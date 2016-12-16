@@ -1,0 +1,21 @@
+.idea
+.vscode
+*.test
+.tmp
+vendor/
+
+# Fake source dir for jenkins and debian, which uses repo root as GOPATH
+bin/
+pkg/
+
+# Binary executable
+kraken
+
+*.xml
+
+# Golang coverage files
+*.out
+# Golang test files
+*.test
+# Visual coverage report
+coverage.html
