@@ -1,0 +1,4 @@
+[submodule "go-build"]
+	path = go-build
+	url = gitolite@code.uber.internal:go-build
+	branch = master

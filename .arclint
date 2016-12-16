@@ -1,0 +1,8 @@
+{
+  "linters": {
+    "sample": {
+      "type": "golint",
+      "include": "(\\.go$)"
+    }
+  }
+}
