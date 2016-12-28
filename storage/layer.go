@@ -31,7 +31,6 @@ type LayerStore struct {
 	m           *Manager
 	name        string
 	pieces      []*PieceStore
-	condLock    *sync.Mutex
 	cond        *sync.Cond
 	broadcasted bool
 }
@@ -42,7 +41,6 @@ func NewLayerStore(m *Manager, name string) *LayerStore {
 	return &LayerStore{
 		name:        name,
 		m:           m,
-		condLock:    l,
 		cond:        sync.NewCond(l),
 		broadcasted: false,
 	}
@@ -116,8 +114,8 @@ func (ls *LayerStore) tryCacheLayer() error {
 			return err
 		}
 		os.Remove(ls.pieceStatusPath())
-		ls.condLock.Lock()
-		defer ls.condLock.Unlock()
+		ls.cond.L.Lock()
+		defer ls.cond.L.Unlock()
 		// broadcast to invoke waiting goroutines
 		ls.cond.Broadcast()
 		ls.broadcasted = true
@@ -142,8 +140,8 @@ func (ls *LayerStore) Wait() error {
 	c := make(chan byte, 1)
 	to := make(chan byte, 1)
 	go func() {
-		ls.condLock.Lock()
-		defer ls.condLock.Unlock()
+		ls.cond.L.Lock()
+		defer ls.cond.L.Unlock()
 		ok := ls.broadcasted
 		if !ok {
 			// wait for broadcast
