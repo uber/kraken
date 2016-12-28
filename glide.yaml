@@ -1,1 +1,21 @@
 package: code.uber.internal/infra/kraken
+import:
+- package: code.uber.internal/go-common.git
+  version: 1db7c5a98612e7bd8f7b2e3ee919cf6dae2da616
+  repo: gitolite@code.uber.internal:go-common.git
+  vcs: git
+  subpackages:
+  - x/config
+  - x/log
+- package: code.uber.internal/infra/dockermover
+  version: 8e3a600bd45f446d2419870387cc4b5ab0fb3a64
+  subpackages:
+  - storage
+- package: github.com/stretchr/testify
+  version: v1.1.4
+  subpackages:
+  - require
+- package: github.com/anacrolix/torrent
+  version: b68d7cd08e83ede9af5a43b6b2fd2eda9f58aba2
+  subpackages:
+  - metainfo

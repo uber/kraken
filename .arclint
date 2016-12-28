@@ -1,8 +1,14 @@
 {
   "linters": {
-    "sample": {
+    "go": {
       "type": "golint",
-      "include": "(\\.go$)"
+      "include": "(\\.go$)",
+      "exclude": [
+      "(^/vender/)",
+      "(/mocks/)",
+      "(^gen/)",
+      "(^Godeps/)"
+      ]
     }
   }
 }
