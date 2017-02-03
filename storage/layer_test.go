@@ -4,8 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"sync"
-
+	cache "code.uber.internal/infra/dockermover/storage"
 	"code.uber.internal/infra/kraken/configuration"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/stretchr/testify/require"
@@ -18,7 +17,8 @@ func getManager() (*configuration.Config, *Manager) {
 	os.MkdirAll(c.DownloadDir, 0755)
 	os.RemoveAll(c.CacheDir)
 	os.MkdirAll(c.CacheDir, 0755)
-	m, _ := NewManager(c)
+	l, _ := cache.NewFileCacheMap(c.CacheMapSize, c.CacheSize)
+	m, _ := NewManager(c, l)
 	return c, m
 }
 
@@ -75,52 +75,6 @@ func TestTryCacheLayer(t *testing.T) {
 	assert.Nil(err)
 	_, ok = ls.m.lru.Get("00", nil)
 	assert.True(ok)
-}
-
-func TestWait(t *testing.T) {
-	assert := require.New(t)
-	_, m := getManager()
-	ls := NewLayerStore(m, "71")
-	ls.CreateEmptyLayerFile(1, 1)
-	ps := ls.pieces[0]
-	wg := sync.WaitGroup{}
-	count := 0
-	c := make(chan byte, 1)
-	ps.compareAndSwapStatus(ps.ls.pieceStatusPath(), dc, done)
-
-	n := 50
-	wg.Add(n)
-	for i := 0; i < n; i++ {
-		go func(i int) {
-			ls.Wait()
-			c <- 'c'
-			count = count + 1
-			<-c
-			wg.Done()
-		}(i)
-	}
-
-	ls.TryCacheLayer()
-	wg.Wait()
-	assert.Equal(n, count)
-
-	// timeout
-	ls = NewLayerStore(m, "72")
-	ls.CreateEmptyLayerFile(1, 1)
-	ps = ls.pieces[0]
-	var e error
-
-	wg.Add(1)
-	go func() {
-		e = ls.Wait()
-		wg.Done()
-	}()
-
-	ls.TryCacheLayer()
-	wg.Wait()
-	assert.NotNil(e)
-	assert.Equal("Timeout waiting for 72", e.Error())
-
 }
 
 func TestPiece(t *testing.T) {

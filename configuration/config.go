@@ -4,6 +4,8 @@ import (
 	"os"
 	"path"
 
+	"net"
+
 	xconfig "code.uber.internal/go-common.git/x/config"
 	"code.uber.internal/go-common.git/x/log"
 )
@@ -15,13 +17,22 @@ const (
 
 // Config contains application configuration
 type Config struct {
-	DownloadDir  string `yaml:"download_dir"`
-	CacheDir     string `yaml:"cache_dir"`
-	CacheSize    int    `yaml:"cache_size"`
-	CacheMapSize int    `yaml:"cache_map_size"`
+	Environment      string `yaml:"environment"`
+	DownloadDir      string `yaml:"download_dir"`
+	CacheDir         string `yaml:"cache_dir"`
+	CacheSize        int    `yaml:"cache_size"`
+	CacheMapSize     int    `yaml:"cache_map_size"`
+	RedisURL         string `yaml:"redis_url"`
+	PieceLength      int    `yaml:"piece_length"`
+	Announce         string `yaml:"announce"`
+	AnnounceInterval int    `yaml:"announce_interval"`
+	ExpireSec        int    `yaml:"expire_sec"`
+	ListenAddr       string `yaml:"listen_addr"`
+	PushTempDir      string `yaml:"push_temp_dir"`
+	RegistryPort     string `yaml:"registry_port"`
 }
 
-// NewConfig returns a configuration from a YAML file
+// NewConfig returns a configuration frocvQa234	287m a YAML file
 func NewConfig(configPath string) *Config {
 	var c Config
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -50,4 +61,14 @@ func GetConfigFilePath(filename string) string {
 	}
 	configFile := path.Join(realConfigDir, filename)
 	return configFile
+}
+
+// GetListenPort returns listen port
+func (c *Config) GetListenPort() (string, error) {
+	_, port, err := net.SplitHostPort(c.ListenAddr)
+	if err != nil {
+		return "", err
+	}
+
+	return port, nil
 }
