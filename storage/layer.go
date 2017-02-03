@@ -7,10 +7,6 @@ import (
 
 	"fmt"
 
-	"sync"
-
-	"time"
-
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
@@ -28,21 +24,16 @@ func GetLayerKey(fname string) string {
 
 // LayerStore contains layer info and a pointer to cache to retrieve data
 type LayerStore struct {
-	m           *Manager
-	name        string
-	pieces      []*PieceStore
-	cond        *sync.Cond
-	broadcasted bool
+	m      *Manager
+	name   string
+	pieces []*PieceStore
 }
 
 // NewLayerStore returns a new LayerStore. Caller should then call either LoadFromDisk or CreateEmptyLayerFile.
 func NewLayerStore(m *Manager, name string) *LayerStore {
-	l := &sync.Mutex{}
 	return &LayerStore{
-		name:        name,
-		m:           m,
-		cond:        sync.NewCond(l),
-		broadcasted: false,
+		name: name,
+		m:    m,
 	}
 }
 
@@ -60,6 +51,13 @@ func (ls *LayerStore) cachePath() string {
 
 func (ls *LayerStore) downloadPath() string {
 	return ls.m.config.DownloadDir + filepath.Base(ls.name)
+}
+
+func (ls *LayerStore) loadPieces(n int) {
+	ls.pieces = make([]*PieceStore, n)
+	for i := 0; i < n; i++ {
+		ls.pieces[i] = NewPieceStore(ls, i, done)
+	}
 }
 
 func (ls *LayerStore) initPieces(n int) error {
@@ -114,11 +112,6 @@ func (ls *LayerStore) tryCacheLayer() error {
 			return err
 		}
 		os.Remove(ls.pieceStatusPath())
-		ls.cond.L.Lock()
-		defer ls.cond.L.Unlock()
-		// broadcast to invoke waiting goroutines
-		ls.cond.Broadcast()
-		ls.broadcasted = true
 		return nil
 	})
 	if !ok {
@@ -133,35 +126,6 @@ func (ls *LayerStore) TryCacheLayer() error {
 	ls.m.mu.Lock()
 	defer ls.m.mu.Unlock()
 	return ls.tryCacheLayer()
-}
-
-// Wait returns after a broadcast happens
-func (ls *LayerStore) Wait() error {
-	c := make(chan byte, 1)
-	to := make(chan byte, 1)
-	go func() {
-		ls.cond.L.Lock()
-		defer ls.cond.L.Unlock()
-		ok := ls.broadcasted
-		if !ok {
-			// wait for broadcast
-			ls.cond.Wait()
-		}
-		c <- uint8(0)
-	}()
-
-	go func() {
-		time.Sleep(timeout * time.Second)
-		to <- uint8(1)
-	}()
-
-	// either get broadcast or timeout after two mins
-	select {
-	case <-c:
-		return nil
-	case <-to:
-		return fmt.Errorf("Timeout waiting for %s", ls.name)
-	}
 }
 
 // LoadFromDisk loads data and piece info from disk. called once at restart

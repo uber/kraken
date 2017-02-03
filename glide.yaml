@@ -7,6 +7,8 @@ import:
   subpackages:
   - x/config
   - x/log
+- package: github.com/docker/distribution
+  version: c9aaff00f89c8b67330fa80a7d7fc89162f3540b
 - package: code.uber.internal/infra/dockermover
   version: 8e3a600bd45f446d2419870387cc4b5ab0fb3a64
   subpackages:
@@ -19,3 +21,5 @@ import:
   version: b68d7cd08e83ede9af5a43b6b2fd2eda9f58aba2
   subpackages:
   - metainfo
+- package: github.com/garyburd/redigo/redis
+  version: 827b38687c49d680c6bd9ac6114111b98cc16cdf

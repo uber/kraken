@@ -3,6 +3,8 @@ package storage
 import (
 	"fmt"
 
+	"code.uber.internal/go-common.git/x/log"
+
 	"os"
 )
 
@@ -73,6 +75,7 @@ func (ps *PieceStore) WriteAt(p []byte, off int64) (n int, err error) {
 	// check downloading status
 	downloading, err := ps.ls.IsDownloading()
 	if err != nil {
+		log.Error(err.Error())
 		return 0, err
 	}
 
@@ -83,6 +86,7 @@ func (ps *PieceStore) WriteAt(p []byte, off int64) (n int, err error) {
 
 	f, err := os.OpenFile(ps.ls.downloadPath(), os.O_RDWR, perm)
 	if err != nil {
+		log.Error(err.Error())
 		return 0, err
 	}
 	defer f.Close()
@@ -90,6 +94,7 @@ func (ps *PieceStore) WriteAt(p []byte, off int64) (n int, err error) {
 	// update status
 	ok, err := ps.compareAndSwapStatus(ps.ls.pieceStatusPath(), clean, dirty)
 	if !ok && err != nil {
+		log.Error(err.Error())
 		return 0, err
 	}
 
@@ -99,6 +104,7 @@ func (ps *PieceStore) WriteAt(p []byte, off int64) (n int, err error) {
 		// write
 		n, err = f.WriteAt(p, off)
 		if err != nil {
+			log.Error(err.Error())
 			return 0, err
 		}
 		return
@@ -124,6 +130,7 @@ func (ps *PieceStore) readFromCache(p []byte, off int64) (ok bool, n int, err er
 	}
 
 	// cache miss
+	log.Errorf("ReadFromCache miss %s", p)
 	return false, 0, nil
 }
 
@@ -138,6 +145,7 @@ func (ps *PieceStore) readAt(p []byte, off int64) (n int, err error) {
 		if isPathErr {
 			ok, n, err = ps.readFromCache(p, off)
 			if err != nil {
+				log.Error(err.Error())
 				return n, err
 			}
 
@@ -146,18 +154,21 @@ func (ps *PieceStore) readAt(p []byte, off int64) (n int, err error) {
 				return n, nil
 			}
 
+			log.Errorf("File %s does not exist in either download directory %s or cache", f.Name(), ps.ls.downloadPath())
 			// file not exist anywhere
-			return 0, fmt.Errorf("File %s does not exist in either download directory %s or cache", f.Name(), ps.ls.downloadPath())
+			return 0, fmt.Errorf("File %s does not exists in either download directory %s or cache", f.Name(), ps.ls.downloadPath())
 		}
 
 		// error opening file
 		return 0, err
 	}
-	defer f.Close()
 
 	// possible race condition when the file get renamed and cached
 	// the caller will need to retry
-	return f.ReadAt(p, off)
+	log.Info(ps.ls.downloadPath())
+	n, err = f.ReadAt(p, off)
+	f.Close()
+	return
 }
 
 // ReadAt reads piece data to buffer. ReadAt can happen neither while the torrent is downloading or it is downloaded.
@@ -178,7 +189,7 @@ func (ps *PieceStore) MarkComplete() error {
 	}
 
 	// try cache layer
-	go ps.ls.TryCacheLayer()
+	ps.ls.TryCacheLayer()
 
 	return nil
 }
