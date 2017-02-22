@@ -20,7 +20,7 @@ type ChanWriteCloser struct {
 
 // NewChanWriteCloser creates new ChanWriteCloser given dest string and tempPrefix string
 func NewChanWriteCloser(path string, append bool) (*ChanWriteCloser, error) {
-	log.Infof("Writecloser %s", path)
+	log.Debugf("Writecloser %s", path)
 	return &ChanWriteCloser{
 		Chan:      make(chan byte, 1),
 		tempPath:  path,
@@ -33,7 +33,7 @@ func NewChanWriteCloser(path string, append bool) (*ChanWriteCloser, error) {
 
 // Write writes p to file
 func (wc *ChanWriteCloser) Write(p []byte) (int, error) {
-	log.Infof("Write %s", wc.tempPath)
+	log.Debugf("Write %s", wc.tempPath)
 	var f *os.File
 	var err error
 	if wc.append {
@@ -51,14 +51,14 @@ func (wc *ChanWriteCloser) Write(p []byte) (int, error) {
 
 // Close closes file and set closed to true
 func (wc *ChanWriteCloser) Close() error {
-	log.Infof("Close %s", wc.tempPath)
+	log.Debugf("Close %s", wc.tempPath)
 	wc.closed = true
 	return nil
 }
 
 // Size returns the size of the file
 func (wc *ChanWriteCloser) Size() (size int64) {
-	log.Infof("Size %s", wc.tempPath)
+	log.Debugf("Size %s", wc.tempPath)
 	f, err := os.Open(wc.tempPath)
 	if err != nil {
 		return -1
@@ -74,7 +74,7 @@ func (wc *ChanWriteCloser) Size() (size int64) {
 
 // Cancel cancel the write and remove the tempfile
 func (wc *ChanWriteCloser) Cancel() error {
-	log.Infof("Cancel %s", wc.tempPath)
+	log.Debugf("Cancel %s", wc.tempPath)
 	// close file
 	if !wc.closed {
 		err := wc.Close()
@@ -93,7 +93,7 @@ func (wc *ChanWriteCloser) Cancel() error {
 
 // Commit close and send signal to Channel
 func (wc *ChanWriteCloser) Commit() error {
-	log.Infof("Commit %s", wc.tempPath)
+	log.Debugf("Commit %s", wc.tempPath)
 	// check if committed
 	if wc.committed {
 		return fmt.Errorf("File %s already committed.", wc.tempPath)

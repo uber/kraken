@@ -8,6 +8,7 @@ import (
 
 	xconfig "code.uber.internal/go-common.git/x/config"
 	"code.uber.internal/go-common.git/x/log"
+	rc "github.com/docker/distribution/configuration"
 )
 
 const (
@@ -17,19 +18,20 @@ const (
 
 // Config contains application configuration
 type Config struct {
-	Environment      string `yaml:"environment"`
-	DownloadDir      string `yaml:"download_dir"`
-	CacheDir         string `yaml:"cache_dir"`
-	CacheSize        int    `yaml:"cache_size"`
-	CacheMapSize     int    `yaml:"cache_map_size"`
-	RedisURL         string `yaml:"redis_url"`
-	PieceLength      int    `yaml:"piece_length"`
-	Announce         string `yaml:"announce"`
-	AnnounceInterval int    `yaml:"announce_interval"`
-	ExpireSec        int    `yaml:"expire_sec"`
-	ListenAddr       string `yaml:"listen_addr"`
-	PushTempDir      string `yaml:"push_temp_dir"`
-	RegistryPort     string `yaml:"registry_port"`
+	Environment      string           `yaml:"environment"`
+	DownloadDir      string           `yaml:"download_dir"`
+	CacheDir         string           `yaml:"cache_dir"`
+	CacheSize        int              `yaml:"cache_size"`
+	CacheMapSize     int              `yaml:"cache_map_size"`
+	RedisURL         string           `yaml:"redis_url"`
+	PieceLength      int              `yaml:"piece_length"`
+	Announce         string           `yaml:"announce"`
+	AnnounceInterval int              `yaml:"announce_interval"`
+	ExpireSec        int              `yaml:"expire_sec"`
+	ClientAddr       string           `yaml:"client"`
+	PushTempDir      string           `yaml:"push_temp_dir"`
+	RegistryPort     string           `yaml:"registry_port"`
+	Notifications    rc.Notifications `yaml:"notifications,omitempty"`
 }
 
 // NewConfig returns a configuration frocvQa234	287m a YAML file
@@ -63,9 +65,9 @@ func GetConfigFilePath(filename string) string {
 	return configFile
 }
 
-// GetListenPort returns listen port
-func (c *Config) GetListenPort() (string, error) {
-	_, port, err := net.SplitHostPort(c.ListenAddr)
+// GetClientPort returns listen port
+func (c *Config) GetClientPort() (string, error) {
+	_, port, err := net.SplitHostPort(c.ClientAddr)
 	if err != nil {
 		return "", err
 	}

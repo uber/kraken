@@ -106,7 +106,7 @@ func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (s
 		DefaultStorage:      p2pStorage,
 		NoUpload:            false,
 		Seed:                true,
-		ListenAddr:          config.ListenAddr,
+		ListenAddr:          config.ClientAddr,
 		NoDHT:               true,
 		Debug:               true,
 		DisableTCP:          false,
@@ -213,15 +213,9 @@ func (d *P2PStorageDriver) GetContent(ctx context.Context, path string) (data []
 	default:
 		if len(ts) > 3 && ts[len(ts)-3] == "hashstates" {
 			uuid := ts[len(ts)-4]
-			m, err := d.hashstates.getHashStates(d.config.PushTempDir, uuid)
-			if err != nil {
-				return nil, err
-			}
-			state, ok := m[path]
-			if !ok {
-				return nil, fmt.Errorf("Cannot get state for %s", path)
-			}
-			return []byte(state), nil
+			alg := ts[len(ts)-2]
+			code := ts[len(ts)-1]
+			return d.hashstates.getHashState(d.config.PushTempDir, uuid, alg, code)
 		}
 		return nil, fmt.Errorf("Invalid request %s", path)
 	}
@@ -258,11 +252,29 @@ func (d *P2PStorageDriver) PutContent(ctx context.Context, path string, content 
 		sha := ts[len(ts)-2]
 		return d.blobs.putBlobData(path, d.config.CacheDir, sha, content)
 	case "link":
+		if len(ts) < 7 {
+			return nil
+		}
+
+		if ts[len(ts)-7] == "_manifests" {
+			repo, err := d.getRepoName(path)
+			if err != nil {
+				return err
+			}
+			digest := ts[len(ts)-2]
+			tag := ts[len(ts)-5]
+			if err = d.p2pTracker.SetDigestForRepoTag(repo, tag, digest); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	default:
 		if len(ts) > 3 && ts[len(ts)-3] == "hashstates" {
 			uuid := ts[len(ts)-4]
-			_, err := d.hashstates.putHashStates(d.config.PushTempDir, uuid, path, content)
+			alg := ts[len(ts)-2]
+			code := ts[len(ts)-1]
+			_, err := d.hashstates.putHashState(d.config.PushTempDir, uuid, alg, code, content)
 			return err
 		}
 		return fmt.Errorf("Invalid request %s", path)
@@ -306,7 +318,7 @@ func (d *P2PStorageDriver) Writer(ctx context.Context, path string, append bool)
 			}
 			break
 		case <-to:
-			log.Errorf("Timeout writting file %s", path)
+			log.Debugf("Timeout writting file %s", path)
 			// cancel write if timeout
 			fw.Cancel()
 		}
@@ -344,7 +356,7 @@ func (d *P2PStorageDriver) List(ctx context.Context, path string) ([]string, err
 	switch contentType {
 	case "hashstates":
 		uuid := st[len(st)-3]
-		s, err := d.hashstates.listHashStates(d.config.PushTempDir, uuid)
+		s, err := d.hashstates.listHashStates(d.config.PushTempDir, uuid, path)
 		return s, err
 	default:
 		break
