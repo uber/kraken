@@ -1,12 +1,12 @@
 package storagedriver
 
 import (
-	"bufio"
-	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"fmt"
+	"io/ioutil"
 )
 
 // HashStates ..
@@ -17,63 +17,58 @@ func NewHashStates() *HashStates {
 	return &HashStates{}
 }
 
-func (h *HashStates) putHashStates(dir, uuid, path string, content []byte) (int, error) {
-	f, err := os.OpenFile(dir+uuid+"_startedat", os.O_APPEND|os.O_WRONLY, os.ModeAppend)
+func (h *HashStates) putHashState(dir, uuid, alg, code string, content []byte) (int, error) {
+	hashdir := fmt.Sprintf("%s%s_hashstates/", dir, uuid)
+	err := os.MkdirAll(hashdir, 0755)
 	if err != nil {
-		return 0, err
+		return -1, err
+	}
+
+	fp := fmt.Sprintf("%s%s_%s", hashdir, alg, code)
+	f, err := os.Create(fp)
+	if err != nil {
+		return -1, err
 	}
 	defer f.Close()
-	_, err = f.WriteString(path + " ")
-	if err != nil {
-		return 0, err
-	}
-	n, err := f.Write(append(content, '\n'))
+
+	n, err := f.Write(content)
 	return n, err
 }
 
-func (h *HashStates) getHashStates(dir, uuid string) (map[string]string, error) {
-	fp := dir + uuid + "_startedat"
-	f, err := os.Open(fp)
+func (h *HashStates) getHashState(dir, uuid, alg, code string) ([]byte, error) {
+	hashdir := fmt.Sprintf("%s%s_hashstates/", dir, uuid)
+	fp := fmt.Sprintf("%s%s_%s", hashdir, alg, code)
+	return ioutil.ReadFile(fp)
+}
+
+func (h *HashStates) getAlgAndCodeFromStateFile(base string) (string, string, error) {
+	st := strings.Split(base, "_")
+	if len(st) < 2 {
+		return "", "", fmt.Errorf("Error getting algorithm and code from state file: %s", base)
+	}
+	return st[0], st[1], nil
+}
+
+func (h *HashStates) listHashStates(dir, uuid, path string) ([]string, error) {
+	hashdir := fmt.Sprintf("%s%s_hashstates/", dir, uuid)
+	states, err := ioutil.ReadDir(hashdir)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
 
-	reader := bufio.NewReader(f)
-	// skip timestamp
-	_, _, err = reader.ReadLine()
-	if err != nil {
-		return nil, err
+	st := strings.Split(path, uuid)
+	if len(st) < 2 {
+		return nil, fmt.Errorf("Error getting hash states. Invalid path: %s", path)
 	}
-
-	m := make(map[string]string)
-
-	for {
-		state, _, err := reader.ReadLine()
-		if err == io.EOF {
-			break
-		}
+	pathprefix := st[0]
+	var ret []string
+	for _, s := range states {
+		alg, code, err := h.getAlgAndCodeFromStateFile(filepath.Base(s.Name()))
 		if err != nil {
 			return nil, err
 		}
-		hashstate := strings.SplitN(string(state), " ", 2)
-		if len(hashstate) < 2 {
-			return nil, fmt.Errorf("Erroring getting hashstate %s", state)
-		}
-		m[hashstate[0]] = hashstate[1]
+		state := pathprefix + uuid + "/hashstates/" + alg + "/" + code
+		ret = append(ret, state)
 	}
-	return m, nil
-}
-
-func (h *HashStates) listHashStates(dir, uuid string) ([]string, error) {
-	m, err := h.getHashStates(dir, uuid)
-	if err != nil {
-		return nil, err
-	}
-
-	var s []string
-	for key := range m {
-		s = append(s, key)
-	}
-	return s, nil
+	return ret, nil
 }

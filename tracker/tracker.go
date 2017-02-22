@@ -219,6 +219,66 @@ func (ex *Tracker) SetDigestForRepoTag(repo string, tag string, digest string) e
 	return nil
 }
 
+// SetRepoTag set tag for repo
+func (ex *Tracker) SetRepoTag(repo string, tag string) error {
+	_, err := ex.redis.Do("rpush", repo, tag)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetRepoTags returns list of tags
+func (ex *Tracker) GetRepoTags(repo string) ([]string, error) {
+	ret, err := ex.redis.Do("lrange", repo, 0, -1)
+	if err != nil {
+		return nil, err
+	}
+
+	if ret == nil {
+		return nil, nil
+	}
+
+	var s []string
+
+	for _, tag := range ret.([]interface{}) {
+		s = append(s, string(tag.([]uint8)))
+	}
+
+	return s, nil
+}
+
+// AddRepo append repo given to repo list
+func (ex *Tracker) AddRepo(repo string) error {
+	_, err := ex.redis.Do("rpush", "REPOSITORIES", repo)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetRepos returns a list of repos
+func (ex *Tracker) GetRepos() ([]string, error) {
+	ret, err := ex.redis.Do("lrange", "REPOSITORIES", 0, -1)
+	if err != nil {
+		return nil, err
+	}
+
+	if ret == nil {
+		return nil, nil
+	}
+
+	var s []string
+
+	for _, tag := range ret.([]interface{}) {
+		s = append(s, fmt.Sprintf("repositories/%s", tag.([]uint8)))
+	}
+
+	return s, nil
+}
+
 // CreateTorrent creates torrent and register with db
 func (ex *Tracker) CreateTorrent(key string, fp string) error {
 	info := metainfo.Info{
@@ -234,7 +294,7 @@ func (ex *Tracker) CreateTorrent(key string, fp string) error {
 		return err
 	}
 
-	log.Infof("InfoBytes: %s", infoBytes)
+	log.Debugf("InfoBytes: %s", infoBytes)
 
 	mi := metainfo.MetaInfo{
 		InfoBytes: infoBytes,
@@ -268,7 +328,7 @@ func (ex *Tracker) CreateTorrent(key string, fp string) error {
 	}
 
 	// get port number
-	port, err := ex.config.GetListenPort()
+	port, err := ex.config.GetClientPort()
 	if err != nil {
 		log.Error(err.Error())
 		return err
