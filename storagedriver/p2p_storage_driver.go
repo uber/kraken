@@ -123,13 +123,15 @@ func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (s
 	// load storage files from disk
 	p2pStorage.LoadFromDisk(p2pClient)
 
-	// init redis connection
-	redisConn, err := redis.DialURL(config.RedisURL)
-	if err != nil {
-		log.Fatal(err.Error())
+	// init redis connection pools
+	pool := &redis.Pool{
+		MaxIdle:     3,
+		MaxActive:   6,
+		IdleTimeout: 240 * time.Second,
+		Dial:        func() (redis.Conn, error) { return redis.DialURL(config.RedisURL) },
 	}
 
-	t := tracker.NewTracker(config, redisConn)
+	t := tracker.NewTracker(config, pool)
 	go t.Serve()
 
 	createTest := params["createTest"]

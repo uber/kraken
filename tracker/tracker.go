@@ -47,14 +47,14 @@ type Peer map[string]interface{}
 // Tracker receives a docker image, breaks it into torrents and register torrents with tracker
 type Tracker struct {
 	config *configuration.Config
-	redis  redis.Conn
+	redis  *redis.Pool
 }
 
 // NewTracker creates a new Exporter
-func NewTracker(config *configuration.Config, conn redis.Conn) *Tracker {
+func NewTracker(config *configuration.Config, pool *redis.Pool) *Tracker {
 	return &Tracker{
 		config: config,
-		redis:  conn,
+		redis:  pool,
 	}
 }
 
@@ -87,12 +87,14 @@ func (ex *Tracker) Announce(w http.ResponseWriter, r *http.Request) {
 	ih := q.Get("info_hash")
 	port := q.Get("port")
 
-	ret, err := ex.redis.Do("lrange", ih, 0, -1)
+	conn := ex.redis.Get()
+	defer conn.Close()
+	ret, err := conn.Do("lrange", ih, 0, -1)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
-		log.Error(err.Error())
+		log.Errorf("%s", conn.Err())
 		return
 	}
 
@@ -158,8 +160,11 @@ func (ex *Tracker) Announce(w http.ResponseWriter, r *http.Request) {
 
 // GetMagnet handles requests received to get magnet uri string
 func (ex *Tracker) GetMagnet(key string) (string, error) {
-	val, err := ex.redis.Do("get", key)
+	conn := ex.redis.Get()
+	defer conn.Close()
+	val, err := conn.Do("get", key)
 	if err != nil {
+		log.Errorf("%s", conn.Err())
 		return "", err
 	}
 	if val == nil {
@@ -184,8 +189,12 @@ func (ex *Tracker) AddPeer(ih, host, port string) error {
 	if err != nil {
 		return err
 	}
-	_, err = ex.redis.Do("rpush", ih, string(peerBlob[:]))
+
+	conn := ex.redis.Get()
+	defer conn.Close()
+	_, err = conn.Do("rpush", ih, string(peerBlob[:]))
 	if err != nil {
+		log.Errorf("%s", conn.Err())
 		return err
 	}
 
@@ -194,8 +203,11 @@ func (ex *Tracker) AddPeer(ih, host, port string) error {
 
 // GetDigestFromRepoTag returns digest string (sha256) given repo and tag
 func (ex *Tracker) GetDigestFromRepoTag(repo string, tag string) (string, error) {
-	sha, err := ex.redis.Do("get", fmt.Sprintf("%s:%s", repo, tag))
+	conn := ex.redis.Get()
+	defer conn.Close()
+	sha, err := conn.Do("get", fmt.Sprintf("%s:%s", repo, tag))
 	if err != nil {
+		log.Errorf("%s", conn.Err())
 		return "", err
 	}
 
@@ -208,8 +220,11 @@ func (ex *Tracker) GetDigestFromRepoTag(repo string, tag string) (string, error)
 
 // SetDigestForRepoTag set digest for given repo and tag
 func (ex *Tracker) SetDigestForRepoTag(repo string, tag string, digest string) error {
-	ok, err := ex.redis.Do("setex", fmt.Sprintf("%s:%s", repo, tag), ex.config.ExpireSec, digest)
+	conn := ex.redis.Get()
+	defer conn.Close()
+	ok, err := conn.Do("setex", fmt.Sprintf("%s:%s", repo, tag), ex.config.ExpireSec, digest)
 	if err != nil {
+		log.Errorf("%s", conn.Err())
 		return err
 	}
 
@@ -221,8 +236,11 @@ func (ex *Tracker) SetDigestForRepoTag(repo string, tag string, digest string) e
 
 // SetRepoTag set tag for repo
 func (ex *Tracker) SetRepoTag(repo string, tag string) error {
-	_, err := ex.redis.Do("rpush", repo, tag)
+	conn := ex.redis.Get()
+	defer conn.Close()
+	_, err := conn.Do("rpush", repo, tag)
 	if err != nil {
+		log.Errorf("%s", conn.Err())
 		return err
 	}
 
@@ -231,8 +249,11 @@ func (ex *Tracker) SetRepoTag(repo string, tag string) error {
 
 // GetRepoTags returns list of tags
 func (ex *Tracker) GetRepoTags(repo string) ([]string, error) {
-	ret, err := ex.redis.Do("lrange", repo, 0, -1)
+	conn := ex.redis.Get()
+	defer conn.Close()
+	ret, err := conn.Do("lrange", repo, 0, -1)
 	if err != nil {
+		log.Errorf("%s", conn.Err())
 		return nil, err
 	}
 
@@ -251,8 +272,11 @@ func (ex *Tracker) GetRepoTags(repo string) ([]string, error) {
 
 // AddRepo append repo given to repo list
 func (ex *Tracker) AddRepo(repo string) error {
-	_, err := ex.redis.Do("rpush", "REPOSITORIES", repo)
+	conn := ex.redis.Get()
+	defer conn.Close()
+	_, err := conn.Do("rpush", "REPOSITORIES", repo)
 	if err != nil {
+		log.Errorf("%s", conn.Err())
 		return err
 	}
 
@@ -261,8 +285,11 @@ func (ex *Tracker) AddRepo(repo string) error {
 
 // GetRepos returns a list of repos
 func (ex *Tracker) GetRepos() ([]string, error) {
-	ret, err := ex.redis.Do("lrange", "REPOSITORIES", 0, -1)
+	conn := ex.redis.Get()
+	defer conn.Close()
+	ret, err := conn.Do("lrange", "REPOSITORIES", 0, -1)
 	if err != nil {
+		log.Errorf("%s", conn.Err())
 		return nil, err
 	}
 
@@ -306,8 +333,11 @@ func (ex *Tracker) CreateTorrent(key string, fp string) error {
 	magnetURI := mi.Magnet(key, ih)
 
 	// store key - magnet uri
-	ok, err := ex.redis.Do("setex", key, ex.config.ExpireSec, magnetURI.String())
+	conn := ex.redis.Get()
+	defer conn.Close()
+	ok, err := conn.Do("setex", key, ex.config.ExpireSec, magnetURI.String())
 	if err != nil {
+		log.Errorf("%s", conn.Err())
 		return err
 	}
 
