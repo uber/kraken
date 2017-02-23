@@ -3,6 +3,7 @@ package tracker
 import (
 	"testing"
 
+	"github.com/garyburd/redigo/redis"
 	"github.com/stretchr/testify/require"
 
 	"io/ioutil"
@@ -83,9 +84,12 @@ func TestGetMagnet(t *testing.T) {
 	assert := require.New(t)
 	cp := configuration.GetConfigFilePath("test.yaml")
 	c := configuration.NewConfig(cp)
-	redis := &TestConn{}
-	redis.SetReply("magnet?blah", nil)
-	tracker := NewTracker(c, redis)
+	r := &TestConn{}
+	pool := &redis.Pool{
+		Dial: func() (redis.Conn, error) { return r, nil },
+	}
+	r.SetReply("magnet?blah", nil)
+	tracker := NewTracker(c, pool)
 	val, _ := tracker.GetMagnet("key1")
 	assert.Equal("magnet?blah", val)
 }
@@ -94,8 +98,11 @@ func TestAddPeer(t *testing.T) {
 	assert := require.New(t)
 	cp := configuration.GetConfigFilePath("test.yaml")
 	c := configuration.NewConfig(cp)
-	redis := &TestConn{}
-	tracker := NewTracker(c, redis)
+	r := &TestConn{}
+	pool := &redis.Pool{
+		Dial: func() (redis.Conn, error) { return r, nil },
+	}
+	tracker := NewTracker(c, pool)
 	assert.Nil(tracker.AddPeer("sha1", "host1", "5000"))
 }
 
@@ -108,10 +115,12 @@ func TestCreateTorrent(t *testing.T) {
 	defer os.Remove(f.Name())
 	cp := configuration.GetConfigFilePath("test.yaml")
 	c := configuration.NewConfig(cp)
-	redis := &TestConn{}
-	tracker := NewTracker(c, redis)
-
-	tracker.redis.(*TestConn).SetReply("Sorry", nil)
+	r := &TestConn{}
+	pool := &redis.Pool{
+		Dial: func() (redis.Conn, error) { return r, nil },
+	}
+	r.SetReply("Sorry", nil)
+	tracker := NewTracker(c, pool)
 	err := tracker.CreateTorrent("key1", f.Name())
 	assert.NotNil(err)
 	//re := regexp.MustCompile("Failed to set key key1 val magnet.*dn=key1.*announce for 604800")
