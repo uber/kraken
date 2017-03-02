@@ -121,7 +121,7 @@ func TestCreateTorrent(t *testing.T) {
 	}
 	r.SetReply("Sorry", nil)
 	tracker := NewTracker(c, pool)
-	err := tracker.CreateTorrent("key1", f.Name())
+	err := tracker.CreateTorrentFromFile("key1", f.Name())
 	assert.NotNil(err)
 	//re := regexp.MustCompile("Failed to set key key1 val magnet.*dn=key1.*announce for 604800")
 	//assert.True(re.Match([]byte(err.Error())))

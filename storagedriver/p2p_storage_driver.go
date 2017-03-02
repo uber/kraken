@@ -110,6 +110,7 @@ func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (s
 		NoDHT:               true,
 		Debug:               true,
 		DisableTCP:          false,
+		DisableUTP:          true,
 		DownloadRateLimiter: rate.NewLimiter(rate.Inf, 1),
 		UploadRateLimiter:   rate.NewLimiter(rate.Inf, 1),
 		DisableEncryption:   true,
@@ -144,7 +145,7 @@ func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (s
 		if !ok || path == "" {
 			log.Fatal("Test layer path not specified")
 		}
-		err := t.CreateTorrent(key.(string), path.(string))
+		err := t.CreateTorrentFromFile(key.(string), path.(string))
 		if err != nil {
 			log.Error(err.Error())
 		}
@@ -172,7 +173,7 @@ func NewP2PStorageDriver(c *configuration.Config, cl *torrent.Client, l *cache.F
 		lru:        l,
 		p2pTracker: t,
 		blobs:      NewBlobs(t, cl, l),
-		uploads:    NewUploads(t, l),
+		uploads:    NewUploads(t, cl, l),
 		hashstates: NewHashStates(),
 	}
 }

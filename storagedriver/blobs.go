@@ -12,6 +12,7 @@ import (
 	cache "code.uber.internal/infra/dockermover/storage"
 	"code.uber.internal/infra/kraken/tracker"
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/metainfo"
 	sd "github.com/docker/distribution/registry/storage/driver"
 )
 
@@ -89,6 +90,7 @@ func (b *Blobs) getBlobStat(path, sha string) (fi sd.FileInfo, err error) {
 
 func (b *Blobs) putBlobData(path, dir, sha string, content []byte) error {
 	fp := dir + sha
+	var mi *metainfo.MetaInfo
 	_, ok, _ := b.lru.Add(sha, fp, func(fp string) error {
 		// Write to file
 		f, err := os.Create(fp)
@@ -104,14 +106,18 @@ func (b *Blobs) putBlobData(path, dir, sha string, content []byte) error {
 			return err
 		}
 
-		// Create torrent
-		err = b.tracker.CreateTorrent(sha, fp)
+		mi, err = b.tracker.CreateTorrentInfo(sha, fp)
 		if err != nil {
 			return err
 		}
-
-		return nil
+		err = b.tracker.CreateTorrentFromInfo(sha, mi)
+		return err
 	})
+
+	_, err := b.client.AddTorrent(mi)
+	if err != nil {
+		return err
+	}
 
 	if !ok {
 		return fmt.Errorf("Failed to put content for %s", path)
