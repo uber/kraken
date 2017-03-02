@@ -136,7 +136,7 @@ func (m *Manager) LoadFromDisk(cl *torrent.Client) {
 
 // OpenTorrent returns torrent specified by the info
 func (m *Manager) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
-	log.Infof("OpenTorrent %s", info.Name)
+	log.Debugf("OpenTorrent %s", info.Name)
 	// Check if torrent is already opened
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -148,10 +148,14 @@ func (m *Manager) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (stor
 
 	// new torrent, create new LayerStore
 	ls = NewLayerStore(m, info.Name)
-	// new torrent, create an empty data file in downloading directory
-	err := ls.CreateEmptyLayerFile(info.Length, info.NumPieces())
-	if err != nil {
-		return nil, err
+	if _, downloaded := ls.IsDownloaded(); !downloaded {
+		// new torrent, create an empty data file in downloading directory
+		err := ls.CreateEmptyLayerFile(info.Length, info.NumPieces())
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		ls.loadPieces(info.NumPieces())
 	}
 	m.opened[info.Name] = ls
 	return ls, nil

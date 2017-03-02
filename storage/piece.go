@@ -72,6 +72,8 @@ func (ps *PieceStore) compareAndSwapStatus(fp string, currStatus byte, newStatus
 
 // WriteAt writes buffered piece data to layer
 func (ps *PieceStore) WriteAt(p []byte, off int64) (n int, err error) {
+	offset := int64(ps.ls.m.config.PieceLength*ps.index) + off
+	log.Debugf("readAt index: %d, status: %v offset: %d (%d)", ps.index, ps.status, off, offset)
 	// check downloading status
 	downloading, err := ps.ls.IsDownloading()
 	if err != nil {
@@ -102,7 +104,7 @@ func (ps *PieceStore) WriteAt(p []byte, off int64) (n int, err error) {
 	if ok {
 		defer ps.compareAndSwapStatus(ps.ls.pieceStatusPath(), dirty, clean)
 		// write
-		n, err = f.WriteAt(p, off)
+		n, err = f.WriteAt(p, offset)
 		if err != nil {
 			log.Error(err.Error())
 			return 0, err
@@ -165,7 +167,7 @@ func (ps *PieceStore) readAt(p []byte, off int64) (n int, err error) {
 
 	// possible race condition when the file get renamed and cached
 	// the caller will need to retry
-	log.Info(ps.ls.downloadPath())
+	log.Debug(ps.ls.downloadPath())
 	n, err = f.ReadAt(p, off)
 	f.Close()
 	return
@@ -173,9 +175,11 @@ func (ps *PieceStore) readAt(p []byte, off int64) (n int, err error) {
 
 // ReadAt reads piece data to buffer. ReadAt can happen neither while the torrent is downloading or it is downloaded.
 func (ps *PieceStore) ReadAt(p []byte, off int64) (n int, err error) {
-	n, err = ps.readAt(p, off)
+	offset := int64(ps.ls.m.config.PieceLength*ps.index) + off
+	log.Debugf("readAt index: %d, status: %v offset: %d (%d)", ps.index, ps.status, off, offset)
+	n, err = ps.readAt(p, offset)
 	if err != nil {
-		return ps.readAt(p, off)
+		return ps.readAt(p, offset)
 	}
 
 	return

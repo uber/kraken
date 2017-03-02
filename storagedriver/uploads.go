@@ -9,6 +9,8 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	cache "code.uber.internal/infra/dockermover/storage"
 	"code.uber.internal/infra/kraken/tracker"
+	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/metainfo"
 	sd "github.com/docker/distribution/registry/storage/driver"
 )
 
@@ -16,13 +18,15 @@ import (
 type Uploads struct {
 	lru     *cache.FileCacheMap
 	tracker *tracker.Tracker
+	client  *torrent.Client
 }
 
 // NewUploads creates a new Uploads
-func NewUploads(t *tracker.Tracker, c *cache.FileCacheMap) *Uploads {
+func NewUploads(t *tracker.Tracker, cl *torrent.Client, c *cache.FileCacheMap) *Uploads {
 	return &Uploads{
 		lru:     c,
 		tracker: t,
+		client:  cl,
 	}
 }
 
@@ -121,14 +125,23 @@ func (u *Uploads) getUploadDataStat(dir, uuid string) (fi sd.FileInfo, err error
 func (u *Uploads) commitUpload(srcdir, srcuuid, destdir, destsha string) (err error) {
 	srcfp := srcdir + srcuuid
 	destfp := destdir + destsha
+	var mi *metainfo.MetaInfo
 	u.lru.Add(destsha, destfp, func(fp string) error {
 		err = os.Rename(srcfp, destfp)
 		if err != nil {
 			return err
 		}
-		err = u.tracker.CreateTorrent(destsha, destfp)
+		mi, err = u.tracker.CreateTorrentInfo(destsha, destfp)
+		if err != nil {
+			return err
+		}
+		err = u.tracker.CreateTorrentFromInfo(destsha, mi)
 		return err
 	})
+	_, err = u.client.AddTorrent(mi)
+	if err != nil {
+		return err
+	}
 	// remove timestamp file
 	os.Remove(srcfp + "_statedat")
 	return

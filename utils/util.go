@@ -7,6 +7,16 @@ import (
 	"strings"
 )
 
+// GetHostIP returns the host ip
+func GetHostIP() (string, error) {
+	out, err := exec.Command("bash", "-c", "ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 | awk '{ print $1}'").Output()
+	name := strings.Trim(string(out[:]), "\n")
+	if err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
 // GetHostName returns host name
 func GetHostName() (string, error) {
 	out, err := exec.Command("bash", "-c", "echo $HOSTNAME").Output()

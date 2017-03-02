@@ -7,8 +7,6 @@ import (
 
 	"strconv"
 
-	"strings"
-
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/utils"
@@ -72,20 +70,15 @@ func (ex *Tracker) Serve() {
 
 // Announce returns a list of peers that has requested piece
 func (ex *Tracker) Announce(w http.ResponseWriter, r *http.Request) {
-	host := r.Host
-	// split host and port
-	hostport := strings.SplitN(host, ":", 2)
-	if len(hostport) > 2 || len(hostport) < 1 {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("bad host: %s", host)))
-		log.Error(fmt.Sprintf("bad host: %s", host))
-		return
-	}
-	host = hostport[0]
 	q := r.URL.Query()
 	ih := q.Get("info_hash")
-	port := q.Get("port")
+	host, port, err := ex.getPeerHostPort()
+	if err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
 
 	conn := ex.redis.Get()
 	defer conn.Close()
@@ -111,7 +104,7 @@ func (ex *Tracker) Announce(w http.ResponseWriter, r *http.Request) {
 
 	var peers []Peer
 	for _, p := range peersStr {
-		log.Infof("Peer %s", p.([]byte))
+		log.Debugf("Peer %s", p.([]byte))
 		var peer Peer
 		err := bencode.Unmarshal(p.([]byte), &peer)
 		if peer["ip"] == host && fmt.Sprintf("%d", peer["port"]) == port {
@@ -151,7 +144,7 @@ func (ex *Tracker) Announce(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Infof("Response %s", data)
+	log.Debugf("Response %s", data)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
@@ -171,7 +164,7 @@ func (ex *Tracker) GetMagnet(key string) (string, error) {
 		return "", NewNotFoundError(fmt.Sprintf("Cannot find magnet with key %s", key))
 	}
 
-	log.Infof("%s", val)
+	log.Debugf("%s", val)
 
 	return fmt.Sprintf("%s", val), nil
 }
@@ -179,9 +172,17 @@ func (ex *Tracker) GetMagnet(key string) (string, error) {
 // AddPeer adds peer to list given info hash
 func (ex *Tracker) AddPeer(ih, host, port string) error {
 	portno, err := strconv.ParseInt(port, 10, 64)
+	if err != nil {
+		return err
+	}
+	peerid, err := utils.GetHostName()
+	if err != nil {
+		return err
+	}
+
 	p := Peer{
 		"ip":      host,
-		"peer id": host,
+		"peer id": peerid,
 		"port":    portno,
 	}
 
@@ -306,54 +307,97 @@ func (ex *Tracker) GetRepos() ([]string, error) {
 	return s, nil
 }
 
-// CreateTorrent creates torrent and register with db
-func (ex *Tracker) CreateTorrent(key string, fp string) error {
+// CreateTorrentInfo returns the metainfo of a torrent
+func (ex *Tracker) CreateTorrentInfo(key string, fp string) (*metainfo.MetaInfo, error) {
 	info := metainfo.Info{
 		PieceLength: int64(ex.config.PieceLength),
 	}
 	err := info.BuildFromFilePath(fp)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	infoBytes, err := bencode.Marshal(info)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	log.Debugf("InfoBytes: %s", infoBytes)
 
-	mi := metainfo.MetaInfo{
+	return &metainfo.MetaInfo{
 		InfoBytes: infoBytes,
 		Announce:  "http://" + ex.config.Announce + "/announce",
-	}
+	}, nil
+}
 
+// CreateTorrentFromInfo creates torrent and registrer with db given metainfo
+func (ex *Tracker) CreateTorrentFromInfo(key string, mi *metainfo.MetaInfo) error {
 	ih := mi.HashInfoBytes()
-
 	magnetURI := mi.Magnet(key, ih)
 
 	// store key - magnet uri
+	ex.storeMagnet(key, ex.config.ExpireSec, magnetURI.String())
+
+	// store infoHash - peerlist
+	hn, port, err := ex.getPeerHostPort()
+	if err != nil {
+		return err
+	}
+
+	return ex.AddPeer(ih.AsString(), hn, port)
+}
+
+// CreateTorrentFromFile creates torrent and register with db given a key and a file path
+func (ex *Tracker) CreateTorrentFromFile(key string, fp string) error {
+	mi, err := ex.CreateTorrentInfo(key, fp)
+	if err != nil {
+		return err
+	}
+
+	ih := mi.HashInfoBytes()
+	magnetURI := mi.Magnet(key, ih)
+
+	// store key - magnet uri
+	err = ex.storeMagnet(key, ex.config.ExpireSec, magnetURI.String())
+	if err != nil {
+		return err
+	}
+
+	// store infoHash - peerlist
+	hn, port, err := ex.getPeerHostPort()
+	if err != nil {
+		return err
+	}
+
+	return ex.AddPeer(ih.AsString(), hn, port)
+}
+
+func (ex *Tracker) storeMagnet(key string, expire int, magnetURI string) error {
+	// store key - magnet uri
 	conn := ex.redis.Get()
 	defer conn.Close()
-	ok, err := conn.Do("setex", key, ex.config.ExpireSec, magnetURI.String())
+	ok, err := conn.Do("setex", key, expire, magnetURI)
 	if err != nil {
 		log.Errorf("%s", conn.Err())
 		return err
 	}
 
 	if ok.(string) != "OK" {
-		return fmt.Errorf("Failed to set key %s val %s for %d", key, magnetURI.String(), ex.config.ExpireSec)
+		return fmt.Errorf("Failed to set key %s val %s for %d", key, magnetURI, expire)
 	}
+	return nil
+}
 
-	// store infoHash - peerlist
+func (ex *Tracker) getPeerHostPort() (string, string, error) {
 	// get host
 	var hn string
+	var err error
 	if ex.config.Environment == "development" {
 		hn = "127.0.0.1"
 	} else {
-		hn, err = utils.GetHostName()
+		hn, err = utils.GetHostIP()
 		if err != nil {
-			return err
+			return "", "", err
 		}
 	}
 
@@ -361,8 +405,7 @@ func (ex *Tracker) CreateTorrent(key string, fp string) error {
 	port, err := ex.config.GetClientPort()
 	if err != nil {
 		log.Error(err.Error())
-		return err
+		return "", "", err
 	}
-
-	return ex.AddPeer(ih.AsString(), hn, port)
+	return hn, port, nil
 }
