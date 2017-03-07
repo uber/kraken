@@ -2,7 +2,7 @@
 BUILD_FLAGS =
 
 # Environment variables to set before go build
-BUILD_ENV=
+BUILD_ENV= GOOS=linux GOARCH=amd64 GOARM=7
 
 # Flags to pass to go test
 TEST_FLAGS =
