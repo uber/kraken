@@ -5,11 +5,11 @@
 vendor/
 
 # Fake source dir for jenkins and debian, which uses repo root as GOPATH
-bin/
+^bin/
 pkg/
 
 # Binary executable
-client/kraken
+client/bin/agent/agent
 
 *.xml
 

@@ -2,7 +2,7 @@
 BUILD_FLAGS =
 
 # Environment variables to set before go build
-BUILD_ENV= GOOS=linux GOARCH=amd64 GOARM=7
+BUILD_ENV= 
 
 # Flags to pass to go test
 TEST_FLAGS =
@@ -15,13 +15,13 @@ PROJECT_ROOT = code.uber.internal/infra/kraken
 
 # Tells udeploy what your service name is (set to $(notdir of PROJECT_ROOT))
 # by default
-SERVICES = kraken
+SERVICES = client/bin/agent/agent
 
 # List all executables
 PROGS = \
-	client/agent/kraken
+	client/bin/agent/agent
 
-client/agent/kraken: client/agent/kraken.go $(wildcard client/agent/*.go)
+client/bin/agent/agent: client/bin/agent/main.go $(wildcard client/*.go)
 
 include go-build/rules.mk
 
