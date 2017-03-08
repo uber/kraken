@@ -8,7 +8,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	cache "code.uber.internal/infra/dockermover/storage"
-	"code.uber.internal/infra/kraken/tracker"
+	"code.uber.internal/infra/kraken/kraken/test-tracker"
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	sd "github.com/docker/distribution/registry/storage/driver"

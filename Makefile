@@ -18,7 +18,10 @@ PROJECT_ROOT = code.uber.internal/infra/kraken
 SERVICES = kraken
 
 # List all executables
-PROGS = kraken
+PROGS = \
+	client/agent/kraken
+
+client/agent/kraken: client/agent/kraken.go $(wildcard client/agent/*.go)
 
 include go-build/rules.mk
 
