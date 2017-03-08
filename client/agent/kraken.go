@@ -5,8 +5,8 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 
+	"code.uber.internal/infra/kraken/client/storagedriver"
 	"code.uber.internal/infra/kraken/configuration"
-	"code.uber.internal/infra/kraken/storagedriver"
 	rc "github.com/docker/distribution/configuration"
 	ctx "github.com/docker/distribution/context"
 	dr "github.com/docker/distribution/registry"

@@ -9,7 +9,7 @@ bin/
 pkg/
 
 # Binary executable
-kraken
+client/kraken
 
 *.xml
 

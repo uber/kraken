@@ -8,9 +8,9 @@ import (
 	"golang.org/x/time/rate"
 
 	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken/client/storage"
 	"code.uber.internal/infra/kraken/configuration"
-	"code.uber.internal/infra/kraken/storage"
-	"code.uber.internal/infra/kraken/tracker"
+	"code.uber.internal/infra/kraken/kraken/test-tracker"
 
 	"path/filepath"
 
