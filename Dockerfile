@@ -49,4 +49,4 @@ RUN /ucontainer/cleanup.sh
 USER udocker
 
 ### Metadata
-ENTRYPOINT ["/bin/bash", "-c", "./start-origin.sh"]
+ENTRYPOINT ["/bin/bash", "-c", "./scripts/start-origin.sh"]
