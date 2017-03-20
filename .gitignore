@@ -10,6 +10,7 @@ pkg/
 
 # Binary executable
 client/bin/agent/agent
+test/bin/puller/puller
 
 *.xml
 

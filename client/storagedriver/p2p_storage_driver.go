@@ -76,7 +76,7 @@ func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (s
 	config := configuration.NewConfig(cp)
 
 	// init temp dir
-	os.RemoveAll(config.PushTempDir)
+	os.Remove(config.PushTempDir)
 	err := os.MkdirAll(config.PushTempDir, 0755)
 	if err != nil {
 		return nil, err

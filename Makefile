@@ -19,9 +19,11 @@ SERVICES = client/bin/agent/agent
 
 # List all executables
 PROGS = \
-	client/bin/agent/agent
+	client/bin/agent/agent \
+	test/bin/puller/puller
 
 client/bin/agent/agent: client/bin/agent/main.go $(wildcard client/*.go)
+test/bin/puller/puller: $(wildcard test/bin/puller/*.go)
 
 include go-build/rules.mk
 
