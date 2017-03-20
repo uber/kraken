@@ -21,5 +21,15 @@ import:
   version: b68d7cd08e83ede9af5a43b6b2fd2eda9f58aba2
   subpackages:
   - metainfo
-- package: github.com/garyburd/redigo/redis
+- package: github.com/garyburd/redigo
   version: 827b38687c49d680c6bd9ac6114111b98cc16cdf
+  subpackages:
+  - redis
+- package: github.com/pressly/chi
+  version: ^2.0.0
+- package: github.com/jackpal/bencode-go
+- package: github.com/pressly/goose
+  version: ^1.0.0
+- package: github.com/golang/mock
+  subpackages:
+  - gomock
