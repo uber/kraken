@@ -36,7 +36,7 @@ func TestCompareAndSwapStatus(t *testing.T) {
 	assert.False(ok)
 
 	// currstatus = done, newstatus = clean
-	ok, err = ps.compareAndSwapStatus(ps.ls.pieceStatusPath(), dc, clean)
+	ok, err = ps.compareAndSwapStatus(ps.ls.pieceStatusPath(), dontCare, clean)
 	assert.Nil(err)
 	assert.True(ok)
 
