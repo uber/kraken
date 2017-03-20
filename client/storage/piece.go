@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	clean = uint8(0)
-	dirty = uint8(1)
-	done  = uint8(2)
-	dc    = uint8(3)
+	clean    = uint8(0)
+	dirty    = uint8(1)
+	done     = uint8(2)
+	dontCare = uint8(3)
 )
 
 // PieceStore contains piece information of a layer
@@ -49,7 +49,7 @@ func (ps *PieceStore) compareAndSwapStatus(fp string, currStatus byte, newStatus
 		return false, err
 	}
 
-	if b[0] == currStatus || currStatus == dc {
+	if b[0] == currStatus || currStatus == dontCare {
 		// same status, no need to write
 		if b[0] == newStatus {
 			return true, nil
@@ -173,7 +173,7 @@ func (ps *PieceStore) readAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-// ReadAt reads piece data to buffer. ReadAt can happen neither while the torrent is downloading or it is downloaded.
+// ReadAt reads piece data to buffer. ReadAt can happen either while the torrent is downloading or it is downloaded.
 func (ps *PieceStore) ReadAt(p []byte, off int64) (n int, err error) {
 	offset := int64(ps.ls.m.config.PieceLength*ps.index) + off
 	log.Debugf("readAt index: %d, status: %v offset: %d (%d)", ps.index, ps.status, off, offset)
@@ -187,7 +187,7 @@ func (ps *PieceStore) ReadAt(p []byte, off int64) (n int, err error) {
 
 // MarkComplete marks piece as complete
 func (ps *PieceStore) MarkComplete() error {
-	_, err := ps.compareAndSwapStatus(ps.ls.pieceStatusPath(), dc, done)
+	_, err := ps.compareAndSwapStatus(ps.ls.pieceStatusPath(), dontCare, done)
 	if err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func (ps *PieceStore) MarkNotComplete() error {
 		ps.ls.m.lru.Remove(GetLayerKey(ps.ls.name))
 		return nil
 	}
-	_, err := ps.compareAndSwapStatus(ps.ls.pieceStatusPath(), dc, clean)
+	_, err := ps.compareAndSwapStatus(ps.ls.pieceStatusPath(), dontCare, clean)
 	return err
 }
 

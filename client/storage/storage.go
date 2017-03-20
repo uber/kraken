@@ -1,13 +1,10 @@
 package storage
 
 import (
-	"os"
-
-	"sync"
-
 	"io/ioutil"
-
+	"os"
 	"regexp"
+	"sync"
 
 	"code.uber.internal/go-common.git/x/log"
 	cache "code.uber.internal/infra/dockermover/storage"

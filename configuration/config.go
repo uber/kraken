@@ -20,6 +20,7 @@ const (
 type Config struct {
 	Environment      string           `yaml:"environment"`
 	DownloadDir      string           `yaml:"download_dir"`
+	TrashDir         string           `yaml:"trash_dir"`
 	CacheDir         string           `yaml:"cache_dir"`
 	CacheSize        int              `yaml:"cache_size"`
 	CacheMapSize     int              `yaml:"cache_map_size"`
