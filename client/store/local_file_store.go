@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"os"
+	"path"
 	"sync"
 
 	"code.uber.internal/infra/kraken/configuration"
@@ -29,27 +30,26 @@ func NewLocalFileStore(config *configuration.Config) *LocalFileStore {
 }
 
 // Add adds a new file to store.
-func (store *LocalFileStore) Add(sourceDir, fileName string) (*LocalFile, error) {
+func (store *LocalFileStore) Add(fileName string) error {
 	store.Lock()
 	defer store.Unlock()
 
 	if _, ok := store.fileMap[fileName]; ok {
-		return nil, fmt.Errorf("Cannot add file %s because it already exists", fileName)
+		return fmt.Errorf("Cannot add file %s because it already exists", fileName)
 	}
 
-	sourcePath := store.sourceRoot + fileName
-	storePath := store.storeRoot + fileName
+	sourcePath := path.Join(store.sourceRoot, fileName)
+	storePath := path.Join(store.storeRoot, fileName)
 	if err := os.Rename(sourcePath, storePath); err != nil {
-		return nil, err
+		return err
 	}
 
-	localFile := NewLocalFile(storePath, fileName)
-	store.fileMap[fileName] = localFile
-	return localFile, nil
+	store.fileMap[fileName] = NewLocalFile(storePath, fileName)
+	return nil
 }
 
 // Get returns a pointer to a LocalFile object that implements SectionReader and Closer interfaces.
-func (store *LocalFileStore) Get(fileName string) (*LocalFile, error) {
+func (store *LocalFileStore) Get(fileName string) (*LocalFileReader, error) {
 	store.Lock()
 	defer store.Unlock()
 
@@ -58,8 +58,7 @@ func (store *LocalFileStore) Get(fileName string) (*LocalFile, error) {
 		return nil, fmt.Errorf("File %s doesn't exist", fileName)
 	}
 
-	err := f.open()
-	return f, err
+	return NewLocalFileReader(f)
 }
 
 // Delete removes a file from store.
@@ -72,11 +71,11 @@ func (store *LocalFileStore) Delete(fileName string) error {
 		return fmt.Errorf("File %s doesn't exist", fileName)
 	}
 
-	if open := f.isOpen(); !open {
+	if f.isOpen() {
 		return fmt.Errorf("Cannot remove file %s because it's still open", f.name)
 	}
 
-	trashPath := store.trashRoot + f.name
+	trashPath := path.Join(store.trashRoot, f.name)
 	if err := os.Rename(f.path, trashPath); err != nil {
 		return err
 	}
