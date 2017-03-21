@@ -5,12 +5,11 @@ import (
 	"regexp"
 	"time"
 
-	"golang.org/x/time/rate"
-
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/storage"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/kraken/test-tracker"
+	"code.uber.internal/infra/kraken/store"
 
 	"path/filepath"
 
@@ -67,13 +66,20 @@ func init() {
 type p2pStorageDriverFactory struct{}
 
 func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (storagedriver.StorageDriver, error) {
-	configFile, ok := params["config"]
-	if !ok {
-		log.Fatal("No config file specified")
+	c, ok := params["config"]
+	if !ok || c == nil {
+		log.Fatal("Failed to create storege driver. No configuration initiated.")
 	}
-	// load config
-	cp := configuration.GetConfigFilePath(configFile.(string))
-	config := configuration.NewConfig(cp)
+
+	s, ok := params["store"]
+	if !ok || s == nil {
+		log.Fatal("Failed to create storege driver. No local file store initiated.")
+	}
+	config := c.(*configuration.Config)
+	_, ok = s.(*store.LocalFileStore)
+	if !ok {
+		log.Fatal("Failed to create storege driver. Error getting local file store.r")
+	}
 
 	// init temp dir
 	os.Remove(config.PushTempDir)
@@ -102,21 +108,7 @@ func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (s
 	}
 
 	// init client
-	p2pClient, err := torrent.NewClient(&torrent.Config{
-		DefaultStorage:      p2pStorage,
-		NoUpload:            false,
-		Seed:                true,
-		ListenAddr:          config.ClientAddr,
-		NoDHT:               true,
-		Debug:               true,
-		DisableTCP:          false,
-		DisableUTP:          true,
-		DownloadRateLimiter: rate.NewLimiter(rate.Inf, 1),
-		UploadRateLimiter:   rate.NewLimiter(rate.Inf, 1),
-		DisableEncryption:   true,
-		ForceEncryption:     false,
-		PreferNoEncryption:  true,
-	})
+	p2pClient, err := torrent.NewClient(config.CreateAgentConfig(p2pStorage))
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -134,22 +126,6 @@ func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (s
 
 	t := tracker.NewTracker(config, pool)
 	go t.Serve()
-
-	createTest := params["createTest"]
-	if createTest.(bool) {
-		key, ok := params["testKey"]
-		if !ok || key == "" {
-			log.Fatal("Test layer key not specified")
-		}
-		path, ok := params["testPath"]
-		if !ok || path == "" {
-			log.Fatal("Test layer path not specified")
-		}
-		err := t.CreateTorrentFromFile(key.(string), path.(string))
-		if err != nil {
-			log.Error(err.Error())
-		}
-	}
 
 	return NewP2PStorageDriver(config, p2pClient, l, t), nil
 }

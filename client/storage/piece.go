@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken/configuration"
 
 	"os"
 )
@@ -19,6 +20,7 @@ const (
 type PieceStore struct {
 	status uint8
 	index  int
+	config *configuration.Config
 	ls     *LayerStore
 }
 
@@ -26,6 +28,7 @@ type PieceStore struct {
 func NewPieceStore(ls *LayerStore, index int, status uint8) *PieceStore {
 	return &PieceStore{
 		ls:     ls,
+		config: ls.config,
 		index:  index,
 		status: status,
 	}
@@ -72,7 +75,7 @@ func (ps *PieceStore) compareAndSwapStatus(fp string, currStatus byte, newStatus
 
 // WriteAt writes buffered piece data to layer
 func (ps *PieceStore) WriteAt(p []byte, off int64) (n int, err error) {
-	offset := int64(ps.ls.m.config.PieceLength*ps.index) + off
+	offset := int64(ps.config.Agent.PieceLength*ps.index) + off
 	log.Debugf("readAt index: %d, status: %v offset: %d (%d)", ps.index, ps.status, off, offset)
 	// check downloading status
 	downloading, err := ps.ls.IsDownloading()
@@ -175,7 +178,7 @@ func (ps *PieceStore) readAt(p []byte, off int64) (n int, err error) {
 
 // ReadAt reads piece data to buffer. ReadAt can happen either while the torrent is downloading or it is downloaded.
 func (ps *PieceStore) ReadAt(p []byte, off int64) (n int, err error) {
-	offset := int64(ps.ls.m.config.PieceLength*ps.index) + off
+	offset := int64(ps.config.Agent.PieceLength*ps.index) + off
 	log.Debugf("readAt index: %d, status: %v offset: %d (%d)", ps.index, ps.status, off, offset)
 	n, err = ps.readAt(p, offset)
 	if err != nil {

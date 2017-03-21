@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken/configuration"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
 )
@@ -25,6 +26,7 @@ func GetLayerKey(fname string) string {
 // LayerStore contains layer info and a pointer to cache to retrieve data
 type LayerStore struct {
 	m      *Manager
+	config *configuration.Config
 	name   string
 	pieces []*PieceStore
 }
@@ -32,8 +34,9 @@ type LayerStore struct {
 // NewLayerStore returns a new LayerStore. Caller should then call either LoadFromDisk or CreateEmptyLayerFile.
 func NewLayerStore(m *Manager, name string) *LayerStore {
 	return &LayerStore{
-		name: name,
-		m:    m,
+		name:   name,
+		m:      m,
+		config: m.config,
 	}
 }
 
@@ -46,11 +49,11 @@ func (ls *LayerStore) pieceStatusPath() string {
 }
 
 func (ls *LayerStore) cachePath() string {
-	return ls.m.config.CacheDir + filepath.Base(ls.name)
+	return ls.config.CacheDir + filepath.Base(ls.name)
 }
 
 func (ls *LayerStore) downloadPath() string {
-	return ls.m.config.DownloadDir + filepath.Base(ls.name)
+	return ls.config.DownloadDir + filepath.Base(ls.name)
 }
 
 func (ls *LayerStore) loadPieces(n int) {
@@ -177,11 +180,11 @@ func (ls *LayerStore) IsDownloaded() (string, bool) {
 // CreateEmptyLayerFile creates a sparse data file for the torrent in download directory
 func (ls *LayerStore) CreateEmptyLayerFile(len int64, numPieces int) error {
 	// in case of DownloadDir does not exit
-	err := os.MkdirAll(ls.m.config.DownloadDir, perm)
+	err := os.MkdirAll(ls.config.DownloadDir, perm)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"name": ls.name,
-			"dir":  ls.m.config.DownloadDir,
+			"dir":  ls.config.DownloadDir,
 			"err":  err,
 		}).Error("Error creating download directory")
 		return err
