@@ -310,7 +310,7 @@ func (ex *Tracker) GetRepos() ([]string, error) {
 // CreateTorrentInfo returns the metainfo of a torrent
 func (ex *Tracker) CreateTorrentInfo(key string, fp string) (*metainfo.MetaInfo, error) {
 	info := metainfo.Info{
-		PieceLength: int64(ex.config.PieceLength),
+		PieceLength: int64(ex.config.Agent.PieceLength),
 	}
 	err := info.BuildFromFilePath(fp)
 	if err != nil {
@@ -402,7 +402,7 @@ func (ex *Tracker) getPeerHostPort() (string, string, error) {
 	}
 
 	// get port number
-	port, err := ex.config.GetClientPort()
+	port, err := ex.config.GetAgentPort()
 	if err != nil {
 		log.Error(err.Error())
 		return "", "", err

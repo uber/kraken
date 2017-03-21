@@ -19,7 +19,7 @@ type LocalFileStore struct {
 }
 
 // NewLocalFileStore returns a pointer to a new LocalFileStore object.
-func NewLocalFileStore(config configuration.Config) *LocalFileStore {
+func NewLocalFileStore(config *configuration.Config) *LocalFileStore {
 	return &LocalFileStore{
 		storeRoot:  config.CacheDir,
 		sourceRoot: config.DownloadDir,

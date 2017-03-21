@@ -7,6 +7,7 @@ import (
 
 	"code.uber.internal/infra/kraken/client/storagedriver"
 	"code.uber.internal/infra/kraken/configuration"
+	"code.uber.internal/infra/kraken/store"
 	rc "github.com/docker/distribution/configuration"
 	ctx "github.com/docker/distribution/context"
 	dr "github.com/docker/distribution/registry"
@@ -14,41 +15,26 @@ import (
 
 func main() {
 	var configFile string
-	var createTestTorrent bool
-	var testKey string
-	var testFp string
-	flag.BoolVar(&createTestTorrent, "createTestTorrent", false, "true if you want to create a test torrent")
-	flag.StringVar(&testKey, "testKey", "", "test layer key")
-	flag.StringVar(&testFp, "testPath", "", "test layer path")
 	flag.StringVar(&configFile, "config", "test.yaml", "configuration file")
 	flag.Parse()
 
 	// load config
+	log.Info("Load agent configuration")
 	cp := configuration.GetConfigFilePath(configFile)
 	config := configuration.NewConfig(cp)
 
-	log.Info("Load registry config")
-	registryConfig := &rc.Configuration{}
-
-	registryConfig.Version = rc.MajorMinorVersion(uint(0), uint(1))
-	registryConfig.Log.Level = rc.Loglevel("debug")
-	registryConfig.Notifications = config.Notifications
-	registryConfig.Storage = rc.Storage{
+	log.Info("Create registry")
+	config.Registry.Storage = rc.Storage{
 		storagedriver.Name: rc.Parameters{
-			"config":     configFile,
-			"createTest": createTestTorrent,
-			"testKey":    testKey,
-			"testPath":   testFp,
+			"config": config,
+			"store":  store.NewLocalFileStore(config),
 		},
 		"redirect": rc.Parameters{
 			"disable": true,
 		},
 	}
-	registryConfig.HTTP.Net = "tcp"
-	registryConfig.HTTP.Addr = "0.0.0.0:" + config.RegistryPort
 
-	log.Info("Create registry")
-	registry, err := dr.NewRegistry(ctx.Background(), registryConfig)
+	registry, err := dr.NewRegistry(ctx.Background(), &config.Registry)
 	if err != nil {
 		log.Fatal(err.Error())
 	}

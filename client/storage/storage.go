@@ -85,7 +85,7 @@ func (m *Manager) loadCache(cl *torrent.Client) error {
 		} else {
 			if cl != nil {
 				info := metainfo.Info{
-					PieceLength: int64(m.config.PieceLength),
+					PieceLength: int64(m.config.Agent.PieceLength),
 				}
 				err := info.BuildFromFilePath(fp)
 				if err != nil {
