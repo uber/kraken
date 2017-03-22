@@ -20,3 +20,6 @@ test/bin/puller/puller
 *.test
 # Visual coverage report
 coverage.html
+
+# test db data
+db/data
