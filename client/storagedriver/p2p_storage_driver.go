@@ -7,9 +7,9 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/storage"
+	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/kraken/test-tracker"
-	"code.uber.internal/infra/kraken/store"
 
 	"path/filepath"
 
