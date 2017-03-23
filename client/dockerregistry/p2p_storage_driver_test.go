@@ -1,4 +1,4 @@
-package storagedriver
+package dockerregistry
 
 import "testing"
 import "github.com/stretchr/testify/require"

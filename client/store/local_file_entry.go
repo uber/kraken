@@ -12,6 +12,7 @@ type FileEntry interface {
 	GetState() FileState
 	SetState(state FileState)
 	IsOpen() bool
+	Stat(string) (os.FileInfo, error)
 	GetFileReader() (FileReader, error)
 	GetFileReadWriter() (FileReadWriter, error)
 }
@@ -49,7 +50,7 @@ func (entry *localFileEntry) SetState(state FileState) {
 	entry.state = state
 }
 
-// isOpen() check if any caller still has this file open.
+// isOpen check if any caller still has this file open.
 func (entry *localFileEntry) IsOpen() bool {
 	entry.RLock()
 	defer entry.RUnlock()
@@ -57,7 +58,7 @@ func (entry *localFileEntry) IsOpen() bool {
 	return entry.openCount > 0
 }
 
-// getPath() returns full path of the file.
+// getPath returns full path of the file.
 func (entry *localFileEntry) getPath() string {
 	entry.RLock()
 	defer entry.RUnlock()
@@ -65,7 +66,20 @@ func (entry *localFileEntry) getPath() string {
 	return path.Join(entry.state.GetDirectory(), entry.name)
 }
 
-// getFileReader returns a FileReader object for read operations.
+// Stat returns a FileInfo describing the named file
+func (entry *localFileEntry) Stat(name string) (os.FileInfo, error) {
+	entry.RLock()
+	defer entry.RUnlock()
+
+	f, err := os.OpenFile(entry.getPath(), os.O_RDONLY, 0755)
+	if err != nil {
+		return nil, err
+	}
+
+	return f.Stat()
+}
+
+// GetFileReader returns a FileReader object for read operations.
 func (entry *localFileEntry) GetFileReader() (FileReader, error) {
 	entry.RLock()
 	defer entry.RUnlock()
@@ -83,7 +97,7 @@ func (entry *localFileEntry) GetFileReader() (FileReader, error) {
 	return reader, nil
 }
 
-// getReadWriter returns a FileReadWriter object for read/write operations.
+// GetReadWriter returns a FileReadWriter object for read/write operations.
 func (entry *localFileEntry) GetFileReadWriter() (FileReadWriter, error) {
 	entry.RLock()
 	defer entry.RUnlock()
