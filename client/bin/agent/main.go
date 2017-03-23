@@ -5,7 +5,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 
-	"code.uber.internal/infra/kraken/client/storagedriver"
+	"code.uber.internal/infra/kraken/client/dockerregistry"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/configuration"
 	rc "github.com/docker/distribution/configuration"
@@ -25,7 +25,7 @@ func main() {
 
 	log.Info("Create registry")
 	config.Registry.Storage = rc.Storage{
-		storagedriver.Name: rc.Parameters{
+		dockerregistry.Name: rc.Parameters{
 			"config": config,
 			"store":  store.NewLocalFileStore(config),
 		},

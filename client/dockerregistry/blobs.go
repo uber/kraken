@@ -1,4 +1,4 @@
-package storagedriver
+package dockerregistry
 
 import (
 	"fmt"

@@ -12,7 +12,6 @@ type FileReader interface {
 	io.ReaderAt
 	io.Seeker
 	io.Closer
-	Size() int64
 }
 
 // FileReadWriter provides read/write operation on a file.
@@ -73,13 +72,4 @@ func (readWriter localFileReadWriter) ReadAt(p []byte, offset int64) (int, error
 // 2 means relative to the end.
 func (readWriter localFileReadWriter) Seek(offset int64, whence int) (int64, error) {
 	return readWriter.descriptor.Seek(offset, whence)
-}
-
-// Size returns the size of the section in bytes.
-func (readWriter localFileReadWriter) Size() int64 {
-	info, err := readWriter.descriptor.Stat()
-	if err != nil || info == nil {
-		return 0
-	}
-	return info.Size()
 }

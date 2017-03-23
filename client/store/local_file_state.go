@@ -6,7 +6,7 @@ type FileState interface {
 	GetDirectory() string
 }
 
-// LocalFileState implements FileState for files on local disk.
+// localFileState implements FileState for files on local disk.
 type localFileState int
 
 const (
@@ -19,7 +19,7 @@ func (state localFileState) GetDirectory() string { return _localFileStateLookup
 
 var _localFileStateLookup = localFileStateLookup{}
 
-// LocalFileStateLookup provides utility functions to lookup mapping between states and directories.
+// localFileStateLookup provides utility functions to lookup mapping between states and directories.
 type localFileStateLookup struct {
 	stateLookup     map[string]FileState
 	directoryLookup map[FileState]string

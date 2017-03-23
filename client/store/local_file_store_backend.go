@@ -17,21 +17,21 @@ type FileStoreBackend interface {
 	DeleteFile(fileName string, state FileState) error
 }
 
-// LocalFileStoreBackend manages files under a global lock.
+// localFileStoreBackend manages files under a global lock.
 type localFileStoreBackend struct {
 	sync.Mutex
 
 	fileMap map[string]FileEntry
 }
 
-// NewLocalFileStoreBackend initializes and returns a new LocalFileStoreBackend object.
+// NewLocalFileStoreBackend initializes and returns a new FileStoreBackend object.
 func NewLocalFileStoreBackend() FileStoreBackend {
 	return &localFileStoreBackend{
 		fileMap: make(map[string]FileEntry),
 	}
 }
 
-// createEmptyFile creates an empty file with specified size.
+// CreateEmptyFile creates an empty file with specified size.
 func (backend *localFileStoreBackend) CreateEmptyFile(fileName string, state FileState, len int64) error {
 	backend.Lock()
 	defer backend.Unlock()
@@ -59,7 +59,7 @@ func (backend *localFileStoreBackend) CreateEmptyFile(fileName string, state Fil
 	return nil
 }
 
-// createFile add a new file to storage by moving an unmanaged file from specified location.
+// CreateFile add a new file to storage by moving an unmanaged file from specified location.
 func (backend *localFileStoreBackend) CreateFile(fileName string, state FileState, sourcePath string) error {
 	backend.Lock()
 	defer backend.Unlock()
@@ -77,7 +77,7 @@ func (backend *localFileStoreBackend) CreateFile(fileName string, state FileStat
 	return nil
 }
 
-// getFileReader returns a FileReader object for read operations.
+// GetFileReader returns a FileReader object for read operations.
 func (backend *localFileStoreBackend) GetFileReader(fileName string, state FileState) (FileReader, error) {
 	backend.Lock()
 	defer backend.Unlock()
@@ -90,7 +90,7 @@ func (backend *localFileStoreBackend) GetFileReader(fileName string, state FileS
 	return f.GetFileReader()
 }
 
-// getFileReadWriter returns a FileReadWriter object for read/write operations.
+// GetFileReadWriter returns a FileReadWriter object for read/write operations.
 func (backend *localFileStoreBackend) GetFileReadWriter(fileName string, state FileState) (FileReadWriter, error) {
 	backend.Lock()
 	defer backend.Unlock()
@@ -103,7 +103,7 @@ func (backend *localFileStoreBackend) GetFileReadWriter(fileName string, state F
 	return f.GetFileReadWriter()
 }
 
-// moveFile moves a file to a different directory and updates its state accordingly.
+// MoveFile moves a file to a different directory and updates its state accordingly.
 func (backend *localFileStoreBackend) MoveFile(fileName string, state, nextState FileState) error {
 	backend.Lock()
 	defer backend.Unlock()
@@ -126,7 +126,7 @@ func (backend *localFileStoreBackend) MoveFile(fileName string, state, nextState
 	return nil
 }
 
-// deleteFile removes a file from disk.
+// DeleteFile removes a file from disk.
 func (backend *localFileStoreBackend) DeleteFile(fileName string, state FileState) error {
 	backend.Lock()
 	defer backend.Unlock()
