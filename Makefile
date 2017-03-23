@@ -21,13 +21,13 @@ SERVICES = \
 
 # List all executables
 PROGS = \
+	kraken/tracker/tracker \
 	client/bin/agent/agent \
-	test/bin/puller/puller \
-	kraken/tracker/tracker
+	test/bin/puller/puller 
 
+kraken/tracker/tracker: kraken/tracker/main.go $(wildcard kraken/tracker/*.go config/tracker/*.go)
 client/bin/agent/agent: client/bin/agent/main.go $(wildcard client/*.go)
 test/bin/puller/puller: $(wildcard test/bin/puller/*.go)
-kraken/tracker/tracker: kraken/tracker/main.go $(wildcard kraken/tracker/*.go config/tracker/*.go)
 
 include go-build/rules.mk
 

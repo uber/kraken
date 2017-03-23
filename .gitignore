@@ -13,6 +13,9 @@ kraken/tracker/tracker
 client/bin/agent/agent
 test/bin/puller/puller
 
+# tmp migration files
+[0-9]*_-dir.go
+
 *.xml
 
 # Golang coverage files
