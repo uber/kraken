@@ -1,83 +1,49 @@
 package store
 
-import (
-	"fmt"
-	"os"
-	"path"
-	"sync"
+import "code.uber.internal/infra/kraken/configuration"
 
-	"code.uber.internal/infra/kraken/configuration"
-)
-
-// LocalFileStore manages all downloaded files on local file system.
+// LocalFileStore manages all agent files on local disk.
 type LocalFileStore struct {
-	sync.Mutex
-
-	storeRoot  string
-	sourceRoot string
-	trashRoot  string
-	fileMap    map[string]*LocalFile
+	backend FileStoreBackend
 }
 
-// NewLocalFileStore returns a pointer to a new LocalFileStore object.
+// NewLocalFileStore initializes and returns a new FileStoreBackend object.
 func NewLocalFileStore(config *configuration.Config) *LocalFileStore {
+	_localFileStateLookup.register(stateCache, config.CacheDir)
+	_localFileStateLookup.register(stateDownload, config.DownloadDir)
+	_localFileStateLookup.register(stateTrash, config.TrashDir)
+
 	return &LocalFileStore{
-		storeRoot:  config.CacheDir,
-		sourceRoot: config.DownloadDir,
-		trashRoot:  config.TrashDir,
-		fileMap:    make(map[string]*LocalFile),
+		backend: NewLocalFileStoreBackend(),
 	}
 }
 
-// Add adds a new file to store.
-func (store *LocalFileStore) Add(fileName string) error {
-	store.Lock()
-	defer store.Unlock()
-
-	if _, ok := store.fileMap[fileName]; ok {
-		return fmt.Errorf("Cannot add file %s because it already exists", fileName)
-	}
-
-	sourcePath := path.Join(store.sourceRoot, fileName)
-	storePath := path.Join(store.storeRoot, fileName)
-	if err := os.Rename(sourcePath, storePath); err != nil {
-		return err
-	}
-
-	store.fileMap[fileName] = NewLocalFile(storePath, fileName)
-	return nil
+// CreateEmptyDownloadFile create an empty file in download directory with specified size.
+func (store *LocalFileStore) CreateEmptyDownloadFile(fileName string, len int64) error {
+	return store.backend.CreateEmptyFile(fileName, stateDownload, len)
 }
 
-// Get returns a pointer to a LocalFile object that implements SectionReader and Closer interfaces.
-func (store *LocalFileStore) Get(fileName string) (*LocalFileReader, error) {
-	store.Lock()
-	defer store.Unlock()
-
-	f, ok := store.fileMap[fileName]
-	if !ok {
-		return nil, fmt.Errorf("File %s doesn't exist", fileName)
-	}
-
-	return NewLocalFileReader(f)
+// GetCacheFileReader returns a FileReader for a file in cache directory.
+func (store *LocalFileStore) GetCacheFileReader(fileName string) (FileReader, error) {
+	return store.backend.GetFileReader(fileName, stateCache)
 }
 
-// Delete removes a file from store.
-func (store *LocalFileStore) Delete(fileName string) error {
-	store.Lock()
-	defer store.Unlock()
+// GetDownloadFileReadWriter returns a FileReadWriter for a file in download directory.
+func (store *LocalFileStore) GetDownloadFileReadWriter(fileName string) (FileReadWriter, error) {
+	return store.backend.GetFileReadWriter(fileName, stateDownload)
+}
 
-	f, ok := store.fileMap[fileName]
-	if !ok {
-		return fmt.Errorf("File %s doesn't exist", fileName)
-	}
+// MoveFileToCache moves a file from download directory to cache directory.
+func (store *LocalFileStore) MoveFileToCache(fileName string) error {
+	return store.backend.MoveFile(fileName, stateDownload, stateCache)
+}
 
-	if f.isOpen() {
-		return fmt.Errorf("Cannot remove file %s because it's still open", f.name)
-	}
+// MoveFileToTrash moves a file from cache directory to trash directory.
+func (store *LocalFileStore) MoveFileToTrash(fileName string) error {
+	return store.backend.MoveFile(fileName, stateCache, stateTrash)
+}
 
-	trashPath := path.Join(store.trashRoot, f.name)
-	if err := os.Rename(f.path, trashPath); err != nil {
-		return err
-	}
-	return nil
+// DeleteTrashFile permanently deletes a file from trash directory.
+func (store *LocalFileStore) DeleteTrashFile(fileName string) error {
+	return store.backend.DeleteFile(fileName, stateTrash)
 }
