@@ -68,17 +68,17 @@ type p2pStorageDriverFactory struct{}
 func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (storagedriver.StorageDriver, error) {
 	c, ok := params["config"]
 	if !ok || c == nil {
-		log.Fatal("Failed to create storege driver. No configuration initiated.")
+		log.Fatal("Failed to create storage driver. No configuration initiated.")
 	}
 
 	s, ok := params["store"]
 	if !ok || s == nil {
-		log.Fatal("Failed to create storege driver. No local file store initiated.")
+		log.Fatal("Failed to create storage driver. No local file store initiated.")
 	}
 	config := c.(*configuration.Config)
 	_, ok = s.(*store.LocalFileStore)
 	if !ok {
-		log.Fatal("Failed to create storege driver. Error getting local file store.r")
+		log.Fatal("Failed to create storage driver. Error getting local file store.")
 	}
 
 	// init temp dir
@@ -324,7 +324,7 @@ func (d *P2PStorageDriver) Stat(ctx context.Context, path string) (fi storagedri
 	}
 }
 
-// List returns a list of contant given path
+// List returns a list of content given path
 func (d *P2PStorageDriver) List(ctx context.Context, path string) ([]string, error) {
 	log.Infof("List %s", path)
 	st := strings.Split(path, "/")
