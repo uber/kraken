@@ -10,14 +10,15 @@ import (
 // FileStoreBackend manages all agent files.
 type FileStoreBackend interface {
 	CreateEmptyFile(fileName string, state FileState, len int64) error
-	CreateFile(fileName string, state FileState, sourcePath string) error
 	GetFileReader(fileName string, state FileState) (FileReader, error)
 	GetFileReadWriter(fileName string, state FileState) (FileReadWriter, error)
 	MoveFile(fileName string, state, nextState FileState) error
+	MoveFileIn(fileName string, state FileState, sourcePath string) error
+	MoveFileOut(fileName string, state FileState, targetPath string) error
 	DeleteFile(fileName string, state FileState) error
 }
 
-// localFileStoreBackend manages files under a global lock.
+// localFileStoreBackend manages all agent files on local disk under a global lock.
 type localFileStoreBackend struct {
 	sync.Mutex
 
@@ -52,24 +53,6 @@ func (backend *localFileStoreBackend) CreateEmptyFile(fileName string, state Fil
 	// Change size
 	err = f.Truncate(len)
 	if err != nil {
-		return err
-	}
-
-	backend.fileMap[fileName] = NewLocalFileEntry(fileName, state)
-	return nil
-}
-
-// CreateFile add a new file to storage by moving an unmanaged file from specified location.
-func (backend *localFileStoreBackend) CreateFile(fileName string, state FileState, sourcePath string) error {
-	backend.Lock()
-	defer backend.Unlock()
-
-	if _, ok := backend.fileMap[fileName]; ok {
-		return fmt.Errorf("Cannot add file %s because it already exists", fileName)
-	}
-
-	targetPath := path.Join(state.GetDirectory(), fileName)
-	if err := os.Rename(sourcePath, targetPath); err != nil {
 		return err
 	}
 
@@ -126,6 +109,47 @@ func (backend *localFileStoreBackend) MoveFile(fileName string, state, nextState
 	return nil
 }
 
+// MoveFileIn moves a file from unmanaged location to file store.
+func (backend *localFileStoreBackend) MoveFileIn(fileName string, state FileState, sourcePath string) error {
+	backend.Lock()
+	defer backend.Unlock()
+
+	if _, ok := backend.fileMap[fileName]; ok {
+		return fmt.Errorf("Cannot add file %s because it already exists", fileName)
+	}
+
+	targetPath := path.Join(state.GetDirectory(), fileName)
+	if err := os.Rename(sourcePath, targetPath); err != nil {
+		return err
+	}
+
+	backend.fileMap[fileName] = NewLocalFileEntry(fileName, state)
+	return nil
+}
+
+// MoveFileIn moves a file from file store to unmanaged location.
+func (backend *localFileStoreBackend) MoveFileOut(fileName string, state FileState, targetPath string) error {
+	backend.Lock()
+	defer backend.Unlock()
+
+	f, ok := backend.fileMap[fileName]
+	if !ok || f.GetState() != state {
+		return fmt.Errorf("Cannot find file %s under directory %s", fileName, state.GetDirectory())
+	}
+
+	if f.IsOpen() {
+		return fmt.Errorf("Cannot remove file %s because it's still open", fileName)
+	}
+
+	sourcePath := path.Join(state.GetDirectory(), fileName)
+	if err := os.Rename(sourcePath, targetPath); err != nil {
+		return err
+	}
+
+	delete(backend.fileMap, fileName)
+	return nil
+}
+
 // DeleteFile removes a file from disk.
 func (backend *localFileStoreBackend) DeleteFile(fileName string, state FileState) error {
 	backend.Lock()
@@ -143,5 +167,7 @@ func (backend *localFileStoreBackend) DeleteFile(fileName string, state FileStat
 	if err := os.Remove(path.Join(state.GetDirectory(), fileName)); err != nil {
 		return err
 	}
+
+	delete(backend.fileMap, fileName)
 	return nil
 }

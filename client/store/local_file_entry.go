@@ -82,10 +82,10 @@ func (entry *localFileEntry) GetFileReader() (FileReader, error) {
 	}
 	entry.openCount++
 
-	reader := FileReader(localFileReadWriter{
+	reader := &localFileReadWriter{
 		entry:      entry,
 		descriptor: f,
-	})
+	}
 	return reader, nil
 }
 
@@ -100,9 +100,9 @@ func (entry *localFileEntry) GetFileReadWriter() (FileReadWriter, error) {
 	}
 	entry.openCount++
 
-	readWriter := FileReadWriter(localFileReadWriter{
+	readWriter := &localFileReadWriter{
 		entry:      entry,
 		descriptor: f,
-	})
+	}
 	return readWriter, nil
 }
