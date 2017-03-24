@@ -6,8 +6,7 @@ import (
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken/client/storage"
-	"code.uber.internal/infra/kraken/client/store"
+	cache "code.uber.internal/infra/dockermover/storage"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/kraken/test-tracker"
 
@@ -15,11 +14,8 @@ import (
 
 	"fmt"
 
-	"os"
-
 	"strings"
 
-	cache "code.uber.internal/infra/dockermover/storage"
 	"github.com/anacrolix/torrent"
 	"github.com/docker/distribution/context"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
@@ -66,55 +62,23 @@ func init() {
 type p2pStorageDriverFactory struct{}
 
 func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (storagedriver.StorageDriver, error) {
-	c, ok := params["config"]
-	if !ok || c == nil {
+	configParam, ok := params["config"]
+	if !ok || configParam == nil {
 		log.Fatal("Failed to create storage driver. No configuration initiated.")
 	}
+	config := configParam.(*configuration.Config)
 
-	s, ok := params["store"]
-	if !ok || s == nil {
-		log.Fatal("Failed to create storage driver. No local file store initiated.")
+	clientParam, ok := params["torrent-client"]
+	if !ok || clientParam == nil {
+		log.Fatal("Failed to create storage driver. No torrent agnet initated.")
 	}
-	config := c.(*configuration.Config)
-	_, ok = s.(*store.LocalFileStore)
-	if !ok {
-		log.Fatal("Failed to create storage driver. Error getting local file store.")
-	}
+	client := clientParam.(*torrent.Client)
 
-	// init temp dir
-	os.Remove(config.PushTempDir)
-	err := os.MkdirAll(config.PushTempDir, 0755)
-	if err != nil {
-		return nil, err
+	lruParam, ok := params["cache"]
+	if !ok || lruParam == nil {
+		log.Fatal("Failed to create storage driver. No lru cache intiated.")
 	}
-
-	// init cache dir
-	err = os.MkdirAll(config.CacheDir, 0755)
-	if err != nil {
-		return nil, err
-	}
-
-	// init new cache
-	// the storage driver and p2p client storage share the same lru
-	l, err := cache.NewFileCacheMap(config.CacheMapSize, config.CacheSize)
-	if err != nil {
-		return nil, err
-	}
-
-	// init storage
-	p2pStorage, err := storage.NewManager(config, l)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
-	// init client
-	p2pClient, err := torrent.NewClient(config.CreateAgentConfig(p2pStorage))
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
-	// load storage files from disk
-	p2pStorage.LoadFromDisk(p2pClient)
+	lru := lruParam.(*cache.FileCacheMap)
 
 	// init redis connection pools
 	pool := &redis.Pool{
@@ -127,7 +91,7 @@ func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (s
 	t := tracker.NewTracker(config, pool)
 	go t.Serve()
 
-	return NewP2PStorageDriver(config, p2pClient, l, t), nil
+	return NewP2PStorageDriver(config, client, lru, t), nil
 }
 
 // P2PStorageDriver is a storage driver
