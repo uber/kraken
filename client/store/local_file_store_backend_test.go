@@ -74,7 +74,6 @@ func TestStore(t *testing.T) {
 			assert.Nil(err)
 			l, err := readWriter.Read(b)
 			assert.Nil(err)
-			fmt.Println(l)
 			assert.Equal(l, 3)
 			assert.Equal(string(b[:l]), "tes")
 
@@ -114,8 +113,8 @@ func TestStore(t *testing.T) {
 	// Confirm openCount is 0.
 	reader, err := backend.GetFileReader(testFileName, stateTest2)
 	reader.Close()
-	assert.Equal(reader.(localFileReadWriter).entry.openCount, 0)
-	assert.False(reader.(localFileReadWriter).entry.IsOpen())
+	assert.Equal(reader.(*localFileReadWriter).entry.openCount, 0)
+	assert.False(reader.(*localFileReadWriter).entry.IsOpen())
 
 	// Test deleting file.
 	err = backend.DeleteFile(testFileName, stateTest2)
