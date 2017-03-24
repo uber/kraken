@@ -9,7 +9,7 @@ import (
 	cache "code.uber.internal/infra/dockermover/storage"
 	"code.uber.internal/infra/kraken/client/dockerregistry"
 	"code.uber.internal/infra/kraken/client/server"
-	"code.uber.internal/infra/kraken/client/storage"
+	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
 	"github.com/anacrolix/torrent"
 	rc "github.com/docker/distribution/configuration"
@@ -48,7 +48,7 @@ func main() {
 	}
 
 	// init storage
-	storage, err := storage.NewManager(config, lru)
+	storage, err := torrentclient.NewManager(config, lru)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package storage
+package torrentclient
 
 import (
 	"io/ioutil"
