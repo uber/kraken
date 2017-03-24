@@ -1,12 +1,11 @@
 package configuration
 
 import (
+	"fmt"
 	"os"
 	"path"
 
 	"golang.org/x/time/rate"
-
-	"net"
 
 	xconfig "code.uber.internal/go-common.git/x/config"
 	"code.uber.internal/go-common.git/x/log"
@@ -22,17 +21,18 @@ const (
 
 // Agent contains configuration of bittorrent agent
 type Agent struct {
-	PieceLength        int    `yaml:"piece_length"`
-	ListenAddr         string `yaml:"listen"`
-	Seed               bool   `yaml:"seed"`
-	Debug              bool   `yaml:"debug"`
-	NoDHT              bool   `yaml:"noDHT"`
-	NoUpload           bool   `yaml:"noUpload"`
-	DisableTCP         bool   `yaml:"disableTCP"`
-	DisableUTP         bool   `yaml:"disableUTP"`
-	DisableEncryption  bool   `yaml:"disableEncryption"`
-	ForceEncryption    bool   `yaml:"forceEncryption"`
-	PreferNoEncryption bool   `yaml:"preferNoEncryption"`
+	PieceLength        int  `yaml:"piece_length"`
+	Frontend           int  `yaml:"frontend"`
+	Backend            int  `yaml:"backend"`
+	Seed               bool `yaml:"seed"`
+	Debug              bool `yaml:"debug"`
+	NoDHT              bool `yaml:"noDHT"`
+	NoUpload           bool `yaml:"noUpload"`
+	DisableTCP         bool `yaml:"disableTCP"`
+	DisableUTP         bool `yaml:"disableUTP"`
+	DisableEncryption  bool `yaml:"disableEncryption"`
+	ForceEncryption    bool `yaml:"forceEncryption"`
+	PreferNoEncryption bool `yaml:"preferNoEncryption"`
 	Download           struct {
 		Rate  int `yaml:"rate"`
 		Limit int `yaml:"limit"`
@@ -93,12 +93,7 @@ func GetConfigFilePath(filename string) string {
 
 // GetAgentPort returns listen port
 func (c *Config) GetAgentPort() (string, error) {
-	_, port, err := net.SplitHostPort(c.Agent.ListenAddr)
-	if err != nil {
-		return "", err
-	}
-
-	return port, nil
+	return fmt.Sprintf("%d", c.Agent.Backend), nil
 }
 
 // CreateAgentConfig returns torrent agent's configuration
@@ -122,7 +117,7 @@ func (c *Config) CreateAgentConfig(storage storage.ClientImpl) *torrent.Config {
 	return &torrent.Config{
 		DefaultStorage:      storage,
 		Seed:                acfg.Seed,
-		ListenAddr:          acfg.ListenAddr,
+		ListenAddr:          fmt.Sprintf("0.0.0.0:%d", acfg.Backend),
 		NoUpload:            acfg.NoUpload,
 		DisableTCP:          acfg.DisableTCP,
 		NoDHT:               acfg.NoDHT,
