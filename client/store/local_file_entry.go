@@ -58,20 +58,12 @@ func (entry *localFileEntry) IsOpen() bool {
 	return entry.openCount > 0
 }
 
-// getPath returns full path of the file.
-func (entry *localFileEntry) getPath() string {
-	entry.RLock()
-	defer entry.RUnlock()
-
-	return path.Join(entry.state.GetDirectory(), entry.name)
-}
-
 // Stat returns a FileInfo describing the named file
 func (entry *localFileEntry) Stat(name string) (os.FileInfo, error) {
 	entry.RLock()
 	defer entry.RUnlock()
 
-	f, err := os.OpenFile(entry.getPath(), os.O_RDONLY, 0755)
+	f, err := os.OpenFile(path.Join(entry.state.GetDirectory(), entry.name), os.O_RDONLY, 0755)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +76,7 @@ func (entry *localFileEntry) GetFileReader() (FileReader, error) {
 	entry.RLock()
 	defer entry.RUnlock()
 
-	f, err := os.OpenFile(entry.getPath(), os.O_RDONLY, 0755)
+	f, err := os.OpenFile(path.Join(entry.state.GetDirectory(), entry.name), os.O_RDONLY, 0755)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +94,7 @@ func (entry *localFileEntry) GetFileReadWriter() (FileReadWriter, error) {
 	entry.RLock()
 	defer entry.RUnlock()
 
-	f, err := os.OpenFile(entry.getPath(), os.O_RDWR, 0755)
+	f, err := os.OpenFile(path.Join(entry.state.GetDirectory(), entry.name), os.O_RDWR, 0755)
 	if err != nil {
 		return nil, err
 	}

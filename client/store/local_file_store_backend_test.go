@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"sync"
@@ -53,42 +54,58 @@ func TestStore(t *testing.T) {
 	_, err = os.Stat(path.Join(stateTest1.GetDirectory(), testFileName))
 	assert.False(os.IsNotExist(err))
 
+	// Test getFileReadWriter
 	var waitGroup sync.WaitGroup
-	for i := 0; i < 1; i++ {
+
+	fmt.Println("test0")
+
+	for i := 0; i < 100; i++ {
 		waitGroup.Add(1)
 		go func() {
-			// Test getFileReadWriter
+
 			readWriter, err := backend.GetFileReadWriter(testFileName, stateTest1)
 			assert.Nil(err)
 
 			_, err = readWriter.Write([]byte{'t', 'e', 's', 't', '\n'})
 			assert.Nil(err)
-			b := make([]byte, 3)
 
+			b := make([]byte, 3)
 			_, err = readWriter.Seek(0, 0)
 			assert.Nil(err)
 			l, err := readWriter.Read(b)
 			assert.Nil(err)
+			fmt.Println(l)
 			assert.Equal(l, 3)
 			assert.Equal(string(b[:l]), "tes")
 
-			readWriter.Close()
+			err = readWriter.Close()
+			assert.Nil(err)
+			waitGroup.Done()
+		}()
+	}
+	waitGroup.Wait()
 
-			// Test moveFile
-			backend.MoveFile(testFileName, stateTest1, stateTest2)
+	// Test moveFile
+	err = backend.MoveFile(testFileName, stateTest1, stateTest2)
+	assert.Nil(err)
 
-			// Test getFileReader
+	// Test getFileReader
+	for i := 0; i < 100; i++ {
+		waitGroup.Add(1)
+		go func() {
 			reader, err := backend.GetFileReader(testFileName, stateTest2)
 			assert.Nil(err)
-			bb := make([]byte, 5)
+
+			b := make([]byte, 5)
 			_, err = reader.Seek(0, 0)
 			assert.Nil(err)
-			l, err = reader.ReadAt(bb, 0)
+			l, err := reader.ReadAt(b, 0)
 			assert.Nil(err)
 			assert.Equal(l, 5)
-			assert.Equal(string(bb[:l]), "test\n")
-			reader.Close()
+			assert.Equal(string(b[:l]), "test\n")
 
+			err = reader.Close()
+			assert.Nil(err)
 			waitGroup.Done()
 		}()
 	}
