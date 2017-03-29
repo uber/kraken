@@ -15,6 +15,8 @@ type FileEntry interface {
 	Stat(string) (os.FileInfo, error)
 	GetFileReader() (FileReader, error)
 	GetFileReadWriter() (FileReadWriter, error)
+	SetMetadata(metadataType, []byte, ...interface{}) error
+	GetMetadata(metadataType, []byte, ...interface{}) error
 }
 
 // LocalFileEntry keeps information of a file on local disk.
@@ -50,7 +52,34 @@ func (entry *localFileEntry) SetState(state FileState) {
 	entry.state = state
 }
 
-// isOpen check if any caller still has this file open.
+// SetMetadatacreates metadata file for the file, if file exists, overwrites
+func (entry *localFileEntry) SetMetadata(mt metadataType, content []byte, additionalArgs ...interface{}) error {
+	entry.Lock()
+	defer entry.Unlock()
+
+	filePath := path.Join(entry.state.GetDirectory(), entry.name)
+	return mt.set(filePath, content, additionalArgs)
+}
+
+// GetMetadata returns metadata for the file
+func (entry *localFileEntry) GetMetadata(mt metadataType, data []byte, additionalArgs ...interface{}) error {
+	entry.Lock()
+	defer entry.Unlock()
+
+	filePath := path.Join(entry.state.GetDirectory(), entry.name)
+	return mt.get(filePath, data, additionalArgs)
+}
+
+// DeleteMetadata deletes metadata file for the file, if file doesnt exit, do nothing
+func (entry *localFileEntry) DeleteMetadata(mt metadataType, data []byte, additionalArgs ...interface{}) error {
+	entry.Lock()
+	defer entry.Unlock()
+
+	filePath := path.Join(entry.state.GetDirectory(), entry.name)
+	return mt.delete(filePath, data, additionalArgs)
+}
+
+// IsOpen check if any caller still has this file open.
 func (entry *localFileEntry) IsOpen() bool {
 	entry.RLock()
 	defer entry.RUnlock()

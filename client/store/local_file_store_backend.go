@@ -9,9 +9,12 @@ import (
 
 // FileStoreBackend manages all agent files.
 type FileStoreBackend interface {
-	CreateEmptyFile(fileName string, state FileState, len int64) error
+	CreateFile(fileName string, state FileState, len int64) (bool, error)
+	SetFileMetadata(fileName string, state FileState, content []byte, mt metadataType, additionalArgs ...interface{}) error
+	GetFileMetadata(fileName string, state FileState, data []byte, mt metadataType, additionalArgs ...interface{}) error
 	GetFileReader(fileName string, state FileState) (FileReader, error)
 	GetFileReadWriter(fileName string, state FileState) (FileReadWriter, error)
+	// TODO (@evelynl): move/delet metadata based on metadataType
 	MoveFile(fileName string, state, nextState FileState) error
 	MoveFileIn(fileName string, state FileState, sourcePath string) error
 	MoveFileOut(fileName string, state FileState, targetPath string) error
@@ -32,13 +35,57 @@ func NewLocalFileStoreBackend() FileStoreBackend {
 	}
 }
 
-// CreateEmptyFile creates an empty file with specified size.
-func (backend *localFileStoreBackend) CreateEmptyFile(fileName string, state FileState, len int64) error {
+// SetFileMetadata creates or overwrites metadata assocciate with the file with content
+func (backend *localFileStoreBackend) SetFileMetadata(fileName string, state FileState, content []byte, mt metadataType, additionalArgs ...interface{}) error {
+	backend.Lock()
+	defer backend.Unlock()
+
+	fileEntry, ok := backend.fileMap[fileName]
+	if !ok {
+		return fmt.Errorf("Failed to set file metadata for %s. File entry does not exist", fileName)
+	}
+
+	if fileEntry.GetState() != state {
+		return fmt.Errorf("Failed to set file metadata for %s. File state does not match: expected %s but got %s", fileEntry.GetState(), state, fileName)
+	}
+
+	// Create metadata file
+	err := fileEntry.SetMetadata(mt, content, additionalArgs)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetFileMetadata returns metadata assocciate with the file
+func (backend *localFileStoreBackend) GetFileMetadata(fileName string, state FileState, data []byte, mt metadataType, additionalArgs ...interface{}) error {
+	backend.Lock()
+	defer backend.Unlock()
+
+	fileEntry, ok := backend.fileMap[fileName]
+	if !ok {
+		return fmt.Errorf("Failed to get file metadata for %s. File entry does not exist", fileName)
+	}
+
+	if fileEntry.GetState() != state {
+		return fmt.Errorf("Failed to get file metadata for %s. File state does not match: expected %s but got %s", fileEntry.GetState(), state, fileName)
+	}
+
+	// Get metadata
+	err := fileEntry.GetMetadata(mt, data, additionalArgs)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// CreateFile creates an empty file with specified size. If file exists, do nothing. Returns if the file is new
+func (backend *localFileStoreBackend) CreateFile(fileName string, state FileState, len int64) (bool, error) {
 	backend.Lock()
 	defer backend.Unlock()
 
 	if _, ok := backend.fileMap[fileName]; ok {
-		return fmt.Errorf("Cannot add file %s because it already exists", fileName)
+		return false, nil
 	}
 
 	targetPath := path.Join(state.GetDirectory(), fileName)
@@ -46,18 +93,18 @@ func (backend *localFileStoreBackend) CreateEmptyFile(fileName string, state Fil
 	// Create file.
 	f, err := os.Create(targetPath)
 	if err != nil {
-		return err
+		return true, err
 	}
 	defer f.Close()
 
 	// Change size
 	err = f.Truncate(len)
 	if err != nil {
-		return err
+		return true, err
 	}
 
 	backend.fileMap[fileName] = NewLocalFileEntry(fileName, state)
-	return nil
+	return true, nil
 }
 
 // GetFileReader returns a FileReader object for read operations.

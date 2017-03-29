@@ -18,9 +18,43 @@ func NewLocalFileStore(config *configuration.Config) *LocalFileStore {
 	}
 }
 
-// CreateEmptyDownloadFile create an empty file in download directory with specified size.
-func (store *LocalFileStore) CreateEmptyDownloadFile(fileName string, len int64) error {
-	return store.backend.CreateEmptyFile(fileName, stateDownload, len)
+// CreateDownloadFile create an empty file in download directory with specified size.
+func (store *LocalFileStore) CreateDownloadFile(fileName string, len int64) (bool, error) {
+	new, err := store.backend.CreateFile(fileName, stateDownload, len)
+	if err != nil {
+		return new, err
+	}
+	return new, nil
+}
+
+// SetDownloadFilePieceStatus create and initializes piece status for a new download file
+func (store *LocalFileStore) SetDownloadFilePieceStatus(fileName string, content []byte) error {
+	return store.backend.SetFileMetadata(fileName, stateDownload, content, pieceStatus)
+}
+
+// GetDownloadFilePieceStatus create and initializes piece status for a new download file
+func (store *LocalFileStore) GetDownloadFilePieceStatus(fileName string, content []byte) error {
+	return store.backend.GetFileMetadata(fileName, stateDownload, content, pieceStatus)
+}
+
+// SetDownloadFileStartedAt create and writes the creation file for a new download file
+func (store *LocalFileStore) SetDownloadFileStartedAt(fileName string, content []byte) error {
+	return store.backend.SetFileMetadata(fileName, stateDownload, content, startedAt)
+}
+
+// GetDownloadFileStartedAt create and writes the creation file for a new download file
+func (store *LocalFileStore) GetDownloadFileStartedAt(fileName string, content []byte) error {
+	return store.backend.GetFileMetadata(fileName, stateDownload, content, startedAt)
+}
+
+// SetDownloadFileHashStates creates and writes the hashstate for a downloading file
+func (store *LocalFileStore) SetDownloadFileHashStates(fileName string, content []byte, algorithm string, code string) error {
+	return store.backend.SetFileMetadata(fileName, stateDownload, content, hashStates, algorithm, code)
+}
+
+// GetDownloadFileHashStates creates and writes the hashstate for a downloading file
+func (store *LocalFileStore) GetDownloadFileHashStates(fileName string, content []byte, algorithm string, code string) error {
+	return store.backend.GetFileMetadata(fileName, stateDownload, content, hashStates, algorithm, code)
 }
 
 // GetCacheFileReader returns a FileReader for a file in cache directory.
