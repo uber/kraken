@@ -46,6 +46,7 @@ type Agent struct {
 // Config contains application configuration
 type Config struct {
 	Environment      string           `yaml:"environment"`
+	UploadDir        string           `yaml:"upload_dir"`
 	DownloadDir      string           `yaml:"download_dir"`
 	TrashDir         string           `yaml:"trash_dir"`
 	CacheDir         string           `yaml:"cache_dir"`

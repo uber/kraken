@@ -63,7 +63,7 @@ func TestStore(t *testing.T) {
 		waitGroup.Add(1)
 		go func() {
 
-			readWriter, err := backend.GetFileReadWriter(testFileName, stateTest1)
+			readWriter, err := backend.GetFileReadWriter(testFileName, []FileState{stateTest1})
 			assert.Nil(err)
 
 			_, err = readWriter.Write([]byte{'t', 'e', 's', 't', '\n'})
@@ -85,14 +85,14 @@ func TestStore(t *testing.T) {
 	waitGroup.Wait()
 
 	// Test moveFile
-	err = backend.MoveFile(testFileName, stateTest1, stateTest2)
+	err = backend.MoveFile(testFileName, []FileState{stateTest1}, stateTest2)
 	assert.Nil(err)
 
 	// Test getFileReader
 	for i := 0; i < 100; i++ {
 		waitGroup.Add(1)
 		go func() {
-			reader, err := backend.GetFileReader(testFileName, stateTest2)
+			reader, err := backend.GetFileReader(testFileName, []FileState{stateTest2})
 			assert.Nil(err)
 
 			b := make([]byte, 5)
@@ -111,13 +111,13 @@ func TestStore(t *testing.T) {
 	waitGroup.Wait()
 
 	// Confirm openCount is 0.
-	reader, err := backend.GetFileReader(testFileName, stateTest2)
+	reader, err := backend.GetFileReader(testFileName, []FileState{stateTest2})
 	reader.Close()
 	assert.Equal(reader.(*localFileReadWriter).entry.openCount, 0)
 	assert.False(reader.(*localFileReadWriter).entry.IsOpen())
 
 	// Test deleting file.
-	err = backend.DeleteFile(testFileName, stateTest2)
+	err = backend.DeleteFile(testFileName, []FileState{stateTest2})
 	assert.Equal(err, nil)
 	_, err = os.Stat(path.Join(_testDir1, testFileName))
 	assert.True(os.IsNotExist(err))

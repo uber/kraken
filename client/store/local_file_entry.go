@@ -12,7 +12,7 @@ type FileEntry interface {
 	GetState() FileState
 	SetState(state FileState)
 	IsOpen() bool
-	Stat(string) (os.FileInfo, error)
+	Stat() (os.FileInfo, error)
 	GetFileReader() (FileReader, error)
 	GetFileReadWriter() (FileReadWriter, error)
 	SetMetadata(metadataType, []byte, ...interface{}) error
@@ -88,7 +88,7 @@ func (entry *localFileEntry) IsOpen() bool {
 }
 
 // Stat returns a FileInfo describing the named file
-func (entry *localFileEntry) Stat(name string) (os.FileInfo, error) {
+func (entry *localFileEntry) Stat() (os.FileInfo, error) {
 	entry.RLock()
 	defer entry.RUnlock()
 

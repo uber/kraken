@@ -10,46 +10,20 @@ type FileState interface {
 type localFileState int
 
 const (
-	stateDownload localFileState = iota // File is being downloaded
-	stateCache                          // File has been downloaded
+	stateUpload   localFileState = iota // File is being uploaded through docker registry API
+	stateDownload                       // File is being downloaded through torrent
+	stateCache                          // File has been downloaded through torrent
 	stateTrash                          // File ready to be removed
 )
 
-func (state localFileState) GetDirectory() string { return _localFileStateLookup.getDirectory(state) }
+var _stateLookup = make(map[string]FileState)
+var _directoryLookup = make(map[FileState]string)
 
-var _localFileStateLookup = localFileStateLookup{}
-
-// localFileStateLookup provides utility functions to lookup mapping between states and directories.
-type localFileStateLookup struct {
-	stateLookup     map[string]FileState
-	directoryLookup map[FileState]string
+func registerFileState(s FileState, d string) {
+	_stateLookup[d] = s
+	_directoryLookup[s] = d
 }
 
-func (lookup localFileStateLookup) register(state FileState, directory string) {
-	lookup.stateLookup[directory] = state
-	lookup.directoryLookup[state] = directory
-}
-
-func (lookup localFileStateLookup) getDirectory(state FileState) string {
-	return lookup.directoryLookup[state]
-}
-
-func (lookup localFileStateLookup) getDirectories(state FileState) []string {
-	directories := []string{}
-	for d := range lookup.stateLookup {
-		directories = append(directories, d)
-	}
-	return directories
-}
-
-func (lookup localFileStateLookup) getState(directory string) FileState {
-	return lookup.stateLookup[directory]
-}
-
-func (lookup localFileStateLookup) getStates(directory string) []FileState {
-	states := []FileState{}
-	for s := range lookup.directoryLookup {
-		states = append(states, s)
-	}
-	return states
+func (state localFileState) GetDirectory() string {
+	return _directoryLookup[state]
 }

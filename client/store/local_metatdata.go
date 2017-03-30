@@ -26,7 +26,7 @@ const (
 func (mt metadataType) path(filepath string, args ...interface{}) (string, error) {
 	switch mt {
 	case pieceStatus:
-		return filepath + "-status", nil
+		return filepath + "_status", nil
 	case startedAt:
 		return filepath + "_startedat", nil
 	case hashStates:
