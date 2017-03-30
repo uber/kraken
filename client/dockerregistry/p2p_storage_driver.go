@@ -1,21 +1,18 @@
 package dockerregistry
 
 import (
+	"fmt"
 	"io"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
-	"code.uber.internal/go-common.git/x/log"
-	cache "code.uber.internal/infra/dockermover/storage"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/kraken/test-tracker"
 
-	"path/filepath"
-
-	"fmt"
-
-	"strings"
-
+	"code.uber.internal/go-common.git/x/log"
+	cache "code.uber.internal/infra/dockermover/storage"
 	"github.com/anacrolix/torrent"
 	"github.com/docker/distribution/context"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
