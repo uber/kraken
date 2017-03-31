@@ -1,5 +1,6 @@
 .idea
 .vscode
+.cache
 *.test
 .tmp
 vendor/
@@ -17,6 +18,8 @@ test/bin/puller/puller
 [0-9]*_-dir.go
 
 *.xml
+*.pyc
+env
 
 # Golang coverage files
 *.out

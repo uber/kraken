@@ -89,7 +89,7 @@ func Init() {
 func RunDBMigration(appCfg config.AppConfig) error {
 
 	// Open our database connection
-	db, err := sql.Open(appCfg.DBConfig.EngineName, appCfg.DBConfig.Dsn)
+	db, err := sql.Open(appCfg.DBConfig.EngineName, appCfg.DBConfig.GetDSN())
 	if err != nil {
 		log.Error("Failed to connect to datastore: ", err.Error())
 		return err
@@ -116,7 +116,7 @@ func RunDBMigration(appCfg config.AppConfig) error {
 // NewMySQLStorage creates and returns new MySQL storage
 func NewMySQLStorage(appCfg config.AppConfig) (Storage, error) {
 
-	db, err := sql.Open(appCfg.DBConfig.EngineName, appCfg.DBConfig.Dsn)
+	db, err := sql.Open(appCfg.DBConfig.EngineName, appCfg.DBConfig.GetDSN())
 	if err != nil {
 		log.Error("Failed to connect to datastore: ", err.Error())
 		return nil, err

@@ -1,5 +1,5 @@
 # Flags to pass to go build
-BUILD_FLAGS =
+BUILD_FLAGS = -gcflags '-N -l'
 
 # Environment variables to set before go build
 BUILD_ENV= 
@@ -47,4 +47,12 @@ run_database:
 		docker rm mysql-kraken || true
 		docker run --name mysql-kraken -p 3306:3306 \
 		-e MYSQL_ROOT_PASSWORD=uber -e MYSQL_USER=uber \
-		-e MYSQL_PASSWORD=uber -e MYSQL_DATABASE=kraken -v `pwd`/db/data:/var/lib/mysql:rw -d mysql/mysql-server:5.7 && sleep 3
+		-e MYSQL_PASSWORD=uber -e MYSQL_DATABASE=kraken -v `pwd`/db/data:/var/lib/mysql:rw -d percona/percona-server:5.6.28 && sleep 3
+
+integration:
+		make clean; GOOS=linux GOARCH=amd64 make kraken/tracker/tracker
+		if [ ! -d env ]; then \
+		   virtualenv --setuptools env ; \
+		fi;
+		env/bin/pip install -r requirements-tests.txt
+		CONFIG_DIR=config/tracker/config env/bin/py.test test/python
