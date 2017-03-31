@@ -93,7 +93,7 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	// write peers bencoded
 	err = bencode.Marshal(w, AnnouncerResponse{
