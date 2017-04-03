@@ -19,6 +19,7 @@ type FileStoreBackend interface {
 	GetFileStat(fileName string, states []FileState) (os.FileInfo, error)
 	// TODO (@evelynl): move/delet metadata based on metadataType
 	MoveFile(fileName string, states []FileState, goalState FileState) error
+	RenameFile(fileName string, states []FileState, targetFileName string, goalState FileState) error
 	MoveFileIn(fileName string, goalState FileState, sourcePath string) error
 	MoveFileOut(fileName string, states []FileState, targetPath string) error
 	DeleteFile(fileName string, states []FileState) error
@@ -189,7 +190,7 @@ func (backend *localFileStoreBackend) MoveFile(fileName string, states []FileSta
 		return err
 	}
 	if fileEntry.GetState() == goalState {
-		return nil
+		return &os.PathError{Op: "move", Path: fileName, Err: os.ErrExist}
 	}
 
 	if fileEntry.IsOpen() {
@@ -206,13 +207,48 @@ func (backend *localFileStoreBackend) MoveFile(fileName string, states []FileSta
 	return nil
 }
 
+// MoveFile moves a file to a different directory and also renames it.
+func (backend *localFileStoreBackend) RenameFile(fileName string, states []FileState, targetFileName string, goalState FileState) error {
+	backend.Lock()
+	defer backend.Unlock()
+
+	_, err := backend.getFileEntry(targetFileName, []FileState{goalState})
+	if err == nil {
+		return &os.PathError{Op: "rename", Path: targetFileName, Err: os.ErrExist}
+	}
+	if IsFileStateError(err) {
+		return err
+	}
+
+	fileEntry, err := backend.getFileEntry(fileName, append(states))
+	if err != nil {
+		return err
+	}
+
+	if fileEntry.IsOpen() {
+		return fmt.Errorf("Cannot remove file %s because it's still open", fileName)
+	}
+
+	sourcePath := path.Join(fileEntry.GetState().GetDirectory(), fileName)
+	targetPath := path.Join(goalState.GetDirectory(), targetFileName)
+	if err := os.Rename(sourcePath, targetPath); err != nil {
+		return err
+	}
+
+	backend.fileMap[fileName].SetState(goalState)
+	return nil
+}
+
 // MoveFileIn moves a file from unmanaged location to file store.
 func (backend *localFileStoreBackend) MoveFileIn(fileName string, goalState FileState, sourcePath string) error {
 	backend.Lock()
 	defer backend.Unlock()
 
 	_, err := backend.getFileEntry(fileName, []FileState{goalState})
-	if err != nil {
+	if err == nil {
+		return &os.PathError{Op: "move", Path: fileName, Err: os.ErrExist}
+	}
+	if IsFileStateError(err) {
 		return err
 	}
 

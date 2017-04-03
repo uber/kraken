@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/kraken/test-tracker"
 
@@ -71,11 +72,7 @@ func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (s
 	}
 	client := clientParam.(*torrent.Client)
 
-	lruParam, ok := params["cache"]
-	if !ok || lruParam == nil {
-		log.Fatal("Failed to create storage driver. No lru cache intiated.")
-	}
-	lru := lruParam.(*cache.FileCacheMap)
+	store := store.NewLocalFileStore(config)
 
 	// init redis connection pools
 	pool := &redis.Pool{
@@ -88,7 +85,7 @@ func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (s
 	t := tracker.NewTracker(config, pool)
 	go t.Serve()
 
-	return NewP2PStorageDriver(config, client, lru, t), nil
+	return NewP2PStorageDriver(config, client, store, t), nil
 }
 
 // P2PStorageDriver is a storage driver
@@ -97,20 +94,21 @@ type P2PStorageDriver struct {
 	p2pClient  *torrent.Client
 	p2pTracker *tracker.Tracker
 	lru        *cache.FileCacheMap
+	store      *store.LocalFileStore
 	blobs      *Blobs
 	uploads    *Uploads
 	hashstates *HashStates
 }
 
 // NewP2PStorageDriver creates a new P2PStorageDriver given Manager
-func NewP2PStorageDriver(c *configuration.Config, cl *torrent.Client, l *cache.FileCacheMap, t *tracker.Tracker) *P2PStorageDriver {
+func NewP2PStorageDriver(c *configuration.Config, cl *torrent.Client, s *store.LocalFileStore, t *tracker.Tracker) *P2PStorageDriver {
 	return &P2PStorageDriver{
 		config:     c,
 		p2pClient:  cl,
-		lru:        l,
+		store:      s,
 		p2pTracker: t,
-		blobs:      NewBlobs(t, cl, l),
-		uploads:    NewUploads(t, cl, l),
+		blobs:      NewBlobs(t, cl, s),
+		uploads:    NewUploads(t, cl, s),
 		hashstates: NewHashStates(),
 	}
 }
@@ -149,7 +147,7 @@ func (d *P2PStorageDriver) GetContent(ctx context.Context, path string) (data []
 		return d.uploads.getUploadStartTime(d.config.PushTempDir, uuid)
 	case "data":
 		// get or download content
-		return d.blobs.getOrDownloadBlobData(path, sha)
+		return d.blobs.getOrDownloadBlobData(sha)
 	default:
 		if len(ts) > 3 && ts[len(ts)-3] == "hashstates" {
 			uuid := ts[len(ts)-4]
@@ -175,7 +173,7 @@ func (d *P2PStorageDriver) Reader(ctx context.Context, path string, offset int64
 		return d.uploads.getUploadReader(path, d.config.PushTempDir, uuid, offset)
 	default:
 		sha := ts[len(ts)-2]
-		return d.blobs.getOrDownloadBlobReader(path, sha, offset)
+		return d.blobs.getOrDownloadBlobReader(sha, offset)
 	}
 }
 
@@ -190,7 +188,7 @@ func (d *P2PStorageDriver) PutContent(ctx context.Context, path string, content 
 		return d.uploads.initUpload(d.config.PushTempDir, uuid)
 	case "data":
 		sha := ts[len(ts)-2]
-		return d.blobs.putBlobData(path, d.config.CacheDir, sha, content)
+		return d.blobs.putBlobData(sha, content)
 	case "link":
 		if len(ts) < 7 {
 			return nil
@@ -236,33 +234,8 @@ func (d *P2PStorageDriver) Writer(ctx context.Context, path string, append bool)
 
 	var fw storagedriver.FileWriter
 	var err error
-	to := make(chan byte, 1)
-	go func() {
-		time.Sleep(writetimeout * time.Second)
-		to <- uint8(1)
-	}()
 
 	fw, err = NewChanWriteCloser(d.config.PushTempDir+uuid, append)
-
-	go func() {
-		// wait for file close or timeout
-		select {
-		case res := <-fw.(*ChanWriteCloser).Chan:
-			switch res {
-			// cancel
-			case uint8(0):
-				log.Infof("Cancel writting file %s", path)
-				break
-			// commit
-			case uint8(1):
-			}
-			break
-		case <-to:
-			log.Debugf("Timeout writting file %s", path)
-			// cancel write if timeout
-			fw.Cancel()
-		}
-	}()
 
 	return fw, err
 }
@@ -281,7 +254,7 @@ func (d *P2PStorageDriver) Stat(ctx context.Context, path string) (fi storagedri
 		return d.uploads.getUploadDataStat(d.config.PushTempDir, uuid)
 	default:
 		sha := st[len(st)-2]
-		return d.blobs.getBlobStat(path, sha)
+		return d.blobs.getBlobStat(sha)
 	}
 }
 
