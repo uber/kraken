@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"code.uber.internal/go-common.git/x/log"
-	cache "code.uber.internal/infra/dockermover/storage"
+	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/kraken/test-tracker"
+
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	sd "github.com/docker/distribution/registry/storage/driver"
@@ -16,15 +16,15 @@ import (
 
 // Uploads b
 type Uploads struct {
-	lru     *cache.FileCacheMap
+	store   *store.LocalFileStore
 	tracker *tracker.Tracker
 	client  *torrent.Client
 }
 
 // NewUploads creates a new Uploads
-func NewUploads(t *tracker.Tracker, cl *torrent.Client, c *cache.FileCacheMap) *Uploads {
+func NewUploads(t *tracker.Tracker, cl *torrent.Client, s *store.LocalFileStore) *Uploads {
 	return &Uploads{
-		lru:     c,
+		store:   s,
 		tracker: t,
 		client:  cl,
 	}
@@ -63,45 +63,24 @@ func (u *Uploads) getUploadStartTime(dir, uuid string) ([]byte, error) {
 }
 
 func (u *Uploads) getUploadReader(path, dir, uuid string, offset int64) (reader io.ReadCloser, err error) {
-	c := make(chan bool, 1)
 	var f *os.File
-	go func() {
-		to := make(chan byte, 1)
-		go func() {
-			time.Sleep(readtimeout * time.Second)
-			to <- uint8(1)
-		}()
 
-		f, err = os.Open(dir + uuid)
-		if err != nil {
-			c <- false
-		}
-
-		// set offest
-		_, err = f.Seek(offset, 0)
-		if err != nil {
-			c <- false
-		}
-
-		reader = ChanReadCloser{
-			Chan: make(chan byte, 1),
-			f:    f,
-		}
-		c <- true
-
-		// wait for file close or timeout
-		select {
-		case <-reader.(*ChanReadCloser).Chan:
-			break
-		case <-to:
-			log.Errorf("Timeout reading file %s", path)
-		}
-	}()
-	b := <-c
-	if b {
-		return reader, nil
+	f, err = os.Open(dir + uuid)
+	if err != nil {
+		return nil, err
 	}
-	return nil, err
+
+	// set offest
+	_, err = f.Seek(offset, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	reader = ChanReadCloser{
+		f: f,
+	}
+
+	return reader, nil
 }
 
 func (u *Uploads) getUploadDataStat(dir, uuid string) (fi sd.FileInfo, err error) {
@@ -126,18 +105,20 @@ func (u *Uploads) commitUpload(srcdir, srcuuid, destdir, destsha string) (err er
 	srcfp := srcdir + srcuuid
 	destfp := destdir + destsha
 	var mi *metainfo.MetaInfo
-	u.lru.Add(destsha, destfp, func(fp string) error {
-		err = os.Rename(srcfp, destfp)
-		if err != nil {
-			return err
-		}
-		mi, err = u.tracker.CreateTorrentInfo(destsha, destfp)
-		if err != nil {
-			return err
-		}
-		err = u.tracker.CreateTorrentFromInfo(destsha, mi)
+
+	err = u.store.MoveUploadFileToCache(srcuuid, destsha)
+	if err != nil {
 		return err
-	})
+	}
+	mi, err = u.tracker.CreateTorrentInfo(destsha, destfp)
+	if err != nil {
+		return err
+	}
+	err = u.tracker.CreateTorrentFromInfo(destsha, mi)
+	if err != nil {
+		return err
+	}
+
 	_, err = u.client.AddTorrent(mi)
 	if err != nil {
 		return err

@@ -78,9 +78,9 @@ func (store *LocalFileStore) GetDownloadFileReadWriter(fileName string) (FileRea
 	return store.backend.GetFileReadWriter(fileName, []FileState{stateDownload})
 }
 
-// GetUploadFilePath returns full path of a file in upoad directory.
-func (store *LocalFileStore) GetUploadFilePath(fileName string) (string, error) {
-	return store.backend.GetFilePath(fileName, []FileState{stateUpload})
+// GetCacheFilePath returns full path of a file in cache directory.
+func (store *LocalFileStore) GetCacheFilePath(fileName string) (string, error) {
+	return store.backend.GetFilePath(fileName, []FileState{stateCache})
 }
 
 // GetCacheFileStat returns a FileInfo of a file in cache directory.
@@ -89,8 +89,8 @@ func (store *LocalFileStore) GetCacheFileStat(fileName string) (os.FileInfo, err
 }
 
 // MoveUploadFileToCache moves a file from upload directory to cache directory.
-func (store *LocalFileStore) MoveUploadFileToCache(fileName string) error {
-	return store.backend.MoveFile(fileName, []FileState{stateUpload}, stateCache)
+func (store *LocalFileStore) MoveUploadFileToCache(fileName, targetFileName string) error {
+	return store.backend.RenameFile(fileName, []FileState{stateUpload}, targetFileName, stateCache)
 }
 
 // MoveDownloadFileToCache moves a file from download directory to cache directory.

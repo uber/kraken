@@ -1,139 +1,123 @@
 package dockerregistry
 
 import (
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"sync"
 	"time"
 
-	"code.uber.internal/go-common.git/x/log"
-	cache "code.uber.internal/infra/dockermover/storage"
+	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/kraken/test-tracker"
+
+	"code.uber.internal/go-common.git/x/log"
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	sd "github.com/docker/distribution/registry/storage/driver"
+	"github.com/docker/distribution/uuid"
 )
 
 // Blobs b
 type Blobs struct {
 	tracker *tracker.Tracker
 	client  *torrent.Client
-	lru     *cache.FileCacheMap
+	store   *store.LocalFileStore
 }
 
 // NewBlobs creates Blobs
-func NewBlobs(tr *tracker.Tracker, cl *torrent.Client, c *cache.FileCacheMap) *Blobs {
+func NewBlobs(tr *tracker.Tracker, cl *torrent.Client, s *store.LocalFileStore) *Blobs {
 	return &Blobs{
 		tracker: tr,
 		client:  cl,
-		lru:     c,
+		store:   s,
 	}
 }
 
-func (b *Blobs) getBlobStat(path, sha string) (fi sd.FileInfo, err error) {
-	var info os.FileInfo
-	_, ok := b.lru.Get(sha, func(fp string) error {
-		info, err = os.Stat(fp)
-		if err != nil {
-			return err
-		}
-		fi = sd.FileInfoInternal{
-			FileInfoFields: sd.FileInfoFields{
-				Path:    info.Name(),
-				Size:    info.Size(),
-				ModTime: info.ModTime(),
-				IsDir:   info.IsDir(),
-			},
-		}
-		return nil
-	})
-	if !ok {
-		err = b.download(path, sha)
-		if err != nil {
-			return nil, sd.PathNotFoundError{
-				DriverName: "p2p",
-				Path:       path,
-			}
-		}
-		_, ok = b.lru.Get(sha, func(fp string) error {
-			info, err = os.Stat(fp)
-			if err != nil {
-				return err
-			}
-			fi = sd.FileInfoInternal{
-				FileInfoFields: sd.FileInfoFields{
-					Path:    info.Name(),
-					Size:    info.Size(),
-					ModTime: info.ModTime(),
-					IsDir:   info.IsDir(),
-				},
-			}
-			return nil
-		})
-		if !ok {
-			return nil, fmt.Errorf("Unable to get file from cache %s", path)
-		}
-	}
-
+func (b *Blobs) getBlobStat(fileName string) (sd.FileInfo, error) {
+	info, err := b.store.GetCacheFileStat(fileName)
 	if err != nil {
-		return nil, err
+		if os.IsNotExist(err) {
+			err = b.download(fileName)
+			if err != nil {
+				return nil, sd.PathNotFoundError{
+					DriverName: "p2p",
+					Path:       fileName,
+				}
+			}
+			info, err = b.store.GetCacheFileStat(fileName)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
-	if fi == nil {
-		return nil, fmt.Errorf("Unable to get file info of %s", path)
+	fi := sd.FileInfoInternal{
+		FileInfoFields: sd.FileInfoFields{
+			Path:    info.Name(),
+			Size:    info.Size(),
+			ModTime: info.ModTime(),
+			IsDir:   info.IsDir(),
+		},
 	}
-
 	return fi, nil
 }
 
-func (b *Blobs) putBlobData(path, dir, sha string, content []byte) error {
-	fp := dir + sha
+// putBlobData is used to write content to files directly, like image manifest and metadata.
+func (b *Blobs) putBlobData(fileName string, content []byte) error {
 	var mi *metainfo.MetaInfo
-	_, ok, _ := b.lru.Add(sha, fp, func(fp string) error {
-		// Write to file
-		f, err := os.Create(fp)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
 
-		_, err = f.Write(content)
-		if err != nil {
-			// Remove the file if error copying data
-			defer os.Remove(fp)
-			return err
-		}
-
-		mi, err = b.tracker.CreateTorrentInfo(sha, fp)
-		if err != nil {
-			return err
-		}
-		err = b.tracker.CreateTorrentFromInfo(sha, mi)
+	// It's better to have a random extension to avoid race condition.
+	var randFileName = fileName + "." + uuid.Generate().String()
+	_, err := b.store.CreateUploadFile(randFileName, int64(len(content)))
+	if err != nil {
 		return err
-	})
+	}
+	writer, err := b.store.GetUploadFileReadWriter(randFileName)
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(content)
+	if err != nil {
+		writer.Close()
+		return err
+	}
+	writer.Close()
 
-	_, err := b.client.AddTorrent(mi)
+	// TODO (@yiran) Shouldn't use file path directly.
+	// TODO (@yiran) Maybe it's okay to fail with "os.IsExist"
+	err = b.store.MoveUploadFileToCache(randFileName, fileName)
+	if err != nil {
+		return err
+	}
+	path, err := b.store.GetCacheFilePath(fileName)
+	if err != nil {
+		return err
+	}
+	mi, err = b.tracker.CreateTorrentInfo(fileName, path)
+	if err != nil {
+		return err
+	}
+	err = b.tracker.CreateTorrentFromInfo(fileName, mi)
 	if err != nil {
 		return err
 	}
 
-	if !ok {
-		return fmt.Errorf("Failed to put content for %s", path)
+	_, err = b.client.AddTorrent(mi)
+	if err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func (b *Blobs) download(path, sha string) error {
+func (b *Blobs) download(fileName string) error {
 	completed := false
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 
 	go func() {
-		uri, err := b.tracker.GetMagnet(sha)
+		uri, err := b.tracker.GetMagnet(fileName)
 		if err != nil {
 			wg.Done()
 			return
@@ -164,7 +148,7 @@ func (b *Blobs) download(path, sha string) error {
 						return
 					}
 				case <-to:
-					log.Errorf("Timeout waiting for %s to download", path)
+					log.Errorf("Timeout waiting for %s to download", fileName)
 					wg.Done()
 					return
 				}
@@ -183,114 +167,47 @@ func (b *Blobs) download(path, sha string) error {
 
 	return sd.PathNotFoundError{
 		DriverName: "p2p",
-		Path:       path,
+		Path:       fileName,
 	}
 }
 
-func (b *Blobs) getOrDownloadBlobData(path, sha string) (data []byte, err error) {
+func (b *Blobs) getOrDownloadBlobData(fileName string) (data []byte, err error) {
 	// check cache
-	_, ok := b.lru.Get(sha, func(fp string) error {
-		data, err = ioutil.ReadFile(fp)
-		return nil
-	})
-	if ok {
-		return data, err
-	}
-
-	err = b.download(path, sha)
+	reader, err := b.getOrDownloadBlobReader(fileName, 0)
 	if err != nil {
 		return nil, err
 	}
-
-	_, ok = b.lru.Get(sha, func(fp string) error {
-		data, err = ioutil.ReadFile(fp)
-		return nil
-	})
-	if ok {
-		return data, err
-	}
-
-	return nil, fmt.Errorf("Failed to download %s", path)
+	defer reader.Close()
+	return ioutil.ReadAll(reader)
 }
 
-func (b *Blobs) getOrDownloadBlobReader(path, sha string, offset int64) (reader io.ReadCloser, err error) {
-	var ok bool
-	reader, ok, err = b.getBlobReader(path, sha, offset)
+func (b *Blobs) getOrDownloadBlobReader(fileName string, offset int64) (reader io.ReadCloser, err error) {
+	reader, err = b.getBlobReader(fileName, offset)
 	if err != nil {
-		return nil, err
-	}
-	if ok {
-		return reader, nil
-	}
-
-	err = b.download(path, sha)
-	if err != nil {
-		return nil, err
-	}
-
-	reader, ok, err = b.getBlobReader(path, sha, offset)
-	if err != nil {
-		return nil, err
-	}
-	if ok {
-		return reader, nil
-	}
-
-	return nil, fmt.Errorf("Failed to download %s", path)
-}
-
-func (b *Blobs) getBlobReader(path, sha string, offset int64) (io.ReadCloser, bool, error) {
-	var err error
-	var f *os.File
-	var reader ChanReadCloser
-	c := make(chan bool, 1)
-
-	go func() {
-		_, ok := b.lru.Get(sha, func(fp string) error {
-			to := make(chan byte, 1)
-			go func() {
-				time.Sleep(readtimeout * time.Second)
-				to <- uint8(1)
-			}()
-
-			f, err = os.Open(fp)
+		if os.IsNotExist(err) {
+			err = b.download(fileName)
 			if err != nil {
-				return err
+				return nil, err
 			}
-
-			// set offest
-			_, err = f.Seek(offset, 0)
-			if err != nil {
-				return err
-			}
-
-			reader = ChanReadCloser{
-				Chan: make(chan byte, 1),
-				f:    f,
-			}
-			c <- true
-
-			// wait for file close or timeout
-			select {
-			case <-reader.Chan:
-				break
-			case <-to:
-				log.Errorf("Timeout reading file %s", path)
-			}
-
-			return nil
-		})
-
-		// treat error
-		if !ok || err != nil {
-			c <- false
+			return b.getBlobReader(fileName, offset)
 		}
-	}()
-
-	// block until either lru.Get returns false or a reader is created
-	d := <-c
-	if d {
-		return reader, true, nil
+		return nil, err
 	}
-	return nil, false, err
+	return reader, nil
+}
+
+func (b *Blobs) getBlobReader(fileName string, offset int64) (io.ReadCloser, error) {
+	reader, err := b.store.GetCacheFileReader(fileName)
+	if err != nil {
+		return nil, err
+	}
+
+	// set offest
+	_, err = reader.Seek(offset, 0)
+	if err != nil {
+		reader.Close()
+		return nil, err
+	}
+
+	return reader, nil
 }

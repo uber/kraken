@@ -9,7 +9,6 @@ import (
 
 // ChanWriteCloser is a writecloser with a channel
 type ChanWriteCloser struct {
-	Chan      chan byte
 	tempPath  string
 	F         *os.File
 	closed    bool
@@ -22,7 +21,6 @@ type ChanWriteCloser struct {
 func NewChanWriteCloser(path string, append bool) (*ChanWriteCloser, error) {
 	log.Debugf("Writecloser %s", path)
 	return &ChanWriteCloser{
-		Chan:      make(chan byte, 1),
 		tempPath:  path,
 		closed:    false,
 		canceled:  false,
@@ -83,8 +81,6 @@ func (wc *ChanWriteCloser) Cancel() error {
 		}
 	}
 
-	// signal cancel
-	wc.Chan <- uint8(0)
 	wc.canceled = true
 
 	// remove file
@@ -112,8 +108,6 @@ func (wc *ChanWriteCloser) Commit() error {
 		}
 	}
 
-	// signal
-	wc.Chan <- uint8(1)
 	wc.committed = true
 
 	return nil
