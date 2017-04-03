@@ -14,6 +14,8 @@ type FileStoreBackend interface {
 	GetFileMetadata(fileName string, states []FileState, data []byte, mt metadataType, additionalArgs ...interface{}) error
 	GetFileReader(fileName string, states []FileState) (FileReader, error)
 	GetFileReadWriter(fileName string, states []FileState) (FileReadWriter, error)
+	// TODO (@yiran): This is only needed when migrating classes to filestore
+	GetFilePath(fileName string, states []FileState) (string, error)
 	GetFileStat(fileName string, states []FileState) (os.FileInfo, error)
 	// TODO (@evelynl): move/delet metadata based on metadataType
 	MoveFile(fileName string, states []FileState, goalState FileState) error
@@ -38,15 +40,15 @@ func NewLocalFileStoreBackend() FileStoreBackend {
 
 // getFileEntry checks if file exists and in one of the desired states, then returns FileEntry.
 // Not thread-safe.
-func (backend *localFileStoreBackend) getFileEntry(fileName string, states []FileState) (FileEntry, bool, error) {
+func (backend *localFileStoreBackend) getFileEntry(fileName string, states []FileState) (FileEntry, error) {
 	fileEntry, exists := backend.fileMap[fileName]
 	if exists {
 		for _, state := range states {
 			if fileEntry.GetState() == state {
-				return fileEntry, exists, nil
+				return fileEntry, nil
 			}
 		}
-		return nil, exists, fmt.Errorf("File %s state does not match: expected %v but got %s", fileName, states, fileEntry.GetState())
+		return nil, &FileStateError{Op: "get", State: fileEntry.GetState(), Name: fileName, Msg: fmt.Sprintf("Desired states: %v", states)}
 	}
 	for _, state := range states {
 		if _, err := os.Stat(path.Join(state.GetDirectory(), fileName)); err == nil {
@@ -54,19 +56,19 @@ func (backend *localFileStoreBackend) getFileEntry(fileName string, states []Fil
 			fileEntry = NewLocalFileEntry(fileName, state)
 			backend.fileMap[fileName] = fileEntry
 			exists = true
-			return fileEntry, exists, nil
+			return fileEntry, nil
 		}
 	}
-	return nil, exists, fmt.Errorf("File %s does not exist", fileName)
+	return nil, &os.PathError{Op: "get", Path: fileName, Err: os.ErrNotExist}
 }
 
-// CreateFile creates an empty file with specified size. If file exists, do nothing. Returns true if the file is new
+// CreateFile creates an empty file with specified size. If file exists, do nothing. Returns true if the file is new.
 func (backend *localFileStoreBackend) CreateFile(fileName string, state FileState, len int64) (bool, error) {
 	backend.Lock()
 	defer backend.Unlock()
 
-	_, exists, err := backend.getFileEntry(fileName, []FileState{state})
-	if exists {
+	_, err := backend.getFileEntry(fileName, []FileState{state})
+	if err == nil || IsFileStateError(err) {
 		return false, err
 	}
 
@@ -94,7 +96,7 @@ func (backend *localFileStoreBackend) SetFileMetadata(fileName string, states []
 	backend.Lock()
 	defer backend.Unlock()
 
-	fileEntry, _, err := backend.getFileEntry(fileName, states)
+	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
 		return err
 	}
@@ -112,7 +114,7 @@ func (backend *localFileStoreBackend) GetFileMetadata(fileName string, states []
 	backend.Lock()
 	defer backend.Unlock()
 
-	fileEntry, _, err := backend.getFileEntry(fileName, states)
+	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
 		return err
 	}
@@ -130,7 +132,7 @@ func (backend *localFileStoreBackend) GetFileReader(fileName string, states []Fi
 	backend.Lock()
 	defer backend.Unlock()
 
-	fileEntry, _, err := backend.getFileEntry(fileName, states)
+	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +145,7 @@ func (backend *localFileStoreBackend) GetFileReadWriter(fileName string, states 
 	backend.Lock()
 	defer backend.Unlock()
 
-	fileEntry, _, err := backend.getFileEntry(fileName, states)
+	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
 		return nil, err
 	}
@@ -151,12 +153,25 @@ func (backend *localFileStoreBackend) GetFileReadWriter(fileName string, states 
 	return fileEntry.GetFileReadWriter()
 }
 
+// GetFilePath returns full path for a file.
+func (backend *localFileStoreBackend) GetFilePath(fileName string, states []FileState) (string, error) {
+	backend.Lock()
+	defer backend.Unlock()
+
+	fileEntry, err := backend.getFileEntry(fileName, states)
+	if err != nil {
+		return "", err
+	}
+
+	return fileEntry.GetPath(), nil
+}
+
 // GetFileStat returns FileInfo for a file.
 func (backend *localFileStoreBackend) GetFileStat(fileName string, states []FileState) (os.FileInfo, error) {
 	backend.Lock()
 	defer backend.Unlock()
 
-	fileEntry, _, err := backend.getFileEntry(fileName, states)
+	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +184,7 @@ func (backend *localFileStoreBackend) MoveFile(fileName string, states []FileSta
 	backend.Lock()
 	defer backend.Unlock()
 
-	fileEntry, _, err := backend.getFileEntry(fileName, append(states, goalState))
+	fileEntry, err := backend.getFileEntry(fileName, append(states, goalState))
 	if err != nil {
 		return err
 	}
@@ -196,8 +211,8 @@ func (backend *localFileStoreBackend) MoveFileIn(fileName string, goalState File
 	backend.Lock()
 	defer backend.Unlock()
 
-	_, exists, err := backend.getFileEntry(fileName, []FileState{goalState})
-	if exists {
+	_, err := backend.getFileEntry(fileName, []FileState{goalState})
+	if err != nil {
 		return err
 	}
 
@@ -215,7 +230,7 @@ func (backend *localFileStoreBackend) MoveFileOut(fileName string, states []File
 	backend.Lock()
 	defer backend.Unlock()
 
-	fileEntry, _, err := backend.getFileEntry(fileName, states)
+	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
 		return err
 	}
@@ -238,7 +253,7 @@ func (backend *localFileStoreBackend) DeleteFile(fileName string, states []FileS
 	backend.Lock()
 	defer backend.Unlock()
 
-	fileEntry, _, err := backend.getFileEntry(fileName, states)
+	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
 		return err
 	}
