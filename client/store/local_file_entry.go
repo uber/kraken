@@ -9,6 +9,7 @@ import (
 // FileEntry keeps basic information of a file, and provides reader and readwriter on the file.
 type FileEntry interface {
 	GetName() string
+	GetPath() string
 	GetState() FileState
 	SetState(state FileState)
 	IsOpen() bool
@@ -39,6 +40,10 @@ func NewLocalFileEntry(name string, state FileState) FileEntry {
 
 func (entry *localFileEntry) GetName() string {
 	return entry.name
+}
+
+func (entry *localFileEntry) GetPath() string {
+	return path.Join(entry.state.GetDirectory(), entry.name)
 }
 
 func (entry *localFileEntry) GetState() FileState {

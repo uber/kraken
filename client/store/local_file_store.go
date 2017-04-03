@@ -1,6 +1,10 @@
 package store
 
-import "code.uber.internal/infra/kraken/configuration"
+import (
+	"os"
+
+	"code.uber.internal/infra/kraken/configuration"
+)
 
 // LocalFileStore manages all agent files on local disk.
 type LocalFileStore struct {
@@ -19,13 +23,14 @@ func NewLocalFileStore(config *configuration.Config) *LocalFileStore {
 	}
 }
 
+// CreateUploadFile create an empty file in upload directory with specified size.
+func (store *LocalFileStore) CreateUploadFile(fileName string, len int64) (bool, error) {
+	return store.backend.CreateFile(fileName, stateUpload, len)
+}
+
 // CreateDownloadFile create an empty file in download directory with specified size.
 func (store *LocalFileStore) CreateDownloadFile(fileName string, len int64) (bool, error) {
-	new, err := store.backend.CreateFile(fileName, stateDownload, len)
-	if err != nil {
-		return new, err
-	}
-	return new, nil
+	return store.backend.CreateFile(fileName, stateDownload, len)
 }
 
 // SetDownloadFilePieceStatus create and initializes piece status for a new download file
@@ -63,13 +68,33 @@ func (store *LocalFileStore) GetCacheFileReader(fileName string) (FileReader, er
 	return store.backend.GetFileReader(fileName, []FileState{stateCache})
 }
 
+// GetUploadFileReadWriter returns a FileReadWriter for a file in upload directory.
+func (store *LocalFileStore) GetUploadFileReadWriter(fileName string) (FileReadWriter, error) {
+	return store.backend.GetFileReadWriter(fileName, []FileState{stateUpload})
+}
+
 // GetDownloadFileReadWriter returns a FileReadWriter for a file in download directory.
 func (store *LocalFileStore) GetDownloadFileReadWriter(fileName string) (FileReadWriter, error) {
 	return store.backend.GetFileReadWriter(fileName, []FileState{stateDownload})
 }
 
-// MoveFileToCache moves a file from download directory to cache directory.
-func (store *LocalFileStore) MoveFileToCache(fileName string) error {
+// GetUploadFilePath returns full path of a file in upoad directory.
+func (store *LocalFileStore) GetUploadFilePath(fileName string) (string, error) {
+	return store.backend.GetFilePath(fileName, []FileState{stateUpload})
+}
+
+// GetCacheFileStat returns a FileInfo of a file in cache directory.
+func (store *LocalFileStore) GetCacheFileStat(fileName string) (os.FileInfo, error) {
+	return store.backend.GetFileStat(fileName, []FileState{stateCache})
+}
+
+// MoveUploadFileToCache moves a file from upload directory to cache directory.
+func (store *LocalFileStore) MoveUploadFileToCache(fileName string) error {
+	return store.backend.MoveFile(fileName, []FileState{stateUpload}, stateCache)
+}
+
+// MoveDownloadFileToCache moves a file from download directory to cache directory.
+func (store *LocalFileStore) MoveDownloadFileToCache(fileName string) error {
 	return store.backend.MoveFile(fileName, []FileState{stateDownload}, stateCache)
 }
 
