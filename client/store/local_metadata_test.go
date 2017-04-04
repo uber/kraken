@@ -26,21 +26,21 @@ func TestPieceStatus(t *testing.T) {
 	p1 := getPieceStatus(1, 2)
 
 	// get on Nil p0
-	_, err = p0.get(fp)
+	_, err = p0.Get(fp)
 	assert.True(t, os.IsNotExist(err))
 
 	// set on Nil content p0
-	updated, err := p0.set(fp, nil)
+	updated, err := p0.Set(fp, nil)
 	assert.False(t, updated)
 	assert.Equal(t, "Invalid content: []", err.Error())
 
 	// updated
-	updated, err = p0.set(fp, []byte{pieceDone})
+	updated, err = p0.Set(fp, []byte{pieceDone})
 	assert.True(t, updated)
 	assert.Nil(t, err)
 
 	// not changed
-	updated, err = p0.set(fp, []byte{pieceDone})
+	updated, err = p0.Set(fp, []byte{pieceDone})
 	assert.False(t, updated)
 	assert.Nil(t, err)
 
@@ -54,23 +54,23 @@ func TestPieceStatus(t *testing.T) {
 	wg.Add(2)
 
 	go func() {
-		updated, err := p0.set(fp, []byte{pieceDirty})
+		updated, err := p0.Set(fp, []byte{pieceDirty})
 		wg.Done()
 		assert.True(t, updated)
 		assert.Nil(t, err)
 		// get
-		d0, err := p0.get(fp)
+		d0, err := p0.Get(fp)
 		assert.Nil(t, err)
 		assert.Equal(t, pieceDirty, d0[0])
 	}()
 
 	go func() {
-		updated, err := p1.set(fp, []byte{pieceDone})
+		updated, err := p1.Set(fp, []byte{pieceDone})
 		wg.Done()
 		assert.True(t, updated)
 		assert.Nil(t, err)
 		// get
-		d1, err := p1.get(fp)
+		d1, err := p1.Get(fp)
 		assert.Nil(t, err)
 		assert.Equal(t, d1[0], pieceDone)
 	}()
@@ -83,8 +83,8 @@ func TestPieceStatus(t *testing.T) {
 	assert.Equal(t, content[1], pieceDone)
 
 	// delete
-	assert.Nil(t, p0.delete(fp))
-	assert.Nil(t, p1.delete(fp))
+	assert.Nil(t, p0.Delete(fp))
+	assert.Nil(t, p1.Delete(fp))
 
 	_, err = os.Stat(fp + "_status")
 	assert.True(t, os.IsNotExist(err))
@@ -99,26 +99,26 @@ func TestStartedAt(t *testing.T) {
 	sa := getStartedAt()
 
 	// get on Nil p0
-	_, err = sa.get(fp)
+	_, err = sa.Get(fp)
 	assert.True(t, os.IsNotExist(err))
 
 	// set and create
-	updated, err := sa.set(fp, nil)
+	updated, err := sa.Set(fp, nil)
 	assert.True(t, updated)
 	assert.Nil(t, err)
 
 	// updated
-	updated, err = sa.set(fp, []byte("2017"))
+	updated, err = sa.Set(fp, []byte("2017"))
 	assert.True(t, updated)
 	assert.Nil(t, err)
 
 	// not updated
-	updated, err = sa.set(fp, []byte("2017"))
+	updated, err = sa.Set(fp, []byte("2017"))
 	assert.False(t, updated)
 	assert.Nil(t, err)
 
 	// get
-	d, err := sa.get(fp)
+	d, err := sa.Get(fp)
 	assert.Nil(t, err)
 	assert.Equal(t, "2017", string(d[:]))
 
@@ -127,7 +127,7 @@ func TestStartedAt(t *testing.T) {
 	assert.Equal(t, "2017", string(content[:]))
 
 	// delete
-	assert.Nil(t, sa.delete(fp))
+	assert.Nil(t, sa.Delete(fp))
 
 	_, err = os.Stat(fp + "_startedat")
 	assert.True(t, os.IsNotExist(err))
@@ -142,26 +142,26 @@ func TestHashState(t *testing.T) {
 	hs := getHashState("sha256", "0")
 
 	// get on Nil p0
-	_, err = hs.get(fp)
+	_, err = hs.Get(fp)
 	assert.True(t, os.IsNotExist(err))
 
 	// set and create
-	updated, err := hs.set(fp, nil)
+	updated, err := hs.Set(fp, nil)
 	assert.True(t, updated)
 	assert.Nil(t, err)
 
 	// updated
-	updated, err = hs.set(fp, []byte("2017"))
+	updated, err = hs.Set(fp, []byte("2017"))
 	assert.True(t, updated)
 	assert.Nil(t, err)
 
 	// not updated
-	updated, err = hs.set(fp, []byte("2017"))
+	updated, err = hs.Set(fp, []byte("2017"))
 	assert.False(t, updated)
 	assert.Nil(t, err)
 
 	// get
-	d, err := hs.get(fp)
+	d, err := hs.Get(fp)
 	assert.Nil(t, err)
 	assert.Equal(t, "2017", string(d[:]))
 
@@ -170,7 +170,7 @@ func TestHashState(t *testing.T) {
 	assert.Equal(t, "2017", string(content[:]))
 
 	// delete
-	assert.Nil(t, hs.delete(fp))
+	assert.Nil(t, hs.Delete(fp))
 
 	_, err = os.Stat(fp + "_hashstates/sha256_0")
 	assert.True(t, os.IsNotExist(err))
