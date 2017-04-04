@@ -34,33 +34,35 @@ func (store *LocalFileStore) CreateDownloadFile(fileName string, len int64) (boo
 }
 
 // SetDownloadFilePieceStatus create and initializes piece status for a new download file
-func (store *LocalFileStore) SetDownloadFilePieceStatus(fileName string, content []byte) error {
-	return store.backend.SetFileMetadata(fileName, []FileState{stateDownload}, content, pieceStatus)
+func (store *LocalFileStore) SetDownloadFilePieceStatus(fileName string, content []byte, index int, numPieces int) (bool, error) {
+	return store.backend.SetFileMetadata(fileName, []FileState{stateDownload}, content, getPieceStatus(index, numPieces))
 }
 
 // GetDownloadFilePieceStatus create and initializes piece status for a new download file
-func (store *LocalFileStore) GetDownloadFilePieceStatus(fileName string, content []byte) error {
-	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload}, content, pieceStatus)
+func (store *LocalFileStore) GetDownloadFilePieceStatus(fileName string, index int, numPieces int) ([]byte, error) {
+	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload}, getPieceStatus(index, numPieces))
 }
 
 // SetDownloadFileStartedAt create and writes the creation file for a new download file
 func (store *LocalFileStore) SetDownloadFileStartedAt(fileName string, content []byte) error {
-	return store.backend.SetFileMetadata(fileName, []FileState{stateDownload}, content, startedAt)
+	_, err := store.backend.SetFileMetadata(fileName, []FileState{stateDownload}, content, getStartedAt())
+	return err
 }
 
 // GetDownloadFileStartedAt create and writes the creation file for a new download file
-func (store *LocalFileStore) GetDownloadFileStartedAt(fileName string, content []byte) error {
-	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload}, content, startedAt)
+func (store *LocalFileStore) GetDownloadFileStartedAt(fileName string) ([]byte, error) {
+	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload}, getStartedAt())
 }
 
 // SetDownloadFileHashStates creates and writes the hashstate for a downloading file
 func (store *LocalFileStore) SetDownloadFileHashStates(fileName string, content []byte, algorithm string, code string) error {
-	return store.backend.SetFileMetadata(fileName, []FileState{stateDownload}, content, hashStates, algorithm, code)
+	_, err := store.backend.SetFileMetadata(fileName, []FileState{stateDownload}, content, getHashState(algorithm, code))
+	return err
 }
 
 // GetDownloadFileHashStates creates and writes the hashstate for a downloading file
-func (store *LocalFileStore) GetDownloadFileHashStates(fileName string, content []byte, algorithm string, code string) error {
-	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload}, content, hashStates, algorithm, code)
+func (store *LocalFileStore) GetDownloadFileHashStates(fileName string, algorithm string, code string) ([]byte, error) {
+	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload}, getHashState(algorithm, code))
 }
 
 // GetCacheFileReader returns a FileReader for a file in cache directory.

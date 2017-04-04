@@ -10,8 +10,8 @@ import (
 // FileStoreBackend manages all agent files.
 type FileStoreBackend interface {
 	CreateFile(fileName string, state FileState, len int64) (bool, error)
-	SetFileMetadata(fileName string, states []FileState, data []byte, mt metadataType, additionalArgs ...interface{}) error
-	GetFileMetadata(fileName string, states []FileState, data []byte, mt metadataType, additionalArgs ...interface{}) error
+	SetFileMetadata(fileName string, states []FileState, data []byte, mt metadataType) (bool, error)
+	GetFileMetadata(fileName string, states []FileState, mt metadataType) ([]byte, error)
 	GetFileReader(fileName string, states []FileState) (FileReader, error)
 	GetFileReadWriter(fileName string, states []FileState) (FileReadWriter, error)
 	// TODO (@yiran): This is only needed when migrating classes to filestore
@@ -93,39 +93,35 @@ func (backend *localFileStoreBackend) CreateFile(fileName string, state FileStat
 }
 
 // SetFileMetadata creates or overwrites metadata assocciate with the file with content
-func (backend *localFileStoreBackend) SetFileMetadata(fileName string, states []FileState, data []byte, mt metadataType, additionalArgs ...interface{}) error {
+func (backend *localFileStoreBackend) SetFileMetadata(fileName string, states []FileState, data []byte, mt metadataType) (bool, error) {
 	backend.Lock()
 	defer backend.Unlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Create metadata file
-	err = fileEntry.SetMetadata(mt, data, additionalArgs)
+	updated, err := fileEntry.SetMetadata(mt, data)
 	if err != nil {
-		return err
+		return updated, err
 	}
-	return nil
+	return updated, nil
 }
 
 // GetFileMetadata returns metadata assocciate with the file
-func (backend *localFileStoreBackend) GetFileMetadata(fileName string, states []FileState, data []byte, mt metadataType, additionalArgs ...interface{}) error {
+func (backend *localFileStoreBackend) GetFileMetadata(fileName string, states []FileState, mt metadataType) ([]byte, error) {
 	backend.Lock()
 	defer backend.Unlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Get metadata
-	err = fileEntry.GetMetadata(mt, data, additionalArgs)
-	if err != nil {
-		return err
-	}
-	return nil
+	return fileEntry.GetMetadata(mt)
 }
 
 // GetFileReader returns a FileReader object for read operations.
