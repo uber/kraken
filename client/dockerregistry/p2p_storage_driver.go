@@ -188,7 +188,7 @@ func (d *P2PStorageDriver) PutContent(ctx context.Context, path string, content 
 		return d.uploads.initUpload(d.config.PushTempDir, uuid)
 	case "data":
 		sha := ts[len(ts)-2]
-		return d.blobs.putBlobData(sha, content)
+		return d.uploads.putBlobData(sha, content)
 	case "link":
 		if len(ts) < 7 {
 			return nil
@@ -232,12 +232,7 @@ func (d *P2PStorageDriver) Writer(ctx context.Context, path string, append bool)
 		return nil, fmt.Errorf("Invalid request %s", path)
 	}
 
-	var fw storagedriver.FileWriter
-	var err error
-
-	fw, err = NewChanWriteCloser(d.config.PushTempDir+uuid, append)
-
-	return fw, err
+	return d.store.GetUploadFileReadWriter(uuid)
 }
 
 // Stat returns fileinfo of path
