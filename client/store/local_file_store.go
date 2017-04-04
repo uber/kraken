@@ -38,9 +38,9 @@ func (store *LocalFileStore) SetDownloadFilePieceStatus(fileName string, content
 	return store.backend.SetFileMetadata(fileName, []FileState{stateDownload}, content, getPieceStatus(index, numPieces))
 }
 
-// GetDownloadFilePieceStatus create and initializes piece status for a new download file
-func (store *LocalFileStore) GetDownloadFilePieceStatus(fileName string, index int, numPieces int) ([]byte, error) {
-	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload}, getPieceStatus(index, numPieces))
+// GetFilePieceStatus create and initializes piece status for a new download file
+func (store *LocalFileStore) GetFilePieceStatus(fileName string, index int, numPieces int) ([]byte, error) {
+	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload, stateCache}, getPieceStatus(index, numPieces))
 }
 
 // SetDownloadFileStartedAt create and writes the creation file for a new download file
