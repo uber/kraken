@@ -12,9 +12,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/metainfo"
 	sd "github.com/docker/distribution/registry/storage/driver"
-	"github.com/docker/distribution/uuid"
 )
 
 // Blobs b
@@ -60,54 +58,6 @@ func (b *Blobs) getBlobStat(fileName string) (sd.FileInfo, error) {
 		},
 	}
 	return fi, nil
-}
-
-// putBlobData is used to write content to files directly, like image manifest and metadata.
-func (b *Blobs) putBlobData(fileName string, content []byte) error {
-	var mi *metainfo.MetaInfo
-
-	// It's better to have a random extension to avoid race condition.
-	var randFileName = fileName + "." + uuid.Generate().String()
-	_, err := b.store.CreateUploadFile(randFileName, int64(len(content)))
-	if err != nil {
-		return err
-	}
-	writer, err := b.store.GetUploadFileReadWriter(randFileName)
-	if err != nil {
-		return err
-	}
-	_, err = writer.Write(content)
-	if err != nil {
-		writer.Close()
-		return err
-	}
-	writer.Close()
-
-	// TODO (@yiran) Shouldn't use file path directly.
-	// TODO (@yiran) Maybe it's okay to fail with "os.IsExist"
-	err = b.store.MoveUploadFileToCache(randFileName, fileName)
-	if err != nil {
-		return err
-	}
-	path, err := b.store.GetCacheFilePath(fileName)
-	if err != nil {
-		return err
-	}
-	mi, err = b.tracker.CreateTorrentInfo(fileName, path)
-	if err != nil {
-		return err
-	}
-	err = b.tracker.CreateTorrentFromInfo(fileName, mi)
-	if err != nil {
-		return err
-	}
-
-	_, err = b.client.AddTorrent(mi)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (b *Blobs) download(fileName string) error {

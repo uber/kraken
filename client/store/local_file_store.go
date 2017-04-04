@@ -65,6 +65,11 @@ func (store *LocalFileStore) GetDownloadFileHashStates(fileName string, algorith
 	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload}, getHashState(algorithm, code))
 }
 
+// GetUploadFileReader returns a FileReader for a file in upload directory.
+func (store *LocalFileStore) GetUploadFileReader(fileName string) (FileReader, error) {
+	return store.backend.GetFileReader(fileName, []FileState{stateUpload})
+}
+
 // GetCacheFileReader returns a FileReader for a file in cache directory.
 func (store *LocalFileStore) GetCacheFileReader(fileName string) (FileReader, error) {
 	return store.backend.GetFileReader(fileName, []FileState{stateCache})

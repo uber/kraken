@@ -12,6 +12,7 @@ import (
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	sd "github.com/docker/distribution/registry/storage/driver"
+	"github.com/docker/distribution/uuid"
 )
 
 // Uploads b
@@ -62,22 +63,16 @@ func (u *Uploads) getUploadStartTime(dir, uuid string) ([]byte, error) {
 	return date, nil
 }
 
-func (u *Uploads) getUploadReader(path, dir, uuid string, offset int64) (reader io.ReadCloser, err error) {
-	var f *os.File
-
-	f, err = os.Open(dir + uuid)
+func (u *Uploads) getUploadReader(path, dir, uuid string, offset int64) (io.ReadCloser, error) {
+	reader, err := u.store.GetUploadFileReader(uuid)
 	if err != nil {
 		return nil, err
 	}
 
 	// set offest
-	_, err = f.Seek(offset, 0)
+	_, err = reader.Seek(offset, 0)
 	if err != nil {
 		return nil, err
-	}
-
-	reader = ChanReadCloser{
-		f: f,
 	}
 
 	return reader, nil
@@ -126,4 +121,52 @@ func (u *Uploads) commitUpload(srcdir, srcuuid, destdir, destsha string) (err er
 	// remove timestamp file
 	os.Remove(srcfp + "_statedat")
 	return
+}
+
+// putBlobData is used to write content to files directly, like image manifest and metadata.
+func (u *Uploads) putBlobData(fileName string, content []byte) error {
+	var mi *metainfo.MetaInfo
+
+	// It's better to have a random extension to avoid race condition.
+	var randFileName = fileName + "." + uuid.Generate().String()
+	_, err := u.store.CreateUploadFile(randFileName, int64(len(content)))
+	if err != nil {
+		return err
+	}
+	writer, err := u.store.GetUploadFileReadWriter(randFileName)
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(content)
+	if err != nil {
+		writer.Close()
+		return err
+	}
+	writer.Close()
+
+	// TODO (@yiran) Shouldn't use file path directly.
+	// TODO (@yiran) Maybe it's okay to fail with "os.IsExist"
+	err = u.store.MoveUploadFileToCache(randFileName, fileName)
+	if err != nil {
+		return err
+	}
+	path, err := u.store.GetCacheFilePath(fileName)
+	if err != nil {
+		return err
+	}
+	mi, err = u.tracker.CreateTorrentInfo(fileName, path)
+	if err != nil {
+		return err
+	}
+	err = u.tracker.CreateTorrentFromInfo(fileName, mi)
+	if err != nil {
+		return err
+	}
+
+	_, err = u.client.AddTorrent(mi)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
