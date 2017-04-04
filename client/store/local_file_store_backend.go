@@ -10,8 +10,8 @@ import (
 // FileStoreBackend manages all agent files.
 type FileStoreBackend interface {
 	CreateFile(fileName string, state FileState, len int64) (bool, error)
-	SetFileMetadata(fileName string, states []FileState, data []byte, mt metadataType) (bool, error)
-	GetFileMetadata(fileName string, states []FileState, mt metadataType) ([]byte, error)
+	SetFileMetadata(fileName string, states []FileState, data []byte, mt MetadataType) (bool, error)
+	GetFileMetadata(fileName string, states []FileState, mt MetadataType) ([]byte, error)
 	GetFileReader(fileName string, states []FileState) (FileReader, error)
 	GetFileReadWriter(fileName string, states []FileState) (FileReadWriter, error)
 	// TODO (@yiran): This is only needed when migrating classes to filestore
@@ -93,7 +93,7 @@ func (backend *localFileStoreBackend) CreateFile(fileName string, state FileStat
 }
 
 // SetFileMetadata creates or overwrites metadata assocciate with the file with content
-func (backend *localFileStoreBackend) SetFileMetadata(fileName string, states []FileState, data []byte, mt metadataType) (bool, error) {
+func (backend *localFileStoreBackend) SetFileMetadata(fileName string, states []FileState, data []byte, mt MetadataType) (bool, error) {
 	backend.Lock()
 	defer backend.Unlock()
 
@@ -111,7 +111,7 @@ func (backend *localFileStoreBackend) SetFileMetadata(fileName string, states []
 }
 
 // GetFileMetadata returns metadata assocciate with the file
-func (backend *localFileStoreBackend) GetFileMetadata(fileName string, states []FileState, mt metadataType) ([]byte, error) {
+func (backend *localFileStoreBackend) GetFileMetadata(fileName string, states []FileState, mt MetadataType) ([]byte, error) {
 	backend.Lock()
 	defer backend.Unlock()
 

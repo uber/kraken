@@ -34,7 +34,7 @@ type localFileReadWriter struct {
 	closed bool
 }
 
-func (readWriter localFileReadWriter) close() error {
+func (readWriter *localFileReadWriter) close() error {
 	readWriter.entry.Lock()
 	defer readWriter.entry.Unlock()
 

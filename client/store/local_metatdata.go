@@ -14,12 +14,11 @@ const (
 	pieceDontCare = uint8(3)
 )
 
-// metadataType is an interface that controls operations on metadata files
-type metadataType interface {
-	path(filepath string) string
-	set(filepath string, content []byte) (bool, error)
-	get(filepath string) ([]byte, error)
-	delete(filepath string) error
+// MetadataType is an interface that controls operations on metadata files
+type MetadataType interface {
+	Set(filepath string, content []byte) (bool, error)
+	Get(filepath string) ([]byte, error)
+	Delete(filepath string) error
 }
 
 type pieceStatus struct {
@@ -27,7 +26,7 @@ type pieceStatus struct {
 	numPieces int
 }
 
-func getPieceStatus(index int, numPieces int) metadataType {
+func getPieceStatus(index int, numPieces int) MetadataType {
 	return &pieceStatus{
 		index:     index,
 		numPieces: numPieces,
@@ -53,9 +52,9 @@ func (p *pieceStatus) path(filepath string) string {
 	return filepath + "_status"
 }
 
-// set updates piece status and returns true only if the file is updated correctly
+// Set updates pieceStatus and returns true only if the file is updated correctly
 // returns false if error or file is already updated with desired content
-func (p *pieceStatus) set(filepath string, content []byte) (bool, error) {
+func (p *pieceStatus) Set(filepath string, content []byte) (bool, error) {
 	fp := p.path(filepath)
 	if err := p.init(filepath); err != nil {
 		return false, err
@@ -91,7 +90,8 @@ func (p *pieceStatus) set(filepath string, content []byte) (bool, error) {
 	return true, nil
 }
 
-func (p *pieceStatus) get(filepath string) ([]byte, error) {
+// Get returns pieceStatus content as a byte array.
+func (p *pieceStatus) Get(filepath string) ([]byte, error) {
 	fp := p.path(filepath)
 
 	// check existence
@@ -116,8 +116,8 @@ func (p *pieceStatus) get(filepath string) ([]byte, error) {
 	return content, nil
 }
 
-// delete deletes pieceStatue of the filepath, i.e. deletes all statuses
-func (p *pieceStatus) delete(filepath string) error {
+// Delete deletes pieceStatus of the filepath, i.e. deletes all statuses.
+func (p *pieceStatus) Delete(filepath string) error {
 	fp := p.path(filepath)
 
 	err := os.RemoveAll(fp)
@@ -130,7 +130,7 @@ func (p *pieceStatus) delete(filepath string) error {
 type startedAt struct {
 }
 
-func getStartedAt() metadataType {
+func getStartedAt() MetadataType {
 	return &startedAt{}
 }
 
@@ -138,9 +138,9 @@ func (s *startedAt) path(filepath string) string {
 	return filepath + "_startedat"
 }
 
-// set updates piece status and returns true only if the file is updated correctly
+// Set updates startedAt and returns true only if the file is updated correctly
 // returns false if error or file is already updated with desired content
-func (s *startedAt) set(filepath string, content []byte) (bool, error) {
+func (s *startedAt) Set(filepath string, content []byte) (bool, error) {
 	fp := s.path(filepath)
 
 	var f *os.File
@@ -191,7 +191,8 @@ func (s *startedAt) set(filepath string, content []byte) (bool, error) {
 	return true, nil
 }
 
-func (s *startedAt) get(filepath string) ([]byte, error) {
+// Get returns startedAt content as a byte array.
+func (s *startedAt) Get(filepath string) ([]byte, error) {
 	fp := s.path(filepath)
 
 	// check existence
@@ -202,7 +203,8 @@ func (s *startedAt) get(filepath string) ([]byte, error) {
 	return ioutil.ReadFile(fp)
 }
 
-func (s *startedAt) delete(filepath string) error {
+// Delete deletes startedAt of the filepath.
+func (s *startedAt) Delete(filepath string) error {
 	fp := s.path(filepath)
 
 	err := os.RemoveAll(fp)
@@ -217,7 +219,7 @@ type hashState struct {
 	code string
 }
 
-func getHashState(alg, code string) metadataType {
+func getHashState(alg, code string) MetadataType {
 	return &hashState{
 		alg:  alg,
 		code: code,
@@ -229,9 +231,9 @@ func (h *hashState) path(filepath string) string {
 	return fmt.Sprintf("%s%s_%s", dir, h.alg, h.code)
 }
 
-// set updates piece status and returns true only if the file is updated correctly
+// Set updates hashState and returns true only if the file is updated correctly
 // returns false if error or file is already updated with desired content
-func (h *hashState) set(filepath string, content []byte) (bool, error) {
+func (h *hashState) Set(filepath string, content []byte) (bool, error) {
 	fp := h.path(filepath)
 
 	var f *os.File
@@ -287,7 +289,8 @@ func (h *hashState) set(filepath string, content []byte) (bool, error) {
 	return true, nil
 }
 
-func (h *hashState) get(filepath string) ([]byte, error) {
+// Get returns hashState content as a byte array.
+func (h *hashState) Get(filepath string) ([]byte, error) {
 	fp := h.path(filepath)
 
 	// check existence
@@ -298,7 +301,8 @@ func (h *hashState) get(filepath string) ([]byte, error) {
 	return ioutil.ReadFile(fp)
 }
 
-func (h *hashState) delete(filepath string) error {
+// Delete deletes hashState of the filepath.
+func (h *hashState) Delete(filepath string) error {
 	fp := h.path(filepath)
 
 	err := os.RemoveAll(fp)
