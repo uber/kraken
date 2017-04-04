@@ -103,11 +103,7 @@ func (backend *localFileStoreBackend) SetFileMetadata(fileName string, states []
 	}
 
 	// Create metadata file
-	updated, err := fileEntry.SetMetadata(mt, data)
-	if err != nil {
-		return updated, err
-	}
-	return updated, nil
+	return mt.Set(fileEntry, data)
 }
 
 // GetFileMetadata returns metadata assocciate with the file
@@ -121,7 +117,7 @@ func (backend *localFileStoreBackend) GetFileMetadata(fileName string, states []
 	}
 
 	// Get metadata
-	return fileEntry.GetMetadata(mt)
+	return mt.Get(fileEntry)
 }
 
 // GetFileReader returns a FileReader object for read operations.

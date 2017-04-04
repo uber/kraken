@@ -7,18 +7,19 @@ import (
 	"path"
 )
 
+// const enum representing the status of a torrent's piece
 const (
-	pieceClean    = uint8(0)
-	pieceDirty    = uint8(1)
-	pieceDone     = uint8(2)
-	pieceDontCare = uint8(3)
+	PieceClean    = uint8(0)
+	PieceDirty    = uint8(1)
+	PieceDone     = uint8(2)
+	PieceDontCare = uint8(3)
 )
 
 // MetadataType is an interface that controls operations on metadata files
 type MetadataType interface {
-	Set(filepath string, content []byte) (bool, error)
-	Get(filepath string) ([]byte, error)
-	Delete(filepath string) error
+	Set(file FileEntry, content []byte) (bool, error)
+	Get(file FileEntry) ([]byte, error)
+	Delete(file FileEntry) error
 }
 
 type pieceStatus struct {
@@ -34,29 +35,33 @@ func getPieceStatus(index int, numPieces int) MetadataType {
 }
 
 // init initilizes pieceStatue of all pieces as clean
-func (p *pieceStatus) init(filepath string) error {
-	fp := p.path(filepath)
+func (p *pieceStatus) init(file FileEntry) error {
+	fp := p.path(file)
 	if _, err := os.Stat(fp); !os.IsNotExist(err) {
 		return nil
 	}
 
 	data := make([]byte, p.numPieces)
 	for i := 0; i < p.numPieces; i++ {
-		data[i] = pieceClean
+		data[i] = PieceClean
 	}
 
 	return ioutil.WriteFile(fp, data, 0755)
 }
 
-func (p *pieceStatus) path(filepath string) string {
-	return filepath + "_status"
+func (p *pieceStatus) path(file FileEntry) string {
+	return file.GetPath() + "_status"
 }
 
 // Set updates pieceStatus and returns true only if the file is updated correctly
 // returns false if error or file is already updated with desired content
-func (p *pieceStatus) Set(filepath string, content []byte) (bool, error) {
-	fp := p.path(filepath)
-	if err := p.init(filepath); err != nil {
+func (p *pieceStatus) Set(file FileEntry, content []byte) (bool, error) {
+	if file.GetState() == stateCache {
+		return false, fmt.Errorf("Cannot change piece status for %s: %d. Already in cache directory.", file.GetPath(), p.index)
+	}
+
+	fp := p.path(file)
+	if err := p.init(file); err != nil {
 		return false, err
 	}
 
@@ -91,8 +96,12 @@ func (p *pieceStatus) Set(filepath string, content []byte) (bool, error) {
 }
 
 // Get returns pieceStatus content as a byte array.
-func (p *pieceStatus) Get(filepath string) ([]byte, error) {
-	fp := p.path(filepath)
+func (p *pieceStatus) Get(file FileEntry) ([]byte, error) {
+	if file.GetState() == stateCache {
+		return []byte{PieceDone}, nil
+	}
+
+	fp := p.path(file)
 
 	// check existence
 	if _, err := os.Stat(fp); err != nil {
@@ -117,8 +126,8 @@ func (p *pieceStatus) Get(filepath string) ([]byte, error) {
 }
 
 // Delete deletes pieceStatus of the filepath, i.e. deletes all statuses.
-func (p *pieceStatus) Delete(filepath string) error {
-	fp := p.path(filepath)
+func (p *pieceStatus) Delete(file FileEntry) error {
+	fp := p.path(file)
 
 	err := os.RemoveAll(fp)
 	if err != nil {
@@ -134,14 +143,14 @@ func getStartedAt() MetadataType {
 	return &startedAt{}
 }
 
-func (s *startedAt) path(filepath string) string {
-	return filepath + "_startedat"
+func (s *startedAt) path(file FileEntry) string {
+	return file.GetPath() + "_startedat"
 }
 
 // Set updates startedAt and returns true only if the file is updated correctly
 // returns false if error or file is already updated with desired content
-func (s *startedAt) Set(filepath string, content []byte) (bool, error) {
-	fp := s.path(filepath)
+func (s *startedAt) Set(file FileEntry, content []byte) (bool, error) {
+	fp := s.path(file)
 
 	var f *os.File
 	// check existence
@@ -192,8 +201,8 @@ func (s *startedAt) Set(filepath string, content []byte) (bool, error) {
 }
 
 // Get returns startedAt content as a byte array.
-func (s *startedAt) Get(filepath string) ([]byte, error) {
-	fp := s.path(filepath)
+func (s *startedAt) Get(file FileEntry) ([]byte, error) {
+	fp := s.path(file)
 
 	// check existence
 	if _, err := os.Stat(fp); err != nil {
@@ -204,8 +213,8 @@ func (s *startedAt) Get(filepath string) ([]byte, error) {
 }
 
 // Delete deletes startedAt of the filepath.
-func (s *startedAt) Delete(filepath string) error {
-	fp := s.path(filepath)
+func (s *startedAt) Delete(file FileEntry) error {
+	fp := s.path(file)
 
 	err := os.RemoveAll(fp)
 	if err != nil {
@@ -226,15 +235,15 @@ func getHashState(alg, code string) MetadataType {
 	}
 }
 
-func (h *hashState) path(filepath string) string {
-	dir := filepath + "_hashstates/"
+func (h *hashState) path(file FileEntry) string {
+	dir := file.GetPath() + "_hashstates/"
 	return fmt.Sprintf("%s%s_%s", dir, h.alg, h.code)
 }
 
 // Set updates hashState and returns true only if the file is updated correctly
 // returns false if error or file is already updated with desired content
-func (h *hashState) Set(filepath string, content []byte) (bool, error) {
-	fp := h.path(filepath)
+func (h *hashState) Set(file FileEntry, content []byte) (bool, error) {
+	fp := h.path(file)
 
 	var f *os.File
 	// check existence
@@ -290,8 +299,8 @@ func (h *hashState) Set(filepath string, content []byte) (bool, error) {
 }
 
 // Get returns hashState content as a byte array.
-func (h *hashState) Get(filepath string) ([]byte, error) {
-	fp := h.path(filepath)
+func (h *hashState) Get(file FileEntry) ([]byte, error) {
+	fp := h.path(file)
 
 	// check existence
 	if _, err := os.Stat(fp); err != nil {
@@ -302,8 +311,8 @@ func (h *hashState) Get(filepath string) ([]byte, error) {
 }
 
 // Delete deletes hashState of the filepath.
-func (h *hashState) Delete(filepath string) error {
-	fp := h.path(filepath)
+func (h *hashState) Delete(file FileEntry) error {
+	fp := h.path(file)
 
 	err := os.RemoveAll(fp)
 	if err != nil {
