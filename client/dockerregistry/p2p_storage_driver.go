@@ -13,7 +13,6 @@ import (
 	"code.uber.internal/infra/kraken/kraken/test-tracker"
 
 	"code.uber.internal/go-common.git/x/log"
-	cache "code.uber.internal/infra/dockermover/storage"
 	"github.com/anacrolix/torrent"
 	"github.com/docker/distribution/context"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
@@ -72,7 +71,11 @@ func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (s
 	}
 	client := clientParam.(*torrent.Client)
 
-	store := store.NewLocalFileStore(config)
+	storeParam, ok := params["store"]
+	if !ok || storeParam == nil {
+		log.Fatal("Failed to create storage driver. No file store initiated.")
+	}
+	store := storeParam.(*store.LocalFileStore)
 
 	// init redis connection pools
 	pool := &redis.Pool{
@@ -93,7 +96,6 @@ type P2PStorageDriver struct {
 	config     *configuration.Config
 	p2pClient  *torrent.Client
 	p2pTracker *tracker.Tracker
-	lru        *cache.FileCacheMap
 	store      *store.LocalFileStore
 	blobs      *Blobs
 	uploads    *Uploads

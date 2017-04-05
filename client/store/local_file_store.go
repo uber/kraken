@@ -85,6 +85,11 @@ func (store *LocalFileStore) GetDownloadFileReadWriter(fileName string) (FileRea
 	return store.backend.GetFileReadWriter(fileName, []FileState{stateDownload})
 }
 
+// GetDownloadOrCacheFileReader returns a FileReader for a file in download or cache directory.
+func (store *LocalFileStore) GetDownloadOrCacheFileReader(fileName string) (FileReader, error) {
+	return store.backend.GetFileReader(fileName, []FileState{stateDownload, stateCache})
+}
+
 // GetCacheFilePath returns full path of a file in cache directory.
 func (store *LocalFileStore) GetCacheFilePath(fileName string) (string, error) {
 	return store.backend.GetFilePath(fileName, []FileState{stateCache})

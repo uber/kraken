@@ -1,149 +1,188 @@
 package torrentclient
 
 import (
+	"log"
 	"testing"
 
-	"io/ioutil"
+	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/configuration"
+
+	"os"
 
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/storage"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestCompareAndSwapStatus(t *testing.T) {
-	assert := require.New(t)
-	info := metainfo.Info{
-		Name:   "01",
-		Length: int64(1),
-		Pieces: make([]byte, 20),
+func getManager() (*configuration.Config, *Manager) {
+	c, s := getFileStore()
+	m, err := NewManager(c, s)
+	if err != nil {
+		log.Fatal(err)
 	}
-	_, m := getManager()
-	ls, _ := m.OpenTorrent(&info, metainfo.Hash([20]byte{}))
-	ps := ls.(*LayerStore).pieces[0]
+	return c, m
+}
 
-	// currstatus = clean, newstatus = done
-	ok, err := ps.compareAndSwapStatus(ps.ls.pieceStatusPath(), clean, done)
-	assert.Nil(err)
-	assert.True(ok)
+func getTorrent(info *metainfo.Info) (storage.TorrentImpl, *configuration.Config) {
+	c, m := getManager()
+	hash := metainfo.Hash([20]byte{})
+	torrent, err := m.OpenTorrent(info, hash)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return torrent, c
+}
 
-	// currstatus = done, newstatus = done
-	ok, err = ps.compareAndSwapStatus(ps.ls.pieceStatusPath(), dirty, done)
-	assert.Nil(err)
-	assert.False(ok)
+func TestGetOffset(t *testing.T) {
+	info := &metainfo.Info{
+		Name:   "01",
+		Length: int64(1 + 512000),
+		Pieces: make([]byte, 40),
+	}
+	tor, c := getTorrent(info)
+	defer os.RemoveAll(c.DownloadDir)
+	p0 := tor.Piece(info.Piece(0))
+	assert.Equal(t, int64(3), p0.(*Piece).getOffset(3))
 
-	// currstatus = done, newstatus = clean
-	ok, err = ps.compareAndSwapStatus(ps.ls.pieceStatusPath(), dirty, clean)
-	assert.Equal("Current status not matched. Expected: 1. Actual: 2", err.Error())
-	assert.False(ok)
-
-	// currstatus = done, newstatus = clean
-	ok, err = ps.compareAndSwapStatus(ps.ls.pieceStatusPath(), dontCare, clean)
-	assert.Nil(err)
-	assert.True(ok)
-
+	p1 := tor.Piece(info.Piece(1))
+	assert.Equal(t, int64(512000), p1.(*Piece).getOffset(0))
 }
 
 func TestWriteAt(t *testing.T) {
 	assert := require.New(t)
-	info := metainfo.Info{
+	info := &metainfo.Info{
 		Name:   "02",
 		Length: int64(1),
 		Pieces: make([]byte, 20),
 	}
-	_, m := getManager()
-	ls, _ := m.OpenTorrent(&info, metainfo.Hash([20]byte{}))
-	ps := ls.(*LayerStore).pieces[0]
+	tor, c := getTorrent(info)
+	defer os.RemoveAll(c.DownloadDir)
+	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
-	assert.Equal(0, ps.index)
-	n, err := ps.WriteAt([]byte{uint8(7)}, 0)
+	// write succeeded
+	assert.Equal(0, p0.index)
+	n, err := p0.WriteAt([]byte{uint8(7)}, 0)
 	assert.Nil(err)
 	assert.Equal(1, n)
-	assert.Equal(clean, ps.status)
-	data, _ := ioutil.ReadFile(ls.(*LayerStore).downloadPath())
-	assert.Equal(uint8(7), data[0])
-	statusOnDisk, err := ioutil.ReadFile(ls.(*LayerStore).pieceStatusPath())
+	status, err := p0.store.GetFilePieceStatus("02", 0, 1)
 	assert.Nil(err)
-	assert.Equal(clean, statusOnDisk[0])
+	assert.Equal(store.PieceClean, status[0])
+	reader, err := p0.store.GetDownloadOrCacheFileReader("02")
+	assert.Nil(err)
+	data := make([]byte, 1)
+	n, err = reader.Read(data)
+	assert.Nil(err)
+	assert.Equal(1, n)
+	assert.Equal(uint8(7), data[0])
+	reader.Close()
+
+	// write failed
+	p0.store.SetDownloadFilePieceStatus("02", []byte{store.PieceDirty}, p0.index, p0.numPieces)
+	defer p0.store.SetDownloadFilePieceStatus("02", []byte{store.PieceClean}, p0.index, p0.numPieces)
+	n, err = p0.WriteAt([]byte{uint8(8)}, 0)
+	assert.NotNil(err)
+	assert.Equal("Another thread is writing to the same piece 02: 0", err.Error())
+	assert.Equal(0, n)
+	reader, err = p0.store.GetDownloadOrCacheFileReader("02")
+	assert.Nil(err)
+	n, err = reader.Read(data)
+	assert.Nil(err)
+	assert.Equal(1, n)
+	// no change
+	assert.Equal(uint8(7), data[0])
+	reader.Close()
+	status, err = p0.store.GetFilePieceStatus("02", 0, 1)
+	assert.Nil(err)
+	assert.Equal(store.PieceDirty, status[0])
 }
 
 func TestReadAt(t *testing.T) {
-	// downloading
 	assert := require.New(t)
-	info := metainfo.Info{
+	info := &metainfo.Info{
 		Name:   "03",
 		Length: int64(1),
 		Pieces: make([]byte, 20),
 	}
-	_, m := getManager()
-	ls, _ := m.OpenTorrent(&info, metainfo.Hash([20]byte{}))
-	ps := ls.(*LayerStore).pieces[0]
+	tor, c := getTorrent(info)
+	defer os.RemoveAll(c.DownloadDir)
+	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
-	ps.WriteAt([]byte{uint8(7)}, 0)
+	// download
+	p0.WriteAt([]byte{uint8(7)}, 0)
 	bu := make([]byte, 1)
-	ps.ReadAt(bu, 0)
+	p0.ReadAt(bu, 0)
 	assert.Equal(uint8(7), bu[0])
-	downloading, _ := ps.ls.IsDownloading()
-	assert.True(downloading)
 
-	// cached
-	ps.WriteAt([]byte{uint8(9)}, 0)
-	ioutil.WriteFile(ps.ls.pieceStatusPath(), []byte{done}, perm)
-	ps.ls.TryCacheLayer()
-	_, downloaded := ps.ls.IsDownloaded()
-	assert.True(downloaded)
-	_, ok := ls.(*LayerStore).m.lru.Get("03", nil)
-	assert.True(ok)
-	ps.ReadAt(bu, 0)
-	assert.Equal(uint8(9), bu[0])
+	// cache
+	p0.WriteAt([]byte{uint8(8)}, 0)
+	assert.Nil(p0.store.MoveDownloadFileToCache("03"))
+	p0.ReadAt(bu, 0)
+	assert.Equal(uint8(8), bu[0])
+
 }
 
 func TestMarkComplete(t *testing.T) {
 	assert := require.New(t)
-	info := metainfo.Info{
+	info := &metainfo.Info{
 		Name:   "04",
 		Length: int64(1),
 		Pieces: make([]byte, 20),
 	}
-	_, m := getManager()
-	ls, _ := m.OpenTorrent(&info, metainfo.Hash([20]byte{}))
-	ps := ls.(*LayerStore).pieces[0]
+	tor, c := getTorrent(info)
+	defer os.RemoveAll(c.DownloadDir)
+	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
-	assert.Nil(ps.MarkComplete())
-	ioutil.WriteFile(ps.ls.pieceStatusPath(), []byte{dirty}, perm)
-	err := ps.MarkComplete()
+	assert.Nil(p0.MarkNotComplete())
+	status, err := p0.store.GetFilePieceStatus("04", 0, 1)
 	assert.Nil(err)
+	assert.Equal(store.PieceClean, status[0])
+
+	assert.Nil(p0.MarkComplete())
+	status, err = p0.store.GetFilePieceStatus("04", 0, 1)
+	assert.Nil(err)
+	assert.Equal(store.PieceDone, status[0])
 }
 
 func TestMarkNotComplete(t *testing.T) {
 	assert := require.New(t)
-	info := metainfo.Info{
+	info := &metainfo.Info{
 		Name:   "05",
 		Length: int64(1),
 		Pieces: make([]byte, 20),
 	}
-	_, m := getManager()
-	ls, _ := m.OpenTorrent(&info, metainfo.Hash([20]byte{}))
-	ps := ls.(*LayerStore).pieces[0]
+	tor, c := getTorrent(info)
+	defer os.RemoveAll(c.DownloadDir)
+	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
-	err := ps.MarkNotComplete()
+	assert.Nil(p0.MarkComplete())
+	status, err := p0.store.GetFilePieceStatus("05", 0, 1)
 	assert.Nil(err)
+	assert.Equal(store.PieceDone, status[0])
 
-	ioutil.WriteFile(ps.ls.pieceStatusPath(), []byte{dirty}, perm)
-	err = ps.MarkNotComplete()
+	assert.Nil(p0.MarkNotComplete())
+	status, err = p0.store.GetFilePieceStatus("05", 0, 1)
 	assert.Nil(err)
+	assert.Equal(store.PieceClean, status[0])
 }
 
 func TestGetIsComplete(t *testing.T) {
 	assert := require.New(t)
-	info := metainfo.Info{
+	info := &metainfo.Info{
 		Name:   "06",
 		Length: int64(1),
 		Pieces: make([]byte, 20),
 	}
-	_, m := getManager()
-	ls, _ := m.OpenTorrent(&info, metainfo.Hash([20]byte{}))
-	ps := ls.(*LayerStore).pieces[0]
+	tor, c := getTorrent(info)
+	defer os.RemoveAll(c.DownloadDir)
+	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
-	assert.False(ps.GetIsComplete())
-	ioutil.WriteFile(ps.ls.pieceStatusPath(), []byte{done}, perm)
-	assert.True(ps.GetIsComplete())
+	assert.False(p0.GetIsComplete())
+	p0.store.SetDownloadFilePieceStatus("06", []byte{store.PieceDone}, p0.index, p0.numPieces)
+	assert.True(p0.GetIsComplete())
+
+	p0.store.SetDownloadFilePieceStatus("06", []byte{store.PieceClean}, p0.index, p0.numPieces)
+	assert.False(p0.GetIsComplete())
+	p0.store.MoveDownloadFileToCache("06")
+	assert.True(p0.GetIsComplete())
 }

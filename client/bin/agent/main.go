@@ -6,9 +6,9 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 
-	cache "code.uber.internal/infra/dockermover/storage"
 	"code.uber.internal/infra/kraken/client/dockerregistry"
 	"code.uber.internal/infra/kraken/client/server"
+	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
 	"github.com/anacrolix/torrent"
@@ -40,29 +40,19 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// init new cache
-	// the storage driver and torrent agent storage share the same lru
-	lru, err := cache.NewFileCacheMap(config.CacheMapSize, config.CacheSize)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	// init storage
-	storage, err := torrentclient.NewManager(config, lru)
+	store := store.NewLocalFileStore(config)
+	torrentsManager, err := torrentclient.NewManager(config, store)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// init torrent client
 	log.Info("Init torrent agent")
-	client, err := torrent.NewClient(config.CreateAgentConfig(storage))
+	client, err := torrent.NewClient(config.CreateAgentConfig(torrentsManager))
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// load existing downloaded files from disk
-	log.Info("Init torrents from disk")
-	storage.LoadFromDisk(client)
 
 	// start agent server
 	aWeb := server.NewAgentWebApp(config, client)
@@ -74,7 +64,7 @@ func main() {
 		dockerregistry.Name: rc.Parameters{
 			"config":         config,
 			"torrent-client": client,
-			"cache":          lru,
+			"store":          store,
 		},
 		"redirect": rc.Parameters{
 			"disable": true,
