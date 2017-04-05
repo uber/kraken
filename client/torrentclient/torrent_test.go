@@ -13,6 +13,7 @@ func TestNewTorrent(t *testing.T) {
 	assert := require.New(t)
 	c, s := getFileStore()
 	defer os.RemoveAll(c.DownloadDir)
+	defer os.RemoveAll(c.CacheDir)
 
 	tor := NewTorrent(c, s, "t0", int64(1), 1)
 	assert.Equal("t0", tor.name)
@@ -25,6 +26,7 @@ func TestPiece(t *testing.T) {
 	assert := require.New(t)
 	c, s := getFileStore()
 	defer os.RemoveAll(c.DownloadDir)
+	defer os.RemoveAll(c.CacheDir)
 
 	tor := NewTorrent(c, s, "t1", int64(1), 1)
 	info := metainfo.Info{

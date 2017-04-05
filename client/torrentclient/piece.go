@@ -8,6 +8,7 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/configuration"
+	"code.uber.internal/infra/kraken/utils"
 )
 
 const (
@@ -96,7 +97,29 @@ func (p *Piece) ReadAt(data []byte, off int64) (n int, err error) {
 // MarkComplete marks piece as complete
 func (p *Piece) MarkComplete() error {
 	_, err := p.store.SetDownloadFilePieceStatus(p.name, []byte{store.PieceDone}, p.index, p.numPieces)
-	return err
+	if err != nil {
+		return err
+	}
+
+	statues, err := p.store.GetFilePieceStatus(p.name, -1, p.numPieces)
+	if err != nil {
+		return err
+	}
+
+	expected := make([]byte, p.numPieces)
+	for i := 0; i < p.numPieces; i++ {
+		expected[i] = store.PieceDone
+	}
+
+	if utils.CompareByteArray(expected, statues) {
+		err = p.store.MoveDownloadFileToCache(p.name)
+		if err != nil {
+			log.Errorf("Download completed but failed to move file to cache directory: %s", err.Error())
+		} else {
+			log.Infof("Download completed and moved %s to cache directory", p.name)
+		}
+	}
+	return nil
 }
 
 // MarkNotComplete marks piece as incomplete

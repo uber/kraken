@@ -42,6 +42,7 @@ func TestGetOffset(t *testing.T) {
 	}
 	tor, c := getTorrent(info)
 	defer os.RemoveAll(c.DownloadDir)
+	defer os.RemoveAll(c.CacheDir)
 	p0 := tor.Piece(info.Piece(0))
 	assert.Equal(t, int64(3), p0.(*Piece).getOffset(3))
 
@@ -58,6 +59,7 @@ func TestWriteAt(t *testing.T) {
 	}
 	tor, c := getTorrent(info)
 	defer os.RemoveAll(c.DownloadDir)
+	defer os.RemoveAll(c.CacheDir)
 	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
 	// write succeeded
@@ -106,6 +108,7 @@ func TestReadAt(t *testing.T) {
 	}
 	tor, c := getTorrent(info)
 	defer os.RemoveAll(c.DownloadDir)
+	defer os.RemoveAll(c.CacheDir)
 	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
 	// download
@@ -131,6 +134,7 @@ func TestMarkComplete(t *testing.T) {
 	}
 	tor, c := getTorrent(info)
 	defer os.RemoveAll(c.DownloadDir)
+	defer os.RemoveAll(c.CacheDir)
 	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
 	assert.Nil(p0.MarkNotComplete())
@@ -144,7 +148,7 @@ func TestMarkComplete(t *testing.T) {
 	assert.Equal(store.PieceDone, status[0])
 }
 
-func TestMarkNotComplete(t *testing.T) {
+func TestMarkNotCompleteCache(t *testing.T) {
 	assert := require.New(t)
 	info := &metainfo.Info{
 		Name:   "05",
@@ -153,6 +157,7 @@ func TestMarkNotComplete(t *testing.T) {
 	}
 	tor, c := getTorrent(info)
 	defer os.RemoveAll(c.DownloadDir)
+	defer os.RemoveAll(c.CacheDir)
 	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
 	assert.Nil(p0.MarkComplete())
@@ -160,8 +165,31 @@ func TestMarkNotComplete(t *testing.T) {
 	assert.Nil(err)
 	assert.Equal(store.PieceDone, status[0])
 
-	assert.Nil(p0.MarkNotComplete())
+	assert.True(store.IsFileStateError(p0.MarkNotComplete()))
 	status, err = p0.store.GetFilePieceStatus("05", 0, 1)
+	assert.Nil(err)
+	assert.Equal(store.PieceDone, status[0])
+}
+
+func TestMarkNotComplete(t *testing.T) {
+	assert := require.New(t)
+	info := &metainfo.Info{
+		Name:   "06",
+		Length: int64(1),
+		Pieces: make([]byte, 40),
+	}
+	tor, c := getTorrent(info)
+	defer os.RemoveAll(c.DownloadDir)
+	defer os.RemoveAll(c.CacheDir)
+	p0 := tor.Piece(info.Piece(0)).(*Piece)
+
+	assert.Nil(p0.MarkComplete())
+	status, err := p0.store.GetFilePieceStatus("06", 0, 1)
+	assert.Nil(err)
+	assert.Equal(store.PieceDone, status[0])
+
+	assert.Nil(p0.MarkNotComplete())
+	status, err = p0.store.GetFilePieceStatus("06", 0, 1)
 	assert.Nil(err)
 	assert.Equal(store.PieceClean, status[0])
 }
@@ -169,20 +197,21 @@ func TestMarkNotComplete(t *testing.T) {
 func TestGetIsComplete(t *testing.T) {
 	assert := require.New(t)
 	info := &metainfo.Info{
-		Name:   "06",
+		Name:   "07",
 		Length: int64(1),
 		Pieces: make([]byte, 20),
 	}
 	tor, c := getTorrent(info)
 	defer os.RemoveAll(c.DownloadDir)
+	defer os.RemoveAll(c.CacheDir)
 	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
 	assert.False(p0.GetIsComplete())
-	p0.store.SetDownloadFilePieceStatus("06", []byte{store.PieceDone}, p0.index, p0.numPieces)
+	p0.store.SetDownloadFilePieceStatus("07", []byte{store.PieceDone}, p0.index, p0.numPieces)
 	assert.True(p0.GetIsComplete())
 
-	p0.store.SetDownloadFilePieceStatus("06", []byte{store.PieceClean}, p0.index, p0.numPieces)
+	p0.store.SetDownloadFilePieceStatus("07", []byte{store.PieceClean}, p0.index, p0.numPieces)
 	assert.False(p0.GetIsComplete())
-	p0.store.MoveDownloadFileToCache("06")
+	p0.store.MoveDownloadFileToCache("07")
 	assert.True(p0.GetIsComplete())
 }

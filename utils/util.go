@@ -42,3 +42,19 @@ func GetIP(host string) (net.IP, error) {
 	}
 	return nil, fmt.Errorf("Error getting ip for %s", host)
 }
+
+// CompareByteArray compares two bytes array
+func CompareByteArray(d1 []byte, d2 []byte) bool {
+	if len(d1) != len(d2) {
+		return false
+	}
+
+	n := len(d1)
+	for i := 0; i < n; i++ {
+		if d1[i] != d2[i] {
+			return false
+		}
+	}
+
+	return true
+}

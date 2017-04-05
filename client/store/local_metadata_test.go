@@ -48,30 +48,83 @@ func TestPieceStatus(t *testing.T) {
 	fe := newMockFileEntry(fp, stateDownload)
 	p0 := getPieceStatus(0, 2)
 	p1 := getPieceStatus(1, 2)
+	pall := getPieceStatus(-1, 2)
 
 	// get on Nil p0
 	_, err = p0.Get(fe)
 	assert.True(t, os.IsNotExist(err))
+	_, err = pall.Get(fe)
+	assert.True(t, os.IsNotExist(err))
+
+	// set invalid content pall
+	updated, err := pall.Set(fe, []byte{PieceClean})
+	assert.NotNil(t, err)
+	assert.False(t, updated)
+	assert.Equal(t, "Failed to set piece status. Invalid content: expecting length 2 but got 1.", err.Error())
+
+	// set all
+	updated, err = pall.Set(fe, []byte{PieceClean, PieceClean})
+	assert.Nil(t, err)
+	assert.True(t, updated)
+
+	dall, err := pall.Get(fe)
+	assert.Nil(t, err)
+	assert.NotNil(t, dall)
+	assert.Equal(t, PieceClean, dall[0])
+	assert.Equal(t, PieceClean, dall[1])
+
+	updated, err = pall.Set(fe, []byte{PieceClean, PieceClean})
+	assert.Nil(t, err)
+	assert.False(t, updated)
+
+	updated, err = pall.Set(fe, []byte{PieceDone, PieceClean})
+	assert.Nil(t, err)
+	assert.True(t, updated)
+
+	// get all
+	dall, err = pall.Get(fe)
+	assert.Nil(t, err)
+	assert.NotNil(t, dall)
+	assert.Equal(t, PieceDone, dall[0])
+	assert.Equal(t, PieceClean, dall[1])
+
+	fe.SetState(stateCache)
+	updated, err = pall.Set(fe, []byte{PieceDirty, PieceDirty})
+	assert.NotNil(t, err)
+	assert.Equal(t, fmt.Sprintf("Cannot change piece status for %s: %d. File not in download directory.", fp, -1), err.Error())
+	assert.False(t, updated)
+
+	dall, err = pall.Get(fe)
+	assert.Nil(t, err)
+	assert.Equal(t, PieceDone, dall[0])
+	assert.Equal(t, PieceDone, dall[1])
+
+	fe.SetState(stateTrash)
+	dall, err = pall.Get(fe)
+	assert.NotNil(t, err)
+	assert.Equal(t, fmt.Sprintf("Failed to get piece status for %s: %d cannot find file in download nor cache directory.", fp, -1), err.Error())
+
+	fe.SetState(stateDownload)
 
 	// set on Nil content p0
-	updated, err := p0.Set(fe, nil)
+	updated, err = p0.Set(fe, nil)
 	assert.False(t, updated)
 	assert.Equal(t, "Invalid content: []", err.Error())
 
 	// updated
-	updated, err = p0.Set(fe, []byte{PieceDone})
+	updated, err = p0.Set(fe, []byte{PieceDirty})
 	assert.True(t, updated)
 	assert.Nil(t, err)
 
 	// not changed
-	updated, err = p0.Set(fe, []byte{PieceDone})
+	updated, err = p0.Set(fe, []byte{PieceDirty})
 	assert.False(t, updated)
 	assert.Nil(t, err)
 
 	// get
 	d0, err := p0.Get(fe)
 	assert.Nil(t, err)
-	assert.Equal(t, PieceDone, d0[0])
+	assert.Equal(t, PieceDirty, d0[0])
 
 	d1, err := p1.Get(fe)
 	assert.Nil(t, err)
@@ -79,7 +132,7 @@ func TestPieceStatus(t *testing.T) {
 
 	content, err := ioutil.ReadFile(fp + "_status")
 	assert.Nil(t, err)
-	assert.Equal(t, content[0], PieceDone)
+	assert.Equal(t, content[0], PieceDirty)
 	assert.Equal(t, content[1], PieceClean)
 
 	// set when in cache
@@ -87,12 +140,17 @@ func TestPieceStatus(t *testing.T) {
 	updated, err = p0.Set(fe, []byte{PieceDone})
 	assert.False(t, updated)
 	assert.NotNil(t, err)
-	assert.Equal(t, fmt.Sprintf("Cannot change piece status for %s: %d. Already in cache directory.", fp, 0), err.Error())
+	assert.Equal(t, fmt.Sprintf("Cannot change piece status for %s: %d. File not in download directory.", fp, 0), err.Error())
 
 	// get when in cache
 	d1, err = p1.Get(fe)
 	assert.Nil(t, err)
 	assert.Equal(t, PieceDone, d1[0])
+
+	fe.SetState(stateTrash)
+	d1, err = p1.Get(fe)
+	assert.NotNil(t, err)
+	assert.Equal(t, fmt.Sprintf("Failed to get piece status for %s: %d cannot find file in download nor cache directory.", fp, 1), err.Error())
 
 	fe.SetState(stateDownload)
 
@@ -101,14 +159,14 @@ func TestPieceStatus(t *testing.T) {
 	wg.Add(2)
 
 	go func() {
-		updated, err := p0.Set(fe, []byte{PieceDirty})
+		updated, err := p0.Set(fe, []byte{PieceClean})
 		wg.Done()
 		assert.True(t, updated)
 		assert.Nil(t, err)
 		// get
 		d0, err := p0.Get(fe)
 		assert.Nil(t, err)
-		assert.Equal(t, PieceDirty, d0[0])
+		assert.Equal(t, PieceClean, d0[0])
 	}()
 
 	go func() {
@@ -126,7 +184,7 @@ func TestPieceStatus(t *testing.T) {
 
 	content, err = ioutil.ReadFile(fp + "_status")
 	assert.Nil(t, err)
-	assert.Equal(t, content[0], PieceDirty)
+	assert.Equal(t, content[0], PieceClean)
 	assert.Equal(t, content[1], PieceDone)
 
 	// delete
@@ -223,14 +281,4 @@ func TestHashState(t *testing.T) {
 
 	_, err = os.Stat(fp + "_hashstates/sha256_0")
 	assert.True(t, os.IsNotExist(err))
-}
-
-func TestCompareMetadata(t *testing.T) {
-	d1 := []byte("2017")
-	d2 := []byte("2018")
-	d3 := []byte("201")
-	d4 := []byte("2018")
-	assert.False(t, compareMetadata(d1, d2))
-	assert.False(t, compareMetadata(d1, d3))
-	assert.True(t, compareMetadata(d2, d4))
 }
