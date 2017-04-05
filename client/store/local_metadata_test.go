@@ -119,7 +119,7 @@ func TestPieceStatus(t *testing.T) {
 		// get
 		d1, err := p1.Get(fe)
 		assert.Nil(t, err)
-		assert.Equal(t, d1[0], PieceDone)
+		assert.Equal(t, PieceDone, d1[0])
 	}()
 
 	wg.Wait()

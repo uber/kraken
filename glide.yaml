@@ -9,10 +9,6 @@ import:
   - x/log
 - package: github.com/docker/distribution
   version: c9aaff00f89c8b67330fa80a7d7fc89162f3540b
-- package: code.uber.internal/infra/dockermover
-  version: 8e3a600bd45f446d2419870387cc4b5ab0fb3a64
-  subpackages:
-  - storage
 - package: github.com/stretchr/testify
   version: v1.1.4
   subpackages:
