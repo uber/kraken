@@ -49,7 +49,7 @@ func TestStore(t *testing.T) {
 
 	// Test createEmptyFile
 	backend := NewLocalFileStoreBackend()
-	_, err := backend.CreateFile(testFileName, stateTest1, 5)
+	_, err := backend.CreateFile(testFileName, []FileState{}, stateTest1, 5)
 	assert.Nil(err)
 	_, err = os.Stat(path.Join(stateTest1.GetDirectory(), testFileName))
 	assert.False(os.IsNotExist(err))

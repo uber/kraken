@@ -25,12 +25,12 @@ func NewLocalFileStore(config *configuration.Config) *LocalFileStore {
 
 // CreateUploadFile create an empty file in upload directory with specified size.
 func (store *LocalFileStore) CreateUploadFile(fileName string, len int64) (bool, error) {
-	return store.backend.CreateFile(fileName, stateUpload, len)
+	return store.backend.CreateFile(fileName, []FileState{}, stateUpload, len)
 }
 
 // CreateDownloadFile create an empty file in download directory with specified size.
 func (store *LocalFileStore) CreateDownloadFile(fileName string, len int64) (bool, error) {
-	return store.backend.CreateFile(fileName, stateDownload, len)
+	return store.backend.CreateFile(fileName, []FileState{stateCache}, stateDownload, len)
 }
 
 // SetDownloadFilePieceStatus create and initializes piece status for a new download file

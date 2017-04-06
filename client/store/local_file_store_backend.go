@@ -9,7 +9,7 @@ import (
 
 // FileStoreBackend manages all agent files.
 type FileStoreBackend interface {
-	CreateFile(fileName string, state FileState, len int64) (bool, error)
+	CreateFile(fileName string, acceptedStates []FileState, createState FileState, len int64) (bool, error)
 	SetFileMetadata(fileName string, states []FileState, data []byte, mt MetadataType) (bool, error)
 	GetFileMetadata(fileName string, states []FileState, mt MetadataType) ([]byte, error)
 	GetFileReader(fileName string, states []FileState) (FileReader, error)
@@ -64,16 +64,16 @@ func (backend *localFileStoreBackend) getFileEntry(fileName string, states []Fil
 }
 
 // CreateFile creates an empty file with specified size. If file exists, do nothing. Returns true if the file is new.
-func (backend *localFileStoreBackend) CreateFile(fileName string, state FileState, len int64) (bool, error) {
+func (backend *localFileStoreBackend) CreateFile(fileName string, acceptedStates []FileState, createState FileState, len int64) (bool, error) {
 	backend.Lock()
 	defer backend.Unlock()
 
-	_, err := backend.getFileEntry(fileName, []FileState{state})
+	_, err := backend.getFileEntry(fileName, append(acceptedStates, createState))
 	if err == nil || IsFileStateError(err) {
 		return false, err
 	}
 
-	targetPath := path.Join(state.GetDirectory(), fileName)
+	targetPath := path.Join(createState.GetDirectory(), fileName)
 
 	// Create file.
 	f, err := os.Create(targetPath)
@@ -88,7 +88,7 @@ func (backend *localFileStoreBackend) CreateFile(fileName string, state FileStat
 		return false, err
 	}
 
-	backend.fileMap[fileName] = NewLocalFileEntry(fileName, state)
+	backend.fileMap[fileName] = NewLocalFileEntry(fileName, createState)
 	return true, nil
 }
 

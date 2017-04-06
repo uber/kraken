@@ -7,8 +7,6 @@ import (
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/configuration"
 
-	"os"
-
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/stretchr/testify/assert"
@@ -41,8 +39,7 @@ func TestGetOffset(t *testing.T) {
 		Pieces: make([]byte, 40),
 	}
 	tor, c := getTorrent(info)
-	defer os.RemoveAll(c.DownloadDir)
-	defer os.RemoveAll(c.CacheDir)
+	defer removeTestTorrentDirs(c)
 	p0 := tor.Piece(info.Piece(0))
 	assert.Equal(t, int64(3), p0.(*Piece).getOffset(3))
 
@@ -58,8 +55,7 @@ func TestWriteAt(t *testing.T) {
 		Pieces: make([]byte, 20),
 	}
 	tor, c := getTorrent(info)
-	defer os.RemoveAll(c.DownloadDir)
-	defer os.RemoveAll(c.CacheDir)
+	defer removeTestTorrentDirs(c)
 	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
 	// write succeeded
@@ -107,8 +103,7 @@ func TestReadAt(t *testing.T) {
 		Pieces: make([]byte, 20),
 	}
 	tor, c := getTorrent(info)
-	defer os.RemoveAll(c.DownloadDir)
-	defer os.RemoveAll(c.CacheDir)
+	defer removeTestTorrentDirs(c)
 	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
 	// download
@@ -133,8 +128,7 @@ func TestMarkComplete(t *testing.T) {
 		Pieces: make([]byte, 20),
 	}
 	tor, c := getTorrent(info)
-	defer os.RemoveAll(c.DownloadDir)
-	defer os.RemoveAll(c.CacheDir)
+	defer removeTestTorrentDirs(c)
 	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
 	assert.Nil(p0.MarkNotComplete())
@@ -156,8 +150,7 @@ func TestMarkNotCompleteCache(t *testing.T) {
 		Pieces: make([]byte, 20),
 	}
 	tor, c := getTorrent(info)
-	defer os.RemoveAll(c.DownloadDir)
-	defer os.RemoveAll(c.CacheDir)
+	defer removeTestTorrentDirs(c)
 	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
 	assert.Nil(p0.MarkComplete())
@@ -179,8 +172,7 @@ func TestMarkNotComplete(t *testing.T) {
 		Pieces: make([]byte, 40),
 	}
 	tor, c := getTorrent(info)
-	defer os.RemoveAll(c.DownloadDir)
-	defer os.RemoveAll(c.CacheDir)
+	defer removeTestTorrentDirs(c)
 	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
 	assert.Nil(p0.MarkComplete())
@@ -202,8 +194,7 @@ func TestGetIsComplete(t *testing.T) {
 		Pieces: make([]byte, 20),
 	}
 	tor, c := getTorrent(info)
-	defer os.RemoveAll(c.DownloadDir)
-	defer os.RemoveAll(c.CacheDir)
+	defer removeTestTorrentDirs(c)
 	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
 	assert.False(p0.GetIsComplete())
