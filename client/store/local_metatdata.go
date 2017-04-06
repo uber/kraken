@@ -286,6 +286,8 @@ func (s *startedAt) Delete(file FileEntry) error {
 	return nil
 }
 
+// hashState stores partial hash result of upload data for resumable upload.
+// Docker registry double writes to a writer and digester, and the digester generates this snapshot.
 type hashState struct {
 	alg  string
 	code string
@@ -299,8 +301,8 @@ func getHashState(alg, code string) MetadataType {
 }
 
 func (h *hashState) path(file FileEntry) string {
-	dir := file.GetPath() + "_hashstates/"
-	return fmt.Sprintf("%s%s_%s", dir, h.alg, h.code)
+	dir := file.GetPath() + "_hashstates"
+	return path.Join(dir, fmt.Sprintf("%s_%s", h.alg, h.code))
 }
 
 // Set updates hashState and returns true only if the file is updated correctly
