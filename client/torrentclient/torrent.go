@@ -58,7 +58,7 @@ func (tor *Torrent) Open() error {
 		return err
 	}
 
-	log.Infof("Successfully created new downalod for %s", tor.name)
+	log.Infof("Successfully created new download for %s", tor.name)
 	return nil
 }
 

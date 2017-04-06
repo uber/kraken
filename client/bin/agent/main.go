@@ -27,9 +27,18 @@ func main() {
 	cp := configuration.GetConfigFilePath(configFile)
 	config := configuration.NewConfig(cp)
 
+	// TODO (@evelynl): we dont need this directory anymore
+	// TODO (@evelynl): init all dirs in local store
 	// init temp dir
-	os.Remove(config.PushTempDir)
+	os.RemoveAll(config.PushTempDir)
 	err := os.MkdirAll(config.PushTempDir, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// init upload dir
+	os.RemoveAll(config.UploadDir)
+	err = os.MkdirAll(config.UploadDir, 0755)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -24,6 +24,14 @@ func getFileStore() (*configuration.Config, *store.LocalFileStore) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	err = os.MkdirAll(c.UploadDir, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+	c.UploadDir, err = ioutil.TempDir(c.UploadDir, "testtorrent")
+	if err != nil {
+		log.Fatal(err)
+	}
 	c.CacheDir, err = ioutil.TempDir(c.CacheDir, "testtorrent")
 	if err != nil {
 		log.Fatal(err)
@@ -36,11 +44,16 @@ func getFileStore() (*configuration.Config, *store.LocalFileStore) {
 	return c, s
 }
 
+func removeTestTorrentDirs(c *configuration.Config) {
+	os.RemoveAll(c.DownloadDir)
+	os.RemoveAll(c.CacheDir)
+	os.RemoveAll(c.UploadDir)
+}
+
 func TestNewManager(t *testing.T) {
 	assert := require.New(t)
 	c, s := getFileStore()
-	defer os.RemoveAll(c.DownloadDir)
-	defer os.RemoveAll(c.CacheDir)
+	defer removeTestTorrentDirs(c)
 	m, err := NewManager(c, s)
 	assert.Nil(err)
 	assert.Nil(m.Close())

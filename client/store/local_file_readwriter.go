@@ -91,7 +91,7 @@ func (readWriter localFileReadWriter) Seek(offset int64, whence int) (int64, err
 
 // Size returns the size of the file
 func (readWriter localFileReadWriter) Size() int64 {
-	fileInfo, err := readWriter.descriptor.Stat()
+	fileInfo, err := readWriter.entry.Stat()
 	if err != nil {
 		return 0
 	}
