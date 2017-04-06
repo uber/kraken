@@ -54,12 +54,12 @@ func NewLocalFileStore(config *configuration.Config) *LocalFileStore {
 	}
 }
 
-// CreateUploadFile create an empty file in upload directory with specified size.
+// CreateUploadFile creates an empty file in upload directory with specified size.
 func (store *LocalFileStore) CreateUploadFile(fileName string, len int64) (bool, error) {
 	return store.backend.CreateFile(fileName, []FileState{}, stateUpload, len)
 }
 
-// CreateDownloadFile create an empty file in download directory with specified size.
+// CreateDownloadFile creates an empty file in download directory with specified size.
 func (store *LocalFileStore) CreateDownloadFile(fileName string, len int64) (bool, error) {
 	return store.backend.CreateFile(fileName, []FileState{stateCache}, stateDownload, len)
 }
@@ -69,18 +69,18 @@ func (store *LocalFileStore) SetDownloadFilePieceStatus(fileName string, content
 	return store.backend.SetFileMetadata(fileName, []FileState{stateDownload}, content, getPieceStatus(index, numPieces))
 }
 
-// GetFilePieceStatus create and initializes piece status for a new download file
+// GetFilePieceStatus creates and initializes piece status for a new download file
 func (store *LocalFileStore) GetFilePieceStatus(fileName string, index int, numPieces int) ([]byte, error) {
 	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload, stateCache}, getPieceStatus(index, numPieces))
 }
 
-// SetDownloadFileStartedAt create and writes the creation file for a new download file
+// SetDownloadFileStartedAt creates and writes the creation file for a new download file
 func (store *LocalFileStore) SetDownloadFileStartedAt(fileName string, content []byte) error {
 	_, err := store.backend.SetFileMetadata(fileName, []FileState{stateDownload}, content, getStartedAt())
 	return err
 }
 
-// GetDownloadFileStartedAt create and writes the creation file for a new download file
+// GetDownloadFileStartedAt creates and writes the creation file for a new download file
 func (store *LocalFileStore) GetDownloadFileStartedAt(fileName string) ([]byte, error) {
 	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload}, getStartedAt())
 }

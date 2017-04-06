@@ -144,7 +144,6 @@ func (u *Uploads) putBlobData(fileName string, content []byte) error {
 	}
 	writer.Close()
 
-	// TODO (@yiran) Shouldn't use file path directly.
 	// TODO (@yiran) Maybe it's okay to fail with "os.IsExist"
 	err = u.store.MoveUploadFileToCache(randFileName, fileName)
 	if err != nil {
@@ -154,6 +153,7 @@ func (u *Uploads) putBlobData(fileName string, content []byte) error {
 	if err != nil {
 		return err
 	}
+	// TODO (@yiran) Shouldn't use file path directly.
 	mi, err = u.tracker.CreateTorrentInfo(fileName, path)
 	if err != nil {
 		return err
