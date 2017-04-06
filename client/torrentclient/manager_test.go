@@ -54,7 +54,6 @@ func TestNewManager(t *testing.T) {
 	assert := require.New(t)
 	c, s := getFileStore()
 	defer removeTestTorrentDirs(c)
-	m, err := NewManager(c, s)
-	assert.Nil(err)
+	m := NewManager(c, s)
 	assert.Nil(m.Close())
 }

@@ -56,7 +56,6 @@ type Config struct {
 	Announce         string           `yaml:"announce"`
 	AnnounceInterval int              `yaml:"announce_interval"`
 	ExpireSec        int              `yaml:"expire_sec"`
-	PushTempDir      string           `yaml:"push_temp_dir"`
 	Registry         rc.Configuration `yaml:"registry"`
 	Agent            Agent            `yaml:"agent"`
 }

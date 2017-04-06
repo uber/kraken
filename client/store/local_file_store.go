@@ -1,6 +1,7 @@
 package store
 
 import (
+	"log"
 	"os"
 
 	"code.uber.internal/infra/kraken/configuration"
@@ -13,6 +14,36 @@ type LocalFileStore struct {
 
 // NewLocalFileStore initializes and returns a new FileStoreBackend object.
 func NewLocalFileStore(config *configuration.Config) *LocalFileStore {
+	// init all directories
+	// upload
+	os.RemoveAll(config.UploadDir)
+	err := os.MkdirAll(config.UploadDir, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// download
+	os.RemoveAll(config.DownloadDir)
+	err = os.MkdirAll(config.DownloadDir, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// cache
+	// we do not want to remove all existing files in cache directory
+	// for the sake of restart
+	err = os.MkdirAll(config.CacheDir, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// trash
+	os.RemoveAll(config.TrashDir)
+	err = os.MkdirAll(config.TrashDir, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	registerFileState(stateUpload, config.UploadDir)
 	registerFileState(stateDownload, config.DownloadDir)
 	registerFileState(stateCache, config.CacheDir)

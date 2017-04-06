@@ -15,10 +15,7 @@ import (
 
 func getManager() (*configuration.Config, *Manager) {
 	c, s := getFileStore()
-	m, err := NewManager(c, s)
-	if err != nil {
-		log.Fatal(err)
-	}
+	m := NewManager(c, s)
 	return c, m
 }
 
