@@ -1,8 +1,6 @@
 package torrentclient
 
 import (
-	"os"
-
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/configuration"
 	"github.com/anacrolix/torrent/metainfo"
@@ -18,19 +16,11 @@ type Manager struct {
 }
 
 // NewManager returns a new Manager
-func NewManager(config *configuration.Config, store *store.LocalFileStore) (*Manager, error) {
-	// init download dir
-	err := os.MkdirAll(config.DownloadDir, perm)
-	if err != nil {
-		return nil, err
-	}
-
-	m := Manager{
+func NewManager(config *configuration.Config, store *store.LocalFileStore) *Manager {
+	return &Manager{
 		config: config,
 		store:  store,
 	}
-
-	return &m, nil
 }
 
 // OpenTorrent returns torrent specified by the info

@@ -146,7 +146,7 @@ func (d *P2PStorageDriver) GetContent(ctx context.Context, path string) (data []
 		return []byte("sha256:" + sha), nil
 	case "startedat":
 		uuid := ts[len(ts)-2]
-		return d.uploads.getUploadStartTime(d.config.PushTempDir, uuid)
+		return d.uploads.getUploadStartTime(d.config.UploadDir, uuid)
 	case "data":
 		// get or download content
 		return d.blobs.getOrDownloadBlobData(sha)
@@ -155,7 +155,7 @@ func (d *P2PStorageDriver) GetContent(ctx context.Context, path string) (data []
 			uuid := ts[len(ts)-4]
 			alg := ts[len(ts)-2]
 			code := ts[len(ts)-1]
-			return d.hashstates.getHashState(d.config.PushTempDir, uuid, alg, code)
+			return d.hashstates.getHashState(d.config.UploadDir, uuid, alg, code)
 		}
 		return nil, fmt.Errorf("Invalid request %s", path)
 	}
@@ -172,7 +172,7 @@ func (d *P2PStorageDriver) Reader(ctx context.Context, path string, offset int64
 	switch fileType {
 	case "_uploads":
 		uuid := ts[len(ts)-2]
-		return d.uploads.getUploadReader(path, d.config.PushTempDir, uuid, offset)
+		return d.uploads.getUploadReader(path, d.config.UploadDir, uuid, offset)
 	default:
 		sha := ts[len(ts)-2]
 		return d.blobs.getOrDownloadBlobReader(sha, offset)
@@ -187,7 +187,7 @@ func (d *P2PStorageDriver) PutContent(ctx context.Context, path string, content 
 	switch contentType {
 	case "startedat":
 		uuid := ts[len(ts)-2]
-		return d.uploads.initUpload(d.config.PushTempDir, uuid)
+		return d.uploads.initUpload(d.config.UploadDir, uuid)
 	case "data":
 		sha := ts[len(ts)-2]
 		return d.uploads.putBlobData(sha, content)
@@ -214,7 +214,7 @@ func (d *P2PStorageDriver) PutContent(ctx context.Context, path string, content 
 			uuid := ts[len(ts)-4]
 			alg := ts[len(ts)-2]
 			code := ts[len(ts)-1]
-			_, err := d.hashstates.putHashState(d.config.PushTempDir, uuid, alg, code, content)
+			_, err := d.hashstates.putHashState(d.config.UploadDir, uuid, alg, code, content)
 			return err
 		}
 		return fmt.Errorf("Invalid request %s", path)
@@ -248,7 +248,7 @@ func (d *P2PStorageDriver) Stat(ctx context.Context, path string) (fi storagedri
 	switch fileType {
 	case "_uploads":
 		uuid := st[len(st)-2]
-		return d.uploads.getUploadDataStat(d.config.PushTempDir, uuid)
+		return d.uploads.getUploadDataStat(d.config.UploadDir, uuid)
 	default:
 		sha := st[len(st)-2]
 		return d.blobs.getBlobStat(sha)
@@ -266,7 +266,7 @@ func (d *P2PStorageDriver) List(ctx context.Context, path string) ([]string, err
 	switch contentType {
 	case "hashstates":
 		uuid := st[len(st)-3]
-		s, err := d.hashstates.listHashStates(d.config.PushTempDir, uuid, path)
+		s, err := d.hashstates.listHashStates(d.config.UploadDir, uuid, path)
 		return s, err
 	default:
 		break
@@ -291,7 +291,7 @@ func (d *P2PStorageDriver) Move(ctx context.Context, sourcePath string, destPath
 	destsha := destst[len(destst)-2]
 	switch srcFileType {
 	case "_uploads":
-		return d.uploads.commitUpload(d.config.PushTempDir, srcsha, d.config.CacheDir, destsha)
+		return d.uploads.commitUpload(d.config.UploadDir, srcsha, d.config.CacheDir, destsha)
 	default:
 		return fmt.Errorf("Not implemented.")
 	}

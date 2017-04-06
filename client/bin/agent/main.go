@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"os"
 
 	"code.uber.internal/go-common.git/x/log"
 
@@ -27,34 +26,9 @@ func main() {
 	cp := configuration.GetConfigFilePath(configFile)
 	config := configuration.NewConfig(cp)
 
-	// TODO (@evelynl): we dont need this directory anymore
-	// TODO (@evelynl): init all dirs in local store
-	// init temp dir
-	os.RemoveAll(config.PushTempDir)
-	err := os.MkdirAll(config.PushTempDir, 0755)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// init upload dir
-	os.RemoveAll(config.UploadDir)
-	err = os.MkdirAll(config.UploadDir, 0755)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// init cache dir
-	err = os.MkdirAll(config.CacheDir, 0755)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	// init storage
 	store := store.NewLocalFileStore(config)
-	torrentsManager, err := torrentclient.NewManager(config, store)
-	if err != nil {
-		log.Fatal(err)
-	}
+	torrentsManager := torrentclient.NewManager(config, store)
 
 	// init torrent client
 	log.Info("Init torrent agent")
