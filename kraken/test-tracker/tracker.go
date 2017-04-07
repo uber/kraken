@@ -11,7 +11,6 @@ import (
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/utils"
 	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gorilla/mux"
 )
@@ -307,71 +306,6 @@ func (ex *Tracker) GetRepos() ([]string, error) {
 	return s, nil
 }
 
-// CreateTorrentInfo returns the metainfo of a torrent
-func (ex *Tracker) CreateTorrentInfo(key string, fp string) (*metainfo.MetaInfo, error) {
-	info := metainfo.Info{
-		PieceLength: int64(ex.config.Agent.PieceLength),
-	}
-	err := info.BuildFromFilePath(fp)
-	if err != nil {
-		return nil, err
-	}
-
-	infoBytes, err := bencode.Marshal(info)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Debugf("InfoBytes: %s", infoBytes)
-
-	return &metainfo.MetaInfo{
-		InfoBytes: infoBytes,
-		Announce:  "http://" + ex.config.Announce + "/announce",
-	}, nil
-}
-
-// CreateTorrentFromInfo creates torrent and registrer with db given metainfo
-func (ex *Tracker) CreateTorrentFromInfo(key string, mi *metainfo.MetaInfo) error {
-	ih := mi.HashInfoBytes()
-	magnetURI := mi.Magnet(key, ih)
-
-	// store key - magnet uri
-	ex.storeMagnet(key, ex.config.ExpireSec, magnetURI.String())
-
-	// store infoHash - peerlist
-	hn, port, err := ex.getPeerHostPort()
-	if err != nil {
-		return err
-	}
-
-	return ex.AddPeer(ih.AsString(), hn, port)
-}
-
-// CreateTorrentFromFile creates torrent and register with db given a key and a file path
-func (ex *Tracker) CreateTorrentFromFile(key string, fp string) error {
-	mi, err := ex.CreateTorrentInfo(key, fp)
-	if err != nil {
-		return err
-	}
-
-	ih := mi.HashInfoBytes()
-	magnetURI := mi.Magnet(key, ih)
-
-	// store key - magnet uri
-	err = ex.storeMagnet(key, ex.config.ExpireSec, magnetURI.String())
-	if err != nil {
-		return err
-	}
-
-	// store infoHash - peerlist
-	hn, port, err := ex.getPeerHostPort()
-	if err != nil {
-		return err
-	}
-
-	return ex.AddPeer(ih.AsString(), hn, port)
-}
-
 func (ex *Tracker) storeMagnet(key string, expire int, magnetURI string) error {
 	// store key - magnet uri
 	conn := ex.redis.Get()
@@ -402,7 +336,7 @@ func (ex *Tracker) getPeerHostPort() (string, string, error) {
 	}
 
 	// get port number
-	port, err := ex.config.GetAgentPort()
+	port := fmt.Sprintf("%d", ex.config.Agent.Backend)
 	if err != nil {
 		log.Error(err.Error())
 		return "", "", err

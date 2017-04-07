@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/kraken/test-tracker"
 
 	"code.uber.internal/go-common.git/x/log"
-	"github.com/anacrolix/torrent"
 	"github.com/docker/distribution/context"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/registry/storage/driver/factory"
@@ -45,37 +45,37 @@ import (
 
 const (
 	// Name of storage driver
-	Name         = "p2p"
-	retries      = 3
-	p2ptimeout   = 120     //seconds
-	readtimeout  = 15 * 60 //seconds
-	writetimeout = 15 * 60 //seconds
+	Name            = "kraken"
+	retries         = 3
+	downloadTimeout = 120     //seconds
+	readtimeout     = 15 * 60 //seconds
+	writetimeout    = 15 * 60 //seconds
 )
 
 func init() {
-	factory.Register(Name, &p2pStorageDriverFactory{})
+	factory.Register(Name, &krakenStorageDriverFactory{})
 }
 
-type p2pStorageDriverFactory struct{}
+type krakenStorageDriverFactory struct{}
 
-func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (storagedriver.StorageDriver, error) {
+func (factory *krakenStorageDriverFactory) Create(params map[string]interface{}) (storagedriver.StorageDriver, error) {
 	configParam, ok := params["config"]
 	if !ok || configParam == nil {
 		log.Fatal("Failed to create storage driver. No configuration initiated.")
 	}
 	config := configParam.(*configuration.Config)
 
-	clientParam, ok := params["torrent-client"]
-	if !ok || clientParam == nil {
-		log.Fatal("Failed to create storage driver. No torrent agnet initated.")
-	}
-	client := clientParam.(*torrent.Client)
-
 	storeParam, ok := params["store"]
 	if !ok || storeParam == nil {
 		log.Fatal("Failed to create storage driver. No file store initiated.")
 	}
 	store := storeParam.(*store.LocalFileStore)
+
+	clientParam, ok := params["torrentclient"]
+	if !ok || clientParam == nil {
+		log.Fatal("Failed to create storage driver. No torrent agnet initated.")
+	}
+	client := clientParam.(*torrentclient.Client)
 
 	// init redis connection pools
 	pool := &redis.Pool{
@@ -88,13 +88,13 @@ func (factory *p2pStorageDriverFactory) Create(params map[string]interface{}) (s
 	t := tracker.NewTracker(config, pool)
 	go t.Serve()
 
-	return NewP2PStorageDriver(config, client, store, t), nil
+	return NewKrakenStorageDriver(config, store, client, t), nil
 }
 
-// P2PStorageDriver is a storage driver
-type P2PStorageDriver struct {
+// KrakenStorageDriver is a storage driver
+type KrakenStorageDriver struct {
 	config     *configuration.Config
-	p2pClient  *torrent.Client
+	tcl        *torrentclient.Client
 	p2pTracker *tracker.Tracker
 	store      *store.LocalFileStore
 	blobs      *Blobs
@@ -102,11 +102,11 @@ type P2PStorageDriver struct {
 	hashstates *HashStates
 }
 
-// NewP2PStorageDriver creates a new P2PStorageDriver given Manager
-func NewP2PStorageDriver(c *configuration.Config, cl *torrent.Client, s *store.LocalFileStore, t *tracker.Tracker) *P2PStorageDriver {
-	return &P2PStorageDriver{
+// NewKrakenStorageDriver creates a new KrakenStorageDriver given Manager
+func NewKrakenStorageDriver(c *configuration.Config, s *store.LocalFileStore, cl *torrentclient.Client, t *tracker.Tracker) *KrakenStorageDriver {
+	return &KrakenStorageDriver{
 		config:     c,
-		p2pClient:  cl,
+		tcl:        cl,
 		store:      s,
 		p2pTracker: t,
 		blobs:      NewBlobs(t, cl, s),
@@ -116,13 +116,13 @@ func NewP2PStorageDriver(c *configuration.Config, cl *torrent.Client, s *store.L
 }
 
 // Name returns driver namae
-func (d *P2PStorageDriver) Name() string {
+func (d *KrakenStorageDriver) Name() string {
 	return Name
 }
 
 // GetContent returns content in the path
 // sample path: /docker/registry/v2/repositories/external/ubuntu/_layers/sha256/a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4/link
-func (d *P2PStorageDriver) GetContent(ctx context.Context, path string) (data []byte, err error) {
+func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data []byte, err error) {
 	log.Infof("GetContent %s", path)
 	ts := strings.Split(path, "/")
 	contentType := ts[len(ts)-1]
@@ -162,7 +162,7 @@ func (d *P2PStorageDriver) GetContent(ctx context.Context, path string) (data []
 }
 
 // Reader returns a reader of path at offset
-func (d *P2PStorageDriver) Reader(ctx context.Context, path string, offset int64) (reader io.ReadCloser, err error) {
+func (d *KrakenStorageDriver) Reader(ctx context.Context, path string, offset int64) (reader io.ReadCloser, err error) {
 	log.Infof("Reader %s", path)
 	ts := strings.Split(path, "/")
 	if len(ts) < 3 {
@@ -180,7 +180,7 @@ func (d *P2PStorageDriver) Reader(ctx context.Context, path string, offset int64
 }
 
 // PutContent writes content to path
-func (d *P2PStorageDriver) PutContent(ctx context.Context, path string, content []byte) error {
+func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, content []byte) error {
 	log.Infof("PutContent %s", path)
 	ts := strings.Split(path, "/")
 	contentType := ts[len(ts)-1]
@@ -222,7 +222,7 @@ func (d *P2PStorageDriver) PutContent(ctx context.Context, path string, content 
 }
 
 // Writer returns a writer of path
-func (d *P2PStorageDriver) Writer(ctx context.Context, path string, append bool) (storagedriver.FileWriter, error) {
+func (d *KrakenStorageDriver) Writer(ctx context.Context, path string, append bool) (storagedriver.FileWriter, error) {
 	log.Infof("Writer %s", path)
 
 	contentType := filepath.Base(path)
@@ -238,7 +238,7 @@ func (d *P2PStorageDriver) Writer(ctx context.Context, path string, append bool)
 }
 
 // Stat returns fileinfo of path
-func (d *P2PStorageDriver) Stat(ctx context.Context, path string) (fi storagedriver.FileInfo, err error) {
+func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (fi storagedriver.FileInfo, err error) {
 	log.Infof("Stat %s", path)
 	st := strings.Split(path, "/")
 	if len(st) < 3 {
@@ -256,7 +256,7 @@ func (d *P2PStorageDriver) Stat(ctx context.Context, path string) (fi storagedri
 }
 
 // List returns a list of content given path
-func (d *P2PStorageDriver) List(ctx context.Context, path string) ([]string, error) {
+func (d *KrakenStorageDriver) List(ctx context.Context, path string) ([]string, error) {
 	log.Infof("List %s", path)
 	st := strings.Split(path, "/")
 	if len(st) < 2 {
@@ -275,7 +275,7 @@ func (d *P2PStorageDriver) List(ctx context.Context, path string) ([]string, err
 }
 
 // Move moves sourcePath to destPath
-func (d *P2PStorageDriver) Move(ctx context.Context, sourcePath string, destPath string) (err error) {
+func (d *KrakenStorageDriver) Move(ctx context.Context, sourcePath string, destPath string) (err error) {
 	log.Infof("Move %s %s", sourcePath, destPath)
 	srcst := strings.Split(sourcePath, "/")
 	if len(srcst) < 3 {
@@ -298,7 +298,7 @@ func (d *P2PStorageDriver) Move(ctx context.Context, sourcePath string, destPath
 }
 
 // Delete deletes path
-func (d *P2PStorageDriver) Delete(ctx context.Context, path string) error {
+func (d *KrakenStorageDriver) Delete(ctx context.Context, path string) error {
 	log.Infof("Delete %s", path)
 	return storagedriver.PathNotFoundError{
 		DriverName: "p2p",
@@ -307,13 +307,13 @@ func (d *P2PStorageDriver) Delete(ctx context.Context, path string) error {
 }
 
 // URLFor returns url for path
-func (d *P2PStorageDriver) URLFor(ctx context.Context, path string, options map[string]interface{}) (string, error) {
+func (d *KrakenStorageDriver) URLFor(ctx context.Context, path string, options map[string]interface{}) (string, error) {
 	log.Infof("URLFor %s", path)
 	return "", fmt.Errorf("Not implemented.")
 }
 
 // isTag return if path contains tag and returns the tag, or digest if it contains digest instead
-func (d *P2PStorageDriver) isTag(path string) (bool, string, error) {
+func (d *KrakenStorageDriver) isTag(path string) (bool, string, error) {
 	tagRegex := regexp.MustCompile(".*_manifests/tags/.*/current/link")
 	digestRegex := regexp.MustCompile(".*/sha256/.*/link")
 	st := strings.Split(path, "/")
@@ -333,7 +333,7 @@ func (d *P2PStorageDriver) isTag(path string) (bool, string, error) {
 }
 
 // getRepoName returns the repo name given path
-func (d *P2PStorageDriver) getRepoName(path string) (string, error) {
+func (d *KrakenStorageDriver) getRepoName(path string) (string, error) {
 	prefix := regexp.MustCompile("^.*repositories/")
 	suffix := regexp.MustCompile("(/_layer|/_manifest|/_uploads).*")
 	name := suffix.ReplaceAllString(prefix.ReplaceAllString(path, ""), "")

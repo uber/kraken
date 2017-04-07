@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
-	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/gorilla/mux"
 )
@@ -16,12 +16,12 @@ const downloadTimeout = 120 // sec
 
 // AgentWebApp is a web application that handles query to agent
 type AgentWebApp struct {
-	cl     *torrent.Client
+	cl     *torrentclient.Client
 	config *configuration.Config
 }
 
 // NewAgentWebApp creates a new agent web application
-func NewAgentWebApp(config *configuration.Config, cl *torrent.Client) *AgentWebApp {
+func NewAgentWebApp(config *configuration.Config, cl *torrentclient.Client) *AgentWebApp {
 	return &AgentWebApp{
 		cl:     cl,
 		config: config,

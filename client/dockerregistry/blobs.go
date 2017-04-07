@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/kraken/test-tracker"
 
 	"code.uber.internal/go-common.git/x/log"
@@ -18,12 +19,12 @@ import (
 // Blobs b
 type Blobs struct {
 	tracker *tracker.Tracker
-	client  *torrent.Client
+	client  *torrentclient.Client
 	store   *store.LocalFileStore
 }
 
 // NewBlobs creates Blobs
-func NewBlobs(tr *tracker.Tracker, cl *torrent.Client, s *store.LocalFileStore) *Blobs {
+func NewBlobs(tr *tracker.Tracker, cl *torrentclient.Client, s *store.LocalFileStore) *Blobs {
 	return &Blobs{
 		tracker: tr,
 		client:  cl,
@@ -38,7 +39,7 @@ func (b *Blobs) getBlobStat(fileName string) (sd.FileInfo, error) {
 			err = b.download(fileName)
 			if err != nil {
 				return nil, sd.PathNotFoundError{
-					DriverName: "p2p",
+					DriverName: "kraken",
 					Path:       fileName,
 				}
 			}
@@ -72,7 +73,7 @@ func (b *Blobs) download(fileName string) error {
 			wg.Done()
 			return
 		}
-		t, err := b.client.AddMagnet(uri)
+		t, err := b.client.AddTorrentMagnet(uri)
 		if err != nil {
 			wg.Done()
 			return
@@ -82,7 +83,7 @@ func (b *Blobs) download(fileName string) error {
 		psc := t.SubscribePieceStateChanges()
 		to := make(chan byte, 1)
 		go func() {
-			time.Sleep(p2ptimeout * time.Second)
+			time.Sleep(downloadTimeout * time.Second)
 			to <- uint8(1)
 		}()
 		go func() {
@@ -116,7 +117,7 @@ func (b *Blobs) download(fileName string) error {
 	}
 
 	return sd.PathNotFoundError{
-		DriverName: "p2p",
+		DriverName: "kraken",
 		Path:       fileName,
 	}
 }
