@@ -10,7 +10,7 @@ var (
 
 func TestIsTag(t *testing.T) {
 	assert := require.New(t)
-	d := &P2PStorageDriver{}
+	d := &KrakenStorageDriver{}
 	isTag, tagOrDigest, _ := d.isTag(layer)
 	assert.False(isTag)
 	assert.Equal(tagOrDigest, "35bc48a1ca97c3971611dc4662d08d131869daa692acb281c7e9e052924e38b1")
@@ -24,7 +24,7 @@ func TestIsTag(t *testing.T) {
 
 func TestGetRepoName(t *testing.T) {
 	assert := require.New(t)
-	d := &P2PStorageDriver{}
+	d := &KrakenStorageDriver{}
 	name, _ := d.getRepoName(layer)
 	assert.Equal(name, "external/ubuntu")
 	name, _ = d.getRepoName(manifest)

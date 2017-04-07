@@ -45,7 +45,9 @@ type Agent struct {
 
 // Config contains application configuration
 type Config struct {
-	Environment      string           `yaml:"environment"`
+	Environment string `yaml:"environment"`
+	// This is used for docker registry only running locally
+	DisableTorrent   bool             `yaml:"disable_torrent"`
 	UploadDir        string           `yaml:"upload_dir"`
 	DownloadDir      string           `yaml:"download_dir"`
 	TrashDir         string           `yaml:"trash_dir"`
@@ -89,11 +91,6 @@ func GetConfigFilePath(filename string) string {
 	}
 	configFile := path.Join(realConfigDir, filename)
 	return configFile
-}
-
-// GetAgentPort returns listen port
-func (c *Config) GetAgentPort() (string, error) {
-	return fmt.Sprintf("%d", c.Agent.Backend), nil
 }
 
 // CreateAgentConfig returns torrent agent's configuration

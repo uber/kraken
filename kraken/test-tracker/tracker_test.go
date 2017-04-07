@@ -6,9 +6,6 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"github.com/stretchr/testify/require"
 
-	"io/ioutil"
-	"os"
-
 	"code.uber.internal/infra/kraken/configuration"
 )
 
@@ -106,6 +103,7 @@ func TestAddPeer(t *testing.T) {
 	assert.Nil(tracker.AddPeer("sha1", "host1", "5000"))
 }
 
+/*
 func TestCreateTorrent(t *testing.T) {
 	assert := require.New(t)
 	dir, _ := os.Getwd()
@@ -125,4 +123,4 @@ func TestCreateTorrent(t *testing.T) {
 	assert.NotNil(err)
 	//re := regexp.MustCompile("Failed to set key key1 val magnet.*dn=key1.*announce for 604800")
 	//assert.True(re.Match([]byte(err.Error())))
-}
+}*/

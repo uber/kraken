@@ -7,10 +7,9 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/kraken/test-tracker"
 
-	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/metainfo"
 	sd "github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/uuid"
 )
@@ -19,11 +18,11 @@ import (
 type Uploads struct {
 	store   *store.LocalFileStore
 	tracker *tracker.Tracker
-	client  *torrent.Client
+	client  *torrentclient.Client
 }
 
 // NewUploads creates a new Uploads
-func NewUploads(t *tracker.Tracker, cl *torrent.Client, s *store.LocalFileStore) *Uploads {
+func NewUploads(t *tracker.Tracker, cl *torrentclient.Client, s *store.LocalFileStore) *Uploads {
 	return &Uploads{
 		store:   s,
 		tracker: t,
@@ -99,22 +98,13 @@ func (u *Uploads) getUploadDataStat(dir, uuid string) (fi sd.FileInfo, err error
 func (u *Uploads) commitUpload(srcdir, srcuuid, destdir, destsha string) (err error) {
 	srcfp := srcdir + srcuuid
 	destfp := destdir + destsha
-	var mi *metainfo.MetaInfo
 
 	err = u.store.MoveUploadFileToCache(srcuuid, destsha)
 	if err != nil {
 		return err
 	}
-	mi, err = u.tracker.CreateTorrentInfo(destsha, destfp)
-	if err != nil {
-		return err
-	}
-	err = u.tracker.CreateTorrentFromInfo(destsha, mi)
-	if err != nil {
-		return err
-	}
 
-	_, err = u.client.AddTorrent(mi)
+	err = u.client.CreateTorrentFromFile(destsha, destfp)
 	if err != nil {
 		return err
 	}
@@ -125,8 +115,6 @@ func (u *Uploads) commitUpload(srcdir, srcuuid, destdir, destsha string) (err er
 
 // putBlobData is used to write content to files directly, like image manifest and metadata.
 func (u *Uploads) putBlobData(fileName string, content []byte) error {
-	var mi *metainfo.MetaInfo
-
 	// It's better to have a random extension to avoid race condition.
 	var randFileName = fileName + "." + uuid.Generate().String()
 	_, err := u.store.CreateUploadFile(randFileName, int64(len(content)))
@@ -153,20 +141,7 @@ func (u *Uploads) putBlobData(fileName string, content []byte) error {
 	if err != nil {
 		return err
 	}
+
 	// TODO (@yiran) Shouldn't use file path directly.
-	mi, err = u.tracker.CreateTorrentInfo(fileName, path)
-	if err != nil {
-		return err
-	}
-	err = u.tracker.CreateTorrentFromInfo(fileName, mi)
-	if err != nil {
-		return err
-	}
-
-	_, err = u.client.AddTorrent(mi)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return u.client.CreateTorrentFromFile(fileName, path)
 }

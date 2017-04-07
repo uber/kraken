@@ -10,7 +10,6 @@ import (
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
-	"github.com/anacrolix/torrent"
 	rc "github.com/docker/distribution/configuration"
 	ctx "github.com/docker/distribution/context"
 	dr "github.com/docker/distribution/registry"
@@ -28,11 +27,10 @@ func main() {
 
 	// init storage
 	store := store.NewLocalFileStore(config)
-	torrentsManager := torrentclient.NewManager(config, store)
 
 	// init torrent client
 	log.Info("Init torrent agent")
-	client, err := torrent.NewClient(config.CreateAgentConfig(torrentsManager))
+	client, err := torrentclient.NewClient(config, store)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -45,9 +43,9 @@ func main() {
 	log.Info("Init registry")
 	config.Registry.Storage = rc.Storage{
 		dockerregistry.Name: rc.Parameters{
-			"config":         config,
-			"torrent-client": client,
-			"store":          store,
+			"config":        config,
+			"torrentclient": client,
+			"store":         store,
 		},
 		"redirect": rc.Parameters{
 			"disable": true,
