@@ -1,9 +1,12 @@
 package store
 
 import (
+	"io/ioutil"
 	"os"
 	"path"
 	"sync"
+
+	"code.uber.internal/infra/kraken/utils"
 )
 
 // FileEntry keeps basic information of a file, and provides reader and readwriter on the file.
@@ -12,38 +15,55 @@ type FileEntry interface {
 	GetPath() string
 	GetState() FileState
 	SetState(state FileState)
-	IsOpen() bool
-	Stat() (os.FileInfo, error)
 	GetFileReader() (FileReader, error)
 	GetFileReadWriter() (FileReadWriter, error)
+	ReadMetadata(mt MetadataType) ([]byte, error)
+	WriteMetadata(mt MetadataType, data []byte) (bool, error)
+	ReadMetadataAt(mt MetadataType, b []byte, off int64) (int, error)
+	WriteMetadataAt(mt MetadataType, b []byte, off int64) (int, error)
+	DeleteMetadata(mt MetadataType) error
+	ListMetadata() []MetadataType
+	IsOpen() bool
+	Stat() (os.FileInfo, error)
 }
 
-// LocalFileEntry keeps information of a file on local disk.
+// localFileEntry keeps information of a file on local disk.
 type localFileEntry struct {
 	sync.RWMutex // Though most operations happen under a global lock, we still need a lock here for Close()
 
-	name      string
-	state     FileState
-	openCount int
+	name        string
+	state       FileState
+	openCount   int
+	metadataMap map[MetadataType]bool
 }
 
-// NewLocalFileEntry initializes and returns a new LocalFileEntryLocalFileEntry object.
+// NewLocalFileEntry initializes and returns a LocalFileEntry object.
 func NewLocalFileEntry(name string, state FileState) FileEntry {
 	return &localFileEntry{
-		name:      name,
-		state:     state,
-		openCount: 0,
+		name:        name,
+		state:       state,
+		openCount:   0,
+		metadataMap: make(map[MetadataType]bool),
 	}
 }
 
+// GetName returns name of the file.
 func (entry *localFileEntry) GetName() string {
+	entry.RLock()
+	defer entry.RUnlock()
+
 	return entry.name
 }
 
+// GetPath returns current path of the file.
 func (entry *localFileEntry) GetPath() string {
+	entry.RLock()
+	defer entry.RUnlock()
+
 	return path.Join(entry.state.GetDirectory(), entry.name)
 }
 
+// GetState returns current state of the file.
 func (entry *localFileEntry) GetState() FileState {
 	entry.RLock()
 	defer entry.RUnlock()
@@ -51,32 +71,12 @@ func (entry *localFileEntry) GetState() FileState {
 	return entry.state
 }
 
+// SetState sets current state of the file.
 func (entry *localFileEntry) SetState(state FileState) {
 	entry.Lock()
 	defer entry.Unlock()
 
 	entry.state = state
-}
-
-// IsOpen check if any caller still has this file open.
-func (entry *localFileEntry) IsOpen() bool {
-	entry.RLock()
-	defer entry.RUnlock()
-
-	return entry.openCount > 0
-}
-
-// Stat returns a FileInfo describing the named file
-func (entry *localFileEntry) Stat() (os.FileInfo, error) {
-	entry.RLock()
-	defer entry.RUnlock()
-
-	f, err := os.OpenFile(path.Join(entry.state.GetDirectory(), entry.name), os.O_RDONLY, 0755)
-	if err != nil {
-		return nil, err
-	}
-
-	return f.Stat()
 }
 
 // GetFileReader returns a FileReader object for read operations.
@@ -97,7 +97,7 @@ func (entry *localFileEntry) GetFileReader() (FileReader, error) {
 	return reader, nil
 }
 
-// GetReadWriter returns a FileReadWriter object for read/write operations.
+// GetFileReadWriter returns a FileReadWriter object for read/write operations.
 func (entry *localFileEntry) GetFileReadWriter() (FileReadWriter, error) {
 	entry.RLock()
 	defer entry.RUnlock()
@@ -113,4 +113,184 @@ func (entry *localFileEntry) GetFileReadWriter() (FileReadWriter, error) {
 		descriptor: f,
 	}
 	return readWriter, nil
+}
+
+// ReadMetadata returns metadata content as a byte array.
+func (entry *localFileEntry) ReadMetadata(mt MetadataType) ([]byte, error) {
+	entry.RLock()
+	defer entry.RUnlock()
+
+	fp := path.Join(entry.state.GetDirectory(), entry.name+mt.Suffix())
+
+	// Check existence.
+	if _, err := os.Stat(fp); err != nil {
+		return nil, err
+	}
+
+	// In case this is during reload.
+	entry.metadataMap[mt] = true
+
+	return ioutil.ReadFile(fp)
+}
+
+// WriteMetadata updates metadata and returns true only if the file is updated correctly;
+// Returns false if error or file already contains desired content.
+func (entry *localFileEntry) WriteMetadata(mt MetadataType, b []byte) (bool, error) {
+	entry.Lock()
+	defer entry.Unlock()
+
+	fp := path.Join(entry.state.GetDirectory(), entry.name+mt.Suffix())
+
+	// Check existence.
+	fs, err := os.Stat(fp)
+	if err != nil && !os.IsNotExist(err) {
+		return false, err
+	}
+
+	if os.IsNotExist(err) {
+		err = os.MkdirAll(path.Dir(fp), 0755)
+		if err != nil {
+			return false, err
+		}
+
+		err = ioutil.WriteFile(fp, b, 0755)
+		if err != nil {
+			return false, err
+		}
+		entry.metadataMap[mt] = true
+		return true, nil
+	}
+
+	f, err := os.OpenFile(fp, os.O_RDWR, 0755)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+
+	// Compare with existing data, overwrite if different.
+	buf := make([]byte, int(fs.Size()))
+	_, err = f.Read(buf)
+	if err != nil {
+		return false, err
+	}
+	if utils.CompareByteArray(buf, b) {
+		return false, nil
+	}
+
+	if len(buf) != len(b) {
+		err = f.Truncate(int64(len(b)))
+		if err != nil {
+			return false, err
+		}
+	}
+
+	_, err = f.WriteAt(b, 0)
+	if err != nil {
+		return false, err
+	}
+	entry.metadataMap[mt] = true
+	return true, nil
+}
+
+// ReadMetadataAt reads metadata at specified offset.
+func (entry *localFileEntry) ReadMetadataAt(mt MetadataType, b []byte, off int64) (int, error) {
+	entry.RLock()
+	defer entry.RUnlock()
+
+	fp := path.Join(entry.state.GetDirectory(), entry.name+mt.Suffix())
+
+	// Check existence.
+	if _, err := os.Stat(fp); err != nil {
+		return 0, err
+	}
+
+	// Read to data.
+	f, err := os.Open(fp)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	return f.ReadAt(b, off)
+}
+
+// WriteMetadataAt writes metadata at specified offset.
+func (entry *localFileEntry) WriteMetadataAt(mt MetadataType, b []byte, off int64) (int, error) {
+	entry.Lock()
+	defer entry.Unlock()
+
+	fp := path.Join(entry.state.GetDirectory(), entry.name+mt.Suffix())
+
+	// Check existence.
+	_, err := os.Stat(fp)
+	if err != nil {
+		return 0, err
+	}
+
+	// Compare with existing data, overwrite if different.
+	f, err := os.OpenFile(fp, os.O_RDWR, 0755)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	buf := make([]byte, len(b))
+	_, err = f.ReadAt(buf, off)
+	if err != nil {
+		return 0, err
+	}
+	if utils.CompareByteArray(buf, b) {
+		return 0, nil
+	}
+
+	return f.WriteAt(b, off)
+}
+
+// DeleteMetadata deletes metadata of the specified type.
+func (entry *localFileEntry) DeleteMetadata(mt MetadataType) error {
+	entry.Lock()
+	defer entry.Unlock()
+
+	fp := path.Join(entry.state.GetDirectory(), entry.name+mt.Suffix())
+
+	err := os.RemoveAll(fp)
+	if err != nil {
+		return err
+	}
+
+	delete(entry.metadataMap, mt)
+
+	return nil
+}
+
+// ListMetadata returns list of metadata for this file.
+func (entry *localFileEntry) ListMetadata() []MetadataType {
+	entry.RLock()
+	defer entry.RUnlock()
+
+	var keys []MetadataType
+	for k := range entry.metadataMap {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// IsOpen check if any caller still has this file open.
+func (entry *localFileEntry) IsOpen() bool {
+	entry.RLock()
+	defer entry.RUnlock()
+
+	return entry.openCount > 0
+}
+
+// Stat returns a FileInfo describing the named file.
+func (entry *localFileEntry) Stat() (os.FileInfo, error) {
+	entry.RLock()
+	defer entry.RUnlock()
+
+	f, err := os.OpenFile(path.Join(entry.state.GetDirectory(), entry.name), os.O_RDONLY, 0755)
+	if err != nil {
+		return nil, err
+	}
+
+	return f.Stat()
 }

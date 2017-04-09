@@ -2,22 +2,25 @@ package store
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 )
 
 // FileStoreBackend manages all agent files.
 type FileStoreBackend interface {
 	CreateFile(fileName string, acceptedStates []FileState, createState FileState, len int64) (bool, error)
-	SetFileMetadata(fileName string, states []FileState, data []byte, mt MetadataType) (bool, error)
-	GetFileMetadata(fileName string, states []FileState, mt MetadataType) ([]byte, error)
+	ReadFileMetadata(fileName string, states []FileState, mt MetadataType) ([]byte, error)
+	WriteFileMetadata(fileName string, states []FileState, mt MetadataType, data []byte) (bool, error)
+	ReadFileMetadataAt(fileName string, states []FileState, mt MetadataType, b []byte, off int64) (int, error)
+	WriteFileMetadataAt(fileName string, states []FileState, mt MetadataType, b []byte, off int64) (int, error)
 	GetFileReader(fileName string, states []FileState) (FileReader, error)
 	GetFileReadWriter(fileName string, states []FileState) (FileReadWriter, error)
 	// TODO (@yiran): This is only needed when migrating classes to filestore
 	GetFilePath(fileName string, states []FileState) (string, error)
 	GetFileStat(fileName string, states []FileState) (os.FileInfo, error)
-	// TODO (@evelynl): move/delet metadata based on metadataType
 	MoveFile(fileName string, states []FileState, goalState FileState) error
 	RenameFile(fileName string, states []FileState, targetFileName string, goalState FileState) error
 	MoveFileIn(fileName string, goalState FileState, sourcePath string) error
@@ -52,9 +55,28 @@ func (backend *localFileStoreBackend) getFileEntry(fileName string, states []Fil
 		return nil, &FileStateError{Op: "get", State: fileEntry.GetState(), Name: fileName, Msg: fmt.Sprintf("Desired states: %v", states)}
 	}
 	for _, state := range states {
-		if _, err := os.Stat(path.Join(state.GetDirectory(), fileName)); err == nil {
-			// File exists on disk, load into memory and return new obj.
+		fp := path.Join(state.GetDirectory(), fileName)
+		if _, err := os.Stat(fp); err == nil {
+			// File exists on disk
 			fileEntry = NewLocalFileEntry(fileName, state)
+
+			// Load metadata
+			// TODO: (@yiran) glob could return the data file itself, and directories.
+			paths, err := filepath.Glob(fp + "*")
+			if err != nil {
+				return nil, err
+			}
+			for _, path := range paths {
+				mt := getMetadataType(path)
+				if mt != nil {
+					_, err = fileEntry.ReadMetadata(mt)
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
+
+			// Load file entry into in-memory map and return new obj
 			backend.fileMap[fileName] = fileEntry
 			exists = true
 			return fileEntry, nil
@@ -92,22 +114,8 @@ func (backend *localFileStoreBackend) CreateFile(fileName string, acceptedStates
 	return true, nil
 }
 
-// SetFileMetadata creates or overwrites metadata assocciate with the file with content
-func (backend *localFileStoreBackend) SetFileMetadata(fileName string, states []FileState, data []byte, mt MetadataType) (bool, error) {
-	backend.Lock()
-	defer backend.Unlock()
-
-	fileEntry, err := backend.getFileEntry(fileName, states)
-	if err != nil {
-		return false, err
-	}
-
-	// Create metadata file
-	return mt.Set(fileEntry, data)
-}
-
-// GetFileMetadata returns metadata assocciate with the file
-func (backend *localFileStoreBackend) GetFileMetadata(fileName string, states []FileState, mt MetadataType) ([]byte, error) {
+// ReadFileMetadata returns metadata assocciate with the file
+func (backend *localFileStoreBackend) ReadFileMetadata(fileName string, states []FileState, mt MetadataType) ([]byte, error) {
 	backend.Lock()
 	defer backend.Unlock()
 
@@ -117,7 +125,49 @@ func (backend *localFileStoreBackend) GetFileMetadata(fileName string, states []
 	}
 
 	// Get metadata
-	return mt.Get(fileEntry)
+	return fileEntry.ReadMetadata(mt)
+}
+
+// WriteFileMetadata creates or overwrites metadata assocciate with the file with content
+func (backend *localFileStoreBackend) WriteFileMetadata(fileName string, states []FileState, mt MetadataType, data []byte) (bool, error) {
+	backend.Lock()
+	defer backend.Unlock()
+
+	fileEntry, err := backend.getFileEntry(fileName, states)
+	if err != nil {
+		return false, err
+	}
+
+	// Create/Write metadata file
+	return fileEntry.WriteMetadata(mt, data)
+}
+
+// ReadFileMetadataAt returns metadata assocciate with the file
+func (backend *localFileStoreBackend) ReadFileMetadataAt(fileName string, states []FileState, mt MetadataType, b []byte, off int64) (int, error) {
+	backend.Lock()
+	defer backend.Unlock()
+
+	fileEntry, err := backend.getFileEntry(fileName, states)
+	if err != nil {
+		return 0, err
+	}
+
+	// Read metadata
+	return fileEntry.ReadMetadataAt(mt, b, off)
+}
+
+// WriteFileMetadataAt overwrites metadata assocciate with the file with content.
+func (backend *localFileStoreBackend) WriteFileMetadataAt(fileName string, states []FileState, mt MetadataType, b []byte, off int64) (int, error) {
+	backend.Lock()
+	defer backend.Unlock()
+
+	fileEntry, err := backend.getFileEntry(fileName, states)
+	if err != nil {
+		return 0, err
+	}
+
+	// Write metadata file
+	return fileEntry.WriteMetadataAt(mt, b, off)
 }
 
 // GetFileReader returns a FileReader object for read operations.
@@ -189,6 +239,30 @@ func (backend *localFileStoreBackend) MoveFile(fileName string, states []FileSta
 		return fmt.Errorf("Cannot remove file %s because it's still open", fileName)
 	}
 
+	// Copy metadata first. Use copy instead of move here, so any failure would be recoverable.
+	var sourceMetadataPaths []string
+	for _, mt := range fileEntry.ListMetadata() {
+		b, err := fileEntry.ReadMetadata(mt)
+		if err != nil {
+			return err
+		}
+		sourceMetadataPath := path.Join(fileEntry.GetState().GetDirectory(), fileName+mt.Suffix())
+		sourceMetadataPaths = append(sourceMetadataPaths, sourceMetadataPath)
+
+		if mt.IsValidState(goalState) {
+			targetMetadataPath := path.Join(goalState.GetDirectory(), fileName+mt.Suffix())
+
+			err = os.MkdirAll(path.Dir(targetMetadataPath), 0755)
+			if err != nil {
+				return err
+			}
+			if err = ioutil.WriteFile(targetMetadataPath, b, 0755); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Move data file.
 	sourcePath := path.Join(fileEntry.GetState().GetDirectory(), fileName)
 	targetPath := path.Join(goalState.GetDirectory(), fileName)
 	if err := os.Rename(sourcePath, targetPath); err != nil {
@@ -196,6 +270,12 @@ func (backend *localFileStoreBackend) MoveFile(fileName string, states []FileSta
 	}
 
 	backend.fileMap[fileName].SetState(goalState)
+
+	// Remove old metadata file, ignore error.
+	for _, sourceMetadataPath := range sourceMetadataPaths {
+		os.RemoveAll(sourceMetadataPath)
+	}
+
 	return nil
 }
 

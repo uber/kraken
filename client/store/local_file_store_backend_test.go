@@ -27,7 +27,7 @@ var _mockFileStateLookup = [...]string{_testDir1, _testDir2, _testDir3}
 
 func (state mockFileState) GetDirectory() string { return _mockFileStateLookup[state] }
 
-func TestStore(t *testing.T) {
+func TestStoreBackend(t *testing.T) {
 	// Setup
 	assert := require.New(t)
 

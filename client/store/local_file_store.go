@@ -64,36 +64,60 @@ func (store *LocalFileStore) CreateDownloadFile(fileName string, len int64) (boo
 	return store.backend.CreateFile(fileName, []FileState{stateCache}, stateDownload, len)
 }
 
-// SetDownloadFilePieceStatus create and initializes piece status for a new download file
+// SetDownloadFilePieceStatus creates and initializes piece status for a new download file.
 func (store *LocalFileStore) SetDownloadFilePieceStatus(fileName string, content []byte, index int, numPieces int) (bool, error) {
-	return store.backend.SetFileMetadata(fileName, []FileState{stateDownload}, content, getPieceStatus(index, numPieces))
+	if index == -1 {
+		return store.backend.WriteFileMetadata(fileName, []FileState{stateDownload}, getPieceStatus(), content)
+	}
+
+	n, err := store.backend.WriteFileMetadataAt(fileName, []FileState{stateDownload}, getPieceStatus(), content, int64(index))
+	if n == 0 {
+		return false, err
+	}
+	return true, err
 }
 
-// GetFilePieceStatus creates and initializes piece status for a new download file
+// GetFilePieceStatus reads piece status for a download file.
 func (store *LocalFileStore) GetFilePieceStatus(fileName string, index int, numPieces int) ([]byte, error) {
-	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload, stateCache}, getPieceStatus(index, numPieces))
+	if index == -1 {
+		index = 0
+	}
+
+	b := make([]byte, numPieces)
+	_, err := store.backend.ReadFileMetadataAt(fileName, []FileState{stateDownload}, getPieceStatus(), b, int64(index))
+	if IsFileStateError(err) {
+		// For files that finished downloading or were pushed, piece status should all be done.
+		if _, e := store.backend.GetFileStat(fileName, []FileState{stateCache}); e == nil {
+			for i := range b {
+				b[i] = PieceDone
+			}
+		}
+		return b, nil
+	}
+
+	return b, err
 }
 
-// SetDownloadFileStartedAt creates and writes the creation file for a new download file
-func (store *LocalFileStore) SetDownloadFileStartedAt(fileName string, content []byte) error {
-	_, err := store.backend.SetFileMetadata(fileName, []FileState{stateDownload}, content, getStartedAt())
+// SetUploadFileStartedAt creates and writes creation file for a new upload file.
+func (store *LocalFileStore) SetUploadFileStartedAt(fileName string, content []byte) error {
+	_, err := store.backend.WriteFileMetadata(fileName, []FileState{stateUpload}, getStartedAt(), content)
 	return err
 }
 
-// GetDownloadFileStartedAt creates and writes the creation file for a new download file
-func (store *LocalFileStore) GetDownloadFileStartedAt(fileName string) ([]byte, error) {
-	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload}, getStartedAt())
+// GetUploadFileStartedAt reads creation file for a new upload file.
+func (store *LocalFileStore) GetUploadFileStartedAt(fileName string) ([]byte, error) {
+	return store.backend.ReadFileMetadata(fileName, []FileState{stateUpload}, getStartedAt())
 }
 
-// SetDownloadFileHashStates creates and writes the hashstate for a downloading file
-func (store *LocalFileStore) SetDownloadFileHashStates(fileName string, content []byte, algorithm string, code string) error {
-	_, err := store.backend.SetFileMetadata(fileName, []FileState{stateDownload}, content, getHashState(algorithm, code))
+// SetUploadFileHashStates creates and writes hashstate for a upload file.
+func (store *LocalFileStore) SetUploadFileHashStates(fileName string, content []byte, algorithm string, code string) error {
+	_, err := store.backend.WriteFileMetadata(fileName, []FileState{stateUpload}, getHashState(algorithm, code), content)
 	return err
 }
 
-// GetDownloadFileHashStates creates and writes the hashstate for a downloading file
-func (store *LocalFileStore) GetDownloadFileHashStates(fileName string, algorithm string, code string) ([]byte, error) {
-	return store.backend.GetFileMetadata(fileName, []FileState{stateDownload}, getHashState(algorithm, code))
+// GetUploadFileHashStates reads hashstate for a upload file.
+func (store *LocalFileStore) GetUploadFileHashStates(fileName string, algorithm string, code string) ([]byte, error) {
+	return store.backend.ReadFileMetadata(fileName, []FileState{stateUpload}, getHashState(algorithm, code))
 }
 
 // GetUploadFileReader returns a FileReader for a file in upload directory.
