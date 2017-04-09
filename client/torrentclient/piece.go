@@ -101,7 +101,7 @@ func (p *Piece) MarkComplete() error {
 		return err
 	}
 
-	statues, err := p.store.GetFilePieceStatus(p.name, -1, p.numPieces)
+	status, err := p.store.GetFilePieceStatus(p.name, -1, p.numPieces)
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func (p *Piece) MarkComplete() error {
 		expected[i] = store.PieceDone
 	}
 
-	if utils.CompareByteArray(expected, statues) {
+	if utils.CompareByteArray(expected, status) {
 		err = p.store.MoveDownloadFileToCache(p.name)
 		if err != nil {
 			log.Errorf("Download completed but failed to move file to cache directory: %s", err.Error())
@@ -130,7 +130,7 @@ func (p *Piece) MarkNotComplete() error {
 
 // GetIsComplete returns completion status of the piece
 func (p *Piece) GetIsComplete() bool {
-	status, err := p.store.GetFilePieceStatus(p.name, p.index, p.numPieces)
+	status, err := p.store.GetFilePieceStatus(p.name, p.index, 1)
 	if err != nil {
 		log.Error(err)
 		return false
