@@ -58,14 +58,14 @@ func getMetadataType(fp string) MetadataType {
 type pieceStatus struct{}
 
 func getPieceStatus() MetadataType {
-	return &pieceStatus{}
+	return pieceStatus{}
 }
 
-func (p *pieceStatus) Suffix() string {
+func (p pieceStatus) Suffix() string {
 	return "_status"
 }
 
-func (p *pieceStatus) IsValidState(state FileState) bool {
+func (p pieceStatus) IsValidState(state FileState) bool {
 	switch state {
 	case stateDownload:
 		return true
@@ -77,14 +77,14 @@ func (p *pieceStatus) IsValidState(state FileState) bool {
 type startedAt struct{}
 
 func getStartedAt() MetadataType {
-	return &startedAt{}
+	return startedAt{}
 }
 
-func (s *startedAt) Suffix() string {
+func (s startedAt) Suffix() string {
 	return "_startedat"
 }
 
-func (s *startedAt) IsValidState(state FileState) bool {
+func (s startedAt) IsValidState(state FileState) bool {
 	switch state {
 	case stateDownload:
 		return true
@@ -101,19 +101,38 @@ type hashState struct {
 }
 
 func getHashState(alg, offset string) MetadataType {
-	return &hashState{
+	return hashState{
 		alg:    alg,
 		offset: offset,
 	}
 }
 
-func (h *hashState) Suffix() string {
+func (h hashState) Suffix() string {
 	return fmt.Sprintf("_hashstates/%s_%s", h.alg, h.offset)
 }
 
-func (h *hashState) IsValidState(state FileState) bool {
+func (h hashState) IsValidState(state FileState) bool {
 	switch state {
 	case stateUpload:
+		return true
+	default:
+		return false
+	}
+}
+
+type refCount struct{}
+
+func getRefCount() MetadataType {
+	return refCount{}
+}
+
+func (r refCount) Suffix() string {
+	return "_refcount"
+}
+
+func (r refCount) IsValidState(state FileState) bool {
+	switch state {
+	case stateCache:
 		return true
 	default:
 		return false
