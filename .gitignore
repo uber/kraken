@@ -12,7 +12,7 @@ pkg/
 # Binary executable
 kraken/tracker/tracker
 client/bin/agent/agent
-test/bin/puller/puller
+tools/bin/puller/puller
 
 # tmp migration files
 [0-9]*_-dir.go
