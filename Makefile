@@ -2,7 +2,7 @@
 BUILD_FLAGS = -gcflags '-N -l'
 
 # Environment variables to set before go build
-BUILD_ENV= 
+BUILD_ENV=
 
 # Flags to pass to go test
 TEST_FLAGS =
@@ -16,14 +16,15 @@ PROJECT_ROOT = code.uber.internal/infra/kraken
 # Tells udeploy what your service name is (set to $(notdir of PROJECT_ROOT))
 # by default
 SERVICES = \
+	kraken/tracker/tracker \
 	client/bin/agent/agent \
-	kraken/tracker/tracker
+	tools/bin/puller/puller
 
 # List all executables
 PROGS = \
 	kraken/tracker/tracker \
 	client/bin/agent/agent \
-	test/bin/puller/puller 
+	tools/bin/puller/puller
 
 kraken/tracker/tracker: kraken/tracker/main.go $(wildcard kraken/tracker/*.go config/tracker/*.go)
 client/bin/agent/agent: client/bin/agent/main.go $(wildcard client/*.go)
