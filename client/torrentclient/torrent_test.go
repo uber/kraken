@@ -54,7 +54,7 @@ func TestOpenCreated(t *testing.T) {
 	assert.True(new)
 	assert.Nil(tor.Open())
 	// will not call
-	_, err = s.GetFilePieceStatus("t2", -1, 1)
+	_, err = s.GetFilePieceStatus("t2", 0, 1)
 	match, _ := regexp.MatchString(".*no such file or directory.*", err.Error())
 	assert.True(match)
 }

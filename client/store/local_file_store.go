@@ -64,12 +64,13 @@ func (store *LocalFileStore) CreateDownloadFile(fileName string, len int64) (boo
 	return store.backend.CreateFile(fileName, []FileState{stateCache}, stateDownload, len)
 }
 
-// SetDownloadFilePieceStatus creates and initializes piece status for a new download file.
-func (store *LocalFileStore) SetDownloadFilePieceStatus(fileName string, content []byte, index int, numPieces int) (bool, error) {
-	if index == -1 {
-		return store.backend.WriteFileMetadata(fileName, []FileState{stateDownload}, getPieceStatus(), content)
-	}
+// WriteDownloadFilePieceStatus creates or overwrites piece status for a new download file.
+func (store *LocalFileStore) WriteDownloadFilePieceStatus(fileName string, content []byte) (bool, error) {
+	return store.backend.WriteFileMetadata(fileName, []FileState{stateDownload}, getPieceStatus(), content)
+}
 
+// WriteDownloadFilePieceStatusAt update piece status for download file at given index.
+func (store *LocalFileStore) WriteDownloadFilePieceStatusAt(fileName string, content []byte, index int) (bool, error) {
 	n, err := store.backend.WriteFileMetadataAt(fileName, []FileState{stateDownload}, getPieceStatus(), content, int64(index))
 	if n == 0 {
 		return false, err
@@ -77,16 +78,12 @@ func (store *LocalFileStore) SetDownloadFilePieceStatus(fileName string, content
 	return true, err
 }
 
-// GetFilePieceStatus reads piece status for a download file.
+// GetFilePieceStatus reads piece status for a file that's in download or cache dir.
 func (store *LocalFileStore) GetFilePieceStatus(fileName string, index int, numPieces int) ([]byte, error) {
-	if index == -1 {
-		index = 0
-	}
-
 	b := make([]byte, numPieces)
 	_, err := store.backend.ReadFileMetadataAt(fileName, []FileState{stateDownload}, getPieceStatus(), b, int64(index))
 	if IsFileStateError(err) {
-		// For files that finished downloading or were pushed, piece status should all be done.
+		// For files that finished downloading or were pushed, piece status should be done.
 		if _, e := store.backend.GetFileStat(fileName, []FileState{stateCache}); e == nil {
 			for i := range b {
 				b[i] = PieceDone

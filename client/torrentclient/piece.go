@@ -32,7 +32,7 @@ func (p *Piece) getOffset(off int64) int64 {
 // WriteAt writes buffered piece data to layer
 func (p *Piece) WriteAt(data []byte, off int64) (n int, err error) {
 	// set metadata
-	updated, err := p.store.SetDownloadFilePieceStatus(p.name, []byte{store.PieceDirty}, p.index, p.numPieces)
+	updated, err := p.store.WriteDownloadFilePieceStatusAt(p.name, []byte{store.PieceDirty}, p.index)
 	if err != nil {
 		return 0, err
 	}
@@ -42,7 +42,7 @@ func (p *Piece) WriteAt(data []byte, off int64) (n int, err error) {
 
 	// reset metadata
 	defer func() {
-		updated, err := p.store.SetDownloadFilePieceStatus(p.name, []byte{store.PieceClean}, p.index, p.numPieces)
+		updated, err := p.store.WriteDownloadFilePieceStatusAt(p.name, []byte{store.PieceClean}, p.index)
 		if err != nil {
 			log.Error(err)
 			return
@@ -96,12 +96,12 @@ func (p *Piece) ReadAt(data []byte, off int64) (n int, err error) {
 
 // MarkComplete marks piece as complete
 func (p *Piece) MarkComplete() error {
-	_, err := p.store.SetDownloadFilePieceStatus(p.name, []byte{store.PieceDone}, p.index, p.numPieces)
+	_, err := p.store.WriteDownloadFilePieceStatusAt(p.name, []byte{store.PieceDone}, p.index)
 	if err != nil {
 		return err
 	}
 
-	status, err := p.store.GetFilePieceStatus(p.name, -1, p.numPieces)
+	status, err := p.store.GetFilePieceStatus(p.name, 0, p.numPieces)
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func (p *Piece) MarkComplete() error {
 
 // MarkNotComplete marks piece as incomplete
 func (p *Piece) MarkNotComplete() error {
-	_, err := p.store.SetDownloadFilePieceStatus(p.name, []byte{store.PieceClean}, p.index, p.numPieces)
+	_, err := p.store.WriteDownloadFilePieceStatusAt(p.name, []byte{store.PieceClean}, p.index)
 	return err
 }
 

@@ -73,8 +73,8 @@ func TestWriteAt(t *testing.T) {
 	reader.Close()
 
 	// write failed
-	p0.store.SetDownloadFilePieceStatus("02", []byte{store.PieceDirty}, p0.index, p0.numPieces)
-	defer p0.store.SetDownloadFilePieceStatus("02", []byte{store.PieceClean}, p0.index, p0.numPieces)
+	p0.store.WriteDownloadFilePieceStatusAt("02", []byte{store.PieceDirty}, p0.index)
+	defer p0.store.WriteDownloadFilePieceStatusAt("02", []byte{store.PieceClean}, p0.index)
 	n, err = p0.WriteAt([]byte{uint8(8)}, 0)
 	assert.NotNil(err)
 	assert.Equal("Another thread is writing to the same piece 02: 0", err.Error())
@@ -195,10 +195,10 @@ func TestGetIsComplete(t *testing.T) {
 	p0 := tor.Piece(info.Piece(0)).(*Piece)
 
 	assert.False(p0.GetIsComplete())
-	p0.store.SetDownloadFilePieceStatus("07", []byte{store.PieceDone}, p0.index, p0.numPieces)
+	p0.store.WriteDownloadFilePieceStatusAt("07", []byte{store.PieceDone}, p0.index)
 	assert.True(p0.GetIsComplete())
 
-	p0.store.SetDownloadFilePieceStatus("07", []byte{store.PieceClean}, p0.index, p0.numPieces)
+	p0.store.WriteDownloadFilePieceStatusAt("07", []byte{store.PieceClean}, p0.index)
 	assert.False(p0.GetIsComplete())
 	p0.store.MoveDownloadFileToCache("07")
 	assert.True(p0.GetIsComplete())

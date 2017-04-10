@@ -52,7 +52,7 @@ func (tor *Torrent) Open() error {
 	for i := 0; i < tor.numPieces; i++ {
 		meta[i] = store.PieceClean
 	}
-	_, err = tor.store.SetDownloadFilePieceStatus(tor.name, meta, -1, tor.numPieces)
+	_, err = tor.store.WriteDownloadFilePieceStatus(tor.name, meta)
 	if err != nil {
 		log.Errorf("Error setting metadata for new download %s", tor.name)
 		return err
