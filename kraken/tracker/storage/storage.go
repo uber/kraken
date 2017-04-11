@@ -32,7 +32,7 @@ type PeerInfo struct {
 	InfoHash        string `bencode:"-"`
 	PeerID          string `bencode:"peer id"`
 	IP              string `bencode:"ip"`
-	Port            string `bencode:"port"`
+	Port            int64  `bencode:"port"`
 	BytesUploaded   int64  `bencode:"-"`
 	BytesDownloaded int64  `bencode:"-"`
 	BytesLeft       int64  `bencode:"-"`

@@ -1,15 +1,15 @@
 package service
 
 import (
-	"code.uber.internal/go-common.git/x/log"
+	"net"
+	"net/http"
+	"strconv"
 
 	"code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/kraken/tracker/storage"
 
+	"code.uber.internal/go-common.git/x/log"
 	bencode "github.com/jackpal/bencode-go"
-
-	"net/http"
-	"strconv"
 )
 
 // WebApp defines a web-app that is backed by a cache.Cache
@@ -36,17 +36,31 @@ func newWebApp(cfg config.AppConfig, storage storage.Storage) webApp {
 }
 
 func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Request) {
+	log.Infof("Received announce requet from: %s", r.Host)
+
+	peerIP, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		log.Infof("Failed to get requester IP: %s", r.Host)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	queryValues := r.URL.Query()
 
 	infoHash := queryValues.Get("info_hash")
 	peerID := queryValues.Get("peer_id")
-	peerIP := queryValues.Get("ip")
-	peerPort := queryValues.Get("port")
+	peerPortStr := queryValues.Get("port")
 	peerBytesDownloadedStr := queryValues.Get("downloaded")
 	peerBytesUploadedStr := queryValues.Get("uploaded")
 	peerBytesLeftStr := queryValues.Get("left")
 	peerEvent := queryValues.Get("event")
+
+	peerPort, err := strconv.ParseInt(peerPortStr, 10, 64)
+	if err != nil {
+		log.Infof("port is not parsable: %s", peerPortStr)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	peerBytesDownloaded, err := strconv.ParseInt(peerBytesDownloadedStr, 10, 64)
 	if err != nil {

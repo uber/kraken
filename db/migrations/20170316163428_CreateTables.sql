@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS peer (
     infoHash char(64),
     peerId char(255),
     ip char(40),
-    port char(10),
+    port bigint,
     bytes_downloaded bigint,
     bytes_uploaded bigint,
     bytes_left bigint,
