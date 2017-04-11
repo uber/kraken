@@ -1,14 +1,14 @@
 package storage
 
 import (
-	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken/config/tracker"
-	"github.com/pressly/goose"
-
 	"database/sql"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql" // need this side effect import for mysql
 	"strings"
+
+	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken/config/tracker"
+	_ "github.com/go-sql-driver/mysql" // need this side effect import for mysql
+	"github.com/pressly/goose"
 )
 
 // TPrivate denotes a private torrent flag
@@ -30,7 +30,7 @@ type TorrentInfo struct {
 // PeerInfo defines metadata for a peer
 type PeerInfo struct {
 	InfoHash        string `bencode:"-"`
-	PeerID          string `bencode:"id"`
+	PeerID          string `bencode:"peer id"`
 	IP              string `bencode:"ip"`
 	Port            string `bencode:"port"`
 	BytesUploaded   int64  `bencode:"-"`
