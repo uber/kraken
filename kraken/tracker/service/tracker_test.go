@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -55,13 +56,14 @@ func performRequest(handler http.Handler, request *http.Request) *http.Response 
 func TestAnnounceEndPoint(t *testing.T) {
 	infoHash := "12345678901234567890"
 	peerID := "ABCDEFGHIJKLMNOPQRST"
-	port := "6881"
+	portStr := "6881"
 	ip := "255.255.255.255"
 	downloaded := "1234"
 	uploaded := "5678"
 	left := "910"
 	event := "stopped"
 
+	port, _ := strconv.ParseInt(portStr, 10, 64)
 	bytesUploaded, _ := strconv.ParseInt(uploaded, 10, 64)
 	bytesDownloaded, _ := strconv.ParseInt(downloaded, 10, 64)
 	bytesLeft, _ := strconv.ParseInt(left, 10, 64)
@@ -80,12 +82,12 @@ func TestAnnounceEndPoint(t *testing.T) {
 		announceRequest, _ := http.NewRequest("GET",
 			"/announce?info_hash="+infoHash+
 				"&peer_id="+peerID+
-				"&ip="+ip+
-				"&port="+port+
+				"&port="+portStr+
 				"&downloaded="+downloaded+
 				"&uploaded="+uploaded+
 				"&left="+left+
 				"&event="+event, nil)
+		announceRequest.Host = fmt.Sprintf("%s:%s", ip, portStr)
 
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()
@@ -114,12 +116,12 @@ func TestAnnounceEndPoint(t *testing.T) {
 		announceRequest, _ := http.NewRequest("GET",
 			"/announce?info_hash="+infoHash+
 				"&peer_id="+peerID+
-				"&ip="+ip+
-				"&port="+port+
+				"&port="+portStr+
 				"&downloaded="+downloaded+
 				"&uploaded="+uploaded+
 				"&left="+left+
 				"&event="+event, nil)
+		announceRequest.Host = fmt.Sprintf("%s:%s", ip, portStr)
 
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()
