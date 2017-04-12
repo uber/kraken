@@ -1,9 +1,10 @@
 package storage
 
 import (
+	"database/sql"
+
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/config/tracker"
-	"database/sql"
 )
 
 const selectPeerStatememtStr string = `select 
@@ -21,7 +22,7 @@ const deletePeerByPeerIDStr string = "delete from peer where peerId = ?"
 
 const selectTorrentStatememtStr string = `select
  torrentName, author, numPieces, pieceLength, flags from torrent where torrentName = ?`
-const insertTorrentStatememtStr string = `insert into
+const insertTorrentStatememtStr string = `insert ignore into
  torrent(torrentName, author, numPieces, pieceLength, flags) values(?, ?, ?, ?, ?)`
 const deleteTorrentStatememtStr string = "delete from torrent where torrentName = ?"
 
@@ -42,7 +43,7 @@ func (ds *MySQLDataStore) Read(infoHash string) ([]PeerInfo, error) {
 
 	rows, err := ds.db.Query(selectPeerStatememtStr, infoHash)
 	if err != nil {
-		log.Error("Failed to connect to query datastore: %s", err.Error())
+		log.Errorf("Failed to connect to query datastore: %s", err.Error())
 		return peers, err
 	}
 	defer rows.Close()
