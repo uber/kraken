@@ -14,32 +14,16 @@ type LocalFileStore struct {
 
 // NewLocalFileStore initializes and returns a new FileStoreBackend object.
 func NewLocalFileStore(config *configuration.Config) *LocalFileStore {
-	// init all directories
-	// upload
-	os.RemoveAll(config.UploadDir)
-	err := os.MkdirAll(config.UploadDir, 0755)
-	if err != nil {
-		log.Fatal(err)
+	// Init all directories.
+	for _, dir := range []string{config.UploadDir, config.DownloadDir, config.TrashDir} {
+		os.RemoveAll(dir)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			log.Fatal(err)
+		}
 	}
 
-	// download
-	os.RemoveAll(config.DownloadDir)
-	err = os.MkdirAll(config.DownloadDir, 0755)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// cache
-	// we do not want to remove all existing files in cache directory
-	// for the sake of restart
-	err = os.MkdirAll(config.CacheDir, 0755)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// trash
-	os.RemoveAll(config.TrashDir)
-	err = os.MkdirAll(config.TrashDir, 0755)
+	// We do not want to remove all existing files in cache directory during restart.
+	err := os.MkdirAll(config.CacheDir, 0755)
 	if err != nil {
 		log.Fatal(err)
 	}
