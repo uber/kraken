@@ -30,7 +30,7 @@ type FileEntry interface {
 	DeleteMetadata(mt MetadataType) error
 	ListMetadata() []MetadataType
 
-	IsReferenced() (bool, error)
+	GetRefCount() (int64, error)
 	IncrementRefCount() (int64, error)
 	DecrementRefCount() (int64, error)
 }
@@ -306,17 +306,15 @@ func (entry *localFileEntry) ListMetadata() []MetadataType {
 	return keys
 }
 
-func (entry *localFileEntry) IsReferenced() (bool, error) {
+// GetRefCount returns current ref count. No ref count file means ref count is 0.
+func (entry *localFileEntry) GetRefCount() (int64, error) {
 	entry.RLock()
 	defer entry.RUnlock()
 
-	refCount, err := entry.getRefCount()
-	if err != nil {
-		return true, err
-	}
-	return refCount > 0, nil
+	return entry.getRefCount()
 }
 
+// IncrementRefCount increments ref count by 1.
 func (entry *localFileEntry) IncrementRefCount() (int64, error) {
 	entry.Lock()
 	defer entry.Unlock()
@@ -324,6 +322,7 @@ func (entry *localFileEntry) IncrementRefCount() (int64, error) {
 	return entry.updateRefCount(true)
 }
 
+// DecrementRefCount decrements ref count by 1.
 func (entry *localFileEntry) DecrementRefCount() (int64, error) {
 	entry.Lock()
 	defer entry.Unlock()

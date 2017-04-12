@@ -4,6 +4,8 @@ import (
 	"log"
 	"os"
 
+	"github.com/docker/distribution/uuid"
+
 	"code.uber.internal/infra/kraken/configuration"
 )
 
@@ -154,4 +156,28 @@ func (store *LocalFileStore) MoveCacheFileToTrash(fileName string) error {
 // DeleteTrashFile permanently deletes a file from trash directory.
 func (store *LocalFileStore) DeleteTrashFile(fileName string) error {
 	return store.backend.DeleteFile(fileName, []FileState{stateTrash})
+}
+
+// IncrementCacheFileRefCount increments ref count for a file in cache directory.
+func (store *LocalFileStore) IncrementCacheFileRefCount(fileName string, states []FileState) (int64, error) {
+	return store.backend.IncrementFileRefCount(fileName, []FileState{stateCache})
+}
+
+// DecrementCacheFileRefCount decrements ref count for a file in cache directory.
+// If ref count reaches 0, it will try to rename it and move it to trash directory.
+func (store *LocalFileStore) DecrementCacheFileRefCount(fileName string, states []FileState) (int64, error) {
+	refCount, err := store.backend.DecrementFileRefCount(fileName, []FileState{stateCache})
+	if err != nil {
+		return refCount, err
+	}
+	// Try rename and move to trash.
+	if refCount == 0 {
+		err := store.backend.RenameFile(fileName, []FileState{stateCache}, fileName+"."+uuid.Generate().String(), stateTrash)
+		if IsRefCountError(err) {
+			// It's possible ref count was incremented again, and that's fine.
+			return err.(*RefCountError).RefCount, nil
+		}
+		return 0, err
+	}
+	return refCount, nil
 }
