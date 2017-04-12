@@ -240,8 +240,12 @@ func (backend *localFileStoreBackend) MoveFile(fileName string, states []FileSta
 	if fileEntry.GetState() == goalState {
 		return &os.PathError{Op: "move", Path: fileName, Err: os.ErrExist}
 	}
-	if refrenced, err := fileEntry.IsReferenced(); refrenced || err != nil {
-		return fmt.Errorf("Cannot remove file %s because it's still referenced", fileName)
+	refCount, err := fileEntry.GetRefCount()
+	if err != nil {
+		return err
+	}
+	if refCount > 0 {
+		return &RefCountError{Op: "move", State: fileEntry.GetState(), Name: fileName, RefCount: refCount, Msg: fmt.Sprintf("File still referenced")}
 	}
 	if fileEntry.IsOpen() {
 		// TODO: set goal state.
@@ -304,8 +308,12 @@ func (backend *localFileStoreBackend) RenameFile(fileName string, states []FileS
 	if err != nil {
 		return err
 	}
-	if refrenced, err := fileEntry.IsReferenced(); refrenced || err != nil {
-		return fmt.Errorf("Cannot remove file %s because it's still referenced", fileName)
+	refCount, err := fileEntry.GetRefCount()
+	if err != nil {
+		return err
+	}
+	if refCount > 0 {
+		return &RefCountError{Op: "move", State: fileEntry.GetState(), Name: fileName, RefCount: refCount, Msg: fmt.Sprintf("File still referenced")}
 	}
 	if fileEntry.IsOpen() {
 		// TODO: set goal state.
@@ -367,8 +375,12 @@ func (backend *localFileStoreBackend) MoveFileOut(fileName string, states []File
 	if err != nil {
 		return err
 	}
-	if refrenced, err := fileEntry.IsReferenced(); refrenced || err != nil {
-		return fmt.Errorf("Cannot remove file %s because it's still referenced", fileName)
+	refCount, err := fileEntry.GetRefCount()
+	if err != nil {
+		return err
+	}
+	if refCount > 0 {
+		return &RefCountError{Op: "move", State: fileEntry.GetState(), Name: fileName, RefCount: refCount, Msg: fmt.Sprintf("File still referenced")}
 	}
 	if fileEntry.IsOpen() {
 		// TODO: set goal state?
@@ -406,8 +418,12 @@ func (backend *localFileStoreBackend) DeleteFile(fileName string, states []FileS
 	if err != nil {
 		return err
 	}
-	if refrenced, err := fileEntry.IsReferenced(); refrenced || err != nil {
-		return fmt.Errorf("Cannot remove file %s because it's still referenced", fileName)
+	refCount, err := fileEntry.GetRefCount()
+	if err != nil {
+		return err
+	}
+	if refCount > 0 {
+		return &RefCountError{Op: "move", State: fileEntry.GetState(), Name: fileName, RefCount: refCount, Msg: fmt.Sprintf("File still referenced")}
 	}
 	if fileEntry.IsOpen() {
 		// TODO: set goal state?
@@ -424,7 +440,7 @@ func (backend *localFileStoreBackend) DeleteFile(fileName string, states []FileS
 	// Remove from map.
 	delete(backend.fileMap, fileName)
 
-	// Unlock early, since deletion is blocking.
+	// Unlock early, since file deletion is blocking.
 	backend.Unlock()
 
 	// Remove data file.

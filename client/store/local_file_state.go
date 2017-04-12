@@ -27,25 +27,3 @@ func registerFileState(s FileState, d string) {
 func (state localFileState) GetDirectory() string {
 	return _directoryLookup[state]
 }
-
-// FileStateError represents errors related to file state.
-type FileStateError struct {
-	Op    string
-	State FileState
-	Name  string
-	Msg   string
-}
-
-func (e *FileStateError) Error() string {
-	return e.Op + " " + e.State.GetDirectory() + "/" + e.Name + ": " + e.Msg
-}
-
-// IsFileStateError returns true if the param is of FileStateError type.
-func IsFileStateError(err error) bool {
-	switch err.(type) {
-	default:
-		return false
-	case *FileStateError:
-		return true
-	}
-}
