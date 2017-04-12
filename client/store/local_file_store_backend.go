@@ -13,7 +13,6 @@ import (
 type FileStoreBackend interface {
 	CreateFile(fileName string, acceptedStates []FileState, createState FileState, len int64) (bool, error)
 
-	// TODO (@yiran): This is only needed when migrating classes to filestore
 	GetFilePath(fileName string, states []FileState) (string, error)
 	GetFileStat(fileName string, states []FileState) (os.FileInfo, error)
 
@@ -30,6 +29,9 @@ type FileStoreBackend interface {
 	MoveFileIn(fileName string, goalState FileState, sourcePath string) error
 	MoveFileOut(fileName string, states []FileState, targetPath string) error
 	DeleteFile(fileName string, states []FileState) error
+
+	IncrementFileRefCount(fileName string, states []FileState) (int64, error)
+	DecrementFileRefCount(fileName string, states []FileState) (int64, error)
 }
 
 // localFileStoreBackend manages all agent files on local disk under a global lock.
@@ -238,7 +240,11 @@ func (backend *localFileStoreBackend) MoveFile(fileName string, states []FileSta
 	if fileEntry.GetState() == goalState {
 		return &os.PathError{Op: "move", Path: fileName, Err: os.ErrExist}
 	}
+	if refrenced, err := fileEntry.IsReferenced(); refrenced || err != nil {
+		return fmt.Errorf("Cannot remove file %s because it's still referenced", fileName)
+	}
 	if fileEntry.IsOpen() {
+		// TODO: set goal state.
 		return fmt.Errorf("Cannot remove file %s because it's still open", fileName)
 	}
 
@@ -298,7 +304,11 @@ func (backend *localFileStoreBackend) RenameFile(fileName string, states []FileS
 	if err != nil {
 		return err
 	}
+	if refrenced, err := fileEntry.IsReferenced(); refrenced || err != nil {
+		return fmt.Errorf("Cannot remove file %s because it's still referenced", fileName)
+	}
 	if fileEntry.IsOpen() {
+		// TODO: set goal state.
 		return fmt.Errorf("Cannot remove file %s because it's still open", fileName)
 	}
 
@@ -357,7 +367,11 @@ func (backend *localFileStoreBackend) MoveFileOut(fileName string, states []File
 	if err != nil {
 		return err
 	}
+	if refrenced, err := fileEntry.IsReferenced(); refrenced || err != nil {
+		return fmt.Errorf("Cannot remove file %s because it's still referenced", fileName)
+	}
 	if fileEntry.IsOpen() {
+		// TODO: set goal state?
 		return fmt.Errorf("Cannot remove file %s because it's still open", fileName)
 	}
 
@@ -387,13 +401,16 @@ func (backend *localFileStoreBackend) MoveFileOut(fileName string, states []File
 // TODO: delete metadata files.
 func (backend *localFileStoreBackend) DeleteFile(fileName string, states []FileState) error {
 	backend.Lock()
-	defer backend.Unlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
 		return err
 	}
+	if refrenced, err := fileEntry.IsReferenced(); refrenced || err != nil {
+		return fmt.Errorf("Cannot remove file %s because it's still referenced", fileName)
+	}
 	if fileEntry.IsOpen() {
+		// TODO: set goal state?
 		return fmt.Errorf("Cannot remove file %s because it's still open", fileName)
 	}
 
@@ -404,11 +421,16 @@ func (backend *localFileStoreBackend) DeleteFile(fileName string, states []FileS
 		sourceMetadataPaths = append(sourceMetadataPaths, sourceMetadataPath)
 	}
 
+	// Remove from map.
+	delete(backend.fileMap, fileName)
+
+	// Unlock early, since deletion is blocking.
+	backend.Unlock()
+
 	// Remove data file.
 	if err := os.Remove(path.Join(fileEntry.GetState().GetDirectory(), fileName)); err != nil {
 		return err
 	}
-	delete(backend.fileMap, fileName)
 
 	// Remove old metadata files, ignore error.
 	for _, sourceMetadataPath := range sourceMetadataPaths {
@@ -416,4 +438,28 @@ func (backend *localFileStoreBackend) DeleteFile(fileName string, states []FileS
 	}
 
 	return nil
+}
+
+func (backend *localFileStoreBackend) IncrementFileRefCount(fileName string, states []FileState) (int64, error) {
+	backend.Lock()
+	defer backend.Unlock()
+
+	fileEntry, err := backend.getFileEntry(fileName, states)
+	if err != nil {
+		return 0, err
+	}
+
+	return fileEntry.IncrementRefCount()
+}
+
+func (backend *localFileStoreBackend) DecrementFileRefCount(fileName string, states []FileState) (int64, error) {
+	backend.Lock()
+	defer backend.Unlock()
+
+	fileEntry, err := backend.getFileEntry(fileName, states)
+	if err != nil {
+		return 0, err
+	}
+
+	return fileEntry.DecrementRefCount()
 }

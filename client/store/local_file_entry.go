@@ -1,6 +1,8 @@
 package store
 
 import (
+	"encoding/binary"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -15,16 +17,22 @@ type FileEntry interface {
 	GetPath() string
 	GetState() FileState
 	SetState(state FileState)
+	IsOpen() bool
+	Stat() (os.FileInfo, error)
+
 	GetFileReader() (FileReader, error)
 	GetFileReadWriter() (FileReadWriter, error)
+
 	ReadMetadata(mt MetadataType) ([]byte, error)
 	WriteMetadata(mt MetadataType, data []byte) (bool, error)
 	ReadMetadataAt(mt MetadataType, b []byte, off int64) (int, error)
 	WriteMetadataAt(mt MetadataType, b []byte, off int64) (int, error)
 	DeleteMetadata(mt MetadataType) error
 	ListMetadata() []MetadataType
-	IsOpen() bool
-	Stat() (os.FileInfo, error)
+
+	IsReferenced() (bool, error)
+	IncrementRefCount() (int64, error)
+	DecrementRefCount() (int64, error)
 }
 
 // localFileEntry keeps information of a file on local disk.
@@ -79,6 +87,22 @@ func (entry *localFileEntry) SetState(state FileState) {
 	entry.state = state
 }
 
+// IsOpen check if any caller still has this file open.
+func (entry *localFileEntry) IsOpen() bool {
+	entry.RLock()
+	defer entry.RUnlock()
+
+	return entry.openCount > 0
+}
+
+// Stat returns a FileInfo describing the named file.
+func (entry *localFileEntry) Stat() (os.FileInfo, error) {
+	entry.RLock()
+	defer entry.RUnlock()
+
+	return os.Stat(path.Join(entry.state.GetDirectory(), entry.name))
+}
+
 // GetFileReader returns a FileReader object for read operations.
 func (entry *localFileEntry) GetFileReader() (FileReader, error) {
 	entry.RLock()
@@ -120,6 +144,10 @@ func (entry *localFileEntry) ReadMetadata(mt MetadataType) ([]byte, error) {
 	entry.RLock()
 	defer entry.RUnlock()
 
+	return entry.readMetadata(mt)
+}
+
+func (entry *localFileEntry) readMetadata(mt MetadataType) ([]byte, error) {
 	fp := path.Join(entry.state.GetDirectory(), entry.name+mt.Suffix())
 
 	// Check existence.
@@ -139,6 +167,10 @@ func (entry *localFileEntry) WriteMetadata(mt MetadataType, b []byte) (bool, err
 	entry.Lock()
 	defer entry.Unlock()
 
+	return entry.writeMetadata(mt, b)
+}
+
+func (entry *localFileEntry) writeMetadata(mt MetadataType, b []byte) (bool, error) {
 	fp := path.Join(entry.state.GetDirectory(), entry.name+mt.Suffix())
 
 	// Check existence.
@@ -274,23 +306,67 @@ func (entry *localFileEntry) ListMetadata() []MetadataType {
 	return keys
 }
 
-// IsOpen check if any caller still has this file open.
-func (entry *localFileEntry) IsOpen() bool {
+func (entry *localFileEntry) IsReferenced() (bool, error) {
 	entry.RLock()
 	defer entry.RUnlock()
 
-	return entry.openCount > 0
+	refCount, err := entry.getRefCount()
+	if err != nil {
+		return true, err
+	}
+	return refCount > 0, nil
 }
 
-// Stat returns a FileInfo describing the named file.
-func (entry *localFileEntry) Stat() (os.FileInfo, error) {
-	entry.RLock()
-	defer entry.RUnlock()
+func (entry *localFileEntry) IncrementRefCount() (int64, error) {
+	entry.Lock()
+	defer entry.Unlock()
 
-	f, err := os.OpenFile(path.Join(entry.state.GetDirectory(), entry.name), os.O_RDONLY, 0755)
+	return entry.updateRefCount(true)
+}
+
+func (entry *localFileEntry) DecrementRefCount() (int64, error) {
+	entry.Lock()
+	defer entry.Unlock()
+
+	return entry.updateRefCount(false)
+}
+
+func (entry *localFileEntry) getRefCount() (int64, error) {
+	var refCount int64
+	var n int
+
+	b, err := entry.ReadMetadata(getRefCount())
+	if err != nil && !os.IsNotExist(err) {
+		return 0, err
+	} else if err == nil {
+		refCount, n = binary.Varint(b)
+		if n <= 0 {
+			return 0, fmt.Errorf("Failed to parse ref count: %v", b)
+		}
+	}
+	return refCount, nil
+}
+
+func (entry *localFileEntry) updateRefCount(increment bool) (int64, error) {
+	refCount, err := entry.getRefCount()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	return f.Stat()
+	if increment {
+		refCount++
+	} else if refCount > 0 {
+		refCount--
+	}
+	buf := make([]byte, 8)
+	n := binary.PutVarint(buf, refCount)
+	if n <= 0 {
+		return 0, fmt.Errorf("Failed to put ref count: %d", refCount)
+	}
+	_, err = entry.WriteMetadata(getRefCount(), buf)
+	if err != nil {
+		return 0, err
+	}
+
+	return refCount, nil
 }
