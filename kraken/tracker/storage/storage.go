@@ -88,8 +88,13 @@ func Init() {
 // RunDBMigration detect and Run DB migration if it is needed
 func RunDBMigration(appCfg config.AppConfig) error {
 
+	dsnTemplate := appCfg.DBConfig.GetDSN()
+	username := appCfg.Nemo.Username["kraken"]
+
+	dsn := fmt.Sprintf(dsnTemplate, username, appCfg.Nemo.Password[username])
+
 	// Open our database connection
-	db, err := sql.Open(appCfg.DBConfig.EngineName, appCfg.DBConfig.GetDSN())
+	db, err := sql.Open(appCfg.DBConfig.EngineName, dsn)
 	if err != nil {
 		log.Error("Failed to connect to datastore: ", err.Error())
 		return err
@@ -116,7 +121,12 @@ func RunDBMigration(appCfg config.AppConfig) error {
 // NewMySQLStorage creates and returns new MySQL storage
 func NewMySQLStorage(appCfg config.AppConfig) (Storage, error) {
 
-	db, err := sql.Open(appCfg.DBConfig.EngineName, appCfg.DBConfig.GetDSN())
+	dsnTemplate := appCfg.DBConfig.GetDSN()
+	username := appCfg.Nemo.Username["kraken"]
+
+	dsn := fmt.Sprintf(dsnTemplate, username, appCfg.Nemo.Password[username])
+
+	db, err := sql.Open(appCfg.DBConfig.EngineName, dsn)
 	if err != nil {
 		log.Error("Failed to connect to datastore: ", err.Error())
 		return nil, err
