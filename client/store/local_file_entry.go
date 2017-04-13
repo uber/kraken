@@ -334,7 +334,7 @@ func (entry *localFileEntry) getRefCount() (int64, error) {
 	var refCount int64
 	var n int
 
-	b, err := entry.ReadMetadata(getRefCount())
+	b, err := entry.readMetadata(getRefCount())
 	if err != nil && !os.IsNotExist(err) {
 		return 0, err
 	} else if err == nil {
@@ -362,7 +362,7 @@ func (entry *localFileEntry) updateRefCount(increment bool) (int64, error) {
 	if n <= 0 {
 		return 0, fmt.Errorf("Failed to put ref count: %d", refCount)
 	}
-	_, err = entry.WriteMetadata(getRefCount(), buf)
+	_, err = entry.writeMetadata(getRefCount(), buf)
 	if err != nil {
 		return 0, err
 	}

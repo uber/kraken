@@ -17,13 +17,13 @@ type mockMetadata struct {
 }
 
 func getMockMetadataOne() MetadataType {
-	return &mockMetadata{
+	return mockMetadata{
 		randomSuffix: "_suffix/one",
 	}
 }
 
 func getMockMetadataTwo() MetadataType {
-	return &mockMetadata{
+	return mockMetadata{
 		randomSuffix: "_suffix/two",
 	}
 }
@@ -38,11 +38,11 @@ func getMockMetadataFromPath(fp string) MetadataType {
 	return nil
 }
 
-func (m *mockMetadata) Suffix() string {
+func (m mockMetadata) Suffix() string {
 	return m.randomSuffix
 }
 
-func (m *mockMetadata) IsValidState(state FileState) bool {
+func (m mockMetadata) IsValidState(state FileState) bool {
 	switch state {
 	case stateTest1:
 		return true
@@ -95,13 +95,14 @@ func getTestFileEntry() (*localFileStoreBackend, FileEntry, error) {
 }
 
 func cleanupTestFileEntry() {
-	defer os.RemoveAll(_testRoot)
+	os.RemoveAll(_testRoot)
 }
 
 func TestMetadata(t *testing.T) {
+	cleanupTestFileEntry()
+	backend, fe, err := getTestFileEntry()
 	defer cleanupTestFileEntry()
 
-	backend, fe, err := getTestFileEntry()
 	m1 := getMockMetadataOne()
 	b := make([]byte, 2)
 	b1 := make([]byte, 1)
@@ -163,7 +164,9 @@ func TestMetadata(t *testing.T) {
 	assert.Equal(t, PieceDirty, b1[0])
 
 	// Move
-	backend.MoveFile("test_file.txt", []FileState{stateTest1}, stateTest2)
+	err = backend.MoveFile("test_file.txt", []FileState{stateTest1}, stateTest2)
+	assert.Nil(t, err)
+
 	_, err = os.Stat(path.Join(stateTest1.GetDirectory(), "test_file.txt"+getMockMetadataOne().Suffix()))
 	assert.NotNil(t, err)
 	_, err = os.Stat(path.Join(stateTest2.GetDirectory(), "test_file.txt"+getMockMetadataOne().Suffix()))
@@ -238,7 +241,8 @@ func TestMetadata(t *testing.T) {
 	assert.Equal(t, PieceDirty, b1[0])
 
 	// Move file to invalid state
-	backend.MoveFile("test_file.txt", []FileState{stateTest2}, stateTest3)
+	err = backend.MoveFile("test_file.txt", []FileState{stateTest2}, stateTest3)
+	assert.Nil(t, err)
 	fe = backend.fileMap["test_file.txt"]
 
 	b, err = fe.ReadMetadata(m1)
@@ -287,4 +291,43 @@ func TestMetadata(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestRefCount(t *testing.T) {
+	cleanupTestFileEntry()
+	backend, fe, err := getTestFileEntry()
+	defer cleanupTestFileEntry()
+
+	wg := &sync.WaitGroup{}
+	wg.Add(100)
+
+	for i := 0; i < 100; i++ {
+		go func() {
+			maxCount := rand.Intn(100)
+			var refCount int64
+			var err error
+			for j := 0; j < maxCount; j++ {
+				// Inc
+				refCount, err = fe.IncrementRefCount()
+				assert.Nil(t, err)
+			}
+			assert.True(t, refCount >= int64(maxCount))
+
+			// Try remove
+			err = backend.DeleteFile(fe.GetName(), []FileState{stateTest1})
+			assert.True(t, IsRefCountError(err))
+
+			for j := 0; j < maxCount; j++ {
+				// Dec
+				refCount, err = fe.DecrementRefCount()
+				assert.Nil(t, err)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+
+	refCount, err := fe.GetRefCount()
+	assert.Nil(t, err)
+	assert.Equal(t, refCount, int64(0))
 }
