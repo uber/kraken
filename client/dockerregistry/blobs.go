@@ -12,7 +12,7 @@ import (
 	"code.uber.internal/infra/kraken/kraken/test-tracker"
 
 	"code.uber.internal/go-common.git/x/log"
-	"github.com/anacrolix/torrent"
+	"code.uber.internal/infra/kraken-torrent"
 	sd "github.com/docker/distribution/registry/storage/driver"
 )
 

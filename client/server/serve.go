@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken-torrent/metainfo"
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/gorilla/mux"
 )
 

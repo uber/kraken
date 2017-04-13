@@ -9,7 +9,7 @@ import (
 
 	"regexp"
 
-	"github.com/anacrolix/torrent/metainfo"
+	"code.uber.internal/infra/kraken-torrent/metainfo"
 	"github.com/stretchr/testify/require"
 )
 
