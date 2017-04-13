@@ -1,10 +1,10 @@
 package torrentclient
 
 import (
+	"code.uber.internal/infra/kraken-torrent/metainfo"
+	"code.uber.internal/infra/kraken-torrent/storage"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/configuration"
-	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/storage"
 )
 
 const perm = 0755

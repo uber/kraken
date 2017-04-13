@@ -9,8 +9,8 @@ import (
 
 	xconfig "code.uber.internal/go-common.git/x/config"
 	"code.uber.internal/go-common.git/x/log"
-	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/storage"
+	"code.uber.internal/infra/kraken-torrent"
+	"code.uber.internal/infra/kraken-torrent/storage"
 	rc "github.com/docker/distribution/configuration"
 )
 

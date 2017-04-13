@@ -11,6 +11,14 @@ import:
   - bencode
   - metainfo
   - storage
+- package: code.uber.internal/infra/kraken-torrent
+  repo: gitolite@code.uber.internal:infra/kraken-torrent
+  version: 002ef3cc26949c6cd3e6ad47983f9097bdeada27
+  vcs: git
+  subpackages:
+  - bencode
+  - metainfo
+  - storage
 - package: github.com/docker/distribution
   version: 534b155cc89a8787a192dd95bf293e4dde19335d
   subpackages:

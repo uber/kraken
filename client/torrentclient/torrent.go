@@ -2,10 +2,10 @@ package torrentclient
 
 import (
 	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken-torrent/metainfo"
+	"code.uber.internal/infra/kraken-torrent/storage"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/configuration"
-	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/storage"
 )
 
 // Torrent contains layer info and a pointer to cache to retrieve data
