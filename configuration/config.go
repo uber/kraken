@@ -50,8 +50,9 @@ type Config struct {
 	DisableTorrent   bool             `yaml:"disable_torrent"`
 	UploadDir        string           `yaml:"upload_dir"`
 	DownloadDir      string           `yaml:"download_dir"`
-	TrashDir         string           `yaml:"trash_dir"`
 	CacheDir         string           `yaml:"cache_dir"`
+	TrashDir         string           `yaml:"trash_dir"`
+	TagDir           string           `yaml:"tag_dir"`
 	CacheSize        int              `yaml:"cache_size"`
 	CacheMapSize     int              `yaml:"cache_map_size"`
 	RedisURL         string           `yaml:"redis_url"`

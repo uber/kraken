@@ -3,8 +3,8 @@ FROM 192.168.65.1:15055/uber-uai/go-1.7:sjc1-produ-0000000008
 
 LABEL com.uber.base-image-name="uber-uai/go-1.7:sjc1-produ-0000000008" com.uber.supported_app_id="kraken"
 
-### registry, peer, annonuce, redis
-EXPOSE 5051 5081 8001 6378
+### registry, peer
+EXPOSE 5051 5052 5081 5081
 
 RUN /ucontainer/prepare.sh && /ucontainer/fix-git.sh
 ### TODO: temp fix to make langley location same as what is on the box. need to remove this line after udeploy fix mount
