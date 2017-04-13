@@ -8,7 +8,6 @@ import (
 
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrentclient"
-	"code.uber.internal/infra/kraken/kraken/test-tracker"
 
 	sd "github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/uuid"
@@ -16,17 +15,15 @@ import (
 
 // Uploads b
 type Uploads struct {
-	store   *store.LocalFileStore
-	tracker *tracker.Tracker
-	client  *torrentclient.Client
+	store  *store.LocalFileStore
+	client *torrentclient.Client
 }
 
 // NewUploads creates a new Uploads
-func NewUploads(t *tracker.Tracker, cl *torrentclient.Client, s *store.LocalFileStore) *Uploads {
+func NewUploads(cl *torrentclient.Client, s *store.LocalFileStore) *Uploads {
 	return &Uploads{
-		store:   s,
-		tracker: t,
-		client:  cl,
+		store:  s,
+		client: cl,
 	}
 }
 
@@ -95,6 +92,7 @@ func (u *Uploads) getUploadDataStat(dir, uuid string) (fi sd.FileInfo, err error
 	return fi, nil
 }
 
+// commmitUpload move a complete data blob from upload directory to cache diretory
 func (u *Uploads) commitUpload(srcdir, srcuuid, destdir, destsha string) (err error) {
 	srcfp := srcdir + srcuuid
 	destfp := destdir + destsha
@@ -116,7 +114,7 @@ func (u *Uploads) commitUpload(srcdir, srcuuid, destdir, destsha string) (err er
 // putBlobData is used to write content to files directly, like image manifest and metadata.
 func (u *Uploads) putBlobData(fileName string, content []byte) error {
 	// It's better to have a random extension to avoid race condition.
-	var randFileName = fileName + "." + uuid.Generate().String()
+	randFileName := fileName + "." + uuid.Generate().String()
 	_, err := u.store.CreateUploadFile(randFileName, int64(len(content)))
 	if err != nil {
 		return err

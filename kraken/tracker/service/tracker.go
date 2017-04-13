@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
@@ -39,7 +40,7 @@ func newWebApp(cfg config.AppConfig, storage storage.Storage) webApp {
 }
 
 func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Request) {
-	log.Infof("Received announce requet from: %s", r.Host)
+	log.Debugf("Received announce requet from: %s", r.Host)
 
 	peerIP, _, err := net.SplitHostPort(r.Host)
 	if err != nil {
@@ -50,8 +51,8 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 
 	queryValues := r.URL.Query()
 
-	infoHash := queryValues.Get("info_hash")
-	peerID := queryValues.Get("peer_id")
+	infoHash := hex.EncodeToString([]byte(queryValues.Get("info_hash")))
+	peerID := hex.EncodeToString([]byte(queryValues.Get("peer_id")))
 	peerPortStr := queryValues.Get("port")
 	peerBytesDownloadedStr := queryValues.Get("downloaded")
 	peerBytesUploadedStr := queryValues.Get("uploaded")
@@ -60,7 +61,7 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 
 	peerPort, err := strconv.ParseInt(peerPortStr, 10, 64)
 	if err != nil {
-		log.Infof("port is not parsable: %s", peerPortStr)
+		log.Infof("Port is not parsable: %s", peerPortStr)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -79,9 +80,9 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	peerBytesLeft, err := strconv.ParseInt(peerBytesLeftStr, 10, 64)
+	peerBytesLeft, err := strconv.ParseUint(peerBytesLeftStr, 10, 64)
 	if err != nil {
-		log.Infof("Left is not parsable: %s", peerBytesLeftStr)
+		log.Infof("left is not parsable: %s", peerBytesLeftStr)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -101,8 +102,9 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 			Port:            peerPort,
 			BytesUploaded:   peerBytesUploaded,
 			BytesDownloaded: peerBytesDownloaded,
-			BytesLeft:       peerBytesLeft,
-			Event:           peerEvent})
+			// TODO (@evelynl): our torrent library use uint64 as bytes left but database/sql does not support it
+			BytesLeft: int64(peerBytesLeft),
+			Event:     peerEvent})
 
 	if err != nil {
 		log.Infof("Could not update storage for: hash %s, error: %s", infoHash, err.Error())
@@ -159,6 +161,7 @@ func (webApp *webAppStruct) GetInfoHashHandler(w http.ResponseWriter, r *http.Re
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(info.InfoHash))
+	log.Infof("Successfully got infohash for %s: %s", name, info.InfoHash)
 }
 
 func (webApp *webAppStruct) PostInfoHashHandler(w http.ResponseWriter, r *http.Request) {

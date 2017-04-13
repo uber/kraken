@@ -21,9 +21,9 @@ const deletePeerByHashInfoStr string = "delete from peer where hashInfo = ?"
 const deletePeerByPeerIDStr string = "delete from peer where peerId = ?"
 
 const selectTorrentStatememtStr string = `select
- torrentName, author, numPieces, pieceLength, flags from torrent where torrentName = ?`
+ torrentName, infoHash, author, numPieces, pieceLength, flags from torrent where torrentName = ?`
 const insertTorrentStatememtStr string = `insert ignore into
- torrent(torrentName, author, numPieces, pieceLength, flags) values(?, ?, ?, ?, ?)`
+ torrent(torrentName, infoHash, author, numPieces, pieceLength, flags) values(?, ?, ?, ?, ?, ?)`
 const deleteTorrentStatememtStr string = "delete from torrent where torrentName = ?"
 
 // MySQLDataStore is a MySQL implementaion of a Storage interface

@@ -4,9 +4,8 @@ import (
 	"code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/kraken/tracker/storage"
 
-	"net/http"
-
 	"github.com/pressly/chi"
+	"net/http"
 )
 
 // InitializeAPI instantiates a new web-app for the tracker

@@ -7,14 +7,13 @@ import (
 	"strconv"
 	"testing"
 
-	"code.uber.internal/infra/kraken/kraken/tracker/storage"
-
-	bencode "github.com/jackpal/bencode-go"
+	"encoding/hex"
 
 	"code.uber.internal/infra/kraken/config/tracker"
+	"code.uber.internal/infra/kraken/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/test/mocks/mock_storage"
 	"github.com/golang/mock/gomock"
-
+	bencode "github.com/jackpal/bencode-go"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -55,7 +54,9 @@ func performRequest(handler http.Handler, request *http.Request) *http.Response 
 
 func TestAnnounceEndPoint(t *testing.T) {
 	infoHash := "12345678901234567890"
-	peerID := "ABCDEFGHIJKLMNOPQRST"
+	rawinfoHash, _ := hex.DecodeString(infoHash)
+	peerID := "09876543210987654321"
+	rawpeerID, _ := hex.DecodeString(peerID)
 	portStr := "6881"
 	ip := "255.255.255.255"
 	downloaded := "1234"
@@ -70,6 +71,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 
 	t.Run("Return 500 if missing parameters", func(t *testing.T) {
 		announceRequest, _ := http.NewRequest("GET", "/announce", nil)
+		announceRequest.Host = fmt.Sprintf("%s:%s", ip, portStr)
 
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()
@@ -80,8 +82,8 @@ func TestAnnounceEndPoint(t *testing.T) {
 	t.Run("Return 200 and empty bencoded response", func(t *testing.T) {
 
 		announceRequest, _ := http.NewRequest("GET",
-			"/announce?info_hash="+infoHash+
-				"&peer_id="+peerID+
+			"/announce?info_hash="+string(rawinfoHash[:])+
+				"&peer_id="+string(rawpeerID[:])+
 				"&port="+portStr+
 				"&downloaded="+downloaded+
 				"&uploaded="+uploaded+
@@ -114,8 +116,8 @@ func TestAnnounceEndPoint(t *testing.T) {
 	t.Run("Return 200 and single peer bencoded response", func(t *testing.T) {
 
 		announceRequest, _ := http.NewRequest("GET",
-			"/announce?info_hash="+infoHash+
-				"&peer_id="+peerID+
+			"/announce?info_hash="+string(rawinfoHash[:])+
+				"&peer_id="+string(rawpeerID[:])+
 				"&port="+portStr+
 				"&downloaded="+downloaded+
 				"&uploaded="+uploaded+

@@ -18,6 +18,4 @@ func TestNewConfig(t *testing.T) {
 	log.Infof("%s", dir)
 	assert.Equal(c.CacheDir, "/var/tmp/cache/")
 	assert.Equal(c.DownloadDir, "/var/tmp/downloads/")
-	assert.Equal(c.CacheSize, 2)
-	assert.Equal(c.CacheMapSize, 2)
 }

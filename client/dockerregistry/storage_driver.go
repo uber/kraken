@@ -6,18 +6,17 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
-	"code.uber.internal/infra/kraken/kraken/test-tracker"
+
+	"bytes"
 
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/docker/distribution/context"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/registry/storage/driver/factory"
-	"github.com/garyburd/redigo/redis"
 )
 
 // The path layout in the storage backend is roughly as follows:
@@ -77,42 +76,41 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 	}
 	client := clientParam.(*torrentclient.Client)
 
-	// init redis connection pools
-	pool := &redis.Pool{
-		MaxIdle:     3,
-		MaxActive:   6,
-		IdleTimeout: 240 * time.Second,
-		Dial:        func() (redis.Conn, error) { return redis.DialURL(config.RedisURL) },
+	sd, err := NewKrakenStorageDriver(config, store, client)
+	if err != nil {
+		return nil, err
 	}
 
-	t := tracker.NewTracker(config, pool)
-	go t.Serve()
-
-	return NewKrakenStorageDriver(config, store, client, t), nil
+	return sd, nil
 }
 
 // KrakenStorageDriver is a storage driver
 type KrakenStorageDriver struct {
 	config     *configuration.Config
 	tcl        *torrentclient.Client
-	p2pTracker *tracker.Tracker
 	store      *store.LocalFileStore
 	blobs      *Blobs
 	uploads    *Uploads
 	hashstates *HashStates
+	tags       *Tags
 }
 
 // NewKrakenStorageDriver creates a new KrakenStorageDriver given Manager
-func NewKrakenStorageDriver(c *configuration.Config, s *store.LocalFileStore, cl *torrentclient.Client, t *tracker.Tracker) *KrakenStorageDriver {
+func NewKrakenStorageDriver(c *configuration.Config, s *store.LocalFileStore, cl *torrentclient.Client) (*KrakenStorageDriver, error) {
+	tags, err := NewTags(c, s, cl)
+	if err != nil {
+		return nil, err
+	}
+
 	return &KrakenStorageDriver{
 		config:     c,
 		tcl:        cl,
 		store:      s,
-		p2pTracker: t,
-		blobs:      NewBlobs(t, cl, s),
-		uploads:    NewUploads(t, cl, s),
+		blobs:      NewBlobs(cl, s, c),
+		uploads:    NewUploads(cl, s),
 		hashstates: NewHashStates(),
-	}
+		tags:       tags,
+	}, nil
 }
 
 // Name returns driver namae
@@ -138,10 +136,19 @@ func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data
 			return nil, err
 		}
 		if isTag {
-			sha, err = d.p2pTracker.GetDigestFromRepoTag(repo, tagOrDigest)
+			reader, err := d.tags.getOrDownloadTaglink(repo, tagOrDigest)
 			if err != nil {
 				return nil, err
 			}
+			defer reader.Close()
+
+			buf := new(bytes.Buffer)
+			_, err = buf.ReadFrom(reader)
+			if err != nil {
+				return nil, err
+			}
+
+			sha = buf.String()
 		}
 		return []byte("sha256:" + sha), nil
 	case "startedat":
@@ -203,11 +210,11 @@ func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, conte
 			}
 			digest := ts[len(ts)-2]
 			tag := ts[len(ts)-5]
-			if err = d.p2pTracker.SetDigestForRepoTag(repo, tag, digest); err != nil {
+			_, err = d.tags.linkManifest(repo, tag, digest)
+			if err != nil {
 				return err
 			}
 		}
-
 		return nil
 	default:
 		if len(ts) > 3 && ts[len(ts)-3] == "hashstates" {
@@ -335,7 +342,7 @@ func (d *KrakenStorageDriver) isTag(path string) (bool, string, error) {
 // getRepoName returns the repo name given path
 func (d *KrakenStorageDriver) getRepoName(path string) (string, error) {
 	prefix := regexp.MustCompile("^.*repositories/")
-	suffix := regexp.MustCompile("(/_layer|/_manifest|/_uploads).*")
+	suffix := regexp.MustCompile("(/_layer|/_manifests|/_uploads).*")
 	name := suffix.ReplaceAllString(prefix.ReplaceAllString(path, ""), "")
 	if name == "" {
 		return "", fmt.Errorf("Error getting repo name %s", path)
