@@ -413,6 +413,7 @@ func (backend *localFileStoreBackend) MoveFileOut(fileName string, states []File
 // TODO: delete metadata files.
 func (backend *localFileStoreBackend) DeleteFile(fileName string, states []FileState) error {
 	backend.Lock()
+	defer backend.Unlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
@@ -439,14 +440,10 @@ func (backend *localFileStoreBackend) DeleteFile(fileName string, states []FileS
 
 	// Remove from map.
 	delete(backend.fileMap, fileName)
-
-	// Unlock early, since file deletion is blocking.
-	backend.Unlock()
-
-	// Remove data file.
-	if err := os.Remove(path.Join(fileEntry.GetState().GetDirectory(), fileName)); err != nil {
-		return err
-	}
+	// Remove data file in a separate go routing, so it won't be blocking.
+	go func() {
+		os.Remove(path.Join(fileEntry.GetState().GetDirectory(), fileName))
+	}()
 
 	// Remove old metadata files, ignore error.
 	for _, sourceMetadataPath := range sourceMetadataPaths {
