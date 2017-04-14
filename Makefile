@@ -17,17 +17,17 @@ PROJECT_ROOT = code.uber.internal/infra/kraken
 # by default
 SERVICES = \
 	kraken/tracker/tracker \
-	client/bin/agent/agent \
+	client/bin/kraken-agent/kraken-agent \
 	tools/bin/puller/puller
 
 # List all executables
 PROGS = \
 	kraken/tracker/tracker \
-	client/bin/agent/agent \
+	client/bin/kraken-agent/kraken-agent \
 	tools/bin/puller/puller
 
 kraken/tracker/tracker: kraken/tracker/main.go $(wildcard kraken/tracker/*.go config/tracker/*.go)
-client/bin/agent/agent: client/bin/agent/main.go $(wildcard client/*.go)
+client/bin/kraken-agent/kraken-agent: client/bin/kraken-agent/main.go $(wildcard client/*.go)
 test/bin/puller/puller: $(wildcard test/bin/puller/*.go)
 
 include go-build/rules.mk
@@ -57,3 +57,8 @@ integration:
 		fi;
 		env/bin/pip install -r requirements-tests.txt
 		CONFIG_DIR=config/tracker/config env/bin/py.test test/python
+
+# jenkins-only debian build job
+.PHONY: debian-kraken-agent
+debian-kraken-agent: client/bin/kraken-agent/kraken-agent
+		make debian-pre
