@@ -1,0 +1,5 @@
+#!/usr/bin/make -f
+PACKAGE = client/bin/kraken-agent
+
+%:
+	dh $@

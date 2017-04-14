@@ -1,0 +1,5 @@
+kraken-agent (0.1) unstable; urgency=low
+
+    * Initial release of kraken-agent
+
+ -- Igor Morozov<igor@uber.com>  Tue, 23 Apr 2017 12:00:00 +0000

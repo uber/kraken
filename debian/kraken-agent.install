@@ -1,0 +1,2 @@
+config/production.yaml /etc/uber/kraken-agent/config
+client/bin/kraken-agent/kraken-agent /usr/bin
