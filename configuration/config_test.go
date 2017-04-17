@@ -12,7 +12,7 @@ import (
 
 func TestNewConfig(t *testing.T) {
 	assert := require.New(t)
-	cp := GetConfigFilePath("test.yaml")
+	cp := GetConfigFilePath("agent/test.yaml")
 	c := NewConfig(cp)
 	dir, _ := os.Getwd()
 	log.Infof("%s", dir)

@@ -92,7 +92,7 @@ func (c *Client) AddTorrentByName(name string) (*torrent.Torrent, error) {
 		tor.AddPeers([]torrent.Peer{localPeer})
 
 		// add announcer
-		announcer := c.config.Announce + "/announce"
+		announcer := c.config.TrackerURL + "/announce"
 		tor.AddTrackers([][]string{{announcer}})
 	}
 
@@ -174,7 +174,7 @@ func (c *Client) CreateTorrentFromFile(name, filepath string) error {
 	t.AddPeers([]torrent.Peer{localPeer})
 
 	// add announcer
-	announcer := c.config.Announce + "/announce"
+	announcer := c.config.TrackerURL + "/announce"
 	t.AddTrackers([][]string{{announcer}})
 
 	log.WithFields(bark.Fields{
@@ -238,7 +238,7 @@ func (c *Client) download(tor *torrent.Torrent) <-chan byte {
 
 func (c *Client) getTorrentInfoHashFromTracker(name string) ([]byte, error) {
 	// get torrent info hash
-	trackerURL := c.config.Announce + "/infohash?name=" + name
+	trackerURL := c.config.TrackerURL + "/infohash?name=" + name
 	req, err := http.NewRequest("GET", trackerURL, nil)
 	if err != nil {
 		return nil, err
@@ -275,7 +275,7 @@ func (c *Client) getTorrentInfoHashFromTracker(name string) ([]byte, error) {
 }
 
 func (c *Client) addTorrentInTracker(name string, infohash metainfo.Hash) (err error) {
-	postURL := c.config.Announce + "/infohash?name=" + name + "&info_hash=" + infohash.HexString()
+	postURL := c.config.TrackerURL + "/infohash?name=" + name + "&info_hash=" + infohash.HexString()
 
 	for i := 0; i < callTrackerRetries; i++ {
 		var req *http.Request

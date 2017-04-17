@@ -17,13 +17,16 @@ import (
 
 func main() {
 	var configFile string
-	flag.StringVar(&configFile, "config", "test.yaml", "configuration file")
+	var disableTorrent bool
+	flag.StringVar(&configFile, "config", "agent/test.yaml", "agent configuration file")
+	flag.BoolVar(&disableTorrent, "disableTorrent", false, "disable torrent")
 	flag.Parse()
 
 	// load config
 	log.Info("Load agent configuration")
 	cp := configuration.GetConfigFilePath(configFile)
 	config := configuration.NewConfig(cp)
+	config.DisableTorrent = disableTorrent
 
 	// init storage
 	store := store.NewLocalFileStore(config)
