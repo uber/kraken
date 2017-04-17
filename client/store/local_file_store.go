@@ -3,6 +3,8 @@ package store
 import (
 	"log"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/docker/distribution/uuid"
 
@@ -92,15 +94,43 @@ func (store *LocalFileStore) GetUploadFileStartedAt(fileName string) ([]byte, er
 	return store.backend.ReadFileMetadata(fileName, []FileState{stateUpload}, getStartedAt())
 }
 
-// SetUploadFileHashStates creates and writes hashstate for a upload file.
-func (store *LocalFileStore) SetUploadFileHashStates(fileName string, content []byte, algorithm string, code string) error {
+// DeleteUploadFileStartedAt deletes creation file for a new upload file.
+func (store *LocalFileStore) DeleteUploadFileStartedAt(fileName string) error {
+	return store.backend.DeleteFileMetadata(fileName, []FileState{stateUpload}, getStartedAt())
+}
+
+// SetUploadFileHashState creates and writes hashstate for a upload file.
+func (store *LocalFileStore) SetUploadFileHashState(fileName string, content []byte, algorithm string, code string) error {
 	_, err := store.backend.WriteFileMetadata(fileName, []FileState{stateUpload}, getHashState(algorithm, code), content)
 	return err
 }
 
-// GetUploadFileHashStates reads hashstate for a upload file.
-func (store *LocalFileStore) GetUploadFileHashStates(fileName string, algorithm string, code string) ([]byte, error) {
+// GetUploadFileHashState reads hashstate for a upload file.
+func (store *LocalFileStore) GetUploadFileHashState(fileName string, algorithm string, code string) ([]byte, error) {
 	return store.backend.ReadFileMetadata(fileName, []FileState{stateUpload}, getHashState(algorithm, code))
+}
+
+// ListUploadFileHashStatePaths list paths of all hashstates for a upload file.
+// This function is not thread-safe.
+// TODO: Right now we store metadata with _hashstate, but registry expects /hashstate.
+func (store *LocalFileStore) ListUploadFileHashStatePaths(fileName string) ([]string, error) {
+	fp, err := store.backend.GetFilePath(fileName, []FileState{stateUpload})
+	if err != nil {
+		return nil, err
+	}
+
+	mtList, err := store.backend.ListFileMetadata(fileName, []FileState{stateUpload})
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, mt := range mtList {
+		if re := regexp.MustCompile("_hashstates/\\w+/\\w+$"); re.MatchString(mt.Suffix()) {
+			r := strings.NewReplacer("_", "/")
+			paths = append(paths, fp+r.Replace(mt.Suffix()))
+		}
+	}
+	return paths, nil
 }
 
 // GetUploadFileReader returns a FileReader for a file in upload directory.

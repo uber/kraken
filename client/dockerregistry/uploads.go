@@ -1,7 +1,6 @@
 package dockerregistry
 
 import (
-	"bufio"
 	"io"
 	"os"
 	"time"
@@ -28,35 +27,17 @@ func NewUploads(cl *torrentclient.Client, s *store.LocalFileStore) *Uploads {
 }
 
 func (u *Uploads) initUpload(dir, uuid string) error {
-	// create timestamp and tempfile
-	ts := time.Now()
-	s, err := os.Create(dir + uuid + "_startedat")
+	// Create timestamp and tempfile
+	_, err := u.store.CreateUploadFile(uuid, 0)
 	if err != nil {
 		return err
 	}
-	defer s.Close()
-	// write timestamp
-	s.WriteString(ts.Format(time.RFC3339) + "\n")
-	f, err := os.Create(dir + uuid)
-	if err != nil {
-		return err
-	}
-	return f.Close()
+
+	return u.store.SetUploadFileStartedAt(uuid, []byte(time.Now().Format(time.RFC3339)))
 }
 
 func (u *Uploads) getUploadStartTime(dir, uuid string) ([]byte, error) {
-	f, err := os.Open(dir + uuid + "_startedat")
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	reader := bufio.NewReader(f)
-	// read start date
-	date, _, err := reader.ReadLine()
-	if err != nil {
-		return nil, err
-	}
-	return date, nil
+	return u.store.GetUploadFileStartedAt(uuid)
 }
 
 func (u *Uploads) getUploadReader(path, dir, uuid string, offset int64) (io.ReadCloser, error) {
@@ -65,7 +46,7 @@ func (u *Uploads) getUploadReader(path, dir, uuid string, offset int64) (io.Read
 		return nil, err
 	}
 
-	// set offest
+	// Set offest
 	_, err = reader.Seek(offset, 0)
 	if err != nil {
 		return nil, err
@@ -94,20 +75,23 @@ func (u *Uploads) getUploadDataStat(dir, uuid string) (fi sd.FileInfo, err error
 
 // commmitUpload move a complete data blob from upload directory to cache diretory
 func (u *Uploads) commitUpload(srcdir, srcuuid, destdir, destsha string) (err error) {
-	srcfp := srcdir + srcuuid
-	destfp := destdir + destsha
+	// Remove timestamp file
+	err = u.store.DeleteUploadFileStartedAt(srcuuid)
+	if err != nil {
+		return err
+	}
 
 	err = u.store.MoveUploadFileToCache(srcuuid, destsha)
 	if err != nil {
 		return err
 	}
 
+	destfp := destdir + destsha
 	err = u.client.CreateTorrentFromFile(destsha, destfp)
 	if err != nil {
 		return err
 	}
-	// remove timestamp file
-	os.Remove(srcfp + "_statedat")
+
 	return
 }
 

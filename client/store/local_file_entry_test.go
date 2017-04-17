@@ -291,6 +291,14 @@ func TestMetadata(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+
+	// Delete
+	_, err = os.Stat(path.Join(stateTest3.GetDirectory(), "test_file.txt"+getMockMetadataOne().Suffix()))
+	assert.Nil(t, err)
+	err = fe.DeleteMetadata(m1)
+	assert.Nil(t, err)
+	_, err = os.Stat(path.Join(stateTest3.GetDirectory(), "test_file.txt"+getMockMetadataOne().Suffix()))
+	assert.NotNil(t, err)
 }
 
 func TestRefCount(t *testing.T) {

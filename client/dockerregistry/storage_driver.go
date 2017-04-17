@@ -86,13 +86,12 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 
 // KrakenStorageDriver is a storage driver
 type KrakenStorageDriver struct {
-	config     *configuration.Config
-	tcl        *torrentclient.Client
-	store      *store.LocalFileStore
-	blobs      *Blobs
-	uploads    *Uploads
-	hashstates *HashStates
-	tags       *Tags
+	config  *configuration.Config
+	tcl     *torrentclient.Client
+	store   *store.LocalFileStore
+	blobs   *Blobs
+	uploads *Uploads
+	tags    *Tags
 }
 
 // NewKrakenStorageDriver creates a new KrakenStorageDriver given Manager
@@ -103,13 +102,12 @@ func NewKrakenStorageDriver(c *configuration.Config, s *store.LocalFileStore, cl
 	}
 
 	return &KrakenStorageDriver{
-		config:     c,
-		tcl:        cl,
-		store:      s,
-		blobs:      NewBlobs(cl, s, c),
-		uploads:    NewUploads(cl, s),
-		hashstates: NewHashStates(),
-		tags:       tags,
+		config:  c,
+		tcl:     cl,
+		store:   s,
+		blobs:   NewBlobs(cl, s, c),
+		uploads: NewUploads(cl, s),
+		tags:    tags,
 	}, nil
 }
 
@@ -162,7 +160,7 @@ func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data
 			uuid := ts[len(ts)-4]
 			alg := ts[len(ts)-2]
 			code := ts[len(ts)-1]
-			return d.hashstates.getHashState(d.config.UploadDir, uuid, alg, code)
+			return d.store.GetUploadFileHashState(uuid, alg, code)
 		}
 		return nil, fmt.Errorf("Invalid request %s", path)
 	}
@@ -221,7 +219,7 @@ func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, conte
 			uuid := ts[len(ts)-4]
 			alg := ts[len(ts)-2]
 			code := ts[len(ts)-1]
-			_, err := d.hashstates.putHashState(d.config.UploadDir, uuid, alg, code, content)
+			err := d.store.SetUploadFileHashState(uuid, content, alg, code)
 			return err
 		}
 		return fmt.Errorf("Invalid request %s", path)
@@ -273,12 +271,12 @@ func (d *KrakenStorageDriver) List(ctx context.Context, path string) ([]string, 
 	switch contentType {
 	case "hashstates":
 		uuid := st[len(st)-3]
-		s, err := d.hashstates.listHashStates(d.config.UploadDir, uuid, path)
+		s, err := d.store.ListUploadFileHashStatePaths(uuid)
 		return s, err
 	default:
 		break
 	}
-	return nil, fmt.Errorf("Not implemented.")
+	return nil, fmt.Errorf("Not implemented")
 }
 
 // Move moves sourcePath to destPath
@@ -300,7 +298,7 @@ func (d *KrakenStorageDriver) Move(ctx context.Context, sourcePath string, destP
 	case "_uploads":
 		return d.uploads.commitUpload(d.config.UploadDir, srcsha, d.config.CacheDir, destsha)
 	default:
-		return fmt.Errorf("Not implemented.")
+		return fmt.Errorf("Not implemented")
 	}
 }
 
@@ -316,7 +314,7 @@ func (d *KrakenStorageDriver) Delete(ctx context.Context, path string) error {
 // URLFor returns url for path
 func (d *KrakenStorageDriver) URLFor(ctx context.Context, path string, options map[string]interface{}) (string, error) {
 	log.Infof("URLFor %s", path)
-	return "", fmt.Errorf("Not implemented.")
+	return "", fmt.Errorf("Not implemented")
 }
 
 // isTag return if path contains tag and returns the tag, or digest if it contains digest instead

@@ -32,10 +32,10 @@ func getMetadataType(fp string) MetadataType {
 	if strings.HasSuffix(fp, "_startedat") {
 		return &startedAt{}
 	}
-	if re := regexp.MustCompile("hashstates/(.*)_.*$"); re.MatchString(fp) {
-		algRe := regexp.MustCompile("_hashstates/(.*)_.*$")
+	if re := regexp.MustCompile("_hashstates/\\w+/\\w+$"); re.MatchString(fp) {
+		algRe := regexp.MustCompile("_hashstates/(\\w+)/\\w+$")
 		alg := algRe.FindStringSubmatch(fp)[0]
-		offsetRe := regexp.MustCompile("_hashstates/.*_(.*)$")
+		offsetRe := regexp.MustCompile("_hashstates/\\w+/(\\w+)$")
 		offset := offsetRe.FindStringSubmatch(fp)[0]
 
 		return &hashState{
@@ -108,7 +108,7 @@ func getHashState(alg, offset string) MetadataType {
 }
 
 func (h hashState) Suffix() string {
-	return fmt.Sprintf("_hashstates/%s_%s", h.alg, h.offset)
+	return fmt.Sprintf("_hashstates/%s/%s", h.alg, h.offset)
 }
 
 func (h hashState) IsValidState(state FileState) bool {
