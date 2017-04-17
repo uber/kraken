@@ -20,6 +20,8 @@ type FileStoreBackend interface {
 	WriteFileMetadata(fileName string, states []FileState, mt MetadataType, data []byte) (bool, error)
 	ReadFileMetadataAt(fileName string, states []FileState, mt MetadataType, b []byte, off int64) (int, error)
 	WriteFileMetadataAt(fileName string, states []FileState, mt MetadataType, b []byte, off int64) (int, error)
+	DeleteFileMetadata(fileName string, states []FileState, mt MetadataType) error
+	ListFileMetadata(fileName string, states []FileState) ([]MetadataType, error)
 
 	GetFileReader(fileName string, states []FileState) (FileReader, error)
 	GetFileReadWriter(fileName string, states []FileState) (FileReadWriter, error)
@@ -200,6 +202,32 @@ func (backend *localFileStoreBackend) WriteFileMetadataAt(fileName string, state
 
 	// Write metadata file
 	return fileEntry.WriteMetadataAt(mt, b, off)
+}
+
+// DeleteFileMetadata deletes metadata of the specified type for a file.
+func (backend *localFileStoreBackend) DeleteFileMetadata(fileName string, states []FileState, mt MetadataType) error {
+	backend.Lock()
+	defer backend.Unlock()
+
+	fileEntry, err := backend.getFileEntry(fileName, states)
+	if err != nil {
+		return err
+	}
+
+	return fileEntry.DeleteMetadata(mt)
+}
+
+// ListFileMetadata returns a list of all metadata for a file.
+func (backend *localFileStoreBackend) ListFileMetadata(fileName string, states []FileState) ([]MetadataType, error) {
+	backend.Lock()
+	defer backend.Unlock()
+
+	fileEntry, err := backend.getFileEntry(fileName, states)
+	if err != nil {
+		return nil, err
+	}
+
+	return fileEntry.ListMetadata(), nil
 }
 
 // GetFileReader returns a FileReader object for read operations.

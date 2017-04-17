@@ -294,7 +294,7 @@ func (entry *localFileEntry) DeleteMetadata(mt MetadataType) error {
 	return nil
 }
 
-// ListMetadata returns list of metadata for this file.
+// ListMetadata returns a list of metadata for this file.
 func (entry *localFileEntry) ListMetadata() []MetadataType {
 	entry.RLock()
 	defer entry.RUnlock()
