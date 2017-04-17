@@ -13,7 +13,7 @@ import (
 )
 
 func getFileStore() (*configuration.Config, *store.LocalFileStore) {
-	cp := configuration.GetConfigFilePath("test.yaml")
+	cp := configuration.GetConfigFilePath("agent/test.yaml")
 	c := configuration.NewConfig(cp)
 	var err error
 	err = os.MkdirAll(c.DownloadDir, 0755)

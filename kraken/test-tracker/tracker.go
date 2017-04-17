@@ -63,8 +63,8 @@ func (ex *Tracker) Serve() {
 		w.Write([]byte("OK"))
 	}).Methods("GET")
 	router.HandleFunc("/announce", ex.Announce).Methods("GET")
-	log.Infof("Tracker listening at %s", ex.config.Announce)
-	log.Fatal(http.ListenAndServe(ex.config.Announce, router))
+	log.Infof("Tracker listening at %s", ex.config.TrackerURL)
+	log.Fatal(http.ListenAndServe(ex.config.TrackerURL, router))
 }
 
 // Announce returns a list of peers that has requested piece
@@ -130,7 +130,7 @@ func (ex *Tracker) Announce(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respBody := httpResponse{
-		Interval: ex.config.AnnounceInterval,
+		Interval: 120,
 		Peers:    peers,
 	}
 
@@ -222,14 +222,14 @@ func (ex *Tracker) GetDigestFromRepoTag(repo string, tag string) (string, error)
 func (ex *Tracker) SetDigestForRepoTag(repo string, tag string, digest string) error {
 	conn := ex.redis.Get()
 	defer conn.Close()
-	ok, err := conn.Do("setex", fmt.Sprintf("%s:%s", repo, tag), ex.config.ExpireSec, digest)
+	ok, err := conn.Do("setex", fmt.Sprintf("%s:%s", repo, tag), 604800, digest)
 	if err != nil {
 		log.Errorf("%s", conn.Err())
 		return err
 	}
 
 	if ok.(string) != "OK" {
-		return fmt.Errorf("Failed to set repo %s tag %s for digest %s for %d", repo, tag, digest, ex.config.ExpireSec)
+		return fmt.Errorf("Failed to set repo %s tag %s for digest %s for %d", repo, tag, digest, 604800)
 	}
 	return nil
 }

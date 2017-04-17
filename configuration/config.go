@@ -47,20 +47,15 @@ type Agent struct {
 type Config struct {
 	Environment string `yaml:"environment"`
 	// This is used for docker registry only running locally
-	DisableTorrent   bool             `yaml:"disable_torrent"`
-	UploadDir        string           `yaml:"upload_dir"`
-	DownloadDir      string           `yaml:"download_dir"`
-	CacheDir         string           `yaml:"cache_dir"`
-	TrashDir         string           `yaml:"trash_dir"`
-	TagDir           string           `yaml:"tag_dir"`
-	CacheSize        int              `yaml:"cache_size"`
-	CacheMapSize     int              `yaml:"cache_map_size"`
-	RedisURL         string           `yaml:"redis_url"`
-	Announce         string           `yaml:"announce"`
-	AnnounceInterval int              `yaml:"announce_interval"`
-	ExpireSec        int              `yaml:"expire_sec"`
-	Registry         rc.Configuration `yaml:"registry"`
-	Agent            Agent            `yaml:"agent"`
+	DisableTorrent bool             `yaml:"disable_torrent"`
+	UploadDir      string           `yaml:"upload_dir"`
+	DownloadDir    string           `yaml:"download_dir"`
+	CacheDir       string           `yaml:"cache_dir"`
+	TrashDir       string           `yaml:"trash_dir"`
+	TagDir         string           `yaml:"tag_dir"`
+	TrackerURL     string           `yaml:"tracker_url"`
+	Registry       rc.Configuration `yaml:"registry"`
+	Agent          Agent            `yaml:"agent"`
 }
 
 // NewConfig returns a configuration frocvQa234	287m a YAML file
