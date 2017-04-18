@@ -82,13 +82,7 @@ func (t *Tags) getOrDownloadTaglink(repo, tag string) (io.ReadCloser, error) {
 		return reader, nil
 	}
 
-	// download file and try again
-	tor, err := t.client.AddTorrentByName(string(tagSha[:]))
-	if err != nil {
-		return nil, err
-	}
-
-	err = t.client.TimedDownload(tor)
+	err = t.client.DownloadByName(string(tagSha[:]))
 	if err != nil {
 		return nil, err
 	}

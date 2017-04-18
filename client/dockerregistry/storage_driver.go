@@ -72,7 +72,7 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 
 	clientParam, ok := params["torrentclient"]
 	if !ok || clientParam == nil {
-		log.Fatal("Failed to create storage driver. No torrent agnet initated.")
+		log.Fatal("Failed to create storage driver. No torrent agent initated.")
 	}
 	client := clientParam.(*torrentclient.Client)
 

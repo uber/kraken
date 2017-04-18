@@ -18,8 +18,10 @@ import (
 func main() {
 	var configFile string
 	var disableTorrent bool
+	var clientTimeout int
 	flag.StringVar(&configFile, "config", "agent/test.yaml", "agent configuration file")
 	flag.BoolVar(&disableTorrent, "disableTorrent", false, "disable torrent")
+	flag.IntVar(&clientTimeout, "clientTimeout", 120, "torrent client timeout in seconds")
 	flag.Parse()
 
 	// load config
@@ -33,7 +35,7 @@ func main() {
 
 	// init torrent client
 	log.Info("Init torrent agent")
-	client, err := torrentclient.NewClient(config, store)
+	client, err := torrentclient.NewClient(config, store, clientTimeout)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -70,7 +70,12 @@ func (awa *AgentWebApp) openTorrent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t, new := awa.cl.AddTorrentInfoHash(metainfo.NewHashFromHex(ih))
+	t, new, err := awa.cl.AddTorrentInfoHash(metainfo.NewHashFromHex(ih))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
 	log.Infof("Added torrent info hash")
 
 	// if the torrent is new to client, add tracker
@@ -107,7 +112,12 @@ func (awa *AgentWebApp) downloadTorrent(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// get the opened torrent from client given info hash
-	t, ok := awa.cl.Torrent(metainfo.NewHashFromHex(ih))
+	t, ok, err := awa.cl.Torrent(metainfo.NewHashFromHex(ih))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("Failed to download torrent. Torrent not found. Did you forget to call open?"))

@@ -28,7 +28,7 @@ PROGS = \
 
 kraken/tracker/tracker: kraken/tracker/main.go $(wildcard kraken/tracker/*.go config/tracker/*.go)
 client/bin/kraken-agent/kraken-agent: client/bin/kraken-agent/main.go $(wildcard client/*.go)
-tools/bin/puller/puller: $(wildcard test/bin/puller/*.go)
+tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 
 include go-build/rules.mk
 
