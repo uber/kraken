@@ -28,43 +28,57 @@ const (
 
 // Client contains a bittorent client and its
 type Client struct {
-	config *configuration.Config
-	cl     *torrent.Client
+	config  *configuration.Config
+	cl      *torrent.Client
+	timeout int //sec
 }
 
 // NewClient creates a new client
-func NewClient(c *configuration.Config, s *store.LocalFileStore) (*Client, error) {
-	torrentsManger := NewManager(c, s)
-	client, err := torrent.NewClient(c.CreateAgentConfig(torrentsManger))
+func NewClient(c *configuration.Config, s *store.LocalFileStore, t int) (*Client, error) {
+	if c.DisableTorrent {
+		log.Info("Torrent disabled")
+		return &Client{
+			config: c,
+			cl:     nil,
+		}, nil
+	}
+
+	torrentsManager := NewManager(c, s)
+	client, err := torrent.NewClient(c.CreateAgentConfig(torrentsManager))
 	if err != nil {
 		return nil, err
 	}
 
 	return &Client{
-		config: c,
-		cl:     client,
+		config:  c,
+		cl:      client,
+		timeout: t,
 	}, nil
 }
 
 // AddTorrent adds a torrent to the client given metainfo
 func (c *Client) AddTorrent(mi *metainfo.MetaInfo) (*torrent.Torrent, error) {
+	if c.config.DisableTorrent {
+		return nil, fmt.Errorf("Torrent disabled")
+	}
 	return c.cl.AddTorrent(mi)
 }
 
 // AddTorrentInfoHash adds a torrent to the client given infohash
-func (c *Client) AddTorrentInfoHash(hash metainfo.Hash) (*torrent.Torrent, bool) {
-	return c.cl.AddTorrentInfoHash(hash)
-}
-
-// AddTorrentMagnet adds a magnet to the client
-// TODO (@evelynl): we dont need this anymore because essentially we only need infohash and an announcer
-func (c *Client) AddTorrentMagnet(uri string) (*torrent.Torrent, error) {
-	return c.cl.AddMagnet(uri)
+func (c *Client) AddTorrentInfoHash(hash metainfo.Hash) (*torrent.Torrent, bool, error) {
+	if c.config.DisableTorrent {
+		return nil, false, fmt.Errorf("Torrent disabled")
+	}
+	tor, new := c.cl.AddTorrentInfoHash(hash)
+	return tor, new, nil
 }
 
 // AddTorrentByName gets torrent info hash from tracker by name and adds the torrent to the client
 // returns TorrentNotFound error if tracker does not have it
 func (c *Client) AddTorrentByName(name string) (*torrent.Torrent, error) {
+	if c.config.DisableTorrent {
+		return nil, fmt.Errorf("Torrent disabled")
+	}
 	infohash, err := c.getTorrentInfoHashFromTracker(name)
 	if err != nil {
 		log.WithFields(bark.Fields{
@@ -105,12 +119,21 @@ func (c *Client) AddTorrentByName(name string) (*torrent.Torrent, error) {
 }
 
 // Torrent gets a torrent from client given infohash
-func (c *Client) Torrent(hash metainfo.Hash) (*torrent.Torrent, bool) {
-	return c.cl.Torrent(hash)
+func (c *Client) Torrent(hash metainfo.Hash) (*torrent.Torrent, bool, error) {
+	if c.config.DisableTorrent {
+		return nil, false, fmt.Errorf("Torrent disabled")
+	}
+
+	tor, ok := c.cl.Torrent(hash)
+	return tor, ok, nil
 }
 
 // CreateTorrentFromFile creates a torrent and add it to the client
+// called by dockerregistry.Uploads and Tags
 func (c *Client) CreateTorrentFromFile(name, filepath string) error {
+	if c.config.DisableTorrent {
+		return nil
+	}
 	// build info hash from file
 	info := metainfo.Info{
 		Name:        name,
@@ -190,25 +213,47 @@ func (c *Client) CreateTorrentFromFile(name, filepath string) error {
 
 // WriteStatus writes torrent client status to a writer
 func (c *Client) WriteStatus(w io.Writer) {
+	if c.config.DisableTorrent {
+		w.Write([]byte("Torrent disabled"))
+		return
+	}
 	c.cl.WriteStatus(w)
 }
 
-// TimedDownload downloads a torrent with a timeout
-func (c *Client) TimedDownload(tor *torrent.Torrent) error {
+// DownloadByName adds and downloads torrent by name
+// called by dockerregistry.Blobs and Tags
+func (c *Client) DownloadByName(name string) error {
+	if c.config.DisableTorrent {
+		return fmt.Errorf("Torrent disabled")
+	}
+
+	tor, err := c.AddTorrentByName(name)
+	if err != nil {
+		return err
+	}
+	return c.Download(tor)
+}
+
+// Download downloads a torrent with a timeout
+func (c *Client) Download(tor *torrent.Torrent) error {
+	if c.config.DisableTorrent {
+		return fmt.Errorf("Torrent disabled")
+	}
+
 	// check torrent info
-	timer := time.NewTimer(downloadTimeout * time.Second)
+	timer := time.NewTimer(time.Duration(c.timeout) * time.Second)
 	select {
 	case <-timer.C:
-		return fmt.Errorf("Timeout waiting for torrent info: %s", tor.Name())
+		return fmt.Errorf("Timeout waiting for torrent info: %s. Exceeds %d seconds", tor.Name(), c.timeout)
 	case <-tor.GotInfo():
 	}
 
 	// start download
-	timer = time.NewTimer(downloadTimeout * time.Second)
+	timer = time.NewTimer(time.Duration(c.timeout) * time.Second)
 	select {
 	case <-timer.C:
 		tor.Drop()
-		return fmt.Errorf("Timeout downloading torrent: %s", tor.Name())
+		return fmt.Errorf("Timeout downloading torrent: %s. Exceeds %d seconds", tor.Name(), c.timeout)
 	case <-c.download(tor):
 		log.Infof("Sucessfully downloaded torrent %s", tor.Name())
 		return nil

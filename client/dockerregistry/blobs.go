@@ -29,14 +29,7 @@ func NewBlobs(cl *torrentclient.Client, s *store.LocalFileStore, config *configu
 func (b *Blobs) getBlobStat(fileName string) (sd.FileInfo, error) {
 	info, err := b.store.GetCacheFileStat(fileName)
 	if err != nil {
-		tor, err := b.client.AddTorrentByName(fileName)
-		if err != nil {
-			return nil, sd.PathNotFoundError{
-				DriverName: "kraken",
-				Path:       fileName,
-			}
-		}
-		err = b.client.TimedDownload(tor)
+		err = b.client.DownloadByName(fileName)
 		if err != nil {
 			return nil, sd.PathNotFoundError{
 				DriverName: "kraken",
@@ -74,14 +67,7 @@ func (b *Blobs) getOrDownloadBlobData(fileName string) (data []byte, err error) 
 func (b *Blobs) getOrDownloadBlobReader(fileName string, offset int64) (reader io.ReadCloser, err error) {
 	reader, err = b.getBlobReader(fileName, offset)
 	if err != nil {
-		tor, err := b.client.AddTorrentByName(fileName)
-		if err != nil {
-			return nil, sd.PathNotFoundError{
-				DriverName: "kraken",
-				Path:       fileName,
-			}
-		}
-		err = b.client.TimedDownload(tor)
+		err = b.client.DownloadByName(fileName)
 		if err != nil {
 			return nil, sd.PathNotFoundError{
 				DriverName: "kraken",
