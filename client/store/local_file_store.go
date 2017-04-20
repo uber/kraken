@@ -189,13 +189,13 @@ func (store *LocalFileStore) DeleteTrashFile(fileName string) error {
 }
 
 // IncrementCacheFileRefCount increments ref count for a file in cache directory.
-func (store *LocalFileStore) IncrementCacheFileRefCount(fileName string, states []FileState) (int64, error) {
+func (store *LocalFileStore) IncrementCacheFileRefCount(fileName string) (int64, error) {
 	return store.backend.IncrementFileRefCount(fileName, []FileState{stateCache})
 }
 
 // DecrementCacheFileRefCount decrements ref count for a file in cache directory.
 // If ref count reaches 0, it will try to rename it and move it to trash directory.
-func (store *LocalFileStore) DecrementCacheFileRefCount(fileName string, states []FileState) (int64, error) {
+func (store *LocalFileStore) DecrementCacheFileRefCount(fileName string) (int64, error) {
 	refCount, err := store.backend.DecrementFileRefCount(fileName, []FileState{stateCache})
 	if err != nil {
 		return refCount, err
