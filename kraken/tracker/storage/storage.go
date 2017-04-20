@@ -24,6 +24,7 @@ type TorrentInfo struct {
 	Author      string
 	NumPieces   int
 	PieceLength int
+	RefCount    int
 	Flags       uint
 }
 
@@ -38,6 +39,13 @@ type PeerInfo struct {
 	BytesLeft       int64  `bencode:"-"`
 	Event           string `bencode:"-"`
 	Flags           uint   `bencode:"-"`
+}
+
+// Manifest defines manifest for a content(torrent)
+type Manifest struct {
+	TagName  string
+	Manifest string
+	Flags    uint
 }
 
 // Storage defines an interface for CRUD operations on peers and torrents
@@ -61,6 +69,11 @@ type Storage interface {
 	CreateTorrent(torrentInfo *TorrentInfo) error
 	//Delete torrent by torrent name
 	DeleteTorrent(torrentName string) error
+
+	//Read manifest
+	ReadManifest(tagName string) (*Manifest, error)
+	//Create torrent
+	UpdateManifest(manifest *Manifest) error
 }
 
 // DataStoreFactory is storage factory function type

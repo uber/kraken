@@ -7,6 +7,7 @@ import (
 	"code.uber.internal/infra/kraken/config/tracker"
 )
 
+//Peer statements
 const selectPeerStatememtStr string = `select 
  infoHash, peerId, ip, port, bytes_uploaded, bytes_downloaded, bytes_left, event, flags
 from peer where infoHash = ?`
@@ -20,11 +21,20 @@ const deletePeerByTorrentStr string = "delete from peer where torrentName = ?"
 const deletePeerByHashInfoStr string = "delete from peer where hashInfo = ?"
 const deletePeerByPeerIDStr string = "delete from peer where peerId = ?"
 
+//Torrent statements
 const selectTorrentStatememtStr string = `select
- torrentName, infoHash, author, numPieces, pieceLength, flags from torrent where torrentName = ?`
+ torrentName, infoHash, author, numPieces, pieceLength, refcount, flags from torrent where torrentName = ?`
 const insertTorrentStatememtStr string = `insert ignore into
- torrent(torrentName, infoHash, author, numPieces, pieceLength, flags) values(?, ?, ?, ?, ?, ?)`
+ torrent(torrentName, infoHash, author, numPieces, pieceLength, recount, flags) values(?, ?, ?, ?, ?, ?)`
 const deleteTorrentStatememtStr string = "delete from torrent where torrentName = ?"
+
+//Manifest statements
+const selectManifestStatememtStr string = `select 
+ tagName, manifest, flags from manifest where tagName = ?`
+
+const upsertManifestStatememtStr string = `insert into
+ manifest(tagName, manifest, flags)
+ values(?, ?, ?) on duplicate key update manifest = ?, flags = ?`
 
 // MySQLDataStore is a MySQL implementaion of a Storage interface
 type MySQLDataStore struct {
@@ -146,6 +156,7 @@ func (ds *MySQLDataStore) ReadTorrent(torrentName string) (*TorrentInfo, error) 
 			&t.Author,
 			&t.NumPieces,
 			&t.PieceLength,
+			&t.RefCount,
 			&t.Flags); err != nil {
 			return nil, err
 		}
@@ -167,6 +178,7 @@ func (ds *MySQLDataStore) CreateTorrent(torrentInfo *TorrentInfo) error {
 		torrentInfo.Author,
 		torrentInfo.NumPieces,
 		torrentInfo.PieceLength,
+		torrentInfo.RefCount,
 		torrentInfo.Flags)
 	if err != nil {
 		log.Error(err)
@@ -183,5 +195,53 @@ func (ds *MySQLDataStore) DeleteTorrent(torrentName string) error {
 		log.Error(err)
 		return err
 	}
+	return nil
+}
+
+// ReadManifest reads manifest from storage
+func (ds *MySQLDataStore) ReadManifest(tagName string) (*Manifest, error) {
+	rows, err := ds.db.Query(selectManifestStatememtStr, tagName)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		m := new(Manifest)
+		if err := rows.Scan(
+			&m.TagName,
+			&m.Manifest,
+			&m.Flags); err != nil {
+			return nil, err
+		}
+		return m, nil
+	}
+	if err := rows.Err(); err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	return nil, nil
+}
+
+// UpdateManifest updates content manifest in a storage
+func (ds *MySQLDataStore) UpdateManifest(manifest *Manifest) error {
+	_, err := ds.db.Exec(
+		upsertManifestStatememtStr,
+		//insert
+		manifest.TagName,
+		manifest.Manifest,
+		manifest.Flags,
+
+		//update
+		manifest.Manifest,
+		manifest.Flags,
+	)
+
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
 	return nil
 }

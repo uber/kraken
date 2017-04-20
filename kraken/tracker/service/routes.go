@@ -29,5 +29,11 @@ func InitializeAPI(
 	// post info hash endpoint
 	r.Post("/infohash", webApp.PostInfoHashHandler)
 
+	// post manifest endpoint
+	r.Post("/manifest/:name", webApp.PostManifestHandler)
+
+	// get manifest
+	r.Get("/manifest/:name", webApp.GetManifestHandler)
+
 	return r
 }

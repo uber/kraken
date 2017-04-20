@@ -2,6 +2,9 @@ package service
 
 import (
 	"encoding/hex"
+	"encoding/json"
+	"io/ioutil"
+
 	"fmt"
 	"net"
 	"net/http"
@@ -12,6 +15,8 @@ import (
 	"code.uber.internal/infra/kraken/kraken/tracker/storage"
 	bencode "github.com/jackpal/bencode-go"
 	"github.com/uber-common/bark"
+
+	"github.com/pressly/chi"
 )
 
 // WebApp defines a web-app that is backed by a cache.Cache
@@ -20,6 +25,8 @@ type webApp interface {
 	GetAnnounceHandler(http.ResponseWriter, *http.Request)
 	GetInfoHashHandler(http.ResponseWriter, *http.Request)
 	PostInfoHashHandler(w http.ResponseWriter, r *http.Request)
+	GetManifestHandler(http.ResponseWriter, *http.Request)
+	PostManifestHandler(w http.ResponseWriter, r *http.Request)
 }
 
 type webAppStruct struct {
@@ -195,4 +202,96 @@ func (webApp *webAppStruct) PostInfoHashHandler(w http.ResponseWriter, r *http.R
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Created"))
+}
+
+func (webApp *webAppStruct) GetManifestHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	name := chi.URLParam(r, "name")
+	if len(name) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Failed to parse an empty tag name"))
+		return
+	}
+
+	manifest, err := webApp.datastore.ReadManifest(name)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(
+			fmt.Sprintf("Failed to get manifests for %s with error: %s", name, err.Error())))
+		log.WithFields(
+			bark.Fields{"name": name, "error": err}).Error(
+			"Failed to get manifest")
+		return
+	}
+
+	if manifest == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(manifest.Manifest)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.WithFields(
+			bark.Fields{"name": name, "manifest": manifest, "error": err}).Error(
+			"Failed to encode manifest into json")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	log.Infof("Got manifest for %s", name)
+}
+
+func (webApp *webAppStruct) PostManifestHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	name := chi.URLParam(r, "name")
+
+	if len(name) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Failed to parse a tag name"))
+		return
+	}
+
+	var jsonManifest map[string]interface{}
+	manifest, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(
+			fmt.Sprintf("Could not read manifest from a post payload for %s and error: %s",
+				name, err.Error())))
+		log.WithFields(
+			bark.Fields{"name": name, "error": err}).Error(
+			"Failed to read manifest payload")
+		return
+	}
+
+	err = json.Unmarshal(manifest, &jsonManifest)
+	defer r.Body.Close()
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(
+			fmt.Sprintf("Mnifest is an invalid json for %s, manifest %s and error: %s",
+				name, manifest[:], err.Error())))
+		log.WithFields(
+			bark.Fields{"name": name, "manifest": manifest[:], "error": err}).Error(
+			"Failed to parse manifest")
+		return
+	}
+
+	err = webApp.datastore.UpdateManifest(
+		&storage.Manifest{TagName: name, Manifest: string(manifest[:]), Flags: 0})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(
+			fmt.Sprintf("Failed to update manifest for %s with manifest %s and error: %s",
+				name, manifest, err.Error())))
+		log.WithFields(
+			bark.Fields{"name": name, "manifest": manifest[:], "error": err}).Error(
+			"Failed to update manifest")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	log.Infof("Updated manifest successfully for %s", name)
 }
