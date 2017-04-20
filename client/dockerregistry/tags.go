@@ -14,6 +14,8 @@ import (
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
+	"github.com/docker/distribution"
+	"github.com/docker/distribution/manifest/schema2"
 	"github.com/docker/distribution/uuid"
 	"github.com/uber-common/bark"
 )
@@ -56,7 +58,7 @@ func (t *Tags) getTagHash(repo, tag string) []byte {
 func (t *Tags) createTag(repo, tag string) error {
 	t.Lock()
 	defer t.Unlock()
-	// create tag file
+	// Create tag file
 	tagFp := path.Join(t.config.TagDir, repo, tag)
 	err := os.MkdirAll(path.Dir(tagFp), 0755)
 	if err != nil {
@@ -75,7 +77,7 @@ func (t *Tags) createTag(repo, tag string) error {
 func (t *Tags) getOrDownloadTaglink(repo, tag string) (io.ReadCloser, error) {
 	tagSha := t.getTagHash(repo, tag)
 
-	// try get file
+	// Try get file
 	reader, err := t.store.GetCacheFileReader(string(tagSha[:]))
 	// TODO (@evelynl): check for file not found error?
 	if err == nil {
@@ -92,7 +94,7 @@ func (t *Tags) getOrDownloadTaglink(repo, tag string) (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	// create tag file
+	// Create tag file
 	err = t.createTag(repo, tag)
 	if err != nil {
 		return nil, err
@@ -101,10 +103,42 @@ func (t *Tags) getOrDownloadTaglink(repo, tag string) (io.ReadCloser, error) {
 	return reader, nil
 }
 
+// getAllLayers returns all layers referenced by the manifest, including the manifest itself.
+func (t *Tags) getAllLayers(manifestDigest string) ([]string, error) {
+	reader, err := t.store.GetCacheFileReader(manifestDigest)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+
+	body, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+	manifest, _, err := distribution.UnmarshalManifest(schema2.MediaTypeManifest, body)
+	if err != nil {
+		return nil, err
+	}
+
+	layers := []string{manifestDigest}
+
+	switch manifest.(type) {
+	case *schema2.DeserializedManifest:
+		// Inc ref count for config and data layers.
+		descriptors := manifest.References()
+		for _, descriptor := range descriptors {
+			layers = append(layers, descriptor.Digest.Hex())
+		}
+	default:
+		return nil, fmt.Errorf("Unsupported manifest format")
+	}
+	return layers, nil
+}
+
 // linkManifest creates a new tag given repo, tag and manifest and a new tag torrent for manifest referencing
 // returns tag file sha1
 func (t *Tags) linkManifest(repo, tag, manifest string) ([]byte, error) {
-	// create tag torrent in upload directory
+	// Create tag torrent in upload directory
 	tagSha := t.getTagHash(repo, tag)
 	randFileName := string(tagSha[:]) + "." + uuid.Generate().String()
 	_, err := t.store.CreateUploadFile(randFileName, int64(len(tagSha)))
@@ -117,7 +151,7 @@ func (t *Tags) linkManifest(repo, tag, manifest string) ([]byte, error) {
 		return nil, err
 	}
 
-	// write manifest digest to tag torrent
+	// Write manifest digest to tag torrent
 	_, err = writer.Write([]byte(manifest))
 	if err != nil {
 		writer.Close()
@@ -125,23 +159,40 @@ func (t *Tags) linkManifest(repo, tag, manifest string) ([]byte, error) {
 	}
 	writer.Close()
 
-	// move tag torrent to cache
-	// TODO (@evelynl): file exist error
+	// Inc ref for all layers and the manifest
+	layers, err := t.getAllLayers(manifest)
+	if err != nil {
+		return nil, err
+	}
+	for _, layer := range layers {
+		_, err := t.store.IncrementCacheFileRefCount(layer)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Move tag torrent to cache
 	err = t.store.MoveUploadFileToCache(randFileName, string(tagSha[:]))
-	if err != nil {
+	if err == nil {
+		// Create torrent
+		fp, err := t.store.GetCacheFilePath(string(tagSha[:]))
+		if err != nil {
+			return nil, err
+		}
+
+		err = t.client.CreateTorrentFromFile(string(tagSha[:]), fp)
+		if err != nil {
+			return nil, err
+		}
+	} else if os.IsExist(err) {
+		// Someone is pushing an existing tag, which is not allowed.
+		// TODO: cleanup upload file
 		return nil, err
-	}
-	fp, err := t.store.GetCacheFilePath(string(tagSha[:]))
-	if err != nil {
+	} else {
 		return nil, err
 	}
 
-	err = t.client.CreateTorrentFromFile(string(tagSha[:]), fp)
-	if err != nil {
-		return nil, err
-	}
-
-	// create tag file
+	// Create tag file
 	err = t.createTag(repo, tag)
 	if err != nil {
 		return nil, err
@@ -161,19 +212,19 @@ func (t *Tags) linkManifest(repo, tag, manifest string) ([]byte, error) {
 func (t *Tags) listTags(repo string) ([]string, error) {
 	t.RLock()
 	defer t.RUnlock()
-	return nil, fmt.Errorf("Not implemented.")
+	return nil, fmt.Errorf("Not implemented")
 }
 
 // listRepos lists repos under tag directory
 func (t *Tags) listRepos(repo string) ([]string, error) {
 	t.RLock()
 	defer t.RUnlock()
-	return nil, fmt.Errorf("Not implemented.")
+	return nil, fmt.Errorf("Not implemented")
 }
 
 // deleteTag deletes a tag given repo and tag
 func (t *Tags) deleteTag(repo, tag string) error {
 	t.Lock()
 	defer t.Unlock()
-	return fmt.Errorf("Not implemented.")
+	return fmt.Errorf("Not implemented")
 }

@@ -114,11 +114,15 @@ func (u *Uploads) putBlobData(fileName string, content []byte) error {
 	}
 	writer.Close()
 
-	// TODO (@yiran) Maybe it's okay to fail with "os.IsExist"
 	err = u.store.MoveUploadFileToCache(randFileName, fileName)
+	if os.IsExist(err) {
+		// It's okay to fail with "os.IsExist"
+		return nil
+	}
 	if err != nil {
 		return err
 	}
+
 	path, err := u.store.GetCacheFilePath(fileName)
 	if err != nil {
 		return err
