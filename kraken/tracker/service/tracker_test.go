@@ -1,13 +1,16 @@
 package service
 
 import (
+	"bytes"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"testing"
-
-	"encoding/hex"
 
 	"code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/kraken/tracker/storage"
@@ -230,5 +233,130 @@ func TestPostInfoHashHandler(t *testing.T) {
 		}).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(getRequest)
 		assert.Equal(t, 200, response.StatusCode)
+	})
+}
+
+func TestPostManifestHandler(t *testing.T) {
+	manifest := `{
+                 "schemaVersion": 2,
+                 "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+                 "config": {
+                    "mediaType": "application/octet-stream",
+                    "size": 11936,
+                    "digest": "sha256:d2176faa6180566e5e6727e101ba26b13c19ef35f171c9b4419c4d50626aad9d"
+                 },
+                 "layers": [{
+                    "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+                    "size": 52998821,
+                    "digest": "sha256:1508613826413590a9fdb496cbedb0c2ebf564cfbcd2c85c2a07bb3a40813233"
+                 },
+                 {
+                    "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+                    "size": 115242848,
+                    "digest": "sha256:f1f1d5da237f1b069eae23cdc9b291e217a4c1fda8f29262c4275a786a4dd322"
+                  }]}`
+	name := "tag1"
+
+	t.Run("Return 400 on invalid manifest", func(t *testing.T) {
+		getRequest, _ := http.NewRequest("POST",
+			"/manifest/"+name, bytes.NewBuffer([]byte("")))
+
+		mocks := &testMocks{}
+		defer mocks.mockController(t)()
+		getResponse := mocks.CreateHandlerAndServeRequest(getRequest)
+		assert.Equal(t, 400, getResponse.StatusCode)
+	})
+
+	t.Run("Return 200", func(t *testing.T) {
+		getRequest, _ := http.NewRequest("POST",
+			"/manifest/"+name, bytes.NewBuffer([]byte(manifest)))
+
+		mocks := &testMocks{}
+		defer mocks.mockController(t)()
+
+		mocks.datastore.EXPECT().UpdateManifest(&storage.Manifest{
+			TagName:  name,
+			Manifest: manifest,
+			Flags:    0,
+		}).Return(nil)
+		response := mocks.CreateHandlerAndServeRequest(getRequest)
+		assert.Equal(t, 200, response.StatusCode)
+	})
+}
+
+// JSONBytesEqual compares the JSON in two byte slices.
+func JSONBytesEqual(a, b []byte) (bool, error) {
+	var j1, j2 interface{}
+	if err := json.Unmarshal(a, &j1); err != nil {
+		return false, err
+	}
+	if err := json.Unmarshal(b, &j2); err != nil {
+		return false, err
+	}
+	return reflect.DeepEqual(j2, j1), nil
+}
+
+func TestGetManifestHandler(t *testing.T) {
+	manifest := `{
+                 "schemaVersion": 2,
+                 "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+                 "config": {
+                    "mediaType": "application/octet-stream",
+                    "size": 11936,
+                    "digest": "sha256:d2176faa6180566e5e6727e101ba26b13c19ef35f171c9b4419c4d50626aad9d"
+                 },
+                 "layers": [{
+                    "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+                    "size": 52998821,
+                    "digest": "sha256:1508613826413590a9fdb496cbedb0c2ebf564cfbcd2c85c2a07bb3a40813233"
+                 },
+                 {
+                    "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+                    "size": 115242848,
+                    "digest": "sha256:f1f1d5da237f1b069eae23cdc9b291e217a4c1fda8f29262c4275a786a4dd322"
+                  }]}`
+	name := "tag1"
+
+	t.Run("Return 400 on empty tag name", func(t *testing.T) {
+		getRequest, _ := http.NewRequest("GET",
+			"/manifest/", nil)
+
+		mocks := &testMocks{}
+		defer mocks.mockController(t)()
+		getResponse := mocks.CreateHandlerAndServeRequest(getRequest)
+		assert.Equal(t, 400, getResponse.StatusCode)
+	})
+
+	t.Run("Return 404 on manifest not found", func(t *testing.T) {
+		getRequest, _ := http.NewRequest("GET",
+			"/manifest/"+name, nil)
+
+		mocks := &testMocks{}
+		defer mocks.mockController(t)()
+
+		mocks.datastore.EXPECT().ReadManifest(name).Return(nil, nil)
+		response := mocks.CreateHandlerAndServeRequest(getRequest)
+		assert.Equal(t, 404, response.StatusCode)
+	})
+
+	t.Run("Return 200 and manifest", func(t *testing.T) {
+		getRequest, _ := http.NewRequest("GET",
+			"/manifest/"+name, nil)
+
+		mocks := &testMocks{}
+		defer mocks.mockController(t)()
+
+		mocks.datastore.EXPECT().ReadManifest(name).Return(&storage.Manifest{TagName: name, Manifest: manifest}, nil)
+		response := mocks.CreateHandlerAndServeRequest(getRequest)
+		assert.Equal(t, 200, response.StatusCode)
+		data, _ := ioutil.ReadAll(response.Body)
+		var j1, j2 interface{}
+		j1, err := json.Marshal(data)
+		assert.Equal(t, err, nil)
+		err = json.Unmarshal([]byte(manifest), &j2)
+		assert.Equal(t, err, nil)
+
+		result := reflect.DeepEqual(j1, j1)
+		assert.Equal(t, result, true)
 	})
 }
