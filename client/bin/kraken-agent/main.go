@@ -19,15 +19,21 @@ func main() {
 	var configFile string
 	var disableTorrent bool
 	var clientTimeout int
-	flag.StringVar(&configFile, "config", "agent/test.yaml", "agent configuration file")
+	flag.StringVar(&configFile, "config", "", "agent configuration file")
 	flag.BoolVar(&disableTorrent, "disableTorrent", false, "disable torrent")
 	flag.IntVar(&clientTimeout, "clientTimeout", 120, "torrent client timeout in seconds")
 	flag.Parse()
 
 	// load config
-	log.Info("Load agent configuration")
-	cp := configuration.GetConfigFilePath(configFile)
-	config := configuration.NewConfig(cp)
+	var config *configuration.Config
+	if configFile != "" {
+		log.Info("Load agent configuration. Config: %s", configFile)
+		cp := configuration.GetConfigFilePath(configFile)
+		config = configuration.NewConfigWithPath(cp)
+	} else {
+		log.Info("Load agent configuration")
+		config = configuration.NewConfig()
+	}
 	config.DisableTorrent = disableTorrent
 
 	// init storage

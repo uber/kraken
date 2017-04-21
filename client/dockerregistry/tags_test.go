@@ -18,7 +18,7 @@ import (
 
 func getFileStoreClient() (*configuration.Config, *store.LocalFileStore, *torrentclient.Client) {
 	cp := configuration.GetConfigFilePath("agent/test.yaml")
-	c := configuration.NewConfig(cp)
+	c := configuration.NewConfigWithPath(cp)
 	c.DisableTorrent = true
 	var err error
 	err = os.MkdirAll(c.DownloadDir, 0755)
