@@ -10,6 +10,8 @@ import (
 	"path"
 	"sync"
 
+	"strings"
+
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrentclient"
@@ -59,7 +61,7 @@ func (t *Tags) createTag(repo, tag string) error {
 	t.Lock()
 	defer t.Unlock()
 	// Create tag file
-	tagFp := path.Join(t.config.TagDir, repo, tag)
+	tagFp := t.getTagPath(repo, tag)
 	err := os.MkdirAll(path.Dir(tagFp), 0755)
 	if err != nil {
 		return err
@@ -212,14 +214,64 @@ func (t *Tags) linkManifest(repo, tag, manifest string) ([]byte, error) {
 func (t *Tags) listTags(repo string) ([]string, error) {
 	t.RLock()
 	defer t.RUnlock()
-	return nil, fmt.Errorf("Not implemented")
+
+	tagInfos, err := ioutil.ReadDir(t.getRepoPath(repo))
+	if err != nil {
+		return nil, err
+	}
+
+	var tags []string
+	for _, tagInfo := range tagInfos {
+		tags = append(tags, tagInfo.Name())
+	}
+	return tags, nil
 }
 
 // listRepos lists repos under tag directory
-func (t *Tags) listRepos(repo string) ([]string, error) {
+// this function can be expensive if there are too many repos
+func (t *Tags) listRepos() ([]string, error) {
 	t.RLock()
 	defer t.RUnlock()
-	return nil, fmt.Errorf("Not implemented")
+
+	return t.listReposFromRoot(t.getRepositoriesPath())
+}
+
+func (t *Tags) listReposFromRoot(root string) ([]string, error) {
+	rootStat, err := os.Stat(root)
+	if err != nil {
+		return nil, err
+	}
+	if !rootStat.IsDir() {
+		return nil, fmt.Errorf("Failed to list repos. %s is a directory", root)
+	}
+
+	repoInfos, err := ioutil.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+
+	var repos []string
+	foundRepo := false
+	for _, repoInfo := range repoInfos {
+		if repoInfo.IsDir() {
+			foundRepo = true
+			var subrepos []string
+			var err error
+			subrepos, err = t.listReposFromRoot(path.Join(root, repoInfo.Name()))
+			if err != nil {
+				continue
+			}
+			repos = append(repos, subrepos...)
+		}
+	}
+	if foundRepo {
+		return repos, nil
+	}
+
+	// all files in root are tags, return itself
+	rootRepo := strings.TrimPrefix(root, t.getRepositoriesPath())
+	rootRepo = strings.TrimLeft(rootRepo, "/")
+	return []string{rootRepo}, nil
 }
 
 // deleteTag deletes a tag given repo and tag
@@ -227,4 +279,16 @@ func (t *Tags) deleteTag(repo, tag string) error {
 	t.Lock()
 	defer t.Unlock()
 	return fmt.Errorf("Not implemented")
+}
+
+func (t *Tags) getRepoPath(repo string) string {
+	return path.Join(t.config.TagDir, repo)
+}
+
+func (t *Tags) getTagPath(repo string, tag string) string {
+	return path.Join(t.config.TagDir, repo, tag)
+}
+
+func (t *Tags) getRepositoriesPath() string {
+	return t.config.TagDir
 }

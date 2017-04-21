@@ -273,6 +273,14 @@ func (d *KrakenStorageDriver) List(ctx context.Context, path string) ([]string, 
 		uuid := st[len(st)-3]
 		s, err := d.store.ListUploadFileHashStatePaths(uuid)
 		return s, err
+	case "_manifests":
+		repo, err := d.getRepoName(path)
+		if err != nil {
+			return nil, err
+		}
+		if st[len(st)-1] == "tags" {
+			return d.tags.listTags(repo)
+		}
 	default:
 		break
 	}
