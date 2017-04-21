@@ -58,8 +58,18 @@ type Config struct {
 	Agent          Agent            `yaml:"agent"`
 }
 
-// NewConfig returns a configuration frocvQa234	287m a YAML file
-func NewConfig(configPath string) *Config {
+// NewConfig creates a configuration based on environment var
+func NewConfig() *Config {
+	var c Config
+	if err := xconfig.Load(&c); err != nil {
+		log.Fatal(err)
+	}
+	log.Info("Configuration loaded.")
+	return &c
+}
+
+// NewConfigWithPath creates a configuration given a YAML file
+func NewConfigWithPath(configPath string) *Config {
 	var c Config
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		log.Fatalf("Cannot find config file: %s", configPath)
