@@ -1,7 +1,3 @@
-kraken-agent (0.1.1) unstable; urgency=low
-
-    * Change config directory structure
-
 kraken-agent (0.1) unstable; urgency=low
 
     * Initial release of kraken-agent
