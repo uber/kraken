@@ -1,17 +1,14 @@
 package dockerregistry
 
 import (
+	"crypto/sha1"
+	"encoding/binary"
+	"encoding/hex"
 	"io/ioutil"
 	"log"
 	"os"
-	"testing"
-
-	"crypto/sha1"
-
-	"encoding/binary"
-	"encoding/hex"
-
 	"path"
+	"testing"
 
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrentclient"
@@ -162,4 +159,89 @@ func TestLinkManifest(t *testing.T) {
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(1), refCount)
 	}
+}
+
+func TestListTags(t *testing.T) {
+	tags, teardown := setup()
+	defer teardown()
+
+	repoTagMap := map[string][]string{
+		"repo1": {
+			"tag1",
+			"tag2",
+			"tag3",
+		},
+		"repo2": {
+			"tag4",
+			"tag5",
+		},
+	}
+
+	for r, ts := range repoTagMap {
+		for _, tag := range ts {
+			tags.createTag(r, tag)
+		}
+	}
+
+	// create empty repo
+	os.Mkdir(path.Join(tags.config.TagDir, "repo4"), 0755)
+
+	repo1tagsExp := []string{
+		"tag1", "tag2", "tag3",
+	}
+	repo1tags, err := tags.listTags("repo1")
+	assert.Nil(t, err)
+	assert.Equal(t, repo1tagsExp, repo1tags)
+
+	repo2tagsExp := []string{
+		"tag4", "tag5",
+	}
+	repo2tags, err := tags.listTags("repo2")
+	assert.Nil(t, err)
+	assert.Equal(t, repo2tagsExp, repo2tags)
+
+	_, err = tags.listTags("notfound")
+	assert.NotNil(t, err)
+	assert.True(t, os.IsNotExist(err))
+
+	repo4tags, err := tags.listTags("repo4")
+	assert.Nil(t, err)
+	assert.Nil(t, repo4tags)
+}
+
+func TestListRepos(t *testing.T) {
+	tags, teardown := setup()
+	defer teardown()
+
+	repoTagMap := map[string][]string{
+		"repo1": {
+			"tag1",
+			"tag2",
+			"tag3",
+		},
+		"repo2": {
+			"tag4",
+			"tag5",
+		},
+		"repo3/subrepo": {
+			"tag6",
+			"tag7",
+		},
+	}
+
+	for r, ts := range repoTagMap {
+		for _, tag := range ts {
+			assert.Nil(t, tags.createTag(r, tag))
+		}
+	}
+
+	// create empty repo
+	os.Mkdir(path.Join(tags.config.TagDir, "repo4"), 0755)
+
+	reposExp := []string{
+		"repo1", "repo2", "repo3/subrepo", "repo4",
+	}
+	repos, err := tags.listRepos()
+	assert.Nil(t, err)
+	assert.Equal(t, reposExp, repos)
 }
