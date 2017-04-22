@@ -1,3 +1,8 @@
+kraken-agent (0.1.3) unstable; urgency=low
+    * Change port configuraiton for an agent registry
+
+ -- Igor Morozov <igor@uber.com> Tue, 23 Apr 2017 15:00:00 +0000
+
 kraken-agent (0.1.2) unstable; urgency=low
     * Change port configuraiton for an agent
 
