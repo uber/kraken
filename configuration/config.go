@@ -56,6 +56,18 @@ type Config struct {
 	TrackerURL     string           `yaml:"tracker_url"`
 	Registry       rc.Configuration `yaml:"registry"`
 	Agent          Agent            `yaml:"agent"`
+	TagDeletion    struct {
+		Enable bool `yaml:"enable"`
+		// Interval for running tag deletion
+		Interval int `yaml:"interval"`
+		// Number of tags we keep for each repo
+		Retention int `yaml:"retention"`
+	} `yaml:"tag_deletion"`
+	TrashGC struct {
+		Enable bool `yaml:"enable"`
+		// Interval for running tag deletion
+		Interval int `yaml:"interval"`
+	} `yaml:"trash_gc"`
 }
 
 // NewConfig creates a configuration based on environment var

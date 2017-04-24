@@ -48,11 +48,85 @@ func NewTags(c *configuration.Config, s *store.LocalFileStore, cl *torrentclient
 	}, nil
 }
 
-// getTaghash returns the hash of the tag reference given repo and tag
-func (t *Tags) getTagHash(repo, tag string) []byte {
-	tagFp := path.Join(repo, tag)
-	rawtagSha := sha1.Sum([]byte(tagFp))
-	return []byte(hex.EncodeToString(rawtagSha[:]))
+// ListTags lists tags under given repo
+func (t *Tags) ListTags(repo string) ([]string, error) {
+	t.RLock()
+	defer t.RUnlock()
+
+	return t.listTags(repo)
+}
+
+// ListRepos lists repos under tag directory
+// this function can be expensive if there are too many repos
+func (t *Tags) ListRepos() ([]string, error) {
+	t.RLock()
+	defer t.RUnlock()
+
+	return t.listReposFromRoot(t.getRepositoriesPath())
+}
+
+// DeleteTag deletes a tag given repo and tag
+func (t *Tags) DeleteTag(repo, tag string) error {
+	if !t.config.TagDeletion.Enable {
+		return fmt.Errorf("Tag Deletion not enabled")
+	}
+
+	t.Lock()
+	defer t.Unlock()
+
+	c := make(chan byte, 1)
+	var tags []string
+	var listErr error
+	// list tags nonblocking
+	go func() {
+		tags, listErr = t.listTags(repo)
+		c <- 'c'
+	}()
+
+	tagSha := t.getTagHash(repo, tag)
+	manifest, err := t.getManifest(repo, tag)
+	if err != nil {
+		return err
+	}
+
+	layers, err := t.getAllLayers(manifest)
+	if err != nil {
+		return err
+	}
+
+	<-c
+	if listErr != nil {
+		log.Errorf("Error listing tags in repo %s:%s. Err: %s", repo, tag, err.Error())
+	} else {
+		// remove repo along with the tag
+		// if this is the last tag in the repo
+		if len(tags) == 1 && tags[0] == tag {
+			err = os.RemoveAll(t.getRepoPath(repo))
+		} else {
+			// delete tag file
+			err = os.Remove(t.getTagPath(repo, tag))
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	// delete tag torrent
+	err = t.store.MoveCacheFileToTrash(string(tagSha[:]))
+	if err != nil {
+		log.Errorf("Error deleting tag torrent for %s:%s. Err: %s", repo, tag, err.Error())
+	}
+
+	for _, layer := range layers {
+		_, err := t.store.DecrementCacheFileRefCount(layer)
+		if err != nil {
+			// TODO (@evelynl): if decrement ref count fails, we might have some garbage layers that are never deleted
+			// one possilbe solution is that we can add a reconciliation routine to re-calcalate ref count for all layers
+			// another is that we use sqlite
+			log.Errorf("Error decrement ref count for layer %s from %s:%s. Err: %s", layer, repo, tag, err.Error())
+		}
+	}
+	return nil
 }
 
 // createTag creates a new tag file given repo and tag
@@ -60,6 +134,7 @@ func (t *Tags) getTagHash(repo, tag string) []byte {
 func (t *Tags) createTag(repo, tag string) error {
 	t.Lock()
 	defer t.Unlock()
+
 	// Create tag file
 	tagFp := t.getTagPath(repo, tag)
 	err := os.MkdirAll(path.Dir(tagFp), 0755)
@@ -156,7 +231,7 @@ func (t *Tags) linkManifest(repo, tag, manifest string) ([]byte, error) {
 	// Create tag torrent in upload directory
 	tagSha := t.getTagHash(repo, tag)
 	randFileName := string(tagSha[:]) + "." + uuid.Generate().String()
-	_, err := t.store.CreateUploadFile(randFileName, int64(len(tagSha)))
+	_, err := t.store.CreateUploadFile(randFileName, int64(len(manifest)))
 	if err != nil {
 		return nil, err
 	}
@@ -173,18 +248,6 @@ func (t *Tags) linkManifest(repo, tag, manifest string) ([]byte, error) {
 		return nil, err
 	}
 	writer.Close()
-
-	// Inc ref for all layers and the manifest
-	layers, err := t.getAllLayers(manifest)
-	if err != nil {
-		return nil, err
-	}
-	for _, layer := range layers {
-		_, err := t.store.IncrementCacheFileRefCount(layer)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	// Move tag torrent to cache
 	err = t.store.MoveUploadFileToCache(randFileName, string(tagSha[:]))
@@ -209,6 +272,21 @@ func (t *Tags) linkManifest(repo, tag, manifest string) ([]byte, error) {
 		return nil, err
 	}
 
+	// Inc ref for all layers and the manifest
+	layers, err := t.getAllLayers(manifest)
+	if err != nil {
+		return nil, err
+	}
+	for _, layer := range layers {
+		// TODO (@evelynl): if increment ref count fails and the caller retries, we might have some garbage layers that are never deleted
+		// one possilbe solution is that we can add a reconciliation routine to re-calcalate ref count for all layers
+		// another is that we use sqlite
+		_, err := t.store.IncrementCacheFileRefCount(layer)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Create tag file
 	err = t.createTag(repo, tag)
 	if err != nil {
@@ -225,11 +303,7 @@ func (t *Tags) linkManifest(repo, tag, manifest string) ([]byte, error) {
 	return tagSha[:], nil
 }
 
-// listTags lists tags under given repo
 func (t *Tags) listTags(repo string) ([]string, error) {
-	t.RLock()
-	defer t.RUnlock()
-
 	tagInfos, err := ioutil.ReadDir(t.getRepoPath(repo))
 	if err != nil {
 		return nil, err
@@ -240,15 +314,6 @@ func (t *Tags) listTags(repo string) ([]string, error) {
 		tags = append(tags, tagInfo.Name())
 	}
 	return tags, nil
-}
-
-// listRepos lists repos under tag directory
-// this function can be expensive if there are too many repos
-func (t *Tags) listRepos() ([]string, error) {
-	t.RLock()
-	defer t.RUnlock()
-
-	return t.listReposFromRoot(t.getRepositoriesPath())
 }
 
 func (t *Tags) listReposFromRoot(root string) ([]string, error) {
@@ -289,11 +354,30 @@ func (t *Tags) listReposFromRoot(root string) ([]string, error) {
 	return []string{rootRepo}, nil
 }
 
-// deleteTag deletes a tag given repo and tag
-func (t *Tags) deleteTag(repo, tag string) error {
-	t.Lock()
-	defer t.Unlock()
-	return fmt.Errorf("Not implemented")
+// getManifest returns manifest digest given repo and tag
+func (t *Tags) getManifest(repo, tag string) (string, error) {
+	tagSha := t.getTagHash(repo, tag)
+
+	linkReader, err := t.store.GetCacheFileReader(string(tagSha[:]))
+	if err != nil {
+		log.Infof("%s", err.Error())
+		return "", err
+	}
+	defer linkReader.Close()
+
+	link, err := ioutil.ReadAll(linkReader)
+	if err != nil {
+		return "", err
+	}
+
+	return string(link[:]), nil
+}
+
+// getTaghash returns the hash of the tag reference given repo and tag
+func (t *Tags) getTagHash(repo, tag string) []byte {
+	tagFp := path.Join(repo, tag)
+	rawtagSha := sha1.Sum([]byte(tagFp))
+	return []byte(hex.EncodeToString(rawtagSha[:]))
 }
 
 func (t *Tags) getRepoPath(repo string) string {
