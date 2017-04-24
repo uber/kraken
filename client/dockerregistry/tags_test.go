@@ -9,10 +9,12 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -391,4 +393,123 @@ func TestDeleteTag(t *testing.T) {
 		string(tags.getTagHash("repo3", "tag6")[:]),
 		string(tags.getTagHash("repo1", "tag1")[:]),
 	})
+}
+
+func TestDeleteExpiredTags(t *testing.T) {
+	tags, teardown := setup()
+	defer teardown()
+
+	manifest := "testdeletetagmanifest"
+	manifestTemp := manifest + ".temp"
+	tags.store.CreateUploadFile(manifestTemp, 0)
+	writer, _ := tags.store.GetUploadFileReadWriter(manifestTemp)
+	data, _ := ioutil.ReadFile("./test/testmanifest.json")
+	_, err := writer.Write(data)
+	writer.Close()
+	assert.Nil(t, tags.store.MoveUploadFileToCache(manifestTemp, manifest))
+
+	for _, digest := range []string{
+		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9",
+		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
+		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
+	} {
+		digestTemp := digest + ".temp"
+		tags.store.CreateUploadFile(digestTemp, 0)
+		tags.store.MoveUploadFileToCache(digestTemp, digest)
+	}
+
+	tagList := []Tag{
+		{
+			repo:    "repo1",
+			tagName: "tag4",
+			modTime: time.Now().AddDate(0, 0, -20),
+		},
+		{
+			repo:    "repo1",
+			tagName: "tag6",
+			modTime: time.Now().AddDate(0, 0, -5),
+		},
+		{
+			repo:    "repo1",
+			tagName: "tag1",
+			modTime: time.Now(),
+		},
+		{
+			repo:    "repo2",
+			tagName: "tag3",
+			modTime: time.Now().AddDate(0, 0, -10),
+		},
+		{
+			repo:    "repo2",
+			tagName: "tag2",
+			modTime: time.Now(),
+		},
+		{
+			repo:    "repo3",
+			tagName: "tag5",
+			modTime: time.Now().AddDate(0, 0, -10),
+		},
+	}
+
+	for _, tag := range tagList {
+		tags.createTag(tag.repo, tag.tagName)
+		tagFp := tags.getTagPath(tag.repo, tag.tagName)
+		assert.Nil(t, err)
+		_, err = tags.linkManifest(tag.repo, tag.tagName, manifest)
+		assert.Nil(t, err)
+		err = os.Chtimes(tagFp, tag.modTime, tag.modTime)
+		assert.Nil(t, err)
+	}
+
+	for _, digest := range []string{
+		manifest,
+		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9",
+		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
+		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
+	} {
+		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
+		b, _ := ioutil.ReadFile(ref)
+		refCount, _ := binary.Varint(b)
+		assert.Equal(t, int64(6), refCount)
+	}
+
+	tags.DeleteExpiredTags(2, time.Now())
+	repo1tags, _ := tags.ListTags("repo1")
+	assert.Equal(t, []string{"tag1", "tag6"}, repo1tags)
+	repo2tags, _ := tags.ListTags("repo2")
+	assert.Equal(t, []string{"tag2", "tag3"}, repo2tags)
+	repo3tags, _ := tags.ListTags("repo3")
+	assert.Equal(t, []string{"tag5"}, repo3tags)
+
+	for _, digest := range []string{
+		manifest,
+		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9",
+		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
+		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
+	} {
+		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
+		b, _ := ioutil.ReadFile(ref)
+		refCount, _ := binary.Varint(b)
+		assert.Equal(t, int64(5), refCount)
+	}
+
+	tags.DeleteExpiredTags(1, time.Now().AddDate(0, 0, -7))
+	repo1tags, _ = tags.ListTags("repo1")
+	assert.Equal(t, []string{"tag1", "tag6"}, repo1tags)
+	repo2tags, _ = tags.ListTags("repo2")
+	assert.Equal(t, []string{"tag2"}, repo2tags)
+	repo3tags, _ = tags.ListTags("repo3")
+	assert.Equal(t, []string{"tag5"}, repo3tags)
+
+	for _, digest := range []string{
+		manifest,
+		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9",
+		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
+		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
+	} {
+		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
+		b, _ := ioutil.ReadFile(ref)
+		refCount, _ := binary.Varint(b)
+		assert.Equal(t, int64(4), refCount)
+	}
 }

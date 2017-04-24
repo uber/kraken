@@ -8,8 +8,10 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store"
@@ -34,6 +36,20 @@ type Tags struct {
 	store  *store.LocalFileStore
 	client *torrentclient.Client
 }
+
+// Tag stores information about one tag.
+type Tag struct {
+	repo    string
+	tagName string
+	modTime time.Time
+}
+
+// TagSlice is used for sorting tags
+type TagSlice []Tag
+
+func (s TagSlice) Less(i, j int) bool { return s[i].modTime.Before(s[j].modTime) }
+func (s TagSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s TagSlice) Len() int           { return len(s) }
 
 // NewTags returns new Tags
 func NewTags(c *configuration.Config, s *store.LocalFileStore, cl *torrentclient.Client) (*Tags, error) {
@@ -390,4 +406,57 @@ func (t *Tags) getTagPath(repo string, tag string) string {
 
 func (t *Tags) getRepositoriesPath() string {
 	return t.config.TagDir
+}
+
+// listExpiredTags lists expired tags under given repo.
+// They are not in the latest n tags and reached expireTime.
+func (t *Tags) listExpiredTags(repo string, n int, expireTime time.Time) ([]string, error) {
+	t.RLock()
+	defer t.RUnlock()
+
+	tagInfos, err := ioutil.ReadDir(t.getRepoPath(repo))
+	if err != nil {
+		return nil, err
+	}
+
+	// Sort tags by creation time
+	s := make(TagSlice, 0)
+	for _, tagInfo := range tagInfos {
+		tag := Tag{
+			repo:    repo,
+			tagName: tagInfo.Name(),
+			modTime: tagInfo.ModTime(),
+		}
+		s = append(s, tag)
+	}
+	sort.Sort(s)
+
+	var tags []string
+	for i := 0; i < len(s)-n; i++ {
+		if s[i].modTime.After(expireTime) {
+			break
+		}
+		tags = append(tags, s[i].tagName)
+	}
+
+	return tags, nil
+}
+
+// DeleteExpiredTags deletes tags that are older than expireTime and not in the n latest.
+func (t *Tags) DeleteExpiredTags(n int, expireTime time.Time) error {
+	repos, err := t.ListRepos()
+	if err != nil {
+		return err
+	}
+	for _, repo := range repos {
+		tags, err := t.listExpiredTags(repo, n, expireTime)
+		if err != nil {
+			return err
+		}
+		for _, tag := range tags {
+			t.DeleteTag(repo, tag)
+		}
+	}
+
+	return nil
 }
