@@ -280,7 +280,7 @@ func (d *KrakenStorageDriver) List(ctx context.Context, path string) ([]string, 
 			return nil, err
 		}
 		if st[len(st)-1] == "tags" {
-			return d.tags.listTags(repo)
+			return d.tags.ListTags(repo)
 		}
 	default:
 		break
