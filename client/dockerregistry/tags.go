@@ -8,14 +8,14 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"sync"
-
 	"strings"
+	"sync"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
+
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/docker/distribution/uuid"
@@ -67,6 +67,7 @@ func (t *Tags) createTag(repo, tag string) error {
 		return err
 	}
 
+	// TODO: handle the case if file already exists.
 	tagSha := t.getTagHash(repo, tag)
 	err = ioutil.WriteFile(tagFp, tagSha, 0755)
 	if err != nil {
@@ -121,6 +122,14 @@ func (t *Tags) getAllLayers(manifestDigest string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	deserializedManifest, ok := manifest.(*schema2.DeserializedManifest)
+	if !ok {
+		return nil, fmt.Errorf("Unable to deserialize manifest")
+	}
+	version := deserializedManifest.Manifest.Versioned.SchemaVersion
+	if version != 2 {
+		return nil, fmt.Errorf("Unsupported manifest version: %d", version)
+	}
 
 	layers := []string{manifestDigest}
 
@@ -129,6 +138,10 @@ func (t *Tags) getAllLayers(manifestDigest string) ([]string, error) {
 		// Inc ref count for config and data layers.
 		descriptors := manifest.References()
 		for _, descriptor := range descriptors {
+			if descriptor.Digest == "" {
+				return nil, fmt.Errorf("Unsupported layer format in manifest")
+			}
+
 			layers = append(layers, descriptor.Digest.Hex())
 		}
 	default:
@@ -188,6 +201,8 @@ func (t *Tags) linkManifest(repo, tag, manifest string) ([]byte, error) {
 		}
 	} else if os.IsExist(err) {
 		// Someone is pushing an existing tag, which is not allowed.
+		// TODO: client would try to push v1 manifest after this failure, and receive 500 response due
+		// to v1 manifest parsing error, which might cause confusion.
 		// TODO: cleanup upload file
 		return nil, err
 	} else {
@@ -268,7 +283,7 @@ func (t *Tags) listReposFromRoot(root string) ([]string, error) {
 		return repos, nil
 	}
 
-	// all files in root are tags, return itself
+	// All files in root are tags, return itself
 	rootRepo := strings.TrimPrefix(root, t.getRepositoriesPath())
 	rootRepo = strings.TrimLeft(rootRepo, "/")
 	return []string{rootRepo}, nil

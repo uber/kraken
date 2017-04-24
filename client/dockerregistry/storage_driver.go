@@ -201,6 +201,7 @@ func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, conte
 			return nil
 		}
 
+		// This check filters out manifestRevisionLinkPathSpec and manifestTagCurrentPathSpec
 		if ts[len(ts)-7] == "_manifests" {
 			repo, err := d.getRepoName(path)
 			if err != nil {
