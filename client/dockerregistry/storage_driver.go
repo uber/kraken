@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrentclient"
@@ -17,6 +18,7 @@ import (
 	"github.com/docker/distribution/context"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/registry/storage/driver/factory"
+	"github.com/robfig/cron"
 )
 
 // The path layout in the storage backend is roughly as follows:
@@ -99,6 +101,22 @@ func NewKrakenStorageDriver(c *configuration.Config, s *store.LocalFileStore, cl
 	tags, err := NewTags(c, s, cl)
 	if err != nil {
 		return nil, err
+	}
+
+	// Start a goroutine to delete expired tags.
+	if c.TagDeletion.Enable && c.TagDeletion.Interval > 0 {
+		log.Info("Scheduling tag cleanup cron")
+		deleteExpiredTagsCron := cron.New()
+		interval := fmt.Sprintf("@every %ds", c.TagDeletion.Interval)
+		err = deleteExpiredTagsCron.AddFunc(interval, func() {
+			log.Info("Running tag cleanup cron")
+			tags.DeleteExpiredTags(c.TagDeletion.RetentionCount,
+				time.Now().Add(time.Duration(-c.TagDeletion.RetentionTime)*time.Second))
+		})
+		if err != nil {
+			return nil, err
+		}
+		deleteExpiredTagsCron.Start()
 	}
 
 	return &KrakenStorageDriver{

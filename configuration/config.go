@@ -58,14 +58,16 @@ type Config struct {
 	Agent          Agent            `yaml:"agent"`
 	TagDeletion    struct {
 		Enable bool `yaml:"enable"`
-		// Interval for running tag deletion
+		// Interval for running tag deletion in seconds
 		Interval int `yaml:"interval"`
 		// Number of tags we keep for each repo
-		Retention int `yaml:"retention"`
+		RetentionCount int `yaml:"retention_count"`
+		// Least number of seconds we keep tags for
+		RetentionTime int `yaml:"retention_time"`
 	} `yaml:"tag_deletion"`
 	TrashGC struct {
 		Enable bool `yaml:"enable"`
-		// Interval for running tag deletion
+		// Interval for running trash GC in seconds
 		Interval int `yaml:"interval"`
 	} `yaml:"trash_gc"`
 }

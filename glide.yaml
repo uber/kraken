@@ -42,9 +42,8 @@ import:
 - package: github.com/gorilla/mux
   version: ^1.3.0
 - package: github.com/uber-common/bark
-- package: golang.org/x/time
-  subpackages:
-  - rate
+- package: github.com/robfig/cron
+  version: ^1.0
 - package: github.com/pressly/chi
   version: ^2.1.0
 - package: github.com/pressly/goose
@@ -59,3 +58,6 @@ testImport:
   subpackages:
   - assert
   - require
+- package: golang.org/x/time
+  subpackages:
+  - rate

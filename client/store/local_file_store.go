@@ -178,9 +178,9 @@ func (store *LocalFileStore) MoveDownloadFileToCache(fileName string) error {
 	return store.backend.MoveFile(fileName, []FileState{stateDownload}, stateCache)
 }
 
-// MoveCacheFileToTrash moves a file from cache directory to trash directory.
+// MoveCacheFileToTrash moves a file from cache directory to trash directory, and append a random suffix so there won't be name collision.
 func (store *LocalFileStore) MoveCacheFileToTrash(fileName string) error {
-	return store.backend.MoveFile(fileName, []FileState{stateCache}, stateTrash)
+	return store.backend.RenameFile(fileName, []FileState{stateCache}, fileName+"."+uuid.Generate().String(), stateTrash)
 }
 
 // DeleteTrashFile permanently deletes a file from trash directory.

@@ -454,6 +454,7 @@ func (t *Tags) DeleteExpiredTags(n int, expireTime time.Time) error {
 			return err
 		}
 		for _, tag := range tags {
+			log.Infof("Deleting tag %s", tag)
 			t.DeleteTag(repo, tag)
 		}
 	}
