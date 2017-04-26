@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,13 +24,13 @@ func getFileStoreClient() (*configuration.Config, *store.LocalFileStore, *torren
 	c := configuration.NewConfigWithPath(cp)
 	c.DisableTorrent = true
 	c.TagDeletion = struct {
-		Enable    bool `yaml:"enable"`
-		Interval  int  `yaml:"interval"`
-		Retention int  `yaml:"retention"`
+		Enable         bool `yaml:"enable"`
+		Interval       int  `yaml:"interval"`
+		RetentionCount int  `yaml:"retention_count"`
+		RetentionTime  int  `yaml:"retention_time"`
 	}{
-		Enable:    true,
-		Interval:  300,
-		Retention: 10,
+		Enable:         true,
+		RetentionCount: 10,
 	}
 	var err error
 	err = os.MkdirAll(c.DownloadDir, 0755)
@@ -389,10 +390,8 @@ func TestDeleteTag(t *testing.T) {
 	for _, info := range infos {
 		deletedTags = append(deletedTags, info.Name())
 	}
-	assert.Equal(t, deletedTags, []string{
-		string(tags.getTagHash("repo3", "tag6")[:]),
-		string(tags.getTagHash("repo1", "tag1")[:]),
-	})
+	assert.True(t, strings.HasPrefix(deletedTags[0], string(tags.getTagHash("repo3", "tag6")[:])))
+	assert.True(t, strings.HasPrefix(deletedTags[1], string(tags.getTagHash("repo1", "tag1")[:])))
 }
 
 func TestDeleteExpiredTags(t *testing.T) {
