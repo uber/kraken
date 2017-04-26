@@ -38,7 +38,7 @@ type FileStoreBackend interface {
 
 // localFileStoreBackend manages all agent files on local disk under a global lock.
 type localFileStoreBackend struct {
-	sync.Mutex
+	sync.RWMutex
 
 	fileMap map[string]FileEntry
 }
@@ -124,8 +124,8 @@ func (backend *localFileStoreBackend) CreateFile(fileName string, acceptedStates
 
 // GetFilePath returns full path for a file.
 func (backend *localFileStoreBackend) GetFilePath(fileName string, states []FileState) (string, error) {
-	backend.Lock()
-	defer backend.Unlock()
+	backend.RLock()
+	defer backend.RUnlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
@@ -137,8 +137,8 @@ func (backend *localFileStoreBackend) GetFilePath(fileName string, states []File
 
 // GetFileStat returns FileInfo for a file.
 func (backend *localFileStoreBackend) GetFileStat(fileName string, states []FileState) (os.FileInfo, error) {
-	backend.Lock()
-	defer backend.Unlock()
+	backend.RLock()
+	defer backend.RUnlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
@@ -150,8 +150,8 @@ func (backend *localFileStoreBackend) GetFileStat(fileName string, states []File
 
 // ReadFileMetadata returns metadata assocciate with the file
 func (backend *localFileStoreBackend) ReadFileMetadata(fileName string, states []FileState, mt MetadataType) ([]byte, error) {
-	backend.Lock()
-	defer backend.Unlock()
+	backend.RLock()
+	defer backend.RUnlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
@@ -164,8 +164,8 @@ func (backend *localFileStoreBackend) ReadFileMetadata(fileName string, states [
 
 // WriteFileMetadata creates or overwrites metadata assocciate with the file with content
 func (backend *localFileStoreBackend) WriteFileMetadata(fileName string, states []FileState, mt MetadataType, data []byte) (bool, error) {
-	backend.Lock()
-	defer backend.Unlock()
+	backend.RLock()
+	defer backend.RUnlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
@@ -178,8 +178,8 @@ func (backend *localFileStoreBackend) WriteFileMetadata(fileName string, states 
 
 // ReadFileMetadataAt returns metadata assocciate with the file
 func (backend *localFileStoreBackend) ReadFileMetadataAt(fileName string, states []FileState, mt MetadataType, b []byte, off int64) (int, error) {
-	backend.Lock()
-	defer backend.Unlock()
+	backend.RLock()
+	defer backend.RUnlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
@@ -192,8 +192,8 @@ func (backend *localFileStoreBackend) ReadFileMetadataAt(fileName string, states
 
 // WriteFileMetadataAt overwrites metadata assocciate with the file with content.
 func (backend *localFileStoreBackend) WriteFileMetadataAt(fileName string, states []FileState, mt MetadataType, b []byte, off int64) (int, error) {
-	backend.Lock()
-	defer backend.Unlock()
+	backend.RLock()
+	defer backend.RUnlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
@@ -206,8 +206,8 @@ func (backend *localFileStoreBackend) WriteFileMetadataAt(fileName string, state
 
 // DeleteFileMetadata deletes metadata of the specified type for a file.
 func (backend *localFileStoreBackend) DeleteFileMetadata(fileName string, states []FileState, mt MetadataType) error {
-	backend.Lock()
-	defer backend.Unlock()
+	backend.RLock()
+	defer backend.RUnlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
@@ -219,8 +219,8 @@ func (backend *localFileStoreBackend) DeleteFileMetadata(fileName string, states
 
 // ListFileMetadata returns a list of all metadata for a file.
 func (backend *localFileStoreBackend) ListFileMetadata(fileName string, states []FileState) ([]MetadataType, error) {
-	backend.Lock()
-	defer backend.Unlock()
+	backend.RLock()
+	defer backend.RUnlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
@@ -232,8 +232,8 @@ func (backend *localFileStoreBackend) ListFileMetadata(fileName string, states [
 
 // GetFileReader returns a FileReader object for read operations.
 func (backend *localFileStoreBackend) GetFileReader(fileName string, states []FileState) (FileReader, error) {
-	backend.Lock()
-	defer backend.Unlock()
+	backend.RLock()
+	defer backend.RUnlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
@@ -245,8 +245,8 @@ func (backend *localFileStoreBackend) GetFileReader(fileName string, states []Fi
 
 // GetFileReadWriter returns a FileReadWriter object for read/write operations.
 func (backend *localFileStoreBackend) GetFileReadWriter(fileName string, states []FileState) (FileReadWriter, error) {
-	backend.Lock()
-	defer backend.Unlock()
+	backend.RLock()
+	defer backend.RUnlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
@@ -482,8 +482,8 @@ func (backend *localFileStoreBackend) DeleteFile(fileName string, states []FileS
 }
 
 func (backend *localFileStoreBackend) IncrementFileRefCount(fileName string, states []FileState) (int64, error) {
-	backend.Lock()
-	defer backend.Unlock()
+	backend.RLock()
+	defer backend.RUnlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
@@ -494,8 +494,8 @@ func (backend *localFileStoreBackend) IncrementFileRefCount(fileName string, sta
 }
 
 func (backend *localFileStoreBackend) DecrementFileRefCount(fileName string, states []FileState) (int64, error) {
-	backend.Lock()
-	defer backend.Unlock()
+	backend.RLock()
+	defer backend.RUnlock()
 
 	fileEntry, err := backend.getFileEntry(fileName, states)
 	if err != nil {
