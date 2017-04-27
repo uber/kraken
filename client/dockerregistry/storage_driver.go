@@ -103,7 +103,7 @@ func NewKrakenStorageDriver(c *configuration.Config, s *store.LocalFileStore, cl
 		return nil, err
 	}
 
-	// Start a goroutine to delete expired tags.
+	// Start a cron to delete expired tags.
 	if c.TagDeletion.Enable && c.TagDeletion.Interval > 0 {
 		log.Info("Scheduling tag cleanup cron")
 		deleteExpiredTagsCron := cron.New()
@@ -117,6 +117,21 @@ func NewKrakenStorageDriver(c *configuration.Config, s *store.LocalFileStore, cl
 			return nil, err
 		}
 		deleteExpiredTagsCron.Start()
+	}
+
+	// Start a cron to delete trash files.
+	if c.TrashDeletion.Enable && c.TrashDeletion.Interval > 0 {
+		log.Info("Scheduling trash cleanup cron")
+		deleteAllTrashFilesCron := cron.New()
+		interval := fmt.Sprintf("@every %ds", c.TrashDeletion.Interval)
+		err = deleteAllTrashFilesCron.AddFunc(interval, func() {
+			log.Info("Running trash cleanup cron")
+			s.DeleteAllTrashFiles()
+		})
+		if err != nil {
+			return nil, err
+		}
+		deleteAllTrashFilesCron.Start()
 	}
 
 	return &KrakenStorageDriver{

@@ -65,11 +65,11 @@ type Config struct {
 		// Least number of seconds we keep tags for
 		RetentionTime int `yaml:"retention_time"`
 	} `yaml:"tag_deletion"`
-	TrashGC struct {
+	TrashDeletion struct {
 		Enable bool `yaml:"enable"`
-		// Interval for running trash GC in seconds
+		// Interval for running trash deletion in seconds
 		Interval int `yaml:"interval"`
-	} `yaml:"trash_gc"`
+	} `yaml:"trash_deletion"`
 }
 
 // NewConfig creates a configuration based on environment var
