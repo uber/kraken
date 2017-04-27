@@ -24,8 +24,8 @@ const deletePeerByPeerIDStr string = "delete from peer where peerId = ?"
 //Torrent statements
 const selectTorrentStatememtStr string = `select
  torrentName, infoHash, author, numPieces, pieceLength, refcount, flags from torrent where torrentName = ?`
-const insertTorrentStatememtStr string = `insert ignore into
- torrent(torrentName, infoHash, author, numPieces, pieceLength, recount, flags) values(?, ?, ?, ?, ?, ?)`
+const insertTorrentStatememtStr string = `insert into
+ torrent(torrentName, infoHash, author, numPieces, pieceLength, recount, flags) values(?, ?, ?, ?, ?, ?, ?)`
 const deleteTorrentStatememtStr string = "delete from torrent where torrentName = ?"
 
 //Manifest statements
