@@ -93,12 +93,12 @@ type KrakenStorageDriver struct {
 	store   *store.LocalFileStore
 	blobs   *Blobs
 	uploads *Uploads
-	tags    *Tags
+	tags    Tags
 }
 
 // NewKrakenStorageDriver creates a new KrakenStorageDriver given Manager
 func NewKrakenStorageDriver(c *configuration.Config, s *store.LocalFileStore, cl *torrentclient.Client) (*KrakenStorageDriver, error) {
-	tags, err := NewTags(c, s, cl)
+	tags, err := NewDockerTags(c, s, cl)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data
 			return nil, err
 		}
 		if isTag {
-			reader, err := d.tags.getOrDownloadTaglink(repo, tagOrDigest)
+			reader, err := d.tags.GetTag(repo, tagOrDigest)
 			if err != nil {
 				return nil, err
 			}
@@ -227,7 +227,7 @@ func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, conte
 			}
 			digest := ts[len(ts)-2]
 			tag := ts[len(ts)-5]
-			_, err = d.tags.linkManifest(repo, tag, digest)
+			_, err = d.tags.CreateTag(repo, tag, digest)
 			if err != nil {
 				return err
 			}
