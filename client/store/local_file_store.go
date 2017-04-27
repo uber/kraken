@@ -183,9 +183,25 @@ func (store *LocalFileStore) MoveCacheFileToTrash(fileName string) error {
 	return store.backend.RenameFile(fileName, []FileState{stateCache}, fileName+"."+uuid.Generate().String(), stateTrash)
 }
 
-// DeleteTrashFile permanently deletes a file from trash directory.
-func (store *LocalFileStore) DeleteTrashFile(fileName string) error {
-	return store.backend.DeleteFile(fileName, []FileState{stateTrash})
+// DeleteAllTrashFiles permanently deletes all files from trash directory.
+// This function is not executed inside global lock, and expects itself to be the only one doing deletion.
+func (store *LocalFileStore) DeleteAllTrashFiles() error {
+	dir, err := os.Open(stateTrash.GetDirectory())
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	names, err := dir.Readdirnames(-1)
+	if err != nil {
+		return err
+	}
+	for _, fileName := range names {
+		err = store.backend.DeleteFile(fileName, []FileState{stateTrash})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // IncrementCacheFileRefCount increments ref count for a file in cache directory.

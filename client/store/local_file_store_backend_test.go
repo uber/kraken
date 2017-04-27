@@ -1,7 +1,6 @@
 package store
 
 import (
-	"fmt"
 	"os"
 	"path"
 	"sync"
@@ -57,12 +56,9 @@ func TestStoreBackend(t *testing.T) {
 	// Test getFileReadWriter
 	var waitGroup sync.WaitGroup
 
-	fmt.Println("test0")
-
 	for i := 0; i < 100; i++ {
 		waitGroup.Add(1)
 		go func() {
-
 			readWriter, err := backend.GetFileReadWriter(testFileName, []FileState{stateTest1})
 			assert.Nil(err)
 
