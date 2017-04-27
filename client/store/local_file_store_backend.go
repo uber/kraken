@@ -240,7 +240,7 @@ func (backend *localFileStoreBackend) GetFileReader(fileName string, states []Fi
 		return nil, err
 	}
 
-	return fileEntry.GetFileReader()
+	return fileEntry.GetReader()
 }
 
 // GetFileReadWriter returns a FileReadWriter object for read/write operations.
@@ -253,7 +253,7 @@ func (backend *localFileStoreBackend) GetFileReadWriter(fileName string, states 
 		return nil, err
 	}
 
-	return fileEntry.GetFileReadWriter()
+	return fileEntry.GetReadWriter()
 }
 
 // MoveFile moves a file to a different directory and updates its state accordingly.

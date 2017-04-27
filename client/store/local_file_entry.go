@@ -20,8 +20,8 @@ type FileEntry interface {
 	IsOpen() bool
 	Stat() (os.FileInfo, error)
 
-	GetFileReader() (FileReader, error)
-	GetFileReadWriter() (FileReadWriter, error)
+	GetReader() (FileReader, error)
+	GetReadWriter() (FileReadWriter, error)
 
 	ReadMetadata(mt MetadataType) ([]byte, error)
 	WriteMetadata(mt MetadataType, data []byte) (bool, error)
@@ -103,10 +103,10 @@ func (entry *localFileEntry) Stat() (os.FileInfo, error) {
 	return os.Stat(path.Join(entry.state.GetDirectory(), entry.name))
 }
 
-// GetFileReader returns a FileReader object for read operations.
-func (entry *localFileEntry) GetFileReader() (FileReader, error) {
-	entry.RLock()
-	defer entry.RUnlock()
+// GetReader returns a FileReader object for read operations.
+func (entry *localFileEntry) GetReader() (FileReader, error) {
+	entry.Lock() // Need write lock here because openCount will be modified.
+	defer entry.Unlock()
 
 	f, err := os.OpenFile(path.Join(entry.state.GetDirectory(), entry.name), os.O_RDONLY, 0755)
 	if err != nil {
@@ -121,10 +121,10 @@ func (entry *localFileEntry) GetFileReader() (FileReader, error) {
 	return reader, nil
 }
 
-// GetFileReadWriter returns a FileReadWriter object for read/write operations.
-func (entry *localFileEntry) GetFileReadWriter() (FileReadWriter, error) {
-	entry.RLock()
-	defer entry.RUnlock()
+// GetReadWriter returns a FileReadWriter object for read/write operations.
+func (entry *localFileEntry) GetReadWriter() (FileReadWriter, error) {
+	entry.Lock() // Need write lock here because openCount will be modified.
+	defer entry.Unlock()
 
 	f, err := os.OpenFile(path.Join(entry.state.GetDirectory(), entry.name), os.O_RDWR, 0755)
 	if err != nil {
