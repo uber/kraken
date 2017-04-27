@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -80,13 +81,13 @@ func removeTestTorrentDirs(c *configuration.Config) {
 	os.RemoveAll(c.TagDir)
 }
 
-func setup() (*Tags, func()) {
+func setup() (*DockerTags, func()) {
 	config, filestore, client := getFileStoreClient()
-	tags, err := NewTags(config, filestore, client)
+	tags, err := NewDockerTags(config, filestore, client)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return tags, func() {
+	return tags.(*DockerTags), func() {
 		removeTestTorrentDirs(config)
 	}
 }
@@ -98,17 +99,6 @@ func TestGetHash(t *testing.T) {
 	expected := sha1.Sum([]byte("somerepo/sometag"))
 	sha := tags.getTagHash("somerepo", "sometag")
 	assert.Equal(t, hex.EncodeToString(expected[:]), string(sha[:]))
-}
-
-func TestCreateTag(t *testing.T) {
-	tags, teardown := setup()
-	defer teardown()
-
-	sha := tags.getTagHash("repocreate", "tagcreate")
-	assert.Nil(t, tags.createTag("repocreate", "tagcreate"))
-	data, err := ioutil.ReadFile(path.Join(tags.config.TagDir, "repocreate", "tagcreate"))
-	assert.Nil(t, err)
-	assert.Equal(t, string(sha[:]), string(data[:]))
 }
 
 func TestGetAllLayers(t *testing.T) {
@@ -134,7 +124,7 @@ func TestGetAllLayers(t *testing.T) {
 	assert.Equal(t, expected, layers)
 }
 
-func TestLinkManifest(t *testing.T) {
+func TestCreateTag(t *testing.T) {
 	tags, teardown := setup()
 	defer teardown()
 
@@ -157,8 +147,13 @@ func TestLinkManifest(t *testing.T) {
 		tags.store.MoveUploadFileToCache(digestTemp, digest)
 	}
 
-	_, err = tags.linkManifest("linkrepo", "linktag", manifest)
+	_, err = tags.CreateTag("linkrepo", "linktag", manifest)
 	assert.Nil(t, err)
+
+	// test create tag again, it should return file exists error
+	_, err = tags.CreateTag("linkrepo", "linktag", manifest)
+	assert.NotNil(t, err)
+	assert.True(t, os.IsExist(err))
 
 	for _, digest := range []string{
 		"testlinkmanifest",
@@ -191,7 +186,7 @@ func TestListTags(t *testing.T) {
 
 	for r, ts := range repoTagMap {
 		for _, tag := range ts {
-			tags.createTag(r, tag)
+			tags.createTag(r, tag, nil)
 		}
 	}
 
@@ -243,7 +238,7 @@ func TestListRepos(t *testing.T) {
 
 	for r, ts := range repoTagMap {
 		for _, tag := range ts {
-			assert.Nil(t, tags.createTag(r, tag))
+			assert.Nil(t, tags.createTag(r, tag, nil))
 		}
 	}
 
@@ -281,8 +276,7 @@ func TestGetManifest(t *testing.T) {
 		tags.store.MoveUploadFileToCache(digestTemp, digest)
 	}
 
-	assert.Nil(t, tags.createTag("repo", "tag"))
-	_, err := tags.linkManifest("repo", "tag", manifest)
+	_, err := tags.CreateTag("repo", "tag", manifest)
 	assert.Nil(t, err)
 	m, err := tags.getManifest("repo", "tag")
 	assert.Nil(t, err)
@@ -329,8 +323,7 @@ func TestDeleteTag(t *testing.T) {
 
 	for r, ts := range repoTagMap {
 		for _, tag := range ts {
-			tags.createTag(r, tag)
-			_, err = tags.linkManifest(r, tag, manifest)
+			_, err = tags.CreateTag(r, tag, manifest)
 			assert.Nil(t, err)
 		}
 	}
@@ -451,10 +444,9 @@ func TestDeleteExpiredTags(t *testing.T) {
 	}
 
 	for _, tag := range tagList {
-		tags.createTag(tag.repo, tag.tagName)
 		tagFp := tags.getTagPath(tag.repo, tag.tagName)
 		assert.Nil(t, err)
-		_, err = tags.linkManifest(tag.repo, tag.tagName, manifest)
+		_, err = tags.CreateTag(tag.repo, tag.tagName, manifest)
 		assert.Nil(t, err)
 		err = os.Chtimes(tagFp, tag.modTime, tag.modTime)
 		assert.Nil(t, err)
@@ -511,4 +503,106 @@ func TestDeleteExpiredTags(t *testing.T) {
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(4), refCount)
 	}
+}
+
+func TestGetOrDownloadAllLayersAndCreateTag(t *testing.T) {
+	tags, teardown := setup()
+	defer teardown()
+
+	manifest := "testdownloadalllayers"
+	manifestTemp := manifest + ".temp"
+	tags.store.CreateUploadFile(manifestTemp, 0)
+	writer, _ := tags.store.GetUploadFileReadWriter(manifestTemp)
+	data, _ := ioutil.ReadFile("./test/testmanifest.json")
+	writer.Write(data)
+	writer.Close()
+	assert.Nil(t, tags.store.MoveUploadFileToCache(manifestTemp, manifest))
+
+	for _, digest := range []string{
+		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9",
+		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
+	} {
+		digestTemp := digest + ".temp"
+		tags.store.CreateUploadFile(digestTemp, 0)
+		tags.store.MoveUploadFileToCache(digestTemp, digest)
+	}
+
+	tagSha := string(tags.getTagHash("newrepo", "newtag")[:])
+	tagShaTemp := tagSha + ".temp"
+	tags.store.CreateUploadFile(tagShaTemp, 0)
+	writer, _ = tags.store.GetUploadFileReadWriter(tagShaTemp)
+	writer.Write([]byte(manifest))
+	writer.Close()
+	assert.Nil(t, tags.store.MoveUploadFileToCache(tagShaTemp, tagSha))
+
+	err := tags.getOrDownloadAllLayersAndCreateTag("newrepo", "newtag")
+	assert.NotNil(t, err)
+	assert.Equal(t, "Torrent disabled", err.Error())
+
+	missingDigest := "0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b"
+	missingDigestTemp := missingDigest + ".temp"
+	tags.store.CreateUploadFile(missingDigestTemp, 0)
+	tags.store.MoveUploadFileToCache(missingDigestTemp, missingDigest)
+
+	l := sync.Mutex{}
+	numSuccess := 0
+	numFailed := 0
+	wg := &sync.WaitGroup{}
+	wg.Add(10)
+	for i := 0; i < 10; i++ {
+		go func() {
+			defer wg.Done()
+			err := tags.getOrDownloadAllLayersAndCreateTag("newrepo", "newtag")
+			if err != nil {
+				l.Lock()
+				numFailed++
+				assert.True(t, os.IsExist(err))
+				l.Unlock()
+			} else {
+				l.Lock()
+				numSuccess++
+				l.Unlock()
+			}
+		}()
+	}
+
+	wg.Wait()
+	assert.Equal(t, 1, numSuccess)
+	assert.Equal(t, 9, numFailed)
+
+	for _, digest := range []string{
+		manifest,
+		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9",
+		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
+		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
+	} {
+		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
+		b, _ := ioutil.ReadFile(ref)
+		refCount, _ := binary.Varint(b)
+		assert.Equal(t, int64(1), refCount)
+	}
+}
+
+func TestGetTag(t *testing.T) {
+	tags, teardown := setup()
+	defer teardown()
+
+	_, err := tags.GetTag("repo", "tag")
+	assert.NotNil(t, err)
+	assert.Equal(t, "Torrent disabled", err.Error())
+
+	manifest := "testgettag"
+	tagSha := string(tags.getTagHash("repo", "tag")[:])
+	tagShaTemp := tagSha + ".temp"
+	tags.store.CreateUploadFile(tagShaTemp, 0)
+	writer, _ := tags.store.GetUploadFileReadWriter(tagShaTemp)
+	writer.Write([]byte(manifest))
+	writer.Close()
+	assert.Nil(t, tags.store.MoveUploadFileToCache(tagShaTemp, tagSha))
+
+	reader, err := tags.GetTag("repo", "tag")
+	assert.Nil(t, err)
+	data, _ := ioutil.ReadAll(reader)
+	reader.Close()
+	assert.Equal(t, manifest, string(data[:]))
 }
