@@ -1,10 +1,7 @@
 package dockerregistry
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -20,7 +17,6 @@ import (
 
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/schema2"
-	"github.com/docker/distribution/uuid"
 	"github.com/uber-common/bark"
 )
 
@@ -29,8 +25,8 @@ type Tags interface {
 	ListTags(repo string) ([]string, error)
 	ListRepos() ([]string, error)
 	DeleteTag(repo, tag string) error
-	GetTag(repo, tag string) (io.ReadCloser, error)
-	CreateTag(repo, tag, manifest string) ([]byte, error)
+	GetTag(repo, tag string) (string, error)
+	CreateTag(repo, tag, manifest string) error
 	DeleteExpiredTags(n int, expireTime time.Time) error
 }
 
@@ -109,13 +105,12 @@ func (t *DockerTags) DeleteTag(repo, tag string) error {
 		c <- 'c'
 	}()
 
-	tagSha := t.getTagHash(repo, tag)
-	manifest, err := t.getManifest(repo, tag)
+	manifestDigest, err := t.getOrDownloadManifest(repo, tag)
 	if err != nil {
 		return err
 	}
 
-	layers, err := t.getAllLayers(manifest)
+	layers, err := t.getAllLayers(manifestDigest)
 	if err != nil {
 		return err
 	}
@@ -137,12 +132,6 @@ func (t *DockerTags) DeleteTag(repo, tag string) error {
 		}
 	}
 
-	// delete tag torrent
-	err = t.store.MoveCacheFileToTrash(string(tagSha[:]))
-	if err != nil {
-		log.Errorf("Error deleting tag torrent for %s:%s. Err: %s", repo, tag, err.Error())
-	}
-
 	for _, layer := range layers {
 		_, err := t.store.DecrementCacheFileRefCount(layer)
 		if err != nil {
@@ -155,14 +144,59 @@ func (t *DockerTags) DeleteTag(repo, tag string) error {
 	return nil
 }
 
+// DeleteExpiredTags deletes tags that are older than expireTime and not in the n latest.
+func (t *DockerTags) DeleteExpiredTags(n int, expireTime time.Time) error {
+	repos, err := t.ListRepos()
+	if err != nil {
+		return err
+	}
+	for _, repo := range repos {
+		tags, err := t.listExpiredTags(repo, n, expireTime)
+		if err != nil {
+			return err
+		}
+		for _, tag := range tags {
+			log.Infof("Deleting tag %s", tag)
+			t.DeleteTag(repo, tag)
+		}
+	}
+
+	return nil
+}
+
 // GetTag returns a reader of tag content
-func (t *DockerTags) GetTag(repo, tag string) (io.ReadCloser, error) {
-	return t.getOrDownloadTaglink(repo, tag)
+// the manifest and layers referenced by the tag may or may not exist
+func (t *DockerTags) GetTag(repo, tag string) (string, error) {
+	return t.getOrDownloadTag(repo, tag)
+}
+
+// CreateTag creates a new tag given repo, tag and manifest and a new tag torrent for manifest referencing and returns tag file sha1
+// it expects the manifest and all layers referenced by the tag exists
+func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
+	// Inc ref for all layers and the manifest
+	layers, err := t.getAllLayers(manifest)
+	if err != nil {
+		return err
+	}
+
+	// Create tag file and increment ref count
+	err = t.createTag(repo, tag, manifest, layers)
+	if err != nil {
+		return err
+	}
+
+	log.WithFields(bark.Fields{
+		"repo":     repo,
+		"tag":      tag,
+		"manifest": manifest,
+	}).Info("Successfully created tag")
+
+	return nil
 }
 
 // createTag creates a new tag file given repo and tag
 // returns tag file sha1
-func (t *DockerTags) createTag(repo, tag string, layers []string) error {
+func (t *DockerTags) createTag(repo, tag, manifestDigest string, layers []string) error {
 	t.Lock()
 	defer t.Unlock()
 
@@ -177,19 +211,6 @@ func (t *DockerTags) createTag(repo, tag string, layers []string) error {
 		return err
 	}
 
-	// Create tag file
-	err = os.MkdirAll(path.Dir(tagFp), 0755)
-	if err != nil {
-		return err
-	}
-
-	// TODO: handle the case if file already exists.
-	tagSha := t.getTagHash(repo, tag)
-	err = ioutil.WriteFile(tagFp, tagSha, 0755)
-	if err != nil {
-		return err
-	}
-
 	for _, layer := range layers {
 		// TODO (@evelynl): if increment ref count fails and the caller retries, we might have some garbage layers that are never deleted
 		// one possilbe solution is that we can add a reconciliation routine to re-calcalate ref count for all layers
@@ -199,65 +220,43 @@ func (t *DockerTags) createTag(repo, tag string, layers []string) error {
 			return err
 		}
 	}
+
+	// Create tag file
+	err = os.MkdirAll(path.Dir(tagFp), 0755)
+	if err != nil {
+		return err
+	}
+
+	err = ioutil.WriteFile(tagFp, []byte(manifestDigest), 0755)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 // getOrDownloadTaglink gets a tag torrent reader or download one
-func (t *DockerTags) getOrDownloadTaglink(repo, tag string) (io.ReadCloser, error) {
-	tagSha := t.getTagHash(repo, tag)
-
-	// Try get file
-	var reader io.ReadCloser
-	var err error
-	reader, err = t.store.GetCacheFileReader(string(tagSha[:]))
-	// TODO (@evelynl): check for file not found error?
+func (t *DockerTags) getOrDownloadTag(repo, tag string) (string, error) {
+	manifestDigest, err := t.getOrDownloadManifest(repo, tag)
 	if err != nil {
-		err = t.client.DownloadByName(string(tagSha[:]))
-		if err != nil {
-			return nil, err
-		}
-
-		reader, err = t.store.GetCacheFileReader(string(tagSha[:]))
-		if err != nil {
-			return nil, err
-		}
+		return "", err
 	}
 
 	// start downloading layers in advance
 	go t.getOrDownloadAllLayersAndCreateTag(repo, tag)
 
-	return reader, nil
+	return manifestDigest, nil
 }
 
 // getOrDownloadAllLayersAndCreateTag downloads all data for a tag
 func (t *DockerTags) getOrDownloadAllLayersAndCreateTag(repo, tag string) error {
-	tagSha := t.getTagHash(repo, tag)
-
-	// TODO (@evelynl): after moving manifest to tracker, we do not need tag and manifest torrents
-	// we should get manifest from the tracker using tag and only download layers
-	// but for now, download manifest first
-	reader, err := t.store.GetCacheFileReader(string(tagSha[:]))
-	if err != nil {
-		log.Errorf("Error getting tag for %s:%s", repo, tag)
-		return err
-	}
-
-	manifestDigest, err := ioutil.ReadAll(reader)
+	manifestDigest, err := t.getOrDownloadManifest(repo, tag)
 	if err != nil {
 		log.Errorf("Error getting manifest for %s:%s", repo, tag)
 		return err
 	}
 
-	_, err = t.store.GetCacheFileStat(string(manifestDigest[:]))
-	if err != nil && os.IsNotExist(err) {
-		err = t.client.DownloadByName(string(manifestDigest[:]))
-	}
-	if err != nil {
-		log.Errorf("Error downloading manifest for %s:%s", repo, tag)
-		return err
-	}
-
-	layers, err := t.getAllLayers(string(manifestDigest[:]))
+	layers, err := t.getAllLayers(manifestDigest)
 	if err != nil {
 		log.Errorf("Error getting layers from manifest %s for %s:%s", manifestDigest, repo, tag)
 		return err
@@ -294,7 +293,7 @@ func (t *DockerTags) getOrDownloadAllLayersAndCreateTag(repo, tag string) error 
 	default:
 	}
 
-	return t.createTag(repo, tag, layers)
+	return t.createTag(repo, tag, manifestDigest, layers)
 }
 
 // getAllLayers returns all layers referenced by the manifest, including the manifest itself.
@@ -339,75 +338,6 @@ func (t *DockerTags) getAllLayers(manifestDigest string) ([]string, error) {
 		return nil, fmt.Errorf("Unsupported manifest format")
 	}
 	return layers, nil
-}
-
-// CreateTag creates a new tag given repo, tag and manifest and a new tag torrent for manifest referencing
-// returns tag file sha1
-func (t *DockerTags) CreateTag(repo, tag, manifest string) ([]byte, error) {
-	// Create tag torrent in upload directory
-	tagSha := t.getTagHash(repo, tag)
-	randFileName := string(tagSha[:]) + "." + uuid.Generate().String()
-	_, err := t.store.CreateUploadFile(randFileName, int64(len(manifest)))
-	if err != nil {
-		return nil, err
-	}
-
-	writer, err := t.store.GetUploadFileReadWriter(randFileName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Write manifest digest to tag torrent
-	_, err = writer.Write([]byte(manifest))
-	if err != nil {
-		writer.Close()
-		return nil, err
-	}
-	writer.Close()
-
-	// Move tag torrent to cache
-	err = t.store.MoveUploadFileToCache(randFileName, string(tagSha[:]))
-	if err == nil {
-		// Create torrent
-		fp, err := t.store.GetCacheFilePath(string(tagSha[:]))
-		if err != nil {
-			return nil, err
-		}
-
-		err = t.client.CreateTorrentFromFile(string(tagSha[:]), fp)
-		if err != nil {
-			return nil, err
-		}
-	} else if os.IsExist(err) {
-		// Someone is pushing an existing tag, which is not allowed.
-		// TODO: client would try to push v1 manifest after this failure, and receive 500 response due
-		// to v1 manifest parsing error, which might cause confusion.
-		// TODO: cleanup upload file
-		return nil, err
-	} else {
-		return nil, err
-	}
-
-	// Inc ref for all layers and the manifest
-	layers, err := t.getAllLayers(manifest)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create tag file and increment ref count
-	err = t.createTag(repo, tag, layers)
-	if err != nil {
-		return nil, err
-	}
-
-	log.WithFields(bark.Fields{
-		"repo":     repo,
-		"tag":      tag,
-		"tagsha":   string(tagSha[:]),
-		"manifest": manifest,
-	}).Info("Successfully created tag")
-
-	return tagSha[:], nil
 }
 
 func (t *DockerTags) listTags(repo string) ([]string, error) {
@@ -461,32 +391,6 @@ func (t *DockerTags) listReposFromRoot(root string) ([]string, error) {
 	return []string{rootRepo}, nil
 }
 
-// getManifest returns manifest digest given repo and tag
-func (t *DockerTags) getManifest(repo, tag string) (string, error) {
-	tagSha := t.getTagHash(repo, tag)
-
-	linkReader, err := t.store.GetCacheFileReader(string(tagSha[:]))
-	if err != nil {
-		log.Infof("%s", err.Error())
-		return "", err
-	}
-	defer linkReader.Close()
-
-	link, err := ioutil.ReadAll(linkReader)
-	if err != nil {
-		return "", err
-	}
-
-	return string(link[:]), nil
-}
-
-// getTaghash returns the hash of the tag reference given repo and tag
-func (t *DockerTags) getTagHash(repo, tag string) []byte {
-	tagFp := path.Join(repo, tag)
-	rawtagSha := sha1.Sum([]byte(tagFp))
-	return []byte(hex.EncodeToString(rawtagSha[:]))
-}
-
 func (t *DockerTags) getRepoPath(repo string) string {
 	return path.Join(t.config.TagDir, repo)
 }
@@ -497,6 +401,24 @@ func (t *DockerTags) getTagPath(repo string, tag string) string {
 
 func (t *DockerTags) getRepositoriesPath() string {
 	return t.config.TagDir
+}
+
+func (t *DockerTags) getOrDownloadManifest(repo, tag string) (string, error) {
+	tagFp := t.getTagPath(repo, tag)
+	_, err := os.Stat(tagFp)
+	if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+
+	if os.IsNotExist(err) {
+		return t.client.GetManifest(repo, tag)
+	}
+
+	data, err := ioutil.ReadFile(tagFp)
+	if err != nil {
+		return "", err
+	}
+	return string(data[:]), nil
 }
 
 // listExpiredTags lists expired tags under given repo.
@@ -531,24 +453,4 @@ func (t *DockerTags) listExpiredTags(repo string, n int, expireTime time.Time) (
 	}
 
 	return tags, nil
-}
-
-// DeleteExpiredTags deletes tags that are older than expireTime and not in the n latest.
-func (t *DockerTags) DeleteExpiredTags(n int, expireTime time.Time) error {
-	repos, err := t.ListRepos()
-	if err != nil {
-		return err
-	}
-	for _, repo := range repos {
-		tags, err := t.listExpiredTags(repo, n, expireTime)
-		if err != nil {
-			return err
-		}
-		for _, tag := range tags {
-			log.Infof("Deleting tag %s", tag)
-			t.DeleteTag(repo, tag)
-		}
-	}
-
-	return nil
 }

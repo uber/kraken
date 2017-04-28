@@ -12,8 +12,6 @@ import (
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
 
-	"bytes"
-
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/docker/distribution/context"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
@@ -167,19 +165,10 @@ func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data
 			return nil, err
 		}
 		if isTag {
-			reader, err := d.tags.GetTag(repo, tagOrDigest)
+			sha, err = d.tags.GetTag(repo, tagOrDigest)
 			if err != nil {
 				return nil, err
 			}
-			defer reader.Close()
-
-			buf := new(bytes.Buffer)
-			_, err = buf.ReadFrom(reader)
-			if err != nil {
-				return nil, err
-			}
-
-			sha = buf.String()
 		}
 		return []byte("sha256:" + sha), nil
 	case "startedat":
@@ -242,7 +231,7 @@ func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, conte
 			}
 			digest := ts[len(ts)-2]
 			tag := ts[len(ts)-5]
-			_, err = d.tags.CreateTag(repo, tag, digest)
+			err = d.tags.CreateTag(repo, tag, digest)
 			if err != nil {
 				return err
 			}
