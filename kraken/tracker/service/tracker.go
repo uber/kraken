@@ -6,13 +6,13 @@ import (
 	"io/ioutil"
 
 	"fmt"
-	"net"
 	"net/http"
 	"strconv"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/utils"
 	bencode "github.com/jackpal/bencode-go"
 	"github.com/uber-common/bark"
 
@@ -49,18 +49,12 @@ func newWebApp(cfg config.AppConfig, storage storage.Storage) webApp {
 func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Request) {
 	log.Debugf("Received announce requet from: %s", r.Host)
 
-	peerIP, _, err := net.SplitHostPort(r.Host)
-	if err != nil {
-		log.Infof("Failed to get requester IP: %s", r.Host)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	queryValues := r.URL.Query()
 
 	infoHash := hex.EncodeToString([]byte(queryValues.Get("info_hash")))
 	peerID := hex.EncodeToString([]byte(queryValues.Get("peer_id")))
 	peerPortStr := queryValues.Get("port")
+	peerIPStr := queryValues.Get("ip")
 	peerBytesDownloadedStr := queryValues.Get("downloaded")
 	peerBytesUploadedStr := queryValues.Get("uploaded")
 	peerBytesLeftStr := queryValues.Get("left")
@@ -69,6 +63,13 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 	peerPort, err := strconv.ParseInt(peerPortStr, 10, 64)
 	if err != nil {
 		log.Infof("Port is not parsable: %s", peerPortStr)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	peerIPInt32, err := strconv.ParseInt(peerIPStr, 10, 32)
+	if err != nil {
+		log.Infof("Peer is not parsable: %s", peerIPStr)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -100,6 +101,8 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	peerIP := utils.Int32toIP(int32(peerIPInt32)).String()
 
 	err = webApp.datastore.Update(
 		&storage.PeerInfo{

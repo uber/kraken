@@ -11,6 +11,8 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken-torrent"
 	"code.uber.internal/infra/kraken-torrent/storage"
+	"code.uber.internal/infra/kraken/utils"
+
 	rc "github.com/docker/distribution/configuration"
 )
 
@@ -131,10 +133,24 @@ func (c *Config) CreateAgentConfig(storage storage.ClientImpl) *torrent.Config {
 		upl = rate.NewLimiter(rate.Inf, 1)
 	}
 
+	// Listen on a non loopback interface here to fetch
+	// and announce real Ip address in production
+	// Note: that does not cover a case of bridged machines
+	// and only works reliably for a single external
+	// network interface configurations.
+	localIP := "0.0.0.0"
+	if os.Getenv("UBER_ENVIRONMENT") == "production" {
+		ip, err := utils.GetLocalIP()
+		if err != nil {
+			log.Fatal(err)
+		}
+		localIP = ip
+	}
+
 	return &torrent.Config{
 		DefaultStorage:      storage,
 		Seed:                acfg.Seed,
-		ListenAddr:          fmt.Sprintf("0.0.0.0:%d", acfg.Backend),
+		ListenAddr:          fmt.Sprintf("%s:%d", localIP, acfg.Backend),
 		NoUpload:            acfg.NoUpload,
 		DisableTCP:          acfg.DisableTCP,
 		NoDHT:               acfg.NoDHT,
