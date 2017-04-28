@@ -1,21 +1,13 @@
 package utils
 
 import (
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
 	"os/exec"
 	"strings"
 )
-
-// GetHostIP returns the host ip
-func GetHostIP() (string, error) {
-	out, err := exec.Command("bash", "-c", "ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 | awk '{ print $1}'").Output()
-	name := strings.Trim(string(out[:]), "\n")
-	if err != nil {
-		return "", err
-	}
-	return name, nil
-}
 
 // GetHostName returns host name
 func GetHostName() (string, error) {
@@ -57,4 +49,36 @@ func CompareByteArray(d1 []byte, d2 []byte) bool {
 	}
 
 	return true
+}
+
+// GetLocalIP returns the non loopback local IP of the host
+func GetLocalIP() (string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
+	}
+	for _, address := range addrs {
+		// check the address type and if it is not a loopback the display it
+		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String(), nil
+			}
+		}
+	}
+	return "", errors.New("Could not found any IPv4 network interface")
+}
+
+// IPtoInt32 converts net.IP address to int32
+func IPtoInt32(ip net.IP) int32 {
+	if len(ip) == 16 {
+		return int32(binary.BigEndian.Uint32(ip[12:16]))
+	}
+	return int32(binary.BigEndian.Uint32(ip))
+}
+
+// Int32toIP converts int32  to net.IP
+func Int32toIP(i32 int32) net.IP {
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, uint32(i32))
+	return ip
 }

@@ -329,7 +329,7 @@ func (ex *Tracker) getPeerHostPort() (string, string, error) {
 	if ex.config.Environment == "development" {
 		hn = "127.0.0.1"
 	} else {
-		hn, err = utils.GetHostIP()
+		hn, err = utils.GetLocalIP()
 		if err != nil {
 			return "", "", err
 		}

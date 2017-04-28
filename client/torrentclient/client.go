@@ -366,7 +366,7 @@ func (c *Client) getLocalPeer() (torrent.Peer, error) {
 		ip = "127.0.0.1"
 	} else {
 		var err error
-		ip, err = utils.GetHostIP()
+		ip, err = utils.GetLocalIP()
 		if err != nil {
 			return torrent.Peer{}, err
 		}
