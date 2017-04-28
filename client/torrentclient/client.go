@@ -29,6 +29,7 @@ const (
 // Client contains a bittorent client and its
 type Client struct {
 	config  *configuration.Config
+	store   *store.LocalFileStore
 	cl      *torrent.Client
 	timeout int //sec
 }
@@ -39,6 +40,7 @@ func NewClient(c *configuration.Config, s *store.LocalFileStore, t int) (*Client
 		log.Info("Torrent disabled")
 		return &Client{
 			config: c,
+			store:  s,
 			cl:     nil,
 		}, nil
 	}
@@ -51,6 +53,7 @@ func NewClient(c *configuration.Config, s *store.LocalFileStore, t int) (*Client
 
 	return &Client{
 		config:  c,
+		store:   s,
 		cl:      client,
 		timeout: t,
 	}, nil
@@ -218,6 +221,15 @@ func (c *Client) WriteStatus(w io.Writer) {
 		return
 	}
 	c.cl.WriteStatus(w)
+}
+
+// GetManifest gets manifest from a tracker, it returns manifest digest
+func (c *Client) GetManifest(repo, tag string) (string, error) {
+	if c.config.DisableTorrent {
+		return "", fmt.Errorf("Torrent disabled")
+	}
+
+	return "", fmt.Errorf("Not implimented")
 }
 
 // DownloadByName adds and downloads torrent by name
