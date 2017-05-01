@@ -16,17 +16,17 @@ PROJECT_ROOT = code.uber.internal/infra/kraken
 # Tells udeploy what your service name is (set to $(notdir of PROJECT_ROOT))
 # by default
 SERVICES = \
-	kraken/tracker/tracker \
+	tracker/tracker \
 	client/bin/kraken-agent/kraken-agent \
 	tools/bin/puller/puller
 
 # List all executables
 PROGS = \
-	kraken/tracker/tracker \
+	tracker/tracker \
 	client/bin/kraken-agent/kraken-agent \
 	tools/bin/puller/puller
 
-kraken/tracker/tracker: kraken/tracker/main.go $(wildcard kraken/tracker/*.go config/tracker/*.go)
+tracker/tracker: tracker/main.go $(wildcard tracker/*.go config/tracker/*.go)
 client/bin/kraken-agent/kraken-agent: client/bin/kraken-agent/main.go $(wildcard client/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 
@@ -37,11 +37,11 @@ go-build/rules.mk:
 
 .PHONY: rebuild_mocks
 rebuild_mocks:
-		$(shell mockgen -destination=test/mocks/mock_storage/mock_storage.go code.uber.internal/infra/kraken/kraken/tracker/storage Storage)
+		$(shell mockgen -destination=test/mocks/mock_storage/mock_storage.go code.uber.internal/infra/kraken/tracker/storage Storage)
 		@echo "generated mocks for Storage"
 
-run_tracker: kraken/tracker/tracker run_database
-		export UBER_CONFIG_DIR=config/tracker && kraken/tracker/tracker
+run_tracker: tracker/tracker run_database
+		export UBER_CONFIG_DIR=config/tracker && tracker/tracker
 
 run_database:
 		docker stop mysql-kraken || true
@@ -51,7 +51,7 @@ run_database:
 		-e MYSQL_PASSWORD=uber -e MYSQL_DATABASE=kraken -v `pwd`/db/data:/var/lib/mysql:rw -d percona/percona-server:5.6.28 && sleep 3
 
 integration:
-		make clean; GOOS=linux GOARCH=amd64 make kraken/tracker/tracker
+		make clean; GOOS=linux GOARCH=amd64 make tracker/tracker
 		if [ ! -d env ]; then \
 		   virtualenv --setuptools env ; \
 		fi;

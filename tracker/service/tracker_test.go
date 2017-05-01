@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/config/tracker"
-	"code.uber.internal/infra/kraken/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils"
 
 	"code.uber.internal/infra/kraken/test/mocks/mock_storage"

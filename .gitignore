@@ -11,7 +11,7 @@ vendor/
 pkg/
 
 # Binary executable
-kraken/tracker/tracker
+tracker/tracker
 client/bin/kraken-agent/kraken-agent
 tools/bin/puller/puller
 
