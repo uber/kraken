@@ -68,7 +68,7 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 
 	peerIPInt32, err := strconv.ParseInt(peerIPStr, 10, 32)
 	if err != nil {
-		log.Infof("Peer is not parsable: %s", peerIPStr)
+		log.Infof("Peer's ip address is not a valid integer: %s", peerIPStr)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
