@@ -357,7 +357,8 @@ func TestGetManifestHandler(t *testing.T) {
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()
 
-		mocks.datastore.EXPECT().ReadManifest(name).Return(&storage.Manifest{TagName: name, Manifest: manifest}, nil)
+		mocks.datastore.EXPECT().ReadManifest(name).Return(
+			&storage.Manifest{TagName: name, Manifest: manifest}, nil)
 		response := mocks.CreateHandlerAndServeRequest(getRequest)
 		assert.Equal(t, 200, response.StatusCode)
 		data, _ := ioutil.ReadAll(response.Body)

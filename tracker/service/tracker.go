@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/config/tracker"
@@ -45,6 +46,33 @@ func newWebApp(cfg config.AppConfig, storage storage.Storage) webApp {
 	return &webAppStruct{appCfg: cfg, datastore: storage}
 }
 
+// formatRequest generates ascii representation of a request
+func (webApp *webAppStruct) FormatRequest(r *http.Request) string {
+	// Create return string
+	var request []string
+	// Add the request string
+	url := fmt.Sprintf("%v %v %v", r.Method, r.URL, r.Proto)
+	request = append(request, url)
+	// Add the host
+	request = append(request, fmt.Sprintf("Host: %v", r.Host))
+	// Loop through headers
+	for name, headers := range r.Header {
+		name = strings.ToLower(name)
+		for _, h := range headers {
+			request = append(request, fmt.Sprintf("%v: %v", name, h))
+		}
+	}
+
+	// If this is a POST, add post data
+	if r.Method == "POST" {
+		r.ParseForm()
+		request = append(request, "\n")
+		request = append(request, r.Form.Encode())
+	}
+	// Return the request as a string
+	return strings.Join(request, "\n")
+}
+
 func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Request) {
 	log.Debugf("Received announce requet from: %s", r.Host)
 
@@ -61,42 +89,43 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 
 	peerPort, err := strconv.ParseInt(peerPortStr, 10, 64)
 	if err != nil {
-		log.Infof("Port is not parsable: %s", peerPortStr)
+		log.Infof("Port is not parsable: %s", webApp.FormatRequest(r))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	peerIPInt32, err := strconv.ParseInt(peerIPStr, 10, 32)
 	if err != nil {
-		log.Infof("Peer's ip address is not a valid integer: %s", peerIPStr)
+		log.Infof("Peer's ip address is not a valid integer: %s", webApp.FormatRequest(r))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	peerBytesDownloaded, err := strconv.ParseInt(peerBytesDownloadedStr, 10, 64)
 	if err != nil {
-		log.Infof("Downloaded is not parsable: %s", peerBytesDownloadedStr)
+		log.Infof("Downloaded is not parsable: %s", webApp.FormatRequest(r))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	peerBytesUploaded, err := strconv.ParseInt(peerBytesUploadedStr, 10, 64)
 	if err != nil {
-		log.Infof("Uploaded is not parsable: %s", peerBytesUploadedStr)
+		log.Infof("Uploaded is not parsable: %s", webApp.FormatRequest(r))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	peerBytesLeft, err := strconv.ParseUint(peerBytesLeftStr, 10, 64)
 	if err != nil {
-		log.Infof("left is not parsable: %s", peerBytesLeftStr)
+		log.Infof("left is not parsable: %s", webApp.FormatRequest(r))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	peerInfos, err := webApp.datastore.Read(infoHash)
 	if err != nil {
-		log.Infof("Could not read storage: hash %s, error: %s", infoHash, err.Error())
+		log.Infof("Could not read storage: hash %s, error: %s, request: %s",
+			infoHash, err.Error(), webApp.FormatRequest(r))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -116,7 +145,8 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 			Event:     peerEvent})
 
 	if err != nil {
-		log.Infof("Could not update storage for: hash %s, error: %s", infoHash, err.Error())
+		log.Infof("Could not update storage for: hash %s, error: %s, request: %s",
+			infoHash, err.Error(), webApp.FormatRequest(r))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -129,7 +159,7 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 		Peers:    peerInfos,
 	})
 	if err != nil {
-		log.Infof("Bencode marshalling has failed: %s", err.Error())
+		log.Infof("Bencode marshalling has failed: %s for request: %s", err.Error(), webApp.FormatRequest(r))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
