@@ -3,20 +3,19 @@ package service
 import (
 	"encoding/hex"
 	"encoding/json"
-	"io/ioutil"
-
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/config/tracker"
-	"code.uber.internal/infra/kraken/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils"
-	bencode "github.com/jackpal/bencode-go"
-	"github.com/uber-common/bark"
 
+	bencode "github.com/jackpal/bencode-go"
 	"github.com/pressly/chi"
+	"github.com/uber-common/bark"
 )
 
 // WebApp defines a web-app that is backed by a cache.Cache

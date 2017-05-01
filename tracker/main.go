@@ -2,15 +2,15 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"code.uber.internal/go-common.git/x/log"
 	cfg "code.uber.internal/infra/kraken/config/tracker"
-	"code.uber.internal/infra/kraken/kraken/tracker/service"
-	"code.uber.internal/infra/kraken/kraken/tracker/storage"
-	"net/http"
+	"code.uber.internal/infra/kraken/tracker/service"
+	"code.uber.internal/infra/kraken/tracker/storage"
 )
 
 func main() {
