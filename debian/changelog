@@ -1,3 +1,8 @@
+kraken-agent (0.1.6) unstable; urgency=low
+    * Fix torrent creation
+
+ -- Igor Morozov <igor@uber.com> Tue, 02 May 2017 15:00:00 +0000
+
 kraken-agent (0.1.5) unstable; urgency=low
     * Announce parameters updated in torrent client
 
