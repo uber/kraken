@@ -138,19 +138,15 @@ func (c *Config) CreateAgentConfig(storage storage.ClientImpl) *torrent.Config {
 	// Note: that does not cover a case of bridged machines
 	// and only works reliably for a single external
 	// network interface configurations.
-	localIP := "0.0.0.0"
-	if os.Getenv("UBER_ENVIRONMENT") == "production" {
-		ip, err := utils.GetLocalIP()
-		if err != nil {
-			log.Fatal(err)
-		}
-		localIP = ip
+	ip, err := utils.GetLocalIP()
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	return &torrent.Config{
 		DefaultStorage:      storage,
 		Seed:                acfg.Seed,
-		ListenAddr:          fmt.Sprintf("%s:%d", localIP, acfg.Backend),
+		ListenAddr:          fmt.Sprintf("%s:%d", ip, acfg.Backend),
 		NoUpload:            acfg.NoUpload,
 		DisableTCP:          acfg.DisableTCP,
 		NoDHT:               acfg.NoDHT,

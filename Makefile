@@ -48,7 +48,7 @@ run_database:
 		docker rm mysql-kraken || true
 		docker run --name mysql-kraken -p 3306:3306 \
 		-e MYSQL_ROOT_PASSWORD=uber -e MYSQL_USER=uber \
-		-e MYSQL_PASSWORD=uber -e MYSQL_DATABASE=kraken -v `pwd`/db/data:/var/lib/mysql:rw -d percona/percona-server:5.6.28 && sleep 3
+		-e MYSQL_PASSWORD=uber -e MYSQL_DATABASE=kraken -d percona/percona-server:5.6.28 && sleep 30
 
 run_agent_origin:
 		make client/bin/kraken-agent/kraken-agent GOOS=linux
