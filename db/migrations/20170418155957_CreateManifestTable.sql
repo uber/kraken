@@ -1,4 +1,3 @@
-
 -- +goose Up
 -- SQL in section 'Up' is executed when this migration is applied
 CREATE TABLE IF NOT EXISTS manifest (
@@ -10,12 +9,10 @@ CREATE TABLE IF NOT EXISTS manifest (
 
 ALTER TABLE torrent ADD COLUMN (refcount int NOT NULL DEFAULT 1);
 
- -- +goose Down
+-- +goose Down
 -- SQL section 'Down' is executed when this migration is rolled back
 
-DROP TABLE manifest;
+DROP TABLE IF EXISTS manifest;
 
 ALTER TABLE torrent DROP COLUMN `refcount`;
-
-
 
