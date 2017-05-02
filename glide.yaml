@@ -5,12 +5,6 @@ import:
   subpackages:
   - x/config
   - x/log
-- package: github.com/anacrolix/torrent
-  version: 40b96d0e4e5df84afb90181e679804638ef8e82e
-  subpackages:
-  - bencode
-  - metainfo
-  - storage
 - package: code.uber.internal/infra/kraken-torrent
   version: 002ef3cc26949c6cd3e6ad47983f9097bdeada27
   repo: gitolite@code.uber.internal:infra/kraken-torrent
