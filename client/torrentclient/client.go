@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"os"
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
@@ -16,10 +17,12 @@ import (
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/utils"
+	"github.com/docker/distribution/uuid"
 	"github.com/uber-common/bark"
 )
 
 const (
+	uploadTimeout         = 120 //sec
 	downloadTimeout       = 120 //sec
 	requestTimeout        = 5   //sec
 	callTrackerRetries    = 3   //times
@@ -135,6 +138,7 @@ func (c *Client) Torrent(hash metainfo.Hash) (*torrent.Torrent, bool, error) {
 // called by dockerregistry.Uploads and Tags
 func (c *Client) CreateTorrentFromFile(name, filepath string) error {
 	if c.config.DisableTorrent {
+		log.Info("Torrent disabled. Nothing is to be done here")
 		return nil
 	}
 	// build info hash from file
@@ -223,13 +227,122 @@ func (c *Client) WriteStatus(w io.Writer) {
 	c.cl.WriteStatus(w)
 }
 
+// PostManifest saves manifest specified by the tag it referred in a tracker
+func (c *Client) PostManifest(repo, tag, manifest string) error {
+	if c.config.DisableTorrent {
+		log.Info("Torrent disabled. Nothing is to be done here")
+		return nil
+	}
+
+	reader, err := c.store.GetCacheFileReader(manifest)
+	if err != nil {
+		return err
+	}
+
+	name := fmt.Sprintf("%s:%s", repo, tag)
+	postURL := c.config.TrackerURL + "/manifest/" + name
+
+	req, err := http.NewRequest("POST", postURL, reader)
+	if err != nil {
+		return err
+	}
+
+	client := http.Client{
+		Timeout: uploadTimeout * time.Second, // sec
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		respDump, err := httputil.DumpResponse(resp, true)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("%s", respDump)
+	}
+
+	return nil
+}
+
 // GetManifest gets manifest from a tracker, it returns manifest digest
 func (c *Client) GetManifest(repo, tag string) (string, error) {
 	if c.config.DisableTorrent {
 		return "", fmt.Errorf("Torrent disabled")
 	}
 
-	return "", fmt.Errorf("Not implimented")
+	name := fmt.Sprintf("%s:%s", repo, tag)
+	getURL := c.config.TrackerURL + "/manifest/" + name
+
+	req, err := http.NewRequest("GET", getURL, nil)
+	if err != nil {
+		return "", err
+	}
+
+	client := http.Client{
+		Timeout: downloadTimeout * time.Second, // sec
+	}
+
+	// send request
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		respDump, err := httputil.DumpResponse(resp, true)
+		if err != nil {
+			return "", err
+		}
+		return "", fmt.Errorf("%s", respDump)
+	}
+
+	// read manifest from body
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	// parse manifest
+	_, manifestDigest, err := utils.ParseManifestV2(data)
+	if err != nil {
+		return "", err
+	}
+
+	// store manifest
+	// TODO (@evelynl): create an upload file instead of a download file because
+	// we want to allow storing the same manifest by multiple threads,
+	// whichever successfully move the file to cache will succeed.
+	// the reason that we cannot use a download file is because we cannot rename the file
+	// when the file is moved to cache. so it might cause race condition when multiple threads are writing the same manifest.
+	manifestDigestTemp := manifestDigest + "." + uuid.Generate().String()
+	_, err = c.store.CreateUploadFile(manifestDigestTemp, 0)
+	if err != nil {
+		return "", err
+	}
+
+	writer, err := c.store.GetUploadFileReadWriter(manifestDigestTemp)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = writer.Write(data)
+	if err != nil {
+		return "", err
+	}
+	writer.Close()
+
+	err = c.store.MoveUploadFileToCache(manifestDigestTemp, manifestDigest)
+	// it is ok if move fails on file exist error
+	if err != nil && !os.IsExist(err) {
+		return "", err
+	}
+
+	return manifestDigest, nil
 }
 
 // DownloadByName adds and downloads torrent by name

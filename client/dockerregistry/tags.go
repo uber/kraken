@@ -14,8 +14,7 @@ import (
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
-
-	"github.com/docker/distribution"
+	"code.uber.internal/infra/kraken/utils"
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/uber-common/bark"
 )
@@ -185,6 +184,12 @@ func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 		return err
 	}
 
+	// Save manifest in tracker
+	err = t.client.PostManifest(repo, tag, manifest)
+	if err != nil {
+		return err
+	}
+
 	log.WithFields(bark.Fields{
 		"repo":     repo,
 		"tag":      tag,
@@ -297,6 +302,7 @@ func (t *DockerTags) getOrDownloadAllLayersAndCreateTag(repo, tag string) error 
 }
 
 // getAllLayers returns all layers referenced by the manifest, including the manifest itself.
+// this function assumes manifest exists in cache already
 func (t *DockerTags) getAllLayers(manifestDigest string) ([]string, error) {
 	reader, err := t.store.GetCacheFileReader(manifestDigest)
 	if err != nil {
@@ -308,17 +314,9 @@ func (t *DockerTags) getAllLayers(manifestDigest string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	manifest, _, err := distribution.UnmarshalManifest(schema2.MediaTypeManifest, body)
+	manifest, _, err := utils.ParseManifestV2(body)
 	if err != nil {
 		return nil, err
-	}
-	deserializedManifest, ok := manifest.(*schema2.DeserializedManifest)
-	if !ok {
-		return nil, fmt.Errorf("Unable to deserialize manifest")
-	}
-	version := deserializedManifest.Manifest.Versioned.SchemaVersion
-	if version != 2 {
-		return nil, fmt.Errorf("Unsupported manifest version: %d", version)
 	}
 
 	layers := []string{manifestDigest}

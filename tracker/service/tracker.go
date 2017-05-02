@@ -237,7 +237,7 @@ func (webApp *webAppStruct) PostInfoHashHandler(w http.ResponseWriter, r *http.R
 }
 
 func (webApp *webAppStruct) GetManifestHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	name := chi.URLParam(r, "name")
 	if len(name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
@@ -261,15 +261,7 @@ func (webApp *webAppStruct) GetManifestHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	err = json.NewEncoder(w).Encode(manifest.Manifest)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.WithFields(
-			bark.Fields{"name": name, "manifest": manifest, "error": err}).Error(
-			"Failed to encode manifest into json")
-		return
-	}
-
+	w.Write([]byte(manifest.Manifest))
 	w.WriteHeader(http.StatusOK)
 	log.Infof("Got manifest for %s", name)
 }
