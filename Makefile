@@ -53,11 +53,15 @@ run_database:
 run_agent_origin:
 		make client/bin/kraken-agent/kraken-agent GOOS=linux
 		docker build -t kraken-agent:dev -f docker/agent/Dockerfile ./
+		docker stop kraken-origin || true
+		docker rm kraken-origin || true
 		docker run -d --name=kraken-origin -p 5051:5051 -p 5081:5081 --entrypoint="/root/kraken/scripts/start_origin.sh" kraken-agent:dev
 
 run_agent_peer:
 		make client/bin/kraken-agent/kraken-agent GOOS=linux
 		docker build -t kraken-agent:dev -f docker/agent/Dockerfile ./
+		docker stop kraken-peer || true
+		docker rm kraken-peer || true
 		docker run -d --name=kraken-peer -p 5052:5052 -p 5082:5082 --entrypoint="/root/kraken/scripts/start_peer.sh" kraken-agent:dev
 
 integration:
