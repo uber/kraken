@@ -6,7 +6,7 @@ import:
   - x/config
   - x/log
 - package: code.uber.internal/infra/kraken-torrent
-  version: 002ef3cc26949c6cd3e6ad47983f9097bdeada27
+  version: 74ee5a4cf6d64dd34047f4912e539b2f7c25c114
   repo: gitolite@code.uber.internal:infra/kraken-torrent
   vcs: git
   subpackages:
