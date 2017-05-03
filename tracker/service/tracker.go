@@ -122,14 +122,6 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	peerInfos, err := webApp.datastore.Read(infoHash)
-	if err != nil {
-		log.Infof("Could not read storage: hash %s, error: %s, request: %s",
-			infoHash, err.Error(), webApp.FormatRequest(r))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	peerIP := utils.Int32toIP(int32(peerIPInt32)).String()
 
 	err = webApp.datastore.Update(
@@ -146,6 +138,14 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 
 	if err != nil {
 		log.Infof("Could not update storage for: hash %s, error: %s, request: %s",
+			infoHash, err.Error(), webApp.FormatRequest(r))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	peerInfos, err := webApp.datastore.Read(infoHash)
+	if err != nil {
+		log.Infof("Could not read storage: hash %s, error: %s, request: %s",
 			infoHash, err.Error(), webApp.FormatRequest(r))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

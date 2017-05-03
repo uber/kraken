@@ -104,7 +104,15 @@ func RunDBMigration(appCfg config.AppConfig) error {
 	dsnTemplate := appCfg.DBConfig.GetDSN()
 	username := appCfg.Nemo.Username["kraken"]
 
-	dsn := fmt.Sprintf(dsnTemplate, username, appCfg.Nemo.Password[username])
+	// check if we need to str format,
+	// we don't have to do that in integration testing suite
+	// as DSN being returned from docker container contains already
+	// username and password
+	dsn := dsnTemplate
+	n := strings.Count(dsnTemplate, "%s")
+	if n > 0 {
+		dsn = fmt.Sprintf(dsnTemplate, username, appCfg.Nemo.Password[username])
+	}
 
 	// Open our database connection
 	db, err := sql.Open(appCfg.DBConfig.EngineName, dsn)
@@ -137,7 +145,15 @@ func NewMySQLStorage(appCfg config.AppConfig) (Storage, error) {
 	dsnTemplate := appCfg.DBConfig.GetDSN()
 	username := appCfg.Nemo.Username["kraken"]
 
-	dsn := fmt.Sprintf(dsnTemplate, username, appCfg.Nemo.Password[username])
+	// check if we need to str format,
+	// we don't have to do that in integration testing suite
+	// as DSN being returned from docker container contains already
+	// username and password
+	dsn := dsnTemplate
+	n := strings.Count(dsnTemplate, "%s")
+	if n > 0 {
+		dsn = fmt.Sprintf(dsnTemplate, username, appCfg.Nemo.Password[username])
+	}
 
 	db, err := sql.Open(appCfg.DBConfig.EngineName, dsn)
 	if err != nil {
