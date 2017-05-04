@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -245,6 +246,18 @@ func (webApp *webAppStruct) GetManifestHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	name, err := url.QueryUnescape(name)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(
+			fmt.Sprintf("cannot unescape manifest name: %s, error: %s",
+				name, err.Error())))
+		log.WithFields(
+			bark.Fields{"name": name, "error": err}).Error(
+			"Failed to unescape manifest name")
+		return
+	}
+
 	manifest, err := webApp.datastore.ReadManifest(name)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -273,6 +286,18 @@ func (webApp *webAppStruct) PostManifestHandler(w http.ResponseWriter, r *http.R
 	if len(name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Failed to parse a tag name"))
+		return
+	}
+
+	name, err := url.QueryUnescape(name)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(
+			fmt.Sprintf("cannot unescape manifest name: %s, error: %s",
+				name, err.Error())))
+		log.WithFields(
+			bark.Fields{"name": name, "error": err}).Error(
+			"Failed to unescape manifest name")
 		return
 	}
 

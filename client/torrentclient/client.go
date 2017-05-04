@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"os"
 	"time"
 
@@ -240,7 +241,7 @@ func (c *Client) PostManifest(repo, tag, manifest string) error {
 	}
 
 	name := fmt.Sprintf("%s:%s", repo, tag)
-	postURL := c.config.TrackerURL + "/manifest/" + name
+	postURL := c.config.TrackerURL + "/manifest/" + url.QueryEscape(name)
 
 	req, err := http.NewRequest("POST", postURL, reader)
 	if err != nil {
