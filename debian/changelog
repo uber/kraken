@@ -1,35 +1,9 @@
-kraken-agent (0.1.6) unstable; urgency=low
+kraken-agent (0.1.7) unstable; urgency=low
     * Fix torrent creation
 
  -- Igor Morozov <igor@uber.com> Tue, 02 May 2017 15:00:00 +0000
 
-kraken-agent (0.1.5) unstable; urgency=low
-    * Announce parameters updated in torrent client
+kraken-agent (0.1.6) unstable; urgency=low
+    * Fix torrent creation
 
- -- Igor Morozov <igor@uber.com> Tue, 23 Apr 2017 15:00:00 +0000
-
-kraken-agent (0.1.4) unstable; urgency=low
-    * Update confgiguration for agent
-
- -- Igor Morozov <igor@uber.com> Tue, 23 Apr 2017 15:00:00 +0000
-
-kraken-agent (0.1.3) unstable; urgency=low
-    * Change port configuraiton for an agent registry
-
- -- Igor Morozov <igor@uber.com> Tue, 23 Apr 2017 15:00:00 +0000
-
-kraken-agent (0.1.2) unstable; urgency=low
-    * Change port configuraiton for an agent
-
- -- Igor Morozov <igor@uber.com> Tue, 23 Apr 2017 14:00:00 +0000
-
-kraken-agent (0.1.1) unstable; urgency=low
-    * Some config changes
-
- -- Igor Morozov <igor@uber.com> Tue, 23 Apr 2017 13:00:00 +0000
-
-kraken-agent (0.1) unstable; urgency=low
-
-    * Initial release of kraken-agent
-
- -- Igor Morozov <igor@uber.com> Tue, 23 Apr 2017 12:00:00 +0000
+ -- Igor Morozov <igor@uber.com> Tue, 02 May 2017 15:00:00 +0000
