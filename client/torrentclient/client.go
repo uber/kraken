@@ -276,7 +276,7 @@ func (c *Client) GetManifest(repo, tag string) (string, error) {
 	}
 
 	name := fmt.Sprintf("%s:%s", repo, tag)
-	getURL := c.config.TrackerURL + "/manifest/" + name
+	getURL := c.config.TrackerURL + "/manifest/" + url.QueryEscape(name)
 
 	req, err := http.NewRequest("GET", getURL, nil)
 	if err != nil {
