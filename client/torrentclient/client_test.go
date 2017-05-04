@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -25,6 +26,7 @@ func getTestRouter() *chi.Mux {
 	r.HandleFunc("/manifest/:name", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Info("request")
 		name := chi.URLParam(r, "name")
+		name, _ = url.QueryUnescape(name)
 		if name == "successrepo:tag" {
 			data, err := ioutil.ReadFile("../dockerregistry/test/testmanifest.json")
 			if err != nil {
