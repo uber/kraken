@@ -175,18 +175,21 @@ func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 	// Inc ref for all layers and the manifest
 	layers, err := t.getAllLayers(manifest)
 	if err != nil {
+		log.Errorf("CreateTag: cannot get all layers for %s:%s, error: %s", repo, tag, err)
 		return err
 	}
 
 	// Create tag file and increment ref count
 	err = t.createTag(repo, tag, manifest, layers)
 	if err != nil {
+		log.Errorf("CreateTag: cannot create a tag for %s:%s, error: %s", repo, tag, err)
 		return err
 	}
 
 	// Save manifest in tracker
 	err = t.client.PostManifest(repo, tag, manifest)
 	if err != nil {
+		log.Errorf("CreateTag: cannot post manifest for %s:%s, error: %s", repo, tag, err)
 		return err
 	}
 

@@ -227,12 +227,14 @@ func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, conte
 		if ts[len(ts)-7] == "_manifests" {
 			repo, err := d.getRepoName(path)
 			if err != nil {
+				log.Errorf("PutContent: cannot get repo %s", path)
 				return err
 			}
 			digest := ts[len(ts)-2]
 			tag := ts[len(ts)-5]
 			err = d.tags.CreateTag(repo, tag, digest)
 			if err != nil {
+				log.Errorf("PutContent: cannot create tag %s:%s", repo, path)
 				return err
 			}
 		}
