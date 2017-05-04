@@ -177,6 +177,7 @@ func (webApp *webAppStruct) GetInfoHashHandler(w http.ResponseWriter, r *http.Re
 
 	name := queryValues.Get("name")
 	if name == "" {
+		log.Errorf("Failed to get torrent info hash, no name specified: %s", webApp.FormatRequest(r))
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Failed to get torrent info hash: no torrent name specified"))
 		return
@@ -184,6 +185,7 @@ func (webApp *webAppStruct) GetInfoHashHandler(w http.ResponseWriter, r *http.Re
 
 	info, err := webApp.datastore.ReadTorrent(name)
 	if err != nil {
+		log.Errorf("Failed to get torrent info hash: %s", webApp.FormatRequest(r))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("Failed to get torrent info hash: %s", err.Error())))
 		log.WithFields(bark.Fields{
@@ -194,6 +196,8 @@ func (webApp *webAppStruct) GetInfoHashHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	if info == nil {
+		log.Infof("Torrent info hash is not found: %s", webApp.FormatRequest(r))
+
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(fmt.Sprintf("Failed to get torrent info hash: name %s not found", name)))
 		return
@@ -224,6 +228,8 @@ func (webApp *webAppStruct) PostInfoHashHandler(w http.ResponseWriter, r *http.R
 	)
 
 	if err != nil {
+		log.Errorf("Failed to creat torrent: %s", webApp.FormatRequest(r))
+
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("Failed to create torrent: %s", err.Error())))
 		log.WithFields(bark.Fields{
@@ -248,6 +254,8 @@ func (webApp *webAppStruct) GetManifestHandler(w http.ResponseWriter, r *http.Re
 
 	name, err := url.QueryUnescape(name)
 	if err != nil {
+		log.Errorf("Cannot unescape name: %s", webApp.FormatRequest(r))
+
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(
 			fmt.Sprintf("cannot unescape manifest name: %s, error: %s",
@@ -260,12 +268,15 @@ func (webApp *webAppStruct) GetManifestHandler(w http.ResponseWriter, r *http.Re
 
 	manifest, err := webApp.datastore.ReadManifest(name)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		log.Errorf("Cannot read manifest: %s", webApp.FormatRequest(r))
+
+		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(
-			fmt.Sprintf("Failed to get manifests for %s with error: %s", name, err.Error())))
+			fmt.Sprintf("cannot unescape manifest name: %s, error: %s",
+				name, err.Error())))
 		log.WithFields(
 			bark.Fields{"name": name, "error": err}).Error(
-			"Failed to get manifest")
+			"Failed to unescape manifest name")
 		return
 	}
 
@@ -291,6 +302,8 @@ func (webApp *webAppStruct) PostManifestHandler(w http.ResponseWriter, r *http.R
 
 	name, err := url.QueryUnescape(name)
 	if err != nil {
+		log.Errorf("Cannot unescape manifest name: %s", webApp.FormatRequest(r))
+
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(
 			fmt.Sprintf("cannot unescape manifest name: %s, error: %s",
@@ -304,6 +317,8 @@ func (webApp *webAppStruct) PostManifestHandler(w http.ResponseWriter, r *http.R
 	var jsonManifest map[string]interface{}
 	manifest, err := ioutil.ReadAll(r.Body)
 	if err != nil {
+		log.Errorf("Cannot read post request: %s", webApp.FormatRequest(r))
+
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(
 			fmt.Sprintf("Could not read manifest from a post payload for %s and error: %s",
@@ -318,6 +333,8 @@ func (webApp *webAppStruct) PostManifestHandler(w http.ResponseWriter, r *http.R
 	defer r.Body.Close()
 
 	if err != nil {
+		log.Errorf("Cannot unmarshal manifest: %s", webApp.FormatRequest(r))
+
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(
 			fmt.Sprintf("Mnifest is an invalid json for %s, manifest %s and error: %s",
@@ -331,6 +348,8 @@ func (webApp *webAppStruct) PostManifestHandler(w http.ResponseWriter, r *http.R
 	err = webApp.datastore.UpdateManifest(
 		&storage.Manifest{TagName: name, Manifest: string(manifest[:]), Flags: 0})
 	if err != nil {
+		log.Errorf("Cannot update the manifest: %s", webApp.FormatRequest(r))
+
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(
 			fmt.Sprintf("Failed to update manifest for %s with manifest %s and error: %s",
