@@ -326,7 +326,7 @@ func TestGetManifestHandler(t *testing.T) {
                     "size": 115242848,
                     "digest": "sha256:f1f1d5da237f1b069eae23cdc9b291e217a4c1fda8f29262c4275a786a4dd322"
                   }]}`
-	name := "tag1"
+	name := "repo:tag1"
 
 	t.Run("Return 400 on empty tag name", func(t *testing.T) {
 		getRequest, _ := http.NewRequest("GET",
