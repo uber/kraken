@@ -54,15 +54,24 @@ func CompareByteArray(d1 []byte, d2 []byte) bool {
 	return true
 }
 
-// GetLocalIP returns the non loopback local IP of the host
+// GetLocalIP returns the first non loopback intreface's IP
 func GetLocalIP() (string, error) {
-	addrs, err := net.InterfaceAddrs()
+	ifis, err := net.Interfaces()
 	if err != nil {
 		return "", err
 	}
-	for _, address := range addrs {
-		// check the address type and if it is not a loopback the display it
-		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+	for _, ifi := range ifis {
+		// TODO: Extend for Running and UP maybe? (@igor)
+		if ifi.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := ifi.Addrs()
+		if err != nil {
+			return "", err
+		}
+
+		if len(addrs) > 0 {
+			ipnet, _ := addrs[0].(*net.IPNet)
 			if ipnet.IP.To4() != nil {
 				return ipnet.IP.String(), nil
 			}
