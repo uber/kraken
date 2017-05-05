@@ -397,7 +397,16 @@ func (c *Client) download(tor *torrent.Torrent) <-chan byte {
 		for {
 			select {
 			case v := <-psc.Values:
-				if v.(torrent.PieceStateChange).Complete {
+				// TODO (@evelynl): kraken-torrent lib should not return nil for suscribed events
+				// will need to look deeper at this
+				if v == nil {
+					continue
+				}
+				status, ok := v.(torrent.PieceStateChange)
+				if !ok {
+					continue
+				}
+				if status.Complete {
 					completedPieces = completedPieces + 1
 				}
 				if completedPieces == tor.NumPieces() {
