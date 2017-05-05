@@ -275,6 +275,7 @@ func (c *Client) GetManifest(repo, tag string) (string, error) {
 		return "", fmt.Errorf("Torrent disabled")
 	}
 
+	log.Infof("torrentclient GetManifest %s:%s", repo, tag)
 	name := fmt.Sprintf("%s:%s", repo, tag)
 	getURL := c.config.TrackerURL + "/manifest/" + url.QueryEscape(name)
 
@@ -314,6 +315,7 @@ func (c *Client) GetManifest(repo, tag string) (string, error) {
 		return "", err
 	}
 
+	log.Infof("torrentclient GetManifest digest:%s", manifestDigest)
 	// store manifest
 	// TODO (@evelynl): create an upload file instead of a download file because
 	// we want to allow storing the same manifest by multiple threads,

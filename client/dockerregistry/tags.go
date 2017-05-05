@@ -264,11 +264,15 @@ func (t *DockerTags) getOrDownloadAllLayersAndCreateTag(repo, tag string) error 
 		return err
 	}
 
+	log.Infof("Successfully got manifest %s for %s:%s", manifestDigest, repo, tag)
+
 	layers, err := t.getAllLayers(manifestDigest)
 	if err != nil {
 		log.Errorf("Error getting layers from manifest %s for %s:%s", manifestDigest, repo, tag)
 		return err
 	}
+
+	log.Infof("Successfully parsed layers from %s: %v", manifestDigest, layers)
 
 	numLayers := len(layers)
 	wg := &sync.WaitGroup{}
