@@ -1,7 +1,11 @@
 FROM debian:8
 
+RUN apt-get update && apt-get install -y curl
+
 ADD ./ /root/kraken
 ADD client/bin/kraken-agent/kraken-agent /usr/bin/kraken-agent
+
+EXPOSE 5051 5081
 
 WORKDIR /root/kraken
 

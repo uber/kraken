@@ -51,21 +51,25 @@ run_database:
 		-e MYSQL_PASSWORD=uber -e MYSQL_DATABASE=kraken -d percona/percona-server:5.6.28 && sleep 30
 
 run_agent_origin:
-		make client/bin/kraken-agent/kraken-agent GOOS=linux
-		docker build -t kraken-agent:dev -f docker/agent/Dockerfile ./
+		make clean; GOOS=linux GOARCH=amd64 make client/bin/kraken-agent/kraken-agent
+		docker build -t kraken-origin:dev -f docker/origin/Dockerfile ./
 		docker stop kraken-origin || true
 		docker rm kraken-origin || true
-		docker run -d --name=kraken-origin -p 5051:5051 -p 5081:5081 --entrypoint="/root/kraken/scripts/start_origin.sh" kraken-agent:dev
+		docker run -d --name=kraken-origin -p 5051:5051 -p 5081:5081 --entrypoint="/root/kraken/scripts/start_origin.sh" kraken-origin:dev
 
 run_agent_peer:
-		make client/bin/kraken-agent/kraken-agent GOOS=linux
-		docker build -t kraken-agent:dev -f docker/agent/Dockerfile ./
+		make clean; GOOS=linux GOARCH=amd64 make client/bin/kraken-agent/kraken-agent
+		docker build -t kraken-peer:dev -f docker/peer/Dockerfile ./
 		docker stop kraken-peer || true
 		docker rm kraken-peer || true
-		docker run -d --name=kraken-peer -p 5052:5052 -p 5082:5082 --entrypoint="/root/kraken/scripts/start_peer.sh" kraken-agent:dev
+		docker run -d --name=kraken-peer -p 5052:5052 -p 5082:5082 --entrypoint="/root/kraken/scripts/start_peer.sh" kraken-peer:dev
 
 integration:
-		make clean; GOOS=linux GOARCH=amd64 make tracker/tracker
+		make clean
+		GOOS=linux GOARCH=amd64 make tracker/tracker
+		GOOS=linux GOARCH=amd64 make client/bin/kraken-agent/kraken-agent
+		docker build -t kraken-origin:dev -f docker/origin/Dockerfile ./
+		docker build -t kraken-peer:dev -f docker/peer/Dockerfile ./
 		if [ ! -d env ]; then \
 		   virtualenv --setuptools env ; \
 		fi;
