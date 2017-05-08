@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"io/ioutil"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,11 +85,71 @@ func TestStoreBackend(t *testing.T) {
 	// Test moveFile
 	err = backend.MoveFile(testFileName, []FileState{stateTest1}, stateTest2)
 	assert.Nil(err)
+	// Test moveFile while it is open
+	// preState: stateTest2
+	// new state: stateTest1
+	readWriterState2, err := backend.GetFileReadWriter(testFileName, []FileState{stateTest2})
+	assert.Nil(err)
+	err = backend.MoveFile(testFileName, []FileState{stateTest2}, stateTest1)
+	assert.Nil(err)
+
+	// Created hardlink in both stateTest1 and stateTest2
+	_, err = os.Stat(path.Join(_testDir1, testFileName))
+	assert.Nil(err)
+	// the old file does not exist but still read/writable
+	_, err = os.Stat(path.Join(_testDir2, testFileName))
+	assert.True(os.IsNotExist(err))
+	// Check goalstate
+	assert.Equal(backend.(*localFileStoreBackend).fileMap[testFileName].(*localFileEntry).state, stateTest1)
+	assert.Equal(backend.(*localFileStoreBackend).fileMap[testFileName].(*localFileEntry).openCount, 1)
+	// Create new readWriter at new state
+	readWriterState1, err := backend.GetFileReadWriter(testFileName, []FileState{stateTest1})
+	assert.Nil(err)
+	assert.Equal(backend.(*localFileStoreBackend).fileMap[testFileName].(*localFileEntry).openCount, 2)
+	// Check content
+	dataState1, err := ioutil.ReadAll(readWriterState1)
+	assert.Nil(err)
+	dataState2, err := ioutil.ReadAll(readWriterState2)
+	assert.Nil(err)
+	assert.Equal(dataState1, dataState2)
+	assert.Equal([]byte{'t', 'e', 's', 't', '\n'}, dataState1)
+	// Write with old readWriter
+	_, err = readWriterState1.WriteAt([]byte{'1'}, 0)
+	assert.Nil(err)
+	// Check content again
+	readWriterState1.Seek(0, 0)
+	readWriterState2.Seek(0, 0)
+	dataState1, err = ioutil.ReadAll(readWriterState1)
+	assert.Nil(err)
+	dataState2, err = ioutil.ReadAll(readWriterState2)
+	assert.Nil(err)
+	assert.Equal(dataState1, dataState2)
+	assert.Equal([]byte{'1', 'e', 's', 't', '\n'}, dataState1)
+	// Close on last opened readwriter removes hardlink
+	readWriterState2.Close()
+	_, err = os.Stat(path.Join(_testDir2, testFileName))
+	assert.True(os.IsNotExist(err))
+	readWriterState1.Close()
+	_, err = os.Stat(path.Join(_testDir1, testFileName))
+	assert.Nil(err)
+	// Check content again
+	readWriterStateMoved, err := backend.GetFileReadWriter(testFileName, []FileState{stateTest1})
+	assert.Nil(err)
+	dataMoved, err := ioutil.ReadAll(readWriterStateMoved)
+	assert.Nil(err)
+	assert.Equal([]byte{'1', 'e', 's', 't', '\n'}, dataMoved)
+	readWriterStateMoved.Close()
+
+	err = backend.MoveFile(testFileName, []FileState{stateTest1}, stateTest2)
+	assert.Nil(err)
+	assert.Equal(backend.(*localFileStoreBackend).fileMap[testFileName].(*localFileEntry).state, stateTest2)
+	assert.Equal(backend.(*localFileStoreBackend).fileMap[testFileName].(*localFileEntry).openCount, 0)
 
 	// Test getFileReader
 	for i := 0; i < 100; i++ {
 		waitGroup.Add(1)
 		go func() {
+			defer waitGroup.Done()
 			reader, err := backend.GetFileReader(testFileName, []FileState{stateTest2})
 			assert.Nil(err)
 
@@ -97,11 +159,10 @@ func TestStoreBackend(t *testing.T) {
 			l, err := reader.ReadAt(b, 0)
 			assert.Nil(err)
 			assert.Equal(l, 5)
-			assert.Equal(string(b[:l]), "test\n")
+			assert.Equal(string(b[:l]), "1est\n")
 
 			err = reader.Close()
 			assert.Nil(err)
-			waitGroup.Done()
 		}()
 	}
 	waitGroup.Wait()
