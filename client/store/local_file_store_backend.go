@@ -7,6 +7,8 @@ import (
 	"path"
 	"path/filepath"
 	"sync"
+
+	"code.uber.internal/go-common.git/x/log"
 )
 
 // FileStoreBackend manages all agent files.
@@ -272,12 +274,13 @@ func (backend *localFileStoreBackend) MoveFile(fileName string, states []FileSta
 	if err != nil {
 		return err
 	}
+
 	if refCount > 0 {
 		return &RefCountError{Op: "move", State: fileEntry.GetState(), Name: fileName, RefCount: refCount, Msg: fmt.Sprintf("File still referenced")}
 	}
+
 	if fileEntry.IsOpen() {
-		// TODO: set goal state.
-		return fmt.Errorf("Cannot remove file %s because it's still open", fileName)
+		log.Infof("%s is still open while moving from %s to %s", fileName, fileEntry.GetState().GetDirectory(), goalState.GetDirectory())
 	}
 
 	// Copy metadata first. Use copy instead of move here, so any failure would be recoverable.
@@ -343,9 +346,14 @@ func (backend *localFileStoreBackend) RenameFile(fileName string, states []FileS
 	if refCount > 0 {
 		return &RefCountError{Op: "move", State: fileEntry.GetState(), Name: fileName, RefCount: refCount, Msg: fmt.Sprintf("File still referenced")}
 	}
+
 	if fileEntry.IsOpen() {
-		// TODO: set goal state.
-		return fmt.Errorf("Cannot remove file %s because it's still open", fileName)
+		// TODO (@evelynl): we use this function to move and rename a file from cache to trash
+		// it is possible that the file is still open after its in trash directory
+		// read/write and os.Remove() will not be affected as it will be handled by the file system
+		// backend.Delete() would fail
+		// however this is not very nice if we have open files in trash dir
+		log.Infof("%s is still open while moving from %s to %s", fileName, fileEntry.GetState().GetDirectory(), goalState.GetDirectory())
 	}
 
 	// Get list of metadata.
