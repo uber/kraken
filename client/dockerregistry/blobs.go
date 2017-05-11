@@ -4,6 +4,7 @@ import (
 	"io"
 	"io/ioutil"
 
+	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
@@ -69,6 +70,7 @@ func (b *Blobs) getOrDownloadBlobReader(fileName string, offset int64) (reader i
 	if err != nil {
 		err = b.client.DownloadByName(fileName)
 		if err != nil {
+			log.Errorf("Failed to download %s", err.Error())
 			return nil, sd.PathNotFoundError{
 				DriverName: "kraken",
 				Path:       fileName,
