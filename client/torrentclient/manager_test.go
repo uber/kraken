@@ -48,6 +48,7 @@ func removeTestTorrentDirs(c *configuration.Config) {
 	os.RemoveAll(c.DownloadDir)
 	os.RemoveAll(c.CacheDir)
 	os.RemoveAll(c.UploadDir)
+	os.Remove("./.torrents.list.bolt.db")
 }
 
 func TestNewManager(t *testing.T) {
