@@ -38,6 +38,7 @@ func (tor *Torrent) Open() error {
 	// create download file from LocalFileStore
 	new, err := tor.store.CreateDownloadFile(tor.name, tor.len)
 	if err != nil {
+		log.Errorf("Error opening torrent: %s", err.Error())
 		return err
 	}
 

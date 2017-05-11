@@ -465,6 +465,8 @@ func (c *Client) DownloadByName(name string) error {
 	if err != nil {
 		return err
 	}
+
+	log.Debugf("Start downloading %s", name)
 	return c.Download(tor)
 }
 
@@ -478,6 +480,7 @@ func (c *Client) Download(tor *torrent.Torrent) error {
 	timer := time.NewTimer(time.Duration(c.timeout) * time.Second)
 	select {
 	case <-timer.C:
+		log.Errorf("Timeout waiting for info %s", tor.Name())
 		return fmt.Errorf("Timeout waiting for torrent info: %s. Exceeds %d seconds", tor.Name(), c.timeout)
 	case <-tor.GotInfo():
 	}
@@ -487,41 +490,104 @@ func (c *Client) Download(tor *torrent.Torrent) error {
 	select {
 	case <-timer.C:
 		tor.Drop()
+		log.Errorf("Timeout downloading %s", tor.Name())
 		return fmt.Errorf("Timeout downloading torrent: %s. Exceeds %d seconds", tor.Name(), c.timeout)
 	case <-c.download(tor):
-		log.Infof("Sucessfully downloaded torrent %s", tor.Name())
+		log.Debugf("Successfully downloaded torrent %s", tor.Name())
 		return nil
 	}
 }
 
 func (c *Client) download(tor *torrent.Torrent) <-chan byte {
 	completedPieces := 0
+	// Subscribe to status change
 	psc := tor.SubscribePieceStateChanges()
 	tor.DownloadAll()
 	ch := make(chan byte, 1)
+	// Check piece status after subscribe to take into account for pieces that are already done
+	// This check has to happen after subscription
+	// TODO (@evelynl): we should consider adding a function to subscribe if torrent completes
+	// in kraken-torrent instead of doing this.
+	var err error
+	var completed bool
+	completed, completedPieces, err = c.isCompleted(tor)
+	if err != nil {
+		log.Errorf("Failed to download %s. Cannot get file piece status %s", tor.Name(), err.Error())
+		ch <- 'c'
+		psc.Close()
+		return ch
+	}
+	// Download is already completed
+	if completed {
+		ch <- 'c'
+		psc.Close()
+		return ch
+	}
+	// Pieces to be completed
 	go func() {
+		defer func() { ch <- 'c' }()
+		defer psc.Close()
 		for {
 			select {
-			case v := <-psc.Values:
-				// TODO (@evelynl): kraken-torrent lib should not return nil for suscribed events
-				// will need to look deeper at this
+			case v, more := <-psc.Values:
+				if !more {
+					log.Infof("Subscription closed for download %s", tor.Name())
+					return
+				}
 				if v == nil {
-					continue
+					log.Errorf("Failed to download %s. Subscription returned status nil", tor.Name())
+					return
 				}
 				status, ok := v.(torrent.PieceStateChange)
 				if !ok {
+					log.Errorf("Failed to download %s. Subscription returned status not PieceStateChange", tor.Name())
 					continue
 				}
+				log.Debugf("download status %s %d complete %v", tor.Name(), status.Index, status.Complete)
 				if status.Complete {
 					completedPieces = completedPieces + 1
 				}
-				if completedPieces == tor.NumPieces() {
-					ch <- 'c'
+				if completedPieces >= tor.NumPieces() {
+					// Check again to make sure
+					completed, _, err := c.isCompleted(tor)
+					if err != nil {
+						log.Errorf("Failed to check if torrent completed: %s", err.Error())
+					}
+					if completed {
+						return
+					}
 				}
 			}
 		}
 	}()
 	return ch
+}
+
+func (c *Client) isCompleted(tor *torrent.Torrent) (bool, int, error) {
+	completed, err := c.getNumCompletedPieces(tor)
+	if err != nil {
+		return false, 0, err
+	}
+
+	if completed == tor.NumPieces() {
+		return true, completed, nil
+	}
+	return false, completed, nil
+}
+
+func (c *Client) getNumCompletedPieces(tor *torrent.Torrent) (int, error) {
+	completedPieces := 0
+	status, err := c.store.GetFilePieceStatus(tor.Name(), 0, tor.NumPieces())
+	if err != nil {
+		log.Errorf("Failed to download %s. Cannot get file piece status %s", tor.Name(), err.Error())
+		return 0, err
+	}
+	for _, s := range status {
+		if s == store.PieceDone {
+			completedPieces++
+		}
+	}
+	return completedPieces, nil
 }
 
 func (c *Client) getTorrentInfoHashFromTracker(name string) ([]byte, error) {
