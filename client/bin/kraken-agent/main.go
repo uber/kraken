@@ -42,6 +42,8 @@ func main() {
 	// init torrent client
 	log.Info("Init torrent agent")
 	client, err := torrentclient.NewClient(config, store, clientTimeout)
+	defer client.Close()
+
 	if err != nil {
 		log.Fatal(err)
 	}

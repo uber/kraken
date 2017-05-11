@@ -77,7 +77,7 @@ func GetLocalIP() (string, error) {
 			}
 		}
 	}
-	return "", errors.New("Could not found any IPv4 network interface")
+	return "", errors.New("Could not find any IPv4 network interface")
 }
 
 // IPtoInt32 converts net.IP address to int32

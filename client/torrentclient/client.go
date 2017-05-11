@@ -11,6 +11,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/boltdb/bolt"
+
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken-torrent"
 	"code.uber.internal/infra/kraken-torrent/bencode"
@@ -32,10 +34,11 @@ const (
 
 // Client contains a bittorent client and its
 type Client struct {
-	config  *configuration.Config
-	store   *store.LocalFileStore
-	cl      *torrent.Client
-	timeout int //sec
+	config    *configuration.Config
+	store     *store.LocalFileStore
+	cl        *torrent.Client
+	torrentDB *bolt.DB
+	timeout   int //sec
 }
 
 // NewClient creates a new client
@@ -51,16 +54,104 @@ func NewClient(c *configuration.Config, s *store.LocalFileStore, t int) (*Client
 
 	torrentsManager := NewManager(c, s)
 	client, err := torrent.NewClient(c.CreateAgentConfig(torrentsManager))
+
 	if err != nil {
 		return nil, err
 	}
 
-	return &Client{
+	cli := &Client{
 		config:  c,
 		store:   s,
 		cl:      client,
 		timeout: t,
-	}, nil
+	}
+
+	cli.torrentDB, err = bolt.Open(
+		".torrents.list.bolt.db", 0600, &bolt.Options{Timeout: 1 * time.Second})
+
+	if err != nil {
+		log.Errorf("could not open boltdb database for torrents: %s", err)
+		return nil, err
+	}
+
+	return cli, cli.LoadTorrentList()
+}
+
+// LoadTorrentList adds or removes torrent's hash from persistent storage
+func (c *Client) LoadTorrentList() error {
+
+	return c.torrentDB.View(func(tx *bolt.Tx) error {
+		// Assume bucket exists and has keys
+		b := tx.Bucket([]byte("Torrents"))
+		log.Debugf("Loading torrents...")
+
+		if b == nil {
+			return nil
+		}
+
+		cur := b.Cursor()
+		for k, v := cur.First(); k != nil; k, v = cur.Next() {
+			log.Debugf("key=%s, value=%s\n", k, v)
+			if len(v) > 0 {
+				mi := &metainfo.MetaInfo{
+					InfoBytes: v,
+				}
+
+				_, err := c.AddTorrent(mi)
+				if err != nil {
+					log.Errorf("Could not add deserialize torrent %s", err)
+					return err
+				}
+			} else {
+				_, _, err := c.AddTorrentInfoHash(metainfo.NewHashFromHex(string(k)))
+				if err != nil {
+					log.Errorf("Could not add deserialize torrent %s", err)
+					return err
+				}
+			}
+		}
+
+		return nil
+	})
+
+}
+
+// UpdateTorrentList adds or removes torrent's hash from persistent storage
+func (c *Client) UpdateTorrentList(hash string, mi *metainfo.MetaInfo, remove bool) error {
+	log.Infof("Update torrent list for %s, remove: %s", hash, remove)
+
+	// Create and update bucket
+	return c.torrentDB.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte("Torrents"))
+		if err != nil && err != bolt.ErrBucketExists {
+			log.Errorf("create bucket has failed: %s", err)
+			return err
+		}
+
+		if remove == false {
+			if mi != nil {
+				err = b.Put([]byte(hash), mi.InfoBytes)
+				if err != nil {
+					log.Errorf("Could not put an entry to boltdb %s", err)
+					return err
+				}
+			} else {
+				err = b.Put([]byte(hash), []byte{})
+				if err != nil {
+					log.Errorf("Could not put an empty value to boltdb %s", err)
+					return err
+				}
+			}
+
+		} else {
+			err = b.Delete([]byte(hash))
+			if err != nil {
+				log.Errorf("Could not delete en entry from boltdb %s", err)
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // AddTorrent adds a torrent to the client given metainfo
@@ -68,7 +159,14 @@ func (c *Client) AddTorrent(mi *metainfo.MetaInfo) (*torrent.Torrent, error) {
 	if c.config.DisableTorrent {
 		return nil, fmt.Errorf("Torrent disabled")
 	}
-	return c.cl.AddTorrent(mi)
+	tor, err := c.cl.AddTorrent(mi)
+	if err != nil {
+		log.Errorf("Could not add torrent %s", err)
+		return nil, err
+	}
+
+	return tor, c.UpdateTorrentList(mi.HashInfoBytes().String(), mi, false)
+
 }
 
 // AddTorrentInfoHash adds a torrent to the client given infohash
@@ -77,7 +175,8 @@ func (c *Client) AddTorrentInfoHash(hash metainfo.Hash) (*torrent.Torrent, bool,
 		return nil, false, fmt.Errorf("Torrent disabled")
 	}
 	tor, new := c.cl.AddTorrentInfoHash(hash)
-	return tor, new, nil
+	err := c.UpdateTorrentList(hash.String(), nil, false)
+	return tor, new, err
 }
 
 // AddTorrentByName gets torrent info hash from tracker by name and adds the torrent to the client
@@ -106,7 +205,14 @@ func (c *Client) AddTorrentByName(name string) (*torrent.Torrent, error) {
 	}
 
 	// add torrent
-	tor, new := c.cl.AddTorrentInfoHash(metainfo.NewHashFromHex(string(infohash[:])))
+	tor, new, err := c.AddTorrentInfoHash(metainfo.NewHashFromHex(string(infohash[:])))
+	if err != nil {
+		log.WithFields(bark.Fields{
+			"name":  name,
+			"error": err,
+		}).Info("Failed to add torrent by name")
+		return nil, err
+	}
 
 	if new {
 		// add itself as peer
@@ -170,7 +276,7 @@ func (c *Client) CreateTorrentFromFile(name, filepath string) error {
 	}
 
 	// create torrent from info
-	t, err := c.cl.AddTorrent(mi)
+	t, err := c.AddTorrent(mi)
 	if err != nil {
 		log.WithFields(bark.Fields{
 			"name":     t.Name(),
@@ -513,6 +619,19 @@ func (c *Client) getLocalPeer() (torrent.Peer, error) {
 		IP:   net.ParseIP(ip),
 		Port: c.config.Agent.Backend,
 	}, nil
+}
+
+// Close release all the resources that client might have been opened
+func (c *Client) Close() error {
+	if c.torrentDB != nil {
+		err := c.torrentDB.Close()
+		if err != nil {
+			log.Errorf("Could not close torrents DB: %s", err)
+			return err
+		}
+	}
+	c.cl.Close()
+	return nil
 }
 
 // TorrentNotFoundError means the torrent cannot be found

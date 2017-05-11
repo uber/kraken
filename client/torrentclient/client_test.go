@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"code.uber.internal/infra/kraken-torrent/metainfo"
+
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/pressly/chi"
 	"github.com/stretchr/testify/assert"
@@ -52,6 +54,8 @@ func TestPostGetManifest(t *testing.T) {
 	defer _server.Close()
 	config.TrackerURL = _server.URL
 	cli, err := NewClient(config, store, 120)
+	defer cli.Close()
+
 	assert.Nil(t, err)
 
 	repo := successrepo
@@ -108,4 +112,32 @@ func TestPostGetManifest(t *testing.T) {
 	digest, err = cli.GetManifest(repo, tag)
 	assert.NotNil(t, err)
 	assert.Equal(t, "Torrent disabled", err.Error())
+}
+
+func TestLoadSaveTorrents(t *testing.T) {
+	config, store := getFileStore()
+	defer removeTestTorrentDirs(config)
+
+	_server = httptest.NewServer(getTestRouter())
+	defer _server.Close()
+
+	config.TrackerURL = _server.URL
+	cli, err := NewClient(config, store, 120)
+	assert.Nil(t, err)
+	assert.NotNil(t, cli)
+
+	infohash := "e940a7a57294e4c98f62514b32611e38181b6cae"
+	tor1, _, err := cli.AddTorrentInfoHash(metainfo.NewHashFromHex(infohash))
+	assert.Nil(t, err)
+	assert.NotNil(t, tor1)
+
+	cli.Close()
+
+	newcli, err := NewClient(config, store, 120)
+	assert.Nil(t, err)
+
+	tor2, _, err := newcli.Torrent(metainfo.NewHashFromHex(infohash))
+	defer newcli.Close()
+
+	assert.NotNil(t, tor2)
 }
