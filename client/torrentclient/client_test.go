@@ -85,6 +85,8 @@ func TestClient(t *testing.T) {
 
 	config.TrackerURL = _server.URL
 	cli, err := NewClient(config, s, 120)
+	defer cli.Close()
+
 	assert.Nil(t, err)
 	assert.NotNil(t, cli)
 
