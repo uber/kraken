@@ -689,6 +689,7 @@ func (c *Client) getLocalPeer() (torrent.Peer, error) {
 
 // Close release all the resources that client might have been opened
 func (c *Client) Close() error {
+	c.cl.Close()
 	if c.torrentDB != nil {
 		err := c.torrentDB.Close()
 		if err != nil {
@@ -696,7 +697,6 @@ func (c *Client) Close() error {
 			return err
 		}
 	}
-	c.cl.Close()
 	return nil
 }
 

@@ -87,6 +87,7 @@ func TestMain(m *testing.M) {
 		InfoHash:        infoHash,
 		PeerID:          peerID,
 		IP:              ip,
+		Priority:        0,
 		Port:            port,
 		BytesUploaded:   bytesUploaded,
 		BytesDownloaded: bytesDownloaded,

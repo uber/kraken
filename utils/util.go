@@ -70,8 +70,8 @@ func GetLocalIP() (string, error) {
 			return "", err
 		}
 
-		if len(addrs) > 0 {
-			ipnet, _ := addrs[0].(*net.IPNet)
+		for _, a := range addrs {
+			ipnet, _ := a.(*net.IPNet)
 			if ipnet.IP.To4() != nil {
 				return ipnet.IP.String(), nil
 			}

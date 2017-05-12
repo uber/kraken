@@ -12,7 +12,9 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/config/tracker"
+	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/storage"
+
 	"code.uber.internal/infra/kraken/utils"
 
 	bencode "github.com/jackpal/bencode-go"
@@ -33,6 +35,7 @@ type webApp interface {
 type webAppStruct struct {
 	appCfg    config.AppConfig
 	datastore storage.Storage
+	policy    peerhandoutpolicy.PeerHandoutPolicy
 }
 
 // AnnouncerResponse follows a bittorrent tracker protocol
@@ -44,7 +47,13 @@ type AnnouncerResponse struct {
 
 // newWebApp instantiates a web-app API backed by the input cache
 func newWebApp(cfg config.AppConfig, storage storage.Storage) webApp {
-	return &webAppStruct{appCfg: cfg, datastore: storage}
+	peerPolicyName := "default"
+	if len(cfg.PeerHandoutPolicy.Name) != 0 {
+		peerPolicyName = cfg.PeerHandoutPolicy.Name
+	}
+	peerPolicy := peerhandoutpolicy.PeerHandoutPolicies[peerPolicyName]
+
+	return &webAppStruct{appCfg: cfg, datastore: storage, policy: peerPolicy()}
 }
 
 // formatRequest generates ascii representation of a request
@@ -145,8 +154,17 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	peerInfos, err := webApp.datastore.Read(infoHash)
+
 	if err != nil {
 		log.Infof("Could not read storage: hash %s, error: %s, request: %s",
+			infoHash, err.Error(), webApp.FormatRequest(r))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	peerInfos, err = webApp.policy.GetPeers(peerIP, "", peerInfos)
+	if err != nil {
+		log.Infof("Could apply a peer handout policy: %s, error : %s, request: %s",
 			infoHash, err.Error(), webApp.FormatRequest(r))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
