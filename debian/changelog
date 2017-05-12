@@ -1,4 +1,4 @@
-kraken-agent (0.1.10) unstable; urgency=low
-    * Fix piece notitication in kraken-agent
+kraken-agent (0.1.11) unstable; urgency=low
+    * Fix bug in download subscription comms
 
  -- Igor Morozov <igor@uber.com> Tue, 02 May 2017 15:00:00 +0000
