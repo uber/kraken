@@ -12,7 +12,6 @@ import (
 	"code.uber.internal/infra/kraken-torrent"
 	"code.uber.internal/infra/kraken-torrent/storage"
 	"code.uber.internal/infra/kraken/utils"
-
 	rc "github.com/docker/distribution/configuration"
 )
 
@@ -72,6 +71,7 @@ type Config struct {
 		// Interval for running trash deletion in seconds
 		Interval int `yaml:"interval"`
 	} `yaml:"trash_deletion"`
+	Metrics map[string]interface{} `yaml:"metrics"`
 }
 
 // NewConfig creates a configuration based on environment var

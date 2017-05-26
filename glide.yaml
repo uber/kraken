@@ -13,6 +13,8 @@ import:
   - bencode
   - metainfo
   - storage
+- package: github.com/uber-go/tally
+  version: v2.1.0
 - package: github.com/docker/distribution
   version: 534b155cc89a8787a192dd95bf293e4dde19335d
   subpackages:
