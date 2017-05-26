@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
+	"code.uber.internal/infra/kraken/metrics"
 	rc "github.com/docker/distribution/configuration"
 	ctx "github.com/docker/distribution/context"
 	dr "github.com/docker/distribution/registry"
@@ -35,6 +36,13 @@ func main() {
 		config = configuration.NewConfig()
 	}
 	config.DisableTorrent = disableTorrent
+
+	// init metrics
+	_, metricsCloser, err := metrics.NewMetrics(config.Metrics)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer metricsCloser.Close()
 
 	// init storage
 	store := store.NewLocalFileStore(config)
