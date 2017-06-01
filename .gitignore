@@ -31,3 +31,6 @@ coverage.html
 
 # test db data
 db/data
+
+# For vim users.
+tags

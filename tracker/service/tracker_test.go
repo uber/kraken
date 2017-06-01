@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"reflect"
 	"strconv"
@@ -21,6 +22,7 @@ import (
 	"github.com/golang/mock/gomock"
 	bencode "github.com/jackpal/bencode-go"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type testMocks struct {
@@ -59,63 +61,35 @@ func performRequest(handler http.Handler, request *http.Request) *http.Response 
 }
 
 var (
-	peerFixture         *storage.PeerInfo
-	torrentFixture      *storage.TorrentInfo
+	peer                *storage.PeerInfo
+	torrent             *storage.TorrentInfo
 	announceRequestPath string
 )
 
 func TestMain(m *testing.M) {
+	torrent = storage.TorrentFixture()
+	peer = storage.PeerForTorrentFixture(torrent)
 
-	//TODO: turn it into a proper fixrture object,
-	infoHash := "12345678901234567890"
-	peerID := "09876543210987654321"
-	portStr := "6881"
-	ipStr := "-1062731519" //192.168.1.1
-	downloaded := "1234"
-	uploaded := "5678"
-	left := "910"
-	event := "stopped"
+	rawinfoHash, err := hex.DecodeString(torrent.InfoHash)
+	if err != nil {
+		panic(err)
+	}
+	rawpeerID, err := hex.DecodeString(peer.PeerID)
+	if err != nil {
+		panic(err)
+	}
 
-	port, _ := strconv.ParseInt(portStr, 10, 64)
-	bytesUploaded, _ := strconv.ParseInt(uploaded, 10, 64)
-	bytesDownloaded, _ := strconv.ParseInt(downloaded, 10, 64)
-	bytesLeft, _ := strconv.ParseInt(left, 10, 64)
-	ipInt32, _ := strconv.ParseInt(ipStr, 10, 32)
-	ip := utils.Int32toIP(int32(ipInt32)).String()
+	v := url.Values{}
+	v.Set("info_hash", string(rawinfoHash))
+	v.Set("peer_id", string(rawpeerID))
+	v.Set("ip", strconv.Itoa(int(utils.IPtoInt32(net.ParseIP(peer.IP)))))
+	v.Set("port", strconv.FormatInt(peer.Port, 10))
+	v.Set("downloaded", strconv.FormatInt(peer.BytesDownloaded, 10))
+	v.Set("uploaded", strconv.FormatInt(peer.BytesUploaded, 10))
+	v.Set("left", strconv.FormatInt(peer.BytesLeft, 10))
+	v.Set("event", peer.Event)
 
-	peerFixture = &storage.PeerInfo{
-		InfoHash:        infoHash,
-		PeerID:          peerID,
-		IP:              ip,
-		Priority:        0,
-		Port:            port,
-		BytesUploaded:   bytesUploaded,
-		BytesDownloaded: bytesDownloaded,
-		BytesLeft:       bytesLeft,
-		Event:           event,
-		Flags:           0}
-
-	torrentFixture = &storage.TorrentInfo{
-		TorrentName: "torrent",
-		InfoHash:    infoHash,
-		Author:      "a guy",
-		NumPieces:   123,
-		PieceLength: 20000,
-		RefCount:    1,
-		Flags:       0}
-
-	rawinfoHash, _ := hex.DecodeString(torrentFixture.InfoHash)
-	rawpeerID, _ := hex.DecodeString(peerFixture.PeerID)
-
-	announceRequestPath =
-		"/announce?info_hash=" + string(rawinfoHash[:]) +
-			"&peer_id=" + string(rawpeerID[:]) +
-			"&ip=" + ipStr +
-			"&port=" + portStr +
-			"&downloaded=" + downloaded +
-			"&uploaded=" + uploaded +
-			"&left=" + left +
-			"&event=" + event
+	announceRequestPath = "/announce?" + v.Encode()
 
 	os.Exit(m.Run())
 }
@@ -129,7 +103,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		defer mocks.mockController(t)()
 
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
-		assert.Equal(t, 500, response.StatusCode)
+		require.Equal(t, 500, response.StatusCode)
 	})
 	t.Run("Return 200 and empty bencoded response", func(t *testing.T) {
 
@@ -138,15 +112,14 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()
 
-		mocks.datastore.EXPECT().Read(torrentFixture.InfoHash).Return([]storage.PeerInfo{}, nil)
-		mocks.datastore.EXPECT().Update(peerFixture).Return(nil)
+		mocks.datastore.EXPECT().Read(torrent.InfoHash).Return([]storage.PeerInfo{}, nil)
+		mocks.datastore.EXPECT().Update(peer).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
+		require.Equal(t, 200, response.StatusCode)
 		announceResponse := AnnouncerResponse{}
-		fmt.Println(response.Body)
 		bencode.Unmarshal(response.Body, &announceResponse)
 		assert.Equal(t, announceResponse.Interval, int64(0))
 		assert.Equal(t, announceResponse.Peers, []storage.PeerInfo{})
-		assert.Equal(t, 200, response.StatusCode)
 	})
 	t.Run("Return 200 and single peer bencoded response", func(t *testing.T) {
 
@@ -155,18 +128,18 @@ func TestAnnounceEndPoint(t *testing.T) {
 		defer mocks.mockController(t)()
 
 		peerTo := storage.PeerInfo{
-			PeerID: peerFixture.PeerID,
-			IP:     peerFixture.IP,
-			Port:   peerFixture.Port}
+			PeerID: peer.PeerID,
+			IP:     peer.IP,
+			Port:   peer.Port}
 
-		mocks.datastore.EXPECT().Read(torrentFixture.InfoHash).Return([]storage.PeerInfo{*peerFixture}, nil)
-		mocks.datastore.EXPECT().Update(peerFixture).Return(nil)
+		mocks.datastore.EXPECT().Read(torrent.InfoHash).Return([]storage.PeerInfo{*peer}, nil)
+		mocks.datastore.EXPECT().Update(peer).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
+		require.Equal(t, 200, response.StatusCode)
 		announceResponse := AnnouncerResponse{}
 		bencode.Unmarshal(response.Body, &announceResponse)
 		assert.Equal(t, announceResponse.Interval, int64(0))
 		assert.Equal(t, announceResponse.Peers, []storage.PeerInfo{peerTo})
-		assert.Equal(t, 200, response.StatusCode)
 	})
 
 }

@@ -2,18 +2,18 @@ package storage
 
 import (
 	"os"
-	"strconv"
 	"testing"
 
-	"code.uber.internal/go-common.git/x/log"
 	"gopkg.in/DATA-DOG/go-sqlmock.v1"
+
+	"code.uber.internal/go-common.git/x/log"
 )
 
 var (
-	store          Storage
-	mock           sqlmock.Sqlmock
-	peerFixture    *PeerInfo
-	torrentFixture *TorrentInfo
+	store   Storage
+	mock    sqlmock.Sqlmock
+	peer    *PeerInfo
+	torrent *TorrentInfo
 )
 
 func TestMain(m *testing.M) {
@@ -29,55 +29,23 @@ func TestMain(m *testing.M) {
 		db: db,
 	}
 
-	//TODO: turn it into a proper fixrture object,
-	infoHash := "12345678901234567890"
-	peerID := "09876543210987654321"
-	portStr := "6881"
-	ip := "255.255.255.255"
-	downloaded := "1234"
-	uploaded := "5678"
-	left := "910"
-	event := "stopped"
-
-	port, _ := strconv.ParseInt(portStr, 10, 64)
-	bytesUploaded, _ := strconv.ParseInt(uploaded, 10, 64)
-	bytesDownloaded, _ := strconv.ParseInt(downloaded, 10, 64)
-	bytesLeft, _ := strconv.ParseInt(left, 10, 64)
-
-	peerFixture = &PeerInfo{
-		InfoHash:        infoHash,
-		PeerID:          peerID,
-		IP:              ip,
-		Port:            port,
-		BytesUploaded:   bytesUploaded,
-		BytesDownloaded: bytesDownloaded,
-		BytesLeft:       bytesLeft,
-		Event:           event,
-		Flags:           0}
-
-	torrentFixture = &TorrentInfo{
-		TorrentName: "torrent",
-		InfoHash:    infoHash,
-		Author:      "a guy",
-		NumPieces:   123,
-		PieceLength: 20000,
-		RefCount:    1,
-		Flags:       0}
+	torrent = TorrentFixture()
+	peer = PeerForTorrentFixture(torrent)
 
 	os.Exit(m.Run())
 }
 
 func TestShouldInsertPeerInfo(t *testing.T) {
 	mock.ExpectExec("insert into peer").WithArgs(
-		peerFixture.InfoHash, peerFixture.PeerID, peerFixture.IP, peerFixture.Port,
-		peerFixture.BytesUploaded, peerFixture.BytesDownloaded,
-		peerFixture.BytesLeft, peerFixture.Event, peerFixture.Flags, // insert part
-		peerFixture.IP, peerFixture.Port, peerFixture.BytesUploaded,
-		peerFixture.BytesDownloaded, peerFixture.BytesLeft, peerFixture.Event,
-		peerFixture.Flags).WillReturnResult(sqlmock.NewResult(1, 1))
+		peer.InfoHash, peer.PeerID, peer.IP, peer.Port,
+		peer.BytesUploaded, peer.BytesDownloaded,
+		peer.BytesLeft, peer.Event, peer.Flags, // insert part
+		peer.IP, peer.Port, peer.BytesUploaded,
+		peer.BytesDownloaded, peer.BytesLeft, peer.Event,
+		peer.Flags).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// now we execute our method
-	err := store.Update(peerFixture)
+	err := store.Update(peer)
 
 	if err != nil {
 		t.Errorf("Update has faileds: %s", err)
@@ -91,12 +59,12 @@ func TestShouldInsertPeerInfo(t *testing.T) {
 
 func TestShouldCreateTorrent(t *testing.T) {
 	mock.ExpectExec("insert into torrent").WithArgs(
-		torrentFixture.TorrentName, torrentFixture.InfoHash, torrentFixture.Author,
-		torrentFixture.NumPieces, torrentFixture.PieceLength, torrentFixture.RefCount,
-		torrentFixture.Flags).WillReturnResult(sqlmock.NewResult(1, 1))
+		torrent.TorrentName, torrent.InfoHash, torrent.Author,
+		torrent.NumPieces, torrent.PieceLength, torrent.RefCount,
+		torrent.Flags).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// now we execute our method
-	err := store.CreateTorrent(torrentFixture)
+	err := store.CreateTorrent(torrent)
 
 	if err != nil {
 		t.Errorf("Update has faileds: %s", err)
