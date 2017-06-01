@@ -4,13 +4,19 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/schema2"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 // GetHostName returns host name
 func GetHostName() (string, error) {
@@ -110,4 +116,29 @@ func ParseManifestV2(data []byte) (distribution.Manifest, string, error) {
 		return nil, "", fmt.Errorf("Unsupported manifest version: %d", version)
 	}
 	return manifest, descriptor.Digest.Hex(), nil
+}
+
+const (
+	numbers = "0123456789"
+	letters = "abcdefghijklmnopqrstuvwxyz"
+)
+
+func chooseRandom(choices string, n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = choices[rand.Intn(len(choices))]
+	}
+	return string(b)
+}
+
+// RandomHexString returns a random hexadecimal string of length n.
+func RandomHexString(n int) string {
+	choices := numbers + letters[:6]
+	return chooseRandom(choices, n)
+}
+
+// RandomString returns a random alphanumeric string of length n.
+func RandomString(n int) string {
+	choices := letters + strings.ToUpper(letters) + numbers
+	return chooseRandom(choices, n)
 }
