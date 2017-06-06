@@ -36,6 +36,7 @@ func PeerFixture() *PeerInfo {
 		PeerID:          PeerIDFixture(),
 		IP:              "192.168.1.1",
 		Priority:        0,
+		DC:              "sjc1",
 		Port:            6881,
 		BytesUploaded:   5678,
 		BytesDownloaded: 1234,
