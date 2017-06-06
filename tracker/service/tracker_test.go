@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/config/tracker"
+	"code.uber.internal/infra/kraken/testutils"
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils"
 
@@ -33,7 +34,12 @@ type testMocks struct {
 
 // mockController sets up all mocks and returns a teardown func that can be called with defer
 func (m *testMocks) mockController(t gomock.TestReporter) func() {
-	m.appCfg = config.AppConfig{}
+	m.appCfg = config.AppConfig{
+		PeerHandoutPolicy: config.PeerHandoutConfig{
+			Priority: "default",
+			Sampling: "default",
+		},
+	}
 	m.ctrl = gomock.NewController(t)
 	m.datastore = mock_storage.NewMockStorage(m.ctrl)
 	return func() {
@@ -84,6 +90,7 @@ func TestMain(m *testing.M) {
 	v.Set("peer_id", string(rawpeerID))
 	v.Set("ip", strconv.Itoa(int(utils.IPtoInt32(net.ParseIP(peer.IP)))))
 	v.Set("port", strconv.FormatInt(peer.Port, 10))
+	v.Set("dc", peer.DC)
 	v.Set("downloaded", strconv.FormatInt(peer.BytesDownloaded, 10))
 	v.Set("uploaded", strconv.FormatInt(peer.BytesUploaded, 10))
 	v.Set("left", strconv.FormatInt(peer.BytesLeft, 10))
@@ -112,7 +119,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()
 
-		mocks.datastore.EXPECT().Read(torrent.InfoHash).Return([]storage.PeerInfo{}, nil)
+		mocks.datastore.EXPECT().Read(torrent.InfoHash).Return([]*storage.PeerInfo{}, nil)
 		mocks.datastore.EXPECT().Update(peer).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
 		require.Equal(t, 200, response.StatusCode)
@@ -127,19 +134,19 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()
 
-		peerTo := storage.PeerInfo{
+		peerTo := &storage.PeerInfo{
 			PeerID: peer.PeerID,
 			IP:     peer.IP,
 			Port:   peer.Port}
 
-		mocks.datastore.EXPECT().Read(torrent.InfoHash).Return([]storage.PeerInfo{*peer}, nil)
+		mocks.datastore.EXPECT().Read(torrent.InfoHash).Return([]*storage.PeerInfo{peer}, nil)
 		mocks.datastore.EXPECT().Update(peer).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
-		require.Equal(t, 200, response.StatusCode)
+		testutils.RequireStatus(t, response, 200)
 		announceResponse := AnnouncerResponse{}
 		bencode.Unmarshal(response.Body, &announceResponse)
 		assert.Equal(t, announceResponse.Interval, int64(0))
-		assert.Equal(t, announceResponse.Peers, []storage.PeerInfo{peerTo})
+		assert.Equal(t, announceResponse.Peers, []storage.PeerInfo{*peerTo})
 	})
 
 }

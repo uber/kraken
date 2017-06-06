@@ -43,6 +43,11 @@ type PeerInfo struct {
 	Flags           uint   `bencode:"-"`
 }
 
+// DownloadComplete indicates whether the peer has finished downloading.
+func (p *PeerInfo) DownloadComplete() bool {
+	return p.BytesDownloaded > 0 && p.BytesLeft == 0
+}
+
 // Manifest defines manifest for a content(torrent)
 type Manifest struct {
 	TagName  string
@@ -55,7 +60,7 @@ type Storage interface {
 	//name of a storage engine
 	Name() string
 	//Read peer info
-	Read(infoHash string) ([]PeerInfo, error)
+	Read(infoHash string) ([]*PeerInfo, error)
 	//Upsert Peer info
 	Update(peerInfo *PeerInfo) error
 	//Delete all peers by hash_info

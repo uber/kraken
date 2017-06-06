@@ -48,8 +48,8 @@ func (ds *MySQLDataStore) Name() string {
 }
 
 // Read reads PeerInfo identified by infoHash key from a storage
-func (ds *MySQLDataStore) Read(infoHash string) ([]PeerInfo, error) {
-	var peers []PeerInfo
+func (ds *MySQLDataStore) Read(infoHash string) ([]*PeerInfo, error) {
+	var peers []*PeerInfo
 
 	rows, err := ds.db.Query(selectPeerStatememtStr, infoHash)
 	if err != nil {
@@ -73,7 +73,7 @@ func (ds *MySQLDataStore) Read(infoHash string) ([]PeerInfo, error) {
 
 			return peers, err
 		}
-		peers = append(peers, *p)
+		peers = append(peers, p)
 	}
 	if err := rows.Err(); err != nil {
 		log.Error(err)

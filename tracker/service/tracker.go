@@ -47,13 +47,13 @@ type AnnouncerResponse struct {
 
 // newWebApp instantiates a web-app API backed by the input cache
 func newWebApp(cfg config.AppConfig, storage storage.Storage) webApp {
-	peerPolicyName := "default"
-	if len(cfg.PeerHandoutPolicy.Name) != 0 {
-		peerPolicyName = cfg.PeerHandoutPolicy.Name
+	policy, ok := peerhandoutpolicy.Get(cfg.PeerHandoutPolicy.Priority, cfg.PeerHandoutPolicy.Sampling)
+	if !ok {
+		log.Fatalf(
+			"Peer handout policy not found: priority=%s sampling=%s",
+			cfg.PeerHandoutPolicy.Priority, cfg.PeerHandoutPolicy.Sampling)
 	}
-	peerPolicy := peerhandoutpolicy.PeerHandoutPolicies[peerPolicyName]
-
-	return &webAppStruct{appCfg: cfg, datastore: storage, policy: peerPolicy()}
+	return &webAppStruct{appCfg: cfg, datastore: storage, policy: policy}
 }
 
 // formatRequest generates ascii representation of a request
@@ -92,6 +92,7 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 	peerID := hex.EncodeToString([]byte(queryValues.Get("peer_id")))
 	peerPortStr := queryValues.Get("port")
 	peerIPStr := queryValues.Get("ip")
+	peerDC := queryValues.Get("dc")
 	peerBytesDownloadedStr := queryValues.Get("downloaded")
 	peerBytesUploadedStr := queryValues.Get("uploaded")
 	peerBytesLeftStr := queryValues.Get("left")
@@ -134,18 +135,20 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 
 	peerIP := utils.Int32toIP(int32(peerIPInt32)).String()
 
-	err = webApp.datastore.Update(
-		&storage.PeerInfo{
-			InfoHash:        infoHash,
-			PeerID:          peerID,
-			IP:              peerIP,
-			Port:            peerPort,
-			BytesUploaded:   peerBytesUploaded,
-			BytesDownloaded: peerBytesDownloaded,
-			// TODO (@evelynl): our torrent library use uint64 as bytes left but database/sql does not support it
-			BytesLeft: int64(peerBytesLeft),
-			Event:     peerEvent})
+	peer := &storage.PeerInfo{
+		InfoHash:        infoHash,
+		PeerID:          peerID,
+		IP:              peerIP,
+		Port:            peerPort,
+		DC:              peerDC,
+		BytesUploaded:   peerBytesUploaded,
+		BytesDownloaded: peerBytesDownloaded,
+		// TODO (@evelynl): our torrent library use uint64 as bytes left but database/sql does not support it
+		BytesLeft: int64(peerBytesLeft),
+		Event:     peerEvent,
+	}
 
+	err = webApp.datastore.Update(peer)
 	if err != nil {
 		log.Infof("Could not update storage for: hash %s, error: %s, request: %s",
 			infoHash, err.Error(), webApp.FormatRequest(r))
@@ -154,7 +157,6 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	peerInfos, err := webApp.datastore.Read(infoHash)
-
 	if err != nil {
 		log.Infof("Could not read storage: hash %s, error: %s, request: %s",
 			infoHash, err.Error(), webApp.FormatRequest(r))
@@ -162,20 +164,40 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	peerInfos, err = webApp.policy.GetPeers(peerIP, "", peerInfos)
+	err = webApp.policy.AssignPeerPriority(peerIP, peerDC, peerInfos)
 	if err != nil {
-		log.Infof("Could apply a peer handout policy: %s, error : %s, request: %s",
+		log.Infof("Could not apply a peer handout priority policy: %s, error : %s, request: %s",
 			infoHash, err.Error(), webApp.FormatRequest(r))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	// TODO(codyg): Accept peer limit query argument.
+	peerInfos, err = webApp.policy.SamplePeers(peerInfos, len(peerInfos))
+	if err != nil {
+		msg := "Could not apply peer handout sampling policy"
+		log.WithFields(log.Fields{
+			"error":     err.Error(),
+			"info_hash": infoHash,
+			"request":   webApp.FormatRequest(r),
+		}).Info(msg)
+		http.Error(w, fmt.Sprintf("%s: %v", msg, err), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// TODO(codyg): bencode can't serialize pointers, so we're forced to dereference
+	// every PeerInfo first.
+	derefPeerInfos := make([]storage.PeerInfo, len(peerInfos))
+	for i, p := range peerInfos {
+		derefPeerInfos[i] = *p
+	}
 
 	// write peers bencoded
 	err = bencode.Marshal(w, AnnouncerResponse{
 		Interval: webApp.appCfg.Announcer.AnnounceInterval,
-		Peers:    peerInfos,
+		Peers:    derefPeerInfos,
 	})
 	if err != nil {
 		log.Infof("Bencode marshalling has failed: %s for request: %s", err.Error(), webApp.FormatRequest(r))
