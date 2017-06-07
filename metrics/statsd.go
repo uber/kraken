@@ -13,7 +13,7 @@ import (
 const (
 	statsdName    = "statsd"
 	flushInterval = 100 //millisec
-	flushBytes    = 1
+	flushBytes    = 512
 	sampleRate    = 1.0
 )
 
@@ -57,13 +57,12 @@ func (r statsdReportor) create(parameters map[string]interface{}) (tally.Scope, 
 	}
 
 	// Create statter, reporter and scope
-	statter, _ := statsd.NewBufferedClient(metricHostPort, "stats", flushInterval*time.Millisecond, flushBytes)
+	statter, _ := statsd.NewBufferedClient(metricHostPort, metricPrefix, flushInterval*time.Millisecond, flushBytes)
 	r.reportor = tallystatsd.NewReporter(statter, tallystatsd.Options{
 		SampleRate: sampleRate,
 	})
 
 	scope, closer := tally.NewRootScope(tally.ScopeOptions{
-		Prefix:   metricPrefix,
 		Tags:     map[string]string{},
 		Reporter: r.reportor,
 	}, time.Second)
