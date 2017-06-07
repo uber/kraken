@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
+	"github.com/uber-go/tally"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken-torrent"
@@ -39,10 +40,15 @@ type Client struct {
 	cl        *torrent.Client
 	torrentDB *bolt.DB
 	timeout   int //sec
+
+	// metrics
+	downloadTimer          tally.Timer
+	successDownloadCounter tally.Counter
+	failureDownloadCounter tally.Counter
 }
 
 // NewClient creates a new client
-func NewClient(c *configuration.Config, s *store.LocalFileStore, t int) (*Client, error) {
+func NewClient(c *configuration.Config, s *store.LocalFileStore, metrics tally.Scope, t int) (*Client, error) {
 	if c.DisableTorrent {
 		log.Info("Torrent disabled")
 		return &Client{
@@ -60,10 +66,13 @@ func NewClient(c *configuration.Config, s *store.LocalFileStore, t int) (*Client
 	}
 
 	cli := &Client{
-		config:  c,
-		store:   s,
-		cl:      client,
-		timeout: t,
+		config:                 c,
+		store:                  s,
+		cl:                     client,
+		timeout:                t,
+		downloadTimer:          metrics.Timer("torrentclient.time.download"),
+		successDownloadCounter: metrics.Counter("torrentclient.success.download"),
+		failureDownloadCounter: metrics.Counter("torrentclient.failure.download"),
 	}
 
 	cli.torrentDB, err = bolt.Open(
@@ -476,11 +485,16 @@ func (c *Client) Download(tor *torrent.Torrent) error {
 		return fmt.Errorf("Torrent disabled")
 	}
 
+	// record total time for download
+	sw := c.downloadTimer.Start()
+	defer sw.Stop()
+
 	// check torrent info
 	timer := time.NewTimer(time.Duration(c.timeout) * time.Second)
 	select {
 	case <-timer.C:
 		log.Errorf("Timeout waiting for info %s", tor.Name())
+		c.failureDownloadCounter.Inc(1)
 		return fmt.Errorf("Timeout waiting for torrent info: %s. Exceeds %d seconds", tor.Name(), c.timeout)
 	case <-tor.GotInfo():
 	}
@@ -491,9 +505,11 @@ func (c *Client) Download(tor *torrent.Torrent) error {
 	case <-timer.C:
 		tor.Drop()
 		log.Errorf("Timeout downloading %s", tor.Name())
+		c.failureDownloadCounter.Inc(1)
 		return fmt.Errorf("Timeout downloading torrent: %s. Exceeds %d seconds", tor.Name(), c.timeout)
 	case <-c.download(tor):
 		log.Debugf("Successfully downloaded torrent %s", tor.Name())
+		c.successDownloadCounter.Inc(1)
 		return nil
 	}
 }

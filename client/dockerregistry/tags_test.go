@@ -14,6 +14,7 @@ import (
 	"code.uber.internal/infra/kraken/configuration"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/uber-go/tally"
 )
 
 func getFileStoreClient() (*configuration.Config, *store.LocalFileStore, *torrentclient.Client) {
@@ -63,7 +64,7 @@ func getFileStoreClient() (*configuration.Config, *store.LocalFileStore, *torren
 		log.Fatal(err)
 	}
 	s := store.NewLocalFileStore(c)
-	client, err := torrentclient.NewClient(c, s, 120)
+	client, err := torrentclient.NewClient(c, s, tally.NoopScope, 120)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -79,7 +80,7 @@ func removeTestTorrentDirs(c *configuration.Config) {
 
 func setup() (*DockerTags, func()) {
 	config, filestore, client := getFileStoreClient()
-	tags, err := NewDockerTags(config, filestore, client)
+	tags, err := NewDockerTags(config, filestore, client, tally.NoopScope)
 	if err != nil {
 		log.Fatal(err)
 	}
