@@ -34,7 +34,7 @@ func NewMetrics(config map[string]interface{}) (tally.Scope, io.Closer, error) {
 		if !ok || defaultMetrics == nil {
 			return nil, nil, fmt.Errorf("Error initializing default metrics")
 		}
-		defaultMetrics.create(config)
+		return defaultMetrics.create(config)
 	}
 
 	typeParam, ok := config["type"]
