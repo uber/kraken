@@ -17,6 +17,7 @@ import (
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/registry/storage/driver/factory"
 	"github.com/robfig/cron"
+	"github.com/uber-go/tally"
 )
 
 // The path layout in the storage backend is roughly as follows:
@@ -76,7 +77,13 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 	}
 	client := clientParam.(*torrentclient.Client)
 
-	sd, err := NewKrakenStorageDriver(config, store, client)
+	metricsParam, ok := params["metrics"]
+	if !ok || metricsParam == nil {
+		log.Fatal("Failed to create storage driver. No metrics initiated.")
+	}
+	metrics := metricsParam.(tally.Scope)
+
+	sd, err := NewKrakenStorageDriver(config, store, client, metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -92,11 +99,16 @@ type KrakenStorageDriver struct {
 	blobs   *Blobs
 	uploads *Uploads
 	tags    Tags
+	metrics tally.Scope
 }
 
 // NewKrakenStorageDriver creates a new KrakenStorageDriver given Manager
-func NewKrakenStorageDriver(c *configuration.Config, s *store.LocalFileStore, cl *torrentclient.Client) (*KrakenStorageDriver, error) {
-	tags, err := NewDockerTags(c, s, cl)
+func NewKrakenStorageDriver(
+	c *configuration.Config,
+	s *store.LocalFileStore,
+	cl *torrentclient.Client,
+	metrics tally.Scope) (*KrakenStorageDriver, error) {
+	tags, err := NewDockerTags(c, s, cl, metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +151,7 @@ func NewKrakenStorageDriver(c *configuration.Config, s *store.LocalFileStore, cl
 		blobs:   NewBlobs(cl, s, c),
 		uploads: NewUploads(cl, s),
 		tags:    tags,
+		metrics: metrics,
 	}, nil
 }
 

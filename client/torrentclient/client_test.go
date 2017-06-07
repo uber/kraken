@@ -16,6 +16,7 @@ import (
 	"code.uber.internal/infra/kraken/client/store"
 	"github.com/pressly/chi"
 	"github.com/stretchr/testify/assert"
+	"github.com/uber-go/tally"
 )
 
 const (
@@ -56,7 +57,7 @@ func TestLoadSaveTorrents(t *testing.T) {
 	defer _server.Close()
 
 	config.TrackerURL = _server.URL
-	cli, err := NewClient(config, store, 120)
+	cli, err := NewClient(config, store, tally.NoopScope, 120)
 	assert.Nil(t, err)
 	assert.NotNil(t, cli)
 
@@ -67,7 +68,7 @@ func TestLoadSaveTorrents(t *testing.T) {
 
 	cli.Close()
 
-	newcli, err := NewClient(config, store, 120)
+	newcli, err := NewClient(config, store, tally.NoopScope, 120)
 	assert.Nil(t, err)
 
 	tor2, _, err := newcli.Torrent(metainfo.NewHashFromHex(infohash))
@@ -84,7 +85,7 @@ func TestClient(t *testing.T) {
 	defer _server.Close()
 
 	config.TrackerURL = _server.URL
-	cli, err := NewClient(config, s, 120)
+	cli, err := NewClient(config, s, tally.NoopScope, 120)
 	defer cli.Close()
 
 	assert.Nil(t, err)

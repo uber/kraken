@@ -38,7 +38,7 @@ func main() {
 	config.DisableTorrent = disableTorrent
 
 	// init metrics
-	_, metricsCloser, err := metrics.NewMetrics(config.Metrics)
+	metricsScope, metricsCloser, err := metrics.NewMetrics(config.Metrics)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func main() {
 
 	// init torrent client
 	log.Info("Init torrent agent")
-	client, err := torrentclient.NewClient(config, store, clientTimeout)
+	client, err := torrentclient.NewClient(config, store, metricsScope, clientTimeout)
 	defer client.Close()
 
 	if err != nil {
@@ -67,6 +67,7 @@ func main() {
 			"config":        config,
 			"torrentclient": client,
 			"store":         store,
+			"metrics":       metricsScope,
 		},
 		"redirect": rc.Parameters{
 			"disable": true,
