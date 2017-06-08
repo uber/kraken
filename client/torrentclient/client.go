@@ -26,11 +26,14 @@ import (
 )
 
 const (
-	uploadTimeout         = 120 //sec
-	downloadTimeout       = 120 //sec
-	requestTimeout        = 5   //sec
-	callTrackerRetries    = 3   //times
-	callTrackerRetrySleep = 1   //sec
+	uploadTimeout          = 120 //sec
+	downloadTimeout        = 120 //sec
+	requestTimeout         = 5   //sec
+	callTrackerRetries     = 3   //times
+	callTrackerRetrySleep  = 1   //sec
+	downloadTimer          = "torrentclient.time.download"
+	downloadSuccessCounter = "torrentclient.success.download"
+	downloadFailureCounter = "torrentclient.failure.download"
 )
 
 // Client contains a bittorent client and its
@@ -40,11 +43,7 @@ type Client struct {
 	cl        *torrent.Client
 	torrentDB *bolt.DB
 	timeout   int //sec
-
-	// metrics
-	downloadTimer          tally.Timer
-	successDownloadCounter tally.Counter
-	failureDownloadCounter tally.Counter
+	metrics   tally.Scope
 }
 
 // NewClient creates a new client
@@ -52,9 +51,10 @@ func NewClient(c *configuration.Config, s *store.LocalFileStore, metrics tally.S
 	if c.DisableTorrent {
 		log.Info("Torrent disabled")
 		return &Client{
-			config: c,
-			store:  s,
-			cl:     nil,
+			config:  c,
+			store:   s,
+			cl:      nil,
+			metrics: metrics,
 		}, nil
 	}
 
@@ -66,13 +66,11 @@ func NewClient(c *configuration.Config, s *store.LocalFileStore, metrics tally.S
 	}
 
 	cli := &Client{
-		config:                 c,
-		store:                  s,
-		cl:                     client,
-		timeout:                t,
-		downloadTimer:          metrics.Timer("torrentclient.time.download"),
-		successDownloadCounter: metrics.Counter("torrentclient.success.download"),
-		failureDownloadCounter: metrics.Counter("torrentclient.failure.download"),
+		config:  c,
+		store:   s,
+		cl:      client,
+		timeout: t,
+		metrics: metrics,
 	}
 
 	cli.torrentDB, err = bolt.Open(
@@ -486,7 +484,7 @@ func (c *Client) Download(tor *torrent.Torrent) error {
 	}
 
 	// record total time for download
-	sw := c.downloadTimer.Start()
+	sw := c.metrics.Timer(downloadTimer).Start()
 	defer sw.Stop()
 
 	// check torrent info
@@ -494,7 +492,7 @@ func (c *Client) Download(tor *torrent.Torrent) error {
 	select {
 	case <-timer.C:
 		log.Errorf("Timeout waiting for info %s", tor.Name())
-		c.failureDownloadCounter.Inc(1)
+		c.metrics.Counter(downloadFailureCounter).Inc(1)
 		return fmt.Errorf("Timeout waiting for torrent info: %s. Exceeds %d seconds", tor.Name(), c.timeout)
 	case <-tor.GotInfo():
 	}
@@ -505,11 +503,11 @@ func (c *Client) Download(tor *torrent.Torrent) error {
 	case <-timer.C:
 		tor.Drop()
 		log.Errorf("Timeout downloading %s", tor.Name())
-		c.failureDownloadCounter.Inc(1)
+		c.metrics.Counter(downloadFailureCounter).Inc(1)
 		return fmt.Errorf("Timeout downloading torrent: %s. Exceeds %d seconds", tor.Name(), c.timeout)
 	case <-c.download(tor):
 		log.Debugf("Successfully downloaded torrent %s", tor.Name())
-		c.successDownloadCounter.Inc(1)
+		c.metrics.Counter(downloadSuccessCounter).Inc(1)
 		return nil
 	}
 }
