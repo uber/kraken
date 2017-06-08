@@ -20,6 +20,14 @@ import (
 	"github.com/uber-go/tally"
 )
 
+const (
+	pullTimer            = "dockertag.time.pull"
+	createSuccessCounter = "dockertag.success.create"
+	createFailureCounter = "dockertag.failure.create"
+	getSuccessCounter    = "dockertag.success.get"
+	getFailureCounter    = "dockertag.failure.get"
+)
+
 // Tags is an interface
 type Tags interface {
 	ListTags(repo string) ([]string, error)
@@ -38,16 +46,10 @@ type Tags interface {
 type DockerTags struct {
 	sync.RWMutex
 
-	config *configuration.Config
-	store  *store.LocalFileStore
-	client *torrentclient.Client
-
-	// pullTimer records the time to get or downloading all layers and config referred by a tag
-	pullTimer            tally.Timer
-	successCreateCounter tally.Counter
-	failureCreateCounter tally.Counter
-	successGetCounter    tally.Counter
-	failureGetCounter    tally.Counter
+	config  *configuration.Config
+	store   *store.LocalFileStore
+	client  *torrentclient.Client
+	metrics tally.Scope
 }
 
 // Tag stores information about one tag.
@@ -71,14 +73,10 @@ func NewDockerTags(c *configuration.Config, s *store.LocalFileStore, cl *torrent
 		return nil, err
 	}
 	return &DockerTags{
-		config:               c,
-		store:                s,
-		client:               cl,
-		pullTimer:            metrics.Timer("dockertag.time.pull"),
-		successCreateCounter: metrics.Counter("dockertag.success.create"),
-		failureCreateCounter: metrics.Counter("dockertag.failure.create"),
-		successGetCounter:    metrics.Counter("dockertag.success.get"),
-		failureGetCounter:    metrics.Counter("dockertag.failure.get"),
+		config:  c,
+		store:   s,
+		client:  cl,
+		metrics: metrics,
 	}, nil
 }
 
@@ -181,9 +179,9 @@ func (t *DockerTags) DeleteExpiredTags(n int, expireTime time.Time) error {
 func (t *DockerTags) GetTag(repo, tag string) (manifestDigest string, err error) {
 	manifestDigest, err = t.getOrDownloadTag(repo, tag)
 	if err != nil {
-		t.failureGetCounter.Inc(1)
+		t.metrics.Counter(getFailureCounter).Inc(1)
 	} else {
-		t.successGetCounter.Inc(1)
+		t.metrics.Counter(getSuccessCounter).Inc(1)
 	}
 	return
 }
@@ -195,7 +193,7 @@ func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 	layers, err := t.getAllLayers(manifest)
 	if err != nil {
 		log.Errorf("CreateTag: cannot get all layers for %s:%s, error: %s", repo, tag, err)
-		t.failureCreateCounter.Inc(1)
+		t.metrics.Counter(createFailureCounter).Inc(1)
 		return err
 	}
 
@@ -203,7 +201,7 @@ func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 	err = t.createTag(repo, tag, manifest, layers)
 	if err != nil {
 		log.Errorf("CreateTag: cannot create a tag for %s:%s, error: %s", repo, tag, err)
-		t.failureCreateCounter.Inc(1)
+		t.metrics.Counter(createFailureCounter).Inc(1)
 		return err
 	}
 
@@ -211,7 +209,7 @@ func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 	err = t.client.PostManifest(repo, tag, manifest)
 	if err != nil {
 		log.Errorf("CreateTag: cannot post manifest for %s:%s, error: %s", repo, tag, err)
-		t.failureCreateCounter.Inc(1)
+		t.metrics.Counter(createFailureCounter).Inc(1)
 		return err
 	}
 
@@ -220,7 +218,7 @@ func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 		"tag":      tag,
 		"manifest": manifest,
 	}).Info("Successfully created tag")
-	t.successCreateCounter.Inc(1)
+	t.metrics.Counter(createSuccessCounter).Inc(1)
 
 	return nil
 }
@@ -281,7 +279,7 @@ func (t *DockerTags) getOrDownloadTag(repo, tag string) (string, error) {
 
 // getOrDownloadAllLayersAndCreateTag downloads all data for a tag
 func (t *DockerTags) getOrDownloadAllLayersAndCreateTag(repo, tag string) error {
-	sw := t.pullTimer.Start()
+	sw := t.metrics.Timer(pullTimer).Start()
 	defer sw.Stop()
 
 	manifestDigest, err := t.getOrDownloadManifest(repo, tag)
