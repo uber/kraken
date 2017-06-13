@@ -23,8 +23,8 @@ const (
 // Agent contains configuration of bittorrent agent
 type Agent struct {
 	PieceLength        int  `yaml:"piece_length"`
-	Frontend           int  `yaml:"frontend"`
-	Backend            int  `yaml:"backend"`
+	Port               int  `yaml:"port"`
+	TorrentClientPort  int  `yaml:"torrentClientPort"`
 	Seed               bool `yaml:"seed"`
 	Debug              bool `yaml:"debug"`
 	NoDHT              bool `yaml:"noDHT"`
@@ -146,7 +146,7 @@ func (c *Config) CreateAgentConfig(storage storage.ClientImpl) *torrent.Config {
 	return &torrent.Config{
 		DefaultStorage:      storage,
 		Seed:                acfg.Seed,
-		ListenAddr:          fmt.Sprintf("%s:%d", ip, acfg.Backend),
+		ListenAddr:          fmt.Sprintf("%s:%d", ip, acfg.TorrentClientPort),
 		NoUpload:            acfg.NoUpload,
 		DisableTCP:          acfg.DisableTCP,
 		NoDHT:               acfg.NoDHT,

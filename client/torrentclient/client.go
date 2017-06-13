@@ -697,7 +697,7 @@ func (c *Client) getLocalPeer() (torrent.Peer, error) {
 
 	return torrent.Peer{
 		IP:   net.ParseIP(ip),
-		Port: c.config.Agent.Backend,
+		Port: c.config.Agent.TorrentClientPort,
 	}, nil
 }
 

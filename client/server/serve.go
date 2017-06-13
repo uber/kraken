@@ -36,7 +36,7 @@ func (awa *AgentWebApp) Serve() {
 	router.HandleFunc("/status", awa.status).Methods("GET")
 	router.HandleFunc("/open", awa.openTorrent).Methods("POST")
 	router.HandleFunc("/download", awa.downloadTorrent).Methods("POST")
-	listen := fmt.Sprintf("0.0.0.0:%d", awa.config.Agent.Frontend)
+	listen := fmt.Sprintf("0.0.0.0:%d", awa.config.Agent.Port)
 	log.Infof("Agent web app listening at %s", listen)
 	log.Fatal(http.ListenAndServe(listen, router))
 }
