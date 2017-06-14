@@ -70,11 +70,12 @@ integration:
 		GOOS=linux GOARCH=amd64 make client/bin/kraken-agent/kraken-agent
 		docker build -t kraken-origin:dev -f docker/origin/Dockerfile ./
 		docker build -t kraken-peer:dev -f docker/peer/Dockerfile ./
+		make tools/bin/puller/puller
 		if [ ! -d env ]; then \
 		   virtualenv --setuptools env ; \
 		fi;
 		env/bin/pip install -r requirements-tests.txt
-		CONFIG_DIR=config/tracker/config env/bin/py.test test/python
+		CONFIG_DIR=config/tracker/config env/bin/py.test -v test/python
 
 # jenkins-only debian build job
 .PHONY: debian-kraken-agent
