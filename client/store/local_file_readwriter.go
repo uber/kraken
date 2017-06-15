@@ -2,28 +2,8 @@ package store
 
 import (
 	"fmt"
-	"io"
 	"os"
 )
-
-// FileReader provides read operation on a file.
-type FileReader interface {
-	io.Reader
-	io.ReaderAt
-	io.Seeker
-	io.Closer
-}
-
-// FileReadWriter provides read/write operation on a file.
-type FileReadWriter interface {
-	FileReader
-	io.Writer
-	io.WriterAt
-
-	Size() int64   // required by docker registry.
-	Cancel() error // required by docker registry.
-	Commit() error // required by docker registry.
-}
 
 // LocalFileReadWriter implements FileReadWriter interface, provides read/write operation on a
 // local file.
@@ -91,7 +71,7 @@ func (readWriter localFileReadWriter) Seek(offset int64, whence int) (int64, err
 
 // Size returns the size of the file.
 func (readWriter localFileReadWriter) Size() int64 {
-	fileInfo, err := readWriter.entry.Stat()
+	fileInfo, err := readWriter.entry.Stat(nil)
 	if err != nil {
 		return 0
 	}

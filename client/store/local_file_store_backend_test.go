@@ -100,12 +100,14 @@ func TestStoreBackend(t *testing.T) {
 	_, err = os.Stat(path.Join(_testDir2, testFileName))
 	assert.True(os.IsNotExist(err))
 	// Check goalstate
-	assert.Equal(backend.(*localFileStoreBackend).fileMap[testFileName].(*localFileEntry).state, stateTest1)
-	assert.Equal(backend.(*localFileStoreBackend).fileMap[testFileName].(*localFileEntry).openCount, 1)
+	f, _ := backend.(*localFileStoreBackend).fileMap.Load(testFileName)
+	assert.Equal(f.(*localFileEntry).state, stateTest1)
+	assert.Equal(f.(*localFileEntry).openCount, 1)
 	// Create new readWriter at new state
 	readWriterState1, err := backend.GetFileReadWriter(testFileName, []FileState{stateTest1})
 	assert.Nil(err)
-	assert.Equal(backend.(*localFileStoreBackend).fileMap[testFileName].(*localFileEntry).openCount, 2)
+	f, _ = backend.(*localFileStoreBackend).fileMap.Load(testFileName)
+	assert.Equal(f.(*localFileEntry).openCount, 2)
 	// Check content
 	dataState1, err := ioutil.ReadAll(readWriterState1)
 	assert.Nil(err)
@@ -142,8 +144,9 @@ func TestStoreBackend(t *testing.T) {
 
 	err = backend.MoveFile(testFileName, []FileState{stateTest1}, stateTest2)
 	assert.Nil(err)
-	assert.Equal(backend.(*localFileStoreBackend).fileMap[testFileName].(*localFileEntry).state, stateTest2)
-	assert.Equal(backend.(*localFileStoreBackend).fileMap[testFileName].(*localFileEntry).openCount, 0)
+	f, _ = backend.(*localFileStoreBackend).fileMap.Load(testFileName)
+	assert.Equal(f.(*localFileEntry).state, stateTest2)
+	assert.Equal(f.(*localFileEntry).openCount, 0)
 
 	// Test getFileReader
 	for i := 0; i < 100; i++ {
@@ -171,7 +174,7 @@ func TestStoreBackend(t *testing.T) {
 	reader, err := backend.GetFileReader(testFileName, []FileState{stateTest2})
 	reader.Close()
 	assert.Equal(reader.(*localFileReadWriter).entry.openCount, 0)
-	assert.False(reader.(*localFileReadWriter).entry.IsOpen())
+	assert.False(reader.(*localFileReadWriter).entry.IsOpen(nil))
 
 	// Test deleting file.
 	err = backend.DeleteFile(testFileName, []FileState{stateTest2})

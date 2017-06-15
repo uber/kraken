@@ -3,8 +3,6 @@ package torrentclient
 import (
 	"testing"
 
-	"code.uber.internal/infra/kraken/client/store"
-
 	"os"
 
 	"regexp"
@@ -57,16 +55,4 @@ func TestOpenCreated(t *testing.T) {
 	_, err = s.GetFilePieceStatus("t2", 0, 1)
 	match, _ := regexp.MatchString(".*no such file or directory.*", err.Error())
 	assert.True(match)
-}
-
-func TestOpenCached(t *testing.T) {
-	assert := require.New(t)
-	c, s := getFileStore()
-	defer removeTestTorrentDirs(c)
-
-	tor := NewTorrent(c, s, "t3", int64(1), 1)
-	new, err := s.CreateUploadFile(tor.name, tor.len)
-	assert.Nil(err)
-	assert.True(new)
-	assert.True(store.IsFileStateError(tor.Open()))
 }
