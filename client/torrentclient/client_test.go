@@ -112,6 +112,9 @@ func TestClient(t *testing.T) {
 		}
 
 		tor, err := cli.AddTorrent(mi)
+		// Need to call Drop() otherwise AddTorrent might trigger MarkNotComplete
+		tor.Drop()
+		assert.Nil(t, err)
 		cli.store.WriteDownloadFilePieceStatus(dl, []byte{store.PieceClean, store.PieceDirty, store.PieceClean, store.PieceDirty})
 		n, err := cli.getNumCompletedPieces(tor)
 		assert.Nil(t, err)
@@ -127,9 +130,6 @@ func TestClient(t *testing.T) {
 		assert.Nil(t, err)
 		assert.False(t, ok)
 		cli.store.WriteDownloadFilePieceStatus(dl, []byte{store.PieceDone, store.PieceDone, store.PieceDone, store.PieceDone})
-		n, err = cli.getNumCompletedPieces(tor)
-		assert.Nil(t, err)
-		assert.Equal(t, 4, n)
 		n, err = cli.getNumCompletedPieces(tor)
 		assert.Nil(t, err)
 		assert.Equal(t, 4, n)

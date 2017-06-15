@@ -129,7 +129,7 @@ func BigIntToFloat64(bytesUInt []byte, maxValue []byte, hasher hash.Hash) float6
 
 // Score computes score of a key for this node
 // in accordance to Weighted Rendezvous Hash. It's using big golang float
-// key is hexidemical encoding of a byte array
+// key as hexidemical encoding of a byte array
 func (rhn *RendezvousHashNode) Score(key string) float64 {
 	hasher := rhn.RHash.Hash()
 

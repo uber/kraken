@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/sync/syncmap"
 )
 
 type mockMetadata struct {
@@ -81,7 +82,7 @@ func getTestFileEntry() (*localFileStoreBackend, FileEntry, error) {
 
 	// Create empty file
 	backend := &localFileStoreBackend{
-		fileMap: make(map[string]FileEntry),
+		fileMap: &syncmap.Map{},
 	}
 	_, err := backend.CreateFile(testFileName, []FileState{}, stateTest1, 5)
 	if err != nil {
@@ -91,7 +92,8 @@ func getTestFileEntry() (*localFileStoreBackend, FileEntry, error) {
 	// Register mock metadata type
 	_testMetadataLookupFuncs = append(_testMetadataLookupFuncs, getMockMetadataFromPath)
 
-	return backend, backend.fileMap[testFileName], nil
+	entry, _ := backend.fileMap.Load(testFileName)
+	return backend, entry.(FileEntry), nil
 }
 
 func cleanupTestFileEntry() {
@@ -108,57 +110,57 @@ func TestMetadata(t *testing.T) {
 	b1 := make([]byte, 1)
 
 	// Invalid get
-	_, err = fe.ReadMetadata(m1)
+	_, err = fe.ReadMetadata(nil, m1)
 	assert.True(t, os.IsNotExist(err))
 
 	// Invalid write at
-	n, err := fe.WriteMetadataAt(m1, b, 0)
+	n, err := fe.WriteMetadataAt(nil, m1, b, 0)
 	assert.NotNil(t, err)
 	assert.Equal(t, n, 0)
 
 	// Set all
-	updated, err := fe.WriteMetadata(m1, []byte{PieceClean, PieceClean})
+	updated, err := fe.WriteMetadata(nil, m1, []byte{PieceClean, PieceClean})
 	assert.Nil(t, err)
 	assert.True(t, updated)
 
-	updated, err = fe.WriteMetadata(getMockMetadataOne(), []byte{PieceClean, PieceClean})
+	updated, err = fe.WriteMetadata(nil, getMockMetadataOne(), []byte{PieceClean, PieceClean})
 	assert.Nil(t, err)
 	assert.False(t, updated)
 
 	// Get all
-	b, err = fe.ReadMetadata(m1)
+	b, err = fe.ReadMetadata(nil, m1)
 	assert.Nil(t, err)
 	assert.NotNil(t, b)
 	assert.Equal(t, PieceClean, b[0])
 	assert.Equal(t, PieceClean, b[1])
 
 	// Invalid get
-	b, err = fe.ReadMetadata(getMockMetadataTwo())
+	b, err = fe.ReadMetadata(nil, getMockMetadataTwo())
 	assert.True(t, os.IsNotExist(err))
 
 	// Write at
-	n, err = fe.WriteMetadataAt(m1, []byte{PieceDirty}, 1)
+	n, err = fe.WriteMetadataAt(nil, m1, []byte{PieceDirty}, 1)
 	assert.Nil(t, err)
 	assert.Equal(t, n, 1)
 
-	n, err = fe.WriteMetadataAt(getMockMetadataOne(), []byte{PieceDirty}, 1)
+	n, err = fe.WriteMetadataAt(nil, getMockMetadataOne(), []byte{PieceDirty}, 1)
 	assert.Nil(t, err)
 	assert.Equal(t, n, 0)
 
 	// Read at
 	b = make([]byte, 2)
 	b1 = make([]byte, 1)
-	n, err = fe.ReadMetadataAt(m1, b1, 0)
+	n, err = fe.ReadMetadataAt(nil, m1, b1, 0)
 	assert.Nil(t, err)
 	assert.Equal(t, n, 1)
 	assert.Equal(t, PieceClean, b1[0])
 
-	n, err = fe.ReadMetadataAt(m1, b1, 1)
+	n, err = fe.ReadMetadataAt(nil, m1, b1, 1)
 	assert.Nil(t, err)
 	assert.Equal(t, n, 1)
 	assert.Equal(t, PieceDirty, b1[0])
 
-	n, err = fe.ReadMetadataAt(m1, b, 1)
+	n, err = fe.ReadMetadataAt(nil, m1, b, 1)
 	assert.NotNil(t, err)
 	assert.Equal(t, n, 1)
 	assert.Equal(t, PieceDirty, b1[0])
@@ -173,7 +175,7 @@ func TestMetadata(t *testing.T) {
 	assert.Nil(t, err)
 	_, err = os.Stat(path.Join(stateTest3.GetDirectory(), "test_file.txt"+getMockMetadataOne().Suffix()))
 	assert.NotNil(t, err)
-	b, err = fe.ReadMetadata(m1)
+	b, err = fe.ReadMetadata(nil, m1)
 	assert.Nil(t, err)
 	assert.NotNil(t, b)
 	assert.Equal(t, PieceClean, b[0])
@@ -181,61 +183,63 @@ func TestMetadata(t *testing.T) {
 
 	// Reload
 	backend = &localFileStoreBackend{
-		fileMap: make(map[string]FileEntry),
+		fileMap: &syncmap.Map{},
 	}
 	backend.GetFileStat("test_file.txt", []FileState{stateTest2})
-	fe = backend.fileMap["test_file.txt"]
+	entry, _ := backend.fileMap.Load("test_file.txt")
+	fe = entry.(FileEntry)
 
 	// Get all
-	b, err = fe.ReadMetadata(m1)
+	b, err = fe.ReadMetadata(nil, m1)
 	assert.Nil(t, err)
 	assert.NotNil(t, b)
 	assert.Equal(t, PieceClean, b[0])
 	assert.Equal(t, PieceDirty, b[1])
 
 	// Invalid get.
-	b, err = fe.ReadMetadata(getMockMetadataTwo())
+	b, err = fe.ReadMetadata(nil, getMockMetadataTwo())
 	assert.True(t, os.IsNotExist(err))
 
 	// Set all
-	updated, err = fe.WriteMetadata(m1, []byte{PieceDirty, PieceDirty})
-	b, err = fe.ReadMetadata(m1)
+	updated, err = fe.WriteMetadata(nil, m1, []byte{PieceDirty, PieceDirty})
+	b, err = fe.ReadMetadata(nil, m1)
 	assert.Nil(t, err)
 	assert.True(t, updated)
 
 	// Get all
-	b, err = fe.ReadMetadata(m1)
+	b, err = fe.ReadMetadata(nil, m1)
 	assert.Nil(t, err)
 	assert.NotNil(t, b)
 	assert.Equal(t, PieceDirty, b[0])
 	assert.Equal(t, PieceDirty, b[1])
 
-	content, err := ioutil.ReadFile(fe.GetPath() + getMockMetadataOne().Suffix())
+	fp, _ := fe.GetPath(nil)
+	content, err := ioutil.ReadFile(fp + getMockMetadataOne().Suffix())
 	assert.Nil(t, err)
 	assert.Equal(t, PieceDirty, content[0])
 	assert.Equal(t, PieceDirty, content[1])
 
 	// Write at
-	n, err = fe.WriteMetadataAt(m1, []byte{PieceDone}, 0)
+	n, err = fe.WriteMetadataAt(nil, m1, []byte{PieceDone}, 0)
 	assert.Nil(t, err)
 	assert.Equal(t, n, 1)
 
-	n, err = fe.WriteMetadataAt(m1, []byte{PieceDone}, 0)
+	n, err = fe.WriteMetadataAt(nil, m1, []byte{PieceDone}, 0)
 	assert.Nil(t, err)
 	assert.Equal(t, n, 0)
 
 	// Read at
-	n, err = fe.ReadMetadataAt(m1, b1, 0)
+	n, err = fe.ReadMetadataAt(nil, m1, b1, 0)
 	assert.Nil(t, err)
 	assert.Equal(t, n, 1)
 	assert.Equal(t, PieceDone, b1[0])
 
-	n, err = fe.ReadMetadataAt(m1, b1, 1)
+	n, err = fe.ReadMetadataAt(nil, m1, b1, 1)
 	assert.Nil(t, err)
 	assert.Equal(t, n, 1)
 	assert.Equal(t, PieceDirty, b1[0])
 
-	n, err = fe.ReadMetadataAt(m1, b, 1)
+	n, err = fe.ReadMetadataAt(nil, m1, b, 1)
 	assert.NotNil(t, err)
 	assert.Equal(t, n, 1)
 	assert.Equal(t, PieceDirty, b1[0])
@@ -243,9 +247,10 @@ func TestMetadata(t *testing.T) {
 	// Move file to invalid state
 	err = backend.MoveFile("test_file.txt", []FileState{stateTest2}, stateTest3)
 	assert.Nil(t, err)
-	fe = backend.fileMap["test_file.txt"]
+	entry, _ = backend.fileMap.Load("test_file.txt")
+	fe = entry.(FileEntry)
 
-	b, err = fe.ReadMetadata(m1)
+	b, err = fe.ReadMetadata(nil, m1)
 	assert.NotNil(t, err)
 
 	_, err = os.Stat(path.Join(stateTest1.GetDirectory(), "test_file.txt"+getMockMetadataOne().Suffix()))
@@ -257,9 +262,10 @@ func TestMetadata(t *testing.T) {
 
 	// Read and Write concurrently
 	backend.MoveFile("test_file.txt", []FileState{stateTest3}, stateTest1)
-	fe = backend.fileMap["test_file.txt"]
+	entry, _ = backend.fileMap.Load("test_file.txt")
+	fe = entry.(FileEntry)
 	b100 := make([]byte, 100)
-	updated, err = fe.WriteMetadata(m1, b100)
+	updated, err = fe.WriteMetadata(nil, m1, b100)
 	assert.Nil(t, err)
 	assert.True(t, updated)
 
@@ -272,16 +278,16 @@ func TestMetadata(t *testing.T) {
 			bb1 := make([]byte, 1)
 
 			// Write at
-			m, e := fe.WriteMetadataAt(m1, []byte{byte(value)}, int64(i))
+			m, e := fe.WriteMetadataAt(nil, m1, []byte{byte(value)}, int64(i))
 			assert.Nil(t, e)
 			assert.Equal(t, m, 1)
 
-			m, e = fe.WriteMetadataAt(getMockMetadataOne(), []byte{byte(value)}, int64(i))
+			m, e = fe.WriteMetadataAt(nil, getMockMetadataOne(), []byte{byte(value)}, int64(i))
 			assert.Nil(t, e)
 			assert.Equal(t, m, 0)
 
 			// Read at
-			m, e = fe.ReadMetadataAt(m1, bb1, int64(i))
+			m, e = fe.ReadMetadataAt(nil, m1, bb1, int64(i))
 			assert.Nil(t, e)
 			assert.Equal(t, m, 1)
 			assert.Equal(t, byte(value), bb1[0])
@@ -295,7 +301,7 @@ func TestMetadata(t *testing.T) {
 	// Delete
 	_, err = os.Stat(path.Join(stateTest3.GetDirectory(), "test_file.txt"+getMockMetadataOne().Suffix()))
 	assert.Nil(t, err)
-	err = fe.DeleteMetadata(m1)
+	err = fe.DeleteMetadata(nil, m1)
 	assert.Nil(t, err)
 	_, err = os.Stat(path.Join(stateTest3.GetDirectory(), "test_file.txt"+getMockMetadataOne().Suffix()))
 	assert.NotNil(t, err)
@@ -311,23 +317,24 @@ func TestRefCount(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		go func() {
-			maxCount := rand.Intn(100)
+			maxCount := rand.Intn(100) + 1
 			var refCount int64
 			var err error
 			for j := 0; j < maxCount; j++ {
 				// Inc
-				refCount, err = fe.IncrementRefCount()
+				refCount, err = fe.IncrementRefCount(nil)
 				assert.Nil(t, err)
 			}
 			assert.True(t, refCount >= int64(maxCount))
 
-			// Try remove
-			err = backend.DeleteFile(fe.GetName(), []FileState{stateTest1})
+			// Try Delete
+			fileName, _ := fe.GetName(nil)
+			err = backend.DeleteFile(fileName, []FileState{stateTest1})
 			assert.True(t, IsRefCountError(err))
 
 			for j := 0; j < maxCount; j++ {
 				// Dec
-				refCount, err = fe.DecrementRefCount()
+				refCount, err = fe.DecrementRefCount(nil)
 				assert.Nil(t, err)
 			}
 			wg.Done()
@@ -335,7 +342,7 @@ func TestRefCount(t *testing.T) {
 	}
 	wg.Wait()
 
-	refCount, err := fe.GetRefCount()
+	refCount, err := fe.GetRefCount(nil)
 	assert.Nil(t, err)
 	assert.Equal(t, refCount, int64(0))
 }

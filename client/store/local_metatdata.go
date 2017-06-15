@@ -14,14 +14,6 @@ const (
 	PieceDontCare = uint8(3)
 )
 
-// MetadataType is an interface that controls operations on metadata files.
-// Structs that implements MetadataType must make itself comparable, and have lookup logic defined
-// in getMetadataType()
-type MetadataType interface {
-	Suffix() string
-	IsValidState(state FileState) bool
-}
-
 // Hook for test metadata classes so they can be reloaded.
 var _testMetadataLookupFuncs []func(string) MetadataType
 

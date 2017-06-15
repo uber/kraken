@@ -1,11 +1,5 @@
 package store
 
-// FileState decides what directory a file is in.
-// A file can only be in one state at any given time.
-type FileState interface {
-	GetDirectory() string
-}
-
 // localFileState implements FileState for files on local disk.
 type localFileState int
 
@@ -25,15 +19,11 @@ const (
 	stateDownload
 	// File has been downloaded through torrent
 	stateCache
-	// File ready to be removed
-	stateTrash
 )
 
-var _stateLookup = make(map[string]FileState)
 var _directoryLookup = make(map[FileState]string)
 
 func registerFileState(s FileState, d string) {
-	_stateLookup[d] = s
 	_directoryLookup[s] = d
 }
 

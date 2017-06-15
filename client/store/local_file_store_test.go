@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -9,8 +10,6 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/configuration"
-
-	"fmt"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -41,6 +40,10 @@ func GetTestFileStore() (*configuration.Config, *LocalFileStore) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	err = os.MkdirAll(c.TrashDir, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
 	err = os.MkdirAll(c.TagDir, 0755)
 	if err != nil {
 		log.Fatal(err)
@@ -54,6 +57,10 @@ func GetTestFileStore() (*configuration.Config, *LocalFileStore) {
 		log.Fatal(err)
 	}
 	c.DownloadDir, err = ioutil.TempDir(c.DownloadDir, "testtags")
+	if err != nil {
+		log.Fatal(err)
+	}
+	c.TrashDir, err = ioutil.TempDir(c.TrashDir, "testtags")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -101,7 +108,7 @@ func TestDownloadAndDeleteFiles(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		testFileName := fmt.Sprintf("test_%d", i)
-		_, err := os.Stat(path.Join(stateTrash.GetDirectory(), testFileName))
+		_, err := os.Stat(path.Join(c.TrashDir, testFileName))
 		assert.True(t, os.IsNotExist(err))
 	}
 }
