@@ -28,6 +28,13 @@ var (
 	diffDatacenter         = fixture{"10.17.22.28", "dca1", false}
 )
 
+func makeSourcePeer() *storage.PeerInfo {
+	return &storage.PeerInfo{
+		IP: sourceIP,
+		DC: sourceDC,
+	}
+}
+
 func makePeerFixtures(fs ...fixture) []*storage.PeerInfo {
 	var peers []*storage.PeerInfo
 	for _, fixture := range fs {
@@ -57,12 +64,13 @@ func TestDefaultPeerPriorityPolicy(t *testing.T) {
 
 	t.Run("Assign priority 0 to all", func(t *testing.T) {
 		policy, _ := Get("default", "default")
+		src := makeSourcePeer()
 		peers := makePeerFixtures(sameRack, samePod, sameDatacenter)
 		for _, p := range peers {
 			// Initialize priority to non-zero to make sure we actually set something.
 			p.Priority = 5
 		}
-		require.NoError(t, policy.AssignPeerPriority(sourceIP, sourceDC, peers))
+		require.NoError(t, policy.AssignPeerPriority(src, peers))
 		for _, peer := range peers {
 			assert.Equal(t, int64(0), peer.Priority)
 		}
@@ -73,8 +81,9 @@ func TestIPv4NetmaskPeerPriorityPolicy(t *testing.T) {
 
 	t.Run("Prioritize by racks, pods and datacenters affinity", func(t *testing.T) {
 		policy, _ := Get("ipv4netmask", "default")
+		src := makeSourcePeer()
 		peers := makePeerFixtures(sameRack, samePod, sameDatacenter, diffDatacenter)
-		require.NoError(t, policy.AssignPeerPriority(sourceIP, sourceDC, peers))
+		require.NoError(t, policy.AssignPeerPriority(src, peers))
 		expected := map[fixture]int64{
 			sameRack:       0,
 			samePod:        1,
@@ -97,8 +106,9 @@ func TestDefaultPeerSamplingPolicy(t *testing.T) {
 
 	t.Run("Sorts peers by priority", func(t *testing.T) {
 		policy, _ := Get("ipv4netmask", "default")
+		src := makeSourcePeer()
 		peers := makePeerFixtures(sameRack, samePod, sameDatacenter)
-		require.NoError(t, policy.AssignPeerPriority(sourceIP, sourceDC, peers))
+		require.NoError(t, policy.AssignPeerPriority(src, peers))
 		peers, err := policy.SamplePeers(peers, len(peers))
 		require.NoError(t, err)
 		for i, priority := range []int64{0, 1, 2} {
@@ -111,9 +121,10 @@ func TestCompletenessPeerSamplingPolicy(t *testing.T) {
 
 	t.Run("Sorts peers by downloaded bytes, then priority", func(t *testing.T) {
 		policy, _ := Get("ipv4netmask", "completeness")
+		src := makeSourcePeer()
 		peers := makePeerFixtures(
 			sameRack, sameRackComplete, sameDatacenter, sameDatacenterComplete)
-		require.NoError(t, policy.AssignPeerPriority(sourceIP, sourceDC, peers))
+		require.NoError(t, policy.AssignPeerPriority(src, peers))
 		peers, err := policy.SamplePeers(peers, len(peers))
 		require.NoError(t, err)
 		for i, f := range []fixture{

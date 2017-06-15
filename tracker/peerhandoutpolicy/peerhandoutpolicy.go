@@ -7,8 +7,9 @@ import (
 
 // PeerPriorityPolicy defines the policy for assigning priority to peers.
 type PeerPriorityPolicy interface {
-	// AssignPeerPriority mutates peers by setting Priority for each PeerInfo.
-	AssignPeerPriority(sourceIP, sourceDC string, peers []*storage.PeerInfo) error
+	// AssignPeerPriority mutates peers by setting Priority for each PeerInfo
+	// based on the source peer. Note, should not set Priority on source.
+	AssignPeerPriority(source *storage.PeerInfo, peers []*storage.PeerInfo) error
 }
 
 // PeerSamplingPolicy defines the policy for selecting and ordering peers.

@@ -164,7 +164,7 @@ func (webApp *webAppStruct) GetAnnounceHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	err = webApp.policy.AssignPeerPriority(peerIP, peerDC, peerInfos)
+	err = webApp.policy.AssignPeerPriority(peer, peerInfos)
 	if err != nil {
 		log.Infof("Could not apply a peer handout priority policy: %s, error : %s, request: %s",
 			infoHash, err.Error(), webApp.FormatRequest(r))
