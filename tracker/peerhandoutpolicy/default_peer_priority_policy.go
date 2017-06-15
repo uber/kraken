@@ -14,7 +14,7 @@ func NewDefaultPeerPriorityPolicy() PeerPriorityPolicy {
 
 // AssignPeerPriority assigns all peers to the highest priority.
 func (p *DefaultPeerPriorityPolicy) AssignPeerPriority(
-	sourceIP string, sourceDC string, peers []*storage.PeerInfo) error {
+	source *storage.PeerInfo, peers []*storage.PeerInfo) error {
 
 	for _, peer := range peers {
 		peer.Priority = 0

@@ -16,14 +16,14 @@ func NewIPv4NetmaskPeerPriorityPolicy() PeerPriorityPolicy {
 
 // AssignPeerPriority sets priority based on network topology proximity to a source IP.
 func (p *IPv4NetmaskPeerPriorityPolicy) AssignPeerPriority(
-	sourceIP, sourceDC string, peers []*storage.PeerInfo) error {
+	source *storage.PeerInfo, peers []*storage.PeerInfo) error {
 
 	// Ideally this all needs to be in a clusto, it's just too expensive for
 	// now to support without implementing a sensible caching strategy
 	// please note currrenty neteng support both /16 and /17 masks per pod
 	// so it is possible some amount of peers on
 	// different pods could be missclassified as the same pods peers
-	src := net.ParseIP(sourceIP)
+	src := net.ParseIP(source.IP)
 
 	//local rack mask /24
 	localRackMask := net.CIDRMask(24, 32)
@@ -38,7 +38,7 @@ func (p *IPv4NetmaskPeerPriorityPolicy) AssignPeerPriority(
 		priorityPredicates := []bool{
 			dst.Mask(localRackMask).Equal(src.Mask(localRackMask)),
 			dst.Mask(localPodMask).Equal(src.Mask(localPodMask)),
-			sourceDC == peer.DC,
+			source.DC == peer.DC,
 		}
 
 		// Default to lowest priority.
