@@ -42,6 +42,10 @@ type Agent struct {
 		Rate  int `yaml:"rate"`
 		Limit int `yaml:"limit"`
 	} `yaml:"upload"`
+	// Note, if PeerID is empty, then a random id will be used
+	// by the torrent client. As such, it is likely only appropriate
+	// to manually set PeerID for testing purposes.
+	PeerID string `yaml:"peer_id"`
 }
 
 // Config contains application configuration
@@ -157,5 +161,6 @@ func (c *Config) CreateAgentConfig(storage storage.ClientImpl) *torrent.Config {
 		PreferNoEncryption:  acfg.PreferNoEncryption,
 		DownloadRateLimiter: dl,
 		UploadRateLimiter:   upl,
+		PeerID:              acfg.PeerID,
 	}
 }

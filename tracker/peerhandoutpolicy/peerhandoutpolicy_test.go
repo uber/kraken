@@ -137,3 +137,64 @@ func TestCompletenessPeerSamplingPolicy(t *testing.T) {
 		}
 	})
 }
+
+func TestMockNetworkPriorityPolicy(t *testing.T) {
+	t.Run("Prioritize peers by peer ID network schema", func(t *testing.T) {
+		policy, _ := Get("mock", "default")
+
+		// Peer IDs.
+		src := "0:r1:p1:d1"
+		mockSameRack := "1:r1:p1:d1"
+		mockSamePod := "2:r2:p1:d1"
+		mockSameDC := "3:r2:p2:d1"
+		mockDiffDC := "4:r2:p2:d2"
+
+		srcPeer := &storage.PeerInfo{PeerID: src}
+
+		var peers []*storage.PeerInfo
+		for _, id := range []string{
+			mockSameRack, mockSamePod, mockSameDC, mockDiffDC} {
+
+			peers = append(peers, &storage.PeerInfo{PeerID: id})
+		}
+
+		require.NoError(t, policy.AssignPeerPriority(srcPeer, peers))
+
+		expected := map[string]int64{
+			mockSameRack: 0,
+			mockSamePod:  1,
+			mockSameDC:   2,
+			mockDiffDC:   3,
+		}
+		assert.Equal(t, len(expected), len(peers))
+		for id, priority := range expected {
+			for _, p := range peers {
+				if p.PeerID == id {
+					assert.Equal(t, priority, p.Priority)
+				}
+			}
+		}
+	})
+
+	t.Run("Bad source peer id returns error", func(t *testing.T) {
+		policy, _ := Get("mock", "default")
+
+		src := &storage.PeerInfo{PeerID: "some-bad-id"}
+		peers := []*storage.PeerInfo{{PeerID: "a:b:c:d"}}
+
+		require.Error(t,
+			policy.AssignPeerPriority(src, peers),
+			ErrInvalidPeerIDFormat)
+	})
+
+	t.Run("Bad peer id returns error", func(t *testing.T) {
+		policy, _ := Get("mock", "default")
+
+		src := &storage.PeerInfo{PeerID: "a:b:c:d"}
+		peers := []*storage.PeerInfo{{PeerID: "some-bad-id"}}
+
+		require.Error(t,
+			policy.AssignPeerPriority(src, peers),
+			ErrInvalidPeerIDFormat)
+	})
+}

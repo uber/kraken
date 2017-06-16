@@ -31,3 +31,15 @@ func sortedPeers(peers []*storage.PeerInfo, n int, sort func(peerInfos)) []*stor
 	}
 	return newPeers[:n]
 }
+
+// Calculates a peers priority given a list of priority predicates. The priority
+// is defined to be the index of the first true predicate, or len(predicates)
+// if no predicates pass (i.e. the worst priority possible).
+func calcPriority(predicates []bool) int64 {
+	for i, p := range predicates {
+		if p {
+			return int64(i)
+		}
+	}
+	return int64(len(predicates))
+}
