@@ -35,22 +35,12 @@ func (p *IPv4NetmaskPeerPriorityPolicy) AssignPeerPriority(
 		dst := net.ParseIP(peer.IP)
 
 		// Sorted in descending order by priority (highest priority = 0).
-		priorityPredicates := []bool{
+		predicates := []bool{
 			dst.Mask(localRackMask).Equal(src.Mask(localRackMask)),
 			dst.Mask(localPodMask).Equal(src.Mask(localPodMask)),
 			source.DC == peer.DC,
 		}
-
-		// Default to lowest priority.
-		peer.Priority = int64(len(priorityPredicates))
-
-		for i, p := range priorityPredicates {
-			if p {
-				// The index of the predicate is the priority.
-				peer.Priority = int64(i)
-				break
-			}
-		}
+		peer.Priority = calcPriority(predicates)
 	}
 
 	return nil

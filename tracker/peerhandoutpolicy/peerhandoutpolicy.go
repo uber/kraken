@@ -54,6 +54,7 @@ func registerSamplingPolicy(name string, f SamplingFactory) {
 func init() {
 	registerPriorityPolicy("default", NewDefaultPeerPriorityPolicy)
 	registerPriorityPolicy("ipv4netmask", NewIPv4NetmaskPeerPriorityPolicy)
+	registerPriorityPolicy("mock", NewMockNetworkPriorityPolicy)
 
 	registerSamplingPolicy("default", NewDefaultPeerSamplingPolicy)
 	registerSamplingPolicy("completeness", NewCompletenessPeerSamplingPolicy)
