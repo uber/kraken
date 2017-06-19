@@ -10,5 +10,4 @@ EXPOSE 5052 5082 15082
 WORKDIR /root/kraken
 
 ### Metadata
-# TODO(codyg): Split development peer and integration test peer into separate Dockerfiles.
 ENTRYPOINT ["/usr/bin/kraken-agent", "-config=agent/development-peer-local.yaml"]

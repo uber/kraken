@@ -59,7 +59,7 @@ run_agent_origin:
 
 run_agent_peer:
 		make clean; GOOS=linux GOARCH=amd64 make client/bin/kraken-agent/kraken-agent
-		docker build -t kraken-peer:dev -f docker/peer/Dockerfile ./
+		docker build -t kraken-peer:dev -f docker/peer/dev/Dockerfile ./
 		docker stop kraken-peer || true
 		docker rm kraken-peer || true
 		docker run -d --name=kraken-peer -p 5052:5052 -p 5082:5082 --entrypoint="/root/kraken/scripts/start_peer.sh" kraken-peer:dev
@@ -68,14 +68,18 @@ integration:
 		make clean
 		GOOS=linux GOARCH=amd64 make tracker/tracker
 		GOOS=linux GOARCH=amd64 make client/bin/kraken-agent/kraken-agent
+		docker build -t kraken-tracker:test -f docker/tracker/Dockerfile ./
 		docker build -t kraken-origin:dev -f docker/origin/Dockerfile ./
-		docker build -t kraken-peer:dev -f docker/peer/Dockerfile ./
+		docker build -t kraken-peer:test -f docker/peer/test/Dockerfile ./
 		make tools/bin/puller/puller
 		if [ ! -d env ]; then \
 		   virtualenv --setuptools env ; \
 		fi;
 		env/bin/pip install -r requirements-tests.txt
-		CONFIG_DIR=config/tracker/config env/bin/py.test -v test/python
+		make run_integration
+
+run_integration:
+	CONFIG_DIR=config/tracker/config env/bin/py.test --timeout=60 -v test/python
 
 # jenkins-only debian build job
 .PHONY: debian-kraken-agent
