@@ -1,0 +1,1 @@
+Bencode encoding/decoding sub package. Uses similar API design to Go's json package.
