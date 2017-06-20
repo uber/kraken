@@ -5,14 +5,6 @@ import:
   subpackages:
   - x/config
   - x/log
-- package: code.uber.internal/infra/kraken-torrent
-  version: a29a931246bd48121d8ff477d0d662f630cb99d1
-  repo: gitolite@code.uber.internal:infra/kraken-torrent
-  vcs: git
-  subpackages:
-  - bencode
-  - metainfo
-  - storage
 - package: github.com/uber-go/tally
   version: v2.1.0
 - package: github.com/docker/distribution
@@ -52,6 +44,7 @@ import:
   version: ^1.2.0
 - package: github.com/spaolacci/murmur3
 - package: golang.org/x/sync/syncmap
+- package: github.com/golang/protobuf
 testImport:
 - package: github.com/stretchr/testify
   version: ^1.1.4

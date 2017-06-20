@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -84,6 +85,42 @@ func GetLocalIP() (string, error) {
 		}
 	}
 	return "", errors.New("Could not find any IPv4 network interface")
+}
+
+// AddrIP extracts IP address from a addr:port string
+func AddrIP(addr string) (net.IP, error) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+	return net.ParseIP(host), nil
+}
+
+// AddrPort extracts port from a addr:port string
+func AddrPort(addr string) (int, error) {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return -1, err
+	}
+	i64, err := strconv.ParseInt(port, 0, 0)
+	if err != nil {
+		return -1, err
+	}
+	return int(i64), nil
+}
+
+// AddrIPPort extracts IP address and port from a addr:port string
+func AddrIPPort(addr string) (net.IP, int, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, -1, err
+	}
+	i64, err := strconv.ParseInt(port, 0, 0)
+	if err != nil {
+		return nil, -1, err
+	}
+
+	return net.ParseIP(host), int(i64), nil
 }
 
 // IPtoInt32 converts net.IP address to int32

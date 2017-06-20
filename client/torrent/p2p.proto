@@ -1,0 +1,92 @@
+/*
+  P2PMessage represents a flavor of a P2P torrent protocol that kraken supports
+*/
+
+syntax = "proto3";
+
+message P2PMessage {
+
+  // Message type
+  enum Type {
+    BITFIELD		= 0;
+    PIECE_REQUEST 	= 1;
+    PIECE_PAYLOAD 	= 2;    
+    ANNOUCE_PIECE 	= 3;
+    CANCEL_PIECE 	= 4;
+    ERROR 		= 5;
+  }
+
+  // protocol version 
+  string version = 1;
+
+  // message type
+  Type type	 = 2;
+
+  // Binary set of all pieces that peer has downloaded so far
+  // This also serves as a first connection handshaking message
+  // so has info hash and peerID fields for this purpose
+  // to announce/request torrent hash and connection's peerID
+  message BitfieldMessage {
+    string 	  info 	   = 1; // torrent info key
+    string 	  peerID   = 2; // peerID of a p2p client
+    repeated bool bitfield = 3; // bitmap of pieces known/downloaded to that peer for the torrent
+  }
+
+  // Request for a peer
+  message PieceRequestMessage {
+    string info    = 1; // torrent info 
+    int32  index   = 2; // piece index in a torrent
+    int32  offset  = 3; // offset in a piece blob
+    int32  length  = 4; // length of a piece blob
+  }
+
+  // Provides binary payload response to a peer request
+  // It is usually followed by a binary blob sent over socket
+  // so a receiver should be ready to treat the blob as not
+  // protobuf message
+  message PiecePayloadMessage {
+    string info      = 1; // torrent info key
+    int32  index     = 2; // piece index in a torrent
+    int32  offset    = 3; // offset in a piece blob
+    int32  length    = 4; // length of a piece blob
+    string digest    = 5; // cryptographic signature of a piece content(sha1, md5)
+  }
+
+  // Advertises a piece to other peers
+  message AnnouncePieceMessage {
+    string info  = 1; // torrent info
+    int32  index = 2; // piece index in a torrent
+  }
+
+  // Cancel getting a piece
+  message CancelPieceMessage {
+    string info  = 1; // torrent info
+    int32  index = 2; // piece index in a torrent
+  }
+
+  // General Error message
+  message ErrorMessage {
+    string error = 1; // general error message  
+    string info  = 2; // torrent info key
+    int32  index = 3; // piece index
+    int32  code  = 4; // error code
+  }
+
+  // bitfield
+  BitfieldMessage	bitfield = 3;
+
+  // piece request
+  PieceRequestMessage 	pieceRequest = 4;
+
+  // piece response
+  PiecePayloadMessage	piecePayload = 5;
+
+  // announce piece
+  AnnouncePieceMessage  announcePiece = 6;
+
+  // cancel a piece
+  CancelPieceMessage 	cancelPiece = 7;
+
+  // error 
+  ErrorMessage		error = 8;
+}
