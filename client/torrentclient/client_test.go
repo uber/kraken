@@ -195,4 +195,37 @@ func TestClient(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.Equal(t, "Torrent disabled", err.Error())
 	})
+
+	t.Run("DeleteTorrent", func(t *testing.T) {
+		cli.config.DisableTorrent = false
+		name := "testdelettorrenttmp"
+		cli.store.CreateUploadFile("tmp", 0)
+		assert.Nil(t, cli.store.MoveUploadFileToCache("tmp", name))
+		fp := path.Join(cli.config.CacheDir, name)
+		assert.Nil(t, cli.CreateTorrentFromFile(name, fp))
+
+		info := metainfo.Info{
+			Name:        name,
+			PieceLength: int64(cli.config.Agent.PieceLength),
+		}
+		assert.Nil(t, info.BuildFromFilePath(fp))
+		infoBytes, _ := bencode.Marshal(info)
+		mi := &metainfo.MetaInfo{
+			InfoBytes: infoBytes,
+		}
+		ih := mi.HashInfoBytes()
+
+		// Verify exist
+		_, ok, _ := cli.Torrent(ih)
+		assert.True(t, ok)
+		_, err = os.Stat(fp)
+		assert.Nil(t, err)
+
+		// Delete torrent
+		assert.Nil(t, cli.DeleteTorrent(name, ih))
+		_, ok, _ = cli.Torrent(ih)
+		assert.False(t, ok)
+		_, err = os.Stat(fp)
+		assert.NotNil(t, err)
+	})
 }

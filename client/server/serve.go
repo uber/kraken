@@ -1,18 +1,37 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/pressly/chi"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken-torrent/metainfo"
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
-	"github.com/gorilla/mux"
 )
 
 const downloadTimeout = 120 // sec
+
+// AgentWebAppError implements Error interface
+type AgentWebAppError struct {
+	Msg string `json:"error"`
+}
+
+// NewAgentWebAppError creates a new AgentWebAppError given error msg string
+func NewAgentWebAppError(msg string) error {
+	return AgentWebAppError{
+		Msg: msg,
+	}
+}
+
+// Error implements error.Error()
+func (e AgentWebAppError) Error() string {
+	return fmt.Sprintf("AgnetWebAppError: %s", e.Msg)
+}
 
 // AgentWebApp is a web application that handles query to agent
 type AgentWebApp struct {
@@ -30,12 +49,13 @@ func NewAgentWebApp(config *configuration.Config, cl *torrentclient.Client) *Age
 
 // Serve starts the web service
 func (awa *AgentWebApp) Serve() {
-	router := mux.NewRouter()
-	router.HandleFunc("/", awa.health).Methods("GET")
-	router.HandleFunc("/health", awa.health).Methods("GET")
-	router.HandleFunc("/status", awa.status).Methods("GET")
-	router.HandleFunc("/open", awa.openTorrent).Methods("POST")
-	router.HandleFunc("/download", awa.downloadTorrent).Methods("POST")
+	router := chi.NewRouter()
+	router.Get("/", awa.health)
+	router.Get("/health", awa.health)
+	router.Get("/status", awa.status)
+	router.Post("/open", awa.openTorrent)
+	router.Post("/download", awa.downloadTorrent)
+	router.Post("/delete", awa.deleteTorrent)
 	listen := fmt.Sprintf("0.0.0.0:%d", awa.config.Agent.Port)
 	log.Infof("Agent web app listening at %s", listen)
 	log.Fatal(http.ListenAndServe(listen, router))
@@ -142,5 +162,49 @@ func (awa *AgentWebApp) downloadTorrent(w http.ResponseWriter, r *http.Request) 
 	log.Info("Torrent download completed.")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("New torrent downloaded"))
+	return
+}
+
+func (awa *AgentWebApp) deleteTorrent(w http.ResponseWriter, r *http.Request) {
+	// TODO (@evelynl): should we consider any authentication for tracker?
+	w.Header().Set("Content-Type", "application/json")
+
+	q := r.URL.Query()
+	name := q.Get("name")
+	ih := q.Get("info_hash")
+
+	var err error
+	defer func() {
+		if err != nil {
+			log.Error(err)
+			json.NewEncoder(w).Encode(AgentWebAppError{
+				Msg: err.Error(),
+			})
+		}
+	}()
+
+	// Returns error if missing name
+	if name == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		err = NewAgentWebAppError("Failed to delete torrent. Name not specified.")
+		return
+	}
+
+	if ih == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		err = NewAgentWebAppError("Failed to delete torrent. infohash not specified.")
+		return
+	}
+
+	// Delete torrent
+	err = awa.cl.DeleteTorrent(name, metainfo.NewHashFromHex(ih))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		err = NewAgentWebAppError(err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("{}"))
 	return
 }
