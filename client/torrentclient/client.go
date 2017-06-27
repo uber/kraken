@@ -36,6 +36,30 @@ const (
 	downloadFailureCounter = "torrentclient.failure.download"
 )
 
+// TorrentNotFoundError means the torrent cannot be found
+type TorrentNotFoundError struct {
+	Name string
+	Msg  string
+}
+
+func (e *TorrentNotFoundError) Error() string {
+	return fmt.Sprintf("Torrent not found: %s. %s", e.Name, e.Msg)
+}
+
+// IsTorrentNotFoundError returns true if the param is of TorrentNotFoundError type.
+func IsTorrentNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	switch err.(type) {
+	default:
+		return false
+	case *TorrentNotFoundError:
+		return true
+	}
+}
+
 // Client contains a bittorent client and its
 type Client struct {
 	config    *configuration.Config
@@ -714,26 +738,21 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// TorrentNotFoundError means the torrent cannot be found
-type TorrentNotFoundError struct {
-	Name string
-	Msg  string
-}
-
-func (e *TorrentNotFoundError) Error() string {
-	return fmt.Sprintf("Torrent not found: %s. %s", e.Name, e.Msg)
-}
-
-// IsTorrentNotFoundError returns true if the param is of TorrentNotFoundError type.
-func IsTorrentNotFoundError(err error) bool {
-	if err == nil {
-		return false
+// DeleteTorrent drops the torrent from torrentclient and delete it from storage
+func (c *Client) DeleteTorrent(name string, ih metainfo.Hash) (err error) {
+	tor, ok := c.cl.Torrent(ih)
+	if ok {
+		// Drop torrent from all download/uploads
+		err = c.UpdateTorrentList(ih.String(), nil, true)
+		if err != nil {
+			log.Error(err)
+			return err
+		}
+		tor.Drop()
 	}
-
-	switch err.(type) {
-	default:
-		return false
-	case *TorrentNotFoundError:
-		return true
+	err = c.store.MoveCacheFileToTrash(name)
+	if err != nil {
+		log.Error(err)
 	}
+	return
 }
