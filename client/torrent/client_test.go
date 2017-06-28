@@ -10,10 +10,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
 	"code.uber.internal/infra/kraken/utils"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
+
+func init() {
+	log.Configure(&log.Configuration{
+		Level:  log.DebugLevel,
+		Stdout: true,
+	}, true)
+}
 
 var TestingConfigOrigin = Config{
 	ListenAddr: "127.0.0.1:4001",
@@ -44,9 +52,8 @@ func testClientTransfer(t *testing.T) {
 	require.NoError(t, err)
 	defer origin.Close()
 
-	_, new, err := origin.AddTorrentSpec(SpecFromMetaInfo(mi))
+	_, err = origin.AddTorrentSpec(SpecFromMetaInfo(mi))
 	require.NoError(t, err)
-	assert.False(t, new)
 }
 
 func TestClientTransfer(t *testing.T) {
@@ -60,9 +67,8 @@ func TestClientTransfer(t *testing.T) {
 	require.NoError(t, err)
 	defer origin.Close()
 
-	originTorrent, new, err := origin.AddTorrentSpec(SpecFromMetaInfo(mi))
+	originTorrent, err := origin.AddTorrentSpec(SpecFromMetaInfo(mi))
 	require.NoError(t, err)
-	assert.True(t, new)
 
 	defer os.RemoveAll(TestingConfigPeer.DataDir)
 	defer os.RemoveAll(TestingConfigPeer.DataDir)
@@ -72,12 +78,8 @@ func TestClientTransfer(t *testing.T) {
 	require.NoError(t, err)
 	defer peer.Close()
 
-	peerTorrent, new, err := peer.AddTorrentSpec(func() (ret *Spec) {
-		ret = SpecFromMetaInfo(mi)
-		return
-	}())
+	peerTorrent, err := peer.AddTorrentSpec(SpecFromMetaInfo(mi))
 	require.NoError(t, err)
-	assert.True(t, new)
 
 	ip, err := utils.AddrIP(origin.ListenAddr().String())
 	require.NoError(t, err)

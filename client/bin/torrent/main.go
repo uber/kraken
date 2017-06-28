@@ -59,7 +59,7 @@ func main() {
 			return
 		}
 
-		seedt, _, err := origin.AddTorrentSpec(torrent.SpecFromMetaInfo(mi))
+		seedt, err := origin.AddTorrentSpec(torrent.SpecFromMetaInfo(mi))
 
 		defer os.RemoveAll(TestingConfigPeer.DataDir)
 		seedt.Wait()
@@ -75,7 +75,7 @@ func main() {
 			return
 		}
 
-		peerGreeting, _, err := peer.AddTorrentSpec(func() *torrent.Spec {
+		peerGreeting, err := peer.AddTorrentSpec(func() *torrent.Spec {
 			return torrent.SpecFromMetaInfo(mi)
 		}())
 

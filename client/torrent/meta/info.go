@@ -41,6 +41,11 @@ func (fi *FileInfo) DisplayPath(info *Info) string {
 	return info.Name
 }
 
+// PieceHashSize returns the size of each piece hash.
+func (info *Info) PieceHashSize() int {
+	return sha1.New().Size()
+}
+
 // BuildFromFilePath is a helper that sets Files and Pieces from a root path and its
 // children.
 func (info *Info) BuildFromFilePath(root string) (err error) {
@@ -170,4 +175,21 @@ func (info *Info) UpvertedFiles() []FileInfo {
 		}}
 	}
 	return info.Files
+}
+
+// Validate returns error if the Info is invalid.
+func (info *Info) Validate() error {
+	if len(info.Pieces)%20 != 0 {
+		return errors.New("pieces has invalid length")
+	}
+	if info.PieceLength == 0 {
+		if info.TotalLength() != 0 {
+			return errors.New("zero piece length")
+		}
+	} else {
+		if int((info.TotalLength()+info.PieceLength-1)/info.PieceLength) != info.NumPieces() {
+			return errors.New("piece count and file lengths are at odds")
+		}
+	}
+	return nil
 }

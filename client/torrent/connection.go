@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"encoding/binary"
 	"encoding/hex"
@@ -58,8 +57,14 @@ type Connection struct {
 	// low level network connection object
 	conn net.Conn
 
-	// signal it's done
-	done chan bool
+	// Signals whether the connection is open or not.
+	done chan struct{}
+
+	// Signals that writer has cleanly exited.
+	writerDone chan struct{}
+
+	// Signals that reader has cleanly exited.
+	readerDone chan struct{}
 
 	// PendingRequests for all pending requests from the local to remote peer in
 	// a scope of this connection
@@ -69,6 +74,8 @@ type Connection struct {
 	PendingPeerRequests map[int]struct{}
 
 	// remote peer id
+	// TODO(codyg): Consider moving this to its own type, so we can have nice .String()
+	// methods...
 	PeerID [20]byte
 
 	// The pieces the remote peer has claimed to have.
@@ -104,11 +111,13 @@ func NewConnection(torrent *Torrent, client *Client, conn net.Conn, maxPendingRe
 		MaxPendingRequests: maxPendingRequests,
 		Priority:           priority,
 		pieceVerifier:      sha1.New(),
+		done:               make(chan struct{}),
+		writerDone:         make(chan struct{}),
+		readerDone:         make(chan struct{}),
 	}
 
-	c.done = make(chan bool, 2)
 	if torrent != nil {
-		c.peerBitfield = make(map[int]bool, torrent.numPieces())
+		c.peerBitfield = make(map[int]bool, torrent.NumPieces())
 	}
 	return c, nil
 }
@@ -119,11 +128,10 @@ func (cn *Connection) Close() {
 	log.Debug("connection is closing...")
 
 	cn.closeOnce.Do(func() {
-
-		// close network connection
+		// Signal that we are no longer accepting outgoing messages.
+		close(cn.done)
+		// Close the network connection.
 		cn.conn.Close()
-
-		close(cn.outgoingMessages)
 	})
 
 	log.Debug("connection closed")
@@ -131,8 +139,8 @@ func (cn *Connection) Close() {
 
 // PeerHasPiece returns true if a piece is known to a remote peer
 func (cn *Connection) PeerHasPiece(pi int) bool {
-	cn.Lock()
-	defer cn.Unlock()
+	cn.RLock()
+	defer cn.RUnlock()
 
 	_, ok := cn.peerBitfield[pi]
 
@@ -141,8 +149,8 @@ func (cn *Connection) PeerHasPiece(pi int) bool {
 
 // IsPieceRequestPending returns true if a piece is known to a local peer
 func (cn *Connection) IsPieceRequestPending(pi int) bool {
-	cn.Lock()
-	defer cn.Unlock()
+	cn.RLock()
+	defer cn.RUnlock()
 
 	_, ok := cn.PendingRequests[pi]
 
@@ -173,7 +181,7 @@ func (cn *Connection) DropRequest(pi int) {
 // and sends a requests for a piece to a remote peer
 func (cn *Connection) RequestPiece(pi int, length int64) {
 
-	log.Infof("request a piece for t: %s, pi: %d", cn.t.infoHash, pi)
+	log.Infof("request a piece for t: %s, pi: %d", cn.t.InfoHash(), pi)
 
 	go func() {
 		cn.Lock()
@@ -199,13 +207,10 @@ func (cn *Connection) RequestPiece(pi int, length int64) {
 
 // CancelPieceRequest sends a cancel message to a remote peer
 func (cn *Connection) CancelPieceRequest(pi int) error {
-	log.Infof("cancel a piece request, t: %s, pi: %d", cn.t.infoHash, pi)
-
-	if !cn.IsPieceRequestPending(pi) {
-		return nil
-	}
 	cn.Lock()
 	defer cn.Unlock()
+
+	log.Infof("cancel a piece request, t: %s, pi: %d", cn.t.InfoHash(), pi)
 
 	delete(cn.PendingRequests, pi)
 	// TODO: do we actually need to send something to a remote peer here?
@@ -218,14 +223,14 @@ func (cn *Connection) cancelPeerRequest(pi int) {
 	cn.Lock()
 	defer cn.Unlock()
 
-	log.Infof("cancel a peer piece request for t: %s, pi: %d", cn.t.infoHash, pi)
+	log.Infof("cancel a peer piece request for t: %s, pi: %d", cn.t.InfoHash(), pi)
 
 	delete(cn.PendingPeerRequests, pi)
 }
 
 // AnnouncePiece advertises a piece to remote peer
 func (cn *Connection) AnnouncePiece(pi int) {
-	log.Infof("announce piece for t: %s, pi: %d", cn.t.infoHash, pi)
+	log.Infof("announce piece for t: %s, pi: %d", cn.t.InfoHash(), pi)
 
 	cn.writeMessage(&p2p.P2PMessage{
 		Type:          p2p.P2PMessage_ANNOUCE_PIECE,
@@ -236,7 +241,7 @@ func (cn *Connection) AnnouncePiece(pi int) {
 // Bitfield sends a bitvector to a remote peer
 // indicating what local peer claims so far
 func (cn *Connection) Bitfield(bitfield []bool) {
-	log.Infof("got a bitfield t: %s, bitfield: %s", cn.t.infoHash, bitfield)
+	log.Infof("got a bitfield t: %s, bitfield: %s", cn.t.InfoHash(), bitfield)
 
 	cn.writeMessage(&p2p.P2PMessage{
 		Type:     p2p.P2PMessage_BITFIELD,
@@ -276,16 +281,13 @@ func (cn *Connection) sendMessage(message *p2p.P2PMessage) error {
 	}
 
 	// very rare, there are anecdotal evidences it still happens
-	for n := 0; len(data) != 0 && err == nil; {
-		n, err = cn.conn.Write(data)
+	for len(data) > 0 {
+		n, err := cn.conn.Write(data)
 		if err != nil {
-			break
+			log.Error("could not write data frame message")
+			return err
 		}
 		data = data[n:]
-	}
-	if err != nil {
-		log.Error("could not write data frame message")
-		return err
 	}
 
 	log.Debugf("sending a message: %s", message.String())
@@ -299,9 +301,10 @@ func (cn *Connection) sendMessage(message *p2p.P2PMessage) error {
 			int(message.PiecePayload.Length))
 		if err != nil {
 			log.Errorf("failed to send a piece payload for %d, err: %s", message.PiecePayload.Index, err)
+			return err
 		}
 	}
-	return err
+	return nil
 }
 
 // readMessage reads and parses framed(len+message) protobuf P2PMessage
@@ -317,7 +320,7 @@ func (cn *Connection) readMessage() (*p2p.P2PMessage, error) {
 
 	if err != nil {
 		log.Errorf("cannot read a data length of a p2p message for torrent: %s, error: %s",
-			cn.t.infoHash, err)
+			cn.t.InfoHash(), err)
 		return nil, err
 	}
 
@@ -336,7 +339,7 @@ func (cn *Connection) readMessage() (*p2p.P2PMessage, error) {
 	_, err = io.ReadFull(cn.conn, data)
 
 	if err != nil {
-		log.Errorf("cannot read a p2p message for torrent: %s, error: %s", cn.t.infoHash, err)
+		log.Errorf("cannot read a p2p message for torrent: %s, error: %s", cn.t.InfoHash(), err)
 		return nil, err
 	}
 
@@ -344,17 +347,20 @@ func (cn *Connection) readMessage() (*p2p.P2PMessage, error) {
 
 	err = proto.Unmarshal(data, message)
 	if err != nil {
-		log.Errorf("could not parse p2p message for torrent: %s, with error: %s", cn.t.infoHash, err)
+		log.Errorf("could not parse p2p message for torrent: %s, with error: %s", cn.t.InfoHash(), err)
 		return nil, err
 	}
 	log.Debugf("unmarshalled message %s", message)
 	return message, nil
 }
 
-// writeMessage reads and parses framed(len+message) protobuf P2PMessage
-// this is not thread safe and supposed to be called under mutex
 func (cn *Connection) writeMessage(message *p2p.P2PMessage) {
-	cn.outgoingMessages <- message
+	select {
+	case cn.outgoingMessages <- message:
+		// No-op: message sent.
+	case <-cn.done:
+		// No-op: connection is no longer accepting messages.
+	}
 }
 
 func (cn *Connection) handleErrorMessage(info string, index int, error string, code int) error {
@@ -364,7 +370,7 @@ func (cn *Connection) handleErrorMessage(info string, index int, error string, c
 
 // onAnnouncedPiece handles remote peer's announcment
 func (cn *Connection) handleAnnouncePiece(pi int) error {
-	log.Infof("on announce piece from a peer for t: %s, pi: %d", cn.t.infoHash, pi)
+	log.Infof("on announce piece from a peer for t: %s, pi: %d", cn.t.InfoHash(), pi)
 
 	cn.Lock()
 	defer cn.Unlock()
@@ -378,7 +384,7 @@ func (cn *Connection) handleAnnouncePiece(pi int) error {
 
 // onPieceRequest handles remote peer's request for a piece
 func (cn *Connection) handlePieceRequest(pi int, pieceOffset int, length int) error {
-	log.Infof("on piece request from a peer for t: %s, pi: %d", cn.t.infoHash, pi)
+	log.Infof("on piece request from a peer for t: %s, pi: %d", cn.t.InfoHash(), pi)
 
 	cn.Lock()
 	_, ok := cn.PendingPeerRequests[pi]
@@ -390,7 +396,7 @@ func (cn *Connection) handlePieceRequest(pi int, pieceOffset int, length int) er
 	cn.writeMessage(&p2p.P2PMessage{
 		Type: p2p.P2PMessage_PIECE_PAYLOAD,
 		PiecePayload: &p2p.P2PMessage_PiecePayloadMessage{
-			Info:   cn.t.infoHash.String(),
+			Info:   cn.t.InfoHash().String(),
 			Index:  int32(pi),
 			Offset: int32(pieceOffset),
 			Length: int32(length)},
@@ -399,7 +405,7 @@ func (cn *Connection) handlePieceRequest(pi int, pieceOffset int, length int) er
 }
 
 func (cn *Connection) handleCancelPeerPieceRequest(pi int) {
-	log.Infof("on cancel piece request from a peer for t: %s, pi: %d", cn.t.infoHash, pi)
+	log.Infof("on cancel piece request from a peer for t: %s, pi: %d", cn.t.InfoHash(), pi)
 
 	cn.Lock()
 	defer cn.Unlock()
@@ -409,7 +415,7 @@ func (cn *Connection) handleCancelPeerPieceRequest(pi int) {
 
 // onPeerBitfield(bitfield handles remote peer's bitvector
 func (cn *Connection) handlePeerBitfield(bitfield []bool) error {
-	log.Infof("on peer bitfield for t: %s, bitfield: %s", cn.t.infoHash, bitfield)
+	log.Infof("on peer bitfield for t: %s, bitfield: %s", cn.t.InfoHash(), bitfield)
 
 	cn.Lock()
 	defer cn.Unlock()
@@ -420,16 +426,18 @@ func (cn *Connection) handlePeerBitfield(bitfield []bool) error {
 	return nil
 }
 
+// ErrInvalidPiece returns when a piece is inconsistent with the stored hash.
+var ErrInvalidPiece = errors.New("Piece data does not match hash")
+
 // onReceivePiecePayload handles receiving a piece payload from a remote peer
 // pieceOffset is 0 and length is set to a piece length
 // these parameters to support a potential extension to chunked blob transfers if we ever need it
 func (cn *Connection) handleReceivePiecePayload(pi int, pieceOffset int, length int, verify bool) error {
-	log.Infof("on piece payload for t: %s, pi: %d, verify: %t", cn.t.infoHash, pi, verify)
+	log.Infof("on piece payload for t: %s, pi: %d, verify: %t", cn.t.InfoHash(), pi, verify)
 
 	//init hash digest
 	cn.pieceVerifier.Reset()
 
-	//reader := bufio.NewReader(cn.conn)
 	off := int64(pi)*cn.t.info.PieceLength + int64(pieceOffset)
 	data := make([]byte, length)
 
@@ -441,6 +449,13 @@ func (cn *Connection) handleReceivePiecePayload(pi int, pieceOffset int, length 
 		return err
 	}
 
+	if verify && !cn.t.VerifyPiece(pi, data) {
+		log.Errorf(
+			"Could not verify piece i=%d offset=%d len=%d data=%s",
+			pi, pieceOffset, length, data)
+		return ErrInvalidPiece
+	}
+
 	_, err = cn.t.writeAt(data, off)
 	if err != nil {
 		log.Errorf("could not write a payload piece (%d, %d, %d): %s",
@@ -448,28 +463,12 @@ func (cn *Connection) handleReceivePiecePayload(pi int, pieceOffset int, length 
 		return err
 	}
 
-	if verify {
-		cn.pieceVerifier.Write(data)
-		if bytes.Compare(cn.t.pieceHashes[pi], cn.pieceVerifier.Sum(nil)) != 0 {
-			err = fmt.Errorf("could not verify a piece: (%d, %d, %d), data:%s",
-				pi, pieceOffset, length, string(data))
-			log.Error(err)
-		} else {
-			log.Infof("verify piece (%d, %d, %d): ok",
-				pi, pieceOffset, length)
-		}
-	}
-
 	// drop the request from pending
 	cn.Lock()
 	delete(cn.PendingRequests, pi)
 	cn.Unlock()
 
-	if err == nil {
-		cn.t.onPieceComplete(pi, cn)
-	} else {
-		cn.t.onPieceFailed(pi, cn)
-	}
+	cn.t.PieceComplete(pi)
 
 	log.Infof("received a piece payload (%d, %d, %d)", pi, pieceOffset, length)
 
@@ -478,14 +477,9 @@ func (cn *Connection) handleReceivePiecePayload(pi int, pieceOffset int, length 
 
 // sendPiecePayload sends a piece payload message followed by an actual piece payload
 func (cn *Connection) sendPiecePayload(pi int, pieceOffset int, length int) error {
-	//writer := bufio.NewWriter(cn.conn)
-	off := int64(pi)*cn.t.info.PieceLength + int64(pieceOffset)
-	data := make([]byte, length)
-
-	// This should read a piece fully or fail
-	_, err := cn.t.readAt(data[:length], off)
+	data, err := cn.t.ReadPiece(pi, pieceOffset, length)
 	if err != nil {
-		log.Errorf("could not read a payload for piece (%d, %d, %d): %s",
+		log.Errorf("could not read a payload for piece i=%d, offset=%d, len=%d: %s",
 			pi, pieceOffset, length, err)
 		return err
 	}
@@ -493,31 +487,33 @@ func (cn *Connection) sendPiecePayload(pi int, pieceOffset int, length int) erro
 	for len(data) > 0 {
 		n, err := cn.conn.Write(data)
 		if err != nil {
-			break
+			log.Errorf("could not write a piece to stream (%d, %d, %d): %s",
+				pi, pieceOffset, length, err)
+			return err
 		}
 		data = data[n:]
-	}
-	if err != nil {
-		log.Errorf("could not write a piece to stream (%d, %d, %d): %s",
-			pi, pieceOffset, length, err)
-		return err
 	}
 	log.Infof("sent a piece payload (%d, %d, %d)", pi, pieceOffset, length)
 	return nil
 }
 
-// Writer is a go-routine that processes message from an
-// message queue effectively representing an outgoing message queue
-func (cn *Connection) Writer() {
-
-	for message := range cn.outgoingMessages {
-		if err := cn.sendMessage(message); err != nil {
-			log.Errorf("could not write a message: %s", err)
-			cn.Close()
+// Synchronously emits messages from an outgoing message queue.
+func (cn *Connection) writer() {
+L:
+	for {
+		select {
+		case message := <-cn.outgoingMessages:
+			if err := cn.sendMessage(message); err != nil {
+				log.Errorf("Error writing message: %s", err)
+				cn.Close()
+				break L
+			}
+		case <-cn.done:
+			break L
 		}
 	}
-	log.Info("shutdown writer")
-	cn.done <- true
+	log.Debug("Writer exited cleanly")
+	close(cn.writerDone)
 }
 
 // dispatch processes incoming messages and calling correspnding handles
@@ -553,30 +549,34 @@ func (cn *Connection) dispatch(message *p2p.P2PMessage) error {
 	return err
 }
 
-// Reader is a go-routine that processes messages from an
-// input message queue paasing them down to a dispatcher
-func (cn *Connection) Reader() {
+// Synchronously processes incoming messages from the underlying socket.
+func (cn *Connection) reader() {
+L:
 	for {
-		// blocks here if there are no messages in a socket
-		message, err := cn.readMessage()
-		if err != nil && err != io.EOF {
-			log.Errorf("got an error at reading the message from socket for %s, error %s", cn.t.infoHash, err)
-			break
-		} else if err == io.EOF {
-			log.Errorf("connection is closed or in a process of being closed %s, err: %s", cn.t.infoHash, err)
-			break
-		} else {
-			cn.dispatch(message)
+		select {
+		case <-cn.done:
+			break L
+		default:
+			// Blocks here if there are no messages in a socket.
+			// TODO(codyg): If the connection closes, we will break out of this loop, however
+			// it will be very noisy.
+			message, err := cn.readMessage()
 			if err != nil {
-				log.Errorf("connection got error, shutting down, t: %s, error :%s,", cn.t.infoHash, err)
-				break
+				log.Errorf(
+					"Error reading message from socket for %s: %s",
+					cn.t.InfoHash(), err)
+				cn.Close()
+				break L
+			}
+			if err := cn.dispatch(message); err != nil {
+				log.Errorf(
+					"Error dispatching message for %s: %s",
+					cn.t.InfoHash(), err)
 			}
 		}
 	}
-
-	log.Info("shutdown reader")
-	cn.Close()
-	cn.done <- true
+	log.Debug("Reader exited cleanly")
+	close(cn.readerDone)
 }
 
 // ih is nil if we expect the peer to declare the InfoHash, such as when the
@@ -626,15 +626,15 @@ func (cn *Connection) handshake(ih *meta.Hash, peerID []byte, bitfield []bool) (
 		// connection is dangling at this point, nothing supposed
 		// to get access to it
 		cn.t = t
-		cn.peerBitfield = make(map[int]bool, t.numPieces())
+		cn.peerBitfield = make(map[int]bool, t.NumPieces())
 
 		// send torrent's bitfield reply
 		err = cn.sendMessage(&p2p.P2PMessage{
 			Type: p2p.P2PMessage_BITFIELD,
 			Bitfield: &p2p.P2PMessage_BitfieldMessage{
-				Info:     t.infoHash.String(),
+				Info:     t.InfoHash().String(),
 				PeerID:   hex.EncodeToString(peerID),
-				Bitfield: t.bitfield()},
+				Bitfield: t.Bitfield()},
 		})
 
 		if err != nil {
@@ -680,5 +680,19 @@ func (cn *Connection) handshake(ih *meta.Hash, peerID []byte, bitfield []bool) (
 	ihash := meta.NewHashFromHex(message.Bitfield.Info)
 
 	log.Debug("handshake is successful: trying to add connection to the pool")
-	return &ihash, err
+	return &ihash, nil
+}
+
+// Run initiates reading / writing in the Connection. Blocks until the Connection has
+// cleanly exited.
+func (cn *Connection) Run() {
+	go cn.writer()
+	go cn.reader()
+	cn.Wait()
+}
+
+// Wait blocks until the Connection has cleanly exited.
+func (cn *Connection) Wait() {
+	<-cn.writerDone
+	<-cn.readerDone
 }
