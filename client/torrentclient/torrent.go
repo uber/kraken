@@ -1,6 +1,8 @@
 package torrentclient
 
 import (
+	"os"
+
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken-torrent/metainfo"
 	"code.uber.internal/infra/kraken-torrent/storage"
@@ -11,7 +13,7 @@ import (
 // Torrent contains layer info and a pointer to cache to retrieve data
 type Torrent struct {
 	config    *configuration.Config
-	store     *store.LocalFileStore
+	store     *store.LocalStore
 	name      string
 	len       int64
 	numPieces int
@@ -20,7 +22,7 @@ type Torrent struct {
 // NewTorrent returns a new LayerStore. Caller should then call either LoadFromDisk or CreateEmptyLayerFile.
 func NewTorrent(
 	config *configuration.Config,
-	store *store.LocalFileStore,
+	store *store.LocalStore,
 	name string,
 	len int64,
 	numPieces int) *Torrent {
@@ -36,16 +38,14 @@ func NewTorrent(
 // Open creates a download torrent
 func (tor *Torrent) Open() error {
 	// create download file from LocalFileStore
-	new, err := tor.store.CreateDownloadFile(tor.name, tor.len)
-	if err != nil {
-		log.Errorf("Error opening torrent: %s", err.Error())
-		return err
-	}
-
+	err := tor.store.CreateDownloadFile(tor.name, tor.len)
 	// if the download is not new, the torrent is either downloading or already downloaded
-	if !new {
+	if os.IsExist(err) {
 		log.Infof("Torrent %s has been created already. No actions taken.", tor.name)
 		return nil
+	} else if err != nil {
+		log.Errorf("Error opening torrent: %s", err.Error())
+		return err
 	}
 
 	// download is new, set metadata for pieces

@@ -17,7 +17,7 @@ import (
 	"github.com/uber-go/tally"
 )
 
-func getFileStoreClient() (*configuration.Config, *store.LocalFileStore, *torrentclient.Client) {
+func getFileStoreClient() (*configuration.Config, *store.LocalStore, *torrentclient.Client) {
 	cp := configuration.GetConfigFilePath("agent/test.yaml")
 	c := configuration.NewConfigWithPath(cp)
 	c.DisableTorrent = true
@@ -63,7 +63,7 @@ func getFileStoreClient() (*configuration.Config, *store.LocalFileStore, *torren
 	if err != nil {
 		log.Fatal(err)
 	}
-	s := store.NewLocalFileStore(c)
+	s := store.NewLocalStore(c)
 	client, err := torrentclient.NewClient(c, s, tally.NoopScope, 120)
 	if err != nil {
 		log.Fatal(err)

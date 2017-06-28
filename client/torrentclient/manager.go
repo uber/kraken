@@ -12,11 +12,11 @@ const perm = 0755
 // Manager implements a data storage for torrent. It should be initiated only once at the start of the program
 type Manager struct {
 	config *configuration.Config
-	store  *store.LocalFileStore
+	store  *store.LocalStore
 }
 
 // NewManager returns a new Manager
-func NewManager(config *configuration.Config, store *store.LocalFileStore) *Manager {
+func NewManager(config *configuration.Config, store *store.LocalStore) *Manager {
 	return &Manager{
 		config: config,
 		store:  store,

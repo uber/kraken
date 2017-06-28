@@ -1,9 +1,10 @@
-.idea
-.vscode
 .cache
+.gen
+.idea
+.tmp
+.vscode
 *.test
 *.go~
-.tmp
 vendor/
 .gen
 

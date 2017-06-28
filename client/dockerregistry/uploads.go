@@ -14,12 +14,12 @@ import (
 
 // Uploads b
 type Uploads struct {
-	store  *store.LocalFileStore
+	store  *store.LocalStore
 	client *torrentclient.Client
 }
 
 // NewUploads creates a new Uploads
-func NewUploads(cl *torrentclient.Client, s *store.LocalFileStore) *Uploads {
+func NewUploads(cl *torrentclient.Client, s *store.LocalStore) *Uploads {
 	return &Uploads{
 		store:  s,
 		client: cl,
@@ -28,8 +28,7 @@ func NewUploads(cl *torrentclient.Client, s *store.LocalFileStore) *Uploads {
 
 func (u *Uploads) initUpload(dir, uuid string) error {
 	// Create timestamp and tempfile
-	_, err := u.store.CreateUploadFile(uuid, 0)
-	if err != nil {
+	if err := u.store.CreateUploadFile(uuid, 0); err != nil {
 		return err
 	}
 
@@ -46,7 +45,7 @@ func (u *Uploads) getUploadReader(path, dir, uuid string, offset int64) (io.Read
 		return nil, err
 	}
 
-	// Set offest
+	// Set offset
 	_, err = reader.Seek(offset, 0)
 	if err != nil {
 		return nil, err
@@ -99,8 +98,7 @@ func (u *Uploads) commitUpload(srcdir, srcuuid, destdir, destsha string) (err er
 func (u *Uploads) putBlobData(fileName string, content []byte) error {
 	// It's better to have a random extension to avoid race condition.
 	randFileName := fileName + "." + uuid.Generate().String()
-	_, err := u.store.CreateUploadFile(randFileName, int64(len(content)))
-	if err != nil {
+	if err := u.store.CreateUploadFile(randFileName, int64(len(content))); err != nil {
 		return err
 	}
 	writer, err := u.store.GetUploadFileReadWriter(randFileName)

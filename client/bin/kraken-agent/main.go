@@ -45,7 +45,7 @@ func main() {
 	defer metricsCloser.Close()
 
 	// init storage
-	store := store.NewLocalFileStore(config)
+	store := store.NewLocalStore(config)
 
 	// init torrent client
 	log.Info("Init torrent agent")

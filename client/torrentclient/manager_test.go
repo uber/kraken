@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getFileStore() (*configuration.Config, *store.LocalFileStore) {
+func getFileStore() (*configuration.Config, *store.LocalStore) {
 	cp := configuration.GetConfigFilePath("agent/test.yaml")
 	c := configuration.NewConfigWithPath(cp)
 	var err error
@@ -40,7 +40,7 @@ func getFileStore() (*configuration.Config, *store.LocalFileStore) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	s := store.NewLocalFileStore(c)
+	s := store.NewLocalStore(c)
 	return c, s
 }
 

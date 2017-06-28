@@ -1,4 +1,4 @@
-package store
+package base
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 // LocalFileReadWriter implements FileReadWriter interface, provides read/write operation on a
 // local file.
 type localFileReadWriter struct {
-	entry      *localFileEntry
+	entry      *LocalFileEntry
 	descriptor *os.File
 
 	closed bool
@@ -22,20 +22,15 @@ func (readWriter *localFileReadWriter) close() error {
 		return fmt.Errorf("already closed")
 	}
 
-	if readWriter.entry.openCount < 1 {
-		return fmt.Errorf("File %s is not open", readWriter.entry.name)
-	}
-
 	if err := readWriter.descriptor.Close(); err != nil {
 		return err
 	}
 
-	readWriter.entry.openCount--
 	readWriter.closed = true
 	return nil
 }
 
-// Close decrements openCount, and closes underlying OS.File object if openCount reaches 0.
+// Close closes underlying OS.File object.
 func (readWriter localFileReadWriter) Close() error {
 	return readWriter.close()
 }
@@ -71,7 +66,8 @@ func (readWriter localFileReadWriter) Seek(offset int64, whence int) (int64, err
 
 // Size returns the size of the file.
 func (readWriter localFileReadWriter) Size() int64 {
-	fileInfo, err := readWriter.entry.Stat(nil)
+	// Use file entry instead of descriptor, because descriptor could have been closed.
+	fileInfo, err := readWriter.entry.Stat(func(FileEntry) error { return nil })
 	if err != nil {
 		return 0
 	}
