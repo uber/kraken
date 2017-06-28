@@ -1,6 +1,7 @@
 package torrentclient
 
 import (
+	"bytes"
 	"fmt"
 
 	"time"
@@ -8,7 +9,6 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/configuration"
-	"code.uber.internal/infra/kraken/utils"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 // Piece contains piece information of a layer
 type Piece struct {
 	config    *configuration.Config
-	store     *store.LocalFileStore
+	store     *store.LocalStore
 	name      string
 	index     int
 	numPieces int
@@ -111,7 +111,7 @@ func (p *Piece) MarkComplete() error {
 		expected[i] = store.PieceDone
 	}
 
-	if utils.CompareByteArray(expected, status) {
+	if bytes.Compare(expected, status) == 0 {
 		err = p.store.MoveDownloadFileToCache(p.name)
 		if err != nil {
 			log.Errorf("Download completed but failed to move file to cache directory: %s", err.Error())

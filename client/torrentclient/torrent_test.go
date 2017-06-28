@@ -47,9 +47,8 @@ func TestOpenCreated(t *testing.T) {
 	defer removeTestTorrentDirs(c)
 
 	tor := NewTorrent(c, s, "t2", int64(1), 1)
-	new, err := s.CreateDownloadFile(tor.name, tor.len)
+	err := s.CreateDownloadFile(tor.name, tor.len)
 	assert.Nil(err)
-	assert.True(new)
 	assert.Nil(tor.Open())
 	// will not call
 	_, err = s.GetFilePieceStatus("t2", 0, 1)

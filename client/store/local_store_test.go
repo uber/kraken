@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"testing"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func GetTestFileStore() (*configuration.Config, *LocalFileStore) {
+func GetTestFileStore() (*configuration.Config, *LocalStore) {
 	cp := configuration.GetConfigFilePath("agent/test.yaml")
 	c := configuration.NewConfigWithPath(cp)
 	c.DisableTorrent = true
@@ -68,7 +69,7 @@ func GetTestFileStore() (*configuration.Config, *LocalFileStore) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	s := NewLocalFileStore(c)
+	s := NewLocalStore(c)
 	return c, s
 }
 
@@ -77,6 +78,53 @@ func cleanupTestFileStore(c *configuration.Config) {
 	os.RemoveAll(c.CacheDir)
 	os.RemoveAll(c.UploadDir)
 	os.RemoveAll(c.TagDir)
+}
+
+func TestFileHashStates(t *testing.T) {
+	c, s := GetTestFileStore()
+	defer cleanupTestFileStore(c)
+
+	s.CreateUploadFile("test_file.txt", 100)
+	err := s.SetUploadFileHashState("test_file.txt", []byte{uint8(0), uint8(1)}, "sha256", "500")
+	assert.Nil(t, err)
+	b, err := s.GetUploadFileHashState("test_file.txt", "sha256", "500")
+	assert.Nil(t, err)
+	assert.Equal(t, uint8(0), b[0])
+	assert.Equal(t, uint8(1), b[1])
+
+	l, err := s.ListUploadFileHashStatePaths("test_file.txt")
+	assert.Nil(t, err)
+	assert.Equal(t, len(l), 1)
+	assert.True(t, strings.HasSuffix(l[0], "/hashstates/sha256/500"))
+}
+
+func TestCreateUploadFileAndMoveToCache(t *testing.T) {
+	c, s := GetTestFileStore()
+	defer cleanupTestFileStore(c)
+
+	err := s.CreateUploadFile("test_file.txt", 100)
+	assert.Nil(t, err)
+	err = s.SetUploadFileHashState("test_file.txt", []byte{uint8(0), uint8(1)}, "sha256", "500")
+	assert.Nil(t, err)
+	b, err := s.GetUploadFileHashState("test_file.txt", "sha256", "500")
+	assert.Nil(t, err)
+	assert.Equal(t, uint8(0), b[0])
+	assert.Equal(t, uint8(1), b[1])
+	err = s.SetUploadFileStartedAt("test_file.txt", []byte{uint8(2), uint8(3)})
+	assert.Nil(t, err)
+	b, err = s.GetUploadFileStartedAt("test_file.txt")
+	assert.Nil(t, err)
+	assert.Equal(t, uint8(2), b[0])
+	assert.Equal(t, uint8(3), b[1])
+	_, err = os.Stat(path.Join(c.UploadDir, "test_file.txt"))
+	assert.Nil(t, err)
+
+	err = s.MoveUploadFileToCache("test_file.txt", "test_file_cache.txt")
+	assert.Nil(t, err)
+	_, err = os.Stat(path.Join(c.UploadDir, "test_file.txt"))
+	assert.True(t, os.IsNotExist(err))
+	_, err = os.Stat(path.Join(c.CacheDir, "test_file_cache.txt"))
+	assert.Nil(t, err)
 }
 
 func TestDownloadAndDeleteFiles(t *testing.T) {
@@ -90,8 +138,7 @@ func TestDownloadAndDeleteFiles(t *testing.T) {
 
 		testFileName := fmt.Sprintf("test_%d", i)
 		go func() {
-			created, err := s.CreateDownloadFile(testFileName, 1)
-			assert.True(t, created)
+			err := s.CreateDownloadFile(testFileName, 1)
 			assert.Nil(t, err)
 			err = s.MoveDownloadFileToCache(testFileName)
 			assert.Nil(t, err)

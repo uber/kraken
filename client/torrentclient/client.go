@@ -63,7 +63,7 @@ func IsTorrentNotFoundError(err error) bool {
 // Client contains a bittorent client and its
 type Client struct {
 	config    *configuration.Config
-	store     *store.LocalFileStore
+	store     *store.LocalStore
 	cl        *torrent.Client
 	torrentDB *bolt.DB
 	timeout   int //sec
@@ -71,7 +71,7 @@ type Client struct {
 }
 
 // NewClient creates a new client
-func NewClient(c *configuration.Config, s *store.LocalFileStore, metrics tally.Scope, t int) (*Client, error) {
+func NewClient(c *configuration.Config, s *store.LocalStore, metrics tally.Scope, t int) (*Client, error) {
 	if c.DisableTorrent {
 		log.Info("Torrent disabled")
 		return &Client{
@@ -460,8 +460,7 @@ func (c *Client) GetManifest(repo, tag string) (string, error) {
 	// the reason that we cannot use a download file is because we cannot rename the file
 	// when the file is moved to cache. so it might cause race condition when multiple threads are writing the same manifest.
 	manifestDigestTemp := manifestDigest + "." + uuid.Generate().String()
-	_, err = c.store.CreateUploadFile(manifestDigestTemp, 0)
-	if err != nil {
+	if err = c.store.CreateUploadFile(manifestDigestTemp, 0); err != nil {
 		return "", err
 	}
 

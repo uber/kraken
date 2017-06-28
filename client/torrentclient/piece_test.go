@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/client/store/base"
 	"code.uber.internal/infra/kraken/configuration"
 
 	"code.uber.internal/infra/kraken-torrent/metainfo"
@@ -155,7 +156,7 @@ func TestMarkNotCompleteCache(t *testing.T) {
 	assert.Nil(err)
 	assert.Equal(store.PieceDone, status[0])
 
-	assert.True(store.IsFileStateError(p0.MarkNotComplete()))
+	assert.True(base.IsFileStateError(p0.MarkNotComplete()))
 	status, err = p0.store.GetFilePieceStatus("05", 0, 1)
 	assert.Nil(err)
 	assert.Equal(store.PieceDone, status[0])

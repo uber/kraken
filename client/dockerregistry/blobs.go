@@ -15,11 +15,11 @@ import (
 type Blobs struct {
 	config *configuration.Config
 	client *torrentclient.Client
-	store  *store.LocalFileStore
+	store  *store.LocalStore
 }
 
 // NewBlobs creates Blobs
-func NewBlobs(cl *torrentclient.Client, s *store.LocalFileStore, config *configuration.Config) *Blobs {
+func NewBlobs(cl *torrentclient.Client, s *store.LocalStore, config *configuration.Config) *Blobs {
 	return &Blobs{
 		client: cl,
 		store:  s,
@@ -87,7 +87,7 @@ func (b *Blobs) getBlobReader(fileName string, offset int64) (io.ReadCloser, err
 		return nil, err
 	}
 
-	// set offest
+	// Set offset
 	_, err = reader.Seek(offset, 0)
 	if err != nil {
 		reader.Close()
