@@ -155,6 +155,27 @@ func ParseManifestV2(data []byte) (distribution.Manifest, string, error) {
 	return manifest, descriptor.Digest.Hex(), nil
 }
 
+// GetManifestV2References returns a list of references by a V2 manifest
+func GetManifestV2References(manifest distribution.Manifest, manifestDigest string) ([]string, error) {
+	layers := []string{manifestDigest}
+
+	switch manifest.(type) {
+	case *schema2.DeserializedManifest:
+		// Inc ref count for config and data layers.
+		descriptors := manifest.References()
+		for _, descriptor := range descriptors {
+			if descriptor.Digest == "" {
+				return nil, fmt.Errorf("Unsupported layer format in manifest")
+			}
+
+			layers = append(layers, descriptor.Digest.Hex())
+		}
+	default:
+		return nil, fmt.Errorf("Unsupported manifest format")
+	}
+	return layers, nil
+}
+
 const (
 	numbers = "0123456789"
 	letters = "abcdefghijklmnopqrstuvwxyz"

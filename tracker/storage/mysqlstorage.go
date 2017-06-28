@@ -2,9 +2,13 @@ package storage
 
 import (
 	"database/sql"
+	"fmt"
+	"sort"
+	"sync"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/config/tracker"
+	"code.uber.internal/infra/kraken/utils"
 )
 
 //Peer statements
@@ -25,16 +29,20 @@ const deletePeerByPeerIDStr string = "delete from peer where peerId = ?"
 const selectTorrentStatememtStr string = `select
  torrentName, infoHash, author, numPieces, pieceLength, refcount, flags from torrent where torrentName = ?`
 const insertTorrentStatememtStr string = `insert into
- torrent(torrentName, infoHash, author, numPieces, pieceLength, refcount, flags) values(?, ?, ?, ?, ?, ?, ?)`
-const deleteTorrentStatememtStr string = "delete from torrent where torrentName = ?"
+ torrent(torrentName, infoHash, author, numPieces, pieceLength, flags) values(?, ?, ?, ?, ?, ?)
+ on duplicate key update refcount = refcount`
+const deleteTorrentByRefCount string = `delete from torrent where torrentName = ? and refcount = 0`
 
 //Manifest statements
 const selectManifestStatememtStr string = `select 
  tagName, manifest, flags from manifest where tagName = ?`
+const insertManifestStatememtStr string = `insert into
+ manifest(tagName, manifest, flags) values(?, ?, ?)`
+const deleteManifestStatementStr string = `delete from manifest where tagName = ?`
 
-const upsertManifestStatememtStr string = `insert into
- manifest(tagName, manifest, flags)
- values(?, ?, ?) on duplicate key update manifest = ?, flags = ?`
+const incrementRefCount string = `update torrent set refcount = refcount + 1 where torrentName = ?`
+const decrementRefCount string = `update torrent set refcount = refcount - 1 where torrentName = ? and refcount > 0`
+const selectRefCount string = `select refcount from torrent where torrentName = ?`
 
 // MySQLDataStore is a MySQL implementaion of a Storage interface
 type MySQLDataStore struct {
@@ -178,19 +186,7 @@ func (ds *MySQLDataStore) CreateTorrent(torrentInfo *TorrentInfo) error {
 		torrentInfo.Author,
 		torrentInfo.NumPieces,
 		torrentInfo.PieceLength,
-		torrentInfo.RefCount,
 		torrentInfo.Flags)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	return nil
-}
-
-// DeleteTorrent deletes torrent from storage
-func (ds *MySQLDataStore) DeleteTorrent(torrentName string) error {
-	_, err := ds.db.Exec(
-		deleteTorrentStatememtStr, torrentName)
 	if err != nil {
 		log.Error(err)
 		return err
@@ -224,24 +220,189 @@ func (ds *MySQLDataStore) ReadManifest(tagName string) (*Manifest, error) {
 	return nil, nil
 }
 
-// UpdateManifest updates content manifest in a storage
-func (ds *MySQLDataStore) UpdateManifest(manifest *Manifest) error {
-	_, err := ds.db.Exec(
-		upsertManifestStatememtStr,
-		//insert
-		manifest.TagName,
-		manifest.Manifest,
-		manifest.Flags,
-
-		//update
-		manifest.Manifest,
-		manifest.Flags,
-	)
-
+// CreateManifest create a new entry in manifest table and then increment refcount for all layers
+func (ds *MySQLDataStore) CreateManifest(manifest *Manifest) error {
+	manifestV2, manifestDigest, err := utils.ParseManifestV2([]byte(manifest.Manifest))
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
+	refs, err := utils.GetManifestV2References(manifestV2, manifestDigest)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	return ds.createManifest(manifest, refs)
+}
+
+func (ds *MySQLDataStore) createManifest(manifest *Manifest, refs []string) error {
+	// Sort layerNames in increasing order to avoid transaction deadlock
+	sort.Strings(refs)
+
+	tx, err := ds.db.Begin()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	// Insert manifest
+	_, err = tx.Exec(
+		insertManifestStatememtStr,
+		manifest.TagName,
+		manifest.Manifest,
+		manifest.Flags)
+
+	if err != nil {
+		log.Error(err)
+		tx.Rollback()
+		return err
+	}
+
+	// Increment refcount for all layers
+	for _, ref := range refs {
+		_, err = tx.Exec(incrementRefCount, ref)
+		if err != nil {
+			log.Error(err)
+			tx.Rollback()
+			return err
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	return nil
+}
+
+// DeleteManifest delete manifest and then deref all its referenced contents
+func (ds *MySQLDataStore) DeleteManifest(tagName string) error {
+	manifest, err := ds.ReadManifest(tagName)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	manifestV2, manifestDigest, err := utils.ParseManifestV2([]byte(manifest.Manifest))
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	refs, err := utils.GetManifestV2References(manifestV2, manifestDigest)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	return ds.deleteManifest(tagName, refs)
+}
+
+func (ds *MySQLDataStore) deleteManifest(name string, refs []string) (err error) {
+	// Sort layerNames in increasing order to avoid transaction deadlock
+	sort.Strings(refs)
+
+	var tx *sql.Tx
+	tx, err = ds.db.Begin()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	// Delete manifest
+	_, err = tx.Exec(deleteManifestStatementStr, name)
+	if err != nil {
+		log.Error(err)
+		tx.Rollback()
+		return err
+	}
+
+	// Deref all layers
+	for _, ref := range refs {
+		_, err = tx.Exec(decrementRefCount, ref)
+		if err != nil {
+			log.Error(err)
+			tx.Rollback()
+			return err
+		}
+
+		// try delete torrent when refcount is zero
+		_, err = tx.Exec(deleteTorrentByRefCount, ref)
+		if err != nil {
+			log.Error(err)
+			tx.Rollback()
+			return err
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	// Try delete all layers on origins
+	wg := sync.WaitGroup{}
+	wg.Add(len(refs))
+	for _, ref := range refs {
+		go func(ref string) {
+			defer wg.Done()
+			ds.tryDeleteTorrentOnOrigins(ref)
+		}(ref)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (ds *MySQLDataStore) tryDeleteTorrentOnOrigins(name string) (err error) {
+	var tx *sql.Tx
+	tx, err = ds.db.Begin()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			log.Error(err)
+			tx.Rollback()
+			return
+		}
+		err = tx.Commit()
+		if err != nil {
+			log.Error(err)
+		}
+	}()
+
+	rows, err := tx.Query(selectRefCount, name)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var count int
+		if err := rows.Scan(&count); err != nil {
+			return err
+		}
+
+		// Refcount < 0, this should not happen, log this error
+		if count < 0 {
+			err = fmt.Errorf("Negative refcount for %s", name)
+			return err
+		}
+
+		return nil
+	}
+
+	// Row not exist, this means we have deleted it
+
+	// TODO (@evelynl):
+	// 1. Call origin's endpoint to remove the data with best effort
+	// This is not the best practice because we are doing IO within a transcation
+	// Temporary we can have a timeout to mitigate potential risk of locking the row forever
+	// 2. Also need to apply rendezvous hashing function to findout which origin to call delete
+	// So we need a table for origin hosts
 	return nil
 }

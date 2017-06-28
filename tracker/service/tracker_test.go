@@ -266,7 +266,7 @@ func TestPostManifestHandler(t *testing.T) {
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()
 
-		mocks.datastore.EXPECT().UpdateManifest(&storage.Manifest{
+		mocks.datastore.EXPECT().CreateManifest(&storage.Manifest{
 			TagName:  name,
 			Manifest: manifest,
 			Flags:    0,

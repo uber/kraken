@@ -74,13 +74,13 @@ type Storage interface {
 	ReadTorrent(torrentName string) (*TorrentInfo, error)
 	//Create torrent
 	CreateTorrent(torrentInfo *TorrentInfo) error
-	//Delete torrent by torrent name
-	DeleteTorrent(torrentName string) error
 
 	//Read manifest
 	ReadManifest(tagName string) (*Manifest, error)
-	//Create torrent
-	UpdateManifest(manifest *Manifest) error
+	//Create manifest
+	CreateManifest(manifest *Manifest) error
+	//Delete manifest
+	DeleteManifest(tagName string) error
 }
 
 // DataStoreFactory is storage factory function type
