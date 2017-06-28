@@ -5,6 +5,7 @@
 *.go~
 .tmp
 vendor/
+.gen
 
 # Fake source dir for jenkins and debian, which uses repo root as GOPATH
 ^bin/
@@ -13,6 +14,7 @@ pkg/
 # Binary executable
 tracker/tracker
 client/bin/kraken-agent/kraken-agent
+client/bin/torrent/kraken-agent
 tools/bin/puller/puller
 
 # tmp migration files

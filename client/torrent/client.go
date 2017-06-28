@@ -165,6 +165,7 @@ func (cl *Client) acceptConnections(l net.Listener) {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
+			// TODO(codyg): This loop cannot exit without this noisy log.
 			log.Errorf("connection: accept failure: %s", err)
 			return
 		}
@@ -195,7 +196,7 @@ func (cl *Client) initiateConn(peer Peer, t *Torrent) {
 	}
 	addr := net.JoinHostPort(peer.IP.String(), fmt.Sprintf("%d", peer.Port))
 
-	log.Debugf("opening outgoing connection for torrent %s to a peer: %s", t.infoHash, peer)
+	log.Debugf("opening outgoing connection for torrent %s to a peer: %s", t.InfoHash(), peer)
 	go cl.outgoingConnection(t, addr)
 }
 
@@ -204,19 +205,20 @@ func (cl *Client) initiateConn(peer Peer, t *Torrent) {
 func (cl *Client) handshakeConnection(nc net.Conn, t *Torrent) (*Connection, error) {
 	c := cl.newConnection(nc, t)
 
-	ih, err := c.handshake(&t.infoHash, cl.peerID[:], t.bitfield())
-	if ih != nil && *ih != t.infoHash {
+	tih := t.InfoHash()
+	cih, err := c.handshake(&tih, cl.peerID[:], t.Bitfield())
+	if cih != nil && *cih != tih {
 		log.Error("Unexpected torrent hash info in handshaking phase")
 		return nil, err
 	}
-	log.Debugf("new connection handshaked for a torrent %s", t.infoHash)
+	log.Debugf("new connection handshaked for a torrent %s", tih)
 	return c, err
 }
 
 // Called to dial out and run a connection. The addr we're given is already
 // considered half-open.
 func (cl *Client) outgoingConnection(t *Torrent, addr string) {
-	log.Debugf("outgoing connection for a torrent %s to %s", t.infoHash, addr)
+	log.Debugf("outgoing connection for a torrent %s to %s", t.InfoHash(), addr)
 
 	nc, err := net.DialTimeout("tcp", addr, minDialTimeout)
 	if err != nil {
@@ -228,7 +230,7 @@ func (cl *Client) outgoingConnection(t *Torrent, addr string) {
 
 	defer nc.Close()
 
-	log.Debugf("handshaking connection for a torrent %s", t.infoHash)
+	log.Debugf("handshaking connection for a torrent %s", t.InfoHash())
 	c, err := cl.handshakeConnection(nc, t)
 	if err != nil || c == nil {
 		log.Error("handshake error: closing the connection")
@@ -250,24 +252,14 @@ func (cl *Client) outgoingConnection(t *Torrent, addr string) {
 		return
 	}
 
-	defer t.dropConnection(c)
+	defer t.DropConnection(c)
 
-	if !t.addConnection(c) {
-		log.Errorf("connection outgoing: could not add a connection to a connection pool")
+	if err := t.AddConnection(c); err != nil {
+		log.Errorf("connection outgoing: could not add a connection to a connection pool: %v", err)
 		return
 	}
 
-	//start a writing loop
-	go c.Writer()
-
-	//start a reading loop
-	go c.Reader()
-
-	// notify an updater
-	t.updateCh <- struct{}{}
-
-	<-c.done
-	<-c.done
+	c.Run()
 }
 
 // The port number for incoming peer connections. 0 if the client isn't
@@ -311,89 +303,47 @@ func (cl *Client) runReceivedConn(c *Connection) {
 		return
 	}
 
-	defer t.dropConnection(c)
+	defer t.DropConnection(c)
 
-	if !t.addConnection(c) {
-		log.Errorf("connection received: could not add a connection to a connection pool")
+	if err := t.AddConnection(c); err != nil {
+		log.Errorf("could not add a connection to a connection pool: %v", err)
 		return
 	}
 
-	//start a writing loop
-	go c.Writer()
-
-	//start a reading loop
-	go c.Reader()
-
-	// notify an updater
-	t.updateCh <- struct{}{}
-
-	<-c.done
-	<-c.done
-}
-
-func (cl *Client) openNewConns(t *Torrent) bool {
-	log.Debugf("opening new connections for torrent %s", t.infoHash.String())
-	for len(t.peers) != 0 {
-		if !t.wantConns() {
-			log.Infof("torrent does not want to open new connecttions, has data already: %s", t.String())
-			return false
-		}
-		var (
-			k peersKey
-			p Peer
-		)
-		for k, p = range t.peers {
-			break
-		}
-		delete(t.peers, k)
-		cl.initiateConn(p, t)
-	}
-	return true
+	c.Run()
 }
 
 // Return a Torrent ready for insertion into a Client.
-func (cl *Client) newTorrent(ih meta.Hash, storage storage.TorrentStorage) (*Torrent, error) {
-	return NewTorrent(cl, ih, nil, storage, defaultEstablishedConnsPerTorrent)
-}
-
-//AddTorrentInfoHash adds torren's info hash
-func (cl *Client) AddTorrentInfoHash(infoHash meta.Hash) (t *Torrent, new bool) {
-	return cl.AddTorrentInfoHashWithStorage(infoHash, nil)
+func (cl *Client) newTorrent(spec *Spec, storage storage.TorrentStorage) (*Torrent, error) {
+	return NewTorrent(cl, spec.InfoHash, spec.InfoBytes, storage, defaultEstablishedConnsPerTorrent)
 }
 
 // AddTorrentInfoHashWithStorage adds a torrent by InfoHash with a custom Storage implementation.
-// If the torrent already exists then this Storage is ignored and the
-// existing torrent returned with `new` set to `false`
-func (cl *Client) AddTorrentInfoHashWithStorage(infoHash meta.Hash, specStorage storage.TorrentStorage) (*Torrent, bool) {
-	t, ok := cl.torrents[infoHash]
-	if ok {
-		return t, ok
-	}
-	var err error
-	if t, err = cl.newTorrent(infoHash, specStorage); err != nil {
-		log.Errorf("client cannot create a new torrent: %s", err)
-		return nil, false
-	}
+func (cl *Client) AddTorrentInfoHashWithStorage(
+	spec *Spec, specStorage storage.TorrentStorage) (*Torrent, error) {
 
-	cl.torrents[infoHash] = t
+	if t, ok := cl.torrents[spec.InfoHash]; ok {
+		return t, nil
+	}
+	t, err := cl.newTorrent(spec, specStorage)
+	if err != nil {
+		log.Errorf("client cannot create a new torrent: %s", err)
+		return nil, err
+	}
+	cl.torrents[spec.InfoHash] = t
 	//TODO: issue a request to a torrent announcer to get peers
-	return t, true
+	return t, nil
 }
 
 // AddTorrentSpec adds or merge a torrent spec.
-func (cl *Client) AddTorrentSpec(spec *Spec) (t *Torrent, new bool, err error) {
-	t, new = cl.AddTorrentInfoHashWithStorage(spec.InfoHash, cl.config.DefaultStorage)
-	if spec.InfoBytes != nil {
-		err = t.SetInfoBytes(spec.InfoBytes)
-		if err != nil {
-			log.Errorf("cannot set infobytes to a torrent: %s", err)
-			return nil, false, err
-		}
+func (cl *Client) AddTorrentSpec(spec *Spec) (*Torrent, error) {
+	t, err := cl.AddTorrentInfoHashWithStorage(spec, cl.config.DefaultStorage)
+	if err != nil {
+		return nil, err
 	}
-
 	// TODO: get a list of peers from announcer
-	t.openNewConns()
-	return
+	t.OpenNewConns()
+	return t, nil
 }
 
 func (cl *Client) dropTorrent(infoHash meta.Hash) (err error) {
@@ -411,9 +361,8 @@ func (cl *Client) dropTorrent(infoHash meta.Hash) (err error) {
 }
 
 // AddTorrent adds fully qualified torrent to a client
-func (cl *Client) AddTorrent(mi *meta.TorrentInfo) (T *Torrent, err error) {
-	t, _, err := cl.AddTorrentSpec(SpecFromMetaInfo(mi))
-	return t, err
+func (cl *Client) AddTorrent(mi *meta.TorrentInfo) (*Torrent, error) {
+	return cl.AddTorrentSpec(SpecFromMetaInfo(mi))
 }
 
 // AddTorrentFromFile adds fully qualified torrent to a client from a file
