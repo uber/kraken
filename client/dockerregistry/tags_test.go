@@ -93,7 +93,7 @@ func TestGetAllLayers(t *testing.T) {
 	tags, teardown := setup()
 	defer teardown()
 
-	manifest := "testgetalllayermanifest"
+	manifest := "09b4be55821450cbf046f7ed71c7a1d9512b442c7967004651f7bff084a285c1"
 	manifestTemp := manifest + ".temp"
 	tags.store.CreateUploadFile(manifestTemp, 0)
 	writer, _ := tags.store.GetUploadFileReadWriter(manifestTemp)
@@ -102,7 +102,7 @@ func TestGetAllLayers(t *testing.T) {
 	writer.Close()
 	assert.Nil(t, tags.store.MoveUploadFileToCache(manifestTemp, manifest))
 	expected := []string{
-		"testgetalllayermanifest",                                          // manifest
+		manifest, // manifest
 		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9", // config
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b", // layer
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4", // layer
@@ -116,7 +116,7 @@ func TestCreateTag(t *testing.T) {
 	tags, teardown := setup()
 	defer teardown()
 
-	manifest := "testlinkmanifest"
+	manifest := "09b4be55821450cbf046f7ed71c7a1d9512b442c7967004651f7bff084a285c1"
 	manifestTemp := manifest + ".temp"
 	tags.store.CreateUploadFile(manifestTemp, 0)
 	writer, _ := tags.store.GetUploadFileReadWriter(manifestTemp)
@@ -141,7 +141,7 @@ func TestCreateTag(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 
 	for _, digest := range []string{
-		"testlinkmanifest",
+		manifest,
 		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9",
 	} {
 		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
@@ -164,7 +164,7 @@ func TestCreateTag(t *testing.T) {
 	assert.True(t, os.IsExist(err))
 
 	for _, digest := range []string{
-		"testlinkmanifest",
+		manifest,
 		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9",
 	} {
 		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
@@ -273,7 +273,7 @@ func TestGetManifest(t *testing.T) {
 	tags, teardown := setup()
 	defer teardown()
 
-	manifest := "testgetmanifest"
+	manifest := "09b4be55821450cbf046f7ed71c7a1d9512b442c7967004651f7bff084a285c1"
 	manifestTemp := manifest + ".temp"
 	tags.store.CreateUploadFile(manifestTemp, 0)
 	writer, _ := tags.store.GetUploadFileReadWriter(manifestTemp)
@@ -303,7 +303,7 @@ func TestDeleteTag(t *testing.T) {
 	tags, teardown := setup()
 	defer teardown()
 
-	manifest := "testdeletetagmanifest"
+	manifest := "09b4be55821450cbf046f7ed71c7a1d9512b442c7967004651f7bff084a285c1"
 	manifestTemp := manifest + ".temp"
 	tags.store.CreateUploadFile(manifestTemp, 0)
 	writer, _ := tags.store.GetUploadFileReadWriter(manifestTemp)
@@ -399,7 +399,7 @@ func TestDeleteExpiredTags(t *testing.T) {
 	tags, teardown := setup()
 	defer teardown()
 
-	manifest := "testdeletetagmanifest"
+	manifest := "09b4be55821450cbf046f7ed71c7a1d9512b442c7967004651f7bff084a285c1"
 	manifestTemp := manifest + ".temp"
 	tags.store.CreateUploadFile(manifestTemp, 0)
 	writer, _ := tags.store.GetUploadFileReadWriter(manifestTemp)
@@ -519,7 +519,7 @@ func TestGetOrDownloadAllLayersAndCreateTag(t *testing.T) {
 
 	repo := "newrepo"
 	tag := "newtag"
-	manifest := "testdownloadalllayers"
+	manifest := "09b4be55821450cbf046f7ed71c7a1d9512b442c7967004651f7bff084a285c1"
 	manifestTemp := manifest + ".temp"
 	tags.store.CreateUploadFile(manifestTemp, 0)
 	writer, _ := tags.store.GetUploadFileReadWriter(manifestTemp)

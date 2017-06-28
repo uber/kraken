@@ -15,7 +15,6 @@ import (
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/utils"
-	"github.com/docker/distribution/manifest/schema2"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 )
@@ -345,28 +344,12 @@ func (t *DockerTags) getAllLayers(manifestDigest string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	manifest, _, err := utils.ParseManifestV2(body)
+	manifest, digest, err := utils.ParseManifestV2(body)
 	if err != nil {
 		return nil, err
 	}
 
-	layers := []string{manifestDigest}
-
-	switch manifest.(type) {
-	case *schema2.DeserializedManifest:
-		// Inc ref count for config and data layers.
-		descriptors := manifest.References()
-		for _, descriptor := range descriptors {
-			if descriptor.Digest == "" {
-				return nil, fmt.Errorf("Unsupported layer format in manifest")
-			}
-
-			layers = append(layers, descriptor.Digest.Hex())
-		}
-	default:
-		return nil, fmt.Errorf("Unsupported manifest format")
-	}
-	return layers, nil
+	return utils.GetManifestV2References(manifest, digest)
 }
 
 func (t *DockerTags) listTags(repo string) ([]string, error) {

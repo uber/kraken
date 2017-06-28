@@ -385,7 +385,7 @@ func (webApp *webAppStruct) PostManifestHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	err = webApp.datastore.UpdateManifest(
+	err = webApp.datastore.CreateManifest(
 		&storage.Manifest{TagName: name, Manifest: string(manifest[:]), Flags: 0})
 	if err != nil {
 		log.Errorf("Cannot update the manifest: %s", webApp.FormatRequest(r))

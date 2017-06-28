@@ -35,6 +35,5 @@ func InitializeAPI(
 
 	// get manifest
 	r.Get("/manifest/:name", webApp.GetManifestHandler)
-
 	return r
 }
