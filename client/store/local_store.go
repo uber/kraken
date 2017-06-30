@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path"
@@ -17,9 +18,8 @@ import (
 // LocalStore manages all peer agent files on local disk.
 type LocalStore struct {
 	uploadBackend        base.FileStore
-	downloadCacheBackend refcountable.RCFileStore
-
-	trashDir string
+	downloadCacheBackend base.FileStore
+	config               *configuration.Config
 }
 
 // NewLocalStore initializes and returns a new LocalStore object.
@@ -42,14 +42,17 @@ func NewLocalStore(config *configuration.Config) *LocalStore {
 	registerFileState(StateDownload, config.DownloadDir)
 	registerFileState(StateCache, config.CacheDir)
 
+	uploadBackend := base.NewLocalFileStoreDefault()
+	var downloadCacheBackend base.FileStore
+	if config.TagDeletion.Enable {
+		downloadCacheBackend = refcountable.NewLocalRCFileStoreDefault()
+	} else {
+		downloadCacheBackend = base.NewLocalFileStoreDefault()
+	}
 	return &LocalStore{
-		uploadBackend: base.NewLocalFileStore(
-			&base.LocalFileEntryInternalFactory{},
-			&base.LocalFileEntryFactory{}),
-		downloadCacheBackend: refcountable.NewLocalRCFileStore(
-			&refcountable.LocalRCFileEntryInternalFactory{},
-			&refcountable.LocalRCFileEntryFactory{}),
-		trashDir: config.TrashDir,
+		uploadBackend:        uploadBackend,
+		downloadCacheBackend: downloadCacheBackend,
+		config:               config,
 	}
 }
 
@@ -249,7 +252,7 @@ func (store *LocalStore) MoveDownloadFileToCache(fileName string) error {
 // MoveCacheFileToTrash moves a file from cache directory to trash directory, and append a random
 // suffix so there won't be name collision.
 func (store *LocalStore) MoveCacheFileToTrash(fileName string) error {
-	newPath := path.Join(store.trashDir, fileName+"."+uuid.Generate().String())
+	newPath := path.Join(store.config.TrashDir, fileName+"."+uuid.Generate().String())
 	if err := store.downloadCacheBackend.LinkToFile(fileName, []base.FileState{StateCache}, newPath); err != nil {
 		return err
 	}
@@ -259,7 +262,7 @@ func (store *LocalStore) MoveCacheFileToTrash(fileName string) error {
 // DeleteAllTrashFiles permanently deletes all files from trash directory.
 // This function is not executed inside global lock, and expects to be the only one doing deletion.
 func (store *LocalStore) DeleteAllTrashFiles() error {
-	dir, err := os.Open(store.trashDir)
+	dir, err := os.Open(store.config.TrashDir)
 	if err != nil {
 		return err
 	}
@@ -269,7 +272,7 @@ func (store *LocalStore) DeleteAllTrashFiles() error {
 		return err
 	}
 	for _, fileName := range names {
-		err = os.Remove(path.Join(store.trashDir, fileName))
+		err = os.Remove(path.Join(store.config.TrashDir, fileName))
 		if err != nil {
 			return err
 		}
@@ -277,30 +280,35 @@ func (store *LocalStore) DeleteAllTrashFiles() error {
 	return nil
 }
 
-// IncrementCacheFileRefCount increments ref count for a file in cache directory.
-func (store *LocalStore) IncrementCacheFileRefCount(fileName string) (int64, error) {
-	return store.downloadCacheBackend.IncrementFileRefCount(fileName, []base.FileState{StateCache})
+// RefCacheFile increments ref count for a file in cache directory.
+func (store *LocalStore) RefCacheFile(fileName string) (int64, error) {
+	b, ok := store.downloadCacheBackend.(refcountable.RCFileStore)
+	if !ok {
+		return 0, fmt.Errorf("Local ref count is disabled")
+	}
+	return b.IncrementFileRefCount(fileName, []base.FileState{StateCache})
 }
 
-// DecrementCacheFileRefCount decrements ref count for a file in cache directory.
+// DerefCacheFile decrements ref count for a file in cache directory.
 // If ref count reaches 0, it will try to rename it and move it to trash directory.
-func (store *LocalStore) DecrementCacheFileRefCount(fileName string) (int64, error) {
-	refCount, err := store.downloadCacheBackend.DecrementFileRefCount(fileName, []base.FileState{StateCache})
-	if err != nil {
-		return refCount, err
+func (store *LocalStore) DerefCacheFile(fileName string) (int64, error) {
+	b, ok := store.downloadCacheBackend.(refcountable.RCFileStore)
+	if !ok {
+		return 0, fmt.Errorf("Local ref count is disabled")
 	}
-	// Try rename and move to trash.
-	if refCount == 0 {
-		newPath := path.Join(store.trashDir, fileName+"."+uuid.Generate().String())
-		if err := store.downloadCacheBackend.LinkToFile(fileName, []base.FileState{StateCache}, newPath); err != nil {
+	refCount, err := b.DecrementFileRefCount(fileName, []base.FileState{StateCache})
+	if err == nil && refCount == 0 {
+		// Try rename and move to trash.
+		newPath := path.Join(store.config.TrashDir, fileName+"."+uuid.Generate().String())
+		if err := b.LinkToFile(fileName, []base.FileState{StateCache}, newPath); err != nil {
 			return 0, err
 		}
-		err := store.downloadCacheBackend.DeleteFile(fileName, []base.FileState{StateCache})
+		err := b.DeleteFile(fileName, []base.FileState{StateCache})
 		if refcountable.IsRefCountError(err) {
 			// It's possible ref count was incremented again, and that's normal. Abort.
 			return err.(*refcountable.RefCountError).RefCount, nil
 		}
-		return 0, err
 	}
 	return refCount, nil
+
 }

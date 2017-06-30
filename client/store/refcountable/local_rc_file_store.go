@@ -8,9 +8,19 @@ type LocalRCFileStore struct {
 }
 
 // NewLocalRCFileStore initializes and returns a new RCFileStore object.
+// It allows dependency injection.
 func NewLocalRCFileStore(internalFactory base.FileEntryInternalFactory, factory base.FileEntryFactory) RCFileStore {
 	return &LocalRCFileStore{
 		LocalFileStore: base.NewLocalFileStore(internalFactory, factory).(*base.LocalFileStore),
+	}
+}
+
+// NewLocalRCFileStoreDefault initializes and returns a new RCFileStore object.
+func NewLocalRCFileStoreDefault() RCFileStore {
+	return &LocalRCFileStore{
+		LocalFileStore: base.NewLocalFileStore(
+			&LocalRCFileEntryInternalFactory{},
+			&LocalRCFileEntryFactory{}).(*base.LocalFileStore),
 	}
 }
 

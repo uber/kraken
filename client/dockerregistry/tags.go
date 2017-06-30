@@ -142,7 +142,7 @@ func (t *DockerTags) DeleteTag(repo, tag string) error {
 	}
 
 	for _, layer := range layers {
-		_, err := t.store.DecrementCacheFileRefCount(layer)
+		_, err := t.store.DerefCacheFile(layer)
 		if err != nil {
 			// TODO (@evelynl): if decrement ref count fails, we might have some garbage layers that are never deleted
 			// one possilbe solution is that we can add a reconciliation routine to re-calcalate ref count for all layers
@@ -239,13 +239,16 @@ func (t *DockerTags) createTag(repo, tag, manifestDigest string, layers []string
 		return err
 	}
 
-	for _, layer := range layers {
-		// TODO (@evelynl): if increment ref count fails and the caller retries, we might have some garbage layers that are never deleted
-		// one possilbe solution is that we can add a reconciliation routine to re-calcalate ref count for all layers
-		// another is that we use sqlite
-		_, err := t.store.IncrementCacheFileRefCount(layer)
-		if err != nil {
-			return err
+	if t.config.TagDeletion.Enable {
+		for _, layer := range layers {
+			// TODO (@evelynl): if increment ref count fails and the caller retries, we might have
+			// some garbage layers that are never deleted. One possilbe solution is that we can add
+			// a reconciliation routine to re-calcalate ref count for all layers; Another is that we
+			// use sqlite
+			_, err := t.store.RefCacheFile(layer)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

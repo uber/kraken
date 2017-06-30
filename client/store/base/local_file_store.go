@@ -20,11 +20,20 @@ type LocalFileStore struct {
 	fileMap                  *syncmap.Map
 }
 
-// NewLocalFileStore initializes and returns a new FileStore object.
+// NewLocalFileStore initializes and returns a new FileStore object. It allows dependency injection.
 func NewLocalFileStore(fileEntryInternalFactory FileEntryInternalFactory, fileEntryFactory FileEntryFactory) FileStore {
 	return &LocalFileStore{
 		fileEntryInternalFactory: fileEntryInternalFactory,
 		fileEntryFactory:         fileEntryFactory,
+		fileMap:                  &syncmap.Map{},
+	}
+}
+
+// NewLocalFileStoreDefault initializes and returns a new FileStore object.
+func NewLocalFileStoreDefault() FileStore {
+	return &LocalFileStore{
+		fileEntryInternalFactory: &LocalFileEntryInternalFactory{},
+		fileEntryFactory:         &LocalFileEntryFactory{},
 		fileMap:                  &syncmap.Map{},
 	}
 }
