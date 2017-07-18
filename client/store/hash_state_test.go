@@ -11,6 +11,7 @@ import (
 func TestHashStateConstructor(t *testing.T) {
 	h := NewHashState("sha256", "500")
 	assert.Equal(t, h.GetSuffix(), "_hashstates/sha256/500")
+	assert.False(t, h.Movable())
 
 	re := regexp.MustCompile("_hashstates/\\w+/\\w+$")
 	assert.True(t, re.MatchString(h.GetSuffix()))

@@ -189,21 +189,30 @@ func TestMove(t *testing.T) {
 	assert.Nil(t, err)
 
 	m1 := getMockMetadataOne()
-	b2 := make([]byte, 2)
+	b1 := make([]byte, 2)
+	m2 := getMockMetadataMovable()
+	b2 := make([]byte, 1)
 
 	// Write metadata
 	updated, err := fe.WriteMetadata(dummyVerify, m1, []byte{uint8(0), uint8(1)})
 	assert.Nil(t, err)
 	assert.True(t, updated)
+	updated, err = fe.WriteMetadata(dummyVerify, m2, []byte{uint8(3)})
+	assert.Nil(t, err)
+	assert.True(t, updated)
 
 	// Read metadata
-	b2, err = fe.ReadMetadata(dummyVerify, m1)
+	b1, err = fe.ReadMetadata(dummyVerify, m1)
+	assert.Nil(t, err)
+	assert.NotNil(t, b1)
+	assert.Equal(t, uint8(0), b1[0])
+	assert.Equal(t, uint8(1), b1[1])
+	b2, err = fe.ReadMetadata(dummyVerify, m2)
 	assert.Nil(t, err)
 	assert.NotNil(t, b2)
-	assert.Equal(t, uint8(0), b2[0])
-	assert.Equal(t, uint8(1), b2[1])
+	assert.Equal(t, uint8(3), b2[0])
 
-	// Move file, removes all metadata.
+	// Move file, removes non-movable metadata.
 	err = s.MoveFile(testFileName, []FileState{stateTest1}, stateTest3)
 	assert.Nil(t, err)
 	fe, _, _ = s.LoadFileEntry(testFileName, []FileState{stateTest3})
@@ -213,14 +222,31 @@ func TestMove(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.True(t, os.IsNotExist(err))
 
+	// Verify metadataMovable still exists
+	b2Moved, err := fe.ReadMetadata(dummyVerify, m2)
+	assert.Nil(t, err)
+	assert.NotNil(t, b2Moved)
+	assert.Equal(t, uint8(3), b2Moved[0])
+
 	// Verify file location
 	_, err = os.Stat(path.Join(stateTest1.GetDirectory(), testFileName+getMockMetadataOne().GetSuffix()))
 	assert.NotNil(t, err)
+	assert.True(t, os.IsNotExist(err))
 	_, err = os.Stat(path.Join(stateTest2.GetDirectory(), testFileName+getMockMetadataOne().GetSuffix()))
 	assert.NotNil(t, err)
+	assert.True(t, os.IsNotExist(err))
 	_, err = os.Stat(path.Join(stateTest3.GetDirectory(), testFileName+getMockMetadataOne().GetSuffix()))
 	assert.NotNil(t, err)
+	assert.True(t, os.IsNotExist(err))
 	_, err = os.Stat(path.Join(stateTest3.GetDirectory(), testFileName))
+	assert.Nil(t, err)
+	_, err = os.Stat(path.Join(stateTest1.GetDirectory(), testFileName+getMockMetadataMovable().GetSuffix()))
+	assert.NotNil(t, err)
+	assert.True(t, os.IsNotExist(err))
+	_, err = os.Stat(path.Join(stateTest2.GetDirectory(), testFileName+getMockMetadataMovable().GetSuffix()))
+	assert.NotNil(t, err)
+	assert.True(t, os.IsNotExist(err))
+	_, err = os.Stat(path.Join(stateTest3.GetDirectory(), testFileName+getMockMetadataMovable().GetSuffix()))
 	assert.Nil(t, err)
 }
 

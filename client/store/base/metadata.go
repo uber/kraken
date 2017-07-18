@@ -10,6 +10,7 @@ import (
 // <filename>/data, metadata to <filename>/<metadata>
 type MetadataType interface {
 	GetSuffix() string
+	Movable() bool
 }
 
 var _metadataFactory = make(map[*regexp.Regexp]MetadataFactory)

@@ -40,3 +40,7 @@ func NewHashState(algo, offset string) base.MetadataType {
 func (h hashState) GetSuffix() string {
 	return fmt.Sprintf("_hashstates/%s/%s", h.algo, h.offset)
 }
+
+func (h hashState) Movable() bool {
+	return false
+}
