@@ -188,6 +188,25 @@ func (store *LocalStore) ListUploadFileHashStatePaths(fileName string) ([]string
 	return paths, nil
 }
 
+// GetDownloadOrCacheFileMeta reads filemeta from a downloading or cached file
+func (store *LocalStore) GetDownloadOrCacheFileMeta(fileName string) ([]byte, error) {
+	return store.downloadCacheBackend.ReadFileMetadata(
+		fileName,
+		[]base.FileState{StateDownload, StateCache},
+		NewTorrentMeta(),
+	)
+}
+
+// SetDownloadOrCacheFileMeta reads filemeta from a downloading or cached file
+func (store *LocalStore) SetDownloadOrCacheFileMeta(fileName string, data []byte) (bool, error) {
+	return store.downloadCacheBackend.WriteFileMetadata(
+		fileName,
+		[]base.FileState{StateDownload, StateCache},
+		NewTorrentMeta(),
+		data,
+	)
+}
+
 // GetUploadFileReader returns a FileReader for a file in upload directory.
 func (store *LocalStore) GetUploadFileReader(fileName string) (base.FileReader, error) {
 	return store.uploadBackend.GetFileReader(fileName, []base.FileState{StateUpload})

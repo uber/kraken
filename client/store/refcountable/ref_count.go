@@ -27,3 +27,7 @@ func NewRefCount() base.MetadataType {
 func (r refCount) GetSuffix() string {
 	return "_refcount"
 }
+
+func (r refCount) Movable() bool {
+	return false
+}

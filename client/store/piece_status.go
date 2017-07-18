@@ -34,3 +34,7 @@ func NewPieceStatus() base.MetadataType {
 func (p pieceStatus) GetSuffix() string {
 	return "_status"
 }
+
+func (p pieceStatus) Movable() bool {
+	return false
+}

@@ -30,6 +30,7 @@ func (state mockFileState) GetDirectory() string { return _mockFileStateLookup[s
 // Mock metadata
 func init() {
 	RegisterMetadata(regexp.MustCompile("_mocksuffix_\\w+"), &mockMetadataFactory{})
+	RegisterMetadata(regexp.MustCompile("_mocksuffix_movable"), &mockMetadataFactoryMovable{})
 }
 
 type mockMetadataFactory struct{}
@@ -62,6 +63,37 @@ func getMockMetadataTwo() MetadataType {
 
 func (m mockMetadata) GetSuffix() string {
 	return m.randomSuffix
+}
+
+func (m mockMetadata) Movable() bool {
+	return false
+}
+
+type mockMetadataFactoryMovable struct{}
+
+func (f mockMetadataFactoryMovable) Create(suffix string) MetadataType {
+	if strings.HasSuffix(suffix, getMockMetadataMovable().GetSuffix()) {
+		return getMockMetadataMovable()
+	}
+	return nil
+}
+
+type mockMetadataMovable struct {
+	randomSuffix string
+}
+
+func getMockMetadataMovable() MetadataType {
+	return mockMetadataMovable{
+		randomSuffix: "_mocksuffix_movable",
+	}
+}
+
+func (m mockMetadataMovable) GetSuffix() string {
+	return m.randomSuffix
+}
+
+func (m mockMetadataMovable) Movable() bool {
+	return true
 }
 
 // Test file entry

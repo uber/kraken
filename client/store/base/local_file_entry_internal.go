@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"path/filepath"
 )
 
 // LocalFileEntryInternalFactory initializes LocalFileEntryInternal obj.
@@ -45,10 +44,6 @@ func (fi *LocalFileEntryInternal) Stat() (os.FileInfo, error) {
 // Create creates a file on disk.
 func (fi *LocalFileEntryInternal) Create(len int64) error {
 	targetPath := fi.GetPath()
-	// Just in case file name contains "/"
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-		return err
-	}
 	// Create file
 	f, err := os.Create(targetPath)
 	if err != nil {
@@ -85,6 +80,18 @@ func (fi *LocalFileEntryInternal) LinkTo(targetPath string) error {
 
 // Move moves file to target dir under the same name, removes all metadata, and updates dir.
 func (fi *LocalFileEntryInternal) Move(targetDir string) error {
+	// Link metadata
+	performLink := func(mt MetadataType) error {
+		if mt.Movable() {
+			return fi.linkMetadata(fi.dir, targetDir, mt)
+		}
+		return nil
+	}
+	err := fi.RangeMetadata(performLink)
+	if err != nil {
+		return err
+	}
+
 	// Move data file.
 	sourcePath := fi.GetPath()
 	targetPath := path.Join(targetDir, fi.name)
@@ -207,6 +214,16 @@ func (fi *LocalFileEntryInternal) DeleteMetadata(mt MetadataType) error {
 	defer delete(fi.metadataSet, mt)
 
 	return os.RemoveAll(filePath)
+}
+
+// linkMetadata hardlinks metadata from sourceDir to targetDir
+func (fi *LocalFileEntryInternal) linkMetadata(sourceDir string, targetDir string, mt MetadataType) error {
+	sourcePath := path.Join(sourceDir, fi.name+mt.GetSuffix())
+	targetPath := path.Join(targetDir, fi.name+mt.GetSuffix())
+	if err := os.Link(sourcePath, targetPath); err != nil {
+		return err
+	}
+	return nil
 }
 
 // RangeMetadata lofis through all metadata and applies function f, until an error happens.

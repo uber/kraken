@@ -27,3 +27,7 @@ func NewStartedAt() base.MetadataType {
 func (s startedAt) GetSuffix() string {
 	return "_startedat"
 }
+
+func (s startedAt) Movable() bool {
+	return false
+}
