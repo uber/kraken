@@ -1,9 +1,11 @@
 package service
 
 import (
+	"log"
 	"net/http"
 
 	"code.uber.internal/infra/kraken/config/tracker"
+	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/storage"
 
 	"github.com/pressly/chi"
@@ -12,28 +14,32 @@ import (
 // InitializeAPI instantiates a new web-app for the tracker
 func InitializeAPI(
 	appCfg config.AppConfig,
-	storage storage.Storage,
+	store storage.Storage,
 ) http.Handler {
 
-	webApp := newWebApp(appCfg, storage)
+	policy, ok := peerhandoutpolicy.Get(
+		appCfg.PeerHandoutPolicy.Priority, appCfg.PeerHandoutPolicy.Sampling)
+	if !ok {
+		log.Fatalf(
+			"Peer handout policy not found: priority=%s sampling=%s",
+			appCfg.PeerHandoutPolicy.Priority, appCfg.PeerHandoutPolicy.Sampling)
+	}
+	announce := &announceHandler{
+		config: appCfg.Announcer,
+		store:  store,
+		policy: policy,
+	}
+	health := &healthHandler{}
+	infohash := &infohashHandler{store}
+	manifest := &manifestHandler{store}
+
 	r := chi.NewRouter()
+	r.Get("/health", health.Get)
+	r.Get("/announce", announce.Get)
+	r.Get("/infohash", infohash.Get)
+	r.Post("/infohash", infohash.Post)
+	r.Get("/manifest/:name", manifest.Get)
+	r.Post("/manifest/:name", manifest.Post)
 
-	// /health endpoint
-	r.Get("/health", webApp.HealthHandler)
-
-	// announce endpoint
-	r.Get("/announce", webApp.GetAnnounceHandler)
-
-	// get info hash endpoint
-	r.Get("/infohash", webApp.GetInfoHashHandler)
-
-	// post info hash endpoint
-	r.Post("/infohash", webApp.PostInfoHashHandler)
-
-	// post manifest endpoint
-	r.Post("/manifest/:name", webApp.PostManifestHandler)
-
-	// get manifest
-	r.Get("/manifest/:name", webApp.GetManifestHandler)
 	return r
 }

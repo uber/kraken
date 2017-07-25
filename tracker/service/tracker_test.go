@@ -2,22 +2,17 @@ package service
 
 import (
 	"bytes"
-	"encoding/hex"
 	"encoding/json"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"reflect"
-	"strconv"
 	"testing"
 
 	"code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/testutils"
 	"code.uber.internal/infra/kraken/tracker/storage"
-	"code.uber.internal/infra/kraken/utils"
 
 	"code.uber.internal/infra/kraken/test/mocks/mock_storage"
 	"github.com/golang/mock/gomock"
@@ -75,28 +70,7 @@ var (
 func TestMain(m *testing.M) {
 	torrent = storage.TorrentFixture()
 	peer = storage.PeerForTorrentFixture(torrent)
-
-	rawinfoHash, err := hex.DecodeString(torrent.InfoHash)
-	if err != nil {
-		panic(err)
-	}
-	rawpeerID, err := hex.DecodeString(peer.PeerID)
-	if err != nil {
-		panic(err)
-	}
-
-	v := url.Values{}
-	v.Set("info_hash", string(rawinfoHash))
-	v.Set("peer_id", string(rawpeerID))
-	v.Set("ip", strconv.Itoa(int(utils.IPtoInt32(net.ParseIP(peer.IP)))))
-	v.Set("port", strconv.FormatInt(peer.Port, 10))
-	v.Set("dc", peer.DC)
-	v.Set("downloaded", strconv.FormatInt(peer.BytesDownloaded, 10))
-	v.Set("uploaded", strconv.FormatInt(peer.BytesUploaded, 10))
-	v.Set("left", strconv.FormatInt(peer.BytesLeft, 10))
-	v.Set("event", peer.Event)
-
-	announceRequestPath = "/announce?" + v.Encode()
+	announceRequestPath = createAnnouncePath(torrent, peer)
 
 	os.Exit(m.Run())
 }
