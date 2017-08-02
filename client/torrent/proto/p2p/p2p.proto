@@ -1,0 +1,81 @@
+/*
+  P2PMessage represents a flavor of a P2P torrent protocol that kraken supports
+*/
+
+syntax = "proto3";
+
+package p2p;
+
+// Binary set of all pieces that peer has downloaded so far. Also serves as a
+// handshaking message, which each peer sends once at the beginning of the
+// connection to declare what their peer id is and what info hash they want to
+// transmit.
+message BitfieldMessage {
+    string infoHash = 2;
+    string peerID   = 3;
+    repeated bool bitfield = 4;
+}
+
+// Requests a piece of the given index. Note: offset and length are unused fields
+// and if set, will be rejected.
+message PieceRequestMessage {
+    int32 index  = 2;
+    int32 offset = 3; // Unused.
+    int32 length = 4; // Unused.
+}
+
+// Provides binary payload response to a peer request. Always immediately followed
+// by a binary blob sent over socket, so the receiver should be ready to treat the
+// blob as a non-protobuf message.
+message PiecePayloadMessage {
+    int32  index  = 2;
+    int32  offset = 3; // Unused.
+    int32  length = 4; // Unused.
+    string digest = 5; // Cryptographic signature of a piece content (sha1, md5).
+}
+
+// Announces that a piece is available to other peers.
+message AnnouncePieceMessage {
+    int32 index = 2;
+}
+
+// Unused.
+message CancelPieceMessage {
+    int32 index = 2;
+}
+
+// General purpose error message. Receivers may check the error code to determine
+// the origin of the message.
+message ErrorMessage {
+
+    enum ErrorCode {
+        PIECE_REQUEST_FAILED = 0;
+    }
+
+    string    error = 2;
+    int32     index = 3;
+    ErrorCode code  = 4;
+}
+
+message Message {
+
+    enum Type {
+        BITFIELD      = 0;
+        PIECE_REQUEST = 1;
+        PIECE_PAYLOAD = 2;
+        ANNOUCE_PIECE = 3;
+        CANCEL_PIECE  = 4;
+        ERROR         = 5;
+    }
+
+    string version = 1;
+
+    Type type = 2;
+
+    BitfieldMessage      bitfield      = 3;
+    PieceRequestMessage  pieceRequest  = 4;
+    PiecePayloadMessage  piecePayload  = 5;
+    AnnouncePieceMessage announcePiece = 6;
+    CancelPieceMessage   cancelPiece   = 7;
+    ErrorMessage         error         = 8;
+}
