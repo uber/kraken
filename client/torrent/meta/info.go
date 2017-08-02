@@ -2,15 +2,12 @@ package meta
 
 import (
 	"crypto/sha1"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"code.uber.internal/go-common.git/x/log"
 
 	"github.com/anacrolix/missinggo/slices"
 )
@@ -133,7 +130,6 @@ func (info *Info) GeneratePieces(open func(fi FileInfo) (io.ReadCloser, error)) 
 		}
 	}
 	info.Pieces = pieces
-	log.Infof("generated pieces hash: %s", hex.EncodeToString(pieces))
 	return nil
 }
 
@@ -188,7 +184,7 @@ func (info *Info) Validate() error {
 		}
 	} else {
 		if int((info.TotalLength()+info.PieceLength-1)/info.PieceLength) != info.NumPieces() {
-			return errors.New("piece count and file lengths are at odds")
+			return fmt.Errorf("piece count and file lengths are at odds: num pieces %d", info.NumPieces())
 		}
 	}
 	return nil

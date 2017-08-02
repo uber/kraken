@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"net/http"
+	"sync"
 
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/pressly/chi"
@@ -13,31 +14,43 @@ import (
 )
 
 type testAnnounceStore struct {
-	torrents map[string][]*storage.PeerInfo
+	sync.Mutex
+	torrents map[string][]storage.PeerInfo
 }
 
 func (s *testAnnounceStore) Update(p *storage.PeerInfo) error {
+	s.Lock()
+	defer s.Unlock()
+
 	peers, ok := s.torrents[p.InfoHash]
 	if !ok {
-		s.torrents[p.InfoHash] = []*storage.PeerInfo{p}
+		s.torrents[p.InfoHash] = []storage.PeerInfo{*p}
 		return nil
 	}
 	for i := range peers {
 		if p.PeerID == peers[i].PeerID {
-			peers[i] = p
+			peers[i] = *p
 			return nil
 		}
 	}
-	s.torrents[p.InfoHash] = append(peers, p)
+	s.torrents[p.InfoHash] = append(peers, *p)
 	return nil
 }
 
 func (s *testAnnounceStore) Read(infoHash string) ([]*storage.PeerInfo, error) {
+	s.Lock()
+	defer s.Unlock()
+
 	peers, ok := s.torrents[infoHash]
 	if !ok {
 		return nil, errors.New("no peers found for info hash")
 	}
-	return peers, nil
+	copies := make([]*storage.PeerInfo, len(peers))
+	for i, p := range peers {
+		copies[i] = new(storage.PeerInfo)
+		*copies[i] = p
+	}
+	return copies, nil
 }
 
 // TestAnnouncer is a test utility which starts an in-memory tracker which listens
@@ -53,7 +66,7 @@ func TestAnnouncer(addr string) func() {
 			AnnounceInterval: 1,
 		},
 		store: &testAnnounceStore{
-			torrents: make(map[string][]*storage.PeerInfo),
+			torrents: make(map[string][]storage.PeerInfo),
 		},
 		policy: policy,
 	}

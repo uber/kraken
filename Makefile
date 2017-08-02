@@ -18,19 +18,17 @@ PROJECT_ROOT = code.uber.internal/infra/kraken
 SERVICES = \
 	tracker/tracker \
 	client/bin/kraken-agent/kraken-agent \
-	client/bin/torrent/kraken-agent \
 	tools/bin/puller/puller
 
 # List all executables
 PROGS = \
 	tracker/tracker \
 	client/bin/kraken-agent/kraken-agent \
-	client/bin/torrent/kraken-agent \
-	tools/bin/puller/puller
+	tools/bin/puller/puller \
 
 # define the list of proto buffers the service depends on
 PROTO_GENDIR ?= .gen
-PROTO_SRCS = client/torrent/p2p.proto
+PROTO_SRCS = client/torrent/proto/p2p/p2p.proto
 GOBUILD_DIR = go-build
 
 MAKE_PROTO = go-build/protoc --plugin=go-build/protoc-gen-go --proto_path=$(dir $(patsubst %/,%,$(dir $(pb)))) --go_out=$(PROTO_GENDIR)/go $(pb)
@@ -41,10 +39,9 @@ proto:
 	$(foreach pb, $(PROTO_SRCS), $(MAKE_PROTO);)
 
 tracker/tracker: tracker/main.go $(wildcard tracker/*.go config/tracker/*.go)
-client/bin/kraken-agent/kraken-agent: client/bin/kraken-agent/main.go $(wildcard client/*.go)
+client/bin/kraken-agent/kraken-agent: proto
+	client/bin/kraken-agent/main.go $(wildcard client/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
-client/bin/torrent/kraken-agent: proto
-	client/bin/kraken-new-agent/main.go $(wildcard client/torrent/*.go) $(wildcard $(PROTO_GENDIR)/go/torrent/*.go)
 
 .PHONY: rebuild_mocks
 rebuild_mocks:

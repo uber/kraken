@@ -1,14 +1,19 @@
 package storage
 
 import (
+	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 
 	"code.uber.internal/go-common.git/x/log"
-
+	"code.uber.internal/infra/kraken/client/torrent/bencode"
 	"code.uber.internal/infra/kraken/client/torrent/meta"
 )
+
+const infoFileSuffix = "_info"
+const perm = 0755
 
 // FileTorrentStorage defines a file-based storage for torrents, that isn't yet bound to a particular
 // torrent.
@@ -38,12 +43,12 @@ func infoHashPathMaker(baseDir string, info *meta.Info, infoHash meta.Hash) stri
 }
 
 // NewFileStorage creates a new file based storage for a torrent
-func NewFileStorage(baseDir string) TorrentStorage {
-	return NewFileWithCustomPathMaker(baseDir, nil)
+func NewFileStorage(baseDir string) TorrentManager {
+	return NewFileWithCustomPathMaker(baseDir, infoHashPathMaker)
 }
 
 // NewFileWithCustomPathMaker allows passing a function to determine the path for storing torrent data
-func NewFileWithCustomPathMaker(baseDir string, pathMaker PathMaker) TorrentStorage {
+func NewFileWithCustomPathMaker(baseDir string, pathMaker PathMaker) TorrentManager {
 	if pathMaker == nil {
 		pathMaker = defaultPathMaker
 	}
@@ -60,11 +65,25 @@ func (fs *FileTorrentStorage) Close() error {
 	return nil
 }
 
-// OpenTorrent opens a new torrent and returns read/write interface to it
-func (fs *FileTorrentStorage) OpenTorrent(info *meta.Info, infoHash meta.Hash) (Torrent, error) {
-	dir := fs.pathMaker(fs.baseDir, info, infoHash)
-	err := CreateNativeZeroLengthFiles(info, dir)
+// CreateTorrent opens a new torrent and returns read/write interface to it
+func (fs *FileTorrentStorage) CreateTorrent(infoHash meta.Hash, infoBytes []byte) (Torrent, error) {
+	h := meta.HashBytes(infoBytes)
+	if h != infoHash {
+		return nil, fmt.Errorf("Invalid info hash")
+	}
 
+	info := new(meta.Info)
+	if err := bencode.Unmarshal(infoBytes, info); err != nil {
+		return nil, err
+	}
+
+	dir := fs.pathMaker(fs.baseDir, info, infoHash)
+	err := os.MkdirAll(dir, perm)
+	if err != nil {
+		return nil, err
+	}
+
+	err = CreateNativeZeroLengthFiles(info, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +94,26 @@ func (fs *FileTorrentStorage) OpenTorrent(info *meta.Info, infoHash meta.Hash) (
 		info:     info,
 		infoHash: infoHash,
 	}, nil
+}
+
+// OpenTorrent opens an existing torrent and returns read/write interface to it
+func (fs *FileTorrentStorage) OpenTorrent(infoHash meta.Hash) (Torrent, []byte, error) {
+	dir := fs.pathMaker(fs.baseDir, nil, infoHash)
+	info := new(meta.Info)
+	infoBytes, err := ioutil.ReadFile(getInfoFilePath(dir))
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := bencode.Unmarshal(infoBytes, info); err != nil {
+		return nil, nil, err
+	}
+
+	return &FileTorrent{
+		ts:       fs,
+		dir:      dir,
+		info:     info,
+		infoHash: infoHash,
+	}, infoBytes, nil
 }
 
 // CreateNativeZeroLengthFiles creates natives files for any zero-length file entries in the info. This is
@@ -89,19 +128,43 @@ func CreateNativeZeroLengthFiles(info *meta.Info, dir string) (err error) {
 		os.MkdirAll(filepath.Dir(name), 0750)
 
 		f, err := os.Create(name)
-		defer f.Close()
-
 		if err != nil {
 			log.Errorf("cannot create a file %s: %s", name, err)
 			break
 		}
+		defer f.Close()
+
 		err = f.Truncate(info.Length)
 		if err != nil {
 			log.Errorf("cannot truncate a file %s: %s", name, err)
 			break
 		}
 	}
+
+	// Save info along with torrent
+	// so peers do not need to query the tracker for complete info
+	infoFile := getInfoFilePath(dir)
+	f, err := os.Create(infoFile)
+	if err != nil {
+		log.Errorf("cannot create file %s: %s", infoFile, err)
+		return
+	}
+	defer f.Close()
+	bencodedInfoBytes, err := bencode.Marshal(info)
+	if err != nil {
+		log.Errorf("cannot write file %s: %s", infoFile, err)
+		return
+	}
+	_, err = f.Write(bencodedInfoBytes)
+	if err != nil {
+		log.Errorf("cannot write file %s: %s", infoFile, err)
+		return
+	}
 	return
+}
+
+func getInfoFilePath(torrentPath string) string {
+	return fmt.Sprintf("%s%s", torrentPath, infoFileSuffix)
 }
 
 // Returns EOF on short or missing file.
@@ -186,7 +249,6 @@ func (ft *FileTorrent) WriteAt(p []byte, off int64) (n int, err error) {
 			log.Errorf("file write error %d", off)
 			return
 		}
-		log.Infof("file write at %d, value: %s", off, string(p[:n1]))
 		n += n1
 		off = 0
 		p = p[n1:]

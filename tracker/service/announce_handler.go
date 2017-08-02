@@ -12,7 +12,6 @@ import (
 	config "code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/storage"
-	"code.uber.internal/infra/kraken/utils"
 )
 
 // announceStore is a subset of the storage.Storage interface.
@@ -35,30 +34,21 @@ type AnnouncerResponse struct {
 }
 
 func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
-	log.Debugf("Received announce requet from: %s", r.Host)
+	q := r.URL.Query()
 
-	queryValues := r.URL.Query()
-
-	infoHash := hex.EncodeToString([]byte(queryValues.Get("info_hash")))
-	peerID := hex.EncodeToString([]byte(queryValues.Get("peer_id")))
-	peerPortStr := queryValues.Get("port")
-	peerIPStr := queryValues.Get("ip")
-	peerDC := queryValues.Get("dc")
-	peerBytesDownloadedStr := queryValues.Get("downloaded")
-	peerBytesUploadedStr := queryValues.Get("uploaded")
-	peerBytesLeftStr := queryValues.Get("left")
-	peerEvent := queryValues.Get("event")
+	infoHash := hex.EncodeToString([]byte(q.Get("info_hash")))
+	peerID := q.Get("peer_id")
+	peerPortStr := q.Get("port")
+	peerIP := q.Get("ip")
+	peerDC := q.Get("dc")
+	peerBytesDownloadedStr := q.Get("downloaded")
+	peerBytesUploadedStr := q.Get("uploaded")
+	peerBytesLeftStr := q.Get("left")
+	peerEvent := q.Get("event")
 
 	peerPort, err := strconv.ParseInt(peerPortStr, 10, 64)
 	if err != nil {
 		log.Infof("Port is not parsable: %s", formatRequest(r))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	peerIPInt32, err := strconv.ParseInt(peerIPStr, 10, 32)
-	if err != nil {
-		log.Infof("Peer's ip address is not a valid integer: %s", formatRequest(r))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -83,8 +73,6 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	peerIP := utils.Int32toIP(int32(peerIPInt32)).String()
 
 	peer := &storage.PeerInfo{
 		InfoHash:        infoHash,

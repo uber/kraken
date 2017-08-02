@@ -24,14 +24,13 @@ type Config struct {
 	// Called to instantiate storage for each added torrent. Builtin backends
 	// are in the storage package. If not set, the "file" implementation is
 	// used.
-	DefaultStorage storage.TorrentStorage
+	DefaultStorage storage.TorrentManager
 
 	// Perform logging and any other behaviour that will help debug.
 	Debug bool `help:"enable debug logging"`
 
-	//Track connection by priority, drop lower priority connections
+	// Track connection by priority, drop lower priority connections.
 	RespectPeerPriority bool `long:"peer-priority"`
 
-	//logger config
 	Logging log.Configuration
 }

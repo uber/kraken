@@ -12,8 +12,9 @@ type Torrent interface {
 	io.WriterAt
 }
 
-// TorrentStorage represents data storage for torrent
-type TorrentStorage interface {
-	OpenTorrent(info *meta.Info, infoHash meta.Hash) (Torrent, error)
+// TorrentManager represents data storage for torrent
+type TorrentManager interface {
+	CreateTorrent(infoHash meta.Hash, infoBytes []byte) (Torrent, error)
+	OpenTorrent(infoHash meta.Hash) (Torrent, []byte, error)
 	Close() error
 }
