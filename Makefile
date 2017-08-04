@@ -7,6 +7,7 @@ BUILD_ENV=
 # Flags to pass to go test
 TEST_FLAGS =
 
+
 # Extra dependencies that the tests use
 TEST_DEPS =
 
@@ -25,6 +26,8 @@ PROGS = \
 	tracker/tracker \
 	client/bin/kraken-agent/kraken-agent \
 	tools/bin/puller/puller \
+	tools/bin/kraken-cli/kraken
+
 
 # define the list of proto buffers the service depends on
 PROTO_GENDIR ?= .gen
@@ -32,6 +35,11 @@ PROTO_SRCS = client/torrent/proto/p2p/p2p.proto
 GOBUILD_DIR = go-build
 
 MAKE_PROTO = go-build/protoc --plugin=go-build/protoc-gen-go --proto_path=$(dir $(patsubst %/,%,$(dir $(pb)))) --go_out=$(PROTO_GENDIR)/go $(pb)
+
+update-golden:
+	$(shell UBER_ENVIRONMENT=test UBER_CONFIG_DIR=`pwd`/config/origin go test ./client/cli/ -update 1>/dev/null)
+	@echo "generated golden files"
+
 
 proto:
 	@mkdir -p $(PROTO_GENDIR)/go
@@ -42,6 +50,7 @@ tracker/tracker: tracker/main.go $(wildcard tracker/*.go config/tracker/*.go)
 client/bin/kraken-agent/kraken-agent: proto
 	client/bin/kraken-agent/main.go $(wildcard client/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
+tools/bin/kraken-cli/kraken:  client/cli/kraken-cli.go tools/bin/kraken-cli/main.go config/origin/config.go
 
 .PHONY: rebuild_mocks
 rebuild_mocks:
