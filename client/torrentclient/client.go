@@ -11,9 +11,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/boltdb/bolt"
-	"github.com/uber-go/tally"
-
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken-torrent"
 	"code.uber.internal/infra/kraken-torrent/bencode"
@@ -21,8 +18,11 @@ import (
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/utils"
+
+	"github.com/boltdb/bolt"
 	"github.com/docker/distribution/uuid"
 	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
 )
 
 const (

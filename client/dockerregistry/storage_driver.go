@@ -193,9 +193,9 @@ func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data
 	default:
 		if len(ts) > 3 && ts[len(ts)-3] == "hashstates" {
 			uuid := ts[len(ts)-4]
-			alg := ts[len(ts)-2]
-			code := ts[len(ts)-1]
-			return d.store.GetUploadFileHashState(uuid, alg, code)
+			algo := ts[len(ts)-2]
+			offset := ts[len(ts)-1]
+			return d.store.GetUploadFileHashState(uuid, algo, offset)
 		}
 		return nil, fmt.Errorf("Invalid request %s", path)
 	}
@@ -255,9 +255,9 @@ func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, conte
 	default:
 		if len(ts) > 3 && ts[len(ts)-3] == "hashstates" {
 			uuid := ts[len(ts)-4]
-			alg := ts[len(ts)-2]
-			code := ts[len(ts)-1]
-			err := d.store.SetUploadFileHashState(uuid, content, alg, code)
+			algo := ts[len(ts)-2]
+			offset := ts[len(ts)-1]
+			err := d.store.SetUploadFileHashState(uuid, content, algo, offset)
 			return err
 		}
 		return fmt.Errorf("Invalid request %s", path)
