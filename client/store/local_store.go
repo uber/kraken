@@ -150,21 +150,21 @@ func (store *LocalStore) DeleteUploadFileStartedAt(fileName string) error {
 }
 
 // SetUploadFileHashState creates and writes hashstate for a upload file.
-func (store *LocalStore) SetUploadFileHashState(fileName string, content []byte, algorithm string, code string) error {
+func (store *LocalStore) SetUploadFileHashState(fileName string, content []byte, algorithm string, offset string) error {
 	_, err := store.uploadBackend.WriteFileMetadata(
 		fileName,
 		[]base.FileState{StateUpload},
-		NewHashState(algorithm, code),
+		NewHashState(algorithm, offset),
 		content)
 	return err
 }
 
 // GetUploadFileHashState reads hashstate for a upload file.
-func (store *LocalStore) GetUploadFileHashState(fileName string, algorithm string, code string) ([]byte, error) {
+func (store *LocalStore) GetUploadFileHashState(fileName string, algorithm string, offset string) ([]byte, error) {
 	return store.uploadBackend.ReadFileMetadata(
 		fileName,
 		[]base.FileState{StateUpload},
-		NewHashState(algorithm, code))
+		NewHashState(algorithm, offset))
 }
 
 // ListUploadFileHashStatePaths list paths of all hashstates for a upload file.
