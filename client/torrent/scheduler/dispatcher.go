@@ -51,20 +51,13 @@ type dispatcher struct {
 	complete func(*dispatcher)
 }
 
-func (d *dispatcher) NumOpenConnections() int {
-	n := 0
-	// syncmap.Map has no length function, so we're forced to do this nonsense (sigh).
-	d.conns.Range(func(k, v interface{}) bool {
-		n++
-		return true
-	})
-	return n
-}
-
 // AddConn registers a new conn with the dispatcher.
 func (d *dispatcher) AddConn(c *conn) error {
 	if c.InfoHash != d.Torrent.InfoHash {
 		return errors.New("conn initialized for wrong torrent")
+	}
+	if _, ok := d.conns.LoadOrStore(c.PeerID, c); ok {
+		return errors.New("conn already exists")
 	}
 	go d.sendInitialPieceRequests(c)
 	go d.feed(c)

@@ -204,3 +204,59 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
+	require := require.New(t)
+
+	stop := trackerservice.TestAnnouncer(trackerAddr)
+	defer stop()
+
+	mi, content := genTorrent(genTorrentOpts{})
+	infoHash := mi.HashInfoBytes()
+
+	// Each peer is allowed two connections, which allows them to establish both
+	// a connection to the seeder and another peer.
+	peerConfig := genConfig()
+	peerConfig.MaxOpenConnectionsPerTorrent = 2
+
+	peerA := genTestPeer(6000, peerConfig)
+	defer peerA.Stop()
+	peerATor, err := peerA.TorrentManager.CreateTorrent(infoHash, mi.InfoBytes)
+	require.NoError(err)
+
+	peerB := genTestPeer(6001, peerConfig)
+	defer peerB.Stop()
+	peerBTor, err := peerB.TorrentManager.CreateTorrent(infoHash, mi.InfoBytes)
+	require.NoError(err)
+
+	peerAErrc := peerA.Scheduler.AddTorrent(peerATor, infoHash, mi.InfoBytes)
+	peerBErrc := peerB.Scheduler.AddTorrent(peerBTor, infoHash, mi.InfoBytes)
+
+	// Wait for peerA and peerB to establish connections to one another before
+	// starting the seeder, so their handshake bitfields are both guaranteed to
+	// be empty.
+	waitForConn(t, peerA.Scheduler, peerB.Scheduler.peerID, infoHash)
+	waitForConn(t, peerB.Scheduler, peerA.Scheduler.peerID, infoHash)
+
+	// The seeder is allowed only one connection, which means only one peer will
+	// have access to the completed torrent, while the other is forced to rely
+	// on the "trickle down" announce piece messages.
+	seederConfig := genConfig()
+	seederConfig.MaxOpenConnectionsPerTorrent = 1
+
+	seeder := genTestPeer(6002, seederConfig)
+	defer seeder.Stop()
+	seederTor := writeTorrent(seeder.TorrentManager, mi, content)
+	require.NoError(<-seeder.Scheduler.AddTorrent(seederTor, infoHash, mi.InfoBytes))
+
+	require.NoError(<-peerAErrc)
+	require.NoError(<-peerBErrc)
+
+	checkContent(require, peerATor, content)
+	checkContent(require, peerBTor, content)
+
+	// Ensure that only one peer was able to open a connection to the seeder.
+	require.NotEqual(
+		hasConn(peerA.Scheduler, seeder.Scheduler.peerID, infoHash),
+		hasConn(peerB.Scheduler, seeder.Scheduler.peerID, infoHash))
+}

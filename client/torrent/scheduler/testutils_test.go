@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -145,22 +146,29 @@ type testPeer struct {
 	TorrentManager *tempTorrentManager
 }
 
+func (p *testPeer) Stop() {
+	p.Scheduler.Stop()
+	p.TorrentManager.Delete()
+}
+
+func genTestPeer(port int, config Config) *testPeer {
+	tm := genTorrentManager()
+	s, err := New(genPeerID(), "localhost", port, "sjc1", tm, config)
+	if err != nil {
+		tm.Delete()
+		panic(err)
+	}
+	return &testPeer{s, tm}
+}
+
 func genTestPeers(n int, startPort int, config Config) (peers []*testPeer, stopAll func()) {
 	peers = make([]*testPeer, n)
 	for i := range peers {
-		tm := genTorrentManager()
-		s, err := New(
-			genPeerID(), "localhost", startPort+i, "sjc1", tm, config)
-		if err != nil {
-			tm.Delete()
-			panic(err)
-		}
-		peers[i] = &testPeer{s, tm}
+		peers[i] = genTestPeer(startPort+i, config)
 	}
 	return peers, func() {
 		for _, p := range peers {
-			defer p.Scheduler.Stop()
-			defer p.TorrentManager.Delete()
+			p.Stop()
 		}
 	}
 }
@@ -170,4 +178,42 @@ func checkContent(r *require.Assertions, t storage.Torrent, expected []byte) {
 	_, err := t.ReadAt(result, 0)
 	r.NoError(err)
 	r.Equal(expected, result)
+}
+
+type hasConnEvent struct {
+	peerID   PeerID
+	infoHash meta.Hash
+	result   chan bool
+}
+
+func (e hasConnEvent) Apply(s *Scheduler) {
+	_, ok := s.conns[connKey{e.peerID, e.infoHash}]
+	e.result <- ok
+}
+
+// waitForConn waits until s has established a connection to peerID for the
+// torrent of infoHash.
+func waitForConn(t *testing.T, s *Scheduler, peerID PeerID, infoHash meta.Hash) {
+	timer := time.NewTimer(5 * time.Second)
+	for {
+		result := make(chan bool)
+		s.events <- hasConnEvent{peerID, infoHash, result}
+		select {
+		case ok := <-result:
+			if ok {
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		case <-timer.C:
+			t.Fatalf("waitForConn timed out for peer=%s, hash=%s", peerID, infoHash)
+		}
+	}
+}
+
+// hasConn checks whether s has an established connection to peerID for the
+// torrent of infoHash.
+func hasConn(s *Scheduler, peerID PeerID, infoHash meta.Hash) bool {
+	result := make(chan bool)
+	s.events <- hasConnEvent{peerID, infoHash, result}
+	return <-result
 }
