@@ -197,7 +197,7 @@ func waitForConn(t *testing.T, s *Scheduler, peerID PeerID, infoHash meta.Hash) 
 	timer := time.NewTimer(5 * time.Second)
 	for {
 		result := make(chan bool)
-		s.events <- hasConnEvent{peerID, infoHash, result}
+		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
 		select {
 		case ok := <-result:
 			if ok {
@@ -214,6 +214,6 @@ func waitForConn(t *testing.T, s *Scheduler, peerID PeerID, infoHash meta.Hash) 
 // torrent of infoHash.
 func hasConn(s *Scheduler, peerID PeerID, infoHash meta.Hash) bool {
 	result := make(chan bool)
-	s.events <- hasConnEvent{peerID, infoHash, result}
+	s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
 	return <-result
 }

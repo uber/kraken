@@ -22,18 +22,19 @@ var (
 
 type dispatcherFactory struct {
 	LocalPeerID PeerID
+
+	EventLoop *eventLoop
 }
 
-// New creates a new dispatcher for the given torrent. complete is a callback which
-// is called once the torrent finishes downloading.
-func (f *dispatcherFactory) New(t *torrent, complete func(*dispatcher)) *dispatcher {
+// New creates a new dispatcher for the given torrent.
+func (f *dispatcherFactory) New(t *torrent) *dispatcher {
 	d := &dispatcher{
 		Torrent:     t,
 		localPeerID: f.LocalPeerID,
-		complete:    complete,
+		eventLoop:   f.EventLoop,
 	}
 	if t.Complete() {
-		d.callComplete()
+		d.completed()
 	}
 	return d
 }
@@ -47,8 +48,10 @@ type dispatcher struct {
 
 	conns syncmap.Map
 
-	once     sync.Once
-	complete func(*dispatcher)
+	// Ensures we only emit a complete event once.
+	once sync.Once
+
+	eventLoop *eventLoop
 }
 
 // AddConn registers a new conn with the dispatcher.
@@ -245,7 +248,7 @@ func (d *dispatcher) handlePiecePayload(
 		return true
 	})
 	if d.Torrent.Complete() {
-		d.callComplete()
+		d.completed()
 	}
 }
 
@@ -261,8 +264,10 @@ func (d *dispatcher) handleBitfield(c *conn, msg *p2p.BitfieldMessage) {
 	}).Error("Unexpected bitfield message from established conn")
 }
 
-func (d *dispatcher) callComplete() {
-	d.once.Do(func() { d.complete(d) })
+func (d *dispatcher) completed() {
+	d.once.Do(func() {
+		go d.eventLoop.Send(completedDispatcherEvent{d})
+	})
 }
 
 func (d *dispatcher) logf(f log.Fields) bark.Logger {

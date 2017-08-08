@@ -91,9 +91,7 @@ type connFactory struct {
 
 	LocalPeerID PeerID
 
-	// Callback which each conn created by this factory calls (passing itself as the
-	// argument) after closing.
-	Closed func(*conn)
+	EventLoop *eventLoop
 }
 
 // newConn resolves response handshake h into a new conn.
@@ -110,8 +108,8 @@ func (f *connFactory) newConn(
 		openedByRemote: openedByRemote,
 		sender:         make(chan *message, f.Config.SenderBufferSize),
 		receiver:       make(chan *message, f.Config.ReceiverBufferSize),
+		eventLoop:      f.EventLoop,
 		done:           make(chan struct{}),
-		closed:         f.Closed,
 	}
 
 	c.start()
@@ -183,11 +181,12 @@ type conn struct {
 	sender   chan *message
 	receiver chan *message
 
+	eventLoop *eventLoop
+
 	// The following fields orchestrate the closing of the connection:
-	once   sync.Once      // Ensures the close sequence is executed only once.
-	done   chan struct{}  // Signals to readLoop / writeLoop to exit.
-	wg     sync.WaitGroup // Waits for readLoop / writeLoop to exit.
-	closed func(*conn)    // Called when conn closes.
+	once sync.Once      // Ensures the close sequence is executed only once.
+	done chan struct{}  // Signals to readLoop / writeLoop to exit.
+	wg   sync.WaitGroup // Waits for readLoop / writeLoop to exit.
 }
 
 // OpenedByRemote returns whether the conn was opened by the local peer, or the remote peer.
@@ -227,7 +226,7 @@ func (c *conn) Close() {
 			close(c.done)
 			c.nc.Close()
 			c.wg.Wait()
-			c.closed(c)
+			c.eventLoop.Send(closedConnEvent{c})
 		}()
 	})
 }
