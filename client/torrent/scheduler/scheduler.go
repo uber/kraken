@@ -38,13 +38,6 @@ func (k connKey) String() string {
 	return fmt.Sprintf("connKey(peer=%s, hash=%s)", k.peerID, k.infoHash)
 }
 
-// event describes an external event which moves the Scheduler into a new state.
-// While the event is applying, it is guaranteed to be the only accessor of
-// Scheduler state.
-type event interface {
-	Apply(s *Scheduler)
-}
-
 // Scheduler manages global state for the peer. This includes:
 // - Opening torrents.
 // - Announcing to the tracker.
@@ -71,8 +64,9 @@ type Scheduler struct {
 	conns         map[connKey]*conn         // Active connections.
 	pendingConns  map[connKey]bool          // Pending connections.
 	announceQueue *announceQueue
+	torrentErrors map[meta.Hash]chan error // AddTorrent error channels.
 
-	events         chan event
+	eventLoop      *eventLoop
 	listener       net.Listener
 	announceTicker *time.Ticker
 
@@ -96,6 +90,8 @@ func New(
 	if err != nil {
 		return nil, err
 	}
+	done := make(chan struct{})
+	eventLoop := newEventLoop(done)
 	s := &Scheduler{
 		peerID:         peerID,
 		ip:             ip,
@@ -103,23 +99,25 @@ func New(
 		datacenter:     datacenter,
 		config:         config,
 		torrentManager: tm,
+		connFactory: &connFactory{
+			Config:      config,
+			LocalPeerID: peerID,
+			EventLoop:   eventLoop,
+		},
+		dispatcherFactory: &dispatcherFactory{
+			LocalPeerID: peerID,
+			EventLoop:   eventLoop,
+		},
 		dispatchers:    make(map[meta.Hash]*dispatcher),
 		connCapacity:   make(map[meta.Hash]int),
 		conns:          make(map[connKey]*conn),
 		pendingConns:   make(map[connKey]bool),
 		announceQueue:  newAnnounceQueue(),
-		events:         make(chan event),
+		torrentErrors:  make(map[meta.Hash]chan error),
+		eventLoop:      eventLoop,
 		listener:       l,
 		announceTicker: time.NewTicker(config.AnnounceInterval),
-		done:           make(chan struct{}),
-	}
-	s.connFactory = &connFactory{
-		Config:      config,
-		LocalPeerID: peerID,
-		Closed:      s.connClosed,
-	}
-	s.dispatcherFactory = &dispatcherFactory{
-		LocalPeerID: peerID,
+		done:           done,
 	}
 
 	s.start()
@@ -133,9 +131,17 @@ func (s *Scheduler) Stop() {
 	s.once.Do(func() {
 		close(s.done)
 		s.listener.Close()
-		s.wg.Wait() // Waits for all loops to stop.
+
+		// Waits for all loops to stop.
+		s.wg.Wait()
+
 		for _, c := range s.conns {
 			c.Close()
+		}
+
+		// Notify local clients of pending torrents that they will not complete.
+		for _, errc := range s.torrentErrors {
+			errc <- ErrSchedulerStopped
 		}
 	})
 }
@@ -156,40 +162,24 @@ func (s *Scheduler) AddTorrent(
 		errc <- err
 		return errc
 	}
-	s.events <- &newTorrentEvent{t, errc}
+	s.eventLoop.Send(newTorrentEvent{t, errc})
 	return errc
-}
-
-// emit sends a new event into the event loop. Should never be called by the event loop
-// goroutine (which handles Apply methods), else deadlock will occur.
-func (s *Scheduler) emit(e event) {
-	select {
-	case s.events <- e:
-	case <-s.done:
-	}
 }
 
 func (s *Scheduler) start() {
 	s.wg.Add(3)
-	go s.eventLoop()
+	go s.runEventLoop()
 	go s.listenLoop()
 	go s.announceTickerLoop()
 }
 
-// eventLoop handles events from the various channels of Scheduler, providing synchronization to
+// eventLoop handles eventLoop from the various channels of Scheduler, providing synchronization to
 // all Scheduler state.
-func (s *Scheduler) eventLoop() {
+func (s *Scheduler) runEventLoop() {
 	s.log().Debugf("Starting eventLoop")
-	for {
-		select {
-		case e := <-s.events:
-			e.Apply(s)
-		case <-s.done:
-			s.log().Debug("eventLoop done")
-			s.wg.Done()
-			return
-		}
-	}
+	s.eventLoop.Run(s)
+	s.log().Debug("eventLoop done")
+	s.wg.Done()
 }
 
 // listenLoop accepts incoming connections.
@@ -213,7 +203,7 @@ func (s *Scheduler) announceTickerLoop() {
 	for {
 		select {
 		case <-s.announceTicker.C:
-			s.emit(announceTickEvent{})
+			s.eventLoop.Send(announceTickEvent{})
 		case <-s.done:
 			s.log().Debug("announceTickerLoop done")
 			s.wg.Done()
@@ -229,7 +219,7 @@ func (s *Scheduler) handshakeIncomingConn(nc net.Conn) {
 		nc.Close()
 		return
 	}
-	s.emit(incomingHandshakeEvent{nc, h})
+	s.eventLoop.Send(incomingHandshakeEvent{nc, h})
 }
 
 func (s *Scheduler) doInitIncomingConn(
@@ -267,7 +257,7 @@ func (s *Scheduler) initIncomingConn(nc net.Conn, remoteHandshake *handshake) {
 	} else {
 		e = incomingConnEvent{c, t}
 	}
-	s.emit(e)
+	s.eventLoop.Send(e)
 }
 
 func (s *Scheduler) doInitOutgoingConn(
@@ -306,7 +296,7 @@ func (s *Scheduler) initOutgoingConn(peerID PeerID, ip string, port int, t *torr
 	} else {
 		e = outgoingConnEvent{c, t}
 	}
-	s.emit(e)
+	s.eventLoop.Send(e)
 }
 
 func (s *Scheduler) doAnnounce(t *torrent) ([]trackerstorage.PeerInfo, error) {
@@ -360,7 +350,7 @@ func (s *Scheduler) announce(d *dispatcher) {
 	} else {
 		e = announceResponseEvent{d.Torrent.InfoHash, peers}
 	}
-	s.emit(e)
+	s.eventLoop.Send(e)
 }
 
 // getConnOpener returns the PeerID of the peer who opened the conn, i.e. sent the first handshake.
@@ -483,37 +473,13 @@ func (s *Scheduler) addIncomingConn(c *conn, t *torrent) error {
 	}
 	d, ok := s.dispatchers[t.InfoHash]
 	if !ok {
-		d = s.dispatcherFactory.New(t, s.dispatcherCompleteFn(nil))
+		d = s.dispatcherFactory.New(t)
 		s.dispatchers[t.InfoHash] = d
 	}
 	if err := d.AddConn(c); err != nil {
 		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
 	}
 	return nil
-}
-
-// dispatcherCompleteFn returns a closure to be called when a dispatcher finishes
-// downloading a torrent. errc is an optional error channel which signals whether
-// the dispatcher was able to successfully complete or not.
-func (s *Scheduler) dispatcherCompleteFn(errc chan error) func(*dispatcher) {
-	return func(d *dispatcher) {
-		go func() {
-			select {
-			case s.events <- completedDispatcherEvent{d}:
-				if errc != nil {
-					errc <- nil
-				}
-			case <-s.done:
-				if errc != nil {
-					errc <- ErrSchedulerStopped
-				}
-			}
-		}()
-	}
-}
-
-func (s *Scheduler) connClosed(c *conn) {
-	s.emit(closedConnEvent{c})
 }
 
 func (s *Scheduler) logf(f log.Fields) bark.Logger {
@@ -523,206 +489,4 @@ func (s *Scheduler) logf(f log.Fields) bark.Logger {
 
 func (s *Scheduler) log() bark.Logger {
 	return s.logf(log.Fields{})
-}
-
-// closedConnEvent occurs when a connection is closed.
-type closedConnEvent struct {
-	conn *conn
-}
-
-// Apply ejects the conn from the Scheduler's active connections.
-func (e closedConnEvent) Apply(s *Scheduler) {
-	s.logf(log.Fields{"conn": e.conn}).Debug("Applying closed conn event")
-
-	s.deleteActiveConn(e.conn)
-}
-
-// failedHandshakeEvent occurs when a pending connection fails to handshake.
-type failedHandshakeEvent struct {
-	peerID   PeerID
-	infoHash meta.Hash
-}
-
-// Apply ejects the peer/hash of the failed handshake from the Scheduler's
-// pending connections.
-func (e failedHandshakeEvent) Apply(s *Scheduler) {
-	s.logf(log.Fields{"peer": e.peerID, "hash": e.infoHash}).Debug("Applying failed handshake event")
-
-	s.deletePendingConn(e.peerID, e.infoHash)
-}
-
-// incomingHandshakeEvent when a handshake was received from a new connection.
-type incomingHandshakeEvent struct {
-	nc        net.Conn
-	handshake *handshake
-}
-
-// Apply rejects incoming handshakes when the Scheduler is at capacity. If the
-// Scheduler has capacity for more connections, adds the peer/hash of the handshake
-// to the Scheduler's pending connections and asynchronously attempts to establish
-// the connection.
-func (e incomingHandshakeEvent) Apply(s *Scheduler) {
-	s.logf(log.Fields{"handshake": e.handshake}).Debug("Applying incoming handshake event")
-
-	if err := s.addPendingConn(e.handshake.PeerID, e.handshake.InfoHash); err != nil {
-		s.logf(log.Fields{"handshake": e.handshake}).Errorf("Rejecting incoming handshake: %s", err)
-		e.nc.Close()
-		return
-	}
-	go s.initIncomingConn(e.nc, e.handshake)
-}
-
-// incomingConnEvent occurs when a pending incoming connection finishes handshaking.
-type incomingConnEvent struct {
-	conn    *conn
-	torrent *torrent
-}
-
-// Apply transitions a fully-handshaked incoming conn from pending to active.
-func (e incomingConnEvent) Apply(s *Scheduler) {
-	s.logf(log.Fields{"conn": e.conn, "torrent": e.torrent}).Debug("Applying incoming conn event")
-
-	if err := s.addIncomingConn(e.conn, e.torrent); err != nil {
-		s.logf(log.Fields{
-			"conn": e.conn, "torrent": e.torrent,
-		}).Errorf("Error adding incoming conn: %s", err)
-		e.conn.Close()
-	}
-}
-
-// outgoingConnEvent occurs when a pending outgoing connection finishes handshaking.
-type outgoingConnEvent struct {
-	conn    *conn
-	torrent *torrent
-}
-
-// Apply transitions a fully-handshaked outgoing conn from pending to active.
-func (e outgoingConnEvent) Apply(s *Scheduler) {
-	s.logf(log.Fields{"conn": e.conn, "torrent": e.torrent}).Debug("Applying outgoing conn event")
-
-	if err := s.addOutgoingConn(e.conn, e.torrent); err != nil {
-		s.logf(log.Fields{
-			"conn": e.conn, "torrent": e.torrent,
-		}).Errorf("Error adding outgoing conn: %s", err)
-		e.conn.Close()
-	}
-}
-
-// announceTickEvent occurs when it is time to announce to the tracker.
-type announceTickEvent struct{}
-
-// Apply pulls the next dispatcher from the announce queue and asynchronously
-// makes an announce request to the tracker.
-func (e announceTickEvent) Apply(s *Scheduler) {
-	s.log().Debug("Applying announce tick event")
-
-	d, ok := s.announceQueue.Next()
-	if !ok {
-		s.log().Debug("No dispatchers in announce queue")
-		return
-	}
-	s.logf(log.Fields{"dispatcher": d}).Debug("Announcing")
-	go s.announce(d)
-}
-
-// announceResponseEvent occurs when a successfully announce response was received
-// from the tracker.
-type announceResponseEvent struct {
-	infoHash meta.Hash
-	peers    []trackerstorage.PeerInfo
-}
-
-// Apply selects new peers returned via an announce response to open connections to
-// if there is capacity. These connections are added to the Scheduler's pending
-// connections and handshaked asynchronously.
-//
-// Also marks the dispatcher as ready to announce again.
-func (e announceResponseEvent) Apply(s *Scheduler) {
-	s.logf(log.Fields{"hash": e.infoHash, "peers": e.peers}).Debug("Applying announce response event")
-
-	d, ok := s.dispatchers[e.infoHash]
-	if !ok {
-		s.logf(log.Fields{
-			"hash": e.infoHash,
-		}).Info("Dispatcher closed after announce response received")
-		return
-	}
-	s.announceQueue.Ready(d)
-	for i := 0; i < len(e.peers); i++ {
-		p := e.peers[i]
-		pid, err := NewPeerID(p.PeerID)
-		if err != nil {
-			s.logf(log.Fields{
-				"peer": p.PeerID, "hash": e.infoHash,
-			}).Errorf("Error creating PeerID from announce response: %s", err)
-			continue
-		}
-		if pid == s.peerID {
-			// Tracker may return our own peer.
-			continue
-		}
-		if err := s.addPendingConn(pid, e.infoHash); err != nil {
-			if err == errTorrentAtCapacity {
-				s.logf(log.Fields{
-					"peer": pid, "hash": e.infoHash,
-				}).Info("Cannot open any more connections, torrent is at capacity")
-				break
-			}
-			s.logf(log.Fields{
-				"peer": pid, "hash": e.infoHash,
-			}).Infof("Cannot add pending conn: %s, skipping", err)
-			continue
-		}
-		go s.initOutgoingConn(pid, p.IP, int(p.Port), d.Torrent)
-	}
-}
-
-// announceFailureEvent occurs when an announce request fails.
-type announceFailureEvent struct {
-	dispatcher *dispatcher
-}
-
-// Apply marks the dispatcher as ready to announce again.
-func (e announceFailureEvent) Apply(s *Scheduler) {
-	s.logf(log.Fields{"dispatcher": e.dispatcher}).Debug("Applying announce failure event")
-
-	s.announceQueue.Ready(e.dispatcher)
-}
-
-// newTorrentEvent occurs when a new torrent was requested for download.
-type newTorrentEvent struct {
-	torrent *torrent
-	errc    chan error
-}
-
-// Apply begins seeding / leeching a new torrent.
-func (e newTorrentEvent) Apply(s *Scheduler) {
-	s.logf(log.Fields{"torrent": e.torrent}).Debug("Applying new torrent event")
-
-	if _, ok := s.dispatchers[e.torrent.InfoHash]; ok {
-		s.logf(log.Fields{
-			"torrent": e.torrent,
-		}).Info("Skipping torrent, info hash already registered in Scheduler")
-		e.errc <- ErrTorrentAlreadyRegistered
-		return
-	}
-	s.logf(log.Fields{
-		"torrent": e.torrent,
-	}).Debugf("Setting torrent max connections to %d", s.config.MaxOpenConnectionsPerTorrent)
-	s.connCapacity[e.torrent.InfoHash] = s.config.MaxOpenConnectionsPerTorrent
-	d := s.dispatcherFactory.New(e.torrent, s.dispatcherCompleteFn(e.errc))
-	s.dispatchers[e.torrent.InfoHash] = d
-	s.announceQueue.Add(d)
-}
-
-// completedDispatcherEvent occurs when a dispatcher finishes downloading its torrent.
-type completedDispatcherEvent struct {
-	dispatcher *dispatcher
-}
-
-// Apply marks the dispatcher for its final announce.
-func (e completedDispatcherEvent) Apply(s *Scheduler) {
-	s.logf(log.Fields{"dispatcher": e.dispatcher}).Debug("Applying completed dispatcher event")
-
-	s.announceQueue.Done(e.dispatcher)
 }
