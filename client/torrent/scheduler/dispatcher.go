@@ -3,7 +3,6 @@ package scheduler
 import (
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/uber-common/bark"
 
@@ -21,9 +20,9 @@ var (
 )
 
 type dispatcherFactory struct {
+	Config      Config
 	LocalPeerID PeerID
-
-	EventLoop *eventLoop
+	EventLoop   *eventLoop
 }
 
 // New creates a new dispatcher for the given torrent.
@@ -34,7 +33,7 @@ func (f *dispatcherFactory) New(t *torrent) *dispatcher {
 		eventLoop:   f.EventLoop,
 	}
 	if t.Complete() {
-		d.completed()
+		go d.eventLoop.Send(completedDispatcherEvent{d})
 	}
 	return d
 }
@@ -48,10 +47,17 @@ type dispatcher struct {
 
 	conns syncmap.Map
 
-	// Ensures we only emit a complete event once.
-	once sync.Once
-
 	eventLoop *eventLoop
+}
+
+func (d *dispatcher) Conns() []*conn {
+	var conns []*conn
+	d.conns.Range(func(k, v interface{}) bool {
+		c := v.(*conn)
+		conns = append(conns, c)
+		return true
+	})
+	return conns
 }
 
 // AddConn registers a new conn with the dispatcher.
@@ -175,11 +181,12 @@ func (d *dispatcher) sendErrPieceRequestFailed(c *conn, i int32, err error) {
 func (d *dispatcher) handlePieceRequest(c *conn, msg *p2p.PieceRequestMessage) {
 	d.logf(log.Fields{"peer": c.PeerID, "piece": msg.Index}).Debug("Received piece request")
 
-	if !d.isFullPiece(int(msg.Index), int(msg.Offset), int(msg.Length)) {
+	i := int(msg.Index)
+	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
 		d.sendErrPieceRequestFailed(c, msg.Index, errChunkNotSupported)
 		return
 	}
-	payload, err := d.Torrent.ReadPiece(int(msg.Index))
+	payload, err := d.Torrent.ReadPiece(i)
 	if err != nil {
 		d.sendErrPieceRequestFailed(c, msg.Index, err)
 		return
@@ -195,7 +202,9 @@ func (d *dispatcher) handlePieceRequest(c *conn, msg *p2p.PieceRequestMessage) {
 		},
 		Payload: payload,
 	}
-	c.Send(m)
+	if err := c.Send(m); err != nil {
+		c.SentPiece()
+	}
 }
 
 func (d *dispatcher) handlePiecePayload(
@@ -203,18 +212,25 @@ func (d *dispatcher) handlePiecePayload(
 
 	// TODO(codyg): re-request piece if write failed.
 
-	if !d.isFullPiece(int(msg.Index), int(msg.Offset), int(msg.Length)) {
+	i := int(msg.Index)
+	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
 		d.logf(log.Fields{
 			"peer": c.PeerID,
 		}).Errorf("Error handling piece payload: %s", errChunkNotSupported)
 		return
 	}
-	if err := d.Torrent.WritePiece(int(msg.Index), payload); err != nil {
+	completed, err := d.Torrent.WritePiece(i, payload)
+	if err != nil {
 		d.logf(log.Fields{
 			"peer": c.PeerID, "piece": msg.Index,
 		}).Errorf("Error writing piece payload: %s", err)
 		return
 	}
+	c.ReceivedGoodPiece()
+	if completed {
+		d.eventLoop.Send(completedDispatcherEvent{d})
+	}
+
 	d.logf(log.Fields{
 		"peer": c.PeerID, "piece": msg.Index,
 	}).Debug("Downloaded piece payload")
@@ -247,9 +263,6 @@ func (d *dispatcher) handlePiecePayload(
 
 		return true
 	})
-	if d.Torrent.Complete() {
-		d.completed()
-	}
 }
 
 func (d *dispatcher) handleCancelPiece(c *conn, msg *p2p.CancelPieceMessage) {
@@ -262,12 +275,6 @@ func (d *dispatcher) handleBitfield(c *conn, msg *p2p.BitfieldMessage) {
 	log.WithFields(log.Fields{
 		"peer": c.PeerID,
 	}).Error("Unexpected bitfield message from established conn")
-}
-
-func (d *dispatcher) completed() {
-	d.once.Do(func() {
-		go d.eventLoop.Send(completedDispatcherEvent{d})
-	})
 }
 
 func (d *dispatcher) logf(f log.Fields) bark.Logger {

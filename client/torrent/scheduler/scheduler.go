@@ -66,9 +66,10 @@ type Scheduler struct {
 	announceQueue *announceQueue
 	torrentErrors map[meta.Hash]chan error // AddTorrent error channels.
 
-	eventLoop      *eventLoop
-	listener       net.Listener
-	announceTicker *time.Ticker
+	eventLoop        *eventLoop
+	listener         net.Listener
+	announceTicker   *time.Ticker
+	preemptionTicker *time.Ticker
 
 	// The following fields orchestrate the stopping of the Scheduler.
 	once sync.Once      // Ensures the stop sequence is executed only once.
@@ -105,19 +106,21 @@ func New(
 			EventLoop:   eventLoop,
 		},
 		dispatcherFactory: &dispatcherFactory{
+			Config:      config,
 			LocalPeerID: peerID,
 			EventLoop:   eventLoop,
 		},
-		dispatchers:    make(map[meta.Hash]*dispatcher),
-		connCapacity:   make(map[meta.Hash]int),
-		conns:          make(map[connKey]*conn),
-		pendingConns:   make(map[connKey]bool),
-		announceQueue:  newAnnounceQueue(),
-		torrentErrors:  make(map[meta.Hash]chan error),
-		eventLoop:      eventLoop,
-		listener:       l,
-		announceTicker: time.NewTicker(config.AnnounceInterval),
-		done:           done,
+		dispatchers:      make(map[meta.Hash]*dispatcher),
+		connCapacity:     make(map[meta.Hash]int),
+		conns:            make(map[connKey]*conn),
+		pendingConns:     make(map[connKey]bool),
+		announceQueue:    newAnnounceQueue(),
+		torrentErrors:    make(map[meta.Hash]chan error),
+		eventLoop:        eventLoop,
+		listener:         l,
+		announceTicker:   time.NewTicker(config.AnnounceInterval),
+		preemptionTicker: time.NewTicker(config.PreemptionInterval),
+		done:             done,
 	}
 
 	s.start()
@@ -143,6 +146,8 @@ func (s *Scheduler) Stop() {
 		for _, errc := range s.torrentErrors {
 			errc <- ErrSchedulerStopped
 		}
+
+		s.log().Info("Stop complete")
 	})
 }
 
@@ -170,7 +175,7 @@ func (s *Scheduler) start() {
 	s.wg.Add(3)
 	go s.runEventLoop()
 	go s.listenLoop()
-	go s.announceTickerLoop()
+	go s.tickerLoop()
 }
 
 // eventLoop handles eventLoop from the various channels of Scheduler, providing synchronization to
@@ -198,14 +203,16 @@ func (s *Scheduler) listenLoop() {
 	s.wg.Done()
 }
 
-// announceTickerLoop periodically emits announceTickEvents.
-func (s *Scheduler) announceTickerLoop() {
+// tickerLoop periodically emits various tick events.
+func (s *Scheduler) tickerLoop() {
 	for {
 		select {
 		case <-s.announceTicker.C:
 			s.eventLoop.Send(announceTickEvent{})
+		case <-s.preemptionTicker.C:
+			s.eventLoop.Send(preemptionTickEvent{})
 		case <-s.done:
-			s.log().Debug("announceTickerLoop done")
+			s.log().Debug("tickerLoop done")
 			s.wg.Done()
 			return
 		}

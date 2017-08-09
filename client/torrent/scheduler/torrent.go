@@ -158,21 +158,24 @@ func (t *torrent) ReadPiece(i int) ([]byte, error) {
 	return buf, nil
 }
 
-func (t *torrent) WritePiece(i int, data []byte) error {
+// WritePiece writes piece i with the given data. Returns true if torrent is completed
+// after writing piece i.
+func (t *torrent) WritePiece(i int, data []byte) (bool, error) {
 	t.Lock()
 	defer t.Unlock()
 
 	if t.completedPieces[i] {
-		return errPieceAlreadyCompleted
+		return false, errPieceAlreadyCompleted
 	}
 	if err := t.verifyPiece(i, data); err != nil {
-		return err
+		return false, err
 	}
 	if _, err := t.store.WriteAt(data, int64(i)*t.info.PieceLength); err != nil {
-		return err
+		return false, err
 	}
 	t.markComplete(i)
-	return nil
+	completed := len(t.completedPieces) == t.info.NumPieces()
+	return completed, nil
 }
 
 func (t *torrent) String() string {

@@ -12,6 +12,7 @@ import (
 	"code.uber.internal/infra/kraken/client/torrent/bencode"
 	"code.uber.internal/infra/kraken/client/torrent/meta"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
+	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
 const trackerAddr = "localhost:4001"
@@ -45,6 +46,8 @@ func genConfig() Config {
 		// buffer will instantly force any deadlock conditions.
 		SenderBufferSize:   0,
 		ReceiverBufferSize: 0,
+		IdleSeedingTimeout: 2 * time.Second,
+		PreemptionInterval: 500 * time.Millisecond,
 	}
 }
 
@@ -191,23 +194,24 @@ func (e hasConnEvent) Apply(s *Scheduler) {
 	e.result <- ok
 }
 
-// waitForConn waits until s has established a connection to peerID for the
+// waitForConnEstablished waits until s has established a connection to peerID for the
 // torrent of infoHash.
-func waitForConn(t *testing.T, s *Scheduler, peerID PeerID, infoHash meta.Hash) {
-	timer := time.NewTimer(5 * time.Second)
-	for {
+func waitForConnEstablished(t *testing.T, s *Scheduler, peerID PeerID, infoHash meta.Hash) {
+	testutil.PollUntilTrue(t, 5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
-		select {
-		case ok := <-result:
-			if ok {
-				return
-			}
-			time.Sleep(100 * time.Millisecond)
-		case <-timer.C:
-			t.Fatalf("waitForConn timed out for peer=%s, hash=%s", peerID, infoHash)
-		}
-	}
+		return <-result
+	})
+}
+
+// waitForConnRemoved waits until s has closed the connection to peerID for the
+// torrent of infoHash.
+func waitForConnRemoved(t *testing.T, s *Scheduler, peerID PeerID, infoHash meta.Hash) {
+	testutil.PollUntilTrue(t, 5*time.Second, func() bool {
+		result := make(chan bool)
+		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
+		return !<-result
+	})
 }
 
 // hasConn checks whether s has an established connection to peerID for the
@@ -216,4 +220,22 @@ func hasConn(s *Scheduler, peerID PeerID, infoHash meta.Hash) bool {
 	result := make(chan bool)
 	s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
 	return <-result
+}
+
+type hasDispatcherEvent struct {
+	infoHash meta.Hash
+	result   chan bool
+}
+
+func (e hasDispatcherEvent) Apply(s *Scheduler) {
+	_, ok := s.dispatchers[e.infoHash]
+	e.result <- ok
+}
+
+func waitForDispatcherRemoved(t *testing.T, s *Scheduler, infoHash meta.Hash) {
+	testutil.PollUntilTrue(t, 5*time.Second, func() bool {
+		result := make(chan bool)
+		s.eventLoop.Send(hasDispatcherEvent{infoHash, result})
+		return <-result
+	})
 }
