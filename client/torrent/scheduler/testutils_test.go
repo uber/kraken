@@ -15,8 +15,6 @@ import (
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
-const trackerAddr = "localhost:4001"
-
 const testTempDir = "/tmp/kraken_scheduler_test"
 
 func init() {
@@ -35,7 +33,7 @@ func randomText(n int) []byte {
 	return b
 }
 
-func genConfig() Config {
+func genConfig(trackerAddr string) Config {
 	return Config{
 		TrackerAddr:                  trackerAddr,
 		MaxOpenConnectionsPerTorrent: 20,
@@ -120,9 +118,7 @@ func genTorrent(o genTorrentOpts) (mi *meta.TorrentInfo, content []byte) {
 	if err := info.BuildFromFilePath(f.Name()); err != nil {
 		panic(err)
 	}
-	mi = &meta.TorrentInfo{
-		Announce: trackerAddr + "/announce",
-	}
+	mi = &meta.TorrentInfo{}
 	mi.InfoBytes, err = bencode.Marshal(info)
 	if err != nil {
 		panic(err)
@@ -154,9 +150,9 @@ func (p *testPeer) Stop() {
 	p.TorrentManager.Delete()
 }
 
-func genTestPeer(port int, config Config) *testPeer {
+func genTestPeer(config Config) *testPeer {
 	tm := genTorrentManager()
-	s, err := New(genPeerID(), "localhost", port, "sjc1", tm, config)
+	s, err := New(genPeerID(), "localhost:0", "sjc1", tm, config)
 	if err != nil {
 		tm.Delete()
 		panic(err)
@@ -164,10 +160,10 @@ func genTestPeer(port int, config Config) *testPeer {
 	return &testPeer{s, tm}
 }
 
-func genTestPeers(n int, startPort int, config Config) (peers []*testPeer, stopAll func()) {
+func genTestPeers(n int, config Config) (peers []*testPeer, stopAll func()) {
 	peers = make([]*testPeer, n)
 	for i := range peers {
-		peers[i] = genTestPeer(startPort+i, config)
+		peers[i] = genTestPeer(config)
 	}
 	return peers, func() {
 		for _, p := range peers {

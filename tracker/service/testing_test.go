@@ -20,8 +20,7 @@ func getPeerIDs(peers []storage.PeerInfo) []string {
 func TestTestAnnouncer(t *testing.T) {
 	require := require.New(t)
 
-	addr := "localhost:26232"
-	stop := TestAnnouncer(addr)
+	addr, stop := TestAnnouncer()
 	defer stop()
 
 	tor := storage.TorrentFixture()

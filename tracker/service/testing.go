@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"net"
 	"net/http"
 	"sync"
 
@@ -54,8 +55,9 @@ func (s *testAnnounceStore) Read(infoHash string) ([]*storage.PeerInfo, error) {
 }
 
 // TestAnnouncer is a test utility which starts an in-memory tracker which listens
-// for announce requests on the given addr. Returns a closure for stopping the tracker.
-func TestAnnouncer(addr string) func() {
+// for announce requests. Returns the "ip:port" the tracker is running on, and a
+// closure for stopping the tracker.
+func TestAnnouncer() (addr string, stop func()) {
 	policy, ok := peerhandoutpolicy.Get("ipv4netmask", "completeness")
 	if !ok {
 		log.Fatal("Failed to lookup peer handout policy")
@@ -74,11 +76,12 @@ func TestAnnouncer(addr string) func() {
 	r := chi.NewRouter()
 	r.Get("/announce", announce.Get)
 
-	server := &http.Server{
-		Addr:    addr,
-		Handler: r,
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		log.Fatalf("Failed to create TestAnnouncer listener: %s", err)
 	}
-	go server.ListenAndServe()
+	server := &http.Server{Handler: r}
+	go server.Serve(l)
 
-	return func() { server.Close() }
+	return l.Addr().String(), func() { server.Close() }
 }
