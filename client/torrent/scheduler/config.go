@@ -34,4 +34,12 @@ type Config struct {
 	// Prevents the connection reader from being blocked if a receiver consumer
 	// is taking a long time to process a message.
 	ReceiverBufferSize int
+
+	// IdleSeedingTimeout is the duration an idle dispatcher will exist after
+	// completing its torrent.
+	IdleSeedingTimeout time.Duration
+
+	// PreemptionInterval is the interval in which the Scheduler analyzes the
+	// status of existing conns and determines whether to preempt them.
+	PreemptionInterval time.Duration
 }

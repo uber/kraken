@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
+	"time"
 
 	"code.uber.internal/infra/kraken/client/torrent/bencode"
 	"code.uber.internal/infra/kraken/client/torrent/meta"
@@ -58,4 +60,25 @@ func DummyTestTorrent() (tempDir string, metaInfo *meta.TorrentInfo) {
 	CreateDummyTorrentData(tempDir)
 	metaInfo = DummyTorrentMetaInfo()
 	return
+}
+
+// PollUntilTrue calls f until f returns true. Fails if true is not received
+// within timeout.
+func PollUntilTrue(t *testing.T, timeout time.Duration, f func() bool) {
+	timer := time.NewTimer(timeout)
+	for {
+		result := make(chan bool, 1)
+		go func() {
+			result <- f()
+		}()
+		select {
+		case ok := <-result:
+			if ok {
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		case <-timer.C:
+			t.Fatalf("PollUntilTrue timed out after %.2f seconds", timeout.Seconds())
+		}
+	}
 }

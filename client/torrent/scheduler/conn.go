@@ -101,6 +101,7 @@ func (f *connFactory) newConn(
 	c := &conn{
 		PeerID:         h.PeerID,
 		InfoHash:       h.InfoHash,
+		CreatedAt:      time.Now(),
 		Bitfield:       newSyncBitfield(h.Bitfield),
 		localPeerID:    f.LocalPeerID,
 		nc:             nc,
@@ -164,8 +165,13 @@ func (f *connFactory) ReciprocateHandshake(
 // conn manages peer communication over a connection for multiple torrents. Inbound
 // messages are multiplexed based on the torrent they pertain to.
 type conn struct {
-	PeerID   PeerID
-	InfoHash meta.Hash
+	PeerID    PeerID
+	InfoHash  meta.Hash
+	CreatedAt time.Time
+
+	mu                    sync.Mutex // Protects the following fields:
+	lastGoodPieceReceived time.Time
+	lastPieceSent         time.Time
 
 	// Tracks known pieces of the remote peer. Initialized to the bitfield sent
 	// via handshake. Mainly used as a bookkeeping tool for dispatcher.
@@ -187,6 +193,34 @@ type conn struct {
 	once sync.Once      // Ensures the close sequence is executed only once.
 	done chan struct{}  // Signals to readLoop / writeLoop to exit.
 	wg   sync.WaitGroup // Waits for readLoop / writeLoop to exit.
+}
+
+func (c *conn) LastGoodPieceReceived() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.lastGoodPieceReceived
+}
+
+func (c *conn) ReceivedGoodPiece() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.lastGoodPieceReceived = time.Now()
+}
+
+func (c *conn) LastPieceSent() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.lastPieceSent
+}
+
+func (c *conn) SentPiece() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.lastPieceSent = time.Now()
 }
 
 // OpenedByRemote returns whether the conn was opened by the local peer, or the remote peer.
@@ -300,6 +334,7 @@ L:
 			c.receiver <- msg
 		}
 	}
+	close(c.receiver)
 	c.wg.Done()
 	c.Close()
 }

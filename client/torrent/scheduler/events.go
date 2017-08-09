@@ -2,11 +2,13 @@ package scheduler
 
 import (
 	"net"
+	"time"
 
 	"code.uber.internal/go-common.git/x/log"
 
 	"code.uber.internal/infra/kraken/client/torrent/meta"
 	trackerstorage "code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/utils/timeutil"
 )
 
 // event describes an external event which moves the Scheduler into a new state.
@@ -257,4 +259,33 @@ func (e completedDispatcherEvent) Apply(s *Scheduler) {
 	}
 	errc <- nil
 	delete(s.torrentErrors, e.dispatcher.Torrent.InfoHash)
+}
+
+// preemptionTickEvent occurs periodically to allow the Scheduler to free
+// unneeded resources.
+type preemptionTickEvent struct{}
+
+// Apply frees Scheduler state of any stale / unneeded resources.
+func (e preemptionTickEvent) Apply(s *Scheduler) {
+	s.log().Debug("Applying preemption tick event")
+
+	for _, d := range s.dispatchers {
+		var lastActivity time.Time
+		conns := d.Conns()
+		for _, c := range conns {
+			lastActivity = timeutil.MostRecent(
+				lastActivity,
+				c.CreatedAt,
+				c.LastGoodPieceReceived(),
+				c.LastPieceSent())
+		}
+		idle := time.Since(lastActivity) > s.config.IdleSeedingTimeout
+		if d.Torrent.Complete() && idle {
+			s.logf(log.Fields{"dispatcher": d}).Info("Removing idle dispatcher")
+			delete(s.dispatchers, d.Torrent.InfoHash)
+			for _, c := range conns {
+				c.Close()
+			}
+		}
+	}
 }

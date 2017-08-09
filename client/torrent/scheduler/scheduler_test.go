@@ -14,8 +14,8 @@ import (
 func init() {
 	formatter := true
 	logConfig := &log.Configuration{
-		Level:         log.DebugLevel,
-		Stdout:        true,
+		Level: log.DebugLevel,
+		//Stdout:        true,
 		TextFormatter: &formatter,
 	}
 	log.Configure(logConfig, true)
@@ -81,7 +81,7 @@ func TestDownloadManyTorrentsWithSeederAndLeecher(t *testing.T) {
 	defer leecher.Stop()
 
 	var wg sync.WaitGroup
-	for _, tor := range genTestTorrents(40, genTorrentOpts{}) {
+	for _, tor := range genTestTorrents(5, genTorrentOpts{}) {
 		tor := tor
 		wg.Add(1)
 		go func() {
@@ -235,8 +235,8 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 	// Wait for peerA and peerB to establish connections to one another before
 	// starting the seeder, so their handshake bitfields are both guaranteed to
 	// be empty.
-	waitForConn(t, peerA.Scheduler, peerB.Scheduler.peerID, infoHash)
-	waitForConn(t, peerB.Scheduler, peerA.Scheduler.peerID, infoHash)
+	waitForConnEstablished(t, peerA.Scheduler, peerB.Scheduler.peerID, infoHash)
+	waitForConnEstablished(t, peerB.Scheduler, peerA.Scheduler.peerID, infoHash)
 
 	// The seeder is allowed only one connection, which means only one peer will
 	// have access to the completed torrent, while the other is forced to rely
@@ -259,4 +259,33 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 	require.NotEqual(
 		hasConn(peerA.Scheduler, seeder.Scheduler.peerID, infoHash),
 		hasConn(peerB.Scheduler, seeder.Scheduler.peerID, infoHash))
+}
+
+func TestDispatcherShutsDownAfterIdleTimeout(t *testing.T) {
+	require := require.New(t)
+
+	stop := trackerservice.TestAnnouncer(trackerAddr)
+	defer stop()
+
+	mi, content := genTorrent(genTorrentOpts{})
+	infoHash := mi.HashInfoBytes()
+
+	config := genConfig()
+	config.IdleSeedingTimeout = 1 * time.Second
+
+	seeder := genTestPeer(6000, config)
+	defer seeder.Stop()
+	seederTor := writeTorrent(seeder.TorrentManager, mi, content)
+	require.NoError(<-seeder.Scheduler.AddTorrent(seederTor, infoHash, mi.InfoBytes))
+
+	leecher := genTestPeer(6001, config)
+	defer leecher.Stop()
+	leecherTor, err := leecher.TorrentManager.CreateTorrent(infoHash, mi.InfoBytes)
+	require.NoError(err)
+	require.NoError(<-leecher.Scheduler.AddTorrent(leecherTor, infoHash, mi.InfoBytes))
+
+	checkContent(require, leecherTor, content)
+
+	waitForDispatcherRemoved(t, seeder.Scheduler, infoHash)
+	waitForDispatcherRemoved(t, leecher.Scheduler, infoHash)
 }
