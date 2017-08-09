@@ -1,0 +1,221 @@
+# Kraken Origin Cluster Operational Guide
+
+## Abstract
+
+Kraken is a P2P distribution system that has multiple components in it:
+
+- Origin Cluster layer: is used for content publishing and seeding
+- Tracker: torrent metadata layer, also responsible for bookkeeping
+  docker layers ref counting
+- Agent: an infra host layer running on every host and exposing P2P interface to
+  other peers
+
+This document describes operational procedures to perform basic maintance tasks
+on origin cluster while maintaning its core SLA metrics.
+
+## Background 
+
+Origin Cluster is built around the concept of rendezvous hashing schema
+(https://en.wikipedia.org/wiki/Rendezvous_hashing). Every origin node is
+a rendezvous hashing node and has a label and score in a scope of a content key.
+For example:
+
+	`key k = '6f858f4b582302063936eedea2375c52d137aac95c184e94b3f0b46bb887362a'`
+and `num_eplicas = 3` (the default for now in kraken) you are going to have
+three origin servers backing up the content item:
+`O1, O2 and O3 and score(k, O1) > score(k, O2) > score(k, O3)`
+
+That provides high availability layer in Kraken, we may lose 2 out of 3 origin
+servers and still be able to operate.
+
+There are multiple hash functions available in our Rendezvous hash implementation, i.e
+sha256, murmur64, etc any hash in fact implementing hash.Hash interface.
+For simplicity and hash collisions capabilities we've picked murmur3 64bits hash function
+as default. 
+
+## Configuration
+
+Rendezvous hashing configuration of origin layer is defined in configuration statically.
+All the changes in active runtime origin layer originates in configuration. Here is an example
+of such configuration in sjc1:
+
+```
+hashstate:
+  kraken-origin-master01-sjc1:
+    label: origin0
+    weight: 30000
+  kraken-origin-master02-sjc1:
+    label: origin1
+    weight: 30000
+  kraken-origin-master03-sjc1:
+    label: origin2
+    weight: 30000
+```
+
+Keys of the hashstate map represent physical host names and the values
+denote logical labels for origins and their initial weights.
+Each weight divided by the total sum of all weights roughly represents
+a ratio of content items that will fall into this origin server bucket.
+A label represents the logical identifier for origin node, if one needs to replace
+a failed origin node the operator just needs to remove a failed node from configuration,
+add a new physcial host there keeping the same origin label and weight and run a repair
+just for this node.
+The repair command reads the latest hashing configuration and for every content items
+ensures that the item's location is consistent with the latest hashstate configuration,
+if this is not the case it will copy the item from other replicas to the one that does
+not have it and will delete the item on ones that are not supposed to have the item anymore.
+
+#IMPORTANT: All the changes to origin configuration should be applied atomically
+and incrementally!!! If you need to add origin servers to a cluster or remove
+a server from the cluster you must run individual add/remove operations followed by
+running the repair command on all origin nodes.
+
+## Add/remove a node to/from origin cluster
+Let's say you have this configuration defined:
+
+```
+hashstate:
+  kraken-origin-master01-sjc1:
+    label: origin0
+    weight: 30000
+  kraken-origin-master02-sjc1:
+    label: origin1
+    weight: 30000
+  kraken-origin-master03-sjc1:
+    label: origin2
+    weight: 30000
+```
+
+and you want to add a new node `kraken-origin-master04-sjc1` that has a capacity
+of 15000 GB (15TB). You would need to add into configuration like this:
+```
+hashstate:
+  kraken-origin-master01-sjc1:
+    label: origin0
+    weight: 30000
+  kraken-origin-master02-sjc1:
+    label: origin1
+    weight: 30000
+  kraken-origin-master03-sjc1:
+    label: origin2
+    weight: 30000
+  kraken-origin-master04-sjc1:
+    label: origin3
+    weight: 15000    
+```
+and run a rolling restart through all origin servers (or simply an upgrade
+if this configuration change was packaged and deployed as a code change which
+is normally the case at Uber) to get the configuration picked up.
+
+Disclaimer: All weights are just scalar values in WRH they don't have any meaning. Since
+they suppose to represent a relative ratio of keys that falls into particlur bucket it makes
+sense to make them proportional to actual disk space capacity on every origin server.
+We've picked available disk space in GBs as the relative weight for our origin servers
+and it is important to keep the units the same across the fleet.
+
+After that since dynamic origin configuraiton has changed you would need to run repair
+on all 4 nodes in a cluster in a particular order(starting with the older servers in
+arbitrary order ending with the newly added origin server).
+Please note the way Rendezvous hashing is designed to
+guarantee at most one origin server will be changed in replicas for any content item
+after the change:
+
+```
+$ kraken -origin origin0 -repair`
+
+origin: origin1, content: 15eaa75240aed625be3e142205df3adbbb7051802b32f450e40276be8582b6d8, repaired: OK
+origin: origin1, content: 14722f2e4c8fa3ba142e2c955c253db8f1274f1761fa0afda85de0f11571b8c8, deleted: OK
+```
+
+```
+$ kraken -origin origin1 -repair`
+
+origin: origin1, content: 15eaa75240aed625be3e142205df3adbbb7051802b32f450e40276be8582b6d8, repaired: OK
+origin: origin1, content: 14722f2e4c8fa3ba142e2c955c253db8f1274f1761fa0afda85de0f11571b8c8, deleted: OK
+```
+
+```
+$ kraken -origin origin2 -repair`
+
+origin: origin1, content: 15eaa75240aed625be3e142205df3adbbb7051802b32f450e40276be8582b6d8, repaired: OK
+origin: origin1, content: 14722f2e4c8fa3ba142e2c955c253db8f1274f1761fa0afda85de0f11571b8c8, repaired: OK
+```
+
+```
+$ kraken -origin origin3 -repair`
+
+origin: origin1, content: 15eaa75240aed625be3e142205df3adbbb7051802b32f450e40276be8582b6d8, repaired: OK
+origin: origin1, content: 14722f2e4c8fa3ba142e2c955c253db8f1274f1761fa0afda85de0f11571b8c8, repaired: OK
+```
+
+You would to execute the same set of steps to remove a node from a cluster with the only difference of
+just running repair for fewer origin nodes.
+
+
+## Change a capacity of an existing node
+
+Let's say you have this configuration defined:
+
+```
+hashstate:
+  kraken-origin-master01-sjc1:
+    label: origin0
+    weight: 30000
+  kraken-origin-master02-sjc1:
+    label: origin1
+    weight: 30000
+  kraken-origin-master03-sjc1:
+    label: origin2
+    weight: 30000
+```
+and you want to add capacity to kraken-origin-master03-sjc1 because we added new 30TB total of disk space to it:
+```
+hashstate:
+  kraken-origin-master01-sjc1:
+    label: origin0
+    weight: 30000
+  kraken-origin-master02-sjc1:
+    label: origin1
+    weight: 30000
+  kraken-origin-master03-sjc1:
+    label: origin2
+    weight: 60000
+```
+
+The operator would need to run a repair for every origin node:
+
+```
+$ kraken -origin origin0 -repair
+$ kraken -origin origin1 -repair
+$ kraken -origin origin2 -repair
+```
+
+## Replacing a failed node
+
+If you just need to replace a failed node while label and relative weight paremeters
+are intact, then it should be enough to just update the configuration via
+rolling restart
+(assuming `kraken-origin-master03-sjc1` is a failing node and `kraken-origin-master05-sjc1`
+is a new one that is replacing the failing)
+
+```
+hashstate:
+  kraken-origin-master01-sjc1:
+    label: origin0
+    weight: 30000
+  kraken-origin-master02-sjc1:
+    label: origin1
+    weight: 30000
+  kraken-origin-master05-sjc1:
+    label: origin2
+    weight: 60000
+```
+
+then run repair on a new node:
+
+```
+$ kraken -origin origin2 -repair
+```
+
+since the placement for all content items is not supposed to change
+
