@@ -47,8 +47,8 @@ func (k connKey) String() string {
 // - Pre-empting existing connections when better options are available (TODO).
 type Scheduler struct {
 	peerID     PeerID
-	ip         string
-	port       int
+	host       string
+	port       string
 	datacenter string
 	config     Config
 
@@ -78,16 +78,19 @@ type Scheduler struct {
 }
 
 // New creates and starts a Scheduler. Incoming connections are accepted on the
-// given ip / port, and the local peer is announced as part of the given datacenter.
+// addr, and the local peer is announced as part of the datacenter.
 func New(
 	peerID PeerID,
-	ip string,
-	port int,
+	addr string,
 	datacenter string,
 	tm storage.TorrentManager,
 	config Config) (*Scheduler, error) {
 
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", ip, port))
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	host, port, err := net.SplitHostPort(l.Addr().String())
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +98,7 @@ func New(
 	eventLoop := newEventLoop(done)
 	s := &Scheduler{
 		peerID:         peerID,
-		ip:             ip,
+		host:           host,
 		port:           port,
 		datacenter:     datacenter,
 		config:         config,
@@ -311,8 +314,8 @@ func (s *Scheduler) doAnnounce(t *torrent) ([]trackerstorage.PeerInfo, error) {
 
 	v.Add("info_hash", t.InfoHash.String())
 	v.Add("peer_id", s.peerID.String())
-	v.Add("port", strconv.Itoa(s.port))
-	v.Add("ip", s.ip)
+	v.Add("port", s.port)
+	v.Add("ip", s.host)
 	v.Add("dc", s.datacenter)
 
 	downloaded := t.Downloaded()
