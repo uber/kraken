@@ -83,7 +83,7 @@ func OriginFixture(digests []OriginContent, weights []int) ([]*TestOriginServer,
 		listeners[i] = listener
 	}
 
-	appConfig := cfg.AppConfig{Hashstate: hashstate}
+	appConfig := cfg.AppConfig{Hashstate: hashstate, NumReplica: 3}
 	origins := make([]*TestOriginServer, len(weights))
 
 	hs := initHashState(appConfig)
