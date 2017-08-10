@@ -16,11 +16,6 @@ import (
 	"sort"
 )
 
-const (
-	// DefaultNumReplicas defines how many replicas backs a content
-	DefaultNumReplicas = 3
-)
-
 //NodeToServer is a node label to origin server lookup index
 type nodeToServer map[string]string
 
@@ -248,7 +243,7 @@ done:
 }
 func repairContent(digest string, origin string, cc commandContext) (int, error) {
 	// get hashstate for a content item
-	nodes, err := cc.hashstate.GetOrderedNodes(digest, DefaultNumReplicas)
+	nodes, err := cc.hashstate.GetOrderedNodes(digest, cc.appCfg.NumReplica)
 	if err != nil {
 		return 1, err
 	}
@@ -278,7 +273,7 @@ func handleRepairContentCommand(digest string, origin string, cc commandContext)
 		return 1, errDigestOrOriginIsRequired
 	}
 
-	nodes, err := cc.hashstate.GetOrderedNodes(digest, DefaultNumReplicas)
+	nodes, err := cc.hashstate.GetOrderedNodes(digest, cc.appCfg.NumReplica)
 	if err != nil {
 		return 1, err
 	}
@@ -329,7 +324,7 @@ func handleDeleteContentCommand(deleteContent string, origin string, cc commandC
 	}
 
 	// get hashstate for a content item
-	nodes, err := cc.hashstate.GetOrderedNodes(deleteContent, DefaultNumReplicas)
+	nodes, err := cc.hashstate.GetOrderedNodes(deleteContent, cc.appCfg.NumReplica)
 	if err != nil {
 		return 1, err
 	}
