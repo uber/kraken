@@ -241,7 +241,7 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 		hasConn(peerB.Scheduler, seeder.Scheduler.peerID, infoHash))
 }
 
-func TestDispatcherShutsDownAfterIdleTimeout(t *testing.T) {
+func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 	require := require.New(t)
 
 	trackerAddr, stop := trackerservice.TestAnnouncer()
@@ -268,4 +268,7 @@ func TestDispatcherShutsDownAfterIdleTimeout(t *testing.T) {
 
 	waitForDispatcherRemoved(t, seeder.Scheduler, infoHash)
 	waitForDispatcherRemoved(t, leecher.Scheduler, infoHash)
+
+	require.False(hasConn(seeder.Scheduler, leecher.Scheduler.peerID, infoHash))
+	require.False(hasConn(leecher.Scheduler, seeder.Scheduler.peerID, infoHash))
 }

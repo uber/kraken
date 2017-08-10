@@ -42,4 +42,13 @@ type Config struct {
 	// PreemptionInterval is the interval in which the Scheduler analyzes the
 	// status of existing conns and determines whether to preempt them.
 	PreemptionInterval time.Duration
+
+	// IdleConnTimeout is the duration an idle connection will exist before
+	// being closed. An idle connection is defined as a connection which is not
+	// transmitting any needed pieces or requesting any pieces.
+	IdleConnTimeout time.Duration
+
+	// MaxConnLifespan is the max duration a connection may exist regardless of
+	// liveness.
+	MaxConnLifespan time.Duration
 }

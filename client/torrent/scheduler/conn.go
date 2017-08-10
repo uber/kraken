@@ -202,7 +202,7 @@ func (c *conn) LastGoodPieceReceived() time.Time {
 	return c.lastGoodPieceReceived
 }
 
-func (c *conn) ReceivedGoodPiece() {
+func (c *conn) TouchLastGoodPieceReceived() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -216,7 +216,7 @@ func (c *conn) LastPieceSent() time.Time {
 	return c.lastPieceSent
 }
 
-func (c *conn) SentPiece() {
+func (c *conn) TouchLastPieceSent() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
