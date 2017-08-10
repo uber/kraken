@@ -3,6 +3,8 @@ package scheduler
 import (
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/uber-common/bark"
 
@@ -29,6 +31,7 @@ type dispatcherFactory struct {
 func (f *dispatcherFactory) New(t *torrent) *dispatcher {
 	d := &dispatcher{
 		Torrent:     t,
+		CreatedAt:   time.Now(),
 		localPeerID: f.LocalPeerID,
 		eventLoop:   f.EventLoop,
 	}
@@ -43,21 +46,41 @@ func (f *dispatcherFactory) New(t *torrent) *dispatcher {
 // and conn have a many-to-many relationship.
 type dispatcher struct {
 	Torrent     *torrent
+	CreatedAt   time.Time
 	localPeerID PeerID
 
 	conns syncmap.Map
 
 	eventLoop *eventLoop
+
+	mu              sync.Mutex // Protects the following fields:
+	lastConnRemoved time.Time
 }
 
-func (d *dispatcher) Conns() []*conn {
-	var conns []*conn
+func (d *dispatcher) LastConnRemoved() time.Time {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return d.lastConnRemoved
+}
+
+func (d *dispatcher) touchLastConnRemoved() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.lastConnRemoved = time.Now()
+}
+
+// Empty returns true if the dispatcher has no conns.
+func (d *dispatcher) Empty() bool {
+	// syncmap.Map does not provide a length function, hence this poor man's
+	// implementation of `len(d.conns) == 0`.
+	empty := true
 	d.conns.Range(func(k, v interface{}) bool {
-		c := v.(*conn)
-		conns = append(conns, c)
-		return true
+		empty = false
+		return false
 	})
-	return conns
+	return empty
 }
 
 // AddConn registers a new conn with the dispatcher.
@@ -118,6 +141,7 @@ func (d *dispatcher) feed(c *conn) {
 	}
 	d.logf(log.Fields{"peer": c.PeerID}).Debug("Dispatcher feeder exiting")
 	d.conns.Delete(c.PeerID)
+	d.touchLastConnRemoved()
 }
 
 func (d *dispatcher) dispatch(c *conn, msg *message) error {
@@ -203,7 +227,7 @@ func (d *dispatcher) handlePieceRequest(c *conn, msg *p2p.PieceRequestMessage) {
 		Payload: payload,
 	}
 	if err := c.Send(m); err != nil {
-		c.SentPiece()
+		c.TouchLastPieceSent()
 	}
 }
 
@@ -226,7 +250,7 @@ func (d *dispatcher) handlePiecePayload(
 		}).Errorf("Error writing piece payload: %s", err)
 		return
 	}
-	c.ReceivedGoodPiece()
+	c.TouchLastGoodPieceReceived()
 	if completed {
 		d.eventLoop.Send(completedDispatcherEvent{d})
 	}

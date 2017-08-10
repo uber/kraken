@@ -269,22 +269,26 @@ type preemptionTickEvent struct{}
 func (e preemptionTickEvent) Apply(s *Scheduler) {
 	s.log().Debug("Applying preemption tick event")
 
-	for _, d := range s.dispatchers {
-		var lastActivity time.Time
-		conns := d.Conns()
-		for _, c := range conns {
-			lastActivity = timeutil.MostRecent(
-				lastActivity,
-				c.CreatedAt,
-				c.LastGoodPieceReceived(),
-				c.LastPieceSent())
+	for _, c := range s.conns {
+		lastProgress := timeutil.MostRecent(c.LastGoodPieceReceived(), c.LastPieceSent())
+		if time.Since(lastProgress) > s.config.IdleConnTimeout {
+			s.logf(log.Fields{"conn": c}).Info("Closing idle conn")
+			c.Close()
+			continue
 		}
-		idle := time.Since(lastActivity) > s.config.IdleSeedingTimeout
-		if d.Torrent.Complete() && idle {
-			s.logf(log.Fields{"dispatcher": d}).Info("Removing idle dispatcher")
-			delete(s.dispatchers, d.Torrent.InfoHash)
-			for _, c := range conns {
-				c.Close()
+		if time.Since(c.CreatedAt) > s.config.MaxConnLifespan {
+			s.logf(log.Fields{"conn": c}).Info("Closing expired conn")
+			c.Close()
+			continue
+		}
+	}
+
+	for _, d := range s.dispatchers {
+		if d.Torrent.Complete() && d.Empty() {
+			becameIdle := timeutil.MostRecent(d.CreatedAt, d.LastConnRemoved())
+			if time.Since(becameIdle) > s.config.IdleSeedingTimeout {
+				s.logf(log.Fields{"dispatcher": d}).Info("Removing idle dispatcher")
+				delete(s.dispatchers, d.Torrent.InfoHash)
 			}
 		}
 	}

@@ -46,6 +46,8 @@ func genConfig(trackerAddr string) Config {
 		ReceiverBufferSize: 0,
 		IdleSeedingTimeout: 2 * time.Second,
 		PreemptionInterval: 500 * time.Millisecond,
+		IdleConnTimeout:    500 * time.Millisecond,
+		MaxConnLifespan:    5 * time.Minute,
 	}
 }
 
@@ -232,6 +234,6 @@ func waitForDispatcherRemoved(t *testing.T, s *Scheduler, infoHash meta.Hash) {
 	testutil.PollUntilTrue(t, 5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasDispatcherEvent{infoHash, result})
-		return <-result
+		return !<-result
 	})
 }
