@@ -16,8 +16,8 @@ import (
 )
 
 func GetTestFileStore() (*configuration.Config, *LocalStore) {
-	cp := configuration.GetConfigFilePath("agent/test.yaml")
-	c := configuration.NewConfigWithPath(cp)
+	var err error
+	c := configuration.NewConfigWithPath("../../config/agent/test.yaml")
 	c.DisableTorrent = true
 	c.TagDeletion = struct {
 		Enable         bool `yaml:"enable"`
@@ -28,44 +28,23 @@ func GetTestFileStore() (*configuration.Config, *LocalStore) {
 		Enable:         true,
 		RetentionCount: 10,
 	}
-	var err error
-	err = os.MkdirAll(c.DownloadDir, 0755)
+	c.UploadDir, err = ioutil.TempDir("/tmp", "upload")
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = os.MkdirAll(c.CacheDir, 0755)
+	c.CacheDir, err = ioutil.TempDir("/tmp", "cache")
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = os.MkdirAll(c.UploadDir, 0755)
+	c.DownloadDir, err = ioutil.TempDir("/tmp", "download")
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = os.MkdirAll(c.TrashDir, 0755)
+	c.TrashDir, err = ioutil.TempDir("/tmp", "trash")
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = os.MkdirAll(c.TagDir, 0755)
-	if err != nil {
-		log.Fatal(err)
-	}
-	c.UploadDir, err = ioutil.TempDir(c.UploadDir, "testtags")
-	if err != nil {
-		log.Fatal(err)
-	}
-	c.CacheDir, err = ioutil.TempDir(c.CacheDir, "testtags")
-	if err != nil {
-		log.Fatal(err)
-	}
-	c.DownloadDir, err = ioutil.TempDir(c.DownloadDir, "testtags")
-	if err != nil {
-		log.Fatal(err)
-	}
-	c.TrashDir, err = ioutil.TempDir(c.TrashDir, "testtags")
-	if err != nil {
-		log.Fatal(err)
-	}
-	c.TagDir, err = ioutil.TempDir(c.TagDir, "testtags")
+	c.TagDir, err = ioutil.TempDir("/tmp", "tag")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -77,6 +56,7 @@ func cleanupTestFileStore(c *configuration.Config) {
 	os.RemoveAll(c.DownloadDir)
 	os.RemoveAll(c.CacheDir)
 	os.RemoveAll(c.UploadDir)
+	os.RemoveAll(c.TrashDir)
 	os.RemoveAll(c.TagDir)
 }
 
