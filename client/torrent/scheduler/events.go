@@ -62,7 +62,10 @@ type closedConnEvent struct {
 func (e closedConnEvent) Apply(s *Scheduler) {
 	s.logf(log.Fields{"conn": e.conn}).Debug("Applying closed conn event")
 
-	s.deleteActiveConn(e.conn)
+	s.connState.DeleteActive(e.conn)
+	if err := s.connState.Blacklist(e.conn.PeerID, e.conn.InfoHash); err != nil {
+		s.logf(log.Fields{"conn": e.conn}).Infof("Error blacklisting active conn: %s", err)
+	}
 }
 
 // failedHandshakeEvent occurs when a pending connection fails to handshake.
@@ -76,7 +79,12 @@ type failedHandshakeEvent struct {
 func (e failedHandshakeEvent) Apply(s *Scheduler) {
 	s.logf(log.Fields{"peer": e.peerID, "hash": e.infoHash}).Debug("Applying failed handshake event")
 
-	s.deletePendingConn(e.peerID, e.infoHash)
+	s.connState.DeletePending(e.peerID, e.infoHash)
+	if err := s.connState.Blacklist(e.peerID, e.infoHash); err != nil {
+		s.logf(log.Fields{
+			"peer": e.peerID, "hash": e.infoHash,
+		}).Infof("Error blacklisting pending conn: %s", err)
+	}
 }
 
 // incomingHandshakeEvent when a handshake was received from a new connection.
@@ -92,7 +100,7 @@ type incomingHandshakeEvent struct {
 func (e incomingHandshakeEvent) Apply(s *Scheduler) {
 	s.logf(log.Fields{"handshake": e.handshake}).Debug("Applying incoming handshake event")
 
-	if err := s.addPendingConn(e.handshake.PeerID, e.handshake.InfoHash); err != nil {
+	if err := s.connState.AddPending(e.handshake.PeerID, e.handshake.InfoHash); err != nil {
 		s.logf(log.Fields{"handshake": e.handshake}).Errorf("Rejecting incoming handshake: %s", err)
 		e.nc.Close()
 		return
@@ -189,7 +197,7 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 			// Tracker may return our own peer.
 			continue
 		}
-		if err := s.addPendingConn(pid, e.infoHash); err != nil {
+		if err := s.connState.AddPending(pid, e.infoHash); err != nil {
 			if err == errTorrentAtCapacity {
 				s.logf(log.Fields{
 					"peer": pid, "hash": e.infoHash,
@@ -234,7 +242,7 @@ func (e newTorrentEvent) Apply(s *Scheduler) {
 		e.errc <- ErrTorrentAlreadyRegistered
 		return
 	}
-	s.connCapacity[e.torrent.InfoHash] = s.config.MaxOpenConnectionsPerTorrent
+	s.connState.InitCapacity(e.torrent.InfoHash)
 	d := s.dispatcherFactory.New(e.torrent)
 	s.dispatchers[e.torrent.InfoHash] = d
 	s.announceQueue.Add(d)
@@ -261,22 +269,22 @@ func (e completedDispatcherEvent) Apply(s *Scheduler) {
 	delete(s.torrentErrors, e.dispatcher.Torrent.InfoHash)
 }
 
-// preemptionTickEvent occurs periodically to allow the Scheduler to free
-// unneeded resources.
+// preemptionTickEvent occurs periodically to preempt unneeded conns and remove
+// idle dispatchers.
 type preemptionTickEvent struct{}
 
-// Apply frees Scheduler state of any stale / unneeded resources.
 func (e preemptionTickEvent) Apply(s *Scheduler) {
 	s.log().Debug("Applying preemption tick event")
 
-	for _, c := range s.conns {
-		lastProgress := timeutil.MostRecent(c.LastGoodPieceReceived(), c.LastPieceSent())
-		if time.Since(lastProgress) > s.config.IdleConnTimeout {
+	for _, c := range s.connState.ActiveConns() {
+		lastProgress := timeutil.MostRecent(
+			c.CreatedAt, c.LastGoodPieceReceived(), c.LastPieceSent())
+		if time.Since(lastProgress) > s.config.IdleConnTTL {
 			s.logf(log.Fields{"conn": c}).Info("Closing idle conn")
 			c.Close()
 			continue
 		}
-		if time.Since(c.CreatedAt) > s.config.MaxConnLifespan {
+		if time.Since(c.CreatedAt) > s.config.ConnTTL {
 			s.logf(log.Fields{"conn": c}).Info("Closing expired conn")
 			c.Close()
 			continue
@@ -286,10 +294,20 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 	for _, d := range s.dispatchers {
 		if d.Torrent.Complete() && d.Empty() {
 			becameIdle := timeutil.MostRecent(d.CreatedAt, d.LastConnRemoved())
-			if time.Since(becameIdle) > s.config.IdleSeedingTimeout {
+			if time.Since(becameIdle) > s.config.IdleSeederTTL {
 				s.logf(log.Fields{"dispatcher": d}).Info("Removing idle dispatcher")
 				delete(s.dispatchers, d.Torrent.InfoHash)
 			}
 		}
 	}
+}
+
+// cleanupBlacklistEvent occurs periodically to allow the Scheduler to cleanup
+// stale blacklist entries.
+type cleanupBlacklistEvent struct{}
+
+func (e cleanupBlacklistEvent) Apply(s *Scheduler) {
+	s.log().Debug("Applying cleanup blacklist event")
+
+	s.connState.DeleteStaleBlacklistEntries()
 }

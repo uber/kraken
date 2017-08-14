@@ -1,12 +1,12 @@
 package testutil
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
-	"testing"
 	"time"
 
 	"code.uber.internal/infra/kraken/client/torrent/bencode"
@@ -62,9 +62,9 @@ func DummyTestTorrent() (tempDir string, metaInfo *meta.TorrentInfo) {
 	return
 }
 
-// PollUntilTrue calls f until f returns true. Fails if true is not received
+// PollUntilTrue calls f until f returns true. Returns error if true is not received
 // within timeout.
-func PollUntilTrue(t *testing.T, timeout time.Duration, f func() bool) {
+func PollUntilTrue(timeout time.Duration, f func() bool) error {
 	timer := time.NewTimer(timeout)
 	for {
 		result := make(chan bool, 1)
@@ -74,11 +74,11 @@ func PollUntilTrue(t *testing.T, timeout time.Duration, f func() bool) {
 		select {
 		case ok := <-result:
 			if ok {
-				return
+				return nil
 			}
 			time.Sleep(100 * time.Millisecond)
 		case <-timer.C:
-			t.Fatalf("PollUntilTrue timed out after %.2f seconds", timeout.Seconds())
+			return fmt.Errorf("timed out after %.2f seconds", timeout.Seconds())
 		}
 	}
 }
