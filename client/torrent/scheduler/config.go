@@ -35,20 +35,41 @@ type Config struct {
 	// is taking a long time to process a message.
 	ReceiverBufferSize int
 
-	// IdleSeedingTimeout is the duration an idle dispatcher will exist after
+	// IdleSeederTTL is the duration an idle dispatcher will exist after
 	// completing its torrent.
-	IdleSeedingTimeout time.Duration
+	IdleSeederTTL time.Duration
 
 	// PreemptionInterval is the interval in which the Scheduler analyzes the
 	// status of existing conns and determines whether to preempt them.
 	PreemptionInterval time.Duration
 
-	// IdleConnTimeout is the duration an idle connection will exist before
+	// IdleConnTTL is the duration an idle connection will exist before
 	// being closed. An idle connection is defined as a connection which is not
 	// transmitting any needed pieces or requesting any pieces.
-	IdleConnTimeout time.Duration
+	IdleConnTTL time.Duration
 
-	// MaxConnLifespan is the max duration a connection may exist regardless of
-	// liveness.
-	MaxConnLifespan time.Duration
+	// ConnTTL is the max duration a connection may exist regardless of liveness.
+	ConnTTL time.Duration
+
+	// InitialBlacklistExpiration is how long a connection will be blacklisted
+	// after its first close.
+	InitialBlacklistExpiration time.Duration
+
+	// BlacklistExpirationBackoff is the power at which the blacklist expiration
+	// time exponentially rises for repeatedly blacklisted connections. Must be
+	// greater than or equal to 1.
+	BlacklistExpirationBackoff float64
+
+	// MaxBlacklistExpiration is the max duration the blacklist expiration backoff
+	// will rise to.
+	MaxBlacklistExpiration time.Duration
+
+	// ExpiredBlacklistEntryTTL is the duration an expired blacklist entry will
+	// exist before being deleted, essentially resetting its backoff. This is
+	// only necessary for ensuring unused memory is eventually reclaimed.
+	ExpiredBlacklistEntryTTL time.Duration
+
+	// BlacklistCleanupInterval is the interval expired blacklist entries which
+	// have surpassed their TTL are removed.
+	BlacklistCleanupInterval time.Duration
 }

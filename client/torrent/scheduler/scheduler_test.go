@@ -251,7 +251,7 @@ func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 	infoHash := mi.HashInfoBytes()
 
 	config := genConfig(trackerAddr)
-	config.IdleSeedingTimeout = 1 * time.Second
+	config.IdleSeederTTL = 1 * time.Second
 
 	seeder := genTestPeer(config)
 	defer seeder.Stop()

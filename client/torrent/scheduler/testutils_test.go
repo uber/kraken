@@ -42,12 +42,17 @@ func genConfig(trackerAddr string) Config {
 		WriteTimeout:                 5 * time.Second,
 		// Buffers are just a performance optimization, so a zero-sized
 		// buffer will instantly force any deadlock conditions.
-		SenderBufferSize:   0,
-		ReceiverBufferSize: 0,
-		IdleSeedingTimeout: 2 * time.Second,
-		PreemptionInterval: 500 * time.Millisecond,
-		IdleConnTimeout:    500 * time.Millisecond,
-		MaxConnLifespan:    5 * time.Minute,
+		SenderBufferSize:           0,
+		ReceiverBufferSize:         0,
+		IdleSeederTTL:              2 * time.Second,
+		PreemptionInterval:         500 * time.Millisecond,
+		IdleConnTTL:                1 * time.Second,
+		ConnTTL:                    5 * time.Minute,
+		InitialBlacklistExpiration: time.Second,
+		BlacklistExpirationBackoff: 2,
+		MaxBlacklistExpiration:     10 * time.Second,
+		ExpiredBlacklistEntryTTL:   5 * time.Minute,
+		BlacklistCleanupInterval:   time.Minute,
 	}
 }
 
@@ -57,6 +62,11 @@ func genPeerID() PeerID {
 		panic(err)
 	}
 	return p
+}
+
+func genInfoHash() meta.Hash {
+	mi, _ := genTorrent(genTorrentOpts{})
+	return mi.HashInfoBytes()
 }
 
 type tempTorrentManager struct {
@@ -188,28 +198,38 @@ type hasConnEvent struct {
 }
 
 func (e hasConnEvent) Apply(s *Scheduler) {
-	_, ok := s.conns[connKey{e.peerID, e.infoHash}]
+	_, ok := s.connState.active[connKey{e.peerID, e.infoHash}]
 	e.result <- ok
 }
 
 // waitForConnEstablished waits until s has established a connection to peerID for the
 // torrent of infoHash.
 func waitForConnEstablished(t *testing.T, s *Scheduler, peerID PeerID, infoHash meta.Hash) {
-	testutil.PollUntilTrue(t, 5*time.Second, func() bool {
+	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
 		return <-result
 	})
+	if err != nil {
+		t.Fatalf(
+			"scheduler=%s did not establish conn to peer=%s hash=%s: %s",
+			s.peerID, peerID, infoHash, err)
+	}
 }
 
 // waitForConnRemoved waits until s has closed the connection to peerID for the
 // torrent of infoHash.
 func waitForConnRemoved(t *testing.T, s *Scheduler, peerID PeerID, infoHash meta.Hash) {
-	testutil.PollUntilTrue(t, 5*time.Second, func() bool {
+	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
 		return !<-result
 	})
+	if err != nil {
+		t.Fatalf(
+			"scheduler=%s did not remove conn to peer=%s hash=%s: %s",
+			s.peerID, peerID, infoHash, err)
+	}
 }
 
 // hasConn checks whether s has an established connection to peerID for the
@@ -231,9 +251,14 @@ func (e hasDispatcherEvent) Apply(s *Scheduler) {
 }
 
 func waitForDispatcherRemoved(t *testing.T, s *Scheduler, infoHash meta.Hash) {
-	testutil.PollUntilTrue(t, 5*time.Second, func() bool {
+	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasDispatcherEvent{infoHash, result})
 		return !<-result
 	})
+	if err != nil {
+		t.Fatalf(
+			"scheduler=%s did not remove dispatcher for hash=%s: %s",
+			s.peerID, infoHash, err)
+	}
 }

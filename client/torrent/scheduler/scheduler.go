@@ -29,11 +29,6 @@ var ErrTorrentAlreadyRegistered = errors.New("torrent already registered in sche
 // ErrSchedulerStopped returns when an action fails due to the Scheduler being stopped.
 var ErrSchedulerStopped = errors.New("scheduler has been stopped")
 
-type connKey struct {
-	peerID   PeerID
-	infoHash meta.Hash
-}
-
 func (k connKey) String() string {
 	return fmt.Sprintf("connKey(peer=%s, hash=%s)", k.peerID, k.infoHash)
 }
@@ -60,16 +55,17 @@ type Scheduler struct {
 	// The following fields define the core Scheduler "state", and should only
 	// be accessed from within the event loop.
 	dispatchers   map[meta.Hash]*dispatcher // Active seeding / leeching torrents.
-	connCapacity  map[meta.Hash]int         // Number of connections which torrent has open capacity for.
-	conns         map[connKey]*conn         // Active connections.
-	pendingConns  map[connKey]bool          // Pending connections.
+	connState     *connState
 	announceQueue *announceQueue
 	torrentErrors map[meta.Hash]chan error // AddTorrent error channels.
 
-	eventLoop        *eventLoop
-	listener         net.Listener
-	announceTicker   *time.Ticker
-	preemptionTicker *time.Ticker
+	eventLoop *eventLoop
+
+	listener net.Listener
+
+	announceTicker         *time.Ticker
+	preemptionTicker       *time.Ticker
+	blacklistCleanupTicker *time.Ticker
 
 	// The following fields orchestrate the stopping of the Scheduler.
 	once sync.Once      // Ensures the stop sequence is executed only once.
@@ -113,17 +109,16 @@ func New(
 			LocalPeerID: peerID,
 			EventLoop:   eventLoop,
 		},
-		dispatchers:      make(map[meta.Hash]*dispatcher),
-		connCapacity:     make(map[meta.Hash]int),
-		conns:            make(map[connKey]*conn),
-		pendingConns:     make(map[connKey]bool),
-		announceQueue:    newAnnounceQueue(),
-		torrentErrors:    make(map[meta.Hash]chan error),
-		eventLoop:        eventLoop,
-		listener:         l,
-		announceTicker:   time.NewTicker(config.AnnounceInterval),
-		preemptionTicker: time.NewTicker(config.PreemptionInterval),
-		done:             done,
+		dispatchers:            make(map[meta.Hash]*dispatcher),
+		connState:              newConnState(peerID, config),
+		announceQueue:          newAnnounceQueue(),
+		torrentErrors:          make(map[meta.Hash]chan error),
+		eventLoop:              eventLoop,
+		listener:               l,
+		announceTicker:         time.NewTicker(config.AnnounceInterval),
+		preemptionTicker:       time.NewTicker(config.PreemptionInterval),
+		blacklistCleanupTicker: time.NewTicker(config.BlacklistCleanupInterval),
+		done: done,
 	}
 
 	s.start()
@@ -141,7 +136,7 @@ func (s *Scheduler) Stop() {
 		// Waits for all loops to stop.
 		s.wg.Wait()
 
-		for _, c := range s.conns {
+		for _, c := range s.connState.ActiveConns() {
 			c.Close()
 		}
 
@@ -214,6 +209,8 @@ func (s *Scheduler) tickerLoop() {
 			s.eventLoop.Send(announceTickEvent{})
 		case <-s.preemptionTicker.C:
 			s.eventLoop.Send(preemptionTickEvent{})
+		case <-s.blacklistCleanupTicker.C:
+			s.eventLoop.Send(cleanupBlacklistEvent{})
 		case <-s.done:
 			s.log().Debug("tickerLoop done")
 			s.wg.Done()
@@ -363,105 +360,8 @@ func (s *Scheduler) announce(d *dispatcher) {
 	s.eventLoop.Send(e)
 }
 
-// getConnOpener returns the PeerID of the peer who opened the conn, i.e. sent the first handshake.
-func (s *Scheduler) getConnOpener(c *conn) PeerID {
-	if c.OpenedByRemote() {
-		return c.PeerID
-	}
-	return s.peerID
-}
-
-// If a connection already exists for this peer, we may preempt the existing connection. This
-// is to prevent the case where two peers, A and B, both initialize connections to each other
-// at the exact same time. If neither connection is tramsitting data yet, the peers independently
-// agree on which connection should be kept by selecting the connection opened by the peer
-// with the larger peer id.
-func (s *Scheduler) newConnPreferred(existingConn *conn, newConn *conn) bool {
-	existingOpener := s.getConnOpener(existingConn)
-	newOpener := s.getConnOpener(newConn)
-
-	return existingOpener != newOpener &&
-		!existingConn.Active() &&
-		existingOpener.LessThan(newOpener)
-}
-
-var errTorrentAtCapacity = errors.New("torrent is at capacity")
-
-// TODO(codyg): Move these pending/active state transitions (and the state itself) into
-// a new struct.
-
-func (s *Scheduler) addPendingConn(peerID PeerID, infoHash meta.Hash) error {
-	k := connKey{peerID, infoHash}
-	if s.connCapacity[k.infoHash] == 0 {
-		return errTorrentAtCapacity
-	}
-	if s.pendingConns[k] {
-		return errors.New("conn is already pending")
-	}
-	if _, ok := s.conns[k]; ok {
-		return errors.New("conn is already active")
-	}
-	s.pendingConns[k] = true
-	s.connCapacity[k.infoHash]--
-	s.logf(log.Fields{
-		"peer": peerID, "hash": infoHash,
-	}).Infof("Adding pending conn, capacity now at %d", s.connCapacity[k.infoHash])
-	return nil
-}
-
-func (s *Scheduler) deletePendingConn(peerID PeerID, infoHash meta.Hash) {
-	k := connKey{peerID, infoHash}
-	if !s.pendingConns[k] {
-		return
-	}
-	delete(s.pendingConns, k)
-	s.connCapacity[k.infoHash]++
-	s.logf(log.Fields{
-		"peer": peerID, "hash": infoHash,
-	}).Infof("Deleting pending conn, capacity now at %d", s.connCapacity[k.infoHash])
-}
-
-func (s *Scheduler) movePendingConnToActive(c *conn) error {
-	k := connKey{c.PeerID, c.InfoHash}
-	if !s.pendingConns[k] {
-		return errors.New("conn must be pending to transition to active")
-	}
-	delete(s.pendingConns, k)
-	if existingConn, ok := s.conns[k]; ok {
-		// If a connection already exists for this peer, we may preempt the
-		// existing connection. This is to prevent the case where two peers,
-		// A and B, both initialize connections to each other at the exact
-		// same time. If neither connection is tramsitting data yet, the peers
-		// independently agree on which connection should be kept by selecting
-		// the connection opened by the peer with the larger peer id.
-		if !s.newConnPreferred(existingConn, c) {
-			s.connCapacity[k.infoHash]--
-			return errors.New("conn already exists")
-		}
-		existingConn.Close()
-	}
-	s.conns[k] = c
-	s.logf(log.Fields{
-		"peer": k.peerID, "hash": k.infoHash,
-	}).Info("Moving conn from pending to active")
-	return nil
-}
-
-func (s *Scheduler) deleteActiveConn(c *conn) {
-	k := connKey{c.PeerID, c.InfoHash}
-	if cur, ok := s.conns[k]; ok && cur == c {
-		// It is possible that some new conn shares the same key as the old conn,
-		// so we need to make sure we're deleting the right one.
-		delete(s.conns, k)
-		s.connCapacity[k.infoHash]++
-		s.logf(log.Fields{
-			"peer": k.peerID, "hash": k.infoHash,
-		}).Infof("Deleting active conn, capacity now at %d", s.connCapacity[k.infoHash])
-	}
-}
-
 func (s *Scheduler) addOutgoingConn(c *conn, t *torrent) error {
-	if err := s.movePendingConnToActive(c); err != nil {
+	if err := s.connState.MovePendingToActive(c); err != nil {
 		c.Close()
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
@@ -477,7 +377,7 @@ func (s *Scheduler) addOutgoingConn(c *conn, t *torrent) error {
 }
 
 func (s *Scheduler) addIncomingConn(c *conn, t *torrent) error {
-	if err := s.movePendingConnToActive(c); err != nil {
+	if err := s.connState.MovePendingToActive(c); err != nil {
 		c.Close()
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
