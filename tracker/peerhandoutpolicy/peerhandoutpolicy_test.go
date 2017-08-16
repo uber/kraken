@@ -3,7 +3,8 @@ package peerhandoutpolicy
 import (
 	"testing"
 
-	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/torlib"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,21 +29,21 @@ var (
 	diffDatacenter         = fixture{"10.17.22.28", "dca1", false}
 )
 
-func makeSourcePeer() *storage.PeerInfo {
-	return &storage.PeerInfo{
+func makeSourcePeer() *torlib.PeerInfo {
+	return &torlib.PeerInfo{
 		IP: sourceIP,
 		DC: sourceDC,
 	}
 }
 
-func makePeerFixtures(fs ...fixture) []*storage.PeerInfo {
-	var peers []*storage.PeerInfo
+func makePeerFixtures(fs ...fixture) []*torlib.PeerInfo {
+	var peers []*torlib.PeerInfo
 	for _, fixture := range fs {
-		p := storage.PeerFixture()
+		p := &torlib.PeerInfo{}
 		p.IP = fixture.ip
 		p.DC = fixture.dc
 		if fixture.complete {
-			p.BytesDownloaded += p.BytesLeft
+			p.BytesDownloaded = 1
 			p.BytesLeft = 0
 		}
 		peers = append(peers, p)
@@ -149,13 +150,13 @@ func TestMockNetworkPriorityPolicy(t *testing.T) {
 		mockSameDC := "3:r2:p2:d1"
 		mockDiffDC := "4:r2:p2:d2"
 
-		srcPeer := &storage.PeerInfo{PeerID: src}
+		srcPeer := &torlib.PeerInfo{PeerID: src}
 
-		var peers []*storage.PeerInfo
+		var peers []*torlib.PeerInfo
 		for _, id := range []string{
 			mockSameRack, mockSamePod, mockSameDC, mockDiffDC} {
 
-			peers = append(peers, &storage.PeerInfo{PeerID: id})
+			peers = append(peers, &torlib.PeerInfo{PeerID: id})
 		}
 
 		require.NoError(t, policy.AssignPeerPriority(srcPeer, peers))
@@ -179,8 +180,8 @@ func TestMockNetworkPriorityPolicy(t *testing.T) {
 	t.Run("Bad source peer id returns error", func(t *testing.T) {
 		policy, _ := Get("mock", "default")
 
-		src := &storage.PeerInfo{PeerID: "some-bad-id"}
-		peers := []*storage.PeerInfo{{PeerID: "a:b:c:d"}}
+		src := &torlib.PeerInfo{PeerID: "some-bad-id"}
+		peers := []*torlib.PeerInfo{{PeerID: "a:b:c:d"}}
 
 		require.Error(t,
 			policy.AssignPeerPriority(src, peers),
@@ -190,8 +191,8 @@ func TestMockNetworkPriorityPolicy(t *testing.T) {
 	t.Run("Bad peer id returns error", func(t *testing.T) {
 		policy, _ := Get("mock", "default")
 
-		src := &storage.PeerInfo{PeerID: "a:b:c:d"}
-		peers := []*storage.PeerInfo{{PeerID: "some-bad-id"}}
+		src := &torlib.PeerInfo{PeerID: "a:b:c:d"}
+		peers := []*torlib.PeerInfo{{PeerID: "some-bad-id"}}
 
 		require.Error(t,
 			policy.AssignPeerPriority(src, peers),

@@ -61,8 +61,18 @@ func TestLoadSaveTorrents(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, cli)
 
-	infohash := "e940a7a57294e4c98f62514b32611e38181b6cae"
-	tor1, _, err := cli.AddTorrentInfoHash(metainfo.NewHashFromHex(infohash))
+	info := metainfo.Info{
+		Name:        "testsaved",
+		Length:      1,
+		PieceLength: 1,
+		Pieces:      make([]byte, 20),
+	}
+	infoBytes, err := bencode.Marshal(info)
+	mi := &metainfo.MetaInfo{
+		InfoBytes: infoBytes,
+	}
+
+	tor1, err := cli.AddTorrent(mi)
 	assert.Nil(t, err)
 	assert.NotNil(t, tor1)
 
@@ -71,7 +81,7 @@ func TestLoadSaveTorrents(t *testing.T) {
 	newcli, err := NewClient(config, store, tally.NoopScope, 120)
 	assert.Nil(t, err)
 
-	tor2, _, err := newcli.Torrent(metainfo.NewHashFromHex(infohash))
+	tor2, _, err := newcli.Torrent(mi.HashInfoBytes())
 	defer newcli.Close()
 
 	assert.NotNil(t, tor2)

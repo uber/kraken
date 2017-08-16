@@ -3,7 +3,7 @@ package peerhandoutpolicy
 import (
 	"net"
 
-	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/torlib"
 )
 
 // IPv4NetmaskPeerPriorityPolicy is Uber specific netmask based peer priority handout policy
@@ -16,7 +16,7 @@ func NewIPv4NetmaskPeerPriorityPolicy() PeerPriorityPolicy {
 
 // AssignPeerPriority sets priority based on network topology proximity to a source IP.
 func (p *IPv4NetmaskPeerPriorityPolicy) AssignPeerPriority(
-	source *storage.PeerInfo, peers []*storage.PeerInfo) error {
+	source *torlib.PeerInfo, peers []*torlib.PeerInfo) error {
 
 	// Ideally this all needs to be in a clusto, it's just too expensive for
 	// now to support without implementing a sensible caching strategy

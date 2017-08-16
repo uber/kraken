@@ -10,22 +10,22 @@ import (
 	"github.com/pressly/chi"
 
 	config "code.uber.internal/infra/kraken/config/tracker"
+	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
-	"code.uber.internal/infra/kraken/tracker/storage"
 )
 
 type testAnnounceStore struct {
 	sync.Mutex
-	torrents map[string][]storage.PeerInfo
+	torrents map[string][]torlib.PeerInfo
 }
 
-func (s *testAnnounceStore) Update(p *storage.PeerInfo) error {
+func (s *testAnnounceStore) UpdatePeer(p *torlib.PeerInfo) error {
 	s.Lock()
 	defer s.Unlock()
 
 	peers, ok := s.torrents[p.InfoHash]
 	if !ok {
-		s.torrents[p.InfoHash] = []storage.PeerInfo{*p}
+		s.torrents[p.InfoHash] = []torlib.PeerInfo{*p}
 		return nil
 	}
 	for i := range peers {
@@ -38,7 +38,7 @@ func (s *testAnnounceStore) Update(p *storage.PeerInfo) error {
 	return nil
 }
 
-func (s *testAnnounceStore) Read(infoHash string) ([]*storage.PeerInfo, error) {
+func (s *testAnnounceStore) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -46,9 +46,9 @@ func (s *testAnnounceStore) Read(infoHash string) ([]*storage.PeerInfo, error) {
 	if !ok {
 		return nil, errors.New("no peers found for info hash")
 	}
-	copies := make([]*storage.PeerInfo, len(peers))
+	copies := make([]*torlib.PeerInfo, len(peers))
 	for i, p := range peers {
-		copies[i] = new(storage.PeerInfo)
+		copies[i] = new(torlib.PeerInfo)
 		*copies[i] = p
 	}
 	return copies, nil
@@ -68,7 +68,7 @@ func TestAnnouncer() (addr string, stop func()) {
 			AnnounceInterval: 1,
 		},
 		store: &testAnnounceStore{
-			torrents: make(map[string][]storage.PeerInfo),
+			torrents: make(map[string][]torlib.PeerInfo),
 		},
 		policy: policy,
 	}

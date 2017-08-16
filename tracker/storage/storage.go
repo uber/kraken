@@ -1,86 +1,36 @@
 package storage
 
 import (
-	"database/sql"
 	"fmt"
 	"strings"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/config/tracker"
+	"code.uber.internal/infra/kraken/torlib"
+
 	_ "github.com/go-sql-driver/mysql" // need this side effect import for mysql
-	"github.com/pressly/goose"
 )
-
-// TPrivate denotes a private torrent flag
-var TPrivate uint = 0x00000001
-
-// POrigin denotes an origin peer
-var POrigin uint = 0x00000001
-
-// TorrentInfo defines metadata for a torrent
-type TorrentInfo struct {
-	TorrentName string
-	InfoHash    string
-	Author      string
-	NumPieces   int
-	PieceLength int
-	RefCount    int
-	Flags       uint
-}
-
-// PeerInfo defines metadata for a peer
-type PeerInfo struct {
-	InfoHash        string `bencode:"-"`
-	PeerID          string `bencode:"peer id"`
-	IP              string `bencode:"ip"`
-	Port            int64  `bencode:"port"`
-	Priority        int64  `bencode:"priority"`
-	DC              string `bencode:"-"`
-	BytesUploaded   int64  `bencode:"-"`
-	BytesDownloaded int64  `bencode:"-"`
-	BytesLeft       int64  `bencode:"-"`
-	Event           string `bencode:"-"`
-	Flags           uint   `bencode:"-"`
-}
-
-// DownloadComplete indicates whether the peer has finished downloading.
-func (p *PeerInfo) DownloadComplete() bool {
-	return p.BytesDownloaded > 0 && p.BytesLeft == 0
-}
-
-// Manifest defines manifest for a content(torrent)
-type Manifest struct {
-	TagName  string
-	Manifest string
-	Flags    uint
-}
 
 // Storage defines an interface for CRUD operations on peers and torrents
 type Storage interface {
 	//name of a storage engine
 	Name() string
-	//Read peer info
-	Read(infoHash string) ([]*PeerInfo, error)
-	//Upsert Peer info
-	Update(peerInfo *PeerInfo) error
-	//Delete all peers by hash_info
-	DeleteAllHashes(infoHash string) error
-	//Delete all peers by peerId
-	DeleteAllPeers(peerID string) error
-	//Delete all peers by torrent name
-	DeleteAllPieces(torrentName string)
+	//GetPeers returns a list of peers
+	GetPeers(infohash string) ([]*torlib.PeerInfo, error)
+	//UpdatePeer updates peer
+	UpdatePeer(peer *torlib.PeerInfo) error
 
-	//Read torrent info
-	ReadTorrent(torrentName string) (*TorrentInfo, error)
-	//Create torrent
-	CreateTorrent(torrentInfo *TorrentInfo) error
+	//GetTorrent returns torrent's metainfo as raw string
+	GetTorrent(name string) (string, error)
+	//CreateTorrent creates torrent in tracker's storage given metainfo
+	CreateTorrent(meta *torlib.MetaInfo) error
 
-	//Read manifest
-	ReadManifest(tagName string) (*Manifest, error)
-	//Create manifest
-	CreateManifest(manifest *Manifest) error
-	//Delete manifest
-	DeleteManifest(tagName string) error
+	//GetManifest returns stored manifest as raw string given tag
+	GetManifest(tag string) (string, error)
+	//CreateManifest creates manfist given tag and manifest
+	CreateManifest(tag, manifestRaw string) error
+	//DeleteManifest deletes manifest from tracker given tag
+	DeleteManifest(tag string) error
 }
 
 // DataStoreFactory is storage factory function type
@@ -95,7 +45,7 @@ func Register(name string, factory DataStoreFactory) {
 	}
 	_, registered := datastoreFactories[name]
 	if registered {
-		log.Error("Datastore factory %s already registered. Ignoring %s.", name)
+		log.Errorf("Ignored registered datastore factory %s", name)
 	}
 	datastoreFactories[name] = factory
 }
@@ -103,75 +53,6 @@ func Register(name string, factory DataStoreFactory) {
 // Init registers all storages in a system
 func Init() {
 	Register("mysql", NewMySQLStorage)
-}
-
-// RunDBMigration detect and Run DB migration if it is needed
-func RunDBMigration(appCfg config.AppConfig) error {
-
-	dsnTemplate := appCfg.DBConfig.GetDSN()
-	username := appCfg.Nemo.Username["kraken"]
-
-	// check if we need to str format,
-	// we don't have to do that in integration testing suite
-	// as DSN being returned from docker container contains already
-	// username and password
-	dsn := dsnTemplate
-	n := strings.Count(dsnTemplate, "%s")
-	if n > 0 {
-		dsn = fmt.Sprintf(dsnTemplate, username, appCfg.Nemo.Password[username])
-	}
-
-	// Open our database connection
-	db, err := sql.Open(appCfg.DBConfig.EngineName, dsn)
-	if err != nil {
-		log.Error("Failed to connect to datastore: ", err.Error())
-		return err
-	}
-	defer db.Close()
-
-	err = goose.SetDialect("mysql")
-
-	if err != nil {
-		log.Error("do not support the driver: ", err.Error())
-		return err
-	}
-	arguments := []string{}
-	// Get the latest possible migration
-	err = goose.Run("up", db, appCfg.DBConfig.MigrationsPath, arguments...)
-	if err != nil {
-		log.Error("could not run a migration: ", err)
-		return err
-	}
-
-	return nil
-}
-
-// NewMySQLStorage creates and returns new MySQL storage
-func NewMySQLStorage(appCfg config.AppConfig) (Storage, error) {
-
-	dsnTemplate := appCfg.DBConfig.GetDSN()
-	username := appCfg.Nemo.Username["kraken"]
-
-	// check if we need to str format,
-	// we don't have to do that in integration testing suite
-	// as DSN being returned from docker container contains already
-	// username and password
-	dsn := dsnTemplate
-	n := strings.Count(dsnTemplate, "%s")
-	if n > 0 {
-		dsn = fmt.Sprintf(dsnTemplate, username, appCfg.Nemo.Password[username])
-	}
-
-	db, err := sql.Open(appCfg.DBConfig.EngineName, dsn)
-	if err != nil {
-		log.Error("Failed to connect to datastore: ", err.Error())
-		return nil, err
-	}
-
-	return &MySQLDataStore{
-		appCfg: appCfg,
-		db:     db,
-	}, nil
 }
 
 // CreateStorage initilizes all available storages in a system

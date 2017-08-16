@@ -32,7 +32,7 @@ func TestBlacklistBackoff(t *testing.T) {
 			s := newConnState(genPeerID(), config)
 
 			peerID := genPeerID()
-			infoHash := genInfoHash()
+			infoHash := genInfoHash("")
 
 			s.InitCapacity(infoHash)
 
@@ -78,7 +78,7 @@ func TestDeleteStaleBlacklistEntries(t *testing.T) {
 	s := newConnState(genPeerID(), config)
 
 	peerID := genPeerID()
-	infoHash := genInfoHash()
+	infoHash := genInfoHash("")
 
 	s.InitCapacity(infoHash)
 

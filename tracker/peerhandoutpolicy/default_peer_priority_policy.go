@@ -1,8 +1,6 @@
 package peerhandoutpolicy
 
-import (
-	"code.uber.internal/infra/kraken/tracker/storage"
-)
+import "code.uber.internal/infra/kraken/torlib"
 
 // DefaultPeerPriorityPolicy is a NO-OP policy
 type DefaultPeerPriorityPolicy struct{}
@@ -14,7 +12,7 @@ func NewDefaultPeerPriorityPolicy() PeerPriorityPolicy {
 
 // AssignPeerPriority assigns all peers to the highest priority.
 func (p *DefaultPeerPriorityPolicy) AssignPeerPriority(
-	source *storage.PeerInfo, peers []*storage.PeerInfo) error {
+	source *torlib.PeerInfo, peers []*torlib.PeerInfo) error {
 
 	for _, peer := range peers {
 		peer.Priority = 0

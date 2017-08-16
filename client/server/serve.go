@@ -80,17 +80,16 @@ func (awa *AgentWebApp) status(w http.ResponseWriter, r *http.Request) {
 func (awa *AgentWebApp) openTorrent(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	q := r.URL.Query()
-	ih := q.Get("info_hash")
-	tr := q.Get("announce")
+	name := q.Get("name")
 
 	// returns error if missing info hash
-	if ih == "" {
+	if name == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Failed to open torrent. Missing info_hash in request."))
+		w.Write([]byte("Failed to open torrent. Missing name in request."))
 		return
 	}
 
-	t, new, err := awa.cl.AddTorrentInfoHash(metainfo.NewHashFromHex(ih))
+	t, err := awa.cl.AddTorrentByName(name)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -98,21 +97,8 @@ func (awa *AgentWebApp) openTorrent(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Infof("Added torrent info hash")
 
-	// if the torrent is new to client, add tracker
-	if new {
-		if ih == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("Failed to open torrent. Missing announce in request."))
-			return
-		}
-
-		t.AddTrackers([][]string{{tr}})
-		<-t.GotInfo()
-		log.Info("Got Torrent Info")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("New torrent added and is ready to be downloaded."))
-		return
-	}
+	<-t.GotInfo()
+	log.Info("Got Torrent Info")
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Torrent already opened. No need to do anything."))

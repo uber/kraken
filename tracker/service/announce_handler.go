@@ -10,27 +10,20 @@ import (
 	"github.com/jackpal/bencode-go"
 
 	config "code.uber.internal/infra/kraken/config/tracker"
+	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
-	"code.uber.internal/infra/kraken/tracker/storage"
 )
 
 // announceStore is a subset of the storage.Storage interface.
 type announceStore interface {
-	Update(p *storage.PeerInfo) error
-	Read(infoHash string) ([]*storage.PeerInfo, error)
+	UpdatePeer(p *torlib.PeerInfo) error
+	GetPeers(infoHash string) ([]*torlib.PeerInfo, error)
 }
 
 type announceHandler struct {
 	config config.AnnouncerConfig
 	store  announceStore
 	policy peerhandoutpolicy.PeerHandoutPolicy
-}
-
-// AnnouncerResponse follows a bittorrent tracker protocol
-// for tracker based peer discovery
-type AnnouncerResponse struct {
-	Interval int64              `bencode:"interval"`
-	Peers    []storage.PeerInfo `bencode:"peers"`
 }
 
 func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +67,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	peer := &storage.PeerInfo{
+	peer := &torlib.PeerInfo{
 		InfoHash:        infoHash,
 		PeerID:          peerID,
 		IP:              peerIP,
@@ -87,7 +80,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 		Event:     peerEvent,
 	}
 
-	err = h.store.Update(peer)
+	err = h.store.UpdatePeer(peer)
 	if err != nil {
 		log.Infof("Could not update storage for: hash %s, error: %s, request: %s",
 			infoHash, err.Error(), formatRequest(r))
@@ -95,7 +88,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	peerInfos, err := h.store.Read(infoHash)
+	peerInfos, err := h.store.GetPeers(infoHash)
 	if err != nil {
 		log.Infof("Could not read storage: hash %s, error: %s, request: %s",
 			infoHash, err.Error(), formatRequest(r))
@@ -128,13 +121,13 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// TODO(codyg): bencode can't serialize pointers, so we're forced to dereference
 	// every PeerInfo first.
-	derefPeerInfos := make([]storage.PeerInfo, len(peerInfos))
+	derefPeerInfos := make([]torlib.PeerInfo, len(peerInfos))
 	for i, p := range peerInfos {
 		derefPeerInfos[i] = *p
 	}
 
 	// write peers bencoded
-	err = bencode.Marshal(w, AnnouncerResponse{
+	err = bencode.Marshal(w, torlib.AnnouncerResponse{
 		Interval: h.config.AnnounceInterval,
 		Peers:    derefPeerInfos,
 	})

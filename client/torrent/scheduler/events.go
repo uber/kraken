@@ -6,8 +6,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 
-	"code.uber.internal/infra/kraken/client/torrent/meta"
-	trackerstorage "code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/timeutil"
 )
 
@@ -71,7 +70,7 @@ func (e closedConnEvent) Apply(s *Scheduler) {
 // failedHandshakeEvent occurs when a pending connection fails to handshake.
 type failedHandshakeEvent struct {
 	peerID   PeerID
-	infoHash meta.Hash
+	infoHash torlib.InfoHash
 }
 
 // Apply ejects the peer/hash of the failed handshake from the Scheduler's
@@ -164,8 +163,8 @@ func (e announceTickEvent) Apply(s *Scheduler) {
 // announceResponseEvent occurs when a successfully announce response was received
 // from the tracker.
 type announceResponseEvent struct {
-	infoHash meta.Hash
-	peers    []trackerstorage.PeerInfo
+	infoHash torlib.InfoHash
+	peers    []torlib.PeerInfo
 }
 
 // Apply selects new peers returned via an announce response to open connections to

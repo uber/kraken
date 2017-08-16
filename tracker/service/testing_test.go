@@ -4,12 +4,13 @@ import (
 	"net/http"
 	"testing"
 
-	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/torlib"
+
 	bencode "github.com/jackpal/bencode-go"
 	"github.com/stretchr/testify/require"
 )
 
-func getPeerIDs(peers []storage.PeerInfo) []string {
+func getPeerIDs(peers []torlib.PeerInfo) []string {
 	s := make([]string, len(peers))
 	for i, p := range peers {
 		s[i] = p.PeerID
@@ -23,16 +24,22 @@ func TestTestAnnouncer(t *testing.T) {
 	addr, stop := TestAnnouncer()
 	defer stop()
 
-	tor := storage.TorrentFixture()
-	p1 := storage.PeerForTorrentFixture(tor)
-	p2 := storage.PeerForTorrentFixture(tor)
+	str := `d8:announce10:trackerurl4:infod6:lengthi2e4:name8:torrent012:piece lengthi1e6:pieces0:eePASS`
+	mi, err := torlib.NewMetaInfoFromBytes([]byte(str))
+	require.NoError(err)
+	p1 := &torlib.PeerInfo{
+		PeerID: "peer1",
+	}
+	p2 := &torlib.PeerInfo{
+		PeerID: "peer2",
+	}
 
 	// Announcing p1 should return p1.
 
-	resp, err := http.Get("http://" + addr + createAnnouncePath(tor, p1))
+	resp, err := http.Get("http://" + addr + createAnnouncePath(mi, p1))
 	require.NoError(err)
 
-	ar := AnnouncerResponse{}
+	ar := torlib.AnnouncerResponse{}
 	err = bencode.Unmarshal(resp.Body, &ar)
 	require.NoError(err)
 
@@ -40,10 +47,10 @@ func TestTestAnnouncer(t *testing.T) {
 
 	// Announce p2 should return both p1 and p2.
 
-	resp, err = http.Get("http://" + addr + createAnnouncePath(tor, p2))
+	resp, err = http.Get("http://" + addr + createAnnouncePath(mi, p2))
 	require.NoError(err)
 
-	ar = AnnouncerResponse{}
+	ar = torlib.AnnouncerResponse{}
 	err = bencode.Unmarshal(resp.Body, &ar)
 	require.NoError(err)
 

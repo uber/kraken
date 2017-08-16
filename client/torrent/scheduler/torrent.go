@@ -8,8 +8,8 @@ import (
 	"sync"
 
 	"code.uber.internal/infra/kraken/client/torrent/bencode"
-	"code.uber.internal/infra/kraken/client/torrent/meta"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
+	"code.uber.internal/infra/kraken/torlib"
 )
 
 var (
@@ -24,10 +24,10 @@ type piece struct {
 }
 
 // Manages torrent state. This includes synchronizing reading and writing
-// pieces to the torrent, and providing access to torrent metadata.
+// pieces to the torrent, and providing access to torrent torlibdata.
 type torrent struct {
-	InfoHash meta.Hash
-	info     *meta.Info
+	InfoHash torlib.InfoHash
+	info     *torlib.Info
 	length   int64
 
 	sync.RWMutex    // Synchronizes access to the following fields:
@@ -38,26 +38,21 @@ type torrent struct {
 }
 
 func newTorrent(
-	infoHash meta.Hash,
+	infoHash torlib.InfoHash,
 	infoBytes []byte,
 	store storage.Torrent) (*torrent, error) {
 
-	h := meta.HashBytes(infoBytes)
+	h := torlib.NewInfoHashFromBytes(infoBytes)
 	if h != infoHash {
 		return nil, errInvalidInfoByteHash
 	}
 
-	info := new(meta.Info)
+	info := new(torlib.Info)
 	if err := bencode.Unmarshal(infoBytes, info); err != nil {
 		return nil, err
 	}
 	if err := info.Validate(); err != nil {
 		return nil, err
-	}
-
-	var length int64
-	for _, f := range info.UpvertedFiles() {
-		length += f.Length
 	}
 
 	n := info.NumPieces()
@@ -74,7 +69,7 @@ func newTorrent(
 	t := &torrent{
 		InfoHash:        infoHash,
 		info:            info,
-		length:          length,
+		length:          info.Length,
 		store:           store,
 		pieces:          pieces,
 		completedPieces: completedPieces,

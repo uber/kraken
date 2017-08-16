@@ -1,8 +1,8 @@
 package torrent
 
 import (
-	"code.uber.internal/infra/kraken/client/torrent/meta"
 	"code.uber.internal/infra/kraken/client/torrent/scheduler"
+	"code.uber.internal/infra/kraken/torlib"
 )
 
 // Client TODO
@@ -34,7 +34,7 @@ func (c *Client) AddTorrent(spec *Spec) error {
 }
 
 // DropTorrent TODO
-func (c *Client) DropTorrent(infoHash meta.Hash) error {
+func (c *Client) DropTorrent(infoHash torlib.InfoHash) error {
 	// TODO
 	return nil
 }

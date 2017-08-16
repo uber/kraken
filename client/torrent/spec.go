@@ -1,20 +1,20 @@
 package torrent
 
-import "code.uber.internal/infra/kraken/client/torrent/meta"
+import "code.uber.internal/infra/kraken/torlib"
 
 // Spec specifies a new torrent for adding to a client.
 type Spec struct {
 	// The tiered tracker URIs.
 	Trackers  [][]string
-	InfoHash  meta.Hash
+	InfoHash  torlib.InfoHash
 	InfoBytes []byte
 	// The name to use if the Name field from the Info isn't available.
 	DisplayName string
 }
 
-// SpecFromMetaInfo generates a torrent's spec by meta info.
-func SpecFromMetaInfo(mi *meta.TorrentInfo) (*Spec, error) {
-	info, err := mi.UnmarshalInfo()
+// SpecFromtorlibInfo generates a torrent's spec by torlib info.
+func SpecFromtorlibInfo(mi *torlib.MetaInfo) (*Spec, error) {
+	infoBytes, err := mi.Info.Serialize()
 	if err != nil {
 		return nil, err
 	}
@@ -26,8 +26,8 @@ func SpecFromMetaInfo(mi *meta.TorrentInfo) (*Spec, error) {
 	}
 	return &Spec{
 		Trackers:    trackers,
-		InfoBytes:   mi.InfoBytes,
-		DisplayName: info.Name,
-		InfoHash:    mi.HashInfoBytes(),
+		InfoBytes:   infoBytes,
+		DisplayName: mi.Info.Name,
+		InfoHash:    mi.GetInfoHash(),
 	}, nil
 }

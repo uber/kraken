@@ -11,7 +11,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
-	"code.uber.internal/infra/kraken/client/torrent/meta"
+	"code.uber.internal/infra/kraken/torlib"
 	"github.com/golang/protobuf/proto"
 	"github.com/uber-common/bark"
 )
@@ -50,7 +50,7 @@ type message struct {
 // in this package "handshake" and "bitfield message" are usually synonymous.
 type handshake struct {
 	PeerID   PeerID
-	InfoHash meta.Hash
+	InfoHash torlib.InfoHash
 	Bitfield []bool
 }
 
@@ -78,9 +78,14 @@ func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	ih, err := torlib.NewInfoHashFromHex(m.Bitfield.InfoHash)
+	if err != nil {
+		return nil, err
+	}
 	return &handshake{
 		PeerID:   peerID,
-		InfoHash: meta.NewHashFromHex(m.Bitfield.InfoHash),
+		InfoHash: ih,
 		Bitfield: m.Bitfield.Bitfield,
 	}, nil
 }
@@ -166,7 +171,7 @@ func (f *connFactory) ReciprocateHandshake(
 // messages are multiplexed based on the torrent they pertain to.
 type conn struct {
 	PeerID    PeerID
-	InfoHash  meta.Hash
+	InfoHash  torlib.InfoHash
 	CreatedAt time.Time
 
 	mu                    sync.Mutex // Protects the following fields:
