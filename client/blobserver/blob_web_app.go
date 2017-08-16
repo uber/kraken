@@ -1,4 +1,4 @@
-package service
+package blobserver
 
 import (
 	"net/http"
@@ -77,5 +77,14 @@ func (app BlobWebApp) PutUpload(writer http.ResponseWriter, request *http.Reques
 	p.AddRequestHandler(parseDigestFromQueryHandler)
 	p.AddRequestHandler(commitUploadHandler)
 	p.AddResponseHandler(returnUploadLocationHandler)
+	p.Run(writer, request)
+}
+
+// DeleteBlob removes blob data.
+func (app BlobWebApp) DeleteBlob(writer http.ResponseWriter, request *http.Request) {
+	p := NewPipeline(request.Context(), app.localStore)
+	p.AddRequestHandler(parseDigestHandler)
+	p.AddRequestHandler(deleteBlobHandler)
+	p.AddResponseHandler(acceptedHandler)
 	p.Run(writer, request)
 }

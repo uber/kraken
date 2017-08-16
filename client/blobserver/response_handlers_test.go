@@ -1,4 +1,4 @@
-package service
+package blobserver
 
 import (
 	"context"
@@ -60,5 +60,5 @@ func TestDownloadBlobHandlerInvalid(t *testing.T) {
 	ctx, se := downloadBlobHandler(ctx, mockWriter)
 	require.Nil(ctx)
 	require.NotNil(se)
-	require.Equal(se.StatusCode(), http.StatusNotFound)
+	require.Equal(se.GetStatusCode(), http.StatusNotFound)
 }

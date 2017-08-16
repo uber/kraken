@@ -1,4 +1,4 @@
-package service
+package blobserver
 
 import (
 	"context"
@@ -25,8 +25,8 @@ func TestParseDigestHandlerValid(t *testing.T) {
 	routeCtx.URLParams.Add("digest", dockerimage.DigestEmptyTar)
 	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx))
 
-	ctx, se := parseDigestHandler(request.Context(), request)
-	require.Nil(se)
+	ctx, resp := parseDigestHandler(request.Context(), request)
+	require.Nil(resp)
 	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
 	require.True(ok)
 	require.Equal(digest.String(), dockerimage.DigestEmptyTar)
@@ -41,10 +41,10 @@ func TestParseDigestHandlerNoAlgo(t *testing.T) {
 	routeCtx.URLParams.Add("digest", emptyDigestHex)
 	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx))
 
-	ctx, se := parseDigestHandler(request.Context(), request)
+	ctx, resp := parseDigestHandler(request.Context(), request)
 	require.Nil(ctx)
-	require.NotNil(se)
-	require.Equal(se.StatusCode(), http.StatusBadRequest)
+	require.NotNil(resp)
+	require.Equal(resp.GetStatusCode(), http.StatusBadRequest)
 }
 
 func TestParseDigestHandlerEmpty(t *testing.T) {
@@ -55,10 +55,10 @@ func TestParseDigestHandlerEmpty(t *testing.T) {
 	routeCtx := chi.NewRouteContext()
 	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx))
 
-	ctx, se := parseDigestHandler(request.Context(), request)
+	ctx, resp := parseDigestHandler(request.Context(), request)
 	require.Nil(ctx)
-	require.NotNil(se)
-	require.Equal(se.StatusCode(), http.StatusBadRequest)
+	require.NotNil(resp)
+	require.Equal(resp.GetStatusCode(), http.StatusBadRequest)
 }
 
 func TestParseDigestFromQueryHandlerValid(t *testing.T) {
@@ -67,8 +67,8 @@ func TestParseDigestFromQueryHandlerValid(t *testing.T) {
 	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", dockerimage.DigestEmptyTar)
 	request, _ := http.NewRequest("POST", url, nil)
 
-	ctx, se := parseDigestFromQueryHandler(request.Context(), request)
-	require.Nil(se)
+	ctx, resp := parseDigestFromQueryHandler(request.Context(), request)
+	require.Nil(resp)
 	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
 	require.True(ok)
 	require.Equal(digest.String(), dockerimage.DigestEmptyTar)
@@ -80,10 +80,10 @@ func TestParseDigestFromQueryHandlerNoAlgo(t *testing.T) {
 	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", emptyDigestHex)
 	request, _ := http.NewRequest("POST", url, nil)
 
-	ctx, se := parseDigestFromQueryHandler(request.Context(), request)
+	ctx, resp := parseDigestFromQueryHandler(request.Context(), request)
 	require.Nil(ctx)
-	require.NotNil(se)
-	require.Equal(se.StatusCode(), http.StatusBadRequest)
+	require.NotNil(resp)
+	require.Equal(resp.GetStatusCode(), http.StatusBadRequest)
 }
 
 func TestParseDigestFromQueryHandlerEmpty(t *testing.T) {
@@ -92,10 +92,10 @@ func TestParseDigestFromQueryHandlerEmpty(t *testing.T) {
 	url := fmt.Sprintf("localhost:8080/blob/uploads")
 	request, _ := http.NewRequest("POST", url, nil)
 
-	ctx, se := parseDigestFromQueryHandler(request.Context(), request)
+	ctx, resp := parseDigestFromQueryHandler(request.Context(), request)
 	require.Nil(ctx)
-	require.NotNil(se)
-	require.Equal(se.StatusCode(), http.StatusBadRequest)
+	require.NotNil(resp)
+	require.Equal(resp.GetStatusCode(), http.StatusBadRequest)
 }
 
 func TestEnsureDigestNotExistsHandlerValid(t *testing.T) {
@@ -112,8 +112,8 @@ func TestEnsureDigestNotExistsHandlerValid(t *testing.T) {
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
 	request = request.WithContext(ctx)
 
-	_, se := ensureDigestNotExistsHandler(request.Context(), request)
-	require.Nil(se)
+	_, resp := ensureDigestNotExistsHandler(request.Context(), request)
+	require.Nil(resp)
 }
 
 func TestEnsureDigestNotExistsHandlerConflict(t *testing.T) {
@@ -132,10 +132,10 @@ func TestEnsureDigestNotExistsHandlerConflict(t *testing.T) {
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
 	request = request.WithContext(ctx)
 
-	ctx, se := ensureDigestNotExistsHandler(request.Context(), request)
+	ctx, resp := ensureDigestNotExistsHandler(request.Context(), request)
 	require.Nil(ctx)
-	require.NotNil(se)
-	require.Equal(se.StatusCode(), http.StatusConflict)
+	require.NotNil(resp)
+	require.Equal(resp.GetStatusCode(), http.StatusConflict)
 }
 
 func TestParseUUIDHandlerValid(t *testing.T) {
@@ -147,8 +147,8 @@ func TestParseUUIDHandlerValid(t *testing.T) {
 	routeCtx.URLParams.Add("uuid", randomUUID)
 	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx))
 
-	ctx, se := parseUUIDHandler(request.Context(), request)
-	require.Nil(se)
+	ctx, resp := parseUUIDHandler(request.Context(), request)
+	require.Nil(resp)
 	uploadUUID, ok := ctx.Value(ctxKeyUploadUUID).(string)
 	require.True(ok)
 	require.Equal(uploadUUID, randomUUID)
@@ -163,10 +163,10 @@ func TestParseUUIDHandlerInvalid(t *testing.T) {
 	routeCtx.URLParams.Add("uuid", "b9cb2c15")
 	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx))
 
-	ctx, se := parseUUIDHandler(request.Context(), request)
+	ctx, resp := parseUUIDHandler(request.Context(), request)
 	require.Nil(ctx)
-	require.NotNil(se)
-	require.Equal(se.StatusCode(), http.StatusBadRequest)
+	require.NotNil(resp)
+	require.Equal(resp.GetStatusCode(), http.StatusBadRequest)
 }
 
 func TestParseUUIDHandlerEmpty(t *testing.T) {
@@ -177,10 +177,10 @@ func TestParseUUIDHandlerEmpty(t *testing.T) {
 	routeCtx := chi.NewRouteContext()
 	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx))
 
-	ctx, se := parseUUIDHandler(request.Context(), request)
+	ctx, resp := parseUUIDHandler(request.Context(), request)
 	require.Nil(ctx)
-	require.NotNil(se)
-	require.Equal(se.StatusCode(), http.StatusBadRequest)
+	require.NotNil(resp)
+	require.Equal(resp.GetStatusCode(), http.StatusBadRequest)
 }
 
 func TestParseContentRangeHandlerValid(t *testing.T) {
@@ -193,8 +193,8 @@ func TestParseContentRangeHandlerValid(t *testing.T) {
 	routeCtx.URLParams.Add("uuid", randomUUID)
 	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx))
 
-	ctx, se := parseContentRangeHandler(request.Context(), request)
-	require.Nil(se)
+	ctx, resp := parseContentRangeHandler(request.Context(), request)
+	require.Nil(resp)
 	startByte, ok := ctx.Value(ctxKeyStartByte).(int64)
 	require.True(ok)
 	require.Equal(startByte, int64(5))
@@ -213,10 +213,10 @@ func TestParseContentRangeHandlerInvalid(t *testing.T) {
 	routeCtx.URLParams.Add("uuid", randomUUID)
 	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx))
 
-	ctx, se := parseContentRangeHandler(request.Context(), request)
+	ctx, resp := parseContentRangeHandler(request.Context(), request)
 	require.Nil(ctx)
-	require.NotNil(se)
-	require.Equal(se.StatusCode(), http.StatusBadRequest)
+	require.NotNil(resp)
+	require.Equal(resp.GetStatusCode(), http.StatusBadRequest)
 
 	request, _ = http.NewRequest("PATCH", url, nil)
 	request.Header.Set("content-range", " 5-10")
@@ -224,11 +224,11 @@ func TestParseContentRangeHandlerInvalid(t *testing.T) {
 	routeCtx.URLParams.Add("uuid", randomUUID)
 	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx))
 
-	ctx, se = parseContentRangeHandler(request.Context(), request)
+	ctx, resp = parseContentRangeHandler(request.Context(), request)
 	require.Nil(ctx)
-	require.NotNil(se)
-	require.Equal(se.StatusCode(), http.StatusBadRequest)
-	require.True(strings.HasPrefix(se.Error(), "Cannot parse start of range"))
+	require.NotNil(resp)
+	require.Equal(resp.GetStatusCode(), http.StatusBadRequest)
+	require.True(strings.HasPrefix(resp.Error(), "Cannot parse start of range"))
 
 	request, _ = http.NewRequest("PATCH", url, nil)
 	request.Header.Set("content-range", "-1-10")
@@ -236,10 +236,10 @@ func TestParseContentRangeHandlerInvalid(t *testing.T) {
 	routeCtx.URLParams.Add("uuid", randomUUID)
 	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx))
 
-	ctx, se = parseContentRangeHandler(request.Context(), request)
+	ctx, resp = parseContentRangeHandler(request.Context(), request)
 	require.Nil(ctx)
-	require.NotNil(se)
-	require.Equal(se.StatusCode(), http.StatusBadRequest)
+	require.NotNil(resp)
+	require.Equal(resp.GetStatusCode(), http.StatusBadRequest)
 }
 
 func TestParseContentRangeHandlerEmpty(t *testing.T) {
@@ -254,7 +254,7 @@ func TestParseContentRangeHandlerEmpty(t *testing.T) {
 	ctx, se := parseContentRangeHandler(request.Context(), request)
 	require.Nil(ctx)
 	require.NotNil(se)
-	require.Equal(se.StatusCode(), http.StatusBadRequest)
+	require.Equal(se.GetStatusCode(), http.StatusBadRequest)
 }
 
 func TestCreateUploadHandler(t *testing.T) {
@@ -401,6 +401,29 @@ func TestCommitUploadHandlerInvalidDigest(t *testing.T) {
 	ctx, se := commitUploadHandler(request.Context(), request)
 	require.Nil(ctx)
 	require.NotNil(se)
-	require.Equal(se.StatusCode(), http.StatusBadRequest)
+	require.Equal(se.GetStatusCode(), http.StatusBadRequest)
 	assert.True(t, strings.HasPrefix(se.Error(), "Computed digest"))
+}
+
+func TestDeleteBlobHandlerValid(t *testing.T) {
+	require := require.New(t)
+
+	c, localStore := getLocalStore()
+	defer clearLocalStore(c)
+	localStore.CreateUploadFile(randomUUID, 0)
+	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
+	writer.Write([]byte("Hello world!!!"))
+	contentDigest, _ := dockerimage.NewDigester().FromReader(strings.NewReader("Hello world!!!"))
+	localStore.MoveUploadFileToCache(randomUUID, contentDigest.Hex())
+
+	url := fmt.Sprintf("localhost:8080/blob/uploads/%s", contentDigest)
+	request, _ := http.NewRequest("DELETE", url, nil)
+	ctx := request.Context()
+	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
+	ctx = context.WithValue(ctx, ctxKeyDigest, contentDigest)
+	request = request.WithContext(ctx)
+
+	ctx, se := deleteBlobHandler(request.Context(), request)
+	require.NotNil(ctx)
+	require.Nil(se)
 }
