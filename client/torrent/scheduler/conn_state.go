@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken/client/torrent/meta"
 	"github.com/uber-common/bark"
+
+	"code.uber.internal/infra/kraken/torlib"
 )
 
 var errTorrentAtCapacity = errors.New("torrent is at capacity")
@@ -23,7 +24,7 @@ func (e blacklistError) Error() string {
 
 type connKey struct {
 	peerID   PeerID
-	infoHash meta.Hash
+	infoHash torlib.InfoHash
 }
 
 type blacklistEntry struct {
@@ -42,7 +43,7 @@ func (e *blacklistEntry) Remaining(now time.Time) time.Duration {
 type connState struct {
 	localPeerID PeerID
 	config      Config
-	capacity    map[meta.Hash]int
+	capacity    map[torlib.InfoHash]int
 	active      map[connKey]*conn
 	pending     map[connKey]bool
 	blacklist   map[connKey]*blacklistEntry
@@ -55,7 +56,7 @@ func newConnState(localPeerID PeerID, config Config) *connState {
 	return &connState{
 		localPeerID: localPeerID,
 		config:      config,
-		capacity:    make(map[meta.Hash]int),
+		capacity:    make(map[torlib.InfoHash]int),
 		active:      make(map[connKey]*conn),
 		pending:     make(map[connKey]bool),
 		blacklist:   make(map[connKey]*blacklistEntry),
@@ -63,7 +64,7 @@ func newConnState(localPeerID PeerID, config Config) *connState {
 	}
 }
 
-func (s *connState) InitCapacity(infoHash meta.Hash) {
+func (s *connState) InitCapacity(infoHash torlib.InfoHash) {
 	s.capacity[infoHash] = s.config.MaxOpenConnectionsPerTorrent
 }
 
@@ -75,7 +76,7 @@ func (s *connState) ActiveConns() []*conn {
 	return conns
 }
 
-func (s *connState) Blacklist(peerID PeerID, infoHash meta.Hash) error {
+func (s *connState) Blacklist(peerID PeerID, infoHash torlib.InfoHash) error {
 	k := connKey{peerID, infoHash}
 	e, ok := s.blacklist[k]
 	if ok && e.Blacklisted(s.now()) {
@@ -102,7 +103,7 @@ func (s *connState) Blacklist(peerID PeerID, infoHash meta.Hash) error {
 	return nil
 }
 
-func (s *connState) AddPending(peerID PeerID, infoHash meta.Hash) error {
+func (s *connState) AddPending(peerID PeerID, infoHash torlib.InfoHash) error {
 	k := connKey{peerID, infoHash}
 	if e, ok := s.blacklist[k]; ok {
 		now := s.now()
@@ -127,7 +128,7 @@ func (s *connState) AddPending(peerID PeerID, infoHash meta.Hash) error {
 	return nil
 }
 
-func (s *connState) DeletePending(peerID PeerID, infoHash meta.Hash) {
+func (s *connState) DeletePending(peerID PeerID, infoHash torlib.InfoHash) {
 	k := connKey{peerID, infoHash}
 	if !s.pending[k] {
 		return

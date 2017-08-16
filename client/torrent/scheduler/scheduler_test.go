@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"path"
 	"sync"
 	"testing"
 	"time"
@@ -35,16 +36,18 @@ func TestDownloadTorrentWithSeederAndLeecher(t *testing.T) {
 	leecher := genTestPeer(config)
 	defer leecher.Stop()
 
-	mi, content := genTorrent(genTorrentOpts{})
-	infoHash := mi.HashInfoBytes()
+	mi, content := genTorrent(genTorrentOpts{}, path.Join(trackerAddr, "/announce"))
+	infoHash := mi.GetInfoHash()
+	infoBytes, err := mi.Info.Serialize()
+	require.NoError(err)
 	seederTor := writeTorrent(seeder.TorrentManager, mi, content)
-	leecherTor, err := leecher.TorrentManager.CreateTorrent(infoHash, mi.InfoBytes)
+	leecherTor, err := leecher.TorrentManager.CreateTorrent(infoHash, infoBytes)
 	require.NoError(err)
 
-	err = <-seeder.Scheduler.AddTorrent(seederTor, infoHash, mi.InfoBytes)
+	err = <-seeder.Scheduler.AddTorrent(seederTor, infoHash, infoBytes)
 	require.NoError(err)
 
-	err = <-leecher.Scheduler.AddTorrent(leecherTor, infoHash, mi.InfoBytes)
+	err = <-leecher.Scheduler.AddTorrent(leecherTor, infoHash, infoBytes)
 	require.NoError(err)
 
 	checkContent(require, leecherTor, content)
@@ -65,21 +68,23 @@ func TestDownloadManyTorrentsWithSeederAndLeecher(t *testing.T) {
 	defer leecher.Stop()
 
 	var wg sync.WaitGroup
-	for _, tor := range genTestTorrents(5, genTorrentOpts{}) {
+	for _, tor := range genTestTorrents(5, genTorrentOpts{}, path.Join(trackerAddr, "/announce")) {
 		tor := tor
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
-			infoHash := tor.Info.HashInfoBytes()
-			seederTor := writeTorrent(seeder.TorrentManager, tor.Info, tor.Content)
-			leecherTor, err := leecher.TorrentManager.CreateTorrent(infoHash, tor.Info.InfoBytes)
+			infoHash := tor.MetaInfo.GetInfoHash()
+			infoBytes, err := tor.MetaInfo.Info.Serialize()
+			require.NoError(err)
+			seederTor := writeTorrent(seeder.TorrentManager, tor.MetaInfo, tor.Content)
+			leecherTor, err := leecher.TorrentManager.CreateTorrent(infoHash, infoBytes)
 			require.NoError(err)
 
-			err = <-seeder.Scheduler.AddTorrent(seederTor, infoHash, tor.Info.InfoBytes)
+			err = <-seeder.Scheduler.AddTorrent(seederTor, infoHash, infoBytes)
 			require.NoError(err)
 
-			err = <-leecher.Scheduler.AddTorrent(leecherTor, infoHash, tor.Info.InfoBytes)
+			err = <-leecher.Scheduler.AddTorrent(leecherTor, infoHash, infoBytes)
 			require.NoError(err)
 
 			checkContent(require, leecherTor, tor.Content)
@@ -102,14 +107,16 @@ func TestDownloadManyTorrentsWithSeederAndManyLeechers(t *testing.T) {
 	leechers, stopAll := genTestPeers(5, config)
 	defer stopAll()
 
-	torrents := genTestTorrents(5, genTorrentOpts{})
+	torrents := genTestTorrents(5, genTorrentOpts{}, path.Join(trackerAddr, "/announce"))
 
 	// Start seeding each torrent.
 	for _, tor := range torrents {
-		infoHash := tor.Info.HashInfoBytes()
-		seederTor := writeTorrent(seeder.TorrentManager, tor.Info, tor.Content)
+		infoHash := tor.MetaInfo.GetInfoHash()
+		infoBytes, err := tor.MetaInfo.Info.Serialize()
+		require.NoError(err)
+		seederTor := writeTorrent(seeder.TorrentManager, tor.MetaInfo, tor.Content)
 
-		err := <-seeder.Scheduler.AddTorrent(seederTor, infoHash, tor.Info.InfoBytes)
+		err = <-seeder.Scheduler.AddTorrent(seederTor, infoHash, infoBytes)
 		require.NoError(err)
 	}
 
@@ -122,13 +129,14 @@ func TestDownloadManyTorrentsWithSeederAndManyLeechers(t *testing.T) {
 			go func() {
 				defer wg.Done()
 
-				infoHash := tor.Info.HashInfoBytes()
-
-				leecherTor, err := p.TorrentManager.CreateTorrent(infoHash, tor.Info.InfoBytes)
+				infoHash := tor.MetaInfo.GetInfoHash()
+				infoBytes, err := tor.MetaInfo.Info.Serialize()
+				require.NoError(err)
+				leecherTor, err := p.TorrentManager.CreateTorrent(infoHash, infoBytes)
 				require.NoError(err)
 
 				select {
-				case err := <-p.Scheduler.AddTorrent(leecherTor, infoHash, tor.Info.InfoBytes):
+				case err := <-p.Scheduler.AddTorrent(leecherTor, infoHash, infoBytes):
 					require.NoError(err)
 				case <-time.After(10 * time.Second):
 					t.Errorf("AddTorrent timeout scheduler=%s torrent=%s", p.Scheduler.peerID, infoHash)
@@ -157,8 +165,10 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 	mi, content := genTorrent(genTorrentOpts{
 		Size:        len(peers) * pieceLength,
 		PieceLength: pieceLength,
-	})
-	infoHash := mi.HashInfoBytes()
+	}, path.Join(trackerAddr, "/announce"))
+	infoHash := mi.GetInfoHash()
+	infoBytes, err := mi.Info.Serialize()
+	require.NoError(err)
 
 	var wg sync.WaitGroup
 	for i, p := range peers {
@@ -173,7 +183,7 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			select {
-			case err := <-p.Scheduler.AddTorrent(tor, infoHash, mi.InfoBytes):
+			case err := <-p.Scheduler.AddTorrent(tor, infoHash, infoBytes):
 				require.NoError(err)
 			case <-time.After(10 * time.Second):
 				t.Errorf("AddTorrent timeout scheduler=%s torrent=%s", p.Scheduler.peerID, infoHash)
@@ -191,8 +201,10 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 	trackerAddr, stop := trackerservice.TestAnnouncer()
 	defer stop()
 
-	mi, content := genTorrent(genTorrentOpts{})
-	infoHash := mi.HashInfoBytes()
+	mi, content := genTorrent(genTorrentOpts{}, path.Join(trackerAddr, "/announce"))
+	infoHash := mi.GetInfoHash()
+	infoBytes, err := mi.Info.Serialize()
+	require.NoError(err)
 
 	// Each peer is allowed two connections, which allows them to establish both
 	// a connection to the seeder and another peer.
@@ -201,16 +213,16 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 
 	peerA := genTestPeer(peerConfig)
 	defer peerA.Stop()
-	peerATor, err := peerA.TorrentManager.CreateTorrent(infoHash, mi.InfoBytes)
+	peerATor, err := peerA.TorrentManager.CreateTorrent(infoHash, infoBytes)
 	require.NoError(err)
 
 	peerB := genTestPeer(peerConfig)
 	defer peerB.Stop()
-	peerBTor, err := peerB.TorrentManager.CreateTorrent(infoHash, mi.InfoBytes)
+	peerBTor, err := peerB.TorrentManager.CreateTorrent(infoHash, infoBytes)
 	require.NoError(err)
 
-	peerAErrc := peerA.Scheduler.AddTorrent(peerATor, infoHash, mi.InfoBytes)
-	peerBErrc := peerB.Scheduler.AddTorrent(peerBTor, infoHash, mi.InfoBytes)
+	peerAErrc := peerA.Scheduler.AddTorrent(peerATor, infoHash, infoBytes)
+	peerBErrc := peerB.Scheduler.AddTorrent(peerBTor, infoHash, infoBytes)
 
 	// Wait for peerA and peerB to establish connections to one another before
 	// starting the seeder, so their handshake bitfields are both guaranteed to
@@ -227,7 +239,7 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 	seeder := genTestPeer(seederConfig)
 	defer seeder.Stop()
 	seederTor := writeTorrent(seeder.TorrentManager, mi, content)
-	require.NoError(<-seeder.Scheduler.AddTorrent(seederTor, infoHash, mi.InfoBytes))
+	require.NoError(<-seeder.Scheduler.AddTorrent(seederTor, infoHash, infoBytes))
 
 	require.NoError(<-peerAErrc)
 	require.NoError(<-peerBErrc)
@@ -247,8 +259,10 @@ func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 	trackerAddr, stop := trackerservice.TestAnnouncer()
 	defer stop()
 
-	mi, content := genTorrent(genTorrentOpts{})
-	infoHash := mi.HashInfoBytes()
+	mi, content := genTorrent(genTorrentOpts{}, path.Join(trackerAddr, "/announce"))
+	infoHash := mi.GetInfoHash()
+	infoBytes, err := mi.Info.Serialize()
+	require.NoError(err)
 
 	config := genConfig(trackerAddr)
 	config.IdleSeederTTL = 1 * time.Second
@@ -256,13 +270,13 @@ func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 	seeder := genTestPeer(config)
 	defer seeder.Stop()
 	seederTor := writeTorrent(seeder.TorrentManager, mi, content)
-	require.NoError(<-seeder.Scheduler.AddTorrent(seederTor, infoHash, mi.InfoBytes))
+	require.NoError(<-seeder.Scheduler.AddTorrent(seederTor, infoHash, infoBytes))
 
 	leecher := genTestPeer(config)
 	defer leecher.Stop()
-	leecherTor, err := leecher.TorrentManager.CreateTorrent(infoHash, mi.InfoBytes)
+	leecherTor, err := leecher.TorrentManager.CreateTorrent(infoHash, infoBytes)
 	require.NoError(err)
-	require.NoError(<-leecher.Scheduler.AddTorrent(leecherTor, infoHash, mi.InfoBytes))
+	require.NoError(<-leecher.Scheduler.AddTorrent(leecherTor, infoHash, infoBytes))
 
 	checkContent(require, leecherTor, content)
 

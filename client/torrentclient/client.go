@@ -1,6 +1,7 @@
 package torrentclient
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -17,9 +18,11 @@ import (
 	"code.uber.internal/infra/kraken-torrent/metainfo"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/configuration"
+	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils"
 
 	"github.com/boltdb/bolt"
+
 	"github.com/docker/distribution/uuid"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
@@ -134,11 +137,9 @@ func (c *Client) LoadTorrentList() error {
 					return err
 				}
 			} else {
-				_, _, err := c.AddTorrentInfoHash(metainfo.NewHashFromHex(string(k)))
-				if err != nil {
-					log.Errorf("Could not add deserialize torrent %s", err)
-					return err
-				}
+				err := fmt.Errorf("Could not add deserialize torrent: metainfo is empty")
+				log.Error(err)
+				return err
 			}
 		}
 
@@ -197,17 +198,6 @@ func (c *Client) AddTorrent(mi *metainfo.MetaInfo) (*torrent.Torrent, error) {
 	}
 
 	return tor, c.UpdateTorrentList(mi.HashInfoBytes().String(), mi, false)
-
-}
-
-// AddTorrentInfoHash adds a torrent to the client given infohash
-func (c *Client) AddTorrentInfoHash(hash metainfo.Hash) (*torrent.Torrent, bool, error) {
-	if c.config.DisableTorrent {
-		return nil, false, fmt.Errorf("Torrent disabled")
-	}
-	tor, new := c.cl.AddTorrentInfoHash(hash)
-	err := c.UpdateTorrentList(hash.String(), nil, false)
-	return tor, new, err
 }
 
 // AddTorrentByName gets torrent info hash from tracker by name and adds the torrent to the client
@@ -216,7 +206,8 @@ func (c *Client) AddTorrentByName(name string) (*torrent.Torrent, error) {
 	if c.config.DisableTorrent {
 		return nil, fmt.Errorf("Torrent disabled")
 	}
-	infohash, err := c.getTorrentInfoHashFromTracker(name)
+
+	miRaw, err := c.getTorrentMetaInfoFromTracker(name)
 	if err != nil {
 		log.WithFields(bark.Fields{
 			"name":  name,
@@ -225,8 +216,16 @@ func (c *Client) AddTorrentByName(name string) (*torrent.Torrent, error) {
 		return nil, err
 	}
 
-	// get local peer
-	localPeer, err := c.getLocalPeer()
+	mi, err := torlib.NewMetaInfoFromBytes(miRaw)
+	if err != nil {
+		log.WithFields(bark.Fields{
+			"name":  name,
+			"error": err,
+		}).Error("Failed to add torrent by name")
+		return nil, err
+	}
+
+	infoBytes, err := mi.Info.Serialize()
 	if err != nil {
 		log.WithFields(bark.Fields{
 			"name":  name,
@@ -236,7 +235,11 @@ func (c *Client) AddTorrentByName(name string) (*torrent.Torrent, error) {
 	}
 
 	// add torrent
-	tor, new, err := c.AddTorrentInfoHash(metainfo.NewHashFromHex(string(infohash[:])))
+	tor, err := c.AddTorrent(&metainfo.MetaInfo{
+		InfoBytes:    infoBytes,
+		Announce:     mi.Announce,
+		AnnounceList: [][]string(mi.AnnounceList),
+	})
 	if err != nil {
 		log.WithFields(bark.Fields{
 			"name":  name,
@@ -245,18 +248,8 @@ func (c *Client) AddTorrentByName(name string) (*torrent.Torrent, error) {
 		return nil, err
 	}
 
-	if new {
-		// add itself as peer
-		tor.AddPeers([]torrent.Peer{localPeer})
-
-		// add announcer
-		announcer := c.config.TrackerURL + "/announce"
-		tor.AddTrackers([][]string{{announcer}})
-	}
-
 	log.WithFields(bark.Fields{
-		"name":     name,
-		"infohash": string(infohash[:]),
+		"name": name,
 	}).Info("Successfully added torrent by name")
 
 	return tor, nil
@@ -328,7 +321,24 @@ func (c *Client) CreateTorrentFromFile(name, filepath string) error {
 	}
 
 	// add torrent name in tracker
-	err = c.addTorrentInTracker(name, mi.HashInfoBytes())
+	libInfo := torlib.Info{
+		Name:        info.Name,
+		PieceLength: info.PieceLength,
+		Pieces:      info.Pieces,
+		Length:      info.Length,
+	}
+
+	libmeta, err := torlib.NewMetaInfoFromInfo(libInfo, c.config.TrackerURL+"/announce")
+	if err != nil {
+		log.WithFields(bark.Fields{
+			"name":     t.Name(),
+			"infohash": t.InfoHash().HexString(),
+			"error":    err,
+		}).Info("Failed to create torrent")
+		return err
+	}
+
+	err = c.addTorrentInTracker(name, libmeta)
 	if err != nil {
 		log.WithFields(bark.Fields{
 			"name":     t.Name(),
@@ -627,9 +637,9 @@ func (c *Client) getNumCompletedPieces(tor *torrent.Torrent) (int, error) {
 	return completedPieces, nil
 }
 
-func (c *Client) getTorrentInfoHashFromTracker(name string) ([]byte, error) {
+func (c *Client) getTorrentMetaInfoFromTracker(name string) ([]byte, error) {
 	// get torrent info hash
-	trackerURL := c.config.TrackerURL + "/infohash?name=" + name
+	trackerURL := c.config.TrackerURL + "/info?name=" + name
 	req, err := http.NewRequest("GET", trackerURL, nil)
 	if err != nil {
 		return nil, err
@@ -665,13 +675,18 @@ func (c *Client) getTorrentInfoHashFromTracker(name string) ([]byte, error) {
 	return data, nil
 }
 
-func (c *Client) addTorrentInTracker(name string, infohash metainfo.Hash) (err error) {
-	postURL := c.config.TrackerURL + "/infohash?name=" + name + "&info_hash=" + infohash.HexString()
+func (c *Client) addTorrentInTracker(name string, mi *torlib.MetaInfo) (err error) {
+	postURL := c.config.TrackerURL + "/info?name=" + name + "&info_hash=" + mi.GetInfoHash().HexString()
+	rawStr, err := mi.Serialize()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
 
 	for i := 0; i < callTrackerRetries; i++ {
 		var req *http.Request
 		var resp *http.Response
-		req, err = http.NewRequest("POST", postURL, nil)
+		req, err = http.NewRequest("POST", postURL, bytes.NewBufferString(rawStr))
 		if err != nil {
 			log.Errorf("Failed to add torrent in tracker: %s", err.Error())
 			time.Sleep(callTrackerRetrySleep * time.Second)

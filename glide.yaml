@@ -54,3 +54,5 @@ testImport:
 - package: golang.org/x/time
   subpackages:
   - rate
+- package: github.com/jmoiron/sqlx
+  version: d9bd385d68c068f1fabb5057e3dedcbcbb039d0f

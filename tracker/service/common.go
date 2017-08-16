@@ -1,7 +1,9 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -31,4 +33,11 @@ func formatRequest(r *http.Request) string {
 	}
 	// Return the request as a string
 	return strings.Join(request, "\n")
+}
+
+func writeJSONErrorf(w io.Writer, format string, a ...interface{}) {
+	json.NewEncoder(w).Encode(map[string]string{
+		"error": fmt.Sprintf(format, a...),
+	})
+	return
 }

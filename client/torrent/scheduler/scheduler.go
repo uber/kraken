@@ -15,11 +15,9 @@ import (
 	"github.com/uber-common/bark"
 
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken/client/torrent/meta"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
+	"code.uber.internal/infra/kraken/torlib"
 	// TODO(codyg): Probably factor these into a common structs package?
-	trackerservice "code.uber.internal/infra/kraken/tracker/service"
-	trackerstorage "code.uber.internal/infra/kraken/tracker/storage"
 )
 
 // ErrTorrentAlreadyRegistered returns when adding a torrent which has already
@@ -54,10 +52,10 @@ type Scheduler struct {
 
 	// The following fields define the core Scheduler "state", and should only
 	// be accessed from within the event loop.
-	dispatchers   map[meta.Hash]*dispatcher // Active seeding / leeching torrents.
+	dispatchers   map[torlib.InfoHash]*dispatcher // Active seeding / leeching torrents.
 	connState     *connState
 	announceQueue *announceQueue
-	torrentErrors map[meta.Hash]chan error // AddTorrent error channels.
+	torrentErrors map[torlib.InfoHash]chan error // AddTorrent error channels.
 
 	eventLoop *eventLoop
 
@@ -109,10 +107,10 @@ func New(
 			LocalPeerID: peerID,
 			EventLoop:   eventLoop,
 		},
-		dispatchers:            make(map[meta.Hash]*dispatcher),
+		dispatchers:            make(map[torlib.InfoHash]*dispatcher),
 		connState:              newConnState(peerID, config),
 		announceQueue:          newAnnounceQueue(),
-		torrentErrors:          make(map[meta.Hash]chan error),
+		torrentErrors:          make(map[torlib.InfoHash]chan error),
 		eventLoop:              eventLoop,
 		listener:               l,
 		announceTicker:         time.NewTicker(config.AnnounceInterval),
@@ -156,7 +154,7 @@ func (s *Scheduler) Stop() {
 // TODO(codyg): Torrents will continue to seed for the entire lifetime of the Scheduler,
 // but this should be a matter of policy.
 func (s *Scheduler) AddTorrent(
-	store storage.Torrent, infoHash meta.Hash, infoBytes []byte) <-chan error {
+	store storage.Torrent, infoHash torlib.InfoHash, infoBytes []byte) <-chan error {
 
 	// Buffer size of 1 so sends do not block.
 	errc := make(chan error, 1)
@@ -306,7 +304,7 @@ func (s *Scheduler) initOutgoingConn(peerID PeerID, ip string, port int, t *torr
 	s.eventLoop.Send(e)
 }
 
-func (s *Scheduler) doAnnounce(t *torrent) ([]trackerstorage.PeerInfo, error) {
+func (s *Scheduler) doAnnounce(t *torrent) ([]torlib.PeerInfo, error) {
 	v := url.Values{}
 
 	v.Add("info_hash", t.InfoHash.String())
@@ -341,7 +339,7 @@ func (s *Scheduler) doAnnounce(t *torrent) ([]trackerstorage.PeerInfo, error) {
 		b, _ := ioutil.ReadAll(resp.Body)
 		return nil, fmt.Errorf("request not ok: %d - %s", resp.StatusCode, b)
 	}
-	var ar trackerservice.AnnouncerResponse
+	var ar torlib.AnnouncerResponse
 	if err := bencode.Unmarshal(resp.Body, &ar); err != nil {
 		return nil, fmt.Errorf("unmarshal failed: %s", err)
 	}

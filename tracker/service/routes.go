@@ -30,14 +30,14 @@ func InitializeAPI(
 		policy: policy,
 	}
 	health := &healthHandler{}
-	infohash := &infohashHandler{store}
+	infohash := &metainfoHandler{store}
 	manifest := &manifestHandler{store}
 
 	r := chi.NewRouter()
 	r.Get("/health", health.Get)
 	r.Get("/announce", announce.Get)
-	r.Get("/infohash", infohash.Get)
-	r.Post("/infohash", infohash.Post)
+	r.Get("/info", infohash.Get)
+	r.Post("/info", infohash.Post)
 	r.Get("/manifest/:name", manifest.Get)
 	r.Post("/manifest/:name", manifest.Post)
 

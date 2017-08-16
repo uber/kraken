@@ -9,9 +9,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"code.uber.internal/infra/kraken/client/torrent/bencode"
-	"code.uber.internal/infra/kraken/client/torrent/meta"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
+	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
@@ -64,9 +63,9 @@ func genPeerID() PeerID {
 	return p
 }
 
-func genInfoHash() meta.Hash {
-	mi, _ := genTorrent(genTorrentOpts{})
-	return mi.HashInfoBytes()
+func genInfoHash(announce string) torlib.InfoHash {
+	mi, _ := genTorrent(genTorrentOpts{}, announce)
+	return mi.GetInfoHash()
 }
 
 type tempTorrentManager struct {
@@ -90,8 +89,12 @@ func genTorrentManager() *tempTorrentManager {
 
 // writeTorrent writes the given content into a torrent file into tm's storage.
 // Useful for populating a completed torrent before seeding it.
-func writeTorrent(tm storage.TorrentManager, mi *meta.TorrentInfo, content []byte) storage.Torrent {
-	t, err := tm.CreateTorrent(mi.HashInfoBytes(), mi.InfoBytes)
+func writeTorrent(tm storage.TorrentManager, mi *torlib.MetaInfo, content []byte) storage.Torrent {
+	infoByte, err := mi.Info.Serialize()
+	if err != nil {
+		panic(err)
+	}
+	t, err := tm.CreateTorrent(mi.GetInfoHash(), infoByte)
 	if err != nil {
 		panic(err)
 	}
@@ -106,7 +109,7 @@ type genTorrentOpts struct {
 	PieceLength int
 }
 
-func genTorrent(o genTorrentOpts) (mi *meta.TorrentInfo, content []byte) {
+func genTorrent(o genTorrentOpts, announce string) (mi *torlib.MetaInfo, content []byte) {
 	if o.Size == 0 {
 		o.Size = 128
 	}
@@ -124,14 +127,11 @@ func genTorrent(o genTorrentOpts) (mi *meta.TorrentInfo, content []byte) {
 	if err := ioutil.WriteFile(f.Name(), content, 0755); err != nil {
 		panic(err)
 	}
-	info := meta.Info{
-		PieceLength: int64(o.PieceLength),
-	}
-	if err := info.BuildFromFilePath(f.Name()); err != nil {
+	info, err := torlib.NewInfoFromFile(f.Name(), int64(o.PieceLength))
+	if err != nil {
 		panic(err)
 	}
-	mi = &meta.TorrentInfo{}
-	mi.InfoBytes, err = bencode.Marshal(info)
+	mi, err = torlib.NewMetaInfoFromInfo(info, announce)
 	if err != nil {
 		panic(err)
 	}
@@ -139,14 +139,14 @@ func genTorrent(o genTorrentOpts) (mi *meta.TorrentInfo, content []byte) {
 }
 
 type testTorrent struct {
-	Info    *meta.TorrentInfo
-	Content []byte
+	MetaInfo *torlib.MetaInfo
+	Content  []byte
 }
 
-func genTestTorrents(n int, o genTorrentOpts) []*testTorrent {
+func genTestTorrents(n int, o genTorrentOpts, announce string) []*testTorrent {
 	l := make([]*testTorrent, n)
 	for i := range l {
-		mi, content := genTorrent(o)
+		mi, content := genTorrent(o, announce)
 		l[i] = &testTorrent{mi, content}
 	}
 	return l
@@ -193,7 +193,7 @@ func checkContent(r *require.Assertions, t storage.Torrent, expected []byte) {
 
 type hasConnEvent struct {
 	peerID   PeerID
-	infoHash meta.Hash
+	infoHash torlib.InfoHash
 	result   chan bool
 }
 
@@ -204,7 +204,7 @@ func (e hasConnEvent) Apply(s *Scheduler) {
 
 // waitForConnEstablished waits until s has established a connection to peerID for the
 // torrent of infoHash.
-func waitForConnEstablished(t *testing.T, s *Scheduler, peerID PeerID, infoHash meta.Hash) {
+func waitForConnEstablished(t *testing.T, s *Scheduler, peerID PeerID, infoHash torlib.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
@@ -219,7 +219,7 @@ func waitForConnEstablished(t *testing.T, s *Scheduler, peerID PeerID, infoHash 
 
 // waitForConnRemoved waits until s has closed the connection to peerID for the
 // torrent of infoHash.
-func waitForConnRemoved(t *testing.T, s *Scheduler, peerID PeerID, infoHash meta.Hash) {
+func waitForConnRemoved(t *testing.T, s *Scheduler, peerID PeerID, infoHash torlib.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
@@ -234,14 +234,14 @@ func waitForConnRemoved(t *testing.T, s *Scheduler, peerID PeerID, infoHash meta
 
 // hasConn checks whether s has an established connection to peerID for the
 // torrent of infoHash.
-func hasConn(s *Scheduler, peerID PeerID, infoHash meta.Hash) bool {
+func hasConn(s *Scheduler, peerID PeerID, infoHash torlib.InfoHash) bool {
 	result := make(chan bool)
 	s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
 	return <-result
 }
 
 type hasDispatcherEvent struct {
-	infoHash meta.Hash
+	infoHash torlib.InfoHash
 	result   chan bool
 }
 
@@ -250,7 +250,7 @@ func (e hasDispatcherEvent) Apply(s *Scheduler) {
 	e.result <- ok
 }
 
-func waitForDispatcherRemoved(t *testing.T, s *Scheduler, infoHash meta.Hash) {
+func waitForDispatcherRemoved(t *testing.T, s *Scheduler, infoHash torlib.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasDispatcherEvent{infoHash, result})

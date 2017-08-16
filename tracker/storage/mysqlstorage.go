@@ -3,117 +3,128 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/config/tracker"
+	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils"
+
+	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
+	"github.com/pressly/goose"
 )
 
-//Peer statements
-const selectPeerStatememtStr string = `select 
- infoHash, peerId, ip, port, bytes_uploaded, bytes_downloaded, bytes_left, event, flags
-from peer where infoHash = ?`
-
-const upsertPeerStatememtStr string = `insert into
- peer(infoHash, peerId, ip, port, bytes_uploaded, bytes_downloaded, bytes_left, event, flags)
- values(?, ?, ?, ?, ?, ?, ?, ?, ?) on duplicate key update ip = ?, port = ?,
- bytes_uploaded = ?, bytes_downloaded = ?, bytes_left = ?, event = ?, flags = ?`
-
-const deletePeerByTorrentStr string = "delete from peer where torrentName = ?"
-const deletePeerByHashInfoStr string = "delete from peer where hashInfo = ?"
-const deletePeerByPeerIDStr string = "delete from peer where peerId = ?"
-
-//Torrent statements
-const selectTorrentStatememtStr string = `select
- torrentName, infoHash, author, numPieces, pieceLength, refcount, flags from torrent where torrentName = ?`
-const insertTorrentStatememtStr string = `insert into
- torrent(torrentName, infoHash, author, numPieces, pieceLength, flags) values(?, ?, ?, ?, ?, ?)
- on duplicate key update refcount = refcount`
-const deleteTorrentByRefCount string = `delete from torrent where torrentName = ? and refcount = 0`
-
-//Manifest statements
-const selectManifestStatememtStr string = `select 
- tagName, manifest, flags from manifest where tagName = ?`
-const insertManifestStatememtStr string = `insert into
- manifest(tagName, manifest, flags) values(?, ?, ?)`
-const deleteManifestStatementStr string = `delete from manifest where tagName = ?`
-
-const incrementRefCount string = `update torrent set refcount = refcount + 1 where torrentName = ?`
-const decrementRefCount string = `update torrent set refcount = refcount - 1 where torrentName = ? and refcount > 0`
-const selectRefCount string = `select refcount from torrent where torrentName = ?`
-
-// MySQLDataStore is a MySQL implementaion of a Storage interface
-type MySQLDataStore struct {
+// MySQLStorage is a MySQL implementaion of a Storage interface
+type MySQLStorage struct {
 	appCfg config.AppConfig
-	db     *sql.DB
+	db     *sqlx.DB
+}
+
+// NewMySQLStorage creates and returns new MySQL storage
+func NewMySQLStorage(appCfg config.AppConfig) (Storage, error) {
+
+	dsnTemplate := appCfg.DBConfig.GetDSN()
+	username := appCfg.Nemo.Username["kraken"]
+
+	// check if we need to str format,
+	// we don't have to do that in integration testing suite
+	// as DSN being returned from docker container contains already
+	// username and password
+	dsn := dsnTemplate
+	n := strings.Count(dsnTemplate, "%s")
+	if n > 0 {
+		dsn = fmt.Sprintf(dsnTemplate, username, appCfg.Nemo.Password[username])
+	}
+
+	db, err := sqlx.Open(appCfg.DBConfig.EngineName, dsn)
+	if err != nil {
+		log.Error("Failed to connect to datastore: ", err.Error())
+		return nil, err
+	}
+
+	return &MySQLStorage{
+		appCfg: appCfg,
+		db:     db,
+	}, nil
+}
+
+// RunDBMigration detect and Run DB migration if it is needed
+func RunDBMigration(appCfg config.AppConfig) error {
+
+	dsnTemplate := appCfg.DBConfig.GetDSN()
+	username := appCfg.Nemo.Username["kraken"]
+
+	// check if we need to str format,
+	// we don't have to do that in integration testing suite
+	// as DSN being returned from docker container contains already
+	// username and password
+	dsn := dsnTemplate
+	n := strings.Count(dsnTemplate, "%s")
+	if n > 0 {
+		dsn = fmt.Sprintf(dsnTemplate, username, appCfg.Nemo.Password[username])
+	}
+
+	// Open our database connection
+	db, err := sql.Open(appCfg.DBConfig.EngineName, dsn)
+	if err != nil {
+		log.Error("Failed to connect to datastore: ", err.Error())
+		return err
+	}
+	defer db.Close()
+
+	err = goose.SetDialect("mysql")
+
+	if err != nil {
+		log.Error("do not support the driver: ", err.Error())
+		return err
+	}
+	arguments := []string{}
+	// Get the latest possible migration
+	err = goose.Run("up", db, appCfg.DBConfig.MigrationsPath, arguments...)
+	if err != nil {
+		log.Error("could not run a migration: ", err)
+		return err
+	}
+
+	return nil
 }
 
 // Name returns a Storage string identifier
-func (ds *MySQLDataStore) Name() string {
+func (ds *MySQLStorage) Name() string {
 	return "MySQLDataStore"
 }
 
-// Read reads PeerInfo identified by infoHash key from a storage
-func (ds *MySQLDataStore) Read(infoHash string) ([]*PeerInfo, error) {
-	var peers []*PeerInfo
-
-	rows, err := ds.db.Query(selectPeerStatememtStr, infoHash)
+// GetPeers implements Storage.GetPeers
+func (ds *MySQLStorage) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
+	var peers []*torlib.PeerInfo
+	err := ds.db.Select(&peers, "select * from peer where infoHash=?", infoHash)
 	if err != nil {
-		log.Errorf("Failed to connect to query datastore: %s", err.Error())
-		return peers, err
+		log.Errorf("Failed to get peers: %s", err)
+		return nil, err
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		p := new(PeerInfo)
-		if err := rows.Scan(
-			&p.InfoHash,
-			&p.PeerID,
-			&p.IP,
-			&p.Port,
-			&p.BytesUploaded,
-			&p.BytesDownloaded,
-			&p.BytesLeft,
-			&p.Event,
-			&p.Flags); err != nil {
-
-			return peers, err
-		}
-		peers = append(peers, p)
-	}
-	if err := rows.Err(); err != nil {
-		log.Error(err)
-		return peers, err
-	}
 	return peers, nil
 }
 
-// Update updataes PeerInfo in a storage
-func (ds *MySQLDataStore) Update(peerInfo *PeerInfo) error {
-	_, err := ds.db.Exec(
-		upsertPeerStatememtStr,
-		//insert
-		peerInfo.InfoHash,
-		peerInfo.PeerID,
-		peerInfo.IP,
-		peerInfo.Port,
-		peerInfo.BytesUploaded,
-		peerInfo.BytesDownloaded,
-		peerInfo.BytesLeft,
-		peerInfo.Event,
-		peerInfo.Flags,
-
-		//update
-		peerInfo.IP,
-		peerInfo.Port,
-		peerInfo.BytesUploaded,
-		peerInfo.BytesDownloaded,
-		peerInfo.BytesLeft,
-		peerInfo.Event,
-		peerInfo.Flags,
-	)
+// UpdatePeer updates PeerInfo in a storage
+func (ds *MySQLStorage) UpdatePeer(peer *torlib.PeerInfo) error {
+	_, err := ds.db.NamedExec(`insert into peer(infoHash, peerId, dc, ip, port, bytes_downloaded, flags)
+	values(:infoHash, :peerId, :dc, :ip, :port, :bytes_downloaded, :flags) on duplicate key update
+	dc =:dc, ip =:ip, port =:port, bytes_downloaded =:bytes_downloaded, flags=:flags`,
+		map[string]interface{}{
+			"infoHash":         peer.InfoHash,
+			"peerId":           peer.PeerID,
+			"dc":               peer.DC,
+			"ip":               peer.IP,
+			"port":             strconv.FormatInt(peer.Port, 10),
+			"bytes_downloaded": strconv.FormatInt(peer.BytesDownloaded, 10),
+			"flags":            strconv.FormatUint(uint64(peer.Flags), 10),
+		})
 
 	if err != nil {
 		log.Error(err)
@@ -123,70 +134,41 @@ func (ds *MySQLDataStore) Update(peerInfo *PeerInfo) error {
 	return nil
 }
 
-// DeleteAllHashes deletes all peers for a particular hash
-func (ds *MySQLDataStore) DeleteAllHashes(infoHash string) error {
-	_, err := ds.db.Exec(deletePeerByHashInfoStr, infoHash)
+// GetTorrent reads torrent's metadata identified by a torrent name
+func (ds *MySQLStorage) GetTorrent(name string) (string, error) {
+	var metaRaw []string
+	err := ds.db.Select(&metaRaw, "select metaInfo from torrent where name=?", name)
 	if err != nil {
 		log.Error(err)
-		return err
+		return "", err
 	}
-	return nil
-}
+	if len(metaRaw) > 1 {
+		log.Fatalf("Duplicated torrent %s", name)
+	}
 
-// DeleteAllPeers deletes all peers with a particular peerID
-func (ds *MySQLDataStore) DeleteAllPeers(peerID string) error {
-	_, err := ds.db.Exec(deletePeerByHashInfoStr, peerID)
-	if err != nil {
-		log.Error(err)
-		return err
+	if len(metaRaw) <= 0 {
+		return "", errors.Wrap(os.ErrNotExist, fmt.Sprintf("Cannot find torrent %s", name))
 	}
-	return nil
-}
-
-// DeleteAllPieces deletes all pieces for a torrent
-func (ds *MySQLDataStore) DeleteAllPieces(torrentName string) {
-}
-
-// ReadTorrent reads torrent's metadata identified by a torrent name
-func (ds *MySQLDataStore) ReadTorrent(torrentName string) (*TorrentInfo, error) {
-	rows, err := ds.db.Query(selectTorrentStatememtStr, torrentName)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		t := new(TorrentInfo)
-		if err := rows.Scan(
-			&t.TorrentName,
-			&t.InfoHash,
-			&t.Author,
-			&t.NumPieces,
-			&t.PieceLength,
-			&t.RefCount,
-			&t.Flags); err != nil {
-			return nil, err
-		}
-		return t, nil
-	}
-	if err := rows.Err(); err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	return nil, nil
+	return metaRaw[0], nil
 }
 
 // CreateTorrent creates a torrent in storage
-func (ds *MySQLDataStore) CreateTorrent(torrentInfo *TorrentInfo) error {
-	_, err := ds.db.Exec(
-		insertTorrentStatememtStr,
-		torrentInfo.TorrentName,
-		torrentInfo.InfoHash,
-		torrentInfo.Author,
-		torrentInfo.NumPieces,
-		torrentInfo.PieceLength,
-		torrentInfo.Flags)
+func (ds *MySQLStorage) CreateTorrent(meta *torlib.MetaInfo) error {
+	serialized, err := meta.Serialize()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	_, err = ds.db.NamedExec(`insert into torrent(name, infoHash, author, metaInfo)
+	values(:name, :infoHash, :author, :metaInfo) on duplicate key update flags = flags`,
+		map[string]interface{}{
+			"name":     meta.GetName(),
+			"infoHash": meta.GetInfoHash().HexString(),
+			"author":   meta.CreatedBy,
+			"metaInfo": serialized,
+		})
+
 	if err != nil {
 		log.Error(err)
 		return err
@@ -194,64 +176,58 @@ func (ds *MySQLDataStore) CreateTorrent(torrentInfo *TorrentInfo) error {
 	return nil
 }
 
-// ReadManifest reads manifest from storage
-func (ds *MySQLDataStore) ReadManifest(tagName string) (*Manifest, error) {
-	rows, err := ds.db.Query(selectManifestStatememtStr, tagName)
+// GetManifest reads manifest from storage
+func (ds *MySQLStorage) GetManifest(tag string) (string, error) {
+	var manifestRaw []string
+	err := ds.db.Select(&manifestRaw, "select data from manifest where tag=?", tag)
 	if err != nil {
 		log.Error(err)
-		return nil, err
+		return "", err
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		m := new(Manifest)
-		if err := rows.Scan(
-			&m.TagName,
-			&m.Manifest,
-			&m.Flags); err != nil {
-			return nil, err
-		}
-		return m, nil
+	if len(manifestRaw) > 1 {
+		log.Fatalf("Duplicated tag %s", tag)
 	}
-	if err := rows.Err(); err != nil {
-		log.Error(err)
-		return nil, err
+
+	if len(manifestRaw) <= 0 {
+		return "", errors.Wrap(os.ErrNotExist, fmt.Sprintf("Cannot find manifest %s", tag))
 	}
-	return nil, nil
+
+	return manifestRaw[0], nil
 }
 
 // CreateManifest create a new entry in manifest table and then increment refcount for all layers
-func (ds *MySQLDataStore) CreateManifest(manifest *Manifest) error {
-	manifestV2, manifestDigest, err := utils.ParseManifestV2([]byte(manifest.Manifest))
+func (ds *MySQLStorage) CreateManifest(tag, manifestRaw string) error {
+	manifestV2, manifestDigest, err := utils.ParseManifestV2([]byte(manifestRaw))
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
-	refs, err := utils.GetManifestV2References(manifestV2, manifestDigest)
+	tors, err := utils.GetManifestV2References(manifestV2, manifestDigest)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	return ds.createManifest(manifest, refs)
+	return ds.createManifest(tag, manifestRaw, tors)
 }
 
-func (ds *MySQLDataStore) createManifest(manifest *Manifest, refs []string) error {
+func (ds *MySQLStorage) createManifest(tag, manifestRaw string, tors []string) error {
 	// Sort layerNames in increasing order to avoid transaction deadlock
-	sort.Strings(refs)
+	sort.Strings(tors)
 
-	tx, err := ds.db.Begin()
+	tx, err := ds.db.Beginx()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
 	// Insert manifest
-	_, err = tx.Exec(
-		insertManifestStatememtStr,
-		manifest.TagName,
-		manifest.Manifest,
-		manifest.Flags)
+	_, err = tx.NamedExec("insert into manifest(tag, data) values(:tag, :data)",
+		map[string]interface{}{
+			"tag":  tag,
+			"data": manifestRaw,
+		})
 
 	if err != nil {
 		log.Error(err)
@@ -259,9 +235,9 @@ func (ds *MySQLDataStore) createManifest(manifest *Manifest, refs []string) erro
 		return err
 	}
 
-	// Increment refcount for all layers
-	for _, ref := range refs {
-		_, err = tx.Exec(incrementRefCount, ref)
+	// Increment refcount for all torrents
+	for _, tor := range tors {
+		_, err = tx.Exec("update torrent set refCount = refCount + 1 where name=?", tor)
 		if err != nil {
 			log.Error(err)
 			tx.Rollback()
@@ -278,40 +254,39 @@ func (ds *MySQLDataStore) createManifest(manifest *Manifest, refs []string) erro
 }
 
 // DeleteManifest delete manifest and then deref all its referenced contents
-func (ds *MySQLDataStore) DeleteManifest(tagName string) error {
-	manifest, err := ds.ReadManifest(tagName)
+func (ds *MySQLStorage) DeleteManifest(tag string) error {
+	manifest, err := ds.GetManifest(tag)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
-	manifestV2, manifestDigest, err := utils.ParseManifestV2([]byte(manifest.Manifest))
+	manifestV2, manifestDigest, err := utils.ParseManifestV2([]byte(manifest))
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
-	refs, err := utils.GetManifestV2References(manifestV2, manifestDigest)
+	tors, err := utils.GetManifestV2References(manifestV2, manifestDigest)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	return ds.deleteManifest(tagName, refs)
+	return ds.deleteManifest(tag, tors)
 }
 
-func (ds *MySQLDataStore) deleteManifest(name string, refs []string) (err error) {
+func (ds *MySQLStorage) deleteManifest(tag string, tors []string) (err error) {
 	// Sort layerNames in increasing order to avoid transaction deadlock
-	sort.Strings(refs)
+	sort.Strings(tors)
 
-	var tx *sql.Tx
-	tx, err = ds.db.Begin()
+	tx, err := ds.db.Beginx()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
 	// Delete manifest
-	_, err = tx.Exec(deleteManifestStatementStr, name)
+	_, err = tx.Exec("delete from manifest where tag=?", tag)
 	if err != nil {
 		log.Error(err)
 		tx.Rollback()
@@ -319,8 +294,8 @@ func (ds *MySQLDataStore) deleteManifest(name string, refs []string) (err error)
 	}
 
 	// Deref all layers
-	for _, ref := range refs {
-		_, err = tx.Exec(decrementRefCount, ref)
+	for _, tor := range tors {
+		_, err = tx.Exec("update torrent set refCount = refCount - 1 where name=? and refCount > 0", tor)
 		if err != nil {
 			log.Error(err)
 			tx.Rollback()
@@ -328,7 +303,7 @@ func (ds *MySQLDataStore) deleteManifest(name string, refs []string) (err error)
 		}
 
 		// try delete torrent when refcount is zero
-		_, err = tx.Exec(deleteTorrentByRefCount, ref)
+		_, err = tx.Exec("delete from torrent where name=? and refCount=0", tor)
 		if err != nil {
 			log.Error(err)
 			tx.Rollback()
@@ -344,55 +319,41 @@ func (ds *MySQLDataStore) deleteManifest(name string, refs []string) (err error)
 
 	// Try delete all layers on origins
 	wg := sync.WaitGroup{}
-	wg.Add(len(refs))
-	for _, ref := range refs {
-		go func(ref string) {
+	wg.Add(len(tors))
+	for _, tor := range tors {
+		go func(tor string) {
 			defer wg.Done()
-			ds.tryDeleteTorrentOnOrigins(ref)
-		}(ref)
+			ds.tryDeleteTorrentOnOrigins(tor)
+		}(tor)
 	}
 	wg.Wait()
 	return nil
 }
 
-func (ds *MySQLDataStore) tryDeleteTorrentOnOrigins(name string) (err error) {
-	var tx *sql.Tx
-	tx, err = ds.db.Begin()
+func (ds *MySQLStorage) tryDeleteTorrentOnOrigins(name string) (err error) {
+	tx, err := ds.db.Beginx()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
+	// The transaction only contains a select statement
+	defer tx.Commit()
 
-	defer func() {
-		if err != nil {
-			log.Error(err)
-			tx.Rollback()
-			return
-		}
-		err = tx.Commit()
-		if err != nil {
-			log.Error(err)
-		}
-	}()
-
-	rows, err := tx.Query(selectRefCount, name)
+	var count []int
+	err = tx.Select(&count, "select refCount from torrent where name=?", name)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var count int
-		if err := rows.Scan(&count); err != nil {
-			return err
+	if len(count) > 1 {
+		log.Fatalf("Duplicated torrent %s", name)
+	}
+
+	// torrent in db
+	if len(count) == 1 {
+		if count[0] <= 0 {
+			return fmt.Errorf("Invalid refCount %d for torrent %s", count[0], name)
 		}
-
-		// Refcount < 0, this should not happen, log this error
-		if count < 0 {
-			err = fmt.Errorf("Negative refcount for %s", name)
-			return err
-		}
-
 		return nil
 	}
 

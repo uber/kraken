@@ -2,20 +2,20 @@ package peerhandoutpolicy
 
 import (
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/torlib"
 )
 
 // PeerPriorityPolicy defines the policy for assigning priority to peers.
 type PeerPriorityPolicy interface {
 	// AssignPeerPriority mutates peers by setting Priority for each PeerInfo
 	// based on the source peer. Note, should not set Priority on source.
-	AssignPeerPriority(source *storage.PeerInfo, peers []*storage.PeerInfo) error
+	AssignPeerPriority(source *torlib.PeerInfo, peers []*torlib.PeerInfo) error
 }
 
 // PeerSamplingPolicy defines the policy for selecting and ordering peers.
 type PeerSamplingPolicy interface {
 	// SamplePeers returns a new slice of n peers, sorted on sampling preference.
-	SamplePeers(peers []*storage.PeerInfo, n int) ([]*storage.PeerInfo, error)
+	SamplePeers(peers []*torlib.PeerInfo, n int) ([]*torlib.PeerInfo, error)
 }
 
 // PriorityFactory creates a PeerPriorityPolicy.
