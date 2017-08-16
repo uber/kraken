@@ -1,4 +1,4 @@
-package service
+package blobserver
 
 import (
 	"context"
@@ -16,10 +16,10 @@ import (
 	"github.com/pressly/chi"
 )
 
-func parseDigestHandler(ctx context.Context, request *http.Request) (context.Context, *ServerError) {
+func parseDigestHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
 	digestParam := chi.URLParam(request, "digest")
 	if len(digestParam) == 0 {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Failed to parse an empty digest")
 	}
@@ -27,23 +27,23 @@ func parseDigestHandler(ctx context.Context, request *http.Request) (context.Con
 	var err error
 	digestRaw, err := url.QueryUnescape(digestParam)
 	if err != nil {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Cannot unescape digest: %s, error: %s", digestParam, err)
 	}
 	digest, err := dockerimage.NewDigestFromString(digestRaw)
 	if err != nil {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Cannot parse digest: %s, error: %s", digestRaw, err)
 	}
 	return context.WithValue(ctx, ctxKeyDigest, digest), nil
 }
 
-func parseDigestFromQueryHandler(ctx context.Context, request *http.Request) (context.Context, *ServerError) {
+func parseDigestFromQueryHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
 	digestParam := request.URL.Query().Get("digest")
 	if len(digestParam) == 0 {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Failed to parse an empty digest")
 	}
@@ -51,51 +51,51 @@ func parseDigestFromQueryHandler(ctx context.Context, request *http.Request) (co
 	var err error
 	digestRaw, err := url.QueryUnescape(digestParam)
 	if err != nil {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Cannot unescape digest: %s, error: %s", digestParam, err)
 	}
 	digest, err := dockerimage.NewDigestFromString(digestRaw)
 	if err != nil {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Cannot parse digest: %s, error: %s", digestRaw, err)
 	}
 	return context.WithValue(ctx, ctxKeyDigest, digest), nil
 }
 
-func ensureDigestNotExistsHandler(ctx context.Context, request *http.Request) (context.Context, *ServerError) {
+func ensureDigestNotExistsHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
 	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
 	if !ok {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
 			"Digest not set")
 	}
 	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
 	if !ok {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
 			"LocalStore not set")
 	}
 
 	// Ensure file doesn't exist.
 	if _, err := localStore.GetCacheFileStat(digest.Hex()); err == nil {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusConflict,
 			"Duplicate digest: %s, error: %s", digest, err)
 	}
 	return ctx, nil
 }
 
-func parseUUIDHandler(ctx context.Context, request *http.Request) (context.Context, *ServerError) {
+func parseUUIDHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
 	uploadUUID := chi.URLParam(request, "uuid")
 	if len(uploadUUID) == 0 {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Cannot parse empty UUID")
 	}
 	if _, err := uuid.Parse(uploadUUID); err != nil {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Cannot parse UUID: %s, error: %s", uploadUUID, err)
 	}
@@ -103,10 +103,10 @@ func parseUUIDHandler(ctx context.Context, request *http.Request) (context.Conte
 	return context.WithValue(ctx, ctxKeyUploadUUID, uploadUUID), nil
 }
 
-func parseContentRangeHandler(ctx context.Context, request *http.Request) (context.Context, *ServerError) {
+func parseContentRangeHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
 	contentRange := request.Header.Get("Content-Range")
 	if contentRange == "" {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"No Content-Range header")
 	}
@@ -114,20 +114,20 @@ func parseContentRangeHandler(ctx context.Context, request *http.Request) (conte
 	// Parse content-range
 	parts := strings.SplitN(contentRange, "-", 2)
 	if len(parts) != 2 {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Cannot parse Content-Range header: %s", contentRange)
 	}
 	startByte, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil || startByte < 0 {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Cannot parse start of range in Content-Range header: %s", contentRange)
 	}
 	ctx = context.WithValue(ctx, ctxKeyStartByte, startByte)
 	endByte, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil || endByte < 0 {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Cannot parse end of range in Content-Range header: %s", contentRange)
 	}
@@ -135,23 +135,23 @@ func parseContentRangeHandler(ctx context.Context, request *http.Request) (conte
 	return context.WithValue(ctx, ctxKeyEndByte, endByte), nil
 }
 
-func createUploadHandler(ctx context.Context, request *http.Request) (context.Context, *ServerError) {
+func createUploadHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
 	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
 	if !ok {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
 			"Digest not set")
 	}
 	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
 	if !ok {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
 			"LocalStore not set")
 	}
 
 	uploadUUID := uuid.Generate().String()
 	if err := localStore.CreateUploadFile(uploadUUID, 0); err != nil {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
 			"Failed to init upload for digest: %s, error: %s", digest, err)
 	}
@@ -159,25 +159,25 @@ func createUploadHandler(ctx context.Context, request *http.Request) (context.Co
 	return context.WithValue(ctx, ctxKeyUploadUUID, uploadUUID), nil
 }
 
-func uploadBlobChunkHandler(ctx context.Context, request *http.Request) (context.Context, *ServerError) {
+func uploadBlobChunkHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
 	uploadUUID, ok := ctx.Value(ctxKeyUploadUUID).(string)
 	if !ok {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "Digest not set")
 	}
 	startByte, ok := ctx.Value(ctxKeyStartByte).(int64)
 	if !ok {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "StartByte not set")
 	}
 	endByte, ok := ctx.Value(ctxKeyEndByte).(int64)
 	if !ok {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "EndByte not set")
 	}
 	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
 	if !ok {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "LocalStore not set")
 	}
 
@@ -185,14 +185,14 @@ func uploadBlobChunkHandler(ctx context.Context, request *http.Request) (context
 	// TODO: calculate SHA256 on the fly using https://github.com/stevvooe/resumable
 	w, err := localStore.GetUploadFileReadWriter(uploadUUID)
 	if err != nil {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusNotFound,
 			"Cannot find upload with UUID: %s, error: %s", uploadUUID, err)
 	}
 
 	blobReader, err := request.GetBody()
 	if err != nil {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Cannot get blob data for upload: %s, error: %s", uploadUUID, err)
 	}
@@ -200,18 +200,18 @@ func uploadBlobChunkHandler(ctx context.Context, request *http.Request) (context
 
 	// Seek start location.
 	if _, err := w.Seek(startByte, 0); err != nil {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Cannot continue upload from offset: %d, error: %s", startByte, err)
 	}
 	// Write data.
 	count, err := io.Copy(w, blobReader)
 	if err != nil {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
 			"Failed to upload: %s, error: %s", uploadUUID, err)
 	} else if endByte-startByte+1 != count {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Upload data length doesn't match content range: %s, error: %s", uploadUUID, err)
 	}
@@ -219,20 +219,20 @@ func uploadBlobChunkHandler(ctx context.Context, request *http.Request) (context
 	return ctx, nil
 }
 
-func commitUploadHandler(ctx context.Context, request *http.Request) (context.Context, *ServerError) {
+func commitUploadHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
 	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
 	if !ok {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "Digest not set")
 	}
 	uploadUUID, ok := ctx.Value(ctxKeyUploadUUID).(string)
 	if !ok {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "uploadUUID not set")
 	}
 	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
 	if !ok {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "LocalStore not set")
 	}
 
@@ -240,26 +240,48 @@ func commitUploadHandler(ctx context.Context, request *http.Request) (context.Co
 	digester := dockerimage.NewDigester()
 	reader, err := localStore.GetUploadFileReader(uploadUUID)
 	if os.IsNotExist(err) {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusNotFound,
 			"Cannot find upload %s, error: %s", uploadUUID, err)
 	}
 	computedDigest, err := digester.FromReader(reader)
 	if err != nil {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
 			"Failed to calculate digest for upload %s, error: %s", uploadUUID, err)
 	} else if computedDigest.String() != digest.String() {
-		return nil, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
 			"Computed digest %s doesn't match parameter %s", computedDigest, digest)
 	}
 
 	// Commit data
 	if err = localStore.MoveUploadFileToCache(uploadUUID, digest.Hex()); err != nil {
-		return ctx, NewServerError(
+		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
 			"Failed to commit digest %s for upload %s, error: %s", digest, uploadUUID, err)
 	}
+	return ctx, nil
+}
+
+func deleteBlobHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
+	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
+	if !ok {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError, "Digest not set")
+	}
+	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
+	if !ok {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError, "LocalStore not set")
+	}
+
+	if err := localStore.MoveCacheFileToTrash(digest.Hex()); err != nil {
+		if os.IsNotExist(err) {
+			return nil, NewServerResponseWithError(http.StatusNotFound, "Cannot find blob data for digest: %s, error: %s", digest, err)
+		}
+		return nil, NewServerResponseWithError(http.StatusInternalServerError, "Cannot delete blob data for digest: %s, error: %s", digest, err)
+	}
+
 	return ctx, nil
 }

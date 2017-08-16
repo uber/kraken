@@ -1,4 +1,4 @@
-package service
+package blobserver
 
 type contextKey int
 

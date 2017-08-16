@@ -1,4 +1,4 @@
-package service
+package blobserver
 
 import (
 	"context"
@@ -11,10 +11,10 @@ import (
 )
 
 // RequestHandler parses request and update context.
-type RequestHandler func(context.Context, *http.Request) (context.Context, *ServerError)
+type RequestHandler func(context.Context, *http.Request) (context.Context, *ServerResponse)
 
 // ResponseHandler get information from context and update response.
-type ResponseHandler func(context.Context, http.ResponseWriter) (context.Context, *ServerError)
+type ResponseHandler func(context.Context, http.ResponseWriter) (context.Context, *ServerResponse)
 
 // Pipeline is in charge of processing requests. It's composed of a series of handlers.
 type Pipeline struct {
@@ -45,20 +45,24 @@ func (p *Pipeline) AddResponseHandler(h ResponseHandler) {
 
 // Run applies handlers on the request.
 func (p *Pipeline) Run(writer http.ResponseWriter, request *http.Request) {
-	var err *ServerError
+	var resp *ServerResponse
 	for _, h := range p.requestHandlers {
-		if p.ctx, err = h(p.ctx, request); err != nil {
-			log.Errorf(err.Error())
-			writer.WriteHeader(err.StatusCode())
-			fmt.Fprintf(writer, err.Error())
+		if p.ctx, resp = h(p.ctx, request); resp != nil {
+			writer.WriteHeader(resp.GetStatusCode())
+			if resp.Error() != "" {
+				log.Errorf(resp.Error())
+				fmt.Fprintf(writer, resp.Error())
+			}
 			return
 		}
 	}
 	for _, h := range p.responseHandlers {
-		if p.ctx, err = h(p.ctx, writer); err != nil {
-			log.Errorf(err.Error())
-			writer.WriteHeader(err.StatusCode())
-			fmt.Fprintf(writer, err.Error())
+		if p.ctx, resp = h(p.ctx, writer); resp != nil {
+			writer.WriteHeader(resp.GetStatusCode())
+			if resp.Error() != "" {
+				log.Errorf(resp.Error())
+				fmt.Fprintf(writer, resp.Error())
+			}
 			return
 		}
 	}
