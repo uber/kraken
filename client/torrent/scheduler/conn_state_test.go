@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"code.uber.internal/infra/kraken/torlib"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,10 +31,10 @@ func TestBlacklistBackoff(t *testing.T) {
 		t.Run(test.description, func(t *testing.T) {
 			require := require.New(t)
 
-			s := newConnState(genPeerID(), config)
+			s := newConnState(torlib.PeerIDFixture(), config)
 
-			peerID := genPeerID()
-			infoHash := genInfoHash("")
+			peerID := torlib.PeerIDFixture()
+			infoHash := torlib.InfoHashFixture()
 
 			s.InitCapacity(infoHash)
 
@@ -75,10 +77,10 @@ func TestDeleteStaleBlacklistEntries(t *testing.T) {
 		ExpiredBlacklistEntryTTL:     5 * time.Minute,
 	}
 
-	s := newConnState(genPeerID(), config)
+	s := newConnState(torlib.PeerIDFixture(), config)
 
-	peerID := genPeerID()
-	infoHash := genInfoHash("")
+	peerID := torlib.PeerIDFixture()
+	infoHash := torlib.InfoHashFixture()
 
 	s.InitCapacity(infoHash)
 

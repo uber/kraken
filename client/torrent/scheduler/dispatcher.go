@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/uber-common/bark"
-
 	"golang.org/x/sync/syncmap"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
+	"code.uber.internal/infra/kraken/torlib"
 )
 
 var (
@@ -23,7 +23,7 @@ var (
 
 type dispatcherFactory struct {
 	Config      Config
-	LocalPeerID PeerID
+	LocalPeerID torlib.PeerID
 	EventLoop   *eventLoop
 }
 
@@ -47,7 +47,7 @@ func (f *dispatcherFactory) New(t *torrent) *dispatcher {
 type dispatcher struct {
 	Torrent     *torrent
 	CreatedAt   time.Time
-	localPeerID PeerID
+	localPeerID torlib.PeerID
 
 	conns syncmap.Map
 
@@ -260,7 +260,7 @@ func (d *dispatcher) handlePiecePayload(
 	}).Debug("Downloaded piece payload")
 
 	d.conns.Range(func(k, v interface{}) bool {
-		if k.(PeerID) == c.PeerID {
+		if k.(torlib.PeerID) == c.PeerID {
 			return true
 		}
 		cc := v.(*conn)

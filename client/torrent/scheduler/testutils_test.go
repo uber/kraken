@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"testing"
 	"time"
@@ -14,22 +13,10 @@ import (
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
-const testTempDir = "/tmp/kraken_scheduler_test"
+const testTempDir = "/tmp/kraken_scheduler"
 
 func init() {
-	rand.Seed(time.Now().UnixNano())
 	os.Mkdir(testTempDir, 0755)
-}
-
-const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-func randomText(n int) []byte {
-	b := make([]byte, n)
-	for i := range b {
-		c := chars[rand.Intn(len(chars))]
-		b[i] = byte(c)
-	}
-	return b
 }
 
 func genConfig(trackerAddr string) Config {
@@ -55,19 +42,6 @@ func genConfig(trackerAddr string) Config {
 	}
 }
 
-func genPeerID() PeerID {
-	var p PeerID
-	if _, err := rand.Read(p[:]); err != nil {
-		panic(err)
-	}
-	return p
-}
-
-func genInfoHash(announce string) torlib.InfoHash {
-	mi, _ := genTorrent(genTorrentOpts{}, announce)
-	return mi.GetInfoHash()
-}
-
 type tempTorrentManager struct {
 	storage.TorrentManager
 	tmpdir string
@@ -79,6 +53,7 @@ func (m *tempTorrentManager) Delete() {
 	}
 }
 
+// TODO(codyg): Move this to storage package.
 func genTorrentManager() *tempTorrentManager {
 	d, err := ioutil.TempDir(testTempDir, "manager_")
 	if err != nil {
@@ -104,54 +79,6 @@ func writeTorrent(tm storage.TorrentManager, mi *torlib.MetaInfo, content []byte
 	return t
 }
 
-type genTorrentOpts struct {
-	Size        int
-	PieceLength int
-}
-
-func genTorrent(o genTorrentOpts, announce string) (mi *torlib.MetaInfo, content []byte) {
-	if o.Size == 0 {
-		o.Size = 128
-	}
-	if o.PieceLength == 0 {
-		o.PieceLength = 32
-	}
-
-	f, err := ioutil.TempFile(testTempDir, "torrent_")
-	if err != nil {
-		panic(err)
-	}
-	defer os.Remove(f.Name())
-
-	content = randomText(o.Size)
-	if err := ioutil.WriteFile(f.Name(), content, 0755); err != nil {
-		panic(err)
-	}
-	info, err := torlib.NewInfoFromFile(f.Name(), int64(o.PieceLength))
-	if err != nil {
-		panic(err)
-	}
-	mi, err = torlib.NewMetaInfoFromInfo(info, announce)
-	if err != nil {
-		panic(err)
-	}
-	return mi, content
-}
-
-type testTorrent struct {
-	MetaInfo *torlib.MetaInfo
-	Content  []byte
-}
-
-func genTestTorrents(n int, o genTorrentOpts, announce string) []*testTorrent {
-	l := make([]*testTorrent, n)
-	for i := range l {
-		mi, content := genTorrent(o, announce)
-		l[i] = &testTorrent{mi, content}
-	}
-	return l
-}
-
 type testPeer struct {
 	Scheduler      *Scheduler
 	TorrentManager *tempTorrentManager
@@ -164,7 +91,7 @@ func (p *testPeer) Stop() {
 
 func genTestPeer(config Config) *testPeer {
 	tm := genTorrentManager()
-	s, err := New(genPeerID(), "localhost:0", "sjc1", tm, config)
+	s, err := New(torlib.PeerIDFixture(), "localhost:0", "sjc1", tm, config)
 	if err != nil {
 		tm.Delete()
 		panic(err)
@@ -192,7 +119,7 @@ func checkContent(r *require.Assertions, t storage.Torrent, expected []byte) {
 }
 
 type hasConnEvent struct {
-	peerID   PeerID
+	peerID   torlib.PeerID
 	infoHash torlib.InfoHash
 	result   chan bool
 }
@@ -204,7 +131,7 @@ func (e hasConnEvent) Apply(s *Scheduler) {
 
 // waitForConnEstablished waits until s has established a connection to peerID for the
 // torrent of infoHash.
-func waitForConnEstablished(t *testing.T, s *Scheduler, peerID PeerID, infoHash torlib.InfoHash) {
+func waitForConnEstablished(t *testing.T, s *Scheduler, peerID torlib.PeerID, infoHash torlib.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
@@ -219,7 +146,7 @@ func waitForConnEstablished(t *testing.T, s *Scheduler, peerID PeerID, infoHash 
 
 // waitForConnRemoved waits until s has closed the connection to peerID for the
 // torrent of infoHash.
-func waitForConnRemoved(t *testing.T, s *Scheduler, peerID PeerID, infoHash torlib.InfoHash) {
+func waitForConnRemoved(t *testing.T, s *Scheduler, peerID torlib.PeerID, infoHash torlib.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
@@ -234,7 +161,7 @@ func waitForConnRemoved(t *testing.T, s *Scheduler, peerID PeerID, infoHash torl
 
 // hasConn checks whether s has an established connection to peerID for the
 // torrent of infoHash.
-func hasConn(s *Scheduler, peerID PeerID, infoHash torlib.InfoHash) bool {
+func hasConn(s *Scheduler, peerID torlib.PeerID, infoHash torlib.InfoHash) bool {
 	result := make(chan bool)
 	s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
 	return <-result

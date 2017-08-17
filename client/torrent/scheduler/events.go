@@ -69,7 +69,7 @@ func (e closedConnEvent) Apply(s *Scheduler) {
 
 // failedHandshakeEvent occurs when a pending connection fails to handshake.
 type failedHandshakeEvent struct {
-	peerID   PeerID
+	peerID   torlib.PeerID
 	infoHash torlib.InfoHash
 }
 
@@ -185,7 +185,7 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 	s.announceQueue.Ready(d)
 	for i := 0; i < len(e.peers); i++ {
 		p := e.peers[i]
-		pid, err := NewPeerID(p.PeerID)
+		pid, err := torlib.NewPeerID(p.PeerID)
 		if err != nil {
 			s.logf(log.Fields{
 				"peer": p.PeerID, "hash": e.infoHash,

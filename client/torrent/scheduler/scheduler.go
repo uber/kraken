@@ -39,7 +39,7 @@ func (k connKey) String() string {
 // - Dispatching connections to torrents.
 // - Pre-empting existing connections when better options are available (TODO).
 type Scheduler struct {
-	peerID     PeerID
+	peerID     torlib.PeerID
 	host       string
 	port       string
 	datacenter string
@@ -74,7 +74,7 @@ type Scheduler struct {
 // New creates and starts a Scheduler. Incoming connections are accepted on the
 // addr, and the local peer is announced as part of the datacenter.
 func New(
-	peerID PeerID,
+	peerID torlib.PeerID,
 	addr string,
 	datacenter string,
 	tm storage.TorrentManager,
@@ -266,7 +266,7 @@ func (s *Scheduler) initIncomingConn(nc net.Conn, remoteHandshake *handshake) {
 }
 
 func (s *Scheduler) doInitOutgoingConn(
-	peerID PeerID, ip string, port int, t *torrent) (*conn, error) {
+	peerID torlib.PeerID, ip string, port int, t *torrent) (*conn, error) {
 
 	addr := fmt.Sprintf("%s:%d", ip, port)
 	nc, err := net.DialTimeout("tcp", addr, s.config.DialTimeout)
@@ -286,7 +286,7 @@ func (s *Scheduler) doInitOutgoingConn(
 	return c, nil
 }
 
-func (s *Scheduler) initOutgoingConn(peerID PeerID, ip string, port int, t *torrent) {
+func (s *Scheduler) initOutgoingConn(peerID torlib.PeerID, ip string, port int, t *torrent) {
 	s.logf(log.Fields{
 		"peer": peerID, "ip": ip, "port": port, "torrent": t,
 	}).Debug("Initializing outgoing connection")

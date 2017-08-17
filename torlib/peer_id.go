@@ -1,4 +1,4 @@
-package scheduler
+package torlib
 
 import (
 	"bytes"

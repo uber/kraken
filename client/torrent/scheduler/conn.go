@@ -49,7 +49,7 @@ type message struct {
 // the fields converted into types used within the scheduler package. As such,
 // in this package "handshake" and "bitfield message" are usually synonymous.
 type handshake struct {
-	PeerID   PeerID
+	PeerID   torlib.PeerID
 	InfoHash torlib.InfoHash
 	Bitfield []bool
 }
@@ -74,7 +74,7 @@ func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
 	if m.Type != p2p.Message_BITFIELD {
 		return nil, errHandshakeExpectedBitfield
 	}
-	peerID, err := NewPeerID(m.Bitfield.PeerID)
+	peerID, err := torlib.NewPeerID(m.Bitfield.PeerID)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ type connFactory struct {
 	// Configuration to initialize conns with.
 	Config Config
 
-	LocalPeerID PeerID
+	LocalPeerID torlib.PeerID
 
 	EventLoop *eventLoop
 }
@@ -170,7 +170,7 @@ func (f *connFactory) ReciprocateHandshake(
 // conn manages peer communication over a connection for multiple torrents. Inbound
 // messages are multiplexed based on the torrent they pertain to.
 type conn struct {
-	PeerID    PeerID
+	PeerID    torlib.PeerID
 	InfoHash  torlib.InfoHash
 	CreatedAt time.Time
 
@@ -182,7 +182,7 @@ type conn struct {
 	// via handshake. Mainly used as a bookkeeping tool for dispatcher.
 	Bitfield *syncBitfield
 
-	localPeerID PeerID
+	localPeerID torlib.PeerID
 	nc          net.Conn
 	config      Config
 
