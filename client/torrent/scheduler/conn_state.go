@@ -23,7 +23,7 @@ func (e blacklistError) Error() string {
 }
 
 type connKey struct {
-	peerID   PeerID
+	peerID   torlib.PeerID
 	infoHash torlib.InfoHash
 }
 
@@ -41,7 +41,7 @@ func (e *blacklistEntry) Remaining(now time.Time) time.Duration {
 }
 
 type connState struct {
-	localPeerID PeerID
+	localPeerID torlib.PeerID
 	config      Config
 	capacity    map[torlib.InfoHash]int
 	active      map[connKey]*conn
@@ -52,7 +52,7 @@ type connState struct {
 	now func() time.Time
 }
 
-func newConnState(localPeerID PeerID, config Config) *connState {
+func newConnState(localPeerID torlib.PeerID, config Config) *connState {
 	return &connState{
 		localPeerID: localPeerID,
 		config:      config,
@@ -76,7 +76,7 @@ func (s *connState) ActiveConns() []*conn {
 	return conns
 }
 
-func (s *connState) Blacklist(peerID PeerID, infoHash torlib.InfoHash) error {
+func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) error {
 	k := connKey{peerID, infoHash}
 	e, ok := s.blacklist[k]
 	if ok && e.Blacklisted(s.now()) {
@@ -103,7 +103,7 @@ func (s *connState) Blacklist(peerID PeerID, infoHash torlib.InfoHash) error {
 	return nil
 }
 
-func (s *connState) AddPending(peerID PeerID, infoHash torlib.InfoHash) error {
+func (s *connState) AddPending(peerID torlib.PeerID, infoHash torlib.InfoHash) error {
 	k := connKey{peerID, infoHash}
 	if e, ok := s.blacklist[k]; ok {
 		now := s.now()
@@ -128,7 +128,7 @@ func (s *connState) AddPending(peerID PeerID, infoHash torlib.InfoHash) error {
 	return nil
 }
 
-func (s *connState) DeletePending(peerID PeerID, infoHash torlib.InfoHash) {
+func (s *connState) DeletePending(peerID torlib.PeerID, infoHash torlib.InfoHash) {
 	k := connKey{peerID, infoHash}
 	if !s.pending[k] {
 		return
@@ -188,7 +188,7 @@ func (s *connState) DeleteStaleBlacklistEntries() {
 }
 
 // getConnOpener returns the PeerID of the peer who opened the conn, i.e. sent the first handshake.
-func (s *connState) getConnOpener(c *conn) PeerID {
+func (s *connState) getConnOpener(c *conn) torlib.PeerID {
 	if c.OpenedByRemote() {
 		return c.PeerID
 	}

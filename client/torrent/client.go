@@ -1,14 +1,11 @@
 package torrent
 
-import (
-	"code.uber.internal/infra/kraken/client/torrent/scheduler"
-	"code.uber.internal/infra/kraken/torlib"
-)
+import "code.uber.internal/infra/kraken/torlib"
 
 // Client TODO
 type Client struct {
 	config Config
-	peerID scheduler.PeerID
+	peerID torlib.PeerID
 }
 
 // NewClient TODO
