@@ -6,6 +6,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 
+	"code.uber.internal/infra/kraken/client/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/timeutil"
 )
@@ -110,7 +111,7 @@ func (e incomingHandshakeEvent) Apply(s *Scheduler) {
 // incomingConnEvent occurs when a pending incoming connection finishes handshaking.
 type incomingConnEvent struct {
 	conn    *conn
-	torrent *torrent
+	torrent storage.Torrent
 }
 
 // Apply transitions a fully-handshaked incoming conn from pending to active.
@@ -128,7 +129,7 @@ func (e incomingConnEvent) Apply(s *Scheduler) {
 // outgoingConnEvent occurs when a pending outgoing connection finishes handshaking.
 type outgoingConnEvent struct {
 	conn    *conn
-	torrent *torrent
+	torrent storage.Torrent
 }
 
 // Apply transitions a fully-handshaked outgoing conn from pending to active.
@@ -226,7 +227,7 @@ func (e announceFailureEvent) Apply(s *Scheduler) {
 
 // newTorrentEvent occurs when a new torrent was requested for download.
 type newTorrentEvent struct {
-	torrent *torrent
+	torrent storage.Torrent
 	errc    chan error
 }
 
@@ -234,18 +235,18 @@ type newTorrentEvent struct {
 func (e newTorrentEvent) Apply(s *Scheduler) {
 	s.logf(log.Fields{"torrent": e.torrent}).Debug("Applying new torrent event")
 
-	if _, ok := s.dispatchers[e.torrent.InfoHash]; ok {
+	if _, ok := s.dispatchers[e.torrent.InfoHash()]; ok {
 		s.logf(log.Fields{
 			"torrent": e.torrent,
 		}).Info("Skipping torrent, info hash already registered in Scheduler")
 		e.errc <- ErrTorrentAlreadyRegistered
 		return
 	}
-	s.connState.InitCapacity(e.torrent.InfoHash)
+	s.connState.InitCapacity(e.torrent.InfoHash())
 	d := s.dispatcherFactory.New(e.torrent)
-	s.dispatchers[e.torrent.InfoHash] = d
+	s.dispatchers[e.torrent.InfoHash()] = d
 	s.announceQueue.Add(d)
-	s.torrentErrors[e.torrent.InfoHash] = e.errc
+	s.torrentErrors[e.torrent.InfoHash()] = e.errc
 }
 
 // completedDispatcherEvent occurs when a dispatcher finishes downloading its torrent.
@@ -258,14 +259,14 @@ func (e completedDispatcherEvent) Apply(s *Scheduler) {
 	s.logf(log.Fields{"dispatcher": e.dispatcher}).Debug("Applying completed dispatcher event")
 
 	s.announceQueue.Done(e.dispatcher)
-	errc, ok := s.torrentErrors[e.dispatcher.Torrent.InfoHash]
+	errc, ok := s.torrentErrors[e.dispatcher.Torrent.InfoHash()]
 	if !ok {
 		// This is fine -- the torrent was requested by a remote client, so there
 		// is no need to signal completion.
 		return
 	}
 	errc <- nil
-	delete(s.torrentErrors, e.dispatcher.Torrent.InfoHash)
+	delete(s.torrentErrors, e.dispatcher.Torrent.InfoHash())
 }
 
 // preemptionTickEvent occurs periodically to preempt unneeded conns and remove
@@ -295,7 +296,7 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 			becameIdle := timeutil.MostRecent(d.CreatedAt, d.LastConnRemoved())
 			if time.Since(becameIdle) > s.config.IdleSeederTTL {
 				s.logf(log.Fields{"dispatcher": d}).Info("Removing idle dispatcher")
-				delete(s.dispatchers, d.Torrent.InfoHash)
+				delete(s.dispatchers, d.Torrent.InfoHash())
 			}
 		}
 	}

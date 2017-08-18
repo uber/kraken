@@ -90,13 +90,13 @@ func (h *metainfoHandler) Post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if infohash matches
-	if mi.GetInfoHash().HexString() != infoHash {
+	if mi.InfoHash.HexString() != infoHash {
 		w.WriteHeader(http.StatusBadRequest)
-		writeJSONErrorf(w, "info_hash mismatch from request for %s: requested %s, actual %s", name, infoHash, mi.GetInfoHash().HexString())
+		writeJSONErrorf(w, "info_hash mismatch from request for %s: requested %s, actual %s", name, infoHash, mi.InfoHash.HexString())
 		log.WithFields(log.Fields{
 			"name":      name,
 			"requested": infoHash,
-			"actual":    mi.GetInfoHash().HexString(),
+			"actual":    mi.InfoHash.HexString(),
 			"request":   formatRequest(r),
 		}).Error("info_hash mismatch")
 		return

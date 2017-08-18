@@ -16,7 +16,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 	mi, err := torlib.NewMetaInfoFromBytes([]byte(metaStr))
 	assert.Nil(t, err)
 	peer := &torlib.PeerInfo{
-		InfoHash: mi.GetInfoHash().HexString(),
+		InfoHash: mi.InfoHash.HexString(),
 		PeerID:   "peer",
 		IP:       "127.0.0.1",
 		Port:     8080,
@@ -40,7 +40,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()
 
-		mocks.datastore.EXPECT().GetPeers(mi.GetInfoHash().HexString()).Return([]*torlib.PeerInfo{}, nil)
+		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString()).Return([]*torlib.PeerInfo{}, nil)
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
 		require.Equal(t, 200, response.StatusCode)
@@ -67,7 +67,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 			Event:           peer.Event,
 		}
 
-		mocks.datastore.EXPECT().GetPeers(mi.GetInfoHash().HexString()).Return([]*torlib.PeerInfo{peer}, nil)
+		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString()).Return([]*torlib.PeerInfo{peer}, nil)
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
 		testutils.RequireStatus(t, response, 200)

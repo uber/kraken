@@ -25,7 +25,7 @@ type MetaInfo struct {
 	// infohash is computed by MetaInfo.Info
 	// we store a copy of the hash here to avoid unnecessary rehash
 	// infohash must be set before this struct is used
-	infoHash InfoHash
+	InfoHash InfoHash
 }
 
 // NewMetaInfoFromInfo create MetaInfo from Info
@@ -86,14 +86,9 @@ func NewMetaInfoFromBytes(data []byte) (*MetaInfo, error) {
 	return &mi, nil
 }
 
-// GetName returns torrent name
-func (mi *MetaInfo) GetName() string {
+// Name returns torrent name
+func (mi *MetaInfo) Name() string {
 	return mi.Info.Name
-}
-
-// GetInfoHash returns hash of mi.Info
-func (mi *MetaInfo) GetInfoHash() InfoHash {
-	return mi.infoHash
 }
 
 // WriteBencode encodes to bencoded form.
@@ -123,10 +118,10 @@ func (mi *MetaInfo) initialize() error {
 
 // setInfoHash computes hash of mi.Info and sets mi.infohash
 func (mi *MetaInfo) setInfoHash() error {
-	hash, err := mi.Info.ComputeHash()
+	hash, err := mi.Info.ComputeInfoHash()
 	if err != nil {
 		return err
 	}
-	mi.infoHash = hash
+	mi.InfoHash = hash
 	return nil
 }

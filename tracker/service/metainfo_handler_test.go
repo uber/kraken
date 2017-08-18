@@ -58,7 +58,7 @@ func TestGetMetaInfoHandler(t *testing.T) {
 func TestPostMetaInfoHandler(t *testing.T) {
 	mi, err := torlib.NewMetaInfoFromBytes([]byte(metaStr))
 	assert.Nil(t, err)
-	infoHash := mi.GetInfoHash()
+	infoHash := mi.InfoHash
 	name := "asdfhjkl"
 
 	t.Run("Return 400 on empty name or infohash", func(t *testing.T) {

@@ -121,6 +121,7 @@ func (fi *LocalFileEntryInternal) Delete() error {
 		fi.DeleteMetadata(mt)
 		return nil
 	}
+
 	fi.RangeMetadata(performDeletion)
 	return nil
 }

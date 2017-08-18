@@ -28,6 +28,6 @@ func SpecFromtorlibInfo(mi *torlib.MetaInfo) (*Spec, error) {
 		Trackers:    trackers,
 		InfoBytes:   infoBytes,
 		DisplayName: mi.Info.Name,
-		InfoHash:    mi.GetInfoHash(),
+		InfoHash:    mi.InfoHash,
 	}, nil
 }

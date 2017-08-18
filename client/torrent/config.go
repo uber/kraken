@@ -24,7 +24,7 @@ type Config struct {
 	// Called to instantiate storage for each added torrent. Builtin backends
 	// are in the storage package. If not set, the "file" implementation is
 	// used.
-	DefaultStorage storage.TorrentManager
+	DefaultStorage storage.TorrentArchive
 
 	// Perform logging and any other behaviour that will help debug.
 	Debug bool `help:"enable debug logging"`

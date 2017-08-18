@@ -69,7 +69,7 @@ func performRequest(handler http.Handler, request *http.Request) *http.Response 
 }
 
 func createAnnouncePath(mi *torlib.MetaInfo, p *torlib.PeerInfo) string {
-	rawInfoHash, err := hex.DecodeString(mi.GetInfoHash().HexString())
+	rawInfoHash, err := hex.DecodeString(mi.InfoHash.HexString())
 	if err != nil {
 		panic(err)
 	}

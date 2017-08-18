@@ -1,10 +1,14 @@
 package scheduler
 
-import "sync"
+import (
+	"sync"
+
+	"code.uber.internal/infra/kraken/client/torrent/storage"
+)
 
 type syncBitfield struct {
 	sync.RWMutex
-	s []bool
+	s storage.Bitfield
 }
 
 func newSyncBitfield(s []bool) *syncBitfield {
@@ -33,5 +37,5 @@ func (b *syncBitfield) String() string {
 	b.RLock()
 	defer b.RUnlock()
 
-	return formatBitfield(b.s)
+	return b.s.String()
 }
