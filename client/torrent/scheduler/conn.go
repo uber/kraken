@@ -11,7 +11,9 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
+	"code.uber.internal/infra/kraken/client/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/uber-common/bark"
 )
@@ -50,13 +52,14 @@ type message struct {
 // in this package "handshake" and "bitfield message" are usually synonymous.
 type handshake struct {
 	PeerID   torlib.PeerID
+	Name     string
 	InfoHash torlib.InfoHash
-	Bitfield []bool
+	Bitfield storage.Bitfield
 }
 
 func (h *handshake) String() string {
-	return fmt.Sprintf("handshake(peer=%s, hash=%s, bitfield=%s)",
-		h.PeerID, h.InfoHash, formatBitfield(h.Bitfield))
+	return fmt.Sprintf("handshake(peer=%s, hash=%s, name=%s, bitfield=%s)",
+		h.PeerID, h.InfoHash, h.Name, h.Bitfield)
 }
 
 func (h *handshake) ToP2PMessage() *p2p.Message {
@@ -64,6 +67,7 @@ func (h *handshake) ToP2PMessage() *p2p.Message {
 		Type: p2p.Message_BITFIELD,
 		Bitfield: &p2p.BitfieldMessage{
 			PeerID:   h.PeerID.String(),
+			Name:     h.Name,
 			InfoHash: h.InfoHash.String(),
 			Bitfield: h.Bitfield,
 		},
@@ -87,6 +91,7 @@ func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
 		PeerID:   peerID,
 		InfoHash: ih,
 		Bitfield: m.Bitfield.Bitfield,
+		Name:     m.Bitfield.Name,
 	}, nil
 }
 

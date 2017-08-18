@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 
@@ -35,9 +36,23 @@ func NewInfoFromFile(fp string, pieceLength int64) (Info, error) {
 	}, nil
 }
 
-// PieceHashSize returns the size of each piece hash.
-func (info *Info) PieceHashSize() int {
-	return sha1.New().Size()
+// PieceHash returns the hash for given piece
+func (info *Info) PieceHash(piece int) ([]byte, error) {
+	if piece >= info.NumPieces() {
+		return nil, fmt.Errorf("Piece index %d out of range %d", piece, info.NumPieces())
+	}
+
+	if math.Mod(float64(len(info.Pieces)), float64(info.NumPieces())) != 0.0 {
+		return nil, fmt.Errorf("Length of piece hash %d is not a muliple of the number of pieces %d",
+			len(info.Pieces), info.NumPieces())
+	}
+
+	pieceHashSize := info.pieceHashSize()
+	start := piece * pieceHashSize
+	end := (piece + 1) * pieceHashSize
+	hash := make([]byte, end-start)
+	copy(hash, info.Pieces[start:end])
+	return hash, nil
 }
 
 // TotalLength returns a total length of all torrent files
@@ -70,9 +85,9 @@ func (info *Info) Validate() error {
 	return nil
 }
 
-// ComputeHash returns the hash of Info
+// ComputeInfoHash returns the hash of Info
 // it is an identifier of a torrent
-func (info *Info) ComputeHash() (InfoHash, error) {
+func (info *Info) ComputeInfoHash() (InfoHash, error) {
 	infoBytes, err := bencode.Marshal(info)
 	if err != nil {
 		return InfoHash{}, err
@@ -88,6 +103,11 @@ func (info *Info) Serialize() ([]byte, error) {
 		return nil, err
 	}
 	return bytes, nil
+}
+
+// pieceHashSize returns the size of each piece hash.
+func (info *Info) pieceHashSize() int {
+	return sha1.New().Size()
 }
 
 // generatePieces hashes file content in chunks given path and pieceLength, and returns file length and hashes

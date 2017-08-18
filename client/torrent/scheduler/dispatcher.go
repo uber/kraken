@@ -11,6 +11,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
+	"code.uber.internal/infra/kraken/client/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 )
 
@@ -28,7 +29,7 @@ type dispatcherFactory struct {
 }
 
 // New creates a new dispatcher for the given torrent.
-func (f *dispatcherFactory) New(t *torrent) *dispatcher {
+func (f *dispatcherFactory) New(t storage.Torrent) *dispatcher {
 	d := &dispatcher{
 		Torrent:     t,
 		CreatedAt:   time.Now(),
@@ -36,7 +37,7 @@ func (f *dispatcherFactory) New(t *torrent) *dispatcher {
 		eventLoop:   f.EventLoop,
 	}
 	if t.Complete() {
-		go d.eventLoop.Send(completedDispatcherEvent{d})
+		d.complete.Do(func() { go d.eventLoop.Send(completedDispatcherEvent{d}) })
 	}
 	return d
 }
@@ -45,7 +46,7 @@ func (f *dispatcherFactory) New(t *torrent) *dispatcher {
 // peers. As such, dispatcher and torrent have a one-to-one relationship, while dispatcher
 // and conn have a many-to-many relationship.
 type dispatcher struct {
-	Torrent     *torrent
+	Torrent     storage.Torrent
 	CreatedAt   time.Time
 	localPeerID torlib.PeerID
 
@@ -55,6 +56,9 @@ type dispatcher struct {
 
 	mu              sync.Mutex // Protects the following fields:
 	lastConnRemoved time.Time
+
+	// complete ensures dispatcher only sends complete event once to scheduler
+	complete sync.Once
 }
 
 func (d *dispatcher) LastConnRemoved() time.Time {
@@ -85,7 +89,7 @@ func (d *dispatcher) Empty() bool {
 
 // AddConn registers a new conn with the dispatcher.
 func (d *dispatcher) AddConn(c *conn) error {
-	if c.InfoHash != d.Torrent.InfoHash {
+	if c.InfoHash != d.Torrent.InfoHash() {
 		return errors.New("conn initialized for wrong torrent")
 	}
 	if _, ok := d.conns.LoadOrStore(c.PeerID, c); ok {
@@ -210,6 +214,7 @@ func (d *dispatcher) handlePieceRequest(c *conn, msg *p2p.PieceRequestMessage) {
 		d.sendErrPieceRequestFailed(c, msg.Index, errChunkNotSupported)
 		return
 	}
+
 	payload, err := d.Torrent.ReadPiece(i)
 	if err != nil {
 		d.sendErrPieceRequestFailed(c, msg.Index, err)
@@ -243,7 +248,7 @@ func (d *dispatcher) handlePiecePayload(
 		}).Errorf("Error handling piece payload: %s", errChunkNotSupported)
 		return
 	}
-	completed, err := d.Torrent.WritePiece(i, payload)
+	_, err := d.Torrent.WritePiece(payload, i)
 	if err != nil {
 		d.logf(log.Fields{
 			"peer": c.PeerID, "piece": msg.Index,
@@ -251,8 +256,8 @@ func (d *dispatcher) handlePiecePayload(
 		return
 	}
 	c.TouchLastGoodPieceReceived()
-	if completed {
-		d.eventLoop.Send(completedDispatcherEvent{d})
+	if d.Torrent.Complete() {
+		d.complete.Do(func() { go d.eventLoop.Send(completedDispatcherEvent{d}) })
 	}
 
 	d.logf(log.Fields{
@@ -278,7 +283,7 @@ func (d *dispatcher) handlePiecePayload(
 		}
 
 		d.logf(log.Fields{
-			"peer": cc.PeerID, "hash": d.Torrent.InfoHash,
+			"peer": cc.PeerID, "hash": d.Torrent.InfoHash(),
 		}).Debugf("Announcing piece %d", msg.Index)
 
 		// Ignore error -- this just means the connection was closed. The feed goroutine

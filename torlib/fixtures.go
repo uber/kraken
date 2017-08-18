@@ -25,7 +25,7 @@ func PeerIDFixture() PeerID {
 
 // InfoHashFixture returns a randomly generated InfoHash.
 func InfoHashFixture() InfoHash {
-	return MetaInfoFixture().GetInfoHash()
+	return MetaInfoFixture().InfoHash
 }
 
 // PeerInfoFixture returns a randomly generated PeerInfo.

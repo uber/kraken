@@ -12,8 +12,14 @@ package p2p;
 // transmit.
 message BitfieldMessage {
     string infoHash = 2;
-    string peerID   = 3;
-    repeated bool bitfield = 4;
+    // TODO: Torrent name is the content hash. Current torrent storage is 
+    // content addressable. Adding name as a part of handshake makes looking  
+    // up torrents faster. If storage supports addressing torrent by infohash, 
+    // this extra field should removed. 
+    // We currently treat infohash as verification of torrents.
+    string name     = 3;
+    string peerID   = 4;
+    repeated bool bitfield = 5;
 }
 
 // Requests a piece of the given index. Note: offset and length are unused fields

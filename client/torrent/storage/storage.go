@@ -1,20 +1,32 @@
 package storage
 
-import (
-	"io"
-
-	"code.uber.internal/infra/kraken/torlib"
-)
+import "code.uber.internal/infra/kraken/torlib"
 
 // Torrent represents a read/write interface for a torrent
 type Torrent interface {
-	io.ReaderAt
-	io.WriterAt
+	// Information
+	Name() string
+	NumPieces() int
+	Length() int64
+	PieceLength(piece int) int64
+	InfoHash() torlib.InfoHash
+	Complete() bool
+	BytesDownloaded() int64
+	Bitfield() Bitfield
+	String() string
+
+	// Piece operations
+	HasPiece(piece int) bool
+	MissingPieces() []int
+	// Read/Write
+	WritePiece(data []byte, piece int) (int, error)
+	ReadPiece(piece int) ([]byte, error)
 }
 
-// TorrentManager represents data storage for torrent
-type TorrentManager interface {
-	CreateTorrent(infoHash torlib.InfoHash, infoBytes []byte) (Torrent, error)
-	OpenTorrent(infoHash torlib.InfoHash) (Torrent, []byte, error)
+// TorrentArchive creates and open torrent file
+type TorrentArchive interface {
+	CreateTorrent(infoHash torlib.InfoHash, mi *torlib.MetaInfo) (Torrent, error)
+	GetTorrent(name string, infoHash torlib.InfoHash) (Torrent, error)
+	DeleteTorrent(name string, infoHash torlib.InfoHash) error
 	Close() error
 }

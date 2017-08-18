@@ -676,7 +676,7 @@ func (c *Client) getTorrentMetaInfoFromTracker(name string) ([]byte, error) {
 }
 
 func (c *Client) addTorrentInTracker(name string, mi *torlib.MetaInfo) (err error) {
-	postURL := c.config.TrackerURL + "/info?name=" + name + "&info_hash=" + mi.GetInfoHash().HexString()
+	postURL := c.config.TrackerURL + "/info?name=" + name + "&info_hash=" + mi.InfoHash.HexString()
 	rawStr, err := mi.Serialize()
 	if err != nil {
 		log.Error(err)

@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -42,61 +41,55 @@ func genConfig(trackerAddr string) Config {
 	}
 }
 
-type tempTorrentManager struct {
-	storage.TorrentManager
-	tmpdir string
-}
-
-func (m *tempTorrentManager) Delete() {
-	if err := os.RemoveAll(m.tmpdir); err != nil {
-		panic(err)
-	}
-}
-
-// TODO(codyg): Move this to storage package.
-func genTorrentManager() *tempTorrentManager {
-	d, err := ioutil.TempDir(testTempDir, "manager_")
-	if err != nil {
-		panic(err)
-	}
-	return &tempTorrentManager{storage.NewFileStorage(d), d}
-}
-
 // writeTorrent writes the given content into a torrent file into tm's storage.
 // Useful for populating a completed torrent before seeding it.
-func writeTorrent(tm storage.TorrentManager, mi *torlib.MetaInfo, content []byte) storage.Torrent {
-	infoByte, err := mi.Info.Serialize()
+func writeTorrent(ta storage.TorrentArchive, mi *torlib.MetaInfo, content []byte) storage.Torrent {
+	t, err := ta.CreateTorrent(mi.InfoHash, mi)
 	if err != nil {
 		panic(err)
 	}
-	t, err := tm.CreateTorrent(mi.GetInfoHash(), infoByte)
-	if err != nil {
-		panic(err)
-	}
-	if _, err := t.WriteAt(content, 0); err != nil {
-		panic(err)
+
+	for i := 0; i < t.NumPieces(); i++ {
+		start := int64(i) * mi.Info.PieceLength
+		end := start + t.PieceLength(i)
+		if _, err := t.WritePiece(content[start:end], i); err != nil {
+			panic(err)
+		}
 	}
 	return t
 }
 
-type testPeer struct {
-	Scheduler      *Scheduler
-	TorrentManager *tempTorrentManager
+func checkContent(r *require.Assertions, t storage.Torrent, expected []byte) {
+	result := make([]byte, t.Length())
+	cursor := result
+	for i := 0; i < t.NumPieces(); i++ {
+		pieceData, err := t.ReadPiece(i)
+		r.NoError(err)
+		copy(cursor, pieceData)
+		cursor = cursor[t.PieceLength(i):]
+	}
+	r.Equal(expected, result)
 }
 
-func (p *testPeer) Stop() {
-	p.Scheduler.Stop()
-	p.TorrentManager.Delete()
+type testPeer struct {
+	Scheduler      *Scheduler
+	TorrentArchive storage.TorrentArchive
+	Stop           func()
 }
 
 func genTestPeer(config Config) *testPeer {
-	tm := genTorrentManager()
+	tm, deleteFunc := storage.TorrentArchiveFixture()
 	s, err := New(torlib.PeerIDFixture(), "localhost:0", "sjc1", tm, config)
 	if err != nil {
-		tm.Delete()
+		deleteFunc()
 		panic(err)
 	}
-	return &testPeer{s, tm}
+
+	stop := func() {
+		s.Stop()
+		deleteFunc()
+	}
+	return &testPeer{s, tm, stop}
 }
 
 func genTestPeers(n int, config Config) (peers []*testPeer, stopAll func()) {
@@ -109,13 +102,6 @@ func genTestPeers(n int, config Config) (peers []*testPeer, stopAll func()) {
 			p.Stop()
 		}
 	}
-}
-
-func checkContent(r *require.Assertions, t storage.Torrent, expected []byte) {
-	result := make([]byte, len(expected))
-	_, err := t.ReadAt(result, 0)
-	r.NoError(err)
-	r.Equal(expected, result)
 }
 
 type hasConnEvent struct {

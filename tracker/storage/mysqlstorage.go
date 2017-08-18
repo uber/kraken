@@ -163,8 +163,8 @@ func (ds *MySQLStorage) CreateTorrent(meta *torlib.MetaInfo) error {
 	_, err = ds.db.NamedExec(`insert into torrent(name, infoHash, author, metaInfo)
 	values(:name, :infoHash, :author, :metaInfo) on duplicate key update flags = flags`,
 		map[string]interface{}{
-			"name":     meta.GetName(),
-			"infoHash": meta.GetInfoHash().HexString(),
+			"name":     meta.Name(),
+			"infoHash": meta.InfoHash.HexString(),
 			"author":   meta.CreatedBy,
 			"metaInfo": serialized,
 		})

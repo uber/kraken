@@ -27,10 +27,6 @@ var ErrTorrentAlreadyRegistered = errors.New("torrent already registered in sche
 // ErrSchedulerStopped returns when an action fails due to the Scheduler being stopped.
 var ErrSchedulerStopped = errors.New("scheduler has been stopped")
 
-func (k connKey) String() string {
-	return fmt.Sprintf("connKey(peer=%s, hash=%s)", k.peerID, k.infoHash)
-}
-
 // Scheduler manages global state for the peer. This includes:
 // - Opening torrents.
 // - Announcing to the tracker.
@@ -45,7 +41,7 @@ type Scheduler struct {
 	datacenter string
 	config     Config
 
-	torrentManager storage.TorrentManager
+	torrentArchive storage.TorrentArchive
 
 	connFactory       *connFactory
 	dispatcherFactory *dispatcherFactory
@@ -77,7 +73,7 @@ func New(
 	peerID torlib.PeerID,
 	addr string,
 	datacenter string,
-	tm storage.TorrentManager,
+	ta storage.TorrentArchive,
 	config Config) (*Scheduler, error) {
 
 	l, err := net.Listen("tcp", addr)
@@ -96,7 +92,7 @@ func New(
 		port:           port,
 		datacenter:     datacenter,
 		config:         config,
-		torrentManager: tm,
+		torrentArchive: ta,
 		connFactory: &connFactory{
 			Config:      config,
 			LocalPeerID: peerID,
@@ -147,18 +143,16 @@ func (s *Scheduler) Stop() {
 	})
 }
 
-// AddTorrent starts downloading / seeding the torrent of the given hash. The returned
-// error channel emits an error if the torrent failed to download, or nil once the
-// torrent finishes downloading.
+// AddTorrent starts downloading / seeding the torrent given metainfo. The returned
+// error channel emits an error if it failed to get torrent from archive
 //
 // TODO(codyg): Torrents will continue to seed for the entire lifetime of the Scheduler,
 // but this should be a matter of policy.
-func (s *Scheduler) AddTorrent(
-	store storage.Torrent, infoHash torlib.InfoHash, infoBytes []byte) <-chan error {
-
+func (s *Scheduler) AddTorrent(mi *torlib.MetaInfo) <-chan error {
 	// Buffer size of 1 so sends do not block.
 	errc := make(chan error, 1)
-	t, err := newTorrent(infoHash, infoBytes, store)
+
+	t, err := s.torrentArchive.GetTorrent(mi.Info.Name, mi.InfoHash)
 	if err != nil {
 		errc <- err
 		return errc
@@ -228,20 +222,15 @@ func (s *Scheduler) handshakeIncomingConn(nc net.Conn) {
 }
 
 func (s *Scheduler) doInitIncomingConn(
-	nc net.Conn, remoteHandshake *handshake) (*conn, *torrent, error) {
+	nc net.Conn, remoteHandshake *handshake) (*conn, storage.Torrent, error) {
 
-	store, infoBytes, err := s.torrentManager.OpenTorrent(remoteHandshake.InfoHash)
+	t, err := s.torrentArchive.GetTorrent(remoteHandshake.Name, remoteHandshake.InfoHash)
 	if err != nil {
 		nc.Close()
 		return nil, nil, fmt.Errorf("failed to open torrent storage: %s", err)
 	}
-	t, err := newTorrent(remoteHandshake.InfoHash, infoBytes, store)
-	if err != nil {
-		nc.Close()
-		return nil, nil, fmt.Errorf("failed to create torrent: %s", err)
-	}
 	c, err := s.connFactory.ReciprocateHandshake(
-		nc, remoteHandshake, &handshake{s.peerID, remoteHandshake.InfoHash, t.Bitfield()})
+		nc, remoteHandshake, &handshake{s.peerID, remoteHandshake.Name, remoteHandshake.InfoHash, t.Bitfield()})
 	if err != nil {
 		nc.Close()
 		return nil, nil, fmt.Errorf("failed to reciprocate handshake: %s", err)
@@ -266,14 +255,14 @@ func (s *Scheduler) initIncomingConn(nc net.Conn, remoteHandshake *handshake) {
 }
 
 func (s *Scheduler) doInitOutgoingConn(
-	peerID torlib.PeerID, ip string, port int, t *torrent) (*conn, error) {
+	peerID torlib.PeerID, ip string, port int, t storage.Torrent) (*conn, error) {
 
 	addr := fmt.Sprintf("%s:%d", ip, port)
 	nc, err := net.DialTimeout("tcp", addr, s.config.DialTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial peer: %s", err)
 	}
-	h := &handshake{s.peerID, t.InfoHash, t.Bitfield()}
+	h := &handshake{s.peerID, t.Name(), t.InfoHash(), t.Bitfield()}
 	c, err := s.connFactory.SendAndReceiveHandshake(nc, h)
 	if err != nil {
 		nc.Close()
@@ -286,7 +275,7 @@ func (s *Scheduler) doInitOutgoingConn(
 	return c, nil
 }
 
-func (s *Scheduler) initOutgoingConn(peerID torlib.PeerID, ip string, port int, t *torrent) {
+func (s *Scheduler) initOutgoingConn(peerID torlib.PeerID, ip string, port int, t storage.Torrent) {
 	s.logf(log.Fields{
 		"peer": peerID, "ip": ip, "port": port, "torrent": t,
 	}).Debug("Initializing outgoing connection")
@@ -297,23 +286,23 @@ func (s *Scheduler) initOutgoingConn(peerID torlib.PeerID, ip string, port int, 
 		s.logf(log.Fields{
 			"peer": peerID, "ip": ip, "port": port, "torrent": t,
 		}).Errorf("Error intializing outgoing connection: %s", err)
-		e = failedHandshakeEvent{peerID, t.InfoHash}
+		e = failedHandshakeEvent{peerID, t.InfoHash()}
 	} else {
 		e = outgoingConnEvent{c, t}
 	}
 	s.eventLoop.Send(e)
 }
 
-func (s *Scheduler) doAnnounce(t *torrent) ([]torlib.PeerInfo, error) {
+func (s *Scheduler) doAnnounce(t storage.Torrent) ([]torlib.PeerInfo, error) {
 	v := url.Values{}
 
-	v.Add("info_hash", t.InfoHash.String())
+	v.Add("info_hash", t.InfoHash().String())
 	v.Add("peer_id", s.peerID.String())
 	v.Add("port", s.port)
 	v.Add("ip", s.host)
 	v.Add("dc", s.datacenter)
 
-	downloaded := t.Downloaded()
+	downloaded := t.BytesDownloaded()
 	v.Add("downloaded", strconv.FormatInt(downloaded, 10))
 	v.Add("left", strconv.FormatInt(t.Length()-downloaded, 10))
 
@@ -353,17 +342,17 @@ func (s *Scheduler) announce(d *dispatcher) {
 		s.logf(log.Fields{"dispatcher": d}).Errorf("Announce failed: %s", err)
 		e = announceFailureEvent{d}
 	} else {
-		e = announceResponseEvent{d.Torrent.InfoHash, peers}
+		e = announceResponseEvent{d.Torrent.InfoHash(), peers}
 	}
 	s.eventLoop.Send(e)
 }
 
-func (s *Scheduler) addOutgoingConn(c *conn, t *torrent) error {
+func (s *Scheduler) addOutgoingConn(c *conn, t storage.Torrent) error {
 	if err := s.connState.MovePendingToActive(c); err != nil {
 		c.Close()
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
-	d, ok := s.dispatchers[t.InfoHash]
+	d, ok := s.dispatchers[t.InfoHash()]
 	if !ok {
 		// We should have created the dispatcher before sending a handshake.
 		return errors.New("no dispatcher found")
@@ -374,15 +363,15 @@ func (s *Scheduler) addOutgoingConn(c *conn, t *torrent) error {
 	return nil
 }
 
-func (s *Scheduler) addIncomingConn(c *conn, t *torrent) error {
+func (s *Scheduler) addIncomingConn(c *conn, t storage.Torrent) error {
 	if err := s.connState.MovePendingToActive(c); err != nil {
 		c.Close()
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
-	d, ok := s.dispatchers[t.InfoHash]
+	d, ok := s.dispatchers[t.InfoHash()]
 	if !ok {
 		d = s.dispatcherFactory.New(t)
-		s.dispatchers[t.InfoHash] = d
+		s.dispatchers[t.InfoHash()] = d
 	}
 	if err := d.AddConn(c); err != nil {
 		return fmt.Errorf("cannot add conn to dispatcher: %s", err)

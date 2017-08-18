@@ -110,8 +110,8 @@ func TestMySQLCreateTorrent(t *testing.T) {
 	assert.Nil(err)
 
 	mock.ExpectExec("insert into torrent").WithArgs(
-		mi.GetName(),
-		mi.GetInfoHash().HexString(),
+		mi.Name(),
+		mi.InfoHash.HexString(),
 		"",
 		metaRaw,
 	).WillReturnResult(sqlmock.NewResult(1, 1))
