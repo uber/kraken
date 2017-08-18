@@ -15,19 +15,19 @@ type AnnouncerResponse struct {
 
 // PeerInfo defines metadata for a peer
 type PeerInfo struct {
-	InfoHash string `bencode:"info_hash" db:"infoHash"`
-	PeerID   string `bencode:"peer_id" db:"peerId"`
-	IP       string `bencode:"ip" db:"ip"`
-	Port     int64  `bencode:"port" db:"port"`
-	Priority int64  `bencode:"priority" db:"-"`
+	InfoHash string `bencode:"info_hash" db:"infoHash" redis:"-"`
+	PeerID   string `bencode:"peer_id" db:"peerId" redis:"-"`
+	IP       string `bencode:"ip" db:"ip" redis:"ip"`
+	Port     int64  `bencode:"port" db:"port" redis:"port"`
+	Priority int64  `bencode:"priority" db:"-" redis:"-"`
 
-	DC              string `bencode:"dc,omitempty" db:"dc"`
-	BytesDownloaded int64  `bencode:"downloaded,omitempty" db:"bytes_downloaded"`
+	DC              string `bencode:"dc,omitempty" db:"dc" redis:"dc"`
+	BytesDownloaded int64  `bencode:"downloaded,omitempty" db:"bytes_downloaded" redis:"bytes_downloaded"`
 
-	BytesUploaded int64  `bencode:"-" db:"-"`
-	BytesLeft     int64  `bencode:"-" db:"-"`
-	Event         string `bencode:"-" db:"-"`
-	Flags         uint   `bencode:"-" db:"flags"`
+	BytesUploaded int64  `bencode:"-" db:"-" redis:"-"`
+	BytesLeft     int64  `bencode:"-" db:"-" redis:"-"`
+	Event         string `bencode:"-" db:"-" redis:"-"`
+	Flags         uint   `bencode:"-" db:"flags" redis:"flags"`
 }
 
 // NewAnnounceRequest creates a new announce request given tracker location, and peerInfo

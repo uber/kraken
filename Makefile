@@ -40,7 +40,6 @@ update-golden:
 	$(shell UBER_ENVIRONMENT=test UBER_CONFIG_DIR=`pwd`/config/origin go test ./client/cli/ -update 1>/dev/null)
 	@echo "generated golden files"
 
-
 proto:
 	@mkdir -p $(PROTO_GENDIR)/go
 	cd $(dir $(patsubst %/,%,$(GOBUILD_DIR)))
@@ -51,6 +50,20 @@ client/bin/kraken-agent/kraken-agent: proto
 	client/bin/kraken-agent/main.go $(wildcard client/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 tools/bin/kraken-cli/kraken:  client/cli/kraken-cli.go tools/bin/kraken-cli/main.go config/origin/config.go
+
+REDIS_CONTAINER_NAME := "kraken-redis"
+
+.PHONY: redis
+redis:
+	-docker stop $(REDIS_CONTAINER_NAME)
+	-docker rm $(REDIS_CONTAINER_NAME)
+	docker pull redis
+	# TODO(codyg): I choose this random port to avoid conflicts in Jenkins. Obviously not ideal.
+	docker run -d -p 6380:6379 --name $(REDIS_CONTAINER_NAME) redis:latest
+
+test:: redis
+
+jenkins:: redis
 
 .PHONY: rebuild_mocks
 rebuild_mocks:
