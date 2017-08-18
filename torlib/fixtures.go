@@ -42,6 +42,17 @@ func PeerInfoFixture() *PeerInfo {
 	}
 }
 
+// PeerInfoForMetaInfoFixture returns a randomly generated PeerInfo associated
+// with the given MetaInfo.
+func PeerInfoForMetaInfoFixture(mi *MetaInfo) *PeerInfo {
+	p := PeerInfoFixture()
+	p.InfoHash = mi.GetInfoHash().String()
+	p.BytesDownloaded = rand.Int63n(mi.Info.Length)
+	p.BytesUploaded = rand.Int63n(mi.Info.Length)
+	p.BytesLeft = rand.Int63n(mi.Info.Length)
+	return p
+}
+
 // TestTorrentFile joins a MetaInfo with the file contents used to generate
 // said MetaInfo. Note, does not include any physical files so no cleanup is
 // necessary.
