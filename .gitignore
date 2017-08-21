@@ -15,8 +15,6 @@ pkg/
 # Binary executable
 tracker/tracker
 client/bin/kraken-agent/kraken-agent
-client/bin/torrent/kraken-agent
-client/bin/scheduler/scheduler
 tools/bin/puller/puller
 
 # tmp migration files

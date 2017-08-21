@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"path"
 
 	"code.uber.internal/infra/kraken/utils/randutil"
 )
@@ -75,7 +76,7 @@ func CustomTestTorrentFileFixture(size int, pieceLength int) *TestTorrentFile {
 	if err := ioutil.WriteFile(f.Name(), content, 0755); err != nil {
 		panic(err)
 	}
-	info, err := NewInfoFromFile(f.Name(), int64(pieceLength))
+	info, err := NewInfoFromFile(path.Base(f.Name()), f.Name(), int64(pieceLength))
 	if err != nil {
 		panic(err)
 	}

@@ -4,7 +4,6 @@ import (
 	"os"
 
 	"code.uber.internal/infra/kraken/client/store"
-	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/torlib"
 )
 
@@ -12,15 +11,13 @@ var _ TorrentArchive = (*LocalTorrentArchive)(nil)
 
 // LocalTorrentArchive implements TorrentArchive
 type LocalTorrentArchive struct {
-	config *configuration.Config
-	store  *store.LocalStore
+	store *store.LocalStore
 }
 
 // NewLocalTorrentArchive creates a new LocalTorrentArchive
-func NewLocalTorrentArchive(config *configuration.Config, store *store.LocalStore) TorrentArchive {
+func NewLocalTorrentArchive(store *store.LocalStore) TorrentArchive {
 	return &LocalTorrentArchive{
-		config: config,
-		store:  store,
+		store: store,
 	}
 }
 

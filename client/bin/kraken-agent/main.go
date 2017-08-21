@@ -6,9 +6,8 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 
 	"code.uber.internal/infra/kraken/client/dockerregistry"
-	"code.uber.internal/infra/kraken/client/server"
 	"code.uber.internal/infra/kraken/client/store"
-	"code.uber.internal/infra/kraken/client/torrentclient"
+	"code.uber.internal/infra/kraken/client/torrent"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/metrics"
 	rc "github.com/docker/distribution/configuration"
@@ -49,16 +48,12 @@ func main() {
 
 	// init torrent client
 	log.Info("Init torrent agent")
-	client, err := torrentclient.NewClient(config, store, metricsScope, clientTimeout)
+	client, err := torrent.NewSchedulerClient(config, store)
 	defer client.Close()
 
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// start agent server
-	aWeb := server.NewAgentWebApp(config, client)
-	go aWeb.Serve()
 
 	// init docker registry
 	log.Info("Init registry")

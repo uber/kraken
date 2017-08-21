@@ -7,7 +7,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"path/filepath"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken-torrent/bencode"
@@ -22,8 +21,8 @@ type Info struct {
 }
 
 // NewInfoFromFile creates new info given file and piecelength
-func NewInfoFromFile(fp string, pieceLength int64) (Info, error) {
-	length, pieces, err := generatePieces(fp, pieceLength)
+func NewInfoFromFile(name, filepath string, pieceLength int64) (Info, error) {
+	length, pieces, err := generatePieces(filepath, pieceLength)
 	if err != nil {
 		return Info{}, err
 	}
@@ -31,7 +30,7 @@ func NewInfoFromFile(fp string, pieceLength int64) (Info, error) {
 	return Info{
 		PieceLength: pieceLength,
 		Pieces:      pieces,
-		Name:        filepath.Base(fp),
+		Name:        name,
 		Length:      length,
 	}, nil
 }

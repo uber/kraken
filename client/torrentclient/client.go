@@ -13,16 +13,16 @@ import (
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken-torrent"
 	"code.uber.internal/infra/kraken-torrent/bencode"
 	"code.uber.internal/infra/kraken-torrent/metainfo"
 	"code.uber.internal/infra/kraken/client/store"
+	t "code.uber.internal/infra/kraken/client/torrent"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils"
 
+	"code.uber.internal/infra/kraken-torrent"
 	"github.com/boltdb/bolt"
-
 	"github.com/docker/distribution/uuid"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
@@ -74,7 +74,7 @@ type Client struct {
 }
 
 // NewClient creates a new client
-func NewClient(c *configuration.Config, s *store.LocalStore, metrics tally.Scope, t int) (*Client, error) {
+func NewClient(c *configuration.Config, s *store.LocalStore, metrics tally.Scope, t int) (t.Client, error) {
 	if c.DisableTorrent {
 		log.Info("Torrent disabled")
 		return &Client{
@@ -494,9 +494,9 @@ func (c *Client) GetManifest(repo, tag string) (string, error) {
 	return manifestDigest, nil
 }
 
-// DownloadByName adds and downloads torrent by name
+// DownloadTorrent adds and downloads torrent by name
 // called by dockerregistry.Blobs and Tags
-func (c *Client) DownloadByName(name string) error {
+func (c *Client) DownloadTorrent(name string) error {
 	if c.config.DisableTorrent {
 		return fmt.Errorf("Torrent disabled")
 	}

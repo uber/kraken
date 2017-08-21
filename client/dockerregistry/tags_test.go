@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/client/torrent"
 	"code.uber.internal/infra/kraken/client/torrentclient"
 	"code.uber.internal/infra/kraken/configuration"
 
@@ -17,7 +18,7 @@ import (
 	"github.com/uber-go/tally"
 )
 
-func getFileStoreClient() (*configuration.Config, *store.LocalStore, *torrentclient.Client) {
+func getFileStoreClient() (*configuration.Config, *store.LocalStore, torrent.Client) {
 	cp := configuration.GetConfigFilePath("agent/test.yaml")
 	c := configuration.NewConfigWithPath(cp)
 	c.DisableTorrent = true

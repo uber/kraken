@@ -6,7 +6,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store"
-	"code.uber.internal/infra/kraken/client/torrentclient"
+	"code.uber.internal/infra/kraken/client/torrent"
 	"code.uber.internal/infra/kraken/configuration"
 	sd "github.com/docker/distribution/registry/storage/driver"
 )
@@ -14,12 +14,12 @@ import (
 // Blobs b
 type Blobs struct {
 	config *configuration.Config
-	client *torrentclient.Client
+	client torrent.Client
 	store  *store.LocalStore
 }
 
 // NewBlobs creates Blobs
-func NewBlobs(cl *torrentclient.Client, s *store.LocalStore, config *configuration.Config) *Blobs {
+func NewBlobs(cl torrent.Client, s *store.LocalStore, config *configuration.Config) *Blobs {
 	return &Blobs{
 		client: cl,
 		store:  s,
@@ -30,7 +30,7 @@ func NewBlobs(cl *torrentclient.Client, s *store.LocalStore, config *configurati
 func (b *Blobs) getBlobStat(fileName string) (sd.FileInfo, error) {
 	info, err := b.store.GetCacheFileStat(fileName)
 	if err != nil {
-		err = b.client.DownloadByName(fileName)
+		err = b.client.DownloadTorrent(fileName)
 		if err != nil {
 			return nil, sd.PathNotFoundError{
 				DriverName: "kraken",
@@ -68,7 +68,7 @@ func (b *Blobs) getOrDownloadBlobData(fileName string) (data []byte, err error) 
 func (b *Blobs) getOrDownloadBlobReader(fileName string, offset int64) (reader io.ReadCloser, err error) {
 	reader, err = b.getBlobReader(fileName, offset)
 	if err != nil {
-		err = b.client.DownloadByName(fileName)
+		err = b.client.DownloadTorrent(fileName)
 		if err != nil {
 			log.Errorf("Failed to download %s", err.Error())
 			return nil, sd.PathNotFoundError{

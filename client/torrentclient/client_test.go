@@ -57,7 +57,8 @@ func TestLoadSaveTorrents(t *testing.T) {
 	defer _server.Close()
 
 	config.TrackerURL = _server.URL
-	cli, err := NewClient(config, store, tally.NoopScope, 120)
+	torcli, err := NewClient(config, store, tally.NoopScope, 120)
+	cli := torcli.(*Client)
 	assert.Nil(t, err)
 	assert.NotNil(t, cli)
 
@@ -78,7 +79,8 @@ func TestLoadSaveTorrents(t *testing.T) {
 
 	cli.Close()
 
-	newcli, err := NewClient(config, store, tally.NoopScope, 120)
+	newTorcli, err := NewClient(config, store, tally.NoopScope, 120)
+	newcli := newTorcli.(*Client)
 	assert.Nil(t, err)
 
 	tor2, _, err := newcli.Torrent(mi.HashInfoBytes())
@@ -95,7 +97,8 @@ func TestClient(t *testing.T) {
 	defer _server.Close()
 
 	config.TrackerURL = _server.URL
-	cli, err := NewClient(config, s, tally.NoopScope, 120)
+	torcli, err := NewClient(config, s, tally.NoopScope, 120)
+	cli := torcli.(*Client)
 	defer cli.Close()
 
 	assert.Nil(t, err)
