@@ -49,5 +49,5 @@ func TorrentArchiveFixture() (TorrentArchive, func()) {
 
 	localStore := store.NewLocalStore(config)
 
-	return NewLocalTorrentArchive(config, localStore), cleanup
+	return NewLocalTorrentArchive(localStore), cleanup
 }

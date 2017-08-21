@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/client/store"
-	"code.uber.internal/infra/kraken/client/torrentclient"
+	"code.uber.internal/infra/kraken/client/torrent"
 
 	sd "github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/uuid"
@@ -15,11 +15,11 @@ import (
 // Uploads b
 type Uploads struct {
 	store  *store.LocalStore
-	client *torrentclient.Client
+	client torrent.Client
 }
 
 // NewUploads creates a new Uploads
-func NewUploads(cl *torrentclient.Client, s *store.LocalStore) *Uploads {
+func NewUploads(cl torrent.Client, s *store.LocalStore) *Uploads {
 	return &Uploads{
 		store:  s,
 		client: cl,

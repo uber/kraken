@@ -46,8 +46,7 @@ proto:
 	$(foreach pb, $(PROTO_SRCS), $(MAKE_PROTO);)
 
 tracker/tracker: tracker/main.go $(wildcard tracker/*.go config/tracker/*.go)
-client/bin/kraken-agent/kraken-agent: proto
-	client/bin/kraken-agent/main.go $(wildcard client/*.go)
+client/bin/kraken-agent/kraken-agent: proto client/bin/kraken-agent/main.go $(wildcard client/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 tools/bin/kraken-cli/kraken:  client/cli/kraken-cli.go tools/bin/kraken-cli/main.go config/origin/config.go
 

@@ -42,6 +42,7 @@ func NewMetaInfoFromInfo(info Info, announce string) (*MetaInfo, error) {
 
 // NewMetaInfoFromFile creates MetaInfo from a file
 func NewMetaInfoFromFile(
+	name string,
 	fp string,
 	piecelength int64,
 	announceList AnnounceList,
@@ -49,7 +50,7 @@ func NewMetaInfoFromFile(
 	createdBy string,
 	encoding string) (*MetaInfo, error) {
 
-	info, err := NewInfoFromFile(fp, piecelength)
+	info, err := NewInfoFromFile(name, fp, piecelength)
 	if err != nil {
 		return nil, err
 	}

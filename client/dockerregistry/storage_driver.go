@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/client/store"
-	"code.uber.internal/infra/kraken/client/torrentclient"
+	"code.uber.internal/infra/kraken/client/torrent"
 	"code.uber.internal/infra/kraken/configuration"
 
 	"code.uber.internal/go-common.git/x/log"
@@ -75,7 +75,7 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 	if !ok || clientParam == nil {
 		log.Fatal("Failed to create storage driver. No torrent agent initated.")
 	}
-	client := clientParam.(*torrentclient.Client)
+	client := clientParam.(torrent.Client)
 
 	metricsParam, ok := params["metrics"]
 	if !ok || metricsParam == nil {
@@ -94,7 +94,7 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 // KrakenStorageDriver is a storage driver
 type KrakenStorageDriver struct {
 	config  *configuration.Config
-	tcl     *torrentclient.Client
+	tcl     torrent.Client
 	store   *store.LocalStore
 	blobs   *Blobs
 	uploads *Uploads
@@ -106,7 +106,7 @@ type KrakenStorageDriver struct {
 func NewKrakenStorageDriver(
 	c *configuration.Config,
 	s *store.LocalStore,
-	cl *torrentclient.Client,
+	cl torrent.Client,
 	metrics tally.Scope) (*KrakenStorageDriver, error) {
 	tags, err := NewDockerTags(c, s, cl, metrics)
 	if err != nil {

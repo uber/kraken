@@ -12,9 +12,10 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store"
-	"code.uber.internal/infra/kraken/client/torrentclient"
+	"code.uber.internal/infra/kraken/client/torrent"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/utils"
+
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 )
@@ -47,7 +48,7 @@ type DockerTags struct {
 
 	config  *configuration.Config
 	store   *store.LocalStore
-	client  *torrentclient.Client
+	client  torrent.Client
 	metrics tally.Scope
 }
 
@@ -66,7 +67,7 @@ func (s TagSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s TagSlice) Len() int           { return len(s) }
 
 // NewDockerTags returns new DockerTags
-func NewDockerTags(c *configuration.Config, s *store.LocalStore, cl *torrentclient.Client, metrics tally.Scope) (Tags, error) {
+func NewDockerTags(c *configuration.Config, s *store.LocalStore, cl torrent.Client, metrics tally.Scope) (Tags, error) {
 	err := os.MkdirAll(c.TagDir, 0755)
 	if err != nil {
 		return nil, err
@@ -313,7 +314,7 @@ func (t *DockerTags) getOrDownloadAllLayersAndCreateTag(repo, tag string) error 
 			var err error
 			_, err = t.store.GetCacheFileStat(l)
 			if err != nil && os.IsNotExist(err) {
-				err = t.client.DownloadByName(l)
+				err = t.client.DownloadTorrent(l)
 			}
 
 			if err != nil {
