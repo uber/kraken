@@ -3,13 +3,10 @@ package store
 import (
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"path"
 	"regexp"
-	"strconv"
 	"strings"
-	"time"
 
 	"code.uber.internal/infra/kraken/client/store/base"
 	"code.uber.internal/infra/kraken/client/store/refcountable"
@@ -45,16 +42,6 @@ func NewLocalStore(config *configuration.Config) *LocalStore {
 		log.Fatal(err)
 	}
 
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	storeid := strconv.FormatInt(int64(r.Int()), 10)
-	upload := agentFileState(fmt.Sprintf("%s_upload", storeid))
-	download := agentFileState(fmt.Sprintf("%s_download", storeid))
-	cache := agentFileState(fmt.Sprintf("%s_cache", storeid))
-
-	registerFileState(upload, config.UploadDir)
-	registerFileState(download, config.DownloadDir)
-	registerFileState(cache, config.CacheDir)
-
 	uploadBackend := base.NewLocalFileStoreDefault()
 	var downloadCacheBackend base.FileStore
 	if config.TagDeletion.Enable {
@@ -66,9 +53,9 @@ func NewLocalStore(config *configuration.Config) *LocalStore {
 		uploadBackend:        uploadBackend,
 		downloadCacheBackend: downloadCacheBackend,
 		config:               config,
-		stateUpload:          upload,
-		stateDownload:        download,
-		stateCache:           cache,
+		stateUpload:          agentFileState{directory: config.UploadDir},
+		stateDownload:        agentFileState{directory: config.DownloadDir},
+		stateCache:           agentFileState{directory: config.CacheDir},
 	}
 }
 
