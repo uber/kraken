@@ -47,7 +47,7 @@ func PeerInfoFixture() *PeerInfo {
 // with the given MetaInfo.
 func PeerInfoForMetaInfoFixture(mi *MetaInfo) *PeerInfo {
 	p := PeerInfoFixture()
-	p.InfoHash = mi.GetInfoHash().String()
+	p.InfoHash = mi.InfoHash.String()
 	p.BytesDownloaded = rand.Int63n(mi.Info.Length)
 	p.BytesUploaded = rand.Int63n(mi.Info.Length)
 	p.BytesLeft = rand.Int63n(mi.Info.Length)

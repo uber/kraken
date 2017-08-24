@@ -102,7 +102,7 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 		require.NoError(s.UpdatePeer(p))
 	}
 
-	result, err := s.GetPeers(mi.GetInfoHash().String())
+	result, err := s.GetPeers(mi.InfoHash.String())
 	require.NoError(err)
 	require.Equal(sortedPeerIDs(peers), sortedPeerIDs(result))
 }
@@ -146,7 +146,7 @@ func TestRedisStorageCreateAndGetTorrent(t *testing.T) {
 
 	require.NoError(s.CreateTorrent(mi))
 
-	result, err := s.GetTorrent(mi.GetName())
+	result, err := s.GetTorrent(mi.Name())
 	require.NoError(err)
 
 	expected, err := mi.Serialize()
