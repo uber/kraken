@@ -141,7 +141,7 @@ func (s *RedisStorage) CreateTorrent(mi *torlib.MetaInfo) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.Do("SETEX", torrentKey(mi.GetName()), s.cfg.TorrentTTLSecs, v)
+	_, err = c.Do("SETEX", torrentKey(mi.Name()), s.cfg.TorrentTTLSecs, v)
 	return err
 }
 
