@@ -2,6 +2,7 @@ package torlib
 
 import (
 	"crypto/sha1"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,7 +16,7 @@ import (
 // Info is a torrent info dictionary.
 type Info struct {
 	PieceLength int64  `bencode:"piece length"`
-	Pieces      []byte `bencode:"pieces"`
+	Pieces      Pieces `bencode:"pieces"`
 	Name        string `bencode:"name"`
 	Length      int64  `bencode:"length"`
 }
@@ -96,7 +97,7 @@ func (info *Info) ComputeInfoHash() (InfoHash, error) {
 
 // Serialize returns info as bytes
 func (info *Info) Serialize() ([]byte, error) {
-	bytes, err := bencode.Marshal(info)
+	bytes, err := json.Marshal(info)
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -110,7 +111,7 @@ func (info *Info) pieceHashSize() int {
 }
 
 // generatePieces hashes file content in chunks given path and pieceLength, and returns file length and hashes
-func generatePieces(fp string, pieceLength int64) (int64, []byte, error) {
+func generatePieces(fp string, pieceLength int64) (int64, Pieces, error) {
 	if pieceLength <= 0 {
 		return 0, nil, errors.New("piece length must be positive")
 	}
@@ -154,5 +155,5 @@ func generatePieces(fp string, pieceLength int64) (int64, []byte, error) {
 		}
 	}
 
-	return stat.Size(), pieces, nil
+	return stat.Size(), Pieces(pieces), nil
 }

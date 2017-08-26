@@ -1,11 +1,10 @@
 package torlib
 
 import (
-	"io"
+	"encoding/json"
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken-torrent/bencode"
 )
 
 // AnnounceList is a list of tracker announcers
@@ -25,7 +24,7 @@ type MetaInfo struct {
 	// infohash is computed by MetaInfo.Info
 	// we store a copy of the hash here to avoid unnecessary rehash
 	// infohash must be set before this struct is used
-	InfoHash InfoHash
+	InfoHash InfoHash `json:"-"`
 }
 
 // NewMetaInfoFromInfo create MetaInfo from Info
@@ -74,7 +73,7 @@ func NewMetaInfoFromFile(
 // NewMetaInfoFromBytes creates MetaInfo from bytes
 func NewMetaInfoFromBytes(data []byte) (*MetaInfo, error) {
 	var mi MetaInfo
-	err := bencode.Unmarshal(data, &mi)
+	err := json.Unmarshal(data, &mi)
 	if err != nil {
 		return nil, err
 	}
@@ -92,14 +91,9 @@ func (mi *MetaInfo) Name() string {
 	return mi.Info.Name
 }
 
-// WriteBencode encodes to bencoded form.
-func (mi *MetaInfo) WriteBencode(w io.Writer) error {
-	return bencode.NewEncoder(w).Encode(mi)
-}
-
 // Serialize returns metainfo as a bencoded string
 func (mi *MetaInfo) Serialize() (string, error) {
-	bytes, err := bencode.Marshal(mi)
+	bytes, err := json.Marshal(mi)
 	if err != nil {
 		log.Error(err)
 		return "", err

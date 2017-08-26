@@ -1,7 +1,6 @@
 package service
 
 import (
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -29,7 +28,7 @@ type announceHandler struct {
 func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
-	infoHash := hex.EncodeToString([]byte(q.Get("info_hash")))
+	infoHash := q.Get("info_hash")
 	peerID := q.Get("peer_id")
 	peerPortStr := q.Get("port")
 	peerIP := q.Get("ip")

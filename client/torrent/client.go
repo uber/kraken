@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/docker/distribution/uuid"
@@ -51,8 +52,9 @@ type SchedulerClient struct {
 func NewSchedulerClient(config *configuration.Config, store *store.LocalStore) (Client, error) {
 	peerID := torlib.PeerIDFixture()
 	// TODO: Move this to .yaml
+	trackerAddr := strings.TrimPrefix(config.TrackerURL, "http://")
 	schedulerConfig := scheduler.Config{
-		TrackerAddr:                  config.TrackerURL,
+		TrackerAddr:                  trackerAddr,
 		MaxOpenConnectionsPerTorrent: 20,
 		AnnounceInterval:             500 * time.Millisecond,
 		DialTimeout:                  5 * time.Second,
@@ -216,6 +218,14 @@ func (c *SchedulerClient) CreateTorrentFromFile(name, filepath string) error {
 		}).Error("Failed to create torrent")
 	}
 
+	err = c.postTorrentMetaInfo(mi)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"name":  name,
+			"error": err,
+		}).Error("Failed to create torrent")
+	}
+
 	// create torrent from info
 	errc := <-c.scheduler.AddTorrent(mi)
 	if errc != nil {
@@ -304,6 +314,21 @@ func (c *SchedulerClient) PostManifest(repo, tag, manifest string) error {
 	name := fmt.Sprintf("%s:%s", repo, tag)
 	postURL := c.config.TrackerURL + "/manifest/" + url.QueryEscape(name)
 	_, err = c.sendRequestToTracker("POST", postURL, reader)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *SchedulerClient) postTorrentMetaInfo(mi *torlib.MetaInfo) error {
+	// get torrent info hash
+	trackerURL := fmt.Sprintf("%s/info?name=%s&info_hash=%s", c.config.TrackerURL, mi.Name(), mi.InfoHash.HexString())
+	miRaw, err := mi.Serialize()
+	if err != nil {
+		return err
+	}
+	_, err = c.sendRequestToTracker("POST", trackerURL, bytes.NewBufferString(miRaw))
 	if err != nil {
 		return err
 	}

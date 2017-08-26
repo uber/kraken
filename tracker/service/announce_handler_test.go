@@ -13,8 +13,7 @@ import (
 )
 
 func TestAnnounceEndPoint(t *testing.T) {
-	mi, err := torlib.NewMetaInfoFromBytes([]byte(metaStr))
-	assert.Nil(t, err)
+	mi := torlib.MetaInfoFixture()
 	peer := &torlib.PeerInfo{
 		InfoHash: mi.InfoHash.HexString(),
 		PeerID:   "peer",
@@ -67,8 +66,8 @@ func TestAnnounceEndPoint(t *testing.T) {
 			Event:           peer.Event,
 		}
 
-		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString()).Return([]*torlib.PeerInfo{peer}, nil)
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
+		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString()).Return([]*torlib.PeerInfo{peer}, nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
 		testutils.RequireStatus(t, response, 200)
 		announceResponse := torlib.AnnouncerResponse{}
