@@ -103,9 +103,7 @@ func TestMySQLGetTorrent(t *testing.T) {
 
 func TestMySQLCreateTorrent(t *testing.T) {
 	assert := require.New(t)
-	str := `d8:announce10:trackerurl4:infod6:lengthi2e4:name8:torrent012:piece lengthi1e6:pieces0:eePASS`
-	mi, err := torlib.NewMetaInfoFromBytes([]byte(str))
-	assert.Nil(err)
+	mi := torlib.MetaInfoFixture()
 	metaRaw, err := mi.Serialize()
 	assert.Nil(err)
 

@@ -24,9 +24,7 @@ func TestTestAnnouncer(t *testing.T) {
 	addr, stop := TestAnnouncer()
 	defer stop()
 
-	str := `d8:announce10:trackerurl4:infod6:lengthi2e4:name8:torrent012:piece lengthi1e6:pieces0:eePASS`
-	mi, err := torlib.NewMetaInfoFromBytes([]byte(str))
-	require.NoError(err)
+	mi := torlib.MetaInfoFixture()
 	p1 := &torlib.PeerInfo{
 		PeerID: "peer1",
 	}

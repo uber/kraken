@@ -10,12 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const metaStr = `d8:announce10:trackerurl4:infod6:lengthi2e4:name8:torrent012:piece lengthi1e6:pieces0:eePASS`
-
 func TestGetMetaInfoHandler(t *testing.T) {
-	_, err := torlib.NewMetaInfoFromBytes([]byte(metaStr))
+	mi := torlib.MetaInfoFixture()
+	serialized, err := mi.Serialize()
 	assert.Nil(t, err)
-	name := "asdfhjkl"
+	name := mi.Name()
 
 	t.Run("Return 400 on empty name", func(t *testing.T) {
 		getRequest, _ := http.NewRequest("GET",
@@ -46,20 +45,21 @@ func TestGetMetaInfoHandler(t *testing.T) {
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()
 
-		mocks.datastore.EXPECT().GetTorrent(name).Return(metaStr, nil)
+		mocks.datastore.EXPECT().GetTorrent(name).Return(serialized, nil)
 		response := mocks.CreateHandlerAndServeRequest(getRequest)
 		assert.Equal(t, 200, response.StatusCode)
-		data := make([]byte, len(metaStr))
+		data := make([]byte, len(serialized))
 		response.Body.Read(data)
-		assert.Equal(t, metaStr, string(data[:]))
+		assert.Equal(t, serialized, string(data[:]))
 	})
 }
 
 func TestPostMetaInfoHandler(t *testing.T) {
-	mi, err := torlib.NewMetaInfoFromBytes([]byte(metaStr))
-	assert.Nil(t, err)
+	mi := torlib.MetaInfoFixture()
 	infoHash := mi.InfoHash
-	name := "asdfhjkl"
+	serialized, err := mi.Serialize()
+	assert.Nil(t, err)
+	name := mi.Name()
 
 	t.Run("Return 400 on empty name or infohash", func(t *testing.T) {
 		getRequest, _ := http.NewRequest("POST",
@@ -78,7 +78,7 @@ func TestPostMetaInfoHandler(t *testing.T) {
 
 	t.Run("Return 200", func(t *testing.T) {
 		getRequest, _ := http.NewRequest("POST",
-			"/info?name="+name+"&info_hash="+infoHash.HexString(), bytes.NewBuffer([]byte(metaStr)))
+			"/info?name="+name+"&info_hash="+infoHash.HexString(), bytes.NewBuffer([]byte(serialized)))
 
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()

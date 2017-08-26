@@ -1,7 +1,6 @@
 package service
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -69,13 +68,8 @@ func performRequest(handler http.Handler, request *http.Request) *http.Response 
 }
 
 func createAnnouncePath(mi *torlib.MetaInfo, p *torlib.PeerInfo) string {
-	rawInfoHash, err := hex.DecodeString(mi.InfoHash.HexString())
-	if err != nil {
-		panic(err)
-	}
-
 	v := url.Values{}
-	v.Set("info_hash", string(rawInfoHash))
+	v.Set("info_hash", mi.InfoHash.HexString())
 	v.Set("peer_id", p.PeerID)
 	v.Set("ip", p.IP)
 	v.Set("port", strconv.FormatInt(p.Port, 10))
