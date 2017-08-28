@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -31,29 +32,29 @@ func (r statsdReportor) create(parameters map[string]interface{}) (tally.Scope, 
 	// Get parameters
 	typeParam, ok := parameters["type"]
 	if !ok || typeParam == nil {
-		return nil, nil, fmt.Errorf("Failed to create metrics reporter. No type provided.")
+		return nil, nil, errors.New("no type provided")
 	}
 	metricType, ok := typeParam.(string)
 	if !ok || metricType != statsdName {
-		return nil, nil, fmt.Errorf("Failed to create metrics reporter. Type is not %s", statsdName)
+		return nil, nil, fmt.Errorf("type is not %s", statsdName)
 	}
 
 	hostportParam, ok := parameters["hostPort"]
 	if !ok || hostportParam == nil {
-		return nil, nil, fmt.Errorf("Failed to create metrics reporter. No hostPort provided.")
+		return nil, nil, errors.New("no hostPort provided")
 	}
 	metricHostPort, ok := hostportParam.(string)
 	if !ok {
-		return nil, nil, fmt.Errorf("Failed to create metric reporter. Invalid hostPort parameter: %v", hostportParam)
+		return nil, nil, fmt.Errorf("invalid hostPort parameter: %v", hostportParam)
 	}
 
 	prefixParam, ok := parameters["prefix"]
 	if !ok || prefixParam == nil {
-		return nil, nil, fmt.Errorf("Failed to create metrics reporter. No prefix provided.")
+		return nil, nil, errors.New("no prefix provided")
 	}
 	metricPrefix, ok := prefixParam.(string)
 	if !ok {
-		return nil, nil, fmt.Errorf("Failed to create metric reporter. Invalid prefix parameter: %v", prefixParam)
+		return nil, nil, fmt.Errorf("invalid prefix parameter: %v", prefixParam)
 	}
 
 	// Create statter, reporter and scope

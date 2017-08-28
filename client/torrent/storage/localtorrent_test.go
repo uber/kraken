@@ -141,15 +141,15 @@ func TestLocalTorrentWriteSamePieceConcurrent(t *testing.T) {
 	assert.Nil(err)
 
 	wg := &sync.WaitGroup{}
-	wg.Add(1000)
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 250; i++ {
+		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			pieceIndex := int(math.Mod(float64(i), float64(len(data))))
 			tor.WritePiece([]byte{data[pieceIndex]}, pieceIndex)
 			time.Sleep(5 * time.Millisecond)
 			readData, err := tor.ReadPiece(pieceIndex)
-			assert.Nil(err)
+			assert.NoError(err)
 			assert.Equal(1, len(readData))
 			assert.Equal(data[pieceIndex], readData[0])
 		}(i)
