@@ -13,25 +13,27 @@ import (
 
 // InitializeAPI instantiates a new web-app for the tracker
 func InitializeAPI(
-	appCfg config.AppConfig,
-	store storage.Storage,
+	cfg config.AppConfig,
+	peerStore storage.PeerStore,
+	torrentStore storage.TorrentStore,
+	manifestStore storage.ManifestStore,
 ) http.Handler {
 
 	policy, ok := peerhandoutpolicy.Get(
-		appCfg.PeerHandoutPolicy.Priority, appCfg.PeerHandoutPolicy.Sampling)
+		cfg.PeerHandoutPolicy.Priority, cfg.PeerHandoutPolicy.Sampling)
 	if !ok {
 		log.Fatalf(
 			"Peer handout policy not found: priority=%s sampling=%s",
-			appCfg.PeerHandoutPolicy.Priority, appCfg.PeerHandoutPolicy.Sampling)
+			cfg.PeerHandoutPolicy.Priority, cfg.PeerHandoutPolicy.Sampling)
 	}
 	announce := &announceHandler{
-		config: appCfg.Announcer,
-		store:  store,
+		config: cfg.Announcer,
+		store:  peerStore,
 		policy: policy,
 	}
 	health := &healthHandler{}
-	infohash := &metainfoHandler{store}
-	manifest := &manifestHandler{store}
+	infohash := &metainfoHandler{torrentStore}
+	manifest := &manifestHandler{manifestStore}
 
 	r := chi.NewRouter()
 	r.Get("/health", health.Get)

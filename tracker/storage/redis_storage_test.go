@@ -49,7 +49,8 @@ func TestRedisStorageGetPeersOnlyReturnsTaggedFields(t *testing.T) {
 
 	flushdb(cfg)
 
-	s := NewRedisStorage(cfg)
+	s, err := NewRedisStorage(cfg)
+	require.NoError(err)
 
 	p := torlib.PeerInfoFixture()
 
@@ -77,7 +78,8 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 
 	flushdb(cfg)
 
-	s := NewRedisStorage(cfg)
+	s, err := NewRedisStorage(cfg)
+	require.NoError(err)
 
 	now := time.Now()
 	s.now = func() time.Time { return now }
@@ -116,7 +118,8 @@ func TestRedisStoragePeerExpiration(t *testing.T) {
 
 	flushdb(cfg)
 
-	s := NewRedisStorage(cfg)
+	s, err := NewRedisStorage(cfg)
+	require.NoError(err)
 
 	p := torlib.PeerInfoFixture()
 
@@ -140,7 +143,8 @@ func TestRedisStorageCreateAndGetTorrent(t *testing.T) {
 
 	flushdb(cfg)
 
-	s := NewRedisStorage(cfg)
+	s, err := NewRedisStorage(cfg)
+	require.NoError(err)
 
 	mi := torlib.MetaInfoFixture()
 
