@@ -27,6 +27,17 @@ var ErrTorrentAlreadyRegistered = errors.New("torrent already registered in sche
 // ErrSchedulerStopped returns when an action fails due to the Scheduler being stopped.
 var ErrSchedulerStopped = errors.New("scheduler has been stopped")
 
+// torrentControl bundles torrent control structures.
+type torrentControl struct {
+	Errors     []chan error
+	Dispatcher *dispatcher
+	Complete   bool
+}
+
+func newTorrentControl(d *dispatcher) *torrentControl {
+	return &torrentControl{Dispatcher: d}
+}
+
 // Scheduler manages global state for the peer. This includes:
 // - Opening torrents.
 // - Announcing to the tracker.
@@ -48,10 +59,9 @@ type Scheduler struct {
 
 	// The following fields define the core Scheduler "state", and should only
 	// be accessed from within the event loop.
-	dispatchers   map[torlib.InfoHash]*dispatcher // Active seeding / leeching torrents.
-	connState     *connState
-	announceQueue *announceQueue
-	torrentErrors map[torlib.InfoHash]chan error // AddTorrent error channels.
+	torrentControls map[torlib.InfoHash]*torrentControl // Active seeding / leeching torrents.
+	connState       *connState
+	announceQueue   *announceQueue
 
 	eventLoop *eventLoop
 
@@ -160,10 +170,9 @@ func New(
 			LocalPeerID: peerID,
 			EventLoop:   eventLoop,
 		},
-		dispatchers:            make(map[torlib.InfoHash]*dispatcher),
+		torrentControls:        make(map[torlib.InfoHash]*torrentControl),
 		connState:              newConnState(peerID, config),
 		announceQueue:          newAnnounceQueue(),
-		torrentErrors:          make(map[torlib.InfoHash]chan error),
 		eventLoop:              eventLoop,
 		listener:               l,
 		announceTicker:         time.NewTicker(config.AnnounceInterval),
@@ -192,8 +201,10 @@ func (s *Scheduler) Stop() {
 		}
 
 		// Notify local clients of pending torrents that they will not complete.
-		for _, errc := range s.torrentErrors {
-			errc <- ErrSchedulerStopped
+		for _, ctrl := range s.torrentControls {
+			for _, errc := range ctrl.Errors {
+				errc <- ErrSchedulerStopped
+			}
 		}
 
 		s.log().Info("Stop complete")
@@ -409,12 +420,11 @@ func (s *Scheduler) addOutgoingConn(c *conn, t storage.Torrent) error {
 		c.Close()
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
-	d, ok := s.dispatchers[t.InfoHash()]
+	ctrl, ok := s.torrentControls[t.InfoHash()]
 	if !ok {
-		// We should have created the dispatcher before sending a handshake.
-		return errors.New("no dispatcher found")
+		return errors.New("torrent must be created before sending handshake")
 	}
-	if err := d.AddConn(c); err != nil {
+	if err := ctrl.Dispatcher.AddConn(c); err != nil {
 		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
 	}
 	return nil
@@ -425,12 +435,12 @@ func (s *Scheduler) addIncomingConn(c *conn, t storage.Torrent) error {
 		c.Close()
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
-	d, ok := s.dispatchers[t.InfoHash()]
+	ctrl, ok := s.torrentControls[t.InfoHash()]
 	if !ok {
-		d = s.dispatcherFactory.New(t)
-		s.dispatchers[t.InfoHash()] = d
+		ctrl = newTorrentControl(s.dispatcherFactory.New(t))
+		s.torrentControls[t.InfoHash()] = ctrl
 	}
-	if err := d.AddConn(c); err != nil {
+	if err := ctrl.Dispatcher.AddConn(c); err != nil {
 		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
 	}
 	return nil
