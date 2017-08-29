@@ -16,6 +16,7 @@ pkg/
 tracker/tracker
 client/bin/kraken-agent/kraken-agent
 tools/bin/puller/puller
+tools/bin/kraken-cli/kraken
 
 # tmp migration files
 [0-9]*_-dir.go

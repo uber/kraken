@@ -150,25 +150,25 @@ func hasConn(s *Scheduler, peerID torlib.PeerID, infoHash torlib.InfoHash) bool 
 	return <-result
 }
 
-type hasDispatcherEvent struct {
+type hasTorrentEvent struct {
 	infoHash torlib.InfoHash
 	result   chan bool
 }
 
-func (e hasDispatcherEvent) Apply(s *Scheduler) {
-	_, ok := s.dispatchers[e.infoHash]
+func (e hasTorrentEvent) Apply(s *Scheduler) {
+	_, ok := s.torrentControls[e.infoHash]
 	e.result <- ok
 }
 
-func waitForDispatcherRemoved(t *testing.T, s *Scheduler, infoHash torlib.InfoHash) {
+func waitForTorrentRemoved(t *testing.T, s *Scheduler, infoHash torlib.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
-		s.eventLoop.Send(hasDispatcherEvent{infoHash, result})
+		s.eventLoop.Send(hasTorrentEvent{infoHash, result})
 		return !<-result
 	})
 	if err != nil {
 		t.Fatalf(
-			"scheduler=%s did not remove dispatcher for hash=%s: %s",
+			"scheduler=%s did not remove torrent for hash=%s: %s",
 			s.peerID, infoHash, err)
 	}
 }

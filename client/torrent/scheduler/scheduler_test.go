@@ -249,9 +249,45 @@ func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 	require.NoError(<-leecher.Scheduler.AddTorrent(tf.MetaInfo))
 	checkContent(require, leecherTor, tf.Content)
 
-	waitForDispatcherRemoved(t, seeder.Scheduler, tf.MetaInfo.InfoHash)
-	waitForDispatcherRemoved(t, leecher.Scheduler, tf.MetaInfo.InfoHash)
+	waitForTorrentRemoved(t, seeder.Scheduler, tf.MetaInfo.InfoHash)
+	waitForTorrentRemoved(t, leecher.Scheduler, tf.MetaInfo.InfoHash)
 
 	require.False(hasConn(seeder.Scheduler, leecher.Scheduler.peerID, tf.MetaInfo.InfoHash))
 	require.False(hasConn(leecher.Scheduler, seeder.Scheduler.peerID, tf.MetaInfo.InfoHash))
+}
+
+func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
+	require := require.New(t)
+
+	trackerAddr, stop := trackerservice.TestAnnouncer()
+	defer stop()
+
+	tf := torlib.TestTorrentFileFixture()
+	config := genConfig(trackerAddr)
+
+	seeder := genTestPeer(config)
+	defer seeder.Stop()
+	writeTorrent(seeder.TorrentArchive, tf.MetaInfo, tf.Content)
+	require.NoError(<-seeder.Scheduler.AddTorrent(tf.MetaInfo))
+
+	leecher := genTestPeer(config)
+	defer leecher.Stop()
+	leecherTor, err := leecher.TorrentArchive.CreateTorrent(tf.MetaInfo.InfoHash, tf.MetaInfo)
+	require.NoError(err)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Multiple goroutines should be able to wait on the same torrent.
+			require.NoError(<-leecher.Scheduler.AddTorrent(tf.MetaInfo))
+		}()
+	}
+	wg.Wait()
+
+	checkContent(require, leecherTor, tf.Content)
+
+	// After the torrent is complete, further calls to AddTorrent should succeed immediately.
+	require.NoError(<-leecher.Scheduler.AddTorrent(tf.MetaInfo))
 }
