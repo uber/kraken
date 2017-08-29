@@ -20,11 +20,8 @@ func init() {
 
 func genConfig(trackerAddr string) Config {
 	return Config{
-		TrackerAddr:                  trackerAddr,
-		MaxOpenConnectionsPerTorrent: 20,
-		AnnounceInterval:             500 * time.Millisecond,
-		DialTimeout:                  5 * time.Second,
-		WriteTimeout:                 5 * time.Second,
+		TrackerAddr:      trackerAddr,
+		AnnounceInterval: 500 * time.Millisecond,
 		// Buffers are just a performance optimization, so a zero-sized
 		// buffer will instantly force any deadlock conditions.
 		SenderBufferSize:           0,
