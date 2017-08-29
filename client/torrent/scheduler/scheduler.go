@@ -67,6 +67,58 @@ type Scheduler struct {
 	wg   sync.WaitGroup // Waits for eventLoop and listenLoop to exit.
 }
 
+func applyDefaults(c Config) (Config, error) {
+	if c.TrackerAddr == "" {
+		return c, errors.New("no tracker addr specified")
+	}
+	if c.MaxOpenConnectionsPerTorrent == 0 {
+		c.MaxOpenConnectionsPerTorrent = 20
+	}
+	if c.AnnounceInterval == 0 {
+		c.AnnounceInterval = 30 * time.Second
+	}
+	if c.DialTimeout == 0 {
+		c.DialTimeout = 5 * time.Second
+	}
+	if c.WriteTimeout == 0 {
+		c.WriteTimeout = 5 * time.Second
+	}
+	if c.SenderBufferSize == 0 {
+		c.SenderBufferSize = 100
+	}
+	if c.ReceiverBufferSize == 0 {
+		c.ReceiverBufferSize = 100
+	}
+	if c.IdleSeederTTL == 0 {
+		c.IdleSeederTTL = 10 * time.Minute
+	}
+	if c.PreemptionInterval == 0 {
+		c.PreemptionInterval = 30 * time.Second
+	}
+	if c.IdleConnTTL == 0 {
+		c.IdleConnTTL = 5 * time.Minute
+	}
+	if c.ConnTTL == 0 {
+		c.ConnTTL = time.Hour
+	}
+	if c.InitialBlacklistExpiration == 0 {
+		c.InitialBlacklistExpiration = time.Minute
+	}
+	if c.BlacklistExpirationBackoff == 0 {
+		c.BlacklistExpirationBackoff = 2
+	}
+	if c.MaxBlacklistExpiration == 0 {
+		c.MaxBlacklistExpiration = 30 * time.Minute
+	}
+	if c.ExpiredBlacklistEntryTTL == 0 {
+		c.ExpiredBlacklistEntryTTL = 6 * time.Hour
+	}
+	if c.BlacklistCleanupInterval == 0 {
+		c.BlacklistCleanupInterval = 10 * time.Minute
+	}
+	return c, nil
+}
+
 // New creates and starts a Scheduler. Incoming connections are accepted on the
 // addr, and the local peer is announced as part of the datacenter.
 func New(
@@ -76,6 +128,11 @@ func New(
 	ta storage.TorrentArchive,
 	config Config) (*Scheduler, error) {
 
+	var err error
+	config, err = applyDefaults(config)
+	if err != nil {
+		return nil, fmt.Errorf("invalid config: %s", err)
+	}
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
