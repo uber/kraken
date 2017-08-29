@@ -11,17 +11,12 @@ import (
 	config "code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
+	"code.uber.internal/infra/kraken/tracker/storage"
 )
-
-// announceStore is a subset of the storage.Storage interface.
-type announceStore interface {
-	UpdatePeer(p *torlib.PeerInfo) error
-	GetPeers(infoHash string) ([]*torlib.PeerInfo, error)
-}
 
 type announceHandler struct {
 	config config.AnnouncerConfig
-	store  announceStore
+	store  storage.PeerStore
 	policy peerhandoutpolicy.PeerHandoutPolicy
 }
 

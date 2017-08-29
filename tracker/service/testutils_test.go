@@ -52,6 +52,8 @@ func (m *testMocks) CreateHandler() http.Handler {
 	return InitializeAPI(
 		m.appCfg,
 		m.datastore,
+		m.datastore,
+		m.datastore,
 	)
 }
 

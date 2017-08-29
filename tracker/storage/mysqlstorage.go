@@ -21,15 +21,15 @@ import (
 
 // MySQLStorage is a MySQL implementaion of a Storage interface
 type MySQLStorage struct {
-	appCfg config.AppConfig
-	db     *sqlx.DB
+	cfg config.MySQLConfig
+	db  *sqlx.DB
 }
 
 // NewMySQLStorage creates and returns new MySQL storage
-func NewMySQLStorage(appCfg config.AppConfig) (Storage, error) {
+func NewMySQLStorage(cfg config.MySQLConfig) (*MySQLStorage, error) {
 
-	dsnTemplate := appCfg.DBConfig.GetDSN()
-	username := appCfg.Nemo.Username["kraken"]
+	dsnTemplate := cfg.GetDSN()
+	username := cfg.Nemo.Username["kraken"]
 
 	// check if we need to str format,
 	// we don't have to do that in integration testing suite
@@ -38,26 +38,26 @@ func NewMySQLStorage(appCfg config.AppConfig) (Storage, error) {
 	dsn := dsnTemplate
 	n := strings.Count(dsnTemplate, "%s")
 	if n > 0 {
-		dsn = fmt.Sprintf(dsnTemplate, username, appCfg.Nemo.Password[username])
+		dsn = fmt.Sprintf(dsnTemplate, username, cfg.Nemo.Password[username])
 	}
 
-	db, err := sqlx.Open(appCfg.DBConfig.EngineName, dsn)
+	db, err := sqlx.Open("mysql", dsn)
 	if err != nil {
 		log.Error("Failed to connect to datastore: ", err.Error())
 		return nil, err
 	}
 
 	return &MySQLStorage{
-		appCfg: appCfg,
-		db:     db,
+		cfg: cfg,
+		db:  db,
 	}, nil
 }
 
 // RunDBMigration detect and Run DB migration if it is needed
-func RunDBMigration(appCfg config.AppConfig) error {
+func RunDBMigration(cfg config.MySQLConfig) error {
 
-	dsnTemplate := appCfg.DBConfig.GetDSN()
-	username := appCfg.Nemo.Username["kraken"]
+	dsnTemplate := cfg.GetDSN()
+	username := cfg.Nemo.Username["kraken"]
 
 	// check if we need to str format,
 	// we don't have to do that in integration testing suite
@@ -66,11 +66,11 @@ func RunDBMigration(appCfg config.AppConfig) error {
 	dsn := dsnTemplate
 	n := strings.Count(dsnTemplate, "%s")
 	if n > 0 {
-		dsn = fmt.Sprintf(dsnTemplate, username, appCfg.Nemo.Password[username])
+		dsn = fmt.Sprintf(dsnTemplate, username, cfg.Nemo.Password[username])
 	}
 
 	// Open our database connection
-	db, err := sql.Open(appCfg.DBConfig.EngineName, dsn)
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		log.Error("Failed to connect to datastore: ", err.Error())
 		return err
@@ -85,7 +85,7 @@ func RunDBMigration(appCfg config.AppConfig) error {
 	}
 	arguments := []string{}
 	// Get the latest possible migration
-	err = goose.Run("up", db, appCfg.DBConfig.MigrationsPath, arguments...)
+	err = goose.Run("up", db, cfg.MigrationsPath, arguments...)
 	if err != nil {
 		log.Error("could not run a migration: ", err)
 		return err

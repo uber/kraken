@@ -31,8 +31,8 @@ type RedisStorage struct {
 }
 
 // NewRedisStorage creates a RedisStorage instance.
-func NewRedisStorage(cfg config.RedisConfig) *RedisStorage {
-	return &RedisStorage{
+func NewRedisStorage(cfg config.RedisConfig) (*RedisStorage, error) {
+	s := &RedisStorage{
 		cfg: cfg,
 		pool: &redis.Pool{
 			Dial: func() (redis.Conn, error) {
@@ -46,6 +46,15 @@ func NewRedisStorage(cfg config.RedisConfig) *RedisStorage {
 		},
 		now: time.Now,
 	}
+
+	// Ensure we can connect to Redis.
+	c, err := s.pool.Dial()
+	if err != nil {
+		return nil, err
+	}
+	c.Close()
+
+	return s, nil
 }
 
 func (s *RedisStorage) curPeerSetWindow() int64 {
@@ -69,6 +78,7 @@ func (s *RedisStorage) UpdatePeer(p *torlib.PeerInfo) error {
 	if err != nil {
 		return err
 	}
+	defer c.Close()
 
 	w := s.curPeerSetWindow()
 	expireAt := w + int64(s.cfg.PeerSetWindowSizeSecs*s.cfg.MaxPeerSetWindows)
@@ -96,6 +106,7 @@ func (s *RedisStorage) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer c.Close()
 
 	peerIDs := make(map[string]struct{})
 	for _, w := range s.peerSetWindows() {
@@ -137,6 +148,8 @@ func (s *RedisStorage) CreateTorrent(mi *torlib.MetaInfo) error {
 	if err != nil {
 		return err
 	}
+	defer c.Close()
+
 	v, err := mi.Serialize()
 	if err != nil {
 		return err
@@ -151,5 +164,7 @@ func (s *RedisStorage) GetTorrent(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer c.Close()
+
 	return redis.String(c.Do("GET", torrentKey(name)))
 }

@@ -12,7 +12,7 @@ import (
 )
 
 type metainfoHandler struct {
-	store storage.Storage
+	store storage.TorrentStore
 }
 
 func (h *metainfoHandler) Get(w http.ResponseWriter, r *http.Request) {

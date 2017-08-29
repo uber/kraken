@@ -14,7 +14,7 @@ import (
 )
 
 type manifestHandler struct {
-	store storage.Storage
+	store storage.ManifestStore
 }
 
 func (h *manifestHandler) Get(w http.ResponseWriter, r *http.Request) {

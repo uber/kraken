@@ -14,12 +14,12 @@ import (
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 )
 
-type testAnnounceStore struct {
+type testPeerStore struct {
 	sync.Mutex
 	torrents map[string][]torlib.PeerInfo
 }
 
-func (s *testAnnounceStore) UpdatePeer(p *torlib.PeerInfo) error {
+func (s *testPeerStore) UpdatePeer(p *torlib.PeerInfo) error {
 	s.Lock()
 	defer s.Unlock()
 
@@ -38,7 +38,7 @@ func (s *testAnnounceStore) UpdatePeer(p *torlib.PeerInfo) error {
 	return nil
 }
 
-func (s *testAnnounceStore) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
+func (s *testPeerStore) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -67,7 +67,7 @@ func TestAnnouncer() (addr string, stop func()) {
 		config: config.AnnouncerConfig{
 			AnnounceInterval: 1,
 		},
-		store: &testAnnounceStore{
+		store: &testPeerStore{
 			torrents: make(map[string][]torlib.PeerInfo),
 		},
 		policy: policy,

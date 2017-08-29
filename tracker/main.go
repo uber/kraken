@@ -8,40 +8,43 @@ import (
 	"syscall"
 
 	"code.uber.internal/go-common.git/x/log"
-	cfg "code.uber.internal/infra/kraken/config/tracker"
+	config "code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/tracker/service"
 	"code.uber.internal/infra/kraken/tracker/storage"
 )
 
 func main() {
-	appCfg := cfg.Initialize()
-	log.Configure(&appCfg.Logging, false)
+	cfg := config.Initialize()
+	log.Configure(&cfg.Logging, false)
 
 	log.Info("Starting Kraken Tracker server...")
 
-	//run db migration if there is any
-	storage.RunDBMigration(appCfg)
+	// Run database migration if there is any.
+	storage.RunDBMigration(cfg.Database.MySQL)
 
-	//Register storafe backends
-	storage.Init()
-
-	//create default data storage engine
-	datastore, err := storage.CreateStorage(appCfg)
-
+	peerStore, err := storage.GetPeerStore(cfg.Database)
 	if err != nil {
-		log.Fatalf("could not create storage: %s", err.Error())
+		log.Fatalf("Could not create PeerStore: %s", err)
+	}
+	torrentStore, err := storage.GetTorrentStore(cfg.Database)
+	if err != nil {
+		log.Fatalf("Could not create TorrentStore: %s", err)
+	}
+	manifestStore, err := storage.GetManifestStore(cfg.Database)
+	if err != nil {
+		log.Fatalf("Could not create ManifestStore: %s", err)
 	}
 
-	webApp := service.InitializeAPI(appCfg, datastore)
+	webApp := service.InitializeAPI(cfg, peerStore, torrentStore, manifestStore)
 
-	log.Infof("Binding to port %d", appCfg.BackendPort)
+	log.Infof("Binding to port %d", cfg.BackendPort)
 
-	go func() { log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appCfg.BackendPort), webApp)) }()
+	go log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", cfg.BackendPort), webApp))
 
 	// Handle SIGINT and SIGTERM.
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	<-ch // blocks until shutdown is signaled
 
-	log.Info("Shutdown complete...")
+	log.Info("Shutdown complete")
 }
