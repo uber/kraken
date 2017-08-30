@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/client/dockerimage"
+	"code.uber.internal/infra/kraken/client/store"
 
 	"github.com/stretchr/testify/require"
 )
@@ -26,8 +27,8 @@ func (r *mockResponseWriter) WriteHeader(status int) {
 func TestDownloadBlobHandlerValid(t *testing.T) {
 	require := require.New(t)
 
-	c, localStore := getLocalStore()
-	defer clearLocalStore(c)
+	localStore, cleanup := store.LocalStoreFixture()
+	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
 	writer.Write([]byte("Hello world!!!"))
@@ -45,8 +46,8 @@ func TestDownloadBlobHandlerValid(t *testing.T) {
 func TestDownloadBlobHandlerInvalid(t *testing.T) {
 	require := require.New(t)
 
-	c, localStore := getLocalStore()
-	defer clearLocalStore(c)
+	localStore, cleanup := store.LocalStoreFixture()
+	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
 	writer.Write([]byte("Hello world!!!"))

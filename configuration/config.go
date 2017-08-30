@@ -1,18 +1,14 @@
 package configuration
 
 import (
-	"fmt"
 	"os"
 	"path"
 
-	"golang.org/x/time/rate"
-
 	xconfig "code.uber.internal/go-common.git/x/config"
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken-torrent"
-	"code.uber.internal/infra/kraken-torrent/storage"
-	"code.uber.internal/infra/kraken/utils"
-	rc "github.com/docker/distribution/configuration"
+	"code.uber.internal/infra/kraken/client/dockerregistry"
+	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/client/torrent"
 )
 
 const (
@@ -20,62 +16,14 @@ const (
 	configDirKey     = "UBER_CONFIG_DIR"
 )
 
-// Agent contains configuration of bittorrent agent
-type Agent struct {
-	PieceLength        int  `yaml:"piece_length"`
-	Port               int  `yaml:"port"`
-	TorrentClientPort  int  `yaml:"torrentClientPort"`
-	Seed               bool `yaml:"seed"`
-	Debug              bool `yaml:"debug"`
-	NoDHT              bool `yaml:"noDHT"`
-	NoUpload           bool `yaml:"noUpload"`
-	DisableTCP         bool `yaml:"disableTCP"`
-	DisableUTP         bool `yaml:"disableUTP"`
-	DisableEncryption  bool `yaml:"disableEncryption"`
-	ForceEncryption    bool `yaml:"forceEncryption"`
-	PreferNoEncryption bool `yaml:"preferNoEncryption"`
-	Download           struct {
-		Rate  int `yaml:"rate"`
-		Limit int `yaml:"limit"`
-	} `yaml:"download"`
-	Upload struct {
-		Rate  int `yaml:"rate"`
-		Limit int `yaml:"limit"`
-	} `yaml:"upload"`
-	// Note, if PeerID is empty, then a random id will be used
-	// by the torrent client. As such, it is likely only appropriate
-	// to manually set PeerID for testing purposes.
-	PeerID string `yaml:"peer_id"`
-}
-
 // Config contains application configuration
 type Config struct {
-	Environment string `yaml:"environment"`
-	// This is used for docker registry only running locally
-	DisableTorrent bool             `yaml:"disable_torrent"`
-	UploadDir      string           `yaml:"upload_dir"`
-	DownloadDir    string           `yaml:"download_dir"`
-	CacheDir       string           `yaml:"cache_dir"`
-	TrashDir       string           `yaml:"trash_dir"`
-	TagDir         string           `yaml:"tag_dir"`
-	TrackerURL     string           `yaml:"tracker_url"`
-	Registry       rc.Configuration `yaml:"registry"`
-	Agent          Agent            `yaml:"agent"`
-	TagDeletion    struct {
-		Enable bool `yaml:"enable"`
-		// Interval for running tag deletion in seconds
-		Interval int `yaml:"interval"`
-		// Number of tags we keep for each repo
-		RetentionCount int `yaml:"retention_count"`
-		// Least number of seconds we keep tags for
-		RetentionTime int `yaml:"retention_time"`
-	} `yaml:"tag_deletion"`
-	TrashDeletion struct {
-		Enable bool `yaml:"enable"`
-		// Interval for running trash deletion in seconds
-		Interval int `yaml:"interval"`
-	} `yaml:"trash_deletion"`
-	Metrics map[string]interface{} `yaml:"metrics"`
+	Environment string                 `yaml:"environment"`
+	Metrics     map[string]interface{} `yaml:"metrics"`
+
+	Store    store.Config          `yaml:"store"`
+	Registry dockerregistry.Config `yaml:"registry"`
+	Torrent  torrent.Config        `yaml:"torrent"`
 }
 
 // NewConfig creates a configuration based on environment var
@@ -117,50 +65,4 @@ func GetConfigFilePath(filename string) string {
 	}
 	configFile := path.Join(realConfigDir, filename)
 	return configFile
-}
-
-// CreateAgentConfig returns torrent agent's configuration
-func (c *Config) CreateAgentConfig(storage storage.ClientImpl) *torrent.Config {
-	var dl *rate.Limiter
-	var upl *rate.Limiter
-	acfg := c.Agent
-
-	if acfg.Download.Limit > 0 {
-		dl = rate.NewLimiter(rate.Limit(acfg.Download.Limit), acfg.Download.Rate)
-	} else {
-		dl = rate.NewLimiter(rate.Inf, 1)
-	}
-
-	if acfg.Upload.Limit > 0 {
-		upl = rate.NewLimiter(rate.Limit(acfg.Upload.Limit), acfg.Upload.Rate)
-	} else {
-		upl = rate.NewLimiter(rate.Inf, 1)
-	}
-
-	// Listen on a non loopback interface here to fetch
-	// and announce real Ip address in production
-	// Note: that does not cover a case of bridged machines
-	// and only works reliably for a single external
-	// network interface configurations.
-	ip, err := utils.GetLocalIP()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return &torrent.Config{
-		DefaultStorage:      storage,
-		Seed:                acfg.Seed,
-		ListenAddr:          fmt.Sprintf("%s:%d", ip, acfg.TorrentClientPort),
-		NoUpload:            acfg.NoUpload,
-		DisableTCP:          acfg.DisableTCP,
-		NoDHT:               acfg.NoDHT,
-		Debug:               acfg.Debug,
-		DisableUTP:          acfg.DisableUTP,
-		DisableEncryption:   acfg.DisableEncryption,
-		ForceEncryption:     acfg.ForceEncryption,
-		PreferNoEncryption:  acfg.PreferNoEncryption,
-		DownloadRateLimiter: dl,
-		UploadRateLimiter:   upl,
-		PeerID:              acfg.PeerID,
-	}
 }

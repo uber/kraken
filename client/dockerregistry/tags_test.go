@@ -3,96 +3,17 @@ package dockerregistry
 import (
 	"encoding/binary"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/client/store"
-	"code.uber.internal/infra/kraken/client/torrent"
-	"code.uber.internal/infra/kraken/client/torrentclient"
-	"code.uber.internal/infra/kraken/configuration"
-
 	"github.com/stretchr/testify/assert"
-	"github.com/uber-go/tally"
 )
 
-func getFileStoreClient() (*configuration.Config, *store.LocalStore, torrent.Client) {
-	cp := configuration.GetConfigFilePath("agent/test.yaml")
-	c := configuration.NewConfigWithPath(cp)
-	c.DisableTorrent = true
-	c.TagDeletion = struct {
-		Enable         bool `yaml:"enable"`
-		Interval       int  `yaml:"interval"`
-		RetentionCount int  `yaml:"retention_count"`
-		RetentionTime  int  `yaml:"retention_time"`
-	}{
-		Enable:         true,
-		RetentionCount: 10,
-	}
-	var err error
-	err = os.MkdirAll(c.DownloadDir, 0755)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = os.MkdirAll(c.CacheDir, 0755)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = os.MkdirAll(c.UploadDir, 0755)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = os.MkdirAll(c.TagDir, 0755)
-	if err != nil {
-		log.Fatal(err)
-	}
-	c.UploadDir, err = ioutil.TempDir(c.UploadDir, "testtags")
-	if err != nil {
-		log.Fatal(err)
-	}
-	c.CacheDir, err = ioutil.TempDir(c.CacheDir, "testtags")
-	if err != nil {
-		log.Fatal(err)
-	}
-	c.DownloadDir, err = ioutil.TempDir(c.DownloadDir, "testtags")
-	if err != nil {
-		log.Fatal(err)
-	}
-	c.TagDir, err = ioutil.TempDir(c.TagDir, "testtags")
-	if err != nil {
-		log.Fatal(err)
-	}
-	s := store.NewLocalStore(c)
-	client, err := torrentclient.NewClient(c, s, tally.NoopScope, 120)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return c, s, client
-}
-
-func removeTestTorrentDirs(c *configuration.Config) {
-	os.RemoveAll(c.DownloadDir)
-	os.RemoveAll(c.CacheDir)
-	os.RemoveAll(c.UploadDir)
-	os.RemoveAll(c.TagDir)
-}
-
-func setup() (*DockerTags, func()) {
-	config, filestore, client := getFileStoreClient()
-	tags, err := NewDockerTags(config, filestore, client, tally.NoopScope)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return tags.(*DockerTags), func() {
-		removeTestTorrentDirs(config)
-	}
-}
-
 func TestGetAllLayers(t *testing.T) {
-	tags, teardown := setup()
-	defer teardown()
+	tags, cleanup := genDockerTags()
+	defer cleanup()
 
 	manifest := "09b4be55821450cbf046f7ed71c7a1d9512b442c7967004651f7bff084a285c1"
 	manifestTemp := manifest + ".temp"
@@ -114,12 +35,12 @@ func TestGetAllLayers(t *testing.T) {
 }
 
 func TestCreateTag(t *testing.T) {
-	tags, teardown := setup()
-	defer teardown()
+	tags, cleanup := genDockerTags()
+	defer cleanup()
 
 	manifest := "09b4be55821450cbf046f7ed71c7a1d9512b442c7967004651f7bff084a285c1"
 	manifestTemp := manifest + ".temp"
-	tags.store.CreateUploadFile(manifestTemp, 0)
+	assert.Nil(t, tags.store.CreateUploadFile(manifestTemp, 0))
 	writer, _ := tags.store.GetUploadFileReadWriter(manifestTemp)
 	data, _ := ioutil.ReadFile("./test/testmanifest.json")
 	_, err := writer.Write(data)
@@ -145,8 +66,9 @@ func TestCreateTag(t *testing.T) {
 		manifest,
 		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9",
 	} {
-		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
-		b, _ := ioutil.ReadFile(ref)
+		ref := path.Join(tags.store.Config().CacheDir, digest+"_refcount")
+		b, err := ioutil.ReadFile(ref)
+		assert.Nil(t, err)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(1), refCount)
 	}
@@ -168,7 +90,7 @@ func TestCreateTag(t *testing.T) {
 		manifest,
 		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9",
 	} {
-		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
+		ref := path.Join(tags.store.Config().CacheDir, digest+"_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(2), refCount)
@@ -178,7 +100,7 @@ func TestCreateTag(t *testing.T) {
 		missingDigest,
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
+		ref := path.Join(tags.store.Config().CacheDir, digest+"_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(1), refCount)
@@ -186,8 +108,8 @@ func TestCreateTag(t *testing.T) {
 }
 
 func TestListTags(t *testing.T) {
-	tags, teardown := setup()
-	defer teardown()
+	tags, cleanup := genDockerTags()
+	defer cleanup()
 
 	repoTagMap := map[string][]string{
 		"repo1": {
@@ -234,8 +156,8 @@ func TestListTags(t *testing.T) {
 }
 
 func TestListRepos(t *testing.T) {
-	tags, teardown := setup()
-	defer teardown()
+	tags, cleanup := genDockerTags()
+	defer cleanup()
 
 	repoTagMap := map[string][]string{
 		"repo1": {
@@ -271,8 +193,8 @@ func TestListRepos(t *testing.T) {
 }
 
 func TestGetManifest(t *testing.T) {
-	tags, teardown := setup()
-	defer teardown()
+	tags, cleanup := genDockerTags()
+	defer cleanup()
 
 	manifest := "09b4be55821450cbf046f7ed71c7a1d9512b442c7967004651f7bff084a285c1"
 	manifestTemp := manifest + ".temp"
@@ -301,8 +223,8 @@ func TestGetManifest(t *testing.T) {
 }
 
 func TestDeleteTag(t *testing.T) {
-	tags, teardown := setup()
-	defer teardown()
+	tags, cleanup := genDockerTags()
+	defer cleanup()
 
 	manifest := "09b4be55821450cbf046f7ed71c7a1d9512b442c7967004651f7bff084a285c1"
 	manifestTemp := manifest + ".temp"
@@ -351,7 +273,7 @@ func TestDeleteTag(t *testing.T) {
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
+		ref := path.Join(tags.store.Config().CacheDir, digest+"_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(6), refCount)
@@ -374,7 +296,6 @@ func TestDeleteTag(t *testing.T) {
 	// delete repo2/tag1, not found
 	err = tags.DeleteTag("repo2", "tag1")
 	assert.NotNil(t, err)
-	assert.Equal(t, "Torrent disabled", err.Error())
 
 	// delete repo3/tag6
 	err = tags.DeleteTag("repo3", "tag6")
@@ -389,7 +310,7 @@ func TestDeleteTag(t *testing.T) {
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
+		ref := path.Join(tags.store.Config().CacheDir, digest+"_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(4), refCount)
@@ -397,8 +318,8 @@ func TestDeleteTag(t *testing.T) {
 }
 
 func TestDeleteExpiredTags(t *testing.T) {
-	tags, teardown := setup()
-	defer teardown()
+	tags, cleanup := genDockerTags()
+	defer cleanup()
 
 	manifest := "09b4be55821450cbf046f7ed71c7a1d9512b442c7967004651f7bff084a285c1"
 	manifestTemp := manifest + ".temp"
@@ -467,7 +388,7 @@ func TestDeleteExpiredTags(t *testing.T) {
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
+		ref := path.Join(tags.store.Config().CacheDir, digest+"_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(6), refCount)
@@ -487,7 +408,7 @@ func TestDeleteExpiredTags(t *testing.T) {
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
+		ref := path.Join(tags.store.Config().CacheDir, digest+"_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(5), refCount)
@@ -507,7 +428,7 @@ func TestDeleteExpiredTags(t *testing.T) {
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
+		ref := path.Join(tags.store.Config().CacheDir, digest+"_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(4), refCount)
@@ -515,8 +436,8 @@ func TestDeleteExpiredTags(t *testing.T) {
 }
 
 func TestGetOrDownloadAllLayersAndCreateTag(t *testing.T) {
-	tags, teardown := setup()
-	defer teardown()
+	tags, cleanup := genDockerTags()
+	defer cleanup()
 
 	repo := "newrepo"
 	tag := "newtag"
@@ -541,7 +462,6 @@ func TestGetOrDownloadAllLayersAndCreateTag(t *testing.T) {
 	// cannot get manifest from tracker
 	err := tags.getOrDownloadAllLayersAndCreateTag(repo, tag)
 	assert.NotNil(t, err)
-	assert.Equal(t, "Torrent disabled", err.Error())
 
 	// create fake tag file because we need to get manifest
 	os.MkdirAll(path.Dir(tags.getTagPath(repo, tag)), 0755)
@@ -549,7 +469,6 @@ func TestGetOrDownloadAllLayersAndCreateTag(t *testing.T) {
 
 	err = tags.getOrDownloadAllLayersAndCreateTag(repo, tag)
 	assert.NotNil(t, err)
-	assert.Equal(t, "Torrent disabled", err.Error())
 
 	missingDigest := "0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b"
 	missingDigestTemp := missingDigest + ".temp"
@@ -567,7 +486,7 @@ func TestGetOrDownloadAllLayersAndCreateTag(t *testing.T) {
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.config.CacheDir, digest+"_refcount")
+		ref := path.Join(tags.store.Config().CacheDir, digest+"_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		// since the tag is already created, ref++ wont happen
@@ -576,12 +495,11 @@ func TestGetOrDownloadAllLayersAndCreateTag(t *testing.T) {
 }
 
 func TestGetTag(t *testing.T) {
-	tags, teardown := setup()
-	defer teardown()
+	tags, cleanup := genDockerTags()
+	defer cleanup()
 
 	_, err := tags.GetTag("repo", "tag")
 	assert.NotNil(t, err)
-	assert.Equal(t, "Torrent disabled", err.Error())
 
 	manifest := "testgettag"
 	assert.Nil(t, tags.createTag("repo", "tag", manifest, nil))

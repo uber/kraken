@@ -7,23 +7,20 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrent"
-	"code.uber.internal/infra/kraken/configuration"
 	sd "github.com/docker/distribution/registry/storage/driver"
 )
 
 // Blobs b
 type Blobs struct {
-	config *configuration.Config
 	client torrent.Client
 	store  *store.LocalStore
 }
 
 // NewBlobs creates Blobs
-func NewBlobs(cl torrent.Client, s *store.LocalStore, config *configuration.Config) *Blobs {
+func NewBlobs(cl torrent.Client, s *store.LocalStore) *Blobs {
 	return &Blobs{
 		client: cl,
 		store:  s,
-		config: config,
 	}
 }
 

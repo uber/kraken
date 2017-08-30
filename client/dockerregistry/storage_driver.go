@@ -10,7 +10,6 @@ import (
 
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrent"
-	"code.uber.internal/infra/kraken/configuration"
 
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/docker/distribution/context"
@@ -63,7 +62,7 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 	if !ok || configParam == nil {
 		log.Fatal("Failed to create storage driver. No configuration initiated.")
 	}
-	config := configParam.(*configuration.Config)
+	config := configParam.(*Config)
 
 	storeParam, ok := params["store"]
 	if !ok || storeParam == nil {
@@ -93,7 +92,7 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 
 // KrakenStorageDriver is a storage driver
 type KrakenStorageDriver struct {
-	config  *configuration.Config
+	config  *Config
 	tcl     torrent.Client
 	store   *store.LocalStore
 	blobs   *Blobs
@@ -104,7 +103,7 @@ type KrakenStorageDriver struct {
 
 // NewKrakenStorageDriver creates a new KrakenStorageDriver given Manager
 func NewKrakenStorageDriver(
-	c *configuration.Config,
+	c *Config,
 	s *store.LocalStore,
 	cl torrent.Client,
 	metrics tally.Scope) (*KrakenStorageDriver, error) {
@@ -129,26 +128,11 @@ func NewKrakenStorageDriver(
 		deleteExpiredTagsCron.Start()
 	}
 
-	// Start a cron to delete trash files.
-	if c.TrashDeletion.Enable && c.TrashDeletion.Interval > 0 {
-		log.Info("Scheduling trash cleanup cron")
-		deleteAllTrashFilesCron := cron.New()
-		interval := fmt.Sprintf("@every %ds", c.TrashDeletion.Interval)
-		err = deleteAllTrashFilesCron.AddFunc(interval, func() {
-			log.Info("Running trash cleanup cron")
-			s.DeleteAllTrashFiles()
-		})
-		if err != nil {
-			return nil, err
-		}
-		deleteAllTrashFilesCron.Start()
-	}
-
 	return &KrakenStorageDriver{
 		config:  c,
 		tcl:     cl,
 		store:   s,
-		blobs:   NewBlobs(cl, s, c),
+		blobs:   NewBlobs(cl, s),
 		uploads: NewUploads(cl, s),
 		tags:    tags,
 		metrics: metrics,
@@ -186,7 +170,7 @@ func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data
 		return []byte("sha256:" + sha), nil
 	case "startedat":
 		uuid := ts[len(ts)-2]
-		return d.uploads.getUploadStartTime(d.config.UploadDir, uuid)
+		return d.uploads.getUploadStartTime(d.store.Config().UploadDir, uuid)
 	case "data":
 		// get or download content
 		return d.blobs.getOrDownloadBlobData(sha)
@@ -212,7 +196,7 @@ func (d *KrakenStorageDriver) Reader(ctx context.Context, path string, offset in
 	switch fileType {
 	case "_uploads":
 		uuid := ts[len(ts)-2]
-		return d.uploads.getUploadReader(path, d.config.UploadDir, uuid, offset)
+		return d.uploads.getUploadReader(uuid, offset)
 	default:
 		sha := ts[len(ts)-2]
 		return d.blobs.getOrDownloadBlobReader(sha, offset)
@@ -227,7 +211,7 @@ func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, conte
 	switch contentType {
 	case "startedat":
 		uuid := ts[len(ts)-2]
-		return d.uploads.initUpload(d.config.UploadDir, uuid)
+		return d.uploads.initUpload(uuid)
 	case "data":
 		sha := ts[len(ts)-2]
 		return d.uploads.putBlobData(sha, content)
@@ -291,7 +275,7 @@ func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (fi storage
 	switch fileType {
 	case "_uploads":
 		uuid := st[len(st)-2]
-		return d.uploads.getUploadDataStat(d.config.UploadDir, uuid)
+		return d.uploads.getUploadDataStat(d.store.Config().UploadDir, uuid)
 	default:
 		sha := st[len(st)-2]
 		return d.blobs.getBlobStat(sha)
@@ -342,7 +326,7 @@ func (d *KrakenStorageDriver) Move(ctx context.Context, sourcePath string, destP
 	destsha := destst[len(destst)-2]
 	switch srcFileType {
 	case "_uploads":
-		return d.uploads.commitUpload(d.config.UploadDir, srcsha, d.config.CacheDir, destsha)
+		return d.uploads.commitUpload(srcsha, d.store.Config().CacheDir, destsha)
 	default:
 		return fmt.Errorf("Not implemented")
 	}

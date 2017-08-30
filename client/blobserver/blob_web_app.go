@@ -4,15 +4,17 @@ import (
 	"net/http"
 
 	"code.uber.internal/infra/kraken/client/store"
-	"code.uber.internal/infra/kraken/configuration"
 
 	"github.com/pressly/chi"
 )
 
 // InitializeAPI instantiates a new web-app for the origin
-func InitializeAPI(c *configuration.Config) http.Handler {
+func InitializeAPI(c *store.Config, refcount bool) (http.Handler, error) {
 	r := chi.NewRouter()
-	webApp := NewBlobWebApp(c)
+	webApp, err := NewBlobWebApp(c, refcount)
+	if err != nil {
+		return nil, err
+	}
 
 	// Pulling data blob
 	r.Get("/blobs/:digest", webApp.GetBlob)
@@ -22,14 +24,18 @@ func InitializeAPI(c *configuration.Config) http.Handler {
 	r.Patch("/blobs/uploads/:uuid", webApp.PatchUpload)
 	r.Put("/blobs/uploads/:uuid", webApp.PutUpload)
 
-	return r
+	return r, nil
 }
 
 // NewBlobWebApp initializes a new BlobWebApp obj.
-func NewBlobWebApp(c *configuration.Config) *BlobWebApp {
-	return &BlobWebApp{
-		localStore: store.NewLocalStore(c),
+func NewBlobWebApp(c *store.Config, refcount bool) (*BlobWebApp, error) {
+	store, err := store.NewLocalStore(c, refcount)
+	if err != nil {
+		return nil, err
 	}
+	return &BlobWebApp{
+		localStore: store,
+	}, nil
 }
 
 // BlobWebApp defines a web-app that serves blob data for agent.
