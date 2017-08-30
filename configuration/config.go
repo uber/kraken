@@ -18,6 +18,7 @@ const (
 
 // Config contains application configuration
 type Config struct {
+	Logging     log.Configuration      `yaml:"logging"`
 	Environment string                 `yaml:"environment"`
 	Metrics     map[string]interface{} `yaml:"metrics"`
 
