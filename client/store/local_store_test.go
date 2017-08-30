@@ -2,67 +2,20 @@ package store
 
 import (
 	"fmt"
-	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"strings"
 	"sync"
 	"testing"
-
-	"code.uber.internal/infra/kraken/configuration"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func GetTestFileStore() (*configuration.Config, *LocalStore) {
-	var err error
-	c := configuration.NewConfigWithPath("../../config/agent/test.yaml")
-	c.DisableTorrent = true
-	c.TagDeletion = struct {
-		Enable         bool `yaml:"enable"`
-		Interval       int  `yaml:"interval"`
-		RetentionCount int  `yaml:"retention_count"`
-		RetentionTime  int  `yaml:"retention_time"`
-	}{
-		Enable:         true,
-		RetentionCount: 10,
-	}
-	c.UploadDir, err = ioutil.TempDir("/tmp", "upload")
-	if err != nil {
-		log.Fatal(err)
-	}
-	c.CacheDir, err = ioutil.TempDir("/tmp", "cache")
-	if err != nil {
-		log.Fatal(err)
-	}
-	c.DownloadDir, err = ioutil.TempDir("/tmp", "download")
-	if err != nil {
-		log.Fatal(err)
-	}
-	c.TrashDir, err = ioutil.TempDir("/tmp", "trash")
-	if err != nil {
-		log.Fatal(err)
-	}
-	c.TagDir, err = ioutil.TempDir("/tmp", "tag")
-	if err != nil {
-		log.Fatal(err)
-	}
-	s := NewLocalStore(c)
-	return c, s
-}
-
-func cleanupTestFileStore(c *configuration.Config) {
-	os.RemoveAll(c.DownloadDir)
-	os.RemoveAll(c.CacheDir)
-	os.RemoveAll(c.UploadDir)
-	os.RemoveAll(c.TrashDir)
-	os.RemoveAll(c.TagDir)
-}
-
 func TestFileHashStates(t *testing.T) {
-	c, s := GetTestFileStore()
-	defer cleanupTestFileStore(c)
+	s, cleanup := LocalStoreWithRefcountFixture()
+	defer cleanup()
 
 	s.CreateUploadFile("test_file.txt", 100)
 	err := s.SetUploadFileHashState("test_file.txt", []byte{uint8(0), uint8(1)}, "sha256", "500")
@@ -79,8 +32,8 @@ func TestFileHashStates(t *testing.T) {
 }
 
 func TestCreateUploadFileAndMoveToCache(t *testing.T) {
-	c, s := GetTestFileStore()
-	defer cleanupTestFileStore(c)
+	s, cleanup := LocalStoreWithRefcountFixture()
+	defer cleanup()
 
 	err := s.CreateUploadFile("test_file.txt", 100)
 	assert.Nil(t, err)
@@ -96,20 +49,20 @@ func TestCreateUploadFileAndMoveToCache(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, uint8(2), b[0])
 	assert.Equal(t, uint8(3), b[1])
-	_, err = os.Stat(path.Join(c.UploadDir, "test_file.txt"))
+	_, err = os.Stat(path.Join(s.Config().UploadDir, "test_file.txt"))
 	assert.Nil(t, err)
 
 	err = s.MoveUploadFileToCache("test_file.txt", "test_file_cache.txt")
 	assert.Nil(t, err)
-	_, err = os.Stat(path.Join(c.UploadDir, "test_file.txt"))
+	_, err = os.Stat(path.Join(s.Config().UploadDir, "test_file.txt"))
 	assert.True(t, os.IsNotExist(err))
-	_, err = os.Stat(path.Join(c.CacheDir, "test_file_cache.txt"))
+	_, err = os.Stat(path.Join(s.Config().CacheDir, "test_file_cache.txt"))
 	assert.Nil(t, err)
 }
 
 func TestDownloadAndDeleteFiles(t *testing.T) {
-	c, s := GetTestFileStore()
-	defer cleanupTestFileStore(c)
+	s, cleanup := LocalStoreWithRefcountFixture()
+	defer cleanup()
 
 	var waitGroup sync.WaitGroup
 
@@ -135,7 +88,25 @@ func TestDownloadAndDeleteFiles(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		testFileName := fmt.Sprintf("test_%d", i)
-		_, err := os.Stat(path.Join(c.TrashDir, testFileName))
+		_, err := os.Stat(path.Join(s.Config().TrashDir, testFileName))
 		assert.True(t, os.IsNotExist(err))
 	}
+}
+
+func TestTrashDeletionCronDeletesFiles(t *testing.T) {
+	require := require.New(t)
+
+	interval := time.Second
+
+	s, cleanup := LocalStoreWithTrashDeletionFixture(interval)
+	defer cleanup()
+
+	f := "test_file.txt"
+	require.NoError(s.CreateDownloadFile(f, 1))
+	require.NoError(s.MoveDownloadOrCacheFileToTrash(f))
+
+	time.Sleep(interval + 250*time.Millisecond)
+
+	_, err := os.Stat(path.Join(s.Config().TrashDir, f))
+	require.True(os.IsNotExist(err))
 }

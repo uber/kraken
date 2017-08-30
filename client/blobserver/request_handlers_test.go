@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/client/dockerimage"
+	"code.uber.internal/infra/kraken/client/store"
 
 	"github.com/pressly/chi"
 	"github.com/stretchr/testify/assert"
@@ -101,8 +102,8 @@ func TestParseDigestFromQueryHandlerEmpty(t *testing.T) {
 func TestEnsureDigestNotExistsHandlerValid(t *testing.T) {
 	require := require.New(t)
 
-	c, localStore := getLocalStore()
-	defer clearLocalStore(c)
+	localStore, cleanup := store.LocalStoreFixture()
+	defer cleanup()
 
 	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", dockerimage.DigestEmptyTar)
 	request, _ := http.NewRequest("POST", url, nil)
@@ -119,10 +120,10 @@ func TestEnsureDigestNotExistsHandlerValid(t *testing.T) {
 func TestEnsureDigestNotExistsHandlerConflict(t *testing.T) {
 	require := require.New(t)
 
-	c, localStore := getLocalStore()
+	localStore, cleanup := store.LocalStoreFixture()
+	defer cleanup()
 	localStore.CreateDownloadFile(emptyDigestHex, 0)
 	localStore.MoveDownloadFileToCache(emptyDigestHex)
-	defer clearLocalStore(c)
 
 	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", dockerimage.DigestEmptyTar)
 	request, _ := http.NewRequest("POST", url, nil)
@@ -260,8 +261,8 @@ func TestParseContentRangeHandlerEmpty(t *testing.T) {
 func TestCreateUploadHandler(t *testing.T) {
 	require := require.New(t)
 
-	c, localStore := getLocalStore()
-	defer clearLocalStore(c)
+	localStore, cleanup := store.LocalStoreFixture()
+	defer cleanup()
 
 	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", dockerimage.DigestEmptyTar)
 	request, _ := http.NewRequest("POST", url, nil)
@@ -282,8 +283,8 @@ func TestCreateUploadHandler(t *testing.T) {
 func TestUploadBlobChunkHandler(t *testing.T) {
 	require := require.New(t)
 
-	c, localStore := getLocalStore()
-	defer clearLocalStore(c)
+	localStore, cleanup := store.LocalStoreFixture()
+	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 
 	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", dockerimage.DigestEmptyTar)
@@ -354,8 +355,8 @@ func TestUploadBlobChunkHandler(t *testing.T) {
 func TestCommitUploadHandlerValid(t *testing.T) {
 	require := require.New(t)
 
-	c, localStore := getLocalStore()
-	defer clearLocalStore(c)
+	localStore, cleanup := store.LocalStoreFixture()
+	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
 	writer.Write([]byte("Hello world!!!"))
@@ -382,8 +383,8 @@ func TestCommitUploadHandlerValid(t *testing.T) {
 func TestCommitUploadHandlerInvalidDigest(t *testing.T) {
 	require := require.New(t)
 
-	c, localStore := getLocalStore()
-	defer clearLocalStore(c)
+	localStore, cleanup := store.LocalStoreFixture()
+	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
 	writer.Write([]byte("Hello world!!!"))
@@ -408,8 +409,8 @@ func TestCommitUploadHandlerInvalidDigest(t *testing.T) {
 func TestDeleteBlobHandlerValid(t *testing.T) {
 	require := require.New(t)
 
-	c, localStore := getLocalStore()
-	defer clearLocalStore(c)
+	localStore, cleanup := store.LocalStoreFixture()
+	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
 	writer.Write([]byte("Hello world!!!"))

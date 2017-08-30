@@ -13,7 +13,6 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrent"
-	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/utils"
 
 	"github.com/uber-common/bark"
@@ -46,7 +45,7 @@ type Tags interface {
 type DockerTags struct {
 	sync.RWMutex
 
-	config  *configuration.Config
+	config  *Config
 	store   *store.LocalStore
 	client  torrent.Client
 	metrics tally.Scope
@@ -67,7 +66,7 @@ func (s TagSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s TagSlice) Len() int           { return len(s) }
 
 // NewDockerTags returns new DockerTags
-func NewDockerTags(c *configuration.Config, s *store.LocalStore, cl torrent.Client, metrics tally.Scope) (Tags, error) {
+func NewDockerTags(c *Config, s *store.LocalStore, cl torrent.Client, metrics tally.Scope) (Tags, error) {
 	err := os.MkdirAll(c.TagDir, 0755)
 	if err != nil {
 		return nil, err
@@ -248,6 +247,7 @@ func (t *DockerTags) createTag(repo, tag, manifestDigest string, layers []string
 			// use sqlite
 			_, err := t.store.RefCacheFile(layer)
 			if err != nil {
+				log.Error(err)
 				return err
 			}
 		}

@@ -10,4 +10,4 @@ EXPOSE 5051 5081
 WORKDIR /root/kraken
 
 ### Metadata
-ENTRYPOINT ["/usr/bin/kraken-agent", "-config=origin/development-local.yaml"]
+ENTRYPOINT ["/usr/bin/kraken-agent", "-config=origin/development-docker.yaml"]

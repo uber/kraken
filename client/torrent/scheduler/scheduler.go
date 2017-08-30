@@ -81,6 +81,12 @@ func applyDefaults(c Config) (Config, error) {
 	if c.TrackerAddr == "" {
 		return c, errors.New("no tracker addr specified")
 	}
+	if c.ListenAddr == "" {
+		return c, errors.New("no listen addr specified")
+	}
+	if c.Datacenter == "" {
+		return c, errors.New("no datacenter specified")
+	}
 	if c.MaxOpenConnectionsPerTorrent == 0 {
 		c.MaxOpenConnectionsPerTorrent = 20
 	}
@@ -132,18 +138,15 @@ func applyDefaults(c Config) (Config, error) {
 // New creates and starts a Scheduler. Incoming connections are accepted on the
 // addr, and the local peer is announced as part of the datacenter.
 func New(
+	config Config,
 	peerID torlib.PeerID,
-	addr string,
-	datacenter string,
-	ta storage.TorrentArchive,
-	config Config) (*Scheduler, error) {
+	ta storage.TorrentArchive) (*Scheduler, error) {
 
-	var err error
-	config, err = applyDefaults(config)
+	config, err := applyDefaults(config)
 	if err != nil {
 		return nil, fmt.Errorf("invalid config: %s", err)
 	}
-	l, err := net.Listen("tcp", addr)
+	l, err := net.Listen("tcp", config.ListenAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +160,7 @@ func New(
 		peerID:         peerID,
 		host:           host,
 		port:           port,
-		datacenter:     datacenter,
+		datacenter:     config.Datacenter,
 		config:         config,
 		torrentArchive: ta,
 		connFactory: &connFactory{

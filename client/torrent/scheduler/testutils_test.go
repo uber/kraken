@@ -20,6 +20,8 @@ func init() {
 
 func genConfig(trackerAddr string) Config {
 	return Config{
+		ListenAddr:       "localhost:0",
+		Datacenter:       "sjc1",
 		TrackerAddr:      trackerAddr,
 		AnnounceInterval: 500 * time.Millisecond,
 		// Buffers are just a performance optimization, so a zero-sized
@@ -76,7 +78,7 @@ type testPeer struct {
 
 func genTestPeer(config Config) *testPeer {
 	tm, deleteFunc := storage.TorrentArchiveFixture()
-	s, err := New(torlib.PeerIDFixture(), "localhost:0", "sjc1", tm, config)
+	s, err := New(config, torlib.PeerIDFixture(), tm)
 	if err != nil {
 		deleteFunc()
 		panic(err)

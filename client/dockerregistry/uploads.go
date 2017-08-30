@@ -26,7 +26,7 @@ func NewUploads(cl torrent.Client, s *store.LocalStore) *Uploads {
 	}
 }
 
-func (u *Uploads) initUpload(dir, uuid string) error {
+func (u *Uploads) initUpload(uuid string) error {
 	// Create timestamp and tempfile
 	if err := u.store.CreateUploadFile(uuid, 0); err != nil {
 		return err
@@ -39,7 +39,7 @@ func (u *Uploads) getUploadStartTime(dir, uuid string) ([]byte, error) {
 	return u.store.GetUploadFileStartedAt(uuid)
 }
 
-func (u *Uploads) getUploadReader(path, dir, uuid string, offset int64) (io.ReadCloser, error) {
+func (u *Uploads) getUploadReader(uuid string, offset int64) (io.ReadCloser, error) {
 	reader, err := u.store.GetUploadFileReader(uuid)
 	if err != nil {
 		return nil, err
@@ -55,6 +55,7 @@ func (u *Uploads) getUploadReader(path, dir, uuid string, offset int64) (io.Read
 }
 
 func (u *Uploads) getUploadDataStat(dir, uuid string) (fi sd.FileInfo, err error) {
+	// TODO (evelynl): getstat from store
 	var info os.FileInfo
 	fp := dir + uuid
 	info, err = os.Stat(fp)
@@ -73,7 +74,7 @@ func (u *Uploads) getUploadDataStat(dir, uuid string) (fi sd.FileInfo, err error
 }
 
 // commmitUpload move a complete data blob from upload directory to cache diretory
-func (u *Uploads) commitUpload(srcdir, srcuuid, destdir, destsha string) (err error) {
+func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) (err error) {
 	// Remove timestamp file
 	err = u.store.DeleteUploadFileStartedAt(srcuuid)
 	if err != nil {
@@ -85,6 +86,7 @@ func (u *Uploads) commitUpload(srcdir, srcuuid, destdir, destsha string) (err er
 		return err
 	}
 
+	// TODO (evelynl): remove dir here
 	destfp := destdir + destsha
 	err = u.client.CreateTorrentFromFile(destsha, destfp)
 	if err != nil {

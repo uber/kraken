@@ -4,15 +4,15 @@ import (
 	"flag"
 
 	"code.uber.internal/go-common.git/x/log"
-
 	"code.uber.internal/infra/kraken/client/dockerregistry"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrent"
 	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/metrics"
-	rc "github.com/docker/distribution/configuration"
+
+	dockerconfig "github.com/docker/distribution/configuration"
 	ctx "github.com/docker/distribution/context"
-	dr "github.com/docker/distribution/registry"
+	docker "github.com/docker/distribution/registry"
 )
 
 func main() {
@@ -27,14 +27,14 @@ func main() {
 	// load config
 	var config *configuration.Config
 	if configFile != "" {
-		log.Info("Load agent configuration. Config: %s", configFile)
+		log.Infof("Load agent configuration. Config: %s", configFile)
 		cp := configuration.GetConfigFilePath(configFile)
 		config = configuration.NewConfigWithPath(cp)
 	} else {
 		log.Info("Load agent configuration")
 		config = configuration.NewConfig()
 	}
-	config.DisableTorrent = disableTorrent
+	config.Registry.DisableTorrent = disableTorrent
 
 	// init metrics
 	metricsScope, metricsCloser, err := metrics.NewMetrics(config.Metrics)
@@ -44,32 +44,34 @@ func main() {
 	defer metricsCloser.Close()
 
 	// init storage
-	store := store.NewLocalStore(config)
-
-	// init torrent client
-	log.Info("Init torrent agent")
-	client, err := torrent.NewSchedulerClient(config, store)
-	defer client.Close()
-
+	store, err := store.NewLocalStore(&config.Store, config.Registry.TagDeletion.Enable)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	// init torrent client
+	log.Info("Init torrent agent")
+	client, err := torrent.NewSchedulerClient(&config.Torrent, store)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Close()
+
 	// init docker registry
 	log.Info("Init registry")
-	config.Registry.Storage = rc.Storage{
-		dockerregistry.Name: rc.Parameters{
-			"config":        config,
+	config.Registry.Docker.Storage = dockerconfig.Storage{
+		dockerregistry.Name: dockerconfig.Parameters{
+			"config":        &config.Registry,
 			"torrentclient": client,
 			"store":         store,
 			"metrics":       metricsScope,
 		},
-		"redirect": rc.Parameters{
+		"redirect": dockerconfig.Parameters{
 			"disable": true,
 		},
 	}
 
-	registry, err := dr.NewRegistry(ctx.Background(), &config.Registry)
+	registry, err := docker.NewRegistry(ctx.Background(), &config.Registry.Docker)
 	if err != nil {
 		log.Fatal(err.Error())
 	}

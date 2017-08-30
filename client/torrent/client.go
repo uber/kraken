@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/docker/distribution/uuid"
@@ -20,7 +19,6 @@ import (
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrent/scheduler"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
-	"code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils"
 )
@@ -39,7 +37,7 @@ type Client interface {
 
 // SchedulerClient is a client for scheduler
 type SchedulerClient struct {
-	config    *configuration.Config
+	config    *Config
 	peerID    torlib.PeerID
 	scheduler *scheduler.Scheduler
 
@@ -49,30 +47,15 @@ type SchedulerClient struct {
 }
 
 // NewSchedulerClient creates a new scheduler client
-func NewSchedulerClient(config *configuration.Config, store *store.LocalStore) (Client, error) {
-	peerID := torlib.PeerIDFixture()
-	// TODO: Move this to .yaml
-	trackerAddr := strings.TrimPrefix(config.TrackerURL, "http://")
-	schedulerConfig := scheduler.Config{
-		TrackerAddr:                  trackerAddr,
-		MaxOpenConnectionsPerTorrent: 20,
-		AnnounceInterval:             500 * time.Millisecond,
-		DialTimeout:                  5 * time.Second,
-		WriteTimeout:                 5 * time.Second,
-		SenderBufferSize:             0,
-		ReceiverBufferSize:           0,
-		IdleSeederTTL:                2 * time.Second,
-		PreemptionInterval:           500 * time.Millisecond,
-		IdleConnTTL:                  1 * time.Second,
-		ConnTTL:                      5 * time.Minute,
-		InitialBlacklistExpiration:   time.Second,
-		BlacklistExpirationBackoff:   2,
-		MaxBlacklistExpiration:       10 * time.Second,
-		ExpiredBlacklistEntryTTL:     5 * time.Minute,
-		BlacklistCleanupInterval:     time.Minute,
+func NewSchedulerClient(config *Config, localStore *store.LocalStore) (Client, error) {
+	// TODO (evelynl): hash hostname and ip to get peerID
+	// TODO (codyg): Get datacenter from env variable.
+	peerID, err := torlib.NewPeerID(config.PeerID)
+	if err != nil {
+		return nil, err
 	}
-	archive := storage.NewLocalTorrentArchive(store)
-	scheduler, err := scheduler.New(peerID, fmt.Sprintf("127.0.0.1:%d", config.Agent.TorrentClientPort), "sjc1", archive, schedulerConfig)
+	archive := storage.NewLocalTorrentArchive(localStore)
+	scheduler, err := scheduler.New(config.Scheduler, peerID, archive)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +63,7 @@ func NewSchedulerClient(config *configuration.Config, store *store.LocalStore) (
 		config:    config,
 		peerID:    peerID,
 		scheduler: scheduler,
-		store:     store,
+		store:     localStore,
 		archive:   archive,
 	}, nil
 }
@@ -93,7 +76,7 @@ func (c *SchedulerClient) Close() error {
 
 // DownloadTorrent downloads a torrent given torrent name
 func (c *SchedulerClient) DownloadTorrent(name string) error {
-	if c.config.DisableTorrent {
+	if c.config.Disabled {
 		return fmt.Errorf("Torrent disabled")
 	}
 
@@ -165,18 +148,18 @@ func (c *SchedulerClient) DownloadTorrent(name string) error {
 
 // CreateTorrentFromFile creates a torrent from file and adds torrent to scheduler for seeding
 func (c *SchedulerClient) CreateTorrentFromFile(name, filepath string) error {
-	if c.config.DisableTorrent {
+	if c.config.Disabled {
 		log.Info("Torrent disabled")
 		return nil
 	}
 
-	announce := path.Join(c.config.TrackerURL, "/announce")
+	announce := path.Join("http://"+c.config.Scheduler.TrackerAddr, "/announce")
 
 	mi, err := torlib.NewMetaInfoFromFile(
 		name,
 		filepath,
-		int64(c.config.Agent.PieceLength),
-		[][]string{{c.config.TrackerURL + "/announce"}},
+		int64(c.config.PieceLength),
+		[][]string{{"http://" + c.config.Scheduler.TrackerAddr + "/announce"}},
 		"docker",
 		"kraken-origin",
 		"UTF-8")
@@ -256,12 +239,12 @@ func (c *SchedulerClient) DropTorrent(infoHash torlib.InfoHash) error {
 
 // GetManifest queries tracker for manifest and stores manifest locally
 func (c *SchedulerClient) GetManifest(repo, tag string) (string, error) {
-	if c.config.DisableTorrent {
+	if c.config.Disabled {
 		return "", fmt.Errorf("Torrent disabled")
 	}
 	name := fmt.Sprintf("%s:%s", repo, tag)
 
-	trackerURL := c.config.TrackerURL + "/manifest/" + url.QueryEscape(name)
+	trackerURL := "http://" + c.config.Scheduler.TrackerAddr + "/manifest/" + url.QueryEscape(name)
 	data, err := c.sendRequestToTracker("GET", trackerURL, nil)
 	if err != nil {
 		return "", err
@@ -301,7 +284,7 @@ func (c *SchedulerClient) GetManifest(repo, tag string) (string, error) {
 
 // PostManifest saves manifest specified by the tag it referred in a tracker
 func (c *SchedulerClient) PostManifest(repo, tag, manifest string) error {
-	if c.config.DisableTorrent {
+	if c.config.Disabled {
 		log.Info("Torrent disabled. Nothing is to be done here")
 		return nil
 	}
@@ -312,7 +295,7 @@ func (c *SchedulerClient) PostManifest(repo, tag, manifest string) error {
 	}
 
 	name := fmt.Sprintf("%s:%s", repo, tag)
-	postURL := c.config.TrackerURL + "/manifest/" + url.QueryEscape(name)
+	postURL := "http://" + c.config.Scheduler.TrackerAddr + "/manifest/" + url.QueryEscape(name)
 	_, err = c.sendRequestToTracker("POST", postURL, reader)
 	if err != nil {
 		return err
@@ -323,7 +306,8 @@ func (c *SchedulerClient) PostManifest(repo, tag, manifest string) error {
 
 func (c *SchedulerClient) postTorrentMetaInfo(mi *torlib.MetaInfo) error {
 	// get torrent info hash
-	trackerURL := fmt.Sprintf("%s/info?name=%s&info_hash=%s", c.config.TrackerURL, mi.Name(), mi.InfoHash.HexString())
+	trackerURL := fmt.Sprintf("http://%s/info?name=%s&info_hash=%s",
+		c.config.Scheduler.TrackerAddr, mi.Name(), mi.InfoHash.HexString())
 	miRaw, err := mi.Serialize()
 	if err != nil {
 		return err
@@ -338,7 +322,7 @@ func (c *SchedulerClient) postTorrentMetaInfo(mi *torlib.MetaInfo) error {
 
 func (c *SchedulerClient) getTorrentMetaInfo(name string) (*torlib.MetaInfo, error) {
 	// get torrent info hash
-	trackerURL := c.config.TrackerURL + "/info?name=" + name
+	trackerURL := "http://" + c.config.Scheduler.TrackerAddr + "/info?name=" + name
 	miRaw, err := c.sendRequestToTracker("GET", trackerURL, nil)
 	if err != nil {
 		return nil, err

@@ -2,32 +2,35 @@ package store
 
 import (
 	"fmt"
-	"log"
+	"math"
 	"os"
 	"path"
 	"regexp"
 	"strings"
 
+	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store/base"
 	"code.uber.internal/infra/kraken/client/store/refcountable"
-	"code.uber.internal/infra/kraken/configuration"
 
 	"github.com/docker/distribution/uuid"
+	"github.com/robfig/cron"
 )
 
 // LocalStore manages all peer agent files on local disk.
 type LocalStore struct {
 	uploadBackend        base.FileStore
 	downloadCacheBackend base.FileStore
-	config               *configuration.Config
+	config               *Config
 
 	stateDownload agentFileState
 	stateUpload   agentFileState
 	stateCache    agentFileState
+
+	trashDeletionCron *cron.Cron
 }
 
 // NewLocalStore initializes and returns a new LocalStore object.
-func NewLocalStore(config *configuration.Config) *LocalStore {
+func NewLocalStore(config *Config, useRefcount bool) (*LocalStore, error) {
 	// Init all directories.
 	for _, dir := range []string{config.UploadDir, config.DownloadDir, config.TrashDir} {
 		os.RemoveAll(dir)
@@ -44,12 +47,13 @@ func NewLocalStore(config *configuration.Config) *LocalStore {
 
 	uploadBackend := base.NewLocalFileStoreDefault()
 	var downloadCacheBackend base.FileStore
-	if config.TagDeletion.Enable {
+	if useRefcount {
 		downloadCacheBackend = refcountable.NewLocalRCFileStoreDefault()
 	} else {
 		downloadCacheBackend = base.NewLocalFileStoreDefault()
 	}
-	return &LocalStore{
+
+	localStore := &LocalStore{
 		uploadBackend:        uploadBackend,
 		downloadCacheBackend: downloadCacheBackend,
 		config:               config,
@@ -57,10 +61,38 @@ func NewLocalStore(config *configuration.Config) *LocalStore {
 		stateDownload:        agentFileState{directory: config.DownloadDir},
 		stateCache:           agentFileState{directory: config.CacheDir},
 	}
+
+	// Start a cron to delete trash files.
+	if config.TrashDeletion.Enable && config.TrashDeletion.Interval > 0 {
+		localStore.trashDeletionCron = cron.New()
+		intervalSecs := int(math.Ceil(config.TrashDeletion.Interval.Seconds()))
+		spec := fmt.Sprintf("@every %ds", intervalSecs)
+		err = localStore.trashDeletionCron.AddFunc(spec, func() {
+			log.Info("Deleting all trash files...")
+			if err := localStore.DeleteAllTrashFiles(); err != nil {
+				log.Errorf("Failed to delete all trash files: %s", err)
+			}
+		})
+		if err != nil {
+			return nil, err
+		}
+		log.Info("Starting trash cleanup cron")
+		localStore.trashDeletionCron.Start()
+	}
+
+	return localStore, nil
 }
 
-func (store *LocalStore) String() string {
-	return fmt.Sprintf("LocalStore downloadDir %s", store.config.DownloadDir)
+// Stop stops any running cron jobs.
+func (store *LocalStore) Stop() {
+	if store.trashDeletionCron != nil {
+		store.trashDeletionCron.Stop()
+	}
+}
+
+// Config returns configuration of the store
+func (store *LocalStore) Config() Config {
+	return *store.config
 }
 
 // CreateUploadFile creates an empty file in upload directory with specified size.
