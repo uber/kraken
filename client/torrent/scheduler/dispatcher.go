@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber-common/bark"
 	"golang.org/x/sync/syncmap"
 
@@ -32,9 +33,10 @@ type dispatcherFactory struct {
 func (f *dispatcherFactory) New(t storage.Torrent) *dispatcher {
 	d := &dispatcher{
 		Torrent:     t,
-		CreatedAt:   time.Now(),
+		CreatedAt:   f.Config.Clock.Now(),
 		localPeerID: f.LocalPeerID,
 		eventLoop:   f.EventLoop,
+		clock:       f.Config.Clock,
 	}
 	if t.Complete() {
 		d.complete.Do(func() { go d.eventLoop.Send(completedDispatcherEvent{d}) })
@@ -49,6 +51,7 @@ type dispatcher struct {
 	Torrent     storage.Torrent
 	CreatedAt   time.Time
 	localPeerID torlib.PeerID
+	clock       clock.Clock
 
 	conns syncmap.Map
 
@@ -72,7 +75,7 @@ func (d *dispatcher) touchLastConnRemoved() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	d.lastConnRemoved = time.Now()
+	d.lastConnRemoved = d.clock.Now()
 }
 
 // Empty returns true if the dispatcher has no conns.

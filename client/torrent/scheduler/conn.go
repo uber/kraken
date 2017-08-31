@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
+	"github.com/andres-erbsen/clock"
+	"github.com/golang/protobuf/proto"
+	"github.com/uber-common/bark"
+
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
-
-	"github.com/golang/protobuf/proto"
-	"github.com/uber-common/bark"
 )
 
 const (
@@ -96,12 +97,10 @@ func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
 }
 
 type connFactory struct {
-	// Configuration to initialize conns with.
-	Config Config
-
+	Config      Config
 	LocalPeerID torlib.PeerID
-
-	EventLoop *eventLoop
+	EventLoop   *eventLoop
+	Clock       clock.Clock
 }
 
 // newConn resolves response handshake h into a new conn.
@@ -111,11 +110,12 @@ func (f *connFactory) newConn(
 	c := &conn{
 		PeerID:         h.PeerID,
 		InfoHash:       h.InfoHash,
-		CreatedAt:      time.Now(),
+		CreatedAt:      f.Clock.Now(),
 		Bitfield:       newSyncBitfield(h.Bitfield),
 		localPeerID:    f.LocalPeerID,
 		nc:             nc,
 		config:         f.Config,
+		clock:          f.Clock,
 		openedByRemote: openedByRemote,
 		sender:         make(chan *message, f.Config.SenderBufferSize),
 		receiver:       make(chan *message, f.Config.ReceiverBufferSize),
@@ -131,7 +131,7 @@ func (f *connFactory) newConn(
 // SendAndReceiveHandshake initializes a new conn by sending localHandshake over
 // nc and waiting for a handshake in response.
 func (f *connFactory) SendAndReceiveHandshake(nc net.Conn, localHandshake *handshake) (*conn, error) {
-	if err := sendMessage(nc, localHandshake.ToP2PMessage(), f.Config.WriteTimeout); err != nil {
+	if err := sendMessage(nc, localHandshake.ToP2PMessage(), f.Clock, f.Config.WriteTimeout); err != nil {
 		return nil, err
 	}
 	m, err := readMessage(nc)
@@ -166,7 +166,7 @@ func receiveHandshake(nc net.Conn) (*handshake, error) {
 func (f *connFactory) ReciprocateHandshake(
 	nc net.Conn, remoteHandshake *handshake, localHandshake *handshake) (*conn, error) {
 
-	if err := sendMessage(nc, localHandshake.ToP2PMessage(), f.Config.WriteTimeout); err != nil {
+	if err := sendMessage(nc, localHandshake.ToP2PMessage(), f.Clock, f.Config.WriteTimeout); err != nil {
 		return nil, err
 	}
 	return f.newConn(nc, remoteHandshake, true), nil
@@ -190,6 +190,7 @@ type conn struct {
 	localPeerID torlib.PeerID
 	nc          net.Conn
 	config      Config
+	clock       clock.Clock
 
 	// Marks whether the connection was opened by the remote peer, or the local peer.
 	openedByRemote bool
@@ -216,7 +217,7 @@ func (c *conn) TouchLastGoodPieceReceived() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.lastGoodPieceReceived = time.Now()
+	c.lastGoodPieceReceived = c.clock.Now()
 }
 
 func (c *conn) LastPieceSent() time.Time {
@@ -230,7 +231,7 @@ func (c *conn) TouchLastPieceSent() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.lastPieceSent = time.Now()
+	c.lastPieceSent = c.clock.Now()
 }
 
 // OpenedByRemote returns whether the conn was opened by the local peer, or the remote peer.
@@ -363,12 +364,12 @@ func (c *conn) sendPayload(payload []byte) error {
 	return nil
 }
 
-func sendMessage(nc net.Conn, msg *p2p.Message, timeout time.Duration) error {
+func sendMessage(nc net.Conn, msg *p2p.Message, clk clock.Clock, timeout time.Duration) error {
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	nc.SetWriteDeadline(time.Now().Add(timeout))
+	nc.SetWriteDeadline(clk.Now().Add(timeout))
 	if err := binary.Write(nc, binary.BigEndian, uint32(len(data))); err != nil {
 		return err
 	}
@@ -383,7 +384,7 @@ func sendMessage(nc net.Conn, msg *p2p.Message, timeout time.Duration) error {
 }
 
 func (c *conn) sendMessage(msg *message) error {
-	if err := sendMessage(c.nc, msg.Message, c.config.WriteTimeout); err != nil {
+	if err := sendMessage(c.nc, msg.Message, c.clock, c.config.WriteTimeout); err != nil {
 		return err
 	}
 	if msg.Message.Type == p2p.Message_PIECE_PAYLOAD {

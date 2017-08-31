@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
+	"github.com/andres-erbsen/clock"
 	"github.com/uber-common/bark"
 
 	"code.uber.internal/infra/kraken/torlib"
@@ -47,12 +48,10 @@ type connState struct {
 	active      map[connKey]*conn
 	pending     map[connKey]bool
 	blacklist   map[connKey]*blacklistEntry
-
-	// Allow overriding time.Now() for testing purposes.
-	now func() time.Time
+	clock       clock.Clock
 }
 
-func newConnState(localPeerID torlib.PeerID, config Config) *connState {
+func newConnState(localPeerID torlib.PeerID, config Config, clk clock.Clock) *connState {
 	return &connState{
 		localPeerID: localPeerID,
 		config:      config,
@@ -60,7 +59,7 @@ func newConnState(localPeerID torlib.PeerID, config Config) *connState {
 		active:      make(map[connKey]*conn),
 		pending:     make(map[connKey]bool),
 		blacklist:   make(map[connKey]*blacklistEntry),
-		now:         time.Now,
+		clock:       clk,
 	}
 }
 
@@ -79,7 +78,7 @@ func (s *connState) ActiveConns() []*conn {
 func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) error {
 	k := connKey{peerID, infoHash}
 	e, ok := s.blacklist[k]
-	if ok && e.Blacklisted(s.now()) {
+	if ok && e.Blacklisted(s.clock.Now()) {
 		return errors.New("conn is already blacklisted")
 	}
 	if !ok {
@@ -95,7 +94,7 @@ func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) er
 			d.Seconds(), s.config.InitialBlacklistExpiration.Seconds())
 		d = s.config.InitialBlacklistExpiration
 	}
-	e.expiration = s.now().Add(d)
+	e.expiration = s.clock.Now().Add(d)
 	e.failures++
 	s.logf(log.Fields{
 		"peer": peerID, "hash": infoHash,
@@ -106,7 +105,7 @@ func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) er
 func (s *connState) AddPending(peerID torlib.PeerID, infoHash torlib.InfoHash) error {
 	k := connKey{peerID, infoHash}
 	if e, ok := s.blacklist[k]; ok {
-		now := s.now()
+		now := s.clock.Now()
 		if e.Blacklisted(now) {
 			return blacklistError{remaining: e.Remaining(now)}
 		}
@@ -181,7 +180,7 @@ func (s *connState) DeleteActive(c *conn) {
 
 func (s *connState) DeleteStaleBlacklistEntries() {
 	for k, e := range s.blacklist {
-		if s.now().Sub(e.expiration) >= s.config.ExpiredBlacklistEntryTTL {
+		if s.clock.Now().Sub(e.expiration) >= s.config.ExpiredBlacklistEntryTTL {
 			delete(s.blacklist, k)
 		}
 	}

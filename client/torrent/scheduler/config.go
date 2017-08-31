@@ -1,6 +1,10 @@
 package scheduler
 
-import "time"
+import (
+	"time"
+
+	"github.com/andres-erbsen/clock"
+)
 
 // Config is the Scheduler configuration.
 type Config struct {
@@ -78,4 +82,7 @@ type Config struct {
 	// BlacklistCleanupInterval is the interval expired blacklist entries which
 	// have surpassed their TTL are removed.
 	BlacklistCleanupInterval time.Duration `yaml:"blacklist_cleanup_interval"`
+
+	// Clock allows overriding the Scheduler clock. Defaults to system clock.
+	Clock clock.Clock
 }
