@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/jackpal/bencode-go"
 	"github.com/uber-common/bark"
 
@@ -51,6 +52,7 @@ type Scheduler struct {
 	port       string
 	datacenter string
 	config     Config
+	clock      clock.Clock
 
 	torrentArchive storage.TorrentArchive
 
@@ -67,9 +69,9 @@ type Scheduler struct {
 
 	listener net.Listener
 
-	announceTicker         *time.Ticker
-	preemptionTicker       *time.Ticker
-	blacklistCleanupTicker *time.Ticker
+	announceTicker         *clock.Ticker
+	preemptionTicker       *clock.Ticker
+	blacklistCleanupTicker *clock.Ticker
 
 	// The following fields orchestrate the stopping of the Scheduler.
 	once sync.Once      // Ensures the stop sequence is executed only once.
@@ -132,6 +134,9 @@ func applyDefaults(c Config) (Config, error) {
 	if c.BlacklistCleanupInterval == 0 {
 		c.BlacklistCleanupInterval = 10 * time.Minute
 	}
+	if c.Clock == nil {
+		c.Clock = clock.New()
+	}
 	return c, nil
 }
 
@@ -162,11 +167,13 @@ func New(
 		port:           port,
 		datacenter:     config.Datacenter,
 		config:         config,
+		clock:          config.Clock,
 		torrentArchive: ta,
 		connFactory: &connFactory{
 			Config:      config,
 			LocalPeerID: peerID,
 			EventLoop:   eventLoop,
+			Clock:       config.Clock,
 		},
 		dispatcherFactory: &dispatcherFactory{
 			Config:      config,
@@ -174,13 +181,13 @@ func New(
 			EventLoop:   eventLoop,
 		},
 		torrentControls:        make(map[torlib.InfoHash]*torrentControl),
-		connState:              newConnState(peerID, config),
+		connState:              newConnState(peerID, config, config.Clock),
 		announceQueue:          newAnnounceQueue(),
 		eventLoop:              eventLoop,
 		listener:               l,
-		announceTicker:         time.NewTicker(config.AnnounceInterval),
-		preemptionTicker:       time.NewTicker(config.PreemptionInterval),
-		blacklistCleanupTicker: time.NewTicker(config.BlacklistCleanupInterval),
+		announceTicker:         config.Clock.Ticker(config.AnnounceInterval),
+		preemptionTicker:       config.Clock.Ticker(config.PreemptionInterval),
+		blacklistCleanupTicker: config.Clock.Ticker(config.BlacklistCleanupInterval),
 		done: done,
 	}
 

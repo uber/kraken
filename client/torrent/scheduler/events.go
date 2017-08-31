@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"net"
-	"time"
 
 	"code.uber.internal/go-common.git/x/log"
 
@@ -281,12 +280,12 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 	for _, c := range s.connState.ActiveConns() {
 		lastProgress := timeutil.MostRecent(
 			c.CreatedAt, c.LastGoodPieceReceived(), c.LastPieceSent())
-		if time.Since(lastProgress) > s.config.IdleConnTTL {
+		if s.clock.Now().Sub(lastProgress) > s.config.IdleConnTTL {
 			s.logf(log.Fields{"conn": c}).Info("Closing idle conn")
 			c.Close()
 			continue
 		}
-		if time.Since(c.CreatedAt) > s.config.ConnTTL {
+		if s.clock.Now().Sub(c.CreatedAt) > s.config.ConnTTL {
 			s.logf(log.Fields{"conn": c}).Info("Closing expired conn")
 			c.Close()
 			continue
@@ -297,7 +296,7 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 		if ctrl.Complete && ctrl.Dispatcher.Empty() {
 			becameIdle := timeutil.MostRecent(
 				ctrl.Dispatcher.CreatedAt, ctrl.Dispatcher.LastConnRemoved())
-			if time.Since(becameIdle) > s.config.IdleSeederTTL {
+			if s.clock.Now().Sub(becameIdle) > s.config.IdleSeederTTL {
 				s.logf(log.Fields{"hash": infoHash}).Info("Removing idle torrent")
 				delete(s.torrentControls, infoHash)
 			}

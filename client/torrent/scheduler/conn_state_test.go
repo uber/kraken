@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/torlib"
-
+	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
+
+	"code.uber.internal/infra/kraken/torlib"
 )
 
 func TestBlacklistBackoff(t *testing.T) {
@@ -31,15 +32,15 @@ func TestBlacklistBackoff(t *testing.T) {
 		t.Run(test.description, func(t *testing.T) {
 			require := require.New(t)
 
-			s := newConnState(torlib.PeerIDFixture(), config)
+			clk := clock.NewMock()
+			clk.Set(time.Now())
+
+			s := newConnState(torlib.PeerIDFixture(), config, clk)
 
 			peerID := torlib.PeerIDFixture()
 			infoHash := torlib.InfoHashFixture()
 
 			s.InitCapacity(infoHash)
-
-			now := time.Now()
-			s.now = func() time.Time { return now }
 
 			var remaining time.Duration
 			for i := 0; i < test.failures; i++ {
@@ -51,8 +52,7 @@ func TestBlacklistBackoff(t *testing.T) {
 				require.True(ok)
 				remaining = blacklistErr.remaining
 
-				// Fast-forward the clock.
-				now = now.Add(remaining)
+				clk.Add(remaining)
 
 				// Peer/hash should no longer be blacklisted.
 				require.NoError(s.AddPending(peerID, infoHash))
@@ -77,15 +77,15 @@ func TestDeleteStaleBlacklistEntries(t *testing.T) {
 		ExpiredBlacklistEntryTTL:     5 * time.Minute,
 	}
 
-	s := newConnState(torlib.PeerIDFixture(), config)
+	clk := clock.NewMock()
+	clk.Set(time.Now())
+
+	s := newConnState(torlib.PeerIDFixture(), config, clk)
 
 	peerID := torlib.PeerIDFixture()
 	infoHash := torlib.InfoHashFixture()
 
 	s.InitCapacity(infoHash)
-
-	now := time.Now()
-	s.now = func() time.Time { return now }
 
 	require.NoError(s.Blacklist(peerID, infoHash))
 
@@ -94,9 +94,9 @@ func TestDeleteStaleBlacklistEntries(t *testing.T) {
 	require.Equal(config.InitialBlacklistExpiration, err.(blacklistError).remaining)
 
 	// Fast-forward to when connection has expired from blacklist.
-	now = now.Add(config.InitialBlacklistExpiration)
+	clk.Add(config.InitialBlacklistExpiration)
 
-	now = now.Add(config.ExpiredBlacklistEntryTTL)
+	clk.Add(config.ExpiredBlacklistEntryTTL)
 
 	s.DeleteStaleBlacklistEntries()
 
