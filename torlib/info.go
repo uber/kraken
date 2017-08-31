@@ -1,6 +1,7 @@
 package torlib
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"encoding/json"
 	"errors"
@@ -10,7 +11,7 @@ import (
 	"os"
 
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken-torrent/bencode"
+	bencode "github.com/jackpal/bencode-go"
 )
 
 // Info is a torrent info dictionary.
@@ -88,11 +89,11 @@ func (info *Info) Validate() error {
 // ComputeInfoHash returns the hash of Info
 // it is an identifier of a torrent
 func (info *Info) ComputeInfoHash() (InfoHash, error) {
-	infoBytes, err := bencode.Marshal(info)
-	if err != nil {
+	b := new(bytes.Buffer)
+	if err := bencode.Marshal(b, *info); err != nil {
 		return InfoHash{}, err
 	}
-	return NewInfoHashFromBytes(infoBytes), nil
+	return NewInfoHashFromBytes(b.Bytes()), nil
 }
 
 // Serialize returns info as bytes

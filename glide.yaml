@@ -43,7 +43,9 @@ import:
 - package: gopkg.in/DATA-DOG/go-sqlmock.v1
   version: ^1.2.0
 - package: github.com/spaolacci/murmur3
-- package: golang.org/x/sync/syncmap
+- package: golang.org/x/sync
+  subpackages:
+  - syncmap
 - package: github.com/golang/protobuf
 testImport:
 - package: github.com/stretchr/testify
