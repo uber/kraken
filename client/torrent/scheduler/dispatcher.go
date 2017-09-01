@@ -108,16 +108,7 @@ func (d *dispatcher) String() string {
 }
 
 func (d *dispatcher) newPieceRequestMessage(i int) *message {
-	return &message{
-		Message: &p2p.Message{
-			Type: p2p.Message_PIECE_REQUEST,
-			PieceRequest: &p2p.PieceRequestMessage{
-				Index:  int32(i),
-				Offset: 0,
-				Length: int32(d.Torrent.PieceLength(i)),
-			},
-		},
-	}
+	return newPieceRequestMessage(i, d.Torrent.PieceLength(i))
 }
 
 func (d *dispatcher) sendInitialPieceRequests(c *conn) {
@@ -129,8 +120,7 @@ func (d *dispatcher) sendInitialPieceRequests(c *conn) {
 			continue
 		}
 		d.logf(log.Fields{"peer": c.PeerID, "piece": i}).Debug("Sending piece request")
-		m := d.newPieceRequestMessage(i)
-		if err := c.Send(m); err != nil {
+		if err := c.Send(d.newPieceRequestMessage(i)); err != nil {
 			// Connection closed.
 			break
 		}
@@ -195,46 +185,21 @@ func (d *dispatcher) isFullPiece(i, offset, length int) bool {
 	return offset == 0 && length == int(d.Torrent.PieceLength(i))
 }
 
-func (d *dispatcher) sendErrPieceRequestFailed(c *conn, i int32, err error) {
-	m := &message{
-		Message: &p2p.Message{
-			Type: p2p.Message_ERROR,
-			Error: &p2p.ErrorMessage{
-				Index: i,
-				Code:  p2p.ErrorMessage_PIECE_REQUEST_FAILED,
-				Error: err.Error(),
-			},
-		},
-	}
-	c.Send(m)
-}
-
 func (d *dispatcher) handlePieceRequest(c *conn, msg *p2p.PieceRequestMessage) {
 	d.logf(log.Fields{"peer": c.PeerID, "piece": msg.Index}).Debug("Received piece request")
 
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
-		d.sendErrPieceRequestFailed(c, msg.Index, errChunkNotSupported)
+		c.Send(newErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, errChunkNotSupported))
 		return
 	}
 
 	payload, err := d.Torrent.ReadPiece(i)
 	if err != nil {
-		d.sendErrPieceRequestFailed(c, msg.Index, err)
+		c.Send(newErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err))
 		return
 	}
-	m := &message{
-		Message: &p2p.Message{
-			Type: p2p.Message_PIECE_PAYLOAD,
-			PiecePayload: &p2p.PiecePayloadMessage{
-				Index:  msg.Index,
-				Offset: 0,
-				Length: int32(len(payload)),
-			},
-		},
-		Payload: payload,
-	}
-	if err := c.Send(m); err != nil {
+	if err := c.Send(newPiecePayloadMessage(int(msg.Index), payload)); err != nil {
 		c.TouchLastPieceSent()
 	}
 }
@@ -273,25 +238,16 @@ func (d *dispatcher) handlePiecePayload(
 		}
 		cc := v.(*conn)
 
-		// TODO(codyg): We need to slim down the number of peers we announce a new
-		// piece to.  We could just rely on announcing to the tracker instead of flooding
-		// the network with tons of announce piece requests.
-		m := &message{
-			Message: &p2p.Message{
-				Type: p2p.Message_ANNOUCE_PIECE,
-				AnnouncePiece: &p2p.AnnouncePieceMessage{
-					Index: msg.Index,
-				},
-			},
-		}
-
 		d.logf(log.Fields{
 			"peer": cc.PeerID, "hash": d.Torrent.InfoHash(),
 		}).Debugf("Announcing piece %d", msg.Index)
 
 		// Ignore error -- this just means the connection was closed. The feed goroutine
 		// for cc will clean up.
-		cc.Send(m)
+		// TODO(codyg): We need to slim down the number of peers we announce a new
+		// piece to.  We could just rely on announcing to the tracker instead of flooding
+		// the network with tons of announce piece requests.
+		cc.Send(newAnnouncePieceMessage(int(msg.Index)))
 
 		return true
 	})
