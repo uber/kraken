@@ -41,13 +41,6 @@ var (
 // Maximum support protocol message size. Does not include piece payload.
 const maxMessageSize = 32 * kb
 
-// message joins a protobuf message with an optional payload. The only p2p.Message
-// type which should include a payload is PiecePayloadMessage.
-type message struct {
-	Message *p2p.Message
-	Payload []byte
-}
-
 // handshake contains the same fields as a protobuf bitfield message, but with
 // the fields converted into types used within the scheduler package. As such,
 // in this package "handshake" and "bitfield message" are usually synonymous.
