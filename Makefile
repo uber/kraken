@@ -64,10 +64,23 @@ test:: redis
 
 jenkins:: redis
 
-.PHONY: rebuild_mocks
-rebuild_mocks:
-		$(shell mockgen -destination=test/mocks/mock_storage/mock_storage.go code.uber.internal/infra/kraken/tracker/storage Storage)
-		@echo "generated mocks for Storage"
+mockgen = GOPATH=$(OLDGOPATH) $(GLIDE_EXEC) -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
+
+.PHONY: mocks
+mocks:
+	rm -rf mocks
+
+	mkdir -p mocks/tracker/mockstorage
+	$(mockgen) \
+		-destination=mocks/tracker/mockstorage/mockstorage.go \
+		-package mockstorage \
+		code.uber.internal/infra/kraken/tracker/storage Storage	
+
+	mkdir -p mocks/client/torrent/mockstorage
+	$(mockgen) \
+		-destination=mocks/client/torrent/mockstorage/mockstorage.go \
+		-package mockstorage \
+		code.uber.internal/infra/kraken/client/torrent/storage Torrent
 
 run_tracker: tracker/tracker run_database
 		export UBER_CONFIG_DIR=config/tracker && tracker/tracker

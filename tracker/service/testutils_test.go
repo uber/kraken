@@ -9,8 +9,8 @@ import (
 	"strconv"
 
 	config "code.uber.internal/infra/kraken/config/tracker"
+	"code.uber.internal/infra/kraken/mocks/tracker/mockstorage"
 	"code.uber.internal/infra/kraken/torlib"
-	"code.uber.internal/infra/kraken/tracker/storage"
 
 	"github.com/golang/mock/gomock"
 )
@@ -30,7 +30,7 @@ func jsonBytesEqual(a, b []byte) (bool, error) {
 type testMocks struct {
 	appCfg    config.AppConfig
 	ctrl      *gomock.Controller
-	datastore *storage.MockStorage
+	datastore *mockstorage.MockStorage
 }
 
 // mockController sets up all mocks and returns a teardown func that can be called with defer
@@ -42,7 +42,7 @@ func (m *testMocks) mockController(t gomock.TestReporter) func() {
 		},
 	}
 	m.ctrl = gomock.NewController(t)
-	m.datastore = storage.NewMockStorage(m.ctrl)
+	m.datastore = mockstorage.NewMockStorage(m.ctrl)
 	return func() {
 		m.ctrl.Finish()
 	}
