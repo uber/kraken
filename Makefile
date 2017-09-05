@@ -62,7 +62,7 @@ mockgen = GOPATH=$(OLDGOPATH) $(GLIDE_EXEC) -g $(GLIDE) -d $(GOPATH)/bin -x gith
 .PHONY: mocks
 mocks:
 	rm -rf mocks
-
+	mkdir -p $(GOPATH)/bin
 	mkdir -p mocks/tracker/mockstorage
 	$(mockgen) \
 		-destination=mocks/tracker/mockstorage/mockstorage.go \
@@ -74,6 +74,12 @@ mocks:
 		-destination=mocks/client/torrent/mockstorage/mockstorage.go \
 		-package mockstorage \
 		code.uber.internal/infra/kraken/client/torrent/storage Torrent
+
+	mkdir -p mocks/origin/client/blobtransferer
+	$(mockgen) \
+		-destination=mocks/origin/client/mockblobtransferer.go \
+		-package mockclient \
+		code.uber.internal/infra/kraken/origin/client BlobTransferer
 
 # Enumerates all container names, including those created by dockerman.
 CONTAINERS := $(foreach \

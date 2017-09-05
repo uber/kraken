@@ -12,8 +12,8 @@ import (
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
+	"code.uber.internal/infra/kraken/origin/client"
 	hashcfg "code.uber.internal/infra/kraken/origin/config"
-
 	"github.com/docker/distribution/uuid"
 	"github.com/pressly/chi"
 )
@@ -316,6 +316,20 @@ func deleteBlobHandler(ctx context.Context, request *http.Request) (context.Cont
 	return ctx, nil
 }
 
+func parseBlobByShardIDHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
+
+	shardID := chi.URLParam(request, "shardID")
+	if len(shardID) == 0 {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError, "missing required ShardID parameter in a reques")
+	}
+
+	ctx = context.WithValue(ctx, ctxKeyShardID, shardID)
+	ctx = context.WithValue(ctx, ctxBlobTransferFactory, client.NewBlobAPIClient)
+
+	return ctx, nil
+}
+
 // Find out which node(s) are responsible for the blob based on the first 2 bytes of digest.
 // Do nothing if current node is among the designated nodes.
 // TODO: this node could be new. This method should ensure the file is actually available locally.
@@ -323,7 +337,7 @@ func redirectByDigestHandler(ctx context.Context, request *http.Request) (contex
 	digest, ok := ctx.Value(ctxKeyDigest).(*image.Digest)
 	if !ok {
 		return nil, NewServerResponseWithError(
-			http.StatusInternalServerError, "Digest not set")
+			http.StatusInternalServerError, "digest not set")
 	}
 	hashConfig, ok := ctx.Value(ctxKeyHashConfig).(hashcfg.HashConfig)
 	if !ok {
@@ -333,7 +347,7 @@ func redirectByDigestHandler(ctx context.Context, request *http.Request) (contex
 	hashState, ok := ctx.Value(ctxKeyHashState).(*hrw.RendezvousHash)
 	if !ok {
 		return nil, NewServerResponseWithError(
-			http.StatusInternalServerError, "HashState not set")
+			http.StatusInternalServerError, "hashState not set")
 	}
 
 	// Shard by first 2 bytes of digest.
@@ -342,7 +356,7 @@ func redirectByDigestHandler(ctx context.Context, request *http.Request) (contex
 	if err != nil || len(nodes) == 0 {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
-			"Failed to calculate hash for digest %s, error: %s", digest, err)
+			"failed to calculate hash for digest %s, error: %s", digest, err)
 	}
 	var labels []string
 	for _, node := range nodes {

@@ -9,6 +9,9 @@ import (
 
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/hrw"
+	"code.uber.internal/infra/kraken/origin/client"
+	hashcfg "code.uber.internal/infra/kraken/origin/config"
 )
 
 const (
@@ -84,5 +87,88 @@ func returnUploadLocationHandler(ctx context.Context, writer http.ResponseWriter
 	writer.Header().Set("Location", fmt.Sprintf("/blobs/uploads/%s", uploadUUID))
 	writer.Header().Set("Content-Length", "0")
 
+	return ctx, resp
+}
+
+func repairBlobByShardIDStreamHandler(ctx context.Context, writer http.ResponseWriter) (context.Context, *ServerResponse) {
+	shardID, ok := ctx.Value(ctxKeyShardID).(string)
+	if !ok {
+		return nil, NewServerResponseWithError(http.StatusInternalServerError, "shard id is not set")
+	}
+
+	hashConfig, ok := ctx.Value(ctxKeyHashConfig).(hashcfg.HashConfig)
+	if !ok {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError, "label is not set")
+	}
+
+	hashState, ok := ctx.Value(ctxKeyHashState).(*hrw.RendezvousHash)
+	if !ok {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError, "hashState is not set")
+	}
+
+	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
+	if !ok {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError, "LocalStore is not set")
+	}
+
+	blobTransferFactory, ok := ctx.Value(ctxBlobTransferFactory).(client.BlobTransferFactory)
+	if !ok {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError, "blobTransferFactory is not set")
+	}
+
+	// TODO(igor): Need to read num_replicas from tracker's metadata
+	nodes, err := hashState.GetOrderedNodes(shardID, hashConfig.NumReplica)
+	if err != nil || len(nodes) == 0 {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError, "failed to compute hash for shard %s, error: %s", shardID, err)
+	}
+
+	digests, err := localStore.ListDigests(shardID)
+	if err != nil {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError,
+			"failed to retrieve local store digests, error: %s",
+			err,
+		)
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+	for _, node := range nodes {
+
+		// skip repair for the current node
+		if node.Label == hashConfig.Label {
+			continue
+		}
+
+		host, ok := hashConfig.LabelToHostname[node.Label]
+
+		if !ok {
+			return nil, NewServerResponseWithError(
+				http.StatusInternalServerError,
+				"cannot find a server by its label: invalid hash configuration, server label: %s",
+				node.Label,
+			)
+		}
+
+		br := &BlobRepairer{
+			context:     ctx,
+			hostname:    host,
+			blobAPI:     blobTransferFactory(host, localStore),
+			numWorkers:  hashConfig.Repair.NumWorkers,
+			numRetries:  hashConfig.Repair.NumRetries,
+			retryDelay:  hashConfig.Repair.RetryDelayMs,
+			connTimeout: hashConfig.Repair.ConnTimeout,
+		}
+
+		// Batch repairer launches a number of background go-routines
+		// and reports the result back into response writer asynchronously
+		br.BatchRepair(digests, writer)
+
+	}
+	resp := NewServerResponse(http.StatusOK)
 	return ctx, resp
 }
