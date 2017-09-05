@@ -6,6 +6,7 @@ import (
 
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/lib/hrw"
+	"code.uber.internal/infra/kraken/origin/client"
 	hashcfg "code.uber.internal/infra/kraken/origin/config"
 
 	"github.com/pressly/chi"
@@ -31,6 +32,9 @@ func InitializeAPI(storeConfig *store.Config, hashConfig hashcfg.HashConfig) htt
 	r.Patch("/blobs/uploads/:uuid", webApp.PatchUpload)
 	r.Put("/blobs/uploads/:uuid", webApp.PutUpload)
 
+	// Repair data blob
+	r.Get("/repair/shard/:shardID", webApp.RepairBlobByShardID)
+
 	return r
 }
 
@@ -40,7 +44,7 @@ func NewBlobWebApp(storeConfig *store.Config, hashConfig hashcfg.HashConfig) *Bl
 		panic("Hashstate has zero length: `0 any_operation X = 0`")
 	}
 
-	// Initalize hashing state
+	// initalize hashing state
 	hashState := hrw.NewRendezvousHash(
 		func() hash.Hash { return murmur3.New64() },
 		hrw.UInt64ToFloat64)
@@ -56,9 +60,10 @@ func NewBlobWebApp(storeConfig *store.Config, hashConfig hashcfg.HashConfig) *Bl
 	}
 
 	return &BlobWebApp{
-		hashConfig: hashConfig,
-		hashState:  hashState,
-		localStore: ls,
+		hashConfig:          hashConfig,
+		hashState:           hashState,
+		localStore:          ls,
+		blobTransferFactory: client.NewBlobAPIClient,
 	}
 }
 
@@ -66,8 +71,9 @@ func NewBlobWebApp(storeConfig *store.Config, hashConfig hashcfg.HashConfig) *Bl
 type BlobWebApp struct {
 	hashConfig hashcfg.HashConfig
 
-	hashState  *hrw.RendezvousHash
-	localStore *store.LocalStore
+	hashState           *hrw.RendezvousHash
+	localStore          *store.LocalStore
+	blobTransferFactory client.BlobTransferFactory
 }
 
 // CheckBlob checks if blob data exists.
@@ -134,4 +140,14 @@ func (app BlobWebApp) PutUpload(writer http.ResponseWriter, request *http.Reques
 	p.AddRequestHandler(commitUploadHandler)
 	p.AddResponseHandler(createdHandler)
 	p.Run(writer, request)
+}
+
+// RepairBlobByShardID runs blob repair by shard ID, ensuring all the digests of a shard
+// are synced properly to target nodes
+func (app BlobWebApp) RepairBlobByShardID(writer http.ResponseWriter, request *http.Request) {
+	p := NewPipeline(request.Context(), app.hashConfig, app.hashState, app.localStore)
+	p.AddRequestHandler(parseBlobByShardIDHandler)
+	p.AddResponseHandler(repairBlobByShardIDStreamHandler)
+	p.Run(writer, request)
+
 }

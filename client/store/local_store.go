@@ -11,6 +11,7 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store/base"
 	"code.uber.internal/infra/kraken/client/store/refcountable"
+	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 
 	"github.com/docker/distribution/uuid"
 	"github.com/robfig/cron"
@@ -380,4 +381,23 @@ func (store *LocalStore) DerefCacheFile(fileName string) (int64, error) {
 	}
 	return refCount, nil
 
+}
+
+// ListDigests lists locally stored digest items on a shard
+func (store *LocalStore) ListDigests(shardID string) ([]*image.Digest, error) {
+	dir, err := os.Open(store.config.CacheDir)
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	names, err := dir.Readdirnames(-1)
+	if err != nil {
+		return nil, err
+	}
+	var digests []*image.Digest
+	for _, fileName := range names {
+		digest, _ := image.NewDigestFromString("sha256:" + fileName)
+		digests = append(digests, digest)
+	}
+	return digests, nil
 }

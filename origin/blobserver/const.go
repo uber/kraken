@@ -11,4 +11,6 @@ const (
 	ctxKeyEndByte
 	ctxKeyHashConfig
 	ctxKeyHashState
+	ctxKeyShardID
+	ctxBlobTransferFactory
 )
