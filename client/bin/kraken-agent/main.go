@@ -37,7 +37,7 @@ func main() {
 	config.Registry.DisableTorrent = disableTorrent
 
 	// init metrics
-	metricsScope, metricsCloser, err := metrics.NewMetrics(config.Metrics)
+	metricsScope, metricsCloser, err := metrics.New(config.Metrics)
 	if err != nil {
 		log.Fatal(err)
 	}
