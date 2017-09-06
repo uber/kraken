@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/utils/memsize"
-
-	"github.com/andres-erbsen/clock"
 )
 
 // Config is the Scheduler configuration.
@@ -51,9 +49,6 @@ type Config struct {
 	// have surpassed their TTL are removed.
 	BlacklistCleanupInterval time.Duration `yaml:"blacklist_cleanup_interval"`
 
-	// Clock allows overriding the Scheduler clock. Defaults to system clock.
-	Clock clock.Clock
-
 	ConnState ConnStateConfig `yaml:"conn_state"`
 
 	Conn ConnConfig `yaml:"conn"`
@@ -89,9 +84,6 @@ func (c Config) applyDefaults() (Config, error) {
 	}
 	if c.BlacklistCleanupInterval == 0 {
 		c.BlacklistCleanupInterval = 10 * time.Minute
-	}
-	if c.Clock == nil {
-		c.Clock = clock.New()
 	}
 	c.ConnState = c.ConnState.applyDefaults()
 	c.Conn = c.Conn.applyDefaults()

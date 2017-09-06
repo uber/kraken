@@ -23,22 +23,26 @@ type eventSender interface {
 }
 
 // eventLoop represents a serialized list of events to be applied to a Scheduler.
-type eventLoop struct {
+type eventLoop interface {
+	eventSender
+	Run(*Scheduler)
+}
+
+type eventLoopImpl struct {
 	events chan event
 	done   chan struct{}
 }
 
-func newEventLoop(done chan struct{}) *eventLoop {
-	return &eventLoop{
+func newEventLoop(done chan struct{}) *eventLoopImpl {
+	return &eventLoopImpl{
 		events: make(chan event),
 		done:   done,
 	}
 }
 
-// Send sends a new event into eventLoop. Should never be called by the same
-// goroutine running the eventLoop (i.e. within Apply methods), else deadlock
-// will occur.
-func (l *eventLoop) Send(e event) {
+// Send sends a new event into l. Should never be called by the same goroutine
+// running l (i.e. within Apply methods), else deadlock will occur.
+func (l *eventLoopImpl) Send(e event) {
 	select {
 	case l.events <- e:
 	case <-l.done:
@@ -46,7 +50,7 @@ func (l *eventLoop) Send(e event) {
 }
 
 // Run processes events until done is closed.
-func (l *eventLoop) Run(s *Scheduler) {
+func (l *eventLoopImpl) Run(s *Scheduler) {
 	for {
 		select {
 		case e := <-l.events:

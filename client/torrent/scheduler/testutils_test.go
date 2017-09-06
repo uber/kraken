@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -99,9 +100,9 @@ type testPeer struct {
 	Stop           func()
 }
 
-func genTestPeer(config Config) *testPeer {
+func genTestPeer(config Config, options ...option) *testPeer {
 	tm, deleteFunc := storage.TorrentArchiveFixture()
-	s, err := New(config, torlib.PeerIDFixture(), tm)
+	s, err := New(config, torlib.PeerIDFixture(), tm, options...)
 	if err != nil {
 		deleteFunc()
 		panic(err)
@@ -237,4 +238,43 @@ func genTestConn(t *testing.T, config ConnConfig, maxPieceLength int) (c *conn, 
 		remoteNC.Close()
 	}
 	return
+}
+
+// eventRecorder wraps an eventLoop and records all events being sent.
+type eventRecorder struct {
+	done   chan struct{}
+	l      eventLoop
+	mu     sync.Mutex
+	events []event
+}
+
+func newEventRecorder() *eventRecorder {
+	done := make(chan struct{})
+	return &eventRecorder{
+		done: done,
+		l:    newEventLoop(done),
+	}
+}
+
+func (r *eventRecorder) Send(e event) {
+	r.mu.Lock()
+	r.events = append(r.events, e)
+	r.l.Send(e)
+	r.mu.Unlock()
+}
+
+func (r *eventRecorder) Run(s *Scheduler) {
+	r.l.Run(s)
+}
+
+func (r *eventRecorder) Events() []event {
+	r.mu.Lock()
+	a := make([]event, len(r.events))
+	copy(a, r.events)
+	r.mu.Unlock()
+	return a
+}
+
+func (r *eventRecorder) Stop() {
+	close(r.done)
 }

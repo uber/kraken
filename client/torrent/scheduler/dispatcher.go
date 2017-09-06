@@ -27,16 +27,17 @@ type dispatcherFactory struct {
 	Config      Config
 	LocalPeerID torlib.PeerID
 	EventSender eventSender
+	Clock       clock.Clock
 }
 
 // New creates a new dispatcher for the given torrent.
 func (f *dispatcherFactory) New(t storage.Torrent) *dispatcher {
 	d := &dispatcher{
 		Torrent:     t,
-		CreatedAt:   f.Config.Clock.Now(),
+		CreatedAt:   f.Clock.Now(),
 		localPeerID: f.LocalPeerID,
 		eventSender: f.EventSender,
-		clock:       f.Config.Clock,
+		clock:       f.Clock,
 	}
 	if t.Complete() {
 		d.complete.Do(func() { go d.eventSender.Send(completedDispatcherEvent{d}) })
