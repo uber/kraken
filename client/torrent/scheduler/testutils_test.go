@@ -1,13 +1,19 @@
 package scheduler
 
 import (
+	"io"
+	"io/ioutil"
+	"net"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/andres-erbsen/clock"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
 	"code.uber.internal/infra/kraken/client/torrent/storage"
+	"code.uber.internal/infra/kraken/mocks/client/torrent/mockstorage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
@@ -18,26 +24,43 @@ func init() {
 	os.Mkdir(testTempDir, 0755)
 }
 
-func genConfig(trackerAddr string) Config {
-	return Config{
-		ListenAddr:       "localhost:0",
-		Datacenter:       "sjc1",
-		TrackerAddr:      trackerAddr,
-		AnnounceInterval: 500 * time.Millisecond,
+func genConnConfig() ConnConfig {
+	return ConnConfig{
 		// Buffers are just a performance optimization, so a zero-sized
 		// buffer will instantly force any deadlock conditions.
-		SenderBufferSize:           0,
-		ReceiverBufferSize:         0,
-		IdleSeederTTL:              2 * time.Second,
-		PreemptionInterval:         500 * time.Millisecond,
-		IdleConnTTL:                1 * time.Second,
-		ConnTTL:                    5 * time.Minute,
-		InitialBlacklistExpiration: time.Second,
-		BlacklistExpirationBackoff: 2,
-		MaxBlacklistExpiration:     10 * time.Second,
-		ExpiredBlacklistEntryTTL:   5 * time.Minute,
-		BlacklistCleanupInterval:   time.Minute,
+		SenderBufferSize:   0,
+		ReceiverBufferSize: 0,
+	}.applyDefaults()
+}
+
+func genConnStateConfig() ConnStateConfig {
+	return ConnStateConfig{
+		MaxOpenConnectionsPerTorrent: 20,
+		InitialBlacklistExpiration:   time.Second,
+		BlacklistExpirationBackoff:   2,
+		MaxBlacklistExpiration:       10 * time.Second,
+		ExpiredBlacklistEntryTTL:     5 * time.Minute,
+	}.applyDefaults()
+}
+
+func genConfig(trackerAddr string) Config {
+	c, err := Config{
+		ListenAddr:               "localhost:0",
+		Datacenter:               "sjc1",
+		TrackerAddr:              trackerAddr,
+		AnnounceInterval:         500 * time.Millisecond,
+		IdleSeederTTL:            2 * time.Second,
+		PreemptionInterval:       500 * time.Millisecond,
+		IdleConnTTL:              1 * time.Second,
+		ConnTTL:                  5 * time.Minute,
+		BlacklistCleanupInterval: time.Minute,
+		ConnState:                genConnStateConfig(),
+		Conn:                     genConnConfig(),
+	}.applyDefaults()
+	if err != nil {
+		panic(err)
 	}
+	return c
 }
 
 // writeTorrent writes the given content into a torrent file into tm's storage.
@@ -173,4 +196,45 @@ func waitForTorrentRemoved(t *testing.T, s *Scheduler, infoHash torlib.InfoHash)
 			"scheduler=%s did not remove torrent for hash=%s: %s",
 			s.peerID, infoHash, err)
 	}
+}
+
+func discard(nc net.Conn) {
+	for {
+		if _, err := io.Copy(ioutil.Discard, nc); err != nil {
+			return
+		}
+	}
+}
+
+type noopEventSender struct{}
+
+func (s noopEventSender) Send(event) {}
+
+func genTestConn(t *testing.T, config ConnConfig, maxPieceLength int) (c *conn, cleanup func()) {
+	ctrl := gomock.NewController(t)
+
+	infoHash := torlib.InfoHashFixture()
+	localPeerID := torlib.PeerIDFixture()
+	remotePeerID := torlib.PeerIDFixture()
+
+	f := &connFactory{
+		Config:      config,
+		LocalPeerID: localPeerID,
+		EventSender: noopEventSender{},
+		Clock:       clock.New(),
+	}
+
+	localNC, remoteNC := net.Pipe()
+	go discard(remoteNC)
+
+	tor := mockstorage.NewMockTorrent(ctrl)
+	tor.EXPECT().InfoHash().Return(infoHash)
+	tor.EXPECT().MaxPieceLength().Return(int64(maxPieceLength))
+
+	c = f.newConn(localNC, tor, remotePeerID, storage.Bitfield{}, false)
+	cleanup = func() {
+		localNC.Close()
+		remoteNC.Close()
+	}
+	return
 }

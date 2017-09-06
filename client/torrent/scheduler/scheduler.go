@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/jackpal/bencode-go"
@@ -18,7 +17,6 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
-	// TODO(codyg): Probably factor these into a common structs package?
 )
 
 // ErrTorrentAlreadyRegistered returns when adding a torrent which has already
@@ -79,67 +77,6 @@ type Scheduler struct {
 	wg   sync.WaitGroup // Waits for eventLoop and listenLoop to exit.
 }
 
-func applyDefaults(c Config) (Config, error) {
-	if c.TrackerAddr == "" {
-		return c, errors.New("no tracker addr specified")
-	}
-	if c.ListenAddr == "" {
-		return c, errors.New("no listen addr specified")
-	}
-	if c.Datacenter == "" {
-		return c, errors.New("no datacenter specified")
-	}
-	if c.MaxOpenConnectionsPerTorrent == 0 {
-		c.MaxOpenConnectionsPerTorrent = 20
-	}
-	if c.AnnounceInterval == 0 {
-		c.AnnounceInterval = 30 * time.Second
-	}
-	if c.DialTimeout == 0 {
-		c.DialTimeout = 5 * time.Second
-	}
-	if c.WriteTimeout == 0 {
-		c.WriteTimeout = 5 * time.Second
-	}
-	if c.SenderBufferSize == 0 {
-		c.SenderBufferSize = 100
-	}
-	if c.ReceiverBufferSize == 0 {
-		c.ReceiverBufferSize = 100
-	}
-	if c.IdleSeederTTL == 0 {
-		c.IdleSeederTTL = 10 * time.Minute
-	}
-	if c.PreemptionInterval == 0 {
-		c.PreemptionInterval = 30 * time.Second
-	}
-	if c.IdleConnTTL == 0 {
-		c.IdleConnTTL = 5 * time.Minute
-	}
-	if c.ConnTTL == 0 {
-		c.ConnTTL = time.Hour
-	}
-	if c.InitialBlacklistExpiration == 0 {
-		c.InitialBlacklistExpiration = time.Minute
-	}
-	if c.BlacklistExpirationBackoff == 0 {
-		c.BlacklistExpirationBackoff = 2
-	}
-	if c.MaxBlacklistExpiration == 0 {
-		c.MaxBlacklistExpiration = 30 * time.Minute
-	}
-	if c.ExpiredBlacklistEntryTTL == 0 {
-		c.ExpiredBlacklistEntryTTL = 6 * time.Hour
-	}
-	if c.BlacklistCleanupInterval == 0 {
-		c.BlacklistCleanupInterval = 10 * time.Minute
-	}
-	if c.Clock == nil {
-		c.Clock = clock.New()
-	}
-	return c, nil
-}
-
 // New creates and starts a Scheduler. Incoming connections are accepted on the
 // addr, and the local peer is announced as part of the datacenter.
 func New(
@@ -147,7 +84,7 @@ func New(
 	peerID torlib.PeerID,
 	ta storage.TorrentArchive) (*Scheduler, error) {
 
-	config, err := applyDefaults(config)
+	config, err := config.applyDefaults()
 	if err != nil {
 		return nil, fmt.Errorf("invalid config: %s", err)
 	}
@@ -170,18 +107,18 @@ func New(
 		clock:          config.Clock,
 		torrentArchive: ta,
 		connFactory: &connFactory{
-			Config:      config,
+			Config:      config.Conn,
 			LocalPeerID: peerID,
-			EventLoop:   eventLoop,
+			EventSender: eventLoop,
 			Clock:       config.Clock,
 		},
 		dispatcherFactory: &dispatcherFactory{
 			Config:      config,
 			LocalPeerID: peerID,
-			EventLoop:   eventLoop,
+			EventSender: eventLoop,
 		},
 		torrentControls:        make(map[torlib.InfoHash]*torrentControl),
-		connState:              newConnState(peerID, config, config.Clock),
+		connState:              newConnState(peerID, config.ConnState, config.Clock),
 		announceQueue:          newAnnounceQueue(),
 		eventLoop:              eventLoop,
 		listener:               l,
@@ -307,8 +244,7 @@ func (s *Scheduler) doInitIncomingConn(
 		nc.Close()
 		return nil, nil, fmt.Errorf("failed to open torrent storage: %s", err)
 	}
-	c, err := s.connFactory.ReciprocateHandshake(
-		nc, remoteHandshake, &handshake{s.peerID, remoteHandshake.Name, remoteHandshake.InfoHash, t.Bitfield()})
+	c, err := s.connFactory.ReciprocateHandshake(nc, t, remoteHandshake)
 	if err != nil {
 		nc.Close()
 		return nil, nil, fmt.Errorf("failed to reciprocate handshake: %s", err)
@@ -340,8 +276,7 @@ func (s *Scheduler) doInitOutgoingConn(
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial peer: %s", err)
 	}
-	h := &handshake{s.peerID, t.Name(), t.InfoHash(), t.Bitfield()}
-	c, err := s.connFactory.SendAndReceiveHandshake(nc, h)
+	c, err := s.connFactory.SendAndReceiveHandshake(nc, t)
 	if err != nil {
 		nc.Close()
 		return nil, fmt.Errorf("failed to handshake peer: %s", err)

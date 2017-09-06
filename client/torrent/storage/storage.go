@@ -9,6 +9,7 @@ type Torrent interface {
 	NumPieces() int
 	Length() int64
 	PieceLength(piece int) int64
+	MaxPieceLength() int64
 	InfoHash() torlib.InfoHash
 	Complete() bool
 	BytesDownloaded() int64

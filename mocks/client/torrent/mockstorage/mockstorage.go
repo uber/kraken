@@ -106,6 +106,18 @@ func (mr *MockTorrentMockRecorder) Length() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Length", reflect.TypeOf((*MockTorrent)(nil).Length))
 }
 
+// MaxPieceLength mocks base method
+func (m *MockTorrent) MaxPieceLength() int64 {
+	ret := m.ctrl.Call(m, "MaxPieceLength")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// MaxPieceLength indicates an expected call of MaxPieceLength
+func (mr *MockTorrentMockRecorder) MaxPieceLength() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaxPieceLength", reflect.TypeOf((*MockTorrent)(nil).MaxPieceLength))
+}
+
 // MissingPieces mocks base method
 func (m *MockTorrent) MissingPieces() []int {
 	ret := m.ctrl.Call(m, "MissingPieces")

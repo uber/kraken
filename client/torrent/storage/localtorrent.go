@@ -57,6 +57,11 @@ func (t *LocalTorrent) PieceLength(piece int) int64 {
 	return t.metaInfo.Info.PieceLength
 }
 
+// MaxPieceLength implements Torrent.MaxPieceLength
+func (t *LocalTorrent) MaxPieceLength() int64 {
+	return t.PieceLength(0)
+}
+
 // Complete implements Torrent.Complete
 func (t *LocalTorrent) Complete() bool {
 	numPieces := t.NumPieces()

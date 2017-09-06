@@ -26,7 +26,7 @@ var (
 type dispatcherFactory struct {
 	Config      Config
 	LocalPeerID torlib.PeerID
-	EventLoop   *eventLoop
+	EventSender eventSender
 }
 
 // New creates a new dispatcher for the given torrent.
@@ -35,11 +35,11 @@ func (f *dispatcherFactory) New(t storage.Torrent) *dispatcher {
 		Torrent:     t,
 		CreatedAt:   f.Config.Clock.Now(),
 		localPeerID: f.LocalPeerID,
-		eventLoop:   f.EventLoop,
+		eventSender: f.EventSender,
 		clock:       f.Config.Clock,
 	}
 	if t.Complete() {
-		d.complete.Do(func() { go d.eventLoop.Send(completedDispatcherEvent{d}) })
+		d.complete.Do(func() { go d.eventSender.Send(completedDispatcherEvent{d}) })
 	}
 	return d
 }
@@ -55,7 +55,7 @@ type dispatcher struct {
 
 	conns syncmap.Map
 
-	eventLoop *eventLoop
+	eventSender eventSender
 
 	mu              sync.Mutex // Protects the following fields:
 	lastConnRemoved time.Time
@@ -225,7 +225,7 @@ func (d *dispatcher) handlePiecePayload(
 	}
 	c.TouchLastGoodPieceReceived()
 	if d.Torrent.Complete() {
-		d.complete.Do(func() { go d.eventLoop.Send(completedDispatcherEvent{d}) })
+		d.complete.Do(func() { go d.eventSender.Send(completedDispatcherEvent{d}) })
 	}
 
 	d.logf(log.Fields{

@@ -7,10 +7,9 @@ import (
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken/torlib"
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-common/bark"
-
-	"code.uber.internal/infra/kraken/torlib"
 )
 
 var errTorrentAtCapacity = errors.New("torrent is at capacity")
@@ -43,7 +42,7 @@ func (e *blacklistEntry) Remaining(now time.Time) time.Duration {
 
 type connState struct {
 	localPeerID torlib.PeerID
-	config      Config
+	config      ConnStateConfig
 	capacity    map[torlib.InfoHash]int
 	active      map[connKey]*conn
 	pending     map[connKey]bool
@@ -51,7 +50,7 @@ type connState struct {
 	clock       clock.Clock
 }
 
-func newConnState(localPeerID torlib.PeerID, config Config, clk clock.Clock) *connState {
+func newConnState(localPeerID torlib.PeerID, config ConnStateConfig, clk clock.Clock) *connState {
 	return &connState{
 		localPeerID: localPeerID,
 		config:      config,
@@ -123,7 +122,7 @@ func (s *connState) AddPending(peerID torlib.PeerID, infoHash torlib.InfoHash) e
 	s.capacity[k.infoHash]--
 	s.logf(log.Fields{
 		"peer": peerID, "hash": infoHash,
-	}).Infof("Adding pending conn, capacity now at %d", s.capacity[k.infoHash])
+	}).Infof("Added pending conn, capacity now at %d", s.capacity[k.infoHash])
 	return nil
 }
 
@@ -136,7 +135,7 @@ func (s *connState) DeletePending(peerID torlib.PeerID, infoHash torlib.InfoHash
 	s.capacity[k.infoHash]++
 	s.logf(log.Fields{
 		"peer": peerID, "hash": infoHash,
-	}).Infof("Deleting pending conn, capacity now at %d", s.capacity[k.infoHash])
+	}).Infof("Deleted pending conn, capacity now at %d", s.capacity[k.infoHash])
 }
 
 func (s *connState) MovePendingToActive(c *conn) error {
@@ -159,9 +158,10 @@ func (s *connState) MovePendingToActive(c *conn) error {
 		existingConn.Close()
 	}
 	s.active[k] = c
+	s.adjustConnBandwidthLimits()
 	s.logf(log.Fields{
 		"peer": k.peerID, "hash": k.infoHash,
-	}).Info("Moving conn from pending to active")
+	}).Info("Moved conn from pending to active")
 	return nil
 }
 
@@ -172,9 +172,10 @@ func (s *connState) DeleteActive(c *conn) {
 		// so we need to make sure we're deleting the right one.
 		delete(s.active, k)
 		s.capacity[k.infoHash]++
+		s.adjustConnBandwidthLimits()
 		s.logf(log.Fields{
 			"peer": k.peerID, "hash": k.infoHash,
-		}).Infof("Deleting active conn, capacity now at %d", s.capacity[k.infoHash])
+		}).Infof("Deleted active conn, capacity now at %d", s.capacity[k.infoHash])
 	}
 }
 
@@ -206,6 +207,29 @@ func (s *connState) newConnPreferred(existingConn *conn, newConn *conn) bool {
 	return existingOpener != newOpener &&
 		!existingConn.Active() &&
 		existingOpener.LessThan(newOpener)
+}
+
+// adjustConnBandwidthLimits balances the amount of egress bandwidth allocated to
+// each active conn.
+func (s *connState) adjustConnBandwidthLimits() {
+	max := s.config.MaxGlobalEgressBytesPerSec
+	min := s.config.MinConnEgressBytesPerSec
+	n := uint64(len(s.active))
+	if n == 0 {
+		// No-op.
+		return
+	}
+	limit := max / n
+	if limit < min {
+		// TODO(codyg): This is really bad. We need to either alert when this happens,
+		// or throttle the number of torrents being added to the Scheduler.
+		s.log().Errorf("Violating max global egress bandwidth by %d b/sec", min*n-max)
+		limit = min
+	}
+	for _, c := range s.active {
+		c.SetEgressBandwidthLimit(limit)
+	}
+	s.log().Infof("Balanced egress bandwidth to %d b/sec across %d conns", limit, n)
 }
 
 func (s *connState) logf(f log.Fields) bark.Logger {

@@ -13,17 +13,12 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/golang/protobuf/proto"
 	"github.com/uber-common/bark"
+	"golang.org/x/time/rate"
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
-)
-
-const (
-	_  = iota
-	kb = 1 << 10 * iota
-	mb
-	gb
+	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
 var (
@@ -39,7 +34,7 @@ var (
 )
 
 // Maximum support protocol message size. Does not include piece payload.
-const maxMessageSize = 32 * kb
+const maxMessageSize = 32 * memsize.KB
 
 // handshake contains the same fields as a protobuf bitfield message, but with
 // the fields converted into types used within the scheduler package. As such,
@@ -90,21 +85,28 @@ func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
 }
 
 type connFactory struct {
-	Config      Config
+	Config      ConnConfig
 	LocalPeerID torlib.PeerID
-	EventLoop   *eventLoop
+	EventSender eventSender
 	Clock       clock.Clock
 }
 
 // newConn resolves response handshake h into a new conn.
 func (f *connFactory) newConn(
-	nc net.Conn, h *handshake, openedByRemote bool) *conn {
+	nc net.Conn,
+	t storage.Torrent,
+	remotePeerID torlib.PeerID,
+	remoteBitfield storage.Bitfield,
+	openedByRemote bool) *conn {
 
 	c := &conn{
-		PeerID:         h.PeerID,
-		InfoHash:       h.InfoHash,
-		CreatedAt:      f.Clock.Now(),
-		Bitfield:       newSyncBitfield(h.Bitfield),
+		PeerID:    remotePeerID,
+		InfoHash:  t.InfoHash(),
+		CreatedAt: f.Clock.Now(),
+		// A limit of 0 means no pieces will be allowed to send until bandwidth
+		// is allocated with SetEgressBandwidthLimit.
+		egressLimiter:  rate.NewLimiter(0, int(t.MaxPieceLength())),
+		Bitfield:       newSyncBitfield(remoteBitfield),
 		localPeerID:    f.LocalPeerID,
 		nc:             nc,
 		config:         f.Config,
@@ -112,7 +114,7 @@ func (f *connFactory) newConn(
 		openedByRemote: openedByRemote,
 		sender:         make(chan *message, f.Config.SenderBufferSize),
 		receiver:       make(chan *message, f.Config.ReceiverBufferSize),
-		eventLoop:      f.EventLoop,
+		eventSender:    f.EventSender,
 		done:           make(chan struct{}),
 	}
 
@@ -121,9 +123,15 @@ func (f *connFactory) newConn(
 	return c
 }
 
-// SendAndReceiveHandshake initializes a new conn by sending localHandshake over
-// nc and waiting for a handshake in response.
-func (f *connFactory) SendAndReceiveHandshake(nc net.Conn, localHandshake *handshake) (*conn, error) {
+// SendAndReceiveHandshake initializes a new conn for Torrent t by sending a
+// handshake over nc and waiting for a handshake in response.
+func (f *connFactory) SendAndReceiveHandshake(nc net.Conn, t storage.Torrent) (*conn, error) {
+	localHandshake := &handshake{
+		PeerID:   f.LocalPeerID,
+		Name:     t.Name(),
+		InfoHash: t.InfoHash(),
+		Bitfield: t.Bitfield(),
+	}
 	if err := sendMessage(nc, localHandshake.ToP2PMessage(), f.Clock, f.Config.WriteTimeout); err != nil {
 		return nil, err
 	}
@@ -138,7 +146,7 @@ func (f *connFactory) SendAndReceiveHandshake(nc net.Conn, localHandshake *hands
 	if remoteHandshake.InfoHash != localHandshake.InfoHash {
 		return nil, errHandshakeInfoHashMismatch
 	}
-	return f.newConn(nc, remoteHandshake, false), nil
+	return f.newConn(nc, t, remoteHandshake.PeerID, remoteHandshake.Bitfield, false), nil
 }
 
 // receiveHandshake reads a handshake from a new connection.
@@ -154,15 +162,22 @@ func receiveHandshake(nc net.Conn) (*handshake, error) {
 	return h, nil
 }
 
-// ReciprocateHandshake initializes a new conn by sending localHandshake over nc
-// assuming that remoteHandshake has already been received over nc.
+// ReciprocateHandshake initializes a new conn for Torrent t by sending a
+// handshake over nc assuming that remoteHandshake has already been received
+// over nc.
 func (f *connFactory) ReciprocateHandshake(
-	nc net.Conn, remoteHandshake *handshake, localHandshake *handshake) (*conn, error) {
+	nc net.Conn, t storage.Torrent, remoteHandshake *handshake) (*conn, error) {
 
+	localHandshake := &handshake{
+		PeerID:   f.LocalPeerID,
+		Name:     t.Name(),
+		InfoHash: t.InfoHash(),
+		Bitfield: t.Bitfield(),
+	}
 	if err := sendMessage(nc, localHandshake.ToP2PMessage(), f.Clock, f.Config.WriteTimeout); err != nil {
 		return nil, err
 	}
-	return f.newConn(nc, remoteHandshake, true), nil
+	return f.newConn(nc, t, remoteHandshake.PeerID, remoteHandshake.Bitfield, true), nil
 }
 
 // conn manages peer communication over a connection for multiple torrents. Inbound
@@ -176,13 +191,17 @@ type conn struct {
 	lastGoodPieceReceived time.Time
 	lastPieceSent         time.Time
 
+	// Controls egress piece bandwidth.
+	egressLimiter *rate.Limiter
+
 	// Tracks known pieces of the remote peer. Initialized to the bitfield sent
 	// via handshake. Mainly used as a bookkeeping tool for dispatcher.
+	// TODO(codyg): Factor dispatcher bookkeeping into a wrapper struct.
 	Bitfield *syncBitfield
 
 	localPeerID torlib.PeerID
 	nc          net.Conn
-	config      Config
+	config      ConnConfig
 	clock       clock.Clock
 
 	// Marks whether the connection was opened by the remote peer, or the local peer.
@@ -191,12 +210,20 @@ type conn struct {
 	sender   chan *message
 	receiver chan *message
 
-	eventLoop *eventLoop
+	eventSender eventSender
 
 	// The following fields orchestrate the closing of the connection:
 	once sync.Once      // Ensures the close sequence is executed only once.
 	done chan struct{}  // Signals to readLoop / writeLoop to exit.
 	wg   sync.WaitGroup // Waits for readLoop / writeLoop to exit.
+}
+
+func (c *conn) SetEgressBandwidthLimit(bytesPerSec uint64) {
+	c.egressLimiter.SetLimitAt(c.clock.Now(), rate.Limit(float64(bytesPerSec)))
+}
+
+func (c *conn) GetEgressBandwidthLimit() uint64 {
+	return uint64(c.egressLimiter.Limit())
 }
 
 func (c *conn) LastGoodPieceReceived() time.Time {
@@ -264,7 +291,7 @@ func (c *conn) Close() {
 			close(c.done)
 			c.nc.Close()
 			c.wg.Wait()
-			c.eventLoop.Send(closedConnEvent{c})
+			c.eventSender.Send(closedConnEvent{c})
 		}()
 	})
 }
@@ -289,7 +316,7 @@ func readMessage(nc net.Conn) (*p2p.Message, error) {
 		return nil, err
 	}
 	dataLen := binary.BigEndian.Uint32(msglen[:])
-	if dataLen > maxMessageSize {
+	if uint64(dataLen) > maxMessageSize {
 		return nil, errMessageExceedsMaxSize
 	}
 	data := make([]byte, dataLen)
@@ -343,16 +370,29 @@ L:
 	c.Close()
 }
 
-func (c *conn) sendPayload(payload []byte) error {
-	if len(payload) == 0 {
+func (c *conn) sendPiecePayload(b []byte) error {
+	if len(b) == 0 {
 		return errEmptyPayload
 	}
-	for len(payload) > 0 {
-		n, err := c.nc.Write(payload)
+
+	r := c.egressLimiter.ReserveN(c.clock.Now(), len(b))
+	if !r.OK() {
+		// TODO(codyg): This is really bad. We need to alert if this happens.
+		c.logf(log.Fields{
+			"max_burst": c.egressLimiter.Burst(), "payload": len(b),
+		}).Errorf("Cannot send piece, payload is larger than burst size")
+		return errors.New("piece payload is larger than burst size")
+	}
+
+	// Throttle the connection egress if we've exceeded our bandwidth.
+	c.clock.Sleep(r.DelayFrom(c.clock.Now()))
+
+	for len(b) > 0 {
+		n, err := c.nc.Write(b)
 		if err != nil {
 			return err
 		}
-		payload = payload[n:]
+		b = b[n:]
 	}
 	return nil
 }
@@ -383,7 +423,7 @@ func (c *conn) sendMessage(msg *message) error {
 	if msg.Message.Type == p2p.Message_PIECE_PAYLOAD {
 		// For payload messages, we must write the actual payload to the connection
 		// after writing the message.
-		if err := c.sendPayload(msg.Payload); err != nil {
+		if err := c.sendPiecePayload(msg.Payload); err != nil {
 			return err
 		}
 	}
@@ -400,7 +440,7 @@ L:
 			break L
 		case msg := <-c.sender:
 			if err := c.sendMessage(msg); err != nil {
-				c.log().Errorf("Error writing message to socket, closing connection: %s", err)
+				c.log().Infof("Error writing message to socket, closing connection: %s", err)
 				break L
 			}
 		}

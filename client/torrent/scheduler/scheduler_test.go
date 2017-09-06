@@ -185,7 +185,7 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 	// Each peer is allowed two connections, which allows them to establish both
 	// a connection to the seeder and another peer.
 	peerConfig := genConfig(trackerAddr)
-	peerConfig.MaxOpenConnectionsPerTorrent = 2
+	peerConfig.ConnState.MaxOpenConnectionsPerTorrent = 2
 
 	peerA := genTestPeer(peerConfig)
 	defer peerA.Stop()
@@ -210,7 +210,7 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 	// have access to the completed torrent, while the other is forced to rely
 	// on the "trickle down" announce piece messages.
 	seederConfig := genConfig(trackerAddr)
-	seederConfig.MaxOpenConnectionsPerTorrent = 1
+	seederConfig.ConnState.MaxOpenConnectionsPerTorrent = 1
 
 	seeder := genTestPeer(seederConfig)
 	defer seeder.Stop()
