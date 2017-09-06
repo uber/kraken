@@ -3,53 +3,36 @@ package metrics
 import (
 	"fmt"
 	"io"
+	"log"
 
 	"github.com/uber-go/tally"
 )
 
-var _metricsFactories = make(map[string]Reporter)
-
-// Reporter defines a metrics interface
-type Reporter interface {
-	create(parameters map[string]interface{}) (tally.Scope, io.Closer, error)
+func init() {
+	register("statsd", newStatsdScope)
+	register("default", newDefaultScope)
 }
 
-// Register registers a new metricsDriverFactory given name
-func Register(name string, reporter Reporter) {
-	if reporter == nil {
-		panic("Must not provide nil MetricsReportorFactory")
-	}
-	_, registered := _metricsFactories[name]
-	if registered {
-		panic(fmt.Sprintf("MetricsReportorFactory %s is already registered", name))
-	}
+var _scopeFactories = make(map[string]scopeFactory)
 
-	_metricsFactories[name] = reporter
+type scopeFactory func(config Config) (tally.Scope, io.Closer, error)
+
+func register(name string, f scopeFactory) {
+	if _, ok := _scopeFactories[name]; ok {
+		log.Fatalf("Scope factory %q is already registered", name)
+	}
+	_scopeFactories[name] = f
 }
 
-// NewMetrics returns a new metric scope
-func NewMetrics(config map[string]interface{}) (tally.Scope, io.Closer, error) {
-	if config == nil || len(config) == 0 {
-		defaultMetrics, ok := _metricsFactories[defaultName]
-		if !ok || defaultMetrics == nil {
-			return nil, nil, fmt.Errorf("Error initializing default metrics")
-		}
-		return defaultMetrics.create(config)
+// New creates a new metrics Scope from config. If no backend is configured, a default
+// scope is used.
+func New(config Config) (tally.Scope, io.Closer, error) {
+	if config.Backend == "" {
+		config.Backend = "default"
 	}
-
-	typeParam, ok := config["type"]
-	if !ok || typeParam == nil {
-		return nil, nil, fmt.Errorf("Error initializing metrics type %v", typeParam)
+	f, ok := _scopeFactories[config.Backend]
+	if !ok || f == nil {
+		return nil, nil, fmt.Errorf("metrics backend %q not registered", config.Backend)
 	}
-	metricsType, ok := typeParam.(string)
-	if !ok {
-		return nil, nil, fmt.Errorf("Error initializing metrics type %v", metricsType)
-	}
-
-	metrics, ok := _metricsFactories[metricsType]
-	if !ok || metrics == nil {
-		return nil, nil, fmt.Errorf("Error initializing metrics type %v: not registered", typeParam)
-	}
-
-	return metrics.create(config)
+	return f(config)
 }

@@ -9,6 +9,7 @@ import (
 	"code.uber.internal/infra/kraken/client/dockerregistry"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrent"
+	"code.uber.internal/infra/kraken/metrics"
 )
 
 const (
@@ -18,9 +19,9 @@ const (
 
 // Config contains application configuration
 type Config struct {
-	Logging     log.Configuration      `yaml:"logging"`
-	Environment string                 `yaml:"environment"`
-	Metrics     map[string]interface{} `yaml:"metrics"`
+	Logging     log.Configuration `yaml:"logging"`
+	Environment string            `yaml:"environment"`
+	Metrics     metrics.Config    `yaml:"metrics"`
 
 	Store    store.Config          `yaml:"store"`
 	Registry dockerregistry.Config `yaml:"registry"`
