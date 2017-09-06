@@ -17,6 +17,11 @@ type event interface {
 	Apply(s *Scheduler)
 }
 
+// eventSender is a subset of the eventLoop which can only send events.
+type eventSender interface {
+	Send(event)
+}
+
 // eventLoop represents a serialized list of events to be applied to a Scheduler.
 type eventLoop struct {
 	events chan event
