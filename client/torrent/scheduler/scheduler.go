@@ -63,7 +63,7 @@ type Scheduler struct {
 	connState       *connState
 	announceQueue   *announceQueue
 
-	eventLoop *eventLoop
+	eventLoop eventLoop
 
 	listener net.Listener
 
@@ -77,12 +77,30 @@ type Scheduler struct {
 	wg   sync.WaitGroup // Waits for eventLoop and listenLoop to exit.
 }
 
+// schedOverrides defines Scheduler fields which may be overrided for testing
+// purposes.
+type schedOverrides struct {
+	clock     clock.Clock
+	eventLoop eventLoop
+}
+
+type option func(*schedOverrides)
+
+func withClock(c clock.Clock) option {
+	return func(o *schedOverrides) { o.clock = c }
+}
+
+func withEventLoop(l eventLoop) option {
+	return func(o *schedOverrides) { o.eventLoop = l }
+}
+
 // New creates and starts a Scheduler. Incoming connections are accepted on the
 // addr, and the local peer is announced as part of the datacenter.
 func New(
 	config Config,
 	peerID torlib.PeerID,
-	ta storage.TorrentArchive) (*Scheduler, error) {
+	ta storage.TorrentArchive,
+	options ...option) (*Scheduler, error) {
 
 	config, err := config.applyDefaults()
 	if err != nil {
@@ -97,34 +115,43 @@ func New(
 		return nil, err
 	}
 	done := make(chan struct{})
-	eventLoop := newEventLoop(done)
+
+	overrides := schedOverrides{
+		clock:     clock.New(),
+		eventLoop: newEventLoop(done),
+	}
+	for _, opt := range options {
+		opt(&overrides)
+	}
+
 	s := &Scheduler{
 		peerID:         peerID,
 		host:           host,
 		port:           port,
 		datacenter:     config.Datacenter,
 		config:         config,
-		clock:          config.Clock,
+		clock:          overrides.clock,
 		torrentArchive: ta,
 		connFactory: &connFactory{
 			Config:      config.Conn,
 			LocalPeerID: peerID,
-			EventSender: eventLoop,
-			Clock:       config.Clock,
+			EventSender: overrides.eventLoop,
+			Clock:       overrides.clock,
 		},
 		dispatcherFactory: &dispatcherFactory{
 			Config:      config,
 			LocalPeerID: peerID,
-			EventSender: eventLoop,
+			EventSender: overrides.eventLoop,
+			Clock:       overrides.clock,
 		},
 		torrentControls:        make(map[torlib.InfoHash]*torrentControl),
-		connState:              newConnState(peerID, config.ConnState, config.Clock),
+		connState:              newConnState(peerID, config.ConnState, overrides.clock),
 		announceQueue:          newAnnounceQueue(),
-		eventLoop:              eventLoop,
+		eventLoop:              overrides.eventLoop,
 		listener:               l,
-		announceTicker:         config.Clock.Ticker(config.AnnounceInterval),
-		preemptionTicker:       config.Clock.Ticker(config.PreemptionInterval),
-		blacklistCleanupTicker: config.Clock.Ticker(config.BlacklistCleanupInterval),
+		announceTicker:         overrides.clock.Ticker(config.AnnounceInterval),
+		preemptionTicker:       overrides.clock.Ticker(config.PreemptionInterval),
+		blacklistCleanupTicker: overrides.clock.Ticker(config.BlacklistCleanupInterval),
 		done: done,
 	}
 
