@@ -13,6 +13,7 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/golang/protobuf/proto"
 	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
 	"golang.org/x/time/rate"
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
@@ -89,6 +90,7 @@ type connFactory struct {
 	LocalPeerID torlib.PeerID
 	EventSender eventSender
 	Clock       clock.Clock
+	Stats       tally.Scope
 }
 
 // newConn resolves response handshake h into a new conn.
@@ -98,6 +100,12 @@ func (f *connFactory) newConn(
 	remotePeerID torlib.PeerID,
 	remoteBitfield storage.Bitfield,
 	openedByRemote bool) *conn {
+
+	stats := f.Stats.
+		SubScope("conn").
+		SubScope(remotePeerID.String()).
+		SubScope("torrent").
+		SubScope(t.Name())
 
 	c := &conn{
 		PeerID:    remotePeerID,
@@ -111,6 +119,7 @@ func (f *connFactory) newConn(
 		nc:             nc,
 		config:         f.Config,
 		clock:          f.Clock,
+		stats:          stats,
 		openedByRemote: openedByRemote,
 		sender:         make(chan *message, f.Config.SenderBufferSize),
 		receiver:       make(chan *message, f.Config.ReceiverBufferSize),
@@ -203,6 +212,7 @@ type conn struct {
 	nc          net.Conn
 	config      ConnConfig
 	clock       clock.Clock
+	stats       tally.Scope
 
 	// Marks whether the connection was opened by the remote peer, or the local peer.
 	openedByRemote bool
@@ -307,6 +317,7 @@ func (c *conn) readPayload(length int32) ([]byte, error) {
 	if _, err := io.ReadFull(c.nc, payload); err != nil {
 		return nil, err
 	}
+	c.stats.Counter("ingress_piece_bandwidth").Inc(int64(length))
 	return payload, nil
 }
 
@@ -371,15 +382,16 @@ L:
 }
 
 func (c *conn) sendPiecePayload(b []byte) error {
-	if len(b) == 0 {
+	numBytes := len(b)
+	if numBytes == 0 {
 		return errEmptyPayload
 	}
 
-	r := c.egressLimiter.ReserveN(c.clock.Now(), len(b))
+	r := c.egressLimiter.ReserveN(c.clock.Now(), numBytes)
 	if !r.OK() {
 		// TODO(codyg): This is really bad. We need to alert if this happens.
 		c.logf(log.Fields{
-			"max_burst": c.egressLimiter.Burst(), "payload": len(b),
+			"max_burst": c.egressLimiter.Burst(), "payload": numBytes,
 		}).Errorf("Cannot send piece, payload is larger than burst size")
 		return errors.New("piece payload is larger than burst size")
 	}
@@ -394,6 +406,7 @@ func (c *conn) sendPiecePayload(b []byte) error {
 		}
 		b = b[n:]
 	}
+	c.stats.Counter("egress_piece_bandwidth").Inc(int64(numBytes))
 	return nil
 }
 

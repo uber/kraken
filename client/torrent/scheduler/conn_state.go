@@ -74,6 +74,10 @@ func (s *connState) ActiveConns() []*conn {
 	return conns
 }
 
+func (s *connState) NumActiveConns() int {
+	return len(s.active)
+}
+
 func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) error {
 	k := connKey{peerID, infoHash}
 	e, ok := s.blacklist[k]

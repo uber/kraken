@@ -13,6 +13,7 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/jackpal/bencode-go"
 	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
@@ -45,14 +46,14 @@ func newTorrentControl(d *dispatcher) *torrentControl {
 // - Dispatching connections to torrents.
 // - Pre-empting existing connections when better options are available (TODO).
 type Scheduler struct {
-	peerID     torlib.PeerID
-	host       string
-	port       string
-	datacenter string
-	config     Config
-	clock      clock.Clock
-
+	peerID         torlib.PeerID
+	host           string
+	port           string
+	datacenter     string
+	config         Config
+	clock          clock.Clock
 	torrentArchive storage.TorrentArchive
+	stats          tally.Scope
 
 	connFactory       *connFactory
 	dispatcherFactory *dispatcherFactory
@@ -70,6 +71,7 @@ type Scheduler struct {
 	announceTicker         *clock.Ticker
 	preemptionTicker       *clock.Ticker
 	blacklistCleanupTicker *clock.Ticker
+	emitStatsTicker        *clock.Ticker
 
 	// The following fields orchestrate the stopping of the Scheduler.
 	once sync.Once      // Ensures the stop sequence is executed only once.
@@ -100,6 +102,7 @@ func New(
 	config Config,
 	peerID torlib.PeerID,
 	ta storage.TorrentArchive,
+	stats tally.Scope,
 	options ...option) (*Scheduler, error) {
 
 	config, err := config.applyDefaults()
@@ -115,10 +118,11 @@ func New(
 		return nil, err
 	}
 	done := make(chan struct{})
+	stats = stats.SubScope("scheduler")
 
 	overrides := schedOverrides{
 		clock:     clock.New(),
-		eventLoop: newEventLoop(done),
+		eventLoop: newEventLoop(),
 	}
 	for _, opt := range options {
 		opt(&overrides)
@@ -132,11 +136,13 @@ func New(
 		config:         config,
 		clock:          overrides.clock,
 		torrentArchive: ta,
+		stats:          stats,
 		connFactory: &connFactory{
 			Config:      config.Conn,
 			LocalPeerID: peerID,
 			EventSender: overrides.eventLoop,
 			Clock:       overrides.clock,
+			Stats:       stats,
 		},
 		dispatcherFactory: &dispatcherFactory{
 			Config:      config,
@@ -152,7 +158,8 @@ func New(
 		announceTicker:         overrides.clock.Ticker(config.AnnounceInterval),
 		preemptionTicker:       overrides.clock.Ticker(config.PreemptionInterval),
 		blacklistCleanupTicker: overrides.clock.Ticker(config.BlacklistCleanupInterval),
-		done: done,
+		emitStatsTicker:        overrides.clock.Ticker(config.EmitStatsInterval),
+		done:                   done,
 	}
 
 	s.start()
@@ -166,6 +173,7 @@ func (s *Scheduler) Stop() {
 	s.once.Do(func() {
 		close(s.done)
 		s.listener.Close()
+		s.eventLoop.Stop()
 
 		// Waits for all loops to stop.
 		s.wg.Wait()
@@ -199,7 +207,9 @@ func (s *Scheduler) AddTorrent(mi *torlib.MetaInfo) <-chan error {
 		errc <- err
 		return errc
 	}
-	s.eventLoop.Send(newTorrentEvent{t, errc})
+	if !s.eventLoop.Send(newTorrentEvent{t, errc}) {
+		errc <- ErrSchedulerStopped
+	}
 	return errc
 }
 
@@ -245,6 +255,8 @@ func (s *Scheduler) tickerLoop() {
 			s.eventLoop.Send(preemptionTickEvent{})
 		case <-s.blacklistCleanupTicker.C:
 			s.eventLoop.Send(cleanupBlacklistEvent{})
+		case <-s.emitStatsTicker.C:
+			s.eventLoop.Send(emitStatsEvent{})
 		case <-s.done:
 			s.log().Debug("tickerLoop done")
 			s.wg.Done()

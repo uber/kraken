@@ -36,12 +36,11 @@ func main() {
 	}
 	config.Registry.DisableTorrent = disableTorrent
 
-	// init metrics
-	metricsScope, metricsCloser, err := metrics.New(config.Metrics)
+	stats, closer, err := metrics.New(config.Metrics)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer metricsCloser.Close()
+	defer closer.Close()
 
 	// init storage
 	store, err := store.NewLocalStore(&config.Store, config.Registry.TagDeletion.Enable)
@@ -51,7 +50,7 @@ func main() {
 
 	// init torrent client
 	log.Info("Init torrent agent")
-	client, err := torrent.NewSchedulerClient(&config.Torrent, store)
+	client, err := torrent.NewSchedulerClient(&config.Torrent, store, stats)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -64,7 +63,7 @@ func main() {
 			"config":        &config.Registry,
 			"torrentclient": client,
 			"store":         store,
-			"metrics":       metricsScope,
+			"metrics":       stats,
 		},
 		"redirect": dockerconfig.Parameters{
 			"disable": true,

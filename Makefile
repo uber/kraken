@@ -57,7 +57,7 @@ redis:
 	-docker stop $(REDIS_CONTAINER_NAME)
 	-docker rm $(REDIS_CONTAINER_NAME)
 	docker pull redis
-	# TODO(codyg): I choose this random port to avoid conflicts in Jenkins. Obviously not ideal.
+	# TODO(codyg): I chose this random port to avoid conflicts in Jenkins. Obviously not ideal.
 	docker run -d -p 6380:6379 --name $(REDIS_CONTAINER_NAME) redis:latest
 
 test:: redis

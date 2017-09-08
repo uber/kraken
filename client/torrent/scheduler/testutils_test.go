@@ -5,13 +5,14 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
-	"sync"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/client/torrent/storage"
 	"code.uber.internal/infra/kraken/mocks/client/torrent/mockstorage"
@@ -97,22 +98,24 @@ func checkContent(r *require.Assertions, t storage.Torrent, expected []byte) {
 type testPeer struct {
 	Scheduler      *Scheduler
 	TorrentArchive storage.TorrentArchive
+	Stats          tally.TestScope
 	Stop           func()
 }
 
 func genTestPeer(config Config, options ...option) *testPeer {
-	tm, deleteFunc := storage.TorrentArchiveFixture()
-	s, err := New(config, torlib.PeerIDFixture(), tm, options...)
+	tm, cleanup := storage.TorrentArchiveFixture()
+	stats := tally.NewTestScope("", nil)
+	s, err := New(config, torlib.PeerIDFixture(), tm, stats, options...)
 	if err != nil {
-		deleteFunc()
+		cleanup()
 		panic(err)
 	}
 
 	stop := func() {
 		s.Stop()
-		deleteFunc()
+		cleanup()
 	}
-	return &testPeer{s, tm, stop}
+	return &testPeer{s, tm, stats, stop}
 }
 
 func genTestPeers(n int, config Config) (peers []*testPeer, stopAll func()) {
@@ -209,7 +212,7 @@ func discard(nc net.Conn) {
 
 type noopEventSender struct{}
 
-func (s noopEventSender) Send(event) {}
+func (s noopEventSender) Send(event) bool { return true }
 
 func genTestConn(t *testing.T, config ConnConfig, maxPieceLength int) (c *conn, cleanup func()) {
 	ctrl := gomock.NewController(t)
@@ -223,12 +226,14 @@ func genTestConn(t *testing.T, config ConnConfig, maxPieceLength int) (c *conn, 
 		LocalPeerID: localPeerID,
 		EventSender: noopEventSender{},
 		Clock:       clock.New(),
+		Stats:       tally.NewTestScope("", nil),
 	}
 
 	localNC, remoteNC := net.Pipe()
 	go discard(remoteNC)
 
 	tor := mockstorage.NewMockTorrent(ctrl)
+	tor.EXPECT().Name().Return("some dummy name")
 	tor.EXPECT().InfoHash().Return(infoHash)
 	tor.EXPECT().MaxPieceLength().Return(int64(maxPieceLength))
 
@@ -240,41 +245,47 @@ func genTestConn(t *testing.T, config ConnConfig, maxPieceLength int) (c *conn, 
 	return
 }
 
-// eventRecorder wraps an eventLoop and records all events being sent.
-type eventRecorder struct {
-	done   chan struct{}
+// eventWatcher wraps an eventLoop and watches all events being sent. Note, clients
+// must call WaitFor else all sends will block.
+type eventWatcher struct {
 	l      eventLoop
-	mu     sync.Mutex
-	events []event
+	events chan event
 }
 
-func newEventRecorder() *eventRecorder {
-	done := make(chan struct{})
-	return &eventRecorder{
-		done: done,
-		l:    newEventLoop(done),
+func newEventWatcher() *eventWatcher {
+	return &eventWatcher{
+		l:      newEventLoop(),
+		events: make(chan event),
 	}
 }
 
-func (r *eventRecorder) Send(e event) {
-	r.mu.Lock()
-	r.events = append(r.events, e)
-	r.l.Send(e)
-	r.mu.Unlock()
+// WaitFor waits for e to send on w.
+func (w *eventWatcher) WaitFor(t *testing.T, e event) {
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case ee := <-w.events:
+			if reflect.DeepEqual(e, ee) {
+				return
+			}
+		case <-timeout:
+			t.Fatalf("timed out waiting for %s to occur", reflect.TypeOf(e).Name())
+		}
+	}
 }
 
-func (r *eventRecorder) Run(s *Scheduler) {
-	r.l.Run(s)
+func (w *eventWatcher) Send(e event) bool {
+	if w.l.Send(e) {
+		go func() { w.events <- e }()
+		return true
+	}
+	return false
 }
 
-func (r *eventRecorder) Events() []event {
-	r.mu.Lock()
-	a := make([]event, len(r.events))
-	copy(a, r.events)
-	r.mu.Unlock()
-	return a
+func (w *eventWatcher) Run(s *Scheduler) {
+	w.l.Run(s)
 }
 
-func (r *eventRecorder) Stop() {
-	close(r.done)
+func (w *eventWatcher) Stop() {
+	w.l.Stop()
 }

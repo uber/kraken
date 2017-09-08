@@ -49,6 +49,10 @@ type Config struct {
 	// have surpassed their TTL are removed.
 	BlacklistCleanupInterval time.Duration `yaml:"blacklist_cleanup_interval"`
 
+	// EmitStatsInterval is the interval introspective stats are emitted from
+	// the Scheduler.
+	EmitStatsInterval time.Duration `yaml:"emit_stats_interval"`
+
 	ConnState ConnStateConfig `yaml:"conn_state"`
 
 	Conn ConnConfig `yaml:"conn"`
@@ -84,6 +88,9 @@ func (c Config) applyDefaults() (Config, error) {
 	}
 	if c.BlacklistCleanupInterval == 0 {
 		c.BlacklistCleanupInterval = 10 * time.Minute
+	}
+	if c.EmitStatsInterval == 0 {
+		c.EmitStatsInterval = 1 * time.Second
 	}
 	c.ConnState = c.ConnState.applyDefaults()
 	c.Conn = c.Conn.applyDefaults()
