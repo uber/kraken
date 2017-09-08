@@ -9,6 +9,7 @@ import (
 	"code.uber.internal/infra/kraken/torlib"
 	trackerservice "code.uber.internal/infra/kraken/tracker/service"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -290,4 +291,19 @@ func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
 
 	// After the torrent is complete, further calls to AddTorrent should succeed immediately.
 	require.NoError(<-leecher.Scheduler.AddTorrent(tf.MetaInfo))
+}
+
+func TestEmitStatsEventTriggers(t *testing.T) {
+	trackerAddr, stop := trackerservice.TestAnnouncer()
+	defer stop()
+
+	config := genConfig(trackerAddr)
+	clk := clock.NewMock()
+	w := newEventWatcher()
+
+	peer := genTestPeer(config, withEventLoop(w), withClock(clk))
+	defer peer.Stop()
+
+	clk.Add(config.EmitStatsInterval)
+	w.WaitFor(t, emitStatsEvent{})
 }

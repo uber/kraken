@@ -14,6 +14,7 @@ import (
 
 	"github.com/docker/distribution/uuid"
 	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store"
@@ -40,6 +41,7 @@ type SchedulerClient struct {
 	config    *Config
 	peerID    torlib.PeerID
 	scheduler *scheduler.Scheduler
+	stats     tally.Scope
 
 	// TODO: Consolidate these...
 	store   *store.LocalStore
@@ -47,7 +49,7 @@ type SchedulerClient struct {
 }
 
 // NewSchedulerClient creates a new scheduler client
-func NewSchedulerClient(config *Config, localStore *store.LocalStore) (Client, error) {
+func NewSchedulerClient(config *Config, localStore *store.LocalStore, stats tally.Scope) (Client, error) {
 	// TODO (evelynl): hash hostname and ip to get peerID
 	// TODO (codyg): Get datacenter from env variable.
 	peerID, err := torlib.NewPeerID(config.PeerID)
@@ -55,7 +57,7 @@ func NewSchedulerClient(config *Config, localStore *store.LocalStore) (Client, e
 		return nil, err
 	}
 	archive := storage.NewLocalTorrentArchive(localStore)
-	scheduler, err := scheduler.New(config.Scheduler, peerID, archive)
+	scheduler, err := scheduler.New(config.Scheduler, peerID, archive, stats)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +65,7 @@ func NewSchedulerClient(config *Config, localStore *store.LocalStore) (Client, e
 		config:    config,
 		peerID:    peerID,
 		scheduler: scheduler,
+		stats:     stats.SubScope("peer").SubScope(peerID.String()),
 		store:     localStore,
 		archive:   archive,
 	}, nil
@@ -76,6 +79,8 @@ func (c *SchedulerClient) Close() error {
 
 // DownloadTorrent downloads a torrent given torrent name
 func (c *SchedulerClient) DownloadTorrent(name string) error {
+	stopwatch := c.stats.SubScope("torrent").SubScope(name).Timer("download_time").Start()
+
 	if c.config.Disabled {
 		return fmt.Errorf("Torrent disabled")
 	}
@@ -139,6 +144,8 @@ func (c *SchedulerClient) DownloadTorrent(name string) error {
 		}).Error("Failed to download torrent")
 		return err
 	}
+
+	stopwatch.Stop()
 
 	log.WithFields(log.Fields{
 		"name": name,

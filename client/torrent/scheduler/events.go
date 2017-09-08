@@ -19,13 +19,14 @@ type event interface {
 
 // eventSender is a subset of the eventLoop which can only send events.
 type eventSender interface {
-	Send(event)
+	Send(event) bool
 }
 
 // eventLoop represents a serialized list of events to be applied to a Scheduler.
 type eventLoop interface {
 	eventSender
 	Run(*Scheduler)
+	Stop()
 }
 
 type eventLoopImpl struct {
@@ -33,19 +34,22 @@ type eventLoopImpl struct {
 	done   chan struct{}
 }
 
-func newEventLoop(done chan struct{}) *eventLoopImpl {
+func newEventLoop() *eventLoopImpl {
 	return &eventLoopImpl{
 		events: make(chan event),
-		done:   done,
+		done:   make(chan struct{}),
 	}
 }
 
 // Send sends a new event into l. Should never be called by the same goroutine
-// running l (i.e. within Apply methods), else deadlock will occur.
-func (l *eventLoopImpl) Send(e event) {
+// running l (i.e. within Apply methods), else deadlock will occur. Returns false
+// if the l is not running.
+func (l *eventLoopImpl) Send(e event) bool {
 	select {
 	case l.events <- e:
+		return true
 	case <-l.done:
+		return false
 	}
 }
 
@@ -59,6 +63,10 @@ func (l *eventLoopImpl) Run(s *Scheduler) {
 			return
 		}
 	}
+}
+
+func (l *eventLoopImpl) Stop() {
+	close(l.done)
 }
 
 // closedConnEvent occurs when a connection is closed.
@@ -321,4 +329,14 @@ func (e cleanupBlacklistEvent) Apply(s *Scheduler) {
 	s.log().Debug("Applying cleanup blacklist event")
 
 	s.connState.DeleteStaleBlacklistEntries()
+}
+
+// emitStatsEvent occurs periodically to emit Scheduler stats.
+type emitStatsEvent struct{}
+
+func (e emitStatsEvent) Apply(s *Scheduler) {
+	s.log().Debug("Applying emit stats event")
+
+	s.stats.Gauge("torrents").Update(float64(len(s.torrentControls)))
+	s.stats.Gauge("conns").Update(float64(s.connState.NumActiveConns()))
 }
