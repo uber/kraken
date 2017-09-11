@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"fmt"
 	"io"
 	"time"
 
@@ -21,19 +20,13 @@ func newDefaultScope(Config) (tally.Scope, io.Closer, error) {
 type defaultReporter struct{}
 
 // ReportCounter implements tally.StatsReporter.ReportCounter
-func (r defaultReporter) ReportCounter(name string, _ map[string]string, value int64) {
-	fmt.Printf("count %s %d\n", name, value)
-}
+func (r defaultReporter) ReportCounter(name string, _ map[string]string, value int64) {}
 
 // ReportGauge implements tally.StatsReporter.ReportGauge
-func (r defaultReporter) ReportGauge(name string, _ map[string]string, value float64) {
-	fmt.Printf("gauge %s %f\n", name, value)
-}
+func (r defaultReporter) ReportGauge(name string, _ map[string]string, value float64) {}
 
 // ReportTimer implements tally.StatsReporter.ReportTimer
-func (r defaultReporter) ReportTimer(name string, _ map[string]string, interval time.Duration) {
-	fmt.Printf("timer %s %s\n", name, interval.String())
-}
+func (r defaultReporter) ReportTimer(name string, _ map[string]string, interval time.Duration) {}
 
 // ReportHistogramValueSamples implements tally.StatsReporter.ReportHistogramValueSamples
 func (r defaultReporter) ReportHistogramValueSamples(
@@ -44,8 +37,6 @@ func (r defaultReporter) ReportHistogramValueSamples(
 	bucketUpperBound float64,
 	samples int64,
 ) {
-	fmt.Printf("histogram %s bucket lower %f upper %f samples %d\n",
-		name, bucketLowerBound, bucketUpperBound, samples)
 }
 
 // ReportHistogramDurationSamples implements tally.StatsReporter.ReportHistogramDurationSamples
@@ -57,8 +48,6 @@ func (r defaultReporter) ReportHistogramDurationSamples(
 	bucketUpperBound time.Duration,
 	samples int64,
 ) {
-	fmt.Printf("histogram %s bucket lower %v upper %v samples %d\n",
-		name, bucketLowerBound, bucketUpperBound, samples)
 }
 
 // Capabilities implements tally.StatsReporter.Capabilities
@@ -77,6 +66,4 @@ func (r defaultReporter) Tagging() bool {
 }
 
 // Flush implements tally.StatsReporter.Flush
-func (r defaultReporter) Flush() {
-	fmt.Printf("flush\n")
-}
+func (r defaultReporter) Flush() {}

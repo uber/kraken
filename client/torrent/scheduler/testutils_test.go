@@ -1,11 +1,13 @@
 package scheduler
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"os"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 
+	"code.uber.internal/infra/kraken/client/peercontext"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
 	"code.uber.internal/infra/kraken/mocks/client/torrent/mockstorage"
 	"code.uber.internal/infra/kraken/torlib"
@@ -48,7 +51,6 @@ func genConnStateConfig() ConnStateConfig {
 func genConfig(trackerAddr string) Config {
 	c, err := Config{
 		ListenAddr:               "localhost:0",
-		Datacenter:               "sjc1",
 		TrackerAddr:              trackerAddr,
 		AnnounceInterval:         500 * time.Millisecond,
 		IdleSeederTTL:            2 * time.Second,
@@ -102,15 +104,38 @@ type testPeer struct {
 	Stop           func()
 }
 
+func findFreePort() int {
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		panic(err)
+	}
+	defer l.Close()
+	_, portStr, err := net.SplitHostPort(l.Addr().String())
+	if err != nil {
+		panic(err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		panic(err)
+	}
+	return port
+}
+
 func genTestPeer(config Config, options ...option) *testPeer {
 	tm, cleanup := storage.TorrentArchiveFixture()
 	stats := tally.NewTestScope("", nil)
-	s, err := New(config, torlib.PeerIDFixture(), tm, stats, options...)
+	pctx := peercontext.PeerContext{
+		PeerID: torlib.PeerIDFixture(),
+		Zone:   "sjc1",
+		IP:     "localhost",
+		Port:   findFreePort(),
+	}
+	config.ListenAddr = fmt.Sprintf("%s:%d", pctx.IP, pctx.Port)
+	s, err := New(config, tm, stats, pctx, options...)
 	if err != nil {
 		cleanup()
 		panic(err)
 	}
-
 	stop := func() {
 		s.Stop()
 		cleanup()

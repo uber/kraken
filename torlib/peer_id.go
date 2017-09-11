@@ -2,8 +2,11 @@ package torlib
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"encoding/hex"
 	"errors"
+	"io"
+	"math/rand"
 )
 
 // ErrInvalidPeerIDLength returns when a string peer id does not decode into 20 bytes.
@@ -35,4 +38,23 @@ func (p PeerID) String() string {
 // LessThan returns whether p is less than o.
 func (p PeerID) LessThan(o PeerID) bool {
 	return bytes.Compare(p[:], o[:]) == -1
+}
+
+// RandomPeerID returns a randomly generated PeerID.
+func RandomPeerID() (PeerID, error) {
+	var p PeerID
+	_, err := rand.Read(p[:])
+	return p, err
+}
+
+// HashedPeerID returns a PeerID derived from the hash of s.
+func HashedPeerID(s string) (PeerID, error) {
+	var p PeerID
+	if s == "" {
+		return p, errors.New("cannot generate peer id from empty string")
+	}
+	h := sha1.New()
+	io.WriteString(h, s)
+	copy(p[:], h.Sum(nil))
+	return p, nil
 }

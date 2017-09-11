@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,11 +13,12 @@ import (
 	"path"
 	"time"
 
+	"code.uber.internal/go-common.git/x/log"
 	"github.com/docker/distribution/uuid"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 
-	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken/client/peercontext"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrent/scheduler"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
@@ -49,23 +51,23 @@ type SchedulerClient struct {
 }
 
 // NewSchedulerClient creates a new scheduler client
-func NewSchedulerClient(config *Config, localStore *store.LocalStore, stats tally.Scope) (Client, error) {
-	// TODO (evelynl): hash hostname and ip to get peerID
-	// TODO (codyg): Get datacenter from env variable.
-	peerID, err := torlib.NewPeerID(config.PeerID)
-	if err != nil {
-		return nil, err
-	}
+func NewSchedulerClient(
+	config *Config,
+	localStore *store.LocalStore,
+	stats tally.Scope,
+	pctx peercontext.PeerContext) (Client, error) {
+
+	stats = stats.SubScope("peer").SubScope(pctx.PeerID.String())
 	archive := storage.NewLocalTorrentArchive(localStore)
-	scheduler, err := scheduler.New(config.Scheduler, peerID, archive, stats)
+	scheduler, err := scheduler.New(config.Scheduler, archive, stats, pctx)
 	if err != nil {
 		return nil, err
 	}
 	return &SchedulerClient{
 		config:    config,
-		peerID:    peerID,
+		peerID:    pctx.PeerID,
 		scheduler: scheduler,
-		stats:     stats.SubScope("peer").SubScope(peerID.String()),
+		stats:     stats,
 		store:     localStore,
 		archive:   archive,
 	}, nil
@@ -79,77 +81,43 @@ func (c *SchedulerClient) Close() error {
 
 // DownloadTorrent downloads a torrent given torrent name
 func (c *SchedulerClient) DownloadTorrent(name string) error {
+	var err error
 	stopwatch := c.stats.SubScope("torrent").SubScope(name).Timer("download_time").Start()
 
 	if c.config.Disabled {
-		return fmt.Errorf("Torrent disabled")
+		return errors.New("torrent disabled")
 	}
 
-	var mi *torlib.MetaInfo
 	miRaw, err := c.store.GetDownloadOrCacheFileMeta(name)
-	if err != nil && !os.IsNotExist(err) {
-		log.WithFields(log.Fields{
-			"name":  name,
-			"error": err,
-		}).Error("Failed to download torrent")
-		return err
-	}
-
-	if err == nil {
-		var err error
-		mi, err = torlib.NewMetaInfoFromBytes(miRaw)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"name":  name,
-				"error": err,
-			}).Error("Failed to download torrent")
-			return err
-		}
-	}
-
-	if err != nil && os.IsNotExist(err) {
-		var err error
-		mi, err = c.getTorrentMetaInfo(name)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"name":  name,
-				"error": err,
-			}).Error("Failed to download torrent")
-			return err
-		}
-	}
-
-	_, err = c.archive.CreateTorrent(mi.InfoHash, mi)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"name":  name,
-			"error": err,
-		}).Error("Failed to download torrent")
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to get file metainfo: %s", err)
+		}
+		miRaw, err = c.requestTorrentMetaInfo(name)
+		if err != nil {
+			return fmt.Errorf("failed to request metainfo: %s", err)
+		}
+	}
+	mi, err := torlib.NewMetaInfoFromBytes(miRaw)
+	if err != nil {
+		return fmt.Errorf("failed to get metainfo: %s", err)
+	}
+
+	if _, err = c.archive.CreateTorrent(mi.InfoHash, mi); err != nil {
+		return fmt.Errorf("failed to create torrent in archive: %s", err)
 	}
 
 	select {
-	case errc := <-c.scheduler.AddTorrent(mi):
-		if errc != nil {
-			log.WithFields(log.Fields{
-				"name":  name,
-				"error": errc,
-			}).Error("Failed to download torrent")
-			return errc
+	case err := <-c.scheduler.AddTorrent(mi):
+		if err != nil {
+			return fmt.Errorf("failed to schedule torrent: %s", err)
 		}
 	case <-time.After(downloadTimeout):
-		err := fmt.Errorf("Download timeout")
-		log.WithFields(log.Fields{
-			"name":  name,
-			"error": err,
-		}).Error("Failed to download torrent")
-		return err
+		// TODO(codyg): Allow cancelling the torrent in the Scheduler.
+		return fmt.Errorf("scheduled torrent timed out after %.2f seconds", downloadTimeout.Seconds())
 	}
 
 	stopwatch.Stop()
-
-	log.WithFields(log.Fields{
-		"name": name,
-	}).Info("Successfully downloaded torrent")
 	return nil
 }
 
@@ -327,19 +295,10 @@ func (c *SchedulerClient) postTorrentMetaInfo(mi *torlib.MetaInfo) error {
 	return nil
 }
 
-func (c *SchedulerClient) getTorrentMetaInfo(name string) (*torlib.MetaInfo, error) {
+func (c *SchedulerClient) requestTorrentMetaInfo(name string) ([]byte, error) {
 	// get torrent info hash
 	trackerURL := "http://" + c.config.Scheduler.TrackerAddr + "/info?name=" + name
-	miRaw, err := c.sendRequestToTracker("GET", trackerURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	mi, err := torlib.NewMetaInfoFromBytes(miRaw)
-	if err != nil {
-		return nil, err
-	}
-	return mi, nil
+	return c.sendRequestToTracker("GET", trackerURL, nil)
 }
 
 func (c *SchedulerClient) sendRequestToTracker(method, endpoint string, body io.Reader) ([]byte, error) {

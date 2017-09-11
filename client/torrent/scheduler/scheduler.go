@@ -16,6 +16,7 @@ import (
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken/client/peercontext"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 )
@@ -47,9 +48,9 @@ func newTorrentControl(d *dispatcher) *torrentControl {
 // - Pre-empting existing connections when better options are available (TODO).
 type Scheduler struct {
 	peerID         torlib.PeerID
-	host           string
+	ip             string
 	port           string
-	datacenter     string
+	zone           string
 	config         Config
 	clock          clock.Clock
 	torrentArchive storage.TorrentArchive
@@ -96,13 +97,12 @@ func withEventLoop(l eventLoop) option {
 	return func(o *schedOverrides) { o.eventLoop = l }
 }
 
-// New creates and starts a Scheduler. Incoming connections are accepted on the
-// addr, and the local peer is announced as part of the datacenter.
+// New creates and starts a Scheduler.
 func New(
 	config Config,
-	peerID torlib.PeerID,
 	ta storage.TorrentArchive,
 	stats tally.Scope,
+	pctx peercontext.PeerContext,
 	options ...option) (*Scheduler, error) {
 
 	config, err := config.applyDefaults()
@@ -110,10 +110,6 @@ func New(
 		return nil, fmt.Errorf("invalid config: %s", err)
 	}
 	l, err := net.Listen("tcp", config.ListenAddr)
-	if err != nil {
-		return nil, err
-	}
-	host, port, err := net.SplitHostPort(l.Addr().String())
 	if err != nil {
 		return nil, err
 	}
@@ -128,30 +124,33 @@ func New(
 		opt(&overrides)
 	}
 
+	log.Infof("Scheduler will announce as peer %s on addr %s:%d",
+		pctx.PeerID, pctx.IP, pctx.Port)
+
 	s := &Scheduler{
-		peerID:         peerID,
-		host:           host,
-		port:           port,
-		datacenter:     config.Datacenter,
+		peerID:         pctx.PeerID,
+		ip:             pctx.IP,
+		port:           strconv.Itoa(pctx.Port),
+		zone:           pctx.Zone,
 		config:         config,
 		clock:          overrides.clock,
 		torrentArchive: ta,
 		stats:          stats,
 		connFactory: &connFactory{
 			Config:      config.Conn,
-			LocalPeerID: peerID,
+			LocalPeerID: pctx.PeerID,
 			EventSender: overrides.eventLoop,
 			Clock:       overrides.clock,
 			Stats:       stats,
 		},
 		dispatcherFactory: &dispatcherFactory{
 			Config:      config,
-			LocalPeerID: peerID,
+			LocalPeerID: pctx.PeerID,
 			EventSender: overrides.eventLoop,
 			Clock:       overrides.clock,
 		},
 		torrentControls:        make(map[torlib.InfoHash]*torrentControl),
-		connState:              newConnState(peerID, config.ConnState, overrides.clock),
+		connState:              newConnState(pctx.PeerID, config.ConnState, overrides.clock),
 		announceQueue:          newAnnounceQueue(),
 		eventLoop:              overrides.eventLoop,
 		listener:               l,
@@ -231,6 +230,7 @@ func (s *Scheduler) runEventLoop() {
 
 // listenLoop accepts incoming connections.
 func (s *Scheduler) listenLoop() {
+	s.log().Infof("Listening on %s", s.listener.Addr().String())
 	for {
 		nc, err := s.listener.Accept()
 		if err != nil {
@@ -351,8 +351,8 @@ func (s *Scheduler) doAnnounce(t storage.Torrent) ([]torlib.PeerInfo, error) {
 	v.Add("info_hash", t.InfoHash().String())
 	v.Add("peer_id", s.peerID.String())
 	v.Add("port", s.port)
-	v.Add("ip", s.host)
-	v.Add("dc", s.datacenter)
+	v.Add("ip", s.ip)
+	v.Add("dc", s.zone)
 
 	downloaded := t.BytesDownloaded()
 	v.Add("downloaded", strconv.FormatInt(downloaded, 10))
@@ -371,7 +371,8 @@ func (s *Scheduler) doAnnounce(t storage.Torrent) ([]torlib.PeerInfo, error) {
 			RawQuery: v.Encode(),
 		},
 	}
-	resp, err := http.DefaultClient.Do(req)
+	cli := http.Client{Timeout: s.config.AnnounceTimeout}
+	resp, err := cli.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %s", err)
 	}
