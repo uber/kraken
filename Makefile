@@ -7,7 +7,6 @@ BUILD_ENV=
 # Flags to pass to go test
 TEST_FLAGS =
 
-
 # Extra dependencies that the tests use
 TEST_DEPS =
 
@@ -18,16 +17,15 @@ PROJECT_ROOT = code.uber.internal/infra/kraken
 # by default
 SERVICES = \
 	tracker/tracker \
-	client/bin/kraken-agent/kraken-agent \
+	agent/agent \
 	tools/bin/puller/puller
 
 # List all executables
 PROGS = \
 	tracker/tracker \
-	client/bin/kraken-agent/kraken-agent \
+	agent/agent \
 	tools/bin/puller/puller \
 	tools/bin/kraken-cli/kraken
-
 
 # define the list of proto buffers the service depends on
 PROTO_GENDIR ?= .gen
@@ -45,8 +43,8 @@ proto:
 	cd $(dir $(patsubst %/,%,$(GOBUILD_DIR)))
 	$(foreach pb, $(PROTO_SRCS), $(MAKE_PROTO);)
 
-tracker/tracker: tracker/main.go $(wildcard tracker/*.go config/tracker/*.go)
-client/bin/kraken-agent/kraken-agent: proto client/bin/kraken-agent/main.go $(wildcard client/*.go)
+tracker/tracker: $(wildcard tracker/*.go config/tracker/*.go)
+agent/agent: proto $(wildcard agent/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 tools/bin/kraken-cli/kraken:  client/cli/kraken-cli.go tools/bin/kraken-cli/main.go config/origin/config.go
 
@@ -54,16 +52,6 @@ tools/bin/kraken-cli/kraken:  client/cli/kraken-cli.go tools/bin/kraken-cli/main
 bench:
 	$(ECHO_V)cd $(FAUXROOT); $(TEST_ENV)	\
 		$(GO) test -bench=. -run=$(TEST_DIRS)
-
-REDIS_CONTAINER_NAME := "kraken-redis"
-
-.PHONY: redis
-redis:
-	-docker stop $(REDIS_CONTAINER_NAME)
-	-docker rm $(REDIS_CONTAINER_NAME)
-	docker pull redis
-	# TODO(codyg): I chose this random port to avoid conflicts in Jenkins. Obviously not ideal.
-	docker run -d -p 6380:6379 --name $(REDIS_CONTAINER_NAME) redis:latest
 
 test:: redis
 
@@ -87,50 +75,103 @@ mocks:
 		-package mockstorage \
 		code.uber.internal/infra/kraken/client/torrent/storage Torrent
 
-run_tracker: tracker/tracker run_database
-		export UBER_CONFIG_DIR=config/tracker && tracker/tracker
+CONTAINERS := "kraken-mysql kraken-redis kraken-tracker kraken-origin kraken-redis"
 
-run_database:
-		docker stop mysql-kraken || true
-		docker rm mysql-kraken || true
-		docker run --name mysql-kraken -p 3306:3306 \
-		-e MYSQL_ROOT_PASSWORD=uber -e MYSQL_USER=uber \
-		-e MYSQL_PASSWORD=uber -e MYSQL_DATABASE=kraken -d percona/percona-server:5.6.28 && sleep 30
+docker_stop:
+	-docker stop $(CONTAINERS)
+	-docker rm $(CONTAINERS)
 
-run_agent_origin:
-		make clean; GOOS=linux GOARCH=amd64 make client/bin/kraken-agent/kraken-agent
-		docker build -t kraken-origin:dev -f docker/origin/Dockerfile ./
-		docker stop kraken-origin || true
-		docker rm kraken-origin || true
-		docker run -d --name=kraken-origin -p 5051:5051 -p 5081:5081 --entrypoint="/root/kraken/scripts/start_origin.sh" kraken-origin:dev
+.PHONY: redis
+redis:
+	-docker stop kraken-redis
+	-docker rm kraken-redis
+	docker pull redis
+	# TODO(codyg): I chose this random port to avoid conflicts in Jenkins. Obviously not ideal.
+	docker run -d -p 6380:6379 --name kraken-redis redis:latest
 
-run_agent_peer:
-		make clean; GOOS=linux GOARCH=amd64 make client/bin/kraken-agent/kraken-agent
-		docker build -t kraken-peer:dev -f docker/peer/dev/Dockerfile ./
-		docker stop kraken-peer || true
-		docker rm kraken-peer || true
-		docker run -d --name=kraken-peer -p 5052:5052 -p 5082:5082 --entrypoint="/root/kraken/scripts/start_peer.sh" kraken-peer:dev
+.PHONY: mysql
+mysql:
+	-docker stop kraken-mysql
+	-docker rm kraken-mysql
+	docker run \
+		--name kraken-mysql \
+		-p 3307:3306 \
+		-e MYSQL_ROOT_PASSWORD=uber \
+		-e MYSQL_USER=uber \
+		-e MYSQL_PASSWORD=uber \
+		-e MYSQL_DATABASE=kraken \
+		-d percona/percona-server:5.6.28
+	sleep 10
 
-integration:
-		make clean
-		GOOS=linux GOARCH=amd64 make tracker/tracker
-		GOOS=linux GOARCH=amd64 make client/bin/kraken-agent/kraken-agent
-		docker build -t kraken-tracker:test -f docker/tracker/Dockerfile ./
-		docker build -t kraken-origin:dev -f docker/origin/Dockerfile ./
-		docker build -t kraken-peer:test -f docker/peer/test/Dockerfile ./
-		make tools/bin/puller/puller
-		if [ ! -d env ]; then \
-		   virtualenv --setuptools env ; \
-		fi;
-		env/bin/pip install -r requirements-tests.txt
-		make run_integration
+.PHONY: tracker
+tracker:
+	-rm tracker/tracker
+	GOOS=linux GOARCH=amd64 make tracker/tracker
+	docker build -t kraken-tracker:dev -f docker/tracker/Dockerfile ./
+
+run_tracker: tracker mysql redis
+	-docker stop kraken-tracker
+	-docker rm kraken-tracker
+	docker run -d \
+		--name=kraken-tracker \
+	    -e UBER_ENVIRONMENT=development \
+		-e UBER_CONFIG_DIR=config/tracker \
+		-e DB_DSN='uber:uber@tcp(192.168.65.1:3307)/kraken' \
+		-p 26232:26232 \
+		kraken-tracker:dev
+
+.PHONY: origin
+origin:
+	-rm agent/agent
+	GOOS=linux GOARCH=amd64 make agent/agent
+	docker build -t kraken-origin:dev -f docker/origin/Dockerfile ./
+
+run_origin: origin
+	-docker stop kraken-origin
+	-docker rm kraken-origin
+	docker run -d \
+		--name=kraken-origin \
+		-e UBER_CONFIG_DIR=/root/kraken/config/origin \
+		-e UBER_ENVIRONMENT=development \
+		-e UBER_DATACENTER=sjc1 \
+		-p 5051:5051 \
+		-p 5081:5081 \
+		kraken-origin:dev \
+		/usr/bin/kraken-agent --announce_ip=192.168.65.1 --announce_port=5081
+
+.PHONY: peer
+peer:
+	-rm agent/agent
+	GOOS=linux GOARCH=amd64 make agent/agent
+	docker build -t kraken-peer:dev -f docker/peer/Dockerfile ./
+
+run_peer: peer
+	-docker stop kraken-peer
+	-docker rm kraken-peer
+	docker run -d \
+	    --name=kraken-peer \
+		-e UBER_CONFIG_DIR=/root/kraken/config/agent \
+		-e UBER_ENVIRONMENT=development \
+		-e UBER_DATACENTER=sjc1 \
+		-p 5052:5052 \
+		-p 5082:5082 \
+		kraken-peer:dev \
+		/usr/bin/kraken-agent --announce_ip=192.168.65.1 --announce_port=5082
+
+build_integration: tracker origin peer tools/bin/puller/puller docker_stop
+	if [ ! -d env ]; then \
+	   virtualenv --setuptools env ; \
+	fi;
+	env/bin/pip install -r requirements-tests.txt
 
 run_integration:
-	CONFIG_DIR=config/tracker/config env/bin/py.test --timeout=60 -v test/python
+	env/bin/py.test --timeout=30 -v test/python
+
+integration: build_integration run_integration
 
 # jenkins-only debian build job
 .PHONY: debian-kraken-agent
-debian-kraken-agent: client/bin/kraken-agent/kraken-agent
+debian-kraken-agent: agent/agent
 		make debian-pre
 
 include go-build/rules.mk

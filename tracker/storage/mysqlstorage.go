@@ -29,7 +29,7 @@ type MySQLStorage struct {
 func NewMySQLStorage(cfg config.MySQLConfig) (*MySQLStorage, error) {
 
 	dsnTemplate := cfg.GetDSN()
-	username := cfg.Nemo.Username["kraken"]
+	credentials := cfg.Credentials["kraken"]
 
 	// check if we need to str format,
 	// we don't have to do that in integration testing suite
@@ -38,13 +38,12 @@ func NewMySQLStorage(cfg config.MySQLConfig) (*MySQLStorage, error) {
 	dsn := dsnTemplate
 	n := strings.Count(dsnTemplate, "%s")
 	if n > 0 {
-		dsn = fmt.Sprintf(dsnTemplate, username, cfg.Nemo.Password[username])
+		dsn = fmt.Sprintf(dsnTemplate, credentials.Username, credentials.Password)
 	}
 
 	db, err := sqlx.Open("mysql", dsn)
 	if err != nil {
-		log.Error("Failed to connect to datastore: ", err.Error())
-		return nil, err
+		return nil, fmt.Errorf("failed to connect to mysql: %s", err)
 	}
 
 	return &MySQLStorage{
@@ -57,7 +56,7 @@ func NewMySQLStorage(cfg config.MySQLConfig) (*MySQLStorage, error) {
 func RunDBMigration(cfg config.MySQLConfig) error {
 
 	dsnTemplate := cfg.GetDSN()
-	username := cfg.Nemo.Username["kraken"]
+	credentials := cfg.Credentials["kraken"]
 
 	// check if we need to str format,
 	// we don't have to do that in integration testing suite
@@ -66,28 +65,20 @@ func RunDBMigration(cfg config.MySQLConfig) error {
 	dsn := dsnTemplate
 	n := strings.Count(dsnTemplate, "%s")
 	if n > 0 {
-		dsn = fmt.Sprintf(dsnTemplate, username, cfg.Nemo.Password[username])
+		dsn = fmt.Sprintf(dsnTemplate, credentials.Username, credentials.Password)
 	}
 
 	// Open our database connection
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		log.Error("Failed to connect to datastore: ", err.Error())
-		return err
+		return fmt.Errorf("failed to connect to mysql: %s", err)
 	}
 	defer db.Close()
 
-	err = goose.SetDialect("mysql")
-
-	if err != nil {
-		log.Error("do not support the driver: ", err.Error())
+	if err := goose.SetDialect("mysql"); err != nil {
 		return err
 	}
-	arguments := []string{}
-	// Get the latest possible migration
-	err = goose.Run("up", db, cfg.MigrationsPath, arguments...)
-	if err != nil {
-		log.Error("could not run a migration: ", err)
+	if err := goose.Run("up", db, cfg.MigrationsPath); err != nil {
 		return err
 	}
 

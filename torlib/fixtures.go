@@ -17,8 +17,8 @@ func init() {
 
 // PeerIDFixture returns a randomly generated PeerID.
 func PeerIDFixture() PeerID {
-	var p PeerID
-	if _, err := rand.Read(p[:]); err != nil {
+	p, err := RandomPeerID()
+	if err != nil {
 		panic(err)
 	}
 	return p

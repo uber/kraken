@@ -190,7 +190,7 @@ type announceResponseEvent struct {
 //
 // Also marks the dispatcher as ready to announce again.
 func (e announceResponseEvent) Apply(s *Scheduler) {
-	s.logf(log.Fields{"hash": e.infoHash, "peers": e.peers}).Debug("Applying announce response event")
+	s.logf(log.Fields{"hash": e.infoHash}).Debug("Applying announce response event")
 
 	ctrl, ok := s.torrentControls[e.infoHash]
 	if !ok {
@@ -213,6 +213,7 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 			// Tracker may return our own peer.
 			continue
 		}
+		s.logf(log.Fields{"peer": pid}).Debug("Received peer from tracker")
 		if err := s.connState.AddPending(pid, e.infoHash); err != nil {
 			if err == errTorrentAtCapacity {
 				s.logf(log.Fields{
@@ -335,8 +336,6 @@ func (e cleanupBlacklistEvent) Apply(s *Scheduler) {
 type emitStatsEvent struct{}
 
 func (e emitStatsEvent) Apply(s *Scheduler) {
-	s.log().Debug("Applying emit stats event")
-
 	s.stats.Gauge("torrents").Update(float64(len(s.torrentControls)))
 	s.stats.Gauge("conns").Update(float64(s.connState.NumActiveConns()))
 }

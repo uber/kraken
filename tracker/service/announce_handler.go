@@ -22,6 +22,7 @@ type announceHandler struct {
 
 func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+	log.Debugf("Get /announce %s", q)
 
 	infoHash := q.Get("info_hash")
 	peerID := q.Get("peer_id")

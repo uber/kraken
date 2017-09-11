@@ -17,10 +17,9 @@ func main() {
 	cfg := config.Initialize()
 	log.Configure(&cfg.Logging, false)
 
-	log.Info("Starting Kraken Tracker server...")
-
-	// Run database migration if there is any.
-	storage.RunDBMigration(cfg.Database.MySQL)
+	if err := storage.RunDBMigration(cfg.Database.MySQL); err != nil {
+		log.Fatalf("Could not run db migration: %s", err)
+	}
 
 	peerStore, err := storage.GetPeerStore(cfg.Database)
 	if err != nil {
@@ -37,9 +36,10 @@ func main() {
 
 	webApp := service.InitializeAPI(cfg, peerStore, torrentStore, manifestStore)
 
-	log.Infof("Binding to port %d", cfg.BackendPort)
+	addr := fmt.Sprintf(":%d", cfg.BackendPort)
+	log.Infof("Listening on %s", addr)
 
-	go log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", cfg.BackendPort), webApp))
+	go log.Fatal(http.ListenAndServe(addr, webApp))
 
 	// Handle SIGINT and SIGTERM.
 	ch := make(chan os.Signal, 1)

@@ -13,9 +13,6 @@ type Config struct {
 	// ListenAddr is the "ip:port" the Scheduler will serve connections on.
 	ListenAddr string `yaml:"listen_addr"`
 
-	// Datacenter is the current datacenter.
-	Datacenter string `yaml:"datacenter"`
-
 	// TrackerAddr is the "ip:port" of the tracker server.
 	TrackerAddr string `yaml:"tracker_addr"`
 
@@ -25,6 +22,9 @@ type Config struct {
 	// 1. Torrents which are making little progress
 	// 2. Higher priority torrents
 	AnnounceInterval time.Duration `yaml:"announce_interval"`
+
+	// AnnounceTimeout is the timeout for announce requests.
+	AnnounceTimeout time.Duration `yaml:"announce_timeout"`
 
 	// DialTimeout is the timeout for opening new connections.
 	DialTimeout time.Duration `yaml:"dial_timeout"`
@@ -65,11 +65,11 @@ func (c Config) applyDefaults() (Config, error) {
 	if c.ListenAddr == "" {
 		return c, errors.New("no listen addr specified")
 	}
-	if c.Datacenter == "" {
-		return c, errors.New("no datacenter specified")
-	}
 	if c.AnnounceInterval == 0 {
 		c.AnnounceInterval = 30 * time.Second
+	}
+	if c.AnnounceTimeout == 0 {
+		c.AnnounceTimeout = 30 * time.Second
 	}
 	if c.DialTimeout == 0 {
 		c.DialTimeout = 5 * time.Second
