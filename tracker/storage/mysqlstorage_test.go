@@ -51,14 +51,14 @@ func TestMySQLGetPeers(t *testing.T) {
 
 	peers, err := storage.GetPeers(ih)
 
-	assert.Nil(err)
+	assert.NoError(err)
 	assert.Equal(2, len(peers))
 	assert.Equal(peers[0].PeerID, peer0)
 	assert.Equal(peers[0].IP, "127.0.0.1")
 	assert.Equal(peers[0].Port, int64(8080))
 	assert.Equal(peers[0].InfoHash, ih)
 	assert.Equal(peers[1].PeerID, peer1)
-	assert.Nil(mock.ExpectationsWereMet())
+	assert.NoError(mock.ExpectationsWereMet())
 }
 
 func TestMySQLUpdatePeer(t *testing.T) {
@@ -79,8 +79,8 @@ func TestMySQLUpdatePeer(t *testing.T) {
 		p.DC, p.IP, "8080", "1", "2",
 	).WillReturnResult(sqlmock.NewResult(1, 1))
 
-	assert.Nil(storage.UpdatePeer(p))
-	assert.Nil(mock.ExpectationsWereMet())
+	assert.NoError(storage.UpdatePeer(p))
+	assert.NoError(mock.ExpectationsWereMet())
 }
 
 func TestMySQLGetTorrent(t *testing.T) {
@@ -91,21 +91,21 @@ func TestMySQLGetTorrent(t *testing.T) {
 	mock.ExpectQuery("select metaInfo from torrent where").WithArgs(name).WillReturnRows(rows)
 
 	str, err := storage.GetTorrent(name)
-	assert.Nil(err)
+	assert.NoError(err)
 	assert.Equal(metaInfo, str)
-	assert.Nil(mock.ExpectationsWereMet())
+	assert.NoError(mock.ExpectationsWereMet())
 
 	mock.ExpectQuery("select metaInfo from torrent where").WithArgs(name).WillReturnRows(sqlmock.NewRows([]string{"metaInfo"}))
 	_, err = storage.GetTorrent(name)
 	assert.Equal("Cannot find torrent torrent0: file does not exist", err.Error())
-	assert.Nil(mock.ExpectationsWereMet())
+	assert.NoError(mock.ExpectationsWereMet())
 }
 
 func TestMySQLCreateTorrent(t *testing.T) {
 	assert := require.New(t)
 	mi := torlib.MetaInfoFixture()
 	metaRaw, err := mi.Serialize()
-	assert.Nil(err)
+	assert.NoError(err)
 
 	mock.ExpectExec("insert into torrent").WithArgs(
 		mi.Name(),
@@ -114,8 +114,8 @@ func TestMySQLCreateTorrent(t *testing.T) {
 		metaRaw,
 	).WillReturnResult(sqlmock.NewResult(1, 1))
 
-	assert.Nil(storage.CreateTorrent(mi))
-	assert.Nil(mock.ExpectationsWereMet())
+	assert.NoError(storage.CreateTorrent(mi))
+	assert.NoError(mock.ExpectationsWereMet())
 }
 
 func TestMySQLGetManifest(t *testing.T) {
@@ -126,16 +126,16 @@ func TestMySQLGetManifest(t *testing.T) {
 	mock.ExpectQuery("select data from manifest where").WithArgs(tag).WillReturnRows(rows)
 
 	str, err := storage.GetManifest(tag)
-	assert.Nil(err)
+	assert.NoError(err)
 	assert.Equal(data, str)
-	assert.Nil(mock.ExpectationsWereMet())
+	assert.NoError(mock.ExpectationsWereMet())
 
 	mock.ExpectQuery("select data from manifest where").WithArgs(tag).WillReturnRows(sqlmock.NewRows([]string{"data"}))
 
 	_, err = storage.GetManifest(tag)
 	assert.NotNil(err)
 	assert.Equal("Cannot find manifest tag0: file does not exist", err.Error())
-	assert.Nil(mock.ExpectationsWereMet())
+	assert.NoError(mock.ExpectationsWereMet())
 }
 
 func TestMySQLCreateManifest(t *testing.T) {
@@ -170,21 +170,44 @@ func TestMySQLCreateManifest(t *testing.T) {
 	mock.ExpectCommit()
 
 	err := storage.CreateManifest(tag, manifestStr)
-	assert.Nil(err)
-	assert.Nil(mock.ExpectationsWereMet())
+	assert.NoError(err)
+	assert.NoError(mock.ExpectationsWereMet())
 }
 
 func TestMySQLDeleteManifest(t *testing.T) {
 	assert := require.New(t)
-	layers := []string{
-		"d2176faa6180566e5e6727e101ba26b13c19ef35f171c9b4419c4d50626aad9d",
-		"1508613826413590a9fdb496cbedb0c2ebf564cfbcd2c85c2a07bb3a40813233",
-		"f1f1d5da237f1b069eae23cdc9b291e217a4c1fda8f29262c4275a786a4dd322",
-		"d93b7da35a7f1d51fb163895714dc1923ad235683116e5553a585d0d8f1b1756",
-	}
+	tag := "tag1"
+	manifestStr := `{
+                 "schemaVersion": 2,
+                 "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+                 "config": {
+                    "mediaType": "application/octet-stream",
+                    "size": 11936,
+                    "digest": "sha256:d2176faa6180566e5e6727e101ba26b13c19ef35f171c9b4419c4d50626aad9d"
+                 },
+                 "layers": [{
+                    "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+                    "size": 52998821,
+                    "digest": "sha256:1508613826413590a9fdb496cbedb0c2ebf564cfbcd2c85c2a07bb3a40813233"
+                 },
+                 {
+                    "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+                    "size": 115242848,
+                    "digest": "sha256:f1f1d5da237f1b069eae23cdc9b291e217a4c1fda8f29262c4275a786a4dd322"
+                  }]}`
+	mock.ExpectBegin()
+	mock.ExpectExec("insert into manifest").WithArgs(tag, manifestStr).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("update torrent set refCount").WithArgs("1508613826413590a9fdb496cbedb0c2ebf564cfbcd2c85c2a07bb3a40813233").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("update torrent set refCount").WithArgs("d2176faa6180566e5e6727e101ba26b13c19ef35f171c9b4419c4d50626aad9d").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("update torrent set refCount").WithArgs("d93b7da35a7f1d51fb163895714dc1923ad235683116e5553a585d0d8f1b1756").WillReturnResult(sqlmock.NewResult(1, 1)) // manifest digest
+	mock.ExpectExec("update torrent set refCount").WithArgs("f1f1d5da237f1b069eae23cdc9b291e217a4c1fda8f29262c4275a786a4dd322").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	rows := sqlmock.NewRows([]string{"data"}).AddRow(manifestStr)
+	mock.ExpectQuery("select data from manifest where").WithArgs(tag).WillReturnRows(rows)
 
 	mock.ExpectBegin()
-	mock.ExpectExec("delete from manifest").WithArgs("tag1").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("delete from manifest").WithArgs(tag).WillReturnResult(sqlmock.NewResult(1, 1))
 	// torrents are updated in the alphabetical order of their names
 	mock.ExpectExec("update torrent set refCount").WithArgs("1508613826413590a9fdb496cbedb0c2ebf564cfbcd2c85c2a07bb3a40813233").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("delete from torrent").WithArgs("1508613826413590a9fdb496cbedb0c2ebf564cfbcd2c85c2a07bb3a40813233").WillReturnResult(sqlmock.NewResult(1, 1))
@@ -196,9 +219,12 @@ func TestMySQLDeleteManifest(t *testing.T) {
 	mock.ExpectExec("delete from torrent").WithArgs("f1f1d5da237f1b069eae23cdc9b291e217a4c1fda8f29262c4275a786a4dd322").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	err := storage.deleteManifest("tag1", layers)
-	assert.Nil(err)
-	assert.Nil(mock.ExpectationsWereMet())
+	err := storage.CreateManifest(tag, manifestStr)
+	assert.NoError(err)
+
+	err = storage.DeleteManifest(tag)
+	assert.NoError(err)
+	assert.NoError(mock.ExpectationsWereMet())
 }
 
 func TestMySQLTryDeleteTorrent(t *testing.T) {
@@ -210,8 +236,8 @@ func TestMySQLTryDeleteTorrent(t *testing.T) {
 		mock.ExpectCommit()
 
 		err := storage.tryDeleteTorrentOnOrigins("1508613826413590a9fdb496cbedb0c2ebf564cfbcd2c85c2a07bb3a40813233")
-		assert.Nil(err)
-		assert.Nil(mock.ExpectationsWereMet())
+		assert.NoError(err)
+		assert.NoError(mock.ExpectationsWereMet())
 	}))
 
 	assert.True(t.Run("refCount is -1", func(t *testing.T) {
@@ -223,6 +249,11 @@ func TestMySQLTryDeleteTorrent(t *testing.T) {
 		err := storage.tryDeleteTorrentOnOrigins("1508613826413590a9fdb496cbedb0c2ebf564cfbcd2c85c2a07bb3a40813233")
 		assert.NotNil(err)
 		assert.Equal("Invalid refCount -1 for torrent 1508613826413590a9fdb496cbedb0c2ebf564cfbcd2c85c2a07bb3a40813233", err.Error())
-		assert.Nil(mock.ExpectationsWereMet())
+		assert.NoError(mock.ExpectationsWereMet())
 	}))
+}
+
+func TestMySQLName(t *testing.T) {
+	assert := require.New(t)
+	assert.Equal("MySQLDataStore", storage.Name())
 }
