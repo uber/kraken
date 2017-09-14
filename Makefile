@@ -50,6 +50,11 @@ client/bin/kraken-agent/kraken-agent: proto client/bin/kraken-agent/main.go $(wi
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 tools/bin/kraken-cli/kraken:  client/cli/kraken-cli.go tools/bin/kraken-cli/main.go config/origin/config.go
 
+.PHONY: bench
+bench:
+	$(ECHO_V)cd $(FAUXROOT); $(TEST_ENV)	\
+		$(GO) test -bench=. -run=$(TEST_DIRS)
+
 REDIS_CONTAINER_NAME := "kraken-redis"
 
 .PHONY: redis
