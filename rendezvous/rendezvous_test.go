@@ -270,3 +270,28 @@ func TestScoreFunctionUint64ToFloat64BadValues(t *testing.T) {
 	}
 
 }
+
+func benchmarkHashScore(hashFactory HashFactory, scoreFunc UIntToFloat, b *testing.B) {
+	keys := HashKeyFixture(1, hashFactory)
+	rh, _ := RendezvousHashFixture(0, hashFactory, scoreFunc, 100, 200, 400, 800)
+
+	for i := 0; i < b.N; i++ {
+		rh.GetOrderedNodes(keys[0], 4)
+	}
+}
+
+func BenchmarkMurmur3UInt64ToFloat64(b *testing.B) {
+	benchmarkHashScore(Murmur3Hash, UInt64ToFloat64, b)
+}
+
+func BenchmarkSha256UInt64ToFloat64(b *testing.B) {
+	benchmarkHashScore(sha256.New, UInt64ToFloat64, b)
+}
+
+func BenchmarkMurmur3BigIntToFloat64(b *testing.B) {
+	benchmarkHashScore(Murmur3Hash, BigIntToFloat64, b)
+}
+
+func BenchmarkSha256BigIntToFloat64(b *testing.B) {
+	benchmarkHashScore(sha256.New, BigIntToFloat64, b)
+}
