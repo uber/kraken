@@ -3,12 +3,13 @@ package dockerregistry
 import (
 	"io"
 	"os"
+	"path"
 	"time"
 
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrent"
 
-	sd "github.com/docker/distribution/registry/storage/driver"
+	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/uuid"
 )
 
@@ -24,6 +25,118 @@ func NewUploads(cl torrent.Client, s *store.LocalStore) *Uploads {
 		store:  s,
 		client: cl,
 	}
+}
+
+// GetContent returns uploads content based given subtype
+func (u *Uploads) GetContent(path string, subtype PathSubType) ([]byte, error) {
+	uuid, err := GetUploadUUID(path)
+	if err != nil {
+		return nil, err
+	}
+	switch subtype {
+	case _startedat:
+		return u.getUploadStartTime(u.store.Config().UploadDir, uuid)
+	case _hashstates:
+		algo, offset, err := GetUploadAlgoAndOffset(path)
+		if err != nil {
+			return nil, err
+		}
+		return u.store.GetUploadFileHashState(uuid, algo, offset)
+	}
+	return nil, InvalidRequestError{path}
+}
+
+// GetReader returns a readercloser for uploaded contant
+func (u *Uploads) GetReader(path string, subtype PathSubType, offset int64) (io.ReadCloser, error) {
+	switch subtype {
+	case _data:
+		uuid, err := GetUploadUUID(path)
+		if err != nil {
+			return nil, err
+		}
+		return u.getUploadReader(uuid, offset)
+	}
+	return nil, InvalidRequestError{path}
+}
+
+// PutUploadContent writes to upload file given type and content
+func (u *Uploads) PutUploadContent(path string, subtype PathSubType, content []byte) error {
+	uuid, err := GetUploadUUID(path)
+	if err != nil {
+		return err
+	}
+
+	switch subtype {
+	case _startedat:
+		return u.initUpload(uuid)
+	case _data:
+		return u.putBlobData(uuid, content)
+	case _hashstates:
+		algo, offset, err := GetUploadAlgoAndOffset(path)
+		if err != nil {
+			return err
+		}
+		return u.store.SetUploadFileHashState(uuid, content, algo, offset)
+	}
+	return InvalidRequestError{path}
+}
+
+// PutBlobContent writes content to a blob
+func (u *Uploads) PutBlobContent(path string, content []byte) error {
+	digest, err := GetBlobDigest(path)
+	if err != nil {
+		return nil
+	}
+	return u.putBlobData(digest, content)
+}
+
+// GetWriter returns a writer for uploaded content
+func (u *Uploads) GetWriter(path string, subtype PathSubType) (storagedriver.FileWriter, error) {
+	uuid, err := GetUploadUUID(path)
+	if err != nil {
+		return nil, err
+	}
+	switch subtype {
+	case _data:
+		return u.store.GetUploadFileReadWriter(uuid)
+	}
+	return nil, InvalidRequestError{path}
+}
+
+// GetStat returns upload file info
+func (u *Uploads) GetStat(path string) (storagedriver.FileInfo, error) {
+	uuid, err := GetUploadUUID(path)
+	if err != nil {
+		return nil, err
+	}
+	return u.getUploadDataStat(u.store.Config().UploadDir, uuid)
+}
+
+// ListHashStates lists all upload hashstates
+func (u *Uploads) ListHashStates(path string, subtype PathSubType) ([]string, error) {
+	uuid, err := GetUploadUUID(path)
+	if err != nil {
+		return nil, err
+	}
+	switch subtype {
+	case _hashstates:
+		return u.store.ListUploadFileHashStatePaths(uuid)
+	}
+	return nil, InvalidRequestError{path}
+}
+
+// Move moves upload file to cached blob store
+func (u *Uploads) Move(uploadsPath string, blobsPath string) error {
+	uuid, err := GetUploadUUID(uploadsPath)
+	if err != nil {
+		return err
+	}
+
+	digest, err := GetBlobDigest(blobsPath)
+	if err != nil {
+		return err
+	}
+	return u.commitUpload(uuid, u.store.Config().CacheDir, digest)
 }
 
 func (u *Uploads) initUpload(uuid string) error {
@@ -54,16 +167,15 @@ func (u *Uploads) getUploadReader(uuid string, offset int64) (io.ReadCloser, err
 	return reader, nil
 }
 
-func (u *Uploads) getUploadDataStat(dir, uuid string) (fi sd.FileInfo, err error) {
-	// TODO (evelynl): getstat from store
+func (u *Uploads) getUploadDataStat(dir, uuid string) (fi storagedriver.FileInfo, err error) {
 	var info os.FileInfo
-	fp := dir + uuid
+	fp := path.Join(dir, uuid)
 	info, err = os.Stat(fp)
 	if err != nil {
 		return nil, err
 	}
-	fi = sd.FileInfoInternal{
-		FileInfoFields: sd.FileInfoFields{
+	fi = storagedriver.FileInfoInternal{
+		FileInfoFields: storagedriver.FileInfoFields{
 			Path:    info.Name(),
 			Size:    info.Size(),
 			ModTime: info.ModTime(),

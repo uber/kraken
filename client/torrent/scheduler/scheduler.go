@@ -206,6 +206,7 @@ func (s *Scheduler) AddTorrent(mi *torlib.MetaInfo) <-chan error {
 		errc <- err
 		return errc
 	}
+
 	if !s.eventLoop.Send(newTorrentEvent{t, errc}) {
 		errc <- ErrSchedulerStopped
 	}

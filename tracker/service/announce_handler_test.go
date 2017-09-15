@@ -66,8 +66,8 @@ func TestAnnounceEndPoint(t *testing.T) {
 			Event:           peer.Event,
 		}
 
-		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString()).Return([]*torlib.PeerInfo{peer}, nil)
+		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
 		testutils.RequireStatus(t, response, 200)
 		announceResponse := torlib.AnnouncerResponse{}

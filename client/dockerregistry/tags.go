@@ -29,12 +29,10 @@ const (
 
 // Tags is an interface
 type Tags interface {
-	ListTags(repo string) ([]string, error)
-	ListRepos() ([]string, error)
-	DeleteTag(repo, tag string) error
-	GetTag(repo, tag string) (string, error)
-	CreateTag(repo, tag, manifest string) error
 	DeleteExpiredTags(n int, expireTime time.Time) error
+	GetContent(path string, subtype PathSubType) (data []byte, err error)
+	PutContent(path string, subtype PathSubType) error
+	ListManifests(path string, subtype PathSubType) ([]string, error)
 }
 
 // DockerTags handles tag lookups
@@ -77,6 +75,95 @@ func NewDockerTags(c *Config, s *store.LocalStore, cl torrent.Client, metrics ta
 		client:  cl,
 		metrics: metrics,
 	}, nil
+}
+
+// GetContent returns manifests in bytes given path
+func (t *DockerTags) GetContent(path string, subtype PathSubType) (data []byte, err error) {
+	switch subtype {
+	case _tags:
+		repo, err := GetRepo(path)
+		if err != nil {
+			return nil, err
+		}
+
+		tag, _, err := GetManifestTag(path)
+		if err != nil {
+			return nil, err
+		}
+
+		digest, err := t.GetTag(repo, tag)
+		if err != nil {
+			return nil, err
+		}
+		return []byte("sha256:" + digest), nil
+	case _revisions:
+		digest, err := GetManifestDigest(path)
+		if err != nil {
+			return nil, err
+		}
+		return []byte("sha256:" + digest), nil
+	}
+	return nil, &InvalidRequestError{path}
+}
+
+// PutContent create tags
+func (t *DockerTags) PutContent(path string, subtype PathSubType) error {
+	switch subtype {
+	case _tags:
+		repo, err := GetRepo(path)
+		if err != nil {
+			return err
+		}
+		tag, isCurrent, err := GetManifestTag(path)
+		if err != nil {
+			return err
+		}
+		if isCurrent {
+			return nil
+		}
+		digest, err := GetManifestDigest(path)
+		if err != nil {
+			return err
+		}
+		err = t.CreateTag(repo, tag, digest)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ListManifests lists manifest tags in a repo
+func (t *DockerTags) ListManifests(path string, subtype PathSubType) ([]string, error) {
+	switch subtype {
+	case _tags:
+		repo, err := GetRepo(path)
+		if err != nil {
+			return nil, err
+		}
+		return t.ListTags(repo)
+	}
+	return nil, &InvalidRequestError{path}
+}
+
+// DeleteExpiredTags deletes tags that are older than expireTime and not in the n latest.
+func (t *DockerTags) DeleteExpiredTags(n int, expireTime time.Time) error {
+	repos, err := t.ListRepos()
+	if err != nil {
+		return err
+	}
+	for _, repo := range repos {
+		tags, err := t.listExpiredTags(repo, n, expireTime)
+		if err != nil {
+			return err
+		}
+		for _, tag := range tags {
+			log.Infof("Deleting tag %s", tag)
+			t.DeleteTag(repo, tag)
+		}
+	}
+
+	return nil
 }
 
 // ListTags lists tags under given repo
@@ -150,26 +237,6 @@ func (t *DockerTags) DeleteTag(repo, tag string) error {
 			log.Errorf("Error decrement ref count for layer %s from %s:%s. Err: %s", layer, repo, tag, err.Error())
 		}
 	}
-	return nil
-}
-
-// DeleteExpiredTags deletes tags that are older than expireTime and not in the n latest.
-func (t *DockerTags) DeleteExpiredTags(n int, expireTime time.Time) error {
-	repos, err := t.ListRepos()
-	if err != nil {
-		return err
-	}
-	for _, repo := range repos {
-		tags, err := t.listExpiredTags(repo, n, expireTime)
-		if err != nil {
-			return err
-		}
-		for _, tag := range tags {
-			log.Infof("Deleting tag %s", tag)
-			t.DeleteTag(repo, tag)
-		}
-	}
-
 	return nil
 }
 
