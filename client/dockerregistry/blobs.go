@@ -7,7 +7,7 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrent"
-	sd "github.com/docker/distribution/registry/storage/driver"
+	storagedriver "github.com/docker/distribution/registry/storage/driver"
 )
 
 // Blobs b
@@ -24,12 +24,48 @@ func NewBlobs(cl torrent.Client, s *store.LocalStore) *Blobs {
 	}
 }
 
-func (b *Blobs) getBlobStat(fileName string) (sd.FileInfo, error) {
+// GetStat returns fileinfo for the blobs
+func (b *Blobs) GetStat(path string) (storagedriver.FileInfo, error) {
+	digest, err := GetBlobDigest(path)
+	if err != nil {
+		return nil, err
+	}
+	return b.getBlobStat(digest)
+}
+
+// GetReader returns a reader to the blob
+func (b *Blobs) GetReader(path string, offset int64) (io.ReadCloser, error) {
+	digest, err := GetBlobDigest(path)
+	if err != nil {
+		return nil, err
+	}
+	return b.getOrDownloadBlobReader(digest, offset)
+}
+
+// GetContent returns blob content in bytes
+func (b *Blobs) GetContent(path string) ([]byte, error) {
+	digest, err := GetBlobDigest(path)
+	if err != nil {
+		return nil, err
+	}
+	return b.getOrDownloadBlobData(digest)
+}
+
+// GetDigest returns layer sha
+func (b *Blobs) GetDigest(path string) ([]byte, error) {
+	layerDigest, err := GetLayerDigest(path)
+	if err != nil {
+		return nil, err
+	}
+	return []byte("sha256:" + layerDigest), nil
+}
+
+func (b *Blobs) getBlobStat(fileName string) (storagedriver.FileInfo, error) {
 	info, err := b.store.GetCacheFileStat(fileName)
 	if err != nil {
 		err = b.client.DownloadTorrent(fileName)
 		if err != nil {
-			return nil, sd.PathNotFoundError{
+			return nil, storagedriver.PathNotFoundError{
 				DriverName: "kraken",
 				Path:       fileName,
 			}
@@ -41,8 +77,8 @@ func (b *Blobs) getBlobStat(fileName string) (sd.FileInfo, error) {
 		}
 	}
 
-	fi := sd.FileInfoInternal{
-		FileInfoFields: sd.FileInfoFields{
+	fi := storagedriver.FileInfoInternal{
+		FileInfoFields: storagedriver.FileInfoFields{
 			Path:    info.Name(),
 			Size:    info.Size(),
 			ModTime: info.ModTime(),
@@ -68,7 +104,7 @@ func (b *Blobs) getOrDownloadBlobReader(fileName string, offset int64) (reader i
 		err = b.client.DownloadTorrent(fileName)
 		if err != nil {
 			log.Errorf("Failed to download %s", err.Error())
-			return nil, sd.PathNotFoundError{
+			return nil, storagedriver.PathNotFoundError{
 				DriverName: "kraken",
 				Path:       fileName,
 			}

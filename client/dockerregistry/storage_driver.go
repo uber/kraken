@@ -3,9 +3,6 @@ package dockerregistry
 import (
 	"fmt"
 	"io"
-	"path/filepath"
-	"regexp"
-	"strings"
 	"time"
 
 	"code.uber.internal/infra/kraken/client/store"
@@ -38,7 +35,7 @@ import (
 // 						data
 // 						startedat
 // 						hashstates/<algorithm>/<offset>
-//			-> blob/<algorithm>
+//			-> blobs/<algorithm>
 //				<split directory content addressable storage>
 //
 
@@ -53,6 +50,15 @@ const (
 
 func init() {
 	factory.Register(Name, &krakenStorageDriverFactory{})
+}
+
+// InvalidRequestError implements error and contains the path that is not supported
+type InvalidRequestError struct {
+	path string
+}
+
+func (e InvalidRequestError) Error() string {
+	return fmt.Sprintf("invalid request: %s", e.path)
 }
 
 type krakenStorageDriverFactory struct{}
@@ -148,187 +154,130 @@ func (d *KrakenStorageDriver) Name() string {
 // sample path: /docker/registry/v2/repositories/external/ubuntu/_layers/sha256/a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4/link
 func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data []byte, err error) {
 	log.Infof("GetContent %s", path)
-	ts := strings.Split(path, "/")
-	contentType := ts[len(ts)-1]
-	sha := filepath.Base(filepath.Dir(path))
-	switch contentType {
-	case "link":
-		isTag, tagOrDigest, err := d.isTag(path)
-		if err != nil {
-			return nil, err
-		}
-		repo, err := d.getRepoName(path)
-		if err != nil {
-			return nil, err
-		}
-		if isTag {
-			sha, err = d.tags.GetTag(repo, tagOrDigest)
-			if err != nil {
-				return nil, err
-			}
-		}
-		return []byte("sha256:" + sha), nil
-	case "startedat":
-		uuid := ts[len(ts)-2]
-		return d.uploads.getUploadStartTime(d.store.Config().UploadDir, uuid)
-	case "data":
-		// get or download content
-		return d.blobs.getOrDownloadBlobData(sha)
-	default:
-		if len(ts) > 3 && ts[len(ts)-3] == "hashstates" {
-			uuid := ts[len(ts)-4]
-			algo := ts[len(ts)-2]
-			offset := ts[len(ts)-1]
-			return d.store.GetUploadFileHashState(uuid, algo, offset)
-		}
-		return nil, fmt.Errorf("Invalid request %s", path)
+	pathType, pathSubType, err := ParsePath(path)
+	if err != nil {
+		return nil, err
 	}
+
+	switch pathType {
+	case _manifests:
+		return d.tags.GetContent(path, pathSubType)
+	case _uploads:
+		return d.uploads.GetContent(path, pathSubType)
+	case _layers:
+		return d.blobs.GetDigest(path)
+	case _blobs:
+		return d.blobs.GetContent(path)
+	}
+	return nil, InvalidRequestError{path}
 }
 
 // Reader returns a reader of path at offset
 func (d *KrakenStorageDriver) Reader(ctx context.Context, path string, offset int64) (reader io.ReadCloser, err error) {
 	log.Infof("Reader %s", path)
-	ts := strings.Split(path, "/")
-	if len(ts) < 3 {
-		return nil, fmt.Errorf("Invalid request %s", path)
+	pathType, pathSubType, err := ParsePath(path)
+	if err != nil {
+		return nil, err
 	}
-	fileType := ts[len(ts)-3]
-	switch fileType {
-	case "_uploads":
-		uuid := ts[len(ts)-2]
-		return d.uploads.getUploadReader(uuid, offset)
+
+	switch pathType {
+	case _uploads:
+		return d.uploads.GetReader(path, pathSubType, offset)
+	case _blobs:
+		return d.blobs.GetReader(path, offset)
 	default:
-		sha := ts[len(ts)-2]
-		return d.blobs.getOrDownloadBlobReader(sha, offset)
+		return nil, InvalidRequestError{path}
 	}
 }
 
 // PutContent writes content to path
 func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, content []byte) error {
 	log.Infof("PutContent %s", path)
-	ts := strings.Split(path, "/")
-	contentType := ts[len(ts)-1]
-	switch contentType {
-	case "startedat":
-		uuid := ts[len(ts)-2]
-		return d.uploads.initUpload(uuid)
-	case "data":
-		sha := ts[len(ts)-2]
-		return d.uploads.putBlobData(sha, content)
-	case "link":
-		if len(ts) < 7 {
-			return nil
-		}
+	pathType, pathSubType, err := ParsePath(path)
+	if err != nil {
+		return err
+	}
 
-		// This check filters out manifestRevisionLinkPathSpec and manifestTagCurrentPathSpec
-		if ts[len(ts)-7] == "_manifests" {
-			repo, err := d.getRepoName(path)
-			if err != nil {
-				log.Errorf("PutContent: cannot get repo %s", path)
-				return err
-			}
-			digest := ts[len(ts)-2]
-			tag := ts[len(ts)-5]
-			err = d.tags.CreateTag(repo, tag, digest)
-			if err != nil {
-				log.Errorf("PutContent: cannot create tag %s:%s", repo, path)
-				return err
-			}
-		}
+	switch pathType {
+	case _manifests:
+		return d.tags.PutContent(path, pathSubType)
+	case _uploads:
+		return d.uploads.PutUploadContent(path, pathSubType, content)
+	case _layers:
+		// noop
 		return nil
+	case _blobs:
+		return d.uploads.PutBlobContent(path, content)
 	default:
-		if len(ts) > 3 && ts[len(ts)-3] == "hashstates" {
-			uuid := ts[len(ts)-4]
-			algo := ts[len(ts)-2]
-			offset := ts[len(ts)-1]
-			err := d.store.SetUploadFileHashState(uuid, content, algo, offset)
-			return err
-		}
-		return fmt.Errorf("Invalid request %s", path)
+		return InvalidRequestError{path}
 	}
 }
 
 // Writer returns a writer of path
 func (d *KrakenStorageDriver) Writer(ctx context.Context, path string, append bool) (storagedriver.FileWriter, error) {
 	log.Infof("Writer %s", path)
-
-	contentType := filepath.Base(path)
-	uuid := filepath.Base(filepath.Dir(path))
-	switch contentType {
-	case "data":
-		break
-	default:
-		return nil, fmt.Errorf("Invalid request %s", path)
+	pathType, pathSubType, err := ParsePath(path)
+	if err != nil {
+		return nil, err
 	}
 
-	return d.store.GetUploadFileReadWriter(uuid)
+	switch pathType {
+	case _uploads:
+		return d.uploads.GetWriter(path, pathSubType)
+	default:
+		return nil, InvalidRequestError{path}
+	}
 }
 
 // Stat returns fileinfo of path
 func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (fi storagedriver.FileInfo, err error) {
 	log.Infof("Stat %s", path)
-	st := strings.Split(path, "/")
-	if len(st) < 3 {
-		return nil, fmt.Errorf("Invalid request %s", path)
+	pathType, _, err := ParsePath(path)
+	if err != nil {
+		return nil, err
 	}
-	fileType := st[len(st)-3]
-	switch fileType {
-	case "_uploads":
-		uuid := st[len(st)-2]
-		return d.uploads.getUploadDataStat(d.store.Config().UploadDir, uuid)
+
+	switch pathType {
+	case _uploads:
+		return d.uploads.GetStat(path)
+	case _blobs:
+		return d.blobs.GetStat(path)
 	default:
-		sha := st[len(st)-2]
-		return d.blobs.getBlobStat(sha)
+		return nil, InvalidRequestError{path}
 	}
 }
 
 // List returns a list of content given path
 func (d *KrakenStorageDriver) List(ctx context.Context, path string) ([]string, error) {
 	log.Infof("List %s", path)
-	st := strings.Split(path, "/")
-	if len(st) < 2 {
-		return nil, fmt.Errorf("Invalid request %s", path)
+	pathType, pathSubType, err := ParsePath(path)
+	if err != nil {
+		return nil, err
 	}
-	contentType := st[len(st)-2]
-	switch contentType {
-	case "hashstates":
-		uuid := st[len(st)-3]
-		s, err := d.store.ListUploadFileHashStatePaths(uuid)
-		return s, err
-	case "_manifests":
-		repo, err := d.getRepoName(path)
-		if err != nil {
-			return nil, err
-		}
-		if st[len(st)-1] == "tags" {
-			return d.tags.ListTags(repo)
-		}
+
+	switch pathType {
+	case _uploads:
+		return d.uploads.ListHashStates(path, pathSubType)
+	case _manifests:
+		return d.tags.ListManifests(path, pathSubType)
 	default:
-		break
+		return nil, InvalidRequestError{path}
 	}
-	return nil, fmt.Errorf("Not implemented")
 }
 
 // Move moves sourcePath to destPath
-func (d *KrakenStorageDriver) Move(ctx context.Context, sourcePath string, destPath string) (err error) {
+func (d *KrakenStorageDriver) Move(ctx context.Context, sourcePath string, destPath string) error {
 	log.Infof("Move %s %s", sourcePath, destPath)
-	srcst := strings.Split(sourcePath, "/")
-	if len(srcst) < 3 {
-		return fmt.Errorf("Invalid request %s", sourcePath)
+	pathType, _, err := ParsePath(sourcePath)
+	if err != nil {
+		return err
 	}
-	srcFileType := srcst[len(srcst)-3]
-	srcsha := srcst[len(srcst)-2]
 
-	destst := strings.Split(destPath, "/")
-	if len(srcst) < 3 {
-		return fmt.Errorf("Invalid request %s", destPath)
-	}
-	destsha := destst[len(destst)-2]
-	switch srcFileType {
-	case "_uploads":
-		return d.uploads.commitUpload(srcsha, d.store.Config().CacheDir, destsha)
+	switch pathType {
+	case _uploads:
+		return d.uploads.Move(sourcePath, destPath)
 	default:
-		return fmt.Errorf("Not implemented")
+		return InvalidRequestError{sourcePath + " to " + destPath}
 	}
 }
 
@@ -345,35 +294,4 @@ func (d *KrakenStorageDriver) Delete(ctx context.Context, path string) error {
 func (d *KrakenStorageDriver) URLFor(ctx context.Context, path string, options map[string]interface{}) (string, error) {
 	log.Infof("URLFor %s", path)
 	return "", fmt.Errorf("Not implemented")
-}
-
-// isTag return if path contains tag and returns the tag, or digest if it contains digest instead
-func (d *KrakenStorageDriver) isTag(path string) (bool, string, error) {
-	tagRegex := regexp.MustCompile(".*_manifests/tags/.*/current/link")
-	digestRegex := regexp.MustCompile(".*/sha256/.*/link")
-	st := strings.Split(path, "/")
-	if tagRegex.MatchString(path) {
-		if len(st) < 3 {
-			return false, "", fmt.Errorf("Invalid path format %s", path)
-		}
-		return true, st[len(st)-3], nil
-	}
-	if digestRegex.MatchString(path) {
-		if len(st) < 2 {
-			return false, "", fmt.Errorf("Invalid path format %s", path)
-		}
-		return false, st[len(st)-2], nil
-	}
-	return false, "", fmt.Errorf("Invalid path format %s", path)
-}
-
-// getRepoName returns the repo name given path
-func (d *KrakenStorageDriver) getRepoName(path string) (string, error) {
-	prefix := regexp.MustCompile("^.*repositories/")
-	suffix := regexp.MustCompile("(/_layer|/_manifests|/_uploads).*")
-	name := suffix.ReplaceAllString(prefix.ReplaceAllString(path, ""), "")
-	if name == "" {
-		return "", fmt.Errorf("Error getting repo name %s", path)
-	}
-	return name, nil
 }

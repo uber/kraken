@@ -219,7 +219,8 @@ func (store *LocalStore) ListUploadFileHashStatePaths(fileName string) ([]string
 	store.uploadBackend.RangeFileMetadata(fileName, []base.FileState{store.stateUpload}, func(mt base.MetadataType) error {
 		if re := regexp.MustCompile("_hashstates/\\w+/\\w+$"); re.MatchString(mt.GetSuffix()) {
 			r := strings.NewReplacer("_", "/")
-			paths = append(paths, fp+r.Replace(mt.GetSuffix()))
+			p := path.Join("localstore/_uploads/", path.Base(fp))
+			paths = append(paths, p+r.Replace(mt.GetSuffix()))
 		}
 		return nil
 	})

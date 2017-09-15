@@ -3,7 +3,6 @@ package torlib
 import (
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 )
 
 // Pieces is a slice of piece hash
@@ -15,7 +14,6 @@ func (p *Pieces) UnmarshalJSON(b []byte) error {
 	json.Unmarshal(b, &str)
 	decoded, err := hex.DecodeString(str)
 	if err != nil {
-		fmt.Printf("unmarshal err: %s", err)
 		return err
 	}
 	*p = decoded
