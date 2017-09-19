@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"code.uber.internal/infra/kraken/client/store"
-	storecfg "code.uber.internal/infra/kraken/configuration"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	hashcfg "code.uber.internal/infra/kraken/origin/config"
 
@@ -14,7 +13,7 @@ import (
 )
 
 // InitializeAPI instantiates a new web-app for the origin
-func InitializeAPI(storeConfig *storecfg.Config, hashConfig hashcfg.HashConfig) http.Handler {
+func InitializeAPI(storeConfig *store.Config, hashConfig hashcfg.HashConfig) http.Handler {
 	r := chi.NewRouter()
 	webApp := NewBlobWebApp(storeConfig, hashConfig)
 
@@ -36,7 +35,7 @@ func InitializeAPI(storeConfig *storecfg.Config, hashConfig hashcfg.HashConfig) 
 }
 
 // NewBlobWebApp initializes a new BlobWebApp obj.
-func NewBlobWebApp(storeConfig *storecfg.Config, hashConfig hashcfg.HashConfig) *BlobWebApp {
+func NewBlobWebApp(storeConfig *store.Config, hashConfig hashcfg.HashConfig) *BlobWebApp {
 	if len(hashConfig.HashNodes) == 0 {
 		panic("Hashstate has zero length: `0 any_operation X = 0`")
 	}
@@ -51,7 +50,7 @@ func NewBlobWebApp(storeConfig *storecfg.Config, hashConfig hashcfg.HashConfig) 
 		hashState.AddNode(node.Label, node.Weight)
 	}
 
-	ls, err := store.NewLocalStore(&storeConfig.Store, storeConfig.Registry.TagDeletion.Enable)
+	ls, err := store.NewLocalStore(storeConfig, true)
 	if err != nil {
 		panic("Could not create local store for blob web app")
 	}
