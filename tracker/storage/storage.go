@@ -3,17 +3,11 @@ package storage
 import (
 	"fmt"
 
-	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/go-common.git/x/mysql"
+
 	"code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/torlib"
-
-	_ "github.com/go-sql-driver/mysql" // need this side effect import for mysql
 )
-
-func init() {
-	register("mysql", new(mysqlStorageFactory))
-	register("redis", new(redisStorageFactory))
-}
 
 // PeerStore provides storage for announcing peers.
 type PeerStore interface {
@@ -56,93 +50,85 @@ type Storage interface {
 	ManifestStore
 }
 
+// StoreProvider provides constructors for datastores. Ensures that at most one
+// storage backend is created regardless of how many stores it backs.
+type StoreProvider struct {
+	cfg  config.DatabaseConfig
+	nemo mysql.Configuration
+
+	// Caches previously created storage backends.
+	mysqlStorage *MySQLStorage
+	redisStorage *RedisStorage
+}
+
+// NewStoreProvider creates a new StoreProvider.
+func NewStoreProvider(cfg config.DatabaseConfig, nemo mysql.Configuration) *StoreProvider {
+	return &StoreProvider{cfg: cfg, nemo: nemo}
+}
+
 // GetPeerStore returns the configured PeerStore.
-func GetPeerStore(cfg config.DatabaseConfig) (PeerStore, error) {
-	s, err := getStore(cfg.PeerStore, cfg)
+func (p *StoreProvider) GetPeerStore() (PeerStore, error) {
+	s, err := p.getStorageBackend(p.cfg.PeerStore)
 	if err != nil {
 		return nil, err
 	}
 	ps, ok := s.(PeerStore)
 	if !ok {
-		return nil, fmt.Errorf("PeerStore not supported for %s", cfg.PeerStore)
+		return nil, fmt.Errorf("PeerStore not supported for %s", p.cfg.PeerStore)
 	}
 	return ps, nil
 }
 
 // GetTorrentStore returns the configured TorrentStore.
-func GetTorrentStore(cfg config.DatabaseConfig) (TorrentStore, error) {
-	s, err := getStore(cfg.TorrentStore, cfg)
+func (p *StoreProvider) GetTorrentStore() (TorrentStore, error) {
+	s, err := p.getStorageBackend(p.cfg.TorrentStore)
 	if err != nil {
 		return nil, err
 	}
 	ts, ok := s.(TorrentStore)
 	if !ok {
-		return nil, fmt.Errorf("TorrentStore not supported for %s", cfg.TorrentStore)
+		return nil, fmt.Errorf("TorrentStore not supported for %s", p.cfg.TorrentStore)
 	}
 	return ts, nil
 }
 
 // GetManifestStore returns the configured ManifestStore.
-func GetManifestStore(cfg config.DatabaseConfig) (ManifestStore, error) {
-	s, err := getStore(cfg.ManifestStore, cfg)
+func (p *StoreProvider) GetManifestStore() (ManifestStore, error) {
+	s, err := p.getStorageBackend(p.cfg.ManifestStore)
 	if err != nil {
 		return nil, err
 	}
 	ms, ok := s.(ManifestStore)
 	if !ok {
-		return nil, fmt.Errorf("ManifestStore not supported for %s", cfg.ManifestStore)
+		return nil, fmt.Errorf("ManifestStore not supported for %s", p.cfg.ManifestStore)
 	}
 	return ms, nil
 }
 
-type storeFactory interface {
-	GetStore(config.DatabaseConfig) (interface{}, error)
-}
-
-var _storeFactories = make(map[string]storeFactory)
-
-func register(name string, f storeFactory) {
-	if f == nil {
-		log.Panicf("No factory supplied for %s", name)
+func (p *StoreProvider) getStorageBackend(name string) (interface{}, error) {
+	switch name {
+	case "mysql":
+		if p.mysqlStorage == nil {
+			s, err := NewMySQLStorage(p.nemo, p.cfg.MySQL)
+			if err != nil {
+				return nil, fmt.Errorf("mysql storage initialization failed: %s", err)
+			}
+			if err := s.RunMigration(); err != nil {
+				return nil, fmt.Errorf("mysql migration failed: %s", err)
+			}
+			p.mysqlStorage = s
+		}
+		return p.mysqlStorage, nil
+	case "redis":
+		if p.redisStorage == nil {
+			s, err := NewRedisStorage(p.cfg.Redis)
+			if err != nil {
+				return nil, fmt.Errorf("redis storage initialization failed: %s", err)
+			}
+			p.redisStorage = s
+		}
+		return p.redisStorage, nil
+	default:
+		return nil, fmt.Errorf("invalid storage backend: %q", name)
 	}
-	if _, ok := _storeFactories[name]; ok {
-		log.Panicf("Duplicate factory registered for %s", name)
-	}
-	_storeFactories[name] = f
-}
-
-type redisStorageFactory struct {
-	store *RedisStorage
-}
-
-func (f *redisStorageFactory) GetStore(cfg config.DatabaseConfig) (interface{}, error) {
-	var err error
-	if f.store == nil {
-		f.store, err = NewRedisStorage(cfg.Redis)
-	}
-	return f.store, err
-}
-
-type mysqlStorageFactory struct {
-	store *MySQLStorage
-}
-
-func (f *mysqlStorageFactory) GetStore(cfg config.DatabaseConfig) (interface{}, error) {
-	var err error
-	if f.store == nil {
-		f.store, err = NewMySQLStorage(cfg.MySQL)
-	}
-	return f.store, err
-}
-
-func getStore(name string, cfg config.DatabaseConfig) (interface{}, error) {
-	f, ok := _storeFactories[name]
-	if !ok {
-		return nil, fmt.Errorf("store not found: %s", name)
-	}
-	s, err := f.GetStore(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize store: %s", err)
-	}
-	return s, nil
 }

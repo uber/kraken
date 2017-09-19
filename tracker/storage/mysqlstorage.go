@@ -1,15 +1,14 @@
 package storage
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 
 	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/go-common.git/x/mysql"
 	"code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils"
@@ -25,75 +24,34 @@ type MySQLStorage struct {
 	db  *sqlx.DB
 }
 
-// NewMySQLStorage creates and returns new MySQL storage
-func NewMySQLStorage(cfg config.MySQLConfig) (*MySQLStorage, error) {
-
-	dsnTemplate := cfg.GetDSN()
-	credentials := cfg.Credentials["kraken"]
-
-	// check if we need to str format,
-	// we don't have to do that in integration testing suite
-	// as DSN being returned from docker container contains already
-	// username and password
-	dsn := dsnTemplate
-	n := strings.Count(dsnTemplate, "%s")
-	if n > 0 {
-		dsn = fmt.Sprintf(dsnTemplate, credentials.Username, credentials.Password)
+// NewMySQLStorage creates and returns new MySQL storage.
+func NewMySQLStorage(nemo mysql.Configuration, cfg config.MySQLConfig) (*MySQLStorage, error) {
+	dsn, err := nemo.GetDefaultDSN()
+	if err != nil {
+		return nil, fmt.Errorf("error getting dsn: %s", err)
 	}
-
 	db, err := sqlx.Open("mysql", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to mysql: %s", err)
 	}
-
-	return &MySQLStorage{
-		cfg: cfg,
-		db:  db,
-	}, nil
+	return &MySQLStorage{cfg, db}, nil
 }
 
-// RunDBMigration detect and Run DB migration if it is needed
-func RunDBMigration(cfg config.MySQLConfig) error {
-
-	dsnTemplate := cfg.GetDSN()
-	credentials := cfg.Credentials["kraken"]
-
-	// check if we need to str format,
-	// we don't have to do that in integration testing suite
-	// as DSN being returned from docker container contains already
-	// username and password
-	dsn := dsnTemplate
-	n := strings.Count(dsnTemplate, "%s")
-	if n > 0 {
-		dsn = fmt.Sprintf(dsnTemplate, credentials.Username, credentials.Password)
-	}
-
-	// Open our database connection
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		return fmt.Errorf("failed to connect to mysql: %s", err)
-	}
-	defer db.Close()
-
+// RunMigration runs MySQL database migration if it is needed.
+func (s *MySQLStorage) RunMigration() error {
 	if err := goose.SetDialect("mysql"); err != nil {
 		return err
 	}
-	if err := goose.Run("up", db, cfg.MigrationsPath); err != nil {
+	if err := goose.Run("up", s.db.DB, s.cfg.MigrationsDir); err != nil {
 		return err
 	}
-
 	return nil
 }
 
-// Name returns a Storage string identifier
-func (ds *MySQLStorage) Name() string {
-	return "MySQLDataStore"
-}
-
 // GetPeers implements Storage.GetPeers
-func (ds *MySQLStorage) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
+func (s *MySQLStorage) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
 	var peers []*torlib.PeerInfo
-	err := ds.db.Select(&peers, "select * from peer where infoHash=?", infoHash)
+	err := s.db.Select(&peers, "select * from peer where infoHash=?", infoHash)
 	if err != nil {
 		log.Errorf("Failed to get peers: %s", err)
 		return nil, err
@@ -103,8 +61,8 @@ func (ds *MySQLStorage) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
 }
 
 // UpdatePeer updates PeerInfo in a storage
-func (ds *MySQLStorage) UpdatePeer(peer *torlib.PeerInfo) error {
-	_, err := ds.db.NamedExec(`insert into peer(infoHash, peerId, dc, ip, port, bytes_downloaded, flags)
+func (s *MySQLStorage) UpdatePeer(peer *torlib.PeerInfo) error {
+	_, err := s.db.NamedExec(`insert into peer(infoHash, peerId, dc, ip, port, bytes_downloaded, flags)
 	values(:infoHash, :peerId, :dc, :ip, :port, :bytes_downloaded, :flags) on duplicate key update
 	dc =:dc, ip =:ip, port =:port, bytes_downloaded =:bytes_downloaded, flags=:flags`,
 		map[string]interface{}{
@@ -126,9 +84,9 @@ func (ds *MySQLStorage) UpdatePeer(peer *torlib.PeerInfo) error {
 }
 
 // GetTorrent reads torrent's metadata identified by a torrent name
-func (ds *MySQLStorage) GetTorrent(name string) (string, error) {
+func (s *MySQLStorage) GetTorrent(name string) (string, error) {
 	var metaRaw []string
-	err := ds.db.Select(&metaRaw, "select metaInfo from torrent where name=?", name)
+	err := s.db.Select(&metaRaw, "select metaInfo from torrent where name=?", name)
 	if err != nil {
 		log.Error(err)
 		return "", err
@@ -144,14 +102,14 @@ func (ds *MySQLStorage) GetTorrent(name string) (string, error) {
 }
 
 // CreateTorrent creates a torrent in storage
-func (ds *MySQLStorage) CreateTorrent(meta *torlib.MetaInfo) error {
+func (s *MySQLStorage) CreateTorrent(meta *torlib.MetaInfo) error {
 	serialized, err := meta.Serialize()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
-	_, err = ds.db.NamedExec(`insert into torrent(name, infoHash, author, metaInfo)
+	_, err = s.db.NamedExec(`insert into torrent(name, infoHash, author, metaInfo)
 	values(:name, :infoHash, :author, :metaInfo) on duplicate key update flags = flags`,
 		map[string]interface{}{
 			"name":     meta.Name(),
@@ -168,9 +126,9 @@ func (ds *MySQLStorage) CreateTorrent(meta *torlib.MetaInfo) error {
 }
 
 // GetManifest reads manifest from storage
-func (ds *MySQLStorage) GetManifest(tag string) (string, error) {
+func (s *MySQLStorage) GetManifest(tag string) (string, error) {
 	var manifestRaw []string
-	err := ds.db.Select(&manifestRaw, "select data from manifest where tag=?", tag)
+	err := s.db.Select(&manifestRaw, "select data from manifest where tag=?", tag)
 	if err != nil {
 		log.Error(err)
 		return "", err
@@ -188,7 +146,7 @@ func (ds *MySQLStorage) GetManifest(tag string) (string, error) {
 }
 
 // CreateManifest create a new entry in manifest table and then increment refcount for all layers
-func (ds *MySQLStorage) CreateManifest(tag, manifestRaw string) error {
+func (s *MySQLStorage) CreateManifest(tag, manifestRaw string) error {
 	manifestV2, manifestDigest, err := utils.ParseManifestV2([]byte(manifestRaw))
 	if err != nil {
 		log.Error(err)
@@ -200,14 +158,14 @@ func (ds *MySQLStorage) CreateManifest(tag, manifestRaw string) error {
 		log.Error(err)
 		return err
 	}
-	return ds.createManifest(tag, manifestRaw, tors)
+	return s.createManifest(tag, manifestRaw, tors)
 }
 
-func (ds *MySQLStorage) createManifest(tag, manifestRaw string, tors []string) error {
+func (s *MySQLStorage) createManifest(tag, manifestRaw string, tors []string) error {
 	// Sort layerNames in increasing order to avoid transaction deadlock
 	sort.Strings(tors)
 
-	tx, err := ds.db.Beginx()
+	tx, err := s.db.Beginx()
 	if err != nil {
 		log.Error(err)
 		return err
@@ -245,8 +203,8 @@ func (ds *MySQLStorage) createManifest(tag, manifestRaw string, tors []string) e
 }
 
 // DeleteManifest delete manifest and then deref all its referenced contents
-func (ds *MySQLStorage) DeleteManifest(tag string) error {
-	manifest, err := ds.GetManifest(tag)
+func (s *MySQLStorage) DeleteManifest(tag string) error {
+	manifest, err := s.GetManifest(tag)
 	if err != nil {
 		log.Error(err)
 		return err
@@ -263,14 +221,14 @@ func (ds *MySQLStorage) DeleteManifest(tag string) error {
 		log.Error(err)
 		return err
 	}
-	return ds.deleteManifest(tag, tors)
+	return s.deleteManifest(tag, tors)
 }
 
-func (ds *MySQLStorage) deleteManifest(tag string, tors []string) (err error) {
+func (s *MySQLStorage) deleteManifest(tag string, tors []string) (err error) {
 	// Sort layerNames in increasing order to avoid transaction deadlock
 	sort.Strings(tors)
 
-	tx, err := ds.db.Beginx()
+	tx, err := s.db.Beginx()
 	if err != nil {
 		log.Error(err)
 		return err
@@ -314,15 +272,15 @@ func (ds *MySQLStorage) deleteManifest(tag string, tors []string) (err error) {
 	for _, tor := range tors {
 		go func(tor string) {
 			defer wg.Done()
-			ds.tryDeleteTorrentOnOrigins(tor)
+			s.tryDeleteTorrentOnOrigins(tor)
 		}(tor)
 	}
 	wg.Wait()
 	return nil
 }
 
-func (ds *MySQLStorage) tryDeleteTorrentOnOrigins(name string) (err error) {
-	tx, err := ds.db.Beginx()
+func (s *MySQLStorage) tryDeleteTorrentOnOrigins(name string) (err error) {
+	tx, err := s.db.Beginx()
 	if err != nil {
 		log.Error(err)
 		return err

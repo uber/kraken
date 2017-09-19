@@ -252,8 +252,3 @@ func TestMySQLTryDeleteTorrent(t *testing.T) {
 		assert.NoError(mock.ExpectationsWereMet())
 	}))
 }
-
-func TestMySQLName(t *testing.T) {
-	assert := require.New(t)
-	assert.Equal("MySQLDataStore", storage.Name())
-}

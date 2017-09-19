@@ -53,9 +53,9 @@ bench:
 	$(ECHO_V)cd $(FAUXROOT); $(TEST_ENV)	\
 		$(GO) test -bench=. -run=$(TEST_DIRS)
 
-test:: redis
+test:: redis mysql
 
-jenkins:: redis
+jenkins:: redis mysql
 
 mockgen = GOPATH=$(OLDGOPATH) $(GLIDE_EXEC) -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
 
@@ -75,11 +75,15 @@ mocks:
 		-package mockstorage \
 		code.uber.internal/infra/kraken/client/torrent/storage Torrent
 
-CONTAINERS := "kraken-mysql kraken-redis kraken-tracker kraken-origin kraken-redis"
+# Enumerates all container names, including those created by dockerman.
+CONTAINERS := $(foreach \
+	c, \
+	kraken-mysql kraken-redis kraken-tracker kraken-origin kraken-redis, \
+	$(c) no-app-id-dockerman.$(c))
 
+# Runs docker stop and docker rm on each container w/ silenced output.
 docker_stop:
-	-docker stop $(CONTAINERS)
-	-docker rm $(CONTAINERS)
+	@-$(foreach cmd,stop rm,$(foreach c,$(CONTAINERS),docker $(cmd) $(c) &>/dev/null))
 
 .PHONY: redis
 redis:
@@ -101,7 +105,10 @@ mysql:
 		-e MYSQL_PASSWORD=uber \
 		-e MYSQL_DATABASE=kraken \
 		-d percona/percona-server:5.6.28
-	sleep 10
+	@echo -n "waiting for mysql to start"
+	@until docker exec kraken-mysql mysql -u uber --password=uber -e "use kraken" &> /dev/null; \
+		do echo -n "."; sleep 1; done
+	@echo
 
 .PHONY: tracker
 tracker:
@@ -116,7 +123,6 @@ run_tracker: tracker mysql redis
 		--name=kraken-tracker \
 	    -e UBER_ENVIRONMENT=development \
 		-e UBER_CONFIG_DIR=config/tracker \
-		-e DB_DSN='uber:uber@tcp(192.168.65.1:3307)/kraken' \
 		-p 26232:26232 \
 		kraken-tracker:dev
 
@@ -158,16 +164,20 @@ run_peer: peer
 		kraken-peer:dev \
 		/usr/bin/kraken-agent --announce_ip=192.168.65.1 --announce_port=5082
 
-build_integration: tracker origin peer tools/bin/puller/puller docker_stop
+bootstrap_integration:
 	if [ ! -d env ]; then \
 	   virtualenv --setuptools env ; \
 	fi;
+	source env/bin/activate
 	env/bin/pip install -r requirements-tests.txt
 
-run_integration:
-	env/bin/py.test --timeout=30 -v test/python
+build_integration: tracker origin peer tools/bin/puller/puller docker_stop
 
-integration: build_integration run_integration
+run_integration:
+	source env/bin/activate
+	env/bin/py.test --timeout=120 -v test/python
+
+integration: bootstrap_integration build_integration run_integration
 
 # jenkins-only debian build job
 .PHONY: debian-kraken-agent

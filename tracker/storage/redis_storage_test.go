@@ -11,18 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func genRedisConfig() config.RedisConfig {
-	return config.RedisConfig{
-		Addr: "localhost:6380",
-		PeerSetWindowSizeSecs: 30,
-		MaxPeerSetWindows:     4,
-		TorrentTTLSecs:        60,
-		MaxIdleConns:          5,
-		MaxActiveConns:        20,
-		IdleConnTimeoutSecs:   10,
-	}
-}
-
 func flushdb(cfg config.RedisConfig) {
 	c, err := redis.Dial("tcp", cfg.Addr)
 	if err != nil {
@@ -45,7 +33,7 @@ func sortedPeerIDs(peers []*torlib.PeerInfo) []string {
 func TestRedisStorageGetPeersOnlyReturnsTaggedFields(t *testing.T) {
 	require := require.New(t)
 
-	cfg := genRedisConfig()
+	cfg := redisConfigFixture()
 
 	flushdb(cfg)
 
@@ -72,7 +60,7 @@ func TestRedisStorageGetPeersOnlyReturnsTaggedFields(t *testing.T) {
 func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 	require := require.New(t)
 
-	cfg := genRedisConfig()
+	cfg := redisConfigFixture()
 	cfg.PeerSetWindowSizeSecs = 10
 	cfg.MaxPeerSetWindows = 3
 
@@ -112,7 +100,7 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 func TestRedisStoragePeerExpiration(t *testing.T) {
 	require := require.New(t)
 
-	cfg := genRedisConfig()
+	cfg := redisConfigFixture()
 	cfg.PeerSetWindowSizeSecs = 1
 	cfg.MaxPeerSetWindows = 1
 
@@ -139,7 +127,7 @@ func TestRedisStoragePeerExpiration(t *testing.T) {
 func TestRedisStorageCreateAndGetTorrent(t *testing.T) {
 	require := require.New(t)
 
-	cfg := genRedisConfig()
+	cfg := redisConfigFixture()
 
 	flushdb(cfg)
 
