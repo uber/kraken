@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"code.uber.internal/go-common.git/x/mysql"
-	"code.uber.internal/infra/kraken/config/tracker"
 )
 
 func nemoConfigFixture() mysql.Configuration {
@@ -28,8 +27,8 @@ func nemoConfigFixture() mysql.Configuration {
 	}
 }
 
-func redisConfigFixture() config.RedisConfig {
-	return config.RedisConfig{
+func redisConfigFixture() RedisConfig {
+	return RedisConfig{
 		Addr:                  "localhost:6380",
 		DialTimeout:           5 * time.Second,
 		ReadTimeout:           30 * time.Second,
@@ -43,14 +42,14 @@ func redisConfigFixture() config.RedisConfig {
 	}
 }
 
-func mysqlConfigFixture() config.MySQLConfig {
-	return config.MySQLConfig{
+func mysqlConfigFixture() MySQLConfig {
+	return MySQLConfig{
 		MigrationsDir: "db/migrations",
 	}
 }
 
-func databaseConfigFixture() config.DatabaseConfig {
-	return config.DatabaseConfig{
+func configFixture() Config {
+	return Config{
 		PeerStore:     "redis",
 		TorrentStore:  "mysql",
 		ManifestStore: "mysql",

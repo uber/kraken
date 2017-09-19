@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	config "code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/torlib"
 	"github.com/garyburd/redigo/redis"
 )
@@ -23,30 +22,30 @@ func peerSetKey(infoHash string, window int64) string {
 
 // RedisStorage provides fast lookup for peers and torrent metainfo with expiration.
 type RedisStorage struct {
-	cfg  config.RedisConfig
-	pool *redis.Pool
+	config RedisConfig
+	pool   *redis.Pool
 
 	// Allow overriding time.Now() for testing purposes.
 	now func() time.Time
 }
 
 // NewRedisStorage creates a RedisStorage instance.
-func NewRedisStorage(cfg config.RedisConfig) (*RedisStorage, error) {
+func NewRedisStorage(config RedisConfig) (*RedisStorage, error) {
 	s := &RedisStorage{
-		cfg: cfg,
+		config: config,
 		pool: &redis.Pool{
 			Dial: func() (redis.Conn, error) {
 				// TODO Add options
 				return redis.Dial(
 					"tcp",
-					cfg.Addr,
-					redis.DialConnectTimeout(cfg.DialTimeout),
-					redis.DialReadTimeout(cfg.ReadTimeout),
-					redis.DialWriteTimeout(cfg.WriteTimeout))
+					config.Addr,
+					redis.DialConnectTimeout(config.DialTimeout),
+					redis.DialReadTimeout(config.ReadTimeout),
+					redis.DialWriteTimeout(config.WriteTimeout))
 			},
-			MaxIdle:     cfg.MaxIdleConns,
-			MaxActive:   cfg.MaxActiveConns,
-			IdleTimeout: time.Duration(cfg.IdleConnTimeoutSecs) * time.Second,
+			MaxIdle:     config.MaxIdleConns,
+			MaxActive:   config.MaxActiveConns,
+			IdleTimeout: time.Duration(config.IdleConnTimeoutSecs) * time.Second,
 			Wait:        true,
 		},
 		now: time.Now,
@@ -64,14 +63,14 @@ func NewRedisStorage(cfg config.RedisConfig) (*RedisStorage, error) {
 
 func (s *RedisStorage) curPeerSetWindow() int64 {
 	t := s.now().Unix()
-	return t - (t % int64(s.cfg.PeerSetWindowSizeSecs))
+	return t - (t % int64(s.config.PeerSetWindowSizeSecs))
 }
 
 func (s *RedisStorage) peerSetWindows() []int64 {
 	cur := s.curPeerSetWindow()
-	ws := make([]int64, s.cfg.MaxPeerSetWindows)
+	ws := make([]int64, s.config.MaxPeerSetWindows)
 	for i := range ws {
-		ws[i] = cur - int64(i*s.cfg.PeerSetWindowSizeSecs)
+		ws[i] = cur - int64(i*s.config.PeerSetWindowSizeSecs)
 	}
 	return ws
 
@@ -86,7 +85,7 @@ func (s *RedisStorage) UpdatePeer(p *torlib.PeerInfo) error {
 	defer c.Close()
 
 	w := s.curPeerSetWindow()
-	expireAt := w + int64(s.cfg.PeerSetWindowSizeSecs*s.cfg.MaxPeerSetWindows)
+	expireAt := w + int64(s.config.PeerSetWindowSizeSecs*s.config.MaxPeerSetWindows)
 
 	c.Send("MULTI")
 
@@ -159,7 +158,7 @@ func (s *RedisStorage) CreateTorrent(mi *torlib.MetaInfo) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.Do("SETEX", torrentKey(mi.Name()), s.cfg.TorrentTTLSecs, v)
+	_, err = c.Do("SETEX", torrentKey(mi.Name()), s.config.TorrentTTLSecs, v)
 	return err
 }
 

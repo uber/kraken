@@ -9,7 +9,7 @@ import (
 func TestRedisStoresBackedBySameInstance(t *testing.T) {
 	require := require.New(t)
 
-	cfg := databaseConfigFixture()
+	cfg := configFixture()
 	cfg.PeerStore = "redis"
 	cfg.TorrentStore = "redis"
 
@@ -33,7 +33,7 @@ func TestRedisStoresBackedBySameInstance(t *testing.T) {
 func TestMySQLStoresBackedBySameInstance(t *testing.T) {
 	require := require.New(t)
 
-	cfg := databaseConfigFixture()
+	cfg := configFixture()
 	cfg.PeerStore = "mysql"
 	cfg.TorrentStore = "mysql"
 	cfg.ManifestStore = "mysql"
