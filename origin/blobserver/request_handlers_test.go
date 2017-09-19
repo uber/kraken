@@ -428,3 +428,37 @@ func TestDeleteBlobHandlerValid(t *testing.T) {
 	require.NotNil(ctx)
 	require.Nil(se)
 }
+
+func TestRedirectByDigestHandlerValid(t *testing.T) {
+	require := require.New(t)
+
+	// Initialize store
+	localStore, cleanup := store.LocalStoreFixture()
+	defer cleanup()
+	localStore.CreateUploadFile(randomUUID, 0)
+	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
+	writer.Write([]byte("Hello world!!!"))
+	contentDigest, _ := dockerimage.NewDigester().FromReader(strings.NewReader("Hello world!!!"))
+	localStore.MoveUploadFileToCache(randomUUID, contentDigest.Hex())
+
+	// Initalize hash config and hash state
+	hashConfig, hashState := newMockHashConfig()
+
+	url := fmt.Sprintf("localhost:8080/blob/")
+	request, _ := http.NewRequest("GET", url, nil)
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("digest", dockerimage.DigestEmptyTar)
+	ctx := context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx)
+	ctx = context.WithValue(ctx, chi.RouteCtxKey, routeCtx)
+	ctx = context.WithValue(ctx, ctxKeyDigest, contentDigest)
+	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
+	ctx = context.WithValue(ctx, ctxKeyDigest, contentDigest)
+	ctx = context.WithValue(ctx, ctxKeyHashConfig, hashConfig)
+	ctx = context.WithValue(ctx, ctxKeyHashState, hashState)
+
+	request = request.WithContext(ctx)
+
+	ctx, se := redirectByDigestHandler(request.Context(), request)
+	require.NotNil(ctx)
+	require.Nil(se)
+}

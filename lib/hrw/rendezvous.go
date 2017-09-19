@@ -1,4 +1,4 @@
-package weightedhash
+package hrw
 
 import (
 	"encoding/binary"
@@ -79,7 +79,6 @@ func NewRendezvousHash(hashFactory HashFactory, scoreFunc UIntToFloat) *Rendezvo
 // https://crypto.stackexchange.com/questions/31657/uniformly-distributed-secure-floating-point-numbers-in-0-1
 // and this https://en.wikipedia.org/wiki/Rendezvous_hashing
 func UInt64ToFloat64(bytesUInt []byte, maxValue []byte, hasher hash.Hash) float64 {
-
 	maxUInt := binary.BigEndian.Uint64(maxValue)
 	fiftyThreeOnes := uint64(maxUInt >> (64 - 53))
 	fiftyThreeZeros := float64(1 << 53)
@@ -151,7 +150,6 @@ func (rhn *RendezvousHashNode) Score(key string) float64 {
 	// http://www.snia.org/sites/default/files/SDC15_presentations/dist_sys/Jason_Resch_New_Consistent_Hashings_Rev.pdf
 
 	return -float64(rhn.Weight) / math.Log(score)
-
 }
 
 // AddNode adds a node to a hashing ring
@@ -188,7 +186,6 @@ func (rh *RendezvousHash) GetNode(name string) (*RendezvousHashNode, int) {
 // where score(Node1) > score(N2) > ... score(NodeN)
 // Number of returned nodes = min(N, len(nodes))
 func (rh *RendezvousHash) GetOrderedNodes(key string, n int) ([]*RendezvousHashNode, error) {
-
 	nodes := make([]*RendezvousHashNode, len(rh.Nodes))
 	copy(nodes, rh.Nodes)
 

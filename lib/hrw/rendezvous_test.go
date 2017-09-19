@@ -1,16 +1,17 @@
-package weightedhash
+package hrw
 
 import (
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/binary"
-	"github.com/spaolacci/murmur3"
-	"github.com/stretchr/testify/assert"
 	"hash"
 	"math"
 	"os"
 	"sort"
 	"testing"
+
+	"github.com/spaolacci/murmur3"
+	"github.com/stretchr/testify/assert"
 )
 
 func assertKeyDistribution(t *testing.T, rh *RendezvousHash, nodekeys NodeKeysTable, numKeys int, totalWeights float64, delta float64) {
@@ -231,7 +232,6 @@ func TestScoreFunctionFloatPrecision(t *testing.T) {
 }
 
 func TestScoreFunctionUint64ToFloat64BadValues(t *testing.T) {
-
 	maxHashValue := make([]byte, 8)
 	for i := 0; i < 8; i++ {
 		maxHashValue[i] = 0xFF
@@ -268,7 +268,6 @@ func TestScoreFunctionUint64ToFloat64BadValues(t *testing.T) {
 		assert.Equal(t, math.IsInf(math.Log(floatVal), -1), false)
 		u64val = u64val << 1
 	}
-
 }
 
 func benchmarkHashScore(hashFactory HashFactory, scoreFunc UIntToFloat, b *testing.B) {

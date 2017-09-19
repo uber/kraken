@@ -47,6 +47,12 @@ func downloadBlobHandler(ctx context.Context, writer http.ResponseWriter) (conte
 	return ctx, nil
 }
 
+func okHandler(ctx context.Context, writer http.ResponseWriter) (context.Context, *ServerResponse) {
+	resp := NewServerResponse(http.StatusOK)
+
+	return ctx, resp
+}
+
 func okOctetStreamHandler(ctx context.Context, writer http.ResponseWriter) (context.Context, *ServerResponse) {
 	resp := NewServerResponse(http.StatusOK)
 	writer.Header().Set("Content-Type", "application/octet-stream-v1")
@@ -56,6 +62,13 @@ func okOctetStreamHandler(ctx context.Context, writer http.ResponseWriter) (cont
 
 func acceptedHandler(ctx context.Context, writer http.ResponseWriter) (context.Context, *ServerResponse) {
 	resp := NewServerResponse(http.StatusAccepted)
+	writer.Header().Set("Content-Length", "0")
+
+	return ctx, resp
+}
+
+func createdHandler(ctx context.Context, writer http.ResponseWriter) (context.Context, *ServerResponse) {
+	resp := NewServerResponse(http.StatusCreated)
 	writer.Header().Set("Content-Length", "0")
 
 	return ctx, resp

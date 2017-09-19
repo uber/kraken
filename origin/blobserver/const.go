@@ -9,4 +9,6 @@ const (
 	ctxKeyLocalStore
 	ctxKeyStartByte
 	ctxKeyEndByte
+	ctxKeyHashConfig
+	ctxKeyHashState
 )
