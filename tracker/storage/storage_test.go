@@ -3,21 +3,22 @@ package storage
 import (
 	"testing"
 
-	"code.uber.internal/infra/kraken/config/tracker"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRedisStoresBackedBySameInstance(t *testing.T) {
 	require := require.New(t)
 
-	cfg := config.InitializeTest()
-	cfg.Database.PeerStore = "redis"
-	cfg.Database.TorrentStore = "redis"
+	cfg := databaseConfigFixture()
+	cfg.PeerStore = "redis"
+	cfg.TorrentStore = "redis"
 
-	peerStore, err := GetPeerStore(cfg.Database)
+	storeProvider := NewStoreProvider(cfg, nemoConfigFixture())
+
+	peerStore, err := storeProvider.GetPeerStore()
 	require.NoError(err)
 
-	torrentStore, err := GetTorrentStore(cfg.Database)
+	torrentStore, err := storeProvider.GetTorrentStore()
 	require.NoError(err)
 
 	s1, ok := peerStore.(*RedisStorage)
@@ -32,18 +33,20 @@ func TestRedisStoresBackedBySameInstance(t *testing.T) {
 func TestMySQLStoresBackedBySameInstance(t *testing.T) {
 	require := require.New(t)
 
-	cfg := config.InitializeTest()
-	cfg.Database.PeerStore = "mysql"
-	cfg.Database.TorrentStore = "mysql"
-	cfg.Database.ManifestStore = "mysql"
+	cfg := databaseConfigFixture()
+	cfg.PeerStore = "mysql"
+	cfg.TorrentStore = "mysql"
+	cfg.ManifestStore = "mysql"
 
-	peerStore, err := GetPeerStore(cfg.Database)
+	storeProvider := NewStoreProvider(cfg, nemoConfigFixture())
+
+	peerStore, err := storeProvider.GetPeerStore()
 	require.NoError(err)
 
-	torrentStore, err := GetTorrentStore(cfg.Database)
+	torrentStore, err := storeProvider.GetTorrentStore()
 	require.NoError(err)
 
-	manifestStore, err := GetManifestStore(cfg.Database)
+	manifestStore, err := storeProvider.GetManifestStore()
 	require.NoError(err)
 
 	s1, ok := peerStore.(*MySQLStorage)

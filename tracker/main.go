@@ -14,22 +14,22 @@ import (
 )
 
 func main() {
-	cfg := config.Initialize()
+	cfg, err := config.Initialize()
+	if err != nil {
+		log.Fatalf("Could not intialize config: %s", err)
+	}
 	log.Configure(&cfg.Logging, false)
 
-	if err := storage.RunDBMigration(cfg.Database.MySQL); err != nil {
-		log.Fatalf("Could not run db migration: %s", err)
-	}
-
-	peerStore, err := storage.GetPeerStore(cfg.Database)
+	storeProvider := storage.NewStoreProvider(cfg.Database, cfg.Nemo)
+	peerStore, err := storeProvider.GetPeerStore()
 	if err != nil {
 		log.Fatalf("Could not create PeerStore: %s", err)
 	}
-	torrentStore, err := storage.GetTorrentStore(cfg.Database)
+	torrentStore, err := storeProvider.GetTorrentStore()
 	if err != nil {
 		log.Fatalf("Could not create TorrentStore: %s", err)
 	}
-	manifestStore, err := storage.GetManifestStore(cfg.Database)
+	manifestStore, err := storeProvider.GetManifestStore()
 	if err != nil {
 		log.Fatalf("Could not create ManifestStore: %s", err)
 	}

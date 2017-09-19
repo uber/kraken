@@ -37,7 +37,12 @@ func NewRedisStorage(cfg config.RedisConfig) (*RedisStorage, error) {
 		pool: &redis.Pool{
 			Dial: func() (redis.Conn, error) {
 				// TODO Add options
-				return redis.Dial("tcp", cfg.Addr)
+				return redis.Dial(
+					"tcp",
+					cfg.Addr,
+					redis.DialConnectTimeout(cfg.DialTimeout),
+					redis.DialReadTimeout(cfg.ReadTimeout),
+					redis.DialWriteTimeout(cfg.WriteTimeout))
 			},
 			MaxIdle:     cfg.MaxIdleConns,
 			MaxActive:   cfg.MaxActiveConns,
