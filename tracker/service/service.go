@@ -1,33 +1,25 @@
 package service
 
 import (
-	"log"
 	"net/http"
 
-	"code.uber.internal/infra/kraken/config/tracker"
+	"github.com/pressly/chi"
+
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/storage"
-
-	"github.com/pressly/chi"
 )
 
-// InitializeAPI instantiates a new web-app for the tracker
-func InitializeAPI(
-	cfg config.AppConfig,
+// Handler instantiates a new handler for the tracker service.
+func Handler(
+	config Config,
+	policy peerhandoutpolicy.PeerHandoutPolicy,
 	peerStore storage.PeerStore,
 	torrentStore storage.TorrentStore,
 	manifestStore storage.ManifestStore,
 ) http.Handler {
 
-	policy, ok := peerhandoutpolicy.Get(
-		cfg.PeerHandoutPolicy.Priority, cfg.PeerHandoutPolicy.Sampling)
-	if !ok {
-		log.Fatalf(
-			"Peer handout policy not found: priority=%s sampling=%s",
-			cfg.PeerHandoutPolicy.Priority, cfg.PeerHandoutPolicy.Sampling)
-	}
 	announce := &announceHandler{
-		config: cfg.Announcer,
+		config: config,
 		store:  peerStore,
 		policy: policy,
 	}

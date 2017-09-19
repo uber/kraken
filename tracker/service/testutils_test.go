@@ -7,10 +7,11 @@ import (
 	"net/url"
 	"reflect"
 	"strconv"
+	"time"
 
-	config "code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/mocks/tracker/mockstorage"
 	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 
 	"github.com/golang/mock/gomock"
 )
@@ -28,29 +29,25 @@ func jsonBytesEqual(a, b []byte) (bool, error) {
 }
 
 type testMocks struct {
-	appCfg    config.AppConfig
+	config    Config
+	policy    peerhandoutpolicy.PeerHandoutPolicy
 	ctrl      *gomock.Controller
 	datastore *mockstorage.MockStorage
 }
 
 // mockController sets up all mocks and returns a teardown func that can be called with defer
 func (m *testMocks) mockController(t gomock.TestReporter) func() {
-	m.appCfg = config.AppConfig{
-		PeerHandoutPolicy: config.PeerHandoutConfig{
-			Priority: "default",
-			Sampling: "default",
-		},
-	}
+	m.config = configFixture()
+	m.policy = peerhandoutpolicy.DefaultPeerHandoutPolicyFixture()
 	m.ctrl = gomock.NewController(t)
 	m.datastore = mockstorage.NewMockStorage(m.ctrl)
-	return func() {
-		m.ctrl.Finish()
-	}
+	return m.ctrl.Finish
 }
 
-func (m *testMocks) CreateHandler() http.Handler {
-	return InitializeAPI(
-		m.appCfg,
+func (m *testMocks) Handler() http.Handler {
+	return Handler(
+		m.config,
+		m.policy,
 		m.datastore,
 		m.datastore,
 		m.datastore,
@@ -59,7 +56,7 @@ func (m *testMocks) CreateHandler() http.Handler {
 
 func (m *testMocks) CreateHandlerAndServeRequest(request *http.Request) *http.Response {
 	w := httptest.NewRecorder()
-	m.CreateHandler().ServeHTTP(w, request)
+	m.Handler().ServeHTTP(w, request)
 	return w.Result()
 }
 
@@ -82,4 +79,10 @@ func createAnnouncePath(mi *torlib.MetaInfo, p *torlib.PeerInfo) string {
 	v.Set("event", p.Event)
 
 	return "/announce?" + v.Encode()
+}
+
+func configFixture() Config {
+	return Config{
+		AnnounceInterval: 5 * time.Second,
+	}
 }

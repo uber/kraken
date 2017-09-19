@@ -9,7 +9,6 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/go-common.git/x/mysql"
-	"code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils"
 
@@ -20,12 +19,12 @@ import (
 
 // MySQLStorage is a MySQL implementaion of a Storage interface
 type MySQLStorage struct {
-	cfg config.MySQLConfig
-	db  *sqlx.DB
+	config MySQLConfig
+	db     *sqlx.DB
 }
 
 // NewMySQLStorage creates and returns new MySQL storage.
-func NewMySQLStorage(nemo mysql.Configuration, cfg config.MySQLConfig) (*MySQLStorage, error) {
+func NewMySQLStorage(nemo mysql.Configuration, config MySQLConfig) (*MySQLStorage, error) {
 	dsn, err := nemo.GetDefaultDSN()
 	if err != nil {
 		return nil, fmt.Errorf("error getting dsn: %s", err)
@@ -34,7 +33,7 @@ func NewMySQLStorage(nemo mysql.Configuration, cfg config.MySQLConfig) (*MySQLSt
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to mysql: %s", err)
 	}
-	return &MySQLStorage{cfg, db}, nil
+	return &MySQLStorage{config, db}, nil
 }
 
 // RunMigration runs MySQL database migration if it is needed.
@@ -42,7 +41,7 @@ func (s *MySQLStorage) RunMigration() error {
 	if err := goose.SetDialect("mysql"); err != nil {
 		return err
 	}
-	if err := goose.Run("up", s.db.DB, s.cfg.MigrationsDir); err != nil {
+	if err := goose.Run("up", s.db.DB, s.config.MigrationsDir); err != nil {
 		return err
 	}
 	return nil

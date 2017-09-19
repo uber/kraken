@@ -1,6 +1,8 @@
 package peerhandoutpolicy
 
 import (
+	"fmt"
+
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/torlib"
 )
@@ -71,18 +73,19 @@ type PeerHandoutPolicy struct {
 }
 
 // Get returns the registered PeerHandoutPolicy for the given priority and sampling policies.
-// Second return value is false if policy does not exist.
-func Get(priorityPolicy string, samplingPolicy string) (PeerHandoutPolicy, bool) {
+func Get(priorityPolicy string, samplingPolicy string) (PeerHandoutPolicy, error) {
+	var p PeerHandoutPolicy
 	priorityFactory, ok := _priorityFactories[priorityPolicy]
 	if !ok {
-		return PeerHandoutPolicy{}, false
+		return p, fmt.Errorf("priority policy %q not found", priorityPolicy)
 	}
 	samplingFactory, ok := _samplingFactories[samplingPolicy]
 	if !ok {
-		return PeerHandoutPolicy{}, false
+		return p, fmt.Errorf("sampling policy %q not found", samplingPolicy)
 	}
-	return PeerHandoutPolicy{
+	p = PeerHandoutPolicy{
 		PeerPriorityPolicy: priorityFactory(),
 		PeerSamplingPolicy: samplingFactory(),
-	}, true
+	}
+	return p, nil
 }

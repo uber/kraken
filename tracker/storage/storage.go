@@ -5,7 +5,6 @@ import (
 
 	"code.uber.internal/go-common.git/x/mysql"
 
-	"code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/torlib"
 )
 
@@ -53,8 +52,8 @@ type Storage interface {
 // StoreProvider provides constructors for datastores. Ensures that at most one
 // storage backend is created regardless of how many stores it backs.
 type StoreProvider struct {
-	cfg  config.DatabaseConfig
-	nemo mysql.Configuration
+	config Config
+	nemo   mysql.Configuration
 
 	// Caches previously created storage backends.
 	mysqlStorage *MySQLStorage
@@ -62,45 +61,45 @@ type StoreProvider struct {
 }
 
 // NewStoreProvider creates a new StoreProvider.
-func NewStoreProvider(cfg config.DatabaseConfig, nemo mysql.Configuration) *StoreProvider {
-	return &StoreProvider{cfg: cfg, nemo: nemo}
+func NewStoreProvider(config Config, nemo mysql.Configuration) *StoreProvider {
+	return &StoreProvider{config: config, nemo: nemo}
 }
 
 // GetPeerStore returns the configured PeerStore.
 func (p *StoreProvider) GetPeerStore() (PeerStore, error) {
-	s, err := p.getStorageBackend(p.cfg.PeerStore)
+	s, err := p.getStorageBackend(p.config.PeerStore)
 	if err != nil {
 		return nil, err
 	}
 	ps, ok := s.(PeerStore)
 	if !ok {
-		return nil, fmt.Errorf("PeerStore not supported for %s", p.cfg.PeerStore)
+		return nil, fmt.Errorf("PeerStore not supported for %s", p.config.PeerStore)
 	}
 	return ps, nil
 }
 
 // GetTorrentStore returns the configured TorrentStore.
 func (p *StoreProvider) GetTorrentStore() (TorrentStore, error) {
-	s, err := p.getStorageBackend(p.cfg.TorrentStore)
+	s, err := p.getStorageBackend(p.config.TorrentStore)
 	if err != nil {
 		return nil, err
 	}
 	ts, ok := s.(TorrentStore)
 	if !ok {
-		return nil, fmt.Errorf("TorrentStore not supported for %s", p.cfg.TorrentStore)
+		return nil, fmt.Errorf("TorrentStore not supported for %s", p.config.TorrentStore)
 	}
 	return ts, nil
 }
 
 // GetManifestStore returns the configured ManifestStore.
 func (p *StoreProvider) GetManifestStore() (ManifestStore, error) {
-	s, err := p.getStorageBackend(p.cfg.ManifestStore)
+	s, err := p.getStorageBackend(p.config.ManifestStore)
 	if err != nil {
 		return nil, err
 	}
 	ms, ok := s.(ManifestStore)
 	if !ok {
-		return nil, fmt.Errorf("ManifestStore not supported for %s", p.cfg.ManifestStore)
+		return nil, fmt.Errorf("ManifestStore not supported for %s", p.config.ManifestStore)
 	}
 	return ms, nil
 }
@@ -109,7 +108,7 @@ func (p *StoreProvider) getStorageBackend(name string) (interface{}, error) {
 	switch name {
 	case "mysql":
 		if p.mysqlStorage == nil {
-			s, err := NewMySQLStorage(p.nemo, p.cfg.MySQL)
+			s, err := NewMySQLStorage(p.nemo, p.config.MySQL)
 			if err != nil {
 				return nil, fmt.Errorf("mysql storage initialization failed: %s", err)
 			}
@@ -121,7 +120,7 @@ func (p *StoreProvider) getStorageBackend(name string) (interface{}, error) {
 		return p.mysqlStorage, nil
 	case "redis":
 		if p.redisStorage == nil {
-			s, err := NewRedisStorage(p.cfg.Redis)
+			s, err := NewRedisStorage(p.config.Redis)
 			if err != nil {
 				return nil, fmt.Errorf("redis storage initialization failed: %s", err)
 			}

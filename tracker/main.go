@@ -7,20 +7,25 @@ import (
 	"os/signal"
 	"syscall"
 
+	xconfig "code.uber.internal/go-common.git/x/config"
 	"code.uber.internal/go-common.git/x/log"
-	config "code.uber.internal/infra/kraken/config/tracker"
+
+	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/service"
 	"code.uber.internal/infra/kraken/tracker/storage"
 )
 
 func main() {
-	cfg, err := config.Initialize()
-	if err != nil {
-		log.Fatalf("Could not intialize config: %s", err)
+	var config Config
+	if err := xconfig.Load(&config); err != nil {
+		panic(err)
 	}
-	log.Configure(&cfg.Logging, false)
+	// Disable JSON logging because it's completely unreadable.
+	formatter := true
+	config.Logging.TextFormatter = &formatter
+	log.Configure(&config.Logging, false)
 
-	storeProvider := storage.NewStoreProvider(cfg.Database, cfg.Nemo)
+	storeProvider := storage.NewStoreProvider(config.Storage, config.Nemo)
 	peerStore, err := storeProvider.GetPeerStore()
 	if err != nil {
 		log.Fatalf("Could not create PeerStore: %s", err)
@@ -34,12 +39,18 @@ func main() {
 		log.Fatalf("Could not create ManifestStore: %s", err)
 	}
 
-	webApp := service.InitializeAPI(cfg, peerStore, torrentStore, manifestStore)
+	policy, err := peerhandoutpolicy.Get(
+		config.PeerHandoutPolicy.Priority, config.PeerHandoutPolicy.Sampling)
+	if err != nil {
+		log.Fatalf("Could not load peer handout policy: %s", err)
+	}
 
-	addr := fmt.Sprintf(":%d", cfg.BackendPort)
+	h := service.Handler(config.Service, policy, peerStore, torrentStore, manifestStore)
+
+	addr := fmt.Sprintf(":%d", config.BackendPort)
 	log.Infof("Listening on %s", addr)
 
-	go log.Fatal(http.ListenAndServe(addr, webApp))
+	go log.Fatal(http.ListenAndServe(addr, h))
 
 	// Handle SIGINT and SIGTERM.
 	ch := make(chan os.Signal, 1)

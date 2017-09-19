@@ -45,7 +45,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		require.Equal(t, 200, response.StatusCode)
 		announceResponse := torlib.AnnouncerResponse{}
 		bencode.Unmarshal(response.Body, &announceResponse)
-		assert.Equal(t, announceResponse.Interval, int64(0))
+		assert.Equal(t, announceResponse.Interval, int64(5))
 		assert.Equal(t, announceResponse.Peers, []torlib.PeerInfo{})
 	})
 	t.Run("Return 200 and single peer bencoded response", func(t *testing.T) {
@@ -72,7 +72,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		testutils.RequireStatus(t, response, 200)
 		announceResponse := torlib.AnnouncerResponse{}
 		bencode.Unmarshal(response.Body, &announceResponse)
-		assert.Equal(t, announceResponse.Interval, int64(0))
+		assert.Equal(t, announceResponse.Interval, int64(5))
 		assert.Equal(t, announceResponse.Peers, []torlib.PeerInfo{*peerTo})
 	})
 }

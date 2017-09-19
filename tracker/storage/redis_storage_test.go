@@ -5,14 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/torlib"
 	"github.com/garyburd/redigo/redis"
 	"github.com/stretchr/testify/require"
 )
 
-func flushdb(cfg config.RedisConfig) {
-	c, err := redis.Dial("tcp", cfg.Addr)
+func flushdb(config RedisConfig) {
+	c, err := redis.Dial("tcp", config.Addr)
 	if err != nil {
 		panic(err)
 	}
@@ -33,11 +32,11 @@ func sortedPeerIDs(peers []*torlib.PeerInfo) []string {
 func TestRedisStorageGetPeersOnlyReturnsTaggedFields(t *testing.T) {
 	require := require.New(t)
 
-	cfg := redisConfigFixture()
+	config := redisConfigFixture()
 
-	flushdb(cfg)
+	flushdb(config)
 
-	s, err := NewRedisStorage(cfg)
+	s, err := NewRedisStorage(config)
 	require.NoError(err)
 
 	p := torlib.PeerInfoFixture()
@@ -60,13 +59,13 @@ func TestRedisStorageGetPeersOnlyReturnsTaggedFields(t *testing.T) {
 func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 	require := require.New(t)
 
-	cfg := redisConfigFixture()
-	cfg.PeerSetWindowSizeSecs = 10
-	cfg.MaxPeerSetWindows = 3
+	config := redisConfigFixture()
+	config.PeerSetWindowSizeSecs = 10
+	config.MaxPeerSetWindows = 3
 
-	flushdb(cfg)
+	flushdb(config)
 
-	s, err := NewRedisStorage(cfg)
+	s, err := NewRedisStorage(config)
 	require.NoError(err)
 
 	now := time.Now()
@@ -78,7 +77,7 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 
 	// Each peer will be added on a different second to distribute them across
 	// multiple windows.
-	peers := make([]*torlib.PeerInfo, cfg.PeerSetWindowSizeSecs*cfg.MaxPeerSetWindows)
+	peers := make([]*torlib.PeerInfo, config.PeerSetWindowSizeSecs*config.MaxPeerSetWindows)
 
 	for i := range peers {
 		if i > 0 {
@@ -100,13 +99,13 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 func TestRedisStoragePeerExpiration(t *testing.T) {
 	require := require.New(t)
 
-	cfg := redisConfigFixture()
-	cfg.PeerSetWindowSizeSecs = 1
-	cfg.MaxPeerSetWindows = 1
+	config := redisConfigFixture()
+	config.PeerSetWindowSizeSecs = 1
+	config.MaxPeerSetWindows = 1
 
-	flushdb(cfg)
+	flushdb(config)
 
-	s, err := NewRedisStorage(cfg)
+	s, err := NewRedisStorage(config)
 	require.NoError(err)
 
 	p := torlib.PeerInfoFixture()
@@ -127,11 +126,11 @@ func TestRedisStoragePeerExpiration(t *testing.T) {
 func TestRedisStorageCreateAndGetTorrent(t *testing.T) {
 	require := require.New(t)
 
-	cfg := redisConfigFixture()
+	config := redisConfigFixture()
 
-	flushdb(cfg)
+	flushdb(config)
 
-	s, err := NewRedisStorage(cfg)
+	s, err := NewRedisStorage(config)
 	require.NoError(err)
 
 	mi := torlib.MetaInfoFixture()

@@ -5,11 +5,11 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/pressly/chi"
 
-	config "code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 )
@@ -58,14 +58,14 @@ func (s *testPeerStore) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
 // for announce requests. Returns the "ip:port" the tracker is running on, and a
 // closure for stopping the tracker.
 func TestAnnouncer() (addr string, stop func()) {
-	policy, ok := peerhandoutpolicy.Get("ipv4netmask", "completeness")
-	if !ok {
-		log.Fatal("Failed to lookup peer handout policy")
+	policy, err := peerhandoutpolicy.Get("ipv4netmask", "completeness")
+	if err != nil {
+		log.Fatalf("Failed to get peer handout policy: %s", err)
 	}
 
 	announce := &announceHandler{
-		config: config.AnnouncerConfig{
-			AnnounceInterval: 1,
+		config: Config{
+			AnnounceInterval: time.Second,
 		},
 		store: &testPeerStore{
 			torrents: make(map[string][]torlib.PeerInfo),

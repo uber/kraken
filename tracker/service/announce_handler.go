@@ -8,14 +8,13 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/jackpal/bencode-go"
 
-	config "code.uber.internal/infra/kraken/config/tracker"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/storage"
 )
 
 type announceHandler struct {
-	config config.AnnouncerConfig
+	config Config
 	store  storage.PeerStore
 	policy peerhandoutpolicy.PeerHandoutPolicy
 }
@@ -123,7 +122,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// write peers bencoded
 	err = bencode.Marshal(w, torlib.AnnouncerResponse{
-		Interval: h.config.AnnounceInterval,
+		Interval: int64(h.config.AnnounceInterval.Seconds()),
 		Peers:    derefPeerInfos,
 	})
 	if err != nil {
