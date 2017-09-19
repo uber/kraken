@@ -2,7 +2,7 @@ package krakencli
 
 import (
 	cfg "code.uber.internal/infra/kraken/config/origin"
-	"code.uber.internal/infra/kraken/rendezvous"
+	"code.uber.internal/infra/kraken/lib/hrw"
 	"github.com/spaolacci/murmur3"
 
 	"encoding/json"
@@ -20,7 +20,7 @@ import (
 type nodeToServer map[string]string
 
 //ServerToNode is an origin server to hashing node lookup index
-type serverToNode map[string]*weightedhash.RendezvousHashNode
+type serverToNode map[string]*hrw.RendezvousHashNode
 
 var (
 	errOriginIsRequired = errors.New(
@@ -35,12 +35,12 @@ var (
 
 //CommandContent
 type commandContext struct {
-	writer    io.Writer                    // default stdout writer
-	verbose   bool                         // verbosity of boolean
-	nts       nodeToServer                 // node to server index
-	stn       serverToNode                 // server to node index
-	appCfg    cfg.AppConfig                // application config
-	hashstate *weightedhash.RendezvousHash // a hashstate configuration parsed from appconfig or defined by other means (rn only config supported)
+	writer    io.Writer           // default stdout writer
+	verbose   bool                // verbosity of boolean
+	nts       nodeToServer        // node to server index
+	stn       serverToNode        // server to node index
+	appCfg    cfg.AppConfig       // application config
+	hashstate *hrw.RendezvousHash // a hashstate configuration parsed from appconfig or defined by other means (rn only config supported)
 }
 
 //OriginCapacity represents Capacity and utiulization of a particular origin server that
@@ -186,12 +186,12 @@ func handleContentListCommand(listOption string, listContentOrigin string, cc co
 
 // this will filter out nodes that are not equal to origin label if origin is not empty
 // otherwise will return a full list of nodes
-func filterOutNodes(nodes []*weightedhash.RendezvousHashNode, origin string, cc commandContext) []*weightedhash.RendezvousHashNode {
+func filterOutNodes(nodes []*hrw.RendezvousHashNode, origin string, cc commandContext) []*hrw.RendezvousHashNode {
 	if origin == "" {
 		return nodes
 	}
 
-	var r []*weightedhash.RendezvousHashNode
+	var r []*hrw.RendezvousHashNode
 	for _, node := range nodes {
 		if node.Label == origin {
 			r = append(r, node)
@@ -357,12 +357,12 @@ func handleNoOpCommand(flag string, origin string, cc commandContext) (int, erro
 	return 0, nil
 }
 
-func initHashState(appConfig cfg.AppConfig) *weightedhash.RendezvousHash {
+func initHashState(appConfig cfg.AppConfig) *hrw.RendezvousHash {
 
 	// initalize hashing state
-	hs := weightedhash.NewRendezvousHash(
+	hs := hrw.NewRendezvousHash(
 		func() hash.Hash { return murmur3.New64() },
-		weightedhash.UInt64ToFloat64)
+		hrw.UInt64ToFloat64)
 
 	fmt.Println("Hash state is being initialized to: ")
 

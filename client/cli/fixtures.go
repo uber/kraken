@@ -11,7 +11,7 @@ import (
 	"github.com/pressly/chi"
 
 	cfg "code.uber.internal/infra/kraken/config/origin"
-	"code.uber.internal/infra/kraken/rendezvous"
+	"code.uber.internal/infra/kraken/lib/hrw"
 )
 
 // TestOriginServer represents Test origin server
@@ -19,7 +19,7 @@ type TestOriginServer struct {
 	label     string
 	listener  net.Listener
 	digests   []OriginContent
-	hashstate *weightedhash.RendezvousHash
+	hashstate *hrw.RendezvousHash
 	appConfig cfg.AppConfig
 }
 
@@ -103,7 +103,7 @@ func OriginFixture(digests []OriginContent, weights []int) ([]*TestOriginServer,
 	return origins, appConfig
 }
 
-//fillContentItems adds content item to an intenal list of blob digests
+// fillContentItems adds content item to an internal list of blob digests
 func (to *TestOriginServer) fillContentItems(digests []OriginContent) {
 	for _, ci := range digests {
 		rhl, err := to.hashstate.GetOrderedNodes(ci.Digest, 1)
@@ -116,7 +116,7 @@ func (to *TestOriginServer) fillContentItems(digests []OriginContent) {
 	}
 }
 
-//fillContentItems adds content item to an intenal list of blob digests
+// fillContentItems adds content item to an internal list of blob digests
 func (to *TestOriginServer) findOriginByLabel(originLabel string) string {
 	// Add all configured nodes to a hashing statae
 	for origin, node := range to.appConfig.Hashstate {
@@ -148,7 +148,7 @@ func (to *TestOriginServer) Close() {
 	to.listener.Close()
 }
 
-//InfoHandler info
+// InfoHandler info
 func (to *TestOriginServer) InfoHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -161,7 +161,7 @@ func (to *TestOriginServer) InfoHandler(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(info)
 }
 
-//ContentListHandler lists content
+// ContentListHandler lists content
 func (to *TestOriginServer) ContentListHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -171,7 +171,7 @@ func (to *TestOriginServer) ContentListHandler(w http.ResponseWriter, r *http.Re
 	json.NewEncoder(w).Encode(cl)
 }
 
-//HeadBlobHandler content blobs request
+// HeadBlobHandler content blobs request
 func (to *TestOriginServer) HeadBlobHandler(w http.ResponseWriter, r *http.Request) {
 
 	digest := chi.URLParam(r, "digest")
@@ -199,7 +199,7 @@ func (to *TestOriginServer) HeadBlobHandler(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNotFound)
 }
 
-//GetBlobHandler content blob get request
+// GetBlobHandler content blob get request
 func (to *TestOriginServer) GetBlobHandler(w http.ResponseWriter, r *http.Request) {
 
 	digest := chi.URLParam(r, "digest")
@@ -221,7 +221,7 @@ func (to *TestOriginServer) GetBlobHandler(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNotFound)
 }
 
-//RepairHandler repairs content
+// RepairHandler repairs content
 func (to *TestOriginServer) RepairHandler(w http.ResponseWriter, r *http.Request) {
 
 	digest := chi.URLParam(r, "digest")
@@ -260,7 +260,7 @@ func (to *TestOriginServer) RepairHandler(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 }
 
-//DeleteHandler deletes content blob
+// DeleteHandler deletes content blob
 func (to *TestOriginServer) DeleteHandler(w http.ResponseWriter, r *http.Request) {
 	digest := chi.URLParam(r, "digest")
 	if len(digest) == 0 {

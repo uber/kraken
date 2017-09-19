@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/lib/hrw"
+	hashcfg "code.uber.internal/infra/kraken/origin/config"
 
 	"code.uber.internal/go-common.git/x/log"
 )
@@ -24,7 +26,9 @@ type Pipeline struct {
 }
 
 // NewPipeline initialized a new pipeline.
-func NewPipeline(ctx context.Context, localStore *store.LocalStore) *Pipeline {
+func NewPipeline(ctx context.Context, hashConfig hashcfg.HashConfig, hashState *hrw.RendezvousHash, localStore *store.LocalStore) *Pipeline {
+	ctx = context.WithValue(ctx, ctxKeyHashConfig, hashConfig)
+	ctx = context.WithValue(ctx, ctxKeyHashState, hashState)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
 	return &Pipeline{
 		ctx:              ctx,

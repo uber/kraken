@@ -11,6 +11,8 @@ import (
 
 	"code.uber.internal/infra/kraken/client/dockerimage"
 	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/lib/hrw"
+	hashcfg "code.uber.internal/infra/kraken/origin/config"
 
 	"github.com/docker/distribution/uuid"
 	"github.com/pressly/chi"
@@ -62,6 +64,34 @@ func parseDigestFromQueryHandler(ctx context.Context, request *http.Request) (co
 			"Cannot parse digest: %s, error: %s", digestRaw, err)
 	}
 	return context.WithValue(ctx, ctxKeyDigest, digest), nil
+}
+
+func ensureDigestExistsHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
+	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
+	if !ok {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError,
+			"Digest not set")
+	}
+	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
+	if !ok {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError,
+			"LocalStore not set")
+	}
+
+	// Ensure file exists.
+	if _, err := localStore.GetCacheFileStat(digest.Hex()); err != nil {
+		if os.IsNotExist(err) {
+			return nil, NewServerResponseWithError(
+				http.StatusNotFound,
+				"Cannot find blob data with digest: %s, error: %s", digest, err)
+		}
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError,
+			"Error happened when looking for blob data with digest: %s, error: %s", digest, err)
+	}
+	return ctx, nil
 }
 
 func ensureDigestNotExistsHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
@@ -236,7 +266,7 @@ func commitUploadHandler(ctx context.Context, request *http.Request) (context.Co
 			http.StatusInternalServerError, "LocalStore not set")
 	}
 
-	// Verify hash
+	// Verify hash.
 	digester := dockerimage.NewDigester()
 	reader, err := localStore.GetUploadFileReader(uploadUUID)
 	if os.IsNotExist(err) {
@@ -278,10 +308,55 @@ func deleteBlobHandler(ctx context.Context, request *http.Request) (context.Cont
 
 	if err := localStore.MoveCacheFileToTrash(digest.Hex()); err != nil {
 		if os.IsNotExist(err) {
-			return nil, NewServerResponseWithError(http.StatusNotFound, "Cannot find blob data for digest: %s, error: %s", digest, err)
+			return nil, NewServerResponseWithError(http.StatusNotFound, "Cannot find blob data with digest: %s, error: %s", digest, err)
 		}
-		return nil, NewServerResponseWithError(http.StatusInternalServerError, "Cannot delete blob data for digest: %s, error: %s", digest, err)
+		return nil, NewServerResponseWithError(http.StatusInternalServerError, "Cannot delete blob data with digest: %s, error: %s", digest, err)
 	}
 
 	return ctx, nil
+}
+
+// Find out which node(s) are responsible for the blob based on the first 2 bytes of digest.
+// Do nothing if current node is among the designated nodes.
+// TODO: this node could be new. This method should ensure the file is actually available locally.
+func redirectByDigestHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
+	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
+	if !ok {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError, "Digest not set")
+	}
+	hashConfig, ok := ctx.Value(ctxKeyHashConfig).(hashcfg.HashConfig)
+	if !ok {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError, "label not set")
+	}
+	hashState, ok := ctx.Value(ctxKeyHashState).(*hrw.RendezvousHash)
+	if !ok {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError, "HashState not set")
+	}
+
+	// Shard by first 2 bytes of digest.
+	shardID := digest.Hex()[:4]
+	nodes, err := hashState.GetOrderedNodes(shardID, hashConfig.NumReplica)
+	if err != nil || len(nodes) == 0 {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError,
+			"Failed to calculate hash for digest %s, error: %s", digest, err)
+	}
+	var labels []string
+	for _, node := range nodes {
+		if node.Label == hashConfig.Label {
+			// Current node is among the designated nodes, return.
+			return ctx, nil
+		}
+		labels = append(labels, node.Label)
+	}
+
+	// Return origin hosts that should have the blob.
+	labelsStr := strings.Join(labels, ",")
+	resp := NewServerResponse(http.StatusTemporaryRedirect)
+	resp.AddHeader("Origin-Locations", labelsStr)
+
+	return ctx, resp
 }

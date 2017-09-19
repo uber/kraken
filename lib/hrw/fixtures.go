@@ -1,4 +1,4 @@
-package weightedhash
+package hrw
 
 import (
 	"crypto/rand"
