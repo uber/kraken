@@ -1,4 +1,4 @@
-package dockerimage
+package image
 
 import "strings"
 import "fmt"

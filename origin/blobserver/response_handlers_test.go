@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"code.uber.internal/infra/kraken/client/dockerimage"
 	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +32,7 @@ func TestDownloadBlobHandlerValid(t *testing.T) {
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
 	writer.Write([]byte("Hello world!!!"))
-	contentDigest, _ := dockerimage.NewDigester().FromReader(strings.NewReader("Hello world!!!"))
+	contentDigest, _ := image.NewDigester().FromReader(strings.NewReader("Hello world!!!"))
 	localStore.MoveUploadFileToCache(randomUUID, contentDigest.Hex())
 	ctx := context.WithValue(context.Background(), ctxKeyDigest, contentDigest)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
@@ -51,9 +51,9 @@ func TestDownloadBlobHandlerInvalid(t *testing.T) {
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
 	writer.Write([]byte("Hello world!!!"))
-	contentDigest, _ := dockerimage.NewDigester().FromReader(strings.NewReader("Hello world!!!"))
+	contentDigest, _ := image.NewDigester().FromReader(strings.NewReader("Hello world!!!"))
 	localStore.MoveUploadFileToCache(randomUUID, contentDigest.Hex())
-	wrongDigest, _ := dockerimage.NewDigestFromString(dockerimage.DigestEmptyTar)
+	wrongDigest, _ := image.NewDigestFromString(image.DigestEmptyTar)
 	ctx := context.WithValue(context.Background(), ctxKeyDigest, wrongDigest)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
 

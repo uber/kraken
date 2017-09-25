@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"code.uber.internal/infra/kraken/client/dockerimage"
 	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	hashcfg "code.uber.internal/infra/kraken/origin/config"
 
@@ -33,7 +33,7 @@ func parseDigestHandler(ctx context.Context, request *http.Request) (context.Con
 			http.StatusBadRequest,
 			"Cannot unescape digest: %s, error: %s", digestParam, err)
 	}
-	digest, err := dockerimage.NewDigestFromString(digestRaw)
+	digest, err := image.NewDigestFromString(digestRaw)
 	if err != nil {
 		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
@@ -57,7 +57,7 @@ func parseDigestFromQueryHandler(ctx context.Context, request *http.Request) (co
 			http.StatusBadRequest,
 			"Cannot unescape digest: %s, error: %s", digestParam, err)
 	}
-	digest, err := dockerimage.NewDigestFromString(digestRaw)
+	digest, err := image.NewDigestFromString(digestRaw)
 	if err != nil {
 		return nil, NewServerResponseWithError(
 			http.StatusBadRequest,
@@ -67,7 +67,7 @@ func parseDigestFromQueryHandler(ctx context.Context, request *http.Request) (co
 }
 
 func ensureDigestExistsHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
-	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
+	digest, ok := ctx.Value(ctxKeyDigest).(*image.Digest)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
@@ -95,7 +95,7 @@ func ensureDigestExistsHandler(ctx context.Context, request *http.Request) (cont
 }
 
 func ensureDigestNotExistsHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
-	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
+	digest, ok := ctx.Value(ctxKeyDigest).(*image.Digest)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
@@ -166,7 +166,7 @@ func parseContentRangeHandler(ctx context.Context, request *http.Request) (conte
 }
 
 func createUploadHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
-	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
+	digest, ok := ctx.Value(ctxKeyDigest).(*image.Digest)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
@@ -250,7 +250,7 @@ func uploadBlobChunkHandler(ctx context.Context, request *http.Request) (context
 }
 
 func commitUploadHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
-	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
+	digest, ok := ctx.Value(ctxKeyDigest).(*image.Digest)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "Digest not set")
@@ -267,7 +267,7 @@ func commitUploadHandler(ctx context.Context, request *http.Request) (context.Co
 	}
 
 	// Verify hash.
-	digester := dockerimage.NewDigester()
+	digester := image.NewDigester()
 	reader, err := localStore.GetUploadFileReader(uploadUUID)
 	if os.IsNotExist(err) {
 		return nil, NewServerResponseWithError(
@@ -295,7 +295,7 @@ func commitUploadHandler(ctx context.Context, request *http.Request) (context.Co
 }
 
 func deleteBlobHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
-	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
+	digest, ok := ctx.Value(ctxKeyDigest).(*image.Digest)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "Digest not set")
@@ -320,7 +320,7 @@ func deleteBlobHandler(ctx context.Context, request *http.Request) (context.Cont
 // Do nothing if current node is among the designated nodes.
 // TODO: this node could be new. This method should ensure the file is actually available locally.
 func redirectByDigestHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
-	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
+	digest, ok := ctx.Value(ctxKeyDigest).(*image.Digest)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "Digest not set")

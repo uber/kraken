@@ -1,4 +1,4 @@
-package dockerimage
+package image
 
 import (
 	"crypto"

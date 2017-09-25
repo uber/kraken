@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"os"
 
-	"code.uber.internal/infra/kraken/client/dockerimage"
 	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 )
 
 const (
@@ -16,7 +16,7 @@ const (
 )
 
 func downloadBlobHandler(ctx context.Context, writer http.ResponseWriter) (context.Context, *ServerResponse) {
-	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
+	digest, ok := ctx.Value(ctxKeyDigest).(*image.Digest)
 	if !ok {
 		return nil, NewServerResponseWithError(http.StatusInternalServerError, "Digest not set")
 	}

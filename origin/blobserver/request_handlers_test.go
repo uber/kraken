@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"code.uber.internal/infra/kraken/client/dockerimage"
 	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 
 	"github.com/pressly/chi"
 	"github.com/stretchr/testify/assert"
@@ -20,17 +20,17 @@ import (
 func TestParseDigestHandlerValid(t *testing.T) {
 	require := require.New(t)
 
-	url := fmt.Sprintf("localhost:8080/blob/%s", dockerimage.DigestEmptyTar)
+	url := fmt.Sprintf("localhost:8080/blob/%s", image.DigestEmptyTar)
 	request, _ := http.NewRequest("GET", url, nil)
 	routeCtx := chi.NewRouteContext()
-	routeCtx.URLParams.Add("digest", dockerimage.DigestEmptyTar)
+	routeCtx.URLParams.Add("digest", image.DigestEmptyTar)
 	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx))
 
 	ctx, resp := parseDigestHandler(request.Context(), request)
 	require.Nil(resp)
-	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
+	digest, ok := ctx.Value(ctxKeyDigest).(*image.Digest)
 	require.True(ok)
-	require.Equal(digest.String(), dockerimage.DigestEmptyTar)
+	require.Equal(digest.String(), image.DigestEmptyTar)
 }
 
 func TestParseDigestHandlerNoAlgo(t *testing.T) {
@@ -65,14 +65,14 @@ func TestParseDigestHandlerEmpty(t *testing.T) {
 func TestParseDigestFromQueryHandlerValid(t *testing.T) {
 	require := require.New(t)
 
-	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", dockerimage.DigestEmptyTar)
+	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", image.DigestEmptyTar)
 	request, _ := http.NewRequest("POST", url, nil)
 
 	ctx, resp := parseDigestFromQueryHandler(request.Context(), request)
 	require.Nil(resp)
-	digest, ok := ctx.Value(ctxKeyDigest).(*dockerimage.Digest)
+	digest, ok := ctx.Value(ctxKeyDigest).(*image.Digest)
 	require.True(ok)
-	require.Equal(digest.String(), dockerimage.DigestEmptyTar)
+	require.Equal(digest.String(), image.DigestEmptyTar)
 }
 
 func TestParseDigestFromQueryHandlerNoAlgo(t *testing.T) {
@@ -105,10 +105,10 @@ func TestEnsureDigestNotExistsHandlerValid(t *testing.T) {
 	localStore, cleanup := store.LocalStoreFixture()
 	defer cleanup()
 
-	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", dockerimage.DigestEmptyTar)
+	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", image.DigestEmptyTar)
 	request, _ := http.NewRequest("POST", url, nil)
 	ctx := request.Context()
-	digest, _ := dockerimage.NewDigestFromString(dockerimage.DigestEmptyTar)
+	digest, _ := image.NewDigestFromString(image.DigestEmptyTar)
 	ctx = context.WithValue(ctx, ctxKeyDigest, digest)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
 	request = request.WithContext(ctx)
@@ -125,10 +125,10 @@ func TestEnsureDigestNotExistsHandlerConflict(t *testing.T) {
 	localStore.CreateDownloadFile(emptyDigestHex, 0)
 	localStore.MoveDownloadFileToCache(emptyDigestHex)
 
-	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", dockerimage.DigestEmptyTar)
+	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", image.DigestEmptyTar)
 	request, _ := http.NewRequest("POST", url, nil)
 	ctx := request.Context()
-	digest, _ := dockerimage.NewDigestFromString(dockerimage.DigestEmptyTar)
+	digest, _ := image.NewDigestFromString(image.DigestEmptyTar)
 	ctx = context.WithValue(ctx, ctxKeyDigest, digest)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
 	request = request.WithContext(ctx)
@@ -264,10 +264,10 @@ func TestCreateUploadHandler(t *testing.T) {
 	localStore, cleanup := store.LocalStoreFixture()
 	defer cleanup()
 
-	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", dockerimage.DigestEmptyTar)
+	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", image.DigestEmptyTar)
 	request, _ := http.NewRequest("POST", url, nil)
 	ctx := request.Context()
-	digest, _ := dockerimage.NewDigestFromString(dockerimage.DigestEmptyTar)
+	digest, _ := image.NewDigestFromString(image.DigestEmptyTar)
 	ctx = context.WithValue(ctx, ctxKeyDigest, digest)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
 	request = request.WithContext(ctx)
@@ -287,11 +287,11 @@ func TestUploadBlobChunkHandler(t *testing.T) {
 	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 
-	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", dockerimage.DigestEmptyTar)
+	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", image.DigestEmptyTar)
 	request, _ := http.NewRequest("PATCH", url, strings.NewReader("Hello!"))
 	request.Header.Set("content-range", "0-5")
 	ctx := request.Context()
-	digest, _ := dockerimage.NewDigestFromString(dockerimage.DigestEmptyTar)
+	digest, _ := image.NewDigestFromString(image.DigestEmptyTar)
 	ctx = context.WithValue(ctx, ctxKeyDigest, digest)
 	ctx = context.WithValue(ctx, ctxKeyUploadUUID, randomUUID)
 	ctx = context.WithValue(ctx, ctxKeyStartByte, int64(0))
@@ -308,11 +308,11 @@ func TestUploadBlobChunkHandler(t *testing.T) {
 	require.Equal(savedContent, []byte("Hello!"))
 
 	// Overlap
-	url = fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", dockerimage.DigestEmptyTar)
+	url = fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", image.DigestEmptyTar)
 	request, _ = http.NewRequest("PATCH", url, strings.NewReader(" world!"))
 	request.Header.Set("content-range", "5-11")
 	ctx = request.Context()
-	digest, _ = dockerimage.NewDigestFromString(dockerimage.DigestEmptyTar)
+	digest, _ = image.NewDigestFromString(image.DigestEmptyTar)
 	ctx = context.WithValue(ctx, ctxKeyDigest, digest)
 	ctx = context.WithValue(ctx, ctxKeyUploadUUID, randomUUID)
 	ctx = context.WithValue(ctx, ctxKeyStartByte, int64(5))
@@ -329,11 +329,11 @@ func TestUploadBlobChunkHandler(t *testing.T) {
 	require.Equal(savedContent, []byte("Hello world!"))
 
 	// Gap
-	url = fmt.Sprintf("localhost:8080/blob/uploads/%s?digest=%s", randomUUID, dockerimage.DigestEmptyTar)
+	url = fmt.Sprintf("localhost:8080/blob/uploads/%s?digest=%s", randomUUID, image.DigestEmptyTar)
 	request, _ = http.NewRequest("PATCH", url, strings.NewReader("kraken"))
 	request.Header.Set("content-range", "100-105")
 	ctx = request.Context()
-	digest, _ = dockerimage.NewDigestFromString(dockerimage.DigestEmptyTar)
+	digest, _ = image.NewDigestFromString(image.DigestEmptyTar)
 	ctx = context.WithValue(ctx, ctxKeyDigest, digest)
 	ctx = context.WithValue(ctx, ctxKeyUploadUUID, randomUUID)
 	ctx = context.WithValue(ctx, ctxKeyStartByte, int64(100))
@@ -360,7 +360,7 @@ func TestCommitUploadHandlerValid(t *testing.T) {
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
 	writer.Write([]byte("Hello world!!!"))
-	contentDigest, se := dockerimage.NewDigester().FromReader(strings.NewReader("Hello world!!!"))
+	contentDigest, se := image.NewDigester().FromReader(strings.NewReader("Hello world!!!"))
 
 	url := fmt.Sprintf("localhost:8080/blob/uploads/%s?digest=%s", randomUUID, contentDigest.String())
 	request, _ := http.NewRequest("PUT", url, nil)
@@ -389,11 +389,11 @@ func TestCommitUploadHandlerInvalidDigest(t *testing.T) {
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
 	writer.Write([]byte("Hello world!!!"))
 
-	url := fmt.Sprintf("localhost:8080/blob/uploads/%s?digest=%s", randomUUID, dockerimage.DigestEmptyTar)
+	url := fmt.Sprintf("localhost:8080/blob/uploads/%s?digest=%s", randomUUID, image.DigestEmptyTar)
 	request, _ := http.NewRequest("PUT", url, nil)
 	request.Header.Set("content-range", "0-5")
 	ctx := request.Context()
-	wrongDigest, _ := dockerimage.NewDigestFromString(dockerimage.DigestEmptyTar)
+	wrongDigest, _ := image.NewDigestFromString(image.DigestEmptyTar)
 	ctx = context.WithValue(ctx, ctxKeyDigest, wrongDigest)
 	ctx = context.WithValue(ctx, ctxKeyUploadUUID, randomUUID)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
@@ -414,7 +414,7 @@ func TestDeleteBlobHandlerValid(t *testing.T) {
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
 	writer.Write([]byte("Hello world!!!"))
-	contentDigest, _ := dockerimage.NewDigester().FromReader(strings.NewReader("Hello world!!!"))
+	contentDigest, _ := image.NewDigester().FromReader(strings.NewReader("Hello world!!!"))
 	localStore.MoveUploadFileToCache(randomUUID, contentDigest.Hex())
 
 	url := fmt.Sprintf("localhost:8080/blob/uploads/%s", contentDigest)
@@ -438,7 +438,7 @@ func TestRedirectByDigestHandlerValid(t *testing.T) {
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
 	writer.Write([]byte("Hello world!!!"))
-	contentDigest, _ := dockerimage.NewDigester().FromReader(strings.NewReader("Hello world!!!"))
+	contentDigest, _ := image.NewDigester().FromReader(strings.NewReader("Hello world!!!"))
 	localStore.MoveUploadFileToCache(randomUUID, contentDigest.Hex())
 
 	// Initalize hash config and hash state
@@ -447,7 +447,7 @@ func TestRedirectByDigestHandlerValid(t *testing.T) {
 	url := fmt.Sprintf("localhost:8080/blob/")
 	request, _ := http.NewRequest("GET", url, nil)
 	routeCtx := chi.NewRouteContext()
-	routeCtx.URLParams.Add("digest", dockerimage.DigestEmptyTar)
+	routeCtx.URLParams.Add("digest", image.DigestEmptyTar)
 	ctx := context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx)
 	ctx = context.WithValue(ctx, chi.RouteCtxKey, routeCtx)
 	ctx = context.WithValue(ctx, ctxKeyDigest, contentDigest)

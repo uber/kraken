@@ -34,9 +34,9 @@ func newMockHashConfig() (hashcfg.HashConfig, *hrw.RendezvousHash) {
 		Verbose:    true,
 		NumReplica: 2,
 		HashNodes: map[string]hashcfg.HashNodeConfig{
-			"kraken-origin-master01-dca1": hashcfg.HashNodeConfig{Label: "origin1", Weight: 100},
-			"kraken-origin-master02-dca1": hashcfg.HashNodeConfig{Label: "origin2", Weight: 100},
-			"kraken-origin-master03-dca1": hashcfg.HashNodeConfig{Label: "origin3", Weight: 100},
+			"kraken-origin-master01-dca1": {Label: "origin1", Weight: 100},
+			"kraken-origin-master02-dca1": {Label: "origin2", Weight: 100},
+			"kraken-origin-master03-dca1": {Label: "origin3", Weight: 100},
 		},
 		Label:    "origin1",
 		Hostname: "kraken-origin-master01-dca1",
