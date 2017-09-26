@@ -5,23 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/torlib"
 	trackerservice "code.uber.internal/infra/kraken/tracker/service"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
-
-func init() {
-	formatter := true
-	logConfig := &log.Configuration{
-		Level: log.DebugLevel,
-		//Stdout:        true,
-		TextFormatter: &formatter,
-	}
-	log.Configure(logConfig, true)
-}
 
 func TestDownloadTorrentWithSeederAndLeecher(t *testing.T) {
 	require := require.New(t)
@@ -235,20 +224,37 @@ func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 	trackerAddr, stop := trackerservice.TestAnnouncer()
 	defer stop()
 
-	tf := torlib.TestTorrentFileFixture()
 	config := genConfig(trackerAddr)
+	config.Conn.DisableThrottling = true
 
-	seeder := genTestPeer(config)
+	tf := torlib.TestTorrentFileFixture()
+	clk := clock.NewMock()
+	w := newEventWatcher()
+
+	seeder := genTestPeer(config, withEventLoop(w), withClock(clk))
 	defer seeder.Stop()
 	writeTorrent(seeder.TorrentArchive, tf.MetaInfo, tf.Content)
 	require.NoError(<-seeder.Scheduler.AddTorrent(tf.MetaInfo))
 
-	leecher := genTestPeer(config)
+	leecher := genTestPeer(config, withClock(clk))
 	defer leecher.Stop()
 	leecherTor, err := leecher.TorrentArchive.CreateTorrent(tf.MetaInfo.InfoHash, tf.MetaInfo)
 	require.NoError(err)
-	require.NoError(<-leecher.Scheduler.AddTorrent(tf.MetaInfo))
+	errc := leecher.Scheduler.AddTorrent(tf.MetaInfo)
+
+	clk.Add(config.AnnounceInterval)
+
+	require.NoError(<-errc)
 	checkContent(require, leecherTor, tf.Content)
+
+	// Conns expire...
+	clk.Add(config.IdleConnTTL)
+
+	clk.Add(config.PreemptionInterval)
+	w.WaitFor(t, preemptionTickEvent{})
+
+	// Then seeding torrents expire.
+	clk.Add(config.IdleSeederTTL)
 
 	waitForTorrentRemoved(t, seeder.Scheduler, tf.MetaInfo.InfoHash)
 	waitForTorrentRemoved(t, leecher.Scheduler, tf.MetaInfo.InfoHash)

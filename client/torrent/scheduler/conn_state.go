@@ -79,6 +79,9 @@ func (s *connState) NumActiveConns() int {
 }
 
 func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) error {
+	if s.config.DisableBlacklist {
+		return nil
+	}
 	k := connKey{peerID, infoHash}
 	e, ok := s.blacklist[k]
 	if ok && e.Blacklisted(s.clock.Now()) {
