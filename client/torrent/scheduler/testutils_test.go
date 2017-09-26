@@ -42,7 +42,7 @@ func init() {
 	log.Configure(logConfig, true)
 }
 
-func genConnConfig() ConnConfig {
+func connConfigFixture() ConnConfig {
 	return ConnConfig{
 		// Buffers are just a performance optimization, so a zero-sized
 		// buffer will instantly force any deadlock conditions.
@@ -51,7 +51,7 @@ func genConnConfig() ConnConfig {
 	}.applyDefaults()
 }
 
-func genConnStateConfig() ConnStateConfig {
+func connStateConfigFixture() ConnStateConfig {
 	return ConnStateConfig{
 		MaxOpenConnectionsPerTorrent: 20,
 		InitialBlacklistExpiration:   250 * time.Millisecond,
@@ -61,7 +61,7 @@ func genConnStateConfig() ConnStateConfig {
 	}.applyDefaults()
 }
 
-func genConfig(trackerAddr string) Config {
+func configFixture(trackerAddr string) Config {
 	c, err := Config{
 		ListenAddr:               "localhost:0",
 		TrackerAddr:              trackerAddr,
@@ -71,8 +71,8 @@ func genConfig(trackerAddr string) Config {
 		IdleConnTTL:              10 * time.Second,
 		ConnTTL:                  5 * time.Minute,
 		BlacklistCleanupInterval: time.Minute,
-		ConnState:                genConnStateConfig(),
-		Conn:                     genConnConfig(),
+		ConnState:                connStateConfigFixture(),
+		Conn:                     connConfigFixture(),
 	}.applyDefaults()
 	if err != nil {
 		panic(err)
@@ -134,7 +134,7 @@ func findFreePort() int {
 	return port
 }
 
-func genTestPeer(config Config, options ...option) *testPeer {
+func testPeerFixture(config Config, options ...option) *testPeer {
 	tm, cleanup := storage.TorrentArchiveFixture()
 	stats := tally.NewTestScope("", nil)
 	pctx := peercontext.PeerContext{
@@ -156,10 +156,10 @@ func genTestPeer(config Config, options ...option) *testPeer {
 	return &testPeer{s, tm, stats, stop}
 }
 
-func genTestPeers(n int, config Config) (peers []*testPeer, stopAll func()) {
+func testPeerFixtures(n int, config Config) (peers []*testPeer, stopAll func()) {
 	peers = make([]*testPeer, n)
 	for i := range peers {
-		peers[i] = genTestPeer(config)
+		peers[i] = testPeerFixture(config)
 	}
 	return peers, func() {
 		for _, p := range peers {
@@ -262,7 +262,7 @@ func (n noopDeadline) SetDeadline(t time.Time) error      { return nil }
 func (n noopDeadline) SetReadDeadline(t time.Time) error  { return nil }
 func (n noopDeadline) SetWriteDeadline(t time.Time) error { return nil }
 
-func genTestConn(t *testing.T, config ConnConfig, maxPieceLength int) (c *conn, cleanup func()) {
+func connFixture(t *testing.T, config ConnConfig, maxPieceLength int) (c *conn, cleanup func()) {
 	ctrl := gomock.NewController(t)
 
 	infoHash := torlib.InfoHashFixture()

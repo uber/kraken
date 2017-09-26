@@ -18,12 +18,12 @@ func TestDownloadTorrentWithSeederAndLeecher(t *testing.T) {
 	trackerAddr, stop := trackerservice.TestAnnouncer()
 	defer stop()
 
-	config := genConfig(trackerAddr)
+	config := configFixture(trackerAddr)
 
-	seeder := genTestPeer(config)
+	seeder := testPeerFixture(config)
 	defer seeder.Stop()
 
-	leecher := genTestPeer(config)
+	leecher := testPeerFixture(config)
 	defer leecher.Stop()
 
 	tf := torlib.TestTorrentFileFixture()
@@ -44,12 +44,12 @@ func TestDownloadManyTorrentsWithSeederAndLeecher(t *testing.T) {
 	trackerAddr, stop := trackerservice.TestAnnouncer()
 	defer stop()
 
-	config := genConfig(trackerAddr)
+	config := configFixture(trackerAddr)
 
-	seeder := genTestPeer(config)
+	seeder := testPeerFixture(config)
 	defer seeder.Stop()
 
-	leecher := genTestPeer(config)
+	leecher := testPeerFixture(config)
 	defer leecher.Stop()
 
 	var wg sync.WaitGroup
@@ -81,12 +81,12 @@ func TestDownloadManyTorrentsWithSeederAndManyLeechers(t *testing.T) {
 	trackerAddr, stop := trackerservice.TestAnnouncer()
 	defer stop()
 
-	config := genConfig(trackerAddr)
+	config := configFixture(trackerAddr)
 
-	seeder := genTestPeer(config)
+	seeder := testPeerFixture(config)
 	defer seeder.Stop()
 
-	leechers, stopAll := genTestPeers(5, config)
+	leechers, stopAll := testPeerFixtures(5, config)
 	defer stopAll()
 
 	// Start seeding each torrent.
@@ -131,9 +131,9 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 	trackerAddr, stop := trackerservice.TestAnnouncer()
 	defer stop()
 
-	config := genConfig(trackerAddr)
+	config := configFixture(trackerAddr)
 
-	peers, stopAll := genTestPeers(10, config)
+	peers, stopAll := testPeerFixtures(10, config)
 	defer stopAll()
 
 	pieceLength := 256
@@ -174,15 +174,15 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 
 	// Each peer is allowed two connections, which allows them to establish both
 	// a connection to the seeder and another peer.
-	peerConfig := genConfig(trackerAddr)
+	peerConfig := configFixture(trackerAddr)
 	peerConfig.ConnState.MaxOpenConnectionsPerTorrent = 2
 
-	peerA := genTestPeer(peerConfig)
+	peerA := testPeerFixture(peerConfig)
 	defer peerA.Stop()
 	peerATor, err := peerA.TorrentArchive.CreateTorrent(tf.MetaInfo.InfoHash, tf.MetaInfo)
 	require.NoError(err)
 
-	peerB := genTestPeer(peerConfig)
+	peerB := testPeerFixture(peerConfig)
 	defer peerB.Stop()
 	peerBTor, err := peerB.TorrentArchive.CreateTorrent(tf.MetaInfo.InfoHash, tf.MetaInfo)
 	require.NoError(err)
@@ -199,10 +199,10 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 	// The seeder is allowed only one connection, which means only one peer will
 	// have access to the completed torrent, while the other is forced to rely
 	// on the "trickle down" announce piece messages.
-	seederConfig := genConfig(trackerAddr)
+	seederConfig := configFixture(trackerAddr)
 	seederConfig.ConnState.MaxOpenConnectionsPerTorrent = 1
 
-	seeder := genTestPeer(seederConfig)
+	seeder := testPeerFixture(seederConfig)
 	defer seeder.Stop()
 	writeTorrent(seeder.TorrentArchive, tf.MetaInfo, tf.Content)
 	require.NoError(<-seeder.Scheduler.AddTorrent(tf.MetaInfo))
@@ -224,19 +224,19 @@ func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 	trackerAddr, stop := trackerservice.TestAnnouncer()
 	defer stop()
 
-	config := genConfig(trackerAddr)
+	config := configFixture(trackerAddr)
 	config.Conn.DisableThrottling = true
 
 	tf := torlib.TestTorrentFileFixture()
 	clk := clock.NewMock()
 	w := newEventWatcher()
 
-	seeder := genTestPeer(config, withEventLoop(w), withClock(clk))
+	seeder := testPeerFixture(config, withEventLoop(w), withClock(clk))
 	defer seeder.Stop()
 	writeTorrent(seeder.TorrentArchive, tf.MetaInfo, tf.Content)
 	require.NoError(<-seeder.Scheduler.AddTorrent(tf.MetaInfo))
 
-	leecher := genTestPeer(config, withClock(clk))
+	leecher := testPeerFixture(config, withClock(clk))
 	defer leecher.Stop()
 	leecherTor, err := leecher.TorrentArchive.CreateTorrent(tf.MetaInfo.InfoHash, tf.MetaInfo)
 	require.NoError(err)
@@ -270,14 +270,14 @@ func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
 	defer stop()
 
 	tf := torlib.TestTorrentFileFixture()
-	config := genConfig(trackerAddr)
+	config := configFixture(trackerAddr)
 
-	seeder := genTestPeer(config)
+	seeder := testPeerFixture(config)
 	defer seeder.Stop()
 	writeTorrent(seeder.TorrentArchive, tf.MetaInfo, tf.Content)
 	require.NoError(<-seeder.Scheduler.AddTorrent(tf.MetaInfo))
 
-	leecher := genTestPeer(config)
+	leecher := testPeerFixture(config)
 	defer leecher.Stop()
 	leecherTor, err := leecher.TorrentArchive.CreateTorrent(tf.MetaInfo.InfoHash, tf.MetaInfo)
 	require.NoError(err)
@@ -303,11 +303,11 @@ func TestEmitStatsEventTriggers(t *testing.T) {
 	trackerAddr, stop := trackerservice.TestAnnouncer()
 	defer stop()
 
-	config := genConfig(trackerAddr)
+	config := configFixture(trackerAddr)
 	clk := clock.NewMock()
 	w := newEventWatcher()
 
-	peer := genTestPeer(config, withEventLoop(w), withClock(clk))
+	peer := testPeerFixture(config, withEventLoop(w), withClock(clk))
 	defer peer.Stop()
 
 	clk.Add(config.EmitStatsInterval)
