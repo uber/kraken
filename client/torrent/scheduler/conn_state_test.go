@@ -12,7 +12,7 @@ import (
 )
 
 func TestBlacklistBackoff(t *testing.T) {
-	config := genConnStateConfig()
+	config := connStateConfigFixture()
 	config.MaxOpenConnectionsPerTorrent = 1
 	config.InitialBlacklistExpiration = 1 * time.Second
 	config.BlacklistExpirationBackoff = 2
@@ -69,7 +69,7 @@ func TestBlacklistBackoff(t *testing.T) {
 func TestDeleteStaleBlacklistEntries(t *testing.T) {
 	require := require.New(t)
 
-	config := genConnStateConfig()
+	config := connStateConfigFixture()
 
 	clk := clock.NewMock()
 	clk.Set(time.Now())
@@ -111,14 +111,14 @@ func transitionToActive(t *testing.T, s *connState, c *conn) {
 func TestChangesToActiveConnsRedistributesBandwidth(t *testing.T) {
 	require := require.New(t)
 
-	config := genConnStateConfig()
+	config := connStateConfigFixture()
 
 	s := newConnState(torlib.PeerIDFixture(), config, clock.New())
 
-	c1, cleanup := genTestConn(t, genConnConfig(), 32)
+	c1, cleanup := connFixture(t, connConfigFixture(), 32)
 	defer cleanup()
 
-	c2, cleanup := genTestConn(t, genConnConfig(), 32)
+	c2, cleanup := connFixture(t, connConfigFixture(), 32)
 	defer cleanup()
 
 	// First conn takes all bandwidth.
@@ -141,7 +141,7 @@ func TestChangesToActiveConnsRedistributesBandwidth(t *testing.T) {
 func TestAddingActiveConnsNeverRedistributesBandwidthBelowMin(t *testing.T) {
 	require := require.New(t)
 
-	config := genConnStateConfig()
+	config := connStateConfigFixture()
 	config.MaxGlobalEgressBytesPerSec = 4 * memsize.KB
 	config.MinConnEgressBytesPerSec = memsize.KB
 
@@ -149,7 +149,7 @@ func TestAddingActiveConnsNeverRedistributesBandwidthBelowMin(t *testing.T) {
 
 	// After adding 4 active conns, the bandwidth should hit the min.
 	for i := 0; i < 12; i++ {
-		c, cleanup := genTestConn(t, genConnConfig(), 32)
+		c, cleanup := connFixture(t, connConfigFixture(), 32)
 		defer cleanup()
 		transitionToActive(t, s, c)
 	}
