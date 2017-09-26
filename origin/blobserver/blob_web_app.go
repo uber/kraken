@@ -18,23 +18,33 @@ func InitializeAPI(storeConfig *store.Config, hashConfig hashcfg.HashConfig) htt
 	r := chi.NewRouter()
 	webApp := NewBlobWebApp(storeConfig, hashConfig)
 
-	// Check data blob
-	r.Head("/blobs/:digest", webApp.CheckBlob)
+	// General Blobs CRUD interface
+	r.Route("/blobs", func(r chi.Router) {
+		// Check data blob
+		r.Head("/:digest", webApp.CheckBlob)
 
-	// Pulling data blob
-	r.Get("/blobs/:digest", webApp.GetBlob)
+		// Pulling data blob
+		r.Get("/:digest", webApp.GetBlob)
 
-	// Delete data blob
-	r.Delete("/blobs/:digest", webApp.DeleteBlob)
+		// Delete data blob
+		r.Delete("/:digest", webApp.DeleteBlob)
 
-	// Pushing data blob
-	r.Post("/blobs/uploads", webApp.PostUpload)
-	r.Patch("/blobs/uploads/:uuid", webApp.PatchUpload)
-	r.Put("/blobs/uploads/:uuid", webApp.PutUpload)
+		// Pushing data blob
+		r.Route("/uploads", func(r chi.Router) {
+			r.Post("/", webApp.PostUpload)
+			r.Patch("/:uuid", webApp.PatchUpload)
+			r.Put("/:uuid", webApp.PutUpload)
+		})
+	})
 
-	// Repair data blob
-	r.Get("/repair/shard/:shardID", webApp.RepairBlobByShardID)
+	// General repair interface
+	r.Route("/repair", func(r chi.Router) {
+		// Repair data blob
+		r.Post("/shard/:shardID", webApp.RepairBlob)
 
+		// Repair a single data blob item
+		r.Post("/:digest", webApp.RepairBlob)
+	})
 	return r
 }
 
@@ -142,12 +152,12 @@ func (app BlobWebApp) PutUpload(writer http.ResponseWriter, request *http.Reques
 	p.Run(writer, request)
 }
 
-// RepairBlobByShardID runs blob repair by shard ID, ensuring all the digests of a shard
+// RepairBlob runs blob repair by shard ID, ensuring all the digests of a shard
 // are synced properly to target nodes
-func (app BlobWebApp) RepairBlobByShardID(writer http.ResponseWriter, request *http.Request) {
+func (app BlobWebApp) RepairBlob(writer http.ResponseWriter, request *http.Request) {
 	p := NewPipeline(request.Context(), app.hashConfig, app.hashState, app.localStore)
-	p.AddRequestHandler(parseBlobByShardIDHandler)
-	p.AddResponseHandler(repairBlobByShardIDStreamHandler)
+	p.AddRequestHandler(parseRepairBlobHandler)
+	p.AddResponseHandler(repairBlobStreamHandler)
 	p.Run(writer, request)
 
 }
