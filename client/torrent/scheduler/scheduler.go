@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/jackpal/bencode-go"
@@ -69,10 +70,10 @@ type Scheduler struct {
 
 	listener net.Listener
 
-	announceTicker         *clock.Ticker
-	preemptionTicker       *clock.Ticker
-	blacklistCleanupTicker *clock.Ticker
-	emitStatsTicker        *clock.Ticker
+	announceTick         <-chan time.Time
+	preemptionTick       <-chan time.Time
+	blacklistCleanupTick <-chan time.Time
+	emitStatsTick        <-chan time.Time
 
 	// The following fields orchestrate the stopping of the Scheduler.
 	once sync.Once      // Ensures the stop sequence is executed only once.
@@ -124,6 +125,15 @@ func New(
 		opt(&overrides)
 	}
 
+	var preemptionTick <-chan time.Time
+	if !config.DisablePreemption {
+		preemptionTick = overrides.clock.Tick(config.PreemptionInterval)
+	}
+	var blacklistCleanupTick <-chan time.Time
+	if !config.ConnState.DisableBlacklist {
+		blacklistCleanupTick = overrides.clock.Tick(config.BlacklistCleanupInterval)
+	}
+
 	log.Infof("Scheduler will announce as peer %s on addr %s:%d",
 		pctx.PeerID, pctx.IP, pctx.Port)
 
@@ -149,16 +159,26 @@ func New(
 			EventSender: overrides.eventLoop,
 			Clock:       overrides.clock,
 		},
-		torrentControls:        make(map[torlib.InfoHash]*torrentControl),
-		connState:              newConnState(pctx.PeerID, config.ConnState, overrides.clock),
-		announceQueue:          newAnnounceQueue(),
-		eventLoop:              overrides.eventLoop,
-		listener:               l,
-		announceTicker:         overrides.clock.Ticker(config.AnnounceInterval),
-		preemptionTicker:       overrides.clock.Ticker(config.PreemptionInterval),
-		blacklistCleanupTicker: overrides.clock.Ticker(config.BlacklistCleanupInterval),
-		emitStatsTicker:        overrides.clock.Ticker(config.EmitStatsInterval),
-		done:                   done,
+		torrentControls:      make(map[torlib.InfoHash]*torrentControl),
+		connState:            newConnState(pctx.PeerID, config.ConnState, overrides.clock),
+		announceQueue:        newAnnounceQueue(),
+		eventLoop:            overrides.eventLoop,
+		listener:             l,
+		announceTick:         overrides.clock.Tick(config.AnnounceInterval),
+		preemptionTick:       preemptionTick,
+		blacklistCleanupTick: blacklistCleanupTick,
+		emitStatsTick:        overrides.clock.Tick(config.EmitStatsInterval),
+		done:                 done,
+	}
+
+	if config.DisablePreemption {
+		s.log().Warn("Preemption disabled")
+	}
+	if config.ConnState.DisableBlacklist {
+		s.log().Warn("Blacklisting disabled")
+	}
+	if config.Conn.DisableThrottling {
+		s.log().Warn("Throttling disabled")
 	}
 
 	s.start()
@@ -250,13 +270,13 @@ func (s *Scheduler) listenLoop() {
 func (s *Scheduler) tickerLoop() {
 	for {
 		select {
-		case <-s.announceTicker.C:
+		case <-s.announceTick:
 			s.eventLoop.Send(announceTickEvent{})
-		case <-s.preemptionTicker.C:
+		case <-s.preemptionTick:
 			s.eventLoop.Send(preemptionTickEvent{})
-		case <-s.blacklistCleanupTicker.C:
+		case <-s.blacklistCleanupTick:
 			s.eventLoop.Send(cleanupBlacklistEvent{})
-		case <-s.emitStatsTicker.C:
+		case <-s.emitStatsTick:
 			s.eventLoop.Send(emitStatsEvent{})
 		case <-s.done:
 			s.log().Debug("tickerLoop done")
@@ -267,7 +287,7 @@ func (s *Scheduler) tickerLoop() {
 }
 
 func (s *Scheduler) handshakeIncomingConn(nc net.Conn) {
-	h, err := receiveHandshake(nc)
+	h, err := receiveHandshake(nc, s.config.Conn.ReadTimeout)
 	if err != nil {
 		s.log().Errorf("Error receiving handshake from incoming connection: %s", err)
 		nc.Close()

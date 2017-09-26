@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 
+	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/peercontext"
 	"code.uber.internal/infra/kraken/client/torrent/storage"
 	"code.uber.internal/infra/kraken/mocks/client/torrent/mockstorage"
@@ -27,6 +29,17 @@ const testTempDir = "/tmp/kraken_scheduler"
 
 func init() {
 	os.Mkdir(testTempDir, 0755)
+
+	debug := flag.Bool("scheduler.debug", false, "log all Scheduler debugging output")
+	flag.Parse()
+
+	formatter := true
+	logConfig := &log.Configuration{
+		Level:         log.DebugLevel,
+		Stdout:        *debug,
+		TextFormatter: &formatter,
+	}
+	log.Configure(logConfig, true)
 }
 
 func genConnConfig() ConnConfig {
@@ -41,9 +54,9 @@ func genConnConfig() ConnConfig {
 func genConnStateConfig() ConnStateConfig {
 	return ConnStateConfig{
 		MaxOpenConnectionsPerTorrent: 20,
-		InitialBlacklistExpiration:   time.Second,
-		BlacklistExpirationBackoff:   2,
-		MaxBlacklistExpiration:       10 * time.Second,
+		InitialBlacklistExpiration:   250 * time.Millisecond,
+		BlacklistExpirationBackoff:   1,
+		MaxBlacklistExpiration:       1 * time.Second,
 		ExpiredBlacklistEntryTTL:     5 * time.Minute,
 	}.applyDefaults()
 }
@@ -53,9 +66,9 @@ func genConfig(trackerAddr string) Config {
 		ListenAddr:               "localhost:0",
 		TrackerAddr:              trackerAddr,
 		AnnounceInterval:         500 * time.Millisecond,
-		IdleSeederTTL:            2 * time.Second,
+		IdleSeederTTL:            10 * time.Second,
 		PreemptionInterval:       500 * time.Millisecond,
-		IdleConnTTL:              1 * time.Second,
+		IdleConnTTL:              10 * time.Second,
 		ConnTTL:                  5 * time.Minute,
 		BlacklistCleanupInterval: time.Minute,
 		ConnState:                genConnStateConfig(),
@@ -239,6 +252,16 @@ type noopEventSender struct{}
 
 func (s noopEventSender) Send(event) bool { return true }
 
+// noopDeadline wraps a Conn which does not support deadlines (e.g. net.Pipe)
+// and makes it accept deadlines.
+type noopDeadline struct {
+	net.Conn
+}
+
+func (n noopDeadline) SetDeadline(t time.Time) error      { return nil }
+func (n noopDeadline) SetReadDeadline(t time.Time) error  { return nil }
+func (n noopDeadline) SetWriteDeadline(t time.Time) error { return nil }
+
 func genTestConn(t *testing.T, config ConnConfig, maxPieceLength int) (c *conn, cleanup func()) {
 	ctrl := gomock.NewController(t)
 
@@ -255,6 +278,7 @@ func genTestConn(t *testing.T, config ConnConfig, maxPieceLength int) (c *conn, 
 	}
 
 	localNC, remoteNC := net.Pipe()
+	localNC = noopDeadline{localNC}
 	go discard(remoteNC)
 
 	tor := mockstorage.NewMockTorrent(ctrl)

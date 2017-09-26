@@ -53,6 +53,10 @@ type Config struct {
 	// the Scheduler.
 	EmitStatsInterval time.Duration `yaml:"emit_stats_interval"`
 
+	// DisablePreemption disables resource preemption. Should only be used for
+	// testing purposes.
+	DisablePreemption bool `yaml:"disable_preemption"`
+
 	ConnState ConnStateConfig `yaml:"conn_state"`
 
 	Conn ConnConfig `yaml:"conn"`
@@ -103,6 +107,10 @@ type ConnStateConfig struct {
 	// MaxOpenConnectionsPerTorrent is the maximum number of connections which a
 	// Scheduler will maintain at once for each torrent.
 	MaxOpenConnectionsPerTorrent int `yaml:"max_open_conn"`
+
+	// DisableBlacklist disables the blacklisting of peers. Should only be used
+	// for testing purposes.
+	DisableBlacklist bool `yaml:"disable_blacklist"`
 
 	// InitialBlacklistExpiration is how long a connection will be blacklisted
 	// after its first close.
@@ -162,6 +170,9 @@ type ConnConfig struct {
 	// WriteTimeout is the timeout for connection writes.
 	WriteTimeout time.Duration `yaml:"write_timeout"`
 
+	// ReadTimeout is the timeout for connections reads.
+	ReadTimeout time.Duration `yaml:"read_timeout"`
+
 	// SenderBufferSize is the size of the sender channel for a connection.
 	// Prevents writers to the connection from being blocked if there are many
 	// writers trying to send messages at the same time.
@@ -171,11 +182,18 @@ type ConnConfig struct {
 	// Prevents the connection reader from being blocked if a receiver consumer
 	// is taking a long time to process a message.
 	ReceiverBufferSize int `yaml:"reciver_buffer_size"`
+
+	// DisableThrottling disables the throttling of pieces. Should only be used
+	// for testing purposes.
+	DisableThrottling bool `yaml:"disable_throttling"`
 }
 
 func (c ConnConfig) applyDefaults() ConnConfig {
 	if c.WriteTimeout == 0 {
 		c.WriteTimeout = 5 * time.Second
+	}
+	if c.ReadTimeout == 0 {
+		c.ReadTimeout = 5 * time.Second
 	}
 	// TODO(codyg): We cannot set default buffer sizes, since 0 is a very valid
 	// buffer size for testing.

@@ -20,23 +20,30 @@ func TestSetEgressBandwidthThrottlesPieceSending(t *testing.T) {
 	bytesPerSec := memsize.KB
 	expectedDur := time.Duration(size/bytesPerSec) * time.Second
 
-	c, cleanup := genTestConn(t, genConnConfig(), pieceLength)
+	config := genConnConfig()
+
+	c, cleanup := genTestConn(t, config, pieceLength)
 	defer cleanup()
 
 	c.SetEgressBandwidthLimit(bytesPerSec)
 
 	var wg sync.WaitGroup
+	errors := make([]error, numPieces)
 	start := time.Now()
 	for i := 0; i < numPieces; i++ {
 		wg.Add(1)
-		go func() {
+		go func(i int) {
 			defer wg.Done()
 			msg := newPiecePayloadMessage(0, randutil.Text(pieceLength))
-			require.NoError(c.Send(msg))
-		}()
+			errors[i] = c.Send(msg)
+		}(i)
 	}
 	wg.Wait()
 	stop := time.Now()
+
+	for _, err := range errors {
+		require.NoError(err)
+	}
 
 	// FIXME(codyg): If this test is prone to flakiness, run the test body a
 	// few times and remove any outlier outcomes.

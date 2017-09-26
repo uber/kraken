@@ -314,7 +314,7 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 		if ctrl.Complete && ctrl.Dispatcher.Empty() {
 			becameIdle := timeutil.MostRecent(
 				ctrl.Dispatcher.CreatedAt, ctrl.Dispatcher.LastConnRemoved())
-			if s.clock.Now().Sub(becameIdle) > s.config.IdleSeederTTL {
+			if s.clock.Now().Sub(becameIdle) >= s.config.IdleSeederTTL {
 				s.logf(log.Fields{"hash": infoHash}).Info("Removing idle torrent")
 				delete(s.torrentControls, infoHash)
 			}

@@ -25,8 +25,6 @@ import (
 var (
 	errHandshakeExpectedBitfield = errors.New(
 		"handshaking new connection expected bitfield message")
-	errHandshakeInfoHashMismatch = errors.New(
-		"handshaking new connection received a mismatched info hash")
 	errConnClosed            = errors.New("conn is closed")
 	errEmptyPayload          = errors.New("payload is empty")
 	errMessageExceedsMaxSize = errors.New("message exceeds max allowed size")
@@ -141,26 +139,26 @@ func (f *connFactory) SendAndReceiveHandshake(nc net.Conn, t storage.Torrent) (*
 		InfoHash: t.InfoHash(),
 		Bitfield: t.Bitfield(),
 	}
-	if err := sendMessage(nc, localHandshake.ToP2PMessage(), f.Clock, f.Config.WriteTimeout); err != nil {
-		return nil, err
+	if err := sendMessage(nc, localHandshake.ToP2PMessage(), f.Config.WriteTimeout); err != nil {
+		return nil, fmt.Errorf("failed to send handshake: %s", err)
 	}
-	m, err := readMessage(nc)
+	m, err := readMessage(nc, f.Config.ReadTimeout)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to receive handshake: %s", err)
 	}
 	remoteHandshake, err := handshakeFromP2PMessage(m)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid handshake: %s", err)
 	}
 	if remoteHandshake.InfoHash != localHandshake.InfoHash {
-		return nil, errHandshakeInfoHashMismatch
+		return nil, errors.New("received handshake with incorrect info hash")
 	}
 	return f.newConn(nc, t, remoteHandshake.PeerID, remoteHandshake.Bitfield, false), nil
 }
 
 // receiveHandshake reads a handshake from a new connection.
-func receiveHandshake(nc net.Conn) (*handshake, error) {
-	m, err := readMessage(nc)
+func receiveHandshake(nc net.Conn, timeout time.Duration) (*handshake, error) {
+	m, err := readMessage(nc, timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +181,7 @@ func (f *connFactory) ReciprocateHandshake(
 		InfoHash: t.InfoHash(),
 		Bitfield: t.Bitfield(),
 	}
-	if err := sendMessage(nc, localHandshake.ToP2PMessage(), f.Clock, f.Config.WriteTimeout); err != nil {
+	if err := sendMessage(nc, localHandshake.ToP2PMessage(), f.Config.WriteTimeout); err != nil {
 		return nil, err
 	}
 	return f.newConn(nc, t, remoteHandshake.PeerID, remoteHandshake.Bitfield, true), nil
@@ -314,6 +312,11 @@ func (c *conn) start() {
 
 func (c *conn) readPayload(length int32) ([]byte, error) {
 	payload := make([]byte, length)
+	// NOTE: We do not use the clock interface here because the net package uses
+	// the system clock when evaluating deadlines.
+	if err := c.nc.SetReadDeadline(time.Now().Add(c.config.ReadTimeout)); err != nil {
+		return nil, fmt.Errorf("failed to set deadline: %s", err)
+	}
 	if _, err := io.ReadFull(c.nc, payload); err != nil {
 		return nil, err
 	}
@@ -321,7 +324,7 @@ func (c *conn) readPayload(length int32) ([]byte, error) {
 	return payload, nil
 }
 
-func readMessage(nc net.Conn) (*p2p.Message, error) {
+func readMessage(nc net.Conn, timeout time.Duration) (*p2p.Message, error) {
 	var msglen [4]byte
 	if _, err := io.ReadFull(nc, msglen[:]); err != nil {
 		return nil, err
@@ -329,6 +332,11 @@ func readMessage(nc net.Conn) (*p2p.Message, error) {
 	dataLen := binary.BigEndian.Uint32(msglen[:])
 	if uint64(dataLen) > maxMessageSize {
 		return nil, errMessageExceedsMaxSize
+	}
+	// NOTE: We do not use the clock interface here because the net package uses
+	// the system clock when evaluating deadlines.
+	if err := nc.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+		return nil, fmt.Errorf("failed to set deadline: %s", err)
 	}
 	data := make([]byte, dataLen)
 	if _, err := io.ReadFull(nc, data); err != nil {
@@ -342,7 +350,7 @@ func readMessage(nc net.Conn) (*p2p.Message, error) {
 }
 
 func (c *conn) readMessage() (*message, error) {
-	p2pMessage, err := readMessage(c.nc)
+	p2pMessage, err := readMessage(c.nc, c.config.ReadTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -387,17 +395,19 @@ func (c *conn) sendPiecePayload(b []byte) error {
 		return errEmptyPayload
 	}
 
-	r := c.egressLimiter.ReserveN(c.clock.Now(), numBytes)
-	if !r.OK() {
-		// TODO(codyg): This is really bad. We need to alert if this happens.
-		c.logf(log.Fields{
-			"max_burst": c.egressLimiter.Burst(), "payload": numBytes,
-		}).Errorf("Cannot send piece, payload is larger than burst size")
-		return errors.New("piece payload is larger than burst size")
-	}
+	if !c.config.DisableThrottling {
+		r := c.egressLimiter.ReserveN(c.clock.Now(), numBytes)
+		if !r.OK() {
+			// TODO(codyg): This is really bad. We need to alert if this happens.
+			c.logf(log.Fields{
+				"max_burst": c.egressLimiter.Burst(), "payload": numBytes,
+			}).Errorf("Cannot send piece, payload is larger than burst size")
+			return errors.New("piece payload is larger than burst size")
+		}
 
-	// Throttle the connection egress if we've exceeded our bandwidth.
-	c.clock.Sleep(r.DelayFrom(c.clock.Now()))
+		// Throttle the connection egress if we've exceeded our bandwidth.
+		c.clock.Sleep(r.DelayFrom(c.clock.Now()))
+	}
 
 	for len(b) > 0 {
 		n, err := c.nc.Write(b)
@@ -410,12 +420,16 @@ func (c *conn) sendPiecePayload(b []byte) error {
 	return nil
 }
 
-func sendMessage(nc net.Conn, msg *p2p.Message, clk clock.Clock, timeout time.Duration) error {
+func sendMessage(nc net.Conn, msg *p2p.Message, timeout time.Duration) error {
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	nc.SetWriteDeadline(clk.Now().Add(timeout))
+	// NOTE: We do not use the clock interface here because the net package uses
+	// the system clock when evaluating deadlines.
+	if err := nc.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+		return fmt.Errorf("failed to set deadline: %s", err)
+	}
 	if err := binary.Write(nc, binary.BigEndian, uint32(len(data))); err != nil {
 		return err
 	}
@@ -430,7 +444,7 @@ func sendMessage(nc net.Conn, msg *p2p.Message, clk clock.Clock, timeout time.Du
 }
 
 func (c *conn) sendMessage(msg *message) error {
-	if err := sendMessage(c.nc, msg.Message, c.clock, c.config.WriteTimeout); err != nil {
+	if err := sendMessage(c.nc, msg.Message, c.config.WriteTimeout); err != nil {
 		return err
 	}
 	if msg.Message.Type == p2p.Message_PIECE_PAYLOAD {
