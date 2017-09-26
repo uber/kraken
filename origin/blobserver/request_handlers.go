@@ -316,15 +316,34 @@ func deleteBlobHandler(ctx context.Context, request *http.Request) (context.Cont
 	return ctx, nil
 }
 
-func parseBlobByShardIDHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
+func parseRepairBlobHandler(ctx context.Context, request *http.Request) (context.Context, *ServerResponse) {
 
 	shardID := chi.URLParam(request, "shardID")
-	if len(shardID) == 0 {
+	if len(shardID) > 0 {
+		ctx = context.WithValue(ctx, ctxKeyShardID, shardID)
+	}
+	digestParam := chi.URLParam(request, "digest")
+	if len(digestParam) > 0 {
+		var err error
+		digestRaw, err := url.QueryUnescape(digestParam)
+		if err != nil {
+			return nil, NewServerResponseWithError(
+				http.StatusBadRequest,
+				"Cannot unescape digest: %s, error: %s", digestParam, err)
+		}
+		digest, err := image.NewDigestFromString(digestRaw)
+		if err != nil {
+			return nil, NewServerResponseWithError(
+				http.StatusBadRequest,
+				"Cannot parse digest: %s, error: %s", digestRaw, err)
+		}
+		ctx = context.WithValue(ctx, ctxKeyDigest, digest)
+	}
+	if len(shardID) == 0 && len(digestParam) == 0 {
 		return nil, NewServerResponseWithError(
-			http.StatusInternalServerError, "missing required ShardID parameter in a reques")
+			http.StatusInternalServerError, "missing required ShardID or digest parameter")
 	}
 
-	ctx = context.WithValue(ctx, ctxKeyShardID, shardID)
 	ctx = context.WithValue(ctx, ctxBlobTransferFactory, client.NewBlobAPIClient)
 
 	return ctx, nil

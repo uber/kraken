@@ -52,7 +52,7 @@ func (br *BlobRepairer) BatchRepair(digests []*image.Digest, writer http.Respons
 		pos count32 = -1
 	)
 
-	for i := 0; i < br.numWorkers; i++ {
+	for i := 0; i < br.numWorkers && i < len(digests); i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

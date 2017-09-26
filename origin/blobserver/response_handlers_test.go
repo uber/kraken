@@ -24,31 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testMocks struct {
-	ctrl                *gomock.Controller
-	blobTransferFactory client.BlobTransferFactory
-}
-
-// mockController sets up all mocks and returns a teardown func that can be called with defer
-func (m *testMocks) mockController(t gomock.TestReporter) func() {
-	m.ctrl = gomock.NewController(t)
-	return func() {
-		m.ctrl.Finish()
-	}
-}
-
-func (r *mockResponseWriter) Header() http.Header {
-	return r.header
-}
-
-func (r *mockResponseWriter) Write(buf []byte) (int, error) {
-	return r.buf.Write(buf)
-}
-
-func (r *mockResponseWriter) WriteHeader(status int) {
-	r.status = status
-}
-
 func TestDownloadBlobHandlerValid(t *testing.T) {
 	require := require.New(t)
 
@@ -62,10 +37,11 @@ func TestDownloadBlobHandlerValid(t *testing.T) {
 	ctx := context.WithValue(context.Background(), ctxKeyDigest, contentDigest)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
 
-	mockWriter := newMockResponseWriter()
+	mockWriter := httptest.NewRecorder()
+
 	ctx, se := downloadBlobHandler(ctx, mockWriter)
 	require.Nil(se)
-	require.Equal(mockWriter.buf.Bytes()[:len("Hello world!!!")], []byte("Hello world!!!"))
+	require.Equal(mockWriter.Body.String(), "Hello world!!!")
 }
 
 func TestDownloadBlobHandlerInvalid(t *testing.T) {
@@ -82,10 +58,10 @@ func TestDownloadBlobHandlerInvalid(t *testing.T) {
 	ctx := context.WithValue(context.Background(), ctxKeyDigest, wrongDigest)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
 
-	mockWriter := newMockResponseWriter()
+	mockWriter := httptest.NewRecorder()
 	ctx, se := downloadBlobHandler(ctx, mockWriter)
 	require.Nil(ctx)
-	require.NotNil(se)
+	require.Error(se)
 	require.Equal(se.GetStatusCode(), http.StatusNotFound)
 }
 
@@ -144,7 +120,7 @@ func verifyDigestsForRepair(t *testing.T, digests []*image.Digest, response stri
 	}
 }
 
-func TestRepairBlobByShardIDHandler(t *testing.T) {
+func TestRepairBlobByShardIDSingleDigestReturnsOK(t *testing.T) {
 	require := require.New(t)
 
 	localStore, cleanup := store.LocalStoreFixture()
@@ -169,14 +145,16 @@ func TestRepairBlobByShardIDHandler(t *testing.T) {
 	ctx = context.WithValue(ctx, ctxKeyHashState, hashstate)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
 
-	mocks := &testMocks{}
-	defer mocks.mockController(t)()
-	bt := mockclient.NewMockBlobTransferer(mocks.ctrl)
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
 
-	mocks.blobTransferFactory = func(address string, blobStore *store.LocalStore) client.BlobTransferer {
-		return bt
-	}
-	ctx = context.WithValue(ctx, ctxBlobTransferFactory, mocks.blobTransferFactory)
+	bt := mockclient.NewMockBlobTransferer(mockCtrl)
+	bf := client.BlobTransferFactory(
+		func(address string, blobStore *store.LocalStore) client.BlobTransferer {
+			return bt
+		})
+
+	ctx = context.WithValue(ctx, ctxBlobTransferFactory, bf)
 	request = request.WithContext(ctx)
 
 	digests, err := localStore.ListDigests(shardID)
@@ -188,12 +166,12 @@ func TestRepairBlobByShardIDHandler(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	repairBlobByShardIDStreamHandler(request.Context(), w)
+	repairBlobStreamHandler(request.Context(), w)
 	verifyDigestsForRepair(t, digests, w.Body.String())
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestRepairBlobByShardIDHandlerBatch(t *testing.T) {
+func TestRepairBlobByShardIDHandlerBatchReturnsOK(t *testing.T) {
 	require := require.New(t)
 
 	localStore, cleanup := store.LocalStoreFixture()
@@ -220,14 +198,16 @@ func TestRepairBlobByShardIDHandlerBatch(t *testing.T) {
 	ctx = context.WithValue(ctx, ctxKeyHashState, hashstate)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
 
-	mocks := &testMocks{}
-	defer mocks.mockController(t)()
-	bt := mockclient.NewMockBlobTransferer(mocks.ctrl)
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
 
-	mocks.blobTransferFactory = func(address string, blobStore *store.LocalStore) client.BlobTransferer {
-		return bt
-	}
-	ctx = context.WithValue(ctx, ctxBlobTransferFactory, mocks.blobTransferFactory)
+	bt := mockclient.NewMockBlobTransferer(mockCtrl)
+	bf := client.BlobTransferFactory(
+		func(address string, blobStore *store.LocalStore) client.BlobTransferer {
+			return bt
+		})
+
+	ctx = context.WithValue(ctx, ctxBlobTransferFactory, bf)
 	request = request.WithContext(ctx)
 
 	digests, err := localStore.ListDigests(shardID)
@@ -242,13 +222,13 @@ func TestRepairBlobByShardIDHandlerBatch(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	repairBlobByShardIDStreamHandler(request.Context(), w)
+	repairBlobStreamHandler(request.Context(), w)
 
 	verifyDigestsForRepair(t, digests, w.Body.String())
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestRepairBatchBlobByShardIDHandlerRetry(t *testing.T) {
+func TestRepairBatchBlobByShardIDHandlerFailAndRetryOK(t *testing.T) {
 	require := require.New(t)
 
 	localStore, cleanup := store.LocalStoreFixture()
@@ -273,15 +253,16 @@ func TestRepairBatchBlobByShardIDHandlerRetry(t *testing.T) {
 	ctx = context.WithValue(ctx, ctxKeyHashState, hashstate)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
 
-	mocks := &testMocks{}
-	defer mocks.mockController(t)()
-	bt := mockclient.NewMockBlobTransferer(mocks.ctrl)
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
 
-	mocks.blobTransferFactory = func(address string, blobStore *store.LocalStore) client.BlobTransferer {
-		return bt
-	}
-	ctx = context.WithValue(ctx, ctxBlobTransferFactory, mocks.blobTransferFactory)
+	bt := mockclient.NewMockBlobTransferer(mockCtrl)
+	bf := client.BlobTransferFactory(
+		func(address string, blobStore *store.LocalStore) client.BlobTransferer {
+			return bt
+		})
 
+	ctx = context.WithValue(ctx, ctxBlobTransferFactory, bf)
 	request = request.WithContext(ctx)
 
 	digests, err := localStore.ListDigests(shardID)
@@ -294,8 +275,116 @@ func TestRepairBatchBlobByShardIDHandlerRetry(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	repairBlobByShardIDStreamHandler(request.Context(), w)
+	repairBlobStreamHandler(request.Context(), w)
 
 	verifyDigestsForRepair(t, digests, w.Body.String())
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestRepairBlobByDigestReturnsOK(t *testing.T) {
+	localStore, cleanup := store.LocalStoreFixture()
+	defer cleanup()
+
+	app := HashConfigFixture([]int{10, 10, 10})
+	hashstate := RendezvousHashFixture(app)
+
+	contentDigest := helperCreateAndUploadDigest(t, localStore, randomUUID)
+
+	url := fmt.Sprintf("localhost:8080/repair/%s", contentDigest)
+	request, _ := http.NewRequest("POST", url, nil)
+
+	ctx := request.Context()
+	ctx = context.WithValue(ctx, ctxKeyDigest, contentDigest)
+	ctx = context.WithValue(ctx, ctxKeyHashConfig, app)
+	ctx = context.WithValue(ctx, ctxKeyHashState, hashstate)
+	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
+
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	bt := mockclient.NewMockBlobTransferer(mockCtrl)
+	bf := client.BlobTransferFactory(
+		func(address string, blobStore *store.LocalStore) client.BlobTransferer {
+			return bt
+		})
+
+	ctx = context.WithValue(ctx, ctxBlobTransferFactory, bf)
+	request = request.WithContext(ctx)
+
+	digests := []*image.Digest{contentDigest}
+
+	// first node
+	bt.EXPECT().PushBlob(*digests[0]).Return(nil)
+
+	// second node
+	bt.EXPECT().PushBlob(*digests[0]).Return(nil)
+
+	w := httptest.NewRecorder()
+	repairBlobStreamHandler(request.Context(), w)
+
+	verifyDigestsForRepair(t, digests, w.Body.String())
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestRepairBlobByDigestCancelRequest(t *testing.T) {
+	require := require.New(t)
+
+	localStore, cleanup := store.LocalStoreFixture()
+	defer cleanup()
+
+	app := HashConfigFixture([]int{10, 10, 10})
+	hashstate := RendezvousHashFixture(app)
+
+	contentDigest := helperCreateAndUploadDigest(t, localStore, randomUUID)
+
+	url := fmt.Sprintf("localhost:8080/repair/%s", contentDigest)
+	request, _ := http.NewRequest("POST", url, nil)
+
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("digest", contentDigest.Hex())
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	ctx = context.WithValue(ctx, chi.RouteCtxKey, routeCtx)
+	ctx = context.WithValue(ctx, ctxKeyDigest, contentDigest)
+	ctx = context.WithValue(ctx, ctxKeyHashConfig, app)
+	ctx = context.WithValue(ctx, ctxKeyHashState, hashstate)
+	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
+
+	bt := mockclient.NewMockBlobTransferer(mockCtrl)
+	bf := client.BlobTransferFactory(
+		func(address string, blobStore *store.LocalStore) client.BlobTransferer {
+			return bt
+		})
+
+	ctx = context.WithValue(ctx, ctxBlobTransferFactory, bf)
+	request = request.WithContext(ctx)
+
+	// first node
+	shardID := contentDigest.Hex()[:4]
+	digests, err := localStore.ListDigests(shardID)
+	require.NoError(err)
+
+	//This will repair a single item on a first node,
+	//second node repair should be cancelled due to
+	//request context being cancelled.
+	for _, d := range digests {
+		bt.EXPECT().PushBlob(*d).Do(func(interface{}) { cancel() }).Return(nil)
+	}
+	w := httptest.NewRecorder()
+	repairBlobStreamHandler(request.Context(), w)
+
+	lm := &DigestRepairMessage{}
+	response, err := ioutil.ReadAll(w.Body)
+
+	_ = json.Unmarshal(response, &lm)
+
+	//This should be no-op to fool golang escape analisys
+	//that reports cancel as a not being used variable - wrong!.
+	cancel()
+
+	assert.Equal(t, lm.Digest, contentDigest.Hex())
 	assert.Equal(t, http.StatusOK, w.Code)
 }
