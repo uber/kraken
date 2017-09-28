@@ -9,20 +9,20 @@ import (
 	"github.com/hashicorp/golang-lru/simplelru"
 )
 
-var _ FileMap = &lruMap{}
+var _ FileMap = &lruFileMap{}
 
-// LRUFileMapFactory creates a new lruMap
+// LRUFileMapFactory creates a new lruFileMap
 type LRUFileMapFactory struct {
 	size int
 }
 
-// Create returns a lruMap
+// Create returns a lruFileMap
 func (lruFactory *LRUFileMapFactory) Create() (fileMap FileMap, err error) {
-	return newlruMap(lruFactory.size)
+	return newlruFileMap(lruFactory.size)
 }
 
-// lruMap implements FileMap interface
-type lruMap struct {
+// lruFileMap implements FileMap interface
+type lruFileMap struct {
 	sync.Mutex
 
 	cache *simplelru.LRU
@@ -36,8 +36,8 @@ func onEvictCallBack(key interface{}, value interface{}) {
 	}
 }
 
-// newlruMap creates a new lru map given size
-func newlruMap(size int) (*lruMap, error) {
+// newlruFileMap creates a new lru map given size
+func newlruFileMap(size int) (*lruFileMap, error) {
 	if size <= 0 {
 		return nil, fmt.Errorf("Invalid map size: %d", size)
 	}
@@ -47,20 +47,20 @@ func newlruMap(size int) (*lruMap, error) {
 		return nil, err
 	}
 
-	m := &lruMap{
+	m := &lruFileMap{
 		cache: c,
 	}
 
 	return m, nil
 }
 
-func (m *lruMap) Load(key interface{}) (value interface{}, ok bool) {
+func (m *lruFileMap) Load(key interface{}) (value interface{}, ok bool) {
 	m.Lock()
 	defer m.Unlock()
 	return m.cache.Get(key)
 }
 
-func (m *lruMap) LoadOrStore(key, value interface{}) (actual interface{}, loaded bool) {
+func (m *lruFileMap) LoadOrStore(key, value interface{}) (actual interface{}, loaded bool) {
 	m.Lock()
 	defer m.Unlock()
 	v, ok := m.cache.Get(key)
@@ -72,7 +72,7 @@ func (m *lruMap) LoadOrStore(key, value interface{}) (actual interface{}, loaded
 	return value, false
 }
 
-func (m *lruMap) Delete(key interface{}) {
+func (m *lruFileMap) Delete(key interface{}) {
 	m.Lock()
 	defer m.Unlock()
 	m.cache.Remove(key)
