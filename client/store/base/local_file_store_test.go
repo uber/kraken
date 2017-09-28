@@ -12,26 +12,22 @@ import (
 
 func TestCreateEmptyFile(t *testing.T) {
 	// Setup
-	cleanupTestFileStore()
-	s, err := getTestFileStore()
-	assert.Nil(t, err)
-	defer cleanupTestFileStore()
+	s, cleanup := getTestFileStore()
+	defer cleanup()
 
 	// Create empty file
-	err = s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
+	err := s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
 	assert.Nil(t, err)
-	_, err = os.Stat(path.Join(stateTest1.GetDirectory(), testFileName))
+	_, err = os.Stat(path.Join(stateTest1.GetDirectory(), testFileName[0:2], testFileName[2:4], testFileName))
 	assert.False(t, os.IsNotExist(err))
 }
 
 func TestGetFileReadWriter(t *testing.T) {
 	// Setup
-	cleanupTestFileStore()
-	s, err := getTestFileStore()
-	assert.Nil(t, err)
-	defer cleanupTestFileStore()
+	s, cleanup := getTestFileStore()
+	defer cleanup()
 
-	err = s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
+	err := s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
 	assert.Nil(t, err)
 
 	// Get ReadWriter and modify file concurrently
@@ -92,12 +88,10 @@ func TestGetFileReadWriter(t *testing.T) {
 
 func TestMoveFile(t *testing.T) {
 	// Setup
-	cleanupTestFileStore()
-	s, err := getTestFileStore()
-	assert.Nil(t, err)
-	defer cleanupTestFileStore()
+	s, cleanup := getTestFileStore()
+	defer cleanup()
 
-	err = s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
+	err := s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
 	assert.Nil(t, err)
 
 	// Move file to stateTest2
@@ -118,10 +112,10 @@ func TestMoveFile(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Created hardlink in both stateTest1
-	_, err = os.Stat(path.Join(testDir1, testFileName))
+	_, err = os.Stat(path.Join(testDir1, testFileName[0:2], testFileName[2:4], testFileName))
 	assert.Nil(t, err)
 	// the old file does not exist but still read/writable
-	_, err = os.Stat(path.Join(testDir2, testFileName))
+	_, err = os.Stat(path.Join(testDir2, testFileName[0:2], testFileName[2:4], testFileName))
 	assert.True(t, os.IsNotExist(err))
 	// Check state
 	f, _, _ := s.LoadFileEntry(testFileName, []FileState{stateTest1})
@@ -150,10 +144,10 @@ func TestMoveFile(t *testing.T) {
 	assert.Equal(t, []byte{'1', 'e', 's', 't', '\n'}, dataState1)
 	// Close on last opened readwriter removes hardlink
 	readWriterState2.Close()
-	_, err = os.Stat(path.Join(testDir2, testFileName))
+	_, err = os.Stat(path.Join(testDir2, testFileName[0:2], testFileName[2:4], testFileName))
 	assert.True(t, os.IsNotExist(err))
 	readWriterState1.Close()
-	_, err = os.Stat(path.Join(testDir1, testFileName))
+	_, err = os.Stat(path.Join(testDir1, testFileName[0:2], testFileName[2:4], testFileName))
 	assert.Nil(t, err)
 	// Check content again
 	readWriterStateMoved, err := s.GetFileReadWriter(testFileName, []FileState{stateTest1})
@@ -172,17 +166,15 @@ func TestMoveFile(t *testing.T) {
 
 func TestDeleteFile(t *testing.T) {
 	// Setup
-	cleanupTestFileStore()
-	s, err := getTestFileStore()
-	assert.Nil(t, err)
-	defer cleanupTestFileStore()
+	s, cleanup := getTestFileStore()
+	defer cleanup()
 
-	err = s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
+	err := s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
 	assert.Nil(t, err)
 
 	// Test deleting file.
 	err = s.DeleteFile(testFileName, []FileState{stateTest1})
 	assert.Equal(t, err, nil)
-	_, err = os.Stat(path.Join(testDir1, testFileName))
+	_, err = os.Stat(path.Join(testDir1, testFileName[0:2], testFileName[2:4], testFileName))
 	assert.True(t, os.IsNotExist(err))
 }

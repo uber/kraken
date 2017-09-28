@@ -38,6 +38,17 @@ func NewLocalFileStoreDefault() FileStore {
 	}
 }
 
+// NewShardedFileStoreDefault initializes and returns a new FileStore object.
+// It uses the first few bytes of file digest (which is also used as file name) as shard ID.
+// For every byte, one more level of directories will be created.
+func NewShardedFileStoreDefault() FileStore {
+	return &LocalFileStore{
+		fileEntryInternalFactory: &ShardedFileEntryInternalFactory{},
+		fileEntryFactory:         &LocalFileEntryFactory{},
+		fileMap:                  &syncmap.Map{},
+	}
+}
+
 func (s *LocalFileStore) createFileEntry(fileName string, state FileState) FileEntry {
 	fi := s.fileEntryInternalFactory.Create(state.GetDirectory(), fileName)
 	fileEntry := s.fileEntryFactory.Create(state, fi)
@@ -273,6 +284,26 @@ func (s *LocalFileStore) GetFileStat(fileName string, states []FileState) (os.Fi
 	return entry.Stat(v)
 }
 
+// GetFileReader returns a FileReader object for read operations.
+func (s *LocalFileStore) GetFileReader(fileName string, states []FileState) (FileReader, error) {
+	entry, v, err := s.LoadFileEntry(fileName, states)
+	if err != nil {
+		return nil, err
+	}
+
+	return entry.GetReader(v)
+}
+
+// GetFileReadWriter returns a FileReadWriter object for read/write operations.
+func (s *LocalFileStore) GetFileReadWriter(fileName string, states []FileState) (FileReadWriter, error) {
+	entry, v, err := s.LoadFileEntry(fileName, states)
+	if err != nil {
+		return nil, err
+	}
+
+	return entry.GetReadWriter(v)
+}
+
 // ReadFileMetadata returns metadata assocciated with the file
 func (s *LocalFileStore) ReadFileMetadata(fileName string, states []FileState, mt MetadataType) ([]byte, error) {
 	entry, v, err := s.LoadFileEntry(fileName, states)
@@ -327,24 +358,4 @@ func (s *LocalFileStore) RangeFileMetadata(fileName string, states []FileState, 
 		return err
 	}
 	return entry.RangeMetadata(v, f)
-}
-
-// GetFileReader returns a FileReader object for read operations.
-func (s *LocalFileStore) GetFileReader(fileName string, states []FileState) (FileReader, error) {
-	entry, v, err := s.LoadFileEntry(fileName, states)
-	if err != nil {
-		return nil, err
-	}
-
-	return entry.GetReader(v)
-}
-
-// GetFileReadWriter returns a FileReadWriter object for read/write operations.
-func (s *LocalFileStore) GetFileReadWriter(fileName string, states []FileState) (FileReadWriter, error) {
-	entry, v, err := s.LoadFileEntry(fileName, states)
-	if err != nil {
-		return nil, err
-	}
-
-	return entry.GetReadWriter(v)
 }

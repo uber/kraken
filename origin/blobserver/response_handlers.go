@@ -98,6 +98,7 @@ func repairBlobStreamHandler(ctx context.Context, writer http.ResponseWriter) (c
 		return nil, NewServerResponseWithError(http.StatusInternalServerError,
 			"neither shard id nor digest set")
 	}
+
 	hashConfig, ok := ctx.Value(ctxKeyHashConfig).(hashcfg.HashConfig)
 	if !ok {
 		return nil, NewServerResponseWithError(
@@ -115,27 +116,41 @@ func repairBlobStreamHandler(ctx context.Context, writer http.ResponseWriter) (c
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "LocalStore is not set")
 	}
+
 	blobTransferFactory, ok := ctx.Value(ctxBlobTransferFactory).(client.BlobTransferFactory)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "blobTransferFactory is not set")
 	}
+
 	// TODO(igor): Need to read num_replicas from tracker's metadata
 	nodes, err := hashState.GetOrderedNodes(shardID, hashConfig.NumReplica)
 	if err != nil || len(nodes) == 0 {
 		return nil, NewServerResponseWithError(
-			http.StatusInternalServerError,
-			"failed to compute hash for shard %s, error: %s", shardID, err)
+			http.StatusInternalServerError, "failed to compute hash for shard %s, error: %s", shardID, err)
 	}
 
+	names, err := localStore.ListCacheFilesByShardID(shardID)
+	if err != nil {
+		return nil, NewServerResponseWithError(
+			http.StatusInternalServerError,
+			"failed to retrieve local store digests, error: %s",
+			err,
+		)
+	}
 	var digests []*image.Digest
 	if okSh { //shard id
-		if digests, err = localStore.ListDigests(shardID); err != nil {
-			return nil, NewServerResponseWithError(
-				http.StatusInternalServerError,
-				"failed to list digests for shard %s, error: %s", shardID, err)
+		for _, name := range names {
+			digest, err := image.NewDigestFromString("sha256:" + name)
+			if err != nil {
+				return nil, NewServerResponseWithError(
+					http.StatusInternalServerError,
+					"failed to retrieve local store digests, error: %s",
+					err,
+				)
+			}
+			digests = append(digests, digest)
 		}
-
 	} else { //digest item
 		digests = append(digests, digest)
 	}

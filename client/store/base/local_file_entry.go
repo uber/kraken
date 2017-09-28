@@ -152,7 +152,7 @@ func (entry *LocalFileEntry) Delete(v Verify) error {
 	return entry.fi.Delete()
 }
 
-// GetReader returns a FileReader object for read fierations.
+// GetReader returns a FileReader object for read operations.
 func (entry *LocalFileEntry) GetReader(v Verify) (FileReader, error) {
 	entry.RLock()
 	defer entry.RUnlock()
@@ -172,7 +172,7 @@ func (entry *LocalFileEntry) GetReader(v Verify) (FileReader, error) {
 	return reader, nil
 }
 
-// GetReadWriter returns a FileReadWriter object for read/write fierations.
+// GetReadWriter returns a FileReadWriter object for read/write operations.
 func (entry *LocalFileEntry) GetReadWriter(v Verify) (FileReadWriter, error) {
 	entry.RLock()
 	defer entry.RUnlock()

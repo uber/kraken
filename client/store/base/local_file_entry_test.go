@@ -12,16 +12,14 @@ import (
 )
 
 func TestReadMetadataAndWriteMetadata(t *testing.T) {
-	cleanupTestFileEntry()
-	fe, err := getTestFileEntry()
-	assert.Nil(t, err)
-	defer cleanupTestFileEntry()
+	fe, cleanup := getTestFileEntry()
+	defer cleanup()
 
 	m1 := getMockMetadataOne()
 	b2 := make([]byte, 2)
 
 	// Invalid read
-	_, err = fe.ReadMetadata(dummyVerify, m1)
+	_, err := fe.ReadMetadata(dummyVerify, m1)
 	assert.True(t, os.IsNotExist(err))
 
 	// Write metadata
@@ -46,10 +44,8 @@ func TestReadMetadataAndWriteMetadata(t *testing.T) {
 }
 
 func TestReadMetadataAtAndWriteMetadataAt(t *testing.T) {
-	cleanupTestFileEntry()
-	fe, err := getTestFileEntry()
-	assert.Nil(t, err)
-	defer cleanupTestFileEntry()
+	fe, cleanup := getTestFileEntry()
+	defer cleanup()
 
 	m1 := getMockMetadataOne()
 	b1 := make([]byte, 1)
@@ -127,12 +123,10 @@ func TestReadMetadataAtAndWriteMetadataAt(t *testing.T) {
 }
 
 func TestReload(t *testing.T) {
-	cleanupTestFileStore()
-	s, err := getTestFileStore()
-	assert.Nil(t, err)
-	defer cleanupTestFileStore()
+	s, cleanup := getTestFileStore()
+	defer cleanup()
 
-	err = s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
+	err := s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
 	assert.Nil(t, err)
 	fe, _, err := s.LoadFileEntry(testFileName, []FileState{stateTest1})
 	assert.Nil(t, err)
@@ -146,7 +140,7 @@ func TestReload(t *testing.T) {
 	assert.True(t, updated)
 
 	// Reload
-	NewLocalFileStore(&LocalFileEntryInternalFactory{}, &LocalFileEntryFactory{})
+	NewLocalFileStore(&ShardedFileEntryInternalFactory{}, &LocalFileEntryFactory{})
 	s.GetFileStat(testFileName, []FileState{stateTest1})
 	fe, _, _ = s.LoadFileEntry(testFileName, []FileState{stateTest1})
 
@@ -178,12 +172,10 @@ func TestReload(t *testing.T) {
 }
 
 func TestMove(t *testing.T) {
-	cleanupTestFileStore()
-	s, err := getTestFileStore()
-	assert.Nil(t, err)
-	defer cleanupTestFileStore()
+	s, cleanup := getTestFileStore()
+	defer cleanup()
 
-	err = s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
+	err := s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
 	assert.Nil(t, err)
 	fe, _, err := s.LoadFileEntry(testFileName, []FileState{stateTest1})
 	assert.Nil(t, err)
@@ -229,32 +221,37 @@ func TestMove(t *testing.T) {
 	assert.Equal(t, uint8(3), b2Moved[0])
 
 	// Verify file location
-	_, err = os.Stat(path.Join(stateTest1.GetDirectory(), testFileName+getMockMetadataOne().GetSuffix()))
+	_, err = os.Stat(path.Join(stateTest1.GetDirectory(),
+		getShardedRelativePath(testFileName+getMockMetadataOne().GetSuffix())))
 	assert.NotNil(t, err)
 	assert.True(t, os.IsNotExist(err))
-	_, err = os.Stat(path.Join(stateTest2.GetDirectory(), testFileName+getMockMetadataOne().GetSuffix()))
+	_, err = os.Stat(path.Join(stateTest2.GetDirectory(),
+		getShardedRelativePath(testFileName+getMockMetadataOne().GetSuffix())))
 	assert.NotNil(t, err)
 	assert.True(t, os.IsNotExist(err))
-	_, err = os.Stat(path.Join(stateTest3.GetDirectory(), testFileName+getMockMetadataOne().GetSuffix()))
+	_, err = os.Stat(path.Join(stateTest3.GetDirectory(),
+		getShardedRelativePath(testFileName+getMockMetadataOne().GetSuffix())))
 	assert.NotNil(t, err)
 	assert.True(t, os.IsNotExist(err))
-	_, err = os.Stat(path.Join(stateTest3.GetDirectory(), testFileName))
+	_, err = os.Stat(path.Join(stateTest3.GetDirectory(),
+		getShardedRelativePath(testFileName)))
 	assert.Nil(t, err)
-	_, err = os.Stat(path.Join(stateTest1.GetDirectory(), testFileName+getMockMetadataMovable().GetSuffix()))
+	_, err = os.Stat(path.Join(stateTest1.GetDirectory(),
+		getShardedRelativePath(testFileName+getMockMetadataMovable().GetSuffix())))
 	assert.NotNil(t, err)
 	assert.True(t, os.IsNotExist(err))
-	_, err = os.Stat(path.Join(stateTest2.GetDirectory(), testFileName+getMockMetadataMovable().GetSuffix()))
+	_, err = os.Stat(path.Join(stateTest2.GetDirectory(),
+		getShardedRelativePath(testFileName+getMockMetadataMovable().GetSuffix())))
 	assert.NotNil(t, err)
 	assert.True(t, os.IsNotExist(err))
-	_, err = os.Stat(path.Join(stateTest3.GetDirectory(), testFileName+getMockMetadataMovable().GetSuffix()))
+	_, err = os.Stat(path.Join(stateTest3.GetDirectory(),
+		getShardedRelativePath(testFileName+getMockMetadataMovable().GetSuffix())))
 	assert.Nil(t, err)
 }
 
 func TestDelete(t *testing.T) {
-	cleanupTestFileEntry()
-	fe, err := getTestFileEntry()
-	assert.Nil(t, err)
-	defer cleanupTestFileEntry()
+	fe, cleanup := getTestFileEntry()
+	defer cleanup()
 
 	m1 := getMockMetadataOne()
 
@@ -266,10 +263,12 @@ func TestDelete(t *testing.T) {
 	assert.Nil(t, e)
 
 	// Delete
-	_, err = os.Stat(path.Join(stateTest1.GetDirectory(), testFileName+getMockMetadataOne().GetSuffix()))
+	_, err = os.Stat(path.Join(stateTest1.GetDirectory(),
+		getShardedRelativePath(testFileName+getMockMetadataOne().GetSuffix())))
 	assert.Nil(t, err)
 	err = fe.DeleteMetadata(dummyVerify, m1)
 	assert.Nil(t, err)
-	_, err = os.Stat(path.Join(stateTest1.GetDirectory(), testFileName+getMockMetadataOne().GetSuffix()))
+	_, err = os.Stat(path.Join(stateTest1.GetDirectory(),
+		getShardedRelativePath(testFileName+getMockMetadataOne().GetSuffix())))
 	assert.NotNil(t, err)
 }

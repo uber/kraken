@@ -3,7 +3,6 @@ package dockerregistry
 import (
 	"io"
 	"os"
-	"path"
 	"time"
 
 	"code.uber.internal/infra/kraken/client/store"
@@ -168,9 +167,7 @@ func (u *Uploads) getUploadReader(uuid string, offset int64) (io.ReadCloser, err
 }
 
 func (u *Uploads) getUploadDataStat(dir, uuid string) (fi storagedriver.FileInfo, err error) {
-	var info os.FileInfo
-	fp := path.Join(dir, uuid)
-	info, err = os.Stat(fp)
+	info, err := u.store.GetUploadFileStat(uuid)
 	if err != nil {
 		return nil, err
 	}
@@ -198,8 +195,11 @@ func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) (err error) {
 		return err
 	}
 
-	// TODO (evelynl): remove dir here
-	destfp := destdir + destsha
+	destfp, err := u.store.GetCacheFilePath(destsha)
+	if err != nil {
+		return err
+	}
+
 	err = u.client.CreateTorrentFromFile(destsha, destfp)
 	if err != nil {
 		return err
