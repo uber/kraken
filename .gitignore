@@ -15,6 +15,7 @@ pkg/
 # Binary executable
 tracker/tracker
 agent/agent
+origin/origin
 tools/bin/puller/puller
 tools/bin/kraken-cli/kraken
 

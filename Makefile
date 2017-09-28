@@ -18,12 +18,14 @@ PROJECT_ROOT = code.uber.internal/infra/kraken
 SERVICES = \
 	tracker/tracker \
 	agent/agent \
+	origin/origin \
 	tools/bin/puller/puller
 
 # List all executables
 PROGS = \
 	tracker/tracker \
 	agent/agent \
+	origin/origin \
 	tools/bin/puller/puller \
 	tools/bin/kraken-cli/kraken
 
@@ -43,8 +45,9 @@ proto:
 	cd $(dir $(patsubst %/,%,$(GOBUILD_DIR)))
 	$(foreach pb, $(PROTO_SRCS), $(MAKE_PROTO);)
 
-tracker/tracker: $(wildcard tracker/*.go config/tracker/*.go)
+tracker/tracker: $(wildcard tracker/*.go)
 agent/agent: proto $(wildcard agent/*.go)
+origin/origin: $(wildcard origin/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 tools/bin/kraken-cli/kraken:  client/cli/kraken-cli.go tools/bin/kraken-cli/main.go config/origin/config.go
 

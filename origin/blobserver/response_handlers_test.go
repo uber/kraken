@@ -126,7 +126,7 @@ func TestRepairBlobByShardIDSingleDigestReturnsOK(t *testing.T) {
 	localStore, cleanup := store.LocalStoreFixture()
 	defer cleanup()
 
-	app := HashConfigFixture([]int{10, 10, 10})
+	app := configFixture([]int{10, 10, 10})
 	hashstate := RendezvousHashFixture(app)
 
 	contentDigest := helperCreateAndUploadDigest(t, localStore, randomUUID)
@@ -182,7 +182,7 @@ func TestRepairBlobByShardIDHandlerBatchReturnsOK(t *testing.T) {
 	localStore, cleanup := store.LocalStoreFixture()
 	defer cleanup()
 
-	app := HashConfigFixture([]int{10, 10, 10})
+	app := configFixture([]int{10, 10, 10})
 	hashstate := RendezvousHashFixture(app)
 
 	contentDigest := helperCreateAndUploadDigest(t, localStore, randomUUID)
@@ -246,7 +246,7 @@ func TestRepairBatchBlobByShardIDHandlerFailAndRetryOK(t *testing.T) {
 	localStore, cleanup := store.LocalStoreFixture()
 	defer cleanup()
 
-	app := HashConfigFixture([]int{10, 10, 10})
+	app := configFixture([]int{10, 10, 10})
 	hashstate := RendezvousHashFixture(app)
 
 	contentDigest := helperCreateAndUploadDigest(t, localStore, randomUUID)
@@ -302,7 +302,7 @@ func TestRepairBlobByDigestReturnsOK(t *testing.T) {
 	localStore, cleanup := store.LocalStoreFixture()
 	defer cleanup()
 
-	app := HashConfigFixture([]int{10, 10, 10})
+	app := configFixture([]int{10, 10, 10})
 	hashstate := RendezvousHashFixture(app)
 
 	contentDigest := helperCreateAndUploadDigest(t, localStore, randomUUID)
@@ -348,7 +348,7 @@ func TestRepairBlobByDigestCancelRequest(t *testing.T) {
 	localStore, cleanup := store.LocalStoreFixture()
 	defer cleanup()
 
-	app := HashConfigFixture([]int{10, 10, 10})
+	app := configFixture([]int{10, 10, 10})
 	hashstate := RendezvousHashFixture(app)
 
 	contentDigest := helperCreateAndUploadDigest(t, localStore, randomUUID)
