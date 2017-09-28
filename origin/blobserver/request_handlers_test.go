@@ -442,7 +442,7 @@ func TestRedirectByDigestHandlerValid(t *testing.T) {
 	localStore.MoveUploadFileToCache(randomUUID, contentDigest.Hex())
 
 	// Initalize hash config and hash state
-	hashConfig, hashState := newMockHashConfig()
+	config, hashState := newMockHashConfig()
 
 	url := fmt.Sprintf("localhost:8080/blob/")
 	request, _ := http.NewRequest("GET", url, nil)
@@ -453,7 +453,7 @@ func TestRedirectByDigestHandlerValid(t *testing.T) {
 	ctx = context.WithValue(ctx, ctxKeyDigest, contentDigest)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)
 	ctx = context.WithValue(ctx, ctxKeyDigest, contentDigest)
-	ctx = context.WithValue(ctx, ctxKeyHashConfig, hashConfig)
+	ctx = context.WithValue(ctx, ctxKeyHashConfig, config)
 	ctx = context.WithValue(ctx, ctxKeyHashState, hashState)
 
 	request = request.WithContext(ctx)

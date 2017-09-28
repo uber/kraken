@@ -11,7 +11,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/client"
-	hashcfg "code.uber.internal/infra/kraken/origin/config"
 )
 
 const (
@@ -99,7 +98,7 @@ func repairBlobStreamHandler(ctx context.Context, writer http.ResponseWriter) (c
 			"neither shard id nor digest set")
 	}
 
-	hashConfig, ok := ctx.Value(ctxKeyHashConfig).(hashcfg.HashConfig)
+	config, ok := ctx.Value(ctxKeyHashConfig).(Config)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "label is not set")
@@ -124,7 +123,7 @@ func repairBlobStreamHandler(ctx context.Context, writer http.ResponseWriter) (c
 	}
 
 	// TODO(igor): Need to read num_replicas from tracker's metadata
-	nodes, err := hashState.GetOrderedNodes(shardID, hashConfig.NumReplica)
+	nodes, err := hashState.GetOrderedNodes(shardID, config.NumReplica)
 	if err != nil || len(nodes) == 0 {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "failed to compute hash for shard %s, error: %s", shardID, err)
@@ -159,11 +158,11 @@ func repairBlobStreamHandler(ctx context.Context, writer http.ResponseWriter) (c
 	for _, node := range nodes {
 
 		// skip repair for the current node
-		if node.Label == hashConfig.Label {
+		if node.Label == config.Label {
 			continue
 		}
 
-		host, ok := hashConfig.LabelToHostname[node.Label]
+		host, ok := config.LabelToHostname[node.Label]
 
 		if !ok {
 			return nil, NewServerResponseWithError(
@@ -177,10 +176,10 @@ func repairBlobStreamHandler(ctx context.Context, writer http.ResponseWriter) (c
 			context:     ctx,
 			hostname:    host,
 			blobAPI:     blobTransferFactory(host, localStore),
-			numWorkers:  hashConfig.Repair.NumWorkers,
-			numRetries:  hashConfig.Repair.NumRetries,
-			retryDelay:  hashConfig.Repair.RetryDelayMs,
-			connTimeout: hashConfig.Repair.ConnTimeout,
+			numWorkers:  config.Repair.NumWorkers,
+			numRetries:  config.Repair.NumRetries,
+			retryDelay:  config.Repair.RetryDelayMs,
+			connTimeout: config.Repair.ConnTimeout,
 		}
 
 		// Batch repairer launches a number of background go-routines

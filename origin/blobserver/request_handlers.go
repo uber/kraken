@@ -13,7 +13,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/client"
-	hashcfg "code.uber.internal/infra/kraken/origin/config"
 	"github.com/docker/distribution/uuid"
 	"github.com/pressly/chi"
 )
@@ -358,7 +357,7 @@ func redirectByDigestHandler(ctx context.Context, request *http.Request) (contex
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "digest not set")
 	}
-	hashConfig, ok := ctx.Value(ctxKeyHashConfig).(hashcfg.HashConfig)
+	config, ok := ctx.Value(ctxKeyHashConfig).(Config)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "label not set")
@@ -371,7 +370,7 @@ func redirectByDigestHandler(ctx context.Context, request *http.Request) (contex
 
 	// Shard by first 2 bytes of digest.
 	shardID := digest.Hex()[:4]
-	nodes, err := hashState.GetOrderedNodes(shardID, hashConfig.NumReplica)
+	nodes, err := hashState.GetOrderedNodes(shardID, config.NumReplica)
 	if err != nil || len(nodes) == 0 {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
@@ -379,7 +378,7 @@ func redirectByDigestHandler(ctx context.Context, request *http.Request) (contex
 	}
 	var labels []string
 	for _, node := range nodes {
-		if node.Label == hashConfig.Label {
+		if node.Label == config.Label {
 			// Current node is among the designated nodes, return.
 			return ctx, nil
 		}
