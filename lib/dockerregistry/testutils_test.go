@@ -5,10 +5,12 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/client/store/base"
 	"code.uber.internal/infra/kraken/utils"
 )
 
@@ -164,4 +166,15 @@ func genManifestRevisionLinkPath(repo, manifest string) string {
 
 func genBlobDataPath(digest string) string {
 	return fmt.Sprintf("/docker/registry/v2/blobs/sha256/%s/%s/data", string([]byte(digest)[:2]), digest)
+}
+
+func getShardedRelativePath(name string) string {
+	filePath := ""
+	for i := 0; i < base.DefaultShardIDLength && i < len(name)/2; i++ {
+		// (1 byte = 2 char of file name assumming file name is in HEX)
+		dirName := name[i*2 : i*2+2]
+		filePath = path.Join(filePath, dirName)
+	}
+
+	return path.Join(filePath, name)
 }

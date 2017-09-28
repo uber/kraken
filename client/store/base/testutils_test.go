@@ -1,7 +1,9 @@
 package base
 
 import (
+	"log"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -97,7 +99,7 @@ func (m mockMetadataMovable) Movable() bool {
 }
 
 // Test file entry
-func getTestFileEntry() (FileEntry, error) {
+func getTestFileEntry() (FileEntry, func()) {
 	// Setup
 	if _, err := os.Stat(testRoot); os.IsNotExist(err) {
 		os.MkdirAll(testRoot, 0777)
@@ -113,17 +115,20 @@ func getTestFileEntry() (FileEntry, error) {
 	}
 
 	// Create empty file
-	backend := NewLocalFileStore(&LocalFileEntryInternalFactory{}, &LocalFileEntryFactory{})
-	err := backend.CreateFile(testFileName, []FileState{}, stateTest1, 5)
-	if err != nil {
-		return nil, err
+	backend := NewLocalFileStore(&ShardedFileEntryInternalFactory{}, &LocalFileEntryFactory{})
+	if err := backend.CreateFile(testFileName, []FileState{}, stateTest1, 5); err != nil {
+		log.Panic(err)
 	}
 	entry, _, err := backend.(*LocalFileStore).LoadFileEntry(testFileName, []FileState{stateTest1})
-	return entry.(*LocalFileEntry), err
-}
-
-func cleanupTestFileEntry() {
-	os.RemoveAll(testRoot)
+	if err != nil {
+		log.Panic(err)
+	}
+	cleanup := func() {
+		if err := os.RemoveAll(testRoot); err != nil {
+			log.Panic(err)
+		}
+	}
+	return entry.(*LocalFileEntry), cleanup
 }
 
 func dummyVerify(entry FileEntry) error {
@@ -131,7 +136,7 @@ func dummyVerify(entry FileEntry) error {
 }
 
 // Test file store
-func getTestFileStore() (*LocalFileStore, error) {
+func getTestFileStore() (*LocalFileStore, func()) {
 	// Setup
 	if _, err := os.Stat(testRoot); os.IsNotExist(err) {
 		os.MkdirAll(testRoot, 0777)
@@ -147,10 +152,21 @@ func getTestFileStore() (*LocalFileStore, error) {
 	}
 
 	// Create empty file
-	backend := NewLocalFileStore(&LocalFileEntryInternalFactory{}, &LocalFileEntryFactory{})
-	return backend.(*LocalFileStore), nil
+	backend := NewLocalFileStore(&ShardedFileEntryInternalFactory{}, &LocalFileEntryFactory{})
+
+	cleanup := func() {
+		os.RemoveAll(testRoot)
+	}
+	return backend.(*LocalFileStore), cleanup
 }
 
-func cleanupTestFileStore() {
-	os.RemoveAll(testRoot)
+func getShardedRelativePath(name string) string {
+	filePath := ""
+	for i := 0; i < DefaultShardIDLength && i < len(name)/2; i++ {
+		// (1 byte = 2 char of file name assumming file name is in HEX)
+		dirName := name[i*2 : i*2+2]
+		filePath = path.Join(filePath, dirName)
+	}
+
+	return path.Join(filePath, name)
 }

@@ -105,13 +105,13 @@ type FileStore interface {
 	GetFilePath(fileName string, states []FileState) (string, error)
 	GetFileStat(fileName string, states []FileState) (os.FileInfo, error)
 
+	GetFileReader(fileName string, states []FileState) (FileReader, error)
+	GetFileReadWriter(fileName string, states []FileState) (FileReadWriter, error)
+
 	ReadFileMetadata(fileName string, states []FileState, mt MetadataType) ([]byte, error)
 	WriteFileMetadata(fileName string, states []FileState, mt MetadataType, data []byte) (bool, error)
 	ReadFileMetadataAt(fileName string, states []FileState, mt MetadataType, b []byte, off int64) (int, error)
 	WriteFileMetadataAt(fileName string, states []FileState, mt MetadataType, b []byte, off int64) (int, error)
 	DeleteFileMetadata(fileName string, states []FileState, mt MetadataType) error
 	RangeFileMetadata(fileName string, states []FileState, f func(mt MetadataType) error) error
-
-	GetFileReader(fileName string, states []FileState) (FileReader, error)
-	GetFileReadWriter(fileName string, states []FileState) (FileReadWriter, error)
 }

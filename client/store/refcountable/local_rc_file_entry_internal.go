@@ -13,7 +13,7 @@ type LocalRCFileEntryInternalFactory struct{}
 
 // Create initializes and returns a FileEntryInternal object.
 func (f *LocalRCFileEntryInternalFactory) Create(dir, name string) base.FileEntryInternal {
-	baseF := base.LocalFileEntryInternalFactory{}
+	baseF := base.ShardedFileEntryInternalFactory{}
 	return &LocalRCFileEntryInternal{
 		FileEntryInternal: baseF.Create(dir, name),
 	}

@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"io/ioutil"
 	"math"
 	"os"
 	"path"
@@ -11,7 +12,6 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/client/store/base"
 	"code.uber.internal/infra/kraken/client/store/refcountable"
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 
 	"github.com/docker/distribution/uuid"
 	"github.com/robfig/cron"
@@ -46,12 +46,12 @@ func NewLocalStore(config *Config, useRefcount bool) (*LocalStore, error) {
 		log.Fatal(err)
 	}
 
-	uploadBackend := base.NewLocalFileStoreDefault()
+	uploadBackend := base.NewShardedFileStoreDefault()
 	var downloadCacheBackend base.FileStore
 	if useRefcount {
 		downloadCacheBackend = refcountable.NewLocalRCFileStoreDefault()
 	} else {
-		downloadCacheBackend = base.NewLocalFileStoreDefault()
+		downloadCacheBackend = base.NewShardedFileStoreDefault()
 	}
 
 	localStore := &LocalStore{
@@ -273,6 +273,11 @@ func (store *LocalStore) GetDownloadOrCacheFileReader(fileName string) (base.Fil
 	return store.downloadCacheBackend.GetFileReader(fileName, []base.FileState{store.stateDownload, store.stateCache})
 }
 
+// GetUploadFileStat returns a FileInfo of a file in upload directory.
+func (store *LocalStore) GetUploadFileStat(fileName string) (os.FileInfo, error) {
+	return store.uploadBackend.GetFileStat(fileName, []base.FileState{store.stateUpload})
+}
+
 // GetCacheFilePath returns full path of a file in cache directory.
 func (store *LocalStore) GetCacheFilePath(fileName string) (string, error) {
 	return store.downloadCacheBackend.GetFilePath(fileName, []base.FileState{store.stateCache})
@@ -380,24 +385,25 @@ func (store *LocalStore) DerefCacheFile(fileName string) (int64, error) {
 		}
 	}
 	return refCount, nil
-
 }
 
-// ListDigests lists locally stored digest items on a shard
-func (store *LocalStore) ListDigests(shardID string) ([]*image.Digest, error) {
-	dir, err := os.Open(store.config.CacheDir)
+// ListCacheFilesByShardID returns a list of FileInfo for all files of given shard.
+func (store *LocalStore) ListCacheFilesByShardID(shardID string) ([]string, error) {
+	shardDir := store.config.CacheDir
+	for i := 0; i < len(shardID); i += 2 {
+		// LocalStore uses the first few bytes of file digest (which is also supposed to be the file
+		// name) as shard ID.
+		// For every byte, one more level of directories will be created
+		// (1 byte = 2 char of file name assumming file name is in HEX)
+		shardDir = path.Join(shardDir, shardID[i:i+2])
+	}
+	infos, err := ioutil.ReadDir(shardDir)
 	if err != nil {
 		return nil, err
 	}
-	defer dir.Close()
-	names, err := dir.Readdirnames(-1)
-	if err != nil {
-		return nil, err
+	var names []string
+	for _, info := range infos {
+		names = append(names, info.Name())
 	}
-	var digests []*image.Digest
-	for _, fileName := range names {
-		digest, _ := image.NewDigestFromString("sha256:" + fileName)
-		digests = append(digests, digest)
-	}
-	return digests, nil
+	return names, nil
 }

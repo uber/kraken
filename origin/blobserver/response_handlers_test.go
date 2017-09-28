@@ -156,9 +156,14 @@ func TestRepairBlobByShardIDSingleDigestReturnsOK(t *testing.T) {
 
 	ctx = context.WithValue(ctx, ctxBlobTransferFactory, bf)
 	request = request.WithContext(ctx)
-
-	digests, err := localStore.ListDigests(shardID)
+	names, err := localStore.ListCacheFilesByShardID(shardID)
 	require.NoError(err)
+	var digests []*image.Digest
+	for _, name := range names {
+		digest, err := image.NewDigestFromString("sha256:" + name)
+		require.NoError(err)
+		digests = append(digests, digest)
+	}
 
 	for _, d := range digests {
 		bt.EXPECT().PushBlob(*d).Return(nil)
@@ -210,8 +215,15 @@ func TestRepairBlobByShardIDHandlerBatchReturnsOK(t *testing.T) {
 	ctx = context.WithValue(ctx, ctxBlobTransferFactory, bf)
 	request = request.WithContext(ctx)
 
-	digests, err := localStore.ListDigests(shardID)
-	assert.Equal(t, 20, len(digests))
+	names, err := localStore.ListCacheFilesByShardID(shardID)
+	require.NoError(err)
+	var digests []*image.Digest
+	for _, name := range names {
+		digest, err := image.NewDigestFromString("sha256:" + name)
+		require.NoError(err)
+		digests = append(digests, digest)
+	}
+	require.Equal(20, len(digests))
 	require.NoError(err)
 
 	for _, d := range digests {
@@ -264,9 +276,14 @@ func TestRepairBatchBlobByShardIDHandlerFailAndRetryOK(t *testing.T) {
 
 	ctx = context.WithValue(ctx, ctxBlobTransferFactory, bf)
 	request = request.WithContext(ctx)
-
-	digests, err := localStore.ListDigests(shardID)
+	names, err := localStore.ListCacheFilesByShardID(shardID)
 	require.NoError(err)
+	var digests []*image.Digest
+	for _, name := range names {
+		digest, err := image.NewDigestFromString("sha256:" + name)
+		require.NoError(err)
+		digests = append(digests, digest)
+	}
 
 	for _, d := range digests {
 		bt.EXPECT().PushBlob(*d).Return(fmt.Errorf("oh god"))
@@ -364,7 +381,14 @@ func TestRepairBlobByDigestCancelRequest(t *testing.T) {
 
 	// first node
 	shardID := contentDigest.Hex()[:4]
-	digests, err := localStore.ListDigests(shardID)
+	names, err := localStore.ListCacheFilesByShardID(shardID)
+	require.NoError(err)
+	var digests []*image.Digest
+	for _, name := range names {
+		digest, err := image.NewDigestFromString("sha256:" + name)
+		require.NoError(err)
+		digests = append(digests, digest)
+	}
 	require.NoError(err)
 
 	//This will repair a single item on a first node,
