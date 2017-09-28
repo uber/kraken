@@ -46,12 +46,21 @@ func NewLocalStore(config *Config, useRefcount bool) (*LocalStore, error) {
 		log.Fatal(err)
 	}
 
-	uploadBackend := base.NewShardedFileStoreDefault()
+	uploadBackend, err := base.NewShardedFileStoreDefault()
+	if err != nil {
+		return nil, err
+	}
 	var downloadCacheBackend base.FileStore
 	if useRefcount {
-		downloadCacheBackend = refcountable.NewLocalRCFileStoreDefault()
+		downloadCacheBackend, err = refcountable.NewLocalRCFileStoreDefault()
+		if err != nil {
+			return nil, err
+		}
 	} else {
-		downloadCacheBackend = base.NewShardedFileStoreDefault()
+		downloadCacheBackend, err = base.NewShardedFileStoreDefault()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	localStore := &LocalStore{

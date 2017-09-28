@@ -2,95 +2,112 @@ package base
 
 import (
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"os"
 	"path"
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReadMetadataAndWriteMetadata(t *testing.T) {
-	fe, cleanup := getTestFileEntry()
+	require := require.New(t)
+	storeBundle, cleanup := fileStoreDefaultFixture()
 	defer cleanup()
+
+	fileBundle, ok := storeBundle.files[storeBundle.state1]
+	if !ok {
+		log.Fatal("file not found in state1")
+	}
+	fe := fileBundle.entry
+	verify := fileBundle.verify
 
 	m1 := getMockMetadataOne()
 	b2 := make([]byte, 2)
 
 	// Invalid read
-	_, err := fe.ReadMetadata(dummyVerify, m1)
-	assert.True(t, os.IsNotExist(err))
+	_, err := fe.ReadMetadata(verify, m1)
+	require.True(os.IsNotExist(err))
 
 	// Write metadata
-	updated, err := fe.WriteMetadata(dummyVerify, m1, []byte{uint8(0), uint8(0)})
-	assert.Nil(t, err)
-	assert.True(t, updated)
+	updated, err := fe.WriteMetadata(verify, m1, []byte{uint8(0), uint8(0)})
+	require.NoError(err)
+	require.True(updated)
 
-	updated, err = fe.WriteMetadata(dummyVerify, getMockMetadataOne(), []byte{uint8(0), uint8(0)})
-	assert.Nil(t, err)
-	assert.False(t, updated)
+	updated, err = fe.WriteMetadata(verify, getMockMetadataOne(), []byte{uint8(0), uint8(0)})
+	require.NoError(err)
+	require.False(updated)
 
 	// Read metadata
-	b2, err = fe.ReadMetadata(dummyVerify, m1)
-	assert.Nil(t, err)
-	assert.NotNil(t, b2)
-	assert.Equal(t, uint8(0), b2[0])
-	assert.Equal(t, uint8(0), b2[1])
+	b2, err = fe.ReadMetadata(verify, m1)
+	require.NoError(err)
+	require.NotNil(b2)
+	require.Equal(uint8(0), b2[0])
+	require.Equal(uint8(0), b2[1])
 
 	// Invalid read
-	b2, err = fe.ReadMetadata(dummyVerify, getMockMetadataTwo())
-	assert.True(t, os.IsNotExist(err))
+	b2, err = fe.ReadMetadata(verify, getMockMetadataTwo())
+	require.True(os.IsNotExist(err))
 }
 
 func TestReadMetadataAtAndWriteMetadataAt(t *testing.T) {
-	fe, cleanup := getTestFileEntry()
+	require := require.New(t)
+	storeBundle, cleanup := fileStoreDefaultFixture()
 	defer cleanup()
+
+	fileBundle, ok := storeBundle.files[storeBundle.state1]
+	if !ok {
+		log.Fatal("file not found in state1")
+	}
+	fe := fileBundle.entry
+	verify := fileBundle.verify
 
 	m1 := getMockMetadataOne()
 	b1 := make([]byte, 1)
 	b2 := make([]byte, 2)
 
 	// Invalid write at
-	n, err := fe.WriteMetadataAt(dummyVerify, m1, b2, 0)
-	assert.NotNil(t, err)
-	assert.Equal(t, n, 0)
+	n, err := fe.WriteMetadataAt(verify, m1, b2, 0)
+	require.NotNil(err)
+	require.Equal(n, 0)
 
 	// Write metadata
-	updated, err := fe.WriteMetadata(dummyVerify, m1, []byte{uint8(0), uint8(0)})
-	assert.Nil(t, err)
-	assert.True(t, updated)
+	updated, err := fe.WriteMetadata(verify, m1, []byte{uint8(0), uint8(0)})
+	require.NoError(err)
+	require.True(updated)
 
 	// Write metadata at
-	n, err = fe.WriteMetadataAt(dummyVerify, m1, []byte{uint8(1)}, 1)
-	assert.Nil(t, err)
-	assert.Equal(t, n, 1)
+	n, err = fe.WriteMetadataAt(verify, m1, []byte{uint8(1)}, 1)
+	require.NoError(err)
+	require.Equal(n, 1)
 
-	n, err = fe.WriteMetadataAt(dummyVerify, getMockMetadataOne(), []byte{uint8(1)}, 1)
-	assert.Nil(t, err)
-	assert.Equal(t, n, 0)
+	n, err = fe.WriteMetadataAt(verify, getMockMetadataOne(), []byte{uint8(1)}, 1)
+	require.NoError(err)
+	require.Equal(n, 0)
 
 	// Read metadata at
 	b2 = make([]byte, 2)
 	b1 = make([]byte, 1)
-	n, err = fe.ReadMetadataAt(dummyVerify, m1, b1, 0)
-	assert.Nil(t, err)
-	assert.Equal(t, n, 1)
-	assert.Equal(t, uint8(0), b1[0])
+	n, err = fe.ReadMetadataAt(verify, m1, b1, 0)
+	require.NoError(err)
+	require.Equal(n, 1)
+	require.Equal(uint8(0), b1[0])
 
-	n, err = fe.ReadMetadataAt(dummyVerify, m1, b1, 1)
-	assert.Nil(t, err)
-	assert.Equal(t, n, 1)
-	assert.Equal(t, uint8(1), b1[0])
+	n, err = fe.ReadMetadataAt(verify, m1, b1, 1)
+	require.NoError(err)
+	require.Equal(n, 1)
+	require.Equal(uint8(1), b1[0])
 
-	n, err = fe.ReadMetadataAt(dummyVerify, m1, b2, 1)
-	assert.NotNil(t, err)
-	assert.Equal(t, n, 1)
-	assert.Equal(t, uint8(1), b2[0])
+	n, err = fe.ReadMetadataAt(verify, m1, b2, 1)
+	require.NotNil(err)
+	require.Equal(n, 1)
+	require.Equal(uint8(1), b2[0])
 
 	// Concurrent write at and read at
 	b100 := make([]byte, 100)
-	updated, err = fe.WriteMetadata(dummyVerify, m1, b100)
+	updated, err = fe.WriteMetadata(verify, m1, b100)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(100)
@@ -101,19 +118,19 @@ func TestReadMetadataAtAndWriteMetadataAt(t *testing.T) {
 			bb1 := make([]byte, 1)
 
 			// Write at
-			m, e := fe.WriteMetadataAt(dummyVerify, m1, []byte{byte(value)}, int64(i))
-			assert.Nil(t, e)
-			assert.Equal(t, m, 1)
+			m, e := fe.WriteMetadataAt(verify, m1, []byte{byte(value)}, int64(i))
+			require.NoError(e)
+			require.Equal(m, 1)
 
-			m, e = fe.WriteMetadataAt(dummyVerify, getMockMetadataOne(), []byte{byte(value)}, int64(i))
-			assert.Nil(t, e)
-			assert.Equal(t, m, 0)
+			m, e = fe.WriteMetadataAt(verify, getMockMetadataOne(), []byte{byte(value)}, int64(i))
+			require.NoError(e)
+			require.Equal(m, 0)
 
 			// Read at
-			m, e = fe.ReadMetadataAt(dummyVerify, m1, bb1, int64(i))
-			assert.Nil(t, e)
-			assert.Equal(t, m, 1)
-			assert.Equal(t, byte(value), bb1[0])
+			m, e = fe.ReadMetadataAt(verify, m1, bb1, int64(i))
+			require.NoError(e)
+			require.Equal(m, 1)
+			require.Equal(byte(value), bb1[0])
 
 			wg.Done()
 
@@ -123,62 +140,73 @@ func TestReadMetadataAtAndWriteMetadataAt(t *testing.T) {
 }
 
 func TestReload(t *testing.T) {
-	s, cleanup := getTestFileStore()
+	require := require.New(t)
+	storeBundle, cleanup := fileStoreDefaultFixture()
 	defer cleanup()
+	store := storeBundle.store.(*LocalFileStore)
 
-	err := s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
-	assert.Nil(t, err)
-	fe, _, err := s.LoadFileEntry(testFileName, []FileState{stateTest1})
-	assert.Nil(t, err)
+	fileBundle, ok := storeBundle.files[storeBundle.state1]
+	if !ok {
+		log.Fatal("file not found in state1")
+	}
+	fe := fileBundle.entry
+	verify := fileBundle.verify
+	fn := fileBundle.name
 
 	m1 := getMockMetadataOne()
 	b2 := make([]byte, 2)
 
 	// Write metadata
-	updated, err := fe.WriteMetadata(dummyVerify, m1, []byte{uint8(0), uint8(1)})
-	assert.Nil(t, err)
-	assert.True(t, updated)
+	updated, err := fe.WriteMetadata(verify, m1, []byte{uint8(0), uint8(1)})
+	require.NoError(err)
+	require.True(updated)
 
 	// Reload
-	NewLocalFileStore(&ShardedFileEntryInternalFactory{}, &LocalFileEntryFactory{})
-	s.GetFileStat(testFileName, []FileState{stateTest1})
-	fe, _, _ = s.LoadFileEntry(testFileName, []FileState{stateTest1})
+	_, err = NewLocalFileStoreDefault()
+	require.NoError(err)
+	store.GetFileStat(fn, []FileState{storeBundle.state1})
+	fe, _, _ = store.LoadFileEntry(fn, []FileState{storeBundle.state1})
 
 	// Read metadata
-	b2, err = fe.ReadMetadata(dummyVerify, m1)
-	assert.Nil(t, err)
-	assert.NotNil(t, b2)
-	assert.Equal(t, uint8(0), b2[0])
-	assert.Equal(t, uint8(1), b2[1])
+	b2, err = fe.ReadMetadata(verify, m1)
+	require.NoError(err)
+	require.NotNil(b2)
+	require.Equal(uint8(0), b2[0])
+	require.Equal(uint8(1), b2[1])
 
 	// Invalid read metadata
-	b2, err = fe.ReadMetadata(dummyVerify, getMockMetadataTwo())
-	assert.True(t, os.IsNotExist(err))
+	b2, err = fe.ReadMetadata(verify, getMockMetadataTwo())
+	require.True(os.IsNotExist(err))
 
 	// Write metadata
-	updated, err = fe.WriteMetadata(dummyVerify, m1, []byte{uint8(1), uint8(1)})
-	assert.Nil(t, err)
-	assert.True(t, updated)
-	b2, err = fe.ReadMetadata(dummyVerify, m1)
-	assert.Nil(t, err)
-	assert.NotNil(t, b2)
+	updated, err = fe.WriteMetadata(verify, m1, []byte{uint8(1), uint8(1)})
+	require.NoError(err)
+	require.True(updated)
+	b2, err = fe.ReadMetadata(verify, m1)
+	require.NoError(err)
+	require.NotNil(b2)
 
 	// Read metadata from disk directly
-	fp, _ := fe.GetPath(dummyVerify)
+	fp, _ := fe.GetPath(verify)
 	content, err := ioutil.ReadFile(fp + getMockMetadataOne().GetSuffix())
-	assert.Nil(t, err)
-	assert.Equal(t, uint8(1), content[0])
-	assert.Equal(t, uint8(1), content[1])
+	require.NoError(err)
+	require.Equal(uint8(1), content[0])
+	require.Equal(uint8(1), content[1])
 }
 
 func TestMove(t *testing.T) {
-	s, cleanup := getTestFileStore()
+	require := require.New(t)
+	storeBundle, cleanup := fileStoreDefaultFixture()
 	defer cleanup()
+	store := storeBundle.store.(*LocalFileStore)
 
-	err := s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
-	assert.Nil(t, err)
-	fe, _, err := s.LoadFileEntry(testFileName, []FileState{stateTest1})
-	assert.Nil(t, err)
+	fileBundle, ok := storeBundle.files[storeBundle.state1]
+	if !ok {
+		log.Fatal("file not found in state1")
+	}
+	fe := fileBundle.entry
+	verify := fileBundle.verify
+	fn := fileBundle.name
 
 	m1 := getMockMetadataOne()
 	b1 := make([]byte, 2)
@@ -186,89 +214,92 @@ func TestMove(t *testing.T) {
 	b2 := make([]byte, 1)
 
 	// Write metadata
-	updated, err := fe.WriteMetadata(dummyVerify, m1, []byte{uint8(0), uint8(1)})
-	assert.Nil(t, err)
-	assert.True(t, updated)
-	updated, err = fe.WriteMetadata(dummyVerify, m2, []byte{uint8(3)})
-	assert.Nil(t, err)
-	assert.True(t, updated)
+	updated, err := fe.WriteMetadata(verify, m1, []byte{uint8(0), uint8(1)})
+	require.NoError(err)
+	require.True(updated)
+	updated, err = fe.WriteMetadata(verify, m2, []byte{uint8(3)})
+	require.NoError(err)
+	require.True(updated)
 
 	// Read metadata
-	b1, err = fe.ReadMetadata(dummyVerify, m1)
-	assert.Nil(t, err)
-	assert.NotNil(t, b1)
-	assert.Equal(t, uint8(0), b1[0])
-	assert.Equal(t, uint8(1), b1[1])
-	b2, err = fe.ReadMetadata(dummyVerify, m2)
-	assert.Nil(t, err)
-	assert.NotNil(t, b2)
-	assert.Equal(t, uint8(3), b2[0])
+	b1, err = fe.ReadMetadata(verify, m1)
+	require.NoError(err)
+	require.NotNil(b1)
+	require.Equal(uint8(0), b1[0])
+	require.Equal(uint8(1), b1[1])
+	b2, err = fe.ReadMetadata(verify, m2)
+	require.NoError(err)
+	require.NotNil(b2)
+	require.Equal(uint8(3), b2[0])
 
 	// Move file, removes non-movable metadata.
-	err = s.MoveFile(testFileName, []FileState{stateTest1}, stateTest3)
-	assert.Nil(t, err)
-	fe, _, _ = s.LoadFileEntry(testFileName, []FileState{stateTest3})
+	err = store.MoveFile(fn, []FileState{storeBundle.state1}, storeBundle.state3)
+	require.NoError(err)
+	fe, _, _ = store.LoadFileEntry(fn, []FileState{storeBundle.state3})
 
 	// Verify metadata is gone
-	_, err = fe.ReadMetadata(dummyVerify, m1)
-	assert.NotNil(t, err)
-	assert.True(t, os.IsNotExist(err))
+	_, err = fe.ReadMetadata(verify, m1)
+	require.NotNil(err)
+	require.True(os.IsNotExist(err))
 
 	// Verify metadataMovable still exists
-	b2Moved, err := fe.ReadMetadata(dummyVerify, m2)
-	assert.Nil(t, err)
-	assert.NotNil(t, b2Moved)
-	assert.Equal(t, uint8(3), b2Moved[0])
+	b2Moved, err := fe.ReadMetadata(verify, m2)
+	require.NoError(err)
+	require.NotNil(b2Moved)
+	require.Equal(uint8(3), b2Moved[0])
 
-	// Verify file location
-	_, err = os.Stat(path.Join(stateTest1.GetDirectory(),
-		getShardedRelativePath(testFileName+getMockMetadataOne().GetSuffix())))
-	assert.NotNil(t, err)
-	assert.True(t, os.IsNotExist(err))
-	_, err = os.Stat(path.Join(stateTest2.GetDirectory(),
-		getShardedRelativePath(testFileName+getMockMetadataOne().GetSuffix())))
-	assert.NotNil(t, err)
-	assert.True(t, os.IsNotExist(err))
-	_, err = os.Stat(path.Join(stateTest3.GetDirectory(),
-		getShardedRelativePath(testFileName+getMockMetadataOne().GetSuffix())))
-	assert.NotNil(t, err)
-	assert.True(t, os.IsNotExist(err))
-	_, err = os.Stat(path.Join(stateTest3.GetDirectory(),
-		getShardedRelativePath(testFileName)))
-	assert.Nil(t, err)
-	_, err = os.Stat(path.Join(stateTest1.GetDirectory(),
-		getShardedRelativePath(testFileName+getMockMetadataMovable().GetSuffix())))
-	assert.NotNil(t, err)
-	assert.True(t, os.IsNotExist(err))
-	_, err = os.Stat(path.Join(stateTest2.GetDirectory(),
-		getShardedRelativePath(testFileName+getMockMetadataMovable().GetSuffix())))
-	assert.NotNil(t, err)
-	assert.True(t, os.IsNotExist(err))
-	_, err = os.Stat(path.Join(stateTest3.GetDirectory(),
-		getShardedRelativePath(testFileName+getMockMetadataMovable().GetSuffix())))
-	assert.Nil(t, err)
+	// Not movable metadata should get deleted after move
+	// it should not exist anywhere
+	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn+getMockMetadataOne().GetSuffix()))
+	require.NotNil(err)
+	require.True(os.IsNotExist(err))
+	_, err = os.Stat(path.Join(storeBundle.state2.GetDirectory(), fn+getMockMetadataOne().GetSuffix()))
+	require.NotNil(err)
+	require.True(os.IsNotExist(err))
+	_, err = os.Stat(path.Join(storeBundle.state3.GetDirectory(), fn+getMockMetadataOne().GetSuffix()))
+	require.NotNil(err)
+	require.True(os.IsNotExist(err))
+
+	// Movable metadata will be moved along with the file entry
+	_, err = os.Stat(path.Join(storeBundle.state3.GetDirectory(), fn))
+	require.Nil(err)
+	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn+getMockMetadataMovable().GetSuffix()))
+	require.NotNil(err)
+	require.True(os.IsNotExist(err))
+	_, err = os.Stat(path.Join(storeBundle.state2.GetDirectory(), fn+getMockMetadataMovable().GetSuffix()))
+	require.NotNil(err)
+	require.True(os.IsNotExist(err))
+	_, err = os.Stat(path.Join(storeBundle.state3.GetDirectory(), fn+getMockMetadataMovable().GetSuffix()))
+	require.NoError(err)
 }
 
 func TestDelete(t *testing.T) {
-	fe, cleanup := getTestFileEntry()
+	require := require.New(t)
+	storeBundle, cleanup := fileStoreDefaultFixture()
 	defer cleanup()
+
+	fileBundle, ok := storeBundle.files[storeBundle.state1]
+	if !ok {
+		log.Fatal("file not found in state1")
+	}
+	fe := fileBundle.entry
+	verify := fileBundle.verify
+	fn := fileBundle.name
 
 	m1 := getMockMetadataOne()
 
 	// Write metadata
-	updated, err := fe.WriteMetadata(dummyVerify, m1, []byte{uint8(0), uint8(0)})
-	assert.Nil(t, err)
-	assert.True(t, updated)
-	_, e := fe.ReadMetadata(dummyVerify, m1)
-	assert.Nil(t, e)
+	updated, err := fe.WriteMetadata(verify, m1, []byte{uint8(0), uint8(0)})
+	require.NoError(err)
+	require.True(updated)
+	_, e := fe.ReadMetadata(verify, m1)
+	require.NoError(e)
 
-	// Delete
-	_, err = os.Stat(path.Join(stateTest1.GetDirectory(),
-		getShardedRelativePath(testFileName+getMockMetadataOne().GetSuffix())))
-	assert.Nil(t, err)
-	err = fe.DeleteMetadata(dummyVerify, m1)
-	assert.Nil(t, err)
-	_, err = os.Stat(path.Join(stateTest1.GetDirectory(),
-		getShardedRelativePath(testFileName+getMockMetadataOne().GetSuffix())))
-	assert.NotNil(t, err)
+	// Stat metadatafile before and after deletion to ensure that it is deleted
+	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn+getMockMetadataOne().GetSuffix()))
+	require.NoError(err)
+	err = fe.DeleteMetadata(verify, m1)
+	require.NoError(err)
+	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn+getMockMetadataOne().GetSuffix()))
+	require.NotNil(err)
 }

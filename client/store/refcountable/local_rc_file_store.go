@@ -9,19 +9,23 @@ type LocalRCFileStore struct {
 
 // NewLocalRCFileStore initializes and returns a new RCFileStore object.
 // It allows dependency injection.
-func NewLocalRCFileStore(internalFactory base.FileEntryInternalFactory, factory base.FileEntryFactory) RCFileStore {
-	return &LocalRCFileStore{
-		LocalFileStore: base.NewLocalFileStore(internalFactory, factory).(*base.LocalFileStore),
+func NewLocalRCFileStore(fileEntryInternalFactory base.FileEntryInternalFactory, fileEntryFactory base.FileEntryFactory, fileMapFactory base.FileMapFactory) (RCFileStore, error) {
+	store, err := base.NewLocalFileStore(fileEntryInternalFactory, fileEntryFactory, fileMapFactory)
+	if err != nil {
+		return nil, err
 	}
+	return &LocalRCFileStore{
+		LocalFileStore: store.(*base.LocalFileStore),
+	}, nil
 }
 
 // NewLocalRCFileStoreDefault initializes and returns a new RCFileStore object.
-func NewLocalRCFileStoreDefault() RCFileStore {
-	return &LocalRCFileStore{
-		LocalFileStore: base.NewLocalFileStore(
-			&LocalRCFileEntryInternalFactory{},
-			&LocalRCFileEntryFactory{}).(*base.LocalFileStore),
+func NewLocalRCFileStoreDefault() (RCFileStore, error) {
+	store, err := NewLocalRCFileStore(&LocalRCFileEntryInternalFactory{}, &LocalRCFileEntryFactory{}, &base.DefaultFileMapFactory{})
+	if err != nil {
+		return nil, err
 	}
+	return store, nil
 }
 
 // IncrementFileRefCount increments file ref count. Ref count is stored in a metadata file on local disk.

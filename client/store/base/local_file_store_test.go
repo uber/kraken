@@ -2,33 +2,71 @@ package base
 
 import (
 	"io/ioutil"
+	"log"
 	"os"
 	"path"
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestCreateEmptyFile(t *testing.T) {
-	// Setup
-	s, cleanup := getTestFileStore()
-	defer cleanup()
+// These tests should pass for all FileStore implementations
+func TestLocalFileStore(t *testing.T) {
+	stores := []struct {
+		name    string
+		fixture func() (storeBundle *fileStoreTestBundle, cleanup func())
+	}{
+		{"Test LocalFileStoreDefault", fileStoreDefaultFixture},
+		{"Test LocalFileStoreSharded", fileStoreShardDefaultFixture},
+		{"Test LocalFileStoreLRU", func() (storeBundle *fileStoreTestBundle, cleanup func()) { return fileStoreLRUFixture(2) }},
+	}
 
-	// Create empty file
-	err := s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
-	assert.Nil(t, err)
-	_, err = os.Stat(path.Join(stateTest1.GetDirectory(), testFileName[0:2], testFileName[2:4], testFileName))
-	assert.False(t, os.IsNotExist(err))
+	tests := []struct {
+		name string
+		f    func(require *require.Assertions, storeBundle *fileStoreTestBundle)
+	}{
+		{"Test CreateFile", testCreateFile},
+		{"Test GetFileReaderWriter", testGetFileReadWriter},
+		{"Test MoveFile", testMoveFile},
+		{"Test DeleteFile", testDeleteFile},
+	}
+
+	for _, store := range stores {
+		t.Run(store.name, func(t *testing.T) {
+			t.Parallel()
+			for _, test := range tests {
+				t.Run(test.name, func(t *testing.T) {
+					t.Parallel()
+					require := require.New(t)
+					s, cleanup := store.fixture()
+					defer cleanup()
+					test.f(require, s)
+				})
+			}
+		})
+	}
 }
 
-func TestGetFileReadWriter(t *testing.T) {
-	// Setup
-	s, cleanup := getTestFileStore()
-	defer cleanup()
+func testCreateFile(require *require.Assertions, storeBundle *fileStoreTestBundle) {
+	store := storeBundle.store
 
-	err := s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
-	assert.Nil(t, err)
+	fn := "testfile123"
+	// Create empty file
+	err := store.CreateFile(fn, []FileState{}, storeBundle.state1, 5)
+	require.NoError(err)
+	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn))
+	require.False(os.IsNotExist(err))
+}
+
+func testGetFileReadWriter(require *require.Assertions, storeBundle *fileStoreTestBundle) {
+	store := storeBundle.store
+
+	fileBundle, ok := storeBundle.files[storeBundle.state1]
+	if !ok {
+		log.Fatal("file not found in state1")
+	}
+	fn := fileBundle.name
 
 	// Get ReadWriter and modify file concurrently
 	var waitGroup sync.WaitGroup
@@ -36,26 +74,26 @@ func TestGetFileReadWriter(t *testing.T) {
 		waitGroup.Add(1)
 		go func() {
 			defer waitGroup.Done()
-			readWriter, err := s.GetFileReadWriter(testFileName, []FileState{stateTest1})
-			assert.Nil(t, err)
+			readWriter, err := store.GetFileReadWriter(fn, []FileState{storeBundle.state1})
+			require.NoError(err)
 
 			_, err = readWriter.Write([]byte{'t', 'e', 's', 't', '\n'})
-			assert.Nil(t, err)
+			require.NoError(err)
 
 			b := make([]byte, 3)
 			_, err = readWriter.Seek(0, 0)
-			assert.Nil(t, err)
+			require.NoError(err)
 			l, err := readWriter.Read(b)
-			assert.Nil(t, err)
-			assert.Equal(t, l, 3)
-			assert.Equal(t, string(b[:l]), "tes")
+			require.NoError(err)
+			require.Equal(l, 3)
+			require.Equal(string(b[:l]), "tes")
 
 			err = readWriter.Close()
-			assert.Nil(t, err)
+			require.NoError(err)
 
 			// Verify size() still works after readwriter is closed.
 			size := readWriter.Size()
-			assert.Equal(t, size, int64(5))
+			require.Equal(size, int64(5))
 		}()
 	}
 	waitGroup.Wait()
@@ -65,116 +103,142 @@ func TestGetFileReadWriter(t *testing.T) {
 		waitGroup.Add(1)
 		go func() {
 			defer waitGroup.Done()
-			reader, err := s.GetFileReader(testFileName, []FileState{stateTest1})
-			assert.Nil(t, err)
+			reader, err := store.GetFileReader(fn, []FileState{storeBundle.state1})
+			require.NoError(err)
 
 			b := make([]byte, 5)
 			_, err = reader.Seek(0, 0)
-			assert.Nil(t, err)
+			require.NoError(err)
 			l, err := reader.ReadAt(b, 0)
-			assert.Nil(t, err)
-			assert.Equal(t, l, 5)
-			assert.Equal(t, string(b[:l]), "test\n")
+			require.NoError(err)
+			require.Equal(l, 5)
+			require.Equal(string(b[:l]), "test\n")
 
 			err = reader.Close()
-			assert.Nil(t, err)
+			require.NoError(err)
 		}()
 	}
 	waitGroup.Wait()
 
-	reader, err := s.GetFileReader(testFileName, []FileState{stateTest1})
+	reader, err := store.GetFileReader(fn, []FileState{storeBundle.state1})
+	require.NoError(err)
 	reader.Close()
 }
 
-func TestMoveFile(t *testing.T) {
-	// Setup
-	s, cleanup := getTestFileStore()
-	defer cleanup()
+func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle) {
+	store := storeBundle.store.(*LocalFileStore)
 
-	err := s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
-	assert.Nil(t, err)
+	fileBundle, ok := storeBundle.files[storeBundle.state1]
+	if !ok {
+		log.Fatal("file not found in state1")
+	}
+	fn := fileBundle.name
 
 	// Move file to stateTest2
-	err = s.MoveFile(testFileName, []FileState{stateTest1}, stateTest2)
-	assert.Nil(t, err)
+	err := store.MoveFile(fn, []FileState{storeBundle.state1}, storeBundle.state2)
+	require.NoError(err)
 
 	// Update content
-	readWriterState2, err := s.GetFileReadWriter(testFileName, []FileState{stateTest2})
-	assert.Nil(t, err)
+	readWriterState2, err := store.GetFileReadWriter(fn, []FileState{storeBundle.state2})
+	require.NoError(err)
 	_, err = readWriterState2.Write([]byte{'t', 'e', 's', 't', '\n'})
-	assert.Nil(t, err)
+	require.NoError(err)
 	readWriterState2.Close()
-	readWriterState2, err = s.GetFileReadWriter(testFileName, []FileState{stateTest2})
-	assert.Nil(t, err)
+	readWriterState2, err = store.GetFileReadWriter(fn, []FileState{storeBundle.state2})
+	require.NoError(err)
 
 	// Move back to stateTest1
-	err = s.MoveFile(testFileName, []FileState{stateTest2}, stateTest1)
-	assert.Nil(t, err)
+	err = store.MoveFile(fn, []FileState{storeBundle.state2}, storeBundle.state1)
+	require.NoError(err)
 
 	// Created hardlink in both stateTest1
-	_, err = os.Stat(path.Join(testDir1, testFileName[0:2], testFileName[2:4], testFileName))
-	assert.Nil(t, err)
+	_, err = os.Stat(path.Join(storeBundle.state1.dir, fn))
+	require.NoError(err)
 	// the old file does not exist but still read/writable
-	_, err = os.Stat(path.Join(testDir2, testFileName[0:2], testFileName[2:4], testFileName))
-	assert.True(t, os.IsNotExist(err))
+	_, err = os.Stat(path.Join(storeBundle.state2.dir, fn))
+	require.True(os.IsNotExist(err))
 	// Check state
-	f, _, _ := s.LoadFileEntry(testFileName, []FileState{stateTest1})
-	assert.Equal(t, f.(*LocalFileEntry).state, stateTest1)
+	f, _, _ := store.LoadFileEntry(fn, []FileState{storeBundle.state1})
+	require.Equal(f.(*LocalFileEntry).state, storeBundle.state1)
 	// Create new readWriter at new state
-	readWriterState1, err := s.GetFileReadWriter(testFileName, []FileState{stateTest1})
-	assert.Nil(t, err)
+	readWriterState1, err := store.GetFileReadWriter(fn, []FileState{storeBundle.state1})
+	require.NoError(err)
 	// Check content
 	dataState1, err := ioutil.ReadAll(readWriterState1)
-	assert.Nil(t, err)
+	require.NoError(err)
 	dataState2, err := ioutil.ReadAll(readWriterState2)
-	assert.Nil(t, err)
-	assert.Equal(t, dataState1, dataState2)
-	assert.Equal(t, []byte{'t', 'e', 's', 't', '\n'}, dataState1)
+	require.NoError(err)
+	require.Equal(dataState1, dataState2)
+	require.Equal([]byte{'t', 'e', 's', 't', '\n'}, dataState1)
 	// Write with old readWriter
 	_, err = readWriterState1.WriteAt([]byte{'1'}, 0)
-	assert.Nil(t, err)
+	require.NoError(err)
 	// Check content again
 	readWriterState1.Seek(0, 0)
 	readWriterState2.Seek(0, 0)
 	dataState1, err = ioutil.ReadAll(readWriterState1)
-	assert.Nil(t, err)
+	require.NoError(err)
 	dataState2, err = ioutil.ReadAll(readWriterState2)
-	assert.Nil(t, err)
-	assert.Equal(t, dataState1, dataState2)
-	assert.Equal(t, []byte{'1', 'e', 's', 't', '\n'}, dataState1)
+	require.NoError(err)
+	require.Equal(dataState1, dataState2)
+	require.Equal([]byte{'1', 'e', 's', 't', '\n'}, dataState1)
 	// Close on last opened readwriter removes hardlink
 	readWriterState2.Close()
-	_, err = os.Stat(path.Join(testDir2, testFileName[0:2], testFileName[2:4], testFileName))
-	assert.True(t, os.IsNotExist(err))
+	_, err = os.Stat(path.Join(storeBundle.state2.dir, fn))
+	require.True(os.IsNotExist(err))
 	readWriterState1.Close()
-	_, err = os.Stat(path.Join(testDir1, testFileName[0:2], testFileName[2:4], testFileName))
-	assert.Nil(t, err)
+	_, err = os.Stat(path.Join(storeBundle.state1.dir, fn))
+	require.NoError(err)
 	// Check content again
-	readWriterStateMoved, err := s.GetFileReadWriter(testFileName, []FileState{stateTest1})
-	assert.Nil(t, err)
+	readWriterStateMoved, err := store.GetFileReadWriter(fn, []FileState{storeBundle.state1})
+	require.NoError(err)
 	dataMoved, err := ioutil.ReadAll(readWriterStateMoved)
-	assert.Nil(t, err)
-	assert.Equal(t, []byte{'1', 'e', 's', 't', '\n'}, dataMoved)
+	require.NoError(err)
+	require.Equal([]byte{'1', 'e', 's', 't', '\n'}, dataMoved)
 	readWriterStateMoved.Close()
 
 	// Move to stateTest2 again
-	err = s.MoveFile(testFileName, []FileState{stateTest1}, stateTest2)
-	assert.Nil(t, err)
-	f, _, _ = s.LoadFileEntry(testFileName, []FileState{stateTest2})
-	assert.Equal(t, f.(*LocalFileEntry).state, stateTest2)
+	err = store.MoveFile(fn, []FileState{storeBundle.state1}, storeBundle.state2)
+	require.NoError(err)
+	f, _, _ = store.LoadFileEntry(fn, []FileState{storeBundle.state2})
+	require.Equal(f.(*LocalFileEntry).state, storeBundle.state2)
 }
 
-func TestDeleteFile(t *testing.T) {
-	// Setup
-	s, cleanup := getTestFileStore()
-	defer cleanup()
+func testDeleteFile(require *require.Assertions, storeBundle *fileStoreTestBundle) {
+	store := storeBundle.store
+	fileBundle, ok := storeBundle.files[storeBundle.state1]
+	if !ok {
+		log.Fatal("file not found in state1")
+	}
+	fn := fileBundle.name
+	content := "this a test for read after delete"
 
-	err := s.CreateFile(testFileName, []FileState{}, stateTest1, 5)
-	assert.Nil(t, err)
+	// Write to file
+	rw, err := store.GetFileReadWriter(fn, []FileState{storeBundle.state1})
+	require.NoError(err)
+	rw.Write([]byte(content))
 
-	// Test deleting file.
-	err = s.DeleteFile(testFileName, []FileState{stateTest1})
-	assert.Equal(t, err, nil)
-	_, err = os.Stat(path.Join(testDir1, testFileName[0:2], testFileName[2:4], testFileName))
-	assert.True(t, os.IsNotExist(err))
+	// Confirm deletion
+	err = store.DeleteFile(fn, []FileState{storeBundle.state1})
+	require.NoError(err)
+	_, err = os.Stat(path.Join(storeBundle.state1.dir, fn))
+	require.True(os.IsNotExist(err))
+
+	// Existing readwriter should still work after deletion
+	rw.Seek(0, 0)
+	data, err := ioutil.ReadAll(rw)
+	require.NoError(err)
+	require.Equal(content, string(data))
+
+	rw.Write([]byte(content))
+	rw.Seek(0, 0)
+	data, err = ioutil.ReadAll(rw)
+	require.NoError(err)
+	require.Equal(content+content, string(data))
+
+	rw.Close()
+
+	// Get deleted file should fail
+	_, err = store.GetFileReader(fn, []FileState{storeBundle.state1})
+	require.True(os.IsNotExist(err))
 }
