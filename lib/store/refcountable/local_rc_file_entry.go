@@ -1,6 +1,6 @@
 package refcountable
 
-import "code.uber.internal/infra/kraken/client/store/base"
+import "code.uber.internal/infra/kraken/lib/store/base"
 
 // LocalRCFileEntryFactory is responsible for initializing LocalRCFileEntry objects.
 type LocalRCFileEntryFactory struct {

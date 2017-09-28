@@ -10,9 +10,9 @@ import (
 	docker "github.com/docker/distribution/registry"
 
 	"code.uber.internal/infra/kraken/client/peercontext"
-	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrent"
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/metrics"
 )
 

@@ -1,6 +1,6 @@
 package storage
 
-import "code.uber.internal/infra/kraken/client/store"
+import "code.uber.internal/infra/kraken/lib/store"
 
 // TorrentArchiveFixture creates a new TorrentArchive and returns the archive with a cleanup function
 func TorrentArchiveFixture() (TorrentArchive, func()) {

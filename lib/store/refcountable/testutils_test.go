@@ -3,7 +3,7 @@ package refcountable
 import (
 	"os"
 
-	"code.uber.internal/infra/kraken/client/store/base"
+	"code.uber.internal/infra/kraken/lib/store/base"
 )
 
 // Mock state

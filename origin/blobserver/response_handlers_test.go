@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/store"
 
 	"code.uber.internal/infra/kraken/mocks/origin/client"
 	"code.uber.internal/infra/kraken/origin/client"

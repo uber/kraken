@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrent"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils"
 
 	"github.com/uber-common/bark"

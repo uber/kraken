@@ -11,7 +11,7 @@ import (
 
 	"github.com/pressly/chi"
 
-	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/testutils"
 )
 

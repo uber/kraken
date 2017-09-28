@@ -4,8 +4,8 @@ import (
 	"hash"
 	"net/http"
 
-	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/lib/hrw"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/client"
 	hashcfg "code.uber.internal/infra/kraken/origin/config"
 

@@ -3,7 +3,7 @@ package store
 import (
 	"regexp"
 
-	"code.uber.internal/infra/kraken/client/store/base"
+	"code.uber.internal/infra/kraken/lib/store/base"
 )
 
 const torrentMetaSuffix = "_torrentmeta"

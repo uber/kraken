@@ -5,8 +5,8 @@ import (
 	"io/ioutil"
 
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/client/torrent"
+	"code.uber.internal/infra/kraken/lib/store"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 )
 

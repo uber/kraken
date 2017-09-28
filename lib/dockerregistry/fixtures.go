@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/lib/store"
 	"github.com/uber-go/tally"
 )
 

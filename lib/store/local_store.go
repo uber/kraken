@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken/client/store/base"
-	"code.uber.internal/infra/kraken/client/store/refcountable"
+	"code.uber.internal/infra/kraken/lib/store/base"
+	"code.uber.internal/infra/kraken/lib/store/refcountable"
 
 	"github.com/docker/distribution/uuid"
 	"github.com/robfig/cron"

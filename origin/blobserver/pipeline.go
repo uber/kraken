@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/lib/hrw"
+	"code.uber.internal/infra/kraken/lib/store"
 	hashcfg "code.uber.internal/infra/kraken/origin/config"
 
 	"code.uber.internal/go-common.git/x/log"

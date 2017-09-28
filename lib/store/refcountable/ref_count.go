@@ -3,7 +3,7 @@ package refcountable
 import (
 	"regexp"
 
-	"code.uber.internal/infra/kraken/client/store/base"
+	"code.uber.internal/infra/kraken/lib/store/base"
 )
 
 func init() {

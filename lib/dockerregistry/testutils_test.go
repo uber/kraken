@@ -9,8 +9,8 @@ import (
 
 	"github.com/uber-go/tally"
 
-	"code.uber.internal/infra/kraken/client/store"
-	"code.uber.internal/infra/kraken/client/store/base"
+	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/base"
 	"code.uber.internal/infra/kraken/utils"
 )
 
