@@ -5,8 +5,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-
-	"golang.org/x/sync/syncmap"
 )
 
 // LocalFileStore manages all agent files on local disk.
@@ -39,8 +37,8 @@ func NewLocalFileStoreDefault() (FileStore, error) {
 	return NewLocalFileStore(&LocalFileEntryInternalFactory{}, &LocalFileEntryFactory{}, &DefaultFileMapFactory{})
 }
 
-// NewLocalFileStoreLRU initializes a LRU FileStore
-func NewLocalFileStoreLRU(size int) (FileStore, error) {
+// NewLocalFileStoreWithLRU initializes a LRU FileStore
+func NewLocalFileStoreWithLRU(size int) (FileStore, error) {
 	return NewLocalFileStore(&LocalFileEntryInternalFactory{}, &LocalFileEntryFactory{}, &LRUFileMapFactory{size})
 }
 
@@ -48,11 +46,7 @@ func NewLocalFileStoreLRU(size int) (FileStore, error) {
 // It uses the first few bytes of file digest (which is also used as file name) as shard ID.
 // For every byte, one more level of directories will be created.
 func NewShardedFileStoreDefault() (FileStore, error) {
-	return &LocalFileStore{
-		fileEntryInternalFactory: &ShardedFileEntryInternalFactory{},
-		fileEntryFactory:         &LocalFileEntryFactory{},
-		fileMap:                  &syncmap.Map{},
-	}, nil
+	return NewLocalFileStore(&ShardedFileEntryInternalFactory{}, &LocalFileEntryFactory{}, &DefaultFileMapFactory{})
 }
 
 func (s *LocalFileStore) createFileEntry(fileName string, state FileState) FileEntry {

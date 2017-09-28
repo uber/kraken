@@ -139,7 +139,7 @@ type fileStoreTestBundle struct {
 }
 
 func fileStoreLRUFixture(size int) (*fileStoreTestBundle, func()) {
-	store, err := NewLocalFileStoreLRU(size)
+	store, err := NewLocalFileStoreWithLRU(size)
 	if err != nil {
 		log.Fatal(err)
 	}
