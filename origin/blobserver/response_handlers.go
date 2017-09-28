@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"os"
 
-	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/client"
 	hashcfg "code.uber.internal/infra/kraken/origin/config"
 )

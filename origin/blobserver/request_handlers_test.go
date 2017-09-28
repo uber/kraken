@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/store"
 
 	"github.com/pressly/chi"
 	"github.com/stretchr/testify/assert"

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/client/store"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/torlib"
 
 	"github.com/stretchr/testify/require"

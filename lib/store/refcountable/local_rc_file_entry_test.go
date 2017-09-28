@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"code.uber.internal/infra/kraken/client/store/base"
+	"code.uber.internal/infra/kraken/lib/store/base"
 
 	"github.com/stretchr/testify/assert"
 )

@@ -1,6 +1,6 @@
 package refcountable
 
-import "code.uber.internal/infra/kraken/client/store/base"
+import "code.uber.internal/infra/kraken/lib/store/base"
 
 // RCFileEntryInternal extends base.FileEntryInternal, adds function to manage file ref count.
 type RCFileEntryInternal interface {

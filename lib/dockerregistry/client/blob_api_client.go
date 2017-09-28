@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"os"
 
-	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils"
 	"code.uber.internal/infra/kraken/utils/httputil"
 

@@ -9,8 +9,8 @@ import (
 	"net/http/httputil"
 	"time"
 
-	"code.uber.internal/infra/kraken/client/store"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/store"
 )
 
 const (

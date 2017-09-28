@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"code.uber.internal/infra/kraken/client/store/base"
+	"code.uber.internal/infra/kraken/lib/store/base"
 )
 
 // LocalRCFileEntryInternalFactory initializes LocalFileEntryInternal obj.
