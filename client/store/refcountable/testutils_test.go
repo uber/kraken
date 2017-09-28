@@ -43,8 +43,12 @@ func getTestRCFileEntry() (*LocalRCFileStore, RCFileEntry, error) {
 	}
 
 	// Create empty file
-	backend := NewLocalRCFileStore(&LocalRCFileEntryInternalFactory{}, &LocalRCFileEntryFactory{})
-	err := backend.CreateFile(testFileName, []base.FileState{}, stateTest1, 5)
+	backend, err := NewLocalRCFileStoreDefault()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	err = backend.CreateFile(testFileName, []base.FileState{}, stateTest1, 5)
 	if err != nil {
 		return nil, nil, err
 	}

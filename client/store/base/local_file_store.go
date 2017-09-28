@@ -17,36 +17,42 @@ import (
 type LocalFileStore struct {
 	fileEntryInternalFactory FileEntryInternalFactory // Used for dependency injection.
 	fileEntryFactory         FileEntryFactory         // Used for dependency injection.
-	fileMap                  *syncmap.Map
+	fileMap                  FileMap
 }
 
 // NewLocalFileStore initializes and returns a new FileStore object. It allows dependency injection.
-func NewLocalFileStore(fileEntryInternalFactory FileEntryInternalFactory, fileEntryFactory FileEntryFactory) FileStore {
+// TODO (@evelynl): maybe we should refactor this...
+func NewLocalFileStore(fileEntryInternalFactory FileEntryInternalFactory, fileEntryFactory FileEntryFactory, fileMapFactory FileMapFactory) (FileStore, error) {
+	fileMap, err := fileMapFactory.Create()
+	if err != nil {
+		return nil, err
+	}
 	return &LocalFileStore{
 		fileEntryInternalFactory: fileEntryInternalFactory,
 		fileEntryFactory:         fileEntryFactory,
-		fileMap:                  &syncmap.Map{},
-	}
+		fileMap:                  fileMap,
+	}, nil
 }
 
 // NewLocalFileStoreDefault initializes and returns a new FileStore object.
-func NewLocalFileStoreDefault() FileStore {
-	return &LocalFileStore{
-		fileEntryInternalFactory: &LocalFileEntryInternalFactory{},
-		fileEntryFactory:         &LocalFileEntryFactory{},
-		fileMap:                  &syncmap.Map{},
-	}
+func NewLocalFileStoreDefault() (FileStore, error) {
+	return NewLocalFileStore(&LocalFileEntryInternalFactory{}, &LocalFileEntryFactory{}, &DefaultFileMapFactory{})
+}
+
+// NewLocalFileStoreLRU initializes a LRU FileStore
+func NewLocalFileStoreLRU(size int) (FileStore, error) {
+	return NewLocalFileStore(&LocalFileEntryInternalFactory{}, &LocalFileEntryFactory{}, &LRUFileMapFactory{size})
 }
 
 // NewShardedFileStoreDefault initializes and returns a new FileStore object.
 // It uses the first few bytes of file digest (which is also used as file name) as shard ID.
 // For every byte, one more level of directories will be created.
-func NewShardedFileStoreDefault() FileStore {
+func NewShardedFileStoreDefault() (FileStore, error) {
 	return &LocalFileStore{
 		fileEntryInternalFactory: &ShardedFileEntryInternalFactory{},
 		fileEntryFactory:         &LocalFileEntryFactory{},
 		fileMap:                  &syncmap.Map{},
-	}
+	}, nil
 }
 
 func (s *LocalFileStore) createFileEntry(fileName string, state FileState) FileEntry {

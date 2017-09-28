@@ -48,6 +48,7 @@ import:
   - syncmap
 - package: github.com/golang/protobuf
 - package: github.com/andres-erbsen/clock
+- package: github.com/hashicorp/golang-lru
 testImport:
 - package: github.com/stretchr/testify
   version: ^1.1.4

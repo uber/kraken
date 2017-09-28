@@ -1,38 +1,61 @@
 package base
 
 import (
+	"io/ioutil"
 	"log"
 	"os"
-	"path"
 	"regexp"
 	"strings"
-)
 
-// Mock state
-const (
-	testRoot     = "./.tmp/test/"
-	testDir1     = "./.tmp/test/test1"
-	testDir2     = "./.tmp/test/test2"
-	testDir3     = "./.tmp/test/test3"
-	testFileName = "test_file.txt"
+	"code.uber.internal/infra/kraken/testutils"
 )
-
-type mockFileState int
 
 const (
-	stateTest1 mockFileState = iota
-	stateTest2
-	stateTest3
+	_testFileName = "test_file.txt"
 )
-
-var _mockFileStateLookup = [...]string{testDir1, testDir2, testDir3}
-
-func (state mockFileState) GetDirectory() string { return _mockFileStateLookup[state] }
 
 // Mock metadata
 func init() {
 	RegisterMetadata(regexp.MustCompile("_mocksuffix_\\w+"), &mockMetadataFactory{})
 	RegisterMetadata(regexp.MustCompile("_mocksuffix_movable"), &mockMetadataFactoryMovable{})
+}
+
+type mockFileState struct {
+	dir string
+}
+
+func (state mockFileState) GetDirectory() string { return state.dir }
+
+func fileStatesFixture() (state1, state2, state3 mockFileState, run func()) {
+	cleanup := &testutils.Cleanup{}
+	defer cleanup.Recover()
+
+	root, err := ioutil.TempDir("/tmp", "store")
+	if err != nil {
+		log.Fatal(err)
+	}
+	cleanup.Add(func() { os.RemoveAll(root) })
+
+	state1Dir, err := ioutil.TempDir(root, "state1")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	state2Dir, err := ioutil.TempDir(root, "state2")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	state3Dir, err := ioutil.TempDir(root, "state3")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	state1 = mockFileState{state1Dir}
+	state2 = mockFileState{state2Dir}
+	state3 = mockFileState{state3Dir}
+
+	return state1, state2, state3, cleanup.Run
 }
 
 type mockMetadataFactory struct{}
@@ -98,75 +121,82 @@ func (m mockMetadataMovable) Movable() bool {
 	return true
 }
 
-// Test file entry
-func getTestFileEntry() (FileEntry, func()) {
-	// Setup
-	if _, err := os.Stat(testRoot); os.IsNotExist(err) {
-		os.MkdirAll(testRoot, 0777)
-	}
-	if _, err := os.Stat(testDir1); os.IsNotExist(err) {
-		os.MkdirAll(testDir1, 0777)
-	}
-	if _, err := os.Stat(testDir2); os.IsNotExist(err) {
-		os.MkdirAll(testDir2, 0777)
-	}
-	if _, err := os.Stat(testDir3); os.IsNotExist(err) {
-		os.MkdirAll(testDir3, 0777)
-	}
+type fileEntryTestBundle struct {
+	name   string
+	verify func(entry FileEntry) error
 
-	// Create empty file
-	backend := NewLocalFileStore(&ShardedFileEntryInternalFactory{}, &LocalFileEntryFactory{})
-	if err := backend.CreateFile(testFileName, []FileState{}, stateTest1, 5); err != nil {
-		log.Panic(err)
-	}
-	entry, _, err := backend.(*LocalFileStore).LoadFileEntry(testFileName, []FileState{stateTest1})
+	entry FileEntry
+}
+
+// fileStoreBundle contains available states, FileStore and a map of FileEntry
+type fileStoreTestBundle struct {
+	state1 mockFileState
+	state2 mockFileState
+	state3 mockFileState
+
+	store FileStore
+	files map[mockFileState]*fileEntryTestBundle
+}
+
+func fileStoreLRUFixture(size int) (*fileStoreTestBundle, func()) {
+	store, err := NewLocalFileStoreLRU(size)
 	if err != nil {
-		log.Panic(err)
+		log.Fatal(err)
 	}
-	cleanup := func() {
-		if err := os.RemoveAll(testRoot); err != nil {
-			log.Panic(err)
-		}
-	}
-	return entry.(*LocalFileEntry), cleanup
+
+	return newFileStoreFixture(store)
 }
 
-func dummyVerify(entry FileEntry) error {
-	return nil
+func fileStoreShardDefaultFixture() (*fileStoreTestBundle, func()) {
+	store, err := NewShardedFileStoreDefault()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return newFileStoreFixture(store)
 }
 
-// Test file store
-func getTestFileStore() (*LocalFileStore, func()) {
-	// Setup
-	if _, err := os.Stat(testRoot); os.IsNotExist(err) {
-		os.MkdirAll(testRoot, 0777)
-	}
-	if _, err := os.Stat(testDir1); os.IsNotExist(err) {
-		os.MkdirAll(testDir1, 0777)
-	}
-	if _, err := os.Stat(testDir2); os.IsNotExist(err) {
-		os.MkdirAll(testDir2, 0777)
-	}
-	if _, err := os.Stat(testDir3); os.IsNotExist(err) {
-		os.MkdirAll(testDir3, 0777)
+func fileStoreDefaultFixture() (*fileStoreTestBundle, func()) {
+	store, err := NewLocalFileStoreDefault()
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	// Create empty file
-	backend := NewLocalFileStore(&ShardedFileEntryInternalFactory{}, &LocalFileEntryFactory{})
-
-	cleanup := func() {
-		os.RemoveAll(testRoot)
-	}
-	return backend.(*LocalFileStore), cleanup
+	return newFileStoreFixture(store)
 }
 
-func getShardedRelativePath(name string) string {
-	filePath := ""
-	for i := 0; i < DefaultShardIDLength && i < len(name)/2; i++ {
-		// (1 byte = 2 char of file name assumming file name is in HEX)
-		dirName := name[i*2 : i*2+2]
-		filePath = path.Join(filePath, dirName)
+func newFileStoreFixture(store FileStore) (*fileStoreTestBundle, func()) {
+	cleanup := &testutils.Cleanup{}
+	defer cleanup.Recover()
+
+	state1, state2, state3, f := fileStatesFixture()
+	cleanup.Add(f)
+
+	storeBundle := &fileStoreTestBundle{
+		state1: state1,
+		state2: state2,
+		state3: state3,
+		store:  store,
+		files:  make(map[mockFileState]*fileEntryTestBundle),
 	}
 
-	return path.Join(filePath, name)
+	// Create one test file in store
+	err := storeBundle.store.CreateFile(_testFileName, []FileState{}, storeBundle.state1, 5)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	entry, _, err := storeBundle.store.(*LocalFileStore).LoadFileEntry(_testFileName, []FileState{storeBundle.state1})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fileBundle := &fileEntryTestBundle{
+		name:   _testFileName,
+		verify: func(FileEntry) error { return nil },
+		entry:  entry,
+	}
+	storeBundle.files[storeBundle.state1] = fileBundle
+
+	return storeBundle, cleanup.Run
 }
