@@ -12,16 +12,16 @@ import (
 )
 
 // LocalTorrent implements Torrent
-// Treat this as a wrapper on top of store.LocalStore
+// Treat this as a wrapper on top of store.FileStore
 // It allows simultaneous read/write to different (or same, only for read) locations in the file
 // TODO (@evelynl): add in-memory bookkeeping for file metadata in storage
 type LocalTorrent struct {
 	metaInfo *torlib.MetaInfo
-	store    *store.LocalStore
+	store    store.FileStore
 }
 
 // NewLocalTorrent creates a new LocalTorrent
-func NewLocalTorrent(store *store.LocalStore, mi *torlib.MetaInfo) Torrent {
+func NewLocalTorrent(store store.FileStore, mi *torlib.MetaInfo) Torrent {
 	return &LocalTorrent{
 		store:    store,
 		metaInfo: mi,

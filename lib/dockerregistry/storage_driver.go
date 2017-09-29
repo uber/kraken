@@ -74,7 +74,7 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 	if !ok || storeParam == nil {
 		log.Fatal("Failed to create storage driver. No file store initiated.")
 	}
-	store := storeParam.(*store.LocalStore)
+	store := storeParam.(store.FileStore)
 
 	clientParam, ok := params["torrentclient"]
 	if !ok || clientParam == nil {
@@ -100,7 +100,7 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 type KrakenStorageDriver struct {
 	config  *Config
 	tcl     torrent.Client
-	store   *store.LocalStore
+	store   store.FileStore
 	blobs   *Blobs
 	uploads *Uploads
 	tags    Tags
@@ -110,7 +110,7 @@ type KrakenStorageDriver struct {
 // NewKrakenStorageDriver creates a new KrakenStorageDriver given Manager
 func NewKrakenStorageDriver(
 	c *Config,
-	s *store.LocalStore,
+	s store.FileStore,
 	cl torrent.Client,
 	metrics tally.Scope) (*KrakenStorageDriver, error) {
 	tags, err := NewDockerTags(c, s, cl, metrics)

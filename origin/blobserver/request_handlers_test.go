@@ -102,7 +102,7 @@ func TestParseDigestFromQueryHandlerEmpty(t *testing.T) {
 func TestEnsureDigestNotExistsHandlerValid(t *testing.T) {
 	require := require.New(t)
 
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
 	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", image.DigestEmptyTar)
@@ -120,7 +120,7 @@ func TestEnsureDigestNotExistsHandlerValid(t *testing.T) {
 func TestEnsureDigestNotExistsHandlerConflict(t *testing.T) {
 	require := require.New(t)
 
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 	localStore.CreateDownloadFile(emptyDigestHex, 0)
 	localStore.MoveDownloadFileToCache(emptyDigestHex)
@@ -261,7 +261,7 @@ func TestParseContentRangeHandlerEmpty(t *testing.T) {
 func TestCreateUploadHandler(t *testing.T) {
 	require := require.New(t)
 
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
 	url := fmt.Sprintf("localhost:8080/blob/uploads?digest=%s", image.DigestEmptyTar)
@@ -283,7 +283,7 @@ func TestCreateUploadHandler(t *testing.T) {
 func TestUploadBlobChunkHandler(t *testing.T) {
 	require := require.New(t)
 
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 
@@ -355,7 +355,7 @@ func TestUploadBlobChunkHandler(t *testing.T) {
 func TestCommitUploadHandlerValid(t *testing.T) {
 	require := require.New(t)
 
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
@@ -383,7 +383,7 @@ func TestCommitUploadHandlerValid(t *testing.T) {
 func TestCommitUploadHandlerInvalidDigest(t *testing.T) {
 	require := require.New(t)
 
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
@@ -409,7 +409,7 @@ func TestCommitUploadHandlerInvalidDigest(t *testing.T) {
 func TestDeleteBlobHandlerValid(t *testing.T) {
 	require := require.New(t)
 
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
@@ -433,7 +433,7 @@ func TestRedirectByDigestHandlerValid(t *testing.T) {
 	require := require.New(t)
 
 	// Initialize store
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)

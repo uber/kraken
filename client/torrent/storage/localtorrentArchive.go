@@ -11,11 +11,11 @@ var _ TorrentArchive = (*LocalTorrentArchive)(nil)
 
 // LocalTorrentArchive implements TorrentArchive
 type LocalTorrentArchive struct {
-	store *store.LocalStore
+	store store.FileStore
 }
 
 // NewLocalTorrentArchive creates a new LocalTorrentArchive
-func NewLocalTorrentArchive(store *store.LocalStore) TorrentArchive {
+func NewLocalTorrentArchive(store store.FileStore) TorrentArchive {
 	return &LocalTorrentArchive{
 		store: store,
 	}

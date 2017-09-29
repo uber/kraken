@@ -72,7 +72,7 @@ func ensureDigestExistsHandler(ctx context.Context, request *http.Request) (cont
 			http.StatusInternalServerError,
 			"Digest not set")
 	}
-	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
+	localStore, ok := ctx.Value(ctxKeyLocalStore).(store.FileStore)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
@@ -100,7 +100,7 @@ func ensureDigestNotExistsHandler(ctx context.Context, request *http.Request) (c
 			http.StatusInternalServerError,
 			"Digest not set")
 	}
-	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
+	localStore, ok := ctx.Value(ctxKeyLocalStore).(store.FileStore)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
@@ -171,7 +171,7 @@ func createUploadHandler(ctx context.Context, request *http.Request) (context.Co
 			http.StatusInternalServerError,
 			"Digest not set")
 	}
-	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
+	localStore, ok := ctx.Value(ctxKeyLocalStore).(store.FileStore)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError,
@@ -204,7 +204,7 @@ func uploadBlobChunkHandler(ctx context.Context, request *http.Request) (context
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "EndByte not set")
 	}
-	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
+	localStore, ok := ctx.Value(ctxKeyLocalStore).(store.FileStore)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "LocalStore not set")
@@ -259,7 +259,7 @@ func commitUploadHandler(ctx context.Context, request *http.Request) (context.Co
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "uploadUUID not set")
 	}
-	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
+	localStore, ok := ctx.Value(ctxKeyLocalStore).(store.FileStore)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "LocalStore not set")
@@ -299,7 +299,7 @@ func deleteBlobHandler(ctx context.Context, request *http.Request) (context.Cont
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "Digest not set")
 	}
-	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
+	localStore, ok := ctx.Value(ctxKeyLocalStore).(store.FileStore)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "LocalStore not set")

@@ -26,7 +26,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error getting local IP: %s", err)
 	}
-	localStore, err := store.NewLocalStore(&config.LocalStore, true)
+	localStore, err := store.NewLocalFileStore(&config.LocalStore, true)
 	if err != nil {
 		log.Fatalf("Error initializing local store: %s", err)
 	}

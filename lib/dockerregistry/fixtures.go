@@ -35,7 +35,7 @@ func StorageDriverFixture() (*KrakenStorageDriver, func()) {
 		TagDir: tag,
 	}
 
-	localStore, cleanupStore := store.LocalStoreFixture()
+	localStore, cleanupStore := store.LocalFileStoreFixture()
 	cleanup := func() {
 		cleanupStore()
 		os.RemoveAll(tag)

@@ -28,14 +28,14 @@ const (
 type BlobAPIClient struct {
 	address    string
 	httpClient http.Client
-	blobStore  *store.LocalStore
+	blobStore  store.FileStore
 }
 
 //BlobTransferFactory a blob api file creation pointer
-type BlobTransferFactory func(string, *store.LocalStore) BlobTransferer
+type BlobTransferFactory func(string, store.FileStore) BlobTransferer
 
 // NewBlobAPIClient initiate and returns a new BlobAPIClient object.
-func NewBlobAPIClient(address string, blobStore *store.LocalStore) BlobTransferer {
+func NewBlobAPIClient(address string, blobStore store.FileStore) BlobTransferer {
 	return &BlobAPIClient{
 		address:    address,
 		httpClient: http.Client{Timeout: timeoutInSeconds * time.Second},

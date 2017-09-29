@@ -25,7 +25,7 @@ type Pipeline struct {
 }
 
 // NewPipeline initialized a new pipeline.
-func NewPipeline(ctx context.Context, config Config, hashState *hrw.RendezvousHash, localStore *store.LocalStore) *Pipeline {
+func NewPipeline(ctx context.Context, config Config, hashState *hrw.RendezvousHash, localStore store.FileStore) *Pipeline {
 	ctx = context.WithValue(ctx, ctxKeyHashConfig, config)
 	ctx = context.WithValue(ctx, ctxKeyHashState, hashState)
 	ctx = context.WithValue(ctx, ctxKeyLocalStore, localStore)

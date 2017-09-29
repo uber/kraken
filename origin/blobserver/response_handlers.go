@@ -22,7 +22,7 @@ func downloadBlobHandler(ctx context.Context, writer http.ResponseWriter) (conte
 	if !ok {
 		return nil, NewServerResponseWithError(http.StatusInternalServerError, "Digest not set")
 	}
-	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
+	localStore, ok := ctx.Value(ctxKeyLocalStore).(store.FileStore)
 	if !ok {
 		return nil, NewServerResponseWithError(http.StatusInternalServerError, "LocalStore not set")
 	}
@@ -110,7 +110,7 @@ func repairBlobStreamHandler(ctx context.Context, writer http.ResponseWriter) (c
 			http.StatusInternalServerError, "hashState is not set")
 	}
 
-	localStore, ok := ctx.Value(ctxKeyLocalStore).(*store.LocalStore)
+	localStore, ok := ctx.Value(ctxKeyLocalStore).(store.FileStore)
 	if !ok {
 		return nil, NewServerResponseWithError(
 			http.StatusInternalServerError, "LocalStore is not set")

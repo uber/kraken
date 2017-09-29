@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-func localStoreFixture(
-	refcountable bool, trashDeletionConfig TrashDeletionConfig) (s *LocalStore, cleanup func()) {
+func localFileStoreFixture(
+	refcountable bool, trashDeletionConfig TrashDeletionConfig) (s *LocalFileStore, cleanup func()) {
 
 	var upload, download, cache, trash string
 	cleanup = func() {
@@ -47,7 +47,7 @@ func localStoreFixture(
 		TrashDir:      trash,
 		TrashDeletion: trashDeletionConfig,
 	}
-	s, err = NewLocalStore(config, refcountable)
+	s, err = NewLocalFileStore(config, refcountable)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -55,21 +55,21 @@ func localStoreFixture(
 	return s, cleanup
 }
 
-// LocalStoreFixture returns a LocalStore using temp directories.
-func LocalStoreFixture() (s *LocalStore, cleanup func()) {
-	return localStoreFixture(false, TrashDeletionConfig{})
+// LocalFileStoreFixture returns a LocalFileStore using temp directories.
+func LocalFileStoreFixture() (s *LocalFileStore, cleanup func()) {
+	return localFileStoreFixture(false, TrashDeletionConfig{})
 }
 
-// LocalStoreWithRefcountFixture returns a refcountable LocalStore using temp
+// LocalFileStoreWithRefcountFixture returns a refcountable LocalFileStore using temp
 // directories.
-func LocalStoreWithRefcountFixture() (s *LocalStore, cleanup func()) {
-	return localStoreFixture(true, TrashDeletionConfig{})
+func LocalFileStoreWithRefcountFixture() (s *LocalFileStore, cleanup func()) {
+	return localFileStoreFixture(true, TrashDeletionConfig{})
 }
 
-// LocalStoreWithTrashDeletionFixture returns a LocalStore with trash deletion
+// LocalFileStoreWithTrashDeletionFixture returns a LocalFileStore with trash deletion
 // occuring at the given interval.
-func LocalStoreWithTrashDeletionFixture(interval time.Duration) (s *LocalStore, cleanup func()) {
-	return localStoreFixture(false, TrashDeletionConfig{
+func LocalFileStoreWithTrashDeletionFixture(interval time.Duration) (s *LocalFileStore, cleanup func()) {
+	return localFileStoreFixture(false, TrashDeletionConfig{
 		Enable:   true,
 		Interval: interval,
 	})

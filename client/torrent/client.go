@@ -46,14 +46,14 @@ type SchedulerClient struct {
 	stats     tally.Scope
 
 	// TODO: Consolidate these...
-	store   *store.LocalStore
+	store   store.FileStore
 	archive storage.TorrentArchive
 }
 
 // NewSchedulerClient creates a new scheduler client
 func NewSchedulerClient(
 	config *Config,
-	localStore *store.LocalStore,
+	localStore store.FileStore,
 	stats tally.Scope,
 	pctx peercontext.PeerContext) (Client, error) {
 
