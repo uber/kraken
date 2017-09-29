@@ -2,7 +2,6 @@ package utils
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -10,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"code.uber.internal/infra/kraken/utils/netutil"
 
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/schema2"
@@ -47,28 +48,12 @@ func GetIP(host string) (net.IP, error) {
 
 // GetLocalIP returns the first non loopback intreface's IP
 func GetLocalIP() (string, error) {
-	ifis, err := net.Interfaces()
+	ip, err := netutil.ChooseBindAddress(net.ParseIP("0.0.0.0"))
 	if err != nil {
 		return "", err
 	}
-	for _, ifi := range ifis {
-		// TODO: Extend for Running and UP maybe? (@igor)
-		if ifi.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, err := ifi.Addrs()
-		if err != nil {
-			return "", err
-		}
 
-		for _, a := range addrs {
-			ipnet, _ := a.(*net.IPNet)
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String(), nil
-			}
-		}
-	}
-	return "", errors.New("Could not find any IPv4 network interface")
+	return ip.String(), err
 }
 
 // AddrIP extracts IP address from a addr:port string
