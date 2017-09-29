@@ -14,7 +14,7 @@ import (
 )
 
 func TestFileHashStates(t *testing.T) {
-	s, cleanup := LocalStoreWithRefcountFixture()
+	s, cleanup := LocalFileStoreWithRefcountFixture()
 	defer cleanup()
 
 	s.CreateUploadFile("test_file.txt", 100)
@@ -32,7 +32,7 @@ func TestFileHashStates(t *testing.T) {
 }
 
 func TestCreateUploadFileAndMoveToCache(t *testing.T) {
-	s, cleanup := LocalStoreWithRefcountFixture()
+	s, cleanup := LocalFileStoreWithRefcountFixture()
 	defer cleanup()
 
 	err := s.CreateUploadFile("test_file.txt", 100)
@@ -61,7 +61,7 @@ func TestCreateUploadFileAndMoveToCache(t *testing.T) {
 }
 
 func TestDownloadAndDeleteFiles(t *testing.T) {
-	s, cleanup := LocalStoreWithRefcountFixture()
+	s, cleanup := LocalFileStoreWithRefcountFixture()
 	defer cleanup()
 
 	var waitGroup sync.WaitGroup
@@ -98,7 +98,7 @@ func TestTrashDeletionCronDeletesFiles(t *testing.T) {
 
 	interval := time.Second
 
-	s, cleanup := LocalStoreWithTrashDeletionFixture(interval)
+	s, cleanup := LocalFileStoreWithTrashDeletionFixture(interval)
 	defer cleanup()
 
 	f := "test_file.txt"

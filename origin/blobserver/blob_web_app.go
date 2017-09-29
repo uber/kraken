@@ -20,7 +20,7 @@ type BlobWebApp struct {
 	hostname            string
 	labelToHostname     map[string]string
 	hashState           *hrw.RendezvousHash
-	localStore          *store.LocalStore
+	localStore          store.FileStore
 	blobTransferFactory client.BlobTransferFactory
 }
 
@@ -28,7 +28,7 @@ type BlobWebApp struct {
 func New(
 	config Config,
 	hostname string,
-	localStore *store.LocalStore,
+	localStore store.FileStore,
 	blobTransferFactory client.BlobTransferFactory) (*BlobWebApp, error) {
 
 	if len(config.HashNodes) == 0 {

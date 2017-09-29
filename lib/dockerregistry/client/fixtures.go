@@ -25,7 +25,7 @@ func BlobAPIClientFixture() (*BlobAPIClient, func()) {
 	cleanup := &testutils.Cleanup{}
 	defer cleanup.Recover()
 
-	s, storeCleanup := store.LocalStoreFixture()
+	s, storeCleanup := store.LocalFileStoreFixture()
 	cleanup.Add(storeCleanup)
 	trackerAddr, trackerClose := mockTracker()
 	cleanup.Add(trackerClose)

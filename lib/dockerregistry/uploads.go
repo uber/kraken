@@ -14,12 +14,12 @@ import (
 
 // Uploads b
 type Uploads struct {
-	store  *store.LocalStore
+	store  store.FileStore
 	client torrent.Client
 }
 
 // NewUploads creates a new Uploads
-func NewUploads(cl torrent.Client, s *store.LocalStore) *Uploads {
+func NewUploads(cl torrent.Client, s store.FileStore) *Uploads {
 	return &Uploads{
 		store:  s,
 		client: cl,

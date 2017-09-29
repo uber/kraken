@@ -27,7 +27,7 @@ import (
 func TestDownloadBlobHandlerValid(t *testing.T) {
 	require := require.New(t)
 
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
@@ -47,7 +47,7 @@ func TestDownloadBlobHandlerValid(t *testing.T) {
 func TestDownloadBlobHandlerInvalid(t *testing.T) {
 	require := require.New(t)
 
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 	localStore.CreateUploadFile(randomUUID, 0)
 	writer, _ := localStore.GetUploadFileReadWriter(randomUUID)
@@ -65,7 +65,7 @@ func TestDownloadBlobHandlerInvalid(t *testing.T) {
 	require.Equal(se.GetStatusCode(), http.StatusNotFound)
 }
 
-func helperCreateAndUploadDigest(t *testing.T, ls *store.LocalStore, us string) *image.Digest {
+func helperCreateAndUploadDigest(t *testing.T, ls store.FileStore, us string) *image.Digest {
 	ls.CreateUploadFile(us, 0)
 	writer, _ := ls.GetUploadFileReadWriter(us)
 	writer.Write([]byte("Hello world!!!"))
@@ -76,7 +76,7 @@ func helperCreateAndUploadDigest(t *testing.T, ls *store.LocalStore, us string) 
 }
 
 func helperCreateTestDigests(t *testing.T, num int, shardID string,
-	ls *store.LocalStore, contentDigest *image.Digest) {
+	ls store.FileStore, contentDigest *image.Digest) {
 
 	require := require.New(t)
 
@@ -123,7 +123,7 @@ func verifyDigestsForRepair(t *testing.T, digests []*image.Digest, response stri
 func TestRepairBlobByShardIDSingleDigestReturnsOK(t *testing.T) {
 	require := require.New(t)
 
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
 	app := configFixture([]int{10, 10, 10})
@@ -150,7 +150,7 @@ func TestRepairBlobByShardIDSingleDigestReturnsOK(t *testing.T) {
 
 	bt := mockclient.NewMockBlobTransferer(mockCtrl)
 	bf := client.BlobTransferFactory(
-		func(address string, blobStore *store.LocalStore) client.BlobTransferer {
+		func(address string, blobStore store.FileStore) client.BlobTransferer {
 			return bt
 		})
 
@@ -179,7 +179,7 @@ func TestRepairBlobByShardIDSingleDigestReturnsOK(t *testing.T) {
 func TestRepairBlobByShardIDHandlerBatchReturnsOK(t *testing.T) {
 	require := require.New(t)
 
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
 	app := configFixture([]int{10, 10, 10})
@@ -208,7 +208,7 @@ func TestRepairBlobByShardIDHandlerBatchReturnsOK(t *testing.T) {
 
 	bt := mockclient.NewMockBlobTransferer(mockCtrl)
 	bf := client.BlobTransferFactory(
-		func(address string, blobStore *store.LocalStore) client.BlobTransferer {
+		func(address string, blobStore store.FileStore) client.BlobTransferer {
 			return bt
 		})
 
@@ -243,7 +243,7 @@ func TestRepairBlobByShardIDHandlerBatchReturnsOK(t *testing.T) {
 func TestRepairBatchBlobByShardIDHandlerFailAndRetryOK(t *testing.T) {
 	require := require.New(t)
 
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
 	app := configFixture([]int{10, 10, 10})
@@ -270,7 +270,7 @@ func TestRepairBatchBlobByShardIDHandlerFailAndRetryOK(t *testing.T) {
 
 	bt := mockclient.NewMockBlobTransferer(mockCtrl)
 	bf := client.BlobTransferFactory(
-		func(address string, blobStore *store.LocalStore) client.BlobTransferer {
+		func(address string, blobStore store.FileStore) client.BlobTransferer {
 			return bt
 		})
 
@@ -299,7 +299,7 @@ func TestRepairBatchBlobByShardIDHandlerFailAndRetryOK(t *testing.T) {
 }
 
 func TestRepairBlobByDigestReturnsOK(t *testing.T) {
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
 	app := configFixture([]int{10, 10, 10})
@@ -320,7 +320,7 @@ func TestRepairBlobByDigestReturnsOK(t *testing.T) {
 	defer mockCtrl.Finish()
 	bt := mockclient.NewMockBlobTransferer(mockCtrl)
 	bf := client.BlobTransferFactory(
-		func(address string, blobStore *store.LocalStore) client.BlobTransferer {
+		func(address string, blobStore store.FileStore) client.BlobTransferer {
 			return bt
 		})
 
@@ -345,7 +345,7 @@ func TestRepairBlobByDigestReturnsOK(t *testing.T) {
 func TestRepairBlobByDigestCancelRequest(t *testing.T) {
 	require := require.New(t)
 
-	localStore, cleanup := store.LocalStoreFixture()
+	localStore, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
 	app := configFixture([]int{10, 10, 10})
@@ -372,7 +372,7 @@ func TestRepairBlobByDigestCancelRequest(t *testing.T) {
 
 	bt := mockclient.NewMockBlobTransferer(mockCtrl)
 	bf := client.BlobTransferFactory(
-		func(address string, blobStore *store.LocalStore) client.BlobTransferer {
+		func(address string, blobStore store.FileStore) client.BlobTransferer {
 			return bt
 		})
 

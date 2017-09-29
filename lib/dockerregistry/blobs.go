@@ -13,11 +13,11 @@ import (
 // Blobs b
 type Blobs struct {
 	client torrent.Client
-	store  *store.LocalStore
+	store  store.FileStore
 }
 
 // NewBlobs creates Blobs
-func NewBlobs(cl torrent.Client, s *store.LocalStore) *Blobs {
+func NewBlobs(cl torrent.Client, s store.FileStore) *Blobs {
 	return &Blobs{
 		client: cl,
 		store:  s,

@@ -24,7 +24,7 @@ const (
 )
 
 func genDockerTags() (*DockerTags, func()) {
-	s, cleanupStore := store.LocalStoreWithRefcountFixture()
+	s, cleanupStore := store.LocalFileStoreWithRefcountFixture()
 	tag, err := ioutil.TempDir("/tmp", "tag")
 	if err != nil {
 		cleanupStore()

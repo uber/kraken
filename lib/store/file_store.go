@@ -17,8 +17,43 @@ import (
 	"github.com/robfig/cron"
 )
 
-// LocalStore manages all peer agent files on local disk.
-type LocalStore struct {
+// FileStore provides an interface for LocalFileStore. Useful for mocks.
+type FileStore interface {
+	Stop()
+	Config() Config
+	CreateUploadFile(fileName string, len int64) error
+	CreateDownloadFile(fileName string, len int64) error
+	WriteDownloadFilePieceStatus(fileName string, content []byte) (bool, error)
+	WriteDownloadFilePieceStatusAt(fileName string, content []byte, index int) (bool, error)
+	GetFilePieceStatus(fileName string, index int, numPieces int) ([]byte, error)
+	SetUploadFileStartedAt(fileName string, content []byte) error
+	GetUploadFileStartedAt(fileName string) ([]byte, error)
+	DeleteUploadFileStartedAt(fileName string) error
+	SetUploadFileHashState(fileName string, content []byte, algorithm string, offset string) error
+	GetUploadFileHashState(fileName string, algorithm string, offset string) ([]byte, error)
+	ListUploadFileHashStatePaths(fileName string) ([]string, error)
+	GetDownloadOrCacheFileMeta(fileName string) ([]byte, error)
+	SetDownloadOrCacheFileMeta(fileName string, data []byte) (bool, error)
+	GetUploadFileReader(fileName string) (base.FileReader, error)
+	GetCacheFileReader(fileName string) (base.FileReader, error)
+	GetUploadFileReadWriter(fileName string) (base.FileReadWriter, error)
+	GetDownloadFileReadWriter(fileName string) (base.FileReadWriter, error)
+	GetDownloadOrCacheFileReader(fileName string) (base.FileReader, error)
+	GetUploadFileStat(fileName string) (os.FileInfo, error)
+	GetCacheFilePath(fileName string) (string, error)
+	GetCacheFileStat(fileName string) (os.FileInfo, error)
+	MoveUploadFileToCache(fileName, targetFileName string) error
+	MoveDownloadFileToCache(fileName string) error
+	MoveCacheFileToTrash(fileName string) error
+	MoveDownloadOrCacheFileToTrash(fileName string) error
+	DeleteAllTrashFiles() error
+	RefCacheFile(fileName string) (int64, error)
+	DerefCacheFile(fileName string) (int64, error)
+	ListCacheFilesByShardID(shardID string) ([]string, error)
+}
+
+// LocalFileStore manages all peer agent files on local disk.
+type LocalFileStore struct {
 	uploadBackend        base.FileStore
 	downloadCacheBackend base.FileStore
 	config               *Config
@@ -30,8 +65,8 @@ type LocalStore struct {
 	trashDeletionCron *cron.Cron
 }
 
-// NewLocalStore initializes and returns a new LocalStore object.
-func NewLocalStore(config *Config, useRefcount bool) (*LocalStore, error) {
+// NewLocalFileStore initializes and returns a new LocalFileStore object.
+func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error) {
 	// Init all directories.
 	for _, dir := range []string{config.UploadDir, config.DownloadDir, config.TrashDir} {
 		os.RemoveAll(dir)
@@ -63,7 +98,7 @@ func NewLocalStore(config *Config, useRefcount bool) (*LocalStore, error) {
 		}
 	}
 
-	localStore := &LocalStore{
+	localStore := &LocalFileStore{
 		uploadBackend:        uploadBackend,
 		downloadCacheBackend: downloadCacheBackend,
 		config:               config,
@@ -94,21 +129,21 @@ func NewLocalStore(config *Config, useRefcount bool) (*LocalStore, error) {
 }
 
 // Stop stops any running cron jobs.
-func (store *LocalStore) Stop() {
+func (store *LocalFileStore) Stop() {
 	if store.trashDeletionCron != nil {
 		store.trashDeletionCron.Stop()
 	}
 }
 
 // Config returns configuration of the store
-func (store *LocalStore) Config() Config {
+func (store *LocalFileStore) Config() Config {
 	return *store.config
 }
 
 // CreateUploadFile creates an empty file in upload directory with specified size.
 // If file exists and is in one of the acceptable states, returns os.ErrExist.
 // If file exists but not in one of the acceptable states, returns FileStateError.
-func (store *LocalStore) CreateUploadFile(fileName string, len int64) error {
+func (store *LocalFileStore) CreateUploadFile(fileName string, len int64) error {
 	return store.uploadBackend.CreateFile(
 		fileName,
 		[]base.FileState{},
@@ -119,7 +154,7 @@ func (store *LocalStore) CreateUploadFile(fileName string, len int64) error {
 // CreateDownloadFile creates an empty file in download directory with specified size.
 // If file exists and is in one of the acceptable states, returns os.ErrExist.
 // If file exists but not in one of the acceptable states, returns FileStateError.
-func (store *LocalStore) CreateDownloadFile(fileName string, len int64) error {
+func (store *LocalFileStore) CreateDownloadFile(fileName string, len int64) error {
 	return store.downloadCacheBackend.CreateFile(
 		fileName,
 		[]base.FileState{store.stateDownload},
@@ -128,7 +163,7 @@ func (store *LocalStore) CreateDownloadFile(fileName string, len int64) error {
 }
 
 // WriteDownloadFilePieceStatus creates or overwrites piece status for a new download file.
-func (store *LocalStore) WriteDownloadFilePieceStatus(fileName string, content []byte) (bool, error) {
+func (store *LocalFileStore) WriteDownloadFilePieceStatus(fileName string, content []byte) (bool, error) {
 	return store.downloadCacheBackend.WriteFileMetadata(
 		fileName,
 		[]base.FileState{store.stateDownload},
@@ -137,7 +172,7 @@ func (store *LocalStore) WriteDownloadFilePieceStatus(fileName string, content [
 }
 
 // WriteDownloadFilePieceStatusAt update piece status for download file at given index.
-func (store *LocalStore) WriteDownloadFilePieceStatusAt(fileName string, content []byte, index int) (bool, error) {
+func (store *LocalFileStore) WriteDownloadFilePieceStatusAt(fileName string, content []byte, index int) (bool, error) {
 	n, err := store.downloadCacheBackend.WriteFileMetadataAt(
 		fileName,
 		[]base.FileState{store.stateDownload},
@@ -151,7 +186,7 @@ func (store *LocalStore) WriteDownloadFilePieceStatusAt(fileName string, content
 }
 
 // GetFilePieceStatus reads piece status for a file that's in download or cache dir.
-func (store *LocalStore) GetFilePieceStatus(fileName string, index int, numPieces int) ([]byte, error) {
+func (store *LocalFileStore) GetFilePieceStatus(fileName string, index int, numPieces int) ([]byte, error) {
 	b := make([]byte, numPieces)
 	_, err := store.downloadCacheBackend.ReadFileMetadataAt(
 		fileName,
@@ -173,7 +208,7 @@ func (store *LocalStore) GetFilePieceStatus(fileName string, index int, numPiece
 }
 
 // SetUploadFileStartedAt creates and writes creation file for a new upload file.
-func (store *LocalStore) SetUploadFileStartedAt(fileName string, content []byte) error {
+func (store *LocalFileStore) SetUploadFileStartedAt(fileName string, content []byte) error {
 	_, err := store.uploadBackend.WriteFileMetadata(
 		fileName,
 		[]base.FileState{store.stateUpload},
@@ -183,7 +218,7 @@ func (store *LocalStore) SetUploadFileStartedAt(fileName string, content []byte)
 }
 
 // GetUploadFileStartedAt reads creation file for a new upload file.
-func (store *LocalStore) GetUploadFileStartedAt(fileName string) ([]byte, error) {
+func (store *LocalFileStore) GetUploadFileStartedAt(fileName string) ([]byte, error) {
 	return store.uploadBackend.ReadFileMetadata(
 		fileName,
 		[]base.FileState{store.stateUpload},
@@ -191,7 +226,7 @@ func (store *LocalStore) GetUploadFileStartedAt(fileName string) ([]byte, error)
 }
 
 // DeleteUploadFileStartedAt deletes creation file for a new upload file.
-func (store *LocalStore) DeleteUploadFileStartedAt(fileName string) error {
+func (store *LocalFileStore) DeleteUploadFileStartedAt(fileName string) error {
 	return store.uploadBackend.DeleteFileMetadata(
 		fileName,
 		[]base.FileState{store.stateUpload},
@@ -199,7 +234,7 @@ func (store *LocalStore) DeleteUploadFileStartedAt(fileName string) error {
 }
 
 // SetUploadFileHashState creates and writes hashstate for a upload file.
-func (store *LocalStore) SetUploadFileHashState(fileName string, content []byte, algorithm string, offset string) error {
+func (store *LocalFileStore) SetUploadFileHashState(fileName string, content []byte, algorithm string, offset string) error {
 	_, err := store.uploadBackend.WriteFileMetadata(
 		fileName,
 		[]base.FileState{store.stateUpload},
@@ -209,7 +244,7 @@ func (store *LocalStore) SetUploadFileHashState(fileName string, content []byte,
 }
 
 // GetUploadFileHashState reads hashstate for a upload file.
-func (store *LocalStore) GetUploadFileHashState(fileName string, algorithm string, offset string) ([]byte, error) {
+func (store *LocalFileStore) GetUploadFileHashState(fileName string, algorithm string, offset string) ([]byte, error) {
 	return store.uploadBackend.ReadFileMetadata(
 		fileName,
 		[]base.FileState{store.stateUpload},
@@ -219,7 +254,7 @@ func (store *LocalStore) GetUploadFileHashState(fileName string, algorithm strin
 // ListUploadFileHashStatePaths list paths of all hashstates for a upload file.
 // This function is not thread-safe.
 // TODO: Right now we store metadata with _hashstate, but registry expects /hashstate.
-func (store *LocalStore) ListUploadFileHashStatePaths(fileName string) ([]string, error) {
+func (store *LocalFileStore) ListUploadFileHashStatePaths(fileName string) ([]string, error) {
 	fp, err := store.uploadBackend.GetFilePath(fileName, []base.FileState{store.stateUpload})
 	if err != nil {
 		return nil, err
@@ -239,7 +274,7 @@ func (store *LocalStore) ListUploadFileHashStatePaths(fileName string) ([]string
 }
 
 // GetDownloadOrCacheFileMeta reads filemeta from a downloading or cached file
-func (store *LocalStore) GetDownloadOrCacheFileMeta(fileName string) ([]byte, error) {
+func (store *LocalFileStore) GetDownloadOrCacheFileMeta(fileName string) ([]byte, error) {
 	return store.downloadCacheBackend.ReadFileMetadata(
 		fileName,
 		[]base.FileState{store.stateDownload, store.stateCache},
@@ -248,7 +283,7 @@ func (store *LocalStore) GetDownloadOrCacheFileMeta(fileName string) ([]byte, er
 }
 
 // SetDownloadOrCacheFileMeta reads filemeta from a downloading or cached file
-func (store *LocalStore) SetDownloadOrCacheFileMeta(fileName string, data []byte) (bool, error) {
+func (store *LocalFileStore) SetDownloadOrCacheFileMeta(fileName string, data []byte) (bool, error) {
 	return store.downloadCacheBackend.WriteFileMetadata(
 		fileName,
 		[]base.FileState{store.stateDownload, store.stateCache},
@@ -258,47 +293,47 @@ func (store *LocalStore) SetDownloadOrCacheFileMeta(fileName string, data []byte
 }
 
 // GetUploadFileReader returns a FileReader for a file in upload directory.
-func (store *LocalStore) GetUploadFileReader(fileName string) (base.FileReader, error) {
+func (store *LocalFileStore) GetUploadFileReader(fileName string) (base.FileReader, error) {
 	return store.uploadBackend.GetFileReader(fileName, []base.FileState{store.stateUpload})
 }
 
 // GetCacheFileReader returns a FileReader for a file in cache directory.
-func (store *LocalStore) GetCacheFileReader(fileName string) (base.FileReader, error) {
+func (store *LocalFileStore) GetCacheFileReader(fileName string) (base.FileReader, error) {
 	return store.downloadCacheBackend.GetFileReader(fileName, []base.FileState{store.stateCache})
 }
 
 // GetUploadFileReadWriter returns a FileReadWriter for a file in upload directory.
-func (store *LocalStore) GetUploadFileReadWriter(fileName string) (base.FileReadWriter, error) {
+func (store *LocalFileStore) GetUploadFileReadWriter(fileName string) (base.FileReadWriter, error) {
 	return store.uploadBackend.GetFileReadWriter(fileName, []base.FileState{store.stateUpload})
 }
 
 // GetDownloadFileReadWriter returns a FileReadWriter for a file in download directory.
-func (store *LocalStore) GetDownloadFileReadWriter(fileName string) (base.FileReadWriter, error) {
+func (store *LocalFileStore) GetDownloadFileReadWriter(fileName string) (base.FileReadWriter, error) {
 	return store.downloadCacheBackend.GetFileReadWriter(fileName, []base.FileState{store.stateDownload})
 }
 
 // GetDownloadOrCacheFileReader returns a FileReader for a file in download or cache directory.
-func (store *LocalStore) GetDownloadOrCacheFileReader(fileName string) (base.FileReader, error) {
+func (store *LocalFileStore) GetDownloadOrCacheFileReader(fileName string) (base.FileReader, error) {
 	return store.downloadCacheBackend.GetFileReader(fileName, []base.FileState{store.stateDownload, store.stateCache})
 }
 
 // GetUploadFileStat returns a FileInfo of a file in upload directory.
-func (store *LocalStore) GetUploadFileStat(fileName string) (os.FileInfo, error) {
+func (store *LocalFileStore) GetUploadFileStat(fileName string) (os.FileInfo, error) {
 	return store.uploadBackend.GetFileStat(fileName, []base.FileState{store.stateUpload})
 }
 
 // GetCacheFilePath returns full path of a file in cache directory.
-func (store *LocalStore) GetCacheFilePath(fileName string) (string, error) {
+func (store *LocalFileStore) GetCacheFilePath(fileName string) (string, error) {
 	return store.downloadCacheBackend.GetFilePath(fileName, []base.FileState{store.stateCache})
 }
 
 // GetCacheFileStat returns a FileInfo of a file in cache directory.
-func (store *LocalStore) GetCacheFileStat(fileName string) (os.FileInfo, error) {
+func (store *LocalFileStore) GetCacheFileStat(fileName string) (os.FileInfo, error) {
 	return store.downloadCacheBackend.GetFileStat(fileName, []base.FileState{store.stateCache})
 }
 
 // MoveUploadFileToCache moves a file from upload directory to cache directory.
-func (store *LocalStore) MoveUploadFileToCache(fileName, targetFileName string) error {
+func (store *LocalFileStore) MoveUploadFileToCache(fileName, targetFileName string) error {
 	uploadFilePath, err := store.uploadBackend.GetFilePath(fileName, []base.FileState{store.stateUpload})
 	if err != nil {
 		return err
@@ -316,7 +351,7 @@ func (store *LocalStore) MoveUploadFileToCache(fileName, targetFileName string) 
 }
 
 // MoveDownloadFileToCache moves a file from download directory to cache directory.
-func (store *LocalStore) MoveDownloadFileToCache(fileName string) error {
+func (store *LocalFileStore) MoveDownloadFileToCache(fileName string) error {
 	return store.downloadCacheBackend.MoveFile(
 		fileName,
 		[]base.FileState{store.stateDownload},
@@ -325,7 +360,7 @@ func (store *LocalStore) MoveDownloadFileToCache(fileName string) error {
 
 // MoveCacheFileToTrash moves a file from cache directory to trash directory, and append a random
 // suffix so there won't be name collision.
-func (store *LocalStore) MoveCacheFileToTrash(fileName string) error {
+func (store *LocalFileStore) MoveCacheFileToTrash(fileName string) error {
 	newPath := path.Join(store.config.TrashDir, fileName+"."+uuid.Generate().String())
 	if err := store.downloadCacheBackend.LinkToFile(fileName, []base.FileState{store.stateCache}, newPath); err != nil {
 		return err
@@ -335,7 +370,7 @@ func (store *LocalStore) MoveCacheFileToTrash(fileName string) error {
 
 // MoveDownloadOrCacheFileToTrash moves a file from cache or download directory to trash directory, and append a random
 // suffix so there won't be name collision.
-func (store *LocalStore) MoveDownloadOrCacheFileToTrash(fileName string) error {
+func (store *LocalFileStore) MoveDownloadOrCacheFileToTrash(fileName string) error {
 	newPath := path.Join(store.config.TrashDir, fileName+"."+uuid.Generate().String())
 	if err := store.downloadCacheBackend.LinkToFile(fileName, []base.FileState{store.stateCache, store.stateDownload}, newPath); err != nil {
 		return err
@@ -345,7 +380,7 @@ func (store *LocalStore) MoveDownloadOrCacheFileToTrash(fileName string) error {
 
 // DeleteAllTrashFiles permanently deletes all files from trash directory.
 // This function is not executed inside global lock, and expects to be the only one doing deletion.
-func (store *LocalStore) DeleteAllTrashFiles() error {
+func (store *LocalFileStore) DeleteAllTrashFiles() error {
 	dir, err := os.Open(store.config.TrashDir)
 	if err != nil {
 		return err
@@ -365,7 +400,7 @@ func (store *LocalStore) DeleteAllTrashFiles() error {
 }
 
 // RefCacheFile increments ref count for a file in cache directory.
-func (store *LocalStore) RefCacheFile(fileName string) (int64, error) {
+func (store *LocalFileStore) RefCacheFile(fileName string) (int64, error) {
 	b, ok := store.downloadCacheBackend.(refcountable.RCFileStore)
 	if !ok {
 		return 0, fmt.Errorf("Local ref count is disabled")
@@ -375,7 +410,7 @@ func (store *LocalStore) RefCacheFile(fileName string) (int64, error) {
 
 // DerefCacheFile decrements ref count for a file in cache directory.
 // If ref count reaches 0, it will try to rename it and move it to trash directory.
-func (store *LocalStore) DerefCacheFile(fileName string) (int64, error) {
+func (store *LocalFileStore) DerefCacheFile(fileName string) (int64, error) {
 	b, ok := store.downloadCacheBackend.(refcountable.RCFileStore)
 	if !ok {
 		return 0, fmt.Errorf("Local ref count is disabled")
@@ -397,10 +432,10 @@ func (store *LocalStore) DerefCacheFile(fileName string) (int64, error) {
 }
 
 // ListCacheFilesByShardID returns a list of FileInfo for all files of given shard.
-func (store *LocalStore) ListCacheFilesByShardID(shardID string) ([]string, error) {
+func (store *LocalFileStore) ListCacheFilesByShardID(shardID string) ([]string, error) {
 	shardDir := store.config.CacheDir
 	for i := 0; i < len(shardID); i += 2 {
-		// LocalStore uses the first few bytes of file digest (which is also supposed to be the file
+		// LocalFileStore uses the first few bytes of file digest (which is also supposed to be the file
 		// name) as shard ID.
 		// For every byte, one more level of directories will be created
 		// (1 byte = 2 char of file name assumming file name is in HEX)

@@ -44,7 +44,7 @@ type DockerTags struct {
 	sync.RWMutex
 
 	config  *Config
-	store   *store.LocalStore
+	store   store.FileStore
 	client  torrent.Client
 	metrics tally.Scope
 }
@@ -64,7 +64,7 @@ func (s TagSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s TagSlice) Len() int           { return len(s) }
 
 // NewDockerTags returns new DockerTags
-func NewDockerTags(c *Config, s *store.LocalStore, cl torrent.Client, metrics tally.Scope) (Tags, error) {
+func NewDockerTags(c *Config, s store.FileStore, cl torrent.Client, metrics tally.Scope) (Tags, error) {
 	err := os.MkdirAll(c.TagDir, 0755)
 	if err != nil {
 		return nil, err

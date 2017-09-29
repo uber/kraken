@@ -21,11 +21,11 @@ import (
 // It doesn't know about sharding strategy and cannot handle redirect.
 type BlobAPIClient struct {
 	config    *Config
-	blobStore *store.LocalStore
+	blobStore store.FileStore
 }
 
 // NewBlobAPIClient initiate and returns a new BlobAPIClient object.
-func NewBlobAPIClient(config *Config, blobStore *store.LocalStore) *BlobAPIClient {
+func NewBlobAPIClient(config *Config, blobStore store.FileStore) *BlobAPIClient {
 	return &BlobAPIClient{
 		config:    config,
 		blobStore: blobStore,
