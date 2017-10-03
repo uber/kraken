@@ -48,3 +48,8 @@ func (d Digest) Algo() string {
 func (d Digest) Hex() string {
 	return d.hex
 }
+
+// GetShardID returns the shard id of the digest.
+func (d Digest) GetShardID() string {
+	return d.hex[:4]
+}

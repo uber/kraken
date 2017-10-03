@@ -19,13 +19,10 @@ import (
 // number of retries on error, default connection timeout and target host
 // that should handle all blob transfers
 type BlobRepairer struct {
-	context     context.Context       // request context
-	hostname    string                // target nodes that handles blob transfers
-	blobAPI     client.BlobTransferer // blob file pusher/puller
-	numWorkers  int                   // number of cocurrent blob transer workers
-	numRetries  int                   // number of retries in a case of an error
-	retryDelay  time.Duration         // number of milliseconds to delay between the retries << retries
-	connTimeout time.Duration         // default read/write timeout on HTTP connection
+	context  context.Context       // request context
+	hostname string                // target nodes that handles blob transfers
+	blobAPI  client.BlobTransferer // blob file pusher/puller
+	config   RepairConfig
 
 	sync.Mutex
 }
@@ -52,7 +49,7 @@ func (br *BlobRepairer) BatchRepair(digests []*image.Digest, writer http.Respons
 		pos count32 = -1
 	)
 
-	for i := 0; i < br.numWorkers && i < len(digests); i++ {
+	for i := 0; i < br.config.NumWorkers && i < len(digests); i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -86,7 +83,7 @@ func (br *BlobRepairer) BatchRepair(digests []*image.Digest, writer http.Respons
 					if err := json.NewEncoder(writer).Encode(lm); err != nil {
 						log.WithFields(log.Fields{
 							"digest": d,
-						}).Error("failed to encode digest repair message: %s", err)
+						}).Errorf("failed to encode digest repair message: %s", err)
 					}
 					writer.(http.Flusher).Flush()
 					br.Unlock()
@@ -98,14 +95,17 @@ func (br *BlobRepairer) BatchRepair(digests []*image.Digest, writer http.Respons
 	wg.Wait()
 }
 
-func (br *BlobRepairer) repairDigest(digest *image.Digest) error {
-	var err error
-	for i := 0; i < br.numRetries; i++ {
-		if err = br.blobAPI.PushBlob(*digest); err != nil {
-			time.Sleep(br.retryDelay * (2 << uint(br.numRetries)))
-			continue
+func (br *BlobRepairer) repairDigest(d *image.Digest) error {
+	var retries int
+	for {
+		err := br.blobAPI.PushBlob(*d)
+		if err == nil {
+			return nil
 		}
-		return err
+		if retries > br.config.NumRetries {
+			return err
+		}
+		time.Sleep(br.config.RetryDelay * (1 << uint(retries)))
+		retries++
 	}
-	return nil
 }

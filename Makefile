@@ -78,11 +78,17 @@ mocks:
 		-package mockstorage \
 		code.uber.internal/infra/kraken/client/torrent/storage Torrent
 
-	mkdir -p mocks/origin/client/blobtransferer
+	mkdir -p mocks/origin/client
 	$(mockgen) \
-		-destination=mocks/origin/client/mockblobtransferer.go \
+		-destination=mocks/origin/client/mockclient.go \
 		-package mockclient \
 		code.uber.internal/infra/kraken/origin/client BlobTransferer
+
+	mkdir -p mocks/lib/store
+	$(mockgen) \
+		-destination=mocks/lib/store/mockstore.go \
+		-package mockstore \
+		code.uber.internal/infra/kraken/lib/store FileStore
 
 # Enumerates all container names, including those created by dockerman.
 CONTAINERS := $(foreach \

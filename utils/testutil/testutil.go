@@ -2,6 +2,9 @@ package testutil
 
 import (
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"testing"
 	"time"
 )
 
@@ -23,5 +26,16 @@ func PollUntilTrue(timeout time.Duration, f func() bool) error {
 		case <-timer.C:
 			return fmt.Errorf("timed out after %.2f seconds", timeout.Seconds())
 		}
+	}
+}
+
+// ExpectBody fails if the response does not have the expected body.
+func ExpectBody(t *testing.T, resp *http.Response, expected []byte) {
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("Could not read body: %s", err)
+	}
+	if string(expected) != string(body) {
+		t.Fatalf("Expected body %q, got %q", string(expected), string(body))
 	}
 }
