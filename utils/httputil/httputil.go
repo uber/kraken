@@ -9,18 +9,21 @@ import (
 	"time"
 )
 
-const (
-	defaultTimeout = 60 * time.Second
-)
+const defaultTimeout = 60 * time.Second
 
-type sendError struct {
-	url    string
-	method string
-	msg    string
+// StatusError occurs if an HTTP response has an unexpected status code.
+type StatusError struct {
+	Method           string
+	URL              string
+	ExpectedStatuses []int
+	Status           int
+	ResponseDump     string
 }
 
-func (e sendError) Error() string {
-	return fmt.Sprintf("error sending http request to url: %s, method: %s, err: %s", e.url, e.method, e.msg)
+func (e StatusError) Error() string {
+	return fmt.Sprintf(
+		"http request \"%s %s\" failed: expected statuses %v, got status %d: %s",
+		e.Method, e.URL, e.ExpectedStatuses, e.Status, e.ResponseDump)
 }
 
 type sendOptions struct {
@@ -68,7 +71,7 @@ func SendHeaders(headers map[string]string) SendOption {
 }
 
 // SendAcceptedCodes specifies accepted codes for http request
-func SendAcceptedCodes(codes []int) SendOption {
+func SendAcceptedCodes(codes ...int) SendOption {
 	m := make(map[int]struct{})
 	for _, c := range codes {
 		m[c] = struct{}{}
@@ -78,16 +81,16 @@ func SendAcceptedCodes(codes []int) SendOption {
 	}}
 }
 
-// Send sends http request
-func Send(method, endpoint string, options ...SendOption) (*http.Response, error) {
+// Send sends an http request.
+func Send(method, url string, options ...SendOption) (*http.Response, error) {
 	opts := defaultSendOptions()
 	for _, opt := range options {
 		opt.f(&opts)
 	}
 
-	req, err := http.NewRequest(method, endpoint, opts.body)
+	req, err := http.NewRequest(method, url, opts.body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create request: %s", err)
 	}
 
 	for key, val := range opts.headers {
@@ -100,18 +103,61 @@ func Send(method, endpoint string, options ...SendOption) (*http.Response, error
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to send request: %s", err)
 	}
 
 	_, ok := opts.acceptedCodes[resp.StatusCode]
 	if !ok {
-		defer resp.Body.Close()
-		respDump, err := httputil.DumpResponse(resp, true)
-		if err != nil {
-			return nil, sendError{endpoint, method, fmt.Sprintf("unexpected response code %d and failed to parse body: %s", resp.StatusCode, err)}
+		var expected []int
+		for code := range opts.acceptedCodes {
+			expected = append(expected, code)
 		}
-		return nil, sendError{endpoint, method, string(respDump)}
+
+		defer resp.Body.Close()
+		respBytes, err := httputil.DumpResponse(resp, true)
+		respDump := string(respBytes)
+		if err != nil {
+			respDump = fmt.Sprintf("failed to dump response: %s", err)
+		}
+
+		return nil, StatusError{
+			Method:           method,
+			URL:              url,
+			ExpectedStatuses: expected,
+			Status:           resp.StatusCode,
+			ResponseDump:     respDump,
+		}
 	}
 
 	return resp, nil
+}
+
+// Get sends a GET http request.
+func Get(url string, options ...SendOption) (*http.Response, error) {
+	return Send("GET", url, options...)
+}
+
+// Head sends a HEAD http request.
+func Head(url string, options ...SendOption) (*http.Response, error) {
+	return Send("HEAD", url, options...)
+}
+
+// Post sends a POST http request.
+func Post(url string, options ...SendOption) (*http.Response, error) {
+	return Send("POST", url, options...)
+}
+
+// Put sends a PUT http request.
+func Put(url string, options ...SendOption) (*http.Response, error) {
+	return Send("PUT", url, options...)
+}
+
+// Patch sends a PATCH http request.
+func Patch(url string, options ...SendOption) (*http.Response, error) {
+	return Send("PATCH", url, options...)
+}
+
+// Delete sends a DELETE http request.
+func Delete(url string, options ...SendOption) (*http.Response, error) {
+	return Send("DELETE", url, options...)
 }

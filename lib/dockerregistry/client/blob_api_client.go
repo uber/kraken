@@ -169,7 +169,7 @@ func (cli *BlobAPIClient) CheckBlobExists(digest image.Digest) (bool, error) {
 		"HEAD",
 		url,
 		httputil.SendTimeout(cli.config.RequestTimeout),
-		httputil.SendAcceptedCodes([]int{http.StatusOK, http.StatusNotFound}))
+		httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound))
 	if err != nil {
 		return false, err
 	}
@@ -202,7 +202,7 @@ func (cli *BlobAPIClient) pushStart(digest image.Digest) (string, error) {
 		"POST",
 		url,
 		httputil.SendTimeout(cli.config.RequestTimeout),
-		httputil.SendAcceptedCodes([]int{http.StatusAccepted}),
+		httputil.SendAcceptedCodes(http.StatusAccepted),
 		httputil.SendHeaders(headers))
 	if err != nil {
 		return "", err
@@ -252,7 +252,7 @@ func (cli *BlobAPIClient) pushBlobContent(location string, digest image.Digest) 
 		"PUT",
 		url,
 		httputil.SendTimeout(cli.config.RequestTimeout),
-		httputil.SendAcceptedCodes([]int{http.StatusCreated}),
+		httputil.SendAcceptedCodes(http.StatusCreated),
 		httputil.SendHeaders(headers))
 	if err != nil {
 		return err
@@ -274,7 +274,7 @@ func (cli *BlobAPIClient) pushBlobChunk(location string, digest image.Digest, re
 		url,
 		httputil.SendBody(reader),
 		httputil.SendTimeout(cli.config.RequestTimeout),
-		httputil.SendAcceptedCodes([]int{http.StatusAccepted}),
+		httputil.SendAcceptedCodes(http.StatusAccepted),
 		httputil.SendHeaders(headers))
 	if err != nil {
 		return "", err
