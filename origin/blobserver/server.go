@@ -178,11 +178,11 @@ func (s Server) uploadBlobHandler(w http.ResponseWriter, r *http.Request) error 
 	if err := s.ensureDigestNotExists(d); err != nil {
 		return err
 	}
-	uploadUUID, err := s.createUpload(d)
+	u, err := s.createUpload(d)
 	if err != nil {
 		return err
 	}
-	setUploadLocation(w, uploadUUID)
+	setUploadLocation(w, u)
 	setContentLength(w, 0)
 	w.WriteHeader(http.StatusAccepted)
 	return nil
@@ -211,7 +211,6 @@ func (s Server) patchUploadHandler(w http.ResponseWriter, r *http.Request) error
 	if err := s.uploadBlobChunk(u, r.Body, start, end); err != nil {
 		return err
 	}
-	setUploadLocation(w, u)
 	setContentLength(w, 0)
 	w.WriteHeader(http.StatusAccepted)
 	return nil
@@ -524,7 +523,7 @@ func (s Server) batchRepair(
 }
 
 func setUploadLocation(w http.ResponseWriter, uploadUUID string) {
-	w.Header().Set("Location", fmt.Sprintf("/blobs/uploads/%s", uploadUUID))
+	w.Header().Set("Location", fmt.Sprintf(uploadUUID))
 }
 
 func setContentLength(w http.ResponseWriter, n int) {

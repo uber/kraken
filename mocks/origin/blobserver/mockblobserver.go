@@ -71,9 +71,9 @@ func (mr *MockClientMockRecorder) DeleteBlob(arg0 interface{}) *gomock.Call {
 }
 
 // GetBlob mocks base method
-func (m *MockClient) GetBlob(arg0 image.Digest) (io.Reader, error) {
+func (m *MockClient) GetBlob(arg0 image.Digest) (io.ReadCloser, error) {
 	ret := m.ctrl.Call(m, "GetBlob", arg0)
-	ret0, _ := ret[0].(io.Reader)
+	ret0, _ := ret[0].(io.ReadCloser)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -96,9 +96,9 @@ func (mr *MockClientMockRecorder) PatchUpload(arg0, arg1, arg2, arg3, arg4 inter
 }
 
 // Repair mocks base method
-func (m *MockClient) Repair() (io.Reader, error) {
+func (m *MockClient) Repair() (io.ReadCloser, error) {
 	ret := m.ctrl.Call(m, "Repair")
-	ret0, _ := ret[0].(io.Reader)
+	ret0, _ := ret[0].(io.ReadCloser)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -106,6 +106,32 @@ func (m *MockClient) Repair() (io.Reader, error) {
 // Repair indicates an expected call of Repair
 func (mr *MockClientMockRecorder) Repair() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Repair", reflect.TypeOf((*MockClient)(nil).Repair))
+}
+
+// RepairDigest mocks base method
+func (m *MockClient) RepairDigest(arg0 image.Digest) (io.ReadCloser, error) {
+	ret := m.ctrl.Call(m, "RepairDigest", arg0)
+	ret0, _ := ret[0].(io.ReadCloser)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RepairDigest indicates an expected call of RepairDigest
+func (mr *MockClientMockRecorder) RepairDigest(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RepairDigest", reflect.TypeOf((*MockClient)(nil).RepairDigest), arg0)
+}
+
+// RepairShard mocks base method
+func (m *MockClient) RepairShard(arg0 string) (io.ReadCloser, error) {
+	ret := m.ctrl.Call(m, "RepairShard", arg0)
+	ret0, _ := ret[0].(io.ReadCloser)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RepairShard indicates an expected call of RepairShard
+func (mr *MockClientMockRecorder) RepairShard(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RepairShard", reflect.TypeOf((*MockClient)(nil).RepairShard), arg0)
 }
 
 // UploadBlob mocks base method
