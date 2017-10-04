@@ -17,7 +17,29 @@ type StatusError struct {
 	URL              string
 	ExpectedStatuses []int
 	Status           int
-	ResponseDump     string
+	Header           http.Header
+
+	ResponseDump string
+}
+
+func newStatusError(
+	method string, url string, expectedStatuses []int, resp *http.Response) StatusError {
+
+	defer resp.Body.Close()
+	respBytes, err := httputil.DumpResponse(resp, true)
+	respDump := string(respBytes)
+	if err != nil {
+		respDump = fmt.Sprintf("failed to dump response: %s", err)
+	}
+
+	return StatusError{
+		Method:           method,
+		URL:              url,
+		ExpectedStatuses: expectedStatuses,
+		Status:           resp.StatusCode,
+		Header:           resp.Header,
+		ResponseDump:     respDump,
+	}
 }
 
 func (e StatusError) Error() string {
@@ -112,21 +134,7 @@ func Send(method, url string, options ...SendOption) (*http.Response, error) {
 		for code := range opts.acceptedCodes {
 			expected = append(expected, code)
 		}
-
-		defer resp.Body.Close()
-		respBytes, err := httputil.DumpResponse(resp, true)
-		respDump := string(respBytes)
-		if err != nil {
-			respDump = fmt.Sprintf("failed to dump response: %s", err)
-		}
-
-		return nil, StatusError{
-			Method:           method,
-			URL:              url,
-			ExpectedStatuses: expected,
-			Status:           resp.StatusCode,
-			ResponseDump:     respDump,
-		}
+		return nil, newStatusError(method, url, expected, resp)
 	}
 
 	return resp, nil

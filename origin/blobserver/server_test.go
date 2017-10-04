@@ -2,7 +2,6 @@ package blobserver
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -16,7 +15,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/randutil"
-	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
 func TestCheckBlobHandlerOK(t *testing.T) {
@@ -32,8 +30,7 @@ func TestCheckBlobHandlerOK(t *testing.T) {
 
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, nil)
 
-	_, err := httputil.Head(fmt.Sprintf("http://%s/blobs/%s", addr, d))
-	require.NoError(err)
+	require.NoError(NewHTTPClient(addr).CheckBlob(d))
 }
 
 func TestCheckBlobHandlerNotFound(t *testing.T) {
@@ -49,7 +46,7 @@ func TestCheckBlobHandlerNotFound(t *testing.T) {
 
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, os.ErrNotExist)
 
-	_, err := httputil.Head(fmt.Sprintf("http://%s/blobs/%s", addr, d))
+	err := NewHTTPClient(addr).CheckBlob(d)
 	require.Error(err)
 	require.Equal(http.StatusNotFound, err.(httputil.StatusError).Status)
 }
@@ -71,9 +68,11 @@ func TestGetBlobHandlerOK(t *testing.T) {
 
 	mocks.fileStore.EXPECT().GetCacheFileReader(d.Hex()).Return(f, nil)
 
-	r, err := httputil.Get(fmt.Sprintf("http://%s/blobs/%s", addr, d))
+	r, err := NewHTTPClient(addr).GetBlob(d)
 	require.NoError(err)
-	testutil.ExpectBody(t, r, blob)
+	b, err := ioutil.ReadAll(r)
+	require.NoError(err)
+	require.Equal(string(blob), string(b))
 }
 
 func TestGetBlobHandlerNotFound(t *testing.T) {
@@ -89,7 +88,7 @@ func TestGetBlobHandlerNotFound(t *testing.T) {
 
 	mocks.fileStore.EXPECT().GetCacheFileReader(d.Hex()).Return(nil, os.ErrNotExist)
 
-	_, err := httputil.Get(fmt.Sprintf("http://%s/blobs/%s", addr, d))
+	_, err := NewHTTPClient(addr).GetBlob(d)
 	require.Error(err)
 	require.Equal(http.StatusNotFound, err.(httputil.StatusError).Status)
 }
@@ -107,10 +106,7 @@ func TestDeleteBlobHandlerAccepted(t *testing.T) {
 
 	mocks.fileStore.EXPECT().MoveCacheFileToTrash(d.Hex()).Return(nil)
 
-	_, err := httputil.Delete(
-		fmt.Sprintf("http://%s/blobs/%s", addr, d),
-		httputil.SendAcceptedCodes(http.StatusAccepted))
-	require.NoError(err)
+	require.NoError(NewHTTPClient(addr).DeleteBlob(d))
 }
 
 func TestDeleteBlobHandlerNotFound(t *testing.T) {
@@ -126,7 +122,7 @@ func TestDeleteBlobHandlerNotFound(t *testing.T) {
 
 	mocks.fileStore.EXPECT().MoveCacheFileToTrash(d.Hex()).Return(os.ErrNotExist)
 
-	_, err := httputil.Delete(fmt.Sprintf("http://%s/blobs/%s", addr, d))
+	err := NewHTTPClient(addr).DeleteBlob(d)
 	require.Error(err)
 	require.Equal(http.StatusNotFound, err.(httputil.StatusError).Status)
 }
@@ -145,10 +141,9 @@ func TestUploadBlobHandlerAccepted(t *testing.T) {
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, os.ErrNotExist)
 	mocks.fileStore.EXPECT().CreateUploadFile(gomock.Any(), int64(0)).Return(nil)
 
-	_, err := httputil.Post(
-		fmt.Sprintf("http://%s/blobs/%s/uploads", addr, d),
-		httputil.SendAcceptedCodes(http.StatusAccepted))
+	uuid, err := NewHTTPClient(addr).UploadBlob(d)
 	require.NoError(err)
+	require.NotEmpty(uuid)
 }
 
 func TestUploadBlobHandlerConflict(t *testing.T) {
@@ -164,7 +159,7 @@ func TestUploadBlobHandlerConflict(t *testing.T) {
 
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, nil)
 
-	_, err := httputil.Post(fmt.Sprintf("http://%s/blobs/%s/uploads", addr, d))
+	_, err := NewHTTPClient(addr).UploadBlob(d)
 	require.Error(err)
 	require.Equal(http.StatusConflict, err.(httputil.StatusError).Status)
 }
@@ -192,15 +187,8 @@ func TestPatchUploadHandlerAccepted(t *testing.T) {
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, os.ErrNotExist)
 	mocks.fileStore.EXPECT().GetUploadFileReadWriter(u).Return(f, nil)
 
-	r, err := httputil.Patch(
-		fmt.Sprintf("http://%s/blobs/%s/uploads/%s", addr, d, u),
-		httputil.SendBody(bytes.NewBuffer(chunk)),
-		httputil.SendHeaders(map[string]string{
-			"Content-Range": fmt.Sprintf("%d-%d", start, stop),
-		}),
-		httputil.SendAcceptedCodes(http.StatusAccepted))
-	require.NoError(err)
-	require.Equal(r.Header.Get("Location"), "/blobs/uploads/"+u)
+	require.NoError(
+		NewHTTPClient(addr).PatchUpload(d, u, int64(start), int64(stop), bytes.NewBuffer(chunk)))
 
 	content, err := ioutil.ReadFile(f.Name())
 	require.NoError(err)
@@ -222,7 +210,7 @@ func TestPatchUploadHandlerConflict(t *testing.T) {
 
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, nil)
 
-	_, err := httputil.Patch(fmt.Sprintf("http://%s/blobs/%s/uploads/%s", addr, d, u))
+	err := NewHTTPClient(addr).PatchUpload(d, u, 0, 4, bytes.NewBufferString("blah"))
 	require.Error(err)
 	require.Equal(http.StatusConflict, err.(httputil.StatusError).Status)
 }
@@ -248,10 +236,7 @@ func TestCommitUploadHandlerCreated(t *testing.T) {
 	mocks.fileStore.EXPECT().GetUploadFileReader(u).Return(f, nil)
 	mocks.fileStore.EXPECT().MoveUploadFileToCache(u, d.Hex()).Return(nil)
 
-	_, err = httputil.Put(
-		fmt.Sprintf("http://%s/blobs/%s/uploads/%s", addr, d, u),
-		httputil.SendAcceptedCodes(http.StatusCreated))
-	require.NoError(err)
+	require.NoError(NewHTTPClient(addr).CommitUpload(*d, u))
 }
 
 func TestCommitUploadHandlerNotFound(t *testing.T) {
@@ -268,7 +253,7 @@ func TestCommitUploadHandlerNotFound(t *testing.T) {
 
 	mocks.fileStore.EXPECT().GetUploadFileReader(u).Return(nil, os.ErrNotExist)
 
-	_, err := httputil.Put(fmt.Sprintf("http://%s/blobs/%s/uploads/%s", addr, d, u))
+	err := NewHTTPClient(addr).CommitUpload(d, u)
 	require.Error(err)
 	require.Equal(http.StatusNotFound, err.(httputil.StatusError).Status)
 }
@@ -298,22 +283,35 @@ func TestParseContentRangeHeaderBadRequests(t *testing.T) {
 	}
 }
 
-func TestHandlersRedirectByDigest(t *testing.T) {
+func TestRedirectErrors(t *testing.T) {
 	d := image.DigestFixture()
 	u := uuid.Generate().String()
 
 	tests := []struct {
-		method   string
-		endpoint string
+		name string
+		f    func(addr string) error
 	}{
-		{"HEAD", fmt.Sprintf("/blobs/%s", d)},
-		{"GET", fmt.Sprintf("/blobs/%s", d)},
-		{"POST", fmt.Sprintf("/blobs/%s/uploads", d)},
-		{"PATCH", fmt.Sprintf("/blobs/%s/uploads/%s", d, u)},
-		{"PUT", fmt.Sprintf("/blobs/%s/uploads/%s", d, u)},
+		{
+			"CheckBlob",
+			func(addr string) error { return NewHTTPClient(addr).CheckBlob(d) },
+		}, {
+			"GetBlob",
+			func(addr string) error { _, err := NewHTTPClient(addr).GetBlob(d); return err },
+		}, {
+			"UploadBlob",
+			func(addr string) error { _, err := NewHTTPClient(addr).UploadBlob(d); return err },
+		}, {
+			"PatchUpload",
+			func(addr string) error {
+				return NewHTTPClient(addr).PatchUpload(d, u, 0, 4, bytes.NewBufferString("blah"))
+			},
+		}, {
+			"CommitUpload",
+			func(addr string) error { return NewHTTPClient(addr).CommitUpload(d, u) },
+		},
 	}
 	for _, test := range tests {
-		t.Run(test.method+" "+test.endpoint, func(t *testing.T) {
+		t.Run(test.name, func(t *testing.T) {
 			require := require.New(t)
 
 			mocks := newServerMocks(t)
@@ -329,12 +327,9 @@ func TestHandlersRedirectByDigest(t *testing.T) {
 			addr, stop := testServer(config, mocks)
 			defer stop()
 
-			r, err := httputil.Send(
-				test.method,
-				fmt.Sprintf("http://%s%s", addr, test.endpoint),
-				httputil.SendAcceptedCodes(http.StatusTemporaryRedirect))
-			require.NoError(err)
-			require.Equal("origin2,origin3", r.Header.Get("Origin-Locations"))
+			err := test.f(addr)
+			require.Error(err)
+			require.Equal([]string{"origin2", "origin3"}, err.(RedirectError).Locations)
 		})
 	}
 }
