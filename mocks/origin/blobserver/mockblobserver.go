@@ -83,6 +83,19 @@ func (mr *MockClientMockRecorder) GetBlob(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlob", reflect.TypeOf((*MockClient)(nil).GetBlob), arg0)
 }
 
+// Locations mocks base method
+func (m *MockClient) Locations(arg0 image.Digest) ([]string, error) {
+	ret := m.ctrl.Call(m, "Locations", arg0)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Locations indicates an expected call of Locations
+func (mr *MockClientMockRecorder) Locations(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Locations", reflect.TypeOf((*MockClient)(nil).Locations), arg0)
+}
+
 // PatchUpload mocks base method
 func (m *MockClient) PatchUpload(arg0 image.Digest, arg1 string, arg2, arg3 int64, arg4 io.Reader) error {
 	ret := m.ctrl.Call(m, "PatchUpload", arg0, arg1, arg2, arg3, arg4)
@@ -93,6 +106,18 @@ func (m *MockClient) PatchUpload(arg0 image.Digest, arg1 string, arg2, arg3 int6
 // PatchUpload indicates an expected call of PatchUpload
 func (mr *MockClientMockRecorder) PatchUpload(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchUpload", reflect.TypeOf((*MockClient)(nil).PatchUpload), arg0, arg1, arg2, arg3, arg4)
+}
+
+// PushBlob mocks base method
+func (m *MockClient) PushBlob(arg0 image.Digest, arg1 io.Reader) error {
+	ret := m.ctrl.Call(m, "PushBlob", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PushBlob indicates an expected call of PushBlob
+func (mr *MockClientMockRecorder) PushBlob(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PushBlob", reflect.TypeOf((*MockClient)(nil).PushBlob), arg0, arg1)
 }
 
 // Repair mocks base method
@@ -134,15 +159,15 @@ func (mr *MockClientMockRecorder) RepairShard(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RepairShard", reflect.TypeOf((*MockClient)(nil).RepairShard), arg0)
 }
 
-// UploadBlob mocks base method
-func (m *MockClient) UploadBlob(arg0 image.Digest) (string, error) {
-	ret := m.ctrl.Call(m, "UploadBlob", arg0)
+// StartUpload mocks base method
+func (m *MockClient) StartUpload(arg0 image.Digest) (string, error) {
+	ret := m.ctrl.Call(m, "StartUpload", arg0)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// UploadBlob indicates an expected call of UploadBlob
-func (mr *MockClientMockRecorder) UploadBlob(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClient)(nil).UploadBlob), arg0)
+// StartUpload indicates an expected call of StartUpload
+func (mr *MockClientMockRecorder) StartUpload(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartUpload", reflect.TypeOf((*MockClient)(nil).StartUpload), arg0)
 }

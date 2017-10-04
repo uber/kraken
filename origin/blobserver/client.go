@@ -25,12 +25,25 @@ func (e RedirectError) Error() string {
 	return fmt.Sprintf("incorrect origin, must redirect request to: %v", e.Locations)
 }
 
+// ClientProvider defines an interface for creating Client scoped to an origin addr.
+type ClientProvider interface {
+	Provide(addr string) Client
+}
+
+// HTTPClientProvider provides HTTPClients.
+type HTTPClientProvider struct{}
+
+// Provide implements ClientProvider's Provide.
+func (p HTTPClientProvider) Provide(addr string) Client {
+	return NewHTTPClient(addr)
+}
+
 // Client provides a wrapper around all Server HTTP endpoints.
 type Client interface {
 	Locations(d image.Digest) ([]string, error)
 	CheckBlob(d image.Digest) error
 	GetBlob(d image.Digest) (io.ReadCloser, error)
-	PushBlob(d image.Digest) error
+	PushBlob(d image.Digest, blob io.Reader) error
 	DeleteBlob(d image.Digest) error
 
 	StartUpload(d image.Digest) (uuid string, err error)
@@ -75,7 +88,7 @@ func (c *HTTPClient) GetBlob(d image.Digest) (io.ReadCloser, error) {
 }
 
 // PushBlob is a convenience wrapper around the upload API.
-func (c *HTTPClient) PushBlob(d image.Digest) error {
+func (c *HTTPClient) PushBlob(d image.Digest, blob io.Reader) error {
 	panic("not implemented")
 }
 
