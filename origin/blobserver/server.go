@@ -108,7 +108,7 @@ func (s Server) Handler() http.Handler {
 	r.Get("/blobs/:digest", handler(s.getBlobHandler))
 	r.Delete("/blobs/:digest", handler(s.deleteBlobHandler))
 
-	r.Post("/blobs/:digest/uploads", handler(s.uploadBlobHandler))
+	r.Post("/blobs/:digest/uploads", handler(s.startUploadHandler))
 	r.Patch("/blobs/:digest/uploads/:uuid", handler(s.patchUploadHandler))
 	r.Put("/blobs/:digest/uploads/:uuid", handler(s.commitUploadHandler))
 
@@ -165,9 +165,9 @@ func (s Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
-// uploadBlobHandler start upload process for a blob. Returns the location of
-// the upload which is needed for subsequent uploads of this blob.
-func (s Server) uploadBlobHandler(w http.ResponseWriter, r *http.Request) error {
+// startUploadHandler starts upload process for a blob. Returns the location of
+// the upload which is needed for subsequent patches of this blob.
+func (s Server) startUploadHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
 		return err

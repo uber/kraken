@@ -27,12 +27,16 @@ func (e RedirectError) Error() string {
 
 // Client provides a wrapper around all Server HTTP endpoints.
 type Client interface {
+	Locations(d image.Digest) ([]string, error)
 	CheckBlob(d image.Digest) error
 	GetBlob(d image.Digest) (io.ReadCloser, error)
+	PushBlob(d image.Digest) error
 	DeleteBlob(d image.Digest) error
-	UploadBlob(d image.Digest) (uuid string, err error)
+
+	StartUpload(d image.Digest) (uuid string, err error)
 	PatchUpload(d image.Digest, uuid string, start, stop int64, chunk io.Reader) error
 	CommitUpload(d image.Digest, uuid string) error
+
 	Repair() (io.ReadCloser, error)
 	RepairShard(shardID string) (io.ReadCloser, error)
 	RepairDigest(d image.Digest) (io.ReadCloser, error)
@@ -50,6 +54,11 @@ func NewHTTPClient(addr string) *HTTPClient {
 	return &HTTPClient{addr}
 }
 
+// Locations returns the origin server addresses which d is sharded on.
+func (c *HTTPClient) Locations(d image.Digest) ([]string, error) {
+	panic("not implemented")
+}
+
 // CheckBlob returns error if the origin does not have a blob for d.
 func (c *HTTPClient) CheckBlob(d image.Digest) error {
 	_, err := httputil.Head(fmt.Sprintf("http://%s/blobs/%s", c.addr, d))
@@ -65,6 +74,11 @@ func (c *HTTPClient) GetBlob(d image.Digest) (io.ReadCloser, error) {
 	return r.Body, nil
 }
 
+// PushBlob is a convenience wrapper around the upload API.
+func (c *HTTPClient) PushBlob(d image.Digest) error {
+	panic("not implemented")
+}
+
 // DeleteBlob deletes the blob corresponding to d.
 func (c *HTTPClient) DeleteBlob(d image.Digest) error {
 	_, err := httputil.Delete(
@@ -73,9 +87,9 @@ func (c *HTTPClient) DeleteBlob(d image.Digest) error {
 	return maybeRedirect(err)
 }
 
-// UploadBlob marks d as ready for upload, returning the upload uuid to use for
+// StartUpload marks d as ready for upload, returning the upload uuid to use for
 // future patches and commit.
-func (c *HTTPClient) UploadBlob(d image.Digest) (uuid string, err error) {
+func (c *HTTPClient) StartUpload(d image.Digest) (uuid string, err error) {
 	r, err := httputil.Post(
 		fmt.Sprintf("http://%s/blobs/%s/uploads", c.addr, d),
 		httputil.SendAcceptedCodes(http.StatusAccepted))

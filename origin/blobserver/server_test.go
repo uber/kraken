@@ -127,7 +127,7 @@ func TestDeleteBlobHandlerNotFound(t *testing.T) {
 	require.Equal(http.StatusNotFound, err.(httputil.StatusError).Status)
 }
 
-func TestUploadBlobHandlerAccepted(t *testing.T) {
+func TestStartUploadHandlerAccepted(t *testing.T) {
 	require := require.New(t)
 
 	mocks := newServerMocks(t)
@@ -141,12 +141,12 @@ func TestUploadBlobHandlerAccepted(t *testing.T) {
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, os.ErrNotExist)
 	mocks.fileStore.EXPECT().CreateUploadFile(gomock.Any(), int64(0)).Return(nil)
 
-	uuid, err := NewHTTPClient(addr).UploadBlob(d)
+	uuid, err := NewHTTPClient(addr).StartUpload(d)
 	require.NoError(err)
 	require.NotEmpty(uuid)
 }
 
-func TestUploadBlobHandlerConflict(t *testing.T) {
+func TestStartUploadHandlerConflict(t *testing.T) {
 	require := require.New(t)
 
 	mocks := newServerMocks(t)
@@ -159,7 +159,7 @@ func TestUploadBlobHandlerConflict(t *testing.T) {
 
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, nil)
 
-	_, err := NewHTTPClient(addr).UploadBlob(d)
+	_, err := NewHTTPClient(addr).StartUpload(d)
 	require.Error(err)
 	require.Equal(http.StatusConflict, err.(httputil.StatusError).Status)
 }
@@ -298,8 +298,8 @@ func TestRedirectErrors(t *testing.T) {
 			"GetBlob",
 			func(addr string) error { _, err := NewHTTPClient(addr).GetBlob(d); return err },
 		}, {
-			"UploadBlob",
-			func(addr string) error { _, err := NewHTTPClient(addr).UploadBlob(d); return err },
+			"StartUpload",
+			func(addr string) error { _, err := NewHTTPClient(addr).StartUpload(d); return err },
 		}, {
 			"PatchUpload",
 			func(addr string) error {
