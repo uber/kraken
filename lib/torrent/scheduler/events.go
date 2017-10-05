@@ -5,7 +5,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 
-	"code.uber.internal/infra/kraken/client/torrent/storage"
+	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/timeutil"
 )

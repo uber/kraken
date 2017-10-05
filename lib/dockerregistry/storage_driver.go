@@ -5,8 +5,8 @@ import (
 	"io"
 	"time"
 
-	"code.uber.internal/infra/kraken/client/torrent"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/torrent"
 
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/docker/distribution/context"

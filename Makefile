@@ -31,7 +31,7 @@ PROGS = \
 
 # define the list of proto buffers the service depends on
 PROTO_GENDIR ?= .gen
-PROTO_SRCS = client/torrent/proto/p2p/p2p.proto
+PROTO_SRCS = lib/torrent/proto/p2p/p2p.proto
 GOBUILD_DIR = go-build
 
 MAKE_PROTO = go-build/protoc --plugin=go-build/protoc-gen-go --proto_path=$(dir $(patsubst %/,%,$(dir $(pb)))) --go_out=$(PROTO_GENDIR)/go $(pb)
@@ -62,6 +62,8 @@ jenkins:: redis mysql
 
 mockgen = GOPATH=$(OLDGOPATH) $(GLIDE_EXEC) -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
 
+# mockgen must be installed on the system to make this work. Install it by running
+# `go get github.com/golang/mock/mockgen`.
 .PHONY: mocks
 mocks:
 	rm -rf mocks
@@ -72,11 +74,11 @@ mocks:
 		-package mockstorage \
 		code.uber.internal/infra/kraken/tracker/storage Storage	
 
-	mkdir -p mocks/client/torrent/mockstorage
+	mkdir -p mocks/lib/torrent/mockstorage
 	$(mockgen) \
-		-destination=mocks/client/torrent/mockstorage/mockstorage.go \
+		-destination=mocks/lib/torrent/mockstorage/mockstorage.go \
 		-package mockstorage \
-		code.uber.internal/infra/kraken/client/torrent/storage Torrent
+		code.uber.internal/infra/kraken/lib/torrent/storage Torrent
 
 	mkdir -p mocks/origin/client
 	$(mockgen) \

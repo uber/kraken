@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"code.uber.internal/infra/kraken/client/torrent"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/torrent"
 
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/uuid"

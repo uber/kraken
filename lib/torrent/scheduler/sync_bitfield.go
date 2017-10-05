@@ -3,7 +3,7 @@ package scheduler
 import (
 	"sync"
 
-	"code.uber.internal/infra/kraken/client/torrent/storage"
+	"code.uber.internal/infra/kraken/lib/torrent/storage"
 )
 
 type syncBitfield struct {
