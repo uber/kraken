@@ -1,4 +1,4 @@
-package krakencli
+package main
 
 import (
 	"encoding/json"

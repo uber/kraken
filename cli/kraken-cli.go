@@ -1,4 +1,4 @@
-package krakencli
+package main
 
 import (
 	cfg "code.uber.internal/infra/kraken/config/origin"
@@ -382,7 +382,7 @@ func initHashState(appConfig cfg.AppConfig) *hrw.RendezvousHash {
 // CommandHandlerFunc defines a command handler type
 type commandHandlerFunc func(flag string, origin string, cc commandContext) (int, error)
 
-//RunMain main wrapper primarely for testing purposes. Please note you should not call os.Exit here
+// RunMain main wrapper primarely for testing purposes. Please note you should not call os.Exit here
 // this will screw tests up, call os.Exit only in a upper level function
 func RunMain(cmdline []string, appConfig cfg.AppConfig, w io.Writer) int {
 

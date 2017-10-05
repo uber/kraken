@@ -16,18 +16,19 @@ PROJECT_ROOT = code.uber.internal/infra/kraken
 # Tells udeploy what your service name is (set to $(notdir of PROJECT_ROOT))
 # by default
 SERVICES = \
-	tracker/tracker \
 	agent/agent \
+	cli/kraken-cli \
 	origin/origin \
+	tracker/tracker \
 	tools/bin/puller/puller
 
 # List all executables
 PROGS = \
-	tracker/tracker \
 	agent/agent \
+	cli/kraken-cli \
+	tracker/tracker \
 	origin/origin \
 	tools/bin/puller/puller \
-	tools/bin/kraken-cli/kraken
 
 # define the list of proto buffers the service depends on
 PROTO_GENDIR ?= .gen
@@ -48,8 +49,8 @@ proto:
 tracker/tracker: $(wildcard tracker/*.go)
 agent/agent: proto $(wildcard agent/*.go)
 origin/origin: $(wildcard origin/*.go)
+cli/kraken-cli: $(wildcard cli/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
-tools/bin/kraken-cli/kraken:  client/cli/kraken-cli.go tools/bin/kraken-cli/main.go config/origin/config.go
 
 .PHONY: bench
 bench:
