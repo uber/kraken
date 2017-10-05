@@ -1,6 +1,6 @@
 package torrent
 
-import "code.uber.internal/infra/kraken/client/torrent/scheduler"
+import "code.uber.internal/infra/kraken/lib/torrent/scheduler"
 
 // Config contains torrent client config
 type Config struct {

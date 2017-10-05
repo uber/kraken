@@ -12,7 +12,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
-	"code.uber.internal/infra/kraken/client/torrent/storage"
+	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 )
 

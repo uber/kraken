@@ -18,10 +18,10 @@ import (
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 
-	"code.uber.internal/infra/kraken/client/peercontext"
-	"code.uber.internal/infra/kraken/client/torrent/scheduler"
-	"code.uber.internal/infra/kraken/client/torrent/storage"
+	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
+	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils"
 )

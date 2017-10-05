@@ -18,9 +18,9 @@ import (
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken/client/peercontext"
-	"code.uber.internal/infra/kraken/client/torrent/storage"
-	"code.uber.internal/infra/kraken/mocks/client/torrent/mockstorage"
+	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/lib/torrent/storage"
+	"code.uber.internal/infra/kraken/mocks/lib/torrent/mockstorage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
