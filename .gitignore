@@ -16,8 +16,8 @@ pkg/
 tracker/tracker
 agent/agent
 origin/origin
+cli/kraken-cli
 tools/bin/puller/puller
-tools/bin/kraken-cli/kraken
 
 # tmp migration files
 [0-9]*_-dir.go

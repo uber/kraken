@@ -1,13 +1,13 @@
-Source: kraken-agent
-Maintainer: Igor Morozov <igor@uber.com>
+Source: kraken-cli
+Maintainer: Kraken Group <kraken-group@uber.com>
 Section: misc
 Priority: optional
-Standards-Version: 0.1.11
-Build-Depends: debhelper (>= 9), golang-1.7, curl, git
+Standards-Version: 0.1.0
+Build-Depends: debhelper (>= 9), golang (>= 2:1.9.0), curl, git
 
-Package: kraken-agent
+Package: kraken-cli
 Architecture: amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: This is P2P enabled backend for docker
+Description: client for operation on Kraken origin cluster.
  .
- - kraken-agent P2P assisted backend for docker
+ - client for operation on Kraken origin cluster.
