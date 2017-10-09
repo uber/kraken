@@ -13,6 +13,11 @@ type AgentTransferer struct {
 	client torrent.Client
 }
 
+// NewAgentTransferer creates a new agent transferer given an agent torrent client
+func NewAgentTransferer(client torrent.Client) *AgentTransferer {
+	return &AgentTransferer{client}
+}
+
 // Download downloads blobs as torrent
 func (tt *AgentTransferer) Download(digest string) error {
 	return tt.client.DownloadTorrent(digest)

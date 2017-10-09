@@ -20,6 +20,7 @@ SERVICES = \
 	cli/kraken-cli \
 	origin/origin \
 	tracker/tracker \
+	proxy/proxy \
 	tools/bin/puller/puller
 
 # List all executables
@@ -28,6 +29,7 @@ PROGS = \
 	cli/kraken-cli \
 	tracker/tracker \
 	origin/origin \
+	proxy/proxy \
 	tools/bin/puller/puller \
 
 # define the list of proto buffers the service depends on
@@ -194,6 +196,24 @@ run_peer: peer
 		-p 5082:5082 \
 		kraken-peer:dev \
 		/usr/bin/kraken-agent --announce_ip=192.168.65.1 --announce_port=5082
+
+.PHONY: proxy
+proxy:
+	-rm proxy/proxy
+	GOOS=linux GOARCH=amd64 make proxy/proxy
+	docker build -t kraken-proxy:dev -f docker/proxy/Dockerfile ./
+
+run_proxy: proxy
+	-docker stop kraken-proxy
+	-docker rm kraken-proxy
+	docker run -d \
+		--name=kraken-proxy \
+		-e UBER_CONFIG_DIR=/root/kraken/config/proxy \
+		-e UBER_ENVIRONMENT=development \
+		-e UBER_DATACENTER=sjc1 \
+		-p 5054:5054 \
+		kraken-proxy:dev \
+		/usr/bin/kraken-proxy 
 
 bootstrap_integration:
 	if [ ! -d env ]; then \
