@@ -210,9 +210,9 @@ run_integration:
 
 integration: bootstrap_integration build_integration run_integration
 
-# jenkins-only debian build job
-.PHONY: debian-kraken-agent
-debian-kraken-agent: agent/agent
+# jenkins-only debian build job for cli
+.PHONY: debian-kraken-cli
+debian-kraken-cli: cli/kraken-cli
 		make debian-pre
 
 include go-build/rules.mk
