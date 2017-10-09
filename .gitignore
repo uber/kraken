@@ -16,6 +16,7 @@ pkg/
 tracker/tracker
 agent/agent
 origin/origin
+proxy/proxy
 cli/kraken-cli
 tools/bin/puller/puller
 

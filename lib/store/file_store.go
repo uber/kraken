@@ -85,17 +85,18 @@ func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error
 	if err != nil {
 		return nil, err
 	}
+
 	var downloadCacheBackend base.FileStore
 	if useRefcount {
 		downloadCacheBackend, err = refcountable.NewLocalRCFileStoreDefault()
-		if err != nil {
-			return nil, err
-		}
+	} else if config.LRUConfig.Enable {
+		downloadCacheBackend, err = base.NewLocalFileStoreWithLRU(config.LRUConfig.Size)
 	} else {
 		downloadCacheBackend, err = base.NewShardedFileStoreDefault()
-		if err != nil {
-			return nil, err
-		}
+	}
+
+	if err != nil {
+		return nil, err
 	}
 
 	localStore := &LocalFileStore{

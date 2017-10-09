@@ -1,8 +1,6 @@
 package main
 
 import (
-	"flag"
-
 	xconfig "code.uber.internal/go-common.git/x/config"
 	"code.uber.internal/go-common.git/x/log"
 	dockerconfig "github.com/docker/distribution/configuration"
@@ -11,17 +9,12 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
-	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/metrics"
+	"code.uber.internal/infra/kraken/origin/blobserver"
 )
 
 func main() {
-	announceIP := flag.String("announce_ip", "", "ip which peer will announce itself as")
-	announcePort := flag.Int("announce_port", 0, "port which peer will announce itself as")
-	flag.Parse()
-
 	var config Config
 	if err := xconfig.Load(&config); err != nil {
 		panic(err)
@@ -30,12 +23,6 @@ func main() {
 	formatter := true
 	config.Logging.TextFormatter = &formatter
 	log.Configure(&config.Logging, false)
-
-	pctx, err := peercontext.New(
-		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *announceIP, *announcePort)
-	if err != nil {
-		log.Fatalf("Failed to create peer context: %s", err)
-	}
 
 	stats, closer, err := metrics.New(config.Metrics)
 	if err != nil {
@@ -48,22 +35,20 @@ func main() {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
 
-	client, err := torrent.NewSchedulerClient(&config.Torrent, store, stats, pctx)
-	if err != nil {
-		log.Fatalf("Failed to create scheduler client: %s", err)
-		panic(err)
-	}
-	defer client.Close()
+	transferer := transfer.NewOriginClusterTransferer(
+		config.Concurrency,
+		store,
+		config.TrackAddr,
+		config.OriginAddr,
+		blobserver.HTTPClientProvider{},
+	)
 
 	config.Registry.Docker.Storage = dockerconfig.Storage{
 		dockerregistry.Name: dockerconfig.Parameters{
 			"config":     &config.Registry,
-			"transferer": transfer.NewAgentTransferer(client),
+			"transferer": transferer,
 			"store":      store,
 			"metrics":    stats,
-		},
-		"redirect": dockerconfig.Parameters{
-			"disable": true,
 		},
 	}
 
