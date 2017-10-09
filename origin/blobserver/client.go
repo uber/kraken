@@ -68,6 +68,9 @@ func NewHTTPClient(addr string) *HTTPClient {
 }
 
 // Locations returns the origin server addresses which d is sharded on.
+// TODO (@evelynl): Locations should returns same list on any addr,
+// except during repair. It should have some retry logic so if one origin host
+// is not available, it retries (assuming we have round robin dns for origin cluster).
 func (c *HTTPClient) Locations(d image.Digest) ([]string, error) {
 	panic("not implemented")
 }

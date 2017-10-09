@@ -53,7 +53,7 @@ func (cli *BlobAPIClient) verifyBlob(digest image.Digest, reader io.ReadCloser) 
 		return false, err
 	}
 
-	return *computedDigest == digest, nil
+	return computedDigest == digest, nil
 }
 
 // PullBlob pulls a file blob from origin server.

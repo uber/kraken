@@ -9,5 +9,5 @@ func DigestFixture() Digest {
 	if err != nil {
 		panic(err)
 	}
-	return *d
+	return d
 }

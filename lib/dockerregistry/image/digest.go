@@ -18,16 +18,26 @@ type Digest struct {
 }
 
 // NewDigestFromString initializes a new Digest obj from given string.
-func NewDigestFromString(str string) (*Digest, error) {
+func NewDigestFromString(str string) (Digest, error) {
+	digest := Digest{}
 	parts := strings.Split(str, ":")
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("Digest %s is not correctly formatted", str)
+		return digest, fmt.Errorf("Digest %s is not correctly formatted", str)
 	}
-	return &Digest{
-		algo: parts[0],
-		hex:  parts[1],
-		raw:  str,
-	}, nil
+
+	digest.algo = parts[0]
+	digest.hex = parts[1]
+	digest.raw = str
+	return digest, nil
+}
+
+// NewSHA256DigestFromHex creates a new Digest obj
+func NewSHA256DigestFromHex(hexStr string) Digest {
+	return Digest{
+		algo: SHA256,
+		hex:  hexStr,
+		raw:  fmt.Sprintf("%s:%s", SHA256, hexStr),
+	}
 }
 
 // String returns digest in string format like "<algorithm>:<hex_digest_string>".

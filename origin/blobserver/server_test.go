@@ -236,7 +236,7 @@ func TestCommitUploadHandlerCreated(t *testing.T) {
 	mocks.fileStore.EXPECT().GetUploadFileReader(u).Return(f, nil)
 	mocks.fileStore.EXPECT().MoveUploadFileToCache(u, d.Hex()).Return(nil)
 
-	require.NoError(NewHTTPClient(addr).CommitUpload(*d, u))
+	require.NoError(NewHTTPClient(addr).CommitUpload(d, u))
 }
 
 func TestCommitUploadHandlerNotFound(t *testing.T) {

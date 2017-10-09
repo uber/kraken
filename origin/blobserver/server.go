@@ -270,26 +270,26 @@ func (s Server) repairBlobByDigestHandler(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return serverErrorf("failed to compute nodes of shard %q: %s", shardID, err)
 	}
-	if err := s.batchRepair(nodes, []*image.Digest{d}, w); err != nil {
+	if err := s.batchRepair(nodes, []image.Digest{d}, w); err != nil {
 		return err
 	}
 	return nil
 }
 
 // parseDigest parses a digest from a url path parameter, e.g. "/blobs/:digest".
-func parseDigest(r *http.Request) (*image.Digest, error) {
+func parseDigest(r *http.Request) (digest image.Digest, err error) {
 	d := chi.URLParam(r, "digest")
 	if len(d) == 0 {
-		return nil, serverErrorf("empty digest").Status(http.StatusBadRequest)
+		return digest, serverErrorf("empty digest").Status(http.StatusBadRequest)
 	}
 	digestRaw, err := url.PathUnescape(d)
 	if err != nil {
-		return nil, serverErrorf(
+		return digest, serverErrorf(
 			"cannot unescape digest %q: %s", d, err).Status(http.StatusBadRequest)
 	}
-	digest, err := image.NewDigestFromString(digestRaw)
+	digest, err = image.NewDigestFromString(digestRaw)
 	if err != nil {
-		return nil, serverErrorf(
+		return digest, serverErrorf(
 			"cannot parse digest %q: %s", digestRaw, err).Status(http.StatusBadRequest)
 	}
 	return digest, nil
@@ -335,7 +335,7 @@ func parseContentRange(h http.Header) (start, end int64, err error) {
 	return start, end, nil
 }
 
-func (s Server) redirectByDigest(d *image.Digest) error {
+func (s Server) redirectByDigest(d image.Digest) error {
 	nodes, err := s.hashState.GetOrderedNodes(d.GetShardID(), s.config.NumReplica)
 	if err != nil || len(nodes) == 0 {
 		return serverErrorf("failed to calculate hash for digest %q: %s", d, err)
@@ -354,7 +354,7 @@ func (s Server) redirectByDigest(d *image.Digest) error {
 		Header("Origin-Locations", strings.Join(labels, ","))
 }
 
-func (s Server) ensureDigestExists(d *image.Digest) error {
+func (s Server) ensureDigestExists(d image.Digest) error {
 	if _, err := s.fileStore.GetCacheFileStat(d.Hex()); err != nil {
 		if os.IsNotExist(err) {
 			return newBlobNotFoundError(d, err)
@@ -364,7 +364,7 @@ func (s Server) ensureDigestExists(d *image.Digest) error {
 	return nil
 }
 
-func (s Server) ensureDigestNotExists(d *image.Digest) error {
+func (s Server) ensureDigestNotExists(d image.Digest) error {
 	_, err := s.fileStore.GetCacheFileStat(d.Hex())
 	if err == nil {
 		return serverErrorf("digest %q already exists: %s", d, err).Status(http.StatusConflict)
@@ -375,7 +375,7 @@ func (s Server) ensureDigestNotExists(d *image.Digest) error {
 	return nil
 }
 
-func (s Server) downloadBlob(d *image.Digest, w http.ResponseWriter) error {
+func (s Server) downloadBlob(d image.Digest, w http.ResponseWriter) error {
 	f, err := s.fileStore.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
 		return newBlobNotFoundError(d, err)
@@ -396,7 +396,7 @@ func (s Server) downloadBlob(d *image.Digest, w http.ResponseWriter) error {
 	return nil
 }
 
-func (s Server) deleteBlob(d *image.Digest) error {
+func (s Server) deleteBlob(d image.Digest) error {
 	if err := s.fileStore.MoveCacheFileToTrash(d.Hex()); err != nil {
 		if os.IsNotExist(err) {
 			return newBlobNotFoundError(d, err)
@@ -406,7 +406,7 @@ func (s Server) deleteBlob(d *image.Digest) error {
 	return nil
 }
 
-func (s Server) createUpload(d *image.Digest) (string, error) {
+func (s Server) createUpload(d image.Digest) (string, error) {
 	uploadUUID := uuid.Generate().String()
 	if err := s.fileStore.CreateUploadFile(uploadUUID, 0); err != nil {
 		return "", serverErrorf("failed to create upload file for digest %q: %s", d, err)
@@ -444,7 +444,7 @@ func (s Server) uploadBlobChunk(uploadUUID string, b io.ReadCloser, start, end i
 	return nil
 }
 
-func (s Server) commitUpload(d *image.Digest, uploadUUID string) error {
+func (s Server) commitUpload(d image.Digest, uploadUUID string) error {
 	// Verify hash.
 	digester := image.NewDigester()
 	f, err := s.fileStore.GetUploadFileReader(uploadUUID)
@@ -458,7 +458,7 @@ func (s Server) commitUpload(d *image.Digest, uploadUUID string) error {
 	if err != nil {
 		return serverErrorf("failed to calculate digest for upload %q: %s", uploadUUID, err)
 	}
-	if *computedDigest != *d {
+	if computedDigest != d {
 		return serverErrorf("computed digest %q doesn't match parameter %q", computedDigest, d).
 			Status(http.StatusBadRequest)
 	}
@@ -471,13 +471,13 @@ func (s Server) commitUpload(d *image.Digest, uploadUUID string) error {
 	return nil
 }
 
-func (s Server) getDigests(shardID string) ([]*image.Digest, error) {
+func (s Server) getDigests(shardID string) ([]image.Digest, error) {
 	names, err := s.fileStore.ListCacheFilesByShardID(shardID)
 	if err != nil {
 		// TODO(codyg): Maybe 404 here?
 		return nil, serverErrorf("failed to retrieve digests for shard %q: %s", shardID, err)
 	}
-	digests := make([]*image.Digest, len(names))
+	digests := make([]image.Digest, len(names))
 	for i, name := range names {
 		d, err := image.NewDigestFromString("sha256:" + name)
 		if err != nil {
@@ -489,7 +489,7 @@ func (s Server) getDigests(shardID string) ([]*image.Digest, error) {
 }
 
 func (s Server) batchRepair(
-	nodes []*hrw.RendezvousHashNode, digests []*image.Digest, w http.ResponseWriter) error {
+	nodes []*hrw.RendezvousHashNode, digests []image.Digest, w http.ResponseWriter) error {
 
 	if len(nodes) == 0 {
 		err := serverErrorf("invalid hash configuration: no nodes found")

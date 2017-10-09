@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 
+	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
 
@@ -76,11 +77,11 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 	}
 	store := storeParam.(store.FileStore)
 
-	clientParam, ok := params["torrentclient"]
-	if !ok || clientParam == nil {
+	transfererParam, ok := params["transferer"]
+	if !ok || transfererParam == nil {
 		log.Fatal("Failed to create storage driver. No torrent agent initated.")
 	}
-	client := clientParam.(torrent.Client)
+	transferer := transfererParam.(transfer.ImageTransferer)
 
 	metricsParam, ok := params["metrics"]
 	if !ok || metricsParam == nil {
@@ -88,7 +89,7 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 	}
 	metrics := metricsParam.(tally.Scope)
 
-	sd, err := NewKrakenStorageDriver(config, store, client, metrics)
+	sd, err := NewKrakenStorageDriver(config, store, transferer, metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -111,9 +112,9 @@ type KrakenStorageDriver struct {
 func NewKrakenStorageDriver(
 	c *Config,
 	s store.FileStore,
-	cl torrent.Client,
+	transferer transfer.ImageTransferer,
 	metrics tally.Scope) (*KrakenStorageDriver, error) {
-	tags, err := NewDockerTags(c, s, cl, metrics)
+	tags, err := NewDockerTags(c, s, transferer, metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -136,10 +137,9 @@ func NewKrakenStorageDriver(
 
 	return &KrakenStorageDriver{
 		config:  c,
-		tcl:     cl,
 		store:   s,
-		blobs:   NewBlobs(cl, s),
-		uploads: NewUploads(cl, s),
+		blobs:   NewBlobs(transferer, s),
+		uploads: NewUploads(transferer, s),
 		tags:    tags,
 		metrics: metrics,
 	}, nil

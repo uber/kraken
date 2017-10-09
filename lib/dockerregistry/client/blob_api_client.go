@@ -189,7 +189,7 @@ func (cli *BlobAPIClient) verifyBlob(digest image.Digest, reader io.Reader) (boo
 		return false, err
 	}
 
-	return *computedDigest == digest, nil
+	return computedDigest == digest, nil
 }
 
 // pushStart starts a blob upload. It returns a UUID to identify the blob.

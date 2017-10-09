@@ -10,16 +10,18 @@ import (
 	"github.com/uber-go/tally"
 )
 
-// TODO (@evelynl): depending on D1135521, you should remove this
+// TODO (@evelynl): this should use a generated mock or an actual transferer fixture
 var errMockError = errors.New("MockTorrent")
 
-type mockTorrentClient struct{}
+type mockImageTransferer struct{}
 
-func (mc *mockTorrentClient) DownloadTorrent(name string) error                   { return errMockError }
-func (mc *mockTorrentClient) CreateTorrentFromFile(name, filepath string) error   { return nil }
-func (mc *mockTorrentClient) GetManifest(repo, tag string) (string, error)        { return "", errMockError }
-func (mc *mockTorrentClient) PostManifest(repo, tag, manifestDigest string) error { return nil }
-func (mc *mockTorrentClient) Close() error                                        { return nil }
+func (mc *mockImageTransferer) Download(name string) error { return errMockError }
+func (mc *mockImageTransferer) Upload(name string) error   { return nil }
+func (mc *mockImageTransferer) GetManifest(repo, tag string) (string, error) {
+	return "", errMockError
+}
+func (mc *mockImageTransferer) PostManifest(repo, tag, manifestDigest string) error { return nil }
+func (mc *mockImageTransferer) Close() error                                        { return nil }
 
 // StorageDriverFixture creates a storage driver and return a cleanup function
 func StorageDriverFixture() (*KrakenStorageDriver, func()) {
@@ -41,7 +43,7 @@ func StorageDriverFixture() (*KrakenStorageDriver, func()) {
 		os.RemoveAll(tag)
 	}
 
-	sd, err := NewKrakenStorageDriver(config, localStore, &mockTorrentClient{}, tally.NoopScope)
+	sd, err := NewKrakenStorageDriver(config, localStore, &mockImageTransferer{}, tally.NoopScope)
 	if err != nil {
 		cleanup()
 		log.Panic(err)

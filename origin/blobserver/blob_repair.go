@@ -43,7 +43,7 @@ func (c *count32) increment() int32 {
 
 // BatchRepair repairs a batch of digest items concurrently
 // it writes result for every repaired item to http response writer
-func (br *BlobRepairer) BatchRepair(digests []*image.Digest, writer http.ResponseWriter) {
+func (br *BlobRepairer) BatchRepair(digests []image.Digest, writer http.ResponseWriter) {
 	var (
 		wg  sync.WaitGroup
 		pos count32 = -1
@@ -95,10 +95,10 @@ func (br *BlobRepairer) BatchRepair(digests []*image.Digest, writer http.Respons
 	wg.Wait()
 }
 
-func (br *BlobRepairer) repairDigest(d *image.Digest) error {
+func (br *BlobRepairer) repairDigest(d image.Digest) error {
 	var retries int
 	for {
-		err := br.blobAPI.PushBlob(*d)
+		err := br.blobAPI.PushBlob(d)
 		if err == nil {
 			return nil
 		}
