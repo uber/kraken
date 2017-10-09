@@ -37,14 +37,14 @@ func TestPullAndPushBlob(t *testing.T) {
 	// Pull and verify blob
 	imageDigest, err := image.NewDigestFromString("sha256:" + _digestHex)
 	require.NoError(err)
-	require.NoError(cli.PullBlob(*imageDigest))
+	require.NoError(cli.PullBlob(imageDigest))
 
 	// Push blob by digest
-	require.NoError(cli.PushBlob(*imageDigest))
+	require.NoError(cli.PushBlob(imageDigest))
 	// Blob not found
 	imageDigest, err = image.NewDigestFromString("sha256:1234")
 	require.NoError(err)
-	require.Error(os.ErrNotExist, cli.PushBlob(*imageDigest))
+	require.Error(os.ErrNotExist, cli.PushBlob(imageDigest))
 }
 
 func TestVerifyBlob(t *testing.T) {
@@ -58,7 +58,7 @@ func TestVerifyBlob(t *testing.T) {
 
 	imageDigest, err := image.NewDigestFromString("sha256:1234")
 	require.NoError(err)
-	ok, err := cli.verifyBlob(*imageDigest, reader)
+	ok, err := cli.verifyBlob(imageDigest, reader)
 	require.NoError(err)
 	require.False(ok)
 
@@ -67,7 +67,7 @@ func TestVerifyBlob(t *testing.T) {
 
 	imageDigest, err = image.NewDigestFromString("sha256:" + _digestHex)
 	require.NoError(err)
-	ok, err = cli.verifyBlob(*imageDigest, reader)
+	ok, err = cli.verifyBlob(imageDigest, reader)
 	require.NoError(err)
 	require.True(ok)
 }

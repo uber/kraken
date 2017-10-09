@@ -97,7 +97,13 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/origin/blobserver/mockblobserver.go \
 		-package mockblobserver \
-		code.uber.internal/infra/kraken/origin/blobserver Client
+		code.uber.internal/infra/kraken/origin/blobserver Client,ClientProvider
+
+	mkdir -p mocks/lib/dockerregistry/transfer
+	$(mockgen) \
+		-destination=mocks/lib/dockerregistry/transfer/mocktransferer.go \
+		-package mocktransferer \
+		code.uber.internal/infra/kraken/lib/dockerregistry/transfer ImageTransferer,ManifestClient
 
 # Enumerates all container names, including those created by dockerman.
 CONTAINERS := $(foreach \

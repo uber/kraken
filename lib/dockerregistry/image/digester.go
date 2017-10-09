@@ -25,25 +25,25 @@ func NewDigester() *Digester {
 }
 
 // Digest returns the digest of existing data.
-func (d *Digester) Digest() *Digest {
+func (d *Digester) Digest() Digest {
 	// Safe to ignore error.
 	digest, _ := NewDigestFromString(fmt.Sprintf("%s:%x", SHA256, d.hash.Sum(nil)))
 	return digest
 }
 
 // FromReader returns the digest of data from reader.
-func (d Digester) FromReader(rd io.Reader) (*Digest, error) {
+func (d Digester) FromReader(rd io.Reader) (Digest, error) {
 	if _, err := io.Copy(d.hash, rd); err != nil {
-		return nil, err
+		return Digest{}, err
 	}
 
 	return d.Digest(), nil
 }
 
 // FromBytes digests the input and returns a Digest.
-func (d Digester) FromBytes(p []byte) (*Digest, error) {
+func (d Digester) FromBytes(p []byte) (Digest, error) {
 	if _, err := d.hash.Write(p); err != nil {
-		return nil, err
+		return Digest{}, err
 	}
 
 	return d.Digest(), nil

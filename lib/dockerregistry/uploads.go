@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
+	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent"
 
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/uuid"
@@ -14,15 +14,15 @@ import (
 
 // Uploads b
 type Uploads struct {
-	store  store.FileStore
-	client torrent.Client
+	store      store.FileStore
+	transferer transfer.ImageTransferer
 }
 
 // NewUploads creates a new Uploads
-func NewUploads(cl torrent.Client, s store.FileStore) *Uploads {
+func NewUploads(transferer transfer.ImageTransferer, s store.FileStore) *Uploads {
 	return &Uploads{
-		store:  s,
-		client: cl,
+		store:      s,
+		transferer: transferer,
 	}
 }
 
@@ -195,17 +195,11 @@ func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) (err error) {
 		return err
 	}
 
-	destfp, err := u.store.GetCacheFilePath(destsha)
+	err = u.transferer.Upload(destsha)
 	if err != nil {
 		return err
 	}
-
-	err = u.client.CreateTorrentFromFile(destsha, destfp)
-	if err != nil {
-		return err
-	}
-
-	return
+	return nil
 }
 
 // putBlobData is used to write content to files directly, like image manifest and metadata.
@@ -235,11 +229,9 @@ func (u *Uploads) putBlobData(fileName string, content []byte) error {
 		return err
 	}
 
-	path, err := u.store.GetCacheFilePath(fileName)
+	err = u.transferer.Upload(fileName)
 	if err != nil {
 		return err
 	}
-
-	// TODO (@yiran) Shouldn't use file path directly.
-	return u.client.CreateTorrentFromFile(fileName, path)
+	return nil
 }

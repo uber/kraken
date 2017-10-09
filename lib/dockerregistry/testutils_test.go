@@ -39,7 +39,7 @@ func genDockerTags() (*DockerTags, func()) {
 		os.RemoveAll(c.TagDir)
 	}
 
-	tags, err := NewDockerTags(c, s, &mockTorrentClient{}, tally.NoopScope)
+	tags, err := NewDockerTags(c, s, &mockImageTransferer{}, tally.NoopScope)
 	if err != nil {
 		cleanup()
 		log.Fatal(err)

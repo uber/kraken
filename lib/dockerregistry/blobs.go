@@ -5,22 +5,22 @@ import (
 	"io/ioutil"
 
 	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 )
 
 // Blobs b
 type Blobs struct {
-	client torrent.Client
-	store  store.FileStore
+	transferer transfer.ImageTransferer
+	store      store.FileStore
 }
 
 // NewBlobs creates Blobs
-func NewBlobs(cl torrent.Client, s store.FileStore) *Blobs {
+func NewBlobs(transferer transfer.ImageTransferer, s store.FileStore) *Blobs {
 	return &Blobs{
-		client: cl,
-		store:  s,
+		transferer: transferer,
+		store:      s,
 	}
 }
 
@@ -63,7 +63,7 @@ func (b *Blobs) GetDigest(path string) ([]byte, error) {
 func (b *Blobs) getBlobStat(fileName string) (storagedriver.FileInfo, error) {
 	info, err := b.store.GetCacheFileStat(fileName)
 	if err != nil {
-		err = b.client.DownloadTorrent(fileName)
+		err = b.transferer.Download(fileName)
 		if err != nil {
 			return nil, storagedriver.PathNotFoundError{
 				DriverName: "kraken",
@@ -101,7 +101,7 @@ func (b *Blobs) getOrDownloadBlobData(fileName string) (data []byte, err error) 
 func (b *Blobs) getOrDownloadBlobReader(fileName string, offset int64) (reader io.ReadCloser, err error) {
 	reader, err = b.getBlobReader(fileName, offset)
 	if err != nil {
-		err = b.client.DownloadTorrent(fileName)
+		err = b.transferer.Download(fileName)
 		if err != nil {
 			log.Errorf("Failed to download %s", err.Error())
 			return nil, storagedriver.PathNotFoundError{

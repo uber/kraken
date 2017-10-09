@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/utils"
 
 	"github.com/uber-common/bark"
@@ -43,10 +43,10 @@ type Tags interface {
 type DockerTags struct {
 	sync.RWMutex
 
-	config  *Config
-	store   store.FileStore
-	client  torrent.Client
-	metrics tally.Scope
+	config     *Config
+	store      store.FileStore
+	transferer transfer.ImageTransferer
+	metrics    tally.Scope
 }
 
 // Tag stores information about one tag.
@@ -64,16 +64,16 @@ func (s TagSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s TagSlice) Len() int           { return len(s) }
 
 // NewDockerTags returns new DockerTags
-func NewDockerTags(c *Config, s store.FileStore, cl torrent.Client, metrics tally.Scope) (Tags, error) {
+func NewDockerTags(c *Config, s store.FileStore, transferer transfer.ImageTransferer, metrics tally.Scope) (Tags, error) {
 	err := os.MkdirAll(c.TagDir, 0755)
 	if err != nil {
 		return nil, err
 	}
 	return &DockerTags{
-		config:  c,
-		store:   s,
-		client:  cl,
-		metrics: metrics,
+		config:     c,
+		store:      s,
+		transferer: transferer,
+		metrics:    metrics,
 	}, nil
 }
 
@@ -272,7 +272,7 @@ func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 	}
 
 	// Save manifest in tracker
-	err = t.client.PostManifest(repo, tag, manifest)
+	err = t.transferer.PostManifest(repo, tag, manifest)
 	if err != nil {
 		log.Errorf("CreateTag: cannot post manifest for %s:%s, error: %s", repo, tag, err)
 		t.metrics.Counter(createFailureCounter).Inc(1)
@@ -381,7 +381,7 @@ func (t *DockerTags) getOrDownloadAllLayersAndCreateTag(repo, tag string) error 
 			var err error
 			_, err = t.store.GetCacheFileStat(l)
 			if err != nil && os.IsNotExist(err) {
-				err = t.client.DownloadTorrent(l)
+				err = t.transferer.Download(l)
 			}
 
 			if err != nil {
@@ -494,7 +494,7 @@ func (t *DockerTags) getOrDownloadManifest(repo, tag string) (string, error) {
 	}
 
 	if os.IsNotExist(err) {
-		return t.client.GetManifest(repo, tag)
+		return t.transferer.GetManifest(repo, tag)
 	}
 
 	data, err := ioutil.ReadFile(tagFp)

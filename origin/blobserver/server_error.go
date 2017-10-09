@@ -35,7 +35,7 @@ func (e *serverError) Error() string {
 	return fmt.Sprintf("server error %d: %s", e.status, e.msg)
 }
 
-func newBlobNotFoundError(d *image.Digest, err error) *serverError {
+func newBlobNotFoundError(d image.Digest, err error) *serverError {
 	return serverErrorf("cannot find blob data for digest %q: %s", d, err).
 		Status(http.StatusNotFound)
 }
