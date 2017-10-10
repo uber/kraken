@@ -1,8 +1,8 @@
 package main
 
 import (
-	cfg "code.uber.internal/infra/kraken/config/origin"
 	"code.uber.internal/infra/kraken/lib/hrw"
+	"code.uber.internal/infra/kraken/origin/blobserver"
 	"github.com/spaolacci/murmur3"
 
 	"encoding/json"
@@ -39,7 +39,7 @@ type commandContext struct {
 	verbose   bool                // verbosity of boolean
 	nts       nodeToServer        // node to server index
 	stn       serverToNode        // server to node index
-	appCfg    cfg.AppConfig       // application config
+	config    blobserver.Config   // application config
 	hashstate *hrw.RendezvousHash // a hashstate configuration parsed from appconfig or defined by other means (rn only config supported)
 }
 
@@ -71,7 +71,7 @@ func isFlagDefined(commandline []string, flag string) bool {
 	return false
 }
 
-func sortedHashstateNodes(hashstate map[string]cfg.HashNodeConfig) []string {
+func sortedHashstateNodes(hashstate map[string]blobserver.HashNodeConfig) []string {
 	var keys []string
 	for _, node := range hashstate {
 		keys = append(keys, node.Label)
@@ -105,7 +105,7 @@ func originInfo(originLabel string, cc commandContext) (*OriginCapacity, error) 
 func handleOriginListCommand(originInfoOpt string, listOrigin string, cc commandContext) (int, error) {
 
 	if listOrigin == "" {
-		sorted := sortedHashstateNodes(cc.appCfg.Hashstate)
+		sorted := sortedHashstateNodes(cc.config.HashNodes)
 		for _, nl := range sorted {
 			originCapacity, err := originInfo(nl, cc)
 			if err != nil {
@@ -161,7 +161,7 @@ func prettyPrintContent(ci *OriginContentList, w io.Writer) {
 
 func handleContentListCommand(listOption string, listContentOrigin string, cc commandContext) (int, error) {
 	if listContentOrigin == "" {
-		sorted := sortedHashstateNodes(cc.appCfg.Hashstate)
+		sorted := sortedHashstateNodes(cc.config.HashNodes)
 		for _, nl := range sorted {
 			fmt.Fprintf(cc.writer, "Origin %s:\n", nl)
 			contentList, err := contentList(nl, cc)
@@ -243,7 +243,7 @@ done:
 }
 func repairContent(digest string, origin string, cc commandContext) (int, error) {
 	// get hashstate for a content item
-	nodes, err := cc.hashstate.GetOrderedNodes(digest, cc.appCfg.NumReplica)
+	nodes, err := cc.hashstate.GetOrderedNodes(digest, cc.config.NumReplica)
 	if err != nil {
 		return 1, err
 	}
@@ -273,7 +273,7 @@ func handleRepairContentCommand(digest string, origin string, cc commandContext)
 		return 1, errDigestOrOriginIsRequired
 	}
 
-	nodes, err := cc.hashstate.GetOrderedNodes(digest, cc.appCfg.NumReplica)
+	nodes, err := cc.hashstate.GetOrderedNodes(digest, cc.config.NumReplica)
 	if err != nil {
 		return 1, err
 	}
@@ -324,7 +324,7 @@ func handleDeleteContentCommand(deleteContent string, origin string, cc commandC
 	}
 
 	// get hashstate for a content item
-	nodes, err := cc.hashstate.GetOrderedNodes(deleteContent, cc.appCfg.NumReplica)
+	nodes, err := cc.hashstate.GetOrderedNodes(deleteContent, cc.config.NumReplica)
 	if err != nil {
 		return 1, err
 	}
@@ -357,7 +357,7 @@ func handleNoOpCommand(flag string, origin string, cc commandContext) (int, erro
 	return 0, nil
 }
 
-func initHashState(appConfig cfg.AppConfig) *hrw.RendezvousHash {
+func initHashState(config blobserver.Config) *hrw.RendezvousHash {
 
 	// initalize hashing state
 	hs := hrw.NewRendezvousHash(
@@ -367,7 +367,7 @@ func initHashState(appConfig cfg.AppConfig) *hrw.RendezvousHash {
 	fmt.Println("Hash state is being initialized to: ")
 
 	// Add all configured nodes to a hashing statae
-	for origin, node := range appConfig.Hashstate {
+	for origin, node := range config.HashNodes {
 
 		hs.AddNode(node.Label, node.Weight)
 		fmt.Printf("Hash node added: [ origin: %s, label: %s, weight: %d ]\n", origin, node.Label, node.Weight)
@@ -384,9 +384,9 @@ type commandHandlerFunc func(flag string, origin string, cc commandContext) (int
 
 // RunMain main wrapper primarely for testing purposes. Please note you should not call os.Exit here
 // this will screw tests up, call os.Exit only in a upper level function
-func RunMain(cmdline []string, appConfig cfg.AppConfig, w io.Writer) int {
+func RunMain(cmdline []string, config blobserver.Config, w io.Writer) int {
 
-	if len(appConfig.Hashstate) == 0 {
+	if len(config.HashNodes) == 0 {
 		fmt.Fprintf(w, "No origin hash state configuraiton found. Major misconfiguraiton...")
 	}
 
@@ -395,10 +395,10 @@ func RunMain(cmdline []string, appConfig cfg.AppConfig, w io.Writer) int {
 		verbose:   false,
 		nts:       make(nodeToServer),
 		stn:       make(serverToNode),
-		hashstate: initHashState(appConfig),
-		appCfg:    appConfig}
+		hashstate: initHashState(config),
+		config:    config}
 
-	for origin, node := range appConfig.Hashstate {
+	for origin, node := range config.HashNodes {
 		context.nts[node.Label] = origin
 		context.stn[origin], _ = context.hashstate.GetNode(node.Label)
 	}

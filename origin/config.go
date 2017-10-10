@@ -10,11 +10,11 @@ import (
 
 // Config defines origin server configuration.
 type Config struct {
-	Logging    log.Configuration
 	Port       int
 	Verbose    bool
-	BlobServer blobserver.Config `yaml:"blobserver"`
+	Logging    log.Configuration
 	LocalStore store.Config      `yaml:"store"`
-	Metrics    metrics.Config    `yaml:"metrics"`
 	Torrent    torrent.Config    `yaml:"torrent"`
+	BlobServer blobserver.Config `yaml:"blobserver"`
+	Metrics    metrics.Config    `yaml:"metrics"`
 }

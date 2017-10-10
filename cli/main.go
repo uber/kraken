@@ -3,10 +3,15 @@ package main
 import (
 	"os"
 
-	"code.uber.internal/infra/kraken/config/origin"
+	xconfig "code.uber.internal/go-common.git/x/config"
+
+	"code.uber.internal/infra/kraken/origin/blobserver"
 )
 
 func main() {
-	cfg := config.Initialize()
-	RunMain(os.Args, cfg, os.Stdout)
+	var config blobserver.Config
+	if err := xconfig.Load(&config); err != nil {
+		panic(err)
+	}
+	RunMain(os.Args, config, os.Stdout)
 }

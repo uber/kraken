@@ -50,7 +50,7 @@ proto:
 
 tracker/tracker: $(wildcard tracker/*.go)
 agent/agent: proto $(wildcard agent/*.go)
-origin/origin: $(wildcard origin/*.go)
+origin/origin: proto $(wildcard origin/*.go)
 cli/kraken-cli: $(wildcard cli/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 
@@ -161,8 +161,8 @@ run_tracker: tracker mysql redis
 
 .PHONY: origin
 origin:
-	-rm agent/agent
-	GOOS=linux GOARCH=amd64 make agent/agent
+	-rm origin/origin
+	GOOS=linux GOARCH=amd64 make origin/origin
 	docker build -t kraken-origin:dev -f docker/origin/Dockerfile ./
 
 run_origin: origin
@@ -176,7 +176,7 @@ run_origin: origin
 		-p 5051:5051 \
 		-p 5081:5081 \
 		kraken-origin:dev \
-		/usr/bin/kraken-agent --announce_ip=192.168.65.1 --announce_port=5081
+		/usr/bin/kraken-origin --announce_ip=192.168.65.1 --announce_port=5081
 
 .PHONY: peer
 peer:
