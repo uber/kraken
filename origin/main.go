@@ -13,7 +13,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobserver"
-	blobclient "code.uber.internal/infra/kraken/origin/client"
 	"code.uber.internal/infra/kraken/utils"
 )
 
@@ -31,7 +30,8 @@ func main() {
 	config.Logging.TextFormatter = &formatter
 	log.Configure(&config.Logging, false)
 
-	// The code below initializes and starts P2P scheduler client.
+	// Initialize and start P2P scheduler client:
+
 	pctx, err := peercontext.New(
 		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *announceIP, *announcePort)
 	if err != nil {
@@ -44,30 +44,33 @@ func main() {
 	}
 	defer closer.Close()
 
-	store, err := store.NewLocalFileStore(&config.LocalStore, true)
+	fileStore, err := store.NewLocalFileStore(&config.LocalStore, true)
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
 
-	client, err := torrent.NewSchedulerClient(&config.Torrent, store, stats, pctx)
+	client, err := torrent.NewSchedulerClient(&config.Torrent, fileStore, stats, pctx)
 	if err != nil {
 		log.Fatalf("Failed to create scheduler client: %s", err)
 		panic(err)
 	}
 	defer client.Close()
 
-	// The code below starts Blob HTTP server.
+	// Initialize and start blob HTTP server:
+
 	hostname, err := utils.GetLocalIP()
 	if err != nil {
 		log.Fatalf("Error getting local IP: %s", err)
 	}
-	s, err := blobserver.New(config.BlobServer, hostname, store, blobclient.NewBlobAPIClient)
+
+	blobClientProvider := blobserver.NewHTTPClientProvider(config.BlobClient)
+
+	server, err := blobserver.New(config.BlobServer, hostname, fileStore, blobClientProvider)
 	if err != nil {
 		log.Fatalf("Error initializing blob server: %s", err)
 	}
 
 	addr := fmt.Sprintf(":%d", config.Port)
 	log.Info("Starting origin server %s on %s", hostname, addr)
-
-	log.Fatal(http.ListenAndServe(addr, s.Handler()))
+	log.Fatal(http.ListenAndServe(addr, server.Handler()))
 }

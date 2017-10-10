@@ -107,6 +107,12 @@ mocks:
 		-package mocktransferer \
 		code.uber.internal/infra/kraken/lib/dockerregistry/transfer ImageTransferer,ManifestClient
 
+	mkdir -p mocks/os
+	$(mockgen) \
+		-destination=mocks/os/mockos.go \
+		-package mockos \
+		os FileInfo
+
 # Enumerates all container names, including those created by dockerman.
 CONTAINERS := $(foreach \
 	c, \

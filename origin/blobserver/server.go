@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,29 +12,26 @@ import (
 	"strconv"
 	"strings"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/origin/client"
 	"code.uber.internal/infra/kraken/utils/memsize"
 
 	"github.com/docker/distribution/uuid"
 	"github.com/pressly/chi"
-	"github.com/spaolacci/murmur3"
 )
 
 const _uploadChunkSize = 16 * memsize.MB
 
 // Server defines a server that serves blob data for agent.
 type Server struct {
-	config              Config
-	label               string
-	hostname            string
-	labelToHostname     map[string]string
-	hashState           *hrw.RendezvousHash
-	fileStore           store.FileStore
-	blobTransferFactory client.BlobTransferFactory
+	config          Config
+	label           string
+	hostname        string
+	labelToHostname map[string]string
+	hashState       *hrw.RendezvousHash
+	fileStore       store.FileStore
+	clientProvider  ClientProvider
 }
 
 // New initializes a new Server.
@@ -43,19 +39,10 @@ func New(
 	config Config,
 	hostname string,
 	fileStore store.FileStore,
-	blobTransferFactory client.BlobTransferFactory) (*Server, error) {
+	clientProvider ClientProvider) (*Server, error) {
 
 	if len(config.HashNodes) == 0 {
 		return nil, errors.New("no hash nodes configured")
-	}
-
-	hashState := hrw.NewRendezvousHash(
-		func() hash.Hash { return murmur3.New64() },
-		hrw.UInt64ToFloat64)
-	labelToHostname := make(map[string]string, len(config.HashNodes))
-	for h, node := range config.HashNodes {
-		hashState.AddNode(node.Label, node.Weight)
-		labelToHostname[node.Label] = h
 	}
 
 	currNode, ok := config.HashNodes[hostname]
@@ -65,13 +52,13 @@ func New(
 	label := currNode.Label
 
 	return &Server{
-		config:              config,
-		label:               label,
-		hostname:            hostname,
-		labelToHostname:     labelToHostname,
-		hashState:           hashState,
-		fileStore:           fileStore,
-		blobTransferFactory: client.NewBlobAPIClient,
+		config:          config,
+		label:           label,
+		hostname:        hostname,
+		labelToHostname: config.LabelToHostname(),
+		hashState:       config.HashState(),
+		fileStore:       fileStore,
+		clientProvider:  clientProvider,
 	}, nil
 }
 
@@ -112,9 +99,9 @@ func (s Server) Handler() http.Handler {
 	r.Patch("/blobs/:digest/uploads/:uuid", handler(s.patchUploadHandler))
 	r.Put("/blobs/:digest/uploads/:uuid", handler(s.commitUploadHandler))
 
-	// TODO(codyg): Revisit repair endpoints.
-	r.Post("/repair/digest/:digest", handler(s.repairBlobByDigestHandler))
-	r.Post("/repair/shard/:shardID", handler(s.repairBlobByShardIDHandler))
+	r.Post("/repair", handler(s.repairHandler))
+	r.Post("/repair/shard/:shardid", handler(s.repairShardHandler))
+	r.Post("/repair/digest/:digest", handler(s.repairDigestHandler))
 
 	return r
 }
@@ -237,43 +224,52 @@ func (s Server) commitUploadHandler(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
-// repairBlobByShardIDHandler runs blob repair by shard ID, ensuring all
-// digests of a shard are synced properly to the target nodes.
-func (s Server) repairBlobByShardIDHandler(w http.ResponseWriter, r *http.Request) error {
-	shardID := chi.URLParam(r, "shardID")
+func (s Server) repairHandler(w http.ResponseWriter, r *http.Request) error {
+	shards, err := s.fileStore.ListPopulatedShardIDs()
+	if err != nil {
+		return serverErrorf("failed to list populated shard ids: %s", err)
+	}
+	rep := s.newRepairer()
+	go func() {
+		defer rep.Close()
+		for _, shardID := range shards {
+			err = rep.RepairShard(shardID)
+			if err != nil {
+				return
+			}
+		}
+	}()
+	rep.WriteMessages(w)
+	return err
+}
+
+func (s Server) repairShardHandler(w http.ResponseWriter, r *http.Request) error {
+	shardID := chi.URLParam(r, "shardid")
 	if len(shardID) == 0 {
 		return serverErrorf("empty shard id").Status(http.StatusBadRequest)
 	}
-	digests, err := s.getDigests(shardID)
-	if err != nil {
-		return err
-	}
-	nodes, err := s.hashState.GetOrderedNodes(shardID, s.config.NumReplica)
-	if err != nil {
-		return serverErrorf("failed to compute nodes of shard %q: %s", shardID, err)
-	}
-	if err := s.batchRepair(nodes, digests, w); err != nil {
-		return err
-	}
-	return nil
+	rep := s.newRepairer()
+	var err error
+	go func() {
+		defer rep.Close()
+		err = rep.RepairShard(shardID)
+	}()
+	rep.WriteMessages(w)
+	return err
 }
 
-// repairBlobByDigestHandler runs blob repair for a digest, ensuring said
-// digest is synced properly to the target nodes.
-func (s Server) repairBlobByDigestHandler(w http.ResponseWriter, r *http.Request) error {
+func (s Server) repairDigestHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
 	}
-	shardID := d.GetShardID()
-	nodes, err := s.hashState.GetOrderedNodes(shardID, s.config.NumReplica)
-	if err != nil {
-		return serverErrorf("failed to compute nodes of shard %q: %s", shardID, err)
-	}
-	if err := s.batchRepair(nodes, []image.Digest{d}, w); err != nil {
-		return err
-	}
-	return nil
+	rep := s.newRepairer()
+	go func() {
+		defer rep.Close()
+		err = rep.RepairDigest(d)
+	}()
+	rep.WriteMessages(w)
+	return err
 }
 
 // parseDigest parses a digest from a url path parameter, e.g. "/blobs/:digest".
@@ -336,7 +332,7 @@ func parseContentRange(h http.Header) (start, end int64, err error) {
 }
 
 func (s Server) redirectByDigest(d image.Digest) error {
-	nodes, err := s.hashState.GetOrderedNodes(d.GetShardID(), s.config.NumReplica)
+	nodes, err := s.hashState.GetOrderedNodes(d.ShardID(), s.config.NumReplica)
 	if err != nil || len(nodes) == 0 {
 		return serverErrorf("failed to calculate hash for digest %q: %s", d, err)
 	}
@@ -367,7 +363,7 @@ func (s Server) ensureDigestExists(d image.Digest) error {
 func (s Server) ensureDigestNotExists(d image.Digest) error {
 	_, err := s.fileStore.GetCacheFileStat(d.Hex())
 	if err == nil {
-		return serverErrorf("digest %q already exists: %s", d, err).Status(http.StatusConflict)
+		return serverErrorf("digest %q already exists", d).Status(http.StatusConflict)
 	}
 	if err != nil && !os.IsNotExist(err) {
 		return serverErrorf("failed to look up blob data for digest %q: %s", d, err)
@@ -471,55 +467,15 @@ func (s Server) commitUpload(d image.Digest, uploadUUID string) error {
 	return nil
 }
 
-func (s Server) getDigests(shardID string) ([]image.Digest, error) {
-	names, err := s.fileStore.ListCacheFilesByShardID(shardID)
-	if err != nil {
-		// TODO(codyg): Maybe 404 here?
-		return nil, serverErrorf("failed to retrieve digests for shard %q: %s", shardID, err)
-	}
-	digests := make([]image.Digest, len(names))
-	for i, name := range names {
-		d, err := image.NewDigestFromString("sha256:" + name)
-		if err != nil {
-			return nil, serverErrorf("failed to parse digest %q: %s", name, err)
-		}
-		digests[i] = d
-	}
-	return digests, nil
-}
-
-func (s Server) batchRepair(
-	nodes []*hrw.RendezvousHashNode, digests []image.Digest, w http.ResponseWriter) error {
-
-	if len(nodes) == 0 {
-		err := serverErrorf("invalid hash configuration: no nodes found")
-		log.Errorf("Invariant violation: %s", err)
-		return err
-	}
-	for _, node := range nodes {
-		// Skip repair for the current node.
-		if node.Label == s.label {
-			continue
-		}
-
-		host, ok := s.labelToHostname[node.Label]
-		if !ok {
-			err := serverErrorf("cannot find server for label %q", node.Label)
-			log.Errorf("Invariant violation: %s", err)
-			return err
-		}
-
-		br := &BlobRepairer{
-			context:  context.TODO(),
-			hostname: host,
-			blobAPI:  s.blobTransferFactory(host, s.fileStore),
-			config:   s.config.Repair,
-		}
-		// Batch repairer launches a number of background go-routines
-		// and reports the result back into response writer asynchronously
-		br.BatchRepair(digests, w)
-	}
-	return nil
+func (s Server) newRepairer() *repairer {
+	return newRepairer(
+		s.config,
+		s.hostname,
+		s.labelToHostname,
+		s.hashState,
+		s.fileStore,
+		s.clientProvider,
+		context.TODO())
 }
 
 func setUploadLocation(w http.ResponseWriter, uploadUUID string) {

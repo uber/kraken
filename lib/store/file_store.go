@@ -12,6 +12,7 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/store/base"
 	"code.uber.internal/infra/kraken/lib/store/refcountable"
+	"code.uber.internal/infra/kraken/utils/osutil"
 
 	"github.com/docker/distribution/uuid"
 	"github.com/robfig/cron"
@@ -50,6 +51,7 @@ type FileStore interface {
 	RefCacheFile(fileName string) (int64, error)
 	DerefCacheFile(fileName string) (int64, error)
 	ListCacheFilesByShardID(shardID string) ([]string, error)
+	ListPopulatedShardIDs() ([]string, error)
 }
 
 // LocalFileStore manages all peer agent files on local disk.
@@ -451,4 +453,49 @@ func (store *LocalFileStore) ListCacheFilesByShardID(shardID string) ([]string, 
 		names = append(names, info.Name())
 	}
 	return names, nil
+}
+
+// ListPopulatedShardIDs is a best effort function which returns the shard ids
+// of all populated shards.
+//
+// XXX: This is an expensive operation and will potentially return stale data.
+// Caller should not assume shard ids will remain populated.
+func (store *LocalFileStore) ListPopulatedShardIDs() ([]string, error) {
+	shardDir := store.config.CacheDir
+	var shards []string
+
+	// Recursive closure which walks the shard directory and adds any populated
+	// shard ids to shards.
+	var walk func(string, int) error
+	walk = func(cursor string, depth int) error {
+		dir := path.Join(shardDir, cursor)
+		if depth == 0 {
+			empty, err := osutil.IsEmpty(dir)
+			if err != nil {
+				return err
+			}
+			if !empty {
+				shard := strings.Replace(cursor, "/", "", -1)
+				shards = append(shards, shard)
+			}
+			return nil
+		}
+		infos, err := ioutil.ReadDir(dir)
+		if err != nil {
+			return err
+		}
+		for _, info := range infos {
+			if info.IsDir() {
+				if err := walk(path.Join(cursor, info.Name()), depth-1); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	// TODO(codyg): Revisit shard depth constant.
+	err := walk("", 2)
+
+	return shards, err
 }

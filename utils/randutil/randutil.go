@@ -10,16 +10,27 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-// Text returns randomly generated alphanumeric text of length n.
-func Text(n int) []byte {
+func choose(n int, choices string) []byte {
 	b := make([]byte, n)
 	for i := range b {
-		c := chars[rand.Intn(len(chars))]
+		c := choices[rand.Intn(len(choices))]
 		b[i] = byte(c)
 	}
 	return b
+}
+
+const text = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// Text returns randomly generated alphanumeric text of length n.
+func Text(n int) []byte {
+	return choose(n, text)
+}
+
+const hex = "0123456789abcdef"
+
+// Hex returns randomly generated hexadecimal string of length n.
+func Hex(n int) string {
+	return string(choose(n, hex))
 }
 
 // IP returns a randomly generated ip address.

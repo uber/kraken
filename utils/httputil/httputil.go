@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
-	"net/http/httputil"
 	"time"
 )
 
@@ -26,7 +26,7 @@ func newStatusError(
 	method string, url string, expectedStatuses []int, resp *http.Response) StatusError {
 
 	defer resp.Body.Close()
-	respBytes, err := httputil.DumpResponse(resp, true)
+	respBytes, err := ioutil.ReadAll(resp.Body)
 	respDump := string(respBytes)
 	if err != nil {
 		respDump = fmt.Sprintf("failed to dump response: %s", err)
@@ -46,6 +46,21 @@ func (e StatusError) Error() string {
 	return fmt.Sprintf(
 		"http request \"%s %s\" failed: expected statuses %v, got status %d: %s",
 		e.Method, e.URL, e.ExpectedStatuses, e.Status, e.ResponseDump)
+}
+
+func isStatus(err error, status int) bool {
+	statusErr, ok := err.(StatusError)
+	return ok && statusErr.Status == status
+}
+
+// IsNotFound returns true if err is a "not found" StatusError.
+func IsNotFound(err error) bool {
+	return isStatus(err, http.StatusNotFound)
+}
+
+// IsConflict returns true if err is a "status conflict" StatusError.
+func IsConflict(err error) bool {
+	return isStatus(err, http.StatusConflict)
 }
 
 type sendOptions struct {
