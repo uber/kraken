@@ -3,7 +3,7 @@ FROM debian:8
 RUN apt-get update && apt-get install -y curl
 
 ADD ./ /root/kraken
-ADD agent/agent /usr/bin/kraken-agent
+ADD origin/origin /usr/bin/kraken-origin
 
 EXPOSE 5051 5081
 

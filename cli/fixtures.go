@@ -10,8 +10,8 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/pressly/chi"
 
-	cfg "code.uber.internal/infra/kraken/config/origin"
 	"code.uber.internal/infra/kraken/lib/hrw"
+	"code.uber.internal/infra/kraken/origin/blobserver"
 )
 
 // TestOriginServer represents Test origin server
@@ -20,7 +20,7 @@ type TestOriginServer struct {
 	listener  net.Listener
 	digests   []OriginContent
 	hashstate *hrw.RendezvousHash
-	appConfig cfg.AppConfig
+	config    blobserver.Config
 }
 
 // OriginContentFixture returns content items
@@ -65,10 +65,10 @@ func OriginContentFixture() OriginContentList {
 
 // OriginFixture creates a cluster of origin servers, initializes them to weights
 // and fill them out from the list of blob digests
-func OriginFixture(digests []OriginContent, weights []int) ([]*TestOriginServer, cfg.AppConfig) {
+func OriginFixture(digests []OriginContent, weights []int) ([]*TestOriginServer, blobserver.Config) {
 
 	listeners := make([]net.Listener, len(weights))
-	hashstate := make(map[string]cfg.HashNodeConfig)
+	hashstate := make(map[string]blobserver.HashNodeConfig)
 
 	for i, w := range weights {
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -76,17 +76,17 @@ func OriginFixture(digests []OriginContent, weights []int) ([]*TestOriginServer,
 			log.Fatal(err)
 		}
 
-		hashstate[listener.Addr().String()] = cfg.HashNodeConfig{
+		hashstate[listener.Addr().String()] = blobserver.HashNodeConfig{
 			Label:  "origin" + strconv.Itoa(i),
 			Weight: w,
 		}
 		listeners[i] = listener
 	}
 
-	appConfig := cfg.AppConfig{Hashstate: hashstate, NumReplica: 3}
+	config := blobserver.Config{HashNodes: hashstate, NumReplica: 3}
 	origins := make([]*TestOriginServer, len(weights))
 
-	hs := initHashState(appConfig)
+	hs := initHashState(config)
 
 	for i := 0; i < len(weights); i++ {
 		origins[i] = &TestOriginServer{
@@ -94,13 +94,13 @@ func OriginFixture(digests []OriginContent, weights []int) ([]*TestOriginServer,
 			listener:  listeners[i],
 			hashstate: hs,
 			digests:   []OriginContent{},
-			appConfig: appConfig,
+			config:    config,
 		}
 
 		origins[i].fillContentItems(digests)
 	}
 
-	return origins, appConfig
+	return origins, config
 }
 
 // fillContentItems adds content item to an internal list of blob digests
@@ -119,7 +119,7 @@ func (to *TestOriginServer) fillContentItems(digests []OriginContent) {
 // fillContentItems adds content item to an internal list of blob digests
 func (to *TestOriginServer) findOriginByLabel(originLabel string) string {
 	// Add all configured nodes to a hashing statae
-	for origin, node := range to.appConfig.Hashstate {
+	for origin, node := range to.config.HashNodes {
 
 		if node.Label == originLabel {
 			return origin
