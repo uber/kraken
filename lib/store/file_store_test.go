@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"code.uber.internal/infra/kraken/utils/randutil"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -109,4 +111,40 @@ func TestTrashDeletionCronDeletesFiles(t *testing.T) {
 
 	_, err := os.Stat(path.Join(s.Config().TrashDir, f))
 	require.True(os.IsNotExist(err))
+}
+
+func TestListPopulatedShardIDs(t *testing.T) {
+	require := require.New(t)
+
+	s, cleanup := LocalFileStoreFixture()
+	defer cleanup()
+
+	cacheFiles := make([]string, 50)
+	for i := range cacheFiles {
+		name := randutil.Hex(32)
+		cacheFiles[i] = name
+		require.NoError(s.CreateUploadFile(name, 1))
+		require.NoError(s.MoveUploadFileToCache(name, name))
+	}
+
+	deletedFiles := make([]string, 50)
+	for i := range deletedFiles {
+		name := randutil.Hex(32)
+		deletedFiles[i] = name
+		require.NoError(s.CreateUploadFile(name, 1))
+		require.NoError(s.MoveUploadFileToCache(name, name))
+		require.NoError(s.MoveCacheFileToTrash(name))
+	}
+
+	shards, err := s.ListPopulatedShardIDs()
+	require.NoError(err)
+
+	for _, name := range cacheFiles {
+		shard := name[:4]
+		require.Contains(shards, shard)
+	}
+	for _, name := range deletedFiles {
+		shard := name[:4]
+		require.NotContains(shards, shard)
+	}
 }

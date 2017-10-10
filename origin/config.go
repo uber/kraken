@@ -13,8 +13,9 @@ type Config struct {
 	Port       int
 	Verbose    bool
 	Logging    log.Configuration
-	LocalStore store.Config      `yaml:"store"`
-	Torrent    torrent.Config    `yaml:"torrent"`
-	BlobServer blobserver.Config `yaml:"blobserver"`
-	Metrics    metrics.Config    `yaml:"metrics"`
+	BlobServer blobserver.Config       `yaml:"blobserver"`
+	BlobClient blobserver.ClientConfig `yaml:"blobclient"`
+	LocalStore store.Config            `yaml:"store"`
+	Torrent    torrent.Config          `yaml:"torrent"`
+	Metrics    metrics.Config          `yaml:"metrics"`
 }

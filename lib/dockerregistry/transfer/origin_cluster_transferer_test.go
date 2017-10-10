@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"strings"
+	"sort"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/mocks/os"
 	"code.uber.internal/infra/kraken/utils/randutil"
 
 	"github.com/stretchr/testify/require"
@@ -123,7 +124,8 @@ func TestUploadSuccessAll(t *testing.T) {
 	defer mocks.ctrl.Finish()
 	transferer := testOriginClusterTransferer(mocks)
 
-	blob := randutil.Text(256)
+	var size int64 = 256
+	blob := randutil.Text(int(size))
 	digest, err := image.NewDigester().FromBytes(blob)
 	require.NoError(err)
 
@@ -131,7 +133,7 @@ func TestUploadSuccessAll(t *testing.T) {
 	mocks.blobClients[transferer.originAddr].EXPECT().Locations(digest).Return(locs, nil).Times(2)
 	for _, loc := range locs {
 		mocks.blobClientProvider.EXPECT().Provide(loc).Return(mocks.blobClients[loc])
-		mocks.blobClients[loc].EXPECT().PushBlob(digest, gomock.Any()).Return(nil)
+		mocks.blobClients[loc].EXPECT().PushBlob(digest, gomock.Any(), size).Return(nil)
 
 	}
 
@@ -139,6 +141,10 @@ func TestUploadSuccessAll(t *testing.T) {
 		r, cleanup := store.NewMockFileReadWriter(blob)
 		defer cleanup()
 		mocks.fileStore.EXPECT().GetCacheFileReader(digest.Hex()).Return(r, nil)
+
+		mockInfo := mockos.NewMockFileInfo(mocks.ctrl)
+		mockInfo.EXPECT().Size().Return(size)
+		mocks.fileStore.EXPECT().GetCacheFileStat(digest.Hex()).Return(mockInfo, nil)
 	}
 
 	require.NoError(transferer.Upload(digest.Hex()))
@@ -151,7 +157,8 @@ func TestUploadSuccessMajority(t *testing.T) {
 	defer mocks.ctrl.Finish()
 	transferer := testOriginClusterTransferer(mocks)
 
-	blob := randutil.Text(256)
+	var size int64 = 256
+	blob := randutil.Text(int(size))
 	digest, err := image.NewDigester().FromBytes(blob)
 	require.NoError(err)
 
@@ -159,17 +166,21 @@ func TestUploadSuccessMajority(t *testing.T) {
 	mocks.blobClients[transferer.originAddr].EXPECT().Locations(digest).Return(locs, nil).Times(2)
 	// one failure
 	mocks.blobClientProvider.EXPECT().Provide("loc1").Return(mocks.blobClients["loc1"])
-	mocks.blobClients["loc1"].EXPECT().PushBlob(digest, gomock.Any()).Return(errors.New("loc1 503"))
+	mocks.blobClients["loc1"].EXPECT().PushBlob(digest, gomock.Any(), size).Return(errors.New("loc1 503"))
 
 	for _, loc := range locs[1:] {
 		mocks.blobClientProvider.EXPECT().Provide(loc).Return(mocks.blobClients[loc])
-		mocks.blobClients[loc].EXPECT().PushBlob(digest, gomock.Any()).Return(nil)
+		mocks.blobClients[loc].EXPECT().PushBlob(digest, gomock.Any(), size).Return(nil)
 	}
 
 	for i := 0; i < len(locs); i++ {
 		r, cleanup := store.NewMockFileReadWriter(blob)
 		defer cleanup()
 		mocks.fileStore.EXPECT().GetCacheFileReader(digest.Hex()).Return(r, nil)
+
+		mockInfo := mockos.NewMockFileInfo(mocks.ctrl)
+		mockInfo.EXPECT().Size().Return(size)
+		mocks.fileStore.EXPECT().GetCacheFileStat(digest.Hex()).Return(mockInfo, nil)
 	}
 
 	require.NoError(transferer.Upload(digest.Hex()))
@@ -182,7 +193,8 @@ func TestUploadFailureMajority(t *testing.T) {
 	defer mocks.ctrl.Finish()
 	transferer := testOriginClusterTransferer(mocks)
 
-	blob := randutil.Text(256)
+	var size int64 = 256
+	blob := randutil.Text(int(size))
 	digest, err := image.NewDigester().FromBytes(blob)
 	require.NoError(err)
 
@@ -190,25 +202,33 @@ func TestUploadFailureMajority(t *testing.T) {
 	mocks.blobClients[transferer.originAddr].EXPECT().Locations(digest).Return(locs, nil).Times(2)
 	// two failures
 	mocks.blobClientProvider.EXPECT().Provide("loc1").Return(mocks.blobClients["loc1"])
-	mocks.blobClients["loc1"].EXPECT().PushBlob(digest, gomock.Any()).Return(errors.New("loc1 503"))
+	mocks.blobClients["loc1"].EXPECT().PushBlob(digest, gomock.Any(), size).Return(errors.New("loc1 503"))
 	mocks.blobClientProvider.EXPECT().Provide("loc2").Return(mocks.blobClients["loc2"])
-	mocks.blobClients["loc2"].EXPECT().PushBlob(digest, gomock.Any()).Return(errors.New("loc2 503"))
+	mocks.blobClients["loc2"].EXPECT().PushBlob(digest, gomock.Any(), size).Return(errors.New("loc2 503"))
 
 	for _, loc := range locs[2:] {
 		mocks.blobClientProvider.EXPECT().Provide(loc).Return(mocks.blobClients[loc])
-		mocks.blobClients[loc].EXPECT().PushBlob(digest, gomock.Any()).Return(nil)
+		mocks.blobClients[loc].EXPECT().PushBlob(digest, gomock.Any(), size).Return(nil)
 	}
 
 	for i := 0; i < len(locs); i++ {
 		r, cleanup := store.NewMockFileReadWriter(blob)
 		defer cleanup()
 		mocks.fileStore.EXPECT().GetCacheFileReader(digest.Hex()).Return(r, nil)
+
+		mockInfo := mockos.NewMockFileInfo(mocks.ctrl)
+		mockInfo.EXPECT().Size().Return(size)
+		mocks.fileStore.EXPECT().GetCacheFileStat(digest.Hex()).Return(mockInfo, nil)
 	}
 
 	err = transferer.Upload(digest.Hex())
 	require.Error(err)
-	require.True(strings.Contains(err.Error(), "failed to push blob to loc2: loc2 503"))
-	require.True(strings.Contains(err.Error(), "failed to push blob to loc1: loc1 503"))
+	var failedLocs []string
+	for _, e := range err.(uploadQuorumError).errs {
+		failedLocs = append(failedLocs, e.(pushBlobError).loc)
+	}
+	sort.Strings(failedLocs)
+	require.Equal([]string{"loc1", "loc2"}, failedLocs)
 }
 
 func TestGetManifest(t *testing.T) {

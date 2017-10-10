@@ -36,10 +36,11 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // CheckBlob mocks base method
-func (m *MockClient) CheckBlob(arg0 image.Digest) error {
+func (m *MockClient) CheckBlob(arg0 image.Digest) (bool, error) {
 	ret := m.ctrl.Call(m, "CheckBlob", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // CheckBlob indicates an expected call of CheckBlob
@@ -110,15 +111,15 @@ func (mr *MockClientMockRecorder) PatchUpload(arg0, arg1, arg2, arg3, arg4 inter
 }
 
 // PushBlob mocks base method
-func (m *MockClient) PushBlob(arg0 image.Digest, arg1 io.Reader) error {
-	ret := m.ctrl.Call(m, "PushBlob", arg0, arg1)
+func (m *MockClient) PushBlob(arg0 image.Digest, arg1 io.Reader, arg2 int64) error {
+	ret := m.ctrl.Call(m, "PushBlob", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PushBlob indicates an expected call of PushBlob
-func (mr *MockClientMockRecorder) PushBlob(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PushBlob", reflect.TypeOf((*MockClient)(nil).PushBlob), arg0, arg1)
+func (mr *MockClientMockRecorder) PushBlob(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PushBlob", reflect.TypeOf((*MockClient)(nil).PushBlob), arg0, arg1, arg2)
 }
 
 // Repair mocks base method

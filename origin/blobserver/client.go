@@ -11,6 +11,11 @@ import (
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
+// Client errors.
+var (
+	ErrBlobExist = errors.New("blob already exists")
+)
+
 // RedirectError occurs when a Client is scoped to the wrong origin.
 type RedirectError struct {
 	Locations []string
@@ -31,19 +36,27 @@ type ClientProvider interface {
 }
 
 // HTTPClientProvider provides HTTPClients.
-type HTTPClientProvider struct{}
+type HTTPClientProvider struct {
+	config ClientConfig
+}
+
+// NewHTTPClientProvider returns a new HTTPClientProvider.
+func NewHTTPClientProvider(config ClientConfig) HTTPClientProvider {
+	return HTTPClientProvider{config}
+}
 
 // Provide implements ClientProvider's Provide.
+// TODO(codyg): Make this return error.
 func (p HTTPClientProvider) Provide(addr string) Client {
-	return NewHTTPClient(addr)
+	return NewHTTPClient(p.config, addr)
 }
 
 // Client provides a wrapper around all Server HTTP endpoints.
 type Client interface {
 	Locations(d image.Digest) ([]string, error)
-	CheckBlob(d image.Digest) error
+	CheckBlob(d image.Digest) (bool, error)
 	GetBlob(d image.Digest) (io.ReadCloser, error)
-	PushBlob(d image.Digest, blob io.Reader) error
+	PushBlob(d image.Digest, blob io.Reader, size int64) error
 	DeleteBlob(d image.Digest) error
 
 	StartUpload(d image.Digest) (uuid string, err error)
@@ -59,12 +72,13 @@ var _ Client = (*HTTPClient)(nil)
 
 // HTTPClient defines the Client implementation.
 type HTTPClient struct {
-	addr string
+	config ClientConfig
+	addr   string
 }
 
 // NewHTTPClient returns a new HTTPClient scoped to addr.
-func NewHTTPClient(addr string) *HTTPClient {
-	return &HTTPClient{addr}
+func NewHTTPClient(config ClientConfig, addr string) *HTTPClient {
+	return &HTTPClient{config, addr}
 }
 
 // Locations returns the origin server addresses which d is sharded on.
@@ -76,9 +90,15 @@ func (c *HTTPClient) Locations(d image.Digest) ([]string, error) {
 }
 
 // CheckBlob returns error if the origin does not have a blob for d.
-func (c *HTTPClient) CheckBlob(d image.Digest) error {
+func (c *HTTPClient) CheckBlob(d image.Digest) (bool, error) {
 	_, err := httputil.Head(fmt.Sprintf("http://%s/blobs/%s", c.addr, d))
-	return maybeRedirect(err)
+	if err != nil {
+		if httputil.IsNotFound(err) {
+			return false, nil
+		}
+		return false, maybeRedirect(err)
+	}
+	return true, nil
 }
 
 // GetBlob returns the blob corresponding to d.
@@ -90,9 +110,29 @@ func (c *HTTPClient) GetBlob(d image.Digest) (io.ReadCloser, error) {
 	return r.Body, nil
 }
 
-// PushBlob is a convenience wrapper around the upload API.
-func (c *HTTPClient) PushBlob(d image.Digest, blob io.Reader) error {
-	panic("not implemented")
+// PushBlob is a convenience wrapper around the upload API. Returns ErrBlobExist
+// if the blob already exists on the target origin.
+func (c *HTTPClient) PushBlob(d image.Digest, blob io.Reader, size int64) error {
+	uuid, err := c.StartUpload(d)
+	if err != nil {
+		if httputil.IsConflict(err) {
+			return ErrBlobExist
+		}
+		return fmt.Errorf("failed to start upload: %s", err)
+	}
+	var start int64
+	for start < size {
+		n := min(c.config.UploadChunkSize, size-start)
+		chunk := io.LimitReader(blob, n)
+		if err := c.PatchUpload(d, uuid, start, start+n, chunk); err != nil {
+			return fmt.Errorf("failed to patch upload: %s", err)
+		}
+		start += n
+	}
+	if err := c.CommitUpload(d, uuid); err != nil {
+		return fmt.Errorf("failed to commit upload: %s", err)
+	}
+	return nil
 }
 
 // DeleteBlob deletes the blob corresponding to d.
@@ -140,19 +180,25 @@ func (c *HTTPClient) CommitUpload(d image.Digest, uuid string) error {
 	return maybeRedirect(err)
 }
 
-// Repair TODO
+// Repair runs a global repair of all shards present on disk. See RepairShard
+// for more details.
 func (c *HTTPClient) Repair() (io.ReadCloser, error) {
-	panic("repair not implemented")
+	r, err := httputil.Post(fmt.Sprintf("http://%s/repair", c.addr))
+	return r.Body, err
 }
 
-// RepairShard TODO
+// RepairShard pushes the blobs of shardID to other replicas, and removes shardID
+// from the target origin if it is now longer an owner of shardID.
 func (c *HTTPClient) RepairShard(shardID string) (io.ReadCloser, error) {
-	panic("repair shard not implemented")
+	r, err := httputil.Post(fmt.Sprintf("http://%s/repair/shard/%s", c.addr, shardID))
+	return r.Body, err
 }
 
-// RepairDigest TODO
+// RepairDigest pushes d to other replicas, and removes d from the target origin
+// if it is no longer the owner of d.
 func (c *HTTPClient) RepairDigest(d image.Digest) (io.ReadCloser, error) {
-	panic("repair digest not implemented")
+	r, err := httputil.Post(fmt.Sprintf("http://%s/repair/digest/%s", c.addr, d))
+	return r.Body, err
 }
 
 // maybeRedirect attempts to convert redirects into RedirectErrors.
@@ -164,4 +210,11 @@ func maybeRedirect(err error) error {
 		return newRedirectError(serr.Header)
 	}
 	return err
+}
+
+func min(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }

@@ -59,7 +59,7 @@ func (d Digest) Hex() string {
 	return d.hex
 }
 
-// GetShardID returns the shard id of the digest.
-func (d Digest) GetShardID() string {
+// ShardID returns the shard id of the digest.
+func (d Digest) ShardID() string {
 	return d.hex[:4]
 }
