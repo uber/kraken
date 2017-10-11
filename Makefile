@@ -116,7 +116,7 @@ mocks:
 # Enumerates all container names, including those created by dockerman.
 CONTAINERS := $(foreach \
 	c, \
-	kraken-mysql kraken-redis kraken-tracker kraken-origin kraken-redis, \
+	kraken-mysql kraken-redis kraken-tracker kraken-origin kraken-redis kraken-proxy, \
 	$(c) no-app-id-dockerman.$(c))
 
 # Runs docker stop and docker rm on each container w/ silenced output.
@@ -228,7 +228,8 @@ bootstrap_integration:
 	source env/bin/activate
 	env/bin/pip install -r requirements-tests.txt
 
-build_integration: tracker origin peer tools/bin/puller/puller docker_stop
+# build_integration: tracker origin peer proxy tools/bin/puller/puller docker_stop
+build_integration: origin docker_stop
 
 run_integration:
 	source env/bin/activate
