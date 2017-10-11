@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"os"
 
 	xconfig "code.uber.internal/go-common.git/x/config"
 
@@ -13,7 +14,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobserver"
-	"code.uber.internal/infra/kraken/utils"
 )
 
 func main() {
@@ -25,6 +25,7 @@ func main() {
 	if err := xconfig.Load(&config); err != nil {
 		panic(err)
 	}
+
 	// Disable JSON logging because it's completely unreadable.
 	formatter := true
 	config.Logging.TextFormatter = &formatter
@@ -56,11 +57,10 @@ func main() {
 	}
 	defer client.Close()
 
-	// Initialize and start blob HTTP server:
-
-	hostname, err := utils.GetLocalIP()
+	// The code below starts Blob HTTP server.
+	hostname, err := os.Hostname()
 	if err != nil {
-		log.Fatalf("Error getting local IP: %s", err)
+		log.Fatalf("Error getting hostname: %s", err)
 	}
 
 	blobClientProvider := blobserver.NewHTTPClientProvider(config.BlobClient)
