@@ -86,7 +86,12 @@ func NewHTTPClient(config ClientConfig, addr string) *HTTPClient {
 // except during repair. It should have some retry logic so if one origin host
 // is not available, it retries (assuming we have round robin dns for origin cluster).
 func (c *HTTPClient) Locations(d image.Digest) ([]string, error) {
-	panic("not implemented")
+	r, err := httputil.Get(fmt.Sprintf("http://%s/blobs/%s/locations", c.addr, d))
+	if err != nil {
+		return nil, err
+	}
+	locs := strings.Split(r.Header.Get("Origin-Locations"), ",")
+	return locs, nil
 }
 
 // CheckBlob returns error if the origin does not have a blob for d.

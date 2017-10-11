@@ -129,6 +129,24 @@ func TestDeleteBlobHandlerNotFound(t *testing.T) {
 	require.Equal(http.StatusNotFound, err.(httputil.StatusError).Status)
 }
 
+func TestGetLocationsHandlerOK(t *testing.T) {
+	require := require.New(t)
+
+	mocks := newServerMocks(t)
+	defer mocks.ctrl.Finish()
+
+	config := configFixture()
+
+	addr, stop := mocks.server(config)
+	defer stop()
+
+	d, _ := computeBlobForHosts(config, master1, master2)
+
+	locs, err := NewHTTPClient(clientConfigFixture(), addr).Locations(d)
+	require.NoError(err)
+	require.Equal([]string{master1, master2}, locs)
+}
+
 func TestStartUploadHandlerAccepted(t *testing.T) {
 	require := require.New(t)
 
@@ -286,7 +304,8 @@ func TestParseContentRangeHeaderBadRequests(t *testing.T) {
 }
 
 func TestRedirectErrors(t *testing.T) {
-	d := image.DigestFixture()
+	config := configFixture()
+	d, _ := computeBlobForHosts(config, master2, master3)
 	u := uuid.Generate().String()
 	cc := clientConfigFixture()
 
@@ -320,19 +339,12 @@ func TestRedirectErrors(t *testing.T) {
 			mocks := newServerMocks(t)
 			defer mocks.ctrl.Finish()
 
-			// Set the master we test against to have a weight of 0, such that all
-			// requests will redirect to the other nodes.
-			config := configFixture()
-			node := config.HashNodes[master1]
-			node.Weight = 0
-			config.HashNodes[master1] = node
-
 			addr, stop := mocks.server(config)
 			defer stop()
 
 			err := test.f(addr)
 			require.Error(err)
-			require.Equal([]string{"origin2", "origin3"}, err.(RedirectError).Locations)
+			require.Equal([]string{master2, master3}, err.(RedirectError).Locations)
 		})
 	}
 }

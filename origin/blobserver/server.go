@@ -95,6 +95,8 @@ func (s Server) Handler() http.Handler {
 	r.Get("/blobs/:digest", handler(s.getBlobHandler))
 	r.Delete("/blobs/:digest", handler(s.deleteBlobHandler))
 
+	r.Get("/blobs/:digest/locations", handler(s.getLocationsHandler))
+
 	r.Post("/blobs/:digest/uploads", handler(s.startUploadHandler))
 	r.Patch("/blobs/:digest/uploads/:uuid", handler(s.patchUploadHandler))
 	r.Put("/blobs/:digest/uploads/:uuid", handler(s.commitUploadHandler))
@@ -149,6 +151,20 @@ func (s Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error 
 	}
 	setContentLength(w, 0)
 	w.WriteHeader(http.StatusAccepted)
+	return nil
+}
+
+func (s Server) getLocationsHandler(w http.ResponseWriter, r *http.Request) error {
+	d, err := parseDigest(r)
+	if err != nil {
+		return err
+	}
+	locs, err := s.getLocations(d)
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Origin-Locations", strings.Join(locs, ","))
+	w.WriteHeader(http.StatusOK)
 	return nil
 }
 
@@ -331,23 +347,33 @@ func parseContentRange(h http.Header) (start, end int64, err error) {
 	return start, end, nil
 }
 
-func (s Server) redirectByDigest(d image.Digest) error {
+func (s Server) getLocations(d image.Digest) ([]string, error) {
 	nodes, err := s.hashState.GetOrderedNodes(d.ShardID(), s.config.NumReplica)
 	if err != nil || len(nodes) == 0 {
-		return serverErrorf("failed to calculate hash for digest %q: %s", d, err)
+		return nil, serverErrorf("failed to calculate hash for digest %q: %s", d, err)
 	}
-	var labels []string
+	var locs []string
 	for _, node := range nodes {
-		if node.Label == s.label {
-			// Current node is among the designated nodes.
+		locs = append(locs, s.labelToHostname[node.Label])
+	}
+	sort.Strings(locs)
+	return locs, nil
+}
+
+func (s Server) redirectByDigest(d image.Digest) error {
+	locs, err := s.getLocations(d)
+	if err != nil {
+		return err
+	}
+	for _, loc := range locs {
+		if s.hostname == loc {
+			// Current node is among designated nodes.
 			return nil
 		}
-		labels = append(labels, node.Label)
 	}
-	sort.Strings(labels)
 	return serverErrorf("redirecting to correct nodes").
 		Status(http.StatusTemporaryRedirect).
-		Header("Origin-Locations", strings.Join(labels, ","))
+		Header("Origin-Locations", strings.Join(locs, ","))
 }
 
 func (s Server) ensureDigestExists(d image.Digest) error {
