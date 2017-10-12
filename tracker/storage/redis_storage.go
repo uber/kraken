@@ -2,15 +2,15 @@ package storage
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
+	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/utils/stringset"
 	"github.com/garyburd/redigo/redis"
 )
-
-func peerKey(infoHash string, peerID string) string {
-	return fmt.Sprintf("peer:%s:%s", infoHash, peerID)
-}
 
 func torrentKey(name string) string {
 	return fmt.Sprintf("tor:%s", name)
@@ -18,6 +18,24 @@ func torrentKey(name string) string {
 
 func peerSetKey(infoHash string, window int64) string {
 	return fmt.Sprintf("peerset:%s:%d", infoHash, window)
+}
+
+func serializePeer(p *torlib.PeerInfo) string {
+	return fmt.Sprintf("%s:%s:%d", p.PeerID, p.IP, p.Port)
+}
+
+func deserializePeer(s string) (*torlib.PeerInfo, error) {
+	parts := strings.Split(s, ":")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid peer encoding: expected 'pid:ip:port'")
+	}
+	peerID := parts[0]
+	ip := parts[1]
+	port, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse port: %s", err)
+	}
+	return &torlib.PeerInfo{PeerID: peerID, IP: ip, Port: port}, nil
 }
 
 // RedisStorage provides fast lookup for peers and torrent metainfo with expiration.
@@ -73,7 +91,6 @@ func (s *RedisStorage) peerSetWindows() []int64 {
 		ws[i] = cur - int64(i*s.config.PeerSetWindowSizeSecs)
 	}
 	return ws
-
 }
 
 // UpdatePeer writes p to Redis with a TTL.
@@ -87,18 +104,11 @@ func (s *RedisStorage) UpdatePeer(p *torlib.PeerInfo) error {
 	w := s.curPeerSetWindow()
 	expireAt := w + int64(s.config.PeerSetWindowSizeSecs*s.config.MaxPeerSetWindows)
 
-	c.Send("MULTI")
-
 	// Add p to the current window.
-	psk := peerSetKey(p.InfoHash, w)
-	c.Send("SADD", psk, p.PeerID)
-	c.Send("EXPIREAT", psk, expireAt)
-
-	// Update the fields of p.
-	pk := peerKey(p.InfoHash, p.PeerID)
-	c.Send("HMSET", redis.Args{}.Add(pk).AddFlat(p)...)
-	c.Send("EXPIREAT", pk, expireAt)
-
+	k := peerSetKey(p.InfoHash, w)
+	c.Send("MULTI")
+	c.Send("SADD", k, serializePeer(p))
+	c.Send("EXPIREAT", k, expireAt)
 	_, err = c.Do("EXEC")
 
 	return err
@@ -112,34 +122,27 @@ func (s *RedisStorage) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
 	}
 	defer c.Close()
 
-	peerIDs := make(map[string]struct{})
+	// Collect all serialized peers into a set to eliminate duplicates from
+	// other windows.
+	serializedPeers := make(stringset.Set)
 	for _, w := range s.peerSetWindows() {
 		result, err := redis.Strings(c.Do("SMEMBERS", peerSetKey(infoHash, w)))
 		if err != nil {
 			return nil, err
 		}
-		for _, peerID := range result {
-			peerIDs[peerID] = struct{}{}
+		for _, s := range result {
+			serializedPeers.Add(s)
 		}
 	}
 
-	peers := make([]*torlib.PeerInfo, 0, len(peerIDs))
-	for peerID := range peerIDs {
-		result, err := redis.Values(c.Do("HGETALL", peerKey(infoHash, peerID)))
+	var peers []*torlib.PeerInfo
+	for s := range serializedPeers {
+		p, err := deserializePeer(s)
 		if err != nil {
-			return nil, err
-		}
-		if len(result) == 0 {
-			// Peer no longer exists.
+			log.Errorf("Error deserializing peer %q: %s", s, err)
 			continue
 		}
-		p := &torlib.PeerInfo{
-			InfoHash: infoHash,
-			PeerID:   peerID,
-		}
-		if err := redis.ScanStruct(result, p); err != nil {
-			return nil, err
-		}
+		p.InfoHash = infoHash
 		peers = append(peers, p)
 	}
 
