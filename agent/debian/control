@@ -3,7 +3,7 @@ Maintainer: Igor Morozov <igor@uber.com>
 Section: misc
 Priority: optional
 Standards-Version: 0.1.11
-Build-Depends: debhelper (>= 9), golang (>= 2:1.7.0), curl, git
+Build-Depends: debhelper (>= 9), golang (>= 2:1.4.0), curl, git
 
 Package: kraken-agent
 Architecture: amd64
