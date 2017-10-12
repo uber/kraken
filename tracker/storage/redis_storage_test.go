@@ -29,7 +29,7 @@ func sortedPeerIDs(peers []*torlib.PeerInfo) []string {
 	return pids
 }
 
-func TestRedisStorageGetPeersOnlyReturnsTaggedFields(t *testing.T) {
+func TestRedisStorageGetPeersPopulatesPeerInfoFields(t *testing.T) {
 	require := require.New(t)
 
 	config := redisConfigFixture()
@@ -46,13 +46,10 @@ func TestRedisStorageGetPeersOnlyReturnsTaggedFields(t *testing.T) {
 	peers, err := s.GetPeers(p.InfoHash)
 	require.NoError(err)
 	require.Equal(peers, []*torlib.PeerInfo{{
-		InfoHash:        p.InfoHash,
-		PeerID:          p.PeerID,
-		IP:              p.IP,
-		Port:            p.Port,
-		DC:              p.DC,
-		BytesDownloaded: p.BytesDownloaded,
-		Flags:           p.Flags,
+		InfoHash: p.InfoHash,
+		PeerID:   p.PeerID,
+		IP:       p.IP,
+		Port:     p.Port,
 	}})
 }
 
@@ -97,8 +94,6 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 }
 
 func TestRedisStoragePeerExpiration(t *testing.T) {
-	t.Skip("Flaky test: needs investigation")
-
 	require := require.New(t)
 
 	config := redisConfigFixture()
@@ -118,7 +113,7 @@ func TestRedisStoragePeerExpiration(t *testing.T) {
 	require.NoError(err)
 	require.Len(result, 1)
 
-	time.Sleep(1500 * time.Millisecond)
+	time.Sleep(3 * time.Second)
 
 	result, err = s.GetPeers(p.InfoHash)
 	require.NoError(err)
