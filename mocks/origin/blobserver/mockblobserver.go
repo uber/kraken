@@ -35,6 +35,18 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
+// Addr mocks base method
+func (m *MockClient) Addr() string {
+	ret := m.ctrl.Call(m, "Addr")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Addr indicates an expected call of Addr
+func (mr *MockClientMockRecorder) Addr() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Addr", reflect.TypeOf((*MockClient)(nil).Addr))
+}
+
 // CheckBlob mocks base method
 func (m *MockClient) CheckBlob(arg0 image.Digest) (bool, error) {
 	ret := m.ctrl.Call(m, "CheckBlob", arg0)

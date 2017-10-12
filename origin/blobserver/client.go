@@ -53,6 +53,8 @@ func (p HTTPClientProvider) Provide(addr string) Client {
 
 // Client provides a wrapper around all Server HTTP endpoints.
 type Client interface {
+	Addr() string
+
 	Locations(d image.Digest) ([]string, error)
 	CheckBlob(d image.Digest) (bool, error)
 	GetBlob(d image.Digest) (io.ReadCloser, error)
@@ -79,6 +81,11 @@ type HTTPClient struct {
 // NewHTTPClient returns a new HTTPClient scoped to addr.
 func NewHTTPClient(config ClientConfig, addr string) *HTTPClient {
 	return &HTTPClient{config, addr}
+}
+
+// Addr returns the address of the server the client is provisioned for.
+func (c *HTTPClient) Addr() string {
+	return c.addr
 }
 
 // Locations returns the origin server addresses which d is sharded on.
