@@ -3,3 +3,6 @@ PACKAGE = cli/kraken-cli
 
 %:
 	dh $@
+
+override_dh_auto_build:
+	make cli/kraken-cli
