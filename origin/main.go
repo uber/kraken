@@ -67,10 +67,14 @@ func main() {
 
 	server, err := blobserver.New(config.BlobServer, hostname, fileStore, blobClientProvider)
 	if err != nil {
-		log.Fatalf("Error initializing blob server: %s", err)
+		log.Fatalf("Error initializing blob server %s: %s", hostname, err)
 	}
 
-	addr := fmt.Sprintf(":%d", config.Port)
-	log.Info("Starting origin server %s on %s", hostname, addr)
-	log.Fatal(http.ListenAndServe(addr, server.Handler()))
+	port, err := server.Port()
+	if err != nil {
+		log.Fatalf("Failed to get port %s: %s", hostname, err)
+	}
+
+	log.Infof("Starting origin server %s on %s", hostname, port)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), server.Handler()))
 }

@@ -10,10 +10,16 @@ import (
 
 // Config defines the configuration used by Origin cluster for hashing blob digests.
 type Config struct {
-	NumReplica int                       `yaml:"num_replica"`
-	HashNodes  map[string]HashNodeConfig `yaml:"hash_nodes"`
-	Repair     RepairConfig              `yaml:"repair"`
+	NumReplica int          `yaml:"num_replica"`
+	HashNodes  HashNodeMap  `yaml:"hash_nodes"`
+	Repair     RepairConfig `yaml:"repair"`
 }
+
+// HashNodeMap defines a map from address of HashNodeConfig
+// NOTE: Address should be in the form of hostname:port or dns name.
+// The reason behind this is that we do not want to make assumption of the port
+// each origin is running on.
+type HashNodeMap map[string]HashNodeConfig
 
 // HashNodeConfig defines the config for a single origin node
 type HashNodeConfig struct {
@@ -36,11 +42,11 @@ type ClientConfig struct {
 	UploadChunkSize int64 `yaml:"upload_chunk_size"`
 }
 
-// LabelToHostname generates a reverse mapping of HashNodes by label to hostname.
-func (c Config) LabelToHostname() map[string]string {
+// LabelToAddress generates a reverse mapping of HashNodes by label to hostname.
+func (c Config) LabelToAddress() map[string]string {
 	m := make(map[string]string, len(c.HashNodes))
-	for host, node := range c.HashNodes {
-		m[node.Label] = host
+	for addr, node := range c.HashNodes {
+		m[node.Label] = addr
 	}
 	return m
 }

@@ -10,7 +10,6 @@ import (
 
 // Config defines origin server configuration.
 type Config struct {
-	Port       int
 	Verbose    bool
 	Logging    log.Configuration
 	BlobServer blobserver.Config       `yaml:"blobserver"`

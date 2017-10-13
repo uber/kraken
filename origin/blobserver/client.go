@@ -1,9 +1,11 @@
 package blobserver
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -117,7 +119,7 @@ func (c *HTTPClient) CheckBlob(d image.Digest) (bool, error) {
 func (c *HTTPClient) GetBlob(d image.Digest) (io.ReadCloser, error) {
 	r, err := httputil.Get(fmt.Sprintf("http://%s/blobs/%s", c.addr, d))
 	if err != nil {
-		return nil, maybeRedirect(err)
+		return ioutil.NopCloser(bytes.NewReader([]byte{})), maybeRedirect(err)
 	}
 	return r.Body, nil
 }
@@ -196,6 +198,9 @@ func (c *HTTPClient) CommitUpload(d image.Digest, uuid string) error {
 // for more details.
 func (c *HTTPClient) Repair() (io.ReadCloser, error) {
 	r, err := httputil.Post(fmt.Sprintf("http://%s/repair", c.addr))
+	if err != nil {
+		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
+	}
 	return r.Body, err
 }
 
@@ -203,6 +208,9 @@ func (c *HTTPClient) Repair() (io.ReadCloser, error) {
 // from the target origin if it is now longer an owner of shardID.
 func (c *HTTPClient) RepairShard(shardID string) (io.ReadCloser, error) {
 	r, err := httputil.Post(fmt.Sprintf("http://%s/repair/shard/%s", c.addr, shardID))
+	if err != nil {
+		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
+	}
 	return r.Body, err
 }
 
@@ -210,6 +218,9 @@ func (c *HTTPClient) RepairShard(shardID string) (io.ReadCloser, error) {
 // if it is no longer the owner of d.
 func (c *HTTPClient) RepairDigest(d image.Digest) (io.ReadCloser, error) {
 	r, err := httputil.Post(fmt.Sprintf("http://%s/repair/digest/%s", c.addr, d))
+	if err != nil {
+		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
+	}
 	return r.Body, err
 }
 
