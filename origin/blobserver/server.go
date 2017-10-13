@@ -2,7 +2,6 @@ package blobserver
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils/memsize"
+	"code.uber.internal/infra/kraken/utils/netutil"
 
 	"github.com/docker/distribution/uuid"
 	"github.com/pressly/chi"
@@ -25,13 +25,13 @@ const _uploadChunkSize = 16 * memsize.MB
 
 // Server defines a server that serves blob data for agent.
 type Server struct {
-	config          Config
-	label           string
-	hostname        string
-	labelToHostname map[string]string
-	hashState       *hrw.RendezvousHash
-	fileStore       store.FileStore
-	clientProvider  ClientProvider
+	config         Config
+	label          string
+	addr           string
+	labelToAddr    map[string]string
+	hashState      *hrw.RendezvousHash
+	fileStore      store.FileStore
+	clientProvider ClientProvider
 }
 
 // New initializes a new Server.
@@ -42,24 +42,58 @@ func New(
 	clientProvider ClientProvider) (*Server, error) {
 
 	if len(config.HashNodes) == 0 {
-		return nil, errors.New("no hash nodes configured")
+		return nil, fmt.Errorf("no hash nodes configured")
 	}
 
-	currNode, ok := config.HashNodes[hostname]
+	var ports []string
+	for addr := range config.HashNodes {
+		h, p, err := netutil.SplitHostPort(addr)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing address %s: %s", addr, err)
+		}
+		if h == hostname {
+			ports = append(ports, p)
+		}
+	}
+
+	if len(ports) != 1 {
+		return nil, fmt.Errorf("error parsing hashnode configuration: %s should have exactly one port, actual number of ports: %d", hostname, len(ports))
+	}
+
+	addr := hostname
+	if ports[0] != "" {
+		addr = fmt.Sprintf("%s:%s", hostname, ports[0])
+	}
+
+	currNode, ok := config.HashNodes[addr]
 	if !ok {
-		return nil, fmt.Errorf("hostname %q not in configured hash nodes", hostname)
+		return nil, fmt.Errorf("host address %s not in configured hash nodes", addr)
 	}
 	label := currNode.Label
 
 	return &Server{
-		config:          config,
-		label:           label,
-		hostname:        hostname,
-		labelToHostname: config.LabelToHostname(),
-		hashState:       config.HashState(),
-		fileStore:       fileStore,
-		clientProvider:  clientProvider,
+		config:         config,
+		label:          label,
+		addr:           addr,
+		labelToAddr:    config.LabelToAddress(),
+		hashState:      config.HashState(),
+		fileStore:      fileStore,
+		clientProvider: clientProvider,
 	}, nil
+}
+
+// Port returns listening port of server
+func (s *Server) Port() (string, error) {
+	_, port, err := netutil.SplitHostPort(s.addr)
+	if err != nil {
+		return "", err
+	}
+
+	// TODO (@evelynl): if s.addr is a dns name, it could return a defaul port
+	if port == "" {
+		return "", fmt.Errorf("no port specified")
+	}
+	return port, nil
 }
 
 type errHandler func(http.ResponseWriter, *http.Request) error
@@ -354,7 +388,7 @@ func (s Server) getLocations(d image.Digest) ([]string, error) {
 	}
 	var locs []string
 	for _, node := range nodes {
-		locs = append(locs, s.labelToHostname[node.Label])
+		locs = append(locs, s.labelToAddr[node.Label])
 	}
 	sort.Strings(locs)
 	return locs, nil
@@ -366,7 +400,7 @@ func (s Server) redirectByDigest(d image.Digest) error {
 		return err
 	}
 	for _, loc := range locs {
-		if s.hostname == loc {
+		if s.addr == loc {
 			// Current node is among designated nodes.
 			return nil
 		}
@@ -496,8 +530,8 @@ func (s Server) commitUpload(d image.Digest, uploadUUID string) error {
 func (s Server) newRepairer() *repairer {
 	return newRepairer(
 		s.config,
-		s.hostname,
-		s.labelToHostname,
+		s.addr,
+		s.labelToAddr,
 		s.hashState,
 		s.fileStore,
 		s.clientProvider,

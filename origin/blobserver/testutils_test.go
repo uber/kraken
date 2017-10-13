@@ -21,9 +21,9 @@ import (
 )
 
 const (
-	master1 = "dummy-origin-master01-dca1"
-	master2 = "dummy-origin-master02-dca1"
-	master3 = "dummy-origin-master03-dca1"
+	master1 = "dummy-origin-master01-dca1:1001"
+	master2 = "dummy-origin-master02-dca1:1002"
+	master3 = "dummy-origin-master03-dca1:1003"
 )
 
 func configFixture() Config {
@@ -78,7 +78,8 @@ func (p *testClientProvider) Provide(host string) Client {
 	return NewHTTPClient(p.config, addr)
 }
 
-func startServer(host string, config Config, fs store.FileStore, cp ClientProvider) (addr string, stop func()) {
+func startServer(hostaddr string, config Config, fs store.FileStore, cp ClientProvider) (listenaddr string, stop func()) {
+	host, _, err := net.SplitHostPort(hostaddr)
 	s, err := New(config, host, fs, cp)
 	if err != nil {
 		panic(err)

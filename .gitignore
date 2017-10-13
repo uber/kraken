@@ -36,6 +36,8 @@ coverage.html
 
 # test db data
 db/data
+# test generated config file
+config/origin/test/base.yaml
 
 # For vim users.
 tags

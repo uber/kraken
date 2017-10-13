@@ -2,6 +2,7 @@ package blobserver
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -16,6 +17,69 @@ import (
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/randutil"
 )
+
+func TestNewServer(t *testing.T) {
+	testCases := []struct {
+		name          string
+		inputHostname string
+		hnConfig      HashNodeMap
+		errStr        string
+		addr          string
+	}{
+		{"empty config", "master4", HashNodeMap{}, "no hash nodes configured", ""},
+		{"master not in config", "master4", HashNodeMap{"master1:1": {}, "master2:2": {}, "master3:3": {}}, "error parsing hashnode configuration: master4 should have exactly one port, actual number of ports: 0", ""},
+		{"duplicated master in config", "master1", HashNodeMap{"master1:1": {}, "master2:2": {}, "master3:3": {}, "master1:4": {}}, "error parsing hashnode configuration: master1 should have exactly one port, actual number of ports: 2", ""},
+		{"found port in config", "master1", HashNodeMap{"master1:1": {}, "master2:2": {}, "master3:3": {}}, "", "master1:1"},
+		{"address does not contain port", "master1", HashNodeMap{"master1": {}}, "", "master1"},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			require := require.New(t)
+			config := Config{
+				HashNodes: test.hnConfig,
+			}
+			s, err := New(config, test.inputHostname, nil, nil)
+			if test.errStr == "" {
+				require.NoError(err)
+				require.Equal(test.addr, s.addr)
+				return
+			}
+
+			require.Error(err)
+			require.Contains(err.Error(), test.errStr)
+		})
+	}
+}
+
+func TestServerPort(t *testing.T) {
+	testCases := []struct {
+		s    *Server
+		port string
+		err  error
+	}{
+		{&Server{addr: "master"}, "", fmt.Errorf("no port specified")},
+		{&Server{addr: "master:1"}, "1", nil},
+		{&Server{addr: "master:1:1"}, "", fmt.Errorf("master:1:1 is not a valid address")},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.s.addr, func(t *testing.T) {
+			t.Parallel()
+			require := require.New(t)
+			port, err := test.s.Port()
+			if test.err == nil {
+				require.NoError(err)
+				require.Equal(test.port, port)
+				return
+			}
+
+			require.Error(err)
+			require.Equal(test.err, err)
+		})
+	}
+}
 
 func TestCheckBlobHandlerOK(t *testing.T) {
 	require := require.New(t)
