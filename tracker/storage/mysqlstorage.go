@@ -315,3 +315,13 @@ func (s *MySQLStorage) tryDeleteTorrentOnOrigins(name string) (err error) {
 	// So we need a table for origin hosts
 	return nil
 }
+
+// GetOrigins implements PeerStore.GetOrigins.
+func (s *MySQLStorage) GetOrigins(infohash string) ([]*torlib.PeerInfo, error) {
+	panic("GetOrigins not implemented")
+}
+
+// UpdateOrigins implements PeerStore.UpdateOrigins.
+func (s *MySQLStorage) UpdateOrigins(infohash string, origins []*torlib.PeerInfo) error {
+	panic("UpdateOrigins not implemented")
+}

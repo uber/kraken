@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
 	"code.uber.internal/infra/kraken/utils/randutil"
@@ -21,9 +22,9 @@ import (
 )
 
 const (
-	master1 = "dummy-origin-master01-dca1:1001"
-	master2 = "dummy-origin-master02-dca1:1002"
-	master3 = "dummy-origin-master03-dca1:1003"
+	master1 = "dummy-origin-master01-dca1"
+	master2 = "dummy-origin-master02-dca1"
+	master3 = "dummy-origin-master03-dca1"
 )
 
 func configFixture() Config {
@@ -78,9 +79,14 @@ func (p *testClientProvider) Provide(host string) Client {
 	return NewHTTPClient(p.config, addr)
 }
 
-func startServer(hostaddr string, config Config, fs store.FileStore, cp ClientProvider) (listenaddr string, stop func()) {
-	host, _, err := net.SplitHostPort(hostaddr)
-	s, err := New(config, host, fs, cp)
+func startServer(
+	host string,
+	config Config,
+	fs store.FileStore,
+	cp ClientProvider,
+	pctx peercontext.PeerContext) (addr string, stop func()) {
+
+	s, err := New(config, host, fs, cp, pctx)
 	if err != nil {
 		panic(err)
 	}
@@ -100,19 +106,22 @@ type testServer struct {
 	addr    string
 	fs      *store.LocalFileStore
 	cp      *testClientProvider
+	pctx    peercontext.PeerContext
 	stop    func()
 	cleanFS func()
 }
 
 func newTestServer(host string, config Config, cp *testClientProvider) *testServer {
+	pctx := peercontext.Fixture()
 	fs, cleanFS := store.LocalFileStoreFixture()
-	addr, stop := startServer(host, config, fs, cp)
+	addr, stop := startServer(host, config, fs, cp, pctx)
 	cp.register(host, addr)
 	return &testServer{
 		host:    host,
 		addr:    addr,
 		fs:      fs,
 		cp:      cp,
+		pctx:    pctx,
 		stop:    stop,
 		cleanFS: cleanFS,
 	}
@@ -121,7 +130,7 @@ func newTestServer(host string, config Config, cp *testClientProvider) *testServ
 func (s *testServer) restart(config Config) {
 	s.stop()
 
-	s.addr, s.stop = startServer(s.host, config, s.fs, s.cp)
+	s.addr, s.stop = startServer(s.host, config, s.fs, s.cp, s.pctx)
 	s.cp.register(s.host, s.addr)
 }
 
@@ -148,7 +157,7 @@ func newServerMocks(t *testing.T) *serverMocks {
 }
 
 func (mocks *serverMocks) server(config Config) (addr string, stop func()) {
-	return startServer(master1, config, mocks.fileStore, mocks.clientProvider)
+	return startServer(master1, config, mocks.fileStore, mocks.clientProvider, peercontext.Fixture())
 }
 
 // labelSet converts hosts into their corresponding labels as specified by config.

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
 )
 
@@ -176,7 +177,7 @@ func TestRepairUnownedShardDoesNotDeleteIfReplicationFails(t *testing.T) {
 	fs3 := mockstore.NewMockFileStore(ctrl)
 	fs3.EXPECT().GetCacheFileStat(gomock.Any()).MinTimes(1).Return(nil, os.ErrNotExist)
 	fs3.EXPECT().CreateUploadFile(gomock.Any(), int64(0)).MinTimes(1).Return(errors.New("some error"))
-	addr3, stop := startServer(master3, config, fs3, cp)
+	addr3, stop := startServer(master3, config, fs3, cp, peercontext.Fixture())
 	defer stop()
 	cp.register(master3, addr3)
 

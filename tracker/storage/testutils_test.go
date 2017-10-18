@@ -39,6 +39,7 @@ func redisConfigFixture() RedisConfig {
 		MaxIdleConns:          5,
 		MaxActiveConns:        20,
 		IdleConnTimeoutSecs:   10,
+		OriginsTTL:            5 * time.Minute,
 	}
 }
 

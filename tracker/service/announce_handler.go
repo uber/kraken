@@ -4,25 +4,68 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/jackpal/bencode-go"
 
+	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/origin/blobserver"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/utils/errutil"
 )
 
 type announceHandler struct {
-	config Config
-	store  storage.PeerStore
-	policy peerhandoutpolicy.PeerHandoutPolicy
+	config         Config
+	store          storage.PeerStore
+	policy         peerhandoutpolicy.PeerHandoutPolicy
+	originResolver blobserver.ClusterClientResolver
+}
+
+func (h *announceHandler) requestOrigins(infoHash, name string) ([]*torlib.PeerInfo, error) {
+	clients, err := h.originResolver.Resolve(image.NewSHA256DigestFromHex(name))
+	if err != nil {
+		return nil, err
+	}
+
+	var mu sync.Mutex
+	var origins []*torlib.PeerInfo
+	var errs []error
+
+	var wg sync.WaitGroup
+	for _, client := range clients {
+		wg.Add(1)
+		go func(client blobserver.Client) {
+			defer wg.Done()
+			pctx, err := client.GetPeerContext()
+			mu.Lock()
+			if err != nil {
+				errs = append(errs, err)
+			} else {
+				origins = append(origins, &torlib.PeerInfo{
+					InfoHash: infoHash,
+					PeerID:   pctx.PeerID.String(),
+					IP:       pctx.IP,
+					Port:     int64(pctx.Port),
+					DC:       pctx.Zone,
+					Origin:   true,
+				})
+			}
+			mu.Unlock()
+		}(client)
+	}
+	wg.Wait()
+
+	return origins, errutil.Join(errs)
 }
 
 func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	log.Debugf("Get /announce %s", q)
 
+	name := q.Get("name")
 	infoHash := q.Get("info_hash")
 	peerID := q.Get("peer_id")
 	peerPortStr := q.Get("port")
@@ -74,23 +117,54 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 		Event:     peerEvent,
 	}
 
-	err = h.store.UpdatePeer(peer)
+	if err := h.store.UpdatePeer(peer); err != nil {
+		log.WithFields(log.Fields{
+			"info_hash": infoHash,
+			"peer_id":   peerID,
+		}).Errorf("Error updating peer: %s", err)
+	}
+
+	var errs []error
+	peers, err := h.store.GetPeers(infoHash)
 	if err != nil {
-		log.Infof("Could not update storage for: hash %s, error: %s, request: %s",
-			infoHash, err.Error(), formatRequest(r))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		errs = append(errs, fmt.Errorf("peer storage error: %s", err))
+	}
+	origins, err := h.store.GetOrigins(infoHash)
+	if err != nil {
+		tryUpdate := true
+		if err != storage.ErrNoOrigins {
+			errs = append(errs, fmt.Errorf("origin peer storage error: %s", err))
+			tryUpdate = false
+		}
+		origins, err = h.requestOrigins(infoHash, name)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("origin lookup error: %s", err))
+		}
+		if len(origins) > 0 && tryUpdate {
+			if err := h.store.UpdateOrigins(infoHash, origins); err != nil {
+				log.WithFields(log.Fields{
+					"info_hash": infoHash,
+				}).Errorf("Error upserting origins: %s", err)
+			}
+		}
+	}
+	err = errutil.Join(errs)
+	if err != nil {
+		log.Errorf("Error getting peers: %s", err)
+	}
+	for _, origin := range origins {
+		peers = append(peers, origin)
+	}
+	if len(peers) == 0 {
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error getting peers: %s", err), http.StatusInternalServerError)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
 		return
 	}
 
-	peerInfos, err := h.store.GetPeers(infoHash)
-	if err != nil {
-		log.Infof("Could not read storage: hash %s, error: %s, request: %s",
-			infoHash, err.Error(), formatRequest(r))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	err = h.policy.AssignPeerPriority(peer, peerInfos)
+	err = h.policy.AssignPeerPriority(peer, peers)
 	if err != nil {
 		log.Infof("Could not apply a peer handout priority policy: %s, error : %s, request: %s",
 			infoHash, err.Error(), formatRequest(r))
@@ -99,7 +173,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO(codyg): Accept peer limit query argument.
-	peerInfos, err = h.policy.SamplePeers(peerInfos, len(peerInfos))
+	peers, err = h.policy.SamplePeers(peers, len(peers))
 	if err != nil {
 		msg := "Could not apply peer handout sampling policy"
 		log.WithFields(log.Fields{
@@ -115,8 +189,8 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// TODO(codyg): bencode can't serialize pointers, so we're forced to dereference
 	// every PeerInfo first.
-	derefPeerInfos := make([]torlib.PeerInfo, len(peerInfos))
-	for i, p := range peerInfos {
+	derefPeerInfos := make([]torlib.PeerInfo, len(peers))
+	for i, p := range peers {
 		derefPeerInfos[i] = *p
 	}
 

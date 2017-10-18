@@ -16,6 +16,12 @@ type PeerStore interface {
 
 	// UpdatePeer updates peer fields.
 	UpdatePeer(peer *torlib.PeerInfo) error
+
+	// GetOrigins returns all origin peers serving infohash.
+	GetOrigins(infohash string) ([]*torlib.PeerInfo, error)
+
+	// UpdateOrigins overwrites all origin peers serving infohash.
+	UpdateOrigins(infohash string, origins []*torlib.PeerInfo) error
 }
 
 // TorrentStore provides storage for torrent metainfo.

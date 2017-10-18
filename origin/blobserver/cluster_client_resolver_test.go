@@ -39,7 +39,9 @@ func TestRoundRobinClientResolverProvidesCorrectClients(t *testing.T) {
 
 	clients, err := resolver.Resolve(d)
 	require.NoError(err)
-	require.Equal([]string{s1.addr, s2.addr}, toAddrs(clients))
+	expected := []string{s1.addr, s2.addr}
+	sort.Strings(expected)
+	require.Equal(expected, toAddrs(clients))
 }
 
 func TestRoundRobinClientResolverResilientToUnavailableMasters(t *testing.T) {
@@ -68,7 +70,9 @@ func TestRoundRobinClientResolverResilientToUnavailableMasters(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		clients, err := resolver.Resolve(d)
 		require.NoError(err)
-		require.Equal([]string{s.addr, "master2-dummy-addr"}, toAddrs(clients))
+		expected := []string{s.addr, "master2-dummy-addr"}
+		sort.Strings(expected)
+		require.Equal(expected, toAddrs(clients))
 	}
 }
 

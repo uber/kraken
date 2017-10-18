@@ -10,6 +10,7 @@ import (
 	xconfig "code.uber.internal/go-common.git/x/config"
 	"code.uber.internal/go-common.git/x/log"
 
+	"code.uber.internal/infra/kraken/origin/blobserver"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/service"
 	"code.uber.internal/infra/kraken/tracker/storage"
@@ -45,7 +46,15 @@ func main() {
 		log.Fatalf("Could not load peer handout policy: %s", err)
 	}
 
-	h := service.Handler(config.Service, policy, peerStore, torrentStore, manifestStore)
+	originResolver, err := blobserver.NewRoundRobinClientResolver(
+		blobserver.NewHTTPClientProvider(config.OriginCluster.Client),
+		config.OriginCluster.Retries,
+		config.OriginCluster.DNS)
+	if err != nil {
+		log.Fatalf("Error creating origin resolver: %s", err)
+	}
+
+	h := service.Handler(config.Service, policy, peerStore, torrentStore, manifestStore, originResolver)
 
 	addr := fmt.Sprintf(":%d", config.BackendPort)
 	log.Infof("Listening on %s", addr)

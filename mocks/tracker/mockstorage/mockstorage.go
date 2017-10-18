@@ -82,6 +82,19 @@ func (mr *MockStorageMockRecorder) GetManifest(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetManifest", reflect.TypeOf((*MockStorage)(nil).GetManifest), arg0)
 }
 
+// GetOrigins mocks base method
+func (m *MockStorage) GetOrigins(arg0 string) ([]*torlib.PeerInfo, error) {
+	ret := m.ctrl.Call(m, "GetOrigins", arg0)
+	ret0, _ := ret[0].([]*torlib.PeerInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOrigins indicates an expected call of GetOrigins
+func (mr *MockStorageMockRecorder) GetOrigins(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrigins", reflect.TypeOf((*MockStorage)(nil).GetOrigins), arg0)
+}
+
 // GetPeers mocks base method
 func (m *MockStorage) GetPeers(arg0 string) ([]*torlib.PeerInfo, error) {
 	ret := m.ctrl.Call(m, "GetPeers", arg0)
@@ -106,6 +119,18 @@ func (m *MockStorage) GetTorrent(arg0 string) (string, error) {
 // GetTorrent indicates an expected call of GetTorrent
 func (mr *MockStorageMockRecorder) GetTorrent(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTorrent", reflect.TypeOf((*MockStorage)(nil).GetTorrent), arg0)
+}
+
+// UpdateOrigins mocks base method
+func (m *MockStorage) UpdateOrigins(arg0 string, arg1 []*torlib.PeerInfo) error {
+	ret := m.ctrl.Call(m, "UpdateOrigins", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateOrigins indicates an expected call of UpdateOrigins
+func (mr *MockStorageMockRecorder) UpdateOrigins(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrigins", reflect.TypeOf((*MockStorage)(nil).UpdateOrigins), arg0, arg1)
 }
 
 // UpdatePeer mocks base method

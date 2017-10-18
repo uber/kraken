@@ -3,6 +3,7 @@ package torlib
 import (
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 )
 
@@ -28,6 +29,8 @@ type PeerInfo struct {
 	BytesLeft     int64  `bencode:"-" db:"-"`
 	Event         string `bencode:"-" db:"-"`
 	Flags         uint   `bencode:"-" db:"flags"`
+
+	Origin bool `bencode:"-" db:"-"`
 }
 
 // NewAnnounceRequest creates a new announce request given tracker location, and peerInfo
@@ -50,4 +53,14 @@ func NewAnnounceRequest(host, scheme, path string, p PeerInfo) *http.Request {
 			RawQuery: v.Encode(),
 		},
 	}
+}
+
+// SortedPeerIDs converts a list of peers into their peer ids in ascending order.
+func SortedPeerIDs(peers []*PeerInfo) []string {
+	pids := make([]string, len(peers))
+	for i := range pids {
+		pids[i] = peers[i].PeerID
+	}
+	sort.Strings(pids)
+	return pids
 }

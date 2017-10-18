@@ -28,4 +28,5 @@ type RedisConfig struct {
 	MaxIdleConns          int           `yaml:"max_idle_conns"`
 	MaxActiveConns        int           `yaml:"max_active_conns"`
 	IdleConnTimeoutSecs   int           `yaml:"idle_conn_timeout_secs"`
+	OriginsTTL            time.Duration `yaml:"origins_ttl"`
 }

@@ -1,7 +1,9 @@
 package blobserver
 
 import (
+	"fmt"
 	"hash"
+	"strings"
 	"time"
 
 	"code.uber.internal/infra/kraken/lib/hrw"
@@ -60,4 +62,54 @@ func (c Config) HashState() *hrw.RendezvousHash {
 		h.AddNode(node.Label, node.Weight)
 	}
 	return h
+}
+
+type portLookupError struct {
+	hostname string
+	numPorts int
+}
+
+func (e portLookupError) Error() string {
+	return fmt.Sprintf(
+		"invalid hashnode configuration: %s should have exactly one port, actual number of ports: %d",
+		e.hostname, e.numPorts)
+}
+
+type parseAddrError struct {
+	addr string
+}
+
+func (e parseAddrError) Error() string {
+	return fmt.Sprintf("cannot parse node addr %q: expected format host:port or host", e.addr)
+}
+
+// GetAddr searches hash node config for hostname and returns the full address.
+func (c Config) GetAddr(hostname string) (string, error) {
+	var ports []string
+	for addr := range c.HashNodes {
+		var h, p string
+		parts := strings.Split(addr, ":")
+		if len(parts) == 2 {
+			h = parts[0]
+			p = parts[1]
+			if p == "" {
+				return "", parseAddrError{addr}
+			}
+		} else if len(parts) == 1 {
+			h = parts[0]
+		} else {
+			return "", parseAddrError{addr}
+		}
+		if h == hostname {
+			ports = append(ports, p)
+		}
+	}
+	if len(ports) != 1 {
+		return "", portLookupError{hostname, len(ports)}
+	}
+	addr := hostname
+	if ports[0] != "" {
+		addr += ":" + ports[0]
+	}
+	return addr, nil
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 
@@ -65,16 +66,16 @@ func main() {
 
 	blobClientProvider := blobserver.NewHTTPClientProvider(config.BlobClient)
 
-	server, err := blobserver.New(config.BlobServer, hostname, fileStore, blobClientProvider)
+	server, err := blobserver.New(config.BlobServer, hostname, fileStore, blobClientProvider, pctx)
 	if err != nil {
 		log.Fatalf("Error initializing blob server %s: %s", hostname, err)
 	}
 
-	port, err := server.Port()
+	_, port, err := net.SplitHostPort(server.Addr())
 	if err != nil {
-		log.Fatalf("Failed to get port %s: %s", hostname, err)
+		log.Fatalf("Failed to get port from addr %q: %s", server.Addr(), err)
 	}
 
-	log.Infof("Starting origin server %s on %s", hostname, port)
+	log.Infof("Starting origin server %s on port %s", hostname, port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), server.Handler()))
 }
