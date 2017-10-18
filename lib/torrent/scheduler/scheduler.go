@@ -369,6 +369,7 @@ func (s *Scheduler) initOutgoingConn(peerID torlib.PeerID, ip string, port int, 
 func (s *Scheduler) doAnnounce(t storage.Torrent) ([]torlib.PeerInfo, error) {
 	v := url.Values{}
 
+	v.Add("name", t.Name())
 	v.Add("info_hash", t.InfoHash().String())
 	v.Add("peer_id", s.peerID.String())
 	v.Add("port", s.port)

@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"sort"
 	"testing"
 	"time"
 
@@ -18,15 +17,6 @@ func flushdb(config RedisConfig) {
 	if _, err := c.Do("FLUSHDB"); err != nil {
 		panic(err)
 	}
-}
-
-func sortedPeerIDs(peers []*torlib.PeerInfo) []string {
-	pids := make([]string, len(peers))
-	for i := range pids {
-		pids[i] = peers[i].PeerID
-	}
-	sort.Strings(pids)
-	return pids
 }
 
 func TestRedisStorageGetPeersPopulatesPeerInfoFields(t *testing.T) {
@@ -90,7 +80,7 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 
 	result, err := s.GetPeers(mi.InfoHash.String())
 	require.NoError(err)
-	require.Equal(sortedPeerIDs(peers), sortedPeerIDs(result))
+	require.Equal(torlib.SortedPeerIDs(peers), torlib.SortedPeerIDs(result))
 }
 
 func TestRedisStoragePeerExpiration(t *testing.T) {
@@ -141,4 +131,97 @@ func TestRedisStorageCreateAndGetTorrent(t *testing.T) {
 	require.NoError(err)
 
 	require.Equal(expected, result)
+}
+
+func TestRedisStorageGetOriginsPopulatesPeerInfoFields(t *testing.T) {
+	require := require.New(t)
+
+	config := redisConfigFixture()
+
+	flushdb(config)
+
+	s, err := NewRedisStorage(config)
+	require.NoError(err)
+
+	mi := torlib.MetaInfoFixture()
+	infoHash := mi.InfoHash.String()
+
+	origin := torlib.PeerInfoForMetaInfoFixture(mi)
+
+	require.NoError(s.UpdateOrigins(infoHash, []*torlib.PeerInfo{origin}))
+
+	result, err := s.GetOrigins(infoHash)
+	require.NoError(err)
+	require.Equal(result, []*torlib.PeerInfo{{
+		InfoHash: origin.InfoHash,
+		PeerID:   origin.PeerID,
+		IP:       origin.IP,
+		Port:     origin.Port,
+		Origin:   true,
+	}})
+}
+
+func TestRedisStorageUpdateOriginsOverwritesExistingOrigins(t *testing.T) {
+	require := require.New(t)
+
+	config := redisConfigFixture()
+
+	flushdb(config)
+
+	s, err := NewRedisStorage(config)
+	require.NoError(err)
+
+	mi := torlib.MetaInfoFixture()
+	infoHash := mi.InfoHash.String()
+
+	initialOrigins := []*torlib.PeerInfo{
+		torlib.PeerInfoForMetaInfoFixture(mi),
+		torlib.PeerInfoForMetaInfoFixture(mi),
+	}
+
+	require.NoError(s.UpdateOrigins(infoHash, initialOrigins))
+
+	result, err := s.GetOrigins(infoHash)
+	require.NoError(err)
+	require.Equal(torlib.SortedPeerIDs(initialOrigins), torlib.SortedPeerIDs(result))
+
+	newOrigins := []*torlib.PeerInfo{
+		torlib.PeerInfoForMetaInfoFixture(mi),
+		torlib.PeerInfoForMetaInfoFixture(mi),
+		torlib.PeerInfoForMetaInfoFixture(mi),
+	}
+
+	require.NoError(s.UpdateOrigins(infoHash, newOrigins))
+
+	result, err = s.GetOrigins(infoHash)
+	require.NoError(err)
+	require.Equal(torlib.SortedPeerIDs(newOrigins), torlib.SortedPeerIDs(result))
+}
+
+func TestRedisStorageOriginsExpiration(t *testing.T) {
+	require := require.New(t)
+
+	config := redisConfigFixture()
+	config.OriginsTTL = time.Second
+
+	flushdb(config)
+
+	s, err := NewRedisStorage(config)
+	require.NoError(err)
+
+	mi := torlib.MetaInfoFixture()
+	infoHash := mi.InfoHash.String()
+
+	origin := torlib.PeerInfoForMetaInfoFixture(mi)
+
+	require.NoError(s.UpdateOrigins(infoHash, []*torlib.PeerInfo{origin}))
+
+	result, err := s.GetOrigins(infoHash)
+	require.NoError(err)
+	require.Len(result, 1)
+
+	time.Sleep(2 * time.Second)
+
+	result, err = s.GetOrigins(infoHash)
+	require.Equal(err, ErrNoOrigins)
 }

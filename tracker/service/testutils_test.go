@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"code.uber.internal/infra/kraken/mocks/origin/blobserver"
 	"code.uber.internal/infra/kraken/mocks/tracker/mockstorage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
@@ -29,10 +30,11 @@ func jsonBytesEqual(a, b []byte) (bool, error) {
 }
 
 type testMocks struct {
-	config    Config
-	policy    peerhandoutpolicy.PeerHandoutPolicy
-	ctrl      *gomock.Controller
-	datastore *mockstorage.MockStorage
+	config         Config
+	policy         peerhandoutpolicy.PeerHandoutPolicy
+	ctrl           *gomock.Controller
+	datastore      *mockstorage.MockStorage
+	originResolver *mockblobserver.MockClusterClientResolver
 }
 
 // mockController sets up all mocks and returns a teardown func that can be called with defer
@@ -41,6 +43,7 @@ func (m *testMocks) mockController(t gomock.TestReporter) func() {
 	m.policy = peerhandoutpolicy.DefaultPeerHandoutPolicyFixture()
 	m.ctrl = gomock.NewController(t)
 	m.datastore = mockstorage.NewMockStorage(m.ctrl)
+	m.originResolver = mockblobserver.NewMockClusterClientResolver(m.ctrl)
 	return m.ctrl.Finish
 }
 
@@ -51,6 +54,7 @@ func (m *testMocks) Handler() http.Handler {
 		m.datastore,
 		m.datastore,
 		m.datastore,
+		m.originResolver,
 	)
 }
 
@@ -68,6 +72,7 @@ func performRequest(handler http.Handler, request *http.Request) *http.Response 
 
 func createAnnouncePath(mi *torlib.MetaInfo, p *torlib.PeerInfo) string {
 	v := url.Values{}
+	v.Set("name", mi.Info.Name)
 	v.Set("info_hash", mi.InfoHash.HexString())
 	v.Set("peer_id", p.PeerID)
 	v.Set("ip", p.IP)

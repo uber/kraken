@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -12,12 +13,21 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
+// RedisStorage errors.
+var (
+	ErrNoOrigins = errors.New("no origins found")
+)
+
 func torrentKey(name string) string {
 	return fmt.Sprintf("tor:%s", name)
 }
 
 func peerSetKey(infoHash string, window int64) string {
 	return fmt.Sprintf("peerset:%s:%d", infoHash, window)
+}
+
+func originsKey(infoHash string) string {
+	return fmt.Sprintf("origins:%s", infoHash)
 }
 
 func serializePeer(p *torlib.PeerInfo) string {
@@ -174,4 +184,53 @@ func (s *RedisStorage) GetTorrent(name string) (string, error) {
 	defer c.Close()
 
 	return redis.String(c.Do("GET", torrentKey(name)))
+}
+
+// GetOrigins returns all origin PeerInfos for infoHash. Returns ErrNoOrigins if
+// no origins exist in Redis.
+func (s *RedisStorage) GetOrigins(infoHash string) ([]*torlib.PeerInfo, error) {
+	c, err := s.pool.Dial()
+	if err != nil {
+		return nil, err
+	}
+	defer c.Close()
+
+	result, err := redis.String(c.Do("GET", originsKey(infoHash)))
+	if err != nil {
+		if err == redis.ErrNil {
+			return nil, ErrNoOrigins
+		}
+		return nil, err
+	}
+
+	var peers []*torlib.PeerInfo
+	for _, s := range strings.Split(result, ",") {
+		p, err := deserializePeer(s)
+		if err != nil {
+			log.Errorf("Error deserializing origin %q: %s", s, err)
+			continue
+		}
+		p.InfoHash = infoHash
+		p.Origin = true
+		peers = append(peers, p)
+	}
+	return peers, nil
+}
+
+// UpdateOrigins overwrites all origin PeerInfos for infoHash with the given origins.
+func (s *RedisStorage) UpdateOrigins(infoHash string, origins []*torlib.PeerInfo) error {
+	c, err := s.pool.Dial()
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	var serializedOrigins []string
+	for _, o := range origins {
+		serializedOrigins = append(serializedOrigins, serializePeer(o))
+	}
+	v := strings.Join(serializedOrigins, ",")
+
+	_, err = c.Do("SETEX", originsKey(infoHash), int(s.config.OriginsTTL.Seconds()), v)
+	return err
 }

@@ -2,6 +2,8 @@ package blobserver
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,9 +15,9 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
+	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils/memsize"
-	"code.uber.internal/infra/kraken/utils/netutil"
 
 	"github.com/docker/distribution/uuid"
 	"github.com/pressly/chi"
@@ -32,6 +34,12 @@ type Server struct {
 	hashState      *hrw.RendezvousHash
 	fileStore      store.FileStore
 	clientProvider ClientProvider
+
+	// This is an unfortunate coupling between the p2p client and the blob server.
+	// Tracker queries the origin cluster to discover which origins can seed
+	// a given torrent, however this requires blob server to understand the
+	// context of the p2p client running alongside it.
+	pctx peercontext.PeerContext
 }
 
 // New initializes a new Server.
@@ -39,30 +47,16 @@ func New(
 	config Config,
 	hostname string,
 	fileStore store.FileStore,
-	clientProvider ClientProvider) (*Server, error) {
+	clientProvider ClientProvider,
+	pctx peercontext.PeerContext) (*Server, error) {
 
 	if len(config.HashNodes) == 0 {
-		return nil, fmt.Errorf("no hash nodes configured")
+		return nil, errors.New("no hash nodes configured")
 	}
 
-	var ports []string
-	for addr := range config.HashNodes {
-		h, p, err := netutil.SplitHostPort(addr)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing address %s: %s", addr, err)
-		}
-		if h == hostname {
-			ports = append(ports, p)
-		}
-	}
-
-	if len(ports) != 1 {
-		return nil, fmt.Errorf("error parsing hashnode configuration: %s should have exactly one port, actual number of ports: %d", hostname, len(ports))
-	}
-
-	addr := hostname
-	if ports[0] != "" {
-		addr = fmt.Sprintf("%s:%s", hostname, ports[0])
+	addr, err := config.GetAddr(hostname)
+	if err != nil {
+		return nil, fmt.Errorf("error getting addr from config: %s", err)
 	}
 
 	currNode, ok := config.HashNodes[addr]
@@ -79,21 +73,8 @@ func New(
 		hashState:      config.HashState(),
 		fileStore:      fileStore,
 		clientProvider: clientProvider,
+		pctx:           pctx,
 	}, nil
-}
-
-// Port returns listening port of server
-func (s *Server) Port() (string, error) {
-	_, port, err := netutil.SplitHostPort(s.addr)
-	if err != nil {
-		return "", err
-	}
-
-	// TODO (@evelynl): if s.addr is a dns name, it could return a defaul port
-	if port == "" {
-		return "", fmt.Errorf("no port specified")
-	}
-	return port, nil
 }
 
 type errHandler func(http.ResponseWriter, *http.Request) error
@@ -121,6 +102,11 @@ func handler(h errHandler) http.HandlerFunc {
 	}
 }
 
+// Addr returns the address the blob server is configured on.
+func (s Server) Addr() string {
+	return s.addr
+}
+
 // Handler returns an http handler for the blob server.
 func (s Server) Handler() http.Handler {
 	r := chi.NewRouter()
@@ -138,6 +124,8 @@ func (s Server) Handler() http.Handler {
 	r.Post("/repair", handler(s.repairHandler))
 	r.Post("/repair/shard/:shardid", handler(s.repairShardHandler))
 	r.Post("/repair/digest/:digest", handler(s.repairDigestHandler))
+
+	r.Get("/peercontext", handler(s.getPeerContextHandler))
 
 	return r
 }
@@ -320,6 +308,14 @@ func (s Server) repairDigestHandler(w http.ResponseWriter, r *http.Request) erro
 	}()
 	rep.WriteMessages(w)
 	return err
+}
+
+// getPeerContextHandler returns the Server's peer context as JSON.
+func (s Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) error {
+	if err := json.NewEncoder(w).Encode(s.pctx); err != nil {
+		return serverErrorf("error converting peer context to json: %s", err)
+	}
+	return nil
 }
 
 // parseDigest parses a digest from a url path parameter, e.g. "/blobs/:digest".

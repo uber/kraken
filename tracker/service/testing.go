@@ -54,6 +54,14 @@ func (s *testPeerStore) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
 	return copies, nil
 }
 
+func (s *testPeerStore) GetOrigins(string) ([]*torlib.PeerInfo, error) {
+	return nil, nil
+}
+
+func (s *testPeerStore) UpdateOrigins(string, []*torlib.PeerInfo) error {
+	return nil
+}
+
 // TestAnnouncer is a test utility which starts an in-memory tracker which listens
 // for announce requests. Returns the "ip:port" the tracker is running on, and a
 // closure for stopping the tracker.

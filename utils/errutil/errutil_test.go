@@ -27,3 +27,20 @@ func TestMultiError(t *testing.T) {
 		})
 	}
 }
+
+func TestJoinNil(t *testing.T) {
+	f := func() error {
+		var errs []error
+		return Join(errs)
+	}
+	require.NoError(t, f())
+}
+
+func TestJoinNonNil(t *testing.T) {
+	f := func() error {
+		var errs []error
+		errs = append(errs, errors.New("some error"))
+		return Join(errs)
+	}
+	require.Error(t, f())
+}

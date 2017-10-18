@@ -2,6 +2,7 @@ package blobserver
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
@@ -70,6 +72,8 @@ type Client interface {
 	Repair() (io.ReadCloser, error)
 	RepairShard(shardID string) (io.ReadCloser, error)
 	RepairDigest(d image.Digest) (io.ReadCloser, error)
+
+	GetPeerContext() (peercontext.PeerContext, error)
 }
 
 var _ Client = (*HTTPClient)(nil)
@@ -222,6 +226,20 @@ func (c *HTTPClient) RepairDigest(d image.Digest) (io.ReadCloser, error) {
 		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
 	}
 	return r.Body, err
+}
+
+// GetPeerContext gets the PeerContext of the p2p client running alongside the Server.
+func (c *HTTPClient) GetPeerContext() (peercontext.PeerContext, error) {
+	var pctx peercontext.PeerContext
+	r, err := httputil.Get(fmt.Sprintf("http://%s/peercontext", c.addr))
+	if err != nil {
+		return pctx, err
+	}
+	defer r.Body.Close()
+	if err := json.NewDecoder(r.Body).Decode(&pctx); err != nil {
+		return pctx, err
+	}
+	return pctx, nil
 }
 
 // maybeRedirect attempts to convert redirects into RedirectErrors.

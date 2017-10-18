@@ -39,14 +39,14 @@ type PeerContext struct {
 	// this is distinct from the address a peer's Scheduler will listen on
 	// because the peer may be running within a container and the address it
 	// listens on is mapped to a different ip/port outside of the container.
-	IP   string
-	Port int
+	IP   string `json:"ip"`
+	Port int    `json:"port"`
 
 	// PeerID the peer will identify itself as.
-	PeerID torlib.PeerID
+	PeerID torlib.PeerID `json:"peer_id"`
 
 	// Zone is the zone the peer is running within.
-	Zone string
+	Zone string `json:"zone"`
 }
 
 // New creates a new PeerContext.

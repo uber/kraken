@@ -16,6 +16,8 @@ message BitfieldMessage {
     // content addressable. Adding name as a part of handshake makes looking  
     // up torrents faster. If storage supports addressing torrent by infohash, 
     // this extra field should removed. 
+    // XXX(codyg): We rely on this name field for announcing too, so tracker can
+    // look up origins that have this content.
     // We currently treat infohash as verification of torrents.
     string name     = 3;
     string peerID   = 4;
