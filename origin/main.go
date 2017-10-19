@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 
@@ -18,9 +17,14 @@ import (
 )
 
 func main() {
+	blobServerPort := flag.Int("blobserver_port", 0, "port which registry listens on")
 	announceIP := flag.String("announce_ip", "", "ip which peer will announce itself as")
 	announcePort := flag.Int("announce_port", 0, "port which peer will announce itself as")
 	flag.Parse()
+
+	if blobServerPort == nil || *blobServerPort == 0 {
+		panic("0 is not a valid port for registry")
+	}
 
 	var config Config
 	if err := xconfig.Load(&config); err != nil {
@@ -64,18 +68,14 @@ func main() {
 		log.Fatalf("Error getting hostname: %s", err)
 	}
 
+	addr := fmt.Sprintf("%s:%d", hostname, *blobServerPort)
 	blobClientProvider := blobserver.NewHTTPClientProvider(config.BlobClient)
 
-	server, err := blobserver.New(config.BlobServer, hostname, fileStore, blobClientProvider, pctx)
+	server, err := blobserver.New(config.BlobServer, addr, fileStore, blobClientProvider, pctx)
 	if err != nil {
-		log.Fatalf("Error initializing blob server %s: %s", hostname, err)
+		log.Fatalf("Error initializing blob server %s: %s", addr, err)
 	}
 
-	_, port, err := net.SplitHostPort(server.Addr())
-	if err != nil {
-		log.Fatalf("Failed to get port from addr %q: %s", server.Addr(), err)
-	}
-
-	log.Infof("Starting origin server %s on port %s", hostname, port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), server.Handler()))
+	log.Infof("Starting origin server %s on %d", hostname, *blobServerPort)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *blobServerPort), server.Handler()))
 }

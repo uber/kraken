@@ -86,7 +86,7 @@ type HTTPClient struct {
 
 // NewHTTPClient returns a new HTTPClient scoped to addr.
 func NewHTTPClient(config ClientConfig, addr string) *HTTPClient {
-	return &HTTPClient{config, addr}
+	return &HTTPClient{config.applyDefaults(), addr}
 }
 
 // Addr returns the address of the server the client is provisioned for.

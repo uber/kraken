@@ -30,7 +30,7 @@ PROGS = \
 	tracker/tracker \
 	origin/origin \
 	proxy/proxy \
-	tools/bin/puller/puller \
+	tools/bin/puller/puller 
 
 # define the list of proto buffers the service depends on
 PROTO_GENDIR ?= .gen
@@ -117,7 +117,7 @@ mocks:
 CONTAINERS := $(foreach \
 	c, \
 	kraken-mysql kraken-redis kraken-tracker kraken-origin kraken-redis kraken-proxy, \
-	$(c) no-app-id-dockerman.$(c))
+	$(c) $(wildcard *$(c)*))
 
 # Runs docker stop and docker rm on each container w/ silenced output.
 docker_stop:
@@ -228,8 +228,7 @@ bootstrap_integration:
 	source env/bin/activate
 	env/bin/pip install -r requirements-tests.txt
 
-# build_integration: tracker origin peer proxy tools/bin/puller/puller docker_stop
-build_integration: origin docker_stop
+build_integration: tracker origin peer proxy tools/bin/puller/puller docker_stop
 
 run_integration:
 	source env/bin/activate
