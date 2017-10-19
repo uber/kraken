@@ -15,6 +15,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
+	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/docker/distribution/uuid"
 	"github.com/pressly/chi"
+	"github.com/uber-go/tally"
 )
 
 const _uploadChunkSize = 16 * memsize.MB
@@ -35,6 +37,7 @@ type Server struct {
 	hashState      *hrw.RendezvousHash
 	fileStore      store.FileStore
 	clientProvider blobclient.Provider
+	scope          tally.Scope
 
 	// This is an unfortunate coupling between the p2p client and the blob server.
 	// Tracker queries the origin cluster to discover which origins can seed
@@ -46,6 +49,7 @@ type Server struct {
 // New initializes a new Server.
 func New(
 	config Config,
+	stats tally.Scope,
 	addr string,
 	fileStore store.FileStore,
 	clientProvider blobclient.Provider,
@@ -70,6 +74,7 @@ func New(
 		fileStore:      fileStore,
 		clientProvider: clientProvider,
 		pctx:           pctx,
+		scope:          stats.SubScope("kraken"),
 	}, nil
 }
 
@@ -107,21 +112,58 @@ func (s Server) Addr() string {
 func (s Server) Handler() http.Handler {
 	r := chi.NewRouter()
 
-	r.Head("/blobs/:digest", handler(s.checkBlobHandler))
-	r.Get("/blobs/:digest", handler(s.getBlobHandler))
-	r.Delete("/blobs/:digest", handler(s.deleteBlobHandler))
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Counter(s.scope.SubScope("blobs")))
+		r.Use(middleware.ElapsedTimer(s.scope.SubScope("blobs")))
 
-	r.Get("/blobs/:digest/locations", handler(s.getLocationsHandler))
+		r.Head("/blobs/:digest", handler(s.checkBlobHandler))
+		r.Get("/blobs/:digest", handler(s.getBlobHandler))
+		r.Delete("/blobs/:digest", handler(s.deleteBlobHandler))
+	})
 
-	r.Post("/blobs/:digest/uploads", handler(s.startUploadHandler))
-	r.Patch("/blobs/:digest/uploads/:uuid", handler(s.patchUploadHandler))
-	r.Put("/blobs/:digest/uploads/:uuid", handler(s.commitUploadHandler))
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Counter(s.scope.SubScope("blobs.locations")))
+		r.Use(middleware.ElapsedTimer(s.scope.SubScope("blobs").SubScope("locations")))
 
-	r.Post("/repair", handler(s.repairHandler))
-	r.Post("/repair/shard/:shardid", handler(s.repairShardHandler))
-	r.Post("/repair/digest/:digest", handler(s.repairDigestHandler))
+		r.Get("/blobs/:digest/locations", handler(s.getLocationsHandler))
+	})
 
-	r.Get("/peercontext", handler(s.getPeerContextHandler))
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Counter(s.scope.SubScope("blobs.uploads")))
+		r.Use(middleware.ElapsedTimer(s.scope.SubScope("blobs.uploads")))
+
+		r.Post("/blobs/:digest/uploads", handler(s.startUploadHandler))
+		r.Patch("/blobs/:digest/uploads/:uuid", handler(s.patchUploadHandler))
+		r.Put("/blobs/:digest/uploads/:uuid", handler(s.commitUploadHandler))
+	})
+
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Counter(s.scope.SubScope("repair")))
+		r.Use(middleware.ElapsedTimer(s.scope.SubScope("repair")))
+
+		r.Post("/repair", handler(s.repairHandler))
+	})
+
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Counter(s.scope.SubScope("repair.shard")))
+		r.Use(middleware.ElapsedTimer(s.scope.SubScope("repair.shard")))
+
+		r.Post("/repair/shard/:shardid", handler(s.repairShardHandler))
+	})
+
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Counter(s.scope.SubScope("repair.digest")))
+		r.Use(middleware.ElapsedTimer(s.scope.SubScope("repair.digest")))
+
+		r.Post("/repair/digest/:digest", handler(s.repairDigestHandler))
+	})
+
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Counter(s.scope.SubScope("peercontext")))
+		r.Use(middleware.ElapsedTimer(s.scope.SubScope("peercontext")))
+
+		r.Get("/peercontext", handler(s.getPeerContextHandler))
+	})
 
 	return r
 }
