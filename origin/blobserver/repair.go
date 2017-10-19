@@ -14,6 +14,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/netutil"
 	"code.uber.internal/infra/kraken/utils/stringset"
 )
@@ -91,7 +92,7 @@ type repairer struct {
 	labelToHostname map[string]string
 	hashState       *hrw.RendezvousHash
 	fileStore       store.FileStore
-	clientProvider  ClientProvider
+	clientProvider  blobclient.Provider
 
 	ctx      context.Context
 	messages chan repairMessage
@@ -103,7 +104,7 @@ func newRepairer(
 	labelToHostname map[string]string,
 	hashState *hrw.RendezvousHash,
 	fileStore store.FileStore,
-	clientProvider ClientProvider,
+	clientProvider blobclient.Provider,
 	ctx context.Context) *repairer {
 
 	return &repairer{
@@ -264,7 +265,7 @@ func (r *repairer) replicateDigest(d image.Digest, hosts stringset.Set) (replica
 				// Reset f for next push.
 				f.Seek(0, io.SeekStart)
 
-				if err == ErrBlobExist {
+				if err == blobclient.ErrBlobExist {
 					// Host already has blob -- move along.
 					return nil
 				}

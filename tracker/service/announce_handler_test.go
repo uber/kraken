@@ -8,8 +8,8 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/peercontext"
-	"code.uber.internal/infra/kraken/mocks/origin/blobserver"
-	"code.uber.internal/infra/kraken/origin/blobserver"
+	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/testutils"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/storage"
@@ -126,9 +126,9 @@ func TestAnnounceEndPoint(t *testing.T) {
 			Origin:   true,
 		}
 
-		mockBlobClient := mockblobserver.NewMockClient(mocks.ctrl)
+		mockBlobClient := mockblobclient.NewMockClient(mocks.ctrl)
 
-		mocks.originResolver.EXPECT().Resolve(digest).Return([]blobserver.Client{mockBlobClient}, nil)
+		mocks.originResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockBlobClient}, nil)
 		mockBlobClient.EXPECT().GetPeerContext().Return(originPCtx, nil)
 
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
@@ -164,9 +164,9 @@ func TestAnnounceEndPoint(t *testing.T) {
 			Origin:   true,
 		}
 
-		mockBlobClient := mockblobserver.NewMockClient(mocks.ctrl)
+		mockBlobClient := mockblobclient.NewMockClient(mocks.ctrl)
 
-		mocks.originResolver.EXPECT().Resolve(digest).Return([]blobserver.Client{mockBlobClient}, nil)
+		mocks.originResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockBlobClient}, nil)
 		mockBlobClient.EXPECT().GetPeerContext().Return(originPCtx, nil)
 
 		storageErr := errors.New("some storage error")
@@ -225,12 +225,12 @@ func TestAnnounceHandlerRequestOriginsConcurrency(t *testing.T) {
 	infoHash := mi.InfoHash.HexString()
 	digest := image.NewSHA256DigestFromHex(mi.Info.Name)
 
-	mockOriginResolver := mockblobserver.NewMockClusterClientResolver(ctrl)
+	mockOriginResolver := mockblobclient.NewMockClusterResolver(ctrl)
 
-	var clients []blobserver.Client
+	var clients []blobclient.Client
 	var peerIDs []string
 	for i := 0; i < 3; i++ {
-		mockClient := mockblobserver.NewMockClient(ctrl)
+		mockClient := mockblobclient.NewMockClient(ctrl)
 		pctx := peercontext.Fixture()
 		mockClient.EXPECT().GetPeerContext().Return(pctx, nil)
 
@@ -258,11 +258,11 @@ func TestAnnounceHandlerRequestOriginsPartialErrors(t *testing.T) {
 	infoHash := mi.InfoHash.HexString()
 	digest := image.NewSHA256DigestFromHex(mi.Info.Name)
 
-	mockOriginResolver := mockblobserver.NewMockClusterClientResolver(ctrl)
+	mockOriginResolver := mockblobclient.NewMockClusterResolver(ctrl)
 
-	mockClient1 := mockblobserver.NewMockClient(ctrl)
-	mockClient2 := mockblobserver.NewMockClient(ctrl)
-	mockClient3 := mockblobserver.NewMockClient(ctrl)
+	mockClient1 := mockblobclient.NewMockClient(ctrl)
+	mockClient2 := mockblobclient.NewMockClient(ctrl)
+	mockClient3 := mockblobclient.NewMockClient(ctrl)
 
 	pctx := peercontext.Fixture()
 
@@ -271,7 +271,7 @@ func TestAnnounceHandlerRequestOriginsPartialErrors(t *testing.T) {
 	mockClient3.EXPECT().GetPeerContext().Return(peercontext.PeerContext{}, errors.New("some error"))
 
 	mockOriginResolver.EXPECT().Resolve(digest).Return(
-		[]blobserver.Client{mockClient1, mockClient2, mockClient3}, nil)
+		[]blobclient.Client{mockClient1, mockClient2, mockClient3}, nil)
 
 	h := &announceHandler{originResolver: mockOriginResolver}
 

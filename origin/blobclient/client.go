@@ -1,4 +1,4 @@
-package blobserver
+package blobclient
 
 import (
 	"bytes"
@@ -34,27 +34,6 @@ func (e RedirectError) Error() string {
 	return fmt.Sprintf("incorrect origin, must redirect request to: %v", e.Locations)
 }
 
-// ClientProvider defines an interface for creating Client scoped to an origin addr.
-type ClientProvider interface {
-	Provide(addr string) Client
-}
-
-// HTTPClientProvider provides HTTPClients.
-type HTTPClientProvider struct {
-	config ClientConfig
-}
-
-// NewHTTPClientProvider returns a new HTTPClientProvider.
-func NewHTTPClientProvider(config ClientConfig) HTTPClientProvider {
-	return HTTPClientProvider{config}
-}
-
-// Provide implements ClientProvider's Provide.
-// TODO(codyg): Make this return error.
-func (p HTTPClientProvider) Provide(addr string) Client {
-	return NewHTTPClient(p.config, addr)
-}
-
 // Client provides a wrapper around all Server HTTP endpoints.
 type Client interface {
 	Addr() string
@@ -76,16 +55,14 @@ type Client interface {
 	GetPeerContext() (peercontext.PeerContext, error)
 }
 
-var _ Client = (*HTTPClient)(nil)
-
 // HTTPClient defines the Client implementation.
 type HTTPClient struct {
-	config ClientConfig
+	config Config
 	addr   string
 }
 
-// NewHTTPClient returns a new HTTPClient scoped to addr.
-func NewHTTPClient(config ClientConfig, addr string) *HTTPClient {
+// New returns a new HTTPClient scoped to addr.
+func New(config Config, addr string) *HTTPClient {
 	return &HTTPClient{config.applyDefaults(), addr}
 }
 

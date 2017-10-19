@@ -17,6 +17,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/stringset"
 )
@@ -49,21 +50,21 @@ func configNoRedirectFixture() Config {
 	return c
 }
 
-func clientConfigFixture() ClientConfig {
-	return ClientConfig{
+func clientConfigFixture() blobclient.Config {
+	return blobclient.Config{
 		UploadChunkSize: 16,
 	}
 }
 
-// testClientProvider implements ClientProvider. It maps origin hostnames to
+// testClientProvider implements blobclient.ClientProvider. It maps origin hostnames to
 // the local addresses they are running on, such that Provide("dummy-origin")
 // can resolve a real address.
 type testClientProvider struct {
-	config         ClientConfig
+	config         blobclient.Config
 	addrByHostname map[string]string
 }
 
-func newTestClientProvider(config ClientConfig) *testClientProvider {
+func newTestClientProvider(config blobclient.Config) *testClientProvider {
 	return &testClientProvider{config, make(map[string]string)}
 }
 
@@ -71,19 +72,19 @@ func (p *testClientProvider) register(host string, addr string) {
 	p.addrByHostname[host] = addr
 }
 
-func (p *testClientProvider) Provide(host string) Client {
+func (p *testClientProvider) Provide(host string) blobclient.Client {
 	addr, ok := p.addrByHostname[host]
 	if !ok {
 		log.Panicf("host %q not found", host)
 	}
-	return NewHTTPClient(p.config, addr)
+	return blobclient.New(p.config, addr)
 }
 
 func startServer(
 	host string,
 	config Config,
 	fs store.FileStore,
-	cp ClientProvider,
+	cp blobclient.Provider,
 	pctx peercontext.PeerContext) (addr string, stop func()) {
 
 	s, err := New(config, host, fs, cp, pctx)
@@ -143,7 +144,7 @@ func (s *testServer) cleanup() {
 type serverMocks struct {
 	ctrl           *gomock.Controller
 	fileStore      *mockstore.MockFileStore
-	clientProvider ClientProvider
+	clientProvider blobclient.Provider
 }
 
 func newServerMocks(t *testing.T) *serverMocks {

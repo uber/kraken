@@ -5,7 +5,7 @@ import (
 
 	"github.com/pressly/chi"
 
-	"code.uber.internal/infra/kraken/origin/blobserver"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/storage"
 )
@@ -17,7 +17,7 @@ func Handler(
 	peerStore storage.PeerStore,
 	torrentStore storage.TorrentStore,
 	manifestStore storage.ManifestStore,
-	originResolver blobserver.ClusterClientResolver,
+	originResolver blobclient.ClusterResolver,
 ) http.Handler {
 
 	announce := &announceHandler{

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/lib/hrw"
-	"code.uber.internal/infra/kraken/utils/memsize"
 	"github.com/spaolacci/murmur3"
 )
 
@@ -36,20 +35,6 @@ type RepairConfig struct {
 	RetryDelay    time.Duration `yaml:"retry_delay"`
 	MaxRetryDelay time.Duration `yaml:"max_retry_delay"`
 	ConnTimeout   time.Duration `yaml:"conn_timeout"`
-}
-
-// ClientConfig defines configuration for blobserver HTTP Client.
-type ClientConfig struct {
-	UploadChunkSize int64 `yaml:"upload_chunk_size"`
-}
-
-func (c ClientConfig) applyDefaults() ClientConfig {
-	if c.UploadChunkSize == 0 {
-		return ClientConfig{
-			UploadChunkSize: int64(50 * memsize.MB),
-		}
-	}
-	return c
 }
 
 // LabelToAddress generates a reverse mapping of HashNodes by label to hostname.
