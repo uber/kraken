@@ -10,9 +10,6 @@ import (
 // Config is the Scheduler configuration.
 type Config struct {
 
-	// ListenAddr is the "ip:port" the Scheduler will serve connections on.
-	ListenAddr string `yaml:"listen_addr"`
-
 	// TrackerAddr is the "ip:port" of the tracker server.
 	TrackerAddr string `yaml:"tracker_addr"`
 
@@ -65,9 +62,6 @@ type Config struct {
 func (c Config) applyDefaults() (Config, error) {
 	if c.TrackerAddr == "" {
 		return c, errors.New("no tracker addr specified")
-	}
-	if c.ListenAddr == "" {
-		return c, errors.New("no listen addr specified")
 	}
 	if c.AnnounceInterval == 0 {
 		c.AnnounceInterval = 30 * time.Second

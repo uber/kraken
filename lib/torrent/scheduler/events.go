@@ -209,7 +209,7 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 			}).Errorf("Error creating PeerID from announce response: %s", err)
 			continue
 		}
-		if pid == s.peerID {
+		if pid == s.pctx.PeerID {
 			// Tracker may return our own peer.
 			continue
 		}

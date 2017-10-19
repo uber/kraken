@@ -18,8 +18,8 @@ import (
 
 func main() {
 	blobServerPort := flag.Int("blobserver_port", 0, "port which registry listens on")
-	announceIP := flag.String("announce_ip", "", "ip which peer will announce itself as")
-	announcePort := flag.Int("announce_port", 0, "port which peer will announce itself as")
+	peerIP := flag.String("peer_ip", "", "ip which peer will announce itself as")
+	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
 	flag.Parse()
 
 	if blobServerPort == nil || *blobServerPort == 0 {
@@ -39,7 +39,7 @@ func main() {
 	// Initialize and start P2P scheduler client:
 
 	pctx, err := peercontext.New(
-		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *announceIP, *announcePort)
+		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *peerIP, *peerPort)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}

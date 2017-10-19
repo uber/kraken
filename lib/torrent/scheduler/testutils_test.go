@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"flag"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -63,7 +62,6 @@ func connStateConfigFixture() ConnStateConfig {
 
 func configFixture(trackerAddr string) Config {
 	c, err := Config{
-		ListenAddr:               "localhost:0",
 		TrackerAddr:              trackerAddr,
 		AnnounceInterval:         500 * time.Millisecond,
 		IdleSeederTTL:            10 * time.Second,
@@ -111,6 +109,7 @@ func checkContent(r *require.Assertions, t storage.Torrent, expected []byte) {
 }
 
 type testPeer struct {
+	pctx           peercontext.PeerContext
 	Scheduler      *Scheduler
 	TorrentArchive storage.TorrentArchive
 	Stats          tally.TestScope
@@ -143,7 +142,6 @@ func testPeerFixture(config Config, options ...option) *testPeer {
 		IP:     "localhost",
 		Port:   findFreePort(),
 	}
-	config.ListenAddr = fmt.Sprintf("%s:%d", pctx.IP, pctx.Port)
 	s, err := New(config, tm, stats, pctx, options...)
 	if err != nil {
 		cleanup()
@@ -153,7 +151,7 @@ func testPeerFixture(config Config, options ...option) *testPeer {
 		s.Stop()
 		cleanup()
 	}
-	return &testPeer{s, tm, stats, stop}
+	return &testPeer{pctx, s, tm, stats, stop}
 }
 
 func testPeerFixtures(n int, config Config) (peers []*testPeer, stopAll func()) {
@@ -190,7 +188,7 @@ func waitForConnEstablished(t *testing.T, s *Scheduler, peerID torlib.PeerID, in
 	if err != nil {
 		t.Fatalf(
 			"scheduler=%s did not establish conn to peer=%s hash=%s: %s",
-			s.peerID, peerID, infoHash, err)
+			s.pctx.PeerID, peerID, infoHash, err)
 	}
 }
 
@@ -205,7 +203,7 @@ func waitForConnRemoved(t *testing.T, s *Scheduler, peerID torlib.PeerID, infoHa
 	if err != nil {
 		t.Fatalf(
 			"scheduler=%s did not remove conn to peer=%s hash=%s: %s",
-			s.peerID, peerID, infoHash, err)
+			s.pctx.PeerID, peerID, infoHash, err)
 	}
 }
 
@@ -236,7 +234,7 @@ func waitForTorrentRemoved(t *testing.T, s *Scheduler, infoHash torlib.InfoHash)
 	if err != nil {
 		t.Fatalf(
 			"scheduler=%s did not remove torrent for hash=%s: %s",
-			s.peerID, infoHash, err)
+			s.pctx.PeerID, infoHash, err)
 	}
 }
 

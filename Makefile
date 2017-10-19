@@ -182,7 +182,7 @@ run_origin: origin
 		-p 5051:5051 \
 		-p 5081:5081 \
 		kraken-origin:dev \
-		/usr/bin/kraken-origin --announce_ip=192.168.65.1 --announce_port=5081
+		/usr/bin/kraken-origin --peer_ip=192.168.65.1 --peer_port=5081
 
 .PHONY: peer
 peer:
@@ -201,7 +201,7 @@ run_peer: peer
 		-p 5052:5052 \
 		-p 5082:5082 \
 		kraken-peer:dev \
-		/usr/bin/kraken-agent --announce_ip=192.168.65.1 --announce_port=5082
+		/usr/bin/kraken-agent --peer_ip=192.168.65.1 --peer_port=5082
 
 .PHONY: proxy
 proxy:
