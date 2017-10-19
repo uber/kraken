@@ -17,8 +17,8 @@ import (
 )
 
 func main() {
-	announceIP := flag.String("announce_ip", "", "ip which peer will announce itself as")
-	announcePort := flag.Int("announce_port", 0, "port which peer will announce itself as")
+	peerIP := flag.String("peer_ip", "", "ip which peer will announce itself as")
+	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
 	flag.Parse()
 
 	var config Config
@@ -31,7 +31,7 @@ func main() {
 	log.Configure(&config.Logging, false)
 
 	pctx, err := peercontext.New(
-		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *announceIP, *announcePort)
+		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *peerIP, *peerPort)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}

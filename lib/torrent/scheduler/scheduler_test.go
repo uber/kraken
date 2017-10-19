@@ -114,7 +114,8 @@ func TestDownloadManyTorrentsWithSeederAndManyLeechers(t *testing.T) {
 				case err := <-p.Scheduler.AddTorrent(tf.MetaInfo):
 					require.NoError(err)
 				case <-time.After(10 * time.Second):
-					t.Errorf("AddTorrent timeout scheduler=%s torrent=%s", p.Scheduler.peerID, tf.MetaInfo.InfoHash)
+					t.Errorf("AddTorrent timeout scheduler=%s torrent=%s",
+						p.pctx.PeerID, tf.MetaInfo.InfoHash)
 					return
 				}
 
@@ -155,7 +156,7 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 			case err := <-p.Scheduler.AddTorrent(tf.MetaInfo):
 				require.NoError(err)
 			case <-time.After(10 * time.Second):
-				t.Errorf("AddTorrent timeout scheduler=%s torrent=%s", p.Scheduler.peerID, tf.MetaInfo.InfoHash)
+				t.Errorf("AddTorrent timeout scheduler=%s torrent=%s", p.pctx.PeerID, tf.MetaInfo.InfoHash)
 				return
 			}
 			checkContent(require, tor, tf.Content)
@@ -193,8 +194,8 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 	// Wait for peerA and peerB to establish connections to one another before
 	// starting the seeder, so their handshake bitfields are both guaranteed to
 	// be empty.
-	waitForConnEstablished(t, peerA.Scheduler, peerB.Scheduler.peerID, tf.MetaInfo.InfoHash)
-	waitForConnEstablished(t, peerB.Scheduler, peerA.Scheduler.peerID, tf.MetaInfo.InfoHash)
+	waitForConnEstablished(t, peerA.Scheduler, peerB.pctx.PeerID, tf.MetaInfo.InfoHash)
+	waitForConnEstablished(t, peerB.Scheduler, peerA.pctx.PeerID, tf.MetaInfo.InfoHash)
 
 	// The seeder is allowed only one connection, which means only one peer will
 	// have access to the completed torrent, while the other is forced to rely
@@ -214,8 +215,8 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 
 	// Ensure that only one peer was able to open a connection to the seeder.
 	require.NotEqual(
-		hasConn(peerA.Scheduler, seeder.Scheduler.peerID, tf.MetaInfo.InfoHash),
-		hasConn(peerB.Scheduler, seeder.Scheduler.peerID, tf.MetaInfo.InfoHash))
+		hasConn(peerA.Scheduler, seeder.pctx.PeerID, tf.MetaInfo.InfoHash),
+		hasConn(peerB.Scheduler, seeder.pctx.PeerID, tf.MetaInfo.InfoHash))
 }
 
 func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
@@ -259,8 +260,8 @@ func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 	waitForTorrentRemoved(t, seeder.Scheduler, tf.MetaInfo.InfoHash)
 	waitForTorrentRemoved(t, leecher.Scheduler, tf.MetaInfo.InfoHash)
 
-	require.False(hasConn(seeder.Scheduler, leecher.Scheduler.peerID, tf.MetaInfo.InfoHash))
-	require.False(hasConn(leecher.Scheduler, seeder.Scheduler.peerID, tf.MetaInfo.InfoHash))
+	require.False(hasConn(seeder.Scheduler, leecher.pctx.PeerID, tf.MetaInfo.InfoHash))
+	require.False(hasConn(leecher.Scheduler, seeder.pctx.PeerID, tf.MetaInfo.InfoHash))
 }
 
 func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {

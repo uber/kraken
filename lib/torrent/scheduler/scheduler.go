@@ -48,10 +48,7 @@ func newTorrentControl(d *dispatcher) *torrentControl {
 // - Dispatching connections to torrents.
 // - Pre-empting existing connections when better options are available (TODO).
 type Scheduler struct {
-	peerID         torlib.PeerID
-	ip             string
-	port           string
-	zone           string
+	pctx           peercontext.PeerContext
 	config         Config
 	clock          clock.Clock
 	torrentArchive storage.TorrentArchive
@@ -110,7 +107,7 @@ func New(
 	if err != nil {
 		return nil, fmt.Errorf("invalid config: %s", err)
 	}
-	l, err := net.Listen("tcp", config.ListenAddr)
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", pctx.IP, pctx.Port))
 	if err != nil {
 		return nil, err
 	}
@@ -138,10 +135,7 @@ func New(
 		pctx.PeerID, pctx.IP, pctx.Port)
 
 	s := &Scheduler{
-		peerID:         pctx.PeerID,
-		ip:             pctx.IP,
-		port:           strconv.Itoa(pctx.Port),
-		zone:           pctx.Zone,
+		pctx:           pctx,
 		config:         config,
 		clock:          overrides.clock,
 		torrentArchive: ta,
@@ -371,10 +365,10 @@ func (s *Scheduler) doAnnounce(t storage.Torrent) ([]torlib.PeerInfo, error) {
 
 	v.Add("name", t.Name())
 	v.Add("info_hash", t.InfoHash().String())
-	v.Add("peer_id", s.peerID.String())
-	v.Add("port", s.port)
-	v.Add("ip", s.ip)
-	v.Add("dc", s.zone)
+	v.Add("peer_id", s.pctx.PeerID.String())
+	v.Add("port", strconv.Itoa(s.pctx.Port))
+	v.Add("ip", s.pctx.IP)
+	v.Add("dc", s.pctx.Zone)
 
 	downloaded := t.BytesDownloaded()
 	v.Add("downloaded", strconv.FormatInt(downloaded, 10))
@@ -454,7 +448,7 @@ func (s *Scheduler) addIncomingConn(c *conn, t storage.Torrent) error {
 }
 
 func (s *Scheduler) logf(f log.Fields) bark.Logger {
-	f["scheduler"] = s.peerID
+	f["scheduler"] = s.pctx.PeerID
 	return log.WithFields(f)
 }
 
