@@ -3,7 +3,6 @@ package main
 import (
 	xconfig "code.uber.internal/go-common.git/x/config"
 	"code.uber.internal/go-common.git/x/log"
-	dockerconfig "github.com/docker/distribution/configuration"
 	dockercontext "github.com/docker/distribution/context"
 	docker "github.com/docker/distribution/registry"
 
@@ -43,16 +42,8 @@ func main() {
 		blobserver.HTTPClientProvider{},
 	)
 
-	config.Registry.Docker.Storage = dockerconfig.Storage{
-		dockerregistry.Name: dockerconfig.Parameters{
-			"config":     &config.Registry,
-			"transferer": transferer,
-			"store":      store,
-			"metrics":    stats,
-		},
-	}
-
-	registry, err := docker.NewRegistry(dockercontext.Background(), &config.Registry.Docker)
+	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, store, stats)
+	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)
 	if err != nil {
 		log.Fatalf("Failed to init registry: %s", err)
 	}

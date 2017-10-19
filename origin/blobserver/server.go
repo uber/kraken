@@ -45,18 +45,13 @@ type Server struct {
 // New initializes a new Server.
 func New(
 	config Config,
-	hostname string,
+	addr string,
 	fileStore store.FileStore,
 	clientProvider ClientProvider,
 	pctx peercontext.PeerContext) (*Server, error) {
 
 	if len(config.HashNodes) == 0 {
 		return nil, errors.New("no hash nodes configured")
-	}
-
-	addr, err := config.GetAddr(hostname)
-	if err != nil {
-		return nil, fmt.Errorf("error getting addr from config: %s", err)
 	}
 
 	currNode, ok := config.HashNodes[addr]

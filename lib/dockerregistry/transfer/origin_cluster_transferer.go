@@ -162,7 +162,9 @@ func (t *OriginClusterTransferer) Upload(digest string) error {
 		}
 
 		// TODO (@evelynl): create a retry queue for new locations
-		log.Errorf("missing blobs at locations: %s", strings.Join(missinglocs, ", "))
+		if missinglocs != nil {
+			log.Errorf("missing blobs at locations: %s", strings.Join(missinglocs, ", "))
+		}
 	}()
 
 	var mu sync.Mutex
