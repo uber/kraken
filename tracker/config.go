@@ -4,7 +4,7 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/go-common.git/x/mysql"
 
-	"code.uber.internal/infra/kraken/origin/blobserver"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/service"
 	"code.uber.internal/infra/kraken/tracker/storage"
@@ -27,7 +27,7 @@ type Config struct {
 // OriginClusterConfig defines configuration for tracker's dependency on the
 // origin cluster.
 type OriginClusterConfig struct {
-	DNS     string                  `yaml:"dns"`
-	Retries int                     `yaml:"retries"`
-	Client  blobserver.ClientConfig `yaml:"client"`
+	DNS     string            `yaml:"dns"`
+	Retries int               `yaml:"retries"`
+	Client  blobclient.Config `yaml:"client"`
 }

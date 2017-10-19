@@ -13,7 +13,7 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/origin/blobserver"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils"
 	"code.uber.internal/infra/kraken/utils/errutil"
 )
@@ -24,7 +24,7 @@ var _ ImageTransferer = (*OriginClusterTransferer)(nil)
 type OriginClusterTransferer struct {
 	originAddr string
 
-	blobClientProvider blobserver.ClientProvider
+	blobClientProvider blobclient.Provider
 	manifestClient     ManifestClient
 
 	// concurrency defines the number of concurrent downloads and uploads allowed
@@ -40,7 +40,7 @@ func NewOriginClusterTransferer(
 	store store.FileStore,
 	trackerAddr string,
 	originAddr string,
-	blobClientProvider blobserver.ClientProvider) *OriginClusterTransferer {
+	blobClientProvider blobclient.Provider) *OriginClusterTransferer {
 	manifestClient := &HTTPManifestClient{trackerAddr}
 	return &OriginClusterTransferer{
 		originAddr:         originAddr,

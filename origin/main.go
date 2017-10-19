@@ -13,6 +13,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/metrics"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobserver"
 )
 
@@ -69,7 +70,7 @@ func main() {
 	}
 
 	addr := fmt.Sprintf("%s:%d", hostname, *blobServerPort)
-	blobClientProvider := blobserver.NewHTTPClientProvider(config.BlobClient)
+	blobClientProvider := blobclient.NewProvider(config.BlobClient)
 
 	server, err := blobserver.New(config.BlobServer, addr, fileStore, blobClientProvider, pctx)
 	if err != nil {

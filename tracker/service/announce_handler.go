@@ -10,7 +10,7 @@ import (
 	"github.com/jackpal/bencode-go"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
-	"code.uber.internal/infra/kraken/origin/blobserver"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/storage"
@@ -21,7 +21,7 @@ type announceHandler struct {
 	config         Config
 	store          storage.PeerStore
 	policy         peerhandoutpolicy.PeerHandoutPolicy
-	originResolver blobserver.ClusterClientResolver
+	originResolver blobclient.ClusterResolver
 }
 
 func (h *announceHandler) requestOrigins(infoHash, name string) ([]*torlib.PeerInfo, error) {
@@ -37,7 +37,7 @@ func (h *announceHandler) requestOrigins(infoHash, name string) ([]*torlib.PeerI
 	var wg sync.WaitGroup
 	for _, client := range clients {
 		wg.Add(1)
-		go func(client blobserver.Client) {
+		go func(client blobclient.Client) {
 			defer wg.Done()
 			pctx, err := client.GetPeerContext()
 			mu.Lock()

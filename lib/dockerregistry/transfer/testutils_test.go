@@ -11,7 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
-	"code.uber.internal/infra/kraken/mocks/origin/blobserver"
+	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 )
 
 const _mockOriginDNS string = "mockOriginDns"
@@ -20,24 +20,24 @@ type originClusterTransfererMocks struct {
 	originDNS          string
 	ctrl               *gomock.Controller
 	fileStore          *mockstore.MockFileStore
-	blobClientProvider *mockblobserver.MockClientProvider
-	blobClients        map[string]*mockblobserver.MockClient
+	blobClientProvider *mockblobclient.MockProvider
+	blobClients        map[string]*mockblobclient.MockClient
 	manifestClient     *mocktransferer.MockManifestClient
 }
 
 func newOrginClusterTransfererMocks(t *testing.T, originAddrs ...string) *originClusterTransfererMocks {
 	ctrl := gomock.NewController(t)
-	m := make(map[string]*mockblobserver.MockClient)
+	m := make(map[string]*mockblobclient.MockClient)
 	for _, addr := range originAddrs {
-		m[addr] = mockblobserver.NewMockClient(ctrl)
+		m[addr] = mockblobclient.NewMockClient(ctrl)
 	}
-	m[_mockOriginDNS] = mockblobserver.NewMockClient(ctrl)
+	m[_mockOriginDNS] = mockblobclient.NewMockClient(ctrl)
 
 	return &originClusterTransfererMocks{
 		originDNS:          _mockOriginDNS,
 		ctrl:               ctrl,
 		fileStore:          mockstore.NewMockFileStore(ctrl),
-		blobClientProvider: mockblobserver.NewMockClientProvider(ctrl),
+		blobClientProvider: mockblobclient.NewMockProvider(ctrl),
 		blobClients:        m,
 		manifestClient:     mocktransferer.NewMockManifestClient(ctrl),
 	}

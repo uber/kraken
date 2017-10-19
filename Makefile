@@ -53,6 +53,7 @@ agent/agent: proto $(wildcard agent/*.go)
 origin/origin: proto $(wildcard origin/*.go)
 cli/kraken-cli: $(wildcard cli/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
+proxy/proxy: $(wildcard proxy/*.go)
 
 .PHONY: bench
 bench:
@@ -83,23 +84,17 @@ mocks:
 		-package mockstorage \
 		code.uber.internal/infra/kraken/lib/torrent/storage Torrent
 
-	mkdir -p mocks/origin/client
-	$(mockgen) \
-		-destination=mocks/origin/client/mockclient.go \
-		-package mockclient \
-		code.uber.internal/infra/kraken/origin/client BlobTransferer
-
 	mkdir -p mocks/lib/store
 	$(mockgen) \
 		-destination=mocks/lib/store/mockstore.go \
 		-package mockstore \
 		code.uber.internal/infra/kraken/lib/store FileStore
 
-	mkdir -p mocks/origin/blobserver
+	mkdir -p mocks/origin/blobclient
 	$(mockgen) \
-		-destination=mocks/origin/blobserver/mockblobserver.go \
-		-package mockblobserver \
-		code.uber.internal/infra/kraken/origin/blobserver Client,ClientProvider,ClusterClientResolver
+		-destination=mocks/origin/blobclient/mockblobclient.go \
+		-package mockblobclient \
+		code.uber.internal/infra/kraken/origin/blobclient Client,Provider,ClusterResolver
 
 	mkdir -p mocks/lib/dockerregistry/transfer
 	$(mockgen) \

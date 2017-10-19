@@ -17,6 +17,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/memsize"
 
 	"github.com/docker/distribution/uuid"
@@ -33,7 +34,7 @@ type Server struct {
 	labelToAddr    map[string]string
 	hashState      *hrw.RendezvousHash
 	fileStore      store.FileStore
-	clientProvider ClientProvider
+	clientProvider blobclient.Provider
 
 	// This is an unfortunate coupling between the p2p client and the blob server.
 	// Tracker queries the origin cluster to discover which origins can seed
@@ -47,7 +48,7 @@ func New(
 	config Config,
 	addr string,
 	fileStore store.FileStore,
-	clientProvider ClientProvider,
+	clientProvider blobclient.Provider,
 	pctx peercontext.PeerContext) (*Server, error) {
 
 	if len(config.HashNodes) == 0 {

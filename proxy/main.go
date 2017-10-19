@@ -10,7 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/metrics"
-	"code.uber.internal/infra/kraken/origin/blobserver"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 )
 
 func main() {
@@ -39,8 +39,7 @@ func main() {
 		store,
 		config.TrackAddr,
 		config.OriginAddr,
-		blobserver.HTTPClientProvider{},
-	)
+		blobclient.NewProvider(blobclient.Config{}))
 
 	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, store, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)

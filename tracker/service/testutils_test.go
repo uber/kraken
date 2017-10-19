@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"code.uber.internal/infra/kraken/mocks/origin/blobserver"
+	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/mocks/tracker/mockstorage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
@@ -34,7 +34,7 @@ type testMocks struct {
 	policy         peerhandoutpolicy.PeerHandoutPolicy
 	ctrl           *gomock.Controller
 	datastore      *mockstorage.MockStorage
-	originResolver *mockblobserver.MockClusterClientResolver
+	originResolver *mockblobclient.MockClusterResolver
 }
 
 // mockController sets up all mocks and returns a teardown func that can be called with defer
@@ -43,7 +43,7 @@ func (m *testMocks) mockController(t gomock.TestReporter) func() {
 	m.policy = peerhandoutpolicy.DefaultPeerHandoutPolicyFixture()
 	m.ctrl = gomock.NewController(t)
 	m.datastore = mockstorage.NewMockStorage(m.ctrl)
-	m.originResolver = mockblobserver.NewMockClusterClientResolver(m.ctrl)
+	m.originResolver = mockblobclient.NewMockClusterResolver(m.ctrl)
 	return m.ctrl.Finish
 }
 
