@@ -72,7 +72,13 @@ func main() {
 	addr := fmt.Sprintf("%s:%d", hostname, *blobServerPort)
 	blobClientProvider := blobclient.NewProvider(config.BlobClient)
 
-	server, err := blobserver.New(config.BlobServer, addr, fileStore, blobClientProvider, pctx)
+	stats, closer, err = metrics.New(config.Metrics)
+	if err != nil {
+		log.Fatalf("Failed to create metrics: %s", err)
+	}
+	defer closer.Close()
+
+	server, err := blobserver.New(config.BlobServer, stats, addr, fileStore, blobClientProvider, pctx)
 	if err != nil {
 		log.Fatalf("Error initializing blob server %s: %s", addr, err)
 	}

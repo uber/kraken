@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/peercontext"
@@ -87,7 +88,9 @@ func startServer(
 	cp blobclient.Provider,
 	pctx peercontext.PeerContext) (addr string, stop func()) {
 
-	s, err := New(config, host, fs, cp, pctx)
+	stats := tally.NewTestScope("", nil)
+
+	s, err := New(config, stats, host, fs, cp, pctx)
 	if err != nil {
 		panic(err)
 	}
