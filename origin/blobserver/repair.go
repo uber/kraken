@@ -99,13 +99,13 @@ type repairer struct {
 }
 
 func newRepairer(
+	ctx context.Context,
 	config Config,
 	hostname string,
 	labelToHostname map[string]string,
 	hashState *hrw.RendezvousHash,
 	fileStore store.FileStore,
-	clientProvider blobclient.Provider,
-	ctx context.Context) *repairer {
+	clientProvider blobclient.Provider) *repairer {
 
 	return &repairer{
 		config:          config,

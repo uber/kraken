@@ -17,8 +17,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/middleware"
-	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/memsize"
 
@@ -31,7 +31,8 @@ const _uploadChunkSize = 16 * memsize.MB
 
 // Server defines a server that serves blob data for agent.
 type Server struct {
-	config         Config
+	serverConfig   Config
+	torrentConfig  torrent.Config
 	label          string
 	addr           string
 	labelToAddr    map[string]string
@@ -44,37 +45,39 @@ type Server struct {
 	// Tracker queries the origin cluster to discover which origins can seed
 	// a given torrent, however this requires blob server to understand the
 	// context of the p2p client running alongside it.
-	pctx peercontext.PeerContext
+	torrentClient torrent.Client
 }
 
 // New initializes a new Server.
 func New(
-	config Config,
+	serverConfig Config,
+	torrentConfig torrent.Config,
 	stats tally.Scope,
 	addr string,
 	fileStore store.FileStore,
 	clientProvider blobclient.Provider,
-	pctx peercontext.PeerContext) (*Server, error) {
+	torrentClient torrent.Client) (*Server, error) {
 
-	if len(config.HashNodes) == 0 {
+	if len(serverConfig.HashNodes) == 0 {
 		return nil, errors.New("no hash nodes configured")
 	}
 
-	currNode, ok := config.HashNodes[addr]
+	currNode, ok := serverConfig.HashNodes[addr]
 	if !ok {
 		return nil, fmt.Errorf("host address %s not in configured hash nodes", addr)
 	}
 	label := currNode.Label
 
 	return &Server{
-		config:         config,
+		serverConfig:   serverConfig,
+		torrentConfig:  torrentConfig,
 		label:          label,
 		addr:           addr,
-		labelToAddr:    config.LabelToAddress(),
-		hashState:      config.HashState(),
+		labelToAddr:    serverConfig.LabelToAddress(),
+		hashState:      serverConfig.HashState(),
 		fileStore:      fileStore,
 		clientProvider: clientProvider,
-		pctx:           pctx,
+		torrentClient:  torrentClient,
 		stats:          stats.SubScope("blobserver"),
 	}, nil
 }
@@ -384,7 +387,12 @@ func (s Server) repairDigestHandler(w http.ResponseWriter, r *http.Request) erro
 
 // getPeerContextHandler returns the Server's peer context as JSON.
 func (s Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) error {
-	if err := json.NewEncoder(w).Encode(s.pctx); err != nil {
+	pctx, err := s.torrentClient.GetPeerContext()
+	if err != nil {
+		return serverErrorf("error retrieving peer context: %s", err)
+	}
+
+	if err := json.NewEncoder(w).Encode(pctx); err != nil {
 		return serverErrorf("error converting peer context to json: %s", err)
 	}
 	log.Debugf("successfully get peer context %v", s.pctx)
@@ -451,7 +459,7 @@ func parseContentRange(h http.Header) (start, end int64, err error) {
 }
 
 func (s Server) getLocations(d image.Digest) ([]string, error) {
-	nodes, err := s.hashState.GetOrderedNodes(d.ShardID(), s.config.NumReplica)
+	nodes, err := s.hashState.GetOrderedNodes(d.ShardID(), s.serverConfig.NumReplica)
 	if err != nil || len(nodes) == 0 {
 		return nil, serverErrorf("failed to calculate hash for digest %q: %s", d, err)
 	}
@@ -593,18 +601,29 @@ func (s Server) commitUpload(d image.Digest, uploadUUID string) error {
 		return serverErrorf("failed to commit digest %q for upload %q: %s", d, uploadUUID, err)
 	}
 
+	// Add torrent - announce to tracker and start seeding.
+	if !s.torrentConfig.Disabled {
+		filePath, err := s.fileStore.GetCacheFilePath(d.Hex())
+		if err != nil {
+			return serverErrorf("failed to get file path for digest %q for upload %q: %s", d, uploadUUID, err)
+		}
+		if err := s.torrentClient.CreateTorrentFromFile(d.Hex(), filePath); err != nil {
+			return serverErrorf("failed to add torrent for digest %q for upload %q: %s", d, uploadUUID, err)
+		}
+	}
+
 	return nil
 }
 
 func (s Server) newRepairer() *repairer {
 	return newRepairer(
-		s.config,
+		context.TODO(),
+		s.serverConfig,
 		s.addr,
 		s.labelToAddr,
 		s.hashState,
 		s.fileStore,
-		s.clientProvider,
-		context.TODO())
+		s.clientProvider)
 }
 
 func setUploadLocation(w http.ResponseWriter, uploadUUID string) {
