@@ -37,7 +37,7 @@ func main() {
 	config.Logging.TextFormatter = &formatter
 	log.Configure(&config.Logging, false)
 
-	// stats
+	// Stats
 	stats, closer, err := metrics.New(config.Metrics)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
@@ -47,25 +47,27 @@ func main() {
 	// root metrics scope for origin
 	stats = stats.SubScope("kraken.origin")
 
-	// Initialize and start P2P scheduler client:
-
-	pctx, err := peercontext.New(
-		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *peerIP, *peerPort)
-	if err != nil {
-		log.Fatalf("Failed to create peer context: %s", err)
-	}
-
+	// Initialize file storage
 	fileStore, err := store.NewLocalFileStore(&config.LocalStore, true)
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
 
-	client, err := torrent.NewSchedulerClient(&config.Torrent, fileStore, stats, pctx)
-	if err != nil {
-		log.Fatalf("Failed to create scheduler client: %s", err)
-		panic(err)
+	// Initialize and start P2P scheduler client:
+	var torrentClient torrent.Client
+	if !config.Torrent.Disabled {
+		pctx, err := peercontext.New(
+			peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *peerIP, *peerPort)
+		if err != nil {
+			log.Fatalf("Failed to create peer context: %s", err)
+		}
+
+		torrentClient, err = torrent.NewSchedulerClient(&config.Torrent, fileStore, stats, pctx)
+		if err != nil {
+			log.Fatalf("Failed to create scheduler client: %s", err)
+			panic(err)
+		}
 	}
-	defer client.Close()
 
 	// The code below starts Blob HTTP server.
 	hostname, err := os.Hostname()
@@ -76,7 +78,20 @@ func main() {
 	addr := fmt.Sprintf("%s:%d", hostname, *blobServerPort)
 	blobClientProvider := blobclient.NewProvider(config.BlobClient)
 
-	server, err := blobserver.New(config.BlobServer, stats, addr, fileStore, blobClientProvider, pctx)
+	stats, closer, err = metrics.New(config.Metrics)
+	if err != nil {
+		log.Fatalf("Failed to create metrics: %s", err)
+	}
+	defer closer.Close()
+
+	server, err := blobserver.New(
+		config.BlobServer,
+		config.Torrent,
+		stats,
+		addr,
+		fileStore,
+		blobClientProvider,
+		torrentClient)
 	if err != nil {
 		log.Fatalf("Error initializing blob server %s: %s", addr, err)
 	}

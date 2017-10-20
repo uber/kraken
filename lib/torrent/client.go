@@ -31,6 +31,7 @@ const downloadTimeout = 120 * time.Second
 type Client interface {
 	DownloadTorrent(name string) (io.ReadCloser, error)
 	CreateTorrentFromFile(name, filepath string) error
+	GetPeerContext() (peercontext.PeerContext, error)
 	GetManifest(repo, tag string) (io.ReadCloser, error)
 	PostManifest(repo, tag, manifestDigest string, reader io.Reader) error
 	Close() error
@@ -39,6 +40,7 @@ type Client interface {
 // SchedulerClient is a client for scheduler
 type SchedulerClient struct {
 	config    *Config
+	pctx      peercontext.PeerContext
 	peerID    torlib.PeerID
 	scheduler *scheduler.Scheduler
 	stats     tally.Scope
@@ -63,6 +65,7 @@ func NewSchedulerClient(
 	}
 	return &SchedulerClient{
 		config:    config,
+		pctx:      pctx,
 		peerID:    pctx.PeerID,
 		scheduler: scheduler,
 		stats:     stats,
@@ -208,6 +211,11 @@ func (c *SchedulerClient) CreateTorrentFromFile(name, filepath string) error {
 func (c *SchedulerClient) DropTorrent(infoHash torlib.InfoHash) error {
 	// TODO
 	return nil
+}
+
+// GetPeerContext returns peer context
+func (c *SchedulerClient) GetPeerContext() (peercontext.PeerContext, error) {
+	return c.pctx, nil
 }
 
 // GetManifest queries tracker for manifest and stores manifest locally

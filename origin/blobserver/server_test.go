@@ -350,15 +350,15 @@ func TestRedirectErrors(t *testing.T) {
 	}
 }
 
-func TestGetPeerContextHandlerOK(t *testing.T) {
-	require := require.New(t)
+// func TestGetPeerContextHandlerOK(t *testing.T) {
+// 	require := require.New(t)
 
-	cp := newTestClientProvider(clientConfigFixture())
+// 	cp := newTestClientProvider(clientConfigFixture())
 
-	s := newTestServer(master1, configFixture(), cp)
-	defer s.cleanup()
+// 	s := newTestServer(master1, configFixture(), cp)
+// 	defer s.cleanup()
 
-	pctx, err := cp.Provide(master1).GetPeerContext()
-	require.NoError(err)
-	require.Equal(s.pctx, pctx)
-}
+// 	pctx, err := cp.Provide(master1).GetPeerContext()
+// 	require.NoError(err)
+// 	require.Equal(s.pctx, pctx)
+// }
