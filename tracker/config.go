@@ -4,6 +4,7 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/go-common.git/x/mysql"
 
+	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/service"
@@ -19,6 +20,8 @@ type Config struct {
 	Service           service.Config           `yaml:"service"`
 	PeerHandoutPolicy peerhandoutpolicy.Config `yaml:"peerhandoutpolicy"`
 	OriginCluster     OriginClusterConfig      `yaml:"origin_cluster"`
+	Metrics           metrics.Config           `yaml:"metrics"`
+
 	// Unfortunately, nemo must be in top-level configuration to allow secrets
 	// injection.
 	Nemo mysql.Configuration `yaml:"nemo"`

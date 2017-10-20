@@ -15,6 +15,7 @@ import (
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 
 	"github.com/golang/mock/gomock"
+	"github.com/uber-go/tally"
 )
 
 // jsonBytesEqual compares the JSON in two byte slices.
@@ -35,6 +36,7 @@ type testMocks struct {
 	ctrl           *gomock.Controller
 	datastore      *mockstorage.MockStorage
 	originResolver *mockblobclient.MockClusterResolver
+	stats          tally.Scope
 }
 
 // mockController sets up all mocks and returns a teardown func that can be called with defer
@@ -44,12 +46,14 @@ func (m *testMocks) mockController(t gomock.TestReporter) func() {
 	m.ctrl = gomock.NewController(t)
 	m.datastore = mockstorage.NewMockStorage(m.ctrl)
 	m.originResolver = mockblobclient.NewMockClusterResolver(m.ctrl)
+	m.stats = tally.NewTestScope("testing", nil)
 	return m.ctrl.Finish
 }
 
 func (m *testMocks) Handler() http.Handler {
 	return Handler(
 		m.config,
+		m.stats,
 		m.policy,
 		m.datastore,
 		m.datastore,

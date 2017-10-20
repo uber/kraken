@@ -37,6 +37,16 @@ func main() {
 	config.Logging.TextFormatter = &formatter
 	log.Configure(&config.Logging, false)
 
+	// stats
+	stats, closer, err := metrics.New(config.Metrics)
+	if err != nil {
+		log.Fatalf("Failed to init metrics: %s", err)
+	}
+	defer closer.Close()
+
+	// root metrics scope for origin
+	stats = stats.SubScope("kraken.origin")
+
 	// Initialize and start P2P scheduler client:
 
 	pctx, err := peercontext.New(
@@ -44,12 +54,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
-
-	stats, closer, err := metrics.New(config.Metrics)
-	if err != nil {
-		log.Fatalf("Failed to init metrics: %s", err)
-	}
-	defer closer.Close()
 
 	fileStore, err := store.NewLocalFileStore(&config.LocalStore, true)
 	if err != nil {
@@ -71,12 +75,6 @@ func main() {
 
 	addr := fmt.Sprintf("%s:%d", hostname, *blobServerPort)
 	blobClientProvider := blobclient.NewProvider(config.BlobClient)
-
-	stats, closer, err = metrics.New(config.Metrics)
-	if err != nil {
-		log.Fatalf("Failed to create metrics: %s", err)
-	}
-	defer closer.Close()
 
 	server, err := blobserver.New(config.BlobServer, stats, addr, fileStore, blobClientProvider, pctx)
 	if err != nil {
