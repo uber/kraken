@@ -107,7 +107,7 @@ func New(
 	if err != nil {
 		return nil, fmt.Errorf("invalid config: %s", err)
 	}
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", pctx.IP, pctx.Port))
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", pctx.Port))
 	if err != nil {
 		return nil, err
 	}
