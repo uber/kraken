@@ -10,6 +10,7 @@ import (
 	xconfig "code.uber.internal/go-common.git/x/config"
 	"code.uber.internal/go-common.git/x/log"
 
+	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/service"
@@ -25,6 +26,16 @@ func main() {
 	formatter := true
 	config.Logging.TextFormatter = &formatter
 	log.Configure(&config.Logging, false)
+
+	// stats
+	stats, closer, err := metrics.New(config.Metrics)
+	if err != nil {
+		log.Fatalf("Failed to init metrics: %s", err)
+	}
+	defer closer.Close()
+
+	// root metrics scope for the tracker
+	stats = stats.SubScope("kraken.tracker")
 
 	storeProvider := storage.NewStoreProvider(config.Storage, config.Nemo)
 	peerStore, err := storeProvider.GetPeerStore()
@@ -54,7 +65,14 @@ func main() {
 		log.Fatalf("Error creating origin resolver: %s", err)
 	}
 
-	h := service.Handler(config.Service, policy, peerStore, torrentStore, manifestStore, originResolver)
+	h := service.Handler(
+		config.Service,
+		stats,
+		policy,
+		peerStore,
+		torrentStore,
+		manifestStore,
+		originResolver)
 
 	addr := fmt.Sprintf(":%d", config.BackendPort)
 	log.Infof("Listening on %s", addr)

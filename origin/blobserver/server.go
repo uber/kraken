@@ -37,7 +37,7 @@ type Server struct {
 	hashState      *hrw.RendezvousHash
 	fileStore      store.FileStore
 	clientProvider blobclient.Provider
-	scope          tally.Scope
+	stats          tally.Scope
 
 	// This is an unfortunate coupling between the p2p client and the blob server.
 	// Tracker queries the origin cluster to discover which origins can seed
@@ -74,7 +74,7 @@ func New(
 		fileStore:      fileStore,
 		clientProvider: clientProvider,
 		pctx:           pctx,
-		scope:          stats.SubScope("kraken"),
+		stats:          stats.SubScope("blobserver"),
 	}, nil
 }
 
@@ -113,13 +113,17 @@ func (s Server) Handler() http.Handler {
 	r := chi.NewRouter()
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.ElapsedTimer(s.scope.SubScope("health")))
+		stats := s.stats.SubScope("health")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
+
 		r.Get("/health", handler(s.healthCheckHandler))
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Counter(s.scope.SubScope("blobs")))
-		r.Use(middleware.ElapsedTimer(s.scope.SubScope("blobs")))
+		stats := s.stats.SubScope("blobs")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
 
 		r.Head("/blobs/:digest", handler(s.checkBlobHandler))
 		r.Get("/blobs/:digest", handler(s.getBlobHandler))
@@ -127,15 +131,18 @@ func (s Server) Handler() http.Handler {
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Counter(s.scope.SubScope("blobs.locations")))
-		r.Use(middleware.ElapsedTimer(s.scope.SubScope("blobs").SubScope("locations")))
+		stats := s.stats.SubScope("blobs.locations")
+
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
 
 		r.Get("/blobs/:digest/locations", handler(s.getLocationsHandler))
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Counter(s.scope.SubScope("blobs.uploads")))
-		r.Use(middleware.ElapsedTimer(s.scope.SubScope("blobs.uploads")))
+		stats := s.stats.SubScope("blobs.uploads")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
 
 		r.Post("/blobs/:digest/uploads", handler(s.startUploadHandler))
 		r.Patch("/blobs/:digest/uploads/:uuid", handler(s.patchUploadHandler))
@@ -143,29 +150,34 @@ func (s Server) Handler() http.Handler {
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Counter(s.scope.SubScope("repair")))
-		r.Use(middleware.ElapsedTimer(s.scope.SubScope("repair")))
+		stats := s.stats.SubScope("repair")
+
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
 
 		r.Post("/repair", handler(s.repairHandler))
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Counter(s.scope.SubScope("repair.shard")))
-		r.Use(middleware.ElapsedTimer(s.scope.SubScope("repair.shard")))
+		stats := s.stats.SubScope("repair.shard")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
 
 		r.Post("/repair/shard/:shardid", handler(s.repairShardHandler))
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Counter(s.scope.SubScope("repair.digest")))
-		r.Use(middleware.ElapsedTimer(s.scope.SubScope("repair.digest")))
+		stats := s.stats.SubScope("repair.digest")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
 
 		r.Post("/repair/digest/:digest", handler(s.repairDigestHandler))
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Counter(s.scope.SubScope("peercontext")))
-		r.Use(middleware.ElapsedTimer(s.scope.SubScope("peercontext")))
+		stats := s.stats.SubScope("peercontext")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
 
 		r.Get("/peercontext", handler(s.getPeerContextHandler))
 	})
