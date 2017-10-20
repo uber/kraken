@@ -24,7 +24,7 @@ func main() {
 	flag.Parse()
 
 	if blobServerPort == nil || *blobServerPort == 0 {
-		panic("0 is not a valid port for registry")
+		panic("0 is not a valid port for blob server")
 	}
 
 	var config Config

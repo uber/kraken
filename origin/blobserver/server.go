@@ -113,6 +113,11 @@ func (s Server) Handler() http.Handler {
 	r := chi.NewRouter()
 
 	r.Group(func(r chi.Router) {
+		r.Use(middleware.ElapsedTimer(s.scope.SubScope("health")))
+		r.Get("/health", handler(s.healthCheckHandler))
+	})
+
+	r.Group(func(r chi.Router) {
 		r.Use(middleware.Counter(s.scope.SubScope("blobs")))
 		r.Use(middleware.ElapsedTimer(s.scope.SubScope("blobs")))
 
@@ -166,6 +171,11 @@ func (s Server) Handler() http.Handler {
 	})
 
 	return r
+}
+
+func (s Server) healthCheckHandler(w http.ResponseWriter, r *http.Request) error {
+	w.WriteHeader(http.StatusOK)
+	return nil
 }
 
 // checkBlobHandler checks if blob data exists.
