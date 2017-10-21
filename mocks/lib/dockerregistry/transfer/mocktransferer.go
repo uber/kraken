@@ -34,10 +34,11 @@ func (m *MockImageTransferer) EXPECT() *MockImageTransfererMockRecorder {
 }
 
 // Download mocks base method
-func (m *MockImageTransferer) Download(arg0 string) error {
+func (m *MockImageTransferer) Download(arg0 string) (io.ReadCloser, error) {
 	ret := m.ctrl.Call(m, "Download", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(io.ReadCloser)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Download indicates an expected call of Download
@@ -46,9 +47,9 @@ func (mr *MockImageTransfererMockRecorder) Download(arg0 interface{}) *gomock.Ca
 }
 
 // GetManifest mocks base method
-func (m *MockImageTransferer) GetManifest(arg0, arg1 string) (string, error) {
+func (m *MockImageTransferer) GetManifest(arg0, arg1 string) (io.ReadCloser, error) {
 	ret := m.ctrl.Call(m, "GetManifest", arg0, arg1)
-	ret0, _ := ret[0].(string)
+	ret0, _ := ret[0].(io.ReadCloser)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -59,27 +60,27 @@ func (mr *MockImageTransfererMockRecorder) GetManifest(arg0, arg1 interface{}) *
 }
 
 // PostManifest mocks base method
-func (m *MockImageTransferer) PostManifest(arg0, arg1, arg2 string) error {
-	ret := m.ctrl.Call(m, "PostManifest", arg0, arg1, arg2)
+func (m *MockImageTransferer) PostManifest(arg0, arg1, arg2 string, arg3 io.Reader) error {
+	ret := m.ctrl.Call(m, "PostManifest", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PostManifest indicates an expected call of PostManifest
-func (mr *MockImageTransfererMockRecorder) PostManifest(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostManifest", reflect.TypeOf((*MockImageTransferer)(nil).PostManifest), arg0, arg1, arg2)
+func (mr *MockImageTransfererMockRecorder) PostManifest(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostManifest", reflect.TypeOf((*MockImageTransferer)(nil).PostManifest), arg0, arg1, arg2, arg3)
 }
 
 // Upload mocks base method
-func (m *MockImageTransferer) Upload(arg0 string) error {
-	ret := m.ctrl.Call(m, "Upload", arg0)
+func (m *MockImageTransferer) Upload(arg0 string, arg1 io.Reader, arg2 int64) error {
+	ret := m.ctrl.Call(m, "Upload", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Upload indicates an expected call of Upload
-func (mr *MockImageTransfererMockRecorder) Upload(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockImageTransferer)(nil).Upload), arg0)
+func (mr *MockImageTransfererMockRecorder) Upload(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockImageTransferer)(nil).Upload), arg0, arg1, arg2)
 }
 
 // MockManifestClient is a mock of ManifestClient interface

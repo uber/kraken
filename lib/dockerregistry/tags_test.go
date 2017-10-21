@@ -205,20 +205,21 @@ func TestGetManifest(t *testing.T) {
 	writer.Close()
 	assert.Nil(t, tags.store.MoveUploadFileToCache(manifestTemp, manifest))
 
-	for _, digest := range []string{
+	layers := []string{
 		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9",
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
-	} {
+	}
+
+	for _, digest := range layers {
 		digestTemp := digest + ".temp"
 		tags.store.CreateUploadFile(digestTemp, 0)
 		tags.store.MoveUploadFileToCache(digestTemp, digest)
 	}
 
-	err := tags.CreateTag("repo", "tag", manifest)
-	assert.Nil(t, err)
+	assert.NoError(t, tags.createTag("repo", "tag", manifest, layers))
 	m, err := tags.getOrDownloadManifest("repo", "tag")
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, manifest, m)
 }
 

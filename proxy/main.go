@@ -36,7 +36,6 @@ func main() {
 
 	transferer := transfer.NewOriginClusterTransferer(
 		config.Concurrency,
-		store,
 		config.TrackAddr,
 		config.OriginAddr,
 		blobclient.NewProvider(blobclient.Config{}))

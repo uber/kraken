@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/middleware"
@@ -86,6 +87,7 @@ type errHandler func(http.ResponseWriter, *http.Request) error
 func handler(h errHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := h(w, r); err != nil {
+			log.Error(err)
 			switch e := err.(type) {
 			case *serverError:
 				for k, vs := range e.header {
@@ -203,6 +205,7 @@ func (s Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	w.WriteHeader(http.StatusOK)
+	log.Debugf("successfully check blob %s exists", d.Hex())
 	return nil
 }
 
@@ -219,6 +222,7 @@ func (s Server) getBlobHandler(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	setOctetStreamContentType(w)
+	log.Debugf("successfully get blob %s", d.Hex())
 	return nil
 }
 
@@ -233,6 +237,7 @@ func (s Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error 
 	}
 	setContentLength(w, 0)
 	w.WriteHeader(http.StatusAccepted)
+	log.Debugf("successfully delete blob %s", d.Hex())
 	return nil
 }
 
@@ -247,6 +252,7 @@ func (s Server) getLocationsHandler(w http.ResponseWriter, r *http.Request) erro
 	}
 	w.Header().Set("Origin-Locations", strings.Join(locs, ","))
 	w.WriteHeader(http.StatusOK)
+	log.Debugf("successfully get location for blob %s: locs: %v", d.Hex(), locs)
 	return nil
 }
 
@@ -270,6 +276,7 @@ func (s Server) startUploadHandler(w http.ResponseWriter, r *http.Request) error
 	setUploadLocation(w, u)
 	setContentLength(w, 0)
 	w.WriteHeader(http.StatusAccepted)
+	log.Debugf("successfully start upload %s for blob %s", u, d.Hex())
 	return nil
 }
 
@@ -298,6 +305,7 @@ func (s Server) patchUploadHandler(w http.ResponseWriter, r *http.Request) error
 	}
 	setContentLength(w, 0)
 	w.WriteHeader(http.StatusAccepted)
+	log.Debugf("successfully patch upload %s for blob %s", u, d.Hex())
 	return nil
 }
 
@@ -319,6 +327,7 @@ func (s Server) commitUploadHandler(w http.ResponseWriter, r *http.Request) erro
 	}
 	setContentLength(w, 0)
 	w.WriteHeader(http.StatusCreated)
+	log.Debugf("successfully commit upload %s for blob %s", u, d.Hex())
 	return nil
 }
 
@@ -338,6 +347,7 @@ func (s Server) repairHandler(w http.ResponseWriter, r *http.Request) error {
 		}
 	}()
 	rep.WriteMessages(w)
+	log.Debugf("successfully repair owning shards %v", shards)
 	return err
 }
 
@@ -353,6 +363,7 @@ func (s Server) repairShardHandler(w http.ResponseWriter, r *http.Request) error
 		err = rep.RepairShard(shardID)
 	}()
 	rep.WriteMessages(w)
+	log.Debugf("successfully repair shard %s", shardID)
 	return err
 }
 
@@ -367,6 +378,7 @@ func (s Server) repairDigestHandler(w http.ResponseWriter, r *http.Request) erro
 		err = rep.RepairDigest(d)
 	}()
 	rep.WriteMessages(w)
+	log.Debugf("successfully repair digest %s", d.Hex())
 	return err
 }
 
@@ -375,6 +387,7 @@ func (s Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) er
 	if err := json.NewEncoder(w).Encode(s.pctx); err != nil {
 		return serverErrorf("error converting peer context to json: %s", err)
 	}
+	log.Debugf("successfully get peer context %v", s.pctx)
 	return nil
 }
 

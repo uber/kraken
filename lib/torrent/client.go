@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
-	"github.com/docker/distribution/uuid"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 
@@ -23,7 +22,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
-	"code.uber.internal/infra/kraken/utils"
 )
 
 const requestTimeout = 60 * time.Second
@@ -31,10 +29,10 @@ const downloadTimeout = 120 * time.Second
 
 // Client TODO
 type Client interface {
-	DownloadTorrent(name string) error
+	DownloadTorrent(name string) (io.ReadCloser, error)
 	CreateTorrentFromFile(name, filepath string) error
-	GetManifest(repo, tag string) (string, error)
-	PostManifest(repo, tag, manifestDigest string) error
+	GetManifest(repo, tag string) (io.ReadCloser, error)
+	PostManifest(repo, tag, manifestDigest string, reader io.Reader) error
 	Close() error
 }
 
@@ -80,45 +78,45 @@ func (c *SchedulerClient) Close() error {
 }
 
 // DownloadTorrent downloads a torrent given torrent name
-func (c *SchedulerClient) DownloadTorrent(name string) error {
+func (c *SchedulerClient) DownloadTorrent(name string) (io.ReadCloser, error) {
 	var err error
 	stopwatch := c.stats.SubScope("torrent").SubScope(name).Timer("download_time").Start()
 
 	if c.config.Disabled {
-		return errors.New("torrent disabled")
+		return nil, errors.New("torrent disabled")
 	}
 
 	miRaw, err := c.store.GetDownloadOrCacheFileMeta(name)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to get file metainfo: %s", err)
+			return nil, fmt.Errorf("failed to get file metainfo: %s", err)
 		}
 		miRaw, err = c.requestTorrentMetaInfo(name)
 		if err != nil {
-			return fmt.Errorf("failed to request metainfo: %s", err)
+			return nil, fmt.Errorf("failed to request metainfo: %s", err)
 		}
 	}
 	mi, err := torlib.NewMetaInfoFromBytes(miRaw)
 	if err != nil {
-		return fmt.Errorf("failed to get metainfo: %s", err)
+		return nil, fmt.Errorf("failed to get metainfo: %s", err)
 	}
 
 	if _, err = c.archive.CreateTorrent(mi.InfoHash, mi); err != nil {
-		return fmt.Errorf("failed to create torrent in archive: %s", err)
+		return nil, fmt.Errorf("failed to create torrent in archive: %s", err)
 	}
 
 	select {
 	case err := <-c.scheduler.AddTorrent(mi):
 		if err != nil {
-			return fmt.Errorf("failed to schedule torrent: %s", err)
+			return nil, fmt.Errorf("failed to schedule torrent: %s", err)
 		}
 	case <-time.After(downloadTimeout):
 		// TODO(codyg): Allow cancelling the torrent in the Scheduler.
-		return fmt.Errorf("scheduled torrent timed out after %.2f seconds", downloadTimeout.Seconds())
+		return nil, fmt.Errorf("scheduled torrent timed out after %.2f seconds", downloadTimeout.Seconds())
 	}
 
 	stopwatch.Stop()
-	return nil
+	return c.store.GetCacheFileReader(name)
 }
 
 // CreateTorrentFromFile creates a torrent from file and adds torrent to scheduler for seeding
@@ -213,68 +211,30 @@ func (c *SchedulerClient) DropTorrent(infoHash torlib.InfoHash) error {
 }
 
 // GetManifest queries tracker for manifest and stores manifest locally
-func (c *SchedulerClient) GetManifest(repo, tag string) (string, error) {
+func (c *SchedulerClient) GetManifest(repo, tag string) (io.ReadCloser, error) {
 	if c.config.Disabled {
-		return "", fmt.Errorf("Torrent disabled")
+		return nil, fmt.Errorf("Torrent disabled")
 	}
 	name := fmt.Sprintf("%s:%s", repo, tag)
 
 	trackerURL := "http://" + c.config.Scheduler.TrackerAddr + "/manifest/" + url.QueryEscape(name)
-	data, err := c.sendRequestToTracker("GET", trackerURL, nil)
-	if err != nil {
-		return "", err
-	}
-
-	// parse manifest
-	_, manifestDigest, err := utils.ParseManifestV2(data)
-	if err != nil {
-		return "", err
-	}
-
-	// Store manifest
-	manifestDigestTemp := manifestDigest + "." + uuid.Generate().String()
-	if err = c.store.CreateUploadFile(manifestDigestTemp, 0); err != nil {
-		return "", err
-	}
-
-	writer, err := c.store.GetUploadFileReadWriter(manifestDigestTemp)
-	if err != nil {
-		return "", err
-	}
-
-	_, err = writer.Write(data)
-	if err != nil {
-		return "", err
-	}
-	writer.Close()
-
-	err = c.store.MoveUploadFileToCache(manifestDigestTemp, manifestDigest)
-	// it is ok if move fails on file exist error
-	if err != nil && !os.IsExist(err) {
-		return "", err
-	}
-
-	return manifestDigest, nil
+	return c.sendRequestToTracker("GET", trackerURL, nil)
 }
 
 // PostManifest saves manifest specified by the tag it referred in a tracker
-func (c *SchedulerClient) PostManifest(repo, tag, manifest string) error {
+func (c *SchedulerClient) PostManifest(repo, tag, manifest string, reader io.Reader) error {
 	if c.config.Disabled {
 		log.Info("Torrent disabled. Nothing is to be done here")
 		return nil
 	}
 
-	reader, err := c.store.GetCacheFileReader(manifest)
-	if err != nil {
-		return err
-	}
-
 	name := fmt.Sprintf("%s:%s", repo, tag)
 	postURL := "http://" + c.config.Scheduler.TrackerAddr + "/manifest/" + url.QueryEscape(name)
-	_, err = c.sendRequestToTracker("POST", postURL, reader)
+	readCloser, err := c.sendRequestToTracker("POST", postURL, reader)
 	if err != nil {
 		return err
 	}
+	defer readCloser.Close()
 
 	return nil
 }
@@ -287,10 +247,11 @@ func (c *SchedulerClient) postTorrentMetaInfo(mi *torlib.MetaInfo) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.sendRequestToTracker("POST", trackerURL, bytes.NewBufferString(miRaw))
+	readCloser, err := c.sendRequestToTracker("POST", trackerURL, bytes.NewBufferString(miRaw))
 	if err != nil {
 		return err
 	}
+	defer readCloser.Close()
 
 	return nil
 }
@@ -298,10 +259,16 @@ func (c *SchedulerClient) postTorrentMetaInfo(mi *torlib.MetaInfo) error {
 func (c *SchedulerClient) requestTorrentMetaInfo(name string) ([]byte, error) {
 	// get torrent info hash
 	trackerURL := "http://" + c.config.Scheduler.TrackerAddr + "/info?name=" + name
-	return c.sendRequestToTracker("GET", trackerURL, nil)
+	readCloser, err := c.sendRequestToTracker("GET", trackerURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer readCloser.Close()
+
+	return ioutil.ReadAll(readCloser)
 }
 
-func (c *SchedulerClient) sendRequestToTracker(method, endpoint string, body io.Reader) ([]byte, error) {
+func (c *SchedulerClient) sendRequestToTracker(method, endpoint string, body io.Reader) (io.ReadCloser, error) {
 	if body == nil {
 		body = bytes.NewReader([]byte{})
 	}
@@ -320,7 +287,6 @@ func (c *SchedulerClient) sendRequestToTracker(method, endpoint string, body io.
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		respDump, err := httputil.DumpResponse(resp, true)
@@ -330,10 +296,5 @@ func (c *SchedulerClient) sendRequestToTracker(method, endpoint string, body io.
 		return nil, fmt.Errorf("%s", respDump)
 	}
 
-	// read infohash from respsonse
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
+	return resp.Body, nil
 }

@@ -2,6 +2,7 @@ package dockerregistry
 
 import (
 	"errors"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -15,13 +16,17 @@ var errMockError = errors.New("MockTorrent")
 
 type mockImageTransferer struct{}
 
-func (mc *mockImageTransferer) Download(name string) error { return errMockError }
-func (mc *mockImageTransferer) Upload(name string) error   { return nil }
-func (mc *mockImageTransferer) GetManifest(repo, tag string) (string, error) {
-	return "", errMockError
+func (mc *mockImageTransferer) Download(digest string) (io.ReadCloser, error) {
+	return nil, errMockError
 }
-func (mc *mockImageTransferer) PostManifest(repo, tag, manifestDigest string) error { return nil }
-func (mc *mockImageTransferer) Close() error                                        { return nil }
+func (mc *mockImageTransferer) Upload(digest string, reader io.Reader, size int64) error { return nil }
+func (mc *mockImageTransferer) GetManifest(repo, tag string) (readCloser io.ReadCloser, err error) {
+	return nil, errMockError
+}
+func (mc *mockImageTransferer) PostManifest(repo, tag, digest string, reader io.Reader) error {
+	return nil
+}
+func (mc *mockImageTransferer) Close() error { return nil }
 
 // StorageDriverFixture creates a storage driver and return a cleanup function
 func StorageDriverFixture() (*KrakenStorageDriver, func()) {
