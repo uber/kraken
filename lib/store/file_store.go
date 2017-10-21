@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/store/base"
 	"code.uber.internal/infra/kraken/lib/store/refcountable"
 	"code.uber.internal/infra/kraken/utils/osutil"
@@ -24,6 +26,7 @@ type FileStore interface {
 	Config() Config
 	CreateUploadFile(fileName string, len int64) error
 	CreateDownloadFile(fileName string, len int64) error
+	CreateCacheFile(fileName string, reader io.Reader) error
 	WriteDownloadFilePieceStatus(fileName string, content []byte) (bool, error)
 	WriteDownloadFilePieceStatusAt(fileName string, content []byte, index int) (bool, error)
 	GetFilePieceStatus(fileName string, index int, numPieces int) ([]byte, error)
@@ -116,7 +119,7 @@ func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error
 		intervalSecs := int(math.Ceil(config.TrashDeletion.Interval.Seconds()))
 		spec := fmt.Sprintf("@every %ds", intervalSecs)
 		err = localStore.trashDeletionCron.AddFunc(spec, func() {
-			log.Info("Deleting all trash files...")
+			log.Debug("Deleting all trash files...")
 			if err := localStore.DeleteAllTrashFiles(); err != nil {
 				log.Errorf("Failed to delete all trash files: %s", err)
 			}
@@ -163,6 +166,39 @@ func (store *LocalFileStore) CreateDownloadFile(fileName string, len int64) erro
 		[]base.FileState{store.stateDownload},
 		store.stateDownload,
 		len)
+}
+
+// CreateCacheFile creates a cache file given name and reader
+func (store *LocalFileStore) CreateCacheFile(fileName string, reader io.Reader) error {
+	tmp := fmt.Sprintf("%s.%s", fileName, uuid.Generate().String())
+	if err := store.CreateUploadFile(tmp, 0); err != nil {
+		return err
+	}
+	w, err := store.GetUploadFileReadWriter(tmp)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+
+	// Stream to file and verify content at the same time
+	r := io.TeeReader(reader, w)
+
+	verified, err := image.Verify(image.NewSHA256DigestFromHex(fileName), r)
+	if err != nil {
+		return err
+	}
+	if !verified {
+		// TODO: Delete tmp file on error
+		return fmt.Errorf("failed to verify data: digests do not match")
+	}
+
+	if err := store.MoveUploadFileToCache(tmp, fileName); err != nil {
+		if !os.IsExist(err) {
+			return err
+		}
+		// Ignore if another thread is pulling the same blob because it is normal
+	}
+	return nil
 }
 
 // WriteDownloadFilePieceStatus creates or overwrites piece status for a new download file.

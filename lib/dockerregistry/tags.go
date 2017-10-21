@@ -1,7 +1,9 @@
 package dockerregistry
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -14,6 +16,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils"
+	"code.uber.internal/infra/kraken/utils/errutil"
 
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
@@ -271,8 +274,15 @@ func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 		return err
 	}
 
+	reader, err := t.store.GetCacheFileReader(manifest)
+	if err != nil {
+		log.Errorf("CreateTag: cannot get manifest reader for %s:%s, error: %s", repo, tag, err)
+		return err
+	}
+	defer reader.Close()
+
 	// Save manifest in tracker
-	err = t.transferer.PostManifest(repo, tag, manifest)
+	err = t.transferer.PostManifest(repo, tag, manifest, reader)
 	if err != nil {
 		log.Errorf("CreateTag: cannot post manifest for %s:%s, error: %s", repo, tag, err)
 		t.metrics.Counter(createFailureCounter).Inc(1)
@@ -368,35 +378,43 @@ func (t *DockerTags) getOrDownloadAllLayersAndCreateTag(repo, tag string) error 
 
 	log.Infof("Successfully parsed layers from %s: %v", manifestDigest, layers)
 
-	numLayers := len(layers)
-	wg := &sync.WaitGroup{}
-	wg.Add(numLayers)
-	// errors is a channel to collect errors
-	errors := make(chan error, numLayers)
-
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errs errutil.MultiError
 	// for every layer, download if it is already
 	for _, layer := range layers {
+		wg.Add(1)
 		go func(l string) {
 			defer wg.Done()
 			var err error
 			_, err = t.store.GetCacheFileStat(l)
 			if err != nil && os.IsNotExist(err) {
-				err = t.transferer.Download(l)
+				var readCloser io.ReadCloser
+				readCloser, err = t.transferer.Download(l)
+				if err != nil {
+					mu.Lock()
+					defer mu.Unlock()
+					errs = append(errs, fmt.Errorf("error getting layer %s from manifest %s for %s:%s: %s", l, manifestDigest, repo, tag, err))
+					return
+				}
+				defer readCloser.Close()
+				err = t.store.CreateCacheFile(l, readCloser)
 			}
 
 			if err != nil {
-				log.Errorf("Error getting layer %s from manifest %s for %s:%s", l, manifestDigest, repo, tag)
-				errors <- err
+				mu.Lock()
+				defer mu.Unlock()
+				errs = append(errs, fmt.Errorf("Error getting layer %s from manifest %s for %s:%s: %s", l, manifestDigest, repo, tag, err))
+				return
 			}
+
 		}(layer)
 	}
 
 	wg.Wait()
-	select {
-	// if there is any error downloading layers, we return without incrementing ref count nor creating tag
-	case err = <-errors:
-		return err
-	default:
+
+	if errs != nil {
+		return errs
 	}
 
 	return t.createTag(repo, tag, manifestDigest, layers)
@@ -489,19 +507,41 @@ func (t *DockerTags) getRepositoriesPath() string {
 func (t *DockerTags) getOrDownloadManifest(repo, tag string) (string, error) {
 	tagFp := t.getTagPath(repo, tag)
 	_, err := os.Stat(tagFp)
-	if err != nil && !os.IsNotExist(err) {
+	if err == nil {
+		data, err := ioutil.ReadFile(tagFp)
+		if err != nil {
+			return "", err
+		}
+		return string(data[:]), nil
+	}
+
+	if !os.IsNotExist(err) {
 		return "", err
 	}
 
-	if os.IsNotExist(err) {
-		return t.transferer.GetManifest(repo, tag)
-	}
-
-	data, err := ioutil.ReadFile(tagFp)
+	readCloser, err := t.transferer.GetManifest(repo, tag)
 	if err != nil {
 		return "", err
 	}
-	return string(data[:]), nil
+	defer readCloser.Close()
+
+	data, err := ioutil.ReadAll(readCloser)
+	if err != nil {
+		return "", fmt.Errorf("failed to read manifest: %s", err)
+	}
+
+	_, manifestDigest, err := utils.ParseManifestV2(data)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse manifest for %s:%s: %s", repo, tag, err)
+	}
+
+	// Store manifest
+	err = t.store.CreateCacheFile(manifestDigest, bytes.NewReader(data))
+	if err != nil {
+		return "", fmt.Errorf("failed to create manifest file for %s:%s: %s", repo, tag, err)
+	}
+
+	return manifestDigest, nil
 }
 
 // listExpiredTags lists expired tags under given repo.

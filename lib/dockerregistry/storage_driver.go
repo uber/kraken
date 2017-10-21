@@ -67,25 +67,25 @@ type krakenStorageDriverFactory struct{}
 func (factory *krakenStorageDriverFactory) Create(params map[string]interface{}) (storagedriver.StorageDriver, error) {
 	configParam, ok := params["config"]
 	if !ok || configParam == nil {
-		log.Fatal("Failed to create storage driver. No configuration initiated.")
+		log.Fatal("failed to create storage driver. No configuration initiated.")
 	}
 	config := configParam.(*Config)
 
 	storeParam, ok := params["store"]
 	if !ok || storeParam == nil {
-		log.Fatal("Failed to create storage driver. No file store initiated.")
+		log.Fatal("failed to create storage driver. No file store initiated.")
 	}
 	store := storeParam.(store.FileStore)
 
 	transfererParam, ok := params["transferer"]
 	if !ok || transfererParam == nil {
-		log.Fatal("Failed to create storage driver. No torrent agent initated.")
+		log.Fatal("failed to create storage driver. No torrent agent initated.")
 	}
 	transferer := transfererParam.(transfer.ImageTransferer)
 
 	metricsParam, ok := params["metrics"]
 	if !ok || metricsParam == nil {
-		log.Fatal("Failed to create storage driver. No metrics initiated.")
+		log.Fatal("failed to create storage driver. No metrics initiated.")
 	}
 	metrics := metricsParam.(tally.Scope)
 
@@ -121,11 +121,11 @@ func NewKrakenStorageDriver(
 
 	// Start a cron to delete expired tags.
 	if c.TagDeletion.Enable && c.TagDeletion.Interval > 0 {
-		log.Info("Scheduling tag cleanup cron")
+		log.Info("scheduling tag cleanup cron")
 		deleteExpiredTagsCron := cron.New()
 		interval := fmt.Sprintf("@every %ds", c.TagDeletion.Interval)
 		err = deleteExpiredTagsCron.AddFunc(interval, func() {
-			log.Info("Running tag cleanup cron")
+			log.Debug("running tag cleanup cron")
 			tags.DeleteExpiredTags(c.TagDeletion.RetentionCount,
 				time.Now().Add(time.Duration(-c.TagDeletion.RetentionTime)*time.Second))
 		})
@@ -153,7 +153,7 @@ func (d *KrakenStorageDriver) Name() string {
 // GetContent returns content in the path
 // sample path: /docker/registry/v2/repositories/external/ubuntu/_layers/sha256/a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4/link
 func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data []byte, err error) {
-	log.Infof("GetContent %s", path)
+	log.Debugf("(*KrakenStorageDriver).GetContent %s", path)
 	pathType, pathSubType, err := ParsePath(path)
 	if err != nil {
 		return nil, err
@@ -174,7 +174,7 @@ func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data
 
 // Reader returns a reader of path at offset
 func (d *KrakenStorageDriver) Reader(ctx context.Context, path string, offset int64) (reader io.ReadCloser, err error) {
-	log.Infof("Reader %s", path)
+	log.Debugf("(*KrakenStorageDriver).Reader %s", path)
 	pathType, pathSubType, err := ParsePath(path)
 	if err != nil {
 		return nil, err
@@ -192,7 +192,7 @@ func (d *KrakenStorageDriver) Reader(ctx context.Context, path string, offset in
 
 // PutContent writes content to path
 func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, content []byte) error {
-	log.Infof("PutContent %s", path)
+	log.Debugf("(*KrakenStorageDriver).PutContent %s", path)
 	pathType, pathSubType, err := ParsePath(path)
 	if err != nil {
 		return err
@@ -215,7 +215,7 @@ func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, conte
 
 // Writer returns a writer of path
 func (d *KrakenStorageDriver) Writer(ctx context.Context, path string, append bool) (storagedriver.FileWriter, error) {
-	log.Infof("Writer %s", path)
+	log.Debugf("(*KrakenStorageDriver).Writer %s", path)
 	pathType, pathSubType, err := ParsePath(path)
 	if err != nil {
 		return nil, err
@@ -231,7 +231,7 @@ func (d *KrakenStorageDriver) Writer(ctx context.Context, path string, append bo
 
 // Stat returns fileinfo of path
 func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (fi storagedriver.FileInfo, err error) {
-	log.Infof("Stat %s", path)
+	log.Debugf("(*KrakenStorageDriver).Stat %s", path)
 	pathType, _, err := ParsePath(path)
 	if err != nil {
 		return nil, err
@@ -249,7 +249,7 @@ func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (fi storage
 
 // List returns a list of content given path
 func (d *KrakenStorageDriver) List(ctx context.Context, path string) ([]string, error) {
-	log.Infof("List %s", path)
+	log.Debugf("(*KrakenStorageDriver).List %s", path)
 	pathType, pathSubType, err := ParsePath(path)
 	if err != nil {
 		return nil, err
@@ -267,7 +267,7 @@ func (d *KrakenStorageDriver) List(ctx context.Context, path string) ([]string, 
 
 // Move moves sourcePath to destPath
 func (d *KrakenStorageDriver) Move(ctx context.Context, sourcePath string, destPath string) error {
-	log.Infof("Move %s %s", sourcePath, destPath)
+	log.Debugf("(*KrakenStorageDriver).Move %s %s", sourcePath, destPath)
 	pathType, _, err := ParsePath(sourcePath)
 	if err != nil {
 		return err
@@ -283,7 +283,7 @@ func (d *KrakenStorageDriver) Move(ctx context.Context, sourcePath string, destP
 
 // Delete deletes path
 func (d *KrakenStorageDriver) Delete(ctx context.Context, path string) error {
-	log.Infof("Delete %s", path)
+	log.Debugf("(*KrakenStorageDriver).Delete %s", path)
 	return storagedriver.PathNotFoundError{
 		DriverName: "p2p",
 		Path:       path,
@@ -292,6 +292,6 @@ func (d *KrakenStorageDriver) Delete(ctx context.Context, path string) error {
 
 // URLFor returns url for path
 func (d *KrakenStorageDriver) URLFor(ctx context.Context, path string, options map[string]interface{}) (string, error) {
-	log.Infof("URLFor %s", path)
+	log.Debugf("(*KrakenStorageDriver).URLFor %s", path)
 	return "", fmt.Errorf("Not implemented")
 }

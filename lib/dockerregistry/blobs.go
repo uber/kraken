@@ -63,12 +63,18 @@ func (b *Blobs) GetDigest(path string) ([]byte, error) {
 func (b *Blobs) getBlobStat(fileName string) (storagedriver.FileInfo, error) {
 	info, err := b.store.GetCacheFileStat(fileName)
 	if err != nil {
-		err = b.transferer.Download(fileName)
+		readCloser, err := b.transferer.Download(fileName)
 		if err != nil {
 			return nil, storagedriver.PathNotFoundError{
 				DriverName: "kraken",
 				Path:       fileName,
 			}
+		}
+		defer readCloser.Close()
+
+		err = b.store.CreateCacheFile(fileName, readCloser)
+		if err != nil {
+			return nil, err
 		}
 
 		info, err = b.store.GetCacheFileStat(fileName)
@@ -101,14 +107,20 @@ func (b *Blobs) getOrDownloadBlobData(fileName string) (data []byte, err error) 
 func (b *Blobs) getOrDownloadBlobReader(fileName string, offset int64) (reader io.ReadCloser, err error) {
 	reader, err = b.getBlobReader(fileName, offset)
 	if err != nil {
-		err = b.transferer.Download(fileName)
+		readCloser, err := b.transferer.Download(fileName)
 		if err != nil {
-			log.Errorf("Failed to download %s", err.Error())
+			log.Errorf("failed to download %s: %s", fileName, err.Error())
 			return nil, storagedriver.PathNotFoundError{
 				DriverName: "kraken",
 				Path:       fileName,
 			}
 		}
+		defer readCloser.Close()
+
+		if err := b.store.CreateCacheFile(fileName, readCloser); err != nil {
+			return nil, err
+		}
+
 		return b.getBlobReader(fileName, offset)
 	}
 	return reader, nil

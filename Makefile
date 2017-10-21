@@ -111,12 +111,12 @@ mocks:
 # Enumerates all container names, including those created by dockerman.
 CONTAINERS := $(foreach \
 	c, \
-	kraken-mysql kraken-redis kraken-tracker kraken-origin kraken-redis kraken-proxy, \
-	$(c) $(wildcard *$(c)*))
+	kraken-mysql kraken-redis kraken-tracker kraken-peer kraken-proxy kraken-origin, \
+	$(c))
 
 # Runs docker stop and docker rm on each container w/ silenced output.
 docker_stop:
-	@-$(foreach cmd,stop rm,$(foreach c,$(CONTAINERS),docker $(cmd) $(c) &>/dev/null))
+	@-$(foreach c,$(CONTAINERS),docker rm -f $$(docker ps -aq --filter name=$(c)) &>/dev/null)
 
 .PHONY: redis
 redis:

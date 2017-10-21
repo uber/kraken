@@ -190,12 +190,23 @@ func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) (err error) {
 		return err
 	}
 
+	info, err := u.store.GetUploadFileStat(srcuuid)
+	if err != nil {
+		return err
+	}
+
+	readCloser, err := u.store.GetUploadFileReader(srcuuid)
+	if err != nil {
+		return err
+	}
+	defer readCloser.Close()
+
 	err = u.store.MoveUploadFileToCache(srcuuid, destsha)
 	if err != nil {
 		return err
 	}
 
-	err = u.transferer.Upload(destsha)
+	err = u.transferer.Upload(destsha, readCloser, info.Size())
 	if err != nil {
 		return err
 	}
@@ -209,16 +220,26 @@ func (u *Uploads) putBlobData(fileName string, content []byte) error {
 	if err := u.store.CreateUploadFile(randFileName, int64(len(content))); err != nil {
 		return err
 	}
-	writer, err := u.store.GetUploadFileReadWriter(randFileName)
+
+	rw, err := u.store.GetUploadFileReadWriter(randFileName)
 	if err != nil {
 		return err
 	}
-	_, err = writer.Write(content)
+	defer rw.Close()
+
+	_, err = rw.Write(content)
 	if err != nil {
-		writer.Close()
 		return err
 	}
-	writer.Close()
+
+	if _, err := rw.Seek(0, 0); err != nil {
+		return err
+	}
+
+	info, err := u.store.GetUploadFileStat(randFileName)
+	if err != nil {
+		return err
+	}
 
 	err = u.store.MoveUploadFileToCache(randFileName, fileName)
 	if os.IsExist(err) {
@@ -229,7 +250,7 @@ func (u *Uploads) putBlobData(fileName string, content []byte) error {
 		return err
 	}
 
-	err = u.transferer.Upload(fileName)
+	err = u.transferer.Upload(fileName, rw, info.Size())
 	if err != nil {
 		return err
 	}

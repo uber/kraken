@@ -8,6 +8,7 @@ import (
 	store "code.uber.internal/infra/kraken/lib/store"
 	base "code.uber.internal/infra/kraken/lib/store/base"
 	gomock "github.com/golang/mock/gomock"
+	io "io"
 	os "os"
 	reflect "reflect"
 )
@@ -45,6 +46,18 @@ func (m *MockFileStore) Config() store.Config {
 // Config indicates an expected call of Config
 func (mr *MockFileStoreMockRecorder) Config() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Config", reflect.TypeOf((*MockFileStore)(nil).Config))
+}
+
+// CreateCacheFile mocks base method
+func (m *MockFileStore) CreateCacheFile(arg0 string, arg1 io.Reader) error {
+	ret := m.ctrl.Call(m, "CreateCacheFile", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateCacheFile indicates an expected call of CreateCacheFile
+func (mr *MockFileStoreMockRecorder) CreateCacheFile(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCacheFile", reflect.TypeOf((*MockFileStore)(nil).CreateCacheFile), arg0, arg1)
 }
 
 // CreateDownloadFile mocks base method

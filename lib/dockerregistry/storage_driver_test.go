@@ -15,7 +15,6 @@ import (
 )
 
 func TestStorageDriverGetContent(t *testing.T) {
-	require := require.New(t)
 	sd, testImage, cleanup := genStorageDriver()
 	defer cleanup()
 
@@ -39,8 +38,13 @@ func TestStorageDriverGetContent(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetContent %s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			data, err := sd.GetContent(context.Background(), tc.input)
 			require.Equal(tc.data, data)
+			if tc.err == nil {
+				require.NoError(err)
+				return
+			}
 			require.Equal(tc.err, err)
 		})
 	}

@@ -3,18 +3,12 @@ package transfer
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
-	"os"
 	"strings"
 	"sync"
 
-	"github.com/docker/distribution/uuid"
-
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
-	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/utils"
 	"code.uber.internal/infra/kraken/utils/errutil"
 )
 
@@ -31,20 +25,17 @@ type OriginClusterTransferer struct {
 	// numWorkers ensures this concurrency
 	concurrency int
 	numWorkers  chan struct{}
-	store       store.FileStore
 }
 
 // NewOriginClusterTransferer creates a new sharded blob transferer
 func NewOriginClusterTransferer(
 	concurrency int,
-	store store.FileStore,
 	trackerAddr string,
 	originAddr string,
 	blobClientProvider blobclient.Provider) *OriginClusterTransferer {
 	manifestClient := &HTTPManifestClient{trackerAddr}
 	return &OriginClusterTransferer{
 		originAddr:         originAddr,
-		store:              store,
 		blobClientProvider: blobClientProvider,
 		manifestClient:     manifestClient,
 		concurrency:        concurrency,
@@ -53,7 +44,7 @@ func NewOriginClusterTransferer(
 }
 
 // Download tries to download blob from several locations and returns error if failed to download from all locations
-func (t *OriginClusterTransferer) Download(digest string) error {
+func (t *OriginClusterTransferer) Download(digest string) (io.ReadCloser, error) {
 	t.reserveWorker()
 	defer t.releaseWorker()
 
@@ -61,7 +52,7 @@ func (t *OriginClusterTransferer) Download(digest string) error {
 	client := t.blobClientProvider.Provide(t.originAddr)
 	locs, err := client.Locations(imageDigest)
 	if err != nil {
-		return fmt.Errorf("unable to get pull blob locations: %s", err)
+		return nil, fmt.Errorf("unable to get pull blob locations: %s", err)
 	}
 
 	// Download will succeed if at least one location has the data
@@ -73,36 +64,16 @@ func (t *OriginClusterTransferer) Download(digest string) error {
 			errs = append(errs, fmt.Sprintf("failed to pull blob from %s: %s", loc, err))
 			continue
 		}
-		defer readCloser.Close()
-		err = t.saveBlob(readCloser, imageDigest)
-		if err != nil {
-			errs = append(errs, fmt.Sprintf("failed to save %s: %s", digest, err))
-			// TODO (@evelynl): should it continue? If store is having an issue (for exmaple, running of the disk space),
-			// this call will pull useless blobs from all origins.
-			break
-		} else {
-			return nil
-		}
+		return readCloser, nil
 	}
 
-	return fmt.Errorf("failed to pull blob from all locations: %s", strings.Join(errs, ", "))
+	return nil, fmt.Errorf("failed to pull blob from all locations: %s", strings.Join(errs, ", "))
 }
 
-func (t *OriginClusterTransferer) pushBlob(d image.Digest, loc string) error {
+func (t *OriginClusterTransferer) pushBlob(d image.Digest, reader io.Reader, size int64, loc string) error {
 	client := t.blobClientProvider.Provide(loc)
 
-	f, err := t.store.GetCacheFileReader(d.Hex())
-	if err != nil {
-		return fmt.Errorf("failed to get reader: %s", err)
-	}
-	defer f.Close()
-
-	info, err := t.store.GetCacheFileStat(d.Hex())
-	if err != nil {
-		return fmt.Errorf("failed to get file stat: %s", err)
-	}
-
-	if err := client.PushBlob(d, f, info.Size()); err != nil {
+	if err := client.PushBlob(d, reader, size); err != nil {
 		return fmt.Errorf("failed to push blob: %s", err)
 	}
 
@@ -129,7 +100,7 @@ func (e uploadQuorumError) Error() string {
 
 // Upload tries to upload blobs to multiple locations and returns error if
 // a majority of locations failed to receive the blob
-func (t *OriginClusterTransferer) Upload(digest string) error {
+func (t *OriginClusterTransferer) Upload(digest string, reader io.Reader, size int64) error {
 	t.reserveWorker()
 	defer t.releaseWorker()
 
@@ -167,20 +138,39 @@ func (t *OriginClusterTransferer) Upload(digest string) error {
 		}
 	}()
 
+	m := make(map[string]*io.PipeReader)
+	var pipeWriters []*io.PipeWriter
+	for _, loc := range locs {
+		r, w := io.Pipe()
+		m[loc] = r
+		pipeWriters = append(pipeWriters, w)
+	}
+
+	go func() {
+		var ioWriters []io.Writer
+		for _, w := range pipeWriters {
+			defer w.Close()
+			ioWriters = append(ioWriters, w)
+		}
+
+		mw := io.MultiWriter(ioWriters...)
+		io.Copy(mw, reader)
+	}()
+
 	var mu sync.Mutex
 	var errs errutil.MultiError
 
 	wg := sync.WaitGroup{}
-	for _, loc := range locs {
+	for loc, pipeR := range m {
 		wg.Add(1)
-		go func(loc string) {
+		go func(loc string, reader io.Reader) {
 			defer wg.Done()
-			if err := t.pushBlob(imageDigest, loc); err != nil {
+			if err := t.pushBlob(imageDigest, reader, size, loc); err != nil {
 				mu.Lock()
 				errs = append(errs, pushBlobError{imageDigest, loc, err})
 				mu.Unlock()
 			}
-		}(loc)
+		}(loc, pipeR)
 	}
 	wg.Wait()
 
@@ -198,102 +188,27 @@ func (t *OriginClusterTransferer) Upload(digest string) error {
 }
 
 // GetManifest gets and saves manifest given addr, repo and tag
-func (t *OriginClusterTransferer) GetManifest(repo, tag string) (digest string, err error) {
+func (t *OriginClusterTransferer) GetManifest(repo, tag string) (io.ReadCloser, error) {
 	t.reserveWorker()
 	defer t.releaseWorker()
 
 	readCloser, err := t.manifestClient.GetManifest(repo, tag)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	defer readCloser.Close()
-
-	data, err := ioutil.ReadAll(readCloser)
-	if err != nil {
-		return "", fmt.Errorf("failed to read manifest: %s", err)
-	}
-
-	_, manifestDigest, err := utils.ParseManifestV2(data)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse manifest for %s:%s: %s", repo, tag, err)
-	}
-
-	// Store manifest
-	manifestDigestTemp := manifestDigest + "." + uuid.Generate().String()
-	if err = t.store.CreateUploadFile(manifestDigestTemp, 0); err != nil {
-		return "", fmt.Errorf("failed to create file %s: %s", manifestDigest, err)
-	}
-
-	writer, err := t.store.GetUploadFileReadWriter(manifestDigestTemp)
-	if err != nil {
-		return "", fmt.Errorf("failed to get writer %s: %s", manifestDigest, err)
-	}
-
-	_, err = writer.Write(data)
-	if err != nil {
-		return "", fmt.Errorf("failed to write %s: %s", manifestDigest, err)
-	}
-	writer.Close()
-
-	err = t.store.MoveUploadFileToCache(manifestDigestTemp, manifestDigest)
-	// It is ok if move fails on file exist error
-	if err != nil && !os.IsExist(err) {
-		return "", fmt.Errorf("failed to move %s to cache: %s", manifestDigest, err)
-	}
-
-	return manifestDigest, nil
+	return readCloser, nil
 }
 
 // PostManifest posts manifest to addr given repo and tag
-func (t *OriginClusterTransferer) PostManifest(repo, tag, manifest string) error {
+func (t *OriginClusterTransferer) PostManifest(repo, tag, manifest string, reader io.Reader) error {
 	t.reserveWorker()
 	defer t.releaseWorker()
 
-	readCloser, err := t.store.GetCacheFileReader(manifest)
-	if err != nil {
-		return fmt.Errorf("failed to get reader for %s: %s", manifest, err)
-	}
-	defer readCloser.Close()
-
-	err = t.manifestClient.PostManifest(repo, tag, manifest, readCloser)
+	err := t.manifestClient.PostManifest(repo, tag, manifest, reader)
 	if err != nil {
 		return fmt.Errorf("failed to post manifest %s:%s: %s", repo, tag, err)
 	}
 
-	return nil
-}
-
-func (t *OriginClusterTransferer) saveBlob(reader io.Reader, digest image.Digest) error {
-	// Store layer with a tmp name and then move to cache
-	// This allows multiple threads to pull the same blob
-	tmp := fmt.Sprintf("%s.%s", digest.Hex(), uuid.Generate().String())
-	if err := t.store.CreateUploadFile(tmp, 0); err != nil {
-		return fmt.Errorf("failed to create upload file: %s", err)
-	}
-	w, err := t.store.GetUploadFileReadWriter(tmp)
-	if err != nil {
-		return fmt.Errorf("failed to get writer: %s", err)
-	}
-	defer w.Close()
-
-	// Stream to file and verify content at the same time
-	r := io.TeeReader(reader, w)
-
-	verified, err := image.Verify(digest, r)
-	if err != nil {
-		return fmt.Errorf("failed to verify data: %s", err)
-	}
-	if !verified {
-		// TODO: Delete tmp file on error
-		return fmt.Errorf("failed to verify data: digests do not match")
-	}
-
-	if err := t.store.MoveUploadFileToCache(tmp, digest.Hex()); err != nil {
-		if !os.IsExist(err) {
-			return fmt.Errorf("failed to move upload file to cache: %s", err)
-		}
-		// Ignore if another thread is pulling the same blob because it is normal
-	}
 	return nil
 }
 
