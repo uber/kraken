@@ -85,8 +85,8 @@ func (c *SchedulerClient) DownloadTorrent(name string) (io.ReadCloser, error) {
 	var err error
 	stopwatch := c.stats.SubScope("torrent").SubScope(name).Timer("download_time").Start()
 
-	if c.config.Disabled {
-		return nil, errors.New("torrent disabled")
+	if !c.config.Enabled {
+		return nil, errors.New("torrent not enabled")
 	}
 
 	miRaw, err := c.store.GetDownloadOrCacheFileMeta(name)
@@ -124,8 +124,8 @@ func (c *SchedulerClient) DownloadTorrent(name string) (io.ReadCloser, error) {
 
 // CreateTorrentFromFile creates a torrent from file and adds torrent to scheduler for seeding
 func (c *SchedulerClient) CreateTorrentFromFile(name, filepath string) error {
-	if c.config.Disabled {
-		log.Info("Torrent disabled")
+	if !c.config.Enabled {
+		log.Info("Torrent not enabled")
 		return nil
 	}
 
@@ -220,8 +220,8 @@ func (c *SchedulerClient) GetPeerContext() (peercontext.PeerContext, error) {
 
 // GetManifest queries tracker for manifest and stores manifest locally
 func (c *SchedulerClient) GetManifest(repo, tag string) (io.ReadCloser, error) {
-	if c.config.Disabled {
-		return nil, fmt.Errorf("Torrent disabled")
+	if !c.config.Enabled {
+		return nil, fmt.Errorf("Torrent not enabled")
 	}
 	name := fmt.Sprintf("%s:%s", repo, tag)
 
@@ -231,8 +231,8 @@ func (c *SchedulerClient) GetManifest(repo, tag string) (io.ReadCloser, error) {
 
 // PostManifest saves manifest specified by the tag it referred in a tracker
 func (c *SchedulerClient) PostManifest(repo, tag, manifest string, reader io.Reader) error {
-	if c.config.Disabled {
-		log.Info("Torrent disabled. Nothing is to be done here")
+	if !c.config.Enabled {
+		log.Info("Torrent not enabled. Nothing is to be done here")
 		return nil
 	}
 

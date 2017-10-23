@@ -602,7 +602,7 @@ func (s Server) commitUpload(d image.Digest, uploadUUID string) error {
 	}
 
 	// Add torrent - announce to tracker and start seeding.
-	if !s.torrentConfig.Disabled {
+	if s.torrentConfig.Enabled {
 		filePath, err := s.fileStore.GetCacheFilePath(d.Hex())
 		if err != nil {
 			return serverErrorf("failed to get file path for digest %q for upload %q: %s", d, uploadUUID, err)

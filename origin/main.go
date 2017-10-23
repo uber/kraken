@@ -55,7 +55,7 @@ func main() {
 
 	// Initialize and start P2P scheduler client:
 	var torrentClient torrent.Client
-	if !config.Torrent.Disabled {
+	if config.Torrent.Enabled {
 		pctx, err := peercontext.New(
 			peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *peerIP, *peerPort)
 		if err != nil {
