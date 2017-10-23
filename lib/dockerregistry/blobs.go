@@ -65,6 +65,7 @@ func (b *Blobs) getBlobStat(fileName string) (storagedriver.FileInfo, error) {
 	if err != nil {
 		readCloser, err := b.transferer.Download(fileName)
 		if err != nil {
+			log.Errorf("failed to download %s: %s", fileName, err)
 			return nil, storagedriver.PathNotFoundError{
 				DriverName: "kraken",
 				Path:       fileName,
@@ -109,7 +110,7 @@ func (b *Blobs) getOrDownloadBlobReader(fileName string, offset int64) (reader i
 	if err != nil {
 		readCloser, err := b.transferer.Download(fileName)
 		if err != nil {
-			log.Errorf("failed to download %s: %s", fileName, err.Error())
+			log.Errorf("failed to download %s: %s", fileName, err)
 			return nil, storagedriver.PathNotFoundError{
 				DriverName: "kraken",
 				Path:       fileName,

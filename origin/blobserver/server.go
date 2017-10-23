@@ -395,7 +395,7 @@ func (s Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) er
 	if err := json.NewEncoder(w).Encode(pctx); err != nil {
 		return serverErrorf("error converting peer context to json: %s", err)
 	}
-	log.Debugf("successfully get peer context %v", s.pctx)
+	log.Debugf("successfully get peer context %v", pctx)
 	return nil
 }
 
