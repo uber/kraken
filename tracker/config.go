@@ -14,8 +14,7 @@ import (
 // Config defines tracker configuration.
 type Config struct {
 	Logging           log.Configuration        `yaml:"logging"`
-	BackendPort       int                      `yaml:"backendport"`
-	FrontendPort      int                      `yaml:"frontendport"`
+	Port              int                      `yaml:"port"`
 	Storage           storage.Config           `yaml:"storage"`
 	Service           service.Config           `yaml:"service"`
 	PeerHandoutPolicy peerhandoutpolicy.Config `yaml:"peerhandoutpolicy"`

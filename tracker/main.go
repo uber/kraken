@@ -27,14 +27,13 @@ func main() {
 	config.Logging.TextFormatter = &formatter
 	log.Configure(&config.Logging, false)
 
-	// stats
 	stats, closer, err := metrics.New(config.Metrics)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}
 	defer closer.Close()
 
-	// root metrics scope for the tracker
+	// Root metrics scope for the tracker.
 	stats = stats.SubScope("kraken.tracker")
 
 	storeProvider := storage.NewStoreProvider(config.Storage, config.Nemo)
@@ -74,7 +73,7 @@ func main() {
 		manifestStore,
 		originResolver)
 
-	addr := fmt.Sprintf(":%d", config.BackendPort)
+	addr := fmt.Sprintf(":%d", config.Port)
 	log.Infof("Listening on %s", addr)
 
 	go log.Fatal(http.ListenAndServe(addr, h))
@@ -82,7 +81,7 @@ func main() {
 	// Handle SIGINT and SIGTERM.
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-	<-ch // blocks until shutdown is signaled
+	<-ch // Blocks until shutdown is signaled.
 
 	log.Info("Shutdown complete")
 }
