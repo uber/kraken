@@ -92,7 +92,7 @@ func startServer(
 	stats := tally.NewTestScope("", nil)
 
 	var torrentConfig torrent.Config
-	torrentConfig.Disabled = true
+	torrentConfig.Enabled = false
 	s, err := New(config, torrentConfig, stats, host, fs, cp, nil)
 	if err != nil {
 		panic(err)

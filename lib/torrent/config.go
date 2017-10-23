@@ -6,6 +6,6 @@ import "code.uber.internal/infra/kraken/lib/torrent/scheduler"
 type Config struct {
 	PeerIDFactory string           `yaml:"peer_id_factory"`
 	PieceLength   int64            `yaml:"piece_length"`
-	Disabled      bool             `yaml:"disabled"`
+	Enabled       bool             `yaml:"enabled"`
 	Scheduler     scheduler.Config `yaml:"scheduler"`
 }
