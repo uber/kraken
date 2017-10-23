@@ -73,7 +73,7 @@ func (t *OriginClusterTransferer) Download(digest string) (io.ReadCloser, error)
 func (t *OriginClusterTransferer) pushBlob(d image.Digest, reader io.Reader, size int64, loc string) error {
 	client := t.blobClientProvider.Provide(loc)
 
-	if err := client.PushBlob(d, reader, size); err != nil {
+	if err := client.PushBlob(d, reader, size); err != nil && err != blobclient.ErrBlobExist {
 		return fmt.Errorf("failed to push blob: %s", err)
 	}
 

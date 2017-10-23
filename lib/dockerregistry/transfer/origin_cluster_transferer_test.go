@@ -11,6 +11,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/randutil"
 
 	"github.com/stretchr/testify/require"
@@ -114,7 +115,31 @@ func TestUploadSuccessAll(t *testing.T) {
 	for _, loc := range locs {
 		mocks.blobClientProvider.EXPECT().Provide(loc).Return(mocks.blobClients[loc])
 		mocks.blobClients[loc].EXPECT().PushBlob(digest, gomock.Any(), size).Return(nil)
+	}
 
+	require.NoError(transferer.Upload(digest.Hex(), r, size))
+}
+
+func TestUploadSuccessAllBlobExist(t *testing.T) {
+	require := require.New(t)
+	locs := []string{"loc1", "loc2", "loc3"}
+	mocks := newOrginClusterTransfererMocks(t, locs...)
+	defer mocks.ctrl.Finish()
+	transferer := testOriginClusterTransferer(mocks)
+
+	var size int64 = 256
+	blob := randutil.Text(int(size))
+	digest, err := image.NewDigester().FromBytes(blob)
+	require.NoError(err)
+
+	r, cleanup := store.NewMockFileReadWriter(blob)
+	defer cleanup()
+
+	mocks.blobClientProvider.EXPECT().Provide(transferer.originAddr).Return(mocks.blobClients[transferer.originAddr])
+	mocks.blobClients[transferer.originAddr].EXPECT().Locations(digest).Return(locs, nil).Times(2)
+	for _, loc := range locs {
+		mocks.blobClientProvider.EXPECT().Provide(loc).Return(mocks.blobClients[loc])
+		mocks.blobClients[loc].EXPECT().PushBlob(digest, gomock.Any(), size).Return(blobclient.ErrBlobExist)
 	}
 
 	require.NoError(transferer.Upload(digest.Hex(), r, size))
