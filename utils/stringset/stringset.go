@@ -29,6 +29,26 @@ func (s Set) Has(x string) bool {
 	return ok
 }
 
+// Sub returns a new set which is the result of s minus s2.
+func (s Set) Sub(s2 Set) Set {
+	result := make(Set)
+	for x := range s {
+		if !s2.Has(x) {
+			result.Add(x)
+		}
+	}
+	return result
+}
+
+// ToSlice converts s to a slice.
+func (s Set) ToSlice() []string {
+	var xs []string
+	for x := range s {
+		xs = append(xs, x)
+	}
+	return xs
+}
+
 // Equal returns whether s1 and s2 contain the same elements.
 func Equal(s1 Set, s2 Set) bool {
 	if len(s1) != len(s2) {

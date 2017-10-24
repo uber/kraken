@@ -4,6 +4,7 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/go-common.git/x/mysql"
 
+	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
@@ -18,7 +19,7 @@ type Config struct {
 	Storage           storage.Config           `yaml:"storage"`
 	Service           service.Config           `yaml:"service"`
 	PeerHandoutPolicy peerhandoutpolicy.Config `yaml:"peerhandoutpolicy"`
-	OriginCluster     OriginClusterConfig      `yaml:"origin_cluster"`
+	Origin            OriginConfig             `yaml:"origin"`
 	Metrics           metrics.Config           `yaml:"metrics"`
 
 	// Unfortunately, nemo must be in top-level configuration to allow secrets
@@ -26,10 +27,9 @@ type Config struct {
 	Nemo mysql.Configuration `yaml:"nemo"`
 }
 
-// OriginClusterConfig defines configuration for tracker's dependency on the
+// OriginConfig defines configuration for tracker's dependency on the
 // origin cluster.
-type OriginClusterConfig struct {
-	DNS     string            `yaml:"dns"`
-	Retries int               `yaml:"retries"`
-	Client  blobclient.Config `yaml:"client"`
+type OriginConfig struct {
+	RoundRobin serverset.RoundRobinConfig `yaml:"round_robin"`
+	Client     blobclient.Config          `yaml:"client"`
 }

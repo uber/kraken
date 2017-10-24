@@ -100,7 +100,13 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/lib/dockerregistry/transfer/mocktransferer.go \
 		-package mocktransferer \
-		code.uber.internal/infra/kraken/lib/dockerregistry/transfer ImageTransferer,ManifestClient
+		code.uber.internal/infra/kraken/lib/dockerregistry/transfer ImageTransferer
+
+	mkdir -p mocks/lib/dockerregistry/transfer/manifestclient
+	$(mockgen) \
+		-destination=mocks/lib/dockerregistry/transfer/manifestclient/mockmanifestclient.go \
+		-package mockmanifestclient \
+		code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient Client
 
 	mkdir -p mocks/os
 	$(mockgen) \

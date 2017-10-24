@@ -1,11 +1,8 @@
 package blobclient
 
 import (
-	"errors"
-
-	"go.uber.org/atomic"
-
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/serverset"
 )
 
 // ClusterResolver defines an interface for accessing Clients at a cluster
@@ -14,55 +11,38 @@ type ClusterResolver interface {
 	Resolve(d image.Digest) ([]Client, error)
 }
 
-// RoundRobinResolver implements ClusterResolver using a list of
-// hosts (which may be DNS servers).
+// RoundRobinResolver implements ClusterResolver using a list of addresses
+// (which may be DNS servers).
 type RoundRobinResolver struct {
 	provider Provider
-	retries  int
-	cursor   *atomic.Uint32
-	hosts    []string
+	servers  *serverset.RoundRobin
 }
 
 // NewRoundRobinResolver returns a new RoundRobinResolver.
 func NewRoundRobinResolver(
 	p Provider,
-	retries int,
-	hosts ...string) (*RoundRobinResolver, error) {
+	config serverset.RoundRobinConfig) (*RoundRobinResolver, error) {
 
-	if len(hosts) == 0 {
-		return nil, errors.New("no hosts provided")
+	servers, err := serverset.NewRoundRobin(config)
+	if err != nil {
+		return nil, err
 	}
-	return &RoundRobinResolver{
-		provider: p,
-		retries:  retries,
-		cursor:   atomic.NewUint32(0),
-		hosts:    hosts,
-	}, nil
-}
-
-func (r *RoundRobinResolver) locations(d image.Digest) ([]string, error) {
-	var err error
-	for i := 0; i < r.retries; i++ {
-		next := r.cursor.Inc() % uint32(len(r.hosts))
-		server := r.hosts[next]
-		var locs []string
-		locs, err = r.provider.Provide(server).Locations(d)
-		if err == nil {
-			return locs, nil
-		}
-	}
-	return nil, err
+	return &RoundRobinResolver{p, servers}, nil
 }
 
 // Resolve returns a list of Clients for the origin servers which own d.
 func (r *RoundRobinResolver) Resolve(d image.Digest) ([]Client, error) {
-	locs, err := r.locations(d)
-	if err != nil {
-		return nil, err
+	var err error
+	for it := r.servers.Iter(); it.HasNext(); it.Next() {
+		var locs []string
+		locs, err = r.provider.Provide(it.Addr()).Locations(d)
+		if err == nil {
+			var clients []Client
+			for _, loc := range locs {
+				clients = append(clients, r.provider.Provide(loc))
+			}
+			return clients, nil
+		}
 	}
-	var clients []Client
-	for _, loc := range locs {
-		clients = append(clients, r.provider.Provide(loc))
-	}
-	return clients, nil
+	return nil, err
 }
