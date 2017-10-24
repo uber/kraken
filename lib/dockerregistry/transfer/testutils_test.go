@@ -9,45 +9,41 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/mocks/lib/dockerregistry/transfer"
+	"code.uber.internal/infra/kraken/mocks/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 )
 
-const _mockOriginDNS string = "mockOriginDns"
-
 type originClusterTransfererMocks struct {
-	originDNS          string
-	ctrl               *gomock.Controller
-	blobClientProvider *mockblobclient.MockProvider
-	blobClients        map[string]*mockblobclient.MockClient
-	manifestClient     *mocktransferer.MockManifestClient
+	ctrl           *gomock.Controller
+	originResolver *mockblobclient.MockClusterResolver
+	manifestClient *mockmanifestclient.MockClient
 }
 
-func newOrginClusterTransfererMocks(t *testing.T, originAddrs ...string) *originClusterTransfererMocks {
+func newOrginClusterTransfererMocks(t *testing.T) *originClusterTransfererMocks {
 	ctrl := gomock.NewController(t)
-	m := make(map[string]*mockblobclient.MockClient)
-	for _, addr := range originAddrs {
-		m[addr] = mockblobclient.NewMockClient(ctrl)
-	}
-	m[_mockOriginDNS] = mockblobclient.NewMockClient(ctrl)
-
 	return &originClusterTransfererMocks{
-		originDNS:          _mockOriginDNS,
-		ctrl:               ctrl,
-		blobClientProvider: mockblobclient.NewMockProvider(ctrl),
-		blobClients:        m,
-		manifestClient:     mocktransferer.NewMockManifestClient(ctrl),
+		ctrl:           ctrl,
+		originResolver: mockblobclient.NewMockClusterResolver(ctrl),
+		manifestClient: mockmanifestclient.NewMockClient(ctrl),
 	}
 }
 
-func testOriginClusterTransferer(mocks *originClusterTransfererMocks) *OriginClusterTransferer {
-	return &OriginClusterTransferer{
-		originAddr:         mocks.originDNS,
-		blobClientProvider: mocks.blobClientProvider,
-		manifestClient:     mocks.manifestClient,
-		concurrency:        1,
-		numWorkers:         make(chan struct{}, 1),
+func (m *originClusterTransfererMocks) newTransferer() *OriginClusterTransferer {
+	return NewOriginClusterTransferer(1, m.originResolver, m.manifestClient)
+}
+
+func (m *originClusterTransfererMocks) expectClients(d image.Digest, locs ...string) []*mockblobclient.MockClient {
+	var mockClients []*mockblobclient.MockClient
+	var clients []blobclient.Client
+	for _, loc := range locs {
+		c := mockblobclient.NewMockClient(m.ctrl)
+		c.EXPECT().Addr().Return(loc).AnyTimes()
+		mockClients = append(mockClients, c)
+		clients = append(clients, c)
 	}
+	m.originResolver.EXPECT().Resolve(d).Return(clients, nil).MinTimes(1)
+	return mockClients
 }
 
 func mockManifestReadWriter() (rw *store.MockFileReadWriter, digest image.Digest, cleanup func()) {

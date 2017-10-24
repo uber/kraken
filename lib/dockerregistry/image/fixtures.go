@@ -11,3 +11,13 @@ func DigestFixture() Digest {
 	}
 	return d
 }
+
+// DigestWithBlobFixture returns a random digest and its corresponding blob.
+func DigestWithBlobFixture() (d Digest, blob []byte) {
+	blob = randutil.Text(256)
+	d, err := NewDigester().FromBytes(blob)
+	if err != nil {
+		panic(err)
+	}
+	return d, blob
+}

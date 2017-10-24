@@ -3,23 +3,24 @@ package transfer
 import (
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"sync"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/errutil"
+	"code.uber.internal/infra/kraken/utils/stringset"
 )
 
 var _ ImageTransferer = (*OriginClusterTransferer)(nil)
 
 // OriginClusterTransferer transfers blobs in a distributed system
 type OriginClusterTransferer struct {
-	originAddr string
-
-	blobClientProvider blobclient.Provider
-	manifestClient     ManifestClient
+	originResolver blobclient.ClusterResolver
+	manifestClient manifestclient.Client
 
 	// concurrency defines the number of concurrent downloads and uploads allowed
 	// numWorkers ensures this concurrency
@@ -30,16 +31,14 @@ type OriginClusterTransferer struct {
 // NewOriginClusterTransferer creates a new sharded blob transferer
 func NewOriginClusterTransferer(
 	concurrency int,
-	trackerAddr string,
-	originAddr string,
-	blobClientProvider blobclient.Provider) *OriginClusterTransferer {
-	manifestClient := &HTTPManifestClient{trackerAddr}
+	originResolver blobclient.ClusterResolver,
+	manifestClient manifestclient.Client) *OriginClusterTransferer {
+
 	return &OriginClusterTransferer{
-		originAddr:         originAddr,
-		blobClientProvider: blobClientProvider,
-		manifestClient:     manifestClient,
-		concurrency:        concurrency,
-		numWorkers:         make(chan struct{}, concurrency),
+		originResolver: originResolver,
+		manifestClient: manifestClient,
+		concurrency:    concurrency,
+		numWorkers:     make(chan struct{}, concurrency),
 	}
 }
 
@@ -48,129 +47,110 @@ func (t *OriginClusterTransferer) Download(digest string) (io.ReadCloser, error)
 	t.reserveWorker()
 	defer t.releaseWorker()
 
-	imageDigest := image.NewSHA256DigestFromHex(digest)
-	client := t.blobClientProvider.Provide(t.originAddr)
-	locs, err := client.Locations(imageDigest)
+	d := image.NewSHA256DigestFromHex(digest)
+
+	clients, err := t.originResolver.Resolve(d)
 	if err != nil {
-		return nil, fmt.Errorf("unable to get pull blob locations: %s", err)
+		return nil, fmt.Errorf("unable to resolve origin cluster: %s", err)
 	}
 
 	// Download will succeed if at least one location has the data
-	var errs []string
-	for _, loc := range locs {
-		client := t.blobClientProvider.Provide(loc)
-		readCloser, err := client.GetBlob(imageDigest)
+	var errs []error
+	for _, client := range clients {
+		blob, err := client.GetBlob(d)
 		if err != nil {
-			errs = append(errs, fmt.Sprintf("failed to pull blob from %s: %s", loc, err))
+			errs = append(errs, fmt.Errorf("failed to pull blob from %s: %s", client.Addr(), err))
 			continue
 		}
-		return readCloser, nil
+		return blob, nil
 	}
 
-	return nil, fmt.Errorf("failed to pull blob from all locations: %s", strings.Join(errs, ", "))
+	return nil, fmt.Errorf("failed to pull blob from all locations: %s", errutil.Join(errs))
 }
 
-func (t *OriginClusterTransferer) pushBlob(d image.Digest, reader io.Reader, size int64, loc string) error {
-	client := t.blobClientProvider.Provide(loc)
-
-	if err := client.PushBlob(d, reader, size); err != nil && err != blobclient.ErrBlobExist {
-		return fmt.Errorf("failed to push blob: %s", err)
+func toLocations(clients []blobclient.Client) stringset.Set {
+	locs := make(stringset.Set)
+	for _, c := range clients {
+		locs.Add(c.Addr())
 	}
+	return locs
+}
 
+func (t *OriginClusterTransferer) ensureNoLocationChanges(initLocs stringset.Set, d image.Digest) error {
+	newClients, err := t.originResolver.Resolve(d)
+	if err != nil {
+		return fmt.Errorf("unable to resolve origin cluster: %s", err)
+	}
+	newLocs := toLocations(newClients)
+	missingLocs := newLocs.Sub(initLocs)
+	if len(missingLocs) > 0 {
+		return fmt.Errorf("missing blobs at locations: %s", strings.Join(missingLocs.ToSlice(), ","))
+	}
 	return nil
 }
 
-type pushBlobError struct {
-	d   image.Digest
-	loc string
-	err error
-}
-
-func (e pushBlobError) Error() string {
-	return fmt.Sprintf("failed to push digest %q to location %s: %s", e.d, e.loc, e.err)
-}
-
-type uploadQuorumError struct {
-	errs errutil.MultiError
-}
-
-func (e uploadQuorumError) Error() string {
-	return fmt.Sprintf("failed to push blob to quorum of locations: %s", e.errs)
+// Splits src into n thread-safe readers which only buffer data as needed.
+func split(src io.Reader, n int) []io.ReadCloser {
+	var rs []io.ReadCloser
+	var ws []io.WriteCloser
+	for i := 0; i < n; i++ {
+		r, w := io.Pipe()
+		rs = append(rs, r)
+		ws = append(ws, w)
+	}
+	// Exits after every returned ReadCloser is closed.
+	go func() {
+		var writers []io.Writer
+		for _, w := range ws {
+			defer w.Close()
+			// Cannot cast []io.WriteCloser to []io.Writer (sigh).
+			writers = append(writers, w)
+		}
+		io.Copy(io.MultiWriter(writers...), src)
+	}()
+	return rs
 }
 
 // Upload tries to upload blobs to multiple locations and returns error if
 // a majority of locations failed to receive the blob
-func (t *OriginClusterTransferer) Upload(digest string, reader io.Reader, size int64) error {
+func (t *OriginClusterTransferer) Upload(digest string, blob io.Reader, size int64) error {
 	t.reserveWorker()
 	defer t.releaseWorker()
 
-	imageDigest := image.NewSHA256DigestFromHex(digest)
-	client := t.blobClientProvider.Provide(t.originAddr)
-	locs, err := client.Locations(imageDigest)
+	d := image.NewSHA256DigestFromHex(digest)
+
+	clients, err := t.originResolver.Resolve(d)
 	if err != nil {
-		return fmt.Errorf("unable to get upload blob locations: %s", err)
+		return fmt.Errorf("unable to resolve origin cluster: %s", err)
 	}
 
 	// Blob locations could change if there is a change in origin config, so we should
 	// compare locations before and after push, and put the missing origin locations to a retry queue
 	defer func() {
-		newlocs, err := client.Locations(imageDigest)
-		if err != nil {
-			log.Debugf("unable to get upload blob locations: %s", err)
-		}
-
-		m := make(map[string]struct{})
-		for _, loc := range locs {
-			m[loc] = struct{}{}
-		}
-
-		var missinglocs []string
-		for _, newloc := range newlocs {
-			_, ok := m[newloc]
-			if !ok {
-				missinglocs = append(missinglocs, newloc)
-			}
-		}
-
-		// TODO (@evelynl): create a retry queue for new locations
-		if missinglocs != nil {
-			log.Errorf("missing blobs at locations: %s", strings.Join(missinglocs, ", "))
+		// TODO(evelynl): Create a retry queue for new locations.
+		if err := t.ensureNoLocationChanges(toLocations(clients), d); err != nil {
+			log.Errorf("Upload error: %s", err)
 		}
 	}()
 
-	m := make(map[string]*io.PipeReader)
-	var pipeWriters []*io.PipeWriter
-	for _, loc := range locs {
-		r, w := io.Pipe()
-		m[loc] = r
-		pipeWriters = append(pipeWriters, w)
-	}
-
-	go func() {
-		var ioWriters []io.Writer
-		for _, w := range pipeWriters {
-			defer w.Close()
-			ioWriters = append(ioWriters, w)
-		}
-
-		mw := io.MultiWriter(ioWriters...)
-		io.Copy(mw, reader)
-	}()
+	blobReaders := split(blob, len(clients))
 
 	var mu sync.Mutex
-	var errs errutil.MultiError
+	var errs []error
 
-	wg := sync.WaitGroup{}
-	for loc, pipeR := range m {
+	var wg sync.WaitGroup
+	for i, client := range clients {
 		wg.Add(1)
-		go func(loc string, reader io.Reader) {
+		go func(client blobclient.Client, blob io.ReadCloser) {
 			defer wg.Done()
-			if err := t.pushBlob(imageDigest, reader, size, loc); err != nil {
+			defer blob.Close()
+			if err := client.PushBlob(d, blob, size); err != nil && err != blobclient.ErrBlobExist {
 				mu.Lock()
-				errs = append(errs, pushBlobError{imageDigest, loc, err})
+				err = fmt.Errorf("failed to push digest %q to location %s: %s", d, client.Addr(), err)
+				errs = append(errs, err)
 				mu.Unlock()
 			}
-		}(loc, pipeR)
+		}(client, blobReaders[i])
 	}
 	wg.Wait()
 
@@ -179,12 +159,12 @@ func (t *OriginClusterTransferer) Upload(digest string, reader io.Reader, size i
 	}
 
 	// We return nil and log error when the push to majority of locations succeeded
-	if len(errs) < len(locs)/2 {
-		log.Errorf("failed to push blob to some locations: %s", errs)
+	if len(errs) < int(math.Ceil(float64(len(clients))/2)) {
+		log.Errorf("failed to push blob to some locations: %s", errutil.Join(errs))
 		return nil
 	}
 
-	return uploadQuorumError{errs}
+	return fmt.Errorf("failed to push blob to majority of locations: %s", errutil.Join(errs))
 }
 
 // GetManifest gets and saves manifest given addr, repo and tag
@@ -192,11 +172,11 @@ func (t *OriginClusterTransferer) GetManifest(repo, tag string) (io.ReadCloser, 
 	t.reserveWorker()
 	defer t.releaseWorker()
 
-	readCloser, err := t.manifestClient.GetManifest(repo, tag)
+	m, err := t.manifestClient.GetManifest(repo, tag)
 	if err != nil {
 		return nil, err
 	}
-	return readCloser, nil
+	return m, nil
 }
 
 // PostManifest posts manifest to addr given repo and tag

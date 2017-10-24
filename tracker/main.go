@@ -57,9 +57,7 @@ func main() {
 	}
 
 	originResolver, err := blobclient.NewRoundRobinResolver(
-		blobclient.NewProvider(config.OriginCluster.Client),
-		config.OriginCluster.Retries,
-		config.OriginCluster.DNS)
+		blobclient.NewProvider(config.Origin.Client), config.Origin.RoundRobin)
 	if err != nil {
 		log.Fatalf("Error creating origin resolver: %s", err)
 	}

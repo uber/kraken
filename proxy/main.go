@@ -8,6 +8,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
+	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -34,11 +35,18 @@ func main() {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
 
-	transferer := transfer.NewOriginClusterTransferer(
-		config.Concurrency,
-		config.TrackAddr,
-		config.OriginAddr,
-		blobclient.NewProvider(blobclient.Config{}))
+	originResolver, err := blobclient.NewRoundRobinResolver(
+		blobclient.NewProvider(config.Origin.Client), config.Origin.RoundRobin)
+	if err != nil {
+		log.Fatalf("Failed to init origin resolver: %s", err)
+	}
+
+	manifestClient, err := manifestclient.New(config.Tracker.RoundRobin)
+	if err != nil {
+		log.Fatalf("Failed to init manifest client: %s", err)
+	}
+
+	transferer := transfer.NewOriginClusterTransferer(config.Concurrency, originResolver, manifestClient)
 
 	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, store, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)

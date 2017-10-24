@@ -1,10 +1,9 @@
 package transfer
 
 import (
+	"bytes"
 	"errors"
-	"fmt"
 	"io/ioutil"
-	"sort"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -12,241 +11,150 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/utils/randutil"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestDownloadSuccess(t *testing.T) {
 	require := require.New(t)
-	locs := []string{"loc1", "loc2", "loc3"}
-	mocks := newOrginClusterTransfererMocks(t, locs...)
+
+	mocks := newOrginClusterTransfererMocks(t)
 	defer mocks.ctrl.Finish()
-	transferer := testOriginClusterTransferer(mocks)
 
-	blob := randutil.Text(256)
-	digest, err := image.NewDigester().FromBytes(blob)
+	transferer := mocks.newTransferer()
+
+	d, blob := image.DigestWithBlobFixture()
+
+	clients := mocks.expectClients(d, "loc1", "loc2", "loc3")
+
+	clients[0].EXPECT().GetBlob(d).Return(ioutil.NopCloser(bytes.NewBuffer(blob)), nil)
+
+	result, err := transferer.Download(d.Hex())
 	require.NoError(err)
-
-	r, cleanup := store.NewMockFileReadWriter(blob)
-	defer cleanup()
-
-	mocks.blobClientProvider.EXPECT().Provide(transferer.originAddr).Return(mocks.blobClients[transferer.originAddr])
-	mocks.blobClients[transferer.originAddr].EXPECT().Locations(digest).Return(locs, nil)
-	mocks.blobClientProvider.EXPECT().Provide("loc1").Return(mocks.blobClients["loc1"])
-	mocks.blobClients["loc1"].EXPECT().GetBlob(digest).Return(r, nil)
-
-	readCloser, err := transferer.Download(digest.Hex())
-	require.NoError(err)
-	defer readCloser.Close()
-	data, err := ioutil.ReadAll(readCloser)
+	defer result.Close()
+	data, err := ioutil.ReadAll(result)
 	require.NoError(err)
 	require.Equal(blob, data)
 }
 
-func TestDownloadRetrySuccess(t *testing.T) {
+func TestDownloadFailure(t *testing.T) {
 	require := require.New(t)
-	locs := []string{"loc1", "loc2", "loc3"}
-	mocks := newOrginClusterTransfererMocks(t, locs...)
+	mocks := newOrginClusterTransfererMocks(t)
 	defer mocks.ctrl.Finish()
-	transferer := testOriginClusterTransferer(mocks)
 
-	blob := randutil.Text(256)
-	digest, err := image.NewDigester().FromBytes(blob)
-	require.NoError(err)
+	transferer := mocks.newTransferer()
 
-	r, cleanup := store.NewMockFileReadWriter(blob)
-	defer cleanup()
+	d := image.DigestFixture()
 
-	mocks.blobClientProvider.EXPECT().Provide(transferer.originAddr).Return(mocks.blobClients[transferer.originAddr])
-	mocks.blobClients[transferer.originAddr].EXPECT().Locations(digest).Return(locs, nil)
-	mocks.blobClientProvider.EXPECT().Provide("loc1").Return(mocks.blobClients["loc1"])
-	mocks.blobClients["loc1"].EXPECT().GetBlob(digest).Return(nil, errors.New("not found"))
-	mocks.blobClientProvider.EXPECT().Provide("loc2").Return(mocks.blobClients["loc1"])
-	mocks.blobClients["loc1"].EXPECT().GetBlob(digest).Return(r, nil)
-
-	readCloser, err := transferer.Download(digest.Hex())
-	require.NoError(err)
-	defer readCloser.Close()
-	data, err := ioutil.ReadAll(readCloser)
-	require.NoError(err)
-	require.Equal(blob, data)
-}
-
-func TestDownloadRetryFailure(t *testing.T) {
-	require := require.New(t)
-	locs := []string{"loc1", "loc2", "loc3"}
-	mocks := newOrginClusterTransfererMocks(t, locs...)
-	defer mocks.ctrl.Finish()
-	transferer := testOriginClusterTransferer(mocks)
-
-	blob := randutil.Text(256)
-	digest, err := image.NewDigester().FromBytes(blob)
-	require.NoError(err)
-
-	mocks.blobClientProvider.EXPECT().Provide(transferer.originAddr).Return(mocks.blobClients[transferer.originAddr])
-	mocks.blobClients[transferer.originAddr].EXPECT().Locations(digest).Return(locs, nil)
-	for _, loc := range locs {
-		mocks.blobClientProvider.EXPECT().Provide(loc).Return(mocks.blobClients[loc])
-		mocks.blobClients[loc].EXPECT().GetBlob(digest).Return(nil, errors.New("not found"))
+	clients := mocks.expectClients(d, "loc1", "loc2", "loc3")
+	for _, c := range clients {
+		c.EXPECT().GetBlob(d).Return(nil, errors.New("some error"))
 	}
 
-	_, err = transferer.Download(digest.Hex())
-	require.Equal(fmt.Errorf("failed to pull blob from all locations: failed to pull blob from loc1: not found, failed to pull blob from loc2: not found, failed to pull blob from loc3: not found"), err)
+	_, err := transferer.Download(d.Hex())
+	require.Error(err)
 }
 
-func TestUploadSuccessAll(t *testing.T) {
-	require := require.New(t)
-	locs := []string{"loc1", "loc2", "loc3"}
-	mocks := newOrginClusterTransfererMocks(t, locs...)
-	defer mocks.ctrl.Finish()
-	transferer := testOriginClusterTransferer(mocks)
-
-	var size int64 = 256
-	blob := randutil.Text(int(size))
-	digest, err := image.NewDigester().FromBytes(blob)
-	require.NoError(err)
-
-	r, cleanup := store.NewMockFileReadWriter(blob)
-	defer cleanup()
-
-	mocks.blobClientProvider.EXPECT().Provide(transferer.originAddr).Return(mocks.blobClients[transferer.originAddr])
-	mocks.blobClients[transferer.originAddr].EXPECT().Locations(digest).Return(locs, nil).Times(2)
-	for _, loc := range locs {
-		mocks.blobClientProvider.EXPECT().Provide(loc).Return(mocks.blobClients[loc])
-		mocks.blobClients[loc].EXPECT().PushBlob(digest, gomock.Any(), size).Return(nil)
+func TestUploadSuccess(t *testing.T) {
+	tests := []struct {
+		description string
+		errors      [3]error
+	}{
+		{
+			"all succeed",
+			[3]error{nil, nil, nil},
+		}, {
+			"blob already exists",
+			[3]error{blobclient.ErrBlobExist, blobclient.ErrBlobExist, blobclient.ErrBlobExist},
+		}, {
+			"majority succeed",
+			[3]error{nil, nil, errors.New("some error")},
+		},
 	}
+	for _, test := range tests {
+		t.Run(test.description, func(t *testing.T) {
+			require := require.New(t)
 
-	require.NoError(transferer.Upload(digest.Hex(), r, size))
-}
+			mocks := newOrginClusterTransfererMocks(t)
+			defer mocks.ctrl.Finish()
 
-func TestUploadSuccessAllBlobExist(t *testing.T) {
-	require := require.New(t)
-	locs := []string{"loc1", "loc2", "loc3"}
-	mocks := newOrginClusterTransfererMocks(t, locs...)
-	defer mocks.ctrl.Finish()
-	transferer := testOriginClusterTransferer(mocks)
+			transferer := mocks.newTransferer()
 
-	var size int64 = 256
-	blob := randutil.Text(int(size))
-	digest, err := image.NewDigester().FromBytes(blob)
-	require.NoError(err)
+			d, blob := image.DigestWithBlobFixture()
+			size := int64(len(blob))
 
-	r, cleanup := store.NewMockFileReadWriter(blob)
-	defer cleanup()
+			clients := mocks.expectClients(d, "loc1", "loc2", "loc3")
+			for i := range test.errors {
+				clients[i].EXPECT().PushBlob(d, gomock.Any(), size).Return(test.errors[i])
+			}
 
-	mocks.blobClientProvider.EXPECT().Provide(transferer.originAddr).Return(mocks.blobClients[transferer.originAddr])
-	mocks.blobClients[transferer.originAddr].EXPECT().Locations(digest).Return(locs, nil).Times(2)
-	for _, loc := range locs {
-		mocks.blobClientProvider.EXPECT().Provide(loc).Return(mocks.blobClients[loc])
-		mocks.blobClients[loc].EXPECT().PushBlob(digest, gomock.Any(), size).Return(blobclient.ErrBlobExist)
+			require.NoError(transferer.Upload(d.Hex(), bytes.NewBuffer(blob), size))
+		})
 	}
-
-	require.NoError(transferer.Upload(digest.Hex(), r, size))
-}
-
-func TestUploadSuccessMajority(t *testing.T) {
-	require := require.New(t)
-	locs := []string{"loc1", "loc2", "loc3", "loc4"}
-	mocks := newOrginClusterTransfererMocks(t, locs...)
-	defer mocks.ctrl.Finish()
-	transferer := testOriginClusterTransferer(mocks)
-
-	var size int64 = 256
-	blob := randutil.Text(int(size))
-	digest, err := image.NewDigester().FromBytes(blob)
-	require.NoError(err)
-
-	r, cleanup := store.NewMockFileReadWriter(blob)
-	defer cleanup()
-
-	mocks.blobClientProvider.EXPECT().Provide(transferer.originAddr).Return(mocks.blobClients[transferer.originAddr])
-	mocks.blobClients[transferer.originAddr].EXPECT().Locations(digest).Return(locs, nil).Times(2)
-	// one failure
-	mocks.blobClientProvider.EXPECT().Provide("loc1").Return(mocks.blobClients["loc1"])
-	mocks.blobClients["loc1"].EXPECT().PushBlob(digest, gomock.Any(), size).Return(errors.New("loc1 503"))
-
-	for _, loc := range locs[1:] {
-		mocks.blobClientProvider.EXPECT().Provide(loc).Return(mocks.blobClients[loc])
-		mocks.blobClients[loc].EXPECT().PushBlob(digest, gomock.Any(), size).Return(nil)
-	}
-
-	require.NoError(transferer.Upload(digest.Hex(), r, size))
 }
 
 func TestUploadFailureMajority(t *testing.T) {
 	require := require.New(t)
-	locs := []string{"loc1", "loc2", "loc3", "loc4"}
-	mocks := newOrginClusterTransfererMocks(t, locs...)
+
+	mocks := newOrginClusterTransfererMocks(t)
 	defer mocks.ctrl.Finish()
-	transferer := testOriginClusterTransferer(mocks)
 
-	var size int64 = 256
-	blob := randutil.Text(int(size))
-	digest, err := image.NewDigester().FromBytes(blob)
-	require.NoError(err)
+	transferer := mocks.newTransferer()
 
-	r, cleanup := store.NewMockFileReadWriter(blob)
-	defer cleanup()
+	d, blob := image.DigestWithBlobFixture()
+	size := int64(len(blob))
 
-	mocks.blobClientProvider.EXPECT().Provide(transferer.originAddr).Return(mocks.blobClients[transferer.originAddr])
-	mocks.blobClients[transferer.originAddr].EXPECT().Locations(digest).Return(locs, nil).Times(2)
-	// two failures
-	mocks.blobClientProvider.EXPECT().Provide("loc1").Return(mocks.blobClients["loc1"])
-	mocks.blobClients["loc1"].EXPECT().PushBlob(digest, gomock.Any(), size).Return(errors.New("loc1 503"))
-	mocks.blobClientProvider.EXPECT().Provide("loc2").Return(mocks.blobClients["loc2"])
-	mocks.blobClients["loc2"].EXPECT().PushBlob(digest, gomock.Any(), size).Return(errors.New("loc2 503"))
+	clients := mocks.expectClients(d, "loc1", "loc2", "loc3")
 
-	for _, loc := range locs[2:] {
-		mocks.blobClientProvider.EXPECT().Provide(loc).Return(mocks.blobClients[loc])
-		mocks.blobClients[loc].EXPECT().PushBlob(digest, gomock.Any(), size).Return(nil)
-	}
+	// Two clients fail.
+	clients[0].EXPECT().PushBlob(d, gomock.Any(), size).Return(errors.New("some error"))
+	clients[1].EXPECT().PushBlob(d, gomock.Any(), size).Return(errors.New("some error"))
+	clients[2].EXPECT().PushBlob(d, gomock.Any(), size).Return(nil)
 
-	err = transferer.Upload(digest.Hex(), r, size)
-	require.Error(err)
-	var failedLocs []string
-	for _, e := range err.(uploadQuorumError).errs {
-		failedLocs = append(failedLocs, e.(pushBlobError).loc)
-	}
-	sort.Strings(failedLocs)
-	require.Equal([]string{"loc1", "loc2"}, failedLocs)
+	require.Error(transferer.Upload(d.Hex(), bytes.NewBuffer(blob), size))
 }
 
 func TestGetManifest(t *testing.T) {
 	require := require.New(t)
-	repo := "testrepo"
-	tag := "testtag"
+
 	mocks := newOrginClusterTransfererMocks(t)
 	defer mocks.ctrl.Finish()
-	transferer := testOriginClusterTransferer(mocks)
 
-	rw, digest, cleanup := mockManifestReadWriter()
+	transferer := mocks.newTransferer()
+
+	repo := "testrepo"
+	tag := "testtag"
+
+	rw, d, cleanup := mockManifestReadWriter()
 	defer cleanup()
 
 	mocks.manifestClient.EXPECT().GetManifest(repo, tag).Return(rw, nil)
 
-	readCloser, err := transferer.GetManifest(repo, tag)
+	m, err := transferer.GetManifest(repo, tag)
 	require.NoError(err)
-	defer readCloser.Close()
-	ok, err := image.Verify(digest, readCloser)
+	defer m.Close()
+	ok, err := image.Verify(d, m)
 	require.NoError(err)
 	require.True(ok)
 }
 
 func TestPostManifest(t *testing.T) {
 	require := require.New(t)
-	repo := "testrepo"
-	tag := "testtag"
+
 	mocks := newOrginClusterTransfererMocks(t)
 	defer mocks.ctrl.Finish()
-	transferer := testOriginClusterTransferer(mocks)
 
-	_, digest, cleanup := mockManifestReadWriter()
+	transferer := mocks.newTransferer()
+
+	repo := "testrepo"
+	tag := "testtag"
+
+	_, d, cleanup := mockManifestReadWriter()
 	defer cleanup()
 
 	r, cleanup := store.NewMockFileReadWriter([]byte{})
 	defer cleanup()
 
-	mocks.manifestClient.EXPECT().PostManifest(repo, tag, digest.Hex(), r).Return(nil)
-	require.NoError(transferer.PostManifest(repo, tag, digest.Hex(), r))
+	mocks.manifestClient.EXPECT().PostManifest(repo, tag, d.Hex(), r).Return(nil)
+	require.NoError(transferer.PostManifest(repo, tag, d.Hex(), r))
 }

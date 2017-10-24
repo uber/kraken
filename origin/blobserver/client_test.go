@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 
 	"github.com/stretchr/testify/require"
@@ -65,7 +66,9 @@ func TestRoundRobinResolverProvidesCorrectClients(t *testing.T) {
 
 	d, _ := computeBlobForHosts(config, master1, master2)
 
-	resolver, err := blobclient.NewRoundRobinResolver(cp, 3, master1, master2, master3)
+	rrConfig := serverset.RoundRobinConfig{Addrs: []string{master1, master2, master3}, Retries: 3}
+
+	resolver, err := blobclient.NewRoundRobinResolver(cp, rrConfig)
 	require.NoError(err)
 
 	clients, err := resolver.Resolve(d)
@@ -92,9 +95,11 @@ func TestRoundRobinResolverResilientToUnavailableMasters(t *testing.T) {
 
 	d, _ := computeBlobForHosts(config, master1, master2)
 
+	rrConfig := serverset.RoundRobinConfig{Addrs: []string{master1, master2, master3}, Retries: 3}
+
 	// master2 and master3 are unavailable, however we should still be able to query
 	// locations from master1.
-	resolver, err := blobclient.NewRoundRobinResolver(cp, 3, master1, master2, master3)
+	resolver, err := blobclient.NewRoundRobinResolver(cp, rrConfig)
 	require.NoError(err)
 
 	// Run Resolve multiple times to ensure we eventually hit an unavailable server.
@@ -112,7 +117,9 @@ func TestRoundRobinResolverReturnsErrorOnNoAvailability(t *testing.T) {
 
 	cp := blobclient.NewProvider(clientConfigFixture())
 
-	resolver, err := blobclient.NewRoundRobinResolver(cp, 3, master1, master2, master3)
+	rrConfig := serverset.RoundRobinConfig{Addrs: []string{master1, master2, master3}, Retries: 3}
+
+	resolver, err := blobclient.NewRoundRobinResolver(cp, rrConfig)
 	require.NoError(err)
 
 	_, err = resolver.Resolve(image.DigestFixture())
