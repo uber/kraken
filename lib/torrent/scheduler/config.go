@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"errors"
 	"time"
 
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -10,18 +9,12 @@ import (
 // Config is the Scheduler configuration.
 type Config struct {
 
-	// TrackerAddr is the "ip:port" of the tracker server.
-	TrackerAddr string `yaml:"tracker_addr"`
-
 	// AnnounceInterval is the time between all announce requests.
 	// TODO(codyg): Make this smarter -- ideally, we give priority on announcing based on the
 	// following criteria:
 	// 1. Torrents which are making little progress
 	// 2. Higher priority torrents
 	AnnounceInterval time.Duration `yaml:"announce_interval"`
-
-	// AnnounceTimeout is the timeout for announce requests.
-	AnnounceTimeout time.Duration `yaml:"announce_timeout"`
 
 	// DialTimeout is the timeout for opening new connections.
 	DialTimeout time.Duration `yaml:"dial_timeout"`
@@ -59,15 +52,9 @@ type Config struct {
 	Conn ConnConfig `yaml:"conn"`
 }
 
-func (c Config) applyDefaults() (Config, error) {
-	if c.TrackerAddr == "" {
-		return c, errors.New("no tracker addr specified")
-	}
+func (c Config) applyDefaults() Config {
 	if c.AnnounceInterval == 0 {
 		c.AnnounceInterval = 30 * time.Second
-	}
-	if c.AnnounceTimeout == 0 {
-		c.AnnounceTimeout = 30 * time.Second
 	}
 	if c.DialTimeout == 0 {
 		c.DialTimeout = 5 * time.Second
@@ -92,7 +79,7 @@ func (c Config) applyDefaults() (Config, error) {
 	}
 	c.ConnState = c.ConnState.applyDefaults()
 	c.Conn = c.Conn.applyDefaults()
-	return c, nil
+	return c
 }
 
 // ConnStateConfig is the configuration for the connection state management.

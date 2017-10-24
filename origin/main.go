@@ -9,12 +9,16 @@ import (
 	xconfig "code.uber.internal/go-common.git/x/config"
 
 	"code.uber.internal/go-common.git/x/log"
+	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobserver"
+	"code.uber.internal/infra/kraken/tracker/announceclient"
+	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 )
 
 func main() {
@@ -62,7 +66,19 @@ func main() {
 			log.Fatalf("Failed to create peer context: %s", err)
 		}
 
-		torrentClient, err = torrent.NewSchedulerClient(&config.Torrent, fileStore, stats, pctx)
+		trackers, err := serverset.NewRoundRobin(config.Tracker.RoundRobin)
+		if err != nil {
+			log.Fatalf("Error creating tracker round robin: %s", err)
+		}
+
+		torrentClient, err = torrent.NewSchedulerClient(
+			&config.Torrent,
+			fileStore,
+			stats,
+			pctx,
+			announceclient.Default(pctx, trackers),
+			manifestclient.New(trackers),
+			metainfoclient.Default(trackers))
 		if err != nil {
 			log.Fatalf("Failed to create scheduler client: %s", err)
 			panic(err)

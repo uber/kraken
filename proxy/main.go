@@ -9,6 +9,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
+	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -35,16 +36,18 @@ func main() {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
 
-	originResolver, err := blobclient.NewRoundRobinResolver(
-		blobclient.NewProvider(config.Origin.Client), config.Origin.RoundRobin)
+	origins, err := serverset.NewRoundRobin(config.Origin.RoundRobin)
 	if err != nil {
-		log.Fatalf("Failed to init origin resolver: %s", err)
+		log.Fatalf("Error creating origin round robin: %s", err)
 	}
+	originResolver := blobclient.NewClusterResolver(
+		blobclient.NewProvider(config.Origin.Client), origins)
 
-	manifestClient, err := manifestclient.New(config.Tracker.RoundRobin)
+	trackers, err := serverset.NewRoundRobin(config.Tracker.RoundRobin)
 	if err != nil {
-		log.Fatalf("Failed to init manifest client: %s", err)
+		log.Fatalf("Error creating tracker round robin: %s", err)
 	}
+	manifestClient := manifestclient.New(trackers)
 
 	transferer := transfer.NewOriginClusterTransferer(config.Concurrency, originResolver, manifestClient)
 

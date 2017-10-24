@@ -3,16 +3,11 @@ package scheduler
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
-	"net/http"
-	"net/url"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/andres-erbsen/clock"
-	"github.com/jackpal/bencode-go"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 
@@ -20,6 +15,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/tracker/announceclient"
 )
 
 // ErrTorrentAlreadyRegistered returns when adding a torrent which has already
@@ -72,6 +68,8 @@ type Scheduler struct {
 	blacklistCleanupTick <-chan time.Time
 	emitStatsTick        <-chan time.Time
 
+	announceClient announceclient.Client
+
 	// The following fields orchestrate the stopping of the Scheduler.
 	once sync.Once      // Ensures the stop sequence is executed only once.
 	done chan struct{}  // Signals all goroutines to exit.
@@ -101,12 +99,11 @@ func New(
 	ta storage.TorrentArchive,
 	stats tally.Scope,
 	pctx peercontext.PeerContext,
+	announceClient announceclient.Client,
 	options ...option) (*Scheduler, error) {
 
-	config, err := config.applyDefaults()
-	if err != nil {
-		return nil, fmt.Errorf("invalid config: %s", err)
-	}
+	config = config.applyDefaults()
+
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", pctx.Port))
 	if err != nil {
 		return nil, err
@@ -162,6 +159,7 @@ func New(
 		preemptionTick:       preemptionTick,
 		blacklistCleanupTick: blacklistCleanupTick,
 		emitStatsTick:        overrides.clock.Tick(config.EmitStatsInterval),
+		announceClient:       announceClient,
 		done:                 done,
 	}
 
@@ -360,53 +358,10 @@ func (s *Scheduler) initOutgoingConn(peerID torlib.PeerID, ip string, port int, 
 	s.eventLoop.Send(e)
 }
 
-func (s *Scheduler) doAnnounce(t storage.Torrent) ([]torlib.PeerInfo, error) {
-	v := url.Values{}
-
-	v.Add("name", t.Name())
-	v.Add("info_hash", t.InfoHash().String())
-	v.Add("peer_id", s.pctx.PeerID.String())
-	v.Add("port", strconv.Itoa(s.pctx.Port))
-	v.Add("ip", s.pctx.IP)
-	v.Add("dc", s.pctx.Zone)
-
-	downloaded := t.BytesDownloaded()
-	v.Add("downloaded", strconv.FormatInt(downloaded, 10))
-	v.Add("left", strconv.FormatInt(t.Length()-downloaded, 10))
-
-	// TODO(codyg): Implement these last two arguments.
-	v.Add("uploaded", "0")
-	v.Add("event", "")
-
-	req := &http.Request{
-		Method: "GET",
-		URL: &url.URL{
-			Host:     s.config.TrackerAddr,
-			Scheme:   "http",
-			Path:     "/announce",
-			RawQuery: v.Encode(),
-		},
-	}
-	cli := http.Client{Timeout: s.config.AnnounceTimeout}
-	resp, err := cli.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %s", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		b, _ := ioutil.ReadAll(resp.Body)
-		return nil, fmt.Errorf("request not ok: %d - %s", resp.StatusCode, b)
-	}
-	var ar torlib.AnnouncerResponse
-	if err := bencode.Unmarshal(resp.Body, &ar); err != nil {
-		return nil, fmt.Errorf("unmarshal failed: %s", err)
-	}
-	return ar.Peers, nil
-}
-
 func (s *Scheduler) announce(d *dispatcher) {
 	var e event
-	peers, err := s.doAnnounce(d.Torrent)
+	peers, err := s.announceClient.Announce(
+		d.Torrent.Name(), d.Torrent.InfoHash(), d.Torrent.BytesDownloaded())
 	if err != nil {
 		s.logf(log.Fields{"dispatcher": d}).Errorf("Announce failed: %s", err)
 		e = announceFailureEvent{d}
