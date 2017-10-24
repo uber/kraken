@@ -16,22 +16,17 @@ type Client interface {
 	PostManifest(repo, tag, digest string, manifest io.Reader) error
 }
 
-// HTTPClient gets and posts manifest via http
-type HTTPClient struct {
-	servers *serverset.RoundRobin
+type client struct {
+	servers serverset.Set
 }
 
 // New creates a new Client.
-func New(config serverset.RoundRobinConfig) (*HTTPClient, error) {
-	servers, err := serverset.NewRoundRobin(config)
-	if err != nil {
-		return nil, err
-	}
-	return &HTTPClient{servers}, nil
+func New(servers serverset.Set) Client {
+	return &client{servers}
 }
 
 // GetManifest gets the manifest of repo:tag.
-func (m *HTTPClient) GetManifest(repo, tag string) (io.ReadCloser, error) {
+func (m *client) GetManifest(repo, tag string) (io.ReadCloser, error) {
 	name := fmt.Sprintf("%s:%s", repo, tag)
 	var err error
 	for it := m.servers.Iter(); it.HasNext(); it.Next() {
@@ -45,7 +40,7 @@ func (m *HTTPClient) GetManifest(repo, tag string) (io.ReadCloser, error) {
 }
 
 // PostManifest posts manifest for repo:tag.
-func (m *HTTPClient) PostManifest(repo, tag, digest string, manifest io.Reader) error {
+func (m *client) PostManifest(repo, tag, digest string, manifest io.Reader) error {
 	name := fmt.Sprintf("%s:%s", repo, tag)
 	var err error
 	for it := m.servers.Iter(); it.HasNext(); it.Next() {

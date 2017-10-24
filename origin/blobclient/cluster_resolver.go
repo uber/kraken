@@ -11,27 +11,19 @@ type ClusterResolver interface {
 	Resolve(d image.Digest) ([]Client, error)
 }
 
-// RoundRobinResolver implements ClusterResolver using a list of addresses
-// (which may be DNS servers).
-type RoundRobinResolver struct {
+// clusterResolver implements ClusterResolver.
+type clusterResolver struct {
 	provider Provider
-	servers  *serverset.RoundRobin
+	servers  serverset.Set
 }
 
-// NewRoundRobinResolver returns a new RoundRobinResolver.
-func NewRoundRobinResolver(
-	p Provider,
-	config serverset.RoundRobinConfig) (*RoundRobinResolver, error) {
-
-	servers, err := serverset.NewRoundRobin(config)
-	if err != nil {
-		return nil, err
-	}
-	return &RoundRobinResolver{p, servers}, nil
+// NewClusterResolver returns a new clusterResolver.
+func NewClusterResolver(p Provider, servers serverset.Set) ClusterResolver {
+	return &clusterResolver{p, servers}
 }
 
 // Resolve returns a list of Clients for the origin servers which own d.
-func (r *RoundRobinResolver) Resolve(d image.Digest) ([]Client, error) {
+func (r *clusterResolver) Resolve(d image.Digest) ([]Client, error) {
 	var err error
 	for it := r.servers.Iter(); it.HasNext(); it.Next() {
 		var locs []string

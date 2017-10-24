@@ -1,27 +1,24 @@
 package torrent
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
-	"path"
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 
+	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/tracker/announceclient"
+	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 )
 
 const requestTimeout = 60 * time.Second
@@ -33,7 +30,7 @@ type Client interface {
 	CreateTorrentFromFile(name, filepath string) error
 	GetPeerContext() (peercontext.PeerContext, error)
 	GetManifest(repo, tag string) (io.ReadCloser, error)
-	PostManifest(repo, tag, manifestDigest string, reader io.Reader) error
+	PostManifest(repo, tag, digest string, manifest io.Reader) error
 	Close() error
 }
 
@@ -48,6 +45,9 @@ type SchedulerClient struct {
 	// TODO: Consolidate these...
 	store   store.FileStore
 	archive storage.TorrentArchive
+
+	manifestClient manifestclient.Client
+	metaInfoClient metainfoclient.Client
 }
 
 // NewSchedulerClient creates a new scheduler client
@@ -55,22 +55,27 @@ func NewSchedulerClient(
 	config *Config,
 	localStore store.FileStore,
 	stats tally.Scope,
-	pctx peercontext.PeerContext) (Client, error) {
+	pctx peercontext.PeerContext,
+	announceClient announceclient.Client,
+	manifestClient manifestclient.Client,
+	metaInfoClient metainfoclient.Client) (Client, error) {
 
 	stats = stats.SubScope("peer").SubScope(pctx.PeerID.String())
 	archive := storage.NewLocalTorrentArchive(localStore)
-	scheduler, err := scheduler.New(config.Scheduler, archive, stats, pctx)
+	scheduler, err := scheduler.New(config.Scheduler, archive, stats, pctx, announceClient)
 	if err != nil {
 		return nil, err
 	}
 	return &SchedulerClient{
-		config:    config,
-		pctx:      pctx,
-		peerID:    pctx.PeerID,
-		scheduler: scheduler,
-		stats:     stats,
-		store:     localStore,
-		archive:   archive,
+		config:         config,
+		pctx:           pctx,
+		peerID:         pctx.PeerID,
+		scheduler:      scheduler,
+		stats:          stats,
+		store:          localStore,
+		archive:        archive,
+		manifestClient: manifestClient,
+		metaInfoClient: metaInfoClient,
 	}, nil
 }
 
@@ -89,19 +94,20 @@ func (c *SchedulerClient) DownloadTorrent(name string) (io.ReadCloser, error) {
 		return nil, errors.New("torrent not enabled")
 	}
 
-	miRaw, err := c.store.GetDownloadOrCacheFileMeta(name)
-	if err != nil {
+	var mi *torlib.MetaInfo
+	if miRaw, err := c.store.GetDownloadOrCacheFileMeta(name); err != nil {
 		if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("failed to get file metainfo: %s", err)
 		}
-		miRaw, err = c.requestTorrentMetaInfo(name)
+		mi, err = c.metaInfoClient.Get(name)
 		if err != nil {
-			return nil, fmt.Errorf("failed to request metainfo: %s", err)
+			return nil, fmt.Errorf("failed to get remote metainfo: %s", err)
 		}
-	}
-	mi, err := torlib.NewMetaInfoFromBytes(miRaw)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get metainfo: %s", err)
+	} else {
+		mi, err = torlib.NewMetaInfoFromBytes(miRaw)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse metainfo: %s", err)
+		}
 	}
 
 	if _, err = c.archive.CreateTorrent(mi.InfoHash, mi); err != nil {
@@ -129,13 +135,11 @@ func (c *SchedulerClient) CreateTorrentFromFile(name, filepath string) error {
 		return nil
 	}
 
-	announce := path.Join("http://"+c.config.Scheduler.TrackerAddr, "/announce")
-
 	mi, err := torlib.NewMetaInfoFromFile(
 		name,
 		filepath,
 		int64(c.config.PieceLength),
-		[][]string{{"http://" + c.config.Scheduler.TrackerAddr + "/announce"}},
+		nil,
 		"docker",
 		"kraken-origin",
 		"UTF-8")
@@ -177,8 +181,7 @@ func (c *SchedulerClient) CreateTorrentFromFile(name, filepath string) error {
 		}).Error("Failed to create torrent")
 	}
 
-	err = c.postTorrentMetaInfo(mi)
-	if err != nil {
+	if err := c.metaInfoClient.Post(mi); err != nil {
 		log.WithFields(log.Fields{
 			"name":  name,
 			"error": err,
@@ -201,7 +204,6 @@ func (c *SchedulerClient) CreateTorrentFromFile(name, filepath string) error {
 		"length":   mi.Info.Length,
 		"infohash": mi.InfoHash,
 		"origin":   c.peerID,
-		"announce": announce,
 	}).Info("Successfully created torrent")
 
 	return nil
@@ -221,88 +223,16 @@ func (c *SchedulerClient) GetPeerContext() (peercontext.PeerContext, error) {
 // GetManifest queries tracker for manifest and stores manifest locally
 func (c *SchedulerClient) GetManifest(repo, tag string) (io.ReadCloser, error) {
 	if !c.config.Enabled {
-		return nil, fmt.Errorf("Torrent not enabled")
+		return nil, errors.New("torrent not enabled")
 	}
-	name := fmt.Sprintf("%s:%s", repo, tag)
-
-	trackerURL := "http://" + c.config.Scheduler.TrackerAddr + "/manifest/" + url.QueryEscape(name)
-	return c.sendRequestToTracker("GET", trackerURL, nil)
+	return c.manifestClient.GetManifest(repo, tag)
 }
 
 // PostManifest saves manifest specified by the tag it referred in a tracker
-func (c *SchedulerClient) PostManifest(repo, tag, manifest string, reader io.Reader) error {
+func (c *SchedulerClient) PostManifest(repo, tag, digest string, manifest io.Reader) error {
 	if !c.config.Enabled {
-		log.Info("Torrent not enabled. Nothing is to be done here")
+		log.Info("Skipping post manifest: torrent not enabled")
 		return nil
 	}
-
-	name := fmt.Sprintf("%s:%s", repo, tag)
-	postURL := "http://" + c.config.Scheduler.TrackerAddr + "/manifest/" + url.QueryEscape(name)
-	readCloser, err := c.sendRequestToTracker("POST", postURL, reader)
-	if err != nil {
-		return err
-	}
-	defer readCloser.Close()
-
-	return nil
-}
-
-func (c *SchedulerClient) postTorrentMetaInfo(mi *torlib.MetaInfo) error {
-	// get torrent info hash
-	trackerURL := fmt.Sprintf("http://%s/info?name=%s&info_hash=%s",
-		c.config.Scheduler.TrackerAddr, mi.Name(), mi.InfoHash.HexString())
-	miRaw, err := mi.Serialize()
-	if err != nil {
-		return err
-	}
-	readCloser, err := c.sendRequestToTracker("POST", trackerURL, bytes.NewBufferString(miRaw))
-	if err != nil {
-		return err
-	}
-	defer readCloser.Close()
-
-	return nil
-}
-
-func (c *SchedulerClient) requestTorrentMetaInfo(name string) ([]byte, error) {
-	// get torrent info hash
-	trackerURL := "http://" + c.config.Scheduler.TrackerAddr + "/info?name=" + name
-	readCloser, err := c.sendRequestToTracker("GET", trackerURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer readCloser.Close()
-
-	return ioutil.ReadAll(readCloser)
-}
-
-func (c *SchedulerClient) sendRequestToTracker(method, endpoint string, body io.Reader) (io.ReadCloser, error) {
-	if body == nil {
-		body = bytes.NewReader([]byte{})
-	}
-
-	req, err := http.NewRequest(method, endpoint, body)
-	if err != nil {
-		return nil, err
-	}
-
-	client := http.Client{
-		Timeout: requestTimeout,
-	}
-
-	// send request
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != 200 {
-		respDump, err := httputil.DumpResponse(resp, true)
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("%s", respDump)
-	}
-
-	return resp.Body, nil
+	return c.manifestClient.PostManifest(repo, tag, digest, manifest)
 }

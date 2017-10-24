@@ -18,9 +18,11 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/mocks/lib/torrent/mockstorage"
 	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
@@ -60,9 +62,8 @@ func connStateConfigFixture() ConnStateConfig {
 	}.applyDefaults()
 }
 
-func configFixture(trackerAddr string) Config {
-	c, err := Config{
-		TrackerAddr:              trackerAddr,
+func configFixture() Config {
+	return Config{
 		AnnounceInterval:         500 * time.Millisecond,
 		IdleSeederTTL:            10 * time.Second,
 		PreemptionInterval:       500 * time.Millisecond,
@@ -72,10 +73,6 @@ func configFixture(trackerAddr string) Config {
 		ConnState:                connStateConfigFixture(),
 		Conn:                     connConfigFixture(),
 	}.applyDefaults()
-	if err != nil {
-		panic(err)
-	}
-	return c
 }
 
 // writeTorrent writes the given content into a torrent file into tm's storage.
@@ -133,7 +130,7 @@ func findFreePort() int {
 	return port
 }
 
-func testPeerFixture(config Config, options ...option) *testPeer {
+func testPeerFixture(config Config, trackerAddr string, options ...option) *testPeer {
 	tm, cleanup := storage.TorrentArchiveFixture()
 	stats := tally.NewTestScope("", nil)
 	pctx := peercontext.PeerContext{
@@ -142,7 +139,8 @@ func testPeerFixture(config Config, options ...option) *testPeer {
 		IP:     "localhost",
 		Port:   findFreePort(),
 	}
-	s, err := New(config, tm, stats, pctx, options...)
+	ac := announceclient.New(announceclient.Config{}, pctx, serverset.NewSingle(trackerAddr))
+	s, err := New(config, tm, stats, pctx, ac, options...)
 	if err != nil {
 		cleanup()
 		panic(err)
@@ -154,10 +152,10 @@ func testPeerFixture(config Config, options ...option) *testPeer {
 	return &testPeer{pctx, s, tm, stats, stop}
 }
 
-func testPeerFixtures(n int, config Config) (peers []*testPeer, stopAll func()) {
+func testPeerFixtures(n int, config Config, trackerAddr string) (peers []*testPeer, stopAll func()) {
 	peers = make([]*testPeer, n)
 	for i := range peers {
-		peers[i] = testPeerFixture(config)
+		peers[i] = testPeerFixture(config, trackerAddr)
 	}
 	return peers, func() {
 		for _, p := range peers {

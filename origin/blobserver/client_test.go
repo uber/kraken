@@ -50,7 +50,7 @@ func toAddrs(clients []blobclient.Client) []string {
 	return addrs
 }
 
-func TestRoundRobinResolverProvidesCorrectClients(t *testing.T) {
+func TestClusterResolverProvidesCorrectClients(t *testing.T) {
 	require := require.New(t)
 
 	cp := newTestClientProvider(clientConfigFixture())
@@ -66,10 +66,13 @@ func TestRoundRobinResolverProvidesCorrectClients(t *testing.T) {
 
 	d, _ := computeBlobForHosts(config, master1, master2)
 
-	rrConfig := serverset.RoundRobinConfig{Addrs: []string{master1, master2, master3}, Retries: 3}
-
-	resolver, err := blobclient.NewRoundRobinResolver(cp, rrConfig)
+	masters, err := serverset.NewRoundRobin(serverset.RoundRobinConfig{
+		Addrs:   []string{master1, master2, master3},
+		Retries: 3,
+	})
 	require.NoError(err)
+
+	resolver := blobclient.NewClusterResolver(cp, masters)
 
 	clients, err := resolver.Resolve(d)
 	require.NoError(err)
@@ -78,7 +81,7 @@ func TestRoundRobinResolverProvidesCorrectClients(t *testing.T) {
 	require.Equal(expected, toAddrs(clients))
 }
 
-func TestRoundRobinResolverResilientToUnavailableMasters(t *testing.T) {
+func TestClusterResolverResilientToUnavailableMasters(t *testing.T) {
 	require := require.New(t)
 
 	cp := newTestClientProvider(clientConfigFixture())
@@ -95,12 +98,15 @@ func TestRoundRobinResolverResilientToUnavailableMasters(t *testing.T) {
 
 	d, _ := computeBlobForHosts(config, master1, master2)
 
-	rrConfig := serverset.RoundRobinConfig{Addrs: []string{master1, master2, master3}, Retries: 3}
+	masters, err := serverset.NewRoundRobin(serverset.RoundRobinConfig{
+		Addrs:   []string{master1, master2, master3},
+		Retries: 3,
+	})
+	require.NoError(err)
 
 	// master2 and master3 are unavailable, however we should still be able to query
 	// locations from master1.
-	resolver, err := blobclient.NewRoundRobinResolver(cp, rrConfig)
-	require.NoError(err)
+	resolver := blobclient.NewClusterResolver(cp, masters)
 
 	// Run Resolve multiple times to ensure we eventually hit an unavailable server.
 	for i := 0; i < 3; i++ {
@@ -112,15 +118,18 @@ func TestRoundRobinResolverResilientToUnavailableMasters(t *testing.T) {
 	}
 }
 
-func TestRoundRobinResolverReturnsErrorOnNoAvailability(t *testing.T) {
+func TestClusterResolverReturnsErrorOnNoAvailability(t *testing.T) {
 	require := require.New(t)
 
 	cp := blobclient.NewProvider(clientConfigFixture())
 
-	rrConfig := serverset.RoundRobinConfig{Addrs: []string{master1, master2, master3}, Retries: 3}
-
-	resolver, err := blobclient.NewRoundRobinResolver(cp, rrConfig)
+	masters, err := serverset.NewRoundRobin(serverset.RoundRobinConfig{
+		Addrs:   []string{master1, master2, master3},
+		Retries: 3,
+	})
 	require.NoError(err)
+
+	resolver := blobclient.NewClusterResolver(cp, masters)
 
 	_, err = resolver.Resolve(image.DigestFixture())
 	require.Error(err)

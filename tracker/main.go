@@ -10,6 +10,7 @@ import (
 	xconfig "code.uber.internal/go-common.git/x/config"
 	"code.uber.internal/go-common.git/x/log"
 
+	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
@@ -56,11 +57,12 @@ func main() {
 		log.Fatalf("Could not load peer handout policy: %s", err)
 	}
 
-	originResolver, err := blobclient.NewRoundRobinResolver(
-		blobclient.NewProvider(config.Origin.Client), config.Origin.RoundRobin)
+	origins, err := serverset.NewRoundRobin(config.Origin.RoundRobin)
 	if err != nil {
-		log.Fatalf("Error creating origin resolver: %s", err)
+		log.Fatalf("Error creating origin round robin: %s", err)
 	}
+	originResolver := blobclient.NewClusterResolver(
+		blobclient.NewProvider(config.Origin.Client), origins)
 
 	h := service.Handler(
 		config.Service,

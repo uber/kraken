@@ -10,10 +10,14 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
+	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/metrics"
+	"code.uber.internal/infra/kraken/tracker/announceclient"
+	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 )
 
 func main() {
@@ -47,7 +51,19 @@ func main() {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
 
-	client, err := torrent.NewSchedulerClient(&config.Torrent, store, stats, pctx)
+	trackers, err := serverset.NewRoundRobin(config.Tracker.RoundRobin)
+	if err != nil {
+		log.Fatalf("Error creating tracker round robin: %s", err)
+	}
+
+	client, err := torrent.NewSchedulerClient(
+		&config.Torrent,
+		store,
+		stats,
+		pctx,
+		announceclient.Default(pctx, trackers),
+		manifestclient.New(trackers),
+		metainfoclient.Default(trackers))
 	if err != nil {
 		log.Fatalf("Failed to create scheduler client: %s", err)
 		panic(err)

@@ -29,24 +29,20 @@ type RoundRobinIter struct {
 	i       int
 }
 
-// Addr returns the current address of the iteration.
-func (it *RoundRobinIter) Addr() string {
-	return it.addrs[it.i]
-}
+// Addr implements Iter.Addr
+func (it *RoundRobinIter) Addr() string { return it.addrs[it.i] }
 
-// HasNext returns whether the iterator may advance.
-func (it *RoundRobinIter) HasNext() bool {
-	return it.retries > 0
-}
+// HasNext implements Iter.HasNext
+func (it *RoundRobinIter) HasNext() bool { return it.retries > 0 }
 
-// Next advances the iterator the next address.
+// Next implements Iter.Next
 func (it *RoundRobinIter) Next() {
 	it.i = int(it.cursor.Inc() % uint32(len(it.addrs)))
 	it.retries--
 }
 
 // Iter returns an iterator over the configured addresses.
-func (r *RoundRobin) Iter() *RoundRobinIter {
+func (r *RoundRobin) Iter() Iter {
 	it := &RoundRobinIter{
 		cursor:  r.cursor,
 		addrs:   r.config.Addrs,
