@@ -41,10 +41,7 @@ func (s *MySQLStorage) RunMigration() error {
 	if err := goose.SetDialect("mysql"); err != nil {
 		return err
 	}
-	if err := goose.Run("up", s.db.DB, s.config.MigrationsDir); err != nil {
-		return err
-	}
-	return nil
+	return goose.Run("up", s.db.DB, s.config.MigrationsDir)
 }
 
 // GetPeers implements Storage.GetPeers
