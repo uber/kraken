@@ -5,7 +5,7 @@ BUILD_FLAGS = -gcflags '-N -l'
 BUILD_ENV=
 
 # Flags to pass to go test
-TEST_FLAGS =
+TEST_FLAGS = -timeout 2m
 
 # Extra dependencies that the tests use
 TEST_DEPS =

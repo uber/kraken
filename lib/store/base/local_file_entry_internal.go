@@ -264,10 +264,7 @@ func (fi *LocalFileEntryInternal) linkMetadata(sourceDir string, targetDir strin
 	sourcePath := path.Join(sourceDir, fi.getRelativePath()+mt.GetSuffix())
 	targetPath := path.Join(targetDir, fi.getRelativePath()+mt.GetSuffix())
 	os.MkdirAll(filepath.Dir(targetPath), DefaultDirPermission)
-	if err := os.Link(sourcePath, targetPath); err != nil {
-		return err
-	}
-	return nil
+	return os.Link(sourcePath, targetPath)
 }
 
 // RangeMetadata lofis through all metadata and applies function f, until an error happens.
