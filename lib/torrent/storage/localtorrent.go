@@ -15,6 +15,12 @@ import (
 	"code.uber.internal/infra/kraken/torlib"
 )
 
+// LocalTorrent errors.
+var (
+	ErrWritePieceConflict = errors.New("piece is already being written to")
+	ErrPieceComplete      = errors.New("piece is already complete")
+)
+
 type pieceStatus int
 
 const (
@@ -201,8 +207,6 @@ func (t *LocalTorrent) markPieceComplete(pi int) {
 	t.numComplete.Inc()
 }
 
-var errWritePieceConflict = errors.New("piece is already being written to")
-
 // WritePiece writes data to piece pi.
 func (t *LocalTorrent) WritePiece(data []byte, pi int) error {
 	piece, err := t.getPiece(pi)
@@ -215,10 +219,10 @@ func (t *LocalTorrent) WritePiece(data []byte, pi int) error {
 
 	// Exit quickly if the piece is not writable.
 	if piece.complete() {
-		return nil
+		return ErrPieceComplete
 	}
 	if piece.dirty() {
-		return errWritePieceConflict
+		return ErrWritePieceConflict
 	}
 
 	if err := t.verifyPiece(pi, data); err != nil {
@@ -227,9 +231,9 @@ func (t *LocalTorrent) WritePiece(data []byte, pi int) error {
 
 	dirty, complete := piece.tryMarkDirty()
 	if dirty {
-		return errWritePieceConflict
+		return ErrWritePieceConflict
 	} else if complete {
-		return nil
+		return ErrPieceComplete
 	}
 
 	// At this point, we've determined that the piece is not complete and ensured

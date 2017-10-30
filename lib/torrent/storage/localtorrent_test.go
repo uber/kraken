@@ -83,8 +83,8 @@ func TestLocalTorrentWriteComplete(t *testing.T) {
 	require.True(tor.Complete())
 	require.Equal(int64(1), tor.BytesDownloaded())
 
-	// Duplicate write should no-op.
-	require.NoError(tor.WritePiece(data[:1], 0))
+	// Duplicate write should detect piece is complete.
+	require.Error(ErrPieceComplete, tor.WritePiece(data[:1], 0))
 }
 
 func TestLocalTorrentWriteMultiplePieceConcurrent(t *testing.T) {
@@ -147,8 +147,8 @@ func TestLocalTorrentWriteSamePieceConcurrent(t *testing.T) {
 			pi := int(math.Mod(float64(i), float64(len(data))))
 
 			err := tor.WritePiece([]byte{data[pi]}, pi)
-			if err != nil {
-				require.Equal(errWritePieceConflict, err)
+			if err != nil && err != ErrWritePieceConflict && err != ErrPieceComplete {
+				require.Equal(ErrWritePieceConflict, err)
 			}
 
 			time.Sleep(5 * time.Millisecond)
@@ -214,13 +214,13 @@ func TestLocalTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
 
 	// Writing while another goroutine is mid-write should not block.
 	<-w.startWriting
-	require.Equal(errWritePieceConflict, tor.WritePiece(tf.Content, 0))
+	require.Equal(ErrWritePieceConflict, tor.WritePiece(tf.Content, 0))
 	w.stopWriting <- true
 
 	<-done
 
-	// Once write is done, future writes should be no-op.
-	require.NoError(tor.WritePiece(tf.Content, 0))
+	// Duplicate write should detect piece is complete.
+	require.Error(ErrPieceComplete, tor.WritePiece(tf.Content, 0))
 }
 
 func TestLocalTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {

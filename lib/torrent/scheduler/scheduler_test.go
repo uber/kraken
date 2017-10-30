@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/torlib"
 	trackerservice "code.uber.internal/infra/kraken/tracker/service"
 
@@ -292,4 +293,68 @@ func TestEmitStatsEventTriggers(t *testing.T) {
 
 	clk.Add(config.EmitStatsInterval)
 	w.WaitFor(t, emitStatsEvent{})
+}
+
+func stripTimestamps(events []networkevent.Event) []networkevent.Event {
+	var res []networkevent.Event
+	for _, e := range events {
+		e.Time = time.Time{}
+		res = append(res, e)
+	}
+	return res
+}
+
+func TestNetworkEvents(t *testing.T) {
+	require := require.New(t)
+
+	trackerAddr, stop := trackerservice.TestAnnouncer()
+	defer stop()
+
+	config := configFixture()
+	config.IdleConnTTL = 2 * time.Second
+
+	seeder, cleanup := testPeerFixture(config, trackerAddr)
+	defer cleanup()
+
+	leecher, cleanup := testPeerFixture(config, trackerAddr)
+	defer cleanup()
+
+	// Torrent with 1 piece.
+	tf := torlib.CustomTestTorrentFileFixture(1, 1)
+
+	seeder.writeTorrent(tf)
+	require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo))
+
+	require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo))
+	leecher.checkTorrent(t, tf)
+
+	sid := seeder.pctx.PeerID
+	lid := leecher.pctx.PeerID
+	h := tf.MetaInfo.InfoHash
+
+	waitForConnRemoved(t, seeder.scheduler, lid, h)
+	waitForConnRemoved(t, leecher.scheduler, sid, h)
+
+	seederExpected := []networkevent.Event{
+		networkevent.AddTorrentEvent(h, sid, []bool{true}),
+		networkevent.TorrentCompleteEvent(h, sid),
+		networkevent.AddConnEvent(h, sid, lid),
+		networkevent.DropConnEvent(h, sid, lid),
+	}
+
+	leecherExpected := []networkevent.Event{
+		networkevent.AddTorrentEvent(h, lid, []bool{false}),
+		networkevent.AddConnEvent(h, lid, sid),
+		networkevent.ReceivePieceEvent(h, lid, sid, 0),
+		networkevent.TorrentCompleteEvent(h, lid),
+		networkevent.DropConnEvent(h, lid, sid),
+	}
+
+	require.Equal(
+		stripTimestamps(seederExpected),
+		stripTimestamps(seeder.testProducer.Events()))
+
+	require.Equal(
+		stripTimestamps(leecherExpected),
+		stripTimestamps(leecher.testProducer.Events()))
 }

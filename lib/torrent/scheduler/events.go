@@ -5,6 +5,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/timeutil"
@@ -78,7 +79,10 @@ type closedConnEvent struct {
 func (e closedConnEvent) Apply(s *Scheduler) {
 	s.logf(log.Fields{"conn": e.conn}).Debug("Applying closed conn event")
 
-	s.connState.DeleteActive(e.conn)
+	if s.connState.DeleteActive(e.conn) {
+		s.networkEventProducer.Produce(
+			networkevent.DropConnEvent(e.conn.InfoHash, s.pctx.PeerID, e.conn.PeerID))
+	}
 	if err := s.connState.Blacklist(e.conn.PeerID, e.conn.InfoHash); err != nil {
 		s.logf(log.Fields{"conn": e.conn}).Infof("Error blacklisting active conn: %s", err)
 	}
@@ -140,6 +144,8 @@ func (e incomingConnEvent) Apply(s *Scheduler) {
 		}).Errorf("Error adding incoming conn: %s", err)
 		e.conn.Close()
 	}
+	s.networkEventProducer.Produce(
+		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
 }
 
 // outgoingConnEvent occurs when a pending outgoing connection finishes handshaking.
@@ -158,6 +164,8 @@ func (e outgoingConnEvent) Apply(s *Scheduler) {
 		}).Errorf("Error adding outgoing conn: %s", err)
 		e.conn.Close()
 	}
+	s.networkEventProducer.Produce(
+		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
 }
 
 // announceTickEvent occurs when it is time to announce to the tracker.
@@ -263,6 +271,8 @@ func (e newTorrentEvent) Apply(s *Scheduler) {
 		s.torrentControls[infoHash] = ctrl
 		s.announceQueue.Add(ctrl.Dispatcher)
 		s.connState.InitCapacity(infoHash)
+		s.networkEventProducer.Produce(
+			networkevent.AddTorrentEvent(infoHash, s.pctx.PeerID, e.torrent.Bitfield()))
 	}
 	if ctrl.Complete {
 		e.errc <- nil
@@ -280,8 +290,10 @@ type completedDispatcherEvent struct {
 func (e completedDispatcherEvent) Apply(s *Scheduler) {
 	s.logf(log.Fields{"dispatcher": e.dispatcher}).Debug("Applying completed dispatcher event")
 
+	infoHash := e.dispatcher.Torrent.InfoHash()
+
 	s.announceQueue.Done(e.dispatcher)
-	ctrl, ok := s.torrentControls[e.dispatcher.Torrent.InfoHash()]
+	ctrl, ok := s.torrentControls[infoHash]
 	if !ok {
 		s.logf(log.Fields{"dispatcher": e.dispatcher}).Error("Completed dispatcher not found")
 		return
@@ -290,6 +302,7 @@ func (e completedDispatcherEvent) Apply(s *Scheduler) {
 		errc <- nil
 	}
 	ctrl.Complete = true
+	s.networkEventProducer.Produce(networkevent.TorrentCompleteEvent(infoHash, s.pctx.PeerID))
 }
 
 // preemptionTickEvent occurs periodically to preempt unneeded conns and remove

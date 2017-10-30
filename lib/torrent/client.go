@@ -14,6 +14,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
@@ -62,9 +63,14 @@ func NewSchedulerClient(
 
 	stats = stats.SubScope("peer").SubScope(pctx.PeerID.String())
 	archive := storage.NewLocalTorrentArchive(localStore)
-	scheduler, err := scheduler.New(config.Scheduler, archive, stats, pctx, announceClient)
+	networkEventProducer, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("network event producer: %s", err)
+	}
+	scheduler, err := scheduler.New(
+		config.Scheduler, archive, stats, pctx, announceClient, networkEventProducer)
+	if err != nil {
+		return nil, fmt.Errorf("scheduler: %s", err)
 	}
 	return &SchedulerClient{
 		config:         config,

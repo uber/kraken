@@ -12,6 +12,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 )
@@ -24,20 +25,22 @@ var (
 )
 
 type dispatcherFactory struct {
-	Config      Config
-	LocalPeerID torlib.PeerID
-	EventSender eventSender
-	Clock       clock.Clock
+	Config               Config
+	LocalPeerID          torlib.PeerID
+	EventSender          eventSender
+	Clock                clock.Clock
+	NetworkEventProducer networkevent.Producer
 }
 
 // New creates a new dispatcher for the given torrent.
 func (f *dispatcherFactory) New(t storage.Torrent) *dispatcher {
 	d := &dispatcher{
-		Torrent:     t,
-		CreatedAt:   f.Clock.Now(),
-		localPeerID: f.LocalPeerID,
-		eventSender: f.EventSender,
-		clock:       f.Clock,
+		Torrent:              t,
+		CreatedAt:            f.Clock.Now(),
+		localPeerID:          f.LocalPeerID,
+		eventSender:          f.EventSender,
+		clock:                f.Clock,
+		networkEventProducer: f.NetworkEventProducer,
 	}
 	if t.Complete() {
 		d.complete.Do(func() { go d.eventSender.Send(completedDispatcherEvent{d}) })
@@ -57,6 +60,8 @@ type dispatcher struct {
 	conns syncmap.Map
 
 	eventSender eventSender
+
+	networkEventProducer networkevent.Producer
 
 	mu              sync.Mutex // Protects the following fields:
 	lastConnRemoved time.Time
@@ -218,11 +223,15 @@ func (d *dispatcher) handlePiecePayload(
 		return
 	}
 	if err := d.Torrent.WritePiece(payload, i); err != nil {
-		d.logf(log.Fields{
-			"peer": c.PeerID, "piece": msg.Index,
-		}).Errorf("Error writing piece payload: %s", err)
+		if err != storage.ErrPieceComplete {
+			d.logf(log.Fields{
+				"peer": c.PeerID, "piece": msg.Index,
+			}).Errorf("Error writing piece payload: %s", err)
+		}
 		return
 	}
+	d.networkEventProducer.Produce(
+		networkevent.ReceivePieceEvent(d.Torrent.InfoHash(), d.localPeerID, c.PeerID, i))
 	c.TouchLastGoodPieceReceived()
 	if d.Torrent.Complete() {
 		d.complete.Do(func() { go d.eventSender.Send(completedDispatcherEvent{d}) })
