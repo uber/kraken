@@ -3,232 +3,309 @@ package storage
 import (
 	"bytes"
 	"crypto/sha1"
+	"errors"
 	"fmt"
 	"os"
+	"sync"
+
+	"go.uber.org/atomic"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/torlib"
 )
 
-// LocalTorrent implements Torrent
-// Treat this as a wrapper on top of store.FileStore
-// It allows simultaneous read/write to different (or same, only for read) locations in the file
-// TODO (@evelynl): add in-memory bookkeeping for file metadata in storage
-type LocalTorrent struct {
-	metaInfo *torlib.MetaInfo
-	store    store.FileStore
+type pieceStatus int
+
+const (
+	_empty pieceStatus = iota
+	_dirty
+	_complete
+)
+
+type piece struct {
+	sync.RWMutex
+	status pieceStatus
 }
 
-// NewLocalTorrent creates a new LocalTorrent
-func NewLocalTorrent(store store.FileStore, mi *torlib.MetaInfo) Torrent {
-	return &LocalTorrent{
-		store:    store,
-		metaInfo: mi,
+func (p *piece) complete() bool {
+	p.RLock()
+	defer p.RUnlock()
+	return p.status == _complete
+}
+
+func (p *piece) dirty() bool {
+	p.RLock()
+	defer p.RUnlock()
+	return p.status == _dirty
+}
+
+func (p *piece) tryMarkDirty() (dirty, complete bool) {
+	p.Lock()
+	defer p.Unlock()
+
+	switch p.status {
+	case _empty:
+		p.status = _dirty
+	case _dirty:
+		dirty = true
+	case _complete:
+		complete = true
+	default:
+		log.Fatalf("Unknown piece status: %d", p.status)
+	}
+	return
+}
+
+func (p *piece) markEmpty() {
+	p.Lock()
+	defer p.Unlock()
+	p.status = _empty
+}
+
+func (p *piece) markComplete() {
+	p.Lock()
+	defer p.Unlock()
+	p.status = _complete
+}
+
+// LocalTorrent implements a Torrent on top of a FileStore. Allows concurrent
+// writes on distinct pieces, and concurrent reads on all pieces. Behavior is
+// undefined if multiple LocalTorrent instances are backed by the same file
+// store and metainfo.
+type LocalTorrent struct {
+	metaInfo    *torlib.MetaInfo
+	store       store.FileStore
+	pieces      []piece
+	numComplete *atomic.Int32
+}
+
+// NewLocalTorrent creates a new LocalTorrent.
+func NewLocalTorrent(store store.FileStore, mi *torlib.MetaInfo) *LocalTorrent {
+	t := &LocalTorrent{
+		store:       store,
+		metaInfo:    mi,
+		pieces:      make([]piece, mi.Info.NumPieces()),
+		numComplete: atomic.NewInt32(0),
+	}
+	t.restorePieces()
+	return t
+}
+
+// restorePieces populates any existing piece state from file store. Must be called
+// before any other read/write operations on t.
+func (t *LocalTorrent) restorePieces() {
+	f, err := t.store.GetDownloadOrCacheFileReader(t.metaInfo.Info.Name)
+	if err != nil {
+		log.Debugf("Restore pieces get file reader error: %s", err)
+		return
+	}
+	defer f.Close()
+
+	buf := make([]byte, t.metaInfo.Info.PieceLength)
+	for i := range t.pieces {
+		p := buf[:t.PieceLength(i)]
+		if _, err := f.ReadAt(p, t.getFileOffset(i)); err != nil {
+			continue
+		}
+		if err := t.verifyPiece(i, p); err != nil {
+			continue
+		}
+		t.markPieceComplete(i)
 	}
 }
 
-// Name implements Torrent.Name
+// Name returns the name of the target file.
 func (t *LocalTorrent) Name() string {
 	return t.metaInfo.Info.Name
 }
 
-// InfoHash implements Torrent.InfoHash
+// InfoHash returns the torrent metainfo hash.
 func (t *LocalTorrent) InfoHash() torlib.InfoHash {
 	return t.metaInfo.InfoHash
 }
 
-// NumPieces implements Torrent.NumPieces
+// NumPieces returns the number of pieces in the torrent.
 func (t *LocalTorrent) NumPieces() int {
-	return t.metaInfo.Info.NumPieces()
+	return len(t.pieces)
 }
 
-// Length implements Torrent.Length
+// Length returns the length of the target file.
 func (t *LocalTorrent) Length() int64 {
 	return t.metaInfo.Info.Length
 }
 
-// PieceLength implements Torrent.PieceLength
-func (t *LocalTorrent) PieceLength(piece int) int64 {
-	if piece == t.NumPieces()-1 {
-		// Last piece
-		return t.Length() - t.metaInfo.Info.PieceLength*int64(piece)
+// PieceLength returns the length of piece pi.
+func (t *LocalTorrent) PieceLength(pi int) int64 {
+	if pi == len(t.pieces)-1 {
+		// Last piece.
+		return t.Length() - t.metaInfo.Info.PieceLength*int64(pi)
 	}
 	return t.metaInfo.Info.PieceLength
 }
 
-// MaxPieceLength implements Torrent.MaxPieceLength
+// MaxPieceLength returns the longest piece length of the torrent.
 func (t *LocalTorrent) MaxPieceLength() int64 {
 	return t.PieceLength(0)
 }
 
-// Complete implements Torrent.Complete
+// Complete indicates whether the torrent is complete or not.
 func (t *LocalTorrent) Complete() bool {
-	numPieces := t.NumPieces()
-
-	// Read statuses of all pieces
-	statuses, err := t.pieceStatuses()
-	if err != nil {
-		log.Error(err)
-		return false
-	}
-
-	expected := make([]byte, numPieces)
-	for i := 0; i < numPieces; i++ {
-		expected[i] = store.PieceDone
-	}
-
-	return bytes.Compare(expected, statuses) == 0
+	return int(t.numComplete.Load()) == len(t.pieces)
 }
 
-// BytesDownloaded implements Torrent.BytesDownloaded
+// BytesDownloaded returns an estimate of the number of bytes downloaded in the
+// torrent.
 func (t *LocalTorrent) BytesDownloaded() int64 {
-	var sum int64
-
-	// Read statuses of all pieces
-	statuses, err := t.pieceStatuses()
-	if err != nil {
-		log.Error(err)
-		return sum
-	}
-
-	// Check status
-	for p, status := range statuses {
-		if status == store.PieceDone {
-			sum += t.PieceLength(p)
-		}
-	}
-	return sum
+	return min(int64(t.numComplete.Load())*t.metaInfo.Info.PieceLength, t.metaInfo.Info.Length)
 }
 
-// Bitfield implements Torrent.Bitfield
+// Bitfield returns the bitfield of pieces where true denotes a complete piece
+// and false denotes an incomplete piece.
 func (t *LocalTorrent) Bitfield() Bitfield {
-	bitfield := make([]bool, t.NumPieces())
-
-	// Read statuses of all pieces
-	statuses, err := t.pieceStatuses()
-	if err != nil {
-		log.Error(err)
-		return bitfield
-	}
-
-	// Check status
-	for p, status := range statuses {
-		if status == store.PieceDone {
-			bitfield[p] = true
+	bitfield := make(Bitfield, len(t.pieces))
+	for i := range t.pieces {
+		if t.pieces[i].complete() {
+			bitfield[i] = true
 		}
 	}
 	return bitfield
 }
 
-// String implements Torrent.String and returns a string representation of the torrent
 func (t *LocalTorrent) String() string {
 	return fmt.Sprintf("torrent(hash=%s, bitfield=%s)", t.InfoHash().HexString(), t.Bitfield())
 }
 
-// WritePiece implements Torrent.WritePieceAt
-func (t *LocalTorrent) WritePiece(data []byte, piece int) (int, error) {
-	verified := true
-	err := t.verifyPiece(piece, data)
+func (t *LocalTorrent) writePiece(data []byte, offset int64) error {
+	f, err := t.store.GetDownloadFileReadWriter(t.metaInfo.Info.Name)
 	if err != nil {
-		verified = false
-		log.Error(err)
+		return fmt.Errorf("cannot get download writer: %s", err)
 	}
-
-	fileOff, err := t.getFileOffset(piece, 0)
-	if err != nil {
-		return 0, err
+	defer f.Close()
+	if _, err := f.WriteAt(data, offset); err != nil {
+		return fmt.Errorf("write error: %s", err)
 	}
-
-	// Set piece status
-	err = t.preparePieceWrite(piece)
-	if err != nil {
-		return 0, err
-	}
-
-	// Get file writer
-	writer, err := t.store.GetDownloadFileReadWriter(t.metaInfo.Info.Name)
-	if err != nil {
-		return 0, err
-	}
-	defer writer.Close()
-
-	// Write piece
-	n, err := writer.WriteAt(data, fileOff)
-	if err != nil {
-		verified = false
-		return n, err
-	}
-
-	// Reset piece status
-	if err := t.finishPieceWrite(piece, verified); err != nil {
-		log.Error(err)
-		return n, err
-	}
-
-	return n, nil
+	return nil
 }
 
-// ReadPiece implements Torrent.ReadPieceAt
-func (t *LocalTorrent) ReadPiece(piece int) ([]byte, error) {
-	data := make([]byte, t.PieceLength(piece))
-	fileOff, err := t.getFileOffset(piece, 0)
+func (t *LocalTorrent) getPiece(pi int) (*piece, error) {
+	if pi >= len(t.pieces) {
+		return nil, fmt.Errorf("invalid piece index %d: num pieces = %d", pi, len(t.pieces))
+	}
+	return &t.pieces[pi], nil
+}
+
+// markPieceComplete must only be called once per piece.
+func (t *LocalTorrent) markPieceComplete(pi int) {
+	t.pieces[pi].markComplete()
+	t.numComplete.Inc()
+}
+
+var errWritePieceConflict = errors.New("piece is already being written to")
+
+// WritePiece writes data to piece pi.
+func (t *LocalTorrent) WritePiece(data []byte, pi int) error {
+	piece, err := t.getPiece(pi)
+	if err != nil {
+		return err
+	}
+	if int64(len(data)) != t.PieceLength(pi) {
+		return fmt.Errorf("invalid piece data length: expected %d, got %d", t.PieceLength(pi), len(data))
+	}
+
+	// Exit quickly if the piece is not writable.
+	if piece.complete() {
+		return nil
+	}
+	if piece.dirty() {
+		return errWritePieceConflict
+	}
+
+	if err := t.verifyPiece(pi, data); err != nil {
+		return fmt.Errorf("invalid piece: %s", err)
+	}
+
+	dirty, complete := piece.tryMarkDirty()
+	if dirty {
+		return errWritePieceConflict
+	} else if complete {
+		return nil
+	}
+
+	// At this point, we've determined that the piece is not complete and ensured
+	// we are the only thread which may write the piece. We do not block other
+	// threads from checking if the piece is writable.
+
+	if err := t.writePiece(data, t.getFileOffset(pi)); err != nil {
+		// Allow other threads to write this piece since we mysteriously failed.
+		piece.markEmpty()
+		return fmt.Errorf("write piece: %s", err)
+	}
+
+	// Each piece will be marked complete exactly once.
+	t.markPieceComplete(pi)
+
+	if t.Complete() {
+		// Multiple threads may attempt to move the download file to cache, however
+		// only one will succeed while the others will receive (and ignore) file exist
+		// error.
+		if err := t.store.MoveDownloadFileToCache(t.metaInfo.Info.Name); err != nil && !os.IsExist(err) {
+			return fmt.Errorf("download completed but failed to move file to cache directory: %s", err)
+		}
+	}
+
+	return nil
+}
+
+// ReadPiece returns the data for piece pi.
+func (t *LocalTorrent) ReadPiece(pi int) ([]byte, error) {
+	piece, err := t.getPiece(pi)
 	if err != nil {
 		return nil, err
 	}
-
-	// Get file reader
-	// It is ok if file is moved from download to cache
-	reader, err := t.store.GetDownloadOrCacheFileReader(t.metaInfo.Info.Name)
-	if err != nil {
-		return nil, err
-	}
-	defer reader.Close()
-
-	_, err = reader.ReadAt(data, fileOff)
-	if err != nil {
-		return nil, err
+	if !piece.complete() {
+		return nil, errors.New("piece not complete")
 	}
 
+	// It is ok if file is moved from download to cache.
+	f, err := t.store.GetDownloadOrCacheFileReader(t.metaInfo.Info.Name)
+	if err != nil {
+		return nil, fmt.Errorf("cannot get download/cache reader: %s", err)
+	}
+	defer f.Close()
+
+	data := make([]byte, t.PieceLength(pi))
+	if _, err := f.ReadAt(data, t.getFileOffset(pi)); err != nil {
+		return nil, fmt.Errorf("read piece: %s", err)
+	}
 	return data, nil
 }
 
-// HasPiece implements Torrent.HasPiece
-func (t *LocalTorrent) HasPiece(piece int) bool {
-	status, err := t.store.GetFilePieceStatus(t.metaInfo.Info.Name, piece, 1)
+// HasPiece returns if piece pi is complete.
+func (t *LocalTorrent) HasPiece(pi int) bool {
+	piece, err := t.getPiece(pi)
 	if err != nil {
-		log.Error(err)
 		return false
 	}
-	return status[0] == store.PieceDone
+	return piece.complete()
 }
 
-// MissingPieces implements Torrent.MissingPieces and returns the indexes of missing pieces
+// MissingPieces returns the indeces of all missing pieces.
 func (t *LocalTorrent) MissingPieces() []int {
 	var missing []int
-
-	// Read statuses of all pieces
-	statuses, err := t.pieceStatuses()
-	if err != nil {
-		log.Error(err)
-		return missing
-	}
-
-	// Check status
-	for p, status := range statuses {
-		if status == store.PieceDone {
-			continue
+	for i := range t.pieces {
+		if !t.pieces[i].complete() {
+			missing = append(missing, i)
 		}
-		missing = append(missing, p)
 	}
 	return missing
 }
 
-// verifyPiece verifies if the piece is complete
-func (t *LocalTorrent) verifyPiece(piece int, data []byte) error {
-	expectedHash, err := t.metaInfo.Info.PieceHash(piece)
+// verifyPiece ensures data for pi is valid.
+func (t *LocalTorrent) verifyPiece(pi int, data []byte) error {
+	expectedHash, err := t.metaInfo.Info.PieceHash(pi)
 	if err != nil {
-		return err
+		return fmt.Errorf("lookup piece hash: %s", err)
 	}
 
 	h := sha1.New()
@@ -236,85 +313,20 @@ func (t *LocalTorrent) verifyPiece(piece int, data []byte) error {
 	b := h.Sum(nil)
 
 	if bytes.Compare(b, expectedHash) != 0 {
-		return fmt.Errorf("Piece %d verification failed", piece)
+		return errors.New("unexpected piece hash")
 	}
 	return nil
 }
 
-// markPieceComplete implements Torrent.MarkPieceComplete
-func (t *LocalTorrent) markPieceComplete(piece int) error {
-	name := t.metaInfo.Info.Name
-	_, err := t.store.WriteDownloadFilePieceStatusAt(name, []byte{store.PieceDone}, piece)
-	if err != nil {
-		return err
-	}
-
-	// On every call, check if all pieces are completed.
-	// If so, try to move file from download to cache
-	if t.Complete() {
-		err = t.store.MoveDownloadFileToCache(name)
-		if err != nil {
-			if !os.IsExist(err) {
-				log.Errorf("Download completed but failed to move file to cache directory: %s", err.Error())
-				return err
-			}
-			return nil
-		}
-		log.Infof("Download completed and moved %s to cache directory", name)
-	}
-	return nil
+// getFileOffset calculates the offset in the torrent file given piece index.
+// Assumes pi is a valid piece index.
+func (t *LocalTorrent) getFileOffset(pi int) int64 {
+	return t.metaInfo.Info.PieceLength * int64(pi)
 }
 
-// getFileOffset calculates the offset in the torrent file given piece index and offset according to the piece
-func (t *LocalTorrent) getFileOffset(piece int, pieceOff int64) (int64, error) {
-	off := t.metaInfo.Info.PieceLength*int64(piece) + pieceOff
-	if off >= t.metaInfo.Info.Length {
-		return -1, fmt.Errorf("Offset out of range: offset %d file length %d", off, t.metaInfo.Info.Length)
+func min(a, b int64) int64 {
+	if a < b {
+		return a
 	}
-	return off, nil
-}
-
-// preparePieceWrite marks the piece as being written
-func (t *LocalTorrent) preparePieceWrite(piece int) error {
-	name := t.metaInfo.Info.Name
-	updated, err := t.store.WriteDownloadFilePieceStatusAt(name, []byte{store.PieceDirty}, piece)
-	if err != nil {
-		return err
-	}
-
-	// Another thread is writing to the same piece, current write should fail
-	// TODO (@evelynl): verify that we clean the status file at restart, otherwise some pieces will be left in dirty state forever
-	if !updated {
-		return ConflictedPieceWriteError{name, piece}
-	}
-	return nil
-}
-
-// finishPieceWrite unmarks the piece and resumes other threads to write to this piece
-func (t *LocalTorrent) finishPieceWrite(piece int, verified bool) error {
-	name := t.metaInfo.Info.Name
-	if verified {
-		err := t.markPieceComplete(piece)
-		if err == nil {
-			return nil
-		}
-		log.Error(err)
-	}
-	updated, err := t.store.WriteDownloadFilePieceStatusAt(name, []byte{store.PieceClean}, piece)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-
-	// Only the current thread should be able to unmark the piece
-	// TODO (@evelynl): verify that we clean the status file at restart, otherwise some pieces will be left in dirty state forever
-	if !updated {
-		log.Errorf("Another thread is marking the same piece as clean. This should not happend. %s: %d", name, piece)
-	}
-	return nil
-}
-
-// pieceStatues returns status for all pieces
-func (t *LocalTorrent) pieceStatuses() ([]byte, error) {
-	return t.store.GetFilePieceStatus(t.metaInfo.Info.Name, 0, t.metaInfo.Info.NumPieces())
+	return b
 }

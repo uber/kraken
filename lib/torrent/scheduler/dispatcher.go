@@ -217,8 +217,7 @@ func (d *dispatcher) handlePiecePayload(
 		}).Errorf("Error handling piece payload: %s", errChunkNotSupported)
 		return
 	}
-	_, err := d.Torrent.WritePiece(payload, i)
-	if err != nil {
+	if err := d.Torrent.WritePiece(payload, i); err != nil {
 		d.logf(log.Fields{
 			"peer": c.PeerID, "piece": msg.Index,
 		}).Errorf("Error writing piece payload: %s", err)

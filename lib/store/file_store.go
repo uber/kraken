@@ -20,6 +20,12 @@ import (
 	"github.com/robfig/cron"
 )
 
+// FileReadWriter aliases base.FileReadWriter
+type FileReadWriter = base.FileReadWriter
+
+// FileReader aliases base.FileReader
+type FileReader = base.FileReader
+
 // FileStore provides an interface for LocalFileStore. Useful for mocks.
 type FileStore interface {
 	Stop()

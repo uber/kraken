@@ -213,15 +213,17 @@ func (s *Scheduler) AddTorrent(mi *torlib.MetaInfo) <-chan error {
 	// Buffer size of 1 so sends do not block.
 	errc := make(chan error, 1)
 
-	t, err := s.torrentArchive.GetTorrent(mi.Info.Name, mi.InfoHash)
+	t, err := s.torrentArchive.CreateTorrent(mi)
 	if err != nil {
-		errc <- err
+		errc <- fmt.Errorf("create torrent: %s", err)
 		return errc
 	}
 
 	if !s.eventLoop.Send(newTorrentEvent{t, errc}) {
 		errc <- ErrSchedulerStopped
+		return errc
 	}
+
 	return errc
 }
 

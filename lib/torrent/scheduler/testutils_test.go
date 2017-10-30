@@ -21,6 +21,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/mocks/lib/torrent/mockstorage"
+	"code.uber.internal/infra/kraken/testutils"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -75,42 +76,46 @@ func configFixture() Config {
 	}.applyDefaults()
 }
 
-// writeTorrent writes the given content into a torrent file into tm's storage.
+type testPeer struct {
+	pctx           peercontext.PeerContext
+	scheduler      *Scheduler
+	torrentArchive storage.TorrentArchive
+	stats          tally.TestScope
+}
+
+// writeTorrent writes the given content into a torrent file into peers storage.
 // Useful for populating a completed torrent before seeding it.
-func writeTorrent(ta storage.TorrentArchive, mi *torlib.MetaInfo, content []byte) storage.Torrent {
-	t, err := ta.CreateTorrent(mi.InfoHash, mi)
+func (p *testPeer) writeTorrent(tf *torlib.TestTorrentFile) {
+	t, err := p.torrentArchive.CreateTorrent(tf.MetaInfo)
 	if err != nil {
 		panic(err)
 	}
-
 	for i := 0; i < t.NumPieces(); i++ {
-		start := int64(i) * mi.Info.PieceLength
+		start := int64(i) * tf.MetaInfo.Info.PieceLength
 		end := start + t.PieceLength(i)
-		if _, err := t.WritePiece(content[start:end], i); err != nil {
+		if err := t.WritePiece(tf.Content[start:end], i); err != nil {
 			panic(err)
 		}
 	}
-	return t
 }
 
-func checkContent(r *require.Assertions, t storage.Torrent, expected []byte) {
-	result := make([]byte, t.Length())
+func (p *testPeer) checkTorrent(t *testing.T, tf *torlib.TestTorrentFile) {
+	require := require.New(t)
+
+	tor, err := p.torrentArchive.GetTorrent(tf.MetaInfo.Info.Name, tf.MetaInfo.InfoHash)
+	require.NoError(err)
+
+	require.True(tor.Complete())
+
+	result := make([]byte, tor.Length())
 	cursor := result
-	for i := 0; i < t.NumPieces(); i++ {
-		pieceData, err := t.ReadPiece(i)
-		r.NoError(err)
+	for i := 0; i < tor.NumPieces(); i++ {
+		pieceData, err := tor.ReadPiece(i)
+		require.NoError(err)
 		copy(cursor, pieceData)
-		cursor = cursor[t.PieceLength(i):]
+		cursor = cursor[tor.PieceLength(i):]
 	}
-	r.Equal(expected, result)
-}
-
-type testPeer struct {
-	pctx           peercontext.PeerContext
-	Scheduler      *Scheduler
-	TorrentArchive storage.TorrentArchive
-	Stats          tally.TestScope
-	Stop           func()
+	require.Equal(tf.Content, result)
 }
 
 func findFreePort() int {
@@ -130,8 +135,13 @@ func findFreePort() int {
 	return port
 }
 
-func testPeerFixture(config Config, trackerAddr string, options ...option) *testPeer {
-	tm, cleanup := storage.TorrentArchiveFixture()
+func testPeerFixture(config Config, trackerAddr string, options ...option) (*testPeer, func()) {
+	var cleanup testutils.Cleanup
+	defer cleanup.Recover()
+
+	ta, c := storage.TorrentArchiveFixture()
+	cleanup.Add(c)
+
 	stats := tally.NewTestScope("", nil)
 	pctx := peercontext.PeerContext{
 		PeerID: torlib.PeerIDFixture(),
@@ -140,28 +150,26 @@ func testPeerFixture(config Config, trackerAddr string, options ...option) *test
 		Port:   findFreePort(),
 	}
 	ac := announceclient.New(announceclient.Config{}, pctx, serverset.NewSingle(trackerAddr))
-	s, err := New(config, tm, stats, pctx, ac, options...)
+	s, err := New(config, ta, stats, pctx, ac, options...)
 	if err != nil {
-		cleanup()
 		panic(err)
 	}
-	stop := func() {
-		s.Stop()
-		cleanup()
-	}
-	return &testPeer{pctx, s, tm, stats, stop}
+	cleanup.Add(s.Stop)
+
+	return &testPeer{pctx, s, ta, stats}, cleanup.Run
 }
 
-func testPeerFixtures(n int, config Config, trackerAddr string) (peers []*testPeer, stopAll func()) {
-	peers = make([]*testPeer, n)
-	for i := range peers {
-		peers[i] = testPeerFixture(config, trackerAddr)
+func testPeerFixtures(n int, config Config, trackerAddr string) ([]*testPeer, func()) {
+	var cleanup testutils.Cleanup
+	defer cleanup.Recover()
+
+	var peers []*testPeer
+	for i := 0; i < n; i++ {
+		p, c := testPeerFixture(config, trackerAddr)
+		peers = append(peers, p)
+		cleanup.Add(c)
 	}
-	return peers, func() {
-		for _, p := range peers {
-			p.Stop()
-		}
-	}
+	return peers, cleanup.Run
 }
 
 type hasConnEvent struct {

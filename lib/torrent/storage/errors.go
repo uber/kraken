@@ -6,21 +6,21 @@ import (
 	"code.uber.internal/infra/kraken/torlib"
 )
 
-// InfoHashMissMatchError implements error and contains expected and actual torlib.InfoHash
+// InfoHashMismatchError implements error and contains expected and actual torlib.InfoHash
 // TODO (@evelynl): this seems to be a fairly common error
-type InfoHashMissMatchError struct {
+type InfoHashMismatchError struct {
 	expected torlib.InfoHash
 	actual   torlib.InfoHash
 }
 
-func (ie InfoHashMissMatchError) Error() string {
+func (ie InfoHashMismatchError) Error() string {
 	return fmt.Sprintf("InfoHash missmatch: expected %s, actual %s", ie.expected.HexString(), ie.actual.HexString())
 }
 
-// IsInfoHashMissMatchError returns true if error type is InfoHashMissMatchError
-func IsInfoHashMissMatchError(err error) bool {
+// IsInfoHashMismatchError returns true if error type is InfoHashMismatchError
+func IsInfoHashMismatchError(err error) bool {
 	switch err.(type) {
-	case InfoHashMissMatchError:
+	case InfoHashMismatchError:
 		return true
 	}
 	return false

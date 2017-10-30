@@ -20,22 +20,19 @@ func TestDownloadTorrentWithSeederAndLeecher(t *testing.T) {
 
 	config := configFixture()
 
-	seeder := testPeerFixture(config, trackerAddr)
-	defer seeder.Stop()
+	seeder, cleanup := testPeerFixture(config, trackerAddr)
+	defer cleanup()
 
-	leecher := testPeerFixture(config, trackerAddr)
-	defer leecher.Stop()
+	leecher, cleanup := testPeerFixture(config, trackerAddr)
+	defer cleanup()
 
 	tf := torlib.TestTorrentFileFixture()
-	writeTorrent(seeder.TorrentArchive, tf.MetaInfo, tf.Content)
-	leecherTor, err := leecher.TorrentArchive.CreateTorrent(tf.MetaInfo.InfoHash, tf.MetaInfo)
-	require.NoError(err)
 
-	err = <-seeder.Scheduler.AddTorrent(tf.MetaInfo)
-	require.NoError(err)
-	err = <-leecher.Scheduler.AddTorrent(tf.MetaInfo)
-	require.NoError(err)
-	checkContent(require, leecherTor, tf.Content)
+	seeder.writeTorrent(tf)
+	require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo))
+
+	require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo))
+	leecher.checkTorrent(t, tf)
 }
 
 func TestDownloadManyTorrentsWithSeederAndLeecher(t *testing.T) {
@@ -46,11 +43,11 @@ func TestDownloadManyTorrentsWithSeederAndLeecher(t *testing.T) {
 
 	config := configFixture()
 
-	seeder := testPeerFixture(config, trackerAddr)
-	defer seeder.Stop()
+	seeder, cleanup := testPeerFixture(config, trackerAddr)
+	defer cleanup()
 
-	leecher := testPeerFixture(config, trackerAddr)
-	defer leecher.Stop()
+	leecher, cleanup := testPeerFixture(config, trackerAddr)
+	defer cleanup()
 
 	var wg sync.WaitGroup
 	for i := 0; i < 5; i++ {
@@ -59,17 +56,11 @@ func TestDownloadManyTorrentsWithSeederAndLeecher(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			writeTorrent(seeder.TorrentArchive, tf.MetaInfo, tf.Content)
-			leecherTor, err := leecher.TorrentArchive.CreateTorrent(tf.MetaInfo.InfoHash, tf.MetaInfo)
-			require.NoError(err)
+			seeder.writeTorrent(tf)
+			require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo))
 
-			err = <-seeder.Scheduler.AddTorrent(tf.MetaInfo)
-			require.NoError(err)
-
-			err = <-leecher.Scheduler.AddTorrent(tf.MetaInfo)
-			require.NoError(err)
-
-			checkContent(require, leecherTor, tf.Content)
+			require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo))
+			leecher.checkTorrent(t, tf)
 		}()
 	}
 	wg.Wait()
@@ -83,20 +74,19 @@ func TestDownloadManyTorrentsWithSeederAndManyLeechers(t *testing.T) {
 
 	config := configFixture()
 
-	seeder := testPeerFixture(config, trackerAddr)
-	defer seeder.Stop()
+	seeder, cleanup := testPeerFixture(config, trackerAddr)
+	defer cleanup()
 
-	leechers, stopAll := testPeerFixtures(5, config, trackerAddr)
-	defer stopAll()
+	leechers, cleanup := testPeerFixtures(5, config, trackerAddr)
+	defer cleanup()
 
 	// Start seeding each torrent.
 	torrentFiles := make([]*torlib.TestTorrentFile, 5)
 	for i := range torrentFiles {
 		tf := torlib.TestTorrentFileFixture()
 		torrentFiles[i] = tf
-		writeTorrent(seeder.TorrentArchive, tf.MetaInfo, tf.Content)
-		err := <-seeder.Scheduler.AddTorrent(tf.MetaInfo)
-		require.NoError(err)
+		seeder.writeTorrent(tf)
+		require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo))
 	}
 
 	var wg sync.WaitGroup
@@ -107,19 +97,13 @@ func TestDownloadManyTorrentsWithSeederAndManyLeechers(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				leecherTor, err := p.TorrentArchive.CreateTorrent(tf.MetaInfo.InfoHash, tf.MetaInfo)
-				require.NoError(err)
-
 				select {
-				case err := <-p.Scheduler.AddTorrent(tf.MetaInfo):
+				case err := <-p.scheduler.AddTorrent(tf.MetaInfo):
 					require.NoError(err)
+					p.checkTorrent(t, tf)
 				case <-time.After(10 * time.Second):
-					t.Errorf("AddTorrent timeout scheduler=%s torrent=%s",
-						p.pctx.PeerID, tf.MetaInfo.InfoHash)
-					return
+					t.Errorf("AddTorrent timeout scheduler=%s torrent=%s", p.pctx.PeerID, tf.MetaInfo.InfoHash)
 				}
-
-				checkContent(require, leecherTor, tf.Content)
 			}()
 		}
 	}
@@ -134,32 +118,34 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 
 	config := configFixture()
 
-	peers, stopAll := testPeerFixtures(10, config, trackerAddr)
-	defer stopAll()
+	peers, cleanup := testPeerFixtures(10, config, trackerAddr)
+	defer cleanup()
 
 	pieceLength := 256
 	tf := torlib.CustomTestTorrentFileFixture(len(peers)*pieceLength, pieceLength)
 
 	var wg sync.WaitGroup
 	for i, p := range peers {
-		partialContent := make([]byte, len(tf.Content))
+		tor, err := p.torrentArchive.CreateTorrent(tf.MetaInfo)
+		require.NoError(err)
+
+		piece := make([]byte, pieceLength)
 		start := i * pieceLength
 		stop := (i + 1) * pieceLength
-		copy(partialContent[start:stop], tf.Content[start:stop])
-		tor := writeTorrent(p.TorrentArchive, tf.MetaInfo, partialContent)
+		copy(piece, tf.Content[start:stop])
+		require.NoError(tor.WritePiece(piece, i))
 
 		p := p
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			select {
-			case err := <-p.Scheduler.AddTorrent(tf.MetaInfo):
+			case err := <-p.scheduler.AddTorrent(tf.MetaInfo):
 				require.NoError(err)
+				p.checkTorrent(t, tf)
 			case <-time.After(10 * time.Second):
 				t.Errorf("AddTorrent timeout scheduler=%s torrent=%s", p.pctx.PeerID, tf.MetaInfo.InfoHash)
-				return
 			}
-			checkContent(require, tor, tf.Content)
 		}()
 	}
 	wg.Wait()
@@ -178,24 +164,20 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 	peerConfig := configFixture()
 	peerConfig.ConnState.MaxOpenConnectionsPerTorrent = 2
 
-	peerA := testPeerFixture(peerConfig, trackerAddr)
-	defer peerA.Stop()
-	peerATor, err := peerA.TorrentArchive.CreateTorrent(tf.MetaInfo.InfoHash, tf.MetaInfo)
-	require.NoError(err)
+	peerA, cleanup := testPeerFixture(peerConfig, trackerAddr)
+	defer cleanup()
 
-	peerB := testPeerFixture(peerConfig, trackerAddr)
-	defer peerB.Stop()
-	peerBTor, err := peerB.TorrentArchive.CreateTorrent(tf.MetaInfo.InfoHash, tf.MetaInfo)
-	require.NoError(err)
+	peerB, cleanup := testPeerFixture(peerConfig, trackerAddr)
+	defer cleanup()
 
-	peerAErrc := peerA.Scheduler.AddTorrent(tf.MetaInfo)
-	peerBErrc := peerB.Scheduler.AddTorrent(tf.MetaInfo)
+	peerAErrc := peerA.scheduler.AddTorrent(tf.MetaInfo)
+	peerBErrc := peerB.scheduler.AddTorrent(tf.MetaInfo)
 
 	// Wait for peerA and peerB to establish connections to one another before
 	// starting the seeder, so their handshake bitfields are both guaranteed to
 	// be empty.
-	waitForConnEstablished(t, peerA.Scheduler, peerB.pctx.PeerID, tf.MetaInfo.InfoHash)
-	waitForConnEstablished(t, peerB.Scheduler, peerA.pctx.PeerID, tf.MetaInfo.InfoHash)
+	waitForConnEstablished(t, peerA.scheduler, peerB.pctx.PeerID, tf.MetaInfo.InfoHash)
+	waitForConnEstablished(t, peerB.scheduler, peerA.pctx.PeerID, tf.MetaInfo.InfoHash)
 
 	// The seeder is allowed only one connection, which means only one peer will
 	// have access to the completed torrent, while the other is forced to rely
@@ -203,20 +185,21 @@ func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
 	seederConfig := configFixture()
 	seederConfig.ConnState.MaxOpenConnectionsPerTorrent = 1
 
-	seeder := testPeerFixture(seederConfig, trackerAddr)
-	defer seeder.Stop()
-	writeTorrent(seeder.TorrentArchive, tf.MetaInfo, tf.Content)
-	require.NoError(<-seeder.Scheduler.AddTorrent(tf.MetaInfo))
+	seeder, cleanup := testPeerFixture(seederConfig, trackerAddr)
+	defer cleanup()
+
+	seeder.writeTorrent(tf)
+	require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo))
 	require.NoError(<-peerAErrc)
 	require.NoError(<-peerBErrc)
 
-	checkContent(require, peerATor, tf.Content)
-	checkContent(require, peerBTor, tf.Content)
+	peerA.checkTorrent(t, tf)
+	peerB.checkTorrent(t, tf)
 
 	// Ensure that only one peer was able to open a connection to the seeder.
 	require.NotEqual(
-		hasConn(peerA.Scheduler, seeder.pctx.PeerID, tf.MetaInfo.InfoHash),
-		hasConn(peerB.Scheduler, seeder.pctx.PeerID, tf.MetaInfo.InfoHash))
+		hasConn(peerA.scheduler, seeder.pctx.PeerID, tf.MetaInfo.InfoHash),
+		hasConn(peerB.scheduler, seeder.pctx.PeerID, tf.MetaInfo.InfoHash))
 }
 
 func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
@@ -232,21 +215,19 @@ func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 	clk := clock.NewMock()
 	w := newEventWatcher()
 
-	seeder := testPeerFixture(config, trackerAddr, withEventLoop(w), withClock(clk))
-	defer seeder.Stop()
-	writeTorrent(seeder.TorrentArchive, tf.MetaInfo, tf.Content)
-	require.NoError(<-seeder.Scheduler.AddTorrent(tf.MetaInfo))
+	seeder, cleanup := testPeerFixture(config, trackerAddr, withEventLoop(w), withClock(clk))
+	defer cleanup()
+	seeder.writeTorrent(tf)
+	require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo))
 
-	leecher := testPeerFixture(config, trackerAddr, withClock(clk))
-	defer leecher.Stop()
-	leecherTor, err := leecher.TorrentArchive.CreateTorrent(tf.MetaInfo.InfoHash, tf.MetaInfo)
-	require.NoError(err)
-	errc := leecher.Scheduler.AddTorrent(tf.MetaInfo)
+	leecher, cleanup := testPeerFixture(config, trackerAddr, withClock(clk))
+	defer cleanup()
+	errc := leecher.scheduler.AddTorrent(tf.MetaInfo)
 
 	clk.Add(config.AnnounceInterval)
 
 	require.NoError(<-errc)
-	checkContent(require, leecherTor, tf.Content)
+	leecher.checkTorrent(t, tf)
 
 	// Conns expire...
 	clk.Add(config.IdleConnTTL)
@@ -257,11 +238,11 @@ func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 	// Then seeding torrents expire.
 	clk.Add(config.IdleSeederTTL)
 
-	waitForTorrentRemoved(t, seeder.Scheduler, tf.MetaInfo.InfoHash)
-	waitForTorrentRemoved(t, leecher.Scheduler, tf.MetaInfo.InfoHash)
+	waitForTorrentRemoved(t, seeder.scheduler, tf.MetaInfo.InfoHash)
+	waitForTorrentRemoved(t, leecher.scheduler, tf.MetaInfo.InfoHash)
 
-	require.False(hasConn(seeder.Scheduler, leecher.pctx.PeerID, tf.MetaInfo.InfoHash))
-	require.False(hasConn(leecher.Scheduler, seeder.pctx.PeerID, tf.MetaInfo.InfoHash))
+	require.False(hasConn(seeder.scheduler, leecher.pctx.PeerID, tf.MetaInfo.InfoHash))
+	require.False(hasConn(leecher.scheduler, seeder.pctx.PeerID, tf.MetaInfo.InfoHash))
 }
 
 func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
@@ -273,15 +254,13 @@ func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
 	tf := torlib.TestTorrentFileFixture()
 	config := configFixture()
 
-	seeder := testPeerFixture(config, trackerAddr)
-	defer seeder.Stop()
-	writeTorrent(seeder.TorrentArchive, tf.MetaInfo, tf.Content)
-	require.NoError(<-seeder.Scheduler.AddTorrent(tf.MetaInfo))
+	seeder, cleanup := testPeerFixture(config, trackerAddr)
+	defer cleanup()
+	seeder.writeTorrent(tf)
+	require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo))
 
-	leecher := testPeerFixture(config, trackerAddr)
-	defer leecher.Stop()
-	leecherTor, err := leecher.TorrentArchive.CreateTorrent(tf.MetaInfo.InfoHash, tf.MetaInfo)
-	require.NoError(err)
+	leecher, cleanup := testPeerFixture(config, trackerAddr)
+	defer cleanup()
 
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
@@ -289,15 +268,15 @@ func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			// Multiple goroutines should be able to wait on the same torrent.
-			require.NoError(<-leecher.Scheduler.AddTorrent(tf.MetaInfo))
+			require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo))
 		}()
 	}
 	wg.Wait()
 
-	checkContent(require, leecherTor, tf.Content)
+	leecher.checkTorrent(t, tf)
 
 	// After the torrent is complete, further calls to AddTorrent should succeed immediately.
-	require.NoError(<-leecher.Scheduler.AddTorrent(tf.MetaInfo))
+	require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo))
 }
 
 func TestEmitStatsEventTriggers(t *testing.T) {
@@ -308,8 +287,8 @@ func TestEmitStatsEventTriggers(t *testing.T) {
 	clk := clock.NewMock()
 	w := newEventWatcher()
 
-	peer := testPeerFixture(config, trackerAddr, withEventLoop(w), withClock(clk))
-	defer peer.Stop()
+	_, cleanup := testPeerFixture(config, trackerAddr, withEventLoop(w), withClock(clk))
+	defer cleanup()
 
 	clk.Add(config.EmitStatsInterval)
 	w.WaitFor(t, emitStatsEvent{})
