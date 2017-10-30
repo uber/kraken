@@ -60,6 +60,8 @@ type FileState interface {
 // Verify is passed into FileEntry functions to perform verification after lock is acquired.
 type Verify func(entry FileEntry) error
 
+var noopVerify = func(FileEntry) error { return nil }
+
 // FileEntry manages one file and its metadata in a stateful and thread-safe manner.
 type FileEntry interface {
 	GetInternal() FileEntryInternal

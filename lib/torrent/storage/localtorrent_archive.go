@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"os"
 
 	"code.uber.internal/infra/kraken/lib/store"
@@ -15,62 +16,48 @@ type LocalTorrentArchive struct {
 }
 
 // NewLocalTorrentArchive creates a new LocalTorrentArchive
-func NewLocalTorrentArchive(store store.FileStore) TorrentArchive {
-	return &LocalTorrentArchive{
-		store: store,
-	}
+func NewLocalTorrentArchive(store store.FileStore) *LocalTorrentArchive {
+	return &LocalTorrentArchive{store}
 }
 
-// CreateTorrent implements TorrentArchive.CreateTorrent
-func (a *LocalTorrentArchive) CreateTorrent(ih torlib.InfoHash, mi *torlib.MetaInfo) (Torrent, error) {
-	if err := a.store.CreateDownloadFile(mi.Info.Name, mi.Info.Length); err != nil {
-		// Duplicated files are not allowed, only one thread will create a download file
-		if os.IsExist(err) {
-			return a.GetTorrent(mi.Info.Name, ih)
-		}
-		return nil, err
-	}
+// CreateTorrent creates a torrent file on disk, or returns os.ErrExist if the
+// torrent already exists.
+func (a *LocalTorrentArchive) CreateTorrent(mi *torlib.MetaInfo) (Torrent, error) {
 
+	// We ignore existing download / metainfo file errors to allow thread
+	// interleaving: if two threads try to create the same torrent at the same
+	// time, said files will be created exactly once and both threads will succeed.
+
+	if err := a.store.CreateDownloadFile(mi.Info.Name, mi.Info.Length); err != nil && !os.IsExist(err) {
+		return nil, fmt.Errorf("create download file: %s", err)
+	}
 	// Save metainfo in store so we do not need to query tracker everytime
 	miRaw, err := mi.Serialize()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("serialize metainfo: %s", err)
 	}
-
-	_, err = a.store.SetDownloadOrCacheFileMeta(mi.Info.Name, []byte(miRaw))
-	if err != nil {
-		return nil, err
+	if _, err := a.store.SetDownloadOrCacheFileMeta(mi.Info.Name, []byte(miRaw)); err != nil && !os.IsExist(err) {
+		return nil, fmt.Errorf("write metainfo: %s", err)
 	}
-
-	// Init piece status for empty torrent
-	numPieces := mi.Info.NumPieces()
-	statues := make([]byte, numPieces)
-	for i := 0; i < numPieces; i++ {
-		statues[i] = store.PieceClean
-	}
-
-	// Save piece status in store
-	_, err = a.store.WriteDownloadFilePieceStatus(mi.Info.Name, statues)
-	if err != nil {
-		return nil, err
-	}
-
 	return NewLocalTorrent(a.store, mi), nil
 }
 
 // GetTorrent implements TorrentArchive.GetTorrent
 // All torrents are content addressable by name, so both name and ih identify a unique torrent
 // Our storage supports search by content addressable file name, so torrent name is required
+// Returns os.ErrNotExist if the torrent does not exist.
 func (a *LocalTorrentArchive) GetTorrent(name string, ih torlib.InfoHash) (Torrent, error) {
-	// Get metainfo from disk
 	miRaw, err := a.store.GetDownloadOrCacheFileMeta(name)
 	if err != nil {
-		return nil, err
+		if os.IsNotExist(err) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("get metainfo: %s", err)
 	}
 
 	mi, err := torlib.NewMetaInfoFromBytes(miRaw)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse metainfo: %s", err)
 	}
 
 	// Verify infohash
@@ -78,7 +65,7 @@ func (a *LocalTorrentArchive) GetTorrent(name string, ih torlib.InfoHash) (Torre
 	// because InfoHash does not match what is in tracker.
 	// The correct way is to delete and re-create this torrent.
 	if mi.InfoHash.HexString() != ih.HexString() {
-		return nil, InfoHashMissMatchError{ih, mi.InfoHash}
+		return nil, InfoHashMismatchError{ih, mi.InfoHash}
 	}
 
 	return NewLocalTorrent(a.store, mi), nil

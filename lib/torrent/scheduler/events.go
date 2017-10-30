@@ -252,6 +252,10 @@ type newTorrentEvent struct {
 func (e newTorrentEvent) Apply(s *Scheduler) {
 	s.logf(log.Fields{"torrent": e.torrent}).Debug("Applying new torrent event")
 
+	// If the torrent already exists, we must be careful not to use e.torrent
+	// because using multiple Torrent instances for the same torrent file will
+	// result in undefined behavior.
+
 	infoHash := e.torrent.InfoHash()
 	ctrl, ok := s.torrentControls[infoHash]
 	if !ok {

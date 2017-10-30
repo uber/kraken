@@ -87,7 +87,6 @@ func (c *SchedulerClient) Close() error {
 
 // DownloadTorrent downloads a torrent given torrent name
 func (c *SchedulerClient) DownloadTorrent(name string) (io.ReadCloser, error) {
-	var err error
 	stopwatch := c.stats.SubScope("torrent").SubScope(name).Timer("download_time").Start()
 
 	if !c.config.Enabled {
@@ -108,10 +107,6 @@ func (c *SchedulerClient) DownloadTorrent(name string) (io.ReadCloser, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse metainfo: %s", err)
 		}
-	}
-
-	if _, err = c.archive.CreateTorrent(mi.InfoHash, mi); err != nil {
-		return nil, fmt.Errorf("failed to create torrent in archive: %s", err)
 	}
 
 	select {
@@ -173,7 +168,7 @@ func (c *SchedulerClient) CreateTorrentFromFile(name, filepath string) error {
 		log.Warnf("%s_meta is already created", name)
 	}
 
-	_, err = c.archive.CreateTorrent(mi.InfoHash, mi)
+	_, err = c.archive.CreateTorrent(mi)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"name":  name,

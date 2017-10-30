@@ -155,7 +155,7 @@ func (s *LocalFileStore) CreateFile(fileName string, states []FileState, targetS
 		value, loaded := s.fileMap.LoadOrStore(fileName, newEntry)
 		if loaded {
 			// It's another object, so it's ok to call functions that calls Lock()
-			loadedState, err := value.(FileEntry).GetState(nil)
+			loadedState, err := value.(FileEntry).GetState(noopVerify)
 			if err != nil {
 				return err
 			}
@@ -200,7 +200,7 @@ func (s *LocalFileStore) CreateLinkFromFile(fileName string, states []FileState,
 		value, loaded := s.fileMap.LoadOrStore(fileName, newEntry)
 		if loaded {
 			// It's another object, so it's ok to call functions that calls Lock()
-			loadedState, err := value.(FileEntry).GetState(nil)
+			loadedState, err := value.(FileEntry).GetState(noopVerify)
 			if err != nil {
 				return err
 			}
