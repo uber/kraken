@@ -19,6 +19,7 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/serverset"
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/mocks/lib/torrent/mockstorage"
 	"code.uber.internal/infra/kraken/testutils"
@@ -81,6 +82,7 @@ type testPeer struct {
 	scheduler      *Scheduler
 	torrentArchive storage.TorrentArchive
 	stats          tally.TestScope
+	testProducer   *networkevent.TestProducer
 }
 
 // writeTorrent writes the given content into a torrent file into peers storage.
@@ -150,13 +152,14 @@ func testPeerFixture(config Config, trackerAddr string, options ...option) (*tes
 		Port:   findFreePort(),
 	}
 	ac := announceclient.New(announceclient.Config{}, pctx, serverset.NewSingle(trackerAddr))
-	s, err := New(config, ta, stats, pctx, ac, options...)
+	tp := networkevent.NewTestProducer()
+	s, err := New(config, ta, stats, pctx, ac, tp, options...)
 	if err != nil {
 		panic(err)
 	}
 	cleanup.Add(s.Stop)
 
-	return &testPeer{pctx, s, ta, stats}, cleanup.Run
+	return &testPeer{pctx, s, ta, stats, tp}, cleanup.Run
 }
 
 func testPeerFixtures(n int, config Config, trackerAddr string) ([]*testPeer, func()) {

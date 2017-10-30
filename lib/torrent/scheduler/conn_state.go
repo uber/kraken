@@ -172,18 +172,23 @@ func (s *connState) MovePendingToActive(c *conn) error {
 	return nil
 }
 
-func (s *connState) DeleteActive(c *conn) {
+// DeleteActive returns true if the conn was deleted, or false if the conn is not
+// active.
+func (s *connState) DeleteActive(c *conn) bool {
 	k := connKey{c.PeerID, c.InfoHash}
-	if cur, ok := s.active[k]; ok && cur == c {
+	cur, ok := s.active[k]
+	if !ok || cur != c {
 		// It is possible that some new conn shares the same key as the old conn,
 		// so we need to make sure we're deleting the right one.
-		delete(s.active, k)
-		s.capacity[k.infoHash]++
-		s.adjustConnBandwidthLimits()
-		s.logf(log.Fields{
-			"peer": k.peerID, "hash": k.infoHash,
-		}).Infof("Deleted active conn, capacity now at %d", s.capacity[k.infoHash])
+		return false
 	}
+	delete(s.active, k)
+	s.capacity[k.infoHash]++
+	s.adjustConnBandwidthLimits()
+	s.logf(log.Fields{
+		"peer": k.peerID, "hash": k.infoHash,
+	}).Infof("Deleted active conn, capacity now at %d", s.capacity[k.infoHash])
+	return true
 }
 
 func (s *connState) DeleteStaleBlacklistEntries() {

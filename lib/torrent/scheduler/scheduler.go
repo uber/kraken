@@ -13,6 +13,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
@@ -70,6 +71,8 @@ type Scheduler struct {
 
 	announceClient announceclient.Client
 
+	networkEventProducer networkevent.Producer
+
 	// The following fields orchestrate the stopping of the Scheduler.
 	once sync.Once      // Ensures the stop sequence is executed only once.
 	done chan struct{}  // Signals all goroutines to exit.
@@ -100,6 +103,7 @@ func New(
 	stats tally.Scope,
 	pctx peercontext.PeerContext,
 	announceClient announceclient.Client,
+	networkEventProducer networkevent.Producer,
 	options ...option) (*Scheduler, error) {
 
 	config = config.applyDefaults()
@@ -145,10 +149,11 @@ func New(
 			Stats:       stats,
 		},
 		dispatcherFactory: &dispatcherFactory{
-			Config:      config,
-			LocalPeerID: pctx.PeerID,
-			EventSender: overrides.eventLoop,
-			Clock:       overrides.clock,
+			Config:               config,
+			LocalPeerID:          pctx.PeerID,
+			EventSender:          overrides.eventLoop,
+			Clock:                overrides.clock,
+			NetworkEventProducer: networkEventProducer,
 		},
 		torrentControls:      make(map[torlib.InfoHash]*torrentControl),
 		connState:            newConnState(pctx.PeerID, config.ConnState, overrides.clock),
@@ -160,6 +165,7 @@ func New(
 		blacklistCleanupTick: blacklistCleanupTick,
 		emitStatsTick:        overrides.clock.Tick(config.EmitStatsInterval),
 		announceClient:       announceClient,
+		networkEventProducer: networkEventProducer,
 		done:                 done,
 	}
 
