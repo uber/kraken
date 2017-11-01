@@ -62,10 +62,6 @@ func newConnState(localPeerID torlib.PeerID, config ConnStateConfig, clk clock.C
 	}
 }
 
-func (s *connState) InitCapacity(infoHash torlib.InfoHash) {
-	s.capacity[infoHash] = s.config.MaxOpenConnectionsPerTorrent
-}
-
 func (s *connState) ActiveConns() []*conn {
 	conns := make([]*conn, 0, len(s.active))
 	for _, c := range s.active {
@@ -116,7 +112,12 @@ func (s *connState) AddPending(peerID torlib.PeerID, infoHash torlib.InfoHash) e
 			return blacklistError{remaining: e.Remaining(now)}
 		}
 	}
-	if s.capacity[k.infoHash] == 0 {
+	cap, ok := s.capacity[infoHash]
+	if !ok {
+		cap = s.config.MaxOpenConnectionsPerTorrent
+		s.capacity[infoHash] = cap
+	}
+	if cap == 0 {
 		return errTorrentAtCapacity
 	}
 	if s.pending[k] {

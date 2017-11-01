@@ -85,6 +85,31 @@ type testPeer struct {
 	testProducer   *networkevent.TestProducer
 }
 
+func testPeerFixture(config Config, trackerAddr string, options ...option) (*testPeer, func()) {
+	var cleanup testutils.Cleanup
+	defer cleanup.Recover()
+
+	ta, c := storage.TorrentArchiveFixture()
+	cleanup.Add(c)
+
+	stats := tally.NewTestScope("", nil)
+	pctx := peercontext.PeerContext{
+		PeerID: torlib.PeerIDFixture(),
+		Zone:   "sjc1",
+		IP:     "localhost",
+		Port:   findFreePort(),
+	}
+	ac := announceclient.Default(pctx, serverset.NewSingle(trackerAddr))
+	tp := networkevent.NewTestProducer()
+	s, err := New(config, ta, stats, pctx, ac, tp, options...)
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(s.Stop)
+
+	return &testPeer{pctx, s, ta, stats, tp}, cleanup.Run
+}
+
 // writeTorrent writes the given content into a torrent file into peers storage.
 // Useful for populating a completed torrent before seeding it.
 func (p *testPeer) writeTorrent(tf *torlib.TestTorrentFile) {
@@ -135,31 +160,6 @@ func findFreePort() int {
 		panic(err)
 	}
 	return port
-}
-
-func testPeerFixture(config Config, trackerAddr string, options ...option) (*testPeer, func()) {
-	var cleanup testutils.Cleanup
-	defer cleanup.Recover()
-
-	ta, c := storage.TorrentArchiveFixture()
-	cleanup.Add(c)
-
-	stats := tally.NewTestScope("", nil)
-	pctx := peercontext.PeerContext{
-		PeerID: torlib.PeerIDFixture(),
-		Zone:   "sjc1",
-		IP:     "localhost",
-		Port:   findFreePort(),
-	}
-	ac := announceclient.New(announceclient.Config{}, pctx, serverset.NewSingle(trackerAddr))
-	tp := networkevent.NewTestProducer()
-	s, err := New(config, ta, stats, pctx, ac, tp, options...)
-	if err != nil {
-		panic(err)
-	}
-	cleanup.Add(s.Stop)
-
-	return &testPeer{pctx, s, ta, stats, tp}, cleanup.Run
 }
 
 func testPeerFixtures(n int, config Config, trackerAddr string) ([]*testPeer, func()) {

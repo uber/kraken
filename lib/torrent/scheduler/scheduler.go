@@ -108,6 +108,8 @@ func New(
 
 	config = config.applyDefaults()
 
+	log.Infof("Scheduler initializing with config:\n%s", config)
+
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", pctx.Port))
 	if err != nil {
 		return nil, err
