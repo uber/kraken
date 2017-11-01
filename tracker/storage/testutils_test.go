@@ -29,17 +29,11 @@ func nemoConfigFixture() mysql.Configuration {
 
 func redisConfigFixture() RedisConfig {
 	return RedisConfig{
-		Addr:                  "localhost:6380",
-		DialTimeout:           5 * time.Second,
-		ReadTimeout:           30 * time.Second,
-		WriteTimeout:          30 * time.Second,
-		PeerSetWindowSizeSecs: 30,
-		MaxPeerSetWindows:     4,
-		TorrentTTLSecs:        60,
-		MaxIdleConns:          5,
-		MaxActiveConns:        20,
-		IdleConnTimeoutSecs:   10,
-		OriginsTTL:            5 * time.Minute,
+		Addr:              "localhost:6380",
+		PeerSetWindowSize: 30 * time.Second,
+		MaxPeerSetWindows: 4,
+		TorrentTTL:        time.Minute,
+		OriginsTTL:        5 * time.Minute,
 	}
 }
 
