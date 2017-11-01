@@ -47,7 +47,7 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 	require := require.New(t)
 
 	config := redisConfigFixture()
-	config.PeerSetWindowSizeSecs = 10
+	config.PeerSetWindowSize = 10 * time.Second
 	config.MaxPeerSetWindows = 3
 
 	flushdb(config)
@@ -64,7 +64,7 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 
 	// Each peer will be added on a different second to distribute them across
 	// multiple windows.
-	peers := make([]*torlib.PeerInfo, config.PeerSetWindowSizeSecs*config.MaxPeerSetWindows)
+	peers := make([]*torlib.PeerInfo, int(config.PeerSetWindowSize.Seconds())*config.MaxPeerSetWindows)
 
 	for i := range peers {
 		if i > 0 {
@@ -87,7 +87,7 @@ func TestRedisStoragePeerExpiration(t *testing.T) {
 	require := require.New(t)
 
 	config := redisConfigFixture()
-	config.PeerSetWindowSizeSecs = 1
+	config.PeerSetWindowSize = time.Second
 	config.MaxPeerSetWindows = 2
 
 	flushdb(config)

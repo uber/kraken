@@ -59,6 +59,13 @@ type RedisStorage struct {
 
 // NewRedisStorage creates a RedisStorage instance.
 func NewRedisStorage(config RedisConfig) (*RedisStorage, error) {
+	config, err := config.applyDefaults()
+	if err != nil {
+		return nil, fmt.Errorf("configuration: %s", err)
+	}
+
+	log.Infof("Redis storage initializing with config:\n%s", config)
+
 	s := &RedisStorage{
 		config: config,
 		pool: &redis.Pool{
@@ -73,7 +80,7 @@ func NewRedisStorage(config RedisConfig) (*RedisStorage, error) {
 			},
 			MaxIdle:     config.MaxIdleConns,
 			MaxActive:   config.MaxActiveConns,
-			IdleTimeout: time.Duration(config.IdleConnTimeoutSecs) * time.Second,
+			IdleTimeout: config.IdleConnTimeout,
 			Wait:        true,
 		},
 		now: time.Now,
@@ -91,14 +98,14 @@ func NewRedisStorage(config RedisConfig) (*RedisStorage, error) {
 
 func (s *RedisStorage) curPeerSetWindow() int64 {
 	t := s.now().Unix()
-	return t - (t % int64(s.config.PeerSetWindowSizeSecs))
+	return t - (t % int64(s.config.PeerSetWindowSize.Seconds()))
 }
 
 func (s *RedisStorage) peerSetWindows() []int64 {
 	cur := s.curPeerSetWindow()
 	ws := make([]int64, s.config.MaxPeerSetWindows)
 	for i := range ws {
-		ws[i] = cur - int64(i*s.config.PeerSetWindowSizeSecs)
+		ws[i] = cur - int64(i)*int64(s.config.PeerSetWindowSize.Seconds())
 	}
 	return ws
 }
@@ -112,7 +119,7 @@ func (s *RedisStorage) UpdatePeer(p *torlib.PeerInfo) error {
 	defer c.Close()
 
 	w := s.curPeerSetWindow()
-	expireAt := w + int64(s.config.PeerSetWindowSizeSecs*s.config.MaxPeerSetWindows)
+	expireAt := w + int64(s.config.PeerSetWindowSize.Seconds())*int64(s.config.MaxPeerSetWindows)
 
 	// Add p to the current window.
 	k := peerSetKey(p.InfoHash, w)
@@ -171,7 +178,7 @@ func (s *RedisStorage) CreateTorrent(mi *torlib.MetaInfo) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.Do("SETEX", torrentKey(mi.Name()), s.config.TorrentTTLSecs, v)
+	_, err = c.Do("SETEX", torrentKey(mi.Name()), int(s.config.TorrentTTL.Seconds()), v)
 	return err
 }
 
