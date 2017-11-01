@@ -1,7 +1,10 @@
 package scheduler
 
 import (
+	"fmt"
 	"time"
+
+	"gopkg.in/yaml.v2"
 
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
@@ -50,6 +53,14 @@ type Config struct {
 	ConnState ConnStateConfig `yaml:"conn_state"`
 
 	Conn ConnConfig `yaml:"conn"`
+}
+
+func (c Config) String() string {
+	b, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Sprintf("yaml marshal error: %s", err)
+	}
+	return string(b)
 }
 
 func (c Config) applyDefaults() Config {

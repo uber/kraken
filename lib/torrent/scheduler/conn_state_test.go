@@ -40,8 +40,6 @@ func TestBlacklistBackoff(t *testing.T) {
 			peerID := torlib.PeerIDFixture()
 			infoHash := torlib.InfoHashFixture()
 
-			s.InitCapacity(infoHash)
-
 			var remaining time.Duration
 			for i := 0; i < test.failures; i++ {
 				require.NoError(s.Blacklist(peerID, infoHash))
@@ -79,8 +77,6 @@ func TestDeleteStaleBlacklistEntries(t *testing.T) {
 	peerID := torlib.PeerIDFixture()
 	infoHash := torlib.InfoHashFixture()
 
-	s.InitCapacity(infoHash)
-
 	require.NoError(s.Blacklist(peerID, infoHash))
 
 	err := s.AddPending(peerID, infoHash)
@@ -103,7 +99,6 @@ func TestDeleteStaleBlacklistEntries(t *testing.T) {
 }
 
 func transitionToActive(t *testing.T, s *connState, c *conn) {
-	s.InitCapacity(c.InfoHash)
 	require.NoError(t, s.AddPending(c.PeerID, c.InfoHash))
 	require.NoError(t, s.MovePendingToActive(c))
 }

@@ -270,7 +270,6 @@ func (e newTorrentEvent) Apply(s *Scheduler) {
 		ctrl = newTorrentControl(s.dispatcherFactory.New(e.torrent))
 		s.torrentControls[infoHash] = ctrl
 		s.announceQueue.Add(ctrl.Dispatcher)
-		s.connState.InitCapacity(infoHash)
 		s.networkEventProducer.Produce(
 			networkevent.AddTorrentEvent(infoHash, s.pctx.PeerID, e.torrent.Bitfield()))
 	}

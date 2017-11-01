@@ -5,8 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/tracker/announceclient"
 	trackerservice "code.uber.internal/infra/kraken/tracker/service"
 
 	"github.com/andres-erbsen/clock"
@@ -357,4 +359,32 @@ func TestNetworkEvents(t *testing.T) {
 	require.Equal(
 		stripTimestamps(leecherExpected),
 		stripTimestamps(leecher.testProducer.Events()))
+}
+
+func TestPullInactiveTorrent(t *testing.T) {
+	require := require.New(t)
+
+	trackerAddr, stop := trackerservice.TestAnnouncer()
+	defer stop()
+
+	config := configFixture()
+
+	tf := torlib.TestTorrentFileFixture()
+
+	seeder, cleanup := testPeerFixture(config, trackerAddr)
+	defer cleanup()
+
+	// Write torrent to disk, but don't add it the scheduler.
+	seeder.writeTorrent(tf)
+
+	// Force announce the scheduler for this torrent to simulate a peer which
+	// is registered in tracker but does not have the torrent in memory.
+	ac := announceclient.Default(seeder.pctx, serverset.NewSingle(trackerAddr))
+	ac.Announce(tf.MetaInfo.Info.Name, tf.MetaInfo.InfoHash, 0)
+
+	leecher, cleanup := testPeerFixture(config, trackerAddr)
+	defer cleanup()
+
+	require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo))
+	leecher.checkTorrent(t, tf)
 }
