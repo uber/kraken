@@ -159,11 +159,8 @@ func (c ConnStateConfig) applyDefaults() ConnStateConfig {
 // ConnConfig is the configuration for individual live connections.
 type ConnConfig struct {
 
-	// WriteTimeout is the timeout for connection writes.
-	WriteTimeout time.Duration `yaml:"write_timeout"`
-
-	// ReadTimeout is the timeout for connections reads.
-	ReadTimeout time.Duration `yaml:"read_timeout"`
+	// HandshakeTimeout is the timeout for writing / reading connection handshake.
+	HandshakeTimeout time.Duration `yaml:"write_timeout"`
 
 	// SenderBufferSize is the size of the sender channel for a connection.
 	// Prevents writers to the connection from being blocked if there are many
@@ -181,11 +178,8 @@ type ConnConfig struct {
 }
 
 func (c ConnConfig) applyDefaults() ConnConfig {
-	if c.WriteTimeout == 0 {
-		c.WriteTimeout = 5 * time.Second
-	}
-	if c.ReadTimeout == 0 {
-		c.ReadTimeout = 5 * time.Second
+	if c.HandshakeTimeout == 0 {
+		c.HandshakeTimeout = 5 * time.Second
 	}
 	// TODO(codyg): We cannot set default buffer sizes, since 0 is a very valid
 	// buffer size for testing.

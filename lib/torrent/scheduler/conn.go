@@ -97,13 +97,19 @@ func (f *connFactory) newConn(
 	t storage.Torrent,
 	remotePeerID torlib.PeerID,
 	remoteBitfield storage.Bitfield,
-	openedByRemote bool) *conn {
+	openedByRemote bool) (*conn, error) {
 
 	stats := f.Stats.
 		SubScope("conn").
 		SubScope(remotePeerID.String()).
 		SubScope("torrent").
 		SubScope(t.Name())
+
+	// Clear all deadlines set during handshake. Once a conn is created, we
+	// rely on our own idle conn management via preemption events.
+	if err := nc.SetDeadline(time.Time{}); err != nil {
+		return nil, fmt.Errorf("set deadline: %s", err)
+	}
 
 	c := &conn{
 		PeerID:    remotePeerID,
@@ -127,7 +133,7 @@ func (f *connFactory) newConn(
 
 	c.start()
 
-	return c
+	return c, nil
 }
 
 // SendAndReceiveHandshake initializes a new conn for Torrent t by sending a
@@ -139,10 +145,10 @@ func (f *connFactory) SendAndReceiveHandshake(nc net.Conn, t storage.Torrent) (*
 		InfoHash: t.InfoHash(),
 		Bitfield: t.Bitfield(),
 	}
-	if err := sendMessage(nc, localHandshake.ToP2PMessage(), f.Config.WriteTimeout); err != nil {
+	if err := sendMessageWithTimeout(nc, localHandshake.ToP2PMessage(), f.Config.HandshakeTimeout); err != nil {
 		return nil, fmt.Errorf("failed to send handshake: %s", err)
 	}
-	m, err := readMessage(nc, f.Config.ReadTimeout)
+	m, err := readMessageWithTimeout(nc, f.Config.HandshakeTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to receive handshake: %s", err)
 	}
@@ -153,12 +159,12 @@ func (f *connFactory) SendAndReceiveHandshake(nc net.Conn, t storage.Torrent) (*
 	if remoteHandshake.InfoHash != localHandshake.InfoHash {
 		return nil, errors.New("received handshake with incorrect info hash")
 	}
-	return f.newConn(nc, t, remoteHandshake.PeerID, remoteHandshake.Bitfield, false), nil
+	return f.newConn(nc, t, remoteHandshake.PeerID, remoteHandshake.Bitfield, false)
 }
 
 // receiveHandshake reads a handshake from a new connection.
 func receiveHandshake(nc net.Conn, timeout time.Duration) (*handshake, error) {
-	m, err := readMessage(nc, timeout)
+	m, err := readMessageWithTimeout(nc, timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -181,10 +187,10 @@ func (f *connFactory) ReciprocateHandshake(
 		InfoHash: t.InfoHash(),
 		Bitfield: t.Bitfield(),
 	}
-	if err := sendMessage(nc, localHandshake.ToP2PMessage(), f.Config.WriteTimeout); err != nil {
+	if err := sendMessageWithTimeout(nc, localHandshake.ToP2PMessage(), f.Config.HandshakeTimeout); err != nil {
 		return nil, err
 	}
-	return f.newConn(nc, t, remoteHandshake.PeerID, remoteHandshake.Bitfield, true), nil
+	return f.newConn(nc, t, remoteHandshake.PeerID, remoteHandshake.Bitfield, true)
 }
 
 // conn manages peer communication over a connection for multiple torrents. Inbound
@@ -312,11 +318,6 @@ func (c *conn) start() {
 
 func (c *conn) readPayload(length int32) ([]byte, error) {
 	payload := make([]byte, length)
-	// NOTE: We do not use the clock interface here because the net package uses
-	// the system clock when evaluating deadlines.
-	if err := c.nc.SetReadDeadline(time.Now().Add(c.config.ReadTimeout)); err != nil {
-		return nil, fmt.Errorf("failed to set deadline: %s", err)
-	}
 	if _, err := io.ReadFull(c.nc, payload); err != nil {
 		return nil, err
 	}
@@ -324,35 +325,39 @@ func (c *conn) readPayload(length int32) ([]byte, error) {
 	return payload, nil
 }
 
-func readMessage(nc net.Conn, timeout time.Duration) (*p2p.Message, error) {
+func readMessage(nc net.Conn) (*p2p.Message, error) {
 	var msglen [4]byte
 	if _, err := io.ReadFull(nc, msglen[:]); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read message length: %s", err)
 	}
 	dataLen := binary.BigEndian.Uint32(msglen[:])
 	if uint64(dataLen) > maxMessageSize {
 		return nil, errMessageExceedsMaxSize
 	}
-	// NOTE: We do not use the clock interface here because the net package uses
-	// the system clock when evaluating deadlines.
-	if err := nc.SetReadDeadline(time.Now().Add(timeout)); err != nil {
-		return nil, fmt.Errorf("failed to set deadline: %s", err)
-	}
 	data := make([]byte, dataLen)
 	if _, err := io.ReadFull(nc, data); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read data: %s", err)
 	}
 	p2pMessage := new(p2p.Message)
 	if err := proto.Unmarshal(data, p2pMessage); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("proto unmarshal: %s", err)
 	}
 	return p2pMessage, nil
 }
 
+func readMessageWithTimeout(nc net.Conn, timeout time.Duration) (*p2p.Message, error) {
+	// NOTE: We do not use the clock interface here because the net package uses
+	// the system clock when evaluating deadlines.
+	if err := nc.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+		return nil, fmt.Errorf("set read deadline: %s", err)
+	}
+	return readMessage(nc)
+}
+
 func (c *conn) readMessage() (*message, error) {
-	p2pMessage, err := readMessage(c.nc, c.config.ReadTimeout)
+	p2pMessage, err := readMessage(c.nc)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read message: %s", err)
 	}
 	var payload []byte
 	if p2pMessage.Type == p2p.Message_PIECE_PAYLOAD {
@@ -361,7 +366,7 @@ func (c *conn) readMessage() (*message, error) {
 		var err error
 		payload, err = c.readPayload(p2pMessage.PiecePayload.Length)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read payload: %s", err)
 		}
 	}
 	return &message{p2pMessage, payload}, nil
@@ -412,7 +417,7 @@ func (c *conn) sendPiecePayload(b []byte) error {
 	for len(b) > 0 {
 		n, err := c.nc.Write(b)
 		if err != nil {
-			return err
+			return fmt.Errorf("write: %s", err)
 		}
 		b = b[n:]
 	}
@@ -420,38 +425,42 @@ func (c *conn) sendPiecePayload(b []byte) error {
 	return nil
 }
 
-func sendMessage(nc net.Conn, msg *p2p.Message, timeout time.Duration) error {
+func sendMessage(nc net.Conn, msg *p2p.Message) error {
 	data, err := proto.Marshal(msg)
 	if err != nil {
-		return err
-	}
-	// NOTE: We do not use the clock interface here because the net package uses
-	// the system clock when evaluating deadlines.
-	if err := nc.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
-		return fmt.Errorf("failed to set deadline: %s", err)
+		return fmt.Errorf("proto marshal: %s", err)
 	}
 	if err := binary.Write(nc, binary.BigEndian, uint32(len(data))); err != nil {
-		return err
+		return fmt.Errorf("write data length: %s", err)
 	}
 	for len(data) > 0 {
 		n, err := nc.Write(data)
 		if err != nil {
-			return err
+			return fmt.Errorf("write data: %s", err)
 		}
 		data = data[n:]
 	}
 	return nil
 }
 
+func sendMessageWithTimeout(nc net.Conn, msg *p2p.Message, timeout time.Duration) error {
+	// NOTE: We do not use the clock interface here because the net package uses
+	// the system clock when evaluating deadlines.
+	if err := nc.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+		return fmt.Errorf("set write deadline: %s", err)
+	}
+	return sendMessage(nc, msg)
+}
+
 func (c *conn) sendMessage(msg *message) error {
-	if err := sendMessage(c.nc, msg.Message, c.config.WriteTimeout); err != nil {
-		return err
+	if err := sendMessage(c.nc, msg.Message); err != nil {
+		return fmt.Errorf("send message: %s", err)
 	}
 	if msg.Message.Type == p2p.Message_PIECE_PAYLOAD {
 		// For payload messages, we must write the actual payload to the connection
 		// after writing the message.
 		if err := c.sendPiecePayload(msg.Payload); err != nil {
-			return err
+			return fmt.Errorf("send piece payload: %s", err)
 		}
 	}
 	return nil

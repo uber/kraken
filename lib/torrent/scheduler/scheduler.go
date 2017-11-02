@@ -289,7 +289,7 @@ func (s *Scheduler) tickerLoop() {
 }
 
 func (s *Scheduler) handshakeIncomingConn(nc net.Conn) {
-	h, err := receiveHandshake(nc, s.config.Conn.ReadTimeout)
+	h, err := receiveHandshake(nc, s.config.Conn.HandshakeTimeout)
 	if err != nil {
 		s.log().Errorf("Error receiving handshake from incoming connection: %s", err)
 		nc.Close()
