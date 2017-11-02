@@ -123,20 +123,17 @@ func (d *dispatcher) String() string {
 	return fmt.Sprintf("dispatcher(%s)", d.Torrent)
 }
 
-func (d *dispatcher) newPieceRequestMessage(i int) *message {
-	return newPieceRequestMessage(i, d.Torrent.PieceLength(i))
+func (d *dispatcher) sendPieceRequest(c *conn, i int) error {
+	d.logf(log.Fields{"conn": c, "piece": i}).Info("Sending piece request")
+	return c.Send(newPieceRequestMessage(i, d.Torrent.PieceLength(i)))
 }
 
 func (d *dispatcher) sendInitialPieceRequests(c *conn) {
-	d.logf(log.Fields{
-		"peer": c.PeerID, "bitfield": c.Bitfield,
-	}).Debug("Sending initial piece requests")
 	for _, i := range d.Torrent.MissingPieces() {
 		if !c.Bitfield.Has(i) {
 			continue
 		}
-		d.logf(log.Fields{"peer": c.PeerID, "piece": i}).Debug("Sending piece request")
-		if err := c.Send(d.newPieceRequestMessage(i)); err != nil {
+		if err := d.sendPieceRequest(c, i); err != nil {
 			// Connection closed.
 			break
 		}
@@ -181,7 +178,7 @@ func (d *dispatcher) handleError(c *conn, msg *p2p.ErrorMessage) {
 	switch msg.Code {
 	case p2p.ErrorMessage_PIECE_REQUEST_FAILED:
 		d.log().Errorf("Piece request failed: %s", msg.Error)
-		c.Send(d.newPieceRequestMessage(int(msg.Index)))
+		d.sendPieceRequest(c, int(msg.Index))
 	}
 }
 
@@ -193,7 +190,7 @@ func (d *dispatcher) handleAnnouncePiece(c *conn, msg *p2p.AnnouncePieceMessage)
 	i := int(msg.Index)
 	c.Bitfield.Set(i, true)
 	if !d.Torrent.HasPiece(i) {
-		c.Send(d.newPieceRequestMessage(i))
+		d.sendPieceRequest(c, i)
 	}
 }
 
@@ -202,22 +199,27 @@ func (d *dispatcher) isFullPiece(i, offset, length int) bool {
 }
 
 func (d *dispatcher) handlePieceRequest(c *conn, msg *p2p.PieceRequestMessage) {
-	d.logf(log.Fields{"peer": c.PeerID, "piece": msg.Index}).Debug("Received piece request")
+	d.logf(log.Fields{"conn": c, "piece": msg.Index}).Debug("Received piece request")
 
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
+		d.logf(log.Fields{"conn": c, "piece": i}).Error("Rejecting piece request: chunk not supported")
 		c.Send(newErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, errChunkNotSupported))
 		return
 	}
 
 	payload, err := d.Torrent.ReadPiece(i)
 	if err != nil {
+		d.logf(log.Fields{"conn": c, "piece": i}).Errorf("Error reading requested piece: %s", err)
 		c.Send(newErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err))
 		return
 	}
-	if err := c.Send(newPiecePayloadMessage(int(msg.Index), payload)); err != nil {
-		c.TouchLastPieceSent()
+	if err := c.Send(newPiecePayloadMessage(i, payload)); err != nil {
+		d.logf(log.Fields{"conn": c, "piece": i}).Errorf("Failed to send piece: %s", err)
+		return
 	}
+	c.TouchLastPieceSent()
+	d.logf(log.Fields{"conn": c, "piece": msg.Index}).Info("Sent piece")
 }
 
 func (d *dispatcher) handlePiecePayload(
@@ -227,19 +229,16 @@ func (d *dispatcher) handlePiecePayload(
 
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
-		d.logf(log.Fields{
-			"peer": c.PeerID,
-		}).Errorf("Error handling piece payload: %s", errChunkNotSupported)
+		d.logf(log.Fields{"conn": c, "piece": i}).Error("Rejecting piece payload: chunk not supported")
 		return
 	}
 	if err := d.Torrent.WritePiece(payload, i); err != nil {
 		if err != storage.ErrPieceComplete {
-			d.logf(log.Fields{
-				"peer": c.PeerID, "piece": msg.Index,
-			}).Errorf("Error writing piece payload: %s", err)
+			d.logf(log.Fields{"conn": c, "piece": i}).Errorf("Error writing piece payload: %s", err)
 		}
 		return
 	}
+	d.logf(log.Fields{"conn": c, "piece": i}).Info("Received piece")
 	d.networkEventProducer.Produce(
 		networkevent.ReceivePieceEvent(d.Torrent.InfoHash(), d.localPeerID, c.PeerID, i))
 	c.TouchLastGoodPieceReceived()
@@ -247,26 +246,20 @@ func (d *dispatcher) handlePiecePayload(
 		d.complete.Do(func() { go d.eventSender.Send(completedDispatcherEvent{d}) })
 	}
 
-	d.logf(log.Fields{
-		"peer": c.PeerID, "piece": msg.Index,
-	}).Debug("Downloaded piece payload")
-
 	d.conns.Range(func(k, v interface{}) bool {
 		if k.(torlib.PeerID) == c.PeerID {
 			return true
 		}
 		cc := v.(*conn)
 
-		d.logf(log.Fields{
-			"peer": cc.PeerID, "hash": d.Torrent.InfoHash(),
-		}).Debugf("Announcing piece %d", msg.Index)
+		d.logf(log.Fields{"conn": cc, "piece": i}).Info("Announcing piece")
 
 		// Ignore error -- this just means the connection was closed. The feed goroutine
 		// for cc will clean up.
 		// TODO(codyg): We need to slim down the number of peers we announce a new
 		// piece to.  We could just rely on announcing to the tracker instead of flooding
 		// the network with tons of announce piece requests.
-		cc.Send(newAnnouncePieceMessage(int(msg.Index)))
+		cc.Send(newAnnouncePieceMessage(i))
 
 		return true
 	})
