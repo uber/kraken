@@ -14,20 +14,20 @@ import (
 func TestBlacklistBackoff(t *testing.T) {
 	config := connStateConfigFixture()
 	config.MaxOpenConnectionsPerTorrent = 1
-	config.InitialBlacklistExpiration = 1 * time.Second
+	config.InitialBlacklistExpiration = 30 * time.Second
 	config.BlacklistExpirationBackoff = 2
-	config.MaxBlacklistExpiration = 8 * time.Second
+	config.MaxBlacklistExpiration = 5 * time.Minute
 
 	for _, test := range []struct {
 		description string
 		failures    int
 		expected    time.Duration
 	}{
-		{"first failure", 1, time.Second},
-		{"second failure", 2, 2 * time.Second},
-		{"third failure", 3, 4 * time.Second},
-		{"fourth failure", 4, 8 * time.Second},
-		{"maxes out after fourth failure", 10, 8 * time.Second},
+		{"first failure", 1, 30 * time.Second},
+		{"second failure", 2, time.Minute},
+		{"third failure", 3, 2 * time.Minute},
+		{"fourth failure", 4, 4 * time.Minute},
+		{"maxes out after fourth failure", 10, 5 * time.Minute},
 	} {
 		t.Run(test.description, func(t *testing.T) {
 			require := require.New(t)

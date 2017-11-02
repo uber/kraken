@@ -78,6 +78,7 @@ func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) er
 	if s.config.DisableBlacklist {
 		return nil
 	}
+
 	k := connKey{peerID, infoHash}
 	e, ok := s.blacklist[k]
 	if ok && e.Blacklisted(s.clock.Now()) {
@@ -87,8 +88,11 @@ func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) er
 		e = &blacklistEntry{}
 		s.blacklist[k] = e
 	}
-	n := math.Ceil(math.Pow(s.config.BlacklistExpirationBackoff, float64(e.failures))) - 1
-	d := s.config.InitialBlacklistExpiration + time.Duration(n)*time.Second
+
+	backoff := math.Ceil(math.Pow(s.config.BlacklistExpirationBackoff, float64(e.failures))) - 1
+	d := s.config.InitialBlacklistExpiration
+	d += d * time.Duration(backoff)
+
 	if d > s.config.MaxBlacklistExpiration {
 		d = s.config.MaxBlacklistExpiration
 	} else if d < s.config.InitialBlacklistExpiration {
@@ -96,11 +100,14 @@ func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) er
 			d.Seconds(), s.config.InitialBlacklistExpiration.Seconds())
 		d = s.config.InitialBlacklistExpiration
 	}
+
 	e.expiration = s.clock.Now().Add(d)
 	e.failures++
+
 	s.logf(log.Fields{
 		"peer": peerID, "hash": infoHash,
 	}).Infof("Conn blacklisted for %.1f seconds after %d failures", d.Seconds(), e.failures)
+
 	return nil
 }
 
