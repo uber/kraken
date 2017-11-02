@@ -260,7 +260,10 @@ type newTorrentEvent struct {
 func (e newTorrentEvent) Apply(s *Scheduler) {
 	s.logf(log.Fields{"torrent": e.torrent}).Debug("Applying new torrent event")
 
-	ctrl := s.getTorrentControl(e.torrent)
+	ctrl, ok := s.torrentControls[e.torrent.InfoHash()]
+	if !ok {
+		ctrl = s.initTorrentControl(e.torrent)
+	}
 	if ctrl.Complete {
 		e.errc <- nil
 		return
@@ -342,4 +345,26 @@ type emitStatsEvent struct{}
 func (e emitStatsEvent) Apply(s *Scheduler) {
 	s.stats.Gauge("torrents").Update(float64(len(s.torrentControls)))
 	s.stats.Gauge("conns").Update(float64(s.connState.NumActiveConns()))
+}
+
+// cancelTorrentEvent occurs when a client of Scheduler manually cancels a torrent.
+type cancelTorrentEvent struct {
+	infoHash torlib.InfoHash
+}
+
+func (e cancelTorrentEvent) Apply(s *Scheduler) {
+	s.log().Debug("Applying cancel torrent event")
+
+	ctrl, ok := s.torrentControls[e.infoHash]
+	if !ok {
+		return
+	}
+	ctrl.Dispatcher.TearDown()
+	for _, errc := range ctrl.Errors {
+		errc <- ErrTorrentCancelled
+	}
+	s.networkEventProducer.Produce(networkevent.TorrentCancelledEvent(e.infoHash, s.pctx.PeerID))
+	delete(s.torrentControls, e.infoHash)
+
+	s.logf(log.Fields{"hash": e.infoHash}).Info("Torrent cancelled")
 }

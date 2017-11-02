@@ -121,7 +121,7 @@ func (c *SchedulerClient) DownloadTorrent(name string) (io.ReadCloser, error) {
 			return nil, fmt.Errorf("failed to schedule torrent: %s", err)
 		}
 	case <-time.After(downloadTimeout):
-		// TODO(codyg): Allow cancelling the torrent in the Scheduler.
+		c.scheduler.CancelTorrent(mi.InfoHash)
 		return nil, fmt.Errorf("scheduled torrent timed out after %.2f seconds", downloadTimeout.Seconds())
 	}
 
