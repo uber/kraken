@@ -269,8 +269,12 @@ func (n noopDeadline) SetDeadline(t time.Time) error      { return nil }
 func (n noopDeadline) SetReadDeadline(t time.Time) error  { return nil }
 func (n noopDeadline) SetWriteDeadline(t time.Time) error { return nil }
 
-func connFixture(t *testing.T, config ConnConfig, maxPieceLength int) (c *conn, cleanup func()) {
+func connFixture(t *testing.T, config ConnConfig, maxPieceLength int) (*conn, func()) {
+	var cleanup testutils.Cleanup
+	defer cleanup.Recover()
+
 	ctrl := gomock.NewController(t)
+	cleanup.Add(ctrl.Finish)
 
 	infoHash := torlib.InfoHashFixture()
 	localPeerID := torlib.PeerIDFixture()
@@ -285,6 +289,8 @@ func connFixture(t *testing.T, config ConnConfig, maxPieceLength int) (c *conn, 
 	}
 
 	localNC, remoteNC := net.Pipe()
+	cleanup.Add(func() { localNC.Close() })
+	cleanup.Add(func() { remoteNC.Close() })
 	localNC = noopDeadline{localNC}
 	go discard(remoteNC)
 
@@ -293,12 +299,11 @@ func connFixture(t *testing.T, config ConnConfig, maxPieceLength int) (c *conn, 
 	tor.EXPECT().InfoHash().Return(infoHash)
 	tor.EXPECT().MaxPieceLength().Return(int64(maxPieceLength))
 
-	c = f.newConn(localNC, tor, remotePeerID, storage.Bitfield{}, false)
-	cleanup = func() {
-		localNC.Close()
-		remoteNC.Close()
+	c, err := f.newConn(localNC, tor, remotePeerID, storage.Bitfield{}, false)
+	if err != nil {
+		panic(err)
 	}
-	return
+	return c, cleanup.Run
 }
 
 // eventWatcher wraps an eventLoop and watches all events being sent. Note, clients
