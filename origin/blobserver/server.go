@@ -598,6 +598,9 @@ func (s Server) commitUpload(d image.Digest, uploadUUID string) error {
 
 	// Commit data.
 	if err := s.fileStore.MoveUploadFileToCache(uploadUUID, d.Hex()); err != nil {
+		if os.IsExist(err) {
+			return serverErrorf("digest %q already exists", d).Status(http.StatusConflict)
+		}
 		return serverErrorf("failed to commit digest %q for upload %q: %s", d, uploadUUID, err)
 	}
 
