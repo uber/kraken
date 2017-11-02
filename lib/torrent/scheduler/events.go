@@ -80,6 +80,7 @@ func (e closedConnEvent) Apply(s *Scheduler) {
 	s.logf(log.Fields{"conn": e.conn}).Debug("Applying closed conn event")
 
 	if s.connState.DeleteActive(e.conn) {
+		s.logf(log.Fields{"conn": e.conn}).Info("Conn closed")
 		s.networkEventProducer.Produce(
 			networkevent.DropConnEvent(e.conn.InfoHash, s.pctx.PeerID, e.conn.PeerID))
 	}
@@ -143,7 +144,9 @@ func (e incomingConnEvent) Apply(s *Scheduler) {
 			"conn": e.conn, "torrent": e.torrent,
 		}).Errorf("Error adding incoming conn: %s", err)
 		e.conn.Close()
+		return
 	}
+	s.logf(log.Fields{"conn": e.conn}).Info("Added incoming conn")
 	s.networkEventProducer.Produce(
 		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
 }
@@ -163,7 +166,9 @@ func (e outgoingConnEvent) Apply(s *Scheduler) {
 			"conn": e.conn, "torrent": e.torrent,
 		}).Errorf("Error adding outgoing conn: %s", err)
 		e.conn.Close()
+		return
 	}
+	s.logf(log.Fields{"conn": e.conn}).Info("Added outgoing conn")
 	s.networkEventProducer.Produce(
 		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
 }
@@ -225,13 +230,13 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 		if err := s.connState.AddPending(pid, e.infoHash); err != nil {
 			if err == errTorrentAtCapacity {
 				s.logf(log.Fields{
-					"peer": pid, "hash": e.infoHash,
+					"hash": e.infoHash,
 				}).Info("Cannot open any more connections, torrent is at capacity")
 				break
 			}
 			s.logf(log.Fields{
 				"peer": pid, "hash": e.infoHash,
-			}).Infof("Cannot add pending conn: %s, skipping", err)
+			}).Infof("Skipping peer from announce: %s", err)
 			continue
 		}
 		go s.initOutgoingConn(pid, p.IP, int(p.Port), ctrl.Dispatcher.Torrent)
@@ -263,6 +268,7 @@ func (e newTorrentEvent) Apply(s *Scheduler) {
 	ctrl, ok := s.torrentControls[e.torrent.InfoHash()]
 	if !ok {
 		ctrl = s.initTorrentControl(e.torrent)
+		s.logf(log.Fields{"torrent": e.torrent}).Info("Initialized new torrent")
 	}
 	if ctrl.Complete {
 		e.errc <- nil
@@ -292,6 +298,7 @@ func (e completedDispatcherEvent) Apply(s *Scheduler) {
 		errc <- nil
 	}
 	ctrl.Complete = true
+	s.logf(log.Fields{"torrent": e.dispatcher.Torrent}).Info("Torrent complete")
 	s.networkEventProducer.Produce(networkevent.TorrentCompleteEvent(infoHash, s.pctx.PeerID))
 }
 
@@ -363,8 +370,8 @@ func (e cancelTorrentEvent) Apply(s *Scheduler) {
 	for _, errc := range ctrl.Errors {
 		errc <- ErrTorrentCancelled
 	}
-	s.networkEventProducer.Produce(networkevent.TorrentCancelledEvent(e.infoHash, s.pctx.PeerID))
 	delete(s.torrentControls, e.infoHash)
 
 	s.logf(log.Fields{"hash": e.infoHash}).Info("Torrent cancelled")
+	s.networkEventProducer.Produce(networkevent.TorrentCancelledEvent(e.infoHash, s.pctx.PeerID))
 }
