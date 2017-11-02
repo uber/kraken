@@ -25,10 +25,10 @@ func NewProducer(config Config) (Producer, error) {
 	if err != nil {
 		return nil, err
 	}
-	if config.Enable && config.KafkaTopic == "" {
+	if config.Enabled && config.KafkaTopic == "" {
 		return nil, errors.New("no kafka topic supplied")
 	}
-	if !config.Enable {
+	if !config.Enabled {
 		log.Warn("Kafka network events not enabled")
 	}
 	return &producer{config, rest}, nil
@@ -36,7 +36,7 @@ func NewProducer(config Config) (Producer, error) {
 
 // Produce publishes e on the configured Kafka topic.
 func (p *producer) Produce(e Event) error {
-	if !p.config.Enable {
+	if !p.config.Enabled {
 		return nil
 	}
 	b, err := json.Marshal(e)
