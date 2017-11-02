@@ -401,15 +401,31 @@ func (s *Scheduler) addIncomingConn(c *conn, t storage.Torrent) error {
 		c.Close()
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
-	ctrl, ok := s.torrentControls[t.InfoHash()]
-	if !ok {
-		ctrl = newTorrentControl(s.dispatcherFactory.New(t))
-		s.torrentControls[t.InfoHash()] = ctrl
-	}
+	ctrl := s.getTorrentControl(t)
 	if err := ctrl.Dispatcher.AddConn(c); err != nil {
 		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
 	}
 	return nil
+}
+
+// getTorrentControl returns the registered torrentControl associated with t's
+// info hash, initializing one if necessary. Callers relieve ownership of t when
+// calling this method.
+func (s *Scheduler) getTorrentControl(t storage.Torrent) *torrentControl {
+
+	// NOTE: If the torrent already exists, we must be careful not to use t
+	// because using multiple Torrent instances for the same torrent file will
+	// result in undefined behavior.
+
+	h := t.InfoHash()
+	ctrl, ok := s.torrentControls[h]
+	if !ok {
+		ctrl = newTorrentControl(s.dispatcherFactory.New(t))
+		s.torrentControls[h] = ctrl
+		s.announceQueue.Add(ctrl.Dispatcher)
+		s.networkEventProducer.Produce(networkevent.AddTorrentEvent(h, s.pctx.PeerID, t.Bitfield()))
+	}
+	return ctrl
 }
 
 func (s *Scheduler) logf(f log.Fields) bark.Logger {

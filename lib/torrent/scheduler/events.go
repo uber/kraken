@@ -260,19 +260,7 @@ type newTorrentEvent struct {
 func (e newTorrentEvent) Apply(s *Scheduler) {
 	s.logf(log.Fields{"torrent": e.torrent}).Debug("Applying new torrent event")
 
-	// If the torrent already exists, we must be careful not to use e.torrent
-	// because using multiple Torrent instances for the same torrent file will
-	// result in undefined behavior.
-
-	infoHash := e.torrent.InfoHash()
-	ctrl, ok := s.torrentControls[infoHash]
-	if !ok {
-		ctrl = newTorrentControl(s.dispatcherFactory.New(e.torrent))
-		s.torrentControls[infoHash] = ctrl
-		s.announceQueue.Add(ctrl.Dispatcher)
-		s.networkEventProducer.Produce(
-			networkevent.AddTorrentEvent(infoHash, s.pctx.PeerID, e.torrent.Bitfield()))
-	}
+	ctrl := s.getTorrentControl(e.torrent)
 	if ctrl.Complete {
 		e.errc <- nil
 		return
