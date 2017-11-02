@@ -279,6 +279,32 @@ func TestCommitUploadHandlerNotFound(t *testing.T) {
 	require.Equal(http.StatusNotFound, err.(httputil.StatusError).Status)
 }
 
+func TestCommitUploadHandleDuplicated(t *testing.T) {
+	require := require.New(t)
+
+	mocks := newServerMocks(t)
+	defer mocks.ctrl.Finish()
+
+	addr, stop := mocks.server(configNoRedirectFixture())
+	defer stop()
+
+	u := uuid.Generate().String()
+
+	blob := randutil.Text(256)
+	f, cleanup := store.NewMockFileReadWriter(blob)
+	defer cleanup()
+
+	d, err := image.NewDigester().FromBytes(blob)
+	require.NoError(err)
+
+	mocks.fileStore.EXPECT().GetUploadFileReader(u).Return(f, nil)
+	mocks.fileStore.EXPECT().MoveUploadFileToCache(u, d.Hex()).Return(os.ErrExist)
+
+	err = blobclient.New(clientConfigFixture(), addr).CommitUpload(d, u)
+	require.Error(err)
+	require.Equal(http.StatusConflict, err.(httputil.StatusError).Status)
+}
+
 func TestParseContentRangeHeaderBadRequests(t *testing.T) {
 	tests := []struct {
 		description string
