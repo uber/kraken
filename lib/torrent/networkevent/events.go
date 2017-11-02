@@ -12,11 +12,12 @@ type Name string
 
 // Possible event names.
 const (
-	AddTorrent      Name = "add_torrent"
-	AddConn         Name = "add_conn"
-	DropConn        Name = "drop_conn"
-	ReceivePiece    Name = "receive_piece"
-	TorrentComplete Name = "torrent_complete"
+	AddTorrent       Name = "add_torrent"
+	AddConn          Name = "add_conn"
+	DropConn         Name = "drop_conn"
+	ReceivePiece     Name = "receive_piece"
+	TorrentComplete  Name = "torrent_complete"
+	TorrentCancelled Name = "torrent_cancelled"
 )
 
 // Event consolidates all possible event fields.
@@ -73,4 +74,9 @@ func ReceivePieceEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID
 // TorrentCompleteEvent returns an event for a completed torrent.
 func TorrentCompleteEvent(h torlib.InfoHash, self torlib.PeerID) Event {
 	return baseEvent(TorrentComplete, h, self)
+}
+
+// TorrentCancelledEvent returns an event for a cancelled torrent.
+func TorrentCancelledEvent(h torlib.InfoHash, self torlib.PeerID) Event {
+	return baseEvent(TorrentCancelled, h, self)
 }

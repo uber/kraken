@@ -388,3 +388,52 @@ func TestPullInactiveTorrent(t *testing.T) {
 	require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo))
 	leecher.checkTorrent(t, tf)
 }
+
+func TestCancelTorrent(t *testing.T) {
+	require := require.New(t)
+
+	trackerAddr, stop := trackerservice.TestAnnouncer()
+	defer stop()
+
+	config := configFixture()
+
+	// Set high TTL to ensure conns are being closed due to cancel signal, not
+	// natural expiration.
+	config.IdleSeederTTL = time.Hour
+	config.IdleConnTTL = time.Hour
+	config.ConnTTL = time.Hour
+
+	// Set high blacklist expiration to prevent second peer from immediately opening
+	// a new connection to first peer after cancel.
+	config.ConnState.InitialBlacklistExpiration = time.Minute
+
+	p1, cleanup := testPeerFixture(config, trackerAddr)
+	defer cleanup()
+
+	p2, cleanup := testPeerFixture(config, trackerAddr)
+	defer cleanup()
+
+	tf := torlib.TestTorrentFileFixture()
+	h := tf.MetaInfo.InfoHash
+
+	// First peer will be cancelled.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		require.Error(ErrTorrentCancelled, <-p1.scheduler.AddTorrent(tf.MetaInfo))
+	}()
+
+	// (We don't really care what happens to the second peer).
+	go p2.scheduler.AddTorrent(tf.MetaInfo)
+
+	waitForConnEstablished(t, p1.scheduler, p2.pctx.PeerID, h)
+	waitForConnEstablished(t, p2.scheduler, p1.pctx.PeerID, h)
+
+	p1.scheduler.CancelTorrent(h)
+
+	// Once first peer cancels, it should remove the connection to the second peer and
+	// remove the torrent.
+	<-done
+	waitForConnRemoved(t, p1.scheduler, p2.pctx.PeerID, h)
+	waitForTorrentRemoved(t, p1.scheduler, h)
+}

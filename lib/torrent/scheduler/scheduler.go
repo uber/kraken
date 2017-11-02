@@ -19,12 +19,12 @@ import (
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 )
 
-// ErrTorrentAlreadyRegistered returns when adding a torrent which has already
-// been added to the Scheduler.
-var ErrTorrentAlreadyRegistered = errors.New("torrent already registered in scheduler")
-
-// ErrSchedulerStopped returns when an action fails due to the Scheduler being stopped.
-var ErrSchedulerStopped = errors.New("scheduler has been stopped")
+// Scheduler errors.
+var (
+	ErrTorrentAlreadyRegistered = errors.New("torrent already registered in scheduler")
+	ErrSchedulerStopped         = errors.New("scheduler has been stopped")
+	ErrTorrentCancelled         = errors.New("torrent has been cancelled")
+)
 
 // torrentControl bundles torrent control structures.
 type torrentControl struct {
@@ -235,6 +235,11 @@ func (s *Scheduler) AddTorrent(mi *torlib.MetaInfo) <-chan error {
 	return errc
 }
 
+// CancelTorrent stops downloading the torrent of h.
+func (s *Scheduler) CancelTorrent(h torlib.InfoHash) {
+	s.eventLoop.Send(cancelTorrentEvent{h})
+}
+
 func (s *Scheduler) start() {
 	s.wg.Add(3)
 	go s.runEventLoop()
@@ -401,30 +406,23 @@ func (s *Scheduler) addIncomingConn(c *conn, t storage.Torrent) error {
 		c.Close()
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
-	ctrl := s.getTorrentControl(t)
+	ctrl, ok := s.torrentControls[t.InfoHash()]
+	if !ok {
+		ctrl = s.initTorrentControl(t)
+	}
 	if err := ctrl.Dispatcher.AddConn(c); err != nil {
 		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
 	}
 	return nil
 }
 
-// getTorrentControl returns the registered torrentControl associated with t's
-// info hash, initializing one if necessary. Callers relieve ownership of t when
-// calling this method.
-func (s *Scheduler) getTorrentControl(t storage.Torrent) *torrentControl {
-
-	// NOTE: If the torrent already exists, we must be careful not to use t
-	// because using multiple Torrent instances for the same torrent file will
-	// result in undefined behavior.
-
-	h := t.InfoHash()
-	ctrl, ok := s.torrentControls[h]
-	if !ok {
-		ctrl = newTorrentControl(s.dispatcherFactory.New(t))
-		s.torrentControls[h] = ctrl
-		s.announceQueue.Add(ctrl.Dispatcher)
-		s.networkEventProducer.Produce(networkevent.AddTorrentEvent(h, s.pctx.PeerID, t.Bitfield()))
-	}
+// initTorrentControl initializes a new torrentControl for t. Overwrites any
+// existing torrentControl for t, so callers should check if one exists first.
+func (s *Scheduler) initTorrentControl(t storage.Torrent) *torrentControl {
+	ctrl := newTorrentControl(s.dispatcherFactory.New(t))
+	s.announceQueue.Add(ctrl.Dispatcher)
+	s.networkEventProducer.Produce(networkevent.AddTorrentEvent(t.InfoHash(), s.pctx.PeerID, t.Bitfield()))
+	s.torrentControls[t.InfoHash()] = ctrl
 	return ctrl
 }
 

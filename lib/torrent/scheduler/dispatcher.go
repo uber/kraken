@@ -57,6 +57,7 @@ type dispatcher struct {
 	localPeerID torlib.PeerID
 	clock       clock.Clock
 
+	// Maps torlib.PeerID to *conn.
 	conns syncmap.Map
 
 	eventSender eventSender
@@ -107,6 +108,15 @@ func (d *dispatcher) AddConn(c *conn) error {
 	go d.sendInitialPieceRequests(c)
 	go d.feed(c)
 	return nil
+}
+
+// TearDown closes all dispatcher connections.
+func (d *dispatcher) TearDown() {
+	d.conns.Range(func(k, v interface{}) bool {
+		conn := v.(*conn)
+		conn.Close()
+		return true
+	})
 }
 
 func (d *dispatcher) String() string {
