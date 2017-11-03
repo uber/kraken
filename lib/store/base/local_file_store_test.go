@@ -27,6 +27,7 @@ func TestLocalFileStore(t *testing.T) {
 		f    func(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	}{
 		{"Test CreateFile", testCreateFile},
+		{"Test LoadFileEntry", testLoadFileEntry},
 		{"Test GetFileReaderWriter", testGetFileReadWriter},
 		{"Test MoveFile", testMoveFile},
 		{"Test DeleteFile", testDeleteFile},
@@ -34,10 +35,8 @@ func TestLocalFileStore(t *testing.T) {
 
 	for _, store := range stores {
 		t.Run(store.name, func(t *testing.T) {
-			t.Parallel()
 			for _, test := range tests {
 				t.Run(test.name, func(t *testing.T) {
-					t.Parallel()
 					require := require.New(t)
 					s, cleanup := store.fixture()
 					defer cleanup()
@@ -55,8 +54,30 @@ func testCreateFile(require *require.Assertions, storeBundle *fileStoreTestBundl
 	// Create empty file
 	err := store.CreateFile(fn, []FileState{}, storeBundle.state1, 5)
 	require.NoError(err)
-	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn))
+	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), store.fileEntryInternalFactory.GetRelativePath(fn)))
 	require.False(os.IsNotExist(err))
+}
+
+func testLoadFileEntry(require *require.Assertions, storeBundle *fileStoreTestBundle) {
+	store := storeBundle.store
+
+	fn := "testfileondisk"
+	require.NoError(store.CreateFile(fn, []FileState{}, storeBundle.state1, 5))
+	_, err := os.Stat(path.Join(storeBundle.state1.GetDirectory(), store.fileEntryInternalFactory.GetRelativePath(fn)))
+	require.NoError(err)
+	_, ok := store.fileMap.Load(fn)
+	require.True(ok)
+
+	// Recreate store nukes store's in memory map
+	storeBundle.recreateStore()
+	store = storeBundle.store
+	_, ok = store.fileMap.Load(fn)
+	require.False(ok)
+	// GetFileReader should load file from disk into map
+	_, err = store.GetFileReader(fn, []FileState{storeBundle.state1})
+	require.NoError(err)
+	_, ok = store.fileMap.Load(fn)
+	require.True(ok)
 }
 
 func testGetFileReadWriter(require *require.Assertions, storeBundle *fileStoreTestBundle) {
@@ -126,7 +147,7 @@ func testGetFileReadWriter(require *require.Assertions, storeBundle *fileStoreTe
 }
 
 func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle) {
-	store := storeBundle.store.(*LocalFileStore)
+	store := storeBundle.store
 
 	fileBundle, ok := storeBundle.files[storeBundle.state1]
 	if !ok {
@@ -152,10 +173,10 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	require.NoError(err)
 
 	// Created hardlink in both stateTest1
-	_, err = os.Stat(path.Join(storeBundle.state1.dir, fn))
+	_, err = os.Stat(path.Join(storeBundle.state1.dir, store.fileEntryInternalFactory.GetRelativePath(fn)))
 	require.NoError(err)
 	// the old file does not exist but still read/writable
-	_, err = os.Stat(path.Join(storeBundle.state2.dir, fn))
+	_, err = os.Stat(path.Join(storeBundle.state2.dir, store.fileEntryInternalFactory.GetRelativePath(fn)))
 	require.True(os.IsNotExist(err))
 	// Check state
 	f, _, _ := store.LoadFileEntry(fn, []FileState{storeBundle.state1})
@@ -184,10 +205,10 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	require.Equal([]byte{'1', 'e', 's', 't', '\n'}, dataState1)
 	// Close on last opened readwriter removes hardlink
 	readWriterState2.Close()
-	_, err = os.Stat(path.Join(storeBundle.state2.dir, fn))
+	_, err = os.Stat(path.Join(storeBundle.state2.dir, store.fileEntryInternalFactory.GetRelativePath(fn)))
 	require.True(os.IsNotExist(err))
 	readWriterState1.Close()
-	_, err = os.Stat(path.Join(storeBundle.state1.dir, fn))
+	_, err = os.Stat(path.Join(storeBundle.state1.dir, store.fileEntryInternalFactory.GetRelativePath(fn)))
 	require.NoError(err)
 	// Check content again
 	readWriterStateMoved, err := store.GetFileReadWriter(fn, []FileState{storeBundle.state1})
@@ -221,7 +242,7 @@ func testDeleteFile(require *require.Assertions, storeBundle *fileStoreTestBundl
 	// Confirm deletion
 	err = store.DeleteFile(fn, []FileState{storeBundle.state1})
 	require.NoError(err)
-	_, err = os.Stat(path.Join(storeBundle.state1.dir, fn))
+	_, err = os.Stat(path.Join(storeBundle.state1.dir, store.fileEntryInternalFactory.GetRelativePath(fn)))
 	require.True(os.IsNotExist(err))
 
 	// Existing readwriter should still work after deletion

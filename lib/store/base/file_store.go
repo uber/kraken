@@ -48,7 +48,13 @@ type FileEntryInternal interface {
 
 // FileEntryInternalFactory initializes FileEntryInternal obj.
 type FileEntryInternalFactory interface {
+	// Create creates a file entry given a state directory and a name.
+	// It calls GetRelativePath to generate the actual file path under given directory,
 	Create(dir, name string) FileEntryInternal
+	// GetRelativePath returns the relative path for a file entry.
+	// The path is relative to the state directory that file entry belongs to.
+	// i.e. a file entry can have a relative path of 00/0e/filename under directory /var/cache/
+	GetRelativePath(name string) string
 }
 
 // FileState decides what directory a file is in.

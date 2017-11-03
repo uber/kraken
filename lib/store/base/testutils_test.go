@@ -129,43 +129,54 @@ type fileEntryTestBundle struct {
 }
 
 // fileStoreBundle contains available states, FileStore and a map of FileEntry
+// NOTE: do not use this struct directly, use fixtures instead
+// TODO: breakdown fileStoreTestBundle
 type fileStoreTestBundle struct {
 	state1 mockFileState
 	state2 mockFileState
 	state3 mockFileState
 
-	store FileStore
-	files map[mockFileState]*fileEntryTestBundle
+	createStore func() *LocalFileStore
+	store       *LocalFileStore
+	files       map[mockFileState]*fileEntryTestBundle
+}
+
+func (b *fileStoreTestBundle) recreateStore() {
+	b.store = b.createStore()
 }
 
 func fileStoreLRUFixture(size int) (*fileStoreTestBundle, func()) {
-	store, err := NewLocalFileStoreWithLRU(size)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return newFileStoreFixture(store)
+	return newFileStoreFixture(func() *LocalFileStore {
+		store, err := NewLocalFileStoreWithLRU(size)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return store
+	})
 }
 
 func fileStoreShardDefaultFixture() (*fileStoreTestBundle, func()) {
-	store, err := NewShardedFileStoreDefault()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return newFileStoreFixture(store)
+	return newFileStoreFixture(func() *LocalFileStore {
+		store, err := NewShardedFileStoreDefault()
+		if err != nil {
+			log.Fatal(err)
+		}
+		return store
+	})
 }
 
 func fileStoreDefaultFixture() (*fileStoreTestBundle, func()) {
-	store, err := NewLocalFileStoreDefault()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return newFileStoreFixture(store)
+	return newFileStoreFixture(func() *LocalFileStore {
+		store, err := NewLocalFileStoreDefault()
+		if err != nil {
+			log.Fatal(err)
+		}
+		return store
+	})
 }
 
-func newFileStoreFixture(store FileStore) (*fileStoreTestBundle, func()) {
+func newFileStoreFixture(createStore func() *LocalFileStore) (*fileStoreTestBundle, func()) {
+	store := createStore()
 	cleanup := &testutils.Cleanup{}
 	defer cleanup.Recover()
 
@@ -173,11 +184,12 @@ func newFileStoreFixture(store FileStore) (*fileStoreTestBundle, func()) {
 	cleanup.Add(f)
 
 	storeBundle := &fileStoreTestBundle{
-		state1: state1,
-		state2: state2,
-		state3: state3,
-		store:  store,
-		files:  make(map[mockFileState]*fileEntryTestBundle),
+		state1:      state1,
+		state2:      state2,
+		state3:      state3,
+		createStore: createStore,
+		store:       store,
+		files:       make(map[mockFileState]*fileEntryTestBundle),
 	}
 
 	// Create one test file in store
@@ -186,7 +198,7 @@ func newFileStoreFixture(store FileStore) (*fileStoreTestBundle, func()) {
 		log.Fatal(err)
 	}
 
-	entry, _, err := storeBundle.store.(*LocalFileStore).LoadFileEntry(_testFileName, []FileState{storeBundle.state1})
+	entry, _, err := storeBundle.store.LoadFileEntry(_testFileName, []FileState{storeBundle.state1})
 	if err != nil {
 		log.Fatal(err)
 	}

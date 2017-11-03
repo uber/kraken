@@ -15,13 +15,13 @@ func NewLocalRCFileStore(fileEntryInternalFactory base.FileEntryInternalFactory,
 		return nil, err
 	}
 	return &LocalRCFileStore{
-		LocalFileStore: store.(*base.LocalFileStore),
+		LocalFileStore: store,
 	}, nil
 }
 
 // NewLocalRCFileStoreDefault initializes and returns a new RCFileStore object.
 func NewLocalRCFileStoreDefault() (RCFileStore, error) {
-	store, err := NewLocalRCFileStore(&LocalRCFileEntryInternalFactory{}, &LocalRCFileEntryFactory{}, &base.DefaultFileMapFactory{})
+	store, err := NewLocalRCFileStore(NewLocalRCFileEntryInternalFactory(base.DefaultShardIDLength), &LocalRCFileEntryFactory{}, &base.DefaultFileMapFactory{})
 	if err != nil {
 		return nil, err
 	}
