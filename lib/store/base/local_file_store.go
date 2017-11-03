@@ -20,7 +20,7 @@ type LocalFileStore struct {
 
 // NewLocalFileStore initializes and returns a new FileStore object. It allows dependency injection.
 // TODO (@evelynl): maybe we should refactor this...
-func NewLocalFileStore(fileEntryInternalFactory FileEntryInternalFactory, fileEntryFactory FileEntryFactory, fileMapFactory FileMapFactory) (FileStore, error) {
+func NewLocalFileStore(fileEntryInternalFactory FileEntryInternalFactory, fileEntryFactory FileEntryFactory, fileMapFactory FileMapFactory) (*LocalFileStore, error) {
 	fileMap, err := fileMapFactory.Create()
 	if err != nil {
 		return nil, err
@@ -33,20 +33,20 @@ func NewLocalFileStore(fileEntryInternalFactory FileEntryInternalFactory, fileEn
 }
 
 // NewLocalFileStoreDefault initializes and returns a new FileStore object.
-func NewLocalFileStoreDefault() (FileStore, error) {
+func NewLocalFileStoreDefault() (*LocalFileStore, error) {
 	return NewLocalFileStore(&LocalFileEntryInternalFactory{}, &LocalFileEntryFactory{}, &DefaultFileMapFactory{})
 }
 
 // NewLocalFileStoreWithLRU initializes a LRU FileStore
-func NewLocalFileStoreWithLRU(size int) (FileStore, error) {
+func NewLocalFileStoreWithLRU(size int) (*LocalFileStore, error) {
 	return NewLocalFileStore(&LocalFileEntryInternalFactory{}, &LocalFileEntryFactory{}, &LRUFileMapFactory{size})
 }
 
 // NewShardedFileStoreDefault initializes and returns a new FileStore object.
 // It uses the first few bytes of file digest (which is also used as file name) as shard ID.
 // For every byte, one more level of directories will be created.
-func NewShardedFileStoreDefault() (FileStore, error) {
-	return NewLocalFileStore(&ShardedFileEntryInternalFactory{}, &LocalFileEntryFactory{}, &DefaultFileMapFactory{})
+func NewShardedFileStoreDefault() (*LocalFileStore, error) {
+	return NewLocalFileStore(NewShardedFileEntryInternalFactory(DefaultShardIDLength), &LocalFileEntryFactory{}, &DefaultFileMapFactory{})
 }
 
 func (s *LocalFileStore) createFileEntry(fileName string, state FileState) FileEntry {
@@ -67,7 +67,7 @@ func (s *LocalFileStore) LoadFileEntry(fileName string, states []FileState) (Fil
 	} else {
 		// Check if file exists on disk.
 		for _, state := range states {
-			fp := path.Join(state.GetDirectory(), fileName)
+			fp := path.Join(state.GetDirectory(), s.fileEntryInternalFactory.GetRelativePath(fileName))
 			if _, err := os.Stat(fp); err != nil {
 				// File doesn't exists on disk.
 				continue

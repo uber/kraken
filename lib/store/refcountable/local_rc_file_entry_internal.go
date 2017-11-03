@@ -8,15 +8,28 @@ import (
 	"code.uber.internal/infra/kraken/lib/store/base"
 )
 
+var _ base.FileEntryInternalFactory = (*LocalRCFileEntryInternalFactory)(nil)
+
 // LocalRCFileEntryInternalFactory initializes LocalFileEntryInternal obj.
-type LocalRCFileEntryInternalFactory struct{}
+type LocalRCFileEntryInternalFactory struct {
+	baseF *base.ShardedFileEntryInternalFactory
+}
+
+// NewLocalRCFileEntryInternalFactory returns a new LocalRCFileEntryInternalFactory
+func NewLocalRCFileEntryInternalFactory(shardIDLength uint) *LocalRCFileEntryInternalFactory {
+	return &LocalRCFileEntryInternalFactory{base.NewShardedFileEntryInternalFactory(shardIDLength)}
+}
 
 // Create initializes and returns a FileEntryInternal object.
 func (f *LocalRCFileEntryInternalFactory) Create(dir, name string) base.FileEntryInternal {
-	baseF := base.ShardedFileEntryInternalFactory{}
 	return &LocalRCFileEntryInternal{
-		FileEntryInternal: baseF.Create(dir, name),
+		FileEntryInternal: f.baseF.Create(dir, name),
 	}
+}
+
+// GetRelativePath returns
+func (f *LocalRCFileEntryInternalFactory) GetRelativePath(name string) string {
+	return f.baseF.GetRelativePath(name)
 }
 
 // LocalRCFileEntryInternal extends LocalFileEntryInternal, adds functions to manage file ref count.

@@ -177,13 +177,16 @@ run_origin: origin
 	-docker rm kraken-origin
 	docker run -d \
 		--name=kraken-origin \
+		--hostname=192.168.65.1 \
 		-e UBER_CONFIG_DIR=/root/kraken/config/origin \
 		-e UBER_ENVIRONMENT=development \
 		-e UBER_DATACENTER=sjc1 \
-		-p 5051:5051 \
+		-p 19003:19003 \
 		-p 5081:5081 \
+		# Mount cache dir so restart will be able to load from disk
+		-v /tmp/kraken:/var/kraken/ \
 		kraken-origin:dev \
-		/usr/bin/kraken-origin --peer_ip=192.168.65.1 --peer_port=5081
+		/usr/bin/kraken-origin --peer_ip=192.168.65.1 --peer_port=5081 --blobserver_port=19003
 
 .PHONY: peer
 peer:

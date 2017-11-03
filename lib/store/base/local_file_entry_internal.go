@@ -8,39 +8,71 @@ import (
 	"path/filepath"
 )
 
+var _ FileEntryInternalFactory = (*LocalFileEntryInternalFactory)(nil)
+var _ FileEntryInternalFactory = (*ShardedFileEntryInternalFactory)(nil)
+
 // LocalFileEntryInternalFactory initializes LocalFileEntryInternal obj.
 type LocalFileEntryInternalFactory struct{}
 
 // Create initializes and returns a FileEntryInternal object.
 func (f *LocalFileEntryInternalFactory) Create(dir, name string) FileEntryInternal {
 	return &LocalFileEntryInternal{
-		dir:         dir,
-		name:        name,
-		metadataSet: make(map[MetadataType]struct{}),
+		dir:          dir,
+		name:         name,
+		relativePath: f.GetRelativePath(name),
+		metadataSet:  make(map[MetadataType]struct{}),
 	}
+}
+
+// GetRelativePath returns name because file entries are stored flat under state directory.
+func (f *LocalFileEntryInternalFactory) GetRelativePath(name string) string {
+	return name
 }
 
 // ShardedFileEntryInternalFactory initializes LocalFileEntryInternal obj.
 // It uses the first few bytes of file digest (which is also used as file name) as shard ID.
 // For every byte, one more level of directories will be created.
-type ShardedFileEntryInternalFactory struct{}
+type ShardedFileEntryInternalFactory struct {
+	shardIDLength uint
+}
+
+// NewShardedFileEntryInternalFactory creates a new ShardedFileEntryInternalFactory given shardIDLength
+func NewShardedFileEntryInternalFactory(shardIDLength uint) *ShardedFileEntryInternalFactory {
+	return &ShardedFileEntryInternalFactory{shardIDLength}
+}
 
 // Create initializes and returns a FileEntryInternal object.
 func (f *ShardedFileEntryInternalFactory) Create(dir, name string) FileEntryInternal {
 	return &LocalFileEntryInternal{
-		dir:           dir,
-		name:          name,
-		shardIDLength: DefaultShardIDLength,
-		metadataSet:   make(map[MetadataType]struct{}),
+		dir:          dir,
+		name:         name,
+		relativePath: f.GetRelativePath(name),
+		metadataSet:  make(map[MetadataType]struct{}),
 	}
+}
+
+// GetRelativePath returns sharded file path under state directory.
+// Example:
+// name = 07123e1f482356c415f684407a3b8723e10b2cbbc0b8fcd6282c49d37c9c1abc
+// shardIDLength = 2
+// relative path = 07/12/07123e1f482356c415f684407a3b8723e10b2cbbc0b8fcd6282c49d37c9c1abc
+func (f *ShardedFileEntryInternalFactory) GetRelativePath(name string) string {
+	filePath := ""
+	for i := 0; i < int(f.shardIDLength) && i < len(name)/2; i++ {
+		// (1 byte = 2 char of file name assumming file name is in HEX)
+		dirName := name[i*2 : i*2+2]
+		filePath = path.Join(filePath, dirName)
+	}
+
+	return path.Join(filePath, name)
 }
 
 // LocalFileEntryInternal implements FileEntryInternal interface, handles IO operations for one file on local disk.
 type LocalFileEntryInternal struct {
-	dir           string
-	name          string
-	shardIDLength int
-	metadataSet   map[MetadataType]struct{}
+	dir          string
+	name         string
+	relativePath string
+	metadataSet  map[MetadataType]struct{}
 }
 
 // GetName returns name of the file.
@@ -48,20 +80,9 @@ func (fi *LocalFileEntryInternal) GetName() string {
 	return fi.name
 }
 
-func (fi *LocalFileEntryInternal) getRelativePath() string {
-	filePath := ""
-	for i := 0; i < fi.shardIDLength && i < len(fi.name)/2; i++ {
-		// (1 byte = 2 char of file name assumming file name is in HEX)
-		dirName := fi.name[i*2 : i*2+2]
-		filePath = path.Join(filePath, dirName)
-	}
-
-	return path.Join(filePath, fi.name)
-}
-
 // GetPath returns current path of the file.
 func (fi *LocalFileEntryInternal) GetPath() string {
-	return path.Join(fi.dir, fi.getRelativePath())
+	return path.Join(fi.dir, fi.relativePath)
 }
 
 // Stat returns a FileInfo describing the named file.
@@ -135,7 +156,7 @@ func (fi *LocalFileEntryInternal) Move(targetDir string) error {
 
 	// Move data file.
 	sourcePath := fi.GetPath()
-	targetPath := path.Join(targetDir, fi.getRelativePath())
+	targetPath := path.Join(targetDir, fi.relativePath)
 	os.MkdirAll(filepath.Dir(targetPath), DefaultDirPermission)
 	if err := os.Rename(sourcePath, targetPath); err != nil {
 		return err
@@ -261,8 +282,8 @@ func (fi *LocalFileEntryInternal) DeleteMetadata(mt MetadataType) error {
 
 // linkMetadata hardlinks metadata from sourceDir to targetDir
 func (fi *LocalFileEntryInternal) linkMetadata(sourceDir string, targetDir string, mt MetadataType) error {
-	sourcePath := path.Join(sourceDir, fi.getRelativePath()+mt.GetSuffix())
-	targetPath := path.Join(targetDir, fi.getRelativePath()+mt.GetSuffix())
+	sourcePath := path.Join(sourceDir, fi.relativePath+mt.GetSuffix())
+	targetPath := path.Join(targetDir, fi.relativePath+mt.GetSuffix())
 	os.MkdirAll(filepath.Dir(targetPath), DefaultDirPermission)
 	return os.Link(sourcePath, targetPath)
 }

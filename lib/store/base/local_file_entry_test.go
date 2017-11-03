@@ -143,7 +143,7 @@ func TestReload(t *testing.T) {
 	require := require.New(t)
 	storeBundle, cleanup := fileStoreDefaultFixture()
 	defer cleanup()
-	store := storeBundle.store.(*LocalFileStore)
+	store := storeBundle.store
 
 	fileBundle, ok := storeBundle.files[storeBundle.state1]
 	if !ok {
@@ -198,7 +198,7 @@ func TestMove(t *testing.T) {
 	require := require.New(t)
 	storeBundle, cleanup := fileStoreDefaultFixture()
 	defer cleanup()
-	store := storeBundle.store.(*LocalFileStore)
+	store := storeBundle.store
 
 	fileBundle, ok := storeBundle.files[storeBundle.state1]
 	if !ok {
