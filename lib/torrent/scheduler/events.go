@@ -367,6 +367,7 @@ func (e cancelTorrentEvent) Apply(s *Scheduler) {
 		return
 	}
 	ctrl.Dispatcher.TearDown()
+	s.announceQueue.Eject(ctrl.Dispatcher)
 	for _, errc := range ctrl.Errors {
 		errc <- ErrTorrentCancelled
 	}

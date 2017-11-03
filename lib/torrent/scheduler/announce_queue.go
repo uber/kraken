@@ -63,3 +63,15 @@ func (q *announceQueue) Ready(d *dispatcher) {
 func (q *announceQueue) Done(d *dispatcher) {
 	q.done[d] = true
 }
+
+// Eject immediately ejects d from the announce queue, preventing it from
+// announcing further.
+func (q *announceQueue) Eject(d *dispatcher) {
+	delete(q.pending, d)
+	delete(q.done, d)
+	for e := q.readyQueue.Front(); e != nil; e = e.Next() {
+		if e.Value.(*dispatcher) == d {
+			q.readyQueue.Remove(e)
+		}
+	}
+}
