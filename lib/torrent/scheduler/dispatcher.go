@@ -252,7 +252,7 @@ func (d *dispatcher) handlePiecePayload(
 		}
 		cc := v.(*conn)
 
-		d.logf(log.Fields{"conn": cc, "piece": i}).Info("Announcing piece")
+		d.logf(log.Fields{"conn": cc, "piece": i}).Debug("Announcing piece")
 
 		// Ignore error -- this just means the connection was closed. The feed goroutine
 		// for cc will clean up.
