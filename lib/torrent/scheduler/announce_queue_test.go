@@ -80,3 +80,45 @@ func TestAnnounceQueueDoneOnPendingDispatcherDeletesAfterNext(t *testing.T) {
 	_, ok = q.Next()
 	require.False(ok)
 }
+
+func TestAnnounceQueueEjectDeletesDispatcherInAllStates(t *testing.T) {
+	tests := []struct {
+		description string
+		setup       func(*announceQueue, *dispatcher)
+	}{
+		{"dispatcher in middle of queue", func(q *announceQueue, d *dispatcher) {
+			q.Add(&dispatcher{})
+			q.Add(d)
+			q.Add(&dispatcher{})
+		}},
+		{"dispatcher ready", func(q *announceQueue, d *dispatcher) {
+			q.Add(d)
+			q.Next()
+		}},
+		{"dispatcher done", func(q *announceQueue, d *dispatcher) {
+			q.Add(d)
+			q.Done(d)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.description, func(t *testing.T) {
+			require := require.New(t)
+
+			q := newAnnounceQueue()
+			d := &dispatcher{}
+			test.setup(q, d)
+
+			q.Eject(d)
+
+			require.False(q.done[d])
+			require.False(q.pending[d])
+			for {
+				n, ok := q.Next()
+				if !ok {
+					break
+				}
+				require.False(d == n)
+			}
+		})
+	}
+}
