@@ -124,7 +124,7 @@ func (d *dispatcher) String() string {
 }
 
 func (d *dispatcher) sendPieceRequest(c *conn, i int) error {
-	d.logf(log.Fields{"conn": c, "piece": i}).Info("Sending piece request")
+	d.logf(log.Fields{"conn": c, "piece": i}).Debug("Sending piece request")
 	return c.Send(newPieceRequestMessage(i, d.Torrent.PieceLength(i)))
 }
 
@@ -219,7 +219,7 @@ func (d *dispatcher) handlePieceRequest(c *conn, msg *p2p.PieceRequestMessage) {
 		return
 	}
 	c.TouchLastPieceSent()
-	d.logf(log.Fields{"conn": c, "piece": msg.Index}).Info("Sent piece")
+	d.logf(log.Fields{"conn": c, "piece": msg.Index}).Debug("Sent piece")
 }
 
 func (d *dispatcher) handlePiecePayload(
@@ -238,7 +238,7 @@ func (d *dispatcher) handlePiecePayload(
 		}
 		return
 	}
-	d.logf(log.Fields{"conn": c, "piece": i}).Info("Received piece")
+	d.logf(log.Fields{"conn": c, "piece": i}).Debug("Received piece")
 	d.networkEventProducer.Produce(
 		networkevent.ReceivePieceEvent(d.Torrent.InfoHash(), d.localPeerID, c.PeerID, i))
 	c.TouchLastGoodPieceReceived()
