@@ -279,7 +279,6 @@ func (d *dispatcher) handleBitfield(c *conn, msg *p2p.BitfieldMessage) {
 
 func (d *dispatcher) logf(f log.Fields) bark.Logger {
 	f["torrent"] = d.Torrent
-	f["scheduler"] = d.localPeerID
 	return log.WithFields(f)
 }
 

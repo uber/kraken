@@ -487,7 +487,6 @@ L:
 
 func (c *conn) logf(f log.Fields) bark.Logger {
 	f["remote_peer"] = c.PeerID
-	f["scheduler"] = c.localPeerID
 	f["hash"] = c.InfoHash
 	return log.WithFields(f)
 }

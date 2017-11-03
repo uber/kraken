@@ -39,7 +39,7 @@ func TestLocalTorrentCreate(t *testing.T) {
 	require.False(tor.Complete())
 	require.Equal(int64(0), tor.BytesDownloaded())
 	require.Equal(Bitfield{false, false, false, false}, tor.Bitfield())
-	require.Equal(fmt.Sprintf("torrent(hash=%s, bitfield=0000)", mi.InfoHash.HexString()), tor.String())
+	require.Equal(fmt.Sprintf("torrent(hash=%s, downloaded=0%%)", mi.InfoHash.HexString()), tor.String())
 	require.False(tor.HasPiece(0))
 	require.Equal([]int{0, 1, 2, 3}, tor.MissingPieces())
 }
@@ -116,7 +116,7 @@ func TestLocalTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 	require.True(tor.Complete())
 	require.Equal(int64(7), tor.BytesDownloaded())
 	require.Nil(tor.MissingPieces())
-	require.Equal(fmt.Sprintf("torrent(hash=%s, bitfield=1111)", mi.InfoHash.HexString()), tor.String())
+	require.Equal(fmt.Sprintf("torrent(hash=%s, downloaded=100%%)", mi.InfoHash.HexString()), tor.String())
 
 	// Check content
 	reader, err := archive.(*LocalTorrentArchive).store.GetCacheFileReader(mi.Name())

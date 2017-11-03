@@ -179,7 +179,8 @@ func (t *LocalTorrent) Bitfield() Bitfield {
 }
 
 func (t *LocalTorrent) String() string {
-	return fmt.Sprintf("torrent(hash=%s, bitfield=%s)", t.InfoHash().HexString(), t.Bitfield())
+	downloaded := int(float64(t.BytesDownloaded()) / float64(t.metaInfo.Info.Length) * 100)
+	return fmt.Sprintf("torrent(hash=%s, downloaded=%d%%)", t.InfoHash().HexString(), downloaded)
 }
 
 func (t *LocalTorrent) writePiece(data []byte, offset int64) error {
