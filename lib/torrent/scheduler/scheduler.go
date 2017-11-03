@@ -427,7 +427,6 @@ func (s *Scheduler) initTorrentControl(t storage.Torrent) *torrentControl {
 }
 
 func (s *Scheduler) logf(f log.Fields) bark.Logger {
-	f["scheduler"] = s.pctx.PeerID
 	return log.WithFields(f)
 }
 

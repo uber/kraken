@@ -253,7 +253,6 @@ func (s *connState) adjustConnBandwidthLimits() {
 }
 
 func (s *connState) logf(f log.Fields) bark.Logger {
-	f["scheduler"] = s.localPeerID
 	return log.WithFields(f)
 }
 
