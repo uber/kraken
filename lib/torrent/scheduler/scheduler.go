@@ -320,7 +320,7 @@ func (s *Scheduler) doInitIncomingConn(
 }
 
 func (s *Scheduler) initIncomingConn(nc net.Conn, remoteHandshake *handshake) {
-	s.logf(log.Fields{"peer": remoteHandshake.PeerID}).Debugf("Handshaking incoming connection")
+	s.logf(log.Fields{"peer": remoteHandshake.PeerID}).Info("Handshaking incoming connection")
 
 	var e event
 	c, t, err := s.doInitIncomingConn(nc, remoteHandshake)
@@ -358,7 +358,7 @@ func (s *Scheduler) doInitOutgoingConn(
 func (s *Scheduler) initOutgoingConn(peerID torlib.PeerID, ip string, port int, t storage.Torrent) {
 	s.logf(log.Fields{
 		"peer": peerID, "ip": ip, "port": port, "torrent": t,
-	}).Debug("Initializing outgoing connection")
+	}).Info("Initializing outgoing connection")
 
 	var e event
 	c, err := s.doInitOutgoingConn(peerID, ip, port, t)
