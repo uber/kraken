@@ -213,6 +213,10 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 		return
 	}
 	s.announceQueue.Ready(ctrl.Dispatcher)
+	if ctrl.Complete {
+		// Torrent is already complete, don't open any new connections.
+		return
+	}
 	for i := 0; i < len(e.peers); i++ {
 		p := e.peers[i]
 		pid, err := torlib.NewPeerID(p.PeerID)
