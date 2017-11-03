@@ -65,7 +65,7 @@ func (c Config) String() string {
 
 func (c Config) applyDefaults() Config {
 	if c.AnnounceInterval == 0 {
-		c.AnnounceInterval = 30 * time.Second
+		c.AnnounceInterval = 3 * time.Second
 	}
 	if c.DialTimeout == 0 {
 		c.DialTimeout = 5 * time.Second
