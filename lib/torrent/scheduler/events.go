@@ -360,23 +360,25 @@ func (e emitStatsEvent) Apply(s *Scheduler) {
 
 // cancelTorrentEvent occurs when a client of Scheduler manually cancels a torrent.
 type cancelTorrentEvent struct {
-	infoHash torlib.InfoHash
+	name string
 }
 
 func (e cancelTorrentEvent) Apply(s *Scheduler) {
 	s.log().Debug("Applying cancel torrent event")
 
-	ctrl, ok := s.torrentControls[e.infoHash]
-	if !ok {
-		return
+	// TODO(codyg): Fix torrent hash / name issue.
+	for _, ctrl := range s.torrentControls {
+		if ctrl.Dispatcher.Torrent.Name() == e.name {
+			h := ctrl.Dispatcher.Torrent.InfoHash()
+			ctrl.Dispatcher.TearDown()
+			s.announceQueue.Eject(ctrl.Dispatcher)
+			for _, errc := range ctrl.Errors {
+				errc <- ErrTorrentCancelled
+			}
+			delete(s.torrentControls, h)
+			s.logf(log.Fields{"hash": h}).Info("Torrent cancelled")
+			s.networkEventProducer.Produce(networkevent.TorrentCancelledEvent(h, s.pctx.PeerID))
+			break
+		}
 	}
-	ctrl.Dispatcher.TearDown()
-	s.announceQueue.Eject(ctrl.Dispatcher)
-	for _, errc := range ctrl.Errors {
-		errc <- ErrTorrentCancelled
-	}
-	delete(s.torrentControls, e.infoHash)
-
-	s.logf(log.Fields{"hash": e.infoHash}).Info("Torrent cancelled")
-	s.networkEventProducer.Produce(networkevent.TorrentCancelledEvent(e.infoHash, s.pctx.PeerID))
 }

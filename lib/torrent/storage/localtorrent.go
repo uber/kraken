@@ -87,15 +87,41 @@ type LocalTorrent struct {
 }
 
 // NewLocalTorrent creates a new LocalTorrent.
-func NewLocalTorrent(store store.FileStore, mi *torlib.MetaInfo) *LocalTorrent {
+func NewLocalTorrent(store store.FileStore, mi *torlib.MetaInfo) (*LocalTorrent, error) {
+
+	// We ignore existing download / metainfo file errors to allow thread
+	// interleaving: if two threads try to create the same torrent at the same
+	// time, said files will be created exactly once and both threads will succeed.
+
+	if err := store.CreateDownloadFile(mi.Name(), mi.Info.Length); err != nil && !os.IsExist(err) {
+		return nil, fmt.Errorf("create download file: %s", err)
+	}
+
+	// Save metainfo in store so we do not need to query tracker everytime
+	miRaw, err := mi.Serialize()
+	if err != nil {
+		return nil, fmt.Errorf("serialize metainfo: %s", err)
+	}
+	if _, err := store.SetDownloadOrCacheFileMeta(mi.Name(), []byte(miRaw)); err != nil && !os.IsExist(err) {
+		return nil, fmt.Errorf("write metainfo: %s", err)
+	}
+
 	t := &LocalTorrent{
 		store:       store,
 		metaInfo:    mi,
 		pieces:      make([]piece, mi.Info.NumPieces()),
 		numComplete: atomic.NewInt32(0),
 	}
+
 	t.restorePieces()
-	return t
+
+	if t.Complete() {
+		if err := t.store.MoveDownloadFileToCache(mi.Name()); err != nil && !os.IsExist(err) {
+			return nil, fmt.Errorf("move file to cache: %s", err)
+		}
+	}
+
+	return t, nil
 }
 
 // restorePieces populates any existing piece state from file store. Must be called

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"sort"
@@ -8,10 +9,11 @@ import (
 	"sync"
 
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/go-common.git/x/mysql"
+	xmysql "code.uber.internal/go-common.git/x/mysql"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"github.com/pressly/goose"
@@ -24,7 +26,7 @@ type MySQLStorage struct {
 }
 
 // NewMySQLStorage creates and returns new MySQL storage.
-func NewMySQLStorage(nemo mysql.Configuration, config MySQLConfig) (*MySQLStorage, error) {
+func NewMySQLStorage(nemo xmysql.Configuration, config MySQLConfig) (*MySQLStorage, error) {
 	dsn, err := nemo.GetDefaultDSN()
 	if err != nil {
 		return nil, fmt.Errorf("error getting dsn: %s", err)
@@ -81,42 +83,38 @@ func (s *MySQLStorage) UpdatePeer(peer *torlib.PeerInfo) error {
 
 // GetTorrent reads torrent's metadata identified by a torrent name
 func (s *MySQLStorage) GetTorrent(name string) (string, error) {
-	var metaRaw []string
-	err := s.db.Select(&metaRaw, "select metaInfo from torrent where name=?", name)
+	var metainfo string
+	err := s.db.Get(&metainfo, "select metaInfo from torrent where name=?", name)
 	if err != nil {
-		log.Error(err)
+		if err == sql.ErrNoRows {
+			return "", ErrNotFound
+		}
 		return "", err
 	}
-	if len(metaRaw) > 1 {
-		log.Fatalf("Duplicated torrent %s", name)
-	}
-
-	if len(metaRaw) <= 0 {
-		return "", errors.Wrap(os.ErrNotExist, fmt.Sprintf("Cannot find torrent %s", name))
-	}
-	return metaRaw[0], nil
+	return metainfo, err
 }
 
 // CreateTorrent creates a torrent in storage
-func (s *MySQLStorage) CreateTorrent(meta *torlib.MetaInfo) error {
-	serialized, err := meta.Serialize()
+func (s *MySQLStorage) CreateTorrent(mi *torlib.MetaInfo) error {
+	serialized, err := mi.Serialize()
 	if err != nil {
-		log.Error(err)
-		return err
+		return fmt.Errorf("serialize metainfo: %s", err)
 	}
 
-	_, err = s.db.NamedExec(`insert into torrent(name, infoHash, author, metaInfo)
-	values(:name, :infoHash, :author, :metaInfo) on duplicate key update flags = flags`,
+	_, err = s.db.NamedExec(`
+		insert into torrent(name, infoHash, author, metaInfo)
+		values(:name, :infoHash, :author, :metaInfo)`,
 		map[string]interface{}{
-			"name":     meta.Name(),
-			"infoHash": meta.InfoHash.HexString(),
-			"author":   meta.CreatedBy,
+			"name":     mi.Name(),
+			"infoHash": mi.InfoHash.HexString(),
+			"author":   mi.CreatedBy,
 			"metaInfo": serialized,
 		})
-
 	if err != nil {
-		log.Error(err)
-		return err
+		if isDuplicateKeyError(err) {
+			return ErrExists
+		}
+		return fmt.Errorf("insert torrent: %s", err)
 	}
 	return nil
 }
@@ -321,4 +319,11 @@ func (s *MySQLStorage) GetOrigins(infohash string) ([]*torlib.PeerInfo, error) {
 // UpdateOrigins implements PeerStore.UpdateOrigins.
 func (s *MySQLStorage) UpdateOrigins(infohash string, origins []*torlib.PeerInfo) error {
 	panic("UpdateOrigins not implemented")
+}
+
+func isDuplicateKeyError(err error) bool {
+	if me, ok := err.(*mysql.MySQLError); ok {
+		return me.Number == 1062
+	}
+	return false
 }

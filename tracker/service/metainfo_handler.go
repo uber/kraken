@@ -1,10 +1,10 @@
 package service
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"os"
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/torlib"
@@ -22,23 +22,18 @@ func (h *metainfoHandler) Get(w http.ResponseWriter, r *http.Request) {
 	name := q.Get("name")
 
 	if name == "" {
-		log.Errorf("Failed to get torrent metainfo, no name specified: %s", formatRequest(r))
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSONErrorf(w, "Failed to get torrent metainfo: no torrent name specified")
+		http.Error(w, "no name specified", http.StatusBadRequest)
 		return
 	}
 
 	metaRaw, err := h.store.GetTorrent(name)
 	if err != nil {
-		if os.IsNotExist(err) {
-			w.WriteHeader(http.StatusNotFound)
+		if err == storage.ErrNotFound {
+			http.Error(w, "torrent not found", http.StatusNotFound)
 		} else {
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("storage: %s", err), http.StatusInternalServerError)
 		}
-		writeJSONErrorf(w, "Failed to get torrent metainfo: %s", err)
-		log.WithFields(log.Fields{
-			"name": name, "error": err,
-		}).Error("Failed to get torrent metainfo")
+		log.WithFields(log.Fields{"name": name}).Errorf("Error getting torrent metainfo: %s", err)
 		return
 	}
 
@@ -48,70 +43,31 @@ func (h *metainfoHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *metainfoHandler) Post(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	q := r.URL.Query()
-	name := q.Get("name")
-	infoHash := q.Get("info_hash")
-
-	if name == "" || infoHash == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSONErrorf(w, "Failed to create torrent: incomplete query")
-		return
-	}
-
-	// Read metainfo
 	defer r.Body.Close()
 	metaRaw, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		writeJSONErrorf(w, "Could not read metainfo payload from request for %s: %s", name, err)
-		log.WithFields(log.Fields{
-			"name":      name,
-			"info_hash": infoHash,
-			"error":     err,
-			"request":   formatRequest(r),
-		}).Error("Failed to read metainfo payload")
+		http.Error(w, fmt.Sprintf("read body: %s", err), http.StatusInternalServerError)
+		log.Errorf("Error reading request body: %s", err)
 		return
 	}
 
-	// Unmarshal metainfo
-	mi, err := torlib.NewMetaInfoFromBytes(metaRaw)
+	mi, err := torlib.DeserializeMetaInfo(metaRaw)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		writeJSONErrorf(w, "Could not create metainfo from request for %s: %s", name, err)
-		log.WithFields(log.Fields{
-			"name":      name,
-			"info_hash": infoHash,
-			"error":     err,
-			"request":   formatRequest(r),
-		}).Error("Failed to create metainfo from payload")
+		http.Error(w, fmt.Sprintf("deserialize metainfo: %s", err), http.StatusBadRequest)
+		log.Errorf("Error deserializing metainfo body: %s", err)
 		return
 	}
 
-	// Check if infohash matches
-	if mi.InfoHash.HexString() != infoHash {
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSONErrorf(w, "info_hash mismatch from request for %s: requested %s, actual %s", name, infoHash, mi.InfoHash.HexString())
-		log.WithFields(log.Fields{
-			"name":      name,
-			"requested": infoHash,
-			"actual":    mi.InfoHash.HexString(),
-			"request":   formatRequest(r),
-		}).Error("info_hash mismatch")
+	if err := h.store.CreateTorrent(mi); err != nil {
+		if err == storage.ErrExists {
+			http.Error(w, fmt.Sprintf("metainfo already exists for name %s", mi.Name()), http.StatusConflict)
+		} else {
+			http.Error(w, fmt.Sprintf("storage: %s", err), http.StatusInternalServerError)
+		}
+		log.WithFields(log.Fields{"name": mi.Name()}).Errorf("Failed to create torrent: %s", err)
 		return
 	}
 
-	err = h.store.CreateTorrent(mi)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		writeJSONErrorf(w, "Failed to create torrent: %s", err)
-		log.WithFields(log.Fields{
-			"name":  name,
-			"error": err,
-		}).Error("Failed to create torrent")
-		return
-	}
-
+	log.WithFields(log.Fields{"name": mi.Name()}).Info("Wrote torrent metainfo")
 	w.WriteHeader(http.StatusOK)
 }

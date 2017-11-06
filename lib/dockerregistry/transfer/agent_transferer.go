@@ -25,7 +25,7 @@ func (tt *AgentTransferer) Download(digest string) (io.ReadCloser, error) {
 }
 
 // Upload uploads blobs to a torrent network
-func (tt *AgentTransferer) Upload(digest string, reader io.Reader, size int64) error {
+func (tt *AgentTransferer) Upload(digest string, blobIO IOCloner, size int64) error {
 	return errors.New("unsupported in TorrentImageTransferer")
 }
 

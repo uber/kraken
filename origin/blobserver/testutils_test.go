@@ -17,7 +17,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/randutil"
@@ -91,9 +90,7 @@ func startServer(
 
 	stats := tally.NewTestScope("", nil)
 
-	var torrentConfig torrent.Config
-	torrentConfig.Enabled = false
-	s, err := New(config, torrentConfig, stats, host, fs, cp, nil)
+	s, err := New(config, stats, host, fs, cp, pctx)
 	if err != nil {
 		panic(err)
 	}

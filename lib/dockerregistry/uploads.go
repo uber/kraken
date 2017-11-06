@@ -184,6 +184,15 @@ func (u *Uploads) getUploadDataStat(dir, uuid string) (fi storagedriver.FileInfo
 	return fi, nil
 }
 
+type fileCloner struct {
+	fs   store.FileStore
+	name string
+}
+
+func (c *fileCloner) Clone() (io.ReadCloser, error) {
+	return c.fs.GetCacheFileReader(c.name)
+}
+
 // commmitUpload move a complete data blob from upload directory to cache diretory
 func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) (err error) {
 	// Remove timestamp file
@@ -197,22 +206,12 @@ func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) (err error) {
 		return err
 	}
 
-	readCloser, err := u.store.GetUploadFileReader(srcuuid)
-	if err != nil {
-		return err
-	}
-	defer readCloser.Close()
-
 	err = u.store.MoveUploadFileToCache(srcuuid, destsha)
 	if err != nil {
 		return err
 	}
 
-	err = u.transferer.Upload(destsha, readCloser, info.Size())
-	if err != nil {
-		return err
-	}
-	return nil
+	return u.transferer.Upload(destsha, &fileCloner{u.store, destsha}, info.Size())
 }
 
 // putBlobData is used to write content to files directly, like image manifest and metadata.
@@ -252,7 +251,7 @@ func (u *Uploads) putBlobData(fileName string, content []byte) error {
 		return err
 	}
 
-	err = u.transferer.Upload(fileName, rw, info.Size())
+	err = u.transferer.Upload(fileName, &fileCloner{u.store, fileName}, info.Size())
 	if err != nil {
 		return err
 	}

@@ -15,16 +15,16 @@ func TestRedisStoresBackedBySameInstance(t *testing.T) {
 
 	storeProvider := NewStoreProvider(cfg, nemoConfigFixture())
 
-	peerStore, err := storeProvider.GetPeerStore()
+	peerStore1, err := storeProvider.GetPeerStore()
 	require.NoError(err)
 
-	torrentStore, err := storeProvider.GetTorrentStore()
+	peerStore2, err := storeProvider.GetPeerStore()
 	require.NoError(err)
 
-	s1, ok := peerStore.(*RedisStorage)
+	s1, ok := peerStore1.(*RedisStorage)
 	require.True(ok)
 
-	s2, ok := torrentStore.(*RedisStorage)
+	s2, ok := peerStore2.(*RedisStorage)
 	require.True(ok)
 
 	require.Equal(s1, s2)

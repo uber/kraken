@@ -17,8 +17,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/middleware"
+	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/memsize"
 
@@ -31,8 +31,7 @@ const _uploadChunkSize = 16 * memsize.MB
 
 // Server defines a server that serves blob data for agent.
 type Server struct {
-	serverConfig   Config
-	torrentConfig  torrent.Config
+	config         Config
 	label          string
 	addr           string
 	labelToAddr    map[string]string
@@ -45,40 +44,38 @@ type Server struct {
 	// Tracker queries the origin cluster to discover which origins can seed
 	// a given torrent, however this requires blob server to understand the
 	// context of the p2p client running alongside it.
-	torrentClient torrent.Client
+	pctx peercontext.PeerContext
 }
 
 // New initializes a new Server.
 func New(
-	serverConfig Config,
-	torrentConfig torrent.Config,
+	config Config,
 	stats tally.Scope,
 	addr string,
 	fileStore store.FileStore,
 	clientProvider blobclient.Provider,
-	torrentClient torrent.Client) (*Server, error) {
+	pctx peercontext.PeerContext) (*Server, error) {
 
-	if len(serverConfig.HashNodes) == 0 {
+	if len(config.HashNodes) == 0 {
 		return nil, errors.New("no hash nodes configured")
 	}
 
-	currNode, ok := serverConfig.HashNodes[addr]
+	currNode, ok := config.HashNodes[addr]
 	if !ok {
 		return nil, fmt.Errorf("host address %s not in configured hash nodes", addr)
 	}
 	label := currNode.Label
 
 	return &Server{
-		serverConfig:   serverConfig,
-		torrentConfig:  torrentConfig,
+		config:         config,
 		label:          label,
 		addr:           addr,
-		labelToAddr:    serverConfig.LabelToAddress(),
-		hashState:      serverConfig.HashState(),
+		labelToAddr:    config.LabelToAddress(),
+		hashState:      config.HashState(),
 		fileStore:      fileStore,
 		clientProvider: clientProvider,
-		torrentClient:  torrentClient,
 		stats:          stats.SubScope("blobserver"),
+		pctx:           pctx,
 	}, nil
 }
 
@@ -387,15 +384,9 @@ func (s Server) repairDigestHandler(w http.ResponseWriter, r *http.Request) erro
 
 // getPeerContextHandler returns the Server's peer context as JSON.
 func (s Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) error {
-	pctx, err := s.torrentClient.GetPeerContext()
-	if err != nil {
-		return serverErrorf("error retrieving peer context: %s", err)
-	}
-
-	if err := json.NewEncoder(w).Encode(pctx); err != nil {
+	if err := json.NewEncoder(w).Encode(s.pctx); err != nil {
 		return serverErrorf("error converting peer context to json: %s", err)
 	}
-	log.Debugf("successfully get peer context %v", pctx)
 	return nil
 }
 
@@ -459,7 +450,7 @@ func parseContentRange(h http.Header) (start, end int64, err error) {
 }
 
 func (s Server) getLocations(d image.Digest) ([]string, error) {
-	nodes, err := s.hashState.GetOrderedNodes(d.ShardID(), s.serverConfig.NumReplica)
+	nodes, err := s.hashState.GetOrderedNodes(d.ShardID(), s.config.NumReplica)
 	if err != nil || len(nodes) == 0 {
 		return nil, serverErrorf("failed to calculate hash for digest %q: %s", d, err)
 	}
@@ -604,24 +595,13 @@ func (s Server) commitUpload(d image.Digest, uploadUUID string) error {
 		return serverErrorf("failed to commit digest %q for upload %q: %s", d, uploadUUID, err)
 	}
 
-	// Add torrent - announce to tracker and start seeding.
-	if s.torrentConfig.Enabled {
-		filePath, err := s.fileStore.GetCacheFilePath(d.Hex())
-		if err != nil {
-			return serverErrorf("failed to get file path for digest %q for upload %q: %s", d, uploadUUID, err)
-		}
-		if err := s.torrentClient.CreateTorrentFromFile(d.Hex(), filePath); err != nil {
-			return serverErrorf("failed to add torrent for digest %q for upload %q: %s", d, uploadUUID, err)
-		}
-	}
-
 	return nil
 }
 
 func (s Server) newRepairer() *repairer {
 	return newRepairer(
 		context.TODO(),
-		s.serverConfig,
+		s.config,
 		s.addr,
 		s.labelToAddr,
 		s.hashState,

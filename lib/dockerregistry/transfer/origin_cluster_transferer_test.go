@@ -3,8 +3,10 @@ package transfer
 import (
 	"bytes"
 	"errors"
+	"io"
 	"io/ioutil"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 
@@ -55,6 +57,15 @@ func TestDownloadFailure(t *testing.T) {
 	require.Error(err)
 }
 
+type bufferCloner struct {
+	buf []byte
+}
+
+func (c *bufferCloner) Clone() (io.ReadCloser, error) {
+	// Create a new reader for each blob access.
+	return ioutil.NopCloser(bytes.NewBuffer(c.buf)), nil
+}
+
 func TestUploadSuccess(t *testing.T) {
 	tests := []struct {
 		description string
@@ -83,12 +94,24 @@ func TestUploadSuccess(t *testing.T) {
 			d, blob := image.DigestWithBlobFixture()
 			size := int64(len(blob))
 
+			mocks.metaInfoClient.EXPECT().Upload(gomock.Any()).Return(nil)
+
 			clients := mocks.expectClients(d, "loc1", "loc2", "loc3")
 			for i := range test.errors {
 				clients[i].EXPECT().PushBlob(d, gomock.Any(), size).Return(test.errors[i])
 			}
 
-			require.NoError(transferer.Upload(d.Hex(), bytes.NewBuffer(blob), size))
+			errc := make(chan error)
+			go func() {
+				errc <- transferer.Upload(d.Hex(), &bufferCloner{blob}, size)
+			}()
+
+			select {
+			case err := <-errc:
+				require.NoError(err)
+			case <-time.After(5 * time.Second):
+				panic("timeout")
+			}
 		})
 	}
 }
@@ -106,12 +129,14 @@ func TestUploadFailureMajority(t *testing.T) {
 
 	clients := mocks.expectClients(d, "loc1", "loc2", "loc3")
 
+	mocks.metaInfoClient.EXPECT().Upload(gomock.Any()).Return(nil)
+
 	// Two clients fail.
 	clients[0].EXPECT().PushBlob(d, gomock.Any(), size).Return(errors.New("some error"))
 	clients[1].EXPECT().PushBlob(d, gomock.Any(), size).Return(errors.New("some error"))
 	clients[2].EXPECT().PushBlob(d, gomock.Any(), size).Return(nil)
 
-	require.Error(transferer.Upload(d.Hex(), bytes.NewBuffer(blob), size))
+	require.Error(transferer.Upload(d.Hex(), &bufferCloner{blob}, size))
 }
 
 func TestGetManifest(t *testing.T) {

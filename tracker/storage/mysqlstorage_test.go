@@ -97,7 +97,7 @@ func TestMySQLGetTorrent(t *testing.T) {
 
 	mock.ExpectQuery("select metaInfo from torrent where").WithArgs(name).WillReturnRows(sqlmock.NewRows([]string{"metaInfo"}))
 	_, err = storage.GetTorrent(name)
-	assert.Equal("Cannot find torrent torrent0: file does not exist", err.Error())
+	assert.Error(ErrNotFound, err)
 	assert.NoError(mock.ExpectationsWereMet())
 }
 
@@ -251,4 +251,19 @@ func TestMySQLTryDeleteTorrent(t *testing.T) {
 		assert.Equal("Invalid refCount -1 for torrent 1508613826413590a9fdb496cbedb0c2ebf564cfbcd2c85c2a07bb3a40813233", err.Error())
 		assert.NoError(mock.ExpectationsWereMet())
 	}))
+}
+
+func TestMySQLCreateTwoTorrentsWithSameNameReturnsErrExist(t *testing.T) {
+	require := require.New(t)
+
+	s, err := NewMySQLStorage(nemoConfigFixture(), mysqlConfigFixture())
+	require.NoError(err)
+	require.NoError(s.RunMigration())
+
+	m1 := torlib.MetaInfoFixture()
+	m2 := torlib.MetaInfoFixture()
+	m2.Info.Name = m1.Info.Name
+
+	require.NoError(s.CreateTorrent(m1))
+	require.Equal(ErrExists, s.CreateTorrent(m2))
 }

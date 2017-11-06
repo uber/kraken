@@ -13,6 +13,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
+	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 )
 
 func main() {
@@ -48,8 +49,10 @@ func main() {
 		log.Fatalf("Error creating tracker round robin: %s", err)
 	}
 	manifestClient := manifestclient.New(trackers)
+	metaInfoClient := metainfoclient.Default(trackers)
 
-	transferer := transfer.NewOriginClusterTransferer(config.Concurrency, originResolver, manifestClient)
+	transferer := transfer.NewOriginClusterTransferer(
+		config.Transfer, originResolver, manifestClient, metaInfoClient)
 
 	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, store, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)

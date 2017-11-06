@@ -2,6 +2,8 @@ package torlib
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
@@ -39,39 +41,33 @@ func NewMetaInfoFromInfo(info Info, announce string) (*MetaInfo, error) {
 	return mi, err
 }
 
-// NewMetaInfoFromFile creates MetaInfo from a file
-func NewMetaInfoFromFile(
+// NewMetaInfoFromBlob creates MetaInfo from a blob reader.
+func NewMetaInfoFromBlob(
 	name string,
-	fp string,
-	piecelength int64,
-	announceList AnnounceList,
+	blob io.Reader,
+	pieceLength int64,
 	comment string,
 	createdBy string,
 	encoding string) (*MetaInfo, error) {
 
-	info, err := NewInfoFromFile(name, fp, piecelength)
+	info, err := NewInfoFromBlob(name, blob, pieceLength)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create info: %s", err)
 	}
-
-	mi := MetaInfo{
+	mi := &MetaInfo{
 		Info:         info,
-		AnnounceList: announceList,
 		CreationDate: time.Now().Unix(),
 		CreatedBy:    createdBy,
 		Encoding:     encoding,
 	}
-
-	err = mi.initialize()
-	if err != nil {
+	if err := mi.initialize(); err != nil {
 		return nil, err
 	}
-
-	return &mi, nil
+	return mi, nil
 }
 
-// NewMetaInfoFromBytes creates MetaInfo from bytes
-func NewMetaInfoFromBytes(data []byte) (*MetaInfo, error) {
+// DeserializeMetaInfo deserializes MetaInfo from bytes
+func DeserializeMetaInfo(data []byte) (*MetaInfo, error) {
 	var mi MetaInfo
 	err := json.Unmarshal(data, &mi)
 	if err != nil {
@@ -103,12 +99,7 @@ func (mi *MetaInfo) Serialize() (string, error) {
 
 // initialize computes info hash and set default fields
 func (mi *MetaInfo) initialize() error {
-	err := mi.setInfoHash()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return mi.setInfoHash()
 }
 
 // setInfoHash computes hash of mi.Info and sets mi.infohash
