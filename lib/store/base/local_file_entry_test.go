@@ -162,7 +162,7 @@ func TestReload(t *testing.T) {
 	require.True(updated)
 
 	// Reload
-	_, err = NewLocalFileStoreDefault()
+	_, err = (&LocalFileStoreBuilder{}).Build()
 	require.NoError(err)
 	store.GetFileStat(fn, []FileState{storeBundle.state1})
 	fe, _, _ = store.LoadFileEntry(fn, []FileState{storeBundle.state1})
@@ -188,7 +188,7 @@ func TestReload(t *testing.T) {
 
 	// Read metadata from disk directly
 	fp, _ := fe.GetPath(verify)
-	content, err := ioutil.ReadFile(fp + getMockMetadataOne().GetSuffix())
+	content, err := ioutil.ReadFile(path.Join(path.Dir(fp), getMockMetadataOne().GetSuffix()))
 	require.NoError(err)
 	require.Equal(uint8(1), content[0])
 	require.Equal(uint8(1), content[1])
@@ -237,12 +237,12 @@ func TestMove(t *testing.T) {
 	require.NoError(err)
 	fe, _, _ = store.LoadFileEntry(fn, []FileState{storeBundle.state3})
 
-	// Verify metadata is gone
+	// Verify metadata still exists
 	_, err = fe.ReadMetadata(verify, m1)
 	require.NotNil(err)
 	require.True(os.IsNotExist(err))
 
-	// Verify metadataMovable still exists
+	// Verify metadata still exists
 	b2Moved, err := fe.ReadMetadata(verify, m2)
 	require.NoError(err)
 	require.NotNil(b2Moved)
@@ -263,13 +263,13 @@ func TestMove(t *testing.T) {
 	// Movable metadata will be moved along with the file entry
 	_, err = os.Stat(path.Join(storeBundle.state3.GetDirectory(), fn))
 	require.Nil(err)
-	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn+getMockMetadataMovable().GetSuffix()))
+	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
 	require.NotNil(err)
 	require.True(os.IsNotExist(err))
-	_, err = os.Stat(path.Join(storeBundle.state2.GetDirectory(), fn+getMockMetadataMovable().GetSuffix()))
+	_, err = os.Stat(path.Join(storeBundle.state2.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
 	require.NotNil(err)
 	require.True(os.IsNotExist(err))
-	_, err = os.Stat(path.Join(storeBundle.state3.GetDirectory(), fn+getMockMetadataMovable().GetSuffix()))
+	_, err = os.Stat(path.Join(storeBundle.state3.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
 	require.NoError(err)
 }
 
@@ -296,10 +296,10 @@ func TestDelete(t *testing.T) {
 	require.NoError(e)
 
 	// Stat metadatafile before and after deletion to ensure that it is deleted
-	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn+getMockMetadataOne().GetSuffix()))
+	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
 	require.NoError(err)
 	err = fe.DeleteMetadata(verify, m1)
 	require.NoError(err)
-	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn+getMockMetadataOne().GetSuffix()))
+	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
 	require.NotNil(err)
 }

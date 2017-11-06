@@ -147,31 +147,31 @@ func (b *fileStoreTestBundle) recreateStore() {
 
 func fileStoreLRUFixture(size int) (*fileStoreTestBundle, func()) {
 	return newFileStoreFixture(func() *LocalFileStore {
-		store, err := NewLocalFileStoreWithLRU(size)
+		store, err := (&LocalFileStoreBuilder{}).SetFileMapFactory(&LRUFileMapFactory{Size: size}).Build()
 		if err != nil {
 			log.Fatal(err)
 		}
-		return store
+		return store.(*LocalFileStore)
 	})
 }
 
 func fileStoreShardDefaultFixture() (*fileStoreTestBundle, func()) {
 	return newFileStoreFixture(func() *LocalFileStore {
-		store, err := NewShardedFileStoreDefault()
+		store, err := (&LocalFileStoreBuilder{}).SetFileEntryInternalFactory(&CASFileEntryInternalFactory{}).Build()
 		if err != nil {
 			log.Fatal(err)
 		}
-		return store
+		return store.(*LocalFileStore)
 	})
 }
 
 func fileStoreDefaultFixture() (*fileStoreTestBundle, func()) {
 	return newFileStoreFixture(func() *LocalFileStore {
-		store, err := NewLocalFileStoreDefault()
+		store, err := (&LocalFileStoreBuilder{}).Build()
 		if err != nil {
 			log.Fatal(err)
 		}
-		return store
+		return store.(*LocalFileStore)
 	})
 }
 

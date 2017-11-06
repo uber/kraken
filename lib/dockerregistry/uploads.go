@@ -171,9 +171,11 @@ func (u *Uploads) getUploadDataStat(dir, uuid string) (fi storagedriver.FileInfo
 	if err != nil {
 		return nil, err
 	}
+	// Hacking the path, since kraken storage driver is also the consumer of this info.
+	// Instead of the relative path from root that docker registry expected, just use uuid.
 	fi = storagedriver.FileInfoInternal{
 		FileInfoFields: storagedriver.FileInfoFields{
-			Path:    info.Name(),
+			Path:    uuid,
 			Size:    info.Size(),
 			ModTime: info.ModTime(),
 			IsDir:   info.IsDir(),

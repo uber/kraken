@@ -84,9 +84,11 @@ func (b *Blobs) getBlobStat(fileName string) (storagedriver.FileInfo, error) {
 		}
 	}
 
+	// Hacking the path, since kraken storage driver is also the consumer of this info.
+	// Instead of the relative path from root that docker registry expected, just use content hash.
 	fi := storagedriver.FileInfoInternal{
 		FileInfoFields: storagedriver.FileInfoFields{
-			Path:    info.Name(),
+			Path:    fileName,
 			Size:    info.Size(),
 			ModTime: info.ModTime(),
 			IsDir:   info.IsDir(),

@@ -12,7 +12,7 @@ type RefCountError struct {
 }
 
 func (e *RefCountError) Error() string {
-	return fmt.Sprintf("Failed to perform \"%s\" on %s with ref count %d: %s",
+	return fmt.Sprintf("failed to perform \"%s\" on %s with ref count %d: %s",
 		e.Op, e.Name, e.RefCount, e.Msg)
 }
 
