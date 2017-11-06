@@ -4,11 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
@@ -28,8 +26,6 @@ const downloadTimeout = 120 * time.Second
 // Client TODO
 type Client interface {
 	DownloadTorrent(name string) (io.ReadCloser, error)
-	CreateTorrentFromFile(name, filepath string) error
-	GetPeerContext() (peercontext.PeerContext, error)
 	GetManifest(repo, tag string) (io.ReadCloser, error)
 	PostManifest(repo, tag, digest string, manifest io.Reader) error
 	Close() error
@@ -38,7 +34,6 @@ type Client interface {
 // SchedulerClient is a client for scheduler
 type SchedulerClient struct {
 	config    *Config
-	pctx      peercontext.PeerContext
 	peerID    torlib.PeerID
 	scheduler *scheduler.Scheduler
 	stats     tally.Scope
@@ -48,7 +43,6 @@ type SchedulerClient struct {
 	archive storage.TorrentArchive
 
 	manifestClient manifestclient.Client
-	metaInfoClient metainfoclient.Client
 }
 
 // NewSchedulerClient creates a new scheduler client
@@ -62,7 +56,7 @@ func NewSchedulerClient(
 	metaInfoClient metainfoclient.Client) (Client, error) {
 
 	stats = stats.SubScope("peer").SubScope(pctx.PeerID.String())
-	archive := storage.NewLocalTorrentArchive(localStore)
+	archive := storage.NewLocalTorrentArchive(localStore, metaInfoClient)
 	networkEventProducer, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
 		return nil, fmt.Errorf("network event producer: %s", err)
@@ -74,14 +68,12 @@ func NewSchedulerClient(
 	}
 	return &SchedulerClient{
 		config:         config,
-		pctx:           pctx,
 		peerID:         pctx.PeerID,
 		scheduler:      scheduler,
 		stats:          stats,
 		store:          localStore,
 		archive:        archive,
 		manifestClient: manifestClient,
-		metaInfoClient: metaInfoClient,
 	}, nil
 }
 
@@ -99,29 +91,13 @@ func (c *SchedulerClient) DownloadTorrent(name string) (io.ReadCloser, error) {
 		return nil, errors.New("torrent not enabled")
 	}
 
-	var mi *torlib.MetaInfo
-	if miRaw, err := c.store.GetDownloadOrCacheFileMeta(name); err != nil {
-		if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("failed to get file metainfo: %s", err)
-		}
-		mi, err = c.metaInfoClient.Get(name)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get remote metainfo: %s", err)
-		}
-	} else {
-		mi, err = torlib.NewMetaInfoFromBytes(miRaw)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse metainfo: %s", err)
-		}
-	}
-
 	select {
-	case err := <-c.scheduler.AddTorrent(mi):
+	case err := <-c.scheduler.AddTorrent(name):
 		if err != nil {
 			return nil, fmt.Errorf("failed to schedule torrent: %s", err)
 		}
 	case <-time.After(downloadTimeout):
-		c.scheduler.CancelTorrent(mi.InfoHash)
+		c.scheduler.CancelTorrent(name)
 		return nil, fmt.Errorf("scheduled torrent timed out after %.2f seconds", downloadTimeout.Seconds())
 	}
 
@@ -129,96 +105,10 @@ func (c *SchedulerClient) DownloadTorrent(name string) (io.ReadCloser, error) {
 	return c.store.GetCacheFileReader(name)
 }
 
-// CreateTorrentFromFile creates a torrent from file and adds torrent to scheduler for seeding
-func (c *SchedulerClient) CreateTorrentFromFile(name, filepath string) error {
-	if !c.config.Enabled {
-		log.Info("Torrent not enabled")
-		return nil
-	}
-
-	mi, err := torlib.NewMetaInfoFromFile(
-		name,
-		filepath,
-		int64(c.config.PieceLength),
-		nil,
-		"docker",
-		"kraken-origin",
-		"UTF-8")
-	if err != nil {
-		log.WithFields(log.Fields{
-			"name":  name,
-			"error": err,
-		}).Error("Failed to create torrent")
-		return err
-	}
-
-	miRaw, err := mi.Serialize()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"name":  name,
-			"error": err,
-		}).Error("Failed to create torrent")
-		return err
-	}
-
-	ok, err := c.store.SetDownloadOrCacheFileMeta(name, []byte(miRaw))
-	if err != nil {
-		log.WithFields(log.Fields{
-			"name":  name,
-			"error": err,
-		}).Error("Failed to create torrent")
-		return err
-	}
-
-	if !ok {
-		log.Warnf("%s_meta is already created", name)
-	}
-
-	_, err = c.archive.CreateTorrent(mi)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"name":  name,
-			"error": err,
-		}).Error("Failed to create torrent")
-	}
-
-	if err := c.metaInfoClient.Post(mi); err != nil {
-		log.WithFields(log.Fields{
-			"name":  name,
-			"error": err,
-		}).Error("Failed to create torrent")
-	}
-
-	// create torrent from info
-	errc := <-c.scheduler.AddTorrent(mi)
-	if errc != nil {
-		log.WithFields(bark.Fields{
-			"name":     name,
-			"infohash": mi.InfoHash,
-			"error":    errc,
-		}).Info("Failed to create torrent")
-		return errc
-	}
-
-	log.WithFields(bark.Fields{
-		"name":     name,
-		"length":   mi.Info.Length,
-		"infohash": mi.InfoHash,
-		"origin":   c.peerID,
-	}).Info("Successfully created torrent")
-
-	return nil
-}
-
 // DropTorrent TODO
 func (c *SchedulerClient) DropTorrent(infoHash torlib.InfoHash) error {
 	// TODO
 	return nil
-}
-
-// GetPeerContext returns peer context
-func (c *SchedulerClient) GetPeerContext() (peercontext.PeerContext, error) {
-	return c.pctx, nil
 }
 
 // GetManifest queries tracker for manifest and stores manifest locally

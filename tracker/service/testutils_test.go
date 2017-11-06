@@ -2,11 +2,13 @@ package service
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"strconv"
+	"testing"
 	"time"
 
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
@@ -39,6 +41,17 @@ type testMocks struct {
 	stats          tally.Scope
 }
 
+func newTestMocks(t *testing.T) (*testMocks, func()) {
+	ctrl := gomock.NewController(t)
+	return &testMocks{
+		config:         configFixture(),
+		policy:         peerhandoutpolicy.DefaultPeerHandoutPolicyFixture(),
+		datastore:      mockstorage.NewMockStorage(ctrl),
+		originResolver: mockblobclient.NewMockClusterResolver(ctrl),
+		stats:          tally.NewTestScope("testing", nil),
+	}, ctrl.Finish
+}
+
 // mockController sets up all mocks and returns a teardown func that can be called with defer
 func (m *testMocks) mockController(t gomock.TestReporter) func() {
 	m.config = configFixture()
@@ -48,6 +61,16 @@ func (m *testMocks) mockController(t gomock.TestReporter) func() {
 	m.originResolver = mockblobclient.NewMockClusterResolver(m.ctrl)
 	m.stats = tally.NewTestScope("testing", nil)
 	return m.ctrl.Finish
+}
+
+func (m *testMocks) startServer() (string, func()) {
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		panic(err)
+	}
+	s := &http.Server{Handler: m.Handler()}
+	go s.Serve(l)
+	return l.Addr().String(), func() { s.Close() }
 }
 
 func (m *testMocks) Handler() http.Handler {

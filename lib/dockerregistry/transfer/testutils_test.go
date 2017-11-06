@@ -11,13 +11,19 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
+	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 )
+
+func originClusterTransfererConfigFixture() OriginClusterTransfererConfig {
+	return OriginClusterTransfererConfig{}.applyDefaults()
+}
 
 type originClusterTransfererMocks struct {
 	ctrl           *gomock.Controller
 	originResolver *mockblobclient.MockClusterResolver
 	manifestClient *mockmanifestclient.MockClient
+	metaInfoClient *mockmetainfoclient.MockClient
 }
 
 func newOrginClusterTransfererMocks(t *testing.T) *originClusterTransfererMocks {
@@ -26,11 +32,16 @@ func newOrginClusterTransfererMocks(t *testing.T) *originClusterTransfererMocks 
 		ctrl:           ctrl,
 		originResolver: mockblobclient.NewMockClusterResolver(ctrl),
 		manifestClient: mockmanifestclient.NewMockClient(ctrl),
+		metaInfoClient: mockmetainfoclient.NewMockClient(ctrl),
 	}
 }
 
 func (m *originClusterTransfererMocks) newTransferer() *OriginClusterTransferer {
-	return NewOriginClusterTransferer(1, m.originResolver, m.manifestClient)
+	return NewOriginClusterTransferer(
+		originClusterTransfererConfigFixture(),
+		m.originResolver,
+		m.manifestClient,
+		m.metaInfoClient)
 }
 
 func (m *originClusterTransfererMocks) expectClients(d image.Digest, locs ...string) []*mockblobclient.MockClient {

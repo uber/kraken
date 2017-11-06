@@ -5,6 +5,7 @@
 package mocktransferer
 
 import (
+	transfer "code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	gomock "github.com/golang/mock/gomock"
 	io "io"
 	reflect "reflect"
@@ -72,7 +73,7 @@ func (mr *MockImageTransfererMockRecorder) PostManifest(arg0, arg1, arg2, arg3 i
 }
 
 // Upload mocks base method
-func (m *MockImageTransferer) Upload(arg0 string, arg1 io.Reader, arg2 int64) error {
+func (m *MockImageTransferer) Upload(arg0 string, arg1 transfer.IOCloner, arg2 int64) error {
 	ret := m.ctrl.Call(m, "Upload", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0

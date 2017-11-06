@@ -11,6 +11,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
+	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/errutil"
 	"code.uber.internal/infra/kraken/utils/stringset"
 )
@@ -19,26 +21,31 @@ var _ ImageTransferer = (*OriginClusterTransferer)(nil)
 
 // OriginClusterTransferer transfers blobs in a distributed system
 type OriginClusterTransferer struct {
+	config OriginClusterTransfererConfig
+
 	originResolver blobclient.ClusterResolver
 	manifestClient manifestclient.Client
+	metaInfoClient metainfoclient.Client
 
-	// concurrency defines the number of concurrent downloads and uploads allowed
 	// numWorkers ensures this concurrency
-	concurrency int
-	numWorkers  chan struct{}
+	numWorkers chan struct{}
 }
 
 // NewOriginClusterTransferer creates a new sharded blob transferer
 func NewOriginClusterTransferer(
-	concurrency int,
+	config OriginClusterTransfererConfig,
 	originResolver blobclient.ClusterResolver,
-	manifestClient manifestclient.Client) *OriginClusterTransferer {
+	manifestClient manifestclient.Client,
+	metaInfoClient metainfoclient.Client) *OriginClusterTransferer {
+
+	config = config.applyDefaults()
 
 	return &OriginClusterTransferer{
+		config:         config,
 		originResolver: originResolver,
 		manifestClient: manifestClient,
-		concurrency:    concurrency,
-		numWorkers:     make(chan struct{}, concurrency),
+		metaInfoClient: metaInfoClient,
+		numWorkers:     make(chan struct{}, config.Concurrency),
 	}
 }
 
@@ -68,6 +75,41 @@ func (t *OriginClusterTransferer) Download(digest string) (io.ReadCloser, error)
 	return nil, fmt.Errorf("failed to pull blob from all locations: %s", errutil.Join(errs))
 }
 
+// uploadMetaInfo creates and uploads torrent metainfo for blob. No-ops if metainfo
+// already exists for blob.
+func (t *OriginClusterTransferer) uploadMetaInfo(d image.Digest, blobIO IOCloner) error {
+	blob, err := blobIO.Clone()
+	if err != nil {
+		return fmt.Errorf("clone blob io: %s", err)
+	}
+	defer blob.Close()
+
+	mi, err := torlib.NewMetaInfoFromBlob(
+		d.Hex(), blob, t.config.TorrentPieceLength, "docker", "kraken-proxy", "UTF-8")
+	if err != nil {
+		return fmt.Errorf("create metainfo: %s", err)
+	}
+	if err := t.metaInfoClient.Upload(mi); err != nil && err != metainfoclient.ErrExists {
+		return fmt.Errorf("post metainfo: %s", err)
+	}
+	return nil
+}
+
+func (t *OriginClusterTransferer) pushBlob(
+	client blobclient.Client, d image.Digest, blobIO IOCloner, size int64) error {
+
+	blob, err := blobIO.Clone()
+	if err != nil {
+		return fmt.Errorf("clone blob io: %s", err)
+	}
+	defer blob.Close()
+
+	if err := client.PushBlob(d, blob, size); err != nil && err != blobclient.ErrBlobExist {
+		return fmt.Errorf("push blob: %s", err)
+	}
+	return nil
+}
+
 func toLocations(clients []blobclient.Client) stringset.Set {
 	locs := make(stringset.Set)
 	for _, c := range clients {
@@ -89,31 +131,9 @@ func (t *OriginClusterTransferer) ensureNoLocationChanges(initLocs stringset.Set
 	return nil
 }
 
-// Splits src into n thread-safe readers which only buffer data as needed.
-func split(src io.Reader, n int) []io.ReadCloser {
-	var rs []io.ReadCloser
-	var ws []io.WriteCloser
-	for i := 0; i < n; i++ {
-		r, w := io.Pipe()
-		rs = append(rs, r)
-		ws = append(ws, w)
-	}
-	// Exits after every returned ReadCloser is closed.
-	go func() {
-		var writers []io.Writer
-		for _, w := range ws {
-			defer w.Close()
-			// Cannot cast []io.WriteCloser to []io.Writer (sigh).
-			writers = append(writers, w)
-		}
-		io.Copy(io.MultiWriter(writers...), src)
-	}()
-	return rs
-}
-
 // Upload tries to upload blobs to multiple locations and returns error if
 // a majority of locations failed to receive the blob
-func (t *OriginClusterTransferer) Upload(digest string, blob io.Reader, size int64) error {
+func (t *OriginClusterTransferer) Upload(digest string, blobIO IOCloner, size int64) error {
 	t.reserveWorker()
 	defer t.releaseWorker()
 
@@ -133,24 +153,25 @@ func (t *OriginClusterTransferer) Upload(digest string, blob io.Reader, size int
 		}
 	}()
 
-	blobReaders := split(blob, len(clients))
+	if err := t.uploadMetaInfo(d, blobIO); err != nil {
+		return fmt.Errorf("upload torrent: %s", err)
+	}
 
 	var mu sync.Mutex
 	var errs []error
 
 	var wg sync.WaitGroup
-	for i, client := range clients {
+	for _, client := range clients {
 		wg.Add(1)
-		go func(client blobclient.Client, blob io.ReadCloser) {
+		go func(client blobclient.Client) {
 			defer wg.Done()
-			defer blob.Close()
-			if err := client.PushBlob(d, blob, size); err != nil && err != blobclient.ErrBlobExist {
+			if err := t.pushBlob(client, d, blobIO, size); err != nil {
 				mu.Lock()
 				err = fmt.Errorf("failed to push digest %q to location %s: %s", d, client.Addr(), err)
 				errs = append(errs, err)
 				mu.Unlock()
 			}
-		}(client, blobReaders[i])
+		}(client)
 	}
 	wg.Wait()
 

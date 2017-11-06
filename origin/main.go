@@ -57,21 +57,20 @@ func main() {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
 
-	// Initialize and start P2P scheduler client:
-	var torrentClient torrent.Client
-	if config.Torrent.Enabled {
-		pctx, err := peercontext.New(
-			peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *peerIP, *peerPort)
-		if err != nil {
-			log.Fatalf("Failed to create peer context: %s", err)
-		}
+	pctx, err := peercontext.New(
+		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *peerIP, *peerPort)
+	if err != nil {
+		log.Fatalf("Failed to create peer context: %s", err)
+	}
 
+	// Initialize and start P2P scheduler client:
+	if config.Torrent.Enabled {
 		trackers, err := serverset.NewRoundRobin(config.Tracker.RoundRobin)
 		if err != nil {
 			log.Fatalf("Error creating tracker round robin: %s", err)
 		}
 
-		torrentClient, err = torrent.NewSchedulerClient(
+		_, err = torrent.NewSchedulerClient(
 			&config.Torrent,
 			fileStore,
 			stats,
@@ -83,6 +82,8 @@ func main() {
 			log.Fatalf("Failed to create scheduler client: %s", err)
 			panic(err)
 		}
+	} else {
+		log.Warn("Torrent disabled")
 	}
 
 	// The code below starts Blob HTTP server.
@@ -102,12 +103,11 @@ func main() {
 
 	server, err := blobserver.New(
 		config.BlobServer,
-		config.Torrent,
 		stats,
 		addr,
 		fileStore,
 		blobClientProvider,
-		torrentClient)
+		pctx)
 	if err != nil {
 		log.Fatalf("Error initializing blob server %s: %s", addr, err)
 	}

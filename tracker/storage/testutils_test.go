@@ -39,7 +39,8 @@ func redisConfigFixture() RedisConfig {
 
 func mysqlConfigFixture() MySQLConfig {
 	return MySQLConfig{
-		MigrationsDir: "db/migrations",
+		// Assumes the working directory is tracker/storage.
+		MigrationsDir: "../../db/migrations",
 	}
 }
 

@@ -1,11 +1,18 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 
 	"code.uber.internal/go-common.git/x/mysql"
 
 	"code.uber.internal/infra/kraken/torlib"
+)
+
+// Storage errors.
+var (
+	ErrExists   = errors.New("record already exists")
+	ErrNotFound = errors.New("not found")
 )
 
 // PeerStore provides storage for announcing peers.
@@ -27,11 +34,14 @@ type PeerStore interface {
 // TorrentStore provides storage for torrent metainfo.
 type TorrentStore interface {
 
-	// GetTorrent returns torrent's metainfo as raw string.
+	// GetTorrent returns torrent's metainfo as raw string. Should return
+	// ErrNotFound if the name is not found.
 	GetTorrent(name string) (string, error)
 
 	// CreateTorrent creates torrent in tracker's storage given metainfo.
-	CreateTorrent(meta *torlib.MetaInfo) error
+	// Should return ErrExists if there already exists a metainfo
+	// for the filename.
+	CreateTorrent(mi *torlib.MetaInfo) error
 }
 
 // ManifestStore provides storage for Docker image manifests.

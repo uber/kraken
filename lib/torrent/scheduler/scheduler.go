@@ -217,11 +217,11 @@ func (s *Scheduler) Stop() {
 //
 // TODO(codyg): Torrents will continue to seed for the entire lifetime of the Scheduler,
 // but this should be a matter of policy.
-func (s *Scheduler) AddTorrent(mi *torlib.MetaInfo) <-chan error {
+func (s *Scheduler) AddTorrent(name string) <-chan error {
 	// Buffer size of 1 so sends do not block.
 	errc := make(chan error, 1)
 
-	t, err := s.torrentArchive.CreateTorrent(mi)
+	t, err := s.torrentArchive.GetTorrent(name)
 	if err != nil {
 		errc <- fmt.Errorf("create torrent: %s", err)
 		return errc
@@ -236,8 +236,8 @@ func (s *Scheduler) AddTorrent(mi *torlib.MetaInfo) <-chan error {
 }
 
 // CancelTorrent stops downloading the torrent of h.
-func (s *Scheduler) CancelTorrent(h torlib.InfoHash) {
-	s.eventLoop.Send(cancelTorrentEvent{h})
+func (s *Scheduler) CancelTorrent(name string) {
+	s.eventLoop.Send(cancelTorrentEvent{name})
 }
 
 func (s *Scheduler) start() {
@@ -306,14 +306,15 @@ func (s *Scheduler) handshakeIncomingConn(nc net.Conn) {
 func (s *Scheduler) doInitIncomingConn(
 	nc net.Conn, remoteHandshake *handshake) (*conn, storage.Torrent, error) {
 
-	t, err := s.torrentArchive.GetTorrent(remoteHandshake.Name, remoteHandshake.InfoHash)
+	t, err := s.torrentArchive.GetTorrent(remoteHandshake.Name)
 	if err != nil {
-		nc.Close()
 		return nil, nil, fmt.Errorf("failed to open torrent storage: %s", err)
+	}
+	if t.InfoHash() != remoteHandshake.InfoHash {
+		return nil, nil, fmt.Errorf("info hash mismatch for name %s", remoteHandshake.Name)
 	}
 	c, err := s.connFactory.ReciprocateHandshake(nc, t, remoteHandshake)
 	if err != nil {
-		nc.Close()
 		return nil, nil, fmt.Errorf("failed to reciprocate handshake: %s", err)
 	}
 	return c, t, nil
@@ -325,6 +326,7 @@ func (s *Scheduler) initIncomingConn(nc net.Conn, remoteHandshake *handshake) {
 	var e event
 	c, t, err := s.doInitIncomingConn(nc, remoteHandshake)
 	if err != nil {
+		nc.Close()
 		s.logf(log.Fields{
 			"handshake": remoteHandshake,
 		}).Errorf("Error initializing incoming connection: %s", err)

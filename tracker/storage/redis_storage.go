@@ -18,10 +18,6 @@ var (
 	ErrNoOrigins = errors.New("no origins found")
 )
 
-func torrentKey(name string) string {
-	return fmt.Sprintf("tor:%s", name)
-}
-
 func peerSetKey(infoHash string, window int64) string {
 	return fmt.Sprintf("peerset:%s:%d", infoHash, window)
 }
@@ -164,33 +160,6 @@ func (s *RedisStorage) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
 	}
 
 	return peers, nil
-}
-
-// CreateTorrent writes mi to Redis with a TTL.
-func (s *RedisStorage) CreateTorrent(mi *torlib.MetaInfo) error {
-	c, err := s.pool.Dial()
-	if err != nil {
-		return err
-	}
-	defer c.Close()
-
-	v, err := mi.Serialize()
-	if err != nil {
-		return err
-	}
-	_, err = c.Do("SETEX", torrentKey(mi.Name()), int(s.config.TorrentTTL.Seconds()), v)
-	return err
-}
-
-// GetTorrent returns serialized MetaInfo for the given file name.
-func (s *RedisStorage) GetTorrent(name string) (string, error) {
-	c, err := s.pool.Dial()
-	if err != nil {
-		return "", err
-	}
-	defer c.Close()
-
-	return redis.String(c.Do("GET", torrentKey(name)))
 }
 
 // GetOrigins returns all origin PeerInfos for infoHash. Returns ErrNoOrigins if

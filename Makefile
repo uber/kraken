@@ -108,6 +108,12 @@ mocks:
 		-package mockmanifestclient \
 		code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient Client
 
+	mkdir -p mocks/tracker/metainfoclient
+	$(mockgen) \
+		-destination=mocks/tracker/metainfoclient/mockmetainfoclient.go \
+		-package mockmetainfoclient \
+		code.uber.internal/infra/kraken/tracker/metainfoclient Client
+
 	mkdir -p mocks/os
 	$(mockgen) \
 		-destination=mocks/os/mockos.go \

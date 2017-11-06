@@ -24,8 +24,7 @@ type Torrent interface {
 
 // TorrentArchive creates and open torrent file
 type TorrentArchive interface {
-	CreateTorrent(mi *torlib.MetaInfo) (Torrent, error)
-	GetTorrent(name string, infoHash torlib.InfoHash) (Torrent, error)
-	DeleteTorrent(name string, infoHash torlib.InfoHash) error
+	GetTorrent(name string) (Torrent, error)
+	DeleteTorrent(name string) error
 	Close() error
 }

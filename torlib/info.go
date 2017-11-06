@@ -24,11 +24,21 @@ type Info struct {
 
 // NewInfoFromFile creates new info given file and piecelength
 func NewInfoFromFile(name, filepath string, pieceLength int64) (Info, error) {
-	length, pieces, err := generatePieces(filepath, pieceLength)
+	f, err := os.Open(filepath)
 	if err != nil {
-		return Info{}, err
+		return Info{}, fmt.Errorf("open file: %s", err)
 	}
+	defer f.Close()
 
+	return NewInfoFromBlob(name, f, pieceLength)
+}
+
+// NewInfoFromBlob creates a new Info from a blob.
+func NewInfoFromBlob(name string, blob io.Reader, pieceLength int64) (Info, error) {
+	length, pieces, err := generatePieces(blob, pieceLength)
+	if err != nil {
+		return Info{}, fmt.Errorf("generate pieces: %s", err)
+	}
 	return Info{
 		PieceLength: pieceLength,
 		Pieces:      pieces,
@@ -111,50 +121,25 @@ func (info *Info) pieceHashSize() int {
 	return sha1.New().Size()
 }
 
-// generatePieces hashes file content in chunks given path and pieceLength, and returns file length and hashes
-func generatePieces(fp string, pieceLength int64) (int64, Pieces, error) {
+// generatePieces hashes blob content in pieceLength chunks.
+func generatePieces(blob io.Reader, pieceLength int64) (length int64, pieces Pieces, err error) {
 	if pieceLength <= 0 {
 		return 0, nil, errors.New("piece length must be positive")
 	}
-
-	f, err := os.Open(fp)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer f.Close()
-
-	stat, err := f.Stat()
-	if err != nil {
-		return 0, nil, err
-	}
-
-	// Pipe file content
-	pr, pw := io.Pipe()
-	defer pr.Close()
-	go func() {
-		_, err := io.Copy(pw, f)
-		pw.CloseWithError(err)
-	}()
-
-	// Generate hash
-	var pieces []byte
 	for {
-		hasher := sha1.New()
-		wn, err := io.CopyN(hasher, pr, pieceLength)
-		if err == io.EOF {
-			err = nil
+		h := sha1.New()
+		n, err := io.CopyN(h, blob, pieceLength)
+		if err != nil && err != io.EOF {
+			return 0, nil, fmt.Errorf("read blob: %s", err)
 		}
-		if err != nil {
-			return 0, nil, err
-		}
-		if wn == 0 {
+		length += n
+		if n == 0 {
 			break
 		}
-		pieces = hasher.Sum(pieces)
-		if wn < pieceLength {
+		pieces = h.Sum(pieces)
+		if n < pieceLength {
 			break
 		}
 	}
-
-	return stat.Size(), Pieces(pieces), nil
+	return length, pieces, nil
 }

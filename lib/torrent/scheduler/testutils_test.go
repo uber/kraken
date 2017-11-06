@@ -19,12 +19,15 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/serverset"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/mocks/lib/torrent/mockstorage"
+	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/testutils"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
+	trackerservice "code.uber.internal/infra/kraken/tracker/service"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
@@ -77,20 +80,44 @@ func configFixture() Config {
 	}.applyDefaults()
 }
 
+type testMocks struct {
+	ctrl           *gomock.Controller
+	metaInfoClient *mockmetainfoclient.MockClient
+	trackerAddr    string
+	cleanup        *testutils.Cleanup
+}
+
+func newTestMocks(t *testing.T) (*testMocks, func()) {
+	var cleanup testutils.Cleanup
+
+	ctrl := gomock.NewController(t)
+	cleanup.Add(ctrl.Finish)
+
+	trackerAddr, stop := trackerservice.TestAnnouncer()
+	cleanup.Add(stop)
+
+	return &testMocks{
+		ctrl:           ctrl,
+		metaInfoClient: mockmetainfoclient.NewMockClient(ctrl),
+		trackerAddr:    trackerAddr,
+		cleanup:        &cleanup,
+	}, cleanup.Run
+}
+
 type testPeer struct {
 	pctx           peercontext.PeerContext
 	scheduler      *Scheduler
 	torrentArchive storage.TorrentArchive
 	stats          tally.TestScope
 	testProducer   *networkevent.TestProducer
+	fs             store.FileStore
 }
 
-func testPeerFixture(config Config, trackerAddr string, options ...option) (*testPeer, func()) {
-	var cleanup testutils.Cleanup
-	defer cleanup.Recover()
+func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
+	fs, c := store.LocalFileStoreFixture()
+	m.cleanup.Add(c)
 
-	ta, c := storage.TorrentArchiveFixture()
-	cleanup.Add(c)
+	ta := storage.NewLocalTorrentArchive(fs, m.metaInfoClient)
 
 	stats := tally.NewTestScope("", nil)
 	pctx := peercontext.PeerContext{
@@ -99,21 +126,29 @@ func testPeerFixture(config Config, trackerAddr string, options ...option) (*tes
 		IP:     "localhost",
 		Port:   findFreePort(),
 	}
-	ac := announceclient.Default(pctx, serverset.NewSingle(trackerAddr))
+	ac := announceclient.Default(pctx, serverset.NewSingle(m.trackerAddr))
 	tp := networkevent.NewTestProducer()
 	s, err := New(config, ta, stats, pctx, ac, tp, options...)
 	if err != nil {
 		panic(err)
 	}
-	cleanup.Add(s.Stop)
+	m.cleanup.Add(s.Stop)
 
-	return &testPeer{pctx, s, ta, stats, tp}, cleanup.Run
+	return &testPeer{pctx, s, ta, stats, tp, fs}
+}
+
+func (m *testMocks) newPeers(n int, config Config) []*testPeer {
+	var peers []*testPeer
+	for i := 0; i < n; i++ {
+		peers = append(peers, m.newPeer(config))
+	}
+	return peers
 }
 
 // writeTorrent writes the given content into a torrent file into peers storage.
 // Useful for populating a completed torrent before seeding it.
 func (p *testPeer) writeTorrent(tf *torlib.TestTorrentFile) {
-	t, err := p.torrentArchive.CreateTorrent(tf.MetaInfo)
+	t, err := p.torrentArchive.GetTorrent(tf.MetaInfo.Name())
 	if err != nil {
 		panic(err)
 	}
@@ -129,7 +164,7 @@ func (p *testPeer) writeTorrent(tf *torlib.TestTorrentFile) {
 func (p *testPeer) checkTorrent(t *testing.T, tf *torlib.TestTorrentFile) {
 	require := require.New(t)
 
-	tor, err := p.torrentArchive.GetTorrent(tf.MetaInfo.Info.Name, tf.MetaInfo.InfoHash)
+	tor, err := p.torrentArchive.GetTorrent(tf.MetaInfo.Info.Name)
 	require.NoError(err)
 
 	require.True(tor.Complete())
@@ -160,19 +195,6 @@ func findFreePort() int {
 		panic(err)
 	}
 	return port
-}
-
-func testPeerFixtures(n int, config Config, trackerAddr string) ([]*testPeer, func()) {
-	var cleanup testutils.Cleanup
-	defer cleanup.Recover()
-
-	var peers []*testPeer
-	for i := 0; i < n; i++ {
-		p, c := testPeerFixture(config, trackerAddr)
-		peers = append(peers, p)
-		cleanup.Add(c)
-	}
-	return peers, cleanup.Run
 }
 
 type hasConnEvent struct {

@@ -110,29 +110,6 @@ func TestRedisStoragePeerExpiration(t *testing.T) {
 	require.Empty(result)
 }
 
-func TestRedisStorageCreateAndGetTorrent(t *testing.T) {
-	require := require.New(t)
-
-	config := redisConfigFixture()
-
-	flushdb(config)
-
-	s, err := NewRedisStorage(config)
-	require.NoError(err)
-
-	mi := torlib.MetaInfoFixture()
-
-	require.NoError(s.CreateTorrent(mi))
-
-	result, err := s.GetTorrent(mi.Name())
-	require.NoError(err)
-
-	expected, err := mi.Serialize()
-	require.NoError(err)
-
-	require.Equal(expected, result)
-}
-
 func TestRedisStorageGetOriginsPopulatesPeerInfoFields(t *testing.T) {
 	require := require.New(t)
 

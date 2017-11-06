@@ -2,6 +2,7 @@ package metainfoclient
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -11,10 +12,16 @@ import (
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
+// Client errors.
+var (
+	ErrExists   = errors.New("metainfo already exists")
+	ErrNotFound = errors.New("metainfo not found")
+)
+
 // Client defines operations on torrent metainfo.
 type Client interface {
-	Get(name string) (*torlib.MetaInfo, error)
-	Post(mi *torlib.MetaInfo) error
+	Download(name string) (*torlib.MetaInfo, error)
+	Upload(mi *torlib.MetaInfo) error
 }
 
 type client struct {
@@ -32,8 +39,9 @@ func Default(servers serverset.Set) Client {
 	return New(Config{}, servers)
 }
 
-// Get returns the MetaInfo associated with name.
-func (c *client) Get(name string) (*torlib.MetaInfo, error) {
+// Download returns the MetaInfo associated with name. Returns ErrNotFound if
+// no torrent exists under name.
+func (c *client) Download(name string) (*torlib.MetaInfo, error) {
 	var err error
 	for it := c.servers.Iter(); it.HasNext(); it.Next() {
 		var resp *http.Response
@@ -41,13 +49,16 @@ func (c *client) Get(name string) (*torlib.MetaInfo, error) {
 			fmt.Sprintf("http://%s/info?name=%s", it.Addr(), name),
 			httputil.SendTimeout(c.config.Timeout))
 		if err != nil {
+			if httputil.IsNotFound(err) {
+				return nil, ErrNotFound
+			}
 			continue
 		}
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("error reading body: %s", err)
 		}
-		mi, err := torlib.NewMetaInfoFromBytes(b)
+		mi, err := torlib.DeserializeMetaInfo(b)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing metainfo: %s", err)
 		}
@@ -56,18 +67,22 @@ func (c *client) Get(name string) (*torlib.MetaInfo, error) {
 	return nil, err
 }
 
-// Post writes mi to storage.
-func (c *client) Post(mi *torlib.MetaInfo) error {
+// Upload uploads mi to storage. Returns ErrExists if there is a name conflict
+// for mi.
+func (c *client) Upload(mi *torlib.MetaInfo) error {
 	s, err := mi.Serialize()
 	if err != nil {
 		return fmt.Errorf("error serializing metainfo: %s", err)
 	}
 	for it := c.servers.Iter(); it.HasNext(); it.Next() {
 		_, err = httputil.Post(
-			fmt.Sprintf("http://%s/info?name=%s&info_hash=%s", it.Addr(), mi.Name(), mi.InfoHash.HexString()),
+			fmt.Sprintf("http://%s/info", it.Addr()),
 			httputil.SendBody(bytes.NewBufferString(s)),
 			httputil.SendTimeout(c.config.Timeout))
 		if err != nil {
+			if httputil.IsConflict(err) {
+				return ErrExists
+			}
 			continue
 		}
 		return nil
