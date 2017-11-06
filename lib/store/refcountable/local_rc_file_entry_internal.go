@@ -12,12 +12,12 @@ var _ base.FileEntryInternalFactory = (*LocalRCFileEntryInternalFactory)(nil)
 
 // LocalRCFileEntryInternalFactory initializes LocalFileEntryInternal obj.
 type LocalRCFileEntryInternalFactory struct {
-	baseF *base.ShardedFileEntryInternalFactory
+	baseF *base.CASFileEntryInternalFactory
 }
 
 // NewLocalRCFileEntryInternalFactory returns a new LocalRCFileEntryInternalFactory
-func NewLocalRCFileEntryInternalFactory(shardIDLength uint) *LocalRCFileEntryInternalFactory {
-	return &LocalRCFileEntryInternalFactory{base.NewShardedFileEntryInternalFactory(shardIDLength)}
+func NewLocalRCFileEntryInternalFactory() *LocalRCFileEntryInternalFactory {
+	return &LocalRCFileEntryInternalFactory{&base.CASFileEntryInternalFactory{}}
 }
 
 // Create initializes and returns a FileEntryInternal object.
@@ -116,12 +116,10 @@ func (fi *LocalRCFileEntryInternal) updateRefCount(increment bool) (int64, error
 
 // IncrementRefCount increments ref count by 1.
 func (fi *LocalRCFileEntryInternal) IncrementRefCount() (int64, error) {
-
 	return fi.updateRefCount(true)
 }
 
 // DecrementRefCount decrements ref count by 1.
 func (fi *LocalRCFileEntryInternal) DecrementRefCount() (int64, error) {
-
 	return fi.updateRefCount(false)
 }

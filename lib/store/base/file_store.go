@@ -102,6 +102,18 @@ type FileEntryFactory interface {
 	Create(state FileState, fi FileEntryInternal) FileEntry
 }
 
+// FileMap is a thread-safe name -> FileEntry map.
+type FileMap interface {
+	Load(key interface{}) (interface{}, bool)
+	LoadOrStore(key, value interface{}) (interface{}, bool)
+	Delete(key interface{})
+}
+
+// FileMapFactory is an interface initilizes a FileMap object.
+type FileMapFactory interface {
+	Create() (FileMap, error)
+}
+
 // FileStore manages files and their metadata in a stateful and thread-safe manner.
 type FileStore interface {
 	CreateFile(fileName string, states []FileState, createState FileState, len int64) error
@@ -122,4 +134,12 @@ type FileStore interface {
 	WriteFileMetadataAt(fileName string, states []FileState, mt MetadataType, b []byte, off int64) (int, error)
 	DeleteFileMetadata(fileName string, states []FileState, mt MetadataType) error
 	RangeFileMetadata(fileName string, states []FileState, f func(mt MetadataType) error) error
+}
+
+// FileStoreBuilder is used to init new FileStore object.
+type FileStoreBuilder interface {
+	SetFileEntryInternalFactory(FileEntryInternalFactory) FileStoreBuilder
+	SetFileEntryFactory(FileEntryFactory) FileStoreBuilder
+	SetFileMapFactory(FileMapFactory) FileStoreBuilder
+	Build() (FileStore, error)
 }

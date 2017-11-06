@@ -13,12 +13,12 @@ var _ FileMap = &lruFileMap{}
 
 // LRUFileMapFactory creates a new lruFileMap
 type LRUFileMapFactory struct {
-	size int
+	Size int
 }
 
 // Create returns a lruFileMap
 func (lruFactory *LRUFileMapFactory) Create() (fileMap FileMap, err error) {
-	return newlruFileMap(lruFactory.size)
+	return newlruFileMap(lruFactory.Size)
 }
 
 // lruFileMap implements FileMap interface

@@ -66,7 +66,7 @@ func TestCreateTag(t *testing.T) {
 		manifest,
 		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9",
 	} {
-		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest+"_refcount"))
+		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest), "_refcount")
 		b, err := ioutil.ReadFile(ref)
 		assert.Nil(t, err)
 		refCount, _ := binary.Varint(b)
@@ -90,7 +90,7 @@ func TestCreateTag(t *testing.T) {
 		manifest,
 		"1f02865f52ae11e4f76d7c9b6373011cc54ce302c65ce9c54092209d58f1a2c9",
 	} {
-		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest+"_refcount"))
+		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest), "_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(2), refCount)
@@ -100,7 +100,7 @@ func TestCreateTag(t *testing.T) {
 		missingDigest,
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest+"_refcount"))
+		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest), "_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(1), refCount)
@@ -274,7 +274,7 @@ func TestDeleteTag(t *testing.T) {
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest+"_refcount"))
+		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest), "_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(6), refCount)
@@ -311,7 +311,7 @@ func TestDeleteTag(t *testing.T) {
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest+"_refcount"))
+		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest), "_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(4), refCount)
@@ -389,7 +389,7 @@ func TestDeleteExpiredTags(t *testing.T) {
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest+"_refcount"))
+		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest), "_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(6), refCount)
@@ -409,7 +409,7 @@ func TestDeleteExpiredTags(t *testing.T) {
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest+"_refcount"))
+		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest), "_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(5), refCount)
@@ -429,7 +429,7 @@ func TestDeleteExpiredTags(t *testing.T) {
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest+"_refcount"))
+		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest), "_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		assert.Equal(t, int64(4), refCount)
@@ -487,7 +487,7 @@ func TestGetOrDownloadAllLayersAndCreateTag(t *testing.T) {
 		"0a8490d0dfd399b3a50e9aaa81dba0d425c3868762d46526b41be00886bcc28b",
 		"e7e0d0aad96b0a9e5a0e04239b56a1c4423db1040369c3bba970327bf99ffea4",
 	} {
-		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest+"_refcount"))
+		ref := path.Join(tags.store.Config().CacheDir, getShardedRelativePath(digest), "_refcount")
 		b, _ := ioutil.ReadFile(ref)
 		refCount, _ := binary.Varint(b)
 		// since the tag is already created, ref++ wont happen

@@ -92,7 +92,7 @@ func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error
 		log.Fatal(err)
 	}
 
-	uploadBackend, err := base.NewShardedFileStoreDefault()
+	uploadBackend, err := (&base.LocalFileStoreBuilder{}).Build()
 	if err != nil {
 		return nil, err
 	}
@@ -100,12 +100,13 @@ func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error
 	var downloadCacheBackend base.FileStore
 	if useRefcount {
 		downloadCacheBackend, err = refcountable.NewLocalRCFileStoreDefault()
-	} else if config.LRUConfig.Enable {
-		downloadCacheBackend, err = base.NewLocalFileStoreWithLRU(config.LRUConfig.Size)
 	} else {
-		downloadCacheBackend, err = base.NewShardedFileStoreDefault()
+		f := (&base.LocalFileStoreBuilder{}).SetFileEntryInternalFactory(&base.CASFileEntryInternalFactory{})
+		if config.LRUConfig.Enable {
+			f.SetFileMapFactory(&base.LRUFileMapFactory{Size: config.LRUConfig.Size})
+		}
+		downloadCacheBackend, err = f.Build()
 	}
-
 	if err != nil {
 		return nil, err
 	}
@@ -300,16 +301,11 @@ func (store *LocalFileStore) GetUploadFileHashState(fileName string, algorithm s
 // This function is not thread-safe.
 // TODO: Right now we store metadata with _hashstate, but registry expects /hashstate.
 func (store *LocalFileStore) ListUploadFileHashStatePaths(fileName string) ([]string, error) {
-	fp, err := store.uploadBackend.GetFilePath(fileName, []base.FileState{store.stateUpload})
-	if err != nil {
-		return nil, err
-	}
-
 	var paths []string
 	store.uploadBackend.RangeFileMetadata(fileName, []base.FileState{store.stateUpload}, func(mt base.MetadataType) error {
 		if re := regexp.MustCompile("_hashstates/\\w+/\\w+$"); re.MatchString(mt.GetSuffix()) {
 			r := strings.NewReplacer("_", "/")
-			p := path.Join("localstore/_uploads/", path.Base(fp))
+			p := path.Join("localstore/_uploads/", fileName)
 			paths = append(paths, p+r.Replace(mt.GetSuffix()))
 		}
 		return nil

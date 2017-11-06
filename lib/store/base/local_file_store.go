@@ -7,6 +7,46 @@ import (
 	"path/filepath"
 )
 
+// LocalFileStoreBuilder initialized FileStore objects.
+type LocalFileStoreBuilder struct {
+	fileEntryInternalFactory FileEntryInternalFactory
+	fileEntryFactory         FileEntryFactory
+	fileMapFactory           FileMapFactory
+}
+
+// Build initializes and returns a new FileStore object.
+func (f *LocalFileStoreBuilder) Build() (FileStore, error) {
+	if f.fileEntryInternalFactory == nil {
+		f.fileEntryInternalFactory = &LocalFileEntryInternalFactory{}
+	}
+	if f.fileEntryFactory == nil {
+		f.fileEntryFactory = &LocalFileEntryFactory{}
+	}
+	if f.fileMapFactory == nil {
+		f.fileMapFactory = &DefaultFileMapFactory{}
+	}
+
+	return NewLocalFileStore(f.fileEntryInternalFactory, f.fileEntryFactory, f.fileMapFactory)
+}
+
+// SetFileEntryInternalFactory sets the factory used to init FileEntryInternal.
+func (f *LocalFileStoreBuilder) SetFileEntryInternalFactory(fileEntryInternalFactory FileEntryInternalFactory) FileStoreBuilder {
+	f.fileEntryInternalFactory = fileEntryInternalFactory
+	return f
+}
+
+// SetFileEntryFactory sets the factory used to init FileEntry.
+func (f *LocalFileStoreBuilder) SetFileEntryFactory(fileEntryFactory FileEntryFactory) FileStoreBuilder {
+	f.fileEntryFactory = fileEntryFactory
+	return f
+}
+
+// SetFileMapFactory sets the factory used to init FileMap.
+func (f *LocalFileStoreBuilder) SetFileMapFactory(fileMapFactory FileMapFactory) FileStoreBuilder {
+	f.fileMapFactory = fileMapFactory
+	return f
+}
+
 // LocalFileStore manages all agent files on local disk.
 // Read/Write operation should access data in this order:
 //   map load -> file lock -> verify not deleted -> map load/store -> file/metadata change -> file unlock
@@ -20,7 +60,10 @@ type LocalFileStore struct {
 
 // NewLocalFileStore initializes and returns a new FileStore object. It allows dependency injection.
 // TODO (@evelynl): maybe we should refactor this...
-func NewLocalFileStore(fileEntryInternalFactory FileEntryInternalFactory, fileEntryFactory FileEntryFactory, fileMapFactory FileMapFactory) (*LocalFileStore, error) {
+func NewLocalFileStore(
+	fileEntryInternalFactory FileEntryInternalFactory,
+	fileEntryFactory FileEntryFactory,
+	fileMapFactory FileMapFactory) (*LocalFileStore, error) {
 	fileMap, err := fileMapFactory.Create()
 	if err != nil {
 		return nil, err
@@ -30,23 +73,6 @@ func NewLocalFileStore(fileEntryInternalFactory FileEntryInternalFactory, fileEn
 		fileEntryFactory:         fileEntryFactory,
 		fileMap:                  fileMap,
 	}, nil
-}
-
-// NewLocalFileStoreDefault initializes and returns a new FileStore object.
-func NewLocalFileStoreDefault() (*LocalFileStore, error) {
-	return NewLocalFileStore(&LocalFileEntryInternalFactory{}, &LocalFileEntryFactory{}, &DefaultFileMapFactory{})
-}
-
-// NewLocalFileStoreWithLRU initializes a LRU FileStore
-func NewLocalFileStoreWithLRU(size int) (*LocalFileStore, error) {
-	return NewLocalFileStore(&LocalFileEntryInternalFactory{}, &LocalFileEntryFactory{}, &LRUFileMapFactory{size})
-}
-
-// NewShardedFileStoreDefault initializes and returns a new FileStore object.
-// It uses the first few bytes of file digest (which is also used as file name) as shard ID.
-// For every byte, one more level of directories will be created.
-func NewShardedFileStoreDefault() (*LocalFileStore, error) {
-	return NewLocalFileStore(NewShardedFileEntryInternalFactory(DefaultShardIDLength), &LocalFileEntryFactory{}, &DefaultFileMapFactory{})
 }
 
 func (s *LocalFileStore) createFileEntry(fileName string, state FileState) FileEntry {

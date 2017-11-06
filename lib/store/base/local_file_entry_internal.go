@@ -9,7 +9,7 @@ import (
 )
 
 var _ FileEntryInternalFactory = (*LocalFileEntryInternalFactory)(nil)
-var _ FileEntryInternalFactory = (*ShardedFileEntryInternalFactory)(nil)
+var _ FileEntryInternalFactory = (*CASFileEntryInternalFactory)(nil)
 
 // LocalFileEntryInternalFactory initializes LocalFileEntryInternal obj.
 type LocalFileEntryInternalFactory struct{}
@@ -26,23 +26,16 @@ func (f *LocalFileEntryInternalFactory) Create(dir, name string) FileEntryIntern
 
 // GetRelativePath returns name because file entries are stored flat under state directory.
 func (f *LocalFileEntryInternalFactory) GetRelativePath(name string) string {
-	return name
+	return path.Join(name, DefaultDataFileName)
 }
 
-// ShardedFileEntryInternalFactory initializes LocalFileEntryInternal obj.
+// CASFileEntryInternalFactory initializes LocalFileEntryInternal obj.
 // It uses the first few bytes of file digest (which is also used as file name) as shard ID.
 // For every byte, one more level of directories will be created.
-type ShardedFileEntryInternalFactory struct {
-	shardIDLength uint
-}
-
-// NewShardedFileEntryInternalFactory creates a new ShardedFileEntryInternalFactory given shardIDLength
-func NewShardedFileEntryInternalFactory(shardIDLength uint) *ShardedFileEntryInternalFactory {
-	return &ShardedFileEntryInternalFactory{shardIDLength}
-}
+type CASFileEntryInternalFactory struct{}
 
 // Create initializes and returns a FileEntryInternal object.
-func (f *ShardedFileEntryInternalFactory) Create(dir, name string) FileEntryInternal {
+func (f *CASFileEntryInternalFactory) Create(dir, name string) FileEntryInternal {
 	return &LocalFileEntryInternal{
 		dir:          dir,
 		name:         name,
@@ -51,20 +44,20 @@ func (f *ShardedFileEntryInternalFactory) Create(dir, name string) FileEntryInte
 	}
 }
 
-// GetRelativePath returns sharded file path under state directory.
+// GetRelativePath returns content-addressable file path under state directory.
 // Example:
 // name = 07123e1f482356c415f684407a3b8723e10b2cbbc0b8fcd6282c49d37c9c1abc
 // shardIDLength = 2
 // relative path = 07/12/07123e1f482356c415f684407a3b8723e10b2cbbc0b8fcd6282c49d37c9c1abc
-func (f *ShardedFileEntryInternalFactory) GetRelativePath(name string) string {
+func (f *CASFileEntryInternalFactory) GetRelativePath(name string) string {
 	filePath := ""
-	for i := 0; i < int(f.shardIDLength) && i < len(name)/2; i++ {
+	for i := 0; i < int(DefaultShardIDLength) && i < len(name)/2; i++ {
 		// (1 byte = 2 char of file name assumming file name is in HEX)
 		dirName := name[i*2 : i*2+2]
 		filePath = path.Join(filePath, dirName)
 	}
 
-	return path.Join(filePath, name)
+	return path.Join(filePath, name, DefaultDataFileName)
 }
 
 // LocalFileEntryInternal implements FileEntryInternal interface, handles IO operations for one file on local disk.
@@ -142,56 +135,38 @@ func (fi *LocalFileEntryInternal) LinkTo(targetPath string) error {
 
 // Move moves file to target dir under the same name, removes all metadata, and updates dir.
 func (fi *LocalFileEntryInternal) Move(targetDir string) error {
-	// Link metadata
-	performLink := func(mt MetadataType) error {
-		if mt.Movable() {
-			return fi.linkMetadata(fi.dir, targetDir, mt)
-		}
-		return nil
-	}
-	err := fi.RangeMetadata(performLink)
-	if err != nil {
-		return err
-	}
-
-	// Move data file.
-	sourcePath := fi.GetPath()
-	targetPath := path.Join(targetDir, fi.relativePath)
+	sourcePath := path.Dir(fi.GetPath())
+	targetPath := path.Join(targetDir, path.Dir(fi.relativePath))
 	os.MkdirAll(filepath.Dir(targetPath), DefaultDirPermission)
+
 	if err := os.Rename(sourcePath, targetPath); err != nil {
 		return err
 	}
 
-	// Remove metadata files, ignore error.
-	performDeletion := func(mt MetadataType) error {
-		fi.DeleteMetadata(mt)
+	// Update dir in memory.
+	fi.dir = targetDir
+
+	// Delete metadata we don't want to keep. Ignore error.
+	cleanup := func(mt MetadataType) error {
+		if !mt.Movable() {
+			return fi.DeleteMetadata(mt)
+		}
 		return nil
 	}
-	fi.RangeMetadata(performDeletion)
+	fi.RangeMetadata(cleanup)
 
-	// Update dir.
-	fi.dir = targetDir
 	return nil
 }
 
 // Delete removes file and all of its metedata files from disk.
 func (fi *LocalFileEntryInternal) Delete() error {
-	// Remove data file.
-	os.Remove(fi.GetPath())
-
-	// Remove metadata files, ignore error.
-	performDeletion := func(mt MetadataType) error {
-		fi.DeleteMetadata(mt)
-		return nil
-	}
-
-	fi.RangeMetadata(performDeletion)
+	os.RemoveAll(path.Dir(fi.GetPath()))
 	return nil
 }
 
 // AddMetadata adds a new metadata type to metadataSet. This is primirily used during reload.
 func (fi *LocalFileEntryInternal) AddMetadata(mt MetadataType) error {
-	filePath := fi.GetPath() + mt.GetSuffix()
+	filePath := path.Join(path.Dir(fi.GetPath()), mt.GetSuffix())
 
 	// Check existence.
 	if _, err := os.Stat(filePath); err != nil {
@@ -203,7 +178,7 @@ func (fi *LocalFileEntryInternal) AddMetadata(mt MetadataType) error {
 
 // ReadMetadata returns metadata content as a byte array.
 func (fi *LocalFileEntryInternal) ReadMetadata(mt MetadataType) ([]byte, error) {
-	filePath := fi.GetPath() + mt.GetSuffix()
+	filePath := path.Join(path.Dir(fi.GetPath()), mt.GetSuffix())
 
 	// Check existence.
 	if _, err := os.Stat(filePath); err != nil {
@@ -216,7 +191,8 @@ func (fi *LocalFileEntryInternal) ReadMetadata(mt MetadataType) ([]byte, error) 
 // WriteMetadata updates metadata and returns true only if the file is updated correctly;
 // It returns false if error happened or file already contains desired content.
 func (fi *LocalFileEntryInternal) WriteMetadata(mt MetadataType, b []byte) (bool, error) {
-	filePath := fi.GetPath() + mt.GetSuffix()
+	filePath := path.Join(path.Dir(fi.GetPath()), mt.GetSuffix())
+
 	updated, err := CompareAndWriteFile(filePath, b)
 	if err == nil {
 		fi.metadataSet[mt] = struct{}{}
@@ -226,7 +202,7 @@ func (fi *LocalFileEntryInternal) WriteMetadata(mt MetadataType, b []byte) (bool
 
 // ReadMetadataAt reads metadata at specified offset.
 func (fi *LocalFileEntryInternal) ReadMetadataAt(mt MetadataType, b []byte, off int64) (int, error) {
-	filePath := fi.GetPath() + mt.GetSuffix()
+	filePath := path.Join(path.Dir(fi.GetPath()), mt.GetSuffix())
 
 	// Check existence.
 	if _, err := os.Stat(filePath); err != nil {
@@ -245,7 +221,7 @@ func (fi *LocalFileEntryInternal) ReadMetadataAt(mt MetadataType, b []byte, off 
 
 // WriteMetadataAt writes metadata at specified offset.
 func (fi *LocalFileEntryInternal) WriteMetadataAt(mt MetadataType, b []byte, off int64) (int, error) {
-	filePath := fi.GetPath() + mt.GetSuffix()
+	filePath := path.Join(path.Dir(fi.GetPath()), mt.GetSuffix())
 
 	// Check existence.
 	if _, err := os.Stat(filePath); err != nil {
@@ -272,20 +248,12 @@ func (fi *LocalFileEntryInternal) WriteMetadataAt(mt MetadataType, b []byte, off
 
 // DeleteMetadata deletes metadata of the specified type.
 func (fi *LocalFileEntryInternal) DeleteMetadata(mt MetadataType) error {
-	filePath := fi.GetPath() + mt.GetSuffix()
+	filePath := path.Join(path.Dir(fi.GetPath()), mt.GetSuffix())
 
 	// Remove from map no matter if the actual metadata file is removed from disk.
 	defer delete(fi.metadataSet, mt)
 
 	return os.RemoveAll(filePath)
-}
-
-// linkMetadata hardlinks metadata from sourceDir to targetDir
-func (fi *LocalFileEntryInternal) linkMetadata(sourceDir string, targetDir string, mt MetadataType) error {
-	sourcePath := path.Join(sourceDir, fi.relativePath+mt.GetSuffix())
-	targetPath := path.Join(targetDir, fi.relativePath+mt.GetSuffix())
-	os.MkdirAll(filepath.Dir(targetPath), DefaultDirPermission)
-	return os.Link(sourcePath, targetPath)
 }
 
 // RangeMetadata lofis through all metadata and applies function f, until an error happens.
