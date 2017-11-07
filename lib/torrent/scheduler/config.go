@@ -77,7 +77,7 @@ func (c Config) applyDefaults() Config {
 		c.PreemptionInterval = 30 * time.Second
 	}
 	if c.IdleConnTTL == 0 {
-		c.IdleConnTTL = 5 * time.Minute
+		c.IdleConnTTL = 30 * time.Second
 	}
 	if c.ConnTTL == 0 {
 		c.ConnTTL = time.Hour
@@ -133,7 +133,7 @@ type ConnStateConfig struct {
 
 func (c ConnStateConfig) applyDefaults() ConnStateConfig {
 	if c.MaxOpenConnectionsPerTorrent == 0 {
-		c.MaxOpenConnectionsPerTorrent = 20
+		c.MaxOpenConnectionsPerTorrent = 10
 	}
 	if c.InitialBlacklistExpiration == 0 {
 		c.InitialBlacklistExpiration = time.Minute
@@ -170,7 +170,7 @@ type ConnConfig struct {
 	// ReceiverBufferSize is the size of the receiver channel for a connection.
 	// Prevents the connection reader from being blocked if a receiver consumer
 	// is taking a long time to process a message.
-	ReceiverBufferSize int `yaml:"reciver_buffer_size"`
+	ReceiverBufferSize int `yaml:"receiver_buffer_size"`
 
 	// DisableThrottling disables the throttling of pieces. Should only be used
 	// for testing purposes.
