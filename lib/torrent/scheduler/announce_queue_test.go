@@ -84,18 +84,18 @@ func TestAnnounceQueueDoneOnPendingDispatcherDeletesAfterNext(t *testing.T) {
 func TestAnnounceQueueEjectDeletesDispatcherInAllStates(t *testing.T) {
 	tests := []struct {
 		description string
-		setup       func(*announceQueue, *dispatcher)
+		setup       func(announceQueue, *dispatcher)
 	}{
-		{"dispatcher in middle of queue", func(q *announceQueue, d *dispatcher) {
+		{"dispatcher in middle of queue", func(q announceQueue, d *dispatcher) {
 			q.Add(&dispatcher{})
 			q.Add(d)
 			q.Add(&dispatcher{})
 		}},
-		{"dispatcher ready", func(q *announceQueue, d *dispatcher) {
+		{"dispatcher ready", func(q announceQueue, d *dispatcher) {
 			q.Add(d)
 			q.Next()
 		}},
-		{"dispatcher done", func(q *announceQueue, d *dispatcher) {
+		{"dispatcher done", func(q announceQueue, d *dispatcher) {
 			q.Add(d)
 			q.Done(d)
 		}},

@@ -47,10 +47,12 @@ type PeerContext struct {
 
 	// Zone is the zone the peer is running within.
 	Zone string `json:"zone"`
+
+	// Origin indicates whether the peer is an origin server or not.
+	Origin bool `json:"origin"`
 }
 
-// New creates a new PeerContext.
-func New(f PeerIDFactory, ip string, port int) (PeerContext, error) {
+func new(f PeerIDFactory, ip string, port int, origin bool) (PeerContext, error) {
 	if ip == "" {
 		return PeerContext{}, errors.New("no ip supplied")
 	}
@@ -66,5 +68,16 @@ func New(f PeerIDFactory, ip string, port int) (PeerContext, error) {
 		Port:   port,
 		PeerID: peerID,
 		Zone:   xconfig.GetZone(),
+		Origin: origin,
 	}, nil
+}
+
+// New creates a new PeerContext.
+func New(f PeerIDFactory, ip string, port int) (PeerContext, error) {
+	return new(f, ip, port, false)
+}
+
+// NewOrigin creates a new PeerContext for an origin server.
+func NewOrigin(f PeerIDFactory, ip string, port int) (PeerContext, error) {
+	return new(f, ip, port, true)
 }
