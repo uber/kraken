@@ -57,7 +57,7 @@ func main() {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
 
-	pctx, err := peercontext.New(
+	pctx, err := peercontext.NewOrigin(
 		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *peerIP, *peerPort)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)

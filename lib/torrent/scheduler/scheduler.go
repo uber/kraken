@@ -58,7 +58,7 @@ type Scheduler struct {
 	// be accessed from within the event loop.
 	torrentControls map[torlib.InfoHash]*torrentControl // Active seeding / leeching torrents.
 	connState       *connState
-	announceQueue   *announceQueue
+	announceQueue   announceQueue
 
 	eventLoop eventLoop
 
@@ -137,6 +137,14 @@ func New(
 	log.Infof("Scheduler will announce as peer %s on addr %s:%d",
 		pctx.PeerID, pctx.IP, pctx.Port)
 
+	var aq announceQueue
+	if pctx.Origin {
+		// Origin peers should not announce.
+		aq = disabledAnnounceQueue{}
+	} else {
+		aq = newAnnounceQueue()
+	}
+
 	s := &Scheduler{
 		pctx:           pctx,
 		config:         config,
@@ -159,7 +167,7 @@ func New(
 		},
 		torrentControls:      make(map[torlib.InfoHash]*torrentControl),
 		connState:            newConnState(pctx.PeerID, config.ConnState, overrides.clock),
-		announceQueue:        newAnnounceQueue(),
+		announceQueue:        aq,
 		eventLoop:            overrides.eventLoop,
 		listener:             l,
 		announceTick:         overrides.clock.Tick(config.AnnounceInterval),
