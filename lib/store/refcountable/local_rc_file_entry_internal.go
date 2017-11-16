@@ -38,15 +38,18 @@ type LocalRCFileEntryInternal struct {
 }
 
 // Move checks ref count, then moves file to target dir under the same name, removes all metadata,
-// and updates dir.
+// and updates parent dir.
 func (fi *LocalRCFileEntryInternal) Move(targetDir string) error {
 	// Verify it's safe to delete data file and/or metadata.
 	checkSafeToDelete := func(mt base.MetadataType) error {
-		refCount, err := fi.GetRefCount()
-		if err == nil && refCount == 0 {
-			return nil
+		if refCount, err := fi.GetRefCount(); err != nil || refCount != 0 {
+			return &RefCountError{
+				Op:       "Move",
+				Name:     fi.GetPath(),
+				RefCount: refCount,
+				Msg:      "File still referenced"}
 		}
-		return &RefCountError{Op: "SafeToDelete", Name: fi.GetPath(), RefCount: refCount, Msg: fmt.Sprintf("File still referenced")}
+		return nil
 	}
 	if err := fi.RangeMetadata(checkSafeToDelete); err != nil {
 		return err
@@ -55,15 +58,38 @@ func (fi *LocalRCFileEntryInternal) Move(targetDir string) error {
 	return fi.FileEntryInternal.Move(targetDir)
 }
 
+// MoveTo checks ref count, then moves file to target path, removes source and all metadata.
+func (fi *LocalRCFileEntryInternal) MoveTo(targetPath string) error {
+	// Verify it's safe to delete data file and/or metadata.
+	checkSafeToDelete := func(mt base.MetadataType) error {
+		if refCount, err := fi.GetRefCount(); err != nil || refCount != 0 {
+			return &RefCountError{
+				Op:       "MoveTo",
+				Name:     fi.GetPath(),
+				RefCount: refCount,
+				Msg:      "File still referenced"}
+		}
+		return nil
+	}
+	if err := fi.RangeMetadata(checkSafeToDelete); err != nil {
+		return err
+	}
+
+	return fi.FileEntryInternal.MoveTo(targetPath)
+}
+
 // Delete checks ref count, then removes file and all of its metedata files from disk.
 func (fi *LocalRCFileEntryInternal) Delete() error {
 	// Verify it's safe to delete data file and/or metadata.
 	checkSafeToDelete := func(mt base.MetadataType) error {
-		refCount, err := fi.GetRefCount()
-		if err == nil && refCount == 0 {
-			return nil
+		if refCount, err := fi.GetRefCount(); err != nil || refCount != 0 {
+			return &RefCountError{
+				Op:       "Delete",
+				Name:     fi.GetPath(),
+				RefCount: refCount,
+				Msg:      "File still referenced"}
 		}
-		return &RefCountError{Op: "SafeToDelete", Name: fi.GetPath(), RefCount: refCount, Msg: fmt.Sprintf("File still referenced")}
+		return nil
 	}
 	if err := fi.RangeMetadata(checkSafeToDelete); err != nil {
 		return err

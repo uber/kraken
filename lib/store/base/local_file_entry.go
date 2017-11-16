@@ -103,31 +103,19 @@ func (entry *LocalFileEntry) Create(v Verify, targetState FileState, len int64) 
 	return entry.fi.Create(len)
 }
 
-// CreateLinkFrom creates a hardlink from an unmanaged file.
-func (entry *LocalFileEntry) CreateLinkFrom(v Verify, targetState FileState, sourcePath string) error {
+// MoveFrom moves an unmanaged file in.
+func (entry *LocalFileEntry) MoveFrom(v Verify, targetState FileState, sourcePath string) error {
 	entry.Lock()
 	defer entry.Unlock()
 	if err := v(entry); err != nil { // Insert into map
 		return err
 	}
 
-	// Create hardlink
-	return entry.fi.CreateLinkFrom(sourcePath)
+	// Move file
+	return entry.fi.MoveFrom(sourcePath)
 }
 
-// LinkTo creates a hardlink to an unmanaged file.
-func (entry *LocalFileEntry) LinkTo(v Verify, targetPath string) error {
-	entry.RLock()
-	defer entry.RUnlock()
-	if err := v(entry); err != nil {
-		return err
-	}
-
-	// Create hardlink
-	return entry.fi.LinkTo(targetPath)
-}
-
-// Move moves file to another directory and upload state accordingly.
+// Move moves file to another directory and upload state accordingly, and moves all metadata that's `movable`.
 func (entry *LocalFileEntry) Move(v Verify, targetState FileState) error {
 	entry.Lock()
 	defer entry.Unlock()
@@ -140,6 +128,18 @@ func (entry *LocalFileEntry) Move(v Verify, targetState FileState) error {
 		entry.state = targetState
 	}
 	return err
+}
+
+// MoveTo moves data file out to an unmanaged location.
+func (entry *LocalFileEntry) MoveTo(v Verify, targetPath string) error {
+	entry.RLock()
+	defer entry.RUnlock()
+	if err := v(entry); err != nil {
+		return err
+	}
+
+	// Move file
+	return entry.fi.MoveTo(targetPath)
 }
 
 // Delete removes file from disk.

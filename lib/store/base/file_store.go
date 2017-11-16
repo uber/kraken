@@ -32,9 +32,9 @@ type FileEntryInternal interface {
 	Stat() (os.FileInfo, error)
 
 	Create(len int64) error
-	CreateLinkFrom(sourcePath string) error
-	LinkTo(targetPath string) error
+	MoveFrom(sourcePath string) error
 	Move(targetDir string) error
+	MoveTo(targetPath string) error
 	Delete() error
 
 	AddMetadata(mt MetadataType) error
@@ -80,9 +80,9 @@ type FileEntry interface {
 	Stat(v Verify) (os.FileInfo, error)
 
 	Create(v Verify, targetState FileState, len int64) error
-	CreateLinkFrom(v Verify, targetState FileState, sourcePath string) error
-	LinkTo(v Verify, targetPath string) error
+	MoveFrom(v Verify, targetState FileState, sourcePath string) error
 	Move(v Verify, targetState FileState) error
+	MoveTo(v Verify, targetPath string) error
 	Delete(v Verify) error
 
 	GetReader(v Verify) (FileReader, error)
@@ -117,9 +117,9 @@ type FileMapFactory interface {
 // FileStore manages files and their metadata in a stateful and thread-safe manner.
 type FileStore interface {
 	CreateFile(fileName string, states []FileState, createState FileState, len int64) error
-	CreateLinkFromFile(fileName string, states []FileState, createState FileState, sourcePath string) error
-	LinkToFile(fileName string, states []FileState, targetPath string) error
+	MoveFileFrom(fileName string, states []FileState, createState FileState, sourcePath string) error
 	MoveFile(fileName string, states []FileState, goalState FileState) error
+	MoveFileTo(fileName string, states []FileState, targetPath string) error
 	DeleteFile(fileName string, states []FileState) error
 
 	GetFilePath(fileName string, states []FileState) (string, error)
