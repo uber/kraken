@@ -250,13 +250,13 @@ func TestMove(t *testing.T) {
 
 	// Not movable metadata should get deleted after move
 	// it should not exist anywhere
-	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn+getMockMetadataOne().GetSuffix()))
+	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
 	require.NotNil(err)
 	require.True(os.IsNotExist(err))
-	_, err = os.Stat(path.Join(storeBundle.state2.GetDirectory(), fn+getMockMetadataOne().GetSuffix()))
+	_, err = os.Stat(path.Join(storeBundle.state2.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
 	require.NotNil(err)
 	require.True(os.IsNotExist(err))
-	_, err = os.Stat(path.Join(storeBundle.state3.GetDirectory(), fn+getMockMetadataOne().GetSuffix()))
+	_, err = os.Stat(path.Join(storeBundle.state3.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
 	require.NotNil(err)
 	require.True(os.IsNotExist(err))
 

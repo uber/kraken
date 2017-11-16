@@ -2,6 +2,7 @@ package refcountable
 
 import (
 	"math/rand"
+	"path"
 	"sync"
 	"testing"
 
@@ -37,6 +38,14 @@ func TestRefCount(t *testing.T) {
 			// Try Delete
 			fileName, _ := fe.GetName(dummyVerify)
 			err = backend.DeleteFile(fileName, []base.FileState{stateTest1})
+			assert.True(t, IsRefCountError(err))
+
+			// Try Move
+			err = backend.MoveFile(fileName, []base.FileState{stateTest1}, stateTest2)
+			assert.True(t, IsRefCountError(err))
+
+			// Try MoveTo
+			err = backend.MoveFileTo(fileName, []base.FileState{stateTest1}, path.Join(stateTest2.GetDirectory(), fileName))
 			assert.True(t, IsRefCountError(err))
 
 			for j := 0; j < maxCount; j++ {

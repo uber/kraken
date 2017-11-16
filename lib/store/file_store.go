@@ -379,16 +379,14 @@ func (store *LocalFileStore) MoveUploadFileToCache(fileName, targetFileName stri
 	if err != nil {
 		return err
 	}
-	err = store.downloadCacheBackend.CreateLinkFromFile(
+	// There is a gap between file being moved to downloadCacheBackend and the in memory object still exists in
+	// uploadBackend. This is fine because file names in uploadBackend are all unique.
+	defer store.uploadBackend.DeleteFile(fileName, []base.FileState{store.stateUpload})
+	return store.downloadCacheBackend.MoveFileFrom(
 		targetFileName,
 		[]base.FileState{store.stateCache},
 		store.stateCache,
 		uploadFilePath)
-	if err != nil {
-		return err
-	}
-	err = store.uploadBackend.DeleteFile(fileName, []base.FileState{store.stateUpload})
-	return err
 }
 
 // MoveDownloadFileToCache moves a file from download directory to cache directory.
@@ -402,21 +400,24 @@ func (store *LocalFileStore) MoveDownloadFileToCache(fileName string) error {
 // MoveCacheFileToTrash moves a file from cache directory to trash directory, and append a random
 // suffix so there won't be name collision.
 func (store *LocalFileStore) MoveCacheFileToTrash(fileName string) error {
-	newPath := path.Join(store.config.TrashDir, fileName+"."+uuid.Generate().String())
-	if err := store.downloadCacheBackend.LinkToFile(fileName, []base.FileState{store.stateCache}, newPath); err != nil {
-		return err
+	newPath := path.Join(store.config.TrashDir, fileName, base.DefaultDataFileName)
+	err := store.downloadCacheBackend.MoveFileTo(fileName, []base.FileState{store.stateCache}, newPath)
+	if os.IsExist(err) {
+		return store.downloadCacheBackend.DeleteFile(fileName, []base.FileState{store.stateCache})
 	}
-	return store.downloadCacheBackend.DeleteFile(fileName, []base.FileState{store.stateCache})
+	return err
 }
 
 // MoveDownloadOrCacheFileToTrash moves a file from cache or download directory to trash directory, and append a random
 // suffix so there won't be name collision.
 func (store *LocalFileStore) MoveDownloadOrCacheFileToTrash(fileName string) error {
-	newPath := path.Join(store.config.TrashDir, fileName+"."+uuid.Generate().String())
-	if err := store.downloadCacheBackend.LinkToFile(fileName, []base.FileState{store.stateCache, store.stateDownload}, newPath); err != nil {
-		return err
+	newPath := path.Join(store.config.TrashDir, fileName, base.DefaultDataFileName)
+	err := store.downloadCacheBackend.MoveFileTo(
+		fileName, []base.FileState{store.stateCache, store.stateDownload}, newPath)
+	if os.IsExist(err) {
+		return store.downloadCacheBackend.DeleteFile(fileName, []base.FileState{store.stateCache})
 	}
-	return store.downloadCacheBackend.DeleteFile(fileName, []base.FileState{store.stateCache, store.stateDownload})
+	return err
 }
 
 // DeleteAllTrashFiles permanently deletes all files from trash directory.
@@ -432,7 +433,7 @@ func (store *LocalFileStore) DeleteAllTrashFiles() error {
 		return err
 	}
 	for _, fileName := range names {
-		err = os.Remove(path.Join(store.config.TrashDir, fileName))
+		err = os.RemoveAll(path.Join(store.config.TrashDir, fileName))
 		if err != nil {
 			return err
 		}
@@ -459,14 +460,9 @@ func (store *LocalFileStore) DerefCacheFile(fileName string) (int64, error) {
 	refCount, err := b.DecrementFileRefCount(fileName, []base.FileState{store.stateCache})
 	if err == nil && refCount == 0 {
 		// Try rename and move to trash.
-		newPath := path.Join(store.config.TrashDir, fileName+"."+uuid.Generate().String())
-		if err := b.LinkToFile(fileName, []base.FileState{store.stateCache}, newPath); err != nil {
+		newPath := path.Join(store.config.TrashDir, fileName, base.DefaultDataFileName)
+		if err := b.MoveFileTo(fileName, []base.FileState{store.stateCache}, newPath); err != nil {
 			return 0, err
-		}
-		err := b.DeleteFile(fileName, []base.FileState{store.stateCache})
-		if refcountable.IsRefCountError(err) {
-			// It's possible ref count was incremented again, and that's normal. Abort.
-			return err.(*refcountable.RefCountError).RefCount, nil
 		}
 	}
 	return refCount, nil

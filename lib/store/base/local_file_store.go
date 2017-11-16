@@ -204,10 +204,10 @@ func (s *LocalFileStore) CreateFile(fileName string, states []FileState, targetS
 	return newEntry.Create(mapLoadOrStore, targetState, len)
 }
 
-// CreateLinkFromFile create a hardlink of a file from unmanaged location to file store.
+// MoveFileFrom moves an unmanaged file into file store.
 // If file exists and is in one of the acceptable states, returns os.ErrExist.
 // If file exists but not in one of the acceptable states, returns FileStateError.
-func (s *LocalFileStore) CreateLinkFromFile(fileName string, states []FileState, targetState FileState, sourcePath string) error {
+func (s *LocalFileStore) MoveFileFrom(fileName string, states []FileState, targetState FileState, sourcePath string) error {
 	// Verify if file exists in memory or on disk.
 	_, _, err := s.LoadFileEntry(fileName, []FileState{targetState})
 	if err == nil {
@@ -247,20 +247,11 @@ func (s *LocalFileStore) CreateLinkFromFile(fileName string, states []FileState,
 	}
 
 	// Create link on disk.
-	return newEntry.CreateLinkFrom(mapLoadOrStore, targetState, sourcePath)
+	return newEntry.MoveFrom(mapLoadOrStore, targetState, sourcePath)
 }
 
-// LinkToFile create a hardlink from a file in file store to unmanaged location.
-func (s *LocalFileStore) LinkToFile(fileName string, states []FileState, targetPath string) error {
-	entry, v, err := s.LoadFileEntry(fileName, states)
-	if err != nil {
-		return err
-	}
-
-	return entry.LinkTo(v, targetPath)
-}
-
-// MoveFile moves a file to a different directory and updates its state accordingly.
+// MoveFile moves a file to a different directory and updates its state accordingly, and moves all metadata that's
+// `movable`.
 func (s *LocalFileStore) MoveFile(fileName string, states []FileState, targetState FileState) error {
 	entry, v, err := s.LoadFileEntry(fileName, states)
 	if err != nil {
@@ -275,6 +266,16 @@ func (s *LocalFileStore) MoveFile(fileName string, states []FileState, targetSta
 	}
 
 	return entry.Move(moreVerify, targetState)
+}
+
+// MoveFileTo moves a file in file store to unmanaged location.
+func (s *LocalFileStore) MoveFileTo(fileName string, states []FileState, targetPath string) error {
+	entry, v, err := s.LoadFileEntry(fileName, states)
+	if err != nil {
+		return err
+	}
+
+	return entry.MoveTo(v, targetPath)
 }
 
 // DeleteFile removes a file from disk and file map.
