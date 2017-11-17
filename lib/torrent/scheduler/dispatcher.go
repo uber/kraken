@@ -124,7 +124,6 @@ func (d *dispatcher) String() string {
 }
 
 func (d *dispatcher) sendPieceRequest(c *conn, i int) error {
-	d.logf(log.Fields{"conn": c, "piece": i}).Debug("Sending piece request")
 	return c.Send(newPieceRequestMessage(i, d.Torrent.PieceLength(i)))
 }
 
@@ -149,7 +148,6 @@ func (d *dispatcher) feed(c *conn) {
 			// TODO Maybe close conn?
 		}
 	}
-	d.logf(log.Fields{"peer": c.PeerID}).Debug("Dispatcher feeder exiting")
 	d.conns.Delete(c.PeerID)
 	d.touchLastConnRemoved()
 }
@@ -199,8 +197,6 @@ func (d *dispatcher) isFullPiece(i, offset, length int) bool {
 }
 
 func (d *dispatcher) handlePieceRequest(c *conn, msg *p2p.PieceRequestMessage) {
-	d.logf(log.Fields{"conn": c, "piece": msg.Index}).Debug("Received piece request")
-
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
 		d.logf(log.Fields{"conn": c, "piece": i}).Error("Rejecting piece request: chunk not supported")
@@ -219,7 +215,6 @@ func (d *dispatcher) handlePieceRequest(c *conn, msg *p2p.PieceRequestMessage) {
 		return
 	}
 	c.TouchLastPieceSent()
-	d.logf(log.Fields{"conn": c, "piece": msg.Index}).Debug("Sent piece")
 }
 
 func (d *dispatcher) handlePiecePayload(
@@ -238,7 +233,6 @@ func (d *dispatcher) handlePiecePayload(
 		}
 		return
 	}
-	d.logf(log.Fields{"conn": c, "piece": i}).Debug("Received piece")
 	d.networkEventProducer.Produce(
 		networkevent.ReceivePieceEvent(d.Torrent.InfoHash(), d.localPeerID, c.PeerID, i))
 	c.TouchLastGoodPieceReceived()
@@ -251,8 +245,6 @@ func (d *dispatcher) handlePiecePayload(
 			return true
 		}
 		cc := v.(*conn)
-
-		d.logf(log.Fields{"conn": cc, "piece": i}).Debug("Announcing piece")
 
 		// Ignore error -- this just means the connection was closed. The feed goroutine
 		// for cc will clean up.

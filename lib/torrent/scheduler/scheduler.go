@@ -316,14 +316,14 @@ func (s *Scheduler) doInitIncomingConn(
 
 	t, err := s.torrentArchive.GetTorrent(remoteHandshake.Name)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open torrent storage: %s", err)
+		return nil, nil, fmt.Errorf("get torrent for blob %s: %s", remoteHandshake.Name, err)
 	}
 	if t.InfoHash() != remoteHandshake.InfoHash {
-		return nil, nil, fmt.Errorf("info hash mismatch for name %s", remoteHandshake.Name)
+		return nil, nil, fmt.Errorf("info hash mismatch for blob %s", remoteHandshake.Name)
 	}
 	c, err := s.connFactory.ReciprocateHandshake(nc, t, remoteHandshake)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to reciprocate handshake: %s", err)
+		return nil, nil, fmt.Errorf("reciprocate handshake for blob %s: %s", remoteHandshake.Name, err)
 	}
 	return c, t, nil
 }

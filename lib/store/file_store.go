@@ -26,6 +26,9 @@ type FileReadWriter = base.FileReadWriter
 // FileReader aliases base.FileReader
 type FileReader = base.FileReader
 
+// MetadataType aliases base.MetadataType
+type MetadataType = base.MetadataType
+
 // FileStore provides an interface for LocalFileStore. Useful for mocks.
 type FileStore interface {
 	Stop()
@@ -61,6 +64,9 @@ type FileStore interface {
 	DerefCacheFile(fileName string) (int64, error)
 	ListCacheFilesByShardID(shardID string) ([]string, error)
 	ListPopulatedShardIDs() ([]string, error)
+	EnsureDownloadOrCacheFilePresent(fileName string, defaultLength int64) error
+	States() *StateAcceptor
+	InCacheError(error) bool
 }
 
 // LocalFileStore manages all peer agent files on local disk.
@@ -236,20 +242,10 @@ func (store *LocalFileStore) GetFilePieceStatus(fileName string, index int, numP
 	b := make([]byte, numPieces)
 	_, err := store.downloadCacheBackend.ReadFileMetadataAt(
 		fileName,
-		[]base.FileState{store.stateDownload},
+		[]base.FileState{store.stateDownload, store.stateCache},
 		NewPieceStatus(),
 		b,
 		int64(index))
-	if base.IsFileStateError(err) {
-		// For files that finished downloading or were pushed, piece status should be done.
-		if _, e := store.downloadCacheBackend.GetFileStat(fileName, []base.FileState{store.stateCache}); e == nil {
-			for i := range b {
-				b[i] = PieceDone
-			}
-		}
-		return b, nil
-	}
-
 	return b, err
 }
 
@@ -532,4 +528,75 @@ func (store *LocalFileStore) ListPopulatedShardIDs() ([]string, error) {
 	err := walk("", 2)
 
 	return shards, err
+}
+
+// EnsureDownloadOrCacheFilePresent ensures that fileName is present in either
+// the download or cache state. If it is not, then it is initialized in download
+// with defaultLength.
+func (store *LocalFileStore) EnsureDownloadOrCacheFilePresent(fileName string, defaultLength int64) error {
+	err := store.downloadCacheBackend.CreateFile(
+		fileName,
+		[]base.FileState{store.stateDownload, store.stateCache},
+		store.stateDownload,
+		defaultLength)
+	if err != nil && !os.IsExist(err) {
+		return err
+	}
+	return nil
+}
+
+// StateAcceptor is a builder which allows LocalFileStore clients to specify which
+// states an operation may be accepted within. Should only be used for read / write
+// operations which are acceptable in any state.
+type StateAcceptor struct {
+	store  *LocalFileStore
+	states []base.FileState
+}
+
+// States returns a new StateAcceptor builder.
+func (store *LocalFileStore) States() *StateAcceptor {
+	return &StateAcceptor{store: store}
+}
+
+// Download adds the download state to the accepted states.
+func (a *StateAcceptor) Download() *StateAcceptor {
+	a.states = append(a.states, a.store.stateDownload)
+	return a
+}
+
+// Cache adds the cache state to the accepted states.
+func (a *StateAcceptor) Cache() *StateAcceptor {
+	a.states = append(a.states, a.store.stateCache)
+	return a
+}
+
+// GetMetadata returns the metadata content of mt for filename.
+func (a *StateAcceptor) GetMetadata(filename string, mt MetadataType) ([]byte, error) {
+	return a.store.downloadCacheBackend.ReadFileMetadata(filename, a.states, mt)
+}
+
+// GetOrSetMetadata returns the metadata content of mt for filename, or
+// initializes the metadata content to b if not set.
+func (a *StateAcceptor) GetOrSetMetadata(filename string, mt MetadataType, b []byte) ([]byte, error) {
+	return a.store.downloadCacheBackend.GetOrSetFileMetadata(filename, a.states, mt, b)
+}
+
+// SetMetadata writes b to metadata content of mt for filename.
+func (a *StateAcceptor) SetMetadata(filename string, mt MetadataType, b []byte) (updated bool, err error) {
+	return a.store.downloadCacheBackend.WriteFileMetadata(filename, a.states, mt, b)
+}
+
+// SetMetadataAt writes b to metadata content of mt starting at index i for filename.
+func (a *StateAcceptor) SetMetadataAt(
+	filename string, mt MetadataType, b []byte, i int) (updated bool, err error) {
+
+	n, err := a.store.downloadCacheBackend.WriteFileMetadataAt(filename, a.states, mt, b, int64(i))
+	return n != 0, err
+}
+
+// InCacheError returns true for errors originating from file store operations
+// which do not accept files in cache state.
+func (store *LocalFileStore) InCacheError(err error) bool {
+	fse, ok := err.(*base.FileStateError)
+	return ok && fse.State == store.stateCache
 }

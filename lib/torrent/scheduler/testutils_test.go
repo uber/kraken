@@ -87,7 +87,7 @@ type testMocks struct {
 	cleanup        *testutils.Cleanup
 }
 
-func newTestMocks(t *testing.T) (*testMocks, func()) {
+func newTestMocks(t gomock.TestReporter) (*testMocks, func()) {
 	var cleanup testutils.Cleanup
 
 	ctrl := gomock.NewController(t)
@@ -111,11 +111,15 @@ type testPeer struct {
 	stats          tally.TestScope
 	testProducer   *networkevent.TestProducer
 	fs             store.FileStore
+	cleanup        *testutils.Cleanup
 }
 
 func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
+	var cleanup testutils.Cleanup
+	m.cleanup.Add(cleanup.Run)
+
 	fs, c := store.LocalFileStoreFixture()
-	m.cleanup.Add(c)
+	cleanup.Add(c)
 
 	ta := storage.NewLocalTorrentArchive(fs, m.metaInfoClient)
 
@@ -132,9 +136,9 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 	if err != nil {
 		panic(err)
 	}
-	m.cleanup.Add(s.Stop)
+	cleanup.Add(s.Stop)
 
-	return &testPeer{pctx, s, ta, stats, tp, fs}
+	return &testPeer{pctx, s, ta, stats, tp, fs, &cleanup}
 }
 
 func (m *testMocks) newPeers(n int, config Config) []*testPeer {

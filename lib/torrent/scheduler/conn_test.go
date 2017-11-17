@@ -16,13 +16,13 @@ func TestSetEgressBandwidthThrottlesPieceSending(t *testing.T) {
 
 	size := 4 * memsize.KB
 	numPieces := 256
-	pieceLength := int(size / uint64(numPieces))
+	pieceLength := size / uint64(numPieces)
 	bytesPerSec := memsize.KB
 	expectedDur := time.Duration(size/bytesPerSec) * time.Second
 
 	config := connConfigFixture()
 
-	c, cleanup := connFixture(t, config, pieceLength)
+	c, cleanup := connFixture(t, config, int(pieceLength))
 	defer cleanup()
 
 	c.SetEgressBandwidthLimit(bytesPerSec)

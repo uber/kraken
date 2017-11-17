@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"time"
-
-	"code.uber.internal/go-common.git/x/log"
 )
 
 // AnnounceList is a list of tracker announcers
@@ -88,13 +86,8 @@ func (mi *MetaInfo) Name() string {
 }
 
 // Serialize returns metainfo as a bencoded string
-func (mi *MetaInfo) Serialize() (string, error) {
-	bytes, err := json.Marshal(mi)
-	if err != nil {
-		log.Error(err)
-		return "", err
-	}
-	return string(bytes[:]), nil
+func (mi *MetaInfo) Serialize() ([]byte, error) {
+	return json.Marshal(mi)
 }
 
 // initialize computes info hash and set default fields

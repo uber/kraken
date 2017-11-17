@@ -54,3 +54,18 @@ func NewMockFileReadWriter(content []byte) (*MockFileReadWriter, func()) {
 
 	return &MockFileReadWriter{File: f}, cleanup.Run
 }
+
+type mockGetDownloadFileReadWriterStore struct {
+	FileStore
+	f FileReadWriter
+}
+
+func (s *mockGetDownloadFileReadWriterStore) GetDownloadFileReadWriter(name string) (FileReadWriter, error) {
+	return s.f, nil
+}
+
+// MockGetDownloadFileReadWriter returns a FileStore wrapping baseFS which overrides
+// the GetDownloadFileReadWriter method to return f.
+func MockGetDownloadFileReadWriter(baseFS FileStore, f FileReadWriter) FileStore {
+	return &mockGetDownloadFileReadWriterStore{baseFS, f}
+}

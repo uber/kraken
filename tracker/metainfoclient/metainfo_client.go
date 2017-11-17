@@ -70,14 +70,14 @@ func (c *client) Download(name string) (*torlib.MetaInfo, error) {
 // Upload uploads mi to storage. Returns ErrExists if there is a name conflict
 // for mi.
 func (c *client) Upload(mi *torlib.MetaInfo) error {
-	s, err := mi.Serialize()
+	b, err := mi.Serialize()
 	if err != nil {
 		return fmt.Errorf("error serializing metainfo: %s", err)
 	}
 	for it := c.servers.Iter(); it.HasNext(); it.Next() {
 		_, err = httputil.Post(
 			fmt.Sprintf("http://%s/info", it.Addr()),
-			httputil.SendBody(bytes.NewBufferString(s)),
+			httputil.SendBody(bytes.NewBuffer(b)),
 			httputil.SendTimeout(c.config.Timeout))
 		if err != nil {
 			if httputil.IsConflict(err) {

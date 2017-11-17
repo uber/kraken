@@ -10,14 +10,6 @@ func init() {
 	base.RegisterMetadata(regexp.MustCompile("_status"), &pieceStatusFactory{})
 }
 
-// const enum representing the status of a torrent's piece
-const (
-	PieceClean uint8 = iota
-	PieceDirty
-	PieceDone
-	PieceDontCare
-)
-
 type pieceStatusFactory struct{}
 
 func (f pieceStatusFactory) Create(suffix string) base.MetadataType {
@@ -28,7 +20,7 @@ type pieceStatus struct{}
 
 // NewPieceStatus initializes and returns an new MetadataType obj.
 func NewPieceStatus() base.MetadataType {
-	return &pieceStatus{}
+	return pieceStatus{}
 }
 
 func (p pieceStatus) GetSuffix() string {
@@ -36,5 +28,5 @@ func (p pieceStatus) GetSuffix() string {
 }
 
 func (p pieceStatus) Movable() bool {
-	return false
+	return true
 }

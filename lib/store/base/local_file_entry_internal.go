@@ -286,3 +286,26 @@ func (fi *LocalFileEntryInternal) RangeMetadata(f func(mt MetadataType) error) e
 	}
 	return nil
 }
+
+// GetOrSetMetadata writes b under metadata mt if mt has not been initialized yet.
+// Always returns the final content of the metadata, whether it be the existing
+// content or the content just written.
+func (fi *LocalFileEntryInternal) GetOrSetMetadata(mt MetadataType, b []byte) ([]byte, error) {
+	if _, ok := fi.metadataSet[mt]; ok {
+		return fi.ReadMetadata(mt)
+	}
+	filePath := path.Join(path.Dir(fi.GetPath()), mt.GetSuffix())
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0755)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if _, err := f.Write(b); err != nil {
+		return nil, err
+	}
+	fi.metadataSet[mt] = struct{}{}
+
+	c := make([]byte, len(b))
+	copy(c, b)
+	return c, nil
+}

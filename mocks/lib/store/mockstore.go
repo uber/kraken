@@ -121,6 +121,18 @@ func (mr *MockFileStoreMockRecorder) DerefCacheFile(arg0 interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DerefCacheFile", reflect.TypeOf((*MockFileStore)(nil).DerefCacheFile), arg0)
 }
 
+// EnsureDownloadOrCacheFilePresent mocks base method
+func (m *MockFileStore) EnsureDownloadOrCacheFilePresent(arg0 string, arg1 int64) error {
+	ret := m.ctrl.Call(m, "EnsureDownloadOrCacheFilePresent", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// EnsureDownloadOrCacheFilePresent indicates an expected call of EnsureDownloadOrCacheFilePresent
+func (mr *MockFileStoreMockRecorder) EnsureDownloadOrCacheFilePresent(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureDownloadOrCacheFilePresent", reflect.TypeOf((*MockFileStore)(nil).EnsureDownloadOrCacheFilePresent), arg0, arg1)
+}
+
 // GetCacheFilePath mocks base method
 func (m *MockFileStore) GetCacheFilePath(arg0 string) (string, error) {
 	ret := m.ctrl.Call(m, "GetCacheFilePath", arg0)
@@ -277,6 +289,18 @@ func (mr *MockFileStoreMockRecorder) GetUploadFileStat(arg0 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileStat", reflect.TypeOf((*MockFileStore)(nil).GetUploadFileStat), arg0)
 }
 
+// InCacheError mocks base method
+func (m *MockFileStore) InCacheError(arg0 error) bool {
+	ret := m.ctrl.Call(m, "InCacheError", arg0)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// InCacheError indicates an expected call of InCacheError
+func (mr *MockFileStoreMockRecorder) InCacheError(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InCacheError", reflect.TypeOf((*MockFileStore)(nil).InCacheError), arg0)
+}
+
 // ListCacheFilesByShardID mocks base method
 func (m *MockFileStore) ListCacheFilesByShardID(arg0 string) ([]string, error) {
 	ret := m.ctrl.Call(m, "ListCacheFilesByShardID", arg0)
@@ -412,6 +436,18 @@ func (m *MockFileStore) SetUploadFileStartedAt(arg0 string, arg1 []byte) error {
 // SetUploadFileStartedAt indicates an expected call of SetUploadFileStartedAt
 func (mr *MockFileStoreMockRecorder) SetUploadFileStartedAt(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUploadFileStartedAt", reflect.TypeOf((*MockFileStore)(nil).SetUploadFileStartedAt), arg0, arg1)
+}
+
+// States mocks base method
+func (m *MockFileStore) States() *store.StateAcceptor {
+	ret := m.ctrl.Call(m, "States")
+	ret0, _ := ret[0].(*store.StateAcceptor)
+	return ret0
+}
+
+// States indicates an expected call of States
+func (mr *MockFileStoreMockRecorder) States() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "States", reflect.TypeOf((*MockFileStore)(nil).States))
 }
 
 // Stop mocks base method

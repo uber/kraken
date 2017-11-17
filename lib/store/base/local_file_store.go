@@ -386,3 +386,14 @@ func (s *LocalFileStore) RangeFileMetadata(fileName string, states []FileState, 
 	}
 	return entry.RangeMetadata(v, f)
 }
+
+// GetOrSetFileMetadata see LocalFileEntryInternal.
+func (s *LocalFileStore) GetOrSetFileMetadata(
+	fileName string, states []FileState, mt MetadataType, b []byte) ([]byte, error) {
+
+	entry, v, err := s.LoadFileEntry(fileName, states)
+	if err != nil {
+		return nil, err
+	}
+	return entry.GetOrSetMetadata(v, mt, b)
+}

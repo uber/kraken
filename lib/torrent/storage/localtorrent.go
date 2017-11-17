@@ -25,9 +25,11 @@ type pieceStatus int
 
 const (
 	_empty pieceStatus = iota
-	_dirty
 	_complete
+	_dirty
 )
+
+func (s pieceStatus) toBytes() []byte { return []byte{byte(s)} }
 
 type piece struct {
 	sync.RWMutex
@@ -75,6 +77,52 @@ func (p *piece) markComplete() {
 	p.status = _complete
 }
 
+func makeEmptyPieceMetadata(n int) []byte {
+	return make([]byte, n)
+}
+
+func makeCompletePieceMetadata(n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = byte(_complete)
+	}
+	return b
+}
+
+// restorePieces reads piece metadata from disk and restores the in-memory piece
+// statuses. A naive solution would be to read the entire blob from disk and
+// hash the pieces to determine completion status -- however, this is very
+// expensive. Instead, LocalTorrent tracks completed pieces on disk via metadata
+// as they are written.
+func restorePieces(name string, fs store.FileStore, numPieces int) (pieces []*piece, numComplete int, err error) {
+	raw, err := fs.States().Download().GetOrSetMetadata(
+		name, store.NewPieceStatus(), makeEmptyPieceMetadata(numPieces))
+	if fs.InCacheError(err) {
+		// File is in cache state -- initialize completed pieces.
+		pieces = make([]*piece, numPieces)
+		for i := range pieces {
+			pieces[i] = &piece{status: _complete}
+		}
+		return pieces, numPieces, nil
+	} else if err != nil {
+		return nil, 0, fmt.Errorf("get or set piece metadata: %s", err)
+	}
+
+	pieces = make([]*piece, numPieces)
+	for i, b := range raw {
+		status := pieceStatus(b)
+		if status != _empty && status != _complete {
+			log.Errorf("Unexpected status at %d in piece metadata %s: %d", i, name, status)
+			status = _empty
+		}
+		if status == _complete {
+			numComplete++
+		}
+		pieces[i] = &piece{status: status}
+	}
+	return pieces, numComplete, nil
+}
+
 // LocalTorrent implements a Torrent on top of a FileStore. Allows concurrent
 // writes on distinct pieces, and concurrent reads on all pieces. Behavior is
 // undefined if multiple LocalTorrent instances are backed by the same file
@@ -82,69 +130,29 @@ func (p *piece) markComplete() {
 type LocalTorrent struct {
 	metaInfo    *torlib.MetaInfo
 	store       store.FileStore
-	pieces      []piece
+	pieces      []*piece
 	numComplete *atomic.Int32
 }
 
 // NewLocalTorrent creates a new LocalTorrent.
 func NewLocalTorrent(store store.FileStore, mi *torlib.MetaInfo) (*LocalTorrent, error) {
-
-	// We ignore existing download / metainfo file errors to allow thread
-	// interleaving: if two threads try to create the same torrent at the same
-	// time, said files will be created exactly once and both threads will succeed.
-
-	if err := store.CreateDownloadFile(mi.Name(), mi.Info.Length); err != nil && !os.IsExist(err) {
-		return nil, fmt.Errorf("create download file: %s", err)
-	}
-
-	// Save metainfo in store so we do not need to query tracker everytime
-	miRaw, err := mi.Serialize()
+	pieces, numComplete, err := restorePieces(mi.Name(), store, mi.Info.NumPieces())
 	if err != nil {
-		return nil, fmt.Errorf("serialize metainfo: %s", err)
-	}
-	if _, err := store.SetDownloadOrCacheFileMeta(mi.Name(), []byte(miRaw)); err != nil && !os.IsExist(err) {
-		return nil, fmt.Errorf("write metainfo: %s", err)
+		return nil, fmt.Errorf("restore pieces: %s", err)
 	}
 
-	t := &LocalTorrent{
-		store:       store,
-		metaInfo:    mi,
-		pieces:      make([]piece, mi.Info.NumPieces()),
-		numComplete: atomic.NewInt32(0),
-	}
-
-	t.restorePieces()
-
-	if t.Complete() {
-		if err := t.store.MoveDownloadFileToCache(mi.Name()); err != nil && !os.IsExist(err) {
+	if numComplete == len(pieces) {
+		if err := store.MoveDownloadFileToCache(mi.Name()); err != nil && !os.IsExist(err) {
 			return nil, fmt.Errorf("move file to cache: %s", err)
 		}
 	}
 
-	return t, nil
-}
-
-// restorePieces populates any existing piece state from file store. Must be called
-// before any other read/write operations on t.
-func (t *LocalTorrent) restorePieces() {
-	f, err := t.store.GetDownloadOrCacheFileReader(t.metaInfo.Info.Name)
-	if err != nil {
-		log.Debugf("Restore pieces get file reader error: %s", err)
-		return
-	}
-	defer f.Close()
-
-	buf := make([]byte, t.metaInfo.Info.PieceLength)
-	for i := range t.pieces {
-		p := buf[:t.PieceLength(i)]
-		if _, err := f.ReadAt(p, t.getFileOffset(i)); err != nil {
-			continue
-		}
-		if err := t.verifyPiece(i, p); err != nil {
-			continue
-		}
-		t.markPieceComplete(i)
-	}
+	return &LocalTorrent{
+		store:       store,
+		metaInfo:    mi,
+		pieces:      pieces,
+		numComplete: atomic.NewInt32(int32(numComplete)),
+	}, nil
 }
 
 // Name returns the name of the target file.
@@ -196,8 +204,8 @@ func (t *LocalTorrent) BytesDownloaded() int64 {
 // and false denotes an incomplete piece.
 func (t *LocalTorrent) Bitfield() Bitfield {
 	bitfield := make(Bitfield, len(t.pieces))
-	for i := range t.pieces {
-		if t.pieces[i].complete() {
+	for i, p := range t.pieces {
+		if p.complete() {
 			bitfield[i] = true
 		}
 	}
@@ -209,7 +217,33 @@ func (t *LocalTorrent) String() string {
 	return fmt.Sprintf("torrent(hash=%s, downloaded=%d%%)", t.InfoHash().HexString(), downloaded)
 }
 
-func (t *LocalTorrent) writePiece(data []byte, offset int64) error {
+func (t *LocalTorrent) getPiece(pi int) (*piece, error) {
+	if pi >= len(t.pieces) {
+		return nil, fmt.Errorf("invalid piece index %d: num pieces = %d", pi, len(t.pieces))
+	}
+	return t.pieces[pi], nil
+}
+
+// markPieceComplete must only be called once per piece.
+func (t *LocalTorrent) markPieceComplete(pi int) error {
+	updated, err := t.store.States().Download().SetMetadataAt(
+		t.Name(), store.NewPieceStatus(), _complete.toBytes(), pi)
+	if err != nil {
+		return fmt.Errorf("write piece metadata: %s", err)
+	}
+	if !updated {
+		// This could mean there's another thread with a LocalTorrent instance using
+		// the same file as us.
+		log.Errorf("Invariant violation: piece marked complete twice: piece %d in %s", pi, t.Name())
+	}
+	t.pieces[pi].markComplete()
+	t.numComplete.Inc()
+	return nil
+}
+
+// writePiece writes data to piece pi. If the write succeeds, marks the piece as completed.
+func (t *LocalTorrent) writePiece(data []byte, pi int) error {
+	offset := t.getFileOffset(pi)
 	f, err := t.store.GetDownloadFileReadWriter(t.metaInfo.Info.Name)
 	if err != nil {
 		return fmt.Errorf("cannot get download writer: %s", err)
@@ -218,20 +252,10 @@ func (t *LocalTorrent) writePiece(data []byte, offset int64) error {
 	if _, err := f.WriteAt(data, offset); err != nil {
 		return fmt.Errorf("write error: %s", err)
 	}
-	return nil
-}
-
-func (t *LocalTorrent) getPiece(pi int) (*piece, error) {
-	if pi >= len(t.pieces) {
-		return nil, fmt.Errorf("invalid piece index %d: num pieces = %d", pi, len(t.pieces))
+	if err := t.markPieceComplete(pi); err != nil {
+		return fmt.Errorf("mark piece complete: %s", err)
 	}
-	return &t.pieces[pi], nil
-}
-
-// markPieceComplete must only be called once per piece.
-func (t *LocalTorrent) markPieceComplete(pi int) {
-	t.pieces[pi].markComplete()
-	t.numComplete.Inc()
+	return nil
 }
 
 // WritePiece writes data to piece pi.
@@ -267,14 +291,11 @@ func (t *LocalTorrent) WritePiece(data []byte, pi int) error {
 	// we are the only thread which may write the piece. We do not block other
 	// threads from checking if the piece is writable.
 
-	if err := t.writePiece(data, t.getFileOffset(pi)); err != nil {
+	if err := t.writePiece(data, pi); err != nil {
 		// Allow other threads to write this piece since we mysteriously failed.
 		piece.markEmpty()
 		return fmt.Errorf("write piece: %s", err)
 	}
-
-	// Each piece will be marked complete exactly once.
-	t.markPieceComplete(pi)
 
 	if t.Complete() {
 		// Multiple threads may attempt to move the download file to cache, however
@@ -324,8 +345,8 @@ func (t *LocalTorrent) HasPiece(pi int) bool {
 // MissingPieces returns the indeces of all missing pieces.
 func (t *LocalTorrent) MissingPieces() []int {
 	var missing []int
-	for i := range t.pieces {
-		if !t.pieces[i].complete() {
+	for i, p := range t.pieces {
+		if !p.complete() {
 			missing = append(missing, i)
 		}
 	}
