@@ -29,7 +29,7 @@ func TestUploadAndDownloadMetaInfo(t *testing.T) {
 
 	require.NoError(client.Upload(mi))
 
-	mocks.datastore.EXPECT().GetTorrent(mi.Name()).Return(serialized, nil)
+	mocks.datastore.EXPECT().GetTorrent(mi.Name()).Return(string(serialized), nil)
 
 	result, err := client.Download(mi.Name())
 	require.NoError(err)

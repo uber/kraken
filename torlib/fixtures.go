@@ -65,7 +65,7 @@ type TestTorrentFile struct {
 // CustomTestTorrentFileFixture returns a randomly generated TestTorrentFile
 // of the given size and piece length.
 // TODO(codyg): Move this to storage package.
-func CustomTestTorrentFileFixture(size int, pieceLength int) *TestTorrentFile {
+func CustomTestTorrentFileFixture(size uint64, pieceLength uint64) *TestTorrentFile {
 	f, err := ioutil.TempFile(fixtureTempDir, "torrent_")
 	if err != nil {
 		panic(err)

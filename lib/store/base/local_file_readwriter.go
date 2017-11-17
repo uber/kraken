@@ -1,33 +1,16 @@
 package base
 
-import (
-	"fmt"
-	"os"
-)
+import "os"
 
 // LocalFileReadWriter implements FileReadWriter interface, provides read/write operation on a
 // local file.
 type localFileReadWriter struct {
 	entry      *LocalFileEntry
 	descriptor *os.File
-
-	closed bool
 }
 
 func (readWriter *localFileReadWriter) close() error {
-	readWriter.entry.Lock()
-	defer readWriter.entry.Unlock()
-
-	if readWriter.closed {
-		return fmt.Errorf("already closed")
-	}
-
-	if err := readWriter.descriptor.Close(); err != nil {
-		return err
-	}
-
-	readWriter.closed = true
-	return nil
+	return readWriter.descriptor.Close()
 }
 
 // Close closes underlying OS.File object.

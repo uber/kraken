@@ -44,6 +44,7 @@ type FileEntryInternal interface {
 	WriteMetadataAt(mt MetadataType, b []byte, off int64) (int, error)
 	DeleteMetadata(mt MetadataType) error
 	RangeMetadata(f func(mt MetadataType) error) error
+	GetOrSetMetadata(mt MetadataType, b []byte) ([]byte, error)
 }
 
 // FileEntryInternalFactory initializes FileEntryInternal obj.
@@ -95,6 +96,7 @@ type FileEntry interface {
 	WriteMetadataAt(v Verify, mt MetadataType, b []byte, off int64) (int, error)
 	DeleteMetadata(v Verify, mt MetadataType) error
 	RangeMetadata(v Verify, f func(mt MetadataType) error) error
+	GetOrSetMetadata(v Verify, mt MetadataType, b []byte) ([]byte, error)
 }
 
 // FileEntryFactory initializes FileEntry obj.
@@ -134,6 +136,7 @@ type FileStore interface {
 	WriteFileMetadataAt(fileName string, states []FileState, mt MetadataType, b []byte, off int64) (int, error)
 	DeleteFileMetadata(fileName string, states []FileState, mt MetadataType) error
 	RangeFileMetadata(fileName string, states []FileState, f func(mt MetadataType) error) error
+	GetOrSetFileMetadata(fileName string, states []FileState, mt MetadataType, b []byte) ([]byte, error)
 }
 
 // FileStoreBuilder is used to init new FileStore object.

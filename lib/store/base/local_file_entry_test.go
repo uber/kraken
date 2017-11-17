@@ -303,3 +303,31 @@ func TestDelete(t *testing.T) {
 	_, err = os.Stat(path.Join(storeBundle.state1.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
 	require.NotNil(err)
 }
+
+func TestGetOrSetMetadata(t *testing.T) {
+	require := require.New(t)
+
+	storeBundle, cleanup := fileStoreDefaultFixture()
+	defer cleanup()
+
+	fileBundle, ok := storeBundle.files[storeBundle.state1]
+	if !ok {
+		log.Fatal("file not found in state1")
+	}
+	e := fileBundle.entry
+	v := fileBundle.verify
+
+	m := getMockMetadataOne()
+
+	content := []byte("foo")
+
+	// First GetOrSet should write.
+	b, err := e.GetOrSetMetadata(v, m, content)
+	require.NoError(err)
+	require.Equal(content, b)
+
+	// Second GetOrSet should read.
+	b, err = e.GetOrSetMetadata(v, m, []byte("bar"))
+	require.NoError(err)
+	require.Equal(content, b)
+}

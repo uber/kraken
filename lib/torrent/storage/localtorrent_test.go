@@ -18,6 +18,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func prepareFileStore(fs store.FileStore, mi *torlib.MetaInfo) {
+	fs.CreateDownloadFile(mi.Name(), mi.Info.Length)
+	b, err := mi.Serialize()
+	if err != nil {
+		panic(err)
+	}
+	fs.States().Download().SetMetadata(mi.Name(), store.NewTorrentMeta(), b)
+}
+
 func TestLocalTorrentCreate(t *testing.T) {
 	require := require.New(t)
 
@@ -26,6 +35,8 @@ func TestLocalTorrentCreate(t *testing.T) {
 
 	tf := torlib.CustomTestTorrentFileFixture(7, 2)
 	mi := tf.MetaInfo
+
+	prepareFileStore(fs, mi)
 
 	tor, err := NewLocalTorrent(fs, mi)
 	require.NoError(err)
@@ -55,6 +66,8 @@ func TestLocalTorrentWriteUpdatesBytesDownloadedAndBitfield(t *testing.T) {
 	mi := tf.MetaInfo
 	data := tf.Content
 
+	prepareFileStore(fs, mi)
+
 	tor, err := NewLocalTorrent(fs, mi)
 	require.NoError(err)
 
@@ -73,6 +86,8 @@ func TestLocalTorrentWriteComplete(t *testing.T) {
 	tf := torlib.CustomTestTorrentFileFixture(1, 1)
 	mi := tf.MetaInfo
 	data := tf.Content
+
+	prepareFileStore(fs, mi)
 
 	tor, err := NewLocalTorrent(fs, mi)
 	require.NoError(err)
@@ -99,6 +114,8 @@ func TestLocalTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 	tf := torlib.CustomTestTorrentFileFixture(7, 2)
 	mi := tf.MetaInfo
 	data := tf.Content
+
+	prepareFileStore(fs, mi)
 
 	tor, err := NewLocalTorrent(fs, mi)
 	require.NoError(err)
@@ -139,6 +156,8 @@ func TestLocalTorrentWriteSamePieceConcurrent(t *testing.T) {
 	tf := torlib.CustomTestTorrentFileFixture(16, 1)
 	mi := tf.MetaInfo
 	data := tf.Content
+
+	prepareFileStore(fs, mi)
 
 	tor, err := NewLocalTorrent(fs, mi)
 	require.NoError(err)
@@ -193,26 +212,22 @@ func (w *coordinatedWriter) WriteAt([]byte, int64) (int, error) {
 func TestLocalTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	fs := mockstore.NewMockFileStore(ctrl)
-
 	tf := torlib.CustomTestTorrentFileFixture(1, 1)
 
 	f, cleanup := store.NewMockFileReadWriter([]byte{})
 	defer cleanup()
 
-	fs.EXPECT().CreateDownloadFile(tf.MetaInfo.Name(), tf.MetaInfo.Info.Length).Return(nil)
-	fs.EXPECT().SetDownloadOrCacheFileMeta(tf.MetaInfo.Name(), gomock.Any()).Return(true, nil)
-	fs.EXPECT().GetDownloadOrCacheFileReader(tf.MetaInfo.Name()).Return(f, nil)
+	w := newCoordinatedWriter(f)
+
+	baseFS, cleanup := store.LocalFileStoreFixture()
+	defer cleanup()
+
+	fs := store.MockGetDownloadFileReadWriter(baseFS, w)
+
+	prepareFileStore(fs, tf.MetaInfo)
 
 	tor, err := NewLocalTorrent(fs, tf.MetaInfo)
 	require.NoError(err)
-
-	w := newCoordinatedWriter(f)
-	fs.EXPECT().GetDownloadFileReadWriter(tf.MetaInfo.Info.Name).Return(w, nil).AnyTimes()
-	fs.EXPECT().MoveDownloadFileToCache(tf.MetaInfo.Info.Name).Return(nil)
 
 	done := make(chan struct{})
 	go func() {
@@ -237,30 +252,25 @@ func TestLocalTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	fs := mockstore.NewMockFileStore(ctrl)
+	w := mockstore.NewMockFileReadWriter(ctrl)
+
+	baseFS, cleanup := store.LocalFileStoreFixture()
+	defer cleanup()
+
+	fs := store.MockGetDownloadFileReadWriter(baseFS, w)
 
 	tf := torlib.CustomTestTorrentFileFixture(1, 1)
 
-	// Ensure restorePieces does not restore the piece.
-	r := mockstore.NewMockFileReadWriter(ctrl)
-	fs.EXPECT().CreateDownloadFile(tf.MetaInfo.Name(), tf.MetaInfo.Info.Length).Return(nil)
-	fs.EXPECT().SetDownloadOrCacheFileMeta(tf.MetaInfo.Name(), gomock.Any()).Return(true, nil)
-	fs.EXPECT().GetDownloadOrCacheFileReader(tf.MetaInfo.Info.Name).Return(r, nil)
-	r.EXPECT().ReadAt(gomock.Any(), int64(0)).Return(0, errors.New("read error"))
-	r.EXPECT().Close().Return(nil)
+	prepareFileStore(fs, tf.MetaInfo)
 
-	w := mockstore.NewMockFileReadWriter(ctrl)
 	gomock.InOrder(
 		// First write fails.
-		fs.EXPECT().GetDownloadFileReadWriter(tf.MetaInfo.Info.Name).Return(w, nil),
 		w.EXPECT().WriteAt(tf.Content, int64(0)).Return(0, errors.New("first write error")),
 		w.EXPECT().Close().Return(nil),
 
 		// Second write succeeds.
-		fs.EXPECT().GetDownloadFileReadWriter(tf.MetaInfo.Info.Name).Return(w, nil),
 		w.EXPECT().WriteAt(tf.Content, int64(0)).Return(0, nil),
 		w.EXPECT().Close().Return(nil),
-		fs.EXPECT().MoveDownloadFileToCache(tf.MetaInfo.Info.Name).Return(nil),
 	)
 
 	tor, err := NewLocalTorrent(fs, tf.MetaInfo)
@@ -270,4 +280,54 @@ func TestLocalTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
 	// allowing future writes to succeed.
 	require.Error(tor.WritePiece(tf.Content, 0))
 	require.NoError(tor.WritePiece(tf.Content, 0))
+}
+
+func TestLocalTorrentRestoreCompletedTorrent(t *testing.T) {
+	require := require.New(t)
+
+	fs, cleanup := store.LocalFileStoreFixture()
+	defer cleanup()
+
+	tf := torlib.CustomTestTorrentFileFixture(8, 1)
+
+	prepareFileStore(fs, tf.MetaInfo)
+
+	tor, err := NewLocalTorrent(fs, tf.MetaInfo)
+	require.NoError(err)
+
+	for i, b := range tf.Content {
+		require.NoError(tor.WritePiece([]byte{b}, i))
+	}
+
+	require.True(tor.Complete())
+
+	tor, err = NewLocalTorrent(fs, tf.MetaInfo)
+	require.NoError(err)
+
+	require.True(tor.Complete())
+}
+
+func TestLocalTorrentRestoreInProgressTorrent(t *testing.T) {
+	require := require.New(t)
+
+	fs, cleanup := store.LocalFileStoreFixture()
+	defer cleanup()
+
+	tf := torlib.CustomTestTorrentFileFixture(8, 1)
+
+	prepareFileStore(fs, tf.MetaInfo)
+
+	tor, err := NewLocalTorrent(fs, tf.MetaInfo)
+	require.NoError(err)
+
+	pi := 4
+
+	require.NoError(tor.WritePiece([]byte{tf.Content[pi]}, pi))
+	require.Equal(int64(1), tor.BytesDownloaded())
+
+	tor, err = NewLocalTorrent(fs, tf.MetaInfo)
+	require.NoError(err)
+
+	require.Equal(int64(1), tor.BytesDownloaded())
+	require.Equal(ErrPieceComplete, tor.WritePiece([]byte{tf.Content[pi]}, pi))
 }

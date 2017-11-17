@@ -31,7 +31,7 @@ func TestLocalTorrentArchiveGetTorrent(t *testing.T) {
 	require.NoError(err)
 	miExpected, err := mi.Serialize()
 	require.NoError(err)
-	require.Equal(miExpected, string(miRaw))
+	require.Equal(string(miExpected), string(miRaw))
 
 	// Get again reads from disk.
 	tor, err = archive.GetTorrent(mi.Name())

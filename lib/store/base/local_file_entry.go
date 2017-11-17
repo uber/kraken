@@ -262,3 +262,13 @@ func (entry *LocalFileEntry) RangeMetadata(v Verify, f func(mt MetadataType) err
 	}
 	return entry.fi.RangeMetadata(f)
 }
+
+// GetOrSetMetadata see LocalFileEntryInternal.
+func (entry *LocalFileEntry) GetOrSetMetadata(v Verify, mt MetadataType, b []byte) ([]byte, error) {
+	entry.Lock()
+	defer entry.Unlock()
+	if err := v(entry); err != nil {
+		return nil, err
+	}
+	return entry.fi.GetOrSetMetadata(mt, b)
+}

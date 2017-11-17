@@ -9,6 +9,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
+	"code.uber.internal/infra/kraken/utils/memsize"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
@@ -122,7 +123,7 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 	peers := mocks.newPeers(10, config)
 
 	pieceLength := 256
-	tf := torlib.CustomTestTorrentFileFixture(len(peers)*pieceLength, pieceLength)
+	tf := torlib.CustomTestTorrentFileFixture(uint64(len(peers)*pieceLength), uint64(pieceLength))
 
 	mocks.metaInfoClient.EXPECT().Download(tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(len(peers))
 
@@ -433,4 +434,61 @@ func TestCancelTorrent(t *testing.T) {
 	<-done
 	waitForConnRemoved(t, p1.scheduler, p2.pctx.PeerID, h)
 	waitForTorrentRemoved(t, p1.scheduler, h)
+}
+
+// BENCHMARKS
+
+// NOTE: You'll need to increase your fd limit to around 4096 to run this benchmark.
+// You can do this with `ulimit -n 4096`.
+func BenchmarkPieceUploadingAndDownloading(b *testing.B) {
+	require := require.New(b)
+
+	config := configFixture()
+	config.AnnounceInterval = 50 * time.Millisecond
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+
+		b.StopTimer()
+
+		mocks, cleanup := newTestMocks(b)
+		defer func() {
+			if err := recover(); err != nil {
+				cleanup()
+				panic(err)
+			}
+		}()
+
+		seeder := mocks.newPeer(config)
+
+		var tfs []*torlib.TestTorrentFile
+		for i := 0; i < 10; i++ {
+			tf := torlib.CustomTestTorrentFileFixture(50*memsize.MB, 128*memsize.KB)
+			tfs = append(tfs, tf)
+
+			mocks.metaInfoClient.EXPECT().Download(tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).AnyTimes()
+
+			seeder.writeTorrent(tf)
+			require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo.Name()))
+		}
+
+		peers := mocks.newPeers(10, config)
+
+		b.StartTimer()
+		var wg sync.WaitGroup
+		for _, p := range peers {
+			for _, tf := range tfs {
+				wg.Add(1)
+				go func(p *testPeer, tf *torlib.TestTorrentFile) {
+					defer wg.Done()
+					require.NoError(<-p.scheduler.AddTorrent(tf.MetaInfo.Name()))
+				}(p, tf)
+			}
+		}
+		wg.Wait()
+		b.StopTimer()
+
+		cleanup()
+	}
 }
