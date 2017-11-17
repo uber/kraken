@@ -10,7 +10,8 @@ import (
 
 func init() {
 	register("statsd", newStatsdScope)
-	register("default", newDefaultScope)
+	register("disabled", newDisabledScope)
+	register("m3", newM3Scope)
 }
 
 var _scopeFactories = make(map[string]scopeFactory)
@@ -19,16 +20,16 @@ type scopeFactory func(config Config) (tally.Scope, io.Closer, error)
 
 func register(name string, f scopeFactory) {
 	if _, ok := _scopeFactories[name]; ok {
-		log.Fatalf("Scope factory %q is already registered", name)
+		log.Fatalf("Metrics reporter factory %q is already registered", name)
 	}
 	_scopeFactories[name] = f
 }
 
-// New creates a new metrics Scope from config. If no backend is configured, a default
-// scope is used.
+// New creates a new metrics Scope from config. If no backend is configured, metrics
+// are disabled.
 func New(config Config) (tally.Scope, io.Closer, error) {
 	if config.Backend == "" {
-		config.Backend = "default"
+		config.Backend = "disabled"
 	}
 	f, ok := _scopeFactories[config.Backend]
 	if !ok || f == nil {

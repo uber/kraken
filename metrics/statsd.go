@@ -21,12 +21,11 @@ func newStatsdScope(config Config) (tally.Scope, io.Closer, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	scope, closer := tally.NewRootScope(tally.ScopeOptions{
-		Tags: map[string]string{},
-		Reporter: tallystatsd.NewReporter(statter, tallystatsd.Options{
-			SampleRate: sampleRate,
-		}),
+	r := tallystatsd.NewReporter(statter, tallystatsd.Options{
+		SampleRate: sampleRate,
+	})
+	s, c := tally.NewRootScope(tally.ScopeOptions{
+		Reporter: r,
 	}, time.Second)
-
-	return scope, closer, nil
+	return s, c, nil
 }
