@@ -60,9 +60,9 @@ bench:
 	$(ECHO_V)cd $(FAUXROOT); $(TEST_ENV)	\
 		$(GO) test -bench=. -run=$(TEST_DIRS)
 
-test:: redis mysql
+test:: redis run_mysql
 
-jenkins:: redis mysql
+jenkins:: redis run_mysql
 
 mockgen = GOPATH=$(OLDGOPATH) $(GLIDE_EXEC) -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
 
@@ -140,6 +140,9 @@ redis:
 
 .PHONY: mysql
 mysql:
+	docker build -t kraken-mysql:dev -f docker/mysql/Dockerfile ./docker/mysql
+
+run_mysql: mysql
 	-docker stop kraken-mysql
 	-docker rm kraken-mysql
 	docker run \
@@ -150,7 +153,7 @@ mysql:
 		-e MYSQL_PASSWORD=uber \
 		-e MYSQL_DATABASE=kraken \
 		-v `pwd`/docker/mysql/my.cnf:/etc/my.cnf \
-		-d percona/percona-server:5.6.28
+		-d kraken-mysql:dev
 	@echo -n "waiting for mysql to start"
 	@until docker exec kraken-mysql mysql -u uber --password=uber -e "use kraken" &> /dev/null; \
 		do echo -n "."; sleep 1; done
@@ -162,7 +165,7 @@ tracker:
 	GOOS=linux GOARCH=amd64 make tracker/tracker
 	docker build -t kraken-tracker:dev -f docker/tracker/Dockerfile ./
 
-run_tracker: tracker mysql redis
+run_tracker: tracker run_mysql redis
 	-docker stop kraken-tracker
 	-docker rm kraken-tracker
 	docker run -d \
