@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"code.uber.internal/infra/kraken/testutils"
+	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
 const (
@@ -27,7 +27,7 @@ type mockFileState struct {
 func (state mockFileState) GetDirectory() string { return state.dir }
 
 func fileStatesFixture() (state1, state2, state3 mockFileState, run func()) {
-	cleanup := &testutils.Cleanup{}
+	cleanup := &testutil.Cleanup{}
 	defer cleanup.Recover()
 
 	root, err := ioutil.TempDir("/tmp", "store")
@@ -177,7 +177,7 @@ func fileStoreDefaultFixture() (*fileStoreTestBundle, func()) {
 
 func newFileStoreFixture(createStore func() *LocalFileStore) (*fileStoreTestBundle, func()) {
 	store := createStore()
-	cleanup := &testutils.Cleanup{}
+	cleanup := &testutil.Cleanup{}
 	defer cleanup.Recover()
 
 	state1, state2, state3, f := fileStatesFixture()

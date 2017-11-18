@@ -17,9 +17,9 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/testutils"
 	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/stringset"
+	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
 const (
@@ -93,7 +93,7 @@ func startServer(
 	if err != nil {
 		panic(err)
 	}
-	return testutils.StartServer(s.Handler())
+	return testutil.StartServer(s.Handler())
 }
 
 // testServer is a convenience wrapper around the underlying components of a

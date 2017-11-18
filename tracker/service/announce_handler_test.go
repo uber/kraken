@@ -10,10 +10,10 @@ import (
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/testutils"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/errutil"
+	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
 	bencode "github.com/jackpal/bencode-go"
@@ -71,7 +71,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString()).Return([]*torlib.PeerInfo{peerTo}, nil)
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
-		testutils.RequireStatus(t, response, 200)
+		testutil.RequireStatus(t, response, 200)
 		announceResponse := torlib.AnnouncerResponse{}
 		bencode.Unmarshal(response.Body, &announceResponse)
 		assert.Equal(t, announceResponse.Interval, int64(5))
@@ -99,7 +99,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
-		testutils.RequireStatus(t, resp, 200)
+		testutil.RequireStatus(t, resp, 200)
 		ar := torlib.AnnouncerResponse{}
 		bencode.Unmarshal(resp.Body, &ar)
 		origin.Origin = false
@@ -137,7 +137,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks.datastore.EXPECT().UpdateOrigins(infoHash, []*torlib.PeerInfo{origin}).Return(nil)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
-		testutils.RequireStatus(t, resp, 200)
+		testutil.RequireStatus(t, resp, 200)
 		ar := torlib.AnnouncerResponse{}
 		bencode.Unmarshal(resp.Body, &ar)
 		origin.Origin = false
@@ -176,7 +176,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks.datastore.EXPECT().GetOrigins(infoHash).Return(nil, storageErr)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
-		testutils.RequireStatus(t, resp, 200)
+		testutil.RequireStatus(t, resp, 200)
 		ar := torlib.AnnouncerResponse{}
 		bencode.Unmarshal(resp.Body, &ar)
 		origin.Origin = false
@@ -208,7 +208,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks.datastore.EXPECT().GetOrigins(infoHash).Return(nil, storage.ErrNoOrigins)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
-		testutils.RequireStatus(t, resp, 200)
+		testutil.RequireStatus(t, resp, 200)
 		ar := torlib.AnnouncerResponse{}
 		bencode.Unmarshal(resp.Body, &ar)
 		require.Equal([]torlib.PeerInfo{*otherPeer}, ar.Peers)

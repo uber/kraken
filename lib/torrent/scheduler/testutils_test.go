@@ -24,7 +24,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/mocks/lib/torrent/mockstorage"
 	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
-	"code.uber.internal/infra/kraken/testutils"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	trackerservice "code.uber.internal/infra/kraken/tracker/service"
@@ -84,11 +83,11 @@ type testMocks struct {
 	ctrl           *gomock.Controller
 	metaInfoClient *mockmetainfoclient.MockClient
 	trackerAddr    string
-	cleanup        *testutils.Cleanup
+	cleanup        *testutil.Cleanup
 }
 
 func newTestMocks(t gomock.TestReporter) (*testMocks, func()) {
-	var cleanup testutils.Cleanup
+	var cleanup testutil.Cleanup
 
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
@@ -111,11 +110,11 @@ type testPeer struct {
 	stats          tally.TestScope
 	testProducer   *networkevent.TestProducer
 	fs             store.FileStore
-	cleanup        *testutils.Cleanup
+	cleanup        *testutil.Cleanup
 }
 
 func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
-	var cleanup testutils.Cleanup
+	var cleanup testutil.Cleanup
 	m.cleanup.Add(cleanup.Run)
 
 	fs, c := store.LocalFileStoreFixture()
@@ -296,7 +295,7 @@ func (n noopDeadline) SetReadDeadline(t time.Time) error  { return nil }
 func (n noopDeadline) SetWriteDeadline(t time.Time) error { return nil }
 
 func connFixture(t *testing.T, config ConnConfig, maxPieceLength int) (*conn, func()) {
-	var cleanup testutils.Cleanup
+	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
 	ctrl := gomock.NewController(t)

@@ -5,7 +5,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
-	"code.uber.internal/infra/kraken/testutils"
+	"code.uber.internal/infra/kraken/utils/testutil"
 	"github.com/golang/mock/gomock"
 )
 
@@ -15,7 +15,7 @@ type torrentArchiveMocks struct {
 }
 
 func newTorrentArchiveMocks(t *testing.T) (*torrentArchiveMocks, func()) {
-	var cleanup testutils.Cleanup
+	var cleanup testutil.Cleanup
 
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)

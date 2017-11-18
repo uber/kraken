@@ -8,9 +8,9 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/pressly/chi"
 
-	"code.uber.internal/infra/kraken/testutils"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
+	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
 type testPeerStore struct {
@@ -83,5 +83,5 @@ func TestAnnouncer() (addr string, stop func()) {
 	r := chi.NewRouter()
 	r.Get("/announce", announce.Get)
 
-	return testutils.StartServer(r)
+	return testutil.StartServer(r)
 }
