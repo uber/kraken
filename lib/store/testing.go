@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"code.uber.internal/infra/kraken/lib/store/base"
-	"code.uber.internal/infra/kraken/testutils"
+	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
 // MockFileReadWriter is a mock base.FileReadWriter that is backed by a
@@ -29,7 +29,7 @@ var _ base.FileReadWriter = (*MockFileReadWriter)(nil)
 
 // NewMockFileReadWriter returns a new MockFileReadWriter and a cleanup function.
 func NewMockFileReadWriter(content []byte) (*MockFileReadWriter, func()) {
-	cleanup := new(testutils.Cleanup)
+	cleanup := new(testutil.Cleanup)
 	defer cleanup.Recover()
 
 	tmp, err := ioutil.TempFile("", "")

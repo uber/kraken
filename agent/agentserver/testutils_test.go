@@ -7,17 +7,17 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/torrent"
-	"code.uber.internal/infra/kraken/testutils"
+	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
 type serverMocks struct {
 	fs            store.FileStore
 	torrentClient *mocktorrent.MockClient
-	cleanup       *testutils.Cleanup
+	cleanup       *testutil.Cleanup
 }
 
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
-	var cleanup testutils.Cleanup
+	var cleanup testutil.Cleanup
 
 	fs, c := store.LocalFileStoreFixture()
 	cleanup.Add(c)
@@ -32,7 +32,7 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 
 func (m *serverMocks) startServer() string {
 	s := New(Config{}, m.fs, m.torrentClient)
-	addr, stop := testutils.StartServer(s.Handler())
+	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
 	return addr
 }
