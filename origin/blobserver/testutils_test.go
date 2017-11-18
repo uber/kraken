@@ -5,8 +5,6 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
-	"net"
-	"net/http"
 	"testing"
 	"time"
 
@@ -19,6 +17,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
+	"code.uber.internal/infra/kraken/testutils"
 	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/stringset"
 )
@@ -94,13 +93,7 @@ func startServer(
 	if err != nil {
 		panic(err)
 	}
-	l, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		panic(err)
-	}
-	hs := &http.Server{Handler: s.Handler()}
-	go hs.Serve(l)
-	return l.Addr().String(), func() { hs.Close() }
+	return testutils.StartServer(s.Handler())
 }
 
 // testServer is a convenience wrapper around the underlying components of a
