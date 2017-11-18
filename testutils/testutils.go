@@ -2,6 +2,7 @@ package testutils
 
 import (
 	"io/ioutil"
+	"net"
 	"net/http"
 	"testing"
 )
@@ -53,4 +54,16 @@ func RequireStatus(t *testing.T, r *http.Response, status int) {
 			"Expected status %d, got %d. Body: %s",
 			status, r.StatusCode, string(b))
 	}
+}
+
+// StartServer starts an HTTP server with h. Returns address the server is
+// listening on, and a closure for stopping the server.
+func StartServer(h http.Handler) (addr string, stop func()) {
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		panic(err)
+	}
+	s := &http.Server{Handler: h}
+	go s.Serve(l)
+	return l.Addr().String(), func() { s.Close() }
 }

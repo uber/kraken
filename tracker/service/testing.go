@@ -2,14 +2,13 @@ package service
 
 import (
 	"errors"
-	"net"
-	"net/http"
 	"sync"
 	"time"
 
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/pressly/chi"
 
+	"code.uber.internal/infra/kraken/testutils"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 )
@@ -84,12 +83,5 @@ func TestAnnouncer() (addr string, stop func()) {
 	r := chi.NewRouter()
 	r.Get("/announce", announce.Get)
 
-	l, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		log.Fatalf("Failed to create TestAnnouncer listener: %s", err)
-	}
-	server := &http.Server{Handler: r}
-	go server.Serve(l)
-
-	return l.Addr().String(), func() { server.Close() }
+	return testutils.StartServer(r)
 }

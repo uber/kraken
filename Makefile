@@ -89,6 +89,12 @@ mocks:
 		-destination=mocks/lib/store/mockstore.go \
 		-package mockstore \
 		code.uber.internal/infra/kraken/lib/store FileStore,FileReadWriter
+	
+	mkdir -p mocks/lib/torrent
+	$(mockgen) \
+		-destination=mocks/lib/torrent/mocktorrent.go \
+		-package mocktorrent \
+		code.uber.internal/infra/kraken/lib/torrent Client
 
 	mkdir -p mocks/origin/blobclient
 	$(mockgen) \

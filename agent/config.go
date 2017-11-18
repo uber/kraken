@@ -3,6 +3,7 @@ package main
 import (
 	"code.uber.internal/go-common.git/x/log"
 
+	"code.uber.internal/infra/kraken/agent/agentserver"
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -12,12 +13,13 @@ import (
 
 // Config defines agent configuration.
 type Config struct {
-	Logging  log.Configuration     `yaml:"logging"`
-	Metrics  metrics.Config        `yaml:"metrics"`
-	Store    store.Config          `yaml:"store"`
-	Registry dockerregistry.Config `yaml:"registry"`
-	Torrent  torrent.Config        `yaml:"torrent"`
-	Tracker  TrackerConfig         `yaml:"tracker"`
+	Logging     log.Configuration     `yaml:"logging"`
+	Metrics     metrics.Config        `yaml:"metrics"`
+	Store       store.Config          `yaml:"store"`
+	Registry    dockerregistry.Config `yaml:"registry"`
+	Torrent     torrent.Config        `yaml:"torrent"`
+	Tracker     TrackerConfig         `yaml:"tracker"`
+	AgentServer agentserver.Config    `yaml:"agentserver"`
 }
 
 // TrackerConfig defines configuration for agent's dependency on tracker.
