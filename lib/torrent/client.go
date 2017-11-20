@@ -21,7 +21,7 @@ import (
 )
 
 const requestTimeout = 60 * time.Second
-const downloadTimeout = 120 * time.Second
+const downloadTimeout = 10 * time.Minute
 
 // Client TODO
 type Client interface {
@@ -85,23 +85,23 @@ func (c *SchedulerClient) Close() error {
 
 // DownloadTorrent downloads a torrent given torrent name
 func (c *SchedulerClient) DownloadTorrent(name string) (io.ReadCloser, error) {
-	stopwatch := c.stats.SubScope("torrent").SubScope(name).Timer("download_time").Start()
-
 	if !c.config.Enabled {
 		return nil, errors.New("torrent not enabled")
 	}
 
+	stopwatch := c.stats.Timer("download_torrent_time").Start()
 	select {
 	case err := <-c.scheduler.AddTorrent(name):
 		if err != nil {
+			c.stats.Counter("download_torrent_errors").Inc(1)
 			return nil, fmt.Errorf("failed to schedule torrent: %s", err)
 		}
+		stopwatch.Stop()
 	case <-time.After(downloadTimeout):
+		c.stats.Counter("download_torrent_timeouts").Inc(1)
 		c.scheduler.CancelTorrent(name)
 		return nil, fmt.Errorf("scheduled torrent timed out after %.2f seconds", downloadTimeout.Seconds())
 	}
-
-	stopwatch.Stop()
 	return c.store.GetCacheFileReader(name)
 }
 
