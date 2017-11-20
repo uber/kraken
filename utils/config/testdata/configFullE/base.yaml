@@ -1,0 +1,5 @@
+listen_address: configFullEBase:01
+buffer_space: 4000
+servers:
+  - configFullEBase:01
+  - configFullEBase:02

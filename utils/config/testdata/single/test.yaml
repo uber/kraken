@@ -1,0 +1,5 @@
+extends: base.yaml
+buffer_space: 9000
+servers:
+  - 127.0.0.1:01
+  - 127.0.0.1:02
