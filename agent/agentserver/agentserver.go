@@ -29,6 +29,8 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/blobs/:name", s.getBlobHandler)
 
+	r.Get("/health", s.healthHandler)
+
 	return r
 }
 
@@ -55,4 +57,8 @@ func (s *Server) getBlobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	io.WriteString(w, filepath)
+}
+
+func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
+	io.WriteString(w, "OK")
 }
