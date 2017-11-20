@@ -34,3 +34,15 @@ func TestGetBlobHandler(t *testing.T) {
 	require.NoError(err)
 	require.Equal(blob, result)
 }
+
+func TestHealthHandler(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr := mocks.startServer()
+
+	_, err := http.Get(fmt.Sprintf("http://%s/health", addr))
+	require.NoError(err)
+}
