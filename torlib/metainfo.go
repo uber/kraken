@@ -13,13 +13,12 @@ type AnnounceList [][]string
 
 // MetaInfo contains torrent metadata
 type MetaInfo struct {
-	Info         Info         `bencode:"info"`
-	Announce     string       `bencode:"announce"`
-	AnnounceList AnnounceList `bencode:"announce-list,omitempty"`
-	CreationDate int64        `bencode:"creation date,omitempty"`
-	Comment      string       `bencode:"comment,omitempty"`
-	CreatedBy    string       `bencode:"created by,omitempty"`
-	Encoding     string       `bencode:"encoding,omitempty"`
+	Info         Info
+	Announce     string
+	AnnounceList AnnounceList
+	CreationDate int64
+	Comment      string
+	CreatedBy    string
 
 	// infohash is computed by MetaInfo.Info
 	// we store a copy of the hash here to avoid unnecessary rehash
@@ -45,8 +44,7 @@ func NewMetaInfoFromBlob(
 	blob io.Reader,
 	pieceLength int64,
 	comment string,
-	createdBy string,
-	encoding string) (*MetaInfo, error) {
+	createdBy string) (*MetaInfo, error) {
 
 	info, err := NewInfoFromBlob(name, blob, pieceLength)
 	if err != nil {
@@ -56,7 +54,6 @@ func NewMetaInfoFromBlob(
 		Info:         info,
 		CreationDate: time.Now().Unix(),
 		CreatedBy:    createdBy,
-		Encoding:     encoding,
 	}
 	if err := mi.initialize(); err != nil {
 		return nil, err

@@ -1,8 +1,6 @@
 package storage
 
 import (
-	"bytes"
-	"crypto/sha1"
 	"errors"
 	"fmt"
 	"os"
@@ -355,17 +353,11 @@ func (t *LocalTorrent) MissingPieces() []int {
 
 // verifyPiece ensures data for pi is valid.
 func (t *LocalTorrent) verifyPiece(pi int, data []byte) error {
-	expectedHash, err := t.metaInfo.Info.PieceHash(pi)
-	if err != nil {
-		return fmt.Errorf("lookup piece hash: %s", err)
-	}
-
-	h := sha1.New()
+	h := torlib.PieceHash()
 	h.Write(data)
-	b := h.Sum(nil)
-
-	if bytes.Compare(b, expectedHash) != 0 {
-		return errors.New("unexpected piece hash")
+	sum := h.Sum32()
+	if sum != t.metaInfo.Info.PieceSums[pi] {
+		return errors.New("invalid piece sum")
 	}
 	return nil
 }
