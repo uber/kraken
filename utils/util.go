@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/netutil"
-
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/schema2"
 )
@@ -44,16 +42,6 @@ func GetIP(host string) (net.IP, error) {
 		return ip, nil
 	}
 	return nil, fmt.Errorf("Error getting ip for %s", host)
-}
-
-// GetLocalIP returns the first non loopback intreface's IP
-func GetLocalIP() (string, error) {
-	ip, err := netutil.ChooseBindAddress(net.ParseIP("0.0.0.0"))
-	if err != nil {
-		return "", err
-	}
-
-	return ip.String(), err
 }
 
 // AddrIP extracts IP address from a addr:port string
