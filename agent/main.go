@@ -88,11 +88,15 @@ func main() {
 	}
 
 	log.Info("Starting registry...")
-	go log.Fatal(registry.ListenAndServe())
+	go func() {
+		log.Fatal(registry.ListenAndServe())
+	}()
 
 	addr := fmt.Sprintf(":%d", *agentServerPort)
-	log.Info("Starting agent server on %s", addr)
-	go log.Fatal(http.ListenAndServe(addr, agentServer.Handler()))
+	log.Infof("Starting agent server on %s", addr)
+	go func() {
+		log.Fatal(http.ListenAndServe(addr, agentServer.Handler()))
+	}()
 
 	select {}
 }
