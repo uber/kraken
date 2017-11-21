@@ -57,14 +57,16 @@ func main() {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
 
-	pctx, err := peercontext.NewOrigin(
-		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *peerIP, *peerPort)
-	if err != nil {
-		log.Fatalf("Failed to create peer context: %s", err)
-	}
+	var pctx peercontext.PeerContext
 
 	// Initialize and start P2P scheduler client:
 	if config.Torrent.Enabled {
+		pctx, err = peercontext.NewOrigin(
+			peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *peerIP, *peerPort)
+		if err != nil {
+			log.Fatalf("Failed to create peer context: %s", err)
+		}
+
 		trackers, err := serverset.NewRoundRobin(config.Tracker.RoundRobin)
 		if err != nil {
 			log.Fatalf("Error creating tracker round robin: %s", err)
