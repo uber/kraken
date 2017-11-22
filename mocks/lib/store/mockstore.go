@@ -5,12 +5,13 @@
 package mockstore
 
 import (
-	store "code.uber.internal/infra/kraken/lib/store"
-	base "code.uber.internal/infra/kraken/lib/store/base"
-	gomock "github.com/golang/mock/gomock"
 	io "io"
 	os "os"
 	reflect "reflect"
+
+	store "code.uber.internal/infra/kraken/lib/store"
+	base "code.uber.internal/infra/kraken/lib/store/base"
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockFileStore is a mock of FileStore interface
@@ -94,18 +95,6 @@ func (m *MockFileStore) DeleteAllTrashFiles() error {
 // DeleteAllTrashFiles indicates an expected call of DeleteAllTrashFiles
 func (mr *MockFileStoreMockRecorder) DeleteAllTrashFiles() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAllTrashFiles", reflect.TypeOf((*MockFileStore)(nil).DeleteAllTrashFiles))
-}
-
-// DeleteUploadFileStartedAt mocks base method
-func (m *MockFileStore) DeleteUploadFileStartedAt(arg0 string) error {
-	ret := m.ctrl.Call(m, "DeleteUploadFileStartedAt", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteUploadFileStartedAt indicates an expected call of DeleteUploadFileStartedAt
-func (mr *MockFileStoreMockRecorder) DeleteUploadFileStartedAt(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUploadFileStartedAt", reflect.TypeOf((*MockFileStore)(nil).DeleteUploadFileStartedAt), arg0)
 }
 
 // DerefCacheFile mocks base method
@@ -209,19 +198,6 @@ func (m *MockFileStore) GetDownloadOrCacheFileReader(arg0 string) (base.FileRead
 // GetDownloadOrCacheFileReader indicates an expected call of GetDownloadOrCacheFileReader
 func (mr *MockFileStoreMockRecorder) GetDownloadOrCacheFileReader(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDownloadOrCacheFileReader", reflect.TypeOf((*MockFileStore)(nil).GetDownloadOrCacheFileReader), arg0)
-}
-
-// GetFilePieceStatus mocks base method
-func (m *MockFileStore) GetFilePieceStatus(arg0 string, arg1, arg2 int) ([]byte, error) {
-	ret := m.ctrl.Call(m, "GetFilePieceStatus", arg0, arg1, arg2)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetFilePieceStatus indicates an expected call of GetFilePieceStatus
-func (mr *MockFileStoreMockRecorder) GetFilePieceStatus(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFilePieceStatus", reflect.TypeOf((*MockFileStore)(nil).GetFilePieceStatus), arg0, arg1, arg2)
 }
 
 // GetUploadFileHashState mocks base method
@@ -448,16 +424,6 @@ func (m *MockFileStore) States() *store.StateAcceptor {
 // States indicates an expected call of States
 func (mr *MockFileStoreMockRecorder) States() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "States", reflect.TypeOf((*MockFileStore)(nil).States))
-}
-
-// Stop mocks base method
-func (m *MockFileStore) Stop() {
-	m.ctrl.Call(m, "Stop")
-}
-
-// Stop indicates an expected call of Stop
-func (mr *MockFileStoreMockRecorder) Stop() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockFileStore)(nil).Stop))
 }
 
 // WriteDownloadFilePieceStatus mocks base method
