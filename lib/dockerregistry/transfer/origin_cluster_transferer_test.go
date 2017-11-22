@@ -3,7 +3,6 @@ package transfer
 import (
 	"bytes"
 	"errors"
-	"io"
 	"io/ioutil"
 	"testing"
 	"time"
@@ -20,8 +19,8 @@ import (
 func TestDownloadSuccess(t *testing.T) {
 	require := require.New(t)
 
-	mocks := newOrginClusterTransfererMocks(t)
-	defer mocks.ctrl.Finish()
+	mocks, cleanup := newOrginClusterTransfererMocks(t)
+	defer cleanup()
 
 	transferer := mocks.newTransferer()
 
@@ -41,8 +40,9 @@ func TestDownloadSuccess(t *testing.T) {
 
 func TestDownloadFailure(t *testing.T) {
 	require := require.New(t)
-	mocks := newOrginClusterTransfererMocks(t)
-	defer mocks.ctrl.Finish()
+
+	mocks, cleanup := newOrginClusterTransfererMocks(t)
+	defer cleanup()
 
 	transferer := mocks.newTransferer()
 
@@ -55,15 +55,6 @@ func TestDownloadFailure(t *testing.T) {
 
 	_, err := transferer.Download(d.Hex())
 	require.Error(err)
-}
-
-type bufferCloner struct {
-	buf []byte
-}
-
-func (c *bufferCloner) Clone() (io.ReadCloser, error) {
-	// Create a new reader for each blob access.
-	return ioutil.NopCloser(bytes.NewBuffer(c.buf)), nil
 }
 
 func TestUploadSuccess(t *testing.T) {
@@ -86,8 +77,8 @@ func TestUploadSuccess(t *testing.T) {
 		t.Run(test.description, func(t *testing.T) {
 			require := require.New(t)
 
-			mocks := newOrginClusterTransfererMocks(t)
-			defer mocks.ctrl.Finish()
+			mocks, cleanup := newOrginClusterTransfererMocks(t)
+			defer cleanup()
 
 			transferer := mocks.newTransferer()
 
@@ -103,7 +94,7 @@ func TestUploadSuccess(t *testing.T) {
 
 			errc := make(chan error)
 			go func() {
-				errc <- transferer.Upload(d.Hex(), &bufferCloner{blob}, size)
+				errc <- transferer.Upload(d.Hex(), store.TestFileReaderCloner(blob), size)
 			}()
 
 			select {
@@ -119,8 +110,8 @@ func TestUploadSuccess(t *testing.T) {
 func TestUploadFailureMajority(t *testing.T) {
 	require := require.New(t)
 
-	mocks := newOrginClusterTransfererMocks(t)
-	defer mocks.ctrl.Finish()
+	mocks, cleanup := newOrginClusterTransfererMocks(t)
+	defer cleanup()
 
 	transferer := mocks.newTransferer()
 
@@ -136,14 +127,14 @@ func TestUploadFailureMajority(t *testing.T) {
 	clients[1].EXPECT().PushBlob(d, gomock.Any(), size).Return(errors.New("some error"))
 	clients[2].EXPECT().PushBlob(d, gomock.Any(), size).Return(nil)
 
-	require.Error(transferer.Upload(d.Hex(), &bufferCloner{blob}, size))
+	require.Error(transferer.Upload(d.Hex(), store.TestFileReaderCloner(blob), size))
 }
 
 func TestGetManifest(t *testing.T) {
 	require := require.New(t)
 
-	mocks := newOrginClusterTransfererMocks(t)
-	defer mocks.ctrl.Finish()
+	mocks, cleanup := newOrginClusterTransfererMocks(t)
+	defer cleanup()
 
 	transferer := mocks.newTransferer()
 
@@ -166,20 +157,17 @@ func TestGetManifest(t *testing.T) {
 func TestPostManifest(t *testing.T) {
 	require := require.New(t)
 
-	mocks := newOrginClusterTransfererMocks(t)
-	defer mocks.ctrl.Finish()
+	mocks, cleanup := newOrginClusterTransfererMocks(t)
+	defer cleanup()
 
 	transferer := mocks.newTransferer()
 
 	repo := "testrepo"
 	tag := "testtag"
 
-	_, d, cleanup := mockManifestReadWriter()
-	defer cleanup()
-
 	r, cleanup := store.NewMockFileReadWriter([]byte{})
 	defer cleanup()
 
-	mocks.manifestClient.EXPECT().PostManifest(repo, tag, d.Hex(), r).Return(nil)
-	require.NoError(transferer.PostManifest(repo, tag, d.Hex(), r))
+	mocks.manifestClient.EXPECT().PostManifest(repo, tag, r).Return(nil)
+	require.NoError(transferer.PostManifest(repo, tag, r))
 }

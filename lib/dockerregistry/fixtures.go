@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	"github.com/uber-go/tally"
 )
@@ -17,16 +16,16 @@ var errMockError = errors.New("MockTorrent")
 
 type mockImageTransferer struct{}
 
-func (mc *mockImageTransferer) Download(digest string) (io.ReadCloser, error) {
+func (mc *mockImageTransferer) Download(name string) (store.FileReader, error) {
 	return nil, errMockError
 }
-func (mc *mockImageTransferer) Upload(digest string, blobIO transfer.IOCloner, size int64) error {
+func (mc *mockImageTransferer) Upload(name string, blobCloner store.FileReaderCloner, size int64) error {
 	return nil
 }
-func (mc *mockImageTransferer) GetManifest(repo, tag string) (readCloser io.ReadCloser, err error) {
+func (mc *mockImageTransferer) GetManifest(repo, tag string) (io.ReadCloser, error) {
 	return nil, errMockError
 }
-func (mc *mockImageTransferer) PostManifest(repo, tag, digest string, reader io.Reader) error {
+func (mc *mockImageTransferer) PostManifest(repo, tag string, manifest io.Reader) error {
 	return nil
 }
 func (mc *mockImageTransferer) Close() error { return nil }

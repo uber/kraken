@@ -282,7 +282,7 @@ func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 	defer reader.Close()
 
 	// Save manifest in tracker
-	err = t.transferer.PostManifest(repo, tag, manifest, reader)
+	err = t.transferer.PostManifest(repo, tag, reader)
 	if err != nil {
 		log.Errorf("CreateTag: cannot post manifest for %s:%s, error: %s", repo, tag, err)
 		t.metrics.Counter(createFailureCounter).Inc(1)

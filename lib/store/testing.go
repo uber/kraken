@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"io/ioutil"
 	"os"
 
@@ -68,4 +69,30 @@ func (s *mockGetDownloadFileReadWriterStore) GetDownloadFileReadWriter(name stri
 // the GetDownloadFileReadWriter method to return f.
 func MockGetDownloadFileReadWriter(baseFS FileStore, f FileReadWriter) FileStore {
 	return &mockGetDownloadFileReadWriterStore{baseFS, f}
+}
+
+type testFileReader struct {
+	*bytes.Reader
+}
+
+func (b *testFileReader) Close() error {
+	return nil
+}
+
+// TestFileReader returns an in-memory FileReader backed by b.
+func TestFileReader(b []byte) FileReader {
+	return &testFileReader{bytes.NewReader(b)}
+}
+
+type testFileReaderCloner struct {
+	b []byte
+}
+
+func (c *testFileReaderCloner) Clone() (FileReader, error) {
+	return TestFileReader(c.b), nil
+}
+
+// TestFileReaderCloner returns a Cloner which returns in-memory FileReaders backed by b.
+func TestFileReaderCloner(b []byte) FileReaderCloner {
+	return &testFileReaderCloner{b}
 }

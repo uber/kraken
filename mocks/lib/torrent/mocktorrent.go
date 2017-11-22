@@ -5,8 +5,8 @@
 package mocktorrent
 
 import (
+	base "code.uber.internal/infra/kraken/lib/store/base"
 	gomock "github.com/golang/mock/gomock"
-	io "io"
 	reflect "reflect"
 )
 
@@ -45,40 +45,15 @@ func (mr *MockClientMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockClient)(nil).Close))
 }
 
-// DownloadTorrent mocks base method
-func (m *MockClient) DownloadTorrent(arg0 string) (io.ReadCloser, error) {
-	ret := m.ctrl.Call(m, "DownloadTorrent", arg0)
-	ret0, _ := ret[0].(io.ReadCloser)
+// Download mocks base method
+func (m *MockClient) Download(arg0 string) (base.FileReader, error) {
+	ret := m.ctrl.Call(m, "Download", arg0)
+	ret0, _ := ret[0].(base.FileReader)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// DownloadTorrent indicates an expected call of DownloadTorrent
-func (mr *MockClientMockRecorder) DownloadTorrent(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadTorrent", reflect.TypeOf((*MockClient)(nil).DownloadTorrent), arg0)
-}
-
-// GetManifest mocks base method
-func (m *MockClient) GetManifest(arg0, arg1 string) (io.ReadCloser, error) {
-	ret := m.ctrl.Call(m, "GetManifest", arg0, arg1)
-	ret0, _ := ret[0].(io.ReadCloser)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetManifest indicates an expected call of GetManifest
-func (mr *MockClientMockRecorder) GetManifest(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetManifest", reflect.TypeOf((*MockClient)(nil).GetManifest), arg0, arg1)
-}
-
-// PostManifest mocks base method
-func (m *MockClient) PostManifest(arg0, arg1, arg2 string, arg3 io.Reader) error {
-	ret := m.ctrl.Call(m, "PostManifest", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// PostManifest indicates an expected call of PostManifest
-func (mr *MockClientMockRecorder) PostManifest(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostManifest", reflect.TypeOf((*MockClient)(nil).PostManifest), arg0, arg1, arg2, arg3)
+// Download indicates an expected call of Download
+func (mr *MockClientMockRecorder) Download(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0)
 }

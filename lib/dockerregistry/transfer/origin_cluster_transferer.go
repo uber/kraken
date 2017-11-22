@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
@@ -27,6 +28,8 @@ type OriginClusterTransferer struct {
 	manifestClient manifestclient.Client
 	metaInfoClient metainfoclient.Client
 
+	fs store.FileStore
+
 	// numWorkers ensures this concurrency
 	numWorkers chan struct{}
 }
@@ -36,7 +39,8 @@ func NewOriginClusterTransferer(
 	config OriginClusterTransfererConfig,
 	originResolver blobclient.ClusterResolver,
 	manifestClient manifestclient.Client,
-	metaInfoClient metainfoclient.Client) *OriginClusterTransferer {
+	metaInfoClient metainfoclient.Client,
+	fs store.FileStore) *OriginClusterTransferer {
 
 	config = config.applyDefaults()
 
@@ -45,16 +49,22 @@ func NewOriginClusterTransferer(
 		originResolver: originResolver,
 		manifestClient: manifestClient,
 		metaInfoClient: metaInfoClient,
+		fs:             fs,
 		numWorkers:     make(chan struct{}, config.Concurrency),
 	}
 }
 
 // Download tries to download blob from several locations and returns error if failed to download from all locations
-func (t *OriginClusterTransferer) Download(digest string) (io.ReadCloser, error) {
+func (t *OriginClusterTransferer) Download(name string) (store.FileReader, error) {
 	t.reserveWorker()
 	defer t.releaseWorker()
 
-	d := image.NewSHA256DigestFromHex(digest)
+	blob, err := t.fs.GetCacheFileReader(name)
+	if err == nil {
+		return blob, nil
+	}
+
+	d := image.NewSHA256DigestFromHex(name)
 
 	clients, err := t.originResolver.Resolve(d)
 	if err != nil {
@@ -64,10 +74,18 @@ func (t *OriginClusterTransferer) Download(digest string) (io.ReadCloser, error)
 	// Download will succeed if at least one location has the data
 	var errs []error
 	for _, client := range clients {
-		blob, err := client.GetBlob(d)
+		r, err := client.GetBlob(d)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to pull blob from %s: %s", client.Addr(), err))
 			continue
+		}
+		if err := t.fs.CreateCacheFile(name, r); err != nil {
+			errs = append(errs, fmt.Errorf("create cache file: %s", err))
+			continue
+		}
+		blob, err := t.fs.GetCacheFileReader(name)
+		if err != nil {
+			return nil, fmt.Errorf("wrote blob to cache but could not get reader: %s", err)
 		}
 		return blob, nil
 	}
@@ -77,8 +95,8 @@ func (t *OriginClusterTransferer) Download(digest string) (io.ReadCloser, error)
 
 // uploadMetaInfo creates and uploads torrent metainfo for blob. No-ops if metainfo
 // already exists for blob.
-func (t *OriginClusterTransferer) uploadMetaInfo(d image.Digest, blobIO IOCloner) error {
-	blob, err := blobIO.Clone()
+func (t *OriginClusterTransferer) uploadMetaInfo(d image.Digest, blobCloner store.FileReaderCloner) error {
+	blob, err := blobCloner.Clone()
 	if err != nil {
 		return fmt.Errorf("clone blob io: %s", err)
 	}
@@ -96,9 +114,9 @@ func (t *OriginClusterTransferer) uploadMetaInfo(d image.Digest, blobIO IOCloner
 }
 
 func (t *OriginClusterTransferer) pushBlob(
-	client blobclient.Client, d image.Digest, blobIO IOCloner, size int64) error {
+	client blobclient.Client, d image.Digest, blobCloner store.FileReaderCloner, size int64) error {
 
-	blob, err := blobIO.Clone()
+	blob, err := blobCloner.Clone()
 	if err != nil {
 		return fmt.Errorf("clone blob io: %s", err)
 	}
@@ -133,11 +151,11 @@ func (t *OriginClusterTransferer) ensureNoLocationChanges(initLocs stringset.Set
 
 // Upload tries to upload blobs to multiple locations and returns error if
 // a majority of locations failed to receive the blob
-func (t *OriginClusterTransferer) Upload(digest string, blobIO IOCloner, size int64) error {
+func (t *OriginClusterTransferer) Upload(name string, blobCloner store.FileReaderCloner, size int64) error {
 	t.reserveWorker()
 	defer t.releaseWorker()
 
-	d := image.NewSHA256DigestFromHex(digest)
+	d := image.NewSHA256DigestFromHex(name)
 
 	clients, err := t.originResolver.Resolve(d)
 	if err != nil {
@@ -153,7 +171,7 @@ func (t *OriginClusterTransferer) Upload(digest string, blobIO IOCloner, size in
 		}
 	}()
 
-	if err := t.uploadMetaInfo(d, blobIO); err != nil {
+	if err := t.uploadMetaInfo(d, blobCloner); err != nil {
 		return fmt.Errorf("upload torrent: %s", err)
 	}
 
@@ -165,7 +183,7 @@ func (t *OriginClusterTransferer) Upload(digest string, blobIO IOCloner, size in
 		wg.Add(1)
 		go func(client blobclient.Client) {
 			defer wg.Done()
-			if err := t.pushBlob(client, d, blobIO, size); err != nil {
+			if err := t.pushBlob(client, d, blobCloner, size); err != nil {
 				mu.Lock()
 				err = fmt.Errorf("failed to push digest %q to location %s: %s", d, client.Addr(), err)
 				errs = append(errs, err)
@@ -201,11 +219,11 @@ func (t *OriginClusterTransferer) GetManifest(repo, tag string) (io.ReadCloser, 
 }
 
 // PostManifest posts manifest to addr given repo and tag
-func (t *OriginClusterTransferer) PostManifest(repo, tag, manifest string, reader io.Reader) error {
+func (t *OriginClusterTransferer) PostManifest(repo, tag string, manifest io.Reader) error {
 	t.reserveWorker()
 	defer t.releaseWorker()
 
-	err := t.manifestClient.PostManifest(repo, tag, manifest, reader)
+	err := t.manifestClient.PostManifest(repo, tag, manifest)
 	if err != nil {
 		return fmt.Errorf("failed to post manifest %s:%s: %s", repo, tag, err)
 	}

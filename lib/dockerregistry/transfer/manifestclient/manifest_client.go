@@ -13,7 +13,7 @@ import (
 // Client defines an interface to get and post manifest
 type Client interface {
 	GetManifest(repo, tag string) (io.ReadCloser, error)
-	PostManifest(repo, tag, digest string, manifest io.Reader) error
+	PostManifest(repo, tag string, manifest io.Reader) error
 }
 
 type client struct {
@@ -40,7 +40,7 @@ func (m *client) GetManifest(repo, tag string) (io.ReadCloser, error) {
 }
 
 // PostManifest posts manifest for repo:tag.
-func (m *client) PostManifest(repo, tag, digest string, manifest io.Reader) error {
+func (m *client) PostManifest(repo, tag string, manifest io.Reader) error {
 	name := fmt.Sprintf("%s:%s", repo, tag)
 	var err error
 	for it := m.servers.Iter(); it.HasNext(); it.Next() {

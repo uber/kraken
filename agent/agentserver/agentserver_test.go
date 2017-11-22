@@ -1,9 +1,7 @@
 package agentserver
 
 import (
-	"bytes"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"testing"
 
@@ -17,22 +15,14 @@ func TestGetBlobHandler(t *testing.T) {
 	mocks, cleanup := newServerMocks(t)
 	defer cleanup()
 
-	d, blob := image.DigestWithBlobFixture()
+	d := image.DigestFixture()
 
-	mocks.torrentClient.EXPECT().DownloadTorrent(d.Hex()).
-		Return(ioutil.NopCloser(bytes.NewBuffer(blob)), nil)
+	mocks.torrentClient.EXPECT().Download(d.Hex()).Return(nil, nil)
 
 	addr := mocks.startServer()
 
-	resp, err := http.Get(fmt.Sprintf("http://%s/blobs/%s", addr, d.Hex()))
+	_, err := http.Get(fmt.Sprintf("http://%s/blobs/%s", addr, d.Hex()))
 	require.NoError(err)
-	body, err := ioutil.ReadAll(resp.Body)
-	require.NoError(err)
-
-	filepath := string(body)
-	result, err := ioutil.ReadFile(filepath)
-	require.NoError(err)
-	require.Equal(blob, result)
 }
 
 func TestHealthHandler(t *testing.T) {

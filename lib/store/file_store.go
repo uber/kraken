@@ -29,6 +29,30 @@ type FileReader = base.FileReader
 // MetadataType aliases base.MetadataType
 type MetadataType = base.MetadataType
 
+// FileReaderCloner provides access to distinct IO interfaces for a single file.
+// If clients need to read a file multiple times, a single reader is not sufficient
+// because it can only be read once. Loading the file into a reusable buffer
+// is not an option because the size of may be in the magnitude of gigabytes.
+// Thus, FileReaderCloner allows clients to retrieve as many readers as they need.
+type FileReaderCloner interface {
+	Clone() (FileReader, error)
+}
+
+type cacheReaderCloner struct {
+	fs   FileStore
+	name string
+}
+
+func (c *cacheReaderCloner) Clone() (FileReader, error) {
+	return c.fs.GetCacheFileReader(c.name)
+}
+
+// CacheReaderCloner returns a FileReaderCloner for cloning FileReaders
+// for name from the cache directory.
+func CacheReaderCloner(fs FileStore, name string) FileReaderCloner {
+	return &cacheReaderCloner{fs, name}
+}
+
 // FileStore provides an interface for LocalFileStore. Useful for mocks.
 type FileStore interface {
 	Config() Config

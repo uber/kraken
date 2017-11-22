@@ -1,31 +1,25 @@
 package transfer
 
-import "io"
+import (
+	"io"
 
-// IOCloner provides access to distinct ReadClosers for a single ReadCloser.
-// If clients need to read a blob file multiple times, a single reader is not
-// sufficient because it can only be read once. Loading the blob file into a
-// reusable buffer is not an option because the size of the blob may be in the
-// magnitude of gigabytes. Thus, IOCloner allows clients to retrieve as many
-// readers as they need.
-type IOCloner interface {
-	Clone() (io.ReadCloser, error)
-}
+	"code.uber.internal/infra/kraken/lib/store"
+)
 
 // Downloader defines an interface to download blobs
 type Downloader interface {
-	Download(digest string) (io.ReadCloser, error)
+	Download(name string) (store.FileReader, error)
 }
 
 // Uploader defines an interface to upload blobs
 type Uploader interface {
-	Upload(digest string, blobIO IOCloner, size int64) error
+	Upload(name string, blobCloner store.FileReaderCloner, size int64) error
 }
 
 // ManifestManager defines an interface to get and post manifest
 type ManifestManager interface {
 	GetManifest(repo, tag string) (io.ReadCloser, error)
-	PostManifest(repo, tag, digest string, reader io.Reader) error
+	PostManifest(repo, tag string, reader io.Reader) error
 }
 
 // ImageTransferer defines an interface that transfers images

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"io"
 
+	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
 )
 
@@ -11,32 +13,34 @@ var _ ImageTransferer = (*AgentTransferer)(nil)
 
 // AgentTransferer gets and posts manifest to tracker, and transfers blobs as torrent
 type AgentTransferer struct {
-	client torrent.Client
+	torrentClient  torrent.Client
+	manifestClient manifestclient.Client
 }
 
-// NewAgentTransferer creates a new agent transferer given an agent torrent client
-func NewAgentTransferer(client torrent.Client) *AgentTransferer {
-	return &AgentTransferer{client}
+// NewAgentTransferer creates a new AgentTransferer.
+func NewAgentTransferer(
+	torrentClient torrent.Client,
+	manifestClient manifestclient.Client) *AgentTransferer {
+
+	return &AgentTransferer{torrentClient, manifestClient}
 }
 
 // Download downloads blobs as torrent
-func (tt *AgentTransferer) Download(digest string) (io.ReadCloser, error) {
-	return tt.client.DownloadTorrent(digest)
+func (t *AgentTransferer) Download(name string) (store.FileReader, error) {
+	return t.torrentClient.Download(name)
 }
 
 // Upload uploads blobs to a torrent network
-func (tt *AgentTransferer) Upload(digest string, blobIO IOCloner, size int64) error {
-	return errors.New("unsupported in TorrentImageTransferer")
+func (t *AgentTransferer) Upload(name string, blobCloner store.FileReaderCloner, size int64) error {
+	return errors.New("unsupported operation")
 }
 
 // GetManifest gets manifest from the tracker
-// TODO (@evelynl): maybe change torrent client to use ManifestClient
-func (tt *AgentTransferer) GetManifest(repo, tag string) (io.ReadCloser, error) {
-	return tt.client.GetManifest(repo, tag)
+func (t *AgentTransferer) GetManifest(repo, tag string) (io.ReadCloser, error) {
+	return t.manifestClient.GetManifest(repo, tag)
 }
 
 // PostManifest posts manifest to tracker
-// TODO (@evelynl): maybe change torrent client to use ManifestClient
-func (tt *AgentTransferer) PostManifest(repo, tag, manifest string, reader io.Reader) error {
-	return tt.client.PostManifest(repo, tag, manifest, reader)
+func (t *AgentTransferer) PostManifest(repo, tag string, manifest io.Reader) error {
+	return t.manifestClient.PostManifest(repo, tag, manifest)
 }

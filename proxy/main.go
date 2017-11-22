@@ -32,7 +32,7 @@ func main() {
 	}
 	defer closer.Close()
 
-	store, err := store.NewLocalFileStore(&config.Store, config.Registry.TagDeletion.Enable)
+	fs, err := store.NewLocalFileStore(&config.Store, config.Registry.TagDeletion.Enable)
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
@@ -52,9 +52,9 @@ func main() {
 	metaInfoClient := metainfoclient.Default(trackers)
 
 	transferer := transfer.NewOriginClusterTransferer(
-		config.Transfer, originResolver, manifestClient, metaInfoClient)
+		config.Transfer, originResolver, manifestClient, metaInfoClient, fs)
 
-	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, store, stats)
+	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)
 	if err != nil {
 		log.Fatalf("Failed to init registry: %s", err)
