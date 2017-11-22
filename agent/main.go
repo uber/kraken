@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	xconfig "code.uber.internal/go-common.git/x/config"
 	"code.uber.internal/go-common.git/x/log"
 	dockercontext "github.com/docker/distribution/context"
 	docker "github.com/docker/distribution/registry"
@@ -21,12 +20,15 @@ import (
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
+	"code.uber.internal/infra/kraken/utils/configutil"
 )
 
 func main() {
 	peerIP := flag.String("peer_ip", "", "ip which peer will announce itself as")
 	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
 	agentServerPort := flag.Int("agent_server_port", 0, "port which agent server will listen on")
+	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
+
 	flag.Parse()
 
 	if agentServerPort == nil || *agentServerPort == 0 {
@@ -34,7 +36,7 @@ func main() {
 	}
 
 	var config Config
-	if err := xconfig.Load(&config); err != nil {
+	if err := configutil.Load(*configFile, &config); err != nil {
 		panic(err)
 	}
 	// Disable JSON logging because it's completely unreadable.
