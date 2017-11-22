@@ -1,6 +1,7 @@
 package agentserver
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"github.com/pressly/chi"
 
 	"code.uber.internal/infra/kraken/lib/torrent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 )
 
 // Server defines the agent HTTP server.
@@ -26,8 +28,10 @@ func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
 
 	r.Get("/blobs/:name", s.getBlobHandler)
-
 	r.Get("/health", s.healthHandler)
+
+	// Dangerous endpoint for running experiments.
+	r.Patch("/x/config/scheduler", s.patchSchedulerConfigHandler)
 
 	return r
 }
@@ -49,4 +53,16 @@ func (s *Server) getBlobHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "OK")
+}
+
+// patchSchedulerConfigHandler restarts the agent torrent scheduler with
+// the config in request body.
+func (s *Server) patchSchedulerConfigHandler(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	var config scheduler.Config
+	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+		http.Error(w, fmt.Sprintf("decode body: %s", err), http.StatusBadRequest)
+		return
+	}
+	s.torrentClient.Reload(config)
 }
