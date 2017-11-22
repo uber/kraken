@@ -195,12 +195,6 @@ func (c *fileCloner) Clone() (io.ReadCloser, error) {
 
 // commmitUpload move a complete data blob from upload directory to cache diretory
 func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) (err error) {
-	// Remove timestamp file
-	err = u.store.DeleteUploadFileStartedAt(srcuuid)
-	if err != nil {
-		return err
-	}
-
 	info, err := u.store.GetUploadFileStat(srcuuid)
 	if err != nil {
 		return err

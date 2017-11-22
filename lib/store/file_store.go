@@ -31,17 +31,14 @@ type MetadataType = base.MetadataType
 
 // FileStore provides an interface for LocalFileStore. Useful for mocks.
 type FileStore interface {
-	Stop()
 	Config() Config
 	CreateUploadFile(fileName string, len int64) error
 	CreateDownloadFile(fileName string, len int64) error
 	CreateCacheFile(fileName string, reader io.Reader) error
 	WriteDownloadFilePieceStatus(fileName string, content []byte) (bool, error)
 	WriteDownloadFilePieceStatusAt(fileName string, content []byte, index int) (bool, error)
-	GetFilePieceStatus(fileName string, index int, numPieces int) ([]byte, error)
 	SetUploadFileStartedAt(fileName string, content []byte) error
 	GetUploadFileStartedAt(fileName string) ([]byte, error)
-	DeleteUploadFileStartedAt(fileName string) error
 	SetUploadFileHashState(fileName string, content []byte, algorithm string, offset string) error
 	GetUploadFileHashState(fileName string, algorithm string, offset string) ([]byte, error)
 	ListUploadFileHashStatePaths(fileName string) ([]string, error)
@@ -147,13 +144,6 @@ func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error
 	return localStore, nil
 }
 
-// Stop stops any running cron jobs.
-func (store *LocalFileStore) Stop() {
-	if store.trashDeletionCron != nil {
-		store.trashDeletionCron.Stop()
-	}
-}
-
 // Config returns configuration of the store
 func (store *LocalFileStore) Config() Config {
 	return *store.config
@@ -237,18 +227,6 @@ func (store *LocalFileStore) WriteDownloadFilePieceStatusAt(fileName string, con
 	return true, err
 }
 
-// GetFilePieceStatus reads piece status for a file that's in download or cache dir.
-func (store *LocalFileStore) GetFilePieceStatus(fileName string, index int, numPieces int) ([]byte, error) {
-	b := make([]byte, numPieces)
-	_, err := store.downloadCacheBackend.ReadFileMetadataAt(
-		fileName,
-		[]base.FileState{store.stateDownload, store.stateCache},
-		NewPieceStatus(),
-		b,
-		int64(index))
-	return b, err
-}
-
 // SetUploadFileStartedAt creates and writes creation file for a new upload file.
 func (store *LocalFileStore) SetUploadFileStartedAt(fileName string, content []byte) error {
 	_, err := store.uploadBackend.WriteFileMetadata(
@@ -262,14 +240,6 @@ func (store *LocalFileStore) SetUploadFileStartedAt(fileName string, content []b
 // GetUploadFileStartedAt reads creation file for a new upload file.
 func (store *LocalFileStore) GetUploadFileStartedAt(fileName string) ([]byte, error) {
 	return store.uploadBackend.ReadFileMetadata(
-		fileName,
-		[]base.FileState{store.stateUpload},
-		NewStartedAt())
-}
-
-// DeleteUploadFileStartedAt deletes creation file for a new upload file.
-func (store *LocalFileStore) DeleteUploadFileStartedAt(fileName string) error {
-	return store.uploadBackend.DeleteFileMetadata(
 		fileName,
 		[]base.FileState{store.stateUpload},
 		NewStartedAt())
