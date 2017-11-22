@@ -6,9 +6,8 @@ import (
 	"net/http"
 	"os"
 
-	xconfig "code.uber.internal/go-common.git/x/config"
-
 	"code.uber.internal/go-common.git/x/log"
+
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -18,12 +17,15 @@ import (
 	"code.uber.internal/infra/kraken/origin/blobserver"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
+	"code.uber.internal/infra/kraken/utils/configutil"
 )
 
 func main() {
 	blobServerPort := flag.Int("blobserver_port", 0, "port which registry listens on")
 	peerIP := flag.String("peer_ip", "", "ip which peer will announce itself as")
 	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
+	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
+
 	flag.Parse()
 
 	if blobServerPort == nil || *blobServerPort == 0 {
@@ -31,7 +33,7 @@ func main() {
 	}
 
 	var config Config
-	if err := xconfig.Load(&config); err != nil {
+	if err := configutil.Load(*configFile, &config); err != nil {
 		panic(err)
 	}
 

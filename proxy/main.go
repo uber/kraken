@@ -1,7 +1,8 @@
 package main
 
 import (
-	xconfig "code.uber.internal/go-common.git/x/config"
+	"flag"
+
 	"code.uber.internal/go-common.git/x/log"
 	dockercontext "github.com/docker/distribution/context"
 	docker "github.com/docker/distribution/registry"
@@ -14,11 +15,15 @@ import (
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
+	"code.uber.internal/infra/kraken/utils/configutil"
 )
 
 func main() {
+	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
+	flag.Parse()
+
 	var config Config
-	if err := xconfig.Load(&config); err != nil {
+	if err := configutil.Load(*configFile, &config); err != nil {
 		panic(err)
 	}
 	// Disable JSON logging because it's completely unreadable.

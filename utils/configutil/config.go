@@ -1,4 +1,4 @@
-// Package config provides an interface for loading and validating configuration
+// Package configutil provides an interface for loading and validating configuration
 // data from YAML files.
 //
 // Other YAML files could be included via the following directive:
@@ -43,7 +43,7 @@
 //           football: true
 //           basketball: true
 //
-package config
+package configutil
 
 import (
 	"bytes"
