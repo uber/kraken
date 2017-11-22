@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
 	"net/url"
 	"os"
 	"sort"
@@ -183,6 +184,9 @@ func (s Server) Handler() http.Handler {
 
 		r.Get("/peercontext", handler(s.getPeerContextHandler))
 	})
+
+	// Serves /debug/pprof endpoints.
+	r.Mount("/", http.DefaultServeMux)
 
 	return r
 }
