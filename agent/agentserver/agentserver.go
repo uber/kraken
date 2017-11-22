@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
 
 	"github.com/pressly/chi"
 
@@ -32,6 +33,9 @@ func (s *Server) Handler() http.Handler {
 
 	// Dangerous endpoint for running experiments.
 	r.Patch("/x/config/scheduler", s.patchSchedulerConfigHandler)
+
+	// Serves /debug/pprof endpoints.
+	r.Mount("/", http.DefaultServeMux)
 
 	return r
 }

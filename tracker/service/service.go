@@ -2,6 +2,7 @@ package service
 
 import (
 	"net/http"
+	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
 
 	"github.com/pressly/chi"
 	"github.com/uber-go/tally"
@@ -70,6 +71,9 @@ func Handler(
 		r.Post("/manifest/:name", manifest.Post)
 
 	})
+
+	// Serves /debug/pprof endpoints.
+	r.Mount("/", http.DefaultServeMux)
 
 	return r
 }
