@@ -124,32 +124,31 @@ func TestListPopulatedShardIDs(t *testing.T) {
 	s, cleanup := LocalFileStoreFixture()
 	defer cleanup()
 
-	cacheFiles := make([]string, 50)
-	for i := range cacheFiles {
+	var cacheFiles []string
+	cacheFileMap := make(map[string]string)
+	for i := 0; i < 100; i++ {
 		name := randutil.Hex(32)
-		cacheFiles[i] = name
+		if _, ok := cacheFileMap[name]; ok {
+			// Avoid duplicated names
+			continue
+		}
+		cacheFiles = append(cacheFiles, name)
+		cacheFileMap[name] = name
 		require.NoError(s.CreateUploadFile(name, 1))
 		require.NoError(s.MoveUploadFileToCache(name, name))
+		if i >= 50 {
+			require.NoError(s.MoveCacheFileToTrash(name))
+		}
 	}
-
-	deletedFiles := make([]string, 50)
-	for i := range deletedFiles {
-		name := randutil.Hex(32)
-		deletedFiles[i] = name
-		require.NoError(s.CreateUploadFile(name, 1))
-		require.NoError(s.MoveUploadFileToCache(name, name))
-		require.NoError(s.MoveCacheFileToTrash(name))
-	}
-
 	shards, err := s.ListPopulatedShardIDs()
 	require.NoError(err)
 
-	for _, name := range cacheFiles {
+	for i, name := range cacheFiles {
 		shard := name[:4]
-		require.Contains(shards, shard)
-	}
-	for _, name := range deletedFiles {
-		shard := name[:4]
-		require.NotContains(shards, shard)
+		if i < 50 {
+			require.Contains(shards, shard)
+		} else {
+			require.NotContains(shards, shard)
+		}
 	}
 }
