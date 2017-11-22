@@ -3,6 +3,8 @@ package torrent
 import (
 	"errors"
 	"fmt"
+	"log"
+	"sync"
 	"time"
 
 	"github.com/uber-go/tally"
@@ -22,15 +24,19 @@ const downloadTimeout = 10 * time.Minute
 // Client TODO
 type Client interface {
 	Download(name string) (store.FileReader, error)
+	Reload(config scheduler.Config)
 	Close() error
 }
 
 // SchedulerClient is a client for scheduler
 type SchedulerClient struct {
-	config    Config
+	config Config
+
+	mu        sync.Mutex // Protects reloading scheduler.
 	scheduler *scheduler.Scheduler
-	stats     tally.Scope
-	fs        store.FileStore
+
+	stats tally.Scope
+	fs    store.FileStore
 }
 
 // NewSchedulerClient creates a new scheduler client
@@ -59,6 +65,20 @@ func NewSchedulerClient(
 		stats:     stats,
 		fs:        fs,
 	}, nil
+}
+
+// Reload restarts the client with new configuration.
+func (c *SchedulerClient) Reload(config scheduler.Config) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	s, err := scheduler.Reload(c.scheduler, config)
+	if err != nil {
+		// Totally unrecoverable error -- c.scheduler is now stopped and unusable,
+		// so let process die and restart with original config.
+		log.Fatalf("Failed to reload scheduler config: %s", err)
+	}
+	c.scheduler = s
 }
 
 // Close stops scheduler

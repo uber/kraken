@@ -6,6 +6,7 @@ package mocktorrent
 
 import (
 	base "code.uber.internal/infra/kraken/lib/store/base"
+	scheduler "code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
 )
@@ -56,4 +57,14 @@ func (m *MockClient) Download(arg0 string) (base.FileReader, error) {
 // Download indicates an expected call of Download
 func (mr *MockClientMockRecorder) Download(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0)
+}
+
+// Reload mocks base method
+func (m *MockClient) Reload(arg0 scheduler.Config) {
+	m.ctrl.Call(m, "Reload", arg0)
+}
+
+// Reload indicates an expected call of Reload
+func (mr *MockClientMockRecorder) Reload(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reload", reflect.TypeOf((*MockClient)(nil).Reload), arg0)
 }

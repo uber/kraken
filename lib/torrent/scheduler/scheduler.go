@@ -194,6 +194,13 @@ func New(
 	return s, nil
 }
 
+// Reload transfers s into a new Scheduler with new config. After reloading, s
+// is unusable.
+func Reload(s *Scheduler, config Config) (*Scheduler, error) {
+	s.Stop()
+	return New(config, s.torrentArchive, s.stats, s.pctx, s.announceClient, s.networkEventProducer)
+}
+
 // Stop shuts down the scheduler.
 func (s *Scheduler) Stop() {
 	s.log().Info("Stop called")

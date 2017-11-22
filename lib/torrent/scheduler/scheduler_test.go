@@ -436,6 +436,39 @@ func TestCancelTorrent(t *testing.T) {
 	waitForTorrentRemoved(t, p1.scheduler, h)
 }
 
+func TestSchedulerReload(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newTestMocks(t)
+	defer cleanup()
+
+	config := configFixture()
+
+	seeder := mocks.newPeer(config)
+	leecher := mocks.newPeer(config)
+
+	download := func() {
+		tf := torlib.TestTorrentFileFixture()
+
+		mocks.metaInfoClient.EXPECT().Download(tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
+
+		seeder.writeTorrent(tf)
+		require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo.Name()))
+
+		require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo.Name()))
+		leecher.checkTorrent(t, tf)
+	}
+
+	download()
+
+	config.ConnTTL = 45 * time.Minute
+	s, err := Reload(leecher.scheduler, config)
+	require.NoError(err)
+	leecher.scheduler = s
+
+	download()
+}
+
 // BENCHMARKS
 
 // NOTE: You'll need to increase your fd limit to around 4096 to run this benchmark.

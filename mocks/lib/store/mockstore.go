@@ -5,13 +5,12 @@
 package mockstore
 
 import (
-	io "io"
-	os "os"
-	reflect "reflect"
-
 	store "code.uber.internal/infra/kraken/lib/store"
 	base "code.uber.internal/infra/kraken/lib/store/base"
 	gomock "github.com/golang/mock/gomock"
+	io "io"
+	os "os"
+	reflect "reflect"
 )
 
 // MockFileStore is a mock of FileStore interface
