@@ -35,20 +35,25 @@ func (b *Blobs) GetStat(path string) (storagedriver.FileInfo, error) {
 
 // GetReader returns a reader to the blob
 func (b *Blobs) GetReader(path string, offset int64) (io.ReadCloser, error) {
-	digest, err := GetBlobDigest(path)
+	name, err := GetBlobDigest(path)
 	if err != nil {
 		return nil, err
 	}
-	return b.getOrDownloadBlobReader(digest, offset)
+	return b.getBlobReader(name, offset)
 }
 
 // GetContent returns blob content in bytes
 func (b *Blobs) GetContent(path string) ([]byte, error) {
-	digest, err := GetBlobDigest(path)
+	name, err := GetBlobDigest(path)
 	if err != nil {
 		return nil, err
 	}
-	return b.getOrDownloadBlobData(digest)
+	blob, err := b.getBlobReader(name, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer blob.Close()
+	return ioutil.ReadAll(blob)
 }
 
 // GetDigest returns layer sha
@@ -97,20 +102,10 @@ func (b *Blobs) getBlobStat(fileName string) (storagedriver.FileInfo, error) {
 	return fi, nil
 }
 
-func (b *Blobs) getOrDownloadBlobData(fileName string) (data []byte, err error) {
-	// check cache
-	reader, err := b.getOrDownloadBlobReader(fileName, 0)
+func (b *Blobs) getBlobReader(fileName string, offset int64) (io.ReadCloser, error) {
+	blob, err := b.store.GetCacheFileReader(fileName)
 	if err != nil {
-		return nil, err
-	}
-	defer reader.Close()
-	return ioutil.ReadAll(reader)
-}
-
-func (b *Blobs) getOrDownloadBlobReader(fileName string, offset int64) (reader io.ReadCloser, err error) {
-	reader, err = b.getBlobReader(fileName, offset)
-	if err != nil {
-		readCloser, err := b.transferer.Download(fileName)
+		blob, err = b.transferer.Download(fileName)
 		if err != nil {
 			log.Errorf("failed to download %s: %s", fileName, err)
 			return nil, storagedriver.PathNotFoundError{
@@ -118,29 +113,10 @@ func (b *Blobs) getOrDownloadBlobReader(fileName string, offset int64) (reader i
 				Path:       fileName,
 			}
 		}
-		defer readCloser.Close()
-
-		if err := b.store.CreateCacheFile(fileName, readCloser); err != nil {
-			return nil, err
-		}
-
-		return b.getBlobReader(fileName, offset)
 	}
-	return reader, nil
-}
-
-func (b *Blobs) getBlobReader(fileName string, offset int64) (io.ReadCloser, error) {
-	reader, err := b.store.GetCacheFileReader(fileName)
-	if err != nil {
+	if _, err := blob.Seek(offset, 0); err != nil {
+		blob.Close()
 		return nil, err
 	}
-
-	// Set offset
-	_, err = reader.Seek(offset, 0)
-	if err != nil {
-		reader.Close()
-		return nil, err
-	}
-
-	return reader, nil
+	return blob, nil
 }

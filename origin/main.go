@@ -9,7 +9,6 @@ import (
 	xconfig "code.uber.internal/go-common.git/x/config"
 
 	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -73,12 +72,11 @@ func main() {
 		}
 
 		_, err = torrent.NewSchedulerClient(
-			&config.Torrent,
+			config.Torrent,
 			fileStore,
 			stats,
 			pctx,
 			announceclient.Default(pctx, trackers),
-			manifestclient.New(trackers),
 			metainfoclient.Default(trackers))
 		if err != nil {
 			log.Fatalf("Failed to create scheduler client: %s", err)

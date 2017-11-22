@@ -65,12 +65,11 @@ func main() {
 	}
 
 	torrentClient, err := torrent.NewSchedulerClient(
-		&config.Torrent,
+		config.Torrent,
 		store,
 		stats,
 		pctx,
 		announceclient.Default(pctx, trackers),
-		manifestclient.New(trackers),
 		metainfoclient.Default(trackers))
 	if err != nil {
 		log.Fatalf("Failed to create scheduler client: %s", err)
@@ -78,10 +77,11 @@ func main() {
 	}
 	defer torrentClient.Close()
 
-	agentServer := agentserver.New(config.AgentServer, store, torrentClient)
+	agentServer := agentserver.New(config.AgentServer, torrentClient)
 
-	dockerConfig := config.Registry.CreateDockerConfig(
-		dockerregistry.Name, transfer.NewAgentTransferer(torrentClient), store, stats)
+	transferer := transfer.NewAgentTransferer(torrentClient, manifestclient.New(trackers))
+
+	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, store, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)
 	if err != nil {
 		log.Fatalf("Failed to init registry: %s", err)

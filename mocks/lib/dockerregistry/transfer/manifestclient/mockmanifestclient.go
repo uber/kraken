@@ -47,13 +47,13 @@ func (mr *MockClientMockRecorder) GetManifest(arg0, arg1 interface{}) *gomock.Ca
 }
 
 // PostManifest mocks base method
-func (m *MockClient) PostManifest(arg0, arg1, arg2 string, arg3 io.Reader) error {
-	ret := m.ctrl.Call(m, "PostManifest", arg0, arg1, arg2, arg3)
+func (m *MockClient) PostManifest(arg0, arg1 string, arg2 io.Reader) error {
+	ret := m.ctrl.Call(m, "PostManifest", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PostManifest indicates an expected call of PostManifest
-func (mr *MockClientMockRecorder) PostManifest(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostManifest", reflect.TypeOf((*MockClient)(nil).PostManifest), arg0, arg1, arg2, arg3)
+func (mr *MockClientMockRecorder) PostManifest(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostManifest", reflect.TypeOf((*MockClient)(nil).PostManifest), arg0, arg1, arg2)
 }
