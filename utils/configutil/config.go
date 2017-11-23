@@ -67,7 +67,7 @@ const (
 
 const (
 	configDir       = "config"
-	secretsFile     = "secrets"
+	secretsFile     = "secrets.yaml"
 	configSeparator = ":"
 )
 
