@@ -48,6 +48,7 @@ type configuration struct {
 	BufferSpace   int      `yaml:"buffer_space" validate:"min=255"`
 	Servers       []string `validate:"nonzero"`
 	Nodes         map[string]string
+	Secret        string
 }
 
 func writeFile(t *testing.T, contents string) string {
@@ -315,6 +316,7 @@ func TestLoadSingleConfigDir(t *testing.T) {
 		ListenAddress: "127.0.0.1:8080",
 		BufferSpace:   9000,
 		Servers:       []string{"127.0.0.1:01", "127.0.0.1:02"},
+		Secret:        "shh",
 	}, config, "configs mismatch for %s", os.Getenv(configDirKey))
 }
 
