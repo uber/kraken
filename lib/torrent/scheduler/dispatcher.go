@@ -18,6 +18,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/memsize"
+	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/timeutil"
 )
 
@@ -360,7 +361,9 @@ func (d *dispatcher) watchPendingPieceRequests() {
 }
 
 func (d *dispatcher) sendInitialPieceRequests(p *peer) {
-	for _, i := range d.Torrent.MissingPieces() {
+	pieces := d.Torrent.MissingPieces()
+	randutil.ShuffleInts(pieces)
+	for _, i := range pieces {
 		if !p.bitfield.Has(i) {
 			continue
 		}
