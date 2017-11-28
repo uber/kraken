@@ -47,3 +47,11 @@ func IP() string {
 func Port() int {
 	return rand.Intn(65535) + 1
 }
+
+// ShuffleInts shuffles the values of xs in place.
+func ShuffleInts(xs []int) {
+	for i := range xs {
+		j := rand.Intn(i + 1)
+		xs[i], xs[j] = xs[j], xs[i]
+	}
+}
