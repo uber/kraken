@@ -30,7 +30,8 @@ PROGS = \
 	tracker/tracker \
 	origin/origin \
 	proxy/proxy \
-	tools/bin/puller/puller 
+	tools/bin/puller/puller \
+	test/benchmark/benchmark
 
 # define the list of proto buffers the service depends on
 PROTO_GENDIR ?= .gen
@@ -54,6 +55,7 @@ origin/origin: proto $(wildcard origin/*.go)
 cli/kraken-cli: $(wildcard cli/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 proxy/proxy: $(wildcard proxy/*.go)
+test/benchmark/benchmark: $(wildcard test/benchmark/*.go)
 
 .PHONY: bench
 bench:
@@ -254,6 +256,10 @@ run_integration:
 	env/bin/py.test --timeout=120 -v test/python
 
 integration: bootstrap_integration build_integration run_integration
+
+benchmark:
+	-rm test/benchmark/benchmark
+	GOOS=linux GOARCH=amd64 make test/benchmark/benchmark
 
 # jenkins-only debian build job for cli
 .PHONY: debian-kraken-cli
