@@ -5,11 +5,11 @@
 package mocktransferer
 
 import (
-	store "code.uber.internal/infra/kraken/lib/store"
-	base "code.uber.internal/infra/kraken/lib/store/base"
-	gomock "github.com/golang/mock/gomock"
 	io "io"
 	reflect "reflect"
+
+	store "code.uber.internal/infra/kraken/lib/store"
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockImageTransferer is a mock of ImageTransferer interface
@@ -36,9 +36,9 @@ func (m *MockImageTransferer) EXPECT() *MockImageTransfererMockRecorder {
 }
 
 // Download mocks base method
-func (m *MockImageTransferer) Download(arg0 string) (base.FileReader, error) {
+func (m *MockImageTransferer) Download(arg0 string) (store.FileReader, error) {
 	ret := m.ctrl.Call(m, "Download", arg0)
-	ret0, _ := ret[0].(base.FileReader)
+	ret0, _ := ret[0].(store.FileReader)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

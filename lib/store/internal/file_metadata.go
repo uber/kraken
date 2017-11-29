@@ -1,4 +1,4 @@
-package base
+package internal
 
 import (
 	"regexp"

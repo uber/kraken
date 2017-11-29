@@ -1,11 +1,33 @@
-package base
+package internal
 
-import "os"
+import (
+	"io"
+	"os"
+)
+
+// FileReader provides read operation on a file.
+type FileReader interface {
+	io.Reader
+	io.ReaderAt
+	io.Seeker
+	io.Closer
+}
+
+// FileReadWriter provides read/write operation on a file.
+type FileReadWriter interface {
+	FileReader
+	io.Writer
+	io.WriterAt
+
+	Size() int64   // required by docker registry.
+	Cancel() error // required by docker registry.
+	Commit() error // required by docker registry.
+}
 
 // LocalFileReadWriter implements FileReadWriter interface, provides read/write operation on a
 // local file.
 type localFileReadWriter struct {
-	entry      *LocalFileEntry
+	entry      *localFileEntry
 	descriptor *os.File
 }
 
@@ -50,7 +72,8 @@ func (readWriter localFileReadWriter) Seek(offset int64, whence int) (int64, err
 // Size returns the size of the file.
 func (readWriter localFileReadWriter) Size() int64 {
 	// Use file entry instead of descriptor, because descriptor could have been closed.
-	fileInfo, err := readWriter.entry.Stat(func(FileEntry) error { return nil })
+	fileInfo, err := readWriter.entry.GetStat()
+
 	if err != nil {
 		return 0
 	}

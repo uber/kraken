@@ -5,11 +5,10 @@ import (
 	"io/ioutil"
 	"os"
 
-	"code.uber.internal/infra/kraken/lib/store/base"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
-// MockFileReadWriter is a mock base.FileReadWriter that is backed by a
+// MockFileReadWriter is a mock FileReadWriter that is backed by a
 // physical file. This is preferred to a gomock struct because read/write
 // operations are greatly simplified.
 type MockFileReadWriter struct {
@@ -17,16 +16,16 @@ type MockFileReadWriter struct {
 	Committed bool
 }
 
-// Commit implements base.FileReadWriter.Commit
+// Commit implements FileReadWriter.Commit
 func (f *MockFileReadWriter) Commit() error { panic("commit not implemented") }
 
-// Cancel implements base.FileReadWriter.Cancel
+// Cancel implements FileReadWriter.Cancel
 func (f *MockFileReadWriter) Cancel() error { panic("cancel not implemented") }
 
-// Size implements base.FileReadWriter.Size
+// Size implements FileReadWriter.Size
 func (f *MockFileReadWriter) Size() int64 { panic("size not implemented") }
 
-var _ base.FileReadWriter = (*MockFileReadWriter)(nil)
+var _ FileReadWriter = (*MockFileReadWriter)(nil)
 
 // NewMockFileReadWriter returns a new MockFileReadWriter and a cleanup function.
 func NewMockFileReadWriter(content []byte) (*MockFileReadWriter, func()) {
@@ -65,10 +64,10 @@ func (s *mockGetDownloadFileReadWriterStore) GetDownloadFileReadWriter(name stri
 	return s.f, nil
 }
 
-// MockGetDownloadFileReadWriter returns a FileStore wrapping baseFS which overrides
+// MockGetDownloadFileReadWriter returns a FileStore wrapping internalFS which overrides
 // the GetDownloadFileReadWriter method to return f.
-func MockGetDownloadFileReadWriter(baseFS FileStore, f FileReadWriter) FileStore {
-	return &mockGetDownloadFileReadWriterStore{baseFS, f}
+func MockGetDownloadFileReadWriter(internalFS FileStore, f FileReadWriter) FileStore {
+	return &mockGetDownloadFileReadWriterStore{internalFS, f}
 }
 
 type testFileReader struct {
