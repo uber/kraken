@@ -1,7 +1,8 @@
 package main
 
 import (
-	"code.uber.internal/go-common.git/x/log"
+	"go.uber.org/zap"
+
 	"code.uber.internal/go-common.git/x/mysql"
 
 	"code.uber.internal/infra/kraken/lib/serverset"
@@ -14,7 +15,7 @@ import (
 
 // Config defines tracker configuration.
 type Config struct {
-	Logging           log.Configuration        `yaml:"logging"`
+	ZapLogging        zap.Config               `yaml:"zap"`
 	Port              int                      `yaml:"port"`
 	Storage           storage.Config           `yaml:"storage"`
 	Service           service.Config           `yaml:"service"`

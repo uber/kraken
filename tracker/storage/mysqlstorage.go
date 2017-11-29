@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"sync"
 
-	"code.uber.internal/go-common.git/x/log"
 	xmysql "code.uber.internal/go-common.git/x/mysql"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils"
+	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"

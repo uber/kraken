@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"os"
 
-	"code.uber.internal/go-common.git/x/log"
-
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -19,6 +17,7 @@ import (
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 func main() {
@@ -42,10 +41,8 @@ func main() {
 		panic(err)
 	}
 
-	// Disable JSON logging because it's completely unreadable.
-	formatter := true
-	config.Logging.TextFormatter = &formatter
-	log.Configure(&config.Logging, false)
+	zlog := log.ConfigureLogger(config.ZapLogging)
+	defer zlog.Sync()
 
 	// Stats
 	stats, closer, err := metrics.New(config.Metrics)

@@ -8,9 +8,10 @@ import (
 	"net/url"
 	"os"
 
-	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken/tracker/storage"
 	"github.com/pressly/chi"
+
+	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 type manifestHandler struct {
@@ -31,9 +32,7 @@ func (h *manifestHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		writeJSONErrorf(w, "cannot unescape manifest name: %s, error: %s", name, err)
-		log.WithFields(log.Fields{
-			"name": name, "error": err, "request": formatRequest(r),
-		}).Error("Failed to unescape manifest name")
+		log.With("name", name, "error", err, "request", formatRequest(r)).Error("Failed to unescape manifest name")
 		return
 	}
 
@@ -45,9 +44,7 @@ func (h *manifestHandler) Get(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 		}
 		writeJSONErrorf(w, "cannot get manifest name: %s, error: %s", name, err)
-		log.WithFields(log.Fields{
-			"name": name, "error": err, "request": formatRequest(r),
-		}).Error("cannot get manifest")
+		log.With("name", name, "error", err, "request", formatRequest(r)).Error("cannot get manifest")
 		return
 	}
 
@@ -70,9 +67,7 @@ func (h *manifestHandler) Post(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		writeJSONErrorf(w, "cannot unescape manifest name: %s, error: %s", name, err)
-		log.WithFields(log.Fields{
-			"name": name, "error": err, "request": formatRequest(r),
-		}).Error("Failed to unescape manifest name")
+		log.With("name", name, "error", err, "request", formatRequest(r)).Error("Failed to unescape manifest name")
 		return
 	}
 
@@ -81,9 +76,7 @@ func (h *manifestHandler) Post(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		writeJSONErrorf(w, "Could not read manifest on post for %s and error: %s", name, err)
-		log.WithFields(log.Fields{
-			"name": name, "error": err, "request": formatRequest(r),
-		}).Error("Failed to read manifest payload")
+		log.With("name", name, "error", err, "request", formatRequest(r)).Error("Failed to read manifest payload")
 		return
 	}
 
@@ -92,9 +85,8 @@ func (h *manifestHandler) Post(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		writeJSONErrorf(w, "Manifest is an invalid json for %s, manifest %s and error: %s",
 			name, manifest[:], err)
-		log.WithFields(log.Fields{
-			"name": name, "manifest": manifest[:], "error": err, "request": formatRequest(r),
-		}).Error("Failed to parse manifest")
+		log.With("name", name, "manifest", manifest[:], "error", err, "request", formatRequest(r)).Error(
+			"Failed to parse manifest")
 		return
 	}
 
@@ -103,9 +95,8 @@ func (h *manifestHandler) Post(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		writeJSONErrorf(w, "Failed to update manifest for %s with manifest %s and error: %s",
 			name, manifest, err)
-		log.WithFields(log.Fields{
-			"name": name, "manifest": manifest[:], "error": err, "request": formatRequest(r),
-		}).Error("Failed to update manifest")
+		log.With("name", name, "manifest", manifest[:], "error", err, "request", formatRequest(r)).Error(
+			"Failed to update manifest")
 		return
 	}
 

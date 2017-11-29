@@ -1,7 +1,8 @@
 package main
 
 import (
-	"code.uber.internal/go-common.git/x/log"
+	"go.uber.org/zap"
+
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
@@ -13,7 +14,7 @@ import (
 // Config defines origin server configuration.
 type Config struct {
 	Verbose    bool
-	Logging    log.Configuration
+	ZapLogging zap.Config        `yaml:"zap"`
 	BlobServer blobserver.Config `yaml:"blobserver"`
 	BlobClient blobclient.Config `yaml:"blobclient"`
 	LocalStore store.Config      `yaml:"store"`

@@ -6,9 +6,9 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 type metainfoHandler struct {
@@ -33,7 +33,7 @@ func (h *metainfoHandler) Get(w http.ResponseWriter, r *http.Request) {
 		} else {
 			http.Error(w, fmt.Sprintf("storage: %s", err), http.StatusInternalServerError)
 		}
-		log.WithFields(log.Fields{"name": name}).Errorf("Error getting torrent metainfo: %s", err)
+		log.With("name", name).Errorf("Error getting torrent metainfo: %s", err)
 		return
 	}
 
@@ -64,10 +64,10 @@ func (h *metainfoHandler) Post(w http.ResponseWriter, r *http.Request) {
 		} else {
 			http.Error(w, fmt.Sprintf("storage: %s", err), http.StatusInternalServerError)
 		}
-		log.WithFields(log.Fields{"name": mi.Name()}).Errorf("Failed to create torrent: %s", err)
+		log.With("name", mi.Name()).Errorf("Failed to create torrent: %s", err)
 		return
 	}
 
-	log.WithFields(log.Fields{"name": mi.Name()}).Info("Wrote torrent metainfo")
+	log.With("name", mi.Name()).Info("Wrote torrent metainfo")
 	w.WriteHeader(http.StatusOK)
 }

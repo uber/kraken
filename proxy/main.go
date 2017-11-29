@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 
-	"code.uber.internal/go-common.git/x/log"
 	dockercontext "github.com/docker/distribution/context"
 	docker "github.com/docker/distribution/registry"
 
@@ -16,6 +15,7 @@ import (
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 func main() {
@@ -26,10 +26,8 @@ func main() {
 	if err := configutil.Load(*configFile, &config); err != nil {
 		panic(err)
 	}
-	// Disable JSON logging because it's completely unreadable.
-	formatter := true
-	config.Logging.TextFormatter = &formatter
-	log.Configure(&config.Logging, false)
+
+	log.ConfigureLogger(config.ZapLogging)
 
 	stats, closer, err := metrics.New(config.Metrics)
 	if err != nil {

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -15,6 +14,7 @@ import (
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/errutil"
+	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/stringset"
 )
 

@@ -12,13 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils"
 	"code.uber.internal/infra/kraken/utils/errutil"
+	"code.uber.internal/infra/kraken/utils/log"
 
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 )
 
@@ -289,11 +288,7 @@ func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 		return err
 	}
 
-	log.WithFields(bark.Fields{
-		"repo":     repo,
-		"tag":      tag,
-		"manifest": manifest,
-	}).Info("Successfully created tag")
+	log.With("repo", repo, "tag", tag, "manifest", manifest).Info("Successfully created tag")
 	t.metrics.Counter(createSuccessCounter).Inc(1)
 
 	return nil

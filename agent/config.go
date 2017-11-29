@@ -1,7 +1,7 @@
 package main
 
 import (
-	"code.uber.internal/go-common.git/x/log"
+	"go.uber.org/zap"
 
 	"code.uber.internal/infra/kraken/agent/agentserver"
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
@@ -13,7 +13,7 @@ import (
 
 // Config defines agent configuration.
 type Config struct {
-	Logging     log.Configuration     `yaml:"logging"`
+	ZapLogging  zap.Config            `yaml:"zap"`
 	Metrics     metrics.Config        `yaml:"metrics"`
 	Store       store.Config          `yaml:"store"`
 	Registry    dockerregistry.Config `yaml:"registry"`

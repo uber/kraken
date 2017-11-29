@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"sync"
 
-	"code.uber.internal/go-common.git/x/log"
 	"github.com/jackpal/bencode-go"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
@@ -15,6 +14,7 @@ import (
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/errutil"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 type announceHandler struct {
@@ -118,10 +118,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.UpdatePeer(peer); err != nil {
-		log.WithFields(log.Fields{
-			"info_hash": infoHash,
-			"peer_id":   peerID,
-		}).Errorf("Error updating peer: %s", err)
+		log.With("info_hash", infoHash, "peer_id", peerID).Errorf("Error updating peer: %s", err)
 	}
 
 	var errs []error
@@ -142,9 +139,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(origins) > 0 && tryUpdate {
 			if err := h.store.UpdateOrigins(infoHash, origins); err != nil {
-				log.WithFields(log.Fields{
-					"info_hash": infoHash,
-				}).Errorf("Error upserting origins: %s", err)
+				log.With("info_hash", infoHash).Errorf("Error upserting origins: %s", err)
 			}
 		}
 	}
@@ -176,11 +171,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	peers, err = h.policy.SamplePeers(peers, len(peers))
 	if err != nil {
 		msg := "Could not apply peer handout sampling policy"
-		log.WithFields(log.Fields{
-			"error":     err.Error(),
-			"info_hash": infoHash,
-			"request":   formatRequest(r),
-		}).Info(msg)
+		log.With("error", err.Error(), "info_hash", infoHash, "request", formatRequest(r)).Info(msg)
 		http.Error(w, fmt.Sprintf("%s: %v", msg, err), http.StatusInternalServerError)
 		return
 	}

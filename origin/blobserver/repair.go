@@ -10,11 +10,11 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
+	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/netutil"
 	"code.uber.internal/infra/kraken/utils/stringset"
 )
@@ -126,9 +126,7 @@ func (r *repairer) WriteMessages(w http.ResponseWriter) {
 	buf := new(bytes.Buffer)
 	for msg := range r.messages {
 		if err := json.NewEncoder(buf).Encode(msg); err != nil {
-			log.WithFields(log.Fields{
-				"message": msg,
-			}).Errorf("Failed to encode digest repair message: %s", err)
+			log.With("message", msg).Errorf("Failed to encode digest repair message: %s", err)
 			continue
 		}
 	}

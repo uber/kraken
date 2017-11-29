@@ -8,15 +8,16 @@ import (
 	"time"
 
 	"github.com/andres-erbsen/clock"
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
+	"go.uber.org/zap"
 	"golang.org/x/sync/syncmap"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
+
+	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/timeutil"
@@ -440,19 +441,19 @@ func (d *dispatcher) isFullPiece(i, offset, length int) bool {
 func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
-		d.logf(log.Fields{"peer": p, "piece": i}).Error("Rejecting piece request: chunk not supported")
+		d.log("peer", p, "piece", i).Error("Rejecting piece request: chunk not supported")
 		p.messages.Send(newErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, errChunkNotSupported))
 		return
 	}
 
 	payload, err := d.Torrent.ReadPiece(i)
 	if err != nil {
-		d.logf(log.Fields{"peer": p, "piece": i}).Errorf("Error reading requested piece: %s", err)
+		d.log("peer", p, "piece", i).Errorf("Error reading requested piece: %s", err)
 		p.messages.Send(newErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err))
 		return
 	}
 	if err := p.messages.Send(newPiecePayloadMessage(i, payload)); err != nil {
-		d.logf(log.Fields{"peer": p, "piece": i}).Errorf("Failed to send piece: %s", err)
+		d.log("peer", p, "piece", i).Errorf("Failed to send piece: %s", err)
 		return
 	}
 	p.touchLastPieceSent()
@@ -466,13 +467,13 @@ func (d *dispatcher) handlePiecePayload(
 
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
-		d.logf(log.Fields{"peer": p, "piece": i}).Error("Rejecting piece payload: chunk not supported")
+		d.log("peer", p, "piece", i).Error("Rejecting piece payload: chunk not supported")
 		d.clearPieceRequest(p.id, i)
 		return
 	}
 	if err := d.Torrent.WritePiece(payload, i); err != nil {
 		if err != storage.ErrPieceComplete {
-			d.logf(log.Fields{"peer": p, "piece": i}).Errorf("Error writing piece payload: %s", err)
+			d.log("peer", p, "piece", i).Errorf("Error writing piece payload: %s", err)
 			d.clearPieceRequest(p.id, i)
 		}
 		return
@@ -505,14 +506,10 @@ func (d *dispatcher) handleCancelPiece(p *peer, msg *p2p.CancelPieceMessage) {
 }
 
 func (d *dispatcher) handleBitfield(p *peer, msg *p2p.BitfieldMessage) {
-	log.WithFields(log.Fields{"peer": p}).Error("Unexpected bitfield message from established conn")
+	d.log("peer", p).Error("Unexpected bitfield message from established conn")
 }
 
-func (d *dispatcher) logf(f log.Fields) bark.Logger {
-	f["torrent"] = d.Torrent
-	return log.WithFields(f)
-}
-
-func (d *dispatcher) log() bark.Logger {
-	return d.logf(log.Fields{})
+func (d *dispatcher) log(args ...interface{}) *zap.SugaredLogger {
+	args = append(args, "torrent", d.Torrent)
+	return log.With(args...)
 }

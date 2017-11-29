@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"code.uber.internal/go-common.git/x/log"
 	dockercontext "github.com/docker/distribution/context"
 	docker "github.com/docker/distribution/registry"
 
@@ -21,6 +20,7 @@ import (
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 func main() {
@@ -39,10 +39,9 @@ func main() {
 	if err := configutil.Load(*configFile, &config); err != nil {
 		panic(err)
 	}
-	// Disable JSON logging because it's completely unreadable.
-	formatter := true
-	config.Logging.TextFormatter = &formatter
-	log.Configure(&config.Logging, false)
+
+	zlog := log.ConfigureLogger(config.ZapLogging)
+	defer zlog.Sync()
 
 	pctx, err := peercontext.New(
 		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *peerIP, *peerPort)

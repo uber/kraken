@@ -8,8 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/DATA-DOG/go-sqlmock.v1"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/torlib"
+
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 var (
