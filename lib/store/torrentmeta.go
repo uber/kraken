@@ -3,25 +3,25 @@ package store
 import (
 	"regexp"
 
-	"code.uber.internal/infra/kraken/lib/store/base"
+	"code.uber.internal/infra/kraken/lib/store/internal"
 )
 
 const torrentMetaSuffix = "_torrentmeta"
 
 func init() {
-	base.RegisterMetadata(regexp.MustCompile(torrentMetaSuffix), &torrentMetaFactory{})
+	internal.RegisterMetadata(regexp.MustCompile(torrentMetaSuffix), &torrentMetaFactory{})
 }
 
 type torrentMetaFactory struct{}
 
-func (f torrentMetaFactory) Create(suffix string) base.MetadataType {
+func (f torrentMetaFactory) Create(suffix string) internal.MetadataType {
 	return NewTorrentMeta()
 }
 
 type torrentMeta struct{}
 
 // NewTorrentMeta return a new torrentMeat object
-func NewTorrentMeta() base.MetadataType {
+func NewTorrentMeta() internal.MetadataType {
 	return &torrentMeta{}
 }
 

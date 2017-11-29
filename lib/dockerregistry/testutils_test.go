@@ -10,7 +10,6 @@ import (
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/store/base"
 	"code.uber.internal/infra/kraken/utils"
 )
 
@@ -170,7 +169,7 @@ func genBlobDataPath(digest string) string {
 
 func getShardedRelativePath(name string) string {
 	filePath := ""
-	for i := 0; i < base.DefaultShardIDLength && i < len(name)/2; i++ {
+	for i := 0; i < 2 && i < len(name)/2; i++ {
 		// (1 byte = 2 char of file name assumming file name is in HEX)
 		dirName := name[i*2 : i*2+2]
 		filePath = path.Join(filePath, dirName)

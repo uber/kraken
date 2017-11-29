@@ -71,10 +71,10 @@ func TestDownloadAndDeleteFiles(t *testing.T) {
 	s, cleanup := LocalFileStoreWithRefcountFixture()
 	defer cleanup()
 
-	var waitGroup sync.WaitGroup
+	var wg sync.WaitGroup
 
 	for i := 0; i < 100; i++ {
-		waitGroup.Add(1)
+		wg.Add(1)
 
 		testFileName := fmt.Sprintf("test_%d", i)
 		go func() {
@@ -85,11 +85,11 @@ func TestDownloadAndDeleteFiles(t *testing.T) {
 			err = s.MoveCacheFileToTrash(testFileName)
 			require.Nil(err)
 
-			waitGroup.Done()
+			wg.Done()
 		}()
 	}
 
-	waitGroup.Wait()
+	wg.Wait()
 	err := s.DeleteAllTrashFiles()
 	require.Nil(err)
 
@@ -125,15 +125,15 @@ func TestListPopulatedShardIDs(t *testing.T) {
 	defer cleanup()
 
 	var cacheFiles []string
-	cacheFileMap := make(map[string]string)
+	shardsMap := make(map[string]string)
 	for i := 0; i < 100; i++ {
 		name := randutil.Hex(32)
-		if _, ok := cacheFileMap[name]; ok {
+		if _, ok := shardsMap[name[:4]]; ok {
 			// Avoid duplicated names
 			continue
 		}
 		cacheFiles = append(cacheFiles, name)
-		cacheFileMap[name] = name
+		shardsMap[name[:4]] = name
 		require.NoError(s.CreateUploadFile(name, 1))
 		require.NoError(s.MoveUploadFileToCache(name, name))
 		if i >= 50 {

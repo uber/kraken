@@ -3,16 +3,16 @@ package store
 import (
 	"regexp"
 
-	"code.uber.internal/infra/kraken/lib/store/base"
+	"code.uber.internal/infra/kraken/lib/store/internal"
 )
 
 func init() {
-	base.RegisterMetadata(regexp.MustCompile("_startedat"), &startedAtFactory{})
+	internal.RegisterMetadata(regexp.MustCompile("_startedat"), &startedAtFactory{})
 }
 
 type startedAtFactory struct{}
 
-func (f startedAtFactory) Create(suffix string) base.MetadataType {
+func (f startedAtFactory) Create(suffix string) internal.MetadataType {
 	return NewStartedAt()
 }
 
@@ -20,7 +20,7 @@ type startedAt struct{}
 
 // NewStartedAt returns a new startedAt object.
 // Registry reads the startedat file and removes uploads that have been active for too long.
-func NewStartedAt() base.MetadataType {
+func NewStartedAt() internal.MetadataType {
 	return &startedAt{}
 }
 

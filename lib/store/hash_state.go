@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"regexp"
 
-	"code.uber.internal/infra/kraken/lib/store/base"
+	"code.uber.internal/infra/kraken/lib/store/internal"
 )
 
 func init() {
 	// TODO: use _ instead of /, otherwise it won't support reload.
-	base.RegisterMetadata(regexp.MustCompile("_hashstates/\\w+/\\w+$"), &hashStateFactory{})
+	internal.RegisterMetadata(regexp.MustCompile("_hashstates/\\w+/\\w+$"), &hashStateFactory{})
 }
 
 type hashStateFactory struct{}
 
-func (f hashStateFactory) Create(suffix string) base.MetadataType {
+func (f hashStateFactory) Create(suffix string) internal.MetadataType {
 	algoRe := regexp.MustCompile("_hashstates/(\\w+)/\\w+$")
 	algo := algoRe.FindStringSubmatch(suffix)[0]
 	offsetRe := regexp.MustCompile("_hashstates/\\w+/(\\w+)$")
@@ -30,7 +30,7 @@ type hashState struct {
 }
 
 // NewHashState initializes and returns an new MetadataType obj.
-func NewHashState(algo, offset string) base.MetadataType {
+func NewHashState(algo, offset string) internal.MetadataType {
 	return &hashState{
 		algo:   algo,
 		offset: offset,
