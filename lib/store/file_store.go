@@ -11,10 +11,10 @@ import (
 	"regexp"
 	"strings"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store/internal"
+	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/osutil"
 
 	"github.com/docker/distribution/uuid"

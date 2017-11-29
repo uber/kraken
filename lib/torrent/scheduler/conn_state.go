@@ -6,10 +6,11 @@ import (
 	"math"
 	"time"
 
-	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken/torlib"
 	"github.com/andres-erbsen/clock"
-	"github.com/uber-common/bark"
+	"go.uber.org/zap"
+
+	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 var errTorrentAtCapacity = errors.New("torrent is at capacity")
@@ -104,9 +105,8 @@ func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) er
 	e.expiration = s.clock.Now().Add(d)
 	e.failures++
 
-	s.logf(log.Fields{
-		"peer": peerID, "hash": infoHash,
-	}).Infof("Conn blacklisted for %.1f seconds after %d failures", d.Seconds(), e.failures)
+	s.log("peer", peerID, "hash", infoHash).Infof(
+		"Conn blacklisted for %.1f seconds after %d failures", d.Seconds(), e.failures)
 
 	return nil
 }
@@ -135,9 +135,8 @@ func (s *connState) AddPending(peerID torlib.PeerID, infoHash torlib.InfoHash) e
 	}
 	s.pending[k] = true
 	s.capacity[k.infoHash]--
-	s.logf(log.Fields{
-		"peer": peerID, "hash": infoHash,
-	}).Infof("Added pending conn, capacity now at %d", s.capacity[k.infoHash])
+	s.log("peer", peerID, "hash", infoHash).Infof(
+		"Added pending conn, capacity now at %d", s.capacity[k.infoHash])
 	return nil
 }
 
@@ -148,9 +147,8 @@ func (s *connState) DeletePending(peerID torlib.PeerID, infoHash torlib.InfoHash
 	}
 	delete(s.pending, k)
 	s.capacity[k.infoHash]++
-	s.logf(log.Fields{
-		"peer": peerID, "hash": infoHash,
-	}).Infof("Deleted pending conn, capacity now at %d", s.capacity[k.infoHash])
+	s.log("peer", peerID, "hash", infoHash).Infof(
+		"Deleted pending conn, capacity now at %d", s.capacity[k.infoHash])
 }
 
 func (s *connState) MovePendingToActive(c *conn) error {
@@ -174,9 +172,8 @@ func (s *connState) MovePendingToActive(c *conn) error {
 	}
 	s.active[k] = c
 	s.adjustConnBandwidthLimits()
-	s.logf(log.Fields{
-		"peer": k.peerID, "hash": k.infoHash,
-	}).Info("Moved conn from pending to active")
+	s.log("peer", k.peerID, "hash", k.infoHash).Info(
+		"Moved conn from pending to active")
 	return nil
 }
 
@@ -193,9 +190,8 @@ func (s *connState) DeleteActive(c *conn) bool {
 	delete(s.active, k)
 	s.capacity[k.infoHash]++
 	s.adjustConnBandwidthLimits()
-	s.logf(log.Fields{
-		"peer": k.peerID, "hash": k.infoHash,
-	}).Infof("Deleted active conn, capacity now at %d", s.capacity[k.infoHash])
+	s.log("peer", k.peerID, "hash", k.infoHash).Infof(
+		"Deleted active conn, capacity now at %d", s.capacity[k.infoHash])
 	return true
 }
 
@@ -252,10 +248,6 @@ func (s *connState) adjustConnBandwidthLimits() {
 	s.log().Infof("Balanced egress bandwidth to %d b/sec across %d conns", limit, n)
 }
 
-func (s *connState) logf(f log.Fields) bark.Logger {
-	return log.WithFields(f)
-}
-
-func (s *connState) log() bark.Logger {
-	return s.logf(log.Fields{})
+func (s *connState) log(args ...interface{}) *zap.SugaredLogger {
+	return log.With(args...)
 }

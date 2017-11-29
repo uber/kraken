@@ -11,12 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -26,6 +27,7 @@ import (
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	trackerservice "code.uber.internal/infra/kraken/tracker/service"
+	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
@@ -37,13 +39,15 @@ func init() {
 	debug := flag.Bool("scheduler.debug", false, "log all Scheduler debugging output")
 	flag.Parse()
 
-	formatter := true
-	logConfig := &log.Configuration{
-		Level:         log.DebugLevel,
-		Stdout:        *debug,
-		TextFormatter: &formatter,
+	zapConfig := zap.NewProductionConfig()
+	zapConfig.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+	zapConfig.Encoding = "console"
+
+	if !*debug {
+		zapConfig.OutputPaths = []string{}
 	}
-	log.Configure(logConfig, true)
+
+	log.ConfigureLogger(zapConfig)
 }
 
 func connConfigFixture() ConnConfig {

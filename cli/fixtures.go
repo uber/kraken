@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"code.uber.internal/go-common.git/x/log"
 	"github.com/pressly/chi"
 
 	"code.uber.internal/infra/kraken/lib/hrw"
@@ -73,7 +72,7 @@ func OriginFixture(digests []OriginContent, weights []int) ([]*TestOriginServer,
 	for i, w := range weights {
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 
 		hashstate[listener.Addr().String()] = blobserver.HashNodeConfig{

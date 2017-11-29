@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"code.uber.internal/infra/kraken/utils/log"
+
 	"code.uber.internal/go-common.git/x/kafka"
-	"code.uber.internal/go-common.git/x/log"
 )
 
 // Producer emits events.

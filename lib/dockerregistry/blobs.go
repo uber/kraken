@@ -4,9 +4,9 @@ import (
 	"io"
 	"io/ioutil"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/utils/log"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 )
 

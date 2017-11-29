@@ -1,7 +1,8 @@
 package main
 
 import (
-	"code.uber.internal/go-common.git/x/log"
+	"go.uber.org/zap"
+
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/serverset"
@@ -12,13 +13,13 @@ import (
 
 // Config defines proxy configuration
 type Config struct {
-	Tracker  TrackerConfig                          `yaml:"tracker"`
-	Origin   OriginConfig                           `yaml:"origin"`
-	Transfer transfer.OriginClusterTransfererConfig `yaml:"transfer"`
-	Store    store.Config                           `yaml:"store"`
-	Registry dockerregistry.Config                  `yaml:"registry"`
-	Logging  log.Configuration                      `yaml:"logging"`
-	Metrics  metrics.Config                         `yaml:"metrics"`
+	Tracker    TrackerConfig                          `yaml:"tracker"`
+	Origin     OriginConfig                           `yaml:"origin"`
+	Transfer   transfer.OriginClusterTransfererConfig `yaml:"transfer"`
+	Store      store.Config                           `yaml:"store"`
+	Registry   dockerregistry.Config                  `yaml:"registry"`
+	ZapLogging zap.Config                             `yaml:"zap"`
+	Metrics    metrics.Config                         `yaml:"metrics"`
 }
 
 // OriginConfig defines configuration for proxy's dependency on the origin cluster.

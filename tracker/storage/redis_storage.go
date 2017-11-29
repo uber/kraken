@@ -7,10 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/infra/kraken/torlib"
-	"code.uber.internal/infra/kraken/utils/stringset"
 	"github.com/garyburd/redigo/redis"
+
+	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/utils/log"
+	"code.uber.internal/infra/kraken/utils/stringset"
 )
 
 // RedisStorage errors.

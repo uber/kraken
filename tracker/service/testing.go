@@ -5,11 +5,11 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/go-common.git/x/log"
 	"github.com/pressly/chi"
 
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
+	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 

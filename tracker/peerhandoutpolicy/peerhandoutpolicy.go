@@ -3,8 +3,8 @@ package peerhandoutpolicy
 import (
 	"fmt"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 // PeerPriorityPolicy defines the policy for assigning priority to peers.

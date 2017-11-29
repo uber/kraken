@@ -9,16 +9,16 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/go-common.git/x/log"
 	"github.com/andres-erbsen/clock"
 	"github.com/golang/protobuf/proto"
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
+	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
@@ -371,9 +371,9 @@ func (c *conn) sendPiecePayload(b []byte) error {
 		r := c.egressLimiter.ReserveN(c.clock.Now(), numBytes)
 		if !r.OK() {
 			// TODO(codyg): This is really bad. We need to alert if this happens.
-			c.logf(log.Fields{
-				"max_burst": c.egressLimiter.Burst(), "payload": numBytes,
-			}).Errorf("Cannot send piece, payload is larger than burst size")
+			c.log(
+				"max_burst", c.egressLimiter.Burst(), "payload", numBytes,
+			).Errorf("Cannot send piece, payload is larger than burst size")
 			return errors.New("piece payload is larger than burst size")
 		}
 
@@ -452,12 +452,7 @@ L:
 	c.Close()
 }
 
-func (c *conn) logf(f log.Fields) bark.Logger {
-	f["remote_peer"] = c.PeerID
-	f["hash"] = c.InfoHash
-	return log.WithFields(f)
-}
-
-func (c *conn) log() bark.Logger {
-	return c.logf(log.Fields{})
+func (c *conn) log(keysAndValues ...interface{}) *zap.SugaredLogger {
+	keysAndValues = append(keysAndValues, "remote_peer", c.PeerID, "hash", c.InfoHash)
+	return log.With(keysAndValues...)
 }

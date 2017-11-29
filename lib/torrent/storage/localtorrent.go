@@ -8,9 +8,9 @@ import (
 
 	"go.uber.org/atomic"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 // LocalTorrent errors.

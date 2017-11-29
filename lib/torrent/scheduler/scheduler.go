@@ -8,15 +8,15 @@ import (
 	"time"
 
 	"github.com/andres-erbsen/clock"
-	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
+	"go.uber.org/zap"
 
-	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 // Scheduler errors.
@@ -342,15 +342,13 @@ func (s *Scheduler) doInitIncomingConn(
 }
 
 func (s *Scheduler) initIncomingConn(nc net.Conn, remoteHandshake *handshake) {
-	s.logf(log.Fields{"peer": remoteHandshake.PeerID}).Info("Handshaking incoming connection")
+	s.log("peer", remoteHandshake.PeerID).Info("Handshaking incoming connection")
 
 	var e event
 	c, bitfield, t, err := s.doInitIncomingConn(nc, remoteHandshake)
 	if err != nil {
 		nc.Close()
-		s.logf(log.Fields{
-			"handshake": remoteHandshake,
-		}).Errorf("Error initializing incoming connection: %s", err)
+		s.log("handshake", remoteHandshake).Errorf("Error initializing incoming connection: %s", err)
 		e = failedHandshakeEvent{remoteHandshake.PeerID, remoteHandshake.InfoHash}
 	} else {
 		e = incomingConnEvent{c, bitfield, t}
@@ -385,16 +383,14 @@ func (s *Scheduler) doInitOutgoingConn(
 }
 
 func (s *Scheduler) initOutgoingConn(peerID torlib.PeerID, ip string, port int, t storage.Torrent) {
-	s.logf(log.Fields{
-		"peer": peerID, "ip": ip, "port": port, "torrent": t,
-	}).Info("Initializing outgoing connection")
+	s.log("peer", peerID, "ip", ip, "port", port, "torrent", t).Info(
+		"Initializing outgoing connection")
 
 	var e event
 	c, bitfield, err := s.doInitOutgoingConn(peerID, ip, port, t)
 	if err != nil {
-		s.logf(log.Fields{
-			"peer": peerID, "ip": ip, "port": port, "torrent": t,
-		}).Errorf("Error intializing outgoing connection: %s", err)
+		s.log("peer", peerID, "ip", ip, "port", port, "torrent", t).Errorf(
+			"Error intializing outgoing connection: %s", err)
 		e = failedHandshakeEvent{peerID, t.InfoHash()}
 	} else {
 		e = outgoingConnEvent{c, bitfield, t}
@@ -407,7 +403,7 @@ func (s *Scheduler) announce(d *dispatcher) {
 	peers, err := s.announceClient.Announce(
 		d.Torrent.Name(), d.Torrent.InfoHash(), d.Torrent.BytesDownloaded())
 	if err != nil {
-		s.logf(log.Fields{"dispatcher": d}).Errorf("Announce failed: %s", err)
+		s.log("dispatcher", d).Errorf("Announce failed: %s", err)
 		e = announceFailureEvent{d}
 	} else {
 		e = announceResponseEvent{d.Torrent.InfoHash(), peers}
@@ -453,10 +449,6 @@ func (s *Scheduler) initTorrentControl(t storage.Torrent) *torrentControl {
 	return ctrl
 }
 
-func (s *Scheduler) logf(f log.Fields) bark.Logger {
-	return log.WithFields(f)
-}
-
-func (s *Scheduler) log() bark.Logger {
-	return s.logf(log.Fields{})
+func (s *Scheduler) log(args ...interface{}) *zap.SugaredLogger {
+	return log.With(args...)
 }
