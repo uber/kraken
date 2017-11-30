@@ -366,9 +366,8 @@ func initHashState(config blobserver.Config) *hrw.RendezvousHash {
 
 	fmt.Println("Hash state is being initialized to: ")
 
-	// Add all configured nodes to a hashing statae
+	// Add all configured nodes to a hashing state
 	for origin, node := range config.HashNodes {
-
 		hs.AddNode(node.Label, node.Weight)
 		fmt.Printf("Hash node added: [ origin: %s, label: %s, weight: %d ]\n", origin, node.Label, node.Weight)
 	}

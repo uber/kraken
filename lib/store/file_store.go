@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"hash"
 	"io"
 	"io/ioutil"
 	"math"
@@ -12,11 +13,13 @@ import (
 
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store/internal"
 	"code.uber.internal/infra/kraken/utils/osutil"
 
 	"github.com/docker/distribution/uuid"
 	"github.com/robfig/cron"
+	"github.com/spaolacci/murmur3"
 )
 
 // FileReadWriter aliases internal.FileReadWriter
@@ -104,18 +107,9 @@ type LocalFileStore struct {
 
 // NewLocalFileStore initializes and returns a new LocalFileStore object.
 func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error) {
-	// Init all directories.
-	for _, dir := range []string{config.UploadDir, config.DownloadDir, config.TrashDir} {
-		os.RemoveAll(dir)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	// We do not want to remove all existing files in cache directory during restart.
-	err := os.MkdirAll(config.CacheDir, 0755)
+	err := initDirectories(config)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	uploadBackend, err := internal.NewLocalFileStore()
@@ -163,6 +157,84 @@ func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error
 	}
 
 	return localStore, nil
+}
+
+func initDirectories(config *Config) error {
+	// Recreate upload, download and trash dirs.
+	for _, dir := range []string{config.UploadDir, config.DownloadDir, config.TrashDir} {
+		os.RemoveAll(dir)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return err
+		}
+	}
+
+	// We do not want to remove all existing files in cache directory during restart.
+	err := os.MkdirAll(config.CacheDir, 0755)
+	if err != nil {
+		return err
+	}
+
+	// If a list of volumes is provided, the volumes will be used to store the actual files, and symlinks will be
+	// created from these volumes to the state directories.
+	// Download, cache and trash dirs are supposed to contain 256 symlinks (first level of shards), points to different
+	// volumnes based on rendezvous hash.
+	if len(config.Volumes) > 0 {
+		rendezvousHash := hrw.NewRendezvousHash(
+			func() hash.Hash { return murmur3.New64() },
+			hrw.UInt64ToFloat64)
+
+		for _, volume := range config.Volumes {
+			if _, err := os.Stat(volume.Location); err != nil {
+				return err
+			}
+			rendezvousHash.AddNode(volume.Location, volume.Weight)
+		}
+
+		// For download, cache and trash directories, create 256 symlinks each.
+		for subdirIndex := 0; subdirIndex < 256; subdirIndex++ {
+			subdirName := fmt.Sprintf("%02X", subdirIndex)
+			nodes, err := rendezvousHash.GetOrderedNodes(subdirName, 1)
+			if len(nodes) != 1 || err != nil {
+				return fmt.Errorf("Failed to calculate volume for subdir %s", subdirName)
+			}
+			for _, stateDir := range []string{config.DownloadDir, config.CacheDir, config.TrashDir} {
+				sourcePath := path.Join(nodes[0].Label, path.Base(stateDir), subdirName)
+				if err := os.MkdirAll(sourcePath, 0755); err != nil {
+					return err
+				}
+				targetPath := path.Join(stateDir, subdirName)
+				if err := createOrUpdateSymlink(sourcePath, targetPath); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func createOrUpdateSymlink(sourcePath, targetPath string) error {
+	if _, err := os.Stat(targetPath); err == nil {
+		if existingSource, err := os.Readlink(targetPath); err != nil {
+			return err
+		} else if existingSource != sourcePath {
+			// If the symlink already exists and points to another valid location, recreate the symlink.
+			if err := os.Remove(targetPath); err != nil {
+				return err
+			}
+			if err := os.Symlink(sourcePath, targetPath); err != nil {
+				return err
+			}
+		}
+	} else if os.IsNotExist(err) {
+		if err := os.Symlink(sourcePath, targetPath); err != nil {
+			return err
+		}
+	} else {
+		return err
+	}
+
+	return nil
 }
 
 // Config returns configuration of the store
