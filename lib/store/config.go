@@ -11,6 +11,7 @@ type Config struct {
 	TrashDir      string              `yaml:"trash_dir"`
 	TrashDeletion TrashDeletionConfig `yaml:"trash_deletion"`
 	LRUConfig     LRUConfig           `yaml:"lru"`
+	Volumes       []Volume            `yaml:"volumes"`
 }
 
 // TrashDeletionConfig contains configuration to delete trash dir
@@ -23,4 +24,12 @@ type TrashDeletionConfig struct {
 type LRUConfig struct {
 	Enable bool `yaml:"enable"`
 	Size   int  `yaml:"size"`
+}
+
+// Volume - if provided, volumes are used to store the actual files.
+// Symlinks will be created under state directories.
+// This configuration is needed on hosts with multiple disks.
+type Volume struct {
+	Location string
+	Weight   int
 }

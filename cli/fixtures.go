@@ -118,7 +118,7 @@ func (to *TestOriginServer) fillContentItems(digests []OriginContent) {
 
 // fillContentItems adds content item to an internal list of blob digests
 func (to *TestOriginServer) findOriginByLabel(originLabel string) string {
-	// Add all configured nodes to a hashing statae
+	// Add all configured nodes to a hashing state
 	for origin, node := range to.config.HashNodes {
 
 		if node.Label == originLabel {
