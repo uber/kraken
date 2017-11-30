@@ -261,6 +261,15 @@ func (d *dispatcher) complete() {
 	d.pendingPiecesDoneOnce.Do(func() {
 		close(d.pendingPiecesDone)
 	})
+	// Close connections to other completed peers since those connections are
+	// now useless.
+	d.peers.Range(func(k, v interface{}) bool {
+		p := v.(*peer)
+		if p.bitfield.Complete() {
+			p.messages.Close()
+		}
+		return true
+	})
 }
 
 func (d *dispatcher) expiredPieceRequest(r pendingPieceRequest) bool {
@@ -447,6 +456,9 @@ func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 		return
 	}
 	p.touchLastPieceSent()
+
+	// Assume that the peer successfully received the piece.
+	p.bitfield.Set(i, true)
 }
 
 func (d *dispatcher) handlePiecePayload(

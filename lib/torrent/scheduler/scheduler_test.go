@@ -154,55 +154,6 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 	wg.Wait()
 }
 
-func TestPeerAnnouncesPieceAfterDownloadingFromSeeder(t *testing.T) {
-	require := require.New(t)
-
-	mocks, cleanup := newTestMocks(t)
-	defer cleanup()
-
-	tf := torlib.TestTorrentFileFixture()
-
-	mocks.metaInfoClient.EXPECT().Download(tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(3)
-
-	// Each peer is allowed two connections, which allows them to establish both
-	// a connection to the seeder and another peer.
-	peerConfig := configFixture()
-	peerConfig.ConnState.MaxOpenConnectionsPerTorrent = 2
-
-	peerA := mocks.newPeer(peerConfig)
-	peerB := mocks.newPeer(peerConfig)
-
-	peerAErrc := peerA.scheduler.AddTorrent(tf.MetaInfo.Name())
-	peerBErrc := peerB.scheduler.AddTorrent(tf.MetaInfo.Name())
-
-	// Wait for peerA and peerB to establish connections to one another before
-	// starting the seeder, so their handshake bitfields are both guaranteed to
-	// be empty.
-	waitForConnEstablished(t, peerA.scheduler, peerB.pctx.PeerID, tf.MetaInfo.InfoHash)
-	waitForConnEstablished(t, peerB.scheduler, peerA.pctx.PeerID, tf.MetaInfo.InfoHash)
-
-	// The seeder is allowed only one connection, which means only one peer will
-	// have access to the completed torrent, while the other is forced to rely
-	// on the "trickle down" announce piece messages.
-	seederConfig := configFixture()
-	seederConfig.ConnState.MaxOpenConnectionsPerTorrent = 1
-
-	seeder := mocks.newPeer(seederConfig)
-
-	seeder.writeTorrent(tf)
-	require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo.Name()))
-	require.NoError(<-peerAErrc)
-	require.NoError(<-peerBErrc)
-
-	peerA.checkTorrent(t, tf)
-	peerB.checkTorrent(t, tf)
-
-	// Ensure that only one peer was able to open a connection to the seeder.
-	require.NotEqual(
-		hasConn(peerA.scheduler, seeder.pctx.PeerID, tf.MetaInfo.InfoHash),
-		hasConn(peerB.scheduler, seeder.pctx.PeerID, tf.MetaInfo.InfoHash))
-}
-
 func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 	require := require.New(t)
 
