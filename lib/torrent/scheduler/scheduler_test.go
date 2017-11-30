@@ -223,6 +223,8 @@ func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 	seeder.writeTorrent(tf)
 	require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo.Name()))
 
+	clk.Add(config.AnnounceInterval)
+
 	leecher := mocks.newPeer(config, withClock(clk))
 	errc := leecher.scheduler.AddTorrent(tf.MetaInfo.Name())
 

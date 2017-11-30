@@ -131,44 +131,46 @@ func (e incomingHandshakeEvent) Apply(s *Scheduler) {
 
 // incomingConnEvent occurs when a pending incoming connection finishes handshaking.
 type incomingConnEvent struct {
-	conn    *conn
-	torrent storage.Torrent
+	conn     *conn
+	bitfield storage.Bitfield
+	torrent  storage.Torrent
 }
 
 // Apply transitions a fully-handshaked incoming conn from pending to active.
 func (e incomingConnEvent) Apply(s *Scheduler) {
 	s.logf(log.Fields{"conn": e.conn, "torrent": e.torrent}).Debug("Applying incoming conn event")
 
-	if err := s.addIncomingConn(e.conn, e.torrent); err != nil {
+	if err := s.addIncomingConn(e.conn, e.bitfield, e.torrent); err != nil {
 		s.logf(log.Fields{
 			"conn": e.conn, "torrent": e.torrent,
 		}).Errorf("Error adding incoming conn: %s", err)
 		e.conn.Close()
 		return
 	}
-	s.logf(log.Fields{"conn": e.conn}).Info("Added incoming conn")
+	s.logf(log.Fields{"conn": e.conn, "bitfield": e.bitfield}).Info("Added incoming conn")
 	s.networkEventProducer.Produce(
 		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
 }
 
 // outgoingConnEvent occurs when a pending outgoing connection finishes handshaking.
 type outgoingConnEvent struct {
-	conn    *conn
-	torrent storage.Torrent
+	conn     *conn
+	bitfield storage.Bitfield
+	torrent  storage.Torrent
 }
 
 // Apply transitions a fully-handshaked outgoing conn from pending to active.
 func (e outgoingConnEvent) Apply(s *Scheduler) {
 	s.logf(log.Fields{"conn": e.conn, "torrent": e.torrent}).Debug("Applying outgoing conn event")
 
-	if err := s.addOutgoingConn(e.conn, e.torrent); err != nil {
+	if err := s.addOutgoingConn(e.conn, e.bitfield, e.torrent); err != nil {
 		s.logf(log.Fields{
 			"conn": e.conn, "torrent": e.torrent,
 		}).Errorf("Error adding outgoing conn: %s", err)
 		e.conn.Close()
 		return
 	}
-	s.logf(log.Fields{"conn": e.conn}).Info("Added outgoing conn")
+	s.logf(log.Fields{"conn": e.conn, "bitfield": e.bitfield}).Info("Added outgoing conn")
 	s.networkEventProducer.Produce(
 		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
 }
@@ -203,7 +205,7 @@ type announceResponseEvent struct {
 //
 // Also marks the dispatcher as ready to announce again.
 func (e announceResponseEvent) Apply(s *Scheduler) {
-	s.logf(log.Fields{"hash": e.infoHash}).Debug("Applying announce response event")
+	s.logf(log.Fields{"hash": e.infoHash, "num_peers": len(e.peers)}).Debug("Applying announce response event")
 
 	ctrl, ok := s.torrentControls[e.infoHash]
 	if !ok {
@@ -314,8 +316,17 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 	s.log().Debug("Applying preemption tick event")
 
 	for _, c := range s.connState.ActiveConns() {
+		ctrl, ok := s.torrentControls[c.InfoHash]
+		if !ok {
+			s.logf(log.Fields{"conn": c}).Error(
+				"Invariant violation: active conn not assigned to dispatcher")
+			c.Close()
+			continue
+		}
 		lastProgress := timeutil.MostRecent(
-			c.CreatedAt, c.LastGoodPieceReceived(), c.LastPieceSent())
+			c.CreatedAt,
+			ctrl.Dispatcher.LastGoodPieceReceived(c.PeerID),
+			ctrl.Dispatcher.LastPieceSent(c.PeerID))
 		if s.clock.Now().Sub(lastProgress) > s.config.IdleConnTTL {
 			s.logf(log.Fields{"conn": c}).Info("Closing idle conn")
 			c.Close()

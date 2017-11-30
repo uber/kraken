@@ -15,3 +15,11 @@ func MostRecent(ts ...time.Time) time.Time {
 	}
 	return max
 }
+
+// MaxDuration returns the largest duration between a and b.
+func MaxDuration(a, b time.Duration) time.Duration {
+	if a > b {
+		return a
+	}
+	return b
+}

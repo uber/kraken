@@ -96,3 +96,9 @@ func TestTorrentFileFixture() *TestTorrentFile {
 func MetaInfoFixture() *MetaInfo {
 	return TestTorrentFileFixture().MetaInfo
 }
+
+// CustomMetaInfoFixture returns a randomly generated MetaInfo of the given size
+// and piece length.
+func CustomMetaInfoFixture(size, pieceLength uint64) *MetaInfo {
+	return CustomTestTorrentFileFixture(size, pieceLength).MetaInfo
+}

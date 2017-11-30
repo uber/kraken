@@ -7,6 +7,7 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 
+	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
@@ -110,10 +111,13 @@ func TestChangesToActiveConnsRedistributesBandwidth(t *testing.T) {
 
 	s := newConnState(torlib.PeerIDFixture(), config, clock.New())
 
-	c1, cleanup := connFixture(t, connConfigFixture(), 32)
+	torrent, cleanup := storage.TorrentFixture(128, 32)
 	defer cleanup()
 
-	c2, cleanup := connFixture(t, connConfigFixture(), 32)
+	c1, cleanup := connFixture(connConfigFixture(), torrent)
+	defer cleanup()
+
+	c2, cleanup := connFixture(connConfigFixture(), torrent)
 	defer cleanup()
 
 	// First conn takes all bandwidth.
@@ -142,9 +146,12 @@ func TestAddingActiveConnsNeverRedistributesBandwidthBelowMin(t *testing.T) {
 
 	s := newConnState(torlib.PeerIDFixture(), config, clock.New())
 
+	torrent, cleanup := storage.TorrentFixture(128, 32)
+	defer cleanup()
+
 	// After adding 4 active conns, the bandwidth should hit the min.
 	for i := 0; i < 12; i++ {
-		c, cleanup := connFixture(t, connConfigFixture(), 32)
+		c, cleanup := connFixture(connConfigFixture(), torrent)
 		defer cleanup()
 		transitionToActive(t, s, c)
 	}
