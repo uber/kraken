@@ -96,14 +96,7 @@ func (f *connFactory) newConn(
 	nc net.Conn,
 	t storage.Torrent,
 	remotePeerID torlib.PeerID,
-	remoteBitfield storage.Bitfield,
 	openedByRemote bool) (*conn, error) {
-
-	stats := f.Stats.
-		SubScope("conn").
-		SubScope(remotePeerID.String()).
-		SubScope("torrent").
-		SubScope(t.Name())
 
 	// Clear all deadlines set during handshake. Once a conn is created, we
 	// rely on our own idle conn management via preemption events.
@@ -118,12 +111,11 @@ func (f *connFactory) newConn(
 		// A limit of 0 means no pieces will be allowed to send until bandwidth
 		// is allocated with SetEgressBandwidthLimit.
 		egressLimiter:  rate.NewLimiter(0, int(t.MaxPieceLength())),
-		Bitfield:       newSyncBitfield(remoteBitfield),
 		localPeerID:    f.LocalPeerID,
 		nc:             nc,
 		config:         f.Config,
 		clock:          f.Clock,
-		stats:          stats,
+		stats:          f.Stats,
 		openedByRemote: openedByRemote,
 		sender:         make(chan *message, f.Config.SenderBufferSize),
 		receiver:       make(chan *message, f.Config.ReceiverBufferSize),
@@ -138,7 +130,7 @@ func (f *connFactory) newConn(
 
 // SendAndReceiveHandshake initializes a new conn for Torrent t by sending a
 // handshake over nc and waiting for a handshake in response.
-func (f *connFactory) SendAndReceiveHandshake(nc net.Conn, t storage.Torrent) (*conn, error) {
+func (f *connFactory) SendAndReceiveHandshake(nc net.Conn, t storage.Torrent) (*conn, storage.Bitfield, error) {
 	localHandshake := &handshake{
 		PeerID:   f.LocalPeerID,
 		Name:     t.Name(),
@@ -146,20 +138,24 @@ func (f *connFactory) SendAndReceiveHandshake(nc net.Conn, t storage.Torrent) (*
 		Bitfield: t.Bitfield(),
 	}
 	if err := sendMessageWithTimeout(nc, localHandshake.ToP2PMessage(), f.Config.HandshakeTimeout); err != nil {
-		return nil, fmt.Errorf("failed to send handshake: %s", err)
+		return nil, nil, fmt.Errorf("failed to send handshake: %s", err)
 	}
 	m, err := readMessageWithTimeout(nc, f.Config.HandshakeTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("failed to receive handshake: %s", err)
+		return nil, nil, fmt.Errorf("failed to receive handshake: %s", err)
 	}
 	remoteHandshake, err := handshakeFromP2PMessage(m)
 	if err != nil {
-		return nil, fmt.Errorf("invalid handshake: %s", err)
+		return nil, nil, fmt.Errorf("invalid handshake: %s", err)
 	}
 	if remoteHandshake.InfoHash != localHandshake.InfoHash {
-		return nil, errors.New("received handshake with incorrect info hash")
+		return nil, nil, errors.New("received handshake with incorrect info hash")
 	}
-	return f.newConn(nc, t, remoteHandshake.PeerID, remoteHandshake.Bitfield, false)
+	c, err := f.newConn(nc, t, remoteHandshake.PeerID, false)
+	if err != nil {
+		return nil, nil, fmt.Errorf("new conn: %s", err)
+	}
+	return c, remoteHandshake.Bitfield, nil
 }
 
 // receiveHandshake reads a handshake from a new connection.
@@ -179,7 +175,7 @@ func receiveHandshake(nc net.Conn, timeout time.Duration) (*handshake, error) {
 // handshake over nc assuming that remoteHandshake has already been received
 // over nc.
 func (f *connFactory) ReciprocateHandshake(
-	nc net.Conn, t storage.Torrent, remoteHandshake *handshake) (*conn, error) {
+	nc net.Conn, t storage.Torrent, remoteHandshake *handshake) (*conn, storage.Bitfield, error) {
 
 	localHandshake := &handshake{
 		PeerID:   f.LocalPeerID,
@@ -188,9 +184,13 @@ func (f *connFactory) ReciprocateHandshake(
 		Bitfield: t.Bitfield(),
 	}
 	if err := sendMessageWithTimeout(nc, localHandshake.ToP2PMessage(), f.Config.HandshakeTimeout); err != nil {
-		return nil, err
+		return nil, nil, fmt.Errorf("send message: %s", err)
 	}
-	return f.newConn(nc, t, remoteHandshake.PeerID, remoteHandshake.Bitfield, true)
+	c, err := f.newConn(nc, t, remoteHandshake.PeerID, true)
+	if err != nil {
+		return nil, nil, fmt.Errorf("new conn: %s", err)
+	}
+	return c, remoteHandshake.Bitfield, nil
 }
 
 // conn manages peer communication over a connection for multiple torrents. Inbound
@@ -206,11 +206,6 @@ type conn struct {
 
 	// Controls egress piece bandwidth.
 	egressLimiter *rate.Limiter
-
-	// Tracks known pieces of the remote peer. Initialized to the bitfield sent
-	// via handshake. Mainly used as a bookkeeping tool for dispatcher.
-	// TODO(codyg): Factor dispatcher bookkeeping into a wrapper struct.
-	Bitfield *syncBitfield
 
 	localPeerID torlib.PeerID
 	nc          net.Conn
@@ -238,34 +233,6 @@ func (c *conn) SetEgressBandwidthLimit(bytesPerSec uint64) {
 
 func (c *conn) GetEgressBandwidthLimit() uint64 {
 	return uint64(c.egressLimiter.Limit())
-}
-
-func (c *conn) LastGoodPieceReceived() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	return c.lastGoodPieceReceived
-}
-
-func (c *conn) TouchLastGoodPieceReceived() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.lastGoodPieceReceived = c.clock.Now()
-}
-
-func (c *conn) LastPieceSent() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	return c.lastPieceSent
-}
-
-func (c *conn) TouchLastPieceSent() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.lastPieceSent = c.clock.Now()
 }
 
 // OpenedByRemote returns whether the conn was opened by the local peer, or the remote peer.

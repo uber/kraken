@@ -22,7 +22,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/mocks/lib/torrent/mockstorage"
 	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
@@ -66,6 +65,10 @@ func connStateConfigFixture() ConnStateConfig {
 	}.applyDefaults()
 }
 
+func dispatcherConfigFixture() DispatcherConfig {
+	return DispatcherConfig{}.applyDefaults()
+}
+
 func configFixture() Config {
 	return Config{
 		AnnounceInterval:         500 * time.Millisecond,
@@ -76,6 +79,7 @@ func configFixture() Config {
 		BlacklistCleanupInterval: time.Minute,
 		ConnState:                connStateConfigFixture(),
 		Conn:                     connConfigFixture(),
+		Dispatcher:               dispatcherConfigFixture(),
 	}.applyDefaults()
 }
 
@@ -294,14 +298,10 @@ func (n noopDeadline) SetDeadline(t time.Time) error      { return nil }
 func (n noopDeadline) SetReadDeadline(t time.Time) error  { return nil }
 func (n noopDeadline) SetWriteDeadline(t time.Time) error { return nil }
 
-func connFixture(t *testing.T, config ConnConfig, maxPieceLength int) (*conn, func()) {
+func connFixture(config ConnConfig, torrent storage.Torrent) (*conn, func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
-	ctrl := gomock.NewController(t)
-	cleanup.Add(ctrl.Finish)
-
-	infoHash := torlib.InfoHashFixture()
 	localPeerID := torlib.PeerIDFixture()
 	remotePeerID := torlib.PeerIDFixture()
 
@@ -319,16 +319,22 @@ func connFixture(t *testing.T, config ConnConfig, maxPieceLength int) (*conn, fu
 	localNC = noopDeadline{localNC}
 	go discard(remoteNC)
 
-	tor := mockstorage.NewMockTorrent(ctrl)
-	tor.EXPECT().Name().Return("some dummy name")
-	tor.EXPECT().InfoHash().Return(infoHash)
-	tor.EXPECT().MaxPieceLength().Return(int64(maxPieceLength))
-
-	c, err := f.newConn(localNC, tor, remotePeerID, storage.Bitfield{}, false)
+	c, err := f.newConn(localNC, torrent, remotePeerID, false)
 	if err != nil {
 		panic(err)
 	}
 	return c, cleanup.Run
+}
+
+func dispatcherFactoryFixture(config DispatcherConfig, clk clock.Clock) *dispatcherFactory {
+	return &dispatcherFactory{
+		Config:               config,
+		LocalPeerID:          torlib.PeerIDFixture(),
+		EventSender:          noopEventSender{},
+		Clock:                clk,
+		NetworkEventProducer: networkevent.NewTestProducer(),
+		Stats:                tally.NewTestScope("", nil),
+	}
 }
 
 // eventWatcher wraps an eventLoop and watches all events being sent. Note, clients

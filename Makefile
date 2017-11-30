@@ -31,7 +31,8 @@ PROGS = \
 	origin/origin \
 	proxy/proxy \
 	tools/bin/puller/puller \
-	benchmarks/benchmarks
+	benchmarks/benchmarks \
+	tools/bin/reload-config/reload-config
 
 # define the list of proto buffers the service depends on
 PROTO_GENDIR ?= .gen
@@ -56,6 +57,7 @@ cli/kraken-cli: $(wildcard cli/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 proxy/proxy: $(wildcard proxy/*.go)
 benchmarks/benchmarks: $(wildcard benchmarks/*.go)
+tools/bin/reload-config/reload-config: $(wildcard tools/bin/reload-config/*.go)
 
 .PHONY: bench
 bench:
@@ -257,9 +259,15 @@ run_integration:
 
 integration: bootstrap_integration build_integration run_integration
 
+.PHONY: benchmarks
 benchmarks:
 	-rm benchmarks/benchmarks
 	GOOS=linux GOARCH=amd64 make benchmarks/benchmarks
+
+.PHONY:
+reload-config:
+	-rm tools/bin/reload-config/reload-config
+	GOOS=linux GOARCH=amd64 make tools/bin/reload-config/reload-config
 
 # jenkins-only debian build job for cli
 .PHONY: debian-kraken-cli

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"flag"
@@ -24,6 +23,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/errutil"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/memsize"
+	"code.uber.internal/infra/kraken/utils/osutil"
 )
 
 const originDNS = "kraken-origin-sjc1.uber.internal:9003"
@@ -31,21 +31,6 @@ const originDNS = "kraken-origin-sjc1.uber.internal:9003"
 const trackerDNS = "kraken-tracker-sjc1.uber.internal:8351"
 
 const agentPort = 7602
-
-func readLines(filename string) ([]string, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	var agents []string
-	s := bufio.NewScanner(f)
-	s.Split(bufio.ScanLines)
-	for s.Scan() {
-		l := s.Text()
-		agents = append(agents, l)
-	}
-	return agents, nil
-}
 
 func filterHealthyAgents(agents []string) []string {
 	var mu sync.Mutex
@@ -130,14 +115,14 @@ type result struct {
 }
 
 func (r *benchmarkRunner) run(fileSize, pieceSize int64) (chan result, error) {
-	fmt.Println("Uploading file to origin cluster...")
+	log.Println("Uploading file to origin cluster...")
 
 	digest, err := r.upload(fileSize, pieceSize)
 	if err != nil {
 		return nil, fmt.Errorf("upload to origin cluster: %s", err)
 	}
 
-	fmt.Println("Running agent downloads...")
+	log.Println("Running agent downloads...")
 
 	results := make(chan result)
 
@@ -179,13 +164,13 @@ func main() {
 		log.Fatalf("Error opening output file: %s", err)
 	}
 
-	agents, err := readLines(*agentFile)
+	agents, err := osutil.ReadLines(*agentFile)
 	if err != nil {
 		log.Fatalf("Error reading lines from agent file: %s", err)
 	}
 	healthyAgents := filterHealthyAgents(agents)
 
-	fmt.Printf("Filtered out %d unhealthy agents (%d remaining)\n",
+	log.Printf("Filtered out %d unhealthy agents (%d remaining)\n",
 		len(agents)-len(healthyAgents), len(healthyAgents))
 
 	origins, err := serverset.NewRoundRobin(serverset.RoundRobinConfig{Addrs: []string{originDNS}})
@@ -219,29 +204,31 @@ func main() {
 		4 * memsize.MB,
 		8 * memsize.MB,
 	}
-	fmt.Fprintf(outfile, "peers\tfsz(gb)\tpsz(mb)\tmin(s)\tavg(s)\tp95(s)\tp99(s)\tmax(s)\n")
+	fmt.Fprintf(outfile, "peers\tfsz(gb)\tpsz(mb)\tmin(s)\tp50(s)\tp95(s)\tp99(s)\tmax(s)\n")
 	for _, fileSize := range fileSizes {
 		for _, pieceSize := range pieceSizes {
-			fmt.Printf("---- file size %s / piece size %s ----\n",
+			log.Printf("---- file size %s / piece size %s ----\n",
 				memsize.Format(fileSize), memsize.Format(pieceSize))
 
 			results, err := r.run(int64(fileSize), int64(pieceSize))
 			if err != nil {
-				fmt.Printf("Error running benchmark: %s", err)
+				log.Printf("Error running benchmark: %s", err)
 				continue
 			}
 			fmt.Fprintf(outfile, "%d\t%.3f\t%.1f\t",
 				len(r.agents), float64(fileSize)/float64(memsize.GB), float64(pieceSize)/float64(memsize.MB))
 			var times stats.Float64Data
 			var errs []error
+			var i int
 			for res := range results {
+				i++
 				if res.err != nil {
-					fmt.Printf("FAILURE %s %s\n", res.agent, res.err)
+					log.Printf("(%d/%d) FAILURE %s %s\n", i, len(r.agents), res.agent, res.err)
 					errs = append(errs, fmt.Errorf("agent %s: %s", res.agent, res.err))
 					continue
 				}
 				t := res.t.Seconds()
-				fmt.Printf("SUCCESS %s %.2fs\n", res.agent, t)
+				log.Printf("(%d/%d) SUCCESS %s %.2fs\n", i, len(r.agents), res.agent, t)
 				times = append(times, t)
 			}
 			if len(errs) > 0 {
@@ -253,11 +240,11 @@ func main() {
 				continue
 			}
 			min, _ := stats.Min(times)
-			median, _ := stats.Median(times)
+			p50, _ := stats.Median(times)
 			p95, _ := stats.Percentile(times, 95)
 			p99, _ := stats.Percentile(times, 99)
 			max, _ := stats.Max(times)
-			fmt.Fprintf(outfile, "%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", min, median, p95, p99, max)
+			fmt.Fprintf(outfile, "%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", min, p50, p95, p99, max)
 		}
 	}
 }

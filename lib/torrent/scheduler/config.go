@@ -53,6 +53,8 @@ type Config struct {
 	ConnState ConnStateConfig `yaml:"conn_state"`
 
 	Conn ConnConfig `yaml:"conn"`
+
+	Dispatcher DispatcherConfig `yaml:"dispatcher"`
 }
 
 func (c Config) String() string {
@@ -90,6 +92,7 @@ func (c Config) applyDefaults() Config {
 	}
 	c.ConnState = c.ConnState.applyDefaults()
 	c.Conn = c.Conn.applyDefaults()
+	c.Dispatcher = c.Dispatcher.applyDefaults()
 	return c
 }
 
@@ -183,5 +186,27 @@ func (c ConnConfig) applyDefaults() ConnConfig {
 	}
 	// TODO(codyg): We cannot set default buffer sizes, since 0 is a very valid
 	// buffer size for testing.
+	return c
+}
+
+// DispatcherConfig is the configuration for piece dispatch.
+type DispatcherConfig struct {
+
+	// PieceRequestMinTimeout is the minimum timeout for all piece requests, regardless of
+	// size.
+	PieceRequestMinTimeout time.Duration `yaml:"piece_request_min_timeout"`
+
+	// PieceRequestTimeoutPerMb is the duration that will be added to piece request
+	// timeouts based on the piece size (in megabytes).
+	PieceRequestTimeoutPerMb time.Duration `yaml:"piece_request_timeout_per_mb"`
+}
+
+func (c DispatcherConfig) applyDefaults() DispatcherConfig {
+	if c.PieceRequestMinTimeout == 0 {
+		c.PieceRequestMinTimeout = 4 * time.Second
+	}
+	if c.PieceRequestTimeoutPerMb == 0 {
+		c.PieceRequestTimeoutPerMb = 4 * time.Second
+	}
 	return c
 }

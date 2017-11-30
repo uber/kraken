@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/randutil"
 )
@@ -22,7 +23,10 @@ func TestSetEgressBandwidthThrottlesPieceSending(t *testing.T) {
 
 	config := connConfigFixture()
 
-	c, cleanup := connFixture(t, config, int(pieceLength))
+	torrent, cleanup := storage.TorrentFixture(pieceLength*4, pieceLength)
+	defer cleanup()
+
+	c, cleanup := connFixture(config, torrent)
 	defer cleanup()
 
 	c.SetEgressBandwidthLimit(bytesPerSec)
