@@ -15,6 +15,7 @@ import (
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobserver"
+	"code.uber.internal/infra/kraken/origin/torrentserver"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
@@ -25,11 +26,15 @@ func main() {
 	peerIP := flag.String("peer_ip", "", "ip which peer will announce itself as")
 	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
 	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
+	torrentServerPort := flag.Int("torrent_server_port", 0, "port which torrent server will listen on")
 
 	flag.Parse()
 
 	if blobServerPort == nil || *blobServerPort == 0 {
 		panic("0 is not a valid port for blob server")
+	}
+	if *torrentServerPort == 0 {
+		panic("-torrent_server_port must be non-zero")
 	}
 
 	var config Config
@@ -73,7 +78,7 @@ func main() {
 			log.Fatalf("Error creating tracker round robin: %s", err)
 		}
 
-		_, err = torrent.NewSchedulerClient(
+		c, err := torrent.NewSchedulerClient(
 			config.Torrent,
 			fileStore,
 			stats,
@@ -82,8 +87,14 @@ func main() {
 			metainfoclient.Default(trackers))
 		if err != nil {
 			log.Fatalf("Failed to create scheduler client: %s", err)
-			panic(err)
 		}
+
+		torrentServer := torrentserver.New(c)
+		addr := fmt.Sprintf(":%d", *torrentServerPort)
+		log.Infof("Starting torrent server on %s", addr)
+		go func() {
+			log.Fatal(http.ListenAndServe(addr, torrentServer.Handler()))
+		}()
 	} else {
 		log.Warn("Torrent disabled")
 	}
