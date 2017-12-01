@@ -28,6 +28,7 @@ func main() {
 	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
 	agentServerPort := flag.Int("agent_server_port", 0, "port which agent server will listen on")
 	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
+	zone := flag.String("zone", "", "zone/datacenter name")
 
 	flag.Parse()
 
@@ -44,7 +45,7 @@ func main() {
 	defer zlog.Sync()
 
 	pctx, err := peercontext.New(
-		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *peerIP, *peerPort)
+		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *zone, *peerIP, *peerPort)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}

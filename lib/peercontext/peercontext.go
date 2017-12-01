@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	xconfig "code.uber.internal/go-common.git/x/config"
-
 	"code.uber.internal/infra/kraken/torlib"
 )
 
@@ -52,7 +50,7 @@ type PeerContext struct {
 	Origin bool `json:"origin"`
 }
 
-func new(f PeerIDFactory, ip string, port int, origin bool) (PeerContext, error) {
+func new(f PeerIDFactory, zone string, ip string, port int, origin bool) (PeerContext, error) {
 	if ip == "" {
 		return PeerContext{}, errors.New("no ip supplied")
 	}
@@ -67,17 +65,17 @@ func new(f PeerIDFactory, ip string, port int, origin bool) (PeerContext, error)
 		IP:     ip,
 		Port:   port,
 		PeerID: peerID,
-		Zone:   xconfig.GetZone(),
+		Zone:   zone,
 		Origin: origin,
 	}, nil
 }
 
 // New creates a new PeerContext.
-func New(f PeerIDFactory, ip string, port int) (PeerContext, error) {
-	return new(f, ip, port, false)
+func New(f PeerIDFactory, zone string, ip string, port int) (PeerContext, error) {
+	return new(f, zone, ip, port, false)
 }
 
 // NewOrigin creates a new PeerContext for an origin server.
-func NewOrigin(f PeerIDFactory, ip string, port int) (PeerContext, error) {
-	return new(f, ip, port, true)
+func NewOrigin(f PeerIDFactory, zone string, ip string, port int) (PeerContext, error) {
+	return new(f, zone, ip, port, true)
 }

@@ -26,6 +26,7 @@ func main() {
 	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
 	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
 	torrentServerPort := flag.Int("torrent_server_port", 0, "port which torrent server will listen on")
+	zone := flag.String("zone", "", "zone/datacenter name")
 
 	flag.Parse()
 
@@ -65,7 +66,7 @@ func main() {
 	// Initialize and start P2P scheduler client:
 	if config.Torrent.Enabled {
 		pctx, err = peercontext.NewOrigin(
-			peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *peerIP, *peerPort)
+			peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *zone, *peerIP, *peerPort)
 		if err != nil {
 			log.Fatalf("Failed to create peer context: %s", err)
 		}

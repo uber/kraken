@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sync"
 
-	"code.uber.internal/go-common.git/x/log"
-
 	"github.com/hashicorp/golang-lru/simplelru"
+
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 var _ FileMap = (*lruFileMap)(nil)
