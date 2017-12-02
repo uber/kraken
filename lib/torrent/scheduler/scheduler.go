@@ -72,6 +72,7 @@ type Scheduler struct {
 	announceClient announceclient.Client
 
 	networkEventProducer networkevent.Producer
+	eventLogger          *zap.SugaredLogger
 
 	// The following fields orchestrate the stopping of the Scheduler.
 	once sync.Once      // Ensures the stop sequence is executed only once.
@@ -104,6 +105,7 @@ func New(
 	pctx peercontext.PeerContext,
 	announceClient announceclient.Client,
 	networkEventProducer networkevent.Producer,
+	eventLogger *zap.SugaredLogger,
 	options ...option) (*Scheduler, error) {
 
 	config = config.applyDefaults()
@@ -164,6 +166,7 @@ func New(
 			EventSender:          overrides.eventLoop,
 			Clock:                overrides.clock,
 			NetworkEventProducer: networkEventProducer,
+			EventLogger:          eventLogger,
 			Stats:                stats,
 		},
 		torrentControls:      make(map[torlib.InfoHash]*torrentControl),
@@ -177,6 +180,7 @@ func New(
 		emitStatsTick:        overrides.clock.Tick(config.EmitStatsInterval),
 		announceClient:       announceClient,
 		networkEventProducer: networkEventProducer,
+		eventLogger:          eventLogger,
 		done:                 done,
 	}
 
@@ -199,7 +203,7 @@ func New(
 // is unusable.
 func Reload(s *Scheduler, config Config) (*Scheduler, error) {
 	s.Stop()
-	return New(config, s.torrentArchive, s.stats, s.pctx, s.announceClient, s.networkEventProducer)
+	return New(config, s.torrentArchive, s.stats, s.pctx, s.announceClient, s.networkEventProducer, s.eventLogger)
 }
 
 // Stop shuts down the scheduler.
@@ -445,6 +449,7 @@ func (s *Scheduler) initTorrentControl(t storage.Torrent) *torrentControl {
 	ctrl := newTorrentControl(s.dispatcherFactory.New(t))
 	s.announceQueue.Add(ctrl.Dispatcher)
 	s.networkEventProducer.Produce(networkevent.AddTorrentEvent(t.InfoHash(), s.pctx.PeerID, t.Bitfield()))
+	s.eventLogger.Info(networkevent.AddTorrentEvent(t.InfoHash(), s.pctx.PeerID, t.Bitfield()))
 	s.torrentControls[t.InfoHash()] = ctrl
 	return ctrl
 }

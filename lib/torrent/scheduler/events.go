@@ -81,6 +81,8 @@ func (e closedConnEvent) Apply(s *Scheduler) {
 		s.log("conn", e.conn).Info("Conn closed")
 		s.networkEventProducer.Produce(
 			networkevent.DropConnEvent(e.conn.InfoHash, s.pctx.PeerID, e.conn.PeerID))
+		s.eventLogger.Info(
+			networkevent.DropConnEvent(e.conn.InfoHash, s.pctx.PeerID, e.conn.PeerID))
 	}
 	if err := s.connState.Blacklist(e.conn.PeerID, e.conn.InfoHash); err != nil {
 		s.log("conn", e.conn).Infof("Error blacklisting active conn: %s", err)
@@ -145,6 +147,8 @@ func (e incomingConnEvent) Apply(s *Scheduler) {
 	s.log("conn", e.conn, "bitfield", e.bitfield).Info("Added incoming conn")
 	s.networkEventProducer.Produce(
 		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
+	s.eventLogger.Info(
+		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
 }
 
 // outgoingConnEvent occurs when a pending outgoing connection finishes handshaking.
@@ -165,6 +169,8 @@ func (e outgoingConnEvent) Apply(s *Scheduler) {
 	}
 	s.log("conn", e.conn, "bitfield", e.bitfield).Info("Added outgoing conn")
 	s.networkEventProducer.Produce(
+		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
+	s.eventLogger.Info(
 		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
 }
 
@@ -293,6 +299,7 @@ func (e completedDispatcherEvent) Apply(s *Scheduler) {
 	ctrl.Complete = true
 	s.log("torrent", e.dispatcher.Torrent).Info("Torrent complete")
 	s.networkEventProducer.Produce(networkevent.TorrentCompleteEvent(infoHash, s.pctx.PeerID))
+	s.eventLogger.Info(networkevent.TorrentCompleteEvent(infoHash, s.pctx.PeerID))
 }
 
 // preemptionTickEvent occurs periodically to preempt unneeded conns and remove
@@ -376,6 +383,7 @@ func (e cancelTorrentEvent) Apply(s *Scheduler) {
 			delete(s.torrentControls, h)
 			s.log("hash", h).Info("Torrent cancelled")
 			s.networkEventProducer.Produce(networkevent.TorrentCancelledEvent(h, s.pctx.PeerID))
+			s.eventLogger.Info(networkevent.TorrentCancelledEvent(h, s.pctx.PeerID))
 			break
 		}
 	}

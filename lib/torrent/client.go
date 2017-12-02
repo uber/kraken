@@ -54,8 +54,14 @@ func NewSchedulerClient(
 	if err != nil {
 		return nil, fmt.Errorf("network event producer: %s", err)
 	}
+
+	networkEventLogger, err := networkevent.NewLogger(config.NetworkEvent)
+	if err != nil {
+		return nil, fmt.Errorf("network event logger: %s", err)
+	}
+
 	sched, err := scheduler.New(
-		config.Scheduler, archive, stats, pctx, announceClient, networkEventProducer)
+		config.Scheduler, archive, stats, pctx, announceClient, networkEventProducer, networkEventLogger)
 	if err != nil {
 		return nil, fmt.Errorf("scheduler: %s", err)
 	}
