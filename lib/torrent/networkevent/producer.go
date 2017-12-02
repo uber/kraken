@@ -5,9 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	"code.uber.internal/infra/kraken/utils/log"
+	"go.uber.org/zap"
 
 	"code.uber.internal/go-common.git/x/kafka"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 // Producer emits events.
@@ -18,6 +19,26 @@ type Producer interface {
 type producer struct {
 	config Config
 	rest   *kafka.RestProducer
+}
+
+// NewLogger creates a new Event logger.
+func NewLogger(config Config) (*zap.SugaredLogger, error) {
+	eventConfig := zap.NewProductionConfig()
+
+	if config.Enabled {
+		if config.LogPath == "" {
+			return nil, errors.New("no network event path defined")
+		}
+
+		eventConfig.OutputPaths = []string{config.LogPath}
+		eventConfig.ErrorOutputPaths = []string{config.LogPath}
+	}
+	logger, err := eventConfig.Build()
+	if err != nil {
+		return nil, err
+	}
+
+	return logger.Sugar(), nil
 }
 
 // NewProducer creates a new Kafka producer.

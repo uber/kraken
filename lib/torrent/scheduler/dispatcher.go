@@ -98,6 +98,7 @@ type dispatcherFactory struct {
 	EventSender          eventSender
 	Clock                clock.Clock
 	NetworkEventProducer networkevent.Producer
+	EventLogger          *zap.SugaredLogger
 	Stats                tally.Scope
 }
 
@@ -128,6 +129,7 @@ func (f *dispatcherFactory) init(t storage.Torrent) *dispatcher {
 		eventSender:          f.EventSender,
 		clock:                f.Clock,
 		networkEventProducer: f.NetworkEventProducer,
+		eventLogger:          f.EventLogger,
 		pieceRequestTimeout:  f.calcPieceRequestTimeout(t.MaxPieceLength()),
 		pendingPieceRequests: make(map[int]pendingPieceRequest),
 		pendingPiecesDone:    make(chan struct{}),
@@ -152,6 +154,7 @@ type dispatcher struct {
 	eventSender eventSender
 
 	networkEventProducer networkevent.Producer
+	eventLogger          *zap.SugaredLogger
 
 	lastConnRemovedMu sync.Mutex
 	lastConnRemoved   time.Time
@@ -480,6 +483,9 @@ func (d *dispatcher) handlePiecePayload(
 	}
 	d.networkEventProducer.Produce(
 		networkevent.ReceivePieceEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
+	d.eventLogger.Info(
+		networkevent.ReceivePieceEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
+
 	p.touchLastGoodPieceReceived()
 	if d.Torrent.Complete() {
 		d.complete()
