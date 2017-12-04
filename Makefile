@@ -259,12 +259,10 @@ run_integration:
 
 integration: bootstrap_integration build_integration run_integration
 
-.PHONY: benchmarks
 linux-benchmarks:
 	-rm benchmarks/benchmarks
 	GOOS=linux GOARCH=amd64 make benchmarks/benchmarks
 
-.PHONY:
 linux-reload:
 	-rm tools/bin/reload/reload
 	GOOS=linux GOARCH=amd64 make tools/bin/reload/reload
