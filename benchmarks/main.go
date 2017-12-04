@@ -24,6 +24,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/osutil"
+	"code.uber.internal/infra/kraken/utils/stringset"
 )
 
 const originDNS = "kraken-origin-sjc1.uber.internal:9003"
@@ -219,17 +220,27 @@ func main() {
 				len(r.agents), float64(fileSize)/float64(memsize.GB), float64(pieceSize)/float64(memsize.MB))
 			var times stats.Float64Data
 			var errs []error
-			var i int
-			for res := range results {
-				i++
-				if res.err != nil {
-					log.Printf("(%d/%d) FAILURE %s %s\n", i, len(r.agents), res.agent, res.err)
-					errs = append(errs, fmt.Errorf("agent %s: %s", res.agent, res.err))
-					continue
+			pending := stringset.FromSlice(r.agents)
+		RESULT_LOOP:
+			for {
+				select {
+				case <-time.After(15 * time.Second):
+					log.Printf("Pending hosts: %v\n", pending.ToSlice())
+				case res, ok := <-results:
+					if !ok {
+						break RESULT_LOOP
+					}
+					pending.Remove(res.agent)
+					i := len(r.agents) - len(pending)
+					if res.err != nil {
+						log.Printf("(%d/%d) FAILURE %s %s\n", i, len(r.agents), res.agent, res.err)
+						errs = append(errs, fmt.Errorf("agent %s: %s", res.agent, res.err))
+						continue
+					}
+					t := res.t.Seconds()
+					log.Printf("(%d/%d) SUCCESS %s %.2fs\n", i, len(r.agents), res.agent, t)
+					times = append(times, t)
 				}
-				t := res.t.Seconds()
-				log.Printf("(%d/%d) SUCCESS %s %.2fs\n", i, len(r.agents), res.agent, t)
-				times = append(times, t)
 			}
 			if len(errs) > 0 {
 				fmt.Fprintf(outfile, "download failures: %s\n", errutil.Join(errs))
