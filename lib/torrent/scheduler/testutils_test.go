@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
@@ -141,6 +142,8 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 	tp := networkevent.NewTestProducer()
 
 	loggerConfig := zap.NewProductionConfig()
+	loggerConfig.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+
 	eventLogger, err := loggerConfig.Build()
 	if err != nil {
 		panic(err)
