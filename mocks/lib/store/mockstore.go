@@ -6,6 +6,7 @@ package mockstore
 
 import (
 	store "code.uber.internal/infra/kraken/lib/store"
+	base "code.uber.internal/infra/kraken/lib/store/base"
 	gomock "github.com/golang/mock/gomock"
 	io "io"
 	os "os"
@@ -35,7 +36,7 @@ func (m *MockFileStore) EXPECT() *MockFileStoreMockRecorder {
 	return m.recorder
 }
 
-// Config mocks internal method
+// Config mocks base method
 func (m *MockFileStore) Config() store.Config {
 	ret := m.ctrl.Call(m, "Config")
 	ret0, _ := ret[0].(store.Config)
@@ -47,7 +48,7 @@ func (mr *MockFileStoreMockRecorder) Config() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Config", reflect.TypeOf((*MockFileStore)(nil).Config))
 }
 
-// CreateCacheFile mocks internal method
+// CreateCacheFile mocks base method
 func (m *MockFileStore) CreateCacheFile(arg0 string, arg1 io.Reader) error {
 	ret := m.ctrl.Call(m, "CreateCacheFile", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -59,7 +60,7 @@ func (mr *MockFileStoreMockRecorder) CreateCacheFile(arg0, arg1 interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCacheFile", reflect.TypeOf((*MockFileStore)(nil).CreateCacheFile), arg0, arg1)
 }
 
-// CreateDownloadFile mocks internal method
+// CreateDownloadFile mocks base method
 func (m *MockFileStore) CreateDownloadFile(arg0 string, arg1 int64) error {
 	ret := m.ctrl.Call(m, "CreateDownloadFile", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -71,7 +72,7 @@ func (mr *MockFileStoreMockRecorder) CreateDownloadFile(arg0, arg1 interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDownloadFile", reflect.TypeOf((*MockFileStore)(nil).CreateDownloadFile), arg0, arg1)
 }
 
-// CreateUploadFile mocks internal method
+// CreateUploadFile mocks base method
 func (m *MockFileStore) CreateUploadFile(arg0 string, arg1 int64) error {
 	ret := m.ctrl.Call(m, "CreateUploadFile", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -83,7 +84,7 @@ func (mr *MockFileStoreMockRecorder) CreateUploadFile(arg0, arg1 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUploadFile", reflect.TypeOf((*MockFileStore)(nil).CreateUploadFile), arg0, arg1)
 }
 
-// DeleteAllTrashFiles mocks internal method
+// DeleteAllTrashFiles mocks base method
 func (m *MockFileStore) DeleteAllTrashFiles() error {
 	ret := m.ctrl.Call(m, "DeleteAllTrashFiles")
 	ret0, _ := ret[0].(error)
@@ -95,7 +96,7 @@ func (mr *MockFileStoreMockRecorder) DeleteAllTrashFiles() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAllTrashFiles", reflect.TypeOf((*MockFileStore)(nil).DeleteAllTrashFiles))
 }
 
-// DerefCacheFile mocks internal method
+// DerefCacheFile mocks base method
 func (m *MockFileStore) DerefCacheFile(arg0 string) (int64, error) {
 	ret := m.ctrl.Call(m, "DerefCacheFile", arg0)
 	ret0, _ := ret[0].(int64)
@@ -108,7 +109,7 @@ func (mr *MockFileStoreMockRecorder) DerefCacheFile(arg0 interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DerefCacheFile", reflect.TypeOf((*MockFileStore)(nil).DerefCacheFile), arg0)
 }
 
-// EnsureDownloadOrCacheFilePresent mocks internal method
+// EnsureDownloadOrCacheFilePresent mocks base method
 func (m *MockFileStore) EnsureDownloadOrCacheFilePresent(arg0 string, arg1 int64) error {
 	ret := m.ctrl.Call(m, "EnsureDownloadOrCacheFilePresent", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -120,7 +121,7 @@ func (mr *MockFileStoreMockRecorder) EnsureDownloadOrCacheFilePresent(arg0, arg1
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureDownloadOrCacheFilePresent", reflect.TypeOf((*MockFileStore)(nil).EnsureDownloadOrCacheFilePresent), arg0, arg1)
 }
 
-// GetCacheFilePath mocks internal method
+// GetCacheFilePath mocks base method
 func (m *MockFileStore) GetCacheFilePath(arg0 string) (string, error) {
 	ret := m.ctrl.Call(m, "GetCacheFilePath", arg0)
 	ret0, _ := ret[0].(string)
@@ -133,10 +134,10 @@ func (mr *MockFileStoreMockRecorder) GetCacheFilePath(arg0 interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCacheFilePath", reflect.TypeOf((*MockFileStore)(nil).GetCacheFilePath), arg0)
 }
 
-// GetCacheFileReader mocks internal method
-func (m *MockFileStore) GetCacheFileReader(arg0 string) (store.FileReader, error) {
+// GetCacheFileReader mocks base method
+func (m *MockFileStore) GetCacheFileReader(arg0 string) (base.FileReader, error) {
 	ret := m.ctrl.Call(m, "GetCacheFileReader", arg0)
-	ret0, _ := ret[0].(store.FileReader)
+	ret0, _ := ret[0].(base.FileReader)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -146,7 +147,7 @@ func (mr *MockFileStoreMockRecorder) GetCacheFileReader(arg0 interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCacheFileReader", reflect.TypeOf((*MockFileStore)(nil).GetCacheFileReader), arg0)
 }
 
-// GetCacheFileStat mocks internal method
+// GetCacheFileStat mocks base method
 func (m *MockFileStore) GetCacheFileStat(arg0 string) (os.FileInfo, error) {
 	ret := m.ctrl.Call(m, "GetCacheFileStat", arg0)
 	ret0, _ := ret[0].(os.FileInfo)
@@ -159,10 +160,10 @@ func (mr *MockFileStoreMockRecorder) GetCacheFileStat(arg0 interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCacheFileStat", reflect.TypeOf((*MockFileStore)(nil).GetCacheFileStat), arg0)
 }
 
-// GetDownloadFileReadWriter mocks internal method
-func (m *MockFileStore) GetDownloadFileReadWriter(arg0 string) (store.FileReadWriter, error) {
+// GetDownloadFileReadWriter mocks base method
+func (m *MockFileStore) GetDownloadFileReadWriter(arg0 string) (base.FileReadWriter, error) {
 	ret := m.ctrl.Call(m, "GetDownloadFileReadWriter", arg0)
-	ret0, _ := ret[0].(store.FileReadWriter)
+	ret0, _ := ret[0].(base.FileReadWriter)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -172,7 +173,7 @@ func (mr *MockFileStoreMockRecorder) GetDownloadFileReadWriter(arg0 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDownloadFileReadWriter", reflect.TypeOf((*MockFileStore)(nil).GetDownloadFileReadWriter), arg0)
 }
 
-// GetDownloadOrCacheFileMeta mocks internal method
+// GetDownloadOrCacheFileMeta mocks base method
 func (m *MockFileStore) GetDownloadOrCacheFileMeta(arg0 string) ([]byte, error) {
 	ret := m.ctrl.Call(m, "GetDownloadOrCacheFileMeta", arg0)
 	ret0, _ := ret[0].([]byte)
@@ -185,10 +186,10 @@ func (mr *MockFileStoreMockRecorder) GetDownloadOrCacheFileMeta(arg0 interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDownloadOrCacheFileMeta", reflect.TypeOf((*MockFileStore)(nil).GetDownloadOrCacheFileMeta), arg0)
 }
 
-// GetDownloadOrCacheFileReader mocks internal method
-func (m *MockFileStore) GetDownloadOrCacheFileReader(arg0 string) (store.FileReader, error) {
+// GetDownloadOrCacheFileReader mocks base method
+func (m *MockFileStore) GetDownloadOrCacheFileReader(arg0 string) (base.FileReader, error) {
 	ret := m.ctrl.Call(m, "GetDownloadOrCacheFileReader", arg0)
-	ret0, _ := ret[0].(store.FileReader)
+	ret0, _ := ret[0].(base.FileReader)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -198,7 +199,7 @@ func (mr *MockFileStoreMockRecorder) GetDownloadOrCacheFileReader(arg0 interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDownloadOrCacheFileReader", reflect.TypeOf((*MockFileStore)(nil).GetDownloadOrCacheFileReader), arg0)
 }
 
-// GetUploadFileHashState mocks internal method
+// GetUploadFileHashState mocks base method
 func (m *MockFileStore) GetUploadFileHashState(arg0, arg1, arg2 string) ([]byte, error) {
 	ret := m.ctrl.Call(m, "GetUploadFileHashState", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]byte)
@@ -211,10 +212,10 @@ func (mr *MockFileStoreMockRecorder) GetUploadFileHashState(arg0, arg1, arg2 int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileHashState", reflect.TypeOf((*MockFileStore)(nil).GetUploadFileHashState), arg0, arg1, arg2)
 }
 
-// GetUploadFileReadWriter mocks internal method
-func (m *MockFileStore) GetUploadFileReadWriter(arg0 string) (store.FileReadWriter, error) {
+// GetUploadFileReadWriter mocks base method
+func (m *MockFileStore) GetUploadFileReadWriter(arg0 string) (base.FileReadWriter, error) {
 	ret := m.ctrl.Call(m, "GetUploadFileReadWriter", arg0)
-	ret0, _ := ret[0].(store.FileReadWriter)
+	ret0, _ := ret[0].(base.FileReadWriter)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -224,10 +225,10 @@ func (mr *MockFileStoreMockRecorder) GetUploadFileReadWriter(arg0 interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileReadWriter", reflect.TypeOf((*MockFileStore)(nil).GetUploadFileReadWriter), arg0)
 }
 
-// GetUploadFileReader mocks internal method
-func (m *MockFileStore) GetUploadFileReader(arg0 string) (store.FileReader, error) {
+// GetUploadFileReader mocks base method
+func (m *MockFileStore) GetUploadFileReader(arg0 string) (base.FileReader, error) {
 	ret := m.ctrl.Call(m, "GetUploadFileReader", arg0)
-	ret0, _ := ret[0].(store.FileReader)
+	ret0, _ := ret[0].(base.FileReader)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -237,7 +238,7 @@ func (mr *MockFileStoreMockRecorder) GetUploadFileReader(arg0 interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileReader", reflect.TypeOf((*MockFileStore)(nil).GetUploadFileReader), arg0)
 }
 
-// GetUploadFileStartedAt mocks internal method
+// GetUploadFileStartedAt mocks base method
 func (m *MockFileStore) GetUploadFileStartedAt(arg0 string) ([]byte, error) {
 	ret := m.ctrl.Call(m, "GetUploadFileStartedAt", arg0)
 	ret0, _ := ret[0].([]byte)
@@ -250,7 +251,7 @@ func (mr *MockFileStoreMockRecorder) GetUploadFileStartedAt(arg0 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileStartedAt", reflect.TypeOf((*MockFileStore)(nil).GetUploadFileStartedAt), arg0)
 }
 
-// GetUploadFileStat mocks internal method
+// GetUploadFileStat mocks base method
 func (m *MockFileStore) GetUploadFileStat(arg0 string) (os.FileInfo, error) {
 	ret := m.ctrl.Call(m, "GetUploadFileStat", arg0)
 	ret0, _ := ret[0].(os.FileInfo)
@@ -263,7 +264,7 @@ func (mr *MockFileStoreMockRecorder) GetUploadFileStat(arg0 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileStat", reflect.TypeOf((*MockFileStore)(nil).GetUploadFileStat), arg0)
 }
 
-// InCacheError mocks internal method
+// InCacheError mocks base method
 func (m *MockFileStore) InCacheError(arg0 error) bool {
 	ret := m.ctrl.Call(m, "InCacheError", arg0)
 	ret0, _ := ret[0].(bool)
@@ -275,7 +276,7 @@ func (mr *MockFileStoreMockRecorder) InCacheError(arg0 interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InCacheError", reflect.TypeOf((*MockFileStore)(nil).InCacheError), arg0)
 }
 
-// ListCacheFilesByShardID mocks internal method
+// ListCacheFilesByShardID mocks base method
 func (m *MockFileStore) ListCacheFilesByShardID(arg0 string) ([]string, error) {
 	ret := m.ctrl.Call(m, "ListCacheFilesByShardID", arg0)
 	ret0, _ := ret[0].([]string)
@@ -288,7 +289,7 @@ func (mr *MockFileStoreMockRecorder) ListCacheFilesByShardID(arg0 interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCacheFilesByShardID", reflect.TypeOf((*MockFileStore)(nil).ListCacheFilesByShardID), arg0)
 }
 
-// ListPopulatedShardIDs mocks internal method
+// ListPopulatedShardIDs mocks base method
 func (m *MockFileStore) ListPopulatedShardIDs() ([]string, error) {
 	ret := m.ctrl.Call(m, "ListPopulatedShardIDs")
 	ret0, _ := ret[0].([]string)
@@ -301,7 +302,7 @@ func (mr *MockFileStoreMockRecorder) ListPopulatedShardIDs() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPopulatedShardIDs", reflect.TypeOf((*MockFileStore)(nil).ListPopulatedShardIDs))
 }
 
-// ListUploadFileHashStatePaths mocks internal method
+// ListUploadFileHashStatePaths mocks base method
 func (m *MockFileStore) ListUploadFileHashStatePaths(arg0 string) ([]string, error) {
 	ret := m.ctrl.Call(m, "ListUploadFileHashStatePaths", arg0)
 	ret0, _ := ret[0].([]string)
@@ -314,7 +315,7 @@ func (mr *MockFileStoreMockRecorder) ListUploadFileHashStatePaths(arg0 interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListUploadFileHashStatePaths", reflect.TypeOf((*MockFileStore)(nil).ListUploadFileHashStatePaths), arg0)
 }
 
-// MoveCacheFileToTrash mocks internal method
+// MoveCacheFileToTrash mocks base method
 func (m *MockFileStore) MoveCacheFileToTrash(arg0 string) error {
 	ret := m.ctrl.Call(m, "MoveCacheFileToTrash", arg0)
 	ret0, _ := ret[0].(error)
@@ -326,7 +327,7 @@ func (mr *MockFileStoreMockRecorder) MoveCacheFileToTrash(arg0 interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveCacheFileToTrash", reflect.TypeOf((*MockFileStore)(nil).MoveCacheFileToTrash), arg0)
 }
 
-// MoveDownloadFileToCache mocks internal method
+// MoveDownloadFileToCache mocks base method
 func (m *MockFileStore) MoveDownloadFileToCache(arg0 string) error {
 	ret := m.ctrl.Call(m, "MoveDownloadFileToCache", arg0)
 	ret0, _ := ret[0].(error)
@@ -338,7 +339,7 @@ func (mr *MockFileStoreMockRecorder) MoveDownloadFileToCache(arg0 interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveDownloadFileToCache", reflect.TypeOf((*MockFileStore)(nil).MoveDownloadFileToCache), arg0)
 }
 
-// MoveDownloadOrCacheFileToTrash mocks internal method
+// MoveDownloadOrCacheFileToTrash mocks base method
 func (m *MockFileStore) MoveDownloadOrCacheFileToTrash(arg0 string) error {
 	ret := m.ctrl.Call(m, "MoveDownloadOrCacheFileToTrash", arg0)
 	ret0, _ := ret[0].(error)
@@ -350,7 +351,7 @@ func (mr *MockFileStoreMockRecorder) MoveDownloadOrCacheFileToTrash(arg0 interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveDownloadOrCacheFileToTrash", reflect.TypeOf((*MockFileStore)(nil).MoveDownloadOrCacheFileToTrash), arg0)
 }
 
-// MoveUploadFileToCache mocks internal method
+// MoveUploadFileToCache mocks base method
 func (m *MockFileStore) MoveUploadFileToCache(arg0, arg1 string) error {
 	ret := m.ctrl.Call(m, "MoveUploadFileToCache", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -362,7 +363,7 @@ func (mr *MockFileStoreMockRecorder) MoveUploadFileToCache(arg0, arg1 interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveUploadFileToCache", reflect.TypeOf((*MockFileStore)(nil).MoveUploadFileToCache), arg0, arg1)
 }
 
-// RefCacheFile mocks internal method
+// RefCacheFile mocks base method
 func (m *MockFileStore) RefCacheFile(arg0 string) (int64, error) {
 	ret := m.ctrl.Call(m, "RefCacheFile", arg0)
 	ret0, _ := ret[0].(int64)
@@ -375,7 +376,7 @@ func (mr *MockFileStoreMockRecorder) RefCacheFile(arg0 interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefCacheFile", reflect.TypeOf((*MockFileStore)(nil).RefCacheFile), arg0)
 }
 
-// SetDownloadOrCacheFileMeta mocks internal method
+// SetDownloadOrCacheFileMeta mocks base method
 func (m *MockFileStore) SetDownloadOrCacheFileMeta(arg0 string, arg1 []byte) (bool, error) {
 	ret := m.ctrl.Call(m, "SetDownloadOrCacheFileMeta", arg0, arg1)
 	ret0, _ := ret[0].(bool)
@@ -388,7 +389,7 @@ func (mr *MockFileStoreMockRecorder) SetDownloadOrCacheFileMeta(arg0, arg1 inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDownloadOrCacheFileMeta", reflect.TypeOf((*MockFileStore)(nil).SetDownloadOrCacheFileMeta), arg0, arg1)
 }
 
-// SetUploadFileHashState mocks internal method
+// SetUploadFileHashState mocks base method
 func (m *MockFileStore) SetUploadFileHashState(arg0 string, arg1 []byte, arg2, arg3 string) error {
 	ret := m.ctrl.Call(m, "SetUploadFileHashState", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
@@ -400,7 +401,7 @@ func (mr *MockFileStoreMockRecorder) SetUploadFileHashState(arg0, arg1, arg2, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUploadFileHashState", reflect.TypeOf((*MockFileStore)(nil).SetUploadFileHashState), arg0, arg1, arg2, arg3)
 }
 
-// SetUploadFileStartedAt mocks internal method
+// SetUploadFileStartedAt mocks base method
 func (m *MockFileStore) SetUploadFileStartedAt(arg0 string, arg1 []byte) error {
 	ret := m.ctrl.Call(m, "SetUploadFileStartedAt", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -412,7 +413,7 @@ func (mr *MockFileStoreMockRecorder) SetUploadFileStartedAt(arg0, arg1 interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUploadFileStartedAt", reflect.TypeOf((*MockFileStore)(nil).SetUploadFileStartedAt), arg0, arg1)
 }
 
-// States mocks internal method
+// States mocks base method
 func (m *MockFileStore) States() *store.StateAcceptor {
 	ret := m.ctrl.Call(m, "States")
 	ret0, _ := ret[0].(*store.StateAcceptor)
@@ -424,7 +425,7 @@ func (mr *MockFileStoreMockRecorder) States() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "States", reflect.TypeOf((*MockFileStore)(nil).States))
 }
 
-// WriteDownloadFilePieceStatus mocks internal method
+// WriteDownloadFilePieceStatus mocks base method
 func (m *MockFileStore) WriteDownloadFilePieceStatus(arg0 string, arg1 []byte) (bool, error) {
 	ret := m.ctrl.Call(m, "WriteDownloadFilePieceStatus", arg0, arg1)
 	ret0, _ := ret[0].(bool)
@@ -437,7 +438,7 @@ func (mr *MockFileStoreMockRecorder) WriteDownloadFilePieceStatus(arg0, arg1 int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteDownloadFilePieceStatus", reflect.TypeOf((*MockFileStore)(nil).WriteDownloadFilePieceStatus), arg0, arg1)
 }
 
-// WriteDownloadFilePieceStatusAt mocks internal method
+// WriteDownloadFilePieceStatusAt mocks base method
 func (m *MockFileStore) WriteDownloadFilePieceStatusAt(arg0 string, arg1 []byte, arg2 int) (bool, error) {
 	ret := m.ctrl.Call(m, "WriteDownloadFilePieceStatusAt", arg0, arg1, arg2)
 	ret0, _ := ret[0].(bool)
@@ -473,7 +474,7 @@ func (m *MockFileReadWriter) EXPECT() *MockFileReadWriterMockRecorder {
 	return m.recorder
 }
 
-// Cancel mocks internal method
+// Cancel mocks base method
 func (m *MockFileReadWriter) Cancel() error {
 	ret := m.ctrl.Call(m, "Cancel")
 	ret0, _ := ret[0].(error)
@@ -485,7 +486,7 @@ func (mr *MockFileReadWriterMockRecorder) Cancel() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cancel", reflect.TypeOf((*MockFileReadWriter)(nil).Cancel))
 }
 
-// Close mocks internal method
+// Close mocks base method
 func (m *MockFileReadWriter) Close() error {
 	ret := m.ctrl.Call(m, "Close")
 	ret0, _ := ret[0].(error)
@@ -497,7 +498,7 @@ func (mr *MockFileReadWriterMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockFileReadWriter)(nil).Close))
 }
 
-// Commit mocks internal method
+// Commit mocks base method
 func (m *MockFileReadWriter) Commit() error {
 	ret := m.ctrl.Call(m, "Commit")
 	ret0, _ := ret[0].(error)
@@ -509,7 +510,7 @@ func (mr *MockFileReadWriterMockRecorder) Commit() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockFileReadWriter)(nil).Commit))
 }
 
-// Read mocks internal method
+// Read mocks base method
 func (m *MockFileReadWriter) Read(arg0 []byte) (int, error) {
 	ret := m.ctrl.Call(m, "Read", arg0)
 	ret0, _ := ret[0].(int)
@@ -522,7 +523,7 @@ func (mr *MockFileReadWriterMockRecorder) Read(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockFileReadWriter)(nil).Read), arg0)
 }
 
-// ReadAt mocks internal method
+// ReadAt mocks base method
 func (m *MockFileReadWriter) ReadAt(arg0 []byte, arg1 int64) (int, error) {
 	ret := m.ctrl.Call(m, "ReadAt", arg0, arg1)
 	ret0, _ := ret[0].(int)
@@ -535,7 +536,7 @@ func (mr *MockFileReadWriterMockRecorder) ReadAt(arg0, arg1 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadAt", reflect.TypeOf((*MockFileReadWriter)(nil).ReadAt), arg0, arg1)
 }
 
-// Seek mocks internal method
+// Seek mocks base method
 func (m *MockFileReadWriter) Seek(arg0 int64, arg1 int) (int64, error) {
 	ret := m.ctrl.Call(m, "Seek", arg0, arg1)
 	ret0, _ := ret[0].(int64)
@@ -548,7 +549,7 @@ func (mr *MockFileReadWriterMockRecorder) Seek(arg0, arg1 interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seek", reflect.TypeOf((*MockFileReadWriter)(nil).Seek), arg0, arg1)
 }
 
-// Size mocks internal method
+// Size mocks base method
 func (m *MockFileReadWriter) Size() int64 {
 	ret := m.ctrl.Call(m, "Size")
 	ret0, _ := ret[0].(int64)
@@ -560,7 +561,7 @@ func (mr *MockFileReadWriterMockRecorder) Size() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Size", reflect.TypeOf((*MockFileReadWriter)(nil).Size))
 }
 
-// Write mocks internal method
+// Write mocks base method
 func (m *MockFileReadWriter) Write(arg0 []byte) (int, error) {
 	ret := m.ctrl.Call(m, "Write", arg0)
 	ret0, _ := ret[0].(int)
@@ -573,7 +574,7 @@ func (mr *MockFileReadWriterMockRecorder) Write(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockFileReadWriter)(nil).Write), arg0)
 }
 
-// WriteAt mocks internal method
+// WriteAt mocks base method
 func (m *MockFileReadWriter) WriteAt(arg0 []byte, arg1 int64) (int, error) {
 	ret := m.ctrl.Call(m, "WriteAt", arg0, arg1)
 	ret0, _ := ret[0].(int)

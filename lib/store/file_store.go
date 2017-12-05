@@ -13,7 +13,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
-	"code.uber.internal/infra/kraken/lib/store/internal"
+	"code.uber.internal/infra/kraken/lib/store/base"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/osutil"
 
@@ -22,14 +22,14 @@ import (
 	"github.com/spaolacci/murmur3"
 )
 
-// FileReadWriter aliases internal.FileReadWriter
-type FileReadWriter = internal.FileReadWriter
+// FileReadWriter aliases base.FileReadWriter
+type FileReadWriter = base.FileReadWriter
 
-// FileReader aliases internal.FileReader
-type FileReader = internal.FileReader
+// FileReader aliases base.FileReader
+type FileReader = base.FileReader
 
-// MetadataType aliases internal.MetadataType
-type MetadataType = internal.MetadataType
+// MetadataType aliases base.MetadataType
+type MetadataType = base.MetadataType
 
 // FileReaderCloner provides access to distinct IO interfaces for a single file.
 // If clients need to read a file multiple times, a single reader is not sufficient
@@ -94,8 +94,8 @@ type FileStore interface {
 
 // LocalFileStore manages all peer agent files on local disk.
 type LocalFileStore struct {
-	uploadBackend        internal.FileStore
-	downloadCacheBackend internal.FileStore
+	uploadBackend        base.FileStore
+	downloadCacheBackend base.FileStore
 	config               *Config
 
 	stateDownload agentFileState
@@ -112,18 +112,18 @@ func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error
 		return nil, err
 	}
 
-	uploadBackend, err := internal.NewLocalFileStore()
+	uploadBackend, err := base.NewLocalFileStore()
 	if err != nil {
 		return nil, err
 	}
 
-	var downloadCacheBackend internal.FileStore
+	var downloadCacheBackend base.FileStore
 	if useRefcount {
-		downloadCacheBackend, err = internal.NewLocalRCFileStore()
+		downloadCacheBackend, err = base.NewLocalRCFileStore()
 	} else if config.LRUConfig.Enable {
-		downloadCacheBackend, err = internal.NewLRUFileStore(config.LRUConfig.Size)
+		downloadCacheBackend, err = base.NewLRUFileStore(config.LRUConfig.Size)
 	} else {
-		downloadCacheBackend, err = internal.NewCASFileStore()
+		downloadCacheBackend, err = base.NewCASFileStore()
 	}
 	if err != nil {
 		return nil, err
@@ -354,7 +354,7 @@ func (store *LocalFileStore) GetUploadFileHashState(fileName string, algorithm s
 func (store *LocalFileStore) ListUploadFileHashStatePaths(fileName string) ([]string, error) {
 	var paths []string
 	store.uploadBackend.NewFileOp().AcceptState(store.stateUpload).RangeFileMetadata(
-		fileName, func(mt internal.MetadataType) error {
+		fileName, func(mt base.MetadataType) error {
 			if re := regexp.MustCompile("_hashstates/\\w+/\\w+$"); re.MatchString(mt.GetSuffix()) {
 				r := strings.NewReplacer("_", "/")
 				p := path.Join("localstore/_uploads/", fileName)
@@ -448,7 +448,7 @@ func (store *LocalFileStore) MoveDownloadFileToCache(fileName string) error {
 // MoveCacheFileToTrash moves a file from cache directory to trash directory, and append a random
 // suffix so there won't be name collision.
 func (store *LocalFileStore) MoveCacheFileToTrash(fileName string) error {
-	newPath := path.Join(store.config.TrashDir, fileName, internal.DefaultDataFileName)
+	newPath := path.Join(store.config.TrashDir, fileName, base.DefaultDataFileName)
 	err := store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).MoveFileTo(fileName, newPath)
 	if os.IsExist(err) {
 		return store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).DeleteFile(fileName)
@@ -459,7 +459,7 @@ func (store *LocalFileStore) MoveCacheFileToTrash(fileName string) error {
 // MoveDownloadOrCacheFileToTrash moves a file from cache or download directory to trash directory, and append a random
 // suffix so there won't be name collision.
 func (store *LocalFileStore) MoveDownloadOrCacheFileToTrash(fileName string) error {
-	newPath := path.Join(store.config.TrashDir, fileName, internal.DefaultDataFileName)
+	newPath := path.Join(store.config.TrashDir, fileName, base.DefaultDataFileName)
 	err := store.downloadCacheBackend.NewFileOp().AcceptState(store.stateDownload).AcceptState(store.stateCache).MoveFileTo(
 		fileName, newPath)
 	if os.IsExist(err) {
@@ -492,7 +492,7 @@ func (store *LocalFileStore) DeleteAllTrashFiles() error {
 // RefCacheFile increments ref count for a file in cache directory.
 func (store *LocalFileStore) RefCacheFile(fileName string) (int64, error) {
 	op := store.downloadCacheBackend.NewFileOp()
-	rcOp, ok := op.AcceptState(store.stateCache).(internal.RCFileOp)
+	rcOp, ok := op.AcceptState(store.stateCache).(base.RCFileOp)
 	if !ok {
 		return 0, fmt.Errorf("Local ref count is disabled")
 	}
@@ -503,14 +503,14 @@ func (store *LocalFileStore) RefCacheFile(fileName string) (int64, error) {
 // If ref count reaches 0, it will try to rename it and move it to trash directory.
 func (store *LocalFileStore) DerefCacheFile(fileName string) (int64, error) {
 	op := store.downloadCacheBackend.NewFileOp()
-	rcOp, ok := op.AcceptState(store.stateCache).(internal.RCFileOp)
+	rcOp, ok := op.AcceptState(store.stateCache).(base.RCFileOp)
 	if !ok {
 		return 0, fmt.Errorf("Local ref count is disabled")
 	}
 	refCount, err := rcOp.DecFileRefCount(fileName)
 	if err == nil && refCount == 0 {
 		// Try rename and move to trash.
-		newPath := path.Join(store.config.TrashDir, fileName, internal.DefaultDataFileName)
+		newPath := path.Join(store.config.TrashDir, fileName, base.DefaultDataFileName)
 		if err := rcOp.MoveFileTo(fileName, newPath); err != nil {
 			return 0, err
 		}
@@ -603,7 +603,7 @@ func (store *LocalFileStore) EnsureDownloadOrCacheFilePresent(fileName string, d
 // operations which are acceptable in any state.
 type StateAcceptor struct {
 	store *LocalFileStore
-	op    internal.FileOp
+	op    base.FileOp
 }
 
 // States returns a new StateAcceptor builder.
@@ -653,6 +653,6 @@ func (a *StateAcceptor) GetOrSetMetadata(filename string, mt MetadataType, b []b
 // InCacheError returns true for errors originating from file store operations
 // which do not accept files in cache state.
 func (store *LocalFileStore) InCacheError(err error) bool {
-	fse, ok := err.(*internal.FileStateError)
+	fse, ok := err.(*base.FileStateError)
 	return ok && fse.State == store.stateCache
 }

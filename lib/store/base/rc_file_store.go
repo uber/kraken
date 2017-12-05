@@ -1,4 +1,4 @@
-package internal
+package base
 
 // localRCFileStore is an extension of localFileStore, that also keeps file ref count on disk.
 type localRCFileStore struct {

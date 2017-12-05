@@ -203,6 +203,19 @@ func (s *connState) DeleteStaleBlacklistEntries() {
 	}
 }
 
+func (s *connState) BlacklistSnapshot() []BlacklistedConn {
+	var conns []BlacklistedConn
+	for k, e := range s.blacklist {
+		c := BlacklistedConn{
+			PeerID:    k.peerID,
+			InfoHash:  k.infoHash,
+			Remaining: e.Remaining(s.clock.Now()),
+		}
+		conns = append(conns, c)
+	}
+	return conns
+}
+
 // getConnOpener returns the PeerID of the peer who opened the conn, i.e. sent the first handshake.
 func (s *connState) getConnOpener(c *conn) torlib.PeerID {
 	if c.OpenedByRemote() {

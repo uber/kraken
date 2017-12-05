@@ -1,4 +1,4 @@
-package internal
+package base
 
 // FileStore manages files and their metadata. Actual operations are done through FileOp.
 type FileStore interface {

@@ -388,3 +388,11 @@ func (e cancelTorrentEvent) Apply(s *Scheduler) {
 		}
 	}
 }
+
+type blacklistSnapshotEvent struct {
+	result chan []BlacklistedConn
+}
+
+func (e blacklistSnapshotEvent) Apply(s *Scheduler) {
+	e.result <- s.connState.BlacklistSnapshot()
+}

@@ -159,3 +159,21 @@ func TestAddingActiveConnsNeverRedistributesBandwidthBelowMin(t *testing.T) {
 		require.Equal(c.GetEgressBandwidthLimit(), config.MinConnEgressBytesPerSec)
 	}
 }
+
+func TestConnStateBlacklistSnapshot(t *testing.T) {
+	require := require.New(t)
+
+	config := connStateConfigFixture()
+	clk := clock.NewMock()
+
+	s := newConnState(torlib.PeerIDFixture(), config, clk)
+
+	pid := torlib.PeerIDFixture()
+	h := torlib.InfoHashFixture()
+
+	require.NoError(s.AddPending(pid, h))
+	require.NoError(s.Blacklist(pid, h))
+
+	expected := []BlacklistedConn{{pid, h, config.InitialBlacklistExpiration}}
+	require.Equal(expected, s.BlacklistSnapshot())
+}
