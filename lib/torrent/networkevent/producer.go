@@ -13,7 +13,7 @@ import (
 
 // Producer emits events.
 type Producer interface {
-	Produce(Event) error
+	Produce(e *Event) error
 }
 
 type producer struct {
@@ -57,7 +57,7 @@ func NewProducer(config Config) (Producer, error) {
 }
 
 // Produce publishes e on the configured Kafka topic.
-func (p *producer) Produce(e Event) error {
+func (p *producer) Produce(e *Event) error {
 	if !p.config.Enabled {
 		return nil
 	}

@@ -484,7 +484,7 @@ func (d *dispatcher) handlePiecePayload(
 	d.networkEventProducer.Produce(
 		networkevent.ReceivePieceEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
 	d.eventLogger.Info(
-		networkevent.ReceivePieceEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
+		networkevent.ReceivePieceEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i).JSON())
 
 	p.touchLastGoodPieceReceived()
 	if d.Torrent.Complete() {

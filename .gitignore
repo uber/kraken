@@ -21,6 +21,7 @@ cli/kraken-cli
 tools/bin/puller/puller
 benchmarks/benchmarks
 tools/bin/reload/reload
+tools/bin/reload-config/reload-config
 
 # tmp migration files
 [0-9]*_-dir.go
