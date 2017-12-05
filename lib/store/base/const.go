@@ -1,4 +1,4 @@
-package internal
+package base
 
 // DefaultShardIDLength is the number of bytes of file digest to be used for shard ID.
 // For every byte, one more level of directories will be created.

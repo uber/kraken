@@ -261,6 +261,22 @@ func (s *Scheduler) CancelTorrent(name string) {
 	s.eventLoop.Send(cancelTorrentEvent{name})
 }
 
+// BlacklistedConn represents a connection which has been blacklisted.
+type BlacklistedConn struct {
+	PeerID    torlib.PeerID   `json:"peer_id"`
+	InfoHash  torlib.InfoHash `json:"info_hash"`
+	Remaining time.Duration   `json:"remaining"`
+}
+
+// BlacklistSnapshot returns a snapshot of the current connection blacklist.
+func (s *Scheduler) BlacklistSnapshot() (chan []BlacklistedConn, error) {
+	result := make(chan []BlacklistedConn)
+	if !s.eventLoop.Send(blacklistSnapshotEvent{result}) {
+		return nil, ErrSchedulerStopped
+	}
+	return result, nil
+}
+
 func (s *Scheduler) start() {
 	s.wg.Add(3)
 	go s.runEventLoop()

@@ -25,6 +25,7 @@ const downloadTimeout = 10 * time.Minute
 type Client interface {
 	Download(name string) (store.FileReader, error)
 	Reload(config scheduler.Config)
+	BlacklistSnapshot() ([]scheduler.BlacklistedConn, error)
 	Close() error
 }
 
@@ -118,4 +119,13 @@ func (c *SchedulerClient) Download(name string) (store.FileReader, error) {
 		return nil, fmt.Errorf("get cache file reader: %s", err)
 	}
 	return f, nil
+}
+
+// BlacklistSnapshot returns the currently blacklisted connections for this peer.
+func (c *SchedulerClient) BlacklistSnapshot() ([]scheduler.BlacklistedConn, error) {
+	result, err := c.scheduler.BlacklistSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	return <-result, nil
 }

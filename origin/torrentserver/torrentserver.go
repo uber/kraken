@@ -28,6 +28,8 @@ func (s *Server) Handler() http.Handler {
 	// Dangerous endpoint for running experiments.
 	r.Patch("/x/config/scheduler", s.patchSchedulerConfigHandler)
 
+	r.Get("/x/blacklist", s.getBlacklistHandler)
+
 	return r
 }
 
@@ -41,4 +43,16 @@ func (s *Server) patchSchedulerConfigHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	s.torrentClient.Reload(config)
+}
+
+func (s *Server) getBlacklistHandler(w http.ResponseWriter, r *http.Request) {
+	blacklist, err := s.torrentClient.BlacklistSnapshot()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("blacklist snapshot: %s", err), http.StatusInternalServerError)
+		return
+	}
+	if err := json.NewEncoder(w).Encode(&blacklist); err != nil {
+		http.Error(w, fmt.Sprintf("encode blacklist: %s", err), http.StatusInternalServerError)
+		return
+	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
+	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"github.com/stretchr/testify/require"
 )
@@ -62,4 +63,27 @@ func TestPatchSchedulerConfigHandler(t *testing.T) {
 		fmt.Sprintf("http://%s/x/config/scheduler", addr),
 		httputil.SendBody(bytes.NewReader(b)))
 	require.NoError(err)
+}
+
+func TestGetBlacklistHandler(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	blacklist := []scheduler.BlacklistedConn{{
+		PeerID:    torlib.PeerIDFixture(),
+		InfoHash:  torlib.InfoHashFixture(),
+		Remaining: time.Second,
+	}}
+	mocks.torrentClient.EXPECT().BlacklistSnapshot().Return(blacklist, nil)
+
+	addr := mocks.startServer()
+
+	resp, err := httputil.Get(fmt.Sprintf("http://%s/x/blacklist", addr))
+	require.NoError(err)
+
+	var result []scheduler.BlacklistedConn
+	require.NoError(json.NewDecoder(resp.Body).Decode(&result))
+	require.Equal(blacklist, result)
 }

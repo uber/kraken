@@ -5,11 +5,10 @@
 package mocktorrent
 
 import (
-	reflect "reflect"
-
-	store "code.uber.internal/infra/kraken/lib/store"
+	base "code.uber.internal/infra/kraken/lib/store/base"
 	scheduler "code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	gomock "github.com/golang/mock/gomock"
+	reflect "reflect"
 )
 
 // MockClient is a mock of Client interface
@@ -35,6 +34,19 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
+// BlacklistSnapshot mocks base method
+func (m *MockClient) BlacklistSnapshot() ([]scheduler.BlacklistedConn, error) {
+	ret := m.ctrl.Call(m, "BlacklistSnapshot")
+	ret0, _ := ret[0].([]scheduler.BlacklistedConn)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BlacklistSnapshot indicates an expected call of BlacklistSnapshot
+func (mr *MockClientMockRecorder) BlacklistSnapshot() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlacklistSnapshot", reflect.TypeOf((*MockClient)(nil).BlacklistSnapshot))
+}
+
 // Close mocks base method
 func (m *MockClient) Close() error {
 	ret := m.ctrl.Call(m, "Close")
@@ -48,9 +60,9 @@ func (mr *MockClientMockRecorder) Close() *gomock.Call {
 }
 
 // Download mocks base method
-func (m *MockClient) Download(arg0 string) (store.FileReader, error) {
+func (m *MockClient) Download(arg0 string) (base.FileReader, error) {
 	ret := m.ctrl.Call(m, "Download", arg0)
-	ret0, _ := ret[0].(store.FileReader)
+	ret0, _ := ret[0].(base.FileReader)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

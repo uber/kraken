@@ -3,23 +3,23 @@ package store
 import (
 	"regexp"
 
-	"code.uber.internal/infra/kraken/lib/store/internal"
+	"code.uber.internal/infra/kraken/lib/store/base"
 )
 
 func init() {
-	internal.RegisterMetadata(regexp.MustCompile("_status"), &pieceStatusFactory{})
+	base.RegisterMetadata(regexp.MustCompile("_status"), &pieceStatusFactory{})
 }
 
 type pieceStatusFactory struct{}
 
-func (f pieceStatusFactory) Create(suffix string) internal.MetadataType {
+func (f pieceStatusFactory) Create(suffix string) base.MetadataType {
 	return NewPieceStatus()
 }
 
 type pieceStatus struct{}
 
 // NewPieceStatus initializes and returns an new MetadataType obj.
-func NewPieceStatus() internal.MetadataType {
+func NewPieceStatus() base.MetadataType {
 	return pieceStatus{}
 }
 
