@@ -6,6 +6,7 @@ package log
 
 import (
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -17,6 +18,7 @@ func init() {
 	// we create and return default logger
 	zapConfig := zap.NewProductionConfig()
 	zapConfig.Encoding = "console"
+	zapConfig.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
 	ConfigureLogger(zapConfig)
 }
