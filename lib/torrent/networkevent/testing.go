@@ -5,7 +5,7 @@ import "sync"
 // TestProducer records all produced events.
 type TestProducer struct {
 	sync.Mutex
-	events []Event
+	events []*Event
 }
 
 // NewTestProducer returns a new TestProducer.
@@ -14,7 +14,7 @@ func NewTestProducer() *TestProducer {
 }
 
 // Produce records e.
-func (p *TestProducer) Produce(e Event) error {
+func (p *TestProducer) Produce(e *Event) error {
 	p.Lock()
 	defer p.Unlock()
 
@@ -23,11 +23,11 @@ func (p *TestProducer) Produce(e Event) error {
 }
 
 // Events returns all currently recorded events.
-func (p *TestProducer) Events() []Event {
+func (p *TestProducer) Events() []*Event {
 	p.Lock()
 	defer p.Unlock()
 
-	res := make([]Event, len(p.events))
+	res := make([]*Event, len(p.events))
 	copy(res, p.events)
 	return res
 }

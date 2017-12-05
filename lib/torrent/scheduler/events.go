@@ -82,7 +82,7 @@ func (e closedConnEvent) Apply(s *Scheduler) {
 		s.networkEventProducer.Produce(
 			networkevent.DropConnEvent(e.conn.InfoHash, s.pctx.PeerID, e.conn.PeerID))
 		s.eventLogger.Info(
-			networkevent.DropConnEvent(e.conn.InfoHash, s.pctx.PeerID, e.conn.PeerID))
+			networkevent.DropConnEvent(e.conn.InfoHash, s.pctx.PeerID, e.conn.PeerID).JSON())
 	}
 	if err := s.connState.Blacklist(e.conn.PeerID, e.conn.InfoHash); err != nil {
 		s.log("conn", e.conn).Infof("Error blacklisting active conn: %s", err)
@@ -148,7 +148,7 @@ func (e incomingConnEvent) Apply(s *Scheduler) {
 	s.networkEventProducer.Produce(
 		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
 	s.eventLogger.Info(
-		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
+		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID).JSON())
 }
 
 // outgoingConnEvent occurs when a pending outgoing connection finishes handshaking.
@@ -171,7 +171,7 @@ func (e outgoingConnEvent) Apply(s *Scheduler) {
 	s.networkEventProducer.Produce(
 		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
 	s.eventLogger.Info(
-		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID))
+		networkevent.AddConnEvent(e.torrent.InfoHash(), s.pctx.PeerID, e.conn.PeerID).JSON())
 }
 
 // announceTickEvent occurs when it is time to announce to the tracker.
@@ -299,7 +299,7 @@ func (e completedDispatcherEvent) Apply(s *Scheduler) {
 	ctrl.Complete = true
 	s.log("torrent", e.dispatcher.Torrent).Info("Torrent complete")
 	s.networkEventProducer.Produce(networkevent.TorrentCompleteEvent(infoHash, s.pctx.PeerID))
-	s.eventLogger.Info(networkevent.TorrentCompleteEvent(infoHash, s.pctx.PeerID))
+	s.eventLogger.Info(networkevent.TorrentCompleteEvent(infoHash, s.pctx.PeerID).JSON())
 }
 
 // preemptionTickEvent occurs periodically to preempt unneeded conns and remove

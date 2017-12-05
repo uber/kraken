@@ -250,8 +250,8 @@ func TestEmitStatsEventTriggers(t *testing.T) {
 	w.WaitFor(t, emitStatsEvent{})
 }
 
-func stripTimestamps(events []networkevent.Event) []networkevent.Event {
-	var res []networkevent.Event
+func stripTimestamps(events []*networkevent.Event) []*networkevent.Event {
+	var res []*networkevent.Event
 	for _, e := range events {
 		e.Time = time.Time{}
 		res = append(res, e)
@@ -289,14 +289,14 @@ func TestNetworkEvents(t *testing.T) {
 	waitForConnRemoved(t, seeder.scheduler, lid, h)
 	waitForConnRemoved(t, leecher.scheduler, sid, h)
 
-	seederExpected := []networkevent.Event{
+	seederExpected := []*networkevent.Event{
 		networkevent.AddTorrentEvent(h, sid, []bool{true}),
 		networkevent.TorrentCompleteEvent(h, sid),
 		networkevent.AddConnEvent(h, sid, lid),
 		networkevent.DropConnEvent(h, sid, lid),
 	}
 
-	leecherExpected := []networkevent.Event{
+	leecherExpected := []*networkevent.Event{
 		networkevent.AddTorrentEvent(h, lid, []bool{false}),
 		networkevent.AddConnEvent(h, lid, sid),
 		networkevent.ReceivePieceEvent(h, lid, sid, 0),

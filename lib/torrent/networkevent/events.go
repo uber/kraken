@@ -1,10 +1,12 @@
 package networkevent
 
 import (
+	"encoding/json"
 	"time"
 
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 // Name defines event names.
@@ -33,8 +35,8 @@ type Event struct {
 	Bitfield []bool `json:"bitfield,omitempty"`
 }
 
-func baseEvent(name Name, h torlib.InfoHash, self torlib.PeerID) Event {
-	return Event{
+func baseEvent(name Name, h torlib.InfoHash, self torlib.PeerID) *Event {
+	return &Event{
 		Name:    name,
 		Torrent: h.String(),
 		Self:    self.String(),
@@ -42,29 +44,39 @@ func baseEvent(name Name, h torlib.InfoHash, self torlib.PeerID) Event {
 	}
 }
 
+// JSON converts event into a json string primarely for logging purposes
+func (e *Event) JSON() string {
+	b, err := json.Marshal(e)
+	if err != nil {
+		log.Errorf("json marshal error %s", err)
+		return ""
+	}
+	return string(b)
+}
+
 // AddTorrentEvent returns an event for an added torrent with initial bitfield.
-func AddTorrentEvent(h torlib.InfoHash, self torlib.PeerID, bitfield storage.Bitfield) Event {
+func AddTorrentEvent(h torlib.InfoHash, self torlib.PeerID, bitfield storage.Bitfield) *Event {
 	e := baseEvent(AddTorrent, h, self)
 	e.Bitfield = []bool(bitfield)
 	return e
 }
 
 // AddConnEvent returns an event for an added conn from self to peer.
-func AddConnEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID) Event {
+func AddConnEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID) *Event {
 	e := baseEvent(AddConn, h, self)
 	e.Peer = peer.String()
 	return e
 }
 
 // DropConnEvent returns an event for a dropped conn from self to peer.
-func DropConnEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID) Event {
+func DropConnEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID) *Event {
 	e := baseEvent(DropConn, h, self)
 	e.Peer = peer.String()
 	return e
 }
 
 // ReceivePieceEvent returns an event for a piece received from peer.
-func ReceivePieceEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) Event {
+func ReceivePieceEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
 	e := baseEvent(ReceivePiece, h, self)
 	e.Peer = peer.String()
 	e.Piece = piece
@@ -72,11 +84,11 @@ func ReceivePieceEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID
 }
 
 // TorrentCompleteEvent returns an event for a completed torrent.
-func TorrentCompleteEvent(h torlib.InfoHash, self torlib.PeerID) Event {
+func TorrentCompleteEvent(h torlib.InfoHash, self torlib.PeerID) *Event {
 	return baseEvent(TorrentComplete, h, self)
 }
 
 // TorrentCancelledEvent returns an event for a cancelled torrent.
-func TorrentCancelledEvent(h torlib.InfoHash, self torlib.PeerID) Event {
+func TorrentCancelledEvent(h torlib.InfoHash, self torlib.PeerID) *Event {
 	return baseEvent(TorrentCancelled, h, self)
 }

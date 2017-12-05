@@ -465,7 +465,7 @@ func (s *Scheduler) initTorrentControl(t storage.Torrent) *torrentControl {
 	ctrl := newTorrentControl(s.dispatcherFactory.New(t))
 	s.announceQueue.Add(ctrl.Dispatcher)
 	s.networkEventProducer.Produce(networkevent.AddTorrentEvent(t.InfoHash(), s.pctx.PeerID, t.Bitfield()))
-	s.eventLogger.Info(networkevent.AddTorrentEvent(t.InfoHash(), s.pctx.PeerID, t.Bitfield()))
+	s.eventLogger.Info(networkevent.AddTorrentEvent(t.InfoHash(), s.pctx.PeerID, t.Bitfield()).JSON())
 	s.torrentControls[t.InfoHash()] = ctrl
 	return ctrl
 }
