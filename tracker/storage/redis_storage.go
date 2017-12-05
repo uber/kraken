@@ -11,7 +11,6 @@ import (
 
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/stringset"
 )
 
 // RedisStorage errors.
@@ -28,21 +27,33 @@ func originsKey(infoHash string) string {
 }
 
 func serializePeer(p *torlib.PeerInfo) string {
-	return fmt.Sprintf("%s:%s:%d", p.PeerID, p.IP, p.Port)
+	var completeBit int
+	if p.Complete {
+		completeBit = 1
+	}
+	return fmt.Sprintf("%s:%s:%d:%d", p.PeerID, p.IP, p.Port, completeBit)
 }
 
-func deserializePeer(s string) (*torlib.PeerInfo, error) {
+type peerIdentity struct {
+	PeerID string
+	IP     string
+	Port   int64
+}
+
+func deserializePeer(s string) (id peerIdentity, complete bool, err error) {
 	parts := strings.Split(s, ":")
-	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid peer encoding: expected 'pid:ip:port'")
+	if len(parts) != 4 {
+		return id, false, fmt.Errorf("invalid peer encoding: expected 'pid:ip:port:complete'")
 	}
 	peerID := parts[0]
 	ip := parts[1]
 	port, err := strconv.ParseInt(parts[2], 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("cannot parse port: %s", err)
+		return id, false, fmt.Errorf("cannot parse port: %s", err)
 	}
-	return &torlib.PeerInfo{PeerID: peerID, IP: ip, Port: port}, nil
+	id = peerIdentity{peerID, ip, port}
+	complete = parts[3] == "1"
+	return id, complete, nil
 }
 
 // RedisStorage provides fast lookup for peers and torrent metainfo with expiration.
@@ -136,31 +147,36 @@ func (s *RedisStorage) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
 	}
 	defer c.Close()
 
-	// Collect all serialized peers into a set to eliminate duplicates from
-	// other windows.
-	serializedPeers := make(stringset.Set)
+	// Eliminate duplicates from other windows and collapses complete bits.
+	peers := make(map[peerIdentity]bool)
 	for _, w := range s.peerSetWindows() {
 		result, err := redis.Strings(c.Do("SMEMBERS", peerSetKey(infoHash, w)))
 		if err != nil {
 			return nil, err
 		}
 		for _, s := range result {
-			serializedPeers.Add(s)
+			id, complete, err := deserializePeer(s)
+			if err != nil {
+				log.Errorf("Error deserializing peer %q: %s", s, err)
+				continue
+			}
+			peers[id] = peers[id] || complete
 		}
 	}
 
-	var peers []*torlib.PeerInfo
-	for s := range serializedPeers {
-		p, err := deserializePeer(s)
-		if err != nil {
-			log.Errorf("Error deserializing peer %q: %s", s, err)
-			continue
+	peerInfos := make([]*torlib.PeerInfo, 0, len(peers))
+	for id, complete := range peers {
+		p := &torlib.PeerInfo{
+			InfoHash: infoHash,
+			PeerID:   id.PeerID,
+			IP:       id.IP,
+			Port:     id.Port,
+			Complete: complete,
 		}
-		p.InfoHash = infoHash
-		peers = append(peers, p)
+		peerInfos = append(peerInfos, p)
 	}
 
-	return peers, nil
+	return peerInfos, nil
 }
 
 // GetOrigins returns all origin PeerInfos for infoHash. Returns ErrNoOrigins if
@@ -180,18 +196,24 @@ func (s *RedisStorage) GetOrigins(infoHash string) ([]*torlib.PeerInfo, error) {
 		return nil, err
 	}
 
-	var peers []*torlib.PeerInfo
+	var peerInfos []*torlib.PeerInfo
 	for _, s := range strings.Split(result, ",") {
-		p, err := deserializePeer(s)
+		id, complete, err := deserializePeer(s)
 		if err != nil {
 			log.Errorf("Error deserializing origin %q: %s", s, err)
 			continue
 		}
-		p.InfoHash = infoHash
-		p.Origin = true
-		peers = append(peers, p)
+		p := &torlib.PeerInfo{
+			InfoHash: infoHash,
+			PeerID:   id.PeerID,
+			IP:       id.IP,
+			Port:     id.Port,
+			Complete: complete,
+			Origin:   true,
+		}
+		peerInfos = append(peerInfos, p)
 	}
-	return peers, nil
+	return peerInfos, nil
 }
 
 // UpdateOrigins overwrites all origin PeerInfos for infoHash with the given origins.

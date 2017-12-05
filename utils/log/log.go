@@ -19,6 +19,7 @@ func init() {
 	zapConfig := zap.NewProductionConfig()
 	zapConfig.Encoding = "console"
 	zapConfig.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	zapConfig.DisableStacktrace = true
 
 	ConfigureLogger(zapConfig)
 }

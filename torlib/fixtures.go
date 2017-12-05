@@ -2,7 +2,6 @@ package torlib
 
 import (
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"path"
 
@@ -32,14 +31,12 @@ func InfoHashFixture() InfoHash {
 // PeerInfoFixture returns a randomly generated PeerInfo.
 func PeerInfoFixture() *PeerInfo {
 	return &PeerInfo{
-		InfoHash:        InfoHashFixture().String(),
-		PeerID:          PeerIDFixture().String(),
-		IP:              randutil.IP(),
-		Port:            int64(randutil.Port()),
-		DC:              "sjc1",
-		BytesDownloaded: rand.Int63n(4096),
-		BytesUploaded:   rand.Int63n(4096),
-		BytesLeft:       rand.Int63n(4096),
+		InfoHash: InfoHashFixture().String(),
+		PeerID:   PeerIDFixture().String(),
+		IP:       randutil.IP(),
+		Port:     int64(randutil.Port()),
+		DC:       "sjc1",
+		Complete: false,
 	}
 }
 
@@ -48,9 +45,6 @@ func PeerInfoFixture() *PeerInfo {
 func PeerInfoForMetaInfoFixture(mi *MetaInfo) *PeerInfo {
 	p := PeerInfoFixture()
 	p.InfoHash = mi.InfoHash.String()
-	p.BytesDownloaded = rand.Int63n(mi.Info.Length)
-	p.BytesUploaded = rand.Int63n(mi.Info.Length)
-	p.BytesLeft = rand.Int63n(mi.Info.Length)
 	return p
 }
 

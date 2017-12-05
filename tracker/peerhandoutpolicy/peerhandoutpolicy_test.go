@@ -10,9 +10,8 @@ import (
 )
 
 type fixture struct {
-	ip       string
-	dc       string
-	complete bool
+	ip string
+	dc string
 }
 
 const (
@@ -21,12 +20,10 @@ const (
 )
 
 var (
-	sameRack               = fixture{"10.12.14.16", "sjc1", false}
-	sameRackComplete       = fixture{"10.12.14.17", "sjc1", true}
-	samePod                = fixture{"10.12.127.1", "sjc1", false}
-	sameDatacenter         = fixture{"10.15.0.1", "sjc1", false}
-	sameDatacenterComplete = fixture{"10.15.0.2", "sjc1", true}
-	diffDatacenter         = fixture{"10.17.22.28", "dca1", false}
+	sameRack       = fixture{"10.12.14.16", "sjc1"}
+	samePod        = fixture{"10.12.127.1", "sjc1"}
+	sameDatacenter = fixture{"10.15.0.1", "sjc1"}
+	diffDatacenter = fixture{"10.17.22.28", "dca1"}
 )
 
 func makeSourcePeer() *torlib.PeerInfo {
@@ -42,10 +39,6 @@ func makePeerFixtures(fs ...fixture) []*torlib.PeerInfo {
 		p := &torlib.PeerInfo{}
 		p.IP = fixture.ip
 		p.DC = fixture.dc
-		if fixture.complete {
-			p.BytesDownloaded = 1
-			p.BytesLeft = 0
-		}
 		peers = append(peers, p)
 	}
 
@@ -114,27 +107,6 @@ func TestDefaultPeerSamplingPolicy(t *testing.T) {
 		require.NoError(t, err)
 		for i, priority := range []int64{0, 1, 2} {
 			assert.Equal(t, priority, peers[i].Priority)
-		}
-	})
-}
-
-func TestCompletenessPeerSamplingPolicy(t *testing.T) {
-
-	t.Run("Sorts peers by downloaded bytes, then priority", func(t *testing.T) {
-		policy, _ := Get("ipv4netmask", "completeness")
-		src := makeSourcePeer()
-		peers := makePeerFixtures(
-			sameRack, sameRackComplete, sameDatacenter, sameDatacenterComplete)
-		require.NoError(t, policy.AssignPeerPriority(src, peers))
-		peers, err := policy.SamplePeers(peers, len(peers))
-		require.NoError(t, err)
-		for i, f := range []fixture{
-			sameRackComplete,
-			sameDatacenterComplete,
-			sameRack,
-			sameDatacenter,
-		} {
-			assert.Equal(t, f.ip, peers[i].IP)
 		}
 	})
 }

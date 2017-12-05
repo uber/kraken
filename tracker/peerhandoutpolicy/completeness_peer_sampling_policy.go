@@ -22,6 +22,6 @@ func (p *CompletenessPeerSamplingPolicy) SamplePeers(
 
 	return sortedPeers(peers, n, func(s peerInfos) {
 		sort.Sort(byPriority{s})
-		sort.Stable(sort.Reverse(byBytesDownloaded{s}))
+		sort.Stable(byComplete{s})
 	}), nil
 }
