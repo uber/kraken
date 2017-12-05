@@ -26,10 +26,12 @@ func TestTestAnnouncer(t *testing.T) {
 
 	mi := torlib.MetaInfoFixture()
 	p1 := &torlib.PeerInfo{
-		PeerID: "peer1",
+		PeerID:   "peer1",
+		Complete: true,
 	}
 	p2 := &torlib.PeerInfo{
-		PeerID: "peer2",
+		PeerID:   "peer2",
+		Complete: false,
 	}
 
 	// Announcing p1 should return p1.

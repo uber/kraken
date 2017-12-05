@@ -421,7 +421,7 @@ func (s *Scheduler) initOutgoingConn(peerID torlib.PeerID, ip string, port int, 
 func (s *Scheduler) announce(d *dispatcher) {
 	var e event
 	peers, err := s.announceClient.Announce(
-		d.Torrent.Name(), d.Torrent.InfoHash(), d.Torrent.BytesDownloaded())
+		d.Torrent.Name(), d.Torrent.InfoHash(), d.Torrent.Complete())
 	if err != nil {
 		s.log("dispatcher", d).Errorf("Announce failed: %s", err)
 		e = announceFailureEvent{d}

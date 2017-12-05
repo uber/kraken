@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strconv"
 	"sync"
 
 	xmysql "code.uber.internal/go-common.git/x/mysql"
@@ -44,41 +43,6 @@ func (s *MySQLStorage) RunMigration() error {
 		return err
 	}
 	return goose.Run("up", s.db.DB, s.config.MigrationsDir)
-}
-
-// GetPeers implements Storage.GetPeers
-func (s *MySQLStorage) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
-	var peers []*torlib.PeerInfo
-	err := s.db.Select(&peers, "select * from peer where infoHash=?", infoHash)
-	if err != nil {
-		log.Errorf("Failed to get peers: %s", err)
-		return nil, err
-	}
-
-	return peers, nil
-}
-
-// UpdatePeer updates PeerInfo in a storage
-func (s *MySQLStorage) UpdatePeer(peer *torlib.PeerInfo) error {
-	_, err := s.db.NamedExec(`insert into peer(infoHash, peerId, dc, ip, port, bytes_downloaded, flags)
-	values(:infoHash, :peerId, :dc, :ip, :port, :bytes_downloaded, :flags) on duplicate key update
-	dc =:dc, ip =:ip, port =:port, bytes_downloaded =:bytes_downloaded, flags=:flags`,
-		map[string]interface{}{
-			"infoHash":         peer.InfoHash,
-			"peerId":           peer.PeerID,
-			"dc":               peer.DC,
-			"ip":               peer.IP,
-			"port":             strconv.FormatInt(peer.Port, 10),
-			"bytes_downloaded": strconv.FormatInt(peer.BytesDownloaded, 10),
-			"flags":            strconv.FormatUint(uint64(peer.Flags), 10),
-		})
-
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-
-	return nil
 }
 
 // GetTorrent reads torrent's metadata identified by a torrent name

@@ -40,24 +40,17 @@ func TestMySQLStoresBackedBySameInstance(t *testing.T) {
 
 	storeProvider := NewStoreProvider(cfg, nemoConfigFixture())
 
-	peerStore, err := storeProvider.GetPeerStore()
-	require.NoError(err)
-
 	torrentStore, err := storeProvider.GetTorrentStore()
 	require.NoError(err)
 
 	manifestStore, err := storeProvider.GetManifestStore()
 	require.NoError(err)
 
-	s1, ok := peerStore.(*MySQLStorage)
+	s1, ok := torrentStore.(*MySQLStorage)
 	require.True(ok)
 
-	s2, ok := torrentStore.(*MySQLStorage)
-	require.True(ok)
-
-	s3, ok := manifestStore.(*MySQLStorage)
+	s2, ok := manifestStore.(*MySQLStorage)
 	require.True(ok)
 
 	require.Equal(s1, s2)
-	require.Equal(s2, s3)
 }

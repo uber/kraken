@@ -15,7 +15,7 @@ import (
 
 // Client defines a client for announcing and getting peers.
 type Client interface {
-	Announce(name string, h torlib.InfoHash, downloaded int64) ([]torlib.PeerInfo, error)
+	Announce(name string, h torlib.InfoHash, complete bool) ([]torlib.PeerInfo, error)
 }
 
 type client struct {
@@ -37,7 +37,7 @@ func Default(pctx peercontext.PeerContext, servers serverset.Set) Client {
 // Announce announces the torrent identified by (name, h) with the number of
 // downloaded bytes. Returns a list of all other peers announcing for said torrent,
 // sorted by priority.
-func (c *client) Announce(name string, h torlib.InfoHash, downloaded int64) ([]torlib.PeerInfo, error) {
+func (c *client) Announce(name string, h torlib.InfoHash, complete bool) ([]torlib.PeerInfo, error) {
 	v := url.Values{}
 
 	v.Add("name", name)
@@ -46,11 +46,7 @@ func (c *client) Announce(name string, h torlib.InfoHash, downloaded int64) ([]t
 	v.Add("port", strconv.Itoa(c.pctx.Port))
 	v.Add("ip", c.pctx.IP)
 	v.Add("dc", c.pctx.Zone)
-	v.Add("downloaded", strconv.FormatInt(downloaded, 10))
-
-	// TODO(codyg): Remove these from tracker.
-	v.Add("uploaded", "0")
-	v.Add("left", "0")
+	v.Add("complete", strconv.FormatBool(complete))
 
 	q := v.Encode()
 

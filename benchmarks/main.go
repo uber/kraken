@@ -169,6 +169,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error reading lines from agent file: %s", err)
 	}
+	// Remove duplicates.
+	agents = stringset.FromSlice(agents).ToSlice()
 	healthyAgents := filterHealthyAgents(agents)
 
 	log.Printf("Filtered out %d unhealthy agents (%d remaining)\n",

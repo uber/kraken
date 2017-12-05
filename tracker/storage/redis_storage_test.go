@@ -30,6 +30,7 @@ func TestRedisStorageGetPeersPopulatesPeerInfoFields(t *testing.T) {
 	require.NoError(err)
 
 	p := torlib.PeerInfoFixture()
+	p.Complete = true
 
 	require.NoError(s.UpdatePeer(p))
 
@@ -40,6 +41,7 @@ func TestRedisStorageGetPeersPopulatesPeerInfoFields(t *testing.T) {
 		PeerID:   p.PeerID,
 		IP:       p.IP,
 		Port:     p.Port,
+		Complete: true,
 	}})
 }
 
@@ -83,6 +85,34 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 	require.Equal(torlib.SortedPeerIDs(peers), torlib.SortedPeerIDs(result))
 }
 
+func TestRedisStorageGetPeersCollapsesCompleteBits(t *testing.T) {
+	require := require.New(t)
+
+	config := redisConfigFixture()
+
+	flushdb(config)
+
+	s, err := NewRedisStorage(config)
+	require.NoError(err)
+
+	p := torlib.PeerInfoFixture()
+
+	require.NoError(s.UpdatePeer(p))
+
+	peers, err := s.GetPeers(p.InfoHash)
+	require.NoError(err)
+	require.Len(peers, 1)
+	require.False(peers[0].Complete)
+
+	p.Complete = true
+	require.NoError(s.UpdatePeer(p))
+
+	peers, err = s.GetPeers(p.InfoHash)
+	require.NoError(err)
+	require.Len(peers, 1)
+	require.True(peers[0].Complete)
+}
+
 func TestRedisStoragePeerExpiration(t *testing.T) {
 	require := require.New(t)
 
@@ -124,6 +154,7 @@ func TestRedisStorageGetOriginsPopulatesPeerInfoFields(t *testing.T) {
 	infoHash := mi.InfoHash.String()
 
 	origin := torlib.PeerInfoForMetaInfoFixture(mi)
+	origin.Complete = true
 
 	require.NoError(s.UpdateOrigins(infoHash, []*torlib.PeerInfo{origin}))
 
@@ -134,6 +165,7 @@ func TestRedisStorageGetOriginsPopulatesPeerInfoFields(t *testing.T) {
 		PeerID:   origin.PeerID,
 		IP:       origin.IP,
 		Port:     origin.Port,
+		Complete: true,
 		Origin:   true,
 	}})
 }

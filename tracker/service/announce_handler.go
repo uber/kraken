@@ -51,6 +51,7 @@ func (h *announceHandler) requestOrigins(infoHash, name string) ([]*torlib.PeerI
 					Port:     int64(pctx.Port),
 					DC:       pctx.Zone,
 					Origin:   true,
+					Complete: true,
 				})
 			}
 			mu.Unlock()
@@ -68,53 +69,26 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	name := q.Get("name")
 	infoHash := q.Get("info_hash")
 	peerID := q.Get("peer_id")
-	peerPortStr := q.Get("port")
 	peerIP := q.Get("ip")
 	peerDC := q.Get("dc")
-	peerBytesDownloadedStr := q.Get("downloaded")
-	peerBytesUploadedStr := q.Get("uploaded")
-	peerBytesLeftStr := q.Get("left")
-	peerEvent := q.Get("event")
-
-	peerPort, err := strconv.ParseInt(peerPortStr, 10, 64)
+	peerPort, err := strconv.ParseInt(q.Get("port"), 10, 64)
 	if err != nil {
-		log.Infof("Port is not parsable: %s", formatRequest(r))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("parse port: %s", err), http.StatusBadRequest)
 		return
 	}
-
-	peerBytesDownloaded, err := strconv.ParseInt(peerBytesDownloadedStr, 10, 64)
+	peerComplete, err := strconv.ParseBool(q.Get("complete"))
 	if err != nil {
-		log.Infof("Downloaded is not parsable: %s", formatRequest(r))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	peerBytesUploaded, err := strconv.ParseInt(peerBytesUploadedStr, 10, 64)
-	if err != nil {
-		log.Infof("Uploaded is not parsable: %s", formatRequest(r))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	peerBytesLeft, err := strconv.ParseUint(peerBytesLeftStr, 10, 64)
-	if err != nil {
-		log.Infof("left is not parsable: %s", formatRequest(r))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("parse complete: %s", err), http.StatusBadRequest)
 		return
 	}
 
 	peer := &torlib.PeerInfo{
-		InfoHash:        infoHash,
-		PeerID:          peerID,
-		IP:              peerIP,
-		Port:            peerPort,
-		DC:              peerDC,
-		BytesUploaded:   peerBytesUploaded,
-		BytesDownloaded: peerBytesDownloaded,
-		// TODO (@evelynl): our torrent library use uint64 as bytes left but database/sql does not support it
-		BytesLeft: int64(peerBytesLeft),
-		Event:     peerEvent,
+		InfoHash: infoHash,
+		PeerID:   peerID,
+		IP:       peerIP,
+		Port:     peerPort,
+		DC:       peerDC,
+		Complete: peerComplete,
 	}
 
 	if err := h.store.UpdatePeer(peer); err != nil {

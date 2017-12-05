@@ -32,14 +32,14 @@ func TestAnnounceEndPoint(t *testing.T) {
 	}
 	announceRequestPath := createAnnouncePath(mi, peer)
 
-	t.Run("Return 500 if missing parameters", func(t *testing.T) {
+	t.Run("Return 400 if missing parameters", func(t *testing.T) {
 		announceRequest, _ := http.NewRequest("GET", "/announce", nil)
 
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()
 
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
-		require.Equal(t, 500, response.StatusCode)
+		require.Equal(t, 400, response.StatusCode)
 	})
 	t.Run("Return 404 if no peers found", func(t *testing.T) {
 
@@ -124,6 +124,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 			Port:     int64(originPCtx.Port),
 			DC:       originPCtx.Zone,
 			Origin:   true,
+			Complete: true,
 		}
 
 		mockBlobClient := mockblobclient.NewMockClient(mocks.ctrl)
@@ -141,6 +142,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		ar := torlib.AnnouncerResponse{}
 		bencode.Unmarshal(resp.Body, &ar)
 		origin.Origin = false
+		origin.Complete = false
 		require.Equal([]torlib.PeerInfo{*origin}, ar.Peers)
 	})
 	t.Run("Unavailable peer store can still provide origin peers", func(t *testing.T) {

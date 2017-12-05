@@ -37,53 +37,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestMySQLGetPeers(t *testing.T) {
-	assert := require.New(t)
-	ih := "0"
-	peer0 := "peer0"
-	ip0 := "127.0.0.1"
-	port0 := 8080
-	peer1 := "peer1"
-	ip1 := "127.0.0.3"
-	port1 := 5000
-
-	rows := sqlmock.NewRows([]string{"infoHash", "peerId", "ip", "port"}).AddRow(ih, peer0, ip0, port0).AddRow(ih, peer1, ip1, port1)
-	mock.ExpectQuery("^select (.+) from peer where").WithArgs(ih).WillReturnRows(rows)
-
-	peers, err := storage.GetPeers(ih)
-
-	assert.NoError(err)
-	assert.Equal(2, len(peers))
-	assert.Equal(peers[0].PeerID, peer0)
-	assert.Equal(peers[0].IP, "127.0.0.1")
-	assert.Equal(peers[0].Port, int64(8080))
-	assert.Equal(peers[0].InfoHash, ih)
-	assert.Equal(peers[1].PeerID, peer1)
-	assert.NoError(mock.ExpectationsWereMet())
-}
-
-func TestMySQLUpdatePeer(t *testing.T) {
-	assert := require.New(t)
-	p := &torlib.PeerInfo{
-		InfoHash:        "1",
-		PeerID:          "peer0",
-		DC:              "sjc1",
-		IP:              "127.0.0.1",
-		Port:            int64(8080),
-		BytesDownloaded: int64(1),
-		Flags:           uint(2),
-	}
-	mock.ExpectExec("insert into peer").WithArgs(
-		// insert
-		p.InfoHash, p.PeerID, p.DC, p.IP, "8080", "1", "2",
-		// update
-		p.DC, p.IP, "8080", "1", "2",
-	).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	assert.NoError(storage.UpdatePeer(p))
-	assert.NoError(mock.ExpectationsWereMet())
-}
-
 func TestMySQLGetTorrent(t *testing.T) {
 	assert := require.New(t)
 	name := "torrent0"

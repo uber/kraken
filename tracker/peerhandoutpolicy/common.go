@@ -13,10 +13,10 @@ func (s byPriority) Less(i, j int) bool {
 	return s.peerInfos[i].Priority < s.peerInfos[j].Priority
 }
 
-type byBytesDownloaded struct{ peerInfos }
+type byComplete struct{ peerInfos }
 
-func (s byBytesDownloaded) Less(i, j int) bool {
-	return s.peerInfos[i].BytesDownloaded < s.peerInfos[j].BytesDownloaded
+func (s byComplete) Less(i, j int) bool {
+	return s.peerInfos[i].Complete && !s.peerInfos[j].Complete
 }
 
 // Returns a new slice of the first n peers after applying the `sorter` function.

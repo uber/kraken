@@ -105,10 +105,7 @@ func createAnnouncePath(mi *torlib.MetaInfo, p *torlib.PeerInfo) string {
 	v.Set("ip", p.IP)
 	v.Set("port", strconv.FormatInt(p.Port, 10))
 	v.Set("dc", p.DC)
-	v.Set("downloaded", strconv.FormatInt(p.BytesDownloaded, 10))
-	v.Set("uploaded", strconv.FormatInt(p.BytesUploaded, 10))
-	v.Set("left", strconv.FormatInt(p.BytesLeft, 10))
-	v.Set("event", p.Event)
+	v.Set("complete", strconv.FormatBool(p.Complete))
 
 	return "/announce?" + v.Encode()
 }
