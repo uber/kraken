@@ -22,6 +22,7 @@ import (
 
 func main() {
 	blobServerPort := flag.Int("blobserver_port", 0, "port which registry listens on")
+	blobServerHostName := flag.String("blobserver_hostname", "", "optional hostname which blobserver will use to lookup a local host in a blob server hashnode config")
 	peerIP := flag.String("peer_ip", "", "ip which peer will announce itself as")
 	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
 	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
@@ -97,10 +98,15 @@ func main() {
 		log.Warn("Torrent disabled")
 	}
 
+	var hostname string
 	// The code below starts Blob HTTP server.
-	hostname, err := os.Hostname()
-	if err != nil {
-		log.Fatalf("Error getting hostname: %s", err)
+	if blobServerHostName == nil || *blobServerHostName == "" {
+		hostname, err = os.Hostname()
+		if err != nil {
+			log.Fatalf("Error getting hostname: %s", err)
+		}
+	} else {
+		hostname = *blobServerHostName
 	}
 
 	addr := fmt.Sprintf("%s:%d", hostname, *blobServerPort)

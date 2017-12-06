@@ -1,6 +1,8 @@
 package memsize
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // Defines the number of bytes in each unit.
 const (
