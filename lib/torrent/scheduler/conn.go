@@ -26,6 +26,7 @@ var (
 	errHandshakeExpectedBitfield = errors.New(
 		"handshaking new connection expected bitfield message")
 	errConnClosed            = errors.New("conn is closed")
+	errSendBufferFull        = errors.New("send buffer is full")
 	errEmptyPayload          = errors.New("payload is empty")
 	errMessageExceedsMaxSize = errors.New("message exceeds max allowed size")
 	errTorrentNotInConn      = errors.New("torrent not initialized for connection")
@@ -257,6 +258,11 @@ func (c *conn) Send(msg *message) error {
 		return errConnClosed
 	case c.sender <- msg:
 		return nil
+	default:
+		// TODO(codyg): Consider a timeout here instead.
+		t := msg.Message.Type.String()
+		c.stats.SubScope("dropped_messages").Counter(t).Inc(1)
+		return errSendBufferFull
 	}
 }
 

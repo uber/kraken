@@ -184,8 +184,12 @@ func (c ConnConfig) applyDefaults() ConnConfig {
 	if c.HandshakeTimeout == 0 {
 		c.HandshakeTimeout = 5 * time.Second
 	}
-	// TODO(codyg): We cannot set default buffer sizes, since 0 is a very valid
-	// buffer size for testing.
+	if c.SenderBufferSize == 0 {
+		c.SenderBufferSize = 10000
+	}
+	if c.ReceiverBufferSize == 0 {
+		c.ReceiverBufferSize = 10000
+	}
 	return c
 }
 
