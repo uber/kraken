@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
@@ -134,16 +133,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 	ac := announceclient.Default(pctx, serverset.NewSingle(m.trackerAddr))
 	tp := networkevent.NewTestProducer()
 
-	loggerConfig := zap.NewProductionConfig()
-	loggerConfig.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	loggerConfig.OutputPaths = []string{}
-
-	eventLogger, err := loggerConfig.Build()
-	if err != nil {
-		panic(err)
-	}
-
-	s, err := New(config, ta, stats, pctx, ac, tp, eventLogger.Sugar(), options...)
+	s, err := New(config, ta, stats, pctx, ac, tp, options...)
 	if err != nil {
 		panic(err)
 	}
@@ -334,20 +324,12 @@ func connFixture(config ConnConfig, torrent storage.Torrent) (*conn, *conn, func
 }
 
 func dispatcherFactoryFixture(config DispatcherConfig, clk clock.Clock) *dispatcherFactory {
-	//event logger config
-	loggerConfig := zap.NewProductionConfig()
-	eventLogger, err := loggerConfig.Build()
-	if err != nil {
-		panic(err)
-	}
-
 	return &dispatcherFactory{
 		Config:               config,
 		LocalPeerID:          torlib.PeerIDFixture(),
 		EventSender:          noopEventSender{},
 		Clock:                clk,
 		NetworkEventProducer: networkevent.NewTestProducer(),
-		EventLogger:          eventLogger.Sugar(),
 		Stats:                tally.NewTestScope("", nil),
 	}
 }

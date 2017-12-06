@@ -7,6 +7,7 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -36,7 +37,7 @@ func TestBlacklistBackoff(t *testing.T) {
 			clk := clock.NewMock()
 			clk.Set(time.Now())
 
-			s := newConnState(torlib.PeerIDFixture(), config, clk)
+			s := newConnState(torlib.PeerIDFixture(), config, clk, networkevent.NewTestProducer())
 
 			peerID := torlib.PeerIDFixture()
 			infoHash := torlib.InfoHashFixture()
@@ -73,7 +74,7 @@ func TestDeleteStaleBlacklistEntries(t *testing.T) {
 	clk := clock.NewMock()
 	clk.Set(time.Now())
 
-	s := newConnState(torlib.PeerIDFixture(), config, clk)
+	s := newConnState(torlib.PeerIDFixture(), config, clk, networkevent.NewTestProducer())
 
 	peerID := torlib.PeerIDFixture()
 	infoHash := torlib.InfoHashFixture()
@@ -109,7 +110,7 @@ func TestChangesToActiveConnsRedistributesBandwidth(t *testing.T) {
 
 	config := connStateConfigFixture()
 
-	s := newConnState(torlib.PeerIDFixture(), config, clock.New())
+	s := newConnState(torlib.PeerIDFixture(), config, clock.New(), networkevent.NewTestProducer())
 
 	torrent, cleanup := storage.TorrentFixture(128, 32)
 	defer cleanup()
@@ -144,7 +145,7 @@ func TestAddingActiveConnsNeverRedistributesBandwidthBelowMin(t *testing.T) {
 	config.MaxGlobalEgressBytesPerSec = 4 * memsize.KB
 	config.MinConnEgressBytesPerSec = memsize.KB
 
-	s := newConnState(torlib.PeerIDFixture(), config, clock.New())
+	s := newConnState(torlib.PeerIDFixture(), config, clock.New(), networkevent.NewTestProducer())
 
 	torrent, cleanup := storage.TorrentFixture(128, 32)
 	defer cleanup()
@@ -166,7 +167,7 @@ func TestConnStateBlacklistSnapshot(t *testing.T) {
 	config := connStateConfigFixture()
 	clk := clock.NewMock()
 
-	s := newConnState(torlib.PeerIDFixture(), config, clk)
+	s := newConnState(torlib.PeerIDFixture(), config, clk, networkevent.NewTestProducer())
 
 	pid := torlib.PeerIDFixture()
 	h := torlib.InfoHashFixture()

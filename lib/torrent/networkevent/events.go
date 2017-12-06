@@ -15,8 +15,11 @@ type Name string
 // Possible event names.
 const (
 	AddTorrent       Name = "add_torrent"
-	AddConn          Name = "add_conn"
-	DropConn         Name = "drop_conn"
+	AddPendingConn   Name = "add_pending_conn"
+	DropPendingConn  Name = "drop_pending_conn"
+	AddActiveConn    Name = "add_active_conn"
+	DropActiveConn   Name = "drop_active_conn"
+	BlacklistConn    Name = "blacklist_conn"
 	ReceivePiece     Name = "receive_piece"
 	TorrentComplete  Name = "torrent_complete"
 	TorrentCancelled Name = "torrent_cancelled"
@@ -30,9 +33,11 @@ type Event struct {
 	Time    time.Time `json:"ts"`
 
 	// Optional fields.
-	Peer     string `json:"peer,omitempty"`
-	Piece    int    `json:"piece,omitempty"`
-	Bitfield []bool `json:"bitfield,omitempty"`
+	Peer         string `json:"peer,omitempty"`
+	Piece        int    `json:"piece,omitempty"`
+	Bitfield     []bool `json:"bitfield,omitempty"`
+	DurationMS   int64  `json:"duration_ms,omitempty"`
+	ConnCapacity int    `json:"conn_capacity,omitempty"`
 }
 
 func baseEvent(name Name, h torlib.InfoHash, self torlib.PeerID) *Event {
@@ -55,23 +60,46 @@ func (e *Event) JSON() string {
 }
 
 // AddTorrentEvent returns an event for an added torrent with initial bitfield.
-func AddTorrentEvent(h torlib.InfoHash, self torlib.PeerID, bitfield storage.Bitfield) *Event {
+func AddTorrentEvent(h torlib.InfoHash, self torlib.PeerID, b storage.Bitfield, connCapacity int) *Event {
 	e := baseEvent(AddTorrent, h, self)
-	e.Bitfield = []bool(bitfield)
+	e.Bitfield = []bool(b)
+	e.ConnCapacity = connCapacity
 	return e
 }
 
-// AddConnEvent returns an event for an added conn from self to peer.
-func AddConnEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID) *Event {
-	e := baseEvent(AddConn, h, self)
+// AddPendingConnEvent returns an event for an added pending conn from self to peer.
+func AddPendingConnEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID) *Event {
+	e := baseEvent(AddPendingConn, h, self)
 	e.Peer = peer.String()
 	return e
 }
 
-// DropConnEvent returns an event for a dropped conn from self to peer.
-func DropConnEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID) *Event {
-	e := baseEvent(DropConn, h, self)
+// DropPendingConnEvent returns an event for a dropped pending conn from self to peer.
+func DropPendingConnEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID) *Event {
+	e := baseEvent(DropPendingConn, h, self)
 	e.Peer = peer.String()
+	return e
+}
+
+// AddActiveConnEvent returns an event for an added active conn from self to peer.
+func AddActiveConnEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID) *Event {
+	e := baseEvent(AddActiveConn, h, self)
+	e.Peer = peer.String()
+	return e
+}
+
+// DropActiveConnEvent returns an event for a dropped active conn from self to peer.
+func DropActiveConnEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID) *Event {
+	e := baseEvent(DropActiveConn, h, self)
+	e.Peer = peer.String()
+	return e
+}
+
+// BlacklistConnEvent returns an event for a blacklisted connection.
+func BlacklistConnEvent(h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, dur time.Duration) *Event {
+	e := baseEvent(BlacklistConn, h, self)
+	e.Peer = peer.String()
+	e.DurationMS = int64(dur.Seconds() * 1000)
 	return e
 }
 

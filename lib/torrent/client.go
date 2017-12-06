@@ -51,18 +51,12 @@ func NewSchedulerClient(
 
 	stats = stats.SubScope("peer").SubScope(pctx.PeerID.String())
 	archive := storage.NewLocalTorrentArchive(fs, metaInfoClient)
-	networkEventProducer, err := networkevent.NewProducer(config.NetworkEvent)
+	networkEvents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
 		return nil, fmt.Errorf("network event producer: %s", err)
 	}
-
-	networkEventLogger, err := networkevent.NewLogger(config.NetworkEvent)
-	if err != nil {
-		return nil, fmt.Errorf("network event logger: %s", err)
-	}
-
 	sched, err := scheduler.New(
-		config.Scheduler, archive, stats, pctx, announceClient, networkEventProducer, networkEventLogger)
+		config.Scheduler, archive, stats, pctx, announceClient, networkEvents)
 	if err != nil {
 		return nil, fmt.Errorf("scheduler: %s", err)
 	}
