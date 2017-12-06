@@ -290,18 +290,22 @@ func TestNetworkEvents(t *testing.T) {
 	waitForConnRemoved(t, leecher.scheduler, sid, h)
 
 	seederExpected := []*networkevent.Event{
-		networkevent.AddTorrentEvent(h, sid, []bool{true}),
+		networkevent.AddTorrentEvent(h, sid, []bool{true}, config.ConnState.MaxOpenConnectionsPerTorrent),
 		networkevent.TorrentCompleteEvent(h, sid),
-		networkevent.AddConnEvent(h, sid, lid),
-		networkevent.DropConnEvent(h, sid, lid),
+		networkevent.AddPendingConnEvent(h, sid, lid),
+		networkevent.AddActiveConnEvent(h, sid, lid),
+		networkevent.DropActiveConnEvent(h, sid, lid),
+		networkevent.BlacklistConnEvent(h, sid, lid, config.ConnState.InitialBlacklistExpiration),
 	}
 
 	leecherExpected := []*networkevent.Event{
-		networkevent.AddTorrentEvent(h, lid, []bool{false}),
-		networkevent.AddConnEvent(h, lid, sid),
+		networkevent.AddTorrentEvent(h, lid, []bool{false}, config.ConnState.MaxOpenConnectionsPerTorrent),
+		networkevent.AddPendingConnEvent(h, lid, sid),
+		networkevent.AddActiveConnEvent(h, lid, sid),
 		networkevent.ReceivePieceEvent(h, lid, sid, 0),
 		networkevent.TorrentCompleteEvent(h, lid),
-		networkevent.DropConnEvent(h, lid, sid),
+		networkevent.DropActiveConnEvent(h, lid, sid),
+		networkevent.BlacklistConnEvent(h, lid, sid, config.ConnState.InitialBlacklistExpiration),
 	}
 
 	require.Equal(

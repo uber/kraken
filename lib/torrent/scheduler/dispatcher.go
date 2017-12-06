@@ -93,7 +93,6 @@ type dispatcherFactory struct {
 	EventSender          eventSender
 	Clock                clock.Clock
 	NetworkEventProducer networkevent.Producer
-	EventLogger          *zap.SugaredLogger
 	Stats                tally.Scope
 }
 
@@ -119,17 +118,16 @@ func (f *dispatcherFactory) New(t storage.Torrent) *dispatcher {
 func (f *dispatcherFactory) init(t storage.Torrent) *dispatcher {
 	pieceRequestTimeout := f.calcPieceRequestTimeout(t.MaxPieceLength())
 	return &dispatcher{
-		Torrent:              t,
-		CreatedAt:            f.Clock.Now(),
-		localPeerID:          f.LocalPeerID,
-		eventSender:          f.EventSender,
-		clock:                f.Clock,
-		networkEventProducer: f.NetworkEventProducer,
-		eventLogger:          f.EventLogger,
-		pieceRequestManager:  piecerequest.NewManager(f.Clock, pieceRequestTimeout),
-		pieceRequestTimeout:  pieceRequestTimeout,
-		pendingPiecesDone:    make(chan struct{}),
-		stats:                f.Stats,
+		Torrent:             t,
+		CreatedAt:           f.Clock.Now(),
+		localPeerID:         f.LocalPeerID,
+		eventSender:         f.EventSender,
+		clock:               f.Clock,
+		networkEvents:       f.NetworkEventProducer,
+		pieceRequestManager: piecerequest.NewManager(f.Clock, pieceRequestTimeout),
+		pieceRequestTimeout: pieceRequestTimeout,
+		pendingPiecesDone:   make(chan struct{}),
+		stats:               f.Stats,
 	}
 }
 
@@ -149,8 +147,7 @@ type dispatcher struct {
 
 	eventSender eventSender
 
-	networkEventProducer networkevent.Producer
-	eventLogger          *zap.SugaredLogger
+	networkEvents networkevent.Producer
 
 	lastConnRemovedMu sync.Mutex
 	lastConnRemoved   time.Time
@@ -437,10 +434,8 @@ func (d *dispatcher) handlePiecePayload(
 		}
 		return
 	}
-	d.networkEventProducer.Produce(
+	d.networkEvents.Produce(
 		networkevent.ReceivePieceEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
-	d.eventLogger.Info(
-		networkevent.ReceivePieceEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i).JSON())
 
 	p.touchLastGoodPieceReceived()
 	if d.Torrent.Complete() {

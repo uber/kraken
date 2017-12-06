@@ -9,6 +9,7 @@ import (
 	"github.com/andres-erbsen/clock"
 	"go.uber.org/zap"
 
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -42,24 +43,31 @@ func (e *blacklistEntry) Remaining(now time.Time) time.Duration {
 }
 
 type connState struct {
-	localPeerID torlib.PeerID
-	config      ConnStateConfig
-	capacity    map[torlib.InfoHash]int
-	active      map[connKey]*conn
-	pending     map[connKey]bool
-	blacklist   map[connKey]*blacklistEntry
-	clock       clock.Clock
+	localPeerID   torlib.PeerID
+	config        ConnStateConfig
+	capacity      map[torlib.InfoHash]int
+	active        map[connKey]*conn
+	pending       map[connKey]bool
+	blacklist     map[connKey]*blacklistEntry
+	clock         clock.Clock
+	networkEvents networkevent.Producer
 }
 
-func newConnState(localPeerID torlib.PeerID, config ConnStateConfig, clk clock.Clock) *connState {
+func newConnState(
+	localPeerID torlib.PeerID,
+	config ConnStateConfig,
+	clk clock.Clock,
+	networkEvents networkevent.Producer) *connState {
+
 	return &connState{
-		localPeerID: localPeerID,
-		config:      config,
-		capacity:    make(map[torlib.InfoHash]int),
-		active:      make(map[connKey]*conn),
-		pending:     make(map[connKey]bool),
-		blacklist:   make(map[connKey]*blacklistEntry),
-		clock:       clk,
+		localPeerID:   localPeerID,
+		config:        config,
+		capacity:      make(map[torlib.InfoHash]int),
+		active:        make(map[connKey]*conn),
+		pending:       make(map[connKey]bool),
+		blacklist:     make(map[connKey]*blacklistEntry),
+		clock:         clk,
+		networkEvents: networkEvents,
 	}
 }
 
@@ -107,6 +115,8 @@ func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) er
 
 	s.log("peer", peerID, "hash", infoHash).Infof(
 		"Conn blacklisted for %.1f seconds after %d failures", d.Seconds(), e.failures)
+	s.networkEvents.Produce(
+		networkevent.BlacklistConnEvent(infoHash, s.localPeerID, peerID, d))
 
 	return nil
 }
@@ -135,8 +145,11 @@ func (s *connState) AddPending(peerID torlib.PeerID, infoHash torlib.InfoHash) e
 	}
 	s.pending[k] = true
 	s.capacity[k.infoHash]--
+
 	s.log("peer", peerID, "hash", infoHash).Infof(
 		"Added pending conn, capacity now at %d", s.capacity[k.infoHash])
+	s.networkEvents.Produce(networkevent.AddPendingConnEvent(infoHash, s.localPeerID, peerID))
+
 	return nil
 }
 
@@ -147,8 +160,10 @@ func (s *connState) DeletePending(peerID torlib.PeerID, infoHash torlib.InfoHash
 	}
 	delete(s.pending, k)
 	s.capacity[k.infoHash]++
+
 	s.log("peer", peerID, "hash", infoHash).Infof(
 		"Deleted pending conn, capacity now at %d", s.capacity[k.infoHash])
+	s.networkEvents.Produce(networkevent.DropPendingConnEvent(infoHash, s.localPeerID, peerID))
 }
 
 func (s *connState) MovePendingToActive(c *conn) error {
@@ -172,27 +187,31 @@ func (s *connState) MovePendingToActive(c *conn) error {
 	}
 	s.active[k] = c
 	s.adjustConnBandwidthLimits()
-	s.log("peer", k.peerID, "hash", k.infoHash).Info(
-		"Moved conn from pending to active")
+
+	s.log("peer", k.peerID, "hash", k.infoHash).Info("Moved conn from pending to active")
+	s.networkEvents.Produce(networkevent.AddActiveConnEvent(c.InfoHash, s.localPeerID, c.PeerID))
+
 	return nil
 }
 
-// DeleteActive returns true if the conn was deleted, or false if the conn is not
-// active.
-func (s *connState) DeleteActive(c *conn) bool {
+// DeleteActive deletes c. No-ops if c is not an active conn.
+func (s *connState) DeleteActive(c *conn) {
 	k := connKey{c.PeerID, c.InfoHash}
 	cur, ok := s.active[k]
 	if !ok || cur != c {
 		// It is possible that some new conn shares the same key as the old conn,
 		// so we need to make sure we're deleting the right one.
-		return false
+		return
 	}
 	delete(s.active, k)
 	s.capacity[k.infoHash]++
 	s.adjustConnBandwidthLimits()
+
 	s.log("peer", k.peerID, "hash", k.infoHash).Infof(
 		"Deleted active conn, capacity now at %d", s.capacity[k.infoHash])
-	return true
+	s.networkEvents.Produce(networkevent.DropActiveConnEvent(c.InfoHash, s.localPeerID, c.PeerID))
+
+	return
 }
 
 func (s *connState) DeleteStaleBlacklistEntries() {
