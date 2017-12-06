@@ -2,8 +2,6 @@ package scheduler
 
 import (
 	"flag"
-	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"reflect"
@@ -52,12 +50,7 @@ func init() {
 }
 
 func connConfigFixture() ConnConfig {
-	return ConnConfig{
-		// Buffers are just a performance optimization, so a zero-sized
-		// buffer will instantly force any deadlock conditions.
-		SenderBufferSize:   0,
-		ReceiverBufferSize: 0,
-	}.applyDefaults()
+	return ConnConfig{}.applyDefaults()
 }
 
 func connStateConfigFixture() ConnStateConfig {
@@ -143,6 +136,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 
 	loggerConfig := zap.NewProductionConfig()
 	loggerConfig.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	loggerConfig.OutputPaths = []string{}
 
 	eventLogger, err := loggerConfig.Build()
 	if err != nil {
@@ -290,14 +284,6 @@ func waitForTorrentRemoved(t *testing.T, s *Scheduler, infoHash torlib.InfoHash)
 	}
 }
 
-func discard(nc net.Conn) {
-	for {
-		if _, err := io.Copy(ioutil.Discard, nc); err != nil {
-			return
-		}
-	}
-}
-
 type noopEventSender struct{}
 
 func (s noopEventSender) Send(event) bool { return true }
@@ -312,32 +298,39 @@ func (n noopDeadline) SetDeadline(t time.Time) error      { return nil }
 func (n noopDeadline) SetReadDeadline(t time.Time) error  { return nil }
 func (n noopDeadline) SetWriteDeadline(t time.Time) error { return nil }
 
-func connFixture(config ConnConfig, torrent storage.Torrent) (*conn, func()) {
+func connFixture(config ConnConfig, torrent storage.Torrent) (*conn, *conn, func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
-	localPeerID := torlib.PeerIDFixture()
-	remotePeerID := torlib.PeerIDFixture()
-
-	f := &connFactory{
+	f1 := &connFactory{
 		Config:      config,
-		LocalPeerID: localPeerID,
+		LocalPeerID: torlib.PeerIDFixture(),
+		EventSender: noopEventSender{},
+		Clock:       clock.New(),
+		Stats:       tally.NewTestScope("", nil),
+	}
+	f2 := &connFactory{
+		Config:      config,
+		LocalPeerID: torlib.PeerIDFixture(),
 		EventSender: noopEventSender{},
 		Clock:       clock.New(),
 		Stats:       tally.NewTestScope("", nil),
 	}
 
-	localNC, remoteNC := net.Pipe()
-	cleanup.Add(func() { localNC.Close() })
-	cleanup.Add(func() { remoteNC.Close() })
-	localNC = noopDeadline{localNC}
-	go discard(remoteNC)
+	nc1, nc2 := net.Pipe()
+	cleanup.Add(func() { nc1.Close() })
+	cleanup.Add(func() { nc2.Close() })
 
-	c, err := f.newConn(localNC, torrent, remotePeerID, false)
+	c1, err := f1.newConn(noopDeadline{nc1}, torrent, f2.LocalPeerID, true)
 	if err != nil {
 		panic(err)
 	}
-	return c, cleanup.Run
+	c2, err := f2.newConn(noopDeadline{nc2}, torrent, f1.LocalPeerID, false)
+	if err != nil {
+		panic(err)
+	}
+
+	return c1, c2, cleanup.Run
 }
 
 func dispatcherFactoryFixture(config DispatcherConfig, clk clock.Clock) *dispatcherFactory {

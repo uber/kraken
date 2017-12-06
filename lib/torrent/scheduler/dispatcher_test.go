@@ -96,32 +96,7 @@ func TestDispatcherDoesNotSendDuplicateInitialPieceRequests(t *testing.T) {
 	}
 }
 
-func TestDispatcherReservePieceRequest(t *testing.T) {
-	require := require.New(t)
-
-	config := dispatcherConfigFixture()
-	clk := clock.NewMock()
-	f := dispatcherFactoryFixture(config, clk)
-
-	torrent, cleanup := storage.TorrentFixture(100, 1)
-	defer cleanup()
-
-	d := f.init(torrent)
-
-	peerID := torlib.PeerIDFixture()
-
-	require.True(d.reservePieceRequest(peerID, 0))
-
-	// Further reservations fail.
-	require.False(d.reservePieceRequest(peerID, 0))
-	require.False(d.reservePieceRequest(torlib.PeerIDFixture(), 0))
-
-	clk.Add(d.pieceRequestTimeout + 1)
-
-	require.True(d.reservePieceRequest(peerID, 0))
-}
-
-func TestDispatcherResendExpiredPieceRequests(t *testing.T) {
+func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 	require := require.New(t)
 
 	config := dispatcherConfigFixture()
@@ -162,7 +137,7 @@ func TestDispatcherResendExpiredPieceRequests(t *testing.T) {
 
 	clk.Add(d.pieceRequestTimeout + 1)
 
-	d.resendExpiredPieceRequests()
+	d.resendFailedPieceRequests()
 
 	// p1 was not sent any new piece requests.
 	require.Equal(map[int]int{
@@ -181,7 +156,7 @@ func TestDispatcherResendExpiredPieceRequests(t *testing.T) {
 	}, p3Messages.numRequestsPerPiece())
 }
 
-func TestDispatcherSendErrorsClearPendingPieceRequest(t *testing.T) {
+func TestDispatcherSendErrorsMarksPieceRequestsUnsent(t *testing.T) {
 	require := require.New(t)
 
 	config := dispatcherConfigFixture()
@@ -208,7 +183,7 @@ func TestDispatcherSendErrorsClearPendingPieceRequest(t *testing.T) {
 	p2, err := d.addPeer(torlib.PeerIDFixture(), []bool{true}, p2Messages)
 	require.NoError(err)
 
-	// Send should succeed since pending requests were cleared.
+	// Send should succeed since pending requests were marked unsent.
 	d.sendInitialPieceRequests(p2)
 
 	require.Equal(map[int]int{
@@ -216,7 +191,7 @@ func TestDispatcherSendErrorsClearPendingPieceRequest(t *testing.T) {
 	}, p2Messages.numRequestsPerPiece())
 }
 
-func TestCalcPieceRequestTimeout(t *testing.T) {
+func TestDispatcherCalcPieceRequestTimeout(t *testing.T) {
 	config := dispatcherConfigFixture()
 	config.PieceRequestMinTimeout = 5 * time.Second
 	config.PieceRequestTimeoutPerMb = 2 * time.Second

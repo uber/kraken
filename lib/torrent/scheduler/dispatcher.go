@@ -14,6 +14,7 @@ import (
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/piecerequest"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 
@@ -86,12 +87,6 @@ func (p *peer) touchLastPieceSent() {
 	p.lastPieceSent = p.clock.Now()
 }
 
-type pendingPieceRequest struct {
-	i      int
-	peerID torlib.PeerID
-	sentAt time.Time
-}
-
 type dispatcherFactory struct {
 	Config               DispatcherConfig
 	LocalPeerID          torlib.PeerID
@@ -122,6 +117,7 @@ func (f *dispatcherFactory) New(t storage.Torrent) *dispatcher {
 }
 
 func (f *dispatcherFactory) init(t storage.Torrent) *dispatcher {
+	pieceRequestTimeout := f.calcPieceRequestTimeout(t.MaxPieceLength())
 	return &dispatcher{
 		Torrent:              t,
 		CreatedAt:            f.Clock.Now(),
@@ -130,8 +126,8 @@ func (f *dispatcherFactory) init(t storage.Torrent) *dispatcher {
 		clock:                f.Clock,
 		networkEventProducer: f.NetworkEventProducer,
 		eventLogger:          f.EventLogger,
-		pieceRequestTimeout:  f.calcPieceRequestTimeout(t.MaxPieceLength()),
-		pendingPieceRequests: make(map[int]pendingPieceRequest),
+		pieceRequestManager:  piecerequest.NewManager(f.Clock, pieceRequestTimeout),
+		pieceRequestTimeout:  pieceRequestTimeout,
 		pendingPiecesDone:    make(chan struct{}),
 		stats:                f.Stats,
 	}
@@ -161,8 +157,7 @@ type dispatcher struct {
 
 	pieceRequestTimeout time.Duration
 
-	pendingPieceRequestsMu sync.Mutex
-	pendingPieceRequests   map[int]pendingPieceRequest
+	pieceRequestManager *piecerequest.Manager
 
 	pendingPiecesDoneOnce sync.Once
 	pendingPiecesDone     chan struct{}
@@ -276,89 +271,51 @@ func (d *dispatcher) complete() {
 	})
 }
 
-func (d *dispatcher) expiredPieceRequest(r pendingPieceRequest) bool {
-	expiresAt := r.sentAt.Add(d.pieceRequestTimeout)
-	return d.clock.Now().After(expiresAt)
-}
-
-func (d *dispatcher) clearPieceRequest(peerID torlib.PeerID, i int) {
-	d.pendingPieceRequestsMu.Lock()
-	defer d.pendingPieceRequestsMu.Unlock()
-
-	if r, ok := d.pendingPieceRequests[i]; ok && r.peerID == peerID {
-		delete(d.pendingPieceRequests, i)
-	}
-}
-
-func (d *dispatcher) reservePieceRequest(peerID torlib.PeerID, i int) bool {
-	d.pendingPieceRequestsMu.Lock()
-	defer d.pendingPieceRequestsMu.Unlock()
-
-	if r, ok := d.pendingPieceRequests[i]; ok && !d.expiredPieceRequest(r) {
-		return false
-	}
-	d.pendingPieceRequests[i] = pendingPieceRequest{i, peerID, d.clock.Now()}
-	return true
-}
-
-func (d *dispatcher) getExpiredPieceRequests() []pendingPieceRequest {
-	d.pendingPieceRequestsMu.Lock()
-	defer d.pendingPieceRequestsMu.Unlock()
-
-	var expired []pendingPieceRequest
-	for _, r := range d.pendingPieceRequests {
-		if d.expiredPieceRequest(r) {
-			expired = append(expired, r)
-		}
-	}
-	return expired
-}
-
 func (d *dispatcher) maybeSendPieceRequest(p *peer, i int) error {
 	if d.Torrent.HasPiece(i) {
 		// No-op: we already have this piece.
 		return nil
 	}
-	if !d.reservePieceRequest(p.id, i) {
-		// No-op: we have already have a non-expired pending request for this piece.
+	if !d.pieceRequestManager.Reserve(p.id, i) {
+		// No-op: we have already have a pending request for this piece.
 		return nil
 	}
 	if err := p.messages.Send(newPieceRequestMessage(i, d.Torrent.PieceLength(i))); err != nil {
-		d.clearPieceRequest(p.id, i)
+		d.pieceRequestManager.MarkUnsent(p.id, i)
 		return err
 	}
 	return nil
 }
 
-func (d *dispatcher) resendExpiredPieceRequests() {
-	expired := d.getExpiredPieceRequests()
-	if len(expired) > 0 {
-		d.log().Infof("Resending %d expired piece requests", len(expired))
-		d.stats.Counter("piece_request_timeouts").Inc(int64(len(expired)))
+func (d *dispatcher) resendFailedPieceRequests() {
+	failedRequests := d.pieceRequestManager.GetFailedRequests()
+	if len(failedRequests) > 0 {
+		d.log().Infof("Resending %d failed piece requests", len(failedRequests))
+		d.stats.Counter("piece_request_failures").Inc(int64(len(failedRequests)))
 	}
+
 	var sent int
-	for _, r := range expired {
+	for _, r := range failedRequests {
 		d.peers.Range(func(k, v interface{}) bool {
 			p := v.(*peer)
-			if p.id == r.peerID {
-				// The expired request is from this peer -- do not request again.
+			if (r.Status == piecerequest.StatusExpired || r.Status == piecerequest.StatusInvalid) &&
+				r.PeerID == p.id {
+				// Do not resend to the same peer for expired or invalid requests.
 				return true
 			}
-			if p.bitfield.Has(r.i) {
-				if err := d.maybeSendPieceRequest(p, r.i); err == nil {
+			if p.bitfield.Has(r.Piece) {
+				if err := d.maybeSendPieceRequest(p, r.Piece); err == nil {
 					sent++
 					return false
 				}
 			}
 			return true
 		})
-		// NOTE: It is possible that we were unable to resend the piece
-		// request. This is fine -- future piece announcements / handshakes
-		// will still trigger piece requests.
 	}
-	failures := len(expired) - sent
-	if failures > 0 {
-		d.log().Infof("Nowhere to resend %d / %d expired piece requests", failures, len(expired))
+
+	unsent := len(failedRequests) - sent
+	if unsent > 0 {
+		d.log().Infof("Nowhere to resend %d / %d failed piece requests", unsent, len(failedRequests))
 	}
 }
 
@@ -366,7 +323,7 @@ func (d *dispatcher) watchPendingPieceRequests() {
 	for {
 		select {
 		case <-d.clock.After(d.pieceRequestTimeout / 2):
-			d.resendExpiredPieceRequests()
+			d.resendFailedPieceRequests()
 		case <-d.pendingPiecesDone:
 			return
 		}
@@ -423,7 +380,7 @@ func (d *dispatcher) handleError(p *peer, msg *p2p.ErrorMessage) {
 	switch msg.Code {
 	case p2p.ErrorMessage_PIECE_REQUEST_FAILED:
 		d.log().Errorf("Piece request failed: %s", msg.Error)
-		d.clearPieceRequest(p.id, int(msg.Index))
+		d.pieceRequestManager.MarkInvalid(p.id, int(msg.Index))
 	}
 }
 
@@ -456,7 +413,6 @@ func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 		return
 	}
 	if err := p.messages.Send(newPiecePayloadMessage(i, payload)); err != nil {
-		d.log("peer", p, "piece", i).Errorf("Failed to send piece: %s", err)
 		return
 	}
 	p.touchLastPieceSent()
@@ -471,13 +427,13 @@ func (d *dispatcher) handlePiecePayload(
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
 		d.log("peer", p, "piece", i).Error("Rejecting piece payload: chunk not supported")
-		d.clearPieceRequest(p.id, i)
+		d.pieceRequestManager.MarkInvalid(p.id, i)
 		return
 	}
 	if err := d.Torrent.WritePiece(payload, i); err != nil {
 		if err != storage.ErrPieceComplete {
 			d.log("peer", p, "piece", i).Errorf("Error writing piece payload: %s", err)
-			d.clearPieceRequest(p.id, i)
+			d.pieceRequestManager.MarkInvalid(p.id, i)
 		}
 		return
 	}
@@ -491,14 +447,14 @@ func (d *dispatcher) handlePiecePayload(
 		d.complete()
 	}
 
+	d.pieceRequestManager.Clear(i)
+
 	d.peers.Range(func(k, v interface{}) bool {
 		if k.(torlib.PeerID) == p.id {
 			return true
 		}
 		pp := v.(*peer)
 
-		// Ignore error -- this just means the connection was closed. The feed goroutine
-		// for pp will clean up.
 		pp.messages.Send(newAnnouncePieceMessage(i))
 
 		return true

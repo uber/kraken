@@ -114,10 +114,10 @@ func TestChangesToActiveConnsRedistributesBandwidth(t *testing.T) {
 	torrent, cleanup := storage.TorrentFixture(128, 32)
 	defer cleanup()
 
-	c1, cleanup := connFixture(connConfigFixture(), torrent)
+	c1, _, cleanup := connFixture(connConfigFixture(), torrent)
 	defer cleanup()
 
-	c2, cleanup := connFixture(connConfigFixture(), torrent)
+	c2, _, cleanup := connFixture(connConfigFixture(), torrent)
 	defer cleanup()
 
 	// First conn takes all bandwidth.
@@ -151,7 +151,7 @@ func TestAddingActiveConnsNeverRedistributesBandwidthBelowMin(t *testing.T) {
 
 	// After adding 4 active conns, the bandwidth should hit the min.
 	for i := 0; i < 12; i++ {
-		c, cleanup := connFixture(connConfigFixture(), torrent)
+		c, _, cleanup := connFixture(connConfigFixture(), torrent)
 		defer cleanup()
 		transitionToActive(t, s, c)
 	}

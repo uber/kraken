@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"sync"
 	"testing"
 	"time"
 
@@ -12,7 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/randutil"
 )
 
-func TestSetEgressBandwidthThrottlesPieceSending(t *testing.T) {
+func TestConnSetEgressBandwidthThrottlesPieceSending(t *testing.T) {
 	require := require.New(t)
 
 	size := 4 * memsize.KB
@@ -26,30 +25,36 @@ func TestSetEgressBandwidthThrottlesPieceSending(t *testing.T) {
 	torrent, cleanup := storage.TorrentFixture(pieceLength*4, pieceLength)
 	defer cleanup()
 
-	c, cleanup := connFixture(config, torrent)
+	c1, c2, cleanup := connFixture(config, torrent)
 	defer cleanup()
 
-	c.SetEgressBandwidthLimit(bytesPerSec)
+	complete := make(chan bool)
+	go func() {
+		var n int
+		for range c2.Receiver() {
+			n++
+			if n == numPieces {
+				complete <- true
+				return
+			}
+		}
+		complete <- false
+	}()
 
-	var wg sync.WaitGroup
-	errors := make([]error, numPieces)
+	c1.SetEgressBandwidthLimit(bytesPerSec)
+
 	start := time.Now()
 	for i := 0; i < numPieces; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+		go func() {
 			msg := newPiecePayloadMessage(0, randutil.Text(pieceLength))
-			errors[i] = c.Send(msg)
-		}(i)
-	}
-	wg.Wait()
-	stop := time.Now()
-
-	for _, err := range errors {
-		require.NoError(err)
+			require.NoError(c1.Send(msg))
+		}()
 	}
 
-	// FIXME(codyg): If this test is prone to flakiness, run the test body a
-	// few times and remove any outlier outcomes.
-	require.WithinDuration(start.Add(expectedDur), stop, 250*time.Millisecond)
+	if <-complete {
+		stop := time.Now()
+		require.WithinDuration(start.Add(expectedDur), stop, 250*time.Millisecond)
+	} else {
+		require.FailNow("Receiver closed early")
+	}
 }
