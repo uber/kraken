@@ -267,6 +267,7 @@ func (s Server) startUploadHandler(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
+
 	if err := s.redirectByDigest(d); err != nil {
 		return err
 	}
@@ -304,6 +305,7 @@ func (s Server) patchUploadHandler(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
+
 	if err := s.uploadBlobChunk(u, r.Body, start, end); err != nil {
 		return err
 	}
@@ -329,6 +331,7 @@ func (s Server) commitUploadHandler(w http.ResponseWriter, r *http.Request) erro
 	if err := s.commitUpload(d, u); err != nil {
 		return err
 	}
+
 	setContentLength(w, 0)
 	w.WriteHeader(http.StatusCreated)
 	log.Debugf("successfully commit upload %s for blob %s", u, d.Hex())
