@@ -13,7 +13,7 @@ import (
 
 // Producer emits events.
 type Producer interface {
-	Produce(e *Event) error
+	Produce(e *Event)
 }
 
 type producer struct {
@@ -62,14 +62,18 @@ func NewProducer(config Config) (Producer, error) {
 }
 
 // Produce publishes e on the configured Kafka topic.
-func (p *producer) Produce(e *Event) error {
+func (p *producer) Produce(e *Event) {
 	if !p.config.Enabled {
-		return nil
+		return
 	}
 	b, err := json.Marshal(e)
 	if err != nil {
-		return fmt.Errorf("json marshal: %s", err)
+		log.Errorf("Error serializing network event to json: %s", err)
+		return
 	}
 	p.logger.Info(string(b))
-	return p.rest.Produce(p.config.KafkaTopic, b)
+	if err := p.rest.Produce(p.config.KafkaTopic, b); err != nil {
+		log.Errorf("Error producing network event: %s", err)
+		return
+	}
 }

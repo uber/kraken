@@ -14,12 +14,11 @@ func NewTestProducer() *TestProducer {
 }
 
 // Produce records e.
-func (p *TestProducer) Produce(e *Event) error {
+func (p *TestProducer) Produce(e *Event) {
 	p.Lock()
 	defer p.Unlock()
 
 	p.events = append(p.events, e)
-	return nil
 }
 
 // Events returns all currently recorded events.
