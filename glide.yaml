@@ -1,4 +1,6 @@
 package: code.uber.internal/infra/kraken
+ignore:
+- go/doc
 import:
 - package: code.uber.internal/go-common.git
   version: master
@@ -52,6 +54,8 @@ import:
 - package: gopkg.in/yaml.v2
 - package: github.com/montanaflynn/stats
   version: ^0.2.0
+- package: github.com/alecthomas/kingpin
+  version: ^2.2.5
 testImport:
 - package: github.com/stretchr/testify
   version: ^1.1.4

@@ -31,7 +31,7 @@ PROGS = \
 	origin/origin \
 	proxy/proxy \
 	tools/bin/puller/puller \
-	benchmarks/benchmarks \
+	tools/bin/benchmarks/benchmarks \
 	tools/bin/reload/reload
 
 # define the list of proto buffers the service depends on
@@ -56,7 +56,7 @@ origin/origin: proto $(wildcard origin/*.go)
 cli/kraken-cli: $(wildcard cli/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 proxy/proxy: $(wildcard proxy/*.go)
-benchmarks/benchmarks: $(wildcard benchmarks/*.go)
+tools/bin/benchmarks/benchmarks: $(wildcard tools/bin/benchmarks/*.go)
 tools/bin/reload/reload: $(wildcard tools/bin/reload/*.go)
 
 .PHONY: bench
@@ -260,8 +260,8 @@ run_integration:
 integration: bootstrap_integration build_integration run_integration
 
 linux-benchmarks:
-	-rm benchmarks/benchmarks
-	GOOS=linux GOARCH=amd64 make benchmarks/benchmarks
+	-rm tools/bin/benchmarks/benchmarks
+	GOOS=linux GOARCH=amd64 make tools/bin/benchmarks/benchmarks
 
 linux-reload:
 	-rm tools/bin/reload/reload

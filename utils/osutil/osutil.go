@@ -22,11 +22,7 @@ func IsEmpty(dir string) (bool, error) {
 }
 
 // ReadLines returns a list of lines in filename.
-func ReadLines(filename string) ([]string, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
+func ReadLines(f *os.File) ([]string, error) {
 	var lines []string
 	s := bufio.NewScanner(f)
 	s.Split(bufio.ScanLines)
