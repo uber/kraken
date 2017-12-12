@@ -36,7 +36,9 @@ func NewCASFileStore() (FileStore, error) {
 // NewLRUFileStore initializes and returns a new LRU FileStore.
 // When size exceeds limit, the least recently accessed entry will be removed.
 func NewLRUFileStore(size int) (FileStore, error) {
-	fm, err := NewLRUFileMap(size)
+	fm, err := NewLRUFileMap(size, func(name string, entry FileEntry) {
+		entry.Delete()
+	})
 	if err != nil {
 		return nil, err
 	}

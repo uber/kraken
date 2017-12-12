@@ -110,7 +110,9 @@ func fileMapLRUFixture() (bundle *fileMapTestBundle, run func()) {
 	b, clean := fileEntryLocalFixture()
 	cleanup.Add(clean)
 
-	fm, err := NewLRUFileMap(100)
+	fm, err := NewLRUFileMap(100, func(name string, entry FileEntry) {
+		entry.Delete()
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
