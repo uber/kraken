@@ -50,7 +50,6 @@ import:
   - syncmap
 - package: github.com/golang/protobuf
 - package: github.com/andres-erbsen/clock
-- package: github.com/hashicorp/golang-lru
 - package: gopkg.in/yaml.v2
 - package: github.com/montanaflynn/stats
   version: ^0.2.0
