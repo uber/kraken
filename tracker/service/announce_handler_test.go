@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"io/ioutil"
 	"net/http"
 	"sort"
 	"testing"
@@ -13,7 +14,6 @@ import (
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/errutil"
-	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
 	bencode "github.com/jackpal/bencode-go"
@@ -71,7 +71,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString()).Return([]*torlib.PeerInfo{peerTo}, nil)
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
-		testutil.RequireStatus(t, response, 200)
+		requireStatus(t, response, 200)
 		announceResponse := torlib.AnnouncerResponse{}
 		bencode.Unmarshal(response.Body, &announceResponse)
 		assert.Equal(t, announceResponse.Interval, int64(5))
@@ -99,7 +99,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
-		testutil.RequireStatus(t, resp, 200)
+		requireStatus(t, resp, 200)
 		ar := torlib.AnnouncerResponse{}
 		bencode.Unmarshal(resp.Body, &ar)
 		origin.Origin = false
@@ -138,7 +138,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks.datastore.EXPECT().UpdateOrigins(infoHash, []*torlib.PeerInfo{origin}).Return(nil)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
-		testutil.RequireStatus(t, resp, 200)
+		requireStatus(t, resp, 200)
 		ar := torlib.AnnouncerResponse{}
 		bencode.Unmarshal(resp.Body, &ar)
 		origin.Origin = false
@@ -178,7 +178,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks.datastore.EXPECT().GetOrigins(infoHash).Return(nil, storageErr)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
-		testutil.RequireStatus(t, resp, 200)
+		requireStatus(t, resp, 200)
 		ar := torlib.AnnouncerResponse{}
 		bencode.Unmarshal(resp.Body, &ar)
 		origin.Origin = false
@@ -210,7 +210,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks.datastore.EXPECT().GetOrigins(infoHash).Return(nil, storage.ErrNoOrigins)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
-		testutil.RequireStatus(t, resp, 200)
+		requireStatus(t, resp, 200)
 		ar := torlib.AnnouncerResponse{}
 		bencode.Unmarshal(resp.Body, &ar)
 		require.Equal([]torlib.PeerInfo{*otherPeer}, ar.Peers)
@@ -281,4 +281,20 @@ func TestAnnounceHandlerRequestOriginsPartialErrors(t *testing.T) {
 	require.Error(err)
 	require.Len(err.(errutil.MultiError), 2)
 	require.Equal([]string{pctx.PeerID.String()}, torlib.SortedPeerIDs(origins))
+}
+
+// requireStatus fails if the response is not of the given status. Logs the body
+// of the response on failure for debugging purposes.
+func requireStatus(t *testing.T, r *http.Response, status int) {
+	if r.StatusCode != status {
+		b, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf(
+				"Expected status %d, got %d. Could not read body: %v",
+				status, r.StatusCode, err)
+		}
+		t.Fatalf(
+			"Expected status %d, got %d. Body: %s",
+			status, r.StatusCode, string(b))
+	}
 }

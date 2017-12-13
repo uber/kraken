@@ -22,6 +22,7 @@ tools/bin/puller/puller
 tools/bin/benchmarks/benchmarks
 tools/bin/reload/reload
 tools/bin/reload-config/reload-config
+tools/bin/simulation/simulation
 
 # tmp migration files
 [0-9]*_-dir.go

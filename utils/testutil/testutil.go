@@ -2,10 +2,8 @@ package testutil
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
-	"testing"
 	"time"
 )
 
@@ -27,17 +25,6 @@ func PollUntilTrue(timeout time.Duration, f func() bool) error {
 		case <-timer.C:
 			return fmt.Errorf("timed out after %.2f seconds", timeout.Seconds())
 		}
-	}
-}
-
-// ExpectBody fails if the response does not have the expected body.
-func ExpectBody(t *testing.T, resp *http.Response, expected []byte) {
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("Could not read body: %s", err)
-	}
-	if string(expected) != string(body) {
-		t.Fatalf("Expected body %q, got %q", string(expected), string(body))
 	}
 }
 
@@ -71,22 +58,6 @@ func (c *Cleanup) Run() {
 func (c *Cleanup) run() {
 	for _, f := range c.funcs {
 		f()
-	}
-}
-
-// RequireStatus fails if the response is not of the given status. Logs the body
-// of the response on failure for debugging purposes.
-func RequireStatus(t *testing.T, r *http.Response, status int) {
-	if r.StatusCode != status {
-		b, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			t.Fatalf(
-				"Expected status %d, got %d. Could not read body: %v",
-				status, r.StatusCode, err)
-		}
-		t.Fatalf(
-			"Expected status %d, got %d. Body: %s",
-			status, r.StatusCode, string(b))
 	}
 }
 
