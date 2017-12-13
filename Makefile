@@ -32,7 +32,8 @@ PROGS = \
 	proxy/proxy \
 	tools/bin/puller/puller \
 	tools/bin/benchmarks/benchmarks \
-	tools/bin/reload/reload
+	tools/bin/reload/reload \
+	tools/bin/simulation/simulation
 
 # define the list of proto buffers the service depends on
 PROTO_GENDIR ?= .gen
@@ -58,6 +59,7 @@ tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 proxy/proxy: $(wildcard proxy/*.go)
 tools/bin/benchmarks/benchmarks: $(wildcard tools/bin/benchmarks/*.go)
 tools/bin/reload/reload: $(wildcard tools/bin/reload/*.go)
+tools/bin/simulation/simulation: $(wildcard tools/bin/simulation/*.go)
 
 .PHONY: bench
 bench:
@@ -148,9 +150,12 @@ redis:
 	# TODO(codyg): I chose this random port to avoid conflicts in Jenkins. Obviously not ideal.
 	docker run -d -p 6380:6379 --name kraken-redis redis:latest
 
+build_mysql:
+	docker build -t kraken-mysql:dev -f docker/mysql/Dockerfile ./docker/mysql
+
 .PHONY: mysql
 mysql:
-	docker build -t kraken-mysql:dev -f docker/mysql/Dockerfile ./docker/mysql
+	docker pull percona/percona-server:5.6.28
 
 run_mysql: mysql
 	-docker stop kraken-mysql
