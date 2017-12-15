@@ -4,7 +4,9 @@ import "code.uber.internal/infra/kraken/torlib"
 
 // Torrent represents a read/write interface for a torrent
 type Torrent interface {
+	// TODO(codyg): Move some of these methods into TorrentInfo.
 	Name() string
+	Stat() *TorrentInfo
 	NumPieces() int
 	Length() int64
 	PieceLength(piece int) int64
@@ -24,7 +26,7 @@ type Torrent interface {
 
 // TorrentArchive creates and open torrent file
 type TorrentArchive interface {
+	Stat(name string) (*TorrentInfo, error)
 	GetTorrent(name string) (Torrent, error)
 	DeleteTorrent(name string) error
-	Close() error
 }

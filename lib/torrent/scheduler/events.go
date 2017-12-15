@@ -126,15 +126,15 @@ func (e incomingHandshakeEvent) Apply(s *Scheduler) {
 type incomingConnEvent struct {
 	conn     *conn
 	bitfield storage.Bitfield
-	torrent  storage.Torrent
+	info     *storage.TorrentInfo
 }
 
 // Apply transitions a fully-handshaked incoming conn from pending to active.
 func (e incomingConnEvent) Apply(s *Scheduler) {
-	s.log("conn", e.conn, "torrent", e.torrent).Debug("Applying incoming conn event")
+	s.log("conn", e.conn, "torrent", e.info).Debug("Applying incoming conn event")
 
-	if err := s.addIncomingConn(e.conn, e.bitfield, e.torrent); err != nil {
-		s.log("conn", e.conn, "torrent", e.torrent).Errorf("Error adding incoming conn: %s", err)
+	if err := s.addIncomingConn(e.conn, e.bitfield, e.info); err != nil {
+		s.log("conn", e.conn, "torrent", e.info).Errorf("Error adding incoming conn: %s", err)
 		e.conn.Close()
 		return
 	}
@@ -145,15 +145,15 @@ func (e incomingConnEvent) Apply(s *Scheduler) {
 type outgoingConnEvent struct {
 	conn     *conn
 	bitfield storage.Bitfield
-	torrent  storage.Torrent
+	info     *storage.TorrentInfo
 }
 
 // Apply transitions a fully-handshaked outgoing conn from pending to active.
 func (e outgoingConnEvent) Apply(s *Scheduler) {
-	s.log("conn", e.conn, "torrent", e.torrent).Debug("Applying outgoing conn event")
+	s.log("conn", e.conn, "torrent", e.info).Debug("Applying outgoing conn event")
 
-	if err := s.addOutgoingConn(e.conn, e.bitfield, e.torrent); err != nil {
-		s.log("conn", e.conn, "torrent", e.torrent).Errorf("Error adding outgoing conn: %s", err)
+	if err := s.addOutgoingConn(e.conn, e.bitfield, e.info); err != nil {
+		s.log("conn", e.conn, "torrent", e.info).Errorf("Error adding outgoing conn: %s", err)
 		e.conn.Close()
 		return
 	}
@@ -224,7 +224,7 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 			s.log("peer", pid, "hash", e.infoHash).Infof("Skipping peer from announce: %s", err)
 			continue
 		}
-		go s.initOutgoingConn(pid, p.IP, int(p.Port), ctrl.Dispatcher.Torrent)
+		go s.initOutgoingConn(pid, p.IP, int(p.Port), ctrl.Dispatcher.Torrent.Stat())
 	}
 }
 

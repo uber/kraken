@@ -168,7 +168,7 @@ run_mysql: mysql
 		-e MYSQL_PASSWORD=uber \
 		-e MYSQL_DATABASE=kraken \
 		-v `pwd`/docker/mysql/my.cnf:/etc/my.cnf \
-		-d kraken-mysql:dev
+		-d percona/percona-server:5.6.28
 	@echo -n "waiting for mysql to start"
 	@until docker exec kraken-mysql mysql -u uber --password=uber -e "use kraken" &> /dev/null; \
 		do echo -n "."; sleep 1; done

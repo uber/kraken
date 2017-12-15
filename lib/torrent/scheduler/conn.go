@@ -95,7 +95,7 @@ type connFactory struct {
 // newConn resolves response handshake h into a new conn.
 func (f *connFactory) newConn(
 	nc net.Conn,
-	t storage.Torrent,
+	info *storage.TorrentInfo,
 	remotePeerID torlib.PeerID,
 	openedByRemote bool) (*conn, error) {
 
@@ -107,11 +107,11 @@ func (f *connFactory) newConn(
 
 	c := &conn{
 		PeerID:    remotePeerID,
-		InfoHash:  t.InfoHash(),
+		InfoHash:  info.InfoHash(),
 		CreatedAt: f.Clock.Now(),
 		// A limit of 0 means no pieces will be allowed to send until bandwidth
 		// is allocated with SetEgressBandwidthLimit.
-		egressLimiter:  rate.NewLimiter(0, int(t.MaxPieceLength())),
+		egressLimiter:  rate.NewLimiter(0, int(info.MaxPieceLength())),
 		localPeerID:    f.LocalPeerID,
 		nc:             nc,
 		config:         f.Config,
@@ -129,14 +129,16 @@ func (f *connFactory) newConn(
 	return c, nil
 }
 
-// SendAndReceiveHandshake initializes a new conn for Torrent t by sending a
+// SendAndReceiveHandshake initializes a new conn with info by sending a
 // handshake over nc and waiting for a handshake in response.
-func (f *connFactory) SendAndReceiveHandshake(nc net.Conn, t storage.Torrent) (*conn, storage.Bitfield, error) {
+func (f *connFactory) SendAndReceiveHandshake(
+	nc net.Conn, info *storage.TorrentInfo) (*conn, storage.Bitfield, error) {
+
 	localHandshake := &handshake{
 		PeerID:   f.LocalPeerID,
-		Name:     t.Name(),
-		InfoHash: t.InfoHash(),
-		Bitfield: t.Bitfield(),
+		Name:     info.Name(),
+		InfoHash: info.InfoHash(),
+		Bitfield: info.Bitfield(),
 	}
 	if err := sendMessageWithTimeout(nc, localHandshake.ToP2PMessage(), f.Config.HandshakeTimeout); err != nil {
 		return nil, nil, fmt.Errorf("failed to send handshake: %s", err)
@@ -152,7 +154,7 @@ func (f *connFactory) SendAndReceiveHandshake(nc net.Conn, t storage.Torrent) (*
 	if remoteHandshake.InfoHash != localHandshake.InfoHash {
 		return nil, nil, errors.New("received handshake with incorrect info hash")
 	}
-	c, err := f.newConn(nc, t, remoteHandshake.PeerID, false)
+	c, err := f.newConn(nc, info, remoteHandshake.PeerID, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("new conn: %s", err)
 	}
@@ -172,22 +174,22 @@ func receiveHandshake(nc net.Conn, timeout time.Duration) (*handshake, error) {
 	return h, nil
 }
 
-// ReciprocateHandshake initializes a new conn for Torrent t by sending a
+// ReciprocateHandshake initializes a new conn with info by sending a
 // handshake over nc assuming that remoteHandshake has already been received
 // over nc.
 func (f *connFactory) ReciprocateHandshake(
-	nc net.Conn, t storage.Torrent, remoteHandshake *handshake) (*conn, storage.Bitfield, error) {
+	nc net.Conn, info *storage.TorrentInfo, remoteHandshake *handshake) (*conn, storage.Bitfield, error) {
 
 	localHandshake := &handshake{
 		PeerID:   f.LocalPeerID,
-		Name:     t.Name(),
-		InfoHash: t.InfoHash(),
-		Bitfield: t.Bitfield(),
+		Name:     info.Name(),
+		InfoHash: info.InfoHash(),
+		Bitfield: info.Bitfield(),
 	}
 	if err := sendMessageWithTimeout(nc, localHandshake.ToP2PMessage(), f.Config.HandshakeTimeout); err != nil {
 		return nil, nil, fmt.Errorf("send message: %s", err)
 	}
-	c, err := f.newConn(nc, t, remoteHandshake.PeerID, true)
+	c, err := f.newConn(nc, info, remoteHandshake.PeerID, true)
 	if err != nil {
 		return nil, nil, fmt.Errorf("new conn: %s", err)
 	}
