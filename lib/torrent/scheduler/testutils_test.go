@@ -121,7 +121,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 	fs, c := store.LocalFileStoreFixture()
 	cleanup.Add(c)
 
-	ta := storage.NewLocalTorrentArchive(fs, m.metaInfoClient)
+	ta := storage.NewAgentTorrentArchive(fs, m.metaInfoClient)
 
 	stats := tally.NewTestScope("", nil)
 	pctx := peercontext.PeerContext{
@@ -311,11 +311,11 @@ func connFixture(config ConnConfig, torrent storage.Torrent) (*conn, *conn, func
 	cleanup.Add(func() { nc1.Close() })
 	cleanup.Add(func() { nc2.Close() })
 
-	c1, err := f1.newConn(noopDeadline{nc1}, torrent, f2.LocalPeerID, true)
+	c1, err := f1.newConn(noopDeadline{nc1}, torrent.Stat(), f2.LocalPeerID, true)
 	if err != nil {
 		panic(err)
 	}
-	c2, err := f2.newConn(noopDeadline{nc2}, torrent, f1.LocalPeerID, false)
+	c2, err := f2.newConn(noopDeadline{nc2}, torrent.Stat(), f1.LocalPeerID, false)
 	if err != nil {
 		panic(err)
 	}

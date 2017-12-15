@@ -47,6 +47,7 @@ func (c *Cleanup) AppendFront(c1 *Cleanup) {
 func (c *Cleanup) Recover() {
 	if err := recover(); err != nil {
 		c.run()
+		panic(err)
 	}
 }
 

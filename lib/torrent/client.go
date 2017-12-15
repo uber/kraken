@@ -50,16 +50,25 @@ func NewSchedulerClient(
 	metaInfoClient metainfoclient.Client) (Client, error) {
 
 	stats = stats.SubScope("peer").SubScope(pctx.PeerID.String())
-	archive := storage.NewLocalTorrentArchive(fs, metaInfoClient)
+
+	var archive storage.TorrentArchive
+	if pctx.Origin {
+		archive = storage.NewOriginTorrentArchive(fs, metaInfoClient)
+	} else {
+		archive = storage.NewAgentTorrentArchive(fs, metaInfoClient)
+	}
+
 	networkEvents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
 		return nil, fmt.Errorf("network event producer: %s", err)
 	}
+
 	sched, err := scheduler.New(
 		config.Scheduler, archive, stats, pctx, announceClient, networkEvents)
 	if err != nil {
 		return nil, fmt.Errorf("scheduler: %s", err)
 	}
+
 	return &SchedulerClient{
 		config:    config,
 		scheduler: sched,

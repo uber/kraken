@@ -1,10 +1,11 @@
 package torlib
 
 import (
+	"bytes"
 	"io/ioutil"
 	"os"
-	"path"
 
+	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/utils/randutil"
 )
 
@@ -67,10 +68,17 @@ func CustomTestTorrentFileFixture(size uint64, pieceLength uint64) *TestTorrentF
 	defer os.Remove(f.Name())
 
 	content := randutil.Text(size)
+
+	digest, err := image.NewDigester().FromReader(bytes.NewBuffer(content))
+	if err != nil {
+		panic(err)
+	}
+
 	if err := ioutil.WriteFile(f.Name(), content, 0755); err != nil {
 		panic(err)
 	}
-	info, err := NewInfoFromFile(path.Base(f.Name()), f.Name(), int64(pieceLength))
+
+	info, err := NewInfoFromFile(digest.Hex(), f.Name(), int64(pieceLength))
 	if err != nil {
 		panic(err)
 	}
@@ -78,6 +86,7 @@ func CustomTestTorrentFileFixture(size uint64, pieceLength uint64) *TestTorrentF
 	if err != nil {
 		panic(err)
 	}
+
 	return &TestTorrentFile{mi, content}
 }
 

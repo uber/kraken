@@ -340,36 +340,36 @@ func (s *Scheduler) handshakeIncomingConn(nc net.Conn) {
 
 func (s *Scheduler) doInitIncomingConn(
 	nc net.Conn,
-	remoteHandshake *handshake) (c *conn, remoteBitfield storage.Bitfield, t storage.Torrent, err error) {
+	remoteHandshake *handshake) (c *conn, remoteBitfield storage.Bitfield, info *storage.TorrentInfo, err error) {
 
-	t, err = s.torrentArchive.GetTorrent(remoteHandshake.Name)
+	info, err = s.torrentArchive.Stat(remoteHandshake.Name)
 	if err != nil {
-		err = fmt.Errorf("get torrent for blob %s: %s", remoteHandshake.Name, err)
+		err = fmt.Errorf("check torrent: %s", err)
 		return
 	}
-	if t.InfoHash() != remoteHandshake.InfoHash {
+	if info.InfoHash() != remoteHandshake.InfoHash {
 		err = fmt.Errorf("info hash mismatch for blob %s", remoteHandshake.Name)
 		return
 	}
-	c, remoteBitfield, err = s.connFactory.ReciprocateHandshake(nc, t, remoteHandshake)
+	c, remoteBitfield, err = s.connFactory.ReciprocateHandshake(nc, info, remoteHandshake)
 	if err != nil {
 		err = fmt.Errorf("reciprocate handshake for blob %s: %s", remoteHandshake.Name, err)
 		return
 	}
-	return c, remoteBitfield, t, nil
+	return c, remoteBitfield, info, nil
 }
 
 func (s *Scheduler) initIncomingConn(nc net.Conn, remoteHandshake *handshake) {
 	s.log("peer", remoteHandshake.PeerID).Info("Handshaking incoming connection")
 
 	var e event
-	c, bitfield, t, err := s.doInitIncomingConn(nc, remoteHandshake)
+	c, bitfield, info, err := s.doInitIncomingConn(nc, remoteHandshake)
 	if err != nil {
 		nc.Close()
 		s.log("handshake", remoteHandshake).Errorf("Error initializing incoming connection: %s", err)
 		e = failedHandshakeEvent{remoteHandshake.PeerID, remoteHandshake.InfoHash}
 	} else {
-		e = incomingConnEvent{c, bitfield, t}
+		e = incomingConnEvent{c, bitfield, info}
 	}
 	s.eventLoop.Send(e)
 }
@@ -378,7 +378,7 @@ func (s *Scheduler) doInitOutgoingConn(
 	peerID torlib.PeerID,
 	ip string,
 	port int,
-	t storage.Torrent) (c *conn, remoteBitfield storage.Bitfield, err error) {
+	info *storage.TorrentInfo) (c *conn, remoteBitfield storage.Bitfield, err error) {
 
 	addr := fmt.Sprintf("%s:%d", ip, port)
 	nc, err := net.DialTimeout("tcp", addr, s.config.DialTimeout)
@@ -386,7 +386,7 @@ func (s *Scheduler) doInitOutgoingConn(
 		err = fmt.Errorf("failed to dial peer: %s", err)
 		return
 	}
-	c, remoteBitfield, err = s.connFactory.SendAndReceiveHandshake(nc, t)
+	c, remoteBitfield, err = s.connFactory.SendAndReceiveHandshake(nc, info)
 	if err != nil {
 		nc.Close()
 		err = fmt.Errorf("failed to handshake peer: %s", err)
@@ -400,18 +400,18 @@ func (s *Scheduler) doInitOutgoingConn(
 	return c, remoteBitfield, nil
 }
 
-func (s *Scheduler) initOutgoingConn(peerID torlib.PeerID, ip string, port int, t storage.Torrent) {
-	s.log("peer", peerID, "ip", ip, "port", port, "torrent", t).Info(
+func (s *Scheduler) initOutgoingConn(peerID torlib.PeerID, ip string, port int, info *storage.TorrentInfo) {
+	s.log("peer", peerID, "ip", ip, "port", port, "torrent", info).Info(
 		"Initializing outgoing connection")
 
 	var e event
-	c, bitfield, err := s.doInitOutgoingConn(peerID, ip, port, t)
+	c, bitfield, err := s.doInitOutgoingConn(peerID, ip, port, info)
 	if err != nil {
-		s.log("peer", peerID, "ip", ip, "port", port, "torrent", t).Errorf(
+		s.log("peer", peerID, "ip", ip, "port", port, "torrent", info).Errorf(
 			"Error intializing outgoing connection: %s", err)
-		e = failedHandshakeEvent{peerID, t.InfoHash()}
+		e = failedHandshakeEvent{peerID, info.InfoHash()}
 	} else {
-		e = outgoingConnEvent{c, bitfield, t}
+		e = outgoingConnEvent{c, bitfield, info}
 	}
 	s.eventLoop.Send(e)
 }
@@ -429,11 +429,11 @@ func (s *Scheduler) announce(d *dispatcher) {
 	s.eventLoop.Send(e)
 }
 
-func (s *Scheduler) addOutgoingConn(c *conn, b storage.Bitfield, t storage.Torrent) error {
+func (s *Scheduler) addOutgoingConn(c *conn, b storage.Bitfield, info *storage.TorrentInfo) error {
 	if err := s.connState.MovePendingToActive(c); err != nil {
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
-	ctrl, ok := s.torrentControls[t.InfoHash()]
+	ctrl, ok := s.torrentControls[info.InfoHash()]
 	if !ok {
 		return errors.New("torrent must be created before sending handshake")
 	}
@@ -443,12 +443,16 @@ func (s *Scheduler) addOutgoingConn(c *conn, b storage.Bitfield, t storage.Torre
 	return nil
 }
 
-func (s *Scheduler) addIncomingConn(c *conn, b storage.Bitfield, t storage.Torrent) error {
+func (s *Scheduler) addIncomingConn(c *conn, b storage.Bitfield, info *storage.TorrentInfo) error {
 	if err := s.connState.MovePendingToActive(c); err != nil {
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
-	ctrl, ok := s.torrentControls[t.InfoHash()]
+	ctrl, ok := s.torrentControls[info.InfoHash()]
 	if !ok {
+		t, err := s.torrentArchive.GetTorrent(info.Name())
+		if err != nil {
+			return fmt.Errorf("get torrent: %s", err)
+		}
 		ctrl = s.initTorrentControl(t)
 	}
 	if err := ctrl.Dispatcher.AddPeer(c.PeerID, b, c); err != nil {

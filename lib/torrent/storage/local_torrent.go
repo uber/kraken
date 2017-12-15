@@ -27,7 +27,18 @@ const (
 	_dirty
 )
 
-func (s pieceStatus) toBytes() []byte { return []byte{byte(s)} }
+func newBitfieldFromPieceStatusBytes(name string, raw []byte) Bitfield {
+	bitfield := make(Bitfield, len(raw))
+	for i, b := range raw {
+		status := pieceStatus(b)
+		if status != _empty && status != _complete {
+			log.Errorf("Unexpected status at %d in piece metadata %s: %d", i, name, status)
+			status = _empty
+		}
+		bitfield[i] = status == _complete
+	}
+	return bitfield
+}
 
 type piece struct {
 	sync.RWMutex
@@ -106,15 +117,15 @@ func restorePieces(name string, fs store.FileStore, numPieces int) (pieces []*pi
 		return nil, 0, fmt.Errorf("get or set piece metadata: %s", err)
 	}
 
-	pieces = make([]*piece, numPieces)
-	for i, b := range raw {
-		status := pieceStatus(b)
-		if status != _empty && status != _complete {
-			log.Errorf("Unexpected status at %d in piece metadata %s: %d", i, name, status)
-			status = _empty
-		}
-		if status == _complete {
+	bitfield := newBitfieldFromPieceStatusBytes(name, raw)
+	pieces = make([]*piece, len(bitfield))
+	for i, b := range bitfield {
+		var status pieceStatus
+		if b {
 			numComplete++
+			status = _complete
+		} else {
+			status = _empty
 		}
 		pieces[i] = &piece{status: status}
 	}
@@ -156,6 +167,11 @@ func NewLocalTorrent(store store.FileStore, mi *torlib.MetaInfo) (*LocalTorrent,
 // Name returns the name of the target file.
 func (t *LocalTorrent) Name() string {
 	return t.metaInfo.Info.Name
+}
+
+// Stat returns the TorrentInfo for t.
+func (t *LocalTorrent) Stat() *TorrentInfo {
+	return newTorrentInfo(t.metaInfo, t.Bitfield())
 }
 
 // InfoHash returns the torrent metainfo hash.
@@ -225,7 +241,7 @@ func (t *LocalTorrent) getPiece(pi int) (*piece, error) {
 // markPieceComplete must only be called once per piece.
 func (t *LocalTorrent) markPieceComplete(pi int) error {
 	updated, err := t.store.States().Download().SetMetadataAt(
-		t.Name(), store.NewPieceStatus(), _complete.toBytes(), pi)
+		t.Name(), store.NewPieceStatus(), []byte{byte(_complete)}, pi)
 	if err != nil {
 		return fmt.Errorf("write piece metadata: %s", err)
 	}
