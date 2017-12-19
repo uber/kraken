@@ -6,6 +6,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
@@ -18,9 +19,6 @@ type Config struct {
 	// 1. Torrents which are making little progress
 	// 2. Higher priority torrents
 	AnnounceInterval time.Duration `yaml:"announce_interval"`
-
-	// DialTimeout is the timeout for opening new connections.
-	DialTimeout time.Duration `yaml:"dial_timeout"`
 
 	// IdleSeederTTL is the duration an idle dispatcher will exist after
 	// completing its torrent.
@@ -52,7 +50,7 @@ type Config struct {
 
 	ConnState ConnStateConfig `yaml:"conn_state"`
 
-	Conn ConnConfig `yaml:"conn"`
+	Conn conn.Config `yaml:"conn"`
 
 	Dispatcher DispatcherConfig `yaml:"dispatcher"`
 }
@@ -68,9 +66,6 @@ func (c Config) String() string {
 func (c Config) applyDefaults() Config {
 	if c.AnnounceInterval == 0 {
 		c.AnnounceInterval = 3 * time.Second
-	}
-	if c.DialTimeout == 0 {
-		c.DialTimeout = 5 * time.Second
 	}
 	if c.IdleSeederTTL == 0 {
 		c.IdleSeederTTL = 10 * time.Minute
@@ -91,7 +86,6 @@ func (c Config) applyDefaults() Config {
 		c.EmitStatsInterval = 1 * time.Second
 	}
 	c.ConnState = c.ConnState.applyDefaults()
-	c.Conn = c.Conn.applyDefaults()
 	c.Dispatcher = c.Dispatcher.applyDefaults()
 	return c
 }
@@ -155,40 +149,6 @@ func (c ConnStateConfig) applyDefaults() ConnStateConfig {
 	}
 	if c.MinConnEgressBytesPerSec == 0 {
 		c.MinConnEgressBytesPerSec = 2 * memsize.MB
-	}
-	return c
-}
-
-// ConnConfig is the configuration for individual live connections.
-type ConnConfig struct {
-
-	// HandshakeTimeout is the timeout for writing / reading connection handshake.
-	HandshakeTimeout time.Duration `yaml:"write_timeout"`
-
-	// SenderBufferSize is the size of the sender channel for a connection.
-	// Prevents writers to the connection from being blocked if there are many
-	// writers trying to send messages at the same time.
-	SenderBufferSize int `yaml:"sender_buffer_size"`
-
-	// ReceiverBufferSize is the size of the receiver channel for a connection.
-	// Prevents the connection reader from being blocked if a receiver consumer
-	// is taking a long time to process a message.
-	ReceiverBufferSize int `yaml:"receiver_buffer_size"`
-
-	// DisableThrottling disables the throttling of pieces. Should only be used
-	// for testing purposes.
-	DisableThrottling bool `yaml:"disable_throttling"`
-}
-
-func (c ConnConfig) applyDefaults() ConnConfig {
-	if c.HandshakeTimeout == 0 {
-		c.HandshakeTimeout = 5 * time.Second
-	}
-	if c.SenderBufferSize == 0 {
-		c.SenderBufferSize = 10000
-	}
-	if c.ReceiverBufferSize == 0 {
-		c.ReceiverBufferSize = 10000
 	}
 	return c
 }

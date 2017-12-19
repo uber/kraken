@@ -20,6 +20,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/torlib"
@@ -48,10 +49,6 @@ func init() {
 	log.ConfigureLogger(zapConfig)
 }
 
-func connConfigFixture() ConnConfig {
-	return ConnConfig{}.applyDefaults()
-}
-
 func connStateConfigFixture() ConnStateConfig {
 	return ConnStateConfig{
 		MaxOpenConnectionsPerTorrent: 20,
@@ -75,7 +72,7 @@ func configFixture() Config {
 		ConnTTL:                  5 * time.Minute,
 		BlacklistCleanupInterval: time.Minute,
 		ConnState:                connStateConfigFixture(),
-		Conn:                     connConfigFixture(),
+		Conn:                     conn.ConfigFixture(),
 		Dispatcher:               dispatcherConfigFixture(),
 	}.applyDefaults()
 }
@@ -277,51 +274,6 @@ func waitForTorrentRemoved(t *testing.T, s *Scheduler, infoHash torlib.InfoHash)
 type noopEventSender struct{}
 
 func (s noopEventSender) Send(event) bool { return true }
-
-// noopDeadline wraps a Conn which does not support deadlines (e.g. net.Pipe)
-// and makes it accept deadlines.
-type noopDeadline struct {
-	net.Conn
-}
-
-func (n noopDeadline) SetDeadline(t time.Time) error      { return nil }
-func (n noopDeadline) SetReadDeadline(t time.Time) error  { return nil }
-func (n noopDeadline) SetWriteDeadline(t time.Time) error { return nil }
-
-func connFixture(config ConnConfig, torrent storage.Torrent) (*conn, *conn, func()) {
-	var cleanup testutil.Cleanup
-	defer cleanup.Recover()
-
-	f1 := &connFactory{
-		Config:      config,
-		LocalPeerID: torlib.PeerIDFixture(),
-		EventSender: noopEventSender{},
-		Clock:       clock.New(),
-		Stats:       tally.NewTestScope("", nil),
-	}
-	f2 := &connFactory{
-		Config:      config,
-		LocalPeerID: torlib.PeerIDFixture(),
-		EventSender: noopEventSender{},
-		Clock:       clock.New(),
-		Stats:       tally.NewTestScope("", nil),
-	}
-
-	nc1, nc2 := net.Pipe()
-	cleanup.Add(func() { nc1.Close() })
-	cleanup.Add(func() { nc2.Close() })
-
-	c1, err := f1.newConn(noopDeadline{nc1}, torrent.Stat(), f2.LocalPeerID, true)
-	if err != nil {
-		panic(err)
-	}
-	c2, err := f2.newConn(noopDeadline{nc2}, torrent.Stat(), f1.LocalPeerID, false)
-	if err != nil {
-		panic(err)
-	}
-
-	return c1, c2, cleanup.Run
-}
 
 func dispatcherFactoryFixture(config DispatcherConfig, clk clock.Clock) *dispatcherFactory {
 	return &dispatcherFactory{

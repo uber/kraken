@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -46,7 +47,7 @@ type connState struct {
 	localPeerID   torlib.PeerID
 	config        ConnStateConfig
 	capacity      map[torlib.InfoHash]int
-	active        map[connKey]*conn
+	active        map[connKey]*conn.Conn
 	pending       map[connKey]bool
 	blacklist     map[connKey]*blacklistEntry
 	clock         clock.Clock
@@ -63,7 +64,7 @@ func newConnState(
 		localPeerID:   localPeerID,
 		config:        config,
 		capacity:      make(map[torlib.InfoHash]int),
-		active:        make(map[connKey]*conn),
+		active:        make(map[connKey]*conn.Conn),
 		pending:       make(map[connKey]bool),
 		blacklist:     make(map[connKey]*blacklistEntry),
 		clock:         clk,
@@ -71,8 +72,8 @@ func newConnState(
 	}
 }
 
-func (s *connState) ActiveConns() []*conn {
-	conns := make([]*conn, 0, len(s.active))
+func (s *connState) ActiveConns() []*conn.Conn {
+	conns := make([]*conn.Conn, 0, len(s.active))
 	for _, c := range s.active {
 		conns = append(conns, c)
 	}
@@ -166,8 +167,8 @@ func (s *connState) DeletePending(peerID torlib.PeerID, infoHash torlib.InfoHash
 	s.networkEvents.Produce(networkevent.DropPendingConnEvent(infoHash, s.localPeerID, peerID))
 }
 
-func (s *connState) MovePendingToActive(c *conn) error {
-	k := connKey{c.PeerID, c.InfoHash}
+func (s *connState) MovePendingToActive(c *conn.Conn) error {
+	k := connKey{c.PeerID(), c.InfoHash()}
 	if !s.pending[k] {
 		return errors.New("conn must be pending to transition to active")
 	}
@@ -189,14 +190,15 @@ func (s *connState) MovePendingToActive(c *conn) error {
 	s.adjustConnBandwidthLimits()
 
 	s.log("peer", k.peerID, "hash", k.infoHash).Info("Moved conn from pending to active")
-	s.networkEvents.Produce(networkevent.AddActiveConnEvent(c.InfoHash, s.localPeerID, c.PeerID))
+	s.networkEvents.Produce(networkevent.AddActiveConnEvent(
+		c.InfoHash(), s.localPeerID, c.PeerID()))
 
 	return nil
 }
 
 // DeleteActive deletes c. No-ops if c is not an active conn.
-func (s *connState) DeleteActive(c *conn) {
-	k := connKey{c.PeerID, c.InfoHash}
+func (s *connState) DeleteActive(c *conn.Conn) {
+	k := connKey{c.PeerID(), c.InfoHash()}
 	cur, ok := s.active[k]
 	if !ok || cur != c {
 		// It is possible that some new conn shares the same key as the old conn,
@@ -209,7 +211,8 @@ func (s *connState) DeleteActive(c *conn) {
 
 	s.log("peer", k.peerID, "hash", k.infoHash).Infof(
 		"Deleted active conn, capacity now at %d", s.capacity[k.infoHash])
-	s.networkEvents.Produce(networkevent.DropActiveConnEvent(c.InfoHash, s.localPeerID, c.PeerID))
+	s.networkEvents.Produce(networkevent.DropActiveConnEvent(
+		c.InfoHash(), s.localPeerID, c.PeerID()))
 
 	return
 }
@@ -236,9 +239,9 @@ func (s *connState) BlacklistSnapshot() []BlacklistedConn {
 }
 
 // getConnOpener returns the PeerID of the peer who opened the conn, i.e. sent the first handshake.
-func (s *connState) getConnOpener(c *conn) torlib.PeerID {
+func (s *connState) getConnOpener(c *conn.Conn) torlib.PeerID {
 	if c.OpenedByRemote() {
-		return c.PeerID
+		return c.PeerID()
 	}
 	return s.localPeerID
 }
@@ -248,7 +251,7 @@ func (s *connState) getConnOpener(c *conn) torlib.PeerID {
 // at the exact same time. If neither connection is tramsitting data yet, the peers independently
 // agree on which connection should be kept by selecting the connection opened by the peer
 // with the larger peer id.
-func (s *connState) newConnPreferred(existingConn *conn, newConn *conn) bool {
+func (s *connState) newConnPreferred(existingConn *conn.Conn, newConn *conn.Conn) bool {
 	existingOpener := s.getConnOpener(existingConn)
 	newOpener := s.getConnOpener(newConn)
 
@@ -281,5 +284,6 @@ func (s *connState) adjustConnBandwidthLimits() {
 }
 
 func (s *connState) log(args ...interface{}) *zap.SugaredLogger {
+	args = append(args, "scheduler", s.localPeerID)
 	return log.With(args...)
 }

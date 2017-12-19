@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -15,16 +16,16 @@ import (
 )
 
 type mockMessages struct {
-	sent     []*message
-	receiver chan *message
+	sent     []*conn.Message
+	receiver chan *conn.Message
 	closed   bool
 }
 
 func newMockMessages() *mockMessages {
-	return &mockMessages{receiver: make(chan *message)}
+	return &mockMessages{receiver: make(chan *conn.Message)}
 }
 
-func (m *mockMessages) Send(msg *message) error {
+func (m *mockMessages) Send(msg *conn.Message) error {
 	if m.closed {
 		return errors.New("messages closed")
 	}
@@ -32,7 +33,7 @@ func (m *mockMessages) Send(msg *message) error {
 	return nil
 }
 
-func (m *mockMessages) Receiver() <-chan *message { return m.receiver }
+func (m *mockMessages) Receiver() <-chan *conn.Message { return m.receiver }
 
 func (m *mockMessages) Close() {
 	if m.closed {

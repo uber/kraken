@@ -14,6 +14,7 @@ import (
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/piecerequest"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
@@ -34,8 +35,8 @@ var (
 // messages defines a subset of conn methods which dispatcher requires to
 // communicate with remote peers.
 type messages interface {
-	Send(msg *message) error
-	Receiver() <-chan *message
+	Send(msg *conn.Message) error
+	Receiver() <-chan *conn.Message
 	Close()
 }
 
@@ -277,7 +278,7 @@ func (d *dispatcher) maybeSendPieceRequest(p *peer, i int) error {
 		// No-op: we have already have a pending request for this piece.
 		return nil
 	}
-	if err := p.messages.Send(newPieceRequestMessage(i, d.Torrent.PieceLength(i))); err != nil {
+	if err := p.messages.Send(conn.NewPieceRequestMessage(i, d.Torrent.PieceLength(i))); err != nil {
 		d.pieceRequestManager.MarkUnsent(p.id, i)
 		return err
 	}
@@ -353,7 +354,7 @@ func (d *dispatcher) feed(p *peer) {
 	d.touchLastConnRemoved()
 }
 
-func (d *dispatcher) dispatch(p *peer, msg *message) error {
+func (d *dispatcher) dispatch(p *peer, msg *conn.Message) error {
 	switch msg.Message.Type {
 	case p2p.Message_ERROR:
 		d.handleError(p, msg.Message.Error)
@@ -399,17 +400,17 @@ func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
 		d.log("peer", p, "piece", i).Error("Rejecting piece request: chunk not supported")
-		p.messages.Send(newErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, errChunkNotSupported))
+		p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, errChunkNotSupported))
 		return
 	}
 
 	payload, err := d.Torrent.ReadPiece(i)
 	if err != nil {
 		d.log("peer", p, "piece", i).Errorf("Error reading requested piece: %s", err)
-		p.messages.Send(newErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err))
+		p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err))
 		return
 	}
-	if err := p.messages.Send(newPiecePayloadMessage(i, payload)); err != nil {
+	if err := p.messages.Send(conn.NewPiecePayloadMessage(i, payload)); err != nil {
 		return
 	}
 	p.touchLastPieceSent()
@@ -450,7 +451,7 @@ func (d *dispatcher) handlePiecePayload(
 		}
 		pp := v.(*peer)
 
-		pp.messages.Send(newAnnouncePieceMessage(i))
+		pp.messages.Send(conn.NewAnnouncePieceMessage(i))
 
 		return true
 	})
