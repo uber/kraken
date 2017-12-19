@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -100,8 +101,8 @@ func TestDeleteStaleBlacklistEntries(t *testing.T) {
 	require.Equal(config.InitialBlacklistExpiration, err.(blacklistError).remaining)
 }
 
-func transitionToActive(t *testing.T, s *connState, c *conn) {
-	require.NoError(t, s.AddPending(c.PeerID, c.InfoHash))
+func transitionToActive(t *testing.T, s *connState, c *conn.Conn) {
+	require.NoError(t, s.AddPending(c.PeerID(), c.InfoHash()))
 	require.NoError(t, s.MovePendingToActive(c))
 }
 
@@ -112,13 +113,13 @@ func TestChangesToActiveConnsRedistributesBandwidth(t *testing.T) {
 
 	s := newConnState(torlib.PeerIDFixture(), config, clock.New(), networkevent.NewTestProducer())
 
-	torrent, cleanup := storage.TorrentFixture(128, 32)
+	info, cleanup := storage.TorrentInfoFixture(128, 32)
 	defer cleanup()
 
-	c1, _, cleanup := connFixture(connConfigFixture(), torrent)
+	c1, cleanup := conn.Fixture(conn.ConfigFixture(), info)
 	defer cleanup()
 
-	c2, _, cleanup := connFixture(connConfigFixture(), torrent)
+	c2, cleanup := conn.Fixture(conn.ConfigFixture(), info)
 	defer cleanup()
 
 	// First conn takes all bandwidth.
@@ -147,12 +148,12 @@ func TestAddingActiveConnsNeverRedistributesBandwidthBelowMin(t *testing.T) {
 
 	s := newConnState(torlib.PeerIDFixture(), config, clock.New(), networkevent.NewTestProducer())
 
-	torrent, cleanup := storage.TorrentFixture(128, 32)
+	info, cleanup := storage.TorrentInfoFixture(128, 32)
 	defer cleanup()
 
 	// After adding 4 active conns, the bandwidth should hit the min.
 	for i := 0; i < 12; i++ {
-		c, _, cleanup := connFixture(connConfigFixture(), torrent)
+		c, cleanup := conn.Fixture(conn.ConfigFixture(), info)
 		defer cleanup()
 		transitionToActive(t, s, c)
 	}

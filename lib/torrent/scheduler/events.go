@@ -1,9 +1,10 @@
 package scheduler
 
 import (
-	"net"
+	"fmt"
 
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/timeutil"
@@ -70,16 +71,16 @@ func (l *eventLoopImpl) Stop() {
 
 // closedConnEvent occurs when a connection is closed.
 type closedConnEvent struct {
-	conn *conn
+	c *conn.Conn
 }
 
 // Apply ejects the conn from the Scheduler's active connections.
 func (e closedConnEvent) Apply(s *Scheduler) {
-	s.log("conn", e.conn).Debug("Applying closed conn event")
+	s.log("conn", e.c).Debug("Applying closed conn event")
 
-	s.connState.DeleteActive(e.conn)
-	if err := s.connState.Blacklist(e.conn.PeerID, e.conn.InfoHash); err != nil {
-		s.log("conn", e.conn).Infof("Error blacklisting active conn: %s", err)
+	s.connState.DeleteActive(e.c)
+	if err := s.connState.Blacklist(e.c.PeerID(), e.c.InfoHash()); err != nil {
+		s.log("conn", e.c).Infof("Error blacklisting active conn: %s", err)
 	}
 }
 
@@ -103,8 +104,7 @@ func (e failedHandshakeEvent) Apply(s *Scheduler) {
 
 // incomingHandshakeEvent when a handshake was received from a new connection.
 type incomingHandshakeEvent struct {
-	nc        net.Conn
-	handshake *handshake
+	pc *conn.PendingConn
 }
 
 // Apply rejects incoming handshakes when the Scheduler is at capacity. If the
@@ -112,52 +112,66 @@ type incomingHandshakeEvent struct {
 // to the Scheduler's pending connections and asynchronously attempts to establish
 // the connection.
 func (e incomingHandshakeEvent) Apply(s *Scheduler) {
-	s.log("handshake", e.handshake).Debug("Applying incoming handshake event")
-
-	if err := s.connState.AddPending(e.handshake.PeerID, e.handshake.InfoHash); err != nil {
-		s.log("handshake", e.handshake).Errorf("Rejecting incoming handshake: %s", err)
-		e.nc.Close()
+	if err := s.connState.AddPending(e.pc.PeerID(), e.pc.InfoHash()); err != nil {
+		s.log("peer", e.pc.PeerID(), "hash", e.pc.InfoHash()).Infof(
+			"Rejecting incoming handshake: %s", err)
+		e.pc.Close()
 		return
 	}
-	go s.initIncomingConn(e.nc, e.handshake)
+	go func() {
+		info, err := s.torrentArchive.Stat(e.pc.Name())
+		if err != nil {
+			e.pc.Close()
+			return
+		}
+		c, err := s.handshaker.Establish(e.pc, info)
+		if err != nil {
+			s.log("peer", e.pc.PeerID(), "hash", e.pc.InfoHash()).Infof(
+				"Error establishing conn: %s", err)
+			e.pc.Close()
+			s.eventLoop.Send(failedHandshakeEvent{e.pc.PeerID(), e.pc.InfoHash()})
+			return
+		}
+		s.eventLoop.Send(incomingConnEvent{c, e.pc.Bitfield(), info})
+	}()
 }
 
 // incomingConnEvent occurs when a pending incoming connection finishes handshaking.
 type incomingConnEvent struct {
-	conn     *conn
+	c        *conn.Conn
 	bitfield storage.Bitfield
 	info     *storage.TorrentInfo
 }
 
 // Apply transitions a fully-handshaked incoming conn from pending to active.
 func (e incomingConnEvent) Apply(s *Scheduler) {
-	s.log("conn", e.conn, "torrent", e.info).Debug("Applying incoming conn event")
+	s.log("conn", e.c, "torrent", e.info).Debug("Applying incoming conn event")
 
-	if err := s.addIncomingConn(e.conn, e.bitfield, e.info); err != nil {
-		s.log("conn", e.conn, "torrent", e.info).Errorf("Error adding incoming conn: %s", err)
-		e.conn.Close()
+	if err := s.addIncomingConn(e.c, e.bitfield, e.info); err != nil {
+		s.log("conn", e.c).Errorf("Error adding incoming conn: %s", err)
+		e.c.Close()
 		return
 	}
-	s.log("conn", e.conn, "bitfield", e.bitfield).Info("Added incoming conn")
+	s.log("conn", e.c, "bitfield", e.bitfield).Info("Added incoming conn")
 }
 
 // outgoingConnEvent occurs when a pending outgoing connection finishes handshaking.
 type outgoingConnEvent struct {
-	conn     *conn
+	c        *conn.Conn
 	bitfield storage.Bitfield
 	info     *storage.TorrentInfo
 }
 
 // Apply transitions a fully-handshaked outgoing conn from pending to active.
 func (e outgoingConnEvent) Apply(s *Scheduler) {
-	s.log("conn", e.conn, "torrent", e.info).Debug("Applying outgoing conn event")
+	s.log("conn", e.c, "torrent", e.info).Debug("Applying outgoing conn event")
 
-	if err := s.addOutgoingConn(e.conn, e.bitfield, e.info); err != nil {
-		s.log("conn", e.conn, "torrent", e.info).Errorf("Error adding outgoing conn: %s", err)
-		e.conn.Close()
+	if err := s.addOutgoingConn(e.c, e.bitfield, e.info); err != nil {
+		s.log("conn", e.c).Errorf("Error adding outgoing conn: %s", err)
+		e.c.Close()
 		return
 	}
-	s.log("conn", e.conn, "bitfield", e.bitfield).Info("Added outgoing conn")
+	s.log("conn", e.c, "bitfield", e.bitfield).Info("Added outgoing conn")
 }
 
 // announceTickEvent occurs when it is time to announce to the tracker.
@@ -214,7 +228,6 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 			// Tracker may return our own peer.
 			continue
 		}
-		s.log("peer", pid).Debug("Received peer from tracker")
 		if err := s.connState.AddPending(pid, e.infoHash); err != nil {
 			if err == errTorrentAtCapacity {
 				s.log("hash", e.infoHash).Info(
@@ -224,7 +237,18 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 			s.log("peer", pid, "hash", e.infoHash).Infof("Skipping peer from announce: %s", err)
 			continue
 		}
-		go s.initOutgoingConn(pid, p.IP, int(p.Port), ctrl.Dispatcher.Torrent.Stat())
+		go func() {
+			addr := fmt.Sprintf("%s:%d", p.IP, int(p.Port))
+			info := ctrl.Dispatcher.Torrent.Stat()
+			c, bitfield, err := s.handshaker.Initialize(pid, addr, info)
+			if err != nil {
+				s.log("peer", pid, "hash", e.infoHash, "addr", addr).Infof(
+					"Failed handshake: %s", err)
+				s.eventLoop.Send(failedHandshakeEvent{pid, e.infoHash})
+				return
+			}
+			s.eventLoop.Send(outgoingConnEvent{c, bitfield, info})
+		}()
 	}
 }
 
@@ -296,7 +320,7 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 	s.log().Debug("Applying preemption tick event")
 
 	for _, c := range s.connState.ActiveConns() {
-		ctrl, ok := s.torrentControls[c.InfoHash]
+		ctrl, ok := s.torrentControls[c.InfoHash()]
 		if !ok {
 			s.log("conn", c).Error(
 				"Invariant violation: active conn not assigned to dispatcher")
@@ -304,15 +328,15 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 			continue
 		}
 		lastProgress := timeutil.MostRecent(
-			c.CreatedAt,
-			ctrl.Dispatcher.LastGoodPieceReceived(c.PeerID),
-			ctrl.Dispatcher.LastPieceSent(c.PeerID))
+			c.CreatedAt(),
+			ctrl.Dispatcher.LastGoodPieceReceived(c.PeerID()),
+			ctrl.Dispatcher.LastPieceSent(c.PeerID()))
 		if s.clock.Now().Sub(lastProgress) > s.config.IdleConnTTL {
 			s.log("conn", c).Info("Closing idle conn")
 			c.Close()
 			continue
 		}
-		if s.clock.Now().Sub(c.CreatedAt) > s.config.ConnTTL {
+		if s.clock.Now().Sub(c.CreatedAt()) > s.config.ConnTTL {
 			s.log("conn", c).Info("Closing expired conn")
 			c.Close()
 			continue

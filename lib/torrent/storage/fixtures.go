@@ -36,3 +36,9 @@ func TorrentFixture(size, pieceLength uint64) (Torrent, func()) {
 
 	return tor, cleanup.Run
 }
+
+// TorrentInfoFixture returns a TorrentInfo for the given size and piece length.
+func TorrentInfoFixture(size, pieceLength uint64) (*TorrentInfo, func()) {
+	torrent, cleanup := TorrentFixture(size, pieceLength)
+	return torrent.Stat(), cleanup
+}

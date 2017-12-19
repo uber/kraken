@@ -1,4 +1,4 @@
-package scheduler
+package conn
 
 import (
 	"testing"
@@ -20,18 +20,16 @@ func TestConnSetEgressBandwidthThrottlesPieceSending(t *testing.T) {
 	bytesPerSec := memsize.KB
 	expectedDur := time.Duration(size/bytesPerSec) * time.Second
 
-	config := connConfigFixture()
-
-	torrent, cleanup := storage.TorrentFixture(pieceLength*4, pieceLength)
+	info, cleanup := storage.TorrentInfoFixture(pieceLength*4, pieceLength)
 	defer cleanup()
 
-	c1, c2, cleanup := connFixture(config, torrent)
+	local, remote, cleanup := PipeFixture(ConfigFixture(), info)
 	defer cleanup()
 
 	complete := make(chan bool)
 	go func() {
 		var n int
-		for range c2.Receiver() {
+		for range remote.Receiver() {
 			n++
 			if n == numPieces {
 				complete <- true
@@ -41,13 +39,13 @@ func TestConnSetEgressBandwidthThrottlesPieceSending(t *testing.T) {
 		complete <- false
 	}()
 
-	c1.SetEgressBandwidthLimit(bytesPerSec)
+	local.SetEgressBandwidthLimit(bytesPerSec)
 
 	start := time.Now()
 	for i := 0; i < numPieces; i++ {
 		go func() {
-			msg := newPiecePayloadMessage(0, randutil.Text(pieceLength))
-			require.NoError(c1.Send(msg))
+			msg := NewPiecePayloadMessage(0, randutil.Text(pieceLength))
+			require.NoError(local.Send(msg))
 		}()
 	}
 

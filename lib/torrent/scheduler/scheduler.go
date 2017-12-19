@@ -13,6 +13,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
@@ -51,7 +52,8 @@ type Scheduler struct {
 	torrentArchive storage.TorrentArchive
 	stats          tally.Scope
 
-	connFactory       *connFactory
+	handshaker *conn.Handshaker
+
 	dispatcherFactory *dispatcherFactory
 
 	// The following fields define the core Scheduler "state", and should only
@@ -74,9 +76,9 @@ type Scheduler struct {
 	networkEvents networkevent.Producer
 
 	// The following fields orchestrate the stopping of the Scheduler.
-	once sync.Once      // Ensures the stop sequence is executed only once.
-	done chan struct{}  // Signals all goroutines to exit.
-	wg   sync.WaitGroup // Waits for eventLoop and listenLoop to exit.
+	stopOnce sync.Once      // Ensures the stop sequence is executed only once.
+	done     chan struct{}  // Signals all goroutines to exit.
+	wg       sync.WaitGroup // Waits for eventLoop and listenLoop to exit.
 }
 
 // schedOverrides defines Scheduler fields which may be overrided for testing
@@ -145,6 +147,12 @@ func New(
 		aq = newAnnounceQueue()
 	}
 
+	closedConnHandler := func(c *conn.Conn) {
+		overrides.eventLoop.Send(closedConnEvent{c})
+	}
+	handshaker := conn.NewHandshaker(
+		config.Conn, stats, overrides.clock, pctx.PeerID, closedConnHandler)
+
 	connState := newConnState(pctx.PeerID, config.ConnState, overrides.clock, networkEvents)
 
 	s := &Scheduler{
@@ -153,13 +161,7 @@ func New(
 		clock:          overrides.clock,
 		torrentArchive: ta,
 		stats:          stats,
-		connFactory: &connFactory{
-			Config:      config.Conn,
-			LocalPeerID: pctx.PeerID,
-			EventSender: overrides.eventLoop,
-			Clock:       overrides.clock,
-			Stats:       stats,
-		},
+		handshaker:     handshaker,
 		dispatcherFactory: &dispatcherFactory{
 			Config:               config.Dispatcher,
 			LocalPeerID:          pctx.PeerID,
@@ -206,8 +208,9 @@ func Reload(s *Scheduler, config Config) (*Scheduler, error) {
 
 // Stop shuts down the scheduler.
 func (s *Scheduler) Stop() {
-	s.log().Info("Stop called")
-	s.once.Do(func() {
+	s.stopOnce.Do(func() {
+		s.log().Info("Stopping scheduler...")
+
 		close(s.done)
 		s.listener.Close()
 		s.eventLoop.Stop()
@@ -227,7 +230,7 @@ func (s *Scheduler) Stop() {
 			}
 		}
 
-		s.log().Info("Stop complete")
+		s.log().Info("Scheduler stopped")
 	})
 }
 
@@ -285,31 +288,39 @@ func (s *Scheduler) start() {
 // eventLoop handles eventLoop from the various channels of Scheduler, providing synchronization to
 // all Scheduler state.
 func (s *Scheduler) runEventLoop() {
-	s.log().Debugf("Starting eventLoop")
+	defer s.wg.Done()
+
 	s.eventLoop.Run(s)
-	s.log().Debug("eventLoop done")
-	s.wg.Done()
 }
 
 // listenLoop accepts incoming connections.
 func (s *Scheduler) listenLoop() {
+	defer s.wg.Done()
+
 	s.log().Infof("Listening on %s", s.listener.Addr().String())
 	for {
 		nc, err := s.listener.Accept()
 		if err != nil {
 			// TODO Need some way to make this gracefully exit.
-			s.log().Errorf("Failed to accept new connection: %s", err)
-			break
+			s.log().Errorf("Error accepting new conn: %s", err)
+			return
 		}
-		s.log().Debug("New incoming connection")
-		go s.handshakeIncomingConn(nc)
+		go func() {
+			pc, err := s.handshaker.Accept(nc)
+			if err != nil {
+				s.log().Infof("Error accepting handshake: %s", err)
+				pc.Close()
+				return
+			}
+			s.eventLoop.Send(incomingHandshakeEvent{pc})
+		}()
 	}
-	s.log().Debug("listenLoop done")
-	s.wg.Done()
 }
 
 // tickerLoop periodically emits various tick events.
 func (s *Scheduler) tickerLoop() {
+	defer s.wg.Done()
+
 	for {
 		select {
 		case <-s.announceTick:
@@ -321,99 +332,9 @@ func (s *Scheduler) tickerLoop() {
 		case <-s.emitStatsTick:
 			s.eventLoop.Send(emitStatsEvent{})
 		case <-s.done:
-			s.log().Debug("tickerLoop done")
-			s.wg.Done()
 			return
 		}
 	}
-}
-
-func (s *Scheduler) handshakeIncomingConn(nc net.Conn) {
-	h, err := receiveHandshake(nc, s.config.Conn.HandshakeTimeout)
-	if err != nil {
-		s.log().Errorf("Error receiving handshake from incoming connection: %s", err)
-		nc.Close()
-		return
-	}
-	s.eventLoop.Send(incomingHandshakeEvent{nc, h})
-}
-
-func (s *Scheduler) doInitIncomingConn(
-	nc net.Conn,
-	remoteHandshake *handshake) (c *conn, remoteBitfield storage.Bitfield, info *storage.TorrentInfo, err error) {
-
-	info, err = s.torrentArchive.Stat(remoteHandshake.Name)
-	if err != nil {
-		err = fmt.Errorf("check torrent: %s", err)
-		return
-	}
-	if info.InfoHash() != remoteHandshake.InfoHash {
-		err = fmt.Errorf("info hash mismatch for blob %s", remoteHandshake.Name)
-		return
-	}
-	c, remoteBitfield, err = s.connFactory.ReciprocateHandshake(nc, info, remoteHandshake)
-	if err != nil {
-		err = fmt.Errorf("reciprocate handshake for blob %s: %s", remoteHandshake.Name, err)
-		return
-	}
-	return c, remoteBitfield, info, nil
-}
-
-func (s *Scheduler) initIncomingConn(nc net.Conn, remoteHandshake *handshake) {
-	s.log("peer", remoteHandshake.PeerID).Info("Handshaking incoming connection")
-
-	var e event
-	c, bitfield, info, err := s.doInitIncomingConn(nc, remoteHandshake)
-	if err != nil {
-		nc.Close()
-		s.log("handshake", remoteHandshake).Errorf("Error initializing incoming connection: %s", err)
-		e = failedHandshakeEvent{remoteHandshake.PeerID, remoteHandshake.InfoHash}
-	} else {
-		e = incomingConnEvent{c, bitfield, info}
-	}
-	s.eventLoop.Send(e)
-}
-
-func (s *Scheduler) doInitOutgoingConn(
-	peerID torlib.PeerID,
-	ip string,
-	port int,
-	info *storage.TorrentInfo) (c *conn, remoteBitfield storage.Bitfield, err error) {
-
-	addr := fmt.Sprintf("%s:%d", ip, port)
-	nc, err := net.DialTimeout("tcp", addr, s.config.DialTimeout)
-	if err != nil {
-		err = fmt.Errorf("failed to dial peer: %s", err)
-		return
-	}
-	c, remoteBitfield, err = s.connFactory.SendAndReceiveHandshake(nc, info)
-	if err != nil {
-		nc.Close()
-		err = fmt.Errorf("failed to handshake peer: %s", err)
-		return
-	}
-	if c.PeerID != peerID {
-		c.Close()
-		err = errors.New("unexpected peer id from handshaked conn")
-		return
-	}
-	return c, remoteBitfield, nil
-}
-
-func (s *Scheduler) initOutgoingConn(peerID torlib.PeerID, ip string, port int, info *storage.TorrentInfo) {
-	s.log("peer", peerID, "ip", ip, "port", port, "torrent", info).Info(
-		"Initializing outgoing connection")
-
-	var e event
-	c, bitfield, err := s.doInitOutgoingConn(peerID, ip, port, info)
-	if err != nil {
-		s.log("peer", peerID, "ip", ip, "port", port, "torrent", info).Errorf(
-			"Error intializing outgoing connection: %s", err)
-		e = failedHandshakeEvent{peerID, info.InfoHash()}
-	} else {
-		e = outgoingConnEvent{c, bitfield, info}
-	}
-	s.eventLoop.Send(e)
 }
 
 func (s *Scheduler) announce(d *dispatcher) {
@@ -429,7 +350,7 @@ func (s *Scheduler) announce(d *dispatcher) {
 	s.eventLoop.Send(e)
 }
 
-func (s *Scheduler) addOutgoingConn(c *conn, b storage.Bitfield, info *storage.TorrentInfo) error {
+func (s *Scheduler) addOutgoingConn(c *conn.Conn, b storage.Bitfield, info *storage.TorrentInfo) error {
 	if err := s.connState.MovePendingToActive(c); err != nil {
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
@@ -437,13 +358,13 @@ func (s *Scheduler) addOutgoingConn(c *conn, b storage.Bitfield, info *storage.T
 	if !ok {
 		return errors.New("torrent must be created before sending handshake")
 	}
-	if err := ctrl.Dispatcher.AddPeer(c.PeerID, b, c); err != nil {
+	if err := ctrl.Dispatcher.AddPeer(c.PeerID(), b, c); err != nil {
 		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
 	}
 	return nil
 }
 
-func (s *Scheduler) addIncomingConn(c *conn, b storage.Bitfield, info *storage.TorrentInfo) error {
+func (s *Scheduler) addIncomingConn(c *conn.Conn, b storage.Bitfield, info *storage.TorrentInfo) error {
 	if err := s.connState.MovePendingToActive(c); err != nil {
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
@@ -455,7 +376,7 @@ func (s *Scheduler) addIncomingConn(c *conn, b storage.Bitfield, info *storage.T
 		}
 		ctrl = s.initTorrentControl(t)
 	}
-	if err := ctrl.Dispatcher.AddPeer(c.PeerID, b, c); err != nil {
+	if err := ctrl.Dispatcher.AddPeer(c.PeerID(), b, c); err != nil {
 		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
 	}
 	return nil
@@ -473,5 +394,6 @@ func (s *Scheduler) initTorrentControl(t storage.Torrent) *torrentControl {
 }
 
 func (s *Scheduler) log(args ...interface{}) *zap.SugaredLogger {
+	args = append(args, "scheduler", s.pctx.PeerID)
 	return log.With(args...)
 }
