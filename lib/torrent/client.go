@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -49,7 +50,16 @@ func NewSchedulerClient(
 	announceClient announceclient.Client,
 	metaInfoClient metainfoclient.Client) (Client, error) {
 
-	stats = stats.SubScope("peer").SubScope(pctx.PeerID.String())
+	// NOTE: M3 will drop metrics that contain 32 consecutive hexadecimal characters,
+	// so we cannot emit full peer ids. Instead, we emit a combination of hostname
+	// (which will almost always have a 1-1 mapping with peer id) and a shortened
+	// peer id to catch cases where there may be multiple peers on the same host.
+	shortenedPID := pctx.PeerID.String()[:8]
+	hostname, err := os.Hostname()
+	if err != nil {
+		return nil, fmt.Errorf("hostname: %s", err)
+	}
+	stats = stats.SubScope("peer").SubScope(hostname).SubScope(shortenedPID)
 
 	var archive storage.TorrentArchive
 	if pctx.Origin {
