@@ -13,6 +13,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/log"
+	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
 var errTorrentAtCapacity = errors.New("torrent is at capacity")
@@ -184,6 +185,7 @@ func (s *connState) MovePendingToActive(c *conn.Conn) error {
 			s.capacity[k.infoHash]--
 			return errors.New("conn already exists")
 		}
+		s.log("conn", existingConn).Info("Closing conflicting connection")
 		existingConn.Close()
 	}
 	s.active[k] = c
@@ -280,7 +282,7 @@ func (s *connState) adjustConnBandwidthLimits() {
 	for _, c := range s.active {
 		c.SetEgressBandwidthLimit(limit)
 	}
-	s.log().Infof("Balanced egress bandwidth to %d b/sec across %d conns", limit, n)
+	s.log().Infof("Balanced egress bandwidth to %s/sec across %d conns", memsize.Format(limit), n)
 }
 
 func (s *connState) log(args ...interface{}) *zap.SugaredLogger {

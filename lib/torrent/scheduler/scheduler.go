@@ -219,6 +219,7 @@ func (s *Scheduler) Stop() {
 		s.wg.Wait()
 
 		for _, c := range s.connState.ActiveConns() {
+			s.log("conn", c).Info("Closing conn to stop scheduler")
 			c.Close()
 		}
 
@@ -302,14 +303,14 @@ func (s *Scheduler) listenLoop() {
 		nc, err := s.listener.Accept()
 		if err != nil {
 			// TODO Need some way to make this gracefully exit.
-			s.log().Errorf("Error accepting new conn: %s", err)
+			s.log().Infof("Error accepting new conn, exiting listen loop: %s", err)
 			return
 		}
 		go func() {
 			pc, err := s.handshaker.Accept(nc)
 			if err != nil {
-				s.log().Infof("Error accepting handshake: %s", err)
-				pc.Close()
+				s.log().Infof("Error accepting handshake, closing net conn: %s", err)
+				nc.Close()
 				return
 			}
 			s.eventLoop.Send(incomingHandshakeEvent{pc})

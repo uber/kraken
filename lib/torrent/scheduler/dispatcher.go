@@ -242,6 +242,7 @@ func (d *dispatcher) TearDown() {
 	})
 	d.peers.Range(func(k, v interface{}) bool {
 		p := v.(*peer)
+		d.log("peer", p).Info("Dispatcher teardown closing connection")
 		p.messages.Close()
 		return true
 	})
@@ -263,6 +264,7 @@ func (d *dispatcher) complete() {
 	d.peers.Range(func(k, v interface{}) bool {
 		p := v.(*peer)
 		if p.bitfield.Complete() {
+			d.log("peer", p).Info("Completed dispatcher closing connection to completed peer")
 			p.messages.Close()
 		}
 		return true
