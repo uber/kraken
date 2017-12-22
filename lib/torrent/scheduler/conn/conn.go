@@ -54,9 +54,9 @@ type Conn struct {
 	receiver chan *Message
 
 	// The following fields orchestrate the closing of the connection:
-	once sync.Once      // Ensures the close sequence is executed only once.
-	done chan struct{}  // Signals to readLoop / writeLoop to exit.
-	wg   sync.WaitGroup // Waits for readLoop / writeLoop to exit.
+	closeOnce sync.Once      // Ensures the close sequence is executed only once.
+	done      chan struct{}  // Signals to readLoop / writeLoop to exit.
+	wg        sync.WaitGroup // Waits for readLoop / writeLoop to exit.
 }
 
 func newConn(
@@ -161,7 +161,7 @@ func (c *Conn) Receiver() <-chan *Message {
 
 // Close starts the shutdown sequence for the Conn.
 func (c *Conn) Close() {
-	c.once.Do(func() {
+	c.closeOnce.Do(func() {
 		go func() {
 			close(c.done)
 			c.nc.Close()
@@ -220,7 +220,7 @@ func (c *Conn) readLoop() {
 		default:
 			msg, err := c.readMessage()
 			if err != nil {
-				c.log().Errorf("Error reading message from socket, closing connection: %s", err)
+				c.log().Infof("Error reading message from socket, exiting read loop: %s", err)
 				return
 			}
 			c.receiver <- msg
@@ -279,13 +279,14 @@ func (c *Conn) writeLoop() {
 		c.wg.Done()
 		c.Close()
 	}()
+
 	for {
 		select {
 		case <-c.done:
 			return
 		case msg := <-c.sender:
 			if err := c.sendMessage(msg); err != nil {
-				c.log().Infof("Error writing message to socket, closing connection: %s", err)
+				c.log().Infof("Error writing message to socket, exiting write loop: %s", err)
 				return
 			}
 		}
