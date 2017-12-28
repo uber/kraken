@@ -2,6 +2,8 @@ package randutil
 
 import (
 	"fmt"
+	"io"
+	"io/ioutil"
 	"math/rand"
 	"time"
 )
@@ -24,6 +26,16 @@ const text = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 // Text returns randomly generated alphanumeric text of length n.
 func Text(n uint64) []byte {
 	return choose(n, text)
+}
+
+// Blob returns randomly generated blob data of length n.
+func Blob(n uint64) []byte {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	lr := io.LimitReader(r, int64(n))
+	b, _ := ioutil.ReadAll(lr)
+
+	return b
 }
 
 const hex = "0123456789abcdef"

@@ -55,6 +55,8 @@ import:
   version: ^0.2.0
 - package: github.com/alecthomas/kingpin
   version: ^2.2.5
+- package: github.com/aws/aws-sdk-go
+  version: ^1.12.48
 testImport:
 - package: github.com/stretchr/testify
   version: ^1.1.4

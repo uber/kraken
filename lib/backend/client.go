@@ -5,13 +5,13 @@ import "code.uber.internal/infra/kraken/lib/fileio"
 // Uploader reads blobs from src and uploads them to name. Name should be
 // the digest of the blob.
 type Uploader interface {
-	Upload(name string, src fileio.Reader) error
+	Upload(r fileio.Reader, dst string) error
 }
 
 // Downloader downloads blobs under name and writes them to dst. Name should
 // be the digest of the blob.
 type Downloader interface {
-	Download(name string, dst fileio.Writer) error
+	Download(w fileio.Writer, src string) error
 }
 
 // Client defines an interface for uploading and downloading blobs to a remote
