@@ -12,6 +12,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
@@ -51,6 +52,8 @@ type Client interface {
 	Repair() (io.ReadCloser, error)
 	RepairShard(shardID string) (io.ReadCloser, error)
 	RepairDigest(d image.Digest) (io.ReadCloser, error)
+
+	GetMetaInfo(namespace string, d image.Digest) (*torlib.MetaInfo, error)
 
 	GetPeerContext() (peercontext.PeerContext, error)
 }
@@ -182,7 +185,7 @@ func (c *HTTPClient) Repair() (io.ReadCloser, error) {
 	if err != nil {
 		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
 	}
-	return r.Body, err
+	return r.Body, nil
 }
 
 // RepairShard pushes the blobs of shardID to other replicas, and removes shardID
@@ -192,7 +195,7 @@ func (c *HTTPClient) RepairShard(shardID string) (io.ReadCloser, error) {
 	if err != nil {
 		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
 	}
-	return r.Body, err
+	return r.Body, nil
 }
 
 // RepairDigest pushes d to other replicas, and removes d from the target origin
@@ -202,7 +205,29 @@ func (c *HTTPClient) RepairDigest(d image.Digest) (io.ReadCloser, error) {
 	if err != nil {
 		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
 	}
-	return r.Body, err
+	return r.Body, nil
+}
+
+// GetMetaInfo returns metainfo for d. If the blob of d is not available yet
+// (i.e. still downloading), returns a 202 httputil.StatusError, indicating that
+// the request should be retried later. If no blob exists for d, returns a 404
+// httputil.StatusError.
+func (c *HTTPClient) GetMetaInfo(namespace string, d image.Digest) (*torlib.MetaInfo, error) {
+	r, err := httputil.Get(fmt.Sprintf(
+		"http://%s/namespace/%s/blobs/%s/metainfo", c.addr, namespace, d))
+	if err != nil {
+		return nil, err
+	}
+	defer r.Body.Close()
+	raw, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read body: %s", err)
+	}
+	mi, err := torlib.DeserializeMetaInfo(raw)
+	if err != nil {
+		return nil, fmt.Errorf("deserialize metainfo: %s", err)
+	}
+	return mi, nil
 }
 
 // GetPeerContext gets the PeerContext of the p2p client running alongside the Server.

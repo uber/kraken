@@ -32,6 +32,9 @@ func (e *serverError) Header(k, v string) *serverError {
 }
 
 func (e *serverError) Error() string {
+	if e.msg == "" {
+		return fmt.Sprintf("server error %d", e.status)
+	}
 	return fmt.Sprintf("server error %d: %s", e.status, e.msg)
 }
 

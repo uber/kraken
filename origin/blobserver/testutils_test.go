@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c2h5oh/datasize"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -41,6 +43,8 @@ func configFixture() Config {
 			MaxRetries: 3,
 			RetryDelay: 200 * time.Millisecond,
 		},
+		// 4 byte piece lengths for all file sizes.
+		PieceLengths: map[datasize.ByteSize]datasize.ByteSize{0: 4},
 	}
 }
 
@@ -85,11 +89,12 @@ func startServer(
 	config Config,
 	fs store.FileStore,
 	cp blobclient.Provider,
-	pctx peercontext.PeerContext) (addr string, stop func()) {
+	pctx peercontext.PeerContext,
+	bm *backend.Manager) (addr string, stop func()) {
 
 	stats := tally.NewTestScope("", nil)
 
-	s, err := New(config, stats, host, fs, cp, pctx)
+	s, err := New(config, stats, host, fs, cp, pctx, bm)
 	if err != nil {
 		panic(err)
 	}
@@ -99,35 +104,41 @@ func startServer(
 // testServer is a convenience wrapper around the underlying components of a
 // Server and faciliates restarting Servers with new configuration.
 type testServer struct {
-	host    string
-	addr    string
-	fs      *store.LocalFileStore
-	cp      *testClientProvider
-	pctx    peercontext.PeerContext
-	stop    func()
-	cleanFS func()
+	host           string
+	addr           string
+	fs             *store.LocalFileStore
+	cp             *testClientProvider
+	pctx           peercontext.PeerContext
+	backendManager *backend.Manager
+	stop           func()
+	cleanFS        func()
 }
 
 func newTestServer(host string, config Config, cp *testClientProvider) *testServer {
 	pctx := peercontext.Fixture()
 	fs, cleanFS := store.LocalFileStoreFixture()
-	addr, stop := startServer(host, config, fs, cp, pctx)
+	bm, err := backend.NewManager(nil)
+	if err != nil {
+		panic(err)
+	}
+	addr, stop := startServer(host, config, fs, cp, pctx, bm)
 	cp.register(host, addr)
 	return &testServer{
-		host:    host,
-		addr:    addr,
-		fs:      fs,
-		cp:      cp,
-		pctx:    pctx,
-		stop:    stop,
-		cleanFS: cleanFS,
+		host:           host,
+		addr:           addr,
+		fs:             fs,
+		cp:             cp,
+		pctx:           pctx,
+		backendManager: bm,
+		stop:           stop,
+		cleanFS:        cleanFS,
 	}
 }
 
 func (s *testServer) restart(config Config) {
 	s.stop()
 
-	s.addr, s.stop = startServer(s.host, config, s.fs, s.cp, s.pctx)
+	s.addr, s.stop = startServer(s.host, config, s.fs, s.cp, s.pctx, s.backendManager)
 	s.cp.register(s.host, s.addr)
 }
 
@@ -154,7 +165,7 @@ func newServerMocks(t *testing.T) *serverMocks {
 }
 
 func (mocks *serverMocks) server(config Config) (addr string, stop func()) {
-	return startServer(master1, config, mocks.fileStore, mocks.clientProvider, peercontext.Fixture())
+	return startServer(master1, config, mocks.fileStore, mocks.clientProvider, peercontext.Fixture(), nil)
 }
 
 // labelSet converts hosts into their corresponding labels as specified by config.

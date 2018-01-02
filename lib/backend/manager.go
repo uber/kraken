@@ -1,8 +1,9 @@
 package backend
 
 import (
-	"errors"
 	"fmt"
+
+	"code.uber.internal/infra/kraken/lib/backend/s3"
 )
 
 // Manager manages backend clients for namespaces.
@@ -17,9 +18,8 @@ func NewManager(namespaces NamespaceConfig) (*Manager, error) {
 		var c Client
 		var err error
 		switch config.Backend {
-		// FIXME: Add client initialization here.
-		case "fixme":
-			err = errors.New("fixme")
+		case "s3":
+			c, err = s3.NewClient(config.S3)
 		default:
 			return nil, fmt.Errorf("unknown backend for namespace %s: %s", ns, config.Backend)
 		}
@@ -29,6 +29,17 @@ func NewManager(namespaces NamespaceConfig) (*Manager, error) {
 		clients[ns] = c
 	}
 	return &Manager{clients}, nil
+}
+
+// Register dynamically registers a namespace with a provided client. Register
+// should be primarily used for testing purposes -- namespaces should almost
+// always be statically configured and provided upon construction of the Manager.
+func (m *Manager) Register(namespace string, c Client) error {
+	if _, ok := m.clients[namespace]; ok {
+		return fmt.Errorf("namespace %s already exists", namespace)
+	}
+	m.clients[namespace] = c
+	return nil
 }
 
 // GetClient returns the configured Client for the given namespace.

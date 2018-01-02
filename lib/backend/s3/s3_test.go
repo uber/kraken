@@ -19,7 +19,8 @@ func TestS3UploadSuccess(t *testing.T) {
 	b := randutil.Blob(32 * memsize.KB)
 
 	config := Config{Region: "us-west-1", Bucket: "test_bucket"}
-	s3client := NewS3Client(config)
+	s3client, err := NewClient(config)
+	require.NoError(err)
 	req, err := http.NewRequest("POST", "", nil)
 	require.NoError(err)
 
@@ -29,7 +30,7 @@ func TestS3UploadSuccess(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	err = s3client.Upload(f, f.Name())
+	err = s3client.Upload(f.Name(), f)
 	require.NoError(err)
 }
 
@@ -40,7 +41,8 @@ func TestS3DownloadSuccess(t *testing.T) {
 	b := randutil.Blob(32 * memsize.KB)
 
 	config := Config{Region: "us-west-1", Bucket: "test_bucket"}
-	s3client := NewS3Client(config)
+	s3client, err := NewClient(config)
+	require.NoError(err)
 	req, err := http.NewRequest("POST", "", nil)
 	require.NoError(err)
 
@@ -50,7 +52,6 @@ func TestS3DownloadSuccess(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	n, err := s3client.Download(f, f.Name())
-	require.Equal(n, int64(32*memsize.KB))
+	err = s3client.Download(f.Name(), f)
 	require.NoError(err)
 }

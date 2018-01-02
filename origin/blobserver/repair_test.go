@@ -177,7 +177,7 @@ func TestRepairUnownedShardDoesNotDeleteIfReplicationFails(t *testing.T) {
 	fs3 := mockstore.NewMockFileStore(ctrl)
 	fs3.EXPECT().GetCacheFileStat(gomock.Any()).MinTimes(1).Return(nil, os.ErrNotExist)
 	fs3.EXPECT().CreateUploadFile(gomock.Any(), int64(0)).MinTimes(1).Return(errors.New("some error"))
-	addr3, stop := startServer(master3, config, fs3, cp, peercontext.Fixture())
+	addr3, stop := startServer(master3, config, fs3, cp, peercontext.Fixture(), nil)
 	defer stop()
 	cp.register(master3, addr3)
 

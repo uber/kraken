@@ -8,6 +8,7 @@ import (
 	image "code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	peercontext "code.uber.internal/infra/kraken/lib/peercontext"
 	blobclient "code.uber.internal/infra/kraken/origin/blobclient"
+	torlib "code.uber.internal/infra/kraken/torlib"
 	gomock "github.com/golang/mock/gomock"
 	io "io"
 	reflect "reflect"
@@ -96,6 +97,19 @@ func (m *MockClient) GetBlob(arg0 image.Digest) (io.ReadCloser, error) {
 // GetBlob indicates an expected call of GetBlob
 func (mr *MockClientMockRecorder) GetBlob(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlob", reflect.TypeOf((*MockClient)(nil).GetBlob), arg0)
+}
+
+// GetMetaInfo mocks base method
+func (m *MockClient) GetMetaInfo(arg0 string, arg1 image.Digest) (*torlib.MetaInfo, error) {
+	ret := m.ctrl.Call(m, "GetMetaInfo", arg0, arg1)
+	ret0, _ := ret[0].(*torlib.MetaInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMetaInfo indicates an expected call of GetMetaInfo
+func (mr *MockClientMockRecorder) GetMetaInfo(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetaInfo", reflect.TypeOf((*MockClient)(nil).GetMetaInfo), arg0, arg1)
 }
 
 // GetPeerContext mocks base method

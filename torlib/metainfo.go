@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"time"
 )
 
 // AnnounceList is a list of tracker announcers
@@ -42,19 +41,13 @@ func NewMetaInfoFromInfo(info Info, announce string) (*MetaInfo, error) {
 func NewMetaInfoFromBlob(
 	name string,
 	blob io.Reader,
-	pieceLength int64,
-	comment string,
-	createdBy string) (*MetaInfo, error) {
+	pieceLength int64) (*MetaInfo, error) {
 
 	info, err := NewInfoFromBlob(name, blob, pieceLength)
 	if err != nil {
 		return nil, fmt.Errorf("create info: %s", err)
 	}
-	mi := &MetaInfo{
-		Info:         info,
-		CreationDate: time.Now().Unix(),
-		CreatedBy:    createdBy,
-	}
+	mi := &MetaInfo{Info: info}
 	if err := mi.initialize(); err != nil {
 		return nil, err
 	}
