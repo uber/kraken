@@ -63,6 +63,11 @@ func IsConflict(err error) bool {
 	return isStatus(err, http.StatusConflict)
 }
 
+// IsAccepted returns true if err is a "status accepted" StatusError.
+func IsAccepted(err error) bool {
+	return isStatus(err, http.StatusAccepted)
+}
+
 type sendOptions struct {
 	body          io.Reader
 	timeout       time.Duration

@@ -6,16 +6,19 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/docker/distribution/uuid"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/randutil"
+	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
 func TestCheckBlobHandlerOK(t *testing.T) {
@@ -387,4 +390,71 @@ func TestGetPeerContextHandlerOK(t *testing.T) {
 	pctx, err := cp.Provide(master1).GetPeerContext()
 	require.NoError(err)
 	require.Equal(s.pctx, pctx)
+}
+
+func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
+	require := require.New(t)
+
+	config := configFixture()
+	cp := newTestClientProvider(clientConfigFixture())
+	namespace := "test-namespace"
+	backendClient := backend.TestClient()
+
+	for _, master := range []string{master1, master2} {
+		s := newTestServer(master, configFixture(), cp)
+		defer s.cleanup()
+		s.backendManager.Register(namespace, backendClient)
+	}
+
+	d, blob := computeBlobForHosts(config, master1, master2)
+
+	backendClient.Upload(d.Hex(), bytes.NewReader(blob))
+
+	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
+	require.True(httputil.IsAccepted(err))
+	require.Nil(mi)
+
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		_, err := cp.Provide(master1).GetMetaInfo(namespace, d)
+		return !httputil.IsAccepted(err)
+	}))
+
+	mi, err = cp.Provide(master1).GetMetaInfo(namespace, d)
+	require.NoError(err)
+	require.NotNil(mi)
+	require.Equal(len(blob), int(mi.Info.Length))
+
+	// Ensure blob was replicated to other master.
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		ok, err := cp.Provide(master2).CheckBlob(d)
+		return ok && err == nil
+	}))
+}
+
+func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider(clientConfigFixture())
+
+	s := newTestServer(master1, configFixture(), cp)
+	defer s.cleanup()
+
+	namespace := "test-namespace"
+	backendClient := backend.TestClient()
+	s.backendManager.Register(namespace, backendClient)
+
+	d := image.DigestFixture()
+
+	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
+	require.True(httputil.IsAccepted(err))
+	require.Nil(mi)
+
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		_, err := cp.Provide(master1).GetMetaInfo(namespace, d)
+		return !httputil.IsAccepted(err)
+	}))
+
+	mi, err = cp.Provide(master1).GetMetaInfo(namespace, d)
+	require.True(httputil.IsNotFound(err))
+	require.Nil(mi)
 }

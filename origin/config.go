@@ -3,6 +3,7 @@ package main
 import (
 	"go.uber.org/zap"
 
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
@@ -14,13 +15,14 @@ import (
 // Config defines origin server configuration.
 type Config struct {
 	Verbose    bool
-	ZapLogging zap.Config        `yaml:"zap"`
-	BlobServer blobserver.Config `yaml:"blobserver"`
-	BlobClient blobclient.Config `yaml:"blobclient"`
-	LocalStore store.Config      `yaml:"store"`
-	Torrent    torrent.Config    `yaml:"torrent"`
-	Metrics    metrics.Config    `yaml:"metrics"`
-	Tracker    TrackerConfig     `yaml:"tracker"`
+	ZapLogging zap.Config              `yaml:"zap"`
+	BlobServer blobserver.Config       `yaml:"blobserver"`
+	BlobClient blobclient.Config       `yaml:"blobclient"`
+	LocalStore store.Config            `yaml:"store"`
+	Torrent    torrent.Config          `yaml:"torrent"`
+	Metrics    metrics.Config          `yaml:"metrics"`
+	Tracker    TrackerConfig           `yaml:"tracker"`
+	Namespaces backend.NamespaceConfig `yaml:"namespaces"`
 }
 
 // TrackerConfig defines configuration for proxy's dependency on tracker.

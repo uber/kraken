@@ -1,6 +1,8 @@
 package s3
 
 import (
+	"errors"
+
 	"code.uber.internal/infra/kraken/lib/fileio"
 
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -47,45 +49,51 @@ func (c Config) applyDefaults() Config {
 	return c
 }
 
-// NewS3Client creates s3 client from input parameters
-func NewS3Client(config Config) *Client {
+// NewClient creates s3 client from input parameters
+func NewClient(config Config) (*Client, error) {
 	config = config.applyDefaults()
+	if config.Region == "" {
+		return nil, errors.New("invalid config: region required")
+	}
+	if config.Bucket == "" {
+		return nil, errors.New("invalid config: bucket required")
+	}
 
 	sess := session.New()
 	svc := s3.New(sess, aws.NewConfig().WithRegion(config.Region))
 
-	return &Client{s3Session: svc, config: config}
+	return &Client{s3Session: svc, config: config}, nil
 }
 
 // Download downloads the content from a given input bucket writing
 // data into provided writer
-func (s3f *Client) Download(w fileio.Writer, src string) (int64, error) {
-	downloader := s3manager.NewDownloaderWithClient(s3f.s3Session, func(d *s3manager.Downloader) {
-		d.PartSize = s3f.config.DownloadPartSize // per part
-		d.Concurrency = s3f.config.DownloadConcurrency
+func (c *Client) Download(name string, dst fileio.Writer) error {
+	downloader := s3manager.NewDownloaderWithClient(c.s3Session, func(d *s3manager.Downloader) {
+		d.PartSize = c.config.DownloadPartSize // per part
+		d.Concurrency = c.config.DownloadConcurrency
 	})
 
 	dlParams := &s3.GetObjectInput{
-		Bucket: aws.String(s3f.config.Bucket),
-		Key:    aws.String(src),
+		Bucket: aws.String(c.config.Bucket),
+		Key:    aws.String(name),
 	}
 
-	n, err := downloader.Download(w, dlParams)
-	return n, err
+	_, err := downloader.Download(dst, dlParams)
+	return err
 }
 
 // Upload uploads the content for a given input bucket and key reading
 // data from a provided reader
-func (s3f *Client) Upload(r fileio.Reader, dst string) error {
-	uploader := s3manager.NewUploaderWithClient(s3f.s3Session, func(u *s3manager.Uploader) {
-		u.PartSize = s3f.config.UploadPartSize // per part,
-		u.Concurrency = s3f.config.UploadConcurrency
+func (c *Client) Upload(name string, src fileio.Reader) error {
+	uploader := s3manager.NewUploaderWithClient(c.s3Session, func(u *s3manager.Uploader) {
+		u.PartSize = c.config.UploadPartSize // per part,
+		u.Concurrency = c.config.UploadConcurrency
 	})
 
 	upParams := &s3manager.UploadInput{
-		Bucket: aws.String(s3f.config.Bucket),
-		Key:    aws.String(dst),
-		Body:   r,
+		Bucket: aws.String(c.config.Bucket),
+		Key:    aws.String(name),
+		Body:   src,
 	}
 
 	// TODO(igor): support resumable uploads, for now we're ignoring UploadOutput

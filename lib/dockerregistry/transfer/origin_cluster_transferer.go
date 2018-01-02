@@ -102,8 +102,7 @@ func (t *OriginClusterTransferer) uploadMetaInfo(d image.Digest, blobCloner stor
 	}
 	defer blob.Close()
 
-	mi, err := torlib.NewMetaInfoFromBlob(
-		d.Hex(), blob, t.config.TorrentPieceLength, "docker", "kraken-proxy")
+	mi, err := torlib.NewMetaInfoFromBlob(d.Hex(), blob, t.config.TorrentPieceLength)
 	if err != nil {
 		return fmt.Errorf("create metainfo: %s", err)
 	}

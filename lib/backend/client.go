@@ -1,17 +1,25 @@
 package backend
 
-import "code.uber.internal/infra/kraken/lib/fileio"
+import (
+	"errors"
+
+	"code.uber.internal/infra/kraken/lib/fileio"
+)
+
+// ErrBlobNotFound is returned when a blob is not found in a storage backend.
+var ErrBlobNotFound = errors.New("blob not found")
 
 // Uploader reads blobs from src and uploads them to name. Name should be
 // the digest of the blob.
 type Uploader interface {
-	Upload(r fileio.Reader, dst string) error
+	Upload(name string, src fileio.Reader) error
 }
 
 // Downloader downloads blobs under name and writes them to dst. Name should
-// be the digest of the blob.
+// be the digest of the blob. Implementations of Download should return
+// ErrBlobNotFound when the blob was not found.
 type Downloader interface {
-	Download(w fileio.Writer, src string) error
+	Download(name string, dst fileio.Writer) error
 }
 
 // Client defines an interface for uploading and downloading blobs to a remote

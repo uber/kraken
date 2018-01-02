@@ -179,6 +179,18 @@ func (mr *MockTorrentMockRecorder) ReadPiece(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadPiece", reflect.TypeOf((*MockTorrent)(nil).ReadPiece), arg0)
 }
 
+// Stat mocks base method
+func (m *MockTorrent) Stat() *storage.TorrentInfo {
+	ret := m.ctrl.Call(m, "Stat")
+	ret0, _ := ret[0].(*storage.TorrentInfo)
+	return ret0
+}
+
+// Stat indicates an expected call of Stat
+func (mr *MockTorrentMockRecorder) Stat() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockTorrent)(nil).Stat))
+}
+
 // String mocks base method
 func (m *MockTorrent) String() string {
 	ret := m.ctrl.Call(m, "String")

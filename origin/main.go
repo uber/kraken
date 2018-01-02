@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -118,13 +119,19 @@ func main() {
 	}
 	defer closer.Close()
 
+	backendManager, err := backend.NewManager(config.Namespaces)
+	if err != nil {
+		log.Fatalf("Error creating backend manager: %s", err)
+	}
+
 	server, err := blobserver.New(
 		config.BlobServer,
 		stats,
 		addr,
 		fileStore,
 		blobClientProvider,
-		pctx)
+		pctx,
+		backendManager)
 	if err != nil {
 		log.Fatalf("Error initializing blob server %s: %s", addr, err)
 	}
