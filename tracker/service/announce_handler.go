@@ -14,6 +14,7 @@ import (
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/errutil"
+	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
@@ -62,7 +63,7 @@ func (h *announceHandler) requestOrigins(infoHash, name string) ([]*torlib.PeerI
 	return origins, errutil.Join(errs)
 }
 
-func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
+func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
 	log.Debugf("Get /announce %s", q)
 
@@ -73,13 +74,11 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	peerDC := q.Get("dc")
 	peerPort, err := strconv.ParseInt(q.Get("port"), 10, 64)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("parse port: %s", err), http.StatusBadRequest)
-		return
+		return handler.Errorf("parse port: %s", err).Status(http.StatusBadRequest)
 	}
 	peerComplete, err := strconv.ParseBool(q.Get("complete"))
 	if err != nil {
-		http.Error(w, fmt.Sprintf("parse complete: %s", err), http.StatusBadRequest)
-		return
+		return handler.Errorf("parse complete: %s", err).Status(http.StatusBadRequest)
 	}
 
 	peer := &torlib.PeerInfo{
@@ -126,28 +125,20 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(peers) == 0 {
 		if err != nil {
-			http.Error(w, fmt.Sprintf("error getting peers: %s", err), http.StatusInternalServerError)
-		} else {
-			w.WriteHeader(http.StatusNotFound)
+			return handler.Errorf("error getting peers: %s", err)
 		}
-		return
+		return handler.ErrorStatus(http.StatusNotFound)
 	}
 
 	err = h.policy.AssignPeerPriority(peer, peers)
 	if err != nil {
-		log.Infof("Could not apply a peer handout priority policy: %s, error : %s, request: %s",
-			infoHash, err.Error(), formatRequest(r))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return handler.Errorf("assign peer priority: %s", err)
 	}
 
 	// TODO(codyg): Accept peer limit query argument.
 	peers, err = h.policy.SamplePeers(peers, len(peers))
 	if err != nil {
-		msg := "Could not apply peer handout sampling policy"
-		log.With("error", err.Error(), "info_hash", infoHash, "request", formatRequest(r)).Info(msg)
-		http.Error(w, fmt.Sprintf("%s: %v", msg, err), http.StatusInternalServerError)
-		return
+		return handler.Errorf("sample peers: %s", err)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -165,8 +156,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) {
 		Peers:    derefPeerInfos,
 	})
 	if err != nil {
-		log.Infof("Bencode marshalling has failed: %s for request: %s", err.Error(), formatRequest(r))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return handler.Errorf("bencode marshal: %s", err)
 	}
+	return nil
 }

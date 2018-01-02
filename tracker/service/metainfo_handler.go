@@ -1,13 +1,12 @@
 package service
 
 import (
-	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
@@ -15,59 +14,45 @@ type metainfoHandler struct {
 	store storage.TorrentStore
 }
 
-func (h *metainfoHandler) Get(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	q := r.URL.Query()
-	name := q.Get("name")
-
+func (h *metainfoHandler) Get(w http.ResponseWriter, r *http.Request) error {
+	name := r.URL.Query().Get("name")
 	if name == "" {
-		http.Error(w, "no name specified", http.StatusBadRequest)
-		return
+		return handler.Errorf("empty name").Status(http.StatusBadRequest)
 	}
 
 	metaRaw, err := h.store.GetTorrent(name)
 	if err != nil {
 		if err == storage.ErrNotFound {
-			http.Error(w, "torrent not found", http.StatusNotFound)
-		} else {
-			http.Error(w, fmt.Sprintf("storage: %s", err), http.StatusInternalServerError)
+			return handler.ErrorStatus(http.StatusNotFound)
 		}
-		log.With("name", name).Errorf("Error getting torrent metainfo: %s", err)
-		return
+		return handler.Errorf("storage: %s", err)
 	}
 
-	w.WriteHeader(http.StatusOK)
-	io.WriteString(w, metaRaw)
-	log.Infof("Successfully got metainfo for %s", name)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(metaRaw))
+	return nil
 }
 
-func (h *metainfoHandler) Post(w http.ResponseWriter, r *http.Request) {
+func (h *metainfoHandler) Post(w http.ResponseWriter, r *http.Request) error {
 	defer r.Body.Close()
 	metaRaw, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("read body: %s", err), http.StatusInternalServerError)
-		log.Errorf("Error reading request body: %s", err)
-		return
+		return handler.Errorf("read body: %s", err)
 	}
 
 	mi, err := torlib.DeserializeMetaInfo(metaRaw)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("deserialize metainfo: %s", err), http.StatusBadRequest)
-		log.Errorf("Error deserializing metainfo body: %s", err)
-		return
+		return handler.Errorf("deserialize metainfo: %s", err).Status(http.StatusBadRequest)
 	}
 
 	if err := h.store.CreateTorrent(mi); err != nil {
 		if err == storage.ErrExists {
-			http.Error(w, fmt.Sprintf("metainfo already exists for name %s", mi.Name()), http.StatusConflict)
-		} else {
-			http.Error(w, fmt.Sprintf("storage: %s", err), http.StatusInternalServerError)
+			return handler.ErrorStatus(http.StatusConflict)
 		}
-		log.With("name", mi.Name()).Errorf("Failed to create torrent: %s", err)
-		return
+		return handler.Errorf("storage: %s", err)
 	}
 
 	log.With("name", mi.Name()).Info("Wrote torrent metainfo")
 	w.WriteHeader(http.StatusOK)
+	return nil
 }

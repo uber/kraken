@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -11,6 +10,7 @@ import (
 	"github.com/pressly/chi"
 
 	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
@@ -18,88 +18,59 @@ type manifestHandler struct {
 	store storage.ManifestStore
 }
 
-func (h *manifestHandler) Get(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	name := chi.URLParam(r, "name")
-	if len(name) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSONErrorf(w, "Failed to parse an empty tag name")
-		return
-	}
-
-	name, err := url.QueryUnescape(name)
+func (h *manifestHandler) Get(w http.ResponseWriter, r *http.Request) error {
+	name, err := parseName(r)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSONErrorf(w, "cannot unescape manifest name: %s, error: %s", name, err)
-		log.With("name", name, "error", err, "request", formatRequest(r)).Error("Failed to unescape manifest name")
-		return
+		return err
 	}
 
 	manifest, err := h.store.GetManifest(name)
 	if err != nil {
 		if os.IsNotExist(err) {
-			w.WriteHeader(http.StatusNotFound)
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
+			return handler.ErrorStatus(http.StatusNotFound)
 		}
-		writeJSONErrorf(w, "cannot get manifest name: %s, error: %s", name, err)
-		log.With("name", name, "error", err, "request", formatRequest(r)).Error("cannot get manifest")
-		return
+		return handler.Errorf("get manifest: %s", err)
 	}
 
-	io.WriteString(w, manifest)
-	w.WriteHeader(http.StatusOK)
-	log.Infof("Got manifest for %s", name)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(manifest))
+	return nil
 }
 
-func (h *manifestHandler) Post(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	name := chi.URLParam(r, "name")
-
-	if len(name) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSONErrorf(w, "Failed to parse a tag name")
-		return
-	}
-
-	name, err := url.QueryUnescape(name)
+func (h *manifestHandler) Post(w http.ResponseWriter, r *http.Request) error {
+	name, err := parseName(r)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSONErrorf(w, "cannot unescape manifest name: %s, error: %s", name, err)
-		log.With("name", name, "error", err, "request", formatRequest(r)).Error("Failed to unescape manifest name")
-		return
+		return err
 	}
 
 	defer r.Body.Close()
 	manifest, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		writeJSONErrorf(w, "Could not read manifest on post for %s and error: %s", name, err)
-		log.With("name", name, "error", err, "request", formatRequest(r)).Error("Failed to read manifest payload")
-		return
+		return handler.Errorf("read body: %s", err)
 	}
 
 	var jsonManifest map[string]interface{}
 	if err := json.Unmarshal(manifest, &jsonManifest); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSONErrorf(w, "Manifest is an invalid json for %s, manifest %s and error: %s",
-			name, manifest[:], err)
-		log.With("name", name, "manifest", manifest[:], "error", err, "request", formatRequest(r)).Error(
-			"Failed to parse manifest")
-		return
+		return handler.Errorf("json unmarshal: %s", err).Status(http.StatusBadRequest)
 	}
 
-	err = h.store.CreateManifest(name, string(manifest[:]))
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		writeJSONErrorf(w, "Failed to update manifest for %s with manifest %s and error: %s",
-			name, manifest, err)
-		log.With("name", name, "manifest", manifest[:], "error", err, "request", formatRequest(r)).Error(
-			"Failed to update manifest")
-		return
+	if err := h.store.CreateManifest(name, string(manifest[:])); err != nil {
+		return handler.Errorf("create manifest: %s", err)
 	}
 
-	w.WriteHeader(http.StatusOK)
 	log.Infof("Updated manifest successfully for %s", name)
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+func parseName(r *http.Request) (string, error) {
+	name := chi.URLParam(r, "name")
+	if len(name) == 0 {
+		return "", handler.Errorf("empty name").Status(http.StatusBadRequest)
+	}
+	name, err := url.PathUnescape(name)
+	if err != nil {
+		return "", handler.Errorf("path unescape name: %s", err).Status(http.StatusBadRequest)
+	}
+	return name, nil
 }
