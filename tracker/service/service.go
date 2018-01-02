@@ -11,6 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/utils/handler"
 )
 
 // Handler instantiates a new handler for the tracker service.
@@ -32,7 +33,7 @@ func Handler(
 		originResolver,
 	}
 	health := &healthHandler{}
-	infohash := &metainfoHandler{torrentStore}
+	metainfo := &metainfoHandler{torrentStore}
 	manifest := &manifestHandler{manifestStore}
 
 	r := chi.NewRouter()
@@ -50,7 +51,7 @@ func Handler(
 		r.Use(middleware.Counter(estats))
 		r.Use(middleware.ElapsedTimer(estats))
 
-		r.Get("/announce", announce.Get)
+		r.Get("/announce", handler.Wrap(announce.Get))
 	})
 
 	r.Group(func(r chi.Router) {
@@ -58,8 +59,8 @@ func Handler(
 		r.Use(middleware.Counter(estats))
 		r.Use(middleware.ElapsedTimer(estats))
 
-		r.Get("/info", infohash.Get)
-		r.Post("/info", infohash.Post)
+		r.Get("/info", handler.Wrap(metainfo.Get))
+		r.Post("/info", handler.Wrap(metainfo.Post))
 	})
 
 	r.Group(func(r chi.Router) {
@@ -67,8 +68,8 @@ func Handler(
 		r.Use(middleware.Counter(estats))
 		r.Use(middleware.ElapsedTimer(estats))
 
-		r.Get("/manifest/:name", manifest.Get)
-		r.Post("/manifest/:name", manifest.Post)
+		r.Get("/manifest/:name", handler.Wrap(manifest.Get))
+		r.Post("/manifest/:name", handler.Wrap(manifest.Post))
 
 	})
 

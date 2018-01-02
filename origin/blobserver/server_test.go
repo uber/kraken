@@ -16,6 +16,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
+	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -326,7 +327,7 @@ func TestParseContentRangeHeaderBadRequests(t *testing.T) {
 			h.Add("Content-Range", test.value)
 			start, end, err := parseContentRange(h)
 			require.Error(err)
-			require.Equal(http.StatusBadRequest, err.(*serverError).status)
+			require.Equal(http.StatusBadRequest, err.(*handler.Error).GetStatus())
 			require.Equal(int64(0), start)
 			require.Equal(int64(0), end)
 		})

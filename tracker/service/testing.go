@@ -9,6 +9,7 @@ import (
 
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
+	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
@@ -81,7 +82,7 @@ func TestAnnouncer() (addr string, stop func()) {
 	}
 
 	r := chi.NewRouter()
-	r.Get("/announce", announce.Get)
+	r.Get("/announce", handler.Wrap(announce.Get))
 
 	return testutil.StartServer(r)
 }

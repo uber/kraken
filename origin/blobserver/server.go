@@ -25,6 +25,7 @@ import (
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/errutil"
+	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 
@@ -98,32 +99,6 @@ func New(
 	}, nil
 }
 
-type errHandler func(http.ResponseWriter, *http.Request) error
-
-// handler converts an errHandler into a proper http.HandlerFunc. This allows
-// handlers of Server to return errors without worrying about applying the
-// error to the response.
-func handler(h errHandler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if err := h(w, r); err != nil {
-			log.Errorf("%s %s: %s", r.Method, r.URL.Path, err)
-			switch e := err.(type) {
-			case *serverError:
-				for k, vs := range e.header {
-					for _, v := range vs {
-						w.Header().Add(k, v)
-					}
-				}
-				w.WriteHeader(e.status)
-				w.Write([]byte(e.msg))
-			default:
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(e.Error()))
-			}
-		}
-	}
-}
-
 // Addr returns the address the blob server is configured on.
 func (s Server) Addr() string {
 	return s.addr
@@ -138,7 +113,7 @@ func (s Server) Handler() http.Handler {
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
 
-		r.Get("/health", handler(s.healthCheckHandler))
+		r.Get("/health", handler.Wrap(s.healthCheckHandler))
 	})
 
 	r.Group(func(r chi.Router) {
@@ -146,9 +121,9 @@ func (s Server) Handler() http.Handler {
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
 
-		r.Head("/blobs/:digest", handler(s.checkBlobHandler))
-		r.Get("/blobs/:digest", handler(s.getBlobHandler))
-		r.Delete("/blobs/:digest", handler(s.deleteBlobHandler))
+		r.Head("/blobs/:digest", handler.Wrap(s.checkBlobHandler))
+		r.Get("/blobs/:digest", handler.Wrap(s.getBlobHandler))
+		r.Delete("/blobs/:digest", handler.Wrap(s.deleteBlobHandler))
 	})
 
 	r.Group(func(r chi.Router) {
@@ -157,7 +132,7 @@ func (s Server) Handler() http.Handler {
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
 
-		r.Get("/blobs/:digest/locations", handler(s.getLocationsHandler))
+		r.Get("/blobs/:digest/locations", handler.Wrap(s.getLocationsHandler))
 	})
 
 	r.Group(func(r chi.Router) {
@@ -165,9 +140,9 @@ func (s Server) Handler() http.Handler {
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
 
-		r.Post("/blobs/:digest/uploads", handler(s.startUploadHandler))
-		r.Patch("/blobs/:digest/uploads/:uuid", handler(s.patchUploadHandler))
-		r.Put("/blobs/:digest/uploads/:uuid", handler(s.commitUploadHandler))
+		r.Post("/blobs/:digest/uploads", handler.Wrap(s.startUploadHandler))
+		r.Patch("/blobs/:digest/uploads/:uuid", handler.Wrap(s.patchUploadHandler))
+		r.Put("/blobs/:digest/uploads/:uuid", handler.Wrap(s.commitUploadHandler))
 	})
 
 	r.Group(func(r chi.Router) {
@@ -175,7 +150,7 @@ func (s Server) Handler() http.Handler {
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
 
-		r.Post("/repair", handler(s.repairHandler))
+		r.Post("/repair", handler.Wrap(s.repairHandler))
 	})
 
 	r.Group(func(r chi.Router) {
@@ -183,7 +158,7 @@ func (s Server) Handler() http.Handler {
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
 
-		r.Post("/repair/shard/:shardid", handler(s.repairShardHandler))
+		r.Post("/repair/shard/:shardid", handler.Wrap(s.repairShardHandler))
 	})
 
 	r.Group(func(r chi.Router) {
@@ -191,7 +166,7 @@ func (s Server) Handler() http.Handler {
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
 
-		r.Post("/repair/digest/:digest", handler(s.repairDigestHandler))
+		r.Post("/repair/digest/:digest", handler.Wrap(s.repairDigestHandler))
 	})
 
 	r.Group(func(r chi.Router) {
@@ -199,7 +174,7 @@ func (s Server) Handler() http.Handler {
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
 
-		r.Get("/peercontext", handler(s.getPeerContextHandler))
+		r.Get("/peercontext", handler.Wrap(s.getPeerContextHandler))
 	})
 
 	r.Group(func(r chi.Router) {
@@ -207,7 +182,7 @@ func (s Server) Handler() http.Handler {
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
 
-		r.Get("/namespace/:namespace/blobs/:digest/metainfo", handler(s.getMetaInfoHandler))
+		r.Get("/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(s.getMetaInfoHandler))
 	})
 
 	// Serves /debug/pprof endpoints.
@@ -366,7 +341,7 @@ func (s Server) commitUploadHandler(w http.ResponseWriter, r *http.Request) erro
 func (s Server) repairHandler(w http.ResponseWriter, r *http.Request) error {
 	shards, err := s.fileStore.ListPopulatedShardIDs()
 	if err != nil {
-		return serverErrorf("failed to list populated shard ids: %s", err)
+		return handler.Errorf("failed to list populated shard ids: %s", err)
 	}
 	rep := s.newRepairer()
 	go func() {
@@ -386,7 +361,7 @@ func (s Server) repairHandler(w http.ResponseWriter, r *http.Request) error {
 func (s Server) repairShardHandler(w http.ResponseWriter, r *http.Request) error {
 	shardID := chi.URLParam(r, "shardid")
 	if len(shardID) == 0 {
-		return serverErrorf("empty shard id").Status(http.StatusBadRequest)
+		return handler.Errorf("empty shard id").Status(http.StatusBadRequest)
 	}
 	rep := s.newRepairer()
 	var err error
@@ -417,7 +392,7 @@ func (s Server) repairDigestHandler(w http.ResponseWriter, r *http.Request) erro
 // getPeerContextHandler returns the Server's peer context as JSON.
 func (s Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewEncoder(w).Encode(s.pctx); err != nil {
-		return serverErrorf("error converting peer context to json: %s", err)
+		return handler.Errorf("error converting peer context to json: %s", err)
 	}
 	return nil
 }
@@ -425,7 +400,7 @@ func (s Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) er
 func (s Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
 	namespace := chi.URLParam(r, "namespace")
 	if len(namespace) == 0 {
-		return serverErrorf("empty namespace").Status(http.StatusBadRequest)
+		return handler.Errorf("empty namespace").Status(http.StatusBadRequest)
 	}
 	d, err := parseDigest(r)
 	if err != nil {
@@ -447,22 +422,22 @@ func (s Server) getMetaInfo(namespace string, d image.Digest) ([]byte, error) {
 	if _, err := s.fileStore.GetCacheFileStat(d.Hex()); os.IsNotExist(err) {
 		return nil, s.startRemoteBlobDownload(namespace, d)
 	} else if err != nil {
-		return nil, serverErrorf("cache file stat: %s", err)
+		return nil, handler.Errorf("cache file stat: %s", err)
 	}
 	cache := s.fileStore.States().Cache()
 	raw, err := cache.GetMetadata(d.Hex(), store.NewTorrentMeta())
 	if os.IsNotExist(err) {
 		raw, err = s.generateMetaInfo(d)
 		if err != nil {
-			return nil, serverErrorf("generate metainfo: %s", err)
+			return nil, handler.Errorf("generate metainfo: %s", err)
 		}
 		// Never overwrite existing metadata.
 		raw, err = cache.GetOrSetMetadata(d.Hex(), store.NewTorrentMeta(), raw)
 		if err != nil {
-			return nil, serverErrorf("get or set metadata: %s", err)
+			return nil, handler.Errorf("get or set metadata: %s", err)
 		}
 	} else if err != nil {
-		return nil, serverErrorf("get cache metadata: %s", err)
+		return nil, handler.Errorf("get cache metadata: %s", err)
 	}
 	return raw, nil
 }
@@ -470,7 +445,7 @@ func (s Server) getMetaInfo(namespace string, d image.Digest) ([]byte, error) {
 func (s Server) startRemoteBlobDownload(namespace string, d image.Digest) error {
 	c, err := s.backendManager.GetClient(namespace)
 	if err != nil {
-		return serverErrorf("backend manager: %s", err).Status(http.StatusBadRequest)
+		return handler.Errorf("backend manager: %s", err).Status(http.StatusBadRequest)
 	}
 	id := namespace + ":" + d.Hex()
 	err = s.requestCache.Start(id, func() error {
@@ -488,11 +463,11 @@ func (s Server) startRemoteBlobDownload(namespace string, d image.Digest) error 
 		return nil
 	})
 	if err == dedup.ErrRequestPending || err == nil {
-		return serverErrorf("").Status(http.StatusAccepted)
+		return handler.ErrorStatus(http.StatusAccepted)
 	} else if err == dedup.ErrNotFound {
-		return serverErrorf("").Status(http.StatusNotFound)
+		return handler.ErrorStatus(http.StatusNotFound)
 	} else if err == dedup.ErrWorkersBusy {
-		return serverErrorf("").Status(http.StatusServiceUnavailable)
+		return handler.ErrorStatus(http.StatusServiceUnavailable)
 	}
 	return err
 }
@@ -500,27 +475,27 @@ func (s Server) startRemoteBlobDownload(namespace string, d image.Digest) error 
 func (s Server) downloadRemoteBlob(c backend.Client, d image.Digest) error {
 	u := uuid.Generate().String()
 	if err := s.fileStore.CreateUploadFile(u, 0); err != nil {
-		return serverErrorf("create upload file: %s", err)
+		return handler.Errorf("create upload file: %s", err)
 	}
 	f, err := s.fileStore.GetUploadFileReadWriter(u)
 	if err != nil {
-		return serverErrorf("get upload writer: %s", err)
+		return handler.Errorf("get upload writer: %s", err)
 	}
 	if err := c.Download(d.Hex(), f); err != nil {
 		return err
 	}
 	if _, err := f.Seek(0, 0); err != nil {
-		return serverErrorf("seek: %s", err)
+		return handler.Errorf("seek: %s", err)
 	}
 	fd, err := image.NewDigester().FromReader(f)
 	if err != nil {
-		return serverErrorf("compute digest: %s", err)
+		return handler.Errorf("compute digest: %s", err)
 	}
 	if fd != d {
-		return serverErrorf("invalid remote blob digest: got %s, expected %s", fd, d)
+		return handler.Errorf("invalid remote blob digest: got %s, expected %s", fd, d)
 	}
 	if err := s.fileStore.MoveUploadFileToCache(u, d.Hex()); err != nil {
-		return serverErrorf("move upload file to cache: %s", err)
+		return handler.Errorf("move upload file to cache: %s", err)
 	}
 	return nil
 }
@@ -528,7 +503,7 @@ func (s Server) downloadRemoteBlob(c backend.Client, d image.Digest) error {
 func (s Server) replicateBlob(d image.Digest) error {
 	locs, err := s.getLocations(d)
 	if err != nil {
-		return serverErrorf("get locations: %s", err)
+		return handler.Errorf("get locations: %s", err)
 	}
 
 	var mu sync.Mutex
@@ -557,14 +532,14 @@ func (s Server) replicateBlob(d image.Digest) error {
 func (s Server) pushBlob(loc string, d image.Digest) error {
 	info, err := s.fileStore.GetCacheFileStat(d.Hex())
 	if err != nil {
-		return serverErrorf("cache stat: %s", err)
+		return handler.Errorf("cache stat: %s", err)
 	}
 	f, err := s.fileStore.GetCacheFileReader(d.Hex())
 	if err != nil {
-		return serverErrorf("get cache reader: %s", err)
+		return handler.Errorf("get cache reader: %s", err)
 	}
 	if err := s.clientProvider.Provide(loc).PushBlob(d, f, info.Size()); err != nil {
-		return serverErrorf("push blob: %s", err)
+		return handler.Errorf("push blob: %s", err)
 	}
 	return nil
 }
@@ -572,20 +547,20 @@ func (s Server) pushBlob(loc string, d image.Digest) error {
 func (s Server) generateMetaInfo(d image.Digest) ([]byte, error) {
 	info, err := s.fileStore.GetCacheFileStat(d.Hex())
 	if err != nil {
-		return nil, serverErrorf("cache stat: %s", err)
+		return nil, handler.Errorf("cache stat: %s", err)
 	}
 	f, err := s.fileStore.GetCacheFileReader(d.Hex())
 	if err != nil {
-		return nil, serverErrorf("get cache file: %s", err)
+		return nil, handler.Errorf("get cache file: %s", err)
 	}
 	pieceLength := s.pieceLengthConfig.get(info.Size())
 	mi, err := torlib.NewMetaInfoFromBlob(d.Hex(), f, pieceLength)
 	if err != nil {
-		return nil, serverErrorf("create metainfo: %s", err)
+		return nil, handler.Errorf("create metainfo: %s", err)
 	}
 	raw, err := mi.Serialize()
 	if err != nil {
-		return nil, serverErrorf("serialize metainfo: %s", err)
+		return nil, handler.Errorf("serialize metainfo: %s", err)
 	}
 	return raw, nil
 }
@@ -594,16 +569,16 @@ func (s Server) generateMetaInfo(d image.Digest) ([]byte, error) {
 func parseDigest(r *http.Request) (digest image.Digest, err error) {
 	d := chi.URLParam(r, "digest")
 	if len(d) == 0 {
-		return digest, serverErrorf("empty digest").Status(http.StatusBadRequest)
+		return digest, handler.Errorf("empty digest").Status(http.StatusBadRequest)
 	}
 	digestRaw, err := url.PathUnescape(d)
 	if err != nil {
-		return digest, serverErrorf(
+		return digest, handler.Errorf(
 			"cannot unescape digest %q: %s", d, err).Status(http.StatusBadRequest)
 	}
 	digest, err = image.NewDigestFromString(digestRaw)
 	if err != nil {
-		return digest, serverErrorf(
+		return digest, handler.Errorf(
 			"cannot parse digest %q: %s", digestRaw, err).Status(http.StatusBadRequest)
 	}
 	return digest, nil
@@ -613,10 +588,10 @@ func parseDigest(r *http.Request) (digest image.Digest, err error) {
 func parseUUID(r *http.Request) (string, error) {
 	u := chi.URLParam(r, "uuid")
 	if len(u) == 0 {
-		return "", serverErrorf("empty uuid").Status(http.StatusBadRequest)
+		return "", handler.Errorf("empty uuid").Status(http.StatusBadRequest)
 	}
 	if _, err := uuid.Parse(u); err != nil {
-		return "", serverErrorf("cannot parse uuid %q: %s", u, err).Status(http.StatusBadRequest)
+		return "", handler.Errorf("cannot parse uuid %q: %s", u, err).Status(http.StatusBadRequest)
 	}
 	return u, nil
 }
@@ -624,23 +599,23 @@ func parseUUID(r *http.Request) (string, error) {
 func parseContentRange(h http.Header) (start, end int64, err error) {
 	contentRange := h.Get("Content-Range")
 	if len(contentRange) == 0 {
-		return 0, 0, serverErrorf("no Content-Range header").Status(http.StatusBadRequest)
+		return 0, 0, handler.Errorf("no Content-Range header").Status(http.StatusBadRequest)
 	}
 	parts := strings.Split(contentRange, "-")
 	if len(parts) != 2 {
-		return 0, 0, serverErrorf(
+		return 0, 0, handler.Errorf(
 			"cannot parse Content-Range header %q: expected format \"start-end\"", contentRange).
 			Status(http.StatusBadRequest)
 	}
 	start, err = strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
-		return 0, 0, serverErrorf(
+		return 0, 0, handler.Errorf(
 			"cannot parse start of range in Content-Range header %q: %s", contentRange, err).
 			Status(http.StatusBadRequest)
 	}
 	end, err = strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
-		return 0, 0, serverErrorf(
+		return 0, 0, handler.Errorf(
 			"cannot parse end of range in Content-Range header %q: %s", contentRange, err).
 			Status(http.StatusBadRequest)
 	}
@@ -652,7 +627,7 @@ func parseContentRange(h http.Header) (start, end int64, err error) {
 func (s Server) getLocations(d image.Digest) ([]string, error) {
 	nodes, err := s.hashState.GetOrderedNodes(d.ShardID(), s.config.NumReplica)
 	if err != nil || len(nodes) == 0 {
-		return nil, serverErrorf("failed to calculate hash for digest %q: %s", d, err)
+		return nil, handler.Errorf("failed to calculate hash for digest %q: %s", d, err)
 	}
 	var locs []string
 	for _, node := range nodes {
@@ -673,7 +648,7 @@ func (s Server) redirectByDigest(d image.Digest) error {
 			return nil
 		}
 	}
-	return serverErrorf("redirecting to correct nodes").
+	return handler.Errorf("redirecting to correct nodes").
 		Status(http.StatusTemporaryRedirect).
 		Header("Origin-Locations", strings.Join(locs, ","))
 }
@@ -681,9 +656,9 @@ func (s Server) redirectByDigest(d image.Digest) error {
 func (s Server) ensureDigestExists(d image.Digest) error {
 	if _, err := s.fileStore.GetCacheFileStat(d.Hex()); err != nil {
 		if os.IsNotExist(err) {
-			return newBlobNotFoundError(d, err)
+			return handler.ErrorStatus(http.StatusNotFound)
 		}
-		return serverErrorf("failed to look up blob data for digest %q: %s", d, err)
+		return handler.Errorf("failed to look up blob data for digest %q: %s", d, err)
 	}
 	return nil
 }
@@ -691,10 +666,10 @@ func (s Server) ensureDigestExists(d image.Digest) error {
 func (s Server) ensureDigestNotExists(d image.Digest) error {
 	_, err := s.fileStore.GetCacheFileStat(d.Hex())
 	if err == nil {
-		return serverErrorf("digest %q already exists", d).Status(http.StatusConflict)
+		return handler.Errorf("digest %q already exists", d).Status(http.StatusConflict)
 	}
 	if err != nil && !os.IsNotExist(err) {
-		return serverErrorf("failed to look up blob data for digest %q: %s", d, err)
+		return handler.Errorf("failed to look up blob data for digest %q: %s", d, err)
 	}
 	return nil
 }
@@ -702,9 +677,9 @@ func (s Server) ensureDigestNotExists(d image.Digest) error {
 func (s Server) downloadBlob(d image.Digest, w http.ResponseWriter) error {
 	f, err := s.fileStore.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
-		return newBlobNotFoundError(d, err)
+		return handler.ErrorStatus(http.StatusNotFound)
 	} else if err != nil {
-		return serverErrorf("cannot read blob data for digest %q: %s", d, err)
+		return handler.Errorf("cannot read blob data for digest %q: %s", d, err)
 	}
 	defer f.Close()
 
@@ -713,7 +688,7 @@ func (s Server) downloadBlob(d image.Digest, w http.ResponseWriter) error {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return serverErrorf("cannot read digest %q: %s", d, err)
+			return handler.Errorf("cannot read digest %q: %s", d, err)
 		}
 	}
 
@@ -723,9 +698,9 @@ func (s Server) downloadBlob(d image.Digest, w http.ResponseWriter) error {
 func (s Server) deleteBlob(d image.Digest) error {
 	if err := s.fileStore.MoveCacheFileToTrash(d.Hex()); err != nil {
 		if os.IsNotExist(err) {
-			return newBlobNotFoundError(d, err)
+			return handler.ErrorStatus(http.StatusNotFound)
 		}
-		return serverErrorf("cannot delete blob data for digest %q: %s", d, err)
+		return handler.Errorf("cannot delete blob data for digest %q: %s", d, err)
 	}
 	return nil
 }
@@ -733,7 +708,7 @@ func (s Server) deleteBlob(d image.Digest) error {
 func (s Server) createUpload(d image.Digest) (string, error) {
 	uploadUUID := uuid.Generate().String()
 	if err := s.fileStore.CreateUploadFile(uploadUUID, 0); err != nil {
-		return "", serverErrorf("failed to create upload file for digest %q: %s", d, err)
+		return "", handler.Errorf("failed to create upload file for digest %q: %s", d, err)
 	}
 	return uploadUUID, nil
 }
@@ -743,24 +718,24 @@ func (s Server) uploadBlobChunk(uploadUUID string, b io.ReadCloser, start, end i
 	f, err := s.fileStore.GetUploadFileReadWriter(uploadUUID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return newUploadNotFoundError(uploadUUID, err)
+			return handler.ErrorStatus(http.StatusNotFound)
 		}
-		return serverErrorf("cannot get reader for upload %q: %s", uploadUUID, err)
+		return handler.Errorf("cannot get reader for upload %q: %s", uploadUUID, err)
 	}
 	defer f.Close()
 	if _, err := f.Seek(start, 0); err != nil {
-		return serverErrorf(
+		return handler.Errorf(
 			"cannot continue upload for %q from offset %d: %s", uploadUUID, start, err).
 			Status(http.StatusBadRequest)
 	}
 	defer b.Close()
 	n, err := io.Copy(f, b)
 	if err != nil {
-		return serverErrorf("failed to upload %q: %s", uploadUUID, err)
+		return handler.Errorf("failed to upload %q: %s", uploadUUID, err)
 	}
 	expected := end - start
 	if n != expected {
-		return serverErrorf(
+		return handler.Errorf(
 			"upload data length for %q doesn't match content range: got %d, expected %d",
 			uploadUUID, n, expected).
 			Status(http.StatusBadRequest)
@@ -774,25 +749,25 @@ func (s Server) commitUpload(d image.Digest, uploadUUID string) error {
 	f, err := s.fileStore.GetUploadFileReader(uploadUUID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return newUploadNotFoundError(uploadUUID, err)
+			return handler.ErrorStatus(http.StatusNotFound)
 		}
-		return serverErrorf("cannot get reader for upload %q: %s", uploadUUID, err)
+		return handler.Errorf("cannot get reader for upload %q: %s", uploadUUID, err)
 	}
 	computedDigest, err := digester.FromReader(f)
 	if err != nil {
-		return serverErrorf("failed to calculate digest for upload %q: %s", uploadUUID, err)
+		return handler.Errorf("failed to calculate digest for upload %q: %s", uploadUUID, err)
 	}
 	if computedDigest != d {
-		return serverErrorf("computed digest %q doesn't match parameter %q", computedDigest, d).
+		return handler.Errorf("computed digest %q doesn't match parameter %q", computedDigest, d).
 			Status(http.StatusBadRequest)
 	}
 
 	// Commit data.
 	if err := s.fileStore.MoveUploadFileToCache(uploadUUID, d.Hex()); err != nil {
 		if os.IsExist(err) {
-			return serverErrorf("digest %q already exists", d).Status(http.StatusConflict)
+			return handler.Errorf("digest %q already exists", d).Status(http.StatusConflict)
 		}
-		return serverErrorf("failed to commit digest %q for upload %q: %s", d, uploadUUID, err)
+		return handler.Errorf("failed to commit digest %q for upload %q: %s", d, uploadUUID, err)
 	}
 
 	return nil
