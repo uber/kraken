@@ -1,10 +1,12 @@
 package storage
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
 	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/utils/randutil"
 	"github.com/garyburd/redigo/redis"
 	"github.com/stretchr/testify/require"
 )
@@ -233,4 +235,47 @@ func TestRedisStorageOriginsExpiration(t *testing.T) {
 
 	result, err = s.GetOrigins(infoHash)
 	require.Equal(err, ErrNoOrigins)
+}
+
+func TestRedisStorageSetAndGetMetaInfo(t *testing.T) {
+	require := require.New(t)
+
+	config := redisConfigFixture()
+
+	flushdb(config)
+
+	s, err := NewRedisStorage(config)
+	require.NoError(err)
+
+	mi := torlib.MetaInfoFixture()
+
+	require.NoError(s.SetMetaInfo(mi))
+
+	raw, err := s.GetMetaInfo(mi.Name())
+	require.NoError(err)
+	result, err := torlib.DeserializeMetaInfo(raw)
+	require.NoError(err)
+	require.Equal(mi, result)
+}
+
+func TestRedisStorageSetMetaInfoConflict(t *testing.T) {
+	require := require.New(t)
+
+	config := redisConfigFixture()
+
+	flushdb(config)
+
+	s, err := NewRedisStorage(config)
+	require.NoError(err)
+
+	blob := bytes.NewReader(randutil.Blob(32))
+
+	// Two metainfos for same file with different piece lengths.
+	mi1, err := torlib.NewMetaInfoFromBlob("some_name", blob, 1)
+	require.NoError(err)
+	mi2, err := torlib.NewMetaInfoFromBlob("some_name", blob, 2)
+	require.NoError(err)
+
+	require.NoError(s.SetMetaInfo(mi1))
+	require.Equal(ErrExists, s.SetMetaInfo(mi2))
 }

@@ -11,7 +11,7 @@ func TestRedisStoresBackedBySameInstance(t *testing.T) {
 
 	cfg := configFixture()
 	cfg.PeerStore = "redis"
-	cfg.TorrentStore = "redis"
+	cfg.MetaInfoStore = "redis"
 
 	storeProvider := NewStoreProvider(cfg, nemoConfigFixture())
 
@@ -35,12 +35,12 @@ func TestMySQLStoresBackedBySameInstance(t *testing.T) {
 
 	cfg := configFixture()
 	cfg.PeerStore = "mysql"
-	cfg.TorrentStore = "mysql"
+	cfg.MetaInfoStore = "mysql"
 	cfg.ManifestStore = "mysql"
 
 	storeProvider := NewStoreProvider(cfg, nemoConfigFixture())
 
-	torrentStore, err := storeProvider.GetTorrentStore()
+	torrentStore, err := storeProvider.GetMetaInfoStore()
 	require.NoError(err)
 
 	manifestStore, err := storeProvider.GetManifestStore()

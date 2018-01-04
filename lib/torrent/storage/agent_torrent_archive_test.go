@@ -1,12 +1,15 @@
 package storage
 
 import (
+	"errors"
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
+	"code.uber.internal/infra/kraken/utils/backoff"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,12 +19,12 @@ func TestAgentTorrentArchiveStatBitfield(t *testing.T) {
 	mocks, cleanup := newTorrentArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newAgentTorrentArchive()
+	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{})
 
 	tf := torlib.CustomTestTorrentFileFixture(4, 1)
 	mi := tf.MetaInfo
 
-	mocks.metaInfoClient.EXPECT().Download(mi.Name()).Return(mi, nil).Times(1)
+	mocks.metaInfoClient.EXPECT().Download("noexist", mi.Name()).Return(mi, nil).Times(1)
 
 	tor, err := archive.GetTorrent(mi.Name())
 	require.NoError(tor.WritePiece(tf.Content[2:3], 2))
@@ -38,7 +41,7 @@ func TestAgentTorrentArchiveStatNotExist(t *testing.T) {
 	mocks, cleanup := newTorrentArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newAgentTorrentArchive()
+	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{})
 
 	name := torlib.MetaInfoFixture().Name()
 
@@ -52,11 +55,11 @@ func TestAgentTorrentArchiveGetTorrent(t *testing.T) {
 	mocks, cleanup := newTorrentArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newAgentTorrentArchive()
+	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{})
 
 	mi := torlib.MetaInfoFixture()
 
-	mocks.metaInfoClient.EXPECT().Download(mi.Name()).Return(mi, nil)
+	mocks.metaInfoClient.EXPECT().Download("noexist", mi.Name()).Return(mi, nil)
 
 	tor, err := archive.GetTorrent(mi.Name())
 	require.NoError(err)
@@ -81,11 +84,11 @@ func TestAgentTorrentArchiveGetTorrentAndDeleteTorrentNotFound(t *testing.T) {
 	mocks, cleanup := newTorrentArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newAgentTorrentArchive()
+	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{})
 
 	mi := torlib.MetaInfoFixture()
 
-	mocks.metaInfoClient.EXPECT().Download(mi.Name()).Return(nil, metainfoclient.ErrNotFound)
+	mocks.metaInfoClient.EXPECT().Download("noexist", mi.Name()).Return(nil, metainfoclient.ErrNotFound)
 
 	tor, err := archive.GetTorrent(mi.Name())
 	require.Error(err)
@@ -99,11 +102,11 @@ func TestAgentTorrentArchiveDeleteTorrent(t *testing.T) {
 	mocks, cleanup := newTorrentArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newAgentTorrentArchive()
+	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{})
 
 	mi := torlib.MetaInfoFixture()
 
-	mocks.metaInfoClient.EXPECT().Download(mi.Name()).Return(mi, nil)
+	mocks.metaInfoClient.EXPECT().Download("noexist", mi.Name()).Return(mi, nil)
 
 	tor, err := archive.GetTorrent(mi.Name())
 	require.NoError(err)
@@ -118,12 +121,12 @@ func TestAgentTorrentArchiveConcurrentGet(t *testing.T) {
 	mocks, cleanup := newTorrentArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newAgentTorrentArchive()
+	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{})
 
 	mi := torlib.MetaInfoFixture()
 
 	// Allow any times for concurrency below.
-	mocks.metaInfoClient.EXPECT().Download(mi.Name()).Return(mi, nil).AnyTimes()
+	mocks.metaInfoClient.EXPECT().Download("noexist", mi.Name()).Return(mi, nil).AnyTimes()
 
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
@@ -136,4 +139,63 @@ func TestAgentTorrentArchiveConcurrentGet(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+func TestAgentTorrentArchiveDownloadMetaInfoRetryTimeout(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newTorrentArchiveMocks(t)
+	defer cleanup()
+
+	config := AgentTorrentArchiveConfig{
+		DownloadMetaInfoTimeout: 5 * time.Second,
+		DownloadMetaInfoBackoff: backoff.Config{
+			Min:    1 * time.Second,
+			Max:    10 * time.Second,
+			Factor: 2,
+		},
+	}
+	archive := mocks.newAgentTorrentArchive(config)
+
+	name := torlib.MetaInfoFixture().Name()
+
+	mocks.metaInfoClient.EXPECT().Download("noexist", name).Return(nil, metainfoclient.ErrRetry).AnyTimes()
+
+	var elapsed time.Duration
+	errc := make(chan error)
+	go func() {
+		start := time.Now()
+		_, err := archive.GetTorrent(name)
+		elapsed = time.Since(start)
+		errc <- err
+	}()
+
+	select {
+	case err := <-errc:
+		require.Error(err)
+		require.InDelta(config.DownloadMetaInfoTimeout, 500*time.Millisecond, float64(elapsed))
+	case <-time.After(2 * config.DownloadMetaInfoTimeout):
+		require.Fail("Download did not timeout")
+	}
+}
+
+func TestAgentTorrentArchiveDownloadMetaInfoNonRetryErrorsFailFast(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newTorrentArchiveMocks(t)
+	defer cleanup()
+
+	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{
+		DownloadMetaInfoTimeout: 5 * time.Second,
+	})
+
+	name := torlib.MetaInfoFixture().Name()
+
+	mocks.metaInfoClient.EXPECT().Download("noexist", name).Return(nil, errors.New("some error")).AnyTimes()
+
+	start := time.Now()
+	_, err := archive.GetTorrent(name)
+	elapsed := time.Since(start)
+	require.Error(err)
+	require.True(elapsed < time.Second)
 }

@@ -11,7 +11,7 @@ import (
 // Config defines storage configuration.
 type Config struct {
 	PeerStore     string      `yaml:"peer_store"`
-	TorrentStore  string      `yaml:"torrent_store"`
+	MetaInfoStore string      `yaml:"metainfo_store"`
 	ManifestStore string      `yaml:"manifest_store"`
 	Redis         RedisConfig `yaml:"redis"`
 	MySQL         MySQLConfig `yaml:"mysql"`

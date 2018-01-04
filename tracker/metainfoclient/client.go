@@ -1,12 +1,12 @@
 package metainfoclient
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 
+	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/httputil"
@@ -16,12 +16,12 @@ import (
 var (
 	ErrExists   = errors.New("metainfo already exists")
 	ErrNotFound = errors.New("metainfo not found")
+	ErrRetry    = errors.New("request accepted, retry later")
 )
 
 // Client defines operations on torrent metainfo.
 type Client interface {
-	Download(name string) (*torlib.MetaInfo, error)
-	Upload(mi *torlib.MetaInfo) error
+	Download(namespace string, name string) (*torlib.MetaInfo, error)
 }
 
 type client struct {
@@ -40,19 +40,28 @@ func Default(servers serverset.Set) Client {
 }
 
 // Download returns the MetaInfo associated with name. Returns ErrNotFound if
-// no torrent exists under name.
-func (c *client) Download(name string) (*torlib.MetaInfo, error) {
+// no torrent exists under name, or ErrRetry if the metainfo is still generating.
+func (c *client) Download(namespace string, name string) (*torlib.MetaInfo, error) {
+	d := image.NewSHA256DigestFromHex(name)
 	var err error
 	for it := c.servers.Iter(); it.HasNext(); it.Next() {
 		var resp *http.Response
 		resp, err = httputil.Get(
-			fmt.Sprintf("http://%s/info?name=%s", it.Addr(), name),
+			fmt.Sprintf("http://%s/namespace/%s/blobs/%s/metainfo", it.Addr(), namespace, d),
 			httputil.SendTimeout(c.config.Timeout))
 		if err != nil {
-			if httputil.IsNotFound(err) {
-				return nil, ErrNotFound
+			switch v := err.(type) {
+			case httputil.NetworkError:
+				continue
+			case httputil.StatusError:
+				switch v.Status {
+				case http.StatusAccepted:
+					err = ErrRetry
+				case http.StatusNotFound:
+					err = ErrNotFound
+				}
 			}
-			continue
+			return nil, err
 		}
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
@@ -65,27 +74,4 @@ func (c *client) Download(name string) (*torlib.MetaInfo, error) {
 		return mi, nil
 	}
 	return nil, err
-}
-
-// Upload uploads mi to storage. Returns ErrExists if there is a name conflict
-// for mi.
-func (c *client) Upload(mi *torlib.MetaInfo) error {
-	b, err := mi.Serialize()
-	if err != nil {
-		return fmt.Errorf("error serializing metainfo: %s", err)
-	}
-	for it := c.servers.Iter(); it.HasNext(); it.Next() {
-		_, err = httputil.Post(
-			fmt.Sprintf("http://%s/info", it.Addr()),
-			httputil.SendBody(bytes.NewBuffer(b)),
-			httputil.SendTimeout(c.config.Timeout))
-		if err != nil {
-			if httputil.IsConflict(err) {
-				return ErrExists
-			}
-			continue
-		}
-		return nil
-	}
-	return err
 }

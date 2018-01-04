@@ -83,6 +83,9 @@ func New(
 		return nil, fmt.Errorf("piece length config: %s", err)
 	}
 
+	rc := dedup.NewRequestCache(config.RequestCache, clock.New())
+	rc.SetNotFound(func(err error) bool { return err == backend.ErrBlobNotFound })
+
 	return &Server{
 		config:            config,
 		label:             label,
@@ -93,7 +96,7 @@ func New(
 		clientProvider:    clientProvider,
 		stats:             stats.SubScope("blobserver"),
 		backendManager:    backendManager,
-		requestCache:      dedup.NewRequestCache(config.RequestCache, clock.New()),
+		requestCache:      rc,
 		pieceLengthConfig: plConfig,
 		pctx:              pctx,
 	}, nil
@@ -450,21 +453,17 @@ func (s Server) startRemoteBlobDownload(namespace string, d image.Digest) error 
 	id := namespace + ":" + d.Hex()
 	err = s.requestCache.Start(id, func() error {
 		if err := s.downloadRemoteBlob(c, d); err != nil {
-			if err == backend.ErrBlobNotFound {
-				return dedup.ErrNotFound
-			}
 			return err
 		}
-		// Replicate the blob within the request cache worker, but don't return any
-		// errors because we only want to cache storage backend errors.
 		if err := s.replicateBlob(d); err != nil {
+			// Don't return error here as we only want to cache storage backend errors.
 			log.With("blob", d.Hex()).Errorf("Error replicating remote blob: %s", err)
 		}
 		return nil
 	})
 	if err == dedup.ErrRequestPending || err == nil {
 		return handler.ErrorStatus(http.StatusAccepted)
-	} else if err == dedup.ErrNotFound {
+	} else if err == backend.ErrBlobNotFound {
 		return handler.ErrorStatus(http.StatusNotFound)
 	} else if err == dedup.ErrWorkersBusy {
 		return handler.ErrorStatus(http.StatusServiceUnavailable)

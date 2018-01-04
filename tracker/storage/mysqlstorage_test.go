@@ -37,25 +37,25 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestMySQLGetTorrent(t *testing.T) {
+func TestMySQLGetMetaInfo(t *testing.T) {
 	assert := require.New(t)
 	name := "torrent0"
 	metaInfo := "this is a test"
 	rows := sqlmock.NewRows([]string{"metaInfo"}).AddRow(metaInfo)
 	mock.ExpectQuery("select metaInfo from torrent where").WithArgs(name).WillReturnRows(rows)
 
-	str, err := storage.GetTorrent(name)
+	b, err := storage.GetMetaInfo(name)
 	assert.NoError(err)
-	assert.Equal(metaInfo, str)
+	assert.Equal(metaInfo, string(b))
 	assert.NoError(mock.ExpectationsWereMet())
 
 	mock.ExpectQuery("select metaInfo from torrent where").WithArgs(name).WillReturnRows(sqlmock.NewRows([]string{"metaInfo"}))
-	_, err = storage.GetTorrent(name)
+	_, err = storage.GetMetaInfo(name)
 	assert.Error(ErrNotFound, err)
 	assert.NoError(mock.ExpectationsWereMet())
 }
 
-func TestMySQLCreateTorrent(t *testing.T) {
+func TestMySQLSetMetaInfo(t *testing.T) {
 	assert := require.New(t)
 	mi := torlib.MetaInfoFixture()
 	metaRaw, err := mi.Serialize()
@@ -68,7 +68,7 @@ func TestMySQLCreateTorrent(t *testing.T) {
 		metaRaw,
 	).WillReturnResult(sqlmock.NewResult(1, 1))
 
-	assert.NoError(storage.CreateTorrent(mi))
+	assert.NoError(storage.SetMetaInfo(mi))
 	assert.NoError(mock.ExpectationsWereMet())
 }
 
@@ -218,6 +218,6 @@ func TestMySQLCreateTwoTorrentsWithSameNameReturnsErrExist(t *testing.T) {
 	m2 := torlib.MetaInfoFixture()
 	m2.Info.Name = m1.Info.Name
 
-	require.NoError(s.CreateTorrent(m1))
-	require.Equal(ErrExists, s.CreateTorrent(m2))
+	require.NoError(s.SetMetaInfo(m1))
+	require.Equal(ErrExists, s.SetMetaInfo(m2))
 }

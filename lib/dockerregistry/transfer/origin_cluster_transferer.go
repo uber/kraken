@@ -11,7 +11,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/errutil"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -93,25 +92,6 @@ func (t *OriginClusterTransferer) Download(name string) (store.FileReader, error
 	return nil, fmt.Errorf("failed to pull blob from all locations: %s", errutil.Join(errs))
 }
 
-// uploadMetaInfo creates and uploads torrent metainfo for blob. No-ops if metainfo
-// already exists for blob.
-func (t *OriginClusterTransferer) uploadMetaInfo(d image.Digest, blobCloner store.FileReaderCloner) error {
-	blob, err := blobCloner.Clone()
-	if err != nil {
-		return fmt.Errorf("clone blob io: %s", err)
-	}
-	defer blob.Close()
-
-	mi, err := torlib.NewMetaInfoFromBlob(d.Hex(), blob, t.config.TorrentPieceLength)
-	if err != nil {
-		return fmt.Errorf("create metainfo: %s", err)
-	}
-	if err := t.metaInfoClient.Upload(mi); err != nil && err != metainfoclient.ErrExists {
-		return fmt.Errorf("post metainfo: %s", err)
-	}
-	return nil
-}
-
 func (t *OriginClusterTransferer) pushBlob(
 	client blobclient.Client, d image.Digest, blobCloner store.FileReaderCloner, size int64) error {
 
@@ -169,10 +149,6 @@ func (t *OriginClusterTransferer) Upload(name string, blobCloner store.FileReade
 			log.Errorf("Upload error: %s", err)
 		}
 	}()
-
-	if err := t.uploadMetaInfo(d, blobCloner); err != nil {
-		return fmt.Errorf("upload torrent: %s", err)
-	}
 
 	var mu sync.Mutex
 	var errs []error

@@ -6,17 +6,20 @@ import (
 	"code.uber.internal/infra/kraken/torlib"
 )
 
-type testClient struct {
+// TestClient is a thread-safe, in-memory client for simulating downloads.
+type TestClient struct {
 	sync.Mutex
 	m map[string]*torlib.MetaInfo
 }
 
-// TestClient returns an thread-safe, in-memory client for simulating upload / download.
-func TestClient() Client {
-	return &testClient{m: make(map[string]*torlib.MetaInfo)}
+// NewTestClient returns a new TestClient.
+func NewTestClient() *TestClient {
+	return &TestClient{m: make(map[string]*torlib.MetaInfo)}
 }
 
-func (c *testClient) Upload(mi *torlib.MetaInfo) error {
+// Upload "uploads" metainfo that can then be subsequently downloaded. Upload
+// is not supported in the Client interface and exists soley for testing purposes.
+func (c *TestClient) Upload(mi *torlib.MetaInfo) error {
 	c.Lock()
 	defer c.Unlock()
 	if _, ok := c.m[mi.Name()]; ok {
@@ -26,7 +29,8 @@ func (c *testClient) Upload(mi *torlib.MetaInfo) error {
 	return nil
 }
 
-func (c *testClient) Download(name string) (*torlib.MetaInfo, error) {
+// Download returns the metainfo for digest. Ignores namespace.
+func (c *TestClient) Download(namespace string, name string) (*torlib.MetaInfo, error) {
 	c.Lock()
 	defer c.Unlock()
 	mi, ok := c.m[name]

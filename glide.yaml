@@ -58,6 +58,7 @@ import:
 - package: github.com/aws/aws-sdk-go
   version: ^1.12.48
 - package: github.com/c2h5oh/datasize
+- package: github.com/jpillora/backoff
 testImport:
 - package: github.com/stretchr/testify
   version: ^1.1.4

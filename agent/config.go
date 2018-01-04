@@ -8,18 +8,20 @@ import (
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
+	torrentstorage "code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/metrics"
 )
 
 // Config defines agent configuration.
 type Config struct {
-	ZapLogging  zap.Config            `yaml:"zap"`
-	Metrics     metrics.Config        `yaml:"metrics"`
-	Store       store.Config          `yaml:"store"`
-	Registry    dockerregistry.Config `yaml:"registry"`
-	Torrent     torrent.Config        `yaml:"torrent"`
-	Tracker     TrackerConfig         `yaml:"tracker"`
-	AgentServer agentserver.Config    `yaml:"agentserver"`
+	ZapLogging          zap.Config                               `yaml:"zap"`
+	Metrics             metrics.Config                           `yaml:"metrics"`
+	Store               store.Config                             `yaml:"store"`
+	Registry            dockerregistry.Config                    `yaml:"registry"`
+	Torrent             torrent.Config                           `yaml:"torrent"`
+	Tracker             TrackerConfig                            `yaml:"tracker"`
+	AgentServer         agentserver.Config                       `yaml:"agentserver"`
+	AgentTorrentArchive torrentstorage.AgentTorrentArchiveConfig `yaml:"agent_torrent_archive"`
 }
 
 // TrackerConfig defines configuration for agent's dependency on tracker.

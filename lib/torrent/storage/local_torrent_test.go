@@ -102,7 +102,7 @@ func TestLocalTorrentWriteComplete(t *testing.T) {
 	require.Equal(int64(1), tor.BytesDownloaded())
 
 	// Duplicate write should detect piece is complete.
-	require.Error(ErrPieceComplete, tor.WritePiece(data[:1], 0))
+	require.Equal(ErrPieceComplete, tor.WritePiece(data[:1], 0))
 }
 
 func TestLocalTorrentWriteMultiplePieceConcurrent(t *testing.T) {
@@ -243,7 +243,7 @@ func TestLocalTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
 	<-done
 
 	// Duplicate write should detect piece is complete.
-	require.Error(ErrPieceComplete, tor.WritePiece(tf.Content, 0))
+	require.Equal(ErrPieceComplete, tor.WritePiece(tf.Content, 0))
 }
 
 func TestLocalTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {

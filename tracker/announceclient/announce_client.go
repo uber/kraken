@@ -57,7 +57,10 @@ func (c *client) Announce(name string, h torlib.InfoHash, complete bool) ([]torl
 			fmt.Sprintf("http://%s/announce?%s", it.Addr(), q),
 			httputil.SendTimeout(c.config.Timeout))
 		if err != nil {
-			continue
+			if _, ok := err.(httputil.NetworkError); ok {
+				continue
+			}
+			return nil, err
 		}
 		var b struct {
 			Peers []torlib.PeerInfo `bencode:"peers"`

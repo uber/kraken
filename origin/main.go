@@ -11,6 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
+	torrentstorage "code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobserver"
@@ -58,7 +59,7 @@ func main() {
 	stats = stats.SubScope("kraken.origin")
 
 	// Initialize file storage
-	fileStore, err := store.NewLocalFileStore(&config.LocalStore, true)
+	fs, err := store.NewLocalFileStore(&config.LocalStore, true)
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
@@ -78,13 +79,15 @@ func main() {
 			log.Fatalf("Error creating tracker round robin: %s", err)
 		}
 
+		archive := torrentstorage.NewOriginTorrentArchive(fs, metainfoclient.Default(trackers))
+
 		c, err := torrent.NewSchedulerClient(
 			config.Torrent,
-			fileStore,
+			fs,
 			stats,
 			pctx,
 			announceclient.Default(pctx, trackers),
-			metainfoclient.Default(trackers))
+			archive)
 		if err != nil {
 			log.Fatalf("Failed to create scheduler client: %s", err)
 		}
@@ -128,7 +131,7 @@ func main() {
 		config.BlobServer,
 		stats,
 		addr,
-		fileStore,
+		fs,
 		blobClientProvider,
 		pctx,
 		backendManager)

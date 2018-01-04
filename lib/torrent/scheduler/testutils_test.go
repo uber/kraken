@@ -22,9 +22,9 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
+	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	trackerservice "code.uber.internal/infra/kraken/tracker/service"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -79,7 +79,7 @@ func configFixture() Config {
 
 type testMocks struct {
 	ctrl           *gomock.Controller
-	metaInfoClient *mockmetainfoclient.MockClient
+	metaInfoClient *metainfoclient.TestClient
 	trackerAddr    string
 	cleanup        *testutil.Cleanup
 }
@@ -95,7 +95,7 @@ func newTestMocks(t gomock.TestReporter) (*testMocks, func()) {
 
 	return &testMocks{
 		ctrl:           ctrl,
-		metaInfoClient: mockmetainfoclient.NewMockClient(ctrl),
+		metaInfoClient: metainfoclient.NewTestClient(),
 		trackerAddr:    trackerAddr,
 		cleanup:        &cleanup,
 	}, cleanup.Run
@@ -118,7 +118,8 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 	fs, c := store.LocalFileStoreFixture()
 	cleanup.Add(c)
 
-	ta := storage.NewAgentTorrentArchive(fs, m.metaInfoClient)
+	ta := storage.NewAgentTorrentArchive(
+		storage.AgentTorrentArchiveConfig{}, fs, m.metaInfoClient)
 
 	stats := tally.NewTestScope("", nil)
 	pctx := peercontext.PeerContext{

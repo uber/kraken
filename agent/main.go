@@ -16,6 +16,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
+	torrentstorage "code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
@@ -56,7 +57,7 @@ func main() {
 	}
 	defer closer.Close()
 
-	store, err := store.NewLocalFileStore(&config.Store, config.Registry.TagDeletion.Enable)
+	fs, err := store.NewLocalFileStore(&config.Store, config.Registry.TagDeletion.Enable)
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
@@ -66,13 +67,16 @@ func main() {
 		log.Fatalf("Error creating tracker round robin: %s", err)
 	}
 
+	archive := torrentstorage.NewAgentTorrentArchive(
+		config.AgentTorrentArchive, fs, metainfoclient.Default(trackers))
+
 	torrentClient, err := torrent.NewSchedulerClient(
 		config.Torrent,
-		store,
+		fs,
 		stats,
 		pctx,
 		announceclient.Default(pctx, trackers),
-		metainfoclient.Default(trackers))
+		archive)
 	if err != nil {
 		log.Fatalf("Failed to create scheduler client: %s", err)
 		panic(err)
@@ -83,7 +87,7 @@ func main() {
 
 	transferer := transfer.NewAgentTransferer(torrentClient, manifestclient.New(trackers))
 
-	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, store, stats)
+	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)
 	if err != nil {
 		log.Fatalf("Failed to init registry: %s", err)

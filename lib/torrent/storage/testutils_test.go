@@ -28,8 +28,10 @@ func newTorrentArchiveMocks(t *testing.T) (*torrentArchiveMocks, func()) {
 	return &torrentArchiveMocks{fs, metaInfoClient}, cleanup.Run
 }
 
-func (m *torrentArchiveMocks) newAgentTorrentArchive() *AgentTorrentArchive {
-	return NewAgentTorrentArchive(m.fs, m.metaInfoClient)
+func (m *torrentArchiveMocks) newAgentTorrentArchive(
+	config AgentTorrentArchiveConfig) *AgentTorrentArchive {
+
+	return NewAgentTorrentArchive(config, m.fs, m.metaInfoClient)
 }
 
 func (m *torrentArchiveMocks) newOriginTorrentArchive() *OriginTorrentArchive {
