@@ -2,58 +2,91 @@ package service
 
 import (
 	"testing"
+	"time"
 
+	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/serverset"
+	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/utils/httputil"
+	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/golang/mock/gomock"
+	"github.com/pressly/chi"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 )
 
-func TestUploadAndDownloadMetaInfo(t *testing.T) {
+func startMetaInfoServer(h *metaInfoHandler) (addr string, stop func()) {
+	r := chi.NewRouter()
+	h.setRoutes(r, tally.NewTestScope("testing", nil))
+	return testutil.StartServer(r)
+}
+
+func TestMetaInfoHandlerGetFetchesFromOrigin(t *testing.T) {
 	require := require.New(t)
 
-	mocks, finish := newTestMocks(t)
-	defer finish()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	addr, stop := mocks.startServer()
+	mockClusterResolver := mockblobclient.NewMockClusterResolver(ctrl)
+
+	h := newMetaInfoHandler(
+		MetaInfoConfig{}, storage.TestMetaInfoStore(), mockClusterResolver)
+	addr, stop := startMetaInfoServer(h)
 	defer stop()
 
-	client := metainfoclient.Default(serverset.NewSingle(addr))
+	mic := metainfoclient.Default(serverset.NewSingle(addr))
 
+	namespace := "test-namespace"
 	mi := torlib.MetaInfoFixture()
-	serialized, err := mi.Serialize()
-	require.NoError(err)
+	digest := image.NewSHA256DigestFromHex(mi.Name())
 
-	mocks.datastore.EXPECT().CreateTorrent(mi).Return(nil)
+	mockBlobClient := mockblobclient.NewMockClient(ctrl)
+	mockClusterResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockBlobClient}, nil)
+	mockBlobClient.EXPECT().GetMetaInfo(namespace, digest).Return(mi, nil)
 
-	require.NoError(client.Upload(mi))
+	_, err := mic.Download(namespace, digest.Hex())
+	require.Equal(metainfoclient.ErrRetry, err)
 
-	mocks.datastore.EXPECT().GetTorrent(mi.Name()).Return(string(serialized), nil)
-
-	result, err := client.Download(mi.Name())
-	require.NoError(err)
+	var result *torlib.MetaInfo
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		result, err = mic.Download(namespace, digest.Hex())
+		return err == nil
+	}))
 	require.Equal(mi, result)
 }
 
-func TestUploadMetaInfoConflict(t *testing.T) {
+func TestMetaInfoHandlerGetCachesAndPropagatesOriginError(t *testing.T) {
 	require := require.New(t)
 
-	mocks, finish := newTestMocks(t)
-	defer finish()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	addr, stop := mocks.startServer()
+	mockClusterResolver := mockblobclient.NewMockClusterResolver(ctrl)
+
+	h := newMetaInfoHandler(
+		MetaInfoConfig{}, storage.TestMetaInfoStore(), mockClusterResolver)
+	addr, stop := startMetaInfoServer(h)
 	defer stop()
 
-	client := metainfoclient.Default(serverset.NewSingle(addr))
+	mic := metainfoclient.Default(serverset.NewSingle(addr))
 
+	namespace := "test-namespace"
 	mi := torlib.MetaInfoFixture()
+	digest := image.NewSHA256DigestFromHex(mi.Name())
 
-	mocks.datastore.EXPECT().CreateTorrent(mi).Return(nil)
+	mockBlobClient := mockblobclient.NewMockClient(ctrl)
+	mockClusterResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockBlobClient}, nil)
+	mockBlobClient.EXPECT().GetMetaInfo(namespace, digest).Return(mi, httputil.StatusError{Status: 599})
 
-	require.NoError(client.Upload(mi))
+	_, err := mic.Download(namespace, digest.Hex())
+	require.Equal(metainfoclient.ErrRetry, err)
 
-	mocks.datastore.EXPECT().CreateTorrent(mi).Return(storage.ErrExists)
-
-	require.Equal(metainfoclient.ErrExists, client.Upload(mi))
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		_, err := mic.Download(namespace, digest.Hex())
+		return httputil.IsStatus(err, 599)
+	}))
 }

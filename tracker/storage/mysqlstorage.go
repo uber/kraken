@@ -45,21 +45,21 @@ func (s *MySQLStorage) RunMigration() error {
 	return goose.Run("up", s.db.DB, s.config.MigrationsDir)
 }
 
-// GetTorrent reads torrent's metadata identified by a torrent name
-func (s *MySQLStorage) GetTorrent(name string) (string, error) {
+// GetMetaInfo reads torrent's metadata identified by a torrent name
+func (s *MySQLStorage) GetMetaInfo(name string) ([]byte, error) {
 	var metainfo string
 	err := s.db.Get(&metainfo, "select metaInfo from torrent where name=?", name)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return "", ErrNotFound
+			return nil, ErrNotFound
 		}
-		return "", err
+		return nil, err
 	}
-	return metainfo, err
+	return []byte(metainfo), err
 }
 
-// CreateTorrent creates a torrent in storage
-func (s *MySQLStorage) CreateTorrent(mi *torlib.MetaInfo) error {
+// SetMetaInfo creates a torrent in storage
+func (s *MySQLStorage) SetMetaInfo(mi *torlib.MetaInfo) error {
 	serialized, err := mi.Serialize()
 	if err != nil {
 		return fmt.Errorf("serialize metainfo: %s", err)

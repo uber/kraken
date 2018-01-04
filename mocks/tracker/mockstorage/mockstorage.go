@@ -45,18 +45,6 @@ func (mr *MockStorageMockRecorder) CreateManifest(arg0, arg1 interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateManifest", reflect.TypeOf((*MockStorage)(nil).CreateManifest), arg0, arg1)
 }
 
-// CreateTorrent mocks base method
-func (m *MockStorage) CreateTorrent(arg0 *torlib.MetaInfo) error {
-	ret := m.ctrl.Call(m, "CreateTorrent", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CreateTorrent indicates an expected call of CreateTorrent
-func (mr *MockStorageMockRecorder) CreateTorrent(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTorrent", reflect.TypeOf((*MockStorage)(nil).CreateTorrent), arg0)
-}
-
 // DeleteManifest mocks base method
 func (m *MockStorage) DeleteManifest(arg0 string) error {
 	ret := m.ctrl.Call(m, "DeleteManifest", arg0)
@@ -80,6 +68,19 @@ func (m *MockStorage) GetManifest(arg0 string) (string, error) {
 // GetManifest indicates an expected call of GetManifest
 func (mr *MockStorageMockRecorder) GetManifest(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetManifest", reflect.TypeOf((*MockStorage)(nil).GetManifest), arg0)
+}
+
+// GetMetaInfo mocks base method
+func (m *MockStorage) GetMetaInfo(arg0 string) ([]byte, error) {
+	ret := m.ctrl.Call(m, "GetMetaInfo", arg0)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMetaInfo indicates an expected call of GetMetaInfo
+func (mr *MockStorageMockRecorder) GetMetaInfo(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetaInfo", reflect.TypeOf((*MockStorage)(nil).GetMetaInfo), arg0)
 }
 
 // GetOrigins mocks base method
@@ -108,17 +109,16 @@ func (mr *MockStorageMockRecorder) GetPeers(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPeers", reflect.TypeOf((*MockStorage)(nil).GetPeers), arg0)
 }
 
-// GetTorrent mocks base method
-func (m *MockStorage) GetTorrent(arg0 string) (string, error) {
-	ret := m.ctrl.Call(m, "GetTorrent", arg0)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+// SetMetaInfo mocks base method
+func (m *MockStorage) SetMetaInfo(arg0 *torlib.MetaInfo) error {
+	ret := m.ctrl.Call(m, "SetMetaInfo", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// GetTorrent indicates an expected call of GetTorrent
-func (mr *MockStorageMockRecorder) GetTorrent(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTorrent", reflect.TypeOf((*MockStorage)(nil).GetTorrent), arg0)
+// SetMetaInfo indicates an expected call of SetMetaInfo
+func (mr *MockStorageMockRecorder) SetMetaInfo(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMetaInfo", reflect.TypeOf((*MockStorage)(nil).SetMetaInfo), arg0)
 }
 
 // UpdateOrigins mocks base method

@@ -16,7 +16,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
-	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 )
 
 const requestTimeout = 60 * time.Second
@@ -48,7 +47,7 @@ func NewSchedulerClient(
 	stats tally.Scope,
 	pctx peercontext.PeerContext,
 	announceClient announceclient.Client,
-	metaInfoClient metainfoclient.Client) (Client, error) {
+	archive storage.TorrentArchive) (Client, error) {
 
 	// NOTE: M3 will drop metrics that contain 32 consecutive hexadecimal characters,
 	// so we cannot emit full peer ids. Instead, we emit a combination of hostname
@@ -60,13 +59,6 @@ func NewSchedulerClient(
 		return nil, fmt.Errorf("hostname: %s", err)
 	}
 	stats = stats.SubScope("peer").SubScope(hostname).SubScope(shortenedPID)
-
-	var archive storage.TorrentArchive
-	if pctx.Origin {
-		archive = storage.NewOriginTorrentArchive(fs, metaInfoClient)
-	} else {
-		archive = storage.NewAgentTorrentArchive(fs, metaInfoClient)
-	}
 
 	networkEvents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {

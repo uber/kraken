@@ -27,7 +27,7 @@ func TestRequestCacheStartPreventsDuplicates(t *testing.T) {
 	id := "foo"
 
 	require.NoError(d.Start(id, block))
-	require.Error(ErrRequestPending, d.Start(id, block))
+	require.Equal(ErrRequestPending, d.Start(id, block))
 }
 
 func TestRequestCacheStartClearsPendingWhenFuncDone(t *testing.T) {
@@ -91,15 +91,17 @@ func TestRequestCacheExpiresNotFoundErrorsIndependently(t *testing.T) {
 	d := NewRequestCache(config, clk)
 
 	id := "foo"
+	errNotFound := errors.New("error not found")
+	d.SetNotFound(func(err error) bool { return err == errNotFound })
 
-	require.NoError(d.Start(id, func() error { return ErrNotFound }))
+	require.NoError(d.Start(id, func() error { return errNotFound }))
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		return d.Start(id, noop) == ErrNotFound
+		return d.Start(id, noop) == errNotFound
 	}))
 
 	clk.Add(config.ErrorTTL + 1)
 
-	require.Error(ErrNotFound, d.Start(id, noop))
+	require.Equal(errNotFound, d.Start(id, noop))
 
 	clk.Add(config.NotFoundTTL + 1)
 
@@ -153,7 +155,7 @@ func TestRequestCacheLimitsNumberOfWorkers(t *testing.T) {
 		<-exit
 		return nil
 	}))
-	require.Error(ErrWorkersBusy, d.Start("b", noop))
+	require.Equal(ErrWorkersBusy, d.Start("b", noop))
 
 	// After a's function exits, the worker should be released.
 	exit <- true

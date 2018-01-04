@@ -35,7 +35,7 @@ func TestOriginTorrentArchiveStatLazilyPullsMetadata(t *testing.T) {
 
 	require.NoError(mocks.fs.CreateCacheFile(mi.Name(), bytes.NewBuffer(tf.Content)))
 
-	mocks.metaInfoClient.EXPECT().Download(mi.Name()).Return(mi, nil).Times(1)
+	mocks.metaInfoClient.EXPECT().Download("noexist", mi.Name()).Return(mi, nil).Times(1)
 
 	info, err := archive.Stat(mi.Name())
 	require.NoError(err)
@@ -70,7 +70,7 @@ func TestOriginTorrentArchiveGetTorrent(t *testing.T) {
 
 	require.NoError(mocks.fs.CreateCacheFile(mi.Name(), bytes.NewBuffer(tf.Content)))
 
-	mocks.metaInfoClient.EXPECT().Download(mi.Name()).Return(mi, nil).Times(1)
+	mocks.metaInfoClient.EXPECT().Download("noexist", mi.Name()).Return(mi, nil).Times(1)
 
 	tor, err := archive.GetTorrent(mi.Name())
 	require.NoError(err)

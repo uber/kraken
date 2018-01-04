@@ -26,6 +26,10 @@ func originsKey(infoHash string) string {
 	return fmt.Sprintf("origins:%s", infoHash)
 }
 
+func metaInfoKey(name string) string {
+	return fmt.Sprintf("metainfo:%s", name)
+}
+
 func serializePeer(p *torlib.PeerInfo) string {
 	var completeBit int
 	if p.Complete {
@@ -232,4 +236,48 @@ func (s *RedisStorage) UpdateOrigins(infoHash string, origins []*torlib.PeerInfo
 
 	_, err = c.Do("SETEX", originsKey(infoHash), int(s.config.OriginsTTL.Seconds()), v)
 	return err
+}
+
+// GetMetaInfo returns metainfo for the given file name. Returns ErrNotFound if
+// no metainfo exists for name.
+func (s *RedisStorage) GetMetaInfo(name string) ([]byte, error) {
+	c, err := s.pool.Dial()
+	if err != nil {
+		return nil, err
+	}
+	defer c.Close()
+
+	b, err := redis.Bytes(c.Do("GET", metaInfoKey(name)))
+	if err != nil {
+		if err == redis.ErrNil {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	return b, nil
+}
+
+// SetMetaInfo writes metainfo. Returns ErrExists if metainfo already exists for
+// mi's file name.
+func (s *RedisStorage) SetMetaInfo(mi *torlib.MetaInfo) error {
+	c, err := s.pool.Dial()
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	b, err := mi.Serialize()
+	if err != nil {
+		return fmt.Errorf("serialize metainfo: %s", err)
+	}
+
+	n, err := redis.Int(c.Do("SETNX", metaInfoKey(mi.Name()), b))
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrExists
+	}
+	return nil
 }

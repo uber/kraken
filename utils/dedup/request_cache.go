@@ -38,7 +38,6 @@ func (c *RequestCacheConfig) applyDefaults() {
 // RequestCache errors.
 var (
 	ErrRequestPending = errors.New("request pending")
-	ErrNotFound       = errors.New("resource not found")
 	ErrWorkersBusy    = errors.New("no workers available to handle request")
 )
 
@@ -51,6 +50,13 @@ func (e *cachedError) expired(now time.Time) bool {
 	return now.After(e.expiresAt)
 }
 
+// ErrorMatcher defines functions which RequestCache uses to detect user defined
+// errors.
+type ErrorMatcher func(error) bool
+
+// Request defines functions which encapsulate a request.
+type Request func() error
+
 // RequestCache tracks pending requests and caches errors for configurable TTLs.
 // It is used to prevent request duplication and DDOS-ing external components.
 // Each request is represented by an arbitrary id string determined by the user.
@@ -58,10 +64,11 @@ type RequestCache struct {
 	config RequestCacheConfig
 	clk    clock.Clock
 
-	mu        sync.Mutex // Protects access to the following fields:
-	pending   map[string]bool
-	errors    map[string]*cachedError
-	lastClean time.Time
+	mu         sync.Mutex // Protects access to the following fields:
+	pending    map[string]bool
+	errors     map[string]*cachedError
+	lastClean  time.Time
+	isNotFound ErrorMatcher
 
 	numWorkers chan struct{}
 }
@@ -75,16 +82,25 @@ func NewRequestCache(config RequestCacheConfig, clk clock.Clock) *RequestCache {
 		pending:    make(map[string]bool),
 		errors:     make(map[string]*cachedError),
 		lastClean:  clk.Now(),
+		isNotFound: func(error) bool { return false },
 		numWorkers: make(chan struct{}, config.NumWorkers),
 	}
 }
 
-// Start concurrently runs f under the given request id. Any error returned by
-// f will be cached for the configured TTL. If f returns ErrNotFound, the configured
-// NotFoundTTL is used instead of the ErrorTTL. If there is already a function
-// executing under id, Start returns ErrRequestPending. If there are no available
-// workers to run f, Start returns ErrWorkersBusy.
-func (c *RequestCache) Start(id string, f func() error) error {
+// SetNotFound sets the ErrorMatcher for activating the configured NotFoundTTL
+// for errors returned by Request functions.
+func (c *RequestCache) SetNotFound(m ErrorMatcher) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.isNotFound = m
+}
+
+// Start concurrently runs r under the given id. Any error returned by r will be
+// cached for the configured TTL. If there is already a function executing under
+// id, Start returns ErrRequestPending. If there are no available workers to run
+// r, Start returns ErrWorkersBusy.
+func (c *RequestCache) Start(id string, r Request) error {
 	if err := c.reserve(id); err != nil {
 		return err
 	}
@@ -94,7 +110,7 @@ func (c *RequestCache) Start(id string, f func() error) error {
 	}
 	go func() {
 		defer c.releaseWorker()
-		c.run(id, f)
+		c.run(id, r)
 	}()
 	return nil
 }
@@ -125,8 +141,8 @@ func (c *RequestCache) reserve(id string) error {
 	return nil
 }
 
-func (c *RequestCache) run(id string, f func() error) {
-	if err := f(); err != nil {
+func (c *RequestCache) run(id string, r Request) {
+	if err := r(); err != nil {
 		c.error(id, err)
 		return
 	}
@@ -145,7 +161,7 @@ func (c *RequestCache) error(id string, err error) {
 	defer c.mu.Unlock()
 
 	var ttl time.Duration
-	if err == ErrNotFound {
+	if c.isNotFound(err) {
 		ttl = c.config.NotFoundTTL
 	} else {
 		ttl = c.config.ErrorTTL

@@ -47,7 +47,7 @@ func mysqlConfigFixture() MySQLConfig {
 func configFixture() Config {
 	return Config{
 		PeerStore:     "redis",
-		TorrentStore:  "mysql",
+		MetaInfoStore: "mysql",
 		ManifestStore: "mysql",
 		MySQL:         mysqlConfigFixture(),
 		Redis:         redisConfigFixture(),

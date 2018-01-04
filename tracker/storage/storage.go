@@ -31,17 +31,17 @@ type PeerStore interface {
 	UpdateOrigins(infohash string, origins []*torlib.PeerInfo) error
 }
 
-// TorrentStore provides storage for torrent metainfo.
-type TorrentStore interface {
+// MetaInfoStore provides storage for torrent metainfo.
+type MetaInfoStore interface {
 
-	// GetTorrent returns torrent's metainfo as raw string. Should return
+	// GetMetaInfo returns torrent's metainfo as raw string. Should return
 	// ErrNotFound if the name is not found.
-	GetTorrent(name string) (string, error)
+	GetMetaInfo(name string) ([]byte, error)
 
-	// CreateTorrent creates torrent in tracker's storage given metainfo.
+	// SetMetaInfo sets torrent in tracker's storage given metainfo.
 	// Should return ErrExists if there already exists a metainfo
 	// for the filename.
-	CreateTorrent(mi *torlib.MetaInfo) error
+	SetMetaInfo(mi *torlib.MetaInfo) error
 }
 
 // ManifestStore provides storage for Docker image manifests.
@@ -61,7 +61,7 @@ type ManifestStore interface {
 // TODO(codyg): Replace all "storage" variables names with "store".
 type Storage interface {
 	PeerStore
-	TorrentStore
+	MetaInfoStore
 	ManifestStore
 }
 
@@ -94,15 +94,15 @@ func (p *StoreProvider) GetPeerStore() (PeerStore, error) {
 	return ps, nil
 }
 
-// GetTorrentStore returns the configured TorrentStore.
-func (p *StoreProvider) GetTorrentStore() (TorrentStore, error) {
-	s, err := p.getStorageBackend(p.config.TorrentStore)
+// GetMetaInfoStore returns the configured MetaInfoStore.
+func (p *StoreProvider) GetMetaInfoStore() (MetaInfoStore, error) {
+	s, err := p.getStorageBackend(p.config.MetaInfoStore)
 	if err != nil {
 		return nil, err
 	}
-	ts, ok := s.(TorrentStore)
+	ts, ok := s.(MetaInfoStore)
 	if !ok {
-		return nil, fmt.Errorf("TorrentStore not supported for %s", p.config.TorrentStore)
+		return nil, fmt.Errorf("MetaInfoStore not supported for %s", p.config.MetaInfoStore)
 	}
 	return ts, nil
 }

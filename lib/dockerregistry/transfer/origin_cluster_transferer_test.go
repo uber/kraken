@@ -85,8 +85,6 @@ func TestUploadSuccess(t *testing.T) {
 			d, blob := image.DigestWithBlobFixture()
 			size := int64(len(blob))
 
-			mocks.metaInfoClient.EXPECT().Upload(gomock.Any()).Return(nil)
-
 			clients := mocks.expectClients(d, "loc1", "loc2", "loc3")
 			for i := range test.errors {
 				clients[i].EXPECT().PushBlob(d, gomock.Any(), size).Return(test.errors[i])
@@ -119,8 +117,6 @@ func TestUploadFailureMajority(t *testing.T) {
 	size := int64(len(blob))
 
 	clients := mocks.expectClients(d, "loc1", "loc2", "loc3")
-
-	mocks.metaInfoClient.EXPECT().Upload(gomock.Any()).Return(nil)
 
 	// Two clients fail.
 	clients[0].EXPECT().PushBlob(d, gomock.Any(), size).Return(errors.New("some error"))

@@ -40,8 +40,17 @@ func (a *OriginTorrentArchive) Stat(name string) (*TorrentInfo, error) {
 	// lazily.
 	raw, err := cache.GetMetadata(name, store.NewTorrentMeta())
 	if os.IsNotExist(err) {
-		mi, err := a.metaInfoClient.Download(name)
+		// TODO(codyg): Plumb namespace into here.
+		// FIXME(codyg): This is a weird circular dependency. When metainfo is
+		// requested from tracker, it may trigger a download of metainfo from
+		// this very origin, i.e. it basically requests it's own blob server
+		// through tracker. Unfortunately we need this Download call right now
+		// because metainfo is not generated upon blob push in the origin.
+		mi, err := a.metaInfoClient.Download("noexist", name)
 		if err != nil {
+			// We do not handle ErrRetry here because if metainfo can't be downloaded
+			// immediately, we need to fail fast as Stat is a performance-sensitive
+			// operation.
 			return nil, fmt.Errorf("download metainfo: %s", err)
 		}
 		raw, err = mi.Serialize()

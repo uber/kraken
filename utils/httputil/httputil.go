@@ -48,24 +48,37 @@ func (e StatusError) Error() string {
 		e.Method, e.URL, e.ExpectedStatuses, e.Status, e.ResponseDump)
 }
 
-func isStatus(err error, status int) bool {
+// IsStatus returns true if err is a StatusError of the given status.
+func IsStatus(err error, status int) bool {
 	statusErr, ok := err.(StatusError)
 	return ok && statusErr.Status == status
 }
 
 // IsNotFound returns true if err is a "not found" StatusError.
 func IsNotFound(err error) bool {
-	return isStatus(err, http.StatusNotFound)
+	return IsStatus(err, http.StatusNotFound)
 }
 
 // IsConflict returns true if err is a "status conflict" StatusError.
 func IsConflict(err error) bool {
-	return isStatus(err, http.StatusConflict)
+	return IsStatus(err, http.StatusConflict)
 }
 
 // IsAccepted returns true if err is a "status accepted" StatusError.
 func IsAccepted(err error) bool {
-	return isStatus(err, http.StatusAccepted)
+	return IsStatus(err, http.StatusAccepted)
+}
+
+// NetworkError occurs on any Send error which occurred while trying to send
+// the HTTP request, e.g. the given host is unresponsive.
+type NetworkError struct {
+	method string
+	url    string
+	err    error
+}
+
+func (e NetworkError) Error() string {
+	return fmt.Sprintf("%s %s: %s", e.method, e.url, e.err)
 }
 
 type sendOptions struct {
@@ -123,7 +136,7 @@ func SendAcceptedCodes(codes ...int) SendOption {
 	}}
 }
 
-// Send sends an http request.
+// Send sends an HTTP request. May return NetworkError or StatusError (see above).
 func Send(method, url string, options ...SendOption) (*http.Response, error) {
 	opts := defaultSendOptions()
 	for _, opt := range options {
@@ -145,7 +158,7 @@ func Send(method, url string, options ...SendOption) (*http.Response, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %s", err)
+		return nil, NetworkError{method, url, err}
 	}
 
 	_, ok := opts.acceptedCodes[resp.StatusCode]

@@ -20,10 +20,10 @@ func Handler(
 	stats tally.Scope,
 	policy peerhandoutpolicy.PeerHandoutPolicy,
 	peerStore storage.PeerStore,
-	torrentStore storage.TorrentStore,
+	metaInfoStore storage.MetaInfoStore,
 	manifestStore storage.ManifestStore,
-	originResolver blobclient.ClusterResolver,
-) http.Handler {
+	originResolver blobclient.ClusterResolver) http.Handler {
+
 	stats = stats.SubScope("service")
 
 	announce := &announceHandler{
@@ -33,48 +33,58 @@ func Handler(
 		originResolver,
 	}
 	health := &healthHandler{}
-	metainfo := &metainfoHandler{torrentStore}
+	metainfo := newMetaInfoHandler(config.MetaInfo, metaInfoStore, originResolver)
 	manifest := &manifestHandler{manifestStore}
 
 	r := chi.NewRouter()
-
-	r.Group(func(r chi.Router) {
-		estats := stats.SubScope("health")
-		r.Use(middleware.Counter(estats))
-		r.Use(middleware.ElapsedTimer(estats))
-
-		r.Get("/health", health.Get)
-	})
-
-	r.Group(func(r chi.Router) {
-		estats := stats.SubScope("announce")
-		r.Use(middleware.Counter(estats))
-		r.Use(middleware.ElapsedTimer(estats))
-
-		r.Get("/announce", handler.Wrap(announce.Get))
-	})
-
-	r.Group(func(r chi.Router) {
-		estats := stats.SubScope("info")
-		r.Use(middleware.Counter(estats))
-		r.Use(middleware.ElapsedTimer(estats))
-
-		r.Get("/info", handler.Wrap(metainfo.Get))
-		r.Post("/info", handler.Wrap(metainfo.Post))
-	})
-
-	r.Group(func(r chi.Router) {
-		estats := stats.SubScope("manifest")
-		r.Use(middleware.Counter(estats))
-		r.Use(middleware.ElapsedTimer(estats))
-
-		r.Get("/manifest/:name", handler.Wrap(manifest.Get))
-		r.Post("/manifest/:name", handler.Wrap(manifest.Post))
-
-	})
+	announce.setRoutes(r, stats)
+	health.setRoutes(r, stats)
+	metainfo.setRoutes(r, stats)
+	manifest.setRoutes(r, stats)
 
 	// Serves /debug/pprof endpoints.
 	r.Mount("/", http.DefaultServeMux)
 
 	return r
+}
+
+func (h *healthHandler) setRoutes(r chi.Router, stats tally.Scope) {
+	r.Group(func(r chi.Router) {
+		estats := stats.SubScope("health")
+		r.Use(middleware.Counter(estats))
+		r.Use(middleware.ElapsedTimer(estats))
+
+		r.Get("/health", h.Get)
+	})
+}
+
+func (h *metaInfoHandler) setRoutes(r chi.Router, stats tally.Scope) {
+	r.Group(func(r chi.Router) {
+		estats := stats.SubScope("namespace.blobs.metainfo")
+		r.Use(middleware.Counter(estats))
+		r.Use(middleware.ElapsedTimer(estats))
+
+		r.Get("/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(h.get))
+	})
+}
+
+func (h *manifestHandler) setRoutes(r chi.Router, stats tally.Scope) {
+	r.Group(func(r chi.Router) {
+		estats := stats.SubScope("manifest")
+		r.Use(middleware.Counter(estats))
+		r.Use(middleware.ElapsedTimer(estats))
+
+		r.Get("/manifest/:name", handler.Wrap(h.Get))
+		r.Post("/manifest/:name", handler.Wrap(h.Post))
+	})
+}
+
+func (h *announceHandler) setRoutes(r chi.Router, stats tally.Scope) {
+	r.Group(func(r chi.Router) {
+		estats := stats.SubScope("announce")
+		r.Use(middleware.Counter(estats))
+		r.Use(middleware.ElapsedTimer(estats))
+
+		r.Get("/announce", handler.Wrap(h.Get))
+	})
 }

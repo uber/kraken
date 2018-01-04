@@ -43,9 +43,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not create PeerStore: %s", err)
 	}
-	torrentStore, err := storeProvider.GetTorrentStore()
+	torrentStore, err := storeProvider.GetMetaInfoStore()
 	if err != nil {
-		log.Fatalf("Could not create TorrentStore: %s", err)
+		log.Fatalf("Could not create MetaInfoStore: %s", err)
 	}
 	manifestStore, err := storeProvider.GetManifestStore()
 	if err != nil {

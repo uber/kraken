@@ -10,7 +10,9 @@ import (
 // TorrentArchiveFixture creates a new TorrentArchive and returns the archive with a cleanup function
 func TorrentArchiveFixture() (TorrentArchive, func()) {
 	localStore, cleanup := store.LocalFileStoreFixture()
-	return NewAgentTorrentArchive(localStore, nil), cleanup
+	archive := NewAgentTorrentArchive(
+		AgentTorrentArchiveConfig{}, localStore, nil)
+	return archive, cleanup
 }
 
 // TorrentFixture returns a Torrent for the given size and piece length.
@@ -21,12 +23,12 @@ func TorrentFixture(size, pieceLength uint64) (Torrent, func()) {
 	fs, c := store.LocalFileStoreFixture()
 	cleanup.Add(c)
 
-	mic := metainfoclient.TestClient()
+	tc := metainfoclient.NewTestClient()
 
-	ta := NewAgentTorrentArchive(fs, mic)
+	ta := NewAgentTorrentArchive(AgentTorrentArchiveConfig{}, fs, tc)
 
 	mi := torlib.CustomMetaInfoFixture(size, pieceLength)
-	if err := mic.Upload(mi); err != nil {
+	if err := tc.Upload(mi); err != nil {
 		panic(err)
 	}
 	tor, err := ta.GetTorrent(mi.Name())
