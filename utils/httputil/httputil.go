@@ -54,6 +54,11 @@ func IsStatus(err error, status int) bool {
 	return ok && statusErr.Status == status
 }
 
+// IsCreated returns true if err is a "created", 201
+func IsCreated(err error) bool {
+	return IsStatus(err, http.StatusCreated)
+}
+
 // IsNotFound returns true if err is a "not found" StatusError.
 func IsNotFound(err error) bool {
 	return IsStatus(err, http.StatusNotFound)
@@ -82,10 +87,12 @@ func (e NetworkError) Error() string {
 }
 
 type sendOptions struct {
-	body          io.Reader
-	timeout       time.Duration
-	acceptedCodes map[int]struct{}
-	headers       map[string]string
+	body           io.Reader
+	timeout        time.Duration
+	acceptedCodes  map[int]struct{}
+	headers        map[string]string
+	redirectPolicy func(req *http.Request, via []*http.Request) error
+	client         *http.Client
 }
 
 // defaultSendOptions creates httpOptions with default settings
@@ -136,6 +143,13 @@ func SendAcceptedCodes(codes ...int) SendOption {
 	}}
 }
 
+// SendRedirect specifies a redirect policy for http request
+func SendRedirect(redirect func(req *http.Request, via []*http.Request) error) SendOption {
+	return SendOption{func(opts *sendOptions) {
+		opts.redirectPolicy = redirect
+	}}
+}
+
 // Send sends an HTTP request. May return NetworkError or StatusError (see above).
 func Send(method, url string, options ...SendOption) (*http.Response, error) {
 	opts := defaultSendOptions()
@@ -153,7 +167,8 @@ func Send(method, url string, options ...SendOption) (*http.Response, error) {
 	}
 
 	client := http.Client{
-		Timeout: opts.timeout,
+		Timeout:       opts.timeout,
+		CheckRedirect: opts.redirectPolicy,
 	}
 
 	resp, err := client.Do(req)
@@ -167,7 +182,7 @@ func Send(method, url string, options ...SendOption) (*http.Response, error) {
 		for code := range opts.acceptedCodes {
 			expected = append(expected, code)
 		}
-		return nil, newStatusError(method, url, expected, resp)
+		return resp, newStatusError(method, url, expected, resp)
 	}
 
 	return resp, nil
