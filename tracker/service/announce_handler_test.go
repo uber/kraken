@@ -4,18 +4,13 @@ import (
 	"errors"
 	"io/ioutil"
 	"net/http"
-	"sort"
 	"testing"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/peercontext"
-	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
-	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/storage"
-	"code.uber.internal/infra/kraken/utils/errutil"
 
-	"github.com/golang/mock/gomock"
 	bencode "github.com/jackpal/bencode-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -127,10 +122,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 			Complete: true,
 		}
 
-		mockBlobClient := mockblobclient.NewMockClient(mocks.ctrl)
-
-		mocks.originResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockBlobClient}, nil)
-		mockBlobClient.EXPECT().GetPeerContext().Return(originPCtx, nil)
+		mocks.originCluster.EXPECT().Owners(digest).Return([]peercontext.PeerContext{originPCtx}, nil)
 
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		mocks.datastore.EXPECT().GetPeers(infoHash).Return(nil, nil)
@@ -166,10 +158,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 			Origin:   true,
 		}
 
-		mockBlobClient := mockblobclient.NewMockClient(mocks.ctrl)
-
-		mocks.originResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockBlobClient}, nil)
-		mockBlobClient.EXPECT().GetPeerContext().Return(originPCtx, nil)
+		mocks.originCluster.EXPECT().Owners(digest).Return([]peercontext.PeerContext{originPCtx}, nil)
 
 		storageErr := errors.New("some storage error")
 
@@ -203,7 +192,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 			Port:     peer.Port,
 		}
 
-		mocks.originResolver.EXPECT().Resolve(digest).Return(nil, errors.New("origin cluster error"))
+		mocks.originCluster.EXPECT().Owners(digest).Return(nil, errors.New("origin cluster error"))
 
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		mocks.datastore.EXPECT().GetPeers(infoHash).Return([]*torlib.PeerInfo{otherPeer}, nil)
@@ -215,72 +204,6 @@ func TestAnnounceEndPoint(t *testing.T) {
 		bencode.Unmarshal(resp.Body, &ar)
 		require.Equal([]torlib.PeerInfo{*otherPeer}, ar.Peers)
 	})
-}
-
-func TestAnnounceHandlerRequestOriginsConcurrency(t *testing.T) {
-	require := require.New(t)
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mi := torlib.MetaInfoFixture()
-	infoHash := mi.InfoHash.HexString()
-	digest := image.NewSHA256DigestFromHex(mi.Info.Name)
-
-	mockOriginResolver := mockblobclient.NewMockClusterResolver(ctrl)
-
-	var clients []blobclient.Client
-	var peerIDs []string
-	for i := 0; i < 3; i++ {
-		mockClient := mockblobclient.NewMockClient(ctrl)
-		pctx := peercontext.Fixture()
-		mockClient.EXPECT().GetPeerContext().Return(pctx, nil)
-
-		peerIDs = append(peerIDs, pctx.PeerID.String())
-		clients = append(clients, mockClient)
-	}
-	sort.Strings(peerIDs)
-
-	mockOriginResolver.EXPECT().Resolve(digest).Return(clients, nil)
-
-	h := &announceHandler{originResolver: mockOriginResolver}
-
-	origins, err := h.requestOrigins(infoHash, mi.Info.Name)
-	require.NoError(err)
-	require.Equal(peerIDs, torlib.SortedPeerIDs(origins))
-}
-
-func TestAnnounceHandlerRequestOriginsPartialErrors(t *testing.T) {
-	require := require.New(t)
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mi := torlib.MetaInfoFixture()
-	infoHash := mi.InfoHash.HexString()
-	digest := image.NewSHA256DigestFromHex(mi.Info.Name)
-
-	mockOriginResolver := mockblobclient.NewMockClusterResolver(ctrl)
-
-	mockClient1 := mockblobclient.NewMockClient(ctrl)
-	mockClient2 := mockblobclient.NewMockClient(ctrl)
-	mockClient3 := mockblobclient.NewMockClient(ctrl)
-
-	pctx := peercontext.Fixture()
-
-	mockClient1.EXPECT().GetPeerContext().Return(pctx, nil)
-	mockClient2.EXPECT().GetPeerContext().Return(peercontext.PeerContext{}, errors.New("some error"))
-	mockClient3.EXPECT().GetPeerContext().Return(peercontext.PeerContext{}, errors.New("some error"))
-
-	mockOriginResolver.EXPECT().Resolve(digest).Return(
-		[]blobclient.Client{mockClient1, mockClient2, mockClient3}, nil)
-
-	h := &announceHandler{originResolver: mockOriginResolver}
-
-	origins, err := h.requestOrigins(infoHash, mi.Info.Name)
-	require.Error(err)
-	require.Len(err.(errutil.MultiError), 2)
-	require.Equal([]string{pctx.PeerID.String()}, torlib.SortedPeerIDs(origins))
 }
 
 // requireStatus fails if the response is not of the given status. Logs the body

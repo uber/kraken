@@ -143,9 +143,7 @@ func (s Server) Handler() http.Handler {
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
 
-		r.Post("/blobs/:digest/uploads", handler.Wrap(s.startUploadHandler))
-		r.Patch("/blobs/:digest/uploads/:uuid", handler.Wrap(s.patchUploadHandler))
-		r.Put("/blobs/:digest/uploads/:uuid", handler.Wrap(s.commitUploadHandler))
+		r.Post("/blobs/:digest/uploads", handler.Wrap(s.pushBlobHandler))
 	})
 
 	r.Group(func(r chi.Router) {
@@ -273,10 +271,29 @@ func (s Server) getLocationsHandler(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
+// pushBlobHandler accepts a blob via chunked transfer encoding.
+func (s Server) pushBlobHandler(w http.ResponseWriter, r *http.Request) error {
+	defer r.Body.Close()
+	d, err := parseDigest(r)
+	if err != nil {
+		return err
+	}
+	if err := s.redirectByDigest(d); err != nil {
+		return err
+	}
+	if exists, err := s.blobExists(d); err != nil {
+		return err
+	} else if exists {
+		return nil
+	}
+	return s.downloadPushedBlob(d, r.Body)
+}
+
 // uploadBlobHandler uploads a blob via chunked transfer encoding. Replicates
 // the blob among other origins. If query argument "through" is set to true,
 // pushes the blob to the storage backend configured for the given namespace.
 func (s Server) uploadBlobHandler(w http.ResponseWriter, r *http.Request) error {
+	defer r.Body.Close()
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -297,90 +314,7 @@ func (s Server) uploadBlobHandler(w http.ResponseWriter, r *http.Request) error 
 				"invalid through argument: parse bool: %s", err).Status(http.StatusBadRequest)
 		}
 	}
-	defer r.Body.Close()
 	return s.uploadBlob(namespace, d, r.Body, through)
-}
-
-// startUploadHandler starts upload process for a blob. Returns the location of
-// the upload which is needed for subsequent patches of this blob.
-func (s Server) startUploadHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
-	if err != nil {
-		return err
-	}
-
-	if err := s.redirectByDigest(d); err != nil {
-		return err
-	}
-	if ok, err := s.blobExists(d); err != nil {
-		return err
-	} else if ok {
-		return handler.ErrorStatus(http.StatusConflict)
-	}
-	u, err := s.createUpload(d)
-	if err != nil {
-		return err
-	}
-	setUploadLocation(w, u)
-	setContentLength(w, 0)
-	w.WriteHeader(http.StatusAccepted)
-	log.Debugf("successfully start upload %s for blob %s", u, d.Hex())
-	return nil
-}
-
-// patchUploadHandler uploads a chunk of a blob.
-func (s Server) patchUploadHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
-	if err != nil {
-		return err
-	}
-	u, err := parseUUID(r)
-	if err != nil {
-		return err
-	}
-	if err := s.redirectByDigest(d); err != nil {
-		return err
-	}
-	if ok, err := s.blobExists(d); err != nil {
-		return err
-	} else if ok {
-		return handler.ErrorStatus(http.StatusConflict)
-	}
-	start, end, err := parseContentRange(r.Header)
-	if err != nil {
-		return err
-	}
-
-	if err := s.uploadBlobChunk(u, r.Body, start, end); err != nil {
-		return err
-	}
-	setContentLength(w, 0)
-	w.WriteHeader(http.StatusAccepted)
-	log.Debugf("successfully patch upload %s for blob %s", u, d.Hex())
-	return nil
-}
-
-// commitUploadHandler commits the upload.
-func (s Server) commitUploadHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
-	if err != nil {
-		return err
-	}
-	u, err := parseUUID(r)
-	if err != nil {
-		return err
-	}
-	if err := s.redirectByDigest(d); err != nil {
-		return err
-	}
-	if err := s.commitUpload(d, u); err != nil {
-		return err
-	}
-
-	setContentLength(w, 0)
-	w.WriteHeader(http.StatusCreated)
-	log.Debugf("successfully commit upload %s for blob %s", u, d.Hex())
-	return nil
 }
 
 func (s Server) repairHandler(w http.ResponseWriter, r *http.Request) error {
@@ -571,15 +505,11 @@ func (s Server) replicateBlob(d image.Digest) error {
 }
 
 func (s Server) pushBlob(loc string, d image.Digest) error {
-	info, err := s.fileStore.GetCacheFileStat(d.Hex())
-	if err != nil {
-		return handler.Errorf("cache stat: %s", err)
-	}
 	f, err := s.fileStore.GetCacheFileReader(d.Hex())
 	if err != nil {
 		return handler.Errorf("get cache reader: %s", err)
 	}
-	if err := s.clientProvider.Provide(loc).PushBlob(d, f, info.Size()); err != nil {
+	if err := s.clientProvider.Provide(loc).PushBlob(d, f); err != nil {
 		return handler.Errorf("push blob: %s", err)
 	}
 	return nil
@@ -623,46 +553,6 @@ func parseDigest(r *http.Request) (digest image.Digest, err error) {
 			"cannot parse digest %q: %s", digestRaw, err).Status(http.StatusBadRequest)
 	}
 	return digest, nil
-}
-
-// parseUUID parses a uuid from a url path parameter, e.g. "/uploads/:uuid".
-func parseUUID(r *http.Request) (string, error) {
-	u := chi.URLParam(r, "uuid")
-	if len(u) == 0 {
-		return "", handler.Errorf("empty uuid").Status(http.StatusBadRequest)
-	}
-	if _, err := uuid.Parse(u); err != nil {
-		return "", handler.Errorf("cannot parse uuid %q: %s", u, err).Status(http.StatusBadRequest)
-	}
-	return u, nil
-}
-
-func parseContentRange(h http.Header) (start, end int64, err error) {
-	contentRange := h.Get("Content-Range")
-	if len(contentRange) == 0 {
-		return 0, 0, handler.Errorf("no Content-Range header").Status(http.StatusBadRequest)
-	}
-	parts := strings.Split(contentRange, "-")
-	if len(parts) != 2 {
-		return 0, 0, handler.Errorf(
-			"cannot parse Content-Range header %q: expected format \"start-end\"", contentRange).
-			Status(http.StatusBadRequest)
-	}
-	start, err = strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		return 0, 0, handler.Errorf(
-			"cannot parse start of range in Content-Range header %q: %s", contentRange, err).
-			Status(http.StatusBadRequest)
-	}
-	end, err = strconv.ParseInt(parts[1], 10, 64)
-	if err != nil {
-		return 0, 0, handler.Errorf(
-			"cannot parse end of range in Content-Range header %q: %s", contentRange, err).
-			Status(http.StatusBadRequest)
-	}
-	// Note, no need to check for negative because the "-" would cause the
-	// Split check to fail.
-	return start, end, nil
 }
 
 func (s Server) getLocations(d image.Digest) ([]string, error) {
@@ -735,6 +625,30 @@ func (s Server) deleteBlob(d image.Digest) error {
 	return nil
 }
 
+func (s Server) downloadPushedBlob(d image.Digest, blob io.Reader) error {
+	u := uuid.Generate().String()
+	if err := s.fileStore.CreateUploadFile(u, 0); err != nil {
+		return handler.Errorf("create upload file: %s", err)
+	}
+	f, err := s.fileStore.GetUploadFileReadWriter(u)
+	if err != nil {
+		return handler.Errorf("get upload file: %s", err)
+	}
+	digester := image.NewDigester()
+	if _, err := io.Copy(f, digester.Tee(blob)); err != nil {
+		return handler.Errorf("copy blob: %s", err)
+	}
+	resd := digester.Digest()
+	if resd != d {
+		return handler.Errorf(
+			"expected digest %s, calculated %s from blob", d, resd).Status(http.StatusBadRequest)
+	}
+	if err := s.fileStore.MoveUploadFileToCache(u, d.Hex()); err != nil {
+		return handler.Errorf("move upload file to cache: %s", err)
+	}
+	return nil
+}
+
 func (s Server) uploadBlob(namespace string, d image.Digest, blob io.Reader, through bool) error {
 	exists, err := s.blobExists(d)
 	if err != nil {
@@ -801,74 +715,6 @@ func (s Server) uploadBlob(namespace string, d image.Digest, blob io.Reader, thr
 		if err := s.replicateBlob(d); err != nil {
 			log.With("blob", d.Hex()).Errorf("Error replicating uploaded blob: %s", err)
 		}
-	}
-
-	return nil
-}
-
-func (s Server) createUpload(d image.Digest) (string, error) {
-	uploadUUID := uuid.Generate().String()
-	if err := s.fileStore.CreateUploadFile(uploadUUID, 0); err != nil {
-		return "", handler.Errorf("failed to create upload file for digest %q: %s", d, err)
-	}
-	return uploadUUID, nil
-}
-
-func (s Server) uploadBlobChunk(uploadUUID string, b io.ReadCloser, start, end int64) error {
-	// TODO(yiran): Calculate SHA256 on the fly using https://github.com/stevvooe/resumable
-	f, err := s.fileStore.GetUploadFileReadWriter(uploadUUID)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return handler.ErrorStatus(http.StatusNotFound)
-		}
-		return handler.Errorf("cannot get reader for upload %q: %s", uploadUUID, err)
-	}
-	defer f.Close()
-	if _, err := f.Seek(start, 0); err != nil {
-		return handler.Errorf(
-			"cannot continue upload for %q from offset %d: %s", uploadUUID, start, err).
-			Status(http.StatusBadRequest)
-	}
-	defer b.Close()
-	n, err := io.Copy(f, b)
-	if err != nil {
-		return handler.Errorf("failed to upload %q: %s", uploadUUID, err)
-	}
-	expected := end - start
-	if n != expected {
-		return handler.Errorf(
-			"upload data length for %q doesn't match content range: got %d, expected %d",
-			uploadUUID, n, expected).
-			Status(http.StatusBadRequest)
-	}
-	return nil
-}
-
-func (s Server) commitUpload(d image.Digest, uploadUUID string) error {
-	// Verify hash.
-	digester := image.NewDigester()
-	f, err := s.fileStore.GetUploadFileReader(uploadUUID)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return handler.ErrorStatus(http.StatusNotFound)
-		}
-		return handler.Errorf("cannot get reader for upload %q: %s", uploadUUID, err)
-	}
-	computedDigest, err := digester.FromReader(f)
-	if err != nil {
-		return handler.Errorf("failed to calculate digest for upload %q: %s", uploadUUID, err)
-	}
-	if computedDigest != d {
-		return handler.Errorf("computed digest %q doesn't match parameter %q", computedDigest, d).
-			Status(http.StatusBadRequest)
-	}
-
-	// Commit data.
-	if err := s.fileStore.MoveUploadFileToCache(uploadUUID, d.Hex()); err != nil {
-		if os.IsExist(err) {
-			return handler.Errorf("digest %q already exists", d).Status(http.StatusConflict)
-		}
-		return handler.Errorf("failed to commit digest %q for upload %q: %s", d, uploadUUID, err)
 	}
 
 	return nil

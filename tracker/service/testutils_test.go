@@ -33,22 +33,22 @@ func jsonBytesEqual(a, b []byte) (bool, error) {
 }
 
 type testMocks struct {
-	config         Config
-	policy         peerhandoutpolicy.PeerHandoutPolicy
-	ctrl           *gomock.Controller
-	datastore      *mockstorage.MockStorage
-	originResolver *mockblobclient.MockClusterResolver
-	stats          tally.Scope
+	config        Config
+	policy        peerhandoutpolicy.PeerHandoutPolicy
+	ctrl          *gomock.Controller
+	datastore     *mockstorage.MockStorage
+	originCluster *mockblobclient.MockClusterClient
+	stats         tally.Scope
 }
 
 func newTestMocks(t *testing.T) (*testMocks, func()) {
 	ctrl := gomock.NewController(t)
 	return &testMocks{
-		config:         configFixture(),
-		policy:         peerhandoutpolicy.DefaultPeerHandoutPolicyFixture(),
-		datastore:      mockstorage.NewMockStorage(ctrl),
-		originResolver: mockblobclient.NewMockClusterResolver(ctrl),
-		stats:          tally.NewTestScope("testing", nil),
+		config:        configFixture(),
+		policy:        peerhandoutpolicy.DefaultPeerHandoutPolicyFixture(),
+		datastore:     mockstorage.NewMockStorage(ctrl),
+		originCluster: mockblobclient.NewMockClusterClient(ctrl),
+		stats:         tally.NewTestScope("testing", nil),
 	}, ctrl.Finish
 }
 
@@ -58,7 +58,7 @@ func (m *testMocks) mockController(t gomock.TestReporter) func() {
 	m.policy = peerhandoutpolicy.DefaultPeerHandoutPolicyFixture()
 	m.ctrl = gomock.NewController(t)
 	m.datastore = mockstorage.NewMockStorage(m.ctrl)
-	m.originResolver = mockblobclient.NewMockClusterResolver(m.ctrl)
+	m.originCluster = mockblobclient.NewMockClusterClient(m.ctrl)
 	m.stats = tally.NewTestScope("testing", nil)
 	return m.ctrl.Finish
 }
@@ -81,7 +81,7 @@ func (m *testMocks) Handler() http.Handler {
 		m.datastore,
 		m.datastore,
 		m.datastore,
-		m.originResolver,
+		m.originCluster,
 	)
 }
 

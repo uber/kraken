@@ -19,7 +19,7 @@ type mockImageTransferer struct{}
 func (mc *mockImageTransferer) Download(name string) (store.FileReader, error) {
 	return nil, errMockError
 }
-func (mc *mockImageTransferer) Upload(name string, blobCloner store.FileReaderCloner, size int64) error {
+func (mc *mockImageTransferer) Upload(name string, blob store.FileReader) error {
 	return nil
 }
 func (mc *mockImageTransferer) GetManifest(repo, tag string) (io.ReadCloser, error) {

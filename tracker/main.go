@@ -62,8 +62,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating origin round robin: %s", err)
 	}
-	originResolver := blobclient.NewClusterResolver(
-		blobclient.NewProvider(config.Origin.Client), origins)
+	originCluster := blobclient.NewClusterClient(blobclient.NewProvider(), origins)
 
 	h := service.Handler(
 		config.Service,
@@ -72,7 +71,7 @@ func main() {
 		peerStore,
 		torrentStore,
 		manifestStore,
-		originResolver)
+		originCluster)
 
 	addr := fmt.Sprintf(":%d", config.Port)
 	log.Infof("Listening on %s", addr)

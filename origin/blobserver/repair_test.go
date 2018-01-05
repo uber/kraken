@@ -18,7 +18,7 @@ func TestRepairOwnedShardPushesToReplica(t *testing.T) {
 	require := require.New(t)
 
 	config := configFixture()
-	cp := newTestClientProvider(clientConfigFixture())
+	cp := newTestClientProvider()
 
 	s1 := newTestServer(master1, config, cp)
 	defer s1.cleanup()
@@ -34,7 +34,7 @@ func TestRepairOwnedShardPushesToReplica(t *testing.T) {
 		d, blob := computeBlobForShard(shardID)
 		blobs[d] = blob
 
-		err := cp.Provide(master1).PushBlob(d, bytes.NewBuffer(blob), int64(len(blob)))
+		err := cp.Provide(master1).PushBlob(d, bytes.NewReader(blob))
 		require.NoError(err)
 	}
 
@@ -51,7 +51,7 @@ func TestRepairUnownedShardPushesToReplicasAndDeletes(t *testing.T) {
 	require := require.New(t)
 
 	config := configFixture()
-	cp := newTestClientProvider(clientConfigFixture())
+	cp := newTestClientProvider()
 
 	shardID := pickShard(config, master1, master2)
 
@@ -64,7 +64,7 @@ func TestRepairUnownedShardPushesToReplicasAndDeletes(t *testing.T) {
 		d, blob := computeBlobForShard(shardID)
 		blobs[d] = blob
 
-		err := cp.Provide(master1).PushBlob(d, bytes.NewBuffer(blob), int64(len(blob)))
+		err := cp.Provide(master1).PushBlob(d, bytes.NewReader(blob))
 		require.NoError(err)
 	}
 
@@ -97,7 +97,7 @@ func TestRepairUnownedShardDeletesIfReplicasAlreadyHaveShard(t *testing.T) {
 	require := require.New(t)
 
 	config := configFixture()
-	cp := newTestClientProvider(clientConfigFixture())
+	cp := newTestClientProvider()
 
 	shardID := pickShard(config, master1, master2)
 
@@ -110,7 +110,7 @@ func TestRepairUnownedShardDeletesIfReplicasAlreadyHaveShard(t *testing.T) {
 		d, blob := computeBlobForShard(shardID)
 		blobs[d] = blob
 
-		err := cp.Provide(master1).PushBlob(d, bytes.NewBuffer(blob), int64(len(blob)))
+		err := cp.Provide(master1).PushBlob(d, bytes.NewReader(blob))
 		require.NoError(err)
 	}
 
@@ -127,7 +127,7 @@ func TestRepairUnownedShardDeletesIfReplicasAlreadyHaveShard(t *testing.T) {
 	// Push blobs to master2 and master3.
 	for d, blob := range blobs {
 		for _, m := range []string{master2, master3} {
-			err := cp.Provide(m).PushBlob(d, bytes.NewBuffer(blob), int64(len(blob)))
+			err := cp.Provide(m).PushBlob(d, bytes.NewReader(blob))
 			require.NoError(err)
 		}
 	}
@@ -147,7 +147,7 @@ func TestRepairUnownedShardDoesNotDeleteIfReplicationFails(t *testing.T) {
 	require := require.New(t)
 
 	config := configFixture()
-	cp := newTestClientProvider(clientConfigFixture())
+	cp := newTestClientProvider()
 
 	shardID := pickShard(config, master1, master2)
 
@@ -160,7 +160,7 @@ func TestRepairUnownedShardDoesNotDeleteIfReplicationFails(t *testing.T) {
 		d, blob := computeBlobForShard(shardID)
 		blobs[d] = blob
 
-		err := cp.Provide(master1).PushBlob(d, bytes.NewBuffer(blob), int64(len(blob)))
+		err := cp.Provide(master1).PushBlob(d, bytes.NewReader(blob))
 		require.NoError(err)
 	}
 
@@ -198,7 +198,7 @@ func TestRepairAllShards(t *testing.T) {
 	require := require.New(t)
 
 	config := configFixture()
-	cp := newTestClientProvider(clientConfigFixture())
+	cp := newTestClientProvider()
 
 	s1 := newTestServer(master1, config, cp)
 	defer s1.cleanup()
@@ -211,7 +211,7 @@ func TestRepairAllShards(t *testing.T) {
 		d, blob := computeBlobForHosts(config, master1, master2)
 		blobs[d] = blob
 
-		err := cp.Provide(master1).PushBlob(d, bytes.NewBuffer(blob), int64(len(blob)))
+		err := cp.Provide(master1).PushBlob(d, bytes.NewReader(blob))
 		require.NoError(err)
 	}
 
@@ -227,7 +227,7 @@ func TestRepairDigest(t *testing.T) {
 	require := require.New(t)
 
 	config := configFixture()
-	cp := newTestClientProvider(clientConfigFixture())
+	cp := newTestClientProvider()
 
 	s1 := newTestServer(master1, config, cp)
 	defer s1.cleanup()
@@ -237,7 +237,7 @@ func TestRepairDigest(t *testing.T) {
 
 	d, blob := computeBlobForHosts(config, master1, master2)
 
-	err := cp.Provide(master1).PushBlob(d, bytes.NewBuffer(blob), int64(len(blob)))
+	err := cp.Provide(master1).PushBlob(d, bytes.NewReader(blob))
 	require.NoError(err)
 
 	_, err = cp.Provide(master1).RepairDigest(d)

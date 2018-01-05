@@ -237,37 +237,20 @@ func (r *repairer) replicateDigests(digests []image.Digest, hosts stringset.Set,
 }
 
 func (r *repairer) replicateDigest(d image.Digest, hosts stringset.Set) (replicated bool) {
-	f, err := r.fileStore.GetCacheFileReader(d.Hex())
-	if err != nil {
-		r.messages <- replicateDigestErrorf(
-			d, "failed to replicate to hosts %v: cannot get blob reader: %s", hosts, err)
-		return false
-	}
-	info, err := r.fileStore.GetCacheFileStat(d.Hex())
-	if err != nil {
-		r.messages <- replicateDigestErrorf(
-			d, "failed to replicate to hosts %v: cannot get blob stat: %s", hosts, err)
-		return false
-	}
-	size := info.Size()
-
 	replicated = true
-
 	for h := range hosts {
 		client := r.clientProvider.Provide(h)
-		err = netutil.WithRetry(
+		err := netutil.WithRetry(
 			r.config.Repair.MaxRetries, r.config.Repair.RetryDelay, r.config.Repair.MaxRetryDelay,
 			func() error {
-
-				err := client.PushBlob(d, f, size)
-				// Reset f for next push.
-				f.Seek(0, io.SeekStart)
-
-				if err == blobclient.ErrBlobExist {
-					// Host already has blob -- move along.
-					return nil
+				f, err := r.fileStore.GetCacheFileReader(d.Hex())
+				if err != nil {
+					return fmt.Errorf("get cache file: %s", err)
 				}
-				return err
+				if err := client.PushBlob(d, f); err != nil {
+					return fmt.Errorf("push blob: %s", err)
+				}
+				return nil
 			})
 		if err != nil {
 			replicated = false
@@ -275,7 +258,6 @@ func (r *repairer) replicateDigest(d image.Digest, hosts stringset.Set) (replica
 		}
 		r.messages <- replicateDigestSuccess(d)
 	}
-
 	return replicated
 }
 

@@ -1,6 +1,7 @@
 package dockerregistry
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -185,18 +186,18 @@ func (u *Uploads) getUploadDataStat(dir, uuid string) (fi storagedriver.FileInfo
 }
 
 // commmitUpload move a complete data blob from upload directory to cache diretory
-func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) (err error) {
-	info, err := u.store.GetUploadFileStat(srcuuid)
-	if err != nil {
-		return err
+func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) error {
+	if err := u.store.MoveUploadFileToCache(srcuuid, destsha); err != nil {
+		return fmt.Errorf("move upload file to cache: %s", err)
 	}
-
-	err = u.store.MoveUploadFileToCache(srcuuid, destsha)
+	f, err := u.store.GetCacheFileReader(destsha)
 	if err != nil {
-		return err
+		return fmt.Errorf("get cache file: %s", err)
 	}
-
-	return u.transferer.Upload(destsha, store.CacheReaderCloner(u.store, destsha), info.Size())
+	if err := u.transferer.Upload(destsha, f); err != nil {
+		return fmt.Errorf("upload: %s", err)
+	}
+	return nil
 }
 
 // putBlobData is used to write content to files directly, like image manifest and metadata.
@@ -204,41 +205,34 @@ func (u *Uploads) putBlobData(fileName string, content []byte) error {
 	// It's better to have a random extension to avoid race condition.
 	randFileName := fileName + "." + uuid.Generate().String()
 	if err := u.store.CreateUploadFile(randFileName, int64(len(content))); err != nil {
-		return err
+		return fmt.Errorf("create upload file: %s", err)
 	}
 
 	rw, err := u.store.GetUploadFileReadWriter(randFileName)
 	if err != nil {
-		return err
+		return fmt.Errorf("get upload file: %s", err)
 	}
 	defer rw.Close()
-
-	_, err = rw.Write(content)
-	if err != nil {
-		return err
+	if _, err := rw.Write(content); err != nil {
+		return fmt.Errorf("write content: %s", err)
 	}
-
 	if _, err := rw.Seek(0, 0); err != nil {
-		return err
+		return fmt.Errorf("seek: %s", err)
 	}
 
-	info, err := u.store.GetUploadFileStat(randFileName)
-	if err != nil {
-		return err
+	if err := u.store.MoveUploadFileToCache(randFileName, fileName); err != nil {
+		if os.IsExist(err) {
+			// It's okay to fail with "os.IsExist"
+			return nil
+		}
+		return fmt.Errorf("move upload file to cache: %s", err)
 	}
-
-	err = u.store.MoveUploadFileToCache(randFileName, fileName)
-	if os.IsExist(err) {
-		// It's okay to fail with "os.IsExist"
-		return nil
-	}
+	f, err := u.store.GetCacheFileReader(fileName)
 	if err != nil {
-		return err
+		return fmt.Errorf("get cache file: %s", err)
 	}
-
-	err = u.transferer.Upload(fileName, store.CacheReaderCloner(u.store, fileName), info.Size())
-	if err != nil {
-		return err
+	if err := u.transferer.Upload(fileName, f); err != nil {
+		return fmt.Errorf("upload: %s", err)
 	}
 	return nil
 }

@@ -113,7 +113,7 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/origin/blobclient/mockblobclient.go \
 		-package mockblobclient \
-		code.uber.internal/infra/kraken/origin/blobclient Client,Provider,ClusterResolver
+		code.uber.internal/infra/kraken/origin/blobclient Client,Provider,ClusterClient
 
 	mkdir -p mocks/lib/dockerregistry/transfer
 	$(mockgen) \

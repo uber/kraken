@@ -42,12 +42,8 @@ type Client interface {
 	Locations(d image.Digest) ([]string, error)
 	CheckBlob(d image.Digest) (bool, error)
 	GetBlob(d image.Digest) (io.ReadCloser, error)
-	PushBlob(d image.Digest, blob io.Reader, size int64) error
+	PushBlob(d image.Digest, blob io.Reader) error
 	DeleteBlob(d image.Digest) error
-
-	StartUpload(d image.Digest) (uuid string, err error)
-	PatchUpload(d image.Digest, uuid string, start, stop int64, chunk io.Reader) error
-	CommitUpload(d image.Digest, uuid string) error
 
 	Repair() (io.ReadCloser, error)
 	RepairShard(shardID string) (io.ReadCloser, error)
@@ -55,21 +51,19 @@ type Client interface {
 
 	GetMetaInfo(namespace string, d image.Digest) (*torlib.MetaInfo, error)
 
-	UploadBlob(namespace string, d image.Digest, blob io.Reader) error
-	UploadBlobThrough(namespace string, d image.Digest, blob io.Reader) error
+	UploadBlob(namespace string, d image.Digest, blob io.Reader, through bool) error
 
 	GetPeerContext() (peercontext.PeerContext, error)
 }
 
 // HTTPClient defines the Client implementation.
 type HTTPClient struct {
-	config Config
-	addr   string
+	addr string
 }
 
 // New returns a new HTTPClient scoped to addr.
-func New(config Config, addr string) *HTTPClient {
-	return &HTTPClient{config.applyDefaults(), addr}
+func New(addr string) *HTTPClient {
+	return &HTTPClient{addr}
 }
 
 // Addr returns the address of the server the client is provisioned for.
@@ -111,29 +105,16 @@ func (c *HTTPClient) GetBlob(d image.Digest) (io.ReadCloser, error) {
 	return r.Body, nil
 }
 
-// PushBlob is a convenience wrapper around the upload API. Returns ErrBlobExist
-// if the blob already exists on the target origin.
-func (c *HTTPClient) PushBlob(d image.Digest, blob io.Reader, size int64) error {
-	uuid, err := c.StartUpload(d)
-	if err != nil {
-		if httputil.IsConflict(err) {
-			return ErrBlobExist
-		}
-		return fmt.Errorf("failed to start upload: %s", err)
-	}
-	var start int64
-	for start < size {
-		n := min(c.config.UploadChunkSize, size-start)
-		chunk := io.LimitReader(blob, n)
-		if err := c.PatchUpload(d, uuid, start, start+n, chunk); err != nil {
-			return fmt.Errorf("failed to patch upload: %s", err)
-		}
-		start += n
-	}
-	if err := c.CommitUpload(d, uuid); err != nil {
-		return fmt.Errorf("failed to commit upload: %s", err)
-	}
-	return nil
+// PushBlob uploads a blob to a single origin server. Unlike it's cousin UploadBlob,
+// PushBlob is an internal API which does not replicate the blob.
+//
+// NOTE: Because the blob is supplied as the body of an HTTP request, if the
+// underlying value of blob implements io.Closer, it will be closed.
+func (c *HTTPClient) PushBlob(d image.Digest, blob io.Reader) error {
+	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/blobs/%s/uploads", c.addr, d),
+		httputil.SendBody(blob))
+	return maybeRedirect(err)
 }
 
 // DeleteBlob deletes the blob corresponding to d.
@@ -144,60 +125,17 @@ func (c *HTTPClient) DeleteBlob(d image.Digest) error {
 	return maybeRedirect(err)
 }
 
-func (c *HTTPClient) uploadBlob(
+// UploadBlob uploads and replicates blob to the origin cluster. If through is set,
+// UploadBlob will also upload blob to the storage backend configured for namespace.
+//
+// NOTE: Because the blob is supplied as the body of an HTTP request, if the
+// underlying value of blob implements io.Closer, it will be closed.
+func (c *HTTPClient) UploadBlob(
 	namespace string, d image.Digest, blob io.Reader, through bool) error {
 
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads?through=%t", c.addr, namespace, d, through),
 		httputil.SendBody(blob))
-	return maybeRedirect(err)
-}
-
-// UploadBlob uploads and replicates blob to the origin cluster.
-func (c *HTTPClient) UploadBlob(namespace string, d image.Digest, blob io.Reader) error {
-	return c.uploadBlob(namespace, d, blob, false)
-}
-
-// UploadBlobThrough uploads blob to the storage backend configured for namespace,
-// and then replicates blob to the origin cluster.
-func (c *HTTPClient) UploadBlobThrough(namespace string, d image.Digest, blob io.Reader) error {
-	return c.uploadBlob(namespace, d, blob, true)
-}
-
-// StartUpload marks d as ready for upload, returning the upload uuid to use for
-// future patches and commit.
-func (c *HTTPClient) StartUpload(d image.Digest) (uuid string, err error) {
-	r, err := httputil.Post(
-		fmt.Sprintf("http://%s/blobs/%s/uploads", c.addr, d),
-		httputil.SendAcceptedCodes(http.StatusAccepted))
-	if err != nil {
-		return "", maybeRedirect(err)
-	}
-	uuid = r.Header.Get("Location")
-	if uuid == "" {
-		return "", errors.New("request succeeded, but Location header not set")
-	}
-	return uuid, nil
-}
-
-// PatchUpload uploads a chunk of d's blob from start to stop byte indeces for
-// the upload of uuid.
-func (c *HTTPClient) PatchUpload(d image.Digest, uuid string, start, stop int64, chunk io.Reader) error {
-	_, err := httputil.Patch(
-		fmt.Sprintf("http://%s/blobs/%s/uploads/%s", c.addr, d, uuid),
-		httputil.SendBody(chunk),
-		httputil.SendHeaders(map[string]string{
-			"Content-Range": fmt.Sprintf("%d-%d", start, stop),
-		}),
-		httputil.SendAcceptedCodes(http.StatusAccepted))
-	return maybeRedirect(err)
-}
-
-// CommitUpload marks the upload uuid for d's blob as committed.
-func (c *HTTPClient) CommitUpload(d image.Digest, uuid string) error {
-	_, err := httputil.Put(
-		fmt.Sprintf("http://%s/blobs/%s/uploads/%s", c.addr, d, uuid),
-		httputil.SendAcceptedCodes(http.StatusCreated))
 	return maybeRedirect(err)
 }
 

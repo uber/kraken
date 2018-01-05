@@ -10,7 +10,6 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
@@ -24,21 +23,21 @@ type MetaInfoConfig struct {
 }
 
 type metaInfoHandler struct {
-	config         MetaInfoConfig
-	store          storage.MetaInfoStore
-	requestCache   *dedup.RequestCache
-	originResolver blobclient.ClusterResolver
+	config        MetaInfoConfig
+	store         storage.MetaInfoStore
+	requestCache  *dedup.RequestCache
+	originCluster blobclient.ClusterClient
 }
 
 func newMetaInfoHandler(
 	config MetaInfoConfig,
 	store storage.MetaInfoStore,
-	originResolver blobclient.ClusterResolver) *metaInfoHandler {
+	originCluster blobclient.ClusterClient) *metaInfoHandler {
 
 	rc := dedup.NewRequestCache(config.RequestCache, clock.New())
 	rc.SetNotFound(httputil.IsNotFound)
 
-	return &metaInfoHandler{config, store, rc, originResolver}
+	return &metaInfoHandler{config, store, rc, originCluster}
 }
 
 func (h *metaInfoHandler) get(w http.ResponseWriter, r *http.Request) error {
@@ -67,7 +66,7 @@ func (h *metaInfoHandler) get(w http.ResponseWriter, r *http.Request) error {
 func (h *metaInfoHandler) startMetaInfoDownload(namespace string, d image.Digest) error {
 	id := namespace + ":" + d.Hex()
 	err := h.requestCache.Start(id, func() error {
-		mi, err := h.fetchOriginMetaInfo(namespace, d)
+		mi, err := h.originCluster.GetMetaInfo(namespace, d)
 		if err != nil {
 			return err
 		}
@@ -86,22 +85,6 @@ func (h *metaInfoHandler) startMetaInfoDownload(namespace string, d image.Digest
 		return handler.Errorf(serr.ResponseDump).Status(serr.Status)
 	}
 	return err
-}
-
-func (h *metaInfoHandler) fetchOriginMetaInfo(namespace string, d image.Digest) (mi *torlib.MetaInfo, err error) {
-	clients, err := h.originResolver.Resolve(d)
-	if err != nil {
-		return nil, handler.Errorf("resolve origins: %s", err)
-	}
-	blobclient.Shuffle(clients)
-	for _, client := range clients {
-		mi, err = client.GetMetaInfo(namespace, d)
-		if _, ok := err.(httputil.NetworkError); ok {
-			continue
-		}
-		return mi, err
-	}
-	return nil, err
 }
 
 // parseDigest parses a digest from a url path parameter, e.g. "/blobs/:digest".
