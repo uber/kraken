@@ -48,3 +48,9 @@ func (d Digester) FromBytes(p []byte) (Digest, error) {
 
 	return d.Digest(), nil
 }
+
+// Tee allows d to calculate a digest of r while the caller reads from the
+// returned reader.
+func (d Digester) Tee(r io.Reader) io.Reader {
+	return io.TeeReader(r, d.hash)
+}

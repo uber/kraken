@@ -55,6 +55,9 @@ type Client interface {
 
 	GetMetaInfo(namespace string, d image.Digest) (*torlib.MetaInfo, error)
 
+	UploadBlob(namespace string, d image.Digest, blob io.Reader) error
+	UploadBlobThrough(namespace string, d image.Digest, blob io.Reader) error
+
 	GetPeerContext() (peercontext.PeerContext, error)
 }
 
@@ -139,6 +142,26 @@ func (c *HTTPClient) DeleteBlob(d image.Digest) error {
 		fmt.Sprintf("http://%s/blobs/%s", c.addr, d),
 		httputil.SendAcceptedCodes(http.StatusAccepted))
 	return maybeRedirect(err)
+}
+
+func (c *HTTPClient) uploadBlob(
+	namespace string, d image.Digest, blob io.Reader, through bool) error {
+
+	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads?through=%t", c.addr, namespace, d, through),
+		httputil.SendBody(blob))
+	return maybeRedirect(err)
+}
+
+// UploadBlob uploads and replicates blob to the origin cluster.
+func (c *HTTPClient) UploadBlob(namespace string, d image.Digest, blob io.Reader) error {
+	return c.uploadBlob(namespace, d, blob, false)
+}
+
+// UploadBlobThrough uploads blob to the storage backend configured for namespace,
+// and then replicates blob to the origin cluster.
+func (c *HTTPClient) UploadBlobThrough(namespace string, d image.Digest, blob io.Reader) error {
+	return c.uploadBlob(namespace, d, blob, true)
 }
 
 // StartUpload marks d as ready for upload, returning the upload uuid to use for

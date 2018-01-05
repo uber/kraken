@@ -214,6 +214,30 @@ func (mr *MockClientMockRecorder) StartUpload(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartUpload", reflect.TypeOf((*MockClient)(nil).StartUpload), arg0)
 }
 
+// UploadBlob mocks base method
+func (m *MockClient) UploadBlob(arg0 string, arg1 image.Digest, arg2 io.Reader) error {
+	ret := m.ctrl.Call(m, "UploadBlob", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UploadBlob indicates an expected call of UploadBlob
+func (mr *MockClientMockRecorder) UploadBlob(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClient)(nil).UploadBlob), arg0, arg1, arg2)
+}
+
+// UploadBlobThrough mocks base method
+func (m *MockClient) UploadBlobThrough(arg0 string, arg1 image.Digest, arg2 io.Reader) error {
+	ret := m.ctrl.Call(m, "UploadBlobThrough", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UploadBlobThrough indicates an expected call of UploadBlobThrough
+func (mr *MockClientMockRecorder) UploadBlobThrough(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlobThrough", reflect.TypeOf((*MockClient)(nil).UploadBlobThrough), arg0, arg1, arg2)
+}
+
 // MockProvider is a mock of Provider interface
 type MockProvider struct {
 	ctrl     *gomock.Controller

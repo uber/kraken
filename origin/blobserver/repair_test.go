@@ -43,7 +43,7 @@ func TestRepairOwnedShardPushesToReplica(t *testing.T) {
 
 	// Ensure master2 received the blob.
 	for d, blob := range blobs {
-		ensureHasBlob(t, s2.fs, d, blob)
+		ensureHasBlob(t, cp.Provide(master2), d, blob)
 	}
 }
 
@@ -82,9 +82,10 @@ func TestRepairUnownedShardPushesToReplicasAndDeletes(t *testing.T) {
 	require.NoError(err)
 
 	for d, blob := range blobs {
-		for _, s := range []*testServer{s2, s3} {
-			ensureHasBlob(t, s.fs, d, blob)
+		for _, master := range []string{master2, master3} {
+			ensureHasBlob(t, cp.Provide(master), d, blob)
 		}
+
 		// Ensure master1 deleted the blobs.
 		_, err := s1.fs.GetCacheFileStat(d.Hex())
 		require.Error(err)
@@ -185,7 +186,7 @@ func TestRepairUnownedShardDoesNotDeleteIfReplicationFails(t *testing.T) {
 	require.NoError(err)
 
 	for d, blob := range blobs {
-		ensureHasBlob(t, s2.fs, d, blob)
+		ensureHasBlob(t, cp.Provide(master2), d, blob)
 
 		// Ensure master1 did not delete the blobs.
 		_, err = s1.fs.GetCacheFileStat(d.Hex())
@@ -218,7 +219,7 @@ func TestRepairAllShards(t *testing.T) {
 	require.NoError(err)
 
 	for d, blob := range blobs {
-		ensureHasBlob(t, s2.fs, d, blob)
+		ensureHasBlob(t, cp.Provide(master2), d, blob)
 	}
 }
 
@@ -242,5 +243,5 @@ func TestRepairDigest(t *testing.T) {
 	_, err = cp.Provide(master1).RepairDigest(d)
 	require.NoError(err)
 
-	ensureHasBlob(t, s2.fs, d, blob)
+	ensureHasBlob(t, cp.Provide(master2), d, blob)
 }
