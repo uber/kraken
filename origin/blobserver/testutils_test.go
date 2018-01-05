@@ -54,22 +54,15 @@ func configNoRedirectFixture() Config {
 	return c
 }
 
-func clientConfigFixture() blobclient.Config {
-	return blobclient.Config{
-		UploadChunkSize: 16,
-	}
-}
-
 // testClientProvider implements blobclient.ClientProvider. It maps origin hostnames to
 // the local addresses they are running on, such that Provide("dummy-origin")
 // can resolve a real address.
 type testClientProvider struct {
-	config         blobclient.Config
 	addrByHostname map[string]string
 }
 
-func newTestClientProvider(config blobclient.Config) *testClientProvider {
-	return &testClientProvider{config, make(map[string]string)}
+func newTestClientProvider() *testClientProvider {
+	return &testClientProvider{make(map[string]string)}
 }
 
 func (p *testClientProvider) register(host string, addr string) {
@@ -81,7 +74,7 @@ func (p *testClientProvider) Provide(host string) blobclient.Client {
 	if !ok {
 		log.Panicf("host %q not found", host)
 	}
-	return blobclient.New(p.config, addr)
+	return blobclient.New(addr)
 }
 
 func startServer(

@@ -7,7 +7,6 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/metrics"
-	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/service"
 	"code.uber.internal/infra/kraken/tracker/storage"
@@ -32,5 +31,4 @@ type Config struct {
 // origin cluster.
 type OriginConfig struct {
 	RoundRobin serverset.RoundRobinConfig `yaml:"round_robin"`
-	Client     blobclient.Config          `yaml:"client"`
 }

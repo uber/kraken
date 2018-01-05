@@ -22,7 +22,7 @@ func Handler(
 	peerStore storage.PeerStore,
 	metaInfoStore storage.MetaInfoStore,
 	manifestStore storage.ManifestStore,
-	originResolver blobclient.ClusterResolver) http.Handler {
+	originCluster blobclient.ClusterClient) http.Handler {
 
 	stats = stats.SubScope("service")
 
@@ -30,10 +30,10 @@ func Handler(
 		config,
 		peerStore,
 		policy,
-		originResolver,
+		originCluster,
 	}
 	health := &healthHandler{}
-	metainfo := newMetaInfoHandler(config.MetaInfo, metaInfoStore, originResolver)
+	metainfo := newMetaInfoHandler(config.MetaInfo, metaInfoStore, originCluster)
 	manifest := &manifestHandler{manifestStore}
 
 	r := chi.NewRouter()

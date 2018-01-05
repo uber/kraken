@@ -113,9 +113,6 @@ func main() {
 		hostname = *blobServerHostName
 	}
 
-	addr := fmt.Sprintf("%s:%d", hostname, *blobServerPort)
-	blobClientProvider := blobclient.NewProvider(config.BlobClient)
-
 	stats, closer, err = metrics.New(config.Metrics)
 	if err != nil {
 		log.Fatalf("Failed to create metrics: %s", err)
@@ -127,12 +124,13 @@ func main() {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
 
+	addr := fmt.Sprintf("%s:%d", hostname, *blobServerPort)
 	server, err := blobserver.New(
 		config.BlobServer,
 		stats,
 		addr,
 		fs,
-		blobClientProvider,
+		blobclient.NewProvider(),
 		pctx,
 		backendManager)
 	if err != nil {

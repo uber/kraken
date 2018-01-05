@@ -6,17 +6,15 @@ type Provider interface {
 }
 
 // HTTPProvider provides HTTPClients.
-type HTTPProvider struct {
-	config Config
-}
+type HTTPProvider struct{}
 
 // NewProvider returns a new HTTPProvider.
-func NewProvider(config Config) HTTPProvider {
-	return HTTPProvider{config}
+func NewProvider() HTTPProvider {
+	return HTTPProvider{}
 }
 
 // Provide implements ClientProvider's Provide.
 // TODO(codyg): Make this return error.
 func (p HTTPProvider) Provide(addr string) Client {
-	return New(p.config, addr)
+	return New(addr)
 }

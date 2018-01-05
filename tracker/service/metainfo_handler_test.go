@@ -7,7 +7,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
-	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/tracker/storage"
@@ -31,10 +30,10 @@ func TestMetaInfoHandlerGetFetchesFromOrigin(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockClusterResolver := mockblobclient.NewMockClusterResolver(ctrl)
+	mockClusterClient := mockblobclient.NewMockClusterClient(ctrl)
 
 	h := newMetaInfoHandler(
-		MetaInfoConfig{}, storage.TestMetaInfoStore(), mockClusterResolver)
+		MetaInfoConfig{}, storage.TestMetaInfoStore(), mockClusterClient)
 	addr, stop := startMetaInfoServer(h)
 	defer stop()
 
@@ -44,9 +43,7 @@ func TestMetaInfoHandlerGetFetchesFromOrigin(t *testing.T) {
 	mi := torlib.MetaInfoFixture()
 	digest := image.NewSHA256DigestFromHex(mi.Name())
 
-	mockBlobClient := mockblobclient.NewMockClient(ctrl)
-	mockClusterResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockBlobClient}, nil)
-	mockBlobClient.EXPECT().GetMetaInfo(namespace, digest).Return(mi, nil)
+	mockClusterClient.EXPECT().GetMetaInfo(namespace, digest).Return(mi, nil)
 
 	_, err := mic.Download(namespace, digest.Hex())
 	require.Equal(metainfoclient.ErrRetry, err)
@@ -65,10 +62,10 @@ func TestMetaInfoHandlerGetCachesAndPropagatesOriginError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockClusterResolver := mockblobclient.NewMockClusterResolver(ctrl)
+	mockClusterClient := mockblobclient.NewMockClusterClient(ctrl)
 
 	h := newMetaInfoHandler(
-		MetaInfoConfig{}, storage.TestMetaInfoStore(), mockClusterResolver)
+		MetaInfoConfig{}, storage.TestMetaInfoStore(), mockClusterClient)
 	addr, stop := startMetaInfoServer(h)
 	defer stop()
 
@@ -78,9 +75,8 @@ func TestMetaInfoHandlerGetCachesAndPropagatesOriginError(t *testing.T) {
 	mi := torlib.MetaInfoFixture()
 	digest := image.NewSHA256DigestFromHex(mi.Name())
 
-	mockBlobClient := mockblobclient.NewMockClient(ctrl)
-	mockClusterResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockBlobClient}, nil)
-	mockBlobClient.EXPECT().GetMetaInfo(namespace, digest).Return(mi, httputil.StatusError{Status: 599})
+	mockClusterClient.EXPECT().GetMetaInfo(namespace, digest).Return(
+		nil, httputil.StatusError{Status: 599})
 
 	_, err := mic.Download(namespace, digest.Hex())
 	require.Equal(metainfoclient.ErrRetry, err)

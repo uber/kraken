@@ -77,13 +77,11 @@ func IsAccepted(err error) bool {
 // NetworkError occurs on any Send error which occurred while trying to send
 // the HTTP request, e.g. the given host is unresponsive.
 type NetworkError struct {
-	method string
-	url    string
-	err    error
+	err error
 }
 
 func (e NetworkError) Error() string {
-	return fmt.Sprintf("%s %s: %s", e.method, e.url, e.err)
+	return e.err.Error()
 }
 
 type sendOptions struct {
@@ -173,7 +171,7 @@ func Send(method, url string, options ...SendOption) (*http.Response, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, NetworkError{method, url, err}
+		return nil, NetworkError{err}
 	}
 
 	_, ok := opts.acceptedCodes[resp.StatusCode]

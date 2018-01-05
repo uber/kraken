@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"sync"
 
 	"github.com/jackpal/bencode-go"
 
@@ -19,48 +18,30 @@ import (
 )
 
 type announceHandler struct {
-	config         Config
-	store          storage.PeerStore
-	policy         peerhandoutpolicy.PeerHandoutPolicy
-	originResolver blobclient.ClusterResolver
+	config        Config
+	store         storage.PeerStore
+	policy        peerhandoutpolicy.PeerHandoutPolicy
+	originCluster blobclient.ClusterClient
 }
 
-func (h *announceHandler) requestOrigins(infoHash, name string) ([]*torlib.PeerInfo, error) {
-	clients, err := h.originResolver.Resolve(image.NewSHA256DigestFromHex(name))
+func (h *announceHandler) fetchOrigins(infoHash, name string) ([]*torlib.PeerInfo, error) {
+	var origins []*torlib.PeerInfo
+	pctxs, err := h.originCluster.Owners(image.NewSHA256DigestFromHex(name))
 	if err != nil {
 		return nil, err
 	}
-
-	var mu sync.Mutex
-	var origins []*torlib.PeerInfo
-	var errs []error
-
-	var wg sync.WaitGroup
-	for _, client := range clients {
-		wg.Add(1)
-		go func(client blobclient.Client) {
-			defer wg.Done()
-			pctx, err := client.GetPeerContext()
-			mu.Lock()
-			if err != nil {
-				errs = append(errs, err)
-			} else {
-				origins = append(origins, &torlib.PeerInfo{
-					InfoHash: infoHash,
-					PeerID:   pctx.PeerID.String(),
-					IP:       pctx.IP,
-					Port:     int64(pctx.Port),
-					DC:       pctx.Zone,
-					Origin:   true,
-					Complete: true,
-				})
-			}
-			mu.Unlock()
-		}(client)
+	for _, pctx := range pctxs {
+		origins = append(origins, &torlib.PeerInfo{
+			InfoHash: infoHash,
+			PeerID:   pctx.PeerID.String(),
+			IP:       pctx.IP,
+			Port:     int64(pctx.Port),
+			DC:       pctx.Zone,
+			Origin:   true,
+			Complete: true,
+		})
 	}
-	wg.Wait()
-
-	return origins, errutil.Join(errs)
+	return origins, nil
 }
 
 func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) error {
@@ -106,11 +87,12 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) error {
 			errs = append(errs, fmt.Errorf("origin peer storage error: %s", err))
 			tryUpdate = false
 		}
-		origins, err = h.requestOrigins(infoHash, name)
+		origins, err = h.fetchOrigins(infoHash, name)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("origin lookup error: %s", err))
+			tryUpdate = false
 		}
-		if len(origins) > 0 && tryUpdate {
+		if tryUpdate {
 			if err := h.store.UpdateOrigins(infoHash, origins); err != nil {
 				log.With("info_hash", infoHash).Errorf("Error upserting origins: %s", err)
 			}

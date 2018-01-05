@@ -13,7 +13,7 @@ type Downloader interface {
 
 // Uploader defines an interface to upload blobs
 type Uploader interface {
-	Upload(name string, blobCloner store.FileReaderCloner, size int64) error
+	Upload(name string, blob store.FileReader) error
 }
 
 // ManifestManager defines an interface to get and post manifest

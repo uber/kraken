@@ -2,6 +2,7 @@ package blobserver
 
 import (
 	"bytes"
+	"io/ioutil"
 	"sort"
 	"testing"
 
@@ -12,35 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestClientPushBlob(t *testing.T) {
-	tests := []struct {
-		description string
-		blobSize    int64
-		chunkSize   int64
-	}{
-		{"multiple chunks", 1024, 16},
-		{"blob size smaller than chunk size", 15, 16},
-		{"exactly one chunk", 16, 16},
-		{"slightly larger blob size than chunk size", 17, 16},
-	}
-
-	for _, test := range tests {
-		t.Run(test.description, func(t *testing.T) {
-			cp := newTestClientProvider(blobclient.Config{UploadChunkSize: test.chunkSize})
-
-			s := newTestServer(master1, configNoRedirectFixture(), cp)
-			defer s.cleanup()
-
-			d, blob := blobFixture(test.blobSize)
-
-			err := cp.Provide(master1).PushBlob(d, bytes.NewBuffer(blob), test.blobSize)
-			require.NoError(t, err)
-
-			ensureHasBlob(t, cp.Provide(master1), d, blob)
-		})
-	}
-}
-
 func toAddrs(clients []blobclient.Client) []string {
 	var addrs []string
 	for _, c := range clients {
@@ -50,53 +22,18 @@ func toAddrs(clients []blobclient.Client) []string {
 	return addrs
 }
 
-func TestClusterResolverProvidesCorrectClients(t *testing.T) {
+func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 	require := require.New(t)
 
-	cp := newTestClientProvider(clientConfigFixture())
+	cp := newTestClientProvider()
 
-	config := configFixture()
-
-	s1 := newTestServer(master1, config, cp)
-	defer s1.cleanup()
-	s2 := newTestServer(master2, config, cp)
-	defer s2.cleanup()
-	s3 := newTestServer(master3, config, cp)
-	defer s3.cleanup()
-
-	d, _ := computeBlobForHosts(config, master1, master2)
-
-	masters, err := serverset.NewRoundRobin(serverset.RoundRobinConfig{
-		Addrs:   []string{master1, master2, master3},
-		Retries: 3,
-	})
-	require.NoError(err)
-
-	resolver := blobclient.NewClusterResolver(cp, masters)
-
-	clients, err := resolver.Resolve(d)
-	require.NoError(err)
-	expected := []string{s1.addr, s2.addr}
-	sort.Strings(expected)
-	require.Equal(expected, toAddrs(clients))
-}
-
-func TestClusterResolverResilientToUnavailableMasters(t *testing.T) {
-	require := require.New(t)
-
-	cp := newTestClientProvider(clientConfigFixture())
-
-	config := configFixture()
-
-	s := newTestServer(master1, config, cp)
+	s := newTestServer(master1, configNoRedirectFixture(), cp)
 	defer s.cleanup()
 
 	// Register a dummy master addresses so Provide can still create a Client for
 	// unavailable masters.
-	cp.register(master2, "master2-dummy-addr")
-	cp.register(master3, "master3-dummy-addr")
-
-	d, _ := computeBlobForHosts(config, master1, master2)
+	cp.register(master2, "http://localhost:0")
+	cp.register(master3, "http://localhost:0")
 
 	masters, err := serverset.NewRoundRobin(serverset.RoundRobinConfig{
 		Addrs:   []string{master1, master2, master3},
@@ -104,24 +41,38 @@ func TestClusterResolverResilientToUnavailableMasters(t *testing.T) {
 	})
 	require.NoError(err)
 
-	// master2 and master3 are unavailable, however we should still be able to query
-	// locations from master1.
-	resolver := blobclient.NewClusterResolver(cp, masters)
+	cc := blobclient.NewClusterClient(cp, masters)
 
-	// Run Resolve multiple times to ensure we eventually hit an unavailable server.
-	for i := 0; i < 3; i++ {
-		clients, err := resolver.Resolve(d)
+	// Run many times to make sure we eventually hit unavailable masters.
+	for i := 0; i < 100; i++ {
+		d, blob := image.DigestWithBlobFixture()
+
+		require.NoError(cc.UploadBlob("noexist", d, bytes.NewReader(blob)))
+
+		mi, err := cc.GetMetaInfo("noexist", d)
 		require.NoError(err)
-		expected := []string{s.addr, "master2-dummy-addr"}
-		sort.Strings(expected)
-		require.Equal(expected, toAddrs(clients))
+		require.NotNil(mi)
+
+		r, err := cc.DownloadBlob(d)
+		require.NoError(err)
+		result, err := ioutil.ReadAll(r)
+		require.NoError(err)
+		require.Equal(string(blob), string(result))
+
+		peers, err := cc.Owners(d)
+		require.NoError(err)
+		require.Len(peers, 1)
+		require.Equal(s.pctx, peers[0])
 	}
 }
 
-func TestClusterResolverReturnsErrorOnNoAvailability(t *testing.T) {
+func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 	require := require.New(t)
 
-	cp := blobclient.NewProvider(clientConfigFixture())
+	cp := newTestClientProvider()
+	cp.register(master1, "http://localhost:0")
+	cp.register(master2, "http://localhost:0")
+	cp.register(master3, "http://localhost:0")
 
 	masters, err := serverset.NewRoundRobin(serverset.RoundRobinConfig{
 		Addrs:   []string{master1, master2, master3},
@@ -129,8 +80,18 @@ func TestClusterResolverReturnsErrorOnNoAvailability(t *testing.T) {
 	})
 	require.NoError(err)
 
-	resolver := blobclient.NewClusterResolver(cp, masters)
+	cc := blobclient.NewClusterClient(cp, masters)
 
-	_, err = resolver.Resolve(image.DigestFixture())
+	d, blob := image.DigestWithBlobFixture()
+
+	require.Error(cc.UploadBlob("noexist", d, bytes.NewReader(blob)))
+
+	_, err = cc.GetMetaInfo("noexist", d)
+	require.Error(err)
+
+	_, err = cc.DownloadBlob(d)
+	require.Error(err)
+
+	_, err = cc.Owners(d)
 	require.Error(err)
 }

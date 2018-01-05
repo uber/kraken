@@ -13,7 +13,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -44,18 +43,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating origin round robin: %s", err)
 	}
-	originResolver := blobclient.NewClusterResolver(
-		blobclient.NewProvider(config.Origin.Client), origins)
+	originCluster := blobclient.NewClusterClient(blobclient.NewProvider(), origins)
 
 	trackers, err := serverset.NewRoundRobin(config.Tracker.RoundRobin)
 	if err != nil {
 		log.Fatalf("Error creating tracker round robin: %s", err)
 	}
 	manifestClient := manifestclient.New(trackers)
-	metaInfoClient := metainfoclient.Default(trackers)
 
 	transferer := transfer.NewOriginClusterTransferer(
-		config.Transfer, originResolver, manifestClient, metaInfoClient, fs)
+		originCluster, manifestClient, fs)
 
 	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)
