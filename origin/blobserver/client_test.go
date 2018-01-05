@@ -36,7 +36,7 @@ func TestClientPushBlob(t *testing.T) {
 			err := cp.Provide(master1).PushBlob(d, bytes.NewBuffer(blob), test.blobSize)
 			require.NoError(t, err)
 
-			ensureHasBlob(t, s.fs, d, blob)
+			ensureHasBlob(t, cp.Provide(master1), d, blob)
 		})
 	}
 }

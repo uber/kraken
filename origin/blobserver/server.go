@@ -181,6 +181,14 @@ func (s Server) Handler() http.Handler {
 	})
 
 	r.Group(func(r chi.Router) {
+		stats := s.stats.SubScope("namespace.blobs.uploads")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
+
+		r.Post("/namespace/:namespace/blobs/:digest/uploads", handler.Wrap(s.uploadBlobHandler))
+	})
+
+	r.Group(func(r chi.Router) {
 		stats := s.stats.SubScope("namespace.blobs.metainfo")
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
@@ -208,8 +216,10 @@ func (s Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	if err := s.redirectByDigest(d); err != nil {
 		return err
 	}
-	if err := s.ensureDigestExists(d); err != nil {
+	if ok, err := s.blobExists(d); err != nil {
 		return err
+	} else if !ok {
+		return handler.ErrorStatus(http.StatusNotFound)
 	}
 	w.WriteHeader(http.StatusOK)
 	log.Debugf("successfully check blob %s exists", d.Hex())
@@ -263,6 +273,34 @@ func (s Server) getLocationsHandler(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
+// uploadBlobHandler uploads a blob via chunked transfer encoding. Replicates
+// the blob among other origins. If query argument "through" is set to true,
+// pushes the blob to the storage backend configured for the given namespace.
+func (s Server) uploadBlobHandler(w http.ResponseWriter, r *http.Request) error {
+	d, err := parseDigest(r)
+	if err != nil {
+		return err
+	}
+	if err := s.redirectByDigest(d); err != nil {
+		return err
+	}
+	namespace := chi.URLParam(r, "namespace")
+	if namespace == "" {
+		return handler.Errorf("empty namespace").Status(http.StatusBadRequest)
+	}
+	through := false
+	t := r.URL.Query().Get("through")
+	if t != "" {
+		through, err = strconv.ParseBool(t)
+		if err != nil {
+			return handler.Errorf(
+				"invalid through argument: parse bool: %s", err).Status(http.StatusBadRequest)
+		}
+	}
+	defer r.Body.Close()
+	return s.uploadBlob(namespace, d, r.Body, through)
+}
+
 // startUploadHandler starts upload process for a blob. Returns the location of
 // the upload which is needed for subsequent patches of this blob.
 func (s Server) startUploadHandler(w http.ResponseWriter, r *http.Request) error {
@@ -274,8 +312,10 @@ func (s Server) startUploadHandler(w http.ResponseWriter, r *http.Request) error
 	if err := s.redirectByDigest(d); err != nil {
 		return err
 	}
-	if err := s.ensureDigestNotExists(d); err != nil {
+	if ok, err := s.blobExists(d); err != nil {
 		return err
+	} else if ok {
+		return handler.ErrorStatus(http.StatusConflict)
 	}
 	u, err := s.createUpload(d)
 	if err != nil {
@@ -301,8 +341,10 @@ func (s Server) patchUploadHandler(w http.ResponseWriter, r *http.Request) error
 	if err := s.redirectByDigest(d); err != nil {
 		return err
 	}
-	if err := s.ensureDigestNotExists(d); err != nil {
+	if ok, err := s.blobExists(d); err != nil {
 		return err
+	} else if ok {
+		return handler.ErrorStatus(http.StatusConflict)
 	}
 	start, end, err := parseContentRange(r.Header)
 	if err != nil {
@@ -502,7 +544,7 @@ func (s Server) downloadRemoteBlob(c backend.Client, d image.Digest) error {
 func (s Server) replicateBlob(d image.Digest) error {
 	locs, err := s.getLocations(d)
 	if err != nil {
-		return handler.Errorf("get locations: %s", err)
+		return fmt.Errorf("get locations: %s", err)
 	}
 
 	var mu sync.Mutex
@@ -652,25 +694,14 @@ func (s Server) redirectByDigest(d image.Digest) error {
 		Header("Origin-Locations", strings.Join(locs, ","))
 }
 
-func (s Server) ensureDigestExists(d image.Digest) error {
+func (s Server) blobExists(d image.Digest) (bool, error) {
 	if _, err := s.fileStore.GetCacheFileStat(d.Hex()); err != nil {
 		if os.IsNotExist(err) {
-			return handler.ErrorStatus(http.StatusNotFound)
+			return false, nil
 		}
-		return handler.Errorf("failed to look up blob data for digest %q: %s", d, err)
+		return false, handler.Errorf("cache file stat: %s", err)
 	}
-	return nil
-}
-
-func (s Server) ensureDigestNotExists(d image.Digest) error {
-	_, err := s.fileStore.GetCacheFileStat(d.Hex())
-	if err == nil {
-		return handler.Errorf("digest %q already exists", d).Status(http.StatusConflict)
-	}
-	if err != nil && !os.IsNotExist(err) {
-		return handler.Errorf("failed to look up blob data for digest %q: %s", d, err)
-	}
-	return nil
+	return true, nil
 }
 
 func (s Server) downloadBlob(d image.Digest, w http.ResponseWriter) error {
@@ -701,6 +732,77 @@ func (s Server) deleteBlob(d image.Digest) error {
 		}
 		return handler.Errorf("cannot delete blob data for digest %q: %s", d, err)
 	}
+	return nil
+}
+
+func (s Server) uploadBlob(namespace string, d image.Digest, blob io.Reader, through bool) error {
+	exists, err := s.blobExists(d)
+	if err != nil {
+		return err
+	}
+
+	// Reader for uploading blob to storage backend. May originate from either
+	// uploads or cache based on whether blob already exists.
+	var f store.FileReader
+
+	var uploadFilename string
+	if !exists {
+		uploadFilename = uuid.Generate().String()
+		if err := s.fileStore.CreateUploadFile(uploadFilename, 0); err != nil {
+			return handler.Errorf("create upload file: %s", err)
+		}
+		rw, err := s.fileStore.GetUploadFileReadWriter(uploadFilename)
+		if err != nil {
+			return handler.Errorf("get upload file: %s", err)
+		}
+		digester := image.NewDigester()
+		if _, err := io.Copy(rw, digester.Tee(blob)); err != nil {
+			return handler.Errorf("copy blob: %s", err)
+		}
+		resd := digester.Digest()
+		if resd != d {
+			return handler.Errorf(
+				"expected digest %s, calculated %s from blob", d, resd).Status(http.StatusBadRequest)
+		}
+		// Reset file for reading.
+		if _, err := rw.Seek(0, 0); err != nil {
+			return handler.Errorf("upload file seek: %s", err)
+		}
+		f = rw // Use upload file for backend upload.
+	}
+
+	// If through is set, we must make sure we safely upload the file to namespace's
+	// storage backend before committing the file to the cache. If the file can't be
+	// uploaded to said backend, the entire upload operation must fail.
+	if through {
+		if exists {
+			r, err := s.fileStore.GetCacheFileReader(d.Hex())
+			if err != nil {
+				return handler.Errorf("get cache file: %s", err)
+			}
+			f = r // Use cache file for backend upload.
+		}
+		c, err := s.backendManager.GetClient(namespace)
+		if err != nil {
+			return handler.Errorf("backend manager: %s", err).Status(http.StatusBadRequest)
+		}
+		log.With("blob", d.Hex()).Infof("Uploading blob to %s backend", namespace)
+		if err := c.Upload(d.Hex(), f); err != nil {
+			// TODO(codyg): We need some way of detecting whether the blob already exists
+			// in the storage backend.
+			return handler.Errorf("backend upload: %s", err)
+		}
+	}
+
+	if !exists {
+		if err := s.fileStore.MoveUploadFileToCache(uploadFilename, d.Hex()); err != nil {
+			return handler.Errorf("move upload file to cache: %s", err)
+		}
+		if err := s.replicateBlob(d); err != nil {
+			log.With("blob", d.Hex()).Errorf("Error replicating uploaded blob: %s", err)
+		}
+	}
+
 	return nil
 }
 

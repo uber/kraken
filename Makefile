@@ -78,6 +78,13 @@ mockgen = GOPATH=$(OLDGOPATH) $(GLIDE_EXEC) -g $(GLIDE) -d $(GOPATH)/bin -x gith
 mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
+
+	mkdir -p mocks/lib/backend
+	$(mockgen) \
+		-destination=mocks/lib/backend/mockbackend.go \
+		-package mockbackend \
+		code.uber.internal/infra/kraken/lib/backend Client
+
 	mkdir -p mocks/tracker/mockstorage
 	$(mockgen) \
 		-destination=mocks/tracker/mockstorage/mockstorage.go \

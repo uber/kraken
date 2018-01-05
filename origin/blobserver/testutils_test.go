@@ -252,12 +252,10 @@ func computeBlobForHosts(config Config, hosts ...string) (image.Digest, []byte) 
 	}
 }
 
-func ensureHasBlob(t *testing.T, fs store.FileStore, d image.Digest, expected []byte) {
-	require := require.New(t)
-
-	f, err := fs.GetCacheFileReader(d.Hex())
-	require.NoError(err)
-	content, err := ioutil.ReadAll(f)
-	require.NoError(err)
-	require.Equal(expected, content)
+func ensureHasBlob(t *testing.T, c blobclient.Client, d image.Digest, expected []byte) {
+	b, err := c.GetBlob(d)
+	require.NoError(t, err)
+	result, err := ioutil.ReadAll(b)
+	require.NoError(t, err)
+	require.Equal(t, string(expected), string(result))
 }

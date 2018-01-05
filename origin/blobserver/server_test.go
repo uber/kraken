@@ -2,6 +2,7 @@ package blobserver
 
 import (
 	"bytes"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -14,7 +15,9 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/fileio"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/httputil"
@@ -59,8 +62,6 @@ func TestCheckBlobHandlerNotFound(t *testing.T) {
 }
 
 func TestGetBlobHandlerOK(t *testing.T) {
-	require := require.New(t)
-
 	mocks := newServerMocks(t)
 	defer mocks.ctrl.Finish()
 
@@ -75,11 +76,7 @@ func TestGetBlobHandlerOK(t *testing.T) {
 
 	mocks.fileStore.EXPECT().GetCacheFileReader(d.Hex()).Return(f, nil)
 
-	r, err := blobclient.New(clientConfigFixture(), addr).GetBlob(d)
-	require.NoError(err)
-	b, err := ioutil.ReadAll(r)
-	require.NoError(err)
-	require.Equal(string(blob), string(b))
+	ensureHasBlob(t, blobclient.New(clientConfigFixture(), addr), d, blob)
 }
 
 func TestGetBlobHandlerNotFound(t *testing.T) {
@@ -396,20 +393,23 @@ func TestGetPeerContextHandlerOK(t *testing.T) {
 func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 	require := require.New(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	config := configFixture()
 	cp := newTestClientProvider(clientConfigFixture())
 	namespace := "test-namespace"
-	backendClient := backend.TestClient()
+	mockBackendClient := mockbackend.NewMockClient(ctrl)
 
 	for _, master := range []string{master1, master2} {
 		s := newTestServer(master, configFixture(), cp)
 		defer s.cleanup()
-		s.backendManager.Register(namespace, backendClient)
+		s.backendManager.Register(namespace, mockBackendClient)
 	}
 
 	d, blob := computeBlobForHosts(config, master1, master2)
 
-	backendClient.Upload(d.Hex(), bytes.NewReader(blob))
+	mockBackendClient.EXPECT().Download(d.Hex(), fileio.MatchWriter(blob)).Return(nil)
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
 	require.True(httputil.IsAccepted(err))
@@ -435,16 +435,20 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 	require := require.New(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	namespace := "test-namespace"
+	mockBackendClient := mockbackend.NewMockClient(ctrl)
+
 	cp := newTestClientProvider(clientConfigFixture())
 
 	s := newTestServer(master1, configFixture(), cp)
 	defer s.cleanup()
-
-	namespace := "test-namespace"
-	backendClient := backend.TestClient()
-	s.backendManager.Register(namespace, backendClient)
+	s.backendManager.Register(namespace, mockBackendClient)
 
 	d := image.DigestFixture()
+
+	mockBackendClient.EXPECT().Download(d.Hex(), gomock.Any()).Return(backend.ErrBlobNotFound)
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
 	require.True(httputil.IsAccepted(err))
@@ -458,4 +462,131 @@ func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 	mi, err = cp.Provide(master1).GetMetaInfo(namespace, d)
 	require.True(httputil.IsNotFound(err))
 	require.Nil(mi)
+}
+
+func TestUploadBlobReplicatesBlob(t *testing.T) {
+	require := require.New(t)
+
+	config := configFixture()
+	cp := newTestClientProvider(clientConfigFixture())
+
+	for _, master := range []string{master1, master2} {
+		s := newTestServer(master, config, cp)
+		defer s.cleanup()
+	}
+
+	d, blob := computeBlobForHosts(config, master1, master2)
+
+	err := cp.Provide(master1).UploadBlob("test-namespace", d, bytes.NewReader(blob))
+	require.NoError(err)
+
+	for _, master := range []string{master1, master2} {
+		ensureHasBlob(t, cp.Provide(master), d, blob)
+	}
+}
+
+func TestUploadBlobResilientToReplicationFailure(t *testing.T) {
+	require := require.New(t)
+
+	config := configFixture()
+	cp := newTestClientProvider(clientConfigFixture())
+
+	s := newTestServer(master1, config, cp)
+	defer s.cleanup()
+
+	cp.register(master2, "some broken address")
+
+	// Master2 owns this blob, but it is not running. Uploads should still succeed
+	// despite this.
+	d, blob := computeBlobForHosts(config, master1, master2)
+
+	err := cp.Provide(master1).UploadBlob("test-namespace", d, bytes.NewReader(blob))
+	require.NoError(err)
+
+	ensureHasBlob(t, cp.Provide(master1), d, blob)
+}
+
+func TestUploadBlobThroughUploadsToStorageBackendAndReplicates(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	config := configFixture()
+	cp := newTestClientProvider(clientConfigFixture())
+	namespace := "test-namespace"
+	mockBackendClient := mockbackend.NewMockClient(ctrl)
+
+	for _, master := range []string{master1, master2} {
+		s := newTestServer(master, config, cp)
+		defer s.cleanup()
+		s.backendManager.Register(namespace, mockBackendClient)
+	}
+
+	d, blob := computeBlobForHosts(config, master1, master2)
+
+	mockBackendClient.EXPECT().Upload(d.Hex(), fileio.MatchReader(blob)).Return(nil)
+
+	err := cp.Provide(master1).UploadBlobThrough(namespace, d, bytes.NewReader(blob))
+	require.NoError(err)
+
+	for _, master := range []string{master1, master2} {
+		ensureHasBlob(t, cp.Provide(master), d, blob)
+	}
+}
+
+func TestUploadBlobThroughCachedBlobStillUploadedToStorageBackend(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	config := configFixture()
+	cp := newTestClientProvider(clientConfigFixture())
+	namespace := "test-namespace"
+	mockBackendClient := mockbackend.NewMockClient(ctrl)
+
+	for _, master := range []string{master1, master2} {
+		s := newTestServer(master, config, cp)
+		defer s.cleanup()
+		s.backendManager.Register(namespace, mockBackendClient)
+	}
+
+	d, blob := computeBlobForHosts(config, master1, master2)
+
+	mockBackendClient.EXPECT().Upload(d.Hex(), fileio.MatchReader(blob)).Return(nil).Times(2)
+
+	err := cp.Provide(master1).UploadBlobThrough(namespace, d, bytes.NewReader(blob))
+	require.NoError(err)
+
+	// Since we don't return error on backend upload, a second upload-through
+	// operation should re-upload the blob to storage backend.
+	err = cp.Provide(master1).UploadBlobThrough(namespace, d, bytes.NewReader(blob))
+	require.NoError(err)
+}
+
+func TestUploadBlobThroughDoesNotCommitBlobIfBackendUploadFails(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cp := newTestClientProvider(clientConfigFixture())
+	namespace := "test-namespace"
+	mockBackendClient := mockbackend.NewMockClient(ctrl)
+
+	s := newTestServer(master1, configNoRedirectFixture(), cp)
+	defer s.cleanup()
+	s.backendManager.Register(namespace, mockBackendClient)
+
+	d, blob := image.DigestWithBlobFixture()
+
+	mockBackendClient.EXPECT().Upload(d.Hex(), fileio.MatchReader(blob)).Return(errors.New("some error"))
+
+	err := cp.Provide(master1).UploadBlobThrough(namespace, d, bytes.NewReader(blob))
+	require.Error(err)
+
+	ok, err := cp.Provide(master1).CheckBlob(d)
+	require.NoError(err)
+	require.False(ok)
 }
