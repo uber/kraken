@@ -409,6 +409,10 @@ func TestPushBlob(t *testing.T) {
 	require.NoError(err)
 	ensureHasBlob(t, cp.Provide(master1), d, blob)
 
+	// Ensure metainfo was generated.
+	_, err = s.fs.States().Cache().GetMetadata(d.Hex(), store.NewTorrentMeta())
+	require.NoError(err)
+
 	// Pushing again should be a no-op.
 	err = cp.Provide(master1).PushBlob(d, bytes.NewReader(blob))
 	require.NoError(err)

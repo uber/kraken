@@ -281,12 +281,13 @@ func (s Server) pushBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	if err := s.redirectByDigest(d); err != nil {
 		return err
 	}
-	if exists, err := s.blobExists(d); err != nil {
+	if err := s.downloadPushedBlob(d, r.Body); err != nil {
 		return err
-	} else if exists {
-		return nil
 	}
-	return s.downloadPushedBlob(d, r.Body)
+	if _, err := s.getOrGenerateMetaInfo(d); err != nil {
+		return err
+	}
+	return nil
 }
 
 // uploadBlobHandler uploads a blob via chunked transfer encoding. Replicates
@@ -314,7 +315,13 @@ func (s Server) uploadBlobHandler(w http.ResponseWriter, r *http.Request) error 
 				"invalid through argument: parse bool: %s", err).Status(http.StatusBadRequest)
 		}
 	}
-	return s.uploadBlob(namespace, d, r.Body, through)
+	if err := s.uploadBlob(namespace, d, r.Body, through); err != nil {
+		return err
+	}
+	if _, err := s.getOrGenerateMetaInfo(d); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s Server) repairHandler(w http.ResponseWriter, r *http.Request) error {
@@ -403,22 +410,7 @@ func (s Server) getMetaInfo(namespace string, d image.Digest) ([]byte, error) {
 	} else if err != nil {
 		return nil, handler.Errorf("cache file stat: %s", err)
 	}
-	cache := s.fileStore.States().Cache()
-	raw, err := cache.GetMetadata(d.Hex(), store.NewTorrentMeta())
-	if os.IsNotExist(err) {
-		raw, err = s.generateMetaInfo(d)
-		if err != nil {
-			return nil, handler.Errorf("generate metainfo: %s", err)
-		}
-		// Never overwrite existing metadata.
-		raw, err = cache.GetOrSetMetadata(d.Hex(), store.NewTorrentMeta(), raw)
-		if err != nil {
-			return nil, handler.Errorf("get or set metadata: %s", err)
-		}
-	} else if err != nil {
-		return nil, handler.Errorf("get cache metadata: %s", err)
-	}
-	return raw, nil
+	return s.getOrGenerateMetaInfo(d)
 }
 
 func (s Server) startRemoteBlobDownload(namespace string, d image.Digest) error {
@@ -515,23 +507,44 @@ func (s Server) pushBlob(loc string, d image.Digest) error {
 	return nil
 }
 
+// getOrGenerateMetaInfo returns metainfo for d. If no metainfo exists, generates
+// metainfo for d and writes it to disk.
+func (s Server) getOrGenerateMetaInfo(d image.Digest) ([]byte, error) {
+	cache := s.fileStore.States().Cache()
+	raw, err := cache.GetMetadata(d.Hex(), store.NewTorrentMeta())
+	if os.IsNotExist(err) {
+		raw, err = s.generateMetaInfo(d)
+		if err != nil {
+			return nil, handler.Errorf("generate metainfo: %s", err)
+		}
+		// Never overwrite existing metadata.
+		raw, err = cache.GetOrSetMetadata(d.Hex(), store.NewTorrentMeta(), raw)
+		if err != nil {
+			return nil, handler.Errorf("get or set metainfo: %s", err)
+		}
+	} else if err != nil {
+		return nil, handler.Errorf("get cache metainfo: %s", err)
+	}
+	return raw, nil
+}
+
 func (s Server) generateMetaInfo(d image.Digest) ([]byte, error) {
 	info, err := s.fileStore.GetCacheFileStat(d.Hex())
 	if err != nil {
-		return nil, handler.Errorf("cache stat: %s", err)
+		return nil, fmt.Errorf("cache stat: %s", err)
 	}
 	f, err := s.fileStore.GetCacheFileReader(d.Hex())
 	if err != nil {
-		return nil, handler.Errorf("get cache file: %s", err)
+		return nil, fmt.Errorf("get cache file: %s", err)
 	}
 	pieceLength := s.pieceLengthConfig.get(info.Size())
 	mi, err := torlib.NewMetaInfoFromBlob(d.Hex(), f, pieceLength)
 	if err != nil {
-		return nil, handler.Errorf("create metainfo: %s", err)
+		return nil, fmt.Errorf("create metainfo: %s", err)
 	}
 	raw, err := mi.Serialize()
 	if err != nil {
-		return nil, handler.Errorf("serialize metainfo: %s", err)
+		return nil, fmt.Errorf("serialize metainfo: %s", err)
 	}
 	return raw, nil
 }
@@ -626,6 +639,11 @@ func (s Server) deleteBlob(d image.Digest) error {
 }
 
 func (s Server) downloadPushedBlob(d image.Digest, blob io.Reader) error {
+	if exists, err := s.blobExists(d); err != nil {
+		return err
+	} else if exists {
+		return nil
+	}
 	u := uuid.Generate().String()
 	if err := s.fileStore.CreateUploadFile(u, 0); err != nil {
 		return handler.Errorf("create upload file: %s", err)

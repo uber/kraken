@@ -16,10 +16,10 @@ import (
 func TestAgentTorrentArchiveStatBitfield(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newTorrentArchiveMocks(t)
+	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{})
+	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
 
 	tf := torlib.CustomTestTorrentFileFixture(4, 1)
 	mi := tf.MetaInfo
@@ -38,10 +38,10 @@ func TestAgentTorrentArchiveStatBitfield(t *testing.T) {
 func TestAgentTorrentArchiveStatNotExist(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newTorrentArchiveMocks(t)
+	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{})
+	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
 
 	name := torlib.MetaInfoFixture().Name()
 
@@ -52,10 +52,10 @@ func TestAgentTorrentArchiveStatNotExist(t *testing.T) {
 func TestAgentTorrentArchiveGetTorrent(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newTorrentArchiveMocks(t)
+	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{})
+	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
 
 	mi := torlib.MetaInfoFixture()
 
@@ -81,10 +81,10 @@ func TestAgentTorrentArchiveGetTorrent(t *testing.T) {
 func TestAgentTorrentArchiveGetTorrentAndDeleteTorrentNotFound(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newTorrentArchiveMocks(t)
+	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{})
+	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
 
 	mi := torlib.MetaInfoFixture()
 
@@ -99,10 +99,10 @@ func TestAgentTorrentArchiveGetTorrentAndDeleteTorrentNotFound(t *testing.T) {
 func TestAgentTorrentArchiveDeleteTorrent(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newTorrentArchiveMocks(t)
+	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{})
+	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
 
 	mi := torlib.MetaInfoFixture()
 
@@ -118,10 +118,10 @@ func TestAgentTorrentArchiveDeleteTorrent(t *testing.T) {
 func TestAgentTorrentArchiveConcurrentGet(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newTorrentArchiveMocks(t)
+	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{})
+	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
 
 	mi := torlib.MetaInfoFixture()
 
@@ -144,7 +144,7 @@ func TestAgentTorrentArchiveConcurrentGet(t *testing.T) {
 func TestAgentTorrentArchiveDownloadMetaInfoRetryTimeout(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newTorrentArchiveMocks(t)
+	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
 	config := AgentTorrentArchiveConfig{
@@ -155,7 +155,7 @@ func TestAgentTorrentArchiveDownloadMetaInfoRetryTimeout(t *testing.T) {
 			Factor: 2,
 		},
 	}
-	archive := mocks.newAgentTorrentArchive(config)
+	archive := mocks.newTorrentArchive(config)
 
 	name := torlib.MetaInfoFixture().Name()
 
@@ -182,10 +182,10 @@ func TestAgentTorrentArchiveDownloadMetaInfoRetryTimeout(t *testing.T) {
 func TestAgentTorrentArchiveDownloadMetaInfoNonRetryErrorsFailFast(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newTorrentArchiveMocks(t)
+	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newAgentTorrentArchive(AgentTorrentArchiveConfig{
+	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{
 		DownloadMetaInfoTimeout: 5 * time.Second,
 	})
 

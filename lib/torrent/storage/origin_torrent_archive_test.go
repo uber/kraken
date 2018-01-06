@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/torlib"
 	"github.com/stretchr/testify/require"
 )
@@ -11,10 +12,10 @@ import (
 func TestOriginTorrentArchiveStatNotExist(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newTorrentArchiveMocks(t)
+	fs, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
-	archive := mocks.newOriginTorrentArchive()
+	archive := NewOriginTorrentArchive(fs)
 
 	name := torlib.MetaInfoFixture().Name()
 
@@ -22,34 +23,13 @@ func TestOriginTorrentArchiveStatNotExist(t *testing.T) {
 	require.Error(err)
 }
 
-func TestOriginTorrentArchiveStatLazilyPullsMetadata(t *testing.T) {
-	require := require.New(t)
-
-	mocks, cleanup := newTorrentArchiveMocks(t)
-	defer cleanup()
-
-	archive := mocks.newOriginTorrentArchive()
-
-	tf := torlib.CustomTestTorrentFileFixture(4, 1)
-	mi := tf.MetaInfo
-
-	require.NoError(mocks.fs.CreateCacheFile(mi.Name(), bytes.NewBuffer(tf.Content)))
-
-	mocks.metaInfoClient.EXPECT().Download("noexist", mi.Name()).Return(mi, nil).Times(1)
-
-	info, err := archive.Stat(mi.Name())
-	require.NoError(err)
-	require.Equal(Bitfield{true, true, true, true}, info.Bitfield())
-	require.Equal(int64(1), info.MaxPieceLength())
-}
-
 func TestOriginTorrentArchiveGetTorrentNotExist(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newTorrentArchiveMocks(t)
+	fs, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
-	archive := mocks.newOriginTorrentArchive()
+	archive := NewOriginTorrentArchive(fs)
 
 	name := torlib.MetaInfoFixture().Name()
 
@@ -60,17 +40,20 @@ func TestOriginTorrentArchiveGetTorrentNotExist(t *testing.T) {
 func TestOriginTorrentArchiveGetTorrent(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newTorrentArchiveMocks(t)
+	fs, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
-	archive := mocks.newOriginTorrentArchive()
+	archive := NewOriginTorrentArchive(fs)
 
 	tf := torlib.CustomTestTorrentFileFixture(4, 1)
 	mi := tf.MetaInfo
 
-	require.NoError(mocks.fs.CreateCacheFile(mi.Name(), bytes.NewBuffer(tf.Content)))
+	require.NoError(fs.CreateCacheFile(mi.Name(), bytes.NewBuffer(tf.Content)))
 
-	mocks.metaInfoClient.EXPECT().Download("noexist", mi.Name()).Return(mi, nil).Times(1)
+	miRaw, err := mi.Serialize()
+	require.NoError(err)
+	_, err = fs.States().Cache().SetMetadata(mi.Name(), store.NewTorrentMeta(), miRaw)
+	require.NoError(err)
 
 	tor, err := archive.GetTorrent(mi.Name())
 	require.NoError(err)
