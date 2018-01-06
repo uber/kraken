@@ -17,7 +17,6 @@ import (
 	"code.uber.internal/infra/kraken/origin/blobserver"
 	"code.uber.internal/infra/kraken/origin/torrentserver"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
-	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -79,13 +78,14 @@ func main() {
 			log.Fatalf("Error creating tracker round robin: %s", err)
 		}
 
-		archive := torrentstorage.NewOriginTorrentArchive(fs, metainfoclient.Default(trackers))
+		archive := torrentstorage.NewOriginTorrentArchive(fs)
 
 		c, err := torrent.NewSchedulerClient(
 			config.Torrent,
 			fs,
 			stats,
 			pctx,
+			// TODO(codyg): Get rid of this dependency.
 			announceclient.Default(pctx, trackers),
 			archive)
 		if err != nil {

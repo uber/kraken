@@ -9,12 +9,12 @@ import (
 	"github.com/golang/mock/gomock"
 )
 
-type torrentArchiveMocks struct {
+type agentMocks struct {
 	fs             store.FileStore
 	metaInfoClient *mockmetainfoclient.MockClient
 }
 
-func newTorrentArchiveMocks(t *testing.T) (*torrentArchiveMocks, func()) {
+func newAgentMocks(t *testing.T) (*agentMocks, func()) {
 	var cleanup testutil.Cleanup
 
 	ctrl := gomock.NewController(t)
@@ -25,15 +25,9 @@ func newTorrentArchiveMocks(t *testing.T) (*torrentArchiveMocks, func()) {
 
 	metaInfoClient := mockmetainfoclient.NewMockClient(ctrl)
 
-	return &torrentArchiveMocks{fs, metaInfoClient}, cleanup.Run
+	return &agentMocks{fs, metaInfoClient}, cleanup.Run
 }
 
-func (m *torrentArchiveMocks) newAgentTorrentArchive(
-	config AgentTorrentArchiveConfig) *AgentTorrentArchive {
-
+func (m *agentMocks) newTorrentArchive(config AgentTorrentArchiveConfig) *AgentTorrentArchive {
 	return NewAgentTorrentArchive(config, m.fs, m.metaInfoClient)
-}
-
-func (m *torrentArchiveMocks) newOriginTorrentArchive() *OriginTorrentArchive {
-	return NewOriginTorrentArchive(m.fs, m.metaInfoClient)
 }
