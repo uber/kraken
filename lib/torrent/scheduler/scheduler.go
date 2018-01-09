@@ -22,9 +22,9 @@ import (
 
 // Scheduler errors.
 var (
-	ErrTorrentAlreadyRegistered = errors.New("torrent already registered in scheduler")
-	ErrSchedulerStopped         = errors.New("scheduler has been stopped")
-	ErrTorrentCancelled         = errors.New("torrent has been cancelled")
+	ErrTorrentNotFound  = errors.New("torrent not found")
+	ErrSchedulerStopped = errors.New("scheduler has been stopped")
+	ErrTorrentCancelled = errors.New("torrent has been cancelled")
 )
 
 // torrentControl bundles torrent control structures.
@@ -235,18 +235,19 @@ func (s *Scheduler) Stop() {
 	})
 }
 
-// AddTorrent starts downloading / seeding the torrent given metainfo. The returned
-// error channel emits an error if it failed to get torrent from archive
-//
-// TODO(codyg): Torrents will continue to seed for the entire lifetime of the Scheduler,
-// but this should be a matter of policy.
-func (s *Scheduler) AddTorrent(name string) <-chan error {
+// AddTorrent starts downloading / seeding the torrent given metainfo. Returns
+// ErrTorrentNotFound if no torrent was found for namespace / name.
+func (s *Scheduler) AddTorrent(namespace, name string) <-chan error {
 	// Buffer size of 1 so sends do not block.
 	errc := make(chan error, 1)
 
-	t, err := s.torrentArchive.GetTorrent(name)
+	t, err := s.torrentArchive.CreateTorrent(namespace, name)
 	if err != nil {
-		errc <- fmt.Errorf("create torrent: %s", err)
+		if err == storage.ErrNotFound {
+			errc <- ErrTorrentNotFound
+		} else {
+			errc <- fmt.Errorf("create torrent: %s", err)
+		}
 		return errc
 	}
 

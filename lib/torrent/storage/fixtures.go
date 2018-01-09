@@ -31,7 +31,7 @@ func TorrentFixture(size, pieceLength uint64) (Torrent, func()) {
 	if err := tc.Upload(mi); err != nil {
 		panic(err)
 	}
-	tor, err := ta.GetTorrent(mi.Name())
+	tor, err := ta.CreateTorrent("noexist", mi.Name())
 	if err != nil {
 		panic(err)
 	}

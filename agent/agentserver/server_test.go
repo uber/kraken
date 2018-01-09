@@ -4,31 +4,45 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"testing"
 	"time"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetBlobHandler(t *testing.T) {
+const namespace = "test-namespace"
+
+func TestDownload(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newServerMocks(t)
 	defer cleanup()
 
-	d := image.DigestFixture()
+	d, blob := image.DigestWithBlobFixture()
 
-	mocks.torrentClient.EXPECT().Download(d.Hex()).Return(nil, nil)
+	mocks.torrentClient.EXPECT().Download(namespace, d.Hex()).DoAndReturn(
+		func(namespace, name string) (store.FileReader, error) {
+			if err := mocks.fs.CreateCacheFile(name, bytes.NewReader(blob)); err != nil {
+				return nil, err
+			}
+			return mocks.fs.GetCacheFileReader(name)
+		})
 
 	addr := mocks.startServer()
+	c := NewClient(ClientConfig{}, addr)
 
-	_, err := http.Get(fmt.Sprintf("http://%s/blobs/%s", addr, d.Hex()))
+	r, err := c.Download(namespace, d.Hex())
 	require.NoError(err)
+	result, err := ioutil.ReadAll(r)
+	require.NoError(err)
+	require.Equal(string(blob), string(result))
 }
 
 func TestHealthHandler(t *testing.T) {

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -68,16 +69,19 @@ func (a *AgentTorrentArchive) Stat(name string) (*TorrentInfo, error) {
 	return newTorrentInfo(mi, b), nil
 }
 
-// GetTorrent returns a Torrent for an existing file on disk, or initializes the
-// file if not present.
-func (a *AgentTorrentArchive) GetTorrent(name string) (Torrent, error) {
+// CreateTorrent returns a Torrent for either an existing metainfo / file on
+// disk, or downloads metainfo and initializes the file. Returns ErrNotFound
+// if no metainfo was found.
+func (a *AgentTorrentArchive) CreateTorrent(namespace, name string) (Torrent, error) {
 	downloadOrCache := a.fs.States().Download().Cache()
 
 	miRaw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
 	if os.IsNotExist(err) {
-		// TODO(codyg): Plumb namespace into here.
-		mi, err := a.downloadMetaInfo("noexist", name)
+		mi, err := a.downloadMetaInfo(namespace, name)
 		if err != nil {
+			if err == metainfoclient.ErrNotFound {
+				return nil, ErrNotFound
+			}
 			return nil, fmt.Errorf("download metainfo: %s", err)
 		}
 		// There's a race condition here, but it's "okay"... Basically, we could
@@ -94,16 +98,35 @@ func (a *AgentTorrentArchive) GetTorrent(name string) (Torrent, error) {
 		}
 		miRaw, err = downloadOrCache.GetOrSetMetadata(name, store.NewTorrentMeta(), miRaw)
 		if err != nil {
-			return nil, fmt.Errorf("get or set metainfo metadata: %s", err)
+			return nil, fmt.Errorf("get or set metainfo: %s", err)
 		}
 	} else if err != nil {
-		return nil, fmt.Errorf("get download metadata: %s", err)
+		return nil, fmt.Errorf("get metainfo: %s", err)
 	}
 	mi, err := torlib.DeserializeMetaInfo(miRaw)
 	if err != nil {
 		return nil, fmt.Errorf("parse metainfo: %s", err)
 	}
 
+	t, err := NewLocalTorrent(a.fs, mi)
+	if err != nil {
+		return nil, fmt.Errorf("initialize torrent: %s", err)
+	}
+	return t, nil
+}
+
+// GetTorrent returns a Torrent for an existing metainfo / file on disk.
+func (a *AgentTorrentArchive) GetTorrent(name string) (Torrent, error) {
+	downloadOrCache := a.fs.States().Download().Cache()
+
+	miRaw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
+	if err != nil {
+		return nil, fmt.Errorf("get metainfo: %s", err)
+	}
+	mi, err := torlib.DeserializeMetaInfo(miRaw)
+	if err != nil {
+		return nil, fmt.Errorf("parse metainfo: %s", err)
+	}
 	t, err := NewLocalTorrent(a.fs, mi)
 	if err != nil {
 		return nil, fmt.Errorf("initialize torrent: %s", err)
@@ -122,14 +145,14 @@ func (a *AgentTorrentArchive) downloadMetaInfo(namespace string, name string) (*
 
 	var attempt int
 	for {
-		mi, err := a.metaInfoClient.Download("noexist", name)
+		mi, err := a.metaInfoClient.Download(namespace, name)
 		if err != metainfoclient.ErrRetry {
 			return mi, err
 		}
 		select {
 		case <-time.After(a.backoff.Duration(attempt)):
 		case <-timer.C:
-			return nil, fmt.Errorf("retries timed out, last error: %s", err)
+			return nil, errors.New("retries timed out")
 		}
 		attempt++
 	}

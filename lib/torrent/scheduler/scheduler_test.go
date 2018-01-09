@@ -28,12 +28,13 @@ func TestDownloadTorrentWithSeederAndLeecher(t *testing.T) {
 
 	tf := torlib.TestTorrentFileFixture()
 
-	mocks.metaInfoClient.Upload(tf.MetaInfo)
+	mocks.metaInfoClient.EXPECT().Download(
+		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
 
 	seeder.writeTorrent(tf)
-	require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo.Name()))
+	require.NoError(<-seeder.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 
-	require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo.Name()))
+	require.NoError(<-leecher.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 	leecher.checkTorrent(t, tf)
 }
 
@@ -52,16 +53,17 @@ func TestDownloadManyTorrentsWithSeederAndLeecher(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		tf := torlib.TestTorrentFileFixture()
 
-		mocks.metaInfoClient.Upload(tf.MetaInfo)
+		mocks.metaInfoClient.EXPECT().Download(
+			namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			seeder.writeTorrent(tf)
-			require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo.Name()))
+			require.NoError(<-seeder.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 
-			require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo.Name()))
+			require.NoError(<-leecher.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 			leecher.checkTorrent(t, tf)
 		}()
 	}
@@ -85,10 +87,11 @@ func TestDownloadManyTorrentsWithSeederAndManyLeechers(t *testing.T) {
 		tf := torlib.TestTorrentFileFixture()
 		torrentFiles[i] = tf
 
-		mocks.metaInfoClient.Upload(tf.MetaInfo)
+		mocks.metaInfoClient.EXPECT().Download(
+			namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(6)
 
 		seeder.writeTorrent(tf)
-		require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo.Name()))
+		require.NoError(<-seeder.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 	}
 
 	var wg sync.WaitGroup
@@ -100,7 +103,7 @@ func TestDownloadManyTorrentsWithSeederAndManyLeechers(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				select {
-				case err := <-p.scheduler.AddTorrent(tf.MetaInfo.Name()):
+				case err := <-p.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()):
 					require.NoError(err)
 					p.checkTorrent(t, tf)
 				case <-time.After(10 * time.Second):
@@ -125,11 +128,12 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 	pieceLength := 256
 	tf := torlib.CustomTestTorrentFileFixture(uint64(len(peers)*pieceLength), uint64(pieceLength))
 
-	mocks.metaInfoClient.Upload(tf.MetaInfo)
+	mocks.metaInfoClient.EXPECT().Download(
+		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(len(peers))
 
 	var wg sync.WaitGroup
 	for i, p := range peers {
-		tor, err := p.torrentArchive.GetTorrent(tf.MetaInfo.Name())
+		tor, err := p.torrentArchive.CreateTorrent(namespace, tf.MetaInfo.Name())
 		require.NoError(err)
 
 		piece := make([]byte, pieceLength)
@@ -143,7 +147,7 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			select {
-			case err := <-p.scheduler.AddTorrent(tf.MetaInfo.Name()):
+			case err := <-p.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()):
 				require.NoError(err)
 				p.checkTorrent(t, tf)
 			case <-time.After(10 * time.Second):
@@ -165,19 +169,20 @@ func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 
 	tf := torlib.TestTorrentFileFixture()
 
-	mocks.metaInfoClient.Upload(tf.MetaInfo)
+	mocks.metaInfoClient.EXPECT().Download(
+		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
 
 	clk := clock.NewMock()
 	w := newEventWatcher()
 
 	seeder := mocks.newPeer(config, withEventLoop(w), withClock(clk))
 	seeder.writeTorrent(tf)
-	require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo.Name()))
+	require.NoError(<-seeder.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 
 	clk.Add(config.AnnounceInterval)
 
 	leecher := mocks.newPeer(config, withClock(clk))
-	errc := leecher.scheduler.AddTorrent(tf.MetaInfo.Name())
+	errc := leecher.scheduler.AddTorrent(namespace, tf.MetaInfo.Name())
 
 	clk.Add(config.AnnounceInterval)
 
@@ -209,13 +214,14 @@ func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
 	tf := torlib.TestTorrentFileFixture()
 
 	// Allow any number of downloads due to concurrency below.
-	mocks.metaInfoClient.Upload(tf.MetaInfo)
+	mocks.metaInfoClient.EXPECT().Download(
+		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).AnyTimes()
 
 	config := configFixture()
 
 	seeder := mocks.newPeer(config)
 	seeder.writeTorrent(tf)
-	require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo.Name()))
+	require.NoError(<-seeder.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 
 	leecher := mocks.newPeer(config)
 
@@ -225,7 +231,7 @@ func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			// Multiple goroutines should be able to wait on the same torrent.
-			require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo.Name()))
+			require.NoError(<-leecher.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 		}()
 	}
 	wg.Wait()
@@ -233,7 +239,7 @@ func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
 	leecher.checkTorrent(t, tf)
 
 	// After the torrent is complete, further calls to AddTorrent should succeed immediately.
-	require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo.Name()))
+	require.NoError(<-leecher.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 }
 
 func TestEmitStatsEventTriggers(t *testing.T) {
@@ -274,12 +280,13 @@ func TestNetworkEvents(t *testing.T) {
 	// Torrent with 1 piece.
 	tf := torlib.CustomTestTorrentFileFixture(1, 1)
 
-	mocks.metaInfoClient.Upload(tf.MetaInfo)
+	mocks.metaInfoClient.EXPECT().Download(
+		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
 
 	seeder.writeTorrent(tf)
-	require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo.Name()))
+	require.NoError(<-seeder.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 
-	require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo.Name()))
+	require.NoError(<-leecher.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 	leecher.checkTorrent(t, tf)
 
 	sid := seeder.pctx.PeerID
@@ -327,7 +334,8 @@ func TestPullInactiveTorrent(t *testing.T) {
 
 	tf := torlib.TestTorrentFileFixture()
 
-	mocks.metaInfoClient.Upload(tf.MetaInfo)
+	mocks.metaInfoClient.EXPECT().Download(
+		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
 
 	seeder := mocks.newPeer(config)
 
@@ -341,7 +349,7 @@ func TestPullInactiveTorrent(t *testing.T) {
 
 	leecher := mocks.newPeer(config)
 
-	require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo.Name()))
+	require.NoError(<-leecher.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 	leecher.checkTorrent(t, tf)
 }
 
@@ -369,17 +377,18 @@ func TestCancelTorrent(t *testing.T) {
 	tf := torlib.TestTorrentFileFixture()
 	h := tf.MetaInfo.InfoHash
 
-	mocks.metaInfoClient.Upload(tf.MetaInfo)
+	mocks.metaInfoClient.EXPECT().Download(
+		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
 
 	// First peer will be cancelled.
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		require.Equal(ErrTorrentCancelled, <-p1.scheduler.AddTorrent(tf.MetaInfo.Name()))
+		require.Error(ErrTorrentCancelled, <-p1.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 	}()
 
 	// (We don't really care what happens to the second peer).
-	go p2.scheduler.AddTorrent(tf.MetaInfo.Name())
+	go p2.scheduler.AddTorrent(namespace, tf.MetaInfo.Name())
 
 	waitForConnEstablished(t, p1.scheduler, p2.pctx.PeerID, h)
 	waitForConnEstablished(t, p2.scheduler, p1.pctx.PeerID, h)
@@ -407,12 +416,13 @@ func TestSchedulerReload(t *testing.T) {
 	download := func() {
 		tf := torlib.TestTorrentFileFixture()
 
-		mocks.metaInfoClient.Upload(tf.MetaInfo)
+		mocks.metaInfoClient.EXPECT().Download(
+			namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
 
 		seeder.writeTorrent(tf)
-		require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo.Name()))
+		require.NoError(<-seeder.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 
-		require.NoError(<-leecher.scheduler.AddTorrent(tf.MetaInfo.Name()))
+		require.NoError(<-leecher.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 		leecher.checkTorrent(t, tf)
 	}
 
@@ -457,10 +467,11 @@ func BenchmarkPieceUploadingAndDownloading(b *testing.B) {
 			tf := torlib.CustomTestTorrentFileFixture(50*memsize.MB, 128*memsize.KB)
 			tfs = append(tfs, tf)
 
-			mocks.metaInfoClient.Upload(tf.MetaInfo)
+			mocks.metaInfoClient.EXPECT().Download(
+				namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).AnyTimes()
 
 			seeder.writeTorrent(tf)
-			require.NoError(<-seeder.scheduler.AddTorrent(tf.MetaInfo.Name()))
+			require.NoError(<-seeder.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 		}
 
 		peers := mocks.newPeers(10, config)
@@ -472,7 +483,7 @@ func BenchmarkPieceUploadingAndDownloading(b *testing.B) {
 				wg.Add(1)
 				go func(p *testPeer, tf *torlib.TestTorrentFile) {
 					defer wg.Done()
-					require.NoError(<-p.scheduler.AddTorrent(tf.MetaInfo.Name()))
+					require.NoError(<-p.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 				}(p, tf)
 			}
 		}

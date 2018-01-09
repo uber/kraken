@@ -83,7 +83,7 @@ func main() {
 	}
 	defer torrentClient.Close()
 
-	agentServer := agentserver.New(config.AgentServer, torrentClient)
+	agentServer := agentserver.New(config.AgentServer, fs, torrentClient)
 
 	transferer := transfer.NewAgentTransferer(torrentClient, manifestclient.New(trackers))
 

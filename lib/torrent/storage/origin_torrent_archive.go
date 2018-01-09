@@ -41,6 +41,11 @@ func (a *OriginTorrentArchive) Stat(name string) (*TorrentInfo, error) {
 	return newTorrentInfo(mi, bitfield), nil
 }
 
+// CreateTorrent is not supported.
+func (a *OriginTorrentArchive) CreateTorrent(namespace, name string) (Torrent, error) {
+	return nil, errors.New("not supported for origin")
+}
+
 // GetTorrent returns a Torrent for an existing file on disk. Returns error if
 // the file does not exist.
 func (a *OriginTorrentArchive) GetTorrent(name string) (Torrent, error) {

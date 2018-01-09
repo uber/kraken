@@ -22,15 +22,17 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
+	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
-	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	trackerservice "code.uber.internal/infra/kraken/tracker/service"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
 const testTempDir = "/tmp/kraken_scheduler"
+
+const namespace = "test-namespace"
 
 func init() {
 	os.Mkdir(testTempDir, 0755)
@@ -79,7 +81,7 @@ func configFixture() Config {
 
 type testMocks struct {
 	ctrl           *gomock.Controller
-	metaInfoClient *metainfoclient.TestClient
+	metaInfoClient *mockmetainfoclient.MockClient
 	trackerAddr    string
 	cleanup        *testutil.Cleanup
 }
@@ -95,7 +97,7 @@ func newTestMocks(t gomock.TestReporter) (*testMocks, func()) {
 
 	return &testMocks{
 		ctrl:           ctrl,
-		metaInfoClient: metainfoclient.NewTestClient(),
+		metaInfoClient: mockmetainfoclient.NewMockClient(ctrl),
 		trackerAddr:    trackerAddr,
 		cleanup:        &cleanup,
 	}, cleanup.Run
@@ -151,7 +153,7 @@ func (m *testMocks) newPeers(n int, config Config) []*testPeer {
 // writeTorrent writes the given content into a torrent file into peers storage.
 // Useful for populating a completed torrent before seeding it.
 func (p *testPeer) writeTorrent(tf *torlib.TestTorrentFile) {
-	t, err := p.torrentArchive.GetTorrent(tf.MetaInfo.Name())
+	t, err := p.torrentArchive.CreateTorrent(namespace, tf.MetaInfo.Name())
 	if err != nil {
 		panic(err)
 	}
