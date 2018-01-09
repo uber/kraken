@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -23,7 +22,7 @@ const downloadTimeout = 10 * time.Minute
 
 // Client TODO
 type Client interface {
-	Download(name string) (store.FileReader, error)
+	Download(namespace string, name string) (store.FileReader, error)
 	Reload(config scheduler.Config)
 	BlacklistSnapshot() ([]scheduler.BlacklistedConn, error)
 	Close() error
@@ -100,25 +99,22 @@ func (c *SchedulerClient) Close() error {
 }
 
 // Download downloads blob identified by name into the file store cache.
-func (c *SchedulerClient) Download(name string) (store.FileReader, error) {
-	if !c.config.Enabled {
-		return nil, errors.New("torrent not enabled")
-	}
-
+// Returns scheduler.ErrTorrentNotFound if no torrent for namespace / name was
+// found.
+func (c *SchedulerClient) Download(namespace string, name string) (store.FileReader, error) {
 	stopwatch := c.stats.Timer("download_torrent_time").Start()
 	select {
-	case err := <-c.scheduler.AddTorrent(name):
+	case err := <-c.scheduler.AddTorrent(namespace, name):
 		if err != nil {
 			c.stats.Counter("download_torrent_errors").Inc(1)
-			return nil, fmt.Errorf("failed to schedule torrent: %s", err)
+			return nil, err
 		}
 		stopwatch.Stop()
 	case <-time.After(downloadTimeout):
 		c.stats.Counter("download_torrent_timeouts").Inc(1)
 		c.scheduler.CancelTorrent(name)
-		return nil, fmt.Errorf("scheduled torrent timed out after %.2f seconds", downloadTimeout.Seconds())
+		return nil, fmt.Errorf("scheduled torrent timed out after %s", downloadTimeout)
 	}
-
 	f, err := c.fs.GetCacheFileReader(name)
 	if err != nil {
 		return nil, fmt.Errorf("get cache file reader: %s", err)

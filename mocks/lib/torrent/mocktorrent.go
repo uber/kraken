@@ -60,16 +60,16 @@ func (mr *MockClientMockRecorder) Close() *gomock.Call {
 }
 
 // Download mocks base method
-func (m *MockClient) Download(arg0 string) (base.FileReader, error) {
-	ret := m.ctrl.Call(m, "Download", arg0)
+func (m *MockClient) Download(arg0, arg1 string) (base.FileReader, error) {
+	ret := m.ctrl.Call(m, "Download", arg0, arg1)
 	ret0, _ := ret[0].(base.FileReader)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Download indicates an expected call of Download
-func (mr *MockClientMockRecorder) Download(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0)
+func (mr *MockClientMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0, arg1)
 }
 
 // Reload mocks base method

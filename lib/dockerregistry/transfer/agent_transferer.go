@@ -27,7 +27,8 @@ func NewAgentTransferer(
 
 // Download downloads blobs as torrent
 func (t *AgentTransferer) Download(name string) (store.FileReader, error) {
-	return t.torrentClient.Download(name)
+	// TODO(codyg): Plumb docker namespace here.
+	return t.torrentClient.Download("TODO", name)
 }
 
 // Upload uploads blobs to a torrent network

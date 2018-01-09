@@ -1,6 +1,15 @@
 package storage
 
-import "code.uber.internal/infra/kraken/torlib"
+import (
+	"errors"
+
+	"code.uber.internal/infra/kraken/torlib"
+)
+
+// TorrentArchive errors.
+var (
+	ErrNotFound = errors.New("torrent not found")
+)
 
 // Torrent represents a read/write interface for a torrent
 type Torrent interface {
@@ -27,6 +36,7 @@ type Torrent interface {
 // TorrentArchive creates and open torrent file
 type TorrentArchive interface {
 	Stat(name string) (*TorrentInfo, error)
+	CreateTorrent(namespace, name string) (Torrent, error)
 	GetTorrent(name string) (Torrent, error)
 	DeleteTorrent(name string) error
 }
