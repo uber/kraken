@@ -66,6 +66,7 @@ type FileStore interface {
 	EnsureDownloadOrCacheFilePresent(fileName string, defaultLength int64) error
 	States() *StateAcceptor
 	InCacheError(error) bool
+	InDownloadError(error) bool
 }
 
 // LocalFileStore manages all peer agent files on local disk.
@@ -631,4 +632,11 @@ func (a *StateAcceptor) GetOrSetMetadata(filename string, mt MetadataType, b []b
 func (store *LocalFileStore) InCacheError(err error) bool {
 	fse, ok := err.(*base.FileStateError)
 	return ok && fse.State == store.stateCache
+}
+
+// InDownloadError returns true for errors originating from file store operations
+// which do not accept files in download state.
+func (store *LocalFileStore) InDownloadError(err error) bool {
+	fse, ok := err.(*base.FileStateError)
+	return ok && fse.State == store.stateDownload
 }

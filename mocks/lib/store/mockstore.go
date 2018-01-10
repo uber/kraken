@@ -276,6 +276,18 @@ func (mr *MockFileStoreMockRecorder) InCacheError(arg0 interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InCacheError", reflect.TypeOf((*MockFileStore)(nil).InCacheError), arg0)
 }
 
+// InDownloadError mocks base method
+func (m *MockFileStore) InDownloadError(arg0 error) bool {
+	ret := m.ctrl.Call(m, "InDownloadError", arg0)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// InDownloadError indicates an expected call of InDownloadError
+func (mr *MockFileStoreMockRecorder) InDownloadError(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InDownloadError", reflect.TypeOf((*MockFileStore)(nil).InDownloadError), arg0)
+}
+
 // ListCacheFilesByShardID mocks base method
 func (m *MockFileStore) ListCacheFilesByShardID(arg0 string) ([]string, error) {
 	ret := m.ctrl.Call(m, "ListCacheFilesByShardID", arg0)
