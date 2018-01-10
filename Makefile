@@ -33,7 +33,8 @@ PROGS = \
 	tools/bin/puller/puller \
 	tools/bin/benchmarks/benchmarks \
 	tools/bin/reload/reload \
-	tools/bin/simulation/simulation
+	tools/bin/simulation/simulation \
+	tools/bin/testfs/testfs
 
 # define the list of proto buffers the service depends on
 PROTO_GENDIR ?= .gen
@@ -60,6 +61,7 @@ proxy/proxy: $(wildcard proxy/*.go)
 tools/bin/benchmarks/benchmarks: $(wildcard tools/bin/benchmarks/*.go)
 tools/bin/reload/reload: $(wildcard tools/bin/reload/*.go)
 tools/bin/simulation/simulation: $(wildcard tools/bin/simulation/*.go)
+tools/bin/testfs/testfs: $(wildcard tools/bin/testfs/*.go)
 
 .PHONY: bench
 bench:
@@ -142,7 +144,8 @@ mocks:
 # Enumerates all container names, including those created by dockerman.
 CONTAINERS := $(foreach \
 	c, \
-	kraken-mysql kraken-redis kraken-tracker kraken-peer kraken-proxy kraken-origin, \
+	kraken-mysql kraken-redis kraken-tracker kraken-agent kraken-proxy kraken-test-origin-01 \
+	kraken-test-origin-02 kraken-test-origin-03 kraken-testfs, \
 	$(c))
 
 # Runs docker stop and docker rm on each container w/ silenced output.
@@ -182,7 +185,7 @@ run_mysql: mysql
 	@echo
 
 .PHONY: tracker
-tracker:
+tracker: mysql redis
 	-rm tracker/tracker
 	GOOS=linux GOARCH=amd64 make tracker/tracker
 	docker build -t kraken-tracker:dev -f docker/tracker/Dockerfile ./
@@ -219,23 +222,23 @@ run_origin: origin
 		kraken-origin:dev \
 		/usr/bin/kraken-origin --peer_ip=192.168.65.1 --peer_port=5081 --blobserver_port=19003
 
-.PHONY: peer
-peer:
+.PHONY: agent
+agent:
 	-rm agent/agent
 	GOOS=linux GOARCH=amd64 make agent/agent
-	docker build -t kraken-peer:dev -f docker/peer/Dockerfile ./
+	docker build -t kraken-agent:dev -f docker/agent/Dockerfile ./
 
-run_peer: peer
-	-docker stop kraken-peer
-	-docker rm kraken-peer
+run_agent: agent
+	-docker stop kraken-agent
+	-docker rm kraken-agent
 	docker run -d \
-	    --name=kraken-peer \
+	    --name=kraken-agent \
 		-e UBER_CONFIG_DIR=/root/kraken/config/agent \
 		-e UBER_ENVIRONMENT=development \
 		-e UBER_DATACENTER=sjc1 \
 		-p 5052:5052 \
 		-p 5082:5082 \
-		kraken-peer:dev \
+		kraken-agent:dev \
 		/usr/bin/kraken-agent --peer_ip=192.168.65.1 --peer_port=5082
 
 .PHONY: proxy
@@ -256,6 +259,11 @@ run_proxy: proxy
 		kraken-proxy:dev \
 		/usr/bin/kraken-proxy 
 
+testfs:
+	-rm tools/bin/testfs/testfs
+	GOOS=linux GOARCH=amd64 make tools/bin/testfs/testfs
+	docker build -t kraken-testfs:dev -f docker/testfs/Dockerfile ./
+
 bootstrap_integration:
 	if [ ! -d env ]; then \
 	   virtualenv --setuptools env ; \
@@ -263,7 +271,7 @@ bootstrap_integration:
 	source env/bin/activate
 	env/bin/pip install -r requirements-tests.txt
 
-build_integration: tracker origin peer proxy tools/bin/puller/puller docker_stop
+build_integration: tracker origin agent proxy testfs tools/bin/puller/puller docker_stop
 
 run_integration:
 	source env/bin/activate

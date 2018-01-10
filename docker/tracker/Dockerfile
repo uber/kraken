@@ -9,5 +9,3 @@ RUN mkdir -p /var/log/udocker/kraken
 EXPOSE 26232
 
 WORKDIR /root/kraken
-
-ENTRYPOINT ["/usr/bin/tracker"]
