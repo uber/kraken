@@ -26,6 +26,9 @@ type MySQLStorage struct {
 
 // NewMySQLStorage creates and returns new MySQL storage.
 func NewMySQLStorage(nemo xmysql.Configuration, config MySQLConfig) (*MySQLStorage, error) {
+	if config.MigrationsDir == "" {
+		return nil, errors.New("no migrations dir configured")
+	}
 	dsn, err := nemo.GetDefaultDSN()
 	if err != nil {
 		return nil, fmt.Errorf("error getting dsn: %s", err)

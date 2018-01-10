@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"code.uber.internal/infra/kraken/lib/backend/s3"
+	"code.uber.internal/infra/kraken/lib/backend/testfs"
 )
 
 // Manager manages backend clients for namespaces.
@@ -20,6 +21,8 @@ func NewManager(namespaces NamespaceConfig) (*Manager, error) {
 		switch config.Backend {
 		case "s3":
 			c, err = s3.NewClient(config.S3)
+		case "testfs":
+			c, err = testfs.NewClient(config.TestFS)
 		default:
 			return nil, fmt.Errorf("unknown backend for namespace %s: %s", ns, config.Backend)
 		}

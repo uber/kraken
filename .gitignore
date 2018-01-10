@@ -23,6 +23,7 @@ tools/bin/benchmarks/benchmarks
 tools/bin/reload/reload
 tools/bin/reload-config/reload-config
 tools/bin/simulation/simulation
+tools/bin/testfs/testfs
 
 # tmp migration files
 [0-9]*_-dir.go
@@ -40,8 +41,9 @@ coverage.html
 
 # test db data
 db/data
-# test generated config file
-config/origin/test/base.yaml
+
+# Test configuratino generated from templates.
+config/*/test.yaml
 
 # For vim users.
 tags

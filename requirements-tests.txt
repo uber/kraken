@@ -1,7 +1,6 @@
 aadict==0.2.3
 bencode==1.0
-docker-py==1.9.0
-dockerman==3.0.4
+docker==2.7.0
 pytest==3.0.6
 pytest-timeout==1.2.0
 zest.releaser==6.9
