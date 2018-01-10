@@ -69,7 +69,7 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	}
 	f, err := s.fs.GetCacheFileReader(name)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) || s.fs.InDownloadError(err) {
 			return s.startTorrentDownload(namespace, name)
 		}
 		return handler.Errorf("file store: %s", err)

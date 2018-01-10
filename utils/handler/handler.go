@@ -60,8 +60,9 @@ type ErrHandler func(http.ResponseWriter, *http.Request) error
 // returned by h.
 func Wrap(h ErrHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		var status int
+		var errMsg string
 		if err := h(w, r); err != nil {
-			log.Errorf("%s %s: %s", r.Method, r.URL.Path, err)
 			switch e := err.(type) {
 			case *Error:
 				for k, vs := range e.header {
@@ -69,12 +70,17 @@ func Wrap(h ErrHandler) http.HandlerFunc {
 						w.Header().Add(k, v)
 					}
 				}
-				w.WriteHeader(e.status)
-				w.Write([]byte(e.msg))
+				status = e.status
+				errMsg = e.msg
 			default:
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(e.Error()))
+				status = http.StatusInternalServerError
+				errMsg = e.Error()
 			}
+			w.WriteHeader(status)
+			w.Write([]byte(errMsg))
+		} else {
+			status = http.StatusOK
 		}
+		log.Infof("%d %s %s %s", status, r.Method, r.URL.Path, errMsg)
 	}
 }
