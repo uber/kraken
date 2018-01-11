@@ -27,7 +27,7 @@ func prepareFileStore(fs store.FileStore, mi *torlib.MetaInfo) {
 	fs.States().Download().SetMetadata(mi.Name(), store.NewTorrentMeta(), b)
 }
 
-func TestLocalTorrentCreate(t *testing.T) {
+func TestAgentTorrentCreate(t *testing.T) {
 	require := require.New(t)
 
 	fs, cleanup := store.LocalFileStoreFixture()
@@ -38,7 +38,7 @@ func TestLocalTorrentCreate(t *testing.T) {
 
 	prepareFileStore(fs, mi)
 
-	tor, err := NewLocalTorrent(fs, mi)
+	tor, err := NewAgentTorrent(fs, mi)
 	require.NoError(err)
 
 	// New torrent
@@ -56,7 +56,7 @@ func TestLocalTorrentCreate(t *testing.T) {
 	require.Equal([]int{0, 1, 2, 3}, tor.MissingPieces())
 }
 
-func TestLocalTorrentWriteUpdatesBytesDownloadedAndBitfield(t *testing.T) {
+func TestAgentTorrentWriteUpdatesBytesDownloadedAndBitfield(t *testing.T) {
 	require := require.New(t)
 
 	fs, cleanup := store.LocalFileStoreFixture()
@@ -68,7 +68,7 @@ func TestLocalTorrentWriteUpdatesBytesDownloadedAndBitfield(t *testing.T) {
 
 	prepareFileStore(fs, mi)
 
-	tor, err := NewLocalTorrent(fs, mi)
+	tor, err := NewAgentTorrent(fs, mi)
 	require.NoError(err)
 
 	require.NoError(tor.WritePiece(data[:1], 0))
@@ -77,7 +77,7 @@ func TestLocalTorrentWriteUpdatesBytesDownloadedAndBitfield(t *testing.T) {
 	require.Equal(Bitfield{true, false}, tor.Bitfield())
 }
 
-func TestLocalTorrentWriteComplete(t *testing.T) {
+func TestAgentTorrentWriteComplete(t *testing.T) {
 	require := require.New(t)
 
 	fs, cleanup := store.LocalFileStoreFixture()
@@ -89,7 +89,7 @@ func TestLocalTorrentWriteComplete(t *testing.T) {
 
 	prepareFileStore(fs, mi)
 
-	tor, err := NewLocalTorrent(fs, mi)
+	tor, err := NewAgentTorrent(fs, mi)
 	require.NoError(err)
 
 	require.NoError(tor.WritePiece(data, 0))
@@ -105,7 +105,7 @@ func TestLocalTorrentWriteComplete(t *testing.T) {
 	require.Equal(ErrPieceComplete, tor.WritePiece(data[:1], 0))
 }
 
-func TestLocalTorrentWriteMultiplePieceConcurrent(t *testing.T) {
+func TestAgentTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 	require := require.New(t)
 
 	fs, cleanup := store.LocalFileStoreFixture()
@@ -117,7 +117,7 @@ func TestLocalTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 
 	prepareFileStore(fs, mi)
 
-	tor, err := NewLocalTorrent(fs, mi)
+	tor, err := NewAgentTorrent(fs, mi)
 	require.NoError(err)
 
 	wg := sync.WaitGroup{}
@@ -147,7 +147,7 @@ func TestLocalTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 	require.Equal(data, torrentBytes)
 }
 
-func TestLocalTorrentWriteSamePieceConcurrent(t *testing.T) {
+func TestAgentTorrentWriteSamePieceConcurrent(t *testing.T) {
 	require := require.New(t)
 
 	fs, cleanup := store.LocalFileStoreFixture()
@@ -159,7 +159,7 @@ func TestLocalTorrentWriteSamePieceConcurrent(t *testing.T) {
 
 	prepareFileStore(fs, mi)
 
-	tor, err := NewLocalTorrent(fs, mi)
+	tor, err := NewAgentTorrent(fs, mi)
 	require.NoError(err)
 
 	var wg sync.WaitGroup
@@ -209,7 +209,7 @@ func (w *coordinatedWriter) WriteAt([]byte, int64) (int, error) {
 	return 0, nil
 }
 
-func TestLocalTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
+func TestAgentTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
 	require := require.New(t)
 
 	tf := torlib.CustomTestTorrentFileFixture(1, 1)
@@ -226,7 +226,7 @@ func TestLocalTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
 
 	prepareFileStore(fs, tf.MetaInfo)
 
-	tor, err := NewLocalTorrent(fs, tf.MetaInfo)
+	tor, err := NewAgentTorrent(fs, tf.MetaInfo)
 	require.NoError(err)
 
 	done := make(chan struct{})
@@ -246,7 +246,7 @@ func TestLocalTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
 	require.Equal(ErrPieceComplete, tor.WritePiece(tf.Content, 0))
 }
 
-func TestLocalTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
+func TestAgentTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
 	require := require.New(t)
 
 	ctrl := gomock.NewController(t)
@@ -273,7 +273,7 @@ func TestLocalTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
 		w.EXPECT().Close().Return(nil),
 	)
 
-	tor, err := NewLocalTorrent(fs, tf.MetaInfo)
+	tor, err := NewAgentTorrent(fs, tf.MetaInfo)
 	require.NoError(err)
 
 	// After the first write fails, the dirty bit should be flipped to empty,
@@ -282,7 +282,7 @@ func TestLocalTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
 	require.NoError(tor.WritePiece(tf.Content, 0))
 }
 
-func TestLocalTorrentRestoreCompletedTorrent(t *testing.T) {
+func TestAgentTorrentRestoreCompletedTorrent(t *testing.T) {
 	require := require.New(t)
 
 	fs, cleanup := store.LocalFileStoreFixture()
@@ -292,7 +292,7 @@ func TestLocalTorrentRestoreCompletedTorrent(t *testing.T) {
 
 	prepareFileStore(fs, tf.MetaInfo)
 
-	tor, err := NewLocalTorrent(fs, tf.MetaInfo)
+	tor, err := NewAgentTorrent(fs, tf.MetaInfo)
 	require.NoError(err)
 
 	for i, b := range tf.Content {
@@ -301,13 +301,13 @@ func TestLocalTorrentRestoreCompletedTorrent(t *testing.T) {
 
 	require.True(tor.Complete())
 
-	tor, err = NewLocalTorrent(fs, tf.MetaInfo)
+	tor, err = NewAgentTorrent(fs, tf.MetaInfo)
 	require.NoError(err)
 
 	require.True(tor.Complete())
 }
 
-func TestLocalTorrentRestoreInProgressTorrent(t *testing.T) {
+func TestAgentTorrentRestoreInProgressTorrent(t *testing.T) {
 	require := require.New(t)
 
 	fs, cleanup := store.LocalFileStoreFixture()
@@ -317,7 +317,7 @@ func TestLocalTorrentRestoreInProgressTorrent(t *testing.T) {
 
 	prepareFileStore(fs, tf.MetaInfo)
 
-	tor, err := NewLocalTorrent(fs, tf.MetaInfo)
+	tor, err := NewAgentTorrent(fs, tf.MetaInfo)
 	require.NoError(err)
 
 	pi := 4
@@ -325,7 +325,7 @@ func TestLocalTorrentRestoreInProgressTorrent(t *testing.T) {
 	require.NoError(tor.WritePiece([]byte{tf.Content[pi]}, pi))
 	require.Equal(int64(1), tor.BytesDownloaded())
 
-	tor, err = NewLocalTorrent(fs, tf.MetaInfo)
+	tor, err = NewAgentTorrent(fs, tf.MetaInfo)
 	require.NoError(err)
 
 	require.Equal(int64(1), tor.BytesDownloaded())

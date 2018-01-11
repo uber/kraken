@@ -13,7 +13,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
-// LocalTorrent errors.
+// AgentTorrent errors.
 var (
 	ErrWritePieceConflict = errors.New("piece is already being written to")
 	ErrPieceComplete      = errors.New("piece is already complete")
@@ -101,7 +101,7 @@ func makeCompletePieceMetadata(n int) []byte {
 // restorePieces reads piece metadata from disk and restores the in-memory piece
 // statuses. A naive solution would be to read the entire blob from disk and
 // hash the pieces to determine completion status -- however, this is very
-// expensive. Instead, LocalTorrent tracks completed pieces on disk via metadata
+// expensive. Instead, AgentTorrent tracks completed pieces on disk via metadata
 // as they are written.
 func restorePieces(name string, fs store.FileStore, numPieces int) (pieces []*piece, numComplete int, err error) {
 	raw, err := fs.States().Download().GetOrSetMetadata(
@@ -132,19 +132,19 @@ func restorePieces(name string, fs store.FileStore, numPieces int) (pieces []*pi
 	return pieces, numComplete, nil
 }
 
-// LocalTorrent implements a Torrent on top of a FileStore. Allows concurrent
-// writes on distinct pieces, and concurrent reads on all pieces. Behavior is
-// undefined if multiple LocalTorrent instances are backed by the same file
-// store and metainfo.
-type LocalTorrent struct {
+// AgentTorrent implements a Torrent on top of an AgentFileStore.
+// It Allows concurrent writes on distinct pieces, and concurrent reads on all
+// pieces. Behavior is undefined if multiple AgentTorrent instances are backed
+// by the same file store and metainfo.
+type AgentTorrent struct {
 	metaInfo    *torlib.MetaInfo
 	store       store.FileStore
 	pieces      []*piece
 	numComplete *atomic.Int32
 }
 
-// NewLocalTorrent creates a new LocalTorrent.
-func NewLocalTorrent(store store.FileStore, mi *torlib.MetaInfo) (*LocalTorrent, error) {
+// NewAgentTorrent creates a new AgentTorrent.
+func NewAgentTorrent(store store.FileStore, mi *torlib.MetaInfo) (*AgentTorrent, error) {
 	pieces, numComplete, err := restorePieces(mi.Name(), store, mi.Info.NumPieces())
 	if err != nil {
 		return nil, fmt.Errorf("restore pieces: %s", err)
@@ -156,7 +156,7 @@ func NewLocalTorrent(store store.FileStore, mi *torlib.MetaInfo) (*LocalTorrent,
 		}
 	}
 
-	return &LocalTorrent{
+	return &AgentTorrent{
 		store:       store,
 		metaInfo:    mi,
 		pieces:      pieces,
@@ -165,32 +165,32 @@ func NewLocalTorrent(store store.FileStore, mi *torlib.MetaInfo) (*LocalTorrent,
 }
 
 // Name returns the name of the target file.
-func (t *LocalTorrent) Name() string {
+func (t *AgentTorrent) Name() string {
 	return t.metaInfo.Info.Name
 }
 
 // Stat returns the TorrentInfo for t.
-func (t *LocalTorrent) Stat() *TorrentInfo {
+func (t *AgentTorrent) Stat() *TorrentInfo {
 	return newTorrentInfo(t.metaInfo, t.Bitfield())
 }
 
 // InfoHash returns the torrent metainfo hash.
-func (t *LocalTorrent) InfoHash() torlib.InfoHash {
+func (t *AgentTorrent) InfoHash() torlib.InfoHash {
 	return t.metaInfo.InfoHash
 }
 
 // NumPieces returns the number of pieces in the torrent.
-func (t *LocalTorrent) NumPieces() int {
+func (t *AgentTorrent) NumPieces() int {
 	return len(t.pieces)
 }
 
 // Length returns the length of the target file.
-func (t *LocalTorrent) Length() int64 {
+func (t *AgentTorrent) Length() int64 {
 	return t.metaInfo.Info.Length
 }
 
 // PieceLength returns the length of piece pi.
-func (t *LocalTorrent) PieceLength(pi int) int64 {
+func (t *AgentTorrent) PieceLength(pi int) int64 {
 	if pi == len(t.pieces)-1 {
 		// Last piece.
 		return t.Length() - t.metaInfo.Info.PieceLength*int64(pi)
@@ -199,24 +199,24 @@ func (t *LocalTorrent) PieceLength(pi int) int64 {
 }
 
 // MaxPieceLength returns the longest piece length of the torrent.
-func (t *LocalTorrent) MaxPieceLength() int64 {
+func (t *AgentTorrent) MaxPieceLength() int64 {
 	return t.PieceLength(0)
 }
 
 // Complete indicates whether the torrent is complete or not.
-func (t *LocalTorrent) Complete() bool {
+func (t *AgentTorrent) Complete() bool {
 	return int(t.numComplete.Load()) == len(t.pieces)
 }
 
 // BytesDownloaded returns an estimate of the number of bytes downloaded in the
 // torrent.
-func (t *LocalTorrent) BytesDownloaded() int64 {
+func (t *AgentTorrent) BytesDownloaded() int64 {
 	return min(int64(t.numComplete.Load())*t.metaInfo.Info.PieceLength, t.metaInfo.Info.Length)
 }
 
 // Bitfield returns the bitfield of pieces where true denotes a complete piece
 // and false denotes an incomplete piece.
-func (t *LocalTorrent) Bitfield() Bitfield {
+func (t *AgentTorrent) Bitfield() Bitfield {
 	bitfield := make(Bitfield, len(t.pieces))
 	for i, p := range t.pieces {
 		if p.complete() {
@@ -226,12 +226,12 @@ func (t *LocalTorrent) Bitfield() Bitfield {
 	return bitfield
 }
 
-func (t *LocalTorrent) String() string {
+func (t *AgentTorrent) String() string {
 	downloaded := int(float64(t.BytesDownloaded()) / float64(t.metaInfo.Info.Length) * 100)
 	return fmt.Sprintf("torrent(hash=%s, downloaded=%d%%)", t.InfoHash().HexString(), downloaded)
 }
 
-func (t *LocalTorrent) getPiece(pi int) (*piece, error) {
+func (t *AgentTorrent) getPiece(pi int) (*piece, error) {
 	if pi >= len(t.pieces) {
 		return nil, fmt.Errorf("invalid piece index %d: num pieces = %d", pi, len(t.pieces))
 	}
@@ -239,14 +239,14 @@ func (t *LocalTorrent) getPiece(pi int) (*piece, error) {
 }
 
 // markPieceComplete must only be called once per piece.
-func (t *LocalTorrent) markPieceComplete(pi int) error {
+func (t *AgentTorrent) markPieceComplete(pi int) error {
 	updated, err := t.store.States().Download().SetMetadataAt(
 		t.Name(), store.NewPieceStatus(), []byte{byte(_complete)}, pi)
 	if err != nil {
 		return fmt.Errorf("write piece metadata: %s", err)
 	}
 	if !updated {
-		// This could mean there's another thread with a LocalTorrent instance using
+		// This could mean there's another thread with a AgentTorrent instance using
 		// the same file as us.
 		log.Errorf("Invariant violation: piece marked complete twice: piece %d in %s", pi, t.Name())
 	}
@@ -256,7 +256,7 @@ func (t *LocalTorrent) markPieceComplete(pi int) error {
 }
 
 // writePiece writes data to piece pi. If the write succeeds, marks the piece as completed.
-func (t *LocalTorrent) writePiece(data []byte, pi int) error {
+func (t *AgentTorrent) writePiece(data []byte, pi int) error {
 	offset := t.getFileOffset(pi)
 	f, err := t.store.GetDownloadFileReadWriter(t.metaInfo.Info.Name)
 	if err != nil {
@@ -273,7 +273,7 @@ func (t *LocalTorrent) writePiece(data []byte, pi int) error {
 }
 
 // WritePiece writes data to piece pi.
-func (t *LocalTorrent) WritePiece(data []byte, pi int) error {
+func (t *AgentTorrent) WritePiece(data []byte, pi int) error {
 	piece, err := t.getPiece(pi)
 	if err != nil {
 		return err
@@ -324,7 +324,7 @@ func (t *LocalTorrent) WritePiece(data []byte, pi int) error {
 }
 
 // ReadPiece returns the data for piece pi.
-func (t *LocalTorrent) ReadPiece(pi int) ([]byte, error) {
+func (t *AgentTorrent) ReadPiece(pi int) ([]byte, error) {
 	piece, err := t.getPiece(pi)
 	if err != nil {
 		return nil, err
@@ -348,7 +348,7 @@ func (t *LocalTorrent) ReadPiece(pi int) ([]byte, error) {
 }
 
 // HasPiece returns if piece pi is complete.
-func (t *LocalTorrent) HasPiece(pi int) bool {
+func (t *AgentTorrent) HasPiece(pi int) bool {
 	piece, err := t.getPiece(pi)
 	if err != nil {
 		return false
@@ -357,7 +357,7 @@ func (t *LocalTorrent) HasPiece(pi int) bool {
 }
 
 // MissingPieces returns the indeces of all missing pieces.
-func (t *LocalTorrent) MissingPieces() []int {
+func (t *AgentTorrent) MissingPieces() []int {
 	var missing []int
 	for i, p := range t.pieces {
 		if !p.complete() {
@@ -368,7 +368,7 @@ func (t *LocalTorrent) MissingPieces() []int {
 }
 
 // verifyPiece ensures data for pi is valid.
-func (t *LocalTorrent) verifyPiece(pi int, data []byte) error {
+func (t *AgentTorrent) verifyPiece(pi int, data []byte) error {
 	h := torlib.PieceHash()
 	h.Write(data)
 	sum := h.Sum32()
@@ -380,7 +380,7 @@ func (t *LocalTorrent) verifyPiece(pi int, data []byte) error {
 
 // getFileOffset calculates the offset in the torrent file given piece index.
 // Assumes pi is a valid piece index.
-func (t *LocalTorrent) getFileOffset(pi int) int64 {
+func (t *AgentTorrent) getFileOffset(pi int) int64 {
 	return t.metaInfo.Info.PieceLength * int64(pi)
 }
 

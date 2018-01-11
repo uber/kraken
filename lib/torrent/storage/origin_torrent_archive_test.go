@@ -12,7 +12,7 @@ import (
 func TestOriginTorrentArchiveStatNotExist(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.LocalFileStoreFixture()
+	fs, cleanup := store.OriginFileStoreFixture()
 	defer cleanup()
 
 	archive := NewOriginTorrentArchive(fs)
@@ -26,7 +26,7 @@ func TestOriginTorrentArchiveStatNotExist(t *testing.T) {
 func TestOriginTorrentArchiveGetTorrentNotExist(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.LocalFileStoreFixture()
+	fs, cleanup := store.OriginFileStoreFixture()
 	defer cleanup()
 
 	archive := NewOriginTorrentArchive(fs)
@@ -40,7 +40,7 @@ func TestOriginTorrentArchiveGetTorrentNotExist(t *testing.T) {
 func TestOriginTorrentArchiveGetTorrent(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.LocalFileStoreFixture()
+	fs, cleanup := store.OriginFileStoreFixture()
 	defer cleanup()
 
 	archive := NewOriginTorrentArchive(fs)
@@ -52,7 +52,7 @@ func TestOriginTorrentArchiveGetTorrent(t *testing.T) {
 
 	miRaw, err := mi.Serialize()
 	require.NoError(err)
-	_, err = fs.States().Cache().SetMetadata(mi.Name(), store.NewTorrentMeta(), miRaw)
+	_, err = fs.SetCacheFileMetadata(mi.Name(), store.NewTorrentMeta(), miRaw)
 	require.NoError(err)
 
 	tor, err := archive.GetTorrent(mi.Name())

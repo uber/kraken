@@ -36,13 +36,13 @@ type SchedulerClient struct {
 	scheduler *scheduler.Scheduler
 
 	stats tally.Scope
-	fs    store.FileStore
+	fs    store.ReadOnlyFileStore
 }
 
 // NewSchedulerClient creates a new scheduler client
 func NewSchedulerClient(
 	config Config,
-	fs store.FileStore,
+	fs store.ReadOnlyFileStore,
 	stats tally.Scope,
 	pctx peercontext.PeerContext,
 	announceClient announceclient.Client,

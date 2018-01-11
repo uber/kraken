@@ -48,6 +48,24 @@ func NewLRUFileStore(size int) (FileStore, error) {
 	}, nil
 }
 
+// NewCASFileStoreWithLRUMap initializes and returns a new Content-Addressable FileStore.
+// It uses the first few bytes of file digest (which is also used as file name) as shard ID.
+// For every byte, one more level of directories will be created.
+// It also store objects in a LRU FileStore.
+// When size exceeds limit, the least recently accessed entry will be removed.
+func NewCASFileStoreWithLRUMap(size int) (FileStore, error) {
+	fm, err := NewLRUFileMap(size, func(name string, entry FileEntry) {
+		entry.Delete()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &localFileStore{
+		fileEntryFactory: NewCASFileEntryFactory(),
+		fileMap:          fm,
+	}, nil
+}
+
 // NewFileOp contructs a new FileOp object.
 func (s *localFileStore) NewFileOp() FileOp {
 	return NewLocalFileOp(s)

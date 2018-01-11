@@ -54,18 +54,18 @@ func main() {
 	}
 	defer closer.Close()
 
-	// root metrics scope for origin
+	// Root metrics scope for origin.
 	stats = stats.SubScope("kraken.origin")
 
-	// Initialize file storage
-	fs, err := store.NewLocalFileStore(&config.LocalStore, true)
+	// Initialize file storage.
+	fs, err := store.NewOriginFileStore(config.OriginStore)
 	if err != nil {
-		log.Fatalf("Failed to create local store: %s", err)
+		log.Fatalf("Failed to create origin file store: %s", err)
 	}
 
 	var pctx peercontext.PeerContext
 
-	// Initialize and start P2P scheduler client:
+	// Initialize and start P2P scheduler client.
 	if config.Torrent.Enabled {
 		pctx, err = peercontext.NewOrigin(
 			peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *zone, *peerIP, *peerPort)
@@ -82,7 +82,7 @@ func main() {
 
 		c, err := torrent.NewSchedulerClient(
 			config.Torrent,
-			fs,
+			fs.(store.ReadOnlyFileStore),
 			stats,
 			pctx,
 			// TODO(codyg): Get rid of this dependency.

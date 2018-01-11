@@ -1,6 +1,8 @@
 package image
 
-import "io"
+import (
+	"io"
+)
 
 // Verify hashes content of given digest
 func Verify(digest Digest, reader io.Reader) (bool, error) {

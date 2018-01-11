@@ -108,7 +108,7 @@ func (a *AgentTorrentArchive) CreateTorrent(namespace, name string) (Torrent, er
 		return nil, fmt.Errorf("parse metainfo: %s", err)
 	}
 
-	t, err := NewLocalTorrent(a.fs, mi)
+	t, err := NewAgentTorrent(a.fs, mi)
 	if err != nil {
 		return nil, fmt.Errorf("initialize torrent: %s", err)
 	}
@@ -127,7 +127,7 @@ func (a *AgentTorrentArchive) GetTorrent(name string) (Torrent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse metainfo: %s", err)
 	}
-	t, err := NewLocalTorrent(a.fs, mi)
+	t, err := NewAgentTorrent(a.fs, mi)
 	if err != nil {
 		return nil, fmt.Errorf("initialize torrent: %s", err)
 	}

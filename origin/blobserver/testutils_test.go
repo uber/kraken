@@ -80,7 +80,7 @@ func (p *testClientProvider) Provide(host string) blobclient.Client {
 func startServer(
 	host string,
 	config Config,
-	fs store.FileStore,
+	fs store.OriginFileStore,
 	cp blobclient.Provider,
 	pctx peercontext.PeerContext,
 	bm *backend.Manager) (addr string, stop func()) {
@@ -99,7 +99,7 @@ func startServer(
 type testServer struct {
 	host           string
 	addr           string
-	fs             *store.LocalFileStore
+	fs             store.OriginFileStore
 	cp             *testClientProvider
 	pctx           peercontext.PeerContext
 	backendManager *backend.Manager
@@ -109,7 +109,7 @@ type testServer struct {
 
 func newTestServer(host string, config Config, cp *testClientProvider) *testServer {
 	pctx := peercontext.Fixture()
-	fs, cleanFS := store.LocalFileStoreFixture()
+	fs, cleanFS := store.OriginFileStoreFixture()
 	bm, err := backend.NewManager(nil)
 	if err != nil {
 		panic(err)
@@ -143,7 +143,7 @@ func (s *testServer) cleanup() {
 // serverMocks is a convenience wrapper around a completely mocked Server.
 type serverMocks struct {
 	ctrl           *gomock.Controller
-	fileStore      *mockstore.MockFileStore
+	fileStore      *mockstore.MockOriginFileStore
 	clientProvider blobclient.Provider
 }
 
@@ -151,7 +151,7 @@ func newServerMocks(t *testing.T) *serverMocks {
 	ctrl := gomock.NewController(t)
 	return &serverMocks{
 		ctrl:      ctrl,
-		fileStore: mockstore.NewMockFileStore(ctrl),
+		fileStore: mockstore.NewMockOriginFileStore(ctrl),
 		// TODO(codyg): Support mock client providers.
 		clientProvider: nil,
 	}

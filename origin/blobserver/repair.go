@@ -91,7 +91,7 @@ type repairer struct {
 	hostname        string
 	labelToHostname map[string]string
 	hashState       *hrw.RendezvousHash
-	fileStore       store.FileStore
+	fileStore       store.OriginFileStore
 	clientProvider  blobclient.Provider
 
 	ctx      context.Context
@@ -104,7 +104,7 @@ func newRepairer(
 	hostname string,
 	labelToHostname map[string]string,
 	hashState *hrw.RendezvousHash,
-	fileStore store.FileStore,
+	fileStore store.OriginFileStore,
 	clientProvider blobclient.Provider) *repairer {
 
 	return &repairer{
@@ -262,7 +262,7 @@ func (r *repairer) replicateDigest(d image.Digest, hosts stringset.Set) (replica
 }
 
 func (r *repairer) deleteDigest(d image.Digest) {
-	if err := r.fileStore.MoveCacheFileToTrash(d.Hex()); err != nil {
+	if err := r.fileStore.DeleteCacheFile(d.Hex()); err != nil {
 		r.messages <- deleteDigestErrorf(d, "failed to move blob to trash: %s", err)
 		return
 	}
