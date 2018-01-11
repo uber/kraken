@@ -2,7 +2,6 @@ package store
 
 import (
 	"fmt"
-	"hash"
 	"io"
 	"io/ioutil"
 	"math"
@@ -12,14 +11,12 @@ import (
 	"strings"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
-	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store/base"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/osutil"
 
 	"github.com/docker/distribution/uuid"
 	"github.com/robfig/cron"
-	"github.com/spaolacci/murmur3"
 )
 
 // FileReadWriter aliases base.FileReadWriter
@@ -67,6 +64,16 @@ type FileStore interface {
 	States() *StateAcceptor
 	InCacheError(error) bool
 	InDownloadError(error) bool
+
+	// TODO: temp methods to ensure LocalFileStore is a superset of OriginFileStore
+	GetCacheFileMetadata(
+		filename string, mt MetadataType) ([]byte, error)
+	SetCacheFileMetadata(
+		filename string, mt MetadataType, b []byte) (updated bool, err error)
+	SetCacheFileMetadataAt(
+		filename string, mt MetadataType, b []byte, offset int64) (updated bool, err error)
+	GetOrSetCacheFileMetadata(
+		filename string, mt MetadataType, b []byte) ([]byte, error)
 }
 
 // LocalFileStore manages all peer agent files on local disk.
@@ -134,84 +141,6 @@ func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error
 	}
 
 	return localStore, nil
-}
-
-func initDirectories(config *Config) error {
-	// Recreate upload, download and trash dirs.
-	for _, dir := range []string{config.UploadDir, config.DownloadDir, config.TrashDir} {
-		os.RemoveAll(dir)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return err
-		}
-	}
-
-	// We do not want to remove all existing files in cache directory during restart.
-	err := os.MkdirAll(config.CacheDir, 0755)
-	if err != nil {
-		return err
-	}
-
-	// If a list of volumes is provided, the volumes will be used to store the actual files, and symlinks will be
-	// created from these volumes to the state directories.
-	// Download, cache and trash dirs are supposed to contain 256 symlinks (first level of shards), points to different
-	// volumnes based on rendezvous hash.
-	if len(config.Volumes) > 0 {
-		rendezvousHash := hrw.NewRendezvousHash(
-			func() hash.Hash { return murmur3.New64() },
-			hrw.UInt64ToFloat64)
-
-		for _, volume := range config.Volumes {
-			if _, err := os.Stat(volume.Location); err != nil {
-				return err
-			}
-			rendezvousHash.AddNode(volume.Location, volume.Weight)
-		}
-
-		// For download, cache and trash directories, create 256 symlinks each.
-		for subdirIndex := 0; subdirIndex < 256; subdirIndex++ {
-			subdirName := fmt.Sprintf("%02X", subdirIndex)
-			nodes, err := rendezvousHash.GetOrderedNodes(subdirName, 1)
-			if len(nodes) != 1 || err != nil {
-				return fmt.Errorf("Failed to calculate volume for subdir %s", subdirName)
-			}
-			for _, stateDir := range []string{config.DownloadDir, config.CacheDir, config.TrashDir} {
-				sourcePath := path.Join(nodes[0].Label, path.Base(stateDir), subdirName)
-				if err := os.MkdirAll(sourcePath, 0755); err != nil {
-					return err
-				}
-				targetPath := path.Join(stateDir, subdirName)
-				if err := createOrUpdateSymlink(sourcePath, targetPath); err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-func createOrUpdateSymlink(sourcePath, targetPath string) error {
-	if _, err := os.Stat(targetPath); err == nil {
-		if existingSource, err := os.Readlink(targetPath); err != nil {
-			return err
-		} else if existingSource != sourcePath {
-			// If the symlink already exists and points to another valid location, recreate the symlink.
-			if err := os.Remove(targetPath); err != nil {
-				return err
-			}
-			if err := os.Symlink(sourcePath, targetPath); err != nil {
-				return err
-			}
-		}
-	} else if os.IsNotExist(err) {
-		if err := os.Symlink(sourcePath, targetPath); err != nil {
-			return err
-		}
-	} else {
-		return err
-	}
-
-	return nil
 }
 
 // Config returns configuration of the store
@@ -639,4 +568,34 @@ func (store *LocalFileStore) InCacheError(err error) bool {
 func (store *LocalFileStore) InDownloadError(err error) bool {
 	fse, ok := err.(*base.FileStateError)
 	return ok && fse.State == store.stateDownload
+}
+
+// GetCacheFileMetadata returns the metadata content of mt for filename.
+func (store *LocalFileStore) GetCacheFileMetadata(
+	filename string, mt MetadataType) ([]byte, error) {
+
+	return store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).GetFileMetadata(filename, mt)
+}
+
+// SetCacheFileMetadata writes b to metadata content of mt for filename.
+func (store *LocalFileStore) SetCacheFileMetadata(
+	filename string, mt MetadataType, b []byte) (updated bool, err error) {
+
+	return store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).SetFileMetadata(filename, mt, b)
+}
+
+// SetCacheFileMetadataAt writes b to metadata content of mt starting at offset for filename.
+func (store *LocalFileStore) SetCacheFileMetadataAt(
+	filename string, mt MetadataType, b []byte, offset int64) (updated bool, err error) {
+
+	n, err := store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).SetFileMetadataAt(filename, mt, b, offset)
+	return n != 0, err
+}
+
+// GetOrSetCacheFileMetadata returns the metadata content of mt for filename, or initializes the metadata
+// content to b if not set.
+func (store *LocalFileStore) GetOrSetCacheFileMetadata(
+	filename string, mt MetadataType, b []byte) ([]byte, error) {
+
+	return store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).GetOrSetFileMetadata(filename, mt, b)
 }

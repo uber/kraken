@@ -30,7 +30,7 @@ type lruFileMap struct {
 // NewLRUFileMap creates a new LRU map given size.
 func NewLRUFileMap(size int, evictFn func(string, FileEntry)) (FileMap, error) {
 	if size <= 0 {
-		return nil, fmt.Errorf("Invalid map size: %d", size)
+		return nil, fmt.Errorf("invalid lru map size: %d", size)
 	}
 
 	m := &lruFileMap{

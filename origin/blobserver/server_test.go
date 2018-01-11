@@ -105,7 +105,7 @@ func TestDeleteBlobHandlerAccepted(t *testing.T) {
 
 	d := image.DigestFixture()
 
-	mocks.fileStore.EXPECT().MoveCacheFileToTrash(d.Hex()).Return(nil)
+	mocks.fileStore.EXPECT().DeleteCacheFile(d.Hex()).Return(nil)
 
 	require.NoError(blobclient.New(addr).DeleteBlob(d))
 }
@@ -121,7 +121,7 @@ func TestDeleteBlobHandlerNotFound(t *testing.T) {
 
 	d := image.DigestFixture()
 
-	mocks.fileStore.EXPECT().MoveCacheFileToTrash(d.Hex()).Return(os.ErrNotExist)
+	mocks.fileStore.EXPECT().DeleteCacheFile(d.Hex()).Return(os.ErrNotExist)
 
 	err := blobclient.New(addr).DeleteBlob(d)
 	require.Error(err)
@@ -410,7 +410,7 @@ func TestPushBlob(t *testing.T) {
 	ensureHasBlob(t, cp.Provide(master1), d, blob)
 
 	// Ensure metainfo was generated.
-	_, err = s.fs.States().Cache().GetMetadata(d.Hex(), store.NewTorrentMeta())
+	_, err = s.fs.GetCacheFileMetadata(d.Hex(), store.NewTorrentMeta())
 	require.NoError(err)
 
 	// Pushing again should be a no-op.

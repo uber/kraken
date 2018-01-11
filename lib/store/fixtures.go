@@ -2,43 +2,46 @@ package store
 
 import (
 	"io/ioutil"
-	"log"
 	"os"
 	"time"
+
+	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
 func localFileStoreFixture(
-	refcountable bool, trashDeletionConfig TrashDeletionConfig) (s *LocalFileStore, cleanup func()) {
+	refcountable bool, trashDeletionConfig TrashDeletionConfig) (*LocalFileStore, func()) {
 
-	var upload, download, cache, trash string
-	cleanup = func() {
-		os.RemoveAll(upload)
-		os.RemoveAll(download)
-		os.RemoveAll(cache)
-		os.RemoveAll(trash)
-	}
-	defer func() {
-		if err := recover(); err != nil {
-			cleanup()
-		}
-	}()
+	cleanup := &testutil.Cleanup{}
+	defer cleanup.Recover()
 
 	upload, err := ioutil.TempDir("/tmp", "upload")
 	if err != nil {
-		log.Panic(err)
+		panic(err)
 	}
-	download, err = ioutil.TempDir("/tmp", "download")
+	cleanup.Add(func() {
+		os.RemoveAll(upload)
+	})
+	download, err := ioutil.TempDir("/tmp", "download")
 	if err != nil {
-		log.Panic(err)
+		panic(err)
 	}
-	cache, err = ioutil.TempDir("/tmp", "cache")
+	cleanup.Add(func() {
+		os.RemoveAll(download)
+	})
+	cache, err := ioutil.TempDir("/tmp", "cache")
 	if err != nil {
-		log.Panic(err)
+		panic(err)
 	}
-	trash, err = ioutil.TempDir("/tmp", "trash")
+	cleanup.Add(func() {
+		os.RemoveAll(cache)
+	})
+	trash, err := ioutil.TempDir("/tmp", "trash")
 	if err != nil {
-		log.Panic(err)
+		panic(err)
 	}
+	cleanup.Add(func() {
+		os.RemoveAll(trash)
+	})
 
 	config := &Config{
 		UploadDir:     upload,
@@ -47,12 +50,12 @@ func localFileStoreFixture(
 		TrashDir:      trash,
 		TrashDeletion: trashDeletionConfig,
 	}
-	s, err = NewLocalFileStore(config, refcountable)
+	s, err := NewLocalFileStore(config, refcountable)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
-	return s, cleanup
+	return s, cleanup.Run
 }
 
 // LocalFileStoreFixture returns a LocalFileStore using temp directories.
@@ -73,4 +76,37 @@ func LocalFileStoreWithTrashDeletionFixture(interval time.Duration) (s *LocalFil
 		Enable:   true,
 		Interval: interval,
 	})
+}
+
+// OriginFileStoreFixture returns a origin file store.
+func OriginFileStoreFixture() (OriginFileStore, func()) {
+	cleanup := &testutil.Cleanup{}
+	defer cleanup.Recover()
+
+	upload, err := ioutil.TempDir("/tmp", "upload")
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(func() {
+		os.RemoveAll(upload)
+	})
+
+	cache, err := ioutil.TempDir("/tmp", "cache")
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(func() {
+		os.RemoveAll(cache)
+	})
+
+	config := OriginConfig{
+		UploadDir: upload,
+		CacheDir:  cache,
+	}
+	s, err := NewOriginFileStore(config)
+	if err != nil {
+		panic(err)
+	}
+
+	return s, cleanup.Run
 }

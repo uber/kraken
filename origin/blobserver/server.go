@@ -44,7 +44,7 @@ type Server struct {
 	addr              string
 	labelToAddr       map[string]string
 	hashState         *hrw.RendezvousHash
-	fileStore         store.FileStore
+	fileStore         store.OriginFileStore
 	clientProvider    blobclient.Provider
 	stats             tally.Scope
 	backendManager    *backend.Manager
@@ -63,7 +63,7 @@ func New(
 	config Config,
 	stats tally.Scope,
 	addr string,
-	fileStore store.FileStore,
+	fileStore store.OriginFileStore,
 	clientProvider blobclient.Provider,
 	pctx peercontext.PeerContext,
 	backendManager *backend.Manager) (*Server, error) {
@@ -510,15 +510,14 @@ func (s Server) pushBlob(loc string, d image.Digest) error {
 // getOrGenerateMetaInfo returns metainfo for d. If no metainfo exists, generates
 // metainfo for d and writes it to disk.
 func (s Server) getOrGenerateMetaInfo(d image.Digest) ([]byte, error) {
-	cache := s.fileStore.States().Cache()
-	raw, err := cache.GetMetadata(d.Hex(), store.NewTorrentMeta())
+	raw, err := s.fileStore.GetCacheFileMetadata(d.Hex(), store.NewTorrentMeta())
 	if os.IsNotExist(err) {
 		raw, err = s.generateMetaInfo(d)
 		if err != nil {
 			return nil, handler.Errorf("generate metainfo: %s", err)
 		}
 		// Never overwrite existing metadata.
-		raw, err = cache.GetOrSetMetadata(d.Hex(), store.NewTorrentMeta(), raw)
+		raw, err = s.fileStore.GetOrSetCacheFileMetadata(d.Hex(), store.NewTorrentMeta(), raw)
 		if err != nil {
 			return nil, handler.Errorf("get or set metainfo: %s", err)
 		}
@@ -629,7 +628,7 @@ func (s Server) downloadBlob(d image.Digest, w http.ResponseWriter) error {
 }
 
 func (s Server) deleteBlob(d image.Digest) error {
-	if err := s.fileStore.MoveCacheFileToTrash(d.Hex()); err != nil {
+	if err := s.fileStore.DeleteCacheFile(d.Hex()); err != nil {
 		if os.IsNotExist(err) {
 			return handler.ErrorStatus(http.StatusNotFound)
 		}

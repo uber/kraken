@@ -175,7 +175,7 @@ func TestRepairUnownedShardDoesNotDeleteIfReplicationFails(t *testing.T) {
 	defer ctrl.Finish()
 
 	// Start master3 with a "broken" file store, such that all pushes to master3 will fail.
-	fs3 := mockstore.NewMockFileStore(ctrl)
+	fs3 := mockstore.NewMockOriginFileStore(ctrl)
 	fs3.EXPECT().GetCacheFileStat(gomock.Any()).MinTimes(1).Return(nil, os.ErrNotExist)
 	fs3.EXPECT().CreateUploadFile(gomock.Any(), int64(0)).MinTimes(1).Return(errors.New("some error"))
 	addr3, stop := startServer(master3, config, fs3, cp, peercontext.Fixture(), nil)

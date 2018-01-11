@@ -11,20 +11,18 @@ import (
 // OriginTorrentArchive is a TorrentArchive for origin peers. It assumes that
 // all files (including metainfo) are already downloaded and in the cache directory.
 type OriginTorrentArchive struct {
-	fs store.FileStore
+	fs store.OriginFileStore
 }
 
 // NewOriginTorrentArchive creates a new OriginTorrentArchive.
-func NewOriginTorrentArchive(fs store.FileStore) *OriginTorrentArchive {
+func NewOriginTorrentArchive(fs store.OriginFileStore) *OriginTorrentArchive {
 	return &OriginTorrentArchive{fs}
 }
 
 // Stat returns TorrentInfo for given file name. Returns error if the file does
 // not exist.
 func (a *OriginTorrentArchive) Stat(name string) (*TorrentInfo, error) {
-	cache := a.fs.States().Cache()
-
-	raw, err := cache.GetMetadata(name, store.NewTorrentMeta())
+	raw, err := a.fs.GetCacheFileMetadata(name, store.NewTorrentMeta())
 	if err != nil {
 		return nil, fmt.Errorf("get metainfo: %s", err)
 	}
@@ -53,8 +51,7 @@ func (a *OriginTorrentArchive) GetTorrent(name string) (Torrent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("torrent stat: %s", err)
 	}
-	// TODO(codyg): Return a read-only torrent implementation.
-	t, err := NewLocalTorrent(a.fs, info.metainfo)
+	t, err := NewOriginTorrent(a.fs, info.metainfo)
 	if err != nil {
 		return nil, fmt.Errorf("initialize torrent: %s", err)
 	}
