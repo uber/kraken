@@ -73,14 +73,19 @@ func (b *Backoff) Attempts() *Attempts {
 	}
 }
 
-// TimeoutError is returned when backoff attempts timeout.
-type TimeoutError struct {
+type timeoutError struct {
 	attempts int
 	timeout  time.Duration
 }
 
-func (e TimeoutError) Error() string {
+func (e timeoutError) Error() string {
 	return fmt.Sprintf("timed out after %d attempts in %s", e.attempts, e.timeout)
+}
+
+// IsTimeoutError returns true if err occured due to Attempts timeout.
+func IsTimeoutError(err error) bool {
+	_, ok := err.(timeoutError)
+	return ok
 }
 
 // Attempts defines an iterator for retrying some action with backoff until a
@@ -102,7 +107,7 @@ func (a *Attempts) WaitForNext() bool {
 		return true
 	}
 	if a.attempt >= a.maxAttempts {
-		a.err = TimeoutError{a.maxAttempts, a.backoff.config.RetryTimeout}
+		a.err = timeoutError{a.maxAttempts, a.backoff.config.RetryTimeout}
 		return false
 	}
 	time.Sleep(a.backoff.Duration(a.attempt))

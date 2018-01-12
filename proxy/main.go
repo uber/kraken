@@ -43,7 +43,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating origin round robin: %s", err)
 	}
-	originCluster := blobclient.NewClusterClient(blobclient.NewProvider(), origins)
+	originCluster := blobclient.NewClusterClient(
+		blobclient.NewClientResolver(blobclient.NewProvider(), origins))
 
 	trackers, err := serverset.NewRoundRobin(config.Tracker.RoundRobin)
 	if err != nil {
