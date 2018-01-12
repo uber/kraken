@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
@@ -11,6 +12,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/utils/backoff"
 	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/httputil"
@@ -19,7 +21,15 @@ import (
 
 // MetaInfoConfig defines metainfo handling configuration.
 type MetaInfoConfig struct {
-	RequestCache dedup.RequestCacheConfig `yaml:"request_cache"`
+	RequestCache  dedup.RequestCacheConfig `yaml:"request_cache"`
+	OriginBackoff backoff.Config           `yaml:"origin_backoff"`
+}
+
+func (c MetaInfoConfig) applyDefaults() MetaInfoConfig {
+	if c.OriginBackoff.RetryTimeout == 0 {
+		c.OriginBackoff.RetryTimeout = 15 * time.Minute
+	}
+	return c
 }
 
 type metaInfoHandler struct {
@@ -27,6 +37,7 @@ type metaInfoHandler struct {
 	store         storage.MetaInfoStore
 	requestCache  *dedup.RequestCache
 	originCluster blobclient.ClusterClient
+	originBackoff *backoff.Backoff
 }
 
 func newMetaInfoHandler(
@@ -34,10 +45,12 @@ func newMetaInfoHandler(
 	store storage.MetaInfoStore,
 	originCluster blobclient.ClusterClient) *metaInfoHandler {
 
+	config = config.applyDefaults()
+
 	rc := dedup.NewRequestCache(config.RequestCache, clock.New())
 	rc.SetNotFound(httputil.IsNotFound)
 
-	return &metaInfoHandler{config, store, rc, originCluster}
+	return &metaInfoHandler{config, store, rc, originCluster, backoff.New(config.OriginBackoff)}
 }
 
 func (h *metaInfoHandler) get(w http.ResponseWriter, r *http.Request) error {
@@ -66,15 +79,22 @@ func (h *metaInfoHandler) get(w http.ResponseWriter, r *http.Request) error {
 func (h *metaInfoHandler) startMetaInfoDownload(namespace string, d image.Digest) error {
 	id := namespace + ":" + d.Hex()
 	err := h.requestCache.Start(id, func() error {
-		mi, err := h.originCluster.GetMetaInfo(namespace, d)
-		if err != nil {
-			return err
+		a := h.originBackoff.Attempts()
+		for a.WaitForNext() {
+			mi, err := h.originCluster.GetMetaInfo(namespace, d)
+			if err != nil {
+				if httputil.IsAccepted(err) {
+					continue
+				}
+				return err
+			}
+			if err := h.store.SetMetaInfo(mi); err != nil && err != storage.ErrExists {
+				// Don't return error here as we only want to cache origin cluster errors.
+				log.With("name", d.Hex()).Errorf("Error caching metainfo: %s", err)
+			}
+			return nil
 		}
-		if err := h.store.SetMetaInfo(mi); err != nil && err != storage.ErrExists {
-			// Don't return error here as we only want to cache origin cluster errors.
-			log.With("name", d.Hex()).Errorf("Error caching metainfo: %s", err)
-		}
-		return nil
+		return a.Err()
 	})
 	if err == dedup.ErrRequestPending || err == nil {
 		return handler.ErrorStatus(http.StatusAccepted)

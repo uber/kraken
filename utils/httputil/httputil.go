@@ -13,39 +13,33 @@ const defaultTimeout = 60 * time.Second
 
 // StatusError occurs if an HTTP response has an unexpected status code.
 type StatusError struct {
-	Method           string
-	URL              string
-	ExpectedStatuses []int
-	Status           int
-	Header           http.Header
-
+	Method       string
+	URL          string
+	Status       int
+	Header       http.Header
 	ResponseDump string
 }
 
-func newStatusError(
-	method string, url string, expectedStatuses []int, resp *http.Response) StatusError {
-
+// NewStatusError returns a new StatusError.
+func NewStatusError(resp *http.Response) StatusError {
 	defer resp.Body.Close()
 	respBytes, err := ioutil.ReadAll(resp.Body)
 	respDump := string(respBytes)
 	if err != nil {
 		respDump = fmt.Sprintf("failed to dump response: %s", err)
 	}
-
 	return StatusError{
-		Method:           method,
-		URL:              url,
-		ExpectedStatuses: expectedStatuses,
-		Status:           resp.StatusCode,
-		Header:           resp.Header,
-		ResponseDump:     respDump,
+		Method:       resp.Request.Method,
+		URL:          resp.Request.URL.String(),
+		Status:       resp.StatusCode,
+		Header:       resp.Header,
+		ResponseDump: respDump,
 	}
 }
 
 func (e StatusError) Error() string {
 	return fmt.Sprintf(
-		"http request \"%s %s\" failed: expected statuses %v, got status %d: %s",
-		e.Method, e.URL, e.ExpectedStatuses, e.Status, e.ResponseDump)
+		"%s %s %d: %s", e.Method, e.URL, e.Status, e.ResponseDump)
 }
 
 // IsStatus returns true if err is a StatusError of the given status.
@@ -82,6 +76,12 @@ type NetworkError struct {
 
 func (e NetworkError) Error() string {
 	return e.err.Error()
+}
+
+// IsNetworkError returns true if err is a NetworkError.
+func IsNetworkError(err error) bool {
+	_, ok := err.(NetworkError)
+	return ok
 }
 
 type sendOptions struct {
@@ -180,7 +180,7 @@ func Send(method, url string, options ...SendOption) (*http.Response, error) {
 		for code := range opts.acceptedCodes {
 			expected = append(expected, code)
 		}
-		return resp, newStatusError(method, url, expected, resp)
+		return resp, NewStatusError(resp)
 	}
 
 	return resp, nil

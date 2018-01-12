@@ -2,7 +2,6 @@ package announceclient
 
 import (
 	"fmt"
-	"net/http"
 	"net/url"
 	"strconv"
 
@@ -10,6 +9,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/httputil"
+	"code.uber.internal/infra/kraken/utils/log"
 	"github.com/jackpal/bencode-go"
 )
 
@@ -50,14 +50,14 @@ func (c *client) Announce(name string, h torlib.InfoHash, complete bool) ([]torl
 
 	q := v.Encode()
 
-	var err error
-	for it := c.servers.Iter(); it.HasNext(); it.Next() {
-		var resp *http.Response
-		resp, err = httputil.Get(
+	it := c.servers.Iter()
+	for it.Next() {
+		resp, err := httputil.Get(
 			fmt.Sprintf("http://%s/announce?%s", it.Addr(), q),
 			httputil.SendTimeout(c.config.Timeout))
 		if err != nil {
 			if _, ok := err.(httputil.NetworkError); ok {
+				log.Errorf("Error announcing to %s: %s", it.Addr(), err)
 				continue
 			}
 			return nil, err
@@ -70,5 +70,5 @@ func (c *client) Announce(name string, h torlib.InfoHash, complete bool) ([]torl
 		}
 		return b.Peers, nil
 	}
-	return nil, err
+	return nil, it.Err()
 }

@@ -133,7 +133,7 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/tracker/metainfoclient/mockmetainfoclient.go \
 		-package mockmetainfoclient \
-		code.uber.internal/infra/kraken/tracker/metainfoclient Client
+		code.uber.internal/infra/kraken/tracker/metainfoclient Client,Getter
 
 	mkdir -p mocks/os
 	$(mockgen) \
