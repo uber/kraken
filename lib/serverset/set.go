@@ -7,12 +7,13 @@ type Set interface {
 
 // Iter defines an iterator over a set of servers.
 type Iter interface {
+	// Next advances the iterator to the next address, or returns false if iteration
+	// has stopped.
+	Next() bool
+
 	// Addr returns the current address of the iteration.
 	Addr() string
 
-	// HasNext returns whether the iterator may advance.
-	HasNext() bool
-
-	// Next advances the iterator to the next address.
-	Next()
+	// Err returns an error if iteration has stopped.
+	Err() error
 }

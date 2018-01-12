@@ -1,14 +1,15 @@
 package service
 
 import (
+	"fmt"
+	"io/ioutil"
+	"net/http"
 	"testing"
 	"time"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/torlib"
-	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -17,6 +18,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 )
+
+const namespace = "test-namespace"
+
+func download(addr string, d image.Digest) (*http.Response, error) {
+	return httputil.Get(
+		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/metainfo", addr, namespace, d))
+}
 
 func startMetaInfoServer(h *metaInfoHandler) (addr string, stop func()) {
 	r := chi.NewRouter()
@@ -37,22 +45,22 @@ func TestMetaInfoHandlerGetFetchesFromOrigin(t *testing.T) {
 	addr, stop := startMetaInfoServer(h)
 	defer stop()
 
-	mic := metainfoclient.Default(serverset.NewSingle(addr))
-
-	namespace := "test-namespace"
 	mi := torlib.MetaInfoFixture()
 	digest := image.NewSHA256DigestFromHex(mi.Name())
 
 	mockClusterClient.EXPECT().GetMetaInfo(namespace, digest).Return(mi, nil)
 
-	_, err := mic.Download(namespace, digest.Hex())
-	require.Equal(metainfoclient.ErrRetry, err)
+	resp, err := download(addr, digest)
+	require.True(httputil.IsAccepted(err))
 
-	var result *torlib.MetaInfo
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		result, err = mic.Download(namespace, digest.Hex())
+		resp, err = download(addr, digest)
 		return err == nil
 	}))
+	b, err := ioutil.ReadAll(resp.Body)
+	require.NoError(err)
+	result, err := torlib.DeserializeMetaInfo(b)
+	require.NoError(err)
 	require.Equal(mi, result)
 }
 
@@ -69,20 +77,17 @@ func TestMetaInfoHandlerGetCachesAndPropagatesOriginError(t *testing.T) {
 	addr, stop := startMetaInfoServer(h)
 	defer stop()
 
-	mic := metainfoclient.Default(serverset.NewSingle(addr))
-
-	namespace := "test-namespace"
 	mi := torlib.MetaInfoFixture()
 	digest := image.NewSHA256DigestFromHex(mi.Name())
 
 	mockClusterClient.EXPECT().GetMetaInfo(namespace, digest).Return(
 		nil, httputil.StatusError{Status: 599})
 
-	_, err := mic.Download(namespace, digest.Hex())
-	require.Equal(metainfoclient.ErrRetry, err)
+	resp, err := download(addr, digest)
+	require.True(httputil.IsAccepted(err))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		_, err := mic.Download(namespace, digest.Hex())
+		resp, err = download(addr, digest)
 		return httputil.IsStatus(err, 599)
 	}))
 }

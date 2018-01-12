@@ -147,12 +147,12 @@ func (c *clusterClient) Owners(d image.Digest) ([]peercontext.PeerContext, error
 
 // resolve returns the clients of the origin servers which own d.
 func (c *clusterClient) resolve(d image.Digest) ([]Client, error) {
-	var err error
-	for it := c.servers.Iter(); it.HasNext(); it.Next() {
-		var locs []string
-		locs, err = c.provider.Provide(it.Addr()).Locations(d)
+	it := c.servers.Iter()
+	for it.Next() {
+		locs, err := c.provider.Provide(it.Addr()).Locations(d)
 		if err != nil {
 			if _, ok := err.(httputil.NetworkError); ok {
+				log.Errorf("Error resolving locations from %s: %s", it.Addr(), err)
 				continue
 			}
 			return nil, fmt.Errorf("get locations: %s", err)
@@ -167,7 +167,7 @@ func (c *clusterClient) resolve(d image.Digest) ([]Client, error) {
 		shuffle(clients)
 		return clients, nil
 	}
-	return nil, err
+	return nil, it.Err()
 }
 
 func shuffle(cs []Client) {

@@ -1,6 +1,7 @@
 package metainfoclient
 
 import (
+	"errors"
 	"sync"
 
 	"code.uber.internal/infra/kraken/torlib"
@@ -23,7 +24,7 @@ func (c *TestClient) Upload(mi *torlib.MetaInfo) error {
 	c.Lock()
 	defer c.Unlock()
 	if _, ok := c.m[mi.Name()]; ok {
-		return ErrExists
+		return errors.New("metainfo already exists")
 	}
 	c.m[mi.Name()] = mi
 	return nil

@@ -1,29 +1,17 @@
 package storage
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"time"
 
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
-	"code.uber.internal/infra/kraken/utils/backoff"
 )
 
 // AgentTorrentArchiveConfig defines AgentTorrentArchive configuration.
-type AgentTorrentArchiveConfig struct {
-	DownloadMetaInfoTimeout time.Duration  `yaml:"download_metainfo_timeout"`
-	DownloadMetaInfoBackoff backoff.Config `yaml:"download_metainfo_backoff"`
-}
-
-func (c AgentTorrentArchiveConfig) applyDefaults() AgentTorrentArchiveConfig {
-	if c.DownloadMetaInfoTimeout == 0 {
-		c.DownloadMetaInfoTimeout = 10 * time.Minute
-	}
-	return c
-}
+// TODO(codyg): Probably could remove this.
+type AgentTorrentArchiveConfig struct{}
 
 // AgentTorrentArchive is a TorrentArchive for agent peers. It is capable
 // of initializing torrents in the download directory and serving torrents
@@ -32,7 +20,6 @@ type AgentTorrentArchive struct {
 	config         AgentTorrentArchiveConfig
 	fs             store.FileStore
 	metaInfoClient metainfoclient.Client
-	backoff        *backoff.Backoff
 }
 
 // NewAgentTorrentArchive creates a new AgentTorrentArchive
@@ -41,9 +28,7 @@ func NewAgentTorrentArchive(
 	fs store.FileStore,
 	mic metainfoclient.Client) *AgentTorrentArchive {
 
-	config = config.applyDefaults()
-
-	return &AgentTorrentArchive{config, fs, mic, backoff.New(config.DownloadMetaInfoBackoff)}
+	return &AgentTorrentArchive{config, fs, mic}
 }
 
 // Stat returns TorrentInfo for given file name. Returns error if the file does
@@ -77,7 +62,7 @@ func (a *AgentTorrentArchive) CreateTorrent(namespace, name string) (Torrent, er
 
 	miRaw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
 	if os.IsNotExist(err) {
-		mi, err := a.downloadMetaInfo(namespace, name)
+		mi, err := a.metaInfoClient.Download(namespace, name)
 		if err != nil {
 			if err == metainfoclient.ErrNotFound {
 				return nil, ErrNotFound
@@ -137,23 +122,4 @@ func (a *AgentTorrentArchive) GetTorrent(name string) (Torrent, error) {
 // DeleteTorrent moves a torrent to the trash.
 func (a *AgentTorrentArchive) DeleteTorrent(name string) error {
 	return a.fs.MoveDownloadOrCacheFileToTrash(name)
-}
-
-func (a *AgentTorrentArchive) downloadMetaInfo(namespace string, name string) (*torlib.MetaInfo, error) {
-	timer := time.NewTimer(a.config.DownloadMetaInfoTimeout)
-	defer timer.Stop()
-
-	var attempt int
-	for {
-		mi, err := a.metaInfoClient.Download(namespace, name)
-		if err != metainfoclient.ErrRetry {
-			return mi, err
-		}
-		select {
-		case <-time.After(a.backoff.Duration(attempt)):
-		case <-timer.C:
-			return nil, errors.New("retries timed out")
-		}
-		attempt++
-	}
 }

@@ -1,14 +1,11 @@
 package storage
 
 import (
-	"errors"
 	"sync"
 	"testing"
-	"time"
 
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
-	"code.uber.internal/infra/kraken/utils/backoff"
 	"github.com/stretchr/testify/require"
 )
 
@@ -138,65 +135,6 @@ func TestAgentTorrentArchiveConcurrentGet(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-}
-
-func TestAgentTorrentArchiveDownloadMetaInfoRetryTimeout(t *testing.T) {
-	require := require.New(t)
-
-	mocks, cleanup := newAgentMocks(t)
-	defer cleanup()
-
-	config := AgentTorrentArchiveConfig{
-		DownloadMetaInfoTimeout: 5 * time.Second,
-		DownloadMetaInfoBackoff: backoff.Config{
-			Min:    1 * time.Second,
-			Max:    10 * time.Second,
-			Factor: 2,
-		},
-	}
-	archive := mocks.newTorrentArchive(config)
-
-	name := torlib.MetaInfoFixture().Name()
-
-	mocks.metaInfoClient.EXPECT().Download(namespace, name).Return(nil, metainfoclient.ErrRetry).AnyTimes()
-
-	var elapsed time.Duration
-	errc := make(chan error)
-	go func() {
-		start := time.Now()
-		_, err := archive.CreateTorrent(namespace, name)
-		elapsed = time.Since(start)
-		errc <- err
-	}()
-
-	select {
-	case err := <-errc:
-		require.Error(err)
-		require.InDelta(config.DownloadMetaInfoTimeout, 500*time.Millisecond, float64(elapsed))
-	case <-time.After(2 * config.DownloadMetaInfoTimeout):
-		require.Fail("Download did not timeout")
-	}
-}
-
-func TestAgentTorrentArchiveDownloadMetaInfoNonRetryErrorsFailFast(t *testing.T) {
-	require := require.New(t)
-
-	mocks, cleanup := newAgentMocks(t)
-	defer cleanup()
-
-	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{
-		DownloadMetaInfoTimeout: 5 * time.Second,
-	})
-
-	name := torlib.MetaInfoFixture().Name()
-
-	mocks.metaInfoClient.EXPECT().Download(namespace, name).Return(nil, errors.New("some error")).AnyTimes()
-
-	start := time.Now()
-	_, err := archive.CreateTorrent(namespace, name)
-	elapsed := time.Since(start)
-	require.Error(err)
-	require.True(elapsed < time.Second)
 }
 
 func TestAgentTorrentArchiveGetTorrent(t *testing.T) {

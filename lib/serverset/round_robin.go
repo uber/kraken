@@ -1,6 +1,10 @@
 package serverset
 
-import "go.uber.org/atomic"
+import (
+	"fmt"
+
+	"go.uber.org/atomic"
+)
 
 // RoundRobin defines a thread-safe round-robin procedure for selecting host addresses.
 // Suitable for both DNS retry (configure with single address) or a list of hosts.
@@ -25,20 +29,39 @@ func NewRoundRobin(config RoundRobinConfig) (*RoundRobin, error) {
 type RoundRobinIter struct {
 	cursor  *atomic.Uint32
 	addrs   []string
+	max     int
 	retries int
 	i       int
+	err     error
 }
 
-// Addr implements Iter.Addr
+// MaxRoundRobinRetryError occurs when the max number of retries was reached.
+type MaxRoundRobinRetryError struct {
+	max int
+}
+
+func (e MaxRoundRobinRetryError) Error() string {
+	return fmt.Sprintf("round robin reached %d max retries", e.max)
+}
+
+// Addr returns the current address.
 func (it *RoundRobinIter) Addr() string { return it.addrs[it.i] }
 
-// HasNext implements Iter.HasNext
-func (it *RoundRobinIter) HasNext() bool { return it.retries > 0 }
-
-// Next implements Iter.Next
-func (it *RoundRobinIter) Next() {
+// Next advances to the next server, which may be the same server. Returns
+// false if reached max retries.
+func (it *RoundRobinIter) Next() bool {
+	if it.retries <= 0 {
+		it.err = MaxRoundRobinRetryError{it.max}
+		return false
+	}
 	it.i = int(it.cursor.Inc() % uint32(len(it.addrs)))
 	it.retries--
+	return true
+}
+
+// Err returns an error if max retries was reached.
+func (it *RoundRobinIter) Err() error {
+	return it.err
 }
 
 // Iter returns an iterator over the configured addresses.
@@ -46,9 +69,8 @@ func (r *RoundRobin) Iter() Iter {
 	it := &RoundRobinIter{
 		cursor:  r.cursor,
 		addrs:   r.config.Addrs,
-		retries: r.config.Retries + 1,
+		max:     r.config.Retries,
+		retries: r.config.Retries,
 	}
-	// Kick off the iterator.
-	it.Next()
 	return it
 }
