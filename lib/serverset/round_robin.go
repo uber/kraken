@@ -25,6 +25,20 @@ func NewRoundRobin(config RoundRobinConfig) (*RoundRobin, error) {
 	}, nil
 }
 
+// MustRoundRobin creates a new RoundRobin instance for addrs, panicking if
+// addrs is empty. Useful for testing.
+func MustRoundRobin(addrs ...string) *RoundRobin {
+	config := RoundRobinConfig{
+		Addrs:   addrs,
+		Retries: len(addrs),
+	}
+	rr, err := NewRoundRobin(config)
+	if err != nil {
+		panic(err)
+	}
+	return rr
+}
+
 // RoundRobinIter defines an iterator over addresses.
 type RoundRobinIter struct {
 	cursor  *atomic.Uint32

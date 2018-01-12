@@ -120,7 +120,7 @@ func TestDownloadPollTimeout(t *testing.T) {
 
 	_, err := client.Download(namespace, d.Hex())
 	require.Error(err)
-	require.IsType(backoff.TimeoutError{}, err)
+	require.True(backoff.IsTimeoutError(err))
 }
 
 func TestDownloadConverts404ToErrNotFound(t *testing.T) {

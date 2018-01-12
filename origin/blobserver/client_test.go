@@ -5,13 +5,21 @@ import (
 	"io/ioutil"
 	"sort"
 	"testing"
+	"time"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/serverset"
+	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
+	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/utils/backoff"
+	"code.uber.internal/infra/kraken/utils/httputil"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
+
+const namespace = "test-namespace"
 
 func toAddrs(clients []blobclient.Client) []string {
 	var addrs []string
@@ -35,13 +43,8 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 	cp.register(master2, "http://localhost:0")
 	cp.register(master3, "http://localhost:0")
 
-	masters, err := serverset.NewRoundRobin(serverset.RoundRobinConfig{
-		Addrs:   []string{master1, master2, master3},
-		Retries: 3,
-	})
-	require.NoError(err)
-
-	cc := blobclient.NewClusterClient(cp, masters)
+	cc := blobclient.NewClusterClient(
+		blobclient.NewClientResolver(cp, serverset.MustRoundRobin(master1, master2, master3)))
 
 	// Run many times to make sure we eventually hit unavailable masters.
 	for i := 0; i < 100; i++ {
@@ -74,24 +77,103 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 	cp.register(master2, "http://localhost:0")
 	cp.register(master3, "http://localhost:0")
 
-	masters, err := serverset.NewRoundRobin(serverset.RoundRobinConfig{
-		Addrs:   []string{master1, master2, master3},
-		Retries: 3,
-	})
-	require.NoError(err)
-
-	cc := blobclient.NewClusterClient(cp, masters)
+	cc := blobclient.NewClusterClient(
+		blobclient.NewClientResolver(cp, serverset.MustRoundRobin(master1, master2, master3)))
 
 	d, blob := image.DigestWithBlobFixture()
 
 	require.Error(cc.UploadBlob("noexist", d, bytes.NewReader(blob)))
 
-	_, err = cc.GetMetaInfo("noexist", d)
+	_, err := cc.GetMetaInfo("noexist", d)
 	require.Error(err)
 
 	_, err = cc.DownloadBlob(d)
 	require.Error(err)
 
 	_, err = cc.Owners(d)
+	require.Error(err)
+}
+
+func TestClusterClientGetMetaInfoSkipsOriginOnPollTimeout(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockResolver := mockblobclient.NewMockClientResolver(ctrl)
+
+	b := backoff.New(backoff.Config{
+		Min:          100 * time.Millisecond,
+		RetryTimeout: 500 * time.Millisecond,
+	})
+	cc := blobclient.NewClusterClient(mockResolver, blobclient.WithPollMetaInfoBackoff(b))
+
+	mi := torlib.MetaInfoFixture()
+	digest := image.NewSHA256DigestFromHex(mi.Name())
+
+	mockClient1 := mockblobclient.NewMockClient(ctrl)
+	mockClient2 := mockblobclient.NewMockClient(ctrl)
+
+	mockResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
+
+	mockClient1.EXPECT().GetMetaInfo(namespace, digest).Return(nil, httputil.StatusError{Status: 202}).MinTimes(1)
+	mockClient1.EXPECT().Addr().Return("client1")
+	mockClient2.EXPECT().GetMetaInfo(namespace, digest).Return(mi, nil)
+
+	result, err := cc.GetMetaInfo(namespace, digest)
+	require.NoError(err)
+	require.Equal(result, mi)
+}
+
+func TestClusterClientGetMetaInfoSkipsOriginOnNetworkErrors(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockResolver := mockblobclient.NewMockClientResolver(ctrl)
+
+	cc := blobclient.NewClusterClient(mockResolver)
+
+	mi := torlib.MetaInfoFixture()
+	digest := image.NewSHA256DigestFromHex(mi.Name())
+
+	mockClient1 := mockblobclient.NewMockClient(ctrl)
+	mockClient2 := mockblobclient.NewMockClient(ctrl)
+
+	mockResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
+
+	mockClient1.EXPECT().GetMetaInfo(namespace, digest).Return(nil, httputil.NetworkError{})
+	mockClient1.EXPECT().Addr().Return("client1")
+	mockClient2.EXPECT().GetMetaInfo(namespace, digest).Return(mi, nil)
+
+	result, err := cc.GetMetaInfo(namespace, digest)
+	require.NoError(err)
+	require.Equal(result, mi)
+}
+
+func TestClusterClientReturnsErrorOnNoAvailableOrigins(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockResolver := mockblobclient.NewMockClientResolver(ctrl)
+
+	cc := blobclient.NewClusterClient(mockResolver)
+
+	mi := torlib.MetaInfoFixture()
+	digest := image.NewSHA256DigestFromHex(mi.Name())
+
+	mockClient1 := mockblobclient.NewMockClient(ctrl)
+	mockClient2 := mockblobclient.NewMockClient(ctrl)
+	mockResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
+
+	mockClient1.EXPECT().GetMetaInfo(namespace, digest).Return(nil, httputil.NetworkError{})
+	mockClient1.EXPECT().Addr().Return("client1")
+	mockClient2.EXPECT().GetMetaInfo(namespace, digest).Return(nil, httputil.NetworkError{})
+	mockClient2.EXPECT().Addr().Return("client2")
+
+	_, err := cc.GetMetaInfo(namespace, digest)
 	require.Error(err)
 }
