@@ -3,7 +3,7 @@ package backend
 import (
 	"fmt"
 
-	"code.uber.internal/infra/kraken/lib/backend/s3"
+	"code.uber.internal/infra/kraken/lib/backend/s3backend"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
 )
 
@@ -20,7 +20,7 @@ func NewManager(namespaces NamespaceConfig) (*Manager, error) {
 		var err error
 		switch config.Backend {
 		case "s3":
-			c, err = s3.NewClient(config.S3)
+			c, err = s3backend.NewClient(config.S3)
 		case "testfs":
 			c, err = testfs.NewClient(config.TestFS)
 		default:
