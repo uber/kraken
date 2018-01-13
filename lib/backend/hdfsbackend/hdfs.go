@@ -1,4 +1,4 @@
-package hdfs
+package hdfsbackend
 
 import (
 	"fmt"
@@ -65,7 +65,7 @@ func (c *Client) Download(name string, dst fileio.Writer) (int64, error) {
 	v.Set("op", HdfsOpen)
 	u := fmt.Sprintf("%s/%s?%s", c.config.NameNodeURL, name, v.Encode())
 
-	log.Infof("make hdfs request to url: %s", u)
+	log.Infof("Starting HDFS download from remote backend: %s", u)
 
 	resp, err := httputil.Get(u)
 	if err != nil {
@@ -101,7 +101,7 @@ func (c *Client) Upload(name string, src fileio.Reader) error {
 	v.Set("op", HdfsCreate)
 	u := fmt.Sprintf("%s/%s?%s", c.config.NameNodeURL, name, v.Encode())
 
-	log.Infof("make hdfs request to url: %s", u)
+	log.Infof("Starting HDFS upload to remote backend: %s", u)
 
 	// WebHDFS protocols requires that create file request should be
 	// sent without being automatically following a redirect

@@ -1,10 +1,10 @@
-package s3
+package s3backend
 
 import (
 	"errors"
 
 	"code.uber.internal/infra/kraken/lib/fileio"
-
+	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -78,6 +78,9 @@ func (c *Client) Download(name string, dst fileio.Writer) error {
 		Key:    aws.String(name),
 	}
 
+	log.Infof("Starting S3 download from remote backend: (bucket: %s, key %s)",
+		c.config.Bucket, name)
+
 	_, err := downloader.Download(dst, dlParams)
 	return err
 }
@@ -95,6 +98,9 @@ func (c *Client) Upload(name string, src fileio.Reader) error {
 		Key:    aws.String(name),
 		Body:   src,
 	}
+
+	log.Infof("Starting S3 upload to remote backend: (bucket: %s, key: %s)",
+		c.config.Bucket, name)
 
 	// TODO(igor): support resumable uploads, for now we're ignoring UploadOutput
 	// entirely
