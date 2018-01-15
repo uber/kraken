@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/andres-erbsen/clock"
 )
 
 var _ FileMap = (*lruFileMap)(nil)
@@ -20,7 +22,8 @@ type fileEntryWithAccessTime struct {
 type lruFileMap struct {
 	sync.Mutex
 
-	size           int           // Size limit of the LRU map. It's not a strict limit, could be exceeded briefly.
+	size           int // Size limit of the LRU map. It's not a strict limit, could be exceeded briefly.
+	clk            clock.Clock
 	timeResolution time.Duration // Min timespan between two updates of last access time for the same file.
 	queue          *list.List
 	elements       map[string]*list.Element
@@ -28,13 +31,14 @@ type lruFileMap struct {
 }
 
 // NewLRUFileMap creates a new LRU map given size.
-func NewLRUFileMap(size int, evictFn func(string, FileEntry)) (FileMap, error) {
+func NewLRUFileMap(size int, clk clock.Clock, evictFn func(string, FileEntry)) (FileMap, error) {
 	if size <= 0 {
 		return nil, fmt.Errorf("invalid lru map size: %d", size)
 	}
 
 	m := &lruFileMap{
 		size:           size,
+		clk:            clk,
 		timeResolution: time.Minute * 5,
 		queue:          list.New(),
 		elements:       make(map[string]*list.Element),
@@ -50,9 +54,9 @@ func (fm *lruFileMap) get(name string) (*fileEntryWithAccessTime, bool) {
 		e := element.Value.(*fileEntryWithAccessTime)
 		if time.Since(e.lastAccessTime) >= fm.timeResolution {
 			// Only persist to disk if new timestamp is <timeResolution> newer than previous value.
-			e.fe.SetMetadata(NewLastAccessTime(), []byte(time.Now().String()))
+			e.fe.SetMetadata(NewLastAccessTime(), MarshalLastAccessTime(fm.clk.Now()))
 		}
-		e.lastAccessTime = time.Now()
+		e.lastAccessTime = fm.clk.Now()
 		return element.Value.(*fileEntryWithAccessTime), ok
 	}
 	return nil, false
@@ -69,7 +73,7 @@ func (fm *lruFileMap) add(name string, e *fileEntryWithAccessTime) bool {
 	if _, ok := fm.elements[name]; !ok {
 		element := fm.queue.PushFront(e)
 		fm.elements[name] = element
-		e.fe.SetMetadata(NewLastAccessTime(), []byte(e.lastAccessTime.String()))
+		e.fe.SetMetadata(NewLastAccessTime(), MarshalLastAccessTime(fm.clk.Now()))
 		return true
 	}
 	return false
@@ -147,7 +151,7 @@ func (fm *lruFileMap) LoadOrStore(
 	name string, entry FileEntry, f func(string, FileEntry) error) (FileEntry, bool) {
 	// Lock on entry first, in case the lock is taken by other goroutine before f().
 	e := &fileEntryWithAccessTime{
-		lastAccessTime: time.Now(),
+		lastAccessTime: fm.clk.Now(),
 		fe:             entry,
 	}
 

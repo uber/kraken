@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/utils/testutil"
+
+	"github.com/andres-erbsen/clock"
 )
 
 func localFileStoreFixture(
@@ -79,7 +81,7 @@ func LocalFileStoreWithTrashDeletionFixture(interval time.Duration) (s *LocalFil
 }
 
 // OriginFileStoreFixture returns a origin file store.
-func OriginFileStoreFixture() (OriginFileStore, func()) {
+func OriginFileStoreFixture(clk clock.Clock) (*OriginLocalFileStore, func()) {
 	cleanup := &testutil.Cleanup{}
 	defer cleanup.Recover()
 
@@ -102,8 +104,9 @@ func OriginFileStoreFixture() (OriginFileStore, func()) {
 	config := OriginConfig{
 		UploadDir: upload,
 		CacheDir:  cache,
+		TTI:       time.Hour * 24,
 	}
-	s, err := NewOriginFileStore(config)
+	s, err := NewOriginFileStore(config, clk)
 	if err != nil {
 		panic(err)
 	}

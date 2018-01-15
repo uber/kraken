@@ -15,6 +15,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/osutil"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
 	"github.com/robfig/cron"
 )
@@ -105,7 +106,7 @@ func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error
 	if useRefcount {
 		downloadCacheBackend, err = base.NewLocalRCFileStore()
 	} else if config.LRUConfig.Enable {
-		downloadCacheBackend, err = base.NewLRUFileStore(config.LRUConfig.Size)
+		downloadCacheBackend, err = base.NewLRUFileStore(config.LRUConfig.Size, clock.New())
 	} else {
 		downloadCacheBackend, err = base.NewCASFileStore()
 	}

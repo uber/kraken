@@ -1,7 +1,10 @@
 package base
 
 import (
+	"encoding/binary"
+	"fmt"
 	"regexp"
+	"time"
 )
 
 func init() {
@@ -28,4 +31,20 @@ func (t lastAccessTime) GetSuffix() string {
 
 func (t lastAccessTime) Movable() bool {
 	return false
+}
+
+// MarshalLastAccessTime marshals time to bytes.
+func MarshalLastAccessTime(t time.Time) []byte {
+	b := make([]byte, 8)
+	binary.PutVarint(b, t.Unix())
+	return b
+}
+
+// UnmarshalLastAccessTime unmarshals time from bytes.
+func UnmarshalLastAccessTime(b []byte) (time.Time, error) {
+	i, n := binary.Varint(b)
+	if n <= 0 {
+		return time.Time{}, fmt.Errorf("unmarshal last access time: %s", b)
+	}
+	return time.Unix(int64(i), 0), nil
 }
