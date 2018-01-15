@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/c2h5oh/datasize"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -109,7 +110,7 @@ type testServer struct {
 
 func newTestServer(host string, config Config, cp *testClientProvider) *testServer {
 	pctx := peercontext.Fixture()
-	fs, cleanFS := store.OriginFileStoreFixture()
+	fs, cleanFS := store.OriginFileStoreFixture(clock.New())
 	bm, err := backend.NewManager(nil)
 	if err != nil {
 		panic(err)

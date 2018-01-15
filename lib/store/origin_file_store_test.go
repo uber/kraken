@@ -8,14 +8,16 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
-	"code.uber.internal/infra/kraken/utils/randutil"
+	"code.uber.internal/infra/kraken/utils/stringset"
+
+	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOriginFileStoreInitDirectories(t *testing.T) {
 	require := require.New(t)
 
-	s, c := OriginFileStoreFixture()
+	s, c := OriginFileStoreFixture(clock.New())
 	defer c()
 
 	volume1, err := ioutil.TempDir("/tmp", "volume")
@@ -41,7 +43,7 @@ func TestOriginFileStoreInitDirectories(t *testing.T) {
 		{Location: volume2, Weight: 100},
 		{Location: volume3, Weight: 100},
 	}
-	_, err = NewOriginFileStore(config)
+	_, err = NewOriginFileStore(config, clock.NewMock())
 	require.NoError(err)
 
 	v1Files, err := ioutil.ReadDir(path.Join(volume1, path.Base(config.CacheDir)))
@@ -64,7 +66,7 @@ func TestOriginFileStoreInitDirectories(t *testing.T) {
 func TestOriginFileStoreInitDirectoriesAfterChangingVolumes(t *testing.T) {
 	require := require.New(t)
 
-	s, c := OriginFileStoreFixture()
+	s, c := OriginFileStoreFixture(clock.New())
 	defer c()
 
 	volume1, err := ioutil.TempDir("/tmp", "volume")
@@ -90,12 +92,12 @@ func TestOriginFileStoreInitDirectoriesAfterChangingVolumes(t *testing.T) {
 		{Location: volume2, Weight: 100},
 		{Location: volume3, Weight: 100},
 	}
-	_, err = NewOriginFileStore(config)
+	_, err = NewOriginFileStore(config, clock.NewMock())
 	require.NoError(err)
 
 	// Add one more volume, recreate file store.
 	config.Volumes = append(config.Volumes, Volume{Location: volume4, Weight: 100})
-	_, err = NewOriginFileStore(config)
+	_, err = NewOriginFileStore(config, clock.NewMock())
 	require.NoError(err)
 
 	var n1, n2, n3, n4 int
@@ -129,7 +131,7 @@ func TestOriginFileStoreInitDirectoriesAfterChangingVolumes(t *testing.T) {
 func TestOriginFileStoreCreateUploadFileAndMoveToCache(t *testing.T) {
 	require := require.New(t)
 
-	s, cleanup := OriginFileStoreFixture()
+	s, cleanup := OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
 	testFileName := "test_file.txt"
@@ -150,7 +152,7 @@ func TestOriginFileStoreCreateUploadFileAndMoveToCache(t *testing.T) {
 func TestOriginFileStoreCreateCacheFile(t *testing.T) {
 	require := require.New(t)
 
-	s, cleanup := OriginFileStoreFixture()
+	s, cleanup := OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
 	s1 := "buffer"
@@ -169,7 +171,7 @@ func TestOriginFileStoreCreateCacheFile(t *testing.T) {
 func TestOriginFileStoreFileHashStates(t *testing.T) {
 	require := require.New(t)
 
-	s, cleanup := OriginFileStoreFixture()
+	s, cleanup := OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
 	err := s.CreateUploadFile("test_file.txt", 100)
@@ -190,7 +192,7 @@ func TestOriginFileStoreFileHashStates(t *testing.T) {
 func TestOriginFileStoreFileStartedAt(t *testing.T) {
 	require := require.New(t)
 
-	s, cleanup := OriginFileStoreFixture()
+	s, cleanup := OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
 	err := s.CreateUploadFile("test_file.txt", 100)
@@ -208,13 +210,13 @@ func TestOriginFileStoreFileStartedAt(t *testing.T) {
 func TestOriginStoreListPopulatedShardIDs(t *testing.T) {
 	require := require.New(t)
 
-	s, cleanup := OriginFileStoreFixture()
+	s, cleanup := OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
 	var cacheFiles []string
 	shardsMap := make(map[string]string)
 	for i := 0; i < 100; i++ {
-		name := randutil.Hex(32)
+		name := image.DigestFixture().Hex()
 		if _, ok := shardsMap[name[:4]]; ok {
 			// Avoid duplicated names
 			continue
@@ -238,4 +240,76 @@ func TestOriginStoreListPopulatedShardIDs(t *testing.T) {
 			require.NotContains(shards, shard)
 		}
 	}
+}
+
+func TestOriginStoreCleanupCacheFile(t *testing.T) {
+	require := require.New(t)
+	clk := clock.NewMock()
+	s, cleanup := OriginFileStoreFixture(clk)
+	defer cleanup()
+
+	cacheFiles := make(stringset.Set)
+	expiredFiles := make(stringset.Set)
+	for i := 0; i < 100; i++ {
+		if i == 50 {
+			clk.Add(s.Config().TTI * 2)
+		}
+
+		name := image.DigestFixture().Hex()
+		if cacheFiles.Has(name) {
+			// Avoid duplicated names
+			continue
+		}
+		cacheFiles.Add(name)
+		require.NoError(s.CreateUploadFile(name, 1))
+		require.NoError(s.MoveUploadFileToCache(name, name))
+
+		if i < 50 {
+			expiredFiles.Add(name)
+		}
+	}
+	err := s.cleanupExpiredCacheFile()
+	require.NoError(err)
+
+	for name := range cacheFiles {
+		_, err := s.GetCacheFileStat(name)
+		if expiredFiles.Has(name) {
+			require.True(os.IsNotExist(err))
+		} else {
+			require.NoError(err)
+		}
+	}
+}
+
+func TestOriginStoreCleanupCacheFileSkipRecentRead(t *testing.T) {
+	require := require.New(t)
+	clk := clock.NewMock()
+	s, cleanup := OriginFileStoreFixture(clk)
+	defer cleanup()
+
+	name1 := image.DigestFixture().Hex()
+	require.NoError(s.CreateUploadFile(name1, 1))
+	require.NoError(s.MoveUploadFileToCache(name1, name1))
+
+	name2 := image.DigestFixture().Hex()
+	require.NoError(s.CreateUploadFile(name2, 1))
+	require.NoError(s.MoveUploadFileToCache(name2, name2))
+
+	clk.Add(s.Config().TTI * 2)
+
+	_, err := s.GetCacheFileStat(name2)
+	require.NoError(err)
+
+	name3 := image.DigestFixture().Hex()
+	require.NoError(s.CreateUploadFile(name3, 1))
+	require.NoError(s.MoveUploadFileToCache(name3, name3))
+
+	require.NoError(s.cleanupExpiredCacheFile())
+
+	_, err = s.GetCacheFileStat(name1)
+	require.True(os.IsNotExist(err))
+	_, err = s.GetCacheFileStat(name2)
+	require.NoError(err)
+	_, err = s.GetCacheFileStat(name3)
+	require.NoError(err)
 }

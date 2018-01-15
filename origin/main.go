@@ -19,6 +19,8 @@ import (
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
+
+	"github.com/andres-erbsen/clock"
 )
 
 func main() {
@@ -58,7 +60,7 @@ func main() {
 	stats = stats.SubScope("kraken.origin")
 
 	// Initialize file storage.
-	fs, err := store.NewOriginFileStore(config.OriginStore)
+	fs, err := store.NewOriginFileStore(config.OriginStore, clock.New())
 	if err != nil {
 		log.Fatalf("Failed to create origin file store: %s", err)
 	}
@@ -82,7 +84,7 @@ func main() {
 
 		c, err := torrent.NewSchedulerClient(
 			config.Torrent,
-			fs.(store.ReadOnlyFileStore),
+			fs,
 			stats,
 			pctx,
 			// TODO(codyg): Get rid of this dependency.

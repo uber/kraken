@@ -1,5 +1,7 @@
 package base
 
+import "github.com/andres-erbsen/clock"
+
 // FileStore manages files and their metadata. Actual operations are done through FileOp.
 type FileStore interface {
 	NewFileOp() FileOp
@@ -35,8 +37,8 @@ func NewCASFileStore() (FileStore, error) {
 
 // NewLRUFileStore initializes and returns a new LRU FileStore.
 // When size exceeds limit, the least recently accessed entry will be removed.
-func NewLRUFileStore(size int) (FileStore, error) {
-	fm, err := NewLRUFileMap(size, func(name string, entry FileEntry) {
+func NewLRUFileStore(size int, clk clock.Clock) (FileStore, error) {
+	fm, err := NewLRUFileMap(size, clk, func(name string, entry FileEntry) {
 		entry.Delete()
 	})
 	if err != nil {
@@ -53,8 +55,8 @@ func NewLRUFileStore(size int) (FileStore, error) {
 // For every byte, one more level of directories will be created.
 // It also store objects in a LRU FileStore.
 // When size exceeds limit, the least recently accessed entry will be removed.
-func NewCASFileStoreWithLRUMap(size int) (FileStore, error) {
-	fm, err := NewLRUFileMap(size, func(name string, entry FileEntry) {
+func NewCASFileStoreWithLRUMap(size int, clk clock.Clock) (FileStore, error) {
+	fm, err := NewLRUFileMap(size, clk, func(name string, entry FileEntry) {
 		entry.Delete()
 	})
 	if err != nil {

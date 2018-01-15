@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -15,8 +16,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store/base"
 	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/osutil"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
 	"github.com/robfig/cron"
 	"github.com/spaolacci/murmur3"
@@ -64,6 +65,7 @@ type OriginLocalFileStore struct {
 	uploadBackend base.FileStore
 	cacheBackend  base.FileStore
 	config        OriginConfig
+	clk           clock.Clock
 
 	stateUpload agentFileState
 	stateCache  agentFileState
@@ -71,8 +73,8 @@ type OriginLocalFileStore struct {
 	cacheCleanupCron *cron.Cron
 }
 
-// NewOriginFileStore initializes and returns a new OriginFileStore object.
-func NewOriginFileStore(config OriginConfig) (OriginFileStore, error) {
+// NewOriginFileStore initializes and returns a new OriginLocalFileStore object.
+func NewOriginFileStore(config OriginConfig, clk clock.Clock) (*OriginLocalFileStore, error) {
 	config = config.applyDefaults()
 
 	err := initOriginStoreDirectories(config)
@@ -85,7 +87,7 @@ func NewOriginFileStore(config OriginConfig) (OriginFileStore, error) {
 		return nil, fmt.Errorf("init origin upload backend: %s", err)
 	}
 
-	cacheBackend, err := base.NewCASFileStoreWithLRUMap(config.Capacity)
+	cacheBackend, err := base.NewCASFileStoreWithLRUMap(config.Capacity, clk)
 	if err != nil {
 		return nil, fmt.Errorf("init origin cache backend: %s", err)
 	}
@@ -94,18 +96,20 @@ func NewOriginFileStore(config OriginConfig) (OriginFileStore, error) {
 		uploadBackend: uploadBackend,
 		cacheBackend:  cacheBackend,
 		config:        config,
-		stateUpload:   agentFileState{directory: config.UploadDir},
-		stateCache:    agentFileState{directory: config.CacheDir},
+		clk:           clk,
+
+		stateUpload: agentFileState{directory: config.UploadDir},
+		stateCache:  agentFileState{directory: config.CacheDir},
 	}
 
-	// Start a cron to delete files that reached TTL.
+	// Start a cron to delete files that reached TTI.
 	if config.TTI > 0 && config.CleanupInterval > 0 {
 		originStore.cacheCleanupCron = cron.New()
 		intervalSecs := int(math.Ceil(config.CleanupInterval.Seconds()))
 		spec := fmt.Sprintf("@every %ds", intervalSecs)
 		err = originStore.cacheCleanupCron.AddFunc(spec, func() {
 			log.Info("Starting cache cleanup cron")
-			if err := cleanupCacheFile(config); err != nil {
+			if err := originStore.cleanupExpiredCacheFile(); err != nil {
 				log.Errorf("Failed to execute cache cleanup cron: %s", err)
 			}
 
@@ -171,7 +175,38 @@ func initOriginStoreDirectories(config OriginConfig) error {
 	return nil
 }
 
-func cleanupCacheFile(config OriginConfig) error {
+func (store *OriginLocalFileStore) cleanupExpiredCacheFile() error {
+	// Walk through the cache directory and remove expired files.
+	dataDepth := base.DefaultShardIDLength + 1
+	err := walkDirectory(store.config.CacheDir, dataDepth, func(currPath string) error {
+		latSuffix := base.NewLastAccessTime().GetSuffix()
+		latPath := path.Join(currPath, latSuffix)
+		if _, err := os.Stat(latPath); os.IsNotExist(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+
+		b, err := ioutil.ReadFile(latPath)
+		if err != nil {
+			return err
+		}
+		lat, err := base.UnmarshalLastAccessTime(b)
+		if err != nil {
+			return fmt.Errorf("unmarshal lat %s: %s", b, err)
+		}
+		if store.clk.Now().Sub(lat) > store.config.TTI {
+			fileName := filepath.Base(currPath)
+			err := store.cacheBackend.NewFileOp().AcceptState(store.stateCache).DeleteFile(fileName)
+			if err != nil {
+				log.Errorf("Failed to clean up file %s: %s", fileName, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("walk cache: %s", err)
+	}
 	return nil
 }
 
@@ -377,41 +412,14 @@ func (store *OriginLocalFileStore) ListCacheFilesByShardID(shardID string) ([]st
 // XXX: This is an expensive operation and will potentially return stale data.
 // Caller should not assume shard ids will remain populated.
 func (store *OriginLocalFileStore) ListPopulatedShardIDs() ([]string, error) {
-	shardDir := store.config.CacheDir
 	var shards []string
 
-	// Recursive closure which walks the shard directory and adds any populated
-	// shard ids to shards.
-	var walk func(string, int) error
-	walk = func(cursor string, depth int) error {
-		dir := path.Join(shardDir, cursor)
-		if depth == 0 {
-			empty, err := osutil.IsEmpty(dir)
-			if err != nil {
-				return err
-			}
-			if !empty {
-				shard := strings.Replace(cursor, "/", "", -1)
-				shards = append(shards, shard)
-			}
+	err := walkDirectory(
+		store.config.CacheDir, base.DefaultShardIDLength, func(currPath string) error {
+			shard := strings.TrimPrefix(currPath, store.config.CacheDir)
+			shards = append(shards, strings.Replace(shard, "/", "", -1))
 			return nil
-		}
-		infos, err := ioutil.ReadDir(dir)
-		if err != nil {
-			return err
-		}
-		for _, info := range infos {
-			if info.IsDir() {
-				if err := walk(path.Join(cursor, info.Name()), depth-1); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
-
-	// TODO(codyg): Revisit shard depth constant.
-	err := walk("", 2)
+		})
 
 	return shards, err
 }

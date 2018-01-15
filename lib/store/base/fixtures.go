@@ -7,6 +7,7 @@ import (
 
 	"code.uber.internal/infra/kraken/utils/testutil"
 
+	"github.com/andres-erbsen/clock"
 	"golang.org/x/sync/syncmap"
 )
 
@@ -110,7 +111,7 @@ func fileMapLRUFixture() (bundle *fileMapTestBundle, run func()) {
 	b, clean := fileEntryLocalFixture()
 	cleanup.Add(clean)
 
-	fm, err := NewLRUFileMap(100, func(name string, entry FileEntry) {
+	fm, err := NewLRUFileMap(100, clock.New(), func(name string, entry FileEntry) {
 		entry.Delete()
 	})
 	if err != nil {
@@ -165,7 +166,7 @@ func fileStoreCASFixture() (*fileStoreTestBundle, func()) {
 
 func fileStoreLRUFixture(size int) (*fileStoreTestBundle, func()) {
 	return newFileStoreFixture(func() *localFileStore {
-		store, err := NewLRUFileStore(size)
+		store, err := NewLRUFileStore(size, clock.New())
 		if err != nil {
 			log.Fatal(err)
 		}

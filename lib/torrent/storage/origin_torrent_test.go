@@ -10,13 +10,14 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/torlib"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOriginTorrentCreate(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.OriginFileStoreFixture()
+	fs, cleanup := store.OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
 	tf := torlib.CustomTestTorrentFileFixture(7, 2)
@@ -45,7 +46,7 @@ func TestOriginTorrentCreate(t *testing.T) {
 func TestOriginTorrentReadPieceConcurrent(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.OriginFileStoreFixture()
+	fs, cleanup := store.OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
 	tf := torlib.CustomTestTorrentFileFixture(7, 2)
@@ -75,7 +76,7 @@ func TestOriginTorrentReadPieceConcurrent(t *testing.T) {
 func TestOriginTorrentWritePieceError(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.OriginFileStoreFixture()
+	fs, cleanup := store.OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
 	tf := torlib.CustomTestTorrentFileFixture(7, 2)

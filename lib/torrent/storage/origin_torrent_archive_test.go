@@ -6,13 +6,15 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/torlib"
+
+	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOriginTorrentArchiveStatNotExist(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.OriginFileStoreFixture()
+	fs, cleanup := store.OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
 	archive := NewOriginTorrentArchive(fs)
@@ -26,7 +28,7 @@ func TestOriginTorrentArchiveStatNotExist(t *testing.T) {
 func TestOriginTorrentArchiveGetTorrentNotExist(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.OriginFileStoreFixture()
+	fs, cleanup := store.OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
 	archive := NewOriginTorrentArchive(fs)
@@ -40,7 +42,7 @@ func TestOriginTorrentArchiveGetTorrentNotExist(t *testing.T) {
 func TestOriginTorrentArchiveGetTorrent(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.OriginFileStoreFixture()
+	fs, cleanup := store.OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
 	archive := NewOriginTorrentArchive(fs)

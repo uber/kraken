@@ -1,7 +1,11 @@
 package store
 
 import (
+	"io/ioutil"
 	"os"
+	"path"
+
+	"code.uber.internal/infra/kraken/utils/osutil"
 )
 
 func initDirectories(config *Config) error {
@@ -43,5 +47,38 @@ func createOrUpdateSymlink(sourcePath, targetPath string) error {
 		return err
 	}
 
+	return nil
+}
+
+// walkDirectory is a helper function which scans the given dir and perform
+// specified functions at given depth.
+// This function doesn't wrap errors.
+//
+// Note: This could be an expensive operation and will potentially return stale
+// data.
+func walkDirectory(rootDir string, depth int, f func(string) error) error {
+	if depth == 0 {
+		empty, err := osutil.IsEmpty(rootDir)
+		if err != nil {
+			return err
+		}
+		if !empty {
+			if err = f(rootDir); err != nil {
+				return err
+			}
+		}
+	} else {
+		infos, err := ioutil.ReadDir(rootDir)
+		if err != nil {
+			return err
+		}
+		for _, info := range infos {
+			if info.IsDir() {
+				if err := walkDirectory(path.Join(rootDir, info.Name()), depth-1, f); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	return nil
 }
