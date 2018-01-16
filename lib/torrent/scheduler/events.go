@@ -2,11 +2,13 @@ package scheduler
 
 import (
 	"fmt"
+	"time"
 
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/timeutil"
 )
 
@@ -260,7 +262,7 @@ type newTorrentEvent struct {
 func (e newTorrentEvent) Apply(s *Scheduler) {
 	ctrl, ok := s.torrentControls[e.torrent.InfoHash()]
 	if !ok {
-		ctrl = s.initTorrentControl(e.torrent)
+		ctrl = s.initTorrentControl(e.torrent, true)
 		s.log("torrent", e.torrent).Info("Initialized new torrent")
 	}
 	if ctrl.Complete {
@@ -289,6 +291,16 @@ func (e completedDispatcherEvent) Apply(s *Scheduler) {
 		errc <- nil
 	}
 	ctrl.Complete = true
+	if ctrl.LocalRequest {
+		// Normalize the download time for all torrent sizes to a per KB value.
+		// Skip torrents that are less than a KB in size because we can't measure
+		// at that granularity.
+		downloadTime := ctrl.Dispatcher.CreatedAt.Sub(s.clock.Now())
+		lengthKB := ctrl.Dispatcher.Torrent.Length() / int64(memsize.KB)
+		if lengthKB > 0 {
+			s.stats.Timer("download_time_per_kb").Record(downloadTime / time.Duration(lengthKB))
+		}
+	}
 
 	s.log("torrent", e.dispatcher.Torrent).Info("Torrent complete")
 	s.networkEvents.Produce(networkevent.TorrentCompleteEvent(infoHash, s.pctx.PeerID))
