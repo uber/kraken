@@ -32,6 +32,50 @@ var (
 	errRepeatedBitfieldMessage = errors.New("received repeated bitfield message")
 )
 
+type torrentAccessWatcher struct {
+	storage.Torrent
+	clk       clock.Clock
+	mu        sync.Mutex
+	lastWrite time.Time
+	lastRead  time.Time
+}
+
+func newTorrentAccessWatcher(t storage.Torrent, clk clock.Clock) *torrentAccessWatcher {
+	return &torrentAccessWatcher{Torrent: t, clk: clk, lastWrite: clk.Now(), lastRead: clk.Now()}
+}
+
+func (w *torrentAccessWatcher) WritePiece(data []byte, piece int) error {
+	err := w.Torrent.WritePiece(data, piece)
+	if err == nil {
+		w.mu.Lock()
+		w.lastWrite = w.clk.Now()
+		w.mu.Unlock()
+	}
+	return err
+}
+
+func (w *torrentAccessWatcher) ReadPiece(piece int) ([]byte, error) {
+	b, err := w.Torrent.ReadPiece(piece)
+	if err == nil {
+		w.mu.Lock()
+		w.lastRead = w.clk.Now()
+		w.mu.Unlock()
+	}
+	return b, err
+}
+
+func (w *torrentAccessWatcher) getLastReadTime() time.Time {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.lastRead
+}
+
+func (w *torrentAccessWatcher) getLastWriteTime() time.Time {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.lastWrite
+}
+
 // messages defines a subset of conn methods which dispatcher requires to
 // communicate with remote peers.
 type messages interface {
@@ -119,7 +163,7 @@ func (f *dispatcherFactory) New(t storage.Torrent) *dispatcher {
 func (f *dispatcherFactory) init(t storage.Torrent) *dispatcher {
 	pieceRequestTimeout := f.calcPieceRequestTimeout(t.MaxPieceLength())
 	return &dispatcher{
-		Torrent:             t,
+		Torrent:             newTorrentAccessWatcher(t, f.Clock),
 		CreatedAt:           f.Clock.Now(),
 		localPeerID:         f.LocalPeerID,
 		eventSender:         f.EventSender,
@@ -136,7 +180,7 @@ func (f *dispatcherFactory) init(t storage.Torrent) *dispatcher {
 // peers. As such, dispatcher and torrent have a one-to-one relationship, while dispatcher
 // and peer have a one-to-many relationship.
 type dispatcher struct {
-	Torrent     storage.Torrent
+	Torrent     *torrentAccessWatcher
 	CreatedAt   time.Time
 	localPeerID torlib.PeerID
 	clock       clock.Clock
@@ -149,9 +193,6 @@ type dispatcher struct {
 	eventSender eventSender
 
 	networkEvents networkevent.Producer
-
-	lastConnRemovedMu sync.Mutex
-	lastConnRemoved   time.Time
 
 	pieceRequestTimeout time.Duration
 
@@ -179,18 +220,12 @@ func (d *dispatcher) LastPieceSent(peerID torlib.PeerID) time.Time {
 	return v.(*peer).getLastPieceSent()
 }
 
-func (d *dispatcher) LastConnRemoved() time.Time {
-	d.lastConnRemovedMu.Lock()
-	defer d.lastConnRemovedMu.Unlock()
-
-	return d.lastConnRemoved
+func (d *dispatcher) LastReadTime() time.Time {
+	return d.Torrent.getLastReadTime()
 }
 
-func (d *dispatcher) touchLastConnRemoved() {
-	d.lastConnRemovedMu.Lock()
-	defer d.lastConnRemovedMu.Unlock()
-
-	d.lastConnRemoved = d.clock.Now()
+func (d *dispatcher) LastWriteTime() time.Time {
+	return d.Torrent.getLastWriteTime()
 }
 
 // Empty returns true if the dispatcher has no peers.
@@ -353,7 +388,6 @@ func (d *dispatcher) feed(p *peer) {
 		}
 	}
 	d.peers.Delete(p.id)
-	d.touchLastConnRemoved()
 }
 
 func (d *dispatcher) dispatch(p *peer, msg *conn.Message) error {

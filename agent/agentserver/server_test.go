@@ -66,7 +66,7 @@ func TestPatchSchedulerConfigHandler(t *testing.T) {
 	addr := mocks.startServer()
 
 	config := scheduler.Config{
-		IdleConnTTL: time.Minute,
+		ConnTTI: time.Minute,
 	}
 	b, err := json.Marshal(config)
 	require.NoError(err)

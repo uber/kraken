@@ -103,18 +103,11 @@ func (c *SchedulerClient) Close() error {
 // found.
 func (c *SchedulerClient) Download(namespace string, name string) (store.FileReader, error) {
 	stopwatch := c.stats.Timer("download_torrent_time").Start()
-	select {
-	case err := <-c.scheduler.AddTorrent(namespace, name):
-		if err != nil {
-			c.stats.Counter("download_torrent_errors").Inc(1)
-			return nil, err
-		}
-		stopwatch.Stop()
-	case <-time.After(downloadTimeout):
-		c.stats.Counter("download_torrent_timeouts").Inc(1)
-		c.scheduler.CancelTorrent(name)
-		return nil, fmt.Errorf("scheduled torrent timed out after %s", downloadTimeout)
+	if err := <-c.scheduler.AddTorrent(namespace, name); err != nil {
+		c.stats.Counter("download_torrent_errors").Inc(1)
+		return nil, err
 	}
+	stopwatch.Stop()
 	f, err := c.fs.GetCacheFileReader(name)
 	if err != nil {
 		return nil, fmt.Errorf("get cache file reader: %s", err)
