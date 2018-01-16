@@ -20,21 +20,24 @@ type Config struct {
 	// 2. Higher priority torrents
 	AnnounceInterval time.Duration `yaml:"announce_interval"`
 
-	// IdleSeederTTL is the duration an idle dispatcher will exist after
-	// completing its torrent.
-	IdleSeederTTL time.Duration `yaml:"idle_seeder_ttl"`
+	// SeederTTI is the duration a seeding torrent will exist without being
+	// read from before being cancelled.
+	SeederTTI time.Duration `yaml:"seeder_tti"`
+
+	// LeecherTTI is the duration a leeching torrent will exist without being
+	// written to before being cancelled.
+	LeecherTTI time.Duration `yaml:"leecher_tti"`
+
+	// ConnTTI is the duration a connection will exist without transmitting any
+	// needed pieces or requesting any pieces.
+	ConnTTI time.Duration `yaml:"conn_tti"`
+
+	// ConnTTL is the max duration a connection may exist regardless of liveness.
+	ConnTTL time.Duration `yaml:"conn_ttl"`
 
 	// PreemptionInterval is the interval in which the Scheduler analyzes the
 	// status of existing conns and determines whether to preempt them.
 	PreemptionInterval time.Duration `yaml:"preemption_interval"`
-
-	// IdleConnTTL is the duration an idle connection will exist before
-	// being closed. An idle connection is defined as a connection which is not
-	// transmitting any needed pieces or requesting any pieces.
-	IdleConnTTL time.Duration `yaml:"idle_conn_ttl"`
-
-	// ConnTTL is the max duration a connection may exist regardless of liveness.
-	ConnTTL time.Duration `yaml:"conn_ttl"`
 
 	// BlacklistCleanupInterval is the interval expired blacklist entries which
 	// have surpassed their TTL are removed.
@@ -67,17 +70,20 @@ func (c Config) applyDefaults() Config {
 	if c.AnnounceInterval == 0 {
 		c.AnnounceInterval = 3 * time.Second
 	}
-	if c.IdleSeederTTL == 0 {
-		c.IdleSeederTTL = 10 * time.Minute
+	if c.SeederTTI == 0 {
+		c.SeederTTI = 10 * time.Minute
 	}
-	if c.PreemptionInterval == 0 {
-		c.PreemptionInterval = 30 * time.Second
+	if c.LeecherTTI == 0 {
+		c.LeecherTTI = 15 * time.Minute
 	}
-	if c.IdleConnTTL == 0 {
-		c.IdleConnTTL = 30 * time.Second
+	if c.ConnTTI == 0 {
+		c.ConnTTI = 30 * time.Second
 	}
 	if c.ConnTTL == 0 {
 		c.ConnTTL = time.Hour
+	}
+	if c.PreemptionInterval == 0 {
+		c.PreemptionInterval = 30 * time.Second
 	}
 	if c.BlacklistCleanupInterval == 0 {
 		c.BlacklistCleanupInterval = 10 * time.Minute

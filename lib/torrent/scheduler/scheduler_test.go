@@ -158,7 +158,7 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 	wg.Wait()
 }
 
-func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
+func TestSeederTTI(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newTestMocks(t)
@@ -190,19 +190,45 @@ func TestResourcesAreFreedAfterIdleTimeout(t *testing.T) {
 	leecher.checkTorrent(t, tf)
 
 	// Conns expire...
-	clk.Add(config.IdleConnTTL)
+	clk.Add(config.ConnTTI)
 
 	clk.Add(config.PreemptionInterval)
 	w.WaitFor(t, preemptionTickEvent{})
 
 	// Then seeding torrents expire.
-	clk.Add(config.IdleSeederTTL)
+	clk.Add(config.SeederTTI)
 
 	waitForTorrentRemoved(t, seeder.scheduler, tf.MetaInfo.InfoHash)
 	waitForTorrentRemoved(t, leecher.scheduler, tf.MetaInfo.InfoHash)
 
 	require.False(hasConn(seeder.scheduler, leecher.pctx.PeerID, tf.MetaInfo.InfoHash))
 	require.False(hasConn(leecher.scheduler, seeder.pctx.PeerID, tf.MetaInfo.InfoHash))
+}
+
+func TestLeecherTTI(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newTestMocks(t)
+	defer cleanup()
+
+	config := configFixture()
+	clk := clock.NewMock()
+	w := newEventWatcher()
+
+	tf := torlib.TestTorrentFileFixture()
+
+	mocks.metaInfoClient.EXPECT().Download(namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil)
+
+	p := mocks.newPeer(config, withEventLoop(w), withClock(clk))
+	errc := p.scheduler.AddTorrent(namespace, tf.MetaInfo.Name())
+
+	waitForTorrentAdded(t, p.scheduler, tf.MetaInfo.InfoHash)
+
+	clk.Add(config.LeecherTTI)
+
+	w.WaitFor(t, preemptionTickEvent{})
+
+	require.Equal(ErrTorrentTimeout, <-errc)
 }
 
 func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
@@ -272,7 +298,7 @@ func TestNetworkEvents(t *testing.T) {
 	defer cleanup()
 
 	config := configFixture()
-	config.IdleConnTTL = 2 * time.Second
+	config.ConnTTI = 2 * time.Second
 
 	seeder := mocks.newPeer(config)
 	leecher := mocks.newPeer(config)
@@ -351,55 +377,6 @@ func TestPullInactiveTorrent(t *testing.T) {
 
 	require.NoError(<-leecher.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 	leecher.checkTorrent(t, tf)
-}
-
-func TestCancelTorrent(t *testing.T) {
-	require := require.New(t)
-
-	mocks, cleanup := newTestMocks(t)
-	defer cleanup()
-
-	config := configFixture()
-
-	// Set high TTL to ensure conns are being closed due to cancel signal, not
-	// natural expiration.
-	config.IdleSeederTTL = time.Hour
-	config.IdleConnTTL = time.Hour
-	config.ConnTTL = time.Hour
-
-	// Set high blacklist expiration to prevent second peer from immediately opening
-	// a new connection to first peer after cancel.
-	config.ConnState.InitialBlacklistExpiration = time.Minute
-
-	p1 := mocks.newPeer(config)
-	p2 := mocks.newPeer(config)
-
-	tf := torlib.TestTorrentFileFixture()
-	h := tf.MetaInfo.InfoHash
-
-	mocks.metaInfoClient.EXPECT().Download(
-		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
-
-	// First peer will be cancelled.
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		require.Error(ErrTorrentCancelled, <-p1.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
-	}()
-
-	// (We don't really care what happens to the second peer).
-	go p2.scheduler.AddTorrent(namespace, tf.MetaInfo.Name())
-
-	waitForConnEstablished(t, p1.scheduler, p2.pctx.PeerID, h)
-	waitForConnEstablished(t, p2.scheduler, p1.pctx.PeerID, h)
-
-	p1.scheduler.CancelTorrent(tf.MetaInfo.Name())
-
-	// Once first peer cancels, it should remove the connection to the second peer and
-	// remove the torrent.
-	<-done
-	waitForConnRemoved(t, p1.scheduler, p2.pctx.PeerID, h)
-	waitForTorrentRemoved(t, p1.scheduler, h)
 }
 
 func TestSchedulerReload(t *testing.T) {

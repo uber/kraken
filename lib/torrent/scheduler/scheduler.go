@@ -24,7 +24,7 @@ import (
 var (
 	ErrTorrentNotFound  = errors.New("torrent not found")
 	ErrSchedulerStopped = errors.New("scheduler has been stopped")
-	ErrTorrentCancelled = errors.New("torrent has been cancelled")
+	ErrTorrentTimeout   = errors.New("torrent timed out")
 )
 
 // torrentControl bundles torrent control structures.
@@ -257,11 +257,6 @@ func (s *Scheduler) AddTorrent(namespace, name string) <-chan error {
 	}
 
 	return errc
-}
-
-// CancelTorrent stops downloading the torrent of h.
-func (s *Scheduler) CancelTorrent(name string) {
-	s.eventLoop.Send(cancelTorrentEvent{name})
 }
 
 // BlacklistedConn represents a connection which has been blacklisted.

@@ -311,7 +311,7 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 			c.CreatedAt(),
 			ctrl.Dispatcher.LastGoodPieceReceived(c.PeerID()),
 			ctrl.Dispatcher.LastPieceSent(c.PeerID()))
-		if s.clock.Now().Sub(lastProgress) > s.config.IdleConnTTL {
+		if s.clock.Now().Sub(lastProgress) > s.config.ConnTTI {
 			s.log("conn", c).Info("Closing idle conn")
 			c.Close()
 			continue
@@ -324,12 +324,21 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 	}
 
 	for infoHash, ctrl := range s.torrentControls {
-		if ctrl.Complete && ctrl.Dispatcher.Empty() {
-			becameIdle := timeutil.MostRecent(
-				ctrl.Dispatcher.CreatedAt, ctrl.Dispatcher.LastConnRemoved())
-			if s.clock.Now().Sub(becameIdle) >= s.config.IdleSeederTTL {
-				s.log("hash", infoHash).Info("Removing idle torrent")
+		if ctrl.Complete {
+			if s.clock.Now().Sub(ctrl.Dispatcher.LastReadTime()) >= s.config.SeederTTI {
+				s.log("hash", infoHash).Info("Removing idle seeding torrent")
 				delete(s.torrentControls, infoHash)
+			}
+		} else {
+			if s.clock.Now().Sub(ctrl.Dispatcher.LastWriteTime()) >= s.config.LeecherTTI {
+				s.log("hash", infoHash).Info("Cancelling idle in-progress torrent")
+				ctrl.Dispatcher.TearDown()
+				s.announceQueue.Eject(ctrl.Dispatcher)
+				for _, errc := range ctrl.Errors {
+					errc <- ErrTorrentTimeout
+				}
+				delete(s.torrentControls, infoHash)
+				s.networkEvents.Produce(networkevent.TorrentCancelledEvent(infoHash, s.pctx.PeerID))
 			}
 		}
 	}
@@ -349,31 +358,6 @@ type emitStatsEvent struct{}
 func (e emitStatsEvent) Apply(s *Scheduler) {
 	s.stats.Gauge("torrents").Update(float64(len(s.torrentControls)))
 	s.stats.Gauge("conns").Update(float64(s.connState.NumActiveConns()))
-}
-
-// cancelTorrentEvent occurs when a client of Scheduler manually cancels a torrent.
-type cancelTorrentEvent struct {
-	name string
-}
-
-func (e cancelTorrentEvent) Apply(s *Scheduler) {
-	// TODO(codyg): Fix torrent hash / name issue.
-	for _, ctrl := range s.torrentControls {
-		if ctrl.Dispatcher.Torrent.Name() == e.name {
-			h := ctrl.Dispatcher.Torrent.InfoHash()
-			ctrl.Dispatcher.TearDown()
-			s.announceQueue.Eject(ctrl.Dispatcher)
-			for _, errc := range ctrl.Errors {
-				errc <- ErrTorrentCancelled
-			}
-			delete(s.torrentControls, h)
-
-			s.log("hash", h).Info("Torrent cancelled")
-			s.networkEvents.Produce(networkevent.TorrentCancelledEvent(h, s.pctx.PeerID))
-
-			break
-		}
-	}
 }
 
 type blacklistSnapshotEvent struct {

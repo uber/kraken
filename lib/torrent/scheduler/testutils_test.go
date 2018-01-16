@@ -68,9 +68,10 @@ func dispatcherConfigFixture() DispatcherConfig {
 func configFixture() Config {
 	return Config{
 		AnnounceInterval:         500 * time.Millisecond,
-		IdleSeederTTL:            10 * time.Second,
+		SeederTTI:                10 * time.Second,
+		LeecherTTI:               time.Minute,
 		PreemptionInterval:       500 * time.Millisecond,
-		IdleConnTTL:              10 * time.Second,
+		ConnTTI:                  10 * time.Second,
 		ConnTTL:                  5 * time.Minute,
 		BlacklistCleanupInterval: time.Minute,
 		ConnState:                connStateConfigFixture(),
@@ -270,6 +271,19 @@ func waitForTorrentRemoved(t *testing.T, s *Scheduler, infoHash torlib.InfoHash)
 	if err != nil {
 		t.Fatalf(
 			"scheduler=%s did not remove torrent for hash=%s: %s",
+			s.pctx.PeerID, infoHash, err)
+	}
+}
+
+func waitForTorrentAdded(t *testing.T, s *Scheduler, infoHash torlib.InfoHash) {
+	err := testutil.PollUntilTrue(5*time.Second, func() bool {
+		result := make(chan bool)
+		s.eventLoop.Send(hasTorrentEvent{infoHash, result})
+		return <-result
+	})
+	if err != nil {
+		t.Fatalf(
+			"scheduler=%s did not add torrent for hash=%s: %s",
 			s.pctx.PeerID, infoHash, err)
 	}
 }
