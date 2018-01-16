@@ -29,13 +29,14 @@ var (
 
 // torrentControl bundles torrent control structures.
 type torrentControl struct {
-	Errors     []chan error
-	Dispatcher *dispatcher
-	Complete   bool
+	Errors       []chan error
+	Dispatcher   *dispatcher
+	Complete     bool
+	LocalRequest bool
 }
 
-func newTorrentControl(d *dispatcher) *torrentControl {
-	return &torrentControl{Dispatcher: d}
+func newTorrentControl(d *dispatcher, localRequest bool) *torrentControl {
+	return &torrentControl{Dispatcher: d, LocalRequest: localRequest}
 }
 
 // Scheduler manages global state for the peer. This includes:
@@ -371,7 +372,7 @@ func (s *Scheduler) addIncomingConn(c *conn.Conn, b storage.Bitfield, info *stor
 		if err != nil {
 			return fmt.Errorf("get torrent: %s", err)
 		}
-		ctrl = s.initTorrentControl(t)
+		ctrl = s.initTorrentControl(t, false)
 	}
 	if err := ctrl.Dispatcher.AddPeer(c.PeerID(), b, c); err != nil {
 		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
@@ -381,8 +382,8 @@ func (s *Scheduler) addIncomingConn(c *conn.Conn, b storage.Bitfield, info *stor
 
 // initTorrentControl initializes a new torrentControl for t. Overwrites any
 // existing torrentControl for t, so callers should check if one exists first.
-func (s *Scheduler) initTorrentControl(t storage.Torrent) *torrentControl {
-	ctrl := newTorrentControl(s.dispatcherFactory.New(t))
+func (s *Scheduler) initTorrentControl(t storage.Torrent, localRequest bool) *torrentControl {
+	ctrl := newTorrentControl(s.dispatcherFactory.New(t), localRequest)
 	s.announceQueue.Add(ctrl.Dispatcher)
 	s.networkEvents.Produce(networkevent.AddTorrentEvent(
 		t.InfoHash(), s.pctx.PeerID, t.Bitfield(), s.config.ConnState.MaxOpenConnectionsPerTorrent))

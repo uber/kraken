@@ -102,12 +102,10 @@ func (c *SchedulerClient) Close() error {
 // Returns scheduler.ErrTorrentNotFound if no torrent for namespace / name was
 // found.
 func (c *SchedulerClient) Download(namespace string, name string) (store.FileReader, error) {
-	stopwatch := c.stats.Timer("download_torrent_time").Start()
 	if err := <-c.scheduler.AddTorrent(namespace, name); err != nil {
 		c.stats.Counter("download_torrent_errors").Inc(1)
 		return nil, err
 	}
-	stopwatch.Stop()
 	f, err := c.fs.GetCacheFileReader(name)
 	if err != nil {
 		return nil, fmt.Errorf("get cache file reader: %s", err)
