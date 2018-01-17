@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
-	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/httputil"
@@ -28,11 +27,8 @@ func TestDownload(t *testing.T) {
 	d, blob := image.DigestWithBlobFixture()
 
 	mocks.torrentClient.EXPECT().Download(namespace, d.Hex()).DoAndReturn(
-		func(namespace, name string) (store.FileReader, error) {
-			if err := mocks.fs.CreateCacheFile(name, bytes.NewReader(blob)); err != nil {
-				return nil, err
-			}
-			return mocks.fs.GetCacheFileReader(name)
+		func(namespace, name string) error {
+			return mocks.fs.CreateCacheFile(name, bytes.NewReader(blob))
 		})
 
 	addr := mocks.startServer()

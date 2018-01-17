@@ -84,7 +84,6 @@ func main() {
 
 		c, err := torrent.NewSchedulerClient(
 			config.Torrent,
-			fs,
 			stats,
 			pctx,
 			// TODO(codyg): Get rid of this dependency.

@@ -5,7 +5,6 @@
 package mocktorrent
 
 import (
-	base "code.uber.internal/infra/kraken/lib/store/base"
 	scheduler "code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
@@ -60,11 +59,10 @@ func (mr *MockClientMockRecorder) Close() *gomock.Call {
 }
 
 // Download mocks base method
-func (m *MockClient) Download(arg0, arg1 string) (base.FileReader, error) {
+func (m *MockClient) Download(arg0, arg1 string) error {
 	ret := m.ctrl.Call(m, "Download", arg0, arg1)
-	ret0, _ := ret[0].(base.FileReader)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Download indicates an expected call of Download

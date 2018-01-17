@@ -83,8 +83,7 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 func (s *Server) startTorrentDownload(namespace, name string) error {
 	id := namespace + ":" + name
 	err := s.requestCache.Start(id, func() error {
-		_, err := s.torrentClient.Download(namespace, name)
-		return err
+		return s.torrentClient.Download(namespace, name)
 	})
 	switch err {
 	case dedup.ErrRequestPending, nil:

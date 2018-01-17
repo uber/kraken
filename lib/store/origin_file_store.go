@@ -23,11 +23,6 @@ import (
 	"github.com/spaolacci/murmur3"
 )
 
-// ReadOnlyFileStore is used by scheduler client to access cached file.
-type ReadOnlyFileStore interface {
-	GetCacheFileReader(fileName string) (FileReader, error)
-}
-
 // OriginFileStore provides an interface for OriginLocalFileStore. Useful for mocks.
 type OriginFileStore interface {
 	Config() OriginConfig
