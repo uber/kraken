@@ -8,9 +8,9 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/peercontext"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
+	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	torrentstorage "code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -75,20 +75,13 @@ func main() {
 			log.Fatalf("Failed to create peer context: %s", err)
 		}
 
-		trackers, err := serverset.NewRoundRobin(config.Tracker.RoundRobin)
-		if err != nil {
-			log.Fatalf("Error creating tracker round robin: %s", err)
-		}
-
-		archive := torrentstorage.NewOriginTorrentArchive(fs)
-
 		c, err := torrent.NewSchedulerClient(
 			config.Torrent,
 			stats,
 			pctx,
-			// TODO(codyg): Get rid of this dependency.
-			announceclient.Default(pctx, trackers),
-			archive)
+			announceclient.Disabled(),
+			announcequeue.Disabled(),
+			torrentstorage.NewOriginTorrentArchive(fs))
 		if err != nil {
 			log.Fatalf("Failed to create scheduler client: %s", err)
 		}

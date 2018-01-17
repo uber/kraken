@@ -370,7 +370,7 @@ func TestPullInactiveTorrent(t *testing.T) {
 
 	// Force announce the scheduler for this torrent to simulate a peer which
 	// is registered in tracker but does not have the torrent in memory.
-	ac := announceclient.Default(seeder.pctx, serverset.NewSingle(mocks.trackerAddr))
+	ac := announceclient.New(seeder.pctx, serverset.NewSingle(mocks.trackerAddr))
 	ac.Announce(tf.MetaInfo.Info.Name, tf.MetaInfo.InfoHash, false)
 
 	leecher := mocks.newPeer(config)
