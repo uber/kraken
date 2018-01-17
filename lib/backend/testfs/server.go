@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/pressly/chi"
 
@@ -49,6 +50,9 @@ func (s *Server) downloadHandler(w http.ResponseWriter, r *http.Request) error {
 	}
 	f, err := s.fs.GetCacheFileReader(name)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return handler.ErrorStatus(http.StatusNotFound)
+		}
 		return fmt.Errorf("file store: %s", err)
 	}
 	if _, err := io.Copy(w, f); err != nil {

@@ -45,7 +45,7 @@ func TestHDFSDownloadFileSuccess(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	_, err = hdfsc.Download("data", f)
+	err = hdfsc.Download("data", f)
 	require.NoError(err)
 
 	require.True(ncalled)
@@ -83,7 +83,7 @@ func TestHDFSDownloadFileNotFound(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	_, err = hdfsc.Download("data", f)
+	err = hdfsc.Download("data", f)
 	require.Error(err)
 
 	require.True(ncalled)

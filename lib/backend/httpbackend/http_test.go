@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -78,7 +79,7 @@ func TestHttpDownloadFileNotFound(t *testing.T) {
 	defer os.Remove(f.Name())
 
 	err = httpc.Download("data", f)
-	require.Error(err)
+	require.Equal(backenderrors.ErrBlobNotFound, err)
 
 	require.True(ncalled)
 }
