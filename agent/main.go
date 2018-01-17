@@ -72,7 +72,6 @@ func main() {
 
 	torrentClient, err := torrent.NewSchedulerClient(
 		config.Torrent,
-		fs,
 		stats,
 		pctx,
 		announceclient.Default(pctx, trackers),
@@ -85,7 +84,7 @@ func main() {
 
 	agentServer := agentserver.New(config.AgentServer, fs, torrentClient)
 
-	transferer := transfer.NewAgentTransferer(torrentClient, manifestclient.New(trackers))
+	transferer := transfer.NewAgentTransferer(fs, torrentClient, manifestclient.New(trackers))
 
 	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)

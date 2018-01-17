@@ -5,24 +5,19 @@ import (
 	"log"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/lib/peercontext"
-	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 )
 
-const requestTimeout = 60 * time.Second
-const downloadTimeout = 10 * time.Minute
-
 // Client TODO
 type Client interface {
-	Download(namespace string, name string) (store.FileReader, error)
+	Download(namespace string, name string) error
 	Reload(config scheduler.Config)
 	BlacklistSnapshot() ([]scheduler.BlacklistedConn, error)
 	Close() error
@@ -36,13 +31,11 @@ type SchedulerClient struct {
 	scheduler *scheduler.Scheduler
 
 	stats tally.Scope
-	fs    store.ReadOnlyFileStore
 }
 
 // NewSchedulerClient creates a new scheduler client
 func NewSchedulerClient(
 	config Config,
-	fs store.ReadOnlyFileStore,
 	stats tally.Scope,
 	pctx peercontext.PeerContext,
 	announceClient announceclient.Client,
@@ -74,7 +67,6 @@ func NewSchedulerClient(
 		config:    config,
 		scheduler: sched,
 		stats:     stats,
-		fs:        fs,
 	}, nil
 }
 
@@ -101,16 +93,12 @@ func (c *SchedulerClient) Close() error {
 // Download downloads blob identified by name into the file store cache.
 // Returns scheduler.ErrTorrentNotFound if no torrent for namespace / name was
 // found.
-func (c *SchedulerClient) Download(namespace string, name string) (store.FileReader, error) {
+func (c *SchedulerClient) Download(namespace string, name string) error {
 	if err := <-c.scheduler.AddTorrent(namespace, name); err != nil {
 		c.stats.Counter("download_torrent_errors").Inc(1)
-		return nil, err
+		return err
 	}
-	f, err := c.fs.GetCacheFileReader(name)
-	if err != nil {
-		return nil, fmt.Errorf("get cache file reader: %s", err)
-	}
-	return f, nil
+	return nil
 }
 
 // BlacklistSnapshot returns the currently blacklisted connections for this peer.
