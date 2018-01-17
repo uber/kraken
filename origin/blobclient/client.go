@@ -50,6 +50,7 @@ type Client interface {
 	RepairDigest(d image.Digest) (io.ReadCloser, error)
 
 	GetMetaInfo(namespace string, d image.Digest) (*torlib.MetaInfo, error)
+	OverwriteMetaInfo(d image.Digest, pieceLength int64) error
 
 	UploadBlob(namespace string, d image.Digest, blob io.Reader, through bool) error
 
@@ -189,6 +190,14 @@ func (c *HTTPClient) GetMetaInfo(namespace string, d image.Digest) (*torlib.Meta
 		return nil, fmt.Errorf("deserialize metainfo: %s", err)
 	}
 	return mi, nil
+}
+
+// OverwriteMetaInfo overwrites existing metainfo for d with new metainfo
+// configured with pieceLength. Primarily intended for benchmarking purposes.
+func (c *HTTPClient) OverwriteMetaInfo(d image.Digest, pieceLength int64) error {
+	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/blobs/%s/metainfo?piece_length=%d", c.addr, d, pieceLength))
+	return err
 }
 
 // GetPeerContext gets the PeerContext of the p2p client running alongside the Server.

@@ -19,8 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const namespace = "test-namespace"
-
 func toAddrs(clients []blobclient.Client) []string {
 	var addrs []string
 	for _, c := range clients {
@@ -176,4 +174,27 @@ func TestClusterClientReturnsErrorOnNoAvailableOrigins(t *testing.T) {
 
 	_, err := cc.GetMetaInfo(namespace, digest)
 	require.Error(err)
+}
+
+func TestClusterClientOverwriteMetainfo(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockResolver := mockblobclient.NewMockClientResolver(ctrl)
+
+	cc := blobclient.NewClusterClient(mockResolver)
+
+	digest := image.DigestFixture()
+
+	mockClient1 := mockblobclient.NewMockClient(ctrl)
+	mockClient2 := mockblobclient.NewMockClient(ctrl)
+	mockResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
+
+	mockClient1.EXPECT().OverwriteMetaInfo(digest, int64(16)).Return(nil)
+	mockClient2.EXPECT().OverwriteMetaInfo(digest, int64(16)).Return(nil)
+
+	err := cc.OverwriteMetaInfo(digest, 16)
+	require.NoError(err)
 }

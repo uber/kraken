@@ -126,6 +126,18 @@ func (mr *MockClientMockRecorder) Locations(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Locations", reflect.TypeOf((*MockClient)(nil).Locations), arg0)
 }
 
+// OverwriteMetaInfo mocks base method
+func (m *MockClient) OverwriteMetaInfo(arg0 image.Digest, arg1 int64) error {
+	ret := m.ctrl.Call(m, "OverwriteMetaInfo", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// OverwriteMetaInfo indicates an expected call of OverwriteMetaInfo
+func (mr *MockClientMockRecorder) OverwriteMetaInfo(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OverwriteMetaInfo", reflect.TypeOf((*MockClient)(nil).OverwriteMetaInfo), arg0, arg1)
+}
+
 // PushBlob mocks base method
 func (m *MockClient) PushBlob(arg0 image.Digest, arg1 io.Reader) error {
 	ret := m.ctrl.Call(m, "PushBlob", arg0, arg1)
@@ -271,6 +283,18 @@ func (m *MockClusterClient) GetMetaInfo(arg0 string, arg1 image.Digest) (*torlib
 // GetMetaInfo indicates an expected call of GetMetaInfo
 func (mr *MockClusterClientMockRecorder) GetMetaInfo(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetaInfo", reflect.TypeOf((*MockClusterClient)(nil).GetMetaInfo), arg0, arg1)
+}
+
+// OverwriteMetaInfo mocks base method
+func (m *MockClusterClient) OverwriteMetaInfo(arg0 image.Digest, arg1 int64) error {
+	ret := m.ctrl.Call(m, "OverwriteMetaInfo", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// OverwriteMetaInfo indicates an expected call of OverwriteMetaInfo
+func (mr *MockClusterClientMockRecorder) OverwriteMetaInfo(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OverwriteMetaInfo", reflect.TypeOf((*MockClusterClient)(nil).OverwriteMetaInfo), arg0, arg1)
 }
 
 // Owners mocks base method
