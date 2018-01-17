@@ -200,7 +200,6 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 
 	config := configFixture()
 	cp := newTestClientProvider()
-	namespace := "test-namespace"
 	mockBackendClient := mockbackend.NewMockClient(ctrl)
 
 	for _, master := range []string{master1, master2} {
@@ -239,7 +238,6 @@ func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	namespace := "test-namespace"
 	mockBackendClient := mockbackend.NewMockClient(ctrl)
 
 	cp := newTestClientProvider()
@@ -279,8 +277,7 @@ func TestUploadBlobReplicatesBlob(t *testing.T) {
 
 	d, blob := computeBlobForHosts(config, master1, master2)
 
-	err := cp.Provide(master1).UploadBlob(
-		"test-namespace", d, bytes.NewReader(blob), false)
+	err := cp.Provide(master1).UploadBlob(namespace, d, bytes.NewReader(blob), false)
 	require.NoError(err)
 
 	for _, master := range []string{master1, master2} {
@@ -303,8 +300,7 @@ func TestUploadBlobResilientToReplicationFailure(t *testing.T) {
 	// despite this.
 	d, blob := computeBlobForHosts(config, master1, master2)
 
-	err := cp.Provide(master1).UploadBlob(
-		"test-namespace", d, bytes.NewReader(blob), false)
+	err := cp.Provide(master1).UploadBlob(namespace, d, bytes.NewReader(blob), false)
 	require.NoError(err)
 
 	ensureHasBlob(t, cp.Provide(master1), d, blob)
@@ -318,7 +314,6 @@ func TestUploadBlobThroughUploadsToStorageBackendAndReplicates(t *testing.T) {
 
 	config := configFixture()
 	cp := newTestClientProvider()
-	namespace := "test-namespace"
 	mockBackendClient := mockbackend.NewMockClient(ctrl)
 
 	for _, master := range []string{master1, master2} {
@@ -347,7 +342,6 @@ func TestUploadBlobThroughCachedBlobStillUploadedToStorageBackend(t *testing.T) 
 
 	config := configFixture()
 	cp := newTestClientProvider()
-	namespace := "test-namespace"
 	mockBackendClient := mockbackend.NewMockClient(ctrl)
 
 	for _, master := range []string{master1, master2} {
@@ -376,7 +370,6 @@ func TestUploadBlobThroughDoesNotCommitBlobIfBackendUploadFails(t *testing.T) {
 	defer ctrl.Finish()
 
 	cp := newTestClientProvider()
-	namespace := "test-namespace"
 	mockBackendClient := mockbackend.NewMockClient(ctrl)
 
 	s := newTestServer(master1, configNoRedirectFixture(), cp)
@@ -417,4 +410,29 @@ func TestPushBlob(t *testing.T) {
 	err = cp.Provide(master1).PushBlob(d, bytes.NewReader(blob))
 	require.NoError(err)
 	ensureHasBlob(t, cp.Provide(master1), d, blob)
+}
+
+func TestOverwriteMetainfo(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(master1, configNoRedirectFixture(), cp)
+	defer s.cleanup()
+
+	d, blob := image.DigestWithBlobFixture()
+
+	err := cp.Provide(master1).PushBlob(d, bytes.NewReader(blob))
+	require.NoError(err)
+
+	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
+	require.NoError(err)
+	require.Equal(int64(4), mi.Info.PieceLength)
+
+	err = cp.Provide(master1).OverwriteMetaInfo(d, 16)
+	require.NoError(err)
+
+	mi, err = cp.Provide(master1).GetMetaInfo(namespace, d)
+	require.NoError(err)
+	require.Equal(int64(16), mi.Info.PieceLength)
 }

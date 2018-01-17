@@ -62,6 +62,7 @@ type ClusterClient interface {
 	UploadBlob(namespace string, d image.Digest, blob io.Reader) error
 	UploadBlobThrough(namespace string, d image.Digest, blob io.Reader) error
 	GetMetaInfo(namespace string, d image.Digest) (*torlib.MetaInfo, error)
+	OverwriteMetaInfo(d image.Digest, pieceLength int64) error
 	DownloadBlob(d image.Digest) (io.ReadCloser, error)
 	Owners(d image.Digest) ([]peercontext.PeerContext, error)
 }
@@ -161,6 +162,23 @@ ORIGINS:
 		errs = append(errs, fmt.Errorf("origin %s: %s", client.Addr(), err))
 	}
 	return nil, fmt.Errorf("all origins unavailable: %s", errutil.Join(errs))
+}
+
+// OverwriteMetaInfo overwrites existing metainfo for d with new metainfo configured
+// with pieceLength on every origin server. Returns error if any origin was unable
+// to overwrite metainfo. Primarly intended for benchmarking purposes.
+func (c *clusterClient) OverwriteMetaInfo(d image.Digest, pieceLength int64) error {
+	clients, err := c.resolver.Resolve(d)
+	if err != nil {
+		return fmt.Errorf("resolve clients: %s", err)
+	}
+	var errs []error
+	for _, client := range clients {
+		if err := client.OverwriteMetaInfo(d, pieceLength); err != nil {
+			errs = append(errs, fmt.Errorf("origin %s: %s", client.Addr(), err))
+		}
+	}
+	return errutil.Join(errs)
 }
 
 // DownloadBlob pulls a blob from the origin cluster.

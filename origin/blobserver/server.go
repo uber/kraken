@@ -148,6 +148,14 @@ func (s Server) Handler() http.Handler {
 	})
 
 	r.Group(func(r chi.Router) {
+		stats := s.stats.SubScope("blobs.metainfo")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
+
+		r.Post("/blobs/:digest/metainfo", handler.Wrap(s.overwriteMetaInfoHandler))
+	})
+
+	r.Group(func(r chi.Router) {
 		stats := s.stats.SubScope("repair")
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
@@ -398,6 +406,40 @@ func (s Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error
 		return err
 	}
 	w.Write(raw)
+	return nil
+}
+
+func (s Server) overwriteMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
+	d, err := parseDigest(r)
+	if err != nil {
+		return err
+	}
+	pieceLength, err := strconv.ParseInt(r.URL.Query().Get("piece_length"), 10, 64)
+	if err != nil {
+		return handler.Errorf("invalid piece_length argument: %s", err).Status(http.StatusBadRequest)
+	}
+	return s.overwriteMetaInfo(d, pieceLength)
+}
+
+// overwriteMetaInfo generates metainfo configured with pieceLength for d and
+// writes it to disk, overwriting any existing metainfo. Primarily intended for
+// benchmarking purposes.
+func (s Server) overwriteMetaInfo(d image.Digest, pieceLength int64) error {
+	f, err := s.fileStore.GetCacheFileReader(d.Hex())
+	if err != nil {
+		return handler.Errorf("get cache file: %s", err)
+	}
+	mi, err := torlib.NewMetaInfoFromBlob(d.Hex(), f, pieceLength)
+	if err != nil {
+		return handler.Errorf("create metainfo: %s", err)
+	}
+	raw, err := mi.Serialize()
+	if err != nil {
+		return handler.Errorf("serialize metainfo: %s", err)
+	}
+	if _, err := s.fileStore.SetCacheFileMetadata(d.Hex(), store.NewTorrentMeta(), raw); err != nil {
+		return handler.Errorf("set metainfo: %s", err)
+	}
 	return nil
 }
 

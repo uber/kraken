@@ -31,6 +31,8 @@ const (
 	master3 = "dummy-origin-master03-dca1"
 )
 
+const namespace = "test-namespace"
+
 func configFixture() Config {
 	return Config{
 		NumReplica: 2,
