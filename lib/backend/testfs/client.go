@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/fileio"
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
@@ -39,6 +40,9 @@ func (c Client) Upload(name string, src fileio.Reader) error {
 func (c Client) Download(name string, dst fileio.Writer) error {
 	resp, err := httputil.Get(fmt.Sprintf("http://%s/files/%s", c.config.Addr, name))
 	if err != nil {
+		if httputil.IsNotFound(err) {
+			return backenderrors.ErrBlobNotFound
+		}
 		return fmt.Errorf("http: %s", err)
 	}
 	defer resp.Body.Close()

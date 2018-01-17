@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/fileio"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -53,7 +54,7 @@ func NewHDFSClient(config Config) *Client {
 
 // Download downloads a file from HDFS datastore, writes it
 // into input writer
-func (c *Client) Download(name string, dst fileio.Writer) (int64, error) {
+func (c *Client) Download(name string, dst fileio.Writer) error {
 
 	v := url.Values{}
 
@@ -69,21 +70,21 @@ func (c *Client) Download(name string, dst fileio.Writer) (int64, error) {
 
 	resp, err := httputil.Get(u)
 	if err != nil {
-		return 0, fmt.Errorf("could not get a content from hdfs: %s", err)
+		if httputil.IsNotFound(err) {
+			return backenderrors.ErrBlobNotFound
+		}
+		return fmt.Errorf("could not get a content from hdfs: %s", err)
 	}
-
 	defer resp.Body.Close()
 
 	written, err := io.Copy(dst, resp.Body)
 	if err != nil {
-		return 0, fmt.Errorf("could not copy response buffer: %s", err)
+		return fmt.Errorf("could not copy response buffer: %s", err)
 	}
-
 	if written != resp.ContentLength {
-		return 0, fmt.Errorf("content len %d does not match data transfer amount %d", resp.ContentLength, written)
+		return fmt.Errorf("content len %d does not match data transfer amount %d", resp.ContentLength, written)
 	}
-
-	return written, nil
+	return nil
 }
 
 // Upload reads bytes from input reader pushing file to a remote

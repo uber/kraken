@@ -11,7 +11,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
-	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/fileio"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -250,7 +250,7 @@ func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 
 	d := image.DigestFixture()
 
-	mockBackendClient.EXPECT().Download(d.Hex(), gomock.Any()).Return(backend.ErrBlobNotFound)
+	mockBackendClient.EXPECT().Download(d.Hex(), gomock.Any()).Return(backenderrors.ErrBlobNotFound)
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
 	require.True(httputil.IsAccepted(err))

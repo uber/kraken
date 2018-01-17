@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/fileio"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -47,6 +48,9 @@ func (c *Client) Download(name string, dst fileio.Writer) error {
 
 	resp, err := httputil.Get(b.String())
 	if err != nil {
+		if httputil.IsNotFound(err) {
+			return backenderrors.ErrBlobNotFound
+		}
 		return fmt.Errorf("could not get a content from http backend: %s", err)
 	}
 

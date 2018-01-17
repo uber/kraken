@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/middleware"
@@ -84,7 +85,7 @@ func New(
 	}
 
 	rc := dedup.NewRequestCache(config.RequestCache, clock.New())
-	rc.SetNotFound(func(err error) bool { return err == backend.ErrBlobNotFound })
+	rc.SetNotFound(func(err error) bool { return err == backenderrors.ErrBlobNotFound })
 
 	return &Server{
 		config:            config,
@@ -431,7 +432,7 @@ func (s Server) startRemoteBlobDownload(namespace string, d image.Digest) error 
 	})
 	if err == dedup.ErrRequestPending || err == nil {
 		return handler.ErrorStatus(http.StatusAccepted)
-	} else if err == backend.ErrBlobNotFound {
+	} else if err == backenderrors.ErrBlobNotFound {
 		return handler.ErrorStatus(http.StatusNotFound)
 	} else if err == dedup.ErrWorkersBusy {
 		return handler.ErrorStatus(http.StatusServiceUnavailable)

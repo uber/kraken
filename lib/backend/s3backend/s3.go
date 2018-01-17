@@ -3,11 +3,13 @@ package s3backend
 import (
 	"errors"
 
+	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/fileio"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
@@ -81,8 +83,13 @@ func (c *Client) Download(name string, dst fileio.Writer) error {
 	log.Infof("Starting S3 download from remote backend: (bucket: %s, key %s)",
 		c.config.Bucket, name)
 
-	_, err := downloader.Download(dst, dlParams)
-	return err
+	if _, err := downloader.Download(dst, dlParams); err != nil {
+		if isNotFound(err) {
+			return backenderrors.ErrBlobNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 // Upload uploads the content for a given input bucket and key reading
@@ -108,4 +115,9 @@ func (c *Client) Upload(name string, src fileio.Reader) error {
 		u.LeavePartsOnError = false // delete the parts if the upload fails.
 	})
 	return err
+}
+
+func isNotFound(err error) bool {
+	awsErr, ok := err.(awserr.Error)
+	return ok && awsErr.Code() == s3.ErrCodeNoSuchKey
 }

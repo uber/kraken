@@ -1,13 +1,6 @@
 package backend
 
-import (
-	"errors"
-
-	"code.uber.internal/infra/kraken/lib/fileio"
-)
-
-// ErrBlobNotFound is returned when a blob is not found in a storage backend.
-var ErrBlobNotFound = errors.New("blob not found")
+import "code.uber.internal/infra/kraken/lib/fileio"
 
 // Uploader reads blobs from src and uploads them to name. Name should be
 // the digest of the blob.
