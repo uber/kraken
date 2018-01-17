@@ -1,9 +1,11 @@
 package announceclient
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
+	"time"
 
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/serverset"
@@ -13,31 +15,28 @@ import (
 	"github.com/jackpal/bencode-go"
 )
 
+const _timeout = 30 * time.Second
+
 // Client defines a client for announcing and getting peers.
 type Client interface {
 	Announce(name string, h torlib.InfoHash, complete bool) ([]torlib.PeerInfo, error)
 }
 
-type client struct {
-	config  Config
+// HTTPClient announces to tracker over HTTP.
+type HTTPClient struct {
 	pctx    peercontext.PeerContext
 	servers serverset.Set
 }
 
-// New creates a new Client.
-func New(config Config, pctx peercontext.PeerContext, servers serverset.Set) Client {
-	return &client{config.applyDefaults(), pctx, servers}
-}
-
-// Default creates a default Client.
-func Default(pctx peercontext.PeerContext, servers serverset.Set) Client {
-	return New(Config{}, pctx, servers)
+// New creates a new HTTPClient.
+func New(pctx peercontext.PeerContext, servers serverset.Set) *HTTPClient {
+	return &HTTPClient{pctx, servers}
 }
 
 // Announce announces the torrent identified by (name, h) with the number of
 // downloaded bytes. Returns a list of all other peers announcing for said torrent,
 // sorted by priority.
-func (c *client) Announce(name string, h torlib.InfoHash, complete bool) ([]torlib.PeerInfo, error) {
+func (c *HTTPClient) Announce(name string, h torlib.InfoHash, complete bool) ([]torlib.PeerInfo, error) {
 	v := url.Values{}
 
 	v.Add("name", name)
@@ -54,7 +53,7 @@ func (c *client) Announce(name string, h torlib.InfoHash, complete bool) ([]torl
 	for it.Next() {
 		resp, err := httputil.Get(
 			fmt.Sprintf("http://%s/announce?%s", it.Addr(), q),
-			httputil.SendTimeout(c.config.Timeout))
+			httputil.SendTimeout(_timeout))
 		if err != nil {
 			if _, ok := err.(httputil.NetworkError); ok {
 				log.Errorf("Error announcing to %s: %s", it.Addr(), err)
@@ -71,4 +70,20 @@ func (c *client) Announce(name string, h torlib.InfoHash, complete bool) ([]torl
 		return b.Peers, nil
 	}
 	return nil, it.Err()
+}
+
+// DisabledClient rejects all announces. Suitable for origin peers which should
+// not be announcing.
+type DisabledClient struct{}
+
+// Disabled returns a new DisabledClient.
+func Disabled() Client {
+	return DisabledClient{}
+}
+
+// Announce always returns error.
+func (c DisabledClient) Announce(
+	name string, h torlib.InfoHash, complete bool) ([]torlib.PeerInfo, error) {
+
+	return nil, errors.New("announcing disabled")
 }

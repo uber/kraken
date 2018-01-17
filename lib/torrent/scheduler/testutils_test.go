@@ -19,6 +19,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
@@ -131,10 +132,10 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 		IP:     "localhost",
 		Port:   findFreePort(),
 	}
-	ac := announceclient.Default(pctx, serverset.NewSingle(m.trackerAddr))
+	ac := announceclient.New(pctx, serverset.NewSingle(m.trackerAddr))
 	tp := networkevent.NewTestProducer()
 
-	s, err := New(config, ta, stats, pctx, ac, tp, options...)
+	s, err := New(config, ta, stats, pctx, ac, announcequeue.New(), tp, options...)
 	if err != nil {
 		panic(err)
 	}

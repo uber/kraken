@@ -9,6 +9,7 @@ import (
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
@@ -39,6 +40,7 @@ func NewSchedulerClient(
 	stats tally.Scope,
 	pctx peercontext.PeerContext,
 	announceClient announceclient.Client,
+	announceQueue announcequeue.Queue,
 	archive storage.TorrentArchive) (Client, error) {
 
 	// NOTE: M3 will drop metrics that contain 32 consecutive hexadecimal characters,
@@ -58,7 +60,7 @@ func NewSchedulerClient(
 	}
 
 	sched, err := scheduler.New(
-		config.Scheduler, archive, stats, pctx, announceClient, networkEvents)
+		config.Scheduler, archive, stats, pctx, announceClient, announceQueue, networkEvents)
 	if err != nil {
 		return nil, fmt.Errorf("scheduler: %s", err)
 	}

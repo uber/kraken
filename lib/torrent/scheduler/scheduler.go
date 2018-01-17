@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
@@ -61,7 +62,7 @@ type Scheduler struct {
 	// be accessed from within the event loop.
 	torrentControls map[torlib.InfoHash]*torrentControl // Active seeding / leeching torrents.
 	connState       *connState
-	announceQueue   announceQueue
+	announceQueue   announcequeue.Queue
 
 	eventLoop eventLoop
 
@@ -106,6 +107,7 @@ func New(
 	stats tally.Scope,
 	pctx peercontext.PeerContext,
 	announceClient announceclient.Client,
+	announceQueue announcequeue.Queue,
 	networkEvents networkevent.Producer,
 	options ...option) (*Scheduler, error) {
 
@@ -140,14 +142,6 @@ func New(
 	log.Infof("Scheduler will announce as peer %s on addr %s:%d",
 		pctx.PeerID, pctx.IP, pctx.Port)
 
-	var aq announceQueue
-	if pctx.Origin {
-		// Origin peers should not announce.
-		aq = disabledAnnounceQueue{}
-	} else {
-		aq = newAnnounceQueue()
-	}
-
 	closedConnHandler := func(c *conn.Conn) {
 		overrides.eventLoop.Send(closedConnEvent{c})
 	}
@@ -173,7 +167,7 @@ func New(
 		},
 		torrentControls:      make(map[torlib.InfoHash]*torrentControl),
 		connState:            connState,
-		announceQueue:        aq,
+		announceQueue:        announceQueue,
 		eventLoop:            overrides.eventLoop,
 		listener:             l,
 		announceTick:         overrides.clock.Tick(config.AnnounceInterval),
@@ -204,7 +198,8 @@ func New(
 // is unusable.
 func Reload(s *Scheduler, config Config) (*Scheduler, error) {
 	s.Stop()
-	return New(config, s.torrentArchive, s.stats, s.pctx, s.announceClient, s.networkEvents)
+	return New(config, s.torrentArchive, s.stats, s.pctx, s.announceClient, s.announceQueue,
+		s.networkEvents)
 }
 
 // Stop shuts down the scheduler.
@@ -341,7 +336,7 @@ func (s *Scheduler) announce(d *dispatcher) {
 		d.Torrent.Name(), d.Torrent.InfoHash(), d.Torrent.Complete())
 	if err != nil {
 		s.log("dispatcher", d).Errorf("Announce failed: %s", err)
-		e = announceFailureEvent{d}
+		e = announceFailureEvent{d.Torrent.InfoHash()}
 	} else {
 		e = announceResponseEvent{d.Torrent.InfoHash(), peers}
 	}
@@ -384,7 +379,7 @@ func (s *Scheduler) addIncomingConn(c *conn.Conn, b storage.Bitfield, info *stor
 // existing torrentControl for t, so callers should check if one exists first.
 func (s *Scheduler) initTorrentControl(t storage.Torrent, localRequest bool) *torrentControl {
 	ctrl := newTorrentControl(s.dispatcherFactory.New(t), localRequest)
-	s.announceQueue.Add(ctrl.Dispatcher)
+	s.announceQueue.Add(t.InfoHash())
 	s.networkEvents.Produce(networkevent.AddTorrentEvent(
 		t.InfoHash(), s.pctx.PeerID, t.Bitfield(), s.config.ConnState.MaxOpenConnectionsPerTorrent))
 	s.torrentControls[t.InfoHash()] = ctrl

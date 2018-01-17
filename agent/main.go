@@ -16,6 +16,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
+	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	torrentstorage "code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
@@ -74,7 +75,8 @@ func main() {
 		config.Torrent,
 		stats,
 		pctx,
-		announceclient.Default(pctx, trackers),
+		announceclient.New(pctx, trackers),
+		announcequeue.New(),
 		archive)
 	if err != nil {
 		log.Fatalf("Failed to create scheduler client: %s", err)

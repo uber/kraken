@@ -174,13 +174,18 @@ type announceTickEvent struct{}
 // Apply pulls the next dispatcher from the announce queue and asynchronously
 // makes an announce request to the tracker.
 func (e announceTickEvent) Apply(s *Scheduler) {
-	d, ok := s.announceQueue.Next()
+	h, ok := s.announceQueue.Next()
 	if !ok {
-		s.log().Debug("No dispatchers in announce queue")
+		s.log().Debug("No torrents in announce queue")
 		return
 	}
-	s.log("dispatcher", d).Debug("Announcing")
-	go s.announce(d)
+	ctrl, ok := s.torrentControls[h]
+	if !ok {
+		s.log("hash", h).Error("Pulled unknown torrent off announce queue")
+		return
+	}
+	s.log("dispatcher", ctrl.Dispatcher).Debug("Announcing")
+	go s.announce(ctrl.Dispatcher)
 }
 
 // announceResponseEvent occurs when a successfully announce response was received
@@ -201,7 +206,7 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 		s.log("hash", e.infoHash).Info("Dispatcher closed after announce response received")
 		return
 	}
-	s.announceQueue.Ready(ctrl.Dispatcher)
+	s.announceQueue.Ready(e.infoHash)
 	if ctrl.Complete {
 		// Torrent is already complete, don't open any new connections.
 		return
@@ -244,12 +249,12 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 
 // announceFailureEvent occurs when an announce request fails.
 type announceFailureEvent struct {
-	dispatcher *dispatcher
+	infoHash torlib.InfoHash
 }
 
 // Apply marks the dispatcher as ready to announce again.
 func (e announceFailureEvent) Apply(s *Scheduler) {
-	s.announceQueue.Ready(e.dispatcher)
+	s.announceQueue.Ready(e.infoHash)
 }
 
 // newTorrentEvent occurs when a new torrent was requested for download.
@@ -281,7 +286,7 @@ type completedDispatcherEvent struct {
 func (e completedDispatcherEvent) Apply(s *Scheduler) {
 	infoHash := e.dispatcher.Torrent.InfoHash()
 
-	s.announceQueue.Done(e.dispatcher)
+	s.announceQueue.Done(infoHash)
 	ctrl, ok := s.torrentControls[infoHash]
 	if !ok {
 		s.log("dispatcher", e.dispatcher).Error("Completed dispatcher not found")
@@ -345,7 +350,7 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 			if s.clock.Now().Sub(ctrl.Dispatcher.LastWriteTime()) >= s.config.LeecherTTI {
 				s.log("hash", infoHash).Info("Cancelling idle in-progress torrent")
 				ctrl.Dispatcher.TearDown()
-				s.announceQueue.Eject(ctrl.Dispatcher)
+				s.announceQueue.Eject(infoHash)
 				for _, errc := range ctrl.Errors {
 					errc <- ErrTorrentTimeout
 				}
