@@ -28,7 +28,7 @@ func TestCheckBlobHandlerOK(t *testing.T) {
 	mocks := newServerMocks(t)
 	defer mocks.ctrl.Finish()
 
-	addr, stop := mocks.server(configNoRedirectFixture())
+	addr, stop := mocks.server(configMaxReplicaFixture())
 	defer stop()
 
 	d := image.DigestFixture()
@@ -46,7 +46,7 @@ func TestCheckBlobHandlerNotFound(t *testing.T) {
 	mocks := newServerMocks(t)
 	defer mocks.ctrl.Finish()
 
-	addr, stop := mocks.server(configNoRedirectFixture())
+	addr, stop := mocks.server(configMaxReplicaFixture())
 	defer stop()
 
 	d := image.DigestFixture()
@@ -62,7 +62,7 @@ func TestGetBlobHandlerOK(t *testing.T) {
 	mocks := newServerMocks(t)
 	defer mocks.ctrl.Finish()
 
-	addr, stop := mocks.server(configNoRedirectFixture())
+	addr, stop := mocks.server(configMaxReplicaFixture())
 	defer stop()
 
 	d := image.DigestFixture()
@@ -82,7 +82,7 @@ func TestGetBlobHandlerNotFound(t *testing.T) {
 	mocks := newServerMocks(t)
 	defer mocks.ctrl.Finish()
 
-	addr, stop := mocks.server(configNoRedirectFixture())
+	addr, stop := mocks.server(configMaxReplicaFixture())
 	defer stop()
 
 	d := image.DigestFixture()
@@ -146,20 +146,34 @@ func TestGetLocationsHandlerOK(t *testing.T) {
 	require.Equal([]string{master1, master2}, locs)
 }
 
-func TestRedirectErrors(t *testing.T) {
+func TestIncorrectNodeErrors(t *testing.T) {
 	config := configFixture()
 	d, _ := computeBlobForHosts(config, master2, master3)
 
 	tests := []struct {
 		name string
-		f    func(addr string) error
+		f    func(c blobclient.Client) error
 	}{
 		{
 			"CheckBlob",
-			func(addr string) error { _, err := blobclient.New(addr).CheckBlob(d); return err },
+			func(c blobclient.Client) error { _, err := c.CheckBlob(d); return err },
 		}, {
 			"GetBlob",
-			func(addr string) error { _, err := blobclient.New(addr).GetBlob(d); return err },
+			func(c blobclient.Client) error { _, err := c.GetBlob(d); return err },
+		}, {
+			"PushBlob",
+			func(c blobclient.Client) error { return c.PushBlob(d, bytes.NewBufferString("blah")) },
+		}, {
+			"GetMetaInfo",
+			func(c blobclient.Client) error { _, err := c.GetMetaInfo(namespace, d); return err },
+		}, {
+			"OverwriteMetaInfo",
+			func(c blobclient.Client) error { return c.OverwriteMetaInfo(d, 64) },
+		}, {
+			"UploadBlob",
+			func(c blobclient.Client) error {
+				return c.UploadBlob(namespace, d, bytes.NewBufferString("blah"), false)
+			},
 		},
 	}
 	for _, test := range tests {
@@ -172,9 +186,9 @@ func TestRedirectErrors(t *testing.T) {
 			addr, stop := mocks.server(config)
 			defer stop()
 
-			err := test.f(addr)
+			err := test.f(blobclient.New(addr))
 			require.Error(err)
-			require.Equal([]string{master2, master3}, err.(blobclient.RedirectError).Locations)
+			require.True(httputil.IsStatus(err, http.StatusBadRequest))
 		})
 	}
 }
@@ -242,7 +256,7 @@ func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(master1, configFixture(), cp)
+	s := newTestServer(master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
 	s.backendManager.Register(namespace, mockBackendClient)
 
@@ -372,7 +386,7 @@ func TestUploadBlobThroughDoesNotCommitBlobIfBackendUploadFails(t *testing.T) {
 	cp := newTestClientProvider()
 	mockBackendClient := mockbackend.NewMockClient(ctrl)
 
-	s := newTestServer(master1, configNoRedirectFixture(), cp)
+	s := newTestServer(master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
 	s.backendManager.Register(namespace, mockBackendClient)
 
@@ -393,7 +407,7 @@ func TestPushBlob(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(master1, configNoRedirectFixture(), cp)
+	s := newTestServer(master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
 
 	d, blob := image.DigestWithBlobFixture()
@@ -417,7 +431,7 @@ func TestOverwriteMetainfo(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(master1, configNoRedirectFixture(), cp)
+	s := newTestServer(master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
 
 	d, blob := image.DigestWithBlobFixture()

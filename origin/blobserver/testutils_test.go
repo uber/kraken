@@ -51,7 +51,9 @@ func configFixture() Config {
 	}
 }
 
-func configNoRedirectFixture() Config {
+// configMaxReplicaFixture returns a config that ensures all blobs are replicated
+// to every master.
+func configMaxReplicaFixture() Config {
 	c := configFixture()
 	c.NumReplica = 3
 	return c
