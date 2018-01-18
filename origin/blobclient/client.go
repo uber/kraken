@@ -21,20 +21,6 @@ var (
 	ErrBlobExist = errors.New("blob already exists")
 )
 
-// RedirectError occurs when a Client is scoped to the wrong origin.
-type RedirectError struct {
-	Locations []string
-}
-
-func newRedirectError(h http.Header) RedirectError {
-	locations := strings.Split(h.Get("Origin-Locations"), ",")
-	return RedirectError{locations}
-}
-
-func (e RedirectError) Error() string {
-	return fmt.Sprintf("incorrect origin, must redirect request to: %v", e.Locations)
-}
-
 // Client provides a wrapper around all Server HTTP endpoints.
 type Client interface {
 	Addr() string
@@ -73,9 +59,6 @@ func (c *HTTPClient) Addr() string {
 }
 
 // Locations returns the origin server addresses which d is sharded on.
-// TODO (@evelynl): Locations should returns same list on any addr,
-// except during repair. It should have some retry logic so if one origin host
-// is not available, it retries (assuming we have round robin dns for origin cluster).
 func (c *HTTPClient) Locations(d image.Digest) ([]string, error) {
 	r, err := httputil.Get(fmt.Sprintf("http://%s/blobs/%s/locations", c.addr, d))
 	if err != nil {
@@ -87,21 +70,21 @@ func (c *HTTPClient) Locations(d image.Digest) ([]string, error) {
 
 // CheckBlob returns error if the origin does not have a blob for d.
 func (c *HTTPClient) CheckBlob(d image.Digest) (bool, error) {
-	_, err := httputil.Head(fmt.Sprintf("http://%s/blobs/%s", c.addr, d))
+	_, err := httputil.Head(fmt.Sprintf("http://%s/internal/blobs/%s", c.addr, d))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return false, nil
 		}
-		return false, maybeRedirect(err)
+		return false, err
 	}
 	return true, nil
 }
 
 // GetBlob returns the blob corresponding to d.
 func (c *HTTPClient) GetBlob(d image.Digest) (io.ReadCloser, error) {
-	r, err := httputil.Get(fmt.Sprintf("http://%s/blobs/%s", c.addr, d))
+	r, err := httputil.Get(fmt.Sprintf("http://%s/internal/blobs/%s", c.addr, d))
 	if err != nil {
-		return ioutil.NopCloser(bytes.NewReader([]byte{})), maybeRedirect(err)
+		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
 	}
 	return r.Body, nil
 }
@@ -113,17 +96,17 @@ func (c *HTTPClient) GetBlob(d image.Digest) (io.ReadCloser, error) {
 // underlying value of blob implements io.Closer, it will be closed.
 func (c *HTTPClient) PushBlob(d image.Digest, blob io.Reader) error {
 	_, err := httputil.Post(
-		fmt.Sprintf("http://%s/blobs/%s/uploads", c.addr, d),
+		fmt.Sprintf("http://%s/internal/blobs/%s/uploads", c.addr, d),
 		httputil.SendBody(blob))
-	return maybeRedirect(err)
+	return err
 }
 
 // DeleteBlob deletes the blob corresponding to d.
 func (c *HTTPClient) DeleteBlob(d image.Digest) error {
 	_, err := httputil.Delete(
-		fmt.Sprintf("http://%s/blobs/%s", c.addr, d),
+		fmt.Sprintf("http://%s/internal/blobs/%s", c.addr, d),
 		httputil.SendAcceptedCodes(http.StatusAccepted))
-	return maybeRedirect(err)
+	return err
 }
 
 // UploadBlob uploads and replicates blob to the origin cluster. If through is set,
@@ -137,13 +120,13 @@ func (c *HTTPClient) UploadBlob(
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads?through=%t", c.addr, namespace, d, through),
 		httputil.SendBody(blob))
-	return maybeRedirect(err)
+	return err
 }
 
 // Repair runs a global repair of all shards present on disk. See RepairShard
 // for more details.
 func (c *HTTPClient) Repair() (io.ReadCloser, error) {
-	r, err := httputil.Post(fmt.Sprintf("http://%s/repair", c.addr))
+	r, err := httputil.Post(fmt.Sprintf("http://%s/internal/repair", c.addr))
 	if err != nil {
 		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
 	}
@@ -153,7 +136,7 @@ func (c *HTTPClient) Repair() (io.ReadCloser, error) {
 // RepairShard pushes the blobs of shardID to other replicas, and removes shardID
 // from the target origin if it is now longer an owner of shardID.
 func (c *HTTPClient) RepairShard(shardID string) (io.ReadCloser, error) {
-	r, err := httputil.Post(fmt.Sprintf("http://%s/repair/shard/%s", c.addr, shardID))
+	r, err := httputil.Post(fmt.Sprintf("http://%s/internal/repair/shard/%s", c.addr, shardID))
 	if err != nil {
 		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
 	}
@@ -163,7 +146,7 @@ func (c *HTTPClient) RepairShard(shardID string) (io.ReadCloser, error) {
 // RepairDigest pushes d to other replicas, and removes d from the target origin
 // if it is no longer the owner of d.
 func (c *HTTPClient) RepairDigest(d image.Digest) (io.ReadCloser, error) {
-	r, err := httputil.Post(fmt.Sprintf("http://%s/repair/digest/%s", c.addr, d))
+	r, err := httputil.Post(fmt.Sprintf("http://%s/internal/repair/digest/%s", c.addr, d))
 	if err != nil {
 		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
 	}
@@ -176,7 +159,7 @@ func (c *HTTPClient) RepairDigest(d image.Digest) (io.ReadCloser, error) {
 // httputil.StatusError.
 func (c *HTTPClient) GetMetaInfo(namespace string, d image.Digest) (*torlib.MetaInfo, error) {
 	r, err := httputil.Get(fmt.Sprintf(
-		"http://%s/namespace/%s/blobs/%s/metainfo", c.addr, namespace, d))
+		"http://%s/internal/namespace/%s/blobs/%s/metainfo", c.addr, namespace, d))
 	if err != nil {
 		return nil, err
 	}
@@ -196,14 +179,14 @@ func (c *HTTPClient) GetMetaInfo(namespace string, d image.Digest) (*torlib.Meta
 // configured with pieceLength. Primarily intended for benchmarking purposes.
 func (c *HTTPClient) OverwriteMetaInfo(d image.Digest, pieceLength int64) error {
 	_, err := httputil.Post(
-		fmt.Sprintf("http://%s/blobs/%s/metainfo?piece_length=%d", c.addr, d, pieceLength))
+		fmt.Sprintf("http://%s/internal/blobs/%s/metainfo?piece_length=%d", c.addr, d, pieceLength))
 	return err
 }
 
 // GetPeerContext gets the PeerContext of the p2p client running alongside the Server.
 func (c *HTTPClient) GetPeerContext() (peercontext.PeerContext, error) {
 	var pctx peercontext.PeerContext
-	r, err := httputil.Get(fmt.Sprintf("http://%s/peercontext", c.addr))
+	r, err := httputil.Get(fmt.Sprintf("http://%s/internal/peercontext", c.addr))
 	if err != nil {
 		return pctx, err
 	}
@@ -212,17 +195,6 @@ func (c *HTTPClient) GetPeerContext() (peercontext.PeerContext, error) {
 		return pctx, err
 	}
 	return pctx, nil
-}
-
-// maybeRedirect attempts to convert redirects into RedirectErrors.
-func maybeRedirect(err error) error {
-	if err == nil {
-		return nil
-	}
-	if serr, ok := err.(httputil.StatusError); ok && serr.Status == http.StatusTemporaryRedirect {
-		return newRedirectError(serr.Header)
-	}
-	return err
 }
 
 func min(a, b int64) int64 {

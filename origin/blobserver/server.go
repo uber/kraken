@@ -112,22 +112,14 @@ func (s Server) Addr() string {
 func (s Server) Handler() http.Handler {
 	r := chi.NewRouter()
 
+	// Public endpoints:
+
 	r.Group(func(r chi.Router) {
 		stats := s.stats.SubScope("health")
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
 
 		r.Get("/health", handler.Wrap(s.healthCheckHandler))
-	})
-
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("blobs")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		r.Head("/blobs/:digest", handler.Wrap(s.checkBlobHandler))
-		r.Get("/blobs/:digest", handler.Wrap(s.getBlobHandler))
-		r.Delete("/blobs/:digest", handler.Wrap(s.deleteBlobHandler))
 	})
 
 	r.Group(func(r chi.Router) {
@@ -140,54 +132,6 @@ func (s Server) Handler() http.Handler {
 	})
 
 	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("blobs.uploads")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		r.Post("/blobs/:digest/uploads", handler.Wrap(s.pushBlobHandler))
-	})
-
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("blobs.metainfo")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		r.Post("/blobs/:digest/metainfo", handler.Wrap(s.overwriteMetaInfoHandler))
-	})
-
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("repair")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		r.Post("/repair", handler.Wrap(s.repairHandler))
-	})
-
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("repair.shard")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		r.Post("/repair/shard/:shardid", handler.Wrap(s.repairShardHandler))
-	})
-
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("repair.digest")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		r.Post("/repair/digest/:digest", handler.Wrap(s.repairDigestHandler))
-	})
-
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("peercontext")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		r.Get("/peercontext", handler.Wrap(s.getPeerContextHandler))
-	})
-
-	r.Group(func(r chi.Router) {
 		stats := s.stats.SubScope("namespace.blobs.uploads")
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
@@ -195,12 +139,72 @@ func (s Server) Handler() http.Handler {
 		r.Post("/namespace/:namespace/blobs/:digest/uploads", handler.Wrap(s.uploadBlobHandler))
 	})
 
+	// Internal endpoints:
+
+	r.Group(func(r chi.Router) {
+		stats := s.stats.SubScope("blobs")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
+
+		r.Head("/internal/blobs/:digest", handler.Wrap(s.checkBlobHandler))
+		r.Get("/internal/blobs/:digest", handler.Wrap(s.getBlobHandler))
+		r.Delete("/internal/blobs/:digest", handler.Wrap(s.deleteBlobHandler))
+	})
+
+	r.Group(func(r chi.Router) {
+		stats := s.stats.SubScope("blobs.uploads")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
+
+		r.Post("/internal/blobs/:digest/uploads", handler.Wrap(s.pushBlobHandler))
+	})
+
+	r.Group(func(r chi.Router) {
+		stats := s.stats.SubScope("blobs.metainfo")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
+
+		r.Post("/internal/blobs/:digest/metainfo", handler.Wrap(s.overwriteMetaInfoHandler))
+	})
+
+	r.Group(func(r chi.Router) {
+		stats := s.stats.SubScope("repair")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
+
+		r.Post("/internal/repair", handler.Wrap(s.repairHandler))
+	})
+
+	r.Group(func(r chi.Router) {
+		stats := s.stats.SubScope("repair.shard")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
+
+		r.Post("/internal/repair/shard/:shardid", handler.Wrap(s.repairShardHandler))
+	})
+
+	r.Group(func(r chi.Router) {
+		stats := s.stats.SubScope("repair.digest")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
+
+		r.Post("/internal/repair/digest/:digest", handler.Wrap(s.repairDigestHandler))
+	})
+
+	r.Group(func(r chi.Router) {
+		stats := s.stats.SubScope("peercontext")
+		r.Use(middleware.Counter(stats))
+		r.Use(middleware.ElapsedTimer(stats))
+
+		r.Get("/internal/peercontext", handler.Wrap(s.getPeerContextHandler))
+	})
+
 	r.Group(func(r chi.Router) {
 		stats := s.stats.SubScope("namespace.blobs.metainfo")
 		r.Use(middleware.Counter(stats))
 		r.Use(middleware.ElapsedTimer(stats))
 
-		r.Get("/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(s.getMetaInfoHandler))
+		r.Get("/internal/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(s.getMetaInfoHandler))
 	})
 
 	// Serves /debug/pprof endpoints.
@@ -220,7 +224,7 @@ func (s Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if err := s.redirectByDigest(d); err != nil {
+	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
 	if ok, err := s.blobExists(d); err != nil {
@@ -239,7 +243,7 @@ func (s Server) getBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if err := s.redirectByDigest(d); err != nil {
+	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
 	if err := s.downloadBlob(d, w); err != nil {
@@ -276,7 +280,6 @@ func (s Server) getLocationsHandler(w http.ResponseWriter, r *http.Request) erro
 	}
 	w.Header().Set("Origin-Locations", strings.Join(locs, ","))
 	w.WriteHeader(http.StatusOK)
-	log.Debugf("successfully get location for blob %s: locs: %v", d.Hex(), locs)
 	return nil
 }
 
@@ -287,7 +290,7 @@ func (s Server) pushBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if err := s.redirectByDigest(d); err != nil {
+	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
 	if err := s.downloadPushedBlob(d, r.Body); err != nil {
@@ -303,12 +306,11 @@ func (s Server) pushBlobHandler(w http.ResponseWriter, r *http.Request) error {
 // the blob among other origins. If query argument "through" is set to true,
 // pushes the blob to the storage backend configured for the given namespace.
 func (s Server) uploadBlobHandler(w http.ResponseWriter, r *http.Request) error {
-	defer r.Body.Close()
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
 	}
-	if err := s.redirectByDigest(d); err != nil {
+	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
 	namespace := chi.URLParam(r, "namespace")
@@ -401,6 +403,9 @@ func (s Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
+	if err := s.ensureCorrectNode(d); err != nil {
+		return err
+	}
 	raw, err := s.getMetaInfo(namespace, d)
 	if err != nil {
 		return err
@@ -412,6 +417,9 @@ func (s Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error
 func (s Server) overwriteMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
+		return err
+	}
+	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
 	pieceLength, err := strconv.ParseInt(r.URL.Query().Get("piece_length"), 10, 64)
@@ -613,7 +621,7 @@ func parseDigest(r *http.Request) (digest image.Digest, err error) {
 func (s Server) getLocations(d image.Digest) ([]string, error) {
 	nodes, err := s.hashState.GetOrderedNodes(d.ShardID(), s.config.NumReplica)
 	if err != nil || len(nodes) == 0 {
-		return nil, handler.Errorf("failed to calculate hash for digest %q: %s", d, err)
+		return nil, handler.Errorf("get nodes: %s", err)
 	}
 	var locs []string
 	for _, node := range nodes {
@@ -623,20 +631,17 @@ func (s Server) getLocations(d image.Digest) ([]string, error) {
 	return locs, nil
 }
 
-func (s Server) redirectByDigest(d image.Digest) error {
-	locs, err := s.getLocations(d)
-	if err != nil {
-		return err
+func (s Server) ensureCorrectNode(d image.Digest) error {
+	nodes, err := s.hashState.GetOrderedNodes(d.ShardID(), s.config.NumReplica)
+	if err != nil || len(nodes) == 0 {
+		return handler.Errorf("get nodes: %s", err)
 	}
-	for _, loc := range locs {
-		if s.addr == loc {
-			// Current node is among designated nodes.
+	for _, node := range nodes {
+		if node.Label == s.label {
 			return nil
 		}
 	}
-	return handler.Errorf("redirecting to correct nodes").
-		Status(http.StatusTemporaryRedirect).
-		Header("Origin-Locations", strings.Join(locs, ","))
+	return handler.Errorf("digest does not hash to this origin").Status(http.StatusBadRequest)
 }
 
 func (s Server) blobExists(d image.Digest) (bool, error) {
