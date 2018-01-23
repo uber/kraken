@@ -23,6 +23,32 @@ const (
 	ReceivePiece     Name = "receive_piece"
 	TorrentComplete  Name = "torrent_complete"
 	TorrentCancelled Name = "torrent_cancelled"
+
+	// Piece request timing:
+
+	// Leecher
+	DispatcherSentPieceRequest Name = "dispatcher_sent_piece_request"
+	ConnSenderGotPieceRequest  Name = "conn_sender_got_piece_request"
+	ConnSenderSentPieceRequest Name = "conn_sender_sent_piece_request"
+
+	// Seeder
+	ConnReaderGotPieceRequest  Name = "conn_reader_got_piece_request"
+	ConnReaderSentPieceRequest Name = "conn_reader_sent_piece_request"
+	DispatcherGotPieceRequest  Name = "dispatcher_got_piece_request"
+	DispatcherReadPiece        Name = "dispatcher_read_piece"
+	DispatcherSentPiecePayload Name = "dispatcher_sent_piece_payload"
+	ConnSenderGotPiecePayload  Name = "conn_sender_got_piece_payload"
+	ConnSenderSentPiecePayload Name = "conn_sender_sent_piece_payload"
+
+	// Leecher
+	ConnReaderGotPiecePayload  Name = "conn_reader_got_piece_payload"
+	ConnReaderSentPiecePayload Name = "conn_reader_sent_piece_payload"
+	DispatcherGotPiecePayload  Name = "dispatcher_got_piece_payload"
+	DispatcherWrotePiece       Name = "dispatcher_wrote_piece"
+
+	// Errors
+	ConnSendDroppedPieceRequest Name = "conn_send_dropped_piece_request"
+	ConnSendDroppedPiecePayload Name = "conn_send_dropped_piece_payload"
 )
 
 // Event consolidates all possible event fields.
@@ -119,4 +145,125 @@ func TorrentCompleteEvent(h torlib.InfoHash, self torlib.PeerID) *Event {
 // TorrentCancelledEvent returns an event for a cancelled torrent.
 func TorrentCancelledEvent(h torlib.InfoHash, self torlib.PeerID) *Event {
 	return baseEvent(TorrentCancelled, h, self)
+}
+
+func pieceEvent(
+	name Name, h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	e := baseEvent(name, h, self)
+	e.Peer = peer.String()
+	e.Piece = piece
+	return e
+}
+
+// DispatcherSentPieceRequestEvent ...
+func DispatcherSentPieceRequestEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(DispatcherSentPieceRequest, h, self, peer, piece)
+}
+
+// ConnSenderSentPieceRequestEvent ...
+func ConnSenderSentPieceRequestEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(ConnSenderSentPieceRequest, h, self, peer, piece)
+}
+
+// ConnSenderGotPieceRequestEvent ...
+func ConnSenderGotPieceRequestEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(ConnSenderGotPieceRequest, h, self, peer, piece)
+}
+
+// ConnReaderGotPieceRequestEvent ...
+func ConnReaderGotPieceRequestEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(ConnReaderGotPieceRequest, h, self, peer, piece)
+}
+
+// ConnReaderSentPieceRequestEvent ...
+func ConnReaderSentPieceRequestEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(ConnReaderSentPieceRequest, h, self, peer, piece)
+}
+
+// DispatcherGotPieceRequestEvent ...
+func DispatcherGotPieceRequestEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(DispatcherGotPieceRequest, h, self, peer, piece)
+}
+
+// DispatcherReadPieceEvent ...
+func DispatcherReadPieceEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(DispatcherReadPiece, h, self, peer, piece)
+}
+
+// DispatcherSentPiecePayloadEvent ...
+func DispatcherSentPiecePayloadEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(DispatcherSentPiecePayload, h, self, peer, piece)
+}
+
+// ConnSenderGotPiecePayloadEvent ...
+func ConnSenderGotPiecePayloadEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(ConnSenderGotPiecePayload, h, self, peer, piece)
+}
+
+// ConnSenderSentPiecePayloadEvent ...
+func ConnSenderSentPiecePayloadEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(ConnSenderSentPiecePayload, h, self, peer, piece)
+}
+
+// ConnReaderGotPiecePayloadEvent ...
+func ConnReaderGotPiecePayloadEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(ConnReaderGotPiecePayload, h, self, peer, piece)
+}
+
+// ConnReaderSentPiecePayloadEvent ...
+func ConnReaderSentPiecePayloadEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(ConnReaderSentPiecePayload, h, self, peer, piece)
+}
+
+// DispatcherGotPiecePayloadEvent ...
+func DispatcherGotPiecePayloadEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(DispatcherGotPiecePayload, h, self, peer, piece)
+}
+
+// DispatcherWrotePieceEvent ...
+func DispatcherWrotePieceEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(DispatcherWrotePiece, h, self, peer, piece)
+}
+
+// ConnSendDroppedPieceRequestEvent ...
+func ConnSendDroppedPieceRequestEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(ConnSendDroppedPieceRequest, h, self, peer, piece)
+}
+
+// ConnSendDroppedPiecePayloadEvent ...
+func ConnSendDroppedPiecePayloadEvent(
+	h torlib.InfoHash, self torlib.PeerID, peer torlib.PeerID, piece int) *Event {
+
+	return pieceEvent(ConnSendDroppedPiecePayload, h, self, peer, piece)
 }

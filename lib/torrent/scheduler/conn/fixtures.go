@@ -7,6 +7,7 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -62,6 +63,7 @@ func HandshakerFixture(config Config) *Handshaker {
 		config,
 		tally.NewTestScope("", nil),
 		clock.New(),
+		networkevent.NewTestProducer(),
 		torlib.PeerIDFixture(),
 		func(*Conn) {})
 }
