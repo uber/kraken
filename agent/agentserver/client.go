@@ -10,28 +10,39 @@ import (
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
-// ClientConfig defines configuration for Client.
-type ClientConfig struct {
-	Backoff backoff.Config `yaml:"backoff"`
-}
-
-func (c ClientConfig) applyDefaults() ClientConfig {
-	if c.Backoff.RetryTimeout == 0 {
-		c.Backoff.RetryTimeout = 15 * time.Minute
-	}
-	return c
-}
-
 // Client provides a wrapper for HTTP operations on an agent.
 type Client struct {
-	config  ClientConfig
 	backoff *backoff.Backoff
 	addr    string
 }
 
+type clientOpts struct {
+	timeout time.Duration
+}
+
+// ClientOption defines an option for the Client.
+type ClientOption func(*clientOpts)
+
+// WithTimeout sets timeout t for Client downloads.
+func WithTimeout(t time.Duration) ClientOption {
+	return func(o *clientOpts) { o.timeout = t }
+}
+
 // NewClient creates a new client for an agent at addr.
-func NewClient(config ClientConfig, addr string) *Client {
-	return &Client{config.applyDefaults(), backoff.New(config.Backoff), addr}
+func NewClient(addr string, opts ...ClientOption) *Client {
+
+	settings := &clientOpts{
+		timeout: 15 * time.Minute,
+	}
+	for _, opt := range opts {
+		opt(settings)
+	}
+
+	b := backoff.New(backoff.Config{
+		RetryTimeout: settings.timeout,
+	})
+
+	return &Client{b, addr}
 }
 
 // Download returns the blob for namespace / name. Callers should close the

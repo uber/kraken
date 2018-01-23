@@ -32,7 +32,7 @@ func TestDownload(t *testing.T) {
 		})
 
 	addr := mocks.startServer()
-	c := NewClient(ClientConfig{}, addr)
+	c := NewClient(addr)
 
 	r, err := c.Download(namespace, d.Hex())
 	require.NoError(err)
