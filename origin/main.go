@@ -100,7 +100,7 @@ func main() {
 		hostname = *blobServerHostName
 	}
 
-	backendManager, err := backend.NewManager(config.Namespaces)
+	backendManager, err := backend.NewManager(config.Namespace)
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}

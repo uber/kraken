@@ -1,6 +1,8 @@
 package backend
 
-import "code.uber.internal/infra/kraken/lib/fileio"
+import (
+	"code.uber.internal/infra/kraken/lib/fileio"
+)
 
 // Uploader reads blobs from src and uploads them to name. Name should be
 // the digest of the blob.
