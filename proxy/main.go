@@ -6,6 +6,7 @@ import (
 	dockercontext "github.com/docker/distribution/context"
 	docker "github.com/docker/distribution/registry"
 
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
@@ -39,22 +40,50 @@ func main() {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
 
-	origins, err := serverset.NewRoundRobin(config.Origin.RoundRobin)
-	if err != nil {
-		log.Fatalf("Error creating origin round robin: %s", err)
+	// if remote backend is set create it instead of origin transferer
+	var transferer transfer.ImageTransferer
+	if config.Namespace != "" {
+		backendManager, err := backend.NewManager(config.Namespaces)
+		if err != nil {
+			log.Fatalf("Error creating backend manager: %s", err)
+		}
+
+		backendClient, err := backendManager.GetClient(config.Namespace)
+		if err != nil {
+			log.Fatalf("Error creating backend manager's client: %s for %s",
+				err, config.Namespace)
+		}
+
+		manifestClient, err := backendManager.GetManifestClient(config.Namespace)
+		if err != nil {
+			log.Fatalf("error creating backendmanager's manifest client: %s", err)
+		}
+
+		transferer, err = transfer.NewRemoteBackendTransferer(
+			manifestClient, backendClient, fs)
+
+		if err != nil {
+			log.Fatalf("Error creating image transferer: %s for %s",
+				err, config.Namespace)
+		}
+
+	} else {
+		origins, err := serverset.NewRoundRobin(config.Origin.RoundRobin)
+		if err != nil {
+			log.Fatalf("Error creating origin round robin: %s", err)
+		}
+		originCluster := blobclient.NewClusterClient(
+			blobclient.NewClientResolver(blobclient.NewProvider(), origins))
+
+		trackers, err := serverset.NewRoundRobin(config.Tracker.RoundRobin)
+		if err != nil {
+			log.Fatalf("Error creating tracker round robin: %s", err)
+		}
+		manifestClient := manifestclient.New(trackers)
+
+		transferer = transfer.NewOriginClusterTransferer(
+			originCluster, manifestClient, fs)
 	}
-	originCluster := blobclient.NewClusterClient(
-		blobclient.NewClientResolver(blobclient.NewProvider(), origins))
-
-	trackers, err := serverset.NewRoundRobin(config.Tracker.RoundRobin)
-	if err != nil {
-		log.Fatalf("Error creating tracker round robin: %s", err)
-	}
-	manifestClient := manifestclient.New(trackers)
-
-	transferer := transfer.NewOriginClusterTransferer(
-		originCluster, manifestClient, fs)
-
 	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)
 	if err != nil {

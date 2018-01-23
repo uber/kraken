@@ -68,6 +68,11 @@ func IsAccepted(err error) bool {
 	return IsStatus(err, http.StatusAccepted)
 }
 
+// IsForbidden returns true if statis code is 403 "forbidden"
+func IsForbidden(err error) bool {
+	return IsStatus(err, http.StatusForbidden)
+}
+
 // NetworkError occurs on any Send error which occurred while trying to send
 // the HTTP request, e.g. the given host is unresponsive.
 type NetworkError struct {
