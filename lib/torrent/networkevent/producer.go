@@ -71,7 +71,8 @@ func (p *producer) Produce(e *Event) {
 		log.Errorf("Error serializing network event to json: %s", err)
 		return
 	}
-	p.logger.Info(string(b))
+	// TODO(codyg): Log events.
+	// p.logger.Info(string(b))
 	if err := p.rest.Produce(p.config.KafkaTopic, b); err != nil {
 		log.Errorf("Error producing network event: %s", err)
 		return

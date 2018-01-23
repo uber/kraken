@@ -14,6 +14,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -29,9 +30,10 @@ type CloseHandler func(*Conn)
 // Conn manages peer communication over a connection for multiple torrents. Inbound
 // messages are multiplexed based on the torrent they pertain to.
 type Conn struct {
-	peerID    torlib.PeerID
-	infoHash  torlib.InfoHash
-	createdAt time.Time
+	peerID      torlib.PeerID
+	infoHash    torlib.InfoHash
+	createdAt   time.Time
+	localPeerID torlib.PeerID
 
 	closeHandler CloseHandler
 
@@ -42,10 +44,11 @@ type Conn struct {
 	// Controls egress piece bandwidth.
 	egressLimiter *rate.Limiter
 
-	nc     net.Conn
-	config Config
-	clk    clock.Clock
-	stats  tally.Scope
+	nc            net.Conn
+	config        Config
+	clk           clock.Clock
+	stats         tally.Scope
+	networkEvents networkevent.Producer
 
 	// Marks whether the connection was opened by the remote peer, or the local peer.
 	openedByRemote bool
@@ -63,9 +66,11 @@ func newConn(
 	config Config,
 	stats tally.Scope,
 	clk clock.Clock,
+	networkEvents networkevent.Producer,
 	closeHandler CloseHandler,
 	nc net.Conn,
-	peerID torlib.PeerID,
+	localPeerID torlib.PeerID,
+	remotePeerID torlib.PeerID,
 	info *storage.TorrentInfo,
 	openedByRemote bool) (*Conn, error) {
 
@@ -76,7 +81,8 @@ func newConn(
 	}
 
 	c := &Conn{
-		peerID:       peerID,
+		peerID:       remotePeerID,
+		localPeerID:  localPeerID,
 		infoHash:     info.InfoHash(),
 		createdAt:    clk.Now(),
 		closeHandler: closeHandler,
@@ -87,6 +93,7 @@ func newConn(
 		config:         config,
 		clk:            clk,
 		stats:          stats,
+		networkEvents:  networkEvents,
 		openedByRemote: openedByRemote,
 		sender:         make(chan *Message, config.SenderBufferSize),
 		receiver:       make(chan *Message, config.ReceiverBufferSize),
@@ -148,6 +155,18 @@ func (c *Conn) Send(msg *Message) error {
 		return nil
 	default:
 		// TODO(codyg): Consider a timeout here instead.
+
+		switch msg.Message.Type {
+		case p2p.Message_PIECE_REQUEST:
+			c.networkEvents.Produce(
+				networkevent.ConnSendDroppedPieceRequestEvent(
+					c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PieceRequest.Index)))
+		case p2p.Message_PIECE_PAYLOAD:
+			c.networkEvents.Produce(
+				networkevent.ConnSendDroppedPiecePayloadEvent(
+					c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PiecePayload.Index)))
+		}
+
 		t := msg.Message.Type.String()
 		c.stats.SubScope("dropped_messages").Counter(t).Inc(1)
 		return errors.New("send buffer full")
@@ -223,7 +242,31 @@ func (c *Conn) readLoop() {
 				c.log().Infof("Error reading message from socket, exiting read loop: %s", err)
 				return
 			}
+
+			switch msg.Message.Type {
+			case p2p.Message_PIECE_REQUEST:
+				c.networkEvents.Produce(
+					networkevent.ConnReaderGotPieceRequestEvent(
+						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PieceRequest.Index)))
+			case p2p.Message_PIECE_PAYLOAD:
+				c.networkEvents.Produce(
+					networkevent.ConnReaderGotPiecePayloadEvent(
+						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PiecePayload.Index)))
+			}
+
 			c.receiver <- msg
+
+			switch msg.Message.Type {
+			case p2p.Message_PIECE_REQUEST:
+				c.networkEvents.Produce(
+					networkevent.ConnReaderSentPieceRequestEvent(
+						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PieceRequest.Index)))
+			case p2p.Message_PIECE_PAYLOAD:
+				c.networkEvents.Produce(
+					networkevent.ConnReaderSentPiecePayloadEvent(
+						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PiecePayload.Index)))
+			}
+
 		}
 	}
 }
@@ -285,10 +328,34 @@ func (c *Conn) writeLoop() {
 		case <-c.done:
 			return
 		case msg := <-c.sender:
+
+			switch msg.Message.Type {
+			case p2p.Message_PIECE_REQUEST:
+				c.networkEvents.Produce(
+					networkevent.ConnSenderGotPieceRequestEvent(
+						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PieceRequest.Index)))
+			case p2p.Message_PIECE_PAYLOAD:
+				c.networkEvents.Produce(
+					networkevent.ConnSenderGotPiecePayloadEvent(
+						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PiecePayload.Index)))
+			}
+
 			if err := c.sendMessage(msg); err != nil {
 				c.log().Infof("Error writing message to socket, exiting write loop: %s", err)
 				return
 			}
+
+			switch msg.Message.Type {
+			case p2p.Message_PIECE_REQUEST:
+				c.networkEvents.Produce(
+					networkevent.ConnSenderSentPieceRequestEvent(
+						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PieceRequest.Index)))
+			case p2p.Message_PIECE_PAYLOAD:
+				c.networkEvents.Produce(
+					networkevent.ConnSenderSentPiecePayloadEvent(
+						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PiecePayload.Index)))
+			}
+
 		}
 	}
 }

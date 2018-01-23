@@ -319,6 +319,8 @@ func (d *dispatcher) maybeSendPieceRequest(p *peer, i int) error {
 		d.pieceRequestManager.MarkUnsent(p.id, i)
 		return err
 	}
+	d.networkEvents.Produce(
+		networkevent.DispatcherSentPieceRequestEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
 	return nil
 }
 
@@ -440,15 +442,26 @@ func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 		return
 	}
 
+	d.networkEvents.Produce(
+		networkevent.DispatcherGotPieceRequestEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
+
 	payload, err := d.Torrent.ReadPiece(i)
 	if err != nil {
 		d.log("peer", p, "piece", i).Errorf("Error reading requested piece: %s", err)
 		p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err))
 		return
 	}
+
+	d.networkEvents.Produce(
+		networkevent.DispatcherReadPieceEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
+
 	if err := p.messages.Send(conn.NewPiecePayloadMessage(i, payload)); err != nil {
 		return
 	}
+
+	d.networkEvents.Produce(
+		networkevent.DispatcherSentPiecePayloadEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
+
 	p.touchLastPieceSent()
 
 	// Assume that the peer successfully received the piece.
@@ -464,6 +477,10 @@ func (d *dispatcher) handlePiecePayload(
 		d.pieceRequestManager.MarkInvalid(p.id, i)
 		return
 	}
+
+	d.networkEvents.Produce(
+		networkevent.DispatcherGotPiecePayloadEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
+
 	if err := d.Torrent.WritePiece(payload, i); err != nil {
 		if err != storage.ErrPieceComplete {
 			d.log("peer", p, "piece", i).Errorf("Error writing piece payload: %s", err)
@@ -471,6 +488,10 @@ func (d *dispatcher) handlePiecePayload(
 		}
 		return
 	}
+
+	d.networkEvents.Produce(
+		networkevent.DispatcherWrotePieceEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
+
 	d.networkEvents.Produce(
 		networkevent.ReceivePieceEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
 

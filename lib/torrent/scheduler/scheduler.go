@@ -146,7 +146,7 @@ func New(
 		overrides.eventLoop.Send(closedConnEvent{c})
 	}
 	handshaker := conn.NewHandshaker(
-		config.Conn, stats, overrides.clock, pctx.PeerID, closedConnHandler)
+		config.Conn, stats, overrides.clock, networkEvents, pctx.PeerID, closedConnHandler)
 
 	connState := newConnState(pctx.PeerID, config.ConnState, overrides.clock, networkEvents)
 

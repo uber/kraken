@@ -9,6 +9,7 @@ import (
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 )
@@ -90,11 +91,12 @@ func (pc *PendingConn) Close() {
 // Handshaker defines the handshake protocol for establishing connections to
 // other peers.
 type Handshaker struct {
-	config       Config
-	stats        tally.Scope
-	clk          clock.Clock
-	peerID       torlib.PeerID
-	closeHandler CloseHandler
+	config        Config
+	stats         tally.Scope
+	clk           clock.Clock
+	networkEvents networkevent.Producer
+	peerID        torlib.PeerID
+	closeHandler  CloseHandler
 }
 
 // NewHandshaker creates a new Handshaker.
@@ -102,6 +104,7 @@ func NewHandshaker(
 	config Config,
 	stats tally.Scope,
 	clk clock.Clock,
+	networkEvents networkevent.Producer,
 	peerID torlib.PeerID,
 	closeHandler CloseHandler) *Handshaker {
 
@@ -109,11 +112,12 @@ func NewHandshaker(
 	stats = stats.SubScope("conn")
 
 	return &Handshaker{
-		config:       config,
-		stats:        stats,
-		clk:          clk,
-		peerID:       peerID,
-		closeHandler: closeHandler,
+		config:        config,
+		stats:         stats,
+		clk:           clk,
+		networkEvents: networkEvents,
+		peerID:        peerID,
+		closeHandler:  closeHandler,
 	}
 }
 
@@ -206,5 +210,6 @@ func (h *Handshaker) newConn(
 	info *storage.TorrentInfo,
 	openedByRemote bool) (*Conn, error) {
 
-	return newConn(h.config, h.stats, h.clk, h.closeHandler, nc, peerID, info, openedByRemote)
+	return newConn(h.config, h.stats, h.clk, h.networkEvents, h.closeHandler, nc,
+		h.peerID, peerID, info, openedByRemote)
 }
