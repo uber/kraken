@@ -90,6 +90,18 @@ func (m *Manager) Clear(i int) {
 	delete(m.requests, i)
 }
 
+// ClearPeer deletes all piece requests for peerID.
+func (m *Manager) ClearPeer(peerID torlib.PeerID) {
+	m.Lock()
+	defer m.Unlock()
+
+	for i, r := range m.requests {
+		if r.PeerID == peerID {
+			delete(m.requests, i)
+		}
+	}
+}
+
 // GetFailedRequests returns a copy of all failed piece requests.
 func (m *Manager) GetFailedRequests() []Request {
 	m.Lock()
