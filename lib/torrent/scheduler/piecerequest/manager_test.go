@@ -111,3 +111,22 @@ func TestManagerClear(t *testing.T) {
 
 	require.Len(m.requests, 0)
 }
+
+func TestManagerClearPeer(t *testing.T) {
+	require := require.New(t)
+
+	m := NewManager(clock.NewMock(), 5*time.Second)
+
+	p1 := torlib.PeerIDFixture()
+	p2 := torlib.PeerIDFixture()
+
+	require.True(m.Reserve(p1, 0))
+	require.True(m.Reserve(p1, 1))
+	require.True(m.Reserve(p2, 2))
+
+	m.ClearPeer(p1)
+
+	require.Nil(m.requests[0])
+	require.Nil(m.requests[1])
+	require.NotNil(m.requests[2])
+}

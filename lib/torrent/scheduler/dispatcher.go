@@ -390,6 +390,7 @@ func (d *dispatcher) feed(p *peer) {
 		}
 	}
 	d.peers.Delete(p.id)
+	d.pieceRequestManager.ClearPeer(p.id)
 }
 
 func (d *dispatcher) dispatch(p *peer, msg *conn.Message) error {
