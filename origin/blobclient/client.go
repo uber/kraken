@@ -14,6 +14,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/httputil"
+
+	"github.com/c2h5oh/datasize"
 )
 
 // Client errors.
@@ -28,8 +30,8 @@ type Client interface {
 	Locations(d image.Digest) ([]string, error)
 	CheckBlob(d image.Digest) (bool, error)
 	GetBlob(d image.Digest) (io.ReadCloser, error)
-	PushBlob(d image.Digest, blob io.Reader) error
 	DeleteBlob(d image.Digest) error
+	TransferBlob(d image.Digest, blob io.Reader, size int64) error
 
 	Repair() (io.ReadCloser, error)
 	RepairShard(shardID string) (io.ReadCloser, error)
@@ -38,19 +40,38 @@ type Client interface {
 	GetMetaInfo(namespace string, d image.Digest) (*torlib.MetaInfo, error)
 	OverwriteMetaInfo(d image.Digest, pieceLength int64) error
 
-	UploadBlob(namespace string, d image.Digest, blob io.Reader, through bool) error
+	UploadBlob(namespace string, d image.Digest, blob io.Reader, size int64, through bool) error
 
 	GetPeerContext() (peercontext.PeerContext, error)
 }
 
-// HTTPClient defines the Client implementation.
-type HTTPClient struct {
-	addr string
+// Config defines HTTPClient configuration.
+type Config struct {
+	ChunkSize datasize.ByteSize `yaml:"chunk_size"`
 }
 
-// New returns a new HTTPClient scoped to addr.
+func (c Config) applyDefaults() Config {
+	if c.ChunkSize == 0 {
+		c.ChunkSize = 32 * datasize.MB
+	}
+	return c
+}
+
+// HTTPClient defines the Client implementation.
+type HTTPClient struct {
+	addr   string
+	config Config
+}
+
+// New returns a new HTTPClient scoped to addr with default config.
 func New(addr string) *HTTPClient {
-	return &HTTPClient{addr}
+	return NewWithConfig(addr, Config{})
+}
+
+// NewWithConfig returns a new HTTPClient scoped to addr with config.
+func NewWithConfig(addr string, config Config) *HTTPClient {
+	config = config.applyDefaults()
+	return &HTTPClient{addr, config}
 }
 
 // Addr returns the address of the server the client is provisioned for.
@@ -89,18 +110,6 @@ func (c *HTTPClient) GetBlob(d image.Digest) (io.ReadCloser, error) {
 	return r.Body, nil
 }
 
-// PushBlob uploads a blob to a single origin server. Unlike it's cousin UploadBlob,
-// PushBlob is an internal API which does not replicate the blob.
-//
-// NOTE: Because the blob is supplied as the body of an HTTP request, if the
-// underlying value of blob implements io.Closer, it will be closed.
-func (c *HTTPClient) PushBlob(d image.Digest, blob io.Reader) error {
-	_, err := httputil.Post(
-		fmt.Sprintf("http://%s/internal/blobs/%s/uploads", c.addr, d),
-		httputil.SendBody(blob))
-	return err
-}
-
 // DeleteBlob deletes the blob corresponding to d.
 func (c *HTTPClient) DeleteBlob(d image.Digest) error {
 	_, err := httputil.Delete(
@@ -109,18 +118,20 @@ func (c *HTTPClient) DeleteBlob(d image.Digest) error {
 	return err
 }
 
+// TransferBlob uploads a blob to a single origin server. Unlike its cousin UploadBlob,
+// TransferBlob is an internal API which does not replicate the blob.
+func (c *HTTPClient) TransferBlob(d image.Digest, blob io.Reader, size int64) error {
+	tc := newTransferClient(c.addr)
+	return runChunkedUpload(tc, d, blob, size, int64(c.config.ChunkSize))
+}
+
 // UploadBlob uploads and replicates blob to the origin cluster. If through is set,
 // UploadBlob will also upload blob to the storage backend configured for namespace.
-//
-// NOTE: Because the blob is supplied as the body of an HTTP request, if the
-// underlying value of blob implements io.Closer, it will be closed.
 func (c *HTTPClient) UploadBlob(
-	namespace string, d image.Digest, blob io.Reader, through bool) error {
+	namespace string, d image.Digest, blob io.Reader, size int64, through bool) error {
 
-	_, err := httputil.Post(
-		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads?through=%t", c.addr, namespace, d, through),
-		httputil.SendBody(blob))
-	return err
+	uc := newUploadClient(c.addr, namespace, through)
+	return runChunkedUpload(uc, d, blob, size, int64(c.config.ChunkSize))
 }
 
 // Repair runs a global repair of all shards present on disk. See RepairShard

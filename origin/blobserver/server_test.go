@@ -161,8 +161,8 @@ func TestIncorrectNodeErrors(t *testing.T) {
 			"GetBlob",
 			func(c blobclient.Client) error { _, err := c.GetBlob(d); return err },
 		}, {
-			"PushBlob",
-			func(c blobclient.Client) error { return c.PushBlob(d, bytes.NewBufferString("blah")) },
+			"TransferBlob",
+			func(c blobclient.Client) error { return c.TransferBlob(d, bytes.NewBufferString("blah"), 4) },
 		}, {
 			"GetMetaInfo",
 			func(c blobclient.Client) error { _, err := c.GetMetaInfo(namespace, d); return err },
@@ -172,7 +172,7 @@ func TestIncorrectNodeErrors(t *testing.T) {
 		}, {
 			"UploadBlob",
 			func(c blobclient.Client) error {
-				return c.UploadBlob(namespace, d, bytes.NewBufferString("blah"), false)
+				return c.UploadBlob(namespace, d, bytes.NewBufferString("blah"), 4, false)
 			},
 		},
 	}
@@ -291,7 +291,8 @@ func TestUploadBlobReplicatesBlob(t *testing.T) {
 
 	d, blob := computeBlobForHosts(config, master1, master2)
 
-	err := cp.Provide(master1).UploadBlob(namespace, d, bytes.NewReader(blob), false)
+	err := cp.Provide(master1).UploadBlob(
+		namespace, d, bytes.NewReader(blob), int64(len(blob)), false)
 	require.NoError(err)
 
 	for _, master := range []string{master1, master2} {
@@ -314,7 +315,8 @@ func TestUploadBlobResilientToReplicationFailure(t *testing.T) {
 	// despite this.
 	d, blob := computeBlobForHosts(config, master1, master2)
 
-	err := cp.Provide(master1).UploadBlob(namespace, d, bytes.NewReader(blob), false)
+	err := cp.Provide(master1).UploadBlob(
+		namespace, d, bytes.NewReader(blob), int64(len(blob)), false)
 	require.NoError(err)
 
 	ensureHasBlob(t, cp.Provide(master1), d, blob)
@@ -340,41 +342,13 @@ func TestUploadBlobThroughUploadsToStorageBackendAndReplicates(t *testing.T) {
 
 	mockBackendClient.EXPECT().Upload(d.Hex(), fileio.MatchReader(blob)).Return(nil)
 
-	err := cp.Provide(master1).UploadBlob(namespace, d, bytes.NewReader(blob), true)
+	err := cp.Provide(master1).UploadBlob(
+		namespace, d, bytes.NewReader(blob), int64(len(blob)), true)
 	require.NoError(err)
 
 	for _, master := range []string{master1, master2} {
 		ensureHasBlob(t, cp.Provide(master), d, blob)
 	}
-}
-
-func TestUploadBlobThroughCachedBlobStillUploadedToStorageBackend(t *testing.T) {
-	require := require.New(t)
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	config := configFixture()
-	cp := newTestClientProvider()
-	mockBackendClient := mockbackend.NewMockClient(ctrl)
-
-	for _, master := range []string{master1, master2} {
-		s := newTestServer(master, config, cp)
-		defer s.cleanup()
-		s.backendManager.Register(namespace, mockBackendClient)
-	}
-
-	d, blob := computeBlobForHosts(config, master1, master2)
-
-	mockBackendClient.EXPECT().Upload(d.Hex(), fileio.MatchReader(blob)).Return(nil).Times(2)
-
-	err := cp.Provide(master1).UploadBlob(namespace, d, bytes.NewReader(blob), true)
-	require.NoError(err)
-
-	// Since we don't return error on backend upload, a second upload-through
-	// operation should re-upload the blob to storage backend.
-	err = cp.Provide(master1).UploadBlob(namespace, d, bytes.NewReader(blob), true)
-	require.NoError(err)
 }
 
 func TestUploadBlobThroughDoesNotCommitBlobIfBackendUploadFails(t *testing.T) {
@@ -394,7 +368,8 @@ func TestUploadBlobThroughDoesNotCommitBlobIfBackendUploadFails(t *testing.T) {
 
 	mockBackendClient.EXPECT().Upload(d.Hex(), fileio.MatchReader(blob)).Return(errors.New("some error"))
 
-	err := cp.Provide(master1).UploadBlob(namespace, d, bytes.NewReader(blob), true)
+	err := cp.Provide(master1).UploadBlob(
+		namespace, d, bytes.NewReader(blob), int64(len(blob)), true)
 	require.Error(err)
 
 	ok, err := cp.Provide(master1).CheckBlob(d)
@@ -402,7 +377,7 @@ func TestUploadBlobThroughDoesNotCommitBlobIfBackendUploadFails(t *testing.T) {
 	require.False(ok)
 }
 
-func TestPushBlob(t *testing.T) {
+func TestTransferBlob(t *testing.T) {
 	require := require.New(t)
 
 	cp := newTestClientProvider()
@@ -412,7 +387,7 @@ func TestPushBlob(t *testing.T) {
 
 	d, blob := image.DigestWithBlobFixture()
 
-	err := cp.Provide(master1).PushBlob(d, bytes.NewReader(blob))
+	err := cp.Provide(master1).TransferBlob(d, bytes.NewReader(blob), int64(len(blob)))
 	require.NoError(err)
 	ensureHasBlob(t, cp.Provide(master1), d, blob)
 
@@ -421,7 +396,7 @@ func TestPushBlob(t *testing.T) {
 	require.NoError(err)
 
 	// Pushing again should be a no-op.
-	err = cp.Provide(master1).PushBlob(d, bytes.NewReader(blob))
+	err = cp.Provide(master1).TransferBlob(d, bytes.NewReader(blob), int64(len(blob)))
 	require.NoError(err)
 	ensureHasBlob(t, cp.Provide(master1), d, blob)
 }
@@ -436,7 +411,7 @@ func TestOverwriteMetainfo(t *testing.T) {
 
 	d, blob := image.DigestWithBlobFixture()
 
-	err := cp.Provide(master1).PushBlob(d, bytes.NewReader(blob))
+	err := cp.Provide(master1).TransferBlob(d, bytes.NewReader(blob), int64(len(blob)))
 	require.NoError(err)
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)

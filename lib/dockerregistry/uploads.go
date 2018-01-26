@@ -190,11 +190,15 @@ func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) error {
 	if err := u.store.MoveUploadFileToCache(srcuuid, destsha); err != nil {
 		return fmt.Errorf("move upload file to cache: %s", err)
 	}
+	info, err := u.store.GetCacheFileStat(destsha)
+	if err != nil {
+		return fmt.Errorf("cache stat: %s", err)
+	}
 	f, err := u.store.GetCacheFileReader(destsha)
 	if err != nil {
 		return fmt.Errorf("get cache file: %s", err)
 	}
-	if err := u.transferer.Upload(destsha, f); err != nil {
+	if err := u.transferer.Upload(destsha, f, info.Size()); err != nil {
 		return fmt.Errorf("upload: %s", err)
 	}
 	return nil
@@ -227,11 +231,15 @@ func (u *Uploads) putBlobData(fileName string, content []byte) error {
 		}
 		return fmt.Errorf("move upload file to cache: %s", err)
 	}
+	info, err := u.store.GetCacheFileStat(fileName)
+	if err != nil {
+		return fmt.Errorf("cache stat: %s", err)
+	}
 	f, err := u.store.GetCacheFileReader(fileName)
 	if err != nil {
 		return fmt.Errorf("get cache file: %s", err)
 	}
-	if err := u.transferer.Upload(fileName, f); err != nil {
+	if err := u.transferer.Upload(fileName, f, info.Size()); err != nil {
 		return fmt.Errorf("upload: %s", err)
 	}
 	return nil

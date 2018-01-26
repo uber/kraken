@@ -56,9 +56,9 @@ func (t *OriginClusterTransferer) Download(name string) (store.FileReader, error
 }
 
 // Upload uploads blob to the origin cluster.
-func (t *OriginClusterTransferer) Upload(name string, blob store.FileReader) error {
+func (t *OriginClusterTransferer) Upload(name string, blob store.FileReader, size int64) error {
 	d := image.NewSHA256DigestFromHex(name)
-	return t.originCluster.UploadBlob("TODO", d, blob)
+	return t.originCluster.UploadBlob("TODO", d, blob, size)
 }
 
 // GetManifest gets and saves manifest given addr, repo and tag

@@ -63,11 +63,15 @@ func configMaxReplicaFixture() Config {
 // the local addresses they are running on, such that Provide("dummy-origin")
 // can resolve a real address.
 type testClientProvider struct {
+	chunkSize      uint64
 	addrByHostname map[string]string
 }
 
 func newTestClientProvider() *testClientProvider {
-	return &testClientProvider{make(map[string]string)}
+	return &testClientProvider{
+		chunkSize:      16,
+		addrByHostname: make(map[string]string),
+	}
 }
 
 func (p *testClientProvider) register(host string, addr string) {
@@ -79,7 +83,9 @@ func (p *testClientProvider) Provide(host string) blobclient.Client {
 	if !ok {
 		log.Panicf("host %q not found", host)
 	}
-	return blobclient.New(addr)
+	return blobclient.NewWithConfig(addr, blobclient.Config{
+		ChunkSize: datasize.ByteSize(p.chunkSize),
+	})
 }
 
 func startServer(

@@ -138,18 +138,6 @@ func (mr *MockClientMockRecorder) OverwriteMetaInfo(arg0, arg1 interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OverwriteMetaInfo", reflect.TypeOf((*MockClient)(nil).OverwriteMetaInfo), arg0, arg1)
 }
 
-// PushBlob mocks base method
-func (m *MockClient) PushBlob(arg0 image.Digest, arg1 io.Reader) error {
-	ret := m.ctrl.Call(m, "PushBlob", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// PushBlob indicates an expected call of PushBlob
-func (mr *MockClientMockRecorder) PushBlob(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PushBlob", reflect.TypeOf((*MockClient)(nil).PushBlob), arg0, arg1)
-}
-
 // Repair mocks base method
 func (m *MockClient) Repair() (io.ReadCloser, error) {
 	ret := m.ctrl.Call(m, "Repair")
@@ -189,16 +177,28 @@ func (mr *MockClientMockRecorder) RepairShard(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RepairShard", reflect.TypeOf((*MockClient)(nil).RepairShard), arg0)
 }
 
+// TransferBlob mocks base method
+func (m *MockClient) TransferBlob(arg0 image.Digest, arg1 io.Reader, arg2 int64) error {
+	ret := m.ctrl.Call(m, "TransferBlob", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// TransferBlob indicates an expected call of TransferBlob
+func (mr *MockClientMockRecorder) TransferBlob(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TransferBlob", reflect.TypeOf((*MockClient)(nil).TransferBlob), arg0, arg1, arg2)
+}
+
 // UploadBlob mocks base method
-func (m *MockClient) UploadBlob(arg0 string, arg1 image.Digest, arg2 io.Reader, arg3 bool) error {
-	ret := m.ctrl.Call(m, "UploadBlob", arg0, arg1, arg2, arg3)
+func (m *MockClient) UploadBlob(arg0 string, arg1 image.Digest, arg2 io.Reader, arg3 int64, arg4 bool) error {
+	ret := m.ctrl.Call(m, "UploadBlob", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UploadBlob indicates an expected call of UploadBlob
-func (mr *MockClientMockRecorder) UploadBlob(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClient)(nil).UploadBlob), arg0, arg1, arg2, arg3)
+func (mr *MockClientMockRecorder) UploadBlob(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClient)(nil).UploadBlob), arg0, arg1, arg2, arg3, arg4)
 }
 
 // MockProvider is a mock of Provider interface
@@ -311,27 +311,27 @@ func (mr *MockClusterClientMockRecorder) Owners(arg0 interface{}) *gomock.Call {
 }
 
 // UploadBlob mocks base method
-func (m *MockClusterClient) UploadBlob(arg0 string, arg1 image.Digest, arg2 io.Reader) error {
-	ret := m.ctrl.Call(m, "UploadBlob", arg0, arg1, arg2)
+func (m *MockClusterClient) UploadBlob(arg0 string, arg1 image.Digest, arg2 io.Reader, arg3 int64) error {
+	ret := m.ctrl.Call(m, "UploadBlob", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UploadBlob indicates an expected call of UploadBlob
-func (mr *MockClusterClientMockRecorder) UploadBlob(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClusterClient)(nil).UploadBlob), arg0, arg1, arg2)
+func (mr *MockClusterClientMockRecorder) UploadBlob(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClusterClient)(nil).UploadBlob), arg0, arg1, arg2, arg3)
 }
 
 // UploadBlobThrough mocks base method
-func (m *MockClusterClient) UploadBlobThrough(arg0 string, arg1 image.Digest, arg2 io.Reader) error {
-	ret := m.ctrl.Call(m, "UploadBlobThrough", arg0, arg1, arg2)
+func (m *MockClusterClient) UploadBlobThrough(arg0 string, arg1 image.Digest, arg2 io.Reader, arg3 int64) error {
+	ret := m.ctrl.Call(m, "UploadBlobThrough", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UploadBlobThrough indicates an expected call of UploadBlobThrough
-func (mr *MockClusterClientMockRecorder) UploadBlobThrough(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlobThrough", reflect.TypeOf((*MockClusterClient)(nil).UploadBlobThrough), arg0, arg1, arg2)
+func (mr *MockClusterClientMockRecorder) UploadBlobThrough(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlobThrough", reflect.TypeOf((*MockClusterClient)(nil).UploadBlobThrough), arg0, arg1, arg2, arg3)
 }
 
 // MockClientResolver is a mock of ClientResolver interface
