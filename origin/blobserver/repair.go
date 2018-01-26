@@ -242,16 +242,7 @@ func (r *repairer) replicateDigest(d image.Digest, hosts stringset.Set) (replica
 		client := r.clientProvider.Provide(h)
 		err := netutil.WithRetry(
 			r.config.Repair.MaxRetries, r.config.Repair.RetryDelay, r.config.Repair.MaxRetryDelay,
-			func() error {
-				f, err := r.fileStore.GetCacheFileReader(d.Hex())
-				if err != nil {
-					return fmt.Errorf("get cache file: %s", err)
-				}
-				if err := client.PushBlob(d, f); err != nil {
-					return fmt.Errorf("push blob: %s", err)
-				}
-				return nil
-			})
+			func() error { return transferBlob(r.fileStore, d, client) })
 		if err != nil {
 			replicated = false
 			r.messages <- replicateDigestErrorf(d, "failed to replicate to host %q: %s", h, err)

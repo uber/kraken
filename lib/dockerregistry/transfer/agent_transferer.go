@@ -42,7 +42,7 @@ func (t *AgentTransferer) Download(name string) (store.FileReader, error) {
 }
 
 // Upload uploads blobs to a torrent network
-func (t *AgentTransferer) Upload(name string, blob store.FileReader) error {
+func (t *AgentTransferer) Upload(name string, blob store.FileReader, size int64) error {
 	return errors.New("unsupported operation")
 }
 

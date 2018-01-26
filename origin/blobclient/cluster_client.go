@@ -59,8 +59,8 @@ func (r *clientResolver) Resolve(d image.Digest) ([]Client, error) {
 // ClusterClient defines a top-level origin cluster client which handles blob
 // location resolution and retries.
 type ClusterClient interface {
-	UploadBlob(namespace string, d image.Digest, blob io.Reader) error
-	UploadBlobThrough(namespace string, d image.Digest, blob io.Reader) error
+	UploadBlob(namespace string, d image.Digest, blob io.Reader, size int64) error
+	UploadBlobThrough(namespace string, d image.Digest, blob io.Reader, size int64) error
 	GetMetaInfo(namespace string, d image.Digest) (*torlib.MetaInfo, error)
 	OverwriteMetaInfo(d image.Digest, pieceLength int64) error
 	DownloadBlob(d image.Digest) (io.ReadCloser, error)
@@ -99,8 +99,10 @@ func NewClusterClient(r ClientResolver, opts ...ClusterClientOption) ClusterClie
 //
 // NOTE: Because the blob is supplied as the body of an HTTP request, if the
 // underlying value of blob implements io.Closer, it will be closed.
-func (c *clusterClient) UploadBlob(namespace string, d image.Digest, blob io.Reader) error {
-	return c.uploadBlob(namespace, d, blob, false)
+func (c *clusterClient) UploadBlob(
+	namespace string, d image.Digest, blob io.Reader, size int64) error {
+
+	return c.uploadBlob(namespace, d, blob, size, false)
 }
 
 // UploadBlob uploads blob to origin cluster and storage backend. See
@@ -108,12 +110,14 @@ func (c *clusterClient) UploadBlob(namespace string, d image.Digest, blob io.Rea
 //
 // NOTE: Because the blob is supplied as the body of an HTTP request, if the
 // underlying value of blob implements io.Closer, it will be closed.
-func (c *clusterClient) UploadBlobThrough(namespace string, d image.Digest, blob io.Reader) error {
-	return c.uploadBlob(namespace, d, blob, true)
+func (c *clusterClient) UploadBlobThrough(
+	namespace string, d image.Digest, blob io.Reader, size int64) error {
+
+	return c.uploadBlob(namespace, d, blob, size, true)
 }
 
 func (c *clusterClient) uploadBlob(
-	namespace string, d image.Digest, blob io.Reader, through bool) (err error) {
+	namespace string, d image.Digest, blob io.Reader, size int64, through bool) (err error) {
 
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
@@ -122,7 +126,7 @@ func (c *clusterClient) uploadBlob(
 	// Shuffle clients to balance load.
 	shuffle(clients)
 	for _, client := range clients {
-		err = client.UploadBlob(namespace, d, blob, through)
+		err = client.UploadBlob(namespace, d, blob, size, through)
 		if _, ok := err.(httputil.NetworkError); ok {
 			continue
 		}
