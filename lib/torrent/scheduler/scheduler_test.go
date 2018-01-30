@@ -330,7 +330,7 @@ func TestNetworkEvents(t *testing.T) {
 		networkevent.AddPendingConnEvent(h, sid, lid),
 		networkevent.AddActiveConnEvent(h, sid, lid),
 		networkevent.DropActiveConnEvent(h, sid, lid),
-		networkevent.BlacklistConnEvent(h, sid, lid, config.ConnState.InitialBlacklistExpiration),
+		networkevent.BlacklistConnEvent(h, sid, lid, config.ConnState.BlacklistDuration),
 	}
 
 	leecherExpected := []*networkevent.Event{
@@ -340,7 +340,7 @@ func TestNetworkEvents(t *testing.T) {
 		networkevent.ReceivePieceEvent(h, lid, sid, 0),
 		networkevent.TorrentCompleteEvent(h, lid),
 		networkevent.DropActiveConnEvent(h, lid, sid),
-		networkevent.BlacklistConnEvent(h, lid, sid, config.ConnState.InitialBlacklistExpiration),
+		networkevent.BlacklistConnEvent(h, lid, sid, config.ConnState.BlacklistDuration),
 	}
 
 	require.Equal(

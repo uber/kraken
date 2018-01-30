@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"testing"
-	"time"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
@@ -13,93 +12,6 @@ import (
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
-
-func TestBlacklistBackoff(t *testing.T) {
-	config := connStateConfigFixture()
-	config.MaxOpenConnectionsPerTorrent = 1
-	config.InitialBlacklistExpiration = 30 * time.Second
-	config.BlacklistExpirationBackoff = 2
-	config.MaxBlacklistExpiration = 5 * time.Minute
-
-	for _, test := range []struct {
-		description string
-		failures    int
-		expected    time.Duration
-	}{
-		{"first failure", 1, 30 * time.Second},
-		{"second failure", 2, time.Minute},
-		{"third failure", 3, 2 * time.Minute},
-		{"fourth failure", 4, 4 * time.Minute},
-		{"maxes out after fourth failure", 10, 5 * time.Minute},
-	} {
-		t.Run(test.description, func(t *testing.T) {
-			require := require.New(t)
-
-			clk := clock.NewMock()
-			clk.Set(time.Now())
-
-			s := newConnState(torlib.PeerIDFixture(), config, clk, networkevent.NewTestProducer())
-
-			peerID := torlib.PeerIDFixture()
-			infoHash := torlib.InfoHashFixture()
-
-			var remaining time.Duration
-			for i := 0; i < test.failures; i++ {
-				require.NoError(s.Blacklist(peerID, infoHash))
-
-				err := s.AddPending(peerID, infoHash)
-				require.Error(err)
-				blacklistErr, ok := err.(blacklistError)
-				require.True(ok)
-				remaining = blacklistErr.remaining
-
-				clk.Add(remaining)
-
-				// Peer/hash should no longer be blacklisted.
-				require.NoError(s.AddPending(peerID, infoHash))
-
-				s.DeletePending(peerID, infoHash)
-			}
-
-			// Checks the remaining backoff of the final iteration.
-			require.Equal(test.expected, remaining)
-		})
-	}
-}
-
-func TestDeleteStaleBlacklistEntries(t *testing.T) {
-	require := require.New(t)
-
-	config := connStateConfigFixture()
-
-	clk := clock.NewMock()
-	clk.Set(time.Now())
-
-	s := newConnState(torlib.PeerIDFixture(), config, clk, networkevent.NewTestProducer())
-
-	peerID := torlib.PeerIDFixture()
-	infoHash := torlib.InfoHashFixture()
-
-	require.NoError(s.Blacklist(peerID, infoHash))
-
-	err := s.AddPending(peerID, infoHash)
-	require.Error(err)
-	require.Equal(config.InitialBlacklistExpiration, err.(blacklistError).remaining)
-
-	// Fast-forward to when connection has expired from blacklist.
-	clk.Add(config.InitialBlacklistExpiration)
-
-	clk.Add(config.ExpiredBlacklistEntryTTL)
-
-	s.DeleteStaleBlacklistEntries()
-
-	require.NoError(s.Blacklist(peerID, infoHash))
-
-	// Backoff should have been reset.
-	err = s.AddPending(peerID, infoHash)
-	require.Error(err)
-	require.Equal(config.InitialBlacklistExpiration, err.(blacklistError).remaining)
-}
 
 func transitionToActive(t *testing.T, s *connState, c *conn.Conn) {
 	require.NoError(t, s.AddPending(c.PeerID(), c.InfoHash()))
@@ -162,6 +74,27 @@ func TestAddingActiveConnsNeverRedistributesBandwidthBelowMin(t *testing.T) {
 	}
 }
 
+func TestConnStateBlacklist(t *testing.T) {
+	require := require.New(t)
+
+	config := connStateConfigFixture()
+	clk := clock.NewMock()
+
+	s := newConnState(torlib.PeerIDFixture(), config, clk, networkevent.NewTestProducer())
+
+	pid := torlib.PeerIDFixture()
+	h := torlib.InfoHashFixture()
+
+	require.NoError(s.Blacklist(pid, h))
+	require.True(s.Blacklisted(pid, h))
+	require.Error(s.Blacklist(pid, h))
+
+	clk.Add(config.BlacklistDuration + 1)
+
+	require.False(s.Blacklisted(pid, h))
+	require.NoError(s.Blacklist(pid, h))
+}
+
 func TestConnStateBlacklistSnapshot(t *testing.T) {
 	require := require.New(t)
 
@@ -173,9 +106,8 @@ func TestConnStateBlacklistSnapshot(t *testing.T) {
 	pid := torlib.PeerIDFixture()
 	h := torlib.InfoHashFixture()
 
-	require.NoError(s.AddPending(pid, h))
 	require.NoError(s.Blacklist(pid, h))
 
-	expected := []BlacklistedConn{{pid, h, config.InitialBlacklistExpiration}}
+	expected := []BlacklistedConn{{pid, h, config.BlacklistDuration}}
 	require.Equal(expected, s.BlacklistSnapshot())
 }

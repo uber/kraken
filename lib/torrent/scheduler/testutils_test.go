@@ -55,10 +55,7 @@ func init() {
 func connStateConfigFixture() ConnStateConfig {
 	return ConnStateConfig{
 		MaxOpenConnectionsPerTorrent: 20,
-		InitialBlacklistExpiration:   250 * time.Millisecond,
-		BlacklistExpirationBackoff:   1,
-		MaxBlacklistExpiration:       1 * time.Second,
-		ExpiredBlacklistEntryTTL:     5 * time.Minute,
+		BlacklistDuration:            time.Second,
 	}.applyDefaults()
 }
 
@@ -68,16 +65,15 @@ func dispatcherConfigFixture() DispatcherConfig {
 
 func configFixture() Config {
 	return Config{
-		AnnounceInterval:         500 * time.Millisecond,
-		SeederTTI:                10 * time.Second,
-		LeecherTTI:               time.Minute,
-		PreemptionInterval:       500 * time.Millisecond,
-		ConnTTI:                  10 * time.Second,
-		ConnTTL:                  5 * time.Minute,
-		BlacklistCleanupInterval: time.Minute,
-		ConnState:                connStateConfigFixture(),
-		Conn:                     conn.ConfigFixture(),
-		Dispatcher:               dispatcherConfigFixture(),
+		AnnounceInterval:   500 * time.Millisecond,
+		SeederTTI:          10 * time.Second,
+		LeecherTTI:         time.Minute,
+		PreemptionInterval: 500 * time.Millisecond,
+		ConnTTI:            10 * time.Second,
+		ConnTTL:            5 * time.Minute,
+		ConnState:          connStateConfigFixture(),
+		Conn:               conn.ConfigFixture(),
+		Dispatcher:         dispatcherConfigFixture(),
 	}.applyDefaults()
 }
 

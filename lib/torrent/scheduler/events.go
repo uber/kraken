@@ -80,23 +80,7 @@ type closedConnEvent struct {
 func (e closedConnEvent) Apply(s *Scheduler) {
 	s.connState.DeleteActive(e.c)
 	if err := s.connState.Blacklist(e.c.PeerID(), e.c.InfoHash()); err != nil {
-		s.log("conn", e.c).Infof("Error blacklisting active conn: %s", err)
-	}
-}
-
-// failedHandshakeEvent occurs when a pending connection fails to handshake.
-type failedHandshakeEvent struct {
-	peerID   torlib.PeerID
-	infoHash torlib.InfoHash
-}
-
-// Apply ejects the peer/hash of the failed handshake from the Scheduler's
-// pending connections.
-func (e failedHandshakeEvent) Apply(s *Scheduler) {
-	s.connState.DeletePending(e.peerID, e.infoHash)
-	if err := s.connState.Blacklist(e.peerID, e.infoHash); err != nil {
-		s.log("peer", e.peerID, "hash", e.infoHash).Infof(
-			"Error blacklisting pending conn: %s", err)
+		s.log("conn", e.c).Infof("Cannot blacklist active conn: %s", err)
 	}
 }
 
@@ -127,11 +111,22 @@ func (e incomingHandshakeEvent) Apply(s *Scheduler) {
 			s.log("peer", e.pc.PeerID(), "hash", e.pc.InfoHash()).Infof(
 				"Error establishing conn: %s", err)
 			e.pc.Close()
-			s.eventLoop.Send(failedHandshakeEvent{e.pc.PeerID(), e.pc.InfoHash()})
+			s.eventLoop.Send(failedIncomingHandshakeEvent{e.pc.PeerID(), e.pc.InfoHash()})
 			return
 		}
 		s.eventLoop.Send(incomingConnEvent{c, e.pc.Bitfield(), info})
 	}()
+}
+
+// failedIncomingHandshakeEvent occurs when a pending incoming connection fails
+// to handshake.
+type failedIncomingHandshakeEvent struct {
+	peerID   torlib.PeerID
+	infoHash torlib.InfoHash
+}
+
+func (e failedIncomingHandshakeEvent) Apply(s *Scheduler) {
+	s.connState.DeletePending(e.peerID, e.infoHash)
 }
 
 // incomingConnEvent occurs when a pending incoming connection finishes handshaking.
@@ -149,6 +144,20 @@ func (e incomingConnEvent) Apply(s *Scheduler) {
 		return
 	}
 	s.log("conn", e.c).Infof("Added incoming conn with %d%% downloaded", e.info.PercentDownloaded())
+}
+
+// failedOutgoingHandshakeEvent occurs when a pending incoming connection fails
+// to handshake.
+type failedOutgoingHandshakeEvent struct {
+	peerID   torlib.PeerID
+	infoHash torlib.InfoHash
+}
+
+func (e failedOutgoingHandshakeEvent) Apply(s *Scheduler) {
+	s.connState.DeletePending(e.peerID, e.infoHash)
+	if err := s.connState.Blacklist(e.peerID, e.infoHash); err != nil {
+		s.log("peer", e.peerID, "hash", e.infoHash).Infof("Cannot blacklist pending conn: %s", err)
+	}
 }
 
 // outgoingConnEvent occurs when a pending outgoing connection finishes handshaking.
@@ -223,13 +232,13 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 			// Tracker may return our own peer.
 			continue
 		}
+		if s.connState.Blacklisted(peerID, e.infoHash) {
+			continue
+		}
 		if err := s.connState.AddPending(peerID, e.infoHash); err != nil {
 			if err == errTorrentAtCapacity {
-				s.log("hash", e.infoHash).Info(
-					"Cannot open any more connections, torrent is at capacity")
 				break
 			}
-			s.log("peer", peerID, "hash", e.infoHash).Infof("Skipping peer from announce: %s", err)
 			continue
 		}
 		go func() {
@@ -239,7 +248,7 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 			if err != nil {
 				s.log("peer", peerID, "hash", e.infoHash, "addr", addr).Infof(
 					"Failed handshake: %s", err)
-				s.eventLoop.Send(failedHandshakeEvent{peerID, e.infoHash})
+				s.eventLoop.Send(failedOutgoingHandshakeEvent{peerID, e.infoHash})
 				return
 			}
 			s.eventLoop.Send(outgoingConnEvent{c, bitfield, info})
@@ -286,6 +295,7 @@ type completedDispatcherEvent struct {
 func (e completedDispatcherEvent) Apply(s *Scheduler) {
 	infoHash := e.dispatcher.Torrent.InfoHash()
 
+	s.connState.ClearBlacklist(infoHash)
 	s.announceQueue.Done(infoHash)
 	ctrl, ok := s.torrentControls[infoHash]
 	if !ok {
@@ -359,14 +369,6 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 			}
 		}
 	}
-}
-
-// cleanupBlacklistEvent occurs periodically to allow the Scheduler to cleanup
-// stale blacklist entries.
-type cleanupBlacklistEvent struct{}
-
-func (e cleanupBlacklistEvent) Apply(s *Scheduler) {
-	s.connState.DeleteStaleBlacklistEntries()
 }
 
 // emitStatsEvent occurs periodically to emit Scheduler stats.

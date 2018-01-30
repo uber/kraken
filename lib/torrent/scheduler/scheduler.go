@@ -68,10 +68,9 @@ type Scheduler struct {
 
 	listener net.Listener
 
-	announceTick         <-chan time.Time
-	preemptionTick       <-chan time.Time
-	blacklistCleanupTick <-chan time.Time
-	emitStatsTick        <-chan time.Time
+	announceTick   <-chan time.Time
+	preemptionTick <-chan time.Time
+	emitStatsTick  <-chan time.Time
 
 	announceClient announceclient.Client
 
@@ -134,10 +133,6 @@ func New(
 	if !config.DisablePreemption {
 		preemptionTick = overrides.clock.Tick(config.PreemptionInterval)
 	}
-	var blacklistCleanupTick <-chan time.Time
-	if !config.ConnState.DisableBlacklist {
-		blacklistCleanupTick = overrides.clock.Tick(config.BlacklistCleanupInterval)
-	}
 
 	log.Infof("Scheduler will announce as peer %s on addr %s:%d",
 		pctx.PeerID, pctx.IP, pctx.Port)
@@ -165,18 +160,17 @@ func New(
 			NetworkEventProducer: networkEvents,
 			Stats:                stats,
 		},
-		torrentControls:      make(map[torlib.InfoHash]*torrentControl),
-		connState:            connState,
-		announceQueue:        announceQueue,
-		eventLoop:            overrides.eventLoop,
-		listener:             l,
-		announceTick:         overrides.clock.Tick(config.AnnounceInterval),
-		preemptionTick:       preemptionTick,
-		blacklistCleanupTick: blacklistCleanupTick,
-		emitStatsTick:        overrides.clock.Tick(config.EmitStatsInterval),
-		announceClient:       announceClient,
-		networkEvents:        networkEvents,
-		done:                 done,
+		torrentControls: make(map[torlib.InfoHash]*torrentControl),
+		connState:       connState,
+		announceQueue:   announceQueue,
+		eventLoop:       overrides.eventLoop,
+		listener:        l,
+		announceTick:    overrides.clock.Tick(config.AnnounceInterval),
+		preemptionTick:  preemptionTick,
+		emitStatsTick:   overrides.clock.Tick(config.EmitStatsInterval),
+		announceClient:  announceClient,
+		networkEvents:   networkEvents,
+		done:            done,
 	}
 
 	if config.DisablePreemption {
@@ -320,8 +314,6 @@ func (s *Scheduler) tickerLoop() {
 			s.eventLoop.Send(announceTickEvent{})
 		case <-s.preemptionTick:
 			s.eventLoop.Send(preemptionTickEvent{})
-		case <-s.blacklistCleanupTick:
-			s.eventLoop.Send(cleanupBlacklistEvent{})
 		case <-s.emitStatsTick:
 			s.eventLoop.Send(emitStatsEvent{})
 		case <-s.done:
