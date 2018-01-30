@@ -3,7 +3,6 @@ package scheduler
 import (
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/andres-erbsen/clock"
@@ -33,7 +32,6 @@ type connKey struct {
 
 type blacklistEntry struct {
 	expiration time.Time
-	failures   int
 }
 
 func (e *blacklistEntry) Blacklisted(now time.Time) bool {
@@ -91,46 +89,34 @@ func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) er
 	}
 
 	k := connKey{peerID, infoHash}
-	e, ok := s.blacklist[k]
-	if ok && e.Blacklisted(s.clock.Now()) {
+	if e, ok := s.blacklist[k]; ok && e.Blacklisted(s.clock.Now()) {
 		return errors.New("conn is already blacklisted")
 	}
-	if !ok {
-		e = &blacklistEntry{}
-		s.blacklist[k] = e
-	}
-
-	backoff := math.Ceil(math.Pow(s.config.BlacklistExpirationBackoff, float64(e.failures))) - 1
-	d := s.config.InitialBlacklistExpiration
-	d += d * time.Duration(backoff)
-
-	if d > s.config.MaxBlacklistExpiration {
-		d = s.config.MaxBlacklistExpiration
-	} else if d < s.config.InitialBlacklistExpiration {
-		s.log().Errorf("Invalid backoff calculation: got %.2f seconds, must be at least %.2f seconds",
-			d.Seconds(), s.config.InitialBlacklistExpiration.Seconds())
-		d = s.config.InitialBlacklistExpiration
-	}
-
-	e.expiration = s.clock.Now().Add(d)
-	e.failures++
+	s.blacklist[k] = &blacklistEntry{s.clock.Now().Add(s.config.BlacklistDuration)}
 
 	s.log("peer", peerID, "hash", infoHash).Infof(
-		"Conn blacklisted for %.1f seconds after %d failures", d.Seconds(), e.failures)
+		"Connection blacklisted for %s", s.config.BlacklistDuration)
 	s.networkEvents.Produce(
-		networkevent.BlacklistConnEvent(infoHash, s.localPeerID, peerID, d))
+		networkevent.BlacklistConnEvent(infoHash, s.localPeerID, peerID, s.config.BlacklistDuration))
 
 	return nil
 }
 
-func (s *connState) AddPending(peerID torlib.PeerID, infoHash torlib.InfoHash) error {
-	k := connKey{peerID, infoHash}
-	if e, ok := s.blacklist[k]; ok {
-		now := s.clock.Now()
-		if e.Blacklisted(now) {
-			return blacklistError{remaining: e.Remaining(now)}
+func (s *connState) Blacklisted(peerID torlib.PeerID, infoHash torlib.InfoHash) bool {
+	e, ok := s.blacklist[connKey{peerID, infoHash}]
+	return ok && e.Blacklisted(s.clock.Now())
+}
+
+func (s *connState) ClearBlacklist(h torlib.InfoHash) {
+	for k := range s.blacklist {
+		if k.infoHash == h {
+			delete(s.blacklist, k)
 		}
 	}
+}
+
+func (s *connState) AddPending(peerID torlib.PeerID, infoHash torlib.InfoHash) error {
+	k := connKey{peerID, infoHash}
 	cap, ok := s.capacity[infoHash]
 	if !ok {
 		cap = s.config.MaxOpenConnectionsPerTorrent
@@ -217,14 +203,6 @@ func (s *connState) DeleteActive(c *conn.Conn) {
 		c.InfoHash(), s.localPeerID, c.PeerID()))
 
 	return
-}
-
-func (s *connState) DeleteStaleBlacklistEntries() {
-	for k, e := range s.blacklist {
-		if s.clock.Now().Sub(e.expiration) >= s.config.ExpiredBlacklistEntryTTL {
-			delete(s.blacklist, k)
-		}
-	}
 }
 
 func (s *connState) BlacklistSnapshot() []BlacklistedConn {

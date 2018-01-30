@@ -39,10 +39,6 @@ type Config struct {
 	// status of existing conns and determines whether to preempt them.
 	PreemptionInterval time.Duration `yaml:"preemption_interval"`
 
-	// BlacklistCleanupInterval is the interval expired blacklist entries which
-	// have surpassed their TTL are removed.
-	BlacklistCleanupInterval time.Duration `yaml:"blacklist_cleanup_interval"`
-
 	// EmitStatsInterval is the interval introspective stats are emitted from
 	// the Scheduler.
 	EmitStatsInterval time.Duration `yaml:"emit_stats_interval"`
@@ -85,9 +81,6 @@ func (c Config) applyDefaults() Config {
 	if c.PreemptionInterval == 0 {
 		c.PreemptionInterval = 30 * time.Second
 	}
-	if c.BlacklistCleanupInterval == 0 {
-		c.BlacklistCleanupInterval = 10 * time.Minute
-	}
 	if c.EmitStatsInterval == 0 {
 		c.EmitStatsInterval = 1 * time.Second
 	}
@@ -107,23 +100,8 @@ type ConnStateConfig struct {
 	// for testing purposes.
 	DisableBlacklist bool `yaml:"disable_blacklist"`
 
-	// InitialBlacklistExpiration is how long a connection will be blacklisted
-	// after its first close.
-	InitialBlacklistExpiration time.Duration `yaml:"init_blacklist_expire"`
-
-	// BlacklistExpirationBackoff is the power at which the blacklist expiration
-	// time exponentially rises for repeatedly blacklisted connections. Must be
-	// greater than or equal to 1.
-	BlacklistExpirationBackoff float64 `yaml:"blacklist_expire_backoff"`
-
-	// MaxBlacklistExpiration is the max duration the blacklist expiration backoff
-	// will rise to.
-	MaxBlacklistExpiration time.Duration `yaml:"max_blacklist_expiration"`
-
-	// ExpiredBlacklistEntryTTL is the duration an expired blacklist entry will
-	// exist before being deleted, essentially resetting its backoff. This is
-	// only necessary for ensuring unused memory is eventually reclaimed.
-	ExpiredBlacklistEntryTTL time.Duration `yaml:"expire_blacklist_ttl"`
+	// BlacklistDuration is the duration a connection will remain blacklisted.
+	BlacklistDuration time.Duration `yaml:"blacklist_duration"`
 
 	// MaxGlobalEgressBytesPerSec is the max number of piece payload bytes that
 	// can be uploaded across all connections per second.
@@ -138,17 +116,8 @@ func (c ConnStateConfig) applyDefaults() ConnStateConfig {
 	if c.MaxOpenConnectionsPerTorrent == 0 {
 		c.MaxOpenConnectionsPerTorrent = 10
 	}
-	if c.InitialBlacklistExpiration == 0 {
-		c.InitialBlacklistExpiration = time.Minute
-	}
-	if c.BlacklistExpirationBackoff == 0 {
-		c.BlacklistExpirationBackoff = 2
-	}
-	if c.MaxBlacklistExpiration == 0 {
-		c.MaxBlacklistExpiration = 30 * time.Minute
-	}
-	if c.ExpiredBlacklistEntryTTL == 0 {
-		c.ExpiredBlacklistEntryTTL = 6 * time.Hour
+	if c.BlacklistDuration == 0 {
+		c.BlacklistDuration = 30 * time.Second
 	}
 	if c.MaxGlobalEgressBytesPerSec == 0 {
 		c.MaxGlobalEgressBytesPerSec = 5 * memsize.GB
