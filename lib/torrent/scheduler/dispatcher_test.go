@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/willf/bitset"
+
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
@@ -75,10 +77,7 @@ func TestDispatcherDoesNotSendDuplicateInitialPieceRequests(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			var bitfield storage.Bitfield
-			for i := 0; i < torrent.NumPieces(); i++ {
-				bitfield = append(bitfield, true)
-			}
+			bitfield := bitset.New(uint(torrent.NumPieces())).Complement()
 			messages := newMockMessages()
 			p, err := d.addPeer(torlib.PeerIDFixture(), bitfield, messages)
 			require.NoError(err)
@@ -112,7 +111,7 @@ func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 	// p1 has both pieces and sends requests for both.
 	p1Messages := newMockMessages()
 	p1, err := d.addPeer(
-		torlib.PeerIDFixture(), []bool{true, true}, p1Messages)
+		torlib.PeerIDFixture(), storage.BitSetFixture(true, true), p1Messages)
 	require.NoError(err)
 	d.sendInitialPieceRequests(p1)
 	require.Equal(map[int]int{
@@ -123,7 +122,7 @@ func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 	// p2 has piece 0 and sends no piece requests.
 	p2Messages := newMockMessages()
 	p2, err := d.addPeer(
-		torlib.PeerIDFixture(), []bool{true, false}, p2Messages)
+		torlib.PeerIDFixture(), storage.BitSetFixture(true, false), p2Messages)
 	require.NoError(err)
 	d.sendInitialPieceRequests(p2)
 	require.Equal(map[int]int{}, p2Messages.numRequestsPerPiece())
@@ -131,7 +130,7 @@ func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 	// p3 has piece 1 and sends no piece requests.
 	p3Messages := newMockMessages()
 	p3, err := d.addPeer(
-		torlib.PeerIDFixture(), []bool{false, true}, p3Messages)
+		torlib.PeerIDFixture(), storage.BitSetFixture(false, true), p3Messages)
 	require.NoError(err)
 	d.sendInitialPieceRequests(p3)
 	require.Equal(map[int]int{}, p3Messages.numRequestsPerPiece())
@@ -170,7 +169,7 @@ func TestDispatcherSendErrorsMarksPieceRequestsUnsent(t *testing.T) {
 	d := f.init(torrent)
 
 	p1Messages := newMockMessages()
-	p1, err := d.addPeer(torlib.PeerIDFixture(), []bool{true}, p1Messages)
+	p1, err := d.addPeer(torlib.PeerIDFixture(), storage.BitSetFixture(true), p1Messages)
 	require.NoError(err)
 
 	p1Messages.Close()
@@ -181,7 +180,7 @@ func TestDispatcherSendErrorsMarksPieceRequestsUnsent(t *testing.T) {
 	require.Equal(map[int]int{}, p1Messages.numRequestsPerPiece())
 
 	p2Messages := newMockMessages()
-	p2, err := d.addPeer(torlib.PeerIDFixture(), []bool{true}, p2Messages)
+	p2, err := d.addPeer(torlib.PeerIDFixture(), storage.BitSetFixture(true), p2Messages)
 	require.NoError(err)
 
 	// Send should succeed since pending requests were marked unsent.

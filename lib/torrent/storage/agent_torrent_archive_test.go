@@ -29,7 +29,7 @@ func TestAgentTorrentArchiveStatBitfield(t *testing.T) {
 
 	info, err := archive.Stat(mi.Name())
 	require.NoError(err)
-	require.Equal(Bitfield{false, false, true, false}, info.Bitfield())
+	require.Equal(BitSetFixture(false, false, true, false), info.Bitfield())
 	require.Equal(int64(1), info.MaxPieceLength())
 }
 

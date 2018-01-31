@@ -5,18 +5,20 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/torlib"
+
 	"github.com/stretchr/testify/require"
+	"github.com/willf/bitset"
 )
 
 func TestTorrentInfoPercentDownloaded(t *testing.T) {
 	mi := torlib.CustomMetaInfoFixture(100, 25)
 	tests := []struct {
-		bitfield Bitfield
+		bitfield *bitset.BitSet
 		expected int
 	}{
-		{Bitfield{true, true, true, true}, 100},
-		{Bitfield{true, false, true, false}, 50},
-		{Bitfield{false, false, false, false}, 0},
+		{BitSetFixture(true, true, true, true), 100},
+		{BitSetFixture(true, false, true, false), 50},
+		{BitSetFixture(false, false, false, false), 0},
 	}
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("%d%%", test.expected), func(t *testing.T) {

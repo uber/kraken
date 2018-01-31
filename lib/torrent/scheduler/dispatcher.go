@@ -7,11 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/andres-erbsen/clock"
-	"github.com/uber-go/tally"
-	"go.uber.org/zap"
-	"golang.org/x/sync/syncmap"
-
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
@@ -23,6 +18,12 @@ import (
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/timeutil"
+
+	"github.com/andres-erbsen/clock"
+	"github.com/uber-go/tally"
+	"github.com/willf/bitset"
+	"go.uber.org/zap"
+	"golang.org/x/sync/syncmap"
 )
 
 var (
@@ -242,7 +243,7 @@ func (d *dispatcher) Empty() bool {
 
 // AddPeer registers a new peer with the dispatcher.
 func (d *dispatcher) AddPeer(
-	peerID torlib.PeerID, b storage.Bitfield, messages messages) error {
+	peerID torlib.PeerID, b *bitset.BitSet, messages messages) error {
 
 	p, err := d.addPeer(peerID, b, messages)
 	if err != nil {
@@ -256,7 +257,7 @@ func (d *dispatcher) AddPeer(
 // addPeer creates and inserts a new peer into the dispatcher. Split from AddPeer
 // with no goroutine side-effects for testing purposes.
 func (d *dispatcher) addPeer(
-	peerID torlib.PeerID, b storage.Bitfield, messages messages) (*peer, error) {
+	peerID torlib.PeerID, b *bitset.BitSet, messages messages) (*peer, error) {
 
 	p := &peer{
 		id:       peerID,
@@ -340,7 +341,7 @@ func (d *dispatcher) resendFailedPieceRequests() {
 				// Do not resend to the same peer for expired or invalid requests.
 				return true
 			}
-			if p.bitfield.Has(r.Piece) {
+			if p.bitfield.Has(uint(r.Piece)) {
 				if err := d.maybeSendPieceRequest(p, r.Piece); err == nil {
 					sent++
 					return false
@@ -371,7 +372,7 @@ func (d *dispatcher) sendInitialPieceRequests(p *peer) {
 	pieces := d.Torrent.MissingPieces()
 	randutil.ShuffleInts(pieces)
 	for _, i := range pieces {
-		if !p.bitfield.Has(i) {
+		if !p.bitfield.Has(uint(i)) {
 			continue
 		}
 		if err := d.maybeSendPieceRequest(p, i); err != nil {
@@ -427,7 +428,7 @@ func (d *dispatcher) handleAnnouncePiece(p *peer, msg *p2p.AnnouncePieceMessage)
 		return
 	}
 	i := int(msg.Index)
-	p.bitfield.Set(i, true)
+	p.bitfield.Set(uint(i), true)
 	d.maybeSendPieceRequest(p, i)
 }
 
@@ -466,7 +467,7 @@ func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 	p.touchLastPieceSent()
 
 	// Assume that the peer successfully received the piece.
-	p.bitfield.Set(i, true)
+	p.bitfield.Set(uint(i), true)
 }
 
 func (d *dispatcher) handlePiecePayload(

@@ -7,6 +7,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -325,7 +326,7 @@ func TestNetworkEvents(t *testing.T) {
 	waitForConnRemoved(t, leecher.scheduler, sid, h)
 
 	seederExpected := []*networkevent.Event{
-		networkevent.AddTorrentEvent(h, sid, []bool{true}, config.ConnState.MaxOpenConnectionsPerTorrent),
+		networkevent.AddTorrentEvent(h, sid, storage.BitSetFixture(true), config.ConnState.MaxOpenConnectionsPerTorrent),
 		networkevent.TorrentCompleteEvent(h, sid),
 		networkevent.AddPendingConnEvent(h, sid, lid),
 		networkevent.AddActiveConnEvent(h, sid, lid),
@@ -334,7 +335,7 @@ func TestNetworkEvents(t *testing.T) {
 	}
 
 	leecherExpected := []*networkevent.Event{
-		networkevent.AddTorrentEvent(h, lid, []bool{false}, config.ConnState.MaxOpenConnectionsPerTorrent),
+		networkevent.AddTorrentEvent(h, lid, storage.BitSetFixture(false), config.ConnState.MaxOpenConnectionsPerTorrent),
 		networkevent.AddPendingConnEvent(h, lid, sid),
 		networkevent.AddActiveConnEvent(h, lid, sid),
 		networkevent.ReceivePieceEvent(h, lid, sid, 0),

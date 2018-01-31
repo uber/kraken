@@ -1,61 +1,57 @@
 package scheduler
 
 import (
+	"bytes"
 	"sync"
 
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
+	"github.com/willf/bitset"
 )
 
 type syncBitfield struct {
 	sync.RWMutex
-	s           storage.Bitfield
-	numComplete int
+	b *bitset.BitSet
 }
 
-func newSyncBitfield(s []bool) *syncBitfield {
-	var numComplete int
-	t := make([]bool, len(s))
-	for i, v := range s {
-		if v {
-			numComplete++
-		}
-		t[i] = v
-	}
+func newSyncBitfield(b *bitset.BitSet) *syncBitfield {
+	c := bitset.New(b.Len())
+	b.Copy(c)
 	return &syncBitfield{
-		s:           t,
-		numComplete: numComplete,
+		b: c,
 	}
 }
 
-func (b *syncBitfield) Has(i int) bool {
-	b.RLock()
-	defer b.RUnlock()
+func (s *syncBitfield) Has(i uint) bool {
+	s.RLock()
+	defer s.RUnlock()
 
-	return b.s[i]
+	return s.b.Test(i)
 }
 
-func (b *syncBitfield) Set(i int, v bool) {
-	b.Lock()
-	defer b.Unlock()
+func (s *syncBitfield) Set(i uint, v bool) {
+	s.Lock()
+	defer s.Unlock()
 
-	if !b.s[i] && v { // false -> true
-		b.numComplete++
-	} else if b.s[i] && !v { // true -> false
-		b.numComplete--
+	s.b.SetTo(i, v)
+}
+
+func (s *syncBitfield) Complete() bool {
+	s.Lock()
+	defer s.Unlock()
+
+	return s.b.All()
+}
+
+func (s *syncBitfield) String() string {
+	s.RLock()
+	defer s.RUnlock()
+
+	var buf bytes.Buffer
+	for i := uint(0); i < (s.b.Len()); i++ {
+		if s.b.Test(i) {
+			buf.WriteString("1")
+		} else {
+			buf.WriteString("0")
+		}
 	}
-	b.s[i] = v
-}
-
-func (b *syncBitfield) Complete() bool {
-	b.Lock()
-	defer b.Unlock()
-
-	return b.numComplete == len(b.s)
-}
-
-func (b *syncBitfield) String() string {
-	b.RLock()
-	defer b.RUnlock()
-
-	return b.s.String()
+	return buf.String()
 }
