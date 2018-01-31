@@ -191,9 +191,9 @@ func New(
 
 // Reload transfers s into a new Scheduler with new config. After reloading, s
 // is unusable.
-func Reload(s *Scheduler, config Config) (*Scheduler, error) {
+func Reload(s *Scheduler, config Config, stats tally.Scope) (*Scheduler, error) {
 	s.Stop()
-	return New(config, s.torrentArchive, s.stats, s.pctx, s.announceClient, s.announceQueue,
+	return New(config, s.torrentArchive, stats, s.pctx, s.announceClient, s.announceQueue,
 		s.networkEvents)
 }
 

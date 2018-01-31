@@ -77,7 +77,7 @@ func (c *SchedulerClient) Reload(config scheduler.Config) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	s, err := scheduler.Reload(c.scheduler, config)
+	s, err := scheduler.Reload(c.scheduler, config, c.stats)
 	if err != nil {
 		// Totally unrecoverable error -- c.scheduler is now stopped and unusable,
 		// so let process die and restart with original config.
