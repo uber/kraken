@@ -14,6 +14,7 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 )
 
 func TestDownloadTorrentWithSeederAndLeecher(t *testing.T) {
@@ -409,7 +410,7 @@ func TestSchedulerReload(t *testing.T) {
 	download()
 
 	config.ConnTTL = 45 * time.Minute
-	s, err := Reload(leecher.scheduler, config)
+	s, err := Reload(leecher.scheduler, config, tally.NewTestScope("", nil))
 	require.NoError(err)
 	leecher.scheduler = s
 

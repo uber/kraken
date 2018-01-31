@@ -49,17 +49,12 @@ func main() {
 	zlog := log.ConfigureLogger(config.ZapLogging)
 	defer zlog.Sync()
 
-	// Stats
 	stats, closer, err := metrics.New(config.Metrics)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}
 	defer closer.Close()
 
-	// Root metrics scope for origin.
-	stats = stats.SubScope("kraken.origin")
-
-	// Initialize file storage.
 	fs, err := store.NewOriginFileStore(config.OriginStore, clock.New())
 	if err != nil {
 		log.Fatalf("Failed to create origin file store: %s", err)
@@ -67,7 +62,6 @@ func main() {
 
 	var pctx peercontext.PeerContext
 
-	// Initialize and start P2P scheduler client.
 	if config.Torrent.Enabled {
 		pctx, err = peercontext.NewOrigin(
 			peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *zone, *peerIP, *peerPort)
@@ -97,7 +91,6 @@ func main() {
 	}
 
 	var hostname string
-	// The code below starts Blob HTTP server.
 	if blobServerHostName == nil || *blobServerHostName == "" {
 		hostname, err = os.Hostname()
 		if err != nil {
@@ -106,12 +99,6 @@ func main() {
 	} else {
 		hostname = *blobServerHostName
 	}
-
-	stats, closer, err = metrics.New(config.Metrics)
-	if err != nil {
-		log.Fatalf("Failed to create metrics: %s", err)
-	}
-	defer closer.Close()
 
 	backendManager, err := backend.NewManager(config.Namespaces)
 	if err != nil {
