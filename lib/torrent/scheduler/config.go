@@ -138,6 +138,10 @@ type DispatcherConfig struct {
 	// PieceRequestTimeoutPerMb is the duration that will be added to piece request
 	// timeouts based on the piece size (in megabytes).
 	PieceRequestTimeoutPerMb time.Duration `yaml:"piece_request_timeout_per_mb"`
+
+	// PipelineLimit limits the total number of requests can be sent to a peer
+	// at the same time.
+	PipelineLimit int `yaml:"pipeline_limit"`
 }
 
 func (c DispatcherConfig) applyDefaults() DispatcherConfig {
@@ -146,6 +150,9 @@ func (c DispatcherConfig) applyDefaults() DispatcherConfig {
 	}
 	if c.PieceRequestTimeoutPerMb == 0 {
 		c.PieceRequestTimeoutPerMb = 4 * time.Second
+	}
+	if c.PipelineLimit == 0 {
+		c.PipelineLimit = 3
 	}
 	return c
 }

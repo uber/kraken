@@ -1,12 +1,14 @@
 package piecerequest
 
 import (
+	"math/rand"
 	"sync"
 	"time"
 
-	"github.com/andres-erbsen/clock"
-
 	"code.uber.internal/infra/kraken/torlib"
+
+	"github.com/andres-erbsen/clock"
+	"github.com/willf/bitset"
 )
 
 // Status enumerates possible statuses of a Request.
@@ -38,37 +40,71 @@ type Request struct {
 // Manager encapsulates thread-safe piece request bookkeeping. It is not responsible
 // for sending nor receiving pieces in any way.
 type Manager struct {
-	sync.Mutex
-	requests map[int]*Request
-	clock    clock.Clock
-	timeout  time.Duration
+	sync.RWMutex
+
+	// requests and requestsByPeer holds the same data, just indexed differently.
+	requests       map[int]*Request
+	requestsByPeer map[torlib.PeerID]map[int]*Request
+
+	clock         clock.Clock
+	timeout       time.Duration
+	pipelineLimit int
 }
 
 // NewManager creates a new Manager.
-func NewManager(clk clock.Clock, timeout time.Duration) *Manager {
+func NewManager(clk clock.Clock, timeout time.Duration, pipelineLimit int) *Manager {
 	return &Manager{
-		requests: make(map[int]*Request),
-		clock:    clk,
-		timeout:  timeout,
+		requests:       make(map[int]*Request),
+		requestsByPeer: make(map[torlib.PeerID]map[int]*Request),
+		clock:          clk,
+		timeout:        timeout,
+		pipelineLimit:  pipelineLimit,
 	}
 }
 
-// Reserve reserves a piece request for piece i. Returns false if there already
-// exists a valid in-flight request for piece i.
-func (m *Manager) Reserve(peerID torlib.PeerID, i int) bool {
+// ReservePieces selects the next piece(s) to be requested from given peer, and
+// save it as pending in request map to avoid duplicate requests.
+func (m *Manager) ReservePieces(peerID torlib.PeerID, candidates *bitset.BitSet) []int {
 	m.Lock()
 	defer m.Unlock()
 
-	if r, ok := m.requests[i]; ok && r.Status == StatusPending && !m.expired(r) {
-		return false
+	if pm, ok := m.requestsByPeer[peerID]; ok && len(pm) > m.pipelineLimit {
+		return nil
 	}
-	m.requests[i] = &Request{
-		Piece:  i,
-		PeerID: peerID,
-		Status: StatusPending,
-		sentAt: m.clock.Now(),
+
+	// Reservoir sampling.
+	var pieces []int
+	count := 0
+	for i, e := candidates.NextSet(0); e; i, e = candidates.NextSet(i + 1) {
+		if r, ok := m.requests[int(i)]; ok && r.Status == StatusPending && !m.expired(r) {
+			continue
+		}
+
+		if count < m.pipelineLimit {
+			pieces = append(pieces, int(i))
+		} else if rand.Intn(count) < 1 {
+			// Replace existing result.
+			pieces[rand.Intn(m.pipelineLimit)] = int(i)
+		}
+		count++
 	}
-	return true
+
+	// Set as pending in requests map.
+	for _, i := range pieces {
+		r := &Request{
+			Piece:  i,
+			PeerID: peerID,
+			Status: StatusPending,
+			sentAt: m.clock.Now(),
+		}
+		m.requests[i] = r
+		if _, ok := m.requestsByPeer[peerID]; !ok {
+			m.requestsByPeer[peerID] = make(map[int]*Request)
+		}
+		m.requestsByPeer[peerID][i] = r
+	}
+
+	return pieces
 }
 
 // MarkUnsent marks the piece request for piece i as unsent.
@@ -88,12 +124,21 @@ func (m *Manager) Clear(i int) {
 	defer m.Unlock()
 
 	delete(m.requests, i)
+
+	for peerID, pm := range m.requestsByPeer {
+		delete(pm, i)
+		if len(pm) == 0 {
+			delete(m.requestsByPeer, peerID)
+		}
+	}
 }
 
 // ClearPeer deletes all piece requests for peerID.
 func (m *Manager) ClearPeer(peerID torlib.PeerID) {
 	m.Lock()
 	defer m.Unlock()
+
+	delete(m.requestsByPeer, peerID)
 
 	for i, r := range m.requests {
 		if r.PeerID == peerID {

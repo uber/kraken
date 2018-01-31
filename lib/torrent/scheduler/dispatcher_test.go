@@ -6,15 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/willf/bitset"
-
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/memsize"
+
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
+	"github.com/willf/bitset"
 )
 
 type mockMessages struct {
@@ -55,7 +55,7 @@ func (m *mockMessages) numRequestsPerPiece() map[int]int {
 	return requests
 }
 
-func TestDispatcherDoesNotSendDuplicateInitialPieceRequests(t *testing.T) {
+func TestDispatcherSendUniquePieceRequestsWithinLimit(t *testing.T) {
 	require := require.New(t)
 
 	config := dispatcherConfigFixture()
@@ -68,10 +68,12 @@ func TestDispatcherDoesNotSendDuplicateInitialPieceRequests(t *testing.T) {
 	d := f.init(torrent)
 
 	var mu sync.Mutex
+	var requestCount int
 	numRequestsPerPiece := make(map[int]int)
+	numRequestsPerPeer := make(map[torlib.PeerID]int)
 
 	// Add a bunch of peers concurrently which are saturated with pieces d needs.
-	// We should send exactly one piece request per piece.
+	// We should send exactly <pipelineLimit> piece request per peer.
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
@@ -81,19 +83,22 @@ func TestDispatcherDoesNotSendDuplicateInitialPieceRequests(t *testing.T) {
 			messages := newMockMessages()
 			p, err := d.addPeer(torlib.PeerIDFixture(), bitfield, messages)
 			require.NoError(err)
-			d.sendInitialPieceRequests(p)
+			d.maybeRequestMorePieces(p)
 			for i, n := range messages.numRequestsPerPiece() {
+				require.True(n <= 1)
 				mu.Lock()
+				requestCount += n
 				numRequestsPerPiece[i] += n
+				require.True(numRequestsPerPiece[i] <= 1)
+				numRequestsPerPeer[p.id] += n
+				require.True(numRequestsPerPeer[p.id] <= config.PipelineLimit)
 				mu.Unlock()
 			}
 		}()
 	}
 	wg.Wait()
 
-	for i := 0; i < 100; i++ {
-		require.Equal(1, numRequestsPerPiece[i], "piece: %d", i)
-	}
+	require.Equal(config.PipelineLimit*10, requestCount)
 }
 
 func TestDispatcherResendFailedPieceRequests(t *testing.T) {
@@ -113,7 +118,7 @@ func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 	p1, err := d.addPeer(
 		torlib.PeerIDFixture(), storage.BitSetFixture(true, true), p1Messages)
 	require.NoError(err)
-	d.sendInitialPieceRequests(p1)
+	d.maybeRequestMorePieces(p1)
 	require.Equal(map[int]int{
 		0: 1,
 		1: 1,
@@ -124,7 +129,7 @@ func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 	p2, err := d.addPeer(
 		torlib.PeerIDFixture(), storage.BitSetFixture(true, false), p2Messages)
 	require.NoError(err)
-	d.sendInitialPieceRequests(p2)
+	d.maybeRequestMorePieces(p2)
 	require.Equal(map[int]int{}, p2Messages.numRequestsPerPiece())
 
 	// p3 has piece 1 and sends no piece requests.
@@ -132,7 +137,7 @@ func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 	p3, err := d.addPeer(
 		torlib.PeerIDFixture(), storage.BitSetFixture(false, true), p3Messages)
 	require.NoError(err)
-	d.sendInitialPieceRequests(p3)
+	d.maybeRequestMorePieces(p3)
 	require.Equal(map[int]int{}, p3Messages.numRequestsPerPiece())
 
 	clk.Add(d.pieceRequestTimeout + 1)
@@ -175,7 +180,7 @@ func TestDispatcherSendErrorsMarksPieceRequestsUnsent(t *testing.T) {
 	p1Messages.Close()
 
 	// Send should fail since p1 messages are closed.
-	d.sendInitialPieceRequests(p1)
+	d.maybeRequestMorePieces(p1)
 
 	require.Equal(map[int]int{}, p1Messages.numRequestsPerPiece())
 
@@ -184,7 +189,7 @@ func TestDispatcherSendErrorsMarksPieceRequestsUnsent(t *testing.T) {
 	require.NoError(err)
 
 	// Send should succeed since pending requests were marked unsent.
-	d.sendInitialPieceRequests(p2)
+	d.maybeRequestMorePieces(p2)
 
 	require.Equal(map[int]int{
 		0: 1,
