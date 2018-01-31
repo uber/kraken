@@ -4,10 +4,11 @@ import (
 	"errors"
 	"fmt"
 
-	"go.uber.org/atomic"
-
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/torlib"
+
+	"github.com/willf/bitset"
+	"go.uber.org/atomic"
 )
 
 // OriginTorrentErrors
@@ -97,12 +98,8 @@ func (t *OriginTorrent) WritePiece(data []byte, pi int) error {
 
 // Bitfield returns the bitfield of pieces where true denotes a complete piece
 // and false denotes an incomplete piece. For OriginTorrent it's always true.
-func (t *OriginTorrent) Bitfield() Bitfield {
-	bitfield := make(Bitfield, len(t.pieces))
-	for i := range t.pieces {
-		bitfield[i] = true
-	}
-	return bitfield
+func (t *OriginTorrent) Bitfield() *bitset.BitSet {
+	return bitset.New(uint(len(t.pieces))).Complement()
 }
 
 func (t *OriginTorrent) String() string {

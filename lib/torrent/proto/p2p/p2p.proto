@@ -21,7 +21,7 @@ message BitfieldMessage {
     // We currently treat infohash as verification of torrents.
     string name     = 3;
     string peerID   = 4;
-    repeated bool bitfield = 5;
+    bytes bitfieldBytes = 5;
 }
 
 // Requests a piece of the given index. Note: offset and length are unused fields

@@ -7,6 +7,7 @@ package mockstorage
 import (
 	storage "code.uber.internal/infra/kraken/lib/torrent/storage"
 	torlib "code.uber.internal/infra/kraken/torlib"
+	bitset "code.uber.internal/infra/kraken/vendor/github.com/willf/bitset"
 	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
 )
@@ -35,9 +36,9 @@ func (m *MockTorrent) EXPECT() *MockTorrentMockRecorder {
 }
 
 // Bitfield mocks base method
-func (m *MockTorrent) Bitfield() storage.Bitfield {
+func (m *MockTorrent) Bitfield() *bitset.BitSet {
 	ret := m.ctrl.Call(m, "Bitfield")
-	ret0, _ := ret[0].(storage.Bitfield)
+	ret0, _ := ret[0].(*bitset.BitSet)
 	return ret0
 }
 

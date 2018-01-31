@@ -4,6 +4,8 @@ import (
 	"errors"
 
 	"code.uber.internal/infra/kraken/torlib"
+
+	"github.com/willf/bitset"
 )
 
 // TorrentArchive errors.
@@ -23,7 +25,7 @@ type Torrent interface {
 	InfoHash() torlib.InfoHash
 	Complete() bool
 	BytesDownloaded() int64
-	Bitfield() Bitfield
+	Bitfield() *bitset.BitSet
 	String() string
 
 	HasPiece(piece int) bool

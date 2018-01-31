@@ -66,6 +66,7 @@ testImport:
   subpackages:
   - assert
   - require
+- package: github.com/willf/bitset
 - package: golang.org/x/time
   subpackages:
   - rate

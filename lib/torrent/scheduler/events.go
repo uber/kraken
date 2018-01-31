@@ -10,6 +10,8 @@ import (
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/timeutil"
+
+	"github.com/willf/bitset"
 )
 
 // event describes an external event which moves the Scheduler into a new state.
@@ -132,7 +134,7 @@ func (e failedIncomingHandshakeEvent) Apply(s *Scheduler) {
 // incomingConnEvent occurs when a pending incoming connection finishes handshaking.
 type incomingConnEvent struct {
 	c        *conn.Conn
-	bitfield storage.Bitfield
+	bitfield *bitset.BitSet
 	info     *storage.TorrentInfo
 }
 
@@ -163,7 +165,7 @@ func (e failedOutgoingHandshakeEvent) Apply(s *Scheduler) {
 // outgoingConnEvent occurs when a pending outgoing connection finishes handshaking.
 type outgoingConnEvent struct {
 	c        *conn.Conn
-	bitfield storage.Bitfield
+	bitfield *bitset.BitSet
 	info     *storage.TorrentInfo
 }
 

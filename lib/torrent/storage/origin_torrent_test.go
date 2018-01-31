@@ -37,7 +37,7 @@ func TestOriginTorrentCreate(t *testing.T) {
 	require.Equal(mi.InfoHash, tor.InfoHash())
 	require.True(tor.Complete())
 	require.Equal(int64(7), tor.BytesDownloaded())
-	require.Equal(Bitfield{true, true, true, true}, tor.Bitfield())
+	require.Equal(BitSetFixture(true, true, true, true), tor.Bitfield())
 	require.Equal(fmt.Sprintf("torrent(hash=%s, downloaded=100%%)", mi.InfoHash.HexString()), tor.String())
 	require.True(tor.HasPiece(0))
 	require.Equal([]int{}, tor.MissingPieces())

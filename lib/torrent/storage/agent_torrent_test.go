@@ -50,7 +50,7 @@ func TestAgentTorrentCreate(t *testing.T) {
 	require.Equal(mi.InfoHash, tor.InfoHash())
 	require.False(tor.Complete())
 	require.Equal(int64(0), tor.BytesDownloaded())
-	require.Equal(Bitfield{false, false, false, false}, tor.Bitfield())
+	require.Equal(BitSetFixture(false, false, false, false), tor.Bitfield())
 	require.Equal(fmt.Sprintf("torrent(hash=%s, downloaded=0%%)", mi.InfoHash.HexString()), tor.String())
 	require.False(tor.HasPiece(0))
 	require.Equal([]int{0, 1, 2, 3}, tor.MissingPieces())
@@ -74,7 +74,7 @@ func TestAgentTorrentWriteUpdatesBytesDownloadedAndBitfield(t *testing.T) {
 	require.NoError(tor.WritePiece(data[:1], 0))
 	require.False(tor.Complete())
 	require.Equal(int64(1), tor.BytesDownloaded())
-	require.Equal(Bitfield{true, false}, tor.Bitfield())
+	require.Equal(BitSetFixture(true, false), tor.Bitfield())
 }
 
 func TestAgentTorrentWriteComplete(t *testing.T) {

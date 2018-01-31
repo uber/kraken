@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/log"
+
+	"github.com/willf/bitset"
 )
 
 // Name defines event names.
@@ -59,11 +60,11 @@ type Event struct {
 	Time    time.Time `json:"ts"`
 
 	// Optional fields.
-	Peer         string `json:"peer,omitempty"`
-	Piece        int    `json:"piece,omitempty"`
-	Bitfield     []bool `json:"bitfield,omitempty"`
-	DurationMS   int64  `json:"duration_ms,omitempty"`
-	ConnCapacity int    `json:"conn_capacity,omitempty"`
+	Peer         string         `json:"peer,omitempty"`
+	Piece        int            `json:"piece,omitempty"`
+	Bitfield     *bitset.BitSet `json:"bitfield,omitempty"`
+	DurationMS   int64          `json:"duration_ms,omitempty"`
+	ConnCapacity int            `json:"conn_capacity,omitempty"`
 }
 
 func baseEvent(name Name, h torlib.InfoHash, self torlib.PeerID) *Event {
@@ -86,9 +87,10 @@ func (e *Event) JSON() string {
 }
 
 // AddTorrentEvent returns an event for an added torrent with initial bitfield.
-func AddTorrentEvent(h torlib.InfoHash, self torlib.PeerID, b storage.Bitfield, connCapacity int) *Event {
+func AddTorrentEvent(h torlib.InfoHash, self torlib.PeerID, b *bitset.BitSet, connCapacity int) *Event {
 	e := baseEvent(AddTorrent, h, self)
-	e.Bitfield = []bool(b)
+	e.Bitfield = bitset.New(b.Len())
+	b.Copy(e.Bitfield)
 	e.ConnCapacity = connCapacity
 	return e
 }

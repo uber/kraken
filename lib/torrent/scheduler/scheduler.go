@@ -9,6 +9,7 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
+	"github.com/willf/bitset"
 	"go.uber.org/zap"
 
 	"code.uber.internal/infra/kraken/lib/peercontext"
@@ -335,7 +336,7 @@ func (s *Scheduler) announce(d *dispatcher) {
 	s.eventLoop.Send(e)
 }
 
-func (s *Scheduler) addOutgoingConn(c *conn.Conn, b storage.Bitfield, info *storage.TorrentInfo) error {
+func (s *Scheduler) addOutgoingConn(c *conn.Conn, b *bitset.BitSet, info *storage.TorrentInfo) error {
 	if err := s.connState.MovePendingToActive(c); err != nil {
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
@@ -349,7 +350,7 @@ func (s *Scheduler) addOutgoingConn(c *conn.Conn, b storage.Bitfield, info *stor
 	return nil
 }
 
-func (s *Scheduler) addIncomingConn(c *conn.Conn, b storage.Bitfield, info *storage.TorrentInfo) error {
+func (s *Scheduler) addIncomingConn(c *conn.Conn, b *bitset.BitSet, info *storage.TorrentInfo) error {
 	if err := s.connState.MovePendingToActive(c); err != nil {
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}

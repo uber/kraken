@@ -6,11 +6,12 @@ import (
 	"os"
 	"sync"
 
-	"go.uber.org/atomic"
-
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/log"
+
+	"github.com/willf/bitset"
+	"go.uber.org/atomic"
 )
 
 // AgentTorrent errors.
@@ -27,15 +28,17 @@ const (
 	_dirty
 )
 
-func newBitfieldFromPieceStatusBytes(name string, raw []byte) Bitfield {
-	bitfield := make(Bitfield, len(raw))
+func newBitfieldFromPieceStatusBytes(name string, raw []byte) *bitset.BitSet {
+	bitfield := bitset.New(uint(len(raw)))
 	for i, b := range raw {
 		status := pieceStatus(b)
 		if status != _empty && status != _complete {
 			log.Errorf("Unexpected status at %d in piece metadata %s: %d", i, name, status)
 			status = _empty
 		}
-		bitfield[i] = status == _complete
+		if status == _complete {
+			bitfield.Set(uint(i))
+		}
 	}
 	return bitfield
 }
@@ -118,18 +121,17 @@ func restorePieces(name string, fs store.FileStore, numPieces int) (pieces []*pi
 	}
 
 	bitfield := newBitfieldFromPieceStatusBytes(name, raw)
-	pieces = make([]*piece, len(bitfield))
-	for i, b := range bitfield {
-		var status pieceStatus
-		if b {
-			numComplete++
-			status = _complete
+	pieces = make([]*piece, numPieces)
+
+	for i := 0; i < numPieces; i++ {
+		if bitfield.Test(uint(i)) {
+			pieces[i] = &piece{status: _complete}
 		} else {
-			status = _empty
+			pieces[i] = &piece{status: _empty}
 		}
-		pieces[i] = &piece{status: status}
 	}
-	return pieces, numComplete, nil
+
+	return pieces, int(bitfield.Count()), nil
 }
 
 // AgentTorrent implements a Torrent on top of an AgentFileStore.
@@ -216,11 +218,11 @@ func (t *AgentTorrent) BytesDownloaded() int64 {
 
 // Bitfield returns the bitfield of pieces where true denotes a complete piece
 // and false denotes an incomplete piece.
-func (t *AgentTorrent) Bitfield() Bitfield {
-	bitfield := make(Bitfield, len(t.pieces))
+func (t *AgentTorrent) Bitfield() *bitset.BitSet {
+	bitfield := bitset.New(uint(len(t.pieces)))
 	for i, p := range t.pieces {
 		if p.complete() {
-			bitfield[i] = true
+			bitfield.Set(uint(i))
 		}
 	}
 	return bitfield

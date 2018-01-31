@@ -5,6 +5,8 @@ import (
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/testutil"
+
+	"github.com/willf/bitset"
 )
 
 // TorrentArchiveFixture creates a new TorrentArchive and returns the archive with a cleanup function
@@ -43,4 +45,13 @@ func TorrentFixture(size, pieceLength uint64) (Torrent, func()) {
 func TorrentInfoFixture(size, pieceLength uint64) (*TorrentInfo, func()) {
 	torrent, cleanup := TorrentFixture(size, pieceLength)
 	return torrent.Stat(), cleanup
+}
+
+// BitSetFixture returns a new BitSet with the give bits set.
+func BitSetFixture(bs ...bool) *bitset.BitSet {
+	s := bitset.New(uint(len(bs)))
+	for i, b := range bs {
+		s.SetTo(uint(i), b)
+	}
+	return s
 }

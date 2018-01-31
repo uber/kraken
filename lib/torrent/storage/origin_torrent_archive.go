@@ -6,6 +6,8 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/torlib"
+
+	"github.com/willf/bitset"
 )
 
 // OriginTorrentArchive is a TorrentArchive for origin peers. It assumes that
@@ -31,10 +33,7 @@ func (a *OriginTorrentArchive) Stat(name string) (*TorrentInfo, error) {
 		return nil, fmt.Errorf("deserialize metainfo: %s", err)
 	}
 
-	bitfield := make([]bool, mi.Info.NumPieces())
-	for i := range bitfield {
-		bitfield[i] = true
-	}
+	bitfield := bitset.New(uint(mi.Info.NumPieces())).Complement()
 
 	return newTorrentInfo(mi, bitfield), nil
 }

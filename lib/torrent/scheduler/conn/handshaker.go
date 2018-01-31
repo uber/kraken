@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/andres-erbsen/clock"
-	"github.com/uber-go/tally"
-
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
+
+	"github.com/andres-erbsen/clock"
+	"github.com/uber-go/tally"
+	"github.com/willf/bitset"
 )
 
 // handshake contains the same fields as a protobuf bitfield message, but with
@@ -21,19 +22,23 @@ type handshake struct {
 	peerID   torlib.PeerID
 	name     string
 	infoHash torlib.InfoHash
-	bitfield storage.Bitfield
+	bitfield *bitset.BitSet
 }
 
-func (h *handshake) toP2PMessage() *p2p.Message {
+func (h *handshake) toP2PMessage() (*p2p.Message, error) {
+	b, err := h.bitfield.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
 	return &p2p.Message{
 		Type: p2p.Message_BITFIELD,
 		Bitfield: &p2p.BitfieldMessage{
-			PeerID:   h.peerID.String(),
-			Name:     h.name,
-			InfoHash: h.infoHash.String(),
-			Bitfield: h.bitfield,
+			PeerID:        h.peerID.String(),
+			Name:          h.name,
+			InfoHash:      h.infoHash.String(),
+			BitfieldBytes: b,
 		},
-	}
+	}, nil
 }
 
 func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
@@ -48,10 +53,14 @@ func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
 	if err != nil {
 		return nil, fmt.Errorf("info hash: %s", err)
 	}
+	bitfield := bitset.New(0)
+	if err := bitfield.UnmarshalBinary(m.Bitfield.BitfieldBytes); err != nil {
+		return nil, err
+	}
 	return &handshake{
 		peerID:   peerID,
 		infoHash: ih,
-		bitfield: m.Bitfield.Bitfield,
+		bitfield: bitfield,
 		name:     m.Bitfield.Name,
 	}, nil
 }
@@ -79,7 +88,7 @@ func (pc *PendingConn) InfoHash() torlib.InfoHash {
 }
 
 // Bitfield returns the bitfield of the remote peer's torrent.
-func (pc *PendingConn) Bitfield() storage.Bitfield {
+func (pc *PendingConn) Bitfield() *bitset.BitSet {
 	return pc.handshake.bitfield
 }
 
@@ -148,7 +157,7 @@ func (h *Handshaker) Establish(pc *PendingConn, info *storage.TorrentInfo) (*Con
 // given peer / address. Also returns the bitfield of the remote peer for said
 // torrent.
 func (h *Handshaker) Initialize(
-	peerID torlib.PeerID, addr string, info *storage.TorrentInfo) (*Conn, storage.Bitfield, error) {
+	peerID torlib.PeerID, addr string, info *storage.TorrentInfo) (*Conn, *bitset.BitSet, error) {
 
 	nc, err := net.DialTimeout("tcp", addr, h.config.HandshakeTimeout)
 	if err != nil {
@@ -169,7 +178,11 @@ func (h *Handshaker) sendHandshake(nc net.Conn, info *storage.TorrentInfo) error
 		infoHash: info.InfoHash(),
 		bitfield: info.Bitfield(),
 	}
-	return sendMessageWithTimeout(nc, hs.toP2PMessage(), h.config.HandshakeTimeout)
+	msg, err := hs.toP2PMessage()
+	if err != nil {
+		return err
+	}
+	return sendMessageWithTimeout(nc, msg, h.config.HandshakeTimeout)
 }
 
 func (h *Handshaker) readHandshake(nc net.Conn) (*handshake, error) {
@@ -185,7 +198,7 @@ func (h *Handshaker) readHandshake(nc net.Conn) (*handshake, error) {
 }
 
 func (h *Handshaker) fullHandshake(
-	nc net.Conn, peerID torlib.PeerID, info *storage.TorrentInfo) (*Conn, storage.Bitfield, error) {
+	nc net.Conn, peerID torlib.PeerID, info *storage.TorrentInfo) (*Conn, *bitset.BitSet, error) {
 
 	if err := h.sendHandshake(nc, info); err != nil {
 		return nil, nil, fmt.Errorf("send handshake: %s", err)
