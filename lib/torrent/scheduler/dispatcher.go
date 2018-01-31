@@ -13,10 +13,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/piecerequest"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
-
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
-	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/timeutil"
 
 	"github.com/andres-erbsen/clock"
@@ -163,6 +161,8 @@ func (f *dispatcherFactory) New(t storage.Torrent) *dispatcher {
 
 func (f *dispatcherFactory) init(t storage.Torrent) *dispatcher {
 	pieceRequestTimeout := f.calcPieceRequestTimeout(t.MaxPieceLength())
+	pieceRequestManager := piecerequest.NewManager(
+		f.Clock, pieceRequestTimeout, f.Config.PipelineLimit)
 	return &dispatcher{
 		Torrent:             newTorrentAccessWatcher(t, f.Clock),
 		CreatedAt:           f.Clock.Now(),
@@ -170,7 +170,7 @@ func (f *dispatcherFactory) init(t storage.Torrent) *dispatcher {
 		eventSender:         f.EventSender,
 		clock:               f.Clock,
 		networkEvents:       f.NetworkEventProducer,
-		pieceRequestManager: piecerequest.NewManager(f.Clock, pieceRequestTimeout),
+		pieceRequestManager: pieceRequestManager,
 		pieceRequestTimeout: pieceRequestTimeout,
 		pendingPiecesDone:   make(chan struct{}),
 		stats:               f.Stats,
@@ -249,7 +249,7 @@ func (d *dispatcher) AddPeer(
 	if err != nil {
 		return err
 	}
-	go d.sendInitialPieceRequests(p)
+	go d.maybeRequestMorePieces(p)
 	go d.feed(p)
 	return nil
 }
@@ -307,22 +307,27 @@ func (d *dispatcher) complete() {
 	})
 }
 
-func (d *dispatcher) maybeSendPieceRequest(p *peer, i int) error {
-	if d.Torrent.HasPiece(i) {
-		// No-op: we already have this piece.
-		return nil
+func (d *dispatcher) maybeRequestMorePieces(p *peer) (bool, error) {
+	candidates := p.bitfield.Intersection(d.Torrent.Bitfield().Complement())
+	return d.maybeSendPieceRequests(p, candidates)
+}
+
+func (d *dispatcher) maybeSendPieceRequests(p *peer, candidates *bitset.BitSet) (bool, error) {
+	pieces := d.pieceRequestManager.ReservePieces(p.id, candidates)
+	if len(pieces) == 0 {
+		return false, nil
 	}
-	if !d.pieceRequestManager.Reserve(p.id, i) {
-		// No-op: we have already have a pending request for this piece.
-		return nil
+
+	for _, i := range pieces {
+		if err := p.messages.Send(conn.NewPieceRequestMessage(i, d.Torrent.PieceLength(i))); err != nil {
+			// Connection closed.
+			d.pieceRequestManager.MarkUnsent(p.id, i)
+			return false, err
+		}
+		d.networkEvents.Produce(
+			networkevent.DispatcherSentPieceRequestEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
 	}
-	if err := p.messages.Send(conn.NewPieceRequestMessage(i, d.Torrent.PieceLength(i))); err != nil {
-		d.pieceRequestManager.MarkUnsent(p.id, i)
-		return err
-	}
-	d.networkEvents.Produce(
-		networkevent.DispatcherSentPieceRequestEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
-	return nil
+	return true, nil
 }
 
 func (d *dispatcher) resendFailedPieceRequests() {
@@ -341,9 +346,12 @@ func (d *dispatcher) resendFailedPieceRequests() {
 				// Do not resend to the same peer for expired or invalid requests.
 				return true
 			}
-			if p.bitfield.Has(uint(r.Piece)) {
-				if err := d.maybeSendPieceRequest(p, r.Piece); err == nil {
-					sent++
+
+			b := d.Torrent.Bitfield()
+			candidates := p.bitfield.Intersection(b.Complement())
+			if candidates.Test(uint(r.Piece)) {
+				nb := bitset.New(b.Len()).Set(uint(r.Piece))
+				if sent, err := d.maybeSendPieceRequests(p, nb); sent && err == nil {
 					return false
 				}
 			}
@@ -364,20 +372,6 @@ func (d *dispatcher) watchPendingPieceRequests() {
 			d.resendFailedPieceRequests()
 		case <-d.pendingPiecesDone:
 			return
-		}
-	}
-}
-
-func (d *dispatcher) sendInitialPieceRequests(p *peer) {
-	pieces := d.Torrent.MissingPieces()
-	randutil.ShuffleInts(pieces)
-	for _, i := range pieces {
-		if !p.bitfield.Has(uint(i)) {
-			continue
-		}
-		if err := d.maybeSendPieceRequest(p, i); err != nil {
-			// Connection closed.
-			break
 		}
 	}
 }
@@ -429,7 +423,8 @@ func (d *dispatcher) handleAnnouncePiece(p *peer, msg *p2p.AnnouncePieceMessage)
 	}
 	i := int(msg.Index)
 	p.bitfield.Set(uint(i), true)
-	d.maybeSendPieceRequest(p, i)
+
+	d.maybeRequestMorePieces(p)
 }
 
 func (d *dispatcher) isFullPiece(i, offset, length int) bool {
@@ -503,6 +498,8 @@ func (d *dispatcher) handlePiecePayload(
 	}
 
 	d.pieceRequestManager.Clear(i)
+
+	d.maybeRequestMorePieces(p)
 
 	d.peers.Range(func(k, v interface{}) bool {
 		if k.(torlib.PeerID) == p.id {

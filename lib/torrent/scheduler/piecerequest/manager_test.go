@@ -7,8 +7,21 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 
+	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/torlib"
 )
+
+func TestManagerPipelineLimit(t *testing.T) {
+	require := require.New(t)
+
+	m := NewManager(clock.NewMock(), 5*time.Second, 3)
+
+	pieces1 := m.ReservePieces(
+		torlib.PeerIDFixture(), storage.BitSetFixture(true, true, true, true))
+	require.Len(pieces1, 3)
+
+	require.Len(m.requests, 3)
+}
 
 func TestManagerReserveExpiredRequest(t *testing.T) {
 	require := require.New(t)
@@ -16,55 +29,61 @@ func TestManagerReserveExpiredRequest(t *testing.T) {
 	clk := clock.NewMock()
 	timeout := 5 * time.Second
 
-	m := NewManager(clk, timeout)
+	m := NewManager(clk, timeout, 1)
 
 	peerID := torlib.PeerIDFixture()
 
-	require.True(m.Reserve(peerID, 0))
+	pieces1 := m.ReservePieces(peerID, storage.BitSetFixture(true))
+	require.Equal([]int{0}, pieces1)
 
 	// Further reservations fail.
-	require.False(m.Reserve(peerID, 0))
-	require.False(m.Reserve(torlib.PeerIDFixture(), 0))
+	require.Empty(m.ReservePieces(peerID, storage.BitSetFixture(true)))
+	require.Empty(m.ReservePieces(torlib.PeerIDFixture(), storage.BitSetFixture(true)))
 
 	clk.Add(timeout + 1)
 
-	require.True(m.Reserve(peerID, 0))
+	pieces2 := m.ReservePieces(peerID, storage.BitSetFixture(true))
+	require.Equal([]int{0}, pieces2)
 }
 
 func TestManagerReserveUnsentRequest(t *testing.T) {
 	require := require.New(t)
 
-	m := NewManager(clock.NewMock(), 5*time.Second)
+	m := NewManager(clock.NewMock(), 5*time.Second, 1)
 
 	peerID := torlib.PeerIDFixture()
 
-	require.True(m.Reserve(peerID, 0))
+	pieces1 := m.ReservePieces(peerID, storage.BitSetFixture(true))
+	require.Equal([]int{0}, pieces1)
 
 	// Further reservations fail.
-	require.False(m.Reserve(peerID, 0))
-	require.False(m.Reserve(torlib.PeerIDFixture(), 0))
+	require.Empty(m.ReservePieces(peerID, storage.BitSetFixture(true)))
+	require.Empty(m.ReservePieces(torlib.PeerIDFixture(), storage.BitSetFixture(true)))
 
 	m.MarkUnsent(peerID, 0)
 
-	require.True(m.Reserve(peerID, 0))
+	pieces2 := m.ReservePieces(peerID, storage.BitSetFixture(true))
+	require.Equal([]int{0}, pieces2)
 }
 
 func TestManagerReserveInvalidRequest(t *testing.T) {
 	require := require.New(t)
 
-	m := NewManager(clock.NewMock(), 5*time.Second)
+	m := NewManager(clock.NewMock(), 5*time.Second, 1)
 
 	peerID := torlib.PeerIDFixture()
 
-	require.True(m.Reserve(peerID, 0))
+	pieces1 := m.ReservePieces(peerID, storage.BitSetFixture(true))
+	require.Equal([]int{0}, pieces1)
 
 	// Further reservations fail.
-	require.False(m.Reserve(peerID, 0))
-	require.False(m.Reserve(torlib.PeerIDFixture(), 0))
+	require.Empty(m.ReservePieces(peerID, storage.BitSetFixture(true)))
+	require.Empty(m.ReservePieces(torlib.PeerIDFixture(), storage.BitSetFixture(true)))
 
 	m.MarkInvalid(peerID, 0)
 
-	require.True(m.Reserve(peerID, 0))
+	pieces2 := m.ReservePieces(peerID, storage.BitSetFixture(true))
+	require.Equal([]int{0}, pieces2)
 }
 
 func TestManagerGetFailedRequests(t *testing.T) {
@@ -73,22 +92,26 @@ func TestManagerGetFailedRequests(t *testing.T) {
 	clk := clock.NewMock()
 	timeout := 5 * time.Second
 
-	m := NewManager(clk, timeout)
+	m := NewManager(clk, timeout, 1)
 
 	p0 := torlib.PeerIDFixture()
 	p1 := torlib.PeerIDFixture()
 	p2 := torlib.PeerIDFixture()
 
-	for i, p := range []torlib.PeerID{p0, p1, p2} {
-		require.True(m.Reserve(p, i))
-	}
+	pieces0 := m.ReservePieces(p0, storage.BitSetFixture(true, false, false))
+	require.Equal([]int{0}, pieces0)
+	pieces1 := m.ReservePieces(p1, storage.BitSetFixture(false, true, false))
+	require.Equal([]int{1}, pieces1)
+	pieces2 := m.ReservePieces(p2, storage.BitSetFixture(false, false, true))
+	require.Equal([]int{2}, pieces2)
 
 	m.MarkUnsent(p0, 0)
 	m.MarkInvalid(p1, 1)
 	clk.Add(timeout + 1) // Expires p2's request.
 
 	p3 := torlib.PeerIDFixture()
-	require.True(m.Reserve(p3, 3))
+	pieces3 := m.ReservePieces(p3, storage.BitSetFixture(false, false, false, true))
+	require.Equal([]int{3}, pieces3)
 
 	failed := m.GetFailedRequests()
 
@@ -101,9 +124,10 @@ func TestManagerGetFailedRequests(t *testing.T) {
 func TestManagerClear(t *testing.T) {
 	require := require.New(t)
 
-	m := NewManager(clock.NewMock(), 5*time.Second)
+	m := NewManager(clock.NewMock(), 5*time.Second, 1)
 
-	require.True(m.Reserve(torlib.PeerIDFixture(), 0))
+	pieces1 := m.ReservePieces(torlib.PeerIDFixture(), storage.BitSetFixture(true))
+	require.Equal([]int{0}, pieces1)
 
 	require.Len(m.requests, 1)
 
@@ -115,14 +139,17 @@ func TestManagerClear(t *testing.T) {
 func TestManagerClearPeer(t *testing.T) {
 	require := require.New(t)
 
-	m := NewManager(clock.NewMock(), 5*time.Second)
+	m := NewManager(clock.NewMock(), 5*time.Second, 1)
 
 	p1 := torlib.PeerIDFixture()
 	p2 := torlib.PeerIDFixture()
 
-	require.True(m.Reserve(p1, 0))
-	require.True(m.Reserve(p1, 1))
-	require.True(m.Reserve(p2, 2))
+	pieces0 := m.ReservePieces(p1, storage.BitSetFixture(true))
+	require.Equal([]int{0}, pieces0)
+	pieces1 := m.ReservePieces(p1, storage.BitSetFixture(false, true))
+	require.Equal([]int{1}, pieces1)
+	pieces2 := m.ReservePieces(p2, storage.BitSetFixture(false, false, true))
+	require.Equal([]int{2}, pieces2)
 
 	m.ClearPeer(p1)
 

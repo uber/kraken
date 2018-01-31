@@ -13,11 +13,16 @@ type syncBitfield struct {
 }
 
 func newSyncBitfield(b *bitset.BitSet) *syncBitfield {
-	c := bitset.New(b.Len())
-	b.Copy(c)
 	return &syncBitfield{
-		b: c,
+		b: b.Clone(),
 	}
+}
+
+func (s *syncBitfield) Intersection(other *bitset.BitSet) *bitset.BitSet {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.b.Intersection(other)
 }
 
 func (s *syncBitfield) Has(i uint) bool {
@@ -35,8 +40,8 @@ func (s *syncBitfield) Set(i uint, v bool) {
 }
 
 func (s *syncBitfield) Complete() bool {
-	s.Lock()
-	defer s.Unlock()
+	s.RLock()
+	defer s.RUnlock()
 
 	return s.b.All()
 }
