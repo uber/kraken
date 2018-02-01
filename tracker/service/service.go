@@ -37,10 +37,14 @@ func Handler(
 	manifest := &manifestHandler{manifestStore}
 
 	r := chi.NewRouter()
-	announce.setRoutes(r, stats)
-	health.setRoutes(r, stats)
-	metainfo.setRoutes(r, stats)
-	manifest.setRoutes(r, stats)
+
+	r.Use(middleware.HitCounter(stats))
+	r.Use(middleware.LatencyTimer(stats))
+
+	announce.setRoutes(r)
+	health.setRoutes(r)
+	metainfo.setRoutes(r)
+	manifest.setRoutes(r)
 
 	// Serves /debug/pprof endpoints.
 	r.Mount("/", http.DefaultServeMux)
@@ -48,43 +52,19 @@ func Handler(
 	return r
 }
 
-func (h *healthHandler) setRoutes(r chi.Router, stats tally.Scope) {
-	r.Group(func(r chi.Router) {
-		estats := stats.SubScope("health")
-		r.Use(middleware.Counter(estats))
-		r.Use(middleware.ElapsedTimer(estats))
-
-		r.Get("/health", h.Get)
-	})
+func (h *healthHandler) setRoutes(r chi.Router) {
+	r.Get("/health", h.Get)
 }
 
-func (h *metaInfoHandler) setRoutes(r chi.Router, stats tally.Scope) {
-	r.Group(func(r chi.Router) {
-		estats := stats.SubScope("namespace.blobs.metainfo")
-		r.Use(middleware.Counter(estats))
-		r.Use(middleware.ElapsedTimer(estats))
-
-		r.Get("/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(h.get))
-	})
+func (h *metaInfoHandler) setRoutes(r chi.Router) {
+	r.Get("/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(h.get))
 }
 
-func (h *manifestHandler) setRoutes(r chi.Router, stats tally.Scope) {
-	r.Group(func(r chi.Router) {
-		estats := stats.SubScope("manifest")
-		r.Use(middleware.Counter(estats))
-		r.Use(middleware.ElapsedTimer(estats))
-
-		r.Get("/manifest/:name", handler.Wrap(h.Get))
-		r.Post("/manifest/:name", handler.Wrap(h.Post))
-	})
+func (h *manifestHandler) setRoutes(r chi.Router) {
+	r.Get("/manifest/:name", handler.Wrap(h.Get))
+	r.Post("/manifest/:name", handler.Wrap(h.Post))
 }
 
-func (h *announceHandler) setRoutes(r chi.Router, stats tally.Scope) {
-	r.Group(func(r chi.Router) {
-		estats := stats.SubScope("announce")
-		r.Use(middleware.Counter(estats))
-		r.Use(middleware.ElapsedTimer(estats))
-
-		r.Get("/announce", handler.Wrap(h.Get))
-	})
+func (h *announceHandler) setRoutes(r chi.Router) {
+	r.Get("/announce", handler.Wrap(h.Get))
 }

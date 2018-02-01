@@ -10,7 +10,9 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
+	"github.com/uber-go/tally"
 
+	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
@@ -26,24 +28,34 @@ type Config struct {
 // Server defines the agent HTTP server.
 type Server struct {
 	config        Config
+	stats         tally.Scope
 	fs            store.FileStore
 	torrentClient torrent.Client
 	requestCache  *dedup.RequestCache
 }
 
 // New creates a new Server.
-func New(config Config, fs store.FileStore, tc torrent.Client) *Server {
+func New(
+	config Config, stats tally.Scope, fs store.FileStore, tc torrent.Client) *Server {
+
+	stats = stats.SubScope("server")
+
 	rc := dedup.NewRequestCache(config.RequestCache, clock.New())
 	rc.SetNotFound(func(err error) bool { return err == scheduler.ErrTorrentNotFound })
-	return &Server{config, fs, tc, rc}
+
+	return &Server{config, stats, fs, tc, rc}
 }
 
 // Handler returns the HTTP handler.
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
 
-	r.Get("/namespace/:namespace/blobs/:name", handler.Wrap(s.downloadBlobHandler))
+	r.Use(middleware.HitCounter(s.stats))
+	r.Use(middleware.LatencyTimer(s.stats))
+
 	r.Get("/health", s.healthHandler)
+
+	r.Get("/namespace/:namespace/blobs/:name", handler.Wrap(s.downloadBlobHandler))
 
 	// Dangerous endpoint for running experiments.
 	r.Patch("/x/config/scheduler", handler.Wrap(s.patchSchedulerConfigHandler))

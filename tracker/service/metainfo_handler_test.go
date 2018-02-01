@@ -16,7 +16,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pressly/chi"
 	"github.com/stretchr/testify/require"
-	"github.com/uber-go/tally"
 )
 
 const namespace = "test-namespace"
@@ -28,7 +27,7 @@ func download(addr string, d image.Digest) (*http.Response, error) {
 
 func startMetaInfoServer(h *metaInfoHandler) (addr string, stop func()) {
 	r := chi.NewRouter()
-	h.setRoutes(r, tally.NewTestScope("testing", nil))
+	h.setRoutes(r)
 	return testutil.StartServer(r)
 }
 
