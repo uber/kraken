@@ -60,11 +60,11 @@ type Event struct {
 	Time    time.Time `json:"ts"`
 
 	// Optional fields.
-	Peer         string         `json:"peer,omitempty"`
-	Piece        int            `json:"piece,omitempty"`
-	Bitfield     *bitset.BitSet `json:"bitfield,omitempty"`
-	DurationMS   int64          `json:"duration_ms,omitempty"`
-	ConnCapacity int            `json:"conn_capacity,omitempty"`
+	Peer         string `json:"peer,omitempty"`
+	Piece        int    `json:"piece,omitempty"`
+	Bitfield     []bool `json:"bitfield,omitempty"`
+	DurationMS   int64  `json:"duration_ms,omitempty"`
+	ConnCapacity int    `json:"conn_capacity,omitempty"`
 }
 
 func baseEvent(name Name, h torlib.InfoHash, self torlib.PeerID) *Event {
@@ -89,8 +89,11 @@ func (e *Event) JSON() string {
 // AddTorrentEvent returns an event for an added torrent with initial bitfield.
 func AddTorrentEvent(h torlib.InfoHash, self torlib.PeerID, b *bitset.BitSet, connCapacity int) *Event {
 	e := baseEvent(AddTorrent, h, self)
-	e.Bitfield = bitset.New(b.Len())
-	b.Copy(e.Bitfield)
+	bools := make([]bool, b.Len())
+	for i := uint(0); i < b.Len(); i++ {
+		bools[i] = b.Test(i)
+	}
+	e.Bitfield = bools
 	e.ConnCapacity = connCapacity
 	return e
 }
