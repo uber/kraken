@@ -69,6 +69,8 @@ func New(
 	pctx peercontext.PeerContext,
 	backendManager *backend.Manager) (*Server, error) {
 
+	stats = stats.SubScope("server")
+
 	if len(config.HashNodes) == 0 {
 		return nil, errors.New("no hash nodes configured")
 	}
@@ -95,7 +97,7 @@ func New(
 		hashState:         config.HashState(),
 		fileStore:         fileStore,
 		clientProvider:    clientProvider,
-		stats:             stats.SubScope("blobserver"),
+		stats:             stats,
 		backendManager:    backendManager,
 		requestCache:      rc,
 		pieceLengthConfig: plConfig,
@@ -113,109 +115,40 @@ func (s Server) Addr() string {
 func (s Server) Handler() http.Handler {
 	r := chi.NewRouter()
 
+	r.Use(middleware.HitCounter(s.stats))
+	r.Use(middleware.LatencyTimer(s.stats))
+
 	// Public endpoints:
 
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("health")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
+	r.Get("/health", handler.Wrap(s.healthCheckHandler))
 
-		r.Get("/health", handler.Wrap(s.healthCheckHandler))
-	})
+	r.Get("/blobs/:digest/locations", handler.Wrap(s.getLocationsHandler))
 
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("blobs.locations")
-
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		r.Get("/blobs/:digest/locations", handler.Wrap(s.getLocationsHandler))
-	})
-
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("namespace.blobs.uploads")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		// Cluster upload API.
-		r.Post("/namespace/:namespace/blobs/:digest/uploads", handler.Wrap(s.startUploadHandler))
-		r.Patch("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.patchUploadHandler))
-		r.Put("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.commitClusterUploadHandler))
-	})
+	r.Post("/namespace/:namespace/blobs/:digest/uploads", handler.Wrap(s.startUploadHandler))
+	r.Patch("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.patchUploadHandler))
+	r.Put("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.commitClusterUploadHandler))
 
 	// Internal endpoints:
 
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("blobs.uploads")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
+	r.Post("/internal/blobs/:digest/uploads", handler.Wrap(s.startUploadHandler))
+	r.Patch("/internal/blobs/:digest/uploads/:uid", handler.Wrap(s.patchUploadHandler))
+	r.Put("/internal/blobs/:digest/uploads/:uid", handler.Wrap(s.commitTransferHandler))
 
-		// Blob transfer API.
-		r.Post("/internal/blobs/:digest/uploads", handler.Wrap(s.startUploadHandler))
-		r.Patch("/internal/blobs/:digest/uploads/:uid", handler.Wrap(s.patchUploadHandler))
-		r.Put("/internal/blobs/:digest/uploads/:uid", handler.Wrap(s.commitTransferHandler))
-	})
+	r.Head("/internal/blobs/:digest", handler.Wrap(s.checkBlobHandler))
+	r.Get("/internal/blobs/:digest", handler.Wrap(s.getBlobHandler))
+	r.Delete("/internal/blobs/:digest", handler.Wrap(s.deleteBlobHandler))
 
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("blobs")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
+	r.Post("/internal/blobs/:digest/metainfo", handler.Wrap(s.overwriteMetaInfoHandler))
 
-		r.Head("/internal/blobs/:digest", handler.Wrap(s.checkBlobHandler))
-		r.Get("/internal/blobs/:digest", handler.Wrap(s.getBlobHandler))
-		r.Delete("/internal/blobs/:digest", handler.Wrap(s.deleteBlobHandler))
-	})
+	r.Post("/internal/repair", handler.Wrap(s.repairHandler))
+	r.Post("/internal/repair/shard/:shardid", handler.Wrap(s.repairShardHandler))
+	r.Post("/internal/repair/digest/:digest", handler.Wrap(s.repairDigestHandler))
 
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("blobs.metainfo")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
+	r.Get("/internal/peercontext", handler.Wrap(s.getPeerContextHandler))
 
-		r.Post("/internal/blobs/:digest/metainfo", handler.Wrap(s.overwriteMetaInfoHandler))
-	})
+	r.Get("/internal/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(s.getMetaInfoHandler))
 
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("repair")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		r.Post("/internal/repair", handler.Wrap(s.repairHandler))
-	})
-
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("repair.shard")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		r.Post("/internal/repair/shard/:shardid", handler.Wrap(s.repairShardHandler))
-	})
-
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("repair.digest")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		r.Post("/internal/repair/digest/:digest", handler.Wrap(s.repairDigestHandler))
-	})
-
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("peercontext")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		r.Get("/internal/peercontext", handler.Wrap(s.getPeerContextHandler))
-	})
-
-	r.Group(func(r chi.Router) {
-		stats := s.stats.SubScope("namespace.blobs.metainfo")
-		r.Use(middleware.Counter(stats))
-		r.Use(middleware.ElapsedTimer(stats))
-
-		r.Get("/internal/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(s.getMetaInfoHandler))
-	})
-
-	// Serves /debug/pprof endpoints.
-	r.Mount("/", http.DefaultServeMux)
+	r.Mount("/", http.DefaultServeMux) // Serves /debug/pprof endpoints.
 
 	return r
 }

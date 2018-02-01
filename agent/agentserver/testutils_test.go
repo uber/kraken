@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/torrent"
@@ -31,7 +32,7 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 }
 
 func (m *serverMocks) startServer() string {
-	s := New(Config{}, m.fs, m.torrentClient)
+	s := New(Config{}, tally.NewTestScope("", nil), m.fs, m.torrentClient)
 	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
 	return addr
