@@ -60,6 +60,9 @@ import:
   version: ^1.12.48
 - package: github.com/c2h5oh/datasize
 - package: github.com/jpillora/backoff
+- package: golang.org/x/crypto
+  subpackages:
+  - ssh
 testImport:
 - package: github.com/stretchr/testify
   version: ^1.1.4
