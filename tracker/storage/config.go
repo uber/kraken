@@ -71,7 +71,7 @@ func (c RedisConfig) applyDefaults() (RedisConfig, error) {
 		c.MaxIdleConns = 10
 	}
 	if c.MaxActiveConns == 0 {
-		c.MaxActiveConns = 50
+		c.MaxActiveConns = 500
 	}
 	if c.IdleConnTimeout == 0 {
 		c.IdleConnTimeout = 60 * time.Second

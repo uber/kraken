@@ -25,6 +25,7 @@ tools/bin/reload-config/reload-config
 tools/bin/simulation/simulation
 tools/bin/testfs/testfs
 tools/bin/pexchange/pexchange
+tools/bin/trackerload/trackerload
 
 # tmp migration files
 [0-9]*_-dir.go
