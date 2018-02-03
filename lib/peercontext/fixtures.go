@@ -11,6 +11,6 @@ func Fixture() PeerContext {
 		IP:     randutil.IP(),
 		Port:   randutil.Port(),
 		PeerID: torlib.PeerIDFixture(),
-		Zone:   "dca1",
+		Zone:   "sjc1",
 	}
 }
