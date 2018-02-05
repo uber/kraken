@@ -61,6 +61,7 @@ func (c *HTTPClient) Announce(name string, h torlib.InfoHash, complete bool) ([]
 			}
 			return nil, err
 		}
+		defer resp.Body.Close()
 		var b struct {
 			Peers []*torlib.PeerInfo `json:"peers"`
 		}

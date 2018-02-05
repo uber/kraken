@@ -101,7 +101,7 @@ func NewRedisStorage(config RedisConfig) (*RedisStorage, error) {
 	// Ensure we can connect to Redis.
 	c, err := s.pool.Dial()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("dial redis: %s", err)
 	}
 	c.Close()
 
@@ -124,10 +124,7 @@ func (s *RedisStorage) peerSetWindows() []int64 {
 
 // UpdatePeer writes p to Redis with a TTL.
 func (s *RedisStorage) UpdatePeer(p *torlib.PeerInfo) error {
-	c, err := s.pool.Dial()
-	if err != nil {
-		return err
-	}
+	c := s.pool.Get()
 	defer c.Close()
 
 	w := s.curPeerSetWindow()
@@ -135,20 +132,18 @@ func (s *RedisStorage) UpdatePeer(p *torlib.PeerInfo) error {
 
 	// Add p to the current window.
 	k := peerSetKey(p.InfoHash, w)
+
 	c.Send("MULTI")
 	c.Send("SADD", k, serializePeer(p))
 	c.Send("EXPIREAT", k, expireAt)
-	_, err = c.Do("EXEC")
+	_, err := c.Do("EXEC")
 
 	return err
 }
 
 // GetPeers returns all PeerInfos associated with infoHash.
 func (s *RedisStorage) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
-	c, err := s.pool.Dial()
-	if err != nil {
-		return nil, err
-	}
+	c := s.pool.Get()
 	defer c.Close()
 
 	// Eliminate duplicates from other windows and collapses complete bits.
@@ -186,10 +181,7 @@ func (s *RedisStorage) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
 // GetOrigins returns all origin PeerInfos for infoHash. Returns ErrNoOrigins if
 // no origins exist in Redis.
 func (s *RedisStorage) GetOrigins(infoHash string) ([]*torlib.PeerInfo, error) {
-	c, err := s.pool.Dial()
-	if err != nil {
-		return nil, err
-	}
+	c := s.pool.Get()
 	defer c.Close()
 
 	result, err := redis.String(c.Do("GET", originsKey(infoHash)))
@@ -222,10 +214,7 @@ func (s *RedisStorage) GetOrigins(infoHash string) ([]*torlib.PeerInfo, error) {
 
 // UpdateOrigins overwrites all origin PeerInfos for infoHash with the given origins.
 func (s *RedisStorage) UpdateOrigins(infoHash string, origins []*torlib.PeerInfo) error {
-	c, err := s.pool.Dial()
-	if err != nil {
-		return err
-	}
+	c := s.pool.Get()
 	defer c.Close()
 
 	var serializedOrigins []string
@@ -234,17 +223,14 @@ func (s *RedisStorage) UpdateOrigins(infoHash string, origins []*torlib.PeerInfo
 	}
 	v := strings.Join(serializedOrigins, ",")
 
-	_, err = c.Do("SETEX", originsKey(infoHash), int(s.config.OriginsTTL.Seconds()), v)
+	_, err := c.Do("SETEX", originsKey(infoHash), int(s.config.OriginsTTL.Seconds()), v)
 	return err
 }
 
 // GetMetaInfo returns metainfo for the given file name. Returns ErrNotFound if
 // no metainfo exists for name.
 func (s *RedisStorage) GetMetaInfo(name string) ([]byte, error) {
-	c, err := s.pool.Dial()
-	if err != nil {
-		return nil, err
-	}
+	c := s.pool.Get()
 	defer c.Close()
 
 	b, err := redis.Bytes(c.Do("GET", metaInfoKey(name)))
@@ -261,10 +247,7 @@ func (s *RedisStorage) GetMetaInfo(name string) ([]byte, error) {
 // SetMetaInfo writes metainfo. Returns ErrExists if metainfo already exists for
 // mi's file name.
 func (s *RedisStorage) SetMetaInfo(mi *torlib.MetaInfo) error {
-	c, err := s.pool.Dial()
-	if err != nil {
-		return err
-	}
+	c := s.pool.Get()
 	defer c.Close()
 
 	b, err := mi.Serialize()
