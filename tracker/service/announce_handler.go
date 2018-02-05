@@ -1,11 +1,10 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
-
-	"github.com/jackpal/bencode-go"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -123,22 +122,11 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) error {
 		return handler.Errorf("sample peers: %s", err)
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-	// TODO(codyg): bencode can't serialize pointers, so we're forced to dereference
-	// every PeerInfo first.
-	derefPeerInfos := make([]torlib.PeerInfo, len(peers))
-	for i, p := range peers {
-		derefPeerInfos[i] = *p
+	resp := torlib.AnnouncerResponse{
+		Peers: peers,
 	}
-
-	// write peers bencoded
-	err = bencode.Marshal(w, torlib.AnnouncerResponse{
-		Interval: int64(h.config.AnnounceInterval.Seconds()),
-		Peers:    derefPeerInfos,
-	})
-	if err != nil {
-		return handler.Errorf("bencode marshal: %s", err)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		return handler.Errorf("json encode: %s", err)
 	}
 	return nil
 }

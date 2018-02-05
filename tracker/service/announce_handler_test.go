@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"net/http"
@@ -11,8 +12,6 @@ import (
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/storage"
 
-	bencode "github.com/jackpal/bencode-go"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,28 +48,28 @@ func TestAnnounceEndPoint(t *testing.T) {
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
 		require.Equal(t, 404, response.StatusCode)
 	})
-	t.Run("Return 200 and single peer bencoded response", func(t *testing.T) {
+	t.Run("Return 200 and single peer response", func(t *testing.T) {
+		require := require.New(t)
 
 		announceRequest, _ := http.NewRequest("GET", announceRequestPath, nil)
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()
 
-		peerTo := &torlib.PeerInfo{
+		peers := []*torlib.PeerInfo{{
 			InfoHash: peer.InfoHash,
 			PeerID:   peer.PeerID,
 			IP:       peer.IP,
 			Port:     peer.Port,
-		}
+		}}
 
 		mocks.datastore.EXPECT().GetOrigins(mi.InfoHash.HexString()).Return(nil, nil)
-		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString()).Return([]*torlib.PeerInfo{peerTo}, nil)
+		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString()).Return(peers, nil)
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
 		requireStatus(t, response, 200)
-		announceResponse := torlib.AnnouncerResponse{}
-		bencode.Unmarshal(response.Body, &announceResponse)
-		assert.Equal(t, announceResponse.Interval, int64(5))
-		assert.Equal(t, announceResponse.Peers, []torlib.PeerInfo{*peerTo})
+		ar := torlib.AnnouncerResponse{}
+		require.NoError(json.NewDecoder(response.Body).Decode(&ar))
+		require.Equal(ar.Peers, peers)
 	})
 	t.Run("Return origins", func(t *testing.T) {
 		require := require.New(t)
@@ -81,24 +80,23 @@ func TestAnnounceEndPoint(t *testing.T) {
 		req, err := http.NewRequest("GET", announceRequestPath, nil)
 		require.NoError(err)
 
-		origin := &torlib.PeerInfo{
+		origins := []*torlib.PeerInfo{{
 			InfoHash: peer.InfoHash,
 			PeerID:   peer.PeerID,
 			IP:       peer.IP,
 			Port:     peer.Port,
 			Origin:   true,
-		}
+		}}
 
-		mocks.datastore.EXPECT().GetOrigins(mi.InfoHash.HexString()).Return([]*torlib.PeerInfo{origin}, nil)
+		mocks.datastore.EXPECT().GetOrigins(mi.InfoHash.HexString()).Return(origins, nil)
 		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString()).Return(nil, nil)
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
 		requireStatus(t, resp, 200)
 		ar := torlib.AnnouncerResponse{}
-		bencode.Unmarshal(resp.Body, &ar)
-		origin.Origin = false
-		require.Equal([]torlib.PeerInfo{*origin}, ar.Peers)
+		require.NoError(json.NewDecoder(resp.Body).Decode(&ar))
+		require.Equal(origins, ar.Peers)
 	})
 	t.Run("No origins in storage makes requests to origin cluster and upserts origins", func(t *testing.T) {
 		require := require.New(t)
@@ -112,7 +110,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		infoHash := mi.InfoHash.HexString()
 		digest := image.NewSHA256DigestFromHex(mi.Info.Name)
 		originPCtx := peercontext.Fixture()
-		origin := &torlib.PeerInfo{
+		origins := []*torlib.PeerInfo{{
 			InfoHash: infoHash,
 			PeerID:   originPCtx.PeerID.String(),
 			IP:       originPCtx.IP,
@@ -120,22 +118,20 @@ func TestAnnounceEndPoint(t *testing.T) {
 			DC:       originPCtx.Zone,
 			Origin:   true,
 			Complete: true,
-		}
+		}}
 
 		mocks.originCluster.EXPECT().Owners(digest).Return([]peercontext.PeerContext{originPCtx}, nil)
 
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		mocks.datastore.EXPECT().GetPeers(infoHash).Return(nil, nil)
 		mocks.datastore.EXPECT().GetOrigins(infoHash).Return(nil, storage.ErrNoOrigins)
-		mocks.datastore.EXPECT().UpdateOrigins(infoHash, []*torlib.PeerInfo{origin}).Return(nil)
+		mocks.datastore.EXPECT().UpdateOrigins(infoHash, origins).Return(nil)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
 		requireStatus(t, resp, 200)
 		ar := torlib.AnnouncerResponse{}
-		bencode.Unmarshal(resp.Body, &ar)
-		origin.Origin = false
-		origin.Complete = false
-		require.Equal([]torlib.PeerInfo{*origin}, ar.Peers)
+		require.NoError(json.NewDecoder(resp.Body).Decode(&ar))
+		require.Equal(origins, ar.Peers)
 	})
 	t.Run("Unavailable peer store can still provide origin peers", func(t *testing.T) {
 		require := require.New(t)
@@ -149,14 +145,15 @@ func TestAnnounceEndPoint(t *testing.T) {
 		infoHash := mi.InfoHash.HexString()
 		digest := image.NewSHA256DigestFromHex(mi.Info.Name)
 		originPCtx := peercontext.Fixture()
-		origin := &torlib.PeerInfo{
+		origins := []*torlib.PeerInfo{{
 			InfoHash: infoHash,
 			PeerID:   originPCtx.PeerID.String(),
 			IP:       originPCtx.IP,
 			Port:     int64(originPCtx.Port),
 			DC:       originPCtx.Zone,
 			Origin:   true,
-		}
+			Complete: true,
+		}}
 
 		mocks.originCluster.EXPECT().Owners(digest).Return([]peercontext.PeerContext{originPCtx}, nil)
 
@@ -169,9 +166,8 @@ func TestAnnounceEndPoint(t *testing.T) {
 		resp := mocks.CreateHandlerAndServeRequest(req)
 		requireStatus(t, resp, 200)
 		ar := torlib.AnnouncerResponse{}
-		bencode.Unmarshal(resp.Body, &ar)
-		origin.Origin = false
-		require.Equal([]torlib.PeerInfo{*origin}, ar.Peers)
+		require.NoError(json.NewDecoder(resp.Body).Decode(&ar))
+		require.Equal(origins, ar.Peers)
 	})
 	t.Run("No origins and unavailable origin cluster can still provide peers", func(t *testing.T) {
 		require := require.New(t)
@@ -185,24 +181,24 @@ func TestAnnounceEndPoint(t *testing.T) {
 		infoHash := mi.InfoHash.HexString()
 		digest := image.NewSHA256DigestFromHex(mi.Info.Name)
 
-		otherPeer := &torlib.PeerInfo{
+		otherPeers := []*torlib.PeerInfo{{
 			InfoHash: peer.InfoHash,
 			PeerID:   peer.PeerID,
 			IP:       peer.IP,
 			Port:     peer.Port,
-		}
+		}}
 
 		mocks.originCluster.EXPECT().Owners(digest).Return(nil, errors.New("origin cluster error"))
 
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
-		mocks.datastore.EXPECT().GetPeers(infoHash).Return([]*torlib.PeerInfo{otherPeer}, nil)
+		mocks.datastore.EXPECT().GetPeers(infoHash).Return(otherPeers, nil)
 		mocks.datastore.EXPECT().GetOrigins(infoHash).Return(nil, storage.ErrNoOrigins)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
 		requireStatus(t, resp, 200)
 		ar := torlib.AnnouncerResponse{}
-		bencode.Unmarshal(resp.Body, &ar)
-		require.Equal([]torlib.PeerInfo{*otherPeer}, ar.Peers)
+		require.NoError(json.NewDecoder(resp.Body).Decode(&ar))
+		require.Equal(otherPeers, ar.Peers)
 	})
 }
 

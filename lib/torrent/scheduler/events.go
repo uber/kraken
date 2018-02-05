@@ -203,7 +203,7 @@ func (e announceTickEvent) Apply(s *Scheduler) {
 // from the tracker.
 type announceResponseEvent struct {
 	infoHash torlib.InfoHash
-	peers    []torlib.PeerInfo
+	peers    []*torlib.PeerInfo
 }
 
 // Apply selects new peers returned via an announce response to open connections to
