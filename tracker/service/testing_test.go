@@ -1,16 +1,16 @@
 package service
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
 	"code.uber.internal/infra/kraken/torlib"
 
-	bencode "github.com/jackpal/bencode-go"
 	"github.com/stretchr/testify/require"
 )
 
-func getPeerIDs(peers []torlib.PeerInfo) []string {
+func getPeerIDs(peers []*torlib.PeerInfo) []string {
 	s := make([]string, len(peers))
 	for i, p := range peers {
 		s[i] = p.PeerID
@@ -40,8 +40,7 @@ func TestTestAnnouncer(t *testing.T) {
 	require.NoError(err)
 
 	ar := torlib.AnnouncerResponse{}
-	err = bencode.Unmarshal(resp.Body, &ar)
-	require.NoError(err)
+	require.NoError(json.NewDecoder(resp.Body).Decode(&ar))
 
 	require.Equal([]string{p1.PeerID}, getPeerIDs(ar.Peers))
 
@@ -51,8 +50,7 @@ func TestTestAnnouncer(t *testing.T) {
 	require.NoError(err)
 
 	ar = torlib.AnnouncerResponse{}
-	err = bencode.Unmarshal(resp.Body, &ar)
-	require.NoError(err)
+	require.NoError(json.NewDecoder(resp.Body).Decode(&ar))
 
 	require.Equal([]string{p1.PeerID, p2.PeerID}, getPeerIDs(ar.Peers))
 }

@@ -5,21 +5,19 @@ import "sort"
 // AnnouncerResponse follows a bittorrent tracker protocol
 // for tracker based peer discovery
 type AnnouncerResponse struct {
-	Interval int64      `bencode:"interval"`
-	Peers    []PeerInfo `bencode:"peers"`
+	Peers []*PeerInfo `json:"peers"`
 }
 
 // PeerInfo defines metadata for a peer
 type PeerInfo struct {
-	InfoHash string `bencode:"info_hash"`
-	PeerID   string `bencode:"peer_id"`
-	IP       string `bencode:"ip"`
-	Port     int64  `bencode:"port"`
-	Priority int64  `bencode:"priority"`
-	DC       string `bencode:"dc"`
-	// TODO(codyg): Get rid of bencode because it can't encode boolean.
-	Origin   bool `bencode:"-"`
-	Complete bool `bencode:"-"`
+	InfoHash string `json:"info_hash"`
+	PeerID   string `json:"peer_id"`
+	IP       string `json:"ip"`
+	Port     int64  `json:"port"`
+	Priority int64  `json:"priority"`
+	DC       string `json:"dc"`
+	Origin   bool   `json:"origin"`
+	Complete bool   `json:"complete"`
 }
 
 // SortedPeerIDs converts a list of peers into their peer ids in ascending order.
