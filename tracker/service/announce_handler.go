@@ -74,6 +74,15 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) error {
 		log.With("info_hash", infoHash, "peer_id", peerID).Errorf("Error updating peer: %s", err)
 	}
 
+	if peer.Complete {
+		// If the peer is announcing as complete, don't return a peer handout since
+		// the peer does not need it.
+		if err := json.NewEncoder(w).Encode(torlib.AnnouncerResponse{}); err != nil {
+			return handler.Errorf("json encode empty response: %s", err)
+		}
+		return nil
+	}
+
 	var errs []error
 	peers, err := h.store.GetPeers(infoHash)
 	if err != nil {

@@ -11,7 +11,6 @@ type Queue interface {
 	Next() (torlib.InfoHash, bool)
 	Add(torlib.InfoHash)
 	Ready(torlib.InfoHash)
-	Done(torlib.InfoHash)
 	Eject(torlib.InfoHash)
 }
 
@@ -23,9 +22,6 @@ type QueueImpl struct {
 
 	// Set of torrents with pending announce requests.
 	pending map[torlib.InfoHash]bool
-
-	// Set of torrents to be removed from the queue after their next announce.
-	done map[torlib.InfoHash]bool
 }
 
 // New returns a new QueueImpl.
@@ -33,7 +29,6 @@ func New() *QueueImpl {
 	return &QueueImpl{
 		readyQueue: list.New(),
 		pending:    make(map[torlib.InfoHash]bool),
-		done:       make(map[torlib.InfoHash]bool),
 	}
 }
 
@@ -48,19 +43,14 @@ func (q *QueueImpl) Next() (torlib.InfoHash, bool) {
 	}
 	q.readyQueue.Remove(next)
 	h := next.Value.(torlib.InfoHash)
-	if q.done[h] {
-		delete(q.done, h)
-	} else {
-		q.pending[h] = true
-	}
+	q.pending[h] = true
 	return h, true
 }
 
-// Add adds a torrent to the front of the queue, so they can send their first
-// announce as soon as possible. Behavior is undefined if called twice on the
-// same torrent.
+// Add adds a torrent to the back of the queue. Behavior is undefined if called
+// twice on the same torrent.
 func (q *QueueImpl) Add(h torlib.InfoHash) {
-	q.readyQueue.PushFront(h)
+	q.readyQueue.PushBack(h)
 }
 
 // Ready places a pending torrent back in the queue. Should be called once an
@@ -73,16 +63,10 @@ func (q *QueueImpl) Ready(h torlib.InfoHash) {
 	q.readyQueue.PushBack(h)
 }
 
-// Done marks a torrent for deletion after its next announce.
-func (q *QueueImpl) Done(h torlib.InfoHash) {
-	q.done[h] = true
-}
-
 // Eject immediately ejects h from the announce queue, preventing it from
 // announcing further.
 func (q *QueueImpl) Eject(h torlib.InfoHash) {
 	delete(q.pending, h)
-	delete(q.done, h)
 	for e := q.readyQueue.Front(); e != nil; e = e.Next() {
 		if e.Value.(torlib.InfoHash) == h {
 			q.readyQueue.Remove(e)
@@ -108,9 +92,6 @@ func (q DisabledQueue) Add(torlib.InfoHash) {}
 
 // Ready noops.
 func (q DisabledQueue) Ready(torlib.InfoHash) {}
-
-// Done noops.
-func (q DisabledQueue) Done(torlib.InfoHash) {}
 
 // Eject noops.
 func (q DisabledQueue) Eject(torlib.InfoHash) {}

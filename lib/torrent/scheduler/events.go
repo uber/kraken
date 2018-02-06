@@ -195,7 +195,6 @@ func (e announceTickEvent) Apply(s *Scheduler) {
 		s.log("hash", h).Error("Pulled unknown torrent off announce queue")
 		return
 	}
-	s.log("dispatcher", ctrl.Dispatcher).Debug("Announcing")
 	go s.announce(ctrl.Dispatcher)
 }
 
@@ -286,6 +285,9 @@ func (e newTorrentEvent) Apply(s *Scheduler) {
 		return
 	}
 	ctrl.Errors = append(ctrl.Errors, e.errc)
+
+	// Immediately announce new torrents.
+	go s.announce(ctrl.Dispatcher)
 }
 
 // completedDispatcherEvent occurs when a dispatcher finishes downloading its torrent.
@@ -298,7 +300,7 @@ func (e completedDispatcherEvent) Apply(s *Scheduler) {
 	infoHash := e.dispatcher.Torrent.InfoHash()
 
 	s.connState.ClearBlacklist(infoHash)
-	s.announceQueue.Done(infoHash)
+	s.announceQueue.Eject(infoHash)
 	ctrl, ok := s.torrentControls[infoHash]
 	if !ok {
 		s.log("dispatcher", e.dispatcher).Error("Completed dispatcher not found")
@@ -321,6 +323,9 @@ func (e completedDispatcherEvent) Apply(s *Scheduler) {
 
 	s.log("torrent", e.dispatcher.Torrent).Info("Torrent complete")
 	s.networkEvents.Produce(networkevent.TorrentCompleteEvent(infoHash, s.pctx.PeerID))
+
+	// Immediately announce completed torrents.
+	go s.announce(ctrl.Dispatcher)
 }
 
 // preemptionTickEvent occurs periodically to preempt unneeded conns and remove
