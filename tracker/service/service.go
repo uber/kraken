@@ -24,7 +24,9 @@ func Handler(
 	manifestStore storage.ManifestStore,
 	originCluster blobclient.ClusterClient) http.Handler {
 
-	stats = stats.SubScope("service")
+	stats = stats.Tagged(map[string]string{
+		"module": "service",
+	})
 
 	announce := &announceHandler{
 		config,

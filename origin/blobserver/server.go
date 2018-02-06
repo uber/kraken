@@ -69,7 +69,9 @@ func New(
 	pctx peercontext.PeerContext,
 	backendManager *backend.Manager) (*Server, error) {
 
-	stats = stats.SubScope("server")
+	stats = stats.Tagged(map[string]string{
+		"module": "blobserver",
+	})
 
 	if len(config.HashNodes) == 0 {
 		return nil, errors.New("no hash nodes configured")
