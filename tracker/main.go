@@ -35,9 +35,6 @@ func main() {
 	}
 	defer closer.Close()
 
-	// Root metrics scope for the tracker.
-	stats = stats.SubScope("kraken.tracker")
-
 	storeProvider := storage.NewStoreProvider(config.Storage, config.Nemo)
 	peerStore, err := storeProvider.GetPeerStore()
 	if err != nil {

@@ -120,7 +120,9 @@ func New(
 		return nil, err
 	}
 	done := make(chan struct{})
-	stats = stats.SubScope("scheduler")
+	stats = stats.Tagged(map[string]string{
+		"module": "scheduler",
+	})
 
 	overrides := schedOverrides{
 		clock:     clock.New(),

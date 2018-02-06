@@ -38,7 +38,9 @@ type Server struct {
 func New(
 	config Config, stats tally.Scope, fs store.FileStore, tc torrent.Client) *Server {
 
-	stats = stats.SubScope("server")
+	stats = stats.Tagged(map[string]string{
+		"module": "agentserver",
+	})
 
 	rc := dedup.NewRequestCache(config.RequestCache, clock.New())
 	rc.SetNotFound(func(err error) bool { return err == scheduler.ErrTorrentNotFound })

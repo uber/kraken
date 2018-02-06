@@ -15,16 +15,16 @@ import (
 
 func TestScopeByEndpoint(t *testing.T) {
 	tests := []struct {
-		method   string
-		path     string
-		reqPath  string
-		expected string
+		method           string
+		path             string
+		reqPath          string
+		expectedEndpoint string
 	}{
-		{"GET", "/foo/:foo/bar/:bar", "/foo/x/bar/y", "foo.bar.GET"},
-		{"POST", "/foo/:foo/bar/:bar", "/foo/x/bar/y", "foo.bar.POST"},
-		{"GET", "/a/b/c", "/a/b/c", "a.b.c.GET"},
-		{"GET", "/", "/", "GET"},
-		{"GET", "/x/:a/:b/:c", "/x/a/b/c", "x.GET"},
+		{"GET", "/foo/:foo/bar/:bar", "/foo/x/bar/y", "foo.bar"},
+		{"POST", "/foo/:foo/bar/:bar", "/foo/x/bar/y", "foo.bar"},
+		{"GET", "/a/b/c", "/a/b/c", "a.b.c"},
+		{"GET", "/", "/", ""},
+		{"GET", "/x/:a/:b/:c", "/x/a/b/c", "x"},
 	}
 
 	for _, test := range tests {
@@ -35,7 +35,7 @@ func TestScopeByEndpoint(t *testing.T) {
 
 			r := chi.NewRouter()
 			r.HandleFunc(test.path, func(w http.ResponseWriter, r *http.Request) {
-				scopeByEndpoint(stats, r).Counter("count").Inc(1)
+				tagEndpoint(stats, r).Counter("count").Inc(1)
 			})
 			addr, stop := testutil.StartServer(r)
 			defer stop()
@@ -43,8 +43,12 @@ func TestScopeByEndpoint(t *testing.T) {
 			_, err := httputil.Send(test.method, fmt.Sprintf("http://%s%s", addr, test.reqPath))
 			require.NoError(err)
 
-			counter, ok := stats.Snapshot().Counters()[test.expected+".count"]
+			counter, ok := stats.Snapshot().Counters()["count"]
 			require.True(ok)
+			require.Equal(map[string]string{
+				"endpoint": test.expectedEndpoint,
+				"method":   test.method,
+			}, counter.Tags())
 			require.Equal(int64(1), counter.Value())
 		})
 	}
@@ -69,8 +73,12 @@ func TestLatencyTimer(t *testing.T) {
 
 	now := time.Now()
 
-	timer, ok := stats.Snapshot().Timers()["foo.GET.latency"]
+	timer, ok := stats.Snapshot().Timers()["latency"]
 	require.True(ok)
+	require.Equal(map[string]string{
+		"endpoint": "foo",
+		"method":   "GET",
+	}, timer.Tags())
 	require.WithinDuration(now, now.Add(timer.Values()[0]), 500*time.Millisecond)
 }
 
@@ -91,7 +99,11 @@ func TestHitCounter(t *testing.T) {
 		require.NoError(err)
 	}
 
-	counter, ok := stats.Snapshot().Counters()["foo.GET.count"]
+	counter, ok := stats.Snapshot().Counters()["count"]
 	require.True(ok)
+	require.Equal(map[string]string{
+		"endpoint": "foo",
+		"method":   "GET",
+	}, counter.Tags())
 	require.Equal(int64(5), counter.Value())
 }

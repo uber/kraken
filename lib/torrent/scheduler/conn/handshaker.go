@@ -118,7 +118,9 @@ func NewHandshaker(
 	closeHandler CloseHandler) *Handshaker {
 
 	config = config.applyDefaults()
-	stats = stats.SubScope("conn")
+	stats = stats.Tagged(map[string]string{
+		"module": "conn",
+	})
 
 	return &Handshaker{
 		config:        config,

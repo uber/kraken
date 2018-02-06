@@ -167,8 +167,10 @@ func (c *Conn) Send(msg *Message) error {
 					c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PiecePayload.Index)))
 		}
 
-		t := msg.Message.Type.String()
-		c.stats.SubScope("dropped_messages").Counter(t).Inc(1)
+		c.stats.Tagged(map[string]string{
+			"dropped_message_type": msg.Message.Type.String(),
+		}).Counter("dropped_messages").Inc(1)
+
 		return errors.New("send buffer full")
 	}
 }
@@ -201,7 +203,7 @@ func (c *Conn) readPayload(length int32) ([]byte, error) {
 	if _, err := io.ReadFull(c.nc, payload); err != nil {
 		return nil, err
 	}
-	c.stats.Counter("ingress_piece_bandwidth").Inc(int64(length))
+	c.countBandwidth("ingress", int64(length))
 	return payload, nil
 }
 
@@ -297,7 +299,7 @@ func (c *Conn) sendPiecePayload(b []byte) error {
 		}
 		b = b[n:]
 	}
-	c.stats.Counter("egress_piece_bandwidth").Inc(int64(numBytes))
+	c.countBandwidth("egress", int64(numBytes))
 	return nil
 }
 
@@ -358,6 +360,12 @@ func (c *Conn) writeLoop() {
 
 		}
 	}
+}
+
+func (c *Conn) countBandwidth(direction string, n int64) {
+	c.stats.Tagged(map[string]string{
+		"piece_bandwidth_direction": direction,
+	}).Counter("piece_bandwidth").Inc(n)
 }
 
 func (c *Conn) log(keysAndValues ...interface{}) *zap.SugaredLogger {

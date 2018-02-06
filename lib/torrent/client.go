@@ -52,7 +52,10 @@ func NewSchedulerClient(
 	if err != nil {
 		return nil, fmt.Errorf("hostname: %s", err)
 	}
-	stats = stats.SubScope("peer").SubScope(hostname).SubScope(shortenedPID)
+	stats = stats.Tagged(map[string]string{
+		"peer":     shortenedPID,
+		"hostname": hostname,
+	})
 
 	networkEvents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
