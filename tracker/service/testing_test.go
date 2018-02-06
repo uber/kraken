@@ -10,14 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getPeerIDs(peers []*torlib.PeerInfo) []string {
-	s := make([]string, len(peers))
-	for i, p := range peers {
-		s[i] = p.PeerID
-	}
-	return s
-}
-
 func TestTestAnnouncer(t *testing.T) {
 	require := require.New(t)
 
@@ -27,7 +19,7 @@ func TestTestAnnouncer(t *testing.T) {
 	mi := torlib.MetaInfoFixture()
 	p1 := &torlib.PeerInfo{
 		PeerID:   "peer1",
-		Complete: true,
+		Complete: false,
 	}
 	p2 := &torlib.PeerInfo{
 		PeerID:   "peer2",
@@ -42,7 +34,7 @@ func TestTestAnnouncer(t *testing.T) {
 	ar := torlib.AnnouncerResponse{}
 	require.NoError(json.NewDecoder(resp.Body).Decode(&ar))
 
-	require.Equal([]string{p1.PeerID}, getPeerIDs(ar.Peers))
+	require.Equal([]string{p1.PeerID}, torlib.SortedPeerIDs(ar.Peers))
 
 	// Announce p2 should return both p1 and p2.
 
@@ -52,5 +44,5 @@ func TestTestAnnouncer(t *testing.T) {
 	ar = torlib.AnnouncerResponse{}
 	require.NoError(json.NewDecoder(resp.Body).Decode(&ar))
 
-	require.Equal([]string{p1.PeerID, p2.PeerID}, getPeerIDs(ar.Peers))
+	require.Equal([]string{p1.PeerID, p2.PeerID}, torlib.SortedPeerIDs(ar.Peers))
 }

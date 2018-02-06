@@ -64,7 +64,7 @@ func (c Config) String() string {
 
 func (c Config) applyDefaults() Config {
 	if c.AnnounceInterval == 0 {
-		c.AnnounceInterval = 3 * time.Second
+		c.AnnounceInterval = 5 * time.Second
 	}
 	if c.SeederTTI == 0 {
 		c.SeederTTI = 10 * time.Minute
