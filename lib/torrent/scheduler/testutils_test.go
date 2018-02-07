@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"flag"
+	"io/ioutil"
 	"net"
 	"os"
 	"reflect"
@@ -175,7 +176,10 @@ func (p *testPeer) checkTorrent(t *testing.T, tf *torlib.TestTorrentFile) {
 	result := make([]byte, tor.Length())
 	cursor := result
 	for i := 0; i < tor.NumPieces(); i++ {
-		pieceData, err := tor.ReadPiece(i)
+		pr, err := tor.GetPieceReader(i)
+		require.NoError(err)
+		defer pr.Close()
+		pieceData, err := ioutil.ReadAll(pr)
 		require.NoError(err)
 		copy(cursor, pieceData)
 		cursor = cursor[tor.PieceLength(i):]

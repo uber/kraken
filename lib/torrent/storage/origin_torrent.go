@@ -107,23 +107,16 @@ func (t *OriginTorrent) String() string {
 	return fmt.Sprintf("torrent(hash=%s, downloaded=%d%%)", t.InfoHash().HexString(), downloaded)
 }
 
-// ReadPiece returns the data for piece pi.
-func (t *OriginTorrent) ReadPiece(pi int) ([]byte, error) {
+// GetPieceReader returns a reader for piece pi.
+func (t *OriginTorrent) GetPieceReader(pi int) (PieceReader, error) {
 	if pi >= len(t.pieces) {
 		return nil, fmt.Errorf("invalid piece index %d: num pieces = %d", pi, len(t.pieces))
 	}
+	return newFilePieceReader(t.getFileOffset(pi), t.PieceLength(pi), t.openFile), nil
+}
 
-	f, err := t.store.GetCacheFileReader(t.metaInfo.Info.Name)
-	if err != nil {
-		return nil, fmt.Errorf("cannot get cache reader: %s", err)
-	}
-	defer f.Close()
-
-	data := make([]byte, t.PieceLength(pi))
-	if _, err := f.ReadAt(data, t.getFileOffset(pi)); err != nil {
-		return nil, fmt.Errorf("read piece: %s", err)
-	}
-	return data, nil
+func (t *OriginTorrent) openFile() (store.FileReader, error) {
+	return t.store.GetCacheFileReader(t.metaInfo.Info.Name)
 }
 
 // HasPiece returns if piece pi is complete.

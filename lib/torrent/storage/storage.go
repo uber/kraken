@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"io"
 
 	"code.uber.internal/infra/kraken/torlib"
 
@@ -12,6 +13,12 @@ import (
 var (
 	ErrNotFound = errors.New("torrent not found")
 )
+
+// PieceReader defines operations for lazy piece reading.
+type PieceReader interface {
+	io.ReadCloser
+	Length() int
+}
 
 // Torrent represents a read/write interface for a torrent
 type Torrent interface {
@@ -32,7 +39,7 @@ type Torrent interface {
 	MissingPieces() []int
 
 	WritePiece(data []byte, piece int) error
-	ReadPiece(piece int) ([]byte, error)
+	GetPieceReader(piece int) (PieceReader, error)
 }
 
 // TorrentArchive creates and open torrent file

@@ -325,8 +325,8 @@ func (t *AgentTorrent) WritePiece(data []byte, pi int) error {
 	return nil
 }
 
-// ReadPiece returns the data for piece pi.
-func (t *AgentTorrent) ReadPiece(pi int) ([]byte, error) {
+// GetPieceReader returns a reader for piece pi.
+func (t *AgentTorrent) GetPieceReader(pi int) (PieceReader, error) {
 	piece, err := t.getPiece(pi)
 	if err != nil {
 		return nil, err
@@ -334,19 +334,11 @@ func (t *AgentTorrent) ReadPiece(pi int) ([]byte, error) {
 	if !piece.complete() {
 		return nil, errors.New("piece not complete")
 	}
+	return newFilePieceReader(t.getFileOffset(pi), t.PieceLength(pi), t.openFile), nil
+}
 
-	// It is ok if file is moved from download to cache.
-	f, err := t.store.GetDownloadOrCacheFileReader(t.metaInfo.Info.Name)
-	if err != nil {
-		return nil, fmt.Errorf("cannot get download/cache reader: %s", err)
-	}
-	defer f.Close()
-
-	data := make([]byte, t.PieceLength(pi))
-	if _, err := f.ReadAt(data, t.getFileOffset(pi)); err != nil {
-		return nil, fmt.Errorf("read piece: %s", err)
-	}
-	return data, nil
+func (t *AgentTorrent) openFile() (store.FileReader, error) {
+	return t.store.GetDownloadOrCacheFileReader(t.metaInfo.Info.Name)
 }
 
 // HasPiece returns if piece pi is complete.

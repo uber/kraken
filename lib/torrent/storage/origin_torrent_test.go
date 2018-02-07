@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"path"
 	"sync"
 	"testing"
@@ -43,7 +44,7 @@ func TestOriginTorrentCreate(t *testing.T) {
 	require.Equal([]int{}, tor.MissingPieces())
 }
 
-func TestOriginTorrentReadPieceConcurrent(t *testing.T) {
+func TestOriginTorrentGetPieceReaderConcurrent(t *testing.T) {
 	require := require.New(t)
 
 	fs, cleanup := store.OriginFileStoreFixture(clock.New())
@@ -64,9 +65,12 @@ func TestOriginTorrentReadPieceConcurrent(t *testing.T) {
 			defer wg.Done()
 			start := i * int(mi.Info.PieceLength)
 			end := start + int(tor.PieceLength(i))
-			data, err := tor.ReadPiece(i)
+			r, err := tor.GetPieceReader(i)
 			require.NoError(err)
-			require.Equal(tf.Content[start:end], data)
+			defer r.Close()
+			result, err := ioutil.ReadAll(r)
+			require.NoError(err)
+			require.Equal(tf.Content[start:end], result)
 		}(i)
 	}
 
