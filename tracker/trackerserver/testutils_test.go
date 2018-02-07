@@ -1,4 +1,4 @@
-package service
+package trackerserver
 
 import (
 	"encoding/json"
@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"strconv"
 	"testing"
-	"time"
 
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/mocks/tracker/mockstorage"
@@ -111,7 +110,5 @@ func createAnnouncePath(mi *torlib.MetaInfo, p *torlib.PeerInfo) string {
 }
 
 func configFixture() Config {
-	return Config{
-		AnnounceInterval: 5 * time.Second,
-	}
+	return Config{}
 }

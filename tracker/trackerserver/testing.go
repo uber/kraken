@@ -1,9 +1,8 @@
-package service
+package trackerserver
 
 import (
 	"errors"
 	"sync"
-	"time"
 
 	"github.com/pressly/chi"
 
@@ -72,9 +71,6 @@ func TestAnnouncer() (addr string, stop func()) {
 	}
 
 	announce := &announceHandler{
-		config: Config{
-			AnnounceInterval: time.Second,
-		},
 		store: &testPeerStore{
 			torrents: make(map[string][]torlib.PeerInfo),
 		},

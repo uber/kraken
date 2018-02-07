@@ -12,8 +12,8 @@ import (
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
-	"code.uber.internal/infra/kraken/tracker/service"
 	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/tracker/trackerserver"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -62,8 +62,8 @@ func main() {
 	originCluster := blobclient.NewClusterClient(
 		blobclient.NewClientResolver(blobclient.NewProvider(), origins))
 
-	h := service.Handler(
-		config.Service,
+	h := trackerserver.Handler(
+		config.TrackerServer,
 		stats,
 		policy,
 		peerStore,

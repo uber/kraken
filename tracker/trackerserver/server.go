@@ -1,4 +1,4 @@
-package service
+package trackerserver
 
 import (
 	"net/http"
@@ -14,7 +14,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/handler"
 )
 
-// Handler instantiates a new handler for the tracker service.
+// Handler instantiates a new handler for the tracker server.
 func Handler(
 	config Config,
 	stats tally.Scope,
@@ -25,15 +25,10 @@ func Handler(
 	originCluster blobclient.ClusterClient) http.Handler {
 
 	stats = stats.Tagged(map[string]string{
-		"module": "service",
+		"module": "trackerserver",
 	})
 
-	announce := &announceHandler{
-		config,
-		peerStore,
-		policy,
-		originCluster,
-	}
+	announce := &announceHandler{peerStore, policy, originCluster}
 	health := &healthHandler{}
 	metainfo := newMetaInfoHandler(config.MetaInfo, metaInfoStore, originCluster)
 	manifest := &manifestHandler{manifestStore}

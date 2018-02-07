@@ -26,7 +26,7 @@ import (
 	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
-	trackerservice "code.uber.internal/infra/kraken/tracker/service"
+	"code.uber.internal/infra/kraken/tracker/trackerserver"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
@@ -90,7 +90,7 @@ func newTestMocks(t gomock.TestReporter) (*testMocks, func()) {
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
 
-	trackerAddr, stop := trackerservice.TestAnnouncer()
+	trackerAddr, stop := trackerserver.TestAnnouncer()
 	cleanup.Add(stop)
 
 	return &testMocks{
