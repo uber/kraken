@@ -1,4 +1,4 @@
-package service
+package trackerserver
 
 import (
 	"encoding/json"
@@ -17,7 +17,6 @@ import (
 )
 
 type announceHandler struct {
-	config        Config
 	store         storage.PeerStore
 	policy        peerhandoutpolicy.PeerHandoutPolicy
 	originCluster blobclient.ClusterClient

@@ -1,4 +1,4 @@
-package service
+package trackerserver
 
 import (
 	"encoding/json"

@@ -8,8 +8,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
-	"code.uber.internal/infra/kraken/tracker/service"
 	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/tracker/trackerserver"
 )
 
 // Config defines tracker configuration.
@@ -17,7 +17,7 @@ type Config struct {
 	ZapLogging        zap.Config               `yaml:"zap"`
 	Port              int                      `yaml:"port"`
 	Storage           storage.Config           `yaml:"storage"`
-	Service           service.Config           `yaml:"service"`
+	TrackerServer     trackerserver.Config     `yaml:"trackerserver"`
 	PeerHandoutPolicy peerhandoutpolicy.Config `yaml:"peerhandoutpolicy"`
 	Origin            OriginConfig             `yaml:"origin"`
 	Metrics           metrics.Config           `yaml:"metrics"`
