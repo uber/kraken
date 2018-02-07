@@ -3,6 +3,7 @@ package scheduler
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"sync"
 	"time"
@@ -30,50 +31,6 @@ var (
 	errChunkNotSupported       = errors.New("reading / writing chunk of piece not supported")
 	errRepeatedBitfieldMessage = errors.New("received repeated bitfield message")
 )
-
-type torrentAccessWatcher struct {
-	storage.Torrent
-	clk       clock.Clock
-	mu        sync.Mutex
-	lastWrite time.Time
-	lastRead  time.Time
-}
-
-func newTorrentAccessWatcher(t storage.Torrent, clk clock.Clock) *torrentAccessWatcher {
-	return &torrentAccessWatcher{Torrent: t, clk: clk, lastWrite: clk.Now(), lastRead: clk.Now()}
-}
-
-func (w *torrentAccessWatcher) WritePiece(data []byte, piece int) error {
-	err := w.Torrent.WritePiece(data, piece)
-	if err == nil {
-		w.mu.Lock()
-		w.lastWrite = w.clk.Now()
-		w.mu.Unlock()
-	}
-	return err
-}
-
-func (w *torrentAccessWatcher) ReadPiece(piece int) ([]byte, error) {
-	b, err := w.Torrent.ReadPiece(piece)
-	if err == nil {
-		w.mu.Lock()
-		w.lastRead = w.clk.Now()
-		w.mu.Unlock()
-	}
-	return b, err
-}
-
-func (w *torrentAccessWatcher) getLastReadTime() time.Time {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.lastRead
-}
-
-func (w *torrentAccessWatcher) getLastWriteTime() time.Time {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.lastWrite
-}
 
 // messages defines a subset of conn methods which dispatcher requires to
 // communicate with remote peers.
@@ -442,9 +399,9 @@ func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 	d.networkEvents.Produce(
 		networkevent.DispatcherGotPieceRequestEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
 
-	payload, err := d.Torrent.ReadPiece(i)
+	pr, err := d.Torrent.GetPieceReader(i)
 	if err != nil {
-		d.log("peer", p, "piece", i).Errorf("Error reading requested piece: %s", err)
+		d.log("peer", p, "piece", i).Errorf("Error getting reader for requested piece: %s", err)
 		p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err))
 		return
 	}
@@ -452,7 +409,7 @@ func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 	d.networkEvents.Produce(
 		networkevent.DispatcherReadPieceEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
 
-	if err := p.messages.Send(conn.NewPiecePayloadMessage(i, payload)); err != nil {
+	if err := p.messages.Send(conn.NewPiecePayloadMessage(i, pr)); err != nil {
 		return
 	}
 
@@ -466,11 +423,20 @@ func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 }
 
 func (d *dispatcher) handlePiecePayload(
-	p *peer, msg *p2p.PiecePayloadMessage, payload []byte) {
+	p *peer, msg *p2p.PiecePayloadMessage, pr storage.PieceReader) {
+
+	defer pr.Close()
 
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
 		d.log("peer", p, "piece", i).Error("Rejecting piece payload: chunk not supported")
+		d.pieceRequestManager.MarkInvalid(p.id, i)
+		return
+	}
+
+	payload, err := ioutil.ReadAll(pr)
+	if err != nil {
+		d.log("peer", p, "piece", i).Errorf("Error reading piece payload: %s", err)
 		d.pieceRequestManager.MarkInvalid(p.id, i)
 		return
 	}

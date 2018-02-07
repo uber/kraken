@@ -44,7 +44,8 @@ func TestConnSetEgressBandwidthThrottlesPieceSending(t *testing.T) {
 	start := time.Now()
 	for i := 0; i < numPieces; i++ {
 		go func() {
-			msg := NewPiecePayloadMessage(0, randutil.Text(pieceLength))
+			pr := storage.NewPieceReaderBuffer(randutil.Text(pieceLength))
+			msg := NewPiecePayloadMessage(0, pr)
 			require.NoError(local.Send(msg))
 		}()
 	}

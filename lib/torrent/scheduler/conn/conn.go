@@ -212,17 +212,19 @@ func (c *Conn) readMessage() (*Message, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read message: %s", err)
 	}
-	var payload []byte
+	var pr storage.PieceReader
 	if p2pMessage.Type == p2p.Message_PIECE_PAYLOAD {
 		// For payload messages, we must read the actual payload to the connection
 		// after reading the message.
-		var err error
-		payload, err = c.readPayload(p2pMessage.PiecePayload.Length)
+		payload, err := c.readPayload(p2pMessage.PiecePayload.Length)
 		if err != nil {
 			return nil, fmt.Errorf("read payload: %s", err)
 		}
+		// TODO(codyg): Consider making this reader read directly from the socket.
+		pr = storage.NewPieceReaderBuffer(payload)
 	}
-	return &Message{p2pMessage, payload}, nil
+
+	return &Message{p2pMessage, pr}, nil
 }
 
 // readLoop reads messages off of the underlying connection and sends them to the
@@ -273,33 +275,27 @@ func (c *Conn) readLoop() {
 	}
 }
 
-func (c *Conn) sendPiecePayload(b []byte) error {
-	numBytes := len(b)
-	if numBytes == 0 {
-		return errors.New("payload is empty")
-	}
+func (c *Conn) sendPiecePayload(pr storage.PieceReader) error {
+	defer pr.Close()
 
-	if !c.config.DisableThrottling {
-		r := c.egressLimiter.ReserveN(c.clk.Now(), numBytes)
-		if !r.OK() {
+	throttle := !c.config.DisableThrottling
+	if throttle {
+		reserve := c.egressLimiter.ReserveN(c.clk.Now(), pr.Length())
+		if !reserve.OK() {
 			// TODO(codyg): This is really bad. We need to alert if this happens.
-			c.log("max_burst", c.egressLimiter.Burst(), "payload", numBytes).Errorf(
+			c.log("max_burst", c.egressLimiter.Burst(), "payload", pr.Length()).Errorf(
 				"Cannot send piece, payload is larger than burst size")
 			return errors.New("piece payload is larger than burst size")
 		}
-
 		// Throttle the connection egress if we've exceeded our bandwidth.
-		c.clk.Sleep(r.DelayFrom(c.clk.Now()))
+		c.clk.Sleep(reserve.DelayFrom(c.clk.Now()))
 	}
 
-	for len(b) > 0 {
-		n, err := c.nc.Write(b)
-		if err != nil {
-			return fmt.Errorf("write: %s", err)
-		}
-		b = b[n:]
+	n, err := io.Copy(c.nc, pr)
+	if err != nil {
+		return fmt.Errorf("copy to socket: %s", err)
 	}
-	c.countBandwidth("egress", int64(numBytes))
+	c.countBandwidth("egress", n)
 	return nil
 }
 

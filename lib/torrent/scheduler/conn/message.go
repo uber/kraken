@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
+	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"github.com/golang/protobuf/proto"
 )
 
@@ -15,21 +16,21 @@ import (
 // type which should include a payload is PiecePayloadMessage.
 type Message struct {
 	Message *p2p.Message
-	Payload []byte
+	Payload storage.PieceReader
 }
 
 // NewPiecePayloadMessage returns a Message for sending a piece payload.
-func NewPiecePayloadMessage(index int, payload []byte) *Message {
+func NewPiecePayloadMessage(index int, pr storage.PieceReader) *Message {
 	return &Message{
 		Message: &p2p.Message{
 			Type: p2p.Message_PIECE_PAYLOAD,
 			PiecePayload: &p2p.PiecePayloadMessage{
 				Index:  int32(index),
 				Offset: 0,
-				Length: int32(len(payload)),
+				Length: int32(pr.Length()),
 			},
 		},
-		Payload: payload,
+		Payload: pr,
 	}
 }
 

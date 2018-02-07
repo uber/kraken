@@ -94,9 +94,12 @@ func TestAgentTorrentWriteComplete(t *testing.T) {
 
 	require.NoError(tor.WritePiece(data, 0))
 
-	readPiece, err := tor.ReadPiece(0)
+	r, err := tor.GetPieceReader(0)
 	require.NoError(err)
-	require.Equal(readPiece, data)
+	defer r.Close()
+	result, err := ioutil.ReadAll(r)
+	require.NoError(err)
+	require.Equal(data, result)
 
 	require.True(tor.Complete())
 	require.Equal(int64(1), tor.BytesDownloaded())
@@ -177,8 +180,12 @@ func TestAgentTorrentWriteSamePieceConcurrent(t *testing.T) {
 
 			time.Sleep(5 * time.Millisecond)
 
-			result, err := tor.ReadPiece(pi)
+			r, err := tor.GetPieceReader(pi)
 			require.NoError(err)
+			defer r.Close()
+			result, err := ioutil.ReadAll(r)
+			require.NoError(err)
+			require.Equal(1, len(result))
 			require.Equal(1, len(result))
 			require.Equal(data[pi], result[0])
 		}(i)

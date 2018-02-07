@@ -71,6 +71,19 @@ func (mr *MockTorrentMockRecorder) Complete() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Complete", reflect.TypeOf((*MockTorrent)(nil).Complete))
 }
 
+// GetPieceReader mocks base method
+func (m *MockTorrent) GetPieceReader(arg0 int) (storage.PieceReader, error) {
+	ret := m.ctrl.Call(m, "GetPieceReader", arg0)
+	ret0, _ := ret[0].(storage.PieceReader)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPieceReader indicates an expected call of GetPieceReader
+func (mr *MockTorrentMockRecorder) GetPieceReader(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPieceReader", reflect.TypeOf((*MockTorrent)(nil).GetPieceReader), arg0)
+}
+
 // HasPiece mocks base method
 func (m *MockTorrent) HasPiece(arg0 int) bool {
 	ret := m.ctrl.Call(m, "HasPiece", arg0)
@@ -165,19 +178,6 @@ func (m *MockTorrent) PieceLength(arg0 int) int64 {
 // PieceLength indicates an expected call of PieceLength
 func (mr *MockTorrentMockRecorder) PieceLength(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PieceLength", reflect.TypeOf((*MockTorrent)(nil).PieceLength), arg0)
-}
-
-// ReadPiece mocks base method
-func (m *MockTorrent) ReadPiece(arg0 int) ([]byte, error) {
-	ret := m.ctrl.Call(m, "ReadPiece", arg0)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ReadPiece indicates an expected call of ReadPiece
-func (mr *MockTorrentMockRecorder) ReadPiece(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadPiece", reflect.TypeOf((*MockTorrent)(nil).ReadPiece), arg0)
 }
 
 // Stat mocks base method
