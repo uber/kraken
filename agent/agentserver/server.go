@@ -52,7 +52,7 @@ func New(
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
 
-	r.Use(middleware.HitCounter(s.stats))
+	r.Use(middleware.StatusCounter(s.stats))
 	r.Use(middleware.LatencyTimer(s.stats))
 
 	r.Get("/health", s.healthHandler)

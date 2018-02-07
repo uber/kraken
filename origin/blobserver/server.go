@@ -117,7 +117,7 @@ func (s Server) Addr() string {
 func (s Server) Handler() http.Handler {
 	r := chi.NewRouter()
 
-	r.Use(middleware.HitCounter(s.stats))
+	r.Use(middleware.StatusCounter(s.stats))
 	r.Use(middleware.LatencyTimer(s.stats))
 
 	// Public endpoints:

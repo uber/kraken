@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,12 +52,32 @@ func LatencyTimer(stats tally.Scope) func(next http.Handler) http.Handler {
 	}
 }
 
-// HitCounter measures endpoint hit count.
-func HitCounter(stats tally.Scope) func(next http.Handler) http.Handler {
+type recordStatusWriter struct {
+	http.ResponseWriter
+	wroteHeader bool
+	code        int
+}
+
+func (w *recordStatusWriter) WriteHeader(code int) {
+	if !w.wroteHeader {
+		w.code = code
+		w.wroteHeader = true
+		w.ResponseWriter.WriteHeader(code)
+	}
+}
+
+func (w *recordStatusWriter) Write(b []byte) (int, error) {
+	w.WriteHeader(http.StatusOK)
+	return w.ResponseWriter.Write(b)
+}
+
+// StatusCounter measures endpoint status count.
+func StatusCounter(stats tally.Scope) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
-			tagEndpoint(stats, r).Counter("count").Inc(1)
+			recordw := &recordStatusWriter{w, false, http.StatusOK}
+			next.ServeHTTP(recordw, r)
+			tagEndpoint(stats, r).Counter(strconv.Itoa(recordw.code)).Inc(1)
 		})
 	}
 }

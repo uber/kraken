@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -75,35 +76,62 @@ func TestLatencyTimer(t *testing.T) {
 
 	timer, ok := stats.Snapshot().Timers()["latency"]
 	require.True(ok)
+	require.WithinDuration(now, now.Add(timer.Values()[0]), 500*time.Millisecond)
 	require.Equal(map[string]string{
 		"endpoint": "foo",
 		"method":   "GET",
 	}, timer.Tags())
-	require.WithinDuration(now, now.Add(timer.Values()[0]), 500*time.Millisecond)
 }
 
-func TestHitCounter(t *testing.T) {
-	require := require.New(t)
-
-	stats := tally.NewTestScope("", nil)
-
-	r := chi.NewRouter()
-	r.Use(HitCounter(stats))
-	r.Get("/foo/:foo", func(w http.ResponseWriter, r *http.Request) {})
-
-	addr, stop := testutil.StartServer(r)
-	defer stop()
-
-	for i := 0; i < 5; i++ {
-		_, err := httputil.Get(fmt.Sprintf("http://%s/foo/x", addr))
-		require.NoError(err)
+func TestStatusCounter(t *testing.T) {
+	tests := []struct {
+		desc           string
+		handler        func(http.ResponseWriter, *http.Request)
+		expectedStatus string
+	}{
+		{
+			"empty handler counts 200",
+			func(http.ResponseWriter, *http.Request) {},
+			"200",
+		}, {
+			"writes count 200",
+			func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "OK") },
+			"200",
+		}, {
+			"write header",
+			func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(500) },
+			"500",
+		}, {
+			"multiple write header calls only measures first call",
+			func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(400); w.WriteHeader(500) },
+			"400",
+		},
 	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			require := require.New(t)
 
-	counter, ok := stats.Snapshot().Counters()["count"]
-	require.True(ok)
-	require.Equal(map[string]string{
-		"endpoint": "foo",
-		"method":   "GET",
-	}, counter.Tags())
-	require.Equal(int64(5), counter.Value())
+			stats := tally.NewTestScope("", nil)
+
+			r := chi.NewRouter()
+			r.Use(StatusCounter(stats))
+			r.Get("/foo/:foo", test.handler)
+
+			addr, stop := testutil.StartServer(r)
+			defer stop()
+
+			for i := 0; i < 5; i++ {
+				_, err := http.Get(fmt.Sprintf("http://%s/foo/x", addr))
+				require.NoError(err)
+			}
+
+			counter, ok := stats.Snapshot().Counters()[test.expectedStatus]
+			require.True(ok)
+			require.Equal(int64(5), counter.Value())
+			require.Equal(map[string]string{
+				"endpoint": "foo",
+				"method":   "GET",
+			}, counter.Tags())
+		})
+	}
 }
