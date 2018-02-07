@@ -38,7 +38,7 @@ type Torrent interface {
 	HasPiece(piece int) bool
 	MissingPieces() []int
 
-	WritePiece(data []byte, piece int) error
+	WritePiece(src PieceReader, piece int) error
 	GetPieceReader(piece int) (PieceReader, error)
 }
 

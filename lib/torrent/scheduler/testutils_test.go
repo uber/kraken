@@ -159,7 +159,7 @@ func (p *testPeer) writeTorrent(tf *torlib.TestTorrentFile) {
 	for i := 0; i < t.NumPieces(); i++ {
 		start := int64(i) * tf.MetaInfo.Info.PieceLength
 		end := start + t.PieceLength(i)
-		if err := t.WritePiece(tf.Content[start:end], i); err != nil {
+		if err := t.WritePiece(storage.NewPieceReaderBuffer(tf.Content[start:end]), i); err != nil {
 			panic(err)
 		}
 	}

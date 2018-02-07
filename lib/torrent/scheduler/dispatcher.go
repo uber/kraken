@@ -3,7 +3,6 @@ package scheduler
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"sync"
 	"time"
@@ -399,7 +398,7 @@ func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 	d.networkEvents.Produce(
 		networkevent.DispatcherGotPieceRequestEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
 
-	pr, err := d.Torrent.GetPieceReader(i)
+	payload, err := d.Torrent.GetPieceReader(i)
 	if err != nil {
 		d.log("peer", p, "piece", i).Errorf("Error getting reader for requested piece: %s", err)
 		p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err))
@@ -409,7 +408,7 @@ func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 	d.networkEvents.Produce(
 		networkevent.DispatcherReadPieceEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
 
-	if err := p.messages.Send(conn.NewPiecePayloadMessage(i, pr)); err != nil {
+	if err := p.messages.Send(conn.NewPiecePayloadMessage(i, payload)); err != nil {
 		return
 	}
 
@@ -423,20 +422,13 @@ func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 }
 
 func (d *dispatcher) handlePiecePayload(
-	p *peer, msg *p2p.PiecePayloadMessage, pr storage.PieceReader) {
+	p *peer, msg *p2p.PiecePayloadMessage, payload storage.PieceReader) {
 
-	defer pr.Close()
+	defer payload.Close()
 
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
 		d.log("peer", p, "piece", i).Error("Rejecting piece payload: chunk not supported")
-		d.pieceRequestManager.MarkInvalid(p.id, i)
-		return
-	}
-
-	payload, err := ioutil.ReadAll(pr)
-	if err != nil {
-		d.log("peer", p, "piece", i).Errorf("Error reading piece payload: %s", err)
 		d.pieceRequestManager.MarkInvalid(p.id, i)
 		return
 	}

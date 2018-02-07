@@ -92,7 +92,7 @@ func (t *OriginTorrent) BytesDownloaded() int64 {
 }
 
 // WritePiece returns error, since OriginTorrent is read-only.
-func (t *OriginTorrent) WritePiece(data []byte, pi int) error {
+func (t *OriginTorrent) WritePiece(src PieceReader, pi int) error {
 	return ErrReadOnly
 }
 

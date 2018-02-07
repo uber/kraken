@@ -3,6 +3,7 @@ package storage
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 
@@ -258,16 +259,26 @@ func (t *AgentTorrent) markPieceComplete(pi int) error {
 }
 
 // writePiece writes data to piece pi. If the write succeeds, marks the piece as completed.
-func (t *AgentTorrent) writePiece(data []byte, pi int) error {
-	offset := t.getFileOffset(pi)
+func (t *AgentTorrent) writePiece(src PieceReader, pi int) error {
 	f, err := t.store.GetDownloadFileReadWriter(t.metaInfo.Info.Name)
 	if err != nil {
-		return fmt.Errorf("cannot get download writer: %s", err)
+		return fmt.Errorf("get download writer: %s", err)
 	}
 	defer f.Close()
-	if _, err := f.WriteAt(data, offset); err != nil {
-		return fmt.Errorf("write error: %s", err)
+
+	h := torlib.PieceHash()
+	r := io.TeeReader(src, h) // Calculates piece sum as we write to file.
+
+	if _, err := f.Seek(t.getFileOffset(pi), 0); err != nil {
+		return fmt.Errorf("seek: %s", err)
 	}
+	if _, err := io.Copy(f, r); err != nil {
+		return fmt.Errorf("copy: %s", err)
+	}
+	if h.Sum32() != t.metaInfo.Info.PieceSums[pi] {
+		return errors.New("invalid piece sum")
+	}
+
 	if err := t.markPieceComplete(pi); err != nil {
 		return fmt.Errorf("mark piece complete: %s", err)
 	}
@@ -275,13 +286,14 @@ func (t *AgentTorrent) writePiece(data []byte, pi int) error {
 }
 
 // WritePiece writes data to piece pi.
-func (t *AgentTorrent) WritePiece(data []byte, pi int) error {
+func (t *AgentTorrent) WritePiece(src PieceReader, pi int) error {
 	piece, err := t.getPiece(pi)
 	if err != nil {
 		return err
 	}
-	if int64(len(data)) != t.PieceLength(pi) {
-		return fmt.Errorf("invalid piece data length: expected %d, got %d", t.PieceLength(pi), len(data))
+	if int64(src.Length()) != t.PieceLength(pi) {
+		return fmt.Errorf(
+			"invalid piece length: expected %d, got %d", t.PieceLength(pi), src.Length())
 	}
 
 	// Exit quickly if the piece is not writable.
@@ -290,10 +302,6 @@ func (t *AgentTorrent) WritePiece(data []byte, pi int) error {
 	}
 	if piece.dirty() {
 		return ErrWritePieceConflict
-	}
-
-	if err := t.verifyPiece(pi, data); err != nil {
-		return fmt.Errorf("invalid piece: %s", err)
 	}
 
 	dirty, complete := piece.tryMarkDirty()
@@ -307,7 +315,7 @@ func (t *AgentTorrent) WritePiece(data []byte, pi int) error {
 	// we are the only thread which may write the piece. We do not block other
 	// threads from checking if the piece is writable.
 
-	if err := t.writePiece(data, pi); err != nil {
+	if err := t.writePiece(src, pi); err != nil {
 		// Allow other threads to write this piece since we mysteriously failed.
 		piece.markEmpty()
 		return fmt.Errorf("write piece: %s", err)
@@ -359,17 +367,6 @@ func (t *AgentTorrent) MissingPieces() []int {
 		}
 	}
 	return missing
-}
-
-// verifyPiece ensures data for pi is valid.
-func (t *AgentTorrent) verifyPiece(pi int, data []byte) error {
-	h := torlib.PieceHash()
-	h.Write(data)
-	sum := h.Sum32()
-	if sum != t.metaInfo.Info.PieceSums[pi] {
-		return errors.New("invalid piece sum")
-	}
-	return nil
 }
 
 // getFileOffset calculates the offset in the torrent file given piece index.

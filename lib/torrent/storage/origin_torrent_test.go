@@ -91,6 +91,6 @@ func TestOriginTorrentWritePieceError(t *testing.T) {
 	tor, err := NewOriginTorrent(fs, mi)
 	require.NoError(err)
 
-	err = tor.WritePiece([]byte{}, 0)
+	err = tor.WritePiece(NewPieceReaderBuffer([]byte{}), 0)
 	require.Equal(ErrReadOnly, err)
 }

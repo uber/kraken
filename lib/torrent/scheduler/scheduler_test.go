@@ -142,7 +142,7 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 		start := i * pieceLength
 		stop := (i + 1) * pieceLength
 		copy(piece, tf.Content[start:stop])
-		require.NoError(tor.WritePiece(piece, i))
+		require.NoError(tor.WritePiece(storage.NewPieceReaderBuffer(piece), i))
 
 		p := p
 		wg.Add(1)
