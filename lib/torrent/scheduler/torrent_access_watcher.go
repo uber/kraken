@@ -22,8 +22,8 @@ func newTorrentAccessWatcher(t storage.Torrent, clk clock.Clock) *torrentAccessW
 	return &torrentAccessWatcher{Torrent: t, clk: clk, lastWrite: clk.Now(), lastRead: clk.Now()}
 }
 
-func (w *torrentAccessWatcher) WritePiece(data []byte, piece int) error {
-	err := w.Torrent.WritePiece(data, piece)
+func (w *torrentAccessWatcher) WritePiece(src storage.PieceReader, piece int) error {
+	err := w.Torrent.WritePiece(src, piece)
 	if err == nil {
 		w.touchLastWrite()
 	}

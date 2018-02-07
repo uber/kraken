@@ -71,7 +71,7 @@ func TestAgentTorrentWriteUpdatesBytesDownloadedAndBitfield(t *testing.T) {
 	tor, err := NewAgentTorrent(fs, mi)
 	require.NoError(err)
 
-	require.NoError(tor.WritePiece(data[:1], 0))
+	require.NoError(tor.WritePiece(NewPieceReaderBuffer(data[:1]), 0))
 	require.False(tor.Complete())
 	require.Equal(int64(1), tor.BytesDownloaded())
 	require.Equal(BitSetFixture(true, false), tor.Bitfield())
@@ -92,7 +92,7 @@ func TestAgentTorrentWriteComplete(t *testing.T) {
 	tor, err := NewAgentTorrent(fs, mi)
 	require.NoError(err)
 
-	require.NoError(tor.WritePiece(data, 0))
+	require.NoError(tor.WritePiece(NewPieceReaderBuffer(data), 0))
 
 	r, err := tor.GetPieceReader(0)
 	require.NoError(err)
@@ -105,7 +105,7 @@ func TestAgentTorrentWriteComplete(t *testing.T) {
 	require.Equal(int64(1), tor.BytesDownloaded())
 
 	// Duplicate write should detect piece is complete.
-	require.Equal(ErrPieceComplete, tor.WritePiece(data[:1], 0))
+	require.Equal(ErrPieceComplete, tor.WritePiece(NewPieceReaderBuffer(data[:1]), 0))
 }
 
 func TestAgentTorrentWriteMultiplePieceConcurrent(t *testing.T) {
@@ -130,7 +130,7 @@ func TestAgentTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 			defer wg.Done()
 			start := i * int(mi.Info.PieceLength)
 			end := start + int(tor.PieceLength(i))
-			require.NoError(tor.WritePiece(data[start:end], i))
+			require.NoError(tor.WritePiece(NewPieceReaderBuffer(data[start:end]), i))
 		}(i)
 	}
 
@@ -173,7 +173,7 @@ func TestAgentTorrentWriteSamePieceConcurrent(t *testing.T) {
 
 			pi := int(math.Mod(float64(i), float64(len(data))))
 
-			err := tor.WritePiece([]byte{data[pi]}, pi)
+			err := tor.WritePiece(NewPieceReaderBuffer([]byte{data[pi]}), pi)
 			if err != nil && err != ErrWritePieceConflict && err != ErrPieceComplete {
 				require.Equal(ErrWritePieceConflict, err)
 			}
@@ -210,10 +210,10 @@ func newCoordinatedWriter(f store.FileReadWriter) *coordinatedWriter {
 	return &coordinatedWriter{f, make(chan bool), make(chan bool)}
 }
 
-func (w *coordinatedWriter) WriteAt([]byte, int64) (int, error) {
+func (w *coordinatedWriter) Write(b []byte) (int, error) {
 	w.startWriting <- true
 	<-w.stopWriting
-	return 0, nil
+	return len(b), nil
 }
 
 func TestAgentTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
@@ -238,19 +238,19 @@ func TestAgentTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		require.NoError(tor.WritePiece(tf.Content, 0))
-		close(done)
+		defer close(done)
+		require.NoError(tor.WritePiece(NewPieceReaderBuffer(tf.Content), 0))
 	}()
 
 	// Writing while another goroutine is mid-write should not block.
 	<-w.startWriting
-	require.Equal(ErrWritePieceConflict, tor.WritePiece(tf.Content, 0))
+	require.Equal(ErrWritePieceConflict, tor.WritePiece(NewPieceReaderBuffer(tf.Content), 0))
 	w.stopWriting <- true
 
 	<-done
 
 	// Duplicate write should detect piece is complete.
-	require.Equal(ErrPieceComplete, tor.WritePiece(tf.Content, 0))
+	require.Equal(ErrPieceComplete, tor.WritePiece(NewPieceReaderBuffer(tf.Content), 0))
 }
 
 func TestAgentTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
@@ -272,11 +272,13 @@ func TestAgentTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
 
 	gomock.InOrder(
 		// First write fails.
-		w.EXPECT().WriteAt(tf.Content, int64(0)).Return(0, errors.New("first write error")),
+		w.EXPECT().Seek(int64(0), 0).Return(int64(0), nil),
+		w.EXPECT().Write(tf.Content).Return(0, errors.New("first write error")),
 		w.EXPECT().Close().Return(nil),
 
 		// Second write succeeds.
-		w.EXPECT().WriteAt(tf.Content, int64(0)).Return(0, nil),
+		w.EXPECT().Seek(int64(0), 0).Return(int64(0), nil),
+		w.EXPECT().Write(tf.Content).Return(len(tf.Content), nil),
 		w.EXPECT().Close().Return(nil),
 	)
 
@@ -285,8 +287,8 @@ func TestAgentTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
 
 	// After the first write fails, the dirty bit should be flipped to empty,
 	// allowing future writes to succeed.
-	require.Error(tor.WritePiece(tf.Content, 0))
-	require.NoError(tor.WritePiece(tf.Content, 0))
+	require.Error(tor.WritePiece(NewPieceReaderBuffer(tf.Content), 0))
+	require.NoError(tor.WritePiece(NewPieceReaderBuffer(tf.Content), 0))
 }
 
 func TestAgentTorrentRestoreCompletedTorrent(t *testing.T) {
@@ -303,7 +305,7 @@ func TestAgentTorrentRestoreCompletedTorrent(t *testing.T) {
 	require.NoError(err)
 
 	for i, b := range tf.Content {
-		require.NoError(tor.WritePiece([]byte{b}, i))
+		require.NoError(tor.WritePiece(NewPieceReaderBuffer([]byte{b}), i))
 	}
 
 	require.True(tor.Complete())
@@ -329,12 +331,12 @@ func TestAgentTorrentRestoreInProgressTorrent(t *testing.T) {
 
 	pi := 4
 
-	require.NoError(tor.WritePiece([]byte{tf.Content[pi]}, pi))
+	require.NoError(tor.WritePiece(NewPieceReaderBuffer([]byte{tf.Content[pi]}), pi))
 	require.Equal(int64(1), tor.BytesDownloaded())
 
 	tor, err = NewAgentTorrent(fs, tf.MetaInfo)
 	require.NoError(err)
 
 	require.Equal(int64(1), tor.BytesDownloaded())
-	require.Equal(ErrPieceComplete, tor.WritePiece([]byte{tf.Content[pi]}, pi))
+	require.Equal(ErrPieceComplete, tor.WritePiece(NewPieceReaderBuffer([]byte{tf.Content[pi]}), pi))
 }
