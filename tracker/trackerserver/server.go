@@ -35,7 +35,7 @@ func Handler(
 
 	r := chi.NewRouter()
 
-	r.Use(middleware.HitCounter(stats))
+	r.Use(middleware.StatusCounter(stats))
 	r.Use(middleware.LatencyTimer(stats))
 
 	announce.setRoutes(r)
