@@ -2,6 +2,7 @@ package networkevent
 
 import (
 	"sort"
+	"time"
 
 	"code.uber.internal/infra/kraken/utils/stringset"
 )
@@ -30,4 +31,15 @@ func Filter(events []*Event, names ...Name) []*Event {
 		}
 	}
 	return f
+}
+
+// StripTimestamps overwrites timestamps in events as empty, allowing clients
+// to check equality of events.
+//
+// Mutates events in place and returns events for chaining purposes.
+func StripTimestamps(events []*Event) []*Event {
+	for _, e := range events {
+		e.Time = time.Time{}
+	}
+	return events
 }

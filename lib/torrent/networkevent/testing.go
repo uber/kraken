@@ -21,6 +21,9 @@ func (p *TestProducer) Produce(e *Event) {
 	p.events = append(p.events, e)
 }
 
+// Close noops.
+func (p *TestProducer) Close() error { return nil }
+
 // Events returns all currently recorded events.
 func (p *TestProducer) Events() []*Event {
 	p.Lock()
