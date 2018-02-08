@@ -4,66 +4,52 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 
-	"go.uber.org/zap"
-
-	"code.uber.internal/go-common.git/x/kafka"
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
 // Producer emits events.
 type Producer interface {
 	Produce(e *Event)
+	Close() error
 }
 
 type producer struct {
-	config Config
-	rest   *kafka.RestProducer
-	logger *zap.SugaredLogger
+	file *os.File
 }
 
-func newLogger(config Config) (*zap.SugaredLogger, error) {
-	eventConfig := zap.NewProductionConfig()
-
+// NewProducer creates a new Producer.
+func NewProducer(config Config) (Producer, error) {
+	var f *os.File
 	if config.Enabled {
 		if config.LogPath == "" {
-			return nil, errors.New("no network event path defined")
+			return nil, errors.New("no log path supplied")
 		}
-
-		eventConfig.OutputPaths = []string{config.LogPath}
-		eventConfig.ErrorOutputPaths = []string{config.LogPath}
+		var flag int
+		if _, err := os.Stat(config.LogPath); err != nil {
+			if os.IsNotExist(err) {
+				flag = os.O_WRONLY | os.O_CREATE | os.O_EXCL
+			} else {
+				return nil, fmt.Errorf("stat: %s", err)
+			}
+		} else {
+			flag = os.O_WRONLY | os.O_APPEND
+		}
+		var err error
+		f, err = os.OpenFile(config.LogPath, flag, 0755)
+		if err != nil {
+			return nil, fmt.Errorf("open %d: %s", flag, err)
+		}
+	} else {
+		log.Warn("Kafka network events disabled")
 	}
-
-	logger, err := eventConfig.Build()
-	if err != nil {
-		return nil, err
-	}
-
-	return logger.Sugar(), nil
+	return &producer{f}, nil
 }
 
-// NewProducer creates a new Kafka producer.
-func NewProducer(config Config) (Producer, error) {
-	rest, err := kafka.NewRestProducer()
-	if err != nil {
-		return nil, err
-	}
-	if config.Enabled && config.KafkaTopic == "" {
-		return nil, errors.New("no kafka topic supplied")
-	}
-	if !config.Enabled {
-		log.Warn("Kafka network events not enabled")
-	}
-	logger, err := newLogger(config)
-	if err != nil {
-		return nil, fmt.Errorf("event logger: %s", err)
-	}
-	return &producer{config, rest, logger}, nil
-}
-
-// Produce publishes e on the configured Kafka topic.
+// Produce emits a network event.
 func (p *producer) Produce(e *Event) {
-	if !p.config.Enabled {
+	if p.file == nil {
 		return
 	}
 	b, err := json.Marshal(e)
@@ -71,10 +57,17 @@ func (p *producer) Produce(e *Event) {
 		log.Errorf("Error serializing network event to json: %s", err)
 		return
 	}
-	// TODO(codyg): Log events.
-	// p.logger.Info(string(b))
-	if err := p.rest.Produce(p.config.KafkaTopic, b); err != nil {
-		log.Errorf("Error producing network event: %s", err)
+	line := append(b, byte('\n'))
+	if _, err := p.file.Write(line); err != nil {
+		log.Errorf("Error writing network event: %s", err)
 		return
 	}
+}
+
+// Close closes the producer.
+func (p *producer) Close() error {
+	if p.file == nil {
+		return nil
+	}
+	return p.file.Close()
 }

@@ -284,15 +284,6 @@ func TestEmitStatsEventTriggers(t *testing.T) {
 	w.WaitFor(t, emitStatsEvent{})
 }
 
-func stripTimestamps(events []*networkevent.Event) []*networkevent.Event {
-	var res []*networkevent.Event
-	for _, e := range events {
-		e.Time = time.Time{}
-		res = append(res, e)
-	}
-	return res
-}
-
 func TestNetworkEvents(t *testing.T) {
 	t.Skip("Network event timers break this test")
 
@@ -346,12 +337,12 @@ func TestNetworkEvents(t *testing.T) {
 	}
 
 	require.Equal(
-		stripTimestamps(seederExpected),
-		stripTimestamps(seeder.testProducer.Events()))
+		networkevent.StripTimestamps(seederExpected),
+		networkevent.StripTimestamps(seeder.testProducer.Events()))
 
 	require.Equal(
-		stripTimestamps(leecherExpected),
-		stripTimestamps(leecher.testProducer.Events()))
+		networkevent.StripTimestamps(leecherExpected),
+		networkevent.StripTimestamps(leecher.testProducer.Events()))
 }
 
 func TestPullInactiveTorrent(t *testing.T) {
