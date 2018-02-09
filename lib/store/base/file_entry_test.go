@@ -7,10 +7,57 @@ import (
 	"path"
 	"reflect"
 	"runtime"
+	"sort"
 	"testing"
+
+	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestFileEntryFactoryList(t *testing.T) {
+	for _, factory := range []FileEntryFactory{
+		NewLocalFileEntryFactory(),
+		NewCASFileEntryFactory(),
+	} {
+		fname := reflect.Indirect(reflect.ValueOf(factory)).Type().Name()
+		t.Run(fname, func(t *testing.T) {
+			require := require.New(t)
+
+			state, _, _, cleanup := fileStatesFixture()
+			defer cleanup()
+
+			checkListNames := func(expectedEntries []FileEntry) {
+				var expectedNames []string
+				for _, e := range expectedEntries {
+					expectedNames = append(expectedNames, e.GetName())
+				}
+				sort.Strings(expectedNames)
+
+				names, err := factory.ListNames(state)
+				require.NoError(err)
+
+				sort.Strings(names)
+				require.Equal(expectedNames, names)
+			}
+
+			// ListNames should show all created entries.
+			var entries []FileEntry
+			for i := 0; i < 100; i++ {
+				entry := factory.Create(image.DigestFixture().Hex(), state)
+				require.NoError(entry.Create(state, 1))
+				entries = append(entries, entry)
+			}
+			checkListNames(entries)
+
+			// ListNames should not show deleted entries.
+			for _, e := range entries[:50] {
+				require.NoError(e.Delete())
+			}
+			checkListNames(entries[50:])
+		})
+	}
+}
 
 // These tests should pass for all FileEntry implementations
 func TestFileEntry(t *testing.T) {

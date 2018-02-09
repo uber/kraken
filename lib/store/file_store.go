@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -13,7 +14,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/store/base"
 	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/osutil"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
@@ -60,7 +60,7 @@ type FileStore interface {
 	RefCacheFile(fileName string) (int64, error)
 	DerefCacheFile(fileName string) (int64, error)
 	ListCacheFilesByShardID(shardID string) ([]string, error)
-	ListPopulatedShardIDs() ([]string, error)
+	ListDownloads() ([]string, error)
 	EnsureDownloadOrCacheFilePresent(fileName string, defaultLength int64) error
 	States() *StateAcceptor
 	InCacheError(error) bool
@@ -75,6 +75,7 @@ type FileStore interface {
 		filename string, mt MetadataType, b []byte, offset int64) (updated bool, err error)
 	GetOrSetCacheFileMetadata(
 		filename string, mt MetadataType, b []byte) ([]byte, error)
+	ListPopulatedShardIDs() ([]string, error)
 }
 
 // LocalFileStore manages all peer agent files on local disk.
@@ -108,7 +109,7 @@ func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error
 	} else if config.LRUConfig.Enable {
 		downloadCacheBackend, err = base.NewLRUFileStore(config.LRUConfig.Size, clock.New())
 	} else {
-		downloadCacheBackend, err = base.NewCASFileStore()
+		downloadCacheBackend, err = base.NewLocalFileStore()
 	}
 	if err != nil {
 		return nil, err
@@ -446,49 +447,14 @@ func (store *LocalFileStore) ListCacheFilesByShardID(shardID string) ([]string, 
 	return names, nil
 }
 
-// ListPopulatedShardIDs is a best effort function which returns the shard ids
-// of all populated shards.
-//
-// XXX: This is an expensive operation and will potentially return stale data.
-// Caller should not assume shard ids will remain populated.
+// ListPopulatedShardIDs is not supported.
 func (store *LocalFileStore) ListPopulatedShardIDs() ([]string, error) {
-	shardDir := store.config.CacheDir
-	var shards []string
+	return nil, errors.New("not supported")
+}
 
-	// Recursive closure which walks the shard directory and adds any populated
-	// shard ids to shards.
-	var walk func(string, int) error
-	walk = func(cursor string, depth int) error {
-		dir := path.Join(shardDir, cursor)
-		if depth == 0 {
-			empty, err := osutil.IsEmpty(dir)
-			if err != nil {
-				return err
-			}
-			if !empty {
-				shard := strings.Replace(cursor, "/", "", -1)
-				shards = append(shards, shard)
-			}
-			return nil
-		}
-		infos, err := ioutil.ReadDir(dir)
-		if err != nil {
-			return err
-		}
-		for _, info := range infos {
-			if info.IsDir() {
-				if err := walk(path.Join(cursor, info.Name()), depth-1); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
-
-	// TODO(codyg): Revisit shard depth constant.
-	err := walk("", 2)
-
-	return shards, err
+// ListDownloads lists all file names in the download state.
+func (store *LocalFileStore) ListDownloads() ([]string, error) {
+	return store.downloadCacheBackend.NewFileOp().AcceptState(store.stateDownload).ListNames()
 }
 
 // EnsureDownloadOrCacheFilePresent ensures that fileName is present in either
