@@ -29,6 +29,8 @@ type FileOp interface {
 	GetOrSetFileMetadata(name string, mt MetadataType, b []byte) ([]byte, error)
 	DeleteFileMetadata(name string, mt MetadataType) error
 	RangeFileMetadata(name string, f func(mt MetadataType) error) error
+
+	ListNames() ([]string, error)
 }
 
 var _ FileOp = (*localFileOp)(nil)
@@ -398,4 +400,16 @@ func (op *localFileOp) RangeFileMetadata(name string, f func(mt MetadataType) er
 		return loadErr
 	}
 	return err
+}
+
+func (op *localFileOp) ListNames() ([]string, error) {
+	var names []string
+	for state := range op.states {
+		stateNames, err := op.s.fileEntryFactory.ListNames(state)
+		if err != nil {
+			return nil, err
+		}
+		names = append(names, stateNames...)
+	}
+	return names, nil
 }

@@ -5,13 +5,13 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
-	"code.uber.internal/infra/kraken/utils/randutil"
 
 	"github.com/stretchr/testify/require"
 )
@@ -139,37 +139,23 @@ func TestTrashDeletionCronDeletesFiles(t *testing.T) {
 	require.True(os.IsNotExist(err))
 }
 
-func TestListPopulatedShardIDs(t *testing.T) {
+func TestListDownloads(t *testing.T) {
 	require := require.New(t)
 
 	s, cleanup := LocalFileStoreFixture()
 	defer cleanup()
 
-	var cacheFiles []string
-	shardsMap := make(map[string]string)
-	for i := 0; i < 100; i++ {
-		name := randutil.Hex(32)
-		if _, ok := shardsMap[name[:4]]; ok {
-			// Avoid duplicated names
-			continue
-		}
-		cacheFiles = append(cacheFiles, name)
-		shardsMap[name[:4]] = name
-		require.NoError(s.CreateUploadFile(name, 1))
-		require.NoError(s.MoveUploadFileToCache(name, name))
-		if i >= 50 {
-			require.NoError(s.MoveCacheFileToTrash(name))
-		}
+	var names []string
+	for i := 0; i < 10; i++ {
+		name := image.DigestFixture().Hex()
+		require.NoError(s.CreateDownloadFile(name, 1))
+		names = append(names, name)
 	}
-	shards, err := s.ListPopulatedShardIDs()
+
+	downloads, err := s.ListDownloads()
 	require.NoError(err)
 
-	for i, name := range cacheFiles {
-		shard := name[:4]
-		if i < 50 {
-			require.Contains(shards, shard)
-		} else {
-			require.NotContains(shards, shard)
-		}
-	}
+	sort.Strings(names)
+	sort.Strings(downloads)
+	require.Equal(names, downloads)
 }
