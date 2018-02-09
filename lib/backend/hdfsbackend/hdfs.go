@@ -1,6 +1,7 @@
 package hdfsbackend
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -244,5 +245,37 @@ func (c *Client) GetManifest(repo, tag string) (io.ReadCloser, error) {
 
 // PostManifest posts manifest to http backend
 func (c *Client) PostManifest(repo, tag string, manifest io.Reader) error {
-	return fmt.Errorf("not implemented")
+	v := c.createParams(HdfsCreate)
+
+	mdata, err := ioutil.ReadAll(manifest)
+	if err != nil {
+		return fmt.Errorf("read manifest: %s", err)
+	}
+
+	d, err := image.NewDigester().FromBytes(mdata)
+	if err != nil {
+		return fmt.Errorf("compute digest: %s", err)
+	}
+
+	// Creates a blob first.
+	u := fmt.Sprintf("/webhdfs/v1/infra/dockerRegistry/docker/registry/v2/blobs/sha256/%s/%s/data?%s",
+		d.Hex()[:2], d.Hex(), v.Encode())
+
+	log.Infof("Starting docker manifest upload to HDFS backend: %s", u)
+
+	err = c.upload(u, bytes.NewReader(mdata))
+	if err != nil {
+		return err
+	}
+
+	// Then create a link to the blob.
+	vl := c.createParams(HdfsCreate)
+	ul := fmt.Sprintf(
+		"/webhdfs/v1/infra/dockerRegistry/docker/registry/v2/repositories/%s/_manifests/tags/%s/current/link?%s",
+		repo,
+		tag,
+		vl.Encode(),
+	)
+
+	return c.upload(ul, bytes.NewBufferString(d.String()))
 }

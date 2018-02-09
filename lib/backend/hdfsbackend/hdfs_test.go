@@ -1,6 +1,7 @@
 package hdfsbackend
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -291,4 +292,36 @@ func TestHDFSGetManifestSuccess(t *testing.T) {
 	require.NoError(err)
 
 	require.Equal("sha256:"+d.Hex(), string(data))
+}
+
+func TestHDFSPostManifestSuccess(t *testing.T) {
+	require := require.New(t)
+
+	r := chi.NewRouter()
+
+	r.Put("/*/:blob/data", func(w http.ResponseWriter, req *http.Request) {
+		url := fmt.Sprintf("http://%s/datanode", req.Host)
+		http.Redirect(w, req, url, http.StatusTemporaryRedirect)
+	})
+
+	r.Put("/datanode", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+	})
+
+	addr, stop := testutil.StartServer(r)
+	defer stop()
+
+	config := &Config{
+		NameNodeRoundRobin: serverset.RoundRobinConfig{
+			Addrs:   []string{addr},
+			Retries: 3,
+		},
+		BuffSize: int64(64 * memsize.MB)}
+
+	hdfsc, err := NewHDFSClient(*config)
+	require.NoError(err)
+
+	tr := bytes.NewBuffer([]byte("test"))
+	err = hdfsc.PostManifest("testrepo", "testtag", tr)
+	require.NoError(err)
 }
