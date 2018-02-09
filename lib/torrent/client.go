@@ -31,7 +31,8 @@ type SchedulerClient struct {
 	mu        sync.Mutex // Protects reloading scheduler.
 	scheduler *scheduler.Scheduler
 
-	stats tally.Scope
+	stats     tally.Scope
+	hostStats tally.Scope
 }
 
 // NewSchedulerClient creates a new scheduler client
@@ -52,7 +53,7 @@ func NewSchedulerClient(
 	if err != nil {
 		return nil, fmt.Errorf("hostname: %s", err)
 	}
-	stats = stats.Tagged(map[string]string{
+	hostStats := stats.Tagged(map[string]string{
 		"peer":     shortenedPID,
 		"hostname": hostname,
 	})
@@ -72,6 +73,7 @@ func NewSchedulerClient(
 		config:    config,
 		scheduler: sched,
 		stats:     stats,
+		hostStats: hostStats,
 	}, nil
 }
 
@@ -100,7 +102,7 @@ func (c *SchedulerClient) Close() error {
 // found.
 func (c *SchedulerClient) Download(namespace string, name string) error {
 	if err := <-c.scheduler.AddTorrent(namespace, name); err != nil {
-		c.stats.Counter("download_torrent_errors").Inc(1)
+		c.hostStats.Counter("download_torrent_errors").Inc(1)
 		return err
 	}
 	return nil
