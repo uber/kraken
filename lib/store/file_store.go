@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math"
 	"os"
 	"path"
 	"regexp"
@@ -58,9 +57,7 @@ type FileStore interface {
 	GetCacheFileStat(fileName string) (os.FileInfo, error)
 	MoveUploadFileToCache(fileName, targetFileName string) error
 	MoveDownloadFileToCache(fileName string) error
-	MoveCacheFileToTrash(fileName string) error
-	MoveDownloadOrCacheFileToTrash(fileName string) error
-	DeleteAllTrashFiles() error
+	DeleteDownloadOrCacheFile(fileName string) error
 	RefCacheFile(fileName string) (int64, error)
 	DerefCacheFile(fileName string) (int64, error)
 	ListCacheFilesByShardID(shardID string) ([]string, error)
@@ -108,9 +105,13 @@ func NewLocalFileStore(config Config, stats tally.Scope, useRefcount bool) (*Loc
 		"module": "store",
 	})
 
-	err := initDirectories(config)
-	if err != nil {
-		return nil, err
+	// Wipe upload directory on restart.
+	os.RemoveAll(config.UploadDir)
+
+	for _, dir := range []string{config.UploadDir, config.DownloadDir, config.CacheDir} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("mkdir %s: %s", dir, err)
+		}
 	}
 
 	uploadBackend, err := base.NewLocalFileStore()
@@ -145,25 +146,6 @@ func NewLocalFileStore(config Config, stats tally.Scope, useRefcount bool) (*Loc
 		stateCache:           agentFileState{directory: config.CacheDir},
 		downloadCleanupTick:  downloadCleanupTick,
 		stop:                 make(chan struct{}),
-	}
-
-	// TODO(codyg): Get rid of trash deletion.
-	// Start a cron to delete trash files.
-	if config.TrashDeletion.Enable && config.TrashDeletion.Interval > 0 {
-		localStore.trashDeletionCron = cron.New()
-		intervalSecs := int(math.Ceil(config.TrashDeletion.Interval.Seconds()))
-		spec := fmt.Sprintf("@every %ds", intervalSecs)
-		err = localStore.trashDeletionCron.AddFunc(spec, func() {
-			log.Debug("Deleting all trash files...")
-			if err := localStore.DeleteAllTrashFiles(); err != nil {
-				log.Errorf("Failed to delete all trash files: %s", err)
-			}
-		})
-		if err != nil {
-			return nil, err
-		}
-		log.Info("Starting trash cleanup cron")
-		localStore.trashDeletionCron.Start()
 	}
 
 	go localStore.tickerLoop()
@@ -397,48 +379,12 @@ func (store *LocalFileStore) MoveDownloadFileToCache(fileName string) error {
 		store.stateCache)
 }
 
-// MoveCacheFileToTrash moves a file from cache directory to trash directory, and append a random
-// suffix so there won't be name collision.
-func (store *LocalFileStore) MoveCacheFileToTrash(fileName string) error {
-	newPath := path.Join(store.config.TrashDir, fileName, base.DefaultDataFileName)
-	err := store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).MoveFileTo(fileName, newPath)
-	if os.IsExist(err) {
-		return store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).DeleteFile(fileName)
-	}
-	return err
-}
-
-// MoveDownloadOrCacheFileToTrash moves a file from cache or download directory to trash directory, and append a random
-// suffix so there won't be name collision.
-func (store *LocalFileStore) MoveDownloadOrCacheFileToTrash(fileName string) error {
-	newPath := path.Join(store.config.TrashDir, fileName, base.DefaultDataFileName)
-	err := store.downloadCacheBackend.NewFileOp().AcceptState(store.stateDownload).AcceptState(store.stateCache).MoveFileTo(
-		fileName, newPath)
-	if os.IsExist(err) {
-		return store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).DeleteFile(fileName)
-	}
-	return err
-}
-
-// DeleteAllTrashFiles permanently deletes all files from trash directory.
-// This function is not executed inside global lock, and expects to be the only one doing deletion.
-func (store *LocalFileStore) DeleteAllTrashFiles() error {
-	dir, err := os.Open(store.config.TrashDir)
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	names, err := dir.Readdirnames(-1)
-	if err != nil {
-		return err
-	}
-	for _, fileName := range names {
-		err = os.RemoveAll(path.Join(store.config.TrashDir, fileName))
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+// DeleteDownloadOrCacheFile deletes a download/cache file.
+func (store *LocalFileStore) DeleteDownloadOrCacheFile(fileName string) error {
+	op := store.downloadCacheBackend.NewFileOp().
+		AcceptState(store.stateDownload).
+		AcceptState(store.stateCache)
+	return op.DeleteFile(fileName)
 }
 
 // RefCacheFile increments ref count for a file in cache directory.
@@ -452,19 +398,19 @@ func (store *LocalFileStore) RefCacheFile(fileName string) (int64, error) {
 }
 
 // DerefCacheFile decrements ref count for a file in cache directory.
-// If ref count reaches 0, it will try to rename it and move it to trash directory.
+// If ref count reaches 0, it will delete the file.
 func (store *LocalFileStore) DerefCacheFile(fileName string) (int64, error) {
-	op := store.downloadCacheBackend.NewFileOp()
-	rcOp, ok := op.AcceptState(store.stateCache).(base.RCFileOp)
+	op, ok := store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).(base.RCFileOp)
 	if !ok {
-		return 0, fmt.Errorf("Local ref count is disabled")
+		return 0, errors.New("local ref count is disabled")
 	}
-	refCount, err := rcOp.DecFileRefCount(fileName)
-	if err == nil && refCount == 0 {
-		// Try rename and move to trash.
-		newPath := path.Join(store.config.TrashDir, fileName, base.DefaultDataFileName)
-		if err := rcOp.MoveFileTo(fileName, newPath); err != nil {
-			return 0, err
+	refCount, err := op.DecFileRefCount(fileName)
+	if err != nil {
+		return 0, fmt.Errorf("dec ref count: %s", err)
+	}
+	if refCount == 0 {
+		if err := op.DeleteFile(fileName); err != nil {
+			return 0, fmt.Errorf("delete file: %s", err)
 		}
 	}
 	return refCount, nil

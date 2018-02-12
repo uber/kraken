@@ -1,7 +1,6 @@
 package store
 
 import (
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -85,31 +84,23 @@ func TestDownloadAndDeleteFiles(t *testing.T) {
 	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil), true)
 	require.NoError(err)
 
+	var names []string
 	var wg sync.WaitGroup
-
 	for i := 0; i < 100; i++ {
+		name := image.DigestFixture().Hex()
+		names = append(names, name)
 		wg.Add(1)
-
-		testFileName := fmt.Sprintf("test_%d", i)
 		go func() {
-			err := s.CreateDownloadFile(testFileName, 1)
-			require.NoError(err)
-			err = s.MoveDownloadFileToCache(testFileName)
-			require.NoError(err)
-			err = s.MoveCacheFileToTrash(testFileName)
-			require.NoError(err)
-
-			wg.Done()
+			defer wg.Done()
+			require.NoError(s.CreateDownloadFile(name, 1))
+			require.NoError(s.MoveDownloadFileToCache(name))
+			require.NoError(s.DeleteDownloadOrCacheFile(name))
 		}()
 	}
-
 	wg.Wait()
-	err = s.DeleteAllTrashFiles()
-	require.NoError(err)
 
-	for i := 0; i < 100; i++ {
-		testFileName := fmt.Sprintf("test_%d", i)
-		_, err := os.Stat(path.Join(s.Config().TrashDir, testFileName))
+	for _, name := range names {
+		_, err := s.GetCacheFileStat(name)
 		require.True(os.IsNotExist(err))
 	}
 }
@@ -131,27 +122,6 @@ func TestCreateCacheFile(t *testing.T) {
 	require.NoError(err)
 	b2, err := ioutil.ReadAll(r2)
 	require.Equal(s1, string(b2))
-}
-
-func TestTrashDeletionCronDeletesFiles(t *testing.T) {
-	require := require.New(t)
-
-	config, cleanup := ConfigFixture()
-	defer cleanup()
-	config.TrashDeletion.Enable = true
-	config.TrashDeletion.Interval = time.Second
-
-	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil), false)
-	require.NoError(err)
-
-	f := "test_file.txt"
-	require.NoError(s.CreateDownloadFile(f, 1))
-	require.NoError(s.MoveDownloadOrCacheFileToTrash(f))
-
-	time.Sleep(config.TrashDeletion.Interval + 250*time.Millisecond)
-
-	_, err = os.Stat(path.Join(s.Config().TrashDir, f))
-	require.True(os.IsNotExist(err))
 }
 
 func TestCleanupIdleDownloads(t *testing.T) {
