@@ -8,11 +8,11 @@ import (
 	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/andres-erbsen/clock"
+	"github.com/uber-go/tally"
 )
 
-func localFileStoreFixture(
-	refcountable bool, trashDeletionConfig TrashDeletionConfig) (*LocalFileStore, func()) {
-
+// ConfigFixture returns a Config with initialized temporary directories.
+func ConfigFixture() (Config, func()) {
 	cleanup := &testutil.Cleanup{}
 	defer cleanup.Recover()
 
@@ -20,64 +20,51 @@ func localFileStoreFixture(
 	if err != nil {
 		panic(err)
 	}
-	cleanup.Add(func() {
-		os.RemoveAll(upload)
-	})
+	cleanup.Add(func() { os.RemoveAll(upload) })
+
 	download, err := ioutil.TempDir("/tmp", "download")
 	if err != nil {
 		panic(err)
 	}
-	cleanup.Add(func() {
-		os.RemoveAll(download)
-	})
+	cleanup.Add(func() { os.RemoveAll(download) })
+
 	cache, err := ioutil.TempDir("/tmp", "cache")
 	if err != nil {
 		panic(err)
 	}
-	cleanup.Add(func() {
-		os.RemoveAll(cache)
-	})
+	cleanup.Add(func() { os.RemoveAll(cache) })
+
 	trash, err := ioutil.TempDir("/tmp", "trash")
 	if err != nil {
 		panic(err)
 	}
-	cleanup.Add(func() {
-		os.RemoveAll(trash)
-	})
+	cleanup.Add(func() { os.RemoveAll(trash) })
 
-	config := &Config{
-		UploadDir:     upload,
-		DownloadDir:   download,
-		CacheDir:      cache,
-		TrashDir:      trash,
-		TrashDeletion: trashDeletionConfig,
-	}
-	s, err := NewLocalFileStore(config, refcountable)
-	if err != nil {
-		panic(err)
-	}
+	config := Config{
+		UploadDir:   upload,
+		DownloadDir: download,
+		CacheDir:    cache,
+		TrashDir:    trash,
+	}.applyDefaults()
 
-	return s, cleanup.Run
+	return config, cleanup.Run
 }
 
 // LocalFileStoreFixture returns a LocalFileStore using temp directories.
-func LocalFileStoreFixture() (s *LocalFileStore, cleanup func()) {
-	return localFileStoreFixture(false, TrashDeletionConfig{})
-}
+func LocalFileStoreFixture() (*LocalFileStore, func()) {
+	var cleanup testutil.Cleanup
+	defer cleanup.Recover()
 
-// LocalFileStoreWithRefcountFixture returns a refcountable LocalFileStore using temp
-// directories.
-func LocalFileStoreWithRefcountFixture() (s *LocalFileStore, cleanup func()) {
-	return localFileStoreFixture(true, TrashDeletionConfig{})
-}
+	config, c := ConfigFixture()
+	cleanup.Add(c)
 
-// LocalFileStoreWithTrashDeletionFixture returns a LocalFileStore with trash deletion
-// occuring at the given interval.
-func LocalFileStoreWithTrashDeletionFixture(interval time.Duration) (s *LocalFileStore, cleanup func()) {
-	return localFileStoreFixture(false, TrashDeletionConfig{
-		Enable:   true,
-		Interval: interval,
-	})
+	fs, err := NewLocalFileStore(config, tally.NewTestScope("", nil), false)
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(fs.Close)
+
+	return fs, cleanup.Run
 }
 
 // OriginFileStoreFixture returns a origin file store.

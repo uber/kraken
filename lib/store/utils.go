@@ -8,7 +8,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/osutil"
 )
 
-func initDirectories(config *Config) error {
+func initDirectories(config Config) error {
 	// Recreate upload, download and trash dirs.
 	for _, dir := range []string{config.UploadDir, config.DownloadDir, config.TrashDir} {
 		os.RemoveAll(dir)

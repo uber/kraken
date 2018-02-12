@@ -2,10 +2,10 @@ package store
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -13,25 +13,31 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 )
 
 func TestFileHashStates(t *testing.T) {
 	require := require.New(t)
 
-	s, cleanup := LocalFileStoreWithRefcountFixture()
+	config, cleanup := ConfigFixture()
 	defer cleanup()
 
+	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil), true)
+	require.NoError(err)
+	defer s.Close()
+
 	s.CreateUploadFile("test_file.txt", 100)
-	err := s.SetUploadFileHashState("test_file.txt", []byte{uint8(0), uint8(1)}, "sha256", "500")
-	require.Nil(err)
+	err = s.SetUploadFileHashState("test_file.txt", []byte{uint8(0), uint8(1)}, "sha256", "500")
+	require.NoError(err)
 	b, err := s.GetUploadFileHashState("test_file.txt", "sha256", "500")
-	require.Nil(err)
+	require.NoError(err)
 	require.Equal(uint8(0), b[0])
 	require.Equal(uint8(1), b[1])
 
 	l, err := s.ListUploadFileHashStatePaths("test_file.txt")
-	require.Nil(err)
+	require.NoError(err)
 	require.Equal(len(l), 1)
 	require.True(strings.HasSuffix(l[0], "/hashstates/sha256/500"))
 }
@@ -39,39 +45,45 @@ func TestFileHashStates(t *testing.T) {
 func TestCreateUploadFileAndMoveToCache(t *testing.T) {
 	require := require.New(t)
 
-	s, cleanup := LocalFileStoreWithRefcountFixture()
+	config, cleanup := ConfigFixture()
 	defer cleanup()
 
-	err := s.CreateUploadFile("test_file.txt", 100)
-	require.Nil(err)
+	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil), true)
+	require.NoError(err)
+
+	err = s.CreateUploadFile("test_file.txt", 100)
+	require.NoError(err)
 	err = s.SetUploadFileHashState("test_file.txt", []byte{uint8(0), uint8(1)}, "sha256", "500")
-	require.Nil(err)
+	require.NoError(err)
 	b, err := s.GetUploadFileHashState("test_file.txt", "sha256", "500")
-	require.Nil(err)
+	require.NoError(err)
 	require.Equal(uint8(0), b[0])
 	require.Equal(uint8(1), b[1])
 	err = s.SetUploadFileStartedAt("test_file.txt", []byte{uint8(2), uint8(3)})
-	require.Nil(err)
+	require.NoError(err)
 	b, err = s.GetUploadFileStartedAt("test_file.txt")
-	require.Nil(err)
+	require.NoError(err)
 	require.Equal(uint8(2), b[0])
 	require.Equal(uint8(3), b[1])
 	_, err = os.Stat(path.Join(s.Config().UploadDir, "test_file.txt"))
-	require.Nil(err)
+	require.NoError(err)
 
 	err = s.MoveUploadFileToCache("test_file.txt", "test_file_cache.txt")
-	require.Nil(err)
+	require.NoError(err)
 	_, err = os.Stat(path.Join(s.Config().UploadDir, "test_file.txt"))
 	require.True(os.IsNotExist(err))
 	_, err = os.Stat(path.Join(s.Config().CacheDir, "te", "st", "test_file_cache.txt"))
-	require.Nil(err)
+	require.NoError(err)
 }
 
 func TestDownloadAndDeleteFiles(t *testing.T) {
 	require := require.New(t)
 
-	s, cleanup := LocalFileStoreWithRefcountFixture()
+	config, cleanup := ConfigFixture()
 	defer cleanup()
+
+	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil), true)
+	require.NoError(err)
 
 	var wg sync.WaitGroup
 
@@ -81,19 +93,19 @@ func TestDownloadAndDeleteFiles(t *testing.T) {
 		testFileName := fmt.Sprintf("test_%d", i)
 		go func() {
 			err := s.CreateDownloadFile(testFileName, 1)
-			require.Nil(err)
+			require.NoError(err)
 			err = s.MoveDownloadFileToCache(testFileName)
-			require.Nil(err)
+			require.NoError(err)
 			err = s.MoveCacheFileToTrash(testFileName)
-			require.Nil(err)
+			require.NoError(err)
 
 			wg.Done()
 		}()
 	}
 
 	wg.Wait()
-	err := s.DeleteAllTrashFiles()
-	require.Nil(err)
+	err = s.DeleteAllTrashFiles()
+	require.NoError(err)
 
 	for i := 0; i < 100; i++ {
 		testFileName := fmt.Sprintf("test_%d", i)
@@ -124,38 +136,78 @@ func TestCreateCacheFile(t *testing.T) {
 func TestTrashDeletionCronDeletesFiles(t *testing.T) {
 	require := require.New(t)
 
-	interval := time.Second
-
-	s, cleanup := LocalFileStoreWithTrashDeletionFixture(interval)
+	config, cleanup := ConfigFixture()
 	defer cleanup()
+	config.TrashDeletion.Enable = true
+	config.TrashDeletion.Interval = time.Second
+
+	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil), false)
+	require.NoError(err)
 
 	f := "test_file.txt"
 	require.NoError(s.CreateDownloadFile(f, 1))
 	require.NoError(s.MoveDownloadOrCacheFileToTrash(f))
 
-	time.Sleep(interval + 250*time.Millisecond)
+	time.Sleep(config.TrashDeletion.Interval + 250*time.Millisecond)
 
-	_, err := os.Stat(path.Join(s.Config().TrashDir, f))
+	_, err = os.Stat(path.Join(s.Config().TrashDir, f))
 	require.True(os.IsNotExist(err))
 }
 
-func TestListDownloads(t *testing.T) {
+func TestCleanupIdleDownloads(t *testing.T) {
 	require := require.New(t)
 
-	s, cleanup := LocalFileStoreFixture()
+	config, cleanup := ConfigFixture()
 	defer cleanup()
+	config.DownloadCleanup.Enabled = true
+	config.DownloadCleanup.Interval = time.Hour
+	config.DownloadCleanup.TTI = 2 * time.Second
 
-	var names []string
+	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil), false)
+	require.NoError(err)
+	defer s.Close()
+
+	var idle []string
 	for i := 0; i < 10; i++ {
 		name := image.DigestFixture().Hex()
 		require.NoError(s.CreateDownloadFile(name, 1))
-		names = append(names, name)
+		idle = append(idle, name)
 	}
 
-	downloads, err := s.ListDownloads()
-	require.NoError(err)
+	stop := make(chan struct{})
+	defer close(stop)
+	var active []string
+	for i := 0; i < 10; i++ {
+		name := image.DigestFixture().Hex()
+		require.NoError(s.CreateDownloadFile(name, 1))
+		active = append(active, name)
+		go func(name string) {
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					w, err := s.GetDownloadFileReadWriter(name)
+					require.NoError(err)
+					_, err = io.WriteString(w, "foo")
+					assert.NoError(t, err)
+					w.Close()
+				}
+			}
+		}(name)
+	}
 
-	sort.Strings(names)
-	sort.Strings(downloads)
-	require.Equal(names, downloads)
+	time.Sleep(config.DownloadCleanup.TTI + 250*time.Millisecond)
+
+	require.NoError(s.CleanupIdleDownloads())
+
+	for _, name := range idle {
+		_, err := s.GetDownloadFileReadWriter(name)
+		require.True(os.IsNotExist(err))
+	}
+
+	for _, name := range active {
+		_, err := s.GetDownloadFileReadWriter(name)
+		require.NoError(err)
+	}
 }

@@ -35,7 +35,7 @@ func main() {
 	}
 	defer closer.Close()
 
-	fs, err := store.NewLocalFileStore(&config.Store, config.Registry.TagDeletion.Enable)
+	fs, err := store.NewLocalFileStore(config.Store, stats, config.Registry.TagDeletion.Enable)
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
