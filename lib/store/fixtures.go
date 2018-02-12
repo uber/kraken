@@ -34,17 +34,10 @@ func ConfigFixture() (Config, func()) {
 	}
 	cleanup.Add(func() { os.RemoveAll(cache) })
 
-	trash, err := ioutil.TempDir("/tmp", "trash")
-	if err != nil {
-		panic(err)
-	}
-	cleanup.Add(func() { os.RemoveAll(trash) })
-
 	config := Config{
 		UploadDir:   upload,
 		DownloadDir: download,
 		CacheDir:    cache,
-		TrashDir:    trash,
 	}.applyDefaults()
 
 	return config, cleanup.Run

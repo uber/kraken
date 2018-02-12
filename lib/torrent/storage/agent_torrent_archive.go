@@ -119,7 +119,7 @@ func (a *AgentTorrentArchive) GetTorrent(name string) (Torrent, error) {
 	return t, nil
 }
 
-// DeleteTorrent moves a torrent to the trash.
+// DeleteTorrent deletes a torrent from disk.
 func (a *AgentTorrentArchive) DeleteTorrent(name string) error {
-	return a.fs.MoveDownloadOrCacheFileToTrash(name)
+	return a.fs.DeleteDownloadOrCacheFile(name)
 }

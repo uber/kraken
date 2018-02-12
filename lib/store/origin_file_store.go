@@ -121,16 +121,13 @@ func NewOriginFileStore(config OriginConfig, clk clock.Clock) (*OriginLocalFileS
 }
 
 func initOriginStoreDirectories(config OriginConfig) error {
-	// Recreate upload dir.
+	// Wipe upload directory on restart.
 	os.RemoveAll(config.UploadDir)
-	if err := os.MkdirAll(config.UploadDir, 0755); err != nil {
-		return fmt.Errorf("make origin upload dir: %s", err)
-	}
 
-	// We do not want to remove all existing files in cache directory during restart.
-	err := os.MkdirAll(config.CacheDir, 0755)
-	if err != nil {
-		return fmt.Errorf("make origin cache dir: %s", err)
+	for _, dir := range []string{config.UploadDir, config.CacheDir} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("mkdir %s: %s", dir, err)
+		}
 	}
 
 	// If a list of volumes is provided, the volumes will be used to store the actual files, and

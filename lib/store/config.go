@@ -8,8 +8,6 @@ type Config struct {
 	UploadDir       string                `yaml:"upload_dir"`
 	DownloadDir     string                `yaml:"download_dir"`
 	CacheDir        string                `yaml:"cache_dir"`
-	TrashDir        string                `yaml:"trash_dir"`
-	TrashDeletion   TrashDeletionConfig   `yaml:"trash_deletion"`
 	DownloadCleanup DownloadCleanupConfig `yaml:"download_cleanup"`
 	LRUConfig       LRUConfig             `yaml:"lru"`
 }
@@ -17,12 +15,6 @@ type Config struct {
 func (c Config) applyDefaults() Config {
 	c.DownloadCleanup = c.DownloadCleanup.applyDefaults()
 	return c
-}
-
-// TrashDeletionConfig contains configuration to delete trash dir
-type TrashDeletionConfig struct {
-	Enable   bool          `yaml:"enable"`
-	Interval time.Duration `yaml:"interval"`
 }
 
 // DownloadCleanupConfig defines configuration for cleaning up files in the
