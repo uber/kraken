@@ -10,6 +10,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/store/base"
@@ -18,6 +20,7 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
 	"github.com/robfig/cron"
+	"github.com/uber-go/tally"
 )
 
 // FileReadWriter aliases base.FileReadWriter
@@ -32,6 +35,7 @@ type MetadataType = base.MetadataType
 // FileStore provides an interface for LocalFileStore. Useful for mocks.
 type FileStore interface {
 	Config() Config
+	Close()
 	CreateUploadFile(fileName string, len int64) error
 	CreateDownloadFile(fileName string, len int64) error
 	CreateCacheFile(fileName string, reader io.Reader) error
@@ -60,7 +64,7 @@ type FileStore interface {
 	RefCacheFile(fileName string) (int64, error)
 	DerefCacheFile(fileName string) (int64, error)
 	ListCacheFilesByShardID(shardID string) ([]string, error)
-	ListDownloads() ([]string, error)
+	CleanupIdleDownloads() error
 	EnsureDownloadOrCacheFilePresent(fileName string, defaultLength int64) error
 	States() *StateAcceptor
 	InCacheError(error) bool
@@ -82,17 +86,28 @@ type FileStore interface {
 type LocalFileStore struct {
 	uploadBackend        base.FileStore
 	downloadCacheBackend base.FileStore
-	config               *Config
+	config               Config
+	stats                tally.Scope
 
 	stateDownload agentFileState
 	stateUpload   agentFileState
 	stateCache    agentFileState
 
 	trashDeletionCron *cron.Cron
+
+	downloadCleanupTick <-chan time.Time
+	closeOnce           sync.Once
+	stop                chan struct{}
 }
 
 // NewLocalFileStore initializes and returns a new LocalFileStore object.
-func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error) {
+func NewLocalFileStore(config Config, stats tally.Scope, useRefcount bool) (*LocalFileStore, error) {
+	config = config.applyDefaults()
+
+	stats = stats.Tagged(map[string]string{
+		"module": "store",
+	})
+
 	err := initDirectories(config)
 	if err != nil {
 		return nil, err
@@ -115,15 +130,24 @@ func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error
 		return nil, err
 	}
 
+	var downloadCleanupTick <-chan time.Time
+	if config.DownloadCleanup.Enabled {
+		downloadCleanupTick = time.Tick(config.DownloadCleanup.Interval)
+	}
+
 	localStore := &LocalFileStore{
 		uploadBackend:        uploadBackend,
 		downloadCacheBackend: downloadCacheBackend,
 		config:               config,
+		stats:                stats,
 		stateUpload:          agentFileState{directory: config.UploadDir},
 		stateDownload:        agentFileState{directory: config.DownloadDir},
 		stateCache:           agentFileState{directory: config.CacheDir},
+		downloadCleanupTick:  downloadCleanupTick,
+		stop:                 make(chan struct{}),
 	}
 
+	// TODO(codyg): Get rid of trash deletion.
 	// Start a cron to delete trash files.
 	if config.TrashDeletion.Enable && config.TrashDeletion.Interval > 0 {
 		localStore.trashDeletionCron = cron.New()
@@ -142,12 +166,32 @@ func NewLocalFileStore(config *Config, useRefcount bool) (*LocalFileStore, error
 		localStore.trashDeletionCron.Start()
 	}
 
+	go localStore.tickerLoop()
+
 	return localStore, nil
+}
+
+func (store *LocalFileStore) tickerLoop() {
+	for {
+		select {
+		case <-store.downloadCleanupTick:
+			if err := store.CleanupIdleDownloads(); err != nil {
+				log.Errorf("Error cleaning up idle downloads: %s", err)
+			}
+		case <-store.stop:
+			return
+		}
+	}
 }
 
 // Config returns configuration of the store
 func (store *LocalFileStore) Config() Config {
-	return *store.config
+	return store.config
+}
+
+// Close terminates goroutines started by store.
+func (store *LocalFileStore) Close() {
+	store.closeOnce.Do(func() { close(store.stop) })
 }
 
 // CreateUploadFile creates an empty file in upload directory with specified size.
@@ -452,9 +496,33 @@ func (store *LocalFileStore) ListPopulatedShardIDs() ([]string, error) {
 	return nil, errors.New("not supported")
 }
 
-// ListDownloads lists all file names in the download state.
-func (store *LocalFileStore) ListDownloads() ([]string, error) {
-	return store.downloadCacheBackend.NewFileOp().AcceptState(store.stateDownload).ListNames()
+// CleanupIdleDownloads deletes any idle download files.
+func (store *LocalFileStore) CleanupIdleDownloads() error {
+	op := store.downloadCacheBackend.NewFileOp().AcceptState(store.stateDownload)
+	downloads, err := op.ListNames()
+	if err != nil {
+		return fmt.Errorf("list downloads: %s", err)
+	}
+	for _, name := range downloads {
+		info, err := op.GetFileStat(name)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("stat: %s", err)
+		}
+		if time.Since(info.ModTime()) > store.config.DownloadCleanup.TTI {
+			if err := op.DeleteFile(name); err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				return fmt.Errorf("delete file: %s", err)
+			}
+			log.With("name", name).Info("Deleted idle download file")
+			store.stats.Counter("idle_download_deleted").Inc(1)
+		}
+	}
+	return nil
 }
 
 // EnsureDownloadOrCacheFilePresent ensures that fileName is present in either

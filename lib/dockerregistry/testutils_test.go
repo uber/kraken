@@ -11,6 +11,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils"
+	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
 const (
@@ -23,27 +24,33 @@ const (
 )
 
 func genDockerTags() (*DockerTags, func()) {
-	s, cleanupStore := store.LocalFileStoreWithRefcountFixture()
+	var cleanup testutil.Cleanup
+	defer cleanup.Recover()
+
+	fsConfig, c := store.ConfigFixture()
+	cleanup.Add(c)
+
+	fs, err := store.NewLocalFileStore(fsConfig, tally.NewTestScope("", nil), true)
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(fs.Close)
+
 	tag, err := ioutil.TempDir("/tmp", "tag")
 	if err != nil {
-		cleanupStore()
-		log.Panic(err)
+		panic(err)
 	}
-	c := &Config{}
-	c.TagDir = tag
-	c.TagDeletion.Enable = true
+	cleanup.Add(func() { os.RemoveAll(tag) })
 
-	cleanup := func() {
-		cleanupStore()
-		os.RemoveAll(c.TagDir)
-	}
+	config := &Config{}
+	config.TagDir = tag
+	config.TagDeletion.Enable = true
 
-	tags, err := NewDockerTags(c, s, &mockImageTransferer{}, tally.NoopScope)
+	tags, err := NewDockerTags(config, fs, &mockImageTransferer{}, tally.NoopScope)
 	if err != nil {
-		cleanup()
-		log.Fatal(err)
+		panic(err)
 	}
-	return tags.(*DockerTags), cleanup
+	return tags.(*DockerTags), cleanup.Run
 }
 
 type testImageUploadBundle struct {
