@@ -4,10 +4,10 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/utils/testutil"
 	"github.com/uber-go/tally"
 )
 
@@ -32,28 +32,27 @@ func (mc *mockImageTransferer) Close() error { return nil }
 
 // StorageDriverFixture creates a storage driver and return a cleanup function
 func StorageDriverFixture() (*KrakenStorageDriver, func()) {
-	var tag string
+	var cleanup testutil.Cleanup
+	defer cleanup.Recover()
 
 	tag, err := ioutil.TempDir("/tmp", "tag")
 	if err != nil {
-		os.RemoveAll(tag)
-		log.Panic(err)
+		panic(err)
 	}
+	cleanup.Add(func() { os.RemoveAll(tag) })
 
-	config := &Config{
+	config := Config{
 		TagDir: tag,
 	}
 
-	localStore, cleanupStore := store.LocalFileStoreFixture()
-	cleanup := func() {
-		cleanupStore()
-		os.RemoveAll(tag)
-	}
+	localStore, c := store.LocalFileStoreFixture()
+	cleanup.Add(c)
 
 	sd, err := NewKrakenStorageDriver(config, localStore, &mockImageTransferer{}, tally.NoopScope)
 	if err != nil {
-		cleanup()
-		log.Panic(err)
+		panic(err)
 	}
-	return sd, cleanup
+	cleanup.Add(sd.Close)
+
+	return sd, cleanup.Run
 }

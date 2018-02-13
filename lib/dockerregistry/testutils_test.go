@@ -42,7 +42,7 @@ func genDockerTags() (*DockerTags, func()) {
 	}
 	cleanup.Add(func() { os.RemoveAll(tag) })
 
-	config := &Config{}
+	config := Config{}
 	config.TagDir = tag
 	config.TagDeletion.Enable = true
 
