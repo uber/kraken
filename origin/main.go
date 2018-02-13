@@ -23,6 +23,18 @@ import (
 	"github.com/andres-erbsen/clock"
 )
 
+func runTorrentServer(server *torrentserver.Server, port int) {
+	addr := fmt.Sprintf(":%d", port)
+	log.Infof("Starting torrent server on %s", addr)
+	log.Fatal(http.ListenAndServe(addr, server.Handler()))
+}
+
+func runBlobServer(server *blobserver.Server, port int) {
+	addr := fmt.Sprintf(":%d", port)
+	log.Infof("Starting blob server on %d", addr)
+	log.Fatal(http.ListenAndServe(addr, server.Handler()))
+}
+
 func main() {
 	blobServerPort := flag.Int("blobserver_port", 0, "port which registry listens on")
 	blobServerHostName := flag.String("blobserver_hostname", "", "optional hostname which blobserver will use to lookup a local host in a blob server hashnode config")
@@ -60,35 +72,24 @@ func main() {
 		log.Fatalf("Failed to create origin file store: %s", err)
 	}
 
-	var pctx peercontext.PeerContext
-
-	if config.Torrent.Enabled {
-		pctx, err = peercontext.NewOrigin(
-			peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *zone, *peerIP, *peerPort)
-		if err != nil {
-			log.Fatalf("Failed to create peer context: %s", err)
-		}
-
-		c, err := torrent.NewSchedulerClient(
-			config.Torrent,
-			stats,
-			pctx,
-			announceclient.Disabled(),
-			announcequeue.Disabled(),
-			torrentstorage.NewOriginTorrentArchive(fs))
-		if err != nil {
-			log.Fatalf("Failed to create scheduler client: %s", err)
-		}
-
-		torrentServer := torrentserver.New(c)
-		addr := fmt.Sprintf(":%d", *torrentServerPort)
-		log.Infof("Starting torrent server on %s", addr)
-		go func() {
-			log.Fatal(http.ListenAndServe(addr, torrentServer.Handler()))
-		}()
-	} else {
-		log.Warn("Torrent disabled")
+	pctx, err := peercontext.NewOrigin(
+		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *zone, *peerIP, *peerPort)
+	if err != nil {
+		log.Fatalf("Failed to create peer context: %s", err)
 	}
+
+	c, err := torrent.NewSchedulerClient(
+		config.Torrent,
+		stats,
+		pctx,
+		announceclient.Disabled(),
+		announcequeue.Disabled(),
+		torrentstorage.NewOriginTorrentArchive(fs))
+	if err != nil {
+		log.Fatalf("Failed to create scheduler client: %s", err)
+	}
+
+	go runTorrentServer(torrentserver.New(c), *torrentServerPort)
 
 	var hostname string
 	if blobServerHostName == nil || *blobServerHostName == "" {
@@ -99,25 +100,25 @@ func main() {
 	} else {
 		hostname = *blobServerHostName
 	}
+	log.Infof("Configuring blob server with hostname '%s'", hostname)
 
 	backendManager, err := backend.NewManager(config.Namespace)
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
 
-	addr := fmt.Sprintf("%s:%d", hostname, *blobServerPort)
-	server, err := blobserver.New(
+	bs, err := blobserver.New(
 		config.BlobServer,
 		stats,
-		addr,
+		fmt.Sprintf("%s:%d", hostname, *blobServerPort),
 		fs,
 		blobclient.NewProvider(),
 		pctx,
 		backendManager)
 	if err != nil {
-		log.Fatalf("Error initializing blob server %s: %s", addr, err)
+		log.Fatalf("Error initializing blob server: %s", err)
 	}
+	go runBlobServer(bs, *blobServerPort)
 
-	log.Infof("Starting origin server %s on %d", hostname, *blobServerPort)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *blobServerPort), server.Handler()))
+	select {}
 }
