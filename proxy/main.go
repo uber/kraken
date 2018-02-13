@@ -40,33 +40,27 @@ func main() {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
 
-	// if remote backend is set create it instead of origin transferer
 	var transferer transfer.ImageTransferer
-	if config.Namespace != "" {
-		backendManager, err := backend.NewManager(config.Namespaces)
+	if config.Registry.Namespace != "" {
+		// If namespace is specified, use remote backend for blob upload/download and
+		// manifest upload/download.
+		backendManager, err := backend.NewManager(config.Registry.Namespaces)
 		if err != nil {
 			log.Fatalf("Error creating backend manager: %s", err)
 		}
-
-		backendClient, err := backendManager.GetClient(config.Namespace)
+		backendClient, err := backendManager.GetClient(config.Registry.Namespace)
 		if err != nil {
-			log.Fatalf("Error creating backend manager's client: %s for %s",
-				err, config.Namespace)
+			log.Fatalf("Error creating backend client: %s", err)
 		}
-
-		manifestClient, err := backendManager.GetManifestClient(config.Namespace)
+		manifestClient, err := backendManager.GetManifestClient(config.Registry.Namespace)
 		if err != nil {
-			log.Fatalf("error creating backendmanager's manifest client: %s", err)
+			log.Fatalf("Error creating backend manifest client: %s", err)
 		}
-
 		transferer, err = transfer.NewRemoteBackendTransferer(
 			manifestClient, backendClient, fs)
-
 		if err != nil {
-			log.Fatalf("Error creating image transferer: %s for %s",
-				err, config.Namespace)
+			log.Fatalf("Error creating image transferer: %s", err)
 		}
-
 	} else {
 		origins, err := serverset.NewRoundRobin(config.Origin.RoundRobin)
 		if err != nil {
