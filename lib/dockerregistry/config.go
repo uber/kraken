@@ -3,6 +3,7 @@ package dockerregistry
 import (
 	"time"
 
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	docker "github.com/docker/distribution/configuration"
@@ -11,10 +12,12 @@ import (
 
 // Config contains docker registry config, disable torrent flag, and tag deletion config
 type Config struct {
-	Docker         docker.Configuration `yaml:"docker"`
-	DisableTorrent bool                 `yaml:"disable_torrent"`
-	TagDir         string               `yaml:"tag_dir"`
-	TagDeletion    TagDeletionConfig    `yaml:"tag_deletion"`
+	Docker         docker.Configuration    `yaml:"docker"`
+	DisableTorrent bool                    `yaml:"disable_torrent"`
+	TagDir         string                  `yaml:"tag_dir"`
+	TagDeletion    TagDeletionConfig       `yaml:"tag_deletion"`
+	Namespaces     backend.NamespaceConfig `yaml:"namespaces"`
+	Namespace      string                  `yaml:"namespace"`
 }
 
 func (c Config) applyDefaults() Config {

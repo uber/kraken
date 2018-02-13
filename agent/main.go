@@ -9,6 +9,7 @@ import (
 	docker "github.com/docker/distribution/registry"
 
 	"code.uber.internal/infra/kraken/agent/agentserver"
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
@@ -86,7 +87,22 @@ func main() {
 
 	agentServer := agentserver.New(config.AgentServer, stats, fs, torrentClient)
 
-	transferer := transfer.NewAgentTransferer(fs, torrentClient, manifestclient.New(trackers))
+	var manifestClient manifestclient.Client
+	if config.Registry.Namespace != "" {
+		// If namespace is specified, use remote backend for manifest downloads.
+		backendManager, err := backend.NewManager(config.Registry.Namespaces)
+		if err != nil {
+			log.Fatalf("Error creating backend manager: %s", err)
+		}
+		manifestClient, err = backendManager.GetManifestClient(config.Registry.Namespace)
+		if err != nil {
+			log.Fatalf("Error creating backend manifest client: %s", err)
+		}
+	} else {
+		manifestClient = manifestclient.New(trackers)
+	}
+
+	transferer := transfer.NewAgentTransferer(fs, torrentClient, manifestClient)
 
 	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)
