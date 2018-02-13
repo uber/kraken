@@ -79,3 +79,15 @@ func (m *MockClient) Reload(arg0 scheduler.Config) {
 func (mr *MockClientMockRecorder) Reload(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reload", reflect.TypeOf((*MockClient)(nil).Reload), arg0)
 }
+
+// RemoveTorrent mocks base method
+func (m *MockClient) RemoveTorrent(arg0 string) error {
+	ret := m.ctrl.Call(m, "RemoveTorrent", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveTorrent indicates an expected call of RemoveTorrent
+func (mr *MockClientMockRecorder) RemoveTorrent(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveTorrent", reflect.TypeOf((*MockClient)(nil).RemoveTorrent), arg0)
+}

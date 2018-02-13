@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"os"
 	"sync"
 	"testing"
 
@@ -44,7 +45,7 @@ func TestAgentTorrentArchiveStatNotExist(t *testing.T) {
 	name := torlib.MetaInfoFixture().Name()
 
 	_, err := archive.Stat(name)
-	require.Error(err)
+	require.True(os.IsNotExist(err))
 }
 
 func TestAgentTorrentArchiveCreateTorrent(t *testing.T) {
@@ -109,6 +110,9 @@ func TestAgentTorrentArchiveDeleteTorrent(t *testing.T) {
 	require.NotNil(tor)
 
 	require.NoError(archive.DeleteTorrent(mi.Name()))
+
+	_, err = archive.Stat(mi.Name())
+	require.True(os.IsNotExist(err))
 }
 
 func TestAgentTorrentArchiveConcurrentGet(t *testing.T) {

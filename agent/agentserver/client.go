@@ -63,3 +63,9 @@ func (c *Client) Download(namespace, name string) (io.ReadCloser, error) {
 	}
 	return nil, a.Err()
 }
+
+// Delete deletes the torrent for name.
+func (c *Client) Delete(name string) error {
+	_, err := httputil.Delete(fmt.Sprintf("http://%s/blobs/%s", c.addr, name))
+	return err
+}

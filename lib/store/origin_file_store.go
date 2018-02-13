@@ -36,6 +36,7 @@ type OriginFileStore interface {
 	GetCacheFileReader(fileName string) (FileReader, error)
 	GetCacheFileStat(fileName string) (os.FileInfo, error)
 	MoveUploadFileToCache(fileName, targetFileName string) error
+	DeleteCacheFile(fileName string) error
 
 	GetCacheFileMetadata(filename string, mt MetadataType) ([]byte, error)
 	SetCacheFileMetadata(filename string, mt MetadataType, b []byte) (bool, error)
@@ -50,7 +51,6 @@ type OriginFileStore interface {
 	ListUploadFileHashStatePaths(fileName string) ([]string, error)
 
 	// TODO: Functions probably no longer needed.
-	DeleteCacheFile(fileName string) error
 	ListCacheFilesByShardID(shardID string) ([]string, error)
 	ListPopulatedShardIDs() ([]string, error)
 }

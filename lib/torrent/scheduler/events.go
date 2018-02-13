@@ -103,17 +103,20 @@ func (e incomingHandshakeEvent) Apply(s *Scheduler) {
 		return
 	}
 	go func() {
+		fail := func(err error) {
+			s.log("peer", e.pc.PeerID(), "hash", e.pc.InfoHash()).Infof(
+				"Error processing incoming handshake: %s", err)
+			e.pc.Close()
+			s.eventLoop.Send(failedIncomingHandshakeEvent{e.pc.PeerID(), e.pc.InfoHash()})
+		}
 		info, err := s.torrentArchive.Stat(e.pc.Name())
 		if err != nil {
-			e.pc.Close()
+			fail(fmt.Errorf("torrent stat: %s", err))
 			return
 		}
 		c, err := s.handshaker.Establish(e.pc, info)
 		if err != nil {
-			s.log("peer", e.pc.PeerID(), "hash", e.pc.InfoHash()).Infof(
-				"Error establishing conn: %s", err)
-			e.pc.Close()
-			s.eventLoop.Send(failedIncomingHandshakeEvent{e.pc.PeerID(), e.pc.InfoHash()})
+			fail(fmt.Errorf("establish handshake: %s", err))
 			return
 		}
 		s.eventLoop.Send(incomingConnEvent{c, e.pc.Bitfield(), info})
@@ -358,22 +361,15 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 	}
 
 	for infoHash, ctrl := range s.torrentControls {
-		if ctrl.Complete {
-			if s.clock.Now().Sub(ctrl.Dispatcher.LastReadTime()) >= s.config.SeederTTI {
-				s.log("hash", infoHash).Info("Removing idle seeding torrent")
-				delete(s.torrentControls, infoHash)
-			}
-		} else {
-			if s.clock.Now().Sub(ctrl.Dispatcher.LastWriteTime()) >= s.config.LeecherTTI {
-				s.log("hash", infoHash).Info("Cancelling idle in-progress torrent")
-				ctrl.Dispatcher.TearDown()
-				s.announceQueue.Eject(infoHash)
-				for _, errc := range ctrl.Errors {
-					errc <- ErrTorrentTimeout
-				}
-				delete(s.torrentControls, infoHash)
-				s.networkEvents.Produce(networkevent.TorrentCancelledEvent(infoHash, s.pctx.PeerID))
-			}
+		idleSeeder :=
+			ctrl.Complete &&
+				s.clock.Now().Sub(ctrl.Dispatcher.LastReadTime()) >= s.config.SeederTTI
+		idleLeecher :=
+			!ctrl.Complete &&
+				s.clock.Now().Sub(ctrl.Dispatcher.LastWriteTime()) >= s.config.LeecherTTI
+		if idleSeeder || idleLeecher {
+			s.log("hash", infoHash, "inprogress", !ctrl.Complete).Info("Removing idle torrent")
+			s.tearDownTorrentControl(ctrl, ErrTorrentTimeout)
 		}
 	}
 }
@@ -392,4 +388,22 @@ type blacklistSnapshotEvent struct {
 
 func (e blacklistSnapshotEvent) Apply(s *Scheduler) {
 	e.result <- s.connState.BlacklistSnapshot()
+}
+
+// removeTorrentEvent occurs when a torrent is manually removed via Scheduler API.
+type removeTorrentEvent struct {
+	name string
+	errc chan error
+}
+
+func (e removeTorrentEvent) Apply(s *Scheduler) {
+	for _, ctrl := range s.torrentControls {
+		if ctrl.Dispatcher.Torrent.Name() == e.name {
+			s.log(
+				"hash", ctrl.Dispatcher.Torrent.InfoHash(),
+				"inprogress", !ctrl.Complete).Info("Removing torrent")
+			s.tearDownTorrentControl(ctrl, ErrTorrentRemoved)
+		}
+	}
+	e.errc <- s.torrentArchive.DeleteTorrent(e.name)
 }

@@ -205,7 +205,7 @@ func (mr *MockTorrentMockRecorder) String() *gomock.Call {
 }
 
 // WritePiece mocks base method
-func (m *MockTorrent) WritePiece(arg0 []byte, arg1 int) error {
+func (m *MockTorrent) WritePiece(arg0 storage.PieceReader, arg1 int) error {
 	ret := m.ctrl.Call(m, "WritePiece", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0

@@ -97,3 +97,19 @@ func TestGetBlacklistHandler(t *testing.T) {
 	require.NoError(json.NewDecoder(resp.Body).Decode(&result))
 	require.Equal(blacklist, result)
 }
+
+func TestDeleteBlobHandler(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	d := image.DigestFixture()
+
+	addr := mocks.startServer()
+	c := NewClient(addr)
+
+	mocks.torrentClient.EXPECT().RemoveTorrent(d.Hex()).Return(nil)
+
+	require.NoError(c.Delete(d.Hex()))
+}
