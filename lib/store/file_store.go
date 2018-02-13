@@ -92,9 +92,9 @@ type LocalFileStore struct {
 
 	trashDeletionCron *cron.Cron
 
-	downloadCleanupTick <-chan time.Time
-	closeOnce           sync.Once
-	stop                chan struct{}
+	downloadCleanupTicker *time.Ticker
+	closeOnce             sync.Once
+	stop                  chan struct{}
 }
 
 // NewLocalFileStore initializes and returns a new LocalFileStore object.
@@ -131,21 +131,21 @@ func NewLocalFileStore(config Config, stats tally.Scope, useRefcount bool) (*Loc
 		return nil, err
 	}
 
-	var downloadCleanupTick <-chan time.Time
+	downloadCleanupTicker := &time.Ticker{}
 	if config.DownloadCleanup.Enabled {
-		downloadCleanupTick = time.Tick(config.DownloadCleanup.Interval)
+		downloadCleanupTicker = time.NewTicker(config.DownloadCleanup.Interval)
 	}
 
 	localStore := &LocalFileStore{
-		uploadBackend:        uploadBackend,
-		downloadCacheBackend: downloadCacheBackend,
-		config:               config,
-		stats:                stats,
-		stateUpload:          agentFileState{directory: config.UploadDir},
-		stateDownload:        agentFileState{directory: config.DownloadDir},
-		stateCache:           agentFileState{directory: config.CacheDir},
-		downloadCleanupTick:  downloadCleanupTick,
-		stop:                 make(chan struct{}),
+		uploadBackend:         uploadBackend,
+		downloadCacheBackend:  downloadCacheBackend,
+		config:                config,
+		stats:                 stats,
+		stateUpload:           agentFileState{directory: config.UploadDir},
+		stateDownload:         agentFileState{directory: config.DownloadDir},
+		stateCache:            agentFileState{directory: config.CacheDir},
+		downloadCleanupTicker: downloadCleanupTicker,
+		stop: make(chan struct{}),
 	}
 
 	go localStore.tickerLoop()
@@ -156,11 +156,12 @@ func NewLocalFileStore(config Config, stats tally.Scope, useRefcount bool) (*Loc
 func (store *LocalFileStore) tickerLoop() {
 	for {
 		select {
-		case <-store.downloadCleanupTick:
+		case <-store.downloadCleanupTicker.C:
 			if err := store.CleanupIdleDownloads(); err != nil {
 				log.Errorf("Error cleaning up idle downloads: %s", err)
 			}
 		case <-store.stop:
+			store.downloadCleanupTicker.Stop()
 			return
 		}
 	}

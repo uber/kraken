@@ -1,6 +1,8 @@
 package dockerregistry
 
 import (
+	"time"
+
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	docker "github.com/docker/distribution/configuration"
@@ -15,19 +17,37 @@ type Config struct {
 	TagDeletion    TagDeletionConfig    `yaml:"tag_deletion"`
 }
 
+func (c Config) applyDefaults() Config {
+	c.TagDeletion = c.TagDeletion.applyDefaults()
+	return c
+}
+
 // TagDeletionConfig contains configuration to delete tags
 type TagDeletionConfig struct {
 	Enable bool `yaml:"enable"`
-	// Interval for running tag deletion in seconds
-	Interval int `yaml:"interval"`
+
+	// Interval for running tag deletion.
+	Interval time.Duration `yaml:"interval"`
+
 	// Number of tags we keep for each repo
 	RetentionCount int `yaml:"retention_count"`
-	// Least number of seconds we keep tags for
-	RetentionTime int `yaml:"retention_time"`
+
+	// Duration tags are kept for.
+	RetentionTime time.Duration `yaml:"retention_time"`
+}
+
+func (c TagDeletionConfig) applyDefaults() TagDeletionConfig {
+	if c.Interval == 0 {
+		c.Interval = 30 * time.Minute
+	}
+	if c.RetentionTime == 0 {
+		c.RetentionTime = 24 * time.Hour
+	}
+	return c
 }
 
 // CreateDockerConfig returns docker specified configuration
-func (c *Config) CreateDockerConfig(name string, imageTransferer transfer.ImageTransferer, fileStore store.FileStore, stats tally.Scope) *docker.Configuration {
+func (c Config) CreateDockerConfig(name string, imageTransferer transfer.ImageTransferer, fileStore store.FileStore, stats tally.Scope) *docker.Configuration {
 	c.Docker.Storage = docker.Storage{
 		name: docker.Parameters{
 			"config":     c,
