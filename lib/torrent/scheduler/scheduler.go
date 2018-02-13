@@ -27,6 +27,7 @@ var (
 	ErrTorrentNotFound  = errors.New("torrent not found")
 	ErrSchedulerStopped = errors.New("scheduler has been stopped")
 	ErrTorrentTimeout   = errors.New("torrent timed out")
+	ErrTorrentRemoved   = errors.New("torrent manually removed")
 )
 
 // torrentControl bundles torrent control structures.
@@ -268,6 +269,16 @@ func (s *Scheduler) BlacklistSnapshot() (chan []BlacklistedConn, error) {
 	return result, nil
 }
 
+// RemoveTorrent forcibly stops leeching / seeding torrent for name and removes
+// the torrent from disk.
+func (s *Scheduler) RemoveTorrent(name string) <-chan error {
+	errc := make(chan error, 1)
+	if !s.eventLoop.Send(removeTorrentEvent{name, errc}) {
+		errc <- ErrSchedulerStopped
+	}
+	return errc
+}
+
 func (s *Scheduler) start() {
 	s.wg.Add(3)
 	go s.runEventLoop()
@@ -379,6 +390,21 @@ func (s *Scheduler) initTorrentControl(t storage.Torrent, localRequest bool) *to
 		t.InfoHash(), s.pctx.PeerID, t.Bitfield(), s.config.ConnState.MaxOpenConnectionsPerTorrent))
 	s.torrentControls[t.InfoHash()] = ctrl
 	return ctrl
+}
+
+func (s *Scheduler) tearDownTorrentControl(ctrl *torrentControl, err error) {
+	h := ctrl.Dispatcher.Torrent.InfoHash()
+	if ctrl.Complete {
+		delete(s.torrentControls, h)
+	} else {
+		ctrl.Dispatcher.TearDown()
+		s.announceQueue.Eject(h)
+		for _, errc := range ctrl.Errors {
+			errc <- err
+		}
+		delete(s.torrentControls, h)
+		s.networkEvents.Produce(networkevent.TorrentCancelledEvent(h, s.pctx.PeerID))
+	}
 }
 
 func (s *Scheduler) log(args ...interface{}) *zap.SugaredLogger {

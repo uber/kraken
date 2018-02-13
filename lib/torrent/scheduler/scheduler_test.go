@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -406,6 +407,35 @@ func TestSchedulerReload(t *testing.T) {
 	leecher.scheduler = s
 
 	download()
+}
+
+func TestSchedulerRemoveTorrent(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newTestMocks(t)
+	defer cleanup()
+
+	p := mocks.newPeer(configFixture())
+
+	tf := torlib.TestTorrentFileFixture()
+
+	mocks.metaInfoClient.EXPECT().Download(
+		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil)
+
+	errc := p.scheduler.AddTorrent(namespace, tf.MetaInfo.Name())
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		require.Equal(ErrTorrentRemoved, <-errc)
+	}()
+
+	require.NoError(<-p.scheduler.RemoveTorrent(tf.MetaInfo.Name()))
+
+	<-done
+
+	_, err := p.torrentArchive.Stat(tf.MetaInfo.Name())
+	require.True(os.IsNotExist(err))
 }
 
 // BENCHMARKS

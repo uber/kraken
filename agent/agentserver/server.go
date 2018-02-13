@@ -59,6 +59,8 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/namespace/:namespace/blobs/:name", handler.Wrap(s.downloadBlobHandler))
 
+	r.Delete("/blobs/:name", handler.Wrap(s.deleteBlobHandler))
+
 	// Dangerous endpoint for running experiments.
 	r.Patch("/x/config/scheduler", handler.Wrap(s.patchSchedulerConfigHandler))
 
@@ -109,6 +111,17 @@ func (s *Server) startTorrentDownload(namespace, name string) error {
 	default:
 		return handler.Errorf("download torrent: %s", err)
 	}
+}
+
+func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error {
+	name := chi.URLParam(r, "name")
+	if name == "" {
+		return handler.Errorf("name required").Status(http.StatusBadRequest)
+	}
+	if err := s.torrentClient.RemoveTorrent(name); err != nil {
+		return handler.Errorf("remove torrent: %s", err)
+	}
+	return nil
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {

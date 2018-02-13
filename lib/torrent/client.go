@@ -21,6 +21,7 @@ type Client interface {
 	Download(namespace string, name string) error
 	Reload(config scheduler.Config)
 	BlacklistSnapshot() ([]scheduler.BlacklistedConn, error)
+	RemoveTorrent(name string) error
 	Close() error
 }
 
@@ -115,4 +116,10 @@ func (c *SchedulerClient) BlacklistSnapshot() ([]scheduler.BlacklistedConn, erro
 		return nil, err
 	}
 	return <-result, nil
+}
+
+// RemoveTorrent forcibly stops torrent for name, preventing it from downloading / seeding
+// any further.
+func (c *SchedulerClient) RemoveTorrent(name string) error {
+	return <-c.scheduler.RemoveTorrent(name)
 }

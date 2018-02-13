@@ -36,6 +36,28 @@ func (m *MockFileStore) EXPECT() *MockFileStoreMockRecorder {
 	return m.recorder
 }
 
+// CleanupIdleDownloads mocks base method
+func (m *MockFileStore) CleanupIdleDownloads() error {
+	ret := m.ctrl.Call(m, "CleanupIdleDownloads")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CleanupIdleDownloads indicates an expected call of CleanupIdleDownloads
+func (mr *MockFileStoreMockRecorder) CleanupIdleDownloads() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanupIdleDownloads", reflect.TypeOf((*MockFileStore)(nil).CleanupIdleDownloads))
+}
+
+// Close mocks base method
+func (m *MockFileStore) Close() {
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close
+func (mr *MockFileStoreMockRecorder) Close() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockFileStore)(nil).Close))
+}
+
 // Config mocks base method
 func (m *MockFileStore) Config() store.Config {
 	ret := m.ctrl.Call(m, "Config")
@@ -84,16 +106,16 @@ func (mr *MockFileStoreMockRecorder) CreateUploadFile(arg0, arg1 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUploadFile", reflect.TypeOf((*MockFileStore)(nil).CreateUploadFile), arg0, arg1)
 }
 
-// DeleteAllTrashFiles mocks base method
-func (m *MockFileStore) DeleteAllTrashFiles() error {
-	ret := m.ctrl.Call(m, "DeleteAllTrashFiles")
+// DeleteDownloadOrCacheFile mocks base method
+func (m *MockFileStore) DeleteDownloadOrCacheFile(arg0 string) error {
+	ret := m.ctrl.Call(m, "DeleteDownloadOrCacheFile", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DeleteAllTrashFiles indicates an expected call of DeleteAllTrashFiles
-func (mr *MockFileStoreMockRecorder) DeleteAllTrashFiles() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAllTrashFiles", reflect.TypeOf((*MockFileStore)(nil).DeleteAllTrashFiles))
+// DeleteDownloadOrCacheFile indicates an expected call of DeleteDownloadOrCacheFile
+func (mr *MockFileStoreMockRecorder) DeleteDownloadOrCacheFile(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDownloadOrCacheFile", reflect.TypeOf((*MockFileStore)(nil).DeleteDownloadOrCacheFile), arg0)
 }
 
 // DerefCacheFile mocks base method
@@ -353,18 +375,6 @@ func (mr *MockFileStoreMockRecorder) ListUploadFileHashStatePaths(arg0 interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListUploadFileHashStatePaths", reflect.TypeOf((*MockFileStore)(nil).ListUploadFileHashStatePaths), arg0)
 }
 
-// MoveCacheFileToTrash mocks base method
-func (m *MockFileStore) MoveCacheFileToTrash(arg0 string) error {
-	ret := m.ctrl.Call(m, "MoveCacheFileToTrash", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MoveCacheFileToTrash indicates an expected call of MoveCacheFileToTrash
-func (mr *MockFileStoreMockRecorder) MoveCacheFileToTrash(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveCacheFileToTrash", reflect.TypeOf((*MockFileStore)(nil).MoveCacheFileToTrash), arg0)
-}
-
 // MoveDownloadFileToCache mocks base method
 func (m *MockFileStore) MoveDownloadFileToCache(arg0 string) error {
 	ret := m.ctrl.Call(m, "MoveDownloadFileToCache", arg0)
@@ -375,18 +385,6 @@ func (m *MockFileStore) MoveDownloadFileToCache(arg0 string) error {
 // MoveDownloadFileToCache indicates an expected call of MoveDownloadFileToCache
 func (mr *MockFileStoreMockRecorder) MoveDownloadFileToCache(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveDownloadFileToCache", reflect.TypeOf((*MockFileStore)(nil).MoveDownloadFileToCache), arg0)
-}
-
-// MoveDownloadOrCacheFileToTrash mocks base method
-func (m *MockFileStore) MoveDownloadOrCacheFileToTrash(arg0 string) error {
-	ret := m.ctrl.Call(m, "MoveDownloadOrCacheFileToTrash", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MoveDownloadOrCacheFileToTrash indicates an expected call of MoveDownloadOrCacheFileToTrash
-func (mr *MockFileStoreMockRecorder) MoveDownloadOrCacheFileToTrash(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveDownloadOrCacheFileToTrash", reflect.TypeOf((*MockFileStore)(nil).MoveDownloadOrCacheFileToTrash), arg0)
 }
 
 // MoveUploadFileToCache mocks base method

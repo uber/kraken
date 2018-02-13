@@ -3,6 +3,7 @@ package storage
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/torlib"
@@ -21,12 +22,12 @@ func NewOriginTorrentArchive(fs store.OriginFileStore) *OriginTorrentArchive {
 	return &OriginTorrentArchive{fs}
 }
 
-// Stat returns TorrentInfo for given file name. Returns error if the file does
+// Stat returns TorrentInfo for given file name. Returns os.ErrNotExist if the file does
 // not exist.
 func (a *OriginTorrentArchive) Stat(name string) (*TorrentInfo, error) {
 	raw, err := a.fs.GetCacheFileMetadata(name, store.NewTorrentMeta())
 	if err != nil {
-		return nil, fmt.Errorf("get metainfo: %s", err)
+		return nil, err
 	}
 	mi, err := torlib.DeserializeMetaInfo(raw)
 	if err != nil {
@@ -59,5 +60,8 @@ func (a *OriginTorrentArchive) GetTorrent(name string) (Torrent, error) {
 
 // DeleteTorrent moves a torrent to the trash.
 func (a *OriginTorrentArchive) DeleteTorrent(name string) error {
-	return errors.New("not supported for origin")
+	if err := a.fs.DeleteCacheFile(name); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }

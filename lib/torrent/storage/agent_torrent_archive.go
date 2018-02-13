@@ -31,14 +31,14 @@ func NewAgentTorrentArchive(
 	return &AgentTorrentArchive{config, fs, mic}
 }
 
-// Stat returns TorrentInfo for given file name. Returns error if the file does
+// Stat returns TorrentInfo for given file name. Returns os.ErrNotExist if the file does
 // not exist.
 func (a *AgentTorrentArchive) Stat(name string) (*TorrentInfo, error) {
 	downloadOrCache := a.fs.States().Download().Cache()
 
 	raw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
 	if err != nil {
-		return nil, fmt.Errorf("get metainfo metadata: %s", err)
+		return nil, err
 	}
 	mi, err := torlib.DeserializeMetaInfo(raw)
 	if err != nil {
@@ -47,7 +47,7 @@ func (a *AgentTorrentArchive) Stat(name string) (*TorrentInfo, error) {
 
 	raw, err = downloadOrCache.GetMetadata(name, store.NewPieceStatus())
 	if err != nil {
-		return nil, fmt.Errorf("get piece status metadata: %s", err)
+		return nil, err
 	}
 	b := newBitfieldFromPieceStatusBytes(name, raw)
 
@@ -121,5 +121,8 @@ func (a *AgentTorrentArchive) GetTorrent(name string) (Torrent, error) {
 
 // DeleteTorrent deletes a torrent from disk.
 func (a *AgentTorrentArchive) DeleteTorrent(name string) error {
-	return a.fs.DeleteDownloadOrCacheFile(name)
+	if err := a.fs.DeleteDownloadOrCacheFile(name); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
