@@ -53,6 +53,18 @@ func main() {
 		panic("-torrent_server_port must be non-zero")
 	}
 
+	var hostname string
+	if blobServerHostName == nil || *blobServerHostName == "" {
+		var err error
+		hostname, err = os.Hostname()
+		if err != nil {
+			log.Fatalf("Error getting hostname: %s", err)
+		}
+	} else {
+		hostname = *blobServerHostName
+	}
+	log.Infof("Configuring origin with hostname '%s'", hostname)
+
 	var config Config
 	if err := configutil.Load(*configFile, &config); err != nil {
 		panic(err)
@@ -66,6 +78,10 @@ func main() {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}
 	defer closer.Close()
+
+	stats = stats.Tagged(map[string]string{
+		"origin": hostname,
+	})
 
 	fs, err := store.NewOriginFileStore(config.OriginStore, clock.New())
 	if err != nil {
@@ -90,17 +106,6 @@ func main() {
 	}
 
 	go runTorrentServer(torrentserver.New(c), *torrentServerPort)
-
-	var hostname string
-	if blobServerHostName == nil || *blobServerHostName == "" {
-		hostname, err = os.Hostname()
-		if err != nil {
-			log.Fatalf("Error getting hostname: %s", err)
-		}
-	} else {
-		hostname = *blobServerHostName
-	}
-	log.Infof("Configuring blob server with hostname '%s'", hostname)
 
 	backendManager, err := backend.NewManager(config.Namespace)
 	if err != nil {
