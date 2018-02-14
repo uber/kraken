@@ -5,9 +5,32 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"math/rand"
 )
+
+// PeerIDFactory defines the method used to generate a peer id.
+type PeerIDFactory string
+
+// RandomPeerIDFactory creates random peer ids.
+const RandomPeerIDFactory PeerIDFactory = "random"
+
+// AddrHashPeerIDFactory creates peers ids based on a full "ip:port" address.
+const AddrHashPeerIDFactory PeerIDFactory = "addr_hash"
+
+// GeneratePeerID creates a new peer id per the factory policy.
+func (f PeerIDFactory) GeneratePeerID(ip string, port int) (PeerID, error) {
+	switch f {
+	case RandomPeerIDFactory:
+		return RandomPeerID()
+	case AddrHashPeerIDFactory:
+		return HashedPeerID(fmt.Sprintf("%s:%d", ip, port))
+	default:
+		err := fmt.Errorf("invalid peer id factory: %q", string(f))
+		return PeerID{}, err
+	}
+}
 
 // ErrInvalidPeerIDLength returns when a string peer id does not decode into 20 bytes.
 var ErrInvalidPeerIDLength = errors.New("peer id has invalid length")

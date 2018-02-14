@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net/http"
@@ -11,28 +12,48 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	torrentstorage "code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobserver"
-	"code.uber.internal/infra/kraken/origin/torrentserver"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
+	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
+	"github.com/pressly/chi"
 )
 
-func runTorrentServer(server *torrentserver.Server, port int) {
-	addr := fmt.Sprintf(":%d", port)
-	log.Infof("Starting torrent server on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, server.Handler()))
-}
+// addTorrentDebugEndpoints mounts experimental debugging endpoints which are
+// compatible with the agent server.
+func addTorrentDebugEndpoints(h http.Handler, c torrent.Client) http.Handler {
+	r := chi.NewRouter()
 
-func runBlobServer(server *blobserver.Server, port int) {
-	addr := fmt.Sprintf(":%d", port)
-	log.Infof("Starting blob server on %d", addr)
-	log.Fatal(http.ListenAndServe(addr, server.Handler()))
+	r.Patch("/x/config/scheduler", handler.Wrap(func(w http.ResponseWriter, r *http.Request) error {
+		var config scheduler.Config
+		if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+			return handler.Errorf("decode body: %s", err)
+		}
+		c.Reload(config)
+		return nil
+	}))
+
+	r.Get("/x/blacklist", handler.Wrap(func(w http.ResponseWriter, r *http.Request) error {
+		blacklist, err := c.BlacklistSnapshot()
+		if err != nil {
+			return handler.Errorf("blacklist snapshot: %s", err)
+		}
+		if err := json.NewEncoder(w).Encode(&blacklist); err != nil {
+			return handler.Errorf("encode blacklist: %s", err)
+		}
+		return nil
+	}))
+
+	r.Mount("/", h)
+
+	return r
 }
 
 func main() {
@@ -41,16 +62,12 @@ func main() {
 	peerIP := flag.String("peer_ip", "", "ip which peer will announce itself as")
 	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
 	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
-	torrentServerPort := flag.Int("torrent_server_port", 0, "port which torrent server will listen on")
 	zone := flag.String("zone", "", "zone/datacenter name")
 
 	flag.Parse()
 
 	if blobServerPort == nil || *blobServerPort == 0 {
 		panic("0 is not a valid port for blob server")
-	}
-	if *torrentServerPort == 0 {
-		panic("-torrent_server_port must be non-zero")
 	}
 
 	var hostname string
@@ -94,7 +111,7 @@ func main() {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
 
-	c, err := torrent.NewSchedulerClient(
+	torrentClient, err := torrent.NewSchedulerClient(
 		config.Torrent,
 		stats,
 		pctx,
@@ -105,14 +122,12 @@ func main() {
 		log.Fatalf("Failed to create scheduler client: %s", err)
 	}
 
-	go runTorrentServer(torrentserver.New(c), *torrentServerPort)
-
 	backendManager, err := backend.NewManager(config.Namespace)
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
 
-	bs, err := blobserver.New(
+	server, err := blobserver.New(
 		config.BlobServer,
 		stats,
 		fmt.Sprintf("%s:%d", hostname, *blobServerPort),
@@ -123,7 +138,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error initializing blob server: %s", err)
 	}
-	go runBlobServer(bs, *blobServerPort)
 
-	select {}
+	h := addTorrentDebugEndpoints(server.Handler(), torrentClient)
+
+	addr := fmt.Sprintf(":%d", *blobServerPort)
+	log.Infof("Starting origin server on %s", addr)
+	log.Fatal(http.ListenAndServe(addr, h))
 }

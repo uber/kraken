@@ -4,9 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/metrics"
@@ -73,13 +70,5 @@ func main() {
 
 	addr := fmt.Sprintf(":%d", config.Port)
 	log.Infof("Listening on %s", addr)
-
-	go log.Fatal(http.ListenAndServe(addr, h))
-
-	// Handle SIGINT and SIGTERM.
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-	<-ch // Blocks until shutdown is signaled.
-
-	log.Info("Shutdown complete")
+	log.Fatal(http.ListenAndServe(addr, h))
 }
