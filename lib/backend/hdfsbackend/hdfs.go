@@ -2,6 +2,7 @@ package hdfsbackend
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,7 +13,6 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/fileio"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -22,9 +22,9 @@ import (
 // host:port, authentication info,
 // token, etc
 type Config struct {
-	NameNodeRoundRobin serverset.RoundRobinConfig `yaml:"round_robin"`
-	BuffSize           int64                      `yaml:"buff_size"` // default transfer block size
-	UserName           string                     `yaml:"username"`  // auth username
+	NameNodes []string `yaml:"namenodes"`
+	BuffSize  int64    `yaml:"buff_size"` // default transfer block size
+	UserName  string   `yaml:"username"`  // auth username
 }
 
 const (
@@ -38,10 +38,12 @@ const (
 	HdfsCreate = "create"
 )
 
+var errAllNameNodesUnavailable = errors.New(
+	"exhausted the list of name nodes for the request without success")
+
 // Client implements HDFS file upload/download functionality
 type Client struct {
-	config  Config
-	servers serverset.Set
+	config Config
 }
 
 func (c Config) applyDefaults() Config {
@@ -54,12 +56,10 @@ func (c Config) applyDefaults() Config {
 
 // NewHDFSClient creates a client to HDFS cluster
 func NewHDFSClient(config Config) (*Client, error) {
-	s, err := serverset.NewRoundRobin(config.NameNodeRoundRobin)
-	if err != nil {
-		return nil, fmt.Errorf("new round robin: %s", err)
+	if len(config.NameNodes) == 0 {
+		return nil, fmt.Errorf("empty namenodes config")
 	}
-
-	return &Client{config: config.applyDefaults(), servers: s}, nil
+	return &Client{config: config.applyDefaults()}, nil
 }
 
 // create url parameters for the call based on configuration
@@ -80,10 +80,9 @@ func (c *Client) createParams(op string) url.Values {
 
 // download returns http reader to a file from HDFS datastore
 func (c *Client) download(path string) (io.ReadCloser, int64, error) {
-	it := c.servers.Iter()
-	for it.Next() {
+	for _, nn := range c.config.NameNodes {
 
-		url := "http://" + it.Addr() + path
+		url := "http://" + nn + path
 		resp, err := httputil.Get(url)
 		if err != nil {
 			// if 403 or network error retry from a different namenode
@@ -99,15 +98,13 @@ func (c *Client) download(path string) (io.ReadCloser, int64, error) {
 		}
 		return resp.Body, resp.ContentLength, nil
 	}
-	return nil, -1, it.Err()
+	return nil, -1, errAllNameNodesUnavailable
 }
 
 // upload writes stream from input reader to HDFS datastore
 func (c *Client) upload(path string, r io.Reader) error {
-	it := c.servers.Iter()
-	for it.Next() {
-
-		url := "http://" + it.Addr() + path
+	for _, nn := range c.config.NameNodes {
+		url := "http://" + nn + path
 
 		nameresp, err := httputil.Put(
 			url,
@@ -158,7 +155,7 @@ func (c *Client) upload(path string, r io.Reader) error {
 
 		return nil
 	}
-	return it.Err()
+	return errAllNameNodesUnavailable
 }
 
 // Download downloads a file from HDFS datastore, writes it

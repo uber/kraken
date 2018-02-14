@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/testutil"
 	"github.com/pressly/chi"
@@ -40,11 +39,8 @@ func TestHDFSDownloadFileSuccess(t *testing.T) {
 	defer stop()
 
 	config := &Config{
-		NameNodeRoundRobin: serverset.RoundRobinConfig{
-			Addrs:   []string{addr},
-			Retries: 3,
-		},
-		BuffSize: int64(64 * memsize.MB)}
+		NameNodes: []string{addr},
+		BuffSize:  int64(64 * memsize.MB)}
 	hdfsc, err := NewHDFSClient(*config)
 	require.NoError(err)
 
@@ -98,11 +94,8 @@ func TestHDFSDownloadRetryNext(t *testing.T) {
 	defer stop2()
 
 	config := &Config{
-		NameNodeRoundRobin: serverset.RoundRobinConfig{
-			Addrs:   []string{addr1, addr2},
-			Retries: 3,
-		},
-		BuffSize: int64(64 * memsize.MB)}
+		NameNodes: []string{addr1, addr2},
+		BuffSize:  int64(64 * memsize.MB)}
 	hdfsc, err := NewHDFSClient(*config)
 	require.NoError(err)
 
@@ -144,11 +137,8 @@ func TestHDFSDownloadFileNotFound(t *testing.T) {
 	defer stop()
 
 	config := &Config{
-		NameNodeRoundRobin: serverset.RoundRobinConfig{
-			Addrs:   []string{addr},
-			Retries: 3,
-		},
-		BuffSize: int64(64 * memsize.MB)}
+		NameNodes: []string{addr},
+		BuffSize:  int64(64 * memsize.MB)}
 
 	hdfsc, err := NewHDFSClient(*config)
 	require.NoError(err)
@@ -188,11 +178,8 @@ func TestHDFSUploadFileSuccess(t *testing.T) {
 	defer stop()
 
 	config := &Config{
-		NameNodeRoundRobin: serverset.RoundRobinConfig{
-			Addrs:   []string{addr},
-			Retries: 3,
-		},
-		BuffSize: int64(64 * memsize.MB)}
+		NameNodes: []string{addr},
+		BuffSize:  int64(64 * memsize.MB)}
 
 	hdfsc, err := NewHDFSClient(*config)
 	require.NoError(err)
@@ -234,11 +221,8 @@ func TestHDFSUploadFileUnknownFailure(t *testing.T) {
 	defer stop()
 
 	config := &Config{
-		NameNodeRoundRobin: serverset.RoundRobinConfig{
-			Addrs:   []string{addr},
-			Retries: 3,
-		},
-		BuffSize: int64(64 * memsize.MB)}
+		NameNodes: []string{addr},
+		BuffSize:  int64(64 * memsize.MB)}
 
 	hdfsc, err := NewHDFSClient(*config)
 	require.NoError(err)
@@ -276,11 +260,8 @@ func TestHDFSGetManifestSuccess(t *testing.T) {
 	defer stop()
 
 	config := &Config{
-		NameNodeRoundRobin: serverset.RoundRobinConfig{
-			Addrs:   []string{addr},
-			Retries: 3,
-		},
-		BuffSize: int64(64 * memsize.MB)}
+		NameNodes: []string{addr},
+		BuffSize:  int64(64 * memsize.MB)}
 
 	hdfsc, err := NewHDFSClient(*config)
 	require.NoError(err)
@@ -312,11 +293,8 @@ func TestHDFSPostManifestSuccess(t *testing.T) {
 	defer stop()
 
 	config := &Config{
-		NameNodeRoundRobin: serverset.RoundRobinConfig{
-			Addrs:   []string{addr},
-			Retries: 3,
-		},
-		BuffSize: int64(64 * memsize.MB)}
+		NameNodes: []string{addr},
+		BuffSize:  int64(64 * memsize.MB)}
 
 	hdfsc, err := NewHDFSClient(*config)
 	require.NoError(err)
