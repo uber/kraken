@@ -1,31 +1,6 @@
 package core
 
-import (
-	"errors"
-	"fmt"
-)
-
-// PeerIDFactory defines the method used to generate a peer id.
-type PeerIDFactory string
-
-// RandomPeerIDFactory creates random peer ids.
-const RandomPeerIDFactory PeerIDFactory = "random"
-
-// IPHashPeerIDFactory creates peer ids based on a hash of the peers ip address.
-const IPHashPeerIDFactory PeerIDFactory = "ip_hash"
-
-// GeneratePeerID creates a new peer id per the factory policy.
-func (f PeerIDFactory) GeneratePeerID(ip string) (PeerID, error) {
-	switch f {
-	case RandomPeerIDFactory:
-		return RandomPeerID()
-	case IPHashPeerIDFactory:
-		return HashedPeerID(ip)
-	default:
-		err := fmt.Errorf("invalid peer id factory: %q", string(f))
-		return PeerID{}, err
-	}
-}
+import "errors"
 
 // PeerContext defines the context a peer runs within, namely the fields which
 // are used to identify each peer.
@@ -58,7 +33,7 @@ func NewPeerContext(
 	if port == 0 {
 		return PeerContext{}, errors.New("no port supplied")
 	}
-	peerID, err := f.GeneratePeerID(ip)
+	peerID, err := f.GeneratePeerID(ip, port)
 	if err != nil {
 		return PeerContext{}, err
 	}
