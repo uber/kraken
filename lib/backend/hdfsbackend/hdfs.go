@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"strconv"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/fileio"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/utils/httputil"
@@ -228,7 +228,7 @@ func (c *Client) GetManifest(repo, tag string) (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	d, err := image.NewDigestFromString(string(body))
+	d, err := core.NewDigestFromString(string(body))
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +252,7 @@ func (c *Client) PostManifest(repo, tag string, manifest io.Reader) error {
 		return fmt.Errorf("read manifest: %s", err)
 	}
 
-	d, err := image.NewDigester().FromBytes(mdata)
+	d, err := core.NewDigester().FromBytes(mdata)
 	if err != nil {
 		return fmt.Errorf("compute digest: %s", err)
 	}

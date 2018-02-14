@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"os"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
@@ -72,8 +72,8 @@ func main() {
 		log.Fatalf("Failed to create origin file store: %s", err)
 	}
 
-	pctx, err := peercontext.NewOrigin(
-		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *zone, *peerIP, *peerPort)
+	pctx, err := core.NewPeerContext(
+		core.PeerIDFactory(config.Torrent.PeerIDFactory), *zone, *peerIP, *peerPort, true)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}

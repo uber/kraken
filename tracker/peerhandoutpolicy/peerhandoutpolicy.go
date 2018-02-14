@@ -3,7 +3,7 @@ package peerhandoutpolicy
 import (
 	"fmt"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
@@ -11,13 +11,13 @@ import (
 type PeerPriorityPolicy interface {
 	// AssignPeerPriority mutates peers by setting Priority for each PeerInfo
 	// based on the source peer. Note, should not set Priority on source.
-	AssignPeerPriority(source *torlib.PeerInfo, peers []*torlib.PeerInfo) error
+	AssignPeerPriority(source *core.PeerInfo, peers []*core.PeerInfo) error
 }
 
 // PeerSamplingPolicy defines the policy for selecting and ordering peers.
 type PeerSamplingPolicy interface {
 	// SamplePeers returns a new slice of n peers, sorted on sampling preference.
-	SamplePeers(peers []*torlib.PeerInfo, n int) ([]*torlib.PeerInfo, error)
+	SamplePeers(peers []*core.PeerInfo, n int) ([]*core.PeerInfo, error)
 }
 
 // PriorityFactory creates a PeerPriorityPolicy.

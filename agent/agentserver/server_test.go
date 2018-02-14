@@ -9,9 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +23,7 @@ func TestDownload(t *testing.T) {
 	mocks, cleanup := newServerMocks(t)
 	defer cleanup()
 
-	d, blob := image.DigestWithBlobFixture()
+	d, blob := core.DigestWithBlobFixture()
 
 	mocks.torrentClient.EXPECT().Download(namespace, d.Hex()).DoAndReturn(
 		func(namespace, name string) error {
@@ -82,8 +81,8 @@ func TestGetBlacklistHandler(t *testing.T) {
 	defer cleanup()
 
 	blacklist := []scheduler.BlacklistedConn{{
-		PeerID:    torlib.PeerIDFixture(),
-		InfoHash:  torlib.InfoHashFixture(),
+		PeerID:    core.PeerIDFixture(),
+		InfoHash:  core.InfoHashFixture(),
 		Remaining: time.Second,
 	}}
 	mocks.torrentClient.EXPECT().BlacklistSnapshot().Return(blacklist, nil)
@@ -104,7 +103,7 @@ func TestDeleteBlobHandler(t *testing.T) {
 	mocks, cleanup := newServerMocks(t)
 	defer cleanup()
 
-	d := image.DigestFixture()
+	d := core.DigestFixture()
 
 	addr := mocks.startServer()
 	c := NewClient(addr)

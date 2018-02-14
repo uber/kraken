@@ -5,18 +5,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 )
 
 func TestCompletenessPeerSamplingPolicy(t *testing.T) {
 	tests := []struct {
 		desc     string
-		peers    []*torlib.PeerInfo
+		peers    []*core.PeerInfo
 		expected []string
 	}{
 		{
 			"completeness first, then priority",
-			[]*torlib.PeerInfo{
+			[]*core.PeerInfo{
 				{PeerID: "a", Priority: 1, Complete: true},
 				{PeerID: "b", Priority: 0, Complete: false},
 				{PeerID: "c", Priority: 2, Complete: true},
@@ -26,7 +26,7 @@ func TestCompletenessPeerSamplingPolicy(t *testing.T) {
 		},
 		{
 			"priority if all complete",
-			[]*torlib.PeerInfo{
+			[]*core.PeerInfo{
 				{PeerID: "b", Priority: 3, Complete: true},
 				{PeerID: "a", Priority: 1, Complete: true},
 				{PeerID: "c", Priority: 2, Complete: true},
@@ -35,7 +35,7 @@ func TestCompletenessPeerSamplingPolicy(t *testing.T) {
 		},
 		{
 			"priority if none complete",
-			[]*torlib.PeerInfo{
+			[]*core.PeerInfo{
 				{PeerID: "b", Priority: 3, Complete: false},
 				{PeerID: "a", Priority: 1, Complete: false},
 				{PeerID: "c", Priority: 2, Complete: false},

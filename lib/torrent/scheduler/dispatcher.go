@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/piecerequest"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/timeutil"
@@ -41,7 +41,7 @@ type messages interface {
 
 // peer consolidates bookeeping for a remote peer.
 type peer struct {
-	id torlib.PeerID
+	id core.PeerID
 
 	// Tracks the pieces which the remote peer has.
 	bitfield *syncBitfield
@@ -89,7 +89,7 @@ func (p *peer) touchLastPieceSent() {
 
 type dispatcherFactory struct {
 	Config               DispatcherConfig
-	LocalPeerID          torlib.PeerID
+	LocalPeerID          core.PeerID
 	EventSender          eventSender
 	Clock                clock.Clock
 	NetworkEventProducer networkevent.Producer
@@ -139,12 +139,12 @@ func (f *dispatcherFactory) init(t storage.Torrent) *dispatcher {
 type dispatcher struct {
 	Torrent     *torrentAccessWatcher
 	CreatedAt   time.Time
-	localPeerID torlib.PeerID
+	localPeerID core.PeerID
 	clock       clock.Clock
 
 	stats tally.Scope
 
-	// Maps torlib.PeerID to *peer.
+	// Maps core.PeerID to *peer.
 	peers syncmap.Map
 
 	eventSender eventSender
@@ -161,7 +161,7 @@ type dispatcher struct {
 	sendCompleteOnce sync.Once
 }
 
-func (d *dispatcher) LastGoodPieceReceived(peerID torlib.PeerID) time.Time {
+func (d *dispatcher) LastGoodPieceReceived(peerID core.PeerID) time.Time {
 	v, ok := d.peers.Load(peerID)
 	if !ok {
 		return time.Time{}
@@ -169,7 +169,7 @@ func (d *dispatcher) LastGoodPieceReceived(peerID torlib.PeerID) time.Time {
 	return v.(*peer).getLastGoodPieceReceived()
 }
 
-func (d *dispatcher) LastPieceSent(peerID torlib.PeerID) time.Time {
+func (d *dispatcher) LastPieceSent(peerID core.PeerID) time.Time {
 	v, ok := d.peers.Load(peerID)
 	if !ok {
 		return time.Time{}
@@ -199,7 +199,7 @@ func (d *dispatcher) Empty() bool {
 
 // AddPeer registers a new peer with the dispatcher.
 func (d *dispatcher) AddPeer(
-	peerID torlib.PeerID, b *bitset.BitSet, messages messages) error {
+	peerID core.PeerID, b *bitset.BitSet, messages messages) error {
 
 	p, err := d.addPeer(peerID, b, messages)
 	if err != nil {
@@ -213,7 +213,7 @@ func (d *dispatcher) AddPeer(
 // addPeer creates and inserts a new peer into the dispatcher. Split from AddPeer
 // with no goroutine side-effects for testing purposes.
 func (d *dispatcher) addPeer(
-	peerID torlib.PeerID, b *bitset.BitSet, messages messages) (*peer, error) {
+	peerID core.PeerID, b *bitset.BitSet, messages messages) (*peer, error) {
 
 	p := &peer{
 		id:       peerID,
@@ -460,7 +460,7 @@ func (d *dispatcher) handlePiecePayload(
 	d.maybeRequestMorePieces(p)
 
 	d.peers.Range(func(k, v interface{}) bool {
-		if k.(torlib.PeerID) == p.id {
+		if k.(core.PeerID) == p.id {
 			return true
 		}
 		pp := v.(*peer)

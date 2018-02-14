@@ -1,4 +1,4 @@
-package torlib
+package core
 
 import (
 	"math/rand"

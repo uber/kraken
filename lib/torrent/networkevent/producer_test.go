@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 
 	"github.com/stretchr/testify/require"
 )
@@ -16,9 +16,9 @@ import (
 func TestProducerCreatesAndReusesFile(t *testing.T) {
 	require := require.New(t)
 
-	h := torlib.InfoHashFixture()
-	peer1 := torlib.PeerIDFixture()
-	peer2 := torlib.PeerIDFixture()
+	h := core.InfoHashFixture()
+	peer1 := core.PeerIDFixture()
+	peer2 := core.PeerIDFixture()
 
 	dir, err := ioutil.TempDir("", "")
 	require.NoError(err)
@@ -71,9 +71,9 @@ func TestProducerCreatesAndReusesFile(t *testing.T) {
 func TestDisabledProducerNoops(t *testing.T) {
 	require := require.New(t)
 
-	h := torlib.InfoHashFixture()
-	peer1 := torlib.PeerIDFixture()
-	peer2 := torlib.PeerIDFixture()
+	h := core.InfoHashFixture()
+	peer1 := core.PeerIDFixture()
+	peer2 := core.PeerIDFixture()
 
 	p, err := NewProducer(Config{})
 	require.NoError(err)

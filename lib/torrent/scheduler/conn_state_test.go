@@ -6,10 +6,10 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
@@ -23,7 +23,7 @@ func TestChangesToActiveConnsRedistributesBandwidth(t *testing.T) {
 
 	config := connStateConfigFixture()
 
-	s := newConnState(torlib.PeerIDFixture(), config, clock.New(), networkevent.NewTestProducer())
+	s := newConnState(core.PeerIDFixture(), config, clock.New(), networkevent.NewTestProducer())
 
 	info, cleanup := storage.TorrentInfoFixture(128, 32)
 	defer cleanup()
@@ -58,7 +58,7 @@ func TestAddingActiveConnsNeverRedistributesBandwidthBelowMin(t *testing.T) {
 	config.MaxGlobalEgressBytesPerSec = 4 * memsize.KB
 	config.MinConnEgressBytesPerSec = memsize.KB
 
-	s := newConnState(torlib.PeerIDFixture(), config, clock.New(), networkevent.NewTestProducer())
+	s := newConnState(core.PeerIDFixture(), config, clock.New(), networkevent.NewTestProducer())
 
 	info, cleanup := storage.TorrentInfoFixture(128, 32)
 	defer cleanup()
@@ -80,10 +80,10 @@ func TestConnStateBlacklist(t *testing.T) {
 	config := connStateConfigFixture()
 	clk := clock.NewMock()
 
-	s := newConnState(torlib.PeerIDFixture(), config, clk, networkevent.NewTestProducer())
+	s := newConnState(core.PeerIDFixture(), config, clk, networkevent.NewTestProducer())
 
-	pid := torlib.PeerIDFixture()
-	h := torlib.InfoHashFixture()
+	pid := core.PeerIDFixture()
+	h := core.InfoHashFixture()
 
 	require.NoError(s.Blacklist(pid, h))
 	require.True(s.Blacklisted(pid, h))
@@ -101,10 +101,10 @@ func TestConnStateBlacklistSnapshot(t *testing.T) {
 	config := connStateConfigFixture()
 	clk := clock.NewMock()
 
-	s := newConnState(torlib.PeerIDFixture(), config, clk, networkevent.NewTestProducer())
+	s := newConnState(core.PeerIDFixture(), config, clk, networkevent.NewTestProducer())
 
-	pid := torlib.PeerIDFixture()
-	h := torlib.InfoHashFixture()
+	pid := core.PeerIDFixture()
+	h := core.InfoHashFixture()
 
 	require.NoError(s.Blacklist(pid, h))
 

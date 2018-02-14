@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/stringset"
 
 	"github.com/andres-erbsen/clock"
@@ -156,7 +156,7 @@ func TestOriginFileStoreCreateCacheFile(t *testing.T) {
 	defer cleanup()
 
 	s1 := "buffer"
-	computedDigest, err := image.NewDigester().FromBytes([]byte(s1))
+	computedDigest, err := core.NewDigester().FromBytes([]byte(s1))
 	require.NoError(err)
 	r1 := strings.NewReader(s1)
 
@@ -216,7 +216,7 @@ func TestOriginStoreListPopulatedShardIDs(t *testing.T) {
 	var cacheFiles []string
 	shardsMap := make(map[string]string)
 	for i := 0; i < 100; i++ {
-		name := image.DigestFixture().Hex()
+		name := core.DigestFixture().Hex()
 		if _, ok := shardsMap[name[:4]]; ok {
 			// Avoid duplicated names
 			continue
@@ -255,7 +255,7 @@ func TestOriginStoreCleanupCacheFile(t *testing.T) {
 			clk.Add(s.Config().TTI * 2)
 		}
 
-		name := image.DigestFixture().Hex()
+		name := core.DigestFixture().Hex()
 		if cacheFiles.Has(name) {
 			// Avoid duplicated names
 			continue
@@ -287,11 +287,11 @@ func TestOriginStoreCleanupCacheFileSkipRecentRead(t *testing.T) {
 	s, cleanup := OriginFileStoreFixture(clk)
 	defer cleanup()
 
-	name1 := image.DigestFixture().Hex()
+	name1 := core.DigestFixture().Hex()
 	require.NoError(s.CreateUploadFile(name1, 1))
 	require.NoError(s.MoveUploadFileToCache(name1, name1))
 
-	name2 := image.DigestFixture().Hex()
+	name2 := core.DigestFixture().Hex()
 	require.NoError(s.CreateUploadFile(name2, 1))
 	require.NoError(s.MoveUploadFileToCache(name2, name2))
 
@@ -300,7 +300,7 @@ func TestOriginStoreCleanupCacheFileSkipRecentRead(t *testing.T) {
 	_, err := s.GetCacheFileStat(name2)
 	require.NoError(err)
 
-	name3 := image.DigestFixture().Hex()
+	name3 := core.DigestFixture().Hex()
 	require.NoError(s.CreateUploadFile(name3, 1))
 	require.NoError(s.MoveUploadFileToCache(name3, name3))
 

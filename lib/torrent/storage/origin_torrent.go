@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/torlib"
 
 	"github.com/willf/bitset"
 	"go.uber.org/atomic"
@@ -20,14 +20,14 @@ var (
 // It allows concurrent reads on all pieces. Behavior is undefined if multiple
 // OriginTorrent instances are backed by the same file store and metainfo.
 type OriginTorrent struct {
-	metaInfo    *torlib.MetaInfo
+	metaInfo    *core.MetaInfo
 	store       store.OriginFileStore
 	pieces      []*piece
 	numComplete *atomic.Int32
 }
 
 // NewOriginTorrent creates a new OriginTorrent.
-func NewOriginTorrent(store store.OriginFileStore, mi *torlib.MetaInfo) (*OriginTorrent, error) {
+func NewOriginTorrent(store store.OriginFileStore, mi *core.MetaInfo) (*OriginTorrent, error) {
 	// For OriginTorrent, all pieces are already completed.
 	pieces := make([]*piece, mi.Info.NumPieces())
 	for i := range pieces {
@@ -52,7 +52,7 @@ func (t *OriginTorrent) Stat() *TorrentInfo {
 }
 
 // InfoHash returns the torrent metainfo hash.
-func (t *OriginTorrent) InfoHash() torlib.InfoHash {
+func (t *OriginTorrent) InfoHash() core.InfoHash {
 	return t.metaInfo.InfoHash
 }
 

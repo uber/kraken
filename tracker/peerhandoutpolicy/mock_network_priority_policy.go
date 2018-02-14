@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 )
 
 // ErrInvalidPeerIDFormat indicates an invalid peer id format.
@@ -43,7 +43,7 @@ func NewMockNetworkPriorityPolicy() PeerPriorityPolicy {
 // AssignPeerPriority sets priority based on the mock network topology
 // of the peers, as described by their peer ids.
 func (p *MockNetworkPriorityPolicy) AssignPeerPriority(
-	source *torlib.PeerInfo, peers []*torlib.PeerInfo) error {
+	source *core.PeerInfo, peers []*core.PeerInfo) error {
 
 	src, err := parseMockLocation(source.PeerID)
 	if err != nil {

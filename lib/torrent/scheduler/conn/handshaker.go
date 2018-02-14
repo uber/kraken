@@ -6,9 +6,9 @@ import (
 	"net"
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/torlib"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
@@ -19,9 +19,9 @@ import (
 // the fields converted into types used within the scheduler package. As such,
 // in this package "handshake" and "bitfield message" are usually synonymous.
 type handshake struct {
-	peerID   torlib.PeerID
+	peerID   core.PeerID
 	name     string
-	infoHash torlib.InfoHash
+	infoHash core.InfoHash
 	bitfield *bitset.BitSet
 }
 
@@ -45,11 +45,11 @@ func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
 	if m.Type != p2p.Message_BITFIELD {
 		return nil, fmt.Errorf("expected bitfield message, got %s", m.Type)
 	}
-	peerID, err := torlib.NewPeerID(m.Bitfield.PeerID)
+	peerID, err := core.NewPeerID(m.Bitfield.PeerID)
 	if err != nil {
 		return nil, fmt.Errorf("peer id: %s", err)
 	}
-	ih, err := torlib.NewInfoHashFromHex(m.Bitfield.InfoHash)
+	ih, err := core.NewInfoHashFromHex(m.Bitfield.InfoHash)
 	if err != nil {
 		return nil, fmt.Errorf("info hash: %s", err)
 	}
@@ -73,7 +73,7 @@ type PendingConn struct {
 }
 
 // PeerID returns the remote peer id.
-func (pc *PendingConn) PeerID() torlib.PeerID {
+func (pc *PendingConn) PeerID() core.PeerID {
 	return pc.handshake.peerID
 }
 
@@ -83,7 +83,7 @@ func (pc *PendingConn) Name() string {
 }
 
 // InfoHash returns the info hash of the torrent the remote peer wants to open.
-func (pc *PendingConn) InfoHash() torlib.InfoHash {
+func (pc *PendingConn) InfoHash() core.InfoHash {
 	return pc.handshake.infoHash
 }
 
@@ -104,7 +104,7 @@ type Handshaker struct {
 	stats         tally.Scope
 	clk           clock.Clock
 	networkEvents networkevent.Producer
-	peerID        torlib.PeerID
+	peerID        core.PeerID
 	closeHandler  CloseHandler
 }
 
@@ -114,7 +114,7 @@ func NewHandshaker(
 	stats tally.Scope,
 	clk clock.Clock,
 	networkEvents networkevent.Producer,
-	peerID torlib.PeerID,
+	peerID core.PeerID,
 	closeHandler CloseHandler) *Handshaker {
 
 	config = config.applyDefaults()
@@ -159,7 +159,7 @@ func (h *Handshaker) Establish(pc *PendingConn, info *storage.TorrentInfo) (*Con
 // given peer / address. Also returns the bitfield of the remote peer for said
 // torrent.
 func (h *Handshaker) Initialize(
-	peerID torlib.PeerID, addr string, info *storage.TorrentInfo) (*Conn, *bitset.BitSet, error) {
+	peerID core.PeerID, addr string, info *storage.TorrentInfo) (*Conn, *bitset.BitSet, error) {
 
 	nc, err := net.DialTimeout("tcp", addr, h.config.HandshakeTimeout)
 	if err != nil {
@@ -200,7 +200,7 @@ func (h *Handshaker) readHandshake(nc net.Conn) (*handshake, error) {
 }
 
 func (h *Handshaker) fullHandshake(
-	nc net.Conn, peerID torlib.PeerID, info *storage.TorrentInfo) (*Conn, *bitset.BitSet, error) {
+	nc net.Conn, peerID core.PeerID, info *storage.TorrentInfo) (*Conn, *bitset.BitSet, error) {
 
 	if err := h.sendHandshake(nc, info); err != nil {
 		return nil, nil, fmt.Errorf("send handshake: %s", err)
@@ -221,7 +221,7 @@ func (h *Handshaker) fullHandshake(
 
 func (h *Handshaker) newConn(
 	nc net.Conn,
-	peerID torlib.PeerID,
+	peerID core.PeerID,
 	info *storage.TorrentInfo,
 	openedByRemote bool) (*Conn, error) {
 

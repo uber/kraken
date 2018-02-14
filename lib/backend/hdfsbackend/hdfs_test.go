@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -53,7 +53,7 @@ func TestHDFSDownloadFileSuccess(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	d, _ := image.DigestWithBlobFixture()
+	d, _ := core.DigestWithBlobFixture()
 
 	err = hdfsc.Download(d.Hex(), f)
 	require.NoError(err)
@@ -111,7 +111,7 @@ func TestHDFSDownloadRetryNext(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	d, _ := image.DigestWithBlobFixture()
+	d, _ := core.DigestWithBlobFixture()
 
 	err = hdfsc.Download(d.Hex(), f)
 	require.NoError(err)
@@ -157,7 +157,7 @@ func TestHDFSDownloadFileNotFound(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	d, _ := image.DigestWithBlobFixture()
+	d, _ := core.DigestWithBlobFixture()
 
 	err = hdfsc.Download(d.Hex(), f)
 	require.Error(err)
@@ -201,7 +201,7 @@ func TestHDFSUploadFileSuccess(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	d, _ := image.DigestWithBlobFixture()
+	d, _ := core.DigestWithBlobFixture()
 	err = hdfsc.Upload(d.Hex(), f)
 
 	require.NoError(err)
@@ -247,7 +247,7 @@ func TestHDFSUploadFileUnknownFailure(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	d, _ := image.DigestWithBlobFixture()
+	d, _ := core.DigestWithBlobFixture()
 	err = hdfsc.Upload(d.Hex(), f)
 	require.Error(err)
 
@@ -260,7 +260,7 @@ func TestHDFSGetManifestSuccess(t *testing.T) {
 
 	r := chi.NewRouter()
 
-	d, _ := image.DigestWithBlobFixture()
+	d, _ := core.DigestWithBlobFixture()
 
 	r.Get("/*/:repo/:tag/data", func(w http.ResponseWriter, req *http.Request) {
 		url := fmt.Sprintf("http://%s/datanode", req.Host)

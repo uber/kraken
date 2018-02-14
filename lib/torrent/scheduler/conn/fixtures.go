@@ -7,9 +7,9 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
@@ -37,13 +37,13 @@ func PipeFixture(
 	var err error
 
 	local, err = HandshakerFixture(config).newConn(
-		noopDeadline{nc1}, torlib.PeerIDFixture(), info, false)
+		noopDeadline{nc1}, core.PeerIDFixture(), info, false)
 	if err != nil {
 		panic(err)
 	}
 
 	remote, err = HandshakerFixture(config).newConn(
-		noopDeadline{nc2}, torlib.PeerIDFixture(), info, true)
+		noopDeadline{nc2}, core.PeerIDFixture(), info, true)
 	if err != nil {
 		panic(err)
 	}
@@ -64,7 +64,7 @@ func HandshakerFixture(config Config) *Handshaker {
 		tally.NewTestScope("", nil),
 		clock.New(),
 		networkevent.NewTestProducer(),
-		torlib.PeerIDFixture(),
+		core.PeerIDFixture(),
 		func(*Conn) {})
 }
 

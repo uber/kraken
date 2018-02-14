@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/torlib"
 
 	"github.com/willf/bitset"
 )
@@ -29,7 +29,7 @@ func (a *OriginTorrentArchive) Stat(name string) (*TorrentInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	mi, err := torlib.DeserializeMetaInfo(raw)
+	mi, err := core.DeserializeMetaInfo(raw)
 	if err != nil {
 		return nil, fmt.Errorf("deserialize metainfo: %s", err)
 	}

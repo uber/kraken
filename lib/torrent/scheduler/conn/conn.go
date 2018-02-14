@@ -14,9 +14,9 @@ import (
 	"golang.org/x/time/rate"
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
@@ -30,10 +30,10 @@ type CloseHandler func(*Conn)
 // Conn manages peer communication over a connection for multiple torrents. Inbound
 // messages are multiplexed based on the torrent they pertain to.
 type Conn struct {
-	peerID      torlib.PeerID
-	infoHash    torlib.InfoHash
+	peerID      core.PeerID
+	infoHash    core.InfoHash
 	createdAt   time.Time
-	localPeerID torlib.PeerID
+	localPeerID core.PeerID
 
 	closeHandler CloseHandler
 
@@ -69,8 +69,8 @@ func newConn(
 	networkEvents networkevent.Producer,
 	closeHandler CloseHandler,
 	nc net.Conn,
-	localPeerID torlib.PeerID,
-	remotePeerID torlib.PeerID,
+	localPeerID core.PeerID,
+	remotePeerID core.PeerID,
 	info *storage.TorrentInfo,
 	openedByRemote bool) (*Conn, error) {
 
@@ -106,13 +106,13 @@ func newConn(
 }
 
 // PeerID returns the remote peer id.
-func (c *Conn) PeerID() torlib.PeerID {
+func (c *Conn) PeerID() core.PeerID {
 	return c.peerID
 }
 
 // InfoHash returns the info hash for the torrent being transmitted over this
 // connection.
-func (c *Conn) InfoHash() torlib.InfoHash {
+func (c *Conn) InfoHash() core.InfoHash {
 	return c.infoHash
 }
 

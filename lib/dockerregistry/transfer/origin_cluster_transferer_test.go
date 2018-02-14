@@ -8,7 +8,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
@@ -27,7 +27,7 @@ func TestOriginClusterTransfererDownloadCachesBlobs(t *testing.T) {
 
 	oct := NewOriginClusterTransferer(mockClusterClient, mockmanifestclient.NewMockClient(ctrl), fs)
 
-	d, blob := image.DigestWithBlobFixture()
+	d, blob := core.DigestWithBlobFixture()
 
 	mockClusterClient.EXPECT().DownloadBlob(d).Return(ioutil.NopCloser(bytes.NewReader(blob)), nil)
 

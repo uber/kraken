@@ -3,7 +3,7 @@ package announcequeue
 import (
 	"testing"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 
 	"github.com/stretchr/testify/require"
 )
@@ -11,7 +11,7 @@ import (
 func TestQueueReadyAfterNextMovesTorrentIntoQueue(t *testing.T) {
 	require := require.New(t)
 	q := New()
-	h := torlib.InfoHashFixture()
+	h := core.InfoHashFixture()
 
 	q.Add(h)
 
@@ -35,14 +35,14 @@ func TestQueueReadyAfterNextMovesTorrentIntoQueue(t *testing.T) {
 func TestQueueEjectDeletesTorrentInAllStates(t *testing.T) {
 	tests := []struct {
 		description string
-		setup       func(*QueueImpl, torlib.InfoHash)
+		setup       func(*QueueImpl, core.InfoHash)
 	}{
-		{"torrent in middle of queue", func(q *QueueImpl, h torlib.InfoHash) {
-			q.Add(torlib.InfoHashFixture())
+		{"torrent in middle of queue", func(q *QueueImpl, h core.InfoHash) {
+			q.Add(core.InfoHashFixture())
 			q.Add(h)
-			q.Add(torlib.InfoHashFixture())
+			q.Add(core.InfoHashFixture())
 		}},
-		{"torrent ready", func(q *QueueImpl, h torlib.InfoHash) {
+		{"torrent ready", func(q *QueueImpl, h core.InfoHash) {
 			q.Add(h)
 			q.Next()
 		}},
@@ -52,7 +52,7 @@ func TestQueueEjectDeletesTorrentInAllStates(t *testing.T) {
 			require := require.New(t)
 
 			q := New()
-			h := torlib.InfoHashFixture()
+			h := core.InfoHashFixture()
 			test.setup(q, h)
 
 			q.Eject(h)

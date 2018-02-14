@@ -6,7 +6,7 @@ import (
 
 	"github.com/pressly/chi"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -15,16 +15,16 @@ import (
 
 type testPeerStore struct {
 	sync.Mutex
-	torrents map[string][]torlib.PeerInfo
+	torrents map[string][]core.PeerInfo
 }
 
-func (s *testPeerStore) UpdatePeer(p *torlib.PeerInfo) error {
+func (s *testPeerStore) UpdatePeer(p *core.PeerInfo) error {
 	s.Lock()
 	defer s.Unlock()
 
 	peers, ok := s.torrents[p.InfoHash]
 	if !ok {
-		s.torrents[p.InfoHash] = []torlib.PeerInfo{*p}
+		s.torrents[p.InfoHash] = []core.PeerInfo{*p}
 		return nil
 	}
 	for i := range peers {
@@ -37,7 +37,7 @@ func (s *testPeerStore) UpdatePeer(p *torlib.PeerInfo) error {
 	return nil
 }
 
-func (s *testPeerStore) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
+func (s *testPeerStore) GetPeers(infoHash string) ([]*core.PeerInfo, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -45,19 +45,19 @@ func (s *testPeerStore) GetPeers(infoHash string) ([]*torlib.PeerInfo, error) {
 	if !ok {
 		return nil, errors.New("no peers found for info hash")
 	}
-	copies := make([]*torlib.PeerInfo, len(peers))
+	copies := make([]*core.PeerInfo, len(peers))
 	for i, p := range peers {
-		copies[i] = new(torlib.PeerInfo)
+		copies[i] = new(core.PeerInfo)
 		*copies[i] = p
 	}
 	return copies, nil
 }
 
-func (s *testPeerStore) GetOrigins(string) ([]*torlib.PeerInfo, error) {
+func (s *testPeerStore) GetOrigins(string) ([]*core.PeerInfo, error) {
 	return nil, nil
 }
 
-func (s *testPeerStore) UpdateOrigins(string, []*torlib.PeerInfo) error {
+func (s *testPeerStore) UpdateOrigins(string, []*core.PeerInfo) error {
 	return nil
 }
 
@@ -72,7 +72,7 @@ func TestAnnouncer() (addr string, stop func()) {
 
 	announce := &announceHandler{
 		store: &testPeerStore{
-			torrents: make(map[string][]torlib.PeerInfo),
+			torrents: make(map[string][]core.PeerInfo),
 		},
 		policy: policy,
 	}

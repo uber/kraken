@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/handler"
@@ -17,7 +17,7 @@ import (
 )
 
 // parseDigest parses a digest from a url path parameter, e.g. "/blobs/:digest".
-func parseDigest(r *http.Request) (digest image.Digest, err error) {
+func parseDigest(r *http.Request) (digest core.Digest, err error) {
 	d := chi.URLParam(r, "digest")
 	if len(d) == 0 {
 		return digest, handler.Errorf("empty digest").Status(http.StatusBadRequest)
@@ -27,7 +27,7 @@ func parseDigest(r *http.Request) (digest image.Digest, err error) {
 		return digest, handler.Errorf(
 			"cannot unescape digest %q: %s", d, err).Status(http.StatusBadRequest)
 	}
-	digest, err = image.NewDigestFromString(digestRaw)
+	digest, err = core.NewDigestFromString(digestRaw)
 	if err != nil {
 		return digest, handler.Errorf(
 			"cannot parse digest %q: %s", digestRaw, err).Status(http.StatusBadRequest)
@@ -86,7 +86,7 @@ func parseContentRange(h http.Header) (start, end int64, err error) {
 }
 
 // blobExists returns true if fs has a cached blob for d.
-func blobExists(fs store.OriginFileStore, d image.Digest) (bool, error) {
+func blobExists(fs store.OriginFileStore, d core.Digest) (bool, error) {
 	if _, err := fs.GetCacheFileStat(d.Hex()); err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
@@ -97,7 +97,7 @@ func blobExists(fs store.OriginFileStore, d image.Digest) (bool, error) {
 }
 
 // transferBlob transfer blob d from fs to client.
-func transferBlob(fs store.OriginFileStore, d image.Digest, client blobclient.Client) error {
+func transferBlob(fs store.OriginFileStore, d core.Digest, client blobclient.Client) error {
 	info, err := fs.GetCacheFileStat(d.Hex())
 	if err != nil {
 		return fmt.Errorf("cache stat: %s", err)

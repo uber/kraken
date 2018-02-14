@@ -3,7 +3,7 @@ package peerhandoutpolicy
 import (
 	"sort"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 )
 
 // CompletenessPeerSamplingPolicy selects peers first on download completeness,
@@ -18,7 +18,7 @@ func NewCompletenessPeerSamplingPolicy() PeerSamplingPolicy {
 // SamplePeers returns the top n peers, ordered first on download completeness, then
 // on priority.
 func (p *CompletenessPeerSamplingPolicy) SamplePeers(
-	peers []*torlib.PeerInfo, n int) ([]*torlib.PeerInfo, error) {
+	peers []*core.PeerInfo, n int) ([]*core.PeerInfo, error) {
 
 	return sortedPeers(peers, n, func(s peerInfos) {
 		sort.Sort(byPriority{s})

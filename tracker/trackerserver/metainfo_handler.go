@@ -8,7 +8,7 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/dedup"
@@ -63,7 +63,7 @@ func (h *metaInfoHandler) get(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (h *metaInfoHandler) startMetaInfoDownload(namespace string, d image.Digest) error {
+func (h *metaInfoHandler) startMetaInfoDownload(namespace string, d core.Digest) error {
 	id := namespace + ":" + d.Hex()
 	err := h.requestCache.Start(id, func() error {
 		mi, err := h.originCluster.GetMetaInfo(namespace, d)
@@ -93,7 +93,7 @@ func (h *metaInfoHandler) startMetaInfoDownload(namespace string, d image.Digest
 }
 
 // parseDigest parses a digest from a url path parameter, e.g. "/blobs/:digest".
-func parseDigest(r *http.Request) (digest image.Digest, err error) {
+func parseDigest(r *http.Request) (digest core.Digest, err error) {
 	d := chi.URLParam(r, "digest")
 	if len(d) == 0 {
 		return digest, fmt.Errorf("empty digest")
@@ -102,7 +102,7 @@ func parseDigest(r *http.Request) (digest image.Digest, err error) {
 	if err != nil {
 		return digest, fmt.Errorf("path unescape: %s", err)
 	}
-	digest, err = image.NewDigestFromString(raw)
+	digest, err = core.NewDigestFromString(raw)
 	if err != nil {
 		return digest, fmt.Errorf("parse digest: %s", err)
 	}

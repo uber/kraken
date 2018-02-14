@@ -9,8 +9,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
-	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
 )
 
@@ -29,7 +28,7 @@ func TestRepairOwnedShardPushesToReplica(t *testing.T) {
 	shardID := pickShard(config, master1, master2)
 
 	// Push blobs to master1.
-	blobs := make(map[image.Digest][]byte)
+	blobs := make(map[core.Digest][]byte)
 	for i := 0; i < 5; i++ {
 		d, blob := computeBlobForShard(shardID)
 		blobs[d] = blob
@@ -59,7 +58,7 @@ func TestRepairUnownedShardPushesToReplicasAndDeletes(t *testing.T) {
 	defer s1.cleanup()
 
 	// Push blobs to master1.
-	blobs := make(map[image.Digest][]byte)
+	blobs := make(map[core.Digest][]byte)
 	for i := 0; i < 5; i++ {
 		d, blob := computeBlobForShard(shardID)
 		blobs[d] = blob
@@ -105,7 +104,7 @@ func TestRepairUnownedShardDeletesIfReplicasAlreadyHaveShard(t *testing.T) {
 	defer s1.cleanup()
 
 	// Push blobs to master1.
-	blobs := make(map[image.Digest][]byte)
+	blobs := make(map[core.Digest][]byte)
 	for i := 0; i < 5; i++ {
 		d, blob := computeBlobForShard(shardID)
 		blobs[d] = blob
@@ -155,7 +154,7 @@ func TestRepairUnownedShardDoesNotDeleteIfReplicationFails(t *testing.T) {
 	defer s1.cleanup()
 
 	// Push blobs to master1.
-	blobs := make(map[image.Digest][]byte)
+	blobs := make(map[core.Digest][]byte)
 	for i := 0; i < 5; i++ {
 		d, blob := computeBlobForShard(shardID)
 		blobs[d] = blob
@@ -178,7 +177,7 @@ func TestRepairUnownedShardDoesNotDeleteIfReplicationFails(t *testing.T) {
 	fs3 := mockstore.NewMockOriginFileStore(ctrl)
 	fs3.EXPECT().GetCacheFileStat(gomock.Any()).MinTimes(1).Return(nil, os.ErrNotExist)
 	fs3.EXPECT().CreateUploadFile(gomock.Any(), int64(0)).MinTimes(1).Return(errors.New("some error"))
-	addr3, stop := startServer(master3, config, fs3, cp, peercontext.Fixture(), nil)
+	addr3, stop := startServer(master3, config, fs3, cp, core.PeerContextFixture(), nil)
 	defer stop()
 	cp.register(master3, addr3)
 
@@ -206,7 +205,7 @@ func TestRepairAllShards(t *testing.T) {
 	s2 := newTestServer(master2, config, cp)
 	defer s2.cleanup()
 
-	blobs := make(map[image.Digest][]byte)
+	blobs := make(map[core.Digest][]byte)
 	for i := 0; i < 5; i++ {
 		d, blob := computeBlobForHosts(config, master1, master2)
 		blobs[d] = blob

@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -37,7 +37,7 @@ func (t *OriginClusterTransferer) Download(name string) (store.FileReader, error
 	blob, err := t.fs.GetCacheFileReader(name)
 	if err != nil {
 		if os.IsNotExist(err) {
-			r, err := t.originCluster.DownloadBlob(image.NewSHA256DigestFromHex(name))
+			r, err := t.originCluster.DownloadBlob(core.NewSHA256DigestFromHex(name))
 			if err != nil {
 				return nil, fmt.Errorf("origin cluster: %s", err)
 			}
@@ -57,7 +57,7 @@ func (t *OriginClusterTransferer) Download(name string) (store.FileReader, error
 
 // Upload uploads blob to the origin cluster.
 func (t *OriginClusterTransferer) Upload(name string, blob store.FileReader, size int64) error {
-	d := image.NewSHA256DigestFromHex(name)
+	d := core.NewSHA256DigestFromHex(name)
 	return t.originCluster.UploadBlob("TODO", d, blob, size)
 }
 

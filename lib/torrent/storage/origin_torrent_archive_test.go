@@ -5,14 +5,14 @@ import (
 	"os"
 	"testing"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/torlib"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
 
-func setupOriginTorrent(t *testing.T, fs store.OriginFileStore, mi *torlib.MetaInfo, content []byte) {
+func setupOriginTorrent(t *testing.T, fs store.OriginFileStore, mi *core.MetaInfo, content []byte) {
 	require := require.New(t)
 
 	require.NoError(fs.CreateCacheFile(mi.Name(), bytes.NewBuffer(content)))
@@ -31,7 +31,7 @@ func TestOriginTorrentArchiveStatNotExist(t *testing.T) {
 
 	archive := NewOriginTorrentArchive(fs)
 
-	name := torlib.MetaInfoFixture().Name()
+	name := core.MetaInfoFixture().Name()
 
 	_, err := archive.Stat(name)
 	require.True(os.IsNotExist(err))
@@ -45,7 +45,7 @@ func TestOriginTorrentArchiveGetTorrentNotExist(t *testing.T) {
 
 	archive := NewOriginTorrentArchive(fs)
 
-	name := torlib.MetaInfoFixture().Name()
+	name := core.MetaInfoFixture().Name()
 
 	_, err := archive.GetTorrent(name)
 	require.Error(err)
@@ -59,7 +59,7 @@ func TestOriginTorrentArchiveGetTorrent(t *testing.T) {
 
 	archive := NewOriginTorrentArchive(fs)
 
-	tf := torlib.CustomTestTorrentFileFixture(4, 1)
+	tf := core.CustomTestTorrentFileFixture(4, 1)
 	mi := tf.MetaInfo
 
 	setupOriginTorrent(t, fs, mi, tf.Content)
@@ -77,7 +77,7 @@ func TestOriginTorrentArchiveDeleteTorrent(t *testing.T) {
 
 	archive := NewOriginTorrentArchive(fs)
 
-	tf := torlib.CustomTestTorrentFileFixture(4, 1)
+	tf := core.CustomTestTorrentFileFixture(4, 1)
 	mi := tf.MetaInfo
 
 	setupOriginTorrent(t, fs, mi, tf.Content)

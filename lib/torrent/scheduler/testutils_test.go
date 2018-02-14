@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 
-	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
@@ -25,7 +25,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/tracker/trackerserver"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -103,7 +102,7 @@ func newTestMocks(t gomock.TestReporter) (*testMocks, func()) {
 }
 
 type testPeer struct {
-	pctx           peercontext.PeerContext
+	pctx           core.PeerContext
 	scheduler      *Scheduler
 	torrentArchive storage.TorrentArchive
 	stats          tally.TestScope
@@ -123,8 +122,8 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 		storage.AgentTorrentArchiveConfig{}, fs, m.metaInfoClient)
 
 	stats := tally.NewTestScope("", nil)
-	pctx := peercontext.PeerContext{
-		PeerID: torlib.PeerIDFixture(),
+	pctx := core.PeerContext{
+		PeerID: core.PeerIDFixture(),
 		Zone:   "sjc1",
 		IP:     "localhost",
 		Port:   findFreePort(),
@@ -151,7 +150,7 @@ func (m *testMocks) newPeers(n int, config Config) []*testPeer {
 
 // writeTorrent writes the given content into a torrent file into peers storage.
 // Useful for populating a completed torrent before seeding it.
-func (p *testPeer) writeTorrent(tf *torlib.TestTorrentFile) {
+func (p *testPeer) writeTorrent(tf *core.TestTorrentFile) {
 	t, err := p.torrentArchive.CreateTorrent(namespace, tf.MetaInfo.Name())
 	if err != nil {
 		panic(err)
@@ -165,7 +164,7 @@ func (p *testPeer) writeTorrent(tf *torlib.TestTorrentFile) {
 	}
 }
 
-func (p *testPeer) checkTorrent(t *testing.T, tf *torlib.TestTorrentFile) {
+func (p *testPeer) checkTorrent(t *testing.T, tf *core.TestTorrentFile) {
 	require := require.New(t)
 
 	tor, err := p.torrentArchive.GetTorrent(tf.MetaInfo.Info.Name)
@@ -205,8 +204,8 @@ func findFreePort() int {
 }
 
 type hasConnEvent struct {
-	peerID   torlib.PeerID
-	infoHash torlib.InfoHash
+	peerID   core.PeerID
+	infoHash core.InfoHash
 	result   chan bool
 }
 
@@ -217,7 +216,7 @@ func (e hasConnEvent) Apply(s *Scheduler) {
 
 // waitForConnEstablished waits until s has established a connection to peerID for the
 // torrent of infoHash.
-func waitForConnEstablished(t *testing.T, s *Scheduler, peerID torlib.PeerID, infoHash torlib.InfoHash) {
+func waitForConnEstablished(t *testing.T, s *Scheduler, peerID core.PeerID, infoHash core.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
@@ -232,7 +231,7 @@ func waitForConnEstablished(t *testing.T, s *Scheduler, peerID torlib.PeerID, in
 
 // waitForConnRemoved waits until s has closed the connection to peerID for the
 // torrent of infoHash.
-func waitForConnRemoved(t *testing.T, s *Scheduler, peerID torlib.PeerID, infoHash torlib.InfoHash) {
+func waitForConnRemoved(t *testing.T, s *Scheduler, peerID core.PeerID, infoHash core.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
@@ -247,14 +246,14 @@ func waitForConnRemoved(t *testing.T, s *Scheduler, peerID torlib.PeerID, infoHa
 
 // hasConn checks whether s has an established connection to peerID for the
 // torrent of infoHash.
-func hasConn(s *Scheduler, peerID torlib.PeerID, infoHash torlib.InfoHash) bool {
+func hasConn(s *Scheduler, peerID core.PeerID, infoHash core.InfoHash) bool {
 	result := make(chan bool)
 	s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
 	return <-result
 }
 
 type hasTorrentEvent struct {
-	infoHash torlib.InfoHash
+	infoHash core.InfoHash
 	result   chan bool
 }
 
@@ -263,7 +262,7 @@ func (e hasTorrentEvent) Apply(s *Scheduler) {
 	e.result <- ok
 }
 
-func waitForTorrentRemoved(t *testing.T, s *Scheduler, infoHash torlib.InfoHash) {
+func waitForTorrentRemoved(t *testing.T, s *Scheduler, infoHash core.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasTorrentEvent{infoHash, result})
@@ -276,7 +275,7 @@ func waitForTorrentRemoved(t *testing.T, s *Scheduler, infoHash torlib.InfoHash)
 	}
 }
 
-func waitForTorrentAdded(t *testing.T, s *Scheduler, infoHash torlib.InfoHash) {
+func waitForTorrentAdded(t *testing.T, s *Scheduler, infoHash core.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasTorrentEvent{infoHash, result})
@@ -296,7 +295,7 @@ func (s noopEventSender) Send(event) bool { return true }
 func dispatcherFactoryFixture(config DispatcherConfig, clk clock.Clock) *dispatcherFactory {
 	return &dispatcherFactory{
 		Config:               config,
-		LocalPeerID:          torlib.PeerIDFixture(),
+		LocalPeerID:          core.PeerIDFixture(),
 		EventSender:          noopEventSender{},
 		Clock:                clk,
 		NetworkEventProducer: networkevent.NewTestProducer(),

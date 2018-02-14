@@ -1,19 +1,19 @@
 package storage
 
 import (
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 
 	"github.com/willf/bitset"
 )
 
 // TorrentInfo encapsulates read-only torrent information.
 type TorrentInfo struct {
-	metainfo          *torlib.MetaInfo
+	metainfo          *core.MetaInfo
 	bitfield          *bitset.BitSet
 	percentDownloaded int
 }
 
-func newTorrentInfo(mi *torlib.MetaInfo, bitfield *bitset.BitSet) *TorrentInfo {
+func newTorrentInfo(mi *core.MetaInfo, bitfield *bitset.BitSet) *TorrentInfo {
 	numComplete := bitfield.Count()
 	downloaded := int(float64(numComplete) / float64(len(mi.Info.PieceSums)) * 100)
 	return &TorrentInfo{mi, bitfield, downloaded}
@@ -29,7 +29,7 @@ func (i *TorrentInfo) Name() string {
 }
 
 // InfoHash returns the hash torrent metainfo.
-func (i *TorrentInfo) InfoHash() torlib.InfoHash {
+func (i *TorrentInfo) InfoHash() core.InfoHash {
 	return i.metainfo.InfoHash
 }
 

@@ -5,7 +5,7 @@
 package mockmetainfoclient
 
 import (
-	torlib "code.uber.internal/infra/kraken/torlib"
+	core "code.uber.internal/infra/kraken/core"
 	gomock "github.com/golang/mock/gomock"
 	http "net/http"
 	reflect "reflect"
@@ -35,9 +35,9 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Download mocks base method
-func (m *MockClient) Download(arg0, arg1 string) (*torlib.MetaInfo, error) {
+func (m *MockClient) Download(arg0, arg1 string) (*core.MetaInfo, error) {
 	ret := m.ctrl.Call(m, "Download", arg0, arg1)
-	ret0, _ := ret[0].(*torlib.MetaInfo)
+	ret0, _ := ret[0].(*core.MetaInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -8,7 +8,7 @@ import (
 
 	"github.com/uber-go/tally"
 
-	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
@@ -40,7 +40,7 @@ type SchedulerClient struct {
 func NewSchedulerClient(
 	config Config,
 	stats tally.Scope,
-	pctx peercontext.PeerContext,
+	pctx core.PeerContext,
 	announceClient announceclient.Client,
 	announceQueue announcequeue.Queue,
 	archive storage.TorrentArchive) (Client, error) {

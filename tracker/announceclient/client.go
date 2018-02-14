@@ -8,9 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/serverset"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -19,24 +18,24 @@ const _timeout = 30 * time.Second
 
 // Client defines a client for announcing and getting peers.
 type Client interface {
-	Announce(name string, h torlib.InfoHash, complete bool) ([]*torlib.PeerInfo, error)
+	Announce(name string, h core.InfoHash, complete bool) ([]*core.PeerInfo, error)
 }
 
 // HTTPClient announces to tracker over HTTP.
 type HTTPClient struct {
-	pctx    peercontext.PeerContext
+	pctx    core.PeerContext
 	servers serverset.Set
 }
 
 // New creates a new HTTPClient.
-func New(pctx peercontext.PeerContext, servers serverset.Set) *HTTPClient {
+func New(pctx core.PeerContext, servers serverset.Set) *HTTPClient {
 	return &HTTPClient{pctx, servers}
 }
 
 // Announce announces the torrent identified by (name, h) with the number of
 // downloaded bytes. Returns a list of all other peers announcing for said torrent,
 // sorted by priority.
-func (c *HTTPClient) Announce(name string, h torlib.InfoHash, complete bool) ([]*torlib.PeerInfo, error) {
+func (c *HTTPClient) Announce(name string, h core.InfoHash, complete bool) ([]*core.PeerInfo, error) {
 	v := url.Values{}
 
 	v.Add("name", name)
@@ -63,7 +62,7 @@ func (c *HTTPClient) Announce(name string, h torlib.InfoHash, complete bool) ([]
 		}
 		defer resp.Body.Close()
 		var b struct {
-			Peers []*torlib.PeerInfo `json:"peers"`
+			Peers []*core.PeerInfo `json:"peers"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&b); err != nil {
 			return nil, fmt.Errorf("unmarshal failed: %s", err)
@@ -84,7 +83,7 @@ func Disabled() Client {
 
 // Announce always returns error.
 func (c DisabledClient) Announce(
-	name string, h torlib.InfoHash, complete bool) ([]*torlib.PeerInfo, error) {
+	name string, h core.InfoHash, complete bool) ([]*core.PeerInfo, error) {
 
 	return nil, errors.New("announcing disabled")
 }

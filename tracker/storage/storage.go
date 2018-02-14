@@ -6,7 +6,7 @@ import (
 
 	"code.uber.internal/go-common.git/x/mysql"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 )
 
 // Storage errors.
@@ -19,16 +19,16 @@ var (
 type PeerStore interface {
 
 	// GetPeers returns all peers announcing for infohash.
-	GetPeers(infohash string) ([]*torlib.PeerInfo, error)
+	GetPeers(infohash string) ([]*core.PeerInfo, error)
 
 	// UpdatePeer updates peer fields.
-	UpdatePeer(peer *torlib.PeerInfo) error
+	UpdatePeer(peer *core.PeerInfo) error
 
 	// GetOrigins returns all origin peers serving infohash.
-	GetOrigins(infohash string) ([]*torlib.PeerInfo, error)
+	GetOrigins(infohash string) ([]*core.PeerInfo, error)
 
 	// UpdateOrigins overwrites all origin peers serving infohash.
-	UpdateOrigins(infohash string, origins []*torlib.PeerInfo) error
+	UpdateOrigins(infohash string, origins []*core.PeerInfo) error
 }
 
 // MetaInfoStore provides storage for torrent metainfo.
@@ -41,7 +41,7 @@ type MetaInfoStore interface {
 	// SetMetaInfo sets torrent in tracker's storage given metainfo.
 	// Should return ErrExists if there already exists a metainfo
 	// for the filename.
-	SetMetaInfo(mi *torlib.MetaInfo) error
+	SetMetaInfo(mi *core.MetaInfo) error
 }
 
 // ManifestStore provides storage for Docker image manifests.

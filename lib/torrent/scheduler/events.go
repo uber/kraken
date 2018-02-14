@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/timeutil"
 
@@ -126,8 +126,8 @@ func (e incomingHandshakeEvent) Apply(s *Scheduler) {
 // failedIncomingHandshakeEvent occurs when a pending incoming connection fails
 // to handshake.
 type failedIncomingHandshakeEvent struct {
-	peerID   torlib.PeerID
-	infoHash torlib.InfoHash
+	peerID   core.PeerID
+	infoHash core.InfoHash
 }
 
 func (e failedIncomingHandshakeEvent) Apply(s *Scheduler) {
@@ -154,8 +154,8 @@ func (e incomingConnEvent) Apply(s *Scheduler) {
 // failedOutgoingHandshakeEvent occurs when a pending incoming connection fails
 // to handshake.
 type failedOutgoingHandshakeEvent struct {
-	peerID   torlib.PeerID
-	infoHash torlib.InfoHash
+	peerID   core.PeerID
+	infoHash core.InfoHash
 }
 
 func (e failedOutgoingHandshakeEvent) Apply(s *Scheduler) {
@@ -204,8 +204,8 @@ func (e announceTickEvent) Apply(s *Scheduler) {
 // announceResponseEvent occurs when a successfully announce response was received
 // from the tracker.
 type announceResponseEvent struct {
-	infoHash torlib.InfoHash
-	peers    []*torlib.PeerInfo
+	infoHash core.InfoHash
+	peers    []*core.PeerInfo
 }
 
 // Apply selects new peers returned via an announce response to open connections to
@@ -226,7 +226,7 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 	}
 	for i := 0; i < len(e.peers); i++ {
 		p := e.peers[i]
-		peerID, err := torlib.NewPeerID(p.PeerID)
+		peerID, err := core.NewPeerID(p.PeerID)
 		if err != nil {
 			s.log("peer", p.PeerID, "hash", e.infoHash).Errorf(
 				"Error creating PeerID from announce response: %s", err)
@@ -262,7 +262,7 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 
 // announceFailureEvent occurs when an announce request fails.
 type announceFailureEvent struct {
-	infoHash torlib.InfoHash
+	infoHash core.InfoHash
 }
 
 // Apply marks the dispatcher as ready to announce again.

@@ -6,9 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/errutil"
@@ -22,14 +21,14 @@ type announceHandler struct {
 	originCluster blobclient.ClusterClient
 }
 
-func (h *announceHandler) fetchOrigins(infoHash, name string) ([]*torlib.PeerInfo, error) {
-	var origins []*torlib.PeerInfo
-	pctxs, err := h.originCluster.Owners(image.NewSHA256DigestFromHex(name))
+func (h *announceHandler) fetchOrigins(infoHash, name string) ([]*core.PeerInfo, error) {
+	var origins []*core.PeerInfo
+	pctxs, err := h.originCluster.Owners(core.NewSHA256DigestFromHex(name))
 	if err != nil {
 		return nil, err
 	}
 	for _, pctx := range pctxs {
-		origins = append(origins, &torlib.PeerInfo{
+		origins = append(origins, &core.PeerInfo{
 			InfoHash: infoHash,
 			PeerID:   pctx.PeerID.String(),
 			IP:       pctx.IP,
@@ -60,7 +59,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) error {
 		return handler.Errorf("parse complete: %s", err).Status(http.StatusBadRequest)
 	}
 
-	peer := &torlib.PeerInfo{
+	peer := &core.PeerInfo{
 		InfoHash: infoHash,
 		PeerID:   peerID,
 		IP:       peerIP,
@@ -76,7 +75,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) error {
 	if peer.Complete {
 		// If the peer is announcing as complete, don't return a peer handout since
 		// the peer does not need it.
-		if err := json.NewEncoder(w).Encode(torlib.AnnouncerResponse{}); err != nil {
+		if err := json.NewEncoder(w).Encode(core.AnnouncerResponse{}); err != nil {
 			return handler.Errorf("json encode empty response: %s", err)
 		}
 		return nil
@@ -130,7 +129,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) error {
 		return handler.Errorf("sample peers: %s", err)
 	}
 
-	resp := torlib.AnnouncerResponse{
+	resp := core.AnnouncerResponse{
 		Peers: peers,
 	}
 	if err := json.NewEncoder(w).Encode(resp); err != nil {

@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +23,7 @@ func TestServerUploadDownload(t *testing.T) {
 	c, err := NewClient(Config{Addr: addr})
 	require.NoError(err)
 
-	d, blob := image.DigestWithBlobFixture()
+	d, blob := core.DigestWithBlobFixture()
 
 	require.NoError(c.Upload(d.Hex(), bytes.NewReader(blob)))
 

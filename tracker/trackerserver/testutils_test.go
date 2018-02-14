@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"testing"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/mocks/tracker/mockstorage"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 
 	"github.com/golang/mock/gomock"
@@ -96,7 +96,7 @@ func performRequest(handler http.Handler, request *http.Request) *http.Response 
 	return w.Result()
 }
 
-func createAnnouncePath(mi *torlib.MetaInfo, p *torlib.PeerInfo) string {
+func createAnnouncePath(mi *core.MetaInfo, p *core.PeerInfo) string {
 	v := url.Values{}
 	v.Set("name", mi.Info.Name)
 	v.Set("info_hash", mi.InfoHash.HexString())

@@ -5,7 +5,7 @@
 package mockstorage
 
 import (
-	torlib "code.uber.internal/infra/kraken/torlib"
+	core "code.uber.internal/infra/kraken/core"
 	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
 )
@@ -84,9 +84,9 @@ func (mr *MockStorageMockRecorder) GetMetaInfo(arg0 interface{}) *gomock.Call {
 }
 
 // GetOrigins mocks base method
-func (m *MockStorage) GetOrigins(arg0 string) ([]*torlib.PeerInfo, error) {
+func (m *MockStorage) GetOrigins(arg0 string) ([]*core.PeerInfo, error) {
 	ret := m.ctrl.Call(m, "GetOrigins", arg0)
-	ret0, _ := ret[0].([]*torlib.PeerInfo)
+	ret0, _ := ret[0].([]*core.PeerInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -97,9 +97,9 @@ func (mr *MockStorageMockRecorder) GetOrigins(arg0 interface{}) *gomock.Call {
 }
 
 // GetPeers mocks base method
-func (m *MockStorage) GetPeers(arg0 string) ([]*torlib.PeerInfo, error) {
+func (m *MockStorage) GetPeers(arg0 string) ([]*core.PeerInfo, error) {
 	ret := m.ctrl.Call(m, "GetPeers", arg0)
-	ret0, _ := ret[0].([]*torlib.PeerInfo)
+	ret0, _ := ret[0].([]*core.PeerInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -110,7 +110,7 @@ func (mr *MockStorageMockRecorder) GetPeers(arg0 interface{}) *gomock.Call {
 }
 
 // SetMetaInfo mocks base method
-func (m *MockStorage) SetMetaInfo(arg0 *torlib.MetaInfo) error {
+func (m *MockStorage) SetMetaInfo(arg0 *core.MetaInfo) error {
 	ret := m.ctrl.Call(m, "SetMetaInfo", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -122,7 +122,7 @@ func (mr *MockStorageMockRecorder) SetMetaInfo(arg0 interface{}) *gomock.Call {
 }
 
 // UpdateOrigins mocks base method
-func (m *MockStorage) UpdateOrigins(arg0 string, arg1 []*torlib.PeerInfo) error {
+func (m *MockStorage) UpdateOrigins(arg0 string, arg1 []*core.PeerInfo) error {
 	ret := m.ctrl.Call(m, "UpdateOrigins", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -134,7 +134,7 @@ func (mr *MockStorageMockRecorder) UpdateOrigins(arg0, arg1 interface{}) *gomock
 }
 
 // UpdatePeer mocks base method
-func (m *MockStorage) UpdatePeer(arg0 *torlib.PeerInfo) error {
+func (m *MockStorage) UpdatePeer(arg0 *core.PeerInfo) error {
 	ret := m.ctrl.Call(m, "UpdatePeer", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0

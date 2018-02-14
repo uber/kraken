@@ -10,9 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
-	"code.uber.internal/infra/kraken/lib/peercontext"
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/httputil"
 
 	"github.com/c2h5oh/datasize"
@@ -27,22 +25,22 @@ var (
 type Client interface {
 	Addr() string
 
-	Locations(d image.Digest) ([]string, error)
-	CheckBlob(d image.Digest) (bool, error)
-	GetBlob(d image.Digest) (io.ReadCloser, error)
-	DeleteBlob(d image.Digest) error
-	TransferBlob(d image.Digest, blob io.Reader, size int64) error
+	Locations(d core.Digest) ([]string, error)
+	CheckBlob(d core.Digest) (bool, error)
+	GetBlob(d core.Digest) (io.ReadCloser, error)
+	DeleteBlob(d core.Digest) error
+	TransferBlob(d core.Digest, blob io.Reader, size int64) error
 
 	Repair() (io.ReadCloser, error)
 	RepairShard(shardID string) (io.ReadCloser, error)
-	RepairDigest(d image.Digest) (io.ReadCloser, error)
+	RepairDigest(d core.Digest) (io.ReadCloser, error)
 
-	GetMetaInfo(namespace string, d image.Digest) (*torlib.MetaInfo, error)
-	OverwriteMetaInfo(d image.Digest, pieceLength int64) error
+	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
+	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
 
-	UploadBlob(namespace string, d image.Digest, blob io.Reader, size int64, through bool) error
+	UploadBlob(namespace string, d core.Digest, blob io.Reader, size int64, through bool) error
 
-	GetPeerContext() (peercontext.PeerContext, error)
+	GetPeerContext() (core.PeerContext, error)
 }
 
 // Config defines HTTPClient configuration.
@@ -80,7 +78,7 @@ func (c *HTTPClient) Addr() string {
 }
 
 // Locations returns the origin server addresses which d is sharded on.
-func (c *HTTPClient) Locations(d image.Digest) ([]string, error) {
+func (c *HTTPClient) Locations(d core.Digest) ([]string, error) {
 	r, err := httputil.Get(fmt.Sprintf("http://%s/blobs/%s/locations", c.addr, d))
 	if err != nil {
 		return nil, err
@@ -90,7 +88,7 @@ func (c *HTTPClient) Locations(d image.Digest) ([]string, error) {
 }
 
 // CheckBlob returns error if the origin does not have a blob for d.
-func (c *HTTPClient) CheckBlob(d image.Digest) (bool, error) {
+func (c *HTTPClient) CheckBlob(d core.Digest) (bool, error) {
 	_, err := httputil.Head(fmt.Sprintf("http://%s/internal/blobs/%s", c.addr, d))
 	if err != nil {
 		if httputil.IsNotFound(err) {
@@ -102,7 +100,7 @@ func (c *HTTPClient) CheckBlob(d image.Digest) (bool, error) {
 }
 
 // GetBlob returns the blob corresponding to d.
-func (c *HTTPClient) GetBlob(d image.Digest) (io.ReadCloser, error) {
+func (c *HTTPClient) GetBlob(d core.Digest) (io.ReadCloser, error) {
 	r, err := httputil.Get(fmt.Sprintf("http://%s/internal/blobs/%s", c.addr, d))
 	if err != nil {
 		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
@@ -111,7 +109,7 @@ func (c *HTTPClient) GetBlob(d image.Digest) (io.ReadCloser, error) {
 }
 
 // DeleteBlob deletes the blob corresponding to d.
-func (c *HTTPClient) DeleteBlob(d image.Digest) error {
+func (c *HTTPClient) DeleteBlob(d core.Digest) error {
 	_, err := httputil.Delete(
 		fmt.Sprintf("http://%s/internal/blobs/%s", c.addr, d),
 		httputil.SendAcceptedCodes(http.StatusAccepted))
@@ -120,7 +118,7 @@ func (c *HTTPClient) DeleteBlob(d image.Digest) error {
 
 // TransferBlob uploads a blob to a single origin server. Unlike its cousin UploadBlob,
 // TransferBlob is an internal API which does not replicate the blob.
-func (c *HTTPClient) TransferBlob(d image.Digest, blob io.Reader, size int64) error {
+func (c *HTTPClient) TransferBlob(d core.Digest, blob io.Reader, size int64) error {
 	tc := newTransferClient(c.addr)
 	return runChunkedUpload(tc, d, blob, size, int64(c.config.ChunkSize))
 }
@@ -128,7 +126,7 @@ func (c *HTTPClient) TransferBlob(d image.Digest, blob io.Reader, size int64) er
 // UploadBlob uploads and replicates blob to the origin cluster. If through is set,
 // UploadBlob will also upload blob to the storage backend configured for namespace.
 func (c *HTTPClient) UploadBlob(
-	namespace string, d image.Digest, blob io.Reader, size int64, through bool) error {
+	namespace string, d core.Digest, blob io.Reader, size int64, through bool) error {
 
 	uc := newUploadClient(c.addr, namespace, through)
 	return runChunkedUpload(uc, d, blob, size, int64(c.config.ChunkSize))
@@ -156,7 +154,7 @@ func (c *HTTPClient) RepairShard(shardID string) (io.ReadCloser, error) {
 
 // RepairDigest pushes d to other replicas, and removes d from the target origin
 // if it is no longer the owner of d.
-func (c *HTTPClient) RepairDigest(d image.Digest) (io.ReadCloser, error) {
+func (c *HTTPClient) RepairDigest(d core.Digest) (io.ReadCloser, error) {
 	r, err := httputil.Post(fmt.Sprintf("http://%s/internal/repair/digest/%s", c.addr, d))
 	if err != nil {
 		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
@@ -168,7 +166,7 @@ func (c *HTTPClient) RepairDigest(d image.Digest) (io.ReadCloser, error) {
 // (i.e. still downloading), returns a 202 httputil.StatusError, indicating that
 // the request should be retried later. If no blob exists for d, returns a 404
 // httputil.StatusError.
-func (c *HTTPClient) GetMetaInfo(namespace string, d image.Digest) (*torlib.MetaInfo, error) {
+func (c *HTTPClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error) {
 	r, err := httputil.Get(fmt.Sprintf(
 		"http://%s/internal/namespace/%s/blobs/%s/metainfo", c.addr, namespace, d))
 	if err != nil {
@@ -179,7 +177,7 @@ func (c *HTTPClient) GetMetaInfo(namespace string, d image.Digest) (*torlib.Meta
 	if err != nil {
 		return nil, fmt.Errorf("read body: %s", err)
 	}
-	mi, err := torlib.DeserializeMetaInfo(raw)
+	mi, err := core.DeserializeMetaInfo(raw)
 	if err != nil {
 		return nil, fmt.Errorf("deserialize metainfo: %s", err)
 	}
@@ -188,15 +186,15 @@ func (c *HTTPClient) GetMetaInfo(namespace string, d image.Digest) (*torlib.Meta
 
 // OverwriteMetaInfo overwrites existing metainfo for d with new metainfo
 // configured with pieceLength. Primarily intended for benchmarking purposes.
-func (c *HTTPClient) OverwriteMetaInfo(d image.Digest, pieceLength int64) error {
+func (c *HTTPClient) OverwriteMetaInfo(d core.Digest, pieceLength int64) error {
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/internal/blobs/%s/metainfo?piece_length=%d", c.addr, d, pieceLength))
 	return err
 }
 
 // GetPeerContext gets the PeerContext of the p2p client running alongside the Server.
-func (c *HTTPClient) GetPeerContext() (peercontext.PeerContext, error) {
-	var pctx peercontext.PeerContext
+func (c *HTTPClient) GetPeerContext() (core.PeerContext, error) {
+	var pctx core.PeerContext
 	r, err := httputil.Get(fmt.Sprintf("http://%s/internal/peercontext", c.addr))
 	if err != nil {
 		return pctx, err
