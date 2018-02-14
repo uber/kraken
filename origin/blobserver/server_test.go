@@ -11,8 +11,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/lib/fileio"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
@@ -31,7 +31,7 @@ func TestCheckBlobHandlerOK(t *testing.T) {
 	addr, stop := mocks.server(configMaxReplicaFixture())
 	defer stop()
 
-	d := image.DigestFixture()
+	d := core.DigestFixture()
 
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, nil)
 
@@ -49,7 +49,7 @@ func TestCheckBlobHandlerNotFound(t *testing.T) {
 	addr, stop := mocks.server(configMaxReplicaFixture())
 	defer stop()
 
-	d := image.DigestFixture()
+	d := core.DigestFixture()
 
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, os.ErrNotExist)
 
@@ -65,7 +65,7 @@ func TestGetBlobHandlerOK(t *testing.T) {
 	addr, stop := mocks.server(configMaxReplicaFixture())
 	defer stop()
 
-	d := image.DigestFixture()
+	d := core.DigestFixture()
 
 	blob := randutil.Text(256)
 	f, cleanup := store.NewMockFileReadWriter(blob)
@@ -85,7 +85,7 @@ func TestGetBlobHandlerNotFound(t *testing.T) {
 	addr, stop := mocks.server(configMaxReplicaFixture())
 	defer stop()
 
-	d := image.DigestFixture()
+	d := core.DigestFixture()
 
 	mocks.fileStore.EXPECT().GetCacheFileReader(d.Hex()).Return(nil, os.ErrNotExist)
 
@@ -103,7 +103,7 @@ func TestDeleteBlobHandlerAccepted(t *testing.T) {
 	addr, stop := mocks.server(configFixture())
 	defer stop()
 
-	d := image.DigestFixture()
+	d := core.DigestFixture()
 
 	mocks.fileStore.EXPECT().DeleteCacheFile(d.Hex()).Return(nil)
 
@@ -119,7 +119,7 @@ func TestDeleteBlobHandlerNotFound(t *testing.T) {
 	addr, stop := mocks.server(configFixture())
 	defer stop()
 
-	d := image.DigestFixture()
+	d := core.DigestFixture()
 
 	mocks.fileStore.EXPECT().DeleteCacheFile(d.Hex()).Return(os.ErrNotExist)
 
@@ -260,7 +260,7 @@ func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 	defer s.cleanup()
 	s.backendManager.Register(namespace, mockBackendClient)
 
-	d := image.DigestFixture()
+	d := core.DigestFixture()
 
 	mockBackendClient.EXPECT().Download(d.Hex(), gomock.Any()).Return(backenderrors.ErrBlobNotFound)
 
@@ -364,7 +364,7 @@ func TestUploadBlobThroughDoesNotCommitBlobIfBackendUploadFails(t *testing.T) {
 	defer s.cleanup()
 	s.backendManager.Register(namespace, mockBackendClient)
 
-	d, blob := image.DigestWithBlobFixture()
+	d, blob := core.DigestWithBlobFixture()
 
 	mockBackendClient.EXPECT().Upload(d.Hex(), fileio.MatchReader(blob)).Return(errors.New("some error"))
 
@@ -385,7 +385,7 @@ func TestTransferBlob(t *testing.T) {
 	s := newTestServer(master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
 
-	d, blob := image.DigestWithBlobFixture()
+	d, blob := core.DigestWithBlobFixture()
 
 	err := cp.Provide(master1).TransferBlob(d, bytes.NewReader(blob), int64(len(blob)))
 	require.NoError(err)
@@ -409,7 +409,7 @@ func TestOverwriteMetainfo(t *testing.T) {
 	s := newTestServer(master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
 
-	d, blob := image.DigestWithBlobFixture()
+	d, blob := core.DigestWithBlobFixture()
 
 	err := cp.Provide(master1).TransferBlob(d, bytes.NewReader(blob), int64(len(blob)))
 	require.NoError(err)

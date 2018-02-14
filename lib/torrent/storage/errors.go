@@ -3,14 +3,14 @@ package storage
 import (
 	"fmt"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 )
 
-// InfoHashMismatchError implements error and contains expected and actual torlib.InfoHash
+// InfoHashMismatchError implements error and contains expected and actual core.InfoHash
 // TODO (@evelynl): this seems to be a fairly common error
 type InfoHashMismatchError struct {
-	expected torlib.InfoHash
-	actual   torlib.InfoHash
+	expected core.InfoHash
+	actual   core.InfoHash
 }
 
 func (ie InfoHashMismatchError) Error() string {

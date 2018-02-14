@@ -14,9 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
-	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -93,7 +92,7 @@ func startServer(
 	config Config,
 	fs store.OriginFileStore,
 	cp blobclient.Provider,
-	pctx peercontext.PeerContext,
+	pctx core.PeerContext,
 	bm *backend.Manager) (addr string, stop func()) {
 
 	stats := tally.NewTestScope("", nil)
@@ -112,14 +111,14 @@ type testServer struct {
 	addr           string
 	fs             store.OriginFileStore
 	cp             *testClientProvider
-	pctx           peercontext.PeerContext
+	pctx           core.PeerContext
 	backendManager *backend.Manager
 	stop           func()
 	cleanFS        func()
 }
 
 func newTestServer(host string, config Config, cp *testClientProvider) *testServer {
-	pctx := peercontext.Fixture()
+	pctx := core.PeerContextFixture()
 	fs, cleanFS := store.OriginFileStoreFixture(clock.New())
 	bm, err := backend.NewManager(nil)
 	if err != nil {
@@ -169,7 +168,7 @@ func newServerMocks(t *testing.T) *serverMocks {
 }
 
 func (mocks *serverMocks) server(config Config) (addr string, stop func()) {
-	return startServer(master1, config, mocks.fileStore, mocks.clientProvider, peercontext.Fixture(), nil)
+	return startServer(master1, config, mocks.fileStore, mocks.clientProvider, core.PeerContextFixture(), nil)
 }
 
 // labelSet converts hosts into their corresponding labels as specified by config.
@@ -206,13 +205,13 @@ func pickShard(config Config, hosts ...string) string {
 	panic(fmt.Sprintf("cannot find shard for hosts %v", hosts))
 }
 
-func blobFixture(size int64) (image.Digest, []byte) {
+func blobFixture(size int64) (core.Digest, []byte) {
 	b := make([]byte, size)
 	_, err := rand.Read(b)
 	if err != nil {
 		panic(err)
 	}
-	d, err := image.NewDigester().FromBytes(b)
+	d, err := core.NewDigester().FromBytes(b)
 	if err != nil {
 		panic(err)
 	}
@@ -221,14 +220,14 @@ func blobFixture(size int64) (image.Digest, []byte) {
 
 // computeBlobForShard generates a random digest / content which matches shardID.
 // XXX This function is not cheap! Each call takes around 0.1 seconds.
-func computeBlobForShard(shardID string) (image.Digest, []byte) {
+func computeBlobForShard(shardID string) (core.Digest, []byte) {
 	b := make([]byte, 64)
 	for {
 		_, err := rand.Read(b)
 		if err != nil {
 			panic(err)
 		}
-		d, err := image.NewDigester().FromBytes(b)
+		d, err := core.NewDigester().FromBytes(b)
 		if err != nil {
 			panic(err)
 		}
@@ -239,14 +238,14 @@ func computeBlobForShard(shardID string) (image.Digest, []byte) {
 }
 
 // computeBlobForHosts generates a random digest / content which shards to hosts.
-func computeBlobForHosts(config Config, hosts ...string) (image.Digest, []byte) {
+func computeBlobForHosts(config Config, hosts ...string) (core.Digest, []byte) {
 	b := make([]byte, 64)
 	for {
 		_, err := rand.Read(b)
 		if err != nil {
 			panic(err)
 		}
-		d, err := image.NewDigester().FromBytes(b)
+		d, err := core.NewDigester().FromBytes(b)
 		if err != nil {
 			panic(err)
 		}
@@ -256,7 +255,7 @@ func computeBlobForHosts(config Config, hosts ...string) (image.Digest, []byte) 
 	}
 }
 
-func ensureHasBlob(t *testing.T, c blobclient.Client, d image.Digest, expected []byte) {
+func ensureHasBlob(t *testing.T, c blobclient.Client, d core.Digest, expected []byte) {
 	b, err := c.GetBlob(d)
 	require.NoError(t, err)
 	result, err := ioutil.ReadAll(b)

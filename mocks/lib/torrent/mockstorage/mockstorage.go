@@ -6,7 +6,7 @@ package mockstorage
 
 import (
 	storage "code.uber.internal/infra/kraken/lib/torrent/storage"
-	torlib "code.uber.internal/infra/kraken/torlib"
+	core "code.uber.internal/infra/kraken/core"
 	bitset "code.uber.internal/infra/kraken/vendor/github.com/willf/bitset"
 	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
@@ -97,9 +97,9 @@ func (mr *MockTorrentMockRecorder) HasPiece(arg0 interface{}) *gomock.Call {
 }
 
 // InfoHash mocks base method
-func (m *MockTorrent) InfoHash() torlib.InfoHash {
+func (m *MockTorrent) InfoHash() core.InfoHash {
 	ret := m.ctrl.Call(m, "InfoHash")
-	ret0, _ := ret[0].(torlib.InfoHash)
+	ret0, _ := ret[0].(core.InfoHash)
 	return ret0
 }
 

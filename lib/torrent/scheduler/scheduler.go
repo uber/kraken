@@ -12,12 +12,11 @@ import (
 	"github.com/willf/bitset"
 	"go.uber.org/zap"
 
-	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -50,7 +49,7 @@ func newTorrentControl(d *dispatcher, localRequest bool) *torrentControl {
 // - Dispatching connections to torrents.
 // - Pre-empting existing connections when better options are available (TODO).
 type Scheduler struct {
-	pctx           peercontext.PeerContext
+	pctx           core.PeerContext
 	config         Config
 	clock          clock.Clock
 	torrentArchive storage.TorrentArchive
@@ -62,7 +61,7 @@ type Scheduler struct {
 
 	// The following fields define the core Scheduler "state", and should only
 	// be accessed from within the event loop.
-	torrentControls map[torlib.InfoHash]*torrentControl // Active seeding / leeching torrents.
+	torrentControls map[core.InfoHash]*torrentControl // Active seeding / leeching torrents.
 	connState       *connState
 	announceQueue   announcequeue.Queue
 
@@ -106,7 +105,7 @@ func New(
 	config Config,
 	ta storage.TorrentArchive,
 	stats tally.Scope,
-	pctx peercontext.PeerContext,
+	pctx core.PeerContext,
 	announceClient announceclient.Client,
 	announceQueue announcequeue.Queue,
 	networkEvents networkevent.Producer,
@@ -164,7 +163,7 @@ func New(
 			NetworkEventProducer: networkEvents,
 			Stats:                stats,
 		},
-		torrentControls: make(map[torlib.InfoHash]*torrentControl),
+		torrentControls: make(map[core.InfoHash]*torrentControl),
 		connState:       connState,
 		announceQueue:   announceQueue,
 		eventLoop:       overrides.eventLoop,
@@ -255,9 +254,9 @@ func (s *Scheduler) AddTorrent(namespace, name string) <-chan error {
 
 // BlacklistedConn represents a connection which has been blacklisted.
 type BlacklistedConn struct {
-	PeerID    torlib.PeerID   `json:"peer_id"`
-	InfoHash  torlib.InfoHash `json:"info_hash"`
-	Remaining time.Duration   `json:"remaining"`
+	PeerID    core.PeerID   `json:"peer_id"`
+	InfoHash  core.InfoHash `json:"info_hash"`
+	Remaining time.Duration `json:"remaining"`
 }
 
 // BlacklistSnapshot returns a snapshot of the current connection blacklist.

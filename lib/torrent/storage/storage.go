@@ -4,7 +4,7 @@ import (
 	"errors"
 	"io"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 
 	"github.com/willf/bitset"
 )
@@ -29,7 +29,7 @@ type Torrent interface {
 	Length() int64
 	PieceLength(piece int) int64
 	MaxPieceLength() int64
-	InfoHash() torlib.InfoHash
+	InfoHash() core.InfoHash
 	Complete() bool
 	BytesDownloaded() int64
 	Bitfield() *bitset.BitSet

@@ -8,9 +8,9 @@ import (
 	"github.com/andres-erbsen/clock"
 	"go.uber.org/zap"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
@@ -26,8 +26,8 @@ func (e blacklistError) Error() string {
 }
 
 type connKey struct {
-	peerID   torlib.PeerID
-	infoHash torlib.InfoHash
+	peerID   core.PeerID
+	infoHash core.InfoHash
 }
 
 type blacklistEntry struct {
@@ -43,9 +43,9 @@ func (e *blacklistEntry) Remaining(now time.Time) time.Duration {
 }
 
 type connState struct {
-	localPeerID   torlib.PeerID
+	localPeerID   core.PeerID
 	config        ConnStateConfig
-	capacity      map[torlib.InfoHash]int
+	capacity      map[core.InfoHash]int
 	active        map[connKey]*conn.Conn
 	pending       map[connKey]bool
 	blacklist     map[connKey]*blacklistEntry
@@ -54,7 +54,7 @@ type connState struct {
 }
 
 func newConnState(
-	localPeerID torlib.PeerID,
+	localPeerID core.PeerID,
 	config ConnStateConfig,
 	clk clock.Clock,
 	networkEvents networkevent.Producer) *connState {
@@ -62,7 +62,7 @@ func newConnState(
 	return &connState{
 		localPeerID:   localPeerID,
 		config:        config,
-		capacity:      make(map[torlib.InfoHash]int),
+		capacity:      make(map[core.InfoHash]int),
 		active:        make(map[connKey]*conn.Conn),
 		pending:       make(map[connKey]bool),
 		blacklist:     make(map[connKey]*blacklistEntry),
@@ -83,7 +83,7 @@ func (s *connState) NumActiveConns() int {
 	return len(s.active)
 }
 
-func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) error {
+func (s *connState) Blacklist(peerID core.PeerID, infoHash core.InfoHash) error {
 	if s.config.DisableBlacklist {
 		return nil
 	}
@@ -102,12 +102,12 @@ func (s *connState) Blacklist(peerID torlib.PeerID, infoHash torlib.InfoHash) er
 	return nil
 }
 
-func (s *connState) Blacklisted(peerID torlib.PeerID, infoHash torlib.InfoHash) bool {
+func (s *connState) Blacklisted(peerID core.PeerID, infoHash core.InfoHash) bool {
 	e, ok := s.blacklist[connKey{peerID, infoHash}]
 	return ok && e.Blacklisted(s.clock.Now())
 }
 
-func (s *connState) ClearBlacklist(h torlib.InfoHash) {
+func (s *connState) ClearBlacklist(h core.InfoHash) {
 	for k := range s.blacklist {
 		if k.infoHash == h {
 			delete(s.blacklist, k)
@@ -115,7 +115,7 @@ func (s *connState) ClearBlacklist(h torlib.InfoHash) {
 	}
 }
 
-func (s *connState) AddPending(peerID torlib.PeerID, infoHash torlib.InfoHash) error {
+func (s *connState) AddPending(peerID core.PeerID, infoHash core.InfoHash) error {
 	k := connKey{peerID, infoHash}
 	cap, ok := s.capacity[infoHash]
 	if !ok {
@@ -141,7 +141,7 @@ func (s *connState) AddPending(peerID torlib.PeerID, infoHash torlib.InfoHash) e
 	return nil
 }
 
-func (s *connState) DeletePending(peerID torlib.PeerID, infoHash torlib.InfoHash) {
+func (s *connState) DeletePending(peerID core.PeerID, infoHash core.InfoHash) {
 	k := connKey{peerID, infoHash}
 	if !s.pending[k] {
 		return
@@ -219,7 +219,7 @@ func (s *connState) BlacklistSnapshot() []BlacklistedConn {
 }
 
 // getConnOpener returns the PeerID of the peer who opened the conn, i.e. sent the first handshake.
-func (s *connState) getConnOpener(c *conn.Conn) torlib.PeerID {
+func (s *connState) getConnOpener(c *conn.Conn) core.PeerID {
 	if c.OpenedByRemote() {
 		return c.PeerID()
 	}

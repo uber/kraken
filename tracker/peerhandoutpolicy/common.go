@@ -1,8 +1,8 @@
 package peerhandoutpolicy
 
-import "code.uber.internal/infra/kraken/torlib"
+import "code.uber.internal/infra/kraken/core"
 
-type peerInfos []*torlib.PeerInfo
+type peerInfos []*core.PeerInfo
 
 func (s peerInfos) Len() int      { return len(s) }
 func (s peerInfos) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
@@ -20,8 +20,8 @@ func (s byComplete) Less(i, j int) bool {
 }
 
 // Returns a new slice of the first n peers after applying the `sorter` function.
-func sortedPeers(peers []*torlib.PeerInfo, n int, sort func(peerInfos)) []*torlib.PeerInfo {
-	newPeers := make([]*torlib.PeerInfo, len(peers))
+func sortedPeers(peers []*core.PeerInfo, n int, sort func(peerInfos)) []*core.PeerInfo {
+	newPeers := make([]*core.PeerInfo, len(peers))
 	copy(newPeers, peers)
 
 	sort(peerInfos(newPeers))

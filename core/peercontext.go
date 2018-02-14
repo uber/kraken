@@ -1,10 +1,8 @@
-package peercontext
+package core
 
 import (
 	"errors"
 	"fmt"
-
-	"code.uber.internal/infra/kraken/torlib"
 )
 
 // PeerIDFactory defines the method used to generate a peer id.
@@ -17,15 +15,15 @@ const RandomPeerIDFactory PeerIDFactory = "random"
 const IPHashPeerIDFactory PeerIDFactory = "ip_hash"
 
 // GeneratePeerID creates a new peer id per the factory policy.
-func (f PeerIDFactory) GeneratePeerID(ip string) (torlib.PeerID, error) {
+func (f PeerIDFactory) GeneratePeerID(ip string) (PeerID, error) {
 	switch f {
 	case RandomPeerIDFactory:
-		return torlib.RandomPeerID()
+		return RandomPeerID()
 	case IPHashPeerIDFactory:
-		return torlib.HashedPeerID(ip)
+		return HashedPeerID(ip)
 	default:
 		err := fmt.Errorf("invalid peer id factory: %q", string(f))
-		return torlib.PeerID{}, err
+		return PeerID{}, err
 	}
 }
 
@@ -41,7 +39,7 @@ type PeerContext struct {
 	Port int    `json:"port"`
 
 	// PeerID the peer will identify itself as.
-	PeerID torlib.PeerID `json:"peer_id"`
+	PeerID PeerID `json:"peer_id"`
 
 	// Zone is the zone the peer is running within.
 	Zone string `json:"zone"`
@@ -50,7 +48,10 @@ type PeerContext struct {
 	Origin bool `json:"origin"`
 }
 
-func new(f PeerIDFactory, zone string, ip string, port int, origin bool) (PeerContext, error) {
+// NewPeerContext creates a new PeerContext.
+func NewPeerContext(
+	f PeerIDFactory, zone string, ip string, port int, origin bool) (PeerContext, error) {
+
 	if ip == "" {
 		return PeerContext{}, errors.New("no ip supplied")
 	}
@@ -68,14 +69,4 @@ func new(f PeerIDFactory, zone string, ip string, port int, origin bool) (PeerCo
 		Zone:   zone,
 		Origin: origin,
 	}, nil
-}
-
-// New creates a new PeerContext.
-func New(f PeerIDFactory, zone string, ip string, port int) (PeerContext, error) {
-	return new(f, zone, ip, port, false)
-}
-
-// NewOrigin creates a new PeerContext for an origin server.
-func NewOrigin(f PeerIDFactory, zone string, ip string, port int) (PeerContext, error) {
-	return new(f, zone, ip, port, true)
 }

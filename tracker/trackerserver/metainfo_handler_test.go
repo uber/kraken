@@ -7,9 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -20,7 +19,7 @@ import (
 
 const namespace = "test-namespace"
 
-func download(addr string, d image.Digest) (*http.Response, error) {
+func download(addr string, d core.Digest) (*http.Response, error) {
 	return httputil.Get(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/metainfo", addr, namespace, d))
 }
@@ -44,8 +43,8 @@ func TestMetaInfoHandlerGetFetchesFromOrigin(t *testing.T) {
 	addr, stop := startMetaInfoServer(h)
 	defer stop()
 
-	mi := torlib.MetaInfoFixture()
-	digest := image.NewSHA256DigestFromHex(mi.Name())
+	mi := core.MetaInfoFixture()
+	digest := core.NewSHA256DigestFromHex(mi.Name())
 
 	mockClusterClient.EXPECT().GetMetaInfo(namespace, digest).Return(mi, nil)
 
@@ -58,7 +57,7 @@ func TestMetaInfoHandlerGetFetchesFromOrigin(t *testing.T) {
 	}))
 	b, err := ioutil.ReadAll(resp.Body)
 	require.NoError(err)
-	result, err := torlib.DeserializeMetaInfo(b)
+	result, err := core.DeserializeMetaInfo(b)
 	require.NoError(err)
 	require.Equal(mi, result)
 }
@@ -76,8 +75,8 @@ func TestMetaInfoHandlerGetCachesAndPropagatesOriginError(t *testing.T) {
 	addr, stop := startMetaInfoServer(h)
 	defer stop()
 
-	mi := torlib.MetaInfoFixture()
-	digest := image.NewSHA256DigestFromHex(mi.Name())
+	mi := core.MetaInfoFixture()
+	digest := core.NewSHA256DigestFromHex(mi.Name())
 
 	mockClusterClient.EXPECT().GetMetaInfo(namespace, digest).Return(
 		nil, httputil.StatusError{Status: 599})

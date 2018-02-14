@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/randutil"
 	"github.com/garyburd/redigo/redis"
 	"github.com/stretchr/testify/require"
@@ -31,14 +31,14 @@ func TestRedisStorageGetPeersPopulatesPeerInfoFields(t *testing.T) {
 	s, err := NewRedisStorage(config)
 	require.NoError(err)
 
-	p := torlib.PeerInfoFixture()
+	p := core.PeerInfoFixture()
 	p.Complete = true
 
 	require.NoError(s.UpdatePeer(p))
 
 	peers, err := s.GetPeers(p.InfoHash)
 	require.NoError(err)
-	require.Equal(peers, []*torlib.PeerInfo{{
+	require.Equal(peers, []*core.PeerInfo{{
 		InfoHash: p.InfoHash,
 		PeerID:   p.PeerID,
 		IP:       p.IP,
@@ -64,11 +64,11 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 	// Reset time to the beginning of a window.
 	now = time.Unix(s.curPeerSetWindow(), 0)
 
-	mi := torlib.MetaInfoFixture()
+	mi := core.MetaInfoFixture()
 
 	// Each peer will be added on a different second to distribute them across
 	// multiple windows.
-	peers := make([]*torlib.PeerInfo, int(config.PeerSetWindowSize.Seconds())*config.MaxPeerSetWindows)
+	peers := make([]*core.PeerInfo, int(config.PeerSetWindowSize.Seconds())*config.MaxPeerSetWindows)
 
 	for i := range peers {
 		if i > 0 {
@@ -76,7 +76,7 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 			now = now.Add(time.Second)
 		}
 
-		p := torlib.PeerInfoForMetaInfoFixture(mi)
+		p := core.PeerInfoForMetaInfoFixture(mi)
 		peers[i] = p
 
 		require.NoError(s.UpdatePeer(p))
@@ -84,7 +84,7 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 
 	result, err := s.GetPeers(mi.InfoHash.String())
 	require.NoError(err)
-	require.Equal(torlib.SortedPeerIDs(peers), torlib.SortedPeerIDs(result))
+	require.Equal(core.SortedPeerIDs(peers), core.SortedPeerIDs(result))
 }
 
 func TestRedisStorageGetPeersCollapsesCompleteBits(t *testing.T) {
@@ -97,7 +97,7 @@ func TestRedisStorageGetPeersCollapsesCompleteBits(t *testing.T) {
 	s, err := NewRedisStorage(config)
 	require.NoError(err)
 
-	p := torlib.PeerInfoFixture()
+	p := core.PeerInfoFixture()
 
 	require.NoError(s.UpdatePeer(p))
 
@@ -127,7 +127,7 @@ func TestRedisStoragePeerExpiration(t *testing.T) {
 	s, err := NewRedisStorage(config)
 	require.NoError(err)
 
-	p := torlib.PeerInfoFixture()
+	p := core.PeerInfoFixture()
 
 	require.NoError(s.UpdatePeer(p))
 
@@ -152,17 +152,17 @@ func TestRedisStorageGetOriginsPopulatesPeerInfoFields(t *testing.T) {
 	s, err := NewRedisStorage(config)
 	require.NoError(err)
 
-	mi := torlib.MetaInfoFixture()
+	mi := core.MetaInfoFixture()
 	infoHash := mi.InfoHash.String()
 
-	origin := torlib.PeerInfoForMetaInfoFixture(mi)
+	origin := core.PeerInfoForMetaInfoFixture(mi)
 	origin.Complete = true
 
-	require.NoError(s.UpdateOrigins(infoHash, []*torlib.PeerInfo{origin}))
+	require.NoError(s.UpdateOrigins(infoHash, []*core.PeerInfo{origin}))
 
 	result, err := s.GetOrigins(infoHash)
 	require.NoError(err)
-	require.Equal(result, []*torlib.PeerInfo{{
+	require.Equal(result, []*core.PeerInfo{{
 		InfoHash: origin.InfoHash,
 		PeerID:   origin.PeerID,
 		IP:       origin.IP,
@@ -182,31 +182,31 @@ func TestRedisStorageUpdateOriginsOverwritesExistingOrigins(t *testing.T) {
 	s, err := NewRedisStorage(config)
 	require.NoError(err)
 
-	mi := torlib.MetaInfoFixture()
+	mi := core.MetaInfoFixture()
 	infoHash := mi.InfoHash.String()
 
-	initialOrigins := []*torlib.PeerInfo{
-		torlib.PeerInfoForMetaInfoFixture(mi),
-		torlib.PeerInfoForMetaInfoFixture(mi),
+	initialOrigins := []*core.PeerInfo{
+		core.PeerInfoForMetaInfoFixture(mi),
+		core.PeerInfoForMetaInfoFixture(mi),
 	}
 
 	require.NoError(s.UpdateOrigins(infoHash, initialOrigins))
 
 	result, err := s.GetOrigins(infoHash)
 	require.NoError(err)
-	require.Equal(torlib.SortedPeerIDs(initialOrigins), torlib.SortedPeerIDs(result))
+	require.Equal(core.SortedPeerIDs(initialOrigins), core.SortedPeerIDs(result))
 
-	newOrigins := []*torlib.PeerInfo{
-		torlib.PeerInfoForMetaInfoFixture(mi),
-		torlib.PeerInfoForMetaInfoFixture(mi),
-		torlib.PeerInfoForMetaInfoFixture(mi),
+	newOrigins := []*core.PeerInfo{
+		core.PeerInfoForMetaInfoFixture(mi),
+		core.PeerInfoForMetaInfoFixture(mi),
+		core.PeerInfoForMetaInfoFixture(mi),
 	}
 
 	require.NoError(s.UpdateOrigins(infoHash, newOrigins))
 
 	result, err = s.GetOrigins(infoHash)
 	require.NoError(err)
-	require.Equal(torlib.SortedPeerIDs(newOrigins), torlib.SortedPeerIDs(result))
+	require.Equal(core.SortedPeerIDs(newOrigins), core.SortedPeerIDs(result))
 }
 
 func TestRedisStorageOriginsExpiration(t *testing.T) {
@@ -220,12 +220,12 @@ func TestRedisStorageOriginsExpiration(t *testing.T) {
 	s, err := NewRedisStorage(config)
 	require.NoError(err)
 
-	mi := torlib.MetaInfoFixture()
+	mi := core.MetaInfoFixture()
 	infoHash := mi.InfoHash.String()
 
-	origin := torlib.PeerInfoForMetaInfoFixture(mi)
+	origin := core.PeerInfoForMetaInfoFixture(mi)
 
-	require.NoError(s.UpdateOrigins(infoHash, []*torlib.PeerInfo{origin}))
+	require.NoError(s.UpdateOrigins(infoHash, []*core.PeerInfo{origin}))
 
 	result, err := s.GetOrigins(infoHash)
 	require.NoError(err)
@@ -247,13 +247,13 @@ func TestRedisStorageSetAndGetMetaInfo(t *testing.T) {
 	s, err := NewRedisStorage(config)
 	require.NoError(err)
 
-	mi := torlib.MetaInfoFixture()
+	mi := core.MetaInfoFixture()
 
 	require.NoError(s.SetMetaInfo(mi))
 
 	raw, err := s.GetMetaInfo(mi.Name())
 	require.NoError(err)
-	result, err := torlib.DeserializeMetaInfo(raw)
+	result, err := core.DeserializeMetaInfo(raw)
 	require.NoError(err)
 	require.Equal(mi, result)
 }
@@ -271,9 +271,9 @@ func TestRedisStorageSetMetaInfoConflict(t *testing.T) {
 	blob := bytes.NewReader(randutil.Blob(32))
 
 	// Two metainfos for same file with different piece lengths.
-	mi1, err := torlib.NewMetaInfoFromBlob("some_name", blob, 1)
+	mi1, err := core.NewMetaInfoFromBlob("some_name", blob, 1)
 	require.NoError(err)
-	mi2, err := torlib.NewMetaInfoFromBlob("some_name", blob, 2)
+	mi2, err := core.NewMetaInfoFromBlob("some_name", blob, 2)
 	require.NoError(err)
 
 	require.NoError(s.SetMetaInfo(mi1))

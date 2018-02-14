@@ -5,10 +5,8 @@
 package mockblobclient
 
 import (
-	image "code.uber.internal/infra/kraken/lib/dockerregistry/image"
-	peercontext "code.uber.internal/infra/kraken/lib/peercontext"
 	blobclient "code.uber.internal/infra/kraken/origin/blobclient"
-	torlib "code.uber.internal/infra/kraken/torlib"
+	core "code.uber.internal/infra/kraken/core"
 	gomock "github.com/golang/mock/gomock"
 	io "io"
 	reflect "reflect"
@@ -50,7 +48,7 @@ func (mr *MockClientMockRecorder) Addr() *gomock.Call {
 }
 
 // CheckBlob mocks base method
-func (m *MockClient) CheckBlob(arg0 image.Digest) (bool, error) {
+func (m *MockClient) CheckBlob(arg0 core.Digest) (bool, error) {
 	ret := m.ctrl.Call(m, "CheckBlob", arg0)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
@@ -63,7 +61,7 @@ func (mr *MockClientMockRecorder) CheckBlob(arg0 interface{}) *gomock.Call {
 }
 
 // DeleteBlob mocks base method
-func (m *MockClient) DeleteBlob(arg0 image.Digest) error {
+func (m *MockClient) DeleteBlob(arg0 core.Digest) error {
 	ret := m.ctrl.Call(m, "DeleteBlob", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -75,7 +73,7 @@ func (mr *MockClientMockRecorder) DeleteBlob(arg0 interface{}) *gomock.Call {
 }
 
 // GetBlob mocks base method
-func (m *MockClient) GetBlob(arg0 image.Digest) (io.ReadCloser, error) {
+func (m *MockClient) GetBlob(arg0 core.Digest) (io.ReadCloser, error) {
 	ret := m.ctrl.Call(m, "GetBlob", arg0)
 	ret0, _ := ret[0].(io.ReadCloser)
 	ret1, _ := ret[1].(error)
@@ -88,9 +86,9 @@ func (mr *MockClientMockRecorder) GetBlob(arg0 interface{}) *gomock.Call {
 }
 
 // GetMetaInfo mocks base method
-func (m *MockClient) GetMetaInfo(arg0 string, arg1 image.Digest) (*torlib.MetaInfo, error) {
+func (m *MockClient) GetMetaInfo(arg0 string, arg1 core.Digest) (*core.MetaInfo, error) {
 	ret := m.ctrl.Call(m, "GetMetaInfo", arg0, arg1)
-	ret0, _ := ret[0].(*torlib.MetaInfo)
+	ret0, _ := ret[0].(*core.MetaInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -101,9 +99,9 @@ func (mr *MockClientMockRecorder) GetMetaInfo(arg0, arg1 interface{}) *gomock.Ca
 }
 
 // GetPeerContext mocks base method
-func (m *MockClient) GetPeerContext() (peercontext.PeerContext, error) {
+func (m *MockClient) GetPeerContext() (core.PeerContext, error) {
 	ret := m.ctrl.Call(m, "GetPeerContext")
-	ret0, _ := ret[0].(peercontext.PeerContext)
+	ret0, _ := ret[0].(core.PeerContext)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -114,7 +112,7 @@ func (mr *MockClientMockRecorder) GetPeerContext() *gomock.Call {
 }
 
 // Locations mocks base method
-func (m *MockClient) Locations(arg0 image.Digest) ([]string, error) {
+func (m *MockClient) Locations(arg0 core.Digest) ([]string, error) {
 	ret := m.ctrl.Call(m, "Locations", arg0)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
@@ -127,7 +125,7 @@ func (mr *MockClientMockRecorder) Locations(arg0 interface{}) *gomock.Call {
 }
 
 // OverwriteMetaInfo mocks base method
-func (m *MockClient) OverwriteMetaInfo(arg0 image.Digest, arg1 int64) error {
+func (m *MockClient) OverwriteMetaInfo(arg0 core.Digest, arg1 int64) error {
 	ret := m.ctrl.Call(m, "OverwriteMetaInfo", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -152,7 +150,7 @@ func (mr *MockClientMockRecorder) Repair() *gomock.Call {
 }
 
 // RepairDigest mocks base method
-func (m *MockClient) RepairDigest(arg0 image.Digest) (io.ReadCloser, error) {
+func (m *MockClient) RepairDigest(arg0 core.Digest) (io.ReadCloser, error) {
 	ret := m.ctrl.Call(m, "RepairDigest", arg0)
 	ret0, _ := ret[0].(io.ReadCloser)
 	ret1, _ := ret[1].(error)
@@ -178,7 +176,7 @@ func (mr *MockClientMockRecorder) RepairShard(arg0 interface{}) *gomock.Call {
 }
 
 // TransferBlob mocks base method
-func (m *MockClient) TransferBlob(arg0 image.Digest, arg1 io.Reader, arg2 int64) error {
+func (m *MockClient) TransferBlob(arg0 core.Digest, arg1 io.Reader, arg2 int64) error {
 	ret := m.ctrl.Call(m, "TransferBlob", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -190,7 +188,7 @@ func (mr *MockClientMockRecorder) TransferBlob(arg0, arg1, arg2 interface{}) *go
 }
 
 // UploadBlob mocks base method
-func (m *MockClient) UploadBlob(arg0 string, arg1 image.Digest, arg2 io.Reader, arg3 int64, arg4 bool) error {
+func (m *MockClient) UploadBlob(arg0 string, arg1 core.Digest, arg2 io.Reader, arg3 int64, arg4 bool) error {
 	ret := m.ctrl.Call(m, "UploadBlob", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -260,7 +258,7 @@ func (m *MockClusterClient) EXPECT() *MockClusterClientMockRecorder {
 }
 
 // DownloadBlob mocks base method
-func (m *MockClusterClient) DownloadBlob(arg0 image.Digest) (io.ReadCloser, error) {
+func (m *MockClusterClient) DownloadBlob(arg0 core.Digest) (io.ReadCloser, error) {
 	ret := m.ctrl.Call(m, "DownloadBlob", arg0)
 	ret0, _ := ret[0].(io.ReadCloser)
 	ret1, _ := ret[1].(error)
@@ -273,9 +271,9 @@ func (mr *MockClusterClientMockRecorder) DownloadBlob(arg0 interface{}) *gomock.
 }
 
 // GetMetaInfo mocks base method
-func (m *MockClusterClient) GetMetaInfo(arg0 string, arg1 image.Digest) (*torlib.MetaInfo, error) {
+func (m *MockClusterClient) GetMetaInfo(arg0 string, arg1 core.Digest) (*core.MetaInfo, error) {
 	ret := m.ctrl.Call(m, "GetMetaInfo", arg0, arg1)
-	ret0, _ := ret[0].(*torlib.MetaInfo)
+	ret0, _ := ret[0].(*core.MetaInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -286,7 +284,7 @@ func (mr *MockClusterClientMockRecorder) GetMetaInfo(arg0, arg1 interface{}) *go
 }
 
 // OverwriteMetaInfo mocks base method
-func (m *MockClusterClient) OverwriteMetaInfo(arg0 image.Digest, arg1 int64) error {
+func (m *MockClusterClient) OverwriteMetaInfo(arg0 core.Digest, arg1 int64) error {
 	ret := m.ctrl.Call(m, "OverwriteMetaInfo", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -298,9 +296,9 @@ func (mr *MockClusterClientMockRecorder) OverwriteMetaInfo(arg0, arg1 interface{
 }
 
 // Owners mocks base method
-func (m *MockClusterClient) Owners(arg0 image.Digest) ([]peercontext.PeerContext, error) {
+func (m *MockClusterClient) Owners(arg0 core.Digest) ([]core.PeerContext, error) {
 	ret := m.ctrl.Call(m, "Owners", arg0)
-	ret0, _ := ret[0].([]peercontext.PeerContext)
+	ret0, _ := ret[0].([]core.PeerContext)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -311,7 +309,7 @@ func (mr *MockClusterClientMockRecorder) Owners(arg0 interface{}) *gomock.Call {
 }
 
 // UploadBlob mocks base method
-func (m *MockClusterClient) UploadBlob(arg0 string, arg1 image.Digest, arg2 io.Reader, arg3 int64) error {
+func (m *MockClusterClient) UploadBlob(arg0 string, arg1 core.Digest, arg2 io.Reader, arg3 int64) error {
 	ret := m.ctrl.Call(m, "UploadBlob", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -323,7 +321,7 @@ func (mr *MockClusterClientMockRecorder) UploadBlob(arg0, arg1, arg2, arg3 inter
 }
 
 // UploadBlobThrough mocks base method
-func (m *MockClusterClient) UploadBlobThrough(arg0 string, arg1 image.Digest, arg2 io.Reader, arg3 int64) error {
+func (m *MockClusterClient) UploadBlobThrough(arg0 string, arg1 core.Digest, arg2 io.Reader, arg3 int64) error {
 	ret := m.ctrl.Call(m, "UploadBlobThrough", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -358,7 +356,7 @@ func (m *MockClientResolver) EXPECT() *MockClientResolverMockRecorder {
 }
 
 // Resolve mocks base method
-func (m *MockClientResolver) Resolve(arg0 image.Digest) ([]blobclient.Client, error) {
+func (m *MockClientResolver) Resolve(arg0 core.Digest) ([]blobclient.Client, error) {
 	ret := m.ctrl.Call(m, "Resolve", arg0)
 	ret0, _ := ret[0].([]blobclient.Client)
 	ret1, _ := ret[1].(error)

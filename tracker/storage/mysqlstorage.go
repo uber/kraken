@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	xmysql "code.uber.internal/go-common.git/x/mysql"
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils"
 	"code.uber.internal/infra/kraken/utils/log"
 
@@ -62,7 +62,7 @@ func (s *MySQLStorage) GetMetaInfo(name string) ([]byte, error) {
 }
 
 // SetMetaInfo creates a torrent in storage
-func (s *MySQLStorage) SetMetaInfo(mi *torlib.MetaInfo) error {
+func (s *MySQLStorage) SetMetaInfo(mi *core.MetaInfo) error {
 	serialized, err := mi.Serialize()
 	if err != nil {
 		return fmt.Errorf("serialize metainfo: %s", err)
@@ -279,12 +279,12 @@ func (s *MySQLStorage) tryDeleteTorrentOnOrigins(name string) (err error) {
 }
 
 // GetOrigins implements PeerStore.GetOrigins.
-func (s *MySQLStorage) GetOrigins(infohash string) ([]*torlib.PeerInfo, error) {
+func (s *MySQLStorage) GetOrigins(infohash string) ([]*core.PeerInfo, error) {
 	panic("GetOrigins not implemented")
 }
 
 // UpdateOrigins implements PeerStore.UpdateOrigins.
-func (s *MySQLStorage) UpdateOrigins(infohash string, origins []*torlib.PeerInfo) error {
+func (s *MySQLStorage) UpdateOrigins(infohash string, origins []*core.PeerInfo) error {
 	panic("UpdateOrigins not implemented")
 }
 

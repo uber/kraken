@@ -8,7 +8,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/fileio"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
@@ -26,7 +26,7 @@ func TestRemoteBackendTransfererDownloadCachesBlobs(t *testing.T) {
 
 	mockBackendClient := mockbackend.NewMockClient(ctrl)
 
-	d, blob := image.DigestWithBlobFixture()
+	d, blob := core.DigestWithBlobFixture()
 
 	rbt, err := NewRemoteBackendTransferer(mockmanifestclient.NewMockClient(ctrl), mockBackendClient, fs)
 	require.NoError(err)
@@ -55,7 +55,7 @@ func TestRemoteBackendTransfererUploadBlobs(t *testing.T) {
 
 	mockBackendClient := mockbackend.NewMockClient(ctrl)
 
-	d, blob := image.DigestWithBlobFixture()
+	d, blob := core.DigestWithBlobFixture()
 
 	fs.CreateCacheFile(d.Hex(), bytes.NewReader(blob))
 

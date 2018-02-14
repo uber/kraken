@@ -10,7 +10,7 @@ import (
 	"sort"
 	"testing"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 
 	"github.com/stretchr/testify/require"
 )
@@ -44,7 +44,7 @@ func TestFileEntryFactoryList(t *testing.T) {
 			// ListNames should show all created entries.
 			var entries []FileEntry
 			for i := 0; i < 100; i++ {
-				entry := factory.Create(image.DigestFixture().Hex(), state)
+				entry := factory.Create(core.DigestFixture().Hex(), state)
 				require.NoError(entry.Create(state, 1))
 				entries = append(entries, entry)
 			}

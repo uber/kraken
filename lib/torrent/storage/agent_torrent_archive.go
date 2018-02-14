@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 )
 
@@ -40,7 +40,7 @@ func (a *AgentTorrentArchive) Stat(name string) (*TorrentInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	mi, err := torlib.DeserializeMetaInfo(raw)
+	mi, err := core.DeserializeMetaInfo(raw)
 	if err != nil {
 		return nil, fmt.Errorf("deserialize metainfo: %s", err)
 	}
@@ -88,7 +88,7 @@ func (a *AgentTorrentArchive) CreateTorrent(namespace, name string) (Torrent, er
 	} else if err != nil {
 		return nil, fmt.Errorf("get metainfo: %s", err)
 	}
-	mi, err := torlib.DeserializeMetaInfo(miRaw)
+	mi, err := core.DeserializeMetaInfo(miRaw)
 	if err != nil {
 		return nil, fmt.Errorf("parse metainfo: %s", err)
 	}
@@ -108,7 +108,7 @@ func (a *AgentTorrentArchive) GetTorrent(name string) (Torrent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get metainfo: %s", err)
 	}
-	mi, err := torlib.DeserializeMetaInfo(miRaw)
+	mi, err := core.DeserializeMetaInfo(miRaw)
 	if err != nil {
 		return nil, fmt.Errorf("parse metainfo: %s", err)
 	}

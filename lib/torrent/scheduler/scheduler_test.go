@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/memsize"
 
@@ -29,7 +29,7 @@ func TestDownloadTorrentWithSeederAndLeecher(t *testing.T) {
 	seeder := mocks.newPeer(config)
 	leecher := mocks.newPeer(config)
 
-	tf := torlib.TestTorrentFileFixture()
+	tf := core.TestTorrentFileFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(
 		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
@@ -54,7 +54,7 @@ func TestDownloadManyTorrentsWithSeederAndLeecher(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for i := 0; i < 5; i++ {
-		tf := torlib.TestTorrentFileFixture()
+		tf := core.TestTorrentFileFixture()
 
 		mocks.metaInfoClient.EXPECT().Download(
 			namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
@@ -85,9 +85,9 @@ func TestDownloadManyTorrentsWithSeederAndManyLeechers(t *testing.T) {
 	leechers := mocks.newPeers(5, config)
 
 	// Start seeding each torrent.
-	torrentFiles := make([]*torlib.TestTorrentFile, 5)
+	torrentFiles := make([]*core.TestTorrentFile, 5)
 	for i := range torrentFiles {
-		tf := torlib.TestTorrentFileFixture()
+		tf := core.TestTorrentFileFixture()
 		torrentFiles[i] = tf
 
 		mocks.metaInfoClient.EXPECT().Download(
@@ -129,7 +129,7 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 	peers := mocks.newPeers(10, config)
 
 	pieceLength := 256
-	tf := torlib.CustomTestTorrentFileFixture(uint64(len(peers)*pieceLength), uint64(pieceLength))
+	tf := core.CustomTestTorrentFileFixture(uint64(len(peers)*pieceLength), uint64(pieceLength))
 
 	mocks.metaInfoClient.EXPECT().Download(
 		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(len(peers))
@@ -170,7 +170,7 @@ func TestSeederTTI(t *testing.T) {
 	config := configFixture()
 	config.Conn.DisableThrottling = true
 
-	tf := torlib.TestTorrentFileFixture()
+	tf := core.TestTorrentFileFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(
 		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
@@ -218,7 +218,7 @@ func TestLeecherTTI(t *testing.T) {
 	clk := clock.NewMock()
 	w := newEventWatcher()
 
-	tf := torlib.TestTorrentFileFixture()
+	tf := core.TestTorrentFileFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil)
 
@@ -240,7 +240,7 @@ func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
 	mocks, cleanup := newTestMocks(t)
 	defer cleanup()
 
-	tf := torlib.TestTorrentFileFixture()
+	tf := core.TestTorrentFileFixture()
 
 	// Allow any number of downloads due to concurrency below.
 	mocks.metaInfoClient.EXPECT().Download(
@@ -300,7 +300,7 @@ func TestNetworkEvents(t *testing.T) {
 	leecher := mocks.newPeer(config)
 
 	// Torrent with 1 piece.
-	tf := torlib.CustomTestTorrentFileFixture(1, 1)
+	tf := core.CustomTestTorrentFileFixture(1, 1)
 
 	mocks.metaInfoClient.EXPECT().Download(
 		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
@@ -354,7 +354,7 @@ func TestPullInactiveTorrent(t *testing.T) {
 
 	config := configFixture()
 
-	tf := torlib.TestTorrentFileFixture()
+	tf := core.TestTorrentFileFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(
 		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
@@ -387,7 +387,7 @@ func TestSchedulerReload(t *testing.T) {
 	leecher := mocks.newPeer(config)
 
 	download := func() {
-		tf := torlib.TestTorrentFileFixture()
+		tf := core.TestTorrentFileFixture()
 
 		mocks.metaInfoClient.EXPECT().Download(
 			namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil).Times(2)
@@ -417,7 +417,7 @@ func TestSchedulerRemoveTorrent(t *testing.T) {
 
 	p := mocks.newPeer(configFixture())
 
-	tf := torlib.TestTorrentFileFixture()
+	tf := core.TestTorrentFileFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(
 		namespace, tf.MetaInfo.Name()).Return(tf.MetaInfo, nil)
@@ -464,9 +464,9 @@ func BenchmarkPieceUploadingAndDownloading(b *testing.B) {
 
 		seeder := mocks.newPeer(config)
 
-		var tfs []*torlib.TestTorrentFile
+		var tfs []*core.TestTorrentFile
 		for i := 0; i < 10; i++ {
-			tf := torlib.CustomTestTorrentFileFixture(50*memsize.MB, 128*memsize.KB)
+			tf := core.CustomTestTorrentFileFixture(50*memsize.MB, 128*memsize.KB)
 			tfs = append(tfs, tf)
 
 			mocks.metaInfoClient.EXPECT().Download(
@@ -483,7 +483,7 @@ func BenchmarkPieceUploadingAndDownloading(b *testing.B) {
 		for _, p := range peers {
 			for _, tf := range tfs {
 				wg.Add(1)
-				go func(p *testPeer, tf *torlib.TestTorrentFile) {
+				go func(p *testPeer, tf *core.TestTorrentFile) {
 					defer wg.Done()
 					require.NoError(<-p.scheduler.AddTorrent(namespace, tf.MetaInfo.Name()))
 				}(p, tf)

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store/base"
 	"code.uber.internal/infra/kraken/utils/log"
 
@@ -198,7 +198,7 @@ func (store *LocalFileStore) CreateDownloadFile(fileName string, len int64) erro
 }
 
 // CreateCacheFile creates a cache file given name and reader
-func (store *LocalFileStore) CreateCacheFile(fileName string, reader io.Reader) error {
+func (store *LocalFileStore) CreateCacheFile(fileName string, r io.Reader) error {
 	tmp := fmt.Sprintf("%s.%s", fileName, uuid.Generate().String())
 	if err := store.CreateUploadFile(tmp, 0); err != nil {
 		return err
@@ -209,15 +209,14 @@ func (store *LocalFileStore) CreateCacheFile(fileName string, reader io.Reader) 
 	}
 	defer w.Close()
 
-	// Stream to file and verify content at the same time
-	r := io.TeeReader(reader, w)
+	digester := core.NewDigester()
+	r = digester.Tee(r)
 
-	verified, err := image.Verify(image.NewSHA256DigestFromHex(fileName), r)
-	if err != nil {
-		return err
+	// TODO: Delete tmp file on error
+	if _, err := io.Copy(w, r); err != nil {
+		return fmt.Errorf("copy: %s", err)
 	}
-	if !verified {
-		// TODO: Delete tmp file on error
+	if digester.Digest() != core.NewSHA256DigestFromHex(fileName) {
 		return fmt.Errorf("failed to verify data: digests do not match")
 	}
 

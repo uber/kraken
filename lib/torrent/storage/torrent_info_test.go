@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"testing"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 
 	"github.com/stretchr/testify/require"
 	"github.com/willf/bitset"
 )
 
 func TestTorrentInfoPercentDownloaded(t *testing.T) {
-	mi := torlib.CustomMetaInfoFixture(100, 25)
+	mi := core.CustomMetaInfoFixture(100, 25)
 	tests := []struct {
 		bitfield *bitset.BitSet
 		expected int

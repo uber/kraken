@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/torlib"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
@@ -21,7 +21,7 @@ func TestOriginTorrentCreate(t *testing.T) {
 	fs, cleanup := store.OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
-	tf := torlib.CustomTestTorrentFileFixture(7, 2)
+	tf := core.CustomTestTorrentFileFixture(7, 2)
 	mi := tf.MetaInfo
 
 	fs.CreateCacheFile(mi.Name(), bytes.NewReader(tf.Content))
@@ -50,7 +50,7 @@ func TestOriginTorrentGetPieceReaderConcurrent(t *testing.T) {
 	fs, cleanup := store.OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
-	tf := torlib.CustomTestTorrentFileFixture(7, 2)
+	tf := core.CustomTestTorrentFileFixture(7, 2)
 	mi := tf.MetaInfo
 
 	fs.CreateCacheFile(mi.Name(), bytes.NewReader(tf.Content))
@@ -83,7 +83,7 @@ func TestOriginTorrentWritePieceError(t *testing.T) {
 	fs, cleanup := store.OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
-	tf := torlib.CustomTestTorrentFileFixture(7, 2)
+	tf := core.CustomTestTorrentFileFixture(7, 2)
 	mi := tf.MetaInfo
 
 	fs.CreateCacheFile(mi.Name(), bytes.NewReader(tf.Content))

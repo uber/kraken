@@ -1,8 +1,8 @@
 package storage
 
 import (
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
@@ -29,7 +29,7 @@ func TorrentFixture(size, pieceLength uint64) (Torrent, func()) {
 
 	ta := NewAgentTorrentArchive(AgentTorrentArchiveConfig{}, fs, tc)
 
-	mi := torlib.CustomMetaInfoFixture(size, pieceLength)
+	mi := core.CustomMetaInfoFixture(size, pieceLength)
 	if err := tc.Upload(mi); err != nil {
 		panic(err)
 	}

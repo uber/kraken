@@ -3,15 +3,15 @@ package announcequeue
 import (
 	"container/list"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 )
 
 // Queue manages a queue of torrents waiting to announce.
 type Queue interface {
-	Next() (torlib.InfoHash, bool)
-	Add(torlib.InfoHash)
-	Ready(torlib.InfoHash)
-	Eject(torlib.InfoHash)
+	Next() (core.InfoHash, bool)
+	Add(core.InfoHash)
+	Ready(core.InfoHash)
+	Eject(core.InfoHash)
 }
 
 // QueueImpl is the primary implementation of Queue. QueueImpl is not thread
@@ -21,14 +21,14 @@ type QueueImpl struct {
 	readyQueue *list.List
 
 	// Set of torrents with pending announce requests.
-	pending map[torlib.InfoHash]bool
+	pending map[core.InfoHash]bool
 }
 
 // New returns a new QueueImpl.
 func New() *QueueImpl {
 	return &QueueImpl{
 		readyQueue: list.New(),
-		pending:    make(map[torlib.InfoHash]bool),
+		pending:    make(map[core.InfoHash]bool),
 	}
 }
 
@@ -36,26 +36,26 @@ func New() *QueueImpl {
 // the returned torrent will be marked as pending and will not be appear
 // again in Next until Ready is called with said torrent. Second return
 // value is false if no torrents are ready.
-func (q *QueueImpl) Next() (torlib.InfoHash, bool) {
+func (q *QueueImpl) Next() (core.InfoHash, bool) {
 	next := q.readyQueue.Front()
 	if next == nil {
-		return torlib.InfoHash{}, false
+		return core.InfoHash{}, false
 	}
 	q.readyQueue.Remove(next)
-	h := next.Value.(torlib.InfoHash)
+	h := next.Value.(core.InfoHash)
 	q.pending[h] = true
 	return h, true
 }
 
 // Add adds a torrent to the back of the queue. Behavior is undefined if called
 // twice on the same torrent.
-func (q *QueueImpl) Add(h torlib.InfoHash) {
+func (q *QueueImpl) Add(h core.InfoHash) {
 	q.readyQueue.PushBack(h)
 }
 
 // Ready places a pending torrent back in the queue. Should be called once an
 // announce response is received.
-func (q *QueueImpl) Ready(h torlib.InfoHash) {
+func (q *QueueImpl) Ready(h core.InfoHash) {
 	if !q.pending[h] {
 		return
 	}
@@ -65,10 +65,10 @@ func (q *QueueImpl) Ready(h torlib.InfoHash) {
 
 // Eject immediately ejects h from the announce queue, preventing it from
 // announcing further.
-func (q *QueueImpl) Eject(h torlib.InfoHash) {
+func (q *QueueImpl) Eject(h core.InfoHash) {
 	delete(q.pending, h)
 	for e := q.readyQueue.Front(); e != nil; e = e.Next() {
-		if e.Value.(torlib.InfoHash) == h {
+		if e.Value.(core.InfoHash) == h {
 			q.readyQueue.Remove(e)
 		}
 	}
@@ -85,13 +85,13 @@ func Disabled() DisabledQueue {
 }
 
 // Next never returns a torrent.
-func (q DisabledQueue) Next() (torlib.InfoHash, bool) { return torlib.InfoHash{}, false }
+func (q DisabledQueue) Next() (core.InfoHash, bool) { return core.InfoHash{}, false }
 
 // Add noops.
-func (q DisabledQueue) Add(torlib.InfoHash) {}
+func (q DisabledQueue) Add(core.InfoHash) {}
 
 // Ready noops.
-func (q DisabledQueue) Ready(torlib.InfoHash) {}
+func (q DisabledQueue) Ready(core.InfoHash) {}
 
 // Eject noops.
-func (q DisabledQueue) Eject(torlib.InfoHash) {}
+func (q DisabledQueue) Eject(core.InfoHash) {}

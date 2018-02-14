@@ -9,11 +9,11 @@ import (
 	docker "github.com/docker/distribution/registry"
 
 	"code.uber.internal/infra/kraken/agent/agentserver"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
-	"code.uber.internal/infra/kraken/lib/peercontext"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
@@ -47,8 +47,8 @@ func main() {
 	zlog := log.ConfigureLogger(config.ZapLogging)
 	defer zlog.Sync()
 
-	pctx, err := peercontext.New(
-		peercontext.PeerIDFactory(config.Torrent.PeerIDFactory), *zone, *peerIP, *peerPort)
+	pctx, err := core.NewPeerContext(
+		core.PeerIDFactory(config.Torrent.PeerIDFactory), *zone, *peerIP, *peerPort, false)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -12,7 +13,7 @@ import (
 	"regexp"
 	"strings"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store/base"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -218,7 +219,7 @@ func (store *OriginLocalFileStore) CreateUploadFile(fileName string, len int64) 
 }
 
 // CreateCacheFile creates a cache file given name and reader
-func (store *OriginLocalFileStore) CreateCacheFile(fileName string, reader io.Reader) error {
+func (store *OriginLocalFileStore) CreateCacheFile(fileName string, r io.Reader) error {
 	tmpFile := fmt.Sprintf("%s.%s", fileName, uuid.Generate().String())
 	if err := store.CreateUploadFile(tmpFile, 0); err != nil {
 		return err
@@ -229,16 +230,15 @@ func (store *OriginLocalFileStore) CreateCacheFile(fileName string, reader io.Re
 	}
 	defer w.Close()
 
-	// Stream to file and verify content at the same time
-	r := io.TeeReader(reader, w)
+	digester := core.NewDigester()
+	r = digester.Tee(r)
 
-	verified, err := image.Verify(image.NewSHA256DigestFromHex(fileName), r)
-	if err != nil {
-		return fmt.Errorf("origin verify image: %s", err)
+	// TODO: Delete tmp file on error
+	if _, err := io.Copy(w, r); err != nil {
+		return fmt.Errorf("copy: %s", err)
 	}
-	if !verified {
-		// TODO: Delete tmp file on error
-		return fmt.Errorf("origin image digests do not match")
+	if digester.Digest() != core.NewSHA256DigestFromHex(fileName) {
+		return errors.New("origin image digests do not match")
 	}
 
 	if err := store.MoveUploadFileToCache(tmpFile, fileName); err != nil {

@@ -7,9 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/serverset"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/backoff"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -38,7 +37,7 @@ func (c Config) applyDefaults() Config {
 
 // Client defines operations on torrent metainfo.
 type Client interface {
-	Download(namespace string, name string) (*torlib.MetaInfo, error)
+	Download(namespace string, name string) (*core.MetaInfo, error)
 }
 
 // Getter performs HTTP get requests on some url.
@@ -86,8 +85,8 @@ func Default(servers serverset.Set) Client {
 
 // Download returns the MetaInfo associated with name. Returns ErrNotFound if
 // no torrent exists under name.
-func (c *client) Download(namespace string, name string) (*torlib.MetaInfo, error) {
-	d := image.NewSHA256DigestFromHex(name)
+func (c *client) Download(namespace string, name string) (*core.MetaInfo, error) {
+	d := core.NewSHA256DigestFromHex(name)
 	it := c.servers.Iter()
 SERVERS:
 	for it.Next() {
@@ -106,7 +105,7 @@ SERVERS:
 				if err != nil {
 					return nil, fmt.Errorf("read body: %s", err)
 				}
-				mi, err := torlib.DeserializeMetaInfo(b)
+				mi, err := core.DeserializeMetaInfo(b)
 				if err != nil {
 					return nil, fmt.Errorf("deserialize metainfo: %s", err)
 				}

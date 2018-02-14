@@ -7,8 +7,8 @@ import (
 	"os"
 	"sync"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/willf/bitset"
@@ -140,14 +140,14 @@ func restorePieces(name string, fs store.FileStore, numPieces int) (pieces []*pi
 // pieces. Behavior is undefined if multiple AgentTorrent instances are backed
 // by the same file store and metainfo.
 type AgentTorrent struct {
-	metaInfo    *torlib.MetaInfo
+	metaInfo    *core.MetaInfo
 	store       store.FileStore
 	pieces      []*piece
 	numComplete *atomic.Int32
 }
 
 // NewAgentTorrent creates a new AgentTorrent.
-func NewAgentTorrent(store store.FileStore, mi *torlib.MetaInfo) (*AgentTorrent, error) {
+func NewAgentTorrent(store store.FileStore, mi *core.MetaInfo) (*AgentTorrent, error) {
 	pieces, numComplete, err := restorePieces(mi.Name(), store, mi.Info.NumPieces())
 	if err != nil {
 		return nil, fmt.Errorf("restore pieces: %s", err)
@@ -178,7 +178,7 @@ func (t *AgentTorrent) Stat() *TorrentInfo {
 }
 
 // InfoHash returns the torrent metainfo hash.
-func (t *AgentTorrent) InfoHash() torlib.InfoHash {
+func (t *AgentTorrent) InfoHash() core.InfoHash {
 	return t.metaInfo.InfoHash
 }
 
@@ -266,7 +266,7 @@ func (t *AgentTorrent) writePiece(src PieceReader, pi int) error {
 	}
 	defer f.Close()
 
-	h := torlib.PieceHash()
+	h := core.PieceHash()
 	r := io.TeeReader(src, h) // Calculates piece sum as we write to file.
 
 	if _, err := f.Seek(t.getFileOffset(pi), 0); err != nil {

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/DATA-DOG/go-sqlmock.v1"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -57,7 +57,7 @@ func TestMySQLGetMetaInfo(t *testing.T) {
 
 func TestMySQLSetMetaInfo(t *testing.T) {
 	assert := require.New(t)
-	mi := torlib.MetaInfoFixture()
+	mi := core.MetaInfoFixture()
 	metaRaw, err := mi.Serialize()
 	assert.NoError(err)
 
@@ -214,8 +214,8 @@ func TestMySQLCreateTwoTorrentsWithSameNameReturnsErrExist(t *testing.T) {
 	require.NoError(err)
 	require.NoError(s.RunMigration())
 
-	m1 := torlib.MetaInfoFixture()
-	m2 := torlib.MetaInfoFixture()
+	m1 := core.MetaInfoFixture()
+	m2 := core.MetaInfoFixture()
 	m2.Info.Name = m1.Info.Name
 
 	require.NoError(s.SetMetaInfo(m1))

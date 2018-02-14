@@ -1,7 +1,9 @@
-package image
+package core
 
-import "strings"
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 const (
 	// DigestEmptyTar is the sha256 digest of an empty tar file.

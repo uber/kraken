@@ -10,7 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -49,7 +49,7 @@ func replicateShardErrorf(shardID string, format string, args ...interface{}) re
 
 // Note: there is no replicateShardSuccess. Clients can infer shard failure from digest failure.
 
-func replicateDigestErrorf(d image.Digest, format string, args ...interface{}) repairMessage {
+func replicateDigestErrorf(d core.Digest, format string, args ...interface{}) repairMessage {
 	return repairMessage{
 		Operation: replicateDigestOp,
 		Object:    d.String(),
@@ -58,7 +58,7 @@ func replicateDigestErrorf(d image.Digest, format string, args ...interface{}) r
 	}
 }
 
-func replicateDigestSuccess(d image.Digest) repairMessage {
+func replicateDigestSuccess(d core.Digest) repairMessage {
 	return repairMessage{
 		Operation: replicateDigestOp,
 		Object:    d.String(),
@@ -66,7 +66,7 @@ func replicateDigestSuccess(d image.Digest) repairMessage {
 	}
 }
 
-func deleteDigestErrorf(d image.Digest, format string, args ...interface{}) repairMessage {
+func deleteDigestErrorf(d core.Digest, format string, args ...interface{}) repairMessage {
 	return repairMessage{
 		Operation: deleteDigestOp,
 		Object:    d.String(),
@@ -75,7 +75,7 @@ func deleteDigestErrorf(d image.Digest, format string, args ...interface{}) repa
 	}
 }
 
-func deleteDigestSuccess(d image.Digest) repairMessage {
+func deleteDigestSuccess(d core.Digest) repairMessage {
 	return repairMessage{
 		Operation: deleteDigestOp,
 		Object:    d.String(),
@@ -148,12 +148,12 @@ func (r *repairer) RepairShard(shardID string) error {
 	return nil
 }
 
-func (r *repairer) RepairDigest(d image.Digest) error {
+func (r *repairer) RepairDigest(d core.Digest) error {
 	hosts, purge, err := r.destination(d.ShardID())
 	if err != nil {
 		return err
 	}
-	r.replicateDigests([]image.Digest{d}, hosts, purge)
+	r.replicateDigests([]core.Digest{d}, hosts, purge)
 	return nil
 }
 
@@ -188,9 +188,9 @@ func (r *repairer) replicateShard(shardID string, hosts stringset.Set, purge boo
 		return
 	}
 
-	var digests []image.Digest
+	var digests []core.Digest
 	for _, name := range names {
-		d, err := image.NewDigestFromString("sha256:" + name)
+		d, err := core.NewDigestFromString("sha256:" + name)
 		if err != nil {
 			r.messages <- replicateShardErrorf(shardID, "failed to parse digest %q: %s", name, err)
 			continue
@@ -201,7 +201,7 @@ func (r *repairer) replicateShard(shardID string, hosts stringset.Set, purge boo
 	r.replicateDigests(digests, hosts, purge)
 }
 
-func (r *repairer) replicateDigests(digests []image.Digest, hosts stringset.Set, purge bool) {
+func (r *repairer) replicateDigests(digests []core.Digest, hosts stringset.Set, purge bool) {
 	var wg sync.WaitGroup
 	var cursor count32 = -1
 
@@ -236,7 +236,7 @@ func (r *repairer) replicateDigests(digests []image.Digest, hosts stringset.Set,
 	wg.Wait()
 }
 
-func (r *repairer) replicateDigest(d image.Digest, hosts stringset.Set) (replicated bool) {
+func (r *repairer) replicateDigest(d core.Digest, hosts stringset.Set) (replicated bool) {
 	replicated = true
 	for h := range hosts {
 		client := r.clientProvider.Provide(h)
@@ -252,7 +252,7 @@ func (r *repairer) replicateDigest(d image.Digest, hosts stringset.Set) (replica
 	return replicated
 }
 
-func (r *repairer) deleteDigest(d image.Digest) {
+func (r *repairer) deleteDigest(d core.Digest) {
 	if err := r.fileStore.DeleteCacheFile(d.Hex()); err != nil {
 		r.messages <- deleteDigestErrorf(d, "failed to move blob to trash: %s", err)
 		return

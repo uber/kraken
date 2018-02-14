@@ -10,15 +10,15 @@ import (
 	"testing"
 	"time"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
-	"code.uber.internal/infra/kraken/torlib"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
 
-func prepareFileStore(fs store.FileStore, mi *torlib.MetaInfo) {
+func prepareFileStore(fs store.FileStore, mi *core.MetaInfo) {
 	fs.CreateDownloadFile(mi.Name(), mi.Info.Length)
 	b, err := mi.Serialize()
 	if err != nil {
@@ -33,7 +33,7 @@ func TestAgentTorrentCreate(t *testing.T) {
 	fs, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
-	tf := torlib.CustomTestTorrentFileFixture(7, 2)
+	tf := core.CustomTestTorrentFileFixture(7, 2)
 	mi := tf.MetaInfo
 
 	prepareFileStore(fs, mi)
@@ -62,7 +62,7 @@ func TestAgentTorrentWriteUpdatesBytesDownloadedAndBitfield(t *testing.T) {
 	fs, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
-	tf := torlib.CustomTestTorrentFileFixture(2, 1)
+	tf := core.CustomTestTorrentFileFixture(2, 1)
 	mi := tf.MetaInfo
 	data := tf.Content
 
@@ -83,7 +83,7 @@ func TestAgentTorrentWriteComplete(t *testing.T) {
 	fs, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
-	tf := torlib.CustomTestTorrentFileFixture(1, 1)
+	tf := core.CustomTestTorrentFileFixture(1, 1)
 	mi := tf.MetaInfo
 	data := tf.Content
 
@@ -114,7 +114,7 @@ func TestAgentTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 	fs, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
-	tf := torlib.CustomTestTorrentFileFixture(7, 2)
+	tf := core.CustomTestTorrentFileFixture(7, 2)
 	mi := tf.MetaInfo
 	data := tf.Content
 
@@ -156,7 +156,7 @@ func TestAgentTorrentWriteSamePieceConcurrent(t *testing.T) {
 	fs, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
-	tf := torlib.CustomTestTorrentFileFixture(16, 1)
+	tf := core.CustomTestTorrentFileFixture(16, 1)
 	mi := tf.MetaInfo
 	data := tf.Content
 
@@ -219,7 +219,7 @@ func (w *coordinatedWriter) Write(b []byte) (int, error) {
 func TestAgentTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
 	require := require.New(t)
 
-	tf := torlib.CustomTestTorrentFileFixture(1, 1)
+	tf := core.CustomTestTorrentFileFixture(1, 1)
 
 	f, cleanup := store.NewMockFileReadWriter([]byte{})
 	defer cleanup()
@@ -266,7 +266,7 @@ func TestAgentTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
 
 	fs := store.MockGetDownloadFileReadWriter(baseFS, w)
 
-	tf := torlib.CustomTestTorrentFileFixture(1, 1)
+	tf := core.CustomTestTorrentFileFixture(1, 1)
 
 	prepareFileStore(fs, tf.MetaInfo)
 
@@ -297,7 +297,7 @@ func TestAgentTorrentRestoreCompletedTorrent(t *testing.T) {
 	fs, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
-	tf := torlib.CustomTestTorrentFileFixture(8, 1)
+	tf := core.CustomTestTorrentFileFixture(8, 1)
 
 	prepareFileStore(fs, tf.MetaInfo)
 
@@ -322,7 +322,7 @@ func TestAgentTorrentRestoreInProgressTorrent(t *testing.T) {
 	fs, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
-	tf := torlib.CustomTestTorrentFileFixture(8, 1)
+	tf := core.CustomTestTorrentFileFixture(8, 1)
 
 	prepareFileStore(fs, tf.MetaInfo)
 

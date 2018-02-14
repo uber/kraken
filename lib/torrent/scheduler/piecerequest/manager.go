@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/willf/bitset"
@@ -31,7 +31,7 @@ const (
 // Request represents a piece request to peer.
 type Request struct {
 	Piece  int
-	PeerID torlib.PeerID
+	PeerID core.PeerID
 	Status Status
 
 	sentAt time.Time
@@ -44,7 +44,7 @@ type Manager struct {
 
 	// requests and requestsByPeer holds the same data, just indexed differently.
 	requests       map[int]*Request
-	requestsByPeer map[torlib.PeerID]map[int]*Request
+	requestsByPeer map[core.PeerID]map[int]*Request
 
 	clock         clock.Clock
 	timeout       time.Duration
@@ -55,7 +55,7 @@ type Manager struct {
 func NewManager(clk clock.Clock, timeout time.Duration, pipelineLimit int) *Manager {
 	return &Manager{
 		requests:       make(map[int]*Request),
-		requestsByPeer: make(map[torlib.PeerID]map[int]*Request),
+		requestsByPeer: make(map[core.PeerID]map[int]*Request),
 		clock:          clk,
 		timeout:        timeout,
 		pipelineLimit:  pipelineLimit,
@@ -64,7 +64,7 @@ func NewManager(clk clock.Clock, timeout time.Duration, pipelineLimit int) *Mana
 
 // ReservePieces selects the next piece(s) to be requested from given peer, and
 // save it as pending in request map to avoid duplicate requests.
-func (m *Manager) ReservePieces(peerID torlib.PeerID, candidates *bitset.BitSet) []int {
+func (m *Manager) ReservePieces(peerID core.PeerID, candidates *bitset.BitSet) []int {
 	m.Lock()
 	defer m.Unlock()
 
@@ -108,12 +108,12 @@ func (m *Manager) ReservePieces(peerID torlib.PeerID, candidates *bitset.BitSet)
 }
 
 // MarkUnsent marks the piece request for piece i as unsent.
-func (m *Manager) MarkUnsent(peerID torlib.PeerID, i int) {
+func (m *Manager) MarkUnsent(peerID core.PeerID, i int) {
 	m.markStatus(peerID, i, StatusUnsent)
 }
 
 // MarkInvalid marks the piece request for piece i as invalid.
-func (m *Manager) MarkInvalid(peerID torlib.PeerID, i int) {
+func (m *Manager) MarkInvalid(peerID core.PeerID, i int) {
 	m.markStatus(peerID, i, StatusInvalid)
 }
 
@@ -134,7 +134,7 @@ func (m *Manager) Clear(i int) {
 }
 
 // ClearPeer deletes all piece requests for peerID.
-func (m *Manager) ClearPeer(peerID torlib.PeerID) {
+func (m *Manager) ClearPeer(peerID core.PeerID) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -174,7 +174,7 @@ func (m *Manager) expired(r *Request) bool {
 	return m.clock.Now().After(expiresAt)
 }
 
-func (m *Manager) markStatus(peerID torlib.PeerID, i int, s Status) {
+func (m *Manager) markStatus(peerID core.PeerID, i int, s Status) {
 	m.Lock()
 	defer m.Unlock()
 

@@ -7,10 +7,8 @@ import (
 	"math/rand"
 	"sync"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
-	"code.uber.internal/infra/kraken/lib/peercontext"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/serverset"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/backoff"
 	"code.uber.internal/infra/kraken/utils/errutil"
 	"code.uber.internal/infra/kraken/utils/httputil"
@@ -20,7 +18,7 @@ import (
 // ClientResolver resolves digests into Clients of origins.
 type ClientResolver interface {
 	// Resolve must return an ordered, stable list of Clients for origins owning d.
-	Resolve(d image.Digest) ([]Client, error)
+	Resolve(d core.Digest) ([]Client, error)
 }
 
 type clientResolver struct {
@@ -33,7 +31,7 @@ func NewClientResolver(p Provider, servers serverset.Set) ClientResolver {
 	return &clientResolver{p, servers}
 }
 
-func (r *clientResolver) Resolve(d image.Digest) ([]Client, error) {
+func (r *clientResolver) Resolve(d core.Digest) ([]Client, error) {
 	it := r.servers.Iter()
 	for it.Next() {
 		locs, err := r.provider.Provide(it.Addr()).Locations(d)
@@ -59,12 +57,12 @@ func (r *clientResolver) Resolve(d image.Digest) ([]Client, error) {
 // ClusterClient defines a top-level origin cluster client which handles blob
 // location resolution and retries.
 type ClusterClient interface {
-	UploadBlob(namespace string, d image.Digest, blob io.Reader, size int64) error
-	UploadBlobThrough(namespace string, d image.Digest, blob io.Reader, size int64) error
-	GetMetaInfo(namespace string, d image.Digest) (*torlib.MetaInfo, error)
-	OverwriteMetaInfo(d image.Digest, pieceLength int64) error
-	DownloadBlob(d image.Digest) (io.ReadCloser, error)
-	Owners(d image.Digest) ([]peercontext.PeerContext, error)
+	UploadBlob(namespace string, d core.Digest, blob io.Reader, size int64) error
+	UploadBlobThrough(namespace string, d core.Digest, blob io.Reader, size int64) error
+	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
+	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
+	DownloadBlob(d core.Digest) (io.ReadCloser, error)
+	Owners(d core.Digest) ([]core.PeerContext, error)
 }
 
 type clusterClient struct {
@@ -100,7 +98,7 @@ func NewClusterClient(r ClientResolver, opts ...ClusterClientOption) ClusterClie
 // NOTE: Because the blob is supplied as the body of an HTTP request, if the
 // underlying value of blob implements io.Closer, it will be closed.
 func (c *clusterClient) UploadBlob(
-	namespace string, d image.Digest, blob io.Reader, size int64) error {
+	namespace string, d core.Digest, blob io.Reader, size int64) error {
 
 	return c.uploadBlob(namespace, d, blob, size, false)
 }
@@ -111,13 +109,13 @@ func (c *clusterClient) UploadBlob(
 // NOTE: Because the blob is supplied as the body of an HTTP request, if the
 // underlying value of blob implements io.Closer, it will be closed.
 func (c *clusterClient) UploadBlobThrough(
-	namespace string, d image.Digest, blob io.Reader, size int64) error {
+	namespace string, d core.Digest, blob io.Reader, size int64) error {
 
 	return c.uploadBlob(namespace, d, blob, size, true)
 }
 
 func (c *clusterClient) uploadBlob(
-	namespace string, d image.Digest, blob io.Reader, size int64, through bool) (err error) {
+	namespace string, d core.Digest, blob io.Reader, size int64, through bool) (err error) {
 
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
@@ -136,7 +134,7 @@ func (c *clusterClient) uploadBlob(
 }
 
 // GetMetaInfo returns the metainfo for d.
-func (c *clusterClient) GetMetaInfo(namespace string, d image.Digest) (*torlib.MetaInfo, error) {
+func (c *clusterClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error) {
 	// By looping over clients in order, we will always prefer the same origin
 	// for making metainfo requests to loosely guarantee that only one origin
 	// needs to fetch the file from remote backend.
@@ -171,7 +169,7 @@ ORIGINS:
 // OverwriteMetaInfo overwrites existing metainfo for d with new metainfo configured
 // with pieceLength on every origin server. Returns error if any origin was unable
 // to overwrite metainfo. Primarly intended for benchmarking purposes.
-func (c *clusterClient) OverwriteMetaInfo(d image.Digest, pieceLength int64) error {
+func (c *clusterClient) OverwriteMetaInfo(d core.Digest, pieceLength int64) error {
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
 		return fmt.Errorf("resolve clients: %s", err)
@@ -186,7 +184,7 @@ func (c *clusterClient) OverwriteMetaInfo(d image.Digest, pieceLength int64) err
 }
 
 // DownloadBlob pulls a blob from the origin cluster.
-func (c *clusterClient) DownloadBlob(d image.Digest) (b io.ReadCloser, err error) {
+func (c *clusterClient) DownloadBlob(d core.Digest) (b io.ReadCloser, err error) {
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
 		return nil, fmt.Errorf("resolve clients: %s", err)
@@ -204,14 +202,14 @@ func (c *clusterClient) DownloadBlob(d image.Digest) (b io.ReadCloser, err error
 }
 
 // Owners returns the origin peers which own d.
-func (c *clusterClient) Owners(d image.Digest) ([]peercontext.PeerContext, error) {
+func (c *clusterClient) Owners(d core.Digest) ([]core.PeerContext, error) {
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
 		return nil, fmt.Errorf("resolve clients: %s", err)
 	}
 
 	var mu sync.Mutex
-	var peers []peercontext.PeerContext
+	var peers []core.PeerContext
 	var errs []error
 
 	var wg sync.WaitGroup

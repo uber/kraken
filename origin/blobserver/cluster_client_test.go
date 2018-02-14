@@ -7,11 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/utils/backoff"
 	"code.uber.internal/infra/kraken/utils/httputil"
 
@@ -46,7 +45,7 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 
 	// Run many times to make sure we eventually hit unavailable masters.
 	for i := 0; i < 100; i++ {
-		d, blob := image.DigestWithBlobFixture()
+		d, blob := core.DigestWithBlobFixture()
 
 		require.NoError(cc.UploadBlob("noexist", d, bytes.NewReader(blob), int64(len(blob))))
 
@@ -78,7 +77,7 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 	cc := blobclient.NewClusterClient(
 		blobclient.NewClientResolver(cp, serverset.MustRoundRobin(master1, master2, master3)))
 
-	d, blob := image.DigestWithBlobFixture()
+	d, blob := core.DigestWithBlobFixture()
 
 	require.Error(cc.UploadBlob("noexist", d, bytes.NewReader(blob), int64(len(blob))))
 
@@ -106,8 +105,8 @@ func TestClusterClientGetMetaInfoSkipsOriginOnPollTimeout(t *testing.T) {
 	})
 	cc := blobclient.NewClusterClient(mockResolver, blobclient.WithPollMetaInfoBackoff(b))
 
-	mi := torlib.MetaInfoFixture()
-	digest := image.NewSHA256DigestFromHex(mi.Name())
+	mi := core.MetaInfoFixture()
+	digest := core.NewSHA256DigestFromHex(mi.Name())
 
 	mockClient1 := mockblobclient.NewMockClient(ctrl)
 	mockClient2 := mockblobclient.NewMockClient(ctrl)
@@ -133,8 +132,8 @@ func TestClusterClientGetMetaInfoSkipsOriginOnNetworkErrors(t *testing.T) {
 
 	cc := blobclient.NewClusterClient(mockResolver)
 
-	mi := torlib.MetaInfoFixture()
-	digest := image.NewSHA256DigestFromHex(mi.Name())
+	mi := core.MetaInfoFixture()
+	digest := core.NewSHA256DigestFromHex(mi.Name())
 
 	mockClient1 := mockblobclient.NewMockClient(ctrl)
 	mockClient2 := mockblobclient.NewMockClient(ctrl)
@@ -160,8 +159,8 @@ func TestClusterClientReturnsErrorOnNoAvailableOrigins(t *testing.T) {
 
 	cc := blobclient.NewClusterClient(mockResolver)
 
-	mi := torlib.MetaInfoFixture()
-	digest := image.NewSHA256DigestFromHex(mi.Name())
+	mi := core.MetaInfoFixture()
+	digest := core.NewSHA256DigestFromHex(mi.Name())
 
 	mockClient1 := mockblobclient.NewMockClient(ctrl)
 	mockClient2 := mockblobclient.NewMockClient(ctrl)
@@ -186,7 +185,7 @@ func TestClusterClientOverwriteMetainfo(t *testing.T) {
 
 	cc := blobclient.NewClusterClient(mockResolver)
 
-	digest := image.DigestFixture()
+	digest := core.DigestFixture()
 
 	mockClient1 := mockblobclient.NewMockClient(ctrl)
 	mockClient2 := mockblobclient.NewMockClient(ctrl)

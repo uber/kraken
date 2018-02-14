@@ -10,10 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
-	"code.uber.internal/infra/kraken/torlib"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/backoff"
 	"code.uber.internal/infra/kraken/utils/httputil"
@@ -23,7 +22,7 @@ import (
 
 const namespace = "test-namespace"
 
-func getURL(addr string, d image.Digest) string {
+func getURL(addr string, d core.Digest) string {
 	return fmt.Sprintf("http://%s/namespace/%s/blobs/%s/metainfo", addr, namespace, d)
 }
 
@@ -46,7 +45,7 @@ func TestDownloadTriesAllServersOnNetworkErrors(t *testing.T) {
 		servers,
 		metainfoclient.WithGetter(mockGetter))
 
-	d := image.DigestFixture()
+	d := core.DigestFixture()
 
 	for _, addr := range addrs {
 		mockGetter.EXPECT().Get(getURL(addr, d)).Return(nil, errors.New("some network err"))
@@ -73,8 +72,8 @@ func TestDownloadPollsOnStatusAcceptedUntilStatusOK(t *testing.T) {
 		},
 	}
 
-	mi := torlib.MetaInfoFixture()
-	d := image.NewSHA256DigestFromHex(mi.Name())
+	mi := core.MetaInfoFixture()
+	d := core.NewSHA256DigestFromHex(mi.Name())
 	miRaw, err := mi.Serialize()
 	require.NoError(err)
 
@@ -110,7 +109,7 @@ func TestDownloadPollTimeout(t *testing.T) {
 		},
 	}
 
-	d := image.DigestFixture()
+	d := core.DigestFixture()
 
 	addr := "test-tracker"
 	client := metainfoclient.New(
@@ -131,7 +130,7 @@ func TestDownloadConverts404ToErrNotFound(t *testing.T) {
 
 	mockGetter := mockmetainfoclient.NewMockGetter(ctrl)
 
-	d := image.DigestFixture()
+	d := core.DigestFixture()
 
 	addr := "test-tracker"
 	client := metainfoclient.New(
@@ -151,7 +150,7 @@ func TestDownloadPropagatesStatusError(t *testing.T) {
 
 	mockGetter := mockmetainfoclient.NewMockGetter(ctrl)
 
-	d := image.DigestFixture()
+	d := core.DigestFixture()
 
 	addr := "test-tracker"
 	client := metainfoclient.New(

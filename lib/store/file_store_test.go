@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
+	"code.uber.internal/infra/kraken/core"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -87,7 +87,7 @@ func TestDownloadAndDeleteFiles(t *testing.T) {
 	var names []string
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
-		name := image.DigestFixture().Hex()
+		name := core.DigestFixture().Hex()
 		names = append(names, name)
 		wg.Add(1)
 		go func() {
@@ -112,7 +112,7 @@ func TestCreateCacheFile(t *testing.T) {
 	defer cleanup()
 
 	s1 := "buffer"
-	computedDigest, err := image.NewDigester().FromBytes([]byte(s1))
+	computedDigest, err := core.NewDigester().FromBytes([]byte(s1))
 	require.NoError(err)
 	r1 := strings.NewReader(s1)
 
@@ -139,7 +139,7 @@ func TestCleanupIdleDownloads(t *testing.T) {
 
 	var idle []string
 	for i := 0; i < 10; i++ {
-		name := image.DigestFixture().Hex()
+		name := core.DigestFixture().Hex()
 		require.NoError(s.CreateDownloadFile(name, 1))
 		idle = append(idle, name)
 	}
@@ -148,7 +148,7 @@ func TestCleanupIdleDownloads(t *testing.T) {
 	defer close(stop)
 	var active []string
 	for i := 0; i < 10; i++ {
-		name := image.DigestFixture().Hex()
+		name := core.DigestFixture().Hex()
 		require.NoError(s.CreateDownloadFile(name, 1))
 		active = append(active, name)
 		go func(name string) {

@@ -7,17 +7,15 @@ import (
 	"net/http"
 	"testing"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
-	"code.uber.internal/infra/kraken/lib/peercontext"
-	"code.uber.internal/infra/kraken/torlib"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/tracker/storage"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestAnnounceEndPoint(t *testing.T) {
-	mi := torlib.MetaInfoFixture()
-	peer := &torlib.PeerInfo{
+	mi := core.MetaInfoFixture()
+	peer := &core.PeerInfo{
 		InfoHash: mi.InfoHash.HexString(),
 		PeerID:   "peer",
 		IP:       "127.0.0.1",
@@ -55,7 +53,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks := &testMocks{}
 		defer mocks.mockController(t)()
 
-		peers := []*torlib.PeerInfo{{
+		peers := []*core.PeerInfo{{
 			InfoHash: peer.InfoHash,
 			PeerID:   peer.PeerID,
 			IP:       peer.IP,
@@ -67,7 +65,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
 		requireStatus(t, response, 200)
-		ar := torlib.AnnouncerResponse{}
+		ar := core.AnnouncerResponse{}
 		require.NoError(json.NewDecoder(response.Body).Decode(&ar))
 		require.Equal(ar.Peers, peers)
 	})
@@ -80,7 +78,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		req, err := http.NewRequest("GET", announceRequestPath, nil)
 		require.NoError(err)
 
-		origins := []*torlib.PeerInfo{{
+		origins := []*core.PeerInfo{{
 			InfoHash: peer.InfoHash,
 			PeerID:   peer.PeerID,
 			IP:       peer.IP,
@@ -94,7 +92,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
 		requireStatus(t, resp, 200)
-		ar := torlib.AnnouncerResponse{}
+		ar := core.AnnouncerResponse{}
 		require.NoError(json.NewDecoder(resp.Body).Decode(&ar))
 		require.Equal(origins, ar.Peers)
 	})
@@ -108,9 +106,9 @@ func TestAnnounceEndPoint(t *testing.T) {
 		require.NoError(err)
 
 		infoHash := mi.InfoHash.HexString()
-		digest := image.NewSHA256DigestFromHex(mi.Info.Name)
-		originPCtx := peercontext.Fixture()
-		origins := []*torlib.PeerInfo{{
+		digest := core.NewSHA256DigestFromHex(mi.Info.Name)
+		originPCtx := core.PeerContextFixture()
+		origins := []*core.PeerInfo{{
 			InfoHash: infoHash,
 			PeerID:   originPCtx.PeerID.String(),
 			IP:       originPCtx.IP,
@@ -120,7 +118,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 			Complete: true,
 		}}
 
-		mocks.originCluster.EXPECT().Owners(digest).Return([]peercontext.PeerContext{originPCtx}, nil)
+		mocks.originCluster.EXPECT().Owners(digest).Return([]core.PeerContext{originPCtx}, nil)
 
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		mocks.datastore.EXPECT().GetPeers(infoHash).Return(nil, nil)
@@ -129,7 +127,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
 		requireStatus(t, resp, 200)
-		ar := torlib.AnnouncerResponse{}
+		ar := core.AnnouncerResponse{}
 		require.NoError(json.NewDecoder(resp.Body).Decode(&ar))
 		require.Equal(origins, ar.Peers)
 	})
@@ -143,9 +141,9 @@ func TestAnnounceEndPoint(t *testing.T) {
 		require.NoError(err)
 
 		infoHash := mi.InfoHash.HexString()
-		digest := image.NewSHA256DigestFromHex(mi.Info.Name)
-		originPCtx := peercontext.Fixture()
-		origins := []*torlib.PeerInfo{{
+		digest := core.NewSHA256DigestFromHex(mi.Info.Name)
+		originPCtx := core.PeerContextFixture()
+		origins := []*core.PeerInfo{{
 			InfoHash: infoHash,
 			PeerID:   originPCtx.PeerID.String(),
 			IP:       originPCtx.IP,
@@ -155,7 +153,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 			Complete: true,
 		}}
 
-		mocks.originCluster.EXPECT().Owners(digest).Return([]peercontext.PeerContext{originPCtx}, nil)
+		mocks.originCluster.EXPECT().Owners(digest).Return([]core.PeerContext{originPCtx}, nil)
 
 		storageErr := errors.New("some storage error")
 
@@ -165,7 +163,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
 		requireStatus(t, resp, 200)
-		ar := torlib.AnnouncerResponse{}
+		ar := core.AnnouncerResponse{}
 		require.NoError(json.NewDecoder(resp.Body).Decode(&ar))
 		require.Equal(origins, ar.Peers)
 	})
@@ -179,9 +177,9 @@ func TestAnnounceEndPoint(t *testing.T) {
 		require.NoError(err)
 
 		infoHash := mi.InfoHash.HexString()
-		digest := image.NewSHA256DigestFromHex(mi.Info.Name)
+		digest := core.NewSHA256DigestFromHex(mi.Info.Name)
 
-		otherPeers := []*torlib.PeerInfo{{
+		otherPeers := []*core.PeerInfo{{
 			InfoHash: peer.InfoHash,
 			PeerID:   peer.PeerID,
 			IP:       peer.IP,
@@ -196,7 +194,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
 		requireStatus(t, resp, 200)
-		ar := torlib.AnnouncerResponse{}
+		ar := core.AnnouncerResponse{}
 		require.NoError(json.NewDecoder(resp.Body).Decode(&ar))
 		require.Equal(otherPeers, ar.Peers)
 	})

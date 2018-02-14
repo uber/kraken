@@ -1,11 +1,10 @@
-package torlib
+package core
 
 import (
 	"bytes"
 	"io/ioutil"
 	"os"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/image"
 	"code.uber.internal/infra/kraken/utils/randutil"
 )
 
@@ -69,7 +68,7 @@ func CustomTestTorrentFileFixture(size uint64, pieceLength uint64) *TestTorrentF
 
 	content := randutil.Text(size)
 
-	digest, err := image.NewDigester().FromReader(bytes.NewBuffer(content))
+	digest, err := NewDigester().FromReader(bytes.NewBuffer(content))
 	if err != nil {
 		panic(err)
 	}
@@ -104,4 +103,34 @@ func MetaInfoFixture() *MetaInfo {
 // and piece length.
 func CustomMetaInfoFixture(size, pieceLength uint64) *MetaInfo {
 	return CustomTestTorrentFileFixture(size, pieceLength).MetaInfo
+}
+
+// DigestFixture returns a random Digest.
+func DigestFixture() Digest {
+	b := randutil.Text(32)
+	d, err := NewDigester().FromBytes(b)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
+// DigestWithBlobFixture returns a random digest and its corresponding blob.
+func DigestWithBlobFixture() (d Digest, blob []byte) {
+	blob = randutil.Text(256)
+	d, err := NewDigester().FromBytes(blob)
+	if err != nil {
+		panic(err)
+	}
+	return d, blob
+}
+
+// PeerContextFixture returns a randomly generated PeerContext.
+func PeerContextFixture() PeerContext {
+	return PeerContext{
+		IP:     randutil.IP(),
+		Port:   randutil.Port(),
+		PeerID: PeerIDFixture(),
+		Zone:   "sjc1",
+	}
 }
