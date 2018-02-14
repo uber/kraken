@@ -143,6 +143,8 @@ func (p *StoreProvider) getStorageBackend(name string) (interface{}, error) {
 			p.redisStorage = s
 		}
 		return p.redisStorage, nil
+	case "disabled":
+		return disabled{}, nil
 	default:
 		return nil, fmt.Errorf("invalid storage backend: %q", name)
 	}
