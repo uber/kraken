@@ -24,8 +24,10 @@ func NewManager(namespaces NamespaceConfig) (*Manager, error) {
 		switch config.Backend {
 		case "s3":
 			c, err = s3backend.NewClient(config.S3)
-		case "hdfs":
-			c, err = hdfsbackend.NewHDFSClient(config.HDFS)
+		case "hdfs-dockerblob":
+			c, err = hdfsbackend.NewDockerBlobClient(config.HDFS)
+		case "hdfs-dockertag":
+			c, err = hdfsbackend.NewDockerTagClient(config.HDFS)
 		case "testfs":
 			c, err = testfs.NewClient(config.TestFS)
 		default:

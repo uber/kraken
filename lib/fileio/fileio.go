@@ -6,6 +6,7 @@ import "io"
 type Reader interface {
 	io.Reader
 	io.ReaderAt
+	io.Seeker
 }
 
 // Writer defines write methods for file io.
