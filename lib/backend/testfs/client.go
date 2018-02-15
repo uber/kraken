@@ -1,6 +1,7 @@
 package testfs
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -28,16 +29,24 @@ func NewClient(config Config) (*Client, error) {
 	return &Client{config}, nil
 }
 
-// Upload uploads src to name.
-func (c Client) Upload(name string, src fileio.Reader) error {
+func (c *Client) upload(name string, src io.Reader) error {
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/files/%s", c.config.Addr, name),
 		httputil.SendBody(src))
 	return err
 }
 
-// Download downloads name to dst.
-func (c Client) Download(name string, dst fileio.Writer) error {
+// UploadFile uploads src to name.
+func (c *Client) UploadFile(name string, src fileio.Reader) error {
+	return c.upload(name, src)
+}
+
+// UploadBytes uploads b to name.
+func (c *Client) UploadBytes(name string, b []byte) error {
+	return c.upload(name, bytes.NewReader(b))
+}
+
+func (c *Client) download(name string, dst io.Writer) error {
 	resp, err := httputil.Get(fmt.Sprintf("http://%s/files/%s", c.config.Addr, name))
 	if err != nil {
 		if httputil.IsNotFound(err) {
@@ -50,4 +59,18 @@ func (c Client) Download(name string, dst fileio.Writer) error {
 		return fmt.Errorf("copy: %s", err)
 	}
 	return nil
+}
+
+// DownloadFile downloads name to dst.
+func (c *Client) DownloadFile(name string, dst fileio.Writer) error {
+	return c.download(name, dst)
+}
+
+// DownloadBytes downloads name.
+func (c *Client) DownloadBytes(name string) ([]byte, error) {
+	var b bytes.Buffer
+	if err := c.download(name, &b); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
 }

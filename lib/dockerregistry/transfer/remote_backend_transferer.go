@@ -47,8 +47,7 @@ func (t *RemoteBackendTransferer) Download(name string) (store.FileReader, error
 			}
 			defer w.Close()
 
-			err = t.client.Download(name, w)
-			if err != nil {
+			if err := t.client.DownloadFile(name, w); err != nil {
 				return nil, fmt.Errorf("remote backend download: %s", err)
 			}
 
@@ -74,7 +73,7 @@ func (t *RemoteBackendTransferer) Download(name string) (store.FileReader, error
 // TODO(igor): remove blob and size parameters from the interface. Transferer should just read
 // directly from a filestore
 func (t *RemoteBackendTransferer) Upload(name string, blob store.FileReader, size int64) error {
-	return t.client.Upload(name, blob)
+	return t.client.UploadFile(name, blob)
 }
 
 // GetManifest gets and saves manifest given addr, repo and tag

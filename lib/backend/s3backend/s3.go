@@ -67,9 +67,9 @@ func NewClient(config Config) (*Client, error) {
 	return &Client{s3Session: svc, config: config}, nil
 }
 
-// Download downloads the content from a given input bucket writing
-// data into provided writer
-func (c *Client) Download(name string, dst fileio.Writer) error {
+// DownloadFile downloads the content from a configured bucket and writes the
+// data to dst.
+func (c *Client) DownloadFile(name string, dst fileio.Writer) error {
 	downloader := s3manager.NewDownloaderWithClient(c.s3Session, func(d *s3manager.Downloader) {
 		d.PartSize = c.config.DownloadPartSize // per part
 		d.Concurrency = c.config.DownloadConcurrency
@@ -92,9 +92,13 @@ func (c *Client) Download(name string, dst fileio.Writer) error {
 	return nil
 }
 
-// Upload uploads the content for a given input bucket and key reading
-// data from a provided reader
-func (c *Client) Upload(name string, src fileio.Reader) error {
+// DownloadBytes TODO(codyg): Implement.
+func (c *Client) DownloadBytes(name string) ([]byte, error) {
+	return nil, errors.New("unimplemented")
+}
+
+// UploadFile uploads src to a configured bucket.
+func (c *Client) UploadFile(name string, src fileio.Reader) error {
 	uploader := s3manager.NewUploaderWithClient(c.s3Session, func(u *s3manager.Uploader) {
 		u.PartSize = c.config.UploadPartSize // per part,
 		u.Concurrency = c.config.UploadConcurrency
@@ -115,6 +119,11 @@ func (c *Client) Upload(name string, src fileio.Reader) error {
 		u.LeavePartsOnError = false // delete the parts if the upload fails.
 	})
 	return err
+}
+
+// UploadBytes TODO(codyg): Implement.
+func (c *Client) UploadBytes(name string, b []byte) error {
+	return errors.New("unimplemented")
 }
 
 func isNotFound(err error) bool {

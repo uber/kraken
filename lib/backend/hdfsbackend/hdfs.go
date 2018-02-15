@@ -158,9 +158,8 @@ func (c *Client) upload(path string, r io.Reader) error {
 	return errAllNameNodesUnavailable
 }
 
-// Download downloads a file from HDFS datastore, writes it
-// into input writer
-func (c *Client) Download(name string, dst fileio.Writer) error {
+// DownloadFile downloads a file from HDFS and writes the data to dst.
+func (c *Client) DownloadFile(name string, dst fileio.Writer) error {
 
 	v := c.createParams(HdfsOpen)
 
@@ -187,9 +186,13 @@ func (c *Client) Download(name string, dst fileio.Writer) error {
 	return nil
 }
 
-// Upload reads bytes from input reader pushing file to a remote
-// HDFS store
-func (c *Client) Upload(name string, src fileio.Reader) error {
+// DownloadBytes TODO(codyg): Implement.
+func (c *Client) DownloadBytes(name string) ([]byte, error) {
+	return nil, errors.New("unimplemented")
+}
+
+// UploadFile uploads src to HDFS.
+func (c *Client) UploadFile(name string, src fileio.Reader) error {
 	v := c.createParams(HdfsCreate)
 
 	u := fmt.Sprintf("/webhdfs/v1/infra/dockerRegistry/docker/registry/v2/blobs/sha256/%s/%s/data?%s",
@@ -198,6 +201,11 @@ func (c *Client) Upload(name string, src fileio.Reader) error {
 	log.Infof("Starting HDFS upload to remote backend: %s", u)
 
 	return c.upload(u, src)
+}
+
+// UploadBytes TODO(codyg): Implement.
+func (c *Client) UploadBytes(name string, b []byte) error {
+	return errors.New("unimplemented")
 }
 
 // GetManifest gets manifest from http backend
