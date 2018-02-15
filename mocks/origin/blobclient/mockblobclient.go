@@ -5,8 +5,8 @@
 package mockblobclient
 
 import (
-	blobclient "code.uber.internal/infra/kraken/origin/blobclient"
 	core "code.uber.internal/infra/kraken/core"
+	blobclient "code.uber.internal/infra/kraken/origin/blobclient"
 	gomock "github.com/golang/mock/gomock"
 	io "io"
 	reflect "reflect"

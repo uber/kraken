@@ -51,7 +51,7 @@ func TestHDFSDownloadFileSuccess(t *testing.T) {
 
 	d, _ := core.DigestWithBlobFixture()
 
-	err = hdfsc.Download(d.Hex(), f)
+	err = hdfsc.DownloadFile(d.Hex(), f)
 	require.NoError(err)
 
 	require.True(ncalled)
@@ -106,7 +106,7 @@ func TestHDFSDownloadRetryNext(t *testing.T) {
 
 	d, _ := core.DigestWithBlobFixture()
 
-	err = hdfsc.Download(d.Hex(), f)
+	err = hdfsc.DownloadFile(d.Hex(), f)
 	require.NoError(err)
 
 	data, err := ioutil.ReadFile(f.Name())
@@ -149,7 +149,7 @@ func TestHDFSDownloadFileNotFound(t *testing.T) {
 
 	d, _ := core.DigestWithBlobFixture()
 
-	err = hdfsc.Download(d.Hex(), f)
+	err = hdfsc.DownloadFile(d.Hex(), f)
 	require.Error(err)
 
 	require.True(ncalled)
@@ -189,7 +189,7 @@ func TestHDFSUploadFileSuccess(t *testing.T) {
 	defer os.Remove(f.Name())
 
 	d, _ := core.DigestWithBlobFixture()
-	err = hdfsc.Upload(d.Hex(), f)
+	err = hdfsc.UploadFile(d.Hex(), f)
 
 	require.NoError(err)
 
@@ -232,7 +232,7 @@ func TestHDFSUploadFileUnknownFailure(t *testing.T) {
 	defer os.Remove(f.Name())
 
 	d, _ := core.DigestWithBlobFixture()
-	err = hdfsc.Upload(d.Hex(), f)
+	err = hdfsc.UploadFile(d.Hex(), f)
 	require.Error(err)
 
 	require.True(ncalled)

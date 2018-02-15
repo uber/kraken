@@ -46,7 +46,7 @@ func TestHttpDownloadFileSuccess(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	err = httpc.Download("data", f)
+	err = httpc.DownloadFile("data", f)
 	require.NoError(err)
 
 	bd, err := ioutil.ReadFile(f.Name())
@@ -78,7 +78,7 @@ func TestHttpDownloadFileNotFound(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	err = httpc.Download("data", f)
+	err = httpc.DownloadFile("data", f)
 	require.Equal(backenderrors.ErrBlobNotFound, err)
 
 	require.True(ncalled)
@@ -103,6 +103,6 @@ func TestDownloadMalformedUrlThrowsError(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	err = httpc.Upload("data", f)
+	err = httpc.DownloadFile("data", f)
 	require.Error(err)
 }

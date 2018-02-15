@@ -5,8 +5,8 @@
 package mockstorage
 
 import (
-	storage "code.uber.internal/infra/kraken/lib/torrent/storage"
 	core "code.uber.internal/infra/kraken/core"
+	storage "code.uber.internal/infra/kraken/lib/torrent/storage"
 	bitset "code.uber.internal/infra/kraken/vendor/github.com/willf/bitset"
 	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"

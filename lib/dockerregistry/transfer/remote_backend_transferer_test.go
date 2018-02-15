@@ -31,7 +31,7 @@ func TestRemoteBackendTransfererDownloadCachesBlobs(t *testing.T) {
 	rbt, err := NewRemoteBackendTransferer(mockmanifestclient.NewMockClient(ctrl), mockBackendClient, fs)
 	require.NoError(err)
 
-	mockBackendClient.EXPECT().Download(d.Hex(), fileio.MatchWriter(blob)).Return(nil)
+	mockBackendClient.EXPECT().DownloadFile(d.Hex(), fileio.MatchWriter(blob)).Return(nil)
 
 	_, err = rbt.Download(d.Hex())
 	require.NoError(err)
@@ -62,7 +62,7 @@ func TestRemoteBackendTransfererUploadBlobs(t *testing.T) {
 	rbt, err := NewRemoteBackendTransferer(mockmanifestclient.NewMockClient(ctrl), mockBackendClient, fs)
 	require.NoError(err)
 
-	mockBackendClient.EXPECT().Upload(d.Hex(), fileio.MatchReader(blob)).Return(nil)
+	mockBackendClient.EXPECT().UploadFile(d.Hex(), fileio.MatchReader(blob)).Return(nil)
 
 	reader, err := fs.GetCacheFileReader(d.Hex())
 	require.NoError(err)
