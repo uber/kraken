@@ -14,6 +14,8 @@ type Config struct {
 	BuffSize  int64    `yaml:"buff_size"` // Default transfer block size.
 	UserName  string   `yaml:"username"`  // Auth username.
 
+	RootDirectory string `yaml:"root_directory"` // RootDirectory for WebHDFS docker registry path, default
+
 	// BufferGuard protects upload from draining the src reader into an oversized
 	// buffer when io.Seeker is not implemented.
 	BufferGuard datasize.ByteSize `yaml:"buffer_guard"`
@@ -28,6 +30,10 @@ func (c Config) applyDefaults() (Config, error) {
 	}
 	if c.BufferGuard == 0 {
 		c.BufferGuard = 10 * datasize.MB
+	}
+
+	if c.RootDirectory == "" {
+		c.RootDirectory = "webhdfs/v1/infra/dockerRegistry/"
 	}
 	return c, nil
 }

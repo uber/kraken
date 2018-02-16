@@ -64,7 +64,7 @@ func TestRemoteBackendTransfererDownloadCachesTags(t *testing.T) {
 
 	mockTagBackendClient.EXPECT().Download(
 		fmt.Sprintf("%s:%s", repo, tag),
-		backend.MatchWriter([]byte(manifestDigest.String()))).Return(nil)
+		rwutil.MatchWriter([]byte(manifestDigest.String()))).Return(nil)
 
 	_, err = rbt.GetTag(repo, tag)
 	require.NoError(err)
