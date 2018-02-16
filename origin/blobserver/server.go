@@ -387,7 +387,7 @@ func (s Server) downloadRemoteBlob(c backend.Client, d core.Digest) error {
 	if err != nil {
 		return handler.Errorf("get upload writer: %s", err)
 	}
-	if err := c.DownloadFile(d.Hex(), f); err != nil {
+	if err := c.Download(d.Hex(), f); err != nil {
 		return err
 	}
 	if _, err := f.Seek(0, 0); err != nil {
@@ -652,7 +652,7 @@ func (s Server) commitClusterUpload(
 			return handler.Errorf("backend manager: %s", err).Status(http.StatusBadRequest)
 		}
 		log.With("blob", d.Hex()).Infof("Uploading blob to %s backend", namespace)
-		if err := c.UploadFile(d.Hex(), f); err != nil {
+		if err := c.Upload(d.Hex(), f); err != nil {
 			// TODO(codyg): We need some way of detecting whether the blob already exists
 			// in the storage backend.
 			return handler.Errorf("backend upload: %s", err)

@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/fileio"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -31,7 +31,7 @@ func newClient(config Config) *client {
 }
 
 func (c *client) download(path string, dst io.Writer) error {
-	params := c.createParams("open")
+	params := c.params("open")
 	for _, node := range c.config.NameNodes {
 		u := fmt.Sprintf("http://%s/%s?%s", node, path, params)
 		log.Infof("Starting HDFS download from %s", u)
@@ -59,16 +59,23 @@ func (c *client) download(path string, dst io.Writer) error {
 	return errAllNameNodesUnavailable
 }
 
-func (c *client) downloadBytes(path string) ([]byte, error) {
-	var b bytes.Buffer
-	if err := c.download(path, &b); err != nil {
-		return nil, err
-	}
-	return b.Bytes(), nil
-}
+func (c *client) upload(path string, src io.Reader) error {
 
-func (c *client) upload(path string, src fileio.Reader) error {
-	params := c.createParams("create")
+	// We must be able to replay src in the event that uploading to the data node
+	// fails halfway through the upload, thus we attempt to upcast src to a Seeker
+	// for this purpose. If src is not a Seeker, we drain it to an in-memory buffer
+	// that can be replayed.
+	readSeeker, ok := src.(io.ReadSeeker)
+	if !ok {
+		log.With("path", path).Info("Draining HDFS upload source into replayable buffer")
+		b, err := ioutil.ReadAll(src)
+		if err != nil {
+			return fmt.Errorf("drain src: %s", err)
+		}
+		readSeeker = bytes.NewReader(b)
+	}
+
+	params := c.params("create")
 	for _, node := range c.config.NameNodes {
 		nameresp, err := httputil.Put(
 			fmt.Sprintf("http://%s/%s?%s", node, path, params),
@@ -93,13 +100,13 @@ func (c *client) upload(path string, src fileio.Reader) error {
 
 		dataresp, err := httputil.Put(
 			loc[0],
-			httputil.SendBody(src),
+			httputil.SendBody(readSeeker),
 			httputil.SendAcceptedCodes(http.StatusCreated))
 		if err != nil {
 			if retryable(err) {
 				log.Infof("HDFS upload error: %s, retrying from the next name node", err)
 				// Reset reader for next retry.
-				if _, err := src.Seek(0, io.SeekStart); err != nil {
+				if _, err := readSeeker.Seek(0, io.SeekStart); err != nil {
 					return fmt.Errorf("seek: %s", err)
 				}
 				continue
@@ -113,7 +120,7 @@ func (c *client) upload(path string, src fileio.Reader) error {
 	return errAllNameNodesUnavailable
 }
 
-func (c *client) createParams(op string) string {
+func (c *client) params(op string) string {
 	v := url.Values{}
 	if c.config.UserName != "" {
 		v.Set("user.name", c.config.UserName)

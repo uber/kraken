@@ -3,9 +3,7 @@ package httpbackend
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"net/http"
-	"os"
 	"testing"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
@@ -17,92 +15,58 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHttpDownloadFileSuccess(t *testing.T) {
+func TestHttpDownloadSuccess(t *testing.T) {
 	require := require.New(t)
 
+	blob := randutil.Blob(32 * memsize.KB)
+
 	r := chi.NewRouter()
-
-	// generate 32KB of random data
-	b := randutil.Blob(32 * memsize.KB)
-	buf := bytes.NewBuffer(b)
-
 	r.Get("/data/:blob", func(w http.ResponseWriter, req *http.Request) {
-		_, err := io.Copy(w, buf)
-		if err != nil {
-			panic(err)
-		}
+		_, err := io.Copy(w, bytes.NewReader(blob))
+		require.NoError(err)
 	})
+	addr, stop := testutil.StartServer(r)
+	defer stop()
 
-	addr, close := testutil.StartServer(r)
-	defer close()
-
-	config := &Config{
-		DownloadURL: "http://" + addr + "/data/%s",
-	}
-	httpc, err := NewClient(*config)
+	config := Config{DownloadURL: "http://" + addr + "/data/%s"}
+	client, err := NewClient(config)
 	require.NoError(err)
 
-	f, err := ioutil.TempFile("", "httptest")
-	require.NoError(err)
-	defer os.Remove(f.Name())
-
-	err = httpc.DownloadFile("data", f)
-	require.NoError(err)
-
-	bd, err := ioutil.ReadFile(f.Name())
-	require.Equal(bytes.Compare(b, bd), 0)
+	var b bytes.Buffer
+	require.NoError(client.Download("data", &b))
+	require.Equal(blob, b.Bytes())
 }
 
 func TestHttpDownloadFileNotFound(t *testing.T) {
 	require := require.New(t)
 
 	r := chi.NewRouter()
-
-	ncalled := false
 	r.Get("/data/:blob", func(w http.ResponseWriter, req *http.Request) {
-		ncalled = true
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("file not found"))
 	})
+	addr, stop := testutil.StartServer(r)
+	defer stop()
 
-	addr, close := testutil.StartServer(r)
-	defer close()
-
-	config := &Config{
-		DownloadURL: "http://" + addr + "/data/%s",
-	}
-	httpc, err := NewClient(*config)
+	config := Config{DownloadURL: "http://" + addr + "/data/%s"}
+	client, err := NewClient(config)
 	require.NoError(err)
 
-	f, err := ioutil.TempFile("", "httptest")
-	require.NoError(err)
-	defer os.Remove(f.Name())
-
-	err = httpc.DownloadFile("data", f)
-	require.Equal(backenderrors.ErrBlobNotFound, err)
-
-	require.True(ncalled)
+	var b bytes.Buffer
+	require.Equal(backenderrors.ErrBlobNotFound, client.Download("data", &b))
 }
 
-func TestDownloadMalformedUrlThrowsError(t *testing.T) {
+func TestDownloadMalformedURLThrowsError(t *testing.T) {
 	require := require.New(t)
 
-	r := chi.NewRouter()
+	// Empty router.
+	addr, stop := testutil.StartServer(chi.NewRouter())
+	defer stop()
 
-	addr, close := testutil.StartServer(r)
-	defer close()
-
-	config := &Config{
-		DownloadURL: "http://" + addr + "/data",
-	}
-
-	httpc, err := NewClient(*config)
+	config := Config{DownloadURL: "http://" + addr + "/data"}
+	client, err := NewClient(config)
 	require.NoError(err)
 
-	f, err := ioutil.TempFile("", "httptest")
-	require.NoError(err)
-	defer os.Remove(f.Name())
-
-	err = httpc.DownloadFile("data", f)
-	require.Error(err)
+	var b bytes.Buffer
+	require.Error(client.Download("data", &b))
 }

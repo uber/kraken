@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/backend/backendclient"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -75,9 +74,9 @@ func TestClientDownloadSuccess(t *testing.T) {
 
 	client := newClient(configFixture(addr))
 
-	result, err := client.downloadBytes("data/" + d.Hex())
-	require.NoError(err)
-	require.Equal(blob, result)
+	var b bytes.Buffer
+	require.NoError(client.download("data/"+d.Hex(), &b))
+	require.Equal(blob, b.Bytes())
 }
 
 func TestClientDownloadRetriesNextNameNode(t *testing.T) {
@@ -103,9 +102,9 @@ func TestClientDownloadRetriesNextNameNode(t *testing.T) {
 
 	client := newClient(configFixture(addr1, addr2))
 
-	result, err := client.downloadBytes("data/" + d.Hex())
-	require.NoError(err)
-	require.Equal(blob, result)
+	var b bytes.Buffer
+	require.NoError(client.download("data/"+d.Hex(), &b))
+	require.Equal(blob, b.Bytes())
 }
 
 func TestClientDownloadErrBlobNotFound(t *testing.T) {
@@ -126,8 +125,8 @@ func TestClientDownloadErrBlobNotFound(t *testing.T) {
 
 	d := core.DigestFixture()
 
-	_, err = client.downloadBytes("data/" + d.Hex())
-	require.Equal(backenderrors.ErrBlobNotFound, err)
+	var b bytes.Buffer
+	require.Equal(backenderrors.ErrBlobNotFound, client.download("data/"+d.Hex(), &b))
 }
 
 func TestClientUploadSuccess(t *testing.T) {
@@ -206,8 +205,16 @@ func TestClientUploadRetriesNextNameNode(t *testing.T) {
 			client := newClient(configFixture(addr1, addr2))
 
 			require.NoError(client.upload("data/"+d.Hex(), bytes.NewReader(blob)))
+
+			// Ensure non-seeker readers can replay their data.
+			require.NoError(client.upload("data/"+d.Hex(), bytes.NewBuffer(blob)))
 		})
 	}
+}
+
+type backendClient interface {
+	Upload(string, io.Reader) error
+	Download(string, io.Writer) error
 }
 
 // TestAllClients is a very mechanical test suite to provide coverage for download / upload
@@ -216,13 +223,13 @@ func TestAllClients(t *testing.T) {
 
 	clients := []struct {
 		desc   string
-		get    func(t *testing.T, config Config) backendclient.Client
+		get    func(t *testing.T, config Config) backendClient
 		path   string
 		params func() (name string, blob []byte)
 	}{
 		{
 			"docker blob client",
-			func(t *testing.T, config Config) backendclient.Client {
+			func(t *testing.T, config Config) backendClient {
 				c, err := NewDockerBlobClient(config)
 				require.NoError(t, err)
 				return c
@@ -234,7 +241,7 @@ func TestAllClients(t *testing.T) {
 			},
 		}, {
 			"docker tag client",
-			func(t *testing.T, config Config) backendclient.Client {
+			func(t *testing.T, config Config) backendClient {
 				c, err := NewDockerTagClient(config)
 				require.NoError(t, err)
 				return c
@@ -246,103 +253,41 @@ func TestAllClients(t *testing.T) {
 		},
 	}
 
-	downloads := []struct {
-		desc  string
-		check func(t *testing.T, client backendclient.Client, name string, expected []byte)
-	}{
-		{
-			"download file",
-			func(t *testing.T, client backendclient.Client, name string, expected []byte) {
-				require := require.New(t)
-
-				f, err := ioutil.TempFile("", "hdfs_test")
-				require.NoError(err)
-				defer os.Remove(f.Name())
-
-				require.NoError(client.DownloadFile(name, f))
-
-				_, err = f.Seek(0, 0)
-				require.NoError(err)
-
-				result, err := ioutil.ReadAll(f)
-				require.NoError(err)
-				require.Equal(expected, result)
-			},
-		}, {
-			"download bytes",
-			func(t *testing.T, client backendclient.Client, name string, expected []byte) {
-				require := require.New(t)
-
-				result, err := client.DownloadBytes(name)
-				require.NoError(err)
-				require.Equal(expected, result)
-			},
-		},
-	}
-
-	uploads := []struct {
-		desc  string
-		check func(t *testing.T, client backendclient.Client, name string, data []byte)
-	}{
-		{
-			"upload file",
-			func(t *testing.T, client backendclient.Client, name string, data []byte) {
-				require := require.New(t)
-
-				f, err := ioutil.TempFile("", "hdfs_test")
-				require.NoError(err)
-				defer os.Remove(f.Name())
-
-				_, err = io.Copy(f, bytes.NewReader(data))
-				require.NoError(err)
-
-				_, err = f.Seek(0, 0)
-				require.NoError(err)
-
-				require.NoError(client.UploadFile(name, f))
-			},
-		}, {
-			"upload bytes",
-			func(t *testing.T, client backendclient.Client, name string, data []byte) {
-				require.NoError(t, client.UploadBytes(name, data))
-			},
-		},
-	}
-
 	for _, client := range clients {
 		t.Run(client.desc, func(t *testing.T) {
-			for _, download := range downloads {
-				t.Run(download.desc, func(t *testing.T) {
-					name, blob := client.params()
+			t.Run("download", func(t *testing.T) {
+				name, blob := client.params()
 
-					server := &testServer{
-						path:    client.path,
-						getName: redirectToDataNode,
-						getData: writeResponse(http.StatusOK, blob),
-					}
-					addr, stop := testutil.StartServer(server.handler())
-					defer stop()
+				server := &testServer{
+					path:    client.path,
+					getName: redirectToDataNode,
+					getData: writeResponse(http.StatusOK, blob),
+				}
+				addr, stop := testutil.StartServer(server.handler())
+				defer stop()
 
-					c := client.get(t, configFixture(addr))
-					download.check(t, c, name, blob)
-				})
-			}
-			for _, upload := range uploads {
-				t.Run(upload.desc, func(t *testing.T) {
-					name, blob := client.params()
+				c := client.get(t, configFixture(addr))
 
-					server := &testServer{
-						path:    client.path,
-						putName: redirectToDataNode,
-						putData: checkBody(t, blob),
-					}
-					addr, stop := testutil.StartServer(server.handler())
-					defer stop()
+				var b bytes.Buffer
+				require.NoError(t, c.Download(name, &b))
+				require.Equal(t, blob, b.Bytes())
+			})
 
-					c := client.get(t, configFixture(addr))
-					upload.check(t, c, name, blob)
-				})
-			}
+			t.Run("upload", func(t *testing.T) {
+				name, blob := client.params()
+
+				server := &testServer{
+					path:    client.path,
+					putName: redirectToDataNode,
+					putData: checkBody(t, blob),
+				}
+				addr, stop := testutil.StartServer(server.handler())
+				defer stop()
+
+				c := client.get(t, configFixture(addr))
+
+				require.NoError(t, c.Upload(name, bytes.NewReader(blob)))
+			})
 		})
 	}
 }

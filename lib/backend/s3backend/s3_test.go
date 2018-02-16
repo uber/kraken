@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestS3UploadFileSuccess(t *testing.T) {
+func TestS3UploadSuccess(t *testing.T) {
 	require := require.New(t)
 
 	// generate 32KB of random data
@@ -30,11 +30,11 @@ func TestS3UploadFileSuccess(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	err = s3client.UploadFile(f.Name(), f)
+	err = s3client.Upload(f.Name(), f)
 	require.NoError(err)
 }
 
-func TestS3DownloadFileSuccess(t *testing.T) {
+func TestS3DownloadSuccess(t *testing.T) {
 	require := require.New(t)
 
 	// generate 32KB of random data
@@ -52,6 +52,6 @@ func TestS3DownloadFileSuccess(t *testing.T) {
 	require.NoError(err)
 	defer os.Remove(f.Name())
 
-	err = s3client.DownloadFile(f.Name(), f)
+	err = s3client.Download(f.Name(), f)
 	require.NoError(err)
 }

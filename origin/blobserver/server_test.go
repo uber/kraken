@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/fileio"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -224,7 +224,7 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 
 	d, blob := computeBlobForHosts(config, master1, master2)
 
-	mockBackendClient.EXPECT().DownloadFile(d.Hex(), fileio.MatchWriter(blob)).Return(nil)
+	mockBackendClient.EXPECT().Download(d.Hex(), backend.MatchWriter(blob)).Return(nil)
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
 	require.True(httputil.IsAccepted(err))
@@ -262,7 +262,7 @@ func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 
 	d := core.DigestFixture()
 
-	mockBackendClient.EXPECT().DownloadFile(d.Hex(), gomock.Any()).Return(backenderrors.ErrBlobNotFound)
+	mockBackendClient.EXPECT().Download(d.Hex(), gomock.Any()).Return(backenderrors.ErrBlobNotFound)
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
 	require.True(httputil.IsAccepted(err))
@@ -340,7 +340,7 @@ func TestUploadBlobThroughUploadsToStorageBackendAndReplicates(t *testing.T) {
 
 	d, blob := computeBlobForHosts(config, master1, master2)
 
-	mockBackendClient.EXPECT().UploadFile(d.Hex(), fileio.MatchReader(blob)).Return(nil)
+	mockBackendClient.EXPECT().Upload(d.Hex(), backend.MatchReader(blob)).Return(nil)
 
 	err := cp.Provide(master1).UploadBlob(
 		namespace, d, bytes.NewReader(blob), int64(len(blob)), true)
@@ -366,7 +366,7 @@ func TestUploadBlobThroughDoesNotCommitBlobIfBackendUploadFails(t *testing.T) {
 
 	d, blob := core.DigestWithBlobFixture()
 
-	mockBackendClient.EXPECT().UploadFile(d.Hex(), fileio.MatchReader(blob)).Return(errors.New("some error"))
+	mockBackendClient.EXPECT().Upload(d.Hex(), backend.MatchReader(blob)).Return(errors.New("some error"))
 
 	err := cp.Provide(master1).UploadBlob(
 		namespace, d, bytes.NewReader(blob), int64(len(blob)), true)
