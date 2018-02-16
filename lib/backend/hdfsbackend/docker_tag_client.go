@@ -1,12 +1,10 @@
 package hdfsbackend
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
-
-	"code.uber.internal/infra/kraken/lib/fileio"
 )
 
 // DockerTagClient is an HDFS client for uploading / downloading tags to a docker
@@ -43,9 +41,9 @@ func (c *DockerTagClient) path(name string) (string, error) {
 	return path, nil
 }
 
-// DownloadFile downloads the value of name into dst. name should be in the
+// Download downloads the value of name into dst. name should be in the
 // format "repo:tag".
-func (c *DockerTagClient) DownloadFile(name string, dst fileio.Writer) error {
+func (c *DockerTagClient) Download(name string, dst io.Writer) error {
 	path, err := c.path(name)
 	if err != nil {
 		return err
@@ -53,29 +51,11 @@ func (c *DockerTagClient) DownloadFile(name string, dst fileio.Writer) error {
 	return c.client.download(path, dst)
 }
 
-// DownloadBytes is the same as DownloadFile, but returns data directly.
-func (c *DockerTagClient) DownloadBytes(name string) ([]byte, error) {
-	path, err := c.path(name)
-	if err != nil {
-		return nil, err
-	}
-	return c.client.downloadBytes(path)
-}
-
-// UploadFile uploads src as the value of name. name should be in the format "repo:tag".
-func (c *DockerTagClient) UploadFile(name string, src fileio.Reader) error {
+// Upload uploads src as the value of name. name should be in the format "repo:tag".
+func (c *DockerTagClient) Upload(name string, src io.Reader) error {
 	path, err := c.path(name)
 	if err != nil {
 		return err
 	}
 	return c.client.upload(path, src)
-}
-
-// UploadBytes is the same as UploadFile, but uploads data from an in-memory buffer.
-func (c *DockerTagClient) UploadBytes(name string, b []byte) error {
-	path, err := c.path(name)
-	if err != nil {
-		return err
-	}
-	return c.client.upload(path, bytes.NewReader(b))
 }

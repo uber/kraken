@@ -7,7 +7,6 @@ import (
 	"io"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/fileio"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -35,9 +34,9 @@ func NewClient(config Config) (*Client, error) {
 	return &Client{config: config}, nil
 }
 
-// DownloadFile downloads the content from a configured url and writes the data
+// Download downloads the content from a configured url and writes the data
 // to dst.
-func (c *Client) DownloadFile(name string, dst fileio.Writer) error {
+func (c *Client) Download(name string, dst io.Writer) error {
 	b := new(bytes.Buffer)
 
 	// using Fprintf instead of Sprintf to handle formatting errors
@@ -65,17 +64,7 @@ func (c *Client) DownloadFile(name string, dst fileio.Writer) error {
 	return err
 }
 
-// DownloadBytes TODO(codyg): Implement.
-func (c *Client) DownloadBytes(name string) ([]byte, error) {
-	return nil, errors.New("unimplemented")
-}
-
-// UploadFile TODO(codyg): Implement.
-func (c *Client) UploadFile(name string, src fileio.Reader) error {
-	return errors.New("unimplemented")
-}
-
-// UploadBytes TODO(codyg): Implement.
-func (c *Client) UploadBytes(name string, b []byte) error {
+// Upload TODO(codyg): Implement.
+func (c *Client) Upload(name string, src io.Reader) error {
 	return errors.New("unimplemented")
 }

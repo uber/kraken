@@ -1,11 +1,12 @@
-package fileio
+package backend
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 )
 
-// ReaderMatcher is a gomock Matcher which matches Readers which produce some
+// ReaderMatcher is a gomock Matcher which matches io.Readers which produce some
 // given bytes.
 type ReaderMatcher struct {
 	expected []byte
@@ -16,9 +17,9 @@ func MatchReader(expected []byte) *ReaderMatcher {
 	return &ReaderMatcher{expected}
 }
 
-// Matches returns true if x is a Reader which contains the expected bytes.
+// Matches returns true if x is an io.Reader which contains the expected bytes.
 func (m *ReaderMatcher) Matches(x interface{}) bool {
-	r, ok := x.(Reader)
+	r, ok := x.(io.Reader)
 	if !ok {
 		return false
 	}
@@ -33,13 +34,13 @@ func (m *ReaderMatcher) String() string {
 	return string(m.expected)
 }
 
-// WriterMatcher is a gomock Matcher which matches any Writer, with the
+// WriterMatcher is a gomock Matcher which matches any io.Writer, with the
 // side-effect of writing some given bytes.
 type WriterMatcher struct {
 	b []byte
 }
 
-// MatchWriter returns a new WriterMatcher which write b to any Writer passed
+// MatchWriter returns a new WriterMatcher which write b to any io.Writer passed
 // to Matches.
 func MatchWriter(b []byte) *WriterMatcher {
 	return &WriterMatcher{b}
@@ -47,7 +48,7 @@ func MatchWriter(b []byte) *WriterMatcher {
 
 // Matches writes given bytes to x.
 func (m *WriterMatcher) Matches(x interface{}) bool {
-	w, ok := x.(Writer)
+	w, ok := x.(io.Writer)
 	if !ok {
 		return false
 	}

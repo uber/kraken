@@ -1,11 +1,9 @@
 package hdfsbackend
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-
-	"code.uber.internal/infra/kraken/lib/fileio"
+	"io"
 )
 
 // DockerBlobClient is an HDFS client for uploading / download blobs to a docker
@@ -33,9 +31,9 @@ func (c *DockerBlobClient) path(name string) (string, error) {
 	return path, nil
 }
 
-// DownloadFile downloads a blob for name into dst. name should be a sha256 digest
+// Download downloads a blob for name into dst. name should be a sha256 digest
 // of the desired blob.
-func (c *DockerBlobClient) DownloadFile(name string, dst fileio.Writer) error {
+func (c *DockerBlobClient) Download(name string, dst io.Writer) error {
 	path, err := c.path(name)
 	if err != nil {
 		return err
@@ -43,31 +41,11 @@ func (c *DockerBlobClient) DownloadFile(name string, dst fileio.Writer) error {
 	return c.client.download(path, dst)
 }
 
-// DownloadBytes is the same as DownloadFile, but returns data directly. Should
-// only be used for small blobs.
-func (c *DockerBlobClient) DownloadBytes(name string) ([]byte, error) {
-	path, err := c.path(name)
-	if err != nil {
-		return nil, err
-	}
-	return c.client.downloadBytes(path)
-}
-
-// UploadFile uploads src to name. name should be a sha256 digest of src.
-func (c *DockerBlobClient) UploadFile(name string, src fileio.Reader) error {
+// Upload uploads src to name. name should be a sha256 digest of src.
+func (c *DockerBlobClient) Upload(name string, src io.Reader) error {
 	path, err := c.path(name)
 	if err != nil {
 		return err
 	}
 	return c.client.upload(path, src)
-}
-
-// UploadBytes is the same as UploadFile, but uploads data from an in-memory
-// buffer. Should only be used for small blobs.
-func (c *DockerBlobClient) UploadBytes(name string, b []byte) error {
-	path, err := c.path(name)
-	if err != nil {
-		return err
-	}
-	return c.client.upload(path, bytes.NewReader(b))
 }

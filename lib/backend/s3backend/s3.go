@@ -1,10 +1,12 @@
 package s3backend
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
+	"io"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/fileio"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 
@@ -67,9 +69,19 @@ func NewClient(config Config) (*Client, error) {
 	return &Client{s3Session: svc, config: config}, nil
 }
 
-// DownloadFile downloads the content from a configured bucket and writes the
+// Download downloads the content from a configured bucket and writes the
 // data to dst.
-func (c *Client) DownloadFile(name string, dst fileio.Writer) error {
+func (c *Client) Download(name string, dst io.Writer) error {
+
+	// The S3 download API uses WriterAt to perform concurrent chunked download.
+	// We attempt to upcast dst to WriterAt for this purpose, else we download into
+	// in-memory buffer and drain it into dst after the download is finished.
+	writerAt, ok := dst.(io.WriterAt)
+	if !ok {
+		log.With("name", name).Info("Using in-memory buffer for S3 download")
+		writerAt = aws.NewWriteAtBuffer([]byte{})
+	}
+
 	downloader := s3manager.NewDownloaderWithClient(c.s3Session, func(d *s3manager.Downloader) {
 		d.PartSize = c.config.DownloadPartSize // per part
 		d.Concurrency = c.config.DownloadConcurrency
@@ -83,22 +95,24 @@ func (c *Client) DownloadFile(name string, dst fileio.Writer) error {
 	log.Infof("Starting S3 download from remote backend: (bucket: %s, key %s)",
 		c.config.Bucket, name)
 
-	if _, err := downloader.Download(dst, dlParams); err != nil {
+	if _, err := downloader.Download(writerAt, dlParams); err != nil {
 		if isNotFound(err) {
 			return backenderrors.ErrBlobNotFound
 		}
 		return err
 	}
+
+	if buf, ok := writerAt.(*aws.WriteAtBuffer); ok {
+		if _, err := io.Copy(dst, bytes.NewReader(buf.Bytes())); err != nil {
+			return fmt.Errorf("drain buffer: %s", err)
+		}
+	}
+
 	return nil
 }
 
-// DownloadBytes TODO(codyg): Implement.
-func (c *Client) DownloadBytes(name string) ([]byte, error) {
-	return nil, errors.New("unimplemented")
-}
-
-// UploadFile uploads src to a configured bucket.
-func (c *Client) UploadFile(name string, src fileio.Reader) error {
+// Upload uploads src to a configured bucket.
+func (c *Client) Upload(name string, src io.Reader) error {
 	uploader := s3manager.NewUploaderWithClient(c.s3Session, func(u *s3manager.Uploader) {
 		u.PartSize = c.config.UploadPartSize // per part,
 		u.Concurrency = c.config.UploadConcurrency
@@ -119,11 +133,6 @@ func (c *Client) UploadFile(name string, src fileio.Reader) error {
 		u.LeavePartsOnError = false // delete the parts if the upload fails.
 	})
 	return err
-}
-
-// UploadBytes TODO(codyg): Implement.
-func (c *Client) UploadBytes(name string, b []byte) error {
-	return errors.New("unimplemented")
 }
 
 func isNotFound(err error) bool {

@@ -5,8 +5,8 @@
 package mockbackend
 
 import (
-	fileio "code.uber.internal/infra/kraken/lib/fileio"
 	gomock "github.com/golang/mock/gomock"
+	io "io"
 	reflect "reflect"
 )
 
@@ -33,51 +33,26 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
-// DownloadBytes mocks base method
-func (m *MockClient) DownloadBytes(arg0 string) ([]byte, error) {
-	ret := m.ctrl.Call(m, "DownloadBytes", arg0)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DownloadBytes indicates an expected call of DownloadBytes
-func (mr *MockClientMockRecorder) DownloadBytes(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBytes", reflect.TypeOf((*MockClient)(nil).DownloadBytes), arg0)
-}
-
-// DownloadFile mocks base method
-func (m *MockClient) DownloadFile(arg0 string, arg1 fileio.Writer) error {
-	ret := m.ctrl.Call(m, "DownloadFile", arg0, arg1)
+// Download mocks base method
+func (m *MockClient) Download(arg0 string, arg1 io.Writer) error {
+	ret := m.ctrl.Call(m, "Download", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DownloadFile indicates an expected call of DownloadFile
-func (mr *MockClientMockRecorder) DownloadFile(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadFile", reflect.TypeOf((*MockClient)(nil).DownloadFile), arg0, arg1)
+// Download indicates an expected call of Download
+func (mr *MockClientMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0, arg1)
 }
 
-// UploadBytes mocks base method
-func (m *MockClient) UploadBytes(arg0 string, arg1 []byte) error {
-	ret := m.ctrl.Call(m, "UploadBytes", arg0, arg1)
+// Upload mocks base method
+func (m *MockClient) Upload(arg0 string, arg1 io.Reader) error {
+	ret := m.ctrl.Call(m, "Upload", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// UploadBytes indicates an expected call of UploadBytes
-func (mr *MockClientMockRecorder) UploadBytes(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBytes", reflect.TypeOf((*MockClient)(nil).UploadBytes), arg0, arg1)
-}
-
-// UploadFile mocks base method
-func (m *MockClient) UploadFile(arg0 string, arg1 fileio.Reader) error {
-	ret := m.ctrl.Call(m, "UploadFile", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UploadFile indicates an expected call of UploadFile
-func (mr *MockClientMockRecorder) UploadFile(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadFile", reflect.TypeOf((*MockClient)(nil).UploadFile), arg0, arg1)
+// Upload indicates an expected call of Upload
+func (mr *MockClientMockRecorder) Upload(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockClient)(nil).Upload), arg0, arg1)
 }
