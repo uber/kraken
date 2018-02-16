@@ -1,26 +1,24 @@
-package hdfsbackend
+package s3backend
 
 import (
-	"fmt"
 	"io"
 
 	"code.uber.internal/infra/kraken/lib/backend/nameparse"
 )
 
-// DockerBlobClient is an HDFS client for uploading / download blobs to a docker
-// registry.
+// DockerBlobClient implements downloading/uploading object from/to S3
 type DockerBlobClient struct {
 	config Config
 	client *client
 }
 
-// NewDockerBlobClient creates a new DockerBlobClient.
+// NewDockerBlobClient creates s3 blob client from input parameters
 func NewDockerBlobClient(config Config) (*DockerBlobClient, error) {
-	config, err := config.applyDefaults()
+	client, err := newClient(config)
 	if err != nil {
-		return nil, fmt.Errorf("invalid config: %s", err)
+		return nil, err
 	}
-	return &DockerBlobClient{client: newClient(config), config: config}, nil
+	return &DockerBlobClient{client: client}, nil
 }
 
 func (c *DockerBlobClient) path(name string) (string, error) {

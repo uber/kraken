@@ -8,7 +8,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/backend/pathutil"
+	"code.uber.internal/infra/kraken/lib/backend/nameparse"
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
@@ -32,8 +32,8 @@ func NewDockerTagClient(config Config) (*DockerTagClient, error) {
 
 // getTagURL returns tag lookup URL to a remote registry.
 func (c *DockerTagClient) getTagURL(name string) (string, error) {
-	repo, tag, err := pathutil.ParseRepoTag(name)
-	if len(tag) == 0 {
+	repo, tag, err := nameparse.ParseRepoTag(name)
+	if err != nil {
 		return "", fmt.Errorf("parse repo tag: %s", err)
 	}
 	tagURL := fmt.Sprintf("http://%s/v2/%s/manifests/%s", c.config.Addr, repo, tag)
