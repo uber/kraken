@@ -130,6 +130,7 @@ func (f *dispatcherFactory) init(t storage.Torrent) *dispatcher {
 		pieceRequestTimeout: pieceRequestTimeout,
 		pendingPiecesDone:   make(chan struct{}),
 		stats:               f.Stats,
+		config:              f.Config,
 	}
 }
 
@@ -141,8 +142,8 @@ type dispatcher struct {
 	CreatedAt   time.Time
 	localPeerID core.PeerID
 	clock       clock.Clock
-
-	stats tally.Scope
+	stats       tally.Scope
+	config      DispatcherConfig
 
 	// Maps core.PeerID to *peer.
 	peers syncmap.Map
@@ -154,6 +155,9 @@ type dispatcher struct {
 	pieceRequestTimeout time.Duration
 
 	pieceRequestManager *piecerequest.Manager
+
+	disableEndgame   bool
+	endgameThreshold int
 
 	pendingPiecesDoneOnce sync.Once
 	pendingPiecesDone     chan struct{}
@@ -263,17 +267,24 @@ func (d *dispatcher) complete() {
 	})
 }
 
+func (d *dispatcher) endgame() bool {
+	if d.config.DisableEndgame {
+		return false
+	}
+	remaining := d.Torrent.NumPieces() - int(d.Torrent.Bitfield().Count())
+	return remaining <= d.config.EndgameThreshold
+}
+
 func (d *dispatcher) maybeRequestMorePieces(p *peer) (bool, error) {
 	candidates := p.bitfield.Intersection(d.Torrent.Bitfield().Complement())
 	return d.maybeSendPieceRequests(p, candidates)
 }
 
 func (d *dispatcher) maybeSendPieceRequests(p *peer, candidates *bitset.BitSet) (bool, error) {
-	pieces := d.pieceRequestManager.ReservePieces(p.id, candidates)
+	pieces := d.pieceRequestManager.ReservePieces(p.id, candidates, d.endgame())
 	if len(pieces) == 0 {
 		return false, nil
 	}
-
 	for _, i := range pieces {
 		if err := p.messages.Send(conn.NewPieceRequestMessage(i, d.Torrent.PieceLength(i))); err != nil {
 			// Connection closed.

@@ -142,6 +142,13 @@ type DispatcherConfig struct {
 	// PipelineLimit limits the total number of requests can be sent to a peer
 	// at the same time.
 	PipelineLimit int `yaml:"pipeline_limit"`
+
+	// EndgameThreshold is the number pieces required to complete the torrent
+	// before the torrent enters "endgame", where we start overloading piece
+	// requests to multiple peers.
+	EndgameThreshold int `yaml:"endgame_threshold"`
+
+	DisableEndgame bool `yaml:"disable_endgame"`
 }
 
 func (c DispatcherConfig) applyDefaults() DispatcherConfig {
@@ -153,6 +160,9 @@ func (c DispatcherConfig) applyDefaults() DispatcherConfig {
 	}
 	if c.PipelineLimit == 0 {
 		c.PipelineLimit = 3
+	}
+	if c.EndgameThreshold == 0 {
+		c.EndgameThreshold = c.PipelineLimit
 	}
 	return c
 }
