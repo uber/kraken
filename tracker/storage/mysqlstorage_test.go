@@ -206,18 +206,3 @@ func TestMySQLTryDeleteTorrent(t *testing.T) {
 		assert.NoError(mock.ExpectationsWereMet())
 	}))
 }
-
-func TestMySQLCreateTwoTorrentsWithSameNameReturnsErrExist(t *testing.T) {
-	require := require.New(t)
-
-	s, err := NewMySQLStorage(nemoConfigFixture(), mysqlConfigFixture())
-	require.NoError(err)
-	require.NoError(s.RunMigration())
-
-	m1 := core.MetaInfoFixture()
-	m2 := core.MetaInfoFixture()
-	m2.Info.Name = m1.Info.Name
-
-	require.NoError(s.SetMetaInfo(m1))
-	require.Equal(ErrExists, s.SetMetaInfo(m2))
-}

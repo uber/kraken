@@ -12,6 +12,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/utils/randutil"
+	"code.uber.internal/infra/kraken/utils/rwutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
 	"github.com/pressly/chi"
 	"github.com/stretchr/testify/require"
@@ -206,10 +207,30 @@ func TestClientUploadRetriesNextNameNode(t *testing.T) {
 
 			require.NoError(client.upload("data/"+d.Hex(), bytes.NewReader(blob)))
 
-			// Ensure non-seeker readers can replay their data.
+			// Ensure bytes.Buffer can replay data.
 			require.NoError(client.upload("data/"+d.Hex(), bytes.NewBuffer(blob)))
+
+			// Ensure non-buffer non-seekers can replay data.
+			require.NoError(client.upload("data/"+d.Hex(), rwutil.PlainReader(blob)))
 		})
 	}
+}
+
+func TestClientUploadErrorsWhenExceedsBufferGuard(t *testing.T) {
+	require := require.New(t)
+
+	config := configFixture("dummy-addr")
+	config.BufferGuard = 50
+
+	client := newClient(config)
+
+	// Exceeds BufferGuard.
+	data := randutil.Text(100)
+
+	err := client.upload("/some/path", rwutil.PlainReader(data))
+	require.Error(err)
+	_, ok := err.(drainSrcError).err.(exceededCapError)
+	require.True(ok)
 }
 
 type backendClient interface {
