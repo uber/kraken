@@ -105,6 +105,7 @@ func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 	require := require.New(t)
 
 	config := dispatcherConfigFixture()
+	config.DisableEndgame = true
 	clk := clock.NewMock()
 	f := dispatcherFactoryFixture(config, clk)
 
@@ -165,6 +166,7 @@ func TestDispatcherSendErrorsMarksPieceRequestsUnsent(t *testing.T) {
 	require := require.New(t)
 
 	config := dispatcherConfigFixture()
+	config.DisableEndgame = true
 	clk := clock.NewMock()
 	f := dispatcherFactoryFixture(config, clk)
 
@@ -218,4 +220,33 @@ func TestDispatcherCalcPieceRequestTimeout(t *testing.T) {
 			require.Equal(t, test.expected, timeout)
 		})
 	}
+}
+
+func TestDispatcherEndgame(t *testing.T) {
+	require := require.New(t)
+
+	config := dispatcherConfigFixture()
+	config.PipelineLimit = 1
+	config.EndgameThreshold = 1
+	f := dispatcherFactoryFixture(config, clock.NewMock())
+
+	torrent, cleanup := storage.TorrentFixture(1, 1)
+	defer cleanup()
+
+	d := f.init(torrent)
+
+	p1Messages := newMockMessages()
+	p1, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(true), p1Messages)
+	require.NoError(err)
+
+	d.maybeRequestMorePieces(p1)
+	require.Equal(map[int]int{0: 1}, p1Messages.numRequestsPerPiece())
+
+	p2Messages := newMockMessages()
+	p2, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(true), p2Messages)
+	require.NoError(err)
+
+	// Should send duplicate request for piece 0 since we're in endgame.
+	d.maybeRequestMorePieces(p2)
+	require.Equal(map[int]int{0: 1}, p2Messages.numRequestsPerPiece())
 }

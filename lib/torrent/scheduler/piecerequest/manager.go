@@ -2,6 +2,7 @@ package piecerequest
 
 import (
 	"math/rand"
+	"sort"
 	"sync"
 	"time"
 
@@ -43,7 +44,7 @@ type Manager struct {
 	sync.RWMutex
 
 	// requests and requestsByPeer holds the same data, just indexed differently.
-	requests       map[int]*Request
+	requests       map[int][]*Request
 	requestsByPeer map[core.PeerID]map[int]*Request
 
 	clock         clock.Clock
@@ -54,7 +55,7 @@ type Manager struct {
 // NewManager creates a new Manager.
 func NewManager(clk clock.Clock, timeout time.Duration, pipelineLimit int) *Manager {
 	return &Manager{
-		requests:       make(map[int]*Request),
+		requests:       make(map[int][]*Request),
 		requestsByPeer: make(map[core.PeerID]map[int]*Request),
 		clock:          clk,
 		timeout:        timeout,
@@ -62,12 +63,17 @@ func NewManager(clk clock.Clock, timeout time.Duration, pipelineLimit int) *Mana
 	}
 }
 
-// ReservePieces selects the next piece(s) to be requested from given peer, and
-// save it as pending in request map to avoid duplicate requests.
-func (m *Manager) ReservePieces(peerID core.PeerID, candidates *bitset.BitSet) []int {
+// ReservePieces selects the next piece(s) to be requested from given peer. If
+// allowDuplicates is set, may return pieces which have already been reserved
+// under other peers.
+func (m *Manager) ReservePieces(
+	peerID core.PeerID, candidates *bitset.BitSet, allowDuplicates bool) []int {
+
 	m.Lock()
 	defer m.Unlock()
 
+	// TODO(codyg): Fix bug where we don't consider failed piece requests here.
+	// If a request has a fail status, it'll still count towards the pipeline limit.
 	if pm, ok := m.requestsByPeer[peerID]; ok && len(pm) > m.pipelineLimit {
 		return nil
 	}
@@ -76,10 +82,9 @@ func (m *Manager) ReservePieces(peerID core.PeerID, candidates *bitset.BitSet) [
 	var pieces []int
 	count := 0
 	for i, e := candidates.NextSet(0); e; i, e = candidates.NextSet(i + 1) {
-		if r, ok := m.requests[int(i)]; ok && r.Status == StatusPending && !m.expired(r) {
+		if !m.validRequest(peerID, int(i), allowDuplicates) {
 			continue
 		}
-
 		if count < m.pipelineLimit {
 			pieces = append(pieces, int(i))
 		} else if rand.Intn(count) < 1 {
@@ -97,7 +102,7 @@ func (m *Manager) ReservePieces(peerID core.PeerID, candidates *bitset.BitSet) [
 			Status: StatusPending,
 			sentAt: m.clock.Now(),
 		}
-		m.requests[i] = r
+		m.requests[i] = append(m.requests[i], r)
 		if _, ok := m.requestsByPeer[peerID]; !ok {
 			m.requestsByPeer[peerID] = make(map[int]*Request)
 		}
@@ -133,6 +138,22 @@ func (m *Manager) Clear(i int) {
 	}
 }
 
+// PendingPieces returns the pieces for all pending requests to peerID in sorted
+// order. Intended primarily for testing purposes.
+func (m *Manager) PendingPieces(peerID core.PeerID) []int {
+	m.RLock()
+	defer m.RUnlock()
+
+	var pieces []int
+	for i, r := range m.requestsByPeer[peerID] {
+		if r.Status == StatusPending {
+			pieces = append(pieces, i)
+		}
+	}
+	sort.Ints(pieces)
+	return pieces
+}
+
 // ClearPeer deletes all piece requests for peerID.
 func (m *Manager) ClearPeer(peerID core.PeerID) {
 	m.Lock()
@@ -140,33 +161,54 @@ func (m *Manager) ClearPeer(peerID core.PeerID) {
 
 	delete(m.requestsByPeer, peerID)
 
-	for i, r := range m.requests {
-		if r.PeerID == peerID {
-			delete(m.requests, i)
+	for i, rs := range m.requests {
+		for j, r := range rs {
+			if r.PeerID == peerID {
+				// Eject request.
+				rs[j] = rs[len(rs)-1]
+				m.requests[i] = rs[:len(rs)-1]
+				break
+			}
 		}
 	}
 }
 
 // GetFailedRequests returns a copy of all failed piece requests.
 func (m *Manager) GetFailedRequests() []Request {
-	m.Lock()
-	defer m.Unlock()
+	m.RLock()
+	defer m.RUnlock()
 
 	var failed []Request
-	for _, r := range m.requests {
-		status := r.Status
-		if status == StatusPending && m.expired(r) {
-			status = StatusExpired
-		}
-		if status != StatusPending {
-			failed = append(failed, Request{
-				Piece:  r.Piece,
-				PeerID: r.PeerID,
-				Status: status,
-			})
+	for _, rs := range m.requests {
+		for _, r := range rs {
+			status := r.Status
+			if status == StatusPending && m.expired(r) {
+				status = StatusExpired
+			}
+			if status != StatusPending {
+				failed = append(failed, Request{
+					Piece:  r.Piece,
+					PeerID: r.PeerID,
+					Status: status,
+				})
+			}
 		}
 	}
 	return failed
+}
+
+func (m *Manager) validRequest(peerID core.PeerID, i int, allowDuplicates bool) bool {
+	for _, r := range m.requests[i] {
+		if r.Status == StatusPending && !m.expired(r) {
+			if r.PeerID == peerID {
+				return false
+			}
+			if !allowDuplicates {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (m *Manager) expired(r *Request) bool {
@@ -178,7 +220,9 @@ func (m *Manager) markStatus(peerID core.PeerID, i int, s Status) {
 	m.Lock()
 	defer m.Unlock()
 
-	if r, ok := m.requests[i]; ok && r.PeerID == peerID {
-		r.Status = s
+	for _, r := range m.requests[i] {
+		if r.PeerID == peerID {
+			r.Status = s
+		}
 	}
 }
