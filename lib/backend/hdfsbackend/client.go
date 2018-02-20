@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
+	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
 var errAllNameNodesUnavailable = errors.New(
@@ -59,18 +59,47 @@ func (c *client) download(path string, dst io.Writer) error {
 	return errAllNameNodesUnavailable
 }
 
+type exceededCapError error
+
+// capBuffer is a buffer that returns errors if the buffer exceeds cap.
+type capBuffer struct {
+	cap int64
+	buf *bytes.Buffer
+}
+
+func (b *capBuffer) Write(p []byte) (n int, err error) {
+	if int64(len(p)+b.buf.Len()) > b.cap {
+		return 0, exceededCapError(
+			fmt.Errorf("buffer exceeded max capacity %s", memsize.Format(uint64(b.cap))))
+	}
+	return b.buf.Write(p)
+}
+
+type drainSrcError struct {
+	err error
+}
+
+func (e drainSrcError) Error() string { return fmt.Sprintf("drain src: %s", e.err) }
+
 func (c *client) upload(path string, src io.Reader) error {
 
 	// We must be able to replay src in the event that uploading to the data node
-	// fails halfway through the upload, thus we attempt to upcast src to a Seeker
-	// for this purpose. If src is not a Seeker, we drain it to an in-memory buffer
+	// fails halfway through the upload, thus we attempt to upcast src to an io.Seeker
+	// for this purpose. If src is not an io.Seeker, we drain it to an in-memory buffer
 	// that can be replayed.
 	readSeeker, ok := src.(io.ReadSeeker)
 	if !ok {
-		log.With("path", path).Info("Draining HDFS upload source into replayable buffer")
-		b, err := ioutil.ReadAll(src)
-		if err != nil {
-			return fmt.Errorf("drain src: %s", err)
+		var b []byte
+		if buf, ok := src.(*bytes.Buffer); ok {
+			// Optimization to avoid draining an existing buffer.
+			b = buf.Bytes()
+		} else {
+			log.With("path", path).Info("Draining HDFS upload source into replayable buffer")
+			cbuf := &capBuffer{int64(c.config.BufferGuard), new(bytes.Buffer)}
+			if _, err := io.Copy(cbuf, src); err != nil {
+				return drainSrcError{err}
+			}
+			b = cbuf.buf.Bytes()
 		}
 		readSeeker = bytes.NewReader(b)
 	}

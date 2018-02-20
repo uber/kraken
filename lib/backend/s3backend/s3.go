@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/c2h5oh/datasize"
 )
 
 // Config defines s3 connection specific
@@ -24,11 +25,16 @@ type Config struct {
 	Region string `yaml:"region"` // AWS S3 region
 	Bucket string `yaml:"bucket"` // S3 bucket
 
-	UploadPartSize   int64 `yaml:"upload_part_size"`   // part size s3 manager uses for upload
-	DownloadPartSize int64 `yaml:"download_part_size"` // part size s3 manager uses for download
+	UploadPartSize   int64 `yaml:"upload_part_size"`
+	DownloadPartSize int64 `yaml:"download_part_size"`
 
-	UploadConcurrency   int `yaml:"upload_concurrency"`   // # of concurrent go-routines s3 manager uses for upload
-	DownloadConcurrency int `yaml:"donwload_concurrency"` // # of concurrent go-routines s3 manager uses for download
+	// Number of concurrent goroutines used for upload/download.
+	UploadConcurrency   int `yaml:"upload_concurrency"`
+	DownloadConcurrency int `yaml:"donwload_concurrency"`
+
+	// BufferGuard protects download from downloading into an oversized buffer
+	// when io.WriterAt is not implemented.
+	BufferGuard datasize.ByteSize `yaml:"buffer_guard"`
 }
 
 // Client implements downloading/uploading object from/to S3
@@ -50,6 +56,9 @@ func (c Config) applyDefaults() Config {
 	if c.DownloadConcurrency == 0 {
 		c.DownloadConcurrency = 10
 	}
+	if c.BufferGuard == 0 {
+		c.BufferGuard = 10 * datasize.MB
+	}
 	return c
 }
 
@@ -69,17 +78,33 @@ func NewClient(config Config) (*Client, error) {
 	return &Client{s3Session: svc, config: config}, nil
 }
 
+type exceededCapError error
+
+// capBuffer is a buffer that returns errors if the buffer exceeds cap.
+type capBuffer struct {
+	cap int64
+	buf *aws.WriteAtBuffer
+}
+
+func (b *capBuffer) WriteAt(p []byte, pos int64) (n int, err error) {
+	if pos+int64(len(p)) > b.cap {
+		return 0, exceededCapError(
+			fmt.Errorf("buffer exceed max capacity %s", memsize.Format(uint64(b.cap))))
+	}
+	return b.buf.WriteAt(p, pos)
+}
+
 // Download downloads the content from a configured bucket and writes the
 // data to dst.
 func (c *Client) Download(name string, dst io.Writer) error {
 
-	// The S3 download API uses WriterAt to perform concurrent chunked download.
-	// We attempt to upcast dst to WriterAt for this purpose, else we download into
+	// The S3 download API uses io.WriterAt to perform concurrent chunked download.
+	// We attempt to upcast dst to io.WriterAt for this purpose, else we download into
 	// in-memory buffer and drain it into dst after the download is finished.
 	writerAt, ok := dst.(io.WriterAt)
 	if !ok {
 		log.With("name", name).Info("Using in-memory buffer for S3 download")
-		writerAt = aws.NewWriteAtBuffer([]byte{})
+		writerAt = &capBuffer{int64(c.config.BufferGuard), aws.NewWriteAtBuffer([]byte{})}
 	}
 
 	downloader := s3manager.NewDownloaderWithClient(c.s3Session, func(d *s3manager.Downloader) {
@@ -102,8 +127,8 @@ func (c *Client) Download(name string, dst io.Writer) error {
 		return err
 	}
 
-	if buf, ok := writerAt.(*aws.WriteAtBuffer); ok {
-		if _, err := io.Copy(dst, bytes.NewReader(buf.Bytes())); err != nil {
+	if cbuf, ok := writerAt.(*capBuffer); ok {
+		if _, err := io.Copy(dst, bytes.NewReader(cbuf.buf.Bytes())); err != nil {
 			return fmt.Errorf("drain buffer: %s", err)
 		}
 	}

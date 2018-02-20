@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/mocks/lib/dockerregistry/transfer/manifestclient"
+	"code.uber.internal/infra/kraken/utils/rwutil"
 )
 
 func TestRemoteBackendTransfererDownloadCachesBlobs(t *testing.T) {
@@ -31,7 +31,7 @@ func TestRemoteBackendTransfererDownloadCachesBlobs(t *testing.T) {
 	rbt, err := NewRemoteBackendTransferer(mockmanifestclient.NewMockClient(ctrl), mockBackendClient, fs)
 	require.NoError(err)
 
-	mockBackendClient.EXPECT().Download(d.Hex(), backend.MatchWriter(blob)).Return(nil)
+	mockBackendClient.EXPECT().Download(d.Hex(), rwutil.MatchWriter(blob)).Return(nil)
 
 	_, err = rbt.Download(d.Hex())
 	require.NoError(err)
@@ -62,7 +62,7 @@ func TestRemoteBackendTransfererUploadBlobs(t *testing.T) {
 	rbt, err := NewRemoteBackendTransferer(mockmanifestclient.NewMockClient(ctrl), mockBackendClient, fs)
 	require.NoError(err)
 
-	mockBackendClient.EXPECT().Upload(d.Hex(), backend.MatchReader(blob)).Return(nil)
+	mockBackendClient.EXPECT().Upload(d.Hex(), rwutil.MatchReader(blob)).Return(nil)
 
 	reader, err := fs.GetCacheFileReader(d.Hex())
 	require.NoError(err)

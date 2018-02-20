@@ -1,6 +1,7 @@
 package s3backend
 
 import (
+	"bytes"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -54,4 +55,8 @@ func TestS3DownloadSuccess(t *testing.T) {
 
 	err = s3client.Download(f.Name(), f)
 	require.NoError(err)
+
+	// Make sure download into buffer works.
+	var buf bytes.Buffer
+	require.NoError(s3client.Download("???", &buf))
 }

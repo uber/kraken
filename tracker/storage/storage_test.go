@@ -31,6 +31,8 @@ func TestRedisStoresBackedBySameInstance(t *testing.T) {
 }
 
 func TestMySQLStoresBackedBySameInstance(t *testing.T) {
+	t.Skip()
+
 	require := require.New(t)
 
 	cfg := configFixture()
