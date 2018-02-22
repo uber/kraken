@@ -1,33 +1,46 @@
 package transfer
 
 import (
+	"bytes"
 	"fmt"
-	"io"
 	"os"
+	"strings"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/lib/store"
+
 	"github.com/docker/distribution/uuid"
+	lru "github.com/hashicorp/golang-lru"
 )
+
+const _defaultTagLRUSize = 256
 
 // RemoteBackendTransferer wraps transferring blobs to/from remote storage backend.
 type RemoteBackendTransferer struct {
-	fs     store.FileStore
-	mc     manifestclient.Client
-	client backend.Client
+	tagClient  backend.Client
+	blobClient backend.Client
+
+	cache *lru.Cache      // In-memory LRU cache for tags
+	fs    store.FileStore // On-disk cache for blobs
 }
 
 // NewRemoteBackendTransferer creates a new RemoteBackendTransferer.
 func NewRemoteBackendTransferer(
-	manifestClient manifestclient.Client,
-	client backend.Client,
+	tagClient backend.Client,
+	blobClient backend.Client,
 	fs store.FileStore) (*RemoteBackendTransferer, error) {
 
+	cache, err := lru.New(_defaultTagLRUSize)
+	if err != nil {
+		return nil, fmt.Errorf("failed to init tag lru: %s", err)
+	}
+
 	return &RemoteBackendTransferer{
-		fs:     fs,
-		mc:     manifestClient,
-		client: client,
+		tagClient:  tagClient,
+		blobClient: blobClient,
+		cache:      cache,
+		fs:         fs,
 	}, nil
 }
 
@@ -47,7 +60,7 @@ func (t *RemoteBackendTransferer) Download(name string) (store.FileReader, error
 			}
 			defer w.Close()
 
-			if err := t.client.Download(name, w); err != nil {
+			if err := t.blobClient.Download(name, w); err != nil {
 				return nil, fmt.Errorf("remote backend download: %s", err)
 			}
 
@@ -61,7 +74,6 @@ func (t *RemoteBackendTransferer) Download(name string) (store.FileReader, error
 			if err != nil {
 				return nil, fmt.Errorf("get cache file: %s", err)
 			}
-
 		} else {
 			return nil, fmt.Errorf("get cache file: %s", err)
 		}
@@ -73,15 +85,29 @@ func (t *RemoteBackendTransferer) Download(name string) (store.FileReader, error
 // TODO(igor): remove blob and size parameters from the interface. Transferer should just read
 // directly from a filestore
 func (t *RemoteBackendTransferer) Upload(name string, blob store.FileReader, size int64) error {
-	return t.client.Upload(name, blob)
+	return t.blobClient.Upload(name, blob)
 }
 
-// GetManifest gets and saves manifest given addr, repo and tag
-func (t *RemoteBackendTransferer) GetManifest(repo, tag string) (io.ReadCloser, error) {
-	return t.mc.GetManifest(repo, tag)
+// GetTag gets manifest digest, given repo and tag.
+func (t *RemoteBackendTransferer) GetTag(repo, tag string) (core.Digest, error) {
+	name := fmt.Sprintf("%s:%s", repo, tag)
+	if v, ok := t.cache.Get(name); ok {
+		if b, ok := v.([]byte); ok {
+			return core.NewDigestFromString(string(b))
+		}
+	}
+
+	var b bytes.Buffer
+	if err := t.tagClient.Download(name, &b); err != nil {
+		return core.Digest{}, err
+	}
+	t.cache.ContainsOrAdd(name, b.Bytes())
+
+	return core.NewDigestFromString(b.String())
 }
 
-// PostManifest posts manifest to addr given repo and tag
-func (t *RemoteBackendTransferer) PostManifest(repo, tag string, manifest io.Reader) error {
-	return t.mc.PostManifest(repo, tag, manifest)
+// PostTag posts tag:manifest_digest mapping to addr given repo and tag.
+func (t *RemoteBackendTransferer) PostTag(repo, tag string, manifestDigest core.Digest) error {
+	r := strings.NewReader(manifestDigest.String())
+	return t.tagClient.Upload(fmt.Sprintf("%s:%s", repo, tag), r)
 }

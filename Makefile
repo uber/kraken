@@ -80,6 +80,8 @@ mockgen = GOPATH=$(OLDGOPATH) $(GLIDE_EXEC) -g $(GLIDE) -d $(GOPATH)/bin -x gith
 
 # mockgen must be installed on the system to make this work. Install it by running
 # `go get github.com/golang/mock/mockgen`.
+# go-build/.go/bin/darwin-x86_64/glide-exec is also needed. build it by running
+# `cd go-build && make gobuild-bins`
 .PHONY: mocks
 mocks:
 	rm -rf mocks
@@ -126,12 +128,6 @@ mocks:
 		-destination=mocks/lib/dockerregistry/transfer/mocktransferer.go \
 		-package mocktransferer \
 		code.uber.internal/infra/kraken/lib/dockerregistry/transfer ImageTransferer
-
-	mkdir -p mocks/lib/dockerregistry/transfer/manifestclient
-	$(mockgen) \
-		-destination=mocks/lib/dockerregistry/transfer/manifestclient/mockmanifestclient.go \
-		-package mockmanifestclient \
-		code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient Client
 
 	mkdir -p mocks/tracker/metainfoclient
 	$(mockgen) \

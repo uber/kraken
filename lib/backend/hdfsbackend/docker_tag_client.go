@@ -1,14 +1,13 @@
 package hdfsbackend
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"strings"
+
+	"code.uber.internal/infra/kraken/lib/backend/pathutil"
 )
 
-// DockerTagClient is an HDFS client for uploading / downloading tags to a docker
-// registry.
+// DockerTagClient is an HDFS client for uploading / downloading tags to a docker registry.
 type DockerTagClient struct {
 	client *client
 }
@@ -23,17 +22,9 @@ func NewDockerTagClient(config Config) (*DockerTagClient, error) {
 }
 
 func (c *DockerTagClient) path(name string) (string, error) {
-	tokens := strings.Split(name, ":")
-	if len(tokens) != 2 {
-		return "", errors.New("name must be in format 'repo:tag'")
-	}
-	repo := tokens[0]
-	tag := tokens[1]
-	if len(repo) == 0 {
-		return "", errors.New("repo must be non-empty")
-	}
+	repo, tag, err := pathutil.ParseRepoTag(name)
 	if len(tag) == 0 {
-		return "", errors.New("tag must be non-empty")
+		return "", fmt.Errorf("parse repo tag: %s", err)
 	}
 	path := fmt.Sprintf(
 		"webhdfs/v1/infra/dockerRegistry/docker/registry/v2/repositories/%s/_manifests/tags/%s/current/link",
@@ -41,21 +32,21 @@ func (c *DockerTagClient) path(name string) (string, error) {
 	return path, nil
 }
 
-// Download downloads the value of name into dst. name should be in the
-// format "repo:tag".
+// Download downloads the value of name into dst. Name should be in the format "repo:tag".
 func (c *DockerTagClient) Download(name string, dst io.Writer) error {
 	path, err := c.path(name)
 	if err != nil {
-		return err
+		return fmt.Errorf("tag path: %s", err)
 	}
+
 	return c.client.download(path, dst)
 }
 
-// Upload uploads src as the value of name. name should be in the format "repo:tag".
+// Upload uploads src as the value of name. Name should be in the format "repo:tag".
 func (c *DockerTagClient) Upload(name string, src io.Reader) error {
 	path, err := c.path(name)
 	if err != nil {
-		return err
+		return fmt.Errorf("tag path: %s", err)
 	}
 	return c.client.upload(path, src)
 }

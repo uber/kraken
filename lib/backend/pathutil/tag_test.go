@@ -1,4 +1,4 @@
-package hdfsbackend
+package pathutil
 
 import (
 	"testing"
@@ -16,10 +16,7 @@ func TestDockerTagClientPathErrors(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			require := require.New(t)
 
-			client, err := NewDockerTagClient(configFixture("dummy-addr"))
-			require.NoError(err)
-
-			_, err = client.path(name)
+			_, _, err := ParseRepoTag(name)
 			require.Error(err)
 		})
 	}

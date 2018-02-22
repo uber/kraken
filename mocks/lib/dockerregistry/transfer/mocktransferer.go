@@ -5,9 +5,9 @@
 package mocktransferer
 
 import (
+	core "code.uber.internal/infra/kraken/core"
 	base "code.uber.internal/infra/kraken/lib/store/base"
 	gomock "github.com/golang/mock/gomock"
-	io "io"
 	reflect "reflect"
 )
 
@@ -47,29 +47,29 @@ func (mr *MockImageTransfererMockRecorder) Download(arg0 interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockImageTransferer)(nil).Download), arg0)
 }
 
-// GetManifest mocks base method
-func (m *MockImageTransferer) GetManifest(arg0, arg1 string) (io.ReadCloser, error) {
-	ret := m.ctrl.Call(m, "GetManifest", arg0, arg1)
-	ret0, _ := ret[0].(io.ReadCloser)
+// GetTag mocks base method
+func (m *MockImageTransferer) GetTag(arg0, arg1 string) (core.Digest, error) {
+	ret := m.ctrl.Call(m, "GetTag", arg0, arg1)
+	ret0, _ := ret[0].(core.Digest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetManifest indicates an expected call of GetManifest
-func (mr *MockImageTransfererMockRecorder) GetManifest(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetManifest", reflect.TypeOf((*MockImageTransferer)(nil).GetManifest), arg0, arg1)
+// GetTag indicates an expected call of GetTag
+func (mr *MockImageTransfererMockRecorder) GetTag(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTag", reflect.TypeOf((*MockImageTransferer)(nil).GetTag), arg0, arg1)
 }
 
-// PostManifest mocks base method
-func (m *MockImageTransferer) PostManifest(arg0, arg1 string, arg2 io.Reader) error {
-	ret := m.ctrl.Call(m, "PostManifest", arg0, arg1, arg2)
+// PostTag mocks base method
+func (m *MockImageTransferer) PostTag(arg0, arg1 string, arg2 core.Digest) error {
+	ret := m.ctrl.Call(m, "PostTag", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// PostManifest indicates an expected call of PostManifest
-func (mr *MockImageTransfererMockRecorder) PostManifest(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostManifest", reflect.TypeOf((*MockImageTransferer)(nil).PostManifest), arg0, arg1, arg2)
+// PostTag indicates an expected call of PostTag
+func (mr *MockImageTransfererMockRecorder) PostTag(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostTag", reflect.TypeOf((*MockImageTransferer)(nil).PostTag), arg0, arg1, arg2)
 }
 
 // Upload mocks base method

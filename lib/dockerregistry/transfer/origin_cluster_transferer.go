@@ -1,33 +1,34 @@
 package transfer
 
 import (
+	"bytes"
 	"fmt"
-	"io"
 	"os"
+	"strings"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 )
 
 // OriginClusterTransferer wraps transferring blobs to the origin cluster.
 type OriginClusterTransferer struct {
-	originCluster  blobclient.ClusterClient
-	manifestClient manifestclient.Client
-	fs             store.FileStore
+	originCluster blobclient.ClusterClient
+	tagClient     backend.Client
+	fs            store.FileStore
 }
 
 // NewOriginClusterTransferer creates a new OriginClusterTransferer.
 func NewOriginClusterTransferer(
 	originCluster blobclient.ClusterClient,
-	manifestClient manifestclient.Client,
+	tagClient backend.Client,
 	fs store.FileStore) *OriginClusterTransferer {
 
 	return &OriginClusterTransferer{
-		originCluster:  originCluster,
-		manifestClient: manifestClient,
-		fs:             fs,
+		originCluster: originCluster,
+		tagClient:     tagClient,
+		fs:            fs,
 	}
 }
 
@@ -61,12 +62,25 @@ func (t *OriginClusterTransferer) Upload(name string, blob store.FileReader, siz
 	return t.originCluster.UploadBlob("TODO", d, blob, size)
 }
 
-// GetManifest gets and saves manifest given addr, repo and tag
-func (t *OriginClusterTransferer) GetManifest(repo, tag string) (io.ReadCloser, error) {
-	return t.manifestClient.GetManifest(repo, tag)
+// GetTag gets manifest digest, given repo and tag.
+func (t *OriginClusterTransferer) GetTag(repo, tag string) (core.Digest, error) {
+	var b bytes.Buffer
+	if err := t.tagClient.Download(fmt.Sprintf("%s:%s", repo, tag), &b); err != nil {
+		return core.Digest{}, fmt.Errorf("download tag through client: %s", err)
+	}
+
+	d, err := core.NewDigestFromString(b.String())
+	if err != nil {
+		return core.Digest{}, fmt.Errorf("construct manifest digest: %s", err)
+	}
+	return d, nil
 }
 
-// PostManifest posts manifest to addr given repo and tag
-func (t *OriginClusterTransferer) PostManifest(repo, tag string, manifest io.Reader) error {
-	return t.manifestClient.PostManifest(repo, tag, manifest)
+// PostTag posts tag:manifest_digest mapping to addr given repo and tag.
+func (t *OriginClusterTransferer) PostTag(repo, tag string, manifestDigest core.Digest) error {
+	r := strings.NewReader(manifestDigest.String())
+	if err := t.tagClient.Upload(fmt.Sprintf("%s:%s", repo, tag), r); err != nil {
+		return fmt.Errorf("upload tag through client: %s", err)
+	}
+	return nil
 }

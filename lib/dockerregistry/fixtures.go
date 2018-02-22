@@ -2,10 +2,10 @@ package dockerregistry
 
 import (
 	"errors"
-	"io"
 	"io/ioutil"
 	"os"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils/testutil"
 	"github.com/uber-go/tally"
@@ -22,10 +22,10 @@ func (mc *mockImageTransferer) Download(name string) (store.FileReader, error) {
 func (mc *mockImageTransferer) Upload(name string, blob store.FileReader, size int64) error {
 	return nil
 }
-func (mc *mockImageTransferer) GetManifest(repo, tag string) (io.ReadCloser, error) {
-	return nil, errMockError
+func (mc *mockImageTransferer) GetTag(repo, tag string) (core.Digest, error) {
+	return core.Digest{}, errMockError
 }
-func (mc *mockImageTransferer) PostManifest(repo, tag string, manifest io.Reader) error {
+func (mc *mockImageTransferer) PostTag(repo, tag string, manifestDigest core.Digest) error {
 	return nil
 }
 func (mc *mockImageTransferer) Close() error { return nil }

@@ -11,7 +11,6 @@ import (
 
 // Config defines proxy configuration
 type Config struct {
-	Tracker    TrackerConfig         `yaml:"tracker"`
 	Origin     OriginConfig          `yaml:"origin"`
 	Store      store.Config          `yaml:"store"`
 	Registry   dockerregistry.Config `yaml:"registry"`

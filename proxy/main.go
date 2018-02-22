@@ -9,11 +9,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/metrics"
-	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -35,49 +32,27 @@ func main() {
 	}
 	defer closer.Close()
 
+	backendManager, err := backend.NewManager(config.Registry.Namespaces)
+	if err != nil {
+		log.Fatalf("Error creating backend manager: %s", err)
+	}
+	tagClient, err := backendManager.GetClient(config.Registry.TagNamespace)
+	if err != nil {
+		log.Fatalf("Error creating backend tag client: %s", err)
+	}
+	blobClient, err := backendManager.GetClient(config.Registry.BlobNamespace)
+	if err != nil {
+		log.Fatalf("Error creating backend blob client: %s", err)
+	}
 	fs, err := store.NewLocalFileStore(config.Store, stats, config.Registry.TagDeletion.Enable)
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
-
-	var transferer transfer.ImageTransferer
-	if config.Registry.Namespace != "" {
-		// If namespace is specified, use remote backend for blob upload/download and
-		// manifest upload/download.
-		backendManager, err := backend.NewManager(config.Registry.Namespaces)
-		if err != nil {
-			log.Fatalf("Error creating backend manager: %s", err)
-		}
-		backendClient, err := backendManager.GetClient(config.Registry.Namespace)
-		if err != nil {
-			log.Fatalf("Error creating backend client: %s", err)
-		}
-		manifestClient, err := backendManager.GetManifestClient(config.Registry.Namespace)
-		if err != nil {
-			log.Fatalf("Error creating backend manifest client: %s", err)
-		}
-		transferer, err = transfer.NewRemoteBackendTransferer(
-			manifestClient, backendClient, fs)
-		if err != nil {
-			log.Fatalf("Error creating image transferer: %s", err)
-		}
-	} else {
-		origins, err := serverset.NewRoundRobin(config.Origin.RoundRobin)
-		if err != nil {
-			log.Fatalf("Error creating origin round robin: %s", err)
-		}
-		originCluster := blobclient.NewClusterClient(
-			blobclient.NewClientResolver(blobclient.NewProvider(), origins))
-
-		trackers, err := serverset.NewRoundRobin(config.Tracker.RoundRobin)
-		if err != nil {
-			log.Fatalf("Error creating tracker round robin: %s", err)
-		}
-		manifestClient := manifestclient.New(trackers)
-
-		transferer = transfer.NewOriginClusterTransferer(
-			originCluster, manifestClient, fs)
+	transferer, err := transfer.NewRemoteBackendTransferer(tagClient, blobClient, fs)
+	if err != nil {
+		log.Fatalf("Error creating image transferer: %s", err)
 	}
+
 	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)
 	if err != nil {

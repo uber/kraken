@@ -20,7 +20,7 @@ type Config struct {
 	Torrent     torrent.Config          `yaml:"torrent"`
 	Metrics     metrics.Config          `yaml:"metrics"`
 	Tracker     TrackerConfig           `yaml:"tracker"`
-	Namespace   backend.NamespaceConfig `yaml:"namespaces"`
+	Namespaces  backend.NamespaceConfig `yaml:"namespaces"`
 }
 
 // TrackerConfig defines configuration for proxy's dependency on tracker.
