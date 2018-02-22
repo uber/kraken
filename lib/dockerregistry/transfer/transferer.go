@@ -1,8 +1,7 @@
 package transfer
 
 import (
-	"io"
-
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 )
 
@@ -16,15 +15,15 @@ type Uploader interface {
 	Upload(name string, blob store.FileReader, size int64) error
 }
 
-// ManifestManager defines an interface to get and post manifest
-type ManifestManager interface {
-	GetManifest(repo, tag string) (io.ReadCloser, error)
-	PostManifest(repo, tag string, reader io.Reader) error
+// TagManager defines an interface to get and post tags
+type TagManager interface {
+	GetTag(repo, tag string) (core.Digest, error)
+	PostTag(repo, tag string, manifestDigest core.Digest) error
 }
 
 // ImageTransferer defines an interface that transfers images
 type ImageTransferer interface {
 	Downloader
 	Uploader
-	ManifestManager
+	TagManager
 }

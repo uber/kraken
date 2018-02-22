@@ -56,7 +56,7 @@ func TestOriginFileStoreInitDirectories(t *testing.T) {
 	n2 := len(v2Files)
 	n3 := len(v3Files)
 
-	// There should be 256 symlinks total, evenly ditributed across the volumes.
+	// There should be 256 symlinks total, evenly distributed across the volumes.
 	require.Equal(256, (n1 + n2 + n3))
 	require.True(float32(n1)/255 > float32(0.25))
 	require.True(float32(n2)/255 > float32(0.25))

@@ -6,10 +6,11 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/pressly/chi"
-
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils/handler"
+
+	"github.com/docker/distribution/uuid"
+	"github.com/pressly/chi"
 )
 
 // Server provides HTTP upload / download endpoints around a file store.
@@ -67,8 +68,25 @@ func (s *Server) uploadHandler(w http.ResponseWriter, r *http.Request) error {
 	if name == "" {
 		return handler.Errorf("name required").Status(http.StatusBadRequest)
 	}
-	if err := s.fs.CreateCacheFile(name, r.Body); err != nil {
-		return handler.Errorf("file store: %s", err)
+
+	tmp := fmt.Sprintf("%s.%s", name, uuid.Generate().String())
+	if err := s.fs.CreateUploadFile(tmp, 0); err != nil {
+		return err
+	}
+	writer, err := s.fs.GetUploadFileReadWriter(tmp)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+	if _, err := io.Copy(writer, r.Body); err != nil {
+		return fmt.Errorf("copy: %s", err)
+	}
+	defer r.Body.Close()
+
+	if err := s.fs.MoveUploadFileToCache(tmp, name); err != nil {
+		if !os.IsExist(err) {
+			return err
+		}
 	}
 	return nil
 }

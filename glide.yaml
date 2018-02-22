@@ -74,3 +74,4 @@ testImport:
   subpackages:
   - rate
 - package: github.com/jmoiron/sqlx
+- package: github.com/hashicorp/golang-lru

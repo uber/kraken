@@ -13,7 +13,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent"
@@ -59,16 +58,15 @@ func main() {
 	}
 	defer closer.Close()
 
-	fs, err := store.NewLocalFileStore(config.Store, stats, config.Registry.TagDeletion.Enable)
-	if err != nil {
-		log.Fatalf("Failed to create local store: %s", err)
-	}
-
 	trackers, err := serverset.NewRoundRobin(config.Tracker.RoundRobin)
 	if err != nil {
 		log.Fatalf("Error creating tracker round robin: %s", err)
 	}
 
+	fs, err := store.NewLocalFileStore(config.Store, stats, config.Registry.TagDeletion.Enable)
+	if err != nil {
+		log.Fatalf("Failed to create local store: %s", err)
+	}
 	archive := torrentstorage.NewAgentTorrentArchive(
 		config.AgentTorrentArchive, fs, metainfoclient.Default(trackers))
 
@@ -85,24 +83,16 @@ func main() {
 	}
 	defer torrentClient.Close()
 
-	agentServer := agentserver.New(config.AgentServer, stats, fs, torrentClient)
-
-	var manifestClient manifestclient.Client
-	if config.Registry.Namespace != "" {
-		// If namespace is specified, use remote backend for manifest downloads.
-		backendManager, err := backend.NewManager(config.Registry.Namespaces)
-		if err != nil {
-			log.Fatalf("Error creating backend manager: %s", err)
-		}
-		manifestClient, err = backendManager.GetManifestClient(config.Registry.Namespace)
-		if err != nil {
-			log.Fatalf("Error creating backend manifest client: %s", err)
-		}
-	} else {
-		manifestClient = manifestclient.New(trackers)
+	backendManager, err := backend.NewManager(config.Registry.Namespaces)
+	if err != nil {
+		log.Fatalf("Error creating backend manager: %s", err)
 	}
-
-	transferer := transfer.NewAgentTransferer(fs, torrentClient, manifestClient)
+	tagClient, err := backendManager.GetClient(config.Registry.TagNamespace)
+	if err != nil {
+		log.Fatalf("Error creating backend tag client: %s", err)
+	}
+	transferer := transfer.NewAgentTransferer(
+		fs, tagClient, config.Registry.BlobNamespace, torrentClient)
 
 	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)
@@ -110,15 +100,16 @@ func main() {
 		log.Fatalf("Failed to init registry: %s", err)
 	}
 
-	log.Info("Starting registry...")
-	go func() {
-		log.Fatal(registry.ListenAndServe())
-	}()
-
+	agentServer := agentserver.New(config.AgentServer, stats, fs, torrentClient)
 	addr := fmt.Sprintf(":%d", *agentServerPort)
 	log.Infof("Starting agent server on %s", addr)
 	go func() {
 		log.Fatal(http.ListenAndServe(addr, agentServer.Handler()))
+	}()
+
+	log.Info("Starting registry...")
+	go func() {
+		log.Fatal(registry.ListenAndServe())
 	}()
 
 	select {}

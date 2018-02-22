@@ -46,13 +46,11 @@ func (c *client) download(path string, dst io.Writer) error {
 			}
 			return err
 		}
-		n, err := io.Copy(dst, resp.Body)
-		if err != nil {
+		if n, err := io.Copy(dst, resp.Body); err != nil {
 			return fmt.Errorf("copy response: %s", err)
-		}
-		if n != resp.ContentLength {
+		} else if n != resp.ContentLength {
 			return fmt.Errorf(
-				"transfered bytes %d does not match content length %d", n, resp.ContentLength)
+				"transferred bytes %d does not match content length %d", n, resp.ContentLength)
 		}
 		return nil
 	}

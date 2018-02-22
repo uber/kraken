@@ -1,7 +1,6 @@
 package dockerregistry
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils"
@@ -29,7 +29,7 @@ const (
 	getFailureCounter    = "dockertag.failure.get"
 )
 
-// Tags is an interface
+// Tags is an interface that handles all tag related operations in docker storage driver.
 type Tags interface {
 	DeleteExpiredTags(n int, expireTime time.Time) error
 	GetContent(path string, subtype PathSubType) (data []byte, err error)
@@ -79,7 +79,7 @@ func NewDockerTags(c Config, s store.FileStore, transferer transfer.ImageTransfe
 	}, nil
 }
 
-// GetContent returns manifests in bytes given path
+// GetContent returns manifest digest in bytes given path.
 func (t *DockerTags) GetContent(path string, subtype PathSubType) (data []byte, err error) {
 	switch subtype {
 	case _tags:
@@ -108,7 +108,7 @@ func (t *DockerTags) GetContent(path string, subtype PathSubType) (data []byte, 
 	return nil, &InvalidRequestError{path}
 }
 
-// PutContent create tags
+// PutContent creates tags.
 func (t *DockerTags) PutContent(path string, subtype PathSubType) error {
 	switch subtype {
 	case _tags:
@@ -135,7 +135,7 @@ func (t *DockerTags) PutContent(path string, subtype PathSubType) error {
 	return nil
 }
 
-// ListManifests lists manifest tags in a repo
+// ListManifests lists manifest tags in a repo.
 func (t *DockerTags) ListManifests(path string, subtype PathSubType) ([]string, error) {
 	switch subtype {
 	case _tags:
@@ -254,8 +254,8 @@ func (t *DockerTags) GetTag(repo, tag string) (manifestDigest string, err error)
 	return
 }
 
-// CreateTag creates a new tag given repo, tag and manifest and a new tag torrent for manifest referencing and returns tag file sha1
-// it expects the manifest and all layers referenced by the tag exists
+// CreateTag creates a new tag given repo, tag and manifest hex.
+// It expects the manifest and all layers referenced by the tag exists.
 func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 	// Inc ref for all layers and the manifest
 	layers, err := t.getAllLayers(manifest)
@@ -265,7 +265,7 @@ func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 		return err
 	}
 
-	// Create tag file and increment ref count
+	// Create tag file and increment ref count.
 	err = t.createTag(repo, tag, manifest, layers)
 	if err != nil {
 		log.Errorf("CreateTag: cannot create a tag for %s:%s, error: %s", repo, tag, err)
@@ -280,8 +280,9 @@ func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 	}
 	defer reader.Close()
 
-	// Save manifest in tracker
-	err = t.transferer.PostManifest(repo, tag, reader)
+	// Upload tag.
+	manifestDigest := core.NewSHA256DigestFromHex(manifest)
+	err = t.transferer.PostTag(repo, tag, manifestDigest)
 	if err != nil {
 		log.Errorf("CreateTag: cannot post manifest for %s:%s, error: %s", repo, tag, err)
 		t.metrics.Counter(createFailureCounter).Inc(1)
@@ -294,8 +295,7 @@ func (t *DockerTags) CreateTag(repo, tag, manifest string) error {
 	return nil
 }
 
-// createTag creates a new tag file given repo and tag
-// returns tag file sha1
+// createTag creates a new tag file given repo and tag.
 func (t *DockerTags) createTag(repo, tag, manifestDigest string, layers []string) error {
 	t.Lock()
 	defer t.Unlock()
@@ -514,29 +514,22 @@ func (t *DockerTags) getOrDownloadManifest(repo, tag string) (string, error) {
 		return "", err
 	}
 
-	readCloser, err := t.transferer.GetManifest(repo, tag)
+	manifestDigest, err := t.transferer.GetTag(repo, tag)
+	if err != nil {
+		return "", fmt.Errorf("get tag through transferer: %s", err)
+	}
+
+	readCloser, err := t.transferer.Download(manifestDigest.Hex())
 	if err != nil {
 		return "", err
 	}
 	defer readCloser.Close()
-
-	data, err := ioutil.ReadAll(readCloser)
+	err = t.store.CreateCacheFile(manifestDigest.Hex(), readCloser)
 	if err != nil {
-		return "", fmt.Errorf("failed to read manifest: %s", err)
+		return "", err
 	}
 
-	_, manifestDigest, err := utils.ParseManifestV2(data)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse manifest for %s:%s: %s", repo, tag, err)
-	}
-
-	// Store manifest
-	err = t.store.CreateCacheFile(manifestDigest, bytes.NewReader(data))
-	if err != nil {
-		return "", fmt.Errorf("failed to create manifest file for %s:%s: %s", repo, tag, err)
-	}
-
-	return manifestDigest, nil
+	return manifestDigest.Hex(), nil
 }
 
 // listExpiredTags lists expired tags under given repo.

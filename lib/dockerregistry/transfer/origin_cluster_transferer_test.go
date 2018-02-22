@@ -10,7 +10,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/mocks/lib/dockerregistry/transfer/manifestclient"
+	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 )
 
@@ -21,11 +21,12 @@ func TestOriginClusterTransfererDownloadCachesBlobs(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockClusterClient := mockblobclient.NewMockClusterClient(ctrl)
+	mockTagBackendClient := mockbackend.NewMockClient(ctrl)
 
 	fs, cleanup := store.LocalFileStoreFixture()
 	defer cleanup()
 
-	oct := NewOriginClusterTransferer(mockClusterClient, mockmanifestclient.NewMockClient(ctrl), fs)
+	oct := NewOriginClusterTransferer(mockClusterClient, mockTagBackendClient, fs)
 
 	d, blob := core.DigestWithBlobFixture()
 

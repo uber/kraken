@@ -3,9 +3,8 @@ package backend
 import (
 	"fmt"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer/manifestclient"
-
 	"code.uber.internal/infra/kraken/lib/backend/hdfsbackend"
+	"code.uber.internal/infra/kraken/lib/backend/proxybackend"
 	"code.uber.internal/infra/kraken/lib/backend/s3backend"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
 )
@@ -24,10 +23,12 @@ func NewManager(namespaces NamespaceConfig) (*Manager, error) {
 		switch config.Backend {
 		case "s3":
 			c, err = s3backend.NewClient(config.S3)
-		case "hdfs-dockerblob":
+		case "hdfs_dockerblob":
 			c, err = hdfsbackend.NewDockerBlobClient(config.HDFS)
-		case "hdfs-dockertag":
+		case "hdfs_dockertag":
 			c, err = hdfsbackend.NewDockerTagClient(config.HDFS)
+		case "proxy_dockertag":
+			c, err = proxybackend.NewDockerTagClient(config.Proxy)
 		case "testfs":
 			c, err = testfs.NewClient(config.TestFS)
 		default:
@@ -59,21 +60,4 @@ func (m *Manager) GetClient(namespace string) (Client, error) {
 		return nil, fmt.Errorf("namespace %s not found", namespace)
 	}
 	return c, nil
-}
-
-// GetManifestClient returns the configured Docker Manifest Client for the given namespace.
-func (m *Manager) GetManifestClient(namespace string) (manifestclient.Client, error) {
-	c, ok := m.clients[namespace]
-	if !ok {
-		return nil, fmt.Errorf("namespace %s not found", namespace)
-	}
-
-	manifestClient, ok := c.(manifestclient.Client)
-	if !ok {
-		return nil, fmt.Errorf(
-			"backend for namespace %s does not support manifest client interface",
-			namespace)
-	}
-
-	return manifestClient, nil
 }
