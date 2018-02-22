@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"testing"
@@ -29,7 +28,6 @@ func helperTest(t *testing.T, cmd []string) int {
 	}
 
 	errCode := RunMain(cmd, appConfig, buf)
-	fmt.Println(buf.String())
 
 	actual := buf.Bytes()
 	golden := filepath.Join("testdata", t.Name()+".golden")
@@ -104,8 +102,6 @@ func TestRepairContentOk(t *testing.T) {
 		ci.OriginContentItems[0].Digest, "-origin", "origin1"}, appConfig, buf)
 
 	assert.Equal(t, errCode, 0)
-
-	fmt.Println(buf.String())
 
 	actual := buf.Bytes()
 	golden := filepath.Join("testdata", t.Name()+".golden")
