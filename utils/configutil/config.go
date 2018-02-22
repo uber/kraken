@@ -124,7 +124,7 @@ func readExtend(configFile string) (string, error) {
 	}
 
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return "", err
+		return "", fmt.Errorf("unmarshal %s: %s", configFile, err)
 	}
 	return cfg.Extends, nil
 }
@@ -223,7 +223,7 @@ func LoadFiles(config interface{}, fnames ...string) error {
 		}
 
 		if err := yaml.Unmarshal(data, config); err != nil {
-			return err
+			return fmt.Errorf("unmarshal %s: %s", fname, err)
 		}
 	}
 
