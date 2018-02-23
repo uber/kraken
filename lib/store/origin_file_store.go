@@ -147,22 +147,20 @@ func initOriginStoreDirectories(config OriginConfig) error {
 			rendezvousHash.AddNode(volume.Location, volume.Weight)
 		}
 
-		// Create 256 symlinks under upload and cache dir.
-		for _, stateDir := range []string{config.UploadDir, config.CacheDir} {
-			for subdirIndex := 0; subdirIndex < 256; subdirIndex++ {
-				subdirName := fmt.Sprintf("%02X", subdirIndex)
-				nodes, err := rendezvousHash.GetOrderedNodes(subdirName, 1)
-				if len(nodes) != 1 || err != nil {
-					return fmt.Errorf("calculate volume for subdir: %s", subdirName)
-				}
-				sourcePath := path.Join(nodes[0].Label, path.Base(stateDir), subdirName)
-				if err := os.MkdirAll(sourcePath, 0755); err != nil {
-					return fmt.Errorf("volume source path: %s", err)
-				}
-				targetPath := path.Join(stateDir, subdirName)
-				if err := createOrUpdateSymlink(sourcePath, targetPath); err != nil {
-					return fmt.Errorf("symlink to volume: %s", err)
-				}
+		// Create 256 symlinks under cache dir.
+		for subdirIndex := 0; subdirIndex < 256; subdirIndex++ {
+			subdirName := fmt.Sprintf("%02X", subdirIndex)
+			nodes, err := rendezvousHash.GetOrderedNodes(subdirName, 1)
+			if len(nodes) != 1 || err != nil {
+				return fmt.Errorf("calculate volume for subdir: %s", subdirName)
+			}
+			sourcePath := path.Join(nodes[0].Label, path.Base(config.CacheDir), subdirName)
+			if err := os.MkdirAll(sourcePath, 0755); err != nil {
+				return fmt.Errorf("volume source path: %s", err)
+			}
+			targetPath := path.Join(config.CacheDir, subdirName)
+			if err := createOrUpdateSymlink(sourcePath, targetPath); err != nil {
+				return fmt.Errorf("symlink to volume: %s", err)
 			}
 		}
 	}
