@@ -36,16 +36,16 @@ func TestChangesToActiveConnsRedistributesBandwidth(t *testing.T) {
 
 	// First conn takes all bandwidth.
 	transitionToActive(t, s, c1)
-	require.Equal(c1.GetEgressBandwidthLimit(), config.MaxGlobalEgressBytesPerSec)
+	require.Equal(c1.GetEgressBandwidthLimit(), config.MaxGlobalEgressBitsPerSec)
 
 	// Adding second conn splits bandwidth with first conn.
 	transitionToActive(t, s, c2)
-	require.Equal(c1.GetEgressBandwidthLimit(), config.MaxGlobalEgressBytesPerSec/2)
-	require.Equal(c2.GetEgressBandwidthLimit(), config.MaxGlobalEgressBytesPerSec/2)
+	require.Equal(c1.GetEgressBandwidthLimit(), config.MaxGlobalEgressBitsPerSec/2)
+	require.Equal(c2.GetEgressBandwidthLimit(), config.MaxGlobalEgressBitsPerSec/2)
 
 	// Removing first conn gives all bandwidth to second conn.
 	s.DeleteActive(c1)
-	require.Equal(c2.GetEgressBandwidthLimit(), config.MaxGlobalEgressBytesPerSec)
+	require.Equal(c2.GetEgressBandwidthLimit(), config.MaxGlobalEgressBitsPerSec)
 
 	// Removing all conns to hit no-op case.
 	s.DeleteActive(c2)
@@ -55,8 +55,8 @@ func TestAddingActiveConnsNeverRedistributesBandwidthBelowMin(t *testing.T) {
 	require := require.New(t)
 
 	config := connStateConfigFixture()
-	config.MaxGlobalEgressBytesPerSec = 4 * memsize.KB
-	config.MinConnEgressBytesPerSec = memsize.KB
+	config.MaxGlobalEgressBitsPerSec = 4 * memsize.Kbit
+	config.MinConnEgressBitsPerSec = memsize.Kbit
 
 	s := newConnState(core.PeerIDFixture(), config, clock.New(), networkevent.NewTestProducer())
 
@@ -70,7 +70,7 @@ func TestAddingActiveConnsNeverRedistributesBandwidthBelowMin(t *testing.T) {
 		transitionToActive(t, s, c)
 	}
 	for _, c := range s.ActiveConns() {
-		require.Equal(c.GetEgressBandwidthLimit(), config.MinConnEgressBytesPerSec)
+		require.Equal(c.GetEgressBandwidthLimit(), config.MinConnEgressBitsPerSec)
 	}
 }
 

@@ -243,8 +243,8 @@ func (s *connState) newConnPreferred(existingConn *conn.Conn, newConn *conn.Conn
 // adjustConnBandwidthLimits balances the amount of egress bandwidth allocated to
 // each active conn.
 func (s *connState) adjustConnBandwidthLimits() {
-	max := s.config.MaxGlobalEgressBytesPerSec
-	min := s.config.MinConnEgressBytesPerSec
+	max := s.config.MaxGlobalEgressBitsPerSec
+	min := s.config.MinConnEgressBitsPerSec
 	n := uint64(len(s.active))
 	if n == 0 {
 		// No-op.
@@ -254,13 +254,13 @@ func (s *connState) adjustConnBandwidthLimits() {
 	if limit < min {
 		// TODO(codyg): This is really bad. We need to either alert when this happens,
 		// or throttle the number of torrents being added to the Scheduler.
-		s.log().Errorf("Violating max global egress bandwidth by %d b/sec", min*n-max)
+		s.log().Errorf("Violating max global egress bandwidth by %s/sec", memsize.BitFormat(min*n-max))
 		limit = min
 	}
 	for _, c := range s.active {
 		c.SetEgressBandwidthLimit(limit)
 	}
-	s.log().Infof("Balanced egress bandwidth to %s/sec across %d conns", memsize.Format(limit), n)
+	s.log().Infof("Balanced egress bandwidth to %s/sec across %d conns", memsize.BitFormat(limit), n)
 }
 
 func (s *connState) log(args ...interface{}) *zap.SugaredLogger {

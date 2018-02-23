@@ -41,7 +41,7 @@ type Conn struct {
 	lastGoodPieceReceived time.Time
 	lastPieceSent         time.Time
 
-	// Controls egress piece bandwidth.
+	// Controls egress piece bandwidth measured in bits.
 	egressLimiter *rate.Limiter
 
 	nc            net.Conn
@@ -88,7 +88,7 @@ func newConn(
 		closeHandler: closeHandler,
 		// A limit of 0 means no pieces will be allowed to send until bandwidth
 		// is allocated with SetEgressBandwidthLimit.
-		egressLimiter:  rate.NewLimiter(0, int(info.MaxPieceLength())),
+		egressLimiter:  rate.NewLimiter(0, int(8*info.MaxPieceLength())),
 		nc:             nc,
 		config:         config,
 		clk:            clk,
@@ -121,9 +121,9 @@ func (c *Conn) CreatedAt() time.Time {
 	return c.createdAt
 }
 
-// SetEgressBandwidthLimit updates the egress bandwidth limit to bytesPerSec.
-func (c *Conn) SetEgressBandwidthLimit(bytesPerSec uint64) {
-	c.egressLimiter.SetLimitAt(c.clk.Now(), rate.Limit(float64(bytesPerSec)))
+// SetEgressBandwidthLimit updates the egress bandwidth limit to bitsPerSec.
+func (c *Conn) SetEgressBandwidthLimit(bitsPerSec uint64) {
+	c.egressLimiter.SetLimitAt(c.clk.Now(), rate.Limit(float64(bitsPerSec)))
 }
 
 // GetEgressBandwidthLimit returns the current egress bandwidth limit.
@@ -203,7 +203,7 @@ func (c *Conn) readPayload(length int32) ([]byte, error) {
 	if _, err := io.ReadFull(c.nc, payload); err != nil {
 		return nil, err
 	}
-	c.countBandwidth("ingress", int64(length))
+	c.countBandwidth("ingress", int64(8*length))
 	return payload, nil
 }
 
@@ -280,10 +280,11 @@ func (c *Conn) sendPiecePayload(pr storage.PieceReader) error {
 
 	throttle := !c.config.DisableThrottling
 	if throttle {
-		reserve := c.egressLimiter.ReserveN(c.clk.Now(), pr.Length())
+		nb := 8 * pr.Length()
+		reserve := c.egressLimiter.ReserveN(c.clk.Now(), nb)
 		if !reserve.OK() {
 			// TODO(codyg): This is really bad. We need to alert if this happens.
-			c.log("max_burst", c.egressLimiter.Burst(), "payload", pr.Length()).Errorf(
+			c.log("max_burst", c.egressLimiter.Burst(), "payload", nb).Errorf(
 				"Cannot send piece, payload is larger than burst size")
 			return errors.New("piece payload is larger than burst size")
 		}
@@ -295,7 +296,7 @@ func (c *Conn) sendPiecePayload(pr storage.PieceReader) error {
 	if err != nil {
 		return fmt.Errorf("copy to socket: %s", err)
 	}
-	c.countBandwidth("egress", n)
+	c.countBandwidth("egress", 8*n)
 	return nil
 }
 

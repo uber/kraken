@@ -103,13 +103,13 @@ type ConnStateConfig struct {
 	// BlacklistDuration is the duration a connection will remain blacklisted.
 	BlacklistDuration time.Duration `yaml:"blacklist_duration"`
 
-	// MaxGlobalEgressBytesPerSec is the max number of piece payload bytes that
+	// MaxGlobalEgressBitsPerSec is the max number of piece payload bits that
 	// can be uploaded across all connections per second.
-	MaxGlobalEgressBytesPerSec uint64 `yaml:"max_global_egress_bytes_per_sec"`
+	MaxGlobalEgressBitsPerSec uint64 `yaml:"max_global_egress_bits_per_sec"`
 
-	// MinConnEgressBytesPerSec is the lowest bytes per second a connection's
-	// egress piece payloads may be throttled to.
-	MinConnEgressBytesPerSec uint64 `yaml:"min_conn_egress_bytes_per_sec"`
+	// MinConnEgressBitsPerSec is the lowest bps a connection's egress piece
+	// payloads may be throttled to.
+	MinConnEgressBitsPerSec uint64 `yaml:"min_conn_egress_bits_per_sec"`
 }
 
 func (c ConnStateConfig) applyDefaults() ConnStateConfig {
@@ -119,11 +119,11 @@ func (c ConnStateConfig) applyDefaults() ConnStateConfig {
 	if c.BlacklistDuration == 0 {
 		c.BlacklistDuration = 30 * time.Second
 	}
-	if c.MaxGlobalEgressBytesPerSec == 0 {
-		c.MaxGlobalEgressBytesPerSec = 5 * memsize.GB
+	if c.MaxGlobalEgressBitsPerSec == 0 {
+		c.MaxGlobalEgressBitsPerSec = 600 * memsize.Mbit
 	}
-	if c.MinConnEgressBytesPerSec == 0 {
-		c.MinConnEgressBytesPerSec = 2 * memsize.MB
+	if c.MinConnEgressBitsPerSec == 0 {
+		c.MinConnEgressBitsPerSec = 20 * memsize.Mbit
 	}
 	return c
 }
