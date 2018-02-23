@@ -17,8 +17,8 @@ func TestConnSetEgressBandwidthThrottlesPieceSending(t *testing.T) {
 	size := 4 * memsize.KB
 	numPieces := 256
 	pieceLength := size / uint64(numPieces)
-	bytesPerSec := memsize.KB
-	expectedDur := time.Duration(size/bytesPerSec) * time.Second
+	bitsPerSec := memsize.Kbit
+	expectedDur := time.Duration(8*size/bitsPerSec) * time.Second
 
 	info, cleanup := storage.TorrentInfoFixture(pieceLength*4, pieceLength)
 	defer cleanup()
@@ -39,7 +39,7 @@ func TestConnSetEgressBandwidthThrottlesPieceSending(t *testing.T) {
 		complete <- false
 	}()
 
-	local.SetEgressBandwidthLimit(bytesPerSec)
+	local.SetEgressBandwidthLimit(bitsPerSec)
 
 	start := time.Now()
 	for i := 0; i < numPieces; i++ {
