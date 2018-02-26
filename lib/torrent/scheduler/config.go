@@ -7,7 +7,6 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
-	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
 // Config is the Scheduler configuration.
@@ -102,14 +101,6 @@ type ConnStateConfig struct {
 
 	// BlacklistDuration is the duration a connection will remain blacklisted.
 	BlacklistDuration time.Duration `yaml:"blacklist_duration"`
-
-	// MaxGlobalEgressBitsPerSec is the max number of piece payload bits that
-	// can be uploaded across all connections per second.
-	MaxGlobalEgressBitsPerSec uint64 `yaml:"max_global_egress_bits_per_sec"`
-
-	// MinConnEgressBitsPerSec is the lowest bps a connection's egress piece
-	// payloads may be throttled to.
-	MinConnEgressBitsPerSec uint64 `yaml:"min_conn_egress_bits_per_sec"`
 }
 
 func (c ConnStateConfig) applyDefaults() ConnStateConfig {
@@ -118,12 +109,6 @@ func (c ConnStateConfig) applyDefaults() ConnStateConfig {
 	}
 	if c.BlacklistDuration == 0 {
 		c.BlacklistDuration = 30 * time.Second
-	}
-	if c.MaxGlobalEgressBitsPerSec == 0 {
-		c.MaxGlobalEgressBitsPerSec = 600 * memsize.Mbit
-	}
-	if c.MinConnEgressBitsPerSec == 0 {
-		c.MinConnEgressBitsPerSec = 20 * memsize.Mbit
 	}
 	return c
 }

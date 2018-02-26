@@ -11,11 +11,11 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
-	"golang.org/x/time/rate"
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/bandwidth"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -34,15 +34,13 @@ type Conn struct {
 	infoHash    core.InfoHash
 	createdAt   time.Time
 	localPeerID core.PeerID
+	bandwidth   *bandwidth.Limiter
 
 	closeHandler CloseHandler
 
 	mu                    sync.Mutex // Protects the following fields:
 	lastGoodPieceReceived time.Time
 	lastPieceSent         time.Time
-
-	// Controls egress piece bandwidth measured in bits.
-	egressLimiter *rate.Limiter
 
 	nc            net.Conn
 	config        Config
@@ -67,6 +65,7 @@ func newConn(
 	stats tally.Scope,
 	clk clock.Clock,
 	networkEvents networkevent.Producer,
+	bandwidth *bandwidth.Limiter,
 	closeHandler CloseHandler,
 	nc net.Conn,
 	localPeerID core.PeerID,
@@ -81,14 +80,12 @@ func newConn(
 	}
 
 	c := &Conn{
-		peerID:       remotePeerID,
-		localPeerID:  localPeerID,
-		infoHash:     info.InfoHash(),
-		createdAt:    clk.Now(),
-		closeHandler: closeHandler,
-		// A limit of 0 means no pieces will be allowed to send until bandwidth
-		// is allocated with SetEgressBandwidthLimit.
-		egressLimiter:  rate.NewLimiter(0, int(8*info.MaxPieceLength())),
+		peerID:         remotePeerID,
+		infoHash:       info.InfoHash(),
+		createdAt:      clk.Now(),
+		localPeerID:    localPeerID,
+		bandwidth:      bandwidth,
+		closeHandler:   closeHandler,
 		nc:             nc,
 		config:         config,
 		clk:            clk,
@@ -119,16 +116,6 @@ func (c *Conn) InfoHash() core.InfoHash {
 // CreatedAt returns the time at which the Conn was created.
 func (c *Conn) CreatedAt() time.Time {
 	return c.createdAt
-}
-
-// SetEgressBandwidthLimit updates the egress bandwidth limit to bitsPerSec.
-func (c *Conn) SetEgressBandwidthLimit(bitsPerSec uint64) {
-	c.egressLimiter.SetLimitAt(c.clk.Now(), rate.Limit(float64(bitsPerSec)))
-}
-
-// GetEgressBandwidthLimit returns the current egress bandwidth limit.
-func (c *Conn) GetEgressBandwidthLimit() uint64 {
-	return uint64(c.egressLimiter.Limit())
 }
 
 // OpenedByRemote returns whether the Conn was opened by the local peer, or the remote peer.
@@ -278,20 +265,11 @@ func (c *Conn) readLoop() {
 func (c *Conn) sendPiecePayload(pr storage.PieceReader) error {
 	defer pr.Close()
 
-	throttle := !c.config.DisableThrottling
-	if throttle {
-		nb := 8 * pr.Length()
-		reserve := c.egressLimiter.ReserveN(c.clk.Now(), nb)
-		if !reserve.OK() {
-			// TODO(codyg): This is really bad. We need to alert if this happens.
-			c.log("max_burst", c.egressLimiter.Burst(), "payload", nb).Errorf(
-				"Cannot send piece, payload is larger than burst size")
-			return errors.New("piece payload is larger than burst size")
-		}
-		// Throttle the connection egress if we've exceeded our bandwidth.
-		c.clk.Sleep(reserve.DelayFrom(c.clk.Now()))
+	if err := c.bandwidth.ReserveEgress(int64(pr.Length())); err != nil {
+		// TODO(codyg): This is bad. Consider alerting here.
+		c.log().Errorf("Error reserving egress bandwidth for piece payload: %s", err)
+		return fmt.Errorf("bandwidth: %s", err)
 	}
-
 	n, err := io.Copy(c.nc, pr)
 	if err != nil {
 		return fmt.Errorf("copy to socket: %s", err)

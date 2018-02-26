@@ -1,6 +1,10 @@
 package conn
 
-import "time"
+import (
+	"time"
+
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/bandwidth"
+)
 
 // Config is the configuration for individual live connections.
 type Config struct {
@@ -19,9 +23,7 @@ type Config struct {
 	// is taking a long time to process a message.
 	ReceiverBufferSize int `yaml:"receiver_buffer_size"`
 
-	// DisableThrottling disables the throttling of pieces. Should only be used
-	// for testing purposes.
-	DisableThrottling bool `yaml:"disable_throttling"`
+	Bandwidth bandwidth.Config `yaml:"bandwidth"`
 }
 
 func (c Config) applyDefaults() Config {

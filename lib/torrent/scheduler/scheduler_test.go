@@ -168,7 +168,6 @@ func TestSeederTTI(t *testing.T) {
 	defer cleanup()
 
 	config := configFixture()
-	config.Conn.DisableThrottling = true
 
 	tf := core.TestTorrentFileFixture()
 

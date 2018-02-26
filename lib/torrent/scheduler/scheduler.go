@@ -182,9 +182,6 @@ func New(
 	if config.ConnState.DisableBlacklist {
 		s.log().Warn("Blacklisting disabled")
 	}
-	if config.Conn.DisableThrottling {
-		s.log().Warn("Throttling disabled")
-	}
 
 	s.start()
 
