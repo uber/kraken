@@ -12,7 +12,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
 var errTorrentAtCapacity = errors.New("torrent is at capacity")
@@ -175,7 +174,6 @@ func (s *connState) MovePendingToActive(c *conn.Conn) error {
 		existingConn.Close()
 	}
 	s.active[k] = c
-	s.adjustConnBandwidthLimits()
 
 	s.log("peer", k.peerID, "hash", k.infoHash).Info("Moved conn from pending to active")
 	s.networkEvents.Produce(networkevent.AddActiveConnEvent(
@@ -195,7 +193,6 @@ func (s *connState) DeleteActive(c *conn.Conn) {
 	}
 	delete(s.active, k)
 	s.capacity[k.infoHash]++
-	s.adjustConnBandwidthLimits()
 
 	s.log("peer", k.peerID, "hash", k.infoHash).Infof(
 		"Deleted active conn, capacity now at %d", s.capacity[k.infoHash])
@@ -238,29 +235,6 @@ func (s *connState) newConnPreferred(existingConn *conn.Conn, newConn *conn.Conn
 	return existingOpener != newOpener &&
 		!existingConn.Active() &&
 		existingOpener.LessThan(newOpener)
-}
-
-// adjustConnBandwidthLimits balances the amount of egress bandwidth allocated to
-// each active conn.
-func (s *connState) adjustConnBandwidthLimits() {
-	max := s.config.MaxGlobalEgressBitsPerSec
-	min := s.config.MinConnEgressBitsPerSec
-	n := uint64(len(s.active))
-	if n == 0 {
-		// No-op.
-		return
-	}
-	limit := max / n
-	if limit < min {
-		// TODO(codyg): This is really bad. We need to either alert when this happens,
-		// or throttle the number of torrents being added to the Scheduler.
-		s.log().Errorf("Violating max global egress bandwidth by %s/sec", memsize.BitFormat(min*n-max))
-		limit = min
-	}
-	for _, c := range s.active {
-		c.SetEgressBandwidthLimit(limit)
-	}
-	s.log().Infof("Balanced egress bandwidth to %s/sec across %d conns", memsize.BitFormat(limit), n)
 }
 
 func (s *connState) log(args ...interface{}) *zap.SugaredLogger {
