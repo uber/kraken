@@ -2,72 +2,45 @@ package base
 
 import (
 	"fmt"
-	"reflect"
-	"runtime"
-	"sync/atomic"
 	"testing"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
 
-// Tests for LRUFileMap
-func TestFileMapLRU(t *testing.T) {
-	tests := []func(require *require.Assertions, bundle *fileMapTestBundle){
-		testLRUFileMapSizeLimit,
-	}
+func TestLRUFileMapSizeLimit(t *testing.T) {
+	require := require.New(t)
 
-	for _, test := range tests {
-		testName := runtime.FuncForPC(reflect.ValueOf(test).Pointer()).Name()
-		t.Run(testName, func(t *testing.T) {
-			require := require.New(t)
-			fm, cleanup := fileMapLRUFixture()
-			defer cleanup()
-			test(require, fm)
-		})
-	}
-}
+	state, cleanup := fileStateFixture()
+	defer cleanup()
 
-func testLRUFileMapSizeLimit(require *require.Assertions, bundle *fileMapTestBundle) {
-	s1 := bundle.state1
-	fm := bundle.fm
+	fm, err := NewLRUFileMap(100, clock.New())
+	require.NoError(err)
 
-	var successCount, skippedCount, errCount uint32
-	for i := 0; i < 100; i++ {
-		var err error
-		name := fmt.Sprintf("test_file_%d", i)
-		entry := NewLocalFileEntryFactory().Create(name, s1)
+	insert := func(name string) {
+		entry := DefaultLocalFileEntryFactory(clock.New()).Create(name, state)
 		_, loaded := fm.LoadOrStore(name, entry, func(name string, entry FileEntry) error {
-			err = entry.Create(s1, 0)
-			return err
+			require.NoError(entry.Create(state, 0))
+			return nil
 		})
-		if loaded {
-			atomic.AddUint32(&skippedCount, 1)
-		} else if err != nil {
-			atomic.AddUint32(&errCount, 1)
-		} else {
-			atomic.AddUint32(&successCount, 1)
-		}
+		require.False(loaded)
 	}
 
-	// All should have succeeded.
-	require.Equal(errCount, uint32(0))
-	require.Equal(skippedCount, uint32(0))
-	require.Equal(successCount, uint32(100))
+	// Generate 101 file names.
+	var names []string
+	for i := 0; i < 101; i++ {
+		names = append(names, fmt.Sprintf("test_file_%d", i))
+	}
 
-	// The first file exists in map.
-	require.True(fm.Contains("test_file_0"))
+	// After inserting 100 files, the first file still exists in map.
+	for _, name := range names[:100] {
+		insert(name)
+	}
+	require.True(fm.Contains(names[0]))
 
 	// Insert one more file entry beyond size limit.
-	var err error
-	name := fmt.Sprintf("test_file_%d", 100)
-	entry := NewLocalFileEntryFactory().Create(name, s1)
-	_, loaded := fm.LoadOrStore(name, entry, func(name string, entry FileEntry) error {
-		err = entry.Create(s1, 0)
-		return err
-	})
-	require.NoError(err)
-	require.False(loaded)
+	insert(names[100])
 
 	// The first file should have been removed.
-	require.False(fm.Contains("test_file_0"))
+	require.False(fm.Contains(names[0]))
 }

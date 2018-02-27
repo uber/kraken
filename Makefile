@@ -72,7 +72,7 @@ bench:
 	$(ECHO_V)cd $(FAUXROOT); $(TEST_ENV)	\
 		$(GO) test -bench=. -run=$(TEST_DIRS)
 
-test:: redis run_mysql
+test:: redis
 
 jenkins:: redis run_mysql
 

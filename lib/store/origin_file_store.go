@@ -9,7 +9,6 @@ import (
 	"math"
 	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -78,7 +77,7 @@ func NewOriginFileStore(config OriginConfig, clk clock.Clock) (*OriginLocalFileS
 		return nil, fmt.Errorf("init origin directories: %s", err)
 	}
 
-	uploadBackend, err := base.NewLocalFileStore()
+	uploadBackend, err := base.NewLocalFileStore(clk)
 	if err != nil {
 		return nil, fmt.Errorf("init origin upload backend: %s", err)
 	}
@@ -169,36 +168,28 @@ func initOriginStoreDirectories(config OriginConfig) error {
 }
 
 func (store *OriginLocalFileStore) cleanupExpiredCacheFile() error {
-	// Walk through the cache directory and remove expired files.
-	dataDepth := base.DefaultShardIDLength + 1
-	err := walkDirectory(store.config.CacheDir, dataDepth, func(currPath string) error {
-		latSuffix := base.NewLastAccessTime().GetSuffix()
-		latPath := path.Join(currPath, latSuffix)
-		if _, err := os.Stat(latPath); os.IsNotExist(err) {
-			return nil
-		} else if err != nil {
-			return err
-		}
-
-		b, err := ioutil.ReadFile(latPath)
+	cache := store.cacheBackend.NewFileOp().AcceptState(store.stateCache)
+	names, err := cache.ListNames()
+	if err != nil {
+		return fmt.Errorf("list names: %s", err)
+	}
+	for _, name := range names {
+		raw, err := cache.GetFileMetadata(name, base.NewLastAccessTime())
 		if err != nil {
-			return err
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("get last access time: %s", err)
 		}
-		lat, err := base.UnmarshalLastAccessTime(b)
+		lat, err := base.UnmarshalLastAccessTime(raw)
 		if err != nil {
-			return fmt.Errorf("unmarshal lat %s: %s", b, err)
+			return fmt.Errorf("unmarshal last access time: %s", err)
 		}
 		if store.clk.Now().Sub(lat) > store.config.TTI {
-			fileName := filepath.Base(currPath)
-			err := store.cacheBackend.NewFileOp().AcceptState(store.stateCache).DeleteFile(fileName)
-			if err != nil {
-				log.Errorf("Failed to clean up file %s: %s", fileName, err)
+			if err := cache.DeleteFile(name); err != nil {
+				log.With("name", name).Errorf("Error deleting idle cache file: %s", err)
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("walk cache: %s", err)
 	}
 	return nil
 }

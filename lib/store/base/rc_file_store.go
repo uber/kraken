@@ -1,5 +1,7 @@
 package base
 
+import "github.com/andres-erbsen/clock"
+
 // localRCFileStore is an extension of localFileStore, that also keeps file ref count on disk.
 type localRCFileStore struct {
 	*localFileStore
@@ -13,7 +15,7 @@ func (store localRCFileStore) NewFileOp() FileOp {
 
 // NewLocalRCFileStore inits a new localRCFileStore.
 func NewLocalRCFileStore() (FileStore, error) {
-	store, err := NewCASFileStore()
+	store, err := NewCASFileStore(clock.New())
 	if err != nil {
 		return nil, err
 	}

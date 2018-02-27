@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 	"testing"
+	"time"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/stringset"
@@ -244,7 +245,10 @@ func TestOriginStoreListPopulatedShardIDs(t *testing.T) {
 
 func TestOriginStoreCleanupCacheFile(t *testing.T) {
 	require := require.New(t)
+
 	clk := clock.NewMock()
+	clk.Set(time.Now())
+
 	s, cleanup := OriginFileStoreFixture(clk)
 	defer cleanup()
 
@@ -254,16 +258,10 @@ func TestOriginStoreCleanupCacheFile(t *testing.T) {
 		if i == 50 {
 			clk.Add(s.Config().TTI * 2)
 		}
-
 		name := core.DigestFixture().Hex()
-		if cacheFiles.Has(name) {
-			// Avoid duplicated names
-			continue
-		}
 		cacheFiles.Add(name)
 		require.NoError(s.CreateUploadFile(name, 1))
 		require.NoError(s.MoveUploadFileToCache(name, name))
-
 		if i < 50 {
 			expiredFiles.Add(name)
 		}
@@ -283,7 +281,10 @@ func TestOriginStoreCleanupCacheFile(t *testing.T) {
 
 func TestOriginStoreCleanupCacheFileSkipRecentRead(t *testing.T) {
 	require := require.New(t)
+
 	clk := clock.NewMock()
+	clk.Set(time.Now())
+
 	s, cleanup := OriginFileStoreFixture(clk)
 	defer cleanup()
 
@@ -297,7 +298,7 @@ func TestOriginStoreCleanupCacheFileSkipRecentRead(t *testing.T) {
 
 	clk.Add(s.Config().TTI * 2)
 
-	_, err := s.GetCacheFileStat(name2)
+	_, err := s.GetCacheFileReader(name2)
 	require.NoError(err)
 
 	name3 := core.DigestFixture().Hex()
@@ -306,10 +307,10 @@ func TestOriginStoreCleanupCacheFileSkipRecentRead(t *testing.T) {
 
 	require.NoError(s.cleanupExpiredCacheFile())
 
-	_, err = s.GetCacheFileStat(name1)
+	_, err = s.GetCacheFileReader(name1)
 	require.True(os.IsNotExist(err))
-	_, err = s.GetCacheFileStat(name2)
+	_, err = s.GetCacheFileReader(name2)
 	require.NoError(err)
-	_, err = s.GetCacheFileStat(name3)
+	_, err = s.GetCacheFileReader(name3)
 	require.NoError(err)
 }

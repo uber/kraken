@@ -18,9 +18,9 @@ type localFileStore struct {
 }
 
 // NewLocalFileStore initializes and returns a new FileStore. It allows dependency injection.
-func NewLocalFileStore() (FileStore, error) {
+func NewLocalFileStore(clk clock.Clock) (FileStore, error) {
 	return &localFileStore{
-		fileEntryFactory: NewLocalFileEntryFactory(),
+		fileEntryFactory: DefaultLocalFileEntryFactory(clk),
 		fileMap:          NewSimpleFileMap(),
 	}, nil
 }
@@ -28,9 +28,9 @@ func NewLocalFileStore() (FileStore, error) {
 // NewCASFileStore initializes and returns a new Content-Addressable FileStore.
 // It uses the first few bytes of file digest (which is also used as file name) as shard ID.
 // For every byte, one more level of directories will be created.
-func NewCASFileStore() (FileStore, error) {
+func NewCASFileStore(clk clock.Clock) (FileStore, error) {
 	return &localFileStore{
-		fileEntryFactory: NewCASFileEntryFactory(),
+		fileEntryFactory: DefaultCASFileEntryFactory(clk),
 		fileMap:          NewSimpleFileMap(),
 	}, nil
 }
@@ -38,14 +38,12 @@ func NewCASFileStore() (FileStore, error) {
 // NewLRUFileStore initializes and returns a new LRU FileStore.
 // When size exceeds limit, the least recently accessed entry will be removed.
 func NewLRUFileStore(size int, clk clock.Clock) (FileStore, error) {
-	fm, err := NewLRUFileMap(size, clk, func(name string, entry FileEntry) {
-		entry.Delete()
-	})
+	fm, err := NewLRUFileMap(size, clk)
 	if err != nil {
 		return nil, err
 	}
 	return &localFileStore{
-		fileEntryFactory: NewLocalFileEntryFactory(),
+		fileEntryFactory: DefaultLocalFileEntryFactory(clk),
 		fileMap:          fm,
 	}, nil
 }
@@ -56,14 +54,12 @@ func NewLRUFileStore(size int, clk clock.Clock) (FileStore, error) {
 // It also store objects in a LRU FileStore.
 // When size exceeds limit, the least recently accessed entry will be removed.
 func NewCASFileStoreWithLRUMap(size int, clk clock.Clock) (FileStore, error) {
-	fm, err := NewLRUFileMap(size, clk, func(name string, entry FileEntry) {
-		entry.Delete()
-	})
+	fm, err := NewLRUFileMap(size, clk)
 	if err != nil {
 		return nil, err
 	}
 	return &localFileStore{
-		fileEntryFactory: NewCASFileEntryFactory(),
+		fileEntryFactory: DefaultCASFileEntryFactory(clk),
 		fileMap:          fm,
 	}, nil
 }

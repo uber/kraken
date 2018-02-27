@@ -53,7 +53,14 @@ func fileStatesFixture() (state1, state2, state3 mockFileState, run func()) {
 	return state1, state2, state3, cleanup.Run
 }
 
+func fileStateFixture() (mockFileState, func()) {
+	s, _, _, cleanup := fileStatesFixture()
+	return s, cleanup
+}
+
 type fileEntryTestBundle struct {
+	clk *clock.Mock
+
 	state1 mockFileState
 	state2 mockFileState
 	state3 mockFileState
@@ -65,11 +72,14 @@ func fileEntryLocalFixture() (bundle *fileEntryTestBundle, run func()) {
 	cleanup := &testutil.Cleanup{}
 	defer cleanup.Recover()
 
+	clk := clock.NewMock()
+
 	state1, state2, state3, f := fileStatesFixture()
 	cleanup.Add(f)
-	entry := NewLocalFileEntryFactory().Create(_testFileName, state1)
+	entry := DefaultLocalFileEntryFactory(clk).Create(_testFileName, state1)
 
 	return &fileEntryTestBundle{
+		clk:    clk,
 		state1: state1,
 		state2: state2,
 		state3: state3,
@@ -111,9 +121,7 @@ func fileMapLRUFixture() (bundle *fileMapTestBundle, run func()) {
 	b, clean := fileEntryLocalFixture()
 	cleanup.Add(clean)
 
-	fm, err := NewLRUFileMap(100, clock.New(), func(name string, entry FileEntry) {
-		entry.Delete()
-	})
+	fm, err := NewLRUFileMap(100, clock.New())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -146,7 +154,7 @@ func (b *fileStoreTestBundle) recreateStore() {
 
 func fileStoreDefaultFixture() (*fileStoreTestBundle, func()) {
 	return newFileStoreFixture(func() *localFileStore {
-		store, err := NewLocalFileStore()
+		store, err := NewLocalFileStore(clock.New())
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -156,7 +164,7 @@ func fileStoreDefaultFixture() (*fileStoreTestBundle, func()) {
 
 func fileStoreCASFixture() (*fileStoreTestBundle, func()) {
 	return newFileStoreFixture(func() *localFileStore {
-		store, err := NewCASFileStore()
+		store, err := NewCASFileStore(clock.New())
 		if err != nil {
 			log.Fatal(err)
 		}

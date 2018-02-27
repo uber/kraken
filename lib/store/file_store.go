@@ -114,7 +114,9 @@ func NewLocalFileStore(config Config, stats tally.Scope, useRefcount bool) (*Loc
 		}
 	}
 
-	uploadBackend, err := base.NewLocalFileStore()
+	clk := clock.New()
+
+	uploadBackend, err := base.NewLocalFileStore(clk)
 	if err != nil {
 		return nil, err
 	}
@@ -123,9 +125,9 @@ func NewLocalFileStore(config Config, stats tally.Scope, useRefcount bool) (*Loc
 	if useRefcount {
 		downloadCacheBackend, err = base.NewLocalRCFileStore()
 	} else if config.LRUConfig.Enable {
-		downloadCacheBackend, err = base.NewLRUFileStore(config.LRUConfig.Size, clock.New())
+		downloadCacheBackend, err = base.NewLRUFileStore(config.LRUConfig.Size, clk)
 	} else {
-		downloadCacheBackend, err = base.NewLocalFileStore()
+		downloadCacheBackend, err = base.NewLocalFileStore(clk)
 	}
 	if err != nil {
 		return nil, err
