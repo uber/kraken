@@ -7,6 +7,9 @@ import (
 	"os"
 	"path"
 	"sync"
+	"time"
+
+	"github.com/andres-erbsen/clock"
 )
 
 // FileState decides what directory a file is in.
@@ -56,28 +59,47 @@ type FileEntry interface {
 	GetOrSetMetadata(mt MetadataType, b []byte) ([]byte, error)
 	DeleteMetadata(mt MetadataType) error
 	RangeMetadata(f func(mt MetadataType) error) error
+
+	Lock()
+	Unlock()
+	RLock()
+	RUnlock()
 }
 
 var _ FileEntryFactory = (*localFileEntryFactory)(nil)
 var _ FileEntryFactory = (*casFileEntryFactory)(nil)
 var _ FileEntry = (*localFileEntry)(nil)
 
+type fileEntryConfig struct {
+	lastAccessResolution time.Duration
+}
+
+func (c fileEntryConfig) applyDefaults() fileEntryConfig {
+	if c.lastAccessResolution == 0 {
+		c.lastAccessResolution = 5 * time.Second
+	}
+	return c
+}
+
 // localFileEntryFactory initializes localFileEntry obj.
-type localFileEntryFactory struct{}
+type localFileEntryFactory struct {
+	config fileEntryConfig
+	clk    clock.Clock
+}
 
 // NewLocalFileEntryFactory is the constructor for localFileEntryFactory.
-func NewLocalFileEntryFactory() FileEntryFactory {
-	return &localFileEntryFactory{}
+func NewLocalFileEntryFactory(config fileEntryConfig, clk clock.Clock) FileEntryFactory {
+	return &localFileEntryFactory{config, clk}
+}
+
+// DefaultLocalFileEntryFactory returns a new local FileEntryFactory with default settings.
+func DefaultLocalFileEntryFactory(clk clock.Clock) FileEntryFactory {
+	return NewLocalFileEntryFactory(fileEntryConfig{}, clk)
 }
 
 // Create initializes and returns a FileEntry object.
 func (f *localFileEntryFactory) Create(name string, state FileState) FileEntry {
-	return &localFileEntry{
-		state:            state,
-		name:             name,
-		relativeDataPath: f.GetRelativePath(name),
-		metadataSet:      make(map[MetadataType]struct{}),
-	}
+	return newLocalFileEntry(f.config, state, name, f.GetRelativePath(name), f.clk)
 }
 
 // GetRelativePath returns name because file entries are stored flat under state directory.
@@ -101,21 +123,24 @@ func (f *localFileEntryFactory) ListNames(state FileState) ([]string, error) {
 // casFileEntryFactory initializes localFileEntry obj.
 // It uses the first few bytes of file digest (which is also used as file name) as shard ID.
 // For every byte, one more level of directories will be created.
-type casFileEntryFactory struct{}
+type casFileEntryFactory struct {
+	config fileEntryConfig
+	clk    clock.Clock
+}
 
 // NewCASFileEntryFactory is the constructor for casFileEntryFactory.
-func NewCASFileEntryFactory() FileEntryFactory {
-	return &casFileEntryFactory{}
+func NewCASFileEntryFactory(config fileEntryConfig, clk clock.Clock) FileEntryFactory {
+	return &casFileEntryFactory{config, clk}
+}
+
+// DefaultCASFileEntryFactory returns a new cas FileEntryFactory with default settings.
+func DefaultCASFileEntryFactory(clk clock.Clock) FileEntryFactory {
+	return NewCASFileEntryFactory(fileEntryConfig{}, clk)
 }
 
 // Create initializes and returns a FileEntry object.
 func (f *casFileEntryFactory) Create(name string, state FileState) FileEntry {
-	return &localFileEntry{
-		state:            state,
-		name:             name,
-		relativeDataPath: f.GetRelativePath(name),
-		metadataSet:      make(map[MetadataType]struct{}),
-	}
+	return newLocalFileEntry(f.config, state, name, f.GetRelativePath(name), f.clk)
 }
 
 // GetRelativePath returns content-addressable file path under state directory.
@@ -165,10 +190,34 @@ func (f *casFileEntryFactory) ListNames(state FileState) ([]string, error) {
 type localFileEntry struct {
 	sync.RWMutex
 
+	config           fileEntryConfig
+	clk              clock.Clock
 	state            FileState
 	name             string
 	relativeDataPath string // Relative path to data file
 	metadataSet      map[MetadataType]struct{}
+
+	// Tracks when the last access time was flushed to disk.
+	lastAccessFlush time.Time
+}
+
+func newLocalFileEntry(
+	config fileEntryConfig,
+	state FileState,
+	name string,
+	relativeDataPath string,
+	clk clock.Clock) *localFileEntry {
+
+	config = config.applyDefaults()
+
+	return &localFileEntry{
+		config:           config,
+		clk:              clk,
+		state:            state,
+		name:             name,
+		relativeDataPath: relativeDataPath,
+		metadataSet:      make(map[MetadataType]struct{}),
+	}
 }
 
 // GetState returns current state of the file.
@@ -218,6 +267,10 @@ func (entry *localFileEntry) Create(targetState FileState, len int64) error {
 	}
 	defer f.Close()
 
+	if err := entry.touch(); err != nil {
+		return err
+	}
+
 	// Change size
 	err = f.Truncate(len)
 	if err != nil {
@@ -225,6 +278,7 @@ func (entry *localFileEntry) Create(targetState FileState, len int64) error {
 		os.RemoveAll(path.Dir(targetPath))
 		return err
 	}
+
 	return f.Close()
 }
 
@@ -276,7 +330,11 @@ func (entry *localFileEntry) MoveFrom(targetState FileState, sourcePath string) 
 	os.MkdirAll(path.Dir(targetPath), DefaultDirPermission)
 
 	// Move data.
-	return os.Rename(sourcePath, targetPath)
+	if err := os.Rename(sourcePath, targetPath); err != nil {
+		return err
+	}
+
+	return entry.touch()
 }
 
 // Move moves file to target dir under the same name, moves all metadata that's `movable`, and
@@ -319,7 +377,7 @@ func (entry *localFileEntry) Move(targetState FileState) error {
 	// Delete source dir. Ignore error.
 	os.RemoveAll(path.Dir(sourcePath))
 
-	return nil
+	return entry.touch()
 }
 
 // MoveTo moves data file out to an unmanaged location.
@@ -351,7 +409,9 @@ func (entry *localFileEntry) GetReader() (FileReader, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	if err := entry.touch(); err != nil {
+		return nil, err
+	}
 	reader := &localFileReadWriter{
 		entry:      entry,
 		descriptor: f,
@@ -365,7 +425,9 @@ func (entry *localFileEntry) GetReadWriter() (FileReadWriter, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	if err := entry.touch(); err != nil {
+		return nil, err
+	}
 	readWriter := &localFileReadWriter{
 		entry:      entry,
 		descriptor: f,
@@ -495,6 +557,19 @@ func (entry *localFileEntry) GetOrSetMetadata(mt MetadataType, b []byte) ([]byte
 	c := make([]byte, len(b))
 	copy(c, b)
 	return c, nil
+}
+
+// touch updates entry's last access time.
+func (entry *localFileEntry) touch() error {
+	now := entry.clk.Now()
+	flush := now.Sub(entry.lastAccessFlush) >= entry.config.lastAccessResolution
+
+	var err error
+	if flush {
+		entry.lastAccessFlush = now
+		_, err = entry.SetMetadata(NewLastAccessTime(), MarshalLastAccessTime(now))
+	}
+	return err
 }
 
 // compareAndWriteFile updates file with given bytes and returns true only if the file is updated

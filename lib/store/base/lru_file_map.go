@@ -6,17 +6,12 @@ import (
 	"sync"
 	"time"
 
+	"code.uber.internal/infra/kraken/utils/log"
+
 	"github.com/andres-erbsen/clock"
 )
 
 var _ FileMap = (*lruFileMap)(nil)
-
-type fileEntryWithAccessTime struct {
-	sync.RWMutex
-
-	lastAccessTime time.Time
-	fe             FileEntry
-}
 
 // lruFileMap implements FileMap interface
 type lruFileMap struct {
@@ -27,11 +22,10 @@ type lruFileMap struct {
 	timeResolution time.Duration // Min timespan between two updates of last access time for the same file.
 	queue          *list.List
 	elements       map[string]*list.Element
-	evictFn        func(string, FileEntry)
 }
 
 // NewLRUFileMap creates a new LRU map given size.
-func NewLRUFileMap(size int, clk clock.Clock, evictFn func(string, FileEntry)) (FileMap, error) {
+func NewLRUFileMap(size int, clk clock.Clock) (FileMap, error) {
 	if size <= 0 {
 		return nil, fmt.Errorf("invalid lru map size: %d", size)
 	}
@@ -42,67 +36,60 @@ func NewLRUFileMap(size int, clk clock.Clock, evictFn func(string, FileEntry)) (
 		timeResolution: time.Minute * 5,
 		queue:          list.New(),
 		elements:       make(map[string]*list.Element),
-		evictFn:        evictFn,
 	}
 
 	return m, nil
 }
 
-func (fm *lruFileMap) get(name string) (*fileEntryWithAccessTime, bool) {
+func (fm *lruFileMap) get(name string) (FileEntry, bool) {
 	if element, ok := fm.elements[name]; ok {
 		fm.queue.MoveToFront(element)
-		e := element.Value.(*fileEntryWithAccessTime)
-		if time.Since(e.lastAccessTime) >= fm.timeResolution {
-			// Only persist to disk if new timestamp is <timeResolution> newer than previous value.
-			e.fe.SetMetadata(NewLastAccessTime(), MarshalLastAccessTime(fm.clk.Now()))
-		}
-		e.lastAccessTime = fm.clk.Now()
-		return element.Value.(*fileEntryWithAccessTime), ok
+		e := element.Value.(FileEntry)
+		return e, true
 	}
 	return nil, false
 }
 
-func (fm *lruFileMap) syncGet(name string) (*fileEntryWithAccessTime, bool) {
+func (fm *lruFileMap) syncGet(name string) (FileEntry, bool) {
 	fm.Lock()
 	defer fm.Unlock()
 
 	return fm.get(name)
 }
 
-func (fm *lruFileMap) add(name string, e *fileEntryWithAccessTime) bool {
+func (fm *lruFileMap) add(name string, e FileEntry) bool {
 	if _, ok := fm.elements[name]; !ok {
 		element := fm.queue.PushFront(e)
 		fm.elements[name] = element
-		e.fe.SetMetadata(NewLastAccessTime(), MarshalLastAccessTime(fm.clk.Now()))
 		return true
 	}
 	return false
 }
 
-func (fm *lruFileMap) getOldest() (*fileEntryWithAccessTime, bool) {
+func (fm *lruFileMap) getOldest() (FileEntry, bool) {
 	if e := fm.queue.Back(); e != nil {
-		return e.Value.(*fileEntryWithAccessTime), true
+		return e.Value.(FileEntry), true
 	}
 	return nil, false
 }
 
-func (fm *lruFileMap) remove(name string) (*fileEntryWithAccessTime, bool) {
+func (fm *lruFileMap) remove(name string) (FileEntry, bool) {
 	if e, ok := fm.elements[name]; ok {
 		delete(fm.elements, name)
 		fm.queue.Remove(e)
-		return e.Value.(*fileEntryWithAccessTime), ok
+		return e.Value.(FileEntry), ok
 	}
 	return nil, false
 }
 
-func (fm *lruFileMap) syncRemove(name string) (*fileEntryWithAccessTime, bool) {
+func (fm *lruFileMap) syncRemove(name string) (FileEntry, bool) {
 	fm.Lock()
 	defer fm.Unlock()
 
 	return fm.remove(name)
 }
 
-func (fm *lruFileMap) syncRemoveOldestIfNeeded() (e *fileEntryWithAccessTime, ok bool) {
+func (fm *lruFileMap) syncRemoveOldestIfNeeded() (e FileEntry, ok bool) {
 	// Verify if size limit was defined and exceeded.
 	fm.Lock()
 	if fm.size <= 0 || fm.queue.Len() <= fm.size {
@@ -120,14 +107,16 @@ func (fm *lruFileMap) syncRemoveOldestIfNeeded() (e *fileEntryWithAccessTime, ok
 	defer e.Unlock()
 
 	// Now that we have the entry lock, make sure k was not deleted or overwritten.
-	name := e.fe.GetName()
+	name := e.GetName()
 	if ne, ok := fm.syncGet(name); !ok {
 		return nil, false
 	} else if ne != e {
 		return nil, false
 	}
 
-	fm.evictFn(name, e.fe)
+	if err := e.Delete(); err != nil {
+		log.With("name", e.GetName()).Errorf("Error deleting evicted entry: %s", err)
+	}
 
 	// Remove from map while the entry lock is still being held
 	fm.syncRemove(name)
@@ -148,12 +137,8 @@ func (fm *lruFileMap) Contains(name string) bool {
 // If object is successfully stored, execute f under the protection of RLock.
 // Returns existing oject and true if the name is already present.
 func (fm *lruFileMap) LoadOrStore(
-	name string, entry FileEntry, f func(string, FileEntry) error) (FileEntry, bool) {
+	name string, e FileEntry, f func(string, FileEntry) error) (FileEntry, bool) {
 	// Lock on entry first, in case the lock is taken by other goroutine before f().
-	e := &fileEntryWithAccessTime{
-		lastAccessTime: fm.clk.Now(),
-		fe:             entry,
-	}
 
 	// After store, make sure size limit wasn't exceeded.
 	// Also make sure this happens after e.RUnlock(), in case the new entry is the one to be deleted.
@@ -166,19 +151,19 @@ func (fm *lruFileMap) LoadOrStore(
 	// Verify if it's already in the map.
 	if actual, ok := fm.get(name); ok {
 		defer fm.Unlock()
-		return actual.fe, true
+		return actual, true
 	}
 	// Add new entry to map.
 	fm.add(name, e)
 	fm.Unlock()
 
-	if err := f(name, e.fe); err != nil {
+	if err := f(name, e); err != nil {
 		// Remove from map while the entry lock is still being held
 		fm.syncRemove(name)
 		return nil, false
 	}
 
-	return e.fe, false
+	return e, false
 }
 
 // LoadReadOnly looks up the value of key k and executes f under the protection of RLock.
@@ -200,7 +185,7 @@ func (fm *lruFileMap) LoadReadOnly(name string, f func(string, FileEntry)) bool 
 		return false
 	}
 
-	f(name, e.fe)
+	f(name, e)
 
 	return true
 }
@@ -224,7 +209,7 @@ func (fm *lruFileMap) Load(name string, f func(string, FileEntry)) bool {
 		return false
 	}
 
-	f(name, e.fe)
+	f(name, e)
 
 	return true
 }
@@ -248,7 +233,7 @@ func (fm *lruFileMap) Delete(name string, f func(string, FileEntry) error) bool 
 		return false
 	}
 
-	if err := f(name, e.fe); err != nil {
+	if err := f(name, e); err != nil {
 		return false
 	}
 

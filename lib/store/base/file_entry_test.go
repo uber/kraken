@@ -9,16 +9,18 @@ import (
 	"runtime"
 	"sort"
 	"testing"
+	"time"
 
 	"code.uber.internal/infra/kraken/core"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFileEntryFactoryList(t *testing.T) {
 	for _, factory := range []FileEntryFactory{
-		NewLocalFileEntryFactory(),
-		NewCASFileEntryFactory(),
+		DefaultLocalFileEntryFactory(clock.New()),
+		DefaultCASFileEntryFactory(clock.New()),
 	} {
 		fname := reflect.Indirect(reflect.ValueOf(factory)).Type().Name()
 		t.Run(fname, func(t *testing.T) {
@@ -59,6 +61,7 @@ func TestFileEntryFactoryList(t *testing.T) {
 	}
 }
 
+// TODO(codyg): Dismantle this as only one FileEntry implementation will be used.
 // These tests should pass for all FileEntry implementations
 func TestFileEntry(t *testing.T) {
 	stores := []struct {
@@ -479,4 +482,136 @@ func testDeleteMetadata(require *require.Assertions, bundle *fileEntryTestBundle
 	require.NoError(err)
 	_, err = os.Stat(path.Join(s1.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
 	require.Error(err)
+}
+
+func TestFileEntryLastAccessTimeUpdatedOnCreate(t *testing.T) {
+	require := require.New(t)
+
+	clk := clock.NewMock()
+	t0 := time.Now()
+	clk.Set(t0)
+
+	state, cleanup := fileStateFixture()
+	defer cleanup()
+
+	fe := DefaultLocalFileEntryFactory(clk).Create("test", state)
+
+	require.NoError(fe.Create(state, 1))
+
+	lat, err := getLastAccessTime(fe)
+	require.NoError(err)
+	require.Equal(t0.Truncate(time.Second), lat.Truncate(time.Second))
+}
+
+func TestFileEntryLastAccessTimeUpdatedOnMoveFrom(t *testing.T) {
+	require := require.New(t)
+
+	clk := clock.NewMock()
+	t0 := time.Now()
+	clk.Set(t0)
+
+	s1, s2, _, cleanup := fileStatesFixture()
+	defer cleanup()
+
+	fe := DefaultLocalFileEntryFactory(clk).Create("test", s2)
+
+	source, err := ioutil.TempFile(s1.GetDirectory(), "")
+	require.NoError(err)
+
+	require.NoError(fe.MoveFrom(s2, source.Name()))
+
+	lat, err := getLastAccessTime(fe)
+	require.NoError(err)
+	require.Equal(t0.Truncate(time.Second), lat.Truncate(time.Second))
+}
+
+func TestFileEntryLastAccessTimeUpdatedOnMove(t *testing.T) {
+	require := require.New(t)
+
+	clk := clock.NewMock()
+	clk.Set(time.Now())
+
+	s1, s2, _, cleanup := fileStatesFixture()
+	defer cleanup()
+
+	config := fileEntryConfig{lastAccessResolution: 5 * time.Second}
+	fe := NewLocalFileEntryFactory(config, clk).Create("test", s1)
+
+	require.NoError(fe.Create(s1, 1))
+
+	clk.Add(time.Hour)
+	require.NoError(fe.Move(s2))
+	lat, err := getLastAccessTime(fe)
+	require.NoError(err)
+	require.Equal(clk.Now().Truncate(time.Second), lat.Truncate(time.Second))
+}
+
+func TestFileEntryLastAccessTimeUpdatedOnOpen(t *testing.T) {
+	require := require.New(t)
+
+	clk := clock.NewMock()
+	clk.Set(time.Now())
+
+	state, cleanup := fileStateFixture()
+	defer cleanup()
+
+	config := fileEntryConfig{lastAccessResolution: 5 * time.Second}
+	fe := NewLocalFileEntryFactory(config, clk).Create("test", state)
+
+	require.NoError(fe.Create(state, 1))
+
+	checkLAT := func(expected time.Time) {
+		lat, err := getLastAccessTime(fe)
+		require.NoError(err)
+		require.Equal(expected.Truncate(time.Second), lat.Truncate(time.Second))
+	}
+
+	clk.Add(time.Hour)
+	_, err := fe.GetReader()
+	require.NoError(err)
+	checkLAT(clk.Now())
+
+	clk.Add(time.Hour)
+	_, err = fe.GetReadWriter()
+	require.NoError(err)
+	checkLAT(clk.Now())
+}
+
+func TestFileEntryLastAccessTimeResolution(t *testing.T) {
+	require := require.New(t)
+
+	clk := clock.NewMock()
+	t0 := time.Now()
+	clk.Set(t0)
+
+	state, cleanup := fileStateFixture()
+	defer cleanup()
+
+	config := fileEntryConfig{lastAccessResolution: 5 * time.Second}
+	fe := NewLocalFileEntryFactory(config, clk).Create("test", state)
+
+	require.NoError(fe.Create(state, 1))
+
+	accessAndCheckLAT := func(expected time.Time) {
+		_, err := fe.GetReader()
+		require.NoError(err)
+
+		lat, err := getLastAccessTime(fe)
+		require.NoError(err)
+
+		require.Equal(expected.Truncate(time.Second), lat.Truncate(time.Second))
+	}
+
+	// Advancing the clock within the resolution should not cause a metadata write.
+
+	clk.Add(2 * time.Second)
+	accessAndCheckLAT(t0)
+
+	clk.Add(2 * time.Second)
+	accessAndCheckLAT(t0)
+
+	// Advancing the clock past the resolution should update metadata with current time.
+
+	clk.Add(2 * time.Second)
+	accessAndCheckLAT(clk.Now())
 }

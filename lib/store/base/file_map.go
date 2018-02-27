@@ -1,10 +1,6 @@
 package base
 
-import (
-	"sync"
-
-	"golang.org/x/sync/syncmap"
-)
+import "golang.org/x/sync/syncmap"
 
 // FileMap is a thread-safe name -> FileEntry map.
 type FileMap interface {
@@ -16,12 +12,6 @@ type FileMap interface {
 }
 
 var _ FileMap = (*simpleFileMap)(nil)
-
-type fileEntryWithRWLock struct {
-	sync.RWMutex
-
-	fe FileEntry
-}
 
 // simpleFileMap is a two-level locking map which synchronizes access to the
 // map in addition to synchronizing access to the values within the map. Useful
@@ -49,18 +39,16 @@ func (fm *simpleFileMap) Contains(name string) bool {
 // Returns existing oject and true if the name is already present.
 func (fm *simpleFileMap) LoadOrStore(
 	name string, entry FileEntry, f func(string, FileEntry) error) (FileEntry, bool) {
+
 	// Grab entry lock first, in case other goroutines get the lock between LoadOrStore() and f().
-	e := &fileEntryWithRWLock{
-		fe: entry,
-	}
-	e.Lock()
-	defer e.Unlock()
+	entry.Lock()
+	defer entry.Unlock()
 
-	if actual, loaded := fm.m.LoadOrStore(name, e); loaded {
-		return actual.(*fileEntryWithRWLock).fe, true
+	if actual, loaded := fm.m.LoadOrStore(name, entry); loaded {
+		return actual.(FileEntry), true
 	}
 
-	if err := f(name, e.fe); err != nil {
+	if err := f(name, entry); err != nil {
 		// Remove from map while the entry lock is still being held
 		fm.m.Delete(name)
 		return nil, false
@@ -77,7 +65,7 @@ func (fm *simpleFileMap) LoadReadOnly(name string, f func(string, FileEntry)) bo
 		return false
 	}
 
-	e := v.(*fileEntryWithRWLock)
+	e := v.(FileEntry)
 	e.RLock()
 	defer e.RUnlock()
 
@@ -88,7 +76,7 @@ func (fm *simpleFileMap) LoadReadOnly(name string, f func(string, FileEntry)) bo
 		return false
 	}
 
-	f(name, e.fe)
+	f(name, e)
 
 	return true
 }
@@ -102,7 +90,7 @@ func (fm *simpleFileMap) Load(name string, f func(string, FileEntry)) bool {
 		return false
 	}
 
-	e := v.(*fileEntryWithRWLock)
+	e := v.(FileEntry)
 	e.Lock()
 	defer e.Unlock()
 
@@ -113,7 +101,7 @@ func (fm *simpleFileMap) Load(name string, f func(string, FileEntry)) bool {
 		return false
 	}
 
-	f(name, e.fe)
+	f(name, e)
 
 	return true
 }
@@ -127,7 +115,7 @@ func (fm *simpleFileMap) Delete(name string, f func(string, FileEntry) error) bo
 		return false
 	}
 
-	e := v.(*fileEntryWithRWLock)
+	e := v.(FileEntry)
 	e.Lock()
 	defer e.Unlock()
 
@@ -138,7 +126,7 @@ func (fm *simpleFileMap) Delete(name string, f func(string, FileEntry) error) bo
 		return false
 	}
 
-	if err := f(name, e.fe); err != nil {
+	if err := f(name, e); err != nil {
 		return false
 	}
 
@@ -149,7 +137,7 @@ func (fm *simpleFileMap) Delete(name string, f func(string, FileEntry) error) bo
 // Range interates over the Map and execs f until f returns false.
 func (fm *simpleFileMap) Range(f func(name string, fe FileEntry) bool) {
 	fm.m.Range(func(k, v interface{}) bool {
-		e := v.(*fileEntryWithRWLock)
+		e := v.(FileEntry)
 		e.Lock()
 		defer e.Unlock()
 
@@ -160,6 +148,6 @@ func (fm *simpleFileMap) Range(f func(name string, fe FileEntry) bool) {
 			return true
 		}
 
-		return f(k.(string), e.fe)
+		return f(k.(string), e)
 	})
 }

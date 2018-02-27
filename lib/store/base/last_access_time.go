@@ -30,7 +30,7 @@ func (t lastAccessTime) GetSuffix() string {
 }
 
 func (t lastAccessTime) Movable() bool {
-	return false
+	return true
 }
 
 // MarshalLastAccessTime marshals time to bytes.
@@ -47,4 +47,16 @@ func UnmarshalLastAccessTime(b []byte) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("unmarshal last access time: %s", b)
 	}
 	return time.Unix(int64(i), 0), nil
+}
+
+func getLastAccessTime(fe FileEntry) (time.Time, error) {
+	raw, err := fe.GetMetadata(NewLastAccessTime())
+	if err != nil {
+		return time.Time{}, err
+	}
+	t, err := UnmarshalLastAccessTime(raw)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return t, nil
 }
