@@ -3,7 +3,6 @@ package store
 import (
 	"io/ioutil"
 	"os"
-	"time"
 
 	"code.uber.internal/infra/kraken/utils/testutil"
 
@@ -84,7 +83,6 @@ func OriginFileStoreFixture(clk clock.Clock) (*OriginLocalFileStore, func()) {
 	config := OriginConfig{
 		UploadDir: upload,
 		CacheDir:  cache,
-		TTI:       time.Hour * 24,
 	}
 	s, err := NewOriginFileStore(config, clk)
 	if err != nil {

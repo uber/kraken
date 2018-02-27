@@ -1,18 +1,15 @@
 package store
 
 import (
-	"io"
 	"io/ioutil"
 	"os"
 	"path"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"code.uber.internal/infra/kraken/core"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 )
@@ -122,62 +119,4 @@ func TestCreateCacheFile(t *testing.T) {
 	require.NoError(err)
 	b2, err := ioutil.ReadAll(r2)
 	require.Equal(s1, string(b2))
-}
-
-func TestCleanupIdleDownloads(t *testing.T) {
-	require := require.New(t)
-
-	config, cleanup := ConfigFixture()
-	defer cleanup()
-	config.DownloadCleanup.Enabled = true
-	config.DownloadCleanup.Interval = time.Hour
-	config.DownloadCleanup.TTI = 2 * time.Second
-
-	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil), false)
-	require.NoError(err)
-	defer s.Close()
-
-	var idle []string
-	for i := 0; i < 10; i++ {
-		name := core.DigestFixture().Hex()
-		require.NoError(s.CreateDownloadFile(name, 1))
-		idle = append(idle, name)
-	}
-
-	stop := make(chan struct{})
-	defer close(stop)
-	var active []string
-	for i := 0; i < 10; i++ {
-		name := core.DigestFixture().Hex()
-		require.NoError(s.CreateDownloadFile(name, 1))
-		active = append(active, name)
-		go func(name string) {
-			for {
-				select {
-				case <-stop:
-					return
-				default:
-					w, err := s.GetDownloadFileReadWriter(name)
-					require.NoError(err)
-					_, err = io.WriteString(w, "foo")
-					assert.NoError(t, err)
-					w.Close()
-				}
-			}
-		}(name)
-	}
-
-	time.Sleep(config.DownloadCleanup.TTI + 250*time.Millisecond)
-
-	require.NoError(s.CleanupIdleDownloads())
-
-	for _, name := range idle {
-		_, err := s.GetDownloadFileReadWriter(name)
-		require.True(os.IsNotExist(err))
-	}
-
-	for _, name := range active {
-		_, err := s.GetDownloadFileReadWriter(name)
-		require.NoError(err)
-	}
 }

@@ -6,10 +6,8 @@ import (
 	"path"
 	"strings"
 	"testing"
-	"time"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/stringset"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
@@ -241,76 +239,4 @@ func TestOriginStoreListPopulatedShardIDs(t *testing.T) {
 			require.NotContains(shards, shard)
 		}
 	}
-}
-
-func TestOriginStoreCleanupCacheFile(t *testing.T) {
-	require := require.New(t)
-
-	clk := clock.NewMock()
-	clk.Set(time.Now())
-
-	s, cleanup := OriginFileStoreFixture(clk)
-	defer cleanup()
-
-	cacheFiles := make(stringset.Set)
-	expiredFiles := make(stringset.Set)
-	for i := 0; i < 100; i++ {
-		if i == 50 {
-			clk.Add(s.Config().TTI * 2)
-		}
-		name := core.DigestFixture().Hex()
-		cacheFiles.Add(name)
-		require.NoError(s.CreateUploadFile(name, 1))
-		require.NoError(s.MoveUploadFileToCache(name, name))
-		if i < 50 {
-			expiredFiles.Add(name)
-		}
-	}
-	err := s.cleanupExpiredCacheFile()
-	require.NoError(err)
-
-	for name := range cacheFiles {
-		_, err := s.GetCacheFileStat(name)
-		if expiredFiles.Has(name) {
-			require.True(os.IsNotExist(err))
-		} else {
-			require.NoError(err)
-		}
-	}
-}
-
-func TestOriginStoreCleanupCacheFileSkipRecentRead(t *testing.T) {
-	require := require.New(t)
-
-	clk := clock.NewMock()
-	clk.Set(time.Now())
-
-	s, cleanup := OriginFileStoreFixture(clk)
-	defer cleanup()
-
-	name1 := core.DigestFixture().Hex()
-	require.NoError(s.CreateUploadFile(name1, 1))
-	require.NoError(s.MoveUploadFileToCache(name1, name1))
-
-	name2 := core.DigestFixture().Hex()
-	require.NoError(s.CreateUploadFile(name2, 1))
-	require.NoError(s.MoveUploadFileToCache(name2, name2))
-
-	clk.Add(s.Config().TTI * 2)
-
-	_, err := s.GetCacheFileReader(name2)
-	require.NoError(err)
-
-	name3 := core.DigestFixture().Hex()
-	require.NoError(s.CreateUploadFile(name3, 1))
-	require.NoError(s.MoveUploadFileToCache(name3, name3))
-
-	require.NoError(s.cleanupExpiredCacheFile())
-
-	_, err = s.GetCacheFileReader(name1)
-	require.True(os.IsNotExist(err))
-	_, err = s.GetCacheFileReader(name2)
-	require.NoError(err)
-	_, err = s.GetCacheFileReader(name3)
-	require.NoError(err)
 }
