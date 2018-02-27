@@ -67,8 +67,12 @@ func (s TagSlice) Len() int           { return len(s) }
 
 // NewDockerTags returns new DockerTags
 func NewDockerTags(c Config, s store.FileStore, transferer transfer.ImageTransferer, metrics tally.Scope) (Tags, error) {
-	err := os.MkdirAll(c.TagDir, 0755)
-	if err != nil {
+
+	metrics = metrics.Tagged(map[string]string{
+		"module": "dockerregistrytags",
+	})
+
+	if err := os.MkdirAll(c.TagDir, 0755); err != nil {
 		return nil, err
 	}
 	return &DockerTags{
@@ -514,18 +518,22 @@ func (t *DockerTags) getOrDownloadManifest(repo, tag string) (string, error) {
 		return "", err
 	}
 
+	getTagTimer := t.metrics.Timer("get_tag").Start()
 	manifestDigest, err := t.transferer.GetTag(repo, tag)
 	if err != nil {
 		return "", fmt.Errorf("get tag through transferer: %s", err)
 	}
+	getTagTimer.Stop()
 
+	downloadManifestTimer := t.metrics.Timer("download_manifest").Start()
 	readCloser, err := t.transferer.Download(manifestDigest.Hex())
 	if err != nil {
 		return "", err
 	}
+	downloadManifestTimer.Stop()
 	defer readCloser.Close()
-	err = t.store.CreateCacheFile(manifestDigest.Hex(), readCloser)
-	if err != nil {
+
+	if err := t.store.CreateCacheFile(manifestDigest.Hex(), readCloser); err != nil {
 		return "", err
 	}
 

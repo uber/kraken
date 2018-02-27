@@ -7,6 +7,7 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
+	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -24,6 +25,7 @@ type MetaInfoConfig struct {
 
 type metaInfoHandler struct {
 	config        MetaInfoConfig
+	stats         tally.Scope
 	store         storage.MetaInfoStore
 	requestCache  *dedup.RequestCache
 	originCluster blobclient.ClusterClient
@@ -31,13 +33,14 @@ type metaInfoHandler struct {
 
 func newMetaInfoHandler(
 	config MetaInfoConfig,
+	stats tally.Scope,
 	store storage.MetaInfoStore,
 	originCluster blobclient.ClusterClient) *metaInfoHandler {
 
 	rc := dedup.NewRequestCache(config.RequestCache, clock.New())
 	rc.SetNotFound(httputil.IsNotFound)
 
-	return &metaInfoHandler{config, store, rc, originCluster}
+	return &metaInfoHandler{config, stats, store, rc, originCluster}
 }
 
 func (h *metaInfoHandler) get(w http.ResponseWriter, r *http.Request) error {
@@ -66,11 +69,15 @@ func (h *metaInfoHandler) get(w http.ResponseWriter, r *http.Request) error {
 func (h *metaInfoHandler) startMetaInfoDownload(namespace string, d core.Digest) error {
 	id := namespace + ":" + d.Hex()
 	err := h.requestCache.Start(id, func() error {
+
+		getMetaInfoTimer := h.stats.Timer("get_metainfo").Start()
 		mi, err := h.originCluster.GetMetaInfo(namespace, d)
 		if err != nil {
 			log.With("name", d.Hex()).Infof("Caching origin metainfo lookup error: %s", err)
 			return err
 		}
+		getMetaInfoTimer.Stop()
+
 		if err := h.store.SetMetaInfo(mi); err != nil {
 			if err != storage.ErrExists {
 				log.With("name", d.Hex()).Errorf("Caching metainfo storage error: %s", err)

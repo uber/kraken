@@ -118,10 +118,11 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 	fs, c := store.LocalFileStoreFixture()
 	cleanup.Add(c)
 
-	ta := storage.NewAgentTorrentArchive(
-		storage.AgentTorrentArchiveConfig{}, fs, m.metaInfoClient)
-
 	stats := tally.NewTestScope("", nil)
+
+	ta := storage.NewAgentTorrentArchive(
+		storage.AgentTorrentArchiveConfig{}, stats, fs, m.metaInfoClient)
+
 	pctx := core.PeerContext{
 		PeerID: core.PeerIDFixture(),
 		Zone:   "sjc1",

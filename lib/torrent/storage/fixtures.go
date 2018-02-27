@@ -6,6 +6,7 @@ import (
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
+	"github.com/uber-go/tally"
 	"github.com/willf/bitset"
 )
 
@@ -13,7 +14,7 @@ import (
 func TorrentArchiveFixture() (TorrentArchive, func()) {
 	localStore, cleanup := store.LocalFileStoreFixture()
 	archive := NewAgentTorrentArchive(
-		AgentTorrentArchiveConfig{}, localStore, nil)
+		AgentTorrentArchiveConfig{}, tally.NoopScope, localStore, nil)
 	return archive, cleanup
 }
 
@@ -27,7 +28,7 @@ func TorrentFixture(size, pieceLength uint64) (Torrent, func()) {
 
 	tc := metainfoclient.NewTestClient()
 
-	ta := NewAgentTorrentArchive(AgentTorrentArchiveConfig{}, fs, tc)
+	ta := NewAgentTorrentArchive(AgentTorrentArchiveConfig{}, tally.NoopScope, fs, tc)
 
 	mi := core.CustomMetaInfoFixture(size, pieceLength)
 	if err := tc.Upload(mi); err != nil {

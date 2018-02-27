@@ -68,7 +68,7 @@ func main() {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
 	archive := torrentstorage.NewAgentTorrentArchive(
-		config.AgentTorrentArchive, fs, metainfoclient.Default(trackers))
+		config.AgentTorrentArchive, stats, fs, metainfoclient.Default(trackers))
 
 	torrentClient, err := torrent.NewSchedulerClient(
 		config.Torrent,

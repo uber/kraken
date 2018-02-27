@@ -359,13 +359,21 @@ func (s Server) startRemoteBlobDownload(namespace string, d core.Digest) error {
 	}
 	id := namespace + ":" + d.Hex()
 	err = s.requestCache.Start(id, func() error {
+		downloadRemoteBlobTimer := s.stats.Timer("download_remote_blob").Start()
 		if err := s.downloadRemoteBlob(c, d); err != nil {
 			return err
 		}
+		downloadRemoteBlobTimer.Stop()
+
+		replicateBlobTimer := s.stats.Timer("replicate_blob").Start()
 		if err := s.replicateBlob(d); err != nil {
 			// Don't return error here as we only want to cache storage backend errors.
 			log.With("blob", d.Hex()).Errorf("Error replicating remote blob: %s", err)
+			s.stats.Counter("replicate_blob_errors").Inc(1)
+		} else {
+			replicateBlobTimer.Stop()
 		}
+
 		return nil
 	})
 	if err == dedup.ErrRequestPending || err == nil {

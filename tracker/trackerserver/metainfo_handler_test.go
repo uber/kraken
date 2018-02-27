@@ -15,6 +15,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pressly/chi"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 )
 
 const namespace = "test-namespace"
@@ -39,7 +40,7 @@ func TestMetaInfoHandlerGetFetchesFromOrigin(t *testing.T) {
 	mockClusterClient := mockblobclient.NewMockClusterClient(ctrl)
 
 	h := newMetaInfoHandler(
-		MetaInfoConfig{}, storage.TestMetaInfoStore(), mockClusterClient)
+		MetaInfoConfig{}, tally.NoopScope, storage.TestMetaInfoStore(), mockClusterClient)
 	addr, stop := startMetaInfoServer(h)
 	defer stop()
 
@@ -71,7 +72,7 @@ func TestMetaInfoHandlerGetCachesAndPropagatesOriginError(t *testing.T) {
 	mockClusterClient := mockblobclient.NewMockClusterClient(ctrl)
 
 	h := newMetaInfoHandler(
-		MetaInfoConfig{}, storage.TestMetaInfoStore(), mockClusterClient)
+		MetaInfoConfig{}, tally.NoopScope, storage.TestMetaInfoStore(), mockClusterClient)
 	addr, stop := startMetaInfoServer(h)
 	defer stop()
 

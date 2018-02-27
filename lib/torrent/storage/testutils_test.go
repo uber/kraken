@@ -7,6 +7,7 @@ import (
 	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/testutil"
 	"github.com/golang/mock/gomock"
+	"github.com/uber-go/tally"
 )
 
 type agentMocks struct {
@@ -29,5 +30,5 @@ func newAgentMocks(t *testing.T) (*agentMocks, func()) {
 }
 
 func (m *agentMocks) newTorrentArchive(config AgentTorrentArchiveConfig) *AgentTorrentArchive {
-	return NewAgentTorrentArchive(config, m.fs, m.metaInfoClient)
+	return NewAgentTorrentArchive(config, tally.NoopScope, m.fs, m.metaInfoClient)
 }
