@@ -30,7 +30,7 @@ func Handler(
 
 	announce := &announceHandler{peerStore, policy, originCluster}
 	health := &healthHandler{}
-	metainfo := newMetaInfoHandler(config.MetaInfo, metaInfoStore, originCluster)
+	metainfo := newMetaInfoHandler(config.MetaInfo, stats, metaInfoStore, originCluster)
 	manifest := &manifestHandler{manifestStore}
 
 	r := chi.NewRouter()

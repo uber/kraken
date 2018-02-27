@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/uber-go/tally"
+
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
@@ -18,6 +20,7 @@ type AgentTorrentArchiveConfig struct{}
 // from either the download or cache directory.
 type AgentTorrentArchive struct {
 	config         AgentTorrentArchiveConfig
+	stats          tally.Scope
 	fs             store.FileStore
 	metaInfoClient metainfoclient.Client
 }
@@ -25,10 +28,15 @@ type AgentTorrentArchive struct {
 // NewAgentTorrentArchive creates a new AgentTorrentArchive
 func NewAgentTorrentArchive(
 	config AgentTorrentArchiveConfig,
+	stats tally.Scope,
 	fs store.FileStore,
 	mic metainfoclient.Client) *AgentTorrentArchive {
 
-	return &AgentTorrentArchive{config, fs, mic}
+	stats = stats.Tagged(map[string]string{
+		"module": "agenttorrentarchive",
+	})
+
+	return &AgentTorrentArchive{config, stats, fs, mic}
 }
 
 // Stat returns TorrentInfo for given file name. Returns os.ErrNotExist if the file does
@@ -62,6 +70,7 @@ func (a *AgentTorrentArchive) CreateTorrent(namespace, name string) (Torrent, er
 
 	miRaw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
 	if os.IsNotExist(err) {
+		downloadTimer := a.stats.Timer("metainfo_download").Start()
 		mi, err := a.metaInfoClient.Download(namespace, name)
 		if err != nil {
 			if err == metainfoclient.ErrNotFound {
@@ -69,6 +78,8 @@ func (a *AgentTorrentArchive) CreateTorrent(namespace, name string) (Torrent, er
 			}
 			return nil, fmt.Errorf("download metainfo: %s", err)
 		}
+		downloadTimer.Stop()
+
 		// There's a race condition here, but it's "okay"... Basically, we could
 		// initialize a download file with metainfo that is rejected by file store,
 		// because someone else beats us to it. However, we catch a lucky break
