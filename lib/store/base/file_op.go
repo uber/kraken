@@ -3,6 +3,7 @@ package base
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 // FileOp performs one file or metadata operation on FileStore, given a list of acceptable states.
@@ -31,6 +32,8 @@ type FileOp interface {
 	RangeFileMetadata(name string, f func(mt MetadataType) error) error
 
 	ListNames() ([]string, error)
+
+	String() string
 }
 
 var _ FileOp = (*localFileOp)(nil)
@@ -412,4 +415,12 @@ func (op *localFileOp) ListNames() ([]string, error) {
 		names = append(names, stateNames...)
 	}
 	return names, nil
+}
+
+func (op *localFileOp) String() string {
+	var dirs []string
+	for state := range op.states {
+		dirs = append(dirs, state.GetDirectory())
+	}
+	return fmt.Sprintf("{%s}", strings.Join(dirs, ", "))
 }

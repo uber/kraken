@@ -6,7 +6,6 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
-	"math"
 	"os"
 	"path"
 	"regexp"
@@ -15,11 +14,9 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store/base"
-	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
-	"github.com/robfig/cron"
 	"github.com/spaolacci/murmur3"
 )
 
@@ -57,23 +54,22 @@ type OriginFileStore interface {
 
 // OriginLocalFileStore manages all origin files on local disk.
 type OriginLocalFileStore struct {
+	config  OriginConfig
+	clk     clock.Clock
+	cleanup *cleanupManager
+
 	uploadBackend base.FileStore
 	cacheBackend  base.FileStore
-	config        OriginConfig
-	clk           clock.Clock
 
 	stateUpload agentFileState
 	stateCache  agentFileState
-
-	cacheCleanupCron *cron.Cron
 }
 
 // NewOriginFileStore initializes and returns a new OriginLocalFileStore object.
 func NewOriginFileStore(config OriginConfig, clk clock.Clock) (*OriginLocalFileStore, error) {
 	config = config.applyDefaults()
 
-	err := initOriginStoreDirectories(config)
-	if err != nil {
+	if err := initOriginStoreDirectories(config); err != nil {
 		return nil, fmt.Errorf("init origin directories: %s", err)
 	}
 
@@ -87,37 +83,22 @@ func NewOriginFileStore(config OriginConfig, clk clock.Clock) (*OriginLocalFileS
 		return nil, fmt.Errorf("init origin cache backend: %s", err)
 	}
 
-	originStore := &OriginLocalFileStore{
-		uploadBackend: uploadBackend,
-		cacheBackend:  cacheBackend,
+	stateUpload := agentFileState{config.UploadDir}
+	stateCache := agentFileState{config.CacheDir}
+
+	cleanup := newCleanupManager(clk)
+	cleanup.addJob(config.UploadCleanup, uploadBackend.NewFileOp().AcceptState(stateUpload))
+	cleanup.addJob(config.CacheCleanup, cacheBackend.NewFileOp().AcceptState(stateCache))
+
+	return &OriginLocalFileStore{
 		config:        config,
 		clk:           clk,
-
-		stateUpload: agentFileState{directory: config.UploadDir},
-		stateCache:  agentFileState{directory: config.CacheDir},
-	}
-
-	// Start a cron to delete files that reached TTI.
-	if config.TTI > 0 && config.CleanupInterval > 0 {
-		originStore.cacheCleanupCron = cron.New()
-		intervalSecs := int(math.Ceil(config.CleanupInterval.Seconds()))
-		spec := fmt.Sprintf("@every %ds", intervalSecs)
-		err = originStore.cacheCleanupCron.AddFunc(spec, func() {
-			log.Info("Starting cache cleanup cron")
-			if err := originStore.cleanupExpiredCacheFile(); err != nil {
-				log.Errorf("Failed to execute cache cleanup cron: %s", err)
-			}
-
-			log.Info("Finished cache cleanup cron")
-		})
-		if err != nil {
-			return nil, fmt.Errorf("origin cache cleanup cron: %s", err)
-		}
-		log.Info("Starting cache cleanup cron")
-		originStore.cacheCleanupCron.Start()
-	}
-
-	return originStore, nil
+		cleanup:       cleanup,
+		uploadBackend: uploadBackend,
+		cacheBackend:  cacheBackend,
+		stateUpload:   stateUpload,
+		stateCache:    stateCache,
+	}, nil
 }
 
 func initOriginStoreDirectories(config OriginConfig) error {
@@ -167,31 +148,9 @@ func initOriginStoreDirectories(config OriginConfig) error {
 	return nil
 }
 
-func (store *OriginLocalFileStore) cleanupExpiredCacheFile() error {
-	cache := store.cacheBackend.NewFileOp().AcceptState(store.stateCache)
-	names, err := cache.ListNames()
-	if err != nil {
-		return fmt.Errorf("list names: %s", err)
-	}
-	for _, name := range names {
-		raw, err := cache.GetFileMetadata(name, base.NewLastAccessTime())
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return fmt.Errorf("get last access time: %s", err)
-		}
-		lat, err := base.UnmarshalLastAccessTime(raw)
-		if err != nil {
-			return fmt.Errorf("unmarshal last access time: %s", err)
-		}
-		if store.clk.Now().Sub(lat) > store.config.TTI {
-			if err := cache.DeleteFile(name); err != nil {
-				log.With("name", name).Errorf("Error deleting idle cache file: %s", err)
-			}
-		}
-	}
-	return nil
+// Close terminates goroutines started by store.
+func (store *OriginLocalFileStore) Close() {
+	store.cleanup.stop()
 }
 
 // Config returns configuration of the store
