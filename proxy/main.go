@@ -17,6 +17,7 @@ import (
 
 func main() {
 	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
+	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-sjc1)")
 	flag.Parse()
 
 	var config Config
@@ -26,7 +27,7 @@ func main() {
 
 	log.ConfigureLogger(config.ZapLogging)
 
-	stats, closer, err := metrics.New(config.Metrics)
+	stats, closer, err := metrics.New(config.Metrics, *cluster)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}

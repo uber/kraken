@@ -7,7 +7,7 @@ import (
 	"github.com/uber-go/tally"
 )
 
-func newDisabledScope(Config) (tally.Scope, io.Closer, error) {
+func newDisabledScope(Config, string) (tally.Scope, io.Closer, error) {
 	s, c := tally.NewRootScope(tally.ScopeOptions{
 		Reporter: disabledReporter{},
 	}, time.Second)
