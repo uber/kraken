@@ -12,11 +12,11 @@ import (
 
 func TestMetaInfoSerializationLimit(t *testing.T) {
 
-	// MetaInfo is stored as raw bytes in a MySQL MEDIUMBLOB column, and should stay
-	// within the limits of this column. Because the number of pieces in a
+	// MetaInfo is stored as raw bytes as a Redis value, and should stay
+	// within the limits of the value. Because the number of pieces in a
 	// torrent is variable, this test serves as a sanity check that reasonable
 	// blob size / piece length combinations can be safely serialized.
-	var mysqlMediumBlobLimit = 16777215
+	var redisValueLimit = 512 * memsize.MB
 
 	tests := []struct {
 		description string
@@ -51,8 +51,9 @@ func TestMetaInfoSerializationLimit(t *testing.T) {
 			}
 			b, err := mi.Serialize()
 			require.NoError(err)
-			require.True(len(b) < mysqlMediumBlobLimit,
-				"%d piece serialization %d bytes too large", numPieces, len(b)-mysqlMediumBlobLimit)
+			size := uint64(len(b))
+			require.True(size < redisValueLimit,
+				"%d piece serialization %d bytes too large", numPieces, size-redisValueLimit)
 		})
 	}
 }

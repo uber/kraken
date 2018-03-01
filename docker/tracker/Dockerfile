@@ -1,6 +1,6 @@
 FROM debian:8
 
-RUN apt-get update && apt-get install -y curl mysql-client
+RUN apt-get update && apt-get install -y curl
 
 ADD ./ /root/kraken
 ADD tracker/tracker /usr/bin/tracker

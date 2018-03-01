@@ -3,8 +3,6 @@ package main
 import (
 	"go.uber.org/zap"
 
-	"code.uber.internal/go-common.git/x/mysql"
-
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
@@ -21,10 +19,6 @@ type Config struct {
 	PeerHandoutPolicy peerhandoutpolicy.Config `yaml:"peerhandoutpolicy"`
 	Origin            OriginConfig             `yaml:"origin"`
 	Metrics           metrics.Config           `yaml:"metrics"`
-
-	// Unfortunately, nemo must be in top-level configuration to allow secrets
-	// injection.
-	Nemo mysql.Configuration `yaml:"nemo"`
 }
 
 // OriginConfig defines configuration for tracker's dependency on the

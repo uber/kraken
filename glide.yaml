@@ -2,11 +2,6 @@ package: code.uber.internal/infra/kraken
 ignore:
 - go/doc
 import:
-- package: code.uber.internal/go-common.git
-  version: master
-  subpackages:
-  - x/config
-  - x/log
 - package: github.com/uber-go/tally
   version: v2.1.0
 - package: github.com/docker/distribution
@@ -39,8 +34,6 @@ import:
   version: ^2.1.0
 - package: github.com/pressly/goose
   version: ^1.0.0
-- package: github.com/go-sql-driver/mysql
-  version: ^1.3.0
 - package: github.com/jackpal/bencode-go
 - package: github.com/bshuster-repo/logrus-logstash-hook.git
 - package: gopkg.in/DATA-DOG/go-sqlmock.v1

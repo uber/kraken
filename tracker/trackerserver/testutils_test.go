@@ -79,9 +79,7 @@ func (m *testMocks) Handler() http.Handler {
 		m.policy,
 		m.datastore,
 		m.datastore,
-		m.datastore,
-		m.originCluster,
-	)
+		m.originCluster)
 }
 
 func (m *testMocks) CreateHandlerAndServeRequest(request *http.Request) *http.Response {

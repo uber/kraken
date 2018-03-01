@@ -12,14 +12,7 @@ import (
 type Config struct {
 	PeerStore     string      `yaml:"peer_store"`
 	MetaInfoStore string      `yaml:"metainfo_store"`
-	ManifestStore string      `yaml:"manifest_store"`
 	Redis         RedisConfig `yaml:"redis"`
-	MySQL         MySQLConfig `yaml:"mysql"`
-}
-
-// MySQLConfig defines configuration for MySQL storage.
-type MySQLConfig struct {
-	MigrationsDir string `yaml:"migration_dir"`
 }
 
 // RedisConfig defines configuration for Redis storage.

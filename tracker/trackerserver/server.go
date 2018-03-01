@@ -21,7 +21,6 @@ func Handler(
 	policy peerhandoutpolicy.PeerHandoutPolicy,
 	peerStore storage.PeerStore,
 	metaInfoStore storage.MetaInfoStore,
-	manifestStore storage.ManifestStore,
 	originCluster blobclient.ClusterClient) http.Handler {
 
 	stats = stats.Tagged(map[string]string{
@@ -31,7 +30,6 @@ func Handler(
 	announce := &announceHandler{peerStore, policy, originCluster}
 	health := &healthHandler{}
 	metainfo := newMetaInfoHandler(config.MetaInfo, stats, metaInfoStore, originCluster)
-	manifest := &manifestHandler{manifestStore}
 
 	r := chi.NewRouter()
 
@@ -41,7 +39,6 @@ func Handler(
 	announce.setRoutes(r)
 	health.setRoutes(r)
 	metainfo.setRoutes(r)
-	manifest.setRoutes(r)
 
 	// Serves /debug/pprof endpoints.
 	r.Mount("/", http.DefaultServeMux)
@@ -55,11 +52,6 @@ func (h *healthHandler) setRoutes(r chi.Router) {
 
 func (h *metaInfoHandler) setRoutes(r chi.Router) {
 	r.Get("/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(h.get))
-}
-
-func (h *manifestHandler) setRoutes(r chi.Router) {
-	r.Get("/manifest/:name", handler.Wrap(h.Get))
-	r.Post("/manifest/:name", handler.Wrap(h.Post))
 }
 
 func (h *announceHandler) setRoutes(r chi.Router) {
