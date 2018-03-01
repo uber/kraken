@@ -63,6 +63,7 @@ func main() {
 	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
 	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
 	zone := flag.String("zone", "", "zone/datacenter name")
+	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-sjc1)")
 
 	flag.Parse()
 
@@ -90,7 +91,7 @@ func main() {
 	zlog := log.ConfigureLogger(config.ZapLogging)
 	defer zlog.Sync()
 
-	stats, closer, err := metrics.New(config.Metrics)
+	stats, closer, err := metrics.New(config.Metrics, *cluster)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}

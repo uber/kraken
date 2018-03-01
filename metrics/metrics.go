@@ -16,7 +16,7 @@ func init() {
 
 var _scopeFactories = make(map[string]scopeFactory)
 
-type scopeFactory func(config Config) (tally.Scope, io.Closer, error)
+type scopeFactory func(config Config, cluster string) (tally.Scope, io.Closer, error)
 
 func register(name string, f scopeFactory) {
 	if _, ok := _scopeFactories[name]; ok {
@@ -27,7 +27,7 @@ func register(name string, f scopeFactory) {
 
 // New creates a new metrics Scope from config. If no backend is configured, metrics
 // are disabled.
-func New(config Config) (tally.Scope, io.Closer, error) {
+func New(config Config, cluster string) (tally.Scope, io.Closer, error) {
 	if config.Backend == "" {
 		config.Backend = "disabled"
 	}
@@ -35,5 +35,5 @@ func New(config Config) (tally.Scope, io.Closer, error) {
 	if !ok || f == nil {
 		return nil, nil, fmt.Errorf("metrics backend %q not registered", config.Backend)
 	}
-	return f(config)
+	return f(config, cluster)
 }

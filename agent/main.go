@@ -31,6 +31,7 @@ func main() {
 	agentServerPort := flag.Int("agent_server_port", 0, "port which agent server will listen on")
 	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
 	zone := flag.String("zone", "", "zone/datacenter name")
+	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-sjc1)")
 
 	flag.Parse()
 
@@ -52,7 +53,7 @@ func main() {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
 
-	stats, closer, err := metrics.New(config.Metrics)
+	stats, closer, err := metrics.New(config.Metrics, *cluster)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}

@@ -15,7 +15,7 @@ const (
 	sampleRate    = 1.0
 )
 
-func newStatsdScope(config Config) (tally.Scope, io.Closer, error) {
+func newStatsdScope(config Config, cluster string) (tally.Scope, io.Closer, error) {
 	statter, err := statsd.NewBufferedClient(
 		config.Statsd.HostPort, config.Statsd.Prefix, flushInterval, flushBytes)
 	if err != nil {
