@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"code.uber.internal/go-common.git/x/mysql"
-
 	"code.uber.internal/infra/kraken/core"
 )
 
@@ -44,41 +42,25 @@ type MetaInfoStore interface {
 	SetMetaInfo(mi *core.MetaInfo) error
 }
 
-// ManifestStore provides storage for Docker image manifests.
-type ManifestStore interface {
-
-	// GetManifest returns stored manifest as raw string given tag.
-	GetManifest(tag string) (string, error)
-
-	// CreateManifest creates manfist given tag and manifest.
-	CreateManifest(tag, manifestRaw string) error
-
-	// DeleteManifest deletes manifest from tracker given tag.
-	DeleteManifest(tag string) error
-}
-
 // Storage provides a combined interface for all stores. Useful for mocking.
 // TODO(codyg): Replace all "storage" variables names with "store".
 type Storage interface {
 	PeerStore
 	MetaInfoStore
-	ManifestStore
 }
 
 // StoreProvider provides constructors for datastores. Ensures that at most one
 // storage backend is created regardless of how many stores it backs.
 type StoreProvider struct {
 	config Config
-	nemo   mysql.Configuration
 
 	// Caches previously created storage backends.
-	mysqlStorage *MySQLStorage
 	redisStorage *RedisStorage
 }
 
 // NewStoreProvider creates a new StoreProvider.
-func NewStoreProvider(config Config, nemo mysql.Configuration) *StoreProvider {
-	return &StoreProvider{config: config, nemo: nemo}
+func NewStoreProvider(config Config) *StoreProvider {
+	return &StoreProvider{config: config}
 }
 
 // GetPeerStore returns the configured PeerStore.
@@ -107,33 +89,8 @@ func (p *StoreProvider) GetMetaInfoStore() (MetaInfoStore, error) {
 	return ts, nil
 }
 
-// GetManifestStore returns the configured ManifestStore.
-func (p *StoreProvider) GetManifestStore() (ManifestStore, error) {
-	s, err := p.getStorageBackend(p.config.ManifestStore)
-	if err != nil {
-		return nil, err
-	}
-	ms, ok := s.(ManifestStore)
-	if !ok {
-		return nil, fmt.Errorf("ManifestStore not supported for %s", p.config.ManifestStore)
-	}
-	return ms, nil
-}
-
 func (p *StoreProvider) getStorageBackend(name string) (interface{}, error) {
 	switch name {
-	case "mysql":
-		if p.mysqlStorage == nil {
-			s, err := NewMySQLStorage(p.nemo, p.config.MySQL)
-			if err != nil {
-				return nil, fmt.Errorf("mysql storage initialization failed: %s", err)
-			}
-			if err := s.RunMigration(); err != nil {
-				return nil, fmt.Errorf("mysql migration failed: %s", err)
-			}
-			p.mysqlStorage = s
-		}
-		return p.mysqlStorage, nil
 	case "redis":
 		if p.redisStorage == nil {
 			s, err := NewRedisStorage(p.config.Redis)
@@ -143,8 +100,6 @@ func (p *StoreProvider) getStorageBackend(name string) (interface{}, error) {
 			p.redisStorage = s
 		}
 		return p.redisStorage, nil
-	case "disabled":
-		return disabled{}, nil
 	default:
 		return nil, fmt.Errorf("invalid storage backend: %q", name)
 	}

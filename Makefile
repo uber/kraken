@@ -74,7 +74,7 @@ bench:
 
 test:: redis
 
-jenkins:: redis run_mysql
+jenkins:: redis
 
 mockgen = GOPATH=$(OLDGOPATH) $(GLIDE_EXEC) -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
 
@@ -144,7 +144,7 @@ mocks:
 # Enumerates all container names, including those created by dockerman.
 CONTAINERS := $(foreach \
 	c, \
-	kraken-mysql kraken-redis kraken-tracker kraken-agent kraken-proxy kraken-test-origin-01 \
+	kraken-redis kraken-tracker kraken-agent kraken-proxy kraken-test-origin-01 \
 	kraken-test-origin-02 kraken-test-origin-03 kraken-testfs, \
 	$(c))
 
@@ -160,37 +160,13 @@ redis:
 	# TODO(codyg): I chose this random port to avoid conflicts in Jenkins. Obviously not ideal.
 	docker run -d -p 6380:6379 --name kraken-redis redis:latest
 
-build_mysql:
-	docker build -t kraken-mysql:dev -f docker/mysql/Dockerfile ./docker/mysql
-
-.PHONY: mysql
-mysql:
-	docker pull percona/percona-server:5.6.28
-
-run_mysql: mysql
-	-docker stop kraken-mysql
-	-docker rm kraken-mysql
-	docker run \
-		--name kraken-mysql \
-		-p 3307:3306 \
-		-e MYSQL_ROOT_PASSWORD=uber \
-		-e MYSQL_USER=uber \
-		-e MYSQL_PASSWORD=uber \
-		-e MYSQL_DATABASE=kraken \
-		-v `pwd`/docker/mysql/my.cnf:/etc/my.cnf \
-		-d percona/percona-server:5.6.28
-	@echo -n "waiting for mysql to start"
-	@until docker exec kraken-mysql mysql -u uber --password=uber -e "use kraken" &> /dev/null; \
-		do echo -n "."; sleep 1; done
-	@echo
-
 .PHONY: tracker
-tracker: mysql redis
+tracker: redis
 	-rm tracker/tracker
 	GOOS=linux GOARCH=amd64 make tracker/tracker
 	docker build -t kraken-tracker:dev -f docker/tracker/Dockerfile ./
 
-run_tracker: tracker run_mysql redis
+run_tracker: tracker redis
 	-docker stop kraken-tracker
 	-docker rm kraken-tracker
 	docker run -d \

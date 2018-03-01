@@ -33,7 +33,7 @@ func main() {
 	}
 	defer closer.Close()
 
-	storeProvider := storage.NewStoreProvider(config.Storage, config.Nemo)
+	storeProvider := storage.NewStoreProvider(config.Storage)
 	peerStore, err := storeProvider.GetPeerStore()
 	if err != nil {
 		log.Fatalf("Could not create PeerStore: %s", err)
@@ -41,10 +41,6 @@ func main() {
 	torrentStore, err := storeProvider.GetMetaInfoStore()
 	if err != nil {
 		log.Fatalf("Could not create MetaInfoStore: %s", err)
-	}
-	manifestStore, err := storeProvider.GetManifestStore()
-	if err != nil {
-		log.Fatalf("Could not create ManifestStore: %s", err)
 	}
 
 	policy, err := peerhandoutpolicy.Get(
@@ -66,7 +62,6 @@ func main() {
 		policy,
 		peerStore,
 		torrentStore,
-		manifestStore,
 		originCluster)
 
 	addr := fmt.Sprintf(":%d", config.Port)
