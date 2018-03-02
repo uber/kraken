@@ -87,6 +87,12 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
+	mkdir -p mocks/utils/dedup
+	$(mockgen) \
+		-destination=mocks/utils/dedup/mockdedup.go \
+		-package mockdedup \
+		code.uber.internal/infra/kraken/utils/dedup Resolver
+
 	mkdir -p mocks/lib/backend
 	$(mockgen) \
 		-destination=mocks/lib/backend/mockbackend.go \
