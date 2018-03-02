@@ -33,43 +33,6 @@ func (m *MockStorage) EXPECT() *MockStorageMockRecorder {
 	return m.recorder
 }
 
-// CreateManifest mocks base method
-func (m *MockStorage) CreateManifest(arg0, arg1 string) error {
-	ret := m.ctrl.Call(m, "CreateManifest", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CreateManifest indicates an expected call of CreateManifest
-func (mr *MockStorageMockRecorder) CreateManifest(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateManifest", reflect.TypeOf((*MockStorage)(nil).CreateManifest), arg0, arg1)
-}
-
-// DeleteManifest mocks base method
-func (m *MockStorage) DeleteManifest(arg0 string) error {
-	ret := m.ctrl.Call(m, "DeleteManifest", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteManifest indicates an expected call of DeleteManifest
-func (mr *MockStorageMockRecorder) DeleteManifest(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteManifest", reflect.TypeOf((*MockStorage)(nil).DeleteManifest), arg0)
-}
-
-// GetManifest mocks base method
-func (m *MockStorage) GetManifest(arg0 string) (string, error) {
-	ret := m.ctrl.Call(m, "GetManifest", arg0)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetManifest indicates an expected call of GetManifest
-func (mr *MockStorageMockRecorder) GetManifest(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetManifest", reflect.TypeOf((*MockStorage)(nil).GetManifest), arg0)
-}
-
 // GetMetaInfo mocks base method
 func (m *MockStorage) GetMetaInfo(arg0 string) ([]byte, error) {
 	ret := m.ctrl.Call(m, "GetMetaInfo", arg0)

@@ -36,18 +36,6 @@ func (m *MockFileStore) EXPECT() *MockFileStoreMockRecorder {
 	return m.recorder
 }
 
-// CleanupIdleDownloads mocks base method
-func (m *MockFileStore) CleanupIdleDownloads() error {
-	ret := m.ctrl.Call(m, "CleanupIdleDownloads")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CleanupIdleDownloads indicates an expected call of CleanupIdleDownloads
-func (mr *MockFileStoreMockRecorder) CleanupIdleDownloads() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanupIdleDownloads", reflect.TypeOf((*MockFileStore)(nil).CleanupIdleDownloads))
-}
-
 // Close mocks base method
 func (m *MockFileStore) Close() {
 	m.ctrl.Call(m, "Close")
