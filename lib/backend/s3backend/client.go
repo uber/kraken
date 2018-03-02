@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
@@ -24,8 +26,8 @@ type client struct {
 	s3Session s3iface.S3API // S3 session
 }
 
-// newClient creates s3 client from input parameters
-func newClient(config Config) (*client, error) {
+// newClient creates s3 client from input parameters and a namespace
+func newClient(config Config, auth AuthConfig, namespace string) (*client, error) {
 	config = config.applyDefaults()
 	if config.Region == "" {
 		return nil, errors.New("invalid config: region required")
@@ -34,8 +36,23 @@ func newClient(config Config) (*client, error) {
 		return nil, errors.New("invalid config: bucket required")
 	}
 
+	var creds *credentials.Credentials
+	if auth.AccessKeyID != "" && auth.AccessSecretKey != "" {
+		// These should be provided by langley or usecret
+		log.Info("Using static s3 credentials")
+		creds = credentials.NewStaticCredentials(auth.AccessKeyID, auth.AccessSecretKey, auth.SessionToken)
+	} else {
+		// fallback to shared credentials
+		// default file name at ./aws/credendtials, profile is a namespace name
+		log.Info("Using shared s3 credentials")
+		if _, err := os.Stat(".aws/credentials"); os.IsNotExist(err) {
+			return nil, errors.New(".aws/credentials file does not exist")
+		}
+		creds = credentials.NewSharedCredentials("", namespace)
+	}
+
 	sess := session.New()
-	svc := s3.New(sess, aws.NewConfig().WithRegion(config.Region))
+	svc := s3.New(sess, aws.NewConfig().WithRegion(config.Region).WithCredentials(creds))
 
 	return &client{s3Session: svc, config: config}, nil
 }

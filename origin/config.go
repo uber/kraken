@@ -13,14 +13,15 @@ import (
 
 // Config defines origin server configuration.
 type Config struct {
-	Verbose     bool
-	ZapLogging  zap.Config              `yaml:"zap"`
-	BlobServer  blobserver.Config       `yaml:"blobserver"`
-	OriginStore store.OriginConfig      `yaml:"originstore"`
-	Torrent     torrent.Config          `yaml:"torrent"`
-	Metrics     metrics.Config          `yaml:"metrics"`
-	Tracker     TrackerConfig           `yaml:"tracker"`
-	Namespaces  backend.NamespaceConfig `yaml:"namespaces"`
+	Verbose        bool
+	ZapLogging     zap.Config                  `yaml:"zap"`
+	BlobServer     blobserver.Config           `yaml:"blobserver"`
+	OriginStore    store.OriginConfig          `yaml:"originstore"`
+	Torrent        torrent.Config              `yaml:"torrent"`
+	Metrics        metrics.Config              `yaml:"metrics"`
+	Tracker        TrackerConfig               `yaml:"tracker"`
+	Namespaces     backend.NamespaceConfig     `yaml:"namespaces"`
+	AuthNamespaces backend.AuthNamespaceConfig `yaml:"auth"`
 }
 
 // TrackerConfig defines configuration for proxy's dependency on tracker.

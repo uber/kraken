@@ -33,7 +33,7 @@ func main() {
 	}
 	defer closer.Close()
 
-	backendManager, err := backend.NewManager(config.Registry.Namespaces)
+	backendManager, err := backend.NewManager(config.Registry.Namespaces, config.AuthNamespaces)
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}

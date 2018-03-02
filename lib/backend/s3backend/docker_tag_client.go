@@ -9,21 +9,20 @@ import (
 
 // DockerTagClient is a tag client for s3
 type DockerTagClient struct {
-	config Config
 	client *client
 }
 
 // NewDockerTagClient creates a new DockerTagClient.
-func NewDockerTagClient(config Config) (*DockerTagClient, error) {
-	client, err := newClient(config.applyDefaults())
+func NewDockerTagClient(config Config, auth AuthConfig, ns string) (*DockerTagClient, error) {
+	client, err := newClient(config, auth, ns)
 	if err != nil {
 		return nil, fmt.Errorf("invalid config: %s", err)
 	}
-	return &DockerTagClient{client: client, config: config}, nil
+	return &DockerTagClient{client: client}, nil
 }
 
 func (c *DockerTagClient) path(name string) (string, error) {
-	return nameparse.RepoTagPath(c.config.RootDirectory, name)
+	return nameparse.RepoTagPath(c.client.config.RootDirectory, name)
 }
 
 // Download downloads a blob for name into dst. name should be a sha256 digest

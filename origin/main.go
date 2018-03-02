@@ -123,7 +123,7 @@ func main() {
 		log.Fatalf("Failed to create scheduler client: %s", err)
 	}
 
-	backendManager, err := backend.NewManager(config.Namespaces)
+	backendManager, err := backend.NewManager(config.Namespaces, config.AuthNamespaces)
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
