@@ -8,13 +8,12 @@ import (
 
 // DockerBlobClient implements downloading/uploading object from/to S3
 type DockerBlobClient struct {
-	config Config
 	client *client
 }
 
 // NewDockerBlobClient creates s3 blob client from input parameters
-func NewDockerBlobClient(config Config) (*DockerBlobClient, error) {
-	client, err := newClient(config)
+func NewDockerBlobClient(config Config, auth AuthConfig, ns string) (*DockerBlobClient, error) {
+	client, err := newClient(config, auth, ns)
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +21,7 @@ func NewDockerBlobClient(config Config) (*DockerBlobClient, error) {
 }
 
 func (c *DockerBlobClient) path(name string) (string, error) {
-	return nameparse.ShardDigestPath(c.config.RootDirectory, name)
+	return nameparse.ShardDigestPath(c.client.config.RootDirectory, name)
 }
 
 // Download downloads a blob for name into dst. name should be a sha256 digest

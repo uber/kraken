@@ -17,6 +17,11 @@ const (
 	goodConfig = `
 listen_address: localhost:4385
 buffer_space: 1024
+X:
+  Y:
+    V: val1
+    Z:
+      K1: v1
 servers:
     - somewhere-sjc1:8090
     - somewhere-else-sjc1:8010
@@ -30,6 +35,10 @@ servers:
 	goodExtendsConfig = `
 extends: %s
 buffer_space: 512
+X:
+  Y:
+    Z:
+      K2: v2
 servers:
     - somewhere-sjc2:8090
     - somewhere-else-sjc2:8010
@@ -47,8 +56,23 @@ type configuration struct {
 	ListenAddress string   `yaml:"listen_address" validate:"nonzero"`
 	BufferSpace   int      `yaml:"buffer_space" validate:"min=255"`
 	Servers       []string `validate:"nonzero"`
+	X             Xconfig  `yaml:"X"`
 	Nodes         map[string]string
 	Secret        string
+}
+
+type Xconfig struct {
+	Y Yconfig `yaml:"Y"`
+}
+
+type Yconfig struct {
+	V string  `yaml:"V"`
+	Z Zconfig `yaml:"Z"`
+}
+
+type Zconfig struct {
+	K1 string `yaml:"K1"`
+	K2 string `yaml:"K2"`
 }
 
 func writeFile(t *testing.T, contents string) string {
@@ -191,6 +215,10 @@ func TestExtendsConfig(t *testing.T) {
 	assert.Equal(t, "localhost:4385", cfg.ListenAddress)
 	assert.Equal(t, 512, cfg.BufferSpace)
 	assert.Equal(t, []string{"somewhere-sjc2:8090", "somewhere-else-sjc2:8010"}, cfg.Servers)
+	assert.Equal(t, "v1", cfg.X.Y.Z.K1)
+	assert.Equal(t, "v2", cfg.X.Y.Z.K2)
+
+	assert.Equal(t, "val1", cfg.X.Y.V)
 }
 
 func TestExtendsConfigDeep(t *testing.T) {

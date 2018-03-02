@@ -19,6 +19,10 @@ func configFixture(region string, bucket string) Config {
 	return Config{Region: region, Bucket: bucket}.applyDefaults()
 }
 
+func authConfigFixture() AuthConfig {
+	return AuthConfig{AccessKeyID: "accesskey", AccessSecretKey: "secret"}
+}
+
 func TestS3UploadSuccess(t *testing.T) {
 	require := require.New(t)
 
@@ -27,7 +31,7 @@ func TestS3UploadSuccess(t *testing.T) {
 
 	config := configFixture("us-west-1", "test_bucket")
 
-	s3client, err := newClient(config)
+	s3client, err := newClient(config, authConfigFixture(), "ns")
 	require.NoError(err)
 	req, err := http.NewRequest("POST", "", nil)
 	require.NoError(err)
@@ -50,7 +54,7 @@ func TestS3DownloadSuccess(t *testing.T) {
 
 	config := configFixture("us-west-1", "test_bucket")
 
-	s3client, err := newClient(config)
+	s3client, err := newClient(config, authConfigFixture(), "ns")
 	require.NoError(err)
 	req, err := http.NewRequest("POST", "", nil)
 	require.NoError(err)
@@ -83,7 +87,7 @@ func TestAllClients(t *testing.T) {
 		{
 			"docker blob client",
 			func(t *testing.T, config Config, name string, blob []byte) backendClient {
-				s3client, err := newClient(config)
+				s3client, err := newClient(config, authConfigFixture(), "ns")
 				require.NoError(t, err)
 
 				req, err := http.NewRequest("POST", "", nil)
@@ -102,14 +106,14 @@ func TestAllClients(t *testing.T) {
 		}, {
 			"docker tag client",
 			func(t *testing.T, config Config, name string, blob []byte) backendClient {
-				s3client, err := newClient(config)
+				s3client, err := newClient(config, authConfigFixture(), "ns")
 				require.NoError(t, err)
 
 				req, err := http.NewRequest("POST", "", nil)
 				require.NoError(t, err)
 				s3client.s3Session = NewS3Mock(blob, req)
 
-				dtc := &DockerTagClient{client: s3client, config: config}
+				dtc := &DockerTagClient{client: s3client}
 				return dtc
 			},
 			"docker/registry/v2/repositories/:repo/_manifests/tags/:tag/current/link",

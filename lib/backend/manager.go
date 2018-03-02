@@ -15,16 +15,17 @@ type Manager struct {
 }
 
 // NewManager creates a new Manager.
-func NewManager(namespaces NamespaceConfig) (*Manager, error) {
+func NewManager(namespaces NamespaceConfig, auth AuthNamespaceConfig) (*Manager, error) {
 	clients := make(map[string]Client)
 	for ns, config := range namespaces {
 		var c Client
 		var err error
+
 		switch config.Backend {
-		case "s3-dockerblob":
-			c, err = s3backend.NewDockerBlobClient(config.S3)
-		case "s3-dockertag":
-			c, err = s3backend.NewDockerTagClient(config.S3)
+		case "s3_dockerblob":
+			c, err = s3backend.NewDockerBlobClient(config.S3, auth[ns].S3, ns)
+		case "s3_dockertag":
+			c, err = s3backend.NewDockerTagClient(config.S3, auth[ns].S3, ns)
 		case "hdfs_dockerblob":
 			c, err = hdfsbackend.NewDockerBlobClient(config.HDFS)
 		case "hdfs_dockertag":

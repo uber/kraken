@@ -120,7 +120,7 @@ type testServer struct {
 func newTestServer(host string, config Config, cp *testClientProvider) *testServer {
 	pctx := core.PeerContextFixture()
 	fs, cleanFS := store.OriginFileStoreFixture(clock.New())
-	bm, err := backend.NewManager(nil)
+	bm, err := backend.NewManager(nil, nil)
 	if err != nil {
 		panic(err)
 	}

@@ -17,9 +17,10 @@ type Config struct {
 	TagDir         string               `yaml:"tag_dir"`
 	TagDeletion    TagDeletionConfig    `yaml:"tag_deletion"`
 
-	Namespaces    backend.NamespaceConfig `yaml:"namespaces"`
-	TagNamespace  string                  `yaml:"tag_namespace"`
-	BlobNamespace string                  `yaml:"blob_namespace"`
+	Namespaces backend.NamespaceConfig `yaml:"namespaces"`
+
+	TagNamespace  string `yaml:"tag_namespace"`
+	BlobNamespace string `yaml:"blob_namespace"`
 }
 
 func (c Config) applyDefaults() Config {

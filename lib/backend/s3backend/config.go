@@ -24,6 +24,15 @@ type Config struct {
 	BufferGuard datasize.ByteSize `yaml:"buffer_guard"`
 }
 
+// AuthConfig defines s3 credential parameters
+type AuthConfig struct {
+	// The credentialas are supposed to be delivered via secure
+	// mechanism only, in Uber's world it would langley or usecret
+	AccessKeyID     string `yaml:"aws_access_key_id"`
+	AccessSecretKey string `yaml:"aws_secret_access_key"`
+	SessionToken    string `yaml:"aws_session_token"`
+}
+
 func (c Config) applyDefaults() Config {
 	if c.UploadPartSize == 0 {
 		c.UploadPartSize = int64(64 * memsize.MB)
