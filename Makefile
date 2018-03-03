@@ -275,6 +275,10 @@ linux-reload:
 	-rm tools/bin/reload/reload
 	GOOS=linux GOARCH=amd64 make tools/bin/reload/reload
 
+linux-trackerload:
+	-rm tools/bin/trackerload/trackerload
+	GOOS=linux GOARCH=amd64 make tools/bin/trackerload/trackerload
+
 # jenkins-only debian build job for cli
 .PHONY: debian-kraken-cli
 debian-kraken-cli: cli/kraken-cli
