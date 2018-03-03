@@ -1,12 +1,13 @@
 package backend
 
 import (
+	"errors"
 	"fmt"
 
 	"code.uber.internal/infra/kraken/lib/backend/hdfsbackend"
-	"code.uber.internal/infra/kraken/lib/backend/proxybackend"
 	"code.uber.internal/infra/kraken/lib/backend/s3backend"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
+	"code.uber.internal/infra/kraken/lib/backend/trackerbackend"
 )
 
 // Manager manages backend clients for namespaces.
@@ -30,8 +31,8 @@ func NewManager(namespaces NamespaceConfig, auth AuthNamespaceConfig) (*Manager,
 			c, err = hdfsbackend.NewDockerBlobClient(config.HDFS)
 		case "hdfs_dockertag":
 			c, err = hdfsbackend.NewDockerTagClient(config.HDFS)
-		case "proxy_dockertag":
-			c, err = proxybackend.NewDockerTagClient(config.Proxy)
+		case "tracker_dockertag":
+			c, err = trackerbackend.NewDockerTagClient(config.Tracker)
 		case "testfs":
 			c, err = testfs.NewClient(config.TestFS)
 		default:
@@ -58,6 +59,9 @@ func (m *Manager) Register(namespace string, c Client) error {
 
 // GetClient returns the configured Client for the given namespace.
 func (m *Manager) GetClient(namespace string) (Client, error) {
+	if namespace == "" {
+		return nil, errors.New("namespace is empty")
+	}
 	c, ok := m.clients[namespace]
 	if !ok {
 		return nil, fmt.Errorf("namespace %s not found", namespace)
