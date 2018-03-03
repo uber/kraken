@@ -7,6 +7,7 @@ import (
 	"github.com/pressly/chi"
 	"github.com/uber-go/tally"
 
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
@@ -21,7 +22,8 @@ func Handler(
 	policy peerhandoutpolicy.PeerHandoutPolicy,
 	peerStore storage.PeerStore,
 	metaInfoStore storage.MetaInfoStore,
-	originCluster blobclient.ClusterClient) http.Handler {
+	originCluster blobclient.ClusterClient,
+	tags backend.Client) http.Handler {
 
 	stats = stats.Tagged(map[string]string{
 		"module": "trackerserver",
@@ -30,6 +32,7 @@ func Handler(
 	announce := &announceHandler{peerStore, policy, originCluster}
 	health := &healthHandler{}
 	metainfo := newMetaInfoHandler(config.MetaInfo, stats, metaInfoStore, originCluster)
+	tag := newTagHandler(tags)
 
 	r := chi.NewRouter()
 
@@ -39,6 +42,7 @@ func Handler(
 	announce.setRoutes(r)
 	health.setRoutes(r)
 	metainfo.setRoutes(r)
+	tag.setRoutes(r)
 
 	// Serves /debug/pprof endpoints.
 	r.Mount("/", http.DefaultServeMux)
@@ -56,4 +60,8 @@ func (h *metaInfoHandler) setRoutes(r chi.Router) {
 
 func (h *announceHandler) setRoutes(r chi.Router) {
 	r.Get("/announce", handler.Wrap(h.Get))
+}
+
+func (h *tagHandler) setRoutes(r chi.Router) {
+	r.Get("/tag/:name", handler.Wrap(h.Get))
 }

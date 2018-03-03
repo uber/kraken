@@ -87,6 +87,12 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
+	mkdir -p mocks/tracker/tagclient
+	$(mockgen) \
+		-destination=mocks/tracker/tagclient/mocktagclient.go \
+		-package mocktagclient \
+		code.uber.internal/infra/kraken/tracker/tagclient Client
+
 	mkdir -p mocks/utils/dedup
 	$(mockgen) \
 		-destination=mocks/utils/dedup/mockdedup.go \

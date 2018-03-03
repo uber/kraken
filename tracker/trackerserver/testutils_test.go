@@ -2,7 +2,6 @@ package trackerserver
 
 import (
 	"encoding/json"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,9 +10,11 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/mocks/tracker/mockstorage"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
+	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
 	"github.com/uber-go/tally"
@@ -37,6 +38,7 @@ type testMocks struct {
 	ctrl          *gomock.Controller
 	datastore     *mockstorage.MockStorage
 	originCluster *mockblobclient.MockClusterClient
+	tags          *mockbackend.MockClient
 	stats         tally.Scope
 }
 
@@ -47,6 +49,7 @@ func newTestMocks(t *testing.T) (*testMocks, func()) {
 		policy:        peerhandoutpolicy.DefaultPeerHandoutPolicyFixture(),
 		datastore:     mockstorage.NewMockStorage(ctrl),
 		originCluster: mockblobclient.NewMockClusterClient(ctrl),
+		tags:          mockbackend.NewMockClient(ctrl),
 		stats:         tally.NewTestScope("testing", nil),
 	}, ctrl.Finish
 }
@@ -63,28 +66,23 @@ func (m *testMocks) mockController(t gomock.TestReporter) func() {
 }
 
 func (m *testMocks) startServer() (string, func()) {
-	l, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		panic(err)
-	}
-	s := &http.Server{Handler: m.Handler()}
-	go s.Serve(l)
-	return l.Addr().String(), func() { s.Close() }
+	return testutil.StartServer(m.handler())
 }
 
-func (m *testMocks) Handler() http.Handler {
+func (m *testMocks) handler() http.Handler {
 	return Handler(
 		m.config,
 		m.stats,
 		m.policy,
 		m.datastore,
 		m.datastore,
-		m.originCluster)
+		m.originCluster,
+		m.tags)
 }
 
 func (m *testMocks) CreateHandlerAndServeRequest(request *http.Request) *http.Response {
 	w := httptest.NewRecorder()
-	m.Handler().ServeHTTP(w, request)
+	m.handler().ServeHTTP(w, request)
 	return w.Result()
 }
 

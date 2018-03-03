@@ -2,9 +2,9 @@ package backend
 
 import (
 	"code.uber.internal/infra/kraken/lib/backend/hdfsbackend"
-	"code.uber.internal/infra/kraken/lib/backend/proxybackend"
 	"code.uber.internal/infra/kraken/lib/backend/s3backend"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
+	"code.uber.internal/infra/kraken/lib/backend/trackerbackend"
 )
 
 // NamespaceConfig defines a mapping of namespace identifier to Config.
@@ -17,11 +17,11 @@ type AuthNamespaceConfig map[string]AuthConfig
 // Config defines the union of configuration for all backends, where
 // the Backend field serves as the key for which backend is activated.
 type Config struct {
-	Backend string              `yaml:"backend"`
-	S3      s3backend.Config    `yaml:"s3"`
-	HDFS    hdfsbackend.Config  `yaml:"hdfs"`
-	Proxy   proxybackend.Config `yaml:"proxy"`
-	TestFS  testfs.Config       `yaml:"testfs"`
+	Backend string                `yaml:"backend"`
+	S3      s3backend.Config      `yaml:"s3"`
+	HDFS    hdfsbackend.Config    `yaml:"hdfs"`
+	Tracker trackerbackend.Config `yaml:"tracker"`
+	TestFS  testfs.Config         `yaml:"testfs"`
 }
 
 // AuthConfig defines the union of authentication credentials
