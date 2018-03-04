@@ -314,13 +314,13 @@ func (e completedDispatcherEvent) Apply(s *Scheduler) {
 	}
 	ctrl.Complete = true
 	if ctrl.LocalRequest {
-		// Normalize the download time for all torrent sizes to a per KB value.
-		// Skip torrents that are less than a KB in size because we can't measure
+		// Normalize the download time for all torrent sizes to a per MB value.
+		// Skip torrents that are less than a MB in size because we can't measure
 		// at that granularity.
 		downloadTime := s.clock.Now().Sub(ctrl.Dispatcher.CreatedAt)
-		lengthKB := ctrl.Dispatcher.Torrent.Length() / int64(memsize.KB)
-		if lengthKB > 0 {
-			s.stats.Timer("download_time_per_kb").Record(downloadTime / time.Duration(lengthKB))
+		lengthMB := ctrl.Dispatcher.Torrent.Length() / int64(memsize.MB)
+		if lengthMB > 0 {
+			s.stats.Timer("download_time_per_mb").Record(downloadTime / time.Duration(lengthMB))
 		}
 	}
 
