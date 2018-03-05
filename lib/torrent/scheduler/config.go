@@ -66,10 +66,10 @@ func (c Config) applyDefaults() Config {
 		c.AnnounceInterval = 5 * time.Second
 	}
 	if c.SeederTTI == 0 {
-		c.SeederTTI = 10 * time.Minute
+		c.SeederTTI = 5 * time.Minute
 	}
 	if c.LeecherTTI == 0 {
-		c.LeecherTTI = 15 * time.Minute
+		c.LeecherTTI = 5 * time.Minute
 	}
 	if c.ConnTTI == 0 {
 		c.ConnTTI = 30 * time.Second
