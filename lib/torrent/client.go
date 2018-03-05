@@ -3,7 +3,6 @@ package torrent
 import (
 	"fmt"
 	"log"
-	"os"
 	"sync"
 
 	"github.com/uber-go/tally"
@@ -32,8 +31,7 @@ type SchedulerClient struct {
 	mu        sync.Mutex // Protects reloading scheduler.
 	scheduler *scheduler.Scheduler
 
-	stats     tally.Scope
-	hostStats tally.Scope
+	stats tally.Scope
 }
 
 // NewSchedulerClient creates a new scheduler client
@@ -44,20 +42,6 @@ func NewSchedulerClient(
 	announceClient announceclient.Client,
 	announceQueue announcequeue.Queue,
 	archive storage.TorrentArchive) (Client, error) {
-
-	// NOTE: M3 will drop metrics that contain 32 consecutive hexadecimal characters,
-	// so we cannot emit full peer ids. Instead, we emit a combination of hostname
-	// (which will almost always have a 1-1 mapping with peer id) and a shortened
-	// peer id to catch cases where there may be multiple peers on the same host.
-	shortenedPID := pctx.PeerID.String()[:8]
-	hostname, err := os.Hostname()
-	if err != nil {
-		return nil, fmt.Errorf("hostname: %s", err)
-	}
-	hostStats := stats.Tagged(map[string]string{
-		"peer":     shortenedPID,
-		"hostname": hostname,
-	})
 
 	networkEvents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
@@ -70,11 +54,14 @@ func NewSchedulerClient(
 		return nil, fmt.Errorf("scheduler: %s", err)
 	}
 
+	stats = stats.Tagged(map[string]string{
+		"module": "torrentclient",
+	})
+
 	return &SchedulerClient{
 		config:    config,
 		scheduler: sched,
 		stats:     stats,
-		hostStats: hostStats,
 	}, nil
 }
 
@@ -102,8 +89,24 @@ func (c *SchedulerClient) Close() error {
 // Returns scheduler.ErrTorrentNotFound if no torrent for namespace / name was
 // found.
 func (c *SchedulerClient) Download(namespace string, name string) error {
-	if err := <-c.scheduler.AddTorrent(namespace, name); err != nil {
-		c.hostStats.Counter("download_torrent_errors").Inc(1)
+	err := <-c.scheduler.AddTorrent(namespace, name)
+	if err != nil {
+		var tag string
+		switch err {
+		case scheduler.ErrTorrentNotFound:
+			tag = "not_found"
+		case scheduler.ErrTorrentTimeout:
+			tag = "timeout"
+		case scheduler.ErrSchedulerStopped:
+			tag = "scheduler_stopped"
+		case scheduler.ErrTorrentRemoved:
+			tag = "removed"
+		default:
+			tag = "unknown"
+		}
+		c.stats.Tagged(map[string]string{
+			"error": tag,
+		}).Counter("download_torrent_errors").Inc(1)
 		return err
 	}
 	return nil
