@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"net/url"
 
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
@@ -38,7 +39,10 @@ func newTagHandler(tags backend.Client) *tagHandler {
 }
 
 func (h *tagHandler) Get(w http.ResponseWriter, r *http.Request) error {
-	name := chi.URLParam(r, "name")
+	name, err := url.PathUnescape(chi.URLParam(r, "name"))
+	if err != nil {
+		return handler.Errorf("unescape name: %s", err).Status(http.StatusBadRequest)
+	}
 	digest, err := h.cache.Get(name)
 	if err != nil {
 		if err == backenderrors.ErrBlobNotFound {
