@@ -24,7 +24,7 @@ func TestTagHandlerGetCachesResults(t *testing.T) {
 
 	client := tagclient.New(serverset.MustRoundRobin(addr))
 
-	name := "repo:tag"
+	name := "some/repo:tag"
 	value := core.DigestFixture().String()
 
 	mocks.tags.EXPECT().Download(name, rwutil.MatchWriter([]byte(value))).Return(nil)
@@ -48,7 +48,7 @@ func TestTagHandlerGetNotFound(t *testing.T) {
 
 	client := tagclient.New(serverset.MustRoundRobin(addr))
 
-	name := "repo:tag"
+	name := "some/repo:tag"
 
 	mocks.tags.EXPECT().Download(name, gomock.Any()).Return(backenderrors.ErrBlobNotFound)
 

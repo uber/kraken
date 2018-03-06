@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"time"
 
 	"code.uber.internal/infra/kraken/lib/serverset"
@@ -36,7 +37,7 @@ func (c *client) Get(name string) (string, error) {
 	it := c.servers.Iter()
 	for it.Next() {
 		resp, err := httputil.Get(
-			fmt.Sprintf("http://%s/tag/%s", it.Addr(), name),
+			fmt.Sprintf("http://%s/tag/%s", it.Addr(), url.PathEscape(name)),
 			httputil.SendTimeout(_timeout))
 		if err != nil {
 			if _, ok := err.(httputil.NetworkError); ok {
