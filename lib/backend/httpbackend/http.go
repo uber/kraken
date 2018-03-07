@@ -30,8 +30,7 @@ func (c Config) applyDefaults() Config {
 
 // NewClient creates s3 client from input parameters
 func NewClient(config Config) (*Client, error) {
-	config = config.applyDefaults()
-	return &Client{config: config}, nil
+	return &Client{config: config.applyDefaults()}, nil
 }
 
 // Download downloads the content from a configured url and writes the data

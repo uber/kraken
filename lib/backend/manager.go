@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"code.uber.internal/infra/kraken/lib/backend/hdfsbackend"
+	"code.uber.internal/infra/kraken/lib/backend/httpbackend"
 	"code.uber.internal/infra/kraken/lib/backend/s3backend"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
 	"code.uber.internal/infra/kraken/lib/backend/trackerbackend"
@@ -31,6 +32,8 @@ func NewManager(namespaces NamespaceConfig, auth AuthNamespaceConfig) (*Manager,
 			c, err = hdfsbackend.NewDockerBlobClient(config.HDFS)
 		case "hdfs_dockertag":
 			c, err = hdfsbackend.NewDockerTagClient(config.HDFS)
+		case "http":
+			c, err = httpbackend.NewClient(config.HTTP)
 		case "tracker_dockertag":
 			c, err = trackerbackend.NewDockerTagClient(config.Tracker)
 		case "testfs":
