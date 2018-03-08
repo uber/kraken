@@ -315,7 +315,7 @@ func (op *localFileOp) GetFileStat(name string) (info os.FileInfo, err error) {
 
 // GetFileReader returns a FileReader object for read operations.
 func (op *localFileOp) GetFileReader(name string) (r FileReader, err error) {
-	if loadErr := op.loadHelper(name, true, func(name string, entry FileEntry) {
+	if loadErr := op.loadHelper(name, false, func(name string, entry FileEntry) {
 		r, err = entry.GetReader()
 	}); loadErr != nil {
 		return nil, loadErr
@@ -325,7 +325,7 @@ func (op *localFileOp) GetFileReader(name string) (r FileReader, err error) {
 
 // GetFileReadWriter returns a FileReadWriter object for read/write operations.
 func (op *localFileOp) GetFileReadWriter(name string) (w FileReadWriter, err error) {
-	if loadErr := op.loadHelper(name, true, func(name string, entry FileEntry) {
+	if loadErr := op.loadHelper(name, false, func(name string, entry FileEntry) {
 		w, err = entry.GetReadWriter()
 	}); loadErr != nil {
 		return nil, loadErr
