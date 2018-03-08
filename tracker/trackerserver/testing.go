@@ -37,7 +37,7 @@ func (s *testPeerStore) UpdatePeer(p *core.PeerInfo) error {
 	return nil
 }
 
-func (s *testPeerStore) GetPeers(infoHash string) ([]*core.PeerInfo, error) {
+func (s *testPeerStore) GetPeers(infoHash string, n int) ([]*core.PeerInfo, error) {
 	s.Lock()
 	defer s.Unlock()
 

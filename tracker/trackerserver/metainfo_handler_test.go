@@ -40,7 +40,7 @@ func TestMetaInfoHandlerGetFetchesFromOrigin(t *testing.T) {
 	mockClusterClient := mockblobclient.NewMockClusterClient(ctrl)
 
 	h := newMetaInfoHandler(
-		MetaInfoConfig{}, tally.NoopScope, storage.TestMetaInfoStore(), mockClusterClient)
+		Config{}, tally.NoopScope, storage.TestMetaInfoStore(), mockClusterClient)
 	addr, stop := startMetaInfoServer(h)
 	defer stop()
 
@@ -72,7 +72,7 @@ func TestMetaInfoHandlerGetCachesAndPropagatesOriginError(t *testing.T) {
 	mockClusterClient := mockblobclient.NewMockClusterClient(ctrl)
 
 	h := newMetaInfoHandler(
-		MetaInfoConfig{}, tally.NoopScope, storage.TestMetaInfoStore(), mockClusterClient)
+		Config{}, tally.NoopScope, storage.TestMetaInfoStore(), mockClusterClient)
 	addr, stop := startMetaInfoServer(h)
 	defer stop()
 

@@ -18,13 +18,8 @@ import (
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
-// MetaInfoConfig defines metainfo handling configuration.
-type MetaInfoConfig struct {
-	RequestCache dedup.RequestCacheConfig `yaml:"request_cache"`
-}
-
 type metaInfoHandler struct {
-	config        MetaInfoConfig
+	config        Config
 	stats         tally.Scope
 	store         storage.MetaInfoStore
 	requestCache  *dedup.RequestCache
@@ -32,12 +27,12 @@ type metaInfoHandler struct {
 }
 
 func newMetaInfoHandler(
-	config MetaInfoConfig,
+	config Config,
 	stats tally.Scope,
 	store storage.MetaInfoStore,
 	originCluster blobclient.ClusterClient) *metaInfoHandler {
 
-	rc := dedup.NewRequestCache(config.RequestCache, clock.New())
+	rc := dedup.NewRequestCache(config.MetaInfoRequestCache, clock.New())
 	rc.SetNotFound(httputil.IsNotFound)
 
 	return &metaInfoHandler{config, stats, store, rc, originCluster}

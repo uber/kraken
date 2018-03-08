@@ -60,16 +60,16 @@ func (mr *MockStorageMockRecorder) GetOrigins(arg0 interface{}) *gomock.Call {
 }
 
 // GetPeers mocks base method
-func (m *MockStorage) GetPeers(arg0 string) ([]*core.PeerInfo, error) {
-	ret := m.ctrl.Call(m, "GetPeers", arg0)
+func (m *MockStorage) GetPeers(arg0 string, arg1 int) ([]*core.PeerInfo, error) {
+	ret := m.ctrl.Call(m, "GetPeers", arg0, arg1)
 	ret0, _ := ret[0].([]*core.PeerInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetPeers indicates an expected call of GetPeers
-func (mr *MockStorageMockRecorder) GetPeers(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPeers", reflect.TypeOf((*MockStorage)(nil).GetPeers), arg0)
+func (mr *MockStorageMockRecorder) GetPeers(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPeers", reflect.TypeOf((*MockStorage)(nil).GetPeers), arg0, arg1)
 }
 
 // SetMetaInfo mocks base method

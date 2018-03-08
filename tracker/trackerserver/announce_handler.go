@@ -16,6 +16,7 @@ import (
 )
 
 type announceHandler struct {
+	config        Config
 	store         storage.PeerStore
 	policy        peerhandoutpolicy.PeerHandoutPolicy
 	originCluster blobclient.ClusterClient
@@ -82,7 +83,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var errs []error
-	peers, err := h.store.GetPeers(infoHash)
+	peers, err := h.store.GetPeers(infoHash, h.config.PeerHandoutLimit)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("peer storage error: %s", err))
 	}
@@ -123,7 +124,7 @@ func (h *announceHandler) Get(w http.ResponseWriter, r *http.Request) error {
 		return handler.Errorf("assign peer priority: %s", err)
 	}
 
-	// TODO(codyg): Accept peer limit query argument.
+	// TODO(codyg): Just make this sort peers since storage already samples via limit.
 	peers, err = h.policy.SamplePeers(peers, len(peers))
 	if err != nil {
 		return handler.Errorf("sample peers: %s", err)

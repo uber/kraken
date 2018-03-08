@@ -67,3 +67,11 @@ func ShuffleInts(xs []int) {
 		xs[i], xs[j] = xs[j], xs[i]
 	}
 }
+
+// ShuffleInt64s shuffles the values of xs in place.
+func ShuffleInt64s(xs []int64) {
+	for i := range xs {
+		j := rand.Intn(i + 1)
+		xs[i], xs[j] = xs[j], xs[i]
+	}
+}

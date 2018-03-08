@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/tracker/storage"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,7 +42,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		defer mocks.mockController(t)()
 
 		mocks.datastore.EXPECT().GetOrigins(mi.InfoHash.HexString()).Return(nil, nil)
-		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString()).Return(nil, nil)
+		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString(), gomock.Any()).Return(nil, nil)
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
 		require.Equal(t, 404, response.StatusCode)
@@ -61,7 +62,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		}}
 
 		mocks.datastore.EXPECT().GetOrigins(mi.InfoHash.HexString()).Return(nil, nil)
-		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString()).Return(peers, nil)
+		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString(), gomock.Any()).Return(peers, nil)
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 		response := mocks.CreateHandlerAndServeRequest(announceRequest)
 		requireStatus(t, response, 200)
@@ -87,7 +88,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		}}
 
 		mocks.datastore.EXPECT().GetOrigins(mi.InfoHash.HexString()).Return(origins, nil)
-		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString()).Return(nil, nil)
+		mocks.datastore.EXPECT().GetPeers(mi.InfoHash.HexString(), gomock.Any()).Return(nil, nil)
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
@@ -121,7 +122,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks.originCluster.EXPECT().Owners(digest).Return([]core.PeerContext{originPCtx}, nil)
 
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
-		mocks.datastore.EXPECT().GetPeers(infoHash).Return(nil, nil)
+		mocks.datastore.EXPECT().GetPeers(infoHash, gomock.Any()).Return(nil, nil)
 		mocks.datastore.EXPECT().GetOrigins(infoHash).Return(nil, storage.ErrNoOrigins)
 		mocks.datastore.EXPECT().UpdateOrigins(infoHash, origins).Return(nil)
 
@@ -158,7 +159,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		storageErr := errors.New("some storage error")
 
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(storageErr)
-		mocks.datastore.EXPECT().GetPeers(infoHash).Return(nil, storageErr)
+		mocks.datastore.EXPECT().GetPeers(infoHash, gomock.Any()).Return(nil, storageErr)
 		mocks.datastore.EXPECT().GetOrigins(infoHash).Return(nil, storageErr)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)
@@ -189,7 +190,7 @@ func TestAnnounceEndPoint(t *testing.T) {
 		mocks.originCluster.EXPECT().Owners(digest).Return(nil, errors.New("origin cluster error"))
 
 		mocks.datastore.EXPECT().UpdatePeer(peer).Return(nil)
-		mocks.datastore.EXPECT().GetPeers(infoHash).Return(otherPeers, nil)
+		mocks.datastore.EXPECT().GetPeers(infoHash, gomock.Any()).Return(otherPeers, nil)
 		mocks.datastore.EXPECT().GetOrigins(infoHash).Return(nil, storage.ErrNoOrigins)
 
 		resp := mocks.CreateHandlerAndServeRequest(req)

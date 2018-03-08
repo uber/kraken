@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/andres-erbsen/clock"
+
 	"code.uber.internal/infra/kraken/core"
 )
 
@@ -16,8 +18,8 @@ var (
 // PeerStore provides storage for announcing peers.
 type PeerStore interface {
 
-	// GetPeers returns all peers announcing for infohash.
-	GetPeers(infohash string) ([]*core.PeerInfo, error)
+	// GetPeers returns at most n random peers announcing for infohash.
+	GetPeers(infohash string, n int) ([]*core.PeerInfo, error)
 
 	// UpdatePeer updates peer fields.
 	UpdatePeer(peer *core.PeerInfo) error
@@ -93,7 +95,7 @@ func (p *StoreProvider) getStorageBackend(name string) (interface{}, error) {
 	switch name {
 	case "redis":
 		if p.redisStorage == nil {
-			s, err := NewRedisStorage(p.config.Redis)
+			s, err := NewRedisStorage(p.config.Redis, clock.New())
 			if err != nil {
 				return nil, fmt.Errorf("redis storage initialization failed: %s", err)
 			}

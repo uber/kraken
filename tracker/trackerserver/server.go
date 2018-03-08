@@ -25,13 +25,15 @@ func Handler(
 	originCluster blobclient.ClusterClient,
 	tags backend.Client) http.Handler {
 
+	config = config.applyDefaults()
+
 	stats = stats.Tagged(map[string]string{
 		"module": "trackerserver",
 	})
 
-	announce := &announceHandler{peerStore, policy, originCluster}
+	announce := &announceHandler{config, peerStore, policy, originCluster}
 	health := &healthHandler{}
-	metainfo := newMetaInfoHandler(config.MetaInfo, stats, metaInfoStore, originCluster)
+	metainfo := newMetaInfoHandler(config, stats, metaInfoStore, originCluster)
 	tag := newTagHandler(tags)
 
 	r := chi.NewRouter()
