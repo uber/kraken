@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/garyburd/redigo/redis"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/log"
+	"code.uber.internal/infra/kraken/utils/randutil"
 )
 
 // RedisStorage errors.
@@ -64,13 +65,11 @@ func deserializePeer(s string) (id peerIdentity, complete bool, err error) {
 type RedisStorage struct {
 	config RedisConfig
 	pool   *redis.Pool
-
-	// Allow overriding time.Now() for testing purposes.
-	now func() time.Time
+	clk    clock.Clock
 }
 
 // NewRedisStorage creates a RedisStorage instance.
-func NewRedisStorage(config RedisConfig) (*RedisStorage, error) {
+func NewRedisStorage(config RedisConfig, clk clock.Clock) (*RedisStorage, error) {
 	config, err := config.applyDefaults()
 	if err != nil {
 		return nil, fmt.Errorf("configuration: %s", err)
@@ -95,7 +94,7 @@ func NewRedisStorage(config RedisConfig) (*RedisStorage, error) {
 			IdleTimeout: config.IdleConnTimeout,
 			Wait:        true,
 		},
-		now: time.Now,
+		clk: clk,
 	}
 
 	// Ensure we can connect to Redis.
@@ -109,7 +108,7 @@ func NewRedisStorage(config RedisConfig) (*RedisStorage, error) {
 }
 
 func (s *RedisStorage) curPeerSetWindow() int64 {
-	t := s.now().Unix()
+	t := s.clk.Now().Unix()
 	return t - (t % int64(s.config.PeerSetWindowSize.Seconds()))
 }
 
@@ -141,15 +140,26 @@ func (s *RedisStorage) UpdatePeer(p *core.PeerInfo) error {
 	return err
 }
 
-// GetPeers returns all PeerInfos associated with infoHash.
-func (s *RedisStorage) GetPeers(infoHash string) ([]*core.PeerInfo, error) {
+// GetPeers returns at most n PeerInfos associated with infoHash.
+func (s *RedisStorage) GetPeers(infoHash string, n int) ([]*core.PeerInfo, error) {
 	c := s.pool.Get()
 	defer c.Close()
 
+	// Try to sample n peers from each window in randomized order until we have
+	// collected n distinct peers. This achieves random sampling across multiple
+	// windows.
+	// TODO(codyg): One limitation of random window sampling is we're no longer
+	// guaranteed to include the latest completion bits. A simple way to mitigate
+	// this is to decrease the number of windows.
+	windows := s.peerSetWindows()
+	randutil.ShuffleInt64s(windows)
+
 	// Eliminate duplicates from other windows and collapses complete bits.
 	peers := make(map[peerIdentity]bool)
-	for _, w := range s.peerSetWindows() {
-		result, err := redis.Strings(c.Do("SMEMBERS", peerSetKey(infoHash, w)))
+
+	var i int
+	for len(peers) < n && i < len(windows) {
+		result, err := redis.Strings(c.Do("SRANDMEMBER", peerSetKey(infoHash, windows[i]), n-len(peers)))
 		if err != nil {
 			return nil, err
 		}
@@ -161,6 +171,7 @@ func (s *RedisStorage) GetPeers(infoHash string) ([]*core.PeerInfo, error) {
 			}
 			peers[id] = peers[id] || complete
 		}
+		i++
 	}
 
 	peerInfos := make([]*core.PeerInfo, 0, len(peers))
