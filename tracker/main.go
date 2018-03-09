@@ -66,7 +66,7 @@ func main() {
 		log.Fatalf("Error creating backend tag client: %s", err)
 	}
 
-	h := trackerserver.Handler(
+	server := trackerserver.New(
 		config.TrackerServer,
 		stats,
 		policy,
@@ -77,5 +77,5 @@ func main() {
 
 	addr := fmt.Sprintf(":%d", config.Port)
 	log.Infof("Listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, h))
+	log.Fatal(http.ListenAndServe(addr, server.Handler()))
 }

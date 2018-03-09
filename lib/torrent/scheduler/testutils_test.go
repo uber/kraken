@@ -86,7 +86,7 @@ func newTestMocks(t gomock.TestReporter) (*testMocks, func()) {
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
 
-	trackerAddr, stop := trackerserver.TestAnnouncer()
+	trackerAddr, stop := testutil.StartServer(trackerserver.Fixture().Handler())
 	cleanup.Add(stop)
 
 	return &testMocks{

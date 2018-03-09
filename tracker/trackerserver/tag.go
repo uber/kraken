@@ -8,10 +8,8 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
-	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
 )
 
@@ -28,22 +26,12 @@ func (r *tagResolver) Resolve(name string) (string, error) {
 	return b.String(), nil
 }
 
-type tagHandler struct {
-	cache *dedup.Cache
-}
-
-func newTagHandler(tags backend.Client) *tagHandler {
-	return &tagHandler{
-		dedup.NewCache(dedup.CacheConfig{}, clock.New(), &tagResolver{tags}),
-	}
-}
-
-func (h *tagHandler) Get(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
 	name, err := url.PathUnescape(chi.URLParam(r, "name"))
 	if err != nil {
 		return handler.Errorf("unescape name: %s", err).Status(http.StatusBadRequest)
 	}
-	digest, err := h.cache.Get(name)
+	digest, err := s.tagCache.Get(name)
 	if err != nil {
 		if err == backenderrors.ErrBlobNotFound {
 			return handler.ErrorStatus(http.StatusNotFound)

@@ -35,7 +35,6 @@ func PeerInfoFixture() *PeerInfo {
 		PeerID:   PeerIDFixture().String(),
 		IP:       randutil.IP(),
 		Port:     int64(randutil.Port()),
-		DC:       "sjc1",
 		Complete: false,
 	}
 }
@@ -45,6 +44,30 @@ func PeerInfoFixture() *PeerInfo {
 func PeerInfoForMetaInfoFixture(mi *MetaInfo) *PeerInfo {
 	p := PeerInfoFixture()
 	p.InfoHash = mi.InfoHash.String()
+	return p
+}
+
+// OriginInfoForMetaInfoFixture returns a randomly generated origin PeerInfo associated
+// with the given MetaInfo.
+func OriginInfoForMetaInfoFixture(mi *MetaInfo) *PeerInfo {
+	o := PeerInfoForMetaInfoFixture(mi)
+	o.Origin = true
+	o.Complete = true
+	return o
+}
+
+// ToPeerInfoFixture joins pctx and mi into a PeerInfo.
+func ToPeerInfoFixture(pctx PeerContext, mi *MetaInfo) *PeerInfo {
+	p := PeerInfoFixture()
+	p.InfoHash = mi.InfoHash.String()
+	p.PeerID = pctx.PeerID.String()
+	p.IP = pctx.IP
+	p.Port = int64(pctx.Port)
+	p.DC = pctx.Zone
+	p.Origin = pctx.Origin
+	if p.Origin {
+		p.Complete = true
+	}
 	return p
 }
 
@@ -133,4 +156,11 @@ func PeerContextFixture() PeerContext {
 		PeerID: PeerIDFixture(),
 		Zone:   "sjc1",
 	}
+}
+
+// OriginContextFixture returns a randomly generated origin PeerContext.
+func OriginContextFixture() PeerContext {
+	octx := PeerContextFixture()
+	octx.Origin = true
+	return octx
 }

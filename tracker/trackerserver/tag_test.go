@@ -13,11 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTagHandlerGetCachesResults(t *testing.T) {
+func TestGetTagHandlerCachesResults(t *testing.T) {
 	require := require.New(t)
 
-	mocks, finish := newTestMocks(t)
-	defer finish()
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
 
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
@@ -37,11 +37,11 @@ func TestTagHandlerGetCachesResults(t *testing.T) {
 	}
 }
 
-func TestTagHandlerGetNotFound(t *testing.T) {
+func TestGetTagHandlerNotFound(t *testing.T) {
 	require := require.New(t)
 
-	mocks, finish := newTestMocks(t)
-	defer finish()
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
 
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
