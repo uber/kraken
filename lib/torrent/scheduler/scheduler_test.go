@@ -285,8 +285,6 @@ func TestEmitStatsEventTriggers(t *testing.T) {
 }
 
 func TestNetworkEvents(t *testing.T) {
-	t.Skip("Network event timers break this test")
-
 	require := require.New(t)
 
 	mocks, cleanup := newTestMocks(t)
@@ -320,7 +318,6 @@ func TestNetworkEvents(t *testing.T) {
 	seederExpected := []*networkevent.Event{
 		networkevent.AddTorrentEvent(h, sid, storage.BitSetFixture(true), config.ConnState.MaxOpenConnectionsPerTorrent),
 		networkevent.TorrentCompleteEvent(h, sid),
-		networkevent.AddPendingConnEvent(h, sid, lid),
 		networkevent.AddActiveConnEvent(h, sid, lid),
 		networkevent.DropActiveConnEvent(h, sid, lid),
 		networkevent.BlacklistConnEvent(h, sid, lid, config.ConnState.BlacklistDuration),
@@ -328,7 +325,6 @@ func TestNetworkEvents(t *testing.T) {
 
 	leecherExpected := []*networkevent.Event{
 		networkevent.AddTorrentEvent(h, lid, storage.BitSetFixture(false), config.ConnState.MaxOpenConnectionsPerTorrent),
-		networkevent.AddPendingConnEvent(h, lid, sid),
 		networkevent.AddActiveConnEvent(h, lid, sid),
 		networkevent.ReceivePieceEvent(h, lid, sid, 0),
 		networkevent.TorrentCompleteEvent(h, lid),

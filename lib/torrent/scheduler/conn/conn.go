@@ -142,22 +142,9 @@ func (c *Conn) Send(msg *Message) error {
 		return nil
 	default:
 		// TODO(codyg): Consider a timeout here instead.
-
-		switch msg.Message.Type {
-		case p2p.Message_PIECE_REQUEST:
-			c.networkEvents.Produce(
-				networkevent.ConnSendDroppedPieceRequestEvent(
-					c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PieceRequest.Index)))
-		case p2p.Message_PIECE_PAYLOAD:
-			c.networkEvents.Produce(
-				networkevent.ConnSendDroppedPiecePayloadEvent(
-					c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PiecePayload.Index)))
-		}
-
 		c.stats.Tagged(map[string]string{
 			"dropped_message_type": msg.Message.Type.String(),
 		}).Counter("dropped_messages").Inc(1)
-
 		return errors.New("send buffer full")
 	}
 }
@@ -233,31 +220,7 @@ func (c *Conn) readLoop() {
 				c.log().Infof("Error reading message from socket, exiting read loop: %s", err)
 				return
 			}
-
-			switch msg.Message.Type {
-			case p2p.Message_PIECE_REQUEST:
-				c.networkEvents.Produce(
-					networkevent.ConnReaderGotPieceRequestEvent(
-						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PieceRequest.Index)))
-			case p2p.Message_PIECE_PAYLOAD:
-				c.networkEvents.Produce(
-					networkevent.ConnReaderGotPiecePayloadEvent(
-						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PiecePayload.Index)))
-			}
-
 			c.receiver <- msg
-
-			switch msg.Message.Type {
-			case p2p.Message_PIECE_REQUEST:
-				c.networkEvents.Produce(
-					networkevent.ConnReaderSentPieceRequestEvent(
-						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PieceRequest.Index)))
-			case p2p.Message_PIECE_PAYLOAD:
-				c.networkEvents.Produce(
-					networkevent.ConnReaderSentPiecePayloadEvent(
-						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PiecePayload.Index)))
-			}
-
 		}
 	}
 }
@@ -305,34 +268,10 @@ func (c *Conn) writeLoop() {
 		case <-c.done:
 			return
 		case msg := <-c.sender:
-
-			switch msg.Message.Type {
-			case p2p.Message_PIECE_REQUEST:
-				c.networkEvents.Produce(
-					networkevent.ConnSenderGotPieceRequestEvent(
-						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PieceRequest.Index)))
-			case p2p.Message_PIECE_PAYLOAD:
-				c.networkEvents.Produce(
-					networkevent.ConnSenderGotPiecePayloadEvent(
-						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PiecePayload.Index)))
-			}
-
 			if err := c.sendMessage(msg); err != nil {
 				c.log().Infof("Error writing message to socket, exiting write loop: %s", err)
 				return
 			}
-
-			switch msg.Message.Type {
-			case p2p.Message_PIECE_REQUEST:
-				c.networkEvents.Produce(
-					networkevent.ConnSenderSentPieceRequestEvent(
-						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PieceRequest.Index)))
-			case p2p.Message_PIECE_PAYLOAD:
-				c.networkEvents.Produce(
-					networkevent.ConnSenderSentPiecePayloadEvent(
-						c.infoHash, c.localPeerID, c.peerID, int(msg.Message.PiecePayload.Index)))
-			}
-
 		}
 	}
 }
