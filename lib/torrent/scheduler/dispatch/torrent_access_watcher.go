@@ -1,4 +1,4 @@
-package scheduler
+package dispatch
 
 import (
 	"sync"
@@ -19,7 +19,12 @@ type torrentAccessWatcher struct {
 }
 
 func newTorrentAccessWatcher(t storage.Torrent, clk clock.Clock) *torrentAccessWatcher {
-	return &torrentAccessWatcher{Torrent: t, clk: clk, lastWrite: clk.Now(), lastRead: clk.Now()}
+	return &torrentAccessWatcher{
+		Torrent:   t,
+		clk:       clk,
+		lastWrite: clk.Now(),
+		lastRead:  clk.Now(),
+	}
 }
 
 func (w *torrentAccessWatcher) WritePiece(src storage.PieceReader, piece int) error {

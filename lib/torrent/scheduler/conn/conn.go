@@ -15,7 +15,7 @@ import (
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/bandwidth"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn/bandwidth"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -24,8 +24,10 @@ import (
 // Maximum support protocol message size. Does not include piece payload.
 const maxMessageSize = 32 * memsize.KB
 
-// CloseHandler defines a function to be called when a Conn closes.
-type CloseHandler func(*Conn)
+// Events defines Conn events.
+type Events interface {
+	ConnClosed(*Conn)
+}
 
 // Conn manages peer communication over a connection for multiple torrents. Inbound
 // messages are multiplexed based on the torrent they pertain to.
@@ -36,7 +38,7 @@ type Conn struct {
 	localPeerID core.PeerID
 	bandwidth   *bandwidth.Limiter
 
-	closeHandler CloseHandler
+	events Events
 
 	mu                    sync.Mutex // Protects the following fields:
 	lastGoodPieceReceived time.Time
@@ -66,7 +68,7 @@ func newConn(
 	clk clock.Clock,
 	networkEvents networkevent.Producer,
 	bandwidth *bandwidth.Limiter,
-	closeHandler CloseHandler,
+	events Events,
 	nc net.Conn,
 	localPeerID core.PeerID,
 	remotePeerID core.PeerID,
@@ -85,7 +87,7 @@ func newConn(
 		createdAt:      clk.Now(),
 		localPeerID:    localPeerID,
 		bandwidth:      bandwidth,
-		closeHandler:   closeHandler,
+		events:         events,
 		nc:             nc,
 		config:         config,
 		clk:            clk,
@@ -161,7 +163,7 @@ func (c *Conn) Close() {
 			close(c.done)
 			c.nc.Close()
 			c.wg.Wait()
-			c.closeHandler(c)
+			c.events.ConnClosed(c)
 		}()
 	})
 }

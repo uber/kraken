@@ -3,7 +3,7 @@ package conn
 import (
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/bandwidth"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn/bandwidth"
 )
 
 // Config is the configuration for individual live connections.

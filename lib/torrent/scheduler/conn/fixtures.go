@@ -13,6 +13,10 @@ import (
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
+type noopEvents struct{}
+
+func (e noopEvents) ConnClosed(*Conn) {}
+
 // noopDeadline wraps a Conn which does not support deadlines (e.g. net.Pipe)
 // and makes it accept deadlines.
 type noopDeadline struct {
@@ -65,7 +69,7 @@ func HandshakerFixture(config Config) *Handshaker {
 		clock.New(),
 		networkevent.NewTestProducer(),
 		core.PeerIDFixture(),
-		func(*Conn) {})
+		noopEvents{})
 }
 
 // ConfigFixture returns a Config for testing.
