@@ -35,7 +35,6 @@ PROGS = \
 	tools/bin/reload/reload \
 	tools/bin/simulation/simulation \
 	tools/bin/testfs/testfs \
-	tools/bin/pexchange/pexchange \
 	tools/bin/trackerload/trackerload
 
 # define the list of proto buffers the service depends on
@@ -64,7 +63,6 @@ tools/bin/benchmarks/benchmarks: $(wildcard tools/bin/benchmarks/*.go)
 tools/bin/reload/reload: $(wildcard tools/bin/reload/*.go)
 tools/bin/simulation/simulation: $(wildcard tools/bin/simulation/*.go)
 tools/bin/testfs/testfs: $(wildcard tools/bin/testfs/*.go)
-tools/bin/pexchange/pexchange: $(wildcard tools/bin/pexchange/*.go)
 tools/bin/trackerload/trackerload: $(wildcard tools/bin/trackerload/*.go)
 
 .PHONY: bench

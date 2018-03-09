@@ -135,7 +135,6 @@ func (s *connState) AddPending(peerID core.PeerID, infoHash core.InfoHash) error
 
 	s.log("peer", peerID, "hash", infoHash).Infof(
 		"Added pending conn, capacity now at %d", s.capacity[k.infoHash])
-	s.networkEvents.Produce(networkevent.AddPendingConnEvent(infoHash, s.localPeerID, peerID))
 
 	return nil
 }
@@ -150,7 +149,6 @@ func (s *connState) DeletePending(peerID core.PeerID, infoHash core.InfoHash) {
 
 	s.log("peer", peerID, "hash", infoHash).Infof(
 		"Deleted pending conn, capacity now at %d", s.capacity[k.infoHash])
-	s.networkEvents.Produce(networkevent.DropPendingConnEvent(infoHash, s.localPeerID, peerID))
 }
 
 func (s *connState) MovePendingToActive(c *conn.Conn) error {
