@@ -5,40 +5,16 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/andres-erbsen/clock"
-	"github.com/pressly/chi"
-	"github.com/uber-go/tally"
-
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/pressly/chi"
 )
 
-type metaInfoHandler struct {
-	config        Config
-	stats         tally.Scope
-	store         storage.MetaInfoStore
-	requestCache  *dedup.RequestCache
-	originCluster blobclient.ClusterClient
-}
-
-func newMetaInfoHandler(
-	config Config,
-	stats tally.Scope,
-	store storage.MetaInfoStore,
-	originCluster blobclient.ClusterClient) *metaInfoHandler {
-
-	rc := dedup.NewRequestCache(config.MetaInfoRequestCache, clock.New())
-	rc.SetNotFound(httputil.IsNotFound)
-
-	return &metaInfoHandler{config, stats, store, rc, originCluster}
-}
-
-func (h *metaInfoHandler) get(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
 	namespace := chi.URLParam(r, "namespace")
 	if namespace == "" {
 		return handler.Errorf("empty namespace").Status(http.StatusBadRequest)
@@ -48,10 +24,10 @@ func (h *metaInfoHandler) get(w http.ResponseWriter, r *http.Request) error {
 		return handler.Errorf("parse digest: %s", err).Status(http.StatusBadRequest)
 	}
 
-	raw, err := h.store.GetMetaInfo(d.Hex())
+	raw, err := s.metaInfoStore.GetMetaInfo(d.Hex())
 	if err != nil {
 		if err == storage.ErrNotFound {
-			return h.startMetaInfoDownload(namespace, d)
+			return s.startMetaInfoDownload(namespace, d)
 		}
 		return handler.Errorf("storage: %s", err)
 	}
@@ -61,19 +37,19 @@ func (h *metaInfoHandler) get(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (h *metaInfoHandler) startMetaInfoDownload(namespace string, d core.Digest) error {
+func (s *Server) startMetaInfoDownload(namespace string, d core.Digest) error {
 	id := namespace + ":" + d.Hex()
-	err := h.requestCache.Start(id, func() error {
+	err := s.metaInfoRequestCache.Start(id, func() error {
 
-		getMetaInfoTimer := h.stats.Timer("get_metainfo").Start()
-		mi, err := h.originCluster.GetMetaInfo(namespace, d)
+		getMetaInfoTimer := s.stats.Timer("get_metainfo").Start()
+		mi, err := s.originCluster.GetMetaInfo(namespace, d)
 		if err != nil {
 			log.With("name", d.Hex()).Infof("Caching origin metainfo lookup error: %s", err)
 			return err
 		}
 		getMetaInfoTimer.Stop()
 
-		if err := h.store.SetMetaInfo(mi); err != nil {
+		if err := s.metaInfoStore.SetMetaInfo(mi); err != nil {
 			if err != storage.ErrExists {
 				log.With("name", d.Hex()).Errorf("Caching metainfo storage error: %s", err)
 				return fmt.Errorf("cache metainfo: %s", err)

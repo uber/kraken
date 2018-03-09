@@ -8,14 +8,9 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
-	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/testutil"
-	"github.com/golang/mock/gomock"
-	"github.com/pressly/chi"
 	"github.com/stretchr/testify/require"
-	"github.com/uber-go/tally"
 )
 
 const namespace = "test-namespace"
@@ -25,29 +20,19 @@ func download(addr string, d core.Digest) (*http.Response, error) {
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/metainfo", addr, namespace, d))
 }
 
-func startMetaInfoServer(h *metaInfoHandler) (addr string, stop func()) {
-	r := chi.NewRouter()
-	h.setRoutes(r)
-	return testutil.StartServer(r)
-}
-
-func TestMetaInfoHandlerGetFetchesFromOrigin(t *testing.T) {
+func TestGetMetaInfoHandlerFetchesFromOrigin(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
 
-	mockClusterClient := mockblobclient.NewMockClusterClient(ctrl)
-
-	h := newMetaInfoHandler(
-		Config{}, tally.NoopScope, storage.TestMetaInfoStore(), mockClusterClient)
-	addr, stop := startMetaInfoServer(h)
+	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
 	mi := core.MetaInfoFixture()
 	digest := core.NewSHA256DigestFromHex(mi.Name())
 
-	mockClusterClient.EXPECT().GetMetaInfo(namespace, digest).Return(mi, nil)
+	mocks.originCluster.EXPECT().GetMetaInfo(namespace, digest).Return(mi, nil)
 
 	resp, err := download(addr, digest)
 	require.True(httputil.IsAccepted(err))
@@ -63,23 +48,19 @@ func TestMetaInfoHandlerGetFetchesFromOrigin(t *testing.T) {
 	require.Equal(mi, result)
 }
 
-func TestMetaInfoHandlerGetCachesAndPropagatesOriginError(t *testing.T) {
+func TestGetMetaInfoHandlerCachesAndPropagatesOriginError(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
 
-	mockClusterClient := mockblobclient.NewMockClusterClient(ctrl)
-
-	h := newMetaInfoHandler(
-		Config{}, tally.NoopScope, storage.TestMetaInfoStore(), mockClusterClient)
-	addr, stop := startMetaInfoServer(h)
+	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
 	mi := core.MetaInfoFixture()
 	digest := core.NewSHA256DigestFromHex(mi.Name())
 
-	mockClusterClient.EXPECT().GetMetaInfo(namespace, digest).Return(
+	mocks.originCluster.EXPECT().GetMetaInfo(namespace, digest).Return(
 		nil, httputil.StatusError{Status: 599})
 
 	resp, err := download(addr, digest)
