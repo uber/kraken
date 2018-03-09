@@ -12,7 +12,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
@@ -23,6 +22,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
@@ -59,10 +59,6 @@ func connStateConfigFixture() ConnStateConfig {
 	}.applyDefaults()
 }
 
-func dispatcherConfigFixture() DispatcherConfig {
-	return DispatcherConfig{}.applyDefaults()
-}
-
 func configFixture() Config {
 	return Config{
 		AnnounceInterval:   500 * time.Millisecond,
@@ -73,7 +69,7 @@ func configFixture() Config {
 		ConnTTL:            5 * time.Minute,
 		ConnState:          connStateConfigFixture(),
 		Conn:               conn.ConfigFixture(),
-		Dispatcher:         dispatcherConfigFixture(),
+		Dispatch:           dispatch.Config{},
 	}.applyDefaults()
 }
 
@@ -286,21 +282,6 @@ func waitForTorrentAdded(t *testing.T, s *Scheduler, infoHash core.InfoHash) {
 		t.Fatalf(
 			"scheduler=%s did not add torrent for hash=%s: %s",
 			s.pctx.PeerID, infoHash, err)
-	}
-}
-
-type noopEventSender struct{}
-
-func (s noopEventSender) Send(event) bool { return true }
-
-func dispatcherFactoryFixture(config DispatcherConfig, clk clock.Clock) *dispatcherFactory {
-	return &dispatcherFactory{
-		Config:               config,
-		LocalPeerID:          core.PeerIDFixture(),
-		EventSender:          noopEventSender{},
-		Clock:                clk,
-		NetworkEventProducer: networkevent.NewTestProducer(),
-		Stats:                tally.NewTestScope("", nil),
 	}
 }
 

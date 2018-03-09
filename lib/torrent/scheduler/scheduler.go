@@ -16,6 +16,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -31,14 +32,17 @@ var (
 
 // torrentControl bundles torrent control structures.
 type torrentControl struct {
-	Errors       []chan error
-	Dispatcher   *dispatcher
-	Complete     bool
-	LocalRequest bool
+	errors       []chan error
+	dispatcher   *dispatch.Dispatcher
+	complete     bool
+	localRequest bool
 }
 
-func newTorrentControl(d *dispatcher, localRequest bool) *torrentControl {
-	return &torrentControl{Dispatcher: d, LocalRequest: localRequest}
+func newTorrentControl(d *dispatch.Dispatcher, localRequest bool) *torrentControl {
+	return &torrentControl{
+		dispatcher:   d,
+		localRequest: localRequest,
+	}
 }
 
 // Scheduler manages global state for the peer. This includes:
@@ -57,15 +61,13 @@ type Scheduler struct {
 
 	handshaker *conn.Handshaker
 
-	dispatcherFactory *dispatcherFactory
-
 	// The following fields define the core Scheduler "state", and should only
 	// be accessed from within the event loop.
 	torrentControls map[core.InfoHash]*torrentControl // Active seeding / leeching torrents.
 	connState       *connState
 	announceQueue   announcequeue.Queue
 
-	eventLoop eventLoop
+	eventLoop *liftedEventLoop
 
 	listener net.Listener
 
@@ -132,6 +134,8 @@ func New(
 		opt(&overrides)
 	}
 
+	eventLoop := liftEventLoop(overrides.eventLoop)
+
 	var preemptionTick <-chan time.Time
 	if !config.DisablePreemption {
 		preemptionTick = overrides.clock.Tick(config.PreemptionInterval)
@@ -140,33 +144,22 @@ func New(
 	log.Infof("Scheduler will announce as peer %s on addr %s:%d",
 		pctx.PeerID, pctx.IP, pctx.Port)
 
-	closedConnHandler := func(c *conn.Conn) {
-		overrides.eventLoop.Send(closedConnEvent{c})
-	}
 	handshaker := conn.NewHandshaker(
-		config.Conn, stats, overrides.clock, networkEvents, pctx.PeerID, closedConnHandler)
+		config.Conn, stats, overrides.clock, networkEvents, pctx.PeerID, eventLoop)
 
 	connState := newConnState(pctx.PeerID, config.ConnState, overrides.clock, networkEvents)
 
 	s := &Scheduler{
-		pctx:           pctx,
-		config:         config,
-		clock:          overrides.clock,
-		torrentArchive: ta,
-		stats:          stats,
-		handshaker:     handshaker,
-		dispatcherFactory: &dispatcherFactory{
-			Config:               config.Dispatcher,
-			LocalPeerID:          pctx.PeerID,
-			EventSender:          overrides.eventLoop,
-			Clock:                overrides.clock,
-			NetworkEventProducer: networkEvents,
-			Stats:                stats,
-		},
+		pctx:            pctx,
+		config:          config,
+		clock:           overrides.clock,
+		torrentArchive:  ta,
+		stats:           stats,
+		handshaker:      handshaker,
 		torrentControls: make(map[core.InfoHash]*torrentControl),
 		connState:       connState,
 		announceQueue:   announceQueue,
-		eventLoop:       overrides.eventLoop,
+		eventLoop:       eventLoop,
 		listener:        l,
 		announceTick:    overrides.clock.Tick(config.AnnounceInterval),
 		preemptionTick:  preemptionTick,
@@ -215,8 +208,8 @@ func (s *Scheduler) Stop() {
 
 		// Notify local clients of pending torrents that they will not complete.
 		for _, ctrl := range s.torrentControls {
-			ctrl.Dispatcher.TearDown()
-			for _, errc := range ctrl.Errors {
+			ctrl.dispatcher.TearDown()
+			for _, errc := range ctrl.errors {
 				errc <- ErrSchedulerStopped
 			}
 		}
@@ -332,15 +325,15 @@ func (s *Scheduler) tickerLoop() {
 	}
 }
 
-func (s *Scheduler) announce(d *dispatcher) {
+func (s *Scheduler) announce(d *dispatch.Dispatcher) {
 	var e event
 	peers, err := s.announceClient.Announce(
-		d.Torrent.Name(), d.Torrent.InfoHash(), d.Torrent.Complete())
+		d.Name(), d.InfoHash(), d.Complete())
 	if err != nil {
 		s.log("dispatcher", d).Errorf("Announce failed: %s", err)
-		e = announceFailureEvent{d.Torrent.InfoHash()}
+		e = announceFailureEvent{d.InfoHash()}
 	} else {
-		e = announceResponseEvent{d.Torrent.InfoHash(), peers}
+		e = announceResponseEvent{d.InfoHash(), peers}
 	}
 	s.eventLoop.Send(e)
 }
@@ -353,7 +346,7 @@ func (s *Scheduler) addOutgoingConn(c *conn.Conn, b *bitset.BitSet, info *storag
 	if !ok {
 		return errors.New("torrent must be created before sending handshake")
 	}
-	if err := ctrl.Dispatcher.AddPeer(c.PeerID(), b, c); err != nil {
+	if err := ctrl.dispatcher.AddPeer(c.PeerID(), b, c); err != nil {
 		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
 	}
 	return nil
@@ -371,7 +364,7 @@ func (s *Scheduler) addIncomingConn(c *conn.Conn, b *bitset.BitSet, info *storag
 		}
 		ctrl = s.initTorrentControl(t, false)
 	}
-	if err := ctrl.Dispatcher.AddPeer(c.PeerID(), b, c); err != nil {
+	if err := ctrl.dispatcher.AddPeer(c.PeerID(), b, c); err != nil {
 		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
 	}
 	return nil
@@ -380,7 +373,15 @@ func (s *Scheduler) addIncomingConn(c *conn.Conn, b *bitset.BitSet, info *storag
 // initTorrentControl initializes a new torrentControl for t. Overwrites any
 // existing torrentControl for t, so callers should check if one exists first.
 func (s *Scheduler) initTorrentControl(t storage.Torrent, localRequest bool) *torrentControl {
-	ctrl := newTorrentControl(s.dispatcherFactory.New(t), localRequest)
+	d := dispatch.New(
+		s.config.Dispatch,
+		s.stats,
+		s.clock,
+		s.networkEvents,
+		s.eventLoop,
+		s.pctx.PeerID,
+		t)
+	ctrl := newTorrentControl(d, localRequest)
 	s.announceQueue.Add(t.InfoHash())
 	s.networkEvents.Produce(networkevent.AddTorrentEvent(
 		t.InfoHash(), s.pctx.PeerID, t.Bitfield(), s.config.ConnState.MaxOpenConnectionsPerTorrent))
@@ -389,13 +390,13 @@ func (s *Scheduler) initTorrentControl(t storage.Torrent, localRequest bool) *to
 }
 
 func (s *Scheduler) tearDownTorrentControl(ctrl *torrentControl, err error) {
-	h := ctrl.Dispatcher.Torrent.InfoHash()
-	if ctrl.Complete {
+	h := ctrl.dispatcher.InfoHash()
+	if ctrl.complete {
 		delete(s.torrentControls, h)
 	} else {
-		ctrl.Dispatcher.TearDown()
+		ctrl.dispatcher.TearDown()
 		s.announceQueue.Eject(h)
-		for _, errc := range ctrl.Errors {
+		for _, errc := range ctrl.errors {
 			errc <- err
 		}
 		delete(s.torrentControls, h)

@@ -7,6 +7,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/timeutil"
@@ -21,25 +22,20 @@ type event interface {
 	Apply(s *Scheduler)
 }
 
-// eventSender is a subset of the eventLoop which can only send events.
-type eventSender interface {
-	Send(event) bool
-}
-
 // eventLoop represents a serialized list of events to be applied to a Scheduler.
 type eventLoop interface {
-	eventSender
+	Send(event) bool
 	Run(*Scheduler)
 	Stop()
 }
 
-type eventLoopImpl struct {
+type defaultEventLoop struct {
 	events chan event
 	done   chan struct{}
 }
 
-func newEventLoop() *eventLoopImpl {
-	return &eventLoopImpl{
+func newEventLoop() *defaultEventLoop {
+	return &defaultEventLoop{
 		events: make(chan event),
 		done:   make(chan struct{}),
 	}
@@ -48,7 +44,7 @@ func newEventLoop() *eventLoopImpl {
 // Send sends a new event into l. Should never be called by the same goroutine
 // running l (i.e. within Apply methods), else deadlock will occur. Returns false
 // if the l is not running.
-func (l *eventLoopImpl) Send(e event) bool {
+func (l *defaultEventLoop) Send(e event) bool {
 	select {
 	case l.events <- e:
 		return true
@@ -58,7 +54,7 @@ func (l *eventLoopImpl) Send(e event) bool {
 }
 
 // Run processes events until done is closed.
-func (l *eventLoopImpl) Run(s *Scheduler) {
+func (l *defaultEventLoop) Run(s *Scheduler) {
 	for {
 		select {
 		case e := <-l.events:
@@ -69,17 +65,34 @@ func (l *eventLoopImpl) Run(s *Scheduler) {
 	}
 }
 
-func (l *eventLoopImpl) Stop() {
+func (l *defaultEventLoop) Stop() {
 	close(l.done)
 }
 
-// closedConnEvent occurs when a connection is closed.
-type closedConnEvent struct {
+type liftedEventLoop struct {
+	eventLoop
+}
+
+// liftEventLoop lifts dispatch and conn events into an eventLoop.
+func liftEventLoop(l eventLoop) *liftedEventLoop {
+	return &liftedEventLoop{l}
+}
+
+func (l *liftedEventLoop) ConnClosed(c *conn.Conn) {
+	l.Send(connClosedEvent{c})
+}
+
+func (l *liftedEventLoop) DispatcherComplete(d *dispatch.Dispatcher) {
+	l.Send(dispatcherCompleteEvent{d})
+}
+
+// connClosedEvent occurs when a connection is closed.
+type connClosedEvent struct {
 	c *conn.Conn
 }
 
 // Apply ejects the conn from the Scheduler's active connections.
-func (e closedConnEvent) Apply(s *Scheduler) {
+func (e connClosedEvent) Apply(s *Scheduler) {
 	s.connState.DeleteActive(e.c)
 	if err := s.connState.Blacklist(e.c.PeerID(), e.c.InfoHash()); err != nil {
 		s.log("conn", e.c).Infof("Cannot blacklist active conn: %s", err)
@@ -198,7 +211,7 @@ func (e announceTickEvent) Apply(s *Scheduler) {
 		s.log("hash", h).Error("Pulled unknown torrent off announce queue")
 		return
 	}
-	go s.announce(ctrl.Dispatcher)
+	go s.announce(ctrl.dispatcher)
 }
 
 // announceResponseEvent occurs when a successfully announce response was received
@@ -220,7 +233,7 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 		return
 	}
 	s.announceQueue.Ready(e.infoHash)
-	if ctrl.Complete {
+	if ctrl.complete {
 		// Torrent is already complete, don't open any new connections.
 		return
 	}
@@ -247,7 +260,7 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 		}
 		go func() {
 			addr := fmt.Sprintf("%s:%d", p.IP, int(p.Port))
-			info := ctrl.Dispatcher.Torrent.Stat()
+			info := ctrl.dispatcher.Stat()
 			c, bitfield, err := s.handshaker.Initialize(peerID, addr, info)
 			if err != nil {
 				s.log("peer", peerID, "hash", e.infoHash, "addr", addr).Infof(
@@ -283,24 +296,24 @@ func (e newTorrentEvent) Apply(s *Scheduler) {
 		ctrl = s.initTorrentControl(e.torrent, true)
 		s.log("torrent", e.torrent).Info("Initialized new torrent")
 	}
-	if ctrl.Complete {
+	if ctrl.complete {
 		e.errc <- nil
 		return
 	}
-	ctrl.Errors = append(ctrl.Errors, e.errc)
+	ctrl.errors = append(ctrl.errors, e.errc)
 
 	// Immediately announce new torrents.
-	go s.announce(ctrl.Dispatcher)
+	go s.announce(ctrl.dispatcher)
 }
 
-// completedDispatcherEvent occurs when a dispatcher finishes downloading its torrent.
-type completedDispatcherEvent struct {
-	dispatcher *dispatcher
+// dispatcherCompleteEvent occurs when a dispatcher finishes downloading its torrent.
+type dispatcherCompleteEvent struct {
+	dispatcher *dispatch.Dispatcher
 }
 
 // Apply marks the dispatcher for its final announce.
-func (e completedDispatcherEvent) Apply(s *Scheduler) {
-	infoHash := e.dispatcher.Torrent.InfoHash()
+func (e dispatcherCompleteEvent) Apply(s *Scheduler) {
+	infoHash := e.dispatcher.InfoHash()
 
 	s.connState.ClearBlacklist(infoHash)
 	s.announceQueue.Eject(infoHash)
@@ -309,26 +322,26 @@ func (e completedDispatcherEvent) Apply(s *Scheduler) {
 		s.log("dispatcher", e.dispatcher).Error("Completed dispatcher not found")
 		return
 	}
-	for _, errc := range ctrl.Errors {
+	for _, errc := range ctrl.errors {
 		errc <- nil
 	}
-	ctrl.Complete = true
-	if ctrl.LocalRequest {
+	ctrl.complete = true
+	if ctrl.localRequest {
 		// Normalize the download time for all torrent sizes to a per MB value.
 		// Skip torrents that are less than a MB in size because we can't measure
 		// at that granularity.
-		downloadTime := s.clock.Now().Sub(ctrl.Dispatcher.CreatedAt)
-		lengthMB := ctrl.Dispatcher.Torrent.Length() / int64(memsize.MB)
+		downloadTime := s.clock.Now().Sub(ctrl.dispatcher.CreatedAt())
+		lengthMB := ctrl.dispatcher.Length() / int64(memsize.MB)
 		if lengthMB > 0 {
 			s.stats.Timer("download_time_per_mb").Record(downloadTime / time.Duration(lengthMB))
 		}
 	}
 
-	s.log("torrent", e.dispatcher.Torrent).Info("Torrent complete")
+	s.log("hash", infoHash).Info("Torrent complete")
 	s.networkEvents.Produce(networkevent.TorrentCompleteEvent(infoHash, s.pctx.PeerID))
 
 	// Immediately announce completed torrents.
-	go s.announce(ctrl.Dispatcher)
+	go s.announce(ctrl.dispatcher)
 }
 
 // preemptionTickEvent occurs periodically to preempt unneeded conns and remove
@@ -346,8 +359,8 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 		}
 		lastProgress := timeutil.MostRecent(
 			c.CreatedAt(),
-			ctrl.Dispatcher.LastGoodPieceReceived(c.PeerID()),
-			ctrl.Dispatcher.LastPieceSent(c.PeerID()))
+			ctrl.dispatcher.LastGoodPieceReceived(c.PeerID()),
+			ctrl.dispatcher.LastPieceSent(c.PeerID()))
 		if s.clock.Now().Sub(lastProgress) > s.config.ConnTTI {
 			s.log("conn", c).Info("Closing idle conn")
 			c.Close()
@@ -362,13 +375,13 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 
 	for infoHash, ctrl := range s.torrentControls {
 		idleSeeder :=
-			ctrl.Complete &&
-				s.clock.Now().Sub(ctrl.Dispatcher.LastReadTime()) >= s.config.SeederTTI
+			ctrl.complete &&
+				s.clock.Now().Sub(ctrl.dispatcher.LastReadTime()) >= s.config.SeederTTI
 		idleLeecher :=
-			!ctrl.Complete &&
-				s.clock.Now().Sub(ctrl.Dispatcher.LastWriteTime()) >= s.config.LeecherTTI
+			!ctrl.complete &&
+				s.clock.Now().Sub(ctrl.dispatcher.LastWriteTime()) >= s.config.LeecherTTI
 		if idleSeeder || idleLeecher {
-			s.log("hash", infoHash, "inprogress", !ctrl.Complete).Info("Removing idle torrent")
+			s.log("hash", infoHash, "inprogress", !ctrl.complete).Info("Removing idle torrent")
 			s.tearDownTorrentControl(ctrl, ErrTorrentTimeout)
 		}
 	}
@@ -398,10 +411,10 @@ type removeTorrentEvent struct {
 
 func (e removeTorrentEvent) Apply(s *Scheduler) {
 	for _, ctrl := range s.torrentControls {
-		if ctrl.Dispatcher.Torrent.Name() == e.name {
+		if ctrl.dispatcher.Name() == e.name {
 			s.log(
-				"hash", ctrl.Dispatcher.Torrent.InfoHash(),
-				"inprogress", !ctrl.Complete).Info("Removing torrent")
+				"hash", ctrl.dispatcher.InfoHash(),
+				"inprogress", !ctrl.complete).Info("Removing torrent")
 			s.tearDownTorrentControl(ctrl, ErrTorrentRemoved)
 		}
 	}

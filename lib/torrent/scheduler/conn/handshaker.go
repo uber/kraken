@@ -8,7 +8,7 @@ import (
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/bandwidth"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn/bandwidth"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 
 	"github.com/andres-erbsen/clock"
@@ -107,7 +107,7 @@ type Handshaker struct {
 	bandwidth     *bandwidth.Limiter
 	networkEvents networkevent.Producer
 	peerID        core.PeerID
-	closeHandler  CloseHandler
+	events        Events
 }
 
 // NewHandshaker creates a new Handshaker.
@@ -117,7 +117,7 @@ func NewHandshaker(
 	clk clock.Clock,
 	networkEvents networkevent.Producer,
 	peerID core.PeerID,
-	closeHandler CloseHandler) *Handshaker {
+	events Events) *Handshaker {
 
 	config = config.applyDefaults()
 	stats = stats.Tagged(map[string]string{
@@ -131,7 +131,7 @@ func NewHandshaker(
 		bandwidth:     bandwidth.NewLimiter(config.Bandwidth),
 		networkEvents: networkEvents,
 		peerID:        peerID,
-		closeHandler:  closeHandler,
+		events:        events,
 	}
 }
 
@@ -234,7 +234,7 @@ func (h *Handshaker) newConn(
 		h.clk,
 		h.networkEvents,
 		h.bandwidth,
-		h.closeHandler,
+		h.events,
 		nc,
 		h.peerID,
 		peerID,

@@ -18,8 +18,8 @@ func TorrentArchiveFixture() (TorrentArchive, func()) {
 	return archive, cleanup
 }
 
-// TorrentFixture returns a Torrent for the given size and piece length.
-func TorrentFixture(size, pieceLength uint64) (Torrent, func()) {
+// TorrentFixture returns a Torrent for the given metainfo.
+func TorrentFixture(mi *core.MetaInfo) (Torrent, func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
@@ -30,7 +30,6 @@ func TorrentFixture(size, pieceLength uint64) (Torrent, func()) {
 
 	ta := NewAgentTorrentArchive(AgentTorrentArchiveConfig{}, tally.NoopScope, fs, tc)
 
-	mi := core.CustomMetaInfoFixture(size, pieceLength)
 	if err := tc.Upload(mi); err != nil {
 		panic(err)
 	}
@@ -44,7 +43,7 @@ func TorrentFixture(size, pieceLength uint64) (Torrent, func()) {
 
 // TorrentInfoFixture returns a TorrentInfo for the given size and piece length.
 func TorrentInfoFixture(size, pieceLength uint64) (*TorrentInfo, func()) {
-	torrent, cleanup := TorrentFixture(size, pieceLength)
+	torrent, cleanup := TorrentFixture(core.CustomMetaInfoFixture(size, pieceLength))
 	return torrent.Stat(), cleanup
 }
 

@@ -1,9 +1,8 @@
-package scheduler
+package dispatch
 
 import (
 	"errors"
 	"fmt"
-	"math"
 	"sync"
 	"time"
 
@@ -11,11 +10,9 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/piecerequest"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch/piecerequest"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/memsize"
-	"code.uber.internal/infra/kraken/utils/timeutil"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
@@ -31,80 +28,50 @@ var (
 	errRepeatedBitfieldMessage = errors.New("received repeated bitfield message")
 )
 
-// messages defines a subset of conn methods which dispatcher requires to
+// Events defines Dispatcher events.
+type Events interface {
+	DispatcherComplete(*Dispatcher)
+}
+
+// Messages defines a subset of conn.Conn methods which Dispatcher requires to
 // communicate with remote peers.
-type messages interface {
+type Messages interface {
 	Send(msg *conn.Message) error
 	Receiver() <-chan *conn.Message
 	Close()
 }
 
-// peer consolidates bookeeping for a remote peer.
-type peer struct {
-	id core.PeerID
-
-	// Tracks the pieces which the remote peer has.
-	bitfield *syncBitfield
-
-	messages messages
-
-	clock clock.Clock
-
-	mu                    sync.Mutex // Protects the following fields:
-	lastGoodPieceReceived time.Time
-	lastPieceSent         time.Time
+// Dispatcher coordinates torrent state with sending / receiving messages between multiple
+// peers. As such, Dispatcher and Torrent have a one-to-one relationship, while Dispatcher
+// and Conn have a one-to-many relationship.
+type Dispatcher struct {
+	config                Config
+	stats                 tally.Scope
+	clk                   clock.Clock
+	createdAt             time.Time
+	localPeerID           core.PeerID
+	torrent               *torrentAccessWatcher
+	peers                 syncmap.Map // Maps core.PeerID to *peer.
+	netevents             networkevent.Producer
+	pieceRequestTimeout   time.Duration
+	pieceRequestManager   *piecerequest.Manager
+	pendingPiecesDoneOnce sync.Once
+	pendingPiecesDone     chan struct{}
+	completeOnce          sync.Once
+	events                Events
 }
 
-func (p *peer) String() string {
-	return p.id.String()
-}
+// New creates a new Dispatcher.
+func New(
+	config Config,
+	stats tally.Scope,
+	clk clock.Clock,
+	netevents networkevent.Producer,
+	events Events,
+	peerID core.PeerID,
+	t storage.Torrent) *Dispatcher {
 
-func (p *peer) getLastGoodPieceReceived() time.Time {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	return p.lastGoodPieceReceived
-}
-
-func (p *peer) touchLastGoodPieceReceived() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	p.lastGoodPieceReceived = p.clock.Now()
-}
-
-func (p *peer) getLastPieceSent() time.Time {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	return p.lastPieceSent
-}
-
-func (p *peer) touchLastPieceSent() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	p.lastPieceSent = p.clock.Now()
-}
-
-type dispatcherFactory struct {
-	Config               DispatcherConfig
-	LocalPeerID          core.PeerID
-	EventSender          eventSender
-	Clock                clock.Clock
-	NetworkEventProducer networkevent.Producer
-	Stats                tally.Scope
-}
-
-func (f *dispatcherFactory) calcPieceRequestTimeout(maxPieceLength int64) time.Duration {
-	n := float64(f.Config.PieceRequestTimeoutPerMb) * float64(maxPieceLength) / float64(memsize.MB)
-	d := time.Duration(math.Ceil(n))
-	return timeutil.MaxDuration(d, f.Config.PieceRequestMinTimeout)
-}
-
-// New creates and starts a new dispatcher for the given torrent.
-func (f *dispatcherFactory) New(t storage.Torrent) *dispatcher {
-	d := f.init(t)
+	d := newDispatcher(config, stats, clk, netevents, events, peerID, t)
 
 	// Exits when d.pendingPiecesDone is closed.
 	go d.watchPendingPieceRequests()
@@ -112,60 +79,77 @@ func (f *dispatcherFactory) New(t storage.Torrent) *dispatcher {
 	if t.Complete() {
 		d.complete()
 	}
+
 	return d
 }
 
-func (f *dispatcherFactory) init(t storage.Torrent) *dispatcher {
-	pieceRequestTimeout := f.calcPieceRequestTimeout(t.MaxPieceLength())
-	pieceRequestManager := piecerequest.NewManager(
-		f.Clock, pieceRequestTimeout, f.Config.PipelineLimit)
-	return &dispatcher{
-		Torrent:             newTorrentAccessWatcher(t, f.Clock),
-		CreatedAt:           f.Clock.Now(),
-		localPeerID:         f.LocalPeerID,
-		eventSender:         f.EventSender,
-		clock:               f.Clock,
-		networkEvents:       f.NetworkEventProducer,
-		pieceRequestManager: pieceRequestManager,
+// newDispatcher creates a new Dispatcher with no side-effects for testing purposes.
+func newDispatcher(
+	config Config,
+	stats tally.Scope,
+	clk clock.Clock,
+	netevents networkevent.Producer,
+	events Events,
+	peerID core.PeerID,
+	t storage.Torrent) *Dispatcher {
+
+	config = config.applyDefaults()
+
+	stats = stats.Tagged(map[string]string{
+		"module": "dispatch",
+	})
+
+	pieceRequestTimeout := config.calcPieceRequestTimeout(t.MaxPieceLength())
+	pieceRequestManager := piecerequest.NewManager(clk, pieceRequestTimeout, config.PipelineLimit)
+
+	return &Dispatcher{
+		config:              config,
+		stats:               stats,
+		clk:                 clk,
+		createdAt:           clk.Now(),
+		localPeerID:         peerID,
+		torrent:             newTorrentAccessWatcher(t, clk),
+		netevents:           netevents,
 		pieceRequestTimeout: pieceRequestTimeout,
+		pieceRequestManager: pieceRequestManager,
 		pendingPiecesDone:   make(chan struct{}),
-		stats:               f.Stats,
-		config:              f.Config,
+		events:              events,
 	}
 }
 
-// dispatcher coordinates torrent state with sending / receiving messages between multiple
-// peers. As such, dispatcher and torrent have a one-to-one relationship, while dispatcher
-// and peer have a one-to-many relationship.
-type dispatcher struct {
-	Torrent     *torrentAccessWatcher
-	CreatedAt   time.Time
-	localPeerID core.PeerID
-	clock       clock.Clock
-	stats       tally.Scope
-	config      DispatcherConfig
-
-	// Maps core.PeerID to *peer.
-	peers syncmap.Map
-
-	eventSender eventSender
-
-	networkEvents networkevent.Producer
-
-	pieceRequestTimeout time.Duration
-
-	pieceRequestManager *piecerequest.Manager
-
-	disableEndgame   bool
-	endgameThreshold int
-
-	pendingPiecesDoneOnce sync.Once
-	pendingPiecesDone     chan struct{}
-
-	sendCompleteOnce sync.Once
+// Name returns d's torrent name.
+func (d *Dispatcher) Name() string {
+	return d.torrent.Name()
 }
 
-func (d *dispatcher) LastGoodPieceReceived(peerID core.PeerID) time.Time {
+// InfoHash returns d's torrent hash.
+func (d *Dispatcher) InfoHash() core.InfoHash {
+	return d.torrent.InfoHash()
+}
+
+// Length returns d's torrent length.
+func (d *Dispatcher) Length() int64 {
+	return d.torrent.Length()
+}
+
+// Stat returns d's TorrentInfo.
+func (d *Dispatcher) Stat() *storage.TorrentInfo {
+	return d.torrent.Stat()
+}
+
+// Complete returns true if d's torrent is complete.
+func (d *Dispatcher) Complete() bool {
+	return d.torrent.Complete()
+}
+
+// CreatedAt returns when d was created.
+func (d *Dispatcher) CreatedAt() time.Time {
+	return d.createdAt
+}
+
+// LastGoodPieceReceived returns when d last received a valid and needed piece
+// from peerID.
+func (d *Dispatcher) LastGoodPieceReceived(peerID core.PeerID) time.Time {
 	v, ok := d.peers.Load(peerID)
 	if !ok {
 		return time.Time{}
@@ -173,7 +157,8 @@ func (d *dispatcher) LastGoodPieceReceived(peerID core.PeerID) time.Time {
 	return v.(*peer).getLastGoodPieceReceived()
 }
 
-func (d *dispatcher) LastPieceSent(peerID core.PeerID) time.Time {
+// LastPieceSent returns when d last sent a piece to peerID.
+func (d *Dispatcher) LastPieceSent(peerID core.PeerID) time.Time {
 	v, ok := d.peers.Load(peerID)
 	if !ok {
 		return time.Time{}
@@ -181,16 +166,18 @@ func (d *dispatcher) LastPieceSent(peerID core.PeerID) time.Time {
 	return v.(*peer).getLastPieceSent()
 }
 
-func (d *dispatcher) LastReadTime() time.Time {
-	return d.Torrent.getLastReadTime()
+// LastReadTime returns when d's torrent was last read from.
+func (d *Dispatcher) LastReadTime() time.Time {
+	return d.torrent.getLastReadTime()
 }
 
-func (d *dispatcher) LastWriteTime() time.Time {
-	return d.Torrent.getLastWriteTime()
+// LastWriteTime returns when d's torrent was last written to.
+func (d *Dispatcher) LastWriteTime() time.Time {
+	return d.torrent.getLastWriteTime()
 }
 
-// Empty returns true if the dispatcher has no peers.
-func (d *dispatcher) Empty() bool {
+// Empty returns true if the Dispatcher has no peers.
+func (d *Dispatcher) Empty() bool {
 	// syncmap.Map does not provide a length function, hence this poor man's
 	// implementation of `len(d.peers) == 0`.
 	empty := true
@@ -201,9 +188,9 @@ func (d *dispatcher) Empty() bool {
 	return empty
 }
 
-// AddPeer registers a new peer with the dispatcher.
-func (d *dispatcher) AddPeer(
-	peerID core.PeerID, b *bitset.BitSet, messages messages) error {
+// AddPeer registers a new peer with the Dispatcher.
+func (d *Dispatcher) AddPeer(
+	peerID core.PeerID, b *bitset.BitSet, messages Messages) error {
 
 	p, err := d.addPeer(peerID, b, messages)
 	if err != nil {
@@ -214,25 +201,20 @@ func (d *dispatcher) AddPeer(
 	return nil
 }
 
-// addPeer creates and inserts a new peer into the dispatcher. Split from AddPeer
+// addPeer creates and inserts a new peer into the Dispatcher. Split from AddPeer
 // with no goroutine side-effects for testing purposes.
-func (d *dispatcher) addPeer(
-	peerID core.PeerID, b *bitset.BitSet, messages messages) (*peer, error) {
+func (d *Dispatcher) addPeer(
+	peerID core.PeerID, b *bitset.BitSet, messages Messages) (*peer, error) {
 
-	p := &peer{
-		id:       peerID,
-		bitfield: newSyncBitfield(b),
-		messages: messages,
-		clock:    d.clock,
-	}
+	p := newPeer(peerID, b, messages, d.clk)
 	if _, ok := d.peers.LoadOrStore(peerID, p); ok {
 		return nil, errors.New("peer already exists")
 	}
 	return p, nil
 }
 
-// TearDown closes all dispatcher connections.
-func (d *dispatcher) TearDown() {
+// TearDown closes all Dispatcher connections.
+func (d *Dispatcher) TearDown() {
 	d.pendingPiecesDoneOnce.Do(func() {
 		close(d.pendingPiecesDone)
 	})
@@ -244,49 +226,46 @@ func (d *dispatcher) TearDown() {
 	})
 }
 
-func (d *dispatcher) String() string {
-	return fmt.Sprintf("dispatcher(%s)", d.Torrent)
+func (d *Dispatcher) String() string {
+	return fmt.Sprintf("Dispatcher(%s)", d.torrent)
 }
 
-func (d *dispatcher) complete() {
-	d.sendCompleteOnce.Do(func() {
-		go d.eventSender.Send(completedDispatcherEvent{d})
-	})
-	d.pendingPiecesDoneOnce.Do(func() {
-		close(d.pendingPiecesDone)
-	})
+func (d *Dispatcher) complete() {
+	d.completeOnce.Do(func() { go d.events.DispatcherComplete(d) })
+	d.pendingPiecesDoneOnce.Do(func() { close(d.pendingPiecesDone) })
+
 	// Close connections to other completed peers since those connections are
 	// now useless.
 	d.peers.Range(func(k, v interface{}) bool {
 		p := v.(*peer)
 		if p.bitfield.Complete() {
-			d.log("peer", p).Info("Completed dispatcher closing connection to completed peer")
+			d.log("peer", p).Info("Completed Dispatcher closing connection to completed peer")
 			p.messages.Close()
 		}
 		return true
 	})
 }
 
-func (d *dispatcher) endgame() bool {
+func (d *Dispatcher) endgame() bool {
 	if d.config.DisableEndgame {
 		return false
 	}
-	remaining := d.Torrent.NumPieces() - int(d.Torrent.Bitfield().Count())
+	remaining := d.torrent.NumPieces() - int(d.torrent.Bitfield().Count())
 	return remaining <= d.config.EndgameThreshold
 }
 
-func (d *dispatcher) maybeRequestMorePieces(p *peer) (bool, error) {
-	candidates := p.bitfield.Intersection(d.Torrent.Bitfield().Complement())
+func (d *Dispatcher) maybeRequestMorePieces(p *peer) (bool, error) {
+	candidates := p.bitfield.Intersection(d.torrent.Bitfield().Complement())
 	return d.maybeSendPieceRequests(p, candidates)
 }
 
-func (d *dispatcher) maybeSendPieceRequests(p *peer, candidates *bitset.BitSet) (bool, error) {
+func (d *Dispatcher) maybeSendPieceRequests(p *peer, candidates *bitset.BitSet) (bool, error) {
 	pieces := d.pieceRequestManager.ReservePieces(p.id, candidates, d.endgame())
 	if len(pieces) == 0 {
 		return false, nil
 	}
 	for _, i := range pieces {
-		if err := p.messages.Send(conn.NewPieceRequestMessage(i, d.Torrent.PieceLength(i))); err != nil {
+		if err := p.messages.Send(conn.NewPieceRequestMessage(i, d.torrent.PieceLength(i))); err != nil {
 			// Connection closed.
 			d.pieceRequestManager.MarkUnsent(p.id, i)
 			return false, err
@@ -295,7 +274,7 @@ func (d *dispatcher) maybeSendPieceRequests(p *peer, candidates *bitset.BitSet) 
 	return true, nil
 }
 
-func (d *dispatcher) resendFailedPieceRequests() {
+func (d *Dispatcher) resendFailedPieceRequests() {
 	failedRequests := d.pieceRequestManager.GetFailedRequests()
 	if len(failedRequests) > 0 {
 		d.log().Infof("Resending %d failed piece requests", len(failedRequests))
@@ -312,7 +291,7 @@ func (d *dispatcher) resendFailedPieceRequests() {
 				return true
 			}
 
-			b := d.Torrent.Bitfield()
+			b := d.torrent.Bitfield()
 			candidates := p.bitfield.Intersection(b.Complement())
 			if candidates.Test(uint(r.Piece)) {
 				nb := bitset.New(b.Len()).Set(uint(r.Piece))
@@ -330,10 +309,10 @@ func (d *dispatcher) resendFailedPieceRequests() {
 	}
 }
 
-func (d *dispatcher) watchPendingPieceRequests() {
+func (d *Dispatcher) watchPendingPieceRequests() {
 	for {
 		select {
-		case <-d.clock.After(d.pieceRequestTimeout / 2):
+		case <-d.clk.After(d.pieceRequestTimeout / 2):
 			d.resendFailedPieceRequests()
 		case <-d.pendingPiecesDone:
 			return
@@ -342,8 +321,8 @@ func (d *dispatcher) watchPendingPieceRequests() {
 }
 
 // feed reads off of peer and handles incoming messages. When peer's messages close,
-// the feed goroutine removes peer from the dispatcher and exits.
-func (d *dispatcher) feed(p *peer) {
+// the feed goroutine removes peer from the Dispatcher and exits.
+func (d *Dispatcher) feed(p *peer) {
 	for msg := range p.messages.Receiver() {
 		if err := d.dispatch(p, msg); err != nil {
 			d.log().Errorf("Error dispatching message: %s", err)
@@ -353,7 +332,7 @@ func (d *dispatcher) feed(p *peer) {
 	d.pieceRequestManager.ClearPeer(p.id)
 }
 
-func (d *dispatcher) dispatch(p *peer, msg *conn.Message) error {
+func (d *Dispatcher) dispatch(p *peer, msg *conn.Message) error {
 	switch msg.Message.Type {
 	case p2p.Message_ERROR:
 		d.handleError(p, msg.Message.Error)
@@ -373,7 +352,7 @@ func (d *dispatcher) dispatch(p *peer, msg *conn.Message) error {
 	return nil
 }
 
-func (d *dispatcher) handleError(p *peer, msg *p2p.ErrorMessage) {
+func (d *Dispatcher) handleError(p *peer, msg *p2p.ErrorMessage) {
 	switch msg.Code {
 	case p2p.ErrorMessage_PIECE_REQUEST_FAILED:
 		d.log().Errorf("Piece request failed: %s", msg.Error)
@@ -381,9 +360,9 @@ func (d *dispatcher) handleError(p *peer, msg *p2p.ErrorMessage) {
 	}
 }
 
-func (d *dispatcher) handleAnnouncePiece(p *peer, msg *p2p.AnnouncePieceMessage) {
-	if int(msg.Index) >= d.Torrent.NumPieces() {
-		d.log().Errorf("Announce piece out of bounds: %d >= %d", msg.Index, d.Torrent.NumPieces())
+func (d *Dispatcher) handleAnnouncePiece(p *peer, msg *p2p.AnnouncePieceMessage) {
+	if int(msg.Index) >= d.torrent.NumPieces() {
+		d.log().Errorf("Announce piece out of bounds: %d >= %d", msg.Index, d.torrent.NumPieces())
 		return
 	}
 	i := int(msg.Index)
@@ -392,11 +371,11 @@ func (d *dispatcher) handleAnnouncePiece(p *peer, msg *p2p.AnnouncePieceMessage)
 	d.maybeRequestMorePieces(p)
 }
 
-func (d *dispatcher) isFullPiece(i, offset, length int) bool {
-	return offset == 0 && length == int(d.Torrent.PieceLength(i))
+func (d *Dispatcher) isFullPiece(i, offset, length int) bool {
+	return offset == 0 && length == int(d.torrent.PieceLength(i))
 }
 
-func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
+func (d *Dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
 		d.log("peer", p, "piece", i).Error("Rejecting piece request: chunk not supported")
@@ -404,7 +383,7 @@ func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 		return
 	}
 
-	payload, err := d.Torrent.GetPieceReader(i)
+	payload, err := d.torrent.GetPieceReader(i)
 	if err != nil {
 		d.log("peer", p, "piece", i).Errorf("Error getting reader for requested piece: %s", err)
 		p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err))
@@ -421,7 +400,7 @@ func (d *dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 	p.bitfield.Set(uint(i), true)
 }
 
-func (d *dispatcher) handlePiecePayload(
+func (d *Dispatcher) handlePiecePayload(
 	p *peer, msg *p2p.PiecePayloadMessage, payload storage.PieceReader) {
 
 	defer payload.Close()
@@ -433,7 +412,7 @@ func (d *dispatcher) handlePiecePayload(
 		return
 	}
 
-	if err := d.Torrent.WritePiece(payload, i); err != nil {
+	if err := d.torrent.WritePiece(payload, i); err != nil {
 		if err != storage.ErrPieceComplete {
 			d.log("peer", p, "piece", i).Errorf("Error writing piece payload: %s", err)
 			d.pieceRequestManager.MarkInvalid(p.id, i)
@@ -441,11 +420,11 @@ func (d *dispatcher) handlePiecePayload(
 		return
 	}
 
-	d.networkEvents.Produce(
-		networkevent.ReceivePieceEvent(d.Torrent.InfoHash(), d.localPeerID, p.id, i))
+	d.netevents.Produce(
+		networkevent.ReceivePieceEvent(d.torrent.InfoHash(), d.localPeerID, p.id, i))
 
 	p.touchLastGoodPieceReceived()
-	if d.Torrent.Complete() {
+	if d.torrent.Complete() {
 		d.complete()
 	}
 
@@ -465,17 +444,17 @@ func (d *dispatcher) handlePiecePayload(
 	})
 }
 
-func (d *dispatcher) handleCancelPiece(p *peer, msg *p2p.CancelPieceMessage) {
+func (d *Dispatcher) handleCancelPiece(p *peer, msg *p2p.CancelPieceMessage) {
 	// No-op: cancelling not supported because all received messages are synchronized,
 	// therefore if we receive a cancel it is already too late -- we've already read
 	// the piece.
 }
 
-func (d *dispatcher) handleBitfield(p *peer, msg *p2p.BitfieldMessage) {
+func (d *Dispatcher) handleBitfield(p *peer, msg *p2p.BitfieldMessage) {
 	d.log("peer", p).Error("Unexpected bitfield message from established conn")
 }
 
-func (d *dispatcher) log(args ...interface{}) *zap.SugaredLogger {
-	args = append(args, "torrent", d.Torrent)
+func (d *Dispatcher) log(args ...interface{}) *zap.SugaredLogger {
+	args = append(args, "torrent", d.torrent)
 	return log.With(args...)
 }
