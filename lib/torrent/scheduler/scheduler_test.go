@@ -205,6 +205,10 @@ func TestSeederTTI(t *testing.T) {
 
 	require.False(hasConn(seeder.scheduler, leecher.pctx.PeerID, tf.MetaInfo.InfoHash))
 	require.False(hasConn(leecher.scheduler, seeder.pctx.PeerID, tf.MetaInfo.InfoHash))
+
+	// Idle seeder should keep around the torrent file so it can still serve content.
+	_, err := seeder.torrentArchive.Stat(tf.MetaInfo.Name())
+	require.NoError(err)
 }
 
 func TestLeecherTTI(t *testing.T) {
@@ -231,6 +235,10 @@ func TestLeecherTTI(t *testing.T) {
 	w.WaitFor(t, preemptionTickEvent{})
 
 	require.Equal(ErrTorrentTimeout, <-errc)
+
+	// Idle leecher should delete torrent file to prevent it from being revived.
+	_, err := p.torrentArchive.Stat(tf.MetaInfo.Name())
+	require.True(os.IsNotExist(err))
 }
 
 func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
