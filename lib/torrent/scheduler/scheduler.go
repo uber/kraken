@@ -391,17 +391,16 @@ func (s *Scheduler) initTorrentControl(t storage.Torrent, localRequest bool) *to
 
 func (s *Scheduler) tearDownTorrentControl(ctrl *torrentControl, err error) {
 	h := ctrl.dispatcher.InfoHash()
-	if ctrl.complete {
-		delete(s.torrentControls, h)
-	} else {
+	if !ctrl.complete {
 		ctrl.dispatcher.TearDown()
 		s.announceQueue.Eject(h)
 		for _, errc := range ctrl.errors {
 			errc <- err
 		}
-		delete(s.torrentControls, h)
 		s.networkEvents.Produce(networkevent.TorrentCancelledEvent(h, s.pctx.PeerID))
+		s.torrentArchive.DeleteTorrent(ctrl.dispatcher.Name())
 	}
+	delete(s.torrentControls, h)
 }
 
 func (s *Scheduler) log(args ...interface{}) *zap.SugaredLogger {
