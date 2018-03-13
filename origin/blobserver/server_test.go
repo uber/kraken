@@ -17,7 +17,6 @@ import (
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/httputil"
-	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/rwutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
@@ -65,15 +64,14 @@ func TestGetBlobHandlerOK(t *testing.T) {
 	addr, stop := mocks.server(configMaxReplicaFixture())
 	defer stop()
 
-	d := core.DigestFixture()
+	blob := core.NewBlobFixture()
 
-	blob := randutil.Text(256)
-	f, cleanup := store.NewMockFileReadWriter(blob)
+	f, cleanup := store.NewMockFileReadWriter(blob.Content)
 	defer cleanup()
 
-	mocks.fileStore.EXPECT().GetCacheFileReader(d.Hex()).Return(f, nil)
+	mocks.fileStore.EXPECT().GetCacheFileReader(blob.Digest.Hex()).Return(f, nil)
 
-	ensureHasBlob(t, blobclient.New(addr), d, blob)
+	ensureHasBlob(t, blobclient.New(addr), blob)
 }
 
 func TestGetBlobHandlerNotFound(t *testing.T) {
@@ -139,16 +137,16 @@ func TestGetLocationsHandlerOK(t *testing.T) {
 	addr, stop := mocks.server(config)
 	defer stop()
 
-	d, _ := computeBlobForHosts(config, master1, master2)
+	blob := computeBlobForHosts(config, master1, master2)
 
-	locs, err := blobclient.New(addr).Locations(d)
+	locs, err := blobclient.New(addr).Locations(blob.Digest)
 	require.NoError(err)
 	require.Equal([]string{master1, master2}, locs)
 }
 
 func TestIncorrectNodeErrors(t *testing.T) {
 	config := configFixture()
-	d, _ := computeBlobForHosts(config, master2, master3)
+	blob := computeBlobForHosts(config, master2, master3)
 
 	tests := []struct {
 		name string
@@ -156,23 +154,23 @@ func TestIncorrectNodeErrors(t *testing.T) {
 	}{
 		{
 			"CheckBlob",
-			func(c blobclient.Client) error { _, err := c.CheckBlob(d); return err },
+			func(c blobclient.Client) error { _, err := c.CheckBlob(blob.Digest); return err },
 		}, {
 			"GetBlob",
-			func(c blobclient.Client) error { _, err := c.GetBlob(d); return err },
+			func(c blobclient.Client) error { _, err := c.GetBlob(blob.Digest); return err },
 		}, {
 			"TransferBlob",
-			func(c blobclient.Client) error { return c.TransferBlob(d, bytes.NewBufferString("blah"), 4) },
+			func(c blobclient.Client) error { return c.TransferBlob(blob.Digest, bytes.NewBufferString("blah"), 4) },
 		}, {
 			"GetMetaInfo",
-			func(c blobclient.Client) error { _, err := c.GetMetaInfo(namespace, d); return err },
+			func(c blobclient.Client) error { _, err := c.GetMetaInfo(namespace, blob.Digest); return err },
 		}, {
 			"OverwriteMetaInfo",
-			func(c blobclient.Client) error { return c.OverwriteMetaInfo(d, 64) },
+			func(c blobclient.Client) error { return c.OverwriteMetaInfo(blob.Digest, 64) },
 		}, {
 			"UploadBlob",
 			func(c blobclient.Client) error {
-				return c.UploadBlob(namespace, d, bytes.NewBufferString("blah"), 4, false)
+				return c.UploadBlob(namespace, blob.Digest, bytes.NewBufferString("blah"), 4, false)
 			},
 		},
 	}
@@ -222,27 +220,27 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 		s.backendManager.Register(namespace, mockBackendClient)
 	}
 
-	d, blob := computeBlobForHosts(config, master1, master2)
+	blob := computeBlobForHosts(config, master1, master2)
 
-	mockBackendClient.EXPECT().Download(d.Hex(), rwutil.MatchWriter(blob)).Return(nil)
+	mockBackendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
 
-	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
+	mi, err := cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
 	require.True(httputil.IsAccepted(err))
 	require.Nil(mi)
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		_, err := cp.Provide(master1).GetMetaInfo(namespace, d)
+		_, err := cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
 		return !httputil.IsAccepted(err)
 	}))
 
-	mi, err = cp.Provide(master1).GetMetaInfo(namespace, d)
+	mi, err = cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
 	require.NoError(err)
 	require.NotNil(mi)
-	require.Equal(len(blob), int(mi.Info.Length))
+	require.Equal(len(blob.Content), int(mi.Info.Length))
 
 	// Ensure blob was replicated to other master.
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		ok, err := cp.Provide(master2).CheckBlob(d)
+		ok, err := cp.Provide(master2).CheckBlob(blob.Digest)
 		return ok && err == nil
 	}))
 }
@@ -289,14 +287,14 @@ func TestUploadBlobReplicatesBlob(t *testing.T) {
 		defer s.cleanup()
 	}
 
-	d, blob := computeBlobForHosts(config, master1, master2)
+	blob := computeBlobForHosts(config, master1, master2)
 
 	err := cp.Provide(master1).UploadBlob(
-		namespace, d, bytes.NewReader(blob), int64(len(blob)), false)
+		namespace, blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)), false)
 	require.NoError(err)
 
 	for _, master := range []string{master1, master2} {
-		ensureHasBlob(t, cp.Provide(master), d, blob)
+		ensureHasBlob(t, cp.Provide(master), blob)
 	}
 }
 
@@ -313,13 +311,13 @@ func TestUploadBlobResilientToReplicationFailure(t *testing.T) {
 
 	// Master2 owns this blob, but it is not running. Uploads should still succeed
 	// despite this.
-	d, blob := computeBlobForHosts(config, master1, master2)
+	blob := computeBlobForHosts(config, master1, master2)
 
 	err := cp.Provide(master1).UploadBlob(
-		namespace, d, bytes.NewReader(blob), int64(len(blob)), false)
+		namespace, blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)), false)
 	require.NoError(err)
 
-	ensureHasBlob(t, cp.Provide(master1), d, blob)
+	ensureHasBlob(t, cp.Provide(master1), blob)
 }
 
 func TestUploadBlobThroughUploadsToStorageBackendAndReplicates(t *testing.T) {
@@ -338,16 +336,16 @@ func TestUploadBlobThroughUploadsToStorageBackendAndReplicates(t *testing.T) {
 		s.backendManager.Register(namespace, mockBackendClient)
 	}
 
-	d, blob := computeBlobForHosts(config, master1, master2)
+	blob := computeBlobForHosts(config, master1, master2)
 
-	mockBackendClient.EXPECT().Upload(d.Hex(), rwutil.MatchReader(blob)).Return(nil)
+	mockBackendClient.EXPECT().Upload(blob.Digest.Hex(), rwutil.MatchReader(blob.Content)).Return(nil)
 
 	err := cp.Provide(master1).UploadBlob(
-		namespace, d, bytes.NewReader(blob), int64(len(blob)), true)
+		namespace, blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)), true)
 	require.NoError(err)
 
 	for _, master := range []string{master1, master2} {
-		ensureHasBlob(t, cp.Provide(master), d, blob)
+		ensureHasBlob(t, cp.Provide(master), blob)
 	}
 }
 
@@ -364,15 +362,15 @@ func TestUploadBlobThroughDoesNotCommitBlobIfBackendUploadFails(t *testing.T) {
 	defer s.cleanup()
 	s.backendManager.Register(namespace, mockBackendClient)
 
-	d, blob := core.DigestWithBlobFixture()
+	blob := core.NewBlobFixture()
 
-	mockBackendClient.EXPECT().Upload(d.Hex(), rwutil.MatchReader(blob)).Return(errors.New("some error"))
+	mockBackendClient.EXPECT().Upload(blob.Digest.Hex(), rwutil.MatchReader(blob.Content)).Return(errors.New("some error"))
 
 	err := cp.Provide(master1).UploadBlob(
-		namespace, d, bytes.NewReader(blob), int64(len(blob)), true)
+		namespace, blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)), true)
 	require.Error(err)
 
-	ok, err := cp.Provide(master1).CheckBlob(d)
+	ok, err := cp.Provide(master1).CheckBlob(blob.Digest)
 	require.NoError(err)
 	require.False(ok)
 }
@@ -385,20 +383,20 @@ func TestTransferBlob(t *testing.T) {
 	s := newTestServer(master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
 
-	d, blob := core.DigestWithBlobFixture()
+	blob := core.NewBlobFixture()
 
-	err := cp.Provide(master1).TransferBlob(d, bytes.NewReader(blob), int64(len(blob)))
+	err := cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)))
 	require.NoError(err)
-	ensureHasBlob(t, cp.Provide(master1), d, blob)
+	ensureHasBlob(t, cp.Provide(master1), blob)
 
 	// Ensure metainfo was generated.
-	_, err = s.fs.GetCacheFileMetadata(d.Hex(), store.NewTorrentMeta())
+	_, err = s.fs.GetCacheFileMetadata(blob.Digest.Hex(), store.NewTorrentMeta())
 	require.NoError(err)
 
 	// Pushing again should be a no-op.
-	err = cp.Provide(master1).TransferBlob(d, bytes.NewReader(blob), int64(len(blob)))
+	err = cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)))
 	require.NoError(err)
-	ensureHasBlob(t, cp.Provide(master1), d, blob)
+	ensureHasBlob(t, cp.Provide(master1), blob)
 }
 
 func TestOverwriteMetainfo(t *testing.T) {
@@ -409,19 +407,19 @@ func TestOverwriteMetainfo(t *testing.T) {
 	s := newTestServer(master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
 
-	d, blob := core.DigestWithBlobFixture()
+	blob := core.NewBlobFixture()
 
-	err := cp.Provide(master1).TransferBlob(d, bytes.NewReader(blob), int64(len(blob)))
+	err := cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)))
 	require.NoError(err)
 
-	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
+	mi, err := cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
 	require.NoError(err)
 	require.Equal(int64(4), mi.Info.PieceLength)
 
-	err = cp.Provide(master1).OverwriteMetaInfo(d, 16)
+	err = cp.Provide(master1).OverwriteMetaInfo(blob.Digest, 16)
 	require.NoError(err)
 
-	mi, err = cp.Provide(master1).GetMetaInfo(namespace, d)
+	mi, err = cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
 	require.NoError(err)
 	require.Equal(int64(16), mi.Info.PieceLength)
 }

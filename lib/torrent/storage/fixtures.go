@@ -43,7 +43,7 @@ func TorrentFixture(mi *core.MetaInfo) (Torrent, func()) {
 
 // TorrentInfoFixture returns a TorrentInfo for the given size and piece length.
 func TorrentInfoFixture(size, pieceLength uint64) (*TorrentInfo, func()) {
-	torrent, cleanup := TorrentFixture(core.CustomMetaInfoFixture(size, pieceLength))
+	torrent, cleanup := TorrentFixture(core.SizedBlobFixture(size, pieceLength).MetaInfo)
 	return torrent.Stat(), cleanup
 }
 

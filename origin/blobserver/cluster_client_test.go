@@ -45,21 +45,21 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 
 	// Run many times to make sure we eventually hit unavailable masters.
 	for i := 0; i < 100; i++ {
-		d, blob := core.DigestWithBlobFixture()
+		blob := core.NewBlobFixture()
 
-		require.NoError(cc.UploadBlob("noexist", d, bytes.NewReader(blob), int64(len(blob))))
+		require.NoError(cc.UploadBlob("noexist", blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content))))
 
-		mi, err := cc.GetMetaInfo("noexist", d)
+		mi, err := cc.GetMetaInfo("noexist", blob.Digest)
 		require.NoError(err)
 		require.NotNil(mi)
 
-		r, err := cc.DownloadBlob(d)
+		r, err := cc.DownloadBlob(blob.Digest)
 		require.NoError(err)
 		result, err := ioutil.ReadAll(r)
 		require.NoError(err)
-		require.Equal(string(blob), string(result))
+		require.Equal(string(blob.Content), string(result))
 
-		peers, err := cc.Owners(d)
+		peers, err := cc.Owners(blob.Digest)
 		require.NoError(err)
 		require.Len(peers, 1)
 		require.Equal(s.pctx, peers[0])
@@ -77,17 +77,17 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 	cc := blobclient.NewClusterClient(
 		blobclient.NewClientResolver(cp, serverset.MustRoundRobin(master1, master2, master3)))
 
-	d, blob := core.DigestWithBlobFixture()
+	blob := core.NewBlobFixture()
 
-	require.Error(cc.UploadBlob("noexist", d, bytes.NewReader(blob), int64(len(blob))))
+	require.Error(cc.UploadBlob("noexist", blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content))))
 
-	_, err := cc.GetMetaInfo("noexist", d)
+	_, err := cc.GetMetaInfo("noexist", blob.Digest)
 	require.Error(err)
 
-	_, err = cc.DownloadBlob(d)
+	_, err = cc.DownloadBlob(blob.Digest)
 	require.Error(err)
 
-	_, err = cc.Owners(d)
+	_, err = cc.Owners(blob.Digest)
 	require.Error(err)
 }
 
@@ -105,21 +105,20 @@ func TestClusterClientGetMetaInfoSkipsOriginOnPollTimeout(t *testing.T) {
 	})
 	cc := blobclient.NewClusterClient(mockResolver, blobclient.WithPollMetaInfoBackoff(b))
 
-	mi := core.MetaInfoFixture()
-	digest := core.NewSHA256DigestFromHex(mi.Name())
+	blob := core.NewBlobFixture()
 
 	mockClient1 := mockblobclient.NewMockClient(ctrl)
 	mockClient2 := mockblobclient.NewMockClient(ctrl)
 
-	mockResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
+	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
 
-	mockClient1.EXPECT().GetMetaInfo(namespace, digest).Return(nil, httputil.StatusError{Status: 202}).MinTimes(1)
+	mockClient1.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(nil, httputil.StatusError{Status: 202}).MinTimes(1)
 	mockClient1.EXPECT().Addr().Return("client1")
-	mockClient2.EXPECT().GetMetaInfo(namespace, digest).Return(mi, nil)
+	mockClient2.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(blob.MetaInfo, nil)
 
-	result, err := cc.GetMetaInfo(namespace, digest)
+	result, err := cc.GetMetaInfo(namespace, blob.Digest)
 	require.NoError(err)
-	require.Equal(result, mi)
+	require.Equal(result, blob.MetaInfo)
 }
 
 func TestClusterClientGetMetaInfoSkipsOriginOnNetworkErrors(t *testing.T) {
@@ -132,21 +131,20 @@ func TestClusterClientGetMetaInfoSkipsOriginOnNetworkErrors(t *testing.T) {
 
 	cc := blobclient.NewClusterClient(mockResolver)
 
-	mi := core.MetaInfoFixture()
-	digest := core.NewSHA256DigestFromHex(mi.Name())
+	blob := core.NewBlobFixture()
 
 	mockClient1 := mockblobclient.NewMockClient(ctrl)
 	mockClient2 := mockblobclient.NewMockClient(ctrl)
 
-	mockResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
+	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
 
-	mockClient1.EXPECT().GetMetaInfo(namespace, digest).Return(nil, httputil.NetworkError{})
+	mockClient1.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(nil, httputil.NetworkError{})
 	mockClient1.EXPECT().Addr().Return("client1")
-	mockClient2.EXPECT().GetMetaInfo(namespace, digest).Return(mi, nil)
+	mockClient2.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(blob.MetaInfo, nil)
 
-	result, err := cc.GetMetaInfo(namespace, digest)
+	result, err := cc.GetMetaInfo(namespace, blob.Digest)
 	require.NoError(err)
-	require.Equal(result, mi)
+	require.Equal(result, blob.MetaInfo)
 }
 
 func TestClusterClientReturnsErrorOnNoAvailableOrigins(t *testing.T) {
@@ -159,19 +157,18 @@ func TestClusterClientReturnsErrorOnNoAvailableOrigins(t *testing.T) {
 
 	cc := blobclient.NewClusterClient(mockResolver)
 
-	mi := core.MetaInfoFixture()
-	digest := core.NewSHA256DigestFromHex(mi.Name())
+	blob := core.NewBlobFixture()
 
 	mockClient1 := mockblobclient.NewMockClient(ctrl)
 	mockClient2 := mockblobclient.NewMockClient(ctrl)
-	mockResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
+	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
 
-	mockClient1.EXPECT().GetMetaInfo(namespace, digest).Return(nil, httputil.NetworkError{})
+	mockClient1.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(nil, httputil.NetworkError{})
 	mockClient1.EXPECT().Addr().Return("client1")
-	mockClient2.EXPECT().GetMetaInfo(namespace, digest).Return(nil, httputil.NetworkError{})
+	mockClient2.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(nil, httputil.NetworkError{})
 	mockClient2.EXPECT().Addr().Return("client2")
 
-	_, err := cc.GetMetaInfo(namespace, digest)
+	_, err := cc.GetMetaInfo(namespace, blob.Digest)
 	require.Error(err)
 }
 
@@ -185,15 +182,15 @@ func TestClusterClientOverwriteMetainfo(t *testing.T) {
 
 	cc := blobclient.NewClusterClient(mockResolver)
 
-	digest := core.DigestFixture()
+	d := core.DigestFixture()
 
 	mockClient1 := mockblobclient.NewMockClient(ctrl)
 	mockClient2 := mockblobclient.NewMockClient(ctrl)
-	mockResolver.EXPECT().Resolve(digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
+	mockResolver.EXPECT().Resolve(d).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
 
-	mockClient1.EXPECT().OverwriteMetaInfo(digest, int64(16)).Return(nil)
-	mockClient2.EXPECT().OverwriteMetaInfo(digest, int64(16)).Return(nil)
+	mockClient1.EXPECT().OverwriteMetaInfo(d, int64(16)).Return(nil)
+	mockClient2.EXPECT().OverwriteMetaInfo(d, int64(16)).Return(nil)
 
-	err := cc.OverwriteMetaInfo(digest, 16)
+	err := cc.OverwriteMetaInfo(d, 16)
 	require.NoError(err)
 }

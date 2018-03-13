@@ -100,8 +100,8 @@ func TestAllClients(t *testing.T) {
 			},
 			"docker/registry/v2/blobs/sha256/:shard/:blob/data",
 			func() (string, []byte) {
-				d, blob := core.DigestWithBlobFixture()
-				return d.Hex(), blob
+				blob := core.NewBlobFixture()
+				return blob.Digest.Hex(), blob.Content
 			},
 		}, {
 			"docker tag client",

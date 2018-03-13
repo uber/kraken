@@ -21,10 +21,10 @@ func TestOriginTorrentCreate(t *testing.T) {
 	fs, cleanup := store.OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
-	tf := core.CustomTestTorrentFileFixture(7, 2)
-	mi := tf.MetaInfo
+	blob := core.SizedBlobFixture(7, 2)
+	mi := blob.MetaInfo
 
-	fs.CreateCacheFile(mi.Name(), bytes.NewReader(tf.Content))
+	fs.CreateCacheFile(mi.Name(), bytes.NewReader(blob.Content))
 
 	tor, err := NewOriginTorrent(fs, mi)
 	require.NoError(err)
@@ -50,10 +50,10 @@ func TestOriginTorrentGetPieceReaderConcurrent(t *testing.T) {
 	fs, cleanup := store.OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
-	tf := core.CustomTestTorrentFileFixture(7, 2)
-	mi := tf.MetaInfo
+	blob := core.SizedBlobFixture(7, 2)
+	mi := blob.MetaInfo
 
-	fs.CreateCacheFile(mi.Name(), bytes.NewReader(tf.Content))
+	fs.CreateCacheFile(mi.Name(), bytes.NewReader(blob.Content))
 
 	tor, err := NewOriginTorrent(fs, mi)
 	require.NoError(err)
@@ -70,7 +70,7 @@ func TestOriginTorrentGetPieceReaderConcurrent(t *testing.T) {
 			defer r.Close()
 			result, err := ioutil.ReadAll(r)
 			require.NoError(err)
-			require.Equal(tf.Content[start:end], result)
+			require.Equal(blob.Content[start:end], result)
 		}(i)
 	}
 
@@ -83,10 +83,10 @@ func TestOriginTorrentWritePieceError(t *testing.T) {
 	fs, cleanup := store.OriginFileStoreFixture(clock.New())
 	defer cleanup()
 
-	tf := core.CustomTestTorrentFileFixture(7, 2)
-	mi := tf.MetaInfo
+	blob := core.SizedBlobFixture(7, 2)
+	mi := blob.MetaInfo
 
-	fs.CreateCacheFile(mi.Name(), bytes.NewReader(tf.Content))
+	fs.CreateCacheFile(mi.Name(), bytes.NewReader(blob.Content))
 
 	tor, err := NewOriginTorrent(fs, mi)
 	require.NoError(err)

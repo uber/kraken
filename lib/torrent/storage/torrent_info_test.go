@@ -11,7 +11,7 @@ import (
 )
 
 func TestTorrentInfoPercentDownloaded(t *testing.T) {
-	mi := core.CustomMetaInfoFixture(100, 25)
+	mi := core.SizedBlobFixture(100, 25).MetaInfo
 	tests := []struct {
 		bitfield *bitset.BitSet
 		expected int
