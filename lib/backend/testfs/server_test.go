@@ -21,11 +21,11 @@ func TestServerUploadDownload(t *testing.T) {
 	c, err := NewClient(Config{Addr: addr})
 	require.NoError(err)
 
-	d, blob := core.DigestWithBlobFixture()
+	blob := core.NewBlobFixture()
 
-	require.NoError(c.Upload(d.Hex(), bytes.NewReader(blob)))
+	require.NoError(c.Upload(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 
 	var b bytes.Buffer
-	require.NoError(c.Download(d.Hex(), &b))
-	require.Equal(blob, b.Bytes())
+	require.NoError(c.Download(blob.Digest.Hex(), &b))
+	require.Equal(blob.Content, b.Bytes())
 }

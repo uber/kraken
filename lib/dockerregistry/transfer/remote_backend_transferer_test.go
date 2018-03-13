@@ -29,19 +29,19 @@ func TestRemoteBackendTransfererDownloadCachesBlobs(t *testing.T) {
 	rbt, err := NewRemoteBackendTransferer(mockTagBackendClient, mockBlobBackendClient, fs)
 	require.NoError(err)
 
-	d, blob := core.DigestWithBlobFixture()
+	blob := core.NewBlobFixture()
 
-	mockBlobBackendClient.EXPECT().Download(d.Hex(), rwutil.MatchWriter(blob)).Return(nil)
+	mockBlobBackendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
 
-	_, err = rbt.Download(d.Hex())
+	_, err = rbt.Download(blob.Digest.Hex())
 	require.NoError(err)
 
 	// Downloading again should use the cache (i.e. the mock should only be called once).
-	r, err := rbt.Download(d.Hex())
+	r, err := rbt.Download(blob.Digest.Hex())
 	require.NoError(err)
 	result, err := ioutil.ReadAll(r)
 	require.NoError(err)
-	require.Equal(string(blob), string(result))
+	require.Equal(string(blob.Content), string(result))
 }
 
 func TestRemoteBackendTransfererDownloadCachesTags(t *testing.T) {
@@ -87,18 +87,18 @@ func TestRemoteBackendTransfererUploadBlobs(t *testing.T) {
 	mockBlobBackendClient := mockbackend.NewMockClient(ctrl)
 	mockTagBackendClient := mockbackend.NewMockClient(ctrl)
 
-	d, blob := core.DigestWithBlobFixture()
+	blob := core.NewBlobFixture()
 
-	fs.CreateCacheFile(d.Hex(), bytes.NewReader(blob))
+	fs.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content))
 
 	rbt, err := NewRemoteBackendTransferer(mockTagBackendClient, mockBlobBackendClient, fs)
 	require.NoError(err)
 
-	mockBlobBackendClient.EXPECT().Upload(d.Hex(), rwutil.MatchReader(blob)).Return(nil)
+	mockBlobBackendClient.EXPECT().Upload(blob.Digest.Hex(), rwutil.MatchReader(blob.Content)).Return(nil)
 
-	reader, err := fs.GetCacheFileReader(d.Hex())
+	reader, err := fs.GetCacheFileReader(blob.Digest.Hex())
 	require.NoError(err)
 
-	err = rbt.Upload(d.Hex(), reader, int64(len(blob)))
+	err = rbt.Upload(blob.Digest.Hex(), reader, int64(len(blob.Content)))
 	require.NoError(err)
 }

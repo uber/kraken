@@ -90,7 +90,7 @@ func TestDispatcherSendUniquePieceRequestsWithinLimit(t *testing.T) {
 	}
 	clk := clock.NewMock()
 
-	torrent, cleanup := storage.TorrentFixture(core.CustomMetaInfoFixture(100, 1))
+	torrent, cleanup := storage.TorrentFixture(core.SizedBlobFixture(100, 1).MetaInfo)
 	defer cleanup()
 
 	d := testDispatcher(config, clk, torrent)
@@ -136,7 +136,7 @@ func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 	}
 	clk := clock.NewMock()
 
-	torrent, cleanup := storage.TorrentFixture(core.CustomMetaInfoFixture(2, 1))
+	torrent, cleanup := storage.TorrentFixture(core.SizedBlobFixture(2, 1).MetaInfo)
 	defer cleanup()
 
 	d := testDispatcher(config, clk, torrent)
@@ -193,7 +193,7 @@ func TestDispatcherSendErrorsMarksPieceRequestsUnsent(t *testing.T) {
 	}
 	clk := clock.NewMock()
 
-	torrent, cleanup := storage.TorrentFixture(core.CustomMetaInfoFixture(1, 1))
+	torrent, cleanup := storage.TorrentFixture(core.SizedBlobFixture(1, 1).MetaInfo)
 	defer cleanup()
 
 	d := testDispatcher(config, clk, torrent)
@@ -251,7 +251,7 @@ func TestDispatcherEndgame(t *testing.T) {
 	}
 	clk := clock.NewMock()
 
-	torrent, cleanup := storage.TorrentFixture(core.CustomMetaInfoFixture(1, 1))
+	torrent, cleanup := storage.TorrentFixture(core.SizedBlobFixture(1, 1).MetaInfo)
 	defer cleanup()
 
 	d := testDispatcher(config, clk, torrent)
@@ -273,9 +273,9 @@ func TestDispatcherEndgame(t *testing.T) {
 func TestDispatcherHandlePiecePayloadAnnouncesPiece(t *testing.T) {
 	require := require.New(t)
 
-	tf := core.CustomTestTorrentFileFixture(1, 1)
+	blob := core.SizedBlobFixture(1, 1)
 
-	torrent, cleanup := storage.TorrentFixture(tf.MetaInfo)
+	torrent, cleanup := storage.TorrentFixture(blob.MetaInfo)
 	defer cleanup()
 
 	d := testDispatcher(Config{}, clock.NewMock(), torrent)
@@ -286,7 +286,7 @@ func TestDispatcherHandlePiecePayloadAnnouncesPiece(t *testing.T) {
 	p2, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(false), newMockMessages())
 	require.NoError(err)
 
-	msg := conn.NewPiecePayloadMessage(0, storage.NewPieceReaderBuffer(tf.Content[0:1]))
+	msg := conn.NewPiecePayloadMessage(0, storage.NewPieceReaderBuffer(blob.Content[0:1]))
 
 	require.NoError(d.dispatch(p1, msg))
 

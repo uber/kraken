@@ -147,24 +147,24 @@ func (m *testMocks) newPeers(n int, config Config) []*testPeer {
 
 // writeTorrent writes the given content into a torrent file into peers storage.
 // Useful for populating a completed torrent before seeding it.
-func (p *testPeer) writeTorrent(tf *core.TestTorrentFile) {
-	t, err := p.torrentArchive.CreateTorrent(namespace, tf.MetaInfo.Name())
+func (p *testPeer) writeTorrent(blob *core.BlobFixture) {
+	t, err := p.torrentArchive.CreateTorrent(namespace, blob.MetaInfo.Name())
 	if err != nil {
 		panic(err)
 	}
 	for i := 0; i < t.NumPieces(); i++ {
-		start := int64(i) * tf.MetaInfo.Info.PieceLength
+		start := int64(i) * blob.MetaInfo.Info.PieceLength
 		end := start + t.PieceLength(i)
-		if err := t.WritePiece(storage.NewPieceReaderBuffer(tf.Content[start:end]), i); err != nil {
+		if err := t.WritePiece(storage.NewPieceReaderBuffer(blob.Content[start:end]), i); err != nil {
 			panic(err)
 		}
 	}
 }
 
-func (p *testPeer) checkTorrent(t *testing.T, tf *core.TestTorrentFile) {
+func (p *testPeer) checkTorrent(t *testing.T, blob *core.BlobFixture) {
 	require := require.New(t)
 
-	tor, err := p.torrentArchive.GetTorrent(tf.MetaInfo.Info.Name)
+	tor, err := p.torrentArchive.GetTorrent(blob.MetaInfo.Info.Name)
 	require.NoError(err)
 
 	require.True(tor.Complete())
@@ -180,7 +180,7 @@ func (p *testPeer) checkTorrent(t *testing.T, tf *core.TestTorrentFile) {
 		copy(cursor, pieceData)
 		cursor = cursor[tor.PieceLength(i):]
 	}
-	require.Equal(tf.Content, result)
+	require.Equal(blob.Content, result)
 }
 
 func findFreePort() int {

@@ -23,21 +23,21 @@ func TestDownload(t *testing.T) {
 	mocks, cleanup := newServerMocks(t)
 	defer cleanup()
 
-	d, blob := core.DigestWithBlobFixture()
+	blob := core.NewBlobFixture()
 
-	mocks.torrentClient.EXPECT().Download(namespace, d.Hex()).DoAndReturn(
+	mocks.torrentClient.EXPECT().Download(namespace, blob.Digest.Hex()).DoAndReturn(
 		func(namespace, name string) error {
-			return mocks.fs.CreateCacheFile(name, bytes.NewReader(blob))
+			return mocks.fs.CreateCacheFile(name, bytes.NewReader(blob.Content))
 		})
 
 	addr := mocks.startServer()
 	c := NewClient(addr)
 
-	r, err := c.Download(namespace, d.Hex())
+	r, err := c.Download(namespace, blob.Digest.Hex())
 	require.NoError(err)
 	result, err := ioutil.ReadAll(r)
 	require.NoError(err)
-	require.Equal(string(blob), string(result))
+	require.Equal(string(blob.Content), string(result))
 }
 
 func TestHealthHandler(t *testing.T) {

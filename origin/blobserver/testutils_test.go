@@ -1,12 +1,14 @@
 package blobserver
 
 import (
+	"bytes"
+	"crypto/rand"
 	"fmt"
 	"io/ioutil"
-	"log"
-	"math/rand"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/c2h5oh/datasize"
@@ -19,6 +21,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
+	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/stringset"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -31,6 +34,12 @@ const (
 )
 
 const namespace = "test-namespace"
+
+func init() {
+	zapConfig := zap.NewProductionConfig()
+	zapConfig.OutputPaths = []string{}
+	log.ConfigureLogger(zapConfig)
+}
 
 func configFixture() Config {
 	return Config{
@@ -205,60 +214,43 @@ func pickShard(config Config, hosts ...string) string {
 	panic(fmt.Sprintf("cannot find shard for hosts %v", hosts))
 }
 
-func blobFixture(size int64) (core.Digest, []byte) {
-	b := make([]byte, size)
-	_, err := rand.Read(b)
-	if err != nil {
-		panic(err)
-	}
-	d, err := core.NewDigester().FromBytes(b)
-	if err != nil {
-		panic(err)
-	}
-	return d, b
-}
-
 // computeBlobForShard generates a random digest / content which matches shardID.
 // XXX This function is not cheap! Each call takes around 0.1 seconds.
-func computeBlobForShard(shardID string) (core.Digest, []byte) {
-	b := make([]byte, 64)
+func computeBlobForShard(shardID string) *core.BlobFixture {
+	buf := make([]byte, 32)
 	for {
-		_, err := rand.Read(b)
+		if _, err := rand.Read(buf); err != nil {
+			panic(err)
+		}
+		d, err := core.NewDigester().FromBytes(buf)
 		if err != nil {
 			panic(err)
 		}
-		d, err := core.NewDigester().FromBytes(b)
+		if d.ShardID() != shardID {
+			continue
+		}
+		mi, err := core.NewMetaInfoFromBlob(d.Hex(), bytes.NewReader(buf), 1)
 		if err != nil {
 			panic(err)
 		}
-		if d.ShardID() == shardID {
-			return d, b
-		}
+		return core.CustomBlobFixture(buf, d, mi)
 	}
 }
 
 // computeBlobForHosts generates a random digest / content which shards to hosts.
-func computeBlobForHosts(config Config, hosts ...string) (core.Digest, []byte) {
-	b := make([]byte, 64)
+func computeBlobForHosts(config Config, hosts ...string) *core.BlobFixture {
 	for {
-		_, err := rand.Read(b)
-		if err != nil {
-			panic(err)
-		}
-		d, err := core.NewDigester().FromBytes(b)
-		if err != nil {
-			panic(err)
-		}
-		if hostsOwnShard(config, d.ShardID(), hosts...) {
-			return d, b
+		blob := core.SizedBlobFixture(32, 4)
+		if hostsOwnShard(config, blob.Digest.ShardID(), hosts...) {
+			return blob
 		}
 	}
 }
 
-func ensureHasBlob(t *testing.T, c blobclient.Client, d core.Digest, expected []byte) {
-	b, err := c.GetBlob(d)
+func ensureHasBlob(t *testing.T, c blobclient.Client, blob *core.BlobFixture) {
+	b, err := c.GetBlob(blob.Digest)
 	require.NoError(t, err)
 	result, err := ioutil.ReadAll(b)
 	require.NoError(t, err)
-	require.Equal(t, string(expected), string(result))
+	require.Equal(t, string(blob.Content), string(result))
 }

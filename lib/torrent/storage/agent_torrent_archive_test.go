@@ -20,13 +20,13 @@ func TestAgentTorrentArchiveStatBitfield(t *testing.T) {
 
 	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
 
-	tf := core.CustomTestTorrentFileFixture(4, 1)
-	mi := tf.MetaInfo
+	blob := core.SizedBlobFixture(4, 1)
+	mi := blob.MetaInfo
 
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(mi, nil).Times(1)
 
 	tor, err := archive.CreateTorrent(namespace, mi.Name())
-	require.NoError(tor.WritePiece(NewPieceReaderBuffer(tf.Content[2:3]), 2))
+	require.NoError(tor.WritePiece(NewPieceReaderBuffer(blob.Content[2:3]), 2))
 
 	info, err := archive.Stat(mi.Name())
 	require.NoError(err)

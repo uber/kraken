@@ -28,20 +28,21 @@ func TestOriginClusterTransfererDownloadCachesBlobs(t *testing.T) {
 
 	oct := NewOriginClusterTransferer(mockClusterClient, mockTagBackendClient, fs)
 
-	d, blob := core.DigestWithBlobFixture()
+	blob := core.NewBlobFixture()
 
-	mockClusterClient.EXPECT().DownloadBlob(d).Return(ioutil.NopCloser(bytes.NewReader(blob)), nil)
+	mockClusterClient.EXPECT().DownloadBlob(blob.Digest).Return(
+		ioutil.NopCloser(bytes.NewReader(blob.Content)), nil)
 
-	r, err := oct.Download(d.Hex())
+	r, err := oct.Download(blob.Digest.Hex())
 	require.NoError(err)
 	result, err := ioutil.ReadAll(r)
 	require.NoError(err)
-	require.Equal(string(blob), string(result))
+	require.Equal(string(blob.Content), string(result))
 
 	// Downloading again should use the cache (i.e. the mock should only be called once).
-	r, err = oct.Download(d.Hex())
+	r, err = oct.Download(blob.Digest.Hex())
 	require.NoError(err)
 	result, err = ioutil.ReadAll(r)
 	require.NoError(err)
-	require.Equal(string(blob), string(result))
+	require.Equal(string(blob.Content), string(result))
 }

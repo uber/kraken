@@ -63,12 +63,12 @@ func configFixture(nodes ...string) Config {
 func TestClientDownloadSuccess(t *testing.T) {
 	require := require.New(t)
 
-	d, blob := core.DigestWithBlobFixture()
+	blob := core.NewBlobFixture()
 
 	server := &testServer{
 		path:    "data/:blob",
 		getName: redirectToDataNode,
-		getData: writeResponse(http.StatusOK, blob),
+		getData: writeResponse(http.StatusOK, blob.Content),
 	}
 	addr, stop := testutil.StartServer(server.handler())
 	defer stop()
@@ -76,14 +76,14 @@ func TestClientDownloadSuccess(t *testing.T) {
 	client := newClient(configFixture(addr))
 
 	var b bytes.Buffer
-	require.NoError(client.download("data/"+d.Hex(), &b))
-	require.Equal(blob, b.Bytes())
+	require.NoError(client.download("data/"+blob.Digest.Hex(), &b))
+	require.Equal(blob.Content, b.Bytes())
 }
 
 func TestClientDownloadRetriesNextNameNode(t *testing.T) {
 	require := require.New(t)
 
-	d, blob := core.DigestWithBlobFixture()
+	blob := core.NewBlobFixture()
 
 	server1 := &testServer{
 		path:    "data/:blob",
@@ -96,7 +96,7 @@ func TestClientDownloadRetriesNextNameNode(t *testing.T) {
 	server2 := &testServer{
 		path:    "data/:blob",
 		getName: redirectToDataNode,
-		getData: writeResponse(http.StatusOK, blob),
+		getData: writeResponse(http.StatusOK, blob.Content),
 	}
 	addr2, stop := testutil.StartServer(server2.handler())
 	defer stop()
@@ -104,8 +104,8 @@ func TestClientDownloadRetriesNextNameNode(t *testing.T) {
 	client := newClient(configFixture(addr1, addr2))
 
 	var b bytes.Buffer
-	require.NoError(client.download("data/"+d.Hex(), &b))
-	require.Equal(blob, b.Bytes())
+	require.NoError(client.download("data/"+blob.Digest.Hex(), &b))
+	require.Equal(blob.Content, b.Bytes())
 }
 
 func TestClientDownloadErrBlobNotFound(t *testing.T) {
@@ -133,19 +133,19 @@ func TestClientDownloadErrBlobNotFound(t *testing.T) {
 func TestClientUploadSuccess(t *testing.T) {
 	require := require.New(t)
 
-	d, blob := core.DigestWithBlobFixture()
+	blob := core.NewBlobFixture()
 
 	server := &testServer{
 		path:    "data/:blob",
 		putName: redirectToDataNode,
-		putData: checkBody(t, blob),
+		putData: checkBody(t, blob.Content),
 	}
 	addr, stop := testutil.StartServer(server.handler())
 	defer stop()
 
 	client := newClient(configFixture(addr))
 
-	require.NoError(client.upload("data/"+d.Hex(), bytes.NewReader(blob)))
+	require.NoError(client.upload("data/"+blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 }
 
 func TestClientUploadUnknownFailure(t *testing.T) {
@@ -161,9 +161,9 @@ func TestClientUploadUnknownFailure(t *testing.T) {
 
 	client := newClient(configFixture(addr))
 
-	d, blob := core.DigestWithBlobFixture()
+	blob := core.NewBlobFixture()
 
-	require.Error(client.upload("data/"+d.Hex(), bytes.NewReader(blob)))
+	require.Error(client.upload("data/"+blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 }
 
 func TestClientUploadRetriesNextNameNode(t *testing.T) {
@@ -190,7 +190,7 @@ func TestClientUploadRetriesNextNameNode(t *testing.T) {
 		t.Run(test.desc, func(t *testing.T) {
 			require := require.New(t)
 
-			d, blob := core.DigestWithBlobFixture()
+			blob := core.NewBlobFixture()
 
 			addr1, stop := testutil.StartServer(test.server1.handler())
 			defer stop()
@@ -198,20 +198,20 @@ func TestClientUploadRetriesNextNameNode(t *testing.T) {
 			server2 := &testServer{
 				path:    "data/:blob",
 				putName: redirectToDataNode,
-				putData: checkBody(t, blob),
+				putData: checkBody(t, blob.Content),
 			}
 			addr2, stop := testutil.StartServer(server2.handler())
 			defer stop()
 
 			client := newClient(configFixture(addr1, addr2))
 
-			require.NoError(client.upload("data/"+d.Hex(), bytes.NewReader(blob)))
+			require.NoError(client.upload("data/"+blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 
 			// Ensure bytes.Buffer can replay data.
-			require.NoError(client.upload("data/"+d.Hex(), bytes.NewBuffer(blob)))
+			require.NoError(client.upload("data/"+blob.Digest.Hex(), bytes.NewBuffer(blob.Content)))
 
 			// Ensure non-buffer non-seekers can replay data.
-			require.NoError(client.upload("data/"+d.Hex(), rwutil.PlainReader(blob)))
+			require.NoError(client.upload("data/"+blob.Digest.Hex(), rwutil.PlainReader(blob.Content)))
 		})
 	}
 }
@@ -246,7 +246,7 @@ func TestAllClients(t *testing.T) {
 		desc   string
 		get    func(t *testing.T, config Config) backendClient
 		path   string
-		params func() (name string, blob []byte)
+		params func() (name string, data []byte)
 	}{
 		{
 			"docker blob client",
@@ -257,8 +257,8 @@ func TestAllClients(t *testing.T) {
 			},
 			"webhdfs/v1/infra/dockerRegistry/docker/registry/v2/blobs/sha256/:shard/:blob/data",
 			func() (string, []byte) {
-				d, blob := core.DigestWithBlobFixture()
-				return d.Hex(), blob
+				blob := core.NewBlobFixture()
+				return blob.Digest.Hex(), blob.Content
 			},
 		}, {
 			"docker tag client",
@@ -277,12 +277,12 @@ func TestAllClients(t *testing.T) {
 	for _, client := range clients {
 		t.Run(client.desc, func(t *testing.T) {
 			t.Run("download", func(t *testing.T) {
-				name, blob := client.params()
+				name, data := client.params()
 
 				server := &testServer{
 					path:    client.path,
 					getName: redirectToDataNode,
-					getData: writeResponse(http.StatusOK, blob),
+					getData: writeResponse(http.StatusOK, data),
 				}
 				addr, stop := testutil.StartServer(server.handler())
 				defer stop()
@@ -291,23 +291,23 @@ func TestAllClients(t *testing.T) {
 
 				var b bytes.Buffer
 				require.NoError(t, c.Download(name, &b))
-				require.Equal(t, blob, b.Bytes())
+				require.Equal(t, data, b.Bytes())
 			})
 
 			t.Run("upload", func(t *testing.T) {
-				name, blob := client.params()
+				name, data := client.params()
 
 				server := &testServer{
 					path:    client.path,
 					putName: redirectToDataNode,
-					putData: checkBody(t, blob),
+					putData: checkBody(t, data),
 				}
 				addr, stop := testutil.StartServer(server.handler())
 				defer stop()
 
 				c := client.get(t, configFixture(addr))
 
-				require.NoError(t, c.Upload(name, bytes.NewReader(blob)))
+				require.NoError(t, c.Upload(name, bytes.NewReader(data)))
 			})
 		})
 	}

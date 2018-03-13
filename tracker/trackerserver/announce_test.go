@@ -23,19 +23,19 @@ func TestAnnounceSinglePeerResponse(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
+	blob := core.NewBlobFixture()
 	pctx := core.PeerContextFixture()
-	mi := core.MetaInfoFixture()
-	peer := core.ToPeerInfoFixture(pctx, mi)
 
 	client := announceclient.New(pctx, serverset.MustRoundRobin(addr))
 
-	peers := []*core.PeerInfo{core.PeerInfoForMetaInfoFixture(mi)}
+	peers := []*core.PeerInfo{blob.PeerInfo()}
 
-	mocks.peerStore.EXPECT().GetOrigins(mi.InfoHash.HexString()).Return(nil, nil)
-	mocks.peerStore.EXPECT().GetPeers(mi.InfoHash.HexString(), gomock.Any()).Return(peers, nil)
-	mocks.peerStore.EXPECT().UpdatePeer(peer).Return(nil)
+	mocks.peerStore.EXPECT().GetOrigins(blob.MetaInfo.InfoHash.HexString()).Return(nil, nil)
+	mocks.peerStore.EXPECT().GetPeers(
+		blob.MetaInfo.InfoHash.HexString(), gomock.Any()).Return(peers, nil)
+	mocks.peerStore.EXPECT().UpdatePeer(blob.PeerInfoFromContext(pctx)).Return(nil)
 
-	result, err := client.Announce(mi.Name(), mi.InfoHash, false)
+	result, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
 	require.NoError(err)
 	require.Equal(peers, result)
 }
@@ -49,20 +49,20 @@ func TestAnnounceReturnsCachedOrigin(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
+	blob := core.NewBlobFixture()
 	pctx := core.PeerContextFixture()
 	octx := core.OriginContextFixture()
-	mi := core.MetaInfoFixture()
-	peer := core.ToPeerInfoFixture(pctx, mi)
 
 	client := announceclient.New(pctx, serverset.MustRoundRobin(addr))
 
-	origins := []*core.PeerInfo{core.ToPeerInfoFixture(octx, mi)}
+	origins := []*core.PeerInfo{blob.PeerInfoFromContext(octx)}
 
-	mocks.peerStore.EXPECT().GetOrigins(mi.InfoHash.HexString()).Return(origins, nil)
-	mocks.peerStore.EXPECT().GetPeers(mi.InfoHash.HexString(), gomock.Any()).Return(nil, nil)
-	mocks.peerStore.EXPECT().UpdatePeer(peer).Return(nil)
+	mocks.peerStore.EXPECT().GetOrigins(blob.MetaInfo.InfoHash.HexString()).Return(origins, nil)
+	mocks.peerStore.EXPECT().GetPeers(
+		blob.MetaInfo.InfoHash.HexString(), gomock.Any()).Return(nil, nil)
+	mocks.peerStore.EXPECT().UpdatePeer(blob.PeerInfoFromContext(pctx)).Return(nil)
 
-	result, err := client.Announce(mi.Name(), mi.InfoHash, false)
+	result, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
 	require.NoError(err)
 	require.Equal(origins, result)
 }
@@ -78,22 +78,22 @@ func TestAnnounceMissingOriginsFetchesAndCachesOrigins(t *testing.T) {
 
 	pctx := core.PeerContextFixture()
 	octx := core.OriginContextFixture()
-	mi := core.MetaInfoFixture()
-	peer := core.ToPeerInfoFixture(pctx, mi)
+	blob := core.NewBlobFixture()
 
 	client := announceclient.New(pctx, serverset.MustRoundRobin(addr))
 
-	origins := []*core.PeerInfo{core.ToPeerInfoFixture(octx, mi)}
+	origins := []*core.PeerInfo{blob.PeerInfoFromContext(octx)}
 
-	mocks.originCluster.EXPECT().Owners(
-		core.NewSHA256DigestFromHex(mi.Info.Name)).Return([]core.PeerContext{octx}, nil)
+	mocks.originCluster.EXPECT().Owners(blob.Digest).Return([]core.PeerContext{octx}, nil)
 
-	mocks.peerStore.EXPECT().UpdatePeer(peer).Return(nil)
-	mocks.peerStore.EXPECT().GetPeers(mi.InfoHash.HexString(), gomock.Any()).Return(nil, nil)
-	mocks.peerStore.EXPECT().GetOrigins(mi.InfoHash.HexString()).Return(nil, storage.ErrNoOrigins)
-	mocks.peerStore.EXPECT().UpdateOrigins(mi.InfoHash.HexString(), origins).Return(nil)
+	mocks.peerStore.EXPECT().UpdatePeer(blob.PeerInfoFromContext(pctx)).Return(nil)
+	mocks.peerStore.EXPECT().GetPeers(
+		blob.MetaInfo.InfoHash.HexString(), gomock.Any()).Return(nil, nil)
+	mocks.peerStore.EXPECT().GetOrigins(
+		blob.MetaInfo.InfoHash.HexString()).Return(nil, storage.ErrNoOrigins)
+	mocks.peerStore.EXPECT().UpdateOrigins(blob.MetaInfo.InfoHash.HexString(), origins).Return(nil)
 
-	result, err := client.Announce(mi.Name(), mi.InfoHash, false)
+	result, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
 	require.NoError(err)
 	require.Equal(origins, result)
 }
@@ -109,23 +109,22 @@ func TestAnnounceUnavailablePeerStoreCanStillProvideOrigins(t *testing.T) {
 
 	pctx := core.PeerContextFixture()
 	octx := core.OriginContextFixture()
-	mi := core.MetaInfoFixture()
-	peer := core.ToPeerInfoFixture(pctx, mi)
+	blob := core.NewBlobFixture()
 
 	client := announceclient.New(pctx, serverset.MustRoundRobin(addr))
 
-	origins := []*core.PeerInfo{core.ToPeerInfoFixture(octx, mi)}
+	origins := []*core.PeerInfo{blob.PeerInfoFromContext(octx)}
 
-	mocks.originCluster.EXPECT().Owners(
-		core.NewSHA256DigestFromHex(mi.Info.Name)).Return([]core.PeerContext{octx}, nil)
+	mocks.originCluster.EXPECT().Owners(blob.Digest).Return([]core.PeerContext{octx}, nil)
 
 	storageErr := errors.New("some storage error")
 
-	mocks.peerStore.EXPECT().UpdatePeer(peer).Return(storageErr)
-	mocks.peerStore.EXPECT().GetPeers(mi.InfoHash.HexString(), gomock.Any()).Return(nil, storageErr)
-	mocks.peerStore.EXPECT().GetOrigins(mi.InfoHash.HexString()).Return(nil, storageErr)
+	mocks.peerStore.EXPECT().UpdatePeer(blob.PeerInfoFromContext(pctx)).Return(storageErr)
+	mocks.peerStore.EXPECT().GetPeers(
+		blob.MetaInfo.InfoHash.HexString(), gomock.Any()).Return(nil, storageErr)
+	mocks.peerStore.EXPECT().GetOrigins(blob.MetaInfo.InfoHash.HexString()).Return(nil, storageErr)
 
-	result, err := client.Announce(mi.Name(), mi.InfoHash, false)
+	result, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
 	require.NoError(err)
 	require.Equal(origins, result)
 }
@@ -140,21 +139,21 @@ func TestAnnouceNoOriginsAndUnavailableOriginClusterCanStillProvidePeers(t *test
 	defer stop()
 
 	pctx := core.PeerContextFixture()
-	mi := core.MetaInfoFixture()
-	peer := core.ToPeerInfoFixture(pctx, mi)
+	blob := core.NewBlobFixture()
 
 	client := announceclient.New(pctx, serverset.MustRoundRobin(addr))
 
-	peers := []*core.PeerInfo{core.PeerInfoForMetaInfoFixture(mi)}
+	peers := []*core.PeerInfo{blob.PeerInfo()}
 
-	mocks.originCluster.EXPECT().Owners(
-		core.NewSHA256DigestFromHex(mi.Name())).Return(nil, errors.New("origin cluster error"))
+	mocks.originCluster.EXPECT().Owners(blob.Digest).Return(nil, errors.New("origin cluster error"))
 
-	mocks.peerStore.EXPECT().UpdatePeer(peer).Return(nil)
-	mocks.peerStore.EXPECT().GetPeers(mi.InfoHash.HexString(), gomock.Any()).Return(peers, nil)
-	mocks.peerStore.EXPECT().GetOrigins(mi.InfoHash.HexString()).Return(nil, storage.ErrNoOrigins)
+	mocks.peerStore.EXPECT().UpdatePeer(blob.PeerInfoFromContext(pctx)).Return(nil)
+	mocks.peerStore.EXPECT().GetPeers(
+		blob.MetaInfo.InfoHash.HexString(), gomock.Any()).Return(peers, nil)
+	mocks.peerStore.EXPECT().GetOrigins(
+		blob.MetaInfo.InfoHash.HexString()).Return(nil, storage.ErrNoOrigins)
 
-	result, err := client.Announce(mi.Name(), mi.InfoHash, false)
+	result, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
 	require.NoError(err)
 	require.Equal(peers, result)
 }

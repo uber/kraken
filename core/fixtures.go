@@ -2,36 +2,49 @@ package core
 
 import (
 	"bytes"
-	"io/ioutil"
-	"os"
 
 	"code.uber.internal/infra/kraken/utils/randutil"
 )
 
-const fixtureTempDir = "/tmp/kraken_fixtures"
-
-func init() {
-	os.Mkdir(fixtureTempDir, 0755)
+// BlobFixture joins all information associated with a blob for testing convenience.
+type BlobFixture struct {
+	Content  []byte
+	Digest   Digest
+	MetaInfo *MetaInfo
 }
 
-// PeerIDFixture returns a randomly generated PeerID.
-func PeerIDFixture() PeerID {
-	p, err := RandomPeerID()
+// CustomBlobFixture creates a BlobFixture with custom fields.
+func CustomBlobFixture(content []byte, digest Digest, mi *MetaInfo) *BlobFixture {
+	return &BlobFixture{content, digest, mi}
+}
+
+// SizedBlobFixture creates a randomly generated BlobFixture of given size with given piece lengths.
+func SizedBlobFixture(size uint64, pieceLength uint64) *BlobFixture {
+	b := randutil.Text(size)
+	d, err := NewDigester().FromBytes(b)
 	if err != nil {
 		panic(err)
 	}
-	return p
+	mi, err := NewMetaInfoFromBlob(d.Hex(), bytes.NewReader(b), int64(pieceLength))
+	if err != nil {
+		panic(err)
+	}
+	return &BlobFixture{
+		Content:  b,
+		Digest:   d,
+		MetaInfo: mi,
+	}
 }
 
-// InfoHashFixture returns a randomly generated InfoHash.
-func InfoHashFixture() InfoHash {
-	return MetaInfoFixture().InfoHash
+// NewBlobFixture creates a randomly generated BlobFixture.
+func NewBlobFixture() *BlobFixture {
+	return SizedBlobFixture(256, 8)
 }
 
-// PeerInfoFixture returns a randomly generated PeerInfo.
-func PeerInfoFixture() *PeerInfo {
+// PeerInfo returns a randomly generated PeerInfo for b.
+func (b *BlobFixture) PeerInfo() *PeerInfo {
 	return &PeerInfo{
-		InfoHash: InfoHashFixture().String(),
+		InfoHash: b.MetaInfo.InfoHash.String(),
 		PeerID:   PeerIDFixture().String(),
 		IP:       randutil.IP(),
 		Port:     int64(randutil.Port()),
@@ -39,27 +52,18 @@ func PeerInfoFixture() *PeerInfo {
 	}
 }
 
-// PeerInfoForMetaInfoFixture returns a randomly generated PeerInfo associated
-// with the given MetaInfo.
-func PeerInfoForMetaInfoFixture(mi *MetaInfo) *PeerInfo {
-	p := PeerInfoFixture()
-	p.InfoHash = mi.InfoHash.String()
+// OriginPeerInfo returns a randomly generated origin PeerInfo for b.
+func (b *BlobFixture) OriginPeerInfo() *PeerInfo {
+	p := b.PeerInfo()
+	p.Origin = true
+	p.Complete = true
 	return p
 }
 
-// OriginInfoForMetaInfoFixture returns a randomly generated origin PeerInfo associated
-// with the given MetaInfo.
-func OriginInfoForMetaInfoFixture(mi *MetaInfo) *PeerInfo {
-	o := PeerInfoForMetaInfoFixture(mi)
-	o.Origin = true
-	o.Complete = true
-	return o
-}
-
-// ToPeerInfoFixture joins pctx and mi into a PeerInfo.
-func ToPeerInfoFixture(pctx PeerContext, mi *MetaInfo) *PeerInfo {
-	p := PeerInfoFixture()
-	p.InfoHash = mi.InfoHash.String()
+// PeerInfoFromContext returns a randomly generated PeerInfo derived from pctx
+// for b.
+func (b *BlobFixture) PeerInfoFromContext(pctx PeerContext) *PeerInfo {
+	p := b.PeerInfo()
 	p.PeerID = pctx.PeerID.String()
 	p.IP = pctx.IP
 	p.Port = int64(pctx.Port)
@@ -71,81 +75,33 @@ func ToPeerInfoFixture(pctx PeerContext, mi *MetaInfo) *PeerInfo {
 	return p
 }
 
-// TestTorrentFile joins a MetaInfo with the file contents used to generate
-// said MetaInfo. Note, does not include any physical files so no cleanup is
-// necessary.
-type TestTorrentFile struct {
-	MetaInfo *MetaInfo
-	Content  []byte
+// PeerIDFixture returns a randomly generated PeerID.
+func PeerIDFixture() PeerID {
+	p, err := RandomPeerID()
+	if err != nil {
+		panic(err)
+	}
+	return p
 }
 
-// CustomTestTorrentFileFixture returns a randomly generated TestTorrentFile
-// of the given size and piece length.
-// TODO(codyg): Move this to storage package.
-func CustomTestTorrentFileFixture(size uint64, pieceLength uint64) *TestTorrentFile {
-	f, err := ioutil.TempFile(fixtureTempDir, "torrent_")
-	if err != nil {
-		panic(err)
-	}
-	defer os.Remove(f.Name())
-
-	content := randutil.Text(size)
-
-	digest, err := NewDigester().FromReader(bytes.NewBuffer(content))
-	if err != nil {
-		panic(err)
-	}
-
-	if err := ioutil.WriteFile(f.Name(), content, 0755); err != nil {
-		panic(err)
-	}
-
-	info, err := NewInfoFromFile(digest.Hex(), f.Name(), int64(pieceLength))
-	if err != nil {
-		panic(err)
-	}
-	mi, err := NewMetaInfoFromInfo(info, "")
-	if err != nil {
-		panic(err)
-	}
-
-	return &TestTorrentFile{mi, content}
-}
-
-// TestTorrentFileFixture returns a randomly generated TestTorrentFile.
-func TestTorrentFileFixture() *TestTorrentFile {
-	return CustomTestTorrentFileFixture(128, 32)
+// PeerInfoFixture returns a randomly generated PeerInfo.
+func PeerInfoFixture() *PeerInfo {
+	return NewBlobFixture().PeerInfo()
 }
 
 // MetaInfoFixture returns a randomly generated MetaInfo.
 func MetaInfoFixture() *MetaInfo {
-	return TestTorrentFileFixture().MetaInfo
+	return NewBlobFixture().MetaInfo
 }
 
-// CustomMetaInfoFixture returns a randomly generated MetaInfo of the given size
-// and piece length.
-func CustomMetaInfoFixture(size, pieceLength uint64) *MetaInfo {
-	return CustomTestTorrentFileFixture(size, pieceLength).MetaInfo
+// InfoHashFixture returns a randomly generated InfoHash.
+func InfoHashFixture() InfoHash {
+	return MetaInfoFixture().InfoHash
 }
 
 // DigestFixture returns a random Digest.
 func DigestFixture() Digest {
-	b := randutil.Text(32)
-	d, err := NewDigester().FromBytes(b)
-	if err != nil {
-		panic(err)
-	}
-	return d
-}
-
-// DigestWithBlobFixture returns a random digest and its corresponding blob.
-func DigestWithBlobFixture() (d Digest, blob []byte) {
-	blob = randutil.Text(256)
-	d, err := NewDigester().FromBytes(blob)
-	if err != nil {
-		panic(err)
-	}
-	return d, blob
+	return NewBlobFixture().Digest
 }
 
 // PeerContextFixture returns a randomly generated PeerContext.

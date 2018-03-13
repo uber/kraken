@@ -59,10 +59,10 @@ func TestOriginTorrentArchiveGetTorrent(t *testing.T) {
 
 	archive := NewOriginTorrentArchive(fs)
 
-	tf := core.CustomTestTorrentFileFixture(4, 1)
-	mi := tf.MetaInfo
+	blob := core.SizedBlobFixture(4, 1)
+	mi := blob.MetaInfo
 
-	setupOriginTorrent(t, fs, mi, tf.Content)
+	setupOriginTorrent(t, fs, mi, blob.Content)
 
 	tor, err := archive.GetTorrent(mi.Name())
 	require.NoError(err)
@@ -77,10 +77,10 @@ func TestOriginTorrentArchiveDeleteTorrent(t *testing.T) {
 
 	archive := NewOriginTorrentArchive(fs)
 
-	tf := core.CustomTestTorrentFileFixture(4, 1)
-	mi := tf.MetaInfo
+	blob := core.SizedBlobFixture(4, 1)
+	mi := blob.MetaInfo
 
-	setupOriginTorrent(t, fs, mi, tf.Content)
+	setupOriginTorrent(t, fs, mi, blob.Content)
 
 	_, err := archive.Stat(mi.Name())
 	require.NoError(err)
