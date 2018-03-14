@@ -18,7 +18,7 @@ func NewDefaultPeerSamplingPolicy() PeerSamplingPolicy {
 func (p *DefaultPeerSamplingPolicy) SamplePeers(
 	peers []*core.PeerInfo, n int) ([]*core.PeerInfo, error) {
 
-	return sortedPeers(peers, n, func(s peerInfos) {
-		sort.Sort(byPriority{s})
+	return sortedPeers(peers, n, func(s core.PeerInfos) {
+		sort.Sort(core.PeersByPriority{PeerInfos: s})
 	}), nil
 }

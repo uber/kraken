@@ -41,40 +41,6 @@ func NewBlobFixture() *BlobFixture {
 	return SizedBlobFixture(256, 8)
 }
 
-// PeerInfo returns a randomly generated PeerInfo for b.
-func (b *BlobFixture) PeerInfo() *PeerInfo {
-	return &PeerInfo{
-		InfoHash: b.MetaInfo.InfoHash.String(),
-		PeerID:   PeerIDFixture().String(),
-		IP:       randutil.IP(),
-		Port:     int64(randutil.Port()),
-		Complete: false,
-	}
-}
-
-// OriginPeerInfo returns a randomly generated origin PeerInfo for b.
-func (b *BlobFixture) OriginPeerInfo() *PeerInfo {
-	p := b.PeerInfo()
-	p.Origin = true
-	p.Complete = true
-	return p
-}
-
-// PeerInfoFromContext returns a randomly generated PeerInfo derived from pctx
-// for b.
-func (b *BlobFixture) PeerInfoFromContext(pctx PeerContext) *PeerInfo {
-	p := b.PeerInfo()
-	p.PeerID = pctx.PeerID.String()
-	p.IP = pctx.IP
-	p.Port = int64(pctx.Port)
-	p.DC = pctx.Zone
-	p.Origin = pctx.Origin
-	if p.Origin {
-		p.Complete = true
-	}
-	return p
-}
-
 // PeerIDFixture returns a randomly generated PeerID.
 func PeerIDFixture() PeerID {
 	p, err := RandomPeerID()
@@ -86,7 +52,12 @@ func PeerIDFixture() PeerID {
 
 // PeerInfoFixture returns a randomly generated PeerInfo.
 func PeerInfoFixture() *PeerInfo {
-	return NewBlobFixture().PeerInfo()
+	return NewPeerInfo(PeerIDFixture(), randutil.IP(), randutil.Port(), false, false)
+}
+
+// OriginPeerInfoFixture returns a randomly generated PeerInfo for an origin.
+func OriginPeerInfoFixture() *PeerInfo {
+	return NewPeerInfo(PeerIDFixture(), randutil.IP(), randutil.Port(), true, true)
 }
 
 // MetaInfoFixture returns a randomly generated MetaInfo.

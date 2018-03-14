@@ -44,23 +44,23 @@ func (s *testMetaInfoStore) SetMetaInfo(mi *core.MetaInfo) error {
 
 type testPeerStore struct {
 	sync.Mutex
-	torrents map[string][]core.PeerInfo
+	torrents map[core.InfoHash][]core.PeerInfo
 }
 
 // TestPeerStore returns a thread-safe, in-memory peer store for testing purposes.
 func TestPeerStore() PeerStore {
 	return &testPeerStore{
-		torrents: make(map[string][]core.PeerInfo),
+		torrents: make(map[core.InfoHash][]core.PeerInfo),
 	}
 }
 
-func (s *testPeerStore) UpdatePeer(p *core.PeerInfo) error {
+func (s *testPeerStore) UpdatePeer(h core.InfoHash, p *core.PeerInfo) error {
 	s.Lock()
 	defer s.Unlock()
 
-	peers, ok := s.torrents[p.InfoHash]
+	peers, ok := s.torrents[h]
 	if !ok {
-		s.torrents[p.InfoHash] = []core.PeerInfo{*p}
+		s.torrents[h] = []core.PeerInfo{*p}
 		return nil
 	}
 	for i := range peers {
@@ -69,15 +69,15 @@ func (s *testPeerStore) UpdatePeer(p *core.PeerInfo) error {
 			return nil
 		}
 	}
-	s.torrents[p.InfoHash] = append(peers, *p)
+	s.torrents[h] = append(peers, *p)
 	return nil
 }
 
-func (s *testPeerStore) GetPeers(infoHash string, n int) ([]*core.PeerInfo, error) {
+func (s *testPeerStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	peers, ok := s.torrents[infoHash]
+	peers, ok := s.torrents[h]
 	if !ok {
 		return nil, errors.New("no peers found for info hash")
 	}
@@ -89,10 +89,10 @@ func (s *testPeerStore) GetPeers(infoHash string, n int) ([]*core.PeerInfo, erro
 	return copies, nil
 }
 
-func (s *testPeerStore) GetOrigins(string) ([]*core.PeerInfo, error) {
+func (s *testPeerStore) GetOrigins(core.InfoHash) ([]*core.PeerInfo, error) {
 	return nil, nil
 }
 
-func (s *testPeerStore) UpdateOrigins(string, []*core.PeerInfo) error {
+func (s *testPeerStore) UpdateOrigins(core.InfoHash, []*core.PeerInfo) error {
 	return nil
 }

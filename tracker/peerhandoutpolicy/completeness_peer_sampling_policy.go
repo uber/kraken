@@ -20,8 +20,8 @@ func NewCompletenessPeerSamplingPolicy() PeerSamplingPolicy {
 func (p *CompletenessPeerSamplingPolicy) SamplePeers(
 	peers []*core.PeerInfo, n int) ([]*core.PeerInfo, error) {
 
-	return sortedPeers(peers, n, func(s peerInfos) {
-		sort.Sort(byPriority{s})
-		sort.Stable(byComplete{s})
+	return sortedPeers(peers, n, func(s core.PeerInfos) {
+		sort.Sort(core.PeersByPriority{PeerInfos: s})
+		sort.Stable(core.PeersByComplete{PeerInfos: s})
 	}), nil
 }

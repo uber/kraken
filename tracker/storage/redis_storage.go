@@ -19,12 +19,12 @@ var (
 	ErrNoOrigins = errors.New("no origins found")
 )
 
-func peerSetKey(infoHash string, window int64) string {
-	return fmt.Sprintf("peerset:%s:%d", infoHash, window)
+func peerSetKey(h core.InfoHash, window int64) string {
+	return fmt.Sprintf("peerset:%s:%d", h.String(), window)
 }
 
-func originsKey(infoHash string) string {
-	return fmt.Sprintf("origins:%s", infoHash)
+func originsKey(h core.InfoHash) string {
+	return fmt.Sprintf("origins:%s", h.String())
 }
 
 func metaInfoKey(name string) string {
@@ -36,13 +36,13 @@ func serializePeer(p *core.PeerInfo) string {
 	if p.Complete {
 		completeBit = 1
 	}
-	return fmt.Sprintf("%s:%s:%d:%d", p.PeerID, p.IP, p.Port, completeBit)
+	return fmt.Sprintf("%s:%s:%d:%d", p.PeerID.String(), p.IP, p.Port, completeBit)
 }
 
 type peerIdentity struct {
-	PeerID string
-	IP     string
-	Port   int64
+	peerID core.PeerID
+	ip     string
+	port   int
 }
 
 func deserializePeer(s string) (id peerIdentity, complete bool, err error) {
@@ -50,11 +50,14 @@ func deserializePeer(s string) (id peerIdentity, complete bool, err error) {
 	if len(parts) != 4 {
 		return id, false, fmt.Errorf("invalid peer encoding: expected 'pid:ip:port:complete'")
 	}
-	peerID := parts[0]
-	ip := parts[1]
-	port, err := strconv.ParseInt(parts[2], 10, 64)
+	peerID, err := core.NewPeerID(parts[0])
 	if err != nil {
-		return id, false, fmt.Errorf("cannot parse port: %s", err)
+		return id, false, fmt.Errorf("parse peer id: %s", err)
+	}
+	ip := parts[1]
+	port, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return id, false, fmt.Errorf("parse port: %s", err)
 	}
 	id = peerIdentity{peerID, ip, port}
 	complete = parts[3] == "1"
@@ -122,7 +125,7 @@ func (s *RedisStorage) peerSetWindows() []int64 {
 }
 
 // UpdatePeer writes p to Redis with a TTL.
-func (s *RedisStorage) UpdatePeer(p *core.PeerInfo) error {
+func (s *RedisStorage) UpdatePeer(h core.InfoHash, p *core.PeerInfo) error {
 	c := s.pool.Get()
 	defer c.Close()
 
@@ -130,7 +133,7 @@ func (s *RedisStorage) UpdatePeer(p *core.PeerInfo) error {
 	expireAt := w + int64(s.config.PeerSetWindowSize.Seconds())*int64(s.config.MaxPeerSetWindows)
 
 	// Add p to the current window.
-	k := peerSetKey(p.InfoHash, w)
+	k := peerSetKey(h, w)
 
 	c.Send("MULTI")
 	c.Send("SADD", k, serializePeer(p))
@@ -140,8 +143,8 @@ func (s *RedisStorage) UpdatePeer(p *core.PeerInfo) error {
 	return err
 }
 
-// GetPeers returns at most n PeerInfos associated with infoHash.
-func (s *RedisStorage) GetPeers(infoHash string, n int) ([]*core.PeerInfo, error) {
+// GetPeers returns at most n PeerInfos associated with h.
+func (s *RedisStorage) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) {
 	c := s.pool.Get()
 	defer c.Close()
 
@@ -155,11 +158,11 @@ func (s *RedisStorage) GetPeers(infoHash string, n int) ([]*core.PeerInfo, error
 	randutil.ShuffleInt64s(windows)
 
 	// Eliminate duplicates from other windows and collapses complete bits.
-	peers := make(map[peerIdentity]bool)
+	selected := make(map[peerIdentity]bool)
 
 	var i int
-	for len(peers) < n && i < len(windows) {
-		result, err := redis.Strings(c.Do("SRANDMEMBER", peerSetKey(infoHash, windows[i]), n-len(peers)))
+	for len(selected) < n && i < len(windows) {
+		result, err := redis.Strings(c.Do("SRANDMEMBER", peerSetKey(h, windows[i]), n-len(selected)))
 		if err != nil {
 			return nil, err
 		}
@@ -169,33 +172,26 @@ func (s *RedisStorage) GetPeers(infoHash string, n int) ([]*core.PeerInfo, error
 				log.Errorf("Error deserializing peer %q: %s", s, err)
 				continue
 			}
-			peers[id] = peers[id] || complete
+			selected[id] = selected[id] || complete
 		}
 		i++
 	}
 
-	peerInfos := make([]*core.PeerInfo, 0, len(peers))
-	for id, complete := range peers {
-		p := &core.PeerInfo{
-			InfoHash: infoHash,
-			PeerID:   id.PeerID,
-			IP:       id.IP,
-			Port:     id.Port,
-			Complete: complete,
-		}
-		peerInfos = append(peerInfos, p)
+	var peers []*core.PeerInfo
+	for id, complete := range selected {
+		p := core.NewPeerInfo(id.peerID, id.ip, id.port, false, complete)
+		peers = append(peers, p)
 	}
-
-	return peerInfos, nil
+	return peers, nil
 }
 
-// GetOrigins returns all origin PeerInfos for infoHash. Returns ErrNoOrigins if
+// GetOrigins returns all origin PeerInfos for h. Returns ErrNoOrigins if
 // no origins exist in Redis.
-func (s *RedisStorage) GetOrigins(infoHash string) ([]*core.PeerInfo, error) {
+func (s *RedisStorage) GetOrigins(h core.InfoHash) ([]*core.PeerInfo, error) {
 	c := s.pool.Get()
 	defer c.Close()
 
-	result, err := redis.String(c.Do("GET", originsKey(infoHash)))
+	result, err := redis.String(c.Do("GET", originsKey(h)))
 	if err != nil {
 		if err == redis.ErrNil {
 			return nil, ErrNoOrigins
@@ -203,28 +199,21 @@ func (s *RedisStorage) GetOrigins(infoHash string) ([]*core.PeerInfo, error) {
 		return nil, err
 	}
 
-	var peerInfos []*core.PeerInfo
+	var origins []*core.PeerInfo
 	for _, s := range strings.Split(result, ",") {
 		id, complete, err := deserializePeer(s)
 		if err != nil {
 			log.Errorf("Error deserializing origin %q: %s", s, err)
 			continue
 		}
-		p := &core.PeerInfo{
-			InfoHash: infoHash,
-			PeerID:   id.PeerID,
-			IP:       id.IP,
-			Port:     id.Port,
-			Complete: complete,
-			Origin:   true,
-		}
-		peerInfos = append(peerInfos, p)
+		o := core.NewPeerInfo(id.peerID, id.ip, id.port, true, complete)
+		origins = append(origins, o)
 	}
-	return peerInfos, nil
+	return origins, nil
 }
 
-// UpdateOrigins overwrites all origin PeerInfos for infoHash with the given origins.
-func (s *RedisStorage) UpdateOrigins(infoHash string, origins []*core.PeerInfo) error {
+// UpdateOrigins overwrites all origin PeerInfos for h with the given origins.
+func (s *RedisStorage) UpdateOrigins(h core.InfoHash, origins []*core.PeerInfo) error {
 	c := s.pool.Get()
 	defer c.Close()
 
@@ -234,12 +223,11 @@ func (s *RedisStorage) UpdateOrigins(infoHash string, origins []*core.PeerInfo) 
 	}
 	v := strings.Join(serializedOrigins, ",")
 
-	_, err := c.Do("SETEX", originsKey(infoHash), int(s.config.OriginsTTL.Seconds()), v)
+	_, err := c.Do("SETEX", originsKey(h), int(s.config.OriginsTTL.Seconds()), v)
 	return err
 }
 
-// GetMetaInfo returns metainfo for the given file name. Returns ErrNotFound if
-// no metainfo exists for name.
+// GetMetaInfo returns metainfo for name. Returns ErrNotFound if no metainfo exists for name.
 func (s *RedisStorage) GetMetaInfo(name string) ([]byte, error) {
 	c := s.pool.Get()
 	defer c.Close()

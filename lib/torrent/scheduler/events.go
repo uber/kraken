@@ -237,39 +237,32 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 		// Torrent is already complete, don't open any new connections.
 		return
 	}
-	for i := 0; i < len(e.peers); i++ {
-		p := e.peers[i]
-		peerID, err := core.NewPeerID(p.PeerID)
-		if err != nil {
-			s.log("peer", p.PeerID, "hash", e.infoHash).Errorf(
-				"Error creating PeerID from announce response: %s", err)
-			continue
-		}
-		if peerID == s.pctx.PeerID {
+	for _, p := range e.peers {
+		if p.PeerID == s.pctx.PeerID {
 			// Tracker may return our own peer.
 			continue
 		}
-		if s.connState.Blacklisted(peerID, e.infoHash) {
+		if s.connState.Blacklisted(p.PeerID, e.infoHash) {
 			continue
 		}
-		if err := s.connState.AddPending(peerID, e.infoHash); err != nil {
+		if err := s.connState.AddPending(p.PeerID, e.infoHash); err != nil {
 			if err == errTorrentAtCapacity {
 				break
 			}
 			continue
 		}
-		go func() {
-			addr := fmt.Sprintf("%s:%d", p.IP, int(p.Port))
+		go func(p *core.PeerInfo) {
+			addr := fmt.Sprintf("%s:%d", p.IP, p.Port)
 			info := ctrl.dispatcher.Stat()
-			c, bitfield, err := s.handshaker.Initialize(peerID, addr, info)
+			c, bitfield, err := s.handshaker.Initialize(p.PeerID, addr, info)
 			if err != nil {
-				s.log("peer", peerID, "hash", e.infoHash, "addr", addr).Infof(
+				s.log("peer", p.PeerID, "hash", e.infoHash, "addr", addr).Infof(
 					"Failed handshake: %s", err)
-				s.eventLoop.Send(failedOutgoingHandshakeEvent{peerID, e.infoHash})
+				s.eventLoop.Send(failedOutgoingHandshakeEvent{p.PeerID, e.infoHash})
 				return
 			}
 			s.eventLoop.Send(outgoingConnEvent{c, bitfield, info})
-		}()
+		}(p)
 	}
 }
 

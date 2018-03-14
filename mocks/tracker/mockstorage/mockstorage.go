@@ -47,7 +47,7 @@ func (mr *MockStorageMockRecorder) GetMetaInfo(arg0 interface{}) *gomock.Call {
 }
 
 // GetOrigins mocks base method
-func (m *MockStorage) GetOrigins(arg0 string) ([]*core.PeerInfo, error) {
+func (m *MockStorage) GetOrigins(arg0 core.InfoHash) ([]*core.PeerInfo, error) {
 	ret := m.ctrl.Call(m, "GetOrigins", arg0)
 	ret0, _ := ret[0].([]*core.PeerInfo)
 	ret1, _ := ret[1].(error)
@@ -60,7 +60,7 @@ func (mr *MockStorageMockRecorder) GetOrigins(arg0 interface{}) *gomock.Call {
 }
 
 // GetPeers mocks base method
-func (m *MockStorage) GetPeers(arg0 string, arg1 int) ([]*core.PeerInfo, error) {
+func (m *MockStorage) GetPeers(arg0 core.InfoHash, arg1 int) ([]*core.PeerInfo, error) {
 	ret := m.ctrl.Call(m, "GetPeers", arg0, arg1)
 	ret0, _ := ret[0].([]*core.PeerInfo)
 	ret1, _ := ret[1].(error)
@@ -85,7 +85,7 @@ func (mr *MockStorageMockRecorder) SetMetaInfo(arg0 interface{}) *gomock.Call {
 }
 
 // UpdateOrigins mocks base method
-func (m *MockStorage) UpdateOrigins(arg0 string, arg1 []*core.PeerInfo) error {
+func (m *MockStorage) UpdateOrigins(arg0 core.InfoHash, arg1 []*core.PeerInfo) error {
 	ret := m.ctrl.Call(m, "UpdateOrigins", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -97,13 +97,13 @@ func (mr *MockStorageMockRecorder) UpdateOrigins(arg0, arg1 interface{}) *gomock
 }
 
 // UpdatePeer mocks base method
-func (m *MockStorage) UpdatePeer(arg0 *core.PeerInfo) error {
-	ret := m.ctrl.Call(m, "UpdatePeer", arg0)
+func (m *MockStorage) UpdatePeer(arg0 core.InfoHash, arg1 *core.PeerInfo) error {
+	ret := m.ctrl.Call(m, "UpdatePeer", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdatePeer indicates an expected call of UpdatePeer
-func (mr *MockStorageMockRecorder) UpdatePeer(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePeer", reflect.TypeOf((*MockStorage)(nil).UpdatePeer), arg0)
+func (mr *MockStorageMockRecorder) UpdatePeer(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePeer", reflect.TypeOf((*MockStorage)(nil).UpdatePeer), arg0, arg1)
 }

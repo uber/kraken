@@ -1,11 +1,10 @@
 package announceclient
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
-	"strconv"
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
@@ -15,6 +14,18 @@ import (
 )
 
 const _timeout = 30 * time.Second
+
+// Request defines an announce request.
+type Request struct {
+	Name     string         `json:"name"`
+	InfoHash core.InfoHash  `json:"info_hash"`
+	Peer     *core.PeerInfo `json:"peer"`
+}
+
+// Response defines an announce response.
+type Response struct {
+	Peers []*core.PeerInfo `json:"peers"`
+}
 
 // Client defines a client for announcing and getting peers.
 type Client interface {
@@ -36,22 +47,19 @@ func New(pctx core.PeerContext, servers serverset.Set) *HTTPClient {
 // downloaded bytes. Returns a list of all other peers announcing for said torrent,
 // sorted by priority.
 func (c *HTTPClient) Announce(name string, h core.InfoHash, complete bool) ([]*core.PeerInfo, error) {
-	v := url.Values{}
-
-	v.Add("name", name)
-	v.Add("info_hash", h.String())
-	v.Add("peer_id", c.pctx.PeerID.String())
-	v.Add("port", strconv.Itoa(c.pctx.Port))
-	v.Add("ip", c.pctx.IP)
-	v.Add("dc", c.pctx.Zone)
-	v.Add("complete", strconv.FormatBool(complete))
-
-	q := v.Encode()
-
+	body, err := json.Marshal(&Request{
+		Name:     name,
+		InfoHash: h,
+		Peer:     core.PeerInfoFromContext(c.pctx, complete),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %s", err)
+	}
 	it := c.servers.Iter()
 	for it.Next() {
-		resp, err := httputil.Get(
-			fmt.Sprintf("http://%s/announce?%s", it.Addr(), q),
+		httpResp, err := httputil.Get(
+			fmt.Sprintf("http://%s/announce", it.Addr()),
+			httputil.SendBody(bytes.NewReader(body)),
 			httputil.SendTimeout(_timeout))
 		if err != nil {
 			if _, ok := err.(httputil.NetworkError); ok {
@@ -60,14 +68,12 @@ func (c *HTTPClient) Announce(name string, h core.InfoHash, complete bool) ([]*c
 			}
 			return nil, err
 		}
-		defer resp.Body.Close()
-		var b struct {
-			Peers []*core.PeerInfo `json:"peers"`
+		defer httpResp.Body.Close()
+		var resp Response
+		if err := json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
+			return nil, fmt.Errorf("decode response: %s", err)
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&b); err != nil {
-			return nil, fmt.Errorf("unmarshal failed: %s", err)
-		}
-		return b.Peers, nil
+		return resp.Peers, nil
 	}
 	return nil, it.Err()
 }
