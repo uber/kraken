@@ -4,9 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"time"
 
 	dockercontext "github.com/docker/distribution/context"
 	docker "github.com/docker/distribution/registry"
+	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/agent/agentserver"
 	"code.uber.internal/infra/kraken/core"
@@ -24,6 +26,15 @@ import (
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
+
+// heartbeat periodically emits a counter metric which allows us to monitor the
+// number of active agents.
+func heartbeat(stats tally.Scope) {
+	for {
+		stats.Counter("heartbeat").Inc(1)
+		time.Sleep(10 * time.Second)
+	}
+}
 
 func main() {
 	peerIP := flag.String("peer_ip", "", "ip which peer will announce itself as")
@@ -112,6 +123,8 @@ func main() {
 	go func() {
 		log.Fatal(registry.ListenAndServe())
 	}()
+
+	go heartbeat(stats)
 
 	select {}
 }
