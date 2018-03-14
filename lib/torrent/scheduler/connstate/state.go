@@ -1,0 +1,225 @@
+package connstate
+
+import (
+	"errors"
+	"time"
+
+	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
+	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/andres-erbsen/clock"
+)
+
+// State errors.
+var (
+	ErrTorrentAtCapacity       = errors.New("torrent is at capacity")
+	ErrConnAlreadyPending      = errors.New("conn is already pending")
+	ErrConnAlreadyActive       = errors.New("conn is already active")
+	ErrInvalidActiveTransition = errors.New("conn must be pending to transition to active")
+)
+
+type connKey struct {
+	peerID   core.PeerID
+	infoHash core.InfoHash
+}
+
+type blacklistEntry struct {
+	expiration time.Time
+}
+
+func (e *blacklistEntry) Blacklisted(now time.Time) bool {
+	return e.Remaining(now) > 0
+}
+
+func (e *blacklistEntry) Remaining(now time.Time) time.Duration {
+	return e.expiration.Sub(now)
+}
+
+// State provides connection lifecycle management and enforces connection
+// limits. A connection to a peer is identified by peer id and torrent info hash.
+// Each connection may exist in the following states: pending, active, or
+// blacklisted. Pending connections are unestablished connections which "reserve"
+// connection capacity until they are done handshaking. Active connections are
+// established connections. Blacklisted connections are failed connections which
+// should be skipped in each peer handout.
+//
+// Note, State is NOT thread-safe. Synchronization must be provided by the client.
+type State struct {
+	config      Config
+	clk         clock.Clock
+	netevents   networkevent.Producer
+	localPeerID core.PeerID
+	capacity    map[core.InfoHash]int
+	active      map[connKey]*conn.Conn
+	pending     map[connKey]bool
+	blacklist   map[connKey]*blacklistEntry
+}
+
+// New creates a new State.
+func New(
+	config Config,
+	clk clock.Clock,
+	localPeerID core.PeerID,
+	netevents networkevent.Producer) *State {
+
+	config = config.applyDefaults()
+
+	return &State{
+		config:      config,
+		clk:         clk,
+		netevents:   netevents,
+		localPeerID: localPeerID,
+		capacity:    make(map[core.InfoHash]int),
+		active:      make(map[connKey]*conn.Conn),
+		pending:     make(map[connKey]bool),
+		blacklist:   make(map[connKey]*blacklistEntry),
+	}
+}
+
+// ActiveConns returns a list of all active connections.
+func (s *State) ActiveConns() []*conn.Conn {
+	conns := make([]*conn.Conn, 0, len(s.active))
+	for _, c := range s.active {
+		conns = append(conns, c)
+	}
+	return conns
+}
+
+// NumActiveConns returns the total number of active connections.
+func (s *State) NumActiveConns() int {
+	return len(s.active)
+}
+
+// Blacklist blacklists peerID/h for the configured BlacklistDuration.
+// Returns error if the connection is already blacklisted.
+func (s *State) Blacklist(peerID core.PeerID, h core.InfoHash) error {
+	if s.config.DisableBlacklist {
+		return nil
+	}
+
+	k := connKey{peerID, h}
+	if e, ok := s.blacklist[k]; ok && e.Blacklisted(s.clk.Now()) {
+		return errors.New("conn is already blacklisted")
+	}
+	s.blacklist[k] = &blacklistEntry{s.clk.Now().Add(s.config.BlacklistDuration)}
+
+	log.With("peer", peerID, "hash", h).Infof(
+		"Connection blacklisted for %s", s.config.BlacklistDuration)
+	s.netevents.Produce(
+		networkevent.BlacklistConnEvent(h, s.localPeerID, peerID, s.config.BlacklistDuration))
+
+	return nil
+}
+
+// Blacklisted returns true if peerID/h is blacklisted.
+func (s *State) Blacklisted(peerID core.PeerID, h core.InfoHash) bool {
+	e, ok := s.blacklist[connKey{peerID, h}]
+	return ok && e.Blacklisted(s.clk.Now())
+}
+
+// ClearBlacklist un-blacklists all connections for h.
+func (s *State) ClearBlacklist(h core.InfoHash) {
+	for k := range s.blacklist {
+		if k.infoHash == h {
+			delete(s.blacklist, k)
+		}
+	}
+}
+
+// AddPending sets the connection for peerID/h as pending and reserves capacity
+// for it.
+func (s *State) AddPending(peerID core.PeerID, h core.InfoHash) error {
+	k := connKey{peerID, h}
+	cap, ok := s.capacity[h]
+	if !ok {
+		cap = s.config.MaxOpenConnectionsPerTorrent
+		s.capacity[h] = cap
+	}
+	if cap == 0 {
+		return ErrTorrentAtCapacity
+	}
+	if s.pending[k] {
+		return ErrConnAlreadyPending
+	}
+	if _, ok := s.active[k]; ok {
+		return ErrConnAlreadyActive
+	}
+	s.pending[k] = true
+	s.capacity[k.infoHash]--
+
+	log.With("peer", peerID, "hash", h).Infof(
+		"Added pending conn, capacity now at %d", s.capacity[k.infoHash])
+
+	return nil
+}
+
+// DeletePending deletes the pending connection for peerID/h and frees capacity.
+func (s *State) DeletePending(peerID core.PeerID, h core.InfoHash) {
+	k := connKey{peerID, h}
+	if !s.pending[k] {
+		return
+	}
+	delete(s.pending, k)
+	s.capacity[k.infoHash]++
+
+	log.With("peer", peerID, "hash", h).Infof(
+		"Deleted pending conn, capacity now at %d", s.capacity[k.infoHash])
+}
+
+// MovePendingToActive sets a previously pending connection as active.
+func (s *State) MovePendingToActive(c *conn.Conn) error {
+	k := connKey{c.PeerID(), c.InfoHash()}
+	if !s.pending[k] {
+		return ErrInvalidActiveTransition
+	}
+	delete(s.pending, k)
+	s.active[k] = c
+
+	log.With("peer", k.peerID, "hash", k.infoHash).Info("Moved conn from pending to active")
+	s.netevents.Produce(networkevent.AddActiveConnEvent(
+		c.InfoHash(), s.localPeerID, c.PeerID()))
+
+	return nil
+}
+
+// DeleteActive deletes c. No-ops if c is not an active conn.
+func (s *State) DeleteActive(c *conn.Conn) {
+	k := connKey{c.PeerID(), c.InfoHash()}
+	cur, ok := s.active[k]
+	if !ok || cur != c {
+		// It is possible that some new conn shares the same connKey as the old conn,
+		// so we need to make sure we're deleting the right one.
+		return
+	}
+	delete(s.active, k)
+	s.capacity[k.infoHash]++
+
+	log.With("peer", k.peerID, "hash", k.infoHash).Infof(
+		"Deleted active conn, capacity now at %d", s.capacity[k.infoHash])
+	s.netevents.Produce(networkevent.DropActiveConnEvent(
+		c.InfoHash(), s.localPeerID, c.PeerID()))
+
+	return
+}
+
+// BlacklistedConn represents a connection which has been blacklisted.
+type BlacklistedConn struct {
+	PeerID    core.PeerID   `json:"peer_id"`
+	InfoHash  core.InfoHash `json:"info_hash"`
+	Remaining time.Duration `json:"remaining"`
+}
+
+// BlacklistSnapshot returns a snapshot of all valid blacklist entries.
+func (s *State) BlacklistSnapshot() []BlacklistedConn {
+	var conns []BlacklistedConn
+	for k, e := range s.blacklist {
+		c := BlacklistedConn{
+			PeerID:    k.peerID,
+			InfoHash:  k.infoHash,
+			Remaining: e.Remaining(s.clk.Now()),
+		}
+		conns = append(conns, c)
+	}
+	return conns
+}

@@ -41,10 +41,10 @@ func TorrentFixture(mi *core.MetaInfo) (Torrent, func()) {
 	return tor, cleanup.Run
 }
 
-// TorrentInfoFixture returns a TorrentInfo for the given size and piece length.
+// TorrentInfoFixture returns a randomly generated TorrentInfo for testing purposes.
 func TorrentInfoFixture(size, pieceLength uint64) (*TorrentInfo, func()) {
-	torrent, cleanup := TorrentFixture(core.SizedBlobFixture(size, pieceLength).MetaInfo)
-	return torrent.Stat(), cleanup
+	t, c := TorrentFixture(core.SizedBlobFixture(size, pieceLength).MetaInfo)
+	return t.Stat(), c
 }
 
 // BitSetFixture returns a new BitSet with the give bits set.

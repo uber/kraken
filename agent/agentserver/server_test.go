@@ -11,6 +11,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"github.com/stretchr/testify/require"
 )
@@ -80,7 +81,7 @@ func TestGetBlacklistHandler(t *testing.T) {
 	mocks, cleanup := newServerMocks(t)
 	defer cleanup()
 
-	blacklist := []scheduler.BlacklistedConn{{
+	blacklist := []connstate.BlacklistedConn{{
 		PeerID:    core.PeerIDFixture(),
 		InfoHash:  core.InfoHashFixture(),
 		Remaining: time.Second,
@@ -92,7 +93,7 @@ func TestGetBlacklistHandler(t *testing.T) {
 	resp, err := httputil.Get(fmt.Sprintf("http://%s/x/blacklist", addr))
 	require.NoError(err)
 
-	var result []scheduler.BlacklistedConn
+	var result []connstate.BlacklistedConn
 	require.NoError(json.NewDecoder(resp.Body).Decode(&result))
 	require.Equal(blacklist, result)
 }

@@ -22,6 +22,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
@@ -52,13 +53,6 @@ func init() {
 	log.ConfigureLogger(zapConfig)
 }
 
-func connStateConfigFixture() ConnStateConfig {
-	return ConnStateConfig{
-		MaxOpenConnectionsPerTorrent: 20,
-		BlacklistDuration:            time.Second,
-	}.applyDefaults()
-}
-
 func configFixture() Config {
 	return Config{
 		AnnounceInterval:   500 * time.Millisecond,
@@ -67,7 +61,7 @@ func configFixture() Config {
 		PreemptionInterval: 500 * time.Millisecond,
 		ConnTTI:            10 * time.Second,
 		ConnTTL:            5 * time.Minute,
-		ConnState:          connStateConfigFixture(),
+		ConnState:          connstate.Config{},
 		Conn:               conn.ConfigFixture(),
 		Dispatch:           dispatch.Config{},
 	}.applyDefaults()
@@ -207,8 +201,15 @@ type hasConnEvent struct {
 }
 
 func (e hasConnEvent) Apply(s *Scheduler) {
-	_, ok := s.connState.active[connKey{e.peerID, e.infoHash}]
-	e.result <- ok
+	found := false
+	conns := s.connState.ActiveConns()
+	for _, c := range conns {
+		if c.PeerID() == e.peerID && c.InfoHash() == e.infoHash {
+			found = true
+			break
+		}
+	}
+	e.result <- found
 }
 
 // waitForConnEstablished waits until s has established a connection to peerID for the

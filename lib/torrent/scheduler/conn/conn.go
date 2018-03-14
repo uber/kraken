@@ -120,19 +120,9 @@ func (c *Conn) CreatedAt() time.Time {
 	return c.createdAt
 }
 
-// OpenedByRemote returns whether the Conn was opened by the local peer, or the remote peer.
-func (c *Conn) OpenedByRemote() bool {
-	return c.openedByRemote
-}
-
 func (c *Conn) String() string {
 	return fmt.Sprintf("Conn(peer=%s, hash=%s, opened_by_remote=%t)",
 		c.peerID, c.infoHash, c.openedByRemote)
-}
-
-// Active TODO(codyg)
-func (c *Conn) Active() bool {
-	return true
 }
 
 // Send writes the given message to the underlying connection.

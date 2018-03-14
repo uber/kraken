@@ -16,6 +16,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
@@ -64,7 +65,7 @@ type Scheduler struct {
 	// The following fields define the core Scheduler "state", and should only
 	// be accessed from within the event loop.
 	torrentControls map[core.InfoHash]*torrentControl // Active seeding / leeching torrents.
-	connState       *connState
+	connState       *connstate.State
 	announceQueue   announcequeue.Queue
 
 	eventLoop *liftedEventLoop
@@ -147,7 +148,7 @@ func New(
 	handshaker := conn.NewHandshaker(
 		config.Conn, stats, overrides.clock, networkEvents, pctx.PeerID, eventLoop)
 
-	connState := newConnState(pctx.PeerID, config.ConnState, overrides.clock, networkEvents)
+	connState := connstate.New(config.ConnState, overrides.clock, pctx.PeerID, networkEvents)
 
 	s := &Scheduler{
 		pctx:            pctx,
@@ -242,16 +243,9 @@ func (s *Scheduler) AddTorrent(namespace, name string) <-chan error {
 	return errc
 }
 
-// BlacklistedConn represents a connection which has been blacklisted.
-type BlacklistedConn struct {
-	PeerID    core.PeerID   `json:"peer_id"`
-	InfoHash  core.InfoHash `json:"info_hash"`
-	Remaining time.Duration `json:"remaining"`
-}
-
 // BlacklistSnapshot returns a snapshot of the current connection blacklist.
-func (s *Scheduler) BlacklistSnapshot() (chan []BlacklistedConn, error) {
-	result := make(chan []BlacklistedConn)
+func (s *Scheduler) BlacklistSnapshot() (chan []connstate.BlacklistedConn, error) {
+	result := make(chan []connstate.BlacklistedConn)
 	if !s.eventLoop.Send(blacklistSnapshotEvent{result}) {
 		return nil, ErrSchedulerStopped
 	}
@@ -404,6 +398,5 @@ func (s *Scheduler) tearDownTorrentControl(ctrl *torrentControl, err error) {
 }
 
 func (s *Scheduler) log(args ...interface{}) *zap.SugaredLogger {
-	args = append(args, "scheduler", s.pctx.PeerID)
 	return log.With(args...)
 }

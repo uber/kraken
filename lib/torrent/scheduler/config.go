@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
 )
 
@@ -47,7 +48,7 @@ type Config struct {
 	// testing purposes.
 	DisablePreemption bool `yaml:"disable_preemption"`
 
-	ConnState ConnStateConfig `yaml:"conn_state"`
+	ConnState connstate.Config `yaml:"connstate"`
 
 	Conn conn.Config `yaml:"conn"`
 
@@ -83,32 +84,6 @@ func (c Config) applyDefaults() Config {
 	}
 	if c.EmitStatsInterval == 0 {
 		c.EmitStatsInterval = 1 * time.Second
-	}
-	c.ConnState = c.ConnState.applyDefaults()
-	return c
-}
-
-// ConnStateConfig is the configuration for the connection state management.
-type ConnStateConfig struct {
-
-	// MaxOpenConnectionsPerTorrent is the maximum number of connections which a
-	// Scheduler will maintain at once for each torrent.
-	MaxOpenConnectionsPerTorrent int `yaml:"max_open_conn"`
-
-	// DisableBlacklist disables the blacklisting of peers. Should only be used
-	// for testing purposes.
-	DisableBlacklist bool `yaml:"disable_blacklist"`
-
-	// BlacklistDuration is the duration a connection will remain blacklisted.
-	BlacklistDuration time.Duration `yaml:"blacklist_duration"`
-}
-
-func (c ConnStateConfig) applyDefaults() ConnStateConfig {
-	if c.MaxOpenConnectionsPerTorrent == 0 {
-		c.MaxOpenConnectionsPerTorrent = 10
-	}
-	if c.BlacklistDuration == 0 {
-		c.BlacklistDuration = 30 * time.Second
 	}
 	return c
 }
