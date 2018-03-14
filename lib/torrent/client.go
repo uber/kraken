@@ -11,6 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 )
@@ -19,7 +20,7 @@ import (
 type Client interface {
 	Download(namespace string, name string) error
 	Reload(config scheduler.Config)
-	BlacklistSnapshot() ([]scheduler.BlacklistedConn, error)
+	BlacklistSnapshot() ([]connstate.BlacklistedConn, error)
 	RemoveTorrent(name string) error
 	Close() error
 }
@@ -113,7 +114,7 @@ func (c *SchedulerClient) Download(namespace string, name string) error {
 }
 
 // BlacklistSnapshot returns the currently blacklisted connections for this peer.
-func (c *SchedulerClient) BlacklistSnapshot() ([]scheduler.BlacklistedConn, error) {
+func (c *SchedulerClient) BlacklistSnapshot() ([]connstate.BlacklistedConn, error) {
 	result, err := c.scheduler.BlacklistSnapshot()
 	if err != nil {
 		return nil, err

@@ -300,6 +300,7 @@ func TestNetworkEvents(t *testing.T) {
 
 	config := configFixture()
 	config.ConnTTI = 2 * time.Second
+	config.ConnState.BlacklistDuration = 30 * time.Second
 
 	seeder := mocks.newPeer(config)
 	leecher := mocks.newPeer(config)

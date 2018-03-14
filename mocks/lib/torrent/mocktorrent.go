@@ -6,6 +6,7 @@ package mocktorrent
 
 import (
 	scheduler "code.uber.internal/infra/kraken/lib/torrent/scheduler"
+	connstate "code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
 )
@@ -34,9 +35,9 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // BlacklistSnapshot mocks base method
-func (m *MockClient) BlacklistSnapshot() ([]scheduler.BlacklistedConn, error) {
+func (m *MockClient) BlacklistSnapshot() ([]connstate.BlacklistedConn, error) {
 	ret := m.ctrl.Call(m, "BlacklistSnapshot")
-	ret0, _ := ret[0].([]scheduler.BlacklistedConn)
+	ret0, _ := ret[0].([]connstate.BlacklistedConn)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

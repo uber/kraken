@@ -7,6 +7,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -246,7 +247,7 @@ func (e announceResponseEvent) Apply(s *Scheduler) {
 			continue
 		}
 		if err := s.connState.AddPending(p.PeerID, e.infoHash); err != nil {
-			if err == errTorrentAtCapacity {
+			if err == connstate.ErrTorrentAtCapacity {
 				break
 			}
 			continue
@@ -389,7 +390,7 @@ func (e emitStatsEvent) Apply(s *Scheduler) {
 }
 
 type blacklistSnapshotEvent struct {
-	result chan []BlacklistedConn
+	result chan []connstate.BlacklistedConn
 }
 
 func (e blacklistSnapshotEvent) Apply(s *Scheduler) {
