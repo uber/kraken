@@ -43,7 +43,7 @@ func (p *IPv4NetmaskPeerPriorityPolicy) AssignPeerPriority(
 		peer.Priority = calcPriority(predicates)
 		if peer.Origin {
 			// Origin peers always have worse priority than regular peers.
-			peer.Priority += int64(len(predicates))
+			peer.Priority += len(predicates)
 		}
 	}
 

@@ -33,20 +33,16 @@ func TestRedisStorageGetPeersPopulatesPeerInfoFields(t *testing.T) {
 	s, err := NewRedisStorage(config, clock.New())
 	require.NoError(err)
 
+	h := core.InfoHashFixture()
+
 	p := core.PeerInfoFixture()
 	p.Complete = true
 
-	require.NoError(s.UpdatePeer(p))
+	require.NoError(s.UpdatePeer(h, p))
 
-	peers, err := s.GetPeers(p.InfoHash, 1)
+	peers, err := s.GetPeers(h, 1)
 	require.NoError(err)
-	require.Equal(peers, []*core.PeerInfo{{
-		InfoHash: p.InfoHash,
-		PeerID:   p.PeerID,
-		IP:       p.IP,
-		Port:     p.Port,
-		Complete: true,
-	}})
+	require.Equal(peers, []*core.PeerInfo{p})
 }
 
 func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
@@ -67,7 +63,7 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 	// Reset time to the beginning of a window.
 	clk.Set(time.Unix(s.curPeerSetWindow(), 0))
 
-	blob := core.NewBlobFixture()
+	h := core.InfoHashFixture()
 
 	// Each peer will be added on a different second to distribute them across
 	// multiple windows.
@@ -76,14 +72,14 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 		if i > 0 {
 			clk.Add(time.Second)
 		}
-		p := blob.PeerInfo()
+		p := core.PeerInfoFixture()
 		peers = append(peers, p)
-		require.NoError(s.UpdatePeer(p))
+		require.NoError(s.UpdatePeer(h, p))
 	}
 
-	result, err := s.GetPeers(blob.MetaInfo.InfoHash.String(), len(peers))
+	result, err := s.GetPeers(h, len(peers))
 	require.NoError(err)
-	require.Equal(core.SortedPeerIDs(peers), core.SortedPeerIDs(result))
+	require.Equal(core.SortedByPeerID(peers), core.SortedByPeerID(result))
 }
 
 func TestRedisStorageGetPeersLimit(t *testing.T) {
@@ -104,7 +100,7 @@ func TestRedisStorageGetPeersLimit(t *testing.T) {
 	// Reset time to the beginning of a window.
 	clk.Set(time.Unix(s.curPeerSetWindow(), 0))
 
-	blob := core.NewBlobFixture()
+	h := core.InfoHashFixture()
 
 	// Each peer will be added on a different second to distribute them across
 	// multiple windows.
@@ -112,13 +108,13 @@ func TestRedisStorageGetPeersLimit(t *testing.T) {
 		if i > 0 {
 			clk.Add(time.Second)
 		}
-		require.NoError(s.UpdatePeer(blob.PeerInfo()))
+		require.NoError(s.UpdatePeer(h, core.PeerInfoFixture()))
 	}
 
 	// Request more peers than were added on a single window to ensure we obey the limit
 	// across multiple windows.
 	for i := 0; i < 100; i++ {
-		result, err := s.GetPeers(blob.MetaInfo.InfoHash.String(), 15)
+		result, err := s.GetPeers(h, 15)
 		require.NoError(err)
 		require.Len(result, 15)
 	}
@@ -134,19 +130,20 @@ func TestRedisStorageGetPeersCollapsesCompleteBits(t *testing.T) {
 	s, err := NewRedisStorage(config, clock.New())
 	require.NoError(err)
 
+	h := core.InfoHashFixture()
 	p := core.PeerInfoFixture()
 
-	require.NoError(s.UpdatePeer(p))
+	require.NoError(s.UpdatePeer(h, p))
 
-	peers, err := s.GetPeers(p.InfoHash, 2)
+	peers, err := s.GetPeers(h, 2)
 	require.NoError(err)
 	require.Len(peers, 1)
 	require.False(peers[0].Complete)
 
 	p.Complete = true
-	require.NoError(s.UpdatePeer(p))
+	require.NoError(s.UpdatePeer(h, p))
 
-	peers, err = s.GetPeers(p.InfoHash, 2)
+	peers, err = s.GetPeers(h, 2)
 	require.NoError(err)
 	require.Len(peers, 1)
 	require.True(peers[0].Complete)
@@ -164,17 +161,18 @@ func TestRedisStoragePeerExpiration(t *testing.T) {
 	s, err := NewRedisStorage(config, clock.New())
 	require.NoError(err)
 
+	h := core.InfoHashFixture()
 	p := core.PeerInfoFixture()
 
-	require.NoError(s.UpdatePeer(p))
+	require.NoError(s.UpdatePeer(h, p))
 
-	result, err := s.GetPeers(p.InfoHash, 1)
+	result, err := s.GetPeers(h, 1)
 	require.NoError(err)
 	require.Len(result, 1)
 
 	time.Sleep(3 * time.Second)
 
-	result, err = s.GetPeers(p.InfoHash, 1)
+	result, err = s.GetPeers(h, 1)
 	require.NoError(err)
 	require.Empty(result)
 }
@@ -189,14 +187,12 @@ func TestRedisStorageGetOriginsPopulatesPeerInfoFields(t *testing.T) {
 	s, err := NewRedisStorage(config, clock.New())
 	require.NoError(err)
 
-	blob := core.NewBlobFixture()
-	infoHash := blob.MetaInfo.InfoHash.String()
+	h := core.InfoHashFixture()
+	origins := []*core.PeerInfo{core.OriginPeerInfoFixture()}
 
-	origins := []*core.PeerInfo{blob.OriginPeerInfo()}
+	require.NoError(s.UpdateOrigins(h, origins))
 
-	require.NoError(s.UpdateOrigins(infoHash, origins))
-
-	result, err := s.GetOrigins(infoHash)
+	result, err := s.GetOrigins(h)
 	require.NoError(err)
 	require.Equal(origins, result)
 }
@@ -211,31 +207,30 @@ func TestRedisStorageUpdateOriginsOverwritesExistingOrigins(t *testing.T) {
 	s, err := NewRedisStorage(config, clock.New())
 	require.NoError(err)
 
-	blob := core.NewBlobFixture()
-	infoHash := blob.MetaInfo.InfoHash.String()
+	h := core.InfoHashFixture()
 
 	initialOrigins := []*core.PeerInfo{
-		blob.OriginPeerInfo(),
-		blob.OriginPeerInfo(),
+		core.OriginPeerInfoFixture(),
+		core.OriginPeerInfoFixture(),
 	}
 
-	require.NoError(s.UpdateOrigins(infoHash, initialOrigins))
+	require.NoError(s.UpdateOrigins(h, initialOrigins))
 
-	result, err := s.GetOrigins(infoHash)
+	result, err := s.GetOrigins(h)
 	require.NoError(err)
-	require.Equal(core.SortedPeerIDs(initialOrigins), core.SortedPeerIDs(result))
+	require.Equal(core.SortedByPeerID(initialOrigins), core.SortedByPeerID(result))
 
 	newOrigins := []*core.PeerInfo{
-		blob.OriginPeerInfo(),
-		blob.OriginPeerInfo(),
-		blob.OriginPeerInfo(),
+		core.OriginPeerInfoFixture(),
+		core.OriginPeerInfoFixture(),
+		core.OriginPeerInfoFixture(),
 	}
 
-	require.NoError(s.UpdateOrigins(infoHash, newOrigins))
+	require.NoError(s.UpdateOrigins(h, newOrigins))
 
-	result, err = s.GetOrigins(infoHash)
+	result, err = s.GetOrigins(h)
 	require.NoError(err)
-	require.Equal(core.SortedPeerIDs(newOrigins), core.SortedPeerIDs(result))
+	require.Equal(core.SortedByPeerID(newOrigins), core.SortedByPeerID(result))
 }
 
 func TestRedisStorageOriginsExpiration(t *testing.T) {
@@ -249,20 +244,18 @@ func TestRedisStorageOriginsExpiration(t *testing.T) {
 	s, err := NewRedisStorage(config, clock.New())
 	require.NoError(err)
 
-	blob := core.NewBlobFixture()
-	infoHash := blob.MetaInfo.InfoHash.String()
+	h := core.InfoHashFixture()
+	origins := []*core.PeerInfo{core.OriginPeerInfoFixture()}
 
-	origins := []*core.PeerInfo{blob.OriginPeerInfo()}
+	require.NoError(s.UpdateOrigins(h, origins))
 
-	require.NoError(s.UpdateOrigins(infoHash, origins))
-
-	result, err := s.GetOrigins(infoHash)
+	result, err := s.GetOrigins(h)
 	require.NoError(err)
 	require.Len(result, 1)
 
 	time.Sleep(2 * time.Second)
 
-	result, err = s.GetOrigins(infoHash)
+	result, err = s.GetOrigins(h)
 	require.Equal(err, ErrNoOrigins)
 }
 

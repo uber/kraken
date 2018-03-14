@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/errutil"
 	"code.uber.internal/infra/kraken/utils/handler"
@@ -14,71 +14,53 @@ import (
 )
 
 func (s *Server) announceHandler(w http.ResponseWriter, r *http.Request) error {
-	q := r.URL.Query()
-	name := q.Get("name")
-	infoHash := q.Get("info_hash")
-	peerID := q.Get("peer_id")
-	peerIP := q.Get("ip")
-	peerDC := q.Get("dc")
-	peerPort, err := strconv.ParseInt(q.Get("port"), 10, 64)
+	req := new(announceclient.Request)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		return handler.Errorf("json decode request: %s", err)
+	}
+	if err := s.peerStore.UpdatePeer(req.InfoHash, req.Peer); err != nil {
+		log.With(
+			"hash", req.InfoHash,
+			"peer_id", req.Peer.PeerID).Errorf("Error updating peer: %s", err)
+	}
+	peers, err := s.getPeerHandout(req.Name, req.InfoHash, req.Peer)
 	if err != nil {
-		return handler.Errorf("parse port: %s", err).Status(http.StatusBadRequest)
+		return err
 	}
-	peerComplete, err := strconv.ParseBool(q.Get("complete"))
-	if err != nil {
-		return handler.Errorf("parse complete: %s", err).Status(http.StatusBadRequest)
-	}
-	peer := &core.PeerInfo{
-		InfoHash: infoHash,
-		PeerID:   peerID,
-		IP:       peerIP,
-		Port:     peerPort,
-		DC:       peerDC,
-		Complete: peerComplete,
-	}
-
-	if err := s.peerStore.UpdatePeer(peer); err != nil {
-		log.With("info_hash", infoHash, "peer_id", peerID).Errorf("Error updating peer: %s", err)
-	}
-
-	// If the peer is announcing as complete, don't return a peer handout since
-	// the peer does not need it.
-	var peers []*core.PeerInfo
-	if !peer.Complete {
-		peers, err = s.getPeerHandout(peer, name)
-		if err != nil {
-			return err
-		}
-	}
-
-	resp := core.AnnouncerResponse{Peers: peers}
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		return handler.Errorf("json encode: %s", err)
+	if err := json.NewEncoder(w).Encode(&announceclient.Response{Peers: peers}); err != nil {
+		return handler.Errorf("json encode response: %s", err)
 	}
 	return nil
 }
 
-func (s *Server) getPeerHandout(peer *core.PeerInfo, name string) ([]*core.PeerInfo, error) {
+func (s *Server) getPeerHandout(
+	name string, h core.InfoHash, peer *core.PeerInfo) ([]*core.PeerInfo, error) {
+
+	if peer.Complete {
+		// If the peer is announcing as complete, don't return a peer handout since
+		// the peer does not need it.
+		return nil, nil
+	}
 	var errs []error
-	peers, err := s.peerStore.GetPeers(peer.InfoHash, s.config.PeerHandoutLimit)
+	peers, err := s.peerStore.GetPeers(h, s.config.PeerHandoutLimit)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("peer storage error: %s", err))
 	}
-	origins, err := s.peerStore.GetOrigins(peer.InfoHash)
+	origins, err := s.peerStore.GetOrigins(h)
 	if err != nil {
 		tryUpdate := true
 		if err != storage.ErrNoOrigins {
 			errs = append(errs, fmt.Errorf("origin peer storage error: %s", err))
 			tryUpdate = false
 		}
-		origins, err = s.fetchOrigins(peer.InfoHash, name)
+		origins, err = s.fetchOrigins(name)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("origin lookup error: %s", err))
 			tryUpdate = false
 		}
 		if tryUpdate {
-			if err := s.peerStore.UpdateOrigins(peer.InfoHash, origins); err != nil {
-				log.With("info_hash", peer.InfoHash).Errorf("Error upserting origins: %s", err)
+			if err := s.peerStore.UpdateOrigins(h, origins); err != nil {
+				log.With("hash", h).Errorf("Error upserting origins: %s", err)
 			}
 		}
 	}
@@ -110,22 +92,14 @@ func (s *Server) getPeerHandout(peer *core.PeerInfo, name string) ([]*core.PeerI
 	return peers, nil
 }
 
-func (s *Server) fetchOrigins(infoHash, name string) ([]*core.PeerInfo, error) {
-	var origins []*core.PeerInfo
-	pctxs, err := s.originCluster.Owners(core.NewSHA256DigestFromHex(name))
+func (s *Server) fetchOrigins(name string) ([]*core.PeerInfo, error) {
+	octxs, err := s.originCluster.Owners(core.NewSHA256DigestFromHex(name))
 	if err != nil {
 		return nil, err
 	}
-	for _, pctx := range pctxs {
-		origins = append(origins, &core.PeerInfo{
-			InfoHash: infoHash,
-			PeerID:   pctx.PeerID.String(),
-			IP:       pctx.IP,
-			Port:     int64(pctx.Port),
-			DC:       pctx.Zone,
-			Origin:   true,
-			Complete: true,
-		})
+	var origins []*core.PeerInfo
+	for _, octx := range octxs {
+		origins = append(origins, core.PeerInfoFromContext(octx, true))
 	}
 	return origins, nil
 }

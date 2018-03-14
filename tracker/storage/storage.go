@@ -18,17 +18,17 @@ var (
 // PeerStore provides storage for announcing peers.
 type PeerStore interface {
 
-	// GetPeers returns at most n random peers announcing for infohash.
-	GetPeers(infohash string, n int) ([]*core.PeerInfo, error)
+	// GetPeers returns at most n random peers announcing for h.
+	GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error)
 
 	// UpdatePeer updates peer fields.
-	UpdatePeer(peer *core.PeerInfo) error
+	UpdatePeer(h core.InfoHash, peer *core.PeerInfo) error
 
-	// GetOrigins returns all origin peers serving infohash.
-	GetOrigins(infohash string) ([]*core.PeerInfo, error)
+	// GetOrigins returns all origin peers serving h.
+	GetOrigins(h core.InfoHash) ([]*core.PeerInfo, error)
 
-	// UpdateOrigins overwrites all origin peers serving infohash.
-	UpdateOrigins(infohash string, origins []*core.PeerInfo) error
+	// UpdateOrigins overwrites all origin peers serving h.
+	UpdateOrigins(h core.InfoHash, origins []*core.PeerInfo) error
 }
 
 // MetaInfoStore provides storage for torrent metainfo.

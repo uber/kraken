@@ -9,38 +9,42 @@ import (
 )
 
 func TestCompletenessPeerSamplingPolicy(t *testing.T) {
+	a := core.PeerIDFixture()
+	b := core.PeerIDFixture()
+	c := core.PeerIDFixture()
+	d := core.PeerIDFixture()
 	tests := []struct {
 		desc     string
 		peers    []*core.PeerInfo
-		expected []string
+		expected []core.PeerID
 	}{
 		{
 			"completeness first, then priority",
 			[]*core.PeerInfo{
-				{PeerID: "a", Priority: 1, Complete: true},
-				{PeerID: "b", Priority: 0, Complete: false},
-				{PeerID: "c", Priority: 2, Complete: true},
-				{PeerID: "d", Priority: 3, Complete: false},
+				{PeerID: a, Priority: 1, Complete: true},
+				{PeerID: b, Priority: 0, Complete: false},
+				{PeerID: c, Priority: 2, Complete: true},
+				{PeerID: d, Priority: 3, Complete: false},
 			},
-			[]string{"a", "c", "b", "d"},
+			[]core.PeerID{a, c, b, d},
 		},
 		{
 			"priority if all complete",
 			[]*core.PeerInfo{
-				{PeerID: "b", Priority: 3, Complete: true},
-				{PeerID: "a", Priority: 1, Complete: true},
-				{PeerID: "c", Priority: 2, Complete: true},
+				{PeerID: b, Priority: 3, Complete: true},
+				{PeerID: a, Priority: 1, Complete: true},
+				{PeerID: c, Priority: 2, Complete: true},
 			},
-			[]string{"a", "c", "b"},
+			[]core.PeerID{a, c, b},
 		},
 		{
 			"priority if none complete",
 			[]*core.PeerInfo{
-				{PeerID: "b", Priority: 3, Complete: false},
-				{PeerID: "a", Priority: 1, Complete: false},
-				{PeerID: "c", Priority: 2, Complete: false},
+				{PeerID: b, Priority: 3, Complete: false},
+				{PeerID: a, Priority: 1, Complete: false},
+				{PeerID: c, Priority: 2, Complete: false},
 			},
-			[]string{"a", "c", "b"},
+			[]core.PeerID{a, c, b},
 		},
 	}
 
@@ -53,7 +57,7 @@ func TestCompletenessPeerSamplingPolicy(t *testing.T) {
 			result, err := policy.SamplePeers(test.peers, len(test.peers))
 			require.NoError(err)
 
-			var pids []string
+			var pids []core.PeerID
 			for _, peer := range result {
 				pids = append(pids, peer.PeerID)
 			}
