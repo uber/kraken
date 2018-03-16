@@ -1,0 +1,19 @@
+upstream registry-backend {
+  server 127.0.0.1:8991;
+  server 127.0.0.1:15055 backup;
+}
+
+server {
+  listen 5055;
+
+  access_log /var/log/udocker/kraken-agent/nginx-access.log;
+  error_log /var/log/udocker/kraken-agent/nginx-error.log;
+
+  gzip on;
+  gzip_types text/plain text/csv application/json;
+
+  location / {
+    proxy_pass http://registry-backend;
+    proxy_next_upstream error timeout http_404 http_500;
+  }
+}
