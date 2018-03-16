@@ -1,10 +1,7 @@
 package scheduler
 
 import (
-	"fmt"
 	"time"
-
-	"gopkg.in/yaml.v2"
 
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
@@ -53,14 +50,6 @@ type Config struct {
 	Conn conn.Config `yaml:"conn"`
 
 	Dispatch dispatch.Config `yaml:"dispatch"`
-}
-
-func (c Config) String() string {
-	b, err := yaml.Marshal(c)
-	if err != nil {
-		return fmt.Sprintf("yaml marshal error: %s", err)
-	}
-	return string(b)
 }
 
 func (c Config) applyDefaults() Config {

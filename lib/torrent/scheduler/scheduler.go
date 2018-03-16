@@ -116,8 +116,6 @@ func New(
 
 	config = config.applyDefaults()
 
-	log.Infof("Scheduler initializing with config:\n%s", config)
-
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", pctx.Port))
 	if err != nil {
 		return nil, err
@@ -141,9 +139,6 @@ func New(
 	if !config.DisablePreemption {
 		preemptionTick = overrides.clock.Tick(config.PreemptionInterval)
 	}
-
-	log.Infof("Scheduler will announce as peer %s on addr %s:%d",
-		pctx.PeerID, pctx.IP, pctx.Port)
 
 	handshaker := conn.NewHandshaker(
 		config.Conn, stats, overrides.clock, networkEvents, pctx.PeerID, eventLoop)
@@ -176,6 +171,8 @@ func New(
 	if config.ConnState.DisableBlacklist {
 		s.log().Warn("Blacklisting disabled")
 	}
+
+	log.Infof("Scheduler starting as peer %s on addr %s:%d", pctx.PeerID, pctx.IP, pctx.Port)
 
 	s.start()
 

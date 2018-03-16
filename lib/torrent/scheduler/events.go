@@ -288,7 +288,7 @@ func (e newTorrentEvent) Apply(s *Scheduler) {
 	ctrl, ok := s.torrentControls[e.torrent.InfoHash()]
 	if !ok {
 		ctrl = s.initTorrentControl(e.torrent, true)
-		s.log("torrent", e.torrent).Info("Initialized new torrent")
+		s.log("torrent", e.torrent).Info("Added new torrent")
 	}
 	if ctrl.complete {
 		e.errc <- nil
