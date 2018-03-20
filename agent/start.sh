@@ -13,7 +13,7 @@ mkdir -p /etc/nginx/sites-enabled && ln -fs /home/udocker/kraken-agent/agent/ngi
 # If agent crashes, systemd won't restart the container because agent is a background
 # process (nginx is the primary process). For this reason, we must monitor the agent
 # health in the background and manually intervene if necessary.
-/home/udocker/kraken-agent/agent/health_check.sh >> /var/log/udocker/kraken-agent/health_check.log &
+/home/udocker/kraken-agent/agent/health_check.sh >> /var/log/udocker/kraken-agent/health_check.log 2>&1 &
 
 /home/udocker/kraken-agent/agent/agent -peer_ip=$KRAKEN_PEER_IP -peer_port=8988 -agent_server_port=7602 -config=$KRAKEN_CONFIG -zone=$UBER_DATACENTER -cluster=$KRAKEN_CLUSTER | tee -a /var/log/udocker/kraken-agent/stdout.log &
 
