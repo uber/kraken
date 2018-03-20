@@ -26,6 +26,7 @@ type event interface {
 // eventLoop represents a serialized list of events to be applied to a Scheduler.
 type eventLoop interface {
 	Send(event) bool
+	SendTimeout(e event, timeout time.Duration) error
 	Run(*Scheduler)
 	Stop()
 }
@@ -51,6 +52,19 @@ func (l *defaultEventLoop) Send(e event) bool {
 		return true
 	case <-l.done:
 		return false
+	}
+}
+
+func (l *defaultEventLoop) SendTimeout(e event, timeout time.Duration) error {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case l.events <- e:
+		return nil
+	case <-l.done:
+		return ErrSchedulerStopped
+	case <-timer.C:
+		return ErrSendEventTimedOut
 	}
 }
 
@@ -414,3 +428,10 @@ func (e removeTorrentEvent) Apply(s *Scheduler) {
 	}
 	e.errc <- s.torrentArchive.DeleteTorrent(e.name)
 }
+
+// probeEvent occurs when a probe is manually requested via Scheduler API.
+// The event loop is unbuffered, so if a probe can be successfully sent, then
+// the event loop is healthy.
+type probeEvent struct{}
+
+func (e probeEvent) Apply(*Scheduler) {}

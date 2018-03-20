@@ -25,10 +25,11 @@ import (
 
 // Scheduler errors.
 var (
-	ErrTorrentNotFound  = errors.New("torrent not found")
-	ErrSchedulerStopped = errors.New("scheduler has been stopped")
-	ErrTorrentTimeout   = errors.New("torrent timed out")
-	ErrTorrentRemoved   = errors.New("torrent manually removed")
+	ErrTorrentNotFound   = errors.New("torrent not found")
+	ErrSchedulerStopped  = errors.New("scheduler has been stopped")
+	ErrTorrentTimeout    = errors.New("torrent timed out")
+	ErrTorrentRemoved    = errors.New("torrent manually removed")
+	ErrSendEventTimedOut = errors.New("event loop send timed out")
 )
 
 // torrentControl bundles torrent control structures.
@@ -257,6 +258,11 @@ func (s *Scheduler) RemoveTorrent(name string) <-chan error {
 		errc <- ErrSchedulerStopped
 	}
 	return errc
+}
+
+// Probe verifies that the Scheduler event loop is running and unblocked.
+func (s *Scheduler) Probe() error {
+	return s.eventLoop.SendTimeout(probeEvent{}, s.config.ProbeTimeout)
 }
 
 func (s *Scheduler) start() {
