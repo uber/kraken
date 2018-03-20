@@ -22,6 +22,7 @@ type Client interface {
 	Reload(config scheduler.Config)
 	BlacklistSnapshot() ([]connstate.BlacklistedConn, error)
 	RemoveTorrent(name string) error
+	Probe() error
 	Close() error
 }
 
@@ -126,4 +127,9 @@ func (c *SchedulerClient) BlacklistSnapshot() ([]connstate.BlacklistedConn, erro
 // any further.
 func (c *SchedulerClient) RemoveTorrent(name string) error {
 	return <-c.scheduler.RemoveTorrent(name)
+}
+
+// Probe verifies that the Scheduler event loop is running and unblocked.
+func (c *SchedulerClient) Probe() error {
+	return c.scheduler.Probe()
 }

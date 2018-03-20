@@ -45,6 +45,8 @@ type Config struct {
 	// testing purposes.
 	DisablePreemption bool `yaml:"disable_preemption"`
 
+	ProbeTimeout time.Duration `yaml:"probe_timeout"`
+
 	ConnState connstate.Config `yaml:"connstate"`
 
 	Conn conn.Config `yaml:"conn"`
@@ -73,6 +75,9 @@ func (c Config) applyDefaults() Config {
 	}
 	if c.EmitStatsInterval == 0 {
 		c.EmitStatsInterval = 1 * time.Second
+	}
+	if c.ProbeTimeout == 0 {
+		c.ProbeTimeout = 3 * time.Second
 	}
 	return c
 }

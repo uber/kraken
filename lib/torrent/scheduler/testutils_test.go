@@ -323,6 +323,10 @@ func (w *eventWatcher) Send(e event) bool {
 	return false
 }
 
+func (w *eventWatcher) SendTimeout(e event, timeout time.Duration) error {
+	panic("unimplemented")
+}
+
 func (w *eventWatcher) Run(s *Scheduler) {
 	w.l.Run(s)
 }

@@ -3,9 +3,9 @@ package agentserver
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"testing"
 	"time"
 
@@ -42,15 +42,32 @@ func TestDownload(t *testing.T) {
 }
 
 func TestHealthHandler(t *testing.T) {
-	require := require.New(t)
+	tests := []struct {
+		desc     string
+		probeErr error
+	}{
+		{"probe error", errors.New("some probe error")},
+		{"healthy", nil},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			require := require.New(t)
 
-	mocks, cleanup := newServerMocks(t)
-	defer cleanup()
+			mocks, cleanup := newServerMocks(t)
+			defer cleanup()
 
-	addr := mocks.startServer()
+			mocks.torrentClient.EXPECT().Probe().Return(test.probeErr)
 
-	_, err := http.Get(fmt.Sprintf("http://%s/health", addr))
-	require.NoError(err)
+			addr := mocks.startServer()
+
+			_, err := httputil.Get(fmt.Sprintf("http://%s/health", addr))
+			if test.probeErr != nil {
+				require.Error(err)
+			} else {
+				require.NoError(err)
+			}
+		})
+	}
 }
 
 func TestPatchSchedulerConfigHandler(t *testing.T) {

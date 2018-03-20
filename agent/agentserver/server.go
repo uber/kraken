@@ -55,7 +55,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.StatusCounter(s.stats))
 	r.Use(middleware.LatencyTimer(s.stats))
 
-	r.Get("/health", s.healthHandler)
+	r.Get("/health", handler.Wrap(s.healthHandler))
 
 	r.Get("/namespace/:namespace/blobs/:name", handler.Wrap(s.downloadBlobHandler))
 
@@ -124,8 +124,12 @@ func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
-func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
-	io.WriteString(w, "OK")
+func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
+	if err := s.torrentClient.Probe(); err != nil {
+		return handler.Errorf("probe torrent client: %s", err)
+	}
+	fmt.Fprintln(w, "OK")
+	return nil
 }
 
 // patchSchedulerConfigHandler restarts the agent torrent scheduler with

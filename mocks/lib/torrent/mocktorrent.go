@@ -71,6 +71,18 @@ func (mr *MockClientMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0, arg1)
 }
 
+// Probe mocks base method
+func (m *MockClient) Probe() error {
+	ret := m.ctrl.Call(m, "Probe")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Probe indicates an expected call of Probe
+func (mr *MockClientMockRecorder) Probe() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Probe", reflect.TypeOf((*MockClient)(nil).Probe))
+}
+
 // Reload mocks base method
 func (m *MockClient) Reload(arg0 scheduler.Config) {
 	m.ctrl.Call(m, "Reload", arg0)

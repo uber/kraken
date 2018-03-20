@@ -442,6 +442,49 @@ func TestSchedulerRemoveTorrent(t *testing.T) {
 	require.True(os.IsNotExist(err))
 }
 
+func TestSchedulerProbe(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newTestMocks(t)
+	defer cleanup()
+
+	p := mocks.newPeer(configFixture())
+
+	require.NoError(p.scheduler.Probe())
+
+	p.scheduler.Stop()
+
+	require.Equal(ErrSchedulerStopped, p.scheduler.Probe())
+}
+
+type deadlockEvent struct {
+	release chan struct{}
+}
+
+func (e deadlockEvent) Apply(*Scheduler) {
+	<-e.release
+}
+
+func TestSchedulerProbeTimeoutsIfDeadlocked(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newTestMocks(t)
+	defer cleanup()
+
+	p := mocks.newPeer(Config{ProbeTimeout: 250 * time.Millisecond})
+
+	require.NoError(p.scheduler.Probe())
+
+	// Must release deadlock so Scheduler can shut down properly (only matters
+	// for testing).
+	release := make(chan struct{})
+	p.scheduler.eventLoop.Send(deadlockEvent{release})
+
+	require.Equal(ErrSendEventTimedOut, p.scheduler.Probe())
+
+	close(release)
+}
+
 // BENCHMARKS
 
 // NOTE: You'll need to increase your fd limit to around 4096 to run this benchmark.
