@@ -1,3 +1,8 @@
+lua_shared_dict ngx_stats 10m;
+lua_package_path '/etc/nginx/lua/?.lua;;';
+lua_package_cpath '/etc/nginx/lua/?.so;;';
+init_by_lua_file /etc/nginx/lua/stats/init.lua;
+
 upstream registry-backend {
   server 127.0.0.1:8991;
   server docker-registry:80 backup;
@@ -11,6 +16,13 @@ server {
 
   gzip on;
   gzip_types text/plain text/csv application/json;
+
+  log_by_lua_file /etc/nginx/lua/stats/log.lua;
+
+  location /status.json {
+    default_type 'application/json';
+    content_by_lua_file /etc/nginx/lua/stats/show.lua;
+  }
 
   location / {
     proxy_pass http://registry-backend;
