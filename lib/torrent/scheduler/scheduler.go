@@ -21,6 +21,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/log"
+	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
 // Scheduler errors.
@@ -218,44 +219,49 @@ func (s *scheduler) Stop() {
 	})
 }
 
-func (s *scheduler) doDownload(namespace, name string) error {
+func (s *scheduler) doDownload(namespace, name string) (size int64, err error) {
 	t, err := s.torrentArchive.CreateTorrent(namespace, name)
 	if err != nil {
 		if err == storage.ErrNotFound {
-			return ErrTorrentNotFound
+			return 0, ErrTorrentNotFound
 		}
-		return fmt.Errorf("create torrent: %s", err)
+		return 0, fmt.Errorf("create torrent: %s", err)
 	}
 
 	// Buffer size of 1 so sends do not block.
 	errc := make(chan error, 1)
 	if !s.eventLoop.Send(newTorrentEvent{t, errc}) {
-		return ErrSchedulerStopped
+		return 0, ErrSchedulerStopped
 	}
-	return <-errc
+	return t.Length(), <-errc
 }
 
 // Download downloads the torrent given metainfo. Once the torrent is downloaded,
 // it will begin seeding asynchronously.
 func (s *scheduler) Download(namespace, name string) error {
-	err := s.doDownload(namespace, name)
+	start := time.Now()
+	size, err := s.doDownload(namespace, name)
 	if err != nil {
-		var tag string
+		var errTag string
 		switch err {
 		case ErrTorrentNotFound:
-			tag = "not_found"
+			errTag = "not_found"
 		case ErrTorrentTimeout:
-			tag = "timeout"
+			errTag = "timeout"
 		case ErrSchedulerStopped:
-			tag = "scheduler_stopped"
+			errTag = "scheduler_stopped"
 		case ErrTorrentRemoved:
-			tag = "removed"
+			errTag = "removed"
 		default:
-			tag = "unknown"
+			errTag = "unknown"
 		}
 		s.stats.Tagged(map[string]string{
-			"error": tag,
+			"error": errTag,
 		}).Counter("download_errors").Inc(1)
+	} else {
+		s.stats.Tagged(map[string]string{
+			"size": memsize.Format(getBucket(uint64(size))),
+		}).Timer("download_time").Record(time.Since(start))
 	}
 	return err
 }
