@@ -26,7 +26,7 @@ func TestDownload(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	mocks.torrentClient.EXPECT().Download(namespace, blob.Digest.Hex()).DoAndReturn(
+	mocks.sched.EXPECT().Download(namespace, blob.Digest.Hex()).DoAndReturn(
 		func(namespace, name string) error {
 			return mocks.fs.CreateCacheFile(name, bytes.NewReader(blob.Content))
 		})
@@ -56,7 +56,7 @@ func TestHealthHandler(t *testing.T) {
 			mocks, cleanup := newServerMocks(t)
 			defer cleanup()
 
-			mocks.torrentClient.EXPECT().Probe().Return(test.probeErr)
+			mocks.sched.EXPECT().Probe().Return(test.probeErr)
 
 			addr := mocks.startServer()
 
@@ -84,7 +84,7 @@ func TestPatchSchedulerConfigHandler(t *testing.T) {
 	b, err := json.Marshal(config)
 	require.NoError(err)
 
-	mocks.torrentClient.EXPECT().Reload(config)
+	mocks.sched.EXPECT().Reload(config)
 
 	_, err = httputil.Patch(
 		fmt.Sprintf("http://%s/x/config/scheduler", addr),
@@ -103,7 +103,7 @@ func TestGetBlacklistHandler(t *testing.T) {
 		InfoHash:  core.InfoHashFixture(),
 		Remaining: time.Second,
 	}}
-	mocks.torrentClient.EXPECT().BlacklistSnapshot().Return(blacklist, nil)
+	mocks.sched.EXPECT().BlacklistSnapshot().Return(blacklist, nil)
 
 	addr := mocks.startServer()
 
@@ -126,7 +126,7 @@ func TestDeleteBlobHandler(t *testing.T) {
 	addr := mocks.startServer()
 	c := NewClient(addr)
 
-	mocks.torrentClient.EXPECT().RemoveTorrent(d.Hex()).Return(nil)
+	mocks.sched.EXPECT().RemoveTorrent(d.Hex()).Return(nil)
 
 	require.NoError(c.Delete(d.Hex()))
 }

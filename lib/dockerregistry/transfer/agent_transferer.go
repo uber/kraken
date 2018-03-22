@@ -8,7 +8,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 )
 
 var _ ImageTransferer = (*AgentTransferer)(nil)
@@ -18,7 +18,7 @@ type AgentTransferer struct {
 	fs            store.FileStore
 	tagClient     backend.Client
 	blobNamespace string
-	torrentClient torrent.Client
+	sched         scheduler.Scheduler
 }
 
 // NewAgentTransferer creates a new AgentTransferer.
@@ -26,16 +26,15 @@ func NewAgentTransferer(
 	fs store.FileStore,
 	tagClient backend.Client,
 	blobNamespace string,
-	torrentClient torrent.Client) *AgentTransferer {
+	sched scheduler.Scheduler) *AgentTransferer {
 
-	return &AgentTransferer{fs, tagClient, blobNamespace, torrentClient}
+	return &AgentTransferer{fs, tagClient, blobNamespace, sched}
 }
 
 // Download downloads blobs as torrent.
 func (t *AgentTransferer) Download(name string) (store.FileReader, error) {
-	// TODO(codyg): Plumb docker namespace here.
-	if err := t.torrentClient.Download(t.blobNamespace, name); err != nil {
-		return nil, fmt.Errorf("torrent: %s", err)
+	if err := t.sched.Download(t.blobNamespace, name); err != nil {
+		return nil, fmt.Errorf("scheduler: %s", err)
 	}
 	f, err := t.fs.GetCacheFileReader(name)
 	if err != nil {

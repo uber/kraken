@@ -29,6 +29,6 @@ func newAgentMocks(t *testing.T) (*agentMocks, func()) {
 	return &agentMocks{fs, metaInfoClient}, cleanup.Run
 }
 
-func (m *agentMocks) newTorrentArchive(config AgentTorrentArchiveConfig) *AgentTorrentArchive {
-	return NewAgentTorrentArchive(config, tally.NoopScope, m.fs, m.metaInfoClient)
+func (m *agentMocks) newTorrentArchive() *AgentTorrentArchive {
+	return NewAgentTorrentArchive(tally.NoopScope, m.fs, m.metaInfoClient)
 }

@@ -7,14 +7,14 @@ import (
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/mocks/lib/torrent"
+	"code.uber.internal/infra/kraken/mocks/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
 type serverMocks struct {
-	fs            store.FileStore
-	torrentClient *mocktorrent.MockClient
-	cleanup       *testutil.Cleanup
+	fs      store.FileStore
+	sched   *mockscheduler.MockReloadableScheduler
+	cleanup *testutil.Cleanup
 }
 
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
@@ -26,13 +26,13 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
 
-	torrentClient := mocktorrent.NewMockClient(ctrl)
+	sched := mockscheduler.NewMockReloadableScheduler(ctrl)
 
-	return &serverMocks{fs, torrentClient, &cleanup}, cleanup.Run
+	return &serverMocks{fs, sched, &cleanup}, cleanup.Run
 }
 
 func (m *serverMocks) startServer() string {
-	s := New(Config{}, tally.NewTestScope("", nil), m.fs, m.torrentClient)
+	s := New(Config{}, tally.NoopScope, m.fs, m.sched)
 	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
 	return addr

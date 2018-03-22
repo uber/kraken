@@ -13,8 +13,8 @@ import (
 	"go.uber.org/zap"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
@@ -32,6 +32,15 @@ var (
 	ErrSendEventTimedOut = errors.New("event loop send timed out")
 )
 
+// Scheduler defines operations for scheduler.
+type Scheduler interface {
+	Stop()
+	Download(namespace, name string) error
+	BlacklistSnapshot() ([]connstate.BlacklistedConn, error)
+	RemoveTorrent(name string) error
+	Probe() error
+}
+
 // torrentControl bundles torrent control structures.
 type torrentControl struct {
 	errors       []chan error
@@ -47,14 +56,14 @@ func newTorrentControl(d *dispatch.Dispatcher, localRequest bool) *torrentContro
 	}
 }
 
-// Scheduler manages global state for the peer. This includes:
+// scheduler manages global state for the peer. This includes:
 // - Opening torrents.
 // - Announcing to the tracker.
 // - Handshaking incoming connections.
 // - Initializing outgoing connections.
 // - Dispatching connections to torrents.
 // - Pre-empting existing connections when better options are available (TODO).
-type Scheduler struct {
+type scheduler struct {
 	pctx           core.PeerContext
 	config         Config
 	clock          clock.Clock
@@ -63,7 +72,7 @@ type Scheduler struct {
 
 	handshaker *conn.Handshaker
 
-	// The following fields define the core Scheduler "state", and should only
+	// The following fields define the core scheduler "state", and should only
 	// be accessed from within the event loop.
 	torrentControls map[core.InfoHash]*torrentControl // Active seeding / leeching torrents.
 	connState       *connstate.State
@@ -81,13 +90,13 @@ type Scheduler struct {
 
 	networkEvents networkevent.Producer
 
-	// The following fields orchestrate the stopping of the Scheduler.
+	// The following fields orchestrate the stopping of the scheduler.
 	stopOnce sync.Once      // Ensures the stop sequence is executed only once.
 	done     chan struct{}  // Signals all goroutines to exit.
 	wg       sync.WaitGroup // Waits for eventLoop and listenLoop to exit.
 }
 
-// schedOverrides defines Scheduler fields which may be overrided for testing
+// schedOverrides defines scheduler fields which may be overrided for testing
 // purposes.
 type schedOverrides struct {
 	clock     clock.Clock
@@ -104,8 +113,8 @@ func withEventLoop(l eventLoop) option {
 	return func(o *schedOverrides) { o.eventLoop = l }
 }
 
-// New creates and starts a Scheduler.
-func New(
+// newScheduler creates and starts a scheduler.
+func newScheduler(
 	config Config,
 	ta storage.TorrentArchive,
 	stats tally.Scope,
@@ -113,7 +122,7 @@ func New(
 	announceClient announceclient.Client,
 	announceQueue announcequeue.Queue,
 	networkEvents networkevent.Producer,
-	options ...option) (*Scheduler, error) {
+	options ...option) (*scheduler, error) {
 
 	config = config.applyDefaults()
 
@@ -146,7 +155,7 @@ func New(
 
 	connState := connstate.New(config.ConnState, overrides.clock, pctx.PeerID, networkEvents)
 
-	s := &Scheduler{
+	s := &scheduler{
 		pctx:            pctx,
 		config:          config,
 		clock:           overrides.clock,
@@ -180,16 +189,8 @@ func New(
 	return s, nil
 }
 
-// Reload transfers s into a new Scheduler with new config. After reloading, s
-// is unusable.
-func Reload(s *Scheduler, config Config, stats tally.Scope) (*Scheduler, error) {
-	s.Stop()
-	return New(config, s.torrentArchive, stats, s.pctx, s.announceClient, s.announceQueue,
-		s.networkEvents)
-}
-
 // Stop shuts down the scheduler.
-func (s *Scheduler) Stop() {
+func (s *scheduler) Stop() {
 	s.stopOnce.Do(func() {
 		s.log().Info("Stopping scheduler...")
 
@@ -217,71 +218,90 @@ func (s *Scheduler) Stop() {
 	})
 }
 
-// AddTorrent starts downloading / seeding the torrent given metainfo. Returns
-// ErrTorrentNotFound if no torrent was found for namespace / name.
-func (s *Scheduler) AddTorrent(namespace, name string) <-chan error {
-	// Buffer size of 1 so sends do not block.
-	errc := make(chan error, 1)
-
+func (s *scheduler) doDownload(namespace, name string) error {
 	t, err := s.torrentArchive.CreateTorrent(namespace, name)
 	if err != nil {
 		if err == storage.ErrNotFound {
-			errc <- ErrTorrentNotFound
-		} else {
-			errc <- fmt.Errorf("create torrent: %s", err)
+			return ErrTorrentNotFound
 		}
-		return errc
+		return fmt.Errorf("create torrent: %s", err)
 	}
 
+	// Buffer size of 1 so sends do not block.
+	errc := make(chan error, 1)
 	if !s.eventLoop.Send(newTorrentEvent{t, errc}) {
-		errc <- ErrSchedulerStopped
-		return errc
+		return ErrSchedulerStopped
 	}
+	return <-errc
+}
 
-	return errc
+// Download downloads the torrent given metainfo. Once the torrent is downloaded,
+// it will begin seeding asynchronously.
+func (s *scheduler) Download(namespace, name string) error {
+	err := s.doDownload(namespace, name)
+	if err != nil {
+		var tag string
+		switch err {
+		case ErrTorrentNotFound:
+			tag = "not_found"
+		case ErrTorrentTimeout:
+			tag = "timeout"
+		case ErrSchedulerStopped:
+			tag = "scheduler_stopped"
+		case ErrTorrentRemoved:
+			tag = "removed"
+		default:
+			tag = "unknown"
+		}
+		s.stats.Tagged(map[string]string{
+			"error": tag,
+		}).Counter("download_errors").Inc(1)
+	}
+	return err
 }
 
 // BlacklistSnapshot returns a snapshot of the current connection blacklist.
-func (s *Scheduler) BlacklistSnapshot() (chan []connstate.BlacklistedConn, error) {
+func (s *scheduler) BlacklistSnapshot() ([]connstate.BlacklistedConn, error) {
 	result := make(chan []connstate.BlacklistedConn)
 	if !s.eventLoop.Send(blacklistSnapshotEvent{result}) {
 		return nil, ErrSchedulerStopped
 	}
-	return result, nil
+	return <-result, nil
 }
 
 // RemoveTorrent forcibly stops leeching / seeding torrent for name and removes
 // the torrent from disk.
-func (s *Scheduler) RemoveTorrent(name string) <-chan error {
+func (s *scheduler) RemoveTorrent(name string) error {
+	// Buffer size of 1 so sends do not block.
 	errc := make(chan error, 1)
 	if !s.eventLoop.Send(removeTorrentEvent{name, errc}) {
-		errc <- ErrSchedulerStopped
+		return ErrSchedulerStopped
 	}
-	return errc
+	return <-errc
 }
 
-// Probe verifies that the Scheduler event loop is running and unblocked.
-func (s *Scheduler) Probe() error {
+// Probe verifies that the scheduler event loop is running and unblocked.
+func (s *scheduler) Probe() error {
 	return s.eventLoop.SendTimeout(probeEvent{}, s.config.ProbeTimeout)
 }
 
-func (s *Scheduler) start() {
+func (s *scheduler) start() {
 	s.wg.Add(3)
 	go s.runEventLoop()
 	go s.listenLoop()
 	go s.tickerLoop()
 }
 
-// eventLoop handles eventLoop from the various channels of Scheduler, providing synchronization to
-// all Scheduler state.
-func (s *Scheduler) runEventLoop() {
+// eventLoop handles eventLoop from the various channels of scheduler, providing synchronization to
+// all scheduler state.
+func (s *scheduler) runEventLoop() {
 	defer s.wg.Done()
 
 	s.eventLoop.Run(s)
 }
 
 // listenLoop accepts incoming connections.
-func (s *Scheduler) listenLoop() {
+func (s *scheduler) listenLoop() {
 	defer s.wg.Done()
 
 	s.log().Infof("Listening on %s", s.listener.Addr().String())
@@ -305,7 +325,7 @@ func (s *Scheduler) listenLoop() {
 }
 
 // tickerLoop periodically emits various tick events.
-func (s *Scheduler) tickerLoop() {
+func (s *scheduler) tickerLoop() {
 	defer s.wg.Done()
 
 	for {
@@ -322,7 +342,7 @@ func (s *Scheduler) tickerLoop() {
 	}
 }
 
-func (s *Scheduler) announce(d *dispatch.Dispatcher) {
+func (s *scheduler) announce(d *dispatch.Dispatcher) {
 	var e event
 	peers, err := s.announceClient.Announce(
 		d.Name(), d.InfoHash(), d.Complete())
@@ -335,7 +355,7 @@ func (s *Scheduler) announce(d *dispatch.Dispatcher) {
 	s.eventLoop.Send(e)
 }
 
-func (s *Scheduler) addOutgoingConn(c *conn.Conn, b *bitset.BitSet, info *storage.TorrentInfo) error {
+func (s *scheduler) addOutgoingConn(c *conn.Conn, b *bitset.BitSet, info *storage.TorrentInfo) error {
 	if err := s.connState.MovePendingToActive(c); err != nil {
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
@@ -349,7 +369,7 @@ func (s *Scheduler) addOutgoingConn(c *conn.Conn, b *bitset.BitSet, info *storag
 	return nil
 }
 
-func (s *Scheduler) addIncomingConn(c *conn.Conn, b *bitset.BitSet, info *storage.TorrentInfo) error {
+func (s *scheduler) addIncomingConn(c *conn.Conn, b *bitset.BitSet, info *storage.TorrentInfo) error {
 	if err := s.connState.MovePendingToActive(c); err != nil {
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
@@ -369,7 +389,7 @@ func (s *Scheduler) addIncomingConn(c *conn.Conn, b *bitset.BitSet, info *storag
 
 // initTorrentControl initializes a new torrentControl for t. Overwrites any
 // existing torrentControl for t, so callers should check if one exists first.
-func (s *Scheduler) initTorrentControl(t storage.Torrent, localRequest bool) *torrentControl {
+func (s *scheduler) initTorrentControl(t storage.Torrent, localRequest bool) *torrentControl {
 	d := dispatch.New(
 		s.config.Dispatch,
 		s.stats,
@@ -386,7 +406,7 @@ func (s *Scheduler) initTorrentControl(t storage.Torrent, localRequest bool) *to
 	return ctrl
 }
 
-func (s *Scheduler) tearDownTorrentControl(ctrl *torrentControl, err error) {
+func (s *scheduler) tearDownTorrentControl(ctrl *torrentControl, err error) {
 	h := ctrl.dispatcher.InfoHash()
 	if !ctrl.complete {
 		ctrl.dispatcher.TearDown()
@@ -400,6 +420,6 @@ func (s *Scheduler) tearDownTorrentControl(ctrl *torrentControl, err error) {
 	delete(s.torrentControls, h)
 }
 
-func (s *Scheduler) log(args ...interface{}) *zap.SugaredLogger {
+func (s *scheduler) log(args ...interface{}) *zap.SugaredLogger {
 	return log.With(args...)
 }

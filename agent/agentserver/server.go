@@ -14,7 +14,6 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
@@ -27,16 +26,19 @@ type Config struct {
 
 // Server defines the agent HTTP server.
 type Server struct {
-	config        Config
-	stats         tally.Scope
-	fs            store.FileStore
-	torrentClient torrent.Client
-	requestCache  *dedup.RequestCache
+	config       Config
+	stats        tally.Scope
+	fs           store.FileStore
+	sched        scheduler.ReloadableScheduler
+	requestCache *dedup.RequestCache
 }
 
 // New creates a new Server.
 func New(
-	config Config, stats tally.Scope, fs store.FileStore, tc torrent.Client) *Server {
+	config Config,
+	stats tally.Scope,
+	fs store.FileStore,
+	sched scheduler.ReloadableScheduler) *Server {
 
 	stats = stats.Tagged(map[string]string{
 		"module": "agentserver",
@@ -45,7 +47,7 @@ func New(
 	rc := dedup.NewRequestCache(config.RequestCache, clock.New())
 	rc.SetNotFound(func(err error) bool { return err == scheduler.ErrTorrentNotFound })
 
-	return &Server{config, stats, fs, tc, rc}
+	return &Server{config, stats, fs, sched, rc}
 }
 
 // Handler returns the HTTP handler.
@@ -99,7 +101,7 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 func (s *Server) startTorrentDownload(namespace, name string) error {
 	id := namespace + ":" + name
 	err := s.requestCache.Start(id, func() error {
-		return s.torrentClient.Download(namespace, name)
+		return s.sched.Download(namespace, name)
 	})
 	switch err {
 	case dedup.ErrRequestPending, nil:
@@ -118,14 +120,14 @@ func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error
 	if name == "" {
 		return handler.Errorf("name required").Status(http.StatusBadRequest)
 	}
-	if err := s.torrentClient.RemoveTorrent(name); err != nil {
+	if err := s.sched.RemoveTorrent(name); err != nil {
 		return handler.Errorf("remove torrent: %s", err)
 	}
 	return nil
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
-	if err := s.torrentClient.Probe(); err != nil {
+	if err := s.sched.Probe(); err != nil {
 		return handler.Errorf("probe torrent client: %s", err)
 	}
 	fmt.Fprintln(w, "OK")
@@ -140,12 +142,12 @@ func (s *Server) patchSchedulerConfigHandler(w http.ResponseWriter, r *http.Requ
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
 		return handler.Errorf("json decode: %s", err).Status(http.StatusBadRequest)
 	}
-	s.torrentClient.Reload(config)
+	s.sched.Reload(config)
 	return nil
 }
 
 func (s *Server) getBlacklistHandler(w http.ResponseWriter, r *http.Request) error {
-	blacklist, err := s.torrentClient.BlacklistSnapshot()
+	blacklist, err := s.sched.BlacklistSnapshot()
 	if err != nil {
 		return handler.Errorf("blacklist snapshot: %s", err)
 	}

@@ -17,12 +17,9 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent"
-	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
-	torrentstorage "code.uber.internal/infra/kraken/lib/torrent/storage"
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/metrics"
-	"code.uber.internal/infra/kraken/tracker/announceclient"
-	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -58,8 +55,7 @@ func main() {
 	zlog := log.ConfigureLogger(config.ZapLogging)
 	defer zlog.Sync()
 
-	pctx, err := core.NewPeerContext(
-		core.PeerIDFactory(config.Torrent.PeerIDFactory), *zone, *peerIP, *peerPort, false)
+	pctx, err := core.NewPeerContext(config.PeerIDFactory, *zone, *peerIP, *peerPort, false)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
@@ -79,21 +75,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
-	archive := torrentstorage.NewAgentTorrentArchive(
-		config.AgentTorrentArchive, stats, fs, metainfoclient.Default(trackers))
 
-	torrentClient, err := torrent.NewSchedulerClient(
-		config.Torrent,
-		stats,
-		pctx,
-		announceclient.New(pctx, trackers),
-		announcequeue.New(),
-		archive)
+	netevents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
-		log.Fatalf("Failed to create scheduler client: %s", err)
-		panic(err)
+		log.Fatalf("Failed to create network event producer: %s", err)
 	}
-	defer torrentClient.Close()
+
+	sched, err := scheduler.NewAgentScheduler(config.Scheduler, stats, pctx, fs, netevents, trackers)
+	if err != nil {
+		log.Fatalf("Error creating scheduler: %s", err)
+	}
 
 	backendManager, err := backend.NewManager(config.Registry.Namespaces, config.AuthNamespaces)
 	if err != nil {
@@ -103,8 +94,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating backend tag client: %s", err)
 	}
-	transferer := transfer.NewAgentTransferer(
-		fs, tagClient, config.Registry.BlobNamespace, torrentClient)
+	transferer := transfer.NewAgentTransferer(fs, tagClient, config.Registry.BlobNamespace, sched)
 
 	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)
@@ -112,7 +102,7 @@ func main() {
 		log.Fatalf("Failed to init registry: %s", err)
 	}
 
-	agentServer := agentserver.New(config.AgentServer, stats, fs, torrentClient)
+	agentServer := agentserver.New(config.AgentServer, stats, fs, sched)
 	addr := fmt.Sprintf(":%d", *agentServerPort)
 	log.Infof("Starting agent server on %s", addr)
 	go func() {

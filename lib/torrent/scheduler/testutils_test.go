@@ -19,8 +19,8 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
@@ -93,7 +93,7 @@ func newTestMocks(t gomock.TestReporter) (*testMocks, func()) {
 
 type testPeer struct {
 	pctx           core.PeerContext
-	scheduler      *Scheduler
+	scheduler      *scheduler
 	torrentArchive storage.TorrentArchive
 	stats          tally.TestScope
 	testProducer   *networkevent.TestProducer
@@ -110,8 +110,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 
 	stats := tally.NewTestScope("", nil)
 
-	ta := storage.NewAgentTorrentArchive(
-		storage.AgentTorrentArchiveConfig{}, stats, fs, m.metaInfoClient)
+	ta := storage.NewAgentTorrentArchive(stats, fs, m.metaInfoClient)
 
 	pctx := core.PeerContext{
 		PeerID: core.PeerIDFixture(),
@@ -122,7 +121,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 	ac := announceclient.New(pctx, serverset.NewSingle(m.trackerAddr))
 	tp := networkevent.NewTestProducer()
 
-	s, err := New(config, ta, stats, pctx, ac, announcequeue.New(), tp, options...)
+	s, err := newScheduler(config, ta, stats, pctx, ac, announcequeue.New(), tp, options...)
 	if err != nil {
 		panic(err)
 	}
@@ -200,7 +199,7 @@ type hasConnEvent struct {
 	result   chan bool
 }
 
-func (e hasConnEvent) Apply(s *Scheduler) {
+func (e hasConnEvent) Apply(s *scheduler) {
 	found := false
 	conns := s.connState.ActiveConns()
 	for _, c := range conns {
@@ -214,7 +213,7 @@ func (e hasConnEvent) Apply(s *Scheduler) {
 
 // waitForConnEstablished waits until s has established a connection to peerID for the
 // torrent of infoHash.
-func waitForConnEstablished(t *testing.T, s *Scheduler, peerID core.PeerID, infoHash core.InfoHash) {
+func waitForConnEstablished(t *testing.T, s *scheduler, peerID core.PeerID, infoHash core.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
@@ -229,7 +228,7 @@ func waitForConnEstablished(t *testing.T, s *Scheduler, peerID core.PeerID, info
 
 // waitForConnRemoved waits until s has closed the connection to peerID for the
 // torrent of infoHash.
-func waitForConnRemoved(t *testing.T, s *Scheduler, peerID core.PeerID, infoHash core.InfoHash) {
+func waitForConnRemoved(t *testing.T, s *scheduler, peerID core.PeerID, infoHash core.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
@@ -244,7 +243,7 @@ func waitForConnRemoved(t *testing.T, s *Scheduler, peerID core.PeerID, infoHash
 
 // hasConn checks whether s has an established connection to peerID for the
 // torrent of infoHash.
-func hasConn(s *Scheduler, peerID core.PeerID, infoHash core.InfoHash) bool {
+func hasConn(s *scheduler, peerID core.PeerID, infoHash core.InfoHash) bool {
 	result := make(chan bool)
 	s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
 	return <-result
@@ -255,12 +254,12 @@ type hasTorrentEvent struct {
 	result   chan bool
 }
 
-func (e hasTorrentEvent) Apply(s *Scheduler) {
+func (e hasTorrentEvent) Apply(s *scheduler) {
 	_, ok := s.torrentControls[e.infoHash]
 	e.result <- ok
 }
 
-func waitForTorrentRemoved(t *testing.T, s *Scheduler, infoHash core.InfoHash) {
+func waitForTorrentRemoved(t *testing.T, s *scheduler, infoHash core.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasTorrentEvent{infoHash, result})
@@ -273,7 +272,7 @@ func waitForTorrentRemoved(t *testing.T, s *Scheduler, infoHash core.InfoHash) {
 	}
 }
 
-func waitForTorrentAdded(t *testing.T, s *Scheduler, infoHash core.InfoHash) {
+func waitForTorrentAdded(t *testing.T, s *scheduler, infoHash core.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
 		s.eventLoop.Send(hasTorrentEvent{infoHash, result})
@@ -302,15 +301,16 @@ func newEventWatcher() *eventWatcher {
 
 // WaitFor waits for e to send on w.
 func (w *eventWatcher) WaitFor(t *testing.T, e event) {
+	name := reflect.TypeOf(e).Name()
 	timeout := time.After(5 * time.Second)
 	for {
 		select {
 		case ee := <-w.events:
-			if reflect.DeepEqual(e, ee) {
+			if name == reflect.TypeOf(ee).Name() {
 				return
 			}
 		case <-timeout:
-			t.Fatalf("timed out waiting for %s to occur", reflect.TypeOf(e).Name())
+			t.Fatalf("timed out waiting for %s to occur", name)
 		}
 	}
 }
@@ -327,7 +327,7 @@ func (w *eventWatcher) SendTimeout(e event, timeout time.Duration) error {
 	panic("unimplemented")
 }
 
-func (w *eventWatcher) Run(s *Scheduler) {
+func (w *eventWatcher) Run(s *scheduler) {
 	w.l.Run(s)
 }
 
