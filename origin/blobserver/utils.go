@@ -98,15 +98,11 @@ func blobExists(fs store.OriginFileStore, d core.Digest) (bool, error) {
 
 // transferBlob transfer blob d from fs to client.
 func transferBlob(fs store.OriginFileStore, d core.Digest, client blobclient.Client) error {
-	info, err := fs.GetCacheFileStat(d.Hex())
-	if err != nil {
-		return fmt.Errorf("cache stat: %s", err)
-	}
 	f, err := fs.GetCacheFileReader(d.Hex())
 	if err != nil {
 		return fmt.Errorf("get cache reader: %s", err)
 	}
-	if err := client.TransferBlob(d, f, info.Size()); err != nil {
+	if err := client.TransferBlob(d, f); err != nil {
 		return fmt.Errorf("push blob: %s", err)
 	}
 	return nil

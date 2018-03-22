@@ -47,7 +47,7 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		blob := core.NewBlobFixture()
 
-		require.NoError(cc.UploadBlob("noexist", blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content))))
+		require.NoError(cc.UploadBlob("noexist", blob.Digest, bytes.NewReader(blob.Content), false))
 
 		mi, err := cc.GetMetaInfo("noexist", blob.Digest)
 		require.NoError(err)
@@ -79,7 +79,7 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	require.Error(cc.UploadBlob("noexist", blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content))))
+	require.Error(cc.UploadBlob("noexist", blob.Digest, bytes.NewReader(blob.Content), false))
 
 	_, err := cc.GetMetaInfo("noexist", blob.Digest)
 	require.Error(err)

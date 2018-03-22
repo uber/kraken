@@ -1,6 +1,7 @@
 package blobclient
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -17,7 +18,7 @@ type uploader interface {
 	commit(d core.Digest, uid string) error
 }
 
-func runChunkedUpload(u uploader, d core.Digest, blob io.Reader, size int64, chunkSize int64) error {
+func runChunkedUpload(u uploader, d core.Digest, blob io.Reader, chunkSize int64) error {
 	uid, err := u.start(d)
 	if err != nil {
 		if httputil.IsConflict(err) {
@@ -25,14 +26,22 @@ func runChunkedUpload(u uploader, d core.Digest, blob io.Reader, size int64, chu
 		}
 		return err
 	}
-	var start int64
-	for start < size {
-		n := min(chunkSize, size-start)
-		chunk := io.LimitReader(blob, n)
-		if err := u.patch(d, uid, start, start+n, chunk); err != nil {
+	var pos int64
+	buf := make([]byte, chunkSize)
+	for {
+		n, err := blob.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("read blob: %s", err)
+		}
+		chunk := bytes.NewReader(buf[:n])
+		stop := pos + int64(n)
+		if err := u.patch(d, uid, pos, stop, chunk); err != nil {
 			return err
 		}
-		start += n
+		pos = stop
 	}
 	return u.commit(d, uid)
 }

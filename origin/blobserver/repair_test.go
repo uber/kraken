@@ -33,8 +33,7 @@ func TestRepairOwnedShardPushesToReplica(t *testing.T) {
 		blob := computeBlobForShard(shardID)
 		blobs = append(blobs, blob)
 
-		err := cp.Provide(master1).TransferBlob(
-			blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)))
+		err := cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 		require.NoError(err)
 	}
 
@@ -64,8 +63,7 @@ func TestRepairUnownedShardPushesToReplicasAndDeletes(t *testing.T) {
 		blob := computeBlobForShard(shardID)
 		blobs = append(blobs, blob)
 
-		err := cp.Provide(master1).TransferBlob(
-			blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)))
+		err := cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 		require.NoError(err)
 	}
 
@@ -111,8 +109,7 @@ func TestRepairUnownedShardDeletesIfReplicasAlreadyHaveShard(t *testing.T) {
 		blob := computeBlobForShard(shardID)
 		blobs = append(blobs, blob)
 
-		err := cp.Provide(master1).TransferBlob(
-			blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)))
+		err := cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 		require.NoError(err)
 	}
 
@@ -129,8 +126,7 @@ func TestRepairUnownedShardDeletesIfReplicasAlreadyHaveShard(t *testing.T) {
 	// Push blobs to master2 and master3.
 	for _, blob := range blobs {
 		for _, m := range []string{master2, master3} {
-			err := cp.Provide(m).TransferBlob(
-				blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)))
+			err := cp.Provide(m).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 			require.NoError(err)
 		}
 	}
@@ -163,8 +159,7 @@ func TestRepairUnownedShardDoesNotDeleteIfReplicationFails(t *testing.T) {
 		blob := computeBlobForShard(shardID)
 		blobs = append(blobs, blob)
 
-		err := cp.Provide(master1).TransferBlob(
-			blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)))
+		err := cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 		require.NoError(err)
 	}
 
@@ -216,8 +211,7 @@ func TestRepairAllShards(t *testing.T) {
 		blob := computeBlobForHosts(config, master1, master2)
 		blobs = append(blobs, blob)
 
-		err := cp.Provide(master1).TransferBlob(
-			blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)))
+		err := cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 		require.NoError(err)
 	}
 
@@ -243,8 +237,7 @@ func TestRepairDigest(t *testing.T) {
 
 	blob := computeBlobForHosts(config, master1, master2)
 
-	err := cp.Provide(master1).TransferBlob(
-		blob.Digest, bytes.NewReader(blob.Content), int64(len(blob.Content)))
+	err := cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
 
 	_, err = cp.Provide(master1).RepairDigest(blob.Digest)
