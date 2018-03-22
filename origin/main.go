@@ -10,14 +10,11 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent"
-	"code.uber.internal/infra/kraken/lib/torrent/announcequeue"
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
-	torrentstorage "code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobserver"
-	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -28,7 +25,7 @@ import (
 
 // addTorrentDebugEndpoints mounts experimental debugging endpoints which are
 // compatible with the agent server.
-func addTorrentDebugEndpoints(h http.Handler, c torrent.Client) http.Handler {
+func addTorrentDebugEndpoints(h http.Handler, sched scheduler.ReloadableScheduler) http.Handler {
 	r := chi.NewRouter()
 
 	r.Patch("/x/config/scheduler", handler.Wrap(func(w http.ResponseWriter, r *http.Request) error {
@@ -36,18 +33,7 @@ func addTorrentDebugEndpoints(h http.Handler, c torrent.Client) http.Handler {
 		if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
 			return handler.Errorf("decode body: %s", err)
 		}
-		c.Reload(config)
-		return nil
-	}))
-
-	r.Get("/x/blacklist", handler.Wrap(func(w http.ResponseWriter, r *http.Request) error {
-		blacklist, err := c.BlacklistSnapshot()
-		if err != nil {
-			return handler.Errorf("blacklist snapshot: %s", err)
-		}
-		if err := json.NewEncoder(w).Encode(&blacklist); err != nil {
-			return handler.Errorf("encode blacklist: %s", err)
-		}
+		sched.Reload(config)
 		return nil
 	}))
 
@@ -106,26 +92,24 @@ func main() {
 		log.Fatalf("Failed to create origin file store: %s", err)
 	}
 
-	pctx, err := core.NewPeerContext(
-		core.PeerIDFactory(config.Torrent.PeerIDFactory), *zone, *peerIP, *peerPort, true)
+	pctx, err := core.NewPeerContext(config.PeerIDFactory, *zone, *peerIP, *peerPort, true)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
-	}
-
-	torrentClient, err := torrent.NewSchedulerClient(
-		config.Torrent,
-		stats,
-		pctx,
-		announceclient.Disabled(),
-		announcequeue.Disabled(),
-		torrentstorage.NewOriginTorrentArchive(fs))
-	if err != nil {
-		log.Fatalf("Failed to create scheduler client: %s", err)
 	}
 
 	backendManager, err := backend.NewManager(config.Namespaces, config.AuthNamespaces)
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
+	}
+
+	netevents, err := networkevent.NewProducer(config.NetworkEvent)
+	if err != nil {
+		log.Fatalf("Error creating network event producer: %s", err)
+	}
+
+	sched, err := scheduler.NewOriginScheduler(config.Scheduler, stats, pctx, fs, netevents)
+	if err != nil {
+		log.Fatalf("Error creating scheduler: %s", err)
 	}
 
 	server, err := blobserver.New(
@@ -140,7 +124,7 @@ func main() {
 		log.Fatalf("Error initializing blob server: %s", err)
 	}
 
-	h := addTorrentDebugEndpoints(server.Handler(), torrentClient)
+	h := addTorrentDebugEndpoints(server.Handler(), sched)
 
 	addr := fmt.Sprintf(":%d", *blobServerPort)
 	log.Infof("Starting origin server on %s", addr)

@@ -3,10 +3,12 @@ package main
 import (
 	"go.uber.org/zap"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent"
+	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobserver"
 )
@@ -17,7 +19,9 @@ type Config struct {
 	ZapLogging     zap.Config                  `yaml:"zap"`
 	BlobServer     blobserver.Config           `yaml:"blobserver"`
 	OriginStore    store.OriginConfig          `yaml:"originstore"`
-	Torrent        torrent.Config              `yaml:"torrent"`
+	Scheduler      scheduler.Config            `yaml:"scheduler"`
+	NetworkEvent   networkevent.Config         `yaml:"networkevent"`
+	PeerIDFactory  core.PeerIDFactory          `yaml:"peer_id_factory"`
 	Metrics        metrics.Config              `yaml:"metrics"`
 	Tracker        TrackerConfig               `yaml:"tracker"`
 	Namespaces     backend.NamespaceConfig     `yaml:"namespaces"`

@@ -18,7 +18,7 @@ func TestAgentTorrentArchiveStatBitfield(t *testing.T) {
 	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
+	archive := mocks.newTorrentArchive()
 
 	blob := core.SizedBlobFixture(4, 1)
 	mi := blob.MetaInfo
@@ -40,7 +40,7 @@ func TestAgentTorrentArchiveStatNotExist(t *testing.T) {
 	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
+	archive := mocks.newTorrentArchive()
 
 	name := core.MetaInfoFixture().Name()
 
@@ -54,7 +54,7 @@ func TestAgentTorrentArchiveCreateTorrent(t *testing.T) {
 	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
+	archive := mocks.newTorrentArchive()
 
 	mi := core.MetaInfoFixture()
 
@@ -83,7 +83,7 @@ func TestAgentTorrentArchiveCreateTorrentNotFound(t *testing.T) {
 	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
+	archive := mocks.newTorrentArchive()
 
 	mi := core.MetaInfoFixture()
 
@@ -99,7 +99,7 @@ func TestAgentTorrentArchiveDeleteTorrent(t *testing.T) {
 	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
+	archive := mocks.newTorrentArchive()
 
 	mi := core.MetaInfoFixture()
 
@@ -121,7 +121,7 @@ func TestAgentTorrentArchiveConcurrentGet(t *testing.T) {
 	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
+	archive := mocks.newTorrentArchive()
 
 	mi := core.MetaInfoFixture()
 
@@ -147,7 +147,7 @@ func TestAgentTorrentArchiveGetTorrent(t *testing.T) {
 	mocks, cleanup := newAgentMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive(AgentTorrentArchiveConfig{})
+	archive := mocks.newTorrentArchive()
 
 	mi := core.MetaInfoFixture()
 

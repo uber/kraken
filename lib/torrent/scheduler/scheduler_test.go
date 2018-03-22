@@ -15,7 +15,6 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
-	"github.com/uber-go/tally"
 )
 
 func TestDownloadTorrentWithSeederAndLeecher(t *testing.T) {
@@ -35,9 +34,9 @@ func TestDownloadTorrentWithSeederAndLeecher(t *testing.T) {
 		namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).Times(2)
 
 	seeder.writeTorrent(blob)
-	require.NoError(<-seeder.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+	require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
 
-	require.NoError(<-leecher.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+	require.NoError(leecher.scheduler.Download(namespace, blob.MetaInfo.Name()))
 	leecher.checkTorrent(t, blob)
 }
 
@@ -64,9 +63,9 @@ func TestDownloadManyTorrentsWithSeederAndLeecher(t *testing.T) {
 			defer wg.Done()
 
 			seeder.writeTorrent(blob)
-			require.NoError(<-seeder.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+			require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
 
-			require.NoError(<-leecher.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+			require.NoError(leecher.scheduler.Download(namespace, blob.MetaInfo.Name()))
 			leecher.checkTorrent(t, blob)
 		}()
 	}
@@ -94,7 +93,7 @@ func TestDownloadManyTorrentsWithSeederAndManyLeechers(t *testing.T) {
 			namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).Times(6)
 
 		seeder.writeTorrent(blob)
-		require.NoError(<-seeder.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+		require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
 	}
 
 	var wg sync.WaitGroup
@@ -105,13 +104,8 @@ func TestDownloadManyTorrentsWithSeederAndManyLeechers(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				select {
-				case err := <-p.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()):
-					require.NoError(err)
-					p.checkTorrent(t, blob)
-				case <-time.After(10 * time.Second):
-					t.Errorf("AddTorrent timeout scheduler=%s torrent=%s", p.pctx.PeerID, blob.MetaInfo.InfoHash)
-				}
+				require.NoError(p.scheduler.Download(namespace, blob.MetaInfo.Name()))
+				p.checkTorrent(t, blob)
 			}()
 		}
 	}
@@ -149,13 +143,8 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			select {
-			case err := <-p.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()):
-				require.NoError(err)
-				p.checkTorrent(t, blob)
-			case <-time.After(10 * time.Second):
-				t.Errorf("AddTorrent timeout scheduler=%s torrent=%s", p.pctx.PeerID, blob.MetaInfo.InfoHash)
-			}
+			require.NoError(p.scheduler.Download(namespace, blob.MetaInfo.Name()))
+			p.checkTorrent(t, blob)
 		}()
 	}
 	wg.Wait()
@@ -179,12 +168,14 @@ func TestSeederTTI(t *testing.T) {
 
 	seeder := mocks.newPeer(config, withEventLoop(w), withClock(clk))
 	seeder.writeTorrent(blob)
-	require.NoError(<-seeder.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+	require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
 
 	clk.Add(config.AnnounceInterval)
 
 	leecher := mocks.newPeer(config, withClock(clk))
-	errc := leecher.scheduler.AddTorrent(namespace, blob.MetaInfo.Name())
+
+	errc := make(chan error)
+	go func() { errc <- leecher.scheduler.Download(namespace, blob.MetaInfo.Name()) }()
 
 	clk.Add(config.AnnounceInterval)
 
@@ -226,7 +217,8 @@ func TestLeecherTTI(t *testing.T) {
 	mocks.metaInfoClient.EXPECT().Download(namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil)
 
 	p := mocks.newPeer(config, withEventLoop(w), withClock(clk))
-	errc := p.scheduler.AddTorrent(namespace, blob.MetaInfo.Name())
+	errc := make(chan error)
+	go func() { errc <- p.scheduler.Download(namespace, blob.MetaInfo.Name()) }()
 
 	waitForTorrentAdded(t, p.scheduler, blob.MetaInfo.InfoHash)
 
@@ -241,7 +233,7 @@ func TestLeecherTTI(t *testing.T) {
 	require.True(os.IsNotExist(err))
 }
 
-func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
+func TestMultipleDownloadsForSameTorrentSucceed(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newTestMocks(t)
@@ -257,7 +249,7 @@ func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
 
 	seeder := mocks.newPeer(config)
 	seeder.writeTorrent(blob)
-	require.NoError(<-seeder.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+	require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
 
 	leecher := mocks.newPeer(config)
 
@@ -267,15 +259,15 @@ func TestMultipleAddTorrentsForSameTorrentSucceed(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			// Multiple goroutines should be able to wait on the same torrent.
-			require.NoError(<-leecher.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+			require.NoError(leecher.scheduler.Download(namespace, blob.MetaInfo.Name()))
 		}()
 	}
 	wg.Wait()
 
 	leecher.checkTorrent(t, blob)
 
-	// After the torrent is complete, further calls to AddTorrent should succeed immediately.
-	require.NoError(<-leecher.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+	// After the torrent is complete, further calls to Download should succeed immediately.
+	require.NoError(leecher.scheduler.Download(namespace, blob.MetaInfo.Name()))
 }
 
 func TestEmitStatsEventTriggers(t *testing.T) {
@@ -312,9 +304,9 @@ func TestNetworkEvents(t *testing.T) {
 		namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).Times(2)
 
 	seeder.writeTorrent(blob)
-	require.NoError(<-seeder.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+	require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
 
-	require.NoError(<-leecher.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+	require.NoError(leecher.scheduler.Download(namespace, blob.MetaInfo.Name()))
 	leecher.checkTorrent(t, blob)
 
 	sid := seeder.pctx.PeerID
@@ -375,7 +367,7 @@ func TestPullInactiveTorrent(t *testing.T) {
 
 	leecher := mocks.newPeer(config)
 
-	require.NoError(<-leecher.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+	require.NoError(leecher.scheduler.Download(namespace, blob.MetaInfo.Name()))
 	leecher.checkTorrent(t, blob)
 }
 
@@ -397,18 +389,18 @@ func TestSchedulerReload(t *testing.T) {
 			namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).Times(2)
 
 		seeder.writeTorrent(blob)
-		require.NoError(<-seeder.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+		require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
 
-		require.NoError(<-leecher.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+		require.NoError(leecher.scheduler.Download(namespace, blob.MetaInfo.Name()))
 		leecher.checkTorrent(t, blob)
 	}
 
 	download()
 
-	config.ConnTTL = 45 * time.Minute
-	s, err := Reload(leecher.scheduler, config, tally.NewTestScope("", nil))
-	require.NoError(err)
-	leecher.scheduler = s
+	rs := makeReloadable(leecher.scheduler)
+	config.ConnTTL += 5 * time.Minute
+	rs.Reload(config)
+	leecher.scheduler = rs.scheduler
 
 	download()
 }
@@ -419,24 +411,23 @@ func TestSchedulerRemoveTorrent(t *testing.T) {
 	mocks, cleanup := newTestMocks(t)
 	defer cleanup()
 
-	p := mocks.newPeer(configFixture())
+	w := newEventWatcher()
+
+	p := mocks.newPeer(configFixture(), withEventLoop(w))
 
 	blob := core.NewBlobFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(
 		namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil)
 
-	errc := p.scheduler.AddTorrent(namespace, blob.MetaInfo.Name())
+	errc := make(chan error)
+	go func() { errc <- p.scheduler.Download(namespace, blob.MetaInfo.Name()) }()
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		require.Equal(ErrTorrentRemoved, <-errc)
-	}()
+	w.WaitFor(t, newTorrentEvent{})
 
-	require.NoError(<-p.scheduler.RemoveTorrent(blob.MetaInfo.Name()))
+	require.NoError(p.scheduler.RemoveTorrent(blob.MetaInfo.Name()))
 
-	<-done
+	require.Equal(ErrTorrentRemoved, <-errc)
 
 	_, err := p.torrentArchive.Stat(blob.MetaInfo.Name())
 	require.True(os.IsNotExist(err))
@@ -461,7 +452,7 @@ type deadlockEvent struct {
 	release chan struct{}
 }
 
-func (e deadlockEvent) Apply(*Scheduler) {
+func (e deadlockEvent) Apply(*scheduler) {
 	<-e.release
 }
 
@@ -520,7 +511,7 @@ func BenchmarkPieceUploadingAndDownloading(b *testing.B) {
 				namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).AnyTimes()
 
 			seeder.writeTorrent(blob)
-			require.NoError(<-seeder.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+			require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
 		}
 
 		peers := mocks.newPeers(10, config)
@@ -532,7 +523,7 @@ func BenchmarkPieceUploadingAndDownloading(b *testing.B) {
 				wg.Add(1)
 				go func(p *testPeer, blob *core.BlobFixture) {
 					defer wg.Done()
-					require.NoError(<-p.scheduler.AddTorrent(namespace, blob.MetaInfo.Name()))
+					require.NoError(p.scheduler.Download(namespace, blob.MetaInfo.Name()))
 				}(p, blob)
 			}
 		}

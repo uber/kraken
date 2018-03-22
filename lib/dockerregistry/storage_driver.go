@@ -8,7 +8,6 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent"
 	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/docker/distribution/context"
@@ -100,7 +99,6 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 // KrakenStorageDriver is a storage driver
 type KrakenStorageDriver struct {
 	config            Config
-	tcl               torrent.Client
 	store             store.FileStore
 	blobs             *Blobs
 	uploads           *Uploads

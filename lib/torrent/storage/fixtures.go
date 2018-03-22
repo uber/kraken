@@ -13,8 +13,7 @@ import (
 // TorrentArchiveFixture creates a new TorrentArchive and returns the archive with a cleanup function
 func TorrentArchiveFixture() (TorrentArchive, func()) {
 	localStore, cleanup := store.LocalFileStoreFixture()
-	archive := NewAgentTorrentArchive(
-		AgentTorrentArchiveConfig{}, tally.NoopScope, localStore, nil)
+	archive := NewAgentTorrentArchive(tally.NoopScope, localStore, nil)
 	return archive, cleanup
 }
 
@@ -28,7 +27,7 @@ func TorrentFixture(mi *core.MetaInfo) (Torrent, func()) {
 
 	tc := metainfoclient.NewTestClient()
 
-	ta := NewAgentTorrentArchive(AgentTorrentArchiveConfig{}, tally.NoopScope, fs, tc)
+	ta := NewAgentTorrentArchive(tally.NoopScope, fs, tc)
 
 	if err := tc.Upload(mi); err != nil {
 		panic(err)

@@ -121,11 +121,11 @@ mocks:
 		-package mockstore \
 		code.uber.internal/infra/kraken/lib/store FileStore,FileReadWriter,OriginFileStore
 
-	mkdir -p mocks/lib/torrent
+	mkdir -p mocks/lib/torrent/scheduler
 	$(mockgen) \
-		-destination=mocks/lib/torrent/mocktorrent.go \
-		-package mocktorrent \
-		code.uber.internal/infra/kraken/lib/torrent Client
+		-destination=mocks/lib/torrent/scheduler/mockscheduler.go \
+		-package mockscheduler \
+		code.uber.internal/infra/kraken/lib/torrent/scheduler ReloadableScheduler
 
 	mkdir -p mocks/origin/blobclient
 	$(mockgen) \

@@ -11,15 +11,10 @@ import (
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 )
 
-// AgentTorrentArchiveConfig defines AgentTorrentArchive configuration.
-// TODO(codyg): Probably could remove this.
-type AgentTorrentArchiveConfig struct{}
-
 // AgentTorrentArchive is a TorrentArchive for agent peers. It is capable
 // of initializing torrents in the download directory and serving torrents
 // from either the download or cache directory.
 type AgentTorrentArchive struct {
-	config         AgentTorrentArchiveConfig
 	stats          tally.Scope
 	fs             store.FileStore
 	metaInfoClient metainfoclient.Client
@@ -27,7 +22,6 @@ type AgentTorrentArchive struct {
 
 // NewAgentTorrentArchive creates a new AgentTorrentArchive
 func NewAgentTorrentArchive(
-	config AgentTorrentArchiveConfig,
 	stats tally.Scope,
 	fs store.FileStore,
 	mic metainfoclient.Client) *AgentTorrentArchive {
@@ -36,7 +30,7 @@ func NewAgentTorrentArchive(
 		"module": "agenttorrentarchive",
 	})
 
-	return &AgentTorrentArchive{config, stats, fs, mic}
+	return &AgentTorrentArchive{stats, fs, mic}
 }
 
 // Stat returns TorrentInfo for given file name. Returns os.ErrNotExist if the file does

@@ -16,18 +16,18 @@ import (
 	"github.com/willf/bitset"
 )
 
-// event describes an external event which moves the Scheduler into a new state.
+// event describes an external event which moves the scheduler into a new state.
 // While the event is applying, it is guaranteed to be the only accessor of
-// Scheduler state.
+// scheduler state.
 type event interface {
-	Apply(s *Scheduler)
+	Apply(s *scheduler)
 }
 
-// eventLoop represents a serialized list of events to be applied to a Scheduler.
+// eventLoop represents a serialized list of events to be applied to a scheduler.
 type eventLoop interface {
 	Send(event) bool
 	SendTimeout(e event, timeout time.Duration) error
-	Run(*Scheduler)
+	Run(*scheduler)
 	Stop()
 }
 
@@ -69,7 +69,7 @@ func (l *defaultEventLoop) SendTimeout(e event, timeout time.Duration) error {
 }
 
 // Run processes events until done is closed.
-func (l *defaultEventLoop) Run(s *Scheduler) {
+func (l *defaultEventLoop) Run(s *scheduler) {
 	for {
 		select {
 		case e := <-l.events:
@@ -106,8 +106,8 @@ type connClosedEvent struct {
 	c *conn.Conn
 }
 
-// Apply ejects the conn from the Scheduler's active connections.
-func (e connClosedEvent) Apply(s *Scheduler) {
+// Apply ejects the conn from the scheduler's active connections.
+func (e connClosedEvent) Apply(s *scheduler) {
 	s.connState.DeleteActive(e.c)
 	if err := s.connState.Blacklist(e.c.PeerID(), e.c.InfoHash()); err != nil {
 		s.log("conn", e.c).Infof("Cannot blacklist active conn: %s", err)
@@ -119,11 +119,11 @@ type incomingHandshakeEvent struct {
 	pc *conn.PendingConn
 }
 
-// Apply rejects incoming handshakes when the Scheduler is at capacity. If the
-// Scheduler has capacity for more connections, adds the peer/hash of the handshake
-// to the Scheduler's pending connections and asynchronously attempts to establish
+// Apply rejects incoming handshakes when the scheduler is at capacity. If the
+// scheduler has capacity for more connections, adds the peer/hash of the handshake
+// to the scheduler's pending connections and asynchronously attempts to establish
 // the connection.
-func (e incomingHandshakeEvent) Apply(s *Scheduler) {
+func (e incomingHandshakeEvent) Apply(s *scheduler) {
 	if err := s.connState.AddPending(e.pc.PeerID(), e.pc.InfoHash()); err != nil {
 		s.log("peer", e.pc.PeerID(), "hash", e.pc.InfoHash()).Infof(
 			"Rejecting incoming handshake: %s", err)
@@ -158,7 +158,7 @@ type failedIncomingHandshakeEvent struct {
 	infoHash core.InfoHash
 }
 
-func (e failedIncomingHandshakeEvent) Apply(s *Scheduler) {
+func (e failedIncomingHandshakeEvent) Apply(s *scheduler) {
 	s.connState.DeletePending(e.peerID, e.infoHash)
 }
 
@@ -170,7 +170,7 @@ type incomingConnEvent struct {
 }
 
 // Apply transitions a fully-handshaked incoming conn from pending to active.
-func (e incomingConnEvent) Apply(s *Scheduler) {
+func (e incomingConnEvent) Apply(s *scheduler) {
 	if err := s.addIncomingConn(e.c, e.bitfield, e.info); err != nil {
 		s.log("conn", e.c).Errorf("Error adding incoming conn: %s", err)
 		e.c.Close()
@@ -186,7 +186,7 @@ type failedOutgoingHandshakeEvent struct {
 	infoHash core.InfoHash
 }
 
-func (e failedOutgoingHandshakeEvent) Apply(s *Scheduler) {
+func (e failedOutgoingHandshakeEvent) Apply(s *scheduler) {
 	s.connState.DeletePending(e.peerID, e.infoHash)
 	if err := s.connState.Blacklist(e.peerID, e.infoHash); err != nil {
 		s.log("peer", e.peerID, "hash", e.infoHash).Infof("Cannot blacklist pending conn: %s", err)
@@ -201,7 +201,7 @@ type outgoingConnEvent struct {
 }
 
 // Apply transitions a fully-handshaked outgoing conn from pending to active.
-func (e outgoingConnEvent) Apply(s *Scheduler) {
+func (e outgoingConnEvent) Apply(s *scheduler) {
 	if err := s.addOutgoingConn(e.c, e.bitfield, e.info); err != nil {
 		s.log("conn", e.c).Errorf("Error adding outgoing conn: %s", err)
 		e.c.Close()
@@ -215,7 +215,7 @@ type announceTickEvent struct{}
 
 // Apply pulls the next dispatcher from the announce queue and asynchronously
 // makes an announce request to the tracker.
-func (e announceTickEvent) Apply(s *Scheduler) {
+func (e announceTickEvent) Apply(s *scheduler) {
 	h, ok := s.announceQueue.Next()
 	if !ok {
 		s.log().Debug("No torrents in announce queue")
@@ -237,11 +237,11 @@ type announceResponseEvent struct {
 }
 
 // Apply selects new peers returned via an announce response to open connections to
-// if there is capacity. These connections are added to the Scheduler's pending
+// if there is capacity. These connections are added to the scheduler's pending
 // connections and handshaked asynchronously.
 //
 // Also marks the dispatcher as ready to announce again.
-func (e announceResponseEvent) Apply(s *Scheduler) {
+func (e announceResponseEvent) Apply(s *scheduler) {
 	ctrl, ok := s.torrentControls[e.infoHash]
 	if !ok {
 		s.log("hash", e.infoHash).Info("Dispatcher closed after announce response received")
@@ -287,7 +287,7 @@ type announceFailureEvent struct {
 }
 
 // Apply marks the dispatcher as ready to announce again.
-func (e announceFailureEvent) Apply(s *Scheduler) {
+func (e announceFailureEvent) Apply(s *scheduler) {
 	s.announceQueue.Ready(e.infoHash)
 }
 
@@ -298,7 +298,7 @@ type newTorrentEvent struct {
 }
 
 // Apply begins seeding / leeching a new torrent.
-func (e newTorrentEvent) Apply(s *Scheduler) {
+func (e newTorrentEvent) Apply(s *scheduler) {
 	ctrl, ok := s.torrentControls[e.torrent.InfoHash()]
 	if !ok {
 		ctrl = s.initTorrentControl(e.torrent, true)
@@ -320,7 +320,7 @@ type dispatcherCompleteEvent struct {
 }
 
 // Apply marks the dispatcher for its final announce.
-func (e dispatcherCompleteEvent) Apply(s *Scheduler) {
+func (e dispatcherCompleteEvent) Apply(s *scheduler) {
 	infoHash := e.dispatcher.InfoHash()
 
 	s.connState.ClearBlacklist(infoHash)
@@ -356,7 +356,7 @@ func (e dispatcherCompleteEvent) Apply(s *Scheduler) {
 // idle torrentControls.
 type preemptionTickEvent struct{}
 
-func (e preemptionTickEvent) Apply(s *Scheduler) {
+func (e preemptionTickEvent) Apply(s *scheduler) {
 	for _, c := range s.connState.ActiveConns() {
 		ctrl, ok := s.torrentControls[c.InfoHash()]
 		if !ok {
@@ -395,10 +395,10 @@ func (e preemptionTickEvent) Apply(s *Scheduler) {
 	}
 }
 
-// emitStatsEvent occurs periodically to emit Scheduler stats.
+// emitStatsEvent occurs periodically to emit scheduler stats.
 type emitStatsEvent struct{}
 
-func (e emitStatsEvent) Apply(s *Scheduler) {
+func (e emitStatsEvent) Apply(s *scheduler) {
 	s.stats.Gauge("torrents").Update(float64(len(s.torrentControls)))
 	s.stats.Gauge("conns").Update(float64(s.connState.NumActiveConns()))
 }
@@ -407,17 +407,17 @@ type blacklistSnapshotEvent struct {
 	result chan []connstate.BlacklistedConn
 }
 
-func (e blacklistSnapshotEvent) Apply(s *Scheduler) {
+func (e blacklistSnapshotEvent) Apply(s *scheduler) {
 	e.result <- s.connState.BlacklistSnapshot()
 }
 
-// removeTorrentEvent occurs when a torrent is manually removed via Scheduler API.
+// removeTorrentEvent occurs when a torrent is manually removed via scheduler API.
 type removeTorrentEvent struct {
 	name string
 	errc chan error
 }
 
-func (e removeTorrentEvent) Apply(s *Scheduler) {
+func (e removeTorrentEvent) Apply(s *scheduler) {
 	for _, ctrl := range s.torrentControls {
 		if ctrl.dispatcher.Name() == e.name {
 			s.log(
@@ -429,9 +429,9 @@ func (e removeTorrentEvent) Apply(s *Scheduler) {
 	e.errc <- s.torrentArchive.DeleteTorrent(e.name)
 }
 
-// probeEvent occurs when a probe is manually requested via Scheduler API.
+// probeEvent occurs when a probe is manually requested via scheduler API.
 // The event loop is unbuffered, so if a probe can be successfully sent, then
 // the event loop is healthy.
 type probeEvent struct{}
 
-func (e probeEvent) Apply(*Scheduler) {}
+func (e probeEvent) Apply(*scheduler) {}
