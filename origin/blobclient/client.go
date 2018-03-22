@@ -29,7 +29,7 @@ type Client interface {
 	CheckBlob(d core.Digest) (bool, error)
 	GetBlob(d core.Digest) (io.ReadCloser, error)
 	DeleteBlob(d core.Digest) error
-	TransferBlob(d core.Digest, blob io.Reader, size int64) error
+	TransferBlob(d core.Digest, blob io.Reader) error
 
 	Repair() (io.ReadCloser, error)
 	RepairShard(shardID string) (io.ReadCloser, error)
@@ -38,7 +38,7 @@ type Client interface {
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
 
-	UploadBlob(namespace string, d core.Digest, blob io.Reader, size int64, through bool) error
+	UploadBlob(namespace string, d core.Digest, blob io.Reader, through bool) error
 
 	GetPeerContext() (core.PeerContext, error)
 }
@@ -118,18 +118,18 @@ func (c *HTTPClient) DeleteBlob(d core.Digest) error {
 
 // TransferBlob uploads a blob to a single origin server. Unlike its cousin UploadBlob,
 // TransferBlob is an internal API which does not replicate the blob.
-func (c *HTTPClient) TransferBlob(d core.Digest, blob io.Reader, size int64) error {
+func (c *HTTPClient) TransferBlob(d core.Digest, blob io.Reader) error {
 	tc := newTransferClient(c.addr)
-	return runChunkedUpload(tc, d, blob, size, int64(c.config.ChunkSize))
+	return runChunkedUpload(tc, d, blob, int64(c.config.ChunkSize))
 }
 
 // UploadBlob uploads and replicates blob to the origin cluster. If through is set,
 // UploadBlob will also upload blob to the storage backend configured for namespace.
 func (c *HTTPClient) UploadBlob(
-	namespace string, d core.Digest, blob io.Reader, size int64, through bool) error {
+	namespace string, d core.Digest, blob io.Reader, through bool) error {
 
 	uc := newUploadClient(c.addr, namespace, through)
-	return runChunkedUpload(uc, d, blob, size, int64(c.config.ChunkSize))
+	return runChunkedUpload(uc, d, blob, int64(c.config.ChunkSize))
 }
 
 // Repair runs a global repair of all shards present on disk. See RepairShard

@@ -57,8 +57,7 @@ func (r *clientResolver) Resolve(d core.Digest) ([]Client, error) {
 // ClusterClient defines a top-level origin cluster client which handles blob
 // location resolution and retries.
 type ClusterClient interface {
-	UploadBlob(namespace string, d core.Digest, blob io.Reader, size int64) error
-	UploadBlobThrough(namespace string, d core.Digest, blob io.Reader, size int64) error
+	UploadBlob(namespace string, d core.Digest, blob io.Reader, through bool) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
 	DownloadBlob(d core.Digest) (io.ReadCloser, error)
@@ -94,28 +93,8 @@ func NewClusterClient(r ClientResolver, opts ...ClusterClientOption) ClusterClie
 }
 
 // UploadBlob uploads blob to origin cluster. See Client.UploadBlob for more details.
-//
-// NOTE: Because the blob is supplied as the body of an HTTP request, if the
-// underlying value of blob implements io.Closer, it will be closed.
 func (c *clusterClient) UploadBlob(
-	namespace string, d core.Digest, blob io.Reader, size int64) error {
-
-	return c.uploadBlob(namespace, d, blob, size, false)
-}
-
-// UploadBlob uploads blob to origin cluster and storage backend. See
-// Client.UploadBlob for more details.
-//
-// NOTE: Because the blob is supplied as the body of an HTTP request, if the
-// underlying value of blob implements io.Closer, it will be closed.
-func (c *clusterClient) UploadBlobThrough(
-	namespace string, d core.Digest, blob io.Reader, size int64) error {
-
-	return c.uploadBlob(namespace, d, blob, size, true)
-}
-
-func (c *clusterClient) uploadBlob(
-	namespace string, d core.Digest, blob io.Reader, size int64, through bool) (err error) {
+	namespace string, d core.Digest, blob io.Reader, through bool) (err error) {
 
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
@@ -124,7 +103,7 @@ func (c *clusterClient) uploadBlob(
 	// Shuffle clients to balance load.
 	shuffle(clients)
 	for _, client := range clients {
-		err = client.UploadBlob(namespace, d, blob, size, through)
+		err = client.UploadBlob(namespace, d, blob, through)
 		if _, ok := err.(httputil.NetworkError); ok {
 			continue
 		}

@@ -6,6 +6,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/backend/hdfsbackend"
 	"code.uber.internal/infra/kraken/lib/backend/httpbackend"
+	"code.uber.internal/infra/kraken/lib/backend/originbackend"
 	"code.uber.internal/infra/kraken/lib/backend/s3backend"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
 	"code.uber.internal/infra/kraken/lib/backend/trackerbackend"
@@ -22,7 +23,6 @@ func NewManager(namespaces NamespaceConfig, auth AuthNamespaceConfig) (*Manager,
 	for ns, config := range namespaces {
 		var c Client
 		var err error
-
 		switch config.Backend {
 		case "s3_dockerblob":
 			c, err = s3backend.NewDockerBlobClient(config.S3, auth[ns].S3, ns)
@@ -36,6 +36,8 @@ func NewManager(namespaces NamespaceConfig, auth AuthNamespaceConfig) (*Manager,
 			c, err = httpbackend.NewClient(config.HTTP)
 		case "tracker_dockertag":
 			c, err = trackerbackend.NewDockerTagClient(config.Tracker)
+		case "origin":
+			c, err = originbackend.NewClient(config.Origin)
 		case "testfs":
 			c, err = testfs.NewClient(config.TestFS)
 		default:

@@ -3,6 +3,7 @@ package backend
 import (
 	"code.uber.internal/infra/kraken/lib/backend/hdfsbackend"
 	"code.uber.internal/infra/kraken/lib/backend/httpbackend"
+	"code.uber.internal/infra/kraken/lib/backend/originbackend"
 	"code.uber.internal/infra/kraken/lib/backend/s3backend"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
 	"code.uber.internal/infra/kraken/lib/backend/trackerbackend"
@@ -24,6 +25,7 @@ type Config struct {
 	Tracker trackerbackend.Config `yaml:"tracker"`
 	TestFS  testfs.Config         `yaml:"testfs"`
 	HTTP    httpbackend.Config    `yaml:"http"`
+	Origin  originbackend.Config  `yaml:"origin"`
 }
 
 // AuthConfig defines the union of authentication credentials
