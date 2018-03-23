@@ -37,6 +37,24 @@ func TestNewClient(t *testing.T) {
 	require.NotNil(t, client)
 }
 
+func TestClientDownload(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	client := mocks.newClient(Config{Namespace: "test-namespace"})
+
+	blob := core.NewBlobFixture()
+
+	mocks.cluster.EXPECT().DownloadBlob(
+		"test-namespace", blob.Digest, rwutil.MatchWriter(blob.Content)).Return(nil)
+
+	var buf bytes.Buffer
+	require.NoError(client.Download(blob.Digest.Hex(), &buf))
+	require.Equal(string(blob.Content), buf.String())
+}
+
 func TestClientUpload(t *testing.T) {
 	require := require.New(t)
 

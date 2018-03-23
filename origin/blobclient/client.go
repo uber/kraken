@@ -27,7 +27,6 @@ type Client interface {
 
 	Locations(d core.Digest) ([]string, error)
 	CheckBlob(d core.Digest) (bool, error)
-	GetBlob(d core.Digest) (io.ReadCloser, error)
 	DeleteBlob(d core.Digest) error
 	TransferBlob(d core.Digest, blob io.Reader) error
 
@@ -39,6 +38,7 @@ type Client interface {
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
 
 	UploadBlob(namespace string, d core.Digest, blob io.Reader, through bool) error
+	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
 
 	GetPeerContext() (core.PeerContext, error)
 }
@@ -99,15 +99,6 @@ func (c *HTTPClient) CheckBlob(d core.Digest) (bool, error) {
 	return true, nil
 }
 
-// GetBlob returns the blob corresponding to d.
-func (c *HTTPClient) GetBlob(d core.Digest) (io.ReadCloser, error) {
-	r, err := httputil.Get(fmt.Sprintf("http://%s/internal/blobs/%s", c.addr, d))
-	if err != nil {
-		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
-	}
-	return r.Body, nil
-}
-
 // DeleteBlob deletes the blob corresponding to d.
 func (c *HTTPClient) DeleteBlob(d core.Digest) error {
 	_, err := httputil.Delete(
@@ -130,6 +121,23 @@ func (c *HTTPClient) UploadBlob(
 
 	uc := newUploadClient(c.addr, namespace, through)
 	return runChunkedUpload(uc, d, blob, int64(c.config.ChunkSize))
+}
+
+// DownloadBlob downloads blob for d. If the blob of d is not available yet
+// (i.e. still downloading), returns 202 httputil.StatusError, indicating that
+// the request shoudl be retried later. If not blob exists for d, returns a 404
+// httputil.StatusError.
+func (c *HTTPClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
+	r, err := httputil.Get(
+		fmt.Sprintf("http://%s/namespace/%s/blobs/%s", c.addr, namespace, d))
+	if err != nil {
+		return err
+	}
+	defer r.Body.Close()
+	if _, err := io.Copy(dst, r.Body); err != nil {
+		return fmt.Errorf("copy body: %s", err)
+	}
+	return nil
 }
 
 // Repair runs a global repair of all shards present on disk. See RepairShard

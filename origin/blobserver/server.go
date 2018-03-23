@@ -128,6 +128,8 @@ func (s Server) Handler() http.Handler {
 	r.Patch("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.patchUploadHandler))
 	r.Put("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.commitClusterUploadHandler))
 
+	r.Get("/namespace/:namespace/blobs/:digest", handler.Wrap(s.downloadBlobHandler))
+
 	// Internal endpoints:
 
 	r.Post("/internal/blobs/:digest/uploads", handler.Wrap(s.startUploadHandler))
@@ -135,7 +137,6 @@ func (s Server) Handler() http.Handler {
 	r.Put("/internal/blobs/:digest/uploads/:uid", handler.Wrap(s.commitTransferHandler))
 
 	r.Head("/internal/blobs/:digest", handler.Wrap(s.checkBlobHandler))
-	r.Get("/internal/blobs/:digest", handler.Wrap(s.getBlobHandler))
 	r.Delete("/internal/blobs/:digest", handler.Wrap(s.deleteBlobHandler))
 
 	r.Post("/internal/blobs/:digest/metainfo", handler.Wrap(s.overwriteMetaInfoHandler))
@@ -177,8 +178,8 @@ func (s Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// getBlobHandler gets blob data.
-func (s Server) getBlobHandler(w http.ResponseWriter, r *http.Request) error {
+func (s Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) error {
+	namespace := chi.URLParam(r, "namespace")
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -186,11 +187,10 @@ func (s Server) getBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
-	if err := s.downloadBlob(d, w); err != nil {
+	if err := s.downloadBlob(namespace, d, w); err != nil {
 		return err
 	}
 	setOctetStreamContentType(w)
-	log.Debugf("successfully get blob %s", d.Hex())
 	return nil
 }
 
@@ -284,9 +284,6 @@ func (s Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) er
 
 func (s Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
 	namespace := chi.URLParam(r, "namespace")
-	if len(namespace) == 0 {
-		return handler.Errorf("empty namespace").Status(http.StatusBadRequest)
-	}
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -510,24 +507,22 @@ func (s Server) ensureCorrectNode(d core.Digest) error {
 	return handler.Errorf("digest does not hash to this origin").Status(http.StatusBadRequest)
 }
 
-func (s Server) downloadBlob(d core.Digest, w http.ResponseWriter) error {
+// downloadBlob downloads blob for d into dst. If no blob exists under d, a
+// download of the blob from the storage backend configured for namespace will
+// be initiated. This download is asynchronous and downloadBlob will immediately
+// return a "202 Accepted" handler error.
+func (s Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error {
 	f, err := s.fileStore.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
-		return handler.ErrorStatus(http.StatusNotFound)
+		return s.startRemoteBlobDownload(namespace, d)
 	} else if err != nil {
-		return handler.Errorf("cannot read blob data for digest %q: %s", d, err)
+		return handler.Errorf("get cache file: %s", err)
 	}
 	defer f.Close()
 
-	for {
-		_, err := io.CopyN(w, f, int64(_uploadChunkSize))
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return handler.Errorf("cannot read digest %q: %s", d, err)
-		}
+	if _, err := io.Copy(dst, f); err != nil {
+		return handler.Errorf("copy blob: %s", err)
 	}
-
 	return nil
 }
 
@@ -566,10 +561,7 @@ func (s Server) patchUploadHandler(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
-	uid, err := parseUploadID(r)
-	if err != nil {
-		return err
-	}
+	uid := chi.URLParam(r, "uid")
 	start, end, err := parseContentRange(r.Header)
 	if err != nil {
 		return err
@@ -587,10 +579,7 @@ func (s Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) er
 	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
-	uid, err := parseUploadID(r)
-	if err != nil {
-		return err
-	}
+	uid := chi.URLParam(r, "uid")
 	if err := s.uploader.verify(d, uid); err != nil {
 		return err
 	}
@@ -614,14 +603,8 @@ func (s Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reques
 	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
-	namespace, err := parseNamespace(r)
-	if err != nil {
-		return err
-	}
-	uid, err := parseUploadID(r)
-	if err != nil {
-		return err
-	}
+	namespace := chi.URLParam(r, "namespace")
+	uid := chi.URLParam(r, "uid")
 	through := false
 	t := r.URL.Query().Get("through")
 	if t != "" {

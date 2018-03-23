@@ -12,48 +12,20 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/handler"
-	"github.com/docker/distribution/uuid"
 	"github.com/pressly/chi"
 )
 
 // parseDigest parses a digest from a url path parameter, e.g. "/blobs/:digest".
-func parseDigest(r *http.Request) (digest core.Digest, err error) {
-	d := chi.URLParam(r, "digest")
-	if len(d) == 0 {
-		return digest, handler.Errorf("empty digest").Status(http.StatusBadRequest)
-	}
-	digestRaw, err := url.PathUnescape(d)
+func parseDigest(r *http.Request) (d core.Digest, err error) {
+	raw, err := url.PathUnescape(chi.URLParam(r, "digest"))
 	if err != nil {
-		return digest, handler.Errorf(
-			"cannot unescape digest %q: %s", d, err).Status(http.StatusBadRequest)
+		return d, handler.Errorf("path unescape: %s", err).Status(http.StatusBadRequest)
 	}
-	digest, err = core.NewDigestFromString(digestRaw)
+	d, err = core.NewDigestFromString(raw)
 	if err != nil {
-		return digest, handler.Errorf(
-			"cannot parse digest %q: %s", digestRaw, err).Status(http.StatusBadRequest)
+		return d, handler.Errorf("parse digest: %s", err).Status(http.StatusBadRequest)
 	}
-	return digest, nil
-}
-
-// parseUploadID parses an upload id from a url path parameter, e.g. "/uploads/:uid".
-func parseUploadID(r *http.Request) (string, error) {
-	uid := chi.URLParam(r, "uid")
-	if len(uid) == 0 {
-		return "", handler.Errorf("empty uid").Status(http.StatusBadRequest)
-	}
-	if _, err := uuid.Parse(uid); err != nil {
-		return "", handler.Errorf("cannot parse uid %q: %s", uid, err).Status(http.StatusBadRequest)
-	}
-	return uid, nil
-}
-
-// parseNamespace parses a namespace from a url path parameter, e.g. "/namespace/:namespace".
-func parseNamespace(r *http.Request) (string, error) {
-	namespace := chi.URLParam(r, "namespace")
-	if namespace == "" {
-		return "", handler.Errorf("empty namespace").Status(http.StatusBadRequest)
-	}
-	return namespace, nil
+	return d, nil
 }
 
 // parseContentRange parses start / end integers from a Content-Range header.
