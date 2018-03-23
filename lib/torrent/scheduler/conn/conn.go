@@ -165,6 +165,10 @@ func (c *Conn) start() {
 }
 
 func (c *Conn) readPayload(length int32) ([]byte, error) {
+	if err := c.bandwidth.ReserveIngress(int64(length)); err != nil {
+		c.log().Errorf("Error reserving ingress bandwidht for piece payload: %s", err)
+		return nil, fmt.Errorf("ingress bandwidth: %s", err)
+	}
 	payload := make([]byte, length)
 	if _, err := io.ReadFull(c.nc, payload); err != nil {
 		return nil, err
@@ -223,7 +227,7 @@ func (c *Conn) sendPiecePayload(pr storage.PieceReader) error {
 	if err := c.bandwidth.ReserveEgress(int64(pr.Length())); err != nil {
 		// TODO(codyg): This is bad. Consider alerting here.
 		c.log().Errorf("Error reserving egress bandwidth for piece payload: %s", err)
-		return fmt.Errorf("bandwidth: %s", err)
+		return fmt.Errorf("egress bandwidth: %s", err)
 	}
 	n, err := io.Copy(c.nc, pr)
 	if err != nil {
