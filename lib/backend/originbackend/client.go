@@ -34,10 +34,10 @@ func newClient(config Config, cluster blobclient.ClusterClient) *Client {
 	return &Client{config, cluster}
 }
 
-// Download is not supported because origin does not support a fetch-through
-// operation.
+// Download downloads name into dst. name must be the sha256 digest of src.
 func (c *Client) Download(name string, dst io.Writer) error {
-	return errors.New("download not supported")
+	d := core.NewSHA256DigestFromHex(name)
+	return c.cluster.DownloadBlob(c.config.Namespace, d, dst)
 }
 
 // Upload uploads src to name. name must be the sha256 digest of src.

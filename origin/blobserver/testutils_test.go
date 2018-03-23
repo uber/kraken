@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
-	"io/ioutil"
 	"testing"
 	"time"
 
@@ -248,9 +247,7 @@ func computeBlobForHosts(config Config, hosts ...string) *core.BlobFixture {
 }
 
 func ensureHasBlob(t *testing.T, c blobclient.Client, blob *core.BlobFixture) {
-	b, err := c.GetBlob(blob.Digest)
-	require.NoError(t, err)
-	result, err := ioutil.ReadAll(b)
-	require.NoError(t, err)
-	require.Equal(t, string(blob.Content), string(result))
+	var buf bytes.Buffer
+	require.NoError(t, c.DownloadBlob(namespace, blob.Digest, &buf))
+	require.Equal(t, string(blob.Content), buf.String())
 }

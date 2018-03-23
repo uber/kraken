@@ -58,38 +58,25 @@ func (r *clientResolver) Resolve(d core.Digest) ([]Client, error) {
 // location resolution and retries.
 type ClusterClient interface {
 	UploadBlob(namespace string, d core.Digest, blob io.Reader, through bool) error
+	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
-	DownloadBlob(d core.Digest) (io.ReadCloser, error)
 	Owners(d core.Digest) ([]core.PeerContext, error)
 }
 
 type clusterClient struct {
 	resolver            ClientResolver
 	pollMetaInfoBackoff *backoff.Backoff
-}
-
-type clusterClientOpts struct {
-	pollMetaInfoBackoff *backoff.Backoff
-}
-
-// ClusterClientOption defines an option of for creating ClusterClients.
-type ClusterClientOption func(*clusterClientOpts)
-
-// WithPollMetaInfoBackoff sets a ClusterClient's metainfo lookup polling backoff to b.
-func WithPollMetaInfoBackoff(b *backoff.Backoff) ClusterClientOption {
-	return func(o *clusterClientOpts) { o.pollMetaInfoBackoff = b }
+	pollDownloadBackoff *backoff.Backoff
 }
 
 // NewClusterClient returns a new ClusterClient.
-func NewClusterClient(r ClientResolver, opts ...ClusterClientOption) ClusterClient {
-	defaults := &clusterClientOpts{
+func NewClusterClient(r ClientResolver) ClusterClient {
+	return &clusterClient{
+		resolver:            r,
 		pollMetaInfoBackoff: backoff.New(backoff.Config{}),
+		pollDownloadBackoff: backoff.New(backoff.Config{}),
 	}
-	for _, opt := range opts {
-		opt(defaults)
-	}
-	return &clusterClient{r, defaults.pollMetaInfoBackoff}
 }
 
 // UploadBlob uploads blob to origin cluster. See Client.UploadBlob for more details.
@@ -113,36 +100,12 @@ func (c *clusterClient) UploadBlob(
 }
 
 // GetMetaInfo returns the metainfo for d.
-func (c *clusterClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error) {
-	// By looping over clients in order, we will always prefer the same origin
-	// for making metainfo requests to loosely guarantee that only one origin
-	// needs to fetch the file from remote backend.
-	clients, err := c.resolver.Resolve(d)
-	if err != nil {
-		return nil, fmt.Errorf("resolve clients: %s", err)
-	}
-	var errs []error
-ORIGINS:
-	for _, client := range clients {
-		a := c.pollMetaInfoBackoff.Attempts()
-	POLL:
-		for a.WaitForNext() {
-			mi, err := client.GetMetaInfo(namespace, d)
-			if err != nil {
-				if httputil.IsNetworkError(err) {
-					errs = append(errs, fmt.Errorf("origin %s: %s", client.Addr(), err))
-					continue ORIGINS
-				}
-				if httputil.IsAccepted(err) {
-					continue POLL
-				}
-				return nil, err
-			}
-			return mi, nil
-		}
-		errs = append(errs, fmt.Errorf("origin %s: %s", client.Addr(), err))
-	}
-	return nil, fmt.Errorf("all origins unavailable: %s", errutil.Join(errs))
+func (c *clusterClient) GetMetaInfo(namespace string, d core.Digest) (mi *core.MetaInfo, err error) {
+	err = Poll(c.resolver, c.pollMetaInfoBackoff, d, func(client Client) error {
+		mi, err = client.GetMetaInfo(namespace, d)
+		return err
+	})
+	return mi, err
 }
 
 // OverwriteMetaInfo overwrites existing metainfo for d with new metainfo configured
@@ -163,21 +126,10 @@ func (c *clusterClient) OverwriteMetaInfo(d core.Digest, pieceLength int64) erro
 }
 
 // DownloadBlob pulls a blob from the origin cluster.
-func (c *clusterClient) DownloadBlob(d core.Digest) (b io.ReadCloser, err error) {
-	clients, err := c.resolver.Resolve(d)
-	if err != nil {
-		return nil, fmt.Errorf("resolve clients: %s", err)
-	}
-	// Shuffle clients to balance load.
-	shuffle(clients)
-	for _, client := range clients {
-		b, err = client.GetBlob(d)
-		if _, ok := err.(httputil.NetworkError); ok {
-			continue
-		}
-		break
-	}
-	return b, err
+func (c *clusterClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
+	return Poll(c.resolver, c.pollDownloadBackoff, d, func(client Client) error {
+		return client.DownloadBlob(namespace, d, dst)
+	})
 }
 
 // Owners returns the origin peers which own d.
@@ -228,4 +180,39 @@ func shuffle(cs []Client) {
 		j := rand.Intn(i + 1)
 		cs[i], cs[j] = cs[j], cs[i]
 	}
+}
+
+// Poll wraps requests for endpoints which require polling, due to a blob
+// being asynchronously fetched from remote storage in the origin cluster.
+func Poll(
+	r ClientResolver, b *backoff.Backoff, d core.Digest, makeRequest func(Client) error) error {
+
+	// By looping over clients in order, we will always prefer the same origin
+	// for making requests to loosely guarantee that only one origin needs to
+	// fetch the file from remote backend.
+	clients, err := r.Resolve(d)
+	if err != nil {
+		return fmt.Errorf("resolve clients: %s", err)
+	}
+	var errs []error
+ORIGINS:
+	for _, client := range clients {
+		a := b.Attempts()
+	POLL:
+		for a.WaitForNext() {
+			if err := makeRequest(client); err != nil {
+				if httputil.IsNetworkError(err) {
+					errs = append(errs, fmt.Errorf("origin %s: %s", client.Addr(), err))
+					continue ORIGINS
+				}
+				if httputil.IsAccepted(err) {
+					continue POLL
+				}
+				return err
+			}
+			return nil // Success!
+		}
+		errs = append(errs, fmt.Errorf("origin %s: %s", client.Addr(), err))
+	}
+	return fmt.Errorf("all origins unavailable: %s", errutil.Join(errs))
 }

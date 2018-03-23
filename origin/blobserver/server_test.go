@@ -3,6 +3,7 @@ package blobserver
 import (
 	"bytes"
 	"errors"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"testing"
@@ -57,7 +58,7 @@ func TestCheckBlobHandlerNotFound(t *testing.T) {
 	require.False(ok)
 }
 
-func TestGetBlobHandlerOK(t *testing.T) {
+func TestDownloadBlobHandlerOK(t *testing.T) {
 	mocks := newServerMocks(t)
 	defer mocks.ctrl.Finish()
 
@@ -74,20 +75,30 @@ func TestGetBlobHandlerOK(t *testing.T) {
 	ensureHasBlob(t, blobclient.New(addr), blob)
 }
 
-func TestGetBlobHandlerNotFound(t *testing.T) {
+func TestDownloadBlobHandlerNotFound(t *testing.T) {
 	require := require.New(t)
 
-	mocks := newServerMocks(t)
-	defer mocks.ctrl.Finish()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	addr, stop := mocks.server(configMaxReplicaFixture())
-	defer stop()
+	mockBackendClient := mockbackend.NewMockClient(ctrl)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(master1, configMaxReplicaFixture(), cp)
+	defer s.cleanup()
+	s.backendManager.Register(namespace, mockBackendClient)
 
 	d := core.DigestFixture()
 
-	mocks.fileStore.EXPECT().GetCacheFileReader(d.Hex()).Return(nil, os.ErrNotExist)
+	mockBackendClient.EXPECT().Download(d.Hex(), gomock.Any()).Return(backenderrors.ErrBlobNotFound)
 
-	_, err := blobclient.New(addr).GetBlob(d)
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		_, err := cp.Provide(master1).GetMetaInfo(namespace, d)
+		return !httputil.IsAccepted(err)
+	}))
+
+	err := cp.Provide(master1).DownloadBlob(namespace, d, ioutil.Discard)
 	require.Error(err)
 	require.Equal(http.StatusNotFound, err.(httputil.StatusError).Status)
 }
@@ -156,14 +167,21 @@ func TestIncorrectNodeErrors(t *testing.T) {
 			"CheckBlob",
 			func(c blobclient.Client) error { _, err := c.CheckBlob(blob.Digest); return err },
 		}, {
-			"GetBlob",
-			func(c blobclient.Client) error { _, err := c.GetBlob(blob.Digest); return err },
+			"DownloadBlob",
+			func(c blobclient.Client) error {
+				return c.DownloadBlob(namespace, blob.Digest, ioutil.Discard)
+			},
 		}, {
 			"TransferBlob",
-			func(c blobclient.Client) error { return c.TransferBlob(blob.Digest, bytes.NewBufferString("blah")) },
+			func(c blobclient.Client) error {
+				return c.TransferBlob(blob.Digest, bytes.NewBufferString("blah"))
+			},
 		}, {
 			"GetMetaInfo",
-			func(c blobclient.Client) error { _, err := c.GetMetaInfo(namespace, blob.Digest); return err },
+			func(c blobclient.Client) error {
+				_, err := c.GetMetaInfo(namespace, blob.Digest)
+				return err
+			},
 		}, {
 			"OverwriteMetaInfo",
 			func(c blobclient.Client) error { return c.OverwriteMetaInfo(blob.Digest, 64) },
@@ -250,6 +268,7 @@ func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
+
 	mockBackendClient := mockbackend.NewMockClient(ctrl)
 
 	cp := newTestClientProvider()

@@ -53,11 +53,9 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 		require.NoError(err)
 		require.NotNil(mi)
 
-		r, err := cc.DownloadBlob(blob.Digest)
-		require.NoError(err)
-		result, err := ioutil.ReadAll(r)
-		require.NoError(err)
-		require.Equal(string(blob.Content), string(result))
+		var buf bytes.Buffer
+		require.NoError(cc.DownloadBlob("noexist", blob.Digest, &buf))
+		require.Equal(string(blob.Content), buf.String())
 
 		peers, err := cc.Owners(blob.Digest)
 		require.NoError(err)
@@ -84,67 +82,70 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 	_, err := cc.GetMetaInfo("noexist", blob.Digest)
 	require.Error(err)
 
-	_, err = cc.DownloadBlob(blob.Digest)
-	require.Error(err)
+	require.Error(cc.DownloadBlob("noexist", blob.Digest, ioutil.Discard))
 
 	_, err = cc.Owners(blob.Digest)
 	require.Error(err)
 }
 
-func TestClusterClientGetMetaInfoSkipsOriginOnPollTimeout(t *testing.T) {
+func TestPollSkipsOriginOnTimeout(t *testing.T) {
 	require := require.New(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	blob := core.NewBlobFixture()
+
 	mockResolver := mockblobclient.NewMockClientResolver(ctrl)
+
+	mockClient1 := mockblobclient.NewMockClient(ctrl)
+	mockClient2 := mockblobclient.NewMockClient(ctrl)
+
+	mockResolver.EXPECT().Resolve(blob.Digest).Return(
+		[]blobclient.Client{mockClient1, mockClient2}, nil)
+
+	mockClient1.EXPECT().DownloadBlob(
+		namespace, blob.Digest, nil).Return(httputil.StatusError{Status: 202}).MinTimes(1)
+	mockClient1.EXPECT().Addr().Return("client1")
+	mockClient2.EXPECT().DownloadBlob(namespace, blob.Digest, nil).Return(nil)
 
 	b := backoff.New(backoff.Config{
 		Min:          100 * time.Millisecond,
 		RetryTimeout: 500 * time.Millisecond,
 	})
-	cc := blobclient.NewClusterClient(mockResolver, blobclient.WithPollMetaInfoBackoff(b))
 
-	blob := core.NewBlobFixture()
-
-	mockClient1 := mockblobclient.NewMockClient(ctrl)
-	mockClient2 := mockblobclient.NewMockClient(ctrl)
-
-	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
-
-	mockClient1.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(nil, httputil.StatusError{Status: 202}).MinTimes(1)
-	mockClient1.EXPECT().Addr().Return("client1")
-	mockClient2.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(blob.MetaInfo, nil)
-
-	result, err := cc.GetMetaInfo(namespace, blob.Digest)
-	require.NoError(err)
-	require.Equal(result, blob.MetaInfo)
+	require.NoError(blobclient.Poll(mockResolver, b, blob.Digest, func(c blobclient.Client) error {
+		return c.DownloadBlob(namespace, blob.Digest, nil)
+	}))
 }
 
-func TestClusterClientGetMetaInfoSkipsOriginOnNetworkErrors(t *testing.T) {
+func TestPollSkipsOriginOnNetworkErrors(t *testing.T) {
 	require := require.New(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockResolver := mockblobclient.NewMockClientResolver(ctrl)
-
-	cc := blobclient.NewClusterClient(mockResolver)
-
 	blob := core.NewBlobFixture()
+
+	mockResolver := mockblobclient.NewMockClientResolver(ctrl)
 
 	mockClient1 := mockblobclient.NewMockClient(ctrl)
 	mockClient2 := mockblobclient.NewMockClient(ctrl)
 
 	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
 
-	mockClient1.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(nil, httputil.NetworkError{})
+	mockClient1.EXPECT().DownloadBlob(namespace, blob.Digest, nil).Return(httputil.NetworkError{})
 	mockClient1.EXPECT().Addr().Return("client1")
-	mockClient2.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(blob.MetaInfo, nil)
+	mockClient2.EXPECT().DownloadBlob(namespace, blob.Digest, nil).Return(nil)
 
-	result, err := cc.GetMetaInfo(namespace, blob.Digest)
-	require.NoError(err)
-	require.Equal(result, blob.MetaInfo)
+	b := backoff.New(backoff.Config{
+		Min:          100 * time.Millisecond,
+		RetryTimeout: 500 * time.Millisecond,
+	})
+
+	require.NoError(blobclient.Poll(mockResolver, b, blob.Digest, func(c blobclient.Client) error {
+		return c.DownloadBlob(namespace, blob.Digest, nil)
+	}))
 }
 
 func TestClusterClientReturnsErrorOnNoAvailableOrigins(t *testing.T) {

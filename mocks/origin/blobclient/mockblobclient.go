@@ -72,17 +72,16 @@ func (mr *MockClientMockRecorder) DeleteBlob(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteBlob", reflect.TypeOf((*MockClient)(nil).DeleteBlob), arg0)
 }
 
-// GetBlob mocks base method
-func (m *MockClient) GetBlob(arg0 core.Digest) (io.ReadCloser, error) {
-	ret := m.ctrl.Call(m, "GetBlob", arg0)
-	ret0, _ := ret[0].(io.ReadCloser)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+// DownloadBlob mocks base method
+func (m *MockClient) DownloadBlob(arg0 string, arg1 core.Digest, arg2 io.Writer) error {
+	ret := m.ctrl.Call(m, "DownloadBlob", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// GetBlob indicates an expected call of GetBlob
-func (mr *MockClientMockRecorder) GetBlob(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlob", reflect.TypeOf((*MockClient)(nil).GetBlob), arg0)
+// DownloadBlob indicates an expected call of DownloadBlob
+func (mr *MockClientMockRecorder) DownloadBlob(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBlob", reflect.TypeOf((*MockClient)(nil).DownloadBlob), arg0, arg1, arg2)
 }
 
 // GetMetaInfo mocks base method
@@ -258,16 +257,15 @@ func (m *MockClusterClient) EXPECT() *MockClusterClientMockRecorder {
 }
 
 // DownloadBlob mocks base method
-func (m *MockClusterClient) DownloadBlob(arg0 core.Digest) (io.ReadCloser, error) {
-	ret := m.ctrl.Call(m, "DownloadBlob", arg0)
-	ret0, _ := ret[0].(io.ReadCloser)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+func (m *MockClusterClient) DownloadBlob(arg0 string, arg1 core.Digest, arg2 io.Writer) error {
+	ret := m.ctrl.Call(m, "DownloadBlob", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // DownloadBlob indicates an expected call of DownloadBlob
-func (mr *MockClusterClientMockRecorder) DownloadBlob(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBlob", reflect.TypeOf((*MockClusterClient)(nil).DownloadBlob), arg0)
+func (mr *MockClusterClientMockRecorder) DownloadBlob(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBlob", reflect.TypeOf((*MockClusterClient)(nil).DownloadBlob), arg0, arg1, arg2)
 }
 
 // GetMetaInfo mocks base method
