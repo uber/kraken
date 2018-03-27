@@ -21,7 +21,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
 // Scheduler errors.
@@ -91,8 +90,6 @@ type scheduler struct {
 
 	networkEvents networkevent.Producer
 
-	downloadTimeBuckets tally.DurationBuckets
-
 	// The following fields orchestrate the stopping of the scheduler.
 	stopOnce sync.Once      // Ensures the stop sequence is executed only once.
 	done     chan struct{}  // Signals all goroutines to exit.
@@ -158,31 +155,24 @@ func newScheduler(
 
 	connState := connstate.New(config.ConnState, overrides.clock, pctx.PeerID, networkEvents)
 
-	// 23 buckets -> max duration is roughly 19 minutes.
-	downloadTimeBuckets, err := tally.ExponentialDurationBuckets(100*time.Millisecond, 1.5, 23)
-	if err != nil {
-		return nil, fmt.Errorf("tally exponential buckets: %s", err)
-	}
-
 	s := &scheduler{
-		pctx:                pctx,
-		config:              config,
-		clock:               overrides.clock,
-		torrentArchive:      ta,
-		stats:               stats,
-		handshaker:          handshaker,
-		torrentControls:     make(map[core.InfoHash]*torrentControl),
-		connState:           connState,
-		announceQueue:       announceQueue,
-		eventLoop:           eventLoop,
-		listener:            l,
-		announceTick:        overrides.clock.Tick(config.AnnounceInterval),
-		preemptionTick:      preemptionTick,
-		emitStatsTick:       overrides.clock.Tick(config.EmitStatsInterval),
-		announceClient:      announceClient,
-		networkEvents:       networkEvents,
-		downloadTimeBuckets: downloadTimeBuckets,
-		done:                done,
+		pctx:            pctx,
+		config:          config,
+		clock:           overrides.clock,
+		torrentArchive:  ta,
+		stats:           stats,
+		handshaker:      handshaker,
+		torrentControls: make(map[core.InfoHash]*torrentControl),
+		connState:       connState,
+		announceQueue:   announceQueue,
+		eventLoop:       eventLoop,
+		listener:        l,
+		announceTick:    overrides.clock.Tick(config.AnnounceInterval),
+		preemptionTick:  preemptionTick,
+		emitStatsTick:   overrides.clock.Tick(config.EmitStatsInterval),
+		announceClient:  announceClient,
+		networkEvents:   networkEvents,
+		done:            done,
 	}
 
 	if config.DisablePreemption {
@@ -268,9 +258,7 @@ func (s *scheduler) Download(namespace, name string) error {
 			"error": errTag,
 		}).Counter("download_errors").Inc(1)
 	} else {
-		s.stats.Tagged(map[string]string{
-			"size": memsize.Format(getBucket(uint64(size))),
-		}).Histogram("download_time", s.downloadTimeBuckets).RecordDuration(time.Since(start))
+		recordDownloadTime(s.stats, size, time.Since(start))
 	}
 	return err
 }

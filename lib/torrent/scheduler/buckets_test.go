@@ -6,7 +6,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
-func TestGetBucket(t *testing.T) {
+func TestGetSizeBucket(t *testing.T) {
 	tests := []struct {
 		desc     string
 		size     uint64
@@ -20,7 +20,7 @@ func TestGetBucket(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			result := getBucket(test.size)
+			result := getSizeBucket(test.size)
 			if test.expected != result {
 				t.Fatalf("Expected %s, got %s", memsize.Format(test.expected), memsize.Format(result))
 			}
