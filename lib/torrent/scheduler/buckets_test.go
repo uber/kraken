@@ -12,12 +12,12 @@ func TestGetBucket(t *testing.T) {
 		size     uint64
 		expected uint64
 	}{
-		{"below min", memsize.KB, memsize.MB},
-		{"above max", 30 * memsize.GB, 20 * memsize.GB},
-		{"between buckets", 600 * memsize.MB, 500 * memsize.MB},
+		{"below min", memsize.KB, 10 * memsize.MB},
+		{"above max", 30 * memsize.GB, 10 * memsize.GB},
+		{"round up", 900 * memsize.MB, memsize.GB},
+		{"round down", 400 * memsize.MB, 100 * memsize.MB},
 		{"exact bucket", memsize.GB, memsize.GB},
 	}
-
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			result := getBucket(test.size)
