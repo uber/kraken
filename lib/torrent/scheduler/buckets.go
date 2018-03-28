@@ -14,20 +14,11 @@ var _sizeBuckets = [...]uint64{
 	10 * memsize.GB,
 }
 
-func diff(x, y uint64) uint64 {
-	if x < y {
-		return y - x
-	}
-	return x - y
-}
-
-// getSizeBucket rounds size to the nearest bucket.
-func getSizeBucket(size uint64) uint64 {
-	var a, b uint64
-	for i := 1; i < len(_sizeBuckets); i++ {
-		a, b = _sizeBuckets[i-1], _sizeBuckets[i]
-		if diff(size, a) < diff(size, b) {
-			return a
+// getSizeBucket rounds size up to the nearest bucket.
+func getSizeBucket(size uint64) (b uint64) {
+	for _, b = range _sizeBuckets {
+		if b >= size {
+			break
 		}
 	}
 	return b
