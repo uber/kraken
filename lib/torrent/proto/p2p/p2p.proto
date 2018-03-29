@@ -65,6 +65,9 @@ message ErrorMessage {
     ErrorCode code  = 4;
 }
 
+// Notifies other peers that the torrent has completed and all pieces are available.
+message CompleteMessage {}
+
 message Message {
 
     enum Type {
@@ -74,6 +77,7 @@ message Message {
         ANNOUCE_PIECE = 3;
         CANCEL_PIECE  = 4;
         ERROR         = 5;
+        COMPLETE      = 6;
     }
 
     string version = 1;
@@ -86,4 +90,5 @@ message Message {
     AnnouncePieceMessage announcePiece = 6;
     CancelPieceMessage   cancelPiece   = 7;
     ErrorMessage         error         = 8;
+    CompleteMessage      complete      = 9;
 }

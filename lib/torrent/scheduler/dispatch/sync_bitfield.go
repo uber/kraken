@@ -46,12 +46,21 @@ func (s *syncBitfield) Complete() bool {
 	return s.b.All()
 }
 
+func (s *syncBitfield) SetAll(v bool) {
+	s.Lock()
+	defer s.Unlock()
+
+	for i := uint(0); i < s.b.Len(); i++ {
+		s.b.SetTo(i, v)
+	}
+}
+
 func (s *syncBitfield) String() string {
 	s.RLock()
 	defer s.RUnlock()
 
 	var buf bytes.Buffer
-	for i := uint(0); i < (s.b.Len()); i++ {
+	for i := uint(0); i < s.b.Len(); i++ {
 		if s.b.Test(i) {
 			buf.WriteString("1")
 		} else {

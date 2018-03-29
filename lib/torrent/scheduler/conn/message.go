@@ -62,7 +62,7 @@ func NewErrorMessage(index int, code p2p.ErrorMessage_ErrorCode, err error) *Mes
 	}
 }
 
-// NewAnnouncePieceMessage returns a message for announcing a piece.
+// NewAnnouncePieceMessage returns a Message for announcing a piece.
 func NewAnnouncePieceMessage(index int) *Message {
 	return &Message{
 		Message: &p2p.Message{
@@ -70,6 +70,15 @@ func NewAnnouncePieceMessage(index int) *Message {
 			AnnouncePiece: &p2p.AnnouncePieceMessage{
 				Index: int32(index),
 			},
+		},
+	}
+}
+
+// NewCompleteMessage returns a Message for a completed torrent.
+func NewCompleteMessage() *Message {
+	return &Message{
+		Message: &p2p.Message{
+			Type: p2p.Message_COMPLETE,
 		},
 	}
 }
