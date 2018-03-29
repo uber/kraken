@@ -21,7 +21,7 @@ type Config struct {
 	BlobServer     blobserver.Config           `yaml:"blobserver"`
 	OriginStore    store.OriginConfig          `yaml:"originstore"`
 	Scheduler      scheduler.Config            `yaml:"scheduler"`
-	NetworkEvent   networkevent.Config         `yaml:"networkevent"`
+	NetworkEvent   networkevent.Config         `yaml:"network_event"`
 	PeerIDFactory  core.PeerIDFactory          `yaml:"peer_id_factory"`
 	Metrics        metrics.Config              `yaml:"metrics"`
 	Tracker        TrackerConfig               `yaml:"tracker"`

@@ -22,7 +22,7 @@ type Config struct {
 	Registry       dockerregistry.Config       `yaml:"registry"`
 	Scheduler      scheduler.Config            `yaml:"scheduler"`
 	PeerIDFactory  core.PeerIDFactory          `yaml:"peer_id_factory"`
-	NetworkEvent   networkevent.Config         `yaml:"networkevent"`
+	NetworkEvent   networkevent.Config         `yaml:"network_event"`
 	Tracker        TrackerConfig               `yaml:"tracker"`
 	AgentServer    agentserver.Config          `yaml:"agentserver"`
 	AuthNamespaces backend.AuthNamespaceConfig `yaml:"auth"`
