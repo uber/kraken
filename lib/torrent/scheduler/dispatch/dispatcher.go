@@ -234,13 +234,17 @@ func (d *Dispatcher) complete() {
 	d.completeOnce.Do(func() { go d.events.DispatcherComplete(d) })
 	d.pendingPiecesDoneOnce.Do(func() { close(d.pendingPiecesDone) })
 
-	// Close connections to other completed peers since those connections are
-	// now useless.
 	d.peers.Range(func(k, v interface{}) bool {
 		p := v.(*peer)
 		if p.bitfield.Complete() {
-			d.log("peer", p).Info("Completed Dispatcher closing connection to completed peer")
+			// Close connections to other completed peers since those connections
+			// are now useless.
+			d.log("peer", p).Info("Closing connection to completed peer")
 			p.messages.Close()
+		} else {
+			// Notify in-progress peers that we have completed the torrent and
+			// all pieces are available.
+			p.messages.Send(conn.NewCompleteMessage())
 		}
 		return true
 	})
@@ -346,6 +350,8 @@ func (d *Dispatcher) dispatch(p *peer, msg *conn.Message) error {
 		d.handleCancelPiece(p, msg.Message.CancelPiece)
 	case p2p.Message_BITFIELD:
 		d.handleBitfield(p, msg.Message.Bitfield)
+	case p2p.Message_COMPLETE:
+		d.handleComplete(p)
 	default:
 		return fmt.Errorf("unknown message type: %d", msg.Message.Type)
 	}
@@ -452,6 +458,16 @@ func (d *Dispatcher) handleCancelPiece(p *peer, msg *p2p.CancelPieceMessage) {
 
 func (d *Dispatcher) handleBitfield(p *peer, msg *p2p.BitfieldMessage) {
 	d.log("peer", p).Error("Unexpected bitfield message from established conn")
+}
+
+func (d *Dispatcher) handleComplete(p *peer) {
+	if d.Complete() {
+		d.log("peer", p).Info("Closing connection to completed peer")
+		p.messages.Close()
+	} else {
+		p.bitfield.SetAll(true)
+		d.maybeRequestMorePieces(p)
+	}
 }
 
 func (d *Dispatcher) log(args ...interface{}) *zap.SugaredLogger {

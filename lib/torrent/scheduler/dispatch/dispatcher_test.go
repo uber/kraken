@@ -67,6 +67,19 @@ func announcedPieces(messages Messages) []int {
 	return ps
 }
 
+func hasComplete(messages Messages) bool {
+	for _, m := range messages.(*mockMessages).sent {
+		if m.Message.Type == p2p.Message_COMPLETE {
+			return true
+		}
+	}
+	return false
+}
+
+func closed(messages Messages) bool {
+	return messages.(*mockMessages).closed
+}
+
 type noopEvents struct{}
 
 func (e noopEvents) DispatcherComplete(*Dispatcher) {}
@@ -273,6 +286,33 @@ func TestDispatcherEndgame(t *testing.T) {
 func TestDispatcherHandlePiecePayloadAnnouncesPiece(t *testing.T) {
 	require := require.New(t)
 
+	blob := core.SizedBlobFixture(2, 1)
+
+	torrent, cleanup := storage.TorrentFixture(blob.MetaInfo)
+	defer cleanup()
+
+	d := testDispatcher(Config{}, clock.NewMock(), torrent)
+
+	p1, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(false, false), newMockMessages())
+	require.NoError(err)
+
+	p2, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(false, false), newMockMessages())
+	require.NoError(err)
+
+	msg := conn.NewPiecePayloadMessage(0, storage.NewPieceReaderBuffer(blob.Content[0:1]))
+
+	require.NoError(d.dispatch(p1, msg))
+
+	// Should not announce to the peer who sent the payload.
+	require.Empty(announcedPieces(p1.messages))
+
+	// Should announce to other peers.
+	require.Equal([]int{0}, announcedPieces(p2.messages))
+}
+
+func TestDispatcherHandlePiecePayloadSendsCompleteMessage(t *testing.T) {
+	require := require.New(t)
+
 	blob := core.SizedBlobFixture(1, 1)
 
 	torrent, cleanup := storage.TorrentFixture(blob.MetaInfo)
@@ -290,9 +330,56 @@ func TestDispatcherHandlePiecePayloadAnnouncesPiece(t *testing.T) {
 
 	require.NoError(d.dispatch(p1, msg))
 
-	// Should not announce to the peer who sent the payload.
-	require.Empty(announcedPieces(p1.messages))
+	require.True(hasComplete(p1.messages))
+	require.True(hasComplete(p2.messages))
+}
 
-	// Should announce to other peers.
-	require.Equal([]int{0}, announcedPieces(p2.messages))
+func TestDispatcherClosesCompletedPeersWhenComplete(t *testing.T) {
+	require := require.New(t)
+
+	blob := core.SizedBlobFixture(1, 1)
+
+	torrent, cleanup := storage.TorrentFixture(blob.MetaInfo)
+	defer cleanup()
+
+	d := testDispatcher(Config{}, clock.NewMock(), torrent)
+
+	completedPeer, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(true), newMockMessages())
+	require.NoError(err)
+
+	incompletePeer, err := d.addPeer(
+		core.PeerIDFixture(), storage.BitSetFixture(false), newMockMessages())
+	require.NoError(err)
+
+	msg := conn.NewPiecePayloadMessage(0, storage.NewPieceReaderBuffer(blob.Content[0:1]))
+
+	// Completed peers are closed when the dispatcher completes.
+	require.NoError(d.dispatch(completedPeer, msg))
+	require.True(closed(completedPeer.messages))
+	require.False(closed(incompletePeer.messages))
+
+	// Peers which send complete messages are closed if the dispatcher is complete.
+	require.NoError(d.dispatch(incompletePeer, conn.NewCompleteMessage()))
+	require.True(closed(incompletePeer.messages))
+}
+
+func TestDispatcherHandleCompleteRequestsPieces(t *testing.T) {
+	require := require.New(t)
+
+	blob := core.SizedBlobFixture(1, 1)
+
+	torrent, cleanup := storage.TorrentFixture(blob.MetaInfo)
+	defer cleanup()
+
+	d := testDispatcher(Config{}, clock.NewMock(), torrent)
+
+	p, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(false), newMockMessages())
+	require.NoError(err)
+
+	require.Empty(numRequestsPerPiece(p.messages))
+
+	require.NoError(d.dispatch(p, conn.NewCompleteMessage()))
+
+	require.Equal(map[int]int{0: 1}, numRequestsPerPiece(p.messages))
+	require.False(closed(p.messages))
 }
