@@ -137,7 +137,7 @@ func (e incomingHandshakeEvent) Apply(s *scheduler) {
 			e.pc.Close()
 			s.eventLoop.Send(failedIncomingHandshakeEvent{e.pc.PeerID(), e.pc.InfoHash()})
 		}
-		info, err := s.torrentArchive.Stat(e.pc.Name())
+		info, err := s.torrentArchive.Stat(e.pc.Namespace(), e.pc.Name())
 		if err != nil {
 			fail(fmt.Errorf("torrent stat: %s", err))
 			return
@@ -147,7 +147,7 @@ func (e incomingHandshakeEvent) Apply(s *scheduler) {
 			fail(fmt.Errorf("establish handshake: %s", err))
 			return
 		}
-		s.eventLoop.Send(incomingConnEvent{c, e.pc.Bitfield(), info})
+		s.eventLoop.Send(incomingConnEvent{e.pc.Namespace(), c, e.pc.Bitfield(), info})
 	}()
 }
 
@@ -164,19 +164,20 @@ func (e failedIncomingHandshakeEvent) Apply(s *scheduler) {
 
 // incomingConnEvent occurs when a pending incoming connection finishes handshaking.
 type incomingConnEvent struct {
-	c        *conn.Conn
-	bitfield *bitset.BitSet
-	info     *storage.TorrentInfo
+	namespace string
+	c         *conn.Conn
+	bitfield  *bitset.BitSet
+	info      *storage.TorrentInfo
 }
 
 // Apply transitions a fully-handshaked incoming conn from pending to active.
 func (e incomingConnEvent) Apply(s *scheduler) {
-	if err := s.addIncomingConn(e.c, e.bitfield, e.info); err != nil {
+	if err := s.addIncomingConn(e.namespace, e.c, e.bitfield, e.info); err != nil {
 		s.log("conn", e.c).Errorf("Error adding incoming conn: %s", err)
 		e.c.Close()
 		return
 	}
-	s.log("conn", e.c).Infof("Added incoming conn with %d%% downloaded", e.info.PercentDownloaded())
+	s.log("conn", e.c).Info("Added incoming conn")
 }
 
 // failedOutgoingHandshakeEvent occurs when a pending incoming connection fails
@@ -269,7 +270,7 @@ func (e announceResponseEvent) Apply(s *scheduler) {
 		go func(p *core.PeerInfo) {
 			addr := fmt.Sprintf("%s:%d", p.IP, p.Port)
 			info := ctrl.dispatcher.Stat()
-			c, bitfield, err := s.handshaker.Initialize(p.PeerID, addr, info)
+			c, bitfield, err := s.handshaker.Initialize(p.PeerID, addr, info, ctrl.namespace)
 			if err != nil {
 				s.log("peer", p.PeerID, "hash", e.infoHash, "addr", addr).Infof(
 					"Failed handshake: %s", err)
@@ -293,15 +294,16 @@ func (e announceFailureEvent) Apply(s *scheduler) {
 
 // newTorrentEvent occurs when a new torrent was requested for download.
 type newTorrentEvent struct {
-	torrent storage.Torrent
-	errc    chan error
+	namespace string
+	torrent   storage.Torrent
+	errc      chan error
 }
 
 // Apply begins seeding / leeching a new torrent.
 func (e newTorrentEvent) Apply(s *scheduler) {
 	ctrl, ok := s.torrentControls[e.torrent.InfoHash()]
 	if !ok {
-		ctrl = s.initTorrentControl(e.torrent, true)
+		ctrl = s.initTorrentControl(e.namespace, e.torrent, true)
 		s.log("torrent", e.torrent).Info("Added new torrent")
 	}
 	if ctrl.complete {

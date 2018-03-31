@@ -20,10 +20,11 @@ import (
 // the fields converted into types used within the scheduler package. As such,
 // in this package "handshake" and "bitfield message" are usually synonymous.
 type handshake struct {
-	peerID   core.PeerID
-	name     string
-	infoHash core.InfoHash
-	bitfield *bitset.BitSet
+	peerID    core.PeerID
+	name      string
+	infoHash  core.InfoHash
+	bitfield  *bitset.BitSet
+	namespace string
 }
 
 func (h *handshake) toP2PMessage() (*p2p.Message, error) {
@@ -38,6 +39,7 @@ func (h *handshake) toP2PMessage() (*p2p.Message, error) {
 			Name:          h.name,
 			InfoHash:      h.infoHash.String(),
 			BitfieldBytes: b,
+			Namespace:     h.namespace,
 		},
 	}, nil
 }
@@ -59,10 +61,11 @@ func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
 		return nil, err
 	}
 	return &handshake{
-		peerID:   peerID,
-		infoHash: ih,
-		bitfield: bitfield,
-		name:     m.Bitfield.Name,
+		peerID:    peerID,
+		infoHash:  ih,
+		bitfield:  bitfield,
+		name:      m.Bitfield.Name,
+		namespace: m.Bitfield.Namespace,
 	}, nil
 }
 
@@ -91,6 +94,11 @@ func (pc *PendingConn) InfoHash() core.InfoHash {
 // Bitfield returns the bitfield of the remote peer's torrent.
 func (pc *PendingConn) Bitfield() *bitset.BitSet {
 	return pc.handshake.bitfield
+}
+
+// Namespace returns the namespace of the remote peer's torrent.
+func (pc *PendingConn) Namespace() string {
+	return pc.handshake.namespace
 }
 
 // Close closes the connection.
@@ -148,7 +156,9 @@ func (h *Handshaker) Accept(nc net.Conn) (*PendingConn, error) {
 // Establish upgrades a PendingConn returned via Accept into a fully
 // established Conn.
 func (h *Handshaker) Establish(pc *PendingConn, info *storage.TorrentInfo) (*Conn, error) {
-	if err := h.sendHandshake(pc.nc, info); err != nil {
+	// Namespace is one-directional: it is only supplied by the connection opener
+	// and is not reciprocated by the connection acceptor.
+	if err := h.sendHandshake(pc.nc, info, ""); err != nil {
 		return nil, fmt.Errorf("send handshake: %s", err)
 	}
 	c, err := h.newConn(pc.nc, pc.handshake.peerID, info, true)
@@ -162,13 +172,13 @@ func (h *Handshaker) Establish(pc *PendingConn, info *storage.TorrentInfo) (*Con
 // given peer / address. Also returns the bitfield of the remote peer for said
 // torrent.
 func (h *Handshaker) Initialize(
-	peerID core.PeerID, addr string, info *storage.TorrentInfo) (*Conn, *bitset.BitSet, error) {
+	peerID core.PeerID, addr string, info *storage.TorrentInfo, namespace string) (*Conn, *bitset.BitSet, error) {
 
 	nc, err := net.DialTimeout("tcp", addr, h.config.HandshakeTimeout)
 	if err != nil {
 		return nil, nil, fmt.Errorf("dial: %s", err)
 	}
-	c, bitfield, err := h.fullHandshake(nc, peerID, info)
+	c, bitfield, err := h.fullHandshake(nc, peerID, info, namespace)
 	if err != nil {
 		nc.Close()
 		return nil, nil, err
@@ -176,12 +186,13 @@ func (h *Handshaker) Initialize(
 	return c, bitfield, nil
 }
 
-func (h *Handshaker) sendHandshake(nc net.Conn, info *storage.TorrentInfo) error {
+func (h *Handshaker) sendHandshake(nc net.Conn, info *storage.TorrentInfo, namespace string) error {
 	hs := &handshake{
-		peerID:   h.peerID,
-		name:     info.Name(),
-		infoHash: info.InfoHash(),
-		bitfield: info.Bitfield(),
+		peerID:    h.peerID,
+		name:      info.Name(),
+		infoHash:  info.InfoHash(),
+		bitfield:  info.Bitfield(),
+		namespace: namespace,
 	}
 	msg, err := hs.toP2PMessage()
 	if err != nil {
@@ -203,9 +214,12 @@ func (h *Handshaker) readHandshake(nc net.Conn) (*handshake, error) {
 }
 
 func (h *Handshaker) fullHandshake(
-	nc net.Conn, peerID core.PeerID, info *storage.TorrentInfo) (*Conn, *bitset.BitSet, error) {
+	nc net.Conn,
+	peerID core.PeerID,
+	info *storage.TorrentInfo,
+	namespace string) (*Conn, *bitset.BitSet, error) {
 
-	if err := h.sendHandshake(nc, info); err != nil {
+	if err := h.sendHandshake(nc, info, namespace); err != nil {
 		return nil, nil, fmt.Errorf("send handshake: %s", err)
 	}
 	hs, err := h.readHandshake(nc)

@@ -16,18 +16,17 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/blobrefresh"
 	"code.uber.internal/infra/kraken/lib/hrw"
+	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/errutil"
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 
-	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
 	"github.com/pressly/chi"
 	"github.com/uber-go/tally"
@@ -46,8 +45,8 @@ type Server struct {
 	clientProvider    blobclient.Provider
 	stats             tally.Scope
 	backendManager    *backend.Manager
-	requestCache      *dedup.RequestCache
-	pieceLengthConfig *pieceLengthConfig
+	blobRefresher     *blobrefresh.Refresher
+	metaInfoGenerator *metainfogen.Generator
 	uploader          *uploader
 
 	// This is an unfortunate coupling between the p2p client and the blob server.
@@ -65,7 +64,9 @@ func New(
 	fileStore store.OriginFileStore,
 	clientProvider blobclient.Provider,
 	pctx core.PeerContext,
-	backendManager *backend.Manager) (*Server, error) {
+	backendManager *backend.Manager,
+	blobRefresher *blobrefresh.Refresher,
+	metaInfoGenerator *metainfogen.Generator) (*Server, error) {
 
 	stats = stats.Tagged(map[string]string{
 		"module": "blobserver",
@@ -81,14 +82,6 @@ func New(
 	}
 	label := currNode.Label
 
-	plConfig, err := newPieceLengthConfig(config.PieceLengths)
-	if err != nil {
-		return nil, fmt.Errorf("piece length config: %s", err)
-	}
-
-	rc := dedup.NewRequestCache(config.RequestCache, clock.New())
-	rc.SetNotFound(func(err error) bool { return err == backenderrors.ErrBlobNotFound })
-
 	return &Server{
 		config:            config,
 		label:             label,
@@ -99,8 +92,8 @@ func New(
 		clientProvider:    clientProvider,
 		stats:             stats,
 		backendManager:    backendManager,
-		requestCache:      rc,
-		pieceLengthConfig: plConfig,
+		blobRefresher:     blobRefresher,
+		metaInfoGenerator: metaInfoGenerator,
 		uploader:          newUploader(fileStore),
 		pctx:              pctx,
 	}, nil
@@ -341,46 +334,43 @@ func (s Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 // This download is asynchronous and getMetaInfo will immediately return a
 // "202 Accepted" server error.
 func (s Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
-	if _, err := s.fileStore.GetCacheFileStat(d.Hex()); os.IsNotExist(err) {
-		return nil, s.startRemoteBlobDownload(namespace, d)
-	} else if err != nil {
-		return nil, handler.Errorf("cache file stat: %s", err)
+	raw, err := s.fileStore.GetCacheFileMetadata(d.Hex(), store.NewTorrentMeta())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, s.startRemoteBlobDownload(namespace, d)
+		}
+		return nil, handler.Errorf("get cache metadata: %s", err)
 	}
-	return s.getOrGenerateMetaInfo(d)
+	return raw, nil
+}
+
+type replicateHook struct {
+	server Server
+}
+
+func (h *replicateHook) Run(d core.Digest) {
+	timer := h.server.stats.Timer("replicate_blob").Start()
+	if err := h.server.replicateBlob(d); err != nil {
+		// Don't return error here as we only want to cache storage backend errors.
+		log.With("blob", d.Hex()).Errorf("Error replicating remote blob: %s", err)
+		h.server.stats.Counter("replicate_blob_errors").Inc(1)
+		return
+	}
+	timer.Stop()
 }
 
 func (s Server) startRemoteBlobDownload(namespace string, d core.Digest) error {
-	c, err := s.backendManager.GetClient(namespace)
-	if err != nil {
-		return handler.Errorf("backend manager: %s", err).Status(http.StatusBadRequest)
-	}
-	id := namespace + ":" + d.Hex()
-	err = s.requestCache.Start(id, func() error {
-		downloadRemoteBlobTimer := s.stats.Timer("download_remote_blob").Start()
-		if err := s.downloadRemoteBlob(c, d); err != nil {
-			return err
-		}
-		downloadRemoteBlobTimer.Stop()
-
-		replicateBlobTimer := s.stats.Timer("replicate_blob").Start()
-		if err := s.replicateBlob(d); err != nil {
-			// Don't return error here as we only want to cache storage backend errors.
-			log.With("blob", d.Hex()).Errorf("Error replicating remote blob: %s", err)
-			s.stats.Counter("replicate_blob_errors").Inc(1)
-		} else {
-			replicateBlobTimer.Stop()
-		}
-
-		return nil
-	})
-	if err == dedup.ErrRequestPending || err == nil {
+	err := s.blobRefresher.Refresh(namespace, d, &replicateHook{s})
+	switch err {
+	case blobrefresh.ErrPending, nil:
 		return handler.ErrorStatus(http.StatusAccepted)
-	} else if err == backenderrors.ErrBlobNotFound {
+	case blobrefresh.ErrNotFound:
 		return handler.ErrorStatus(http.StatusNotFound)
-	} else if err == dedup.ErrWorkersBusy {
+	case blobrefresh.ErrWorkersBusy:
 		return handler.ErrorStatus(http.StatusServiceUnavailable)
+	default:
+		return err
 	}
-	return err
 }
 
 func (s Server) downloadRemoteBlob(c backend.Client, d core.Digest) error {
@@ -438,47 +428,6 @@ func (s Server) replicateBlob(d core.Digest) error {
 	wg.Wait()
 
 	return errutil.Join(errs)
-}
-
-// getOrGenerateMetaInfo returns metainfo for d. If no metainfo exists, generates
-// metainfo for d and writes it to disk.
-func (s Server) getOrGenerateMetaInfo(d core.Digest) ([]byte, error) {
-	raw, err := s.fileStore.GetCacheFileMetadata(d.Hex(), store.NewTorrentMeta())
-	if os.IsNotExist(err) {
-		raw, err = s.generateMetaInfo(d)
-		if err != nil {
-			return nil, handler.Errorf("generate metainfo: %s", err)
-		}
-		// Never overwrite existing metadata.
-		raw, err = s.fileStore.GetOrSetCacheFileMetadata(d.Hex(), store.NewTorrentMeta(), raw)
-		if err != nil {
-			return nil, handler.Errorf("get or set metainfo: %s", err)
-		}
-	} else if err != nil {
-		return nil, handler.Errorf("get cache metainfo: %s", err)
-	}
-	return raw, nil
-}
-
-func (s Server) generateMetaInfo(d core.Digest) ([]byte, error) {
-	info, err := s.fileStore.GetCacheFileStat(d.Hex())
-	if err != nil {
-		return nil, fmt.Errorf("cache stat: %s", err)
-	}
-	f, err := s.fileStore.GetCacheFileReader(d.Hex())
-	if err != nil {
-		return nil, fmt.Errorf("get cache file: %s", err)
-	}
-	pieceLength := s.pieceLengthConfig.get(info.Size())
-	mi, err := core.NewMetaInfoFromBlob(d.Hex(), f, pieceLength)
-	if err != nil {
-		return nil, fmt.Errorf("create metainfo: %s", err)
-	}
-	raw, err := mi.Serialize()
-	if err != nil {
-		return nil, fmt.Errorf("serialize metainfo: %s", err)
-	}
-	return raw, nil
 }
 
 func (s Server) getLocations(d core.Digest) ([]string, error) {
@@ -586,8 +535,8 @@ func (s Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) er
 	if err := s.uploader.commit(d, uid); err != nil {
 		return err
 	}
-	if _, err := s.getOrGenerateMetaInfo(d); err != nil {
-		return err
+	if err := s.metaInfoGenerator.Generate(d); err != nil {
+		return handler.Errorf("generate metainfo: %s", err)
 	}
 	return nil
 }
@@ -617,8 +566,8 @@ func (s Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reques
 	if err := s.commitClusterUpload(uid, namespace, d, through); err != nil {
 		return err
 	}
-	if _, err := s.getOrGenerateMetaInfo(d); err != nil {
-		return err
+	if err := s.metaInfoGenerator.Generate(d); err != nil {
+		return handler.Errorf("generate metainfo: %s", err)
 	}
 	return nil
 }

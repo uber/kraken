@@ -33,9 +33,9 @@ func NewAgentTorrentArchive(
 	return &AgentTorrentArchive{stats, fs, mic}
 }
 
-// Stat returns TorrentInfo for given file name. Returns os.ErrNotExist if the file does
-// not exist.
-func (a *AgentTorrentArchive) Stat(name string) (*TorrentInfo, error) {
+// Stat returns TorrentInfo for given file name. Returns os.ErrNotExist if the
+// file does not exist. Ignores namespace.
+func (a *AgentTorrentArchive) Stat(namespace, name string) (*TorrentInfo, error) {
 	downloadOrCache := a.fs.States().Download().Cache()
 
 	raw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
@@ -105,8 +105,8 @@ func (a *AgentTorrentArchive) CreateTorrent(namespace, name string) (Torrent, er
 	return t, nil
 }
 
-// GetTorrent returns a Torrent for an existing metainfo / file on disk.
-func (a *AgentTorrentArchive) GetTorrent(name string) (Torrent, error) {
+// GetTorrent returns a Torrent for an existing metainfo / file on disk. Ignores namespace.
+func (a *AgentTorrentArchive) GetTorrent(namespace, name string) (Torrent, error) {
 	downloadOrCache := a.fs.States().Download().Cache()
 
 	miRaw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
