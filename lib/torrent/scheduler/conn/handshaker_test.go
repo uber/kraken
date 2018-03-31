@@ -11,6 +11,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 )
 
+const namespace = "test-namespace"
+
 func TestHandshakerSetsConnFieldsProperly(t *testing.T) {
 	require := require.New(t)
 
@@ -43,6 +45,7 @@ func TestHandshakerSetsConnFieldsProperly(t *testing.T) {
 		require.Equal(info.Name(), pc.Name())
 		require.Equal(info.InfoHash(), pc.InfoHash())
 		require.Equal(info.Bitfield(), pc.Bitfield())
+		require.Equal(namespace, pc.Namespace())
 
 		c, err := h1.Establish(pc, info)
 		require.NoError(err)
@@ -55,7 +58,7 @@ func TestHandshakerSetsConnFieldsProperly(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		c, b, err := h2.Initialize(h1.peerID, l1.Addr().String(), info)
+		c, b, err := h2.Initialize(h1.peerID, l1.Addr().String(), info, namespace)
 		require.NoError(err)
 		require.Equal(h1.peerID, c.PeerID())
 		require.Equal(info.InfoHash(), c.InfoHash())

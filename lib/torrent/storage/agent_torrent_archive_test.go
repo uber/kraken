@@ -10,8 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const namespace = "test-namespace"
-
 func TestAgentTorrentArchiveStatBitfield(t *testing.T) {
 	require := require.New(t)
 
@@ -28,7 +26,7 @@ func TestAgentTorrentArchiveStatBitfield(t *testing.T) {
 	tor, err := archive.CreateTorrent(namespace, mi.Name())
 	require.NoError(tor.WritePiece(NewPieceReaderBuffer(blob.Content[2:3]), 2))
 
-	info, err := archive.Stat(mi.Name())
+	info, err := archive.Stat(namespace, mi.Name())
 	require.NoError(err)
 	require.Equal(BitSetFixture(false, false, true, false), info.Bitfield())
 	require.Equal(int64(1), info.MaxPieceLength())
@@ -44,7 +42,7 @@ func TestAgentTorrentArchiveStatNotExist(t *testing.T) {
 
 	name := core.MetaInfoFixture().Name()
 
-	_, err := archive.Stat(name)
+	_, err := archive.Stat(namespace, name)
 	require.True(os.IsNotExist(err))
 }
 
@@ -111,7 +109,7 @@ func TestAgentTorrentArchiveDeleteTorrent(t *testing.T) {
 
 	require.NoError(archive.DeleteTorrent(mi.Name()))
 
-	_, err = archive.Stat(mi.Name())
+	_, err = archive.Stat(namespace, mi.Name())
 	require.True(os.IsNotExist(err))
 }
 
@@ -152,7 +150,7 @@ func TestAgentTorrentArchiveGetTorrent(t *testing.T) {
 	mi := core.MetaInfoFixture()
 
 	// Since metainfo is not yet on disk, get should fail.
-	_, err := archive.GetTorrent(mi.Name())
+	_, err := archive.GetTorrent(namespace, mi.Name())
 	require.Error(err)
 
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(mi, nil)
@@ -161,7 +159,7 @@ func TestAgentTorrentArchiveGetTorrent(t *testing.T) {
 	require.NoError(err)
 
 	// After creating the torrent, get should succeed.
-	tor, err := archive.GetTorrent(mi.Name())
+	tor, err := archive.GetTorrent(namespace, mi.Name())
 	require.NoError(err)
 	require.NotNil(tor)
 }

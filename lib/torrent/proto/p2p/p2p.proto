@@ -19,9 +19,10 @@ message BitfieldMessage {
     // XXX(codyg): We rely on this name field for announcing too, so tracker can
     // look up origins that have this content.
     // We currently treat infohash as verification of torrents.
-    string name     = 3;
-    string peerID   = 4;
-    bytes bitfieldBytes = 5;
+    string name          = 3;
+    string peerID        = 4;
+    bytes  bitfieldBytes = 5;
+    string namespace     = 6;
 }
 
 // Requests a piece of the given index. Note: offset and length are unused fields

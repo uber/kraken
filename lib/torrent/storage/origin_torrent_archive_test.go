@@ -1,92 +1,84 @@
 package storage
 
 import (
-	"bytes"
 	"os"
 	"testing"
+	"time"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/utils/rwutil"
+	"code.uber.internal/infra/kraken/utils/testutil"
 
-	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
 
-func setupOriginTorrent(t *testing.T, fs store.OriginFileStore, mi *core.MetaInfo, content []byte) {
+func TestOriginTorrentArchiveStatNoExistTriggersRefresh(t *testing.T) {
 	require := require.New(t)
 
-	require.NoError(fs.CreateCacheFile(mi.Name(), bytes.NewBuffer(content)))
-
-	miRaw, err := mi.Serialize()
-	require.NoError(err)
-	_, err = fs.SetCacheFileMetadata(mi.Name(), store.NewTorrentMeta(), miRaw)
-	require.NoError(err)
-}
-
-func TestOriginTorrentArchiveStatNotExist(t *testing.T) {
-	require := require.New(t)
-
-	fs, cleanup := store.OriginFileStoreFixture(clock.New())
+	mocks, cleanup := newOriginMocks(t)
 	defer cleanup()
 
-	archive := NewOriginTorrentArchive(fs)
+	archive := mocks.newTorrentArchive()
 
-	name := core.MetaInfoFixture().Name()
+	blob := core.SizedBlobFixture(100, pieceLength)
 
-	_, err := archive.Stat(name)
-	require.True(os.IsNotExist(err))
-}
+	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content))
 
-func TestOriginTorrentArchiveGetTorrentNotExist(t *testing.T) {
-	require := require.New(t)
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		_, err := archive.Stat(namespace, blob.Digest.Hex())
+		return err == nil
+	}))
 
-	fs, cleanup := store.OriginFileStoreFixture(clock.New())
-	defer cleanup()
-
-	archive := NewOriginTorrentArchive(fs)
-
-	name := core.MetaInfoFixture().Name()
-
-	_, err := archive.GetTorrent(name)
-	require.Error(err)
-}
-
-func TestOriginTorrentArchiveGetTorrent(t *testing.T) {
-	require := require.New(t)
-
-	fs, cleanup := store.OriginFileStoreFixture(clock.New())
-	defer cleanup()
-
-	archive := NewOriginTorrentArchive(fs)
-
-	blob := core.SizedBlobFixture(4, 1)
-	mi := blob.MetaInfo
-
-	setupOriginTorrent(t, fs, mi, blob.Content)
-
-	tor, err := archive.GetTorrent(mi.Name())
+	info, err := archive.Stat(namespace, blob.Digest.Hex())
 	require.NoError(err)
+	require.Equal(blob.Digest.Hex(), info.Name())
+	require.Equal(blob.MetaInfo.InfoHash, info.InfoHash())
+	require.Equal(100, info.PercentDownloaded())
+}
+
+func TestOriginTorrentArchiveGetTorrentNoExistTriggersRefresh(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newOriginMocks(t)
+	defer cleanup()
+
+	archive := mocks.newTorrentArchive()
+
+	blob := core.SizedBlobFixture(100, pieceLength)
+
+	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content))
+
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		_, err := archive.GetTorrent(namespace, blob.Digest.Hex())
+		return err == nil
+	}))
+
+	tor, err := archive.GetTorrent(namespace, blob.Digest.Hex())
+	require.NoError(err)
+	require.Equal(blob.Digest.Hex(), tor.Name())
+	require.Equal(blob.MetaInfo.InfoHash, tor.InfoHash())
 	require.True(tor.Complete())
 }
 
 func TestOriginTorrentArchiveDeleteTorrent(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.OriginFileStoreFixture(clock.New())
+	mocks, cleanup := newOriginMocks(t)
 	defer cleanup()
 
-	archive := NewOriginTorrentArchive(fs)
+	archive := mocks.newTorrentArchive()
 
-	blob := core.SizedBlobFixture(4, 1)
-	mi := blob.MetaInfo
+	blob := core.SizedBlobFixture(100, pieceLength)
 
-	setupOriginTorrent(t, fs, mi, blob.Content)
+	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content))
 
-	_, err := archive.Stat(mi.Name())
-	require.NoError(err)
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		_, err := archive.Stat(namespace, blob.Digest.Hex())
+		return err == nil
+	}))
 
-	require.NoError(archive.DeleteTorrent(mi.Name()))
+	require.NoError(archive.DeleteTorrent(blob.Digest.Hex()))
 
-	_, err = archive.Stat(mi.Name())
+	_, err := mocks.fs.GetCacheFileStat(blob.Digest.Hex())
 	require.True(os.IsNotExist(err))
 }

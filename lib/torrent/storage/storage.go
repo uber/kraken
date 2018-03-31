@@ -44,8 +44,8 @@ type Torrent interface {
 
 // TorrentArchive creates and open torrent file
 type TorrentArchive interface {
-	Stat(name string) (*TorrentInfo, error)
+	Stat(namespace, name string) (*TorrentInfo, error)
 	CreateTorrent(namespace, name string) (Torrent, error)
-	GetTorrent(name string) (Torrent, error)
+	GetTorrent(namespace, name string) (Torrent, error)
 	DeleteTorrent(name string) error
 }

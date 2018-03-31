@@ -157,7 +157,7 @@ func (p *testPeer) writeTorrent(blob *core.BlobFixture) {
 func (p *testPeer) checkTorrent(t *testing.T, blob *core.BlobFixture) {
 	require := require.New(t)
 
-	tor, err := p.torrentArchive.GetTorrent(blob.MetaInfo.Info.Name)
+	tor, err := p.torrentArchive.GetTorrent(namespace, blob.MetaInfo.Info.Name)
 	require.NoError(err)
 
 	require.True(tor.Complete())

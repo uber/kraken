@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/blobrefresh"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
@@ -42,11 +43,12 @@ func NewOriginScheduler(
 	stats tally.Scope,
 	pctx core.PeerContext,
 	fs store.OriginFileStore,
-	netevents networkevent.Producer) (ReloadableScheduler, error) {
+	netevents networkevent.Producer,
+	blobRefresher *blobrefresh.Refresher) (ReloadableScheduler, error) {
 
 	s, err := newScheduler(
 		config,
-		storage.NewOriginTorrentArchive(fs),
+		storage.NewOriginTorrentArchive(fs, blobRefresher),
 		stats,
 		pctx,
 		announceclient.Disabled(),

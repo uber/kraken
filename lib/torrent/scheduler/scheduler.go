@@ -43,14 +43,18 @@ type Scheduler interface {
 
 // torrentControl bundles torrent control structures.
 type torrentControl struct {
+	namespace    string
 	errors       []chan error
 	dispatcher   *dispatch.Dispatcher
 	complete     bool
 	localRequest bool
 }
 
-func newTorrentControl(d *dispatch.Dispatcher, localRequest bool) *torrentControl {
+func newTorrentControl(
+	namespace string, d *dispatch.Dispatcher, localRequest bool) *torrentControl {
+
 	return &torrentControl{
+		namespace:    namespace,
 		dispatcher:   d,
 		localRequest: localRequest,
 	}
@@ -229,7 +233,7 @@ func (s *scheduler) doDownload(namespace, name string) (size int64, err error) {
 
 	// Buffer size of 1 so sends do not block.
 	errc := make(chan error, 1)
-	if !s.eventLoop.Send(newTorrentEvent{t, errc}) {
+	if !s.eventLoop.Send(newTorrentEvent{namespace, t, errc}) {
 		return 0, ErrSchedulerStopped
 	}
 	return t.Length(), <-errc
@@ -372,17 +376,19 @@ func (s *scheduler) addOutgoingConn(c *conn.Conn, b *bitset.BitSet, info *storag
 	return nil
 }
 
-func (s *scheduler) addIncomingConn(c *conn.Conn, b *bitset.BitSet, info *storage.TorrentInfo) error {
+func (s *scheduler) addIncomingConn(
+	namespace string, c *conn.Conn, b *bitset.BitSet, info *storage.TorrentInfo) error {
+
 	if err := s.connState.MovePendingToActive(c); err != nil {
 		return fmt.Errorf("cannot add conn to scheduler: %s", err)
 	}
 	ctrl, ok := s.torrentControls[info.InfoHash()]
 	if !ok {
-		t, err := s.torrentArchive.GetTorrent(info.Name())
+		t, err := s.torrentArchive.GetTorrent(namespace, info.Name())
 		if err != nil {
 			return fmt.Errorf("get torrent: %s", err)
 		}
-		ctrl = s.initTorrentControl(t, false)
+		ctrl = s.initTorrentControl(namespace, t, false)
 	}
 	if err := ctrl.dispatcher.AddPeer(c.PeerID(), b, c); err != nil {
 		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
@@ -392,7 +398,9 @@ func (s *scheduler) addIncomingConn(c *conn.Conn, b *bitset.BitSet, info *storag
 
 // initTorrentControl initializes a new torrentControl for t. Overwrites any
 // existing torrentControl for t, so callers should check if one exists first.
-func (s *scheduler) initTorrentControl(t storage.Torrent, localRequest bool) *torrentControl {
+func (s *scheduler) initTorrentControl(
+	namespace string, t storage.Torrent, localRequest bool) *torrentControl {
+
 	d := dispatch.New(
 		s.config.Dispatch,
 		s.stats,
@@ -401,7 +409,7 @@ func (s *scheduler) initTorrentControl(t storage.Torrent, localRequest bool) *to
 		s.eventLoop,
 		s.pctx.PeerID,
 		t)
-	ctrl := newTorrentControl(d, localRequest)
+	ctrl := newTorrentControl(namespace, d, localRequest)
 	s.announceQueue.Add(t.InfoHash())
 	s.networkEvents.Produce(networkevent.AddTorrentEvent(
 		t.InfoHash(), s.pctx.PeerID, t.Bitfield(), s.config.ConnState.MaxOpenConnectionsPerTorrent))

@@ -17,6 +17,8 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/lib/blobrefresh"
+	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -53,8 +55,6 @@ func configFixture() Config {
 			MaxRetries: 3,
 			RetryDelay: 200 * time.Millisecond,
 		},
-		// 4 byte piece lengths for all file sizes.
-		PieceLengths: map[datasize.ByteSize]datasize.ByteSize{0: 4},
 	}
 }
 
@@ -103,9 +103,11 @@ func startServer(
 	pctx core.PeerContext,
 	bm *backend.Manager) (addr string, stop func()) {
 
-	stats := tally.NewTestScope("", nil)
+	mg := metainfogen.Fixture(fs, 4)
 
-	s, err := New(config, stats, host, fs, cp, pctx, bm)
+	br := blobrefresh.New(tally.NoopScope, fs, bm, mg)
+
+	s, err := New(config, tally.NoopScope, host, fs, cp, pctx, bm, br, mg)
 	if err != nil {
 		panic(err)
 	}

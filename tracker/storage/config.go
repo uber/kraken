@@ -58,7 +58,7 @@ func (c RedisConfig) applyDefaults() (RedisConfig, error) {
 		c.MaxPeerSetWindows = 10
 	}
 	if c.TorrentTTL == 0 {
-		c.TorrentTTL = time.Hour
+		c.TorrentTTL = 5 * time.Minute
 	}
 	if c.MaxIdleConns == 0 {
 		c.MaxIdleConns = 10
