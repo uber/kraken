@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
+	"code.uber.internal/infra/kraken/utils/bitsetutil"
 )
 
 func TestManagerPipelineLimit(t *testing.T) {
@@ -19,7 +19,7 @@ func TestManagerPipelineLimit(t *testing.T) {
 	peerID := core.PeerIDFixture()
 
 	require.Len(
-		m.ReservePieces(peerID, storage.BitSetFixture(true, true, true, true), false),
+		m.ReservePieces(peerID, bitsetutil.FromBools(true, true, true, true), false),
 		3)
 
 	require.Len(m.PendingPieces(peerID), 3)
@@ -36,16 +36,16 @@ func TestManagerReserveExpiredRequest(t *testing.T) {
 	peerID := core.PeerIDFixture()
 
 	require.Equal(
-		[]int{0}, m.ReservePieces(peerID, storage.BitSetFixture(true), false))
+		[]int{0}, m.ReservePieces(peerID, bitsetutil.FromBools(true), false))
 
 	// Further reservations fail.
-	require.Empty(m.ReservePieces(peerID, storage.BitSetFixture(true), false))
-	require.Empty(m.ReservePieces(core.PeerIDFixture(), storage.BitSetFixture(true), false))
+	require.Empty(m.ReservePieces(peerID, bitsetutil.FromBools(true), false))
+	require.Empty(m.ReservePieces(core.PeerIDFixture(), bitsetutil.FromBools(true), false))
 
 	clk.Add(timeout + 1)
 
 	require.Equal(
-		[]int{0}, m.ReservePieces(peerID, storage.BitSetFixture(true), false))
+		[]int{0}, m.ReservePieces(peerID, bitsetutil.FromBools(true), false))
 }
 
 func TestManagerReserveUnsentRequest(t *testing.T) {
@@ -56,16 +56,16 @@ func TestManagerReserveUnsentRequest(t *testing.T) {
 	peerID := core.PeerIDFixture()
 
 	require.Equal(
-		[]int{0}, m.ReservePieces(peerID, storage.BitSetFixture(true), false))
+		[]int{0}, m.ReservePieces(peerID, bitsetutil.FromBools(true), false))
 
 	// Further reservations fail.
-	require.Empty(m.ReservePieces(peerID, storage.BitSetFixture(true), false))
-	require.Empty(m.ReservePieces(core.PeerIDFixture(), storage.BitSetFixture(true), false))
+	require.Empty(m.ReservePieces(peerID, bitsetutil.FromBools(true), false))
+	require.Empty(m.ReservePieces(core.PeerIDFixture(), bitsetutil.FromBools(true), false))
 
 	m.MarkUnsent(peerID, 0)
 
 	require.Equal(
-		[]int{0}, m.ReservePieces(peerID, storage.BitSetFixture(true), false))
+		[]int{0}, m.ReservePieces(peerID, bitsetutil.FromBools(true), false))
 }
 
 func TestManagerReserveInvalidRequest(t *testing.T) {
@@ -76,16 +76,16 @@ func TestManagerReserveInvalidRequest(t *testing.T) {
 	peerID := core.PeerIDFixture()
 
 	require.Equal(
-		[]int{0}, m.ReservePieces(peerID, storage.BitSetFixture(true), false))
+		[]int{0}, m.ReservePieces(peerID, bitsetutil.FromBools(true), false))
 
 	// Further reservations fail.
-	require.Empty(m.ReservePieces(peerID, storage.BitSetFixture(true), false))
-	require.Empty(m.ReservePieces(core.PeerIDFixture(), storage.BitSetFixture(true), false))
+	require.Empty(m.ReservePieces(peerID, bitsetutil.FromBools(true), false))
+	require.Empty(m.ReservePieces(core.PeerIDFixture(), bitsetutil.FromBools(true), false))
 
 	m.MarkInvalid(peerID, 0)
 
 	require.Equal(
-		[]int{0}, m.ReservePieces(peerID, storage.BitSetFixture(true), false))
+		[]int{0}, m.ReservePieces(peerID, bitsetutil.FromBools(true), false))
 }
 
 func TestManagerGetFailedRequests(t *testing.T) {
@@ -101,11 +101,11 @@ func TestManagerGetFailedRequests(t *testing.T) {
 	p2 := core.PeerIDFixture()
 
 	require.Equal(
-		[]int{0}, m.ReservePieces(p0, storage.BitSetFixture(true, false, false), false))
+		[]int{0}, m.ReservePieces(p0, bitsetutil.FromBools(true, false, false), false))
 	require.Equal(
-		[]int{1}, m.ReservePieces(p1, storage.BitSetFixture(false, true, false), false))
+		[]int{1}, m.ReservePieces(p1, bitsetutil.FromBools(false, true, false), false))
 	require.Equal(
-		[]int{2}, m.ReservePieces(p2, storage.BitSetFixture(false, false, true), false))
+		[]int{2}, m.ReservePieces(p2, bitsetutil.FromBools(false, false, true), false))
 
 	m.MarkUnsent(p0, 0)
 	m.MarkInvalid(p1, 1)
@@ -113,7 +113,7 @@ func TestManagerGetFailedRequests(t *testing.T) {
 
 	p3 := core.PeerIDFixture()
 	require.Equal(
-		[]int{3}, m.ReservePieces(p3, storage.BitSetFixture(false, false, false, true), false))
+		[]int{3}, m.ReservePieces(p3, bitsetutil.FromBools(false, false, false, true), false))
 
 	failed := m.GetFailedRequests()
 
@@ -131,7 +131,7 @@ func TestManagerClear(t *testing.T) {
 	peerID := core.PeerIDFixture()
 
 	require.Equal(
-		[]int{0}, m.ReservePieces(peerID, storage.BitSetFixture(true), false))
+		[]int{0}, m.ReservePieces(peerID, bitsetutil.FromBools(true), false))
 
 	require.Len(m.PendingPieces(peerID), 1)
 
@@ -149,11 +149,11 @@ func TestManagerClearPeer(t *testing.T) {
 	p2 := core.PeerIDFixture()
 
 	require.Equal(
-		[]int{0}, m.ReservePieces(p1, storage.BitSetFixture(true), false))
+		[]int{0}, m.ReservePieces(p1, bitsetutil.FromBools(true), false))
 	require.Equal(
-		[]int{1}, m.ReservePieces(p1, storage.BitSetFixture(false, true), false))
+		[]int{1}, m.ReservePieces(p1, bitsetutil.FromBools(false, true), false))
 	require.Equal(
-		[]int{2}, m.ReservePieces(p2, storage.BitSetFixture(false, false, true), false))
+		[]int{2}, m.ReservePieces(p2, bitsetutil.FromBools(false, false, true), false))
 
 	m.ClearPeer(p1)
 
@@ -170,15 +170,15 @@ func TestManagerReservePiecesAllowDuplicate(t *testing.T) {
 	p2 := core.PeerIDFixture()
 
 	require.Equal(
-		[]int{0}, m.ReservePieces(p1, storage.BitSetFixture(true), true))
+		[]int{0}, m.ReservePieces(p1, bitsetutil.FromBools(true), true))
 
 	// Shouldn't allow duplicates on the same peer.
 	require.Empty(
-		m.ReservePieces(p1, storage.BitSetFixture(true), true))
+		m.ReservePieces(p1, bitsetutil.FromBools(true), true))
 
 	// Should allow duplicates for different peers.
 	require.Equal(
-		[]int{0}, m.ReservePieces(p2, storage.BitSetFixture(true), true))
+		[]int{0}, m.ReservePieces(p2, bitsetutil.FromBools(true), true))
 }
 
 func TestManagerClearWhenAllowedDuplicates(t *testing.T) {
@@ -190,9 +190,9 @@ func TestManagerClearWhenAllowedDuplicates(t *testing.T) {
 	p2 := core.PeerIDFixture()
 
 	require.Equal(
-		[]int{0, 1}, m.ReservePieces(p1, storage.BitSetFixture(true, true), true))
+		[]int{0, 1}, m.ReservePieces(p1, bitsetutil.FromBools(true, true), true))
 	require.Equal(
-		[]int{0, 1}, m.ReservePieces(p2, storage.BitSetFixture(true, true), true))
+		[]int{0, 1}, m.ReservePieces(p2, bitsetutil.FromBools(true, true), true))
 
 	m.Clear(0)
 
@@ -209,9 +209,9 @@ func TestManagerClearPeerWhenAllowedDuplicates(t *testing.T) {
 	p2 := core.PeerIDFixture()
 
 	require.Equal(
-		[]int{0, 1}, m.ReservePieces(p1, storage.BitSetFixture(true, true), true))
+		[]int{0, 1}, m.ReservePieces(p1, bitsetutil.FromBools(true, true), true))
 	require.Equal(
-		[]int{0, 1}, m.ReservePieces(p2, storage.BitSetFixture(true, true), true))
+		[]int{0, 1}, m.ReservePieces(p2, bitsetutil.FromBools(true, true), true))
 
 	m.ClearPeer(p1)
 
@@ -242,9 +242,9 @@ func TestManagerMarkStatusWhenAllowedDuplicates(t *testing.T) {
 			p2 := core.PeerIDFixture()
 
 			require.Equal(
-				[]int{0, 1}, m.ReservePieces(p1, storage.BitSetFixture(true, true), true))
+				[]int{0, 1}, m.ReservePieces(p1, bitsetutil.FromBools(true, true), true))
 			require.Equal(
-				[]int{0, 1}, m.ReservePieces(p2, storage.BitSetFixture(true, true), true))
+				[]int{0, 1}, m.ReservePieces(p2, bitsetutil.FromBools(true, true), true))
 
 			test.mark(m, p1, 0)
 

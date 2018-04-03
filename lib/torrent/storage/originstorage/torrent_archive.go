@@ -1,4 +1,4 @@
-package storage
+package originstorage
 
 import (
 	"errors"
@@ -8,29 +8,27 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/willf/bitset"
 )
 
-// OriginTorrentArchive is a TorrentArchive for origin peers. It assumes that
+// TorrentArchive is a TorrentArchive for origin peers. It assumes that
 // all files (including metainfo) are already downloaded and in the cache directory.
-type OriginTorrentArchive struct {
+type TorrentArchive struct {
 	fs            store.OriginFileStore
 	blobRefresher *blobrefresh.Refresher
 }
 
-// NewOriginTorrentArchive creates a new OriginTorrentArchive.
-func NewOriginTorrentArchive(
-	fs store.OriginFileStore, blobRefresher *blobrefresh.Refresher) *OriginTorrentArchive {
+// NewTorrentArchive creates a new TorrentArchive.
+func NewTorrentArchive(
+	fs store.OriginFileStore, blobRefresher *blobrefresh.Refresher) *TorrentArchive {
 
-	return &OriginTorrentArchive{fs, blobRefresher}
+	return &TorrentArchive{fs, blobRefresher}
 }
 
-// Stat returns TorrentInfo for given file name. If the file does not exist,
-// attempts to re-fetch the file from the storae backend configured for namespace
-// in a background goroutine.
-func (a *OriginTorrentArchive) Stat(namespace, name string) (*TorrentInfo, error) {
+func (a *TorrentArchive) getMetaInfo(namespace, name string) (*core.MetaInfo, error) {
 	raw, err := a.fs.GetCacheFileMetadata(name, store.NewTorrentMeta())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -47,26 +45,35 @@ func (a *OriginTorrentArchive) Stat(namespace, name string) (*TorrentInfo, error
 	if err != nil {
 		return nil, fmt.Errorf("deserialize metainfo: %s", err)
 	}
+	return mi, nil
+}
 
+// Stat returns TorrentInfo for given file name. If the file does not exist,
+// attempts to re-fetch the file from the storae backend configured for namespace
+// in a background goroutine.
+func (a *TorrentArchive) Stat(namespace, name string) (*storage.TorrentInfo, error) {
+	mi, err := a.getMetaInfo(namespace, name)
+	if err != nil {
+		return nil, err
+	}
 	bitfield := bitset.New(uint(mi.Info.NumPieces())).Complement()
-
-	return newTorrentInfo(mi, bitfield), nil
+	return storage.NewTorrentInfo(mi, bitfield), nil
 }
 
 // CreateTorrent is not supported.
-func (a *OriginTorrentArchive) CreateTorrent(namespace, name string) (Torrent, error) {
+func (a *TorrentArchive) CreateTorrent(namespace, name string) (storage.Torrent, error) {
 	return nil, errors.New("not supported for origin")
 }
 
 // GetTorrent returns a Torrent for an existing file on disk. If the file does
 // not exist, attempts to re-fetch the file from the storae backend configured
 // for namespace in a background goroutine, and returns os.ErrNotExist.
-func (a *OriginTorrentArchive) GetTorrent(namespace, name string) (Torrent, error) {
-	info, err := a.Stat(namespace, name)
+func (a *TorrentArchive) GetTorrent(namespace, name string) (storage.Torrent, error) {
+	mi, err := a.getMetaInfo(namespace, name)
 	if err != nil {
-		return nil, fmt.Errorf("torrent stat: %s", err)
+		return nil, err
 	}
-	t, err := NewOriginTorrent(a.fs, info.metainfo)
+	t, err := NewTorrent(a.fs, mi)
 	if err != nil {
 		return nil, fmt.Errorf("initialize torrent: %s", err)
 	}
@@ -74,7 +81,7 @@ func (a *OriginTorrentArchive) GetTorrent(namespace, name string) (Torrent, erro
 }
 
 // DeleteTorrent moves a torrent to the trash.
-func (a *OriginTorrentArchive) DeleteTorrent(name string) error {
+func (a *TorrentArchive) DeleteTorrent(name string) error {
 	if err := a.fs.DeleteCacheFile(name); err != nil && !os.IsNotExist(err) {
 		return err
 	}

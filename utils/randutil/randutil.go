@@ -75,3 +75,12 @@ func ShuffleInt64s(xs []int64) {
 		xs[i], xs[j] = xs[j], xs[i]
 	}
 }
+
+// Bools returns a list of randomly generated bools of length n.
+func Bools(n int) []bool {
+	b := make([]bool, n)
+	for i := range b {
+		b[i] = rand.Intn(2) == 1
+	}
+	return b
+}

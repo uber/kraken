@@ -1,4 +1,4 @@
-package storage
+package agentstorage
 
 import (
 	"os"
@@ -6,17 +6,53 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/torrent/storage"
+	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
+	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
+	"code.uber.internal/infra/kraken/utils/bitsetutil"
+	"code.uber.internal/infra/kraken/utils/testutil"
+
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 )
 
-func TestAgentTorrentArchiveStatBitfield(t *testing.T) {
+const namespace = "test-namespace"
+
+const pieceLength = 4
+
+type archiveMocks struct {
+	fs             store.FileStore
+	metaInfoClient *mockmetainfoclient.MockClient
+}
+
+func newArchiveMocks(t *testing.T) (*archiveMocks, func()) {
+	var cleanup testutil.Cleanup
+
+	ctrl := gomock.NewController(t)
+	cleanup.Add(ctrl.Finish)
+
+	fs, c := store.LocalFileStoreFixture()
+	cleanup.Add(c)
+
+	metaInfoClient := mockmetainfoclient.NewMockClient(ctrl)
+
+	return &archiveMocks{fs, metaInfoClient}, cleanup.Run
+}
+
+func (m *archiveMocks) new() *TorrentArchive {
+	return NewTorrentArchive(tally.NoopScope, m.fs, m.metaInfoClient)
+}
+
+func TestTorrentArchiveStatBitfield(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newAgentMocks(t)
+	mocks, cleanup := newArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive()
+	archive := mocks.new()
 
 	blob := core.SizedBlobFixture(4, 1)
 	mi := blob.MetaInfo
@@ -24,21 +60,21 @@ func TestAgentTorrentArchiveStatBitfield(t *testing.T) {
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(mi, nil).Times(1)
 
 	tor, err := archive.CreateTorrent(namespace, mi.Name())
-	require.NoError(tor.WritePiece(NewPieceReaderBuffer(blob.Content[2:3]), 2))
+	require.NoError(tor.WritePiece(piecereader.NewBuffer(blob.Content[2:3]), 2))
 
 	info, err := archive.Stat(namespace, mi.Name())
 	require.NoError(err)
-	require.Equal(BitSetFixture(false, false, true, false), info.Bitfield())
+	require.Equal(bitsetutil.FromBools(false, false, true, false), info.Bitfield())
 	require.Equal(int64(1), info.MaxPieceLength())
 }
 
-func TestAgentTorrentArchiveStatNotExist(t *testing.T) {
+func TestTorrentArchiveStatNotExist(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newAgentMocks(t)
+	mocks, cleanup := newArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive()
+	archive := mocks.new()
 
 	name := core.MetaInfoFixture().Name()
 
@@ -46,13 +82,13 @@ func TestAgentTorrentArchiveStatNotExist(t *testing.T) {
 	require.True(os.IsNotExist(err))
 }
 
-func TestAgentTorrentArchiveCreateTorrent(t *testing.T) {
+func TestTorrentArchiveCreateTorrent(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newAgentMocks(t)
+	mocks, cleanup := newArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive()
+	archive := mocks.new()
 
 	mi := core.MetaInfoFixture()
 
@@ -75,29 +111,29 @@ func TestAgentTorrentArchiveCreateTorrent(t *testing.T) {
 	require.NotNil(tor)
 }
 
-func TestAgentTorrentArchiveCreateTorrentNotFound(t *testing.T) {
+func TestTorrentArchiveCreateTorrentNotFound(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newAgentMocks(t)
+	mocks, cleanup := newArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive()
+	archive := mocks.new()
 
 	mi := core.MetaInfoFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(nil, metainfoclient.ErrNotFound)
 
 	_, err := archive.CreateTorrent(namespace, mi.Name())
-	require.Equal(ErrNotFound, err)
+	require.Equal(storage.ErrNotFound, err)
 }
 
-func TestAgentTorrentArchiveDeleteTorrent(t *testing.T) {
+func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newAgentMocks(t)
+	mocks, cleanup := newArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive()
+	archive := mocks.new()
 
 	mi := core.MetaInfoFixture()
 
@@ -113,13 +149,13 @@ func TestAgentTorrentArchiveDeleteTorrent(t *testing.T) {
 	require.True(os.IsNotExist(err))
 }
 
-func TestAgentTorrentArchiveConcurrentGet(t *testing.T) {
+func TestTorrentArchiveConcurrentGet(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newAgentMocks(t)
+	mocks, cleanup := newArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive()
+	archive := mocks.new()
 
 	mi := core.MetaInfoFixture()
 
@@ -139,13 +175,13 @@ func TestAgentTorrentArchiveConcurrentGet(t *testing.T) {
 	wg.Wait()
 }
 
-func TestAgentTorrentArchiveGetTorrent(t *testing.T) {
+func TestTorrentArchiveGetTorrent(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newAgentMocks(t)
+	mocks, cleanup := newArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive()
+	archive := mocks.new()
 
 	mi := core.MetaInfoFixture()
 

@@ -13,7 +13,8 @@ type TorrentInfo struct {
 	percentDownloaded int
 }
 
-func newTorrentInfo(mi *core.MetaInfo, bitfield *bitset.BitSet) *TorrentInfo {
+// NewTorrentInfo creates a new TorrentInfo.
+func NewTorrentInfo(mi *core.MetaInfo, bitfield *bitset.BitSet) *TorrentInfo {
 	numComplete := bitfield.Count()
 	downloaded := int(float64(numComplete) / float64(len(mi.Info.PieceSums)) * 100)
 	return &TorrentInfo{mi, bitfield, downloaded}

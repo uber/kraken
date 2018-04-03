@@ -17,6 +17,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn/bandwidth"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
+	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
@@ -191,7 +192,7 @@ func (c *Conn) readMessage() (*Message, error) {
 			return nil, fmt.Errorf("read payload: %s", err)
 		}
 		// TODO(codyg): Consider making this reader read directly from the socket.
-		pr = storage.NewPieceReaderBuffer(payload)
+		pr = piecereader.NewBuffer(payload)
 	}
 
 	return &Message{p2pMessage, pr}, nil

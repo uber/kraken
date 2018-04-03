@@ -9,8 +9,9 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
+	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
+	"code.uber.internal/infra/kraken/utils/bitsetutil"
 	"code.uber.internal/infra/kraken/utils/memsize"
 
 	"github.com/andres-erbsen/clock"
@@ -137,7 +138,7 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 		start := i * pieceLength
 		stop := (i + 1) * pieceLength
 		copy(piece, blob.Content[start:stop])
-		require.NoError(tor.WritePiece(storage.NewPieceReaderBuffer(piece), i))
+		require.NoError(tor.WritePiece(piecereader.NewBuffer(piece), i))
 
 		p := p
 		wg.Add(1)
@@ -317,7 +318,7 @@ func TestNetworkEvents(t *testing.T) {
 	waitForConnRemoved(t, leecher.scheduler, sid, h)
 
 	seederExpected := []*networkevent.Event{
-		networkevent.AddTorrentEvent(h, sid, storage.BitSetFixture(true), config.ConnState.MaxOpenConnectionsPerTorrent),
+		networkevent.AddTorrentEvent(h, sid, bitsetutil.FromBools(true), config.ConnState.MaxOpenConnectionsPerTorrent),
 		networkevent.TorrentCompleteEvent(h, sid),
 		networkevent.AddActiveConnEvent(h, sid, lid),
 		networkevent.DropActiveConnEvent(h, sid, lid),
@@ -325,7 +326,7 @@ func TestNetworkEvents(t *testing.T) {
 	}
 
 	leecherExpected := []*networkevent.Event{
-		networkevent.AddTorrentEvent(h, lid, storage.BitSetFixture(false), config.ConnState.MaxOpenConnectionsPerTorrent),
+		networkevent.AddTorrentEvent(h, lid, bitsetutil.FromBools(false), config.ConnState.MaxOpenConnectionsPerTorrent),
 		networkevent.AddActiveConnEvent(h, lid, sid),
 		networkevent.ReceivePieceEvent(h, lid, sid, 0),
 		networkevent.TorrentCompleteEvent(h, lid),
