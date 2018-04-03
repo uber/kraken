@@ -1,4 +1,4 @@
-package storage
+package originstorage
 
 import (
 	"bytes"
@@ -10,12 +10,14 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
+	"code.uber.internal/infra/kraken/utils/bitsetutil"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
 
-func TestOriginTorrentCreate(t *testing.T) {
+func TestTorrentCreate(t *testing.T) {
 	require := require.New(t)
 
 	fs, cleanup := store.OriginFileStoreFixture(clock.New())
@@ -26,7 +28,7 @@ func TestOriginTorrentCreate(t *testing.T) {
 
 	fs.CreateCacheFile(mi.Name(), bytes.NewReader(blob.Content))
 
-	tor, err := NewOriginTorrent(fs, mi)
+	tor, err := NewTorrent(fs, mi)
 	require.NoError(err)
 
 	// New torrent
@@ -38,13 +40,13 @@ func TestOriginTorrentCreate(t *testing.T) {
 	require.Equal(mi.InfoHash, tor.InfoHash())
 	require.True(tor.Complete())
 	require.Equal(int64(7), tor.BytesDownloaded())
-	require.Equal(BitSetFixture(true, true, true, true), tor.Bitfield())
+	require.Equal(bitsetutil.FromBools(true, true, true, true), tor.Bitfield())
 	require.Equal(fmt.Sprintf("torrent(hash=%s, downloaded=100%%)", mi.InfoHash.HexString()), tor.String())
 	require.True(tor.HasPiece(0))
 	require.Equal([]int{}, tor.MissingPieces())
 }
 
-func TestOriginTorrentGetPieceReaderConcurrent(t *testing.T) {
+func TestTorrentGetPieceReaderConcurrent(t *testing.T) {
 	require := require.New(t)
 
 	fs, cleanup := store.OriginFileStoreFixture(clock.New())
@@ -55,7 +57,7 @@ func TestOriginTorrentGetPieceReaderConcurrent(t *testing.T) {
 
 	fs.CreateCacheFile(mi.Name(), bytes.NewReader(blob.Content))
 
-	tor, err := NewOriginTorrent(fs, mi)
+	tor, err := NewTorrent(fs, mi)
 	require.NoError(err)
 
 	wg := sync.WaitGroup{}
@@ -77,7 +79,7 @@ func TestOriginTorrentGetPieceReaderConcurrent(t *testing.T) {
 	wg.Wait()
 }
 
-func TestOriginTorrentWritePieceError(t *testing.T) {
+func TestTorrentWritePieceError(t *testing.T) {
 	require := require.New(t)
 
 	fs, cleanup := store.OriginFileStoreFixture(clock.New())
@@ -88,9 +90,9 @@ func TestOriginTorrentWritePieceError(t *testing.T) {
 
 	fs.CreateCacheFile(mi.Name(), bytes.NewReader(blob.Content))
 
-	tor, err := NewOriginTorrent(fs, mi)
+	tor, err := NewTorrent(fs, mi)
 	require.NoError(err)
 
-	err = tor.WritePiece(NewPieceReaderBuffer([]byte{}), 0)
+	err = tor.WritePiece(piecereader.NewBuffer([]byte{}), 0)
 	require.Equal(ErrReadOnly, err)
 }

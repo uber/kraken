@@ -7,7 +7,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcequeue"
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
+	"code.uber.internal/infra/kraken/lib/torrent/storage/agentstorage"
+	"code.uber.internal/infra/kraken/lib/torrent/storage/originstorage"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 
@@ -25,7 +26,7 @@ func NewAgentScheduler(
 
 	s, err := newScheduler(
 		config,
-		storage.NewAgentTorrentArchive(stats, fs, metainfoclient.Default(trackers)),
+		agentstorage.NewTorrentArchive(stats, fs, metainfoclient.Default(trackers)),
 		stats,
 		pctx,
 		announceclient.New(pctx, trackers),
@@ -48,7 +49,7 @@ func NewOriginScheduler(
 
 	s, err := newScheduler(
 		config,
-		storage.NewOriginTorrentArchive(fs, blobRefresher),
+		originstorage.NewTorrentArchive(fs, blobRefresher),
 		stats,
 		pctx,
 		announceclient.Disabled(),

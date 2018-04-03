@@ -70,6 +70,18 @@ func (info *Info) Serialize() ([]byte, error) {
 	return json.Marshal(info)
 }
 
+// GetPieceLength returns the length of piece i.
+func (info *Info) GetPieceLength(i int) int64 {
+	if i < 0 || i >= len(info.PieceSums) {
+		return 0
+	}
+	if i == len(info.PieceSums)-1 {
+		// Last piece.
+		return info.Length - info.PieceLength*int64(i)
+	}
+	return info.PieceLength
+}
+
 // pieceHashSize returns the size of each piece hash.
 func (info *Info) pieceHashSize() int {
 	return sha1.New().Size()

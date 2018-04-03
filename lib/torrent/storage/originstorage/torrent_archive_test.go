@@ -1,4 +1,4 @@
-package storage
+package originstorage
 
 import (
 	"os"
@@ -6,19 +6,65 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/lib/blobrefresh"
+	"code.uber.internal/infra/kraken/lib/metainfogen"
+	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/utils/rwutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
+	"github.com/andres-erbsen/clock"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 )
 
-func TestOriginTorrentArchiveStatNoExistTriggersRefresh(t *testing.T) {
+const namespace = "test-namespace"
+
+const pieceLength = 4
+
+type archiveMocks struct {
+	fs            store.OriginFileStore
+	backendClient *mockbackend.MockClient
+	blobRefresher *blobrefresh.Refresher
+}
+
+func newArchiveMocks(t *testing.T) (*archiveMocks, func()) {
+	var cleanup testutil.Cleanup
+	defer cleanup.Recover()
+
+	fs, c := store.OriginFileStoreFixture(clock.New())
+	cleanup.Add(c)
+
+	ctrl := gomock.NewController(t)
+	cleanup.Add(ctrl.Finish)
+
+	backendClient := mockbackend.NewMockClient(ctrl)
+
+	backends, err := backend.NewManager(nil, nil)
+	if err != nil {
+		panic(err)
+	}
+	backends.Register(namespace, backendClient)
+
+	blobRefresher := blobrefresh.New(
+		tally.NoopScope, fs, backends, metainfogen.Fixture(fs, pieceLength))
+
+	return &archiveMocks{fs, backendClient, blobRefresher}, cleanup.Run
+}
+
+func (m *archiveMocks) new() *TorrentArchive {
+	return NewTorrentArchive(m.fs, m.blobRefresher)
+}
+
+func TestTorrentArchiveStatNoExistTriggersRefresh(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newOriginMocks(t)
+	mocks, cleanup := newArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive()
+	archive := mocks.new()
 
 	blob := core.SizedBlobFixture(100, pieceLength)
 
@@ -36,13 +82,13 @@ func TestOriginTorrentArchiveStatNoExistTriggersRefresh(t *testing.T) {
 	require.Equal(100, info.PercentDownloaded())
 }
 
-func TestOriginTorrentArchiveGetTorrentNoExistTriggersRefresh(t *testing.T) {
+func TestTorrentArchiveGetTorrentNoExistTriggersRefresh(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newOriginMocks(t)
+	mocks, cleanup := newArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive()
+	archive := mocks.new()
 
 	blob := core.SizedBlobFixture(100, pieceLength)
 
@@ -60,13 +106,13 @@ func TestOriginTorrentArchiveGetTorrentNoExistTriggersRefresh(t *testing.T) {
 	require.True(tor.Complete())
 }
 
-func TestOriginTorrentArchiveDeleteTorrent(t *testing.T) {
+func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newOriginMocks(t)
+	mocks, cleanup := newArchiveMocks(t)
 	defer cleanup()
 
-	archive := mocks.newTorrentArchive()
+	archive := mocks.new()
 
 	blob := core.SizedBlobFixture(100, pieceLength)
 

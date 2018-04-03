@@ -63,11 +63,11 @@ func TestGetMetaInfoHandlerCachesAndPropagatesOriginError(t *testing.T) {
 	mocks.originCluster.EXPECT().GetMetaInfo(namespace, digest).Return(
 		nil, httputil.StatusError{Status: 599})
 
-	resp, err := download(addr, digest)
+	_, err := download(addr, digest)
 	require.True(httputil.IsAccepted(err))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		resp, err = download(addr, digest)
+		_, err = download(addr, digest)
 		return httputil.IsStatus(err, 599)
 	}))
 }

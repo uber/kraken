@@ -25,8 +25,7 @@ func TestHandshakerSetsConnFieldsProperly(t *testing.T) {
 
 	h2 := HandshakerFixture(config)
 
-	info, cleanup := storage.TorrentInfoFixture(4, 1)
-	defer cleanup()
+	info := storage.TorrentInfoFixture(4, 1)
 
 	var wg sync.WaitGroup
 

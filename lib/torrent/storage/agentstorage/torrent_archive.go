@@ -1,4 +1,4 @@
-package storage
+package agentstorage
 
 import (
 	"fmt"
@@ -8,34 +8,34 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 )
 
-// AgentTorrentArchive is a TorrentArchive for agent peers. It is capable
-// of initializing torrents in the download directory and serving torrents
-// from either the download or cache directory.
-type AgentTorrentArchive struct {
+// TorrentArchive is capable of initializing torrents in the download directory
+// and serving torrents from either the download or cache directory.
+type TorrentArchive struct {
 	stats          tally.Scope
 	fs             store.FileStore
 	metaInfoClient metainfoclient.Client
 }
 
-// NewAgentTorrentArchive creates a new AgentTorrentArchive
-func NewAgentTorrentArchive(
+// NewTorrentArchive creates a new TorrentArchive.
+func NewTorrentArchive(
 	stats tally.Scope,
 	fs store.FileStore,
-	mic metainfoclient.Client) *AgentTorrentArchive {
+	mic metainfoclient.Client) *TorrentArchive {
 
 	stats = stats.Tagged(map[string]string{
 		"module": "agenttorrentarchive",
 	})
 
-	return &AgentTorrentArchive{stats, fs, mic}
+	return &TorrentArchive{stats, fs, mic}
 }
 
 // Stat returns TorrentInfo for given file name. Returns os.ErrNotExist if the
 // file does not exist. Ignores namespace.
-func (a *AgentTorrentArchive) Stat(namespace, name string) (*TorrentInfo, error) {
+func (a *TorrentArchive) Stat(namespace, name string) (*storage.TorrentInfo, error) {
 	downloadOrCache := a.fs.States().Download().Cache()
 
 	raw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
@@ -53,13 +53,13 @@ func (a *AgentTorrentArchive) Stat(namespace, name string) (*TorrentInfo, error)
 	}
 	b := newBitfieldFromPieceStatusBytes(name, raw)
 
-	return newTorrentInfo(mi, b), nil
+	return storage.NewTorrentInfo(mi, b), nil
 }
 
 // CreateTorrent returns a Torrent for either an existing metainfo / file on
 // disk, or downloads metainfo and initializes the file. Returns ErrNotFound
 // if no metainfo was found.
-func (a *AgentTorrentArchive) CreateTorrent(namespace, name string) (Torrent, error) {
+func (a *TorrentArchive) CreateTorrent(namespace, name string) (storage.Torrent, error) {
 	downloadOrCache := a.fs.States().Download().Cache()
 
 	miRaw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
@@ -68,7 +68,7 @@ func (a *AgentTorrentArchive) CreateTorrent(namespace, name string) (Torrent, er
 		mi, err := a.metaInfoClient.Download(namespace, name)
 		if err != nil {
 			if err == metainfoclient.ErrNotFound {
-				return nil, ErrNotFound
+				return nil, storage.ErrNotFound
 			}
 			return nil, fmt.Errorf("download metainfo: %s", err)
 		}
@@ -98,7 +98,7 @@ func (a *AgentTorrentArchive) CreateTorrent(namespace, name string) (Torrent, er
 		return nil, fmt.Errorf("parse metainfo: %s", err)
 	}
 
-	t, err := NewAgentTorrent(a.fs, mi)
+	t, err := NewTorrent(a.fs, mi)
 	if err != nil {
 		return nil, fmt.Errorf("initialize torrent: %s", err)
 	}
@@ -106,7 +106,7 @@ func (a *AgentTorrentArchive) CreateTorrent(namespace, name string) (Torrent, er
 }
 
 // GetTorrent returns a Torrent for an existing metainfo / file on disk. Ignores namespace.
-func (a *AgentTorrentArchive) GetTorrent(namespace, name string) (Torrent, error) {
+func (a *TorrentArchive) GetTorrent(namespace, name string) (storage.Torrent, error) {
 	downloadOrCache := a.fs.States().Download().Cache()
 
 	miRaw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
@@ -117,7 +117,7 @@ func (a *AgentTorrentArchive) GetTorrent(namespace, name string) (Torrent, error
 	if err != nil {
 		return nil, fmt.Errorf("parse metainfo: %s", err)
 	}
-	t, err := NewAgentTorrent(a.fs, mi)
+	t, err := NewTorrent(a.fs, mi)
 	if err != nil {
 		return nil, fmt.Errorf("initialize torrent: %s", err)
 	}
@@ -125,7 +125,7 @@ func (a *AgentTorrentArchive) GetTorrent(namespace, name string) (Torrent, error
 }
 
 // DeleteTorrent deletes a torrent from disk.
-func (a *AgentTorrentArchive) DeleteTorrent(name string) error {
+func (a *TorrentArchive) DeleteTorrent(name string) error {
 	if err := a.fs.DeleteDownloadOrCacheFile(name); err != nil && !os.IsNotExist(err) {
 		return err
 	}

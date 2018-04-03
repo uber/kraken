@@ -57,16 +57,9 @@ func PipeFixture(
 
 // Fixture returns a single local Conn for testing.
 func Fixture() (*Conn, func()) {
-	var cleanup testutil.Cleanup
-	defer cleanup.Recover()
-
-	info, c := storage.TorrentInfoFixture(1, 1)
-	cleanup.Add(c)
-
-	local, _, c := PipeFixture(Config{}, info)
-	cleanup.Add(c)
-
-	return local, cleanup.Run
+	info := storage.TorrentInfoFixture(1, 1)
+	local, _, cleanup := PipeFixture(Config{}, info)
+	return local, cleanup
 }
 
 // HandshakerFixture returns a Handshaker for testing.

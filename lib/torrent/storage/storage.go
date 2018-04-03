@@ -9,10 +9,12 @@ import (
 	"github.com/willf/bitset"
 )
 
-// TorrentArchive errors.
-var (
-	ErrNotFound = errors.New("torrent not found")
-)
+// ErrNotFound occurs when TorrentArchive cannot found a torrent.
+var ErrNotFound = errors.New("torrent not found")
+
+// ErrPieceComplete occurs when Torrent cannot write a piece because it is already
+// complete.
+var ErrPieceComplete = errors.New("piece is already complete")
 
 // PieceReader defines operations for lazy piece reading.
 type PieceReader interface {
@@ -22,7 +24,6 @@ type PieceReader interface {
 
 // Torrent represents a read/write interface for a torrent
 type Torrent interface {
-	// TODO(codyg): Move some of these methods into TorrentInfo.
 	Name() string
 	Stat() *TorrentInfo
 	NumPieces() int

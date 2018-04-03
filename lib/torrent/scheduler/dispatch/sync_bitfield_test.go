@@ -3,7 +3,7 @@ package dispatch
 import (
 	"testing"
 
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
+	"code.uber.internal/infra/kraken/utils/bitsetutil"
 
 	"github.com/stretchr/testify/require"
 )
@@ -11,7 +11,7 @@ import (
 func TestSyncBitfieldDuplicateSetDoesNotDoubleCount(t *testing.T) {
 	require := require.New(t)
 
-	b := newSyncBitfield(storage.BitSetFixture(false, false))
+	b := newSyncBitfield(bitsetutil.FromBools(false, false))
 	require.False(b.Complete())
 
 	b.Set(0, true)
@@ -34,13 +34,13 @@ func TestSyncBitfieldDuplicateSetDoesNotDoubleCount(t *testing.T) {
 func TestSyncBitfieldNewCountsNumComplete(t *testing.T) {
 	require := require.New(t)
 
-	b := newSyncBitfield(storage.BitSetFixture(true, true, true))
+	b := newSyncBitfield(bitsetutil.FromBools(true, true, true))
 	require.True(b.Complete())
 }
 
 func TestSyncBitfieldString(t *testing.T) {
 	require := require.New(t)
 
-	b := newSyncBitfield(storage.BitSetFixture(true, false, true, false))
+	b := newSyncBitfield(bitsetutil.FromBools(true, false, true, false))
 	require.Equal("1010", b.String())
 }

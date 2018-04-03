@@ -11,6 +11,9 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
+	"code.uber.internal/infra/kraken/lib/torrent/storage/agentstorage"
+	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
+	"code.uber.internal/infra/kraken/utils/bitsetutil"
 	"code.uber.internal/infra/kraken/utils/memsize"
 
 	"github.com/andres-erbsen/clock"
@@ -103,7 +106,7 @@ func TestDispatcherSendUniquePieceRequestsWithinLimit(t *testing.T) {
 	}
 	clk := clock.NewMock()
 
-	torrent, cleanup := storage.TorrentFixture(core.SizedBlobFixture(100, 1).MetaInfo)
+	torrent, cleanup := agentstorage.TorrentFixture(core.SizedBlobFixture(100, 1).MetaInfo)
 	defer cleanup()
 
 	d := testDispatcher(config, clk, torrent)
@@ -149,13 +152,13 @@ func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 	}
 	clk := clock.NewMock()
 
-	torrent, cleanup := storage.TorrentFixture(core.SizedBlobFixture(2, 1).MetaInfo)
+	torrent, cleanup := agentstorage.TorrentFixture(core.SizedBlobFixture(2, 1).MetaInfo)
 	defer cleanup()
 
 	d := testDispatcher(config, clk, torrent)
 
 	// p1 has both pieces and sends requests for both.
-	p1, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(true, true), newMockMessages())
+	p1, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(true, true), newMockMessages())
 	require.NoError(err)
 	d.maybeRequestMorePieces(p1)
 	require.Equal(map[int]int{
@@ -165,14 +168,14 @@ func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 
 	// p2 has piece 0 and sends no piece requests.
 	p2, err := d.addPeer(
-		core.PeerIDFixture(), storage.BitSetFixture(true, false), newMockMessages())
+		core.PeerIDFixture(), bitsetutil.FromBools(true, false), newMockMessages())
 	require.NoError(err)
 	d.maybeRequestMorePieces(p2)
 	require.Equal(map[int]int{}, numRequestsPerPiece(p2.messages))
 
 	// p3 has piece 1 and sends no piece requests.
 	p3, err := d.addPeer(
-		core.PeerIDFixture(), storage.BitSetFixture(false, true), newMockMessages())
+		core.PeerIDFixture(), bitsetutil.FromBools(false, true), newMockMessages())
 	require.NoError(err)
 	d.maybeRequestMorePieces(p3)
 	require.Equal(map[int]int{}, numRequestsPerPiece(p3.messages))
@@ -206,12 +209,12 @@ func TestDispatcherSendErrorsMarksPieceRequestsUnsent(t *testing.T) {
 	}
 	clk := clock.NewMock()
 
-	torrent, cleanup := storage.TorrentFixture(core.SizedBlobFixture(1, 1).MetaInfo)
+	torrent, cleanup := agentstorage.TorrentFixture(core.SizedBlobFixture(1, 1).MetaInfo)
 	defer cleanup()
 
 	d := testDispatcher(config, clk, torrent)
 
-	p1, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(true), newMockMessages())
+	p1, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(true), newMockMessages())
 	require.NoError(err)
 
 	p1.messages.Close()
@@ -221,7 +224,7 @@ func TestDispatcherSendErrorsMarksPieceRequestsUnsent(t *testing.T) {
 
 	require.Equal(map[int]int{}, numRequestsPerPiece(p1.messages))
 
-	p2, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(true), newMockMessages())
+	p2, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(true), newMockMessages())
 	require.NoError(err)
 
 	// Send should succeed since pending requests were marked unsent.
@@ -264,18 +267,18 @@ func TestDispatcherEndgame(t *testing.T) {
 	}
 	clk := clock.NewMock()
 
-	torrent, cleanup := storage.TorrentFixture(core.SizedBlobFixture(1, 1).MetaInfo)
+	torrent, cleanup := agentstorage.TorrentFixture(core.SizedBlobFixture(1, 1).MetaInfo)
 	defer cleanup()
 
 	d := testDispatcher(config, clk, torrent)
 
-	p1, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(true), newMockMessages())
+	p1, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(true), newMockMessages())
 	require.NoError(err)
 
 	d.maybeRequestMorePieces(p1)
 	require.Equal(map[int]int{0: 1}, numRequestsPerPiece(p1.messages))
 
-	p2, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(true), newMockMessages())
+	p2, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(true), newMockMessages())
 	require.NoError(err)
 
 	// Should send duplicate request for piece 0 since we're in endgame.
@@ -288,18 +291,18 @@ func TestDispatcherHandlePiecePayloadAnnouncesPiece(t *testing.T) {
 
 	blob := core.SizedBlobFixture(2, 1)
 
-	torrent, cleanup := storage.TorrentFixture(blob.MetaInfo)
+	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
 	defer cleanup()
 
 	d := testDispatcher(Config{}, clock.NewMock(), torrent)
 
-	p1, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(false, false), newMockMessages())
+	p1, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(false, false), newMockMessages())
 	require.NoError(err)
 
-	p2, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(false, false), newMockMessages())
+	p2, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(false, false), newMockMessages())
 	require.NoError(err)
 
-	msg := conn.NewPiecePayloadMessage(0, storage.NewPieceReaderBuffer(blob.Content[0:1]))
+	msg := conn.NewPiecePayloadMessage(0, piecereader.NewBuffer(blob.Content[0:1]))
 
 	require.NoError(d.dispatch(p1, msg))
 
@@ -315,18 +318,18 @@ func TestDispatcherHandlePiecePayloadSendsCompleteMessage(t *testing.T) {
 
 	blob := core.SizedBlobFixture(1, 1)
 
-	torrent, cleanup := storage.TorrentFixture(blob.MetaInfo)
+	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
 	defer cleanup()
 
 	d := testDispatcher(Config{}, clock.NewMock(), torrent)
 
-	p1, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(false), newMockMessages())
+	p1, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(false), newMockMessages())
 	require.NoError(err)
 
-	p2, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(false), newMockMessages())
+	p2, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(false), newMockMessages())
 	require.NoError(err)
 
-	msg := conn.NewPiecePayloadMessage(0, storage.NewPieceReaderBuffer(blob.Content[0:1]))
+	msg := conn.NewPiecePayloadMessage(0, piecereader.NewBuffer(blob.Content[0:1]))
 
 	require.NoError(d.dispatch(p1, msg))
 
@@ -339,19 +342,19 @@ func TestDispatcherClosesCompletedPeersWhenComplete(t *testing.T) {
 
 	blob := core.SizedBlobFixture(1, 1)
 
-	torrent, cleanup := storage.TorrentFixture(blob.MetaInfo)
+	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
 	defer cleanup()
 
 	d := testDispatcher(Config{}, clock.NewMock(), torrent)
 
-	completedPeer, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(true), newMockMessages())
+	completedPeer, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(true), newMockMessages())
 	require.NoError(err)
 
 	incompletePeer, err := d.addPeer(
-		core.PeerIDFixture(), storage.BitSetFixture(false), newMockMessages())
+		core.PeerIDFixture(), bitsetutil.FromBools(false), newMockMessages())
 	require.NoError(err)
 
-	msg := conn.NewPiecePayloadMessage(0, storage.NewPieceReaderBuffer(blob.Content[0:1]))
+	msg := conn.NewPiecePayloadMessage(0, piecereader.NewBuffer(blob.Content[0:1]))
 
 	// Completed peers are closed when the dispatcher completes.
 	require.NoError(d.dispatch(completedPeer, msg))
@@ -368,12 +371,12 @@ func TestDispatcherHandleCompleteRequestsPieces(t *testing.T) {
 
 	blob := core.SizedBlobFixture(1, 1)
 
-	torrent, cleanup := storage.TorrentFixture(blob.MetaInfo)
+	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
 	defer cleanup()
 
 	d := testDispatcher(Config{}, clock.NewMock(), torrent)
 
-	p, err := d.addPeer(core.PeerIDFixture(), storage.BitSetFixture(false), newMockMessages())
+	p, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(false), newMockMessages())
 	require.NoError(err)
 
 	require.Empty(numRequestsPerPiece(p.messages))

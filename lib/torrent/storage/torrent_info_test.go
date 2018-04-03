@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/utils/bitsetutil"
 
 	"github.com/stretchr/testify/require"
 	"github.com/willf/bitset"
@@ -16,13 +17,13 @@ func TestTorrentInfoPercentDownloaded(t *testing.T) {
 		bitfield *bitset.BitSet
 		expected int
 	}{
-		{BitSetFixture(true, true, true, true), 100},
-		{BitSetFixture(true, false, true, false), 50},
-		{BitSetFixture(false, false, false, false), 0},
+		{bitsetutil.FromBools(true, true, true, true), 100},
+		{bitsetutil.FromBools(true, false, true, false), 50},
+		{bitsetutil.FromBools(false, false, false, false), 0},
 	}
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("%d%%", test.expected), func(t *testing.T) {
-			info := newTorrentInfo(mi, test.bitfield)
+			info := NewTorrentInfo(mi, test.bitfield)
 			require.Equal(t, test.expected, info.PercentDownloaded())
 		})
 	}

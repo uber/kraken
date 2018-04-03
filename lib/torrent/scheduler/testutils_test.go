@@ -25,6 +25,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
+	"code.uber.internal/infra/kraken/lib/torrent/storage/agentstorage"
+	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
 	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/tracker/trackerserver"
@@ -110,7 +112,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 
 	stats := tally.NewTestScope("", nil)
 
-	ta := storage.NewAgentTorrentArchive(stats, fs, m.metaInfoClient)
+	ta := agentstorage.NewTorrentArchive(stats, fs, m.metaInfoClient)
 
 	pctx := core.PeerContext{
 		PeerID: core.PeerIDFixture(),
@@ -148,7 +150,7 @@ func (p *testPeer) writeTorrent(blob *core.BlobFixture) {
 	for i := 0; i < t.NumPieces(); i++ {
 		start := int64(i) * blob.MetaInfo.Info.PieceLength
 		end := start + t.PieceLength(i)
-		if err := t.WritePiece(storage.NewPieceReaderBuffer(blob.Content[start:end]), i); err != nil {
+		if err := t.WritePiece(piecereader.NewBuffer(blob.Content[start:end]), i); err != nil {
 			panic(err)
 		}
 	}
