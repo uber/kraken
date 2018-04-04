@@ -24,6 +24,8 @@ func NewManager(namespaces NamespaceConfig, auth AuthNamespaceConfig) (*Manager,
 		var c Client
 		var err error
 		switch config.Backend {
+		case "s3":
+			c, err = s3backend.NewClient(config.S3, auth[ns].S3, ns)
 		case "s3_dockerblob":
 			c, err = s3backend.NewDockerBlobClient(config.S3, auth[ns].S3, ns)
 		case "s3_dockertag":
