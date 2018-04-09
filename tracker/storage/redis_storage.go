@@ -254,11 +254,14 @@ func (s *RedisStorage) SetMetaInfo(mi *core.MetaInfo) error {
 		return fmt.Errorf("serialize metainfo: %s", err)
 	}
 
-	n, err := redis.Int(c.Do("SETNX", metaInfoKey(mi.Name()), b))
+	r, err := c.Do(
+		"SET", metaInfoKey(mi.Name()), b,
+		"EX", strconv.Itoa(int(s.config.MetaInfoTTL.Seconds())),
+		"NX")
 	if err != nil {
 		return err
 	}
-	if n == 0 {
+	if r == nil {
 		return ErrExists
 	}
 	return nil

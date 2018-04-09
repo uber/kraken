@@ -9,7 +9,6 @@ func redisConfigFixture() RedisConfig {
 		Addr:              "localhost:6380",
 		PeerSetWindowSize: 30 * time.Second,
 		MaxPeerSetWindows: 4,
-		TorrentTTL:        time.Minute,
 		OriginsTTL:        5 * time.Minute,
 	}
 }
