@@ -135,12 +135,22 @@ func (s *RedisStorage) UpdatePeer(h core.InfoHash, p *core.PeerInfo) error {
 	// Add p to the current window.
 	k := peerSetKey(h, w)
 
-	c.Send("MULTI")
-	c.Send("SADD", k, serializePeer(p))
-	c.Send("EXPIREAT", k, expireAt)
-	_, err := c.Do("EXEC")
-
-	return err
+	if err := c.Send("SADD", k, serializePeer(p)); err != nil {
+		return fmt.Errorf("send SADD: %s", err)
+	}
+	if err := c.Send("EXPIREAT", k, expireAt); err != nil {
+		return fmt.Errorf("send EXPIREAT: %s", err)
+	}
+	if err := c.Flush(); err != nil {
+		return fmt.Errorf("flush: %s", err)
+	}
+	if _, err := c.Receive(); err != nil {
+		return fmt.Errorf("SADD: %s", err)
+	}
+	if _, err := c.Receive(); err != nil {
+		return fmt.Errorf("EXPIREAT: %s", err)
+	}
+	return nil
 }
 
 // GetPeers returns at most n PeerInfos associated with h.
