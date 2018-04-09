@@ -301,3 +301,26 @@ func TestRedisStorageSetMetaInfoConflict(t *testing.T) {
 	require.NoError(s.SetMetaInfo(mi1))
 	require.Equal(ErrExists, s.SetMetaInfo(mi2))
 }
+
+func TestRedisStorageMetaInfoExpiration(t *testing.T) {
+	require := require.New(t)
+
+	config := redisConfigFixture()
+	config.MetaInfoTTL = 2 * time.Second
+
+	flushdb(config)
+
+	s, err := NewRedisStorage(config, clock.New())
+	require.NoError(err)
+
+	mi := core.MetaInfoFixture()
+
+	require.NoError(s.SetMetaInfo(mi))
+	_, err = s.GetMetaInfo(mi.Name())
+	require.NoError(err)
+
+	time.Sleep(3 * time.Second)
+
+	_, err = s.GetMetaInfo(mi.Name())
+	require.Equal(ErrNotFound, err)
+}

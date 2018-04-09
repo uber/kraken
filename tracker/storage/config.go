@@ -23,7 +23,7 @@ type RedisConfig struct {
 	WriteTimeout      time.Duration `yaml:"write_timeout"`
 	PeerSetWindowSize time.Duration `yaml:"peer_set_window_size"`
 	MaxPeerSetWindows int           `yaml:"max_peer_set_windows"`
-	TorrentTTL        time.Duration `yaml:"torrent_ttl"`
+	MetaInfoTTL       time.Duration `yaml:"metainfo_ttl"`
 	MaxIdleConns      int           `yaml:"max_idle_conns"`
 	MaxActiveConns    int           `yaml:"max_active_conns"`
 	IdleConnTimeout   time.Duration `yaml:"idle_conn_timeout"`
@@ -57,8 +57,8 @@ func (c RedisConfig) applyDefaults() (RedisConfig, error) {
 	if c.MaxPeerSetWindows == 0 {
 		c.MaxPeerSetWindows = 10
 	}
-	if c.TorrentTTL == 0 {
-		c.TorrentTTL = 5 * time.Minute
+	if c.MetaInfoTTL == 0 {
+		c.MetaInfoTTL = 5 * time.Minute
 	}
 	if c.MaxIdleConns == 0 {
 		c.MaxIdleConns = 10
@@ -70,7 +70,7 @@ func (c RedisConfig) applyDefaults() (RedisConfig, error) {
 		c.IdleConnTimeout = 60 * time.Second
 	}
 	if c.OriginsTTL == 0 {
-		c.OriginsTTL = 10 * time.Hour
+		c.OriginsTTL = 5 * time.Minute
 	}
 	return c, nil
 }
