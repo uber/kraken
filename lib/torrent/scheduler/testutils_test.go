@@ -57,7 +57,6 @@ func init() {
 
 func configFixture() Config {
 	return Config{
-		AnnounceInterval:   500 * time.Millisecond,
 		SeederTTI:          10 * time.Second,
 		LeecherTTI:         time.Minute,
 		PreemptionInterval: 500 * time.Millisecond,
@@ -120,7 +119,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 		IP:     "localhost",
 		Port:   findFreePort(),
 	}
-	ac := announceclient.New(pctx, serverset.NewSingle(m.trackerAddr))
+	ac := announceclient.Default(pctx, serverset.NewSingle(m.trackerAddr))
 	tp := networkevent.NewTestProducer()
 
 	s, err := newScheduler(config, ta, stats, pctx, ac, announcequeue.New(), tp, options...)

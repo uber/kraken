@@ -15,6 +15,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcequeue"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcer"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
@@ -86,11 +87,13 @@ type scheduler struct {
 
 	listener net.Listener
 
-	announceTick   <-chan time.Time
 	preemptionTick <-chan time.Time
 	emitStatsTick  <-chan time.Time
 
+	// TODO(codyg): We only need this hold on this reference for reloading the scheduler...
 	announceClient announceclient.Client
+
+	announcer *announcer.Announcer
 
 	networkEvents networkevent.Producer
 
@@ -171,10 +174,10 @@ func newScheduler(
 		announceQueue:   announceQueue,
 		eventLoop:       eventLoop,
 		listener:        l,
-		announceTick:    overrides.clock.Tick(config.AnnounceInterval),
 		preemptionTick:  preemptionTick,
 		emitStatsTick:   overrides.clock.Tick(config.EmitStatsInterval),
 		announceClient:  announceClient,
+		announcer:       announcer.Default(announceClient, eventLoop, overrides.clock),
 		networkEvents:   networkEvents,
 		done:            done,
 	}
@@ -220,6 +223,15 @@ func (s *scheduler) Stop() {
 
 		s.log().Info("Scheduler stopped")
 	})
+}
+
+func (s *scheduler) announce(d *dispatch.Dispatcher) {
+	peers, err := s.announcer.Announce(d.Name(), d.InfoHash(), d.Complete())
+	if err != nil {
+		s.eventLoop.Send(announceErrEvent{d.InfoHash(), err})
+		return
+	}
+	s.eventLoop.Send(announceResultEvent{d.InfoHash(), peers})
 }
 
 func (s *scheduler) doDownload(namespace, name string) (size int64, err error) {
@@ -293,10 +305,11 @@ func (s *scheduler) Probe() error {
 }
 
 func (s *scheduler) start() {
-	s.wg.Add(3)
+	s.wg.Add(4)
 	go s.runEventLoop()
 	go s.listenLoop()
 	go s.tickerLoop()
+	go s.announceLoop()
 }
 
 // eventLoop handles eventLoop from the various channels of scheduler, providing synchronization to
@@ -337,8 +350,6 @@ func (s *scheduler) tickerLoop() {
 
 	for {
 		select {
-		case <-s.announceTick:
-			s.eventLoop.Send(announceTickEvent{})
 		case <-s.preemptionTick:
 			s.eventLoop.Send(preemptionTickEvent{})
 		case <-s.emitStatsTick:
@@ -349,17 +360,11 @@ func (s *scheduler) tickerLoop() {
 	}
 }
 
-func (s *scheduler) announce(d *dispatch.Dispatcher) {
-	var e event
-	peers, err := s.announceClient.Announce(
-		d.Name(), d.InfoHash(), d.Complete())
-	if err != nil {
-		s.log("dispatcher", d).Errorf("Announce failed: %s", err)
-		e = announceFailureEvent{d.InfoHash()}
-	} else {
-		e = announceResponseEvent{d.InfoHash(), peers}
-	}
-	s.eventLoop.Send(e)
+// announceLoop runs the announcer ticker.
+func (s *scheduler) announceLoop() {
+	defer s.wg.Done()
+
+	s.announcer.Ticker(s.done)
 }
 
 func (s *scheduler) addOutgoingConn(c *conn.Conn, b *bitset.BitSet, info *storage.TorrentInfo) error {

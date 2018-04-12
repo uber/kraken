@@ -88,7 +88,7 @@ type liftedEventLoop struct {
 	eventLoop
 }
 
-// liftEventLoop lifts dispatch and conn events into an eventLoop.
+// liftEventLoop lifts events from subpackages into an eventLoop.
 func liftEventLoop(l eventLoop) *liftedEventLoop {
 	return &liftedEventLoop{l}
 }
@@ -99,6 +99,10 @@ func (l *liftedEventLoop) ConnClosed(c *conn.Conn) {
 
 func (l *liftedEventLoop) DispatcherComplete(d *dispatch.Dispatcher) {
 	l.Send(dispatcherCompleteEvent{d})
+}
+
+func (l *liftedEventLoop) AnnounceTick() {
+	l.Send(announceTickEvent{})
 }
 
 // connClosedEvent occurs when a connection is closed.
@@ -227,12 +231,16 @@ func (e announceTickEvent) Apply(s *scheduler) {
 		s.log("hash", h).Error("Pulled unknown torrent off announce queue")
 		return
 	}
+	if ctrl.dispatcher.NumPeers() >= s.connState.MaxConnsPerTorrent() {
+		s.log("hash", h).Info("Skipping announce for fully saturated torrent")
+		return
+	}
 	go s.announce(ctrl.dispatcher)
 }
 
-// announceResponseEvent occurs when a successfully announce response was received
+// announceResultEvent occurs when a successfully announce response was received
 // from the tracker.
-type announceResponseEvent struct {
+type announceResultEvent struct {
 	infoHash core.InfoHash
 	peers    []*core.PeerInfo
 }
@@ -242,7 +250,7 @@ type announceResponseEvent struct {
 // connections and handshaked asynchronously.
 //
 // Also marks the dispatcher as ready to announce again.
-func (e announceResponseEvent) Apply(s *scheduler) {
+func (e announceResultEvent) Apply(s *scheduler) {
 	ctrl, ok := s.torrentControls[e.infoHash]
 	if !ok {
 		s.log("hash", e.infoHash).Info("Dispatcher closed after announce response received")
@@ -282,13 +290,15 @@ func (e announceResponseEvent) Apply(s *scheduler) {
 	}
 }
 
-// announceFailureEvent occurs when an announce request fails.
-type announceFailureEvent struct {
+// announceErrEvent occurs when an announce request fails.
+type announceErrEvent struct {
 	infoHash core.InfoHash
+	err      error
 }
 
 // Apply marks the dispatcher as ready to announce again.
-func (e announceFailureEvent) Apply(s *scheduler) {
+func (e announceErrEvent) Apply(s *scheduler) {
+	s.log("hash", e.infoHash).Errorf("Error announcing: %s", e.err)
 	s.announceQueue.Ready(e.infoHash)
 }
 

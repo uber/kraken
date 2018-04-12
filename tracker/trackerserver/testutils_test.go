@@ -25,10 +25,10 @@ type serverMocks struct {
 	stats         tally.Scope
 }
 
-func newServerMocks(t *testing.T) (*serverMocks, func()) {
+func newServerMocks(t *testing.T, config Config) (*serverMocks, func()) {
 	ctrl := gomock.NewController(t)
 	return &serverMocks{
-		config:        Config{},
+		config:        config,
 		policy:        peerhandoutpolicy.DefaultPeerHandoutPolicyFixture(),
 		peerStore:     mockstorage.NewMockStorage(ctrl),
 		metaInfoStore: storage.TestMetaInfoStore(),

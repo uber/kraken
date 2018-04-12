@@ -12,7 +12,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/bitsetutil"
-	"code.uber.internal/infra/kraken/utils/memsize"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
@@ -171,14 +170,10 @@ func TestSeederTTI(t *testing.T) {
 	seeder.writeTorrent(blob)
 	require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
 
-	clk.Add(config.AnnounceInterval)
-
 	leecher := mocks.newPeer(config, withClock(clk))
 
 	errc := make(chan error)
 	go func() { errc <- leecher.scheduler.Download(namespace, blob.MetaInfo.Name()) }()
-
-	clk.Add(config.AnnounceInterval)
 
 	require.NoError(<-errc)
 	leecher.checkTorrent(t, blob)
@@ -363,7 +358,7 @@ func TestPullInactiveTorrent(t *testing.T) {
 
 	// Force announce the scheduler for this torrent to simulate a peer which
 	// is registered in tracker but does not have the torrent in memory.
-	ac := announceclient.New(seeder.pctx, serverset.NewSingle(mocks.trackerAddr))
+	ac := announceclient.Default(seeder.pctx, serverset.NewSingle(mocks.trackerAddr))
 	ac.Announce(blob.MetaInfo.Info.Name, blob.MetaInfo.InfoHash, false)
 
 	leecher := mocks.newPeer(config)
@@ -475,62 +470,4 @@ func TestSchedulerProbeTimeoutsIfDeadlocked(t *testing.T) {
 	require.Equal(ErrSendEventTimedOut, p.scheduler.Probe())
 
 	close(release)
-}
-
-// BENCHMARKS
-
-// NOTE: You'll need to increase your fd limit to around 4096 to run this benchmark.
-// You can do this with `ulimit -n 4096`.
-func BenchmarkPieceUploadingAndDownloading(b *testing.B) {
-	require := require.New(b)
-
-	config := configFixture()
-	config.AnnounceInterval = 50 * time.Millisecond
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-
-		b.StopTimer()
-
-		mocks, cleanup := newTestMocks(b)
-		defer func() {
-			if err := recover(); err != nil {
-				cleanup()
-				panic(err)
-			}
-		}()
-
-		seeder := mocks.newPeer(config)
-
-		var blobs []*core.BlobFixture
-		for i := 0; i < 10; i++ {
-			blob := core.SizedBlobFixture(50*memsize.MB, 128*memsize.KB)
-			blobs = append(blobs, blob)
-
-			mocks.metaInfoClient.EXPECT().Download(
-				namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).AnyTimes()
-
-			seeder.writeTorrent(blob)
-			require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
-		}
-
-		peers := mocks.newPeers(10, config)
-
-		b.StartTimer()
-		var wg sync.WaitGroup
-		for _, p := range peers {
-			for _, blob := range blobs {
-				wg.Add(1)
-				go func(p *testPeer, blob *core.BlobFixture) {
-					defer wg.Done()
-					require.NoError(p.scheduler.Download(namespace, blob.MetaInfo.Name()))
-				}(p, blob)
-			}
-		}
-		wg.Wait()
-		b.StopTimer()
-
-		cleanup()
-	}
 }

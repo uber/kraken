@@ -1,6 +1,8 @@
 package trackerserver
 
 import (
+	"time"
+
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
@@ -13,5 +15,8 @@ func Fixture() *Server {
 	if err != nil {
 		panic(err)
 	}
-	return New(Config{}, tally.NoopScope, policy, storage.TestPeerStore(), nil, nil, nil)
+	config := Config{
+		AnnounceInterval: 250 * time.Millisecond,
+	}
+	return New(config, tally.NoopScope, policy, storage.TestPeerStore(), nil, nil, nil)
 }
