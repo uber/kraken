@@ -27,7 +27,11 @@ func (s *Server) announceHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if err := json.NewEncoder(w).Encode(&announceclient.Response{Peers: peers}); err != nil {
+	resp := &announceclient.Response{
+		Peers:    peers,
+		Interval: s.config.AnnounceInterval,
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		return handler.Errorf("json encode response: %s", err)
 	}
 	return nil

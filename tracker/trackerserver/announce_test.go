@@ -3,6 +3,7 @@ package trackerserver
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/serverset"
@@ -17,7 +18,9 @@ import (
 func TestAnnounceSinglePeerResponse(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newServerMocks(t)
+	config := Config{AnnounceInterval: 5 * time.Second}
+
+	mocks, cleanup := newServerMocks(t, config)
 	defer cleanup()
 
 	addr, stop := testutil.StartServer(mocks.handler())
@@ -26,7 +29,7 @@ func TestAnnounceSinglePeerResponse(t *testing.T) {
 	blob := core.NewBlobFixture()
 	pctx := core.PeerContextFixture()
 
-	client := announceclient.New(pctx, serverset.MustRoundRobin(addr))
+	client := announceclient.Default(pctx, serverset.MustRoundRobin(addr))
 
 	peers := []*core.PeerInfo{core.PeerInfoFixture()}
 
@@ -36,15 +39,16 @@ func TestAnnounceSinglePeerResponse(t *testing.T) {
 	mocks.peerStore.EXPECT().UpdatePeer(
 		blob.MetaInfo.InfoHash, core.PeerInfoFromContext(pctx, false)).Return(nil)
 
-	result, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
+	result, interval, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
 	require.NoError(err)
 	require.Equal(peers, result)
+	require.Equal(config.AnnounceInterval, interval)
 }
 
 func TestAnnounceReturnsCachedOrigin(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newServerMocks(t)
+	mocks, cleanup := newServerMocks(t, Config{})
 	defer cleanup()
 
 	addr, stop := testutil.StartServer(mocks.handler())
@@ -54,7 +58,7 @@ func TestAnnounceReturnsCachedOrigin(t *testing.T) {
 	pctx := core.PeerContextFixture()
 	octx := core.OriginContextFixture()
 
-	client := announceclient.New(pctx, serverset.MustRoundRobin(addr))
+	client := announceclient.Default(pctx, serverset.MustRoundRobin(addr))
 
 	origins := []*core.PeerInfo{core.PeerInfoFromContext(octx, true)}
 
@@ -64,7 +68,7 @@ func TestAnnounceReturnsCachedOrigin(t *testing.T) {
 	mocks.peerStore.EXPECT().UpdatePeer(
 		blob.MetaInfo.InfoHash, core.PeerInfoFromContext(pctx, false)).Return(nil)
 
-	result, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
+	result, _, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
 	require.NoError(err)
 	require.Equal(origins, result)
 }
@@ -72,7 +76,7 @@ func TestAnnounceReturnsCachedOrigin(t *testing.T) {
 func TestAnnounceMissingOriginsFetchesAndCachesOrigins(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newServerMocks(t)
+	mocks, cleanup := newServerMocks(t, Config{})
 	defer cleanup()
 
 	addr, stop := testutil.StartServer(mocks.handler())
@@ -82,7 +86,7 @@ func TestAnnounceMissingOriginsFetchesAndCachesOrigins(t *testing.T) {
 	octx := core.OriginContextFixture()
 	blob := core.NewBlobFixture()
 
-	client := announceclient.New(pctx, serverset.MustRoundRobin(addr))
+	client := announceclient.Default(pctx, serverset.MustRoundRobin(addr))
 
 	origins := []*core.PeerInfo{core.PeerInfoFromContext(octx, true)}
 
@@ -96,7 +100,7 @@ func TestAnnounceMissingOriginsFetchesAndCachesOrigins(t *testing.T) {
 		blob.MetaInfo.InfoHash).Return(nil, storage.ErrNoOrigins)
 	mocks.peerStore.EXPECT().UpdateOrigins(blob.MetaInfo.InfoHash, origins).Return(nil)
 
-	result, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
+	result, _, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
 	require.NoError(err)
 	require.Equal(origins, result)
 }
@@ -104,7 +108,7 @@ func TestAnnounceMissingOriginsFetchesAndCachesOrigins(t *testing.T) {
 func TestAnnounceUnavailablePeerStoreCanStillProvideOrigins(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newServerMocks(t)
+	mocks, cleanup := newServerMocks(t, Config{})
 	defer cleanup()
 
 	addr, stop := testutil.StartServer(mocks.handler())
@@ -114,7 +118,7 @@ func TestAnnounceUnavailablePeerStoreCanStillProvideOrigins(t *testing.T) {
 	octx := core.OriginContextFixture()
 	blob := core.NewBlobFixture()
 
-	client := announceclient.New(pctx, serverset.MustRoundRobin(addr))
+	client := announceclient.Default(pctx, serverset.MustRoundRobin(addr))
 
 	origins := []*core.PeerInfo{core.PeerInfoFromContext(octx, true)}
 
@@ -128,7 +132,7 @@ func TestAnnounceUnavailablePeerStoreCanStillProvideOrigins(t *testing.T) {
 		blob.MetaInfo.InfoHash, gomock.Any()).Return(nil, storageErr)
 	mocks.peerStore.EXPECT().GetOrigins(blob.MetaInfo.InfoHash).Return(nil, storageErr)
 
-	result, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
+	result, _, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
 	require.NoError(err)
 	require.Equal(origins, result)
 }
@@ -136,7 +140,7 @@ func TestAnnounceUnavailablePeerStoreCanStillProvideOrigins(t *testing.T) {
 func TestAnnouceNoOriginsAndUnavailableOriginClusterCanStillProvidePeers(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newServerMocks(t)
+	mocks, cleanup := newServerMocks(t, Config{})
 	defer cleanup()
 
 	addr, stop := testutil.StartServer(mocks.handler())
@@ -145,7 +149,7 @@ func TestAnnouceNoOriginsAndUnavailableOriginClusterCanStillProvidePeers(t *test
 	pctx := core.PeerContextFixture()
 	blob := core.NewBlobFixture()
 
-	client := announceclient.New(pctx, serverset.MustRoundRobin(addr))
+	client := announceclient.Default(pctx, serverset.MustRoundRobin(addr))
 
 	peers := []*core.PeerInfo{core.PeerInfoFixture()}
 
@@ -158,7 +162,7 @@ func TestAnnouceNoOriginsAndUnavailableOriginClusterCanStillProvidePeers(t *test
 	mocks.peerStore.EXPECT().GetOrigins(
 		blob.MetaInfo.InfoHash).Return(nil, storage.ErrNoOrigins)
 
-	result, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
+	result, _, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
 	require.NoError(err)
 	require.Equal(peers, result)
 }

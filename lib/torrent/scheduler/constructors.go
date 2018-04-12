@@ -29,7 +29,7 @@ func NewAgentScheduler(
 		agentstorage.NewTorrentArchive(stats, fs, metainfoclient.Default(trackers)),
 		stats,
 		pctx,
-		announceclient.New(pctx, trackers),
+		announceclient.Default(pctx, trackers),
 		announcequeue.New(),
 		netevents)
 	if err != nil {

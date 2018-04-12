@@ -16,7 +16,7 @@ import (
 func TestGetTagHandlerCachesResults(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newServerMocks(t)
+	mocks, cleanup := newServerMocks(t, Config{})
 	defer cleanup()
 
 	addr, stop := testutil.StartServer(mocks.handler())
@@ -40,7 +40,7 @@ func TestGetTagHandlerCachesResults(t *testing.T) {
 func TestGetTagHandlerNotFound(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newServerMocks(t)
+	mocks, cleanup := newServerMocks(t, Config{})
 	defer cleanup()
 
 	addr, stop := testutil.StartServer(mocks.handler())

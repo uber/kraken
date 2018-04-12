@@ -11,13 +11,6 @@ import (
 // Config is the Scheduler configuration.
 type Config struct {
 
-	// AnnounceInterval is the time between all announce requests.
-	// TODO(codyg): Make this smarter -- ideally, we give priority on announcing based on the
-	// following criteria:
-	// 1. Torrents which are making little progress
-	// 2. Higher priority torrents
-	AnnounceInterval time.Duration `yaml:"announce_interval"`
-
 	// SeederTTI is the duration a seeding torrent will exist without being
 	// read from before being cancelled.
 	SeederTTI time.Duration `yaml:"seeder_tti"`
@@ -55,9 +48,6 @@ type Config struct {
 }
 
 func (c Config) applyDefaults() Config {
-	if c.AnnounceInterval == 0 {
-		c.AnnounceInterval = 5 * time.Second
-	}
 	if c.SeederTTI == 0 {
 		c.SeederTTI = 5 * time.Minute
 	}

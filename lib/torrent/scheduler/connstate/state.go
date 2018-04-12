@@ -77,6 +77,12 @@ func New(
 	}
 }
 
+// MaxConnsPerTorrent returns the max number of connections a torrent is
+// permitted to have.
+func (s *State) MaxConnsPerTorrent() int {
+	return s.config.MaxOpenConnectionsPerTorrent
+}
+
 // ActiveConns returns a list of all active connections.
 func (s *State) ActiveConns() []*conn.Conn {
 	conns := make([]*conn.Conn, 0, len(s.active))

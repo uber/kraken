@@ -176,10 +176,18 @@ func (d *Dispatcher) LastWriteTime() time.Time {
 	return d.torrent.getLastWriteTime()
 }
 
+// NumPeers returns the number of peers connected to the dispatcher.
+func (d *Dispatcher) NumPeers() int {
+	var n int
+	d.peers.Range(func(k, v interface{}) bool {
+		n++
+		return true
+	})
+	return n
+}
+
 // Empty returns true if the Dispatcher has no peers.
 func (d *Dispatcher) Empty() bool {
-	// syncmap.Map does not provide a length function, hence this poor man's
-	// implementation of `len(d.peers) == 0`.
 	empty := true
 	d.peers.Range(func(k, v interface{}) bool {
 		empty = false
