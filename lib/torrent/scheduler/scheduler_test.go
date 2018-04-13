@@ -458,7 +458,10 @@ func TestSchedulerProbeTimeoutsIfDeadlocked(t *testing.T) {
 	mocks, cleanup := newTestMocks(t)
 	defer cleanup()
 
-	p := mocks.newPeer(Config{ProbeTimeout: 250 * time.Millisecond})
+	config := configFixture()
+	config.ProbeTimeout = 250 * time.Millisecond
+
+	p := mocks.newPeer(config)
 
 	require.NoError(p.scheduler.Probe())
 

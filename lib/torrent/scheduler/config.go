@@ -6,6 +6,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/torrentlog"
 )
 
 // Config is the Scheduler configuration.
@@ -45,6 +46,8 @@ type Config struct {
 	Conn conn.Config `yaml:"conn"`
 
 	Dispatch dispatch.Config `yaml:"dispatch"`
+
+	TorrentLog torrentlog.Config `yaml:"torrentlog"`
 }
 
 func (c Config) applyDefaults() Config {

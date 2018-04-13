@@ -19,6 +19,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/torrentlog"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -97,6 +98,8 @@ type scheduler struct {
 
 	networkEvents networkevent.Producer
 
+	torrentlog *torrentlog.Logger
+
 	// The following fields orchestrate the stopping of the scheduler.
 	stopOnce sync.Once      // Ensures the stop sequence is executed only once.
 	done     chan struct{}  // Signals all goroutines to exit.
@@ -162,6 +165,11 @@ func newScheduler(
 
 	connState := connstate.New(config.ConnState, overrides.clock, pctx.PeerID, networkEvents)
 
+	tlog, err := torrentlog.New(config.TorrentLog, pctx)
+	if err != nil {
+		return nil, fmt.Errorf("torrentlog: %s", err)
+	}
+
 	s := &scheduler{
 		pctx:            pctx,
 		config:          config,
@@ -179,6 +187,7 @@ func newScheduler(
 		announceClient:  announceClient,
 		announcer:       announcer.Default(announceClient, eventLoop, overrides.clock),
 		networkEvents:   networkEvents,
+		torrentlog:      tlog,
 		done:            done,
 	}
 
@@ -220,6 +229,8 @@ func (s *scheduler) Stop() {
 				errc <- ErrSchedulerStopped
 			}
 		}
+
+		s.torrentlog.Sync()
 
 		s.log().Info("Scheduler stopped")
 	})
@@ -273,8 +284,11 @@ func (s *scheduler) Download(namespace, name string) error {
 		s.stats.Tagged(map[string]string{
 			"error": errTag,
 		}).Counter("download_errors").Inc(1)
+		s.torrentlog.DownloadFailure(namespace, name, size, err)
 	} else {
-		recordDownloadTime(s.stats, size, time.Since(start))
+		downloadTime := time.Since(start)
+		recordDownloadTime(s.stats, size, downloadTime)
+		s.torrentlog.DownloadSuccess(namespace, name, size, downloadTime)
 	}
 	return err
 }
