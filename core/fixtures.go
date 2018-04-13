@@ -77,12 +77,17 @@ func DigestFixture() Digest {
 
 // PeerContextFixture returns a randomly generated PeerContext.
 func PeerContextFixture() PeerContext {
-	return PeerContext{
-		IP:     randutil.IP(),
-		Port:   randutil.Port(),
-		PeerID: PeerIDFixture(),
-		Zone:   "sjc1",
+	pctx, err := NewPeerContext(
+		RandomPeerIDFactory,
+		"sjc1",
+		"test01-sjc1",
+		randutil.IP(),
+		randutil.Port(),
+		false)
+	if err != nil {
+		panic(err)
 	}
+	return pctx
 }
 
 // OriginContextFixture returns a randomly generated origin PeerContext.

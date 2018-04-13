@@ -19,13 +19,16 @@ type PeerContext struct {
 	// Zone is the zone the peer is running within.
 	Zone string `json:"zone"`
 
+	// Cluster is the Kraken cluster the peer is running within.
+	Cluster string `json:"cluster"`
+
 	// Origin indicates whether the peer is an origin server or not.
 	Origin bool `json:"origin"`
 }
 
 // NewPeerContext creates a new PeerContext.
 func NewPeerContext(
-	f PeerIDFactory, zone string, ip string, port int, origin bool) (PeerContext, error) {
+	f PeerIDFactory, zone, cluster, ip string, port int, origin bool) (PeerContext, error) {
 
 	if ip == "" {
 		return PeerContext{}, errors.New("no ip supplied")
@@ -38,10 +41,11 @@ func NewPeerContext(
 		return PeerContext{}, err
 	}
 	return PeerContext{
-		IP:     ip,
-		Port:   port,
-		PeerID: peerID,
-		Zone:   zone,
-		Origin: origin,
+		IP:      ip,
+		Port:    port,
+		PeerID:  peerID,
+		Zone:    zone,
+		Cluster: cluster,
+		Origin:  origin,
 	}, nil
 }

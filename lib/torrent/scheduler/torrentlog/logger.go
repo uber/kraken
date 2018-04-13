@@ -76,6 +76,7 @@ func New(config Config, pctx core.PeerContext) (*Logger, error) {
 	return &Logger{logger.With(
 		zap.String("hostname", hostname),
 		zap.String("zone", pctx.Zone),
+		zap.String("cluster", pctx.Cluster),
 		zap.String("peer_id", pctx.PeerID.String()),
 	)}, nil
 }

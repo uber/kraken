@@ -94,7 +94,7 @@ func main() {
 		log.Fatalf("Failed to create origin file store: %s", err)
 	}
 
-	pctx, err := core.NewPeerContext(config.PeerIDFactory, *zone, *peerIP, *peerPort, true)
+	pctx, err := core.NewPeerContext(config.PeerIDFactory, *zone, *cluster, *peerIP, *peerPort, true)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
