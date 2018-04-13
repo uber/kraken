@@ -55,7 +55,8 @@ func main() {
 	zlog := log.ConfigureLogger(config.ZapLogging)
 	defer zlog.Sync()
 
-	pctx, err := core.NewPeerContext(config.PeerIDFactory, *zone, *peerIP, *peerPort, false)
+	pctx, err := core.NewPeerContext(
+		config.PeerIDFactory, *zone, *cluster, *peerIP, *peerPort, false)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
