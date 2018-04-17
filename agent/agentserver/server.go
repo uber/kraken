@@ -8,29 +8,24 @@ import (
 	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
 	"os"
 
-	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
-	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
 )
 
 // Config defines Server configuration.
-type Config struct {
-	RequestCache dedup.RequestCacheConfig `yaml:"request_cache"`
-}
+type Config struct{}
 
 // Server defines the agent HTTP server.
 type Server struct {
-	config       Config
-	stats        tally.Scope
-	fs           store.FileStore
-	sched        scheduler.ReloadableScheduler
-	requestCache *dedup.RequestCache
+	config Config
+	stats  tally.Scope
+	fs     store.FileStore
+	sched  scheduler.ReloadableScheduler
 }
 
 // New creates a new Server.
@@ -43,11 +38,7 @@ func New(
 	stats = stats.Tagged(map[string]string{
 		"module": "agentserver",
 	})
-
-	rc := dedup.NewRequestCache(config.RequestCache, clock.New())
-	rc.SetNotFound(func(err error) bool { return err == scheduler.ErrTorrentNotFound })
-
-	return &Server{config, stats, fs, sched, rc}
+	return &Server{config, stats, fs, sched}
 }
 
 // Handler returns the HTTP handler.
@@ -74,45 +65,31 @@ func (s *Server) Handler() http.Handler {
 	return r
 }
 
-// downloadBlobHandler initiates a p2p download of a blob. This is a non-blocking
-// endpoint, which returns 202 while the download is still in progress.
+// downloadBlobHandler downloads a blob through p2p.
 func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	namespace := chi.URLParam(r, "namespace")
-	if namespace == "" {
-		return handler.Errorf("namespace required").Status(http.StatusBadRequest)
-	}
 	name := chi.URLParam(r, "name")
-	if name == "" {
-		return handler.Errorf("name required").Status(http.StatusBadRequest)
-	}
 	f, err := s.fs.GetCacheFileReader(name)
 	if err != nil {
 		if os.IsNotExist(err) || s.fs.InDownloadError(err) {
-			return s.startTorrentDownload(namespace, name)
+			if err := s.sched.Download(namespace, name); err != nil {
+				if err == scheduler.ErrTorrentNotFound {
+					return handler.ErrorStatus(http.StatusNotFound)
+				}
+				return handler.Errorf("download torrent: %s", err)
+			}
+			f, err = s.fs.GetCacheFileReader(name)
+			if err != nil {
+				return handler.Errorf("file store: %s", err)
+			}
+		} else {
+			return handler.Errorf("file store: %s", err)
 		}
-		return handler.Errorf("file store: %s", err)
 	}
 	if _, err := io.Copy(w, f); err != nil {
 		return fmt.Errorf("copy file: %s", err)
 	}
 	return nil
-}
-
-func (s *Server) startTorrentDownload(namespace, name string) error {
-	id := namespace + ":" + name
-	err := s.requestCache.Start(id, func() error {
-		return s.sched.Download(namespace, name)
-	})
-	switch err {
-	case dedup.ErrRequestPending, nil:
-		return handler.ErrorStatus(http.StatusAccepted)
-	case dedup.ErrWorkersBusy:
-		return handler.ErrorStatus(http.StatusServiceUnavailable)
-	case scheduler.ErrTorrentNotFound:
-		return handler.ErrorStatus(http.StatusNotFound)
-	default:
-		return handler.Errorf("download torrent: %s", err)
-	}
 }
 
 func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error {
