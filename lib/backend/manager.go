@@ -26,14 +26,8 @@ func NewManager(namespaces NamespaceConfig, auth AuthNamespaceConfig) (*Manager,
 		switch config.Backend {
 		case "s3":
 			c, err = s3backend.NewClient(config.S3, auth[ns].S3, ns)
-		case "s3_dockerblob":
-			c, err = s3backend.NewDockerBlobClient(config.S3, auth[ns].S3, ns)
-		case "s3_dockertag":
-			c, err = s3backend.NewDockerTagClient(config.S3, auth[ns].S3, ns)
-		case "hdfs_dockerblob":
-			c, err = hdfsbackend.NewDockerBlobClient(config.HDFS)
-		case "hdfs_dockertag":
-			c, err = hdfsbackend.NewDockerTagClient(config.HDFS)
+		case "hdfs":
+			c, err = hdfsbackend.NewClient(config.HDFS)
 		case "http":
 			c, err = httpbackend.NewClient(config.HTTP)
 		case "tracker_dockertag":

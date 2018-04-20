@@ -3,7 +3,6 @@ package hdfsbackend
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -19,15 +18,14 @@ import (
 )
 
 type testServer struct {
-	path                               string
 	getName, getData, putName, putData http.HandlerFunc
 }
 
 func (s *testServer) handler() http.Handler {
 	r := chi.NewRouter()
-	r.Get("/"+s.path, s.getName)
+	r.Get("/data/:blob", s.getName)
 	r.Get("/datanode", s.getData)
-	r.Put("/"+s.path, s.putName)
+	r.Put("/data/:blob", s.putName)
 	r.Put("/datanode", s.putData)
 	return r
 }
@@ -53,11 +51,11 @@ func checkBody(t *testing.T, expected []byte) http.HandlerFunc {
 }
 
 func configFixture(nodes ...string) Config {
-	config, err := Config{NameNodes: nodes}.applyDefaults()
-	if err != nil {
-		panic(err)
-	}
-	return config
+	return Config{
+		NameNodes:     nodes,
+		RootDirectory: "data",
+		NamePath:      "identity",
+	}.applyDefaults()
 }
 
 func TestClientDownloadSuccess(t *testing.T) {
@@ -66,17 +64,17 @@ func TestClientDownloadSuccess(t *testing.T) {
 	blob := core.NewBlobFixture()
 
 	server := &testServer{
-		path:    "data/:blob",
 		getName: redirectToDataNode,
 		getData: writeResponse(http.StatusOK, blob.Content),
 	}
 	addr, stop := testutil.StartServer(server.handler())
 	defer stop()
 
-	client := newClient(configFixture(addr))
+	client, err := NewClient(configFixture(addr))
+	require.NoError(err)
 
 	var b bytes.Buffer
-	require.NoError(client.download("data/"+blob.Digest.Hex(), &b))
+	require.NoError(client.Download(blob.Digest.Hex(), &b))
 	require.Equal(blob.Content, b.Bytes())
 }
 
@@ -86,7 +84,6 @@ func TestClientDownloadRetriesNextNameNode(t *testing.T) {
 	blob := core.NewBlobFixture()
 
 	server1 := &testServer{
-		path:    "data/:blob",
 		getName: redirectToDataNode,
 		getData: writeResponse(http.StatusForbidden, nil),
 	}
@@ -94,17 +91,17 @@ func TestClientDownloadRetriesNextNameNode(t *testing.T) {
 	defer stop()
 
 	server2 := &testServer{
-		path:    "data/:blob",
 		getName: redirectToDataNode,
 		getData: writeResponse(http.StatusOK, blob.Content),
 	}
 	addr2, stop := testutil.StartServer(server2.handler())
 	defer stop()
 
-	client := newClient(configFixture(addr1, addr2))
+	client, err := NewClient(configFixture(addr1, addr2))
+	require.NoError(err)
 
 	var b bytes.Buffer
-	require.NoError(client.download("data/"+blob.Digest.Hex(), &b))
+	require.NoError(client.Download(blob.Digest.Hex(), &b))
 	require.Equal(blob.Content, b.Bytes())
 }
 
@@ -112,13 +109,13 @@ func TestClientDownloadErrBlobNotFound(t *testing.T) {
 	require := require.New(t)
 
 	server := &testServer{
-		path:    "data/:blob",
 		getName: writeResponse(http.StatusNotFound, []byte("file not found")),
 	}
 	addr, stop := testutil.StartServer(server.handler())
 	defer stop()
 
-	client := newClient(configFixture(addr))
+	client, err := NewClient(configFixture(addr))
+	require.NoError(err)
 
 	f, err := ioutil.TempFile("", "hdfs3test")
 	require.NoError(err)
@@ -127,7 +124,7 @@ func TestClientDownloadErrBlobNotFound(t *testing.T) {
 	d := core.DigestFixture()
 
 	var b bytes.Buffer
-	require.Equal(backenderrors.ErrBlobNotFound, client.download("data/"+d.Hex(), &b))
+	require.Equal(backenderrors.ErrBlobNotFound, client.Download(d.Hex(), &b))
 }
 
 func TestClientUploadSuccess(t *testing.T) {
@@ -136,34 +133,34 @@ func TestClientUploadSuccess(t *testing.T) {
 	blob := core.NewBlobFixture()
 
 	server := &testServer{
-		path:    "data/:blob",
 		putName: redirectToDataNode,
 		putData: checkBody(t, blob.Content),
 	}
 	addr, stop := testutil.StartServer(server.handler())
 	defer stop()
 
-	client := newClient(configFixture(addr))
+	client, err := NewClient(configFixture(addr))
+	require.NoError(err)
 
-	require.NoError(client.upload("data/"+blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+	require.NoError(client.Upload(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 }
 
 func TestClientUploadUnknownFailure(t *testing.T) {
 	require := require.New(t)
 
 	server := &testServer{
-		path:    "data/:blob",
 		putName: redirectToDataNode,
 		putData: writeResponse(http.StatusInternalServerError, []byte("unknown error")),
 	}
 	addr, stop := testutil.StartServer(server.handler())
 	defer stop()
 
-	client := newClient(configFixture(addr))
+	client, err := NewClient(configFixture(addr))
+	require.NoError(err)
 
 	blob := core.NewBlobFixture()
 
-	require.Error(client.upload("data/"+blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+	require.Error(client.Upload(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 }
 
 func TestClientUploadRetriesNextNameNode(t *testing.T) {
@@ -174,13 +171,11 @@ func TestClientUploadRetriesNextNameNode(t *testing.T) {
 		{
 			"name node forbidden",
 			&testServer{
-				path:    "data/:blob",
 				putName: writeResponse(http.StatusForbidden, nil),
 			},
 		}, {
 			"data node forbidden",
 			&testServer{
-				path:    "data/:blob",
 				putName: redirectToDataNode,
 				putData: writeResponse(http.StatusForbidden, nil),
 			},
@@ -196,22 +191,22 @@ func TestClientUploadRetriesNextNameNode(t *testing.T) {
 			defer stop()
 
 			server2 := &testServer{
-				path:    "data/:blob",
 				putName: redirectToDataNode,
 				putData: checkBody(t, blob.Content),
 			}
 			addr2, stop := testutil.StartServer(server2.handler())
 			defer stop()
 
-			client := newClient(configFixture(addr1, addr2))
+			client, err := NewClient(configFixture(addr1, addr2))
+			require.NoError(err)
 
-			require.NoError(client.upload("data/"+blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+			require.NoError(client.Upload(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 
 			// Ensure bytes.Buffer can replay data.
-			require.NoError(client.upload("data/"+blob.Digest.Hex(), bytes.NewBuffer(blob.Content)))
+			require.NoError(client.Upload(blob.Digest.Hex(), bytes.NewBuffer(blob.Content)))
 
 			// Ensure non-buffer non-seekers can replay data.
-			require.NoError(client.upload("data/"+blob.Digest.Hex(), rwutil.PlainReader(blob.Content)))
+			require.NoError(client.Upload(blob.Digest.Hex(), rwutil.PlainReader(blob.Content)))
 		})
 	}
 }
@@ -222,93 +217,14 @@ func TestClientUploadErrorsWhenExceedsBufferGuard(t *testing.T) {
 	config := configFixture("dummy-addr")
 	config.BufferGuard = 50
 
-	client := newClient(config)
+	client, err := NewClient(config)
+	require.NoError(err)
 
 	// Exceeds BufferGuard.
 	data := randutil.Text(100)
 
-	err := client.upload("/some/path", rwutil.PlainReader(data))
+	err = client.Upload("/some/path", rwutil.PlainReader(data))
 	require.Error(err)
 	_, ok := err.(drainSrcError).err.(exceededCapError)
 	require.True(ok)
-}
-
-type backendClient interface {
-	Upload(string, io.Reader) error
-	Download(string, io.Writer) error
-}
-
-// TestAllClients is a very mechanical test suite to provide coverage for download / upload
-// operations on all HDFS clients. For more detailed testing of HDFS, see client_test.go.
-func TestAllClients(t *testing.T) {
-
-	clients := []struct {
-		desc   string
-		get    func(t *testing.T, config Config) backendClient
-		path   string
-		params func() (name string, data []byte)
-	}{
-		{
-			"docker blob client",
-			func(t *testing.T, config Config) backendClient {
-				c, err := NewDockerBlobClient(config)
-				require.NoError(t, err)
-				return c
-			},
-			"webhdfs/v1/infra/dockerRegistry/docker/registry/v2/blobs/sha256/:shard/:blob/data",
-			func() (string, []byte) {
-				blob := core.NewBlobFixture()
-				return blob.Digest.Hex(), blob.Content
-			},
-		}, {
-			"docker tag client",
-			func(t *testing.T, config Config) backendClient {
-				c, err := NewDockerTagClient(config)
-				require.NoError(t, err)
-				return c
-			},
-			"webhdfs/v1/infra/dockerRegistry/docker/registry/v2/repositories/:repo/_manifests/tags/:tag/current/link",
-			func() (string, []byte) {
-				return "testrepo:testtag", randutil.Text(64)
-			},
-		},
-	}
-
-	for _, client := range clients {
-		t.Run(client.desc, func(t *testing.T) {
-			t.Run("download", func(t *testing.T) {
-				name, data := client.params()
-
-				server := &testServer{
-					path:    client.path,
-					getName: redirectToDataNode,
-					getData: writeResponse(http.StatusOK, data),
-				}
-				addr, stop := testutil.StartServer(server.handler())
-				defer stop()
-
-				c := client.get(t, configFixture(addr))
-
-				var b bytes.Buffer
-				require.NoError(t, c.Download(name, &b))
-				require.Equal(t, data, b.Bytes())
-			})
-
-			t.Run("upload", func(t *testing.T) {
-				name, data := client.params()
-
-				server := &testServer{
-					path:    client.path,
-					putName: redirectToDataNode,
-					putData: checkBody(t, data),
-				}
-				addr, stop := testutil.StartServer(server.handler())
-				defer stop()
-
-				c := client.get(t, configFixture(addr))
-
-				require.NoError(t, c.Upload(name, bytes.NewReader(data)))
-			})
-		})
-	}
 }
