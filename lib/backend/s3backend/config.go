@@ -22,6 +22,9 @@ type Config struct {
 	// BufferGuard protects download from downloading into an oversized buffer
 	// when io.WriterAt is not implemented.
 	BufferGuard datasize.ByteSize `yaml:"buffer_guard"`
+
+	// NamePath identifies which namepath.Pather to use.
+	NamePath string `yaml:"name_path"`
 }
 
 // AuthConfig defines s3 credential parameters

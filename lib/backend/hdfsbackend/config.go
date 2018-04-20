@@ -1,8 +1,6 @@
 package hdfsbackend
 
 import (
-	"errors"
-
 	"github.com/c2h5oh/datasize"
 
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -19,21 +17,20 @@ type Config struct {
 	// BufferGuard protects upload from draining the src reader into an oversized
 	// buffer when io.Seeker is not implemented.
 	BufferGuard datasize.ByteSize `yaml:"buffer_guard"`
+
+	// NamePath identifies which namepath.Pather to use.
+	NamePath string `yaml:"name_path"`
 }
 
-func (c Config) applyDefaults() (Config, error) {
-	if len(c.NameNodes) == 0 {
-		return Config{}, errors.New("namenodes required")
-	}
+func (c Config) applyDefaults() Config {
 	if c.BuffSize == 0 {
 		c.BuffSize = int64(64 * memsize.MB)
 	}
 	if c.BufferGuard == 0 {
 		c.BufferGuard = 10 * datasize.MB
 	}
-
 	if c.RootDirectory == "" {
 		c.RootDirectory = "webhdfs/v1/infra/dockerRegistry/"
 	}
-	return c, nil
+	return c
 }

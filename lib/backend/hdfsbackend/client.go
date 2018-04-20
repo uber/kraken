@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -22,15 +23,31 @@ func retryable(err error) bool {
 	return httputil.IsForbidden(err) || httputil.IsNetworkError(err)
 }
 
-type client struct {
+// Client is a backend.Client for HDFS.
+type Client struct {
 	config Config
+	pather namepath.Pather
 }
 
-func newClient(config Config) *client {
-	return &client{config}
+// NewClient returns a new Client.
+func NewClient(config Config) (*Client, error) {
+	config = config.applyDefaults()
+	if len(config.NameNodes) == 0 {
+		return nil, errors.New("namenodes required")
+	}
+	pather, err := namepath.New(config.RootDirectory, config.NamePath)
+	if err != nil {
+		return nil, fmt.Errorf("namepath: %s", err)
+	}
+	return &Client{config, pather}, nil
 }
 
-func (c *client) download(path string, dst io.Writer) error {
+// Download downloads name into dst.
+func (c *Client) Download(name string, dst io.Writer) error {
+	path, err := c.pather.Path(name)
+	if err != nil {
+		return fmt.Errorf("path: %s", err)
+	}
 	params := c.params("open")
 	for _, node := range c.config.NameNodes {
 		u := fmt.Sprintf("http://%s/%s?%s", node, path, params)
@@ -79,7 +96,12 @@ type drainSrcError struct {
 
 func (e drainSrcError) Error() string { return fmt.Sprintf("drain src: %s", e.err) }
 
-func (c *client) upload(path string, src io.Reader) error {
+// Upload uploads src to name.
+func (c *Client) Upload(name string, src io.Reader) error {
+	path, err := c.pather.Path(name)
+	if err != nil {
+		return fmt.Errorf("path: %s", err)
+	}
 
 	// We must be able to replay src in the event that uploading to the data node
 	// fails halfway through the upload, thus we attempt to upcast src to an io.Seeker
@@ -147,7 +169,7 @@ func (c *client) upload(path string, src io.Reader) error {
 	return errAllNameNodesUnavailable
 }
 
-func (c *client) params(op string) string {
+func (c *Client) params(op string) string {
 	v := url.Values{}
 	if c.config.UserName != "" {
 		v.Set("user.name", c.config.UserName)

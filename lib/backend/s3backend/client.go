@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 
@@ -20,20 +21,26 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
-// Client implements downloading/uploading object from/to S3
-type client struct {
+// Client implements a backend.Client for S3.
+type Client struct {
 	config    Config
-	s3Session s3iface.S3API // S3 session
+	pather    namepath.Pather
+	s3Session s3iface.S3API
 }
 
-// newClient creates s3 client from input parameters and a namespace
-func newClient(config Config, auth AuthConfig, namespace string) (*client, error) {
+// NewClient creates a new Client.
+func NewClient(config Config, auth AuthConfig, namespace string) (*Client, error) {
 	config = config.applyDefaults()
 	if config.Region == "" {
 		return nil, errors.New("invalid config: region required")
 	}
 	if config.Bucket == "" {
 		return nil, errors.New("invalid config: bucket required")
+	}
+
+	pather, err := namepath.New(config.RootDirectory, config.NamePath)
+	if err != nil {
+		return nil, fmt.Errorf("namepath: %s", err)
 	}
 
 	var creds *credentials.Credentials
@@ -54,7 +61,7 @@ func newClient(config Config, auth AuthConfig, namespace string) (*client, error
 	sess := session.New()
 	svc := s3.New(sess, aws.NewConfig().WithRegion(config.Region).WithCredentials(creds))
 
-	return &client{s3Session: svc, config: config}, nil
+	return &Client{config, pather, svc}, nil
 }
 
 type exceededCapError error
@@ -75,7 +82,11 @@ func (b *capBuffer) WriteAt(p []byte, pos int64) (n int, err error) {
 
 // Download downloads the content from a configured bucket and writes the
 // data to dst.
-func (c *client) download(name string, dst io.Writer) error {
+func (c *Client) Download(name string, dst io.Writer) error {
+	path, err := c.pather.Path(name)
+	if err != nil {
+		return fmt.Errorf("path: %s", err)
+	}
 
 	// The S3 download API uses io.WriterAt to perform concurrent chunked download.
 	// We attempt to upcast dst to io.WriterAt for this purpose, else we download into
@@ -93,11 +104,11 @@ func (c *client) download(name string, dst io.Writer) error {
 
 	dlParams := &s3.GetObjectInput{
 		Bucket: aws.String(c.config.Bucket),
-		Key:    aws.String(name),
+		Key:    aws.String(path),
 	}
 
 	log.Infof("Starting S3 download from remote backend: (bucket: %s, key %s)",
-		c.config.Bucket, name)
+		c.config.Bucket, path)
 
 	if _, err := downloader.Download(writerAt, dlParams); err != nil {
 		if isNotFound(err) {
@@ -116,7 +127,12 @@ func (c *client) download(name string, dst io.Writer) error {
 }
 
 // Upload uploads src to a configured bucket.
-func (c *client) upload(name string, src io.Reader) error {
+func (c *Client) Upload(name string, src io.Reader) error {
+	path, err := c.pather.Path(name)
+	if err != nil {
+		return fmt.Errorf("path: %s", err)
+	}
+
 	uploader := s3manager.NewUploaderWithClient(c.s3Session, func(u *s3manager.Uploader) {
 		u.PartSize = c.config.UploadPartSize // per part,
 		u.Concurrency = c.config.UploadConcurrency
@@ -124,16 +140,16 @@ func (c *client) upload(name string, src io.Reader) error {
 
 	upParams := &s3manager.UploadInput{
 		Bucket: aws.String(c.config.Bucket),
-		Key:    aws.String(name),
+		Key:    aws.String(path),
 		Body:   src,
 	}
 
 	log.Infof("Starting S3 upload to remote backend: (bucket: %s, key: %s)",
-		c.config.Bucket, name)
+		c.config.Bucket, path)
 
 	// TODO(igor): support resumable uploads, for now we're ignoring UploadOutput
 	// entirely
-	_, err := uploader.Upload(upParams, func(u *s3manager.Uploader) {
+	_, err = uploader.Upload(upParams, func(u *s3manager.Uploader) {
 		u.LeavePartsOnError = false // delete the parts if the upload fails.
 	})
 	return err
