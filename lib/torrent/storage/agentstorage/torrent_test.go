@@ -2,7 +2,6 @@ package agentstorage
 
 import (
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"math"
 	"path"
@@ -53,7 +52,6 @@ func TestTorrentCreate(t *testing.T) {
 	require.False(tor.Complete())
 	require.Equal(int64(0), tor.BytesDownloaded())
 	require.Equal(bitsetutil.FromBools(false, false, false, false), tor.Bitfield())
-	require.Equal(fmt.Sprintf("torrent(hash=%s, downloaded=0%%)", mi.InfoHash.HexString()), tor.String())
 	require.False(tor.HasPiece(0))
 	require.Equal([]int{0, 1, 2, 3}, tor.MissingPieces())
 }
@@ -136,7 +134,6 @@ func TestTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 	require.True(tor.Complete())
 	require.Equal(int64(7), tor.BytesDownloaded())
 	require.Nil(tor.MissingPieces())
-	require.Equal(fmt.Sprintf("torrent(hash=%s, downloaded=100%%)", blob.MetaInfo.InfoHash.HexString()), tor.String())
 
 	// Check content
 	reader, err := fs.GetCacheFileReader(blob.MetaInfo.Name())

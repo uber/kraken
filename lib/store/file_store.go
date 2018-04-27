@@ -89,7 +89,7 @@ type LocalFileStore struct {
 }
 
 // NewLocalFileStore initializes and returns a new LocalFileStore object.
-func NewLocalFileStore(config Config, stats tally.Scope, useRefcount bool) (*LocalFileStore, error) {
+func NewLocalFileStore(config Config, stats tally.Scope) (*LocalFileStore, error) {
 	config = config.applyDefaults()
 
 	stats = stats.Tagged(map[string]string{
@@ -113,12 +113,10 @@ func NewLocalFileStore(config Config, stats tally.Scope, useRefcount bool) (*Loc
 	}
 
 	var downloadCacheBackend base.FileStore
-	if useRefcount {
-		downloadCacheBackend, err = base.NewLocalRCFileStore()
-	} else if config.LRUConfig.Enable {
+	if config.LRUConfig.Enable {
 		downloadCacheBackend, err = base.NewLRUFileStore(config.LRUConfig.Size, clk)
 	} else {
-		downloadCacheBackend, err = base.NewLocalFileStore(clk)
+		downloadCacheBackend, err = base.NewCASFileStore(clk)
 	}
 	if err != nil {
 		return nil, err

@@ -4,14 +4,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 	"path"
 
-	"github.com/uber-go/tally"
-
-	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils"
-	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
 const (
@@ -22,36 +18,6 @@ const (
 	uploadContent    = "this is a test upload"
 	uploadUUID       = "a20fe261-0060-467f-a44e-46eba3798d63"
 )
-
-func genDockerTags() (*DockerTags, func()) {
-	var cleanup testutil.Cleanup
-	defer cleanup.Recover()
-
-	fsConfig, c := store.ConfigFixture()
-	cleanup.Add(c)
-
-	fs, err := store.NewLocalFileStore(fsConfig, tally.NewTestScope("", nil), true)
-	if err != nil {
-		panic(err)
-	}
-	cleanup.Add(fs.Close)
-
-	tag, err := ioutil.TempDir("/tmp", "tag")
-	if err != nil {
-		panic(err)
-	}
-	cleanup.Add(func() { os.RemoveAll(tag) })
-
-	config := Config{}
-	config.TagDir = tag
-	config.TagDeletion.Enable = true
-
-	tags, err := NewDockerTags(config, fs, &mockImageTransferer{}, tally.NoopScope)
-	if err != nil {
-		panic(err)
-	}
-	return tags.(*DockerTags), cleanup.Run
-}
 
 type testImageUploadBundle struct {
 	repo     string
@@ -129,7 +95,7 @@ func genStorageDriver() (*KrakenStorageDriver, testImageUploadBundle, func()) {
 	}
 
 	// Create tag
-	if err := sd.tags.(*DockerTags).createTag(repoName, tagName, manifestDigest, layerDigests); err != nil {
+	if err := sd.transferer.PostTag(repoName, tagName, core.NewSHA256DigestFromHex(manifestDigest)); err != nil {
 		log.Panic(err)
 	}
 

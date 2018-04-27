@@ -1,10 +1,9 @@
 package dockerregistry
 
 import (
+	"errors"
 	"fmt"
 	"io"
-	"sync"
-	"time"
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -98,16 +97,13 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 
 // KrakenStorageDriver is a storage driver
 type KrakenStorageDriver struct {
-	config            Config
-	store             store.FileStore
-	blobs             *Blobs
-	uploads           *Uploads
-	tags              Tags
-	metrics           tally.Scope
-	tagDeletionTicker *time.Ticker
-
-	closeOnce sync.Once
-	stop      chan struct{}
+	config     Config
+	store      store.FileStore
+	transferer transfer.ImageTransferer
+	blobs      *Blobs
+	uploads    *Uploads
+	tags       *Tags
+	metrics    tally.Scope
 }
 
 // NewKrakenStorageDriver creates a new KrakenStorageDriver given Manager
@@ -117,50 +113,15 @@ func NewKrakenStorageDriver(
 	transferer transfer.ImageTransferer,
 	metrics tally.Scope) (*KrakenStorageDriver, error) {
 
-	c = c.applyDefaults()
-
-	tags, err := NewDockerTags(c, s, transferer, metrics)
-	if err != nil {
-		return nil, err
-	}
-
-	tagDeletionTicker := &time.Ticker{}
-	if c.TagDeletion.Enable {
-		tagDeletionTicker = time.NewTicker(c.TagDeletion.Interval)
-	}
-
 	return &KrakenStorageDriver{
-		config:            c,
-		store:             s,
-		blobs:             NewBlobs(transferer, s),
-		uploads:           NewUploads(transferer, s),
-		tags:              tags,
-		metrics:           metrics,
-		tagDeletionTicker: tagDeletionTicker,
-		stop:              make(chan struct{}),
+		config:     c,
+		store:      s,
+		transferer: transferer,
+		blobs:      NewBlobs(transferer, s),
+		uploads:    NewUploads(transferer, s),
+		tags:       NewTags(transferer),
+		metrics:    metrics,
 	}, nil
-}
-
-func (d *KrakenStorageDriver) tickerLoop() {
-	for {
-		select {
-		case <-d.tagDeletionTicker.C:
-			err := d.tags.DeleteExpiredTags(
-				d.config.TagDeletion.RetentionCount,
-				time.Now().Add(-d.config.TagDeletion.RetentionTime))
-			if err != nil {
-				log.Errorf("Error deleting expired tags: %s", err)
-			}
-		case <-d.stop:
-			d.tagDeletionTicker.Stop()
-			return
-		}
-	}
-}
-
-// Close terminates any goroutines launched by d.
-func (d *KrakenStorageDriver) Close() {
-	d.closeOnce.Do(func() { close(d.stop) })
 }
 
 // Name returns driver namae
@@ -277,7 +238,7 @@ func (d *KrakenStorageDriver) List(ctx context.Context, path string) ([]string, 
 	case _uploads:
 		return d.uploads.ListHashStates(path, pathSubType)
 	case _manifests:
-		return d.tags.ListManifests(path, pathSubType)
+		return nil, errors.New("list manifests not supported")
 	default:
 		return nil, InvalidRequestError{path}
 	}

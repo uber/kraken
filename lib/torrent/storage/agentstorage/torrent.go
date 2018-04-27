@@ -225,7 +225,9 @@ func (t *Torrent) Bitfield() *bitset.BitSet {
 
 func (t *Torrent) String() string {
 	downloaded := int(float64(t.BytesDownloaded()) / float64(t.metaInfo.Info.Length) * 100)
-	return fmt.Sprintf("torrent(hash=%s, downloaded=%d%%)", t.InfoHash().HexString(), downloaded)
+	return fmt.Sprintf(
+		"torrent(name=%s, hash=%s, downloaded=%d%%)",
+		t.Name(), t.InfoHash().HexString(), downloaded)
 }
 
 func (t *Torrent) getPiece(pi int) (*piece, error) {

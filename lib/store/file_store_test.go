@@ -20,7 +20,7 @@ func TestFileHashStates(t *testing.T) {
 	config, cleanup := ConfigFixture()
 	defer cleanup()
 
-	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil), true)
+	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil))
 	require.NoError(err)
 	defer s.Close()
 
@@ -44,7 +44,7 @@ func TestCreateUploadFileAndMoveToCache(t *testing.T) {
 	config, cleanup := ConfigFixture()
 	defer cleanup()
 
-	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil), true)
+	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil))
 	require.NoError(err)
 
 	err = s.CreateUploadFile("test_file.txt", 100)
@@ -78,7 +78,7 @@ func TestDownloadAndDeleteFiles(t *testing.T) {
 	config, cleanup := ConfigFixture()
 	defer cleanup()
 
-	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil), true)
+	s, err := NewLocalFileStore(config, tally.NewTestScope("", nil))
 	require.NoError(err)
 
 	var names []string
