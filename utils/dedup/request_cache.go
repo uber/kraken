@@ -19,13 +19,13 @@ type RequestCacheConfig struct {
 
 func (c *RequestCacheConfig) applyDefaults() {
 	if c.NotFoundTTL == 0 {
-		c.NotFoundTTL = 30 * time.Second
+		c.NotFoundTTL = 5 * time.Second
 	}
 	if c.ErrorTTL == 0 {
-		c.ErrorTTL = 30 * time.Second
+		c.ErrorTTL = 5 * time.Second
 	}
 	if c.CleanupInterval == 0 {
-		c.CleanupInterval = 15 * time.Second
+		c.CleanupInterval = 5 * time.Second
 	}
 	if c.NumWorkers == 0 {
 		c.NumWorkers = 10000
