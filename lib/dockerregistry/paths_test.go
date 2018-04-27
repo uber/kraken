@@ -8,7 +8,6 @@ import (
 )
 
 func TestBlobsPath(t *testing.T) {
-	require := require.New(t)
 	testCases := []struct {
 		input  string
 		digest string
@@ -23,6 +22,7 @@ func TestBlobsPath(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetBlobDigest:%s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			digest, err := GetBlobDigest(tc.input)
 			require.Equal(tc.digest, digest)
 			require.Equal(tc.err, err)
@@ -31,7 +31,6 @@ func TestBlobsPath(t *testing.T) {
 }
 
 func TestRepositoriesPath(t *testing.T) {
-	require := require.New(t)
 	testCases := []struct {
 		input string
 		repo  string
@@ -49,6 +48,7 @@ func TestRepositoriesPath(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetRepositoriesRepo %s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			repo, err := GetRepo(tc.input)
 			require.Equal(tc.repo, repo)
 			require.Equal(tc.err, err)
@@ -57,7 +57,6 @@ func TestRepositoriesPath(t *testing.T) {
 }
 
 func TestLayersPath(t *testing.T) {
-	require := require.New(t)
 	testCases := []struct {
 		input   string
 		match   bool
@@ -73,6 +72,7 @@ func TestLayersPath(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("matchLayersPath %s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			match, subtype := matchLayersPath(tc.input)
 			require.Equal(tc.match, match)
 			require.Equal(tc.subtype, subtype)
@@ -81,7 +81,6 @@ func TestLayersPath(t *testing.T) {
 }
 
 func TestLayersPathGetDigest(t *testing.T) {
-	require := require.New(t)
 	testCases := []struct {
 		input  string
 		digest string
@@ -96,6 +95,7 @@ func TestLayersPathGetDigest(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetLayerDigest:%s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			digest, err := GetLayerDigest(tc.input)
 			require.Equal(tc.digest, digest)
 			require.Equal(tc.err, err)
@@ -104,7 +104,6 @@ func TestLayersPathGetDigest(t *testing.T) {
 }
 
 func TestManifestsPathMatch(t *testing.T) {
-	require := require.New(t)
 	testCases := []struct {
 		input   string
 		match   bool
@@ -121,6 +120,7 @@ func TestManifestsPathMatch(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("matchManifestsPath %s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			match, subtype := matchManifestsPath(tc.input)
 			require.Equal(tc.match, match)
 			require.Equal(tc.subtype, subtype)
@@ -129,7 +129,7 @@ func TestManifestsPathMatch(t *testing.T) {
 }
 
 func TestManifestsPathGetDigest(t *testing.T) {
-	require := require.New(t)
+
 	testCases := []struct {
 		input  string
 		digest string
@@ -140,21 +140,21 @@ func TestManifestsPathGetDigest(t *testing.T) {
 		{"kraken/_manifests/tags/sometag/current", "", InvalidRegistryPathError{_manifests, "kraken/_manifests/tags/sometag/current"}},
 		{"kraken/_manifests/sometag/link", "", InvalidRegistryPathError{_manifests, "kraken/_manifests/sometag/link"}},
 		{"kraken/_manifests/tags/sometag/current/link", "", InvalidRegistryPathError{_manifests, "kraken/_manifests/tags/sometag/current/link"}},
-		{"kraken/_manifests/tags/sometag/index/sha256/manifestdigest/link", "manifestdigest", nil},
-		{"kraken/_manifests/revisions/sha256/manifestdigest/link", "manifestdigest", nil},
+		{"kraken/_manifests/tags/sometag/index/sha256/ff3a5c916c92643ff77519ffa742d3ec61b7f591b6b7504599d95a4a41134e28/link", "ff3a5c916c92643ff77519ffa742d3ec61b7f591b6b7504599d95a4a41134e28", nil},
+		{"kraken/_manifests/revisions/sha256/ff3a5c916c92643ff77519ffa742d3ec61b7f591b6b7504599d95a4a41134e28/link", "ff3a5c916c92643ff77519ffa742d3ec61b7f591b6b7504599d95a4a41134e28", nil},
 	}
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetManifestDigest:%s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			digest, err := GetManifestDigest(tc.input)
-			require.Equal(tc.digest, digest)
 			require.Equal(tc.err, err)
+			require.Equal(tc.digest, digest)
 		})
 	}
 }
 
 func TestManifestsPathGetTag(t *testing.T) {
-	require := require.New(t)
 	testCases := []struct {
 		input     string
 		tag       string
@@ -173,6 +173,7 @@ func TestManifestsPathGetTag(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetRepositoriesRepo %s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			tag, isCurrent, err := GetManifestTag(tc.input)
 			require.Equal(tc.tag, tag)
 			require.Equal(tc.isCurrent, isCurrent)
@@ -182,7 +183,6 @@ func TestManifestsPathGetTag(t *testing.T) {
 }
 
 func TestUploadsPathMatch(t *testing.T) {
-	require := require.New(t)
 	testCases := []struct {
 		input   string
 		match   bool
@@ -203,6 +203,7 @@ func TestUploadsPathMatch(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("matchUploadsPath %s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			match, subtype := matchUploadsPath(tc.input)
 			require.Equal(tc.match, match)
 			require.Equal(tc.subtype, subtype)
@@ -211,7 +212,6 @@ func TestUploadsPathMatch(t *testing.T) {
 }
 
 func TestUploadsPathGetUUID(t *testing.T) {
-	require := require.New(t)
 	testCases := []struct {
 		input string
 		uuid  string
@@ -232,6 +232,7 @@ func TestUploadsPathGetUUID(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetUploadUUID:%s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			uuid, err := GetUploadUUID(tc.input)
 			require.Equal(tc.uuid, uuid)
 			require.Equal(tc.err, err)
@@ -240,7 +241,6 @@ func TestUploadsPathGetUUID(t *testing.T) {
 }
 
 func TestUploadsPathGetAlgoAndOffset(t *testing.T) {
-	require := require.New(t)
 	testCases := []struct {
 		input  string
 		algo   string
@@ -257,6 +257,7 @@ func TestUploadsPathGetAlgoAndOffset(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetUploadAlgoAndOffset:%s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			algo, offset, err := GetUploadAlgoAndOffset(tc.input)
 			require.Equal(tc.algo, algo)
 			require.Equal(tc.offset, offset)

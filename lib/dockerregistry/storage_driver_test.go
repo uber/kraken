@@ -40,18 +40,17 @@ func TestStorageDriverGetContent(t *testing.T) {
 		t.Run(fmt.Sprintf("GetContent %s", tc.input), func(t *testing.T) {
 			require := require.New(t)
 			data, err := sd.GetContent(context.Background(), tc.input)
-			require.Equal(tc.data, data)
 			if tc.err == nil {
 				require.NoError(err)
 				return
 			}
+			require.Equal(tc.data, data)
 			require.Equal(tc.err, err)
 		})
 	}
 }
 
 func TestStorageDriverReader(t *testing.T) {
-	require := require.New(t)
 	sd, testImage, cleanup := genStorageDriver()
 	defer cleanup()
 
@@ -66,6 +65,7 @@ func TestStorageDriverReader(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetReader %s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			reader, err := sd.Reader(context.Background(), tc.input, 0)
 			data, err := ioutil.ReadAll(reader)
 			require.Equal(tc.data, data)
@@ -75,7 +75,6 @@ func TestStorageDriverReader(t *testing.T) {
 }
 
 func TestStorageDriverPutContent(t *testing.T) {
-	require := require.New(t)
 	sd, testImage, cleanup := genStorageDriver()
 	defer cleanup()
 
@@ -101,7 +100,7 @@ func TestStorageDriverPutContent(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("PutContent %s", tc.inputPath), func(t *testing.T) {
-			require.Equal(tc.err, sd.PutContent(context.Background(), tc.inputPath, tc.inputContent))
+			require.Equal(t, tc.err, sd.PutContent(context.Background(), tc.inputPath, tc.inputContent))
 		})
 	}
 
@@ -109,7 +108,6 @@ func TestStorageDriverPutContent(t *testing.T) {
 }
 
 func TestStorageDriverWriter(t *testing.T) {
-	require := require.New(t)
 	sd, testImage, cleanup := genStorageDriver()
 	defer cleanup()
 
@@ -125,6 +123,7 @@ func TestStorageDriverWriter(t *testing.T) {
 	content := []byte("this is a test for upload writer")
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetWriter %s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			w, err := sd.Writer(context.Background(), tc.input, false)
 			require.Equal(tc.err, err)
 			if err != nil {
@@ -143,7 +142,6 @@ func TestStorageDriverWriter(t *testing.T) {
 }
 
 func TestStorageDriverStat(t *testing.T) {
-	require := require.New(t)
 	sd, testImage, cleanup := genStorageDriver()
 	defer cleanup()
 
@@ -159,6 +157,7 @@ func TestStorageDriverStat(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetStat %s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			fi, err := sd.Stat(context.Background(), tc.input)
 			require.Equal(tc.err, err)
 			if err != nil {
@@ -171,7 +170,6 @@ func TestStorageDriverStat(t *testing.T) {
 }
 
 func TestStorageDriverList(t *testing.T) {
-	require := require.New(t)
 	sd, testImage, cleanup := genStorageDriver()
 	defer cleanup()
 
@@ -181,11 +179,11 @@ func TestStorageDriverList(t *testing.T) {
 		err   error
 	}{
 		{genUploadHashStatesPath(testImage.upload), []string{genUploadHashStatesPath(testImage.upload)}, nil},
-		{genManifestTagCurrentLinkPath(testImage.repo, testImage.tag, testImage.manifest), []string{testImage.tag}, nil},
 	}
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("List %s", tc.input), func(t *testing.T) {
+			require := require.New(t)
 			list, err := sd.List(context.Background(), tc.input)
 			require.Equal(tc.err, err)
 			require.Equal(tc.list, list)
@@ -194,7 +192,6 @@ func TestStorageDriverList(t *testing.T) {
 }
 
 func TestStorageDriverMove(t *testing.T) {
-	require := require.New(t)
 	sd, testImage, cleanup := genStorageDriver()
 	defer cleanup()
 
@@ -212,13 +209,13 @@ func TestStorageDriverMove(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Move %s to %s", tc.fromPath, tc.toPath), func(t *testing.T) {
-			require.Equal(tc.err, sd.Move(context.Background(), tc.fromPath, tc.toPath))
+			require.Equal(t, tc.err, sd.Move(context.Background(), tc.fromPath, tc.toPath))
 		})
 	}
 
 	reader, err := sd.store.GetCacheFileReader(sha)
-	require.NoError(err)
+	require.NoError(t, err)
 	data, err := ioutil.ReadAll(reader)
-	require.NoError(err)
-	require.Equal(uploadContent, string(data))
+	require.NoError(t, err)
+	require.Equal(t, uploadContent, string(data))
 }

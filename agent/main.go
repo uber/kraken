@@ -72,7 +72,7 @@ func main() {
 		log.Fatalf("Error creating tracker round robin: %s", err)
 	}
 
-	fs, err := store.NewLocalFileStore(config.Store, stats, config.Registry.TagDeletion.Enable)
+	fs, err := store.NewLocalFileStore(config.Store, stats)
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}

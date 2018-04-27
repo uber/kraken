@@ -50,7 +50,7 @@ func LocalFileStoreFixture() (*LocalFileStore, func()) {
 	config, c := ConfigFixture()
 	cleanup.Add(c)
 
-	fs, err := NewLocalFileStore(config, tally.NewTestScope("", nil), false)
+	fs, err := NewLocalFileStore(config, tally.NewTestScope("", nil))
 	if err != nil {
 		panic(err)
 	}

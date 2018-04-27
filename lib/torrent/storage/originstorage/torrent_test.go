@@ -2,7 +2,6 @@ package originstorage
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"path"
 	"sync"
@@ -41,7 +40,6 @@ func TestTorrentCreate(t *testing.T) {
 	require.True(tor.Complete())
 	require.Equal(int64(7), tor.BytesDownloaded())
 	require.Equal(bitsetutil.FromBools(true, true, true, true), tor.Bitfield())
-	require.Equal(fmt.Sprintf("torrent(hash=%s, downloaded=100%%)", mi.InfoHash.HexString()), tor.String())
 	require.True(tor.HasPiece(0))
 	require.Equal([]int{}, tor.MissingPieces())
 }

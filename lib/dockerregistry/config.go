@@ -1,8 +1,6 @@
 package dockerregistry
 
 import (
-	"time"
-
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -14,42 +12,11 @@ import (
 type Config struct {
 	Docker         docker.Configuration `yaml:"docker"`
 	DisableTorrent bool                 `yaml:"disable_torrent"`
-	TagDir         string               `yaml:"tag_dir"`
-	TagDeletion    TagDeletionConfig    `yaml:"tag_deletion"`
 
 	Namespaces backend.NamespaceConfig `yaml:"namespaces"`
 
 	TagNamespace  string `yaml:"tag_namespace"`
 	BlobNamespace string `yaml:"blob_namespace"`
-}
-
-func (c Config) applyDefaults() Config {
-	c.TagDeletion = c.TagDeletion.applyDefaults()
-	return c
-}
-
-// TagDeletionConfig contains configuration to delete tags
-type TagDeletionConfig struct {
-	Enable bool `yaml:"enable"`
-
-	// Interval for running tag deletion.
-	Interval time.Duration `yaml:"interval"`
-
-	// Number of tags we keep for each repo
-	RetentionCount int `yaml:"retention_count"`
-
-	// Duration tags are kept for.
-	RetentionTime time.Duration `yaml:"retention_time"`
-}
-
-func (c TagDeletionConfig) applyDefaults() TagDeletionConfig {
-	if c.Interval == 0 {
-		c.Interval = 30 * time.Minute
-	}
-	if c.RetentionTime == 0 {
-		c.RetentionTime = 24 * time.Hour
-	}
-	return c
 }
 
 // CreateDockerConfig returns docker specified configuration

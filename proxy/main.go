@@ -45,7 +45,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating backend blob client: %s", err)
 	}
-	fs, err := store.NewLocalFileStore(config.Store, stats, config.Registry.TagDeletion.Enable)
+	fs, err := store.NewLocalFileStore(config.Store, stats)
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
