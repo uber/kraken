@@ -26,7 +26,7 @@ func NewAgentScheduler(
 
 	s, err := newScheduler(
 		config,
-		agentstorage.NewTorrentArchive(stats, fs, metainfoclient.Default(trackers)),
+		agentstorage.DefaultTorrentArchive(stats, fs, metainfoclient.Default(trackers)),
 		stats,
 		pctx,
 		announceclient.Default(pctx, trackers),

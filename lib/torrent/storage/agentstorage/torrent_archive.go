@@ -3,6 +3,7 @@ package agentstorage
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/uber-go/tally"
 
@@ -15,6 +16,7 @@ import (
 // TorrentArchive is capable of initializing torrents in the download directory
 // and serving torrents from either the download or cache directory.
 type TorrentArchive struct {
+	config         Config
 	stats          tally.Scope
 	fs             store.FileStore
 	metaInfoClient metainfoclient.Client
@@ -22,15 +24,25 @@ type TorrentArchive struct {
 
 // NewTorrentArchive creates a new TorrentArchive.
 func NewTorrentArchive(
+	config Config,
 	stats tally.Scope,
 	fs store.FileStore,
 	mic metainfoclient.Client) *TorrentArchive {
+
+	config = config.applyDefaults()
 
 	stats = stats.Tagged(map[string]string{
 		"module": "agenttorrentarchive",
 	})
 
-	return &TorrentArchive{stats, fs, mic}
+	return &TorrentArchive{config, stats, fs, mic}
+}
+
+// DefaultTorrentArchive returns the default TorrentArchive.
+func DefaultTorrentArchive(
+	stats tally.Scope, fs store.FileStore, mic metainfoclient.Client) *TorrentArchive {
+
+	return NewTorrentArchive(Config{}, stats, fs, mic)
 }
 
 // Stat returns TorrentInfo for given file name. Returns os.ErrNotExist if the
@@ -56,6 +68,23 @@ func (a *TorrentArchive) Stat(namespace, name string) (*storage.TorrentInfo, err
 	return storage.NewTorrentInfo(mi, b), nil
 }
 
+func (a *TorrentArchive) downloadMetaInfo(namespace, name string) (mi *core.MetaInfo, err error) {
+	for i := 0; i < a.config.UnavailableMetaInfoRetries; i++ {
+		if i > 0 {
+			time.Sleep(a.config.UnavailableMetaInfoRetrySleep)
+		}
+		mi, err = a.metaInfoClient.Download(namespace, name)
+		if err != nil {
+			if err == metainfoclient.ErrNotFound {
+				return nil, storage.ErrNotFound
+			}
+			continue
+		}
+		return mi, nil
+	}
+	return nil, fmt.Errorf("download metainfo: %s", err)
+}
+
 // CreateTorrent returns a Torrent for either an existing metainfo / file on
 // disk, or downloads metainfo and initializes the file. Returns ErrNotFound
 // if no metainfo was found.
@@ -65,12 +94,9 @@ func (a *TorrentArchive) CreateTorrent(namespace, name string) (storage.Torrent,
 	miRaw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
 	if os.IsNotExist(err) {
 		downloadTimer := a.stats.Timer("metainfo_download").Start()
-		mi, err := a.metaInfoClient.Download(namespace, name)
+		mi, err := a.downloadMetaInfo(namespace, name)
 		if err != nil {
-			if err == metainfoclient.ErrNotFound {
-				return nil, storage.ErrNotFound
-			}
-			return nil, fmt.Errorf("download metainfo: %s", err)
+			return nil, err
 		}
 		downloadTimer.Stop()
 

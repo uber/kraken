@@ -113,7 +113,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 
 	stats := tally.NewTestScope("", nil)
 
-	ta := agentstorage.NewTorrentArchive(stats, fs, m.metaInfoClient)
+	ta := agentstorage.DefaultTorrentArchive(stats, fs, m.metaInfoClient)
 
 	pctx := core.PeerContext{
 		PeerID: core.PeerIDFixture(),

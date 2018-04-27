@@ -11,7 +11,7 @@ import (
 // TorrentArchiveFixture returns a TorrrentArchive for testing purposes.
 func TorrentArchiveFixture() (*TorrentArchive, func()) {
 	fs, cleanup := store.LocalFileStoreFixture()
-	archive := NewTorrentArchive(tally.NoopScope, fs, nil)
+	archive := DefaultTorrentArchive(tally.NoopScope, fs, nil)
 	return archive, cleanup
 }
 
@@ -25,7 +25,7 @@ func TorrentFixture(mi *core.MetaInfo) (*Torrent, func()) {
 
 	tc := metainfoclient.NewTestClient()
 
-	ta := NewTorrentArchive(tally.NoopScope, fs, tc)
+	ta := DefaultTorrentArchive(tally.NoopScope, fs, tc)
 
 	if err := tc.Upload(mi); err != nil {
 		panic(err)
