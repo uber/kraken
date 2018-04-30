@@ -3,6 +3,8 @@ package dockerregistry
 import (
 	"fmt"
 	"regexp"
+
+	"code.uber.internal/infra/kraken/core"
 )
 
 // InvalidRegistryPathError indicates path error
@@ -81,33 +83,33 @@ func GetRepo(path string) (string, error) {
 }
 
 // GetBlobDigest returns blob digest
-func GetBlobDigest(path string) (string, error) {
+func GetBlobDigest(path string) (core.Digest, error) {
 	re := regexp.MustCompile("^.+/blobs/sha256/[0-9a-z]{2}/([0-9a-z]+)/data$")
 	matches := re.FindStringSubmatch(path)
 	if len(matches) < 2 {
-		return "", InvalidRegistryPathError{_blobs, path}
+		return core.Digest{}, InvalidRegistryPathError{_blobs, path}
 	}
-	return matches[1], nil
+	return core.NewSHA256DigestFromHex(matches[1]), nil
 }
 
 // GetLayerDigest returns digest of the layer
-func GetLayerDigest(path string) (string, error) {
+func GetLayerDigest(path string) (core.Digest, error) {
 	re := regexp.MustCompile("^.+/_layers/sha256/([0-9a-z]+)/(?:link|data)$")
 	matches := re.FindStringSubmatch(path)
 	if len(matches) < 2 {
-		return "", InvalidRegistryPathError{_layers, path}
+		return core.Digest{}, InvalidRegistryPathError{_layers, path}
 	}
-	return matches[1], nil
+	return core.NewSHA256DigestFromHex(matches[1]), nil
 }
 
 // GetManifestDigest returns manifest or tag digest
-func GetManifestDigest(path string) (string, error) {
+func GetManifestDigest(path string) (core.Digest, error) {
 	re := regexp.MustCompile("^.+/_manifests/(?:revisions|tags/.+/index)/sha256/([0-9a-z]+)/link$")
 	matches := re.FindStringSubmatch(path)
 	if len(matches) < 2 {
-		return "", InvalidRegistryPathError{_manifests, path}
+		return core.Digest{}, InvalidRegistryPathError{_manifests, path}
 	}
-	return matches[1], nil
+	return core.NewSHA256DigestFromHex(matches[1]), nil
 }
 
 // GetManifestTag returns tag name

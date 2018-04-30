@@ -6,6 +6,8 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
+	"code.uber.internal/infra/kraken/utils/log"
+	storagedriver "github.com/docker/distribution/registry/storage/driver"
 )
 
 const (
@@ -44,31 +46,50 @@ func NewTags(transferer transfer.ImageTransferer) *Tags {
 	return &Tags{transferer}
 }
 
-// GetContent returns manifest digest for path.
-func (t *Tags) GetContent(path string, subtype PathSubType) (data []byte, err error) {
+// GetDigest downloads and returns manifest digest.
+// This is the only place storage driver would download a manifest blob via
+// torrent scheduler or origin because it has namespace information.
+// The caller of storage driver would first call this function to resolve
+// the manifest link (and downloads manifest blob),
+// then call Stat or Reader which would assume the blob is on disk already.
+func (t *Tags) GetDigest(path string, subtype PathSubType) (data []byte, err error) {
+	repo, err := GetRepo(path)
+	if err != nil {
+		return nil, fmt.Errorf("get repo: %s", err)
+	}
+
+	var digest core.Digest
 	switch subtype {
 	case _tags:
-		repo, err := GetRepo(path)
-		if err != nil {
-			return nil, fmt.Errorf("get repo: %s", err)
-		}
 		tag, _, err := GetManifestTag(path)
 		if err != nil {
 			return nil, fmt.Errorf("get manifest tag: %s", err)
 		}
-		digest, err := t.transferer.GetTag(repo, tag)
+		digest, err = t.transferer.GetTag(repo, tag)
 		if err != nil {
 			return nil, fmt.Errorf("transferer get tag: %s", err)
 		}
-		return []byte(digest.String()), nil
 	case _revisions:
-		digest, err := GetManifestDigest(path)
+		var err error
+		digest, err = GetManifestDigest(path)
 		if err != nil {
 			return nil, fmt.Errorf("get manifest digest: %s", err)
 		}
-		return []byte(fmt.Sprintf("sha256:%s", digest)), nil
+	default:
+		return nil, &InvalidRequestError{path}
 	}
-	return nil, &InvalidRequestError{path}
+
+	blob, err := t.transferer.Download(repo, digest.Hex())
+	if err != nil {
+		log.Errorf("Failed to download %s: %s", digest, err)
+		return nil, storagedriver.PathNotFoundError{
+			DriverName: "kraken",
+			Path:       digest.String(),
+		}
+	}
+	defer blob.Close()
+
+	return []byte(digest.String()), nil
 }
 
 // PutContent creates tags.
@@ -90,7 +111,7 @@ func (t *Tags) PutContent(path string, subtype PathSubType) error {
 		if err != nil {
 			return fmt.Errorf("get manifest digest: %s", err)
 		}
-		if err := t.transferer.PostTag(repo, tag, core.NewSHA256DigestFromHex(digest)); err != nil {
+		if err := t.transferer.PostTag(repo, tag, digest); err != nil {
 			return fmt.Errorf("post tag: %s", err)
 		}
 		return nil

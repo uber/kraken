@@ -87,7 +87,7 @@ func (u *Uploads) PutBlobContent(path string, content []byte) error {
 	if err != nil {
 		return nil
 	}
-	return u.putBlobData(digest, content)
+	return u.putBlobData(digest.Hex(), content)
 }
 
 // GetWriter returns a writer for uploaded content
@@ -136,7 +136,7 @@ func (u *Uploads) Move(uploadsPath string, blobsPath string) error {
 	if err != nil {
 		return err
 	}
-	return u.commitUpload(uuid, u.store.Config().CacheDir, digest)
+	return u.commitUpload(uuid, u.store.Config().CacheDir, digest.Hex())
 }
 
 func (u *Uploads) initUpload(uuid string) error {
