@@ -18,6 +18,7 @@ agent/agent
 origin/origin
 proxy/proxy
 cli/kraken-cli
+build-index/build-index
 tools/bin/puller/puller
 tools/bin/benchmarks/benchmarks
 tools/bin/reload/reload

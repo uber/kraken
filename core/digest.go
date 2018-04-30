@@ -1,6 +1,8 @@
 package core
 
 import (
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -64,4 +66,15 @@ func (d Digest) Hex() string {
 // ShardID returns the shard id of the digest.
 func (d Digest) ShardID() string {
 	return d.hex[:4]
+}
+
+// CheckSHA256Digest returns error if s is not a valid SHA256 hex digest.
+func CheckSHA256Digest(s string) error {
+	if len(s) != 64 {
+		return errors.New("must be 64 characters")
+	}
+	if _, err := hex.DecodeString(s); err != nil {
+		return fmt.Errorf("hex: %s", err)
+	}
+	return nil
 }

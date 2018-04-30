@@ -30,6 +30,7 @@ PROGS = \
 	tracker/tracker \
 	origin/origin \
 	proxy/proxy \
+	build-index/build-index \
 	tools/bin/puller/puller \
 	tools/bin/benchmarks/benchmarks \
 	tools/bin/reload/reload \
@@ -59,6 +60,7 @@ origin/origin: proto $(wildcard origin/*.go)
 cli/kraken-cli: $(wildcard cli/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 proxy/proxy: $(wildcard proxy/*.go)
+build-index/build-index: $(wildcard build-index/*.go)
 tools/bin/benchmarks/benchmarks: $(wildcard tools/bin/benchmarks/*.go)
 tools/bin/reload/reload: $(wildcard tools/bin/reload/*.go)
 tools/bin/simulation/simulation: $(wildcard tools/bin/simulation/*.go)
