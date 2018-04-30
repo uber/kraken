@@ -15,6 +15,8 @@ import (
 	"code.uber.internal/infra/kraken/utils/rwutil"
 )
 
+const _testNamespace = "test"
+
 func TestRemoteBackendTransfererDownloadCachesBlobs(t *testing.T) {
 	require := require.New(t)
 
@@ -33,11 +35,11 @@ func TestRemoteBackendTransfererDownloadCachesBlobs(t *testing.T) {
 
 	mockBlobBackendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
 
-	_, err = rbt.Download(blob.Digest.Hex())
+	_, err = rbt.Download(_testNamespace, blob.Digest.Hex())
 	require.NoError(err)
 
 	// Downloading again should use the cache (i.e. the mock should only be called once).
-	r, err := rbt.Download(blob.Digest.Hex())
+	r, err := rbt.Download(_testNamespace, blob.Digest.Hex())
 	require.NoError(err)
 	result, err := ioutil.ReadAll(r)
 	require.NoError(err)

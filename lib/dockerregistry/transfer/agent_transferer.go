@@ -32,7 +32,7 @@ func NewAgentTransferer(
 }
 
 // Download downloads blobs as torrent.
-func (t *AgentTransferer) Download(name string) (store.FileReader, error) {
+func (t *AgentTransferer) Download(namespace, name string) (store.FileReader, error) {
 	if err := t.sched.Download(t.blobNamespace, name); err != nil {
 		return nil, fmt.Errorf("scheduler: %s", err)
 	}

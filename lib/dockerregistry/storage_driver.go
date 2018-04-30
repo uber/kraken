@@ -140,7 +140,7 @@ func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data
 
 	switch pathType {
 	case _manifests:
-		return d.tags.GetContent(path, pathSubType)
+		return d.tags.GetDigest(path, pathSubType)
 	case _uploads:
 		return d.uploads.GetContent(path, pathSubType)
 	case _layers:

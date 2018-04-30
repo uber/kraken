@@ -7,7 +7,7 @@ import (
 
 // Downloader defines an interface to download blobs
 type Downloader interface {
-	Download(name string) (store.FileReader, error)
+	Download(namespace string, name string) (store.FileReader, error)
 }
 
 // Uploader defines an interface to upload blobs

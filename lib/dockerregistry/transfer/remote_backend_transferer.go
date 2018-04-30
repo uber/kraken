@@ -46,7 +46,7 @@ func NewRemoteBackendTransferer(
 
 // Download downloads the blob of name into the file store and returns a reader
 // to the newly downloaded file.
-func (t *RemoteBackendTransferer) Download(name string) (store.FileReader, error) {
+func (t *RemoteBackendTransferer) Download(namespace, name string) (store.FileReader, error) {
 	blob, err := t.fs.GetCacheFileReader(name)
 	if err != nil {
 		if os.IsNotExist(err) {
