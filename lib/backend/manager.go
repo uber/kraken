@@ -3,6 +3,7 @@ package backend
 import (
 	"errors"
 	"fmt"
+	"regexp"
 
 	"code.uber.internal/infra/kraken/lib/backend/hdfsbackend"
 	"code.uber.internal/infra/kraken/lib/backend/httpbackend"
@@ -12,14 +13,30 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/trackerbackend"
 )
 
-// Manager manages backend clients for namespaces.
+type backend struct {
+	regexp *regexp.Regexp
+	client Client
+}
+
+func newBackend(namespace string, c Client) (*backend, error) {
+	re, err := regexp.Compile(namespace)
+	if err != nil {
+		return nil, fmt.Errorf("regexp: %s", err)
+	}
+	return &backend{
+		regexp: re,
+		client: c,
+	}, nil
+}
+
+// Manager manages backend clients for namespace regular expressions.
 type Manager struct {
-	clients map[string]Client
+	backends []*backend
 }
 
 // NewManager creates a new Manager.
 func NewManager(namespaces NamespaceConfig, auth AuthNamespaceConfig) (*Manager, error) {
-	clients := make(map[string]Client)
+	var backends []*backend
 	for ns, config := range namespaces {
 		var c Client
 		var err error
@@ -42,30 +59,41 @@ func NewManager(namespaces NamespaceConfig, auth AuthNamespaceConfig) (*Manager,
 		if err != nil {
 			return nil, fmt.Errorf("new client for backend %s: %s", config.Backend, err)
 		}
-		clients[ns] = c
+		b, err := newBackend(ns, c)
+		if err != nil {
+			return nil, fmt.Errorf("new backend for namespace %s: %s", ns, err)
+		}
+		backends = append(backends, b)
 	}
-	return &Manager{clients}, nil
+	return &Manager{backends}, nil
 }
 
 // Register dynamically registers a namespace with a provided client. Register
-// should be primarily used for testing purposes -- namespaces should almost
-// always be statically configured and provided upon construction of the Manager.
+// should be primarily used for testing purposes -- normally, namespaces should
+// be statically configured and provided upon construction of the Manager.
 func (m *Manager) Register(namespace string, c Client) error {
-	if _, ok := m.clients[namespace]; ok {
-		return fmt.Errorf("namespace %s already exists", namespace)
+	for _, b := range m.backends {
+		if b.regexp.String() == namespace {
+			return fmt.Errorf("namespace %s already exists", namespace)
+		}
 	}
-	m.clients[namespace] = c
+	b, err := newBackend(namespace, c)
+	if err != nil {
+		return fmt.Errorf("new backend: %s", err)
+	}
+	m.backends = append(m.backends, b)
 	return nil
 }
 
-// GetClient returns the configured Client for the given namespace.
+// GetClient matches namespace to the configured Client.
 func (m *Manager) GetClient(namespace string) (Client, error) {
 	if namespace == "" {
 		return nil, errors.New("namespace is empty")
 	}
-	c, ok := m.clients[namespace]
-	if !ok {
-		return nil, fmt.Errorf("namespace %s not found", namespace)
+	for _, b := range m.backends {
+		if b.regexp.MatchString(namespace) {
+			return b.client, nil
+		}
 	}
-	return c, nil
+	return nil, fmt.Errorf("no matches for namespace %s", namespace)
 }

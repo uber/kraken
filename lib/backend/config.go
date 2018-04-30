@@ -9,7 +9,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/trackerbackend"
 )
 
-// NamespaceConfig defines a mapping of namespace identifier to Config.
+// NamespaceConfig defines a mapping of namespace regex to Config.
 type NamespaceConfig map[string]Config
 
 // AuthNamespaceConfig defines auth credentials for corresponding namespaces
