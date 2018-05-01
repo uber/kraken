@@ -5,9 +5,13 @@ import (
 	"fmt"
 	"net/http"
 
+	"code.uber.internal/infra/kraken/build-index/remotes"
+	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/build-index/tagserver"
 	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/metrics"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -30,12 +34,20 @@ func main() {
 	}
 	defer closer.Close()
 
+	originCluster := blobclient.NewClusterClient(
+		blobclient.NewClientResolver(blobclient.NewProvider(), serverset.DNSRoundRobin(config.Origin)))
+
+	replicator, err := remotes.New(config.Remotes, originCluster, tagclient.NewDNSProvider())
+	if err != nil {
+		log.Fatalf("Error creating remote replicator: %s", err)
+	}
+
 	backends, err := backend.NewManager(config.Namespaces, config.AuthNamespaces)
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
 
-	server := tagserver.New(config.TagServer, stats, backends)
+	server := tagserver.New(config.TagServer, stats, backends, replicator, config.Origin)
 
 	addr := fmt.Sprintf(":%d", config.Port)
 	log.Infof("Listening on %s", addr)

@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/andres-erbsen/clock"
-	"github.com/c2h5oh/datasize"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
@@ -70,29 +69,23 @@ func configMaxReplicaFixture() Config {
 // the local addresses they are running on, such that Provide("dummy-origin")
 // can resolve a real address.
 type testClientProvider struct {
-	chunkSize      uint64
-	addrByHostname map[string]string
+	clients map[string]blobclient.Client
 }
 
 func newTestClientProvider() *testClientProvider {
-	return &testClientProvider{
-		chunkSize:      16,
-		addrByHostname: make(map[string]string),
-	}
+	return &testClientProvider{make(map[string]blobclient.Client)}
 }
 
-func (p *testClientProvider) register(host string, addr string) {
-	p.addrByHostname[host] = addr
+func (p *testClientProvider) register(host string, client blobclient.Client) {
+	p.clients[host] = client
 }
 
 func (p *testClientProvider) Provide(host string) blobclient.Client {
-	addr, ok := p.addrByHostname[host]
+	c, ok := p.clients[host]
 	if !ok {
 		log.Panicf("host %q not found", host)
 	}
-	return blobclient.NewWithConfig(addr, blobclient.Config{
-		ChunkSize: datasize.ByteSize(p.chunkSize),
-	})
+	return c
 }
 
 func startServer(
@@ -135,7 +128,7 @@ func newTestServer(host string, config Config, cp *testClientProvider) *testServ
 		panic(err)
 	}
 	addr, stop := startServer(host, config, fs, cp, pctx, bm)
-	cp.register(host, addr)
+	cp.register(host, blobclient.NewWithConfig(addr, blobclient.Config{ChunkSize: 16}))
 	return &testServer{
 		host:           host,
 		addr:           addr,
@@ -152,7 +145,7 @@ func (s *testServer) restart(config Config) {
 	s.stop()
 
 	s.addr, s.stop = startServer(s.host, config, s.fs, s.cp, s.pctx, s.backendManager)
-	s.cp.register(s.host, s.addr)
+	s.cp.register(s.host, blobclient.NewWithConfig(s.addr, blobclient.Config{ChunkSize: 16}))
 }
 
 func (s *testServer) cleanup() {

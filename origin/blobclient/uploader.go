@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
@@ -99,7 +100,8 @@ func newUploadClient(addr string, namespace string, through bool) *uploadClient 
 
 func (c *uploadClient) start(d core.Digest) (uid string, err error) {
 	r, err := httputil.Post(
-		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads", c.addr, c.namespace, d))
+		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads",
+			c.addr, url.PathEscape(c.namespace), d))
 	if err != nil {
 		return "", err
 	}
@@ -114,7 +116,8 @@ func (c *uploadClient) patch(
 	d core.Digest, uid string, start, stop int64, chunk io.Reader) error {
 
 	_, err := httputil.Patch(
-		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads/%s", c.addr, c.namespace, d, uid),
+		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads/%s",
+			c.addr, url.PathEscape(c.namespace), d, uid),
 		httputil.SendBody(chunk),
 		httputil.SendHeaders(map[string]string{
 			"Content-Range": fmt.Sprintf("%d-%d", start, stop),
@@ -125,7 +128,7 @@ func (c *uploadClient) patch(
 func (c *uploadClient) commit(d core.Digest, uid string) error {
 	_, err := httputil.Put(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads/%s?through=%t",
-			c.addr, c.namespace, d, uid, c.through),
+			c.addr, url.PathEscape(c.namespace), d, uid, c.through),
 		httputil.SendTimeout(15*time.Minute))
 	return err
 }

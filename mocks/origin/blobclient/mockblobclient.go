@@ -174,6 +174,18 @@ func (mr *MockClientMockRecorder) RepairShard(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RepairShard", reflect.TypeOf((*MockClient)(nil).RepairShard), arg0)
 }
 
+// ReplicateToRemote mocks base method
+func (m *MockClient) ReplicateToRemote(arg0 string, arg1 core.Digest, arg2 string) error {
+	ret := m.ctrl.Call(m, "ReplicateToRemote", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReplicateToRemote indicates an expected call of ReplicateToRemote
+func (mr *MockClientMockRecorder) ReplicateToRemote(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateToRemote", reflect.TypeOf((*MockClient)(nil).ReplicateToRemote), arg0, arg1, arg2)
+}
+
 // TransferBlob mocks base method
 func (m *MockClient) TransferBlob(arg0 core.Digest, arg1 io.Reader) error {
 	ret := m.ctrl.Call(m, "TransferBlob", arg0, arg1)
@@ -304,6 +316,18 @@ func (m *MockClusterClient) Owners(arg0 core.Digest) ([]core.PeerContext, error)
 // Owners indicates an expected call of Owners
 func (mr *MockClusterClientMockRecorder) Owners(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Owners", reflect.TypeOf((*MockClusterClient)(nil).Owners), arg0)
+}
+
+// ReplicateToRemote mocks base method
+func (m *MockClusterClient) ReplicateToRemote(arg0 string, arg1 core.Digest, arg2 string) error {
+	ret := m.ctrl.Call(m, "ReplicateToRemote", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReplicateToRemote indicates an expected call of ReplicateToRemote
+func (mr *MockClusterClientMockRecorder) ReplicateToRemote(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateToRemote", reflect.TypeOf((*MockClusterClient)(nil).ReplicateToRemote), arg0, arg1, arg2)
 }
 
 // UploadBlob mocks base method

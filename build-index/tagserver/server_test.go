@@ -9,6 +9,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/serverset"
+	"code.uber.internal/infra/kraken/mocks/build-index/remotes"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/utils/rwutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -18,12 +19,15 @@ import (
 	"github.com/uber-go/tally"
 )
 
-const namespace = "uber-usi/.*"
+const _testNamespace = "uber-usi/.*"
+
+const _testOrigin = "some-dns-record"
 
 type serverMocks struct {
 	config        Config
 	backends      *backend.Manager
 	backendClient *mockbackend.MockClient
+	replicator    *mockremotes.MockReplicator
 }
 
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
@@ -34,13 +38,15 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	backends, err := backend.NewManager(nil, nil)
 	require.NoError(t, err)
 
-	require.NoError(t, backends.Register(namespace, backendClient))
+	require.NoError(t, backends.Register(_testNamespace, backendClient))
 
-	return &serverMocks{Config{}, backends, backendClient}, ctrl.Finish
+	replicator := mockremotes.NewMockReplicator(ctrl)
+
+	return &serverMocks{Config{}, backends, backendClient, replicator}, ctrl.Finish
 }
 
 func (m *serverMocks) handler() http.Handler {
-	return New(m.config, tally.NoopScope, m.backends).Handler()
+	return New(m.config, tally.NoopScope, m.backends, m.replicator, _testOrigin).Handler()
 }
 
 func TestPutAndGetTag(t *testing.T) {
@@ -88,4 +94,40 @@ func TestGetTagNotFound(t *testing.T) {
 
 	_, err := client.Get(tag)
 	require.Equal(tagclient.ErrNotFound, err)
+}
+
+func TestReplicate(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := tagclient.New(serverset.MustRoundRobin(addr))
+
+	tag := "uber-usi/labrat"
+	digest := core.DigestFixture()
+	dependencies := []core.Digest{core.DigestFixture(), core.DigestFixture(), core.DigestFixture()}
+
+	mocks.replicator.EXPECT().Replicate(tag, digest, dependencies)
+
+	require.NoError(client.Replicate(tag, digest, dependencies))
+}
+
+func TestOrigin(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := tagclient.New(serverset.MustRoundRobin(addr))
+
+	result, err := client.Origin()
+	require.NoError(err)
+	require.Equal(_testOrigin, result)
 }

@@ -16,6 +16,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
+	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/rwutil"
@@ -326,7 +327,7 @@ func TestUploadBlobResilientToReplicationFailure(t *testing.T) {
 	s := newTestServer(master1, config, cp)
 	defer s.cleanup()
 
-	cp.register(master2, "some broken address")
+	cp.register(master2, blobclient.New("some broken address"))
 
 	// Master2 owns this blob, but it is not running. Uploads should still succeed
 	// despite this.
@@ -421,17 +422,16 @@ func TestTransferBlob(t *testing.T) {
 func TestTransferBlobSmallChunkSize(t *testing.T) {
 	require := require.New(t)
 
-	cp := newTestClientProvider()
-	cp.chunkSize = 13
-
-	s := newTestServer(master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(master1, configMaxReplicaFixture(), newTestClientProvider())
 	defer s.cleanup()
 
 	blob := core.SizedBlobFixture(1000, 1)
 
-	err := cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
+	client := blobclient.NewWithConfig(s.addr, blobclient.Config{ChunkSize: 13})
+
+	err := client.TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
-	ensureHasBlob(t, cp.Provide(master1), blob)
+	ensureHasBlob(t, client, blob)
 }
 
 func TestOverwriteMetainfo(t *testing.T) {
@@ -457,4 +457,62 @@ func TestOverwriteMetainfo(t *testing.T) {
 	mi, err = cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
 	require.NoError(err)
 	require.Equal(int64(16), mi.Info.PieceLength)
+}
+
+func TestReplicateToRemote(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(master1, configMaxReplicaFixture(), cp)
+	defer s.cleanup()
+
+	blob := core.NewBlobFixture()
+
+	require.NoError(cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content)))
+
+	remote := "some-remote-origin"
+	remoteClient := mockblobclient.NewMockClient(ctrl)
+	cp.register(remote, remoteClient)
+
+	remoteClient.EXPECT().Locations(blob.Digest).Return([]string{remote}, nil)
+	remoteClient.EXPECT().UploadBlob(
+		namespace, blob.Digest, rwutil.MatchReader(blob.Content), true).Return(nil)
+
+	require.NoError(cp.Provide(master1).ReplicateToRemote(namespace, blob.Digest, remote))
+}
+
+func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(master1, configMaxReplicaFixture(), cp)
+	defer s.cleanup()
+
+	backendClient := mockbackend.NewMockClient(ctrl)
+	s.backendManager.Register(namespace, backendClient)
+
+	remote := "some-remote-origin"
+	remoteClient := mockblobclient.NewMockClient(ctrl)
+	cp.register(remote, remoteClient)
+
+	blob := core.NewBlobFixture()
+
+	backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
+
+	remoteClient.EXPECT().Locations(blob.Digest).Return([]string{remote}, nil)
+	remoteClient.EXPECT().UploadBlob(
+		namespace, blob.Digest, rwutil.MatchReader(blob.Content), true).Return(nil)
+
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		err := cp.Provide(master1).ReplicateToRemote(namespace, blob.Digest, remote)
+		return !httputil.IsAccepted(err)
+	}))
 }

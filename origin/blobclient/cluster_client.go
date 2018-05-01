@@ -62,6 +62,7 @@ type ClusterClient interface {
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
 	Owners(d core.Digest) ([]core.PeerContext, error)
+	ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error
 }
 
 type clusterClient struct {
@@ -173,6 +174,14 @@ func (c *clusterClient) Owners(d core.Digest) ([]core.PeerContext, error) {
 		log.With("blob", d.Hex()).Errorf("Error getting all origin peers: %s", err)
 	}
 	return peers, nil
+}
+
+// ReplicateToRemote replicates d to a remote origin cluster.
+func (c *clusterClient) ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error {
+	// Re-use download backoff since replicate may download blobs.
+	return Poll(c.resolver, c.pollDownloadBackoff, d, func(client Client) error {
+		return client.ReplicateToRemote(namespace, d, remoteDNS)
+	})
 }
 
 func shuffle(cs []Client) {

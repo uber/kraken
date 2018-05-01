@@ -87,6 +87,18 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
+	mkdir -p mocks/build-index/remotes
+	$(mockgen) \
+		-destination=mocks/build-index/remotes/mockremotes.go \
+		-package mockremotes \
+		code.uber.internal/infra/kraken/build-index/remotes Replicator
+
+	mkdir -p mocks/build-index/tagclient
+	$(mockgen) \
+		-destination=mocks/build-index/tagclient/mocktagclient.go \
+		-package mocktagclient \
+		code.uber.internal/infra/kraken/build-index/tagclient Client
+
 	mkdir -p mocks/tracker/announceclient
 	$(mockgen) \
 		-destination=mocks/tracker/announceclient/mockannounceclient.go \

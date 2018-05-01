@@ -20,6 +20,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/middleware"
+	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/errutil"
@@ -123,6 +124,8 @@ func (s Server) Handler() http.Handler {
 
 	r.Get("/namespace/:namespace/blobs/:digest", handler.Wrap(s.downloadBlobHandler))
 
+	r.Post("/namespace/:namespace/blobs/:digest/remote/:remote", handler.Wrap(s.replicateToRemoteHandler))
+
 	// Internal endpoints:
 
 	r.Post("/internal/blobs/:digest/uploads", handler.Wrap(s.startUploadHandler))
@@ -172,7 +175,10 @@ func (s Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) error {
-	namespace := chi.URLParam(r, "namespace")
+	namespace, err := parseNamespace(r)
+	if err != nil {
+		return err
+	}
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -185,6 +191,35 @@ func (s Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) erro
 	}
 	setOctetStreamContentType(w)
 	return nil
+}
+
+func (s Server) replicateToRemoteHandler(w http.ResponseWriter, r *http.Request) error {
+	namespace, err := parseNamespace(r)
+	if err != nil {
+		return err
+	}
+	d, err := parseDigest(r)
+	if err != nil {
+		return err
+	}
+	remoteDNS := chi.URLParam(r, "remote")
+	return s.replicateToRemote(namespace, d, remoteDNS)
+}
+
+func (s Server) replicateToRemote(namespace string, d core.Digest, remoteDNS string) error {
+	f, err := s.fileStore.GetCacheFileReader(d.Hex())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return s.startRemoteBlobDownload(namespace, d, false)
+		}
+		return handler.Errorf("file store: %s", err)
+	}
+	defer f.Close()
+
+	remoteCluster := blobclient.NewClusterClient(
+		blobclient.NewClientResolver(s.clientProvider, serverset.DNSRoundRobin(remoteDNS)))
+
+	return remoteCluster.UploadBlob(namespace, d, f, true)
 }
 
 // deleteBlobHandler deletes blob data.
@@ -276,7 +311,10 @@ func (s Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) er
 }
 
 func (s Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
-	namespace := chi.URLParam(r, "namespace")
+	namespace, err := parseNamespace(r)
+	if err != nil {
+		return err
+	}
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -337,20 +375,20 @@ func (s Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
 	raw, err := s.fileStore.GetCacheFileMetadata(d.Hex(), store.NewTorrentMeta())
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, s.startRemoteBlobDownload(namespace, d)
+			return nil, s.startRemoteBlobDownload(namespace, d, true)
 		}
 		return nil, handler.Errorf("get cache metadata: %s", err)
 	}
 	return raw, nil
 }
 
-type replicateHook struct {
+type localReplicationHook struct {
 	server Server
 }
 
-func (h *replicateHook) Run(d core.Digest) {
+func (h *localReplicationHook) Run(d core.Digest) {
 	timer := h.server.stats.Timer("replicate_blob").Start()
-	if err := h.server.replicateBlob(d); err != nil {
+	if err := h.server.replicateBlobLocally(d); err != nil {
 		// Don't return error here as we only want to cache storage backend errors.
 		log.With("blob", d.Hex()).Errorf("Error replicating remote blob: %s", err)
 		h.server.stats.Counter("replicate_blob_errors").Inc(1)
@@ -359,8 +397,14 @@ func (h *replicateHook) Run(d core.Digest) {
 	timer.Stop()
 }
 
-func (s Server) startRemoteBlobDownload(namespace string, d core.Digest) error {
-	err := s.blobRefresher.Refresh(namespace, d, &replicateHook{s})
+func (s Server) startRemoteBlobDownload(
+	namespace string, d core.Digest, replicateLocally bool) error {
+
+	var hooks []blobrefresh.PostHook
+	if replicateLocally {
+		hooks = append(hooks, &localReplicationHook{s})
+	}
+	err := s.blobRefresher.Refresh(namespace, d, hooks...)
 	switch err {
 	case blobrefresh.ErrPending, nil:
 		return handler.ErrorStatus(http.StatusAccepted)
@@ -401,7 +445,7 @@ func (s Server) downloadRemoteBlob(c backend.Client, d core.Digest) error {
 	return nil
 }
 
-func (s Server) replicateBlob(d core.Digest) error {
+func (s Server) replicateBlobLocally(d core.Digest) error {
 	locs, err := s.getLocations(d)
 	if err != nil {
 		return fmt.Errorf("get locations: %s", err)
@@ -463,7 +507,7 @@ func (s Server) ensureCorrectNode(d core.Digest) error {
 func (s Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error {
 	f, err := s.fileStore.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
-		return s.startRemoteBlobDownload(namespace, d)
+		return s.startRemoteBlobDownload(namespace, d, true)
 	} else if err != nil {
 		return handler.Errorf("get cache file: %s", err)
 	}
@@ -552,7 +596,10 @@ func (s Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reques
 	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
-	namespace := chi.URLParam(r, "namespace")
+	namespace, err := parseNamespace(r)
+	if err != nil {
+		return err
+	}
 	uid := chi.URLParam(r, "uid")
 	through := false
 	t := r.URL.Query().Get("through")
@@ -602,7 +649,7 @@ func (s Server) commitClusterUpload(
 	if err := s.uploader.commit(d, uid); err != nil {
 		return err
 	}
-	if err := s.replicateBlob(d); err != nil {
+	if err := s.replicateBlobLocally(d); err != nil {
 		log.With("blob", d.Hex()).Errorf("Error replicating uploaded blob: %s", err)
 	}
 

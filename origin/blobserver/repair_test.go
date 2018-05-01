@@ -11,6 +11,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 )
 
 func TestRepairOwnedShardPushesToReplica(t *testing.T) {
@@ -180,7 +181,7 @@ func TestRepairUnownedShardDoesNotDeleteIfReplicationFails(t *testing.T) {
 		gomock.Any(), int64(0)).MinTimes(1).Return(errors.New("some error"))
 	addr3, stop := startServer(master3, config, fs3, cp, core.PeerContextFixture(), nil)
 	defer stop()
-	cp.register(master3, addr3)
+	cp.register(master3, blobclient.New(addr3))
 
 	_, err := cp.Provide(master1).RepairShard(shardID)
 	require.NoError(err)

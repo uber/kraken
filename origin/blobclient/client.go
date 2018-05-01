@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"code.uber.internal/infra/kraken/core"
@@ -39,6 +40,8 @@ type Client interface {
 
 	UploadBlob(namespace string, d core.Digest, blob io.Reader, through bool) error
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
+
+	ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error
 
 	GetPeerContext() (core.PeerContext, error)
 }
@@ -129,7 +132,7 @@ func (c *HTTPClient) UploadBlob(
 // httputil.StatusError.
 func (c *HTTPClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
 	r, err := httputil.Get(
-		fmt.Sprintf("http://%s/namespace/%s/blobs/%s", c.addr, namespace, d))
+		fmt.Sprintf("http://%s/namespace/%s/blobs/%s", c.addr, url.PathEscape(namespace), d))
 	if err != nil {
 		return err
 	}
@@ -138,6 +141,16 @@ func (c *HTTPClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer
 		return fmt.Errorf("copy body: %s", err)
 	}
 	return nil
+}
+
+// ReplicateToRemote replicates the blob of d to a remote origin cluster. If the
+// blob of d is not available yet, returns 202 httputil.StatusError, indicating
+// that the request should be retried later.
+func (c *HTTPClient) ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error {
+	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/remote/%s",
+			c.addr, url.PathEscape(namespace), d, remoteDNS))
+	return err
 }
 
 // Repair runs a global repair of all shards present on disk. See RepairShard
@@ -176,7 +189,7 @@ func (c *HTTPClient) RepairDigest(d core.Digest) (io.ReadCloser, error) {
 // httputil.StatusError.
 func (c *HTTPClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error) {
 	r, err := httputil.Get(fmt.Sprintf(
-		"http://%s/internal/namespace/%s/blobs/%s/metainfo", c.addr, namespace, d))
+		"http://%s/internal/namespace/%s/blobs/%s/metainfo", c.addr, url.PathEscape(namespace), d))
 	if err != nil {
 		return nil, err
 	}
