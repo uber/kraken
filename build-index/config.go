@@ -1,6 +1,7 @@
 package main
 
 import (
+	"code.uber.internal/infra/kraken/build-index/remotes"
 	"code.uber.internal/infra/kraken/build-index/tagserver"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/metrics"
@@ -14,5 +15,7 @@ type Config struct {
 	Namespaces     backend.NamespaceConfig     `yaml:"namespaces"`
 	AuthNamespaces backend.AuthNamespaceConfig `yaml:"auth"`
 	TagServer      tagserver.Config            `yaml:"tagserver"`
+	Remotes        remotes.Config              `yaml:"remotes"`
+	Origin         string                      `yaml:"origin"`
 	Port           int                         `yaml:"port"`
 }

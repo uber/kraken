@@ -2,11 +2,13 @@ package tagserver
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 
+	"code.uber.internal/infra/kraken/build-index/remotes"
+	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/middleware"
@@ -21,19 +23,29 @@ import (
 
 // Server provides tag operations for the build-index.
 type Server struct {
-	config   Config
-	stats    tally.Scope
-	backends *backend.Manager
-	cache    *dedup.Cache
+	config         Config
+	stats          tally.Scope
+	backends       *backend.Manager
+	replicator     remotes.Replicator
+	localOriginDNS string
+	cache          *dedup.Cache
 }
 
 // New creates a new Server.
-func New(config Config, stats tally.Scope, backends *backend.Manager) *Server {
+func New(
+	config Config,
+	stats tally.Scope,
+	backends *backend.Manager,
+	replicator remotes.Replicator,
+	localOriginDNS string) *Server {
+
 	stats = stats.Tagged(map[string]string{
 		"module": "tagserver",
 	})
+
 	cache := dedup.NewCache(config.Cache, clock.New(), &tagResolver{backends})
-	return &Server{config, stats, backends, cache}
+
+	return &Server{config, stats, backends, replicator, localOriginDNS, cache}
 }
 
 // Handler returns an http.Handler for s.
@@ -46,6 +58,8 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/health", handler.Wrap(s.healthHandler))
 	r.Put("/tags/:tag/digest/:digest", handler.Wrap(s.putTagHandler))
 	r.Get("/tags/:tag", handler.Wrap(s.getTagHandler))
+	r.Post("/remotes/tags/:tag/digest/:digest", handler.Wrap(s.replicateTagHandler))
+	r.Get("/origin", handler.Wrap(s.getOriginHandler))
 
 	r.Mount("/debug", chimiddleware.Profiler())
 
@@ -58,13 +72,13 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
-	tag, err := url.PathUnescape(chi.URLParam(r, "tag"))
+	tag, err := parseTag(r)
 	if err != nil {
-		return handler.Errorf("path unescape tag: %s", err).Status(http.StatusBadRequest)
+		return err
 	}
-	d := chi.URLParam(r, "digest")
-	if err := core.CheckSHA256Digest(d); err != nil {
-		return handler.Errorf("invalid sha256 digest: %s", err).Status(http.StatusBadRequest)
+	d, err := parseDigest(r)
+	if err != nil {
+		return err
 	}
 	client, err := s.backends.GetClient(tag)
 	if err != nil {
@@ -78,14 +92,44 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
-	tag, err := url.PathUnescape(chi.URLParam(r, "tag"))
+	tag, err := parseTag(r)
 	if err != nil {
-		return handler.Errorf("path unescape tag: %s", err).Status(http.StatusBadRequest)
+		return err
 	}
 	digest, err := s.cache.Get(tag)
 	if err != nil {
 		return err
 	}
 	io.WriteString(w, digest)
+	return nil
+}
+
+func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) error {
+	tag, err := parseTag(r)
+	if err != nil {
+		return err
+	}
+	d, err := parseDigest(r)
+	if err != nil {
+		return err
+	}
+	var req tagclient.ReplicateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return handler.Errorf("decode body: %s", err)
+	}
+	// Some ugliness to convert strings into typed digests.
+	var deps []core.Digest
+	for _, d := range req.Dependencies {
+		deps = append(deps, core.NewSHA256DigestFromHex(d))
+	}
+	err = s.replicator.Replicate(tag, core.NewSHA256DigestFromHex(d), deps)
+	if err != nil {
+		return handler.Errorf("replicate: %s", err)
+	}
+	return nil
+}
+
+func (s *Server) getOriginHandler(w http.ResponseWriter, r *http.Request) error {
+	io.WriteString(w, s.localOriginDNS)
 	return nil
 }

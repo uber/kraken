@@ -15,11 +15,21 @@ import (
 	"github.com/pressly/chi"
 )
 
+// parseNamespace parses a namespace from a url path parameter,
+// e.g. "/namespace/:namespace".
+func parseNamespace(r *http.Request) (string, error) {
+	ns, err := url.PathUnescape(chi.URLParam(r, "namespace"))
+	if err != nil {
+		return "", handler.Errorf("path unescape namespace: %s", err).Status(http.StatusBadRequest)
+	}
+	return ns, nil
+}
+
 // parseDigest parses a digest from a url path parameter, e.g. "/blobs/:digest".
 func parseDigest(r *http.Request) (d core.Digest, err error) {
 	raw, err := url.PathUnescape(chi.URLParam(r, "digest"))
 	if err != nil {
-		return d, handler.Errorf("path unescape: %s", err).Status(http.StatusBadRequest)
+		return d, handler.Errorf("path unescape digest: %s", err).Status(http.StatusBadRequest)
 	}
 	d, err = core.NewDigestFromString(raw)
 	if err != nil {

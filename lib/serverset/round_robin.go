@@ -39,6 +39,19 @@ func MustRoundRobin(addrs ...string) *RoundRobin {
 	return rr
 }
 
+// DNSRoundRobin creates a new RoundRobin instance for a single dns record
+// with 3 retries.
+func DNSRoundRobin(dns string) *RoundRobin {
+	rr, err := NewRoundRobin(RoundRobinConfig{
+		Addrs:   []string{dns},
+		Retries: 3,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return rr
+}
+
 // RoundRobinIter defines an iterator over addresses.
 type RoundRobinIter struct {
 	cursor  *atomic.Uint32
