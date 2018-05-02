@@ -2,11 +2,9 @@ package originbackend
 
 import (
 	"errors"
-	"fmt"
 	"io"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 )
 
@@ -18,15 +16,11 @@ type Client struct {
 
 // NewClient creates a new Client.
 func NewClient(config Config) (*Client, error) {
-	origins, err := serverset.NewRoundRobin(config.RoundRobin)
-	if err != nil {
-		return nil, fmt.Errorf("round robin: %s", err)
-	}
 	if config.Namespace == "" {
 		return nil, errors.New("no namespace configured")
 	}
 	cluster := blobclient.NewClusterClient(
-		blobclient.NewClientResolver(blobclient.NewProvider(), origins))
+		blobclient.NewClientResolver(blobclient.NewProvider(), config.Addr))
 	return newClient(config, cluster), nil
 }
 

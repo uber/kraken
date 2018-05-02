@@ -18,11 +18,14 @@ type RequestCacheConfig struct {
 }
 
 func (c *RequestCacheConfig) applyDefaults() {
+	// TODO(codyg): If the cached error TTL is lower than the interval in which
+	// clients are polling a 202 endpoint, then it is possible that the client
+	// will never hit the actual error because it expires in between requests.
 	if c.NotFoundTTL == 0 {
-		c.NotFoundTTL = 5 * time.Second
+		c.NotFoundTTL = 15 * time.Second
 	}
 	if c.ErrorTTL == 0 {
-		c.ErrorTTL = 5 * time.Second
+		c.ErrorTTL = 15 * time.Second
 	}
 	if c.CleanupInterval == 0 {
 		c.CleanupInterval = 5 * time.Second

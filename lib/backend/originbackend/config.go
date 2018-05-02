@@ -1,10 +1,8 @@
 package originbackend
 
-import "code.uber.internal/infra/kraken/lib/serverset"
-
 // Config defines Client configuration.
 type Config struct {
-	RoundRobin serverset.RoundRobinConfig `yaml:"round_robin"`
+	Addr string `yaml:"addr"`
 
 	// If set, DisableUploadThrough will only upload blobs to the origin cluster
 	// and not propagate the blobs to an external storage backend. This means the

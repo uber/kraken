@@ -163,13 +163,19 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/tracker/metainfoclient/mockmetainfoclient.go \
 		-package mockmetainfoclient \
-		code.uber.internal/infra/kraken/tracker/metainfoclient Client,Getter
+		code.uber.internal/infra/kraken/tracker/metainfoclient Client
 
 	mkdir -p mocks/os
 	$(mockgen) \
 		-destination=mocks/os/mockos.go \
 		-package mockos \
 		os FileInfo
+
+	mkdir -p mocks/net/http
+	$(mockgen) \
+		-destination=mocks/net/http/mockhttp.go \
+		-package mockhttp \
+		net/http RoundTripper
 
 # Enumerates all container names, including those created by dockerman.
 CONTAINERS := $(foreach \

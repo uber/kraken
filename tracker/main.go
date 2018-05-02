@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
@@ -50,12 +49,8 @@ func main() {
 		log.Fatalf("Could not load peer handout policy: %s", err)
 	}
 
-	origins, err := serverset.NewRoundRobin(config.Origin.RoundRobin)
-	if err != nil {
-		log.Fatalf("Error creating origin round robin: %s", err)
-	}
 	originCluster := blobclient.NewClusterClient(
-		blobclient.NewClientResolver(blobclient.NewProvider(), origins))
+		blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin))
 
 	backends, err := backend.NewManager(config.Namespaces, config.AuthNamespaces)
 	if err != nil {

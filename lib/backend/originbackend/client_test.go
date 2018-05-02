@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/rwutil"
 
@@ -30,8 +29,8 @@ func (m *clientMocks) newClient(config Config) *Client {
 
 func TestNewClient(t *testing.T) {
 	client, err := NewClient(Config{
-		Namespace:  "test-namespace",
-		RoundRobin: serverset.RoundRobinConfig{Addrs: []string{"o1", "o2"}},
+		Namespace: "test-namespace",
+		Addr:      "origin-dns",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, client)

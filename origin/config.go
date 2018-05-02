@@ -6,7 +6,6 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
@@ -24,13 +23,7 @@ type Config struct {
 	NetworkEvent   networkevent.Config         `yaml:"network_event"`
 	PeerIDFactory  core.PeerIDFactory          `yaml:"peer_id_factory"`
 	Metrics        metrics.Config              `yaml:"metrics"`
-	Tracker        TrackerConfig               `yaml:"tracker"`
 	MetaInfoGen    metainfogen.Config          `yaml:"metainfogen"`
 	Namespaces     backend.NamespaceConfig     `yaml:"namespaces"`
 	AuthNamespaces backend.AuthNamespaceConfig `yaml:"auth"`
-}
-
-// TrackerConfig defines configuration for proxy's dependency on tracker.
-type TrackerConfig struct {
-	RoundRobin serverset.RoundRobinConfig `yaml:"round_robin"`
 }

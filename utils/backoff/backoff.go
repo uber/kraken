@@ -22,7 +22,7 @@ func (c Config) applyDefaults() Config {
 		c.Min = 1 * time.Second
 	}
 	if c.Max == 0 {
-		c.Max = 15 * time.Second
+		c.Max = 5 * time.Second
 	}
 	if c.Factor == 0 {
 		c.Factor = 1.3

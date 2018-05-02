@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/backoff"
@@ -40,8 +39,7 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 	cp.register(master2, blobclient.New("http://localhost:0"))
 	cp.register(master3, blobclient.New("http://localhost:0"))
 
-	cc := blobclient.NewClusterClient(
-		blobclient.NewClientResolver(cp, serverset.MustRoundRobin(master1, master2, master3)))
+	cc := blobclient.NewClusterClient(blobclient.NewClientResolver(cp, master1))
 
 	// Run many times to make sure we eventually hit unavailable masters.
 	for i := 0; i < 100; i++ {
@@ -72,8 +70,7 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 	cp.register(master2, blobclient.New("http://localhost:0"))
 	cp.register(master3, blobclient.New("http://localhost:0"))
 
-	cc := blobclient.NewClusterClient(
-		blobclient.NewClientResolver(cp, serverset.MustRoundRobin(master1, master2, master3)))
+	cc := blobclient.NewClusterClient(blobclient.NewClientResolver(cp, master1))
 
 	blob := core.NewBlobFixture()
 

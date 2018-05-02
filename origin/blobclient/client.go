@@ -82,7 +82,9 @@ func (c *HTTPClient) Addr() string {
 
 // Locations returns the origin server addresses which d is sharded on.
 func (c *HTTPClient) Locations(d core.Digest) ([]string, error) {
-	r, err := httputil.Get(fmt.Sprintf("http://%s/blobs/%s/locations", c.addr, d))
+	r, err := httputil.Get(
+		fmt.Sprintf("http://%s/blobs/%s/locations", c.addr, d),
+		httputil.SendRetry())
 	if err != nil {
 		return nil, err
 	}
