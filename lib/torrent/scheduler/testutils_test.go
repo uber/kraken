@@ -17,7 +17,6 @@ import (
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcequeue"
@@ -113,7 +112,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 
 	stats := tally.NewTestScope("", nil)
 
-	ta := agentstorage.DefaultTorrentArchive(stats, fs, m.metaInfoClient)
+	ta := agentstorage.NewTorrentArchive(stats, fs, m.metaInfoClient)
 
 	pctx := core.PeerContext{
 		PeerID: core.PeerIDFixture(),
@@ -121,7 +120,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 		IP:     "localhost",
 		Port:   findFreePort(),
 	}
-	ac := announceclient.Default(pctx, serverset.NewSingle(m.trackerAddr))
+	ac := announceclient.New(pctx, m.trackerAddr)
 	tp := networkevent.NewTestProducer()
 
 	s, err := newScheduler(config, ta, stats, pctx, ac, announcequeue.New(), tp, options...)

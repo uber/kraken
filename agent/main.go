@@ -15,7 +15,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
@@ -67,11 +66,6 @@ func main() {
 	}
 	defer closer.Close()
 
-	trackers, err := serverset.NewRoundRobin(config.Tracker.RoundRobin)
-	if err != nil {
-		log.Fatalf("Error creating tracker round robin: %s", err)
-	}
-
 	fs, err := store.NewLocalFileStore(config.Store, stats)
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
@@ -82,7 +76,8 @@ func main() {
 		log.Fatalf("Failed to create network event producer: %s", err)
 	}
 
-	sched, err := scheduler.NewAgentScheduler(config.Scheduler, stats, pctx, fs, netevents, trackers)
+	sched, err := scheduler.NewAgentScheduler(
+		config.Scheduler, stats, pctx, fs, netevents, config.Tracker)
 	if err != nil {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}

@@ -8,7 +8,6 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/mocks/build-index/remotes"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/utils/rwutil"
@@ -58,7 +57,7 @@ func TestPutAndGetTag(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(serverset.MustRoundRobin(addr))
+	client := tagclient.New(addr)
 
 	tag := "uber-usi/labrat"
 	digest := core.DigestFixture()
@@ -86,7 +85,7 @@ func TestGetTagNotFound(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(serverset.MustRoundRobin(addr))
+	client := tagclient.New(addr)
 
 	tag := "uber-usi/labrat"
 
@@ -105,7 +104,7 @@ func TestReplicate(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(serverset.MustRoundRobin(addr))
+	client := tagclient.New(addr)
 
 	tag := "uber-usi/labrat"
 	digest := core.DigestFixture()
@@ -125,7 +124,7 @@ func TestOrigin(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(serverset.MustRoundRobin(addr))
+	client := tagclient.New(addr)
 
 	result, err := client.Origin()
 	require.NoError(err)

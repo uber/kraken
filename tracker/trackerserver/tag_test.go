@@ -5,7 +5,6 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/tracker/tagclient"
 	"code.uber.internal/infra/kraken/utils/rwutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -22,7 +21,7 @@ func TestGetTagHandlerCachesResults(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(serverset.MustRoundRobin(addr))
+	client := tagclient.New(addr)
 
 	name := "some/repo:tag"
 	value := core.DigestFixture().String()
@@ -46,7 +45,7 @@ func TestGetTagHandlerNotFound(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(serverset.MustRoundRobin(addr))
+	client := tagclient.New(addr)
 
 	name := "some/repo:tag"
 

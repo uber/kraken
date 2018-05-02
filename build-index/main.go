@@ -9,7 +9,6 @@ import (
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/build-index/tagserver"
 	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
@@ -35,9 +34,9 @@ func main() {
 	defer closer.Close()
 
 	originCluster := blobclient.NewClusterClient(
-		blobclient.NewClientResolver(blobclient.NewProvider(), serverset.DNSRoundRobin(config.Origin)))
+		blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin))
 
-	replicator, err := remotes.New(config.Remotes, originCluster, tagclient.NewDNSProvider())
+	replicator, err := remotes.New(config.Remotes, originCluster, tagclient.NewProvider())
 	if err != nil {
 		log.Fatalf("Error creating remote replicator: %s", err)
 	}

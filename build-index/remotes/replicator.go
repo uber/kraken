@@ -84,7 +84,7 @@ func (r *replicator) Replicate(tag string, d core.Digest, dependencies []core.Di
 		wg.Add(1)
 		go func(rem *remote) {
 			defer wg.Done()
-			if err := r.replicate(rem, tag, d, dependencies); err != nil {
+			if err := r.replicateToRemote(rem, tag, d, dependencies); err != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Errorf("replicate to %s: %s", rem.addr, err))
 				mu.Unlock()
@@ -96,7 +96,7 @@ func (r *replicator) Replicate(tag string, d core.Digest, dependencies []core.Di
 	return errutil.Join(errs)
 }
 
-func (r *replicator) replicate(
+func (r *replicator) replicateToRemote(
 	rem *remote, tag string, d core.Digest, dependencies []core.Digest) error {
 
 	remoteOrigin, err := rem.client.Origin()

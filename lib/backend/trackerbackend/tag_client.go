@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/tracker/tagclient"
 )
 
@@ -18,11 +17,7 @@ type DockerTagClient struct {
 
 // NewDockerTagClient creates a new DockerTagClient.
 func NewDockerTagClient(config Config) (*DockerTagClient, error) {
-	servers, err := serverset.NewRoundRobin(config.RoundRobin)
-	if err != nil {
-		return nil, fmt.Errorf("round robin: %s", err)
-	}
-	return &DockerTagClient{tagclient.New(servers)}, nil
+	return &DockerTagClient{tagclient.New(config.Addr)}, nil
 }
 
 // Download downloads the manifest digest that the given tag name maps to.

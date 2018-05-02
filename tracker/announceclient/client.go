@@ -8,22 +8,8 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/utils/httputil"
-	"code.uber.internal/infra/kraken/utils/log"
 )
-
-// Config defines Client configuration.
-type Config struct {
-	Timeout time.Duration `yaml:"timeout"`
-}
-
-func (c Config) applyDefaults() Config {
-	if c.Timeout == 0 {
-		c.Timeout = 30 * time.Second
-	}
-	return c
-}
 
 // Request defines an announce request.
 type Request struct {
@@ -43,29 +29,23 @@ type Client interface {
 	Announce(name string, h core.InfoHash, complete bool) ([]*core.PeerInfo, time.Duration, error)
 }
 
-// HTTPClient announces to tracker over HTTP.
-type HTTPClient struct {
-	config  Config
-	pctx    core.PeerContext
-	servers serverset.Set
+type client struct {
+	pctx core.PeerContext
+	addr string
 }
 
-// New creates a new HTTPClient.
-func New(config Config, pctx core.PeerContext, servers serverset.Set) *HTTPClient {
-	config = config.applyDefaults()
-	return &HTTPClient{config, pctx, servers}
-}
-
-// Default creates the default HTTPClient.
-func Default(pctx core.PeerContext, servers serverset.Set) *HTTPClient {
-	return New(Config{}, pctx, servers)
+// New creates a new client.
+func New(pctx core.PeerContext, addr string) Client {
+	return &client{pctx, addr}
 }
 
 // Announce announces the torrent identified by (name, h) with the number of
 // downloaded bytes. Returns a list of all other peers announcing for said torrent,
 // sorted by priority, and the interval for the next announce.
-func (c *HTTPClient) Announce(
-	name string, h core.InfoHash, complete bool) (peers []*core.PeerInfo, interval time.Duration, err error) {
+func (c *client) Announce(
+	name string,
+	h core.InfoHash,
+	complete bool) (peers []*core.PeerInfo, interval time.Duration, err error) {
 
 	body, err := json.Marshal(&Request{
 		Name:     name,
@@ -75,27 +55,20 @@ func (c *HTTPClient) Announce(
 	if err != nil {
 		return nil, 0, fmt.Errorf("marshal request: %s", err)
 	}
-	it := c.servers.Iter()
-	for it.Next() {
-		httpResp, err := httputil.Get(
-			fmt.Sprintf("http://%s/announce", it.Addr()),
-			httputil.SendBody(bytes.NewReader(body)),
-			httputil.SendTimeout(c.config.Timeout))
-		if err != nil {
-			if _, ok := err.(httputil.NetworkError); ok {
-				log.Errorf("Error announcing to %s: %s", it.Addr(), err)
-				continue
-			}
-			return nil, 0, err
-		}
-		defer httpResp.Body.Close()
-		var resp Response
-		if err := json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
-			return nil, 0, fmt.Errorf("decode response: %s", err)
-		}
-		return resp.Peers, resp.Interval, nil
+	httpResp, err := httputil.Get(
+		fmt.Sprintf("http://%s/announce", c.addr),
+		httputil.SendBody(bytes.NewReader(body)),
+		httputil.SendTimeout(30*time.Second),
+		httputil.SendRetry())
+	if err != nil {
+		return nil, 0, err
 	}
-	return nil, 0, it.Err()
+	defer httpResp.Body.Close()
+	var resp Response
+	if err := json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
+		return nil, 0, fmt.Errorf("decode response: %s", err)
+	}
+	return resp.Peers, resp.Interval, nil
 }
 
 // DisabledClient rejects all announces. Suitable for origin peers which should

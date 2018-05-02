@@ -20,7 +20,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/middleware"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/errutil"
@@ -217,7 +216,7 @@ func (s Server) replicateToRemote(namespace string, d core.Digest, remoteDNS str
 	defer f.Close()
 
 	remoteCluster := blobclient.NewClusterClient(
-		blobclient.NewClientResolver(s.clientProvider, serverset.DNSRoundRobin(remoteDNS)))
+		blobclient.NewClientResolver(s.clientProvider, remoteDNS))
 
 	return remoteCluster.UploadBlob(namespace, d, f, true)
 }

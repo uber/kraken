@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net/http"
 	"sync"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/utils/backoff"
 	"code.uber.internal/infra/kraken/utils/errutil"
 	"code.uber.internal/infra/kraken/utils/httputil"
@@ -23,35 +23,27 @@ type ClientResolver interface {
 
 type clientResolver struct {
 	provider Provider
-	servers  serverset.Set
+	addr     string
 }
 
 // NewClientResolver returns a new client resolver.
-func NewClientResolver(p Provider, servers serverset.Set) ClientResolver {
-	return &clientResolver{p, servers}
+func NewClientResolver(p Provider, addr string) ClientResolver {
+	return &clientResolver{p, addr}
 }
 
 func (r *clientResolver) Resolve(d core.Digest) ([]Client, error) {
-	it := r.servers.Iter()
-	for it.Next() {
-		locs, err := r.provider.Provide(it.Addr()).Locations(d)
-		if err != nil {
-			if _, ok := err.(httputil.NetworkError); ok {
-				log.Errorf("Error resolving locations from %s: %s", it.Addr(), err)
-				continue
-			}
-			return nil, fmt.Errorf("get locations: %s", err)
-		}
-		if len(locs) == 0 {
-			return nil, errors.New("no locations found")
-		}
-		var clients []Client
-		for _, loc := range locs {
-			clients = append(clients, r.provider.Provide(loc))
-		}
-		return clients, nil
+	locs, err := r.provider.Provide(r.addr).Locations(d)
+	if err != nil {
+		return nil, fmt.Errorf("get locations: %s", err)
 	}
-	return nil, it.Err()
+	if len(locs) == 0 {
+		return nil, errors.New("no locations found")
+	}
+	var clients []Client
+	for _, loc := range locs {
+		clients = append(clients, r.provider.Provide(loc))
+	}
+	return clients, nil
 }
 
 // ClusterClient defines a top-level origin cluster client which handles blob
@@ -91,8 +83,7 @@ func (c *clusterClient) UploadBlob(
 	// Shuffle clients to balance load.
 	shuffle(clients)
 	for _, client := range clients {
-		err = client.UploadBlob(namespace, d, blob, through)
-		if _, ok := err.(httputil.NetworkError); ok {
+		if err := client.UploadBlob(namespace, d, blob, through); err != nil {
 			continue
 		}
 		break
@@ -210,18 +201,20 @@ ORIGINS:
 	POLL:
 		for a.WaitForNext() {
 			if err := makeRequest(client); err != nil {
-				if httputil.IsNetworkError(err) {
-					errs = append(errs, fmt.Errorf("origin %s: %s", client.Addr(), err))
-					continue ORIGINS
+				if serr, ok := err.(httputil.StatusError); ok {
+					if serr.Status == http.StatusAccepted {
+						continue POLL
+					}
+					if serr.Status < 500 {
+						return err
+					}
 				}
-				if httputil.IsAccepted(err) {
-					continue POLL
-				}
-				return err
+				errs = append(errs, fmt.Errorf("origin %s: %s", client.Addr(), err))
+				continue ORIGINS
 			}
 			return nil // Success!
 		}
-		errs = append(errs, fmt.Errorf("origin %s: %s", client.Addr(), err))
+		errs = append(errs, fmt.Errorf("origin %s: 202 backoff: %s", client.Addr(), a.Err()))
 	}
 	return fmt.Errorf("all origins unavailable: %s", errutil.Join(errs))
 }

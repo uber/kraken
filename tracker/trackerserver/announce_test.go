@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/serverset"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -29,7 +28,7 @@ func TestAnnounceSinglePeerResponse(t *testing.T) {
 	blob := core.NewBlobFixture()
 	pctx := core.PeerContextFixture()
 
-	client := announceclient.Default(pctx, serverset.MustRoundRobin(addr))
+	client := announceclient.New(pctx, addr)
 
 	peers := []*core.PeerInfo{core.PeerInfoFixture()}
 
@@ -58,7 +57,7 @@ func TestAnnounceReturnsCachedOrigin(t *testing.T) {
 	pctx := core.PeerContextFixture()
 	octx := core.OriginContextFixture()
 
-	client := announceclient.Default(pctx, serverset.MustRoundRobin(addr))
+	client := announceclient.New(pctx, addr)
 
 	origins := []*core.PeerInfo{core.PeerInfoFromContext(octx, true)}
 
@@ -86,7 +85,7 @@ func TestAnnounceMissingOriginsFetchesAndCachesOrigins(t *testing.T) {
 	octx := core.OriginContextFixture()
 	blob := core.NewBlobFixture()
 
-	client := announceclient.Default(pctx, serverset.MustRoundRobin(addr))
+	client := announceclient.New(pctx, addr)
 
 	origins := []*core.PeerInfo{core.PeerInfoFromContext(octx, true)}
 
@@ -118,7 +117,7 @@ func TestAnnounceUnavailablePeerStoreCanStillProvideOrigins(t *testing.T) {
 	octx := core.OriginContextFixture()
 	blob := core.NewBlobFixture()
 
-	client := announceclient.Default(pctx, serverset.MustRoundRobin(addr))
+	client := announceclient.New(pctx, addr)
 
 	origins := []*core.PeerInfo{core.PeerInfoFromContext(octx, true)}
 
@@ -149,7 +148,7 @@ func TestAnnouceNoOriginsAndUnavailableOriginClusterCanStillProvidePeers(t *test
 	pctx := core.PeerContextFixture()
 	blob := core.NewBlobFixture()
 
-	client := announceclient.Default(pctx, serverset.MustRoundRobin(addr))
+	client := announceclient.New(pctx, addr)
 
 	peers := []*core.PeerInfo{core.PeerInfoFixture()}
 
