@@ -68,3 +68,4 @@ testImport:
   - rate
 - package: github.com/jmoiron/sqlx
 - package: github.com/hashicorp/golang-lru
+- package: github.com/mattn/go-sqlite3

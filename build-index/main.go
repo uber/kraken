@@ -1,9 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"net/http"
+
+	_ "github.com/mattn/go-sqlite3"
 
 	"code.uber.internal/infra/kraken/build-index/remotes"
 	"code.uber.internal/infra/kraken/build-index/tagclient"
@@ -32,6 +35,18 @@ func main() {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}
 	defer closer.Close()
+
+	db, err := sql.Open("sqlite3", config.SQLiteSourcePath)
+	if err != nil {
+		log.Fatalf("Failed to open sqlite3: %s", err)
+	}
+	defer db.Close()
+
+	// Dummy statement to make sure we are not compiling a stub driver with CGO_ENABLE=0.
+	_, err = db.Exec(`PRAGMA database_list;`)
+	if err != nil {
+		log.Fatalf("Failed to list databases: %s\n", err)
+	}
 
 	originCluster := blobclient.NewClusterClient(
 		blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin))
