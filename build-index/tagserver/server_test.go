@@ -33,9 +33,7 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	ctrl := gomock.NewController(t)
 
 	backendClient := mockbackend.NewMockClient(ctrl)
-
-	backends, err := backend.NewManager(nil, nil)
-	require.NoError(t, err)
+	backends := backend.ManagerFixture()
 
 	require.NoError(t, backends.Register(_testNamespace, backendClient))
 

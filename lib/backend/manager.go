@@ -35,14 +35,14 @@ type Manager struct {
 }
 
 // NewManager creates a new Manager.
-func NewManager(namespaces NamespaceConfig, auth AuthNamespaceConfig) (*Manager, error) {
+func NewManager(namespaces NamespaceConfig, auth AuthConfig) (*Manager, error) {
 	var backends []*backend
 	for ns, config := range namespaces {
 		var c Client
 		var err error
 		switch config.Backend {
 		case "s3":
-			c, err = s3backend.NewClient(config.S3, auth[ns].S3, ns)
+			c, err = s3backend.NewClient(config.S3, auth.S3)
 		case "hdfs":
 			c, err = hdfsbackend.NewClient(config.HDFS)
 		case "http":

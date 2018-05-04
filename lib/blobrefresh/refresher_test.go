@@ -33,9 +33,7 @@ func TestRefresh(t *testing.T) {
 
 	mockClient := mockbackend.NewMockClient(ctrl)
 
-	backends, err := backend.NewManager(nil, nil)
-	require.NoError(err)
-
+	backends := backend.ManagerFixture()
 	backends.Register(namespace, mockClient)
 
 	pieceLength := 10

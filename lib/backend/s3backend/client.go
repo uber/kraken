@@ -29,8 +29,11 @@ type Client struct {
 }
 
 // NewClient creates a new Client.
-func NewClient(config Config, auth AuthConfig, namespace string) (*Client, error) {
+func NewClient(config Config, userAuth UserAuthConfig) (*Client, error) {
 	config = config.applyDefaults()
+	if config.Username == "" {
+		return nil, errors.New("invalid config: username required")
+	}
 	if config.Region == "" {
 		return nil, errors.New("invalid config: region required")
 	}
@@ -44,18 +47,16 @@ func NewClient(config Config, auth AuthConfig, namespace string) (*Client, error
 	}
 
 	var creds *credentials.Credentials
-	if auth.AccessKeyID != "" && auth.AccessSecretKey != "" {
-		// These should be provided by langley or usecret
-		log.Info("Using static s3 credentials")
-		creds = credentials.NewStaticCredentials(auth.AccessKeyID, auth.AccessSecretKey, auth.SessionToken)
+	if auth, ok := userAuth[config.Username]; ok {
+		log.Info("S3 backend using Langley credentials")
+		creds = credentials.NewStaticCredentials(
+			auth.S3.AccessKeyID, auth.S3.AccessSecretKey, auth.S3.SessionToken)
 	} else {
-		// fallback to shared credentials
-		// default file name at ./aws/credendtials, profile is a namespace name
-		log.Info("Using shared s3 credentials")
+		log.Info("S3 backend using .aws/credentials")
 		if _, err := os.Stat(".aws/credentials"); os.IsNotExist(err) {
 			return nil, errors.New(".aws/credentials file does not exist")
 		}
-		creds = credentials.NewSharedCredentials("", namespace)
+		creds = credentials.NewSharedCredentials("", config.Username)
 	}
 
 	sess := session.New()

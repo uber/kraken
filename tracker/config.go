@@ -12,14 +12,14 @@ import (
 
 // Config defines tracker configuration.
 type Config struct {
-	ZapLogging        zap.Config                  `yaml:"zap"`
-	Port              int                         `yaml:"port"`
-	Storage           storage.Config              `yaml:"storage"`
-	TrackerServer     trackerserver.Config        `yaml:"trackerserver"`
-	PeerHandoutPolicy peerhandoutpolicy.Config    `yaml:"peerhandoutpolicy"`
-	Origin            string                      `yaml:"origin"`
-	Metrics           metrics.Config              `yaml:"metrics"`
-	Namespaces        backend.NamespaceConfig     `yaml:"namespaces"`
-	AuthNamespaces    backend.AuthNamespaceConfig `yaml:"auth"`
-	TagNamespace      string                      `yaml:"tag_namespace"`
+	ZapLogging        zap.Config               `yaml:"zap"`
+	Port              int                      `yaml:"port"`
+	Storage           storage.Config           `yaml:"storage"`
+	TrackerServer     trackerserver.Config     `yaml:"trackerserver"`
+	PeerHandoutPolicy peerhandoutpolicy.Config `yaml:"peerhandoutpolicy"`
+	Origin            string                   `yaml:"origin"`
+	Metrics           metrics.Config           `yaml:"metrics"`
+	Namespaces        backend.NamespaceConfig  `yaml:"namespaces"`
+	Auth              backend.AuthConfig       `yaml:"auth"`
+	TagNamespace      string                   `yaml:"tag_namespace"`
 }

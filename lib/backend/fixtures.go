@@ -8,6 +8,15 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 )
 
+// ManagerFixture returns a Manager with no clients for testing purposes.
+func ManagerFixture() *Manager {
+	m, err := NewManager(nil, AuthConfig{})
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
 type testClient struct {
 	sync.Mutex
 	blobs map[string][]byte

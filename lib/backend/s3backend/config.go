@@ -9,8 +9,9 @@ import (
 // Config defines s3 connection specific
 // parameters and authetication credentials
 type Config struct {
-	Region string `yaml:"region"` // AWS S3 region
-	Bucket string `yaml:"bucket"` // S3 bucket
+	Username string `yaml:"username"` // IAM username for selecting credentials.
+	Region   string `yaml:"region"`   // AWS S3 region
+	Bucket   string `yaml:"bucket"`   // S3 bucket
 
 	RootDirectory    string `yaml:"root_directory"`     // S3 root directory for docker images
 	UploadPartSize   int64  `yaml:"upload_part_size"`   // part size s3 manager uses for upload
@@ -27,13 +28,17 @@ type Config struct {
 	NamePath string `yaml:"name_path"`
 }
 
-// AuthConfig defines s3 credential parameters
+// UserAuthConfig defines authentication configuration overlayed by Langley.
+// Each key is the iam username of the credentials.
+type UserAuthConfig map[string]AuthConfig
+
+// AuthConfig matches Langley format.
 type AuthConfig struct {
-	// The credentialas are supposed to be delivered via secure
-	// mechanism only, in Uber's world it would langley or usecret
-	AccessKeyID     string `yaml:"aws_access_key_id"`
-	AccessSecretKey string `yaml:"aws_secret_access_key"`
-	SessionToken    string `yaml:"aws_session_token"`
+	S3 struct {
+		AccessKeyID     string `yaml:"aws_access_key_id"`
+		AccessSecretKey string `yaml:"aws_secret_access_key"`
+		SessionToken    string `yaml:"aws_session_token"`
+	} `yaml:"s3"`
 }
 
 func (c Config) applyDefaults() Config {

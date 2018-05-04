@@ -123,10 +123,7 @@ type testServer struct {
 func newTestServer(host string, config Config, cp *testClientProvider) *testServer {
 	pctx := core.PeerContextFixture()
 	fs, cleanFS := store.OriginFileStoreFixture(clock.New())
-	bm, err := backend.NewManager(nil, nil)
-	if err != nil {
-		panic(err)
-	}
+	bm := backend.ManagerFixture()
 	addr, stop := startServer(host, config, fs, cp, pctx, bm)
 	cp.register(host, blobclient.NewWithConfig(addr, blobclient.Config{ChunkSize: 16}))
 	return &testServer{

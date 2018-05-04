@@ -11,9 +11,9 @@ import (
 
 // Config defines proxy configuration
 type Config struct {
-	Store          store.Config                `yaml:"store"`
-	Registry       dockerregistry.Config       `yaml:"registry"`
-	ZapLogging     zap.Config                  `yaml:"zap"`
-	Metrics        metrics.Config              `yaml:"metrics"`
-	AuthNamespaces backend.AuthNamespaceConfig `yaml:"auth"`
+	Store      store.Config          `yaml:"store"`
+	Registry   dockerregistry.Config `yaml:"registry"`
+	ZapLogging zap.Config            `yaml:"zap"`
+	Metrics    metrics.Config        `yaml:"metrics"`
+	Auth       backend.AuthConfig    `yaml:"auth"`
 }

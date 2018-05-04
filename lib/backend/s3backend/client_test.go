@@ -13,11 +13,19 @@ import (
 )
 
 func configFixture(region string, bucket string) Config {
-	return Config{Region: region, Bucket: bucket, NamePath: "identity"}.applyDefaults()
+	return Config{
+		Username: "test-user",
+		Region:   region,
+		Bucket:   bucket,
+		NamePath: "identity",
+	}
 }
 
-func authConfigFixture() AuthConfig {
-	return AuthConfig{AccessKeyID: "accesskey", AccessSecretKey: "secret"}
+func authFixture() UserAuthConfig {
+	var c AuthConfig
+	c.S3.AccessKeyID = "accesskey"
+	c.S3.AccessSecretKey = "secret"
+	return UserAuthConfig{"test-user": c}
 }
 
 func TestS3UploadSuccess(t *testing.T) {
@@ -28,7 +36,7 @@ func TestS3UploadSuccess(t *testing.T) {
 
 	config := configFixture("us-west-1", "test_bucket")
 
-	s3client, err := NewClient(config, authConfigFixture(), "ns")
+	s3client, err := NewClient(config, authFixture())
 	require.NoError(err)
 	req, err := http.NewRequest("POST", "", nil)
 	require.NoError(err)
@@ -50,7 +58,7 @@ func TestS3DownloadSuccess(t *testing.T) {
 
 	config := configFixture("us-west-1", "test_bucket")
 
-	s3client, err := NewClient(config, authConfigFixture(), "ns")
+	s3client, err := NewClient(config, authFixture())
 	require.NoError(err)
 	req, err := http.NewRequest("POST", "", nil)
 	require.NoError(err)

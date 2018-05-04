@@ -12,9 +12,9 @@ import (
 // NamespaceConfig defines a mapping of namespace regex to Config.
 type NamespaceConfig map[string]Config
 
-// AuthNamespaceConfig defines auth credentials for corresponding namespaces
+// Auth defines auth credentials for corresponding namespaces
 // It has to be different due to langley secrets overlay structure
-type AuthNamespaceConfig map[string]AuthConfig
+type Auth map[string]AuthConfig
 
 // Config defines the union of configuration for all backends, where
 // the Backend field serves as the key for which backend is activated.
@@ -31,5 +31,5 @@ type Config struct {
 // AuthConfig defines the union of authentication credentials
 // for all type of remote backends. s3 only supported currently
 type AuthConfig struct {
-	S3 s3backend.AuthConfig `yaml:"s3"`
+	S3 s3backend.UserAuthConfig `yaml:"s3"`
 }
