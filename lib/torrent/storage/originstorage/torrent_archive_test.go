@@ -41,11 +41,7 @@ func newArchiveMocks(t *testing.T) (*archiveMocks, func()) {
 	cleanup.Add(ctrl.Finish)
 
 	backendClient := mockbackend.NewMockClient(ctrl)
-
-	backends, err := backend.NewManager(nil, nil)
-	if err != nil {
-		panic(err)
-	}
+	backends := backend.ManagerFixture()
 	backends.Register(namespace, backendClient)
 
 	blobRefresher := blobrefresh.New(

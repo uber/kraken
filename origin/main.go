@@ -99,7 +99,7 @@ func main() {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
 
-	backendManager, err := backend.NewManager(config.Namespaces, config.AuthNamespaces)
+	backendManager, err := backend.NewManager(config.Namespaces, config.Auth)
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}

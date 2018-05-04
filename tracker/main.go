@@ -52,7 +52,7 @@ func main() {
 	originCluster := blobclient.NewClusterClient(
 		blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin))
 
-	backends, err := backend.NewManager(config.Namespaces, config.AuthNamespaces)
+	backends, err := backend.NewManager(config.Namespaces, config.Auth)
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}

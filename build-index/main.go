@@ -56,7 +56,7 @@ func main() {
 		log.Fatalf("Error creating remote replicator: %s", err)
 	}
 
-	backends, err := backend.NewManager(config.Namespaces, config.AuthNamespaces)
+	backends, err := backend.NewManager(config.Namespaces, config.Auth)
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}

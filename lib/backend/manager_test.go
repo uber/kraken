@@ -23,8 +23,7 @@ func TestManagerNamespaceMatching(t *testing.T) {
 		t.Run(test.namespace, func(t *testing.T) {
 			require := require.New(t)
 
-			m, err := NewManager(nil, nil)
-			require.NoError(err)
+			m := ManagerFixture()
 
 			require.NoError(m.Register("static", c1))
 			require.NoError(m.Register("uber-usi/.*", c2))
@@ -38,14 +37,18 @@ func TestManagerNamespaceMatching(t *testing.T) {
 }
 
 func TestManagerNamespaceNoMatch(t *testing.T) {
-	require := require.New(t)
-
-	m, err := NewManager(nil, nil)
-	require.NoError(err)
-
-	_, err = m.GetClient("")
-	require.Error(err)
-
-	_, err = m.GetClient("unknown")
-	require.Error(err)
+	tests := []struct {
+		desc      string
+		namespace string
+	}{
+		{"empty namespace", ""},
+		{"unknown namespace", "blah"},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			m := ManagerFixture()
+			_, err := m.GetClient(test.namespace)
+			require.Error(t, err)
+		})
+	}
 }

@@ -15,14 +15,14 @@ import (
 
 // Config defines agent configuration.
 type Config struct {
-	ZapLogging     zap.Config                  `yaml:"zap"`
-	Metrics        metrics.Config              `yaml:"metrics"`
-	Store          store.Config                `yaml:"store"`
-	Registry       dockerregistry.Config       `yaml:"registry"`
-	Scheduler      scheduler.Config            `yaml:"scheduler"`
-	PeerIDFactory  core.PeerIDFactory          `yaml:"peer_id_factory"`
-	NetworkEvent   networkevent.Config         `yaml:"network_event"`
-	Tracker        string                      `yaml:"tracker"`
-	AgentServer    agentserver.Config          `yaml:"agentserver"`
-	AuthNamespaces backend.AuthNamespaceConfig `yaml:"auth"`
+	ZapLogging    zap.Config            `yaml:"zap"`
+	Metrics       metrics.Config        `yaml:"metrics"`
+	Store         store.Config          `yaml:"store"`
+	Registry      dockerregistry.Config `yaml:"registry"`
+	Scheduler     scheduler.Config      `yaml:"scheduler"`
+	PeerIDFactory core.PeerIDFactory    `yaml:"peer_id_factory"`
+	NetworkEvent  networkevent.Config   `yaml:"network_event"`
+	Tracker       string                `yaml:"tracker"`
+	AgentServer   agentserver.Config    `yaml:"agentserver"`
+	Auth          backend.AuthConfig    `yaml:"auth"`
 }
