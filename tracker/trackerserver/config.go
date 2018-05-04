@@ -8,8 +8,10 @@ import (
 
 // Config defines configuration for the tracker service.
 type Config struct {
-	MetaInfoRequestCache dedup.RequestCacheConfig `yaml:"metainfo_request_cache"`
-	TagCache             dedup.CacheConfig        `yaml:"tag_cache"`
+	TagCache dedup.CacheConfig `yaml:"tag_cache"`
+
+	// Limits the number of unique metainfo requests to origin per namespace/digest.
+	GetMetaInfoLimit time.Duration `yaml:"get_metainfo_limit"`
 
 	// Limits the number of peers returned on each announce.
 	PeerHandoutLimit int `yaml:"announce_limit"`
@@ -18,6 +20,9 @@ type Config struct {
 }
 
 func (c Config) applyDefaults() Config {
+	if c.GetMetaInfoLimit == 0 {
+		c.GetMetaInfoLimit = time.Second
+	}
 	if c.PeerHandoutLimit == 0 {
 		c.PeerHandoutLimit = 50
 	}

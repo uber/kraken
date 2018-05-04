@@ -53,12 +53,12 @@ func (e *cachedError) expired(now time.Time) bool {
 	return now.After(e.expiresAt)
 }
 
+// Request defines functions which encapsulate a request.
+type Request func() error
+
 // ErrorMatcher defines functions which RequestCache uses to detect user defined
 // errors.
 type ErrorMatcher func(error) bool
-
-// Request defines functions which encapsulate a request.
-type Request func() error
 
 // RequestCache tracks pending requests and caches errors for configurable TTLs.
 // It is used to prevent request duplication and DDOS-ing external components.

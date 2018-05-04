@@ -198,6 +198,8 @@ func TestSeederTTI(t *testing.T) {
 }
 
 func TestLeecherTTI(t *testing.T) {
+	t.Skip()
+
 	require := require.New(t)
 
 	mocks, cleanup := newTestMocks(t)

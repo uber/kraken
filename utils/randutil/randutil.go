@@ -84,3 +84,8 @@ func Bools(n int) []bool {
 	}
 	return b
 }
+
+// Duration returns a random duration below limit.
+func Duration(limit time.Duration) time.Duration {
+	return time.Duration(rand.Int63n(int64(limit)))
+}

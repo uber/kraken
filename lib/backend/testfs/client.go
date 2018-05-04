@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
@@ -25,6 +26,18 @@ func NewClient(config Config) (*Client, error) {
 		return nil, errors.New("no addr configured")
 	}
 	return &Client{config}, nil
+}
+
+// Stat returns blob info for name.
+func (c *Client) Stat(name string) (*blobinfo.Info, error) {
+	_, err := httputil.Head(fmt.Sprintf("http://%s/files/%s", c.config.Addr, name))
+	if err != nil {
+		if httputil.IsNotFound(err) {
+			return nil, backenderrors.ErrBlobNotFound
+		}
+		return nil, err
+	}
+	return blobinfo.New(), nil
 }
 
 // Upload uploads src to name.

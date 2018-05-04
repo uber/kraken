@@ -14,7 +14,8 @@ type tagResolver struct {
 	backends *backend.Manager
 }
 
-func (r *tagResolver) Resolve(name string) (string, error) {
+func (r *tagResolver) Resolve(key interface{}) (interface{}, error) {
+	name := key.(string)
 	log.With("tag", name).Info("Resolving tag")
 	client, err := r.backends.GetClient(name)
 	if err != nil {

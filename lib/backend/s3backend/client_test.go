@@ -41,7 +41,7 @@ func TestS3UploadSuccess(t *testing.T) {
 	req, err := http.NewRequest("POST", "", nil)
 	require.NoError(err)
 
-	s3client.s3Session = NewS3Mock(b, req)
+	s3client.svc = NewS3Mock(b, req)
 
 	f, err := ioutil.TempFile("", "s3test")
 	require.NoError(err)
@@ -63,7 +63,7 @@ func TestS3DownloadSuccess(t *testing.T) {
 	req, err := http.NewRequest("POST", "", nil)
 	require.NoError(err)
 
-	s3client.s3Session = NewS3Mock(b, req)
+	s3client.svc = NewS3Mock(b, req)
 
 	f, err := ioutil.TempFile("", "s3test")
 	require.NoError(err)

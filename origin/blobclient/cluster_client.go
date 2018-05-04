@@ -59,7 +59,6 @@ type ClusterClient interface {
 
 type clusterClient struct {
 	resolver            ClientResolver
-	pollMetaInfoBackoff *backoff.Backoff
 	pollDownloadBackoff *backoff.Backoff
 }
 
@@ -67,7 +66,6 @@ type clusterClient struct {
 func NewClusterClient(r ClientResolver) ClusterClient {
 	return &clusterClient{
 		resolver:            r,
-		pollMetaInfoBackoff: backoff.New(backoff.Config{}),
 		pollDownloadBackoff: backoff.New(backoff.Config{}),
 	}
 }
@@ -83,7 +81,8 @@ func (c *clusterClient) UploadBlob(
 	// Shuffle clients to balance load.
 	shuffle(clients)
 	for _, client := range clients {
-		if err := client.UploadBlob(namespace, d, blob, through); err != nil {
+		err = client.UploadBlob(namespace, d, blob, through)
+		if err != nil {
 			continue
 		}
 		break
@@ -91,12 +90,19 @@ func (c *clusterClient) UploadBlob(
 	return err
 }
 
-// GetMetaInfo returns the metainfo for d.
+// GetMetaInfo returns the metainfo for d. Does not handle polling.
 func (c *clusterClient) GetMetaInfo(namespace string, d core.Digest) (mi *core.MetaInfo, err error) {
-	err = Poll(c.resolver, c.pollMetaInfoBackoff, d, func(client Client) error {
+	clients, err := c.resolver.Resolve(d)
+	if err != nil {
+		return nil, fmt.Errorf("resolve clients: %s", err)
+	}
+	for _, client := range clients {
 		mi, err = client.GetMetaInfo(namespace, d)
-		return err
-	})
+		if err != nil {
+			continue
+		}
+		break
+	}
 	return mi, err
 }
 

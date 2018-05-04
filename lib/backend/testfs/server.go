@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 
 	"code.uber.internal/infra/kraken/lib/store"
@@ -30,6 +31,7 @@ func NewServer() *Server {
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/health", s.healthHandler)
+	r.Head("/files/:name", handler.Wrap(s.statHandler))
 	r.Get("/files/:name", handler.Wrap(s.downloadHandler))
 	r.Post("/files/:name", handler.Wrap(s.uploadHandler))
 	return r
@@ -44,10 +46,25 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
+func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
+	name, err := parseName(r)
+	if err != nil {
+		return err
+	}
+	if _, err := s.fs.GetCacheFileStat(name); err != nil {
+		if os.IsNotExist(err) {
+			return handler.ErrorStatus(http.StatusNotFound)
+		}
+		return handler.Errorf("file store: %s", err)
+	}
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
 func (s *Server) downloadHandler(w http.ResponseWriter, r *http.Request) error {
-	name := chi.URLParam(r, "name")
-	if name == "" {
-		return handler.Errorf("name required").Status(http.StatusBadRequest)
+	name, err := parseName(r)
+	if err != nil {
+		return err
 	}
 	f, err := s.fs.GetCacheFileReader(name)
 	if err != nil {
@@ -63,12 +80,10 @@ func (s *Server) downloadHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) uploadHandler(w http.ResponseWriter, r *http.Request) error {
-	defer r.Body.Close()
-	name := chi.URLParam(r, "name")
-	if name == "" {
-		return handler.Errorf("name required").Status(http.StatusBadRequest)
+	name, err := parseName(r)
+	if err != nil {
+		return err
 	}
-
 	tmp := fmt.Sprintf("%s.%s", name, uuid.Generate().String())
 	if err := s.fs.CreateUploadFile(tmp, 0); err != nil {
 		return err
@@ -81,12 +96,18 @@ func (s *Server) uploadHandler(w http.ResponseWriter, r *http.Request) error {
 	if _, err := io.Copy(writer, r.Body); err != nil {
 		return fmt.Errorf("copy: %s", err)
 	}
-	defer r.Body.Close()
-
 	if err := s.fs.MoveUploadFileToCache(tmp, name); err != nil {
 		if !os.IsExist(err) {
 			return err
 		}
 	}
 	return nil
+}
+
+func parseName(r *http.Request) (string, error) {
+	name, err := url.PathUnescape(chi.URLParam(r, "name"))
+	if err != nil {
+		return "", handler.Errorf("path unescape name: %s", err).Status(http.StatusBadRequest)
+	}
+	return name, nil
 }

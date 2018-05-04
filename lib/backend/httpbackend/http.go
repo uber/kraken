@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -31,6 +32,12 @@ func (c Config) applyDefaults() Config {
 // NewClient creates s3 client from input parameters
 func NewClient(config Config) (*Client, error) {
 	return &Client{config: config.applyDefaults()}, nil
+}
+
+// Stat always succeeds.
+// TODO(codyg): Support stat URL.
+func (c *Client) Stat(name string) (*blobinfo.Info, error) {
+	return blobinfo.New(), nil
 }
 
 // Download downloads the content from a configured url and writes the data

@@ -208,7 +208,7 @@ func Send(method, url string, options ...SendOption) (resp *http.Response, err e
 		break
 	}
 	if err != nil {
-		return nil, err
+		return nil, NetworkError{err}
 	}
 	if !opts.acceptedCodes[resp.StatusCode] {
 		return nil, NewStatusError(resp)

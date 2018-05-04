@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 )
 
@@ -26,6 +27,12 @@ func NewClient(config Config) (*Client, error) {
 
 func newClient(config Config, cluster blobclient.ClusterClient) *Client {
 	return &Client{config, cluster}
+}
+
+// Stat always succeeds.
+// TODO(codyg): Support stat-ing remote files via origin.
+func (c *Client) Stat(name string) (*blobinfo.Info, error) {
+	return blobinfo.New(), nil
 }
 
 // Download downloads name into dst. name must be the sha256 digest of src.

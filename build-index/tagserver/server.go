@@ -96,10 +96,11 @@ func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	digest, err := s.cache.Get(tag)
+	v, err := s.cache.Get(tag)
 	if err != nil {
 		return err
 	}
+	digest := v.(string)
 	io.WriteString(w, digest)
 	return nil
 }

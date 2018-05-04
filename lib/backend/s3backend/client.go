@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -23,9 +24,9 @@ import (
 
 // Client implements a backend.Client for S3.
 type Client struct {
-	config    Config
-	pather    namepath.Pather
-	s3Session s3iface.S3API
+	config Config
+	pather namepath.Pather
+	svc    s3iface.S3API
 }
 
 // NewClient creates a new Client.
@@ -59,10 +60,28 @@ func NewClient(config Config, userAuth UserAuthConfig) (*Client, error) {
 		creds = credentials.NewSharedCredentials("", config.Username)
 	}
 
-	sess := session.New()
-	svc := s3.New(sess, aws.NewConfig().WithRegion(config.Region).WithCredentials(creds))
+	svc := s3.New(session.New(), aws.NewConfig().WithRegion(config.Region).WithCredentials(creds))
 
 	return &Client{config, pather, svc}, nil
+}
+
+// Stat returns blob info for name.
+func (c *Client) Stat(name string) (*blobinfo.Info, error) {
+	path, err := c.pather.Path(name)
+	if err != nil {
+		return nil, fmt.Errorf("path: %s", err)
+	}
+	_, err = c.svc.HeadObject(&s3.HeadObjectInput{
+		Bucket: aws.String(c.config.Bucket),
+		Key:    aws.String(path),
+	})
+	if err != nil {
+		if isNotFound(err) {
+			return nil, backenderrors.ErrBlobNotFound
+		}
+		return nil, err
+	}
+	return blobinfo.New(), nil
 }
 
 type exceededCapError error
@@ -98,7 +117,7 @@ func (c *Client) Download(name string, dst io.Writer) error {
 		writerAt = &capBuffer{int64(c.config.BufferGuard), aws.NewWriteAtBuffer([]byte{})}
 	}
 
-	downloader := s3manager.NewDownloaderWithClient(c.s3Session, func(d *s3manager.Downloader) {
+	downloader := s3manager.NewDownloaderWithClient(c.svc, func(d *s3manager.Downloader) {
 		d.PartSize = c.config.DownloadPartSize // per part
 		d.Concurrency = c.config.DownloadConcurrency
 	})
@@ -134,7 +153,7 @@ func (c *Client) Upload(name string, src io.Reader) error {
 		return fmt.Errorf("path: %s", err)
 	}
 
-	uploader := s3manager.NewUploaderWithClient(c.s3Session, func(u *s3manager.Uploader) {
+	uploader := s3manager.NewUploaderWithClient(c.svc, func(u *s3manager.Uploader) {
 		u.PartSize = c.config.UploadPartSize // per part,
 		u.Concurrency = c.config.UploadConcurrency
 	})
