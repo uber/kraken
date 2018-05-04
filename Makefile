@@ -212,6 +212,28 @@ run_tracker: tracker redis
 		-p 26232:26232 \
 		kraken-tracker:dev
 
+.PHONY: build-index
+build-index:
+	-rm build-index/build-index
+	# Cross compiling cgo for sqlite3 is not well supported. 
+	# This workaround builds the binary inside a linux container. 
+	# This takes a few seconds.
+	docker run --rm -it -v $(OLDGOPATH):/go -w /go/src/code.uber.internal/infra/kraken/build-index golang:latest go build
+	docker build -t kraken-build-index:dev -f docker/build-index/Dockerfile ./
+
+run_build-index: build-index
+	-docker stop kraken-build-index
+	-docker rm kraken-build-index
+	docker run -d \
+		--name=kraken-build-index \
+		--hostname=192.168.65.1 \
+		-v /tmp/kraken-build-index:/var/cache/udocker/kraken-build-index/ \
+		-p 5263:5263 \
+		kraken-build-index:dev \
+		/home/udocker/kraken-build-index/build-index/build-index \
+		--config=build-index/development.yaml \
+		--cluster=test-cluster
+
 .PHONY: origin
 origin:
 	-rm origin/origin
@@ -229,7 +251,7 @@ run_origin: origin
 		-e UBER_DATACENTER=sjc1 \
 		-p 19003:19003 \
 		-p 5081:5081 \
-		# Mount cache dir so restart will be able to load from disk
+		# Mount cache dir so restart will be able to load from disk 
 		-v /tmp/kraken:/var/kraken/ \
 		kraken-origin:dev \
 		/usr/bin/kraken-origin --peer_ip=192.168.65.1 --peer_port=5081 --blobserver_port=19003
