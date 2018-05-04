@@ -173,6 +173,9 @@ func (f *casFileEntryFactory) ListNames(state FileState) ([]string, error) {
 			if depth == 0 {
 				names = append(names, info.Name())
 			} else {
+				if !info.IsDir() {
+					continue
+				}
 				if err := readNames(path.Join(dir, info.Name()), depth-1); err != nil {
 					return err
 				}

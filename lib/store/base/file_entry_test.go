@@ -17,7 +17,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFileEntryFactoryList(t *testing.T) {
+func checkListNames(t *testing.T, factory FileEntryFactory, state FileState, expected []FileEntry) {
+	t.Helper()
+
+	var expectedNames []string
+	for _, e := range expected {
+		expectedNames = append(expectedNames, e.GetName())
+	}
+	sort.Strings(expectedNames)
+
+	names, err := factory.ListNames(state)
+	require.NoError(t, err)
+
+	sort.Strings(names)
+	require.Equal(t, expectedNames, names)
+}
+
+func TestFileEntryFactoryListNames(t *testing.T) {
 	for _, factory := range []FileEntryFactory{
 		DefaultLocalFileEntryFactory(clock.New()),
 		DefaultCASFileEntryFactory(clock.New()),
@@ -29,20 +45,6 @@ func TestFileEntryFactoryList(t *testing.T) {
 			state, _, _, cleanup := fileStatesFixture()
 			defer cleanup()
 
-			checkListNames := func(expectedEntries []FileEntry) {
-				var expectedNames []string
-				for _, e := range expectedEntries {
-					expectedNames = append(expectedNames, e.GetName())
-				}
-				sort.Strings(expectedNames)
-
-				names, err := factory.ListNames(state)
-				require.NoError(err)
-
-				sort.Strings(names)
-				require.Equal(expectedNames, names)
-			}
-
 			// ListNames should show all created entries.
 			var entries []FileEntry
 			for i := 0; i < 100; i++ {
@@ -50,15 +52,34 @@ func TestFileEntryFactoryList(t *testing.T) {
 				require.NoError(entry.Create(state, 1))
 				entries = append(entries, entry)
 			}
-			checkListNames(entries)
+			checkListNames(t, factory, state, entries)
 
 			// ListNames should not show deleted entries.
 			for _, e := range entries[:50] {
 				require.NoError(e.Delete())
 			}
-			checkListNames(entries[50:])
+			checkListNames(t, factory, state, entries[50:])
 		})
 	}
+}
+
+func TestFileEntryFactoryLocalToCASListNames(t *testing.T) {
+	require := require.New(t)
+
+	state, _, _, cleanup := fileStatesFixture()
+	defer cleanup()
+
+	localFactory := DefaultLocalFileEntryFactory(clock.New())
+	casFactory := DefaultCASFileEntryFactory(clock.New())
+
+	localEntry := localFactory.Create(core.DigestFixture().Hex(), state)
+	require.NoError(localEntry.Create(state, 1))
+
+	casEntry := casFactory.Create(core.DigestFixture().Hex(), state)
+	require.NoError(casEntry.Create(state, 1))
+
+	// Local entry should not show up.
+	checkListNames(t, casFactory, state, []FileEntry{casEntry})
 }
 
 // TODO(codyg): Dismantle this as only one FileEntry implementation will be used.
