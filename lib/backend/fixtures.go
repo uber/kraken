@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 )
 
 // ManagerFixture returns a Manager with no clients for testing purposes.
@@ -25,6 +26,16 @@ type testClient struct {
 // ClientFixture returns an in-memory Client for testing purposes.
 func ClientFixture() Client {
 	return &testClient{blobs: make(map[string][]byte)}
+}
+
+func (c *testClient) Stat(name string) (*blobinfo.Info, error) {
+	c.Lock()
+	defer c.Unlock()
+
+	if _, ok := c.blobs[name]; !ok {
+		return nil, backenderrors.ErrBlobNotFound
+	}
+	return blobinfo.New(), nil
 }
 
 func (c *testClient) Upload(name string, src io.Reader) error {

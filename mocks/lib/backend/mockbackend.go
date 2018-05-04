@@ -5,6 +5,7 @@
 package mockbackend
 
 import (
+	blobinfo "code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	gomock "github.com/golang/mock/gomock"
 	io "io"
 	reflect "reflect"
@@ -43,6 +44,19 @@ func (m *MockClient) Download(arg0 string, arg1 io.Writer) error {
 // Download indicates an expected call of Download
 func (mr *MockClientMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0, arg1)
+}
+
+// Stat mocks base method
+func (m *MockClient) Stat(arg0 string) (*blobinfo.Info, error) {
+	ret := m.ctrl.Call(m, "Stat", arg0)
+	ret0, _ := ret[0].(*blobinfo.Info)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Stat indicates an expected call of Stat
+func (mr *MockClientMockRecorder) Stat(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockClient)(nil).Stat), arg0)
 }
 
 // Upload mocks base method

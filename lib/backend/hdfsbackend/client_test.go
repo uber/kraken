@@ -228,3 +228,41 @@ func TestClientUploadErrorsWhenExceedsBufferGuard(t *testing.T) {
 	_, ok := err.(drainSrcError).err.(exceededCapError)
 	require.True(ok)
 }
+
+func TestClientStat(t *testing.T) {
+	require := require.New(t)
+
+	blob := core.NewBlobFixture()
+
+	server := &testServer{
+		getName: redirectToDataNode,
+		getData: writeResponse(http.StatusOK, nil),
+	}
+	addr, stop := testutil.StartServer(server.handler())
+	defer stop()
+
+	client, err := NewClient(configFixture(addr))
+	require.NoError(err)
+
+	_, err = client.Stat(blob.Digest.Hex())
+	require.NoError(err)
+}
+
+func TestClientStatNotFound(t *testing.T) {
+	require := require.New(t)
+
+	blob := core.NewBlobFixture()
+
+	server := &testServer{
+		getName: redirectToDataNode,
+		getData: writeResponse(http.StatusNotFound, nil),
+	}
+	addr, stop := testutil.StartServer(server.handler())
+	defer stop()
+
+	client, err := NewClient(configFixture(addr))
+	require.NoError(err)
+
+	_, err = client.Stat(blob.Digest.Hex())
+	require.Equal(backenderrors.ErrBlobNotFound, err)
+}

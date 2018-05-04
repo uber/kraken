@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -40,6 +41,27 @@ func NewClient(config Config) (*Client, error) {
 		return nil, fmt.Errorf("namepath: %s", err)
 	}
 	return &Client{config, pather}, nil
+}
+
+// Stat returns blob info for name.
+func (c *Client) Stat(name string) (*blobinfo.Info, error) {
+	path, err := c.pather.Path(name)
+	if err != nil {
+		return nil, fmt.Errorf("path: %s", err)
+	}
+	for _, node := range c.config.NameNodes {
+		_, err := httputil.Get(fmt.Sprintf("http://%s/%s?op=GETFILESTATUS", node, path))
+		if err != nil {
+			if retryable(err) {
+				continue
+			}
+			if httputil.IsNotFound(err) {
+				return nil, backenderrors.ErrBlobNotFound
+			}
+			return nil, err
+		}
+	}
+	return blobinfo.New(), nil
 }
 
 // Download downloads name into dst.

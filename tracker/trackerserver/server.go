@@ -17,7 +17,6 @@ import (
 	"code.uber.internal/infra/kraken/tracker/storage"
 	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
-	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
 // Server serves Tracker endpoints.
@@ -29,8 +28,8 @@ type Server struct {
 	policy        peerhandoutpolicy.PeerHandoutPolicy
 	originCluster blobclient.ClusterClient
 
-	metaInfoStore        storage.MetaInfoStore
-	metaInfoRequestCache *dedup.RequestCache
+	metaInfoStore      storage.MetaInfoStore
+	getMetaInfoLimiter *dedup.Limiter
 
 	tagCache *dedup.Cache
 }
@@ -51,20 +50,22 @@ func New(
 		"module": "trackerserver",
 	})
 
-	metaInfoRequestCache := dedup.NewRequestCache(config.MetaInfoRequestCache, clock.New())
-	metaInfoRequestCache.SetNotFound(httputil.IsNotFound)
+	getMetaInfoLimiter := dedup.NewLimiter(
+		config.GetMetaInfoLimit,
+		clock.New(),
+		&metaInfoGetter{stats, originCluster, metaInfoStore})
 
 	tagCache := dedup.NewCache(config.TagCache, clock.New(), &tagResolver{tags})
 
 	return &Server{
-		config:               config,
-		stats:                stats,
-		peerStore:            peerStore,
-		policy:               policy,
-		originCluster:        originCluster,
-		metaInfoStore:        metaInfoStore,
-		metaInfoRequestCache: metaInfoRequestCache,
-		tagCache:             tagCache,
+		config:             config,
+		stats:              stats,
+		peerStore:          peerStore,
+		policy:             policy,
+		originCluster:      originCluster,
+		metaInfoStore:      metaInfoStore,
+		getMetaInfoLimiter: getMetaInfoLimiter,
+		tagCache:           tagCache,
 	}
 }
 

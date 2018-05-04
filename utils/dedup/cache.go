@@ -29,86 +29,50 @@ func (c CacheConfig) applyDefaults() CacheConfig {
 
 // Resolver is used by Cache to resolve keys into values / errors.
 type Resolver interface {
-	Resolve(key string) (val string, err error)
+	Resolve(key interface{}) (val interface{}, err error)
 }
 
 type result struct {
 	sync.RWMutex
-	val       string
+	val       interface{}
 	err       error
 	expiresAt time.Time
 }
 
 func (r *result) expired(now time.Time) bool {
-	r.RLock()
-	defer r.RUnlock()
 	return now.After(r.expiresAt)
-}
-
-type cleanupManager struct {
-	sync.RWMutex
-	clk      clock.Clock
-	interval time.Duration
-	prev     time.Time
-}
-
-func (c *cleanupManager) _ready() bool {
-	return c.clk.Now().After(c.prev.Add(c.interval))
-}
-
-// ready quickly checks if c is ready for the next cleanup.
-func (c *cleanupManager) ready() bool {
-	c.RLock()
-	defer c.RUnlock()
-	return c._ready()
-}
-
-// do executes f if c is ready for the next cleanup.
-func (c *cleanupManager) do(f func()) {
-	c.Lock()
-	defer c.Unlock()
-	if !c._ready() {
-		return
-	}
-	f()
-	c.prev = c.clk.Now()
 }
 
 // Cache deduplicates and memoizes key to value lookups using a Resolver.
 type Cache struct {
 	sync.RWMutex
-	config         CacheConfig
-	clk            clock.Clock
-	resolver       Resolver
-	results        map[string]*result
-	cleanupManager *cleanupManager
+	config   CacheConfig
+	clk      clock.Clock
+	resolver Resolver
+	results  map[interface{}]*result
+	cleanup  *IntervalTrap
 }
 
 // NewCache creates a new Cache. The given resolver will be used to perform key
 // to value lookups.
 func NewCache(config CacheConfig, clk clock.Clock, resolver Resolver) *Cache {
 	config = config.applyDefaults()
-	return &Cache{
+	cache := &Cache{
 		config:   config,
 		clk:      clk,
 		resolver: resolver,
-		results:  make(map[string]*result),
-		cleanupManager: &cleanupManager{
-			clk:      clk,
-			interval: config.CleanupInterval,
-			prev:     clk.Now(),
-		},
+		results:  make(map[interface{}]*result),
 	}
+	cache.cleanup = NewIntervalTrap(config.CleanupInterval, clk, &cacheCleanup{cache})
+	return cache
 }
 
 // Get performs a key lookup using c's Resolver. Guarantees that no matter how
 // many concurrent calls to Get are made, there will be exactly one Resolve(key)
 // call within the configured TTL if Resolve(key) returns nil error, else within
 // the configured ErrorTTL if Resolve(key) returns non-nil error.
-func (c *Cache) Get(key string) (val string, err error) {
-
-	// Very fast call which periodically deletes expired cache items.
-	c.maybeClean()
+func (c *Cache) Get(key interface{}) (val interface{}, err error) {
+	c.cleanup.Trap()
 
 	// Quickly check for a cached result under global read lock.
 	c.RLock()
@@ -151,18 +115,20 @@ func (c *Cache) Get(key string) (val string, err error) {
 	return r.val, r.err
 }
 
-func (c *Cache) maybeClean() {
-	if !c.cleanupManager.ready() {
-		return
-	}
-	c.cleanupManager.do(func() {
-		c.Lock()
-		defer c.Unlock()
+type cacheCleanup struct {
+	cache *Cache
+}
 
-		for k, r := range c.results {
-			if r.expired(c.clk.Now()) {
-				delete(c.results, k)
-			}
+func (c *cacheCleanup) Run() {
+	c.cache.Lock()
+	defer c.cache.Unlock()
+
+	for k, r := range c.cache.results {
+		r.RLock()
+		expired := r.expired(c.cache.clk.Now())
+		r.RUnlock()
+		if expired {
+			delete(c.cache.results, k)
 		}
-	})
+	}
 }

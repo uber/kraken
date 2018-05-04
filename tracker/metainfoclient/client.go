@@ -23,12 +23,18 @@ type Client interface {
 }
 
 type client struct {
-	addr string
+	addr    string
+	backoff *backoff.Backoff
 }
 
 // New returns a new Client.
 func New(addr string) Client {
-	return &client{addr}
+	return NewWithBackoff(addr, backoff.New(backoff.Config{RetryTimeout: 15 * time.Minute}))
+}
+
+// NewWithBackoff returns a new Client with custom backoff.
+func NewWithBackoff(addr string, b *backoff.Backoff) Client {
+	return &client{addr, b}
 }
 
 // Download returns the MetaInfo associated with name. Returns ErrNotFound if
@@ -39,7 +45,7 @@ func (c *client) Download(namespace, name string) (*core.MetaInfo, error) {
 		fmt.Sprintf(
 			"http://%s/namespace/%s/blobs/%s/metainfo",
 			c.addr, url.PathEscape(namespace), d),
-		backoff.New(backoff.Config{RetryTimeout: 15 * time.Minute}),
+		c.backoff,
 		httputil.SendTimeout(30*time.Second),
 		httputil.SendRetry())
 	if err != nil {

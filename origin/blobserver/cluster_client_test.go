@@ -162,9 +162,7 @@ func TestClusterClientReturnsErrorOnNoAvailableOrigins(t *testing.T) {
 	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
 
 	mockClient1.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(nil, httputil.NetworkError{})
-	mockClient1.EXPECT().Addr().Return("client1")
 	mockClient2.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(nil, httputil.NetworkError{})
-	mockClient2.EXPECT().Addr().Return("client2")
 
 	_, err := cc.GetMetaInfo(namespace, blob.Digest)
 	require.Error(err)

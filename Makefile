@@ -115,7 +115,7 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/utils/dedup/mockdedup.go \
 		-package mockdedup \
-		code.uber.internal/infra/kraken/utils/dedup Resolver
+		code.uber.internal/infra/kraken/utils/dedup Resolver,TaskRunner,IntervalTask
 
 	mkdir -p mocks/lib/backend
 	$(mockgen) \

@@ -17,7 +17,8 @@ type tagResolver struct {
 	client backend.Client
 }
 
-func (r *tagResolver) Resolve(name string) (string, error) {
+func (r *tagResolver) Resolve(key interface{}) (interface{}, error) {
+	name := key.(string)
 	log.With("tag", name).Info("Resolving tag")
 	var b bytes.Buffer
 	if err := r.client.Download(name, &b); err != nil {
@@ -38,7 +39,7 @@ func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
-	if _, err := io.WriteString(w, digest); err != nil {
+	if _, err := io.WriteString(w, digest.(string)); err != nil {
 		return handler.Errorf("write digest: %s", err)
 	}
 	return nil

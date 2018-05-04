@@ -35,7 +35,7 @@ func TestCacheGetConcurrency(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 5000; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -46,7 +46,7 @@ func TestCacheGetConcurrency(t *testing.T) {
 			}
 			v, err := cache.Get(k)
 			require.NoError(err)
-			require.Equal(kvs[k], v)
+			require.Equal(kvs[k], v.(string))
 		}()
 	}
 	wg.Wait()
@@ -70,7 +70,7 @@ func TestCacheGetError(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		v, e := cache.Get(k)
 		require.Equal(err, e)
-		require.Equal("", v)
+		require.Equal("", v.(string))
 	}
 }
 
@@ -116,14 +116,14 @@ func TestCacheGetCleanup(t *testing.T) {
 
 	get := func() {
 		var wg sync.WaitGroup
-		for i := 0; i < 10000; i++ {
+		for i := 0; i < 5000; i++ {
 			wg.Add(2)
 			go func() {
 				defer wg.Done()
 				for k, v := range kvs {
 					rv, rerr := cache.Get(k)
 					require.NoError(rerr)
-					require.Equal(v, rv)
+					require.Equal(v, rv.(string))
 				}
 			}()
 			go func() {
@@ -131,7 +131,7 @@ func TestCacheGetCleanup(t *testing.T) {
 				for k, err := range kerrs {
 					rv, rerr := cache.Get(k)
 					require.Equal(err, rerr)
-					require.Equal("", rv)
+					require.Equal("", rv.(string))
 				}
 			}()
 		}

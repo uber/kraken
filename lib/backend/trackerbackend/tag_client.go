@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/tracker/tagclient"
 )
 
@@ -18,6 +19,13 @@ type DockerTagClient struct {
 // NewDockerTagClient creates a new DockerTagClient.
 func NewDockerTagClient(config Config) (*DockerTagClient, error) {
 	return &DockerTagClient{tagclient.New(config.Addr)}, nil
+}
+
+// Stat always succeeds.
+// TODO(codyg): We're going to nuke this whole client once build-index is done,
+// so not worrying about implementing this...
+func (c *DockerTagClient) Stat(name string) (*blobinfo.Info, error) {
+	return blobinfo.New(), nil
 }
 
 // Download downloads the manifest digest that the given tag name maps to.
