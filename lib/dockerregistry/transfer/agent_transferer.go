@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
@@ -33,12 +34,19 @@ func NewAgentTransferer(
 
 // Download downloads blobs as torrent.
 func (t *AgentTransferer) Download(namespace, name string) (store.FileReader, error) {
-	if err := t.sched.Download(t.blobNamespace, name); err != nil {
-		return nil, fmt.Errorf("scheduler: %s", err)
-	}
 	f, err := t.fs.GetCacheFileReader(name)
 	if err != nil {
-		return nil, fmt.Errorf("file store: %s", err)
+		if os.IsNotExist(err) {
+			if err := t.sched.Download(t.blobNamespace, name); err != nil {
+				return nil, fmt.Errorf("scheduler: %s", err)
+			}
+			f, err = t.fs.GetCacheFileReader(name)
+			if err != nil {
+				return nil, fmt.Errorf("cache: %s", err)
+			}
+		} else {
+			return nil, fmt.Errorf("cache: %s", err)
+		}
 	}
 	return f, nil
 }

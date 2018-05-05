@@ -145,7 +145,7 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/lib/torrent/scheduler/mockscheduler.go \
 		-package mockscheduler \
-		code.uber.internal/infra/kraken/lib/torrent/scheduler ReloadableScheduler
+		code.uber.internal/infra/kraken/lib/torrent/scheduler ReloadableScheduler,Scheduler
 
 	mkdir -p mocks/origin/blobclient
 	$(mockgen) \
