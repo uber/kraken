@@ -54,8 +54,6 @@ type FileStore interface {
 	MoveUploadFileToCache(fileName, targetFileName string) error
 	MoveDownloadFileToCache(fileName string) error
 	DeleteDownloadOrCacheFile(fileName string) error
-	RefCacheFile(fileName string) (int64, error)
-	DerefCacheFile(fileName string) (int64, error)
 	ListCacheFilesByShardID(shardID string) ([]string, error)
 	EnsureDownloadOrCacheFilePresent(fileName string, defaultLength int64) error
 	States() *StateAcceptor
@@ -360,35 +358,6 @@ func (store *LocalFileStore) DeleteDownloadOrCacheFile(fileName string) error {
 		AcceptState(store.stateDownload).
 		AcceptState(store.stateCache)
 	return op.DeleteFile(fileName)
-}
-
-// RefCacheFile increments ref count for a file in cache directory.
-func (store *LocalFileStore) RefCacheFile(fileName string) (int64, error) {
-	op := store.downloadCacheBackend.NewFileOp()
-	rcOp, ok := op.AcceptState(store.stateCache).(base.RCFileOp)
-	if !ok {
-		return 0, fmt.Errorf("Local ref count is disabled")
-	}
-	return rcOp.IncFileRefCount(fileName)
-}
-
-// DerefCacheFile decrements ref count for a file in cache directory.
-// If ref count reaches 0, it will delete the file.
-func (store *LocalFileStore) DerefCacheFile(fileName string) (int64, error) {
-	op, ok := store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).(base.RCFileOp)
-	if !ok {
-		return 0, errors.New("local ref count is disabled")
-	}
-	refCount, err := op.DecFileRefCount(fileName)
-	if err != nil {
-		return 0, fmt.Errorf("dec ref count: %s", err)
-	}
-	if refCount == 0 {
-		if err := op.DeleteFile(fileName); err != nil {
-			return 0, fmt.Errorf("delete file: %s", err)
-		}
-	}
-	return refCount, nil
 }
 
 // ListCacheFilesByShardID returns a list of FileInfo for all files of given shard.

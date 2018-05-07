@@ -106,19 +106,6 @@ func (mr *MockFileStoreMockRecorder) DeleteDownloadOrCacheFile(arg0 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDownloadOrCacheFile", reflect.TypeOf((*MockFileStore)(nil).DeleteDownloadOrCacheFile), arg0)
 }
 
-// DerefCacheFile mocks base method
-func (m *MockFileStore) DerefCacheFile(arg0 string) (int64, error) {
-	ret := m.ctrl.Call(m, "DerefCacheFile", arg0)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DerefCacheFile indicates an expected call of DerefCacheFile
-func (mr *MockFileStoreMockRecorder) DerefCacheFile(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DerefCacheFile", reflect.TypeOf((*MockFileStore)(nil).DerefCacheFile), arg0)
-}
-
 // EnsureDownloadOrCacheFilePresent mocks base method
 func (m *MockFileStore) EnsureDownloadOrCacheFilePresent(arg0 string, arg1 int64) error {
 	ret := m.ctrl.Call(m, "EnsureDownloadOrCacheFilePresent", arg0, arg1)
@@ -385,19 +372,6 @@ func (m *MockFileStore) MoveUploadFileToCache(arg0, arg1 string) error {
 // MoveUploadFileToCache indicates an expected call of MoveUploadFileToCache
 func (mr *MockFileStoreMockRecorder) MoveUploadFileToCache(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveUploadFileToCache", reflect.TypeOf((*MockFileStore)(nil).MoveUploadFileToCache), arg0, arg1)
-}
-
-// RefCacheFile mocks base method
-func (m *MockFileStore) RefCacheFile(arg0 string) (int64, error) {
-	ret := m.ctrl.Call(m, "RefCacheFile", arg0)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RefCacheFile indicates an expected call of RefCacheFile
-func (mr *MockFileStoreMockRecorder) RefCacheFile(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefCacheFile", reflect.TypeOf((*MockFileStore)(nil).RefCacheFile), arg0)
 }
 
 // SetCacheFileMetadata mocks base method
