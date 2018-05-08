@@ -10,7 +10,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/originbackend"
 	"code.uber.internal/infra/kraken/lib/backend/s3backend"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
-	"code.uber.internal/infra/kraken/lib/backend/trackerbackend"
 )
 
 type backend struct {
@@ -47,8 +46,6 @@ func NewManager(namespaces NamespaceConfig, auth AuthConfig) (*Manager, error) {
 			c, err = hdfsbackend.NewClient(config.HDFS)
 		case "http":
 			c, err = httpbackend.NewClient(config.HTTP)
-		case "tracker_dockertag":
-			c, err = trackerbackend.NewDockerTagClient(config.Tracker)
 		case "origin":
 			c, err = originbackend.NewClient(config.Origin)
 		case "testfs":

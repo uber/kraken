@@ -1,7 +1,6 @@
 package remotes
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"sync"
@@ -66,33 +65,23 @@ func New(
 // successfully replicated first. If any single replication to a remote fails,
 // the entire operation fails.
 func (r *replicator) Replicate(tag string, d core.Digest, dependencies []core.Digest) error {
-	var dests []*remote
-	for _, rem := range r.remotes {
-		if rem.regexp.MatchString(tag) {
-			dests = append(dests, rem)
-		}
-	}
-	if len(dests) == 0 {
-		return errors.New("no remotes found")
-	}
-
 	var mu sync.Mutex
 	var errs []error
-
 	var wg sync.WaitGroup
-	for _, rem := range dests {
-		wg.Add(1)
-		go func(rem *remote) {
-			defer wg.Done()
-			if err := r.replicateToRemote(rem, tag, d, dependencies); err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("replicate to %s: %s", rem.addr, err))
-				mu.Unlock()
-			}
-		}(rem)
+	for _, rem := range r.remotes {
+		if rem.regexp.MatchString(tag) {
+			wg.Add(1)
+			go func(rem *remote) {
+				defer wg.Done()
+				if err := r.replicateToRemote(rem, tag, d, dependencies); err != nil {
+					mu.Lock()
+					errs = append(errs, fmt.Errorf("replicate to %s: %s", rem.addr, err))
+					mu.Unlock()
+				}
+			}(rem)
+		}
 	}
 	wg.Wait()
-
 	return errutil.Join(errs)
 }
 

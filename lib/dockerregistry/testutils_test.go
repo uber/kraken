@@ -2,29 +2,30 @@ package dockerregistry
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"path"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils"
+	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/utils/dockerutil"
 )
 
 const (
 	repoName         = "alpine"
 	tagName          = "latest"
-	layerContent     = "this is a test layer"
 	hashStateContent = "this is a test hashstate"
 	uploadContent    = "this is a test upload"
 	uploadUUID       = "a20fe261-0060-467f-a44e-46eba3798d63"
 )
 
+// TODO(codyg): Get rid of this and all of the above constants.
 type testImageUploadBundle struct {
 	repo     string
 	tag      string
 	upload   string
 	manifest string
-	layers   []string
+	layer1   *core.BlobFixture
+	layer2   *core.BlobFixture
 }
 
 func genStorageDriver() (*KrakenStorageDriver, testImageUploadBundle, func()) {
@@ -48,62 +49,35 @@ func genStorageDriver() (*KrakenStorageDriver, testImageUploadBundle, func()) {
 	defer writer.Close()
 	writer.Write([]byte(uploadContent))
 
-	manifestContent, err := ioutil.ReadFile("test/testmanifest.json")
-	if err != nil {
-		log.Panic(err)
-	}
+	config := core.NewBlobFixture()
+	layer1 := core.NewBlobFixture()
+	layer2 := core.NewBlobFixture()
 
-	dockermanifest, manifestDigest, err := utils.ParseManifestV2(manifestContent)
-	if err != nil {
-		log.Panic(err)
-	}
+	manifestDigest, manifestRaw := dockerutil.ManifestFixture(
+		config.Digest, layer1.Digest, layer2.Digest)
 
-	// Create layers
-	layers := dockermanifest.References()
-	layerDigests := []string{}
-	for _, layer := range layers {
-		layerDigest := layer.Digest.Hex()
-		layerDigestTemp := layerDigest + "-tmp"
-		if err := sd.store.CreateUploadFile(layerDigestTemp, int64(len(layerContent))); err != nil {
-			log.Panic(err)
-		}
-		writer, err := sd.store.GetUploadFileReadWriter(layerDigestTemp)
+	for _, blob := range []*core.BlobFixture{config, layer1, layer2} {
+		err := sd.transferer.Upload("unused", blob.Digest, store.TestFileReader(blob.Content))
 		if err != nil {
 			log.Panic(err)
 		}
-		defer writer.Close()
-		writer.Write([]byte(layerContent))
-		if err := sd.store.MoveUploadFileToCache(layerDigestTemp, layerDigest); err != nil {
-			log.Panic(err)
-		}
-		layerDigests = append(layerDigests, layerDigest)
 	}
-
-	// Create manifest
-	manifestDigestTemp := manifestDigest + "-tmp"
-	if err := sd.store.CreateUploadFile(manifestDigestTemp, int64(len(manifestContent))); err != nil {
-		log.Panic(err)
-	}
-	writer, err = sd.store.GetUploadFileReadWriter(manifestDigestTemp)
+	err = sd.transferer.Upload(
+		"unused", manifestDigest, store.TestFileReader(manifestRaw))
 	if err != nil {
 		log.Panic(err)
 	}
-	defer writer.Close()
-	writer.Write([]byte(manifestContent))
-	if err := sd.store.MoveUploadFileToCache(manifestDigestTemp, manifestDigest); err != nil {
-		log.Panic(err)
-	}
 
-	// Create tag
-	if err := sd.transferer.PostTag(repoName, tagName, core.NewSHA256DigestFromHex(manifestDigest)); err != nil {
+	if err := sd.transferer.PostTag(fmt.Sprintf("%s:%s", repoName, tagName), manifestDigest); err != nil {
 		log.Panic(err)
 	}
 
 	return sd, testImageUploadBundle{
 		repo:     repoName,
 		tag:      tagName,
-		manifest: manifestDigest,
-		layers:   layerDigests,
+		manifest: manifestDigest.Hex(),
+		layer1:   layer1,
+		layer2:   layer2,
 		upload:   uploadUUID,
 	}, cleanup
 }

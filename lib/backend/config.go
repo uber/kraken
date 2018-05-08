@@ -6,7 +6,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/originbackend"
 	"code.uber.internal/infra/kraken/lib/backend/s3backend"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
-	"code.uber.internal/infra/kraken/lib/backend/trackerbackend"
 )
 
 // NamespaceConfig defines a mapping of namespace regex to Config.
@@ -19,13 +18,12 @@ type Auth map[string]AuthConfig
 // Config defines the union of configuration for all backends, where
 // the Backend field serves as the key for which backend is activated.
 type Config struct {
-	Backend string                `yaml:"backend"`
-	S3      s3backend.Config      `yaml:"s3"`
-	HDFS    hdfsbackend.Config    `yaml:"hdfs"`
-	Tracker trackerbackend.Config `yaml:"tracker"`
-	TestFS  testfs.Config         `yaml:"testfs"`
-	HTTP    httpbackend.Config    `yaml:"http"`
-	Origin  originbackend.Config  `yaml:"origin"`
+	Backend string               `yaml:"backend"`
+	S3      s3backend.Config     `yaml:"s3"`
+	HDFS    hdfsbackend.Config   `yaml:"hdfs"`
+	TestFS  testfs.Config        `yaml:"testfs"`
+	HTTP    httpbackend.Config   `yaml:"http"`
+	Origin  originbackend.Config `yaml:"origin"`
 }
 
 // AuthConfig defines the union of authentication credentials

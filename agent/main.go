@@ -11,8 +11,8 @@ import (
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/agent/agentserver"
+	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -82,15 +82,7 @@ func main() {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
 
-	backendManager, err := backend.NewManager(config.Registry.Namespaces, config.Auth)
-	if err != nil {
-		log.Fatalf("Error creating backend manager: %s", err)
-	}
-	tagClient, err := backendManager.GetClient(config.Registry.TagNamespace)
-	if err != nil {
-		log.Fatalf("Error creating backend tag client: %s", err)
-	}
-	transferer := transfer.NewAgentTransferer(fs, tagClient, config.Registry.BlobNamespace, sched)
+	transferer := transfer.NewAgentTransferer(fs, tagclient.New(config.BuildIndex), sched)
 
 	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)

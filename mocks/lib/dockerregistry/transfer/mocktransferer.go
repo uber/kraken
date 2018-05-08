@@ -48,38 +48,38 @@ func (mr *MockImageTransfererMockRecorder) Download(arg0, arg1 interface{}) *gom
 }
 
 // GetTag mocks base method
-func (m *MockImageTransferer) GetTag(arg0, arg1 string) (core.Digest, error) {
-	ret := m.ctrl.Call(m, "GetTag", arg0, arg1)
+func (m *MockImageTransferer) GetTag(arg0 string) (core.Digest, error) {
+	ret := m.ctrl.Call(m, "GetTag", arg0)
 	ret0, _ := ret[0].(core.Digest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetTag indicates an expected call of GetTag
-func (mr *MockImageTransfererMockRecorder) GetTag(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTag", reflect.TypeOf((*MockImageTransferer)(nil).GetTag), arg0, arg1)
+func (mr *MockImageTransfererMockRecorder) GetTag(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTag", reflect.TypeOf((*MockImageTransferer)(nil).GetTag), arg0)
 }
 
 // PostTag mocks base method
-func (m *MockImageTransferer) PostTag(arg0, arg1 string, arg2 core.Digest) error {
-	ret := m.ctrl.Call(m, "PostTag", arg0, arg1, arg2)
+func (m *MockImageTransferer) PostTag(arg0 string, arg1 core.Digest) error {
+	ret := m.ctrl.Call(m, "PostTag", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PostTag indicates an expected call of PostTag
-func (mr *MockImageTransfererMockRecorder) PostTag(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostTag", reflect.TypeOf((*MockImageTransferer)(nil).PostTag), arg0, arg1, arg2)
+func (mr *MockImageTransfererMockRecorder) PostTag(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostTag", reflect.TypeOf((*MockImageTransferer)(nil).PostTag), arg0, arg1)
 }
 
 // Upload mocks base method
-func (m *MockImageTransferer) Upload(arg0 string, arg1 base.FileReader, arg2 int64) error {
-	ret := m.ctrl.Call(m, "Upload", arg0, arg1, arg2)
+func (m *MockImageTransferer) Upload(arg0 string, arg1 base.FileReader) error {
+	ret := m.ctrl.Call(m, "Upload", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Upload indicates an expected call of Upload
-func (mr *MockImageTransfererMockRecorder) Upload(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockImageTransferer)(nil).Upload), arg0, arg1, arg2)
+func (mr *MockImageTransfererMockRecorder) Upload(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockImageTransferer)(nil).Upload), arg0, arg1)
 }

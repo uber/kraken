@@ -1,7 +1,6 @@
 package dockerregistry
 
 import (
-	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	docker "github.com/docker/distribution/configuration"
@@ -12,11 +11,6 @@ import (
 type Config struct {
 	Docker         docker.Configuration `yaml:"docker"`
 	DisableTorrent bool                 `yaml:"disable_torrent"`
-
-	Namespaces backend.NamespaceConfig `yaml:"namespaces"`
-
-	TagNamespace  string `yaml:"tag_namespace"`
-	BlobNamespace string `yaml:"blob_namespace"`
 }
 
 // CreateDockerConfig returns docker specified configuration

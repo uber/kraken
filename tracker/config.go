@@ -3,7 +3,6 @@ package main
 import (
 	"go.uber.org/zap"
 
-	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/storage"
@@ -19,7 +18,4 @@ type Config struct {
 	PeerHandoutPolicy peerhandoutpolicy.Config `yaml:"peerhandoutpolicy"`
 	Origin            string                   `yaml:"origin"`
 	Metrics           metrics.Config           `yaml:"metrics"`
-	Namespaces        backend.NamespaceConfig  `yaml:"namespaces"`
-	Auth              backend.AuthConfig       `yaml:"auth"`
-	TagNamespace      string                   `yaml:"tag_namespace"`
 }

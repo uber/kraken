@@ -9,9 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/docker/distribution"
-	"github.com/docker/distribution/manifest/schema2"
 )
 
 func init() {
@@ -93,44 +90,6 @@ func Int32toIP(i32 int32) net.IP {
 	ip := make(net.IP, 4)
 	binary.BigEndian.PutUint32(ip, uint32(i32))
 	return ip
-}
-
-// ParseManifestV2 returns a parsed v2 manifest and its digest
-func ParseManifestV2(data []byte) (distribution.Manifest, string, error) {
-	manifest, descriptor, err := distribution.UnmarshalManifest(schema2.MediaTypeManifest, data)
-	if err != nil {
-		return nil, "", err
-	}
-	deserializedManifest, ok := manifest.(*schema2.DeserializedManifest)
-	if !ok {
-		return nil, "", fmt.Errorf("Unable to deserialize manifest")
-	}
-	version := deserializedManifest.Manifest.Versioned.SchemaVersion
-	if version != 2 {
-		return nil, "", fmt.Errorf("Unsupported manifest version: %d", version)
-	}
-	return manifest, descriptor.Digest.Hex(), nil
-}
-
-// GetManifestV2References returns a list of references by a V2 manifest
-func GetManifestV2References(manifest distribution.Manifest, manifestDigest string) ([]string, error) {
-	layers := []string{manifestDigest}
-
-	switch manifest.(type) {
-	case *schema2.DeserializedManifest:
-		// Inc ref count for config and data layers.
-		descriptors := manifest.References()
-		for _, descriptor := range descriptors {
-			if descriptor.Digest == "" {
-				return nil, fmt.Errorf("Unsupported layer format in manifest")
-			}
-
-			layers = append(layers, descriptor.Digest.Hex())
-		}
-	default:
-		return nil, fmt.Errorf("Unsupported manifest format")
-	}
-	return layers, nil
 }
 
 const (

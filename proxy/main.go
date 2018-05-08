@@ -6,11 +6,12 @@ import (
 	dockercontext "github.com/docker/distribution/context"
 	docker "github.com/docker/distribution/registry"
 
-	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/metrics"
+	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -33,26 +34,16 @@ func main() {
 	}
 	defer closer.Close()
 
-	backendManager, err := backend.NewManager(config.Registry.Namespaces, config.Auth)
-	if err != nil {
-		log.Fatalf("Error creating backend manager: %s", err)
-	}
-	tagClient, err := backendManager.GetClient(config.Registry.TagNamespace)
-	if err != nil {
-		log.Fatalf("Error creating backend tag client: %s", err)
-	}
-	blobClient, err := backendManager.GetClient(config.Registry.BlobNamespace)
-	if err != nil {
-		log.Fatalf("Error creating backend blob client: %s", err)
-	}
 	fs, err := store.NewLocalFileStore(config.Store, stats)
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
-	transferer, err := transfer.NewRemoteBackendTransferer(tagClient, blobClient, fs)
-	if err != nil {
-		log.Fatalf("Error creating image transferer: %s", err)
-	}
+
+	transferer := transfer.NewProxyTransferer(
+		tagclient.New(config.BuildIndex),
+		blobclient.NewClusterClient(
+			blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin)),
+		fs)
 
 	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
 	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)

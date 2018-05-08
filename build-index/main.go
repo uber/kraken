@@ -43,8 +43,7 @@ func main() {
 	defer db.Close()
 
 	// Dummy statement to make sure we are not compiling a stub driver with CGO_ENABLE=0.
-	_, err = db.Exec(`PRAGMA database_list;`)
-	if err != nil {
+	if _, err := db.Exec(`PRAGMA database_list;`); err != nil {
 		log.Fatalf("Failed to list databases: %s\n", err)
 	}
 
