@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 
@@ -190,15 +191,12 @@ func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) error {
 	if err := u.store.MoveUploadFileToCache(srcuuid, destsha); err != nil {
 		return fmt.Errorf("move upload file to cache: %s", err)
 	}
-	info, err := u.store.GetCacheFileStat(destsha)
-	if err != nil {
-		return fmt.Errorf("cache stat: %s", err)
-	}
 	f, err := u.store.GetCacheFileReader(destsha)
 	if err != nil {
 		return fmt.Errorf("get cache file: %s", err)
 	}
-	if err := u.transferer.Upload(destsha, f, info.Size()); err != nil {
+	d := core.NewSHA256DigestFromHex(destsha)
+	if err := u.transferer.Upload(getNamespace("TODO"), d, f); err != nil {
 		return fmt.Errorf("upload: %s", err)
 	}
 	return nil
@@ -231,15 +229,12 @@ func (u *Uploads) putBlobData(fileName string, content []byte) error {
 		}
 		return fmt.Errorf("move upload file to cache: %s", err)
 	}
-	info, err := u.store.GetCacheFileStat(fileName)
-	if err != nil {
-		return fmt.Errorf("cache stat: %s", err)
-	}
 	f, err := u.store.GetCacheFileReader(fileName)
 	if err != nil {
 		return fmt.Errorf("get cache file: %s", err)
 	}
-	if err := u.transferer.Upload(fileName, f, info.Size()); err != nil {
+	d := core.NewSHA256DigestFromHex(fileName)
+	if err := u.transferer.Upload(getNamespace("TODO"), d, f); err != nil {
 		return fmt.Errorf("upload: %s", err)
 	}
 	return nil

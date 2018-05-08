@@ -105,12 +105,6 @@ mocks:
 		-package mockannounceclient \
 		code.uber.internal/infra/kraken/tracker/announceclient Client
 
-	mkdir -p mocks/tracker/tagclient
-	$(mockgen) \
-		-destination=mocks/tracker/tagclient/mocktagclient.go \
-		-package mocktagclient \
-		code.uber.internal/infra/kraken/tracker/tagclient Client
-
 	mkdir -p mocks/utils/dedup
 	$(mockgen) \
 		-destination=mocks/utils/dedup/mockdedup.go \
@@ -181,7 +175,7 @@ mocks:
 CONTAINERS := $(foreach \
 	c, \
 	kraken-redis kraken-tracker kraken-agent kraken-proxy kraken-test-origin-01 \
-	kraken-test-origin-02 kraken-test-origin-03 kraken-testfs, \
+	kraken-test-origin-02 kraken-test-origin-03 kraken-testfs kraken-build-index, \
 	$(c))
 
 # Runs docker stop and docker rm on each container w/ silenced output.
@@ -215,10 +209,14 @@ run_tracker: tracker redis
 .PHONY: build-index
 build-index:
 	-rm build-index/build-index
-	# Cross compiling cgo for sqlite3 is not well supported. 
+	# Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
 	# This workaround builds the binary inside a linux container. 
 	# This takes a few seconds.
-	docker run --rm -it -v $(OLDGOPATH):/go -w /go/src/code.uber.internal/infra/kraken/build-index golang:latest go build
+	if [[ $$OSTYPE == darwin* ]]; then \
+		docker run --rm -it -v $(OLDGOPATH):/go -w /go/src/code.uber.internal/infra/kraken/build-index golang:latest go build; \
+	else \
+		GOOS=linux GOARCH=amd64 make build-index/build-index; \
+	fi
 	docker build -t kraken-build-index:dev -f docker/build-index/Dockerfile ./
 
 run_build-index: build-index
@@ -227,7 +225,6 @@ run_build-index: build-index
 	docker run -d \
 		--name=kraken-build-index \
 		--hostname=192.168.65.1 \
-		-v /tmp/kraken-build-index:/var/cache/udocker/kraken-build-index/ \
 		-p 5263:5263 \
 		kraken-build-index:dev \
 		/home/udocker/kraken-build-index/build-index/build-index \
@@ -305,7 +302,7 @@ bootstrap_integration:
 	source env/bin/activate
 	env/bin/pip install -r requirements-tests.txt
 
-build_integration: tracker origin agent proxy testfs tools/bin/puller/puller docker_stop
+build_integration: tracker origin agent proxy testfs tools/bin/puller/puller build-index docker_stop
 
 run_integration:
 	source env/bin/activate

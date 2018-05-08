@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
@@ -52,23 +51,13 @@ func main() {
 	originCluster := blobclient.NewClusterClient(
 		blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin))
 
-	backends, err := backend.NewManager(config.Namespaces, config.Auth)
-	if err != nil {
-		log.Fatalf("Error creating backend manager: %s", err)
-	}
-	tags, err := backends.GetClient(config.TagNamespace)
-	if err != nil {
-		log.Fatalf("Error creating backend tag client: %s", err)
-	}
-
 	server := trackerserver.New(
 		config.TrackerServer,
 		stats,
 		policy,
 		peerStore,
 		torrentStore,
-		originCluster,
-		tags)
+		originCluster)
 
 	addr := fmt.Sprintf(":%d", config.Port)
 	log.Infof("Listening on %s", addr)

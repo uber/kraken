@@ -10,7 +10,6 @@ import (
 	chimiddleware "github.com/pressly/chi/middleware"
 	"github.com/uber-go/tally"
 
-	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
@@ -41,8 +40,7 @@ func New(
 	policy peerhandoutpolicy.PeerHandoutPolicy,
 	peerStore storage.PeerStore,
 	metaInfoStore storage.MetaInfoStore,
-	originCluster blobclient.ClusterClient,
-	tags backend.Client) *Server {
+	originCluster blobclient.ClusterClient) *Server {
 
 	config = config.applyDefaults()
 
@@ -55,8 +53,6 @@ func New(
 		clock.New(),
 		&metaInfoGetter{stats, originCluster, metaInfoStore})
 
-	tagCache := dedup.NewCache(config.TagCache, clock.New(), &tagResolver{tags})
-
 	return &Server{
 		config:             config,
 		stats:              stats,
@@ -65,7 +61,6 @@ func New(
 		originCluster:      originCluster,
 		metaInfoStore:      metaInfoStore,
 		getMetaInfoLimiter: getMetaInfoLimiter,
-		tagCache:           tagCache,
 	}
 }
 
@@ -79,7 +74,6 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/health", handler.Wrap(s.healthHandler))
 	r.Get("/announce", handler.Wrap(s.announceHandler))
 	r.Get("/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(s.getMetaInfoHandler))
-	r.Get("/tag/:name", handler.Wrap(s.getTagHandler))
 
 	r.Mount("/debug", chimiddleware.Profiler())
 

@@ -2,8 +2,6 @@ package dockerregistry
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -11,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"code.uber.internal/infra/kraken/core"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,12 +27,12 @@ func TestStorageDriverGetContent(t *testing.T) {
 		data  []byte
 		err   error
 	}{
-		{genLayerLinkPath(testImage.layers[0]), []byte("sha256:" + testImage.layers[0]), nil},
+		{genLayerLinkPath(testImage.layer1.Digest.Hex()), []byte(testImage.layer1.Digest.String()), nil},
 		{genUploadStartedAtPath(testImage.upload), uploadTime, nil},
 		{genUploadHashStatesPath(testImage.upload), []byte(hashStateContent), nil},
 		{genManifestTagCurrentLinkPath(testImage.repo, testImage.tag, testImage.manifest), []byte("sha256:" + testImage.manifest), nil},
 		{genManifestRevisionLinkPath(testImage.repo, testImage.manifest), []byte("sha256:" + testImage.manifest), nil},
-		{genBlobDataPath(testImage.layers[0]), []byte(layerContent), nil},
+		{genBlobDataPath(testImage.layer1.Digest.Hex()), testImage.layer1.Content, nil},
 	}
 
 	for _, tc := range testCases {
@@ -60,7 +59,7 @@ func TestStorageDriverReader(t *testing.T) {
 		err   error
 	}{
 		{genUploadDataPath(testImage.upload), []byte(uploadContent), nil},
-		{genBlobDataPath(testImage.layers[0]), []byte(layerContent), nil},
+		{genBlobDataPath(testImage.layer1.Digest.Hex()), testImage.layer1.Content, nil},
 	}
 
 	for _, tc := range testCases {
@@ -91,8 +90,8 @@ func TestStorageDriverPutContent(t *testing.T) {
 	}{
 		{genUploadStartedAtPath(upload), nil, nil},
 		{genUploadHashStatesPath(testImage.upload), []byte{}, nil},
-		{genLayerLinkPath(testImage.layers[0]), nil, nil},
-		{genBlobDataPath(testImage.layers[0]), []byte("test putcontent"), nil},
+		{genLayerLinkPath(testImage.layer1.Digest.Hex()), nil, nil},
+		{genBlobDataPath(testImage.layer1.Digest.Hex()), []byte("test putcontent"), nil},
 		{genManifestRevisionLinkPath(repo, testImage.manifest), nil, nil},
 		{genManifestTagShaLinkPath(repo, tag, testImage.manifest), nil, nil},
 		{genManifestTagCurrentLinkPath(repo, tag, testImage.manifest), nil, nil},
@@ -117,7 +116,7 @@ func TestStorageDriverWriter(t *testing.T) {
 		err   error
 	}{
 		{genUploadDataPath(testImage.upload), []byte(uploadContent), nil},
-		{genBlobDataPath(testImage.layers[0]), nil, InvalidRequestError{genBlobDataPath(testImage.layers[0])}},
+		{genBlobDataPath(testImage.layer1.Digest.Hex()), nil, InvalidRequestError{genBlobDataPath(testImage.layer1.Digest.Hex())}},
 	}
 
 	content := []byte("this is a test for upload writer")
@@ -151,7 +150,7 @@ func TestStorageDriverStat(t *testing.T) {
 		size  int64
 		err   error
 	}{
-		{genBlobDataPath(testImage.layers[0]), testImage.layers[0], int64(len(layerContent)), nil},
+		{genBlobDataPath(testImage.layer1.Digest.Hex()), testImage.layer1.Digest.Hex(), int64(len(testImage.layer1.Content)), nil},
 		{genUploadDataPath(testImage.upload), testImage.upload, int64(len(uploadContent)), nil},
 	}
 
@@ -192,30 +191,19 @@ func TestStorageDriverList(t *testing.T) {
 }
 
 func TestStorageDriverMove(t *testing.T) {
+	require := require.New(t)
+
 	sd, testImage, cleanup := genStorageDriver()
 	defer cleanup()
 
-	hasher := sha256.New()
-	hasher.Write([]byte(time.Now().String()))
-	sha := hex.EncodeToString(hasher.Sum(nil))
+	d, err := core.NewDigester().FromBytes([]byte(uploadContent))
+	require.NoError(err)
 
-	testCases := []struct {
-		fromPath string
-		toPath   string
-		err      error
-	}{
-		{genUploadDataPath(testImage.upload), genBlobDataPath(sha), nil},
-	}
+	require.NoError(sd.Move(context.TODO(), genUploadDataPath(testImage.upload), genBlobDataPath(d.Hex())))
 
-	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("Move %s to %s", tc.fromPath, tc.toPath), func(t *testing.T) {
-			require.Equal(t, tc.err, sd.Move(context.Background(), tc.fromPath, tc.toPath))
-		})
-	}
-
-	reader, err := sd.store.GetCacheFileReader(sha)
-	require.NoError(t, err)
+	reader, err := sd.store.GetCacheFileReader(d.Hex())
+	require.NoError(err)
 	data, err := ioutil.ReadAll(reader)
-	require.NoError(t, err)
-	require.Equal(t, uploadContent, string(data))
+	require.NoError(err)
+	require.Equal(uploadContent, string(data))
 }

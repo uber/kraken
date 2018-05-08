@@ -65,7 +65,7 @@ func (t *Tags) GetDigest(path string, subtype PathSubType) (data []byte, err err
 		if err != nil {
 			return nil, fmt.Errorf("get manifest tag: %s", err)
 		}
-		digest, err = t.transferer.GetTag(repo, tag)
+		digest, err = t.transferer.GetTag(fmt.Sprintf("%s:%s", repo, tag))
 		if err != nil {
 			return nil, fmt.Errorf("transferer get tag: %s", err)
 		}
@@ -79,7 +79,7 @@ func (t *Tags) GetDigest(path string, subtype PathSubType) (data []byte, err err
 		return nil, &InvalidRequestError{path}
 	}
 
-	blob, err := t.transferer.Download(repo, digest.Hex())
+	blob, err := t.transferer.Download(getNamespace(repo), digest)
 	if err != nil {
 		log.Errorf("Failed to download %s: %s", digest, err)
 		return nil, storagedriver.PathNotFoundError{
@@ -111,7 +111,7 @@ func (t *Tags) PutContent(path string, subtype PathSubType) error {
 		if err != nil {
 			return fmt.Errorf("get manifest digest: %s", err)
 		}
-		if err := t.transferer.PostTag(repo, tag, digest); err != nil {
+		if err := t.transferer.PostTag(fmt.Sprintf("%s:%s", repo, tag), digest); err != nil {
 			return fmt.Errorf("post tag: %s", err)
 		}
 		return nil
