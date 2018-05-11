@@ -49,8 +49,13 @@ func (c *Client) Stat(name string) (*blobinfo.Info, error) {
 	if err != nil {
 		return nil, fmt.Errorf("path: %s", err)
 	}
+
+	v := url.Values{}
+	v.Set("op", "GETFILESTATUS")
+	c.setUserName(v)
+
 	for _, node := range c.config.NameNodes {
-		_, err := httputil.Get(fmt.Sprintf("http://%s/%s?op=GETFILESTATUS", node, path))
+		_, err := httputil.Get(fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()))
 		if err != nil {
 			if retryable(err) {
 				continue
@@ -70,14 +75,16 @@ func (c *Client) Download(name string, dst io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("path: %s", err)
 	}
-	params := c.params("open")
+
+	v := url.Values{}
+	v.Set("op", "OPEN")
+	c.setUserName(v)
+	c.setBuffersize(v)
+
 	for _, node := range c.config.NameNodes {
-		u := fmt.Sprintf("http://%s/%s?%s", node, path, params)
-		log.Infof("Starting HDFS download from %s", u)
-		resp, err := httputil.Get(u)
+		resp, err := httputil.Get(fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()))
 		if err != nil {
 			if retryable(err) {
-				log.Infof("HDFS download error: %s, retrying from the next name node", err)
 				continue
 			}
 			if httputil.IsNotFound(err) {
@@ -146,17 +153,21 @@ func (c *Client) Upload(name string, src io.Reader) error {
 		readSeeker = bytes.NewReader(b)
 	}
 
-	params := c.params("create")
+	v := url.Values{}
+	v.Set("op", "CREATE")
+	c.setUserName(v)
+	c.setBuffersize(v)
+	v.Set("overwrite", "true")
+
 	for _, node := range c.config.NameNodes {
 		nameresp, err := httputil.Put(
-			fmt.Sprintf("http://%s/%s?%s", node, path, params),
+			fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()),
 			httputil.SendRedirect(func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse
 			}),
 			httputil.SendAcceptedCodes(http.StatusTemporaryRedirect, http.StatusPermanentRedirect))
 		if err != nil {
 			if retryable(err) {
-				log.Infof("HDFS upload error: %s, retrying from the next name node", err)
 				continue
 			}
 			return err
@@ -175,7 +186,6 @@ func (c *Client) Upload(name string, src io.Reader) error {
 			httputil.SendAcceptedCodes(http.StatusCreated))
 		if err != nil {
 			if retryable(err) {
-				log.Infof("HDFS upload error: %s, retrying from the next name node", err)
 				// Reset reader for next retry.
 				if _, err := readSeeker.Seek(0, io.SeekStart); err != nil {
 					return fmt.Errorf("seek: %s", err)
@@ -191,13 +201,10 @@ func (c *Client) Upload(name string, src io.Reader) error {
 	return errAllNameNodesUnavailable
 }
 
-func (c *Client) params(op string) string {
-	v := url.Values{}
-	if c.config.UserName != "" {
-		v.Set("user.name", c.config.UserName)
-	}
+func (c *Client) setBuffersize(v url.Values) {
 	v.Set("buffersize", strconv.FormatInt(c.config.BuffSize, 10))
-	v.Set("overwrite", "true")
-	v.Set("op", op)
-	return v.Encode()
+}
+
+func (c *Client) setUserName(v url.Values) {
+	v.Set("user.name", c.config.UserName)
 }
