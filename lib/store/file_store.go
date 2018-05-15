@@ -189,7 +189,13 @@ func (store *LocalFileStore) CreateCacheFile(fileName string, r io.Reader) error
 	if _, err := io.Copy(w, r); err != nil {
 		return fmt.Errorf("copy: %s", err)
 	}
-	if digester.Digest() != core.NewSHA256DigestFromHex(fileName) {
+
+	actual := digester.Digest()
+	expected, err := core.NewSHA256DigestFromHex(fileName)
+	if err != nil {
+		return fmt.Errorf("new digest from file name: %s", err)
+	}
+	if actual != expected {
 		return fmt.Errorf("failed to verify data: digests do not match")
 	}
 

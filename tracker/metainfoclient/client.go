@@ -40,7 +40,10 @@ func NewWithBackoff(addr string, b *backoff.Backoff) Client {
 // Download returns the MetaInfo associated with name. Returns ErrNotFound if
 // no torrent exists under name.
 func (c *client) Download(namespace, name string) (*core.MetaInfo, error) {
-	d := core.NewSHA256DigestFromHex(name)
+	d, err := core.NewSHA256DigestFromHex(name)
+	if err != nil {
+		return nil, fmt.Errorf("new digest: %s", err)
+	}
 	resp, err := httputil.PollAccepted(
 		fmt.Sprintf(
 			"http://%s/namespace/%s/blobs/%s/metainfo",

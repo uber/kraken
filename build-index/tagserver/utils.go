@@ -17,10 +17,10 @@ func parseTag(r *http.Request) (string, error) {
 	return tag, nil
 }
 
-func parseDigest(r *http.Request) (string, error) {
-	d := chi.URLParam(r, "digest")
-	if err := core.CheckSHA256Digest(d); err != nil {
-		return "", handler.Errorf("invalid sha256 digest: %s", err).Status(http.StatusBadRequest)
+func parseDigest(r *http.Request) (core.Digest, error) {
+	d, err := core.ParseSHA256Digest(chi.URLParam(r, "digest"))
+	if err != nil {
+		return core.Digest{}, handler.Errorf("parse digest: %s", err).Status(http.StatusBadRequest)
 	}
 	return d, nil
 }

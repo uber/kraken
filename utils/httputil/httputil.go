@@ -79,7 +79,7 @@ type NetworkError struct {
 }
 
 func (e NetworkError) Error() string {
-	return e.err.Error()
+	return fmt.Sprintf("network error: %s", e.err)
 }
 
 // IsNetworkError returns true if err is a NetworkError.

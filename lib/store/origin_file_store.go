@@ -1,7 +1,6 @@
 package store
 
 import (
-	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -187,8 +186,14 @@ func (store *OriginLocalFileStore) CreateCacheFile(fileName string, r io.Reader)
 	if _, err := io.Copy(w, r); err != nil {
 		return fmt.Errorf("copy: %s", err)
 	}
-	if digester.Digest() != core.NewSHA256DigestFromHex(fileName) {
-		return errors.New("origin image digests do not match")
+
+	actual := digester.Digest()
+	expected, err := core.NewSHA256DigestFromHex(fileName)
+	if err != nil {
+		return fmt.Errorf("new digest from file name: %s", err)
+	}
+	if actual != expected {
+		return fmt.Errorf("failed to verify data: digests do not match")
 	}
 
 	if err := store.MoveUploadFileToCache(tmpFile, fileName); err != nil {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/utils/handler"
@@ -15,18 +16,22 @@ type tagResolver struct {
 }
 
 func (r *tagResolver) Resolve(key interface{}) (interface{}, error) {
-	name := key.(string)
-	log.With("tag", name).Info("Resolving tag")
-	client, err := r.backends.GetClient(name)
+	tag := key.(string)
+	log.With("tag", tag).Info("Resolving tag")
+	client, err := r.backends.GetClient(tag)
 	if err != nil {
-		return "", handler.Errorf("backend manager: %s", err)
+		return core.Digest{}, handler.Errorf("backend manager: %s", err)
 	}
 	var b bytes.Buffer
-	if err := client.Download(name, &b); err != nil {
+	if err := client.Download(tag, &b); err != nil {
 		if err == backenderrors.ErrBlobNotFound {
-			return "", handler.ErrorStatus(http.StatusNotFound)
+			return core.Digest{}, handler.ErrorStatus(http.StatusNotFound)
 		}
-		return "", handler.Errorf("backend client: %s", err)
+		return core.Digest{}, handler.Errorf("backend client: %s", err)
 	}
-	return b.String(), nil
+	d, err := core.ParseSHA256Digest(b.String())
+	if err != nil {
+		return core.Digest{}, handler.Errorf("parse digest: %s", err)
+	}
+	return d, nil
 }

@@ -48,7 +48,7 @@ func New(addr string) Client {
 
 func (c *client) Put(tag string, d core.Digest) error {
 	_, err := httputil.Put(
-		fmt.Sprintf("http://%s/tags/%s/digest/%s", c.addr, url.PathEscape(tag), d.Hex()),
+		fmt.Sprintf("http://%s/tags/%s/digest/%s", c.addr, url.PathEscape(tag), d.String()),
 		httputil.SendRetry())
 	return err
 }
@@ -68,7 +68,11 @@ func (c *client) Get(tag string) (core.Digest, error) {
 	if err != nil {
 		return core.Digest{}, fmt.Errorf("read body: %s", err)
 	}
-	return core.NewSHA256DigestFromHex(string(b)), nil
+	d, err := core.ParseSHA256Digest(string(b))
+	if err != nil {
+		return core.Digest{}, fmt.Errorf("new digest: %s", err)
+	}
+	return d, nil
 }
 
 // ReplicateRequest defines a Replicate request body.
@@ -80,14 +84,14 @@ func (c *client) Replicate(tag string, d core.Digest, dependencies []core.Digest
 	// Some ugliness to convert typed digests into strings.
 	var strDeps []string
 	for _, d := range dependencies {
-		strDeps = append(strDeps, d.Hex())
+		strDeps = append(strDeps, d.String())
 	}
 	b, err := json.Marshal(ReplicateRequest{strDeps})
 	if err != nil {
 		return fmt.Errorf("json marshal: %s", err)
 	}
 	_, err = httputil.Post(
-		fmt.Sprintf("http://%s/remotes/tags/%s/digest/%s", c.addr, url.PathEscape(tag), d.Hex()),
+		fmt.Sprintf("http://%s/remotes/tags/%s/digest/%s", c.addr, url.PathEscape(tag), d.String()),
 		httputil.SendBody(bytes.NewReader(b)),
 		httputil.SendRetry())
 	return err

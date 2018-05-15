@@ -190,7 +190,7 @@ func (r *repairer) replicateShard(shardID string, hosts stringset.Set, purge boo
 
 	var digests []core.Digest
 	for _, name := range names {
-		d, err := core.NewDigestFromString("sha256:" + name)
+		d, err := core.NewSHA256DigestFromHex(name)
 		if err != nil {
 			r.messages <- replicateShardErrorf(shardID, "failed to parse digest %q: %s", name, err)
 			continue

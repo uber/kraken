@@ -195,7 +195,10 @@ func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) error {
 	if err != nil {
 		return fmt.Errorf("get cache file: %s", err)
 	}
-	d := core.NewSHA256DigestFromHex(destsha)
+	d, err := core.NewSHA256DigestFromHex(destsha)
+	if err != nil {
+		return fmt.Errorf("new digest: %s", err)
+	}
 	if err := u.transferer.Upload(getNamespace("TODO"), d, f); err != nil {
 		return fmt.Errorf("upload: %s", err)
 	}
@@ -233,7 +236,10 @@ func (u *Uploads) putBlobData(fileName string, content []byte) error {
 	if err != nil {
 		return fmt.Errorf("get cache file: %s", err)
 	}
-	d := core.NewSHA256DigestFromHex(fileName)
+	d, err := core.NewSHA256DigestFromHex(fileName)
+	if err != nil {
+		return fmt.Errorf("new digest: %s", err)
+	}
 	if err := u.transferer.Upload(getNamespace("TODO"), d, f); err != nil {
 		return fmt.Errorf("upload: %s", err)
 	}
