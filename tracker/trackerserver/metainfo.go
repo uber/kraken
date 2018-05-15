@@ -90,7 +90,7 @@ func parseDigest(r *http.Request) (digest core.Digest, err error) {
 	if err != nil {
 		return digest, fmt.Errorf("path unescape: %s", err)
 	}
-	digest, err = core.NewDigestFromString(raw)
+	digest, err = core.ParseSHA256Digest(raw)
 	if err != nil {
 		return digest, fmt.Errorf("parse digest: %s", err)
 	}

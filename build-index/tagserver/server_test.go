@@ -60,11 +60,11 @@ func TestPutAndGetTag(t *testing.T) {
 	tag := "uber-usi/labrat"
 	digest := core.DigestFixture()
 
-	mocks.backendClient.EXPECT().Upload(tag, rwutil.MatchReader([]byte(digest.Hex()))).Return(nil)
+	mocks.backendClient.EXPECT().Upload(tag, rwutil.MatchReader([]byte(digest.String()))).Return(nil)
 
 	require.NoError(client.Put(tag, digest))
 
-	mocks.backendClient.EXPECT().Download(tag, rwutil.MatchWriter([]byte(digest.Hex()))).Return(nil)
+	mocks.backendClient.EXPECT().Download(tag, rwutil.MatchWriter([]byte(digest.String()))).Return(nil)
 
 	// Getting tag multiple times should only make one download call.
 	for i := 0; i < 10; i++ {

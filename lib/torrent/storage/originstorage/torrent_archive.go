@@ -29,10 +29,14 @@ func NewTorrentArchive(
 }
 
 func (a *TorrentArchive) getMetaInfo(namespace, name string) (*core.MetaInfo, error) {
+	d, err := core.NewSHA256DigestFromHex(name)
+	if err != nil {
+		return nil, fmt.Errorf("new digest: %s", err)
+	}
 	raw, err := a.fs.GetCacheFileMetadata(name, store.NewTorrentMeta())
 	if err != nil {
 		if os.IsNotExist(err) {
-			refreshErr := a.blobRefresher.Refresh(namespace, core.NewSHA256DigestFromHex(name))
+			refreshErr := a.blobRefresher.Refresh(namespace, d)
 			if refreshErr != nil {
 				return nil, fmt.Errorf("blob refresh: %s", refreshErr)
 			}

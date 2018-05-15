@@ -29,7 +29,7 @@ func ParseManifestV2(r io.Reader) (distribution.Manifest, core.Digest, error) {
 	if version != 2 {
 		return nil, core.Digest{}, fmt.Errorf("unsupported manifest version: %d", version)
 	}
-	d, err := core.NewDigestFromString(string(desc.Digest))
+	d, err := core.ParseSHA256Digest(string(desc.Digest))
 	if err != nil {
 		return nil, core.Digest{}, fmt.Errorf("parse digest: %s", err)
 	}
@@ -40,7 +40,7 @@ func ParseManifestV2(r io.Reader) (distribution.Manifest, core.Digest, error) {
 func GetManifestReferences(manifest distribution.Manifest) ([]core.Digest, error) {
 	var refs []core.Digest
 	for _, desc := range manifest.References() {
-		d, err := core.NewDigestFromString(string(desc.Digest))
+		d, err := core.ParseSHA256Digest(string(desc.Digest))
 		if err != nil {
 			return nil, fmt.Errorf("parse digest: %s", err)
 		}

@@ -97,7 +97,11 @@ func (s *Server) getPeerHandout(
 }
 
 func (s *Server) fetchOrigins(name string) ([]*core.PeerInfo, error) {
-	octxs, err := s.originCluster.Owners(core.NewSHA256DigestFromHex(name))
+	d, err := core.NewSHA256DigestFromHex(name)
+	if err != nil {
+		return nil, fmt.Errorf("new digest: %s", err)
+	}
+	octxs, err := s.originCluster.Owners(d)
 	if err != nil {
 		return nil, err
 	}

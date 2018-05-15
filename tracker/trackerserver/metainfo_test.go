@@ -33,7 +33,8 @@ func TestGetMetaInfoHandlerFetchesFromOrigin(t *testing.T) {
 	defer stop()
 
 	mi := core.MetaInfoFixture()
-	digest := core.NewSHA256DigestFromHex(mi.Name())
+	digest, err := core.NewSHA256DigestFromHex(mi.Name())
+	require.NoError(err)
 
 	mocks.originCluster.EXPECT().GetMetaInfo(namespace, digest).Return(mi, nil)
 
@@ -54,14 +55,15 @@ func TestGetMetaInfoHandlerCachesAndPropagatesOriginError(t *testing.T) {
 	defer stop()
 
 	mi := core.MetaInfoFixture()
-	digest := core.NewSHA256DigestFromHex(mi.Name())
+	digest, err := core.NewSHA256DigestFromHex(mi.Name())
+	require.NoError(err)
 
 	mocks.originCluster.EXPECT().GetMetaInfo(
 		namespace, digest).Return(nil, httputil.StatusError{Status: 599})
 
 	client := metainfoclient.New(addr)
 
-	_, err := client.Download(namespace, digest.Hex())
+	_, err = client.Download(namespace, digest.Hex())
 	require.Error(err)
 	require.True(httputil.IsStatus(err, 599))
 }
@@ -76,7 +78,8 @@ func TestConcurrentGetMetaInfo(t *testing.T) {
 	defer stop()
 
 	mi := core.MetaInfoFixture()
-	digest := core.NewSHA256DigestFromHex(mi.Name())
+	digest, err := core.NewSHA256DigestFromHex(mi.Name())
+	require.NoError(err)
 
 	mocks.originCluster.EXPECT().GetMetaInfo(
 		namespace, digest).Return(nil, httputil.StatusError{Status: 202}).Times(3)

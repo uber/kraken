@@ -21,27 +21,39 @@ type Digest struct {
 	raw  string
 }
 
-// NewDigestFromString initializes a new Digest obj from given string.
-func NewDigestFromString(str string) (Digest, error) {
-	digest := Digest{}
-	parts := strings.Split(str, ":")
-	if len(parts) != 2 {
-		return digest, fmt.Errorf("Digest %s is not correctly formatted", str)
+// NewSHA256DigestFromHex constructs a Digest from a sha256 in hexadecimal
+// format. Returns error if hex is not a valid sha256.
+func NewSHA256DigestFromHex(hex string) (Digest, error) {
+	if err := ValidateSHA256(hex); err != nil {
+		return Digest{}, fmt.Errorf("invalid sha256: %s", err)
 	}
-
-	digest.algo = parts[0]
-	digest.hex = parts[1]
-	digest.raw = str
-	return digest, nil
-}
-
-// NewSHA256DigestFromHex creates a new Digest obj
-func NewSHA256DigestFromHex(hexStr string) Digest {
 	return Digest{
 		algo: SHA256,
-		hex:  hexStr,
-		raw:  fmt.Sprintf("%s:%s", SHA256, hexStr),
+		hex:  hex,
+		raw:  fmt.Sprintf("%s:%s", SHA256, hex),
+	}, nil
+}
+
+// ParseSHA256Digest parses a raw "<algo>:<hex>" sha256 digest. Returns error if the
+// algo is not sha256 or the hex is not a valid sha256.
+func ParseSHA256Digest(raw string) (Digest, error) {
+	parts := strings.Split(raw, ":")
+	if len(parts) != 2 {
+		return Digest{}, errors.New("invalid digest: expected '<algo>:<hex>'")
 	}
+	algo := parts[0]
+	hex := parts[1]
+	if algo != SHA256 {
+		return Digest{}, errors.New("invalid digest algo: expected sha256")
+	}
+	if err := ValidateSHA256(hex); err != nil {
+		return Digest{}, fmt.Errorf("invalid sha256: %s", err)
+	}
+	return Digest{
+		algo: algo,
+		hex:  hex,
+		raw:  raw,
+	}, nil
 }
 
 // String returns digest in string format like "<algorithm>:<hex_digest_string>".
@@ -68,10 +80,10 @@ func (d Digest) ShardID() string {
 	return d.hex[:4]
 }
 
-// CheckSHA256Digest returns error if s is not a valid SHA256 hex digest.
-func CheckSHA256Digest(s string) error {
+// ValidateSHA256 returns error if s is not a valid SHA256 hex digest.
+func ValidateSHA256(s string) error {
 	if len(s) != 64 {
-		return errors.New("must be 64 characters")
+		return fmt.Errorf("expected 64 characters, got %d from %q", len(s), s)
 	}
 	if _, err := hex.DecodeString(s); err != nil {
 		return fmt.Errorf("hex: %s", err)

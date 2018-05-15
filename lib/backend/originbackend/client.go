@@ -2,6 +2,7 @@ package originbackend
 
 import (
 	"errors"
+	"fmt"
 	"io"
 
 	"code.uber.internal/infra/kraken/core"
@@ -37,13 +38,19 @@ func (c *Client) Stat(name string) (*blobinfo.Info, error) {
 
 // Download downloads name into dst. name must be the sha256 digest of src.
 func (c *Client) Download(name string, dst io.Writer) error {
-	d := core.NewSHA256DigestFromHex(name)
+	d, err := core.NewSHA256DigestFromHex(name)
+	if err != nil {
+		return fmt.Errorf("new digest: %s", err)
+	}
 	return c.cluster.DownloadBlob(c.config.Namespace, d, dst)
 }
 
 // Upload uploads src to name. name must be the sha256 digest of src.
 func (c *Client) Upload(name string, src io.Reader) error {
-	d := core.NewSHA256DigestFromHex(name)
+	d, err := core.NewSHA256DigestFromHex(name)
+	if err != nil {
+		return fmt.Errorf("new digest: %s", err)
+	}
 	through := !c.config.DisableUploadThrough
 	return c.cluster.UploadBlob(c.config.Namespace, d, src, through)
 }

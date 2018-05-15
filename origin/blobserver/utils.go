@@ -31,7 +31,7 @@ func parseDigest(r *http.Request) (d core.Digest, err error) {
 	if err != nil {
 		return d, handler.Errorf("path unescape digest: %s", err).Status(http.StatusBadRequest)
 	}
-	d, err = core.NewDigestFromString(raw)
+	d, err = core.ParseSHA256Digest(raw)
 	if err != nil {
 		return d, handler.Errorf("parse digest: %s", err).Status(http.StatusBadRequest)
 	}

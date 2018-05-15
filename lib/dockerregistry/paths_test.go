@@ -12,22 +12,11 @@ import (
 const _testDigestHex = "ff3a5c916c92643ff77519ffa742d3ec61b7f591b6b7504599d95a4a41134e28"
 
 func TestBlobsPath(t *testing.T) {
-	testCases := []struct {
-		name   string
-		input  string
-		digest core.Digest
-	}{
-		{"success", fmt.Sprintf("/v2/blobs/sha256/3z/%s/data", _testDigestHex), core.NewSHA256DigestFromHex(_testDigestHex)},
-	}
+	d := core.DigestFixture()
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			require := require.New(t)
-			digest, err := GetBlobDigest(tc.input)
-			require.NoError(err)
-			require.Equal(tc.digest, digest)
-		})
-	}
+	result, err := GetBlobDigest(fmt.Sprintf("/v2/blobs/sha256/%s/%s/data", d.Hex()[:2], d.Hex()))
+	require.NoError(t, err)
+	require.Equal(t, d, result)
 }
 
 func TestBlobsPathNoMatch(t *testing.T) {
@@ -122,22 +111,21 @@ func TestLayersPath(t *testing.T) {
 }
 
 func TestLayersPathGetDigest(t *testing.T) {
-	testDigest := core.NewSHA256DigestFromHex(_testDigestHex)
+	d := core.DigestFixture()
+
 	testCases := []struct {
-		name   string
-		input  string
-		digest core.Digest
+		name  string
+		input string
 	}{
-		{"valid data path", fmt.Sprintf("kraken/_layers/sha256/%s/data", _testDigestHex), testDigest},
-		{"valid link path", fmt.Sprintf("kraken/_layers/sha256/%s/link", _testDigestHex), testDigest},
+		{"valid data path", fmt.Sprintf("kraken/_layers/sha256/%s/data", d.Hex())},
+		{"valid link path", fmt.Sprintf("kraken/_layers/sha256/%s/link", d.Hex())},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			require := require.New(t)
-			digest, err := GetLayerDigest(tc.input)
-			require.NoError(err)
-			require.Equal(tc.digest, digest)
+			result, err := GetLayerDigest(tc.input)
+			require.NoError(t, err)
+			require.Equal(t, d, result)
 		})
 	}
 }
@@ -189,22 +177,20 @@ func TestManifestsPathMatch(t *testing.T) {
 }
 
 func TestManifestsPathGetDigest(t *testing.T) {
-	testDigest := core.NewSHA256DigestFromHex(_testDigestHex)
-	testCases := []struct {
-		name   string
-		input  string
-		digest core.Digest
-	}{
-		{"valid tag digest", fmt.Sprintf("kraken/_manifests/tags/sometag/index/sha256/%s/link", _testDigestHex), testDigest},
-		{"valid revision digest", fmt.Sprintf("kraken/_manifests/revisions/sha256/%s/link", _testDigestHex), testDigest},
-	}
+	d := core.DigestFixture()
 
+	testCases := []struct {
+		name  string
+		input string
+	}{
+		{"valid tag digest", fmt.Sprintf("kraken/_manifests/tags/sometag/index/sha256/%s/link", d.Hex())},
+		{"valid revision digest", fmt.Sprintf("kraken/_manifests/revisions/sha256/%s/link", d.Hex())},
+	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			require := require.New(t)
-			digest, err := GetManifestDigest(tc.input)
-			require.NoError(err)
-			require.Equal(tc.digest, digest)
+			result, err := GetManifestDigest(tc.input)
+			require.NoError(t, err)
+			require.Equal(t, d, result)
 		})
 	}
 }

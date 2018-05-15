@@ -84,7 +84,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return handler.Errorf("backend manager: %s", err)
 	}
-	if err := client.Upload(tag, bytes.NewBufferString(d)); err != nil {
+	if err := client.Upload(tag, bytes.NewBufferString(d.String())); err != nil {
 		return handler.Errorf("backend client: %s", err)
 	}
 	w.WriteHeader(http.StatusOK)
@@ -100,8 +100,10 @@ func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	digest := v.(string)
-	io.WriteString(w, digest)
+	digest := v.(core.Digest)
+	if _, err := io.WriteString(w, digest.String()); err != nil {
+		return handler.Errorf("write digest: %s", err)
+	}
 	return nil
 }
 
@@ -120,10 +122,14 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 	}
 	// Some ugliness to convert strings into typed digests.
 	var deps []core.Digest
-	for _, d := range req.Dependencies {
-		deps = append(deps, core.NewSHA256DigestFromHex(d))
+	for _, dep := range req.Dependencies {
+		depDigest, err := core.ParseSHA256Digest(dep)
+		if err != nil {
+			return handler.Errorf("parse dep digest: %s", err).Status(http.StatusBadRequest)
+		}
+		deps = append(deps, depDigest)
 	}
-	err = s.replicator.Replicate(tag, core.NewSHA256DigestFromHex(d), deps)
+	err = s.replicator.Replicate(tag, d, deps)
 	if err != nil {
 		return handler.Errorf("replicate: %s", err)
 	}
@@ -131,6 +137,8 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 }
 
 func (s *Server) getOriginHandler(w http.ResponseWriter, r *http.Request) error {
-	io.WriteString(w, s.localOriginDNS)
+	if _, err := io.WriteString(w, s.localOriginDNS); err != nil {
+		return handler.Errorf("write local origin dns: %s", err)
+	}
 	return nil
 }

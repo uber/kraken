@@ -89,7 +89,11 @@ func GetBlobDigest(path string) (core.Digest, error) {
 	if len(matches) < 2 {
 		return core.Digest{}, InvalidRegistryPathError{_blobs, path}
 	}
-	return core.NewSHA256DigestFromHex(matches[1]), nil
+	d, err := core.NewSHA256DigestFromHex(matches[1])
+	if err != nil {
+		return core.Digest{}, fmt.Errorf("new digest: %s", err)
+	}
+	return d, nil
 }
 
 // GetLayerDigest returns digest of the layer
@@ -99,7 +103,11 @@ func GetLayerDigest(path string) (core.Digest, error) {
 	if len(matches) < 2 {
 		return core.Digest{}, InvalidRegistryPathError{_layers, path}
 	}
-	return core.NewSHA256DigestFromHex(matches[1]), nil
+	d, err := core.NewSHA256DigestFromHex(matches[1])
+	if err != nil {
+		return core.Digest{}, fmt.Errorf("new digest: %s", err)
+	}
+	return d, nil
 }
 
 // GetManifestDigest returns manifest or tag digest
@@ -109,7 +117,11 @@ func GetManifestDigest(path string) (core.Digest, error) {
 	if len(matches) < 2 {
 		return core.Digest{}, InvalidRegistryPathError{_manifests, path}
 	}
-	return core.NewSHA256DigestFromHex(matches[1]), nil
+	d, err := core.NewSHA256DigestFromHex(matches[1])
+	if err != nil {
+		return core.Digest{}, fmt.Errorf("new digest: %s", err)
+	}
+	return d, nil
 }
 
 // GetManifestTag returns tag name

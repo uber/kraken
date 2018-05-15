@@ -2,7 +2,7 @@ package core
 
 import (
 	"crypto"
-	"fmt"
+	"encoding/hex"
 	"hash"
 	"io"
 )
@@ -26,8 +26,11 @@ func NewDigester() *Digester {
 
 // Digest returns the digest of existing data.
 func (d *Digester) Digest() Digest {
-	// Safe to ignore error.
-	digest, _ := NewDigestFromString(fmt.Sprintf("%s:%x", SHA256, d.hash.Sum(nil)))
+	digest, err := NewSHA256DigestFromHex(hex.EncodeToString(d.hash.Sum(nil)))
+	if err != nil {
+		// This should never fail.
+		panic(err)
+	}
 	return digest
 }
 
