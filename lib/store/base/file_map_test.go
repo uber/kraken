@@ -126,7 +126,7 @@ func testFileMapLoad(require *require.Assertions, bundle *fileMapTestBundle) {
 
 	// Loading an non-existent entry does nothing.
 	testInt := 1
-	loaded := fm.Load(fe.GetName(), func(name string, entry FileEntry) {
+	loaded := fm.LoadForWrite(fe.GetName(), func(name string, entry FileEntry) {
 		testInt = 2
 		return
 	})
@@ -146,7 +146,7 @@ func testFileMapLoad(require *require.Assertions, bundle *fileMapTestBundle) {
 		go func() {
 			defer wg.Done()
 			var err error
-			loaded := fm.Load(fe.GetName(), func(name string, entry FileEntry) {
+			loaded := fm.LoadForWrite(fe.GetName(), func(name string, entry FileEntry) {
 				if fe.GetState() == s2 {
 					atomic.AddUint32(&stateErrorCount, 1)
 				} else {

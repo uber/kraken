@@ -1,6 +1,10 @@
 package base
 
-import "github.com/andres-erbsen/clock"
+import (
+	"fmt"
+
+	"github.com/andres-erbsen/clock"
+)
 
 // FileStore manages files and their metadata. Actual operations are done through FileOp.
 type FileStore interface {
@@ -19,9 +23,14 @@ type localFileStore struct {
 
 // NewLocalFileStore initializes and returns a new FileStore. It allows dependency injection.
 func NewLocalFileStore(clk clock.Clock) (FileStore, error) {
+	m, err := NewLATFileMap(clk)
+	if err != nil {
+		return nil, fmt.Errorf("init file map: %s", err)
+	}
+
 	return &localFileStore{
-		fileEntryFactory: DefaultLocalFileEntryFactory(clk),
-		fileMap:          NewSimpleFileMap(),
+		fileEntryFactory: NewLocalFileEntryFactory(),
+		fileMap:          m,
 	}, nil
 }
 
@@ -29,9 +38,14 @@ func NewLocalFileStore(clk clock.Clock) (FileStore, error) {
 // It uses the first few bytes of file digest (which is also used as file name) as shard ID.
 // For every byte, one more level of directories will be created.
 func NewCASFileStore(clk clock.Clock) (FileStore, error) {
+	m, err := NewLATFileMap(clk)
+	if err != nil {
+		return nil, fmt.Errorf("init file map: %s", err)
+	}
+
 	return &localFileStore{
-		fileEntryFactory: DefaultCASFileEntryFactory(clk),
-		fileMap:          NewSimpleFileMap(),
+		fileEntryFactory: NewCASFileEntryFactory(),
+		fileMap:          m,
 	}, nil
 }
 
@@ -43,7 +57,7 @@ func NewLRUFileStore(size int, clk clock.Clock) (FileStore, error) {
 		return nil, err
 	}
 	return &localFileStore{
-		fileEntryFactory: DefaultLocalFileEntryFactory(clk),
+		fileEntryFactory: NewLocalFileEntryFactory(),
 		fileMap:          fm,
 	}, nil
 }
@@ -59,7 +73,7 @@ func NewCASFileStoreWithLRUMap(size int, clk clock.Clock) (FileStore, error) {
 		return nil, err
 	}
 	return &localFileStore{
-		fileEntryFactory: DefaultCASFileEntryFactory(clk),
+		fileEntryFactory: NewCASFileEntryFactory(),
 		fileMap:          fm,
 	}, nil
 }
