@@ -34,9 +34,9 @@ type Manager struct {
 }
 
 // NewManager creates a new Manager.
-func NewManager(namespaces NamespaceConfig, auth AuthConfig) (*Manager, error) {
+func NewManager(configs []Config, auth AuthConfig) (*Manager, error) {
 	var backends []*backend
-	for ns, config := range namespaces {
+	for _, config := range configs {
 		var c Client
 		var err error
 		switch config.Backend {
@@ -51,14 +51,15 @@ func NewManager(namespaces NamespaceConfig, auth AuthConfig) (*Manager, error) {
 		case "testfs":
 			c, err = testfs.NewClient(config.TestFS)
 		default:
-			return nil, fmt.Errorf("unknown backend for namespace %s: %s", ns, config.Backend)
+			return nil, fmt.Errorf(
+				"unknown backend for namespace %s: %s", config.Namespace, config.Backend)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("new client for backend %s: %s", config.Backend, err)
 		}
-		b, err := newBackend(ns, c)
+		b, err := newBackend(config.Namespace, c)
 		if err != nil {
-			return nil, fmt.Errorf("new backend for namespace %s: %s", ns, err)
+			return nil, fmt.Errorf("new backend for namespace %s: %s", config.Namespace, err)
 		}
 		backends = append(backends, b)
 	}

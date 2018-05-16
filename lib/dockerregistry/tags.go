@@ -79,7 +79,7 @@ func (t *Tags) GetDigest(path string, subtype PathSubType) (data []byte, err err
 		return nil, &InvalidRequestError{path}
 	}
 
-	blob, err := t.transferer.Download(getNamespace(repo), digest)
+	blob, err := t.transferer.Download(repo, digest)
 	if err != nil {
 		log.Errorf("Failed to download %s: %s", digest, err)
 		return nil, storagedriver.PathNotFoundError{
