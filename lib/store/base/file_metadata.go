@@ -5,9 +5,7 @@ import (
 )
 
 // MetadataType defines types of matadata file.
-// All implementations of MetadataType must register itself.
-// TODO: instead of using suffix to identify MetadataType on local disk, move data file to
-// <filename>/data, metadata to <filename>/<metadata>
+// All implementations of MetadataType must register themselves.
 type MetadataType interface {
 	GetSuffix() string
 	Movable() bool

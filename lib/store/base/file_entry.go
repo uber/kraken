@@ -7,9 +7,6 @@ import (
 	"os"
 	"path"
 	"sync"
-	"time"
-
-	"github.com/andres-erbsen/clock"
 )
 
 // FileState decides what directory a file is in.
@@ -59,47 +56,23 @@ type FileEntry interface {
 	GetOrSetMetadata(mt MetadataType, b []byte) ([]byte, error)
 	DeleteMetadata(mt MetadataType) error
 	RangeMetadata(f func(mt MetadataType) error) error
-
-	Lock()
-	Unlock()
-	RLock()
-	RUnlock()
 }
 
 var _ FileEntryFactory = (*localFileEntryFactory)(nil)
 var _ FileEntryFactory = (*casFileEntryFactory)(nil)
 var _ FileEntry = (*localFileEntry)(nil)
 
-type fileEntryConfig struct {
-	lastAccessResolution time.Duration
-}
-
-func (c fileEntryConfig) applyDefaults() fileEntryConfig {
-	if c.lastAccessResolution == 0 {
-		c.lastAccessResolution = 5 * time.Second
-	}
-	return c
-}
-
 // localFileEntryFactory initializes localFileEntry obj.
-type localFileEntryFactory struct {
-	config fileEntryConfig
-	clk    clock.Clock
-}
+type localFileEntryFactory struct{}
 
 // NewLocalFileEntryFactory is the constructor for localFileEntryFactory.
-func NewLocalFileEntryFactory(config fileEntryConfig, clk clock.Clock) FileEntryFactory {
-	return &localFileEntryFactory{config, clk}
-}
-
-// DefaultLocalFileEntryFactory returns a new local FileEntryFactory with default settings.
-func DefaultLocalFileEntryFactory(clk clock.Clock) FileEntryFactory {
-	return NewLocalFileEntryFactory(fileEntryConfig{}, clk)
+func NewLocalFileEntryFactory() FileEntryFactory {
+	return &localFileEntryFactory{}
 }
 
 // Create initializes and returns a FileEntry object.
 func (f *localFileEntryFactory) Create(name string, state FileState) FileEntry {
-	return newLocalFileEntry(f.config, state, name, f.GetRelativePath(name), f.clk)
+	return newLocalFileEntry(state, name, f.GetRelativePath(name))
 }
 
 // GetRelativePath returns name because file entries are stored flat under state directory.
@@ -123,24 +96,16 @@ func (f *localFileEntryFactory) ListNames(state FileState) ([]string, error) {
 // casFileEntryFactory initializes localFileEntry obj.
 // It uses the first few bytes of file digest (which is also used as file name) as shard ID.
 // For every byte, one more level of directories will be created.
-type casFileEntryFactory struct {
-	config fileEntryConfig
-	clk    clock.Clock
-}
+type casFileEntryFactory struct{}
 
 // NewCASFileEntryFactory is the constructor for casFileEntryFactory.
-func NewCASFileEntryFactory(config fileEntryConfig, clk clock.Clock) FileEntryFactory {
-	return &casFileEntryFactory{config, clk}
-}
-
-// DefaultCASFileEntryFactory returns a new cas FileEntryFactory with default settings.
-func DefaultCASFileEntryFactory(clk clock.Clock) FileEntryFactory {
-	return NewCASFileEntryFactory(fileEntryConfig{}, clk)
+func NewCASFileEntryFactory() FileEntryFactory {
+	return &casFileEntryFactory{}
 }
 
 // Create initializes and returns a FileEntry object.
 func (f *casFileEntryFactory) Create(name string, state FileState) FileEntry {
-	return newLocalFileEntry(f.config, state, name, f.GetRelativePath(name), f.clk)
+	return newLocalFileEntry(state, name, f.GetRelativePath(name))
 }
 
 // GetRelativePath returns content-addressable file path under state directory.
@@ -193,29 +158,18 @@ func (f *casFileEntryFactory) ListNames(state FileState) ([]string, error) {
 type localFileEntry struct {
 	sync.RWMutex
 
-	config           fileEntryConfig
-	clk              clock.Clock
 	state            FileState
 	name             string
-	relativeDataPath string // Relative path to data file
+	relativeDataPath string // Relative path to data file.
 	metadataSet      map[MetadataType]struct{}
-
-	// Tracks when the last access time was flushed to disk.
-	lastAccessFlush time.Time
 }
 
 func newLocalFileEntry(
-	config fileEntryConfig,
 	state FileState,
 	name string,
 	relativeDataPath string,
-	clk clock.Clock) *localFileEntry {
-
-	config = config.applyDefaults()
-
+) *localFileEntry {
 	return &localFileEntry{
-		config:           config,
-		clk:              clk,
 		state:            state,
 		name:             name,
 		relativeDataPath: relativeDataPath,
@@ -244,7 +198,7 @@ func (entry *localFileEntry) GetStat() (os.FileInfo, error) {
 }
 
 // Create creates a file on disk.
-func (entry *localFileEntry) Create(targetState FileState, len int64) error {
+func (entry *localFileEntry) Create(targetState FileState, size int64) error {
 	if entry.state != targetState {
 		return &FileStateError{
 			Op:    "Create",
@@ -260,24 +214,22 @@ func (entry *localFileEntry) Create(targetState FileState, len int64) error {
 		return os.ErrExist
 	}
 
-	// Create dir
-	os.MkdirAll(path.Dir(targetPath), DefaultDirPermission)
+	// Create dir.
+	if err := os.MkdirAll(path.Dir(targetPath), DefaultDirPermission); err != nil {
+		return err
+	}
 
-	// Create file
+	// Create file.
 	f, err := os.Create(targetPath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	if err := entry.touch(); err != nil {
-		return err
-	}
-
-	// Change size
-	err = f.Truncate(len)
+	// Change size.
+	err = f.Truncate(size)
 	if err != nil {
-		// Try to delete file
+		// Try to delete file.
 		os.RemoveAll(path.Dir(targetPath))
 		return err
 	}
@@ -288,11 +240,11 @@ func (entry *localFileEntry) Create(targetState FileState, len int64) error {
 // Reload tries to reload a file that doesn't exist in memory from disk.
 func (entry *localFileEntry) Reload(targetState FileState) error {
 	// Verify the file is still on disk.
-	_, err := os.Stat(entry.GetPath())
-	if err != nil {
+	if _, err := os.Stat(entry.GetPath()); err != nil {
 		// Return os.ErrNotExist.
 		return err
 	}
+
 	// Load metadata.
 	files, err := ioutil.ReadDir(path.Dir(entry.GetPath()))
 	if err != nil {
@@ -329,15 +281,19 @@ func (entry *localFileEntry) MoveFrom(targetState FileState, sourcePath string) 
 		return os.ErrExist
 	}
 
-	// Create dir.
-	os.MkdirAll(path.Dir(targetPath), DefaultDirPermission)
-
-	// Move data.
-	if err := os.Rename(sourcePath, targetPath); err != nil {
+	// Verify the source file exists.
+	if _, err := os.Stat(sourcePath); err != nil {
+		// Return os.ErrNotExist.
 		return err
 	}
 
-	return entry.touch()
+	// Create dir.
+	if err := os.MkdirAll(path.Dir(targetPath), DefaultDirPermission); err != nil {
+		return err
+	}
+
+	// Move data.
+	return os.Rename(sourcePath, targetPath)
 }
 
 // Move moves file to target dir under the same name, moves all metadata that's `movable`, and
@@ -347,6 +303,12 @@ func (entry *localFileEntry) Move(targetState FileState) error {
 	sourcePath := entry.GetPath()
 	targetPath := path.Join(targetState.GetDirectory(), entry.relativeDataPath)
 	if err := os.MkdirAll(path.Dir(targetPath), DefaultDirPermission); err != nil {
+		return err
+	}
+
+	// Get file stats, update size in memory.
+	if _, err := os.Stat(sourcePath); err != nil {
+		// Return os.ErrNotExist.
 		return err
 	}
 
@@ -380,7 +342,7 @@ func (entry *localFileEntry) Move(targetState FileState) error {
 	// Delete source dir. Ignore error.
 	os.RemoveAll(path.Dir(sourcePath))
 
-	return entry.touch()
+	return nil
 }
 
 // MoveTo moves data file out to an unmanaged location.
@@ -388,7 +350,15 @@ func (entry *localFileEntry) MoveTo(targetPath string) error {
 	sourcePath := entry.GetPath()
 
 	// Create dir.
-	os.MkdirAll(path.Dir(targetPath), DefaultDirPermission)
+	if err := os.MkdirAll(path.Dir(targetPath), DefaultDirPermission); err != nil {
+		return err
+	}
+
+	// Get file stats, update size in memory.
+	if _, err := os.Stat(sourcePath); err != nil {
+		// Return os.ErrNotExist.
+		return err
+	}
 
 	// Move data.
 	if err := os.Rename(sourcePath, targetPath); err != nil {
@@ -402,7 +372,9 @@ func (entry *localFileEntry) MoveTo(targetPath string) error {
 
 // Delete removes file and all of its metedata files from disk.
 func (entry *localFileEntry) Delete() error {
+	// Remove files, ignore error.
 	os.RemoveAll(path.Dir(entry.GetPath()))
+
 	return nil
 }
 
@@ -412,9 +384,7 @@ func (entry *localFileEntry) GetReader() (FileReader, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := entry.touch(); err != nil {
-		return nil, err
-	}
+
 	reader := &localFileReadWriter{
 		entry:      entry,
 		descriptor: f,
@@ -428,9 +398,7 @@ func (entry *localFileEntry) GetReadWriter() (FileReadWriter, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := entry.touch(); err != nil {
-		return nil, err
-	}
+
 	readWriter := &localFileReadWriter{
 		entry:      entry,
 		descriptor: f,
@@ -513,8 +481,7 @@ func (entry *localFileEntry) SetMetadataAt(mt MetadataType, b []byte, off int64)
 	}
 	defer f.Close()
 	buf := make([]byte, len(b))
-	_, err = f.ReadAt(buf, off)
-	if err != nil {
+	if _, err := f.ReadAt(buf, off); err != nil {
 		return 0, err
 	}
 	if bytes.Compare(buf, b) == 0 {
@@ -562,19 +529,6 @@ func (entry *localFileEntry) GetOrSetMetadata(mt MetadataType, b []byte) ([]byte
 	return c, nil
 }
 
-// touch updates entry's last access time.
-func (entry *localFileEntry) touch() error {
-	now := entry.clk.Now()
-	flush := now.Sub(entry.lastAccessFlush) >= entry.config.lastAccessResolution
-
-	var err error
-	if flush {
-		entry.lastAccessFlush = now
-		_, err = entry.SetMetadata(NewLastAccessTime(), MarshalLastAccessTime(now))
-	}
-	return err
-}
-
 // compareAndWriteFile updates file with given bytes and returns true only if the file is updated
 // correctly.
 // It returns false if error happened or file already contains desired content.
@@ -586,13 +540,11 @@ func compareAndWriteFile(filePath string, b []byte) (bool, error) {
 	}
 
 	if os.IsNotExist(err) {
-		err = os.MkdirAll(path.Dir(filePath), 0755)
-		if err != nil {
+		if err := os.MkdirAll(path.Dir(filePath), 0755); err != nil {
 			return false, err
 		}
 
-		err = ioutil.WriteFile(filePath, b, 0755)
-		if err != nil {
+		if err := ioutil.WriteFile(filePath, b, 0755); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -606,8 +558,7 @@ func compareAndWriteFile(filePath string, b []byte) (bool, error) {
 
 	// Compare with existing data, overwrite if different.
 	buf := make([]byte, int(fs.Size()))
-	_, err = f.Read(buf)
-	if err != nil {
+	if _, err := f.Read(buf); err != nil {
 		return false, err
 	}
 	if bytes.Compare(buf, b) == 0 {
@@ -615,14 +566,12 @@ func compareAndWriteFile(filePath string, b []byte) (bool, error) {
 	}
 
 	if len(buf) != len(b) {
-		err = f.Truncate(int64(len(b)))
-		if err != nil {
+		if err := f.Truncate(int64(len(b))); err != nil {
 			return false, err
 		}
 	}
 
-	_, err = f.WriteAt(b, 0)
-	if err != nil {
+	if _, err := f.WriteAt(b, 0); err != nil {
 		return false, err
 	}
 	return true, nil

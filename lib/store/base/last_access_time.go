@@ -48,15 +48,3 @@ func UnmarshalLastAccessTime(b []byte) (time.Time, error) {
 	}
 	return time.Unix(int64(i), 0), nil
 }
-
-func getLastAccessTime(fe FileEntry) (time.Time, error) {
-	raw, err := fe.GetMetadata(NewLastAccessTime())
-	if err != nil {
-		return time.Time{}, err
-	}
-	t, err := UnmarshalLastAccessTime(raw)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return t, nil
-}

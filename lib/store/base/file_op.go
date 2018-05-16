@@ -6,6 +6,17 @@ import (
 	"strings"
 )
 
+type lockLevel int
+
+const (
+	// lockLevelPeek is used as parameeter to lockHelper to indicate the lock is for peek.
+	_lockLevelPeek lockLevel = iota
+	// lockLevelRead indicates lock for read.
+	_lockLevelRead
+	// lockLevelWrite indicates lock for read.
+	_lockLevelWrite
+)
+
 // FileOp performs one file or metadata operation on FileStore, given a list of acceptable states.
 type FileOp interface {
 	AcceptState(state FileState) FileOp
@@ -103,7 +114,7 @@ func (op *localFileOp) reloadFileEntryHelper(name string) (reloaded bool, err er
 		// Try to store file entry into memory.
 		// It's possible the entry was just reloaded by another goroutine before this point, then
 		// false will be returned.
-		// It's also possibble the entry was just added/reloaded and then deleted, in which case
+		// It's also possible the entry was just added/reloaded and then deleted, in which case
 		// os.ErrNotExist will be returned, and the newly added file entry will be deleted from map.
 		_, loaded := op.s.fileMap.LoadOrStore(
 			name, fileEntry, func(name string, entry FileEntry) error {
@@ -123,22 +134,29 @@ func (op *localFileOp) reloadFileEntryHelper(name string) (reloaded bool, err er
 	return false, os.ErrNotExist
 }
 
-// loadHelper runs f under protection of entry level RWMutex.
-func (op *localFileOp) loadHelper(
-	name string, readOnly bool, f func(name string, entry FileEntry)) (err error) {
+// lockHelper runs f under protection of entry level RWMutex.
+func (op *localFileOp) lockHelper(
+	name string, l lockLevel, f func(name string, entry FileEntry)) (err error) {
 	if _, err = op.reloadFileEntryHelper(name); err != nil {
 		return err
 	}
 	var loaded bool
-	if readOnly {
-		loaded = op.s.fileMap.LoadReadOnly(name, func(name string, entry FileEntry) {
+	if l == _lockLevelPeek {
+		loaded = op.s.fileMap.LoadForPeek(name, func(name string, entry FileEntry) {
 			if err = op.verifyStateHelper(name, entry); err != nil {
 				return
 			}
 			f(name, entry)
 		})
-	} else {
-		loaded = op.s.fileMap.Load(name, func(name string, entry FileEntry) {
+	} else if l == _lockLevelRead {
+		loaded = op.s.fileMap.LoadForRead(name, func(name string, entry FileEntry) {
+			if err = op.verifyStateHelper(name, entry); err != nil {
+				return
+			}
+			f(name, entry)
+		})
+	} else if l == _lockLevelWrite {
+		loaded = op.s.fileMap.LoadForWrite(name, func(name string, entry FileEntry) {
 			if err = op.verifyStateHelper(name, entry); err != nil {
 				return
 			}
@@ -173,7 +191,7 @@ func (op *localFileOp) deleteHelper(
 func (op *localFileOp) createFileHelper(
 	name string, targetState FileState, sourcePath string, len int64) (err error) {
 	// Check if file exists in in-memory map and is in an acceptable state.
-	loaded := op.s.fileMap.LoadReadOnly(name, func(name string, entry FileEntry) {
+	loaded := op.s.fileMap.LoadForRead(name, func(name string, entry FileEntry) {
 		err = op.verifyStateHelper(name, entry)
 	})
 	if err != nil && !os.IsNotExist(err) {
@@ -245,7 +263,7 @@ func (op *localFileOp) MoveFile(name string, targetState FileState) (err error) 
 	}
 
 	// Verify that the file is not in target state, and is currently in one of the acceptable states.
-	loaded := op.s.fileMap.Load(name, func(name string, entry FileEntry) {
+	loaded := op.s.fileMap.LoadForWrite(name, func(name string, entry FileEntry) {
 		currState := entry.GetState()
 		if currState == targetState {
 			err = os.ErrExist
@@ -295,7 +313,7 @@ func (op *localFileOp) DeleteFile(name string) (err error) {
 
 // GetFilePath returns full path for a file.
 func (op *localFileOp) GetFilePath(name string) (path string, err error) {
-	if loadErr := op.loadHelper(name, true, func(name string, entry FileEntry) {
+	if loadErr := op.lockHelper(name, _lockLevelPeek, func(name string, entry FileEntry) {
 		path = entry.GetPath()
 	}); loadErr != nil {
 		return "", loadErr
@@ -305,7 +323,7 @@ func (op *localFileOp) GetFilePath(name string) (path string, err error) {
 
 // GetFileStat returns FileInfo for a file.
 func (op *localFileOp) GetFileStat(name string) (info os.FileInfo, err error) {
-	if loadErr := op.loadHelper(name, true, func(name string, entry FileEntry) {
+	if loadErr := op.lockHelper(name, _lockLevelPeek, func(name string, entry FileEntry) {
 		info, err = entry.GetStat()
 	}); loadErr != nil {
 		return nil, loadErr
@@ -315,7 +333,7 @@ func (op *localFileOp) GetFileStat(name string) (info os.FileInfo, err error) {
 
 // GetFileReader returns a FileReader object for read operations.
 func (op *localFileOp) GetFileReader(name string) (r FileReader, err error) {
-	if loadErr := op.loadHelper(name, false, func(name string, entry FileEntry) {
+	if loadErr := op.lockHelper(name, _lockLevelRead, func(name string, entry FileEntry) {
 		r, err = entry.GetReader()
 	}); loadErr != nil {
 		return nil, loadErr
@@ -325,7 +343,7 @@ func (op *localFileOp) GetFileReader(name string) (r FileReader, err error) {
 
 // GetFileReadWriter returns a FileReadWriter object for read/write operations.
 func (op *localFileOp) GetFileReadWriter(name string) (w FileReadWriter, err error) {
-	if loadErr := op.loadHelper(name, false, func(name string, entry FileEntry) {
+	if loadErr := op.lockHelper(name, _lockLevelWrite, func(name string, entry FileEntry) {
 		w, err = entry.GetReadWriter()
 	}); loadErr != nil {
 		return nil, loadErr
@@ -335,7 +353,7 @@ func (op *localFileOp) GetFileReadWriter(name string) (w FileReadWriter, err err
 
 // GetFileMetadata returns metadata assocciated with the file.
 func (op *localFileOp) GetFileMetadata(name string, mt MetadataType) (b []byte, err error) {
-	if loadErr := op.loadHelper(name, true, func(name string, entry FileEntry) {
+	if loadErr := op.lockHelper(name, _lockLevelPeek, func(name string, entry FileEntry) {
 		b, err = entry.GetMetadata(mt)
 	}); loadErr != nil {
 		return nil, loadErr
@@ -345,7 +363,7 @@ func (op *localFileOp) GetFileMetadata(name string, mt MetadataType) (b []byte, 
 
 // SetFileMetadata creates or overwrites metadata assocciate with the file with content.
 func (op *localFileOp) SetFileMetadata(name string, mt MetadataType, b []byte) (updated bool, err error) {
-	if loadErr := op.loadHelper(name, false, func(name string, entry FileEntry) {
+	if loadErr := op.lockHelper(name, _lockLevelWrite, func(name string, entry FileEntry) {
 		updated, err = entry.SetMetadata(mt, b)
 	}); loadErr != nil {
 		return false, loadErr
@@ -355,7 +373,7 @@ func (op *localFileOp) SetFileMetadata(name string, mt MetadataType, b []byte) (
 
 // GetFileMetadataAt returns metadata assocciate with the file.
 func (op *localFileOp) GetFileMetadataAt(name string, mt MetadataType, b []byte, off int64) (l int, err error) {
-	if loadErr := op.loadHelper(name, true, func(name string, entry FileEntry) {
+	if loadErr := op.lockHelper(name, _lockLevelPeek, func(name string, entry FileEntry) {
 		l, err = entry.GetMetadataAt(mt, b, off)
 	}); loadErr != nil {
 		return 0, loadErr
@@ -365,7 +383,7 @@ func (op *localFileOp) GetFileMetadataAt(name string, mt MetadataType, b []byte,
 
 // SetFileMetadataAt overwrites metadata assocciate with the file with content.
 func (op *localFileOp) SetFileMetadataAt(name string, mt MetadataType, b []byte, off int64) (l int, err error) {
-	if loadErr := op.loadHelper(name, false, func(name string, entry FileEntry) {
+	if loadErr := op.lockHelper(name, _lockLevelWrite, func(name string, entry FileEntry) {
 		l, err = entry.SetMetadataAt(mt, b, off)
 	}); loadErr != nil {
 		return 0, loadErr
@@ -375,7 +393,7 @@ func (op *localFileOp) SetFileMetadataAt(name string, mt MetadataType, b []byte,
 
 // GetOrSetFileMetadata see localFileEntryInternal.
 func (op *localFileOp) GetOrSetFileMetadata(name string, mt MetadataType, b []byte) (c []byte, err error) {
-	if loadErr := op.loadHelper(name, false, func(name string, entry FileEntry) {
+	if loadErr := op.lockHelper(name, _lockLevelWrite, func(name string, entry FileEntry) {
 		b, err = entry.GetOrSetMetadata(mt, b)
 	}); loadErr != nil {
 		return nil, loadErr
@@ -385,7 +403,7 @@ func (op *localFileOp) GetOrSetFileMetadata(name string, mt MetadataType, b []by
 
 // DeleteFileMetadata deletes metadata of the specified type for a file.
 func (op *localFileOp) DeleteFileMetadata(name string, mt MetadataType) (err error) {
-	loadErr := op.loadHelper(name, false, func(name string, entry FileEntry) {
+	loadErr := op.lockHelper(name, _lockLevelWrite, func(name string, entry FileEntry) {
 		err = entry.DeleteMetadata(mt)
 	})
 	if loadErr != nil {
@@ -396,7 +414,7 @@ func (op *localFileOp) DeleteFileMetadata(name string, mt MetadataType) (err err
 
 // RangeFileMetadata loops through all metadata of one file and applies function f, until an error happens.
 func (op *localFileOp) RangeFileMetadata(name string, f func(mt MetadataType) error) (err error) {
-	loadErr := op.loadHelper(name, false, func(name string, entry FileEntry) {
+	loadErr := op.lockHelper(name, _lockLevelWrite, func(name string, entry FileEntry) {
 		err = entry.RangeMetadata(f)
 	})
 	if loadErr != nil {
