@@ -28,6 +28,11 @@ func NewClient(config Config) (*Client, error) {
 	return &Client{config}, nil
 }
 
+// Addr returns the configured server address.
+func (c *Client) Addr() string {
+	return c.config.Addr
+}
+
 // Stat returns blob info for name.
 func (c *Client) Stat(name string) (*blobinfo.Info, error) {
 	_, err := httputil.Head(fmt.Sprintf("http://%s/files/%s", c.config.Addr, name))

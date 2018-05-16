@@ -74,7 +74,7 @@ func (b *Blobs) GetDigest(path string) ([]byte, error) {
 		return nil, err
 	}
 
-	blob, err := b.transferer.Download(getNamespace(repo), digest)
+	blob, err := b.transferer.Download(repo, digest)
 	if err != nil {
 		log.Errorf("Failed to download %s: %s", digest, err)
 		return nil, storagedriver.PathNotFoundError{
