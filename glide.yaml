@@ -56,6 +56,7 @@ import:
 - package: golang.org/x/crypto
   subpackages:
   - ssh
+- package: github.com/jmoiron/sqlx
 testImport:
 - package: github.com/stretchr/testify
   version: ^1.1.4
@@ -66,6 +67,5 @@ testImport:
 - package: golang.org/x/time
   subpackages:
   - rate
-- package: github.com/jmoiron/sqlx
 - package: github.com/hashicorp/golang-lru
 - package: github.com/mattn/go-sqlite3
