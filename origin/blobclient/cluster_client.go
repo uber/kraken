@@ -82,7 +82,7 @@ func (c *clusterClient) UploadBlob(
 	shuffle(clients)
 	for _, client := range clients {
 		err = client.UploadBlob(namespace, d, blob, through)
-		if err != nil {
+		if httputil.IsNetworkError(err) {
 			continue
 		}
 		break

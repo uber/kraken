@@ -46,7 +46,7 @@ coverage.html
 db/data
 
 # Test configuratino generated from templates.
-config/*/test.yaml
+config/*/test*.yaml
 
 # For vim users.
 tags

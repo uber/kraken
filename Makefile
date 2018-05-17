@@ -316,11 +316,16 @@ bootstrap_integration:
 
 build_integration: tracker origin agent proxy testfs tools/bin/puller/puller build-index docker_stop
 
-run_integration:
+run_integration: docker_stop
 	source env/bin/activate
 	env/bin/py.test --timeout=120 -v test/python
 
 integration: bootstrap_integration build_integration run_integration
+
+NAME?=test_
+runtest: docker_stop
+	source env/bin/activate
+	env/bin/py.test --timeout=120 -v test/python -k $(NAME)
 
 linux-benchmarks:
 	-rm tools/bin/benchmarks/benchmarks
