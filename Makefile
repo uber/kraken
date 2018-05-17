@@ -97,7 +97,7 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/build-index/tagclient/mocktagclient.go \
 		-package mocktagclient \
-		code.uber.internal/infra/kraken/build-index/tagclient Client
+		code.uber.internal/infra/kraken/build-index/tagclient Provider,Client
 
 	mkdir -p mocks/tracker/announceclient
 	$(mockgen) \
@@ -175,13 +175,13 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/lib/persistedretry/mockpersistedretry.go \
 		-package mockpersistedretry \
-		code.uber.internal/infra/kraken/lib/persistedretry Store,Task
+		code.uber.internal/infra/kraken/lib/persistedretry Store,Task,Executor
 	
 	mkdir -p mocks/lib/persistedretry/tagreplicate
 	$(mockgen) \
 		-destination=mocks/lib/persistedretry/tagreplicate/mocktagreplicate.go \
 		-package mocktagreplicate \
-		code.uber.internal/infra/kraken/lib/persistedretry/tagreplicate TaskGenerator
+		code.uber.internal/infra/kraken/lib/persistedretry/tagreplicate RemoteValidator
 
 # Enumerates all container names, including those created by dockerman.
 CONTAINERS := $(foreach \

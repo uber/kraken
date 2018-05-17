@@ -9,24 +9,17 @@ import (
 	"github.com/pressly/goose"
 
 	"code.uber.internal/infra/kraken/lib/persistedretry"
-	"code.uber.internal/infra/kraken/utils/log"
 )
-
-var _ persistedretry.Store = (*Store)(nil)
 
 // Store stores tags to be replicated asynchronously.
 type Store struct {
-	db        *sqlx.DB
-	generator TaskGenerator
+	db *sqlx.DB
 }
 
 // NewStore creates a new Store.
-func NewStore(
-	source string,
-	generator TaskGenerator) (*Store, error) {
-	// Create source file if not exist.
-	_, err := os.Stat(source)
-	if os.IsNotExist(err) {
+func NewStore(source string, rv RemoteValidator) (*Store, error) {
+	if _, err := os.Stat(source); os.IsNotExist(err) {
+		// Initialize database if it doesn't exist.
 		f, err := os.Create(source)
 		if err != nil {
 			return nil, fmt.Errorf("create source file: %s", err)
@@ -35,7 +28,6 @@ func NewStore(
 	} else if err != nil {
 		return nil, fmt.Errorf("stat source file: %s", err)
 	}
-
 	db, err := sqlx.Open("sqlite3", source)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite3: %s", err)
@@ -44,118 +36,115 @@ func NewStore(
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return nil, fmt.Errorf("set dialect as sqlite3: %s", err)
 	}
-
 	if err := goose.Up(db.DB, "./migrations"); err != nil {
 		return nil, fmt.Errorf("perform db migration: %s", err)
 	}
 
-	store := &Store{db, generator}
-	if err := store.deleteInvalidTasks(); err != nil {
-		return nil, err
+	s := &Store{db}
+
+	if err := s.deleteInvalidTasks(rv); err != nil {
+		return nil, fmt.Errorf("delete invalid tasks: %s", err)
 	}
-	return store, nil
+
+	return s, nil
 }
 
-// deleteInvalidTasks deletes replication tasks that are not .
-func (ts *Store) deleteInvalidTasks() error {
-	tasks := []*Task{}
-	if err := ts.db.Select(&tasks, `SELECT * FROM replicate_tag_task`); err != nil {
-		return err
-	}
-
-	for _, t := range tasks {
-		if !ts.generator.IsValid(*t) {
-			if err := ts.delete(t); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+// Close closes the store.
+func (s *Store) Close() error {
+	return s.db.Close()
 }
 
-// GetPending returns all replicate tags which have failed=0.
-func (ts *Store) GetPending() ([]persistedretry.Task, error) {
-	tasks := []*Task{}
-	if err := ts.db.Select(&tasks, fmt.Sprintf(`SELECT * FROM replicate_tag_task WHERE state=%q`, Pending)); err != nil {
-		return nil, err
-	}
-
-	var results []persistedretry.Task
-	for _, t := range tasks {
-		if err := ts.generator.Load(t); err != nil {
-			log.Errorf("Failed to create task: %s", err)
-			continue
-		}
-		results = append(results, t)
-	}
-
-	return results, nil
+// GetPending returns all pending tasks.
+func (s *Store) GetPending() ([]persistedretry.Task, error) {
+	return s.selectStatus("pending")
 }
 
-// GetFailed returns all tags in retries.
-func (ts *Store) GetFailed() ([]persistedretry.Task, error) {
-	tasks := []*Task{}
-	if err := ts.db.Select(&tasks, fmt.Sprintf(`SELECT * FROM replicate_tag_task WHERE state=%q`, Failed)); err != nil {
-		return nil, err
-	}
-
-	var results []persistedretry.Task
-	for _, t := range tasks {
-		if err := ts.generator.Load(t); err != nil {
-			log.Errorf("Failed to create task: %s", err)
-			continue
-		}
-		results = append(results, t)
-	}
-
-	return results, nil
+// GetFailed returns all failed tasks.
+func (s *Store) GetFailed() ([]persistedretry.Task, error) {
+	return s.selectStatus("failed")
 }
 
 // MarkPending inserts a tag in db.
-func (ts *Store) MarkPending(r persistedretry.Task) error {
-	_, err := ts.db.NamedExec(
-		fmt.Sprintf(`INSERT OR REPLACE INTO replicate_tag_task (
-			name,
+func (s *Store) MarkPending(r persistedretry.Task) error {
+	_, err := s.db.NamedExec(`
+		INSERT OR REPLACE INTO replicate_tag_task (
+			tag,
 			digest,
 			dependencies,
 			destination,
 			created_at,
 			last_attempt,
-			state,
-			failures) VALUES (
-			:name,
+			failures,
+			status
+		) VALUES (
+			:tag,
 			:digest,
 			:dependencies,
 			:destination,
 			:created_at,
 			:last_attempt,
-			%q,
-			:failures)`, Pending),
-		r.(*Task))
+			:failures,
+			"pending"
+		)`, r.(*Task))
 	return err
 }
 
-// MarkFailed set failed=1 in a tag.
-func (ts *Store) MarkFailed(r persistedretry.Task) error {
-	_, err := ts.db.NamedExec(
-		fmt.Sprintf(
-			`UPDATE replicate_tag_task SET failures=failures+1,state=%q 
-		WHERE name=:name AND destination=:destination`, Failed),
-		r.(*Task))
-	return err
+// MarkFailed marks a task as failed.
+func (s *Store) MarkFailed(r persistedretry.Task) error {
+	t := r.(*Task)
+	_, err := s.db.NamedExec(`
+		UPDATE replicate_tag_task
+		SET failures=failures+1, status="failed"
+		WHERE tag=:tag AND destination=:destination`, t)
+	if err != nil {
+		return err
+	}
+	t.Failures++
+	return nil
 }
 
 // MarkDone deletes a tag in db.
-func (ts *Store) MarkDone(r persistedretry.Task) error {
-	return ts.delete(r)
+func (s *Store) MarkDone(r persistedretry.Task) error {
+	return s.delete(r)
 }
 
-// delete deletes a tag in db.
-func (ts *Store) delete(r persistedretry.Task) error {
-	_, err := ts.db.NamedExec(
-		`DELETE FROM replicate_tag_task 
-		WHERE name=:name AND destination=:destination`,
-		r.(*Task))
+func (s *Store) selectStatus(status string) ([]persistedretry.Task, error) {
+	var tasks []*Task
+	err := s.db.Select(&tasks, `
+		SELECT tag, digest, dependencies, destination, created_at, last_attempt, failures
+		FROM replicate_tag_task
+		WHERE status=?`, status)
+	if err != nil {
+		return nil, err
+	}
+	var result []persistedretry.Task
+	for _, t := range tasks {
+		result = append(result, t)
+	}
+	return result, nil
+}
+
+// deleteInvalidTasks deletes replication tasks whose destinations are no longer
+// valid remotes.
+func (s *Store) deleteInvalidTasks(rv RemoteValidator) error {
+	tasks := []*Task{}
+	if err := s.db.Select(&tasks, `SELECT tag, destination FROM replicate_tag_task`); err != nil {
+		return fmt.Errorf("select all tasks: %s", err)
+	}
+	for _, t := range tasks {
+		if rv.Valid(t.Tag, t.Destination) {
+			continue
+		}
+		if err := s.delete(t); err != nil {
+			return fmt.Errorf("delete: %s", err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) delete(r persistedretry.Task) error {
+	_, err := s.db.NamedExec(`
+		DELETE FROM replicate_tag_task 
+		WHERE tag=:tag AND destination=:destination`, r.(*Task))
 	return err
 }

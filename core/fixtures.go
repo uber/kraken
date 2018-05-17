@@ -75,6 +75,15 @@ func DigestFixture() Digest {
 	return NewBlobFixture().Digest
 }
 
+// DigestListFixture returns a list of random Digests.
+func DigestListFixture(n int) DigestList {
+	var l DigestList
+	for i := 0; i < n; i++ {
+		l = append(l, DigestFixture())
+	}
+	return l
+}
+
 // PeerContextFixture returns a randomly generated PeerContext.
 func PeerContextFixture() PeerContext {
 	pctx, err := NewPeerContext(

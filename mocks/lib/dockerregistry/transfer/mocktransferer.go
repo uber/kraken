@@ -35,7 +35,7 @@ func (m *MockImageTransferer) EXPECT() *MockImageTransfererMockRecorder {
 }
 
 // Download mocks base method
-func (m *MockImageTransferer) Download(arg0, arg1 string) (base.FileReader, error) {
+func (m *MockImageTransferer) Download(arg0 string, arg1 core.Digest) (base.FileReader, error) {
 	ret := m.ctrl.Call(m, "Download", arg0, arg1)
 	ret0, _ := ret[0].(base.FileReader)
 	ret1, _ := ret[1].(error)
@@ -73,13 +73,13 @@ func (mr *MockImageTransfererMockRecorder) PostTag(arg0, arg1 interface{}) *gomo
 }
 
 // Upload mocks base method
-func (m *MockImageTransferer) Upload(arg0 string, arg1 base.FileReader) error {
-	ret := m.ctrl.Call(m, "Upload", arg0, arg1)
+func (m *MockImageTransferer) Upload(arg0 string, arg1 core.Digest, arg2 base.FileReader) error {
+	ret := m.ctrl.Call(m, "Upload", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Upload indicates an expected call of Upload
-func (mr *MockImageTransfererMockRecorder) Upload(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockImageTransferer)(nil).Upload), arg0, arg1)
+func (mr *MockImageTransfererMockRecorder) Upload(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockImageTransferer)(nil).Upload), arg0, arg1, arg2)
 }
