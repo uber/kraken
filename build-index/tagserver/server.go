@@ -120,16 +120,7 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return handler.Errorf("decode body: %s", err)
 	}
-	// Some ugliness to convert strings into typed digests.
-	var deps []core.Digest
-	for _, dep := range req.Dependencies {
-		depDigest, err := core.ParseSHA256Digest(dep)
-		if err != nil {
-			return handler.Errorf("parse dep digest: %s", err).Status(http.StatusBadRequest)
-		}
-		deps = append(deps, depDigest)
-	}
-	err = s.replicator.Replicate(tag, d, deps)
+	err = s.replicator.Replicate(tag, d, req.Dependencies)
 	if err != nil {
 		return handler.Errorf("replicate: %s", err)
 	}

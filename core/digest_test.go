@@ -1,6 +1,8 @@
 package core
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -77,4 +79,30 @@ func TestDigestStringConversion(t *testing.T) {
 	result, err := ParseSHA256Digest(d.String())
 	require.NoError(t, err)
 	require.Equal(t, d, result)
+}
+
+func TestDigestMarshalJSON(t *testing.T) {
+	require := require.New(t)
+	digest := DigestFixture()
+
+	b, err := json.Marshal(digest)
+	require.NoError(err)
+	require.Equal(string(b), fmt.Sprintf("%q", digest))
+
+	var result Digest
+	require.NoError(json.Unmarshal(b, &result))
+	require.Equal(digest, result)
+}
+
+func TestDigestListValue(t *testing.T) {
+	require := require.New(t)
+	digests := DigestList{DigestFixture(), DigestFixture(), DigestFixture()}
+	v, err := digests.Value()
+	require.NoError(err)
+	expected := fmt.Sprintf("[%q,%q,%q]", digests[0], digests[1], digests[2])
+	require.Equal(expected, fmt.Sprintf("%s", v))
+
+	var result DigestList
+	require.NoError(result.Scan([]byte(expected)))
+	require.Equal(digests, result)
 }

@@ -1,7 +1,9 @@
 package core
 
 import (
+	"database/sql/driver"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,6 +13,23 @@ const (
 	// DigestEmptyTar is the sha256 digest of an empty tar file.
 	DigestEmptyTar = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 )
+
+// DigestList is a list of digests.
+type DigestList []Digest
+
+// Value marshals a list of digests and returns []byte as driver.Value.
+func (l DigestList) Value() (driver.Value, error) {
+	b, err := json.Marshal(l)
+	if err != nil {
+		return driver.Value([]byte{}), err
+	}
+	return driver.Value(b), nil
+}
+
+// Scan unmarshals []byte to a list of Digest.
+func (l *DigestList) Scan(src interface{}) error {
+	return json.Unmarshal(src.([]byte), l)
+}
 
 // Digest can be represented in a string like "<algorithm>:<hex_digest_string>"
 // Example:
@@ -54,6 +73,41 @@ func ParseSHA256Digest(raw string) (Digest, error) {
 		hex:  hex,
 		raw:  raw,
 	}, nil
+}
+
+// Value marshals a digest and returns []byte as driver.Value.
+func (d Digest) Value() (driver.Value, error) {
+	b, err := json.Marshal(d)
+	if err != nil {
+		return driver.Value([]byte{}), err
+	}
+	return driver.Value(b), nil
+}
+
+// Scan unmarshals []byte to a Digest.
+func (d *Digest) Scan(src interface{}) error {
+	return json.Unmarshal(src.([]byte), d)
+}
+
+// UnmarshalJSON unmarshals "<algorithm>:<hex_digest_string>" to Digest.
+func (d *Digest) UnmarshalJSON(str []byte) error {
+	var raw string
+	if err := json.Unmarshal(str, &raw); err != nil {
+		return err
+	}
+
+	digest, err := ParseSHA256Digest(raw)
+	if err != nil {
+		return err
+	}
+
+	*d = digest
+	return nil
+}
+
+// MarshalJSON unmarshals hexBytes to Digest.
+func (d Digest) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.raw)
 }
 
 // String returns digest in string format like "<algorithm>:<hex_digest_string>".

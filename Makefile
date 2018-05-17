@@ -171,6 +171,18 @@ mocks:
 		-package mockhttp \
 		net/http RoundTripper
 
+	mkdir -p mocks/lib/persistedretry
+	$(mockgen) \
+		-destination=mocks/lib/persistedretry/mockpersistedretry.go \
+		-package mockpersistedretry \
+		code.uber.internal/infra/kraken/lib/persistedretry Store,Task
+	
+	mkdir -p mocks/lib/persistedretry/tagreplicate
+	$(mockgen) \
+		-destination=mocks/lib/persistedretry/tagreplicate/mocktagreplicate.go \
+		-package mocktagreplicate \
+		code.uber.internal/infra/kraken/lib/persistedretry/tagreplicate TaskGenerator
+
 # Enumerates all container names, including those created by dockerman.
 CONTAINERS := $(foreach \
 	c, \

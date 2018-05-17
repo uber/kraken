@@ -77,16 +77,11 @@ func (c *client) Get(tag string) (core.Digest, error) {
 
 // ReplicateRequest defines a Replicate request body.
 type ReplicateRequest struct {
-	Dependencies []string `json:"dependencies"`
+	Dependencies []core.Digest `json:"dependencies"`
 }
 
 func (c *client) Replicate(tag string, d core.Digest, dependencies []core.Digest) error {
-	// Some ugliness to convert typed digests into strings.
-	var strDeps []string
-	for _, d := range dependencies {
-		strDeps = append(strDeps, d.String())
-	}
-	b, err := json.Marshal(ReplicateRequest{strDeps})
+	b, err := json.Marshal(ReplicateRequest{dependencies})
 	if err != nil {
 		return fmt.Errorf("json marshal: %s", err)
 	}
