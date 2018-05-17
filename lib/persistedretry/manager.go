@@ -15,36 +15,6 @@ import (
 // ErrManagerClosed is returned when Add is called on a closed manager.
 var ErrManagerClosed = errors.New("manager closed")
 
-// Config defines Manager configuration.
-type Config struct {
-	NumWorkers        int           `yaml:"num_workers"`
-	NumRetryWorkers   int           `yaml:"num_retry_workers"`
-	TaskChanSize      int           `yaml:"task_chan_size"`
-	RetryChanSize     int           `yaml:"retry_chan_size"`
-	TaskInterval      time.Duration `yaml:"task_interval"`
-	RetryInterval     time.Duration `yaml:"retry_interval"`
-	RetryTaskInterval time.Duration `yaml:"retry_task_interval"`
-}
-
-func (c Config) applyDefaults() Config {
-	if c.NumWorkers == 0 {
-		c.NumWorkers = 6
-	}
-	if c.NumRetryWorkers == 0 {
-		c.NumRetryWorkers = 1
-	}
-	if c.TaskInterval == 0 {
-		c.TaskInterval = 10 * time.Millisecond
-	}
-	if c.RetryInterval == 0 {
-		c.RetryInterval = 5 * time.Minute
-	}
-	if c.RetryTaskInterval == 0 {
-		c.RetryTaskInterval = 5 * time.Second
-	}
-	return c
-}
-
 // Manager defines interface for a persisted retry manager.
 type Manager interface {
 	Add(Task) error
@@ -52,9 +22,10 @@ type Manager interface {
 }
 
 type manager struct {
-	config Config
-	stats  tally.Scope
-	store  Store
+	config   Config
+	stats    tally.Scope
+	store    Store
+	executor Executor
 
 	wg      sync.WaitGroup
 	tasks   chan Task
@@ -65,25 +36,26 @@ type manager struct {
 	closed    atomic.Bool
 }
 
-// New creates a new pool with default num workers and chan size.
-func New(config Config, stats tally.Scope, store Store) (Manager, error) {
+// NewManager creates a new Manager.
+func NewManager(
+	config Config, stats tally.Scope, store Store, executor Executor) (Manager, error) {
+
 	config = config.applyDefaults()
 	m := &manager{
-		config:  config,
-		stats:   stats,
-		store:   store,
-		tasks:   make(chan Task, config.TaskChanSize),
-		retries: make(chan Task, config.RetryChanSize),
-		done:    make(chan struct{}),
+		config:   config,
+		stats:    stats,
+		store:    store,
+		executor: executor,
+		tasks:    make(chan Task, config.TaskChanSize),
+		retries:  make(chan Task, config.RetryChanSize),
+		done:     make(chan struct{}),
 	}
 	if err := m.markPendingTasksAsFailed(); err != nil {
 		return nil, fmt.Errorf("mark pending tasks as failed: %s", err)
 	}
-
 	if err := m.start(); err != nil {
 		return nil, fmt.Errorf("start: %s", err)
 	}
-
 	return m, nil
 }
 
@@ -92,13 +64,11 @@ func (m *manager) markPendingTasksAsFailed() error {
 	if err != nil {
 		return fmt.Errorf("get pending tasks: %s", err)
 	}
-
 	for _, t := range tasks {
 		if err := m.store.MarkFailed(t); err != nil {
 			return fmt.Errorf("mark task as failed: %s", err)
 		}
 	}
-
 	return nil
 }
 
@@ -165,9 +135,9 @@ func (m *manager) startWorker() {
 			return
 		case t := <-m.tasks:
 			m.stats.Counter("tasks").Inc(-1)
-			if err := m.run(t); err != nil {
+			if err := m.exec(t); err != nil {
 				m.stats.Counter("task_failure").Inc(1)
-				log.With("task", t).Errorf("Failed to run task: %s", err)
+				log.With("task", t).Errorf("Failed to exec task: %s", err)
 			}
 			time.Sleep(m.config.TaskInterval)
 		}
@@ -228,7 +198,7 @@ func (m *manager) startRetryWorker() {
 			return
 		case t := <-m.retries:
 			m.stats.Counter("retries").Inc(-1)
-			if err := m.run(t); err != nil {
+			if err := m.exec(t); err != nil {
 				m.stats.Counter("retry_failure").Inc(1)
 				log.With("task", t).Error("Failed to retry task: %s", err)
 			}
@@ -237,12 +207,12 @@ func (m *manager) startRetryWorker() {
 	}
 }
 
-func (m *manager) run(task Task) error {
-	if err := task.Run(); err != nil {
+func (m *manager) exec(task Task) error {
+	if err := m.executor.Exec(task); err != nil {
 		if err := m.store.MarkFailed(task); err != nil {
 			return fmt.Errorf("mark task as failed: %s", err)
 		}
-		log.With("task", task).Errorf("Fask failed: %s", err)
+		log.With("task", task).Errorf("Task failed: %s", err)
 		return nil
 	}
 
