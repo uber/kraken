@@ -26,6 +26,11 @@ func NewExecutor(
 	return &Executor{stats, originCluster, tagClientProvider}
 }
 
+// Name returns the executor name.
+func (e *Executor) Name() string {
+	return "tagreplicate"
+}
+
 // Exec replicates a tag's blob dependencies to the task's remote origin
 // cluster, then replicates the tag to the remote build-index.
 func (e *Executor) Exec(r persistedretry.Task) error {

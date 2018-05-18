@@ -1,17 +1,15 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
 	"fmt"
 	"net/http"
 
-	_ "github.com/mattn/go-sqlite3"
-
-	"code.uber.internal/infra/kraken/build-index/remotes"
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/build-index/tagserver"
 	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/lib/persistedretry"
+	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplicate"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
@@ -36,23 +34,31 @@ func main() {
 	}
 	defer closer.Close()
 
-	db, err := sql.Open("sqlite3", config.SQLiteSourcePath)
+	replicateExecutor := tagreplicate.NewExecutor(
+		stats,
+		blobclient.NewClusterClient(
+			blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin)),
+		tagclient.NewProvider(),
+	)
+
+	remotes, err := config.Remotes.Build()
 	if err != nil {
-		log.Fatalf("Failed to open sqlite3: %s", err)
-	}
-	defer db.Close()
-
-	// Dummy statement to make sure we are not compiling a stub driver with CGO_ENABLE=0.
-	if _, err := db.Exec(`PRAGMA database_list;`); err != nil {
-		log.Fatalf("Failed to list databases: %s\n", err)
+		log.Fatalf("Error building remotes from configuration: %s", err)
 	}
 
-	originCluster := blobclient.NewClusterClient(
-		blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin))
-
-	replicator, err := remotes.New(config.Remotes, originCluster, tagclient.NewProvider())
+	replicateStore, err := tagreplicate.NewStore(config.SQLiteSourcePath, remotes)
 	if err != nil {
-		log.Fatalf("Error creating remote replicator: %s", err)
+		log.Fatalf("Error creating replicate store: %s", err)
+	}
+
+	replicateManger, err := persistedretry.NewManager(
+		config.Replication,
+		stats,
+		replicateStore,
+		replicateExecutor,
+	)
+	if err != nil {
+		log.Fatalf("Error creating replicate manager: %s", err)
 	}
 
 	backends, err := backend.NewManager(config.Backends, config.Auth)
@@ -60,7 +66,7 @@ func main() {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
 
-	server := tagserver.New(config.TagServer, stats, backends, replicator, config.Origin)
+	server := tagserver.New(config.TagServer, stats, backends, config.Origin, remotes, replicateManger)
 
 	addr := fmt.Sprintf(":%d", config.Port)
 	log.Infof("Listening on %s", addr)

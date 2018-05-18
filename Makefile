@@ -87,12 +87,6 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
-	mkdir -p mocks/build-index/remotes
-	$(mockgen) \
-		-destination=mocks/build-index/remotes/mockremotes.go \
-		-package mockremotes \
-		code.uber.internal/infra/kraken/build-index/remotes Replicator
-
 	mkdir -p mocks/build-index/tagclient
 	$(mockgen) \
 		-destination=mocks/build-index/tagclient/mocktagclient.go \
@@ -175,7 +169,7 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/lib/persistedretry/mockpersistedretry.go \
 		-package mockpersistedretry \
-		code.uber.internal/infra/kraken/lib/persistedretry Store,Task,Executor
+		code.uber.internal/infra/kraken/lib/persistedretry Store,Task,Executor,Manager
 	
 	mkdir -p mocks/lib/persistedretry/tagreplicate
 	$(mockgen) \

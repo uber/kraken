@@ -16,4 +16,5 @@ type Store interface {
 // Executor executes tasks.
 type Executor interface {
 	Exec(Task) error
+	Name() string
 }
