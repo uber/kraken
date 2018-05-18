@@ -41,6 +41,7 @@ func newManagerMocks(t *testing.T) (*managerMocks, func()) {
 }
 
 func (m *managerMocks) new() (Manager, error) {
+	m.executor.EXPECT().Name().Return("mock executor")
 	return NewManager(m.config, tally.NoopScope, m.store, m.executor)
 }
 

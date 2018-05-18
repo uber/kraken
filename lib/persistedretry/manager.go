@@ -40,6 +40,10 @@ type manager struct {
 func NewManager(
 	config Config, stats tally.Scope, store Store, executor Executor) (Manager, error) {
 
+	stats = stats.Tagged(map[string]string{
+		"module":   "persistedretry",
+		"executor": executor.Name(),
+	})
 	config = config.applyDefaults()
 	m := &manager{
 		config:   config,
@@ -208,6 +212,9 @@ func (m *manager) startRetryWorker() {
 }
 
 func (m *manager) exec(task Task) error {
+	timer := m.stats.Timer("exec").Start()
+	defer timer.Stop()
+
 	if err := m.executor.Exec(task); err != nil {
 		if err := m.store.MarkFailed(task); err != nil {
 			return fmt.Errorf("mark task as failed: %s", err)

@@ -7,11 +7,12 @@ import (
 	"io"
 	"net/http"
 
-	"code.uber.internal/infra/kraken/build-index/remotes"
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/middleware"
+	"code.uber.internal/infra/kraken/lib/persistedretry"
+	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplicate"
 	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
 
@@ -26,9 +27,12 @@ type Server struct {
 	config         Config
 	stats          tally.Scope
 	backends       *backend.Manager
-	replicator     remotes.Replicator
 	localOriginDNS string
 	cache          *dedup.Cache
+
+	// For async new tag replication.
+	remotes          tagreplicate.Remotes
+	replicateManager persistedretry.Manager
 }
 
 // New creates a new Server.
@@ -36,16 +40,16 @@ func New(
 	config Config,
 	stats tally.Scope,
 	backends *backend.Manager,
-	replicator remotes.Replicator,
-	localOriginDNS string) *Server {
+	localOriginDNS string,
+	remotes tagreplicate.Remotes,
+	replicateManager persistedretry.Manager) *Server {
 
 	stats = stats.Tagged(map[string]string{
 		"module": "tagserver",
 	})
 
 	cache := dedup.NewCache(config.Cache, clock.New(), &tagResolver{backends})
-
-	return &Server{config, stats, backends, replicator, localOriginDNS, cache}
+	return &Server{config, stats, backends, localOriginDNS, cache, remotes, replicateManager}
 }
 
 // Handler returns an http.Handler for s.
@@ -120,10 +124,16 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return handler.Errorf("decode body: %s", err)
 	}
-	err = s.replicator.Replicate(tag, d, req.Dependencies)
-	if err != nil {
-		return handler.Errorf("replicate: %s", err)
+
+	destinations := s.remotes.Match(tag)
+
+	for _, dest := range destinations {
+		err := s.replicateManager.Add(tagreplicate.NewTask(tag, d, req.Dependencies, dest))
+		if err != nil {
+			return handler.Errorf("add replicate task: %s", err)
+		}
 	}
+
 	return nil
 }
 

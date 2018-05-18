@@ -3,12 +3,14 @@ package tagreplicate
 import (
 	"fmt"
 	"os"
+	"path"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3" // tagreplicate.Store is based on sqlite3
 	"github.com/pressly/goose"
 
 	"code.uber.internal/infra/kraken/lib/persistedretry"
+	_ "code.uber.internal/infra/kraken/lib/persistedretry/tagreplicate/migrations" // registry db migrations
 )
 
 // Store stores tags to be replicated asynchronously.
@@ -19,6 +21,10 @@ type Store struct {
 // NewStore creates a new Store.
 func NewStore(source string, rv RemoteValidator) (*Store, error) {
 	if _, err := os.Stat(source); os.IsNotExist(err) {
+		err := os.MkdirAll(path.Dir(source), 0755)
+		if err != nil {
+			return nil, fmt.Errorf("create source directory: %s", err)
+		}
 		// Initialize database if it doesn't exist.
 		f, err := os.Create(source)
 		if err != nil {
@@ -36,7 +42,8 @@ func NewStore(source string, rv RemoteValidator) (*Store, error) {
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return nil, fmt.Errorf("set dialect as sqlite3: %s", err)
 	}
-	if err := goose.Up(db.DB, "./migrations"); err != nil {
+
+	if err := goose.Up(db.DB, "."); err != nil {
 		return nil, fmt.Errorf("perform db migration: %s", err)
 	}
 
