@@ -1,4 +1,4 @@
-package tagreplicate
+package tagreplication
 
 import (
 	"fmt"
@@ -37,5 +37,5 @@ func NewTask(
 }
 
 func (t *Task) String() string {
-	return fmt.Sprintf("tagreplicate.Task(tag=%s, dest=%s)", t.Tag, t.Destination)
+	return fmt.Sprintf("tagreplication.Task(tag=%s, dest=%s)", t.Tag, t.Destination)
 }

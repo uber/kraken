@@ -1,4 +1,4 @@
-package tagreplicate
+package tagreplication
 
 import (
 	"fmt"
@@ -6,11 +6,11 @@ import (
 	"path"
 
 	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3" // tagreplicate.Store is based on sqlite3
+	_ "github.com/mattn/go-sqlite3" // tagreplication.Store is based on sqlite3
 	"github.com/pressly/goose"
 
 	"code.uber.internal/infra/kraken/lib/persistedretry"
-	_ "code.uber.internal/infra/kraken/lib/persistedretry/tagreplicate/migrations" // registry db migrations
+	_ "code.uber.internal/infra/kraken/lib/persistedretry/tagreplication/migrations" // registry db migrations
 )
 
 // Store stores tags to be replicated asynchronously.

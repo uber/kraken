@@ -1,4 +1,4 @@
-package tagreplicate
+package tagreplication
 
 import (
 	"fmt"
@@ -28,7 +28,7 @@ func NewExecutor(
 
 // Name returns the executor name.
 func (e *Executor) Name() string {
-	return "tagreplicate"
+	return "tagreplication"
 }
 
 // Exec replicates a tag's blob dependencies to the task's remote origin

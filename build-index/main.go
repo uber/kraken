@@ -9,7 +9,7 @@ import (
 	"code.uber.internal/infra/kraken/build-index/tagserver"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
-	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplicate"
+	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
@@ -34,29 +34,27 @@ func main() {
 	}
 	defer closer.Close()
 
-	replicateExecutor := tagreplicate.NewExecutor(
+	trExecutor := tagreplication.NewExecutor(
 		stats,
 		blobclient.NewClusterClient(
 			blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin)),
-		tagclient.NewProvider(),
-	)
+		tagclient.NewProvider())
 
 	remotes, err := config.Remotes.Build()
 	if err != nil {
 		log.Fatalf("Error building remotes from configuration: %s", err)
 	}
 
-	replicateStore, err := tagreplicate.NewStore(config.SQLiteSourcePath, remotes)
+	trStore, err := tagreplication.NewStore(config.SQLiteSourcePath, remotes)
 	if err != nil {
 		log.Fatalf("Error creating replicate store: %s", err)
 	}
 
-	replicateManger, err := persistedretry.NewManager(
+	trManager, err := persistedretry.NewManager(
 		config.Replication,
 		stats,
-		replicateStore,
-		replicateExecutor,
-	)
+		trStore,
+		trExecutor)
 	if err != nil {
 		log.Fatalf("Error creating replicate manager: %s", err)
 	}
@@ -66,7 +64,7 @@ func main() {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
 
-	server := tagserver.New(config.TagServer, stats, backends, config.Origin, remotes, replicateManger)
+	server := tagserver.New(config.TagServer, stats, backends, config.Origin, remotes, trManager)
 
 	addr := fmt.Sprintf(":%d", config.Port)
 	log.Infof("Listening on %s", addr)
