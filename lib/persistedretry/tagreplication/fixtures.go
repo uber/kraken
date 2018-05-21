@@ -1,4 +1,4 @@
-package tagreplicate
+package tagreplication
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
-// StoreFixture creates a fixture of tagreplicate.Store.
+// StoreFixture creates a fixture of tagreplication.Store.
 func StoreFixture(rv RemoteValidator) (*Store, string, func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
@@ -33,7 +33,7 @@ func StoreFixture(rv RemoteValidator) (*Store, string, func()) {
 	return store, source, cleanup.Run
 }
 
-// TaskFixture creates a fixture of tagreplicate.Task.
+// TaskFixture creates a fixture of tagreplication.Task.
 func TaskFixture() *Task {
 	id := randutil.Text(4)
 	tag := fmt.Sprintf("prime/labrat-%s", id)

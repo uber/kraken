@@ -8,7 +8,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplicate"
+	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/mocks/lib/persistedretry"
 	"code.uber.internal/infra/kraken/utils/rwutil"
@@ -26,11 +26,11 @@ const (
 )
 
 type serverMocks struct {
-	config           Config
-	backends         *backend.Manager
-	backendClient    *mockbackend.MockClient
-	remotes          tagreplicate.Remotes
-	replicateManager *mockpersistedretry.MockManager
+	config                Config
+	backends              *backend.Manager
+	backendClient         *mockbackend.MockClient
+	remotes               tagreplication.Remotes
+	tagReplicationManager *mockpersistedretry.MockManager
 }
 
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
@@ -41,20 +41,20 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	cleanup.Add(ctrl.Finish)
 
 	backendClient := mockbackend.NewMockClient(ctrl)
-	replicateManager := mockpersistedretry.NewMockManager(ctrl)
+	tagReplicationManager := mockpersistedretry.NewMockManager(ctrl)
 	backends := backend.ManagerFixture()
 	require.NoError(t, backends.Register(_testNamespace, backendClient))
 
-	remotes, err := tagreplicate.RemotesConfig{_testNamespace: []string{_testRemote}}.Build()
+	remotes, err := tagreplication.RemotesConfig{_testNamespace: []string{_testRemote}}.Build()
 	if err != nil {
 		panic(err)
 	}
 
-	return &serverMocks{Config{}, backends, backendClient, remotes, replicateManager}, cleanup.Run
+	return &serverMocks{Config{}, backends, backendClient, remotes, tagReplicationManager}, cleanup.Run
 }
 
 func (m *serverMocks) handler() http.Handler {
-	return New(m.config, tally.NoopScope, m.backends, _testOrigin, m.remotes, m.replicateManager).Handler()
+	return New(m.config, tally.NoopScope, m.backends, _testOrigin, m.remotes, m.tagReplicationManager).Handler()
 }
 
 func TestPutAndGetTag(t *testing.T) {
@@ -118,9 +118,9 @@ func TestReplicate(t *testing.T) {
 	tag := "uber-usi/labrat"
 	digest := core.DigestFixture()
 	dependencies := core.DigestListFixture(3)
-	task := tagreplicate.NewTask(tag, digest, dependencies, _testRemote)
+	task := tagreplication.NewTask(tag, digest, dependencies, _testRemote)
 
-	mocks.replicateManager.EXPECT().Add(tagreplicate.MatchTask(task)).Return(nil)
+	mocks.tagReplicationManager.EXPECT().Add(tagreplication.MatchTask(task)).Return(nil)
 
 	require.NoError(client.Replicate(tag, digest, dependencies))
 }

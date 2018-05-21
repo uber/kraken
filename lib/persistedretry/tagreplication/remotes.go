@@ -1,4 +1,4 @@
-package tagreplicate
+package tagreplication
 
 import (
 	"fmt"

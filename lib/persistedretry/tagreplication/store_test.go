@@ -1,4 +1,4 @@
-package tagreplicate_test
+package tagreplication_test
 
 import (
 	"testing"
@@ -8,8 +8,8 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
-	. "code.uber.internal/infra/kraken/lib/persistedretry/tagreplicate"
-	"code.uber.internal/infra/kraken/mocks/lib/persistedretry/tagreplicate"
+	. "code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
+	"code.uber.internal/infra/kraken/mocks/lib/persistedretry/tagreplication"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,7 +46,7 @@ func TestDeleteInvalidTasks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	rv := mocktagreplicate.NewMockRemoteValidator(ctrl)
+	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
 
 	store, source, cleanup := StoreFixture(rv)
 	defer cleanup()
@@ -82,7 +82,7 @@ func TestMarkPending(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	rv := mocktagreplicate.NewMockRemoteValidator(ctrl)
+	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
 
 	store, _, cleanup := StoreFixture(rv)
 	defer cleanup()
@@ -102,7 +102,7 @@ func TestMarkPendingTwiceReplacesTask(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	rv := mocktagreplicate.NewMockRemoteValidator(ctrl)
+	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
 
 	store, _, cleanup := StoreFixture(rv)
 	defer cleanup()
@@ -126,7 +126,7 @@ func TestMarkFailed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	rv := mocktagreplicate.NewMockRemoteValidator(ctrl)
+	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
 
 	store, _, cleanup := StoreFixture(rv)
 	defer cleanup()
@@ -146,7 +146,7 @@ func TestMarkFailedIgnoresIfNotPending(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	rv := mocktagreplicate.NewMockRemoteValidator(ctrl)
+	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
 
 	store, _, cleanup := StoreFixture(rv)
 	defer cleanup()
@@ -166,7 +166,7 @@ func TestMarkDone(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	rv := mocktagreplicate.NewMockRemoteValidator(ctrl)
+	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
 
 	store, _, cleanup := StoreFixture(rv)
 	defer cleanup()

@@ -12,7 +12,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
-	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplicate"
+	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
 
@@ -31,8 +31,8 @@ type Server struct {
 	cache          *dedup.Cache
 
 	// For async new tag replication.
-	remotes          tagreplicate.Remotes
-	replicateManager persistedretry.Manager
+	remotes               tagreplication.Remotes
+	tagReplicationManager persistedretry.Manager
 }
 
 // New creates a new Server.
@@ -41,15 +41,15 @@ func New(
 	stats tally.Scope,
 	backends *backend.Manager,
 	localOriginDNS string,
-	remotes tagreplicate.Remotes,
-	replicateManager persistedretry.Manager) *Server {
+	remotes tagreplication.Remotes,
+	tagReplicationManager persistedretry.Manager) *Server {
 
 	stats = stats.Tagged(map[string]string{
 		"module": "tagserver",
 	})
 
 	cache := dedup.NewCache(config.Cache, clock.New(), &tagResolver{backends})
-	return &Server{config, stats, backends, localOriginDNS, cache, remotes, replicateManager}
+	return &Server{config, stats, backends, localOriginDNS, cache, remotes, tagReplicationManager}
 }
 
 // Handler returns an http.Handler for s.
@@ -128,7 +128,7 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 	destinations := s.remotes.Match(tag)
 
 	for _, dest := range destinations {
-		err := s.replicateManager.Add(tagreplicate.NewTask(tag, d, req.Dependencies, dest))
+		err := s.tagReplicationManager.Add(tagreplication.NewTask(tag, d, req.Dependencies, dest))
 		if err != nil {
 			return handler.Errorf("add replicate task: %s", err)
 		}

@@ -171,11 +171,11 @@ mocks:
 		-package mockpersistedretry \
 		code.uber.internal/infra/kraken/lib/persistedretry Store,Task,Executor,Manager
 	
-	mkdir -p mocks/lib/persistedretry/tagreplicate
+	mkdir -p mocks/lib/persistedretry/tagreplication
 	$(mockgen) \
-		-destination=mocks/lib/persistedretry/tagreplicate/mocktagreplicate.go \
-		-package mocktagreplicate \
-		code.uber.internal/infra/kraken/lib/persistedretry/tagreplicate RemoteValidator
+		-destination=mocks/lib/persistedretry/tagreplication/mocktagreplication.go \
+		-package mocktagreplication \
+		code.uber.internal/infra/kraken/lib/persistedretry/tagreplication RemoteValidator
 
 # Enumerates all container names, including those created by dockerman.
 CONTAINERS := $(foreach \
