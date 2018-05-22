@@ -81,6 +81,7 @@ func (s *Store) MarkPending(r persistedretry.Task) error {
 			destination,
 			last_attempt,
 			failures,
+			delay,
 			status
 		) VALUES (
 			:tag,
@@ -89,6 +90,7 @@ func (s *Store) MarkPending(r persistedretry.Task) error {
 			:destination,
 			:last_attempt,
 			:failures,
+			:delay,
 			"pending"
 		)`, r.(*Task))
 	return err
@@ -116,7 +118,7 @@ func (s *Store) MarkDone(r persistedretry.Task) error {
 func (s *Store) selectStatus(status string) ([]persistedretry.Task, error) {
 	var tasks []*Task
 	err := s.db.Select(&tasks, `
-		SELECT tag, digest, dependencies, destination, created_at, last_attempt, failures
+		SELECT tag, digest, dependencies, destination, created_at, last_attempt, failures, delay
 		FROM replicate_tag_task
 		WHERE status=?`, status)
 	if err != nil {

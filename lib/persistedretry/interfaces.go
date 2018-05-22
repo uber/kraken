@@ -5,6 +5,7 @@ import "time"
 // Task represents a single unit of work which must eventually succeed.
 type Task interface {
 	GetLastAttempt() time.Time
+	Ready() bool
 }
 
 // Store provides persisted storage for tasks.

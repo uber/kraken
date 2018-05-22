@@ -185,3 +185,26 @@ func TestMarkDone(t *testing.T) {
 	require.NoError(err)
 	require.Empty(pending)
 }
+
+func TestDelay(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
+
+	store, _, cleanup := StoreFixture(rv)
+	defer cleanup()
+
+	task := TaskFixture()
+	task.Delay = 5 * time.Minute
+
+	require.NoError(store.MarkPending(task))
+
+	pending, err := store.GetPending()
+	require.NoError(err)
+	checkTasks(t, []*Task{task}, pending)
+
+	require.False(task.Ready())
+}

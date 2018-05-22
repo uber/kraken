@@ -21,6 +21,7 @@ func up00001(tx *sql.Tx) error {
 		last_attempt timestamp NOT NULL,
 		status       text      NOT NULL,
 		failures     integer   NOT NULL,
+		delay        integer   NOT NULL,
 		PRIMARY KEY(tag, destination)
 	);`)
 	return err

@@ -89,6 +89,7 @@ func TestManagerAddTaskSuccess(t *testing.T) {
 
 	gomock.InOrder(
 		mocks.store.EXPECT().GetPending().Return(nil, nil),
+		task.EXPECT().Ready().Return(true),
 		mocks.store.EXPECT().MarkPending(task).Return(nil),
 		mocks.executor.EXPECT().Exec(task).Return(nil),
 		mocks.store.EXPECT().MarkDone(task).Return(nil),
@@ -133,6 +134,7 @@ func TestManagerAddTaskFail(t *testing.T) {
 
 	gomock.InOrder(
 		mocks.store.EXPECT().GetPending().Return(nil, nil),
+		task.EXPECT().Ready().Return(true),
 		mocks.store.EXPECT().MarkPending(task).Return(nil),
 		mocks.executor.EXPECT().Exec(task).Return(errors.New("task failed")),
 		mocks.store.EXPECT().MarkFailed(task).Return(nil),
@@ -164,6 +166,7 @@ func TestManagerAddTaskFallbackWhenWorkersBusy(t *testing.T) {
 	mocks.store.EXPECT().GetFailed().Return(nil, nil).AnyTimes()
 
 	gomock.InOrder(
+		task1.EXPECT().Ready().Return(true),
 		mocks.store.EXPECT().MarkPending(task1).Return(nil),
 		mocks.executor.EXPECT().Exec(task1).DoAndReturn(func(Task) error {
 			<-task1Done
@@ -173,6 +176,7 @@ func TestManagerAddTaskFallbackWhenWorkersBusy(t *testing.T) {
 	)
 
 	gomock.InOrder(
+		task2.EXPECT().Ready().Return(true),
 		mocks.store.EXPECT().MarkPending(task2).Return(nil),
 		mocks.store.EXPECT().MarkFailed(task2).Return(nil),
 	)
@@ -204,6 +208,7 @@ func TestManagerRetriesFailedTasks(t *testing.T) {
 	gomock.InOrder(
 		mocks.store.EXPECT().GetPending().Return(nil, nil).MinTimes(1),
 		mocks.store.EXPECT().GetFailed().Return([]Task{task}, nil),
+		task.EXPECT().Ready().Return(true),
 		task.EXPECT().GetLastAttempt().Return(time.Time{}),
 		mocks.store.EXPECT().MarkPending(task),
 		mocks.executor.EXPECT().Exec(task).Return(nil),
@@ -218,7 +223,7 @@ func TestManagerRetriesFailedTasks(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 }
 
-func TestManagerSkipsRecentlyFailedTasks(t *testing.T) {
+func TestManagerRetriesSkipsNotReadyTasks(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newManagerMocks(t)
@@ -229,6 +234,29 @@ func TestManagerSkipsRecentlyFailedTasks(t *testing.T) {
 	gomock.InOrder(
 		mocks.store.EXPECT().GetPending().Return(nil, nil).MinTimes(1),
 		mocks.store.EXPECT().GetFailed().Return([]Task{task}, nil),
+		task.EXPECT().Ready().Return(false),
+	)
+	mocks.store.EXPECT().GetFailed().Return(nil, nil).AnyTimes()
+
+	m, err := mocks.new()
+	require.NoError(err)
+	defer m.Close()
+
+	time.Sleep(50 * time.Millisecond)
+}
+
+func TestManagerRetriesSkipsRecentlyAttemptedTasks(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newManagerMocks(t)
+	defer cleanup()
+
+	task := mocks.task()
+
+	gomock.InOrder(
+		mocks.store.EXPECT().GetPending().Return(nil, nil).MinTimes(1),
+		mocks.store.EXPECT().GetFailed().Return([]Task{task}, nil),
+		task.EXPECT().Ready().Return(true),
 		task.EXPECT().GetLastAttempt().Return(time.Now()),
 	)
 	mocks.store.EXPECT().GetFailed().Return(nil, nil).AnyTimes()
@@ -240,48 +268,28 @@ func TestManagerSkipsRecentlyFailedTasks(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 }
 
-func TestManagerFailedTaskRetryFallbackWhenWorkersBusy(t *testing.T) {
+func TestManagerAddNotReadyTaskMarksAsFailed(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newManagerMocks(t)
 	defer cleanup()
 
-	task1 := mocks.task()
-	task2 := mocks.task()
-
-	task1Done := make(chan bool)
+	task := mocks.task()
 
 	mocks.store.EXPECT().GetPending().Return(nil, nil)
 
 	gomock.InOrder(
-		mocks.store.EXPECT().GetFailed().Return([]Task{task1, task2}, nil),
-		mocks.store.EXPECT().GetFailed().Return(nil, nil).AnyTimes(),
+		task.EXPECT().Ready().Return(false),
+		mocks.store.EXPECT().MarkFailed(task).Return(nil),
 	)
 
-	task1.EXPECT().GetLastAttempt().Return(time.Time{})
-	task2.EXPECT().GetLastAttempt().Return(time.Time{})
-
-	gomock.InOrder(
-		mocks.store.EXPECT().MarkPending(task1),
-		mocks.executor.EXPECT().Exec(task1).DoAndReturn(func(Task) error {
-			<-task1Done
-			return nil
-		}),
-		mocks.store.EXPECT().MarkDone(task1).Return(nil),
-	)
-
-	gomock.InOrder(
-		mocks.store.EXPECT().MarkPending(task2).Return(nil),
-		mocks.store.EXPECT().MarkFailed(task2).Return(nil),
-	)
+	mocks.store.EXPECT().GetFailed().Return(nil, nil).AnyTimes()
 
 	m, err := mocks.new()
 	require.NoError(err)
 	defer m.Close()
 
-	time.Sleep(time.Second)
+	waitForWorkers()
 
-	task1Done <- true
-
-	time.Sleep(time.Second)
+	require.NoError(m.Add(task))
 }

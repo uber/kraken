@@ -110,12 +110,21 @@ func (m *manager) start() error {
 	return nil
 }
 
-// Add adds a task in the pool for works to pick up. It is non-blocking.
+// Add enqueues an incoming task to be executed.
 func (m *manager) Add(t Task) error {
 	if m.closed.Load() {
 		return ErrManagerClosed
 	}
-	return m.tryAdd(t, m.incoming)
+	if !t.Ready() {
+		if err := m.store.MarkFailed(t); err != nil {
+			return fmt.Errorf("mark unready task as failed: %s", err)
+		}
+		return nil
+	}
+	if err := m.enqueue(t, m.incoming); err != nil {
+		return fmt.Errorf("enqueue: %s", err)
+	}
+	return nil
 }
 
 // Close waits for all workers to exit current task.
@@ -127,7 +136,7 @@ func (m *manager) Close() {
 	})
 }
 
-func (m *manager) tryAdd(t Task, q *queue) error {
+func (m *manager) enqueue(t Task, q *queue) error {
 	if err := m.store.MarkPending(t); err != nil {
 		return fmt.Errorf("mark task as pending: %s", err)
 	}
@@ -184,11 +193,10 @@ func (m *manager) pollRetries() {
 		return
 	}
 	for _, t := range tasks {
-		if time.Since(t.GetLastAttempt()) < m.config.RetryInterval {
-			continue
-		}
-		if err := m.tryAdd(t, m.retries); err != nil {
-			log.With("task", t).Errorf("Error adding retry task: %s", err)
+		if t.Ready() && time.Since(t.GetLastAttempt()) > m.config.RetryInterval {
+			if err := m.enqueue(t, m.retries); err != nil {
+				log.With("task", t).Errorf("Error adding retry task: %s", err)
+			}
 		}
 	}
 }
