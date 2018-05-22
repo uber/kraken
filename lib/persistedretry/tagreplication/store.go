@@ -79,7 +79,6 @@ func (s *Store) MarkPending(r persistedretry.Task) error {
 			digest,
 			dependencies,
 			destination,
-			created_at,
 			last_attempt,
 			failures,
 			status
@@ -88,7 +87,6 @@ func (s *Store) MarkPending(r persistedretry.Task) error {
 			:digest,
 			:dependencies,
 			:destination,
-			:created_at,
 			:last_attempt,
 			:failures,
 			"pending"
@@ -101,7 +99,7 @@ func (s *Store) MarkFailed(r persistedretry.Task) error {
 	t := r.(*Task)
 	_, err := s.db.NamedExec(`
 		UPDATE replicate_tag_task
-		SET failures=failures+1, status="failed"
+		SET failures=failures+1, last_attempt=CURRENT_TIMESTAMP, status="failed"
 		WHERE tag=:tag AND destination=:destination`, t)
 	if err != nil {
 		return err

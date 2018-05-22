@@ -17,7 +17,7 @@ type Config struct {
 	Auth             backend.AuthConfig           `yaml:"auth"`
 	TagServer        tagserver.Config             `yaml:"tagserver"`
 	Remotes          tagreplication.RemotesConfig `yaml:"remotes"`
-	Replication      persistedretry.Config        `yaml:"replication"`
+	TagReplication   persistedretry.Config        `yaml:"tag_replication"`
 	Origin           string                       `yaml:"origin"`
 	Port             int                          `yaml:"port"`
 	SQLiteSourcePath string                       `yaml:"sqlite_source_path"`

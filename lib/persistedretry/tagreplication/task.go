@@ -39,3 +39,8 @@ func NewTask(
 func (t *Task) String() string {
 	return fmt.Sprintf("tagreplication.Task(tag=%s, dest=%s)", t.Tag, t.Destination)
 }
+
+// GetLastAttempt returns when the task was last attempted.
+func (t *Task) GetLastAttempt() time.Time {
+	return t.LastAttempt
+}

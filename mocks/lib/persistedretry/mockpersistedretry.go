@@ -8,6 +8,7 @@ import (
 	persistedretry "code.uber.internal/infra/kraken/lib/persistedretry"
 	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+	time "time"
 )
 
 // MockStore is a mock of Store interface
@@ -128,6 +129,18 @@ func NewMockTask(ctrl *gomock.Controller) *MockTask {
 // EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockTask) EXPECT() *MockTaskMockRecorder {
 	return m.recorder
+}
+
+// GetLastAttempt mocks base method
+func (m *MockTask) GetLastAttempt() time.Time {
+	ret := m.ctrl.Call(m, "GetLastAttempt")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// GetLastAttempt indicates an expected call of GetLastAttempt
+func (mr *MockTaskMockRecorder) GetLastAttempt() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastAttempt", reflect.TypeOf((*MockTask)(nil).GetLastAttempt))
 }
 
 // MockExecutor is a mock of Executor interface

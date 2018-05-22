@@ -21,15 +21,25 @@ type Manager interface {
 	Close()
 }
 
+type queue struct {
+	tasks   chan Task
+	counter tally.Counter
+}
+
+func newQueue(size int, counter tally.Counter) *queue {
+	return &queue{make(chan Task, size), counter}
+}
+
 type manager struct {
 	config   Config
 	stats    tally.Scope
 	store    Store
 	executor Executor
 
-	wg      sync.WaitGroup
-	tasks   chan Task
-	retries chan Task
+	wg sync.WaitGroup
+
+	incoming *queue
+	retries  *queue
 
 	closeOnce sync.Once
 	done      chan struct{}
@@ -50,8 +60,8 @@ func NewManager(
 		stats:    stats,
 		store:    store,
 		executor: executor,
-		tasks:    make(chan Task, config.TaskChanSize),
-		retries:  make(chan Task, config.RetryChanSize),
+		incoming: newQueue(config.IncomingBuffer, stats.Counter("incoming")),
+		retries:  newQueue(config.RetryBuffer, stats.Counter("retries")),
 		done:     make(chan struct{}),
 	}
 	if err := m.markPendingTasksAsFailed(); err != nil {
@@ -82,43 +92,30 @@ func (m *manager) start() error {
 		return ErrManagerClosed
 	}
 
-	for i := 0; i < m.config.NumWorkers; i++ {
-		m.wg.Add(1)
-		go m.startWorker()
-	}
+	totalWorkers := m.config.NumIncomingWorkers + m.config.NumRetryWorkers
+	limit := m.config.MaxTaskThroughput * time.Duration(totalWorkers)
 
+	for i := 0; i < m.config.NumIncomingWorkers; i++ {
+		m.wg.Add(1)
+		go m.worker(m.incoming, limit)
+	}
 	for i := 0; i < m.config.NumRetryWorkers; i++ {
 		m.wg.Add(1)
-		go m.startRetryWorker()
+		go m.worker(m.retries, limit)
 	}
 
 	m.wg.Add(1)
-	go m.populateRetries()
+	go m.tickerLoop()
 
 	return nil
 }
 
 // Add adds a task in the pool for works to pick up. It is non-blocking.
-func (m *manager) Add(task Task) error {
+func (m *manager) Add(t Task) error {
 	if m.closed.Load() {
 		return ErrManagerClosed
 	}
-
-	if err := m.store.MarkPending(task); err != nil {
-		return fmt.Errorf("mark task as pending: %s", err)
-	}
-
-	select {
-	case m.tasks <- task:
-		m.stats.Counter("tasks").Inc(1)
-	default:
-		// If task queue is full, fallback task to failure state so
-		// it can be picked up by a retry round.
-		if err := m.store.MarkFailed(task); err != nil {
-			return fmt.Errorf("mark task as failed: %s", err)
-		}
-	}
-	return nil
+	return m.tryAdd(t, m.incoming)
 }
 
 // Close waits for all workers to exit current task.
@@ -130,100 +127,85 @@ func (m *manager) Close() {
 	})
 }
 
-func (m *manager) startWorker() {
+func (m *manager) tryAdd(t Task, q *queue) error {
+	if err := m.store.MarkPending(t); err != nil {
+		return fmt.Errorf("mark task as pending: %s", err)
+	}
+	select {
+	case q.tasks <- t:
+		q.counter.Inc(1)
+	default:
+		// If task queue is full, fallback task to failure state so it can be
+		// picked up by a retry round.
+		if err := m.store.MarkFailed(t); err != nil {
+			return fmt.Errorf("mark task as failed: %s", err)
+		}
+	}
+	return nil
+}
+
+func (m *manager) worker(q *queue, limit time.Duration) {
 	defer m.wg.Done()
 
 	for {
 		select {
 		case <-m.done:
 			return
-		case t := <-m.tasks:
-			m.stats.Counter("tasks").Inc(-1)
+		case t := <-q.tasks:
+			q.counter.Inc(-1)
 			if err := m.exec(t); err != nil {
 				m.stats.Counter("task_failure").Inc(1)
 				log.With("task", t).Errorf("Failed to exec task: %s", err)
 			}
-			time.Sleep(m.config.TaskInterval)
+			time.Sleep(limit)
 		}
 	}
 }
 
-func (m *manager) populateRetries() {
+func (m *manager) tickerLoop() {
 	defer m.wg.Done()
 
-	retryTicker := time.NewTicker(m.config.RetryInterval)
+	pollRetriesTicker := time.NewTicker(m.config.PollRetriesInterval)
 	for {
 		select {
 		case <-m.done:
 			return
-		case <-retryTicker.C:
-			tasks, err := m.store.GetFailed()
-			if err != nil {
-				m.stats.Counter("get_failed_failure").Inc(1)
-				log.Errorf("Error getting failed tasks: %s", err)
-				continue
-			}
-			m.addRetries(tasks)
+		case <-pollRetriesTicker.C:
+			m.pollRetries()
 		}
 	}
 }
 
-// addRetries adds a list of tasks to retries channel. It is non-blocking.
-func (m *manager) addRetries(tasks []Task) {
+func (m *manager) pollRetries() {
+	tasks, err := m.store.GetFailed()
+	if err != nil {
+		m.stats.Counter("get_failed_failure").Inc(1)
+		log.Errorf("Error getting failed tasks: %s", err)
+		return
+	}
 	for _, t := range tasks {
-		// Mark tasks as pending before the task enter the queue to avoid duplicated retry.
-		if err := m.store.MarkPending(t); err != nil {
-			m.stats.Counter("mark_pending_failure").Inc(1)
-			log.With("task", t).Errorf("Failed to mark task as pending: %s", err)
+		if time.Since(t.GetLastAttempt()) < m.config.RetryInterval {
 			continue
 		}
-		select {
-		case m.retries <- t:
-			m.stats.Counter("retries").Inc(1)
-		default:
-			// If retry queue is full, fallback task to failure state so
-			// it can be picked up by next retry round.
-			if err := m.store.MarkFailed(t); err != nil {
-				m.stats.Counter("mark_failed_failure").Inc(1)
-				log.With("task", t).Errorf("Failed to mark task as failed: %s", err)
-			}
-			return
+		if err := m.tryAdd(t, m.retries); err != nil {
+			log.With("task", t).Errorf("Error adding retry task: %s", err)
 		}
 	}
 }
 
-// TODO: add backoff base on failure count or last attempt.
-func (m *manager) startRetryWorker() {
-	defer m.wg.Done()
-
-	for {
-		select {
-		case <-m.done:
-			return
-		case t := <-m.retries:
-			m.stats.Counter("retries").Inc(-1)
-			if err := m.exec(t); err != nil {
-				m.stats.Counter("retry_failure").Inc(1)
-				log.With("task", t).Error("Failed to retry task: %s", err)
-			}
-			time.Sleep(m.config.RetryTaskInterval)
-		}
-	}
-}
-
-func (m *manager) exec(task Task) error {
+func (m *manager) exec(t Task) error {
 	timer := m.stats.Timer("exec").Start()
 	defer timer.Stop()
 
-	if err := m.executor.Exec(task); err != nil {
-		if err := m.store.MarkFailed(task); err != nil {
+	if err := m.executor.Exec(t); err != nil {
+		if err := m.store.MarkFailed(t); err != nil {
 			return fmt.Errorf("mark task as failed: %s", err)
 		}
-		log.With("task", task).Errorf("Task failed: %s", err)
+		log.With("task", t).Errorf("Task failed: %s", err)
 		return nil
 	}
 
-	if err := m.store.MarkDone(task); err != nil {
+	if err := m.store.MarkDone(t); err != nil {
 		return fmt.Errorf("mark task as done: %s", err)
 	}
 	return nil
