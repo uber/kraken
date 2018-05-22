@@ -143,6 +143,18 @@ func (mr *MockTaskMockRecorder) GetLastAttempt() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastAttempt", reflect.TypeOf((*MockTask)(nil).GetLastAttempt))
 }
 
+// Ready mocks base method
+func (m *MockTask) Ready() bool {
+	ret := m.ctrl.Call(m, "Ready")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// Ready indicates an expected call of Ready
+func (mr *MockTaskMockRecorder) Ready() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ready", reflect.TypeOf((*MockTask)(nil).Ready))
+}
+
 // MockExecutor is a mock of Executor interface
 type MockExecutor struct {
 	ctrl     *gomock.Controller
