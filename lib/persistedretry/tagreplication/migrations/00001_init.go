@@ -17,7 +17,7 @@ func up00001(tx *sql.Tx) error {
 		digest       blob      NOT NULL,
 		dependencies blob      NOT NULL,
 		destination  text      NOT NULL,
-		created_at   timestamp NOT NULL,
+		created_at   timestamp DEFAULT CURRENT_TIMESTAMP,
 		last_attempt timestamp NOT NULL,
 		status       text      NOT NULL,
 		failures     integer   NOT NULL,

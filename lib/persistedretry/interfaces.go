@@ -1,7 +1,11 @@
 package persistedretry
 
+import "time"
+
 // Task represents a single unit of work which must eventually succeed.
-type Task interface{}
+type Task interface {
+	GetLastAttempt() time.Time
+}
 
 // Store provides persisted storage for tasks.
 type Store interface {

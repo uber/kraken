@@ -14,6 +14,11 @@ import (
 	"code.uber.internal/infra/kraken/mocks/lib/persistedretry"
 )
 
+func waitForWorkers() {
+	runtime.Gosched()
+	time.Sleep(10 * time.Millisecond)
+}
+
 type managerMocks struct {
 	ctrl     *gomock.Controller
 	config   Config
@@ -26,14 +31,14 @@ func newManagerMocks(t *testing.T) (*managerMocks, func()) {
 	return &managerMocks{
 		ctrl: ctrl,
 		config: Config{
-			NumWorkers:        1,
-			NumRetryWorkers:   1,
-			TaskChanSize:      0,
-			RetryChanSize:     0,
-			TaskInterval:      5 * time.Millisecond,
-			RetryInterval:     10 * time.Millisecond,
-			RetryTaskInterval: 5 * time.Millisecond,
-			Testing:           true,
+			IncomingBuffer:      0,
+			RetryBuffer:         0,
+			NumIncomingWorkers:  1,
+			NumRetryWorkers:     1,
+			MaxTaskThroughput:   5 * time.Millisecond,
+			RetryInterval:       100 * time.Millisecond,
+			PollRetriesInterval: 5 * time.Millisecond,
+			Testing:             true,
 		},
 		store:    mockpersistedretry.NewMockStore(ctrl),
 		executor: mockpersistedretry.NewMockExecutor(ctrl),
@@ -93,8 +98,7 @@ func TestManagerAddTaskSuccess(t *testing.T) {
 	require.NoError(err)
 	defer m.Close()
 
-	// Let workers start.
-	runtime.Gosched()
+	waitForWorkers()
 
 	require.NoError(m.Add(task))
 
@@ -138,8 +142,7 @@ func TestManagerAddTaskFail(t *testing.T) {
 	require.NoError(err)
 	defer m.Close()
 
-	// Let workers start.
-	runtime.Gosched()
+	waitForWorkers()
 
 	require.NoError(m.Add(task))
 
@@ -178,8 +181,7 @@ func TestManagerAddTaskFallbackWhenWorkersBusy(t *testing.T) {
 	require.NoError(err)
 	defer m.Close()
 
-	// Let workers start.
-	runtime.Gosched()
+	waitForWorkers()
 
 	// First task blocks, so the only worker is busy when we add second task, which
 	// should then fallback to failed.
@@ -202,9 +204,32 @@ func TestManagerRetriesFailedTasks(t *testing.T) {
 	gomock.InOrder(
 		mocks.store.EXPECT().GetPending().Return(nil, nil).MinTimes(1),
 		mocks.store.EXPECT().GetFailed().Return([]Task{task}, nil),
+		task.EXPECT().GetLastAttempt().Return(time.Time{}),
 		mocks.store.EXPECT().MarkPending(task),
 		mocks.executor.EXPECT().Exec(task).Return(nil),
 		mocks.store.EXPECT().MarkDone(task).Return(nil),
+	)
+	mocks.store.EXPECT().GetFailed().Return(nil, nil).AnyTimes()
+
+	m, err := mocks.new()
+	require.NoError(err)
+	defer m.Close()
+
+	time.Sleep(50 * time.Millisecond)
+}
+
+func TestManagerSkipsRecentlyFailedTasks(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newManagerMocks(t)
+	defer cleanup()
+
+	task := mocks.task()
+
+	gomock.InOrder(
+		mocks.store.EXPECT().GetPending().Return(nil, nil).MinTimes(1),
+		mocks.store.EXPECT().GetFailed().Return([]Task{task}, nil),
+		task.EXPECT().GetLastAttempt().Return(time.Now()),
 	)
 	mocks.store.EXPECT().GetFailed().Return(nil, nil).AnyTimes()
 
@@ -232,6 +257,9 @@ func TestManagerFailedTaskRetryFallbackWhenWorkersBusy(t *testing.T) {
 		mocks.store.EXPECT().GetFailed().Return([]Task{task1, task2}, nil),
 		mocks.store.EXPECT().GetFailed().Return(nil, nil).AnyTimes(),
 	)
+
+	task1.EXPECT().GetLastAttempt().Return(time.Time{})
+	task2.EXPECT().GetLastAttempt().Return(time.Time{})
 
 	gomock.InOrder(
 		mocks.store.EXPECT().MarkPending(task1),

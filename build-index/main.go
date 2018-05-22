@@ -51,12 +51,12 @@ func main() {
 	}
 
 	trManager, err := persistedretry.NewManager(
-		config.Replication,
+		config.TagReplication,
 		stats,
 		trStore,
 		trExecutor)
 	if err != nil {
-		log.Fatalf("Error creating replicate manager: %s", err)
+		log.Fatalf("Error creating tag replication manager: %s", err)
 	}
 
 	backends, err := backend.NewManager(config.Backends, config.Auth)
