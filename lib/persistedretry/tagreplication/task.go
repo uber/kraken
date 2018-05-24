@@ -44,7 +44,6 @@ func NewTaskWithDelay(
 		Dependencies: dependencies,
 		Destination:  destination,
 		CreatedAt:    time.Now(),
-		LastAttempt:  time.Now(),
 		Delay:        delay,
 	}
 }

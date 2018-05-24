@@ -94,6 +94,8 @@ func TestMarkPending(t *testing.T) {
 	pending, err := store.GetPending()
 	require.NoError(err)
 	checkTasks(t, []*Task{task}, pending)
+
+	require.True(pending[0].Ready())
 }
 
 func TestMarkPendingTwiceReplacesTask(t *testing.T) {
@@ -141,7 +143,7 @@ func TestMarkFailed(t *testing.T) {
 	checkTasks(t, []*Task{task}, failed)
 }
 
-func TestMarkFailedIgnoresIfNotPending(t *testing.T) {
+func TestMarkFailedForNewTask(t *testing.T) {
 	require := require.New(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -157,7 +159,7 @@ func TestMarkFailedIgnoresIfNotPending(t *testing.T) {
 
 	failed, err := store.GetFailed()
 	require.NoError(err)
-	require.Empty(failed)
+	checkTasks(t, []*Task{task}, failed)
 }
 
 func TestMarkDone(t *testing.T) {
@@ -206,5 +208,5 @@ func TestDelay(t *testing.T) {
 	require.NoError(err)
 	checkTasks(t, []*Task{task}, pending)
 
-	require.False(task.Ready())
+	require.False(pending[0].Ready())
 }

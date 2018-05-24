@@ -19,8 +19,13 @@ import (
 func main() {
 	configFile := flag.String("config", "", "configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
 	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-sjc1)")
+	port := flag.Int("port", 0, "tag server port")
 
 	flag.Parse()
+
+	if *port == 0 {
+		panic("no port provided")
+	}
 
 	var config Config
 	if err := configutil.Load(*configFile, &config); err != nil {
@@ -64,9 +69,22 @@ func main() {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
 
-	server := tagserver.New(config.TagServer, stats, backends, config.Origin, remotes, trManager)
+	localReplicas, err := config.LocalReplicas.Build(*port)
+	if err != nil {
+		log.Fatalf("Error building local replica host list: %s", err)
+	}
 
-	addr := fmt.Sprintf(":%d", config.Port)
+	server := tagserver.New(
+		config.TagServer,
+		stats,
+		backends,
+		config.Origin,
+		localReplicas,
+		remotes,
+		trManager,
+		tagclient.NewProvider())
+
+	addr := fmt.Sprintf(":%d", *port)
 	log.Infof("Listening on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, server.Handler()))
 }

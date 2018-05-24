@@ -177,16 +177,9 @@ mocks:
 		-package mocktagreplication \
 		code.uber.internal/infra/kraken/lib/persistedretry/tagreplication RemoteValidator
 
-# Enumerates all container names, including those created by dockerman.
-CONTAINERS := $(foreach \
-	c, \
-	kraken-redis kraken-tracker kraken-agent kraken-proxy kraken-test-origin-01 \
-	kraken-test-origin-02 kraken-test-origin-03 kraken-testfs kraken-build-index, \
-	$(c))
-
 # Runs docker stop and docker rm on each container w/ silenced output.
 docker_stop:
-	@-$(foreach c,$(CONTAINERS),docker rm -f $$(docker ps -aq --filter name=$(c)) &>/dev/null)
+	-docker ps --format '{{.Names}}' | grep kraken | while read n; do docker rm -f $$n; done
 
 .PHONY: redis
 redis:

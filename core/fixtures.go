@@ -76,7 +76,7 @@ func DigestFixture() Digest {
 }
 
 // DigestListFixture returns a list of random Digests.
-func DigestListFixture(n int) DigestList {
+func DigestListFixture(n int) []Digest {
 	var l DigestList
 	for i := 0; i < n; i++ {
 		l = append(l, DigestFixture())

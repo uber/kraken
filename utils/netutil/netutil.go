@@ -1,6 +1,11 @@
 package netutil
 
-import "time"
+import (
+	"errors"
+	"fmt"
+	"net"
+	"time"
+)
 
 func min(a, b time.Duration) time.Duration {
 	if a < b {
@@ -25,4 +30,19 @@ func WithRetry(maxRetries uint, delay time.Duration, maxDelay time.Duration, f f
 		time.Sleep(min(delay*(1<<retries), maxDelay))
 		retries++
 	}
+}
+
+// GetIP looks up the ip of host.
+func GetIP(host string) (net.IP, error) {
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return nil, fmt.Errorf("net: %s", err)
+	}
+	for _, ip := range ips {
+		if ip == nil || ip.IsLoopback() {
+			continue
+		}
+		return ip, nil
+	}
+	return nil, errors.New("no ips found")
 }
