@@ -2,7 +2,6 @@ package blobserver
 
 import (
 	"hash"
-	"time"
 
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"github.com/spaolacci/murmur3"
@@ -10,9 +9,8 @@ import (
 
 // Config defines the configuration used by Origin cluster for hashing blob digests.
 type Config struct {
-	NumReplica int          `yaml:"num_replica"`
-	HashNodes  HashNodeMap  `yaml:"hash_nodes"`
-	Repair     RepairConfig `yaml:"repair"`
+	NumReplica int         `yaml:"num_replica"`
+	HashNodes  HashNodeMap `yaml:"hash_nodes"`
 }
 
 // HashNodeMap defines a map from address of HashNodeConfig
@@ -25,16 +23,6 @@ type HashNodeMap map[string]HashNodeConfig
 type HashNodeConfig struct {
 	Label  string `yaml:"label"`
 	Weight int    `yaml:"weight"`
-}
-
-// RepairConfig defines the configuration used by Origin cluster for
-// running concurrent repairs.
-type RepairConfig struct {
-	NumWorkers    int           `yaml:"num_workers"`
-	MaxRetries    uint          `yaml:"max_retries"`
-	RetryDelay    time.Duration `yaml:"retry_delay"`
-	MaxRetryDelay time.Duration `yaml:"max_retry_delay"`
-	ConnTimeout   time.Duration `yaml:"conn_timeout"`
 }
 
 // LabelToAddress generates a reverse mapping of HashNodes by label to hostname.

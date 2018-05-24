@@ -2,10 +2,7 @@ package blobserver
 
 import (
 	"bytes"
-	"crypto/rand"
-	"fmt"
 	"testing"
-	"time"
 
 	"go.uber.org/zap"
 
@@ -22,7 +19,6 @@ import (
 	"code.uber.internal/infra/kraken/mocks/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/stringset"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
@@ -48,11 +44,6 @@ func configFixture() Config {
 			master1: {Label: "origin1", Weight: 100},
 			master2: {Label: "origin2", Weight: 100},
 			master3: {Label: "origin3", Weight: 100},
-		},
-		Repair: RepairConfig{
-			NumWorkers: 10,
-			MaxRetries: 3,
-			RetryDelay: 200 * time.Millisecond,
 		},
 	}
 }
@@ -138,13 +129,6 @@ func newTestServer(host string, config Config, cp *testClientProvider) *testServ
 	}
 }
 
-func (s *testServer) restart(config Config) {
-	s.stop()
-
-	s.addr, s.stop = startServer(s.host, config, s.fs, s.cp, s.pctx, s.backendManager)
-	s.cp.register(s.host, blobclient.NewWithConfig(s.addr, blobclient.Config{ChunkSize: 16}))
-}
-
 func (s *testServer) cleanup() {
 	s.stop()
 	s.cleanFS()
@@ -192,40 +176,6 @@ func hostsOwnShard(config Config, shardID string, hosts ...string) bool {
 		labels.Add(node.Label)
 	}
 	return stringset.Equal(labelSet(config, hosts), labels)
-}
-
-// pickShard generates a shard that is owned by hosts, as specified by config.
-func pickShard(config Config, hosts ...string) string {
-	for tries := 0; tries < 1000; tries++ {
-		shardID := randutil.Hex(4)
-		if hostsOwnShard(config, shardID, hosts...) {
-			return shardID
-		}
-	}
-	panic(fmt.Sprintf("cannot find shard for hosts %v", hosts))
-}
-
-// computeBlobForShard generates a random digest / content which matches shardID.
-// XXX This function is not cheap! Each call takes around 0.1 seconds.
-func computeBlobForShard(shardID string) *core.BlobFixture {
-	buf := make([]byte, 32)
-	for {
-		if _, err := rand.Read(buf); err != nil {
-			panic(err)
-		}
-		d, err := core.NewDigester().FromBytes(buf)
-		if err != nil {
-			panic(err)
-		}
-		if d.ShardID() != shardID {
-			continue
-		}
-		mi, err := core.NewMetaInfoFromBlob(d.Hex(), bytes.NewReader(buf), 1)
-		if err != nil {
-			panic(err)
-		}
-		return core.CustomBlobFixture(buf, d, mi)
-	}
 }
 
 // computeBlobForHosts generates a random digest / content which shards to hosts.

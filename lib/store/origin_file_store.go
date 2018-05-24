@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"regexp"
@@ -45,10 +44,6 @@ type OriginFileStore interface {
 	SetUploadFileHashState(fileName string, content []byte, algorithm string, offset string) error
 	GetUploadFileHashState(fileName string, algorithm string, offset string) ([]byte, error)
 	ListUploadFileHashStatePaths(fileName string) ([]string, error)
-
-	// TODO: Functions probably no longer needed.
-	ListCacheFilesByShardID(shardID string) ([]string, error)
-	ListPopulatedShardIDs() ([]string, error)
 }
 
 // OriginLocalFileStore manages all origin files on local disk.
@@ -330,43 +325,4 @@ func (store *OriginLocalFileStore) ListUploadFileHashStatePaths(fileName string)
 // DeleteCacheFile deletes a file from cache directory
 func (store *OriginLocalFileStore) DeleteCacheFile(fileName string) error {
 	return store.cacheBackend.NewFileOp().AcceptState(store.stateCache).DeleteFile(fileName)
-}
-
-// ListCacheFilesByShardID returns a list of FileInfo for all files of given shard.
-func (store *OriginLocalFileStore) ListCacheFilesByShardID(shardID string) ([]string, error) {
-	shardDir := store.config.CacheDir
-	for i := 0; i < len(shardID); i += 2 {
-		// LocalFileStore uses the first few bytes of file digest (which is also supposed to be the file
-		// name) as shard ID.
-		// For every byte, one more level of directories will be created
-		// (1 byte = 2 char of file name assumming file name is in HEX)
-		shardDir = path.Join(shardDir, shardID[i:i+2])
-	}
-	infos, err := ioutil.ReadDir(shardDir)
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, info := range infos {
-		names = append(names, info.Name())
-	}
-	return names, nil
-}
-
-// ListPopulatedShardIDs is a best effort function which returns the shard ids
-// of all populated shards.
-//
-// XXX: This is an expensive operation and will potentially return stale data.
-// Caller should not assume shard ids will remain populated.
-func (store *OriginLocalFileStore) ListPopulatedShardIDs() ([]string, error) {
-	var shards []string
-
-	err := walkDirectory(
-		store.config.CacheDir, base.DefaultShardIDLength, func(currPath string) error {
-			shard := strings.TrimPrefix(currPath, store.config.CacheDir)
-			shards = append(shards, strings.Replace(shard, "/", "", -1))
-			return nil
-		})
-
-	return shards, err
 }

@@ -1,10 +1,8 @@
 package store
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"regexp"
@@ -54,7 +52,6 @@ type FileStore interface {
 	MoveUploadFileToCache(fileName, targetFileName string) error
 	MoveDownloadFileToCache(fileName string) error
 	DeleteDownloadOrCacheFile(fileName string) error
-	ListCacheFilesByShardID(shardID string) ([]string, error)
 	EnsureDownloadOrCacheFilePresent(fileName string, defaultLength int64) error
 	States() *StateAcceptor
 	InCacheError(error) bool
@@ -69,7 +66,6 @@ type FileStore interface {
 		filename string, mt MetadataType, b []byte, offset int64) (updated bool, err error)
 	GetOrSetCacheFileMetadata(
 		filename string, mt MetadataType, b []byte) ([]byte, error)
-	ListPopulatedShardIDs() ([]string, error)
 }
 
 // LocalFileStore manages all peer agent files on local disk.
@@ -364,32 +360,6 @@ func (store *LocalFileStore) DeleteDownloadOrCacheFile(fileName string) error {
 		AcceptState(store.stateDownload).
 		AcceptState(store.stateCache)
 	return op.DeleteFile(fileName)
-}
-
-// ListCacheFilesByShardID returns a list of FileInfo for all files of given shard.
-func (store *LocalFileStore) ListCacheFilesByShardID(shardID string) ([]string, error) {
-	shardDir := store.config.CacheDir
-	for i := 0; i < len(shardID); i += 2 {
-		// LocalFileStore uses the first few bytes of file digest (which is also supposed to be the file
-		// name) as shard ID.
-		// For every byte, one more level of directories will be created
-		// (1 byte = 2 char of file name assumming file name is in HEX)
-		shardDir = path.Join(shardDir, shardID[i:i+2])
-	}
-	infos, err := ioutil.ReadDir(shardDir)
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, info := range infos {
-		names = append(names, info.Name())
-	}
-	return names, nil
-}
-
-// ListPopulatedShardIDs is not supported.
-func (store *LocalFileStore) ListPopulatedShardIDs() ([]string, error) {
-	return nil, errors.New("not supported")
 }
 
 // EnsureDownloadOrCacheFilePresent ensures that fileName is present in either

@@ -311,32 +311,6 @@ func (mr *MockFileStoreMockRecorder) InDownloadError(arg0 interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InDownloadError", reflect.TypeOf((*MockFileStore)(nil).InDownloadError), arg0)
 }
 
-// ListCacheFilesByShardID mocks base method
-func (m *MockFileStore) ListCacheFilesByShardID(arg0 string) ([]string, error) {
-	ret := m.ctrl.Call(m, "ListCacheFilesByShardID", arg0)
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListCacheFilesByShardID indicates an expected call of ListCacheFilesByShardID
-func (mr *MockFileStoreMockRecorder) ListCacheFilesByShardID(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCacheFilesByShardID", reflect.TypeOf((*MockFileStore)(nil).ListCacheFilesByShardID), arg0)
-}
-
-// ListPopulatedShardIDs mocks base method
-func (m *MockFileStore) ListPopulatedShardIDs() ([]string, error) {
-	ret := m.ctrl.Call(m, "ListPopulatedShardIDs")
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListPopulatedShardIDs indicates an expected call of ListPopulatedShardIDs
-func (mr *MockFileStoreMockRecorder) ListPopulatedShardIDs() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPopulatedShardIDs", reflect.TypeOf((*MockFileStore)(nil).ListPopulatedShardIDs))
-}
-
 // ListUploadFileHashStatePaths mocks base method
 func (m *MockFileStore) ListUploadFileHashStatePaths(arg0 string) ([]string, error) {
 	ret := m.ctrl.Call(m, "ListUploadFileHashStatePaths", arg0)
@@ -797,32 +771,6 @@ func (m *MockOriginFileStore) GetUploadFileStat(arg0 string) (os.FileInfo, error
 // GetUploadFileStat indicates an expected call of GetUploadFileStat
 func (mr *MockOriginFileStoreMockRecorder) GetUploadFileStat(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileStat", reflect.TypeOf((*MockOriginFileStore)(nil).GetUploadFileStat), arg0)
-}
-
-// ListCacheFilesByShardID mocks base method
-func (m *MockOriginFileStore) ListCacheFilesByShardID(arg0 string) ([]string, error) {
-	ret := m.ctrl.Call(m, "ListCacheFilesByShardID", arg0)
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListCacheFilesByShardID indicates an expected call of ListCacheFilesByShardID
-func (mr *MockOriginFileStoreMockRecorder) ListCacheFilesByShardID(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCacheFilesByShardID", reflect.TypeOf((*MockOriginFileStore)(nil).ListCacheFilesByShardID), arg0)
-}
-
-// ListPopulatedShardIDs mocks base method
-func (m *MockOriginFileStore) ListPopulatedShardIDs() ([]string, error) {
-	ret := m.ctrl.Call(m, "ListPopulatedShardIDs")
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListPopulatedShardIDs indicates an expected call of ListPopulatedShardIDs
-func (mr *MockOriginFileStoreMockRecorder) ListPopulatedShardIDs() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPopulatedShardIDs", reflect.TypeOf((*MockOriginFileStore)(nil).ListPopulatedShardIDs))
 }
 
 // ListUploadFileHashStatePaths mocks base method
