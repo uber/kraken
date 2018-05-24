@@ -92,7 +92,7 @@ func (u *Uploads) PutBlobContent(path string, content []byte) error {
 }
 
 // GetWriter returns a writer for uploaded content
-func (u *Uploads) GetWriter(path string, subtype PathSubType) (storagedriver.FileWriter, error) {
+func (u *Uploads) GetWriter(path string, subtype PathSubType) (store.FileReadWriter, error) {
 	uuid, err := GetUploadUUID(path)
 	if err != nil {
 		return nil, err

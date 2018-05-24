@@ -252,12 +252,14 @@ run_origin: origin
 		-e UBER_CONFIG_DIR=/root/kraken/config/origin \
 		-e UBER_ENVIRONMENT=development \
 		-e UBER_DATACENTER=sjc1 \
-		-p 19003:19003 \
+		-p 9003:9003 \
 		-p 5081:5081 \
-		# Mount cache dir so restart will be able to load from disk 
-		-v /tmp/kraken:/var/kraken/ \
 		kraken-origin:dev \
-		/usr/bin/kraken-origin --peer_ip=192.168.65.1 --peer_port=5081 --blobserver_port=19003
+		/usr/bin/kraken-origin \
+		--peer_ip=192.168.65.1 \
+		--peer_port=5081 \
+		--blobserver_port=9003 \
+		--config=development.yaml
 
 .PHONY: agent
 agent:
@@ -292,14 +294,24 @@ run_proxy: proxy
 		-e UBER_CONFIG_DIR=/root/kraken/config/proxy \
 		-e UBER_ENVIRONMENT=development \
 		-e UBER_DATACENTER=sjc1 \
-		-p 5054:5054 \
+		-p 5367:5367 \
 		kraken-proxy:dev \
-		/usr/bin/kraken-proxy 
+		/usr/bin/kraken-proxy --config=development.yaml
 
 testfs:
 	-rm tools/bin/testfs/testfs
 	GOOS=linux GOARCH=amd64 make tools/bin/testfs/testfs
 	docker build -t kraken-testfs:dev -f docker/testfs/Dockerfile ./
+run_testfs: testfs
+	-docker stop kraken-testfs
+	-docker rm kraken-testfs
+	docker run -d \
+		--name=kraken-testfs \
+		-p 9004:9004 \
+		kraken-testfs:dev \
+		/usr/bin/kraken-testfs --port=9004
+
+run_cluster: run_testfs run_origin run_proxy run_build-index
 
 bootstrap_integration:
 	if [ ! -d env ]; then \
