@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"code.uber.internal/infra/kraken/utils/netutil"
 	"code.uber.internal/infra/kraken/utils/stringset"
 )
 
@@ -37,28 +36,26 @@ type Config struct {
 func (c Config) Build(port int) (stringset.Set, error) {
 	names, err := c.resolve()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve: %s", err)
 	}
 	addrs, err := attachPortIfMissing(names, port)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("attach port to resolved names: %s", err)
 	}
-	hostname, err := os.Hostname()
+	localNames, err := getLocalNames()
 	if err != nil {
-		return nil, fmt.Errorf("hostname: %s", err)
+		return nil, fmt.Errorf("get local names: %s", err)
 	}
-	ip, err := netutil.GetIP(hostname)
+	localAddrs, err := attachPortIfMissing(localNames, port)
 	if err != nil {
-		return nil, fmt.Errorf("get ip of %s: %s", hostname, err)
+		return nil, fmt.Errorf("attach port to local names: %s", err)
 	}
-	addrs = filter(addrs, fmt.Sprintf("%s:%d", hostname, port))
-	addrs = filter(addrs, fmt.Sprintf("%s:%d", ip, port))
-	return stringset.FromSlice(addrs), nil
+	return addrs.Sub(localAddrs), nil
 }
 
-func (c Config) resolve() ([]string, error) {
+func (c Config) resolve() (stringset.Set, error) {
 	if c.DNS == "" {
-		return c.Static, nil
+		return stringset.FromSlice(c.Static), nil
 	}
 	var r net.Resolver
 	addrs, err := r.LookupHost(context.Background(), c.DNS)
@@ -68,12 +65,47 @@ func (c Config) resolve() ([]string, error) {
 	if len(addrs) == 0 {
 		return nil, errors.New("dns record empty")
 	}
-	return addrs, nil
+	return stringset.FromSlice(addrs), nil
 }
 
-func attachPortIfMissing(names []string, port int) ([]string, error) {
-	var result []string
-	for _, name := range names {
+func getLocalNames() (stringset.Set, error) {
+	result := make(stringset.Set)
+
+	// Add all local non-loopback ips.
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("interfaces: %s", err)
+	}
+	for _, i := range ifaces {
+		addrs, err := i.Addrs()
+		if err != nil {
+			return nil, fmt.Errorf("addrs of %v: %s", i, err)
+		}
+		for _, addr := range addrs {
+			ip := net.ParseIP(addr.String()).To4()
+			if ip == nil {
+				continue
+			}
+			if ip.IsLoopback() {
+				continue
+			}
+			result.Add(ip.String())
+		}
+	}
+
+	// Add local hostname just to be safe.
+	hostname, err := os.Hostname()
+	if err != nil {
+		return nil, fmt.Errorf("hostname: %s", err)
+	}
+	result.Add(hostname)
+
+	return result, nil
+}
+
+func attachPortIfMissing(names stringset.Set, port int) (stringset.Set, error) {
+	result := make(stringset.Set)
+	for name := range names {
 		parts := strings.Split(name, ":")
 		switch len(parts) {
 		case 1:
@@ -84,18 +116,7 @@ func attachPortIfMissing(names []string, port int) ([]string, error) {
 		default:
 			return nil, fmt.Errorf("invalid name format: %s, expected 'host' or 'ip:port'", name)
 		}
-		result = append(result, name)
+		result.Add(name)
 	}
 	return result, nil
-}
-
-func filter(addrs []string, x string) []string {
-	var result []string
-	for _, a := range addrs {
-		if a == x {
-			continue
-		}
-		result = append(result, a)
-	}
-	return result
 }

@@ -13,6 +13,11 @@ func FromSlice(xs []string) Set {
 	return s
 }
 
+// New creates a new Set with xs.
+func New(xs ...string) Set {
+	return FromSlice(xs)
+}
+
 // Add adds x to s.
 func (s Set) Add(x string) {
 	s[x] = struct{}{}
