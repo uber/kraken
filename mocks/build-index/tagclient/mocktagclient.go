@@ -9,6 +9,7 @@ import (
 	core "code.uber.internal/infra/kraken/core"
 	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+	time "time"
 )
 
 // MockProvider is a mock of Provider interface
@@ -67,6 +68,18 @@ func NewMockClient(ctrl *gomock.Controller) *MockClient {
 // EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
+}
+
+// DuplicateReplicate mocks base method
+func (m *MockClient) DuplicateReplicate(arg0 string, arg1 core.Digest, arg2 []core.Digest, arg3 time.Duration) error {
+	ret := m.ctrl.Call(m, "DuplicateReplicate", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DuplicateReplicate indicates an expected call of DuplicateReplicate
+func (mr *MockClientMockRecorder) DuplicateReplicate(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DuplicateReplicate", reflect.TypeOf((*MockClient)(nil).DuplicateReplicate), arg0, arg1, arg2, arg3)
 }
 
 // Get mocks base method

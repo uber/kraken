@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3" // tagreplication.Store is based on sqlite3
@@ -100,13 +101,33 @@ func (s *Store) MarkPending(r persistedretry.Task) error {
 func (s *Store) MarkFailed(r persistedretry.Task) error {
 	t := r.(*Task)
 	_, err := s.db.NamedExec(`
-		UPDATE replicate_tag_task
-		SET failures=failures+1, last_attempt=CURRENT_TIMESTAMP, status="failed"
-		WHERE tag=:tag AND destination=:destination`, t)
+		INSERT OR REPLACE INTO replicate_tag_task (
+			tag,
+			digest,
+			dependencies,
+			destination,
+			last_attempt,
+			failures,
+			delay,
+			status
+		) VALUES (
+			:tag,
+			:digest,
+			:dependencies,
+			:destination,
+			CURRENT_TIMESTAMP,
+			COALESCE(
+				(SELECT failures+1 FROM replicate_tag_task
+					WHERE tag=:tag AND destination=:destination),
+				1),
+			:delay,
+			"failed"
+		)`, t)
 	if err != nil {
 		return err
 	}
 	t.Failures++
+	t.LastAttempt = time.Now()
 	return nil
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"time"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/httputil"
@@ -34,6 +35,8 @@ type Client interface {
 	Put(tag string, d core.Digest) error
 	Get(tag string) (core.Digest, error)
 	Replicate(tag string, d core.Digest, dependencies []core.Digest) error
+	DuplicateReplicate(
+		tag string, d core.Digest, dependencies []core.Digest, delay time.Duration) error
 	Origin() (string, error)
 }
 
@@ -87,6 +90,28 @@ func (c *client) Replicate(tag string, d core.Digest, dependencies []core.Digest
 	}
 	_, err = httputil.Post(
 		fmt.Sprintf("http://%s/remotes/tags/%s/digest/%s", c.addr, url.PathEscape(tag), d.String()),
+		httputil.SendBody(bytes.NewReader(b)),
+		httputil.SendRetry())
+	return err
+}
+
+// DuplicateReplicateRequest defines a DuplicateReplicate request body.
+type DuplicateReplicateRequest struct {
+	Dependencies core.DigestList `json:"dependencies"`
+	Delay        time.Duration   `json:"delay"`
+}
+
+func (c *client) DuplicateReplicate(
+	tag string, d core.Digest, dependencies []core.Digest, delay time.Duration) error {
+
+	b, err := json.Marshal(DuplicateReplicateRequest{dependencies, delay})
+	if err != nil {
+		return fmt.Errorf("json marshal: %s", err)
+	}
+	_, err = httputil.Post(
+		fmt.Sprintf(
+			"http://%s/internal/duplicate/remotes/tags/%s/digest/%s",
+			c.addr, url.PathEscape(tag), d.String()),
 		httputil.SendBody(bytes.NewReader(b)),
 		httputil.SendRetry())
 	return err

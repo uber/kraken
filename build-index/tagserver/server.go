@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/core"
@@ -15,6 +16,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
+	"code.uber.internal/infra/kraken/utils/log"
+	"code.uber.internal/infra/kraken/utils/stringset"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
@@ -28,11 +31,13 @@ type Server struct {
 	stats          tally.Scope
 	backends       *backend.Manager
 	localOriginDNS string
+	localReplicas  stringset.Set
 	cache          *dedup.Cache
 
 	// For async new tag replication.
 	remotes               tagreplication.Remotes
 	tagReplicationManager persistedretry.Manager
+	provider              tagclient.Provider
 }
 
 // New creates a new Server.
@@ -41,15 +46,29 @@ func New(
 	stats tally.Scope,
 	backends *backend.Manager,
 	localOriginDNS string,
+	localReplicas stringset.Set,
 	remotes tagreplication.Remotes,
-	tagReplicationManager persistedretry.Manager) *Server {
+	tagReplicationManager persistedretry.Manager,
+	provider tagclient.Provider) *Server {
+
+	config = config.applyDefaults()
 
 	stats = stats.Tagged(map[string]string{
 		"module": "tagserver",
 	})
 
 	cache := dedup.NewCache(config.Cache, clock.New(), &tagResolver{backends})
-	return &Server{config, stats, backends, localOriginDNS, cache, remotes, tagReplicationManager}
+	return &Server{
+		config:                config,
+		stats:                 stats,
+		backends:              backends,
+		localOriginDNS:        localOriginDNS,
+		localReplicas:         localReplicas,
+		cache:                 cache,
+		remotes:               remotes,
+		tagReplicationManager: tagReplicationManager,
+		provider:              provider,
+	}
 }
 
 // Handler returns an http.Handler for s.
@@ -64,6 +83,10 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/tags/:tag", handler.Wrap(s.getTagHandler))
 	r.Post("/remotes/tags/:tag/digest/:digest", handler.Wrap(s.replicateTagHandler))
 	r.Get("/origin", handler.Wrap(s.getOriginHandler))
+
+	r.Post(
+		"/internal/duplicate/remotes/tags/:tag/digest/:digest",
+		handler.Wrap(s.duplicateReplicateTagHandler))
 
 	r.Mount("/debug", chimiddleware.Profiler())
 
@@ -128,8 +151,43 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 	destinations := s.remotes.Match(tag)
 
 	for _, dest := range destinations {
-		err := s.tagReplicationManager.Add(tagreplication.NewTask(tag, d, req.Dependencies, dest))
-		if err != nil {
+		task := tagreplication.NewTask(tag, d, req.Dependencies, dest)
+		if err := s.tagReplicationManager.Add(task); err != nil {
+			return handler.Errorf("add replicate task: %s", err)
+		}
+	}
+
+	var delay time.Duration
+	for addr := range s.localReplicas { // Loops in random order.
+		delay += s.config.DuplicateReplicateStagger
+		client := s.provider.Provide(addr)
+		if err := client.DuplicateReplicate(tag, d, req.Dependencies, delay); err != nil {
+			log.Errorf("Error duplicating replicate task to %s: %s", addr, err)
+		}
+	}
+
+	return nil
+}
+
+func (s *Server) duplicateReplicateTagHandler(w http.ResponseWriter, r *http.Request) error {
+	tag, err := parseTag(r)
+	if err != nil {
+		return err
+	}
+	d, err := parseDigest(r)
+	if err != nil {
+		return err
+	}
+	var req tagclient.DuplicateReplicateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return handler.Errorf("decode body: %s", err)
+	}
+
+	destinations := s.remotes.Match(tag)
+
+	for _, dest := range destinations {
+		task := tagreplication.NewTaskWithDelay(tag, d, req.Dependencies, dest, req.Delay)
+		if err := s.tagReplicationManager.Add(task); err != nil {
 			return handler.Errorf("add replicate task: %s", err)
 		}
 	}
