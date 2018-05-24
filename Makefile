@@ -17,7 +17,6 @@ PROJECT_ROOT = code.uber.internal/infra/kraken
 # by default
 SERVICES = \
 	agent/agent \
-	cli/kraken-cli \
 	origin/origin \
 	tracker/tracker \
 	proxy/proxy \
@@ -26,7 +25,6 @@ SERVICES = \
 # List all executables
 PROGS = \
 	agent/agent \
-	cli/kraken-cli \
 	tracker/tracker \
 	origin/origin \
 	proxy/proxy \
@@ -57,7 +55,6 @@ proto:
 tracker/tracker: $(wildcard tracker/*.go)
 agent/agent: proto $(wildcard agent/*.go)
 origin/origin: proto $(wildcard origin/*.go)
-cli/kraken-cli: $(wildcard cli/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 proxy/proxy: $(wildcard proxy/*.go)
 build-index/build-index: $(wildcard build-index/*.go)
@@ -337,11 +334,6 @@ linux-reload:
 linux-trackerload:
 	-rm tools/bin/trackerload/trackerload
 	GOOS=linux GOARCH=amd64 make tools/bin/trackerload/trackerload
-
-# jenkins-only debian build job for cli
-.PHONY: debian-kraken-cli
-debian-kraken-cli: cli/kraken-cli
-		make debian-pre
 
 include go-build/rules.mk
 

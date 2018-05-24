@@ -1,7 +1,6 @@
 package blobclient
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,10 +29,6 @@ type Client interface {
 	CheckBlob(d core.Digest) (bool, error)
 	DeleteBlob(d core.Digest) error
 	TransferBlob(d core.Digest, blob io.Reader) error
-
-	Repair() (io.ReadCloser, error)
-	RepairShard(shardID string) (io.ReadCloser, error)
-	RepairDigest(d core.Digest) (io.ReadCloser, error)
 
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
@@ -153,36 +148,6 @@ func (c *HTTPClient) ReplicateToRemote(namespace string, d core.Digest, remoteDN
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/remote/%s",
 			c.addr, url.PathEscape(namespace), d, remoteDNS))
 	return err
-}
-
-// Repair runs a global repair of all shards present on disk. See RepairShard
-// for more details.
-func (c *HTTPClient) Repair() (io.ReadCloser, error) {
-	r, err := httputil.Post(fmt.Sprintf("http://%s/internal/repair", c.addr))
-	if err != nil {
-		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
-	}
-	return r.Body, nil
-}
-
-// RepairShard pushes the blobs of shardID to other replicas, and removes shardID
-// from the target origin if it is now longer an owner of shardID.
-func (c *HTTPClient) RepairShard(shardID string) (io.ReadCloser, error) {
-	r, err := httputil.Post(fmt.Sprintf("http://%s/internal/repair/shard/%s", c.addr, shardID))
-	if err != nil {
-		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
-	}
-	return r.Body, nil
-}
-
-// RepairDigest pushes d to other replicas, and removes d from the target origin
-// if it is no longer the owner of d.
-func (c *HTTPClient) RepairDigest(d core.Digest) (io.ReadCloser, error) {
-	r, err := httputil.Post(fmt.Sprintf("http://%s/internal/repair/digest/%s", c.addr, d))
-	if err != nil {
-		return ioutil.NopCloser(bytes.NewReader([]byte{})), err
-	}
-	return r.Body, nil
 }
 
 // GetMetaInfo returns metainfo for d. If the blob of d is not available yet

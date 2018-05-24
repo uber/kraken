@@ -1,7 +1,6 @@
 package blobserver
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -137,10 +136,6 @@ func (s Server) Handler() http.Handler {
 
 	r.Post("/internal/blobs/:digest/metainfo", handler.Wrap(s.overwriteMetaInfoHandler))
 
-	r.Post("/internal/repair", handler.Wrap(s.repairHandler))
-	r.Post("/internal/repair/shard/:shardid", handler.Wrap(s.repairShardHandler))
-	r.Post("/internal/repair/digest/:digest", handler.Wrap(s.repairDigestHandler))
-
 	r.Get("/internal/peercontext", handler.Wrap(s.getPeerContextHandler))
 
 	r.Get("/internal/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(s.getMetaInfoHandler))
@@ -249,57 +244,6 @@ func (s Server) getLocationsHandler(w http.ResponseWriter, r *http.Request) erro
 	w.Header().Set("Origin-Locations", strings.Join(locs, ","))
 	w.WriteHeader(http.StatusOK)
 	return nil
-}
-
-func (s Server) repairHandler(w http.ResponseWriter, r *http.Request) error {
-	shards, err := s.fileStore.ListPopulatedShardIDs()
-	if err != nil {
-		return handler.Errorf("failed to list populated shard ids: %s", err)
-	}
-	rep := s.newRepairer()
-	go func() {
-		defer rep.Close()
-		for _, shardID := range shards {
-			err = rep.RepairShard(shardID)
-			if err != nil {
-				return
-			}
-		}
-	}()
-	rep.WriteMessages(w)
-	log.Debugf("successfully repair owning shards %v", shards)
-	return err
-}
-
-func (s Server) repairShardHandler(w http.ResponseWriter, r *http.Request) error {
-	shardID := chi.URLParam(r, "shardid")
-	if len(shardID) == 0 {
-		return handler.Errorf("empty shard id").Status(http.StatusBadRequest)
-	}
-	rep := s.newRepairer()
-	var err error
-	go func() {
-		defer rep.Close()
-		err = rep.RepairShard(shardID)
-	}()
-	rep.WriteMessages(w)
-	log.Debugf("successfully repair shard %s", shardID)
-	return err
-}
-
-func (s Server) repairDigestHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
-	if err != nil {
-		return err
-	}
-	rep := s.newRepairer()
-	go func() {
-		defer rep.Close()
-		err = rep.RepairDigest(d)
-	}()
-	rep.WriteMessages(w)
-	log.Debugf("successfully repair digest %s", d.Hex())
-	return err
 }
 
 // getPeerContextHandler returns the Server's peer context as JSON.
@@ -668,15 +612,4 @@ func (s Server) commitClusterUpload(
 	}
 
 	return nil
-}
-
-func (s Server) newRepairer() *repairer {
-	return newRepairer(
-		context.TODO(),
-		s.config,
-		s.addr,
-		s.labelToAddr,
-		s.hashState,
-		s.fileStore,
-		s.clientProvider)
 }

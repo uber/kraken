@@ -205,38 +205,3 @@ func TestOriginFileStoreFileStartedAt(t *testing.T) {
 	_, err = os.Stat(path.Join(s.Config().UploadDir, "test_file.txt"))
 	require.NoError(err)
 }
-
-func TestOriginStoreListPopulatedShardIDs(t *testing.T) {
-	require := require.New(t)
-
-	s, cleanup := OriginFileStoreFixture(clock.New())
-	defer cleanup()
-
-	var cacheFiles []string
-	shardsMap := make(map[string]string)
-	for i := 0; i < 100; i++ {
-		name := core.DigestFixture().Hex()
-		if _, ok := shardsMap[name[:4]]; ok {
-			// Avoid duplicated names
-			continue
-		}
-		cacheFiles = append(cacheFiles, name)
-		shardsMap[name[:4]] = name
-		require.NoError(s.CreateUploadFile(name, 1))
-		require.NoError(s.MoveUploadFileToCache(name, name))
-		if i >= 50 {
-			require.NoError(s.DeleteCacheFile(name))
-		}
-	}
-	shards, err := s.ListPopulatedShardIDs()
-	require.NoError(err)
-
-	for i, name := range cacheFiles {
-		shard := name[:4]
-		if i < 50 {
-			require.Contains(shards, shard)
-		} else {
-			require.NotContains(shards, shard)
-		}
-	}
-}

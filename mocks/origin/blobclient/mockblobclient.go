@@ -135,45 +135,6 @@ func (mr *MockClientMockRecorder) OverwriteMetaInfo(arg0, arg1 interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OverwriteMetaInfo", reflect.TypeOf((*MockClient)(nil).OverwriteMetaInfo), arg0, arg1)
 }
 
-// Repair mocks base method
-func (m *MockClient) Repair() (io.ReadCloser, error) {
-	ret := m.ctrl.Call(m, "Repair")
-	ret0, _ := ret[0].(io.ReadCloser)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Repair indicates an expected call of Repair
-func (mr *MockClientMockRecorder) Repair() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Repair", reflect.TypeOf((*MockClient)(nil).Repair))
-}
-
-// RepairDigest mocks base method
-func (m *MockClient) RepairDigest(arg0 core.Digest) (io.ReadCloser, error) {
-	ret := m.ctrl.Call(m, "RepairDigest", arg0)
-	ret0, _ := ret[0].(io.ReadCloser)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RepairDigest indicates an expected call of RepairDigest
-func (mr *MockClientMockRecorder) RepairDigest(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RepairDigest", reflect.TypeOf((*MockClient)(nil).RepairDigest), arg0)
-}
-
-// RepairShard mocks base method
-func (m *MockClient) RepairShard(arg0 string) (io.ReadCloser, error) {
-	ret := m.ctrl.Call(m, "RepairShard", arg0)
-	ret0, _ := ret[0].(io.ReadCloser)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RepairShard indicates an expected call of RepairShard
-func (mr *MockClientMockRecorder) RepairShard(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RepairShard", reflect.TypeOf((*MockClient)(nil).RepairShard), arg0)
-}
-
 // ReplicateToRemote mocks base method
 func (m *MockClient) ReplicateToRemote(arg0 string, arg1 core.Digest, arg2 string) error {
 	ret := m.ctrl.Call(m, "ReplicateToRemote", arg0, arg1, arg2)
