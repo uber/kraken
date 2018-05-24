@@ -202,7 +202,16 @@ func (d *KrakenStorageDriver) Writer(ctx context.Context, path string, append bo
 
 	switch pathType {
 	case _uploads:
-		return d.uploads.GetWriter(path, pathSubType)
+		w, err := d.uploads.GetWriter(path, pathSubType)
+		if err != nil {
+			return nil, err
+		}
+		if append {
+			if _, err := w.Seek(0, io.SeekEnd); err != nil {
+				return nil, err
+			}
+		}
+		return w, nil
 	default:
 		return nil, InvalidRequestError{path}
 	}
