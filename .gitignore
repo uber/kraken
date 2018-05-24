@@ -50,3 +50,10 @@ config/*/test*.yaml
 
 # For vim users.
 tags
+
+# For engdoc.
+.DS_Store
+docs/_build/*
+env*
+*.pyc
+*.pickle
