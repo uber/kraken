@@ -383,6 +383,27 @@ func TestUploadBlobThroughDoesNotCommitBlobIfBackendUploadFails(t *testing.T) {
 	require.False(ok)
 }
 
+func TestUploadDuplicateBlobNoops(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(master1, configNoReplicaFixture(), cp)
+	defer s.cleanup()
+
+	blob := computeBlobForHosts(s.config, s.host)
+
+	err := cp.Provide(master1).UploadBlob(
+		namespace, blob.Digest, bytes.NewReader(blob.Content), false)
+	require.NoError(err)
+
+	// Even without supplying a blob body, this should still succeed since the
+	// blob is already present.
+	err = cp.Provide(master1).UploadBlob(
+		namespace, blob.Digest, bytes.NewReader(nil), false)
+	require.NoError(err)
+}
+
 func TestTransferBlob(t *testing.T) {
 	require := require.New(t)
 

@@ -38,6 +38,12 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 
 	remoteTagClient := e.tagClientProvider.Provide(t.Destination)
 
+	if _, err := remoteTagClient.Get(t.Tag); err == nil {
+		// Remote index already has the tag, therefore dependencies have already
+		// been replicated. No-op.
+		return nil
+	}
+
 	remoteOrigin, err := remoteTagClient.Origin()
 	if err != nil {
 		return fmt.Errorf("lookup remote origin cluster: %s", err)

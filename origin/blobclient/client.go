@@ -2,7 +2,6 @@ package blobclient
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,11 +13,6 @@ import (
 	"code.uber.internal/infra/kraken/utils/httputil"
 
 	"github.com/c2h5oh/datasize"
-)
-
-// Client errors.
-var (
-	ErrBlobExist = errors.New("blob already exists")
 )
 
 // Client provides a wrapper around all Server HTTP endpoints.
@@ -116,6 +110,7 @@ func (c *HTTPClient) TransferBlob(d core.Digest, blob io.Reader) error {
 
 // UploadBlob uploads and replicates blob to the origin cluster. If through is set,
 // UploadBlob will also upload blob to the storage backend configured for namespace.
+// If the blob has already been uploaded, no-ops.
 func (c *HTTPClient) UploadBlob(
 	namespace string, d core.Digest, blob io.Reader, through bool) error {
 
