@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils/handler"
@@ -51,12 +52,14 @@ func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if _, err := s.fs.GetCacheFileStat(name); err != nil {
+	info, err := s.fs.GetCacheFileStat(name)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return handler.ErrorStatus(http.StatusNotFound)
 		}
 		return handler.Errorf("file store: %s", err)
 	}
+	w.Header().Add("Size", strconv.FormatInt(info.Size(), 10))
 	w.WriteHeader(http.StatusOK)
 	return nil
 }

@@ -2,6 +2,7 @@ package hdfsbackend
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -43,6 +44,12 @@ func NewClient(config Config) (*Client, error) {
 	return &Client{config, pather}, nil
 }
 
+type fileStatusResponse struct {
+	FileStatus struct {
+		Length int64 `json:"length"`
+	} `json:"FileStatus"`
+}
+
 // Stat returns blob info for name.
 func (c *Client) Stat(name string) (*blobinfo.Info, error) {
 	path, err := c.pather.Path(name)
@@ -55,7 +62,7 @@ func (c *Client) Stat(name string) (*blobinfo.Info, error) {
 	c.setUserName(v)
 
 	for _, node := range c.config.NameNodes {
-		_, err := httputil.Get(fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()))
+		resp, err := httputil.Get(fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()))
 		if err != nil {
 			if retryable(err) {
 				continue
@@ -65,8 +72,14 @@ func (c *Client) Stat(name string) (*blobinfo.Info, error) {
 			}
 			return nil, err
 		}
+		defer resp.Body.Close()
+		var fsr fileStatusResponse
+		if err := json.NewDecoder(resp.Body).Decode(&fsr); err != nil {
+			return nil, fmt.Errorf("decode body: %s", err)
+		}
+		return blobinfo.New(fsr.FileStatus.Length), nil
 	}
-	return blobinfo.New(), nil
+	return nil, errAllNameNodesUnavailable
 }
 
 // Download downloads name into dst.

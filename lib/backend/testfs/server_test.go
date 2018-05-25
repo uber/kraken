@@ -33,6 +33,7 @@ func TestServerUploadDownloadStat(t *testing.T) {
 	require.NoError(c.Download(blob.Digest.Hex(), &b))
 	require.Equal(blob.Content, b.Bytes())
 
-	_, err = c.Stat(blob.Digest.Hex())
+	info, err := c.Stat(blob.Digest.Hex())
 	require.NoError(err)
+	require.Equal(int64(len(blob.Content)), info.Size)
 }

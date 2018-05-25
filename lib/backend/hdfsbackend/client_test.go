@@ -2,6 +2,7 @@ package hdfsbackend
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -234,9 +235,14 @@ func TestClientStat(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
+	var resp fileStatusResponse
+	resp.FileStatus.Length = 32
+	b, err := json.Marshal(resp)
+	require.NoError(err)
+
 	server := &testServer{
 		getName: redirectToDataNode,
-		getData: writeResponse(http.StatusOK, nil),
+		getData: writeResponse(http.StatusOK, b),
 	}
 	addr, stop := testutil.StartServer(server.handler())
 	defer stop()
@@ -244,8 +250,9 @@ func TestClientStat(t *testing.T) {
 	client, err := NewClient(configFixture(addr))
 	require.NoError(err)
 
-	_, err = client.Stat(blob.Digest.Hex())
+	info, err := client.Stat(blob.Digest.Hex())
 	require.NoError(err)
+	require.Equal(int64(32), info.Size)
 }
 
 func TestClientStatNotFound(t *testing.T) {

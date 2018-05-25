@@ -32,10 +32,11 @@ func (c *testClient) Stat(name string) (*blobinfo.Info, error) {
 	c.Lock()
 	defer c.Unlock()
 
-	if _, ok := c.blobs[name]; !ok {
+	b, ok := c.blobs[name]
+	if !ok {
 		return nil, backenderrors.ErrBlobNotFound
 	}
-	return blobinfo.New(), nil
+	return blobinfo.New(int64(len(b))), nil
 }
 
 func (c *testClient) Upload(name string, src io.Reader) error {

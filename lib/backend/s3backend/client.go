@@ -71,7 +71,7 @@ func (c *Client) Stat(name string) (*blobinfo.Info, error) {
 	if err != nil {
 		return nil, fmt.Errorf("path: %s", err)
 	}
-	_, err = c.svc.HeadObject(&s3.HeadObjectInput{
+	output, err := c.svc.HeadObject(&s3.HeadObjectInput{
 		Bucket: aws.String(c.config.Bucket),
 		Key:    aws.String(path),
 	})
@@ -81,7 +81,11 @@ func (c *Client) Stat(name string) (*blobinfo.Info, error) {
 		}
 		return nil, err
 	}
-	return blobinfo.New(), nil
+	var size int64
+	if output.ContentLength != nil {
+		size = *output.ContentLength
+	}
+	return blobinfo.New(size), nil
 }
 
 type exceededCapError error
