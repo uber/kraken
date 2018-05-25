@@ -1,10 +1,11 @@
 package blobinfo
 
-// Info is empty for now. In the future, it might include things like last access
-// time and blob size.
-type Info struct{}
+// Info contains metadata about a blob.
+type Info struct {
+	Size int64
+}
 
 // New creates a new Info.
-func New() *Info {
-	return &Info{}
+func New(size int64) *Info {
+	return &Info{size}
 }

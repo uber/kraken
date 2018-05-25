@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
@@ -35,14 +36,18 @@ func (c *Client) Addr() string {
 
 // Stat returns blob info for name.
 func (c *Client) Stat(name string) (*blobinfo.Info, error) {
-	_, err := httputil.Head(fmt.Sprintf("http://%s/files/%s", c.config.Addr, name))
+	resp, err := httputil.Head(fmt.Sprintf("http://%s/files/%s", c.config.Addr, name))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return nil, backenderrors.ErrBlobNotFound
 		}
 		return nil, err
 	}
-	return blobinfo.New(), nil
+	size, err := strconv.ParseInt(resp.Header.Get("Size"), 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parse size: %s", err)
+	}
+	return blobinfo.New(size), nil
 }
 
 // Upload uploads src to name.

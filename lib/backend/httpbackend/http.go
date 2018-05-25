@@ -37,7 +37,7 @@ func NewClient(config Config) (*Client, error) {
 // Stat always succeeds.
 // TODO(codyg): Support stat URL.
 func (c *Client) Stat(name string) (*blobinfo.Info, error) {
-	return blobinfo.New(), nil
+	return blobinfo.New(0), nil
 }
 
 // Download downloads the content from a configured url and writes the data
