@@ -176,7 +176,7 @@ mocks:
 
 # Runs docker stop and docker rm on each container w/ silenced output.
 docker_stop:
-	-docker ps --format '{{.Names}}' | grep kraken | while read n; do docker rm -f $$n; done
+	-docker ps -a --format '{{.Names}}' | grep kraken | while read n; do docker rm -f $$n; done
 
 .PHONY: redis
 redis:

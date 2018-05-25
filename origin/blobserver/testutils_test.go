@@ -56,6 +56,12 @@ func configMaxReplicaFixture() Config {
 	return c
 }
 
+func configNoReplicaFixture() Config {
+	c := configFixture()
+	c.NumReplica = 1
+	return c
+}
+
 // testClientProvider implements blobclient.ClientProvider. It maps origin hostnames to
 // the local addresses they are running on, such that Provide("dummy-origin")
 // can resolve a real address.
@@ -101,6 +107,7 @@ func startServer(
 // testServer is a convenience wrapper around the underlying components of a
 // Server and faciliates restarting Servers with new configuration.
 type testServer struct {
+	config         Config
 	host           string
 	addr           string
 	fs             store.OriginFileStore
@@ -118,6 +125,7 @@ func newTestServer(host string, config Config, cp *testClientProvider) *testServ
 	addr, stop := startServer(host, config, fs, cp, pctx, bm)
 	cp.register(host, blobclient.NewWithConfig(addr, blobclient.Config{ChunkSize: 16}))
 	return &testServer{
+		config:         config,
 		host:           host,
 		addr:           addr,
 		fs:             fs,

@@ -38,8 +38,6 @@ func TaskFixture() *Task {
 	id := randutil.Text(4)
 	tag := fmt.Sprintf("prime/labrat-%s", id)
 	d := core.DigestFixture()
-	deps := []core.Digest{
-		core.DigestFixture(), core.DigestFixture(), core.DigestFixture()}
 	dest := fmt.Sprintf("build-index-%s", id)
-	return NewTask(tag, d, deps, dest)
+	return NewTask(tag, d, core.DigestListFixture(3), dest)
 }
