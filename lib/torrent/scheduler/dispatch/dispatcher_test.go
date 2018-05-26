@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/torrentlog"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/lib/torrent/storage/agentstorage"
 	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
@@ -95,7 +96,8 @@ func testDispatcher(config Config, clk clock.Clock, t storage.Torrent) *Dispatch
 		networkevent.NewTestProducer(),
 		noopEvents{},
 		core.PeerIDFixture(),
-		t)
+		t,
+		torrentlog.NewNopLogger())
 }
 
 func TestDispatcherSendUniquePieceRequestsWithinLimit(t *testing.T) {

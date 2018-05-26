@@ -11,6 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch/piecerequest"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/torrentlog"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/utils/log"
 
@@ -59,6 +60,7 @@ type Dispatcher struct {
 	pendingPiecesDone     chan struct{}
 	completeOnce          sync.Once
 	events                Events
+	torrentlog            *torrentlog.Logger
 }
 
 // New creates a new Dispatcher.
@@ -69,9 +71,10 @@ func New(
 	netevents networkevent.Producer,
 	events Events,
 	peerID core.PeerID,
-	t storage.Torrent) *Dispatcher {
+	t storage.Torrent,
+	tlog *torrentlog.Logger) *Dispatcher {
 
-	d := newDispatcher(config, stats, clk, netevents, events, peerID, t)
+	d := newDispatcher(config, stats, clk, netevents, events, peerID, t, tlog)
 
 	// Exits when d.pendingPiecesDone is closed.
 	go d.watchPendingPieceRequests()
@@ -91,7 +94,8 @@ func newDispatcher(
 	netevents networkevent.Producer,
 	events Events,
 	peerID core.PeerID,
-	t storage.Torrent) *Dispatcher {
+	t storage.Torrent,
+	tlog *torrentlog.Logger) *Dispatcher {
 
 	config = config.applyDefaults()
 
@@ -114,6 +118,7 @@ func newDispatcher(
 		pieceRequestManager: pieceRequestManager,
 		pendingPiecesDone:   make(chan struct{}),
 		events:              events,
+		torrentlog:          tlog,
 	}
 }
 
@@ -282,6 +287,7 @@ func (d *Dispatcher) maybeSendPieceRequests(p *peer, candidates *bitset.BitSet) 
 			d.pieceRequestManager.MarkUnsent(p.id, i)
 			return false, err
 		}
+		d.torrentlog.RequestPiece(d.torrent.Name(), d.torrent.InfoHash(), p.id, i)
 	}
 	return true, nil
 }
@@ -436,6 +442,7 @@ func (d *Dispatcher) handlePiecePayload(
 
 	d.netevents.Produce(
 		networkevent.ReceivePieceEvent(d.torrent.InfoHash(), d.localPeerID, p.id, i))
+	d.torrentlog.ReceivePiece(d.torrent.Name(), d.torrent.InfoHash(), p.id, i)
 
 	p.touchLastGoodPieceReceived()
 	if d.torrent.Complete() {

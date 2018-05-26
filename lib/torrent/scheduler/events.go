@@ -131,6 +131,7 @@ func (e incomingHandshakeEvent) Apply(s *scheduler) {
 	if err := s.connState.AddPending(e.pc.PeerID(), e.pc.InfoHash()); err != nil {
 		s.log("peer", e.pc.PeerID(), "hash", e.pc.InfoHash()).Infof(
 			"Rejecting incoming handshake: %s", err)
+		s.torrentlog.IncomingConnectionReject(e.pc.Name(), e.pc.InfoHash(), e.pc.PeerID())
 		e.pc.Close()
 		return
 	}
@@ -151,6 +152,7 @@ func (e incomingHandshakeEvent) Apply(s *scheduler) {
 			fail(fmt.Errorf("establish handshake: %s", err))
 			return
 		}
+		s.torrentlog.IncomingConnectionAccept(e.pc.Name(), e.pc.InfoHash(), e.pc.PeerID())
 		s.eventLoop.Send(incomingConnEvent{e.pc.Namespace(), c, e.pc.Bitfield(), info})
 	}()
 }
@@ -238,7 +240,7 @@ func (e announceTickEvent) Apply(s *scheduler) {
 	go s.announce(ctrl.dispatcher)
 }
 
-// announceResultEvent occurs when a successfully announce response was received
+// announceResultEvent occurs when a successfully announced response was received
 // from the tracker.
 type announceResultEvent struct {
 	infoHash core.InfoHash
@@ -283,8 +285,10 @@ func (e announceResultEvent) Apply(s *scheduler) {
 				s.log("peer", p.PeerID, "hash", e.infoHash, "addr", addr).Infof(
 					"Failed handshake: %s", err)
 				s.eventLoop.Send(failedOutgoingHandshakeEvent{p.PeerID, e.infoHash})
+				s.torrentlog.OutgoingConnectionReject(ctrl.name, e.infoHash, p.PeerID)
 				return
 			}
+			s.torrentlog.OutgoingConnectionAccept(ctrl.name, e.infoHash, p.PeerID)
 			s.eventLoop.Send(outgoingConnEvent{c, bitfield, info})
 		}(p)
 	}
@@ -397,9 +401,17 @@ func (e preemptionTickEvent) Apply(s *scheduler) {
 		idleSeeder :=
 			ctrl.complete &&
 				s.clock.Now().Sub(ctrl.dispatcher.LastReadTime()) >= s.config.SeederTTI
+		if idleSeeder {
+			s.torrentlog.SeedTimeout(ctrl.name, infoHash)
+		}
+
 		idleLeecher :=
 			!ctrl.complete &&
 				s.clock.Now().Sub(ctrl.dispatcher.LastWriteTime()) >= s.config.LeecherTTI
+		if idleLeecher {
+			s.torrentlog.LeechTimeout(ctrl.name, infoHash)
+		}
+
 		if idleSeeder || idleLeecher {
 			s.log("hash", infoHash, "inprogress", !ctrl.complete).Info("Removing idle torrent")
 			s.tearDownTorrentControl(ctrl, ErrTorrentTimeout)

@@ -46,6 +46,7 @@ type Scheduler interface {
 // torrentControl bundles torrent control structures.
 type torrentControl struct {
 	namespace    string
+	name         string
 	errors       []chan error
 	dispatcher   *dispatch.Dispatcher
 	complete     bool
@@ -53,10 +54,11 @@ type torrentControl struct {
 }
 
 func newTorrentControl(
-	namespace string, d *dispatch.Dispatcher, localRequest bool) *torrentControl {
+	namespace, name string, d *dispatch.Dispatcher, localRequest bool) *torrentControl {
 
 	return &torrentControl{
 		namespace:    namespace,
+		name:         name,
 		dispatcher:   d,
 		localRequest: localRequest,
 	}
@@ -427,8 +429,9 @@ func (s *scheduler) initTorrentControl(
 		s.networkEvents,
 		s.eventLoop,
 		s.pctx.PeerID,
-		t)
-	ctrl := newTorrentControl(namespace, d, localRequest)
+		t,
+		s.torrentlog)
+	ctrl := newTorrentControl(namespace, t.Name(), d, localRequest)
 	s.announceQueue.Add(t.InfoHash())
 	s.networkEvents.Produce(networkevent.AddTorrentEvent(
 		t.InfoHash(), s.pctx.PeerID, t.Bitfield(), s.config.ConnState.MaxOpenConnectionsPerTorrent))
