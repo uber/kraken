@@ -51,12 +51,12 @@ func (c Config) build() (*zap.Logger, error) {
 }
 
 // Logger wraps structured log entries for important torrent events. These events
-// are intended to be consumed at the cluster level via Elk, and are distinct from
+// are intended to be consumed at the cluster level via ELK, and are distinct from
 // the verbose stdout logs of the agent. In particular, Logger bridges host-agnostic
-// metrics to an individual hostnames.
+// metrics to individual hostnames.
 //
 // For example, if there is a spike in download times, an engineer can cross-reference
-// the spike with the torrent logs in Elk and zero-in on a single host. From there,
+// the spike with the torrent logs in ELK and zero-in on a single host. From there,
 // the engineer can inspect the stdout logs of the host for more detailed information
 // as to why the download took so long.
 type Logger struct {
@@ -79,6 +79,107 @@ func New(config Config, pctx core.PeerContext) (*Logger, error) {
 		zap.String("cluster", pctx.Cluster),
 		zap.String("peer_id", pctx.PeerID.String()),
 	)}, nil
+}
+
+// NewNopLogger returns a Logger containing a no-op zap logger for testing purposes.
+func NewNopLogger() *Logger {
+	return &Logger{zap.NewNop()}
+}
+
+// OutgoingConnectionAccept logs an accepted outgoing connection.
+func (l *Logger) OutgoingConnectionAccept(
+	name string,
+	infoHash core.InfoHash,
+	remotePeerID core.PeerID) {
+
+	l.zap.Info(
+		"Outgoing connection accept",
+		zap.String("name", name),
+		zap.String("info_hash", infoHash.String()),
+		zap.String("remote_peer_id", remotePeerID.String()))
+}
+
+// OutgoingConnectionReject logs a rejected outgoing connection.
+func (l *Logger) OutgoingConnectionReject(name string,
+	infoHash core.InfoHash,
+	remotePeerID core.PeerID) {
+
+	l.zap.Info(
+		"Outgoing connection reject",
+		zap.String("name", name),
+		zap.String("info_hash", infoHash.String()),
+		zap.String("remote_peer_id", remotePeerID.String()))
+}
+
+// IncomingConnectionAccept logs an accepted incoming connection.
+func (l *Logger) IncomingConnectionAccept(
+	name string,
+	infoHash core.InfoHash,
+	remotePeerID core.PeerID) {
+
+	l.zap.Info(
+		"Incoming connection accept",
+		zap.String("name", name),
+		zap.String("info_hash", infoHash.String()),
+		zap.String("remote_peer_id", remotePeerID.String()))
+}
+
+// IncomingConnectionReject logs a rejected incoming connection.
+func (l *Logger) IncomingConnectionReject(
+	name string,
+	infoHash core.InfoHash,
+	remotePeerID core.PeerID) {
+
+	l.zap.Info(
+		"Incoming connection reject",
+		zap.String("name", name),
+		zap.String("info_hash", infoHash.String()),
+		zap.String("remote_peer_id", remotePeerID.String()))
+}
+
+// SeedTimeout logs a seeding torrent being torn down due to timeout.
+func (l *Logger) SeedTimeout(name string, infoHash core.InfoHash) {
+	l.zap.Info(
+		"Seed timeout",
+		zap.String("name", name),
+		zap.String("info_hash", infoHash.String()))
+}
+
+// LeechTimeout logs a leeching torrent being torn down due to timeout.
+func (l *Logger) LeechTimeout(name string, infoHash core.InfoHash) {
+	l.zap.Info(
+		"Leech timeout",
+		zap.String("name", name),
+		zap.String("info_hash", infoHash.String()))
+}
+
+// RequestPiece logs requesting a piece.
+func (l *Logger) RequestPiece(
+	name string,
+	infoHash core.InfoHash,
+	remotePeerID core.PeerID,
+	pieceIdx int) {
+
+	l.zap.Info(
+		"Request piece_index",
+		zap.String("name", name),
+		zap.String("info_hash", infoHash.String()),
+		zap.String("remote_peer_id", remotePeerID.String()),
+		zap.Int("piece_index", pieceIdx))
+}
+
+// ReceivePiece logs successfully receiving a piece.
+func (l *Logger) ReceivePiece(name string,
+	infoHash core.InfoHash,
+	remotePeerID core.PeerID,
+	pieceIdx int) {
+
+	l.zap.Info(
+		"Receive piece_index",
+		zap.String("name", name),
+		zap.String("info_hash", infoHash.String()),
+		zap.String("remote_peer_id", remotePeerID.String()),
+		zap.Int("piece_index", pieceIdx))
 }
 
 // DownloadSuccess logs a successful download.
