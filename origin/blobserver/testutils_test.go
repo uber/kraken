@@ -95,7 +95,7 @@ func startServer(
 
 	mg := metainfogen.Fixture(fs, 4)
 
-	br := blobrefresh.New(tally.NoopScope, fs, bm, mg)
+	br := blobrefresh.New(blobrefresh.Config{}, tally.NoopScope, fs, bm, mg)
 
 	s, err := New(config, tally.NoopScope, host, fs, cp, pctx, bm, br, mg)
 	if err != nil {

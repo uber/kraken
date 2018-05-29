@@ -5,6 +5,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/lib/blobrefresh"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
@@ -26,4 +27,5 @@ type Config struct {
 	MetaInfoGen   metainfogen.Config  `yaml:"metainfogen"`
 	Backends      []backend.Config    `yaml:"backends"`
 	Auth          backend.AuthConfig  `yaml:"auth"`
+	BlobRefresh   blobrefresh.Config  `yaml:"blobrefresh"`
 }

@@ -15,7 +15,6 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
@@ -344,25 +343,11 @@ func (h *localReplicationHook) Run(d core.Digest) {
 func (s Server) startRemoteBlobDownload(
 	namespace string, d core.Digest, replicateLocally bool) error {
 
-	// Always check whether the blob is actually available for download before
-	// returning a potential 202. This ensures that the majority of errors are
-	// propogated quickly and syncronously.
-	client, err := s.backends.GetClient(namespace)
-	if err != nil {
-		return fmt.Errorf("backend manager: %s", err)
-	}
-	if _, err := client.Stat(d.Hex()); err != nil {
-		if err == backenderrors.ErrBlobNotFound {
-			return handler.ErrorStatus(http.StatusNotFound)
-		}
-		return fmt.Errorf("stat: %s", err)
-	}
-
 	var hooks []blobrefresh.PostHook
 	if replicateLocally {
 		hooks = append(hooks, &localReplicationHook{s})
 	}
-	err = s.blobRefresher.Refresh(namespace, d, hooks...)
+	err := s.blobRefresher.Refresh(namespace, d, hooks...)
 	switch err {
 	case blobrefresh.ErrPending, nil:
 		return handler.ErrorStatus(http.StatusAccepted)

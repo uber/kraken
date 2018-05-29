@@ -109,7 +109,7 @@ func main() {
 		log.Fatalf("Error creating metainfo generator: %s", err)
 	}
 
-	blobRefresher := blobrefresh.New(stats, fs, backendManager, metaInfoGenerator)
+	blobRefresher := blobrefresh.New(config.BlobRefresh, stats, fs, backendManager, metaInfoGenerator)
 
 	netevents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
