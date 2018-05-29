@@ -13,6 +13,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
+	"github.com/c2h5oh/datasize"
 	"github.com/docker/distribution/uuid"
 	"github.com/uber-go/tally"
 )
@@ -34,6 +35,7 @@ type PostHook interface {
 // responsible for tracking whether blobs already exist on disk -- it only provides
 // a method for downloading blobs in a deduplicated fashion.
 type Refresher struct {
+	config            Config
 	stats             tally.Scope
 	requests          *dedup.RequestCache
 	fs                store.OriginFileStore
@@ -43,6 +45,7 @@ type Refresher struct {
 
 // New creates a new Refresher.
 func New(
+	config Config,
 	stats tally.Scope,
 	fs store.OriginFileStore,
 	backends *backend.Manager,
@@ -55,7 +58,7 @@ func New(
 	requests := dedup.NewRequestCache(dedup.RequestCacheConfig{}, clock.New())
 	requests.SetNotFound(func(err error) bool { return err == backenderrors.ErrBlobNotFound })
 
-	return &Refresher{stats, requests, fs, backends, metaInfoGenerator}
+	return &Refresher{config, stats, requests, fs, backends, metaInfoGenerator}
 }
 
 // Refresh kicks off a background goroutine to download the blob for d from the
@@ -68,6 +71,22 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 	if err != nil {
 		return fmt.Errorf("backend manager: %s", err)
 	}
+
+	// Always check whether the blob is actually available and valid before
+	// returning a potential pending error. This ensures that the majority of
+	// errors are propogated quickly and syncronously.
+	info, err := client.Stat(d.Hex())
+	if err != nil {
+		if err == backenderrors.ErrBlobNotFound {
+			return ErrNotFound
+		}
+		return fmt.Errorf("stat: %s", err)
+	}
+	size := datasize.ByteSize(info.Size)
+	if r.config.SizeLimit > 0 && size > r.config.SizeLimit {
+		return fmt.Errorf("%s blob exceeds size limit of %s", size, r.config.SizeLimit)
+	}
+
 	id := namespace + ":" + d.Hex()
 	err = r.requests.Start(id, func() error {
 		timer := r.stats.Timer("download_remote_blob").Start()

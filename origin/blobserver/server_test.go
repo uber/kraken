@@ -14,6 +14,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
@@ -236,7 +237,8 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 
 	blob := computeBlobForHosts(config, master1, master2)
 
-	backendClient.EXPECT().Stat(blob.Digest.Hex()).Return(nil, nil).AnyTimes()
+	backendClient.EXPECT().Stat(
+		blob.Digest.Hex()).Return(blobinfo.New(int64(len(blob.Content))), nil).AnyTimes()
 	backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
@@ -514,7 +516,8 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	backendClient.EXPECT().Stat(blob.Digest.Hex()).Return(nil, nil)
+	backendClient.EXPECT().Stat(
+		blob.Digest.Hex()).Return(blobinfo.New(int64(len(blob.Content))), nil).AnyTimes()
 	backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
 
 	remoteClient.EXPECT().Locations(blob.Digest).Return([]string{remote}, nil)
