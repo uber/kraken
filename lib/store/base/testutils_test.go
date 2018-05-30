@@ -3,17 +3,19 @@ package base
 import (
 	"regexp"
 	"strings"
+
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 )
 
 // Mock metadata
 func init() {
-	RegisterMetadata(regexp.MustCompile("_mocksuffix_\\w+"), &mockMetadataFactory{})
-	RegisterMetadata(regexp.MustCompile("_mockmovable"), &mockMetadataFactoryMovable{})
+	metadata.Register(regexp.MustCompile("_mocksuffix_\\w+"), &mockMetadataFactory{})
+	metadata.Register(regexp.MustCompile("_mockmovable"), &mockMetadataFactoryMovable{})
 }
 
 type mockMetadataFactory struct{}
 
-func (f mockMetadataFactory) Create(suffix string) Metadata {
+func (f mockMetadataFactory) Create(suffix string) metadata.Metadata {
 	if strings.HasSuffix(suffix, getMockMetadataOne().GetSuffix()) {
 		return getMockMetadataOne()
 	}
@@ -59,7 +61,7 @@ func (m *mockMetadata) Deserialize(b []byte) error {
 
 type mockMetadataFactoryMovable struct{}
 
-func (f mockMetadataFactoryMovable) Create(suffix string) Metadata {
+func (f mockMetadataFactoryMovable) Create(suffix string) metadata.Metadata {
 	return getMockMetadataMovable()
 }
 

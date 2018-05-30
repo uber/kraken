@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/store/base"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
@@ -31,11 +32,11 @@ type OriginFileStore interface {
 	MoveUploadFileToCache(fileName, targetFileName string) error
 	DeleteCacheFile(fileName string) error
 
-	GetCacheFileMetadata(filename string, md Metadata) error
-	SetCacheFileMetadata(filename string, md Metadata) (bool, error)
-	GetOrSetCacheFileMetadata(filename string, md Metadata) error
+	GetCacheFileMetadata(filename string, md metadata.Metadata) error
+	SetCacheFileMetadata(filename string, md metadata.Metadata) (bool, error)
+	GetOrSetCacheFileMetadata(filename string, md metadata.Metadata) error
 
-	RangeUploadMetadata(filename string, f func(Metadata) error) error
+	RangeUploadMetadata(filename string, f func(metadata.Metadata) error) error
 }
 
 // OriginLocalFileStore manages all origin files on local disk.
@@ -233,26 +234,26 @@ func (store *OriginLocalFileStore) MoveUploadFileToCache(fileName, targetFileNam
 }
 
 // GetCacheFileMetadata returns the metadata content of md for filename.
-func (store *OriginLocalFileStore) GetCacheFileMetadata(filename string, md Metadata) error {
+func (store *OriginLocalFileStore) GetCacheFileMetadata(filename string, md metadata.Metadata) error {
 	return store.cacheBackend.NewFileOp().AcceptState(store.stateCache).GetFileMetadata(filename, md)
 }
 
 // SetCacheFileMetadata writes b to metadata content of md for filename.
 func (store *OriginLocalFileStore) SetCacheFileMetadata(
-	filename string, md Metadata) (updated bool, err error) {
+	filename string, md metadata.Metadata) (updated bool, err error) {
 
 	return store.cacheBackend.NewFileOp().AcceptState(store.stateCache).SetFileMetadata(filename, md)
 }
 
 // GetOrSetCacheFileMetadata returns the metadata content of md for filename, or initializes the metadata
 // content to b if not set.
-func (store *OriginLocalFileStore) GetOrSetCacheFileMetadata(filename string, md Metadata) error {
+func (store *OriginLocalFileStore) GetOrSetCacheFileMetadata(filename string, md metadata.Metadata) error {
 	return store.cacheBackend.NewFileOp().AcceptState(store.stateCache).GetOrSetFileMetadata(filename, md)
 }
 
 // RangeUploadMetadata ranges upload metadata.
 func (store *OriginLocalFileStore) RangeUploadMetadata(
-	fileName string, f func(Metadata) error) error {
+	fileName string, f func(metadata.Metadata) error) error {
 
 	return store.uploadBackend.NewFileOp().AcceptState(store.stateUpload).RangeFileMetadata(fileName, f)
 }

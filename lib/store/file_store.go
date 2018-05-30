@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"regexp"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store/base"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
@@ -20,14 +20,6 @@ type FileReadWriter = base.FileReadWriter
 // FileReader aliases base.FileReader
 type FileReader = base.FileReader
 
-// Metadata aliases base.Metadata
-type Metadata = base.Metadata
-
-// RegisterMetadata aliases base.RegisterMetadata.
-func RegisterMetadata(suffixRegexp *regexp.Regexp, factory base.MetadataFactory) {
-	base.RegisterMetadata(suffixRegexp, factory)
-}
-
 // FileStore provides an interface for LocalFileStore. Useful for mocks.
 type FileStore interface {
 	Config() Config
@@ -39,9 +31,9 @@ type FileStore interface {
 	GetUploadFileReader(fileName string) (FileReader, error)
 	GetUploadFileReadWriter(fileName string) (FileReadWriter, error)
 	MoveUploadFileToCache(fileName, targetFileName string) error
-	GetUploadFileMetadata(fileName string, md Metadata) error
-	SetUploadFileMetadata(fileName string, md Metadata) error
-	RangeUploadMetadata(fileName string, f func(Metadata) error) error
+	GetUploadFileMetadata(fileName string, md metadata.Metadata) error
+	SetUploadFileMetadata(fileName string, md metadata.Metadata) error
+	RangeUploadMetadata(fileName string, f func(metadata.Metadata) error) error
 
 	CreateDownloadFile(fileName string, len int64) error
 	GetDownloadFileReadWriter(fileName string) (FileReadWriter, error)
@@ -199,7 +191,7 @@ func (store *LocalFileStore) CreateCacheFile(fileName string, r io.Reader) error
 }
 
 // RangeUploadMetadata ranges upload metadata.
-func (store *LocalFileStore) RangeUploadMetadata(fileName string, f func(Metadata) error) error {
+func (store *LocalFileStore) RangeUploadMetadata(fileName string, f func(metadata.Metadata) error) error {
 	return store.uploadBackend.NewFileOp().AcceptState(store.stateUpload).RangeFileMetadata(fileName, f)
 }
 
@@ -288,12 +280,12 @@ func (store *LocalFileStore) EnsureDownloadOrCacheFilePresent(fileName string, d
 }
 
 // GetUploadFileMetadata gets upload metadata.
-func (store *LocalFileStore) GetUploadFileMetadata(fileName string, md Metadata) error {
+func (store *LocalFileStore) GetUploadFileMetadata(fileName string, md metadata.Metadata) error {
 	return store.uploadBackend.NewFileOp().AcceptState(store.stateUpload).GetFileMetadata(fileName, md)
 }
 
 // SetUploadFileMetadata sets upload metadata.
-func (store *LocalFileStore) SetUploadFileMetadata(fileName string, md Metadata) error {
+func (store *LocalFileStore) SetUploadFileMetadata(fileName string, md metadata.Metadata) error {
 	_, err := store.uploadBackend.NewFileOp().AcceptState(store.stateUpload).SetFileMetadata(fileName, md)
 	return err
 }
@@ -327,25 +319,27 @@ func (a *StateAcceptor) Cache() *StateAcceptor {
 }
 
 // GetMetadata returns the metadata content of md for filename.
-func (a *StateAcceptor) GetMetadata(filename string, md Metadata) error {
+func (a *StateAcceptor) GetMetadata(filename string, md metadata.Metadata) error {
 	return a.op.GetFileMetadata(filename, md)
 }
 
 // SetMetadata writes b to metadata content of md for filename.
-func (a *StateAcceptor) SetMetadata(filename string, md Metadata) (updated bool, err error) {
+func (a *StateAcceptor) SetMetadata(
+	filename string, md metadata.Metadata) (updated bool, err error) {
+
 	return a.op.SetFileMetadata(filename, md)
 }
 
 // SetMetadataAt writes b to metadata content of md starting at index i for filename.
 func (a *StateAcceptor) SetMetadataAt(
-	filename string, md Metadata, b []byte, offset int64) (updated bool, err error) {
+	filename string, md metadata.Metadata, b []byte, offset int64) (updated bool, err error) {
 
 	return a.op.SetFileMetadataAt(filename, md, b, offset)
 }
 
 // GetOrSetMetadata returns the metadata content of md for filename, or
 // initializes the metadata content to b if not set.
-func (a *StateAcceptor) GetOrSetMetadata(filename string, md Metadata) error {
+func (a *StateAcceptor) GetOrSetMetadata(filename string, md metadata.Metadata) error {
 	return a.op.GetOrSetFileMetadata(filename, md)
 }
 
@@ -364,18 +358,22 @@ func (store *LocalFileStore) InDownloadError(err error) bool {
 }
 
 // GetCacheFileMetadata returns the metadata content of md for filename.
-func (store *LocalFileStore) GetCacheFileMetadata(filename string, md Metadata) error {
+func (store *LocalFileStore) GetCacheFileMetadata(
+	filename string, md metadata.Metadata) error {
+
 	return store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).GetFileMetadata(filename, md)
 }
 
 // SetCacheFileMetadata writes b to metadata content of md for filename.
-func (store *LocalFileStore) SetCacheFileMetadata(filename string, md Metadata) (updated bool, err error) {
+func (store *LocalFileStore) SetCacheFileMetadata(
+	filename string, md metadata.Metadata) (updated bool, err error) {
+
 	return store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).SetFileMetadata(filename, md)
 }
 
 // SetCacheFileMetadataAt writes b to metadata content of md starting at offset for filename.
 func (store *LocalFileStore) SetCacheFileMetadataAt(
-	filename string, md Metadata, b []byte, offset int64) (updated bool, err error) {
+	filename string, md metadata.Metadata, b []byte, offset int64) (updated bool, err error) {
 
 	return store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).SetFileMetadataAt(
 		filename, md, b, offset)
@@ -383,6 +381,6 @@ func (store *LocalFileStore) SetCacheFileMetadataAt(
 
 // GetOrSetCacheFileMetadata returns the metadata content of md for filename, or initializes the metadata
 // content to b if not set.
-func (store *LocalFileStore) GetOrSetCacheFileMetadata(filename string, md Metadata) error {
+func (store *LocalFileStore) GetOrSetCacheFileMetadata(filename string, md metadata.Metadata) error {
 	return store.downloadCacheBackend.NewFileOp().AcceptState(store.stateCache).GetOrSetFileMetadata(filename, md)
 }

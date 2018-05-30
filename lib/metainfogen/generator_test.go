@@ -6,6 +6,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/c2h5oh/datasize"
@@ -33,7 +34,7 @@ func TestGenerate(t *testing.T) {
 
 	require.NoError(generator.Generate(blob.Digest))
 
-	var tm store.TorrentMeta
+	var tm metadata.TorrentMeta
 	require.NoError(fs.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
 	require.Equal(blob.MetaInfo, tm.MetaInfo)
 }

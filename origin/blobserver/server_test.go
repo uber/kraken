@@ -16,6 +16,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -421,7 +422,7 @@ func TestTransferBlob(t *testing.T) {
 	ensureHasBlob(t, cp.Provide(master1), blob)
 
 	// Ensure metainfo was generated.
-	var tm store.TorrentMeta
+	var tm metadata.TorrentMeta
 	require.NoError(s.fs.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
 
 	// Pushing again should be a no-op.

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/utils/randutil"
 
 	"github.com/stretchr/testify/require"
@@ -81,6 +82,7 @@ func TestFileEntry(t *testing.T) {
 		testMoveFromWrongSourcePath,
 		testMove,
 		testDelete,
+		testDeleteFailsForPersistedFile,
 		testGetMetadataAndSetMetadata,
 		testGetMetadataFail,
 		testSetMetadataAt,
@@ -341,6 +343,19 @@ func testDelete(require *require.Assertions, bundle *fileEntryTestBundle) {
 	require.True(os.IsNotExist(err))
 }
 
+func testDeleteFailsForPersistedFile(require *require.Assertions, bundle *fileEntryTestBundle) {
+	fe := bundle.entry
+
+	_, err := fe.SetMetadata(metadata.NewPersist(true))
+	require.NoError(err)
+
+	require.Equal(ErrFilePersisted, fe.Delete())
+
+	require.NoError(fe.DeleteMetadata(&metadata.Persist{}))
+
+	require.NoError(fe.Delete())
+}
+
 func testGetMetadataAndSetMetadata(require *require.Assertions, bundle *fileEntryTestBundle) {
 	fe := bundle.entry
 
@@ -440,7 +455,7 @@ func testDeleteMetadata(require *require.Assertions, bundle *fileEntryTestBundle
 func testRangeMetadata(require *require.Assertions, bundle *fileEntryTestBundle) {
 	fe := bundle.entry
 
-	ms := []Metadata{
+	ms := []metadata.Metadata{
 		getMockMetadataOne(),
 		getMockMetadataTwo(),
 		getMockMetadataMovable(),
@@ -450,8 +465,8 @@ func testRangeMetadata(require *require.Assertions, bundle *fileEntryTestBundle)
 		require.NoError(err)
 	}
 
-	var result []Metadata
-	require.NoError(fe.RangeMetadata(func(md Metadata) error {
+	var result []metadata.Metadata
+	require.NoError(fe.RangeMetadata(func(md metadata.Metadata) error {
 		result = append(result, md)
 		return nil
 	}))

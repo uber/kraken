@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
@@ -96,7 +97,7 @@ func (fm *lruFileMap) syncGetAndTouch(name string) (*fileEntryWithAccessTime, bo
 		// Only update if new timestamp is <timeResolution> newer than previous
 		// value.
 		e.lastAccessTime = t
-		e.fe.SetMetadata(NewLastAccessTime(t))
+		e.fe.SetMetadata(metadata.NewLastAccessTime(t))
 	}
 
 	return e, true
@@ -206,7 +207,7 @@ func (fm *lruFileMap) LoadOrStore(
 	fm.add(name, e)
 	fm.Unlock()
 
-	lat := NewLastAccessTime(fm.clk.Now())
+	lat := metadata.NewLastAccessTime(fm.clk.Now())
 	if err := e.fe.GetMetadata(lat); err != nil {
 		// Set LAT if it doesn't exist on disk or cannot be read.
 		if !os.IsNotExist(err) {
