@@ -33,9 +33,7 @@ func TestGenerate(t *testing.T) {
 
 	require.NoError(generator.Generate(blob.Digest))
 
-	raw, err := fs.GetCacheFileMetadata(blob.Digest.Hex(), store.NewTorrentMeta())
-	require.NoError(err)
-	mi, err := core.DeserializeMetaInfo(raw)
-	require.NoError(err)
-	require.Equal(blob.MetaInfo, mi)
+	var tm store.TorrentMeta
+	require.NoError(fs.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
+	require.Equal(blob.MetaInfo, tm.MetaInfo)
 }

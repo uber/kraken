@@ -17,7 +17,11 @@ func TestStorageDriverGetContent(t *testing.T) {
 	sd, testImage, cleanup := genStorageDriver()
 	defer cleanup()
 
-	uploadTime, err := sd.store.GetUploadFileStartedAt(testImage.upload)
+	var sa startedAtMetadata
+	if err := sd.store.GetUploadFileMetadata(testImage.upload, &sa); err != nil {
+		log.Panic(err)
+	}
+	uploadTime, err := sa.Serialize()
 	if err != nil {
 		log.Panic(err)
 	}

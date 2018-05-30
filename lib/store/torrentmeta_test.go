@@ -3,11 +3,19 @@ package store
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"code.uber.internal/infra/kraken/core"
+
+	"github.com/stretchr/testify/require"
 )
 
-func TestTorrenMetaConstructor(t *testing.T) {
-	m := NewTorrentMeta()
-	assert.Equal(t, m.GetSuffix(), "_torrentmeta")
-	assert.True(t, m.Movable())
+func TestTorrentMetaSerialization(t *testing.T) {
+	require := require.New(t)
+
+	tm := NewTorrentMeta(core.MetaInfoFixture())
+	b, err := tm.Serialize()
+	require.NoError(err)
+
+	var result TorrentMeta
+	require.NoError(result.Deserialize(b))
+	require.Equal(tm.MetaInfo, result.MetaInfo)
 }

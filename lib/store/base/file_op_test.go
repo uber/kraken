@@ -118,7 +118,7 @@ func testReloadFileEntry(require *require.Assertions, storeBundle *fileStoreTest
 
 	fn := "testfileondisk"
 	m := getMockMetadataOne()
-	md := []byte("foo")
+	m.content = []byte("foo")
 	s1 := storeBundle.state1
 
 	// Create file
@@ -129,7 +129,7 @@ func testReloadFileEntry(require *require.Assertions, storeBundle *fileStoreTest
 	require.NoError(err)
 	ok := store.fileMap.Contains(fn)
 	require.True(ok)
-	_, err = store.NewFileOp().AcceptState(s1).SetFileMetadata(fn, m, md)
+	_, err = store.NewFileOp().AcceptState(s1).SetFileMetadata(fn, m)
 	require.NoError(err)
 
 	// Recreate store nukes store's in memory map
@@ -143,8 +143,9 @@ func testReloadFileEntry(require *require.Assertions, storeBundle *fileStoreTest
 	require.NoError(err)
 	ok = store.fileMap.Contains(fn)
 	require.True(ok)
-	d, err := store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, m)
-	require.Equal(d, md)
+	result := getMockMetadataOne()
+	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, result))
+	require.Equal(m.content, result.content)
 }
 
 func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle) {
@@ -369,8 +370,8 @@ func testGetOrSetFileMetadataConcurrently(require *require.Assertions, storeBund
 	if !ok {
 		log.Fatal("file not found in state1")
 	}
-	m := getMockMetadataOne()
-	content := []byte("foo")
+
+	original := []byte("foo")
 
 	// Get ReadWriter and modify file concurrently.
 	var wg sync.WaitGroup
@@ -379,15 +380,16 @@ func testGetOrSetFileMetadataConcurrently(require *require.Assertions, storeBund
 		go func() {
 			defer wg.Done()
 
-			b, err := store.NewFileOp().AcceptState(s1).GetOrSetFileMetadata(fn, m, content)
-			require.NoError(err)
-			require.Equal(content, b)
+			m := getMockMetadataOne()
+			m.content = original
+			require.NoError(store.NewFileOp().AcceptState(s1).GetOrSetFileMetadata(fn, m))
+			require.Equal(original, m.content)
 		}()
 	}
 	wg.Wait()
 
 	// Verify content
-	b, err := store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, m)
-	require.NoError(err)
-	require.Equal(content, b)
+	m := getMockMetadataOne()
+	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, m))
+	require.Equal(original, m.content)
 }

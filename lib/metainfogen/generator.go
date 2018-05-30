@@ -38,11 +38,7 @@ func (g *Generator) Generate(d core.Digest) error {
 	if err != nil {
 		return fmt.Errorf("create metainfo: %s", err)
 	}
-	raw, err := mi.Serialize()
-	if err != nil {
-		return fmt.Errorf("serialize metainfo: %s", err)
-	}
-	if _, err := g.fs.SetCacheFileMetadata(d.Hex(), store.NewTorrentMeta(), raw); err != nil {
+	if _, err := g.fs.SetCacheFileMetadata(d.Hex(), store.NewTorrentMeta(mi)); err != nil {
 		return fmt.Errorf("set metainfo: %s", err)
 	}
 	return nil

@@ -1,16 +1,17 @@
 package base
 
 import (
-	"io"
 	"io/ioutil"
 	"os"
 	"path"
 	"reflect"
 	"runtime"
 	"sort"
+	"strings"
 	"testing"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/utils/randutil"
 
 	"github.com/stretchr/testify/require"
 )
@@ -82,17 +83,18 @@ func TestFileEntry(t *testing.T) {
 		testDelete,
 		testGetMetadataAndSetMetadata,
 		testGetMetadataFail,
-		testGetMetadataAtAndSetMetadataAt,
-		testGetMetadataAtAndSetMetadataAtFail,
+		testSetMetadataAt,
 		testGetOrSetMetadata,
 		testDeleteMetadata,
+		testRangeMetadata,
 	}
 
 	for _, store := range stores {
 		t.Run(store.name, func(t *testing.T) {
 			for _, test := range tests {
 				testName := runtime.FuncForPC(reflect.ValueOf(test).Pointer()).Name()
-				t.Run(testName, func(t *testing.T) {
+				parts := strings.Split(testName, ".")
+				t.Run(parts[len(parts)-1], func(t *testing.T) {
 					require := require.New(t)
 					s, cleanup := store.fixture()
 					defer cleanup()
@@ -237,33 +239,31 @@ func testMove(require *require.Assertions, bundle *fileEntryTestBundle) {
 	fn := fe.GetName()
 	fp := fe.GetPath()
 	testFileSize := int64(123)
-	m1 := getMockMetadataOne()
-	b1 := make([]byte, 2)
-	m2 := getMockMetadataMovable()
-	b2 := make([]byte, 1)
+	m := getMockMetadataOne()
+	m.content = randutil.Blob(8)
+	mm := getMockMetadataMovable()
+	mm.content = randutil.Blob(8)
 
 	// Create file first.
 	err := fe.Create(s1, testFileSize)
 	require.NoError(err)
 
 	// Write metadata
-	updated, err := fe.SetMetadata(m1, []byte{uint8(0), uint8(1)})
+	updated, err := fe.SetMetadata(m)
 	require.NoError(err)
 	require.True(updated)
-	updated, err = fe.SetMetadata(m2, []byte{uint8(3)})
+	updated, err = fe.SetMetadata(mm)
 	require.NoError(err)
 	require.True(updated)
 
 	// Verify metadata is readable.
-	b1, err = fe.GetMetadata(m1)
-	require.NoError(err)
-	require.NotNil(b1)
-	require.Equal(uint8(0), b1[0])
-	require.Equal(uint8(1), b1[1])
-	b2, err = fe.GetMetadata(m2)
-	require.NoError(err)
-	require.NotNil(b2)
-	require.Equal(uint8(3), b2[0])
+	mresult := getMockMetadataOne()
+	require.NoError(fe.GetMetadata(mresult))
+	require.Equal(m.content, mresult.content)
+
+	mmresult := getMockMetadataMovable()
+	require.NoError(fe.GetMetadata(mmresult))
+	require.Equal(mm.content, mmresult.content)
 
 	// Move file, removes non-movable metadata.
 	err = fe.Move(s3)
@@ -275,25 +275,19 @@ func testMove(require *require.Assertions, bundle *fileEntryTestBundle) {
 	require.NoError(err)
 
 	// Verify metadata that's not movable is deleted.
-	_, err = fe.GetMetadata(m1)
+	err = fe.GetMetadata(getMockMetadataOne())
 	require.Error(err)
 	require.True(os.IsNotExist(err))
-
-	_, err = os.Stat(path.Join(s1.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
-	require.Error(err)
-	require.True(os.IsNotExist(err))
-	_, err = os.Stat(path.Join(s2.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
-	require.Error(err)
-	require.True(os.IsNotExist(err))
-	_, err = os.Stat(path.Join(s3.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
-	require.Error(err)
-	require.True(os.IsNotExist(err))
+	for _, s := range []FileState{s1, s2, s3} {
+		_, err = os.Stat(path.Join(s.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
+		require.Error(err)
+		require.True(os.IsNotExist(err))
+	}
 
 	// Verify metadata that's movable should have been moved along with the file entry.
-	b2Moved, err := fe.GetMetadata(m2)
-	require.NoError(err)
-	require.NotNil(b2Moved)
-	require.Equal(uint8(3), b2Moved[0])
+	mmresult = getMockMetadataMovable()
+	require.NoError(fe.GetMetadata(mmresult))
+	require.Equal(mm.content, mmresult.content)
 
 	_, err = os.Stat(path.Join(s3.GetDirectory(), fn))
 	require.Nil(err)
@@ -314,18 +308,20 @@ func testDelete(require *require.Assertions, bundle *fileEntryTestBundle) {
 	fn := fe.GetName()
 	fp := fe.GetPath()
 	testFileSize := int64(123)
-	m1 := getMockMetadataOne()
-	m2 := getMockMetadataMovable()
+	m := getMockMetadataOne()
+	m.content = randutil.Blob(8)
+	mm := getMockMetadataMovable()
+	mm.content = randutil.Blob(8)
 
 	// Create file first.
 	err := fe.Create(s1, testFileSize)
 	require.NoError(err)
 
 	// Write metadata.
-	updated, err := fe.SetMetadata(m1, []byte{uint8(0), uint8(1)})
+	updated, err := fe.SetMetadata(m)
 	require.NoError(err)
 	require.True(updated)
-	updated, err = fe.SetMetadata(m2, []byte{uint8(3)})
+	updated, err = fe.SetMetadata(mm)
 	require.NoError(err)
 	require.True(updated)
 
@@ -348,24 +344,22 @@ func testDelete(require *require.Assertions, bundle *fileEntryTestBundle) {
 func testGetMetadataAndSetMetadata(require *require.Assertions, bundle *fileEntryTestBundle) {
 	fe := bundle.entry
 
-	m1 := getMockMetadataOne()
-	b := make([]byte, 2)
+	m := getMockMetadataOne()
+	m.content = randutil.Blob(8)
 
 	// Write metadata.
-	updated, err := fe.SetMetadata(m1, []byte{uint8(0), uint8(0)})
+	updated, err := fe.SetMetadata(m)
 	require.NoError(err)
 	require.True(updated)
 
-	updated, err = fe.SetMetadata(m1, []byte{uint8(0), uint8(0)})
+	updated, err = fe.SetMetadata(m)
 	require.NoError(err)
 	require.False(updated)
 
 	// Read metadata.
-	b, err = fe.GetMetadata(m1)
-	require.NoError(err)
-	require.NotNil(b)
-	require.Equal(uint8(0), b[0])
-	require.Equal(uint8(0), b[1])
+	result := getMockMetadataOne()
+	require.NoError(fe.GetMetadata(result))
+	require.Equal(m.content, result.content)
 }
 
 func testGetMetadataFail(require *require.Assertions, bundle *fileEntryTestBundle) {
@@ -375,110 +369,92 @@ func testGetMetadataFail(require *require.Assertions, bundle *fileEntryTestBundl
 	m2 := getMockMetadataTwo()
 
 	// Invalid read.
-	_, err := fe.GetMetadata(m1)
+	err := fe.GetMetadata(m1)
 	require.True(os.IsNotExist(err))
 
 	// Invalid read.
-	_, err = fe.GetMetadata(m2)
+	err = fe.GetMetadata(m2)
 	require.True(os.IsNotExist(err))
 }
 
-func testGetMetadataAtAndSetMetadataAt(require *require.Assertions, bundle *fileEntryTestBundle) {
+func testSetMetadataAt(require *require.Assertions, bundle *fileEntryTestBundle) {
 	fe := bundle.entry
 
-	m1 := getMockMetadataOne()
-	b := make([]byte, 1)
+	m := getMockMetadataOne()
+	m.content = []byte{1, 2, 3, 4}
 
-	// Write metadata.
-	updated, err := fe.SetMetadata(m1, []byte{uint8(0), uint8(0)})
+	updated, err := fe.SetMetadata(m)
 	require.NoError(err)
 	require.True(updated)
 
-	// Write metadata at.
-	n, err := fe.SetMetadataAt(m1, []byte{uint8(1)}, 1)
-	require.NoError(err)
-	require.Equal(n, 1)
-
-	n, err = fe.SetMetadataAt(m1, []byte{uint8(1)}, 1)
-	require.NoError(err)
-	require.Equal(n, 0)
-
-	// Read metadata at.
-	n, err = fe.GetMetadataAt(m1, b, 0)
-	require.NoError(err)
-	require.Equal(n, 1)
-	require.Equal(uint8(0), b[0])
-
-	n, err = fe.GetMetadataAt(m1, b, 1)
-	require.NoError(err)
-	require.Equal(n, 1)
-	require.Equal(uint8(1), b[0])
-}
-
-func testGetMetadataAtAndSetMetadataAtFail(require *require.Assertions, bundle *fileEntryTestBundle) {
-	fe := bundle.entry
-
-	m1 := getMockMetadataOne()
-	b := make([]byte, 2)
-
-	// Invalid write at.
-	n, err := fe.SetMetadataAt(m1, b, 0)
-	require.Error(err)
-	require.Equal(n, 0)
-
-	// Invalid read at.
-	_, err = fe.GetMetadataAt(m1, b, 0)
-	require.True(os.IsNotExist(err))
-
-	// Write metadata.
-	updated, err := fe.SetMetadata(m1, []byte{uint8(0), uint8(1)})
+	updated, err = fe.SetMetadataAt(m, []byte{5, 5}, 1)
 	require.NoError(err)
 	require.True(updated)
 
-	// Valid read at, with io.EOF.
-	n, err = fe.GetMetadataAt(m1, b, 1)
-	require.Error(err)
-	require.Equal(n, 1)
-	require.Equal(err, io.EOF)
-	require.Equal(uint8(1), b[0])
+	updated, err = fe.SetMetadataAt(m, []byte{5, 5}, 1)
+	require.NoError(err)
+	require.False(updated)
+
+	result := getMockMetadataOne()
+	require.NoError(fe.GetMetadata(result))
+	require.Equal([]byte{1, 5, 5, 4}, result.content)
 }
 
 func testGetOrSetMetadata(require *require.Assertions, bundle *fileEntryTestBundle) {
 	fe := bundle.entry
 
+	original := []byte("foo")
+
 	m := getMockMetadataOne()
-	content := []byte("foo")
+	m.content = original
 
 	// First GetOrSet should write.
-	b, err := fe.GetOrSetMetadata(m, content)
-	require.NoError(err)
-	require.Equal(content, b)
+	require.NoError(fe.GetOrSetMetadata(m))
+	require.Equal(original, m.content)
+
+	m.content = []byte("bar")
 
 	// Second GetOrSet should read.
-	b, err = fe.GetOrSetMetadata(m, []byte("bar"))
-	require.NoError(err)
-	require.Equal(content, b)
+	require.NoError(fe.GetOrSetMetadata(m))
+	require.Equal(original, m.content)
 }
 
 func testDeleteMetadata(require *require.Assertions, bundle *fileEntryTestBundle) {
 	fe := bundle.entry
-	s1 := bundle.state1
 
-	fn := fe.GetName()
-	m1 := getMockMetadataOne()
+	m := getMockMetadataOne()
+	m.content = randutil.Blob(8)
 
-	// Write metadata.
-	updated, err := fe.SetMetadata(m1, []byte{uint8(0), uint8(0)})
+	_, err := fe.SetMetadata(m)
 	require.NoError(err)
-	require.True(updated)
-	_, e := fe.GetMetadata(m1)
-	require.NoError(e)
 
-	// Stat metadatafile before and after deletion to ensure that it is deleted.
-	_, err = os.Stat(path.Join(s1.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
-	require.NoError(err)
-	err = fe.DeleteMetadata(m1)
-	require.NoError(err)
-	_, err = os.Stat(path.Join(s1.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
+	require.NoError(fe.GetMetadata(getMockMetadataOne()))
+
+	require.NoError(fe.DeleteMetadata(m))
+
+	err = fe.GetMetadata(getMockMetadataOne())
 	require.Error(err)
+	require.True(os.IsNotExist(err))
+}
+
+func testRangeMetadata(require *require.Assertions, bundle *fileEntryTestBundle) {
+	fe := bundle.entry
+
+	ms := []Metadata{
+		getMockMetadataOne(),
+		getMockMetadataTwo(),
+		getMockMetadataMovable(),
+	}
+	for _, m := range ms {
+		_, err := fe.SetMetadata(m)
+		require.NoError(err)
+	}
+
+	var result []Metadata
+	require.NoError(fe.RangeMetadata(func(md Metadata) error {
+		result = append(result, md)
+		return nil
+	}))
+
+	require.ElementsMatch(ms, result)
 }

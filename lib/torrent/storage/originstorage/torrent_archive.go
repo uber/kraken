@@ -33,8 +33,8 @@ func (a *TorrentArchive) getMetaInfo(namespace, name string) (*core.MetaInfo, er
 	if err != nil {
 		return nil, fmt.Errorf("new digest: %s", err)
 	}
-	raw, err := a.fs.GetCacheFileMetadata(name, store.NewTorrentMeta())
-	if err != nil {
+	var tm store.TorrentMeta
+	if err := a.fs.GetCacheFileMetadata(name, &tm); err != nil {
 		if os.IsNotExist(err) {
 			refreshErr := a.blobRefresher.Refresh(namespace, d)
 			if refreshErr != nil {
@@ -45,11 +45,7 @@ func (a *TorrentArchive) getMetaInfo(namespace, name string) (*core.MetaInfo, er
 		}
 		return nil, err
 	}
-	mi, err := core.DeserializeMetaInfo(raw)
-	if err != nil {
-		return nil, fmt.Errorf("deserialize metainfo: %s", err)
-	}
-	return mi, nil
+	return tm.MetaInfo, nil
 }
 
 // Stat returns TorrentInfo for given file name. If the file does not exist,

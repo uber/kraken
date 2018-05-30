@@ -48,18 +48,13 @@ func (m *cleanupManager) deleteIdleFiles(op base.FileOp, tti time.Duration) erro
 		return fmt.Errorf("list names: %s", err)
 	}
 	for _, name := range names {
-		raw, err := op.GetFileMetadata(name, base.NewLastAccessTime())
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
+		var lat base.LastAccessTime
+		if err := op.GetFileMetadata(name, &lat); os.IsNotExist(err) {
+			continue
+		} else if err != nil {
 			return fmt.Errorf("get last access time: %s", err)
 		}
-		lat, err := base.UnmarshalLastAccessTime(raw)
-		if err != nil {
-			return fmt.Errorf("unmarshal last access time: %s", err)
-		}
-		if m.clk.Now().Sub(lat) > tti {
+		if m.clk.Now().Sub(lat.Time) > tti {
 			if err := op.DeleteFile(name); err != nil {
 				log.With("name", name).Errorf("Error deleting idle file: %s", err)
 			}

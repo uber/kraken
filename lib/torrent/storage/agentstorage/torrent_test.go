@@ -21,12 +21,12 @@ import (
 )
 
 func prepareFileStore(fs store.FileStore, mi *core.MetaInfo) {
-	fs.CreateDownloadFile(mi.Name(), mi.Info.Length)
-	b, err := mi.Serialize()
-	if err != nil {
+	if err := fs.CreateDownloadFile(mi.Name(), mi.Info.Length); err != nil {
 		panic(err)
 	}
-	fs.States().Download().SetMetadata(mi.Name(), store.NewTorrentMeta(), b)
+	if _, err := fs.States().Download().SetMetadata(mi.Name(), store.NewTorrentMeta(mi)); err != nil {
+		panic(err)
+	}
 }
 
 func TestTorrentCreate(t *testing.T) {

@@ -85,11 +85,9 @@ func TestRefresh(t *testing.T) {
 	result, err := ioutil.ReadAll(f)
 	require.Equal(string(blob.Content), string(result))
 
-	raw, err := mocks.fs.GetCacheFileMetadata(blob.Digest.Hex(), store.NewTorrentMeta())
-	require.NoError(err)
-	mi, err := core.DeserializeMetaInfo(raw)
-	require.NoError(err)
-	require.Equal(blob.MetaInfo, mi)
+	var tm store.TorrentMeta
+	require.NoError(mocks.fs.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
+	require.Equal(blob.MetaInfo, tm.MetaInfo)
 }
 
 func TestRefreshSizeLimitError(t *testing.T) {

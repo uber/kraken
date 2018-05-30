@@ -118,19 +118,6 @@ func (mr *MockFileStoreMockRecorder) EnsureDownloadOrCacheFilePresent(arg0, arg1
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureDownloadOrCacheFilePresent", reflect.TypeOf((*MockFileStore)(nil).EnsureDownloadOrCacheFilePresent), arg0, arg1)
 }
 
-// GetCacheFileMetadata mocks base method
-func (m *MockFileStore) GetCacheFileMetadata(arg0 string, arg1 base.MetadataType) ([]byte, error) {
-	ret := m.ctrl.Call(m, "GetCacheFileMetadata", arg0, arg1)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetCacheFileMetadata indicates an expected call of GetCacheFileMetadata
-func (mr *MockFileStoreMockRecorder) GetCacheFileMetadata(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCacheFileMetadata", reflect.TypeOf((*MockFileStore)(nil).GetCacheFileMetadata), arg0, arg1)
-}
-
 // GetCacheFilePath mocks base method
 func (m *MockFileStore) GetCacheFilePath(arg0 string) (string, error) {
 	ret := m.ctrl.Call(m, "GetCacheFilePath", arg0)
@@ -183,19 +170,6 @@ func (mr *MockFileStoreMockRecorder) GetDownloadFileReadWriter(arg0 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDownloadFileReadWriter", reflect.TypeOf((*MockFileStore)(nil).GetDownloadFileReadWriter), arg0)
 }
 
-// GetDownloadOrCacheFileMeta mocks base method
-func (m *MockFileStore) GetDownloadOrCacheFileMeta(arg0 string) ([]byte, error) {
-	ret := m.ctrl.Call(m, "GetDownloadOrCacheFileMeta", arg0)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetDownloadOrCacheFileMeta indicates an expected call of GetDownloadOrCacheFileMeta
-func (mr *MockFileStoreMockRecorder) GetDownloadOrCacheFileMeta(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDownloadOrCacheFileMeta", reflect.TypeOf((*MockFileStore)(nil).GetDownloadOrCacheFileMeta), arg0)
-}
-
 // GetDownloadOrCacheFileReader mocks base method
 func (m *MockFileStore) GetDownloadOrCacheFileReader(arg0 string) (base.FileReader, error) {
 	ret := m.ctrl.Call(m, "GetDownloadOrCacheFileReader", arg0)
@@ -209,30 +183,16 @@ func (mr *MockFileStoreMockRecorder) GetDownloadOrCacheFileReader(arg0 interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDownloadOrCacheFileReader", reflect.TypeOf((*MockFileStore)(nil).GetDownloadOrCacheFileReader), arg0)
 }
 
-// GetOrSetCacheFileMetadata mocks base method
-func (m *MockFileStore) GetOrSetCacheFileMetadata(arg0 string, arg1 base.MetadataType, arg2 []byte) ([]byte, error) {
-	ret := m.ctrl.Call(m, "GetOrSetCacheFileMetadata", arg0, arg1, arg2)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+// GetUploadFileMetadata mocks base method
+func (m *MockFileStore) GetUploadFileMetadata(arg0 string, arg1 base.Metadata) error {
+	ret := m.ctrl.Call(m, "GetUploadFileMetadata", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// GetOrSetCacheFileMetadata indicates an expected call of GetOrSetCacheFileMetadata
-func (mr *MockFileStoreMockRecorder) GetOrSetCacheFileMetadata(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrSetCacheFileMetadata", reflect.TypeOf((*MockFileStore)(nil).GetOrSetCacheFileMetadata), arg0, arg1, arg2)
-}
-
-// GetUploadFileHashState mocks base method
-func (m *MockFileStore) GetUploadFileHashState(arg0, arg1, arg2 string) ([]byte, error) {
-	ret := m.ctrl.Call(m, "GetUploadFileHashState", arg0, arg1, arg2)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetUploadFileHashState indicates an expected call of GetUploadFileHashState
-func (mr *MockFileStoreMockRecorder) GetUploadFileHashState(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileHashState", reflect.TypeOf((*MockFileStore)(nil).GetUploadFileHashState), arg0, arg1, arg2)
+// GetUploadFileMetadata indicates an expected call of GetUploadFileMetadata
+func (mr *MockFileStoreMockRecorder) GetUploadFileMetadata(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileMetadata", reflect.TypeOf((*MockFileStore)(nil).GetUploadFileMetadata), arg0, arg1)
 }
 
 // GetUploadFileReadWriter mocks base method
@@ -259,19 +219,6 @@ func (m *MockFileStore) GetUploadFileReader(arg0 string) (base.FileReader, error
 // GetUploadFileReader indicates an expected call of GetUploadFileReader
 func (mr *MockFileStoreMockRecorder) GetUploadFileReader(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileReader", reflect.TypeOf((*MockFileStore)(nil).GetUploadFileReader), arg0)
-}
-
-// GetUploadFileStartedAt mocks base method
-func (m *MockFileStore) GetUploadFileStartedAt(arg0 string) ([]byte, error) {
-	ret := m.ctrl.Call(m, "GetUploadFileStartedAt", arg0)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetUploadFileStartedAt indicates an expected call of GetUploadFileStartedAt
-func (mr *MockFileStoreMockRecorder) GetUploadFileStartedAt(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileStartedAt", reflect.TypeOf((*MockFileStore)(nil).GetUploadFileStartedAt), arg0)
 }
 
 // GetUploadFileStat mocks base method
@@ -311,19 +258,6 @@ func (mr *MockFileStoreMockRecorder) InDownloadError(arg0 interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InDownloadError", reflect.TypeOf((*MockFileStore)(nil).InDownloadError), arg0)
 }
 
-// ListUploadFileHashStatePaths mocks base method
-func (m *MockFileStore) ListUploadFileHashStatePaths(arg0 string) ([]string, error) {
-	ret := m.ctrl.Call(m, "ListUploadFileHashStatePaths", arg0)
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListUploadFileHashStatePaths indicates an expected call of ListUploadFileHashStatePaths
-func (mr *MockFileStoreMockRecorder) ListUploadFileHashStatePaths(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListUploadFileHashStatePaths", reflect.TypeOf((*MockFileStore)(nil).ListUploadFileHashStatePaths), arg0)
-}
-
 // MoveDownloadFileToCache mocks base method
 func (m *MockFileStore) MoveDownloadFileToCache(arg0 string) error {
 	ret := m.ctrl.Call(m, "MoveDownloadFileToCache", arg0)
@@ -348,67 +282,28 @@ func (mr *MockFileStoreMockRecorder) MoveUploadFileToCache(arg0, arg1 interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveUploadFileToCache", reflect.TypeOf((*MockFileStore)(nil).MoveUploadFileToCache), arg0, arg1)
 }
 
-// SetCacheFileMetadata mocks base method
-func (m *MockFileStore) SetCacheFileMetadata(arg0 string, arg1 base.MetadataType, arg2 []byte) (bool, error) {
-	ret := m.ctrl.Call(m, "SetCacheFileMetadata", arg0, arg1, arg2)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SetCacheFileMetadata indicates an expected call of SetCacheFileMetadata
-func (mr *MockFileStoreMockRecorder) SetCacheFileMetadata(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCacheFileMetadata", reflect.TypeOf((*MockFileStore)(nil).SetCacheFileMetadata), arg0, arg1, arg2)
-}
-
-// SetCacheFileMetadataAt mocks base method
-func (m *MockFileStore) SetCacheFileMetadataAt(arg0 string, arg1 base.MetadataType, arg2 []byte, arg3 int64) (bool, error) {
-	ret := m.ctrl.Call(m, "SetCacheFileMetadataAt", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SetCacheFileMetadataAt indicates an expected call of SetCacheFileMetadataAt
-func (mr *MockFileStoreMockRecorder) SetCacheFileMetadataAt(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCacheFileMetadataAt", reflect.TypeOf((*MockFileStore)(nil).SetCacheFileMetadataAt), arg0, arg1, arg2, arg3)
-}
-
-// SetDownloadOrCacheFileMeta mocks base method
-func (m *MockFileStore) SetDownloadOrCacheFileMeta(arg0 string, arg1 []byte) (bool, error) {
-	ret := m.ctrl.Call(m, "SetDownloadOrCacheFileMeta", arg0, arg1)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SetDownloadOrCacheFileMeta indicates an expected call of SetDownloadOrCacheFileMeta
-func (mr *MockFileStoreMockRecorder) SetDownloadOrCacheFileMeta(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDownloadOrCacheFileMeta", reflect.TypeOf((*MockFileStore)(nil).SetDownloadOrCacheFileMeta), arg0, arg1)
-}
-
-// SetUploadFileHashState mocks base method
-func (m *MockFileStore) SetUploadFileHashState(arg0 string, arg1 []byte, arg2, arg3 string) error {
-	ret := m.ctrl.Call(m, "SetUploadFileHashState", arg0, arg1, arg2, arg3)
+// RangeUploadMetadata mocks base method
+func (m *MockFileStore) RangeUploadMetadata(arg0 string, arg1 func(base.Metadata) error) error {
+	ret := m.ctrl.Call(m, "RangeUploadMetadata", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SetUploadFileHashState indicates an expected call of SetUploadFileHashState
-func (mr *MockFileStoreMockRecorder) SetUploadFileHashState(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUploadFileHashState", reflect.TypeOf((*MockFileStore)(nil).SetUploadFileHashState), arg0, arg1, arg2, arg3)
+// RangeUploadMetadata indicates an expected call of RangeUploadMetadata
+func (mr *MockFileStoreMockRecorder) RangeUploadMetadata(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeUploadMetadata", reflect.TypeOf((*MockFileStore)(nil).RangeUploadMetadata), arg0, arg1)
 }
 
-// SetUploadFileStartedAt mocks base method
-func (m *MockFileStore) SetUploadFileStartedAt(arg0 string, arg1 []byte) error {
-	ret := m.ctrl.Call(m, "SetUploadFileStartedAt", arg0, arg1)
+// SetUploadFileMetadata mocks base method
+func (m *MockFileStore) SetUploadFileMetadata(arg0 string, arg1 base.Metadata) error {
+	ret := m.ctrl.Call(m, "SetUploadFileMetadata", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SetUploadFileStartedAt indicates an expected call of SetUploadFileStartedAt
-func (mr *MockFileStoreMockRecorder) SetUploadFileStartedAt(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUploadFileStartedAt", reflect.TypeOf((*MockFileStore)(nil).SetUploadFileStartedAt), arg0, arg1)
+// SetUploadFileMetadata indicates an expected call of SetUploadFileMetadata
+func (mr *MockFileStoreMockRecorder) SetUploadFileMetadata(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUploadFileMetadata", reflect.TypeOf((*MockFileStore)(nil).SetUploadFileMetadata), arg0, arg1)
 }
 
 // States mocks base method
@@ -421,32 +316,6 @@ func (m *MockFileStore) States() *store.StateAcceptor {
 // States indicates an expected call of States
 func (mr *MockFileStoreMockRecorder) States() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "States", reflect.TypeOf((*MockFileStore)(nil).States))
-}
-
-// WriteDownloadFilePieceStatus mocks base method
-func (m *MockFileStore) WriteDownloadFilePieceStatus(arg0 string, arg1 []byte) (bool, error) {
-	ret := m.ctrl.Call(m, "WriteDownloadFilePieceStatus", arg0, arg1)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// WriteDownloadFilePieceStatus indicates an expected call of WriteDownloadFilePieceStatus
-func (mr *MockFileStoreMockRecorder) WriteDownloadFilePieceStatus(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteDownloadFilePieceStatus", reflect.TypeOf((*MockFileStore)(nil).WriteDownloadFilePieceStatus), arg0, arg1)
-}
-
-// WriteDownloadFilePieceStatusAt mocks base method
-func (m *MockFileStore) WriteDownloadFilePieceStatusAt(arg0 string, arg1 []byte, arg2 int) (bool, error) {
-	ret := m.ctrl.Call(m, "WriteDownloadFilePieceStatusAt", arg0, arg1, arg2)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// WriteDownloadFilePieceStatusAt indicates an expected call of WriteDownloadFilePieceStatusAt
-func (mr *MockFileStoreMockRecorder) WriteDownloadFilePieceStatusAt(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteDownloadFilePieceStatusAt", reflect.TypeOf((*MockFileStore)(nil).WriteDownloadFilePieceStatusAt), arg0, arg1, arg2)
 }
 
 // MockFileReadWriter is a mock of FileReadWriter interface
@@ -657,11 +526,10 @@ func (mr *MockOriginFileStoreMockRecorder) DeleteCacheFile(arg0 interface{}) *go
 }
 
 // GetCacheFileMetadata mocks base method
-func (m *MockOriginFileStore) GetCacheFileMetadata(arg0 string, arg1 base.MetadataType) ([]byte, error) {
+func (m *MockOriginFileStore) GetCacheFileMetadata(arg0 string, arg1 base.Metadata) error {
 	ret := m.ctrl.Call(m, "GetCacheFileMetadata", arg0, arg1)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // GetCacheFileMetadata indicates an expected call of GetCacheFileMetadata
@@ -696,29 +564,15 @@ func (mr *MockOriginFileStoreMockRecorder) GetCacheFileStat(arg0 interface{}) *g
 }
 
 // GetOrSetCacheFileMetadata mocks base method
-func (m *MockOriginFileStore) GetOrSetCacheFileMetadata(arg0 string, arg1 base.MetadataType, arg2 []byte) ([]byte, error) {
-	ret := m.ctrl.Call(m, "GetOrSetCacheFileMetadata", arg0, arg1, arg2)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+func (m *MockOriginFileStore) GetOrSetCacheFileMetadata(arg0 string, arg1 base.Metadata) error {
+	ret := m.ctrl.Call(m, "GetOrSetCacheFileMetadata", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // GetOrSetCacheFileMetadata indicates an expected call of GetOrSetCacheFileMetadata
-func (mr *MockOriginFileStoreMockRecorder) GetOrSetCacheFileMetadata(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrSetCacheFileMetadata", reflect.TypeOf((*MockOriginFileStore)(nil).GetOrSetCacheFileMetadata), arg0, arg1, arg2)
-}
-
-// GetUploadFileHashState mocks base method
-func (m *MockOriginFileStore) GetUploadFileHashState(arg0, arg1, arg2 string) ([]byte, error) {
-	ret := m.ctrl.Call(m, "GetUploadFileHashState", arg0, arg1, arg2)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetUploadFileHashState indicates an expected call of GetUploadFileHashState
-func (mr *MockOriginFileStoreMockRecorder) GetUploadFileHashState(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileHashState", reflect.TypeOf((*MockOriginFileStore)(nil).GetUploadFileHashState), arg0, arg1, arg2)
+func (mr *MockOriginFileStoreMockRecorder) GetOrSetCacheFileMetadata(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrSetCacheFileMetadata", reflect.TypeOf((*MockOriginFileStore)(nil).GetOrSetCacheFileMetadata), arg0, arg1)
 }
 
 // GetUploadFileReadWriter mocks base method
@@ -747,19 +601,6 @@ func (mr *MockOriginFileStoreMockRecorder) GetUploadFileReader(arg0 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileReader", reflect.TypeOf((*MockOriginFileStore)(nil).GetUploadFileReader), arg0)
 }
 
-// GetUploadFileStartedAt mocks base method
-func (m *MockOriginFileStore) GetUploadFileStartedAt(arg0 string) ([]byte, error) {
-	ret := m.ctrl.Call(m, "GetUploadFileStartedAt", arg0)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetUploadFileStartedAt indicates an expected call of GetUploadFileStartedAt
-func (mr *MockOriginFileStoreMockRecorder) GetUploadFileStartedAt(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileStartedAt", reflect.TypeOf((*MockOriginFileStore)(nil).GetUploadFileStartedAt), arg0)
-}
-
 // GetUploadFileStat mocks base method
 func (m *MockOriginFileStore) GetUploadFileStat(arg0 string) (os.FileInfo, error) {
 	ret := m.ctrl.Call(m, "GetUploadFileStat", arg0)
@@ -771,19 +612,6 @@ func (m *MockOriginFileStore) GetUploadFileStat(arg0 string) (os.FileInfo, error
 // GetUploadFileStat indicates an expected call of GetUploadFileStat
 func (mr *MockOriginFileStoreMockRecorder) GetUploadFileStat(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadFileStat", reflect.TypeOf((*MockOriginFileStore)(nil).GetUploadFileStat), arg0)
-}
-
-// ListUploadFileHashStatePaths mocks base method
-func (m *MockOriginFileStore) ListUploadFileHashStatePaths(arg0 string) ([]string, error) {
-	ret := m.ctrl.Call(m, "ListUploadFileHashStatePaths", arg0)
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListUploadFileHashStatePaths indicates an expected call of ListUploadFileHashStatePaths
-func (mr *MockOriginFileStoreMockRecorder) ListUploadFileHashStatePaths(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListUploadFileHashStatePaths", reflect.TypeOf((*MockOriginFileStore)(nil).ListUploadFileHashStatePaths), arg0)
 }
 
 // MoveUploadFileToCache mocks base method
@@ -798,52 +626,27 @@ func (mr *MockOriginFileStoreMockRecorder) MoveUploadFileToCache(arg0, arg1 inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveUploadFileToCache", reflect.TypeOf((*MockOriginFileStore)(nil).MoveUploadFileToCache), arg0, arg1)
 }
 
+// RangeUploadMetadata mocks base method
+func (m *MockOriginFileStore) RangeUploadMetadata(arg0 string, arg1 func(base.Metadata) error) error {
+	ret := m.ctrl.Call(m, "RangeUploadMetadata", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RangeUploadMetadata indicates an expected call of RangeUploadMetadata
+func (mr *MockOriginFileStoreMockRecorder) RangeUploadMetadata(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeUploadMetadata", reflect.TypeOf((*MockOriginFileStore)(nil).RangeUploadMetadata), arg0, arg1)
+}
+
 // SetCacheFileMetadata mocks base method
-func (m *MockOriginFileStore) SetCacheFileMetadata(arg0 string, arg1 base.MetadataType, arg2 []byte) (bool, error) {
-	ret := m.ctrl.Call(m, "SetCacheFileMetadata", arg0, arg1, arg2)
+func (m *MockOriginFileStore) SetCacheFileMetadata(arg0 string, arg1 base.Metadata) (bool, error) {
+	ret := m.ctrl.Call(m, "SetCacheFileMetadata", arg0, arg1)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SetCacheFileMetadata indicates an expected call of SetCacheFileMetadata
-func (mr *MockOriginFileStoreMockRecorder) SetCacheFileMetadata(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCacheFileMetadata", reflect.TypeOf((*MockOriginFileStore)(nil).SetCacheFileMetadata), arg0, arg1, arg2)
-}
-
-// SetCacheFileMetadataAt mocks base method
-func (m *MockOriginFileStore) SetCacheFileMetadataAt(arg0 string, arg1 base.MetadataType, arg2 []byte, arg3 int64) (bool, error) {
-	ret := m.ctrl.Call(m, "SetCacheFileMetadataAt", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SetCacheFileMetadataAt indicates an expected call of SetCacheFileMetadataAt
-func (mr *MockOriginFileStoreMockRecorder) SetCacheFileMetadataAt(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCacheFileMetadataAt", reflect.TypeOf((*MockOriginFileStore)(nil).SetCacheFileMetadataAt), arg0, arg1, arg2, arg3)
-}
-
-// SetUploadFileHashState mocks base method
-func (m *MockOriginFileStore) SetUploadFileHashState(arg0 string, arg1 []byte, arg2, arg3 string) error {
-	ret := m.ctrl.Call(m, "SetUploadFileHashState", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetUploadFileHashState indicates an expected call of SetUploadFileHashState
-func (mr *MockOriginFileStoreMockRecorder) SetUploadFileHashState(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUploadFileHashState", reflect.TypeOf((*MockOriginFileStore)(nil).SetUploadFileHashState), arg0, arg1, arg2, arg3)
-}
-
-// SetUploadFileStartedAt mocks base method
-func (m *MockOriginFileStore) SetUploadFileStartedAt(arg0 string, arg1 []byte) error {
-	ret := m.ctrl.Call(m, "SetUploadFileStartedAt", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetUploadFileStartedAt indicates an expected call of SetUploadFileStartedAt
-func (mr *MockOriginFileStoreMockRecorder) SetUploadFileStartedAt(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUploadFileStartedAt", reflect.TypeOf((*MockOriginFileStore)(nil).SetUploadFileStartedAt), arg0, arg1)
+func (mr *MockOriginFileStoreMockRecorder) SetCacheFileMetadata(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCacheFileMetadata", reflect.TypeOf((*MockOriginFileStore)(nil).SetCacheFileMetadata), arg0, arg1)
 }

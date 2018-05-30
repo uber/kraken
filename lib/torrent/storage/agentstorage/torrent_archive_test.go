@@ -60,6 +60,8 @@ func TestTorrentArchiveStatBitfield(t *testing.T) {
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(mi, nil).Times(1)
 
 	tor, err := archive.CreateTorrent(namespace, mi.Name())
+	require.NoError(err)
+
 	require.NoError(tor.WritePiece(piecereader.NewBuffer(blob.Content[2:3]), 2))
 
 	info, err := archive.Stat(namespace, mi.Name())
@@ -99,11 +101,9 @@ func TestTorrentArchiveCreateTorrent(t *testing.T) {
 	require.NotNil(tor)
 
 	// Check metainfo.
-	miRaw, err := mocks.fs.GetDownloadOrCacheFileMeta(mi.Name())
-	require.NoError(err)
-	miExpected, err := mi.Serialize()
-	require.NoError(err)
-	require.Equal(string(miExpected), string(miRaw))
+	var tm store.TorrentMeta
+	require.NoError(mocks.fs.States().Download().Cache().GetMetadata(mi.Name(), &tm))
+	require.Equal(mi, tm.MetaInfo)
 
 	// Create again reads from disk.
 	tor, err = archive.CreateTorrent(namespace, mi.Name())

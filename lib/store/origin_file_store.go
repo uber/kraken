@@ -6,8 +6,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"regexp"
-	"strings"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/hrw"
@@ -33,17 +31,11 @@ type OriginFileStore interface {
 	MoveUploadFileToCache(fileName, targetFileName string) error
 	DeleteCacheFile(fileName string) error
 
-	GetCacheFileMetadata(filename string, mt MetadataType) ([]byte, error)
-	SetCacheFileMetadata(filename string, mt MetadataType, b []byte) (bool, error)
-	SetCacheFileMetadataAt(filename string, mt MetadataType, b []byte, offset int64) (bool, error)
-	GetOrSetCacheFileMetadata(filename string, mt MetadataType, b []byte) ([]byte, error)
+	GetCacheFileMetadata(filename string, md Metadata) error
+	SetCacheFileMetadata(filename string, md Metadata) (bool, error)
+	GetOrSetCacheFileMetadata(filename string, md Metadata) error
 
-	// Registry specific.
-	SetUploadFileStartedAt(fileName string, content []byte) error
-	GetUploadFileStartedAt(fileName string) ([]byte, error)
-	SetUploadFileHashState(fileName string, content []byte, algorithm string, offset string) error
-	GetUploadFileHashState(fileName string, algorithm string, offset string) ([]byte, error)
-	ListUploadFileHashStatePaths(fileName string) ([]string, error)
+	RangeUploadMetadata(filename string, f func(Metadata) error) error
 }
 
 // OriginLocalFileStore manages all origin files on local disk.
@@ -240,86 +232,29 @@ func (store *OriginLocalFileStore) MoveUploadFileToCache(fileName, targetFileNam
 		uploadFilePath)
 }
 
-// GetCacheFileMetadata returns the metadata content of mt for filename.
-func (store *OriginLocalFileStore) GetCacheFileMetadata(
-	filename string, mt MetadataType) ([]byte, error) {
-
-	return store.cacheBackend.NewFileOp().AcceptState(store.stateCache).GetFileMetadata(filename, mt)
+// GetCacheFileMetadata returns the metadata content of md for filename.
+func (store *OriginLocalFileStore) GetCacheFileMetadata(filename string, md Metadata) error {
+	return store.cacheBackend.NewFileOp().AcceptState(store.stateCache).GetFileMetadata(filename, md)
 }
 
-// SetCacheFileMetadata writes b to metadata content of mt for filename.
+// SetCacheFileMetadata writes b to metadata content of md for filename.
 func (store *OriginLocalFileStore) SetCacheFileMetadata(
-	filename string, mt MetadataType, b []byte) (updated bool, err error) {
+	filename string, md Metadata) (updated bool, err error) {
 
-	return store.cacheBackend.NewFileOp().AcceptState(store.stateCache).SetFileMetadata(filename, mt, b)
+	return store.cacheBackend.NewFileOp().AcceptState(store.stateCache).SetFileMetadata(filename, md)
 }
 
-// SetCacheFileMetadataAt writes b to metadata content of mt starting at offset for filename.
-func (store *OriginLocalFileStore) SetCacheFileMetadataAt(
-	filename string, mt MetadataType, b []byte, offset int64) (updated bool, err error) {
-
-	n, err := store.cacheBackend.NewFileOp().AcceptState(store.stateCache).SetFileMetadataAt(filename, mt, b, offset)
-	return n != 0, err
-}
-
-// GetOrSetCacheFileMetadata returns the metadata content of mt for filename, or initializes the metadata
+// GetOrSetCacheFileMetadata returns the metadata content of md for filename, or initializes the metadata
 // content to b if not set.
-func (store *OriginLocalFileStore) GetOrSetCacheFileMetadata(
-	filename string, mt MetadataType, b []byte) ([]byte, error) {
-
-	return store.cacheBackend.NewFileOp().AcceptState(store.stateCache).GetOrSetFileMetadata(filename, mt, b)
+func (store *OriginLocalFileStore) GetOrSetCacheFileMetadata(filename string, md Metadata) error {
+	return store.cacheBackend.NewFileOp().AcceptState(store.stateCache).GetOrSetFileMetadata(filename, md)
 }
 
-// SetUploadFileStartedAt creates and writes creation file for a new upload file.
-func (store *OriginLocalFileStore) SetUploadFileStartedAt(fileName string, content []byte) error {
-	_, err := store.uploadBackend.NewFileOp().AcceptState(store.stateUpload).SetFileMetadata(
-		fileName,
-		NewStartedAt(),
-		content)
-	return err
-}
+// RangeUploadMetadata ranges upload metadata.
+func (store *OriginLocalFileStore) RangeUploadMetadata(
+	fileName string, f func(Metadata) error) error {
 
-// GetUploadFileStartedAt reads creation file for a new upload file.
-func (store *OriginLocalFileStore) GetUploadFileStartedAt(fileName string) ([]byte, error) {
-	return store.uploadBackend.NewFileOp().AcceptState(store.stateUpload).GetFileMetadata(
-		fileName,
-		NewStartedAt())
-}
-
-// SetUploadFileHashState creates and writes hashstate for a upload file.
-func (store *OriginLocalFileStore) SetUploadFileHashState(
-	fileName string, content []byte, algorithm string, offset string) error {
-	_, err := store.uploadBackend.NewFileOp().AcceptState(store.stateUpload).SetFileMetadata(
-		fileName,
-		NewHashState(algorithm, offset),
-		content)
-	return err
-}
-
-// GetUploadFileHashState reads hashstate for a upload file.
-func (store *OriginLocalFileStore) GetUploadFileHashState(
-	fileName string, algorithm string, offset string) ([]byte, error) {
-	return store.uploadBackend.NewFileOp().AcceptState(store.stateUpload).GetFileMetadata(
-		fileName,
-		NewHashState(algorithm, offset))
-}
-
-// ListUploadFileHashStatePaths list paths of all hashstates for a upload file.
-// This function is not thread-safe.
-// TODO: Right now we store metadata with _hashstate, but registry expects /hashstate.
-func (store *OriginLocalFileStore) ListUploadFileHashStatePaths(fileName string) ([]string, error) {
-	var paths []string
-	store.uploadBackend.NewFileOp().AcceptState(store.stateUpload).RangeFileMetadata(
-		fileName, func(mt base.MetadataType) error {
-			if re := regexp.MustCompile("_hashstates/\\w+/\\w+$"); re.MatchString(mt.GetSuffix()) {
-				r := strings.NewReplacer("_", "/")
-				p := path.Join("localstore/_uploads/", fileName)
-				paths = append(paths, p+r.Replace(mt.GetSuffix()))
-			}
-			return nil
-		})
-
-	return paths, nil
+	return store.uploadBackend.NewFileOp().AcceptState(store.stateUpload).RangeFileMetadata(fileName, f)
 }
 
 // DeleteCacheFile deletes a file from cache directory

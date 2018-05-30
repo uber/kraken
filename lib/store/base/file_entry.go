@@ -7,6 +7,8 @@ import (
 	"os"
 	"path"
 	"sync"
+
+	"code.uber.internal/infra/kraken/utils/stringset"
 )
 
 // FileState decides what directory a file is in.
@@ -48,14 +50,15 @@ type FileEntry interface {
 	GetReader() (FileReader, error)
 	GetReadWriter() (FileReadWriter, error)
 
-	AddMetadata(mt MetadataType) error
-	GetMetadata(mt MetadataType) ([]byte, error)
-	SetMetadata(mt MetadataType, data []byte) (bool, error)
-	GetMetadataAt(mt MetadataType, b []byte, off int64) (int, error)
-	SetMetadataAt(mt MetadataType, b []byte, off int64) (int, error)
-	GetOrSetMetadata(mt MetadataType, b []byte) ([]byte, error)
-	DeleteMetadata(mt MetadataType) error
-	RangeMetadata(f func(mt MetadataType) error) error
+	AddMetadata(md Metadata) error
+
+	GetMetadata(md Metadata) error
+	SetMetadata(md Metadata) (bool, error)
+	SetMetadataAt(md Metadata, b []byte, offset int64) (updated bool, err error)
+	GetOrSetMetadata(md Metadata) error
+	DeleteMetadata(md Metadata) error
+
+	RangeMetadata(f func(md Metadata) error) error
 }
 
 var _ FileEntryFactory = (*localFileEntryFactory)(nil)
@@ -160,8 +163,8 @@ type localFileEntry struct {
 
 	state            FileState
 	name             string
-	relativeDataPath string // Relative path to data file.
-	metadataSet      map[MetadataType]struct{}
+	relativeDataPath string        // Relative path to data file.
+	metadata         stringset.Set // Metadata is identified by suffix.
 }
 
 func newLocalFileEntry(
@@ -173,7 +176,7 @@ func newLocalFileEntry(
 		state:            state,
 		name:             name,
 		relativeDataPath: relativeDataPath,
-		metadataSet:      make(map[MetadataType]struct{}),
+		metadata:         make(stringset.Set),
 	}
 }
 
@@ -254,10 +257,10 @@ func (entry *localFileEntry) Reload(targetState FileState) error {
 		// Glob could return the data file itself, and directories.
 		// Verify it's actually a metadata file.
 		if currFile.Name() != DefaultDataFileName {
-			mt := CreateFromSuffix(currFile.Name())
-			if mt != nil {
+			md := CreateFromSuffix(currFile.Name())
+			if md != nil {
 				// Add metadata
-				entry.AddMetadata(mt)
+				entry.AddMetadata(md)
 			}
 		}
 	}
@@ -313,10 +316,10 @@ func (entry *localFileEntry) Move(targetState FileState) error {
 	}
 
 	// Copy metadata first.
-	performCopy := func(mt MetadataType) error {
-		if mt.Movable() {
-			sourceMetadataPath := entry.getMetadataPath(mt)
-			targetMetadataPath := path.Join(path.Dir(targetPath), mt.GetSuffix())
+	performCopy := func(md Metadata) error {
+		if md.Movable() {
+			sourceMetadataPath := entry.getMetadataPath(md)
+			targetMetadataPath := path.Join(path.Dir(targetPath), md.GetSuffix())
 			bytes, err := ioutil.ReadFile(sourceMetadataPath)
 			if err != nil {
 				return err
@@ -406,127 +409,112 @@ func (entry *localFileEntry) GetReadWriter() (FileReadWriter, error) {
 	return readWriter, nil
 }
 
-func (entry *localFileEntry) getMetadataPath(mt MetadataType) string {
-	return path.Join(path.Dir(entry.GetPath()), mt.GetSuffix())
+func (entry *localFileEntry) getMetadataPath(md Metadata) string {
+	return path.Join(path.Dir(entry.GetPath()), md.GetSuffix())
 }
 
-// AddMetadata adds a new metadata type to metadataSet. This is primirily used during reload.
-func (entry *localFileEntry) AddMetadata(mt MetadataType) error {
-	filePath := entry.getMetadataPath(mt)
+// AddMetadata adds a new metadata type to metadata. This is primirily used during reload.
+func (entry *localFileEntry) AddMetadata(md Metadata) error {
+	filePath := entry.getMetadataPath(md)
 
 	// Check existence.
 	if _, err := os.Stat(filePath); err != nil {
 		return err
 	}
-	entry.metadataSet[mt] = struct{}{}
+	entry.metadata.Add(md.GetSuffix())
 	return nil
 }
 
-// GetMetadata returns metadata content as a byte array.
-func (entry *localFileEntry) GetMetadata(mt MetadataType) ([]byte, error) {
-	filePath := entry.getMetadataPath(mt)
-
-	// Check existence.
-	if _, err := os.Stat(filePath); err != nil {
-		return nil, err
+// GetMetadata reads and unmarshals metadata into md.
+func (entry *localFileEntry) GetMetadata(md Metadata) error {
+	filePath := entry.getMetadataPath(md)
+	b, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return err
 	}
-
-	return ioutil.ReadFile(filePath)
+	return md.Deserialize(b)
 }
 
-// SetMetadata updates metadata and returns true only if the file is updated correctly;
+// SetMetadata updates metadata and returns true only if the file is updated correctly.
 // It returns false if error happened or file already contains desired content.
-func (entry *localFileEntry) SetMetadata(mt MetadataType, b []byte) (bool, error) {
-	filePath := entry.getMetadataPath(mt)
-
+func (entry *localFileEntry) SetMetadata(md Metadata) (bool, error) {
+	filePath := entry.getMetadataPath(md)
+	b, err := md.Serialize()
+	if err != nil {
+		return false, fmt.Errorf("marshal metadata: %s", err)
+	}
 	updated, err := compareAndWriteFile(filePath, b)
 	if err == nil {
-		entry.metadataSet[mt] = struct{}{}
+		entry.metadata.Add(md.GetSuffix())
 	}
 	return updated, err
 }
 
-// GetMetadataAt reads metadata at specified offset.
-func (entry *localFileEntry) GetMetadataAt(mt MetadataType, b []byte, off int64) (int, error) {
-	filePath := entry.getMetadataPath(mt)
+// SetMetadataAt overwrites a single byte of metadata. Returns true if the byte
+// was overwritten.
+func (entry *localFileEntry) SetMetadataAt(
+	md Metadata, b []byte, offset int64) (updated bool, err error) {
 
-	// Check existence.
-	if _, err := os.Stat(filePath); err != nil {
-		return 0, err
-	}
-
-	// Read to data.
-	f, err := os.Open(filePath)
-	if err != nil {
-		return 0, err
-	}
-	defer f.Close()
-
-	return f.ReadAt(b, off)
-}
-
-// SetMetadataAt writes metadata at specified offset.
-func (entry *localFileEntry) SetMetadataAt(mt MetadataType, b []byte, off int64) (int, error) {
-	filePath := entry.getMetadataPath(mt)
-
-	// Check existence.
-	if _, err := os.Stat(filePath); err != nil {
-		return 0, err
-	}
-
-	// Compare with existing data, overwrite if different.
+	filePath := entry.getMetadataPath(md)
 	f, err := os.OpenFile(filePath, os.O_RDWR, 0755)
 	if err != nil {
-		return 0, err
+		return false, err
 	}
 	defer f.Close()
-	buf := make([]byte, len(b))
-	if _, err := f.ReadAt(buf, off); err != nil {
-		return 0, err
-	}
-	if bytes.Compare(buf, b) == 0 {
-		return 0, nil
-	}
 
-	return f.WriteAt(b, off)
+	prev := make([]byte, len(b))
+	if _, err := f.ReadAt(prev, offset); err != nil {
+		return false, err
+	}
+	if bytes.Compare(prev, b) == 0 {
+		return false, nil
+	}
+	if _, err := f.WriteAt(b, offset); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// GetOrSetMetadata writes b under metadata md if md has not been initialized yet.
+// If the given metadata is not initialized, md is overwritten.
+func (entry *localFileEntry) GetOrSetMetadata(md Metadata) error {
+	if entry.metadata.Has(md.GetSuffix()) {
+		return entry.GetMetadata(md)
+	}
+	b, err := md.Serialize()
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %s", err)
+	}
+	filePath := path.Join(path.Dir(entry.GetPath()), md.GetSuffix())
+	if _, err := compareAndWriteFile(filePath, b); err != nil {
+		return err
+	}
+	entry.metadata.Add(md.GetSuffix())
+	return nil
 }
 
 // DeleteMetadata deletes metadata of the specified type.
-func (entry *localFileEntry) DeleteMetadata(mt MetadataType) error {
-	filePath := entry.getMetadataPath(mt)
+func (entry *localFileEntry) DeleteMetadata(md Metadata) error {
+	filePath := entry.getMetadataPath(md)
 
 	// Remove from map no matter if the actual metadata file is removed from disk.
-	defer delete(entry.metadataSet, mt)
+	defer entry.metadata.Remove(md.GetSuffix())
 
 	return os.RemoveAll(filePath)
 }
 
-// RangeMetadata lofis through all metadata and applies function f, until an error happens.
-func (entry *localFileEntry) RangeMetadata(f func(mt MetadataType) error) error {
-	for mt := range entry.metadataSet {
-		if err := f(mt); err != nil {
+// RangeMetadata loops through all metadata and applies function f, until an error happens.
+func (entry *localFileEntry) RangeMetadata(f func(md Metadata) error) error {
+	for suffix := range entry.metadata {
+		md := CreateFromSuffix(suffix)
+		if md == nil {
+			return fmt.Errorf("cannot create metadata from suffix %s", suffix)
+		}
+		if err := f(md); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// GetOrSetMetadata writes b under metadata mt if mt has not been initialized yet.
-// Always returns the final content of the metadata, whether it be the existing content or the
-// content just written.
-func (entry *localFileEntry) GetOrSetMetadata(mt MetadataType, b []byte) ([]byte, error) {
-	if _, ok := entry.metadataSet[mt]; ok {
-		return entry.GetMetadata(mt)
-	}
-	filePath := path.Join(path.Dir(entry.GetPath()), mt.GetSuffix())
-	if _, err := compareAndWriteFile(filePath, b); err != nil {
-		return nil, err
-	}
-	entry.metadataSet[mt] = struct{}{}
-
-	c := make([]byte, len(b))
-	copy(c, b)
-	return c, nil
 }
 
 // compareAndWriteFile updates file with given bytes and returns true only if the file is updated

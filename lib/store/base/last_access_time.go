@@ -7,44 +7,51 @@ import (
 	"time"
 )
 
+var _lastAccessTimeSuffix = "_last_access_time"
+
 func init() {
-	RegisterMetadata(regexp.MustCompile("_last_access_time"), &lastAccessTimeFactory{})
+	RegisterMetadata(regexp.MustCompile(_lastAccessTimeSuffix), &lastAccessTimeFactory{})
 }
 
 type lastAccessTimeFactory struct{}
 
-func (f lastAccessTimeFactory) Create(suffix string) MetadataType {
-	return NewLastAccessTime()
+func (f lastAccessTimeFactory) Create(suffix string) Metadata {
+	return &LastAccessTime{}
 }
 
-// lastAccessTime implements MetadataType. It's used to get file's last access time.
-type lastAccessTime struct{}
-
-// NewLastAccessTime initializes and returns an new MetadataType obj.
-func NewLastAccessTime() MetadataType {
-	return &lastAccessTime{}
+// LastAccessTime tracks a file's last access time.
+type LastAccessTime struct {
+	Time time.Time
 }
 
-func (t lastAccessTime) GetSuffix() string {
-	return "_last_access_time"
+// NewLastAccessTime creates a LastAccessTime from t.
+func NewLastAccessTime(t time.Time) *LastAccessTime {
+	return &LastAccessTime{t}
 }
 
-func (t lastAccessTime) Movable() bool {
+// GetSuffix returns the metadata suffix.
+func (t *LastAccessTime) GetSuffix() string {
+	return _lastAccessTimeSuffix
+}
+
+// Movable is true.
+func (t *LastAccessTime) Movable() bool {
 	return true
 }
 
-// MarshalLastAccessTime marshals time to bytes.
-func MarshalLastAccessTime(t time.Time) []byte {
+// Serialize converts t to bytes.
+func (t *LastAccessTime) Serialize() ([]byte, error) {
 	b := make([]byte, 8)
-	binary.PutVarint(b, t.Unix())
-	return b
+	binary.PutVarint(b, t.Time.Unix())
+	return b, nil
 }
 
-// UnmarshalLastAccessTime unmarshals time from bytes.
-func UnmarshalLastAccessTime(b []byte) (time.Time, error) {
+// Deserialize loads b into t.
+func (t *LastAccessTime) Deserialize(b []byte) error {
 	i, n := binary.Varint(b)
 	if n <= 0 {
-		return time.Time{}, fmt.Errorf("unmarshal last access time: %s", b)
+		return fmt.Errorf("unmarshal last access time: %s", b)
 	}
-	return time.Unix(int64(i), 0), nil
+	t.Time = time.Unix(int64(i), 0)
+	return nil
 }
