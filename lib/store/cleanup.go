@@ -9,6 +9,7 @@ import (
 	"github.com/andres-erbsen/clock"
 
 	"code.uber.internal/infra/kraken/lib/store/base"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
@@ -48,7 +49,7 @@ func (m *cleanupManager) deleteIdleFiles(op base.FileOp, tti time.Duration) erro
 		return fmt.Errorf("list names: %s", err)
 	}
 	for _, name := range names {
-		var lat base.LastAccessTime
+		var lat metadata.LastAccessTime
 		if err := op.GetFileMetadata(name, &lat); os.IsNotExist(err) {
 			continue
 		} else if err != nil {

@@ -11,6 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/utils/rwutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -85,7 +86,7 @@ func TestRefresh(t *testing.T) {
 	result, err := ioutil.ReadAll(f)
 	require.Equal(string(blob.Content), string(result))
 
-	var tm store.TorrentMeta
+	var tm metadata.TorrentMeta
 	require.NoError(mocks.fs.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
 	require.Equal(blob.MetaInfo, tm.MetaInfo)
 }

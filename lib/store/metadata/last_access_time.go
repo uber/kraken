@@ -1,4 +1,4 @@
-package base
+package metadata
 
 import (
 	"encoding/binary"
@@ -10,7 +10,7 @@ import (
 var _lastAccessTimeSuffix = "_last_access_time"
 
 func init() {
-	RegisterMetadata(regexp.MustCompile(_lastAccessTimeSuffix), &lastAccessTimeFactory{})
+	Register(regexp.MustCompile(_lastAccessTimeSuffix), &lastAccessTimeFactory{})
 }
 
 type lastAccessTimeFactory struct{}

@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/uuid"
@@ -131,7 +132,7 @@ func (u *Uploads) ListHashStates(path string, subtype PathSubType) ([]string, er
 	switch subtype {
 	case _hashstates:
 		var paths []string
-		u.store.RangeUploadMetadata(uuid, func(md store.Metadata) error {
+		u.store.RangeUploadMetadata(uuid, func(md metadata.Metadata) error {
 			if hs, ok := md.(*hashStateMetadata); ok {
 				p := stdpath.Join("localstore", "_uploads", uuid, hs.dockerPath())
 				paths = append(paths, p)

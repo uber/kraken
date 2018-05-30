@@ -8,6 +8,7 @@ import (
 	"github.com/willf/bitset"
 
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 )
@@ -37,7 +38,7 @@ func NewTorrentArchive(
 // file does not exist. Ignores namespace.
 func (a *TorrentArchive) Stat(namespace, name string) (*storage.TorrentInfo, error) {
 	downloadOrCache := a.fs.States().Download().Cache()
-	var tm store.TorrentMeta
+	var tm metadata.TorrentMeta
 	if err := downloadOrCache.GetMetadata(name, &tm); err != nil {
 		return nil, err
 	}
@@ -59,7 +60,7 @@ func (a *TorrentArchive) Stat(namespace, name string) (*storage.TorrentInfo, err
 // if no metainfo was found.
 func (a *TorrentArchive) CreateTorrent(namespace, name string) (storage.Torrent, error) {
 	downloadOrCache := a.fs.States().Download().Cache()
-	var tm store.TorrentMeta
+	var tm metadata.TorrentMeta
 	if err := downloadOrCache.GetMetadata(name, &tm); os.IsNotExist(err) {
 		downloadTimer := a.stats.Timer("metainfo_download").Start()
 		mi, err := a.metaInfoClient.Download(namespace, name)
@@ -96,7 +97,7 @@ func (a *TorrentArchive) CreateTorrent(namespace, name string) (storage.Torrent,
 // GetTorrent returns a Torrent for an existing metainfo / file on disk. Ignores namespace.
 func (a *TorrentArchive) GetTorrent(namespace, name string) (storage.Torrent, error) {
 	downloadOrCache := a.fs.States().Download().Cache()
-	var tm store.TorrentMeta
+	var tm metadata.TorrentMeta
 	if err := downloadOrCache.GetMetadata(name, &tm); err != nil {
 		return nil, fmt.Errorf("get metainfo: %s", err)
 	}

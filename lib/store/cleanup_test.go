@@ -8,6 +8,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store/base"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/utils/testutil"
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
@@ -100,4 +101,48 @@ func TestCleanupManagerAddJob(t *testing.T) {
 
 	_, err := op.GetFileStat(name)
 	require.True(os.IsNotExist(err))
+}
+
+func TestCleanupManagerSkipsPersistedFiles(t *testing.T) {
+	require := require.New(t)
+
+	clk := clock.NewMock()
+	clk.Set(time.Now())
+
+	tti := 24 * time.Hour
+
+	m := newCleanupManager(clk)
+
+	state, op, cleanup := fileOpFixture(clk)
+	defer cleanup()
+
+	var names []string
+	for i := 0; i < 100; i++ {
+		names = append(names, core.DigestFixture().Hex())
+	}
+
+	idle := names[:50]
+	for _, name := range idle {
+		require.NoError(op.CreateFile(name, state, 0))
+	}
+
+	persisted := names[50:]
+	for _, name := range persisted {
+		require.NoError(op.CreateFile(name, state, 0))
+		_, err := op.SetFileMetadata(name, metadata.NewPersist(true))
+		require.NoError(err)
+	}
+
+	clk.Add(tti + 1)
+
+	require.NoError(m.deleteIdleFiles(op, tti))
+
+	for _, name := range idle {
+		_, err := op.GetFileStat(name)
+		require.True(os.IsNotExist(err))
+	}
+	for _, name := range persisted {
+		_, err := op.GetFileStat(name)
+		require.NoError(err)
+	}
 }

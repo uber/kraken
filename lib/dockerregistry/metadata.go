@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 )
 
 const (
@@ -15,15 +15,15 @@ const (
 )
 
 func init() {
-	store.RegisterMetadata(regexp.MustCompile(_startedAtSuffix), &startedAtMetadataFactory{})
+	metadata.Register(regexp.MustCompile(_startedAtSuffix), &startedAtMetadataFactory{})
 
 	// TODO(evelynl): use _ instead of /, otherwise it won't support reload.
-	store.RegisterMetadata(regexp.MustCompile("_hashstates/\\w+/\\w+$"), &hashStateMetadataFactory{})
+	metadata.Register(regexp.MustCompile("_hashstates/\\w+/\\w+$"), &hashStateMetadataFactory{})
 }
 
 type startedAtMetadataFactory struct{}
 
-func (f startedAtMetadataFactory) Create(suffix string) store.Metadata {
+func (f startedAtMetadataFactory) Create(suffix string) metadata.Metadata {
 	return &startedAtMetadata{}
 }
 
@@ -59,7 +59,7 @@ func (s *startedAtMetadata) Deserialize(b []byte) error {
 
 type hashStateMetadataFactory struct{}
 
-func (f hashStateMetadataFactory) Create(suffix string) store.Metadata {
+func (f hashStateMetadataFactory) Create(suffix string) metadata.Metadata {
 	parts := strings.Split(suffix, "/")
 	if len(parts) != 3 {
 		return nil

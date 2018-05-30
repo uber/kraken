@@ -7,6 +7,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
 	"code.uber.internal/infra/kraken/mocks/tracker/metainfoclient"
@@ -101,7 +102,7 @@ func TestTorrentArchiveCreateTorrent(t *testing.T) {
 	require.NotNil(tor)
 
 	// Check metainfo.
-	var tm store.TorrentMeta
+	var tm metadata.TorrentMeta
 	require.NoError(mocks.fs.States().Download().Cache().GetMetadata(mi.Name(), &tm))
 	require.Equal(mi, tm.MetaInfo)
 

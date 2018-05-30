@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 )
 
 type lockLevel int
@@ -34,13 +36,13 @@ type FileOp interface {
 	GetFileReader(name string) (FileReader, error)
 	GetFileReadWriter(name string) (FileReadWriter, error)
 
-	GetFileMetadata(name string, md Metadata) error
-	SetFileMetadata(name string, md Metadata) (bool, error)
-	SetFileMetadataAt(name string, md Metadata, b []byte, offset int64) (bool, error)
-	GetOrSetFileMetadata(name string, md Metadata) error
-	DeleteFileMetadata(name string, md Metadata) error
+	GetFileMetadata(name string, md metadata.Metadata) error
+	SetFileMetadata(name string, md metadata.Metadata) (bool, error)
+	SetFileMetadataAt(name string, md metadata.Metadata, b []byte, offset int64) (bool, error)
+	GetOrSetFileMetadata(name string, md metadata.Metadata) error
+	DeleteFileMetadata(name string, md metadata.Metadata) error
 
-	RangeFileMetadata(name string, f func(Metadata) error) error
+	RangeFileMetadata(name string, f func(metadata.Metadata) error) error
 
 	ListNames() ([]string, error)
 
@@ -352,7 +354,7 @@ func (op *localFileOp) GetFileReadWriter(name string) (w FileReadWriter, err err
 }
 
 // GetFileMetadata loads metadata assocciated with the file.
-func (op *localFileOp) GetFileMetadata(name string, md Metadata) (err error) {
+func (op *localFileOp) GetFileMetadata(name string, md metadata.Metadata) (err error) {
 	if loadErr := op.lockHelper(name, _lockLevelPeek, func(name string, entry FileEntry) {
 		err = entry.GetMetadata(md)
 	}); loadErr != nil {
@@ -362,7 +364,7 @@ func (op *localFileOp) GetFileMetadata(name string, md Metadata) (err error) {
 }
 
 // SetFileMetadata creates or overwrites metadata assocciate with the file.
-func (op *localFileOp) SetFileMetadata(name string, md Metadata) (updated bool, err error) {
+func (op *localFileOp) SetFileMetadata(name string, md metadata.Metadata) (updated bool, err error) {
 	if loadErr := op.lockHelper(name, _lockLevelWrite, func(name string, entry FileEntry) {
 		updated, err = entry.SetMetadata(md)
 	}); loadErr != nil {
@@ -373,7 +375,7 @@ func (op *localFileOp) SetFileMetadata(name string, md Metadata) (updated bool, 
 
 // SetFileMetadataAt overwrites metadata assocciate with the file with content.
 func (op *localFileOp) SetFileMetadataAt(
-	name string, md Metadata, b []byte, offset int64) (updated bool, err error) {
+	name string, md metadata.Metadata, b []byte, offset int64) (updated bool, err error) {
 
 	if loadErr := op.lockHelper(name, _lockLevelWrite, func(name string, entry FileEntry) {
 		updated, err = entry.SetMetadataAt(md, b, offset)
@@ -384,7 +386,7 @@ func (op *localFileOp) SetFileMetadataAt(
 }
 
 // GetOrSetFileMetadata see localFileEntryInternal.
-func (op *localFileOp) GetOrSetFileMetadata(name string, md Metadata) (err error) {
+func (op *localFileOp) GetOrSetFileMetadata(name string, md metadata.Metadata) (err error) {
 	if loadErr := op.lockHelper(name, _lockLevelWrite, func(name string, entry FileEntry) {
 		err = entry.GetOrSetMetadata(md)
 	}); loadErr != nil {
@@ -394,7 +396,7 @@ func (op *localFileOp) GetOrSetFileMetadata(name string, md Metadata) (err error
 }
 
 // DeleteFileMetadata deletes metadata of the specified type for a file.
-func (op *localFileOp) DeleteFileMetadata(name string, md Metadata) (err error) {
+func (op *localFileOp) DeleteFileMetadata(name string, md metadata.Metadata) (err error) {
 	loadErr := op.lockHelper(name, _lockLevelWrite, func(name string, entry FileEntry) {
 		err = entry.DeleteMetadata(md)
 	})
@@ -405,7 +407,7 @@ func (op *localFileOp) DeleteFileMetadata(name string, md Metadata) (err error) 
 }
 
 // RangeFileMetadata loops through all metadata of one file and applies function f, until an error happens.
-func (op *localFileOp) RangeFileMetadata(name string, f func(md Metadata) error) (err error) {
+func (op *localFileOp) RangeFileMetadata(name string, f func(md metadata.Metadata) error) (err error) {
 	loadErr := op.lockHelper(name, _lockLevelWrite, func(name string, entry FileEntry) {
 		err = entry.RangeMetadata(f)
 	})

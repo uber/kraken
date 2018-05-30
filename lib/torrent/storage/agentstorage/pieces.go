@@ -6,13 +6,14 @@ import (
 	"sync"
 
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
 const _pieceStatusSuffix = "_status"
 
 func init() {
-	store.RegisterMetadata(regexp.MustCompile(_pieceStatusSuffix), pieceStatusMetadataFactory{})
+	metadata.Register(regexp.MustCompile(_pieceStatusSuffix), pieceStatusMetadataFactory{})
 }
 
 type pieceStatus int
@@ -25,7 +26,7 @@ const (
 
 type pieceStatusMetadataFactory struct{}
 
-func (m pieceStatusMetadataFactory) Create(suffix string) store.Metadata {
+func (m pieceStatusMetadataFactory) Create(suffix string) metadata.Metadata {
 	return &pieceStatusMetadata{}
 }
 

@@ -11,6 +11,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
@@ -24,7 +25,7 @@ func prepareFileStore(fs store.FileStore, mi *core.MetaInfo) {
 	if err := fs.CreateDownloadFile(mi.Name(), mi.Info.Length); err != nil {
 		panic(err)
 	}
-	if _, err := fs.States().Download().SetMetadata(mi.Name(), store.NewTorrentMeta(mi)); err != nil {
+	if _, err := fs.States().Download().SetMetadata(mi.Name(), metadata.NewTorrentMeta(mi)); err != nil {
 		panic(err)
 	}
 }

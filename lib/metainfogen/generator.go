@@ -5,6 +5,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 )
 
 // Generator wraps static piece length configuration in order to determinstically
@@ -38,7 +39,7 @@ func (g *Generator) Generate(d core.Digest) error {
 	if err != nil {
 		return fmt.Errorf("create metainfo: %s", err)
 	}
-	if _, err := g.fs.SetCacheFileMetadata(d.Hex(), store.NewTorrentMeta(mi)); err != nil {
+	if _, err := g.fs.SetCacheFileMetadata(d.Hex(), metadata.NewTorrentMeta(mi)); err != nil {
 		return fmt.Errorf("set metainfo: %s", err)
 	}
 	return nil

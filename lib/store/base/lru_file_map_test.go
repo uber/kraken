@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
@@ -68,7 +69,7 @@ func TestLRUCreateLastAccessTimeOnCreateFile(t *testing.T) {
 	_, err := os.Stat(path.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
 	require.NoError(err)
 
-	var lat LastAccessTime
+	var lat metadata.LastAccessTime
 	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, &lat))
 	require.Equal(t0.Truncate(time.Second), lat.Time)
 }
@@ -91,7 +92,7 @@ func TestLRUUpdateLastAccessTimeOnMoveFrom(t *testing.T) {
 
 	require.NoError(store.NewFileOp().AcceptState(s2).MoveFileFrom(source.Name(), s2, source.Name()))
 
-	var lat LastAccessTime
+	var lat metadata.LastAccessTime
 	require.NoError(store.NewFileOp().AcceptState(s2).GetFileMetadata(source.Name(), &lat))
 	require.Equal(t0.Truncate(time.Second), lat.Time)
 }
@@ -115,7 +116,7 @@ func TestLRUUpdateLastAccessTimeOnMove(t *testing.T) {
 	clk.Add(time.Hour)
 	require.NoError(store.NewFileOp().AcceptState(s1).MoveFile(fn, s2))
 
-	var lat LastAccessTime
+	var lat metadata.LastAccessTime
 	require.NoError(store.NewFileOp().AcceptState(s2).GetFileMetadata(fn, &lat))
 	require.Equal(clk.Now().Truncate(time.Second), lat.Time)
 }
@@ -137,7 +138,7 @@ func TestLRUUpdateLastAccessTimeOnOpen(t *testing.T) {
 	require.NoError(store.NewFileOp().AcceptState(s1).CreateFile(fn, s1, 1))
 
 	checkLAT := func(op FileOp, expected time.Time) {
-		var lat LastAccessTime
+		var lat metadata.LastAccessTime
 		require.NoError(op.GetFileMetadata(fn, &lat))
 		require.Equal(expected.Truncate(time.Second), lat.Time)
 	}
@@ -179,7 +180,7 @@ func TestLRUKeepLastAccessTimeOnPeek(t *testing.T) {
 	_, err := store.NewFileOp().AcceptState(s1).GetFileStat(fn)
 	require.NoError(err)
 
-	var lat LastAccessTime
+	var lat metadata.LastAccessTime
 	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, &lat))
 	require.Equal(t0.Truncate(time.Second), lat.Time)
 

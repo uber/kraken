@@ -20,6 +20,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/errutil"
 	"code.uber.internal/infra/kraken/utils/handler"
@@ -300,7 +301,7 @@ func (s Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 	if err != nil {
 		return handler.Errorf("create metainfo: %s", err)
 	}
-	if _, err := s.fileStore.SetCacheFileMetadata(d.Hex(), store.NewTorrentMeta(mi)); err != nil {
+	if _, err := s.fileStore.SetCacheFileMetadata(d.Hex(), metadata.NewTorrentMeta(mi)); err != nil {
 		return handler.Errorf("set metainfo: %s", err)
 	}
 	return nil
@@ -311,7 +312,7 @@ func (s Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 // This download is asynchronous and getMetaInfo will immediately return a
 // "202 Accepted" server error.
 func (s Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
-	var tm store.TorrentMeta
+	var tm metadata.TorrentMeta
 	if err := s.fileStore.GetCacheFileMetadata(d.Hex(), &tm); os.IsNotExist(err) {
 		return nil, s.startRemoteBlobDownload(namespace, d, true)
 	} else if err != nil {

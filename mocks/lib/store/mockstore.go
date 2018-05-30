@@ -7,6 +7,7 @@ package mockstore
 import (
 	store "code.uber.internal/infra/kraken/lib/store"
 	base "code.uber.internal/infra/kraken/lib/store/base"
+	metadata "code.uber.internal/infra/kraken/lib/store/metadata"
 	gomock "github.com/golang/mock/gomock"
 	io "io"
 	os "os"
@@ -184,7 +185,7 @@ func (mr *MockFileStoreMockRecorder) GetDownloadOrCacheFileReader(arg0 interface
 }
 
 // GetUploadFileMetadata mocks base method
-func (m *MockFileStore) GetUploadFileMetadata(arg0 string, arg1 base.Metadata) error {
+func (m *MockFileStore) GetUploadFileMetadata(arg0 string, arg1 metadata.Metadata) error {
 	ret := m.ctrl.Call(m, "GetUploadFileMetadata", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -283,7 +284,7 @@ func (mr *MockFileStoreMockRecorder) MoveUploadFileToCache(arg0, arg1 interface{
 }
 
 // RangeUploadMetadata mocks base method
-func (m *MockFileStore) RangeUploadMetadata(arg0 string, arg1 func(base.Metadata) error) error {
+func (m *MockFileStore) RangeUploadMetadata(arg0 string, arg1 func(metadata.Metadata) error) error {
 	ret := m.ctrl.Call(m, "RangeUploadMetadata", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -295,7 +296,7 @@ func (mr *MockFileStoreMockRecorder) RangeUploadMetadata(arg0, arg1 interface{})
 }
 
 // SetUploadFileMetadata mocks base method
-func (m *MockFileStore) SetUploadFileMetadata(arg0 string, arg1 base.Metadata) error {
+func (m *MockFileStore) SetUploadFileMetadata(arg0 string, arg1 metadata.Metadata) error {
 	ret := m.ctrl.Call(m, "SetUploadFileMetadata", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -526,7 +527,7 @@ func (mr *MockOriginFileStoreMockRecorder) DeleteCacheFile(arg0 interface{}) *go
 }
 
 // GetCacheFileMetadata mocks base method
-func (m *MockOriginFileStore) GetCacheFileMetadata(arg0 string, arg1 base.Metadata) error {
+func (m *MockOriginFileStore) GetCacheFileMetadata(arg0 string, arg1 metadata.Metadata) error {
 	ret := m.ctrl.Call(m, "GetCacheFileMetadata", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -564,7 +565,7 @@ func (mr *MockOriginFileStoreMockRecorder) GetCacheFileStat(arg0 interface{}) *g
 }
 
 // GetOrSetCacheFileMetadata mocks base method
-func (m *MockOriginFileStore) GetOrSetCacheFileMetadata(arg0 string, arg1 base.Metadata) error {
+func (m *MockOriginFileStore) GetOrSetCacheFileMetadata(arg0 string, arg1 metadata.Metadata) error {
 	ret := m.ctrl.Call(m, "GetOrSetCacheFileMetadata", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -627,7 +628,7 @@ func (mr *MockOriginFileStoreMockRecorder) MoveUploadFileToCache(arg0, arg1 inte
 }
 
 // RangeUploadMetadata mocks base method
-func (m *MockOriginFileStore) RangeUploadMetadata(arg0 string, arg1 func(base.Metadata) error) error {
+func (m *MockOriginFileStore) RangeUploadMetadata(arg0 string, arg1 func(metadata.Metadata) error) error {
 	ret := m.ctrl.Call(m, "RangeUploadMetadata", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -639,7 +640,7 @@ func (mr *MockOriginFileStoreMockRecorder) RangeUploadMetadata(arg0, arg1 interf
 }
 
 // SetCacheFileMetadata mocks base method
-func (m *MockOriginFileStore) SetCacheFileMetadata(arg0 string, arg1 base.Metadata) (bool, error) {
+func (m *MockOriginFileStore) SetCacheFileMetadata(arg0 string, arg1 metadata.Metadata) (bool, error) {
 	ret := m.ctrl.Call(m, "SetCacheFileMetadata", arg0, arg1)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)

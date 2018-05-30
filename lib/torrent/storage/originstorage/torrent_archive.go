@@ -8,6 +8,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/utils/log"
 
@@ -33,7 +34,7 @@ func (a *TorrentArchive) getMetaInfo(namespace, name string) (*core.MetaInfo, er
 	if err != nil {
 		return nil, fmt.Errorf("new digest: %s", err)
 	}
-	var tm store.TorrentMeta
+	var tm metadata.TorrentMeta
 	if err := a.fs.GetCacheFileMetadata(name, &tm); err != nil {
 		if os.IsNotExist(err) {
 			refreshErr := a.blobRefresher.Refresh(namespace, d)
