@@ -68,11 +68,9 @@ func TestLRUCreateLastAccessTimeOnCreateFile(t *testing.T) {
 	_, err := os.Stat(path.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
 	require.NoError(err)
 
-	b, err := store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, NewLastAccessTime())
-	require.NoError(err)
-	lat, err := UnmarshalLastAccessTime(b)
-	require.NoError(err)
-	require.Equal(t0.Truncate(time.Second), lat)
+	var lat LastAccessTime
+	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, &lat))
+	require.Equal(t0.Truncate(time.Second), lat.Time)
 }
 
 func TestLRUUpdateLastAccessTimeOnMoveFrom(t *testing.T) {
@@ -93,11 +91,9 @@ func TestLRUUpdateLastAccessTimeOnMoveFrom(t *testing.T) {
 
 	require.NoError(store.NewFileOp().AcceptState(s2).MoveFileFrom(source.Name(), s2, source.Name()))
 
-	b, err := store.NewFileOp().AcceptState(s2).GetFileMetadata(source.Name(), NewLastAccessTime())
-	require.NoError(err)
-	lat, err := UnmarshalLastAccessTime(b)
-	require.NoError(err)
-	require.Equal(t0.Truncate(time.Second), lat)
+	var lat LastAccessTime
+	require.NoError(store.NewFileOp().AcceptState(s2).GetFileMetadata(source.Name(), &lat))
+	require.Equal(t0.Truncate(time.Second), lat.Time)
 }
 
 func TestLRUUpdateLastAccessTimeOnMove(t *testing.T) {
@@ -119,11 +115,9 @@ func TestLRUUpdateLastAccessTimeOnMove(t *testing.T) {
 	clk.Add(time.Hour)
 	require.NoError(store.NewFileOp().AcceptState(s1).MoveFile(fn, s2))
 
-	b, err := store.NewFileOp().AcceptState(s2).GetFileMetadata(fn, NewLastAccessTime())
-	require.NoError(err)
-	lat, err := UnmarshalLastAccessTime(b)
-	require.NoError(err)
-	require.Equal(clk.Now().Truncate(time.Second), lat)
+	var lat LastAccessTime
+	require.NoError(store.NewFileOp().AcceptState(s2).GetFileMetadata(fn, &lat))
+	require.Equal(clk.Now().Truncate(time.Second), lat.Time)
 }
 
 func TestLRUUpdateLastAccessTimeOnOpen(t *testing.T) {
@@ -143,11 +137,9 @@ func TestLRUUpdateLastAccessTimeOnOpen(t *testing.T) {
 	require.NoError(store.NewFileOp().AcceptState(s1).CreateFile(fn, s1, 1))
 
 	checkLAT := func(op FileOp, expected time.Time) {
-		b, err := op.GetFileMetadata(fn, NewLastAccessTime())
-		require.NoError(err)
-		lat, err := UnmarshalLastAccessTime(b)
-		require.NoError(err)
-		require.Equal(expected.Truncate(time.Second), lat)
+		var lat LastAccessTime
+		require.NoError(op.GetFileMetadata(fn, &lat))
+		require.Equal(expected.Truncate(time.Second), lat.Time)
 	}
 
 	// No LAT change below resolution.
@@ -187,19 +179,14 @@ func TestLRUKeepLastAccessTimeOnPeek(t *testing.T) {
 	_, err := store.NewFileOp().AcceptState(s1).GetFileStat(fn)
 	require.NoError(err)
 
-	b, err := store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, NewLastAccessTime())
-	require.NoError(err)
-	lat, err := UnmarshalLastAccessTime(b)
-	require.NoError(err)
-	require.Equal(t0.Truncate(time.Second), lat)
+	var lat LastAccessTime
+	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, &lat))
+	require.Equal(t0.Truncate(time.Second), lat.Time)
 
 	clk.Add(time.Hour)
 	_, err = store.NewFileOp().AcceptState(s1).GetFilePath(fn)
 	require.NoError(err)
 
-	b, err = store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, NewLastAccessTime())
-	require.NoError(err)
-	lat, err = UnmarshalLastAccessTime(b)
-	require.NoError(err)
-	require.Equal(t0.Truncate(time.Second), lat)
+	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, &lat))
+	require.Equal(t0.Truncate(time.Second), lat.Time)
 }

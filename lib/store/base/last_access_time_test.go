@@ -7,13 +7,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMarshalAndUnmarshalLastAccessTime(t *testing.T) {
+func TestLastAccessTimeSerialization(t *testing.T) {
 	require := require.New(t)
 
-	lat := time.Now().Add(-time.Hour)
-	b := MarshalLastAccessTime(lat)
-
-	newLat, err := UnmarshalLastAccessTime(b)
+	lat := NewLastAccessTime(time.Now().Add(-time.Hour))
+	b, err := lat.Serialize()
 	require.NoError(err)
-	require.Equal(lat.Truncate(time.Second), newLat)
+
+	var newLat LastAccessTime
+	require.NoError(newLat.Deserialize(b))
+	require.Equal(lat.Time.Unix(), newLat.Time.Unix())
 }

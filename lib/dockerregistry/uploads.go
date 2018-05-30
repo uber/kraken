@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	stdpath "path"
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
@@ -42,7 +43,11 @@ func (u *Uploads) GetContent(path string, subtype PathSubType) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		return u.store.GetUploadFileHashState(uuid, algo, offset)
+		hs := newHashStateMetadata(algo, offset)
+		if err := u.store.GetUploadFileMetadata(uuid, hs); err != nil {
+			return nil, err
+		}
+		return hs.Serialize()
 	}
 	return nil, InvalidRequestError{path}
 }
@@ -77,7 +82,11 @@ func (u *Uploads) PutUploadContent(path string, subtype PathSubType, content []b
 		if err != nil {
 			return err
 		}
-		return u.store.SetUploadFileHashState(uuid, content, algo, offset)
+		hs := newHashStateMetadata(algo, offset)
+		if err := hs.Deserialize(content); err != nil {
+			return fmt.Errorf("deserialize hash state: %s", err)
+		}
+		return u.store.SetUploadFileMetadata(uuid, hs)
 	}
 	return InvalidRequestError{path}
 }
@@ -121,7 +130,15 @@ func (u *Uploads) ListHashStates(path string, subtype PathSubType) ([]string, er
 	}
 	switch subtype {
 	case _hashstates:
-		return u.store.ListUploadFileHashStatePaths(uuid)
+		var paths []string
+		u.store.RangeUploadMetadata(uuid, func(md store.Metadata) error {
+			if hs, ok := md.(*hashStateMetadata); ok {
+				p := stdpath.Join("localstore", "_uploads", uuid, hs.dockerPath())
+				paths = append(paths, p)
+			}
+			return nil
+		})
+		return paths, nil
 	}
 	return nil, InvalidRequestError{path}
 }
@@ -145,12 +162,16 @@ func (u *Uploads) initUpload(uuid string) error {
 	if err := u.store.CreateUploadFile(uuid, 0); err != nil {
 		return err
 	}
-
-	return u.store.SetUploadFileStartedAt(uuid, []byte(time.Now().Format(time.RFC3339)))
+	s := newStartedAtMetadata(time.Now())
+	return u.store.SetUploadFileMetadata(uuid, s)
 }
 
 func (u *Uploads) getUploadStartTime(dir, uuid string) ([]byte, error) {
-	return u.store.GetUploadFileStartedAt(uuid)
+	var s startedAtMetadata
+	if err := u.store.GetUploadFileMetadata(uuid, &s); err != nil {
+		return nil, err
+	}
+	return s.Serialize()
 }
 
 func (u *Uploads) getUploadReader(uuid string, offset int64) (io.ReadCloser, error) {

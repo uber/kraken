@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/uber-go/tally"
+	"github.com/willf/bitset"
 
-	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
@@ -37,23 +37,21 @@ func NewTorrentArchive(
 // file does not exist. Ignores namespace.
 func (a *TorrentArchive) Stat(namespace, name string) (*storage.TorrentInfo, error) {
 	downloadOrCache := a.fs.States().Download().Cache()
-
-	raw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
-	if err != nil {
+	var tm store.TorrentMeta
+	if err := downloadOrCache.GetMetadata(name, &tm); err != nil {
 		return nil, err
 	}
-	mi, err := core.DeserializeMetaInfo(raw)
-	if err != nil {
-		return nil, fmt.Errorf("deserialize metainfo: %s", err)
-	}
-
-	raw, err = downloadOrCache.GetMetadata(name, store.NewPieceStatus())
-	if err != nil {
+	var psm pieceStatusMetadata
+	if err := downloadOrCache.GetMetadata(name, &psm); err != nil {
 		return nil, err
 	}
-	b := newBitfieldFromPieceStatusBytes(name, raw)
-
-	return storage.NewTorrentInfo(mi, b), nil
+	b := bitset.New(uint(len(psm.pieces)))
+	for i, p := range psm.pieces {
+		if p.status == _complete {
+			b.Set(uint(i))
+		}
+	}
+	return storage.NewTorrentInfo(tm.MetaInfo, b), nil
 }
 
 // CreateTorrent returns a Torrent for either an existing metainfo / file on
@@ -61,9 +59,8 @@ func (a *TorrentArchive) Stat(namespace, name string) (*storage.TorrentInfo, err
 // if no metainfo was found.
 func (a *TorrentArchive) CreateTorrent(namespace, name string) (storage.Torrent, error) {
 	downloadOrCache := a.fs.States().Download().Cache()
-
-	miRaw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
-	if os.IsNotExist(err) {
+	var tm store.TorrentMeta
+	if err := downloadOrCache.GetMetadata(name, &tm); os.IsNotExist(err) {
 		downloadTimer := a.stats.Timer("metainfo_download").Start()
 		mi, err := a.metaInfoClient.Download(namespace, name)
 		if err != nil {
@@ -82,23 +79,14 @@ func (a *TorrentArchive) CreateTorrent(namespace, name string) (storage.Torrent,
 		if err := a.fs.EnsureDownloadOrCacheFilePresent(mi.Name(), mi.Info.Length); err != nil {
 			return nil, fmt.Errorf("ensure download/cache file present: %s", err)
 		}
-		miRaw, err = mi.Serialize()
-		if err != nil {
-			return nil, fmt.Errorf("serialize downloaded metainfo: %s", err)
-		}
-		miRaw, err = downloadOrCache.GetOrSetMetadata(name, store.NewTorrentMeta(), miRaw)
-		if err != nil {
+		tm.MetaInfo = mi
+		if err := downloadOrCache.GetOrSetMetadata(name, &tm); err != nil {
 			return nil, fmt.Errorf("get or set metainfo: %s", err)
 		}
 	} else if err != nil {
 		return nil, fmt.Errorf("get metainfo: %s", err)
 	}
-	mi, err := core.DeserializeMetaInfo(miRaw)
-	if err != nil {
-		return nil, fmt.Errorf("parse metainfo: %s", err)
-	}
-
-	t, err := NewTorrent(a.fs, mi)
+	t, err := NewTorrent(a.fs, tm.MetaInfo)
 	if err != nil {
 		return nil, fmt.Errorf("initialize torrent: %s", err)
 	}
@@ -108,16 +96,11 @@ func (a *TorrentArchive) CreateTorrent(namespace, name string) (storage.Torrent,
 // GetTorrent returns a Torrent for an existing metainfo / file on disk. Ignores namespace.
 func (a *TorrentArchive) GetTorrent(namespace, name string) (storage.Torrent, error) {
 	downloadOrCache := a.fs.States().Download().Cache()
-
-	miRaw, err := downloadOrCache.GetMetadata(name, store.NewTorrentMeta())
-	if err != nil {
+	var tm store.TorrentMeta
+	if err := downloadOrCache.GetMetadata(name, &tm); err != nil {
 		return nil, fmt.Errorf("get metainfo: %s", err)
 	}
-	mi, err := core.DeserializeMetaInfo(miRaw)
-	if err != nil {
-		return nil, fmt.Errorf("parse metainfo: %s", err)
-	}
-	t, err := NewTorrent(a.fs, mi)
+	t, err := NewTorrent(a.fs, tm.MetaInfo)
 	if err != nil {
 		return nil, fmt.Errorf("initialize torrent: %s", err)
 	}

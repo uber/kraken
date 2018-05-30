@@ -96,7 +96,7 @@ func (fm *lruFileMap) syncGetAndTouch(name string) (*fileEntryWithAccessTime, bo
 		// Only update if new timestamp is <timeResolution> newer than previous
 		// value.
 		e.lastAccessTime = t
-		e.fe.SetMetadata(NewLastAccessTime(), MarshalLastAccessTime(t))
+		e.fe.SetMetadata(NewLastAccessTime(t))
 	}
 
 	return e, true
@@ -206,30 +206,17 @@ func (fm *lruFileMap) LoadOrStore(
 	fm.add(name, e)
 	fm.Unlock()
 
-	t := fm.clk.Now()
-	b := MarshalLastAccessTime(t)
-	if pb, err := e.fe.GetMetadata(NewLastAccessTime()); err != nil {
+	lat := NewLastAccessTime(fm.clk.Now())
+	if err := e.fe.GetMetadata(lat); err != nil {
 		// Set LAT if it doesn't exist on disk or cannot be read.
 		if !os.IsNotExist(err) {
 			log.With("name", e.fe.GetName()).Errorf("Error reading LAT: %s", err)
 		}
-		if _, err := e.fe.SetMetadata(NewLastAccessTime(), b); err != nil {
+		if _, err := e.fe.SetMetadata(lat); err != nil {
 			log.With("name", e.fe.GetName()).Errorf("Error setting LAT: %s", err)
 		}
-		e.lastAccessTime = t
-	} else {
-		// This file is reloaded from disk, don't touch LAT if possible.
-		if prevT, err := UnmarshalLastAccessTime(pb); err != nil {
-			log.With("name", e.fe.GetName()).Errorf("Error parsing LAT: %s", err)
-			// LAT data cannot be parsed, use new timestamp.
-			if _, err := e.fe.SetMetadata(NewLastAccessTime(), b); err != nil {
-				log.With("name", e.fe.GetName()).Errorf("Error setting LAT: %s", err)
-			}
-			e.lastAccessTime = t
-		} else {
-			e.lastAccessTime = prevT
-		}
 	}
+	e.lastAccessTime = lat.Time
 
 	if err := f(name, e.fe); err != nil {
 		// Remove from map while the entry lock is still being held.

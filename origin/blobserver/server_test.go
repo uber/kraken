@@ -421,8 +421,8 @@ func TestTransferBlob(t *testing.T) {
 	ensureHasBlob(t, cp.Provide(master1), blob)
 
 	// Ensure metainfo was generated.
-	_, err = s.fs.GetCacheFileMetadata(blob.Digest.Hex(), store.NewTorrentMeta())
-	require.NoError(err)
+	var tm store.TorrentMeta
+	require.NoError(s.fs.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
 
 	// Pushing again should be a no-op.
 	err = cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))

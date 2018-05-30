@@ -300,11 +300,7 @@ func (s Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 	if err != nil {
 		return handler.Errorf("create metainfo: %s", err)
 	}
-	raw, err := mi.Serialize()
-	if err != nil {
-		return handler.Errorf("serialize metainfo: %s", err)
-	}
-	if _, err := s.fileStore.SetCacheFileMetadata(d.Hex(), store.NewTorrentMeta(), raw); err != nil {
+	if _, err := s.fileStore.SetCacheFileMetadata(d.Hex(), store.NewTorrentMeta(mi)); err != nil {
 		return handler.Errorf("set metainfo: %s", err)
 	}
 	return nil
@@ -315,14 +311,13 @@ func (s Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 // This download is asynchronous and getMetaInfo will immediately return a
 // "202 Accepted" server error.
 func (s Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
-	raw, err := s.fileStore.GetCacheFileMetadata(d.Hex(), store.NewTorrentMeta())
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, s.startRemoteBlobDownload(namespace, d, true)
-		}
+	var tm store.TorrentMeta
+	if err := s.fileStore.GetCacheFileMetadata(d.Hex(), &tm); os.IsNotExist(err) {
+		return nil, s.startRemoteBlobDownload(namespace, d, true)
+	} else if err != nil {
 		return nil, handler.Errorf("get cache metadata: %s", err)
 	}
-	return raw, nil
+	return tm.Serialize()
 }
 
 type localReplicationHook struct {

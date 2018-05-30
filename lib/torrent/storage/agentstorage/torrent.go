@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sync"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -18,120 +17,6 @@ import (
 )
 
 var errWritePieceConflict = errors.New("piece is already being written to")
-
-type pieceStatus int
-
-const (
-	_empty pieceStatus = iota
-	_complete
-	_dirty
-)
-
-func newBitfieldFromPieceStatusBytes(name string, raw []byte) *bitset.BitSet {
-	bitfield := bitset.New(uint(len(raw)))
-	for i, b := range raw {
-		status := pieceStatus(b)
-		if status != _empty && status != _complete {
-			log.Errorf("Unexpected status at %d in piece metadata %s: %d", i, name, status)
-			status = _empty
-		}
-		if status == _complete {
-			bitfield.Set(uint(i))
-		}
-	}
-	return bitfield
-}
-
-type piece struct {
-	sync.RWMutex
-	status pieceStatus
-}
-
-func (p *piece) complete() bool {
-	p.RLock()
-	defer p.RUnlock()
-	return p.status == _complete
-}
-
-func (p *piece) dirty() bool {
-	p.RLock()
-	defer p.RUnlock()
-	return p.status == _dirty
-}
-
-func (p *piece) tryMarkDirty() (dirty, complete bool) {
-	p.Lock()
-	defer p.Unlock()
-
-	switch p.status {
-	case _empty:
-		p.status = _dirty
-	case _dirty:
-		dirty = true
-	case _complete:
-		complete = true
-	default:
-		log.Fatalf("Unknown piece status: %d", p.status)
-	}
-	return
-}
-
-func (p *piece) markEmpty() {
-	p.Lock()
-	defer p.Unlock()
-	p.status = _empty
-}
-
-func (p *piece) markComplete() {
-	p.Lock()
-	defer p.Unlock()
-	p.status = _complete
-}
-
-func makeEmptyPieceMetadata(n int) []byte {
-	return make([]byte, n)
-}
-
-func makeCompletePieceMetadata(n int) []byte {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = byte(_complete)
-	}
-	return b
-}
-
-// restorePieces reads piece metadata from disk and restores the in-memory piece
-// statuses. A naive solution would be to read the entire blob from disk and
-// hash the pieces to determine completion status -- however, this is very
-// expensive. Instead, Torrent tracks completed pieces on disk via metadata
-// as they are written.
-func restorePieces(name string, fs store.FileStore, numPieces int) (pieces []*piece, numComplete int, err error) {
-	raw, err := fs.States().Download().GetOrSetMetadata(
-		name, store.NewPieceStatus(), makeEmptyPieceMetadata(numPieces))
-	if fs.InCacheError(err) {
-		// File is in cache state -- initialize completed pieces.
-		pieces = make([]*piece, numPieces)
-		for i := range pieces {
-			pieces[i] = &piece{status: _complete}
-		}
-		return pieces, numPieces, nil
-	} else if err != nil {
-		return nil, 0, fmt.Errorf("get or set piece metadata: %s", err)
-	}
-
-	bitfield := newBitfieldFromPieceStatusBytes(name, raw)
-	pieces = make([]*piece, numPieces)
-
-	for i := 0; i < numPieces; i++ {
-		if bitfield.Test(uint(i)) {
-			pieces[i] = &piece{status: _complete}
-		} else {
-			pieces[i] = &piece{status: _empty}
-		}
-	}
-
-	return pieces, int(bitfield.Count()), nil
-}
 
 // Torrent implements a Torrent on top of an AgentFileStore.
 // It Allows concurrent writes on distinct pieces, and concurrent reads on all
@@ -240,7 +125,7 @@ func (t *Torrent) getPiece(pi int) (*piece, error) {
 // markPieceComplete must only be called once per piece.
 func (t *Torrent) markPieceComplete(pi int) error {
 	updated, err := t.store.States().Download().SetMetadataAt(
-		t.Name(), store.NewPieceStatus(), []byte{byte(_complete)}, pi)
+		t.Name(), &pieceStatusMetadata{}, []byte{byte(_complete)}, int64(pi))
 	if err != nil {
 		return fmt.Errorf("write piece metadata: %s", err)
 	}
