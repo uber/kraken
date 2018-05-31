@@ -12,6 +12,11 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
 )
 
+// Manager errors.
+var (
+	ErrNamespaceNotFound = errors.New("no matches for namespace")
+)
+
 type backend struct {
 	regexp *regexp.Regexp
 	client Client
@@ -83,7 +88,8 @@ func (m *Manager) Register(namespace string, c Client) error {
 	return nil
 }
 
-// GetClient matches namespace to the configured Client.
+// GetClient matches namespace to the configured Client. Returns ErrNamespaceNotFound
+// if no clients match namespace.
 func (m *Manager) GetClient(namespace string) (Client, error) {
 	if namespace == "" {
 		return nil, errors.New("namespace is empty")
@@ -93,5 +99,5 @@ func (m *Manager) GetClient(namespace string) (Client, error) {
 			return b.client, nil
 		}
 	}
-	return nil, fmt.Errorf("no matches for namespace %s", namespace)
+	return nil, ErrNamespaceNotFound
 }

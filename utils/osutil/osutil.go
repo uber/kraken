@@ -2,8 +2,10 @@ package osutil
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"os"
+	"path"
 )
 
 // IsEmpty returns true if directory dir is empty.
@@ -31,4 +33,23 @@ func ReadLines(f *os.File) ([]string, error) {
 		lines = append(lines, l)
 	}
 	return lines, nil
+}
+
+// EnsureFilePresent initializes a file and all parent directories for filepath
+// if they do not exist. If the file exists, no-ops.
+func EnsureFilePresent(filepath string) error {
+	if _, err := os.Stat(filepath); os.IsNotExist(err) {
+		err := os.MkdirAll(path.Dir(filepath), 0755)
+		if err != nil {
+			return fmt.Errorf("mkdir: %s", err)
+		}
+		f, err := os.Create(filepath)
+		if err != nil {
+			return fmt.Errorf("create: %s", err)
+		}
+		f.Close()
+	} else if err != nil {
+		return fmt.Errorf("stat: %s", err)
+	}
+	return nil
 }

@@ -13,6 +13,11 @@ type BlobFixture struct {
 	MetaInfo *MetaInfo
 }
 
+// Length returns the length of the blob.
+func (f *BlobFixture) Length() int64 {
+	return int64(len(f.Content))
+}
+
 // CustomBlobFixture creates a BlobFixture with custom fields.
 func CustomBlobFixture(content []byte, digest Digest, mi *MetaInfo) *BlobFixture {
 	return &BlobFixture{content, digest, mi}
