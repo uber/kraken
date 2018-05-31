@@ -47,17 +47,24 @@ func TestIntervalTrapConcurrency(t *testing.T) {
 
 	task := mockdedup.NewMockIntervalTask(ctrl)
 
-	trap := NewIntervalTrap(200*time.Millisecond, clock.New(), task)
+	trap := NewIntervalTrap(100*time.Millisecond, clock.New(), task)
 
 	task.EXPECT().Run().Times(4)
 
 	var wg sync.WaitGroup
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			time.Sleep(randutil.Duration(850 * time.Millisecond))
-			trap.Trap()
+			for k := 0; k < 4; k++ {
+				// Guarantees that Trap() will be called exactly 4 times,
+				// as the interval between each Trap() call is >= 100ms
+				// for each goroutine and the total interval for a given
+				// goroutine will never reach 500ms.
+				time.Sleep(120*time.Millisecond +
+					randutil.Duration(10*time.Millisecond))
+				trap.Trap()
+			}
 		}()
 	}
 	wg.Wait()

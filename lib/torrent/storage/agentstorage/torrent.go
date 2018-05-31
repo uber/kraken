@@ -16,7 +16,10 @@ import (
 	"go.uber.org/atomic"
 )
 
-var errWritePieceConflict = errors.New("piece is already being written to")
+var (
+	errPieceNotComplete   = errors.New("piece not complete")
+	errWritePieceConflict = errors.New("piece is already being written to")
+)
 
 // Torrent implements a Torrent on top of an AgentFileStore.
 // It Allows concurrent writes on distinct pieces, and concurrent reads on all
@@ -229,7 +232,7 @@ func (t *Torrent) GetPieceReader(pi int) (storage.PieceReader, error) {
 		return nil, err
 	}
 	if !piece.complete() {
-		return nil, errors.New("piece not complete")
+		return nil, errPieceNotComplete
 	}
 	return piecereader.NewFileReader(t.getFileOffset(pi), t.PieceLength(pi), &opener{t}), nil
 }
