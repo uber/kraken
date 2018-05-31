@@ -7,6 +7,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/utils/log"
 	"github.com/uber-go/tally"
 )
@@ -40,14 +41,22 @@ func (e *Executor) Name() string {
 // that matches r's namespace.
 func (e *Executor) Exec(r persistedretry.Task) error {
 	t := r.(*Task)
+	if err := e.upload(t.Namespace, t.Digest.Hex()); err != nil {
+		return err
+	}
+	err := e.fs.DeleteCacheFileMetadata(t.Digest.Hex(), &metadata.Persist{})
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("delete persist metadata: %s", err)
+	}
+	return nil
+}
 
-	name := t.Digest.Hex()
-
-	client, err := e.backends.GetClient(t.Namespace)
+func (e *Executor) upload(namespace, name string) error {
+	client, err := e.backends.GetClient(namespace)
 	if err != nil {
 		if err == backend.ErrNamespaceNotFound {
 			log.With(
-				"namespace", t.Namespace,
+				"namespace", namespace,
 				"name", name).Info("Dropping writeback for unconfigured namespace")
 			return nil
 		}

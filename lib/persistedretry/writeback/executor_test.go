@@ -2,6 +2,7 @@ package writeback
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"code.uber.internal/infra/kraken/core"
@@ -9,6 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/utils/rwutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
@@ -54,6 +56,13 @@ func (m *executorMocks) client(namespace string) *mockbackend.MockClient {
 	return client
 }
 
+func setupBlob(t *testing.T, fs store.OriginFileStore, blob *core.BlobFixture) {
+	t.Helper()
+	require.NoError(t, fs.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+	_, err := fs.SetCacheFileMetadata(blob.Digest.Hex(), metadata.NewPersist(true))
+	require.NoError(t, err)
+}
+
 func TestExec(t *testing.T) {
 	require := require.New(t)
 
@@ -62,7 +71,7 @@ func TestExec(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	require.NoError(mocks.fs.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+	setupBlob(t, mocks.fs, blob)
 
 	task := NewTask("test-namespace", blob.Digest)
 
@@ -73,6 +82,9 @@ func TestExec(t *testing.T) {
 	executor := mocks.new()
 
 	require.NoError(executor.Exec(task))
+
+	// Should be safe to delete the file.
+	require.NoError(mocks.fs.DeleteCacheFile(blob.Digest.Hex()))
 }
 
 func TestExecNoopWhenFileAlreadyUploaded(t *testing.T) {
@@ -82,6 +94,8 @@ func TestExecNoopWhenFileAlreadyUploaded(t *testing.T) {
 	defer cleanup()
 
 	blob := core.NewBlobFixture()
+
+	setupBlob(t, mocks.fs, blob)
 
 	require.NoError(mocks.fs.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 
@@ -93,6 +107,9 @@ func TestExecNoopWhenFileAlreadyUploaded(t *testing.T) {
 	executor := mocks.new()
 
 	require.NoError(executor.Exec(task))
+
+	// Should be safe to delete the file.
+	require.NoError(mocks.fs.DeleteCacheFile(blob.Digest.Hex()))
 }
 
 func TestExecNoopWhenFileMissing(t *testing.T) {
@@ -121,6 +138,8 @@ func TestExecNoopWhenNamespaceNotFound(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
+	setupBlob(t, mocks.fs, blob)
+
 	require.NoError(mocks.fs.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 
 	task := NewTask("test-namespace", blob.Digest)
@@ -128,4 +147,33 @@ func TestExecNoopWhenNamespaceNotFound(t *testing.T) {
 	executor := mocks.new()
 
 	require.NoError(executor.Exec(task))
+
+	// Should be safe to delete the file.
+	require.NoError(mocks.fs.DeleteCacheFile(blob.Digest.Hex()))
+}
+
+func TestExecUploadFailure(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newExecutorMocks(t)
+	defer cleanup()
+
+	blob := core.NewBlobFixture()
+
+	setupBlob(t, mocks.fs, blob)
+
+	task := NewTask("test-namespace", blob.Digest)
+
+	client := mocks.client(task.Namespace)
+	client.EXPECT().Stat(blob.Digest.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
+	client.EXPECT().Upload(
+		blob.Digest.Hex(), rwutil.MatchReader(blob.Content)).Return(errors.New("some error"))
+
+	executor := mocks.new()
+
+	require.Error(executor.Exec(task))
+
+	// Since upload failed, deletion of the file should fail since persist
+	// metadata is still present.
+	require.Error(mocks.fs.DeleteCacheFile(blob.Digest.Hex()))
 }
