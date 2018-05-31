@@ -2,8 +2,6 @@ package tagreplication
 
 import (
 	"fmt"
-	"os"
-	"path"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -12,6 +10,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	_ "code.uber.internal/infra/kraken/lib/persistedretry/tagreplication/migrations" // registry db migrations
+	"code.uber.internal/infra/kraken/utils/osutil"
 )
 
 // Store stores tags to be replicated asynchronously.
@@ -21,29 +20,16 @@ type Store struct {
 
 // NewStore creates a new Store.
 func NewStore(source string, rv RemoteValidator) (*Store, error) {
-	if _, err := os.Stat(source); os.IsNotExist(err) {
-		err := os.MkdirAll(path.Dir(source), 0755)
-		if err != nil {
-			return nil, fmt.Errorf("create source directory: %s", err)
-		}
-		// Initialize database if it doesn't exist.
-		f, err := os.Create(source)
-		if err != nil {
-			return nil, fmt.Errorf("create source file: %s", err)
-		}
-		f.Close()
-	} else if err != nil {
-		return nil, fmt.Errorf("stat source file: %s", err)
+	if err := osutil.EnsureFilePresent(source); err != nil {
+		return nil, fmt.Errorf("ensure db source present: %s", err)
 	}
 	db, err := sqlx.Open("sqlite3", source)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite3: %s", err)
 	}
-
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return nil, fmt.Errorf("set dialect as sqlite3: %s", err)
 	}
-
 	if err := goose.Up(db.DB, "."); err != nil {
 		return nil, fmt.Errorf("perform db migration: %s", err)
 	}

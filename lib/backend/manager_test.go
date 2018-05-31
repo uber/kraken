@@ -37,21 +37,16 @@ func TestManagerNamespaceMatching(t *testing.T) {
 	}
 }
 
-func TestManagerNamespaceNoMatch(t *testing.T) {
-	tests := []struct {
-		desc      string
-		namespace string
-	}{
-		{"empty namespace", ""},
-		{"unknown namespace", "blah"},
-	}
-	for _, test := range tests {
-		t.Run(test.desc, func(t *testing.T) {
-			m := ManagerFixture()
-			_, err := m.GetClient(test.namespace)
-			require.Error(t, err)
-		})
-	}
+func TestManagerEmptyNamespace(t *testing.T) {
+	m := ManagerFixture()
+	_, err := m.GetClient("")
+	require.Error(t, err)
+}
+
+func TestManagerErrNamespaceNotFound(t *testing.T) {
+	m := ManagerFixture()
+	_, err := m.GetClient("no-match")
+	require.Equal(t, ErrNamespaceNotFound, err)
 }
 
 func TestManagerNamespaceOrdering(t *testing.T) {
