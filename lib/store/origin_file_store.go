@@ -35,6 +35,7 @@ type OriginFileStore interface {
 	GetCacheFileMetadata(filename string, md metadata.Metadata) error
 	SetCacheFileMetadata(filename string, md metadata.Metadata) (bool, error)
 	GetOrSetCacheFileMetadata(filename string, md metadata.Metadata) error
+	DeleteCacheFileMetadata(filename string, md metadata.Metadata) error
 
 	RangeUploadMetadata(filename string, f func(metadata.Metadata) error) error
 }
@@ -249,6 +250,11 @@ func (store *OriginLocalFileStore) SetCacheFileMetadata(
 // content to b if not set.
 func (store *OriginLocalFileStore) GetOrSetCacheFileMetadata(filename string, md metadata.Metadata) error {
 	return store.cacheBackend.NewFileOp().AcceptState(store.stateCache).GetOrSetFileMetadata(filename, md)
+}
+
+// DeleteCacheFileMetadata returns the metadata content of md for filename.
+func (store *OriginLocalFileStore) DeleteCacheFileMetadata(filename string, md metadata.Metadata) error {
+	return store.cacheBackend.NewFileOp().AcceptState(store.stateCache).DeleteFileMetadata(filename, md)
 }
 
 // RangeUploadMetadata ranges upload metadata.

@@ -526,6 +526,18 @@ func (mr *MockOriginFileStoreMockRecorder) DeleteCacheFile(arg0 interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCacheFile", reflect.TypeOf((*MockOriginFileStore)(nil).DeleteCacheFile), arg0)
 }
 
+// DeleteCacheFileMetadata mocks base method
+func (m *MockOriginFileStore) DeleteCacheFileMetadata(arg0 string, arg1 metadata.Metadata) error {
+	ret := m.ctrl.Call(m, "DeleteCacheFileMetadata", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteCacheFileMetadata indicates an expected call of DeleteCacheFileMetadata
+func (mr *MockOriginFileStoreMockRecorder) DeleteCacheFileMetadata(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCacheFileMetadata", reflect.TypeOf((*MockOriginFileStore)(nil).DeleteCacheFileMetadata), arg0, arg1)
+}
+
 // GetCacheFileMetadata mocks base method
 func (m *MockOriginFileStore) GetCacheFileMetadata(arg0 string, arg1 metadata.Metadata) error {
 	ret := m.ctrl.Call(m, "GetCacheFileMetadata", arg0, arg1)
