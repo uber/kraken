@@ -81,10 +81,7 @@ func (u *uploader) verify(d core.Digest, uid string) error {
 }
 
 func (u *uploader) commit(d core.Digest, uid string) error {
-	if err := u.fs.MoveUploadFileToCache(uid, d.Hex()); err != nil {
-		if os.IsExist(err) {
-			return handler.Errorf("digest already exists").Status(http.StatusConflict)
-		}
+	if err := u.fs.MoveUploadFileToCache(uid, d.Hex()); err != nil && !os.IsNotExist(err) {
 		return handler.Errorf("move upload file to cache: %s", err)
 	}
 	return nil

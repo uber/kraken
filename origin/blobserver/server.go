@@ -19,6 +19,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/middleware"
+	"code.uber.internal/infra/kraken/lib/persistedretry"
+	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -48,6 +50,7 @@ type Server struct {
 	blobRefresher     *blobrefresh.Refresher
 	metaInfoGenerator *metainfogen.Generator
 	uploader          *uploader
+	writeBackManager  persistedretry.Manager
 
 	// This is an unfortunate coupling between the p2p client and the blob server.
 	// Tracker queries the origin cluster to discover which origins can seed
@@ -66,7 +69,8 @@ func New(
 	pctx core.PeerContext,
 	backends *backend.Manager,
 	blobRefresher *blobrefresh.Refresher,
-	metaInfoGenerator *metainfogen.Generator) (*Server, error) {
+	metaInfoGenerator *metainfogen.Generator,
+	writeBackManager persistedretry.Manager) (*Server, error) {
 
 	stats = stats.Tagged(map[string]string{
 		"module": "blobserver",
@@ -95,6 +99,7 @@ func New(
 		blobRefresher:     blobRefresher,
 		metaInfoGenerator: metaInfoGenerator,
 		uploader:          newUploader(fileStore),
+		writeBackManager:  writeBackManager,
 		pctx:              pctx,
 	}, nil
 }
@@ -120,6 +125,9 @@ func (s *Server) Handler() http.Handler {
 	r.Post("/namespace/:namespace/blobs/:digest/uploads", handler.Wrap(s.startUploadHandler))
 	r.Patch("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.patchUploadHandler))
 	r.Put("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.commitClusterUploadHandler))
+	r.Put(
+		"/namespace/:namespace/blobs/:digest/uploads/:uid/async",
+		handler.Wrap(s.commitAsyncClusterUploadHandler))
 
 	r.Get("/namespace/:namespace/blobs/:digest", handler.Wrap(s.downloadBlobHandler))
 
@@ -549,24 +557,9 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 				"invalid through argument: parse bool: %s", err).Status(http.StatusBadRequest)
 		}
 	}
-	if err := s.commitClusterUpload(uid, namespace, d, through); err != nil {
-		return err
-	}
-	if err := s.metaInfoGenerator.Generate(d); err != nil {
-		return handler.Errorf("generate metainfo: %s", err)
-	}
-	return nil
-}
-
-func (s *Server) commitClusterUpload(
-	uid string, namespace string, d core.Digest, through bool) error {
 
 	if err := s.uploader.verify(d, uid); err != nil {
 		return err
-	}
-	f, err := s.fileStore.GetUploadFileReader(uid)
-	if err != nil {
-		return handler.Errorf("get upload file: %s", err)
 	}
 
 	// If through is set, we must make sure we safely upload the file to namespace's
@@ -577,6 +570,11 @@ func (s *Server) commitClusterUpload(
 		if err != nil {
 			return handler.Errorf("backend manager: %s", err).Status(http.StatusBadRequest)
 		}
+		f, err := s.fileStore.GetUploadFileReader(uid)
+		if err != nil {
+			return handler.Errorf("get upload file: %s", err)
+		}
+		defer f.Close()
 		log.With("blob", d.Hex()).Infof("Uploading blob to %s backend", namespace)
 		if err := c.Upload(d.Hex(), f); err != nil {
 			// TODO(codyg): We need some way of detecting whether the blob already exists
@@ -592,5 +590,42 @@ func (s *Server) commitClusterUpload(
 		log.With("blob", d.Hex()).Errorf("Error replicating uploaded blob: %s", err)
 	}
 
+	if err := s.metaInfoGenerator.Generate(d); err != nil {
+		return handler.Errorf("generate metainfo: %s", err)
+	}
+
+	return nil
+}
+
+// commitAsyncClusterUploadHandler commits an external blob upload
+// asynchronously, meaning the blob will be written back to remote storage in a
+// non-blocking fashion.
+func (s *Server) commitAsyncClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
+	d, err := parseDigest(r)
+	if err != nil {
+		return err
+	}
+	if err := s.ensureCorrectNode(d); err != nil {
+		return err
+	}
+	namespace, err := parseNamespace(r)
+	if err != nil {
+		return err
+	}
+	uid := chi.URLParam(r, "uid")
+
+	if err := s.uploader.verify(d, uid); err != nil {
+		return err
+	}
+	if err := s.uploader.commit(d, uid); err != nil {
+		return err
+	}
+	// TODO(codyg): Replicate work to other origins.
+	if err := s.writeBackManager.Add(writeback.NewTask(namespace, d)); err != nil {
+		return handler.Errorf("add write-back task: %s", err)
+	}
+	if err := s.metaInfoGenerator.Generate(d); err != nil {
+		return handler.Errorf("generate metainfo: %s", err)
+	}
 	return nil
 }

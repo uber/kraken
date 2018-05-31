@@ -171,6 +171,18 @@ func (mr *MockClientMockRecorder) UploadBlob(arg0, arg1, arg2, arg3 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClient)(nil).UploadBlob), arg0, arg1, arg2, arg3)
 }
 
+// UploadBlobAsync mocks base method
+func (m *MockClient) UploadBlobAsync(arg0 string, arg1 core.Digest, arg2 io.Reader) error {
+	ret := m.ctrl.Call(m, "UploadBlobAsync", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UploadBlobAsync indicates an expected call of UploadBlobAsync
+func (mr *MockClientMockRecorder) UploadBlobAsync(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlobAsync", reflect.TypeOf((*MockClient)(nil).UploadBlobAsync), arg0, arg1, arg2)
+}
+
 // MockProvider is a mock of Provider interface
 type MockProvider struct {
 	ctrl     *gomock.Controller

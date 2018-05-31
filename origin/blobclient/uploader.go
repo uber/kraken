@@ -87,15 +87,23 @@ func (c *transferClient) commit(d core.Digest, uid string) error {
 	return err
 }
 
+type uploadType int
+
+const (
+	_syncUpload uploadType = iota
+	_syncUploadThrough
+	_asyncUpload
+)
+
 // uploadClient executes chunked uploads for external cluster upload operations.
 type uploadClient struct {
-	addr      string
-	namespace string
-	through   bool
+	addr       string
+	namespace  string
+	uploadType uploadType
 }
 
-func newUploadClient(addr string, namespace string, through bool) *uploadClient {
-	return &uploadClient{addr, namespace, through}
+func newUploadClient(addr string, namespace string, t uploadType) *uploadClient {
+	return &uploadClient{addr, namespace, t}
 }
 
 func (c *uploadClient) start(d core.Digest) (uid string, err error) {
@@ -126,9 +134,19 @@ func (c *uploadClient) patch(
 }
 
 func (c *uploadClient) commit(d core.Digest, uid string) error {
+	var template string
+	switch c.uploadType {
+	case _syncUpload:
+		template = "http://%s/namespace/%s/blobs/%s/uploads/%s"
+	case _syncUploadThrough:
+		template = "http://%s/namespace/%s/blobs/%s/uploads/%s?through=true"
+	case _asyncUpload:
+		template = "http://%s/namespace/%s/blobs/%s/uploads/%s/async"
+	default:
+		return fmt.Errorf("unknown upload type: %d", c.uploadType)
+	}
 	_, err := httputil.Put(
-		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads/%s?through=%t",
-			c.addr, url.PathEscape(c.namespace), d, uid, c.through),
+		fmt.Sprintf(template, c.addr, url.PathEscape(c.namespace), d, uid),
 		httputil.SendTimeout(15*time.Minute))
 	return err
 }
