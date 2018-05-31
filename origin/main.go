@@ -11,6 +11,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
+	"code.uber.internal/infra/kraken/lib/persistedretry"
+	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
@@ -104,6 +106,20 @@ func main() {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
 
+	writeBackStore, err := writeback.NewStore(config.SQLiteSourcePath)
+	if err != nil {
+		log.Fatalf("Error creating write-back store: %s", err)
+	}
+
+	writeBackManager, err := persistedretry.NewManager(
+		config.WriteBack,
+		stats,
+		writeBackStore,
+		writeback.NewExecutor(stats, fs, backendManager))
+	if err != nil {
+		log.Fatalf("Error creating write-back manager: %s", err)
+	}
+
 	metaInfoGenerator, err := metainfogen.New(config.MetaInfoGen, fs)
 	if err != nil {
 		log.Fatalf("Error creating metainfo generator: %s", err)
@@ -131,7 +147,8 @@ func main() {
 		pctx,
 		backendManager,
 		blobRefresher,
-		metaInfoGenerator)
+		metaInfoGenerator,
+		writeBackManager)
 	if err != nil {
 		log.Fatalf("Error initializing blob server: %s", err)
 	}

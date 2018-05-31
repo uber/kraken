@@ -28,6 +28,7 @@ type Client interface {
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
 
 	UploadBlob(namespace string, d core.Digest, blob io.Reader, through bool) error
+	UploadBlobAsync(namespace string, d core.Digest, blob io.Reader) error
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
 
 	ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error
@@ -114,7 +115,19 @@ func (c *HTTPClient) TransferBlob(d core.Digest, blob io.Reader) error {
 func (c *HTTPClient) UploadBlob(
 	namespace string, d core.Digest, blob io.Reader, through bool) error {
 
-	uc := newUploadClient(c.addr, namespace, through)
+	t := _syncUpload
+	if through {
+		t = _syncUploadThrough
+	}
+	uc := newUploadClient(c.addr, namespace, t)
+	return runChunkedUpload(uc, d, blob, int64(c.config.ChunkSize))
+}
+
+// UploadBlobAsync uploads and replicates blob to the origin cluster,
+// asynchronously backing the blob up to the remote storage configured for
+// namespace.
+func (c *HTTPClient) UploadBlobAsync(namespace string, d core.Digest, blob io.Reader) error {
+	uc := newUploadClient(c.addr, namespace, _asyncUpload)
 	return runChunkedUpload(uc, d, blob, int64(c.config.ChunkSize))
 }
 

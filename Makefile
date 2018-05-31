@@ -230,7 +230,14 @@ run_build-index: build-index
 .PHONY: origin
 origin:
 	-rm origin/origin
-	GOOS=linux GOARCH=amd64 make origin/origin
+	# Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
+	# This workaround builds the binary inside a linux container. 
+	# This takes a few seconds.
+	if [[ $$OSTYPE == darwin* ]]; then \
+		docker run --rm -it -v $(OLDGOPATH):/go -w /go/src/code.uber.internal/infra/kraken/origin golang:latest go build; \
+	else \
+		GOOS=linux GOARCH=amd64 make origin/origin; \
+	fi
 	docker build -t kraken-origin:dev -f docker/origin/Dockerfile ./
 
 run_origin: origin

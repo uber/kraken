@@ -15,8 +15,12 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
+	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/mocks/lib/backend"
+	"code.uber.internal/infra/kraken/mocks/lib/persistedretry"
 	"code.uber.internal/infra/kraken/mocks/lib/store"
+	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/stringset"
@@ -91,13 +95,14 @@ func startServer(
 	fs store.OriginFileStore,
 	cp blobclient.Provider,
 	pctx core.PeerContext,
-	bm *backend.Manager) (addr string, stop func()) {
+	bm *backend.Manager,
+	writeBackManager persistedretry.Manager) (addr string, stop func()) {
 
 	mg := metainfogen.Fixture(fs, 4)
 
 	br := blobrefresh.New(blobrefresh.Config{}, tally.NoopScope, fs, bm, mg)
 
-	s, err := New(config, tally.NoopScope, host, fs, cp, pctx, bm, br, mg)
+	s, err := New(config, tally.NoopScope, host, fs, cp, pctx, bm, br, mg, writeBackManager)
 	if err != nil {
 		panic(err)
 	}
@@ -107,60 +112,95 @@ func startServer(
 // testServer is a convenience wrapper around the underlying components of a
 // Server and faciliates restarting Servers with new configuration.
 type testServer struct {
-	config         Config
-	host           string
-	addr           string
-	fs             store.OriginFileStore
-	cp             *testClientProvider
-	pctx           core.PeerContext
-	backendManager *backend.Manager
-	stop           func()
-	cleanFS        func()
+	ctrl             *gomock.Controller
+	config           Config
+	host             string
+	addr             string
+	fs               store.OriginFileStore
+	cp               *testClientProvider
+	pctx             core.PeerContext
+	backendManager   *backend.Manager
+	writeBackManager *mockpersistedretry.MockManager
+	cleanup          func()
 }
 
-func newTestServer(host string, config Config, cp *testClientProvider) *testServer {
+func newTestServer(t *testing.T, host string, config Config, cp *testClientProvider) *testServer {
+	var cleanup testutil.Cleanup
+	defer cleanup.Recover()
+
+	ctrl := gomock.NewController(t)
+	cleanup.Add(ctrl.Finish)
+
 	pctx := core.PeerContextFixture()
-	fs, cleanFS := store.OriginFileStoreFixture(clock.New())
+
+	fs, c := store.OriginFileStoreFixture(clock.New())
+	cleanup.Add(c)
+
 	bm := backend.ManagerFixture()
-	addr, stop := startServer(host, config, fs, cp, pctx, bm)
+
+	writeBackManager := mockpersistedretry.NewMockManager(ctrl)
+
+	addr, stop := startServer(host, config, fs, cp, pctx, bm, writeBackManager)
+	cleanup.Add(stop)
+
 	cp.register(host, blobclient.NewWithConfig(addr, blobclient.Config{ChunkSize: 16}))
+
 	return &testServer{
-		config:         config,
-		host:           host,
-		addr:           addr,
-		fs:             fs,
-		cp:             cp,
-		pctx:           pctx,
-		backendManager: bm,
-		stop:           stop,
-		cleanFS:        cleanFS,
+		ctrl:             ctrl,
+		config:           config,
+		host:             host,
+		addr:             addr,
+		fs:               fs,
+		cp:               cp,
+		pctx:             pctx,
+		backendManager:   bm,
+		writeBackManager: writeBackManager,
+		cleanup:          cleanup.Run,
 	}
 }
 
-func (s *testServer) cleanup() {
-	s.stop()
-	s.cleanFS()
+func (s *testServer) backendClient(namespace string) *mockbackend.MockClient {
+	client := mockbackend.NewMockClient(s.ctrl)
+	if err := s.backendManager.Register(namespace, client); err != nil {
+		panic(err)
+	}
+	return client
+}
+
+func (s *testServer) remoteClient(name string) *mockblobclient.MockClient {
+	client := mockblobclient.NewMockClient(s.ctrl)
+	s.cp.register(name, client)
+	return client
 }
 
 // serverMocks is a convenience wrapper around a completely mocked Server.
 type serverMocks struct {
-	ctrl           *gomock.Controller
-	fileStore      *mockstore.MockOriginFileStore
-	clientProvider blobclient.Provider
+	ctrl             *gomock.Controller
+	fileStore        *mockstore.MockOriginFileStore
+	writeBackManager *mockpersistedretry.MockManager
+	clientProvider   blobclient.Provider
 }
 
 func newServerMocks(t *testing.T) *serverMocks {
 	ctrl := gomock.NewController(t)
 	return &serverMocks{
-		ctrl:      ctrl,
-		fileStore: mockstore.NewMockOriginFileStore(ctrl),
+		ctrl:             ctrl,
+		fileStore:        mockstore.NewMockOriginFileStore(ctrl),
+		writeBackManager: mockpersistedretry.NewMockManager(ctrl),
 		// TODO(codyg): Support mock client providers.
 		clientProvider: nil,
 	}
 }
 
 func (mocks *serverMocks) server(config Config) (addr string, stop func()) {
-	return startServer(master1, config, mocks.fileStore, mocks.clientProvider, core.PeerContextFixture(), nil)
+	return startServer(
+		master1,
+		config,
+		mocks.fileStore,
+		mocks.clientProvider,
+		core.PeerContextFixture(),
+		nil,
+		mocks.writeBackManager)
 }
 
 // labelSet converts hosts into their corresponding labels as specified by config.

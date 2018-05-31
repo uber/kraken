@@ -9,16 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
+	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
-	"code.uber.internal/infra/kraken/mocks/lib/backend"
-	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/rwutil"
@@ -81,19 +79,14 @@ func TestDownloadBlobHandlerOK(t *testing.T) {
 func TestDownloadBlobHandlerNotFound(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	backendClient := mockbackend.NewMockClient(ctrl)
-
 	cp := newTestClientProvider()
 
-	s := newTestServer(master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
-	s.backendManager.Register(namespace, backendClient)
 
 	d := core.DigestFixture()
 
+	backendClient := s.backendClient(namespace)
 	backendClient.EXPECT().Stat(d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 
 	err := cp.Provide(master1).DownloadBlob(namespace, d, ioutil.Discard)
@@ -188,6 +181,11 @@ func TestIncorrectNodeErrors(t *testing.T) {
 			func(c blobclient.Client) error {
 				return c.UploadBlob(namespace, blob.Digest, bytes.NewBufferString("blah"), false)
 			},
+		}, {
+			"UploadBlobAsync",
+			func(c blobclient.Client) error {
+				return c.UploadBlobAsync(namespace, blob.Digest, bytes.NewBufferString("blah"))
+			},
 		},
 	}
 	for _, test := range tests {
@@ -212,7 +210,7 @@ func TestGetPeerContextHandlerOK(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(master1, configFixture(), cp)
+	s := newTestServer(t, master1, configFixture(), cp)
 	defer s.cleanup()
 
 	pctx, err := cp.Provide(master1).GetPeerContext()
@@ -223,21 +221,18 @@ func TestGetPeerContextHandlerOK(t *testing.T) {
 func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	config := configFixture()
 	cp := newTestClientProvider()
-	backendClient := mockbackend.NewMockClient(ctrl)
 
-	for _, master := range []string{master1, master2} {
-		s := newTestServer(master, configFixture(), cp)
-		defer s.cleanup()
-		s.backendManager.Register(namespace, backendClient)
-	}
+	s1 := newTestServer(t, master1, config, cp)
+	defer s1.cleanup()
 
-	blob := computeBlobForHosts(config, master1, master2)
+	s2 := newTestServer(t, master2, config, cp)
+	defer s2.cleanup()
 
+	blob := computeBlobForHosts(config, s1.host, s2.host)
+
+	backendClient := s1.backendClient(namespace)
 	backendClient.EXPECT().Stat(
 		blob.Digest.Hex()).Return(blobinfo.New(int64(len(blob.Content))), nil).AnyTimes()
 	backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
@@ -266,19 +261,14 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	backendClient := mockbackend.NewMockClient(ctrl)
-
 	cp := newTestClientProvider()
 
-	s := newTestServer(master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
-	s.backendManager.Register(namespace, backendClient)
 
 	d := core.DigestFixture()
 
+	backendClient := s.backendClient(namespace)
 	backendClient.EXPECT().Stat(d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
@@ -293,7 +283,7 @@ func TestUploadBlobReplicatesBlob(t *testing.T) {
 	cp := newTestClientProvider()
 
 	for _, master := range []string{master1, master2} {
-		s := newTestServer(master, config, cp)
+		s := newTestServer(t, master, config, cp)
 		defer s.cleanup()
 	}
 
@@ -314,7 +304,7 @@ func TestUploadBlobResilientToReplicationFailure(t *testing.T) {
 	config := configFixture()
 	cp := newTestClientProvider()
 
-	s := newTestServer(master1, config, cp)
+	s := newTestServer(t, master1, config, cp)
 	defer s.cleanup()
 
 	cp.register(master2, blobclient.New("some broken address"))
@@ -333,47 +323,39 @@ func TestUploadBlobResilientToReplicationFailure(t *testing.T) {
 func TestUploadBlobThroughUploadsToStorageBackendAndReplicates(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	config := configFixture()
 	cp := newTestClientProvider()
-	backendClient := mockbackend.NewMockClient(ctrl)
 
-	for _, master := range []string{master1, master2} {
-		s := newTestServer(master, config, cp)
-		defer s.cleanup()
-		s.backendManager.Register(namespace, backendClient)
-	}
+	s1 := newTestServer(t, master1, config, cp)
+	defer s1.cleanup()
 
-	blob := computeBlobForHosts(config, master1, master2)
+	s2 := newTestServer(t, master2, config, cp)
+	defer s2.cleanup()
 
+	blob := computeBlobForHosts(config, s1.host, s2.host)
+
+	backendClient := s1.backendClient(namespace)
 	backendClient.EXPECT().Upload(blob.Digest.Hex(), rwutil.MatchReader(blob.Content)).Return(nil)
 
-	err := cp.Provide(master1).UploadBlob(
+	err := cp.Provide(s1.host).UploadBlob(
 		namespace, blob.Digest, bytes.NewReader(blob.Content), true)
 	require.NoError(err)
 
-	for _, master := range []string{master1, master2} {
-		ensureHasBlob(t, cp.Provide(master), blob)
-	}
+	ensureHasBlob(t, cp.Provide(s1.host), blob)
+	ensureHasBlob(t, cp.Provide(s2.host), blob)
 }
 
 func TestUploadBlobThroughDoesNotCommitBlobIfBackendUploadFails(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	cp := newTestClientProvider()
-	backendClient := mockbackend.NewMockClient(ctrl)
 
-	s := newTestServer(master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
-	s.backendManager.Register(namespace, backendClient)
 
 	blob := core.NewBlobFixture()
 
+	backendClient := s.backendClient(namespace)
 	backendClient.EXPECT().Upload(
 		blob.Digest.Hex(), rwutil.MatchReader(blob.Content)).Return(errors.New("some error"))
 
@@ -391,7 +373,7 @@ func TestUploadDuplicateBlobNoops(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(master1, configNoReplicaFixture(), cp)
+	s := newTestServer(t, master1, configNoReplicaFixture(), cp)
 	defer s.cleanup()
 
 	blob := computeBlobForHosts(s.config, s.host)
@@ -412,7 +394,7 @@ func TestTransferBlob(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
 
 	blob := core.NewBlobFixture()
@@ -434,7 +416,7 @@ func TestTransferBlob(t *testing.T) {
 func TestTransferBlobSmallChunkSize(t *testing.T) {
 	require := require.New(t)
 
-	s := newTestServer(master1, configMaxReplicaFixture(), newTestClientProvider())
+	s := newTestServer(t, master1, configMaxReplicaFixture(), newTestClientProvider())
 	defer s.cleanup()
 
 	blob := core.SizedBlobFixture(1000, 1)
@@ -451,7 +433,7 @@ func TestOverwriteMetainfo(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
 
 	blob := core.NewBlobFixture()
@@ -474,12 +456,9 @@ func TestOverwriteMetainfo(t *testing.T) {
 func TestReplicateToRemote(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	cp := newTestClientProvider()
 
-	s := newTestServer(master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
 
 	blob := core.NewBlobFixture()
@@ -487,9 +466,7 @@ func TestReplicateToRemote(t *testing.T) {
 	require.NoError(cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content)))
 
 	remote := "some-remote-origin"
-	remoteClient := mockblobclient.NewMockClient(ctrl)
-	cp.register(remote, remoteClient)
-
+	remoteClient := s.remoteClient(remote)
 	remoteClient.EXPECT().Locations(blob.Digest).Return([]string{remote}, nil)
 	remoteClient.EXPECT().UploadBlob(
 		namespace, blob.Digest, rwutil.MatchReader(blob.Content), true).Return(nil)
@@ -500,27 +477,20 @@ func TestReplicateToRemote(t *testing.T) {
 func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	cp := newTestClientProvider()
 
-	s := newTestServer(master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
 	defer s.cleanup()
-
-	backendClient := mockbackend.NewMockClient(ctrl)
-	s.backendManager.Register(namespace, backendClient)
-
-	remote := "some-remote-origin"
-	remoteClient := mockblobclient.NewMockClient(ctrl)
-	cp.register(remote, remoteClient)
 
 	blob := core.NewBlobFixture()
 
+	backendClient := s.backendClient(namespace)
 	backendClient.EXPECT().Stat(
 		blob.Digest.Hex()).Return(blobinfo.New(int64(len(blob.Content))), nil).AnyTimes()
 	backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
 
+	remote := "some-remote-origin"
+	remoteClient := s.remoteClient(remote)
 	remoteClient.EXPECT().Locations(blob.Digest).Return([]string{remote}, nil)
 	remoteClient.EXPECT().UploadBlob(
 		namespace, blob.Digest, rwutil.MatchReader(blob.Content), true).Return(nil)
@@ -529,4 +499,24 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 		err := cp.Provide(master1).ReplicateToRemote(namespace, blob.Digest, remote)
 		return !httputil.IsAccepted(err)
 	}))
+}
+
+func TestUploadBlobAsync(t *testing.T) {
+	require := require.New(t)
+
+	config := configNoReplicaFixture()
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, config, cp)
+	defer s.cleanup()
+
+	blob := computeBlobForHosts(config, s.host)
+
+	s.writeBackManager.EXPECT().Add(
+		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest))).Return(nil)
+
+	err := cp.Provide(s.host).UploadBlobAsync(namespace, blob.Digest, bytes.NewReader(blob.Content))
+	require.NoError(err)
+
+	ensureHasBlob(t, cp.Provide(s.host), blob)
 }
