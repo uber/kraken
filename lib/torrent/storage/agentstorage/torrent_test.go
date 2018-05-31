@@ -2,6 +2,7 @@ package agentstorage
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"math"
 	"path"
@@ -165,21 +166,38 @@ func TestTorrentWriteSamePieceConcurrent(t *testing.T) {
 
 			pi := int(math.Mod(float64(i), float64(len(blob.Content))))
 
+			// If another goroutine is currently writing, we should get errWritePieceConflict.
+			// If another goroutine has finished writing, we should get storage.ErrPieceComplete.
 			err := tor.WritePiece(piecereader.NewBuffer([]byte{blob.Content[pi]}), pi)
-			if err != nil && err != errWritePieceConflict && err != storage.ErrPieceComplete {
-				require.Equal(errWritePieceConflict, err)
+			if err != nil {
+				require.Contains([]error{errWritePieceConflict, storage.ErrPieceComplete}, err)
 			}
 
-			time.Sleep(5 * time.Millisecond)
+			start := time.Now()
+			timeout := time.Duration(100 * time.Millisecond)
+			for {
+				time.Sleep(5 * time.Millisecond)
+				if time.Since(start) > timeout {
+					require.FailNow(fmt.Sprintf("failed to get piece reader %v after writing", timeout))
+				}
 
-			r, err := tor.GetPieceReader(pi)
-			require.NoError(err)
-			defer r.Close()
-			result, err := ioutil.ReadAll(r)
-			require.NoError(err)
-			require.Equal(1, len(result))
-			require.Equal(1, len(result))
-			require.Equal(blob.Content[pi], result[0])
+				// If another goroutine was writing when we tried to, we will get errPieceNotComplete
+				// until they finish.
+				r, err := tor.GetPieceReader(pi)
+				if err != nil {
+					require.Equal(errPieceNotComplete, err)
+					continue
+				}
+				defer r.Close()
+
+				result, err := ioutil.ReadAll(r)
+				require.NoError(err)
+				require.Equal(1, len(result))
+				require.Equal(1, len(result))
+				require.Equal(blob.Content[pi], result[0])
+
+				return
+			}
 		}(i)
 	}
 	wg.Wait()
