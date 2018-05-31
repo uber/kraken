@@ -23,6 +23,8 @@ type peer struct {
 	mu                    sync.Mutex // Protects the following fields:
 	lastGoodPieceReceived time.Time
 	lastPieceSent         time.Time
+	piecesRequested       int
+	piecesReceived        int
 }
 
 func newPeer(peerID core.PeerID, b *bitset.BitSet, messages Messages, clk clock.Clock) *peer {
@@ -64,4 +66,32 @@ func (p *peer) touchLastPieceSent() {
 	defer p.mu.Unlock()
 
 	p.lastPieceSent = p.clk.Now()
+}
+
+func (p *peer) getPiecesRequested() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return p.piecesRequested
+}
+
+func (p *peer) incrementPiecesRequested() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.piecesRequested++
+}
+
+func (p *peer) getPiecesReceived() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return p.piecesReceived
+}
+
+func (p *peer) incrementPiecesReceived() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.piecesReceived++
 }

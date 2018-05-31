@@ -247,6 +247,8 @@ func (d *Dispatcher) complete() {
 	d.completeOnce.Do(func() { go d.events.DispatcherComplete(d) })
 	d.pendingPiecesDoneOnce.Do(func() { close(d.pendingPiecesDone) })
 
+	var requestedPiecesTotal int
+	var receivedPieces []int
 	d.peers.Range(func(k, v interface{}) bool {
 		p := v.(*peer)
 		if p.bitfield.Complete() {
@@ -259,8 +261,18 @@ func (d *Dispatcher) complete() {
 			// all pieces are available.
 			p.messages.Send(conn.NewCompleteMessage())
 		}
+		requestedPiecesTotal += p.getPiecesRequested()
+		receivedPieces = append(receivedPieces, p.getPiecesReceived())
 		return true
 	})
+
+	// Only log if we actually requested pieces from others.
+	if requestedPiecesTotal > 0 {
+		err := d.torrentlog.ReceivedPiecesSummary(d.torrent.Name(), d.torrent.InfoHash(), receivedPieces)
+		if err != nil {
+			d.log().Errorf("Error logging piece receipt summary: %s", err)
+		}
+	}
 }
 
 func (d *Dispatcher) endgame() bool {
@@ -287,7 +299,7 @@ func (d *Dispatcher) maybeSendPieceRequests(p *peer, candidates *bitset.BitSet) 
 			d.pieceRequestManager.MarkUnsent(p.id, i)
 			return false, err
 		}
-		d.torrentlog.RequestPiece(d.torrent.Name(), d.torrent.InfoHash(), p.id, i)
+		p.incrementPiecesRequested()
 	}
 	return true, nil
 }
@@ -442,8 +454,8 @@ func (d *Dispatcher) handlePiecePayload(
 
 	d.netevents.Produce(
 		networkevent.ReceivePieceEvent(d.torrent.InfoHash(), d.localPeerID, p.id, i))
-	d.torrentlog.ReceivePiece(d.torrent.Name(), d.torrent.InfoHash(), p.id, i)
 
+	p.incrementPiecesReceived()
 	p.touchLastGoodPieceReceived()
 	if d.torrent.Complete() {
 		d.complete()

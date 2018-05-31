@@ -1,7 +1,9 @@
 package torrentlog
 
 import (
+	"errors"
 	"fmt"
+	"math"
 	"os"
 	"time"
 
@@ -10,6 +12,11 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+)
+
+var (
+	errEmptyReceivedPieces    = errors.New("empty received piece counts")
+	errNegativeReceivedPieces = errors.New("negative value in received piece counts")
 )
 
 // Config defines Logger configuration.
@@ -153,35 +160,6 @@ func (l *Logger) LeechTimeout(name string, infoHash core.InfoHash) {
 		zap.String("info_hash", infoHash.String()))
 }
 
-// RequestPiece logs requesting a piece.
-func (l *Logger) RequestPiece(
-	name string,
-	infoHash core.InfoHash,
-	remotePeerID core.PeerID,
-	pieceIdx int) {
-
-	l.zap.Info(
-		"Request piece_index",
-		zap.String("name", name),
-		zap.String("info_hash", infoHash.String()),
-		zap.String("remote_peer_id", remotePeerID.String()),
-		zap.Int("piece_index", pieceIdx))
-}
-
-// ReceivePiece logs successfully receiving a piece.
-func (l *Logger) ReceivePiece(name string,
-	infoHash core.InfoHash,
-	remotePeerID core.PeerID,
-	pieceIdx int) {
-
-	l.zap.Info(
-		"Receive piece_index",
-		zap.String("name", name),
-		zap.String("info_hash", infoHash.String()),
-		zap.String("remote_peer_id", remotePeerID.String()),
-		zap.Int("piece_index", pieceIdx))
-}
-
 // DownloadSuccess logs a successful download.
 func (l *Logger) DownloadSuccess(namespace, name string, size int64, downloadTime time.Duration) {
 	l.zap.Info(
@@ -202,7 +180,81 @@ func (l *Logger) DownloadFailure(namespace, name string, size int64, err error) 
 		zap.Error(err))
 }
 
+// ReceivedPiecesSummary logs a summary of pieces received from peers when a torrent completes.
+func (l *Logger) ReceivedPiecesSummary(
+	name string,
+	infoHash core.InfoHash,
+	receivedPieces []int) error {
+
+	summary, err := newReceivedPiecesSummary(receivedPieces)
+	if err != nil {
+		return err
+	}
+
+	l.zap.Info(
+		"Received pieces summary",
+		zap.String("name", name),
+		zap.String("info_hash", infoHash.String()),
+		zap.Object("pieces_stats", summary))
+
+	return nil
+}
+
 // Sync flushes the log.
 func (l *Logger) Sync() {
 	l.zap.Sync()
+}
+
+// receivedPiecesSummary holds summary statistics about pieces from peers.
+type receivedPiecesSummary struct {
+	numZero int
+	min     int
+	max     int
+	mean    float64
+	stdDev  float64 // sample standard deviation
+}
+
+// newReceivedPiecesSummary calculates and returns summary statistics about pieces received from peers.
+func newReceivedPiecesSummary(receivedPieces []int) (*receivedPiecesSummary, error) {
+	if len(receivedPieces) == 0 {
+		return nil, errEmptyReceivedPieces
+	}
+
+	sum := 0
+	summary := receivedPiecesSummary{min: math.MaxInt32}
+	for _, count := range receivedPieces {
+		if count < 0 {
+			return nil, errNegativeReceivedPieces
+		}
+
+		sum += count
+		if count > summary.max {
+			summary.max = count
+		}
+		if count < summary.min {
+			summary.min = count
+		}
+		if count == 0 {
+			summary.numZero++
+		}
+	}
+	summary.mean = float64(sum) / float64(len(receivedPieces))
+
+	sumSqDiff := 0.0
+	for _, count := range receivedPieces {
+		sumSqDiff += math.Pow(float64(count)-summary.mean, 2)
+	}
+	summary.stdDev = math.Sqrt(sumSqDiff / float64(len(receivedPieces)-1))
+
+	return &summary, nil
+}
+
+func (s *receivedPiecesSummary) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddInt("num_zero_piece_peers", s.numZero)
+	enc.AddInt("min_pieces_from_peer", s.min)
+	enc.AddInt("max_pieces_from_peer", s.max)
+	enc.AddFloat32("mean_pieces_from_peer", float32(s.mean))
+	enc.AddFloat32("stddev_pieces_from_peer", float32(s.stdDev))
+
+	return nil
 }
