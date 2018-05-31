@@ -73,12 +73,14 @@ func (m *Manager) ReservePieces(
 	defer m.Unlock()
 
 	// TODO(codyg): Fix bug where we don't consider failed piece requests here.
-	// If a request has a fail status, it'll still count towards the pipeline limit.
+	// If a request has a fail status, it'll still count towards the pipeline
+	// limit.
 	if pm, ok := m.requestsByPeer[peerID]; ok && len(pm) > m.pipelineLimit {
 		return nil
 	}
 
-	// Reservoir sampling.
+	// Reservoir sampling. There are faster sampling solutions, but most would
+	// require converting the bitset to a list, which itself would take O(n).
 	var pieces []int
 	count := 0
 	for i, e := candidates.NextSet(0); e; i, e = candidates.NextSet(i + 1) {
