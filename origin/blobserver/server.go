@@ -100,12 +100,12 @@ func New(
 }
 
 // Addr returns the address the blob server is configured on.
-func (s Server) Addr() string {
+func (s *Server) Addr() string {
 	return s.addr
 }
 
 // Handler returns an http handler for the blob server.
-func (s Server) Handler() http.Handler {
+func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.StatusCounter(s.stats))
@@ -145,13 +145,13 @@ func (s Server) Handler() http.Handler {
 	return r
 }
 
-func (s Server) healthCheckHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) healthCheckHandler(w http.ResponseWriter, r *http.Request) error {
 	w.WriteHeader(http.StatusOK)
 	return nil
 }
 
 // checkBlobHandler checks if blob data exists.
-func (s Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -169,7 +169,7 @@ func (s Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (s Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	namespace, err := parseNamespace(r)
 	if err != nil {
 		return err
@@ -188,7 +188,7 @@ func (s Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
-func (s Server) replicateToRemoteHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) replicateToRemoteHandler(w http.ResponseWriter, r *http.Request) error {
 	namespace, err := parseNamespace(r)
 	if err != nil {
 		return err
@@ -201,7 +201,7 @@ func (s Server) replicateToRemoteHandler(w http.ResponseWriter, r *http.Request)
 	return s.replicateToRemote(namespace, d, remoteDNS)
 }
 
-func (s Server) replicateToRemote(namespace string, d core.Digest, remoteDNS string) error {
+func (s *Server) replicateToRemote(namespace string, d core.Digest, remoteDNS string) error {
 	f, err := s.fileStore.GetCacheFileReader(d.Hex())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -218,7 +218,7 @@ func (s Server) replicateToRemote(namespace string, d core.Digest, remoteDNS str
 }
 
 // deleteBlobHandler deletes blob data.
-func (s Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -232,7 +232,7 @@ func (s Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
-func (s Server) getLocationsHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) getLocationsHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -247,14 +247,14 @@ func (s Server) getLocationsHandler(w http.ResponseWriter, r *http.Request) erro
 }
 
 // getPeerContextHandler returns the Server's peer context as JSON.
-func (s Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewEncoder(w).Encode(s.pctx); err != nil {
 		return handler.Errorf("error converting peer context to json: %s", err)
 	}
 	return nil
 }
 
-func (s Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
 	namespace, err := parseNamespace(r)
 	if err != nil {
 		return err
@@ -274,7 +274,7 @@ func (s Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
-func (s Server) overwriteMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) overwriteMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -292,7 +292,7 @@ func (s Server) overwriteMetaInfoHandler(w http.ResponseWriter, r *http.Request)
 // overwriteMetaInfo generates metainfo configured with pieceLength for d and
 // writes it to disk, overwriting any existing metainfo. Primarily intended for
 // benchmarking purposes.
-func (s Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
+func (s *Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 	f, err := s.fileStore.GetCacheFileReader(d.Hex())
 	if err != nil {
 		return handler.Errorf("get cache file: %s", err)
@@ -311,7 +311,7 @@ func (s Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 // the blob from the storage backend configured for namespace will be initiated.
 // This download is asynchronous and getMetaInfo will immediately return a
 // "202 Accepted" server error.
-func (s Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
+func (s *Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
 	var tm metadata.TorrentMeta
 	if err := s.fileStore.GetCacheFileMetadata(d.Hex(), &tm); os.IsNotExist(err) {
 		return nil, s.startRemoteBlobDownload(namespace, d, true)
@@ -322,7 +322,7 @@ func (s Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
 }
 
 type localReplicationHook struct {
-	server Server
+	server *Server
 }
 
 func (h *localReplicationHook) Run(d core.Digest) {
@@ -336,7 +336,7 @@ func (h *localReplicationHook) Run(d core.Digest) {
 	timer.Stop()
 }
 
-func (s Server) startRemoteBlobDownload(
+func (s *Server) startRemoteBlobDownload(
 	namespace string, d core.Digest, replicateLocally bool) error {
 
 	var hooks []blobrefresh.PostHook
@@ -356,7 +356,7 @@ func (s Server) startRemoteBlobDownload(
 	}
 }
 
-func (s Server) downloadRemoteBlob(c backend.Client, d core.Digest) error {
+func (s *Server) downloadRemoteBlob(c backend.Client, d core.Digest) error {
 	u := uuid.Generate().String()
 	if err := s.fileStore.CreateUploadFile(u, 0); err != nil {
 		return handler.Errorf("create upload file: %s", err)
@@ -384,7 +384,7 @@ func (s Server) downloadRemoteBlob(c backend.Client, d core.Digest) error {
 	return nil
 }
 
-func (s Server) replicateBlobLocally(d core.Digest) error {
+func (s *Server) replicateBlobLocally(d core.Digest) error {
 	locs, err := s.getLocations(d)
 	if err != nil {
 		return fmt.Errorf("get locations: %s", err)
@@ -413,7 +413,7 @@ func (s Server) replicateBlobLocally(d core.Digest) error {
 	return errutil.Join(errs)
 }
 
-func (s Server) getLocations(d core.Digest) ([]string, error) {
+func (s *Server) getLocations(d core.Digest) ([]string, error) {
 	nodes, err := s.hashState.GetOrderedNodes(d.ShardID(), s.config.NumReplica)
 	if err != nil || len(nodes) == 0 {
 		return nil, handler.Errorf("get nodes: %s", err)
@@ -426,7 +426,7 @@ func (s Server) getLocations(d core.Digest) ([]string, error) {
 	return locs, nil
 }
 
-func (s Server) ensureCorrectNode(d core.Digest) error {
+func (s *Server) ensureCorrectNode(d core.Digest) error {
 	nodes, err := s.hashState.GetOrderedNodes(d.ShardID(), s.config.NumReplica)
 	if err != nil || len(nodes) == 0 {
 		return handler.Errorf("get nodes: %s", err)
@@ -443,7 +443,7 @@ func (s Server) ensureCorrectNode(d core.Digest) error {
 // download of the blob from the storage backend configured for namespace will
 // be initiated. This download is asynchronous and downloadBlob will immediately
 // return a "202 Accepted" handler error.
-func (s Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error {
+func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error {
 	f, err := s.fileStore.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
 		return s.startRemoteBlobDownload(namespace, d, true)
@@ -458,7 +458,7 @@ func (s Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) err
 	return nil
 }
 
-func (s Server) deleteBlob(d core.Digest) error {
+func (s *Server) deleteBlob(d core.Digest) error {
 	if err := s.fileStore.DeleteCacheFile(d.Hex()); err != nil {
 		if os.IsNotExist(err) {
 			return handler.ErrorStatus(http.StatusNotFound)
@@ -471,7 +471,7 @@ func (s Server) deleteBlob(d core.Digest) error {
 // startUploadHandler initializes an upload for both internal and external uploads.
 // Returns the location of the upload which is needed for subsequent chunk uploads of
 // this blob.
-func (s Server) startUploadHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) startUploadHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -488,7 +488,7 @@ func (s Server) startUploadHandler(w http.ResponseWriter, r *http.Request) error
 }
 
 // patchUploadHandler uploads a chunk of a blob for both internal and external uploads.
-func (s Server) patchUploadHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) patchUploadHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -503,7 +503,7 @@ func (s Server) patchUploadHandler(w http.ResponseWriter, r *http.Request) error
 
 // commitTransferHandler commits the upload of an internal blob transfer.
 // Internal blob transfers are not replicated to the rest of the cluster.
-func (s Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -527,7 +527,7 @@ func (s Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) er
 // commitClusterUploadHandler commits the upload of an external blob upload.
 // External blob uploads support write-through operations to storage backends
 // and automatically replicate to the rest of the cluster.
-func (s Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -558,7 +558,7 @@ func (s Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-func (s Server) commitClusterUpload(
+func (s *Server) commitClusterUpload(
 	uid string, namespace string, d core.Digest, through bool) error {
 
 	if err := s.uploader.verify(d, uid); err != nil {
