@@ -71,7 +71,7 @@ func (t *ProxyTransferer) Download(namespace string, d core.Digest) (store.FileR
 func (t *ProxyTransferer) Upload(
 	namespace string, d core.Digest, blob store.FileReader) error {
 
-	return t.originCluster.UploadBlob(namespace, d, blob, true)
+	return t.originCluster.UploadBlob(namespace, d, blob)
 }
 
 // GetTag returns the manifest digest for tag.

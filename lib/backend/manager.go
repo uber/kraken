@@ -7,7 +7,6 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/backend/hdfsbackend"
 	"code.uber.internal/infra/kraken/lib/backend/httpbackend"
-	"code.uber.internal/infra/kraken/lib/backend/originbackend"
 	"code.uber.internal/infra/kraken/lib/backend/s3backend"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
 )
@@ -51,8 +50,6 @@ func NewManager(configs []Config, auth AuthConfig) (*Manager, error) {
 			c, err = hdfsbackend.NewClient(config.HDFS)
 		case "http":
 			c, err = httpbackend.NewClient(config.HTTP)
-		case "origin":
-			c, err = originbackend.NewClient(config.Origin)
 		case "testfs":
 			c, err = testfs.NewClient(config.TestFS)
 		default:

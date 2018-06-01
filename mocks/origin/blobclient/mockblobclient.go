@@ -85,16 +85,16 @@ func (mr *MockClientMockRecorder) DownloadBlob(arg0, arg1, arg2 interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBlob", reflect.TypeOf((*MockClient)(nil).DownloadBlob), arg0, arg1, arg2)
 }
 
-// DuplicateUploadBlobAsync mocks base method
-func (m *MockClient) DuplicateUploadBlobAsync(arg0 string, arg1 core.Digest, arg2 io.Reader, arg3 time.Duration) error {
-	ret := m.ctrl.Call(m, "DuplicateUploadBlobAsync", arg0, arg1, arg2, arg3)
+// DuplicateUploadBlob mocks base method
+func (m *MockClient) DuplicateUploadBlob(arg0 string, arg1 core.Digest, arg2 io.Reader, arg3 time.Duration) error {
+	ret := m.ctrl.Call(m, "DuplicateUploadBlob", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DuplicateUploadBlobAsync indicates an expected call of DuplicateUploadBlobAsync
-func (mr *MockClientMockRecorder) DuplicateUploadBlobAsync(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DuplicateUploadBlobAsync", reflect.TypeOf((*MockClient)(nil).DuplicateUploadBlobAsync), arg0, arg1, arg2, arg3)
+// DuplicateUploadBlob indicates an expected call of DuplicateUploadBlob
+func (mr *MockClientMockRecorder) DuplicateUploadBlob(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DuplicateUploadBlob", reflect.TypeOf((*MockClient)(nil).DuplicateUploadBlob), arg0, arg1, arg2, arg3)
 }
 
 // GetMetaInfo mocks base method
@@ -173,27 +173,15 @@ func (mr *MockClientMockRecorder) TransferBlob(arg0, arg1 interface{}) *gomock.C
 }
 
 // UploadBlob mocks base method
-func (m *MockClient) UploadBlob(arg0 string, arg1 core.Digest, arg2 io.Reader, arg3 bool) error {
-	ret := m.ctrl.Call(m, "UploadBlob", arg0, arg1, arg2, arg3)
+func (m *MockClient) UploadBlob(arg0 string, arg1 core.Digest, arg2 io.Reader) error {
+	ret := m.ctrl.Call(m, "UploadBlob", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UploadBlob indicates an expected call of UploadBlob
-func (mr *MockClientMockRecorder) UploadBlob(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClient)(nil).UploadBlob), arg0, arg1, arg2, arg3)
-}
-
-// UploadBlobAsync mocks base method
-func (m *MockClient) UploadBlobAsync(arg0 string, arg1 core.Digest, arg2 io.Reader) error {
-	ret := m.ctrl.Call(m, "UploadBlobAsync", arg0, arg1, arg2)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UploadBlobAsync indicates an expected call of UploadBlobAsync
-func (mr *MockClientMockRecorder) UploadBlobAsync(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlobAsync", reflect.TypeOf((*MockClient)(nil).UploadBlobAsync), arg0, arg1, arg2)
+func (mr *MockClientMockRecorder) UploadBlob(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClient)(nil).UploadBlob), arg0, arg1, arg2)
 }
 
 // MockProvider is a mock of Provider interface
@@ -317,15 +305,15 @@ func (mr *MockClusterClientMockRecorder) ReplicateToRemote(arg0, arg1, arg2 inte
 }
 
 // UploadBlob mocks base method
-func (m *MockClusterClient) UploadBlob(arg0 string, arg1 core.Digest, arg2 io.Reader, arg3 bool) error {
-	ret := m.ctrl.Call(m, "UploadBlob", arg0, arg1, arg2, arg3)
+func (m *MockClusterClient) UploadBlob(arg0 string, arg1 core.Digest, arg2 io.Reader) error {
+	ret := m.ctrl.Call(m, "UploadBlob", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UploadBlob indicates an expected call of UploadBlob
-func (mr *MockClusterClientMockRecorder) UploadBlob(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClusterClient)(nil).UploadBlob), arg0, arg1, arg2, arg3)
+func (mr *MockClusterClientMockRecorder) UploadBlob(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClusterClient)(nil).UploadBlob), arg0, arg1, arg2)
 }
 
 // MockClientResolver is a mock of ClientResolver interface

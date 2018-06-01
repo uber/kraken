@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/backoff"
@@ -45,14 +47,16 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		blob := core.NewBlobFixture()
 
-		require.NoError(cc.UploadBlob("noexist", blob.Digest, bytes.NewReader(blob.Content), false))
+		s.writeBackManager.EXPECT().Add(
+			writeback.MatchTask(writeback.NewTask(backend.NoopNamespace, blob.Digest))).Return(nil)
+		require.NoError(cc.UploadBlob(backend.NoopNamespace, blob.Digest, bytes.NewReader(blob.Content)))
 
-		mi, err := cc.GetMetaInfo("noexist", blob.Digest)
+		mi, err := cc.GetMetaInfo(backend.NoopNamespace, blob.Digest)
 		require.NoError(err)
 		require.NotNil(mi)
 
 		var buf bytes.Buffer
-		require.NoError(cc.DownloadBlob("noexist", blob.Digest, &buf))
+		require.NoError(cc.DownloadBlob(backend.NoopNamespace, blob.Digest, &buf))
 		require.Equal(string(blob.Content), buf.String())
 
 		peers, err := cc.Owners(blob.Digest)
@@ -74,12 +78,12 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	require.Error(cc.UploadBlob("noexist", blob.Digest, bytes.NewReader(blob.Content), false))
+	require.Error(cc.UploadBlob(backend.NoopNamespace, blob.Digest, bytes.NewReader(blob.Content)))
 
-	_, err := cc.GetMetaInfo("noexist", blob.Digest)
+	_, err := cc.GetMetaInfo(backend.NoopNamespace, blob.Digest)
 	require.Error(err)
 
-	require.Error(cc.DownloadBlob("noexist", blob.Digest, ioutil.Discard))
+	require.Error(cc.DownloadBlob(backend.NoopNamespace, blob.Digest, ioutil.Discard))
 
 	_, err = cc.Owners(blob.Digest)
 	require.Error(err)
