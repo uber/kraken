@@ -10,6 +10,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	io "io"
 	reflect "reflect"
+	time "time"
 )
 
 // MockClient is a mock of Client interface
@@ -82,6 +83,18 @@ func (m *MockClient) DownloadBlob(arg0 string, arg1 core.Digest, arg2 io.Writer)
 // DownloadBlob indicates an expected call of DownloadBlob
 func (mr *MockClientMockRecorder) DownloadBlob(arg0, arg1, arg2 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBlob", reflect.TypeOf((*MockClient)(nil).DownloadBlob), arg0, arg1, arg2)
+}
+
+// DuplicateUploadBlobAsync mocks base method
+func (m *MockClient) DuplicateUploadBlobAsync(arg0 string, arg1 core.Digest, arg2 io.Reader, arg3 time.Duration) error {
+	ret := m.ctrl.Call(m, "DuplicateUploadBlobAsync", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DuplicateUploadBlobAsync indicates an expected call of DuplicateUploadBlobAsync
+func (mr *MockClientMockRecorder) DuplicateUploadBlobAsync(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DuplicateUploadBlobAsync", reflect.TypeOf((*MockClient)(nil).DuplicateUploadBlobAsync), arg0, arg1, arg2, arg3)
 }
 
 // GetMetaInfo mocks base method

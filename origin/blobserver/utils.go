@@ -1,7 +1,6 @@
 package blobserver
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -10,7 +9,6 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/handler"
 	"github.com/pressly/chi"
 )
@@ -76,18 +74,6 @@ func blobExists(fs store.OriginFileStore, d core.Digest) (bool, error) {
 		return false, handler.Errorf("cache file stat: %s", err)
 	}
 	return true, nil
-}
-
-// transferBlob transfer blob d from fs to client.
-func transferBlob(fs store.OriginFileStore, d core.Digest, client blobclient.Client) error {
-	f, err := fs.GetCacheFileReader(d.Hex())
-	if err != nil {
-		return fmt.Errorf("get cache reader: %s", err)
-	}
-	if err := client.TransferBlob(d, f); err != nil {
-		return fmt.Errorf("push blob: %s", err)
-	}
-	return nil
 }
 
 func setUploadLocation(w http.ResponseWriter, uid string) {

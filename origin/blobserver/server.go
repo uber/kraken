@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
@@ -28,6 +29,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
+	"code.uber.internal/infra/kraken/utils/stringset"
 
 	"github.com/docker/distribution/uuid"
 	"github.com/pressly/chi"
@@ -71,6 +73,8 @@ func New(
 	blobRefresher *blobrefresh.Refresher,
 	metaInfoGenerator *metainfogen.Generator,
 	writeBackManager persistedretry.Manager) (*Server, error) {
+
+	config = config.applyDefaults()
 
 	stats = stats.Tagged(map[string]string{
 		"module": "blobserver",
@@ -128,6 +132,9 @@ func (s *Server) Handler() http.Handler {
 	r.Put(
 		"/namespace/:namespace/blobs/:digest/uploads/:uid/async",
 		handler.Wrap(s.commitAsyncClusterUploadHandler))
+	r.Put(
+		"/internal/duplicate/namespace/:namespace/blobs/:digest/uploads/:uid/async",
+		handler.Wrap(s.duplicateCommitAsyncClusterUploadHandler))
 
 	r.Get("/namespace/:namespace/blobs/:digest", handler.Wrap(s.downloadBlobHandler))
 
@@ -393,28 +400,44 @@ func (s *Server) downloadRemoteBlob(c backend.Client, d core.Digest) error {
 }
 
 func (s *Server) replicateBlobLocally(d core.Digest) error {
+	return s.applyToReplicas(d, func(i int, client blobclient.Client) error {
+		f, err := s.fileStore.GetCacheFileReader(d.Hex())
+		if err != nil {
+			return fmt.Errorf("get cache reader: %s", err)
+		}
+		if err := client.TransferBlob(d, f); err != nil {
+			return fmt.Errorf("transfer blob: %s", err)
+		}
+		return nil
+	})
+}
+
+// applyToReplicas applies f to the replicas of d concurrently in random order,
+// not including the current origin. Passes the index of the iteration to f.
+func (s *Server) applyToReplicas(d core.Digest, f func(i int, c blobclient.Client) error) error {
 	locs, err := s.getLocations(d)
 	if err != nil {
 		return fmt.Errorf("get locations: %s", err)
 	}
+	replicas := stringset.FromSlice(locs)
+	replicas.Remove(s.addr)
 
 	var mu sync.Mutex
 	var errs []error
 
 	var wg sync.WaitGroup
-	for _, loc := range locs {
-		if s.addr == loc {
-			continue
-		}
+	var i int
+	for replica := range replicas {
 		wg.Add(1)
-		go func(loc string) {
+		go func(i int, replica string) {
 			defer wg.Done()
-			if err := transferBlob(s.fileStore, d, s.clientProvider.Provide(loc)); err != nil {
+			if err := f(i, s.clientProvider.Provide(replica)); err != nil {
 				mu.Lock()
 				errs = append(errs, err)
 				mu.Unlock()
 			}
-		}(loc)
+		}(i, replica)
+		i++
 	}
 	wg.Wait()
 
@@ -620,8 +643,57 @@ func (s *Server) commitAsyncClusterUploadHandler(w http.ResponseWriter, r *http.
 	if err := s.uploader.commit(d, uid); err != nil {
 		return err
 	}
-	// TODO(codyg): Replicate work to other origins.
 	if err := s.writeBackManager.Add(writeback.NewTask(namespace, d)); err != nil {
+		return handler.Errorf("add write-back task: %s", err)
+	}
+	err = s.applyToReplicas(d, func(i int, client blobclient.Client) error {
+		delay := s.config.DuplicateWriteBackStagger * time.Duration(i+1)
+		f, err := s.fileStore.GetCacheFileReader(d.Hex())
+		if err != nil {
+			return fmt.Errorf("get cache file: %s", err)
+		}
+		if err := client.DuplicateUploadBlobAsync(namespace, d, f, delay); err != nil {
+			return fmt.Errorf("duplicate upload: %s", err)
+		}
+		return nil
+	})
+	if err != nil {
+		log.Errorf("Error duplicating write-back task to replicas: %s", err)
+	}
+	if err := s.metaInfoGenerator.Generate(d); err != nil {
+		return handler.Errorf("generate metainfo: %s", err)
+	}
+	return nil
+}
+
+// duplicateCommitAsyncClusterUploadHandler commits a duplicate blob upload,
+// which will attempt to write-back after the requested delay.
+func (s *Server) duplicateCommitAsyncClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
+	d, err := parseDigest(r)
+	if err != nil {
+		return err
+	}
+	if err := s.ensureCorrectNode(d); err != nil {
+		return err
+	}
+	namespace, err := parseNamespace(r)
+	if err != nil {
+		return err
+	}
+	uid := chi.URLParam(r, "uid")
+	var dr blobclient.DuplicateUploadBlobAsyncRequest
+	if err := json.NewDecoder(r.Body).Decode(&dr); err != nil {
+		return handler.Errorf("decode body: %s", err)
+	}
+	delay := dr.Delay
+
+	if err := s.uploader.verify(d, uid); err != nil {
+		return err
+	}
+	if err := s.uploader.commit(d, uid); err != nil {
+		return err
+	}
+	if err := s.writeBackManager.Add(writeback.NewTaskWithDelay(namespace, d, delay)); err != nil {
 		return handler.Errorf("add write-back task: %s", err)
 	}
 	if err := s.metaInfoGenerator.Generate(d); err != nil {

@@ -504,19 +504,26 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 func TestUploadBlobAsync(t *testing.T) {
 	require := require.New(t)
 
-	config := configNoReplicaFixture()
+	config := configFixture()
+	config.DuplicateWriteBackStagger = time.Minute
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, config, cp)
-	defer s.cleanup()
+	s1 := newTestServer(t, master1, config, cp)
+	defer s1.cleanup()
 
-	blob := computeBlobForHosts(config, s.host)
+	s2 := newTestServer(t, master2, config, cp)
+	defer s2.cleanup()
 
-	s.writeBackManager.EXPECT().Add(
+	blob := computeBlobForHosts(config, s1.host, s2.host)
+
+	s1.writeBackManager.EXPECT().Add(
 		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest))).Return(nil)
+	s2.writeBackManager.EXPECT().Add(
+		writeback.MatchTask(writeback.NewTaskWithDelay(namespace, blob.Digest, time.Minute)))
 
-	err := cp.Provide(s.host).UploadBlobAsync(namespace, blob.Digest, bytes.NewReader(blob.Content))
+	err := cp.Provide(s1.host).UploadBlobAsync(namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
 
-	ensureHasBlob(t, cp.Provide(s.host), blob)
+	ensureHasBlob(t, cp.Provide(s1.host), blob)
+	ensureHasBlob(t, cp.Provide(s2.host), blob)
 }
