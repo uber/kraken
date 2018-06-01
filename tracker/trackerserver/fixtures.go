@@ -11,10 +11,7 @@ import (
 
 // Fixture is a test utility which returns a tracker server with in-memory storage.
 func Fixture() *Server {
-	policy, err := peerhandoutpolicy.Get("ipv4netmask", "completeness")
-	if err != nil {
-		panic(err)
-	}
+	policy := peerhandoutpolicy.DefaultPriorityPolicyFixture()
 	config := Config{
 		AnnounceInterval: 250 * time.Millisecond,
 	}

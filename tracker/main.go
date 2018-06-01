@@ -42,8 +42,7 @@ func main() {
 		log.Fatalf("Could not create MetaInfoStore: %s", err)
 	}
 
-	policy, err := peerhandoutpolicy.Get(
-		config.PeerHandoutPolicy.Priority, config.PeerHandoutPolicy.Sampling)
+	policy, err := peerhandoutpolicy.NewPriorityPolicy(stats, config.PeerHandoutPolicy.Priority)
 	if err != nil {
 		log.Fatalf("Could not load peer handout policy: %s", err)
 	}

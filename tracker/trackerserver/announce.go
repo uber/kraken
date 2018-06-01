@@ -13,11 +13,6 @@ import (
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
-const (
-	_seederHandoutGauge    = "seeders_handed_out"
-	_seederHandoutPctGauge = "seeders_handed_out_pct"
-)
-
 func (s *Server) announceHandler(w http.ResponseWriter, r *http.Request) error {
 	req := new(announceclient.Request)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
@@ -87,32 +82,7 @@ func (s *Server) getPeerHandout(
 		return nil, handler.ErrorStatus(http.StatusNotFound)
 	}
 
-	err = s.policy.AssignPeerPriority(peer, peers)
-	if err != nil {
-		return nil, handler.Errorf("assign peer priority: %s", err)
-	}
-
-	// TODO(codyg): Just make this sort peers since storage already samples via limit.
-	peers, err = s.policy.SamplePeers(peers, len(peers))
-	if err != nil {
-		return nil, handler.Errorf("sample peers: %s", err)
-	}
-
-	var peerCount int
-	var seederCount int
-	for _, peer := range peers {
-		if !peer.Origin {
-			peerCount++
-			if peer.Complete {
-				seederCount++
-			}
-		}
-	}
-
-	s.stats.Gauge(_seederHandoutGauge).Update(float64(seederCount))
-	s.stats.Gauge(_seederHandoutPctGauge).Update(float64(seederCount) / float64(peerCount))
-
-	return peers, nil
+	return s.policy.SortPeers(peer, peers), nil
 }
 
 func (s *Server) fetchOrigins(name string) ([]*core.PeerInfo, error) {

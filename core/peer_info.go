@@ -7,8 +7,6 @@ type PeerInfo struct {
 	PeerID   PeerID `json:"peer_id"`
 	IP       string `json:"ip"`
 	Port     int    `json:"port"`
-	Priority int    `json:"priority"`
-	DC       string `json:"dc"` // TODO(codyg): Remove DC (unused).
 	Origin   bool   `json:"origin"`
 	Complete bool   `json:"complete"`
 }
@@ -43,22 +41,6 @@ func (s PeerInfos) Len() int { return len(s) }
 
 // Swap for sorting
 func (s PeerInfos) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
-// PeersByPriority sorts PeerInfos by priority.
-type PeersByPriority struct{ PeerInfos }
-
-// Less for sorting.
-func (s PeersByPriority) Less(i, j int) bool {
-	return s.PeerInfos[i].Priority < s.PeerInfos[j].Priority
-}
-
-// PeersByComplete sorts PeerInfos by completeness.
-type PeersByComplete struct{ PeerInfos }
-
-// Less for sorting.
-func (s PeersByComplete) Less(i, j int) bool {
-	return s.PeerInfos[i].Complete && !s.PeerInfos[j].Complete
-}
 
 // PeersByPeerID sorts PeerInfos by peer id.
 type PeersByPeerID struct{ PeerInfos }
