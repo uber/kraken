@@ -81,13 +81,16 @@ func NewOriginFileStore(
 	stateUpload := agentFileState{config.UploadDir}
 	stateCache := agentFileState{config.CacheDir}
 
-	cleanup := newCleanupManager(clk, stats)
+	cleanup, err := newCleanupManager(clk, stats)
+	if err != nil {
+		return nil, fmt.Errorf("new cleanup manager: %s", err)
+	}
 	cleanup.addJob(
-		"upload_cleanup",
+		"upload",
 		config.UploadCleanup,
 		uploadBackend.NewFileOp().AcceptState(stateUpload))
 	cleanup.addJob(
-		"cache_cleanup",
+		"cache",
 		config.CacheCleanup,
 		cacheBackend.NewFileOp().AcceptState(stateCache))
 

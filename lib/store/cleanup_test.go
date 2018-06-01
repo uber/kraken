@@ -41,7 +41,8 @@ func TestCleanupManagerAddJob(t *testing.T) {
 
 	clk := clock.New()
 
-	m := newCleanupManager(clk, tally.NoopScope)
+	m, err := newCleanupManager(clk, tally.NoopScope)
+	require.NoError(err)
 	defer m.stop()
 
 	state, op, cleanup := fileOpFixture(clk)
@@ -59,7 +60,7 @@ func TestCleanupManagerAddJob(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	_, err := op.GetFileStat(name)
+	_, err = op.GetFileStat(name)
 	require.True(os.IsNotExist(err))
 }
 
@@ -71,10 +72,9 @@ func TestCleanupManagerDeleteIdleFiles(t *testing.T) {
 	tti := 6 * time.Hour
 	ttl := 24 * time.Hour
 
-	scope := tally.NoopScope
-	gauge := scope.Gauge("test")
-
-	m := newCleanupManager(clk, scope)
+	m, err := newCleanupManager(clk, tally.NoopScope)
+	require.NoError(err)
+	defer m.stop()
 
 	state, op, cleanup := fileOpFixture(clk)
 	defer cleanup()
@@ -96,7 +96,8 @@ func TestCleanupManagerDeleteIdleFiles(t *testing.T) {
 		require.NoError(op.CreateFile(name, state, 0))
 	}
 
-	require.NoError(m.deleteIdleOrExpiredFiles(op, tti, ttl, gauge))
+	_, err = m.scan(op, tti, ttl)
+	require.NoError(err)
 
 	for _, name := range idle {
 		_, err := op.GetFileStat(name)
@@ -116,10 +117,9 @@ func TestCleanupManagerDeleteExpiredFiles(t *testing.T) {
 	tti := 6 * time.Hour
 	ttl := 24 * time.Hour
 
-	scope := tally.NoopScope
-	gauge := scope.Gauge("test")
-
-	m := newCleanupManager(clk, scope)
+	m, err := newCleanupManager(clk, tally.NoopScope)
+	require.NoError(err)
+	defer m.stop()
 
 	state, op, cleanup := fileOpFixture(clk)
 	defer cleanup()
@@ -132,7 +132,9 @@ func TestCleanupManagerDeleteExpiredFiles(t *testing.T) {
 		require.NoError(op.CreateFile(name, state, 0))
 	}
 
-	require.NoError(m.deleteIdleOrExpiredFiles(op, tti, ttl, gauge))
+	_, err = m.scan(op, tti, ttl)
+	require.NoError(err)
+
 	for _, name := range names {
 		_, err := op.GetFileStat(name)
 		require.NoError(err)
@@ -140,7 +142,9 @@ func TestCleanupManagerDeleteExpiredFiles(t *testing.T) {
 
 	clk.Add(ttl + 1)
 
-	require.NoError(m.deleteIdleOrExpiredFiles(op, tti, ttl, gauge))
+	_, err = m.scan(op, tti, ttl)
+	require.NoError(err)
+
 	for _, name := range names {
 		_, err := op.GetFileStat(name)
 		require.True(os.IsNotExist(err))
@@ -155,10 +159,9 @@ func TestCleanupManagerSkipsPersistedFiles(t *testing.T) {
 	tti := 48 * time.Hour
 	ttl := 24 * time.Hour
 
-	scope := tally.NoopScope
-	gauge := scope.Gauge("test")
-
-	m := newCleanupManager(clk, scope)
+	m, err := newCleanupManager(clk, tally.NoopScope)
+	require.NoError(err)
+	defer m.stop()
 
 	state, op, cleanup := fileOpFixture(clk)
 	defer cleanup()
@@ -182,7 +185,8 @@ func TestCleanupManagerSkipsPersistedFiles(t *testing.T) {
 
 	clk.Add(tti + 1)
 
-	require.NoError(m.deleteIdleOrExpiredFiles(op, tti, ttl, gauge))
+	_, err = m.scan(op, tti, ttl)
+	require.NoError(err)
 
 	for _, name := range idle {
 		_, err := op.GetFileStat(name)
@@ -192,4 +196,25 @@ func TestCleanupManagerSkipsPersistedFiles(t *testing.T) {
 		_, err := op.GetFileStat(name)
 		require.NoError(err)
 	}
+}
+
+func TestCleanupManageDiskUsage(t *testing.T) {
+	require := require.New(t)
+
+	clk := clock.New()
+
+	m, err := newCleanupManager(clk, tally.NoopScope)
+	require.NoError(err)
+	defer m.stop()
+
+	state, op, cleanup := fileOpFixture(clk)
+	defer cleanup()
+
+	for i := 0; i < 100; i++ {
+		require.NoError(op.CreateFile(core.DigestFixture().Hex(), state, 5))
+	}
+
+	usage, err := m.scan(op, time.Hour, time.Hour)
+	require.NoError(err)
+	require.Equal(int64(500), usage)
 }
