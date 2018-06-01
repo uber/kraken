@@ -84,7 +84,7 @@ func OriginFileStoreFixture(clk clock.Clock) (*OriginLocalFileStore, func()) {
 		UploadDir: upload,
 		CacheDir:  cache,
 	}
-	s, err := NewOriginFileStore(config, clk)
+	s, err := NewOriginFileStore(config, clk, tally.NewTestScope("", nil))
 	if err != nil {
 		panic(err)
 	}

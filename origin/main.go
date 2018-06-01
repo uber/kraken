@@ -89,7 +89,7 @@ func main() {
 		"origin": hostname,
 	})
 
-	fs, err := store.NewOriginFileStore(config.OriginStore, clock.New())
+	fs, err := store.NewOriginFileStore(config.OriginStore, clock.New(), stats)
 	if err != nil {
 		log.Fatalf("Failed to create origin file store: %s", err)
 	}
