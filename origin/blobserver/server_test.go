@@ -410,11 +410,13 @@ func TestUploadBlobDuplicatesWriteBackTaskToReplicas(t *testing.T) {
 
 	ensureHasBlob(t, cp.Provide(s1.host), blob)
 	ensureHasBlob(t, cp.Provide(s2.host), blob)
+
+	// Shouldn't be able to delete blob since it is still being written back.
+	require.Error(cp.Provide(s1.host).DeleteBlob(blob.Digest))
+	require.Error(cp.Provide(s2.host).DeleteBlob(blob.Digest))
 }
 
 func TestUploadBlobRetriesWriteBackFailure(t *testing.T) {
-	t.Skip("TODO(codyg): Expected failure -- need to fix write-back semantics")
-
 	require := require.New(t)
 
 	config := configNoReplicaFixture()
@@ -442,6 +444,9 @@ func TestUploadBlobRetriesWriteBackFailure(t *testing.T) {
 	// Uploading again should succeed.
 	err = cp.Provide(s.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
+
+	// Shouldn't be able to delete blob since it is still being written back.
+	require.Error(cp.Provide(s.host).DeleteBlob(blob.Digest))
 }
 
 func TestUploadBlobResilientToDuplicationFailure(t *testing.T) {
