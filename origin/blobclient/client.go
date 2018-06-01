@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/httputil"
@@ -29,6 +30,8 @@ type Client interface {
 
 	UploadBlob(namespace string, d core.Digest, blob io.Reader, through bool) error
 	UploadBlobAsync(namespace string, d core.Digest, blob io.Reader) error
+	DuplicateUploadBlobAsync(namespace string, d core.Digest, blob io.Reader, delay time.Duration) error
+
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
 
 	ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error
@@ -119,7 +122,7 @@ func (c *HTTPClient) UploadBlob(
 	if through {
 		t = _syncUploadThrough
 	}
-	uc := newUploadClient(c.addr, namespace, t)
+	uc := newUploadClient(c.addr, namespace, t, 0)
 	return runChunkedUpload(uc, d, blob, int64(c.config.ChunkSize))
 }
 
@@ -127,7 +130,21 @@ func (c *HTTPClient) UploadBlob(
 // asynchronously backing the blob up to the remote storage configured for
 // namespace.
 func (c *HTTPClient) UploadBlobAsync(namespace string, d core.Digest, blob io.Reader) error {
-	uc := newUploadClient(c.addr, namespace, _asyncUpload)
+	uc := newUploadClient(c.addr, namespace, _asyncUpload, 0)
+	return runChunkedUpload(uc, d, blob, int64(c.config.ChunkSize))
+}
+
+// DuplicateUploadBlobAsyncRequest defines HTTP request body.
+type DuplicateUploadBlobAsyncRequest struct {
+	Delay time.Duration `yaml:"delay"`
+}
+
+// DuplicateUploadBlobAsync duplicates an async blob upload request, which will
+// attempt to write-back at the given delay.
+func (c *HTTPClient) DuplicateUploadBlobAsync(
+	namespace string, d core.Digest, blob io.Reader, delay time.Duration) error {
+
+	uc := newUploadClient(c.addr, namespace, _duplicateAsyncUpload, delay)
 	return runChunkedUpload(uc, d, blob, int64(c.config.ChunkSize))
 }
 

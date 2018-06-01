@@ -2,6 +2,7 @@ package blobclient
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -93,6 +94,7 @@ const (
 	_syncUpload uploadType = iota
 	_syncUploadThrough
 	_asyncUpload
+	_duplicateAsyncUpload
 )
 
 // uploadClient executes chunked uploads for external cluster upload operations.
@@ -100,10 +102,13 @@ type uploadClient struct {
 	addr       string
 	namespace  string
 	uploadType uploadType
+	delay      time.Duration
 }
 
-func newUploadClient(addr string, namespace string, t uploadType) *uploadClient {
-	return &uploadClient{addr, namespace, t}
+func newUploadClient(
+	addr string, namespace string, t uploadType, delay time.Duration) *uploadClient {
+
+	return &uploadClient{addr, namespace, t, delay}
 }
 
 func (c *uploadClient) start(d core.Digest) (uid string, err error) {
@@ -135,6 +140,7 @@ func (c *uploadClient) patch(
 
 func (c *uploadClient) commit(d core.Digest, uid string) error {
 	var template string
+	var body io.Reader
 	switch c.uploadType {
 	case _syncUpload:
 		template = "http://%s/namespace/%s/blobs/%s/uploads/%s"
@@ -142,11 +148,19 @@ func (c *uploadClient) commit(d core.Digest, uid string) error {
 		template = "http://%s/namespace/%s/blobs/%s/uploads/%s?through=true"
 	case _asyncUpload:
 		template = "http://%s/namespace/%s/blobs/%s/uploads/%s/async"
+	case _duplicateAsyncUpload:
+		template = "http://%s/internal/duplicate/namespace/%s/blobs/%s/uploads/%s/async"
+		b, err := json.Marshal(DuplicateUploadBlobAsyncRequest{c.delay})
+		if err != nil {
+			return fmt.Errorf("json: %s", err)
+		}
+		body = bytes.NewBuffer(b)
 	default:
 		return fmt.Errorf("unknown upload type: %d", c.uploadType)
 	}
 	_, err := httputil.Put(
 		fmt.Sprintf(template, c.addr, url.PathEscape(c.namespace), d, uid),
-		httputil.SendTimeout(15*time.Minute))
+		httputil.SendTimeout(15*time.Minute),
+		httputil.SendBody(body))
 	return err
 }

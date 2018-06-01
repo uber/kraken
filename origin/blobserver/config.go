@@ -2,6 +2,7 @@ package blobserver
 
 import (
 	"hash"
+	"time"
 
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"github.com/spaolacci/murmur3"
@@ -9,8 +10,16 @@ import (
 
 // Config defines the configuration used by Origin cluster for hashing blob digests.
 type Config struct {
-	NumReplica int         `yaml:"num_replica"`
-	HashNodes  HashNodeMap `yaml:"hash_nodes"`
+	NumReplica                int           `yaml:"num_replica"`
+	HashNodes                 HashNodeMap   `yaml:"hash_nodes"`
+	DuplicateWriteBackStagger time.Duration `yaml:"duplicate_write_back_stagger"`
+}
+
+func (c Config) applyDefaults() Config {
+	if c.DuplicateWriteBackStagger == 0 {
+		c.DuplicateWriteBackStagger = 30 * time.Minute
+	}
+	return c
 }
 
 // HashNodeMap defines a map from address of HashNodeConfig
