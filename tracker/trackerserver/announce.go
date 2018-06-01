@@ -13,6 +13,11 @@ import (
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
+const (
+	_seederHandoutGauge    = "seeders_handed_out"
+	_seederHandoutPctGauge = "seeders_handed_out_pct"
+)
+
 func (s *Server) announceHandler(w http.ResponseWriter, r *http.Request) error {
 	req := new(announceclient.Request)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
@@ -92,6 +97,20 @@ func (s *Server) getPeerHandout(
 	if err != nil {
 		return nil, handler.Errorf("sample peers: %s", err)
 	}
+
+	var peerCount int
+	var seederCount int
+	for _, peer := range peers {
+		if !peer.Origin {
+			peerCount++
+			if peer.Complete {
+				seederCount++
+			}
+		}
+	}
+
+	s.stats.Gauge(_seederHandoutGauge).Update(float64(seederCount))
+	s.stats.Gauge(_seederHandoutPctGauge).Update(float64(seederCount) / float64(peerCount))
 
 	return peers, nil
 }
