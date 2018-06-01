@@ -94,6 +94,9 @@ func (m *Manager) GetClient(namespace string) (Client, error) {
 	if namespace == "" {
 		return nil, errors.New("namespace is empty")
 	}
+	if namespace == NoopNamespace {
+		return NoopClient{}, nil
+	}
 	for _, b := range m.backends {
 		if b.regexp.MatchString(namespace) {
 			return b.client, nil
