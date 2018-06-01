@@ -2,89 +2,85 @@ package peerhandoutpolicy
 
 import (
 	"fmt"
+	"sort"
+
+	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/log"
 )
 
-// PeerPriorityPolicy defines the policy for assigning priority to peers.
-type PeerPriorityPolicy interface {
-	// AssignPeerPriority mutates peers by setting Priority for each PeerInfo
-	// based on the source peer. Note, should not set Priority on source.
-	AssignPeerPriority(source *core.PeerInfo, peers []*core.PeerInfo) error
+type peerPriorityInfo struct {
+	peer     *core.PeerInfo
+	priority int
+	label    string
 }
 
-// PeerSamplingPolicy defines the policy for selecting and ordering peers.
-type PeerSamplingPolicy interface {
-	// SamplePeers returns a new slice of n peers, sorted on sampling preference.
-	SamplePeers(peers []*core.PeerInfo, n int) ([]*core.PeerInfo, error)
+// assignmentPolicy defines the policy for assigning priority to peers.
+type assignmentPolicy interface {
+	assignPriority(peer *core.PeerInfo) (priority int, label string)
 }
 
-// PriorityFactory creates a PeerPriorityPolicy.
-type PriorityFactory func() PeerPriorityPolicy
-
-// SamplingFactory creates a PeerSamplingPolicy.
-type SamplingFactory func() PeerSamplingPolicy
-
-var (
-	_priorityFactories = make(map[string]PriorityFactory)
-	_samplingFactories = make(map[string]SamplingFactory)
-)
-
-func registerPriorityPolicy(name string, f PriorityFactory) {
-	if f == nil {
-		log.Panicf("No factory set for priority policy %s", name)
-	}
-	if _, ok := _priorityFactories[name]; ok {
-		log.Errorf("Priority policy %s already registered, ignoring factory.", name)
-	} else {
-		_priorityFactories[name] = f
-	}
+// PriorityPolicy wraps an assignmentPolicy and uses it to sort lists of peers.
+type PriorityPolicy struct {
+	stats  tally.Scope
+	policy assignmentPolicy
 }
 
-func registerSamplingPolicy(name string, f SamplingFactory) {
-	if f == nil {
-		log.Panicf("No factory set for sampling policy %s", name)
+// NewPriorityPolicy returns a PriorityPolicy that assigns priorities using the given priority policy.
+func NewPriorityPolicy(stats tally.Scope, priorityPolicy string) (*PriorityPolicy, error) {
+	p := &PriorityPolicy{
+		stats: stats.Tagged(map[string]string{
+			"module":   "peerhandoutpolicy",
+			"priority": priorityPolicy,
+		}),
 	}
-	if _, ok := _samplingFactories[name]; ok {
-		log.Errorf("Sampling policy %s already registered, ignoring factory.", name)
-	} else {
-		_samplingFactories[name] = f
-	}
-}
 
-func init() {
-	registerPriorityPolicy("default", NewDefaultPeerPriorityPolicy)
-	registerPriorityPolicy("ipv4netmask", NewIPv4NetmaskPeerPriorityPolicy)
-
-	registerSamplingPolicy("default", NewDefaultPeerSamplingPolicy)
-	registerSamplingPolicy("completeness", NewCompletenessPeerSamplingPolicy)
-}
-
-// PeerHandoutPolicy composes priority and sampling policies. Aims to make priority
-// of peers orthogonal to the suggested peers. The handout policy is thus broken down
-// into two steps:
-//     1. Assign priority to each peer.
-//     2. Sample the top N peers.
-type PeerHandoutPolicy struct {
-	PeerPriorityPolicy
-	PeerSamplingPolicy
-}
-
-// Get returns the registered PeerHandoutPolicy for the given priority and sampling policies.
-func Get(priorityPolicy string, samplingPolicy string) (PeerHandoutPolicy, error) {
-	var p PeerHandoutPolicy
-	priorityFactory, ok := _priorityFactories[priorityPolicy]
-	if !ok {
-		return p, fmt.Errorf("priority policy %q not found", priorityPolicy)
+	switch priorityPolicy {
+	case _defaultPolicy:
+		p.policy = newDefaultAssignmentPolicy()
+	case _completenessPolicy:
+		p.policy = newCompletenessAssignmentPolicy()
+	default:
+		return nil, fmt.Errorf("priority policy %q not found", priorityPolicy)
 	}
-	samplingFactory, ok := _samplingFactories[samplingPolicy]
-	if !ok {
-		return p, fmt.Errorf("sampling policy %q not found", samplingPolicy)
-	}
-	p = PeerHandoutPolicy{
-		PeerPriorityPolicy: priorityFactory(),
-		PeerSamplingPolicy: samplingFactory(),
-	}
+
 	return p, nil
+}
+
+// SortPeers returns the given list of peers sorted by the priority assigned to them
+// by the priorityPolicy. Excludes the source peer from the list.
+func (p *PriorityPolicy) SortPeers(source *core.PeerInfo, peers []*core.PeerInfo) []*core.PeerInfo {
+
+	peerPriorities := make([]*peerPriorityInfo, 0, len(peers))
+	for k := 0; k < len(peers); k++ {
+		if peers[k] != source {
+			priority, label := p.policy.assignPriority(peers[k])
+			peerPriorities = append(peerPriorities,
+				&peerPriorityInfo{peers[k], priority, label})
+		}
+	}
+
+	sort.Slice(peerPriorities, func(i, j int) bool {
+		return peerPriorities[i].priority < peerPriorities[j].priority
+	})
+
+	priorityCounts := make(map[string]int)
+	for k := 0; k < len(peerPriorities); k++ {
+		p := peerPriorities[k]
+		peers[k] = p.peer
+		if count, ok := priorityCounts[p.label]; ok {
+			count++
+		} else {
+			priorityCounts[p.label] = 1
+		}
+	}
+	peers = peers[:len(peerPriorities)]
+
+	for label, count := range priorityCounts {
+		p.stats.Tagged(map[string]string{
+			"label": label,
+		}).Gauge("count").Update(float64(count))
+	}
+
+	return peers
 }

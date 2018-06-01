@@ -24,7 +24,7 @@ type Server struct {
 	stats  tally.Scope
 
 	peerStore     storage.PeerStore
-	policy        peerhandoutpolicy.PeerHandoutPolicy
+	policy        *peerhandoutpolicy.PriorityPolicy
 	originCluster blobclient.ClusterClient
 
 	metaInfoStore      storage.MetaInfoStore
@@ -37,7 +37,7 @@ type Server struct {
 func New(
 	config Config,
 	stats tally.Scope,
-	policy peerhandoutpolicy.PeerHandoutPolicy,
+	policy *peerhandoutpolicy.PriorityPolicy,
 	peerStore storage.PeerStore,
 	metaInfoStore storage.MetaInfoStore,
 	originCluster blobclient.ClusterClient) *Server {

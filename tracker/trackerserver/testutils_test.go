@@ -15,7 +15,7 @@ import (
 
 type serverMocks struct {
 	config        Config
-	policy        peerhandoutpolicy.PeerHandoutPolicy
+	policy        *peerhandoutpolicy.PriorityPolicy
 	ctrl          *gomock.Controller
 	peerStore     *mockstorage.MockStorage
 	metaInfoStore storage.MetaInfoStore
@@ -27,7 +27,7 @@ func newServerMocks(t *testing.T, config Config) (*serverMocks, func()) {
 	ctrl := gomock.NewController(t)
 	return &serverMocks{
 		config:        config,
-		policy:        peerhandoutpolicy.DefaultPeerHandoutPolicyFixture(),
+		policy:        peerhandoutpolicy.DefaultPriorityPolicyFixture(),
 		peerStore:     mockstorage.NewMockStorage(ctrl),
 		metaInfoStore: storage.TestMetaInfoStore(),
 		originCluster: mockblobclient.NewMockClusterClient(ctrl),
