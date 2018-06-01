@@ -28,9 +28,8 @@ type Client interface {
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
 
-	UploadBlob(namespace string, d core.Digest, blob io.Reader, through bool) error
-	UploadBlobAsync(namespace string, d core.Digest, blob io.Reader) error
-	DuplicateUploadBlobAsync(namespace string, d core.Digest, blob io.Reader, delay time.Duration) error
+	UploadBlob(namespace string, d core.Digest, blob io.Reader) error
+	DuplicateUploadBlob(namespace string, d core.Digest, blob io.Reader, delay time.Duration) error
 
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
 
@@ -112,39 +111,19 @@ func (c *HTTPClient) TransferBlob(d core.Digest, blob io.Reader) error {
 	return runChunkedUpload(tc, d, blob, int64(c.config.ChunkSize))
 }
 
-// UploadBlob uploads and replicates blob to the origin cluster. If through is set,
-// UploadBlob will also upload blob to the storage backend configured for namespace.
-// If the blob has already been uploaded, no-ops.
-func (c *HTTPClient) UploadBlob(
-	namespace string, d core.Digest, blob io.Reader, through bool) error {
-
-	t := _syncUpload
-	if through {
-		t = _syncUploadThrough
-	}
-	uc := newUploadClient(c.addr, namespace, t, 0)
+// UploadBlob uploads and replicates blob to the origin cluster, asynchronously
+// backing the blob up to the remote storage configured for namespace.
+func (c *HTTPClient) UploadBlob(namespace string, d core.Digest, blob io.Reader) error {
+	uc := newUploadClient(c.addr, namespace, _publicUpload, 0)
 	return runChunkedUpload(uc, d, blob, int64(c.config.ChunkSize))
 }
 
-// UploadBlobAsync uploads and replicates blob to the origin cluster,
-// asynchronously backing the blob up to the remote storage configured for
-// namespace.
-func (c *HTTPClient) UploadBlobAsync(namespace string, d core.Digest, blob io.Reader) error {
-	uc := newUploadClient(c.addr, namespace, _asyncUpload, 0)
-	return runChunkedUpload(uc, d, blob, int64(c.config.ChunkSize))
-}
-
-// DuplicateUploadBlobAsyncRequest defines HTTP request body.
-type DuplicateUploadBlobAsyncRequest struct {
-	Delay time.Duration `yaml:"delay"`
-}
-
-// DuplicateUploadBlobAsync duplicates an async blob upload request, which will
-// attempt to write-back at the given delay.
-func (c *HTTPClient) DuplicateUploadBlobAsync(
+// DuplicateUploadBlob duplicates an blob upload request, which will attempt to
+// write-back at the given delay.
+func (c *HTTPClient) DuplicateUploadBlob(
 	namespace string, d core.Digest, blob io.Reader, delay time.Duration) error {
 
-	uc := newUploadClient(c.addr, namespace, _duplicateAsyncUpload, delay)
+	uc := newUploadClient(c.addr, namespace, _duplicateUpload, delay)
 	return runChunkedUpload(uc, d, blob, int64(c.config.ChunkSize))
 }
 

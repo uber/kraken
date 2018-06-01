@@ -129,12 +129,6 @@ func (s *Server) Handler() http.Handler {
 	r.Post("/namespace/:namespace/blobs/:digest/uploads", handler.Wrap(s.startUploadHandler))
 	r.Patch("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.patchUploadHandler))
 	r.Put("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.commitClusterUploadHandler))
-	r.Put(
-		"/namespace/:namespace/blobs/:digest/uploads/:uid/async",
-		handler.Wrap(s.commitAsyncClusterUploadHandler))
-	r.Put(
-		"/internal/duplicate/namespace/:namespace/blobs/:digest/uploads/:uid/async",
-		handler.Wrap(s.duplicateCommitAsyncClusterUploadHandler))
 
 	r.Get("/namespace/:namespace/blobs/:digest", handler.Wrap(s.downloadBlobHandler))
 
@@ -154,6 +148,10 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/internal/peercontext", handler.Wrap(s.getPeerContextHandler))
 
 	r.Get("/internal/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(s.getMetaInfoHandler))
+
+	r.Put(
+		"/internal/duplicate/namespace/:namespace/blobs/:digest/uploads/:uid",
+		handler.Wrap(s.duplicateCommitClusterUploadHandler))
 
 	r.Mount("/", http.DefaultServeMux) // Serves /debug/pprof endpoints.
 
@@ -229,7 +227,7 @@ func (s *Server) replicateToRemote(namespace string, d core.Digest, remoteDNS st
 	remoteCluster := blobclient.NewClusterClient(
 		blobclient.NewClientResolver(s.clientProvider, remoteDNS))
 
-	return remoteCluster.UploadBlob(namespace, d, f, true)
+	return remoteCluster.UploadBlob(namespace, d, f)
 }
 
 // deleteBlobHandler deletes blob data.
@@ -555,75 +553,10 @@ func (s *Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-// commitClusterUploadHandler commits the upload of an external blob upload.
-// External blob uploads support write-through operations to storage backends
-// and automatically replicate to the rest of the cluster.
+// commitClusterUploadHandler commits an external blob upload asynchronously,
+// meaning the blob will be written back to remote storage in a non-blocking
+// fashion.
 func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
-	if err != nil {
-		return err
-	}
-	if err := s.ensureCorrectNode(d); err != nil {
-		return err
-	}
-	namespace, err := parseNamespace(r)
-	if err != nil {
-		return err
-	}
-	uid := chi.URLParam(r, "uid")
-	through := false
-	t := r.URL.Query().Get("through")
-	if t != "" {
-		through, err = strconv.ParseBool(t)
-		if err != nil {
-			return handler.Errorf(
-				"invalid through argument: parse bool: %s", err).Status(http.StatusBadRequest)
-		}
-	}
-
-	if err := s.uploader.verify(d, uid); err != nil {
-		return err
-	}
-
-	// If through is set, we must make sure we safely upload the file to namespace's
-	// storage backend before committing the file to the cache. If the file can't be
-	// uploaded to said backend, the entire upload operation must fail.
-	if through {
-		c, err := s.backends.GetClient(namespace)
-		if err != nil {
-			return handler.Errorf("backend manager: %s", err).Status(http.StatusBadRequest)
-		}
-		f, err := s.fileStore.GetUploadFileReader(uid)
-		if err != nil {
-			return handler.Errorf("get upload file: %s", err)
-		}
-		defer f.Close()
-		log.With("blob", d.Hex()).Infof("Uploading blob to %s backend", namespace)
-		if err := c.Upload(d.Hex(), f); err != nil {
-			// TODO(codyg): We need some way of detecting whether the blob already exists
-			// in the storage backend.
-			return handler.Errorf("backend upload: %s", err)
-		}
-	}
-
-	if err := s.uploader.commit(d, uid); err != nil {
-		return err
-	}
-	if err := s.replicateBlobLocally(d); err != nil {
-		log.With("blob", d.Hex()).Errorf("Error replicating uploaded blob: %s", err)
-	}
-
-	if err := s.metaInfoGenerator.Generate(d); err != nil {
-		return handler.Errorf("generate metainfo: %s", err)
-	}
-
-	return nil
-}
-
-// commitAsyncClusterUploadHandler commits an external blob upload
-// asynchronously, meaning the blob will be written back to remote storage in a
-// non-blocking fashion.
-func (s *Server) commitAsyncClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -652,7 +585,7 @@ func (s *Server) commitAsyncClusterUploadHandler(w http.ResponseWriter, r *http.
 		if err != nil {
 			return fmt.Errorf("get cache file: %s", err)
 		}
-		if err := client.DuplicateUploadBlobAsync(namespace, d, f, delay); err != nil {
+		if err := client.DuplicateUploadBlob(namespace, d, f, delay); err != nil {
 			return fmt.Errorf("duplicate upload: %s", err)
 		}
 		return nil
@@ -666,9 +599,9 @@ func (s *Server) commitAsyncClusterUploadHandler(w http.ResponseWriter, r *http.
 	return nil
 }
 
-// duplicateCommitAsyncClusterUploadHandler commits a duplicate blob upload,
-// which will attempt to write-back after the requested delay.
-func (s *Server) duplicateCommitAsyncClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
+// duplicateCommitClusterUploadHandler commits a duplicate blob upload, which
+// will attempt to write-back after the requested delay.
+func (s *Server) duplicateCommitClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -681,7 +614,7 @@ func (s *Server) duplicateCommitAsyncClusterUploadHandler(w http.ResponseWriter,
 		return err
 	}
 	uid := chi.URLParam(r, "uid")
-	var dr blobclient.DuplicateUploadBlobAsyncRequest
+	var dr blobclient.DuplicateCommitUploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&dr); err != nil {
 		return handler.Errorf("decode body: %s", err)
 	}

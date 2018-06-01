@@ -91,10 +91,8 @@ func (c *transferClient) commit(d core.Digest, uid string) error {
 type uploadType int
 
 const (
-	_syncUpload uploadType = iota
-	_syncUploadThrough
-	_asyncUpload
-	_duplicateAsyncUpload
+	_publicUpload = iota + 1
+	_duplicateUpload
 )
 
 // uploadClient executes chunked uploads for external cluster upload operations.
@@ -138,19 +136,20 @@ func (c *uploadClient) patch(
 	return err
 }
 
+// DuplicateCommitUploadRequest defines HTTP request body.
+type DuplicateCommitUploadRequest struct {
+	Delay time.Duration `yaml:"delay"`
+}
+
 func (c *uploadClient) commit(d core.Digest, uid string) error {
 	var template string
 	var body io.Reader
 	switch c.uploadType {
-	case _syncUpload:
+	case _publicUpload:
 		template = "http://%s/namespace/%s/blobs/%s/uploads/%s"
-	case _syncUploadThrough:
-		template = "http://%s/namespace/%s/blobs/%s/uploads/%s?through=true"
-	case _asyncUpload:
-		template = "http://%s/namespace/%s/blobs/%s/uploads/%s/async"
-	case _duplicateAsyncUpload:
-		template = "http://%s/internal/duplicate/namespace/%s/blobs/%s/uploads/%s/async"
-		b, err := json.Marshal(DuplicateUploadBlobAsyncRequest{c.delay})
+	case _duplicateUpload:
+		template = "http://%s/internal/duplicate/namespace/%s/blobs/%s/uploads/%s"
+		b, err := json.Marshal(DuplicateCommitUploadRequest{c.delay})
 		if err != nil {
 			return fmt.Errorf("json: %s", err)
 		}

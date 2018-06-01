@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
 	"code.uber.internal/infra/kraken/core"
@@ -179,12 +180,7 @@ func TestIncorrectNodeErrors(t *testing.T) {
 		}, {
 			"UploadBlob",
 			func(c blobclient.Client) error {
-				return c.UploadBlob(namespace, blob.Digest, bytes.NewBufferString("blah"), false)
-			},
-		}, {
-			"UploadBlobAsync",
-			func(c blobclient.Client) error {
-				return c.UploadBlobAsync(namespace, blob.Digest, bytes.NewBufferString("blah"))
+				return c.UploadBlob(namespace, blob.Digest, bytes.NewBufferString("blah"))
 			},
 		},
 	}
@@ -276,119 +272,6 @@ func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 	require.Nil(mi)
 }
 
-func TestUploadBlobReplicatesBlob(t *testing.T) {
-	require := require.New(t)
-
-	config := configFixture()
-	cp := newTestClientProvider()
-
-	for _, master := range []string{master1, master2} {
-		s := newTestServer(t, master, config, cp)
-		defer s.cleanup()
-	}
-
-	blob := computeBlobForHosts(config, master1, master2)
-
-	err := cp.Provide(master1).UploadBlob(
-		namespace, blob.Digest, bytes.NewReader(blob.Content), false)
-	require.NoError(err)
-
-	for _, master := range []string{master1, master2} {
-		ensureHasBlob(t, cp.Provide(master), blob)
-	}
-}
-
-func TestUploadBlobResilientToReplicationFailure(t *testing.T) {
-	require := require.New(t)
-
-	config := configFixture()
-	cp := newTestClientProvider()
-
-	s := newTestServer(t, master1, config, cp)
-	defer s.cleanup()
-
-	cp.register(master2, blobclient.New("some broken address"))
-
-	// Master2 owns this blob, but it is not running. Uploads should still succeed
-	// despite this.
-	blob := computeBlobForHosts(config, master1, master2)
-
-	err := cp.Provide(master1).UploadBlob(
-		namespace, blob.Digest, bytes.NewReader(blob.Content), false)
-	require.NoError(err)
-
-	ensureHasBlob(t, cp.Provide(master1), blob)
-}
-
-func TestUploadBlobThroughUploadsToStorageBackendAndReplicates(t *testing.T) {
-	require := require.New(t)
-
-	config := configFixture()
-	cp := newTestClientProvider()
-
-	s1 := newTestServer(t, master1, config, cp)
-	defer s1.cleanup()
-
-	s2 := newTestServer(t, master2, config, cp)
-	defer s2.cleanup()
-
-	blob := computeBlobForHosts(config, s1.host, s2.host)
-
-	backendClient := s1.backendClient(namespace)
-	backendClient.EXPECT().Upload(blob.Digest.Hex(), rwutil.MatchReader(blob.Content)).Return(nil)
-
-	err := cp.Provide(s1.host).UploadBlob(
-		namespace, blob.Digest, bytes.NewReader(blob.Content), true)
-	require.NoError(err)
-
-	ensureHasBlob(t, cp.Provide(s1.host), blob)
-	ensureHasBlob(t, cp.Provide(s2.host), blob)
-}
-
-func TestUploadBlobThroughDoesNotCommitBlobIfBackendUploadFails(t *testing.T) {
-	require := require.New(t)
-
-	cp := newTestClientProvider()
-
-	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
-	defer s.cleanup()
-
-	blob := core.NewBlobFixture()
-
-	backendClient := s.backendClient(namespace)
-	backendClient.EXPECT().Upload(
-		blob.Digest.Hex(), rwutil.MatchReader(blob.Content)).Return(errors.New("some error"))
-
-	err := cp.Provide(master1).UploadBlob(
-		namespace, blob.Digest, bytes.NewReader(blob.Content), true)
-	require.Error(err)
-
-	ok, err := cp.Provide(master1).CheckBlob(blob.Digest)
-	require.NoError(err)
-	require.False(ok)
-}
-
-func TestUploadDuplicateBlobNoops(t *testing.T) {
-	require := require.New(t)
-
-	cp := newTestClientProvider()
-
-	s := newTestServer(t, master1, configNoReplicaFixture(), cp)
-	defer s.cleanup()
-
-	blob := computeBlobForHosts(s.config, s.host)
-
-	err := cp.Provide(master1).UploadBlob(
-		namespace, blob.Digest, bytes.NewReader(blob.Content), false)
-	require.NoError(err)
-
-	// Even without supplying a blob body, this should still succeed since the
-	// blob is already present.
-	err = cp.Provide(master1).UploadBlob(
-		namespace, blob.Digest, bytes.NewReader(nil), false)
-	require.NoError(err)
-}
-
 func TestTransferBlob(t *testing.T) {
 	require := require.New(t)
 
@@ -469,7 +352,7 @@ func TestReplicateToRemote(t *testing.T) {
 	remoteClient := s.remoteClient(remote)
 	remoteClient.EXPECT().Locations(blob.Digest).Return([]string{remote}, nil)
 	remoteClient.EXPECT().UploadBlob(
-		namespace, blob.Digest, rwutil.MatchReader(blob.Content), true).Return(nil)
+		namespace, blob.Digest, rwutil.MatchReader(blob.Content)).Return(nil)
 
 	require.NoError(cp.Provide(master1).ReplicateToRemote(namespace, blob.Digest, remote))
 }
@@ -493,7 +376,7 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 	remoteClient := s.remoteClient(remote)
 	remoteClient.EXPECT().Locations(blob.Digest).Return([]string{remote}, nil)
 	remoteClient.EXPECT().UploadBlob(
-		namespace, blob.Digest, rwutil.MatchReader(blob.Content), true).Return(nil)
+		namespace, blob.Digest, rwutil.MatchReader(blob.Content)).Return(nil)
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		err := cp.Provide(master1).ReplicateToRemote(namespace, blob.Digest, remote)
@@ -501,11 +384,12 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 	}))
 }
 
-func TestUploadBlobAsync(t *testing.T) {
+func TestUploadBlobDuplicatesWriteBackTaskToReplicas(t *testing.T) {
 	require := require.New(t)
 
 	config := configFixture()
 	config.DuplicateWriteBackStagger = time.Minute
+
 	cp := newTestClientProvider()
 
 	s1 := newTestServer(t, master1, config, cp)
@@ -521,9 +405,65 @@ func TestUploadBlobAsync(t *testing.T) {
 	s2.writeBackManager.EXPECT().Add(
 		writeback.MatchTask(writeback.NewTaskWithDelay(namespace, blob.Digest, time.Minute)))
 
-	err := cp.Provide(s1.host).UploadBlobAsync(namespace, blob.Digest, bytes.NewReader(blob.Content))
+	err := cp.Provide(s1.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
 
 	ensureHasBlob(t, cp.Provide(s1.host), blob)
 	ensureHasBlob(t, cp.Provide(s2.host), blob)
+}
+
+func TestUploadBlobRetriesWriteBackFailure(t *testing.T) {
+	t.Skip("TODO(codyg): Expected failure -- need to fix write-back semantics")
+
+	require := require.New(t)
+
+	config := configNoReplicaFixture()
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, config, cp)
+	defer s.cleanup()
+
+	blob := computeBlobForHosts(config, s.host)
+
+	expectedTask := writeback.MatchTask(writeback.NewTask(namespace, blob.Digest))
+
+	gomock.InOrder(
+		s.writeBackManager.EXPECT().Add(expectedTask).Return(errors.New("some error")),
+		s.writeBackManager.EXPECT().Add(expectedTask).Return(nil),
+	)
+
+	// Upload should "fail" because we failed to add a write-back task, but blob
+	// should still be present.
+	err := cp.Provide(s.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
+	require.Error(err)
+	ensureHasBlob(t, cp.Provide(s.host), blob)
+
+	// Uploading again should succeed.
+	err = cp.Provide(s.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
+	require.NoError(err)
+}
+
+func TestUploadBlobResilientToDuplicationFailure(t *testing.T) {
+	require := require.New(t)
+
+	config := configFixture()
+	config.DuplicateWriteBackStagger = time.Minute
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, config, cp)
+	defer s.cleanup()
+
+	cp.register(master2, blobclient.New("dummy-addr"))
+
+	blob := computeBlobForHosts(config, s.host, master2)
+
+	s.writeBackManager.EXPECT().Add(
+		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest))).Return(nil)
+
+	err := cp.Provide(s.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
+	require.NoError(err)
+
+	ensureHasBlob(t, cp.Provide(s.host), blob)
 }

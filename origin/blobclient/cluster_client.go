@@ -49,7 +49,7 @@ func (r *clientResolver) Resolve(d core.Digest) ([]Client, error) {
 // ClusterClient defines a top-level origin cluster client which handles blob
 // location resolution and retries.
 type ClusterClient interface {
-	UploadBlob(namespace string, d core.Digest, blob io.Reader, through bool) error
+	UploadBlob(namespace string, d core.Digest, blob io.Reader) error
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
@@ -71,9 +71,7 @@ func NewClusterClient(r ClientResolver) ClusterClient {
 }
 
 // UploadBlob uploads blob to origin cluster. See Client.UploadBlob for more details.
-func (c *clusterClient) UploadBlob(
-	namespace string, d core.Digest, blob io.Reader, through bool) (err error) {
-
+func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob io.Reader) (err error) {
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
 		return fmt.Errorf("resolve clients: %s", err)
@@ -81,7 +79,7 @@ func (c *clusterClient) UploadBlob(
 	// Shuffle clients to balance load.
 	shuffle(clients)
 	for _, client := range clients {
-		err = client.UploadBlob(namespace, d, blob, through)
+		err = client.UploadBlob(namespace, d, blob)
 		if httputil.IsNetworkError(err) {
 			continue
 		}
