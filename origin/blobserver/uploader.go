@@ -21,11 +21,6 @@ func newUploader(fs store.OriginFileStore) *uploader {
 }
 
 func (u *uploader) start(d core.Digest) (uid string, err error) {
-	if ok, err := blobExists(u.fs, d); err != nil {
-		return "", err
-	} else if ok {
-		return "", handler.ErrorStatus(http.StatusConflict)
-	}
 	uid = uuid.Generate().String()
 	if err := u.fs.CreateUploadFile(uid, 0); err != nil {
 		return "", handler.Errorf("create upload file: %s", err)

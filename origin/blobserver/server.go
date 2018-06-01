@@ -126,7 +126,7 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/blobs/:digest/locations", handler.Wrap(s.getLocationsHandler))
 
-	r.Post("/namespace/:namespace/blobs/:digest/uploads", handler.Wrap(s.startUploadHandler))
+	r.Post("/namespace/:namespace/blobs/:digest/uploads", handler.Wrap(s.startClusterUploadHandler))
 	r.Patch("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.patchUploadHandler))
 	r.Put("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.commitClusterUploadHandler))
 
@@ -136,7 +136,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Internal endpoints:
 
-	r.Post("/internal/blobs/:digest/uploads", handler.Wrap(s.startUploadHandler))
+	r.Post("/internal/blobs/:digest/uploads", handler.Wrap(s.startTransferHandler))
 	r.Patch("/internal/blobs/:digest/uploads/:uid", handler.Wrap(s.patchUploadHandler))
 	r.Put("/internal/blobs/:digest/uploads/:uid", handler.Wrap(s.commitTransferHandler))
 
@@ -497,10 +497,8 @@ func (s *Server) deleteBlob(d core.Digest) error {
 	return nil
 }
 
-// startUploadHandler initializes an upload for both internal and external uploads.
-// Returns the location of the upload which is needed for subsequent chunk uploads of
-// this blob.
-func (s *Server) startUploadHandler(w http.ResponseWriter, r *http.Request) error {
+// startTransferHandler initializes an upload for internal blob transfers.
+func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -508,11 +506,52 @@ func (s *Server) startUploadHandler(w http.ResponseWriter, r *http.Request) erro
 	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
+	if ok, err := blobExists(s.fileStore, d); err != nil {
+		return handler.Errorf("check blob: %s", err)
+	} else if ok {
+		return handler.ErrorStatus(http.StatusConflict)
+	}
 	uid, err := s.uploader.start(d)
 	if err != nil {
 		return err
 	}
 	setUploadLocation(w, uid)
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+// startClusterUploadHandler initializes an upload for external uploads.
+func (s *Server) startClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
+	d, err := parseDigest(r)
+	if err != nil {
+		return err
+	}
+	if err := s.ensureCorrectNode(d); err != nil {
+		return err
+	}
+	namespace, err := parseNamespace(r)
+	if err != nil {
+		return err
+	}
+	if ok, err := blobExists(s.fileStore, d); err != nil {
+		return handler.Errorf("check blob: %s", err)
+	} else if ok {
+		// Even if the blob was already uploaded and committed to cache, it's
+		// still possible that adding the write-back task failed. In this scenario,
+		// it's expected that the client might retry the entire upload (as opposed
+		// to just retrying the commit). We try to write-back and return 504
+		// just in case.
+		if err := s.writeBack(namespace, d, 0); err != nil {
+			return err
+		}
+		return handler.ErrorStatus(http.StatusConflict)
+	}
+	uid, err := s.uploader.start(d)
+	if err != nil {
+		return err
+	}
+	setUploadLocation(w, uid)
+	w.WriteHeader(http.StatusOK)
 	return nil
 }
 
@@ -576,8 +615,8 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 	if err := s.uploader.commit(d, uid); err != nil {
 		return err
 	}
-	if err := s.writeBackManager.Add(writeback.NewTask(namespace, d)); err != nil {
-		return handler.Errorf("add write-back task: %s", err)
+	if err := s.writeBack(namespace, d, 0); err != nil {
+		return err
 	}
 	err = s.applyToReplicas(d, func(i int, client blobclient.Client) error {
 		delay := s.config.DuplicateWriteBackStagger * time.Duration(i+1)
@@ -592,9 +631,6 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 	})
 	if err != nil {
 		log.Errorf("Error duplicating write-back task to replicas: %s", err)
-	}
-	if err := s.metaInfoGenerator.Generate(d); err != nil {
-		return handler.Errorf("generate metainfo: %s", err)
 	}
 	return nil
 }
@@ -625,6 +661,13 @@ func (s *Server) duplicateCommitClusterUploadHandler(w http.ResponseWriter, r *h
 	}
 	if err := s.uploader.commit(d, uid); err != nil {
 		return err
+	}
+	return s.writeBack(namespace, d, delay)
+}
+
+func (s *Server) writeBack(namespace string, d core.Digest, delay time.Duration) error {
+	if _, err := s.fileStore.SetCacheFileMetadata(d.Hex(), metadata.NewPersist(true)); err != nil {
+		return handler.Errorf("set persist metadata: %s", err)
 	}
 	if err := s.writeBackManager.Add(writeback.NewTaskWithDelay(namespace, d, delay)); err != nil {
 		return handler.Errorf("add write-back task: %s", err)
