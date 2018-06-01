@@ -106,9 +106,15 @@ func NewLocalFileStore(config Config, stats tally.Scope) (*LocalFileStore, error
 	stateDownload := agentFileState{directory: config.DownloadDir}
 	stateCache := agentFileState{directory: config.CacheDir}
 
-	cleanup := newCleanupManager(clk)
-	cleanup.addJob(config.DownloadCleanup, downloadCacheBackend.NewFileOp().AcceptState(stateDownload))
-	cleanup.addJob(config.CacheCleanup, downloadCacheBackend.NewFileOp().AcceptState(stateCache))
+	cleanup := newCleanupManager(clk, stats)
+	cleanup.addJob(
+		"download_cleanup",
+		config.DownloadCleanup,
+		downloadCacheBackend.NewFileOp().AcceptState(stateDownload))
+	cleanup.addJob(
+		"cache_cleanup",
+		config.CacheCleanup,
+		downloadCacheBackend.NewFileOp().AcceptState(stateCache))
 
 	return &LocalFileStore{
 		config:               config,

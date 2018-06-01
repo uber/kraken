@@ -15,6 +15,7 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
 	"github.com/spaolacci/murmur3"
+	"github.com/uber-go/tally"
 )
 
 // OriginFileStore provides an interface for OriginLocalFileStore. Useful for mocks.
@@ -54,8 +55,14 @@ type OriginLocalFileStore struct {
 }
 
 // NewOriginFileStore initializes and returns a new OriginLocalFileStore object.
-func NewOriginFileStore(config OriginConfig, clk clock.Clock) (*OriginLocalFileStore, error) {
+func NewOriginFileStore(
+	config OriginConfig, clk clock.Clock, stats tally.Scope) (*OriginLocalFileStore, error) {
+
 	config = config.applyDefaults()
+
+	stats = stats.Tagged(map[string]string{
+		"module": "originfilestore",
+	})
 
 	if err := initOriginStoreDirectories(config); err != nil {
 		return nil, fmt.Errorf("init origin directories: %s", err)
@@ -74,9 +81,15 @@ func NewOriginFileStore(config OriginConfig, clk clock.Clock) (*OriginLocalFileS
 	stateUpload := agentFileState{config.UploadDir}
 	stateCache := agentFileState{config.CacheDir}
 
-	cleanup := newCleanupManager(clk)
-	cleanup.addJob(config.UploadCleanup, uploadBackend.NewFileOp().AcceptState(stateUpload))
-	cleanup.addJob(config.CacheCleanup, cacheBackend.NewFileOp().AcceptState(stateCache))
+	cleanup := newCleanupManager(clk, stats)
+	cleanup.addJob(
+		"upload_cleanup",
+		config.UploadCleanup,
+		uploadBackend.NewFileOp().AcceptState(stateUpload))
+	cleanup.addJob(
+		"cache_cleanup",
+		config.CacheCleanup,
+		cacheBackend.NewFileOp().AcceptState(stateCache))
 
 	return &OriginLocalFileStore{
 		config:        config,

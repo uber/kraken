@@ -11,6 +11,7 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 )
 
 func TestOriginFileStoreInitDirectories(t *testing.T) {
@@ -42,7 +43,7 @@ func TestOriginFileStoreInitDirectories(t *testing.T) {
 		{Location: volume2, Weight: 100},
 		{Location: volume3, Weight: 100},
 	}
-	_, err = NewOriginFileStore(config, clock.NewMock())
+	_, err = NewOriginFileStore(config, clock.NewMock(), tally.NewTestScope("", nil))
 	require.NoError(err)
 
 	v1Files, err := ioutil.ReadDir(path.Join(volume1, path.Base(config.CacheDir)))
@@ -91,12 +92,12 @@ func TestOriginFileStoreInitDirectoriesAfterChangingVolumes(t *testing.T) {
 		{Location: volume2, Weight: 100},
 		{Location: volume3, Weight: 100},
 	}
-	_, err = NewOriginFileStore(config, clock.NewMock())
+	_, err = NewOriginFileStore(config, clock.NewMock(), tally.NewTestScope("", nil))
 	require.NoError(err)
 
 	// Add one more volume, recreate file store.
 	config.Volumes = append(config.Volumes, Volume{Location: volume4, Weight: 100})
-	_, err = NewOriginFileStore(config, clock.NewMock())
+	_, err = NewOriginFileStore(config, clock.NewMock(), tally.NewTestScope("", nil))
 	require.NoError(err)
 
 	var n1, n2, n3, n4 int

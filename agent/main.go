@@ -54,17 +54,17 @@ func main() {
 	zlog := log.ConfigureLogger(config.ZapLogging)
 	defer zlog.Sync()
 
-	pctx, err := core.NewPeerContext(
-		config.PeerIDFactory, *zone, *cluster, *peerIP, *peerPort, false)
-	if err != nil {
-		log.Fatalf("Failed to create peer context: %s", err)
-	}
-
 	stats, closer, err := metrics.New(config.Metrics, *cluster)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}
 	defer closer.Close()
+
+	pctx, err := core.NewPeerContext(
+		config.PeerIDFactory, *zone, *cluster, *peerIP, *peerPort, false)
+	if err != nil {
+		log.Fatalf("Failed to create peer context: %s", err)
+	}
 
 	fs, err := store.NewLocalFileStore(config.Store, stats)
 	if err != nil {
