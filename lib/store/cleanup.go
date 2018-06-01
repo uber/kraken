@@ -42,43 +42,46 @@ type cleanupManager struct {
 	stopc    chan struct{}
 }
 
-func newCleanupManager(clk clock.Clock, stats tally.Scope) *cleanupManager {
+func newCleanupManager(clk clock.Clock, stats tally.Scope) (*cleanupManager, error) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return nil, fmt.Errorf("look up hostname: %s", err)
+	}
+	stats = stats.Tagged(map[string]string{
+		"module":   "storecleanup",
+		"hostname": hostname,
+	})
 	return &cleanupManager{
 		clk:   clk,
 		stats: stats,
 		stopc: make(chan struct{}),
-	}
+	}, nil
 }
 
 // addJob starts a background cleanup task which removes idle files from op based
 // on the settings in config. op must set the desired states to clean before addJob
 // is called.
-func (m *cleanupManager) addJob(jobName string, config CleanupConfig, op base.FileOp) {
+func (m *cleanupManager) addJob(tag string, config CleanupConfig, op base.FileOp) {
 	config = config.applyDefaults()
 	if config.Disabled {
 		log.Warnf("Cleanup disabled for %s", op)
 		return
 	}
+
 	ticker := m.clk.Ticker(config.Interval)
 
-	hostname, err := os.Hostname()
-	if err != nil {
-		log.Fatalf("Error getting hostname: %s", err)
-	}
-	stats := m.stats.Tagged(map[string]string{
-		"job":  jobName,
-		"host": hostname,
-	})
-	gauge := stats.Gauge("disk_size")
+	usageGauge := m.stats.Tagged(map[string]string{"job": tag}).Gauge("disk_usage")
 
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
-				log.Infof("Deleting idle files from %s", op)
-				if err := m.deleteIdleOrExpiredFiles(op, config.TTI, config.TTL, gauge); err != nil {
-					log.Errorf("Error deleting idle files from %s: %s", op, err)
+				log.Infof("Performing cleanup of %s", op)
+				usage, err := m.scan(op, config.TTI, config.TTL)
+				if err != nil {
+					log.Errorf("Error scanning %s: %s", op, err)
 				}
+				usageGauge.Update(float64(usage))
 			case <-m.stopc:
 				ticker.Stop()
 				return
@@ -91,43 +94,41 @@ func (m *cleanupManager) stop() {
 	m.stopOnce.Do(func() { close(m.stopc) })
 }
 
-func (m *cleanupManager) deleteIdleOrExpiredFiles(
-	op base.FileOp, tti time.Duration, ttl time.Duration, gauge tally.Gauge) error {
+// scan scans the op for idle or expired files. Also returns the total disk usage
+// of op.
+func (m *cleanupManager) scan(
+	op base.FileOp, tti time.Duration, ttl time.Duration) (usage int64, err error) {
 
-	var totalSize int64
 	names, err := op.ListNames()
 	if err != nil {
-		return fmt.Errorf("list names: %s", err)
+		return 0, fmt.Errorf("list names: %s", err)
 	}
-
 	for _, name := range names {
-		fi, err := op.GetFileStat(name)
+		info, err := op.GetFileStat(name)
 		if err != nil {
 			log.With("name", name).Errorf("Error getting file stat: %s", err)
 			continue
 		}
-		// Add size before deletion, so the total number we got will include files to be deleted,
-		// but exclude some new files added during this function call.
-		totalSize += fi.Size()
-
-		if ready, err := m.readyForDeletion(op, name, fi, tti, ttl); err != nil {
+		if ready, err := m.readyForDeletion(op, name, info, tti, ttl); err != nil {
 			log.With("name", name).Errorf("Error checking if file expired: %s", err)
 		} else if ready {
 			if err := op.DeleteFile(name); err != nil {
 				log.With("name", name).Errorf("Error deleting expired file: %s", err)
 			}
 		}
+		usage += info.Size()
 	}
-
-	gauge.Update(float64(totalSize))
-
-	return nil
+	return usage, nil
 }
 
 func (m *cleanupManager) readyForDeletion(
-	op base.FileOp, name string, fi os.FileInfo, tti time.Duration, ttl time.Duration,
-) (bool, error) {
-	if m.clk.Now().Sub(fi.ModTime()) > ttl {
+	op base.FileOp,
+	name string,
+	info os.FileInfo,
+	tti time.Duration,
+	ttl time.Duration) (bool, error) {
+
+	if m.clk.Now().Sub(info.ModTime()) > ttl {
 		return true, nil
 	}
 
@@ -137,6 +138,5 @@ func (m *cleanupManager) readyForDeletion(
 	} else if err != nil {
 		return false, fmt.Errorf("get file lat: %s", err)
 	}
-
 	return m.clk.Now().Sub(lat.Time) > tti, nil
 }
