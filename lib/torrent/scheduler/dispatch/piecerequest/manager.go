@@ -1,12 +1,13 @@
 package piecerequest
 
 import (
-	"math/rand"
 	"sort"
 	"sync"
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/utils/heap"
+	"code.uber.internal/infra/kraken/utils/syncutil"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/willf/bitset"
@@ -63,37 +64,43 @@ func NewManager(clk clock.Clock, timeout time.Duration, pipelineLimit int) *Mana
 	}
 }
 
-// ReservePieces selects the next piece(s) to be requested from given peer. If
-// allowDuplicates is set, may return pieces which have already been reserved
-// under other peers.
+// ReservePieces selects the next piece(s) to be requested from given peer.
+// It selects peers on a rarity-first basis using numPeersByPiece.
+// If allowDuplicates is set, may return pieces which have already been
+// reserved under other peers.
 func (m *Manager) ReservePieces(
-	peerID core.PeerID, candidates *bitset.BitSet, allowDuplicates bool) []int {
+	peerID core.PeerID,
+	candidates *bitset.BitSet,
+	numPeersByPiece syncutil.Counters,
+	allowDuplicates bool) ([]int, error) {
 
 	m.Lock()
 	defer m.Unlock()
 
-	// TODO(codyg): Fix bug where we don't consider failed piece requests here.
-	// If a request has a fail status, it'll still count towards the pipeline
-	// limit.
-	if pm, ok := m.requestsByPeer[peerID]; ok && len(pm) > m.pipelineLimit {
-		return nil
+	quota := m.requestQuota(peerID)
+	if quota <= 0 {
+		return nil, nil
 	}
 
-	// Reservoir sampling. There are faster sampling solutions, but most would
-	// require converting the bitset to a list, which itself would take O(n).
-	var pieces []int
-	count := 0
+	candidateQueue := heap.NewPriorityQueue()
 	for i, e := candidates.NextSet(0); e; i, e = candidates.NextSet(i + 1) {
-		if !m.validRequest(peerID, int(i), allowDuplicates) {
-			continue
+		candidateQueue.Push(&heap.Item{
+			Value:    int(i),
+			Priority: numPeersByPiece.Get(int(i)),
+		})
+	}
+
+	pieces := make([]int, 0, quota)
+	for len(pieces) < quota && candidateQueue.Len() > 0 {
+		item, err := candidateQueue.Pop()
+		if err != nil {
+			return nil, err
 		}
-		if count < m.pipelineLimit {
-			pieces = append(pieces, int(i))
-		} else if rand.Intn(count) < 1 {
-			// Replace existing result.
-			pieces[rand.Intn(m.pipelineLimit)] = int(i)
+
+		candidate := item.Value.(int)
+		if m.validRequest(peerID, candidate, allowDuplicates) {
+			pieces = append(pieces, candidate)
 		}
-		count++
 	}
 
 	// Set as pending in requests map.
@@ -111,7 +118,7 @@ func (m *Manager) ReservePieces(
 		m.requestsByPeer[peerID][i] = r
 	}
 
-	return pieces
+	return pieces, nil
 }
 
 // MarkUnsent marks the piece request for piece i as unsent.
@@ -211,6 +218,25 @@ func (m *Manager) validRequest(peerID core.PeerID, i int, allowDuplicates bool) 
 		}
 	}
 	return true
+}
+
+func (m *Manager) requestQuota(peerID core.PeerID) int {
+	quota := m.pipelineLimit
+	pm, ok := m.requestsByPeer[peerID]
+	if !ok {
+		return quota
+	}
+
+	for _, r := range pm {
+		if r.Status == StatusPending && !m.expired(r) {
+			quota--
+			if quota == 0 {
+				break
+			}
+		}
+	}
+
+	return quota
 }
 
 func (m *Manager) expired(r *Request) bool {

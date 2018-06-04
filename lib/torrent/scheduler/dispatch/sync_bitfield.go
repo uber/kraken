@@ -25,11 +25,25 @@ func (s *syncBitfield) Intersection(other *bitset.BitSet) *bitset.BitSet {
 	return s.b.Intersection(other)
 }
 
+func (s *syncBitfield) Len() uint {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.b.Len()
+}
+
 func (s *syncBitfield) Has(i uint) bool {
 	s.RLock()
 	defer s.RUnlock()
 
 	return s.b.Test(i)
+}
+
+func (s *syncBitfield) Complete() bool {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.b.All()
 }
 
 func (s *syncBitfield) Set(i uint, v bool) {
@@ -39,11 +53,20 @@ func (s *syncBitfield) Set(i uint, v bool) {
 	s.b.SetTo(i, v)
 }
 
-func (s *syncBitfield) Complete() bool {
+// GetAllSet returns the indices of all set bits in the bitset.
+func (s *syncBitfield) GetAllSet() []uint {
 	s.RLock()
 	defer s.RUnlock()
 
-	return s.b.All()
+	all := make([]uint, 0, s.b.Len())
+	buffer := make([]uint, s.b.Len())
+	j := uint(0)
+	j, buffer = s.b.NextSetMany(j, buffer)
+	for ; len(buffer) > 0; j, buffer = s.b.NextSetMany(j, buffer) {
+		all = append(all, buffer...)
+		j++
+	}
+	return all
 }
 
 func (s *syncBitfield) SetAll(v bool) {
