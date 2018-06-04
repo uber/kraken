@@ -14,6 +14,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/torrentlog"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/utils/log"
+	"code.uber.internal/infra/kraken/utils/syncutil"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
@@ -53,6 +54,7 @@ type Dispatcher struct {
 	localPeerID           core.PeerID
 	torrent               *torrentAccessWatcher
 	peers                 syncmap.Map // Maps core.PeerID to *peer.
+	numPeersByPiece       syncutil.Counters
 	netevents             networkevent.Producer
 	pieceRequestTimeout   time.Duration
 	pieceRequestManager   *piecerequest.Manager
@@ -113,6 +115,7 @@ func newDispatcher(
 		createdAt:           clk.Now(),
 		localPeerID:         peerID,
 		torrent:             newTorrentAccessWatcher(t, clk),
+		numPeersByPiece:     syncutil.NewCounters(t.NumPieces()),
 		netevents:           netevents,
 		pieceRequestTimeout: pieceRequestTimeout,
 		pieceRequestManager: pieceRequestManager,
@@ -223,7 +226,21 @@ func (d *Dispatcher) addPeer(
 	if _, ok := d.peers.LoadOrStore(peerID, p); ok {
 		return nil, errors.New("peer already exists")
 	}
+
+	for _, i := range p.bitfield.GetAllSet() {
+		d.numPeersByPiece.Increment(int(i))
+	}
 	return p, nil
+}
+
+func (d *Dispatcher) removePeer(p *peer) error {
+	d.peers.Delete(p.id)
+	d.pieceRequestManager.ClearPeer(p.id)
+
+	for _, i := range p.bitfield.GetAllSet() {
+		d.numPeersByPiece.Decrement(int(i))
+	}
+	return nil
 }
 
 // TearDown closes all Dispatcher connections.
@@ -285,11 +302,15 @@ func (d *Dispatcher) endgame() bool {
 
 func (d *Dispatcher) maybeRequestMorePieces(p *peer) (bool, error) {
 	candidates := p.bitfield.Intersection(d.torrent.Bitfield().Complement())
+
 	return d.maybeSendPieceRequests(p, candidates)
 }
 
 func (d *Dispatcher) maybeSendPieceRequests(p *peer, candidates *bitset.BitSet) (bool, error) {
-	pieces := d.pieceRequestManager.ReservePieces(p.id, candidates, d.endgame())
+	pieces, err := d.pieceRequestManager.ReservePieces(p.id, candidates, d.numPeersByPiece, d.endgame())
+	if err != nil {
+		return false, err
+	}
 	if len(pieces) == 0 {
 		return false, nil
 	}
@@ -358,8 +379,7 @@ func (d *Dispatcher) feed(p *peer) {
 			d.log().Errorf("Error dispatching message: %s", err)
 		}
 	}
-	d.peers.Delete(p.id)
-	d.pieceRequestManager.ClearPeer(p.id)
+	d.removePeer(p)
 }
 
 func (d *Dispatcher) dispatch(p *peer, msg *conn.Message) error {
@@ -399,6 +419,7 @@ func (d *Dispatcher) handleAnnouncePiece(p *peer, msg *p2p.AnnouncePieceMessage)
 	}
 	i := int(msg.Index)
 	p.bitfield.Set(uint(i), true)
+	d.numPeersByPiece.Increment(int(i))
 
 	d.maybeRequestMorePieces(p)
 }
