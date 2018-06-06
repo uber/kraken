@@ -6,18 +6,21 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/build-index/tagtype"
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
+	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/stringset"
 
@@ -65,7 +68,7 @@ func New(
 		"module": "tagserver",
 	})
 
-	cache := dedup.NewCache(config.Cache, clock.New(), &tagResolver{backends})
+	cache := dedup.NewCache(config.Cache, clock.New(), &tagResolver{backends, remotes, provider})
 	return &Server{
 		config:                config,
 		stats:                 stats,
@@ -90,6 +93,7 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/health", handler.Wrap(s.healthHandler))
 	r.Put("/tags/:tag/digest/:digest", handler.Wrap(s.putTagHandler))
+	r.Head("/tags/:tag", handler.Wrap(s.hasTagHandler))
 	r.Get("/tags/:tag", handler.Wrap(s.getTagHandler))
 	r.Post("/remotes/tags/:tag", handler.Wrap(s.replicateTagHandler))
 	r.Get("/origin", handler.Wrap(s.getOriginHandler))
@@ -151,17 +155,41 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
+	local, err := strconv.ParseBool(httputil.GetQueryArg(r, "local", "false"))
+	if err != nil {
+		return handler.Errorf("parse arg `local` as bool: %s", err)
+	}
 	tag, err := parseTag(r)
 	if err != nil {
 		return err
 	}
-	v, err := s.cache.Get(tag)
+
+	v, err := s.cache.Get(tagContext{local}, tag)
 	if err != nil {
 		return err
 	}
 	digest := v.(core.Digest)
 	if _, err := io.WriteString(w, digest.String()); err != nil {
 		return handler.Errorf("write digest: %s", err)
+	}
+	return nil
+}
+
+func (s *Server) hasTagHandler(w http.ResponseWriter, r *http.Request) error {
+	tag, err := parseTag(r)
+	if err != nil {
+		return err
+	}
+
+	client, err := s.backends.GetClient(tag)
+	if err != nil {
+		return handler.Errorf("backend manager: %s", err)
+	}
+	if _, err := client.Stat(tag); err != nil {
+		if err == backenderrors.ErrBlobNotFound {
+			return handler.ErrorStatus(http.StatusNotFound)
+		}
+		return err
 	}
 	return nil
 }
@@ -177,7 +205,7 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 		return handler.Errorf("get dependency resolver: %s", err)
 	}
 
-	v, err := s.cache.Get(tag)
+	v, err := s.cache.Get(tagContext{}, tag)
 	if err != nil {
 		return err
 	}

@@ -33,16 +33,16 @@ func (m *MockResolver) EXPECT() *MockResolverMockRecorder {
 }
 
 // Resolve mocks base method
-func (m *MockResolver) Resolve(arg0 interface{}) (interface{}, error) {
-	ret := m.ctrl.Call(m, "Resolve", arg0)
+func (m *MockResolver) Resolve(arg0, arg1 interface{}) (interface{}, error) {
+	ret := m.ctrl.Call(m, "Resolve", arg0, arg1)
 	ret0, _ := ret[0].(interface{})
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Resolve indicates an expected call of Resolve
-func (mr *MockResolverMockRecorder) Resolve(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resolve", reflect.TypeOf((*MockResolver)(nil).Resolve), arg0)
+func (mr *MockResolverMockRecorder) Resolve(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resolve", reflect.TypeOf((*MockResolver)(nil).Resolve), arg0, arg1)
 }
 
 // MockTaskRunner is a mock of TaskRunner interface

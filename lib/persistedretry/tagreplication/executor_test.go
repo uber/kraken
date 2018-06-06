@@ -3,8 +3,6 @@ package tagreplication
 import (
 	"testing"
 
-	"code.uber.internal/infra/kraken/build-index/tagclient"
-	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/mocks/build-index/tagclient"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 
@@ -52,7 +50,7 @@ func TestExecutor(t *testing.T) {
 
 	gomock.InOrder(
 		mocks.tagClientProvider.EXPECT().Provide(task.Destination).Return(tagClient),
-		tagClient.EXPECT().Get(task.Tag).Return(core.Digest{}, tagclient.ErrNotFound),
+		tagClient.EXPECT().Has(task.Tag).Return(false, nil),
 		tagClient.EXPECT().Origin().Return(_testRemoteOrigin, nil),
 		mocks.originCluster.EXPECT().ReplicateToRemote(
 			task.Tag, task.Dependencies[0], _testRemoteOrigin).Return(nil),
@@ -78,7 +76,7 @@ func TestExecutorNoopsWhenTagAlreadyReplicated(t *testing.T) {
 
 	gomock.InOrder(
 		mocks.tagClientProvider.EXPECT().Provide(task.Destination).Return(tagClient),
-		tagClient.EXPECT().Get(task.Tag).Return(task.Digest, nil),
+		tagClient.EXPECT().Has(task.Tag).Return(true, nil),
 	)
 
 	require.NoError(executor.Exec(task))

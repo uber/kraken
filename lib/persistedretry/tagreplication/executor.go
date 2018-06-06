@@ -38,7 +38,7 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 
 	remoteTagClient := e.tagClientProvider.Provide(t.Destination)
 
-	if _, err := remoteTagClient.Get(t.Tag); err == nil {
+	if ok, err := remoteTagClient.Has(t.Tag); err == nil && ok {
 		// Remote index already has the tag, therefore dependencies have already
 		// been replicated. No-op.
 		return nil

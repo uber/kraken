@@ -95,6 +95,32 @@ func (mr *MockClientMockRecorder) Get(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockClient)(nil).Get), arg0)
 }
 
+// GetLocal mocks base method
+func (m *MockClient) GetLocal(arg0 string) (core.Digest, error) {
+	ret := m.ctrl.Call(m, "GetLocal", arg0)
+	ret0, _ := ret[0].(core.Digest)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLocal indicates an expected call of GetLocal
+func (mr *MockClientMockRecorder) GetLocal(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLocal", reflect.TypeOf((*MockClient)(nil).GetLocal), arg0)
+}
+
+// Has mocks base method
+func (m *MockClient) Has(arg0 string) (bool, error) {
+	ret := m.ctrl.Call(m, "Has", arg0)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Has indicates an expected call of Has
+func (mr *MockClientMockRecorder) Has(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Has", reflect.TypeOf((*MockClient)(nil).Has), arg0)
+}
+
 // Origin mocks base method
 func (m *MockClient) Origin() (string, error) {
 	ret := m.ctrl.Call(m, "Origin")
