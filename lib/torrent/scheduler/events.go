@@ -128,10 +128,16 @@ type incomingHandshakeEvent struct {
 // to the scheduler's pending connections and asynchronously attempts to establish
 // the connection.
 func (e incomingHandshakeEvent) Apply(s *scheduler) {
-	if err := s.connState.AddPending(e.pc.PeerID(), e.pc.InfoHash()); err != nil {
+	neighbors := make([]core.PeerID, len(e.pc.RemoteBitfields()))
+	var i int
+	for peerID := range e.pc.RemoteBitfields() {
+		neighbors[i] = peerID
+		i++
+	}
+	if err := s.connState.AddPending(e.pc.PeerID(), e.pc.InfoHash(), neighbors); err != nil {
 		s.log("peer", e.pc.PeerID(), "hash", e.pc.InfoHash()).Infof(
 			"Rejecting incoming handshake: %s", err)
-		s.torrentlog.IncomingConnectionReject(e.pc.Name(), e.pc.InfoHash(), e.pc.PeerID())
+		s.torrentlog.IncomingConnectionReject(e.pc.Name(), e.pc.InfoHash(), e.pc.PeerID(), err)
 		e.pc.Close()
 		return
 	}
@@ -147,13 +153,20 @@ func (e incomingHandshakeEvent) Apply(s *scheduler) {
 			fail(fmt.Errorf("torrent stat: %s", err))
 			return
 		}
-		c, err := s.handshaker.Establish(e.pc, info)
+
+		var remoteBitfields conn.RemoteBitfields
+		if ctrl, ok := s.torrentControls[e.pc.InfoHash()]; ok {
+			remoteBitfields = ctrl.dispatcher.RemoteBitfields()
+		}
+
+		c, err := s.handshaker.Establish(e.pc, info, remoteBitfields)
 		if err != nil {
 			fail(fmt.Errorf("establish handshake: %s", err))
 			return
 		}
 		s.torrentlog.IncomingConnectionAccept(e.pc.Name(), e.pc.InfoHash(), e.pc.PeerID())
-		s.eventLoop.Send(incomingConnEvent{e.pc.Namespace(), c, e.pc.Bitfield(), info})
+		s.eventLoop.Send(
+			incomingConnEvent{e.pc.Namespace(), c, e.pc.Bitfield(), info})
 	}()
 }
 
@@ -271,7 +284,7 @@ func (e announceResultEvent) Apply(s *scheduler) {
 		if s.connState.Blacklisted(p.PeerID, e.infoHash) {
 			continue
 		}
-		if err := s.connState.AddPending(p.PeerID, e.infoHash); err != nil {
+		if err := s.connState.AddPending(p.PeerID, e.infoHash, nil); err != nil {
 			if err == connstate.ErrTorrentAtCapacity {
 				break
 			}
@@ -280,16 +293,17 @@ func (e announceResultEvent) Apply(s *scheduler) {
 		go func(p *core.PeerInfo) {
 			addr := fmt.Sprintf("%s:%d", p.IP, p.Port)
 			info := ctrl.dispatcher.Stat()
-			c, bitfield, err := s.handshaker.Initialize(p.PeerID, addr, info, ctrl.namespace)
+			result, err := s.handshaker.Initialize(
+				p.PeerID, addr, info, ctrl.dispatcher.RemoteBitfields(), ctrl.namespace)
 			if err != nil {
 				s.log("peer", p.PeerID, "hash", e.infoHash, "addr", addr).Infof(
 					"Failed handshake: %s", err)
 				s.eventLoop.Send(failedOutgoingHandshakeEvent{p.PeerID, e.infoHash})
-				s.torrentlog.OutgoingConnectionReject(ctrl.name, e.infoHash, p.PeerID)
+				s.torrentlog.OutgoingConnectionReject(ctrl.name, e.infoHash, p.PeerID, err)
 				return
 			}
 			s.torrentlog.OutgoingConnectionAccept(ctrl.name, e.infoHash, p.PeerID)
-			s.eventLoop.Send(outgoingConnEvent{c, bitfield, info})
+			s.eventLoop.Send(outgoingConnEvent{result.Conn, result.Bitfield, info})
 		}(p)
 	}
 }
