@@ -204,6 +204,17 @@ func (d *Dispatcher) Empty() bool {
 	return empty
 }
 
+// RemoteBitfields returns the bitfields of peers connected to the dispatcher.
+func (d *Dispatcher) RemoteBitfields() conn.RemoteBitfields {
+	remoteBitfields := make(conn.RemoteBitfields)
+
+	d.peers.Range(func(k, v interface{}) bool {
+		remoteBitfields[k.(core.PeerID)] = v.(*peer).bitfield.Copy()
+		return true
+	})
+	return remoteBitfields
+}
+
 // AddPeer registers a new peer with the Dispatcher.
 func (d *Dispatcher) AddPeer(
 	peerID core.PeerID, b *bitset.BitSet, messages Messages) error {
