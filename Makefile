@@ -84,6 +84,12 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
+	mkdir -p mocks/build-index/tagtype
+	$(mockgen) \
+		-destination=mocks/build-index/tagtype/mocktagtype.go \
+		-package mocktagtype \
+		code.uber.internal/infra/kraken/build-index/tagtype Manager,DependencyResolver
+
 	mkdir -p mocks/build-index/tagclient
 	$(mockgen) \
 		-destination=mocks/build-index/tagclient/mocktagclient.go \

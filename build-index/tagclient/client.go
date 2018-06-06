@@ -34,9 +34,9 @@ func (p provider) Provide(addr string) Client { return New(addr) }
 type Client interface {
 	Put(tag string, d core.Digest) error
 	Get(tag string) (core.Digest, error)
-	Replicate(tag string, d core.Digest, dependencies []core.Digest) error
+	Replicate(tag string) error
 	DuplicateReplicate(
-		tag string, d core.Digest, dependencies []core.Digest, delay time.Duration) error
+		tag string, d core.Digest, dependencies core.DigestList, delay time.Duration) error
 	Origin() (string, error)
 }
 
@@ -83,14 +83,9 @@ type ReplicateRequest struct {
 	Dependencies []core.Digest `json:"dependencies"`
 }
 
-func (c *client) Replicate(tag string, d core.Digest, dependencies []core.Digest) error {
-	b, err := json.Marshal(ReplicateRequest{dependencies})
-	if err != nil {
-		return fmt.Errorf("json marshal: %s", err)
-	}
-	_, err = httputil.Post(
-		fmt.Sprintf("http://%s/remotes/tags/%s/digest/%s", c.addr, url.PathEscape(tag), d.String()),
-		httputil.SendBody(bytes.NewReader(b)),
+func (c *client) Replicate(tag string) error {
+	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/remotes/tags/%s", c.addr, url.PathEscape(tag)),
 		httputil.SendRetry())
 	return err
 }
@@ -102,7 +97,7 @@ type DuplicateReplicateRequest struct {
 }
 
 func (c *client) DuplicateReplicate(
-	tag string, d core.Digest, dependencies []core.Digest, delay time.Duration) error {
+	tag string, d core.Digest, dependencies core.DigestList, delay time.Duration) error {
 
 	b, err := json.Marshal(DuplicateReplicateRequest{dependencies, delay})
 	if err != nil {

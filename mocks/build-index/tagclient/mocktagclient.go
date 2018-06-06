@@ -71,7 +71,7 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // DuplicateReplicate mocks base method
-func (m *MockClient) DuplicateReplicate(arg0 string, arg1 core.Digest, arg2 []core.Digest, arg3 time.Duration) error {
+func (m *MockClient) DuplicateReplicate(arg0 string, arg1 core.Digest, arg2 core.DigestList, arg3 time.Duration) error {
 	ret := m.ctrl.Call(m, "DuplicateReplicate", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -121,13 +121,13 @@ func (mr *MockClientMockRecorder) Put(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // Replicate mocks base method
-func (m *MockClient) Replicate(arg0 string, arg1 core.Digest, arg2 []core.Digest) error {
-	ret := m.ctrl.Call(m, "Replicate", arg0, arg1, arg2)
+func (m *MockClient) Replicate(arg0 string) error {
+	ret := m.ctrl.Call(m, "Replicate", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Replicate indicates an expected call of Replicate
-func (mr *MockClientMockRecorder) Replicate(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockClient)(nil).Replicate), arg0, arg1, arg2)
+func (mr *MockClientMockRecorder) Replicate(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockClient)(nil).Replicate), arg0)
 }

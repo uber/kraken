@@ -84,11 +84,10 @@ func TestPostTag(t *testing.T) {
 	require.NoError(mocks.fs.CreateCacheFile(manifestDigest.Hex(), bytes.NewReader(rawManifest)))
 
 	tag := "docker/some-tag"
-	dependencies := []core.Digest{config, layer1, layer2, manifestDigest}
 
 	gomock.InOrder(
 		mocks.tags.EXPECT().Put(tag, manifestDigest).Return(nil),
-		mocks.tags.EXPECT().Replicate(tag, manifestDigest, dependencies).Return(nil),
+		mocks.tags.EXPECT().Replicate(tag).Return(nil),
 	)
 
 	require.NoError(transferer.PostTag(tag, manifestDigest))

@@ -49,16 +49,29 @@ func (mr *MockClientMockRecorder) Addr() *gomock.Call {
 }
 
 // CheckBlob mocks base method
-func (m *MockClient) CheckBlob(arg0 core.Digest) (bool, error) {
-	ret := m.ctrl.Call(m, "CheckBlob", arg0)
+func (m *MockClient) CheckBlob(arg0 string, arg1 core.Digest) (bool, error) {
+	ret := m.ctrl.Call(m, "CheckBlob", arg0, arg1)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CheckBlob indicates an expected call of CheckBlob
-func (mr *MockClientMockRecorder) CheckBlob(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckBlob", reflect.TypeOf((*MockClient)(nil).CheckBlob), arg0)
+func (mr *MockClientMockRecorder) CheckBlob(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckBlob", reflect.TypeOf((*MockClient)(nil).CheckBlob), arg0, arg1)
+}
+
+// CheckLocalBlob mocks base method
+func (m *MockClient) CheckLocalBlob(arg0 string, arg1 core.Digest) (bool, error) {
+	ret := m.ctrl.Call(m, "CheckLocalBlob", arg0, arg1)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckLocalBlob indicates an expected call of CheckLocalBlob
+func (mr *MockClientMockRecorder) CheckLocalBlob(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckLocalBlob", reflect.TypeOf((*MockClient)(nil).CheckLocalBlob), arg0, arg1)
 }
 
 // DeleteBlob mocks base method
@@ -240,6 +253,19 @@ func NewMockClusterClient(ctrl *gomock.Controller) *MockClusterClient {
 // EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockClusterClient) EXPECT() *MockClusterClientMockRecorder {
 	return m.recorder
+}
+
+// CheckBlob mocks base method
+func (m *MockClusterClient) CheckBlob(arg0 string, arg1 core.Digest) (bool, error) {
+	ret := m.ctrl.Call(m, "CheckBlob", arg0, arg1)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckBlob indicates an expected call of CheckBlob
+func (mr *MockClusterClientMockRecorder) CheckBlob(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckBlob", reflect.TypeOf((*MockClusterClient)(nil).CheckBlob), arg0, arg1)
 }
 
 // DownloadBlob mocks base method

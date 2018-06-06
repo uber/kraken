@@ -7,6 +7,7 @@ import (
 
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/build-index/tagserver"
+	"code.uber.internal/infra/kraken/build-index/tagtype"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
@@ -39,10 +40,12 @@ func main() {
 	}
 	defer closer.Close()
 
+	originClient := blobclient.NewClusterClient(
+		blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin))
+
 	trExecutor := tagreplication.NewExecutor(
 		stats,
-		blobclient.NewClusterClient(
-			blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin)),
+		originClient,
 		tagclient.NewProvider())
 
 	remotes, err := config.Remotes.Build()
@@ -74,15 +77,23 @@ func main() {
 		log.Fatalf("Error building local replica host list: %s", err)
 	}
 
+	tagTypes, err := tagtype.NewManager(config.TagTypes, originClient)
+	if err != nil {
+		log.Fatalf("Error creating tag check: %s", err)
+	}
+
 	server := tagserver.New(
 		config.TagServer,
 		stats,
 		backends,
 		config.Origin,
+		originClient,
 		localReplicas,
 		remotes,
 		trManager,
-		tagclient.NewProvider())
+		tagclient.NewProvider(),
+		tagTypes,
+	)
 
 	addr := fmt.Sprintf(":%d", *port)
 	log.Infof("Listening on %s", addr)

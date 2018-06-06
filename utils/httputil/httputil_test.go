@@ -2,6 +2,7 @@ package httputil
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -133,4 +134,23 @@ func TestPollAcceptedStatusError(t *testing.T) {
 	require.Error(err)
 	require.Equal(404, err.(StatusError).Status)
 	require.InDelta(400*time.Millisecond, time.Since(start), float64(50*time.Millisecond))
+}
+
+func TestGetQueryArg(t *testing.T) {
+	require := require.New(t)
+	arg := "arg"
+	value := "value"
+	defaultVal := "defaultvalue"
+
+	r := httptest.NewRequest("GET", fmt.Sprintf("localhost:0/?%s=%s", arg, value), nil)
+	require.Equal(value, GetQueryArg(r, arg, defaultVal))
+}
+
+func TestGetQueryArgUseDefault(t *testing.T) {
+	require := require.New(t)
+	arg := "arg"
+	defaultVal := "defaultvalue"
+
+	r := httptest.NewRequest("GET", "localhost:0/", nil)
+	require.Equal(defaultVal, GetQueryArg(r, arg, defaultVal))
 }
