@@ -21,9 +21,11 @@ type Client interface {
 	Addr() string
 
 	Locations(d core.Digest) ([]string, error)
-	CheckBlob(d core.Digest) (bool, error)
 	DeleteBlob(d core.Digest) error
 	TransferBlob(d core.Digest, blob io.Reader) error
+
+	CheckBlob(namespace string, d core.Digest) (bool, error)
+	CheckLocalBlob(namespace string, d core.Digest) (bool, error)
 
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
@@ -85,8 +87,28 @@ func (c *HTTPClient) Locations(d core.Digest) ([]string, error) {
 }
 
 // CheckBlob returns error if the origin does not have a blob for d.
-func (c *HTTPClient) CheckBlob(d core.Digest) (bool, error) {
-	_, err := httputil.Head(fmt.Sprintf("http://%s/internal/blobs/%s", c.addr, d))
+func (c *HTTPClient) CheckBlob(namespace string, d core.Digest) (bool, error) {
+	_, err := httputil.Head(fmt.Sprintf(
+		"http://%s/internal/namespace/%s/blobs/%s",
+		c.addr,
+		namespace,
+		d))
+	if err != nil {
+		if httputil.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// CheckLocalBlob returns error if the origin does not have a blob for d.
+func (c *HTTPClient) CheckLocalBlob(namespace string, d core.Digest) (bool, error) {
+	_, err := httputil.Head(fmt.Sprintf(
+		"http://%s/internal/namespace/%s/blobs/%s?local=true",
+		c.addr,
+		namespace,
+		d))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return false, nil

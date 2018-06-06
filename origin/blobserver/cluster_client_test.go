@@ -51,6 +51,10 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 			writeback.MatchTask(writeback.NewTask(backend.NoopNamespace, blob.Digest))).Return(nil)
 		require.NoError(cc.UploadBlob(backend.NoopNamespace, blob.Digest, bytes.NewReader(blob.Content)))
 
+		ok, err := cc.CheckBlob(backend.NoopNamespace, blob.Digest)
+		require.NoError(err)
+		require.True(ok)
+
 		mi, err := cc.GetMetaInfo(backend.NoopNamespace, blob.Digest)
 		require.NoError(err)
 		require.NotNil(mi)
@@ -80,7 +84,10 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 
 	require.Error(cc.UploadBlob(backend.NoopNamespace, blob.Digest, bytes.NewReader(blob.Content)))
 
-	_, err := cc.GetMetaInfo(backend.NoopNamespace, blob.Digest)
+	_, err := cc.CheckBlob(backend.NoopNamespace, blob.Digest)
+	require.Error(err)
+
+	_, err = cc.GetMetaInfo(backend.NoopNamespace, blob.Digest)
 	require.Error(err)
 
 	require.Error(cc.DownloadBlob(backend.NoopNamespace, blob.Digest, ioutil.Discard))

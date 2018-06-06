@@ -52,6 +52,7 @@ type ClusterClient interface {
 	UploadBlob(namespace string, d core.Digest, blob io.Reader) error
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
+	CheckBlob(namespace string, d core.Digest) (bool, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
 	Owners(d core.Digest) ([]core.PeerContext, error)
 	ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error
@@ -102,6 +103,25 @@ func (c *clusterClient) GetMetaInfo(namespace string, d core.Digest) (mi *core.M
 		break
 	}
 	return mi, err
+}
+
+// CheckBlob checks availability of a blob in the cluster.
+func (c *clusterClient) CheckBlob(namespace string, d core.Digest) (ok bool, err error) {
+	clients, err := c.resolver.Resolve(d)
+	if err != nil {
+		return false, fmt.Errorf("resolve clients: %s", err)
+	}
+
+	shuffle(clients)
+	for _, client := range clients {
+		ok, err = client.CheckBlob(namespace, d)
+		if err != nil {
+			continue
+		}
+		break
+	}
+
+	return ok, err
 }
 
 // OverwriteMetaInfo overwrites existing metainfo for d with new metainfo configured

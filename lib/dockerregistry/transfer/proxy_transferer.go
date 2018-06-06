@@ -8,7 +8,6 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/utils/dockerutil"
 
 	"github.com/docker/distribution/uuid"
 )
@@ -86,19 +85,10 @@ func (t *ProxyTransferer) PostTag(tag string, d core.Digest) error {
 		return fmt.Errorf("cache: %s", err)
 	}
 	defer f.Close()
-	manifest, _, err := dockerutil.ParseManifestV2(f)
-	if err != nil {
-		return fmt.Errorf("parse manifest v2: %s", err)
-	}
-	refs, err := dockerutil.GetManifestReferences(manifest)
-	if err != nil {
-		return fmt.Errorf("get manifest references: %s", err)
-	}
-	dependencies := append(refs, d)
 	if err := t.tags.Put(tag, d); err != nil {
 		return fmt.Errorf("put tag: %s", err)
 	}
-	if err := t.tags.Replicate(tag, d, dependencies); err != nil {
+	if err := t.tags.Replicate(tag); err != nil {
 		return fmt.Errorf("replicate tag: %s", err)
 	}
 	return nil

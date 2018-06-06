@@ -263,3 +263,14 @@ func PollAccepted(
 	}
 	return nil, fmt.Errorf("202 backoff: %s", a.Err())
 }
+
+// GetQueryArg gets an argument from http.Request by name.
+// When the argument is not specified, it returns a default value.
+func GetQueryArg(r *http.Request, name string, defaultVal string) string {
+	v := r.URL.Query().Get(name)
+	if v == "" {
+		v = defaultVal
+	}
+
+	return v
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"code.uber.internal/infra/kraken/build-index/tagserver"
+	"code.uber.internal/infra/kraken/build-index/tagtype"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
@@ -19,6 +20,7 @@ type Config struct {
 	TagServer        tagserver.Config             `yaml:"tagserver"`
 	Remotes          tagreplication.RemotesConfig `yaml:"remotes"`
 	TagReplication   persistedretry.Config        `yaml:"tag_replication"`
+	TagTypes         []tagtype.Config             `yaml:"tag_types"`
 	Origin           string                       `yaml:"origin"`
 	SQLiteSourcePath string                       `yaml:"sqlite_source_path"`
 	LocalReplicas    hostlist.Config              `yaml:"local_replicas"`

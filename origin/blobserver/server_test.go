@@ -24,25 +24,44 @@ import (
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
-func TestCheckBlobHandlerOK(t *testing.T) {
+func TestCheckBlobHandlerLocalOK(t *testing.T) {
 	require := require.New(t)
 
 	mocks := newServerMocks(t)
 	defer mocks.ctrl.Finish()
 
-	addr, stop := mocks.server(configMaxReplicaFixture())
+	addr, stop := mocks.server(configFixture())
 	defer stop()
 
 	d := core.DigestFixture()
 
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, nil)
 
-	ok, err := blobclient.New(addr).CheckBlob(d)
+	ok, err := blobclient.New(addr).CheckLocalBlob(namespace, d)
 	require.NoError(err)
 	require.True(ok)
 }
 
-func TestCheckBlobHandlerNotFound(t *testing.T) {
+func TestCheckBlobHandlerOK(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	defer s.cleanup()
+
+	d := core.DigestFixture()
+
+	backendClient := s.backendClient(namespace)
+
+	backendClient.EXPECT().Stat(d.Hex()).Return(blobinfo.New(int64(len(d.Hex()))), nil)
+
+	ok, err := cp.Provide(master1).CheckBlob(namespace, d)
+	require.NoError(err)
+	require.True(ok)
+}
+
+func TestCheckBlobHandlerLocalNotFound(t *testing.T) {
 	require := require.New(t)
 
 	mocks := newServerMocks(t)
@@ -55,7 +74,26 @@ func TestCheckBlobHandlerNotFound(t *testing.T) {
 
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, os.ErrNotExist)
 
-	ok, err := blobclient.New(addr).CheckBlob(d)
+	ok, err := blobclient.New(addr).CheckLocalBlob(namespace, d)
+	require.NoError(err)
+	require.False(ok)
+}
+
+func TestCheckBlobHandlerNotFound(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	defer s.cleanup()
+
+	d := core.DigestFixture()
+
+	backendClient := s.backendClient(namespace)
+
+	backendClient.EXPECT().Stat(d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
+
+	ok, err := cp.Provide(master1).CheckBlob(namespace, d)
 	require.NoError(err)
 	require.False(ok)
 }
@@ -157,7 +195,7 @@ func TestIncorrectNodeErrors(t *testing.T) {
 	}{
 		{
 			"CheckBlob",
-			func(c blobclient.Client) error { _, err := c.CheckBlob(blob.Digest); return err },
+			func(c blobclient.Client) error { _, err := c.CheckBlob(namespace, blob.Digest); return err },
 		}, {
 			"DownloadBlob",
 			func(c blobclient.Client) error {
@@ -249,7 +287,7 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 
 	// Ensure blob was replicated to other master.
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		ok, err := cp.Provide(master2).CheckBlob(blob.Digest)
+		ok, err := cp.Provide(master2).CheckLocalBlob(namespace, blob.Digest)
 		return ok && err == nil
 	}))
 }

@@ -16,6 +16,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
 	"code.uber.internal/infra/kraken/lib/hrw"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
@@ -27,11 +28,11 @@ import (
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/errutil"
 	"code.uber.internal/infra/kraken/utils/handler"
+	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/stringset"
 
-	"github.com/docker/distribution/uuid"
 	"github.com/pressly/chi"
 	"github.com/uber-go/tally"
 )
@@ -140,12 +141,13 @@ func (s *Server) Handler() http.Handler {
 	r.Patch("/internal/blobs/:digest/uploads/:uid", handler.Wrap(s.patchUploadHandler))
 	r.Put("/internal/blobs/:digest/uploads/:uid", handler.Wrap(s.commitTransferHandler))
 
-	r.Head("/internal/blobs/:digest", handler.Wrap(s.checkBlobHandler))
 	r.Delete("/internal/blobs/:digest", handler.Wrap(s.deleteBlobHandler))
 
 	r.Post("/internal/blobs/:digest/metainfo", handler.Wrap(s.overwriteMetaInfoHandler))
 
 	r.Get("/internal/peercontext", handler.Wrap(s.getPeerContextHandler))
+
+	r.Head("/internal/namespace/:namespace/blobs/:digest", handler.Wrap(s.checkBlobHandler))
 
 	r.Get("/internal/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(s.getMetaInfoHandler))
 
@@ -165,6 +167,14 @@ func (s *Server) healthCheckHandler(w http.ResponseWriter, r *http.Request) erro
 
 // checkBlobHandler checks if blob data exists.
 func (s *Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error {
+	checkLocal, err := strconv.ParseBool(httputil.GetQueryArg(r, "local", "false"))
+	if err != nil {
+		return handler.Errorf("parse arg `local` as bool: %s", err)
+	}
+	namespace, err := parseNamespace(r)
+	if err != nil {
+		return err
+	}
 	d, err := parseDigest(r)
 	if err != nil {
 		return err
@@ -172,12 +182,26 @@ func (s *Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error 
 	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
-	if ok, err := blobExists(s.fileStore, d); err != nil {
+
+	ok, err := blobExists(s.fileStore, d)
+	if err != nil {
 		return err
-	} else if !ok {
+	}
+	if !ok && !checkLocal {
+		client, err := s.backends.GetClient(namespace)
+		if err != nil {
+			return handler.Errorf("get backend client: %s", err)
+		}
+		if _, err := client.Stat(d.Hex()); err == nil {
+			ok = true
+		} else if err != backenderrors.ErrBlobNotFound {
+			return fmt.Errorf("backend stat: %s", err)
+		}
+	}
+
+	if !ok {
 		return handler.ErrorStatus(http.StatusNotFound)
 	}
-	w.WriteHeader(http.StatusOK)
 	log.Debugf("successfully check blob %s exists", d.Hex())
 	return nil
 }
@@ -367,34 +391,6 @@ func (s *Server) startRemoteBlobDownload(
 	default:
 		return err
 	}
-}
-
-func (s *Server) downloadRemoteBlob(c backend.Client, d core.Digest) error {
-	u := uuid.Generate().String()
-	if err := s.fileStore.CreateUploadFile(u, 0); err != nil {
-		return handler.Errorf("create upload file: %s", err)
-	}
-	f, err := s.fileStore.GetUploadFileReadWriter(u)
-	if err != nil {
-		return handler.Errorf("get upload writer: %s", err)
-	}
-	if err := c.Download(d.Hex(), f); err != nil {
-		return err
-	}
-	if _, err := f.Seek(0, 0); err != nil {
-		return handler.Errorf("seek: %s", err)
-	}
-	fd, err := core.NewDigester().FromReader(f)
-	if err != nil {
-		return handler.Errorf("compute digest: %s", err)
-	}
-	if fd != d {
-		return handler.Errorf("invalid remote blob digest: got %s, expected %s", fd, d)
-	}
-	if err := s.fileStore.MoveUploadFileToCache(u, d.Hex()); err != nil {
-		return handler.Errorf("move upload file to cache: %s", err)
-	}
-	return nil
 }
 
 func (s *Server) replicateBlobLocally(d core.Digest) error {
