@@ -29,7 +29,7 @@ func (c CacheConfig) applyDefaults() CacheConfig {
 
 // Resolver is used by Cache to resolve keys into values / errors.
 type Resolver interface {
-	Resolve(key interface{}) (val interface{}, err error)
+	Resolve(ctx interface{}, key interface{}) (val interface{}, err error)
 }
 
 type result struct {
@@ -68,10 +68,11 @@ func NewCache(config CacheConfig, clk clock.Clock, resolver Resolver) *Cache {
 }
 
 // Get performs a key lookup using c's Resolver. Guarantees that no matter how
-// many concurrent calls to Get are made, there will be exactly one Resolve(key)
-// call within the configured TTL if Resolve(key) returns nil error, else within
-// the configured ErrorTTL if Resolve(key) returns non-nil error.
-func (c *Cache) Get(key interface{}) (val interface{}, err error) {
+// many concurrent calls to Get are made, there will be exactly one Resolve(ctx, key)
+// call within the configured TTL if Resolve(ctx, key) returns nil error, else
+// within the configured ErrorTTL if Resolve(ctx, key) returns non-nil error.
+// ctx is the context for resolving a key in resolver.
+func (c *Cache) Get(ctx interface{}, key interface{}) (val interface{}, err error) {
 	c.cleanup.Trap()
 
 	// Quickly check for a cached result under global read lock.
@@ -106,7 +107,7 @@ func (c *Cache) Get(key interface{}) (val interface{}, err error) {
 	// read lock until we are finished resolving the key.
 	c.Unlock()
 
-	r.val, r.err = c.resolver.Resolve(key)
+	r.val, r.err = c.resolver.Resolve(ctx, key)
 	if r.err != nil {
 		r.expiresAt = c.clk.Now().Add(c.config.ErrorTTL)
 	} else {

@@ -31,7 +31,7 @@ func TestCacheGetConcurrency(t *testing.T) {
 	}
 
 	for k, v := range kvs {
-		resolver.EXPECT().Resolve(k).Return(v, nil).MaxTimes(1)
+		resolver.EXPECT().Resolve(nil, k).Return(v, nil).MaxTimes(1)
 	}
 
 	var wg sync.WaitGroup
@@ -44,7 +44,7 @@ func TestCacheGetConcurrency(t *testing.T) {
 			for k = range kvs {
 				break
 			}
-			v, err := cache.Get(k)
+			v, err := cache.Get(nil, k)
 			require.NoError(err)
 			require.Equal(kvs[k], v.(string))
 		}()
@@ -65,10 +65,10 @@ func TestCacheGetError(t *testing.T) {
 	k := "some key"
 	err := errors.New("some error")
 
-	resolver.EXPECT().Resolve(k).Return("", err)
+	resolver.EXPECT().Resolve(nil, k).Return("", err)
 
 	for i := 0; i < 10; i++ {
-		v, e := cache.Get(k)
+		v, e := cache.Get(nil, k)
 		require.Equal(err, e)
 		require.Equal("", v.(string))
 	}
@@ -104,13 +104,13 @@ func TestCacheGetCleanup(t *testing.T) {
 
 	expectVals := func() {
 		for k, v := range kvs {
-			resolver.EXPECT().Resolve(k).Return(v, nil)
+			resolver.EXPECT().Resolve(nil, k).Return(v, nil)
 		}
 	}
 
 	expectErrs := func() {
 		for k, err := range kerrs {
-			resolver.EXPECT().Resolve(k).Return("", err)
+			resolver.EXPECT().Resolve(nil, k).Return("", err)
 		}
 	}
 
@@ -121,7 +121,7 @@ func TestCacheGetCleanup(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for k, v := range kvs {
-					rv, rerr := cache.Get(k)
+					rv, rerr := cache.Get(nil, k)
 					require.NoError(rerr)
 					require.Equal(v, rv.(string))
 				}
@@ -129,7 +129,7 @@ func TestCacheGetCleanup(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for k, err := range kerrs {
-					rv, rerr := cache.Get(k)
+					rv, rerr := cache.Get(nil, k)
 					require.Equal(err, rerr)
 					require.Equal("", rv.(string))
 				}

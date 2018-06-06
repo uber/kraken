@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
+
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
@@ -99,7 +101,7 @@ func (m *serverMocks) handler() http.Handler {
 		m.tagTypes).Handler()
 }
 
-func TestPutAndGetTag(t *testing.T) {
+func TestPutAndGetLocalTag(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newServerMocks(t)
@@ -125,12 +127,37 @@ func TestPutAndGetTag(t *testing.T) {
 
 	// Getting tag multiple times should only make one download call.
 	for i := 0; i < 10; i++ {
-		result, err := client.Get(tag)
+		result, err := client.GetLocal(tag)
 		require.NoError(err)
 		require.Equal(digest, result)
 	}
 }
 
+func TestGetTagFallback(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := tagclient.New(addr)
+
+	tag := "uber-usi/labrat"
+	digest := core.DigestFixture()
+	remoteClient := mocks.client()
+
+	gomock.InOrder(
+		mocks.backendClient.EXPECT().Download(tag, gomock.Any()).Return(backenderrors.ErrBlobNotFound),
+		mocks.provider.EXPECT().Provide(_testRemote).Return(remoteClient),
+		remoteClient.EXPECT().GetLocal(tag).Return(digest, nil),
+	)
+
+	d, err := client.Get(tag)
+	require.NoError(err)
+	require.Equal(digest, d)
+}
 func TestGetTagNotFound(t *testing.T) {
 	require := require.New(t)
 
@@ -143,11 +170,57 @@ func TestGetTagNotFound(t *testing.T) {
 	client := tagclient.New(addr)
 
 	tag := "uber-usi/labrat"
+	remoteClient := mocks.client()
 
-	mocks.backendClient.EXPECT().Download(tag, gomock.Any()).Return(backenderrors.ErrBlobNotFound)
+	gomock.InOrder(
+		mocks.backendClient.EXPECT().Download(tag, gomock.Any()).Return(backenderrors.ErrBlobNotFound),
+		mocks.provider.EXPECT().Provide(_testRemote).Return(remoteClient),
+		remoteClient.EXPECT().GetLocal(tag).Return(core.Digest{}, tagclient.ErrNotFound),
+	)
 
 	_, err := client.Get(tag)
 	require.Equal(tagclient.ErrNotFound, err)
+}
+
+func TestHasTag(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := tagclient.New(addr)
+
+	tag := "uber-usi/labrat"
+	digest := core.DigestFixture()
+
+	mocks.backendClient.EXPECT().Stat(tag).Return(blobinfo.New(int64(len(digest.String()))), nil)
+
+	ok, err := client.Has(tag)
+	require.NoError(err)
+	require.True(ok)
+}
+
+func TestHasTagNotFound(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := tagclient.New(addr)
+
+	tag := "uber-usi/labrat"
+
+	mocks.backendClient.EXPECT().Stat(tag).Return(nil, backenderrors.ErrBlobNotFound)
+
+	ok, err := client.Has(tag)
+	require.NoError(err)
+	require.False(ok)
 }
 
 func TestReplicate(t *testing.T) {

@@ -34,7 +34,9 @@ func (p provider) Provide(addr string) Client { return New(addr) }
 type Client interface {
 	Put(tag string, d core.Digest) error
 	Get(tag string) (core.Digest, error)
+	GetLocal(tag string) (core.Digest, error)
 	Replicate(tag string) error
+	Has(tag string) (bool, error)
 	DuplicateReplicate(
 		tag string, d core.Digest, dependencies core.DigestList, delay time.Duration) error
 	Origin() (string, error)
@@ -54,6 +56,28 @@ func (c *client) Put(tag string, d core.Digest) error {
 		fmt.Sprintf("http://%s/tags/%s/digest/%s", c.addr, url.PathEscape(tag), d.String()),
 		httputil.SendRetry())
 	return err
+}
+
+func (c *client) GetLocal(tag string) (core.Digest, error) {
+	resp, err := httputil.Get(
+		fmt.Sprintf("http://%s/tags/%s?local=true", c.addr, url.PathEscape(tag)),
+		httputil.SendRetry())
+	if err != nil {
+		if httputil.IsNotFound(err) {
+			return core.Digest{}, ErrNotFound
+		}
+		return core.Digest{}, err
+	}
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return core.Digest{}, fmt.Errorf("read body: %s", err)
+	}
+	d, err := core.ParseSHA256Digest(string(b))
+	if err != nil {
+		return core.Digest{}, fmt.Errorf("new digest: %s", err)
+	}
+	return d, nil
 }
 
 func (c *client) Get(tag string) (core.Digest, error) {
@@ -76,6 +100,19 @@ func (c *client) Get(tag string) (core.Digest, error) {
 		return core.Digest{}, fmt.Errorf("new digest: %s", err)
 	}
 	return d, nil
+}
+
+func (c *client) Has(tag string) (bool, error) {
+	_, err := httputil.Head(
+		fmt.Sprintf("http://%s/tags/%s", c.addr, url.PathEscape(tag)),
+		httputil.SendRetry())
+	if err != nil {
+		if httputil.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // ReplicateRequest defines a Replicate request body.
