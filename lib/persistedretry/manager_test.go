@@ -90,9 +90,9 @@ func TestManagerAddTaskSuccess(t *testing.T) {
 	gomock.InOrder(
 		mocks.store.EXPECT().GetPending().Return(nil, nil),
 		task.EXPECT().Ready().Return(true),
-		mocks.store.EXPECT().MarkPending(task).Return(nil),
+		mocks.store.EXPECT().AddPending(task).Return(nil),
 		mocks.executor.EXPECT().Exec(task).Return(nil),
-		mocks.store.EXPECT().MarkDone(task).Return(nil),
+		mocks.store.EXPECT().Remove(task).Return(nil),
 	)
 
 	m, err := mocks.new()
@@ -135,7 +135,7 @@ func TestManagerAddTaskFail(t *testing.T) {
 	gomock.InOrder(
 		mocks.store.EXPECT().GetPending().Return(nil, nil),
 		task.EXPECT().Ready().Return(true),
-		mocks.store.EXPECT().MarkPending(task).Return(nil),
+		mocks.store.EXPECT().AddPending(task).Return(nil),
 		mocks.executor.EXPECT().Exec(task).Return(errors.New("task failed")),
 		mocks.store.EXPECT().MarkFailed(task).Return(nil),
 	)
@@ -167,17 +167,17 @@ func TestManagerAddTaskFallbackWhenWorkersBusy(t *testing.T) {
 
 	gomock.InOrder(
 		task1.EXPECT().Ready().Return(true),
-		mocks.store.EXPECT().MarkPending(task1).Return(nil),
+		mocks.store.EXPECT().AddPending(task1).Return(nil),
 		mocks.executor.EXPECT().Exec(task1).DoAndReturn(func(Task) error {
 			<-task1Done
 			return nil
 		}),
-		mocks.store.EXPECT().MarkDone(task1).Return(nil),
+		mocks.store.EXPECT().Remove(task1).Return(nil),
 	)
 
 	gomock.InOrder(
 		task2.EXPECT().Ready().Return(true),
-		mocks.store.EXPECT().MarkPending(task2).Return(nil),
+		mocks.store.EXPECT().AddPending(task2).Return(nil),
 		mocks.store.EXPECT().MarkFailed(task2).Return(nil),
 	)
 
@@ -212,7 +212,7 @@ func TestManagerRetriesFailedTasks(t *testing.T) {
 		task.EXPECT().GetLastAttempt().Return(time.Time{}),
 		mocks.store.EXPECT().MarkPending(task),
 		mocks.executor.EXPECT().Exec(task).Return(nil),
-		mocks.store.EXPECT().MarkDone(task).Return(nil),
+		mocks.store.EXPECT().Remove(task).Return(nil),
 	)
 	mocks.store.EXPECT().GetFailed().Return(nil, nil).AnyTimes()
 
@@ -280,7 +280,59 @@ func TestManagerAddNotReadyTaskMarksAsFailed(t *testing.T) {
 
 	gomock.InOrder(
 		task.EXPECT().Ready().Return(false),
-		mocks.store.EXPECT().MarkFailed(task).Return(nil),
+		mocks.store.EXPECT().AddFailed(task).Return(nil),
+	)
+
+	mocks.store.EXPECT().GetFailed().Return(nil, nil).AnyTimes()
+
+	m, err := mocks.new()
+	require.NoError(err)
+	defer m.Close()
+
+	waitForWorkers()
+
+	require.NoError(m.Add(task))
+}
+
+func TestManagerNoopsOnFailedTaskConflicts(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newManagerMocks(t)
+	defer cleanup()
+
+	task := mocks.task()
+
+	mocks.store.EXPECT().GetPending().Return(nil, nil)
+
+	gomock.InOrder(
+		task.EXPECT().Ready().Return(false),
+		mocks.store.EXPECT().AddFailed(task).Return(ErrTaskExists),
+	)
+
+	mocks.store.EXPECT().GetFailed().Return(nil, nil).AnyTimes()
+
+	m, err := mocks.new()
+	require.NoError(err)
+	defer m.Close()
+
+	waitForWorkers()
+
+	require.NoError(m.Add(task))
+}
+
+func TestManagerNoopsOnPendingTaskConflicts(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newManagerMocks(t)
+	defer cleanup()
+
+	task := mocks.task()
+
+	mocks.store.EXPECT().GetPending().Return(nil, nil)
+
+	gomock.InOrder(
+		task.EXPECT().Ready().Return(true),
+		mocks.store.EXPECT().AddPending(task).Return(ErrTaskExists),
 	)
 
 	mocks.store.EXPECT().GetFailed().Return(nil, nil).AnyTimes()
