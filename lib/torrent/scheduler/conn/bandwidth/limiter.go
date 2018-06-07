@@ -24,10 +24,10 @@ type Config struct {
 
 func (c Config) applyDefaults() Config {
 	if c.EgressBitsPerSec == 0 {
-		c.EgressBitsPerSec = 400 * memsize.Mbit
+		c.EgressBitsPerSec = 200 * memsize.Mbit
 	}
 	if c.IngressBitsPerSec == 0 {
-		c.IngressBitsPerSec = 600 * memsize.Mbit
+		c.IngressBitsPerSec = 300 * memsize.Mbit
 	}
 	if c.TokenSize == 0 {
 		c.TokenSize = memsize.Mbit
