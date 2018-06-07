@@ -35,24 +35,23 @@ func checkTasks(t *testing.T, expected []*Task, result []persistedretry.Task) {
 	}
 }
 
-func TestMarkPending(t *testing.T) {
-	require := require.New(t)
+func checkPending(t *testing.T, store *Store, expected ...*Task) {
+	t.Helper()
 
-	store, cleanup := StoreFixture()
-	defer cleanup()
-
-	task := TaskFixture()
-
-	require.NoError(store.MarkPending(task))
-
-	pending, err := store.GetPending()
-	require.NoError(err)
-	checkTasks(t, []*Task{task}, pending)
-
-	require.True(pending[0].Ready())
+	result, err := store.GetPending()
+	require.NoError(t, err)
+	checkTasks(t, expected, result)
 }
 
-func TestMarkPendingThenMarkFailed(t *testing.T) {
+func checkFailed(t *testing.T, store *Store, expected ...*Task) {
+	t.Helper()
+
+	result, err := store.GetFailed()
+	require.NoError(t, err)
+	checkTasks(t, expected, result)
+}
+
+func TestAddPending(t *testing.T) {
 	require := require.New(t)
 
 	store, cleanup := StoreFixture()
@@ -60,54 +59,117 @@ func TestMarkPendingThenMarkFailed(t *testing.T) {
 
 	task := TaskFixture()
 
-	require.NoError(store.MarkPending(task))
+	require.NoError(store.AddPending(task))
+
+	checkPending(t, store, task)
+}
+
+func TestAddPendingTwiceReturnsErrTaskExists(t *testing.T) {
+	require := require.New(t)
+
+	store, cleanup := StoreFixture()
+	defer cleanup()
+
+	task := TaskFixture()
+
+	require.NoError(store.AddPending(task))
+	require.Equal(persistedretry.ErrTaskExists, store.AddPending(task))
+}
+
+func TestAddFailed(t *testing.T) {
+	require := require.New(t)
+
+	store, cleanup := StoreFixture()
+	defer cleanup()
+
+	task := TaskFixture()
+
+	require.NoError(store.AddFailed(task))
+
+	checkFailed(t, store, task)
+}
+
+func TestAddFailedTwiceReturnsErrTaskExists(t *testing.T) {
+	require := require.New(t)
+
+	store, cleanup := StoreFixture()
+	defer cleanup()
+
+	task := TaskFixture()
+
+	require.NoError(store.AddFailed(task))
+	require.Equal(persistedretry.ErrTaskExists, store.AddFailed(task))
+}
+
+func TestStateTransitions(t *testing.T) {
+	require := require.New(t)
+
+	store, cleanup := StoreFixture()
+	defer cleanup()
+
+	task := TaskFixture()
+
+	require.NoError(store.AddPending(task))
+	checkPending(t, store, task)
+	checkFailed(t, store)
+
 	require.NoError(store.MarkFailed(task))
-
-	pending, err := store.GetPending()
-	require.NoError(err)
-	require.Empty(pending)
-
-	failed, err := store.GetFailed()
-	require.NoError(err)
-	checkTasks(t, []*Task{task}, failed)
-
-	require.True(failed[0].Ready())
-}
-
-func TestMarkDone(t *testing.T) {
-	require := require.New(t)
-
-	store, cleanup := StoreFixture()
-	defer cleanup()
-
-	task := TaskFixture()
+	checkPending(t, store)
+	checkFailed(t, store, task)
 
 	require.NoError(store.MarkPending(task))
-	require.NoError(store.MarkDone(task))
-
-	pending, err := store.GetPending()
-	require.NoError(err)
-	require.Empty(pending)
-
-	failed, err := store.GetFailed()
-	require.NoError(err)
-	require.Empty(failed)
+	checkPending(t, store, task)
+	checkFailed(t, store)
 }
 
-func TestMarkFailedForNewTaskWithDelay(t *testing.T) {
+func TestMarkTaskNotFound(t *testing.T) {
 	require := require.New(t)
 
 	store, cleanup := StoreFixture()
 	defer cleanup()
 
 	task := TaskFixture()
-	task.Delay = 5 * time.Minute
 
-	require.NoError(store.MarkFailed(task))
+	require.Equal(persistedretry.ErrTaskNotFound, store.MarkPending(task))
+	require.Equal(persistedretry.ErrTaskNotFound, store.MarkFailed(task))
+}
 
-	failed, err := store.GetFailed()
+func TestRemove(t *testing.T) {
+	require := require.New(t)
+
+	store, cleanup := StoreFixture()
+	defer cleanup()
+
+	task := TaskFixture()
+
+	require.NoError(store.AddPending(task))
+
+	checkPending(t, store, task)
+
+	require.NoError(store.Remove(task))
+
+	checkPending(t, store)
+}
+
+func TestDelay(t *testing.T) {
+	require := require.New(t)
+
+	store, cleanup := StoreFixture()
+	defer cleanup()
+
+	task1 := TaskFixture()
+	task1.Delay = 5 * time.Minute
+
+	task2 := TaskFixture()
+	task2.Delay = 0
+
+	require.NoError(store.AddPending(task1))
+	require.NoError(store.AddPending(task2))
+
+	pending, err := store.GetPending()
 	require.NoError(err)
-	checkTasks(t, []*Task{task}, failed)
+	checkTasks(t, []*Task{task1, task2}, pending)
 
-	require.False(failed[0].Ready())
+	require.False(pending[0].Ready())
+	require.True(pending[1].Ready())
 }

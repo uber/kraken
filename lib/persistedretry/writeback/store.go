@@ -9,7 +9,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/osutil"
 
 	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3" // Loads SQL driver.
+	"github.com/mattn/go-sqlite3"
 	"github.com/pressly/goose"
 )
 
@@ -51,10 +51,69 @@ func (s *Store) GetFailed() ([]persistedretry.Task, error) {
 	return s.selectStatus("failed")
 }
 
+// AddPending adds r as pending.
+func (s *Store) AddPending(r persistedretry.Task) error {
+	return s.addWithStatus(r, "pending")
+}
+
+// AddFailed adds r as failed.
+func (s *Store) AddFailed(r persistedretry.Task) error {
+	return s.addWithStatus(r, "failed")
+}
+
 // MarkPending marks r as pending.
 func (s *Store) MarkPending(r persistedretry.Task) error {
+	res, err := s.db.NamedExec(`
+		UPDATE writeback_task
+		SET status = "pending"
+		WHERE namespace=:namespace AND digest=:digest
+	`, r.(*Task))
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		panic("driver does not support RowsAffected")
+	} else if n == 0 {
+		return persistedretry.ErrTaskNotFound
+	}
+	return nil
+}
+
+// MarkFailed marks r as failed.
+func (s *Store) MarkFailed(r persistedretry.Task) error {
+	t := r.(*Task)
+	res, err := s.db.NamedExec(`
+		UPDATE writeback_task
+		SET last_attempt = CURRENT_TIMESTAMP,
+			failures = failures + 1,
+			status = "failed"
+		WHERE namespace=:namespace AND digest=:digest
+	`, t)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		panic("driver does not support RowsAffected")
+	} else if n == 0 {
+		return persistedretry.ErrTaskNotFound
+	}
+	t.Failures++
+	t.LastAttempt = time.Now()
+	return nil
+}
+
+// Remove removes r.
+func (s *Store) Remove(r persistedretry.Task) error {
 	_, err := s.db.NamedExec(`
-		INSERT OR REPLACE INTO writeback_task (
+		DELETE FROM writeback_task
+		WHERE namespace=:namespace AND digest=:digest
+	`, r.(*Task))
+	return err
+}
+
+func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
+	query := fmt.Sprintf(`
+		INSERT INTO writeback_task (
 			namespace,
 			digest,
 			last_attempt,
@@ -67,49 +126,15 @@ func (s *Store) MarkPending(r persistedretry.Task) error {
 			:last_attempt,
 			:failures,
 			:delay,
-			"pending"
+			%q
 		)
-	`, r.(*Task))
-	return err
-}
-
-// MarkFailed marks r as failed.
-func (s *Store) MarkFailed(r persistedretry.Task) error {
-	t := r.(*Task)
-	_, err := s.db.NamedExec(`
-		INSERT OR REPLACE INTO writeback_task (
-			namespace,
-			digest,
-			last_attempt,
-			failures,
-			delay,
-			status
-		) VALUES (
-			:namespace,
-			:digest,
-			CURRENT_TIMESTAMP,
-			COALESCE(
-				(SELECT failures+1 FROM writeback_task
-					WHERE namespace=:namespace AND digest=:digest),
-				1),
-			:delay,
-			"failed"
-		)
-	`, t)
-	if err != nil {
-		return err
+	`, status)
+	_, err := s.db.NamedExec(query, r.(*Task))
+	if se, ok := err.(sqlite3.Error); ok {
+		if se.ExtendedCode == sqlite3.ErrConstraintPrimaryKey {
+			return persistedretry.ErrTaskExists
+		}
 	}
-	t.Failures++
-	t.LastAttempt = time.Now()
-	return nil
-}
-
-// MarkDone deletes r.
-func (s *Store) MarkDone(r persistedretry.Task) error {
-	_, err := s.db.NamedExec(`
-		DELETE FROM writeback_task
-		WHERE namespace=:namespace AND digest=:digest
-	`, r.(*Task))
 	return err
 }
 

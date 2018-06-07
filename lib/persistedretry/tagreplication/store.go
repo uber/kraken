@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3" // tagreplication.Store is based on sqlite3
+	"github.com/mattn/go-sqlite3"
 	"github.com/pressly/goose"
 
 	"code.uber.internal/infra/kraken/lib/persistedretry"
-	_ "code.uber.internal/infra/kraken/lib/persistedretry/tagreplication/migrations" // registry db migrations
+	_ "code.uber.internal/infra/kraken/lib/persistedretry/tagreplication/migrations" // Adds migrations.
 	"code.uber.internal/infra/kraken/utils/osutil"
 )
 
@@ -58,10 +58,65 @@ func (s *Store) GetFailed() ([]persistedretry.Task, error) {
 	return s.selectStatus("failed")
 }
 
-// MarkPending inserts a tag in db.
+// AddPending adds r as pending.
+func (s *Store) AddPending(r persistedretry.Task) error {
+	return s.addWithStatus(r, "pending")
+}
+
+// AddFailed adds r as failed.
+func (s *Store) AddFailed(r persistedretry.Task) error {
+	return s.addWithStatus(r, "failed")
+}
+
+// MarkPending marks r as pending.
 func (s *Store) MarkPending(r persistedretry.Task) error {
-	_, err := s.db.NamedExec(`
-		INSERT OR REPLACE INTO replicate_tag_task (
+	res, err := s.db.NamedExec(`
+		UPDATE replicate_tag_task
+		SET status = "pending"
+		WHERE tag=:tag AND destination=:destination
+	`, r.(*Task))
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		panic("driver does not support RowsAffected")
+	} else if n == 0 {
+		return persistedretry.ErrTaskNotFound
+	}
+	return nil
+}
+
+// MarkFailed marks r as failed.
+func (s *Store) MarkFailed(r persistedretry.Task) error {
+	t := r.(*Task)
+	res, err := s.db.NamedExec(`
+		UPDATE replicate_tag_task
+		SET last_attempt = CURRENT_TIMESTAMP,
+			failures = failures + 1,
+			status = "failed"
+		WHERE tag=:tag AND destination=:destination
+	`, t)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		panic("driver does not support RowsAffected")
+	} else if n == 0 {
+		return persistedretry.ErrTaskNotFound
+	}
+	t.Failures++
+	t.LastAttempt = time.Now()
+	return nil
+}
+
+// Remove removes r.
+func (s *Store) Remove(r persistedretry.Task) error {
+	return s.delete(r)
+}
+
+func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
+	query := fmt.Sprintf(`
+		INSERT INTO replicate_tag_task (
 			tag,
 			digest,
 			dependencies,
@@ -78,48 +133,16 @@ func (s *Store) MarkPending(r persistedretry.Task) error {
 			:last_attempt,
 			:failures,
 			:delay,
-			"pending"
-		)`, r.(*Task))
-	return err
-}
-
-// MarkFailed marks a task as failed.
-func (s *Store) MarkFailed(r persistedretry.Task) error {
-	t := r.(*Task)
-	_, err := s.db.NamedExec(`
-		INSERT OR REPLACE INTO replicate_tag_task (
-			tag,
-			digest,
-			dependencies,
-			destination,
-			last_attempt,
-			failures,
-			delay,
-			status
-		) VALUES (
-			:tag,
-			:digest,
-			:dependencies,
-			:destination,
-			CURRENT_TIMESTAMP,
-			COALESCE(
-				(SELECT failures+1 FROM replicate_tag_task
-					WHERE tag=:tag AND destination=:destination),
-				1),
-			:delay,
-			"failed"
-		)`, t)
-	if err != nil {
-		return err
+			%q
+		)
+	`, status)
+	_, err := s.db.NamedExec(query, r.(*Task))
+	if se, ok := err.(sqlite3.Error); ok {
+		if se.ExtendedCode == sqlite3.ErrConstraintPrimaryKey {
+			return persistedretry.ErrTaskExists
+		}
 	}
-	t.Failures++
-	t.LastAttempt = time.Now()
-	return nil
-}
-
-// MarkDone deletes a tag in db.
-func (s *Store) MarkDone(r persistedretry.Task) error {
-	return s.delete(r)
+	return err
 }
 
 func (s *Store) selectStatus(status string) ([]persistedretry.Task, error) {

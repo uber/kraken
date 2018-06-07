@@ -115,14 +115,24 @@ func (m *manager) Add(t Task) error {
 	if m.closed.Load() {
 		return ErrManagerClosed
 	}
-	if !t.Ready() {
-		if err := m.store.MarkFailed(t); err != nil {
-			return fmt.Errorf("mark unready task as failed: %s", err)
-		}
-		return nil
+	ready := t.Ready()
+	var err error
+	if ready {
+		err = m.store.AddPending(t)
+	} else {
+		err = m.store.AddFailed(t)
 	}
-	if err := m.enqueue(t, m.incoming); err != nil {
-		return fmt.Errorf("enqueue: %s", err)
+	if err != nil {
+		if err == ErrTaskExists {
+			// No-op on duplicate tasks.
+			return nil
+		}
+		return fmt.Errorf("store: %s", err)
+	}
+	if ready {
+		if err := m.enqueue(t, m.incoming); err != nil {
+			return fmt.Errorf("enqueue: %s", err)
+		}
 	}
 	return nil
 }
@@ -137,9 +147,6 @@ func (m *manager) Close() {
 }
 
 func (m *manager) enqueue(t Task, q *queue) error {
-	if err := m.store.MarkPending(t); err != nil {
-		return fmt.Errorf("mark task as pending: %s", err)
-	}
 	select {
 	case q.tasks <- t:
 		q.counter.Inc(1)
@@ -149,6 +156,16 @@ func (m *manager) enqueue(t Task, q *queue) error {
 		if err := m.store.MarkFailed(t); err != nil {
 			return fmt.Errorf("mark task as failed: %s", err)
 		}
+	}
+	return nil
+}
+
+func (m *manager) retry(t Task) error {
+	if err := m.store.MarkPending(t); err != nil {
+		return fmt.Errorf("mark pending: %s", err)
+	}
+	if err := m.enqueue(t, m.retries); err != nil {
+		return fmt.Errorf("enqueue: %s", err)
 	}
 	return nil
 }
@@ -194,7 +211,7 @@ func (m *manager) pollRetries() {
 	}
 	for _, t := range tasks {
 		if t.Ready() && time.Since(t.GetLastAttempt()) > m.config.RetryInterval {
-			if err := m.enqueue(t, m.retries); err != nil {
+			if err := m.retry(t); err != nil {
 				log.With("task", t).Errorf("Error adding retry task: %s", err)
 			}
 		}
@@ -213,8 +230,8 @@ func (m *manager) exec(t Task) error {
 		return nil
 	}
 
-	if err := m.store.MarkDone(t); err != nil {
-		return fmt.Errorf("mark task as done: %s", err)
+	if err := m.store.Remove(t); err != nil {
+		return fmt.Errorf("remove task: %s", err)
 	}
 	return nil
 }

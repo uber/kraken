@@ -34,6 +34,30 @@ func (m *MockStore) EXPECT() *MockStoreMockRecorder {
 	return m.recorder
 }
 
+// AddFailed mocks base method
+func (m *MockStore) AddFailed(arg0 persistedretry.Task) error {
+	ret := m.ctrl.Call(m, "AddFailed", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddFailed indicates an expected call of AddFailed
+func (mr *MockStoreMockRecorder) AddFailed(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddFailed", reflect.TypeOf((*MockStore)(nil).AddFailed), arg0)
+}
+
+// AddPending mocks base method
+func (m *MockStore) AddPending(arg0 persistedretry.Task) error {
+	ret := m.ctrl.Call(m, "AddPending", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddPending indicates an expected call of AddPending
+func (mr *MockStoreMockRecorder) AddPending(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPending", reflect.TypeOf((*MockStore)(nil).AddPending), arg0)
+}
+
 // Close mocks base method
 func (m *MockStore) Close() error {
 	ret := m.ctrl.Call(m, "Close")
@@ -72,18 +96,6 @@ func (mr *MockStoreMockRecorder) GetPending() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPending", reflect.TypeOf((*MockStore)(nil).GetPending))
 }
 
-// MarkDone mocks base method
-func (m *MockStore) MarkDone(arg0 persistedretry.Task) error {
-	ret := m.ctrl.Call(m, "MarkDone", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MarkDone indicates an expected call of MarkDone
-func (mr *MockStoreMockRecorder) MarkDone(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkDone", reflect.TypeOf((*MockStore)(nil).MarkDone), arg0)
-}
-
 // MarkFailed mocks base method
 func (m *MockStore) MarkFailed(arg0 persistedretry.Task) error {
 	ret := m.ctrl.Call(m, "MarkFailed", arg0)
@@ -106,6 +118,18 @@ func (m *MockStore) MarkPending(arg0 persistedretry.Task) error {
 // MarkPending indicates an expected call of MarkPending
 func (mr *MockStoreMockRecorder) MarkPending(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPending", reflect.TypeOf((*MockStore)(nil).MarkPending), arg0)
+}
+
+// Remove mocks base method
+func (m *MockStore) Remove(arg0 persistedretry.Task) error {
+	ret := m.ctrl.Call(m, "Remove", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Remove indicates an expected call of Remove
+func (mr *MockStoreMockRecorder) Remove(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockStore)(nil).Remove), arg0)
 }
 
 // MockTask is a mock of Task interface
