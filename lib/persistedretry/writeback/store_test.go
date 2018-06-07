@@ -14,11 +14,11 @@ func checkTask(t *testing.T, expected *Task, result persistedretry.Task) {
 	expectedCopy := *expected
 	resultCopy := *(result.(*Task))
 
-	require.Equal(t, expectedCopy.CreatedAt.Unix(), resultCopy.CreatedAt.Unix())
+	require.InDelta(t, expectedCopy.CreatedAt.Unix(), resultCopy.CreatedAt.Unix(), 1)
 	expectedCopy.CreatedAt = time.Time{}
 	resultCopy.CreatedAt = time.Time{}
 
-	require.Equal(t, expectedCopy.LastAttempt.Unix(), resultCopy.LastAttempt.Unix())
+	require.InDelta(t, expectedCopy.LastAttempt.Unix(), resultCopy.LastAttempt.Unix(), 1)
 	expectedCopy.LastAttempt = time.Time{}
 	resultCopy.LastAttempt = time.Time{}
 

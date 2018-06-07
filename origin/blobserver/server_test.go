@@ -25,14 +25,12 @@ import (
 )
 
 func TestCheckBlobHandlerLocalOK(t *testing.T) {
-	t.Skip("TODO: fails on jenkins")
-
 	require := require.New(t)
 
 	mocks := newServerMocks(t)
 	defer mocks.ctrl.Finish()
 
-	addr, stop := mocks.server(configFixture())
+	addr, stop := mocks.server(configMaxReplicaFixture())
 	defer stop()
 
 	d := core.DigestFixture()
