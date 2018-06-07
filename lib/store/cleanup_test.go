@@ -26,7 +26,7 @@ func fileOpFixture(clk clock.Clock) (base.FileState, base.FileOp, func()) {
 	}
 	cleanup.Add(func() { os.RemoveAll(dir) })
 
-	state := agentFileState{dir}
+	state := base.NewFileState(dir)
 
 	store, err := base.NewLocalFileStore(clk)
 	if err != nil {
