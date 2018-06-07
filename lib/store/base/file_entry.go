@@ -20,8 +20,18 @@ var (
 
 // FileState decides what directory a file is in.
 // A file can only be in one state at any given time.
-type FileState interface {
-	GetDirectory() string
+type FileState struct {
+	directory string
+}
+
+// NewFileState creates a new FileState for directory.
+func NewFileState(directory string) FileState {
+	return FileState{directory}
+}
+
+// GetDirectory returns the FileState's directory.
+func (s FileState) GetDirectory() string {
+	return s.directory
 }
 
 // FileEntryFactory initializes FileEntry obj.

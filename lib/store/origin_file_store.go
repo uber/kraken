@@ -50,8 +50,8 @@ type OriginLocalFileStore struct {
 	uploadBackend base.FileStore
 	cacheBackend  base.FileStore
 
-	stateUpload agentFileState
-	stateCache  agentFileState
+	stateUpload base.FileState
+	stateCache  base.FileState
 }
 
 // NewOriginFileStore initializes and returns a new OriginLocalFileStore object.
@@ -78,8 +78,8 @@ func NewOriginFileStore(
 		return nil, fmt.Errorf("init origin cache backend: %s", err)
 	}
 
-	stateUpload := agentFileState{config.UploadDir}
-	stateCache := agentFileState{config.CacheDir}
+	stateUpload := base.NewFileState(config.UploadDir)
+	stateCache := base.NewFileState(config.CacheDir)
 
 	cleanup, err := newCleanupManager(clk, stats)
 	if err != nil {

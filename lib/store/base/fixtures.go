@@ -15,13 +15,7 @@ const (
 	_testFileName = "test_file"
 )
 
-type mockFileState struct {
-	dir string
-}
-
-func (state mockFileState) GetDirectory() string { return state.dir }
-
-func fileStatesFixture() (state1, state2, state3 mockFileState, run func()) {
+func fileStatesFixture() (state1, state2, state3 FileState, run func()) {
 	cleanup := &testutil.Cleanup{}
 	defer cleanup.Recover()
 
@@ -46,17 +40,17 @@ func fileStatesFixture() (state1, state2, state3 mockFileState, run func()) {
 		log.Fatal(err)
 	}
 
-	state1 = mockFileState{state1Dir}
-	state2 = mockFileState{state2Dir}
-	state3 = mockFileState{state3Dir}
+	state1 = NewFileState(state1Dir)
+	state2 = NewFileState(state2Dir)
+	state3 = NewFileState(state3Dir)
 
 	return state1, state2, state3, cleanup.Run
 }
 
 type fileEntryTestBundle struct {
-	state1 mockFileState
-	state2 mockFileState
-	state3 mockFileState
+	state1 FileState
+	state2 FileState
+	state3 FileState
 
 	entry FileEntry
 }
@@ -78,9 +72,9 @@ func fileEntryLocalFixture() (bundle *fileEntryTestBundle, run func()) {
 }
 
 type fileMapTestBundle struct {
-	state1 mockFileState
-	state2 mockFileState
-	state3 mockFileState
+	state1 FileState
+	state2 FileState
+	state3 FileState
 
 	entry FileEntry
 	fm    FileMap
@@ -131,13 +125,13 @@ func fileMapLRUFixture() (bundle *fileMapTestBundle, run func()) {
 type fileStoreTestBundle struct {
 	clk clock.Clock
 
-	state1 mockFileState
-	state2 mockFileState
-	state3 mockFileState
+	state1 FileState
+	state2 FileState
+	state3 FileState
 
 	createStore func(clk clock.Clock) *localFileStore
 	store       *localFileStore
-	files       map[mockFileState]string
+	files       map[FileState]string
 }
 
 func (b *fileStoreTestBundle) recreateStore() {
@@ -190,7 +184,7 @@ func newFileStoreFixture(createStore func(clk clock.Clock) *localFileStore) (*fi
 		state3:      state3,
 		createStore: createStore,
 		store:       store,
-		files:       make(map[mockFileState]string),
+		files:       make(map[FileState]string),
 	}
 
 	// Create one test file in store

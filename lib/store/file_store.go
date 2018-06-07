@@ -63,9 +63,9 @@ type LocalFileStore struct {
 	uploadBackend        base.FileStore
 	downloadCacheBackend base.FileStore
 
-	stateDownload agentFileState
-	stateUpload   agentFileState
-	stateCache    agentFileState
+	stateDownload base.FileState
+	stateUpload   base.FileState
+	stateCache    base.FileState
 }
 
 // NewLocalFileStore initializes and returns a new LocalFileStore object.
@@ -102,9 +102,9 @@ func NewLocalFileStore(config Config, stats tally.Scope) (*LocalFileStore, error
 		return nil, err
 	}
 
-	stateUpload := agentFileState{directory: config.UploadDir}
-	stateDownload := agentFileState{directory: config.DownloadDir}
-	stateCache := agentFileState{directory: config.CacheDir}
+	stateUpload := base.NewFileState(config.UploadDir)
+	stateDownload := base.NewFileState(config.DownloadDir)
+	stateCache := base.NewFileState(config.CacheDir)
 
 	cleanup, err := newCleanupManager(clk, stats)
 	if err != nil {

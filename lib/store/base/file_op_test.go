@@ -170,9 +170,9 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	// Move to state2
 	err = store.NewFileOp().AcceptState(s1).MoveFile(fn, s2)
 	require.NoError(err)
-	_, err = os.Stat(path.Join(s2.dir, store.fileEntryFactory.GetRelativePath(fn)))
+	_, err = os.Stat(path.Join(s2.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
 	require.NoError(err)
-	_, err = os.Stat(path.Join(s1.dir, store.fileEntryFactory.GetRelativePath(fn)))
+	_, err = os.Stat(path.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
 	require.True(os.IsNotExist(err))
 	_, err = store.NewFileOp().AcceptState(s2).GetFileReader(fn)
 	require.NoError(err)
@@ -201,10 +201,10 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	require.Equal([]byte{'1', 'e', 's', 't', '\n'}, dataState1)
 	// Close on last opened readwriter removes hardlink
 	readWriterState2.Close()
-	_, err = os.Stat(path.Join(s1.dir, store.fileEntryFactory.GetRelativePath(fn)))
+	_, err = os.Stat(path.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
 	require.True(os.IsNotExist(err))
 	readWriterState1.Close()
-	_, err = os.Stat(path.Join(s2.dir, store.fileEntryFactory.GetRelativePath(fn)))
+	_, err = os.Stat(path.Join(s2.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
 	require.NoError(err)
 	// Check content again
 	readWriterStateMoved, err := store.NewFileOp().AcceptState(s2).GetFileReadWriter(fn)
@@ -239,7 +239,7 @@ func testDeleteFile(require *require.Assertions, storeBundle *fileStoreTestBundl
 	// Confirm deletion
 	err = store.NewFileOp().AcceptState(s1).DeleteFile(fn)
 	require.NoError(err)
-	_, err = os.Stat(path.Join(s1.dir, store.fileEntryFactory.GetRelativePath(fn)))
+	_, err = os.Stat(path.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
 	require.True(os.IsNotExist(err))
 
 	// Existing readwriter should still work after deletion
