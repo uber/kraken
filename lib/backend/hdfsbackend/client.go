@@ -263,5 +263,7 @@ func (c *Client) setBuffersize(v url.Values) {
 }
 
 func (c *Client) setUserName(v url.Values) {
-	v.Set("user.name", c.config.UserName)
+	if c.config.UserName != "" {
+		v.Set("user.name", c.config.UserName)
+	}
 }
