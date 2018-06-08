@@ -3,7 +3,6 @@ package torrentlog
 import (
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"time"
 
@@ -180,23 +179,31 @@ func (l *Logger) DownloadFailure(namespace, name string, size int64, err error) 
 		zap.Error(err))
 }
 
-// ReceivedPiecesSummary logs a summary of pieces received from peers when a torrent completes.
-func (l *Logger) ReceivedPiecesSummary(
+// SeederSummaries logs a summary of the pieces requested and received from peers for a torrent.
+func (l *Logger) SeederSummaries(
 	name string,
 	infoHash core.InfoHash,
-	receivedPieces []int) error {
-
-	summary, err := newReceivedPiecesSummary(receivedPieces)
-	if err != nil {
-		return err
-	}
+	summaries SeederSummaries) error {
 
 	l.zap.Info(
-		"Received pieces summary",
+		"Seeder summaries",
 		zap.String("name", name),
 		zap.String("info_hash", infoHash.String()),
-		zap.Object("pieces_stats", summary))
+		zap.Array("seeder_summaries", summaries))
+	return nil
+}
 
+// LeecherSummaries logs a summary of the pieces requested by and sent to peers for a torrent.
+func (l *Logger) LeecherSummaries(
+	name string,
+	infoHash core.InfoHash,
+	summaries LeecherSummaries) error {
+
+	l.zap.Info(
+		"Leecher summaries",
+		zap.String("name", name),
+		zap.String("info_hash", infoHash.String()),
+		zap.Array("leecher_summaries", summaries))
 	return nil
 }
 
@@ -205,56 +212,56 @@ func (l *Logger) Sync() {
 	l.zap.Sync()
 }
 
-// receivedPiecesSummary holds summary statistics about pieces from peers.
-type receivedPiecesSummary struct {
-	numZero int
-	min     int
-	max     int
-	mean    float64
-	stdDev  float64 // sample standard deviation
+// SeederSummary contains information about piece requests to and pieces received from a peer.
+type SeederSummary struct {
+	PeerID         core.PeerID
+	RequestsSent   int
+	PiecesReceived int
 }
 
-// newReceivedPiecesSummary calculates and returns summary statistics about pieces received from peers.
-func newReceivedPiecesSummary(receivedPieces []int) (*receivedPiecesSummary, error) {
-	if len(receivedPieces) == 0 {
-		return nil, errEmptyReceivedPieces
-	}
-
-	sum := 0
-	summary := receivedPiecesSummary{min: math.MaxInt32}
-	for _, count := range receivedPieces {
-		if count < 0 {
-			return nil, errNegativeReceivedPieces
-		}
-
-		sum += count
-		if count > summary.max {
-			summary.max = count
-		}
-		if count < summary.min {
-			summary.min = count
-		}
-		if count == 0 {
-			summary.numZero++
-		}
-	}
-	summary.mean = float64(sum) / float64(len(receivedPieces))
-
-	sumSqDiff := 0.0
-	for _, count := range receivedPieces {
-		sumSqDiff += math.Pow(float64(count)-summary.mean, 2)
-	}
-	summary.stdDev = math.Sqrt(sumSqDiff / float64(len(receivedPieces)-1))
-
-	return &summary, nil
+// MarshalLogObject marshals a SeederSummary for logging.
+func (s SeederSummary) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("peer_id", s.PeerID.String())
+	enc.AddInt("requests_sent", s.RequestsSent)
+	enc.AddInt("pieces_received", s.PiecesReceived)
+	return nil
 }
 
-func (s *receivedPiecesSummary) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	enc.AddInt("num_zero_piece_peers", s.numZero)
-	enc.AddInt("min_pieces_from_peer", s.min)
-	enc.AddInt("max_pieces_from_peer", s.max)
-	enc.AddFloat32("mean_pieces_from_peer", float32(s.mean))
-	enc.AddFloat32("stddev_pieces_from_peer", float32(s.stdDev))
+// SeederSummaries represents a slice of type SeederSummary
+// that can be marshalled for logging.
+type SeederSummaries []SeederSummary
 
+// MarshalLogArray marshals a SeederSummaries slice for logging.
+func (ss SeederSummaries) MarshalLogArray(enc zapcore.ArrayEncoder) error {
+	for _, summary := range ss {
+		enc.AppendObject(summary)
+	}
+	return nil
+}
+
+// LeecherSummary contains information about piece requests from and pieces sent to a peer.
+type LeecherSummary struct {
+	PeerID           core.PeerID
+	RequestsReceived int
+	PiecesSent       int
+}
+
+// MarshalLogObject marshals a LeecherSummary for logging.
+func (s LeecherSummary) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("peer_id", s.PeerID.String())
+	enc.AddInt("requests_received", s.RequestsReceived)
+	enc.AddInt("pieces_sent", s.PiecesSent)
+	return nil
+}
+
+// LeecherSummaries represents a slice of type LeecherSummary
+// that can be marshalled for logging.
+type LeecherSummaries []LeecherSummary
+
+// MarshalLogArray marshals a LeecherSummaries slice for logging.
+func (ls LeecherSummaries) MarshalLogArray(enc zapcore.ArrayEncoder) error {
+	for _, summary := range ls {
+		enc.AppendObject(summary)
+	}
 	return nil
 }

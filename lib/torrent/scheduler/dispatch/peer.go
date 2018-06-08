@@ -20,19 +20,27 @@ type peer struct {
 
 	clk clock.Clock
 
+	// May be accessed outside of the peer struct.
+	pstats *peerStats
+
 	mu                    sync.Mutex // Protects the following fields:
 	lastGoodPieceReceived time.Time
 	lastPieceSent         time.Time
-	piecesRequested       int
-	piecesReceived        int
 }
 
-func newPeer(peerID core.PeerID, b *bitset.BitSet, messages Messages, clk clock.Clock) *peer {
+func newPeer(
+	peerID core.PeerID,
+	b *bitset.BitSet,
+	messages Messages,
+	clk clock.Clock,
+	pstats *peerStats) *peer {
+
 	return &peer{
 		id:       peerID,
 		bitfield: newSyncBitfield(b),
 		messages: messages,
 		clk:      clk,
+		pstats:   pstats,
 	}
 }
 
@@ -68,30 +76,67 @@ func (p *peer) touchLastPieceSent() {
 	p.lastPieceSent = p.clk.Now()
 }
 
-func (p *peer) getPiecesRequested() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	return p.piecesRequested
+// peerStats wraps stats collected for a given peer.
+type peerStats struct {
+	mu                    sync.Mutex
+	pieceRequestsSent     int // pieces we requested from the peer
+	pieceRequestsReceived int // pieces the peer requested from us
+	piecesSent            int // pieces we sent to the peer
+	piecesReceived        int // pieces we received from the peer
 }
 
-func (p *peer) incrementPiecesRequested() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (s *peerStats) getPieceRequestsSent() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	p.piecesRequested++
+	return s.pieceRequestsSent
 }
 
-func (p *peer) getPiecesReceived() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (s *peerStats) incrementPieceRequestsSent() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	return p.piecesReceived
+	s.pieceRequestsSent++
 }
 
-func (p *peer) incrementPiecesReceived() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (s *peerStats) getPieceRequestsReceived() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	p.piecesReceived++
+	return s.pieceRequestsReceived
+}
+
+func (s *peerStats) incrementPieceRequestsReceived() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.pieceRequestsReceived++
+}
+
+func (s *peerStats) getPiecesSent() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.piecesSent
+}
+
+func (s *peerStats) incrementPiecesSent() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.piecesSent++
+}
+
+func (s *peerStats) getPiecesReceived() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.piecesReceived
+}
+
+func (s *peerStats) incrementPiecesReceived() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.piecesReceived++
 }
