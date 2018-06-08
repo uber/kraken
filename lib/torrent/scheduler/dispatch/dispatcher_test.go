@@ -89,7 +89,7 @@ type noopEvents struct{}
 func (e noopEvents) DispatcherComplete(*Dispatcher) {}
 
 func testDispatcher(config Config, clk clock.Clock, t storage.Torrent) *Dispatcher {
-	return newDispatcher(
+	d, err := newDispatcher(
 		config,
 		tally.NoopScope,
 		clk,
@@ -98,6 +98,10 @@ func testDispatcher(config Config, clk clock.Clock, t storage.Torrent) *Dispatch
 		core.PeerIDFixture(),
 		t,
 		torrentlog.NewNopLogger())
+	if err != nil {
+		panic(err)
+	}
+	return d
 }
 
 func TestDispatcherSendUniquePieceRequestsWithinLimit(t *testing.T) {

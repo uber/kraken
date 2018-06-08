@@ -74,9 +74,12 @@ func New(
 	events Events,
 	peerID core.PeerID,
 	t storage.Torrent,
-	tlog *torrentlog.Logger) *Dispatcher {
+	tlog *torrentlog.Logger) (*Dispatcher, error) {
 
-	d := newDispatcher(config, stats, clk, netevents, events, peerID, t, tlog)
+	d, err := newDispatcher(config, stats, clk, netevents, events, peerID, t, tlog)
+	if err != nil {
+		return nil, err
+	}
 
 	// Exits when d.pendingPiecesDone is closed.
 	go d.watchPendingPieceRequests()
@@ -85,7 +88,7 @@ func New(
 		d.complete()
 	}
 
-	return d
+	return d, nil
 }
 
 // newDispatcher creates a new Dispatcher with no side-effects for testing purposes.
@@ -97,7 +100,7 @@ func newDispatcher(
 	events Events,
 	peerID core.PeerID,
 	t storage.Torrent,
-	tlog *torrentlog.Logger) *Dispatcher {
+	tlog *torrentlog.Logger) (*Dispatcher, error) {
 
 	config = config.applyDefaults()
 
@@ -106,7 +109,11 @@ func newDispatcher(
 	})
 
 	pieceRequestTimeout := config.calcPieceRequestTimeout(t.MaxPieceLength())
-	pieceRequestManager := piecerequest.NewManager(clk, pieceRequestTimeout, config.PipelineLimit)
+	pieceRequestManager, err := piecerequest.NewManager(
+		clk, pieceRequestTimeout, config.PieceRequestPolicy, config.PipelineLimit)
+	if err != nil {
+		return nil, fmt.Errorf("piece request manager: %s", err)
+	}
 
 	return &Dispatcher{
 		config:              config,
@@ -122,7 +129,7 @@ func newDispatcher(
 		pendingPiecesDone:   make(chan struct{}),
 		events:              events,
 		torrentlog:          tlog,
-	}
+	}, nil
 }
 
 // Name returns d's torrent name.

@@ -331,7 +331,12 @@ type newTorrentEvent struct {
 func (e newTorrentEvent) Apply(s *scheduler) {
 	ctrl, ok := s.torrentControls[e.torrent.InfoHash()]
 	if !ok {
-		ctrl = s.initTorrentControl(e.namespace, e.torrent, true)
+		var err error
+		ctrl, err = s.initTorrentControl(e.namespace, e.torrent, true)
+		if err != nil {
+			e.errc <- err
+			return
+		}
 		s.log("torrent", e.torrent).Info("Added new torrent")
 	}
 	if ctrl.complete {

@@ -1,12 +1,12 @@
 package piecerequest
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/heap"
 	"code.uber.internal/infra/kraken/utils/syncutil"
 
 	"github.com/andres-erbsen/clock"
@@ -48,20 +48,37 @@ type Manager struct {
 	requests       map[int][]*Request
 	requestsByPeer map[core.PeerID]map[int]*Request
 
-	clock         clock.Clock
-	timeout       time.Duration
+	clock   clock.Clock
+	timeout time.Duration
+
+	policy        pieceSelectionPolicy
 	pipelineLimit int
 }
 
 // NewManager creates a new Manager.
-func NewManager(clk clock.Clock, timeout time.Duration, pipelineLimit int) *Manager {
-	return &Manager{
+func NewManager(
+	clk clock.Clock,
+	timeout time.Duration,
+	policy string,
+	pipelineLimit int) (*Manager, error) {
+
+	m := &Manager{
 		requests:       make(map[int][]*Request),
 		requestsByPeer: make(map[core.PeerID]map[int]*Request),
 		clock:          clk,
 		timeout:        timeout,
 		pipelineLimit:  pipelineLimit,
 	}
+
+	switch policy {
+	case DefaultPolicy:
+		m.policy = newDefaultPolicy()
+	case RarestFirstPolicy:
+		m.policy = newRarestFirstPolicy()
+	default:
+		return nil, fmt.Errorf("invalid piece selection policy: %s", policy)
+	}
+	return m, nil
 }
 
 // ReservePieces selects the next piece(s) to be requested from given peer.
@@ -82,25 +99,10 @@ func (m *Manager) ReservePieces(
 		return nil, nil
 	}
 
-	candidateQueue := heap.NewPriorityQueue()
-	for i, e := candidates.NextSet(0); e; i, e = candidates.NextSet(i + 1) {
-		candidateQueue.Push(&heap.Item{
-			Value:    int(i),
-			Priority: numPeersByPiece.Get(int(i)),
-		})
-	}
-
-	pieces := make([]int, 0, quota)
-	for len(pieces) < quota && candidateQueue.Len() > 0 {
-		item, err := candidateQueue.Pop()
-		if err != nil {
-			return nil, err
-		}
-
-		candidate := item.Value.(int)
-		if m.validRequest(peerID, candidate, allowDuplicates) {
-			pieces = append(pieces, candidate)
-		}
+	valid := func(i int) bool { return m.validRequest(peerID, i, allowDuplicates) }
+	pieces, err := m.policy.selectPieces(quota, valid, candidates, numPeersByPiece)
+	if err != nil {
+		return nil, err
 	}
 
 	// Set as pending in requests map.

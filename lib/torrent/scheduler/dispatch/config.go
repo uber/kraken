@@ -4,6 +4,7 @@ import (
 	"math"
 	"time"
 
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch/piecerequest"
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/timeutil"
 )
@@ -19,6 +20,10 @@ type Config struct {
 	// timeouts based on the piece size (in megabytes).
 	PieceRequestTimeoutPerMb time.Duration `yaml:"piece_request_timeout_per_mb"`
 
+	// PieceRequestPolicy is the policy that is used to decide which pieces to request
+	// from a peer.
+	PieceRequestPolicy string `yaml:"piece_request_policy"`
+
 	// PipelineLimit limits the total number of requests can be sent to a peer
 	// at the same time.
 	PipelineLimit int `yaml:"pipeline_limit"`
@@ -32,6 +37,9 @@ type Config struct {
 }
 
 func (c Config) applyDefaults() Config {
+	if c.PieceRequestPolicy == "" {
+		c.PieceRequestPolicy = piecerequest.DefaultPolicy
+	}
 	if c.PieceRequestMinTimeout == 0 {
 		c.PieceRequestMinTimeout = 4 * time.Second
 	}
