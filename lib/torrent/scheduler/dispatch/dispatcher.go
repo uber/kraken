@@ -53,7 +53,8 @@ type Dispatcher struct {
 	createdAt             time.Time
 	localPeerID           core.PeerID
 	torrent               *torrentAccessWatcher
-	peers                 syncmap.Map // Maps core.PeerID to *peer.
+	peers                 syncmap.Map // core.PeerID -> *peer
+	peerStats             syncmap.Map // core.PeerID -> *peerStats, persists on peer removal.
 	numPeersByPiece       syncutil.Counters
 	netevents             networkevent.Producer
 	pieceRequestTimeout   time.Duration
@@ -229,7 +230,12 @@ func (d *Dispatcher) AddPeer(
 func (d *Dispatcher) addPeer(
 	peerID core.PeerID, b *bitset.BitSet, messages Messages) (*peer, error) {
 
-	p := newPeer(peerID, b, messages, d.clk)
+	pstats := &peerStats{}
+	if s, ok := d.peerStats.LoadOrStore(peerID, pstats); ok {
+		pstats = s.(*peerStats)
+	}
+
+	p := newPeer(peerID, b, messages, d.clk, pstats)
 	if _, ok := d.peers.LoadOrStore(peerID, p); ok {
 		return nil, errors.New("peer already exists")
 	}
@@ -255,12 +261,30 @@ func (d *Dispatcher) TearDown() {
 	d.pendingPiecesDoneOnce.Do(func() {
 		close(d.pendingPiecesDone)
 	})
+
 	d.peers.Range(func(k, v interface{}) bool {
 		p := v.(*peer)
 		d.log("peer", p).Info("Dispatcher teardown closing connection")
 		p.messages.Close()
 		return true
 	})
+
+	summaries := make(torrentlog.LeecherSummaries, 0)
+	d.peerStats.Range(func(k, v interface{}) bool {
+		peerID := k.(core.PeerID)
+		pstats := v.(*peerStats)
+		summaries = append(summaries, torrentlog.LeecherSummary{
+			PeerID:           peerID,
+			RequestsReceived: pstats.getPieceRequestsReceived(),
+			PiecesSent:       pstats.getPiecesSent(),
+		})
+		return true
+	})
+
+	if err := d.torrentlog.LeecherSummaries(
+		d.torrent.Name(), d.torrent.InfoHash(), summaries); err != nil {
+		d.log().Errorf("Error logging incoming piece request summary: %s", err)
+	}
 }
 
 func (d *Dispatcher) String() string {
@@ -271,8 +295,6 @@ func (d *Dispatcher) complete() {
 	d.completeOnce.Do(func() { go d.events.DispatcherComplete(d) })
 	d.pendingPiecesDoneOnce.Do(func() { close(d.pendingPiecesDone) })
 
-	var requestedPiecesTotal int
-	var receivedPieces []int
 	d.peers.Range(func(k, v interface{}) bool {
 		p := v.(*peer)
 		if p.bitfield.Complete() {
@@ -285,16 +307,30 @@ func (d *Dispatcher) complete() {
 			// all pieces are available.
 			p.messages.Send(conn.NewCompleteMessage())
 		}
-		requestedPiecesTotal += p.getPiecesRequested()
-		receivedPieces = append(receivedPieces, p.getPiecesReceived())
+		return true
+	})
+
+	var piecesRequestedTotal int
+	summaries := make(torrentlog.SeederSummaries, 0)
+	d.peerStats.Range(func(k, v interface{}) bool {
+		peerID := k.(core.PeerID)
+		pstats := v.(*peerStats)
+		requested := pstats.getPieceRequestsSent()
+		piecesRequestedTotal += requested
+		summary := torrentlog.SeederSummary{
+			PeerID:         peerID,
+			RequestsSent:   requested,
+			PiecesReceived: pstats.getPiecesReceived(),
+		}
+		summaries = append(summaries, summary)
 		return true
 	})
 
 	// Only log if we actually requested pieces from others.
-	if requestedPiecesTotal > 0 {
-		err := d.torrentlog.ReceivedPiecesSummary(d.torrent.Name(), d.torrent.InfoHash(), receivedPieces)
-		if err != nil {
-			d.log().Errorf("Error logging piece receipt summary: %s", err)
+	if piecesRequestedTotal > 0 {
+		if err := d.torrentlog.SeederSummaries(
+			d.torrent.Name(), d.torrent.InfoHash(), summaries); err != nil {
+			d.log().Errorf("Error logging outgoing piece request summary: %s", err)
 		}
 	}
 }
@@ -327,7 +363,7 @@ func (d *Dispatcher) maybeSendPieceRequests(p *peer, candidates *bitset.BitSet) 
 			d.pieceRequestManager.MarkUnsent(p.id, i)
 			return false, err
 		}
-		p.incrementPiecesRequested()
+		p.pstats.incrementPieceRequestsSent()
 	}
 	return true, nil
 }
@@ -436,6 +472,8 @@ func (d *Dispatcher) isFullPiece(i, offset, length int) bool {
 }
 
 func (d *Dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
+	p.pstats.incrementPieceRequestsReceived()
+
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
 		d.log("peer", p, "piece", i).Error("Rejecting piece request: chunk not supported")
@@ -455,6 +493,7 @@ func (d *Dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 	}
 
 	p.touchLastPieceSent()
+	p.pstats.incrementPiecesSent()
 
 	// Assume that the peer successfully received the piece.
 	p.bitfield.Set(uint(i), true)
@@ -483,7 +522,7 @@ func (d *Dispatcher) handlePiecePayload(
 	d.netevents.Produce(
 		networkevent.ReceivePieceEvent(d.torrent.InfoHash(), d.localPeerID, p.id, i))
 
-	p.incrementPiecesReceived()
+	p.pstats.incrementPiecesReceived()
 	p.touchLastGoodPieceReceived()
 	if d.torrent.Complete() {
 		d.complete()
