@@ -12,6 +12,19 @@ import (
 	"code.uber.internal/infra/kraken/utils/syncutil"
 )
 
+func newManager(
+	clk clock.Clock,
+	timeout time.Duration,
+	policy string,
+	pipelineLimit int) *Manager {
+
+	m, err := NewManager(clk, timeout, policy, pipelineLimit)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
 func countsFromInts(priorities ...int) syncutil.Counters {
 	c := syncutil.NewCounters(len(priorities))
 	for i, p := range priorities {
@@ -24,7 +37,7 @@ func countsFromInts(priorities ...int) syncutil.Counters {
 func TestManagerPipelineLimit(t *testing.T) {
 	require := require.New(t)
 
-	m := NewManager(clock.NewMock(), 5*time.Second, 3)
+	m := newManager(clock.NewMock(), 5*time.Second, DefaultPolicy, 3)
 
 	peerID := core.PeerIDFixture()
 
@@ -42,7 +55,7 @@ func TestManagerReserveExpiredRequest(t *testing.T) {
 	clk := clock.NewMock()
 	timeout := 5 * time.Second
 
-	m := NewManager(clk, timeout, 1)
+	m := newManager(clk, timeout, DefaultPolicy, 1)
 
 	peerID := core.PeerIDFixture()
 
@@ -73,7 +86,7 @@ func TestManagerReserveExpiredRequest(t *testing.T) {
 func TestManagerReserveUnsentRequest(t *testing.T) {
 	require := require.New(t)
 
-	m := NewManager(clock.NewMock(), 5*time.Second, 1)
+	m := newManager(clock.NewMock(), 5*time.Second, DefaultPolicy, 1)
 
 	peerID := core.PeerIDFixture()
 
@@ -104,7 +117,7 @@ func TestManagerReserveUnsentRequest(t *testing.T) {
 func TestManagerReserveInvalidRequest(t *testing.T) {
 	require := require.New(t)
 
-	m := NewManager(clock.NewMock(), 5*time.Second, 1)
+	m := newManager(clock.NewMock(), 5*time.Second, DefaultPolicy, 1)
 
 	peerID := core.PeerIDFixture()
 
@@ -138,7 +151,7 @@ func TestManagerGetFailedRequests(t *testing.T) {
 	clk := clock.NewMock()
 	timeout := 5 * time.Second
 
-	m := NewManager(clk, timeout, 1)
+	m := newManager(clk, timeout, RarestFirstPolicy, 1)
 
 	p0 := core.PeerIDFixture()
 	p1 := core.PeerIDFixture()
@@ -180,7 +193,7 @@ func TestManagerGetFailedRequests(t *testing.T) {
 func TestManagerClear(t *testing.T) {
 	require := require.New(t)
 
-	m := NewManager(clock.NewMock(), 5*time.Second, 1)
+	m := newManager(clock.NewMock(), 5*time.Second, DefaultPolicy, 1)
 
 	peerID := core.PeerIDFixture()
 
@@ -199,7 +212,7 @@ func TestManagerClear(t *testing.T) {
 func TestManagerClearPeer(t *testing.T) {
 	require := require.New(t)
 
-	m := NewManager(clock.NewMock(), 5*time.Second, 1)
+	m := newManager(clock.NewMock(), 5*time.Second, DefaultPolicy, 1)
 
 	p1 := core.PeerIDFixture()
 	p2 := core.PeerIDFixture()
@@ -228,7 +241,7 @@ func TestManagerClearPeer(t *testing.T) {
 func TestManagerReservePiecesAllowDuplicate(t *testing.T) {
 	require := require.New(t)
 
-	m := NewManager(clock.NewMock(), 5*time.Second, 2)
+	m := newManager(clock.NewMock(), 5*time.Second, DefaultPolicy, 2)
 
 	p1 := core.PeerIDFixture()
 	p2 := core.PeerIDFixture()
@@ -254,7 +267,7 @@ func TestManagerReservePiecesAllowDuplicate(t *testing.T) {
 func TestManagerClearWhenAllowedDuplicates(t *testing.T) {
 	require := require.New(t)
 
-	m := NewManager(clock.NewMock(), 5*time.Second, 2)
+	m := newManager(clock.NewMock(), 5*time.Second, DefaultPolicy, 2)
 
 	p1 := core.PeerIDFixture()
 	p2 := core.PeerIDFixture()
@@ -278,7 +291,7 @@ func TestManagerClearWhenAllowedDuplicates(t *testing.T) {
 func TestManagerClearPeerWhenAllowedDuplicates(t *testing.T) {
 	require := require.New(t)
 
-	m := NewManager(clock.NewMock(), 5*time.Second, 2)
+	m := newManager(clock.NewMock(), 5*time.Second, DefaultPolicy, 2)
 
 	p1 := core.PeerIDFixture()
 	p2 := core.PeerIDFixture()
@@ -316,7 +329,7 @@ func TestManagerMarkStatusWhenAllowedDuplicates(t *testing.T) {
 		t.Run(test.desc, func(t *testing.T) {
 			require := require.New(t)
 
-			m := NewManager(clock.NewMock(), 5*time.Second, 2)
+			m := newManager(clock.NewMock(), 5*time.Second, DefaultPolicy, 2)
 
 			p1 := core.PeerIDFixture()
 			p2 := core.PeerIDFixture()
@@ -339,10 +352,10 @@ func TestManagerMarkStatusWhenAllowedDuplicates(t *testing.T) {
 	}
 }
 
-func TestManagerPiecePriority(t *testing.T) {
+func TestRarestFirstPolicy(t *testing.T) {
 	require := require.New(t)
 
-	m := NewManager(clock.NewMock(), 5*time.Second, 2)
+	m := newManager(clock.NewMock(), 5*time.Second, RarestFirstPolicy, 2)
 
 	p1 := core.PeerIDFixture()
 	p2 := core.PeerIDFixture()

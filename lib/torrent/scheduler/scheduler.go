@@ -409,7 +409,10 @@ func (s *scheduler) addIncomingConn(
 		if err != nil {
 			return fmt.Errorf("get torrent: %s", err)
 		}
-		ctrl = s.initTorrentControl(namespace, t, false)
+		ctrl, err = s.initTorrentControl(namespace, t, false)
+		if err != nil {
+			return fmt.Errorf("initialize torrent control: %s", err)
+		}
 	}
 	if err := ctrl.dispatcher.AddPeer(c.PeerID(), b, c); err != nil {
 		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
@@ -420,9 +423,9 @@ func (s *scheduler) addIncomingConn(
 // initTorrentControl initializes a new torrentControl for t. Overwrites any
 // existing torrentControl for t, so callers should check if one exists first.
 func (s *scheduler) initTorrentControl(
-	namespace string, t storage.Torrent, localRequest bool) *torrentControl {
+	namespace string, t storage.Torrent, localRequest bool) (*torrentControl, error) {
 
-	d := dispatch.New(
+	d, err := dispatch.New(
 		s.config.Dispatch,
 		s.stats,
 		s.clock,
@@ -431,12 +434,15 @@ func (s *scheduler) initTorrentControl(
 		s.pctx.PeerID,
 		t,
 		s.torrentlog)
+	if err != nil {
+		return nil, fmt.Errorf("initialize dispatcher: %s", err)
+	}
 	ctrl := newTorrentControl(namespace, t.Name(), d, localRequest)
 	s.announceQueue.Add(t.InfoHash())
 	s.networkEvents.Produce(networkevent.AddTorrentEvent(
 		t.InfoHash(), s.pctx.PeerID, t.Bitfield(), s.config.ConnState.MaxOpenConnectionsPerTorrent))
 	s.torrentControls[t.InfoHash()] = ctrl
-	return ctrl
+	return ctrl, nil
 }
 
 func (s *scheduler) tearDownTorrentControl(ctrl *torrentControl, err error) {
