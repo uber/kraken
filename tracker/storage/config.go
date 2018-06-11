@@ -55,7 +55,7 @@ func (c RedisConfig) applyDefaults() (RedisConfig, error) {
 		c.PeerSetWindowSize = time.Hour
 	}
 	if c.MaxPeerSetWindows == 0 {
-		c.MaxPeerSetWindows = 10
+		c.MaxPeerSetWindows = 5
 	}
 	if c.MetaInfoTTL == 0 {
 		c.MetaInfoTTL = 5 * time.Minute
