@@ -121,6 +121,19 @@ func (mr *MockClientMockRecorder) Has(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Has", reflect.TypeOf((*MockClient)(nil).Has), arg0)
 }
 
+// ListRepository mocks base method
+func (m *MockClient) ListRepository(arg0 string) ([]string, error) {
+	ret := m.ctrl.Call(m, "ListRepository", arg0)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRepository indicates an expected call of ListRepository
+func (mr *MockClientMockRecorder) ListRepository(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRepository", reflect.TypeOf((*MockClient)(nil).ListRepository), arg0)
+}
+
 // Origin mocks base method
 func (m *MockClient) Origin() (string, error) {
 	ret := m.ctrl.Call(m, "Origin")

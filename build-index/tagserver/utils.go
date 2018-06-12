@@ -24,3 +24,11 @@ func parseDigest(r *http.Request) (core.Digest, error) {
 	}
 	return d, nil
 }
+
+func parseRepo(r *http.Request) (string, error) {
+	repo, err := url.PathUnescape(chi.URLParam(r, "repo"))
+	if err != nil {
+		return "", handler.Errorf("path unescape repo: %s", err).Status(http.StatusBadRequest)
+	}
+	return repo, nil
+}
