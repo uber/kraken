@@ -273,3 +273,74 @@ func TestClientStatNotFound(t *testing.T) {
 	_, err = client.Stat(blob.Digest.Hex())
 	require.Equal(backenderrors.ErrBlobNotFound, err)
 }
+
+func TestClientList(t *testing.T) {
+	require := require.New(t)
+
+	// Copied from webhdfs documentation.
+	resp := `
+		{
+		  "FileStatuses":
+		  {
+			"FileStatus":
+			[
+			  {
+				"accessTime"      : 1320171722771,
+				"blockSize"       : 33554432,
+				"group"           : "supergroup",
+				"length"          : 24930,
+				"modificationTime": 1320171722771,
+				"owner"           : "webuser",
+				"pathSuffix"      : "a.patch",
+				"permission"      : "644",
+				"replication"     : 1,
+				"type"            : "FILE"
+			  },
+			  {
+				"accessTime"      : 0,
+				"blockSize"       : 0,
+				"group"           : "supergroup",
+				"length"          : 0,
+				"modificationTime": 1320895981256,
+				"owner"           : "username",
+				"pathSuffix"      : "bar",
+				"permission"      : "711",
+				"replication"     : 0,
+				"type"            : "DIRECTORY"
+			  }
+			]
+		  }
+		}
+	`
+
+	server := &testServer{
+		getName: redirectToDataNode,
+		getData: writeResponse(http.StatusOK, []byte(resp)),
+	}
+	addr, stop := testutil.StartServer(server.handler())
+	defer stop()
+
+	client, err := NewClient(configFixture(addr))
+	require.NoError(err)
+
+	names, err := client.List("some dir")
+	require.NoError(err)
+	require.Equal([]string{"a.patch", "bar"}, names)
+}
+
+func TestClientListNotFound(t *testing.T) {
+	require := require.New(t)
+
+	server := &testServer{
+		getName: redirectToDataNode,
+		getData: writeResponse(http.StatusNotFound, nil),
+	}
+	addr, stop := testutil.StartServer(server.handler())
+	defer stop()
+
+	client, err := NewClient(configFixture(addr))
+	require.NoError(err)
+
+	_, err = client.List("some dir")
+	require.Equal(backenderrors.ErrDirNotFound, err)
+}

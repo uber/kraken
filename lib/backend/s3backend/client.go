@@ -67,9 +67,9 @@ func NewClient(config Config, userAuth UserAuthConfig) (*Client, error) {
 
 // Stat returns blob info for name.
 func (c *Client) Stat(name string) (*blobinfo.Info, error) {
-	path, err := c.pather.Path(name)
+	path, err := c.pather.BlobPath(name)
 	if err != nil {
-		return nil, fmt.Errorf("path: %s", err)
+		return nil, fmt.Errorf("blob path: %s", err)
 	}
 	output, err := c.svc.HeadObject(&s3.HeadObjectInput{
 		Bucket: aws.String(c.config.Bucket),
@@ -107,9 +107,9 @@ func (b *capBuffer) WriteAt(p []byte, pos int64) (n int, err error) {
 // Download downloads the content from a configured bucket and writes the
 // data to dst.
 func (c *Client) Download(name string, dst io.Writer) error {
-	path, err := c.pather.Path(name)
+	path, err := c.pather.BlobPath(name)
 	if err != nil {
-		return fmt.Errorf("path: %s", err)
+		return fmt.Errorf("blob path: %s", err)
 	}
 
 	// The S3 download API uses io.WriterAt to perform concurrent chunked download.
@@ -152,9 +152,9 @@ func (c *Client) Download(name string, dst io.Writer) error {
 
 // Upload uploads src to a configured bucket.
 func (c *Client) Upload(name string, src io.Reader) error {
-	path, err := c.pather.Path(name)
+	path, err := c.pather.BlobPath(name)
 	if err != nil {
-		return fmt.Errorf("path: %s", err)
+		return fmt.Errorf("blob path: %s", err)
 	}
 
 	uploader := s3manager.NewUploaderWithClient(c.svc, func(u *s3manager.Uploader) {
@@ -182,4 +182,9 @@ func (c *Client) Upload(name string, src io.Reader) error {
 func isNotFound(err error) bool {
 	awsErr, ok := err.(awserr.Error)
 	return ok && awsErr.Code() == s3.ErrCodeNoSuchKey || awsErr.Code() == "NotFound"
+}
+
+// List TODO(codyg): Implement S3 list.
+func (c *Client) List(dir string) ([]string, error) {
+	return nil, errors.New("unimplemented")
 }

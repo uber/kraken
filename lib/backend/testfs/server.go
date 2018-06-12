@@ -1,46 +1,51 @@
 package testfs
 
 import (
-	"fmt"
+	"encoding/json"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
+	"sync"
 
-	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils/handler"
 
-	"github.com/docker/distribution/uuid"
 	"github.com/pressly/chi"
 )
 
-// Server provides HTTP upload / download endpoints around a file store.
+// Server provides HTTP endpoints for operating on files on disk.
 type Server struct {
-	fs      store.FileStore
-	cleanup func()
+	sync.RWMutex
+	dir string
 }
 
 // NewServer creates a new Server.
 func NewServer() *Server {
-	fs, cleanup := store.LocalFileStoreFixture()
-	s := &Server{fs, cleanup}
-	return s
+	dir, err := ioutil.TempDir("/tmp", "kraken-testfs")
+	if err != nil {
+		panic(err)
+	}
+	return &Server{dir: dir}
 }
 
-// Handler returns an HTTP handler for Server.
+// Handler returns an HTTP handler for s.
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/health", s.healthHandler)
 	r.Head("/files/:name", handler.Wrap(s.statHandler))
 	r.Get("/files/:name", handler.Wrap(s.downloadHandler))
 	r.Post("/files/:name", handler.Wrap(s.uploadHandler))
+	r.Get("/dir/:dir", handler.Wrap(s.listHandler))
 	return r
 }
 
-// Cleanup cleans up Server's underlying file store.
+// Cleanup cleans up the underlying directory of s.
 func (s *Server) Cleanup() {
-	s.cleanup()
+	os.RemoveAll(s.dir)
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -48,11 +53,14 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
-	name, err := parseName(r)
+	s.RLock()
+	defer s.RUnlock()
+
+	name, err := param(r, "name")
 	if err != nil {
 		return err
 	}
-	info, err := s.fs.GetCacheFileStat(name)
+	info, err := os.Stat(s.path(name))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return handler.ErrorStatus(http.StatusNotFound)
@@ -65,16 +73,19 @@ func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) downloadHandler(w http.ResponseWriter, r *http.Request) error {
-	name, err := parseName(r)
+	s.RLock()
+	defer s.RUnlock()
+
+	name, err := param(r, "name")
 	if err != nil {
 		return err
 	}
-	f, err := s.fs.GetCacheFileReader(name)
+	f, err := os.Open(s.path(name))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return handler.ErrorStatus(http.StatusNotFound)
 		}
-		return fmt.Errorf("file store: %s", err)
+		return handler.Errorf("open: %s", err)
 	}
 	if _, err := io.Copy(w, f); err != nil {
 		return handler.Errorf("copy: %s", err)
@@ -83,34 +94,64 @@ func (s *Server) downloadHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) uploadHandler(w http.ResponseWriter, r *http.Request) error {
-	name, err := parseName(r)
+	s.Lock()
+	defer s.Unlock()
+
+	name, err := param(r, "name")
 	if err != nil {
 		return err
 	}
-	tmp := fmt.Sprintf("%s.%s", name, uuid.Generate().String())
-	if err := s.fs.CreateUploadFile(tmp, 0); err != nil {
-		return err
+	p := s.path(name)
+	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+		return handler.Errorf("mkdir: %s", err)
 	}
-	writer, err := s.fs.GetUploadFileReadWriter(tmp)
+	f, err := os.Create(p)
 	if err != nil {
-		return err
+		return handler.Errorf("create: %s", err)
 	}
-	defer writer.Close()
-	if _, err := io.Copy(writer, r.Body); err != nil {
-		return fmt.Errorf("copy: %s", err)
-	}
-	if err := s.fs.MoveUploadFileToCache(tmp, name); err != nil {
-		if !os.IsExist(err) {
-			return err
-		}
+	defer f.Close()
+	if _, err := io.Copy(f, r.Body); err != nil {
+		return handler.Errorf("copy: %s", err)
 	}
 	return nil
 }
 
-func parseName(r *http.Request) (string, error) {
-	name, err := url.PathUnescape(chi.URLParam(r, "name"))
+func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
+	s.RLock()
+	defer s.RUnlock()
+
+	dir, err := param(r, "dir")
 	if err != nil {
-		return "", handler.Errorf("path unescape name: %s", err).Status(http.StatusBadRequest)
+		return err
 	}
-	return name, nil
+	infos, err := ioutil.ReadDir(s.path(dir))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return handler.ErrorStatus(http.StatusNotFound)
+		}
+		return handler.Errorf("read dir: %s", err)
+	}
+	var names []string
+	for _, info := range infos {
+		names = append(names, info.Name())
+	}
+	if err := json.NewEncoder(w).Encode(&names); err != nil {
+		return handler.Errorf("json encode: %s", err)
+	}
+	return nil
+}
+
+// path normalizes some file or directory entry into a path.
+func (s *Server) path(entry string) string {
+	// Allows listing tags by repo.
+	entry = strings.Replace(entry, ":", "/", -1)
+	return filepath.Join(s.dir, entry)
+}
+
+func param(r *http.Request, name string) (string, error) {
+	p, err := url.PathUnescape(chi.URLParam(r, name))
+	if err != nil {
+		return "", handler.Errorf("path unescape: %s", err).Status(http.StatusBadRequest)
+	}
+	return p, nil
 }

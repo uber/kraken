@@ -30,3 +30,8 @@ func (c NoopClient) Upload(name string, src io.Reader) error {
 func (c NoopClient) Download(name string, dst io.Writer) error {
 	return backenderrors.ErrBlobNotFound
 }
+
+// List always returns ErrDirNotFound.
+func (c NoopClient) List(dir string) ([]string, error) {
+	return nil, backenderrors.ErrDirNotFound
+}
