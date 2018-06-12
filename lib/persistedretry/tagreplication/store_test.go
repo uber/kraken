@@ -1,6 +1,7 @@
 package tagreplication_test
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -53,6 +54,31 @@ func checkFailed(t *testing.T, store *Store, expected ...*Task) {
 	result, err := store.GetFailed()
 	require.NoError(t, err)
 	checkTasks(t, expected, result)
+}
+
+func TestDatabaseNotLocked(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
+
+	store, _, cleanup := StoreFixture(rv)
+	defer cleanup()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 1000; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := store.GetFailed()
+			require.NoError(err)
+			require.NoError(store.AddPending(TaskFixture()))
+		}()
+
+	}
+	wg.Wait()
 }
 
 func TestDeleteInvalidTasks(t *testing.T) {

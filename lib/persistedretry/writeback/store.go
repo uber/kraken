@@ -27,6 +27,7 @@ func NewStore(source string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite3: %s", err)
 	}
+	db.SetMaxOpenConns(1)
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return nil, fmt.Errorf("set dialect as sqlite3: %s", err)
 	}
