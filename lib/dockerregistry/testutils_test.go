@@ -114,6 +114,10 @@ func genBlobDataPath(digest string) string {
 	return fmt.Sprintf("/docker/registry/v2/blobs/sha256/%s/%s/data", string([]byte(digest)[:2]), digest)
 }
 
+func genManifestListPath(repo string) string {
+	return fmt.Sprintf("/docker/registry/v2/repositories/%s/_manifests/tags", repo)
+}
+
 func getShardedRelativePath(name string) string {
 	filePath := ""
 	for i := 0; i < 2 && i < len(name)/2; i++ {

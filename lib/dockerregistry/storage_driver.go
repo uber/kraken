@@ -1,7 +1,6 @@
 package dockerregistry
 
 import (
-	"errors"
 	"fmt"
 	"io"
 
@@ -247,7 +246,7 @@ func (d *KrakenStorageDriver) List(ctx context.Context, path string) ([]string, 
 	case _uploads:
 		return d.uploads.ListHashStates(path, pathSubType)
 	case _manifests:
-		return nil, errors.New("list manifests not supported")
+		return d.tags.ListManifests(path, pathSubType)
 	default:
 		return nil, InvalidRequestError{path}
 	}

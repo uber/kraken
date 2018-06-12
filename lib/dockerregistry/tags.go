@@ -119,3 +119,20 @@ func (t *Tags) PutContent(path string, subtype PathSubType) error {
 	// No-op.
 	return nil
 }
+
+// ListManifests lists all manifests tags in a repo.
+func (t *Tags) ListManifests(path string, subtype PathSubType) ([]string, error) {
+	switch subtype {
+	case _tags:
+		repo, err := GetRepo(path)
+		if err != nil {
+			return nil, fmt.Errorf("get repo: %s", err)
+		}
+		tags, err := t.transferer.ListRepository(repo)
+		if err != nil {
+			return nil, fmt.Errorf("list repository: %s", err)
+		}
+		return tags, nil
+	}
+	return nil, &InvalidRequestError{path}
+}

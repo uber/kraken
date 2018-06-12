@@ -62,3 +62,8 @@ func (t *AgentTransferer) GetTag(tag string) (core.Digest, error) {
 func (t *AgentTransferer) PostTag(tag string, d core.Digest) error {
 	return errors.New("not supported")
 }
+
+// ListRepository is not supported.
+func (t *AgentTransferer) ListRepository(repo string) ([]string, error) {
+	return nil, errors.New("not supported")
+}

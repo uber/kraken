@@ -2,6 +2,7 @@ package transfer
 
 import (
 	"errors"
+	"strings"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -40,4 +41,14 @@ func (t *testTransferer) GetTag(tag string) (core.Digest, error) {
 func (t *testTransferer) PostTag(tag string, d core.Digest) error {
 	t.tags[tag] = d
 	return nil
+}
+
+func (t *testTransferer) ListRepository(repo string) ([]string, error) {
+	var tags []string
+	for tag := range t.tags {
+		if strings.HasPrefix(tag, repo) {
+			tags = append(tags, tag[len(repo)+1:])
+		}
+	}
+	return tags, nil
 }
