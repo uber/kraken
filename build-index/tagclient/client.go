@@ -15,7 +15,8 @@ import (
 
 // Client errors.
 var (
-	ErrNotFound = errors.New("tag not found")
+	ErrTagNotFound  = errors.New("tag not found")
+	ErrRepoNotFound = errors.New("repo not found")
 )
 
 // Provider maps addresses into Clients.
@@ -35,10 +36,14 @@ type Client interface {
 	Put(tag string, d core.Digest) error
 	Get(tag string) (core.Digest, error)
 	GetLocal(tag string) (core.Digest, error)
-	Replicate(tag string) error
 	Has(tag string) (bool, error)
+
+	ListRepository(repo string) ([]string, error)
+
+	Replicate(tag string) error
 	DuplicateReplicate(
 		tag string, d core.Digest, dependencies core.DigestList, delay time.Duration) error
+
 	Origin() (string, error)
 }
 
@@ -64,7 +69,7 @@ func (c *client) GetLocal(tag string) (core.Digest, error) {
 		httputil.SendRetry())
 	if err != nil {
 		if httputil.IsNotFound(err) {
-			return core.Digest{}, ErrNotFound
+			return core.Digest{}, ErrTagNotFound
 		}
 		return core.Digest{}, err
 	}
@@ -86,7 +91,7 @@ func (c *client) Get(tag string) (core.Digest, error) {
 		httputil.SendRetry())
 	if err != nil {
 		if httputil.IsNotFound(err) {
-			return core.Digest{}, ErrNotFound
+			return core.Digest{}, ErrTagNotFound
 		}
 		return core.Digest{}, err
 	}
@@ -113,6 +118,24 @@ func (c *client) Has(tag string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func (c *client) ListRepository(repo string) ([]string, error) {
+	resp, err := httputil.Get(
+		fmt.Sprintf("http://%s/repositories/%s/tags", c.addr, url.PathEscape(repo)),
+		httputil.SendRetry())
+	if err != nil {
+		if httputil.IsNotFound(err) {
+			return nil, ErrRepoNotFound
+		}
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var tags []string
+	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
+		return nil, fmt.Errorf("json decode: %s", err)
+	}
+	return tags, nil
 }
 
 // ReplicateRequest defines a Replicate request body.

@@ -92,10 +92,15 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.LatencyTimer(s.stats))
 
 	r.Get("/health", handler.Wrap(s.healthHandler))
+
 	r.Put("/tags/:tag/digest/:digest", handler.Wrap(s.putTagHandler))
 	r.Head("/tags/:tag", handler.Wrap(s.hasTagHandler))
 	r.Get("/tags/:tag", handler.Wrap(s.getTagHandler))
+
+	r.Get("/repositories/:repo/tags", handler.Wrap(s.listRepositoryHandler))
+
 	r.Post("/remotes/tags/:tag", handler.Wrap(s.replicateTagHandler))
+
 	r.Get("/origin", handler.Wrap(s.getOriginHandler))
 
 	r.Post(
@@ -190,6 +195,29 @@ func (s *Server) hasTagHandler(w http.ResponseWriter, r *http.Request) error {
 			return handler.ErrorStatus(http.StatusNotFound)
 		}
 		return err
+	}
+	return nil
+}
+
+func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) error {
+	repo, err := parseRepo(r)
+	if err != nil {
+		return err
+	}
+
+	client, err := s.backends.GetClient(repo)
+	if err != nil {
+		return handler.Errorf("backend manager: %s", err)
+	}
+	tags, err := client.List(repo)
+	if err != nil {
+		if err == backenderrors.ErrDirNotFound {
+			return handler.ErrorStatus(http.StatusNotFound)
+		}
+		return err
+	}
+	if err := json.NewEncoder(w).Encode(&tags); err != nil {
+		return handler.Errorf("json encode: %s", err)
 	}
 	return nil
 }

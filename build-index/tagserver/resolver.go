@@ -59,7 +59,7 @@ func (r *tagResolver) resolveFromRemotes(tag string) (core.Digest, error) {
 		d, err := client.GetLocal(tag)
 		if err == nil {
 			return d, nil
-		} else if err != tagclient.ErrNotFound {
+		} else if err != tagclient.ErrTagNotFound {
 			notFound = false
 			errs = append(errs, fmt.Errorf("remote client: %s", err))
 		}

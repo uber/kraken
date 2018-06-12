@@ -112,7 +112,7 @@ func TestPutAndGetLocalTag(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat"
+	tag := "uber-usi/labrat:latest"
 	digest := core.DigestFixture()
 	tagDependencyResolver := mocktagtype.NewMockDependencyResolver(mocks.ctrl)
 
@@ -144,7 +144,7 @@ func TestGetTagFallback(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat"
+	tag := "uber-usi/labrat:latest"
 	digest := core.DigestFixture()
 	remoteClient := mocks.client()
 
@@ -158,6 +158,7 @@ func TestGetTagFallback(t *testing.T) {
 	require.NoError(err)
 	require.Equal(digest, d)
 }
+
 func TestGetTagNotFound(t *testing.T) {
 	require := require.New(t)
 
@@ -169,17 +170,17 @@ func TestGetTagNotFound(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat"
+	tag := "uber-usi/labrat:latest"
 	remoteClient := mocks.client()
 
 	gomock.InOrder(
 		mocks.backendClient.EXPECT().Download(tag, gomock.Any()).Return(backenderrors.ErrBlobNotFound),
 		mocks.provider.EXPECT().Provide(_testRemote).Return(remoteClient),
-		remoteClient.EXPECT().GetLocal(tag).Return(core.Digest{}, tagclient.ErrNotFound),
+		remoteClient.EXPECT().GetLocal(tag).Return(core.Digest{}, tagclient.ErrTagNotFound),
 	)
 
 	_, err := client.Get(tag)
-	require.Equal(tagclient.ErrNotFound, err)
+	require.Equal(tagclient.ErrTagNotFound, err)
 }
 
 func TestHasTag(t *testing.T) {
@@ -193,7 +194,7 @@ func TestHasTag(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat"
+	tag := "uber-usi/labrat:latest"
 	digest := core.DigestFixture()
 
 	mocks.backendClient.EXPECT().Stat(tag).Return(blobinfo.New(int64(len(digest.String()))), nil)
@@ -214,13 +215,53 @@ func TestHasTagNotFound(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat"
+	tag := "uber-usi/labrat:latest"
 
 	mocks.backendClient.EXPECT().Stat(tag).Return(nil, backenderrors.ErrBlobNotFound)
 
 	ok, err := client.Has(tag)
 	require.NoError(err)
 	require.False(ok)
+}
+
+func TestListRepository(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := tagclient.New(addr)
+
+	repo := "uber-usi/labrat"
+	tags := []string{"latest", "0000", "0001"}
+
+	mocks.backendClient.EXPECT().List(repo).Return(tags, nil)
+
+	result, err := client.ListRepository(repo)
+	require.NoError(err)
+	require.Equal(tags, result)
+}
+
+func TestListRepositoryNotFound(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := tagclient.New(addr)
+
+	repo := "uber-usi/labrat"
+
+	mocks.backendClient.EXPECT().List(repo).Return(nil, backenderrors.ErrDirNotFound)
+
+	_, err := client.ListRepository(repo)
+	require.Equal(tagclient.ErrRepoNotFound, err)
 }
 
 func TestReplicate(t *testing.T) {
@@ -234,7 +275,7 @@ func TestReplicate(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat"
+	tag := "uber-usi/labrat:latest"
 	digest := core.DigestFixture()
 	deps := core.DigestList{digest}
 	task := tagreplication.NewTask(tag, digest, deps, _testRemote)
@@ -265,7 +306,7 @@ func TestDuplicateReplicate(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat"
+	tag := "uber-usi/labrat:latest"
 	digest := core.DigestFixture()
 	dependencies := core.DigestListFixture(3)
 	delay := 5 * time.Minute
