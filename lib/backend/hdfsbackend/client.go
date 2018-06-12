@@ -52,9 +52,9 @@ type fileStatusResponse struct {
 
 // Stat returns blob info for name.
 func (c *Client) Stat(name string) (*blobinfo.Info, error) {
-	path, err := c.pather.Path(name)
+	path, err := c.pather.BlobPath(name)
 	if err != nil {
-		return nil, fmt.Errorf("path: %s", err)
+		return nil, fmt.Errorf("blob path: %s", err)
 	}
 
 	v := url.Values{}
@@ -84,9 +84,9 @@ func (c *Client) Stat(name string) (*blobinfo.Info, error) {
 
 // Download downloads name into dst.
 func (c *Client) Download(name string, dst io.Writer) error {
-	path, err := c.pather.Path(name)
+	path, err := c.pather.BlobPath(name)
 	if err != nil {
-		return fmt.Errorf("path: %s", err)
+		return fmt.Errorf("blob path: %s", err)
 	}
 
 	v := url.Values{}
@@ -140,9 +140,9 @@ func (e drainSrcError) Error() string { return fmt.Sprintf("drain src: %s", e.er
 
 // Upload uploads src to name.
 func (c *Client) Upload(name string, src io.Reader) error {
-	path, err := c.pather.Path(name)
+	path, err := c.pather.BlobPath(name)
 	if err != nil {
-		return fmt.Errorf("path: %s", err)
+		return fmt.Errorf("blob path: %s", err)
 	}
 
 	// We must be able to replay src in the event that uploading to the data node
@@ -212,6 +212,50 @@ func (c *Client) Upload(name string, src io.Reader) error {
 		return nil
 	}
 	return errAllNameNodesUnavailable
+}
+
+type listResponse struct {
+	FileStatuses struct {
+		FileStatus []struct {
+			PathSuffix string `json:"pathSuffix"`
+		} `json:"FileStatus"`
+	} `json:"FileStatuses"`
+}
+
+// List lists names in dir.
+func (c *Client) List(dir string) ([]string, error) {
+	path, err := c.pather.DirPath(dir)
+	if err != nil {
+		return nil, fmt.Errorf("dir path: %s", err)
+	}
+
+	v := url.Values{}
+	v.Set("op", "LISTSTATUS")
+	c.setUserName(v)
+
+	for _, node := range c.config.NameNodes {
+		resp, err := httputil.Get(fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()))
+		if err != nil {
+			if retryable(err) {
+				continue
+			}
+			if httputil.IsNotFound(err) {
+				return nil, backenderrors.ErrDirNotFound
+			}
+			return nil, err
+		}
+		defer resp.Body.Close()
+		var lr listResponse
+		if err := json.NewDecoder(resp.Body).Decode(&lr); err != nil {
+			return nil, fmt.Errorf("decode body: %s", err)
+		}
+		var names []string
+		for _, fs := range lr.FileStatuses.FileStatus {
+			names = append(names, fs.PathSuffix)
+		}
+		return names, nil
+	}
+	return nil, errAllNameNodesUnavailable
 }
 
 func (c *Client) setBuffersize(v url.Values) {

@@ -139,7 +139,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 			return handler.Errorf("check blob: %s", err)
 		}
 		if !ok {
-			return handler.Errorf("tag %s has missing dependency: %s", dep)
+			return handler.Errorf("tag has missing dependency: %s", dep)
 		}
 	}
 

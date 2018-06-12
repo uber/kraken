@@ -70,7 +70,12 @@ func (c *Client) Download(name string, dst io.Writer) error {
 	return err
 }
 
-// Upload TODO(codyg): Implement.
+// Upload is not supported.
 func (c *Client) Upload(name string, src io.Reader) error {
-	return errors.New("unimplemented")
+	return errors.New("not supported")
+}
+
+// List is not supported.
+func (c *Client) List(dir string) ([]string, error) {
+	return nil, errors.New("not supported")
 }

@@ -46,6 +46,19 @@ func (mr *MockClientMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0, arg1)
 }
 
+// List mocks base method
+func (m *MockClient) List(arg0 string) ([]string, error) {
+	ret := m.ctrl.Call(m, "List", arg0)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// List indicates an expected call of List
+func (mr *MockClientMockRecorder) List(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockClient)(nil).List), arg0)
+}
+
 // Stat mocks base method
 func (m *MockClient) Stat(arg0 string) (*blobinfo.Info, error) {
 	ret := m.ctrl.Call(m, "Stat", arg0)

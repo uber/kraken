@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"errors"
 	"io"
 	"io/ioutil"
 	"sync"
@@ -61,4 +62,8 @@ func (c *testClient) Download(name string, dst io.Writer) error {
 	}
 	_, err := dst.Write(b)
 	return err
+}
+
+func (c *testClient) List(dir string) ([]string, error) {
+	return nil, errors.New("not supported")
 }

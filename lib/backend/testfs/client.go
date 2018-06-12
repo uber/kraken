@@ -1,9 +1,11 @@
 package testfs
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"strconv"
 
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
@@ -36,7 +38,8 @@ func (c *Client) Addr() string {
 
 // Stat returns blob info for name.
 func (c *Client) Stat(name string) (*blobinfo.Info, error) {
-	resp, err := httputil.Head(fmt.Sprintf("http://%s/files/%s", c.config.Addr, name))
+	resp, err := httputil.Head(
+		fmt.Sprintf("http://%s/files/%s", c.config.Addr, url.PathEscape(name)))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return nil, backenderrors.ErrBlobNotFound
@@ -53,23 +56,42 @@ func (c *Client) Stat(name string) (*blobinfo.Info, error) {
 // Upload uploads src to name.
 func (c *Client) Upload(name string, src io.Reader) error {
 	_, err := httputil.Post(
-		fmt.Sprintf("http://%s/files/%s", c.config.Addr, name),
+		fmt.Sprintf("http://%s/files/%s", c.config.Addr, url.PathEscape(name)),
 		httputil.SendBody(src))
 	return err
 }
 
 // Download downloads name to dst.
 func (c *Client) Download(name string, dst io.Writer) error {
-	resp, err := httputil.Get(fmt.Sprintf("http://%s/files/%s", c.config.Addr, name))
+	resp, err := httputil.Get(
+		fmt.Sprintf("http://%s/files/%s", c.config.Addr, url.PathEscape(name)))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return backenderrors.ErrBlobNotFound
 		}
-		return fmt.Errorf("http: %s", err)
+		return err
 	}
 	defer resp.Body.Close()
 	if _, err := io.Copy(dst, resp.Body); err != nil {
 		return fmt.Errorf("copy: %s", err)
 	}
 	return nil
+}
+
+// List lists entries of dir.
+func (c *Client) List(dir string) ([]string, error) {
+	resp, err := httputil.Get(
+		fmt.Sprintf("http://%s/dir/%s", c.config.Addr, url.PathEscape(dir)))
+	if err != nil {
+		if httputil.IsNotFound(err) {
+			return nil, backenderrors.ErrDirNotFound
+		}
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var names []string
+	if err := json.NewDecoder(resp.Body).Decode(&names); err != nil {
+		return nil, fmt.Errorf("json: %s", err)
+	}
+	return names, nil
 }
