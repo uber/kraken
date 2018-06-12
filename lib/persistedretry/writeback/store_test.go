@@ -1,6 +1,7 @@
 package writeback
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -49,6 +50,26 @@ func checkFailed(t *testing.T, store *Store, expected ...*Task) {
 	result, err := store.GetFailed()
 	require.NoError(t, err)
 	checkTasks(t, expected, result)
+}
+
+func TestDatabaseNotLocked(t *testing.T) {
+	require := require.New(t)
+
+	store, cleanup := StoreFixture()
+	defer cleanup()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 1000; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := store.GetFailed()
+			require.NoError(err)
+			require.NoError(store.AddPending(TaskFixture()))
+		}()
+
+	}
+	wg.Wait()
 }
 
 func TestAddPending(t *testing.T) {
