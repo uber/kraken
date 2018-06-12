@@ -182,6 +182,7 @@ func TestStorageDriverList(t *testing.T) {
 		err   error
 	}{
 		{genUploadHashStatesPath(testImage.upload), []string{genUploadHashStatesPath(testImage.upload)}, nil},
+		{genManifestListPath(testImage.repo), []string{testImage.tag}, nil},
 	}
 
 	for _, tc := range testCases {

@@ -19,6 +19,7 @@ type Uploader interface {
 type TagManager interface {
 	GetTag(tag string) (core.Digest, error)
 	PostTag(tag string, d core.Digest) error
+	ListRepository(repo string) ([]string, error)
 }
 
 // ImageTransferer defines an interface that transfers images
