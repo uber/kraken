@@ -27,8 +27,11 @@ type clientResolver struct {
 }
 
 // NewClientResolver returns a new client resolver.
-func NewClientResolver(p Provider, addr string) ClientResolver {
-	return &clientResolver{p, addr}
+func NewClientResolver(p Provider, addr string) (ClientResolver, error) {
+	if addr == "" {
+		return nil, errors.New("addr is empty")
+	}
+	return &clientResolver{p, addr}, nil
 }
 
 func (r *clientResolver) Resolve(d core.Digest) ([]Client, error) {

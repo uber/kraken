@@ -248,8 +248,11 @@ func (s *Server) replicateToRemote(namespace string, d core.Digest, remoteDNS st
 	}
 	defer f.Close()
 
-	remoteCluster := blobclient.NewClusterClient(
-		blobclient.NewClientResolver(s.clientProvider, remoteDNS))
+	r, err := blobclient.NewClientResolver(s.clientProvider, remoteDNS)
+	if err != nil {
+		return handler.Errorf("new client resolver: %s", err)
+	}
+	remoteCluster := blobclient.NewClusterClient(r)
 
 	return remoteCluster.UploadBlob(namespace, d, f)
 }

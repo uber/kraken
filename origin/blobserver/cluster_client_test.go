@@ -41,7 +41,9 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 	cp.register(master2, blobclient.New("http://localhost:0"))
 	cp.register(master3, blobclient.New("http://localhost:0"))
 
-	cc := blobclient.NewClusterClient(blobclient.NewClientResolver(cp, master1))
+	r, err := blobclient.NewClientResolver(cp, master1)
+	require.NoError(err)
+	cc := blobclient.NewClusterClient(r)
 
 	// Run many times to make sure we eventually hit unavailable masters.
 	for i := 0; i < 100; i++ {
@@ -78,13 +80,15 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 	cp.register(master2, blobclient.New("http://localhost:0"))
 	cp.register(master3, blobclient.New("http://localhost:0"))
 
-	cc := blobclient.NewClusterClient(blobclient.NewClientResolver(cp, master1))
+	r, err := blobclient.NewClientResolver(cp, master1)
+	require.NoError(err)
+	cc := blobclient.NewClusterClient(r)
 
 	blob := core.NewBlobFixture()
 
 	require.Error(cc.UploadBlob(backend.NoopNamespace, blob.Digest, bytes.NewReader(blob.Content)))
 
-	_, err := cc.CheckBlob(backend.NoopNamespace, blob.Digest)
+	_, err = cc.CheckBlob(backend.NoopNamespace, blob.Digest)
 	require.Error(err)
 
 	_, err = cc.GetMetaInfo(backend.NoopNamespace, blob.Digest)

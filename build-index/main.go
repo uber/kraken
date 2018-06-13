@@ -40,8 +40,11 @@ func main() {
 	}
 	defer closer.Close()
 
-	originClient := blobclient.NewClusterClient(
-		blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin))
+	r, err := blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin)
+	if err != nil {
+		log.Fatalf("Error creating origin client resolver: %s", err)
+	}
+	originClient := blobclient.NewClusterClient(r)
 
 	trExecutor := tagreplication.NewExecutor(
 		stats,
