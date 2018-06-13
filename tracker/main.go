@@ -47,8 +47,11 @@ func main() {
 		log.Fatalf("Could not load peer handout policy: %s", err)
 	}
 
-	originCluster := blobclient.NewClusterClient(
-		blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin))
+	r, err := blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin)
+	if err != nil {
+		log.Fatalf("Error creating origin client resolver: %s", err)
+	}
+	originCluster := blobclient.NewClusterClient(r)
 
 	server := trackerserver.New(
 		config.TrackerServer,

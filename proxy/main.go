@@ -39,10 +39,15 @@ func main() {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
 
+	r, err := blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin)
+	if err != nil {
+		log.Fatalf("Error creating origin client resolver: %s", err)
+	}
+	originCluster := blobclient.NewClusterClient(r)
+
 	transferer := transfer.NewProxyTransferer(
 		tagclient.New(config.BuildIndex),
-		blobclient.NewClusterClient(
-			blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin)),
+		originCluster,
 		fs)
 
 	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
