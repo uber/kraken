@@ -17,7 +17,6 @@ var (
 	ErrConnAlreadyPending      = errors.New("conn is already pending")
 	ErrConnAlreadyActive       = errors.New("conn is already active")
 	ErrInvalidActiveTransition = errors.New("conn must be pending to transition to active")
-	ErrTooManyMutualConns      = errors.New("conn has too many mutual connections")
 )
 
 type connKey struct {
@@ -86,11 +85,9 @@ func (s *State) MaxConnsPerTorrent() int {
 
 // ActiveConns returns a list of all active connections.
 func (s *State) ActiveConns() []*conn.Conn {
-	conns := make([]*conn.Conn, len(s.active))
-	var k int
+	conns := make([]*conn.Conn, 0, len(s.active))
 	for _, c := range s.active {
-		conns[k] = c
-		k++
+		conns = append(conns, c)
 	}
 	return conns
 }
@@ -138,7 +135,7 @@ func (s *State) ClearBlacklist(h core.InfoHash) {
 
 // AddPending sets the connection for peerID/h as pending and reserves capacity
 // for it.
-func (s *State) AddPending(peerID core.PeerID, h core.InfoHash, neighbors []core.PeerID) error {
+func (s *State) AddPending(peerID core.PeerID, h core.InfoHash) error {
 	k := connKey{peerID, h}
 	cap, ok := s.capacity[h]
 	if !ok {
@@ -153,9 +150,6 @@ func (s *State) AddPending(peerID core.PeerID, h core.InfoHash, neighbors []core
 	}
 	if _, ok := s.active[k]; ok {
 		return ErrConnAlreadyActive
-	}
-	if s.numMutualConns(h, neighbors) > s.config.MaxMutualConnections {
-		return ErrTooManyMutualConns
 	}
 	s.pending[k] = true
 	s.capacity[k.infoHash]--
@@ -213,18 +207,6 @@ func (s *State) DeleteActive(c *conn.Conn) {
 		c.InfoHash(), s.localPeerID, c.PeerID()))
 
 	return
-}
-
-func (s *State) numMutualConns(h core.InfoHash, neighbors []core.PeerID) int {
-	var n int
-	for _, id := range neighbors {
-		if _, ok := s.active[connKey{id, h}]; ok {
-			n++
-		} else if _, ok := s.pending[connKey{id, h}]; ok {
-			n++
-		}
-	}
-	return n
 }
 
 // BlacklistedConn represents a connection which has been blacklisted.

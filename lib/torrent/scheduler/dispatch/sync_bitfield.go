@@ -18,15 +18,6 @@ func newSyncBitfield(b *bitset.BitSet) *syncBitfield {
 	}
 }
 
-func (s *syncBitfield) Copy() *bitset.BitSet {
-	s.RLock()
-	defer s.RUnlock()
-
-	b := &bitset.BitSet{}
-	s.b.Copy(b)
-	return b
-}
-
 func (s *syncBitfield) Intersection(other *bitset.BitSet) *bitset.BitSet {
 	s.RLock()
 	defer s.RUnlock()

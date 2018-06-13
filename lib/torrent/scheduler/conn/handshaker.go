@@ -16,46 +16,15 @@ import (
 	"github.com/willf/bitset"
 )
 
-// RemoteBitfields represents the bitfields of an agent's peers for a given torrent.
-type RemoteBitfields map[core.PeerID]*bitset.BitSet
-
-func (rb RemoteBitfields) marshalBinary() (map[string][]byte, error) {
-	rbBytes := make(map[string][]byte)
-	for peerID, bitfield := range rb {
-		b, err := bitfield.MarshalBinary()
-		if err != nil {
-			return nil, err
-		}
-		rbBytes[peerID.String()] = b
-	}
-	return rbBytes, nil
-}
-
-func (rb RemoteBitfields) unmarshalBinary(rbBytes map[string][]byte) error {
-	for peerIDStr, bitfieldBytes := range rbBytes {
-		peerID, err := core.NewPeerID(peerIDStr)
-		if err != nil {
-			return fmt.Errorf("peer id: %s", err)
-		}
-		bitfield := bitset.New(0)
-		if err := bitfield.UnmarshalBinary(bitfieldBytes); err != nil {
-			return err
-		}
-		rb[peerID] = bitfield
-	}
-	return nil
-}
-
 // handshake contains the same fields as a protobuf bitfield message, but with
 // the fields converted into types used within the scheduler package. As such,
 // in this package "handshake" and "bitfield message" are usually synonymous.
 type handshake struct {
-	peerID          core.PeerID
-	name            string
-	infoHash        core.InfoHash
-	bitfield        *bitset.BitSet
-	remoteBitfields RemoteBitfields
-	namespace       string
+	peerID    core.PeerID
+	name      string
+	infoHash  core.InfoHash
+	bitfield  *bitset.BitSet
+	namespace string
 }
 
 func (h *handshake) toP2PMessage() (*p2p.Message, error) {
@@ -63,19 +32,14 @@ func (h *handshake) toP2PMessage() (*p2p.Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	rb, err := h.remoteBitfields.marshalBinary()
-	if err != nil {
-		return nil, err
-	}
 	return &p2p.Message{
 		Type: p2p.Message_BITFIELD,
 		Bitfield: &p2p.BitfieldMessage{
-			PeerID:              h.peerID.String(),
-			Name:                h.name,
-			InfoHash:            h.infoHash.String(),
-			BitfieldBytes:       b,
-			RemoteBitfieldBytes: rb,
-			Namespace:           h.namespace,
+			PeerID:        h.peerID.String(),
+			Name:          h.name,
+			InfoHash:      h.infoHash.String(),
+			BitfieldBytes: b,
+			Namespace:     h.namespace,
 		},
 	}, nil
 }
@@ -96,18 +60,12 @@ func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
 	if err := bitfield.UnmarshalBinary(m.Bitfield.BitfieldBytes); err != nil {
 		return nil, err
 	}
-	remoteBitfields := make(RemoteBitfields)
-	if err := remoteBitfields.unmarshalBinary(m.Bitfield.RemoteBitfieldBytes); err != nil {
-		return nil, err
-	}
-
 	return &handshake{
-		peerID:          peerID,
-		infoHash:        ih,
-		bitfield:        bitfield,
-		name:            m.Bitfield.Name,
-		namespace:       m.Bitfield.Namespace,
-		remoteBitfields: remoteBitfields,
+		peerID:    peerID,
+		infoHash:  ih,
+		bitfield:  bitfield,
+		name:      m.Bitfield.Name,
+		namespace: m.Bitfield.Namespace,
 	}, nil
 }
 
@@ -138,11 +96,6 @@ func (pc *PendingConn) Bitfield() *bitset.BitSet {
 	return pc.handshake.bitfield
 }
 
-// RemoteBitfields returns the bitfield of the remote peer's torrent.
-func (pc *PendingConn) RemoteBitfields() RemoteBitfields {
-	return pc.handshake.remoteBitfields
-}
-
 // Namespace returns the namespace of the remote peer's torrent.
 func (pc *PendingConn) Namespace() string {
 	return pc.handshake.namespace
@@ -151,13 +104,6 @@ func (pc *PendingConn) Namespace() string {
 // Close closes the connection.
 func (pc *PendingConn) Close() {
 	pc.nc.Close()
-}
-
-// HandshakeResult wraps data returned from a successful handshake.
-type HandshakeResult struct {
-	Conn            *Conn
-	Bitfield        *bitset.BitSet
-	RemoteBitfields RemoteBitfields
 }
 
 // Handshaker defines the handshake protocol for establishing connections to
@@ -209,14 +155,10 @@ func (h *Handshaker) Accept(nc net.Conn) (*PendingConn, error) {
 
 // Establish upgrades a PendingConn returned via Accept into a fully
 // established Conn.
-func (h *Handshaker) Establish(
-	pc *PendingConn,
-	info *storage.TorrentInfo,
-	remoteBitfields RemoteBitfields) (*Conn, error) {
-
+func (h *Handshaker) Establish(pc *PendingConn, info *storage.TorrentInfo) (*Conn, error) {
 	// Namespace is one-directional: it is only supplied by the connection opener
 	// and is not reciprocated by the connection acceptor.
-	if err := h.sendHandshake(pc.nc, info, remoteBitfields, ""); err != nil {
+	if err := h.sendHandshake(pc.nc, info, ""); err != nil {
 		return nil, fmt.Errorf("send handshake: %s", err)
 	}
 	c, err := h.newConn(pc.nc, pc.handshake.peerID, info, true)
@@ -227,40 +169,30 @@ func (h *Handshaker) Establish(
 }
 
 // Initialize returns a fully established Conn for the given torrent to the
-// given peer / address. Also returns the bitfield of the remote peer and
-// its connections for the torrent.
+// given peer / address. Also returns the bitfield of the remote peer for said
+// torrent.
 func (h *Handshaker) Initialize(
-	peerID core.PeerID,
-	addr string,
-	info *storage.TorrentInfo,
-	peerBitsets RemoteBitfields,
-	namespace string) (*HandshakeResult, error) {
+	peerID core.PeerID, addr string, info *storage.TorrentInfo, namespace string) (*Conn, *bitset.BitSet, error) {
 
 	nc, err := net.DialTimeout("tcp", addr, h.config.HandshakeTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("dial: %s", err)
+		return nil, nil, fmt.Errorf("dial: %s", err)
 	}
-	r, err := h.fullHandshake(nc, peerID, info, peerBitsets, namespace)
+	c, bitfield, err := h.fullHandshake(nc, peerID, info, namespace)
 	if err != nil {
 		nc.Close()
-		return nil, err
+		return nil, nil, err
 	}
-	return r, nil
+	return c, bitfield, nil
 }
 
-func (h *Handshaker) sendHandshake(
-	nc net.Conn,
-	info *storage.TorrentInfo,
-	remoteBitfields RemoteBitfields,
-	namespace string) error {
-
+func (h *Handshaker) sendHandshake(nc net.Conn, info *storage.TorrentInfo, namespace string) error {
 	hs := &handshake{
-		peerID:          h.peerID,
-		name:            info.Name(),
-		infoHash:        info.InfoHash(),
-		bitfield:        info.Bitfield(),
-		remoteBitfields: remoteBitfields,
-		namespace:       namespace,
+		peerID:    h.peerID,
+		name:      info.Name(),
+		infoHash:  info.InfoHash(),
+		bitfield:  info.Bitfield(),
+		namespace: namespace,
 	}
 	msg, err := hs.toP2PMessage()
 	if err != nil {
@@ -285,24 +217,23 @@ func (h *Handshaker) fullHandshake(
 	nc net.Conn,
 	peerID core.PeerID,
 	info *storage.TorrentInfo,
-	remoteBitfields RemoteBitfields,
-	namespace string) (*HandshakeResult, error) {
+	namespace string) (*Conn, *bitset.BitSet, error) {
 
-	if err := h.sendHandshake(nc, info, remoteBitfields, namespace); err != nil {
-		return nil, fmt.Errorf("send handshake: %s", err)
+	if err := h.sendHandshake(nc, info, namespace); err != nil {
+		return nil, nil, fmt.Errorf("send handshake: %s", err)
 	}
 	hs, err := h.readHandshake(nc)
 	if err != nil {
-		return nil, fmt.Errorf("read handshake: %s", err)
+		return nil, nil, fmt.Errorf("read handshake: %s", err)
 	}
 	if hs.peerID != peerID {
-		return nil, errors.New("unexpected peer id")
+		return nil, nil, errors.New("unexpected peer id")
 	}
 	c, err := h.newConn(nc, peerID, info, true)
 	if err != nil {
-		return nil, fmt.Errorf("new conn: %s", err)
+		return nil, nil, fmt.Errorf("new conn: %s", err)
 	}
-	return &HandshakeResult{c, hs.bitfield, hs.remoteBitfields}, nil
+	return c, hs.bitfield, nil
 }
 
 func (h *Handshaker) newConn(

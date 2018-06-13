@@ -109,15 +109,13 @@ func (l *Logger) OutgoingConnectionAccept(
 // OutgoingConnectionReject logs a rejected outgoing connection.
 func (l *Logger) OutgoingConnectionReject(name string,
 	infoHash core.InfoHash,
-	remotePeerID core.PeerID,
-	err error) {
+	remotePeerID core.PeerID) {
 
 	l.zap.Info(
 		"Outgoing connection reject",
 		zap.String("name", name),
 		zap.String("info_hash", infoHash.String()),
-		zap.String("remote_peer_id", remotePeerID.String()),
-		zap.Error(err))
+		zap.String("remote_peer_id", remotePeerID.String()))
 }
 
 // IncomingConnectionAccept logs an accepted incoming connection.
@@ -137,15 +135,13 @@ func (l *Logger) IncomingConnectionAccept(
 func (l *Logger) IncomingConnectionReject(
 	name string,
 	infoHash core.InfoHash,
-	remotePeerID core.PeerID,
-	err error) {
+	remotePeerID core.PeerID) {
 
 	l.zap.Info(
 		"Incoming connection reject",
 		zap.String("name", name),
 		zap.String("info_hash", infoHash.String()),
-		zap.String("remote_peer_id", remotePeerID.String()),
-		zap.Error(err))
+		zap.String("remote_peer_id", remotePeerID.String()))
 }
 
 // SeedTimeout logs a seeding torrent being torn down due to timeout.

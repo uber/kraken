@@ -167,7 +167,7 @@ func (c *Conn) start() {
 
 func (c *Conn) readPayload(length int32) ([]byte, error) {
 	if err := c.bandwidth.ReserveIngress(int64(length)); err != nil {
-		c.log().Errorf("Error reserving ingress bandwidth for piece payload: %s", err)
+		c.log().Errorf("Error reserving ingress bandwidht for piece payload: %s", err)
 		return nil, fmt.Errorf("ingress bandwidth: %s", err)
 	}
 	payload := make([]byte, length)
