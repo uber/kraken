@@ -118,7 +118,7 @@ func (c *clusterClient) CheckBlob(namespace string, d core.Digest) (ok bool, err
 	shuffle(clients)
 	for _, client := range clients {
 		ok, err = client.CheckBlob(namespace, d)
-		if err != nil {
+		if err != nil || !ok {
 			continue
 		}
 		break

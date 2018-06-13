@@ -205,3 +205,29 @@ func TestClusterClientOverwriteMetainfo(t *testing.T) {
 	err := cc.OverwriteMetaInfo(d, 16)
 	require.NoError(err)
 }
+
+func TestClusterClientCheckBlobContinueWhenNotFound(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockResolver := mockblobclient.NewMockClientResolver(ctrl)
+
+	cc := blobclient.NewClusterClient(mockResolver)
+
+	blob := core.NewBlobFixture()
+
+	mockClient := mockblobclient.NewMockClient(ctrl)
+	// Reuse the same mockClient for two origins because origins are shuffled.
+	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient, mockClient}, nil)
+
+	gomock.InOrder(
+		mockClient.EXPECT().CheckBlob(namespace, blob.Digest).Return(false, nil),
+		mockClient.EXPECT().CheckBlob(namespace, blob.Digest).Return(true, nil),
+	)
+
+	ok, err := cc.CheckBlob(namespace, blob.Digest)
+	require.NoError(err)
+	require.True(ok)
+}
