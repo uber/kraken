@@ -629,6 +629,7 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 		return nil
 	})
 	if err != nil {
+		s.stats.Counter("duplicate_write_back_errors").Inc(1)
 		log.Errorf("Error duplicating write-back task to replicas: %s", err)
 	}
 	return nil
