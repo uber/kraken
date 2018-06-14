@@ -91,7 +91,7 @@ func (c *HTTPClient) CheckBlob(namespace string, d core.Digest) (bool, error) {
 	_, err := httputil.Head(fmt.Sprintf(
 		"http://%s/internal/namespace/%s/blobs/%s",
 		c.addr,
-		namespace,
+		url.PathEscape(namespace),
 		d))
 	if err != nil {
 		if httputil.IsNotFound(err) {
@@ -107,7 +107,7 @@ func (c *HTTPClient) CheckLocalBlob(namespace string, d core.Digest) (bool, erro
 	_, err := httputil.Head(fmt.Sprintf(
 		"http://%s/internal/namespace/%s/blobs/%s?local=true",
 		c.addr,
-		namespace,
+		url.PathEscape(namespace),
 		d))
 	if err != nil {
 		if httputil.IsNotFound(err) {
