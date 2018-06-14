@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
@@ -21,8 +22,11 @@ func NewClient(addr string) *Client {
 // Download returns the blob for namespace / name. Callers should close the
 // returned ReadCloser when done reading the blob.
 func (c *Client) Download(namespace, name string) (io.ReadCloser, error) {
-	resp, err := httputil.Get(
-		fmt.Sprintf("http://%s/namespace/%s/blobs/%s", c.addr, namespace, name),
+	resp, err := httputil.Get(fmt.Sprintf(
+		"http://%s/namespace/%s/blobs/%s",
+		c.addr,
+		url.PathEscape(namespace),
+		name),
 		httputil.SendAcceptedCodes(http.StatusOK, http.StatusAccepted))
 	if err != nil {
 		return nil, err

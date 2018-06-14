@@ -1,8 +1,6 @@
 package trackerserver
 
 import (
-	"fmt"
-	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -16,13 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const namespace = "test-namespace"
-
-func download(addr string, d core.Digest) (*http.Response, error) {
-	return httputil.Get(
-		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/metainfo", addr, namespace, d))
-}
-
 func TestGetMetaInfoHandlerFetchesFromOrigin(t *testing.T) {
 	require := require.New(t)
 
@@ -32,6 +23,7 @@ func TestGetMetaInfoHandlerFetchesFromOrigin(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
+	namespace := core.TagFixture()
 	mi := core.MetaInfoFixture()
 	digest, err := core.NewSHA256DigestFromHex(mi.Name())
 	require.NoError(err)
@@ -54,6 +46,7 @@ func TestGetMetaInfoHandlerCachesAndPropagatesOriginError(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
+	namespace := core.TagFixture()
 	mi := core.MetaInfoFixture()
 	digest, err := core.NewSHA256DigestFromHex(mi.Name())
 	require.NoError(err)
@@ -77,6 +70,7 @@ func TestConcurrentGetMetaInfo(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
+	namespace := core.TagFixture()
 	mi := core.MetaInfoFixture()
 	digest, err := core.NewSHA256DigestFromHex(mi.Name())
 	require.NoError(err)

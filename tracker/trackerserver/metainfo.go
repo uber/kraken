@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -12,7 +11,6 @@ import (
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
-	"github.com/pressly/chi"
 	"github.com/uber-go/tally"
 )
 
@@ -56,11 +54,11 @@ func (g *metaInfoGetter) Run(input interface{}) interface{} {
 }
 
 func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
-	namespace := chi.URLParam(r, "namespace")
-	if namespace == "" {
-		return handler.Errorf("empty namespace").Status(http.StatusBadRequest)
+	namespace, err := httputil.ParseParam(r, "namespace")
+	if err != nil {
+		return err
 	}
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return handler.Errorf("parse digest: %s", err).Status(http.StatusBadRequest)
 	}
@@ -78,21 +76,4 @@ func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) erro
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(raw)
 	return nil
-}
-
-// parseDigest parses a digest from a url path parameter, e.g. "/blobs/:digest".
-func parseDigest(r *http.Request) (digest core.Digest, err error) {
-	d := chi.URLParam(r, "digest")
-	if len(d) == 0 {
-		return digest, fmt.Errorf("empty digest")
-	}
-	raw, err := url.PathUnescape(d)
-	if err != nil {
-		return digest, fmt.Errorf("path unescape: %s", err)
-	}
-	digest, err = core.ParseSHA256Digest(raw)
-	if err != nil {
-		return digest, fmt.Errorf("parse digest: %s", err)
-	}
-	return digest, nil
 }

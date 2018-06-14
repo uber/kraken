@@ -1,6 +1,7 @@
 package httputil
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -8,9 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pressly/chi"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/mocks/net/http"
 	"code.uber.internal/infra/kraken/utils/backoff"
 )
@@ -153,4 +157,74 @@ func TestGetQueryArgUseDefault(t *testing.T) {
 
 	r := httptest.NewRequest("GET", "localhost:0/", nil)
 	require.Equal(defaultVal, GetQueryArg(r, arg, defaultVal))
+}
+
+func TestParseParam(t *testing.T) {
+	require := require.New(t)
+
+	r := httptest.NewRequest("GET", "/", nil)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("key", "a%2Fb")
+
+	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+
+	ret, err := ParseParam(r, "key")
+	require.NoError(err)
+	require.Equal("a/b", ret)
+}
+
+func TestParseParamNotFound(t *testing.T) {
+	require := require.New(t)
+
+	r := httptest.NewRequest("GET", "/", nil)
+	rctx := chi.NewRouteContext()
+
+	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+
+	_, err := ParseParam(r, "key")
+	require.Error(err)
+}
+
+func TestParseParamUnescapeError(t *testing.T) {
+	require := require.New(t)
+
+	r := httptest.NewRequest("GET", "/", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("key", "value%")
+
+	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+
+	_, err := ParseParam(r, "key")
+	require.Error(err)
+}
+
+func TestParseDigest(t *testing.T) {
+	require := require.New(t)
+
+	r := httptest.NewRequest("GET", "/", nil)
+
+	d := core.DigestFixture()
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("digest", d.String())
+
+	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+
+	ret, err := ParseDigest(r, "digest")
+	require.NoError(err)
+	require.Equal(d, ret)
+}
+
+func TestParseDigestInvalid(t *testing.T) {
+	require := require.New(t)
+
+	r := httptest.NewRequest("GET", "/", nil)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("digest", "abc")
+
+	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+
+	_, err := ParseDigest(r, "digest")
+	require.Error(err)
 }

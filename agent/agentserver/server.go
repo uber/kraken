@@ -15,6 +15,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/utils/handler"
+	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
 // Config defines Server configuration.
@@ -67,8 +68,15 @@ func (s *Server) Handler() http.Handler {
 
 // downloadBlobHandler downloads a blob through p2p.
 func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) error {
-	namespace := chi.URLParam(r, "namespace")
-	name := chi.URLParam(r, "name")
+	namespace, err := httputil.ParseParam(r, "namespace")
+	if err != nil {
+		return err
+	}
+	name, err := httputil.ParseParam(r, "name")
+	if err != nil {
+		return err
+	}
+
 	f, err := s.fs.GetCacheFileReader(name)
 	if err != nil {
 		if os.IsNotExist(err) || s.fs.InDownloadError(err) {
@@ -93,10 +101,11 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 }
 
 func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error {
-	name := chi.URLParam(r, "name")
-	if name == "" {
-		return handler.Errorf("name required").Status(http.StatusBadRequest)
+	name, err := httputil.ParseParam(r, "name")
+	if err != nil {
+		return err
 	}
+
 	if err := s.sched.RemoveTorrent(name); err != nil {
 		return handler.Errorf("remove torrent: %s", err)
 	}

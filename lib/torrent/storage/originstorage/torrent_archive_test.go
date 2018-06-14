@@ -21,8 +21,6 @@ import (
 	"github.com/uber-go/tally"
 )
 
-const namespace = "test-namespace"
-
 const pieceLength = 4
 
 type archiveMocks struct {
@@ -31,7 +29,7 @@ type archiveMocks struct {
 	blobRefresher *blobrefresh.Refresher
 }
 
-func newArchiveMocks(t *testing.T) (*archiveMocks, func()) {
+func newArchiveMocks(t *testing.T, namespace string) (*archiveMocks, func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
@@ -58,7 +56,8 @@ func (m *archiveMocks) new() *TorrentArchive {
 func TestTorrentArchiveStatNoExistTriggersRefresh(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newArchiveMocks(t)
+	namespace := core.TagFixture()
+	mocks, cleanup := newArchiveMocks(t, namespace)
 	defer cleanup()
 
 	archive := mocks.new()
@@ -84,7 +83,8 @@ func TestTorrentArchiveStatNoExistTriggersRefresh(t *testing.T) {
 func TestTorrentArchiveGetTorrentNoExistTriggersRefresh(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newArchiveMocks(t)
+	namespace := core.TagFixture()
+	mocks, cleanup := newArchiveMocks(t, namespace)
 	defer cleanup()
 
 	archive := mocks.new()
@@ -110,7 +110,8 @@ func TestTorrentArchiveGetTorrentNoExistTriggersRefresh(t *testing.T) {
 func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newArchiveMocks(t)
+	namespace := core.TagFixture()
+	mocks, cleanup := newArchiveMocks(t, namespace)
 	defer cleanup()
 
 	archive := mocks.new()

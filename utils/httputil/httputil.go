@@ -5,9 +5,13 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"time"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/backoff"
+	"code.uber.internal/infra/kraken/utils/handler"
+	"github.com/pressly/chi"
 )
 
 // StatusError occurs if an HTTP response has an unexpected status code.
@@ -273,4 +277,31 @@ func GetQueryArg(r *http.Request, name string, defaultVal string) string {
 	}
 
 	return v
+}
+
+// ParseParam parses a parameter from url.
+func ParseParam(r *http.Request, name string) (string, error) {
+	param := chi.URLParam(r, name)
+	if param == "" {
+		return "", handler.Errorf("param %s is required", name).Status(http.StatusBadRequest)
+	}
+	val, err := url.PathUnescape(param)
+	if err != nil {
+		return "", handler.Errorf("path unescape %s: %s", name, err).Status(http.StatusBadRequest)
+	}
+	return val, nil
+}
+
+// ParseDigest parses a digest from url.
+func ParseDigest(r *http.Request, name string) (core.Digest, error) {
+	raw, err := ParseParam(r, name)
+	if err != nil {
+		return core.Digest{}, err
+	}
+
+	d, err := core.ParseSHA256Digest(raw)
+	if err != nil {
+		return core.Digest{}, handler.Errorf("parse digest: %s", err).Status(http.StatusBadRequest)
+	}
+	return d, nil
 }

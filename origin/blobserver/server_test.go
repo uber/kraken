@@ -34,6 +34,7 @@ func TestCheckBlobHandlerLocalOK(t *testing.T) {
 	defer stop()
 
 	d := core.DigestFixture()
+	namespace := core.TagFixture()
 
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, nil)
 
@@ -51,6 +52,7 @@ func TestCheckBlobHandlerOK(t *testing.T) {
 	defer s.cleanup()
 
 	d := core.DigestFixture()
+	namespace := core.TagFixture()
 
 	backendClient := s.backendClient(namespace)
 
@@ -71,6 +73,7 @@ func TestCheckBlobHandlerLocalNotFound(t *testing.T) {
 	defer stop()
 
 	d := core.DigestFixture()
+	namespace := core.TagFixture()
 
 	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, os.ErrNotExist)
 
@@ -88,6 +91,7 @@ func TestCheckBlobHandlerNotFound(t *testing.T) {
 	defer s.cleanup()
 
 	d := core.DigestFixture()
+	namespace := core.TagFixture()
 
 	backendClient := s.backendClient(namespace)
 
@@ -106,13 +110,14 @@ func TestDownloadBlobHandlerOK(t *testing.T) {
 	defer stop()
 
 	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
 
 	f, cleanup := store.NewMockFileReadWriter(blob.Content)
 	defer cleanup()
 
 	mocks.fileStore.EXPECT().GetCacheFileReader(blob.Digest.Hex()).Return(f, nil)
 
-	ensureHasBlob(t, blobclient.New(addr), blob)
+	ensureHasBlob(t, blobclient.New(addr), namespace, blob)
 }
 
 func TestDownloadBlobHandlerNotFound(t *testing.T) {
@@ -124,6 +129,7 @@ func TestDownloadBlobHandlerNotFound(t *testing.T) {
 	defer s.cleanup()
 
 	d := core.DigestFixture()
+	namespace := core.TagFixture()
 
 	backendClient := s.backendClient(namespace)
 	backendClient.EXPECT().Stat(d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
@@ -187,6 +193,7 @@ func TestGetLocationsHandlerOK(t *testing.T) {
 
 func TestIncorrectNodeErrors(t *testing.T) {
 	config := configFixture()
+	namespace := core.TagFixture()
 	blob := computeBlobForHosts(config, master2, master3)
 
 	tests := []struct {
@@ -257,6 +264,7 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 
 	config := configFixture()
 	cp := newTestClientProvider()
+	namespace := core.TagFixture()
 
 	s1 := newTestServer(t, master1, config, cp)
 	defer s1.cleanup()
@@ -301,6 +309,7 @@ func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 	defer s.cleanup()
 
 	d := core.DigestFixture()
+	namespace := core.TagFixture()
 
 	backendClient := s.backendClient(namespace)
 	backendClient.EXPECT().Stat(d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
@@ -319,10 +328,11 @@ func TestTransferBlob(t *testing.T) {
 	defer s.cleanup()
 
 	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
 
 	err := cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
-	ensureHasBlob(t, cp.Provide(master1), blob)
+	ensureHasBlob(t, cp.Provide(master1), namespace, blob)
 
 	// Ensure metainfo was generated.
 	var tm metadata.TorrentMeta
@@ -331,7 +341,7 @@ func TestTransferBlob(t *testing.T) {
 	// Pushing again should be a no-op.
 	err = cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
-	ensureHasBlob(t, cp.Provide(master1), blob)
+	ensureHasBlob(t, cp.Provide(master1), namespace, blob)
 }
 
 func TestTransferBlobSmallChunkSize(t *testing.T) {
@@ -341,12 +351,13 @@ func TestTransferBlobSmallChunkSize(t *testing.T) {
 	defer s.cleanup()
 
 	blob := core.SizedBlobFixture(1000, 1)
+	namespace := core.TagFixture()
 
 	client := blobclient.NewWithConfig(s.addr, blobclient.Config{ChunkSize: 13})
 
 	err := client.TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
-	ensureHasBlob(t, client, blob)
+	ensureHasBlob(t, client, namespace, blob)
 }
 
 func TestOverwriteMetainfo(t *testing.T) {
@@ -358,6 +369,7 @@ func TestOverwriteMetainfo(t *testing.T) {
 	defer s.cleanup()
 
 	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
 
 	err := cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
@@ -383,6 +395,7 @@ func TestReplicateToRemote(t *testing.T) {
 	defer s.cleanup()
 
 	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
 
 	require.NoError(cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content)))
 
@@ -404,6 +417,7 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 	defer s.cleanup()
 
 	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
 
 	backendClient := s.backendClient(namespace)
 	backendClient.EXPECT().Stat(
@@ -427,6 +441,7 @@ func TestUploadBlobDuplicatesWriteBackTaskToReplicas(t *testing.T) {
 
 	config := configFixture()
 	config.DuplicateWriteBackStagger = time.Minute
+	namespace := core.TagFixture()
 
 	cp := newTestClientProvider()
 
@@ -446,8 +461,8 @@ func TestUploadBlobDuplicatesWriteBackTaskToReplicas(t *testing.T) {
 	err := cp.Provide(s1.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
 
-	ensureHasBlob(t, cp.Provide(s1.host), blob)
-	ensureHasBlob(t, cp.Provide(s2.host), blob)
+	ensureHasBlob(t, cp.Provide(s1.host), namespace, blob)
+	ensureHasBlob(t, cp.Provide(s2.host), namespace, blob)
 
 	// Shouldn't be able to delete blob since it is still being written back.
 	require.Error(cp.Provide(s1.host).DeleteBlob(blob.Digest))
@@ -458,6 +473,7 @@ func TestUploadBlobRetriesWriteBackFailure(t *testing.T) {
 	require := require.New(t)
 
 	config := configNoReplicaFixture()
+	namespace := core.TagFixture()
 
 	cp := newTestClientProvider()
 
@@ -477,7 +493,7 @@ func TestUploadBlobRetriesWriteBackFailure(t *testing.T) {
 	// should still be present.
 	err := cp.Provide(s.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.Error(err)
-	ensureHasBlob(t, cp.Provide(s.host), blob)
+	ensureHasBlob(t, cp.Provide(s.host), namespace, blob)
 
 	// Uploading again should succeed.
 	err = cp.Provide(s.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
@@ -492,6 +508,7 @@ func TestUploadBlobResilientToDuplicationFailure(t *testing.T) {
 
 	config := configFixture()
 	config.DuplicateWriteBackStagger = time.Minute
+	namespace := core.TagFixture()
 
 	cp := newTestClientProvider()
 
@@ -508,5 +525,5 @@ func TestUploadBlobResilientToDuplicationFailure(t *testing.T) {
 	err := cp.Provide(s.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
 
-	ensureHasBlob(t, cp.Provide(s.host), blob)
+	ensureHasBlob(t, cp.Provide(s.host), namespace, blob)
 }

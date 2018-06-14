@@ -33,8 +33,6 @@ const (
 	master3 = "dummy-origin-master03-dca1"
 )
 
-const namespace = "test-namespace"
-
 func init() {
 	zapConfig := zap.NewProductionConfig()
 	zapConfig.OutputPaths = []string{}
@@ -236,7 +234,7 @@ func computeBlobForHosts(config Config, hosts ...string) *core.BlobFixture {
 	}
 }
 
-func ensureHasBlob(t *testing.T, c blobclient.Client, blob *core.BlobFixture) {
+func ensureHasBlob(t *testing.T, c blobclient.Client, namespace string, blob *core.BlobFixture) {
 	var buf bytes.Buffer
 	require.NoError(t, c.DownloadBlob(namespace, blob.Digest, &buf))
 	require.Equal(t, string(blob.Content), buf.String())
