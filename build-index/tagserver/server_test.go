@@ -5,12 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
-
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/mocks/build-index/tagclient"
 	"code.uber.internal/infra/kraken/mocks/build-index/tagtype"
@@ -112,7 +111,7 @@ func TestPutAndGetLocalTag(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat:latest"
+	tag := core.TagFixture()
 	digest := core.DigestFixture()
 	tagDependencyResolver := mocktagtype.NewMockDependencyResolver(mocks.ctrl)
 
@@ -144,7 +143,7 @@ func TestGetTagFallback(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat:latest"
+	tag := core.TagFixture()
 	digest := core.DigestFixture()
 	remoteClient := mocks.client()
 
@@ -170,7 +169,7 @@ func TestGetTagNotFound(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat:latest"
+	tag := core.TagFixture()
 	remoteClient := mocks.client()
 
 	gomock.InOrder(
@@ -194,7 +193,7 @@ func TestHasTag(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat:latest"
+	tag := core.TagFixture()
 	digest := core.DigestFixture()
 
 	mocks.backendClient.EXPECT().Stat(tag).Return(blobinfo.New(int64(len(digest.String()))), nil)
@@ -215,7 +214,7 @@ func TestHasTagNotFound(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat:latest"
+	tag := core.TagFixture()
 
 	mocks.backendClient.EXPECT().Stat(tag).Return(nil, backenderrors.ErrBlobNotFound)
 
@@ -275,7 +274,7 @@ func TestReplicate(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat:latest"
+	tag := core.TagFixture()
 	digest := core.DigestFixture()
 	deps := core.DigestList{digest}
 	task := tagreplication.NewTask(tag, digest, deps, _testRemote)
@@ -306,7 +305,7 @@ func TestDuplicateReplicate(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	tag := "uber-usi/labrat:latest"
+	tag := core.TagFixture()
 	digest := core.DigestFixture()
 	dependencies := core.DigestListFixture(3)
 	delay := 5 * time.Minute

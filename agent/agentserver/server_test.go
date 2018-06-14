@@ -16,14 +16,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const namespace = "test-namespace"
-
 func TestDownload(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newServerMocks(t)
 	defer cleanup()
 
+	namespace := core.TagFixture()
 	blob := core.NewBlobFixture()
 
 	mocks.sched.EXPECT().Download(namespace, blob.Digest.Hex()).DoAndReturn(

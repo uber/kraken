@@ -73,7 +73,7 @@ func TestExec(t *testing.T) {
 
 	setupBlob(t, mocks.fs, blob)
 
-	task := NewTask("test-namespace", blob.Digest)
+	task := NewTask(core.TagFixture(), blob.Digest)
 
 	client := mocks.client(task.Namespace)
 	client.EXPECT().Stat(blob.Digest.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
@@ -99,7 +99,7 @@ func TestExecNoopWhenFileAlreadyUploaded(t *testing.T) {
 
 	require.NoError(mocks.fs.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 
-	task := NewTask("test-namespace", blob.Digest)
+	task := NewTask(core.TagFixture(), blob.Digest)
 
 	client := mocks.client(task.Namespace)
 	client.EXPECT().Stat(blob.Digest.Hex()).Return(blobinfo.New(blob.Length()), nil)
@@ -120,7 +120,7 @@ func TestExecNoopWhenFileMissing(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	task := NewTask("test-namespace", blob.Digest)
+	task := NewTask(core.TagFixture(), blob.Digest)
 
 	client := mocks.client(task.Namespace)
 	client.EXPECT().Stat(blob.Digest.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
@@ -142,7 +142,7 @@ func TestExecNoopWhenNamespaceNotFound(t *testing.T) {
 
 	require.NoError(mocks.fs.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 
-	task := NewTask("test-namespace", blob.Digest)
+	task := NewTask(core.TagFixture(), blob.Digest)
 
 	executor := mocks.new()
 
@@ -162,7 +162,7 @@ func TestExecUploadFailure(t *testing.T) {
 
 	setupBlob(t, mocks.fs, blob)
 
-	task := NewTask("test-namespace", blob.Digest)
+	task := NewTask(core.TagFixture(), blob.Digest)
 
 	client := mocks.client(task.Namespace)
 	client.EXPECT().Stat(blob.Digest.Hex()).Return(nil, backenderrors.ErrBlobNotFound)

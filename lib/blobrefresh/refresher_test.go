@@ -22,10 +22,7 @@ import (
 	"github.com/uber-go/tally"
 )
 
-const (
-	_testNamespace   = "test-namespace"
-	_testPieceLength = 10
-)
+const _testPieceLength = 10
 
 type refresherMocks struct {
 	ctrl     *gomock.Controller
@@ -53,9 +50,9 @@ func (m *refresherMocks) new() *Refresher {
 	return New(m.config, tally.NoopScope, m.fs, m.backends, metainfogen.Fixture(m.fs, _testPieceLength))
 }
 
-func (m *refresherMocks) newClient() *mockbackend.MockClient {
+func (m *refresherMocks) newClient(namespace string) *mockbackend.MockClient {
 	client := mockbackend.NewMockClient(m.ctrl)
-	m.backends.Register(_testNamespace, client)
+	m.backends.Register(namespace, client)
 	return client
 }
 
@@ -67,14 +64,15 @@ func TestRefresh(t *testing.T) {
 
 	refresher := mocks.new()
 
-	client := mocks.newClient()
+	namespace := core.TagFixture()
+	client := mocks.newClient(namespace)
 
 	blob := core.SizedBlobFixture(100, uint64(_testPieceLength))
 
 	client.EXPECT().Stat(blob.Digest.Hex()).Return(blobinfo.New(int64(len(blob.Content))), nil)
 	client.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
 
-	require.NoError(refresher.Refresh(_testNamespace, blob.Digest))
+	require.NoError(refresher.Refresh(namespace, blob.Digest))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		_, err := mocks.fs.GetCacheFileStat(blob.Digest.Hex())
@@ -101,13 +99,14 @@ func TestRefreshSizeLimitError(t *testing.T) {
 
 	refresher := mocks.new()
 
-	client := mocks.newClient()
+	namespace := core.TagFixture()
+	client := mocks.newClient(namespace)
 
 	blob := core.SizedBlobFixture(100, uint64(_testPieceLength))
 
 	client.EXPECT().Stat(blob.Digest.Hex()).Return(blobinfo.New(int64(len(blob.Content))), nil)
 
-	require.Error(refresher.Refresh(_testNamespace, blob.Digest))
+	require.Error(refresher.Refresh(namespace, blob.Digest))
 }
 
 func TestRefreshSizeLimitWithValidSize(t *testing.T) {
@@ -120,14 +119,15 @@ func TestRefreshSizeLimitWithValidSize(t *testing.T) {
 
 	refresher := mocks.new()
 
-	client := mocks.newClient()
+	namespace := core.TagFixture()
+	client := mocks.newClient(namespace)
 
 	blob := core.SizedBlobFixture(100, uint64(_testPieceLength))
 
 	client.EXPECT().Stat(blob.Digest.Hex()).Return(blobinfo.New(int64(len(blob.Content))), nil)
 	client.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
 
-	require.NoError(refresher.Refresh(_testNamespace, blob.Digest))
+	require.NoError(refresher.Refresh(namespace, blob.Digest))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		_, err := mocks.fs.GetCacheFileStat(blob.Digest.Hex())

@@ -171,11 +171,11 @@ func (s *Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return handler.Errorf("parse arg `local` as bool: %s", err)
 	}
-	namespace, err := parseNamespace(r)
+	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
 		return err
 	}
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
@@ -207,11 +207,11 @@ func (s *Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error 
 }
 
 func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) error {
-	namespace, err := parseNamespace(r)
+	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
 		return err
 	}
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
@@ -226,15 +226,19 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 }
 
 func (s *Server) replicateToRemoteHandler(w http.ResponseWriter, r *http.Request) error {
-	namespace, err := parseNamespace(r)
+	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
 		return err
 	}
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
-	remoteDNS := chi.URLParam(r, "remote")
+	remoteDNS, err := httputil.ParseParam(r, "remote")
+	if err != nil {
+		return err
+	}
+
 	return s.replicateToRemote(namespace, d, remoteDNS)
 }
 
@@ -259,7 +263,7 @@ func (s *Server) replicateToRemote(namespace string, d core.Digest, remoteDNS st
 
 // deleteBlobHandler deletes blob data.
 func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
@@ -273,7 +277,7 @@ func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error
 }
 
 func (s *Server) getLocationsHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
@@ -295,11 +299,11 @@ func (s *Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) e
 }
 
 func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
-	namespace, err := parseNamespace(r)
+	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
 		return err
 	}
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
@@ -315,7 +319,7 @@ func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) erro
 }
 
 func (s *Server) overwriteMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
@@ -498,7 +502,7 @@ func (s *Server) deleteBlob(d core.Digest) error {
 
 // startTransferHandler initializes an upload for internal blob transfers.
 func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
@@ -521,14 +525,14 @@ func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) er
 
 // startClusterUploadHandler initializes an upload for external uploads.
 func (s *Server) startClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
 	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
-	namespace, err := parseNamespace(r)
+	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
 		return err
 	}
@@ -556,11 +560,14 @@ func (s *Server) startClusterUploadHandler(w http.ResponseWriter, r *http.Reques
 
 // patchUploadHandler uploads a chunk of a blob for both internal and external uploads.
 func (s *Server) patchUploadHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
-	uid := chi.URLParam(r, "uid")
+	uid, err := httputil.ParseParam(r, "uid")
+	if err != nil {
+		return err
+	}
 	start, end, err := parseContentRange(r.Header)
 	if err != nil {
 		return err
@@ -571,14 +578,18 @@ func (s *Server) patchUploadHandler(w http.ResponseWriter, r *http.Request) erro
 // commitTransferHandler commits the upload of an internal blob transfer.
 // Internal blob transfers are not replicated to the rest of the cluster.
 func (s *Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
 	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
-	uid := chi.URLParam(r, "uid")
+	uid, err := httputil.ParseParam(r, "uid")
+	if err != nil {
+		return err
+	}
+
 	if err := s.uploader.verify(d, uid); err != nil {
 		return err
 	}
@@ -595,18 +606,21 @@ func (s *Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) e
 // meaning the blob will be written back to remote storage in a non-blocking
 // fashion.
 func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
 	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
-	namespace, err := parseNamespace(r)
+	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
 		return err
 	}
-	uid := chi.URLParam(r, "uid")
+	uid, err := httputil.ParseParam(r, "uid")
+	if err != nil {
+		return err
+	}
 
 	if err := s.uploader.verify(d, uid); err != nil {
 		return err
@@ -638,18 +652,22 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 // duplicateCommitClusterUploadHandler commits a duplicate blob upload, which
 // will attempt to write-back after the requested delay.
 func (s *Server) duplicateCommitClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
 	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
-	namespace, err := parseNamespace(r)
+	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
 		return err
 	}
-	uid := chi.URLParam(r, "uid")
+	uid, err := httputil.ParseParam(r, "uid")
+	if err != nil {
+		return err
+	}
+
 	var dr blobclient.DuplicateCommitUploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&dr); err != nil {
 		return handler.Errorf("decode body: %s", err)

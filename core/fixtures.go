@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"fmt"
 
 	"code.uber.internal/infra/kraken/utils/randutil"
 )
@@ -109,4 +110,9 @@ func OriginContextFixture() PeerContext {
 	octx := PeerContextFixture()
 	octx.Origin = true
 	return octx
+}
+
+// TagFixture creates a random tag for service labrat.
+func TagFixture() string {
+	return fmt.Sprintf("uber-usi/labrat:%s", randutil.Text(8))
 }

@@ -8,10 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 )
-
-const namespace = "test-namespace"
 
 func TestHandshakerSetsConnFieldsProperly(t *testing.T) {
 	require := require.New(t)
@@ -23,6 +22,7 @@ func TestHandshakerSetsConnFieldsProperly(t *testing.T) {
 	require.NoError(err)
 	defer l1.Close()
 
+	namespace := core.TagFixture()
 	h2 := HandshakerFixture(config)
 
 	info := storage.TorrentInfoFixture(4, 1)

@@ -118,12 +118,12 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
-	tag, err := parseTag(r)
+	tag, err := httputil.ParseParam(r, "tag")
 	if err != nil {
 		return err
 	}
 
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,7 @@ func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return handler.Errorf("parse arg `local` as bool: %s", err)
 	}
-	tag, err := parseTag(r)
+	tag, err := httputil.ParseParam(r, "tag")
 	if err != nil {
 		return err
 	}
@@ -181,7 +181,7 @@ func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) hasTagHandler(w http.ResponseWriter, r *http.Request) error {
-	tag, err := parseTag(r)
+	tag, err := httputil.ParseParam(r, "tag")
 	if err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ func (s *Server) hasTagHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) error {
-	repo, err := parseRepo(r)
+	repo, err := httputil.ParseParam(r, "repo")
 	if err != nil {
 		return err
 	}
@@ -223,7 +223,7 @@ func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) e
 }
 
 func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) error {
-	tag, err := parseTag(r)
+	tag, err := httputil.ParseParam(r, "tag")
 	if err != nil {
 		return err
 	}
@@ -265,11 +265,11 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 }
 
 func (s *Server) duplicateReplicateTagHandler(w http.ResponseWriter, r *http.Request) error {
-	tag, err := parseTag(r)
+	tag, err := httputil.ParseParam(r, "tag")
 	if err != nil {
 		return err
 	}
-	d, err := parseDigest(r)
+	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return handler.Errorf("get dependency resolver: %s", err)
 	}

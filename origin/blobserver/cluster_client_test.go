@@ -107,6 +107,7 @@ func TestPollSkipsOriginOnTimeout(t *testing.T) {
 	defer ctrl.Finish()
 
 	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
 
 	mockResolver := mockblobclient.NewMockClientResolver(ctrl)
 
@@ -138,6 +139,7 @@ func TestPollSkipsOriginOnNetworkErrors(t *testing.T) {
 	defer ctrl.Finish()
 
 	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
 
 	mockResolver := mockblobclient.NewMockClientResolver(ctrl)
 
@@ -171,6 +173,7 @@ func TestClusterClientReturnsErrorOnNoAvailableOrigins(t *testing.T) {
 	cc := blobclient.NewClusterClient(mockResolver)
 
 	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
 
 	mockClient1 := mockblobclient.NewMockClient(ctrl)
 	mockClient2 := mockblobclient.NewMockClient(ctrl)
@@ -217,6 +220,7 @@ func TestClusterClientCheckBlobContinueWhenNotFound(t *testing.T) {
 	cc := blobclient.NewClusterClient(mockResolver)
 
 	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
 
 	mockClient := mockblobclient.NewMockClient(ctrl)
 	// Reuse the same mockClient for two origins because origins are shuffled.

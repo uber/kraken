@@ -5,7 +5,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"sync"
 
 	"code.uber.internal/infra/kraken/utils/handler"
+	"code.uber.internal/infra/kraken/utils/httputil"
 
 	"github.com/pressly/chi"
 )
@@ -56,7 +56,7 @@ func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
 	s.RLock()
 	defer s.RUnlock()
 
-	name, err := param(r, "name")
+	name, err := httputil.ParseParam(r, "name")
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func (s *Server) downloadHandler(w http.ResponseWriter, r *http.Request) error {
 	s.RLock()
 	defer s.RUnlock()
 
-	name, err := param(r, "name")
+	name, err := httputil.ParseParam(r, "name")
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func (s *Server) uploadHandler(w http.ResponseWriter, r *http.Request) error {
 	s.Lock()
 	defer s.Unlock()
 
-	name, err := param(r, "name")
+	name, err := httputil.ParseParam(r, "name")
 	if err != nil {
 		return err
 	}
@@ -120,7 +120,7 @@ func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
 	s.RLock()
 	defer s.RUnlock()
 
-	dir, err := param(r, "dir")
+	dir, err := httputil.ParseParam(r, "dir")
 	if err != nil {
 		return err
 	}
@@ -146,12 +146,4 @@ func (s *Server) path(entry string) string {
 	// Allows listing tags by repo.
 	entry = strings.Replace(entry, ":", "/", -1)
 	return filepath.Join(s.dir, entry)
-}
-
-func param(r *http.Request, name string) (string, error) {
-	p, err := url.PathUnescape(chi.URLParam(r, name))
-	if err != nil {
-		return "", handler.Errorf("path unescape: %s", err).Status(http.StatusBadRequest)
-	}
-	return p, nil
 }

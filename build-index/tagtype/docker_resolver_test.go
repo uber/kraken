@@ -20,7 +20,7 @@ func TestDockerGetDependencies(t *testing.T) {
 	originClient := mockblobclient.NewMockClusterClient(ctrl)
 	r := NewDockerResolver(originClient)
 
-	tag := "uber-usi/labrat"
+	tag := core.TagFixture()
 	layers := core.DigestListFixture(3)
 	manifest, b := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
 

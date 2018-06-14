@@ -36,8 +36,6 @@ import (
 
 const testTempDir = "/tmp/kraken_scheduler"
 
-const namespace = "test-namespace"
-
 func init() {
 	os.Mkdir(testTempDir, 0755)
 
@@ -142,7 +140,7 @@ func (m *testMocks) newPeers(n int, config Config) []*testPeer {
 
 // writeTorrent writes the given content into a torrent file into peers storage.
 // Useful for populating a completed torrent before seeding it.
-func (p *testPeer) writeTorrent(blob *core.BlobFixture) {
+func (p *testPeer) writeTorrent(namespace string, blob *core.BlobFixture) {
 	t, err := p.torrentArchive.CreateTorrent(namespace, blob.MetaInfo.Name())
 	if err != nil {
 		panic(err)
@@ -156,7 +154,7 @@ func (p *testPeer) writeTorrent(blob *core.BlobFixture) {
 	}
 }
 
-func (p *testPeer) checkTorrent(t *testing.T, blob *core.BlobFixture) {
+func (p *testPeer) checkTorrent(t *testing.T, namespace string, blob *core.BlobFixture) {
 	require := require.New(t)
 
 	tor, err := p.torrentArchive.GetTorrent(namespace, blob.MetaInfo.Info.Name)

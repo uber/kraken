@@ -20,8 +20,6 @@ import (
 	"github.com/uber-go/tally"
 )
 
-const namespace = "test-namespace"
-
 const pieceLength = 4
 
 type archiveMocks struct {
@@ -55,6 +53,7 @@ func TestTorrentArchiveStatBitfield(t *testing.T) {
 
 	archive := mocks.new()
 
+	namespace := core.TagFixture()
 	blob := core.SizedBlobFixture(4, 1)
 	mi := blob.MetaInfo
 
@@ -79,6 +78,7 @@ func TestTorrentArchiveStatNotExist(t *testing.T) {
 
 	archive := mocks.new()
 
+	namespace := core.TagFixture()
 	name := core.MetaInfoFixture().Name()
 
 	_, err := archive.Stat(namespace, name)
@@ -94,6 +94,7 @@ func TestTorrentArchiveCreateTorrent(t *testing.T) {
 	archive := mocks.new()
 
 	mi := core.MetaInfoFixture()
+	namespace := core.TagFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(mi, nil)
 
@@ -121,6 +122,7 @@ func TestTorrentArchiveCreateTorrentNotFound(t *testing.T) {
 	archive := mocks.new()
 
 	mi := core.MetaInfoFixture()
+	namespace := core.TagFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(nil, metainfoclient.ErrNotFound)
 
@@ -137,6 +139,7 @@ func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 	archive := mocks.new()
 
 	mi := core.MetaInfoFixture()
+	namespace := core.TagFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(mi, nil)
 
@@ -159,6 +162,7 @@ func TestTorrentArchiveConcurrentGet(t *testing.T) {
 	archive := mocks.new()
 
 	mi := core.MetaInfoFixture()
+	namespace := core.TagFixture()
 
 	// Allow any times for concurrency below.
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(mi, nil).AnyTimes()
@@ -185,6 +189,7 @@ func TestTorrentArchiveGetTorrent(t *testing.T) {
 	archive := mocks.new()
 
 	mi := core.MetaInfoFixture()
+	namespace := core.TagFixture()
 
 	// Since metainfo is not yet on disk, get should fail.
 	_, err := archive.GetTorrent(namespace, mi.Name())
