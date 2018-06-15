@@ -40,6 +40,11 @@ type manager struct {
 // NewManager creates new tag type manager.
 func NewManager(configs []Config, originClient blobclient.ClusterClient) (Manager, error) {
 	var resolvers []resolver
+
+	if len(configs) == 0 {
+		return nil, fmt.Errorf("no config specified")
+	}
+
 	for _, config := range configs {
 		re, err := regexp.Compile(config.Namespace)
 		if err != nil {

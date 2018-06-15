@@ -82,7 +82,7 @@ func main() {
 
 	tagTypes, err := tagtype.NewManager(config.TagTypes, originClient)
 	if err != nil {
-		log.Fatalf("Error creating tag check: %s", err)
+		log.Fatalf("Error creating tag type manager: %s", err)
 	}
 
 	server := tagserver.New(
