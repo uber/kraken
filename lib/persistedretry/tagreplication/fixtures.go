@@ -35,9 +35,8 @@ func StoreFixture(rv RemoteValidator) (*Store, string, func()) {
 
 // TaskFixture creates a fixture of tagreplication.Task.
 func TaskFixture() *Task {
-	id := randutil.Text(4)
-	tag := fmt.Sprintf("prime/labrat-%s", id)
+	tag := core.TagFixture()
 	d := core.DigestFixture()
-	dest := fmt.Sprintf("build-index-%s", id)
+	dest := fmt.Sprintf("build-index-%s", randutil.Hex(8))
 	return NewTask(tag, d, core.DigestListFixture(3), dest)
 }
