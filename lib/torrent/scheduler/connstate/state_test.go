@@ -163,6 +163,19 @@ func TestStateMovePendingToActiveRejectsNonPendingConns(t *testing.T) {
 	require.Equal(ErrInvalidActiveTransition, s.MovePendingToActive(c))
 }
 
+func TestStateMovePendingToActiveRejectsClosedConns(t *testing.T) {
+	require := require.New(t)
+
+	s := testState(Config{}, clock.New())
+
+	c, cleanup := conn.Fixture()
+	defer cleanup()
+
+	require.NoError(s.AddPending(c.PeerID(), c.InfoHash()))
+	c.Close()
+	require.Equal(ErrConnClosed, s.MovePendingToActive(c))
+}
+
 func TestStateDeleteActiveFreesCapacity(t *testing.T) {
 	require := require.New(t)
 
