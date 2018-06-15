@@ -10,6 +10,7 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"code.uber.internal/infra/kraken/.gen/go/p2p"
@@ -58,9 +59,9 @@ type Conn struct {
 	receiver chan *Message
 
 	// The following fields orchestrate the closing of the connection:
-	closeOnce sync.Once      // Ensures the close sequence is executed only once.
-	done      chan struct{}  // Signals to readLoop / writeLoop to exit.
-	wg        sync.WaitGroup // Waits for readLoop / writeLoop to exit.
+	closed *atomic.Bool
+	done   chan struct{}  // Signals to readLoop / writeLoop to exit.
+	wg     sync.WaitGroup // Waits for readLoop / writeLoop to exit.
 }
 
 func newConn(
@@ -97,6 +98,7 @@ func newConn(
 		openedByRemote: openedByRemote,
 		sender:         make(chan *Message, config.SenderBufferSize),
 		receiver:       make(chan *Message, config.ReceiverBufferSize),
+		closed:         atomic.NewBool(false),
 		done:           make(chan struct{}),
 	}
 
@@ -149,14 +151,20 @@ func (c *Conn) Receiver() <-chan *Message {
 
 // Close starts the shutdown sequence for the Conn.
 func (c *Conn) Close() {
-	c.closeOnce.Do(func() {
-		go func() {
-			close(c.done)
-			c.nc.Close()
-			c.wg.Wait()
-			c.events.ConnClosed(c)
-		}()
-	})
+	if !c.closed.CAS(false, true) {
+		return
+	}
+	go func() {
+		close(c.done)
+		c.nc.Close()
+		c.wg.Wait()
+		c.events.ConnClosed(c)
+	}()
+}
+
+// IsClosed returns true if the c is closed.
+func (c *Conn) IsClosed() bool {
+	return c.closed.Load()
 }
 
 func (c *Conn) start() {

@@ -16,6 +16,7 @@ var (
 	ErrTorrentAtCapacity       = errors.New("torrent is at capacity")
 	ErrConnAlreadyPending      = errors.New("conn is already pending")
 	ErrConnAlreadyActive       = errors.New("conn is already active")
+	ErrConnClosed              = errors.New("conn is closed")
 	ErrInvalidActiveTransition = errors.New("conn must be pending to transition to active")
 )
 
@@ -175,6 +176,9 @@ func (s *State) DeletePending(peerID core.PeerID, h core.InfoHash) {
 
 // MovePendingToActive sets a previously pending connection as active.
 func (s *State) MovePendingToActive(c *conn.Conn) error {
+	if c.IsClosed() {
+		return ErrConnClosed
+	}
 	k := connKey{c.PeerID(), c.InfoHash()}
 	if !s.pending[k] {
 		return ErrInvalidActiveTransition
