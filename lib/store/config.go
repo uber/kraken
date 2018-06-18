@@ -50,3 +50,36 @@ func (c OriginConfig) applyDefaults() OriginConfig {
 	}
 	return c
 }
+
+// CAStoreConfig defines CAStore configuration.
+type CAStoreConfig struct {
+	UploadDir     string        `yaml:"upload_dir"`
+	CacheDir      string        `yaml:"cache_dir"`
+	Volumes       []Volume      `yaml:"volumes"`
+	Capacity      int           `yaml:"capacity"`
+	UploadCleanup CleanupConfig `yaml:"upload_cleanup"`
+	CacheCleanup  CleanupConfig `yaml:"cache_cleanup"`
+}
+
+func (c CAStoreConfig) applyDefaults() CAStoreConfig {
+	if c.Capacity == 0 {
+		c.Capacity = 1 << 20 // 1 million
+	}
+	return c
+}
+
+// SimpleStoreConfig defines SimpleStore configuration.
+type SimpleStoreConfig struct {
+	UploadDir     string        `yaml:"upload_dir"`
+	CacheDir      string        `yaml:"cache_dir"`
+	UploadCleanup CleanupConfig `yaml:"upload_cleanup"`
+	CacheCleanup  CleanupConfig `yaml:"cache_cleanup"`
+}
+
+// TorrentStoreConfig defines TorrentStore configuration.
+type TorrentStoreConfig struct {
+	DownloadDir     string        `yaml:"download_dir"`
+	CacheDir        string        `yaml:"cache_dir"`
+	DownloadCleanup CleanupConfig `yaml:"download_cleanup"`
+	CacheCleanup    CleanupConfig `yaml:"cache_cleanup"`
+}
