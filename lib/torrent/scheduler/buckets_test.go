@@ -22,7 +22,7 @@ func TestGetBucket(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			require.Equal(t, test.expected, getBucket(test.size).name)
+			require.Equal(t, test.expected, getBucket(test.size).sizeTag)
 		})
 	}
 }
