@@ -8,13 +8,13 @@ import (
 )
 
 type bucket struct {
-	name      string
+	sizeTag   string
 	min       uint64
 	durations tally.DurationBuckets
 }
 
-func newBucket(name string, min uint64) *bucket {
-	return &bucket{name, min, nil}
+func newBucket(sizeTag string, min uint64) *bucket {
+	return &bucket{sizeTag, min, nil}
 }
 
 func (b *bucket) addRange(start, stop, width time.Duration) {
@@ -92,7 +92,7 @@ func getBucket(size uint64) (b *bucket) {
 func recordDownloadTime(stats tally.Scope, size int64, t time.Duration) {
 	b := getBucket(uint64(size))
 	stats.Tagged(map[string]string{
-		"bucket":  b.name,
+		"size":    b.sizeTag,
 		"version": "3",
 	}).Histogram("download_time", b.durations).RecordDuration(t)
 }
