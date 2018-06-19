@@ -40,9 +40,9 @@ func parseContentRange(h http.Header) (start, end int64, err error) {
 	return start, end, nil
 }
 
-// blobExists returns true if fs has a cached blob for d.
-func blobExists(fs store.OriginFileStore, d core.Digest) (bool, error) {
-	if _, err := fs.GetCacheFileStat(d.Hex()); err != nil {
+// blobExists returns true if cas has a cached blob for d.
+func blobExists(cas *store.CAStore, d core.Digest) (bool, error) {
+	if _, err := cas.GetCacheFileStat(d.Hex()); err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}

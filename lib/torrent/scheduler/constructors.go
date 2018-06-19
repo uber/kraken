@@ -42,13 +42,13 @@ func NewOriginScheduler(
 	config Config,
 	stats tally.Scope,
 	pctx core.PeerContext,
-	fs store.OriginFileStore,
+	cas *store.CAStore,
 	netevents networkevent.Producer,
 	blobRefresher *blobrefresh.Refresher) (ReloadableScheduler, error) {
 
 	s, err := newScheduler(
 		config,
-		originstorage.NewTorrentArchive(fs, blobRefresher),
+		originstorage.NewTorrentArchive(cas, blobRefresher),
 		stats,
 		pctx,
 		announceclient.Disabled(),

@@ -22,14 +22,14 @@ var (
 // pieces.
 type Torrent struct {
 	metaInfo    *core.MetaInfo
-	store       store.OriginFileStore
+	cas         *store.CAStore
 	numComplete *atomic.Int32
 }
 
 // NewTorrent creates a new Torrent.
-func NewTorrent(store store.OriginFileStore, mi *core.MetaInfo) (*Torrent, error) {
+func NewTorrent(cas *store.CAStore, mi *core.MetaInfo) (*Torrent, error) {
 	return &Torrent{
-		store:       store,
+		cas:         cas,
 		metaInfo:    mi,
 		numComplete: atomic.NewInt32(int32(mi.Info.NumPieces())),
 	}, nil
@@ -100,7 +100,7 @@ type opener struct {
 }
 
 func (o *opener) Open() (store.FileReader, error) {
-	return o.torrent.store.GetCacheFileReader(o.torrent.Name())
+	return o.torrent.cas.GetCacheFileReader(o.torrent.Name())
 }
 
 // GetPieceReader returns a reader for piece pi.

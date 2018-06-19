@@ -18,15 +18,15 @@ import (
 // TorrentArchive is a TorrentArchive for origin peers. It assumes that
 // all files (including metainfo) are already downloaded and in the cache directory.
 type TorrentArchive struct {
-	fs            store.OriginFileStore
+	cas           *store.CAStore
 	blobRefresher *blobrefresh.Refresher
 }
 
 // NewTorrentArchive creates a new TorrentArchive.
 func NewTorrentArchive(
-	fs store.OriginFileStore, blobRefresher *blobrefresh.Refresher) *TorrentArchive {
+	cas *store.CAStore, blobRefresher *blobrefresh.Refresher) *TorrentArchive {
 
-	return &TorrentArchive{fs, blobRefresher}
+	return &TorrentArchive{cas, blobRefresher}
 }
 
 func (a *TorrentArchive) getMetaInfo(namespace, name string) (*core.MetaInfo, error) {
@@ -35,7 +35,7 @@ func (a *TorrentArchive) getMetaInfo(namespace, name string) (*core.MetaInfo, er
 		return nil, fmt.Errorf("new digest: %s", err)
 	}
 	var tm metadata.TorrentMeta
-	if err := a.fs.GetCacheFileMetadata(name, &tm); err != nil {
+	if err := a.cas.GetCacheFileMetadata(name, &tm); err != nil {
 		if os.IsNotExist(err) {
 			refreshErr := a.blobRefresher.Refresh(namespace, d)
 			if refreshErr != nil {
@@ -74,7 +74,7 @@ func (a *TorrentArchive) GetTorrent(namespace, name string) (storage.Torrent, er
 	if err != nil {
 		return nil, err
 	}
-	t, err := NewTorrent(a.fs, mi)
+	t, err := NewTorrent(a.cas, mi)
 	if err != nil {
 		return nil, fmt.Errorf("initialize torrent: %s", err)
 	}
@@ -83,7 +83,7 @@ func (a *TorrentArchive) GetTorrent(namespace, name string) (storage.Torrent, er
 
 // DeleteTorrent moves a torrent to the trash.
 func (a *TorrentArchive) DeleteTorrent(name string) error {
-	if err := a.fs.DeleteCacheFile(name); err != nil && !os.IsNotExist(err) {
+	if err := a.cas.DeleteCacheFile(name); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil

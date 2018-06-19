@@ -12,17 +12,23 @@ import (
 	"github.com/uber-go/tally"
 )
 
+// FileStore defines store operations required for write-back.
+type FileStore interface {
+	DeleteCacheFileMetadata(name string, md metadata.Metadata) error
+	GetCacheFileReader(name string) (store.FileReader, error)
+}
+
 // Executor executes write back tasks.
 type Executor struct {
 	stats    tally.Scope
-	fs       store.OriginFileStore
+	fs       FileStore
 	backends *backend.Manager
 }
 
 // NewExecutor creates a new Executor.
 func NewExecutor(
 	stats tally.Scope,
-	fs store.OriginFileStore,
+	fs FileStore,
 	backends *backend.Manager) *Executor {
 
 	stats = stats.Tagged(map[string]string{

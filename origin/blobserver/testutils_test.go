@@ -6,7 +6,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
@@ -19,7 +18,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/mocks/lib/persistedretry"
-	"code.uber.internal/infra/kraken/mocks/lib/store"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -90,17 +88,17 @@ func (p *testClientProvider) Provide(host string) blobclient.Client {
 func startServer(
 	host string,
 	config Config,
-	fs store.OriginFileStore,
+	cas *store.CAStore,
 	cp blobclient.Provider,
 	pctx core.PeerContext,
 	bm *backend.Manager,
 	writeBackManager persistedretry.Manager) (addr string, stop func()) {
 
-	mg := metainfogen.Fixture(fs, 4)
+	mg := metainfogen.Fixture(cas, 4)
 
-	br := blobrefresh.New(blobrefresh.Config{}, tally.NoopScope, fs, bm, mg)
+	br := blobrefresh.New(blobrefresh.Config{}, tally.NoopScope, cas, bm, mg)
 
-	s, err := New(config, tally.NoopScope, host, fs, cp, pctx, bm, br, mg, writeBackManager)
+	s, err := New(config, tally.NoopScope, host, cas, cp, pctx, bm, br, mg, writeBackManager)
 	if err != nil {
 		panic(err)
 	}
@@ -114,7 +112,7 @@ type testServer struct {
 	config           Config
 	host             string
 	addr             string
-	fs               store.OriginFileStore
+	cas              *store.CAStore
 	cp               *testClientProvider
 	pctx             core.PeerContext
 	backendManager   *backend.Manager
@@ -131,14 +129,23 @@ func newTestServer(t *testing.T, host string, config Config, cp *testClientProvi
 
 	pctx := core.PeerContextFixture()
 
-	fs, c := store.OriginFileStoreFixture(clock.New())
+	cas, c := store.CAStoreFixture()
 	cleanup.Add(c)
 
 	bm := backend.ManagerFixture()
 
 	writeBackManager := mockpersistedretry.NewMockManager(ctrl)
 
-	addr, stop := startServer(host, config, fs, cp, pctx, bm, writeBackManager)
+	mg := metainfogen.Fixture(cas, 4)
+
+	br := blobrefresh.New(blobrefresh.Config{}, tally.NoopScope, cas, bm, mg)
+
+	s, err := New(config, tally.NoopScope, host, cas, cp, pctx, bm, br, mg, writeBackManager)
+	if err != nil {
+		panic(err)
+	}
+
+	addr, stop := testutil.StartServer(s.Handler())
 	cleanup.Add(stop)
 
 	cp.register(host, blobclient.NewWithConfig(addr, blobclient.Config{ChunkSize: 16}))
@@ -148,7 +155,7 @@ func newTestServer(t *testing.T, host string, config Config, cp *testClientProvi
 		config:           config,
 		host:             host,
 		addr:             addr,
-		fs:               fs,
+		cas:              cas,
 		cp:               cp,
 		pctx:             pctx,
 		backendManager:   bm,
@@ -169,36 +176,6 @@ func (s *testServer) remoteClient(name string) *mockblobclient.MockClient {
 	client := mockblobclient.NewMockClient(s.ctrl)
 	s.cp.register(name, client)
 	return client
-}
-
-// serverMocks is a convenience wrapper around a completely mocked Server.
-type serverMocks struct {
-	ctrl             *gomock.Controller
-	fileStore        *mockstore.MockOriginFileStore
-	writeBackManager *mockpersistedretry.MockManager
-	clientProvider   blobclient.Provider
-}
-
-func newServerMocks(t *testing.T) *serverMocks {
-	ctrl := gomock.NewController(t)
-	return &serverMocks{
-		ctrl:             ctrl,
-		fileStore:        mockstore.NewMockOriginFileStore(ctrl),
-		writeBackManager: mockpersistedretry.NewMockManager(ctrl),
-		// TODO(codyg): Support mock client providers.
-		clientProvider: nil,
-	}
-}
-
-func (mocks *serverMocks) server(config Config) (addr string, stop func()) {
-	return startServer(
-		master1,
-		config,
-		mocks.fileStore,
-		mocks.clientProvider,
-		core.PeerContextFixture(),
-		nil,
-		mocks.writeBackManager)
 }
 
 // labelSet converts hosts into their corresponding labels as specified by config.

@@ -8,10 +8,10 @@ import (
 
 // Fixture returns a Generator which creates all metainfo with pieceLength for
 // testing purposes.
-func Fixture(fs store.OriginFileStore, pieceLength int) *Generator {
+func Fixture(cas *store.CAStore, pieceLength int) *Generator {
 	g, err := New(Config{
 		PieceLengths: map[datasize.ByteSize]datasize.ByteSize{0: datasize.ByteSize(pieceLength)},
-	}, fs)
+	}, cas)
 	if err != nil {
 		panic(err)
 	}

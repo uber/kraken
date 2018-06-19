@@ -8,7 +8,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 
-	"github.com/andres-erbsen/clock"
 	"github.com/c2h5oh/datasize"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +15,7 @@ import (
 func TestGenerate(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.OriginFileStoreFixture(clock.New())
+	cas, cleanup := store.CAStoreFixture()
 	defer cleanup()
 
 	pieceLength := 10
@@ -25,16 +24,16 @@ func TestGenerate(t *testing.T) {
 		PieceLengths: map[datasize.ByteSize]datasize.ByteSize{
 			0: datasize.ByteSize(pieceLength),
 		},
-	}, fs)
+	}, cas)
 	require.NoError(err)
 
 	blob := core.SizedBlobFixture(100, uint64(pieceLength))
 
-	require.NoError(fs.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+	require.NoError(cas.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 
 	require.NoError(generator.Generate(blob.Digest))
 
 	var tm metadata.TorrentMeta
-	require.NoError(fs.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
+	require.NoError(cas.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
 	require.Equal(blob.MetaInfo, tm.MetaInfo)
 }

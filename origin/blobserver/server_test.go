@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
-	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/httputil"
@@ -24,26 +22,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
-func TestCheckBlobHandlerLocalOK(t *testing.T) {
-	require := require.New(t)
-
-	mocks := newServerMocks(t)
-	defer mocks.ctrl.Finish()
-
-	addr, stop := mocks.server(configMaxReplicaFixture())
-	defer stop()
-
-	d := core.DigestFixture()
-	namespace := core.TagFixture()
-
-	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, nil)
-
-	ok, err := blobclient.New(addr).CheckLocalBlob(namespace, d)
-	require.NoError(err)
-	require.True(ok)
-}
-
-func TestCheckBlobHandlerOK(t *testing.T) {
+func TestCheckBlobHandlerLocalNotFound(t *testing.T) {
 	require := require.New(t)
 
 	cp := newTestClientProvider()
@@ -54,30 +33,7 @@ func TestCheckBlobHandlerOK(t *testing.T) {
 	d := core.DigestFixture()
 	namespace := core.TagFixture()
 
-	backendClient := s.backendClient(namespace)
-
-	backendClient.EXPECT().Stat(d.Hex()).Return(blobinfo.New(int64(len(d.Hex()))), nil)
-
-	ok, err := cp.Provide(master1).CheckBlob(namespace, d)
-	require.NoError(err)
-	require.True(ok)
-}
-
-func TestCheckBlobHandlerLocalNotFound(t *testing.T) {
-	require := require.New(t)
-
-	mocks := newServerMocks(t)
-	defer mocks.ctrl.Finish()
-
-	addr, stop := mocks.server(configMaxReplicaFixture())
-	defer stop()
-
-	d := core.DigestFixture()
-	namespace := core.TagFixture()
-
-	mocks.fileStore.EXPECT().GetCacheFileStat(d.Hex()).Return(nil, os.ErrNotExist)
-
-	ok, err := blobclient.New(addr).CheckLocalBlob(namespace, d)
+	ok, err := cp.Provide(s.host).CheckLocalBlob(namespace, d)
 	require.NoError(err)
 	require.False(ok)
 }
@@ -102,24 +58,6 @@ func TestCheckBlobHandlerNotFound(t *testing.T) {
 	require.False(ok)
 }
 
-func TestDownloadBlobHandlerOK(t *testing.T) {
-	mocks := newServerMocks(t)
-	defer mocks.ctrl.Finish()
-
-	addr, stop := mocks.server(configMaxReplicaFixture())
-	defer stop()
-
-	blob := core.NewBlobFixture()
-	namespace := core.TagFixture()
-
-	f, cleanup := store.NewMockFileReadWriter(blob.Content)
-	defer cleanup()
-
-	mocks.fileStore.EXPECT().GetCacheFileReader(blob.Digest.Hex()).Return(f, nil)
-
-	ensureHasBlob(t, blobclient.New(addr), namespace, blob)
-}
-
 func TestDownloadBlobHandlerNotFound(t *testing.T) {
 	require := require.New(t)
 
@@ -139,54 +77,42 @@ func TestDownloadBlobHandlerNotFound(t *testing.T) {
 	require.Equal(http.StatusNotFound, err.(httputil.StatusError).Status)
 }
 
-func TestDeleteBlobHandlerAccepted(t *testing.T) {
+func TestDeleteBlob(t *testing.T) {
 	require := require.New(t)
 
-	mocks := newServerMocks(t)
-	defer mocks.ctrl.Finish()
+	cp := newTestClientProvider()
 
-	addr, stop := mocks.server(configFixture())
-	defer stop()
+	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	defer s.cleanup()
 
-	d := core.DigestFixture()
+	client := cp.Provide(s.host)
 
-	mocks.fileStore.EXPECT().DeleteCacheFile(d.Hex()).Return(nil)
+	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
 
-	require.NoError(blobclient.New(addr).DeleteBlob(d))
-}
+	require.NoError(client.TransferBlob(blob.Digest, bytes.NewReader(blob.Content)))
 
-func TestDeleteBlobHandlerNotFound(t *testing.T) {
-	require := require.New(t)
+	ensureHasBlob(t, cp.Provide(s.host), namespace, blob)
 
-	mocks := newServerMocks(t)
-	defer mocks.ctrl.Finish()
+	require.NoError(client.DeleteBlob(blob.Digest))
 
-	addr, stop := mocks.server(configFixture())
-	defer stop()
-
-	d := core.DigestFixture()
-
-	mocks.fileStore.EXPECT().DeleteCacheFile(d.Hex()).Return(os.ErrNotExist)
-
-	err := blobclient.New(addr).DeleteBlob(d)
-	require.Error(err)
-	require.Equal(http.StatusNotFound, err.(httputil.StatusError).Status)
+	ok, err := client.CheckLocalBlob(namespace, blob.Digest)
+	require.NoError(err)
+	require.False(ok)
 }
 
 func TestGetLocationsHandlerOK(t *testing.T) {
 	require := require.New(t)
 
-	mocks := newServerMocks(t)
-	defer mocks.ctrl.Finish()
-
+	cp := newTestClientProvider()
 	config := configFixture()
 
-	addr, stop := mocks.server(config)
-	defer stop()
+	s := newTestServer(t, master1, config, cp)
+	defer s.cleanup()
 
 	blob := computeBlobForHosts(config, master1, master2)
 
-	locs, err := blobclient.New(addr).Locations(blob.Digest)
+	locs, err := cp.Provide(s.host).Locations(blob.Digest)
 	require.NoError(err)
 	require.Equal([]string{master1, master2}, locs)
 }
@@ -233,13 +159,12 @@ func TestIncorrectNodeErrors(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			require := require.New(t)
 
-			mocks := newServerMocks(t)
-			defer mocks.ctrl.Finish()
+			cp := newTestClientProvider()
 
-			addr, stop := mocks.server(config)
-			defer stop()
+			s := newTestServer(t, master1, config, cp)
+			defer s.cleanup()
 
-			err := test.f(blobclient.New(addr))
+			err := test.f(cp.Provide(s.host))
 			require.Error(err)
 			require.True(httputil.IsStatus(err, http.StatusBadRequest))
 		})
@@ -336,7 +261,7 @@ func TestTransferBlob(t *testing.T) {
 
 	// Ensure metainfo was generated.
 	var tm metadata.TorrentMeta
-	require.NoError(s.fs.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
+	require.NoError(s.cas.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
 
 	// Pushing again should be a no-op.
 	err = cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
