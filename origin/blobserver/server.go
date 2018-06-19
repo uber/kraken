@@ -46,7 +46,7 @@ type Server struct {
 	addr              string
 	labelToAddr       map[string]string
 	hashState         *hrw.RendezvousHash
-	fileStore         store.OriginFileStore
+	cas               *store.CAStore
 	clientProvider    blobclient.Provider
 	stats             tally.Scope
 	backends          *backend.Manager
@@ -67,7 +67,7 @@ func New(
 	config Config,
 	stats tally.Scope,
 	addr string,
-	fileStore store.OriginFileStore,
+	cas *store.CAStore,
 	clientProvider blobclient.Provider,
 	pctx core.PeerContext,
 	backends *backend.Manager,
@@ -97,13 +97,13 @@ func New(
 		addr:              addr,
 		labelToAddr:       config.LabelToAddress(),
 		hashState:         config.HashState(),
-		fileStore:         fileStore,
+		cas:               cas,
 		clientProvider:    clientProvider,
 		stats:             stats,
 		backends:          backends,
 		blobRefresher:     blobRefresher,
 		metaInfoGenerator: metaInfoGenerator,
-		uploader:          newUploader(fileStore),
+		uploader:          newUploader(cas),
 		writeBackManager:  writeBackManager,
 		pctx:              pctx,
 	}, nil
@@ -183,7 +183,7 @@ func (s *Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 
-	ok, err := blobExists(s.fileStore, d)
+	ok, err := blobExists(s.cas, d)
 	if err != nil {
 		return err
 	}
@@ -243,7 +243,7 @@ func (s *Server) replicateToRemoteHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) replicateToRemote(namespace string, d core.Digest, remoteDNS string) error {
-	f, err := s.fileStore.GetCacheFileReader(d.Hex())
+	f, err := s.cas.GetCacheFileReader(d.Hex())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return s.startRemoteBlobDownload(namespace, d, false)
@@ -337,7 +337,7 @@ func (s *Server) overwriteMetaInfoHandler(w http.ResponseWriter, r *http.Request
 // writes it to disk, overwriting any existing metainfo. Primarily intended for
 // benchmarking purposes.
 func (s *Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
-	f, err := s.fileStore.GetCacheFileReader(d.Hex())
+	f, err := s.cas.GetCacheFileReader(d.Hex())
 	if err != nil {
 		return handler.Errorf("get cache file: %s", err)
 	}
@@ -345,7 +345,7 @@ func (s *Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 	if err != nil {
 		return handler.Errorf("create metainfo: %s", err)
 	}
-	if _, err := s.fileStore.SetCacheFileMetadata(d.Hex(), metadata.NewTorrentMeta(mi)); err != nil {
+	if _, err := s.cas.SetCacheFileMetadata(d.Hex(), metadata.NewTorrentMeta(mi)); err != nil {
 		return handler.Errorf("set metainfo: %s", err)
 	}
 	return nil
@@ -357,7 +357,7 @@ func (s *Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 // "202 Accepted" server error.
 func (s *Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
 	var tm metadata.TorrentMeta
-	if err := s.fileStore.GetCacheFileMetadata(d.Hex(), &tm); os.IsNotExist(err) {
+	if err := s.cas.GetCacheFileMetadata(d.Hex(), &tm); os.IsNotExist(err) {
 		return nil, s.startRemoteBlobDownload(namespace, d, true)
 	} else if err != nil {
 		return nil, handler.Errorf("get cache metadata: %s", err)
@@ -402,7 +402,7 @@ func (s *Server) startRemoteBlobDownload(
 
 func (s *Server) replicateBlobLocally(d core.Digest) error {
 	return s.applyToReplicas(d, func(i int, client blobclient.Client) error {
-		f, err := s.fileStore.GetCacheFileReader(d.Hex())
+		f, err := s.cas.GetCacheFileReader(d.Hex())
 		if err != nil {
 			return fmt.Errorf("get cache reader: %s", err)
 		}
@@ -476,7 +476,7 @@ func (s *Server) ensureCorrectNode(d core.Digest) error {
 // be initiated. This download is asynchronous and downloadBlob will immediately
 // return a "202 Accepted" handler error.
 func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error {
-	f, err := s.fileStore.GetCacheFileReader(d.Hex())
+	f, err := s.cas.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
 		return s.startRemoteBlobDownload(namespace, d, true)
 	} else if err != nil {
@@ -491,7 +491,7 @@ func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) er
 }
 
 func (s *Server) deleteBlob(d core.Digest) error {
-	if err := s.fileStore.DeleteCacheFile(d.Hex()); err != nil {
+	if err := s.cas.DeleteCacheFile(d.Hex()); err != nil {
 		if os.IsNotExist(err) {
 			return handler.ErrorStatus(http.StatusNotFound)
 		}
@@ -509,7 +509,7 @@ func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) er
 	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
-	if ok, err := blobExists(s.fileStore, d); err != nil {
+	if ok, err := blobExists(s.cas, d); err != nil {
 		return handler.Errorf("check blob: %s", err)
 	} else if ok {
 		return handler.ErrorStatus(http.StatusConflict)
@@ -536,7 +536,7 @@ func (s *Server) startClusterUploadHandler(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		return err
 	}
-	if ok, err := blobExists(s.fileStore, d); err != nil {
+	if ok, err := blobExists(s.cas, d); err != nil {
 		return handler.Errorf("check blob: %s", err)
 	} else if ok {
 		// Even if the blob was already uploaded and committed to cache, it's
@@ -633,7 +633,7 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 	}
 	err = s.applyToReplicas(d, func(i int, client blobclient.Client) error {
 		delay := s.config.DuplicateWriteBackStagger * time.Duration(i+1)
-		f, err := s.fileStore.GetCacheFileReader(d.Hex())
+		f, err := s.cas.GetCacheFileReader(d.Hex())
 		if err != nil {
 			return fmt.Errorf("get cache file: %s", err)
 		}
@@ -684,7 +684,7 @@ func (s *Server) duplicateCommitClusterUploadHandler(w http.ResponseWriter, r *h
 }
 
 func (s *Server) writeBack(namespace string, d core.Digest, delay time.Duration) error {
-	if _, err := s.fileStore.SetCacheFileMetadata(d.Hex(), metadata.NewPersist(true)); err != nil {
+	if _, err := s.cas.SetCacheFileMetadata(d.Hex(), metadata.NewPersist(true)); err != nil {
 		return handler.Errorf("set persist metadata: %s", err)
 	}
 	if err := s.writeBackManager.Add(writeback.NewTaskWithDelay(namespace, d, delay)); err != nil {

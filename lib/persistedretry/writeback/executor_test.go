@@ -15,7 +15,6 @@ import (
 	"code.uber.internal/infra/kraken/utils/rwutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
-	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
@@ -23,7 +22,7 @@ import (
 
 type executorMocks struct {
 	ctrl     *gomock.Controller
-	fs       store.OriginFileStore
+	cas      *store.CAStore
 	backends *backend.Manager
 }
 
@@ -34,18 +33,18 @@ func newExecutorMocks(t *testing.T) (*executorMocks, func()) {
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
 
-	fs, c := store.OriginFileStoreFixture(clock.New())
+	cas, c := store.CAStoreFixture()
 	cleanup.Add(c)
 
 	return &executorMocks{
 		ctrl:     ctrl,
-		fs:       fs,
+		cas:      cas,
 		backends: backend.ManagerFixture(),
 	}, cleanup.Run
 }
 
 func (m *executorMocks) new() *Executor {
-	return NewExecutor(tally.NoopScope, m.fs, m.backends)
+	return NewExecutor(tally.NoopScope, m.cas, m.backends)
 }
 
 func (m *executorMocks) client(namespace string) *mockbackend.MockClient {
@@ -56,10 +55,10 @@ func (m *executorMocks) client(namespace string) *mockbackend.MockClient {
 	return client
 }
 
-func setupBlob(t *testing.T, fs store.OriginFileStore, blob *core.BlobFixture) {
+func setupBlob(t *testing.T, cas *store.CAStore, blob *core.BlobFixture) {
 	t.Helper()
-	require.NoError(t, fs.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
-	_, err := fs.SetCacheFileMetadata(blob.Digest.Hex(), metadata.NewPersist(true))
+	require.NoError(t, cas.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+	_, err := cas.SetCacheFileMetadata(blob.Digest.Hex(), metadata.NewPersist(true))
 	require.NoError(t, err)
 }
 
@@ -71,7 +70,7 @@ func TestExec(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	setupBlob(t, mocks.fs, blob)
+	setupBlob(t, mocks.cas, blob)
 
 	task := NewTask(core.TagFixture(), blob.Digest)
 
@@ -84,7 +83,7 @@ func TestExec(t *testing.T) {
 	require.NoError(executor.Exec(task))
 
 	// Should be safe to delete the file.
-	require.NoError(mocks.fs.DeleteCacheFile(blob.Digest.Hex()))
+	require.NoError(mocks.cas.DeleteCacheFile(blob.Digest.Hex()))
 }
 
 func TestExecNoopWhenFileAlreadyUploaded(t *testing.T) {
@@ -95,9 +94,9 @@ func TestExecNoopWhenFileAlreadyUploaded(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	setupBlob(t, mocks.fs, blob)
+	setupBlob(t, mocks.cas, blob)
 
-	require.NoError(mocks.fs.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+	require.NoError(mocks.cas.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 
 	task := NewTask(core.TagFixture(), blob.Digest)
 
@@ -109,7 +108,7 @@ func TestExecNoopWhenFileAlreadyUploaded(t *testing.T) {
 	require.NoError(executor.Exec(task))
 
 	// Should be safe to delete the file.
-	require.NoError(mocks.fs.DeleteCacheFile(blob.Digest.Hex()))
+	require.NoError(mocks.cas.DeleteCacheFile(blob.Digest.Hex()))
 }
 
 func TestExecNoopWhenFileMissing(t *testing.T) {
@@ -138,9 +137,9 @@ func TestExecNoopWhenNamespaceNotFound(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	setupBlob(t, mocks.fs, blob)
+	setupBlob(t, mocks.cas, blob)
 
-	require.NoError(mocks.fs.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+	require.NoError(mocks.cas.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 
 	task := NewTask(core.TagFixture(), blob.Digest)
 
@@ -149,7 +148,7 @@ func TestExecNoopWhenNamespaceNotFound(t *testing.T) {
 	require.NoError(executor.Exec(task))
 
 	// Should be safe to delete the file.
-	require.NoError(mocks.fs.DeleteCacheFile(blob.Digest.Hex()))
+	require.NoError(mocks.cas.DeleteCacheFile(blob.Digest.Hex()))
 }
 
 func TestExecUploadFailure(t *testing.T) {
@@ -160,7 +159,7 @@ func TestExecUploadFailure(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	setupBlob(t, mocks.fs, blob)
+	setupBlob(t, mocks.cas, blob)
 
 	task := NewTask(core.TagFixture(), blob.Digest)
 
@@ -175,5 +174,5 @@ func TestExecUploadFailure(t *testing.T) {
 
 	// Since upload failed, deletion of the file should fail since persist
 	// metadata is still present.
-	require.Error(mocks.fs.DeleteCacheFile(blob.Digest.Hex()))
+	require.Error(mocks.cas.DeleteCacheFile(blob.Digest.Hex()))
 }

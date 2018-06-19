@@ -6,7 +6,6 @@ import (
 
 	"code.uber.internal/infra/kraken/utils/testutil"
 
-	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 )
 
@@ -57,39 +56,6 @@ func LocalFileStoreFixture() (*LocalFileStore, func()) {
 	cleanup.Add(fs.Close)
 
 	return fs, cleanup.Run
-}
-
-// OriginFileStoreFixture returns a origin file store.
-func OriginFileStoreFixture(clk clock.Clock) (*OriginLocalFileStore, func()) {
-	cleanup := &testutil.Cleanup{}
-	defer cleanup.Recover()
-
-	upload, err := ioutil.TempDir("/tmp", "upload")
-	if err != nil {
-		panic(err)
-	}
-	cleanup.Add(func() {
-		os.RemoveAll(upload)
-	})
-
-	cache, err := ioutil.TempDir("/tmp", "cache")
-	if err != nil {
-		panic(err)
-	}
-	cleanup.Add(func() {
-		os.RemoveAll(cache)
-	})
-
-	config := OriginConfig{
-		UploadDir: upload,
-		CacheDir:  cache,
-	}
-	s, err := NewOriginFileStore(config, clk, tally.NewTestScope("", nil))
-	if err != nil {
-		panic(err)
-	}
-
-	return s, cleanup.Run
 }
 
 // CAStoreConfigFixture returns config for CAStore for testing purposes.

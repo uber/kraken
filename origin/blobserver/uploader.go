@@ -13,16 +13,16 @@ import (
 
 // uploader executes a chunked upload.
 type uploader struct {
-	fs store.OriginFileStore
+	cas *store.CAStore
 }
 
-func newUploader(fs store.OriginFileStore) *uploader {
-	return &uploader{fs}
+func newUploader(cas *store.CAStore) *uploader {
+	return &uploader{cas}
 }
 
 func (u *uploader) start(d core.Digest) (uid string, err error) {
 	uid = uuid.Generate().String()
-	if err := u.fs.CreateUploadFile(uid, 0); err != nil {
+	if err := u.cas.CreateUploadFile(uid, 0); err != nil {
 		return "", handler.Errorf("create upload file: %s", err)
 	}
 	return uid, nil
@@ -31,12 +31,12 @@ func (u *uploader) start(d core.Digest) (uid string, err error) {
 func (u *uploader) patch(
 	d core.Digest, uid string, chunk io.Reader, start, end int64) error {
 
-	if ok, err := blobExists(u.fs, d); err != nil {
+	if ok, err := blobExists(u.cas, d); err != nil {
 		return err
 	} else if ok {
 		return handler.ErrorStatus(http.StatusConflict)
 	}
-	f, err := u.fs.GetUploadFileReadWriter(uid)
+	f, err := u.cas.GetUploadFileReadWriter(uid)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return handler.ErrorStatus(http.StatusNotFound)
@@ -55,7 +55,7 @@ func (u *uploader) patch(
 
 func (u *uploader) verify(d core.Digest, uid string) error {
 	digester := core.NewDigester()
-	f, err := u.fs.GetUploadFileReader(uid)
+	f, err := u.cas.GetUploadFileReader(uid)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return handler.ErrorStatus(http.StatusNotFound)
@@ -76,7 +76,7 @@ func (u *uploader) verify(d core.Digest, uid string) error {
 }
 
 func (u *uploader) commit(d core.Digest, uid string) error {
-	if err := u.fs.MoveUploadFileToCache(uid, d.Hex()); err != nil && !os.IsNotExist(err) {
+	if err := u.cas.MoveUploadFileToCache(uid, d.Hex()); err != nil && !os.IsNotExist(err) {
 		return handler.Errorf("move upload file to cache: %s", err)
 	}
 	return nil

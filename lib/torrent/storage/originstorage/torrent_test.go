@@ -12,22 +12,21 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
 	"code.uber.internal/infra/kraken/utils/bitsetutil"
 
-	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestTorrentCreate(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.OriginFileStoreFixture(clock.New())
+	cas, cleanup := store.CAStoreFixture()
 	defer cleanup()
 
 	blob := core.SizedBlobFixture(7, 2)
 	mi := blob.MetaInfo
 
-	fs.CreateCacheFile(mi.Name(), bytes.NewReader(blob.Content))
+	cas.CreateCacheFile(mi.Name(), bytes.NewReader(blob.Content))
 
-	tor, err := NewTorrent(fs, mi)
+	tor, err := NewTorrent(cas, mi)
 	require.NoError(err)
 
 	// New torrent
@@ -47,15 +46,15 @@ func TestTorrentCreate(t *testing.T) {
 func TestTorrentGetPieceReaderConcurrent(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.OriginFileStoreFixture(clock.New())
+	cas, cleanup := store.CAStoreFixture()
 	defer cleanup()
 
 	blob := core.SizedBlobFixture(7, 2)
 	mi := blob.MetaInfo
 
-	fs.CreateCacheFile(mi.Name(), bytes.NewReader(blob.Content))
+	cas.CreateCacheFile(mi.Name(), bytes.NewReader(blob.Content))
 
-	tor, err := NewTorrent(fs, mi)
+	tor, err := NewTorrent(cas, mi)
 	require.NoError(err)
 
 	wg := sync.WaitGroup{}
@@ -80,15 +79,15 @@ func TestTorrentGetPieceReaderConcurrent(t *testing.T) {
 func TestTorrentWritePieceError(t *testing.T) {
 	require := require.New(t)
 
-	fs, cleanup := store.OriginFileStoreFixture(clock.New())
+	cas, cleanup := store.CAStoreFixture()
 	defer cleanup()
 
 	blob := core.SizedBlobFixture(7, 2)
 	mi := blob.MetaInfo
 
-	fs.CreateCacheFile(mi.Name(), bytes.NewReader(blob.Content))
+	cas.CreateCacheFile(mi.Name(), bytes.NewReader(blob.Content))
 
-	tor, err := NewTorrent(fs, mi)
+	tor, err := NewTorrent(cas, mi)
 	require.NoError(err)
 
 	err = tor.WritePiece(piecereader.NewBuffer([]byte{}), 0)

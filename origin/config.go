@@ -20,7 +20,7 @@ type Config struct {
 	Verbose          bool
 	ZapLogging       zap.Config            `yaml:"zap"`
 	BlobServer       blobserver.Config     `yaml:"blobserver"`
-	OriginStore      store.OriginConfig    `yaml:"originstore"`
+	CAStore          store.CAStoreConfig   `yaml:"castore"`
 	Scheduler        scheduler.Config      `yaml:"scheduler"`
 	NetworkEvent     networkevent.Config   `yaml:"network_event"`
 	PeerIDFactory    core.PeerIDFactory    `yaml:"peer_id_factory"`

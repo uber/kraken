@@ -16,7 +16,6 @@ import (
 	"code.uber.internal/infra/kraken/utils/rwutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
-	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
@@ -26,7 +25,7 @@ const _testPieceLength = 10
 
 type refresherMocks struct {
 	ctrl     *gomock.Controller
-	fs       store.OriginFileStore
+	cas      *store.CAStore
 	backends *backend.Manager
 	config   Config
 }
@@ -35,7 +34,7 @@ func newRefresherMocks(t *testing.T) (*refresherMocks, func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
-	fs, c := store.OriginFileStoreFixture(clock.New())
+	cas, c := store.CAStoreFixture()
 	cleanup.Add(c)
 
 	ctrl := gomock.NewController(t)
@@ -43,11 +42,11 @@ func newRefresherMocks(t *testing.T) (*refresherMocks, func()) {
 
 	backends := backend.ManagerFixture()
 
-	return &refresherMocks{ctrl, fs, backends, Config{}}, cleanup.Run
+	return &refresherMocks{ctrl, cas, backends, Config{}}, cleanup.Run
 }
 
 func (m *refresherMocks) new() *Refresher {
-	return New(m.config, tally.NoopScope, m.fs, m.backends, metainfogen.Fixture(m.fs, _testPieceLength))
+	return New(m.config, tally.NoopScope, m.cas, m.backends, metainfogen.Fixture(m.cas, _testPieceLength))
 }
 
 func (m *refresherMocks) newClient(namespace string) *mockbackend.MockClient {
@@ -75,17 +74,17 @@ func TestRefresh(t *testing.T) {
 	require.NoError(refresher.Refresh(namespace, blob.Digest))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		_, err := mocks.fs.GetCacheFileStat(blob.Digest.Hex())
+		_, err := mocks.cas.GetCacheFileStat(blob.Digest.Hex())
 		return !os.IsNotExist(err)
 	}))
 
-	f, err := mocks.fs.GetCacheFileReader(blob.Digest.Hex())
+	f, err := mocks.cas.GetCacheFileReader(blob.Digest.Hex())
 	require.NoError(err)
 	result, err := ioutil.ReadAll(f)
 	require.Equal(string(blob.Content), string(result))
 
 	var tm metadata.TorrentMeta
-	require.NoError(mocks.fs.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
+	require.NoError(mocks.cas.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
 	require.Equal(blob.MetaInfo, tm.MetaInfo)
 }
 
@@ -130,7 +129,7 @@ func TestRefreshSizeLimitWithValidSize(t *testing.T) {
 	require.NoError(refresher.Refresh(namespace, blob.Digest))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		_, err := mocks.fs.GetCacheFileStat(blob.Digest.Hex())
+		_, err := mocks.cas.GetCacheFileStat(blob.Digest.Hex())
 		return !os.IsNotExist(err)
 	}))
 }

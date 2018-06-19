@@ -12,25 +12,25 @@ import (
 // generate metainfo.
 type Generator struct {
 	pieceLengthConfig *pieceLengthConfig
-	fs                store.OriginFileStore
+	cas               *store.CAStore
 }
 
 // New creates a new Generator.
-func New(config Config, fs store.OriginFileStore) (*Generator, error) {
+func New(config Config, cas *store.CAStore) (*Generator, error) {
 	plConfig, err := newPieceLengthConfig(config.PieceLengths)
 	if err != nil {
 		return nil, fmt.Errorf("piece length config: %s", err)
 	}
-	return &Generator{plConfig, fs}, nil
+	return &Generator{plConfig, cas}, nil
 }
 
 // Generate generates metainfo for the blob of d and writes it to disk.
 func (g *Generator) Generate(d core.Digest) error {
-	info, err := g.fs.GetCacheFileStat(d.Hex())
+	info, err := g.cas.GetCacheFileStat(d.Hex())
 	if err != nil {
 		return fmt.Errorf("cache stat: %s", err)
 	}
-	f, err := g.fs.GetCacheFileReader(d.Hex())
+	f, err := g.cas.GetCacheFileReader(d.Hex())
 	if err != nil {
 		return fmt.Errorf("get cache file: %s", err)
 	}
@@ -39,7 +39,7 @@ func (g *Generator) Generate(d core.Digest) error {
 	if err != nil {
 		return fmt.Errorf("create metainfo: %s", err)
 	}
-	if _, err := g.fs.SetCacheFileMetadata(d.Hex(), metadata.NewTorrentMeta(mi)); err != nil {
+	if _, err := g.cas.SetCacheFileMetadata(d.Hex(), metadata.NewTorrentMeta(mi)); err != nil {
 		return fmt.Errorf("set metainfo: %s", err)
 	}
 	return nil

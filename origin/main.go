@@ -23,7 +23,6 @@ import (
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
 
-	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
 )
 
@@ -91,9 +90,9 @@ func main() {
 		"origin": hostname,
 	})
 
-	fs, err := store.NewOriginFileStore(config.OriginStore, clock.New(), stats)
+	cas, err := store.NewCAStore(config.CAStore, stats)
 	if err != nil {
-		log.Fatalf("Failed to create origin file store: %s", err)
+		log.Fatalf("Failed to create castore: %s", err)
 	}
 
 	pctx, err := core.NewPeerContext(config.PeerIDFactory, *zone, *cluster, *peerIP, *peerPort, true)
@@ -115,17 +114,17 @@ func main() {
 		config.WriteBack,
 		stats,
 		writeBackStore,
-		writeback.NewExecutor(stats, fs, backendManager))
+		writeback.NewExecutor(stats, cas, backendManager))
 	if err != nil {
 		log.Fatalf("Error creating write-back manager: %s", err)
 	}
 
-	metaInfoGenerator, err := metainfogen.New(config.MetaInfoGen, fs)
+	metaInfoGenerator, err := metainfogen.New(config.MetaInfoGen, cas)
 	if err != nil {
 		log.Fatalf("Error creating metainfo generator: %s", err)
 	}
 
-	blobRefresher := blobrefresh.New(config.BlobRefresh, stats, fs, backendManager, metaInfoGenerator)
+	blobRefresher := blobrefresh.New(config.BlobRefresh, stats, cas, backendManager, metaInfoGenerator)
 
 	netevents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
@@ -133,7 +132,7 @@ func main() {
 	}
 
 	sched, err := scheduler.NewOriginScheduler(
-		config.Scheduler, stats, pctx, fs, netevents, blobRefresher)
+		config.Scheduler, stats, pctx, cas, netevents, blobRefresher)
 	if err != nil {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
@@ -142,7 +141,7 @@ func main() {
 		config.BlobServer,
 		stats,
 		fmt.Sprintf("%s:%d", hostname, *blobServerPort),
-		fs,
+		cas,
 		blobclient.NewProvider(),
 		pctx,
 		backendManager,

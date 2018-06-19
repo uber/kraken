@@ -38,7 +38,7 @@ type Refresher struct {
 	config            Config
 	stats             tally.Scope
 	requests          *dedup.RequestCache
-	fs                store.OriginFileStore
+	cas               *store.CAStore
 	backends          *backend.Manager
 	metaInfoGenerator *metainfogen.Generator
 }
@@ -47,7 +47,7 @@ type Refresher struct {
 func New(
 	config Config,
 	stats tally.Scope,
-	fs store.OriginFileStore,
+	cas *store.CAStore,
 	backends *backend.Manager,
 	metaInfoGenerator *metainfogen.Generator) *Refresher {
 
@@ -58,7 +58,7 @@ func New(
 	requests := dedup.NewRequestCache(dedup.RequestCacheConfig{}, clock.New())
 	requests.SetNotFound(func(err error) bool { return err == backenderrors.ErrBlobNotFound })
 
-	return &Refresher{config, stats, requests, fs, backends, metaInfoGenerator}
+	return &Refresher{config, stats, requests, cas, backends, metaInfoGenerator}
 }
 
 // Refresh kicks off a background goroutine to download the blob for d from the
@@ -117,10 +117,10 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 
 func (r *Refresher) download(client backend.Client, d core.Digest) error {
 	u := uuid.Generate().String()
-	if err := r.fs.CreateUploadFile(u, 0); err != nil {
+	if err := r.cas.CreateUploadFile(u, 0); err != nil {
 		return fmt.Errorf("create upload file: %s", err)
 	}
-	f, err := r.fs.GetUploadFileReadWriter(u)
+	f, err := r.cas.GetUploadFileReadWriter(u)
 	if err != nil {
 		return fmt.Errorf("get upload writer: %s", err)
 	}
@@ -137,7 +137,7 @@ func (r *Refresher) download(client backend.Client, d core.Digest) error {
 	if fd != d {
 		return fmt.Errorf("invalid remote blob digest: got %s, expected %s", fd, d)
 	}
-	if err := r.fs.MoveUploadFileToCache(u, d.Hex()); err != nil {
+	if err := r.cas.MoveUploadFileToCache(u, d.Hex()); err != nil {
 		return fmt.Errorf("move upload file to cache: %s", err)
 	}
 	return nil
