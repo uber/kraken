@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"io/ioutil"
 	"os"
 	"path"
@@ -63,4 +64,17 @@ func walkDirectory(rootDir string, depth int, f func(string) error) error {
 		}
 	}
 	return nil
+}
+
+type bufferFileReader struct {
+	*bytes.Reader
+}
+
+func (b *bufferFileReader) Close() error {
+	return nil
+}
+
+// NewBufferFileReader returns an in-memory FileReader backed by b.
+func NewBufferFileReader(b []byte) FileReader {
+	return &bufferFileReader{bytes.NewReader(b)}
 }

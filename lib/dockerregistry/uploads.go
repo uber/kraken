@@ -1,51 +1,59 @@
 package dockerregistry
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
-	"os"
 	stdpath "path"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
-	"github.com/docker/distribution/uuid"
 )
 
-// Uploads b
-type Uploads struct {
-	store      store.FileStore
+type uploads interface {
+	reader(path string, subtype PathSubType, offset int64) (io.ReadCloser, error)
+	getContent(path string, subtype PathSubType) ([]byte, error)
+	putContent(path string, subtype PathSubType, content []byte) error
+	putBlobContent(path string, content []byte) error
+	writer(path string, subtype PathSubType) (store.FileReadWriter, error)
+	stat(path string) (storagedriver.FileInfo, error)
+	list(path string, subtype PathSubType) ([]string, error)
+	move(uploadPath, blobPath string) error
+}
+
+type casUploads struct {
+	cas        *store.CAStore
 	transferer transfer.ImageTransferer
 }
 
-// NewUploads creates a new Uploads
-func NewUploads(transferer transfer.ImageTransferer, s store.FileStore) *Uploads {
-	return &Uploads{
-		store:      s,
-		transferer: transferer,
-	}
+func newCASUploads(cas *store.CAStore, transferer transfer.ImageTransferer) *casUploads {
+	return &casUploads{cas, transferer}
 }
 
-// GetContent returns uploads content based given subtype
-func (u *Uploads) GetContent(path string, subtype PathSubType) ([]byte, error) {
+func (u *casUploads) getContent(path string, subtype PathSubType) ([]byte, error) {
 	uuid, err := GetUploadUUID(path)
 	if err != nil {
 		return nil, err
 	}
 	switch subtype {
 	case _startedat:
-		return u.getUploadStartTime(u.store.Config().UploadDir, uuid)
+		var s startedAtMetadata
+		if err := u.cas.GetUploadFileMetadata(uuid, &s); err != nil {
+			return nil, err
+		}
+		return s.Serialize()
 	case _hashstates:
 		algo, offset, err := GetUploadAlgoAndOffset(path)
 		if err != nil {
 			return nil, err
 		}
 		hs := newHashStateMetadata(algo, offset)
-		if err := u.store.GetUploadFileMetadata(uuid, hs); err != nil {
+		if err := u.cas.GetUploadFileMetadata(uuid, hs); err != nil {
 			return nil, err
 		}
 		return hs.Serialize()
@@ -53,31 +61,40 @@ func (u *Uploads) GetContent(path string, subtype PathSubType) ([]byte, error) {
 	return nil, InvalidRequestError{path}
 }
 
-// GetReader returns a readercloser for uploaded contant
-func (u *Uploads) GetReader(path string, subtype PathSubType, offset int64) (io.ReadCloser, error) {
+func (u *casUploads) reader(path string, subtype PathSubType, offset int64) (io.ReadCloser, error) {
 	switch subtype {
 	case _data:
 		uuid, err := GetUploadUUID(path)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("get upload uuid: %s", err)
 		}
-		return u.getUploadReader(uuid, offset)
+		r, err := u.cas.GetUploadFileReader(uuid)
+		if err != nil {
+			return nil, fmt.Errorf("get reader: %s", err)
+		}
+		if _, err := r.Seek(offset, io.SeekStart); err != nil {
+			return nil, fmt.Errorf("seek: %s", err)
+		}
+		return r, nil
 	}
 	return nil, InvalidRequestError{path}
 }
 
-// PutUploadContent writes to upload file given type and content
-func (u *Uploads) PutUploadContent(path string, subtype PathSubType, content []byte) error {
+func (u *casUploads) putContent(path string, subtype PathSubType, content []byte) error {
 	uuid, err := GetUploadUUID(path)
 	if err != nil {
 		return err
 	}
-
 	switch subtype {
 	case _startedat:
-		return u.initUpload(uuid)
-	case _data:
-		return u.putBlobData(uuid, content)
+		if err := u.cas.CreateUploadFile(uuid, 0); err != nil {
+			return fmt.Errorf("create upload file: %s", err)
+		}
+		s := newStartedAtMetadata(time.Now())
+		if err := u.cas.SetUploadFileMetadata(uuid, s); err != nil {
+			return fmt.Errorf("set started at: %s", err)
+		}
+		return nil
 	case _hashstates:
 		algo, offset, err := GetUploadAlgoAndOffset(path)
 		if err != nil {
@@ -87,44 +104,59 @@ func (u *Uploads) PutUploadContent(path string, subtype PathSubType, content []b
 		if err := hs.Deserialize(content); err != nil {
 			return fmt.Errorf("deserialize hash state: %s", err)
 		}
-		return u.store.SetUploadFileMetadata(uuid, hs)
+		return u.cas.SetUploadFileMetadata(uuid, hs)
 	}
 	return InvalidRequestError{path}
 }
 
-// PutBlobContent writes content to a blob
-func (u *Uploads) PutBlobContent(path string, content []byte) error {
-	digest, err := GetBlobDigest(path)
+func (u *casUploads) putBlobContent(path string, content []byte) error {
+	d, err := GetBlobDigest(path)
 	if err != nil {
-		return nil
+		return fmt.Errorf("get digest: %s", err)
 	}
-	return u.putBlobData(digest.Hex(), content)
+	if err := u.cas.CreateCacheFile(d.Hex(), bytes.NewReader(content)); err != nil {
+		return fmt.Errorf("create cache file: %s", err)
+	}
+	if err := u.transferer.Upload("TODO", d, store.NewBufferFileReader(content)); err != nil {
+		return fmt.Errorf("upload: %s", err)
+	}
+	return nil
 }
 
-// GetWriter returns a writer for uploaded content
-func (u *Uploads) GetWriter(path string, subtype PathSubType) (store.FileReadWriter, error) {
+func (u *casUploads) writer(path string, subtype PathSubType) (store.FileReadWriter, error) {
 	uuid, err := GetUploadUUID(path)
 	if err != nil {
 		return nil, err
 	}
 	switch subtype {
 	case _data:
-		return u.store.GetUploadFileReadWriter(uuid)
+		return u.cas.GetUploadFileReadWriter(uuid)
 	}
 	return nil, InvalidRequestError{path}
 }
 
-// GetStat returns upload file info
-func (u *Uploads) GetStat(path string) (storagedriver.FileInfo, error) {
+func (u *casUploads) stat(path string) (storagedriver.FileInfo, error) {
 	uuid, err := GetUploadUUID(path)
 	if err != nil {
 		return nil, err
 	}
-	return u.getUploadDataStat(u.store.Config().UploadDir, uuid)
+	info, err := u.cas.GetUploadFileStat(uuid)
+	if err != nil {
+		return nil, err
+	}
+	// Hacking the path, since kraken storage driver is also the consumer of this info.
+	// Instead of the relative path from root that docker registry expected, just use uuid.
+	return storagedriver.FileInfoInternal{
+		FileInfoFields: storagedriver.FileInfoFields{
+			Path:    uuid,
+			Size:    info.Size(),
+			ModTime: info.ModTime(),
+			IsDir:   info.IsDir(),
+		},
+	}, nil
 }
 
-// ListHashStates lists all upload hashstates
-func (u *Uploads) ListHashStates(path string, subtype PathSubType) ([]string, error) {
+func (u *casUploads) list(path string, subtype PathSubType) ([]string, error) {
 	uuid, err := GetUploadUUID(path)
 	if err != nil {
 		return nil, err
@@ -132,7 +164,7 @@ func (u *Uploads) ListHashStates(path string, subtype PathSubType) ([]string, er
 	switch subtype {
 	case _hashstates:
 		var paths []string
-		u.store.RangeUploadMetadata(uuid, func(md metadata.Metadata) error {
+		u.cas.RangeUploadMetadata(uuid, func(md metadata.Metadata) error {
 			if hs, ok := md.(*hashStateMetadata); ok {
 				p := stdpath.Join("localstore", "_uploads", uuid, hs.dockerPath())
 				paths = append(paths, p)
@@ -144,82 +176,21 @@ func (u *Uploads) ListHashStates(path string, subtype PathSubType) ([]string, er
 	return nil, InvalidRequestError{path}
 }
 
-// Move moves upload file to cached blob store
-func (u *Uploads) Move(uploadsPath string, blobsPath string) error {
-	uuid, err := GetUploadUUID(uploadsPath)
+func (u *casUploads) move(uploadPath, blobPath string) error {
+	uuid, err := GetUploadUUID(uploadPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("get upload uuid: %s", err)
 	}
-
-	digest, err := GetBlobDigest(blobsPath)
+	d, err := GetBlobDigest(blobPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("get blob uuid: %s", err)
 	}
-	return u.commitUpload(uuid, u.store.Config().CacheDir, digest.Hex())
-}
-
-func (u *Uploads) initUpload(uuid string) error {
-	// Create timestamp and tempfile
-	if err := u.store.CreateUploadFile(uuid, 0); err != nil {
-		return err
-	}
-	s := newStartedAtMetadata(time.Now())
-	return u.store.SetUploadFileMetadata(uuid, s)
-}
-
-func (u *Uploads) getUploadStartTime(dir, uuid string) ([]byte, error) {
-	var s startedAtMetadata
-	if err := u.store.GetUploadFileMetadata(uuid, &s); err != nil {
-		return nil, err
-	}
-	return s.Serialize()
-}
-
-func (u *Uploads) getUploadReader(uuid string, offset int64) (io.ReadCloser, error) {
-	reader, err := u.store.GetUploadFileReader(uuid)
-	if err != nil {
-		return nil, err
-	}
-
-	// Set offset
-	_, err = reader.Seek(offset, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	return reader, nil
-}
-
-func (u *Uploads) getUploadDataStat(dir, uuid string) (fi storagedriver.FileInfo, err error) {
-	info, err := u.store.GetUploadFileStat(uuid)
-	if err != nil {
-		return nil, err
-	}
-	// Hacking the path, since kraken storage driver is also the consumer of this info.
-	// Instead of the relative path from root that docker registry expected, just use uuid.
-	fi = storagedriver.FileInfoInternal{
-		FileInfoFields: storagedriver.FileInfoFields{
-			Path:    uuid,
-			Size:    info.Size(),
-			ModTime: info.ModTime(),
-			IsDir:   info.IsDir(),
-		},
-	}
-	return fi, nil
-}
-
-// commmitUpload move a complete data blob from upload directory to cache diretory
-func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) error {
-	if err := u.store.MoveUploadFileToCache(srcuuid, destsha); err != nil {
+	if err := u.cas.MoveUploadFileToCache(uuid, d.Hex()); err != nil {
 		return fmt.Errorf("move upload file to cache: %s", err)
 	}
-	f, err := u.store.GetCacheFileReader(destsha)
+	f, err := u.cas.GetCacheFileReader(d.Hex())
 	if err != nil {
 		return fmt.Errorf("get cache file: %s", err)
-	}
-	d, err := core.NewSHA256DigestFromHex(destsha)
-	if err != nil {
-		return fmt.Errorf("new digest: %s", err)
 	}
 	if err := u.transferer.Upload("TODO", d, f); err != nil {
 		return fmt.Errorf("upload: %s", err)
@@ -227,43 +198,38 @@ func (u *Uploads) commitUpload(srcuuid, destdir, destsha string) error {
 	return nil
 }
 
-// putBlobData is used to write content to files directly, like image manifest and metadata.
-func (u *Uploads) putBlobData(fileName string, content []byte) error {
-	// It's better to have a random extension to avoid race condition.
-	randFileName := fileName + "." + uuid.Generate().String()
-	if err := u.store.CreateUploadFile(randFileName, int64(len(content))); err != nil {
-		return fmt.Errorf("create upload file: %s", err)
-	}
+var errUploadsDisabled = errors.New("uploads are disabled")
 
-	rw, err := u.store.GetUploadFileReadWriter(randFileName)
-	if err != nil {
-		return fmt.Errorf("get upload file: %s", err)
-	}
-	defer rw.Close()
-	if _, err := rw.Write(content); err != nil {
-		return fmt.Errorf("write content: %s", err)
-	}
-	if _, err := rw.Seek(0, 0); err != nil {
-		return fmt.Errorf("seek: %s", err)
-	}
+type disabledUploads struct{}
 
-	if err := u.store.MoveUploadFileToCache(randFileName, fileName); err != nil {
-		if os.IsExist(err) {
-			// It's okay to fail with "os.IsExist"
-			return nil
-		}
-		return fmt.Errorf("move upload file to cache: %s", err)
-	}
-	f, err := u.store.GetCacheFileReader(fileName)
-	if err != nil {
-		return fmt.Errorf("get cache file: %s", err)
-	}
-	d, err := core.NewSHA256DigestFromHex(fileName)
-	if err != nil {
-		return fmt.Errorf("new digest: %s", err)
-	}
-	if err := u.transferer.Upload("TODO", d, f); err != nil {
-		return fmt.Errorf("upload: %s", err)
-	}
-	return nil
+func (u disabledUploads) reader(path string, subtype PathSubType, offset int64) (io.ReadCloser, error) {
+	return nil, errUploadsDisabled
+}
+
+func (u disabledUploads) getContent(path string, subtype PathSubType) ([]byte, error) {
+	return nil, errUploadsDisabled
+}
+
+func (u disabledUploads) putContent(path string, subtype PathSubType, content []byte) error {
+	return errUploadsDisabled
+}
+
+func (u disabledUploads) putBlobContent(path string, content []byte) error {
+	return errUploadsDisabled
+}
+
+func (u disabledUploads) writer(path string, subtype PathSubType) (store.FileReadWriter, error) {
+	return nil, errUploadsDisabled
+}
+
+func (u disabledUploads) stat(path string) (storagedriver.FileInfo, error) {
+	return nil, errUploadsDisabled
+}
+
+func (u disabledUploads) list(path string, subtype PathSubType) ([]string, error) {
+	return nil, errUploadsDisabled
+}
+
+func (u disabledUploads) move(uploadPath, blobPath string) error {
+	return errUploadsDisabled
 }

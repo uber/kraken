@@ -41,8 +41,10 @@ func NewStatusError(resp *http.Response) StatusError {
 }
 
 func (e StatusError) Error() string {
-	return fmt.Sprintf(
-		"%s %s %d: %s", e.Method, e.URL, e.Status, e.ResponseDump)
+	if e.ResponseDump == "" {
+		return fmt.Sprintf("%s %s %d", e.Method, e.URL, e.Status)
+	}
+	return fmt.Sprintf("%s %s %d: %s", e.Method, e.URL, e.Status, e.ResponseDump)
 }
 
 // IsStatus returns true if err is a StatusError of the given status.

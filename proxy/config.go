@@ -10,7 +10,7 @@ import (
 
 // Config defines proxy configuration
 type Config struct {
-	Store      store.Config          `yaml:"store"`
+	CAStore    store.CAStoreConfig   `yaml:"castore"`
 	Registry   dockerregistry.Config `yaml:"registry"`
 	BuildIndex string                `yaml:"build_index"`
 	Origin     string                `yaml:"origin"`

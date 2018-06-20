@@ -6,14 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	dockercontext "github.com/docker/distribution/context"
-	docker "github.com/docker/distribution/registry"
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/agent/agentserver"
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
@@ -84,8 +81,7 @@ func main() {
 
 	transferer := transfer.NewAgentTransferer(fs, tagclient.New(config.BuildIndex), sched)
 
-	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
-	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)
+	registry, err := config.Registry.Build(config.Registry.AgentParameters(transferer, fs, stats))
 	if err != nil {
 		log.Fatalf("Failed to init registry: %s", err)
 	}

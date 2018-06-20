@@ -20,7 +20,7 @@ import (
 type proxyTransfererMocks struct {
 	tags          *mocktagclient.MockClient
 	originCluster *mockblobclient.MockClusterClient
-	fs            store.FileStore
+	cas           *store.CAStore
 }
 
 func newProxyTransfererMocks(t *testing.T) (*proxyTransfererMocks, func()) {
@@ -33,14 +33,14 @@ func newProxyTransfererMocks(t *testing.T) (*proxyTransfererMocks, func()) {
 
 	originCluster := mockblobclient.NewMockClusterClient(ctrl)
 
-	fs, c := store.LocalFileStoreFixture()
+	cas, c := store.CAStoreFixture()
 	cleanup.Add(c)
 
-	return &proxyTransfererMocks{tags, originCluster, fs}, cleanup.Run
+	return &proxyTransfererMocks{tags, originCluster, cas}, cleanup.Run
 }
 
 func (m *proxyTransfererMocks) new() *ProxyTransferer {
-	return NewProxyTransferer(m.tags, m.originCluster, m.fs)
+	return NewProxyTransferer(m.tags, m.originCluster, m.cas)
 }
 
 func TestProxyTransfererDownloadCachesBlob(t *testing.T) {
@@ -81,7 +81,7 @@ func TestPostTag(t *testing.T) {
 
 	manifestDigest, rawManifest := dockerutil.ManifestFixture(config, layer1, layer2)
 
-	require.NoError(mocks.fs.CreateCacheFile(manifestDigest.Hex(), bytes.NewReader(rawManifest)))
+	require.NoError(mocks.cas.CreateCacheFile(manifestDigest.Hex(), bytes.NewReader(rawManifest)))
 
 	tag := "docker/some-tag"
 
