@@ -6,8 +6,10 @@ import (
 	"path"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils/dockerutil"
+	"github.com/uber-go/tally"
 )
 
 const (
@@ -28,21 +30,32 @@ type testImageUploadBundle struct {
 	layer2   *core.BlobFixture
 }
 
-func genStorageDriver() (*KrakenStorageDriver, testImageUploadBundle, func()) {
-	sd, cleanup := StorageDriverFixture()
+type testDriver struct {
+	cas        *store.CAStore
+	transferer transfer.ImageTransferer
+}
+
+func newTestDriver() (*testDriver, func()) {
+	cas, cleanup := store.CAStoreFixture()
+	transferer := transfer.NewTestTransferer(cas)
+	return &testDriver{cas, transferer}, cleanup
+}
+
+func (d *testDriver) setup() (*KrakenStorageDriver, testImageUploadBundle) {
+	sd := NewReadWriteStorageDriver(Config{}, d.cas, d.transferer, tally.NoopScope)
 
 	// Create upload
 	path := genUploadStartedAtPath(uploadUUID)
-	if err := sd.uploads.PutUploadContent(path, _startedat, nil); err != nil {
+	if err := sd.uploads.putContent(path, _startedat, nil); err != nil {
 		log.Panic(err)
 	}
 	path = genUploadHashStatesPath(uploadUUID)
-	if err := sd.uploads.PutUploadContent(path, _hashstates, []byte(hashStateContent)); err != nil {
+	if err := sd.uploads.putContent(path, _hashstates, []byte(hashStateContent)); err != nil {
 		log.Panic(err)
 	}
 	path = genUploadDataPath(uploadUUID)
 
-	writer, err := sd.store.GetUploadFileReadWriter(uploadUUID)
+	writer, err := d.cas.GetUploadFileReadWriter(uploadUUID)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -57,18 +70,17 @@ func genStorageDriver() (*KrakenStorageDriver, testImageUploadBundle, func()) {
 		config.Digest, layer1.Digest, layer2.Digest)
 
 	for _, blob := range []*core.BlobFixture{config, layer1, layer2} {
-		err := sd.transferer.Upload("unused", blob.Digest, store.TestFileReader(blob.Content))
+		err := d.transferer.Upload("unused", blob.Digest, store.NewBufferFileReader(blob.Content))
 		if err != nil {
 			log.Panic(err)
 		}
 	}
-	err = sd.transferer.Upload(
-		"unused", manifestDigest, store.TestFileReader(manifestRaw))
+	err = d.transferer.Upload("unused", manifestDigest, store.NewBufferFileReader(manifestRaw))
 	if err != nil {
 		log.Panic(err)
 	}
 
-	if err := sd.transferer.PostTag(fmt.Sprintf("%s:%s", repoName, tagName), manifestDigest); err != nil {
+	if err := d.transferer.PostTag(fmt.Sprintf("%s:%s", repoName, tagName), manifestDigest); err != nil {
 		log.Panic(err)
 	}
 
@@ -79,7 +91,7 @@ func genStorageDriver() (*KrakenStorageDriver, testImageUploadBundle, func()) {
 		layer1:   layer1,
 		layer2:   layer2,
 		upload:   uploadUUID,
-	}, cleanup
+	}
 }
 
 func genLayerLinkPath(layerDigest string) string {

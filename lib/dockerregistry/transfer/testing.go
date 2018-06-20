@@ -10,24 +10,24 @@ import (
 
 type testTransferer struct {
 	tags map[string]core.Digest
-	fs   store.FileStore
+	cas  *store.CAStore
 }
 
-// NewTestTransferer creates a Transferer which stores blobs in fs and tags in
+// NewTestTransferer creates a Transferer which stores blobs in cas and tags in
 // memory for testing purposes.
-func NewTestTransferer(fs store.FileStore) ImageTransferer {
+func NewTestTransferer(cas *store.CAStore) ImageTransferer {
 	return &testTransferer{
 		tags: make(map[string]core.Digest),
-		fs:   fs,
+		cas:  cas,
 	}
 }
 
 func (t *testTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
-	return t.fs.GetCacheFileReader(d.Hex())
+	return t.cas.GetCacheFileReader(d.Hex())
 }
 
 func (t *testTransferer) Upload(namespace string, d core.Digest, blob store.FileReader) error {
-	return t.fs.CreateCacheFile(d.Hex(), blob)
+	return t.cas.CreateCacheFile(d.Hex(), blob)
 }
 
 func (t *testTransferer) GetTag(tag string) (core.Digest, error) {

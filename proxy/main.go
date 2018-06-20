@@ -3,11 +3,7 @@ package main
 import (
 	"flag"
 
-	dockercontext "github.com/docker/distribution/context"
-	docker "github.com/docker/distribution/registry"
-
 	"code.uber.internal/infra/kraken/build-index/tagclient"
-	"code.uber.internal/infra/kraken/lib/dockerregistry"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/metrics"
@@ -34,9 +30,9 @@ func main() {
 	}
 	defer closer.Close()
 
-	fs, err := store.NewLocalFileStore(config.Store, stats)
+	cas, err := store.NewCAStore(config.CAStore, stats)
 	if err != nil {
-		log.Fatalf("Failed to create local store: %s", err)
+		log.Fatalf("Failed to create store: %s", err)
 	}
 
 	r, err := blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin)
@@ -45,17 +41,12 @@ func main() {
 	}
 	originCluster := blobclient.NewClusterClient(r)
 
-	transferer := transfer.NewProxyTransferer(
-		tagclient.New(config.BuildIndex),
-		originCluster,
-		fs)
+	transferer := transfer.NewProxyTransferer(tagclient.New(config.BuildIndex), originCluster, cas)
 
-	dockerConfig := config.Registry.CreateDockerConfig(dockerregistry.Name, transferer, fs, stats)
-	registry, err := docker.NewRegistry(dockercontext.Background(), dockerConfig)
+	registry, err := config.Registry.Build(config.Registry.ProxyParameters(transferer, cas, stats))
 	if err != nil {
-		log.Fatalf("Failed to init registry: %s", err)
+		log.Fatalf("Error creating registry: %s", err)
 	}
-
 	log.Info("Starting registry...")
 	log.Fatal(registry.ListenAndServe())
 }

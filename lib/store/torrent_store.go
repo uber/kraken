@@ -73,6 +73,18 @@ func (s *TorrentStore) MoveDownloadFileToCache(name string) error {
 	return s.backend.NewFileOp().AcceptState(s.downloadState).MoveFile(name, s.cacheState)
 }
 
+// GetCacheFileReader gets a cache file reader. Implemented for compatibility with
+// other stores.
+func (s *TorrentStore) GetCacheFileReader(name string) (FileReader, error) {
+	return s.States().Cache().GetFileReader(name)
+}
+
+// GetCacheFileStat stats a cache file. Implemented for compatibility with other
+// stores.
+func (s *TorrentStore) GetCacheFileStat(name string) (os.FileInfo, error) {
+	return s.States().Cache().GetFileStat(name)
+}
+
 // InCacheError returns true for errors originating from file store operations
 // which do not accept files in cache state.
 func (s *TorrentStore) InCacheError(err error) bool {

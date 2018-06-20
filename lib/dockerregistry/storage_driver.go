@@ -61,66 +61,77 @@ func (e InvalidRequestError) Error() string {
 
 type krakenStorageDriverFactory struct{}
 
-func (factory *krakenStorageDriverFactory) Create(params map[string]interface{}) (storagedriver.StorageDriver, error) {
-	configParam, ok := params["config"]
-	if !ok || configParam == nil {
-		log.Fatal("failed to create storage driver. No configuration initiated.")
+func getParam(params map[string]interface{}, name string) interface{} {
+	p, ok := params[name]
+	if !ok || p == nil {
+		log.Fatalf("Required parameter %s not found", name)
 	}
-	config := configParam.(Config)
+	return p
+}
 
-	storeParam, ok := params["store"]
-	if !ok || storeParam == nil {
-		log.Fatal("failed to create storage driver. No file store initiated.")
+func (factory *krakenStorageDriverFactory) Create(
+	params map[string]interface{}) (storagedriver.StorageDriver, error) {
+
+	// Common parameters.
+	component := getParam(params, "component").(string)
+	config := getParam(params, "config").(Config)
+	transferer := getParam(params, "transferer").(transfer.ImageTransferer)
+	metrics := getParam(params, "metrics").(tally.Scope)
+
+	switch component {
+	case _proxy:
+		castore := getParam(params, "castore").(*store.CAStore)
+		return NewReadWriteStorageDriver(config, castore, transferer, metrics), nil
+	case _agent:
+		blobstore := getParam(params, "blobstore").(BlobStore)
+		return NewReadOnlyStorageDriver(config, blobstore, transferer, metrics), nil
+	default:
+		return nil, fmt.Errorf("unknown component %s", component)
 	}
-	store := storeParam.(store.FileStore)
-
-	transfererParam, ok := params["transferer"]
-	if !ok || transfererParam == nil {
-		log.Fatal("failed to create storage driver. No torrent agent initated.")
-	}
-	transferer := transfererParam.(transfer.ImageTransferer)
-
-	metricsParam, ok := params["metrics"]
-	if !ok || metricsParam == nil {
-		log.Fatal("failed to create storage driver. No metrics initiated.")
-	}
-	metrics := metricsParam.(tally.Scope)
-
-	sd, err := NewKrakenStorageDriver(config, store, transferer, metrics)
-	if err != nil {
-		return nil, err
-	}
-
-	return sd, nil
 }
 
 // KrakenStorageDriver is a storage driver
 type KrakenStorageDriver struct {
 	config     Config
-	store      store.FileStore
 	transferer transfer.ImageTransferer
-	blobs      *Blobs
-	uploads    *Uploads
-	tags       *Tags
+	blobs      *blobs
+	uploads    uploads
+	manifests  *manifests
 	metrics    tally.Scope
 }
 
-// NewKrakenStorageDriver creates a new KrakenStorageDriver given Manager
-func NewKrakenStorageDriver(
-	c Config,
-	s store.FileStore,
+// NewReadWriteStorageDriver creates a KrakenStorageDriver which can push / pull blobs.
+func NewReadWriteStorageDriver(
+	config Config,
+	cas *store.CAStore,
 	transferer transfer.ImageTransferer,
-	metrics tally.Scope) (*KrakenStorageDriver, error) {
+	metrics tally.Scope) *KrakenStorageDriver {
 
 	return &KrakenStorageDriver{
-		config:     c,
-		store:      s,
+		config:     config,
 		transferer: transferer,
-		blobs:      NewBlobs(transferer, s),
-		uploads:    NewUploads(transferer, s),
-		tags:       NewTags(transferer),
+		blobs:      newBlobs(cas, transferer),
+		uploads:    newCASUploads(cas, transferer),
+		manifests:  newManifests(transferer),
 		metrics:    metrics,
-	}, nil
+	}
+}
+
+// NewReadOnlyStorageDriver creates a KrakenStorageDriver which can only pull blobs.
+func NewReadOnlyStorageDriver(
+	config Config,
+	bs BlobStore,
+	transferer transfer.ImageTransferer,
+	metrics tally.Scope) *KrakenStorageDriver {
+
+	return &KrakenStorageDriver{
+		config:     config,
+		transferer: transferer,
+		blobs:      newBlobs(bs, transferer),
+		uploads:    disabledUploads{},
+		manifests:  newManifests(transferer),
+		metrics:    metrics,
+	}
 }
 
 // Name returns driver namae
@@ -139,13 +150,13 @@ func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data
 
 	switch pathType {
 	case _manifests:
-		return d.tags.GetDigest(path, pathSubType)
+		return d.manifests.getDigest(path, pathSubType)
 	case _uploads:
-		return d.uploads.GetContent(path, pathSubType)
+		return d.uploads.getContent(path, pathSubType)
 	case _layers:
-		return d.blobs.GetDigest(path)
+		return d.blobs.getDigest(path)
 	case _blobs:
-		return d.blobs.GetContent(path)
+		return d.blobs.getContent(path)
 	}
 	return nil, InvalidRequestError{path}
 }
@@ -160,9 +171,9 @@ func (d *KrakenStorageDriver) Reader(ctx context.Context, path string, offset in
 
 	switch pathType {
 	case _uploads:
-		return d.uploads.GetReader(path, pathSubType, offset)
+		return d.uploads.reader(path, pathSubType, offset)
 	case _blobs:
-		return d.blobs.GetReader(path, offset)
+		return d.blobs.reader(path, offset)
 	default:
 		return nil, InvalidRequestError{path}
 	}
@@ -178,14 +189,14 @@ func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, conte
 
 	switch pathType {
 	case _manifests:
-		return d.tags.PutContent(path, pathSubType)
+		return d.manifests.putContent(path, pathSubType)
 	case _uploads:
-		return d.uploads.PutUploadContent(path, pathSubType, content)
+		return d.uploads.putContent(path, pathSubType, content)
 	case _layers:
 		// noop
 		return nil
 	case _blobs:
-		return d.uploads.PutBlobContent(path, content)
+		return d.uploads.putBlobContent(path, content)
 	default:
 		return InvalidRequestError{path}
 	}
@@ -201,7 +212,7 @@ func (d *KrakenStorageDriver) Writer(ctx context.Context, path string, append bo
 
 	switch pathType {
 	case _uploads:
-		w, err := d.uploads.GetWriter(path, pathSubType)
+		w, err := d.uploads.writer(path, pathSubType)
 		if err != nil {
 			return nil, err
 		}
@@ -217,7 +228,7 @@ func (d *KrakenStorageDriver) Writer(ctx context.Context, path string, append bo
 }
 
 // Stat returns fileinfo of path
-func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (fi storagedriver.FileInfo, err error) {
+func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (storagedriver.FileInfo, error) {
 	log.Debugf("(*KrakenStorageDriver).Stat %s", path)
 	pathType, _, err := ParsePath(path)
 	if err != nil {
@@ -226,9 +237,9 @@ func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (fi storage
 
 	switch pathType {
 	case _uploads:
-		return d.uploads.GetStat(path)
+		return d.uploads.stat(path)
 	case _blobs:
-		return d.blobs.GetStat(path)
+		return d.blobs.stat(path)
 	default:
 		return nil, InvalidRequestError{path}
 	}
@@ -244,9 +255,9 @@ func (d *KrakenStorageDriver) List(ctx context.Context, path string) ([]string, 
 
 	switch pathType {
 	case _uploads:
-		return d.uploads.ListHashStates(path, pathSubType)
+		return d.uploads.list(path, pathSubType)
 	case _manifests:
-		return d.tags.ListManifests(path, pathSubType)
+		return d.manifests.list(path, pathSubType)
 	default:
 		return nil, InvalidRequestError{path}
 	}
@@ -262,7 +273,7 @@ func (d *KrakenStorageDriver) Move(ctx context.Context, sourcePath string, destP
 
 	switch pathType {
 	case _uploads:
-		return d.uploads.Move(sourcePath, destPath)
+		return d.uploads.move(sourcePath, destPath)
 	default:
 		return InvalidRequestError{sourcePath + " to " + destPath}
 	}

@@ -14,11 +14,13 @@ import (
 )
 
 func TestStorageDriverGetContent(t *testing.T) {
-	sd, testImage, cleanup := genStorageDriver()
+	td, cleanup := newTestDriver()
 	defer cleanup()
 
+	sd, testImage := td.setup()
+
 	var sa startedAtMetadata
-	if err := sd.store.GetUploadFileMetadata(testImage.upload, &sa); err != nil {
+	if err := td.cas.GetUploadFileMetadata(testImage.upload, &sa); err != nil {
 		log.Panic(err)
 	}
 	uploadTime, err := sa.Serialize()
@@ -54,8 +56,10 @@ func TestStorageDriverGetContent(t *testing.T) {
 }
 
 func TestStorageDriverReader(t *testing.T) {
-	sd, testImage, cleanup := genStorageDriver()
+	td, cleanup := newTestDriver()
 	defer cleanup()
+
+	sd, testImage := td.setup()
 
 	testCases := []struct {
 		input string
@@ -78,8 +82,10 @@ func TestStorageDriverReader(t *testing.T) {
 }
 
 func TestStorageDriverPutContent(t *testing.T) {
-	sd, testImage, cleanup := genStorageDriver()
+	td, cleanup := newTestDriver()
 	defer cleanup()
+
+	sd, testImage := td.setup()
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	imageID := r.Int()
@@ -95,7 +101,7 @@ func TestStorageDriverPutContent(t *testing.T) {
 		{genUploadStartedAtPath(upload), nil, nil},
 		{genUploadHashStatesPath(testImage.upload), []byte{}, nil},
 		{genLayerLinkPath(testImage.layer1.Digest.Hex()), nil, nil},
-		{genBlobDataPath(testImage.layer1.Digest.Hex()), []byte("test putcontent"), nil},
+		{genBlobDataPath(testImage.layer1.Digest.Hex()), testImage.layer1.Content, nil},
 		{genManifestRevisionLinkPath(repo, testImage.manifest), nil, nil},
 		{genManifestTagShaLinkPath(repo, tag, testImage.manifest), nil, nil},
 		{genManifestTagCurrentLinkPath(repo, tag, testImage.manifest), nil, nil},
@@ -111,8 +117,10 @@ func TestStorageDriverPutContent(t *testing.T) {
 }
 
 func TestStorageDriverWriter(t *testing.T) {
-	sd, testImage, cleanup := genStorageDriver()
+	td, cleanup := newTestDriver()
 	defer cleanup()
+
+	sd, testImage := td.setup()
 
 	testCases := []struct {
 		input string
@@ -145,8 +153,10 @@ func TestStorageDriverWriter(t *testing.T) {
 }
 
 func TestStorageDriverStat(t *testing.T) {
-	sd, testImage, cleanup := genStorageDriver()
+	td, cleanup := newTestDriver()
 	defer cleanup()
+
+	sd, testImage := td.setup()
 
 	testCases := []struct {
 		input string
@@ -173,8 +183,10 @@ func TestStorageDriverStat(t *testing.T) {
 }
 
 func TestStorageDriverList(t *testing.T) {
-	sd, testImage, cleanup := genStorageDriver()
+	td, cleanup := newTestDriver()
 	defer cleanup()
+
+	sd, testImage := td.setup()
 
 	testCases := []struct {
 		input string
@@ -198,15 +210,17 @@ func TestStorageDriverList(t *testing.T) {
 func TestStorageDriverMove(t *testing.T) {
 	require := require.New(t)
 
-	sd, testImage, cleanup := genStorageDriver()
+	td, cleanup := newTestDriver()
 	defer cleanup()
+
+	sd, testImage := td.setup()
 
 	d, err := core.NewDigester().FromBytes([]byte(uploadContent))
 	require.NoError(err)
 
 	require.NoError(sd.Move(context.TODO(), genUploadDataPath(testImage.upload), genBlobDataPath(d.Hex())))
 
-	reader, err := sd.store.GetCacheFileReader(d.Hex())
+	reader, err := td.cas.GetCacheFileReader(d.Hex())
 	require.NoError(err)
 	data, err := ioutil.ReadAll(reader)
 	require.NoError(err)

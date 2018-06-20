@@ -17,29 +17,29 @@ import (
 type ProxyTransferer struct {
 	tags          tagclient.Client
 	originCluster blobclient.ClusterClient
-	fs            store.FileStore
+	cas           *store.CAStore
 }
 
 // NewProxyTransferer creates a new ProxyTransferer.
 func NewProxyTransferer(
 	tags tagclient.Client,
 	originCluster blobclient.ClusterClient,
-	fs store.FileStore) *ProxyTransferer {
+	cas *store.CAStore) *ProxyTransferer {
 
-	return &ProxyTransferer{tags, originCluster, fs}
+	return &ProxyTransferer{tags, originCluster, cas}
 }
 
 // Download downloads the blob of name into the file store and returns a reader
 // to the newly downloaded file.
 func (t *ProxyTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
-	blob, err := t.fs.GetCacheFileReader(d.Hex())
+	blob, err := t.cas.GetCacheFileReader(d.Hex())
 	if err != nil {
 		if os.IsNotExist(err) {
 			tmp := fmt.Sprintf("%s.%s", d.Hex(), uuid.Generate().String())
-			if err := t.fs.CreateUploadFile(tmp, 0); err != nil {
+			if err := t.cas.CreateUploadFile(tmp, 0); err != nil {
 				return nil, err
 			}
-			w, err := t.fs.GetUploadFileReadWriter(tmp)
+			w, err := t.cas.GetUploadFileReadWriter(tmp)
 			if err != nil {
 				return nil, err
 			}
@@ -49,13 +49,13 @@ func (t *ProxyTransferer) Download(namespace string, d core.Digest) (store.FileR
 				return nil, fmt.Errorf("remote backend download: %s", err)
 			}
 
-			if err := t.fs.MoveUploadFileToCache(tmp, d.Hex()); err != nil {
+			if err := t.cas.MoveUploadFileToCache(tmp, d.Hex()); err != nil {
 				if !os.IsExist(err) {
 					return nil, err
 				}
 				// If file exists another thread else is pulling the same blob.
 			}
-			blob, err = t.fs.GetCacheFileReader(d.Hex())
+			blob, err = t.cas.GetCacheFileReader(d.Hex())
 			if err != nil {
 				return nil, fmt.Errorf("get cache file: %s", err)
 			}
@@ -80,7 +80,7 @@ func (t *ProxyTransferer) GetTag(tag string) (core.Digest, error) {
 
 // PostTag uploads d as the manifest digest for tag.
 func (t *ProxyTransferer) PostTag(tag string, d core.Digest) error {
-	f, err := t.fs.GetCacheFileReader(d.Hex())
+	f, err := t.cas.GetCacheFileReader(d.Hex())
 	if err != nil {
 		return fmt.Errorf("cache: %s", err)
 	}

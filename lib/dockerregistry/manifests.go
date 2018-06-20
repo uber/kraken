@@ -2,7 +2,6 @@ package dockerregistry
 
 import (
 	"fmt"
-	"time"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
@@ -18,41 +17,21 @@ const (
 	getFailureCounter    = "dockertag.failure.get"
 )
 
-// Tags handles tag lookups
-// a tag is a file with tag_path = <tag_dir>/<repo>/<tag>
-// content of the file is sha1(<tag_path>), which is the name of a (torrent) file in cache_dir
-// torrent file <cache_dir>/<sha1(<tag_path>)> is a link between tag and manifest
-// the content of it is the manifest digest of the tag
-type Tags struct {
+type manifests struct {
 	transferer transfer.ImageTransferer
 }
 
-// Tag stores information about one tag.
-type Tag struct {
-	repo    string
-	tagName string
-	modTime time.Time
+func newManifests(transferer transfer.ImageTransferer) *manifests {
+	return &manifests{transferer}
 }
 
-// TagSlice is used for sorting tags
-type TagSlice []Tag
-
-func (s TagSlice) Less(i, j int) bool { return s[i].modTime.Before(s[j].modTime) }
-func (s TagSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s TagSlice) Len() int           { return len(s) }
-
-// NewTags returns a new Tags.
-func NewTags(transferer transfer.ImageTransferer) *Tags {
-	return &Tags{transferer}
-}
-
-// GetDigest downloads and returns manifest digest.
+// getDigest downloads and returns manifest digest.
 // This is the only place storage driver would download a manifest blob via
 // torrent scheduler or origin because it has namespace information.
 // The caller of storage driver would first call this function to resolve
 // the manifest link (and downloads manifest blob),
 // then call Stat or Reader which would assume the blob is on disk already.
-func (t *Tags) GetDigest(path string, subtype PathSubType) (data []byte, err error) {
+func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) {
 	repo, err := GetRepo(path)
 	if err != nil {
 		return nil, fmt.Errorf("get repo: %s", err)
@@ -92,8 +71,7 @@ func (t *Tags) GetDigest(path string, subtype PathSubType) (data []byte, err err
 	return []byte(digest.String()), nil
 }
 
-// PutContent creates tags.
-func (t *Tags) PutContent(path string, subtype PathSubType) error {
+func (t *manifests) putContent(path string, subtype PathSubType) error {
 	switch subtype {
 	case _tags:
 		repo, err := GetRepo(path)
@@ -116,23 +94,22 @@ func (t *Tags) PutContent(path string, subtype PathSubType) error {
 		}
 		return nil
 	}
-	// No-op.
+	// Intentional no-op.
 	return nil
 }
 
-// ListManifests lists all manifests tags in a repo.
-func (t *Tags) ListManifests(path string, subtype PathSubType) ([]string, error) {
+func (t *manifests) list(path string, subtype PathSubType) ([]string, error) {
 	switch subtype {
 	case _tags:
 		repo, err := GetRepo(path)
 		if err != nil {
 			return nil, fmt.Errorf("get repo: %s", err)
 		}
-		tags, err := t.transferer.ListRepository(repo)
+		manifests, err := t.transferer.ListRepository(repo)
 		if err != nil {
 			return nil, fmt.Errorf("list repository: %s", err)
 		}
-		return tags, nil
+		return manifests, nil
 	}
 	return nil, &InvalidRequestError{path}
 }
