@@ -59,8 +59,8 @@ type SimpleStoreConfig struct {
 	CacheCleanup  CleanupConfig `yaml:"cache_cleanup"`
 }
 
-// TorrentStoreConfig defines TorrentStore configuration.
-type TorrentStoreConfig struct {
+// CADownloadStoreConfig defines CADownloadStore configuration.
+type CADownloadStoreConfig struct {
 	DownloadDir     string        `yaml:"download_dir"`
 	CacheDir        string        `yaml:"cache_dir"`
 	DownloadCleanup CleanupConfig `yaml:"download_cleanup"`
