@@ -116,7 +116,7 @@ func TestCacheGetCleanup(t *testing.T) {
 
 	get := func() {
 		var wg sync.WaitGroup
-		for i := 0; i < 5000; i++ {
+		for i := 0; i < 4000; i++ {
 			wg.Add(2)
 			go func() {
 				defer wg.Done()
