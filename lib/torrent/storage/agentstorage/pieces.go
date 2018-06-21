@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"sync"
 
-	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -119,12 +118,16 @@ func (p *piece) markComplete() {
 // hash the pieces to determine completion status -- however, this is very
 // expensive. Instead, Torrent tracks completed pieces on disk via metadata
 // as they are written.
-func restorePieces(name string, fs store.FileStore, numPieces int) (pieces []*piece, numComplete int, err error) {
+func restorePieces(
+	name string,
+	cads caDownloadStore,
+	numPieces int) (pieces []*piece, numComplete int, err error) {
+
 	for i := 0; i < numPieces; i++ {
 		pieces = append(pieces, &piece{status: _empty})
 	}
 	md := newPieceStatusMetadata(pieces)
-	if err := fs.States().Download().GetOrSetMetadata(name, md); fs.InCacheError(err) {
+	if err := cads.Download().GetOrSetMetadata(name, md); cads.InCacheError(err) {
 		// File is in cache state -- initialize completed pieces.
 		for _, p := range pieces {
 			p.status = _complete

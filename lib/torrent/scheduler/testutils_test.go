@@ -97,7 +97,7 @@ type testPeer struct {
 	torrentArchive storage.TorrentArchive
 	stats          tally.TestScope
 	testProducer   *networkevent.TestProducer
-	fs             store.FileStore
+	cads           *store.CADownloadStore
 	cleanup        *testutil.Cleanup
 }
 
@@ -105,12 +105,12 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 	var cleanup testutil.Cleanup
 	m.cleanup.Add(cleanup.Run)
 
-	fs, c := store.LocalFileStoreFixture()
+	cads, c := store.CADownloadStoreFixture()
 	cleanup.Add(c)
 
 	stats := tally.NewTestScope("", nil)
 
-	ta := agentstorage.NewTorrentArchive(stats, fs, m.metaInfoClient)
+	ta := agentstorage.NewTorrentArchive(stats, cads, m.metaInfoClient)
 
 	pctx := core.PeerContext{
 		PeerID: core.PeerIDFixture(),
@@ -127,7 +127,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 	}
 	cleanup.Add(s.Stop)
 
-	return &testPeer{pctx, s, ta, stats, tp, fs, &cleanup}
+	return &testPeer{pctx, s, ta, stats, tp, cads, &cleanup}
 }
 
 func (m *testMocks) newPeers(n int, config Config) []*testPeer {

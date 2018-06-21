@@ -1,7 +1,6 @@
 package transfer
 
 import (
-	"bytes"
 	"io/ioutil"
 	"testing"
 
@@ -16,7 +15,7 @@ import (
 )
 
 type agentTransfererMocks struct {
-	fs    store.FileStore
+	cads  *store.CADownloadStore
 	tags  *mocktagclient.MockClient
 	sched *mockscheduler.MockScheduler
 }
@@ -24,7 +23,7 @@ type agentTransfererMocks struct {
 func newAgentTransfererMocks(t *testing.T) (*agentTransfererMocks, func()) {
 	var cleanup testutil.Cleanup
 
-	fs, c := store.LocalFileStoreFixture()
+	cads, c := store.CADownloadStoreFixture()
 	cleanup.Add(c)
 
 	ctrl := gomock.NewController(t)
@@ -34,11 +33,11 @@ func newAgentTransfererMocks(t *testing.T) (*agentTransfererMocks, func()) {
 
 	sched := mockscheduler.NewMockScheduler(ctrl)
 
-	return &agentTransfererMocks{fs, tags, sched}, cleanup.Run
+	return &agentTransfererMocks{cads, tags, sched}, cleanup.Run
 }
 
 func (m *agentTransfererMocks) new() *AgentTransferer {
-	return NewAgentTransferer(m.fs, m.tags, m.sched)
+	return NewAgentTransferer(m.cads, m.tags, m.sched)
 }
 
 func TestAgentTransfererDownloadCachesBlob(t *testing.T) {
@@ -55,7 +54,7 @@ func TestAgentTransfererDownloadCachesBlob(t *testing.T) {
 	mocks.sched.EXPECT().Download(
 		namespace, blob.Digest.Hex()).DoAndReturn(func(namespace, name string) error {
 
-		return mocks.fs.CreateCacheFile(name, bytes.NewReader(blob.Content))
+		return store.RunDownload(mocks.cads, blob.Digest, blob.Content)
 	})
 
 	// Downloading multiple times should only call scheduler download once.

@@ -63,7 +63,7 @@ func main() {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
 
-	fs, err := store.NewLocalFileStore(config.Store, stats)
+	cads, err := store.NewCADownloadStore(config.CADownloadStore, stats)
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
@@ -74,19 +74,19 @@ func main() {
 	}
 
 	sched, err := scheduler.NewAgentScheduler(
-		config.Scheduler, stats, pctx, fs, netevents, config.Tracker)
+		config.Scheduler, stats, pctx, cads, netevents, config.Tracker)
 	if err != nil {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
 
-	transferer := transfer.NewAgentTransferer(fs, tagclient.New(config.BuildIndex), sched)
+	transferer := transfer.NewAgentTransferer(cads, tagclient.New(config.BuildIndex), sched)
 
-	registry, err := config.Registry.Build(config.Registry.AgentParameters(transferer, fs, stats))
+	registry, err := config.Registry.Build(config.Registry.AgentParameters(transferer, cads, stats))
 	if err != nil {
 		log.Fatalf("Failed to init registry: %s", err)
 	}
 
-	agentServer := agentserver.New(config.AgentServer, stats, fs, sched)
+	agentServer := agentserver.New(config.AgentServer, stats, cads, sched)
 	addr := fmt.Sprintf(":%d", *agentServerPort)
 	log.Infof("Starting agent server on %s", addr)
 	go func() {

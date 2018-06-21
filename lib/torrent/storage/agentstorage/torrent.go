@@ -21,32 +21,42 @@ var (
 	errWritePieceConflict = errors.New("piece is already being written to")
 )
 
+// caDownloadStore defines the CADownloadStore methods which Torrent requires. Useful
+// for testing purposes, where we need to mock certain methods.
+type caDownloadStore interface {
+	MoveDownloadFileToCache(name string) error
+	GetDownloadFileReadWriter(name string) (store.FileReadWriter, error)
+	Any() *store.CADownloadStoreScope
+	Download() *store.CADownloadStoreScope
+	InCacheError(error) bool
+}
+
 // Torrent implements a Torrent on top of an AgentFileStore.
 // It Allows concurrent writes on distinct pieces, and concurrent reads on all
 // pieces. Behavior is undefined if multiple Torrent instances are backed
 // by the same file store and metainfo.
 type Torrent struct {
 	metaInfo    *core.MetaInfo
-	store       store.FileStore
+	cads        caDownloadStore
 	pieces      []*piece
 	numComplete *atomic.Int32
 }
 
 // NewTorrent creates a new Torrent.
-func NewTorrent(store store.FileStore, mi *core.MetaInfo) (*Torrent, error) {
-	pieces, numComplete, err := restorePieces(mi.Name(), store, mi.Info.NumPieces())
+func NewTorrent(cads caDownloadStore, mi *core.MetaInfo) (*Torrent, error) {
+	pieces, numComplete, err := restorePieces(mi.Name(), cads, mi.Info.NumPieces())
 	if err != nil {
 		return nil, fmt.Errorf("restore pieces: %s", err)
 	}
 
 	if numComplete == len(pieces) {
-		if err := store.MoveDownloadFileToCache(mi.Name()); err != nil && !os.IsExist(err) {
+		if err := cads.MoveDownloadFileToCache(mi.Name()); err != nil && !os.IsExist(err) {
 			return nil, fmt.Errorf("move file to cache: %s", err)
 		}
 	}
 
 	return &Torrent{
-		store:       store,
+		cads:        cads,
 		metaInfo:    mi,
 		pieces:      pieces,
 		numComplete: atomic.NewInt32(int32(numComplete)),
@@ -127,7 +137,7 @@ func (t *Torrent) getPiece(pi int) (*piece, error) {
 
 // markPieceComplete must only be called once per piece.
 func (t *Torrent) markPieceComplete(pi int) error {
-	updated, err := t.store.States().Download().SetMetadataAt(
+	updated, err := t.cads.Download().SetMetadataAt(
 		t.Name(), &pieceStatusMetadata{}, []byte{byte(_complete)}, int64(pi))
 	if err != nil {
 		return fmt.Errorf("write piece metadata: %s", err)
@@ -144,7 +154,7 @@ func (t *Torrent) markPieceComplete(pi int) error {
 
 // writePiece writes data to piece pi. If the write succeeds, marks the piece as completed.
 func (t *Torrent) writePiece(src storage.PieceReader, pi int) error {
-	f, err := t.store.GetDownloadFileReadWriter(t.metaInfo.Info.Name)
+	f, err := t.cads.GetDownloadFileReadWriter(t.metaInfo.Info.Name)
 	if err != nil {
 		return fmt.Errorf("get download writer: %s", err)
 	}
@@ -209,7 +219,7 @@ func (t *Torrent) WritePiece(src storage.PieceReader, pi int) error {
 		// Multiple threads may attempt to move the download file to cache, however
 		// only one will succeed while the others will receive (and ignore) file exist
 		// error.
-		if err := t.store.MoveDownloadFileToCache(t.metaInfo.Info.Name); err != nil && !os.IsExist(err) {
+		if err := t.cads.MoveDownloadFileToCache(t.metaInfo.Info.Name); err != nil && !os.IsExist(err) {
 			return fmt.Errorf("download completed but failed to move file to cache directory: %s", err)
 		}
 	}
@@ -222,7 +232,7 @@ type opener struct {
 }
 
 func (o *opener) Open() (store.FileReader, error) {
-	return o.torrent.store.GetDownloadOrCacheFileReader(o.torrent.Name())
+	return o.torrent.cads.Any().GetFileReader(o.torrent.Name())
 }
 
 // GetPieceReader returns a reader for piece pi.

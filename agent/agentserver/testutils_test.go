@@ -12,7 +12,7 @@ import (
 )
 
 type serverMocks struct {
-	fs      store.FileStore
+	cads    *store.CADownloadStore
 	sched   *mockscheduler.MockReloadableScheduler
 	cleanup *testutil.Cleanup
 }
@@ -20,7 +20,7 @@ type serverMocks struct {
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	var cleanup testutil.Cleanup
 
-	fs, c := store.LocalFileStoreFixture()
+	cads, c := store.CADownloadStoreFixture()
 	cleanup.Add(c)
 
 	ctrl := gomock.NewController(t)
@@ -28,11 +28,11 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 
 	sched := mockscheduler.NewMockReloadableScheduler(ctrl)
 
-	return &serverMocks{fs, sched, &cleanup}, cleanup.Run
+	return &serverMocks{cads, sched, &cleanup}, cleanup.Run
 }
 
 func (m *serverMocks) startServer() string {
-	s := New(Config{}, tally.NoopScope, m.fs, m.sched)
+	s := New(Config{}, tally.NoopScope, m.cads, m.sched)
 	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
 	return addr

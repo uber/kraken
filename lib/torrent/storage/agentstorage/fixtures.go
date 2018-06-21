@@ -10,8 +10,8 @@ import (
 
 // TorrentArchiveFixture returns a TorrrentArchive for testing purposes.
 func TorrentArchiveFixture() (*TorrentArchive, func()) {
-	fs, cleanup := store.LocalFileStoreFixture()
-	archive := NewTorrentArchive(tally.NoopScope, fs, nil)
+	cads, cleanup := store.CADownloadStoreFixture()
+	archive := NewTorrentArchive(tally.NoopScope, cads, nil)
 	return archive, cleanup
 }
 
@@ -20,12 +20,12 @@ func TorrentFixture(mi *core.MetaInfo) (*Torrent, func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
-	fs, c := store.LocalFileStoreFixture()
+	cads, c := store.CADownloadStoreFixture()
 	cleanup.Add(c)
 
 	tc := metainfoclient.NewTestClient()
 
-	ta := NewTorrentArchive(tally.NoopScope, fs, tc)
+	ta := NewTorrentArchive(tally.NoopScope, cads, tc)
 
 	if err := tc.Upload(mi); err != nil {
 		panic(err)

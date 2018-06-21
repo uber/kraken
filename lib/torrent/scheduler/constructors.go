@@ -19,13 +19,13 @@ func NewAgentScheduler(
 	config Config,
 	stats tally.Scope,
 	pctx core.PeerContext,
-	fs store.FileStore,
+	cads *store.CADownloadStore,
 	netevents networkevent.Producer,
 	tracker string) (ReloadableScheduler, error) {
 
 	s, err := newScheduler(
 		config,
-		agentstorage.NewTorrentArchive(stats, fs, metainfoclient.New(tracker)),
+		agentstorage.NewTorrentArchive(stats, cads, metainfoclient.New(tracker)),
 		stats,
 		pctx,
 		announceclient.New(pctx, tracker),

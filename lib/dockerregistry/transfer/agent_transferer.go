@@ -15,29 +15,29 @@ var _ ImageTransferer = (*AgentTransferer)(nil)
 
 // AgentTransferer gets and posts manifest to tracker, and transfers blobs as torrent.
 type AgentTransferer struct {
-	fs    store.FileStore
+	cads  *store.CADownloadStore
 	tags  tagclient.Client
 	sched scheduler.Scheduler
 }
 
 // NewAgentTransferer creates a new AgentTransferer.
 func NewAgentTransferer(
-	fs store.FileStore,
+	cads *store.CADownloadStore,
 	tags tagclient.Client,
 	sched scheduler.Scheduler) *AgentTransferer {
 
-	return &AgentTransferer{fs, tags, sched}
+	return &AgentTransferer{cads, tags, sched}
 }
 
 // Download downloads blobs as torrent.
 func (t *AgentTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
-	f, err := t.fs.GetCacheFileReader(d.Hex())
+	f, err := t.cads.Cache().GetFileReader(d.Hex())
 	if err != nil {
 		if os.IsNotExist(err) {
 			if err := t.sched.Download(namespace, d.Hex()); err != nil {
 				return nil, fmt.Errorf("scheduler: %s", err)
 			}
-			f, err = t.fs.GetCacheFileReader(d.Hex())
+			f, err = t.cads.Cache().GetFileReader(d.Hex())
 			if err != nil {
 				return nil, fmt.Errorf("cache: %s", err)
 			}
