@@ -22,7 +22,7 @@ type CADownloadStore struct {
 // NewCADownloadStore creates a new CADownloadStore.
 func NewCADownloadStore(config CADownloadStoreConfig, stats tally.Scope) (*CADownloadStore, error) {
 	stats = stats.Tagged(map[string]string{
-		"module": "torrentstore",
+		"module": "cadownloadstore",
 	})
 
 	for _, dir := range []string{config.DownloadDir, config.CacheDir} {
@@ -77,13 +77,13 @@ func (s *CADownloadStore) MoveDownloadFileToCache(name string) error {
 // GetCacheFileReader gets a cache file reader. Implemented for compatibility with
 // other stores.
 func (s *CADownloadStore) GetCacheFileReader(name string) (FileReader, error) {
-	return s.States().Cache().GetFileReader(name)
+	return s.Cache().GetFileReader(name)
 }
 
 // GetCacheFileStat stats a cache file. Implemented for compatibility with other
 // stores.
 func (s *CADownloadStore) GetCacheFileStat(name string) (os.FileInfo, error) {
-	return s.States().Cache().GetFileStat(name)
+	return s.Cache().GetFileStat(name)
 }
 
 // InCacheError returns true for errors originating from file store operations
@@ -100,63 +100,75 @@ func (s *CADownloadStore) InDownloadError(err error) bool {
 	return ok && fse.State == s.downloadState
 }
 
-// CADownloadStoreStateAcceptor is a builder which allows CADownloadStore clients to specify which
-// states an operation may be accepted within. Should only be used for read / write
-// operations which are acceptable in any state.
-type CADownloadStoreStateAcceptor struct {
+// CADownloadStoreScope scopes what states an operation may be accepted within.
+// Should only be used for read / write operations which are acceptable in any
+// state.
+type CADownloadStoreScope struct {
 	store *CADownloadStore
 	op    base.FileOp
 }
 
-// States returns a new CADownloadStoreStateAcceptor builder.
-func (s *CADownloadStore) States() *CADownloadStoreStateAcceptor {
-	return &CADownloadStoreStateAcceptor{
+func (s *CADownloadStore) states() *CADownloadStoreScope {
+	return &CADownloadStoreScope{
 		store: s,
 		op:    s.backend.NewFileOp(),
 	}
 }
 
-// Download adds the download state to the accepted states.
-func (a *CADownloadStoreStateAcceptor) Download() *CADownloadStoreStateAcceptor {
+func (a *CADownloadStoreScope) download() *CADownloadStoreScope {
 	a.op = a.op.AcceptState(a.store.downloadState)
 	return a
 }
 
-// Cache adds the cache state to the accepted states.
-func (a *CADownloadStoreStateAcceptor) Cache() *CADownloadStoreStateAcceptor {
+func (a *CADownloadStoreScope) cache() *CADownloadStoreScope {
 	a.op = a.op.AcceptState(a.store.cacheState)
 	return a
 }
 
+// Download scopes the store to files in the download state.
+func (s *CADownloadStore) Download() *CADownloadStoreScope {
+	return s.states().download()
+}
+
+// Cache scopes the store to files in the cache state.
+func (s *CADownloadStore) Cache() *CADownloadStoreScope {
+	return s.states().cache()
+}
+
+// Any scopes the store to files in any state.
+func (s *CADownloadStore) Any() *CADownloadStoreScope {
+	return s.states().download().cache()
+}
+
 // GetFileReader returns a reader for name.
-func (a *CADownloadStoreStateAcceptor) GetFileReader(name string) (FileReader, error) {
+func (a *CADownloadStoreScope) GetFileReader(name string) (FileReader, error) {
 	return a.op.GetFileReader(name)
 }
 
 // GetFileStat returns file info for name.
-func (a *CADownloadStoreStateAcceptor) GetFileStat(name string) (os.FileInfo, error) {
+func (a *CADownloadStoreScope) GetFileStat(name string) (os.FileInfo, error) {
 	return a.op.GetFileStat(name)
 }
 
 // DeleteFile deletes name.
-func (a *CADownloadStoreStateAcceptor) DeleteFile(name string) error {
+func (a *CADownloadStoreScope) DeleteFile(name string) error {
 	return a.op.DeleteFile(name)
 }
 
 // GetMetadata returns the metadata content of md for name.
-func (a *CADownloadStoreStateAcceptor) GetMetadata(name string, md metadata.Metadata) error {
+func (a *CADownloadStoreScope) GetMetadata(name string, md metadata.Metadata) error {
 	return a.op.GetFileMetadata(name, md)
 }
 
 // SetMetadata writes b to metadata content of md for name.
-func (a *CADownloadStoreStateAcceptor) SetMetadata(
+func (a *CADownloadStoreScope) SetMetadata(
 	name string, md metadata.Metadata) (updated bool, err error) {
 
 	return a.op.SetFileMetadata(name, md)
 }
 
 // SetMetadataAt writes b to metadata content of md starting at index i for name.
-func (a *CADownloadStoreStateAcceptor) SetMetadataAt(
+func (a *CADownloadStoreScope) SetMetadataAt(
 	name string, md metadata.Metadata, b []byte, offset int64) (updated bool, err error) {
 
 	return a.op.SetFileMetadataAt(name, md, b, offset)
@@ -164,6 +176,6 @@ func (a *CADownloadStoreStateAcceptor) SetMetadataAt(
 
 // GetOrSetMetadata returns the metadata content of md for name, or
 // initializes the metadata content to b if not set.
-func (a *CADownloadStoreStateAcceptor) GetOrSetMetadata(name string, md metadata.Metadata) error {
+func (a *CADownloadStoreScope) GetOrSetMetadata(name string, md metadata.Metadata) error {
 	return a.op.GetOrSetFileMetadata(name, md)
 }

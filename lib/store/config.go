@@ -1,31 +1,5 @@
 package store
 
-import "time"
-
-// Config contains store directory configs
-// TODO: merge them into one root dir
-type Config struct {
-	UploadDir       string        `yaml:"upload_dir"`
-	DownloadDir     string        `yaml:"download_dir"`
-	CacheDir        string        `yaml:"cache_dir"`
-	LRUConfig       LRUConfig     `yaml:"lru"`
-	DownloadCleanup CleanupConfig `yaml:"download_cleanup"`
-	CacheCleanup    CleanupConfig `yaml:"cache_cleanup"`
-}
-
-func (c Config) applyDefaults() Config {
-	c.DownloadCleanup = c.DownloadCleanup.applyDefaults()
-	return c
-}
-
-// LRUConfig contains configuration create a lru file store
-type LRUConfig struct {
-	Enable   bool          `yaml:"enable"`
-	Size     int           `yaml:"size"`
-	TTL      time.Duration `yaml:"ttl"`
-	Interval time.Duration `yaml:"interval"`
-}
-
 // Volume - if provided, volumes are used to store the actual files.
 // Symlinks will be created under state directories.
 // This configuration is needed on hosts with multiple disks.

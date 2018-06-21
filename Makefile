@@ -130,7 +130,7 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/lib/store/mockstore.go \
 		-package mockstore \
-		code.uber.internal/infra/kraken/lib/store FileStore,FileReadWriter
+		code.uber.internal/infra/kraken/lib/store FileReadWriter
 
 	mkdir -p mocks/lib/torrent/scheduler
 	$(mockgen) \

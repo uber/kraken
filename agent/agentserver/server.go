@@ -25,7 +25,7 @@ type Config struct{}
 type Server struct {
 	config Config
 	stats  tally.Scope
-	fs     store.FileStore
+	cads   *store.CADownloadStore
 	sched  scheduler.ReloadableScheduler
 }
 
@@ -33,13 +33,13 @@ type Server struct {
 func New(
 	config Config,
 	stats tally.Scope,
-	fs store.FileStore,
+	cads *store.CADownloadStore,
 	sched scheduler.ReloadableScheduler) *Server {
 
 	stats = stats.Tagged(map[string]string{
 		"module": "agentserver",
 	})
-	return &Server{config, stats, fs, sched}
+	return &Server{config, stats, cads, sched}
 }
 
 // Handler returns the HTTP handler.
@@ -77,21 +77,21 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 		return err
 	}
 
-	f, err := s.fs.GetCacheFileReader(name)
+	f, err := s.cads.Cache().GetFileReader(name)
 	if err != nil {
-		if os.IsNotExist(err) || s.fs.InDownloadError(err) {
+		if os.IsNotExist(err) || s.cads.InDownloadError(err) {
 			if err := s.sched.Download(namespace, name); err != nil {
 				if err == scheduler.ErrTorrentNotFound {
 					return handler.ErrorStatus(http.StatusNotFound)
 				}
 				return handler.Errorf("download torrent: %s", err)
 			}
-			f, err = s.fs.GetCacheFileReader(name)
+			f, err = s.cads.Cache().GetFileReader(name)
 			if err != nil {
-				return handler.Errorf("file store: %s", err)
+				return handler.Errorf("store: %s", err)
 			}
 		} else {
-			return handler.Errorf("file store: %s", err)
+			return handler.Errorf("store: %s", err)
 		}
 	}
 	if _, err := io.Copy(w, f); err != nil {

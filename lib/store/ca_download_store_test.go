@@ -26,13 +26,13 @@ func TestCADownloadStoreDownloadAndDeleteFiles(t *testing.T) {
 			defer wg.Done()
 			require.NoError(s.CreateDownloadFile(name, 1))
 			require.NoError(s.MoveDownloadFileToCache(name))
-			require.NoError(s.States().Cache().DeleteFile(name))
+			require.NoError(s.Cache().DeleteFile(name))
 		}()
 	}
 	wg.Wait()
 
 	for _, name := range names {
-		_, err := s.States().Cache().GetFileStat(name)
+		_, err := s.Cache().GetFileStat(name)
 		require.True(os.IsNotExist(err))
 	}
 }

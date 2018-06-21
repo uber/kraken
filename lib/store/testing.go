@@ -1,9 +1,12 @@
 package store
 
 import (
+	"bytes"
+	"io"
 	"io/ioutil"
 	"os"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
@@ -54,17 +57,17 @@ func NewMockFileReadWriter(content []byte) (*MockFileReadWriter, func()) {
 	return &MockFileReadWriter{File: f}, cleanup.Run
 }
 
-type mockGetDownloadFileReadWriterStore struct {
-	FileStore
-	f FileReadWriter
-}
-
-func (s *mockGetDownloadFileReadWriterStore) GetDownloadFileReadWriter(name string) (FileReadWriter, error) {
-	return s.f, nil
-}
-
-// MockGetDownloadFileReadWriter returns a FileStore wrapping internalFS which overrides
-// the GetDownloadFileReadWriter method to return f.
-func MockGetDownloadFileReadWriter(internalFS FileStore, f FileReadWriter) FileStore {
-	return &mockGetDownloadFileReadWriterStore{internalFS, f}
+// RunDownload downloads content to cads.
+func RunDownload(cads *CADownloadStore, d core.Digest, content []byte) error {
+	if err := cads.CreateDownloadFile(d.Hex(), int64(len(content))); err != nil {
+		return err
+	}
+	w, err := cads.GetDownloadFileReadWriter(d.Hex())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(w, bytes.NewReader(content)); err != nil {
+		return err
+	}
+	return cads.MoveDownloadFileToCache(d.Hex())
 }

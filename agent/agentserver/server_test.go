@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/utils/httputil"
@@ -27,7 +28,7 @@ func TestDownload(t *testing.T) {
 
 	mocks.sched.EXPECT().Download(namespace, blob.Digest.Hex()).DoAndReturn(
 		func(namespace, name string) error {
-			return mocks.fs.CreateCacheFile(name, bytes.NewReader(blob.Content))
+			return store.RunDownload(mocks.cads, blob.Digest, blob.Content)
 		})
 
 	addr := mocks.startServer()

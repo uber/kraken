@@ -23,7 +23,7 @@ import (
 const pieceLength = 4
 
 type archiveMocks struct {
-	fs             store.FileStore
+	cads           *store.CADownloadStore
 	metaInfoClient *mockmetainfoclient.MockClient
 }
 
@@ -33,16 +33,16 @@ func newArchiveMocks(t *testing.T) (*archiveMocks, func()) {
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
 
-	fs, c := store.LocalFileStoreFixture()
+	cads, c := store.CADownloadStoreFixture()
 	cleanup.Add(c)
 
 	metaInfoClient := mockmetainfoclient.NewMockClient(ctrl)
 
-	return &archiveMocks{fs, metaInfoClient}, cleanup.Run
+	return &archiveMocks{cads, metaInfoClient}, cleanup.Run
 }
 
 func (m *archiveMocks) new() *TorrentArchive {
-	return NewTorrentArchive(tally.NoopScope, m.fs, m.metaInfoClient)
+	return NewTorrentArchive(tally.NoopScope, m.cads, m.metaInfoClient)
 }
 
 func TestTorrentArchiveStatBitfield(t *testing.T) {
@@ -104,7 +104,7 @@ func TestTorrentArchiveCreateTorrent(t *testing.T) {
 
 	// Check metainfo.
 	var tm metadata.TorrentMeta
-	require.NoError(mocks.fs.States().Download().Cache().GetMetadata(mi.Name(), &tm))
+	require.NoError(mocks.cads.Any().GetMetadata(mi.Name(), &tm))
 	require.Equal(mi, tm.MetaInfo)
 
 	// Create again reads from disk.
