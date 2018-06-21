@@ -96,8 +96,8 @@ func CAStoreFixture() (*CAStore, func()) {
 	return s, cleanup.Run
 }
 
-// TorrentStoreFixture returns a TorrentStore for testing purposes.
-func TorrentStoreFixture() (*TorrentStore, func()) {
+// CADownloadStoreFixture returns a CADownloadStore for testing purposes.
+func CADownloadStoreFixture() (*CADownloadStore, func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
@@ -113,11 +113,11 @@ func TorrentStoreFixture() (*TorrentStore, func()) {
 	}
 	cleanup.Add(func() { os.RemoveAll(cache) })
 
-	config := TorrentStoreConfig{
+	config := CADownloadStoreConfig{
 		DownloadDir: download,
 		CacheDir:    cache,
 	}
-	s, err := NewTorrentStore(config, tally.NoopScope)
+	s, err := NewCADownloadStore(config, tally.NoopScope)
 	if err != nil {
 		panic(err)
 	}

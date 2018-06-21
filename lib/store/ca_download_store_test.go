@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTorrentStoreDownloadAndDeleteFiles(t *testing.T) {
+func TestCADownloadStoreDownloadAndDeleteFiles(t *testing.T) {
 	require := require.New(t)
 
-	s, cleanup := TorrentStoreFixture()
+	s, cleanup := CADownloadStoreFixture()
 	defer cleanup()
 
 	var names []string
