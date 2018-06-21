@@ -8,8 +8,6 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
-
-	"github.com/docker/distribution/uuid"
 )
 
 // ProxyTransferer is a Transferer for proxy. Uploads/downloads blobs via the
@@ -29,39 +27,15 @@ func NewProxyTransferer(
 	return &ProxyTransferer{tags, originCluster, cas}
 }
 
-// Download downloads the blob of name into the file store and returns a reader
-// to the newly downloaded file.
+// Download only checks local cache from previous uploads and never downloads
+// from origin, to avoid downloading blobs when handling HEAD requests during
+// upload.
 func (t *ProxyTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
 	blob, err := t.cas.GetCacheFileReader(d.Hex())
-	if err != nil {
-		if os.IsNotExist(err) {
-			tmp := fmt.Sprintf("%s.%s", d.Hex(), uuid.Generate().String())
-			if err := t.cas.CreateUploadFile(tmp, 0); err != nil {
-				return nil, err
-			}
-			w, err := t.cas.GetUploadFileReadWriter(tmp)
-			if err != nil {
-				return nil, err
-			}
-			defer w.Close()
-
-			if err := t.originCluster.DownloadBlob(namespace, d, w); err != nil {
-				return nil, fmt.Errorf("remote backend download: %s", err)
-			}
-
-			if err := t.cas.MoveUploadFileToCache(tmp, d.Hex()); err != nil {
-				if !os.IsExist(err) {
-					return nil, err
-				}
-				// If file exists another thread else is pulling the same blob.
-			}
-			blob, err = t.cas.GetCacheFileReader(d.Hex())
-			if err != nil {
-				return nil, fmt.Errorf("get cache file: %s", err)
-			}
-		} else {
-			return nil, fmt.Errorf("get cache file: %s", err)
-		}
+	if os.IsNotExist(err) {
+		return nil, ErrBlobNotFound
+	} else if err != nil {
+		return nil, fmt.Errorf("get cache reader %s: %s", d.Hex(), err)
 	}
 	return blob, nil
 }

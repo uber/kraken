@@ -2,7 +2,6 @@ package transfer
 
 import (
 	"bytes"
-	"io/ioutil"
 	"testing"
 
 	"code.uber.internal/infra/kraken/core"
@@ -10,7 +9,6 @@ import (
 	"code.uber.internal/infra/kraken/mocks/build-index/tagclient"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/dockerutil"
-	"code.uber.internal/infra/kraken/utils/rwutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
@@ -43,7 +41,7 @@ func (m *proxyTransfererMocks) new() *ProxyTransferer {
 	return NewProxyTransferer(m.tags, m.originCluster, m.cas)
 }
 
-func TestProxyTransfererDownloadCachesBlob(t *testing.T) {
+func TestProxyTransfererDownloadFail(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newProxyTransfererMocks(t)
@@ -54,17 +52,10 @@ func TestProxyTransfererDownloadCachesBlob(t *testing.T) {
 	namespace := "docker/test-image"
 	blob := core.NewBlobFixture()
 
-	mocks.originCluster.EXPECT().DownloadBlob(
-		namespace, blob.Digest, rwutil.MatchWriter(blob.Content)).Return(nil)
-
-	// Downloading multiple times should only call blob download once.
-	for i := 0; i < 10; i++ {
-		result, err := transferer.Download(namespace, blob.Digest)
-		require.NoError(err)
-		b, err := ioutil.ReadAll(result)
-		require.NoError(err)
-		require.Equal(blob.Content, b)
-	}
+	// Download would always fail.
+	_, err := transferer.Download(namespace, blob.Digest)
+	require.Error(err)
+	require.Equal(ErrBlobNotFound, err)
 }
 
 func TestPostTag(t *testing.T) {

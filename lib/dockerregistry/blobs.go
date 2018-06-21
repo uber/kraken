@@ -89,12 +89,14 @@ func (b *blobs) getDigest(path string) ([]byte, error) {
 	}
 
 	blob, err := b.transferer.Download(repo, digest)
-	if err != nil {
-		log.Errorf("Failed to download %s: %s", digest, err)
+	if err == transfer.ErrBlobNotFound {
 		return nil, storagedriver.PathNotFoundError{
 			DriverName: "kraken",
 			Path:       digest.String(),
 		}
+	} else if err != nil {
+		log.Errorf("Failed to download %s: %s", digest, err)
+		return nil, fmt.Errorf("download %s: %s", digest.String(), err)
 	}
 	defer blob.Close()
 

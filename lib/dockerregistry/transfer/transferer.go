@@ -1,9 +1,14 @@
 package transfer
 
 import (
+	"errors"
+
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 )
+
+// ErrBlobNotFound is returned when a blob is not found by a transferer.
+var ErrBlobNotFound = errors.New("blob not found")
 
 // Downloader defines an interface to download blobs
 type Downloader interface {
