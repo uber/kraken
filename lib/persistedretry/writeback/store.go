@@ -67,7 +67,7 @@ func (s *Store) MarkPending(r persistedretry.Task) error {
 	res, err := s.db.NamedExec(`
 		UPDATE writeback_task
 		SET status = "pending"
-		WHERE namespace=:namespace AND digest=:digest
+		WHERE namespace=:namespace AND name=:name
 	`, r.(*Task))
 	if err != nil {
 		return err
@@ -88,7 +88,7 @@ func (s *Store) MarkFailed(r persistedretry.Task) error {
 		SET last_attempt = CURRENT_TIMESTAMP,
 			failures = failures + 1,
 			status = "failed"
-		WHERE namespace=:namespace AND digest=:digest
+		WHERE namespace=:namespace AND name=:name
 	`, t)
 	if err != nil {
 		return err
@@ -107,7 +107,7 @@ func (s *Store) MarkFailed(r persistedretry.Task) error {
 func (s *Store) Remove(r persistedretry.Task) error {
 	_, err := s.db.NamedExec(`
 		DELETE FROM writeback_task
-		WHERE namespace=:namespace AND digest=:digest
+		WHERE namespace=:namespace AND name=:name
 	`, r.(*Task))
 	return err
 }
@@ -116,14 +116,14 @@ func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
 	query := fmt.Sprintf(`
 		INSERT INTO writeback_task (
 			namespace,
-			digest,
+			name,
 			last_attempt,
 			failures,
 			delay,
 			status
 		) VALUES (
 			:namespace,
-			:digest,
+			:name,
 			:last_attempt,
 			:failures,
 			:delay,
@@ -142,7 +142,7 @@ func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
 func (s *Store) selectStatus(status string) ([]persistedretry.Task, error) {
 	var tasks []*Task
 	err := s.db.Select(&tasks, `
-		SELECT namespace, digest, created_at, last_attempt, failures, delay
+		SELECT namespace, name, created_at, last_attempt, failures, delay
 		FROM writeback_task
 		WHERE status=?
 	`, status)

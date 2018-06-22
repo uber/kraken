@@ -10,30 +10,33 @@ import (
 // Task contains information to write back a blob to remote storage.
 type Task struct {
 	Namespace   string        `db:"namespace"`
-	Digest      core.Digest   `db:"digest"`
+	Name        string        `db:"name"`
 	CreatedAt   time.Time     `db:"created_at"`
 	LastAttempt time.Time     `db:"last_attempt"`
 	Failures    int           `db:"failures"`
 	Delay       time.Duration `db:"delay"`
+
+	// Deprecated. Use name instead.
+	Digest core.Digest `db:"digest"`
 }
 
 // NewTask creates a new Task.
-func NewTask(namespace string, d core.Digest) *Task {
-	return NewTaskWithDelay(namespace, d, 0)
+func NewTask(namespace, name string) *Task {
+	return NewTaskWithDelay(namespace, name, 0)
 }
 
 // NewTaskWithDelay creates a new Task which will run after a given delay.
-func NewTaskWithDelay(namespace string, d core.Digest, delay time.Duration) *Task {
+func NewTaskWithDelay(namespace, name string, delay time.Duration) *Task {
 	return &Task{
 		Namespace: namespace,
-		Digest:    d,
+		Name:      name,
 		CreatedAt: time.Now(),
 		Delay:     delay,
 	}
 }
 
 func (t *Task) String() string {
-	return fmt.Sprintf("writeback.Task(namespace=%s, digest=%s)", t.Namespace, t.Digest)
+	return fmt.Sprintf("writeback.Task(namespace=%s, name=%s)", t.Namespace, t.Name)
 }
 
 // GetLastAttempt returns when t was last attempted.

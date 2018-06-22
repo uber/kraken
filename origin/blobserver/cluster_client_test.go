@@ -50,7 +50,8 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 		blob := core.NewBlobFixture()
 
 		s.writeBackManager.EXPECT().Add(
-			writeback.MatchTask(writeback.NewTask(backend.NoopNamespace, blob.Digest))).Return(nil)
+			writeback.MatchTask(writeback.NewTask(
+				backend.NoopNamespace, blob.Digest.Hex()))).Return(nil)
 		require.NoError(cc.UploadBlob(backend.NoopNamespace, blob.Digest, bytes.NewReader(blob.Content)))
 
 		ok, err := cc.CheckBlob(backend.NoopNamespace, blob.Digest)
