@@ -379,9 +379,9 @@ func TestUploadBlobDuplicatesWriteBackTaskToReplicas(t *testing.T) {
 	blob := computeBlobForHosts(config, s1.host, s2.host)
 
 	s1.writeBackManager.EXPECT().Add(
-		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest))).Return(nil)
+		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex()))).Return(nil)
 	s2.writeBackManager.EXPECT().Add(
-		writeback.MatchTask(writeback.NewTaskWithDelay(namespace, blob.Digest, time.Minute)))
+		writeback.MatchTask(writeback.NewTaskWithDelay(namespace, blob.Digest.Hex(), time.Minute)))
 
 	err := cp.Provide(s1.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
@@ -407,7 +407,7 @@ func TestUploadBlobRetriesWriteBackFailure(t *testing.T) {
 
 	blob := computeBlobForHosts(config, s.host)
 
-	expectedTask := writeback.MatchTask(writeback.NewTask(namespace, blob.Digest))
+	expectedTask := writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex()))
 
 	gomock.InOrder(
 		s.writeBackManager.EXPECT().Add(expectedTask).Return(errors.New("some error")),
@@ -445,7 +445,7 @@ func TestUploadBlobResilientToDuplicationFailure(t *testing.T) {
 	blob := computeBlobForHosts(config, s.host, master2)
 
 	s.writeBackManager.EXPECT().Add(
-		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest))).Return(nil)
+		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex()))).Return(nil)
 
 	err := cp.Provide(s.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)

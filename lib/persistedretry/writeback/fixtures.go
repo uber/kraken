@@ -37,5 +37,5 @@ func StoreFixture() (*Store, func()) {
 func TaskFixture() *Task {
 	return NewTask(
 		fmt.Sprintf("namespace-%s", randutil.Hex(8)),
-		core.DigestFixture())
+		core.DigestFixture().Hex())
 }

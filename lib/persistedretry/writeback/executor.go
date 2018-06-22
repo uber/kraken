@@ -47,10 +47,10 @@ func (e *Executor) Name() string {
 // that matches r's namespace.
 func (e *Executor) Exec(r persistedretry.Task) error {
 	t := r.(*Task)
-	if err := e.upload(t.Namespace, t.Digest.Hex()); err != nil {
+	if err := e.upload(t.Namespace, t.Name); err != nil {
 		return err
 	}
-	err := e.fs.DeleteCacheFileMetadata(t.Digest.Hex(), &metadata.Persist{})
+	err := e.fs.DeleteCacheFileMetadata(t.Name, &metadata.Persist{})
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("delete persist metadata: %s", err)
 	}
