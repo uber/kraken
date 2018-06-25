@@ -6,11 +6,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/mattn/go-sqlite3"
-	"github.com/pressly/goose"
 
 	"code.uber.internal/infra/kraken/lib/persistedretry"
-	_ "code.uber.internal/infra/kraken/lib/persistedretry/tagreplication/migrations" // Adds migrations.
-	"code.uber.internal/infra/kraken/utils/osutil"
 )
 
 // Store stores tags to be replicated asynchronously.
@@ -19,34 +16,12 @@ type Store struct {
 }
 
 // NewStore creates a new Store.
-func NewStore(source string, rv RemoteValidator) (*Store, error) {
-	if err := osutil.EnsureFilePresent(source); err != nil {
-		return nil, fmt.Errorf("ensure db source present: %s", err)
-	}
-	db, err := sqlx.Open("sqlite3", source)
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite3: %s", err)
-	}
-	db.SetMaxOpenConns(1)
-	if err := goose.SetDialect("sqlite3"); err != nil {
-		return nil, fmt.Errorf("set dialect as sqlite3: %s", err)
-	}
-	if err := goose.Up(db.DB, "."); err != nil {
-		return nil, fmt.Errorf("perform db migration: %s", err)
-	}
-
+func NewStore(db *sqlx.DB, rv RemoteValidator) (*Store, error) {
 	s := &Store{db}
-
 	if err := s.deleteInvalidTasks(rv); err != nil {
 		return nil, fmt.Errorf("delete invalid tasks: %s", err)
 	}
-
 	return s, nil
-}
-
-// Close closes the store.
-func (s *Store) Close() error {
-	return s.db.Close()
 }
 
 // GetPending returns all pending tasks.

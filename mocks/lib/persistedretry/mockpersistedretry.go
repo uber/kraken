@@ -58,18 +58,6 @@ func (mr *MockStoreMockRecorder) AddPending(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPending", reflect.TypeOf((*MockStore)(nil).AddPending), arg0)
 }
 
-// Close mocks base method
-func (m *MockStore) Close() error {
-	ret := m.ctrl.Call(m, "Close")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Close indicates an expected call of Close
-func (mr *MockStoreMockRecorder) Close() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockStore)(nil).Close))
-}
-
 // GetFailed mocks base method
 func (m *MockStore) GetFailed() ([]persistedretry.Task, error) {
 	ret := m.ctrl.Call(m, "GetFailed")

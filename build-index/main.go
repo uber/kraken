@@ -11,6 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
+	"code.uber.internal/infra/kraken/localdb"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
@@ -46,6 +47,11 @@ func main() {
 	}
 	originClient := blobclient.NewClusterClient(r)
 
+	localDB, err := localdb.New(config.LocalDB)
+	if err != nil {
+		log.Fatalf("Error creating local db: %s", err)
+	}
+
 	trExecutor := tagreplication.NewExecutor(
 		stats,
 		originClient,
@@ -56,7 +62,7 @@ func main() {
 		log.Fatalf("Error building remotes from configuration: %s", err)
 	}
 
-	trStore, err := tagreplication.NewStore(config.SQLiteSourcePath, remotes)
+	trStore, err := tagreplication.NewStore(localDB, remotes)
 	if err != nil {
 		log.Fatalf("Error creating replicate store: %s", err)
 	}
