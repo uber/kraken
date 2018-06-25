@@ -6,12 +6,43 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/jmoiron/sqlx"
 
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	. "code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
+	"code.uber.internal/infra/kraken/localdb"
 	"code.uber.internal/infra/kraken/mocks/lib/persistedretry/tagreplication"
+	"code.uber.internal/infra/kraken/utils/testutil"
 	"github.com/stretchr/testify/require"
 )
+
+type storeMocks struct {
+	db *sqlx.DB
+	rv *mocktagreplication.MockRemoteValidator
+}
+
+func newStoreMocks(t *testing.T) (*storeMocks, func()) {
+	var cleanup testutil.Cleanup
+	defer cleanup.Recover()
+
+	ctrl := gomock.NewController(t)
+	cleanup.Add(ctrl.Finish)
+
+	db, c := localdb.Fixture()
+	cleanup.Add(c)
+
+	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
+
+	return &storeMocks{db, rv}, cleanup.Run
+}
+
+func (m *storeMocks) new() *Store {
+	s, err := NewStore(m.db, m.rv)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
 
 func checkTask(t *testing.T, expected *Task, result persistedretry.Task) {
 	t.Helper()
@@ -59,13 +90,10 @@ func checkFailed(t *testing.T, store *Store, expected ...*Task) {
 func TestDatabaseNotLocked(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
-
-	store, _, cleanup := StoreFixture(rv)
+	mocks, cleanup := newStoreMocks(t)
 	defer cleanup()
+
+	store := mocks.new()
 
 	var wg sync.WaitGroup
 	for i := 0; i < 1000; i++ {
@@ -84,13 +112,10 @@ func TestDatabaseNotLocked(t *testing.T) {
 func TestDeleteInvalidTasks(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
-
-	store, source, cleanup := StoreFixture(rv)
+	mocks, cleanup := newStoreMocks(t)
 	defer cleanup()
+
+	store := mocks.new()
 
 	task1 := TaskFixture()
 	task2 := TaskFixture()
@@ -98,13 +123,10 @@ func TestDeleteInvalidTasks(t *testing.T) {
 	store.AddPending(task1)
 	store.AddFailed(task2)
 
-	require.NoError(store.Close())
+	mocks.rv.EXPECT().Valid(task1.Tag, task1.Destination).Return(false)
+	mocks.rv.EXPECT().Valid(task2.Tag, task2.Destination).Return(false)
 
-	rv.EXPECT().Valid(task1.Tag, task1.Destination).Return(false)
-	rv.EXPECT().Valid(task2.Tag, task2.Destination).Return(false)
-
-	store, err := NewStore(source, rv)
-	require.NoError(err)
+	store = mocks.new()
 
 	tasks, err := store.GetPending()
 	require.NoError(err)
@@ -118,13 +140,10 @@ func TestDeleteInvalidTasks(t *testing.T) {
 func TestAddPending(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
-
-	store, _, cleanup := StoreFixture(rv)
+	mocks, cleanup := newStoreMocks(t)
 	defer cleanup()
+
+	store := mocks.new()
 
 	task := TaskFixture()
 
@@ -136,13 +155,10 @@ func TestAddPending(t *testing.T) {
 func TestAddPendingTwiceReturnsErrTaskExists(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
-
-	store, _, cleanup := StoreFixture(rv)
+	mocks, cleanup := newStoreMocks(t)
 	defer cleanup()
+
+	store := mocks.new()
 
 	task := TaskFixture()
 
@@ -153,13 +169,10 @@ func TestAddPendingTwiceReturnsErrTaskExists(t *testing.T) {
 func TestAddFailed(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
-
-	store, _, cleanup := StoreFixture(rv)
+	mocks, cleanup := newStoreMocks(t)
 	defer cleanup()
+
+	store := mocks.new()
 
 	task := TaskFixture()
 
@@ -171,13 +184,10 @@ func TestAddFailed(t *testing.T) {
 func TestAddFailedTwiceReturnsErrTaskExists(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
-
-	store, _, cleanup := StoreFixture(rv)
+	mocks, cleanup := newStoreMocks(t)
 	defer cleanup()
+
+	store := mocks.new()
 
 	task := TaskFixture()
 
@@ -188,13 +198,10 @@ func TestAddFailedTwiceReturnsErrTaskExists(t *testing.T) {
 func TestStateTransitions(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
-
-	store, _, cleanup := StoreFixture(rv)
+	mocks, cleanup := newStoreMocks(t)
 	defer cleanup()
+
+	store := mocks.new()
 
 	task := TaskFixture()
 
@@ -214,13 +221,10 @@ func TestStateTransitions(t *testing.T) {
 func TestMarkTaskNotFound(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
-
-	store, _, cleanup := StoreFixture(rv)
+	mocks, cleanup := newStoreMocks(t)
 	defer cleanup()
+
+	store := mocks.new()
 
 	task := TaskFixture()
 
@@ -231,13 +235,10 @@ func TestMarkTaskNotFound(t *testing.T) {
 func TestRemove(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
-
-	store, _, cleanup := StoreFixture(rv)
+	mocks, cleanup := newStoreMocks(t)
 	defer cleanup()
+
+	store := mocks.new()
 
 	task := TaskFixture()
 
@@ -253,13 +254,10 @@ func TestRemove(t *testing.T) {
 func TestDelay(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
-
-	store, _, cleanup := StoreFixture(rv)
+	mocks, cleanup := newStoreMocks(t)
 	defer cleanup()
+
+	store := mocks.new()
 
 	task1 := TaskFixture()
 	task1.Delay = 5 * time.Minute

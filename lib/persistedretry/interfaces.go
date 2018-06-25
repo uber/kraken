@@ -32,9 +32,6 @@ type Store interface {
 
 	// Remove removes a task from the store.
 	Remove(Task) error
-
-	// Close closes the store.
-	Close() error
 }
 
 // Executor executes tasks.

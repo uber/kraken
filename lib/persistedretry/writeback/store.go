@@ -5,12 +5,9 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/lib/persistedretry"
-	_ "code.uber.internal/infra/kraken/lib/persistedretry/writeback/migrations" // Adds migrations.
-	"code.uber.internal/infra/kraken/utils/osutil"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/mattn/go-sqlite3"
-	"github.com/pressly/goose"
 )
 
 // Store stores writeback tasks.
@@ -18,28 +15,9 @@ type Store struct {
 	db *sqlx.DB
 }
 
-// NewStore creates a new store from a sqlite source file.
-func NewStore(source string) (*Store, error) {
-	if err := osutil.EnsureFilePresent(source); err != nil {
-		return nil, fmt.Errorf("ensure db source present: %s", err)
-	}
-	db, err := sqlx.Open("sqlite3", source)
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite3: %s", err)
-	}
-	db.SetMaxOpenConns(1)
-	if err := goose.SetDialect("sqlite3"); err != nil {
-		return nil, fmt.Errorf("set dialect as sqlite3: %s", err)
-	}
-	if err := goose.Up(db.DB, "."); err != nil {
-		return nil, fmt.Errorf("perform db migration: %s", err)
-	}
-	return &Store{db}, nil
-}
-
-// Close closes s.
-func (s *Store) Close() error {
-	return s.db.Close()
+// NewStore creates a new Store.
+func NewStore(db *sqlx.DB) *Store {
+	return &Store{db}
 }
 
 // GetPending returns all pending tasks.

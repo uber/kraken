@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/lib/persistedretry"
+	"code.uber.internal/infra/kraken/localdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,8 +56,10 @@ func checkFailed(t *testing.T, store *Store, expected ...*Task) {
 func TestDatabaseNotLocked(t *testing.T) {
 	require := require.New(t)
 
-	store, cleanup := StoreFixture()
+	db, cleanup := localdb.Fixture()
 	defer cleanup()
+
+	store := NewStore(db)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 1000; i++ {
@@ -75,8 +78,10 @@ func TestDatabaseNotLocked(t *testing.T) {
 func TestAddPending(t *testing.T) {
 	require := require.New(t)
 
-	store, cleanup := StoreFixture()
+	db, cleanup := localdb.Fixture()
 	defer cleanup()
+
+	store := NewStore(db)
 
 	task := TaskFixture()
 
@@ -88,8 +93,10 @@ func TestAddPending(t *testing.T) {
 func TestAddPendingTwiceReturnsErrTaskExists(t *testing.T) {
 	require := require.New(t)
 
-	store, cleanup := StoreFixture()
+	db, cleanup := localdb.Fixture()
 	defer cleanup()
+
+	store := NewStore(db)
 
 	task := TaskFixture()
 
@@ -100,8 +107,10 @@ func TestAddPendingTwiceReturnsErrTaskExists(t *testing.T) {
 func TestAddFailed(t *testing.T) {
 	require := require.New(t)
 
-	store, cleanup := StoreFixture()
+	db, cleanup := localdb.Fixture()
 	defer cleanup()
+
+	store := NewStore(db)
 
 	task := TaskFixture()
 
@@ -113,8 +122,10 @@ func TestAddFailed(t *testing.T) {
 func TestAddFailedTwiceReturnsErrTaskExists(t *testing.T) {
 	require := require.New(t)
 
-	store, cleanup := StoreFixture()
+	db, cleanup := localdb.Fixture()
 	defer cleanup()
+
+	store := NewStore(db)
 
 	task := TaskFixture()
 
@@ -125,8 +136,10 @@ func TestAddFailedTwiceReturnsErrTaskExists(t *testing.T) {
 func TestStateTransitions(t *testing.T) {
 	require := require.New(t)
 
-	store, cleanup := StoreFixture()
+	db, cleanup := localdb.Fixture()
 	defer cleanup()
+
+	store := NewStore(db)
 
 	task := TaskFixture()
 
@@ -146,8 +159,10 @@ func TestStateTransitions(t *testing.T) {
 func TestMarkTaskNotFound(t *testing.T) {
 	require := require.New(t)
 
-	store, cleanup := StoreFixture()
+	db, cleanup := localdb.Fixture()
 	defer cleanup()
+
+	store := NewStore(db)
 
 	task := TaskFixture()
 
@@ -158,8 +173,10 @@ func TestMarkTaskNotFound(t *testing.T) {
 func TestRemove(t *testing.T) {
 	require := require.New(t)
 
-	store, cleanup := StoreFixture()
+	db, cleanup := localdb.Fixture()
 	defer cleanup()
+
+	store := NewStore(db)
 
 	task := TaskFixture()
 
@@ -175,8 +192,10 @@ func TestRemove(t *testing.T) {
 func TestDelay(t *testing.T) {
 	require := require.New(t)
 
-	store, cleanup := StoreFixture()
+	db, cleanup := localdb.Fixture()
 	defer cleanup()
+
+	store := NewStore(db)
 
 	task1 := TaskFixture()
 	task1.Delay = 5 * time.Minute
