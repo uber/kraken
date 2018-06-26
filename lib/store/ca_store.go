@@ -136,7 +136,7 @@ func initCASVolumes(dir string, volumes []Volume) error {
 			return fmt.Errorf("calculate volume for subdir: %s", subdirName)
 		}
 		sourcePath := path.Join(nodes[0].Label, path.Base(dir), subdirName)
-		if err := os.MkdirAll(sourcePath, 0755); err != nil {
+		if err := os.MkdirAll(sourcePath, 0775); err != nil {
 			return fmt.Errorf("volume source path: %s", err)
 		}
 		targetPath := path.Join(dir, subdirName)

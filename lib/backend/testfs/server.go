@@ -102,7 +102,7 @@ func (s *Server) uploadHandler(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	p := s.path(name)
-	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0775); err != nil {
 		return handler.Errorf("mkdir: %s", err)
 	}
 	f, err := os.Create(p)

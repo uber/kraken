@@ -56,6 +56,9 @@ func NewSHA256DigestFromHex(hex string) (Digest, error) {
 // ParseSHA256Digest parses a raw "<algo>:<hex>" sha256 digest. Returns error if the
 // algo is not sha256 or the hex is not a valid sha256.
 func ParseSHA256Digest(raw string) (Digest, error) {
+	if raw == "" {
+		return Digest{}, errors.New("invalid digest: empty")
+	}
 	parts := strings.Split(raw, ":")
 	if len(parts) != 2 {
 		return Digest{}, errors.New("invalid digest: expected '<algo>:<hex>'")

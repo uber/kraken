@@ -9,22 +9,22 @@ import (
 	"github.com/uber-go/tally"
 )
 
+func tempdir(cleanup *testutil.Cleanup, name string) string {
+	d, err := ioutil.TempDir("/tmp", name)
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(func() { os.RemoveAll(d) })
+	return d
+}
+
 // CAStoreConfigFixture returns config for CAStore for testing purposes.
 func CAStoreConfigFixture() (CAStoreConfig, func()) {
-	var cleanup testutil.Cleanup
+	cleanup := &testutil.Cleanup{}
 	defer cleanup.Recover()
 
-	upload, err := ioutil.TempDir("/tmp", "upload")
-	if err != nil {
-		panic(err)
-	}
-	cleanup.Add(func() { os.RemoveAll(upload) })
-
-	cache, err := ioutil.TempDir("/tmp", "cache")
-	if err != nil {
-		panic(err)
-	}
-	cleanup.Add(func() { os.RemoveAll(cache) })
+	upload := tempdir(cleanup, "upload")
+	cache := tempdir(cleanup, "cache")
 
 	return CAStoreConfig{
 		UploadDir: upload,
@@ -44,25 +44,18 @@ func CAStoreFixture() (*CAStore, func()) {
 	if err != nil {
 		panic(err)
 	}
+	cleanup.Add(s.Close)
+
 	return s, cleanup.Run
 }
 
 // CADownloadStoreFixture returns a CADownloadStore for testing purposes.
 func CADownloadStoreFixture() (*CADownloadStore, func()) {
-	var cleanup testutil.Cleanup
+	cleanup := &testutil.Cleanup{}
 	defer cleanup.Recover()
 
-	download, err := ioutil.TempDir("/tmp", "download")
-	if err != nil {
-		panic(err)
-	}
-	cleanup.Add(func() { os.RemoveAll(download) })
-
-	cache, err := ioutil.TempDir("/tmp", "cache")
-	if err != nil {
-		panic(err)
-	}
-	cleanup.Add(func() { os.RemoveAll(cache) })
+	download := tempdir(cleanup, "download")
+	cache := tempdir(cleanup, "cache")
 
 	config := CADownloadStoreConfig{
 		DownloadDir: download,
@@ -72,5 +65,28 @@ func CADownloadStoreFixture() (*CADownloadStore, func()) {
 	if err != nil {
 		panic(err)
 	}
+	cleanup.Add(s.Close)
+
+	return s, cleanup.Run
+}
+
+// SimpleStoreFixture returns a SimpleStore for testing purposes.
+func SimpleStoreFixture() (*SimpleStore, func()) {
+	cleanup := &testutil.Cleanup{}
+	defer cleanup.Recover()
+
+	upload := tempdir(cleanup, "upload")
+	cache := tempdir(cleanup, "cache")
+
+	config := SimpleStoreConfig{
+		UploadDir: upload,
+		CacheDir:  cache,
+	}
+	s, err := NewSimpleStore(config, tally.NoopScope)
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(s.Close)
+
 	return s, cleanup.Run
 }

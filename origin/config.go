@@ -31,5 +31,5 @@ type Config struct {
 	Auth          backend.AuthConfig    `yaml:"auth"`
 	BlobRefresh   blobrefresh.Config    `yaml:"blobrefresh"`
 	LocalDB       localdb.Config        `yaml:"localdb"`
-	WriteBack     persistedretry.Config `yaml:"write_back"`
+	WriteBack     persistedretry.Config `yaml:"writeback"`
 }

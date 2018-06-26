@@ -20,7 +20,7 @@ func newUploadStore(dir string) (*uploadStore, error) {
 	// Always wipe upload directory on startup.
 	os.RemoveAll(dir)
 
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0775); err != nil {
 		return nil, fmt.Errorf("mkdir: %s", err)
 	}
 	state := base.NewFileState(dir)

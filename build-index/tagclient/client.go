@@ -37,14 +37,13 @@ type Client interface {
 	Get(tag string) (core.Digest, error)
 	GetLocal(tag string) (core.Digest, error)
 	Has(tag string) (bool, error)
-
 	ListRepository(repo string) ([]string, error)
-
 	Replicate(tag string) error
+	Origin() (string, error)
+
 	DuplicateReplicate(
 		tag string, d core.Digest, dependencies core.DigestList, delay time.Duration) error
-
-	Origin() (string, error)
+	DuplicatePut(tag string, d core.Digest, delay time.Duration) error
 }
 
 type client struct {
@@ -65,7 +64,7 @@ func (c *client) Put(tag string, d core.Digest) error {
 
 func (c *client) GetLocal(tag string) (core.Digest, error) {
 	resp, err := httputil.Get(
-		fmt.Sprintf("http://%s/tags/%s?local=true", c.addr, url.PathEscape(tag)),
+		fmt.Sprintf("http://%s/tags/%s?fallback=false", c.addr, url.PathEscape(tag)),
 		httputil.SendRetry())
 	if err != nil {
 		if httputil.IsNotFound(err) {
@@ -166,6 +165,25 @@ func (c *client) DuplicateReplicate(
 	_, err = httputil.Post(
 		fmt.Sprintf(
 			"http://%s/internal/duplicate/remotes/tags/%s/digest/%s",
+			c.addr, url.PathEscape(tag), d.String()),
+		httputil.SendBody(bytes.NewReader(b)),
+		httputil.SendRetry())
+	return err
+}
+
+// DuplicatePutRequest defines a DuplicatePut request body.
+type DuplicatePutRequest struct {
+	Delay time.Duration `json:"delay"`
+}
+
+func (c *client) DuplicatePut(tag string, d core.Digest, delay time.Duration) error {
+	b, err := json.Marshal(DuplicatePutRequest{delay})
+	if err != nil {
+		return fmt.Errorf("json marshal: %s", err)
+	}
+	_, err = httputil.Put(
+		fmt.Sprintf(
+			"http://%s/internal/duplicate/tags/%s/digest/%s",
 			c.addr, url.PathEscape(tag), d.String()),
 		httputil.SendBody(bytes.NewReader(b)),
 		httputil.SendRetry())

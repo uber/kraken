@@ -2,13 +2,16 @@ package main
 
 import (
 	"code.uber.internal/infra/kraken/build-index/tagserver"
+	"code.uber.internal/infra/kraken/build-index/tagstore"
 	"code.uber.internal/infra/kraken/build-index/tagtype"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/localdb"
 	"code.uber.internal/infra/kraken/metrics"
+
 	"go.uber.org/zap"
 )
 
@@ -25,4 +28,7 @@ type Config struct {
 	Origin         string                       `yaml:"origin"`
 	LocalDB        localdb.Config               `yaml:"localdb"`
 	LocalReplicas  hostlist.Config              `yaml:"local_replicas"`
+	Store          store.SimpleStoreConfig      `yaml:"store"`
+	TagStore       tagstore.Config              `yaml:"tagstore"`
+	WriteBack      persistedretry.Config        `yaml:"writeback"`
 }

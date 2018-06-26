@@ -2,8 +2,14 @@ FROM debian:8
 
 RUN apt-get update && apt-get install -y curl
 
-ADD ./ /root/kraken
-ADD tools/bin/testfs/testfs /usr/bin/kraken-testfs
-RUN mkdir -p /var/log/udocker/kraken-testfs
+RUN mkdir -p -m 777 /var/log/udocker/kraken-testfs
+RUN mkdir -p -m 777 /var/cache/udocker/kraken-testfs
 
-WORKDIR /root/kraken
+RUN groupadd --gid 100001 udocker
+RUN useradd --uid 100001 -g udocker -d /home/udocker -m -s /bin/bash udocker
+USER udocker
+
+ADD ./ /home/udocker/kraken
+ADD tools/bin/testfs/testfs /usr/bin/kraken-testfs
+
+WORKDIR /home/udocker/kraken
