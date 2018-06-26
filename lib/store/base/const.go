@@ -5,7 +5,7 @@ package base
 const DefaultShardIDLength = 2
 
 // DefaultDirPermission is the default permission for new directories.
-const DefaultDirPermission = 0740
+const DefaultDirPermission = 0775
 
 // DefaultDataFileName is the name of the actual blob data file.
 const DefaultDataFileName = "data"

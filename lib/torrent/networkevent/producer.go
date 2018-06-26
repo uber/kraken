@@ -37,7 +37,7 @@ func NewProducer(config Config) (Producer, error) {
 			flag = os.O_WRONLY | os.O_APPEND
 		}
 		var err error
-		f, err = os.OpenFile(config.LogPath, flag, 0755)
+		f, err = os.OpenFile(config.LogPath, flag, 0775)
 		if err != nil {
 			return nil, fmt.Errorf("open %d: %s", flag, err)
 		}

@@ -37,9 +37,9 @@ func ReadLines(f *os.File) ([]string, error) {
 
 // EnsureFilePresent initializes a file and all parent directories for filepath
 // if they do not exist. If the file exists, no-ops.
-func EnsureFilePresent(filepath string) error {
+func EnsureFilePresent(filepath string, perm os.FileMode) error {
 	if _, err := os.Stat(filepath); os.IsNotExist(err) {
-		err := os.MkdirAll(path.Dir(filepath), 0755)
+		err := os.MkdirAll(path.Dir(filepath), perm)
 		if err != nil {
 			return fmt.Errorf("mkdir: %s", err)
 		}

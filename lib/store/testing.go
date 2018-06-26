@@ -49,7 +49,7 @@ func NewMockFileReadWriter(content []byte) (*MockFileReadWriter, func()) {
 	}
 
 	// Open fresh file.
-	f, err := os.OpenFile(name, os.O_RDWR, 0755)
+	f, err := os.OpenFile(name, os.O_RDWR, 0775)
 	if err != nil {
 		panic(err)
 	}

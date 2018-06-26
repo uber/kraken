@@ -26,7 +26,7 @@ func NewCADownloadStore(config CADownloadStoreConfig, stats tally.Scope) (*CADow
 	})
 
 	for _, dir := range []string{config.DownloadDir, config.CacheDir} {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0775); err != nil {
 			return nil, fmt.Errorf("mkdir %s: %s", dir, err)
 		}
 	}
@@ -57,6 +57,11 @@ func NewCADownloadStore(config CADownloadStoreConfig, stats tally.Scope) (*CADow
 		cacheState:    cacheState,
 		cleanup:       cleanup,
 	}, nil
+}
+
+// Close terminates all goroutines started by s.
+func (s *CADownloadStore) Close() {
+	s.cleanup.stop()
 }
 
 // CreateDownloadFile creates an empty download file initialized with length.

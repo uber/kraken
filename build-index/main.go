@@ -7,10 +7,13 @@ import (
 
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/build-index/tagserver"
+	"code.uber.internal/infra/kraken/build-index/tagstore"
 	"code.uber.internal/infra/kraken/build-index/tagtype"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
+	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
+	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/localdb"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -41,6 +44,16 @@ func main() {
 	}
 	defer closer.Close()
 
+	ss, err := store.NewSimpleStore(config.Store, stats)
+	if err != nil {
+		log.Fatalf("Error creating simple store: %s", err)
+	}
+
+	backends, err := backend.NewManager(config.Backends, config.Auth)
+	if err != nil {
+		log.Fatalf("Error creating backend manager: %s", err)
+	}
+
 	r, err := blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin)
 	if err != nil {
 		log.Fatalf("Error creating origin client resolver: %s", err)
@@ -52,39 +65,50 @@ func main() {
 		log.Fatalf("Error creating local db: %s", err)
 	}
 
-	trExecutor := tagreplication.NewExecutor(
-		stats,
-		originClient,
-		tagclient.NewProvider())
+	localReplicas, err := config.LocalReplicas.Build(*port)
+	if err != nil {
+		log.Fatalf("Error building local replica host list: %s", err)
+	}
 
 	remotes, err := config.Remotes.Build()
 	if err != nil {
 		log.Fatalf("Error building remotes from configuration: %s", err)
 	}
 
-	trStore, err := tagreplication.NewStore(localDB, remotes)
+	tagReplicationExecutor := tagreplication.NewExecutor(
+		stats,
+		originClient,
+		tagclient.NewProvider())
+	tagReplicationStore, err := tagreplication.NewStore(localDB, remotes)
 	if err != nil {
-		log.Fatalf("Error creating replicate store: %s", err)
+		log.Fatalf("Error creating tag replication store: %s", err)
 	}
-
-	trManager, err := persistedretry.NewManager(
+	tagReplicationManager, err := persistedretry.NewManager(
 		config.TagReplication,
 		stats,
-		trStore,
-		trExecutor)
+		tagReplicationStore,
+		tagReplicationExecutor)
 	if err != nil {
 		log.Fatalf("Error creating tag replication manager: %s", err)
 	}
 
-	backends, err := backend.NewManager(config.Backends, config.Auth)
+	writeBackManager, err := persistedretry.NewManager(
+		config.WriteBack,
+		stats,
+		writeback.NewStore(localDB),
+		writeback.NewExecutor(stats, ss, backends))
 	if err != nil {
-		log.Fatalf("Error creating backend manager: %s", err)
+		log.Fatalf("Error creating write-back manager: %s", err)
 	}
 
-	localReplicas, err := config.LocalReplicas.Build(*port)
-	if err != nil {
-		log.Fatalf("Error building local replica host list: %s", err)
-	}
+	tagStore := tagstore.New(
+		config.TagStore,
+		stats,
+		ss,
+		backends,
+		writeBackManager,
+		remotes,
+		tagclient.NewProvider())
 
 	tagTypes, err := tagtype.NewManager(config.TagTypes, originClient)
 	if err != nil {
@@ -98,11 +122,11 @@ func main() {
 		config.Origin,
 		originClient,
 		localReplicas,
+		tagStore,
 		remotes,
-		trManager,
+		tagReplicationManager,
 		tagclient.NewProvider(),
-		tagTypes,
-	)
+		tagTypes)
 
 	addr := fmt.Sprintf(":%d", *port)
 	log.Infof("Listening on %s", addr)

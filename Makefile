@@ -84,6 +84,12 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
+	mkdir -p mocks/build-index/tagstore
+	$(mockgen) \
+		-destination=mocks/build-index/tagstore/mocktagstore.go \
+		-package mocktagstore \
+		code.uber.internal/infra/kraken/build-index/tagstore Store,FileStore
+
 	mkdir -p mocks/build-index/tagtype
 	$(mockgen) \
 		-destination=mocks/build-index/tagtype/mocktagtype.go \
@@ -252,7 +258,7 @@ run_origin: origin
 	docker run -d \
 		--name=kraken-origin \
 		--hostname=192.168.65.1 \
-		-e UBER_CONFIG_DIR=/root/kraken/config/origin \
+		-e UBER_CONFIG_DIR=/home/udocker/kraken/config/origin \
 		-e UBER_ENVIRONMENT=development \
 		-e UBER_DATACENTER=sjc1 \
 		-p 9003:9003 \
@@ -275,7 +281,7 @@ run_agent: agent
 	-docker rm kraken-agent
 	docker run -d \
 	    --name=kraken-agent \
-		-e UBER_CONFIG_DIR=/root/kraken/config/agent \
+		-e UBER_CONFIG_DIR=/home/udocker/kraken/config/agent \
 		-e UBER_ENVIRONMENT=development \
 		-e UBER_DATACENTER=sjc1 \
 		-p 5052:5052 \
@@ -294,7 +300,7 @@ run_proxy: proxy
 	-docker rm kraken-proxy
 	docker run -d \
 		--name=kraken-proxy \
-		-e UBER_CONFIG_DIR=/root/kraken/config/proxy \
+		-e UBER_CONFIG_DIR=/home/udocker/kraken/config/proxy \
 		-e UBER_ENVIRONMENT=development \
 		-e UBER_DATACENTER=sjc1 \
 		-p 5367:5367 \

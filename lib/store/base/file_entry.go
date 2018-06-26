@@ -412,7 +412,7 @@ func (entry *localFileEntry) Delete() error {
 
 // GetReader returns a FileReader object for read operations.
 func (entry *localFileEntry) GetReader() (FileReader, error) {
-	f, err := os.OpenFile(entry.GetPath(), os.O_RDONLY, 0755)
+	f, err := os.OpenFile(entry.GetPath(), os.O_RDONLY, 0775)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +426,7 @@ func (entry *localFileEntry) GetReader() (FileReader, error) {
 
 // GetReadWriter returns a FileReadWriter object for read/write operations.
 func (entry *localFileEntry) GetReadWriter() (FileReadWriter, error) {
-	f, err := os.OpenFile(entry.GetPath(), os.O_RDWR, 0755)
+	f, err := os.OpenFile(entry.GetPath(), os.O_RDWR, 0775)
 	if err != nil {
 		return nil, err
 	}
@@ -485,7 +485,7 @@ func (entry *localFileEntry) SetMetadataAt(
 	md metadata.Metadata, b []byte, offset int64) (updated bool, err error) {
 
 	filePath := entry.getMetadataPath(md)
-	f, err := os.OpenFile(filePath, os.O_RDWR, 0755)
+	f, err := os.OpenFile(filePath, os.O_RDWR, 0775)
 	if err != nil {
 		return false, err
 	}
@@ -557,17 +557,17 @@ func compareAndWriteFile(filePath string, b []byte) (bool, error) {
 	}
 
 	if os.IsNotExist(err) {
-		if err := os.MkdirAll(path.Dir(filePath), 0755); err != nil {
+		if err := os.MkdirAll(path.Dir(filePath), 0775); err != nil {
 			return false, err
 		}
 
-		if err := ioutil.WriteFile(filePath, b, 0755); err != nil {
+		if err := ioutil.WriteFile(filePath, b, 0775); err != nil {
 			return false, err
 		}
 		return true, nil
 	}
 
-	f, err := os.OpenFile(filePath, os.O_RDWR, 0755)
+	f, err := os.OpenFile(filePath, os.O_RDWR, 0775)
 	if err != nil {
 		return false, err
 	}

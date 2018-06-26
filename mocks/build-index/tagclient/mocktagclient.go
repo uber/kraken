@@ -70,6 +70,18 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
+// DuplicatePut mocks base method
+func (m *MockClient) DuplicatePut(arg0 string, arg1 core.Digest, arg2 time.Duration) error {
+	ret := m.ctrl.Call(m, "DuplicatePut", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DuplicatePut indicates an expected call of DuplicatePut
+func (mr *MockClientMockRecorder) DuplicatePut(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DuplicatePut", reflect.TypeOf((*MockClient)(nil).DuplicatePut), arg0, arg1, arg2)
+}
+
 // DuplicateReplicate mocks base method
 func (m *MockClient) DuplicateReplicate(arg0 string, arg1 core.Digest, arg2 core.DigestList, arg3 time.Duration) error {
 	ret := m.ctrl.Call(m, "DuplicateReplicate", arg0, arg1, arg2, arg3)

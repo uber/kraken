@@ -1,7 +1,6 @@
 package tagserver
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,21 +9,19 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/build-index/tagclient"
+	"code.uber.internal/infra/kraken/build-index/tagstore"
 	"code.uber.internal/infra/kraken/build-index/tagtype"
-	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/stringset"
 
-	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
 	chimiddleware "github.com/pressly/chi/middleware"
 	"github.com/uber-go/tally"
@@ -38,7 +35,7 @@ type Server struct {
 	localOriginDNS    string
 	localOriginClient blobclient.ClusterClient
 	localReplicas     stringset.Set
-	cache             *dedup.Cache
+	store             tagstore.Store
 
 	// For async new tag replication.
 	remotes               tagreplication.Remotes
@@ -57,6 +54,7 @@ func New(
 	localOriginDNS string,
 	localOriginClient blobclient.ClusterClient,
 	localReplicas stringset.Set,
+	store tagstore.Store,
 	remotes tagreplication.Remotes,
 	tagReplicationManager persistedretry.Manager,
 	provider tagclient.Provider,
@@ -68,7 +66,6 @@ func New(
 		"module": "tagserver",
 	})
 
-	cache := dedup.NewCache(config.Cache, clock.New(), &tagResolver{backends, remotes, provider})
 	return &Server{
 		config:                config,
 		stats:                 stats,
@@ -76,7 +73,7 @@ func New(
 		localOriginDNS:        localOriginDNS,
 		localOriginClient:     localOriginClient,
 		localReplicas:         localReplicas,
-		cache:                 cache,
+		store:                 store,
 		remotes:               remotes,
 		tagReplicationManager: tagReplicationManager,
 		provider:              provider,
@@ -107,6 +104,10 @@ func (s *Server) Handler() http.Handler {
 		"/internal/duplicate/remotes/tags/:tag/digest/:digest",
 		handler.Wrap(s.duplicateReplicateTagHandler))
 
+	r.Put(
+		"/internal/duplicate/tags/:tag/digest/:digest",
+		handler.Wrap(s.duplicatePutTagHandler))
+
 	r.Mount("/debug", chimiddleware.Profiler())
 
 	return r
@@ -122,7 +123,6 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
@@ -132,49 +132,77 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return handler.Errorf("get dependency resolver: %s", err)
 	}
-
 	deps, err := depResolver.Resolve(tag, d)
 	if err != nil {
 		return handler.Errorf("get dependencies: %s", err)
 	}
-
 	for _, dep := range deps {
-		ok, err := s.localOriginClient.CheckBlob(tag, dep)
-		if err != nil {
+		if ok, err := s.localOriginClient.CheckBlob(tag, dep); err != nil {
 			return handler.Errorf("check blob: %s", err)
-		}
-		if !ok {
-			return handler.Errorf("tag has missing dependency: %s", dep)
+		} else if !ok {
+			return handler.Errorf("cannot upload tag, missing dependency %s", dep)
 		}
 	}
 
-	client, err := s.backends.GetClient(tag)
+	if err := s.store.Put(tag, d, 0); err != nil {
+		return handler.Errorf("storage: %s", err)
+	}
+
+	var delay time.Duration
+	for addr := range s.localReplicas {
+		delay += s.config.DuplicatePutStagger
+		client := s.provider.Provide(addr)
+		if err := client.DuplicatePut(tag, d, delay); err != nil {
+			log.Errorf("Error duplicating put task to %s: %s", addr, err)
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+func (s *Server) duplicatePutTagHandler(w http.ResponseWriter, r *http.Request) error {
+	tag, err := httputil.ParseParam(r, "tag")
 	if err != nil {
-		return handler.Errorf("backend manager: %s", err)
+		return err
 	}
-	if err := client.Upload(tag, bytes.NewBufferString(d.String())); err != nil {
-		return handler.Errorf("backend client: %s", err)
+	d, err := httputil.ParseDigest(r, "digest")
+	if err != nil {
+		return err
 	}
+	var req tagclient.DuplicatePutRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return handler.Errorf("decode body: %s", err)
+	}
+	delay := req.Delay
+
+	if err := s.store.Put(tag, d, delay); err != nil {
+		return handler.Errorf("storage: %s", err)
+	}
+
 	w.WriteHeader(http.StatusOK)
 	return nil
 }
 
 func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
-	local, err := strconv.ParseBool(httputil.GetQueryArg(r, "local", "false"))
+	fallback, err := strconv.ParseBool(httputil.GetQueryArg(r, "fallback", "true"))
 	if err != nil {
-		return handler.Errorf("parse arg `local` as bool: %s", err)
+		return handler.Errorf("parse fallback arg as bool: %s", err)
 	}
 	tag, err := httputil.ParseParam(r, "tag")
 	if err != nil {
 		return err
 	}
 
-	v, err := s.cache.Get(tagContext{local}, tag)
+	d, err := s.store.Get(tag, fallback)
 	if err != nil {
-		return err
+		if err == tagstore.ErrTagNotFound {
+			return handler.ErrorStatus(http.StatusNotFound)
+		}
+		return handler.Errorf("storage: %s", err)
 	}
-	digest := v.(core.Digest)
-	if _, err := io.WriteString(w, digest.String()); err != nil {
+
+	if _, err := io.WriteString(w, d.String()); err != nil {
 		return handler.Errorf("write digest: %s", err)
 	}
 	return nil
@@ -228,17 +256,18 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 		return err
 	}
 
+	d, err := s.store.Get(tag, false)
+	if err != nil {
+		if err == tagstore.ErrTagNotFound {
+			return handler.ErrorStatus(http.StatusNotFound)
+		}
+		return handler.Errorf("storage: %s", err)
+	}
+
 	depResolver, err := s.tagTypes.GetDependencyResolver(tag)
 	if err != nil {
 		return handler.Errorf("get dependency resolver: %s", err)
 	}
-
-	v, err := s.cache.Get(tagContext{}, tag)
-	if err != nil {
-		return err
-	}
-	d := v.(core.Digest)
-
 	deps, err := depResolver.Resolve(tag, d)
 	if err != nil {
 		return handler.Errorf("get dependencies: %s", err)
@@ -261,6 +290,7 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 		}
 	}
 
+	w.WriteHeader(http.StatusOK)
 	return nil
 }
 

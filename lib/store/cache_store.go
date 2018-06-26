@@ -16,7 +16,7 @@ type cacheStore struct {
 }
 
 func newCacheStore(dir string, backend base.FileStore) (*cacheStore, error) {
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0775); err != nil {
 		return nil, fmt.Errorf("mkdir: %s", err)
 	}
 	state := base.NewFileState(dir)

@@ -77,6 +77,10 @@ func (s *SimpleStore) CreateCacheFile(name string, r io.Reader) error {
 	}
 	defer w.Close()
 
+	if _, err := io.Copy(w, r); err != nil {
+		return fmt.Errorf("copy: %s", err)
+	}
+
 	if err := s.MoveUploadFileToCache(tmp, name); err != nil && !os.IsExist(err) {
 		return fmt.Errorf("move upload file to cache: %s", err)
 	}

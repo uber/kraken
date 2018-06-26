@@ -13,7 +13,7 @@ import (
 
 // New creates a new locally embedded SQLite database.
 func New(config Config) (*sqlx.DB, error) {
-	if err := osutil.EnsureFilePresent(config.Source); err != nil {
+	if err := osutil.EnsureFilePresent(config.Source, 0775); err != nil {
 		return nil, fmt.Errorf("ensure db source present: %s", err)
 	}
 	db, err := sqlx.Open("sqlite3", config.Source)

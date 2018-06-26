@@ -6,17 +6,18 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/build-index/tagclient"
+	"code.uber.internal/infra/kraken/build-index/tagstore"
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/mocks/build-index/tagclient"
+	"code.uber.internal/infra/kraken/mocks/build-index/tagstore"
 	"code.uber.internal/infra/kraken/mocks/build-index/tagtype"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/mocks/lib/persistedretry"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
-	"code.uber.internal/infra/kraken/utils/rwutil"
 	"code.uber.internal/infra/kraken/utils/stringset"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
@@ -42,6 +43,7 @@ type serverMocks struct {
 	provider              *mocktagclient.MockProvider
 	tagTypes              *mocktagtype.MockManager
 	originClient          *mockblobclient.MockClusterClient
+	store                 *mocktagstore.MockStore
 }
 
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
@@ -69,6 +71,8 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	originClient := mockblobclient.NewMockClusterClient(ctrl)
 	tagTypes := mocktagtype.NewMockManager(ctrl)
 
+	store := mocktagstore.NewMockStore(ctrl)
+
 	return &serverMocks{
 		ctrl:                  ctrl,
 		config:                Config{DuplicateReplicateStagger: 20 * time.Minute},
@@ -79,6 +83,7 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 		provider:              provider,
 		originClient:          originClient,
 		tagTypes:              tagTypes,
+		store:                 store,
 	}, cleanup.Run
 }
 
@@ -94,13 +99,14 @@ func (m *serverMocks) handler() http.Handler {
 		_testOrigin,
 		m.originClient,
 		stringset.FromSlice([]string{_testLocalReplica}),
+		m.store,
 		m.remotes,
 		m.tagReplicationManager,
 		m.provider,
 		m.tagTypes).Handler()
 }
 
-func TestPutAndGetLocalTag(t *testing.T) {
+func TestPut(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newServerMocks(t)
@@ -114,25 +120,20 @@ func TestPutAndGetLocalTag(t *testing.T) {
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
 	tagDependencyResolver := mocktagtype.NewMockDependencyResolver(mocks.ctrl)
+	localReplicaClient := mocktagclient.NewMockClient(mocks.ctrl)
 
 	mocks.tagTypes.EXPECT().GetDependencyResolver(tag).Return(tagDependencyResolver, nil)
 	tagDependencyResolver.EXPECT().Resolve(tag, digest).Return(core.DigestList{digest}, nil)
 	mocks.originClient.EXPECT().CheckBlob(tag, digest).Return(true, nil)
-	mocks.backendClient.EXPECT().Upload(tag, rwutil.MatchReader([]byte(digest.String()))).Return(nil)
+	mocks.store.EXPECT().Put(tag, digest, time.Duration(0)).Return(nil)
+	mocks.provider.EXPECT().Provide(_testLocalReplica).Return(localReplicaClient)
+	localReplicaClient.EXPECT().DuplicatePut(
+		tag, digest, mocks.config.DuplicateReplicateStagger).Return(nil)
 
 	require.NoError(client.Put(tag, digest))
-
-	mocks.backendClient.EXPECT().Download(tag, rwutil.MatchWriter([]byte(digest.String()))).Return(nil)
-
-	// Getting tag multiple times should only make one download call.
-	for i := 0; i < 10; i++ {
-		result, err := client.GetLocal(tag)
-		require.NoError(err)
-		require.Equal(digest, result)
-	}
 }
 
-func TestGetTagFallback(t *testing.T) {
+func TestGet(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newServerMocks(t)
@@ -145,17 +146,33 @@ func TestGetTagFallback(t *testing.T) {
 
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
-	remoteClient := mocks.client()
 
-	gomock.InOrder(
-		mocks.backendClient.EXPECT().Download(tag, gomock.Any()).Return(backenderrors.ErrBlobNotFound),
-		mocks.provider.EXPECT().Provide(_testRemote).Return(remoteClient),
-		remoteClient.EXPECT().GetLocal(tag).Return(digest, nil),
-	)
+	mocks.store.EXPECT().Get(tag, true).Return(digest, nil)
 
-	d, err := client.Get(tag)
+	result, err := client.Get(tag)
 	require.NoError(err)
-	require.Equal(digest, d)
+	require.Equal(digest, result)
+}
+
+func TestGetLocal(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := tagclient.New(addr)
+
+	tag := core.TagFixture()
+	digest := core.DigestFixture()
+
+	mocks.store.EXPECT().Get(tag, false).Return(digest, nil)
+
+	result, err := client.GetLocal(tag)
+	require.NoError(err)
+	require.Equal(digest, result)
 }
 
 func TestGetTagNotFound(t *testing.T) {
@@ -170,19 +187,14 @@ func TestGetTagNotFound(t *testing.T) {
 	client := tagclient.New(addr)
 
 	tag := core.TagFixture()
-	remoteClient := mocks.client()
 
-	gomock.InOrder(
-		mocks.backendClient.EXPECT().Download(tag, gomock.Any()).Return(backenderrors.ErrBlobNotFound),
-		mocks.provider.EXPECT().Provide(_testRemote).Return(remoteClient),
-		remoteClient.EXPECT().GetLocal(tag).Return(core.Digest{}, tagclient.ErrTagNotFound),
-	)
+	mocks.store.EXPECT().Get(tag, true).Return(core.Digest{}, tagstore.ErrTagNotFound)
 
 	_, err := client.Get(tag)
 	require.Equal(tagclient.ErrTagNotFound, err)
 }
 
-func TestHasTag(t *testing.T) {
+func TestHas(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newServerMocks(t)
@@ -203,7 +215,7 @@ func TestHasTag(t *testing.T) {
 	require.True(ok)
 }
 
-func TestHasTagNotFound(t *testing.T) {
+func TestHasNotFound(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newServerMocks(t)
@@ -282,9 +294,9 @@ func TestReplicate(t *testing.T) {
 	tagDependencyResolver := mocktagtype.NewMockDependencyResolver(mocks.ctrl)
 
 	gomock.InOrder(
+		mocks.store.EXPECT().Get(tag, false).Return(digest, nil),
 		mocks.tagTypes.EXPECT().GetDependencyResolver(tag).Return(tagDependencyResolver, nil),
-		mocks.backendClient.EXPECT().Download(tag, rwutil.MatchWriter([]byte(digest.String()))).Return(nil),
-		tagDependencyResolver.EXPECT().Resolve(tag, digest).Return(core.DigestList{digest}, nil),
+		tagDependencyResolver.EXPECT().Resolve(tag, digest).Return(deps, nil),
 		mocks.tagReplicationManager.EXPECT().Add(tagreplication.MatchTask(task)).Return(nil),
 		mocks.provider.EXPECT().Provide(_testLocalReplica).Return(replicaClient),
 		replicaClient.EXPECT().DuplicateReplicate(
