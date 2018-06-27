@@ -354,6 +354,15 @@ linux-trackerload:
 	-rm tools/bin/trackerload/trackerload
 	GOOS=linux GOARCH=amd64 make tools/bin/trackerload/trackerload
 
+build_devcluster:
+	docker build -t kraken-devcluster:latest -f docker/devcluster/Dockerfile ./
+
+run_devcluster:
+	-docker rm -f kraken-devcluster
+	docker run -d -p 7602:7602 -p 9003:9003 --hostname localhost --name kraken-devcluster kraken-devcluster:latest
+
+devcluster: build_devcluster run_devcluster
+
 include go-build/rules.mk
 
 go-build/rules.mk:
