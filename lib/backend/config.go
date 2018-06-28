@@ -4,18 +4,20 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/hdfsbackend"
 	"code.uber.internal/infra/kraken/lib/backend/httpbackend"
 	"code.uber.internal/infra/kraken/lib/backend/s3backend"
+	"code.uber.internal/infra/kraken/lib/backend/terrablobbackend"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
 )
 
 // Config defines the union of configuration for all backends, where
 // the Backend field serves as the key for which backend is activated.
 type Config struct {
-	Namespace string             `yaml:"namespace"`
-	Backend   string             `yaml:"backend"`
-	S3        s3backend.Config   `yaml:"s3"`
-	HDFS      hdfsbackend.Config `yaml:"hdfs"`
-	TestFS    testfs.Config      `yaml:"testfs"`
-	HTTP      httpbackend.Config `yaml:"http"`
+	Namespace string                  `yaml:"namespace"`
+	Backend   string                  `yaml:"backend"`
+	S3        s3backend.Config        `yaml:"s3"`
+	HDFS      hdfsbackend.Config      `yaml:"hdfs"`
+	TestFS    testfs.Config           `yaml:"testfs"`
+	HTTP      httpbackend.Config      `yaml:"http"`
+	TerraBlob terrablobbackend.Config `yaml:"terrablob"`
 }
 
 // Auth defines auth credentials for corresponding namespaces
