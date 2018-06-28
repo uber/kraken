@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -36,8 +36,8 @@ func NewClient(config Config) (*Client, error) {
 
 // Stat always succeeds.
 // TODO(codyg): Support stat URL.
-func (c *Client) Stat(name string) (*blobinfo.Info, error) {
-	return blobinfo.New(0), nil
+func (c *Client) Stat(name string) (*core.BlobInfo, error) {
+	return core.NewBlobInfo(0), nil
 }
 
 // Download downloads the content from a configured url and writes the data

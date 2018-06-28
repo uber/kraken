@@ -13,7 +13,6 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -22,7 +21,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
-func TestCheckBlobHandlerLocalNotFound(t *testing.T) {
+func TestStatHandlerLocalNotFound(t *testing.T) {
 	require := require.New(t)
 
 	cp := newTestClientProvider()
@@ -33,12 +32,11 @@ func TestCheckBlobHandlerLocalNotFound(t *testing.T) {
 	d := core.DigestFixture()
 	namespace := core.TagFixture()
 
-	ok, err := cp.Provide(s.host).CheckLocalBlob(namespace, d)
-	require.NoError(err)
-	require.False(ok)
+	_, err := cp.Provide(s.host).StatLocal(namespace, d)
+	require.Equal(blobclient.ErrBlobNotFound, err)
 }
 
-func TestCheckBlobHandlerNotFound(t *testing.T) {
+func TestStatHandlerNotFound(t *testing.T) {
 	require := require.New(t)
 
 	cp := newTestClientProvider()
@@ -53,9 +51,30 @@ func TestCheckBlobHandlerNotFound(t *testing.T) {
 
 	backendClient.EXPECT().Stat(d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 
-	ok, err := cp.Provide(master1).CheckBlob(namespace, d)
+	_, err := cp.Provide(master1).Stat(namespace, d)
+	require.Equal(blobclient.ErrBlobNotFound, err)
+}
+
+func TestStatHandlerReturnSize(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	defer s.cleanup()
+
+	client := cp.Provide(s.host)
+	blob := core.SizedBlobFixture(256, 8)
+	namespace := core.TagFixture()
+
+	require.NoError(client.TransferBlob(blob.Digest, bytes.NewReader(blob.Content)))
+
+	ensureHasBlob(t, cp.Provide(s.host), namespace, blob)
+
+	bi, err := cp.Provide(master1).Stat(namespace, blob.Digest)
 	require.NoError(err)
-	require.False(ok)
+	require.NotNil(bi)
+	require.Equal(int64(256), bi.Size)
 }
 
 func TestDownloadBlobHandlerNotFound(t *testing.T) {
@@ -96,9 +115,8 @@ func TestDeleteBlob(t *testing.T) {
 
 	require.NoError(client.DeleteBlob(blob.Digest))
 
-	ok, err := client.CheckLocalBlob(namespace, blob.Digest)
-	require.NoError(err)
-	require.False(ok)
+	_, err := client.StatLocal(namespace, blob.Digest)
+	require.Equal(blobclient.ErrBlobNotFound, err)
 }
 
 func TestGetLocationsHandlerOK(t *testing.T) {
@@ -127,8 +145,8 @@ func TestIncorrectNodeErrors(t *testing.T) {
 		f    func(c blobclient.Client) error
 	}{
 		{
-			"CheckBlob",
-			func(c blobclient.Client) error { _, err := c.CheckBlob(namespace, blob.Digest); return err },
+			"Stat",
+			func(c blobclient.Client) error { _, err := c.Stat(namespace, blob.Digest); return err },
 		}, {
 			"DownloadBlob",
 			func(c blobclient.Client) error {
@@ -201,7 +219,7 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 
 	backendClient := s1.backendClient(namespace)
 	backendClient.EXPECT().Stat(
-		blob.Digest.Hex()).Return(blobinfo.New(int64(len(blob.Content))), nil).AnyTimes()
+		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil).AnyTimes()
 	backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
@@ -220,8 +238,8 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 
 	// Ensure blob was replicated to other master.
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		ok, err := cp.Provide(master2).CheckLocalBlob(namespace, blob.Digest)
-		return ok && err == nil
+		_, err := cp.Provide(master2).StatLocal(namespace, blob.Digest)
+		return err == nil
 	}))
 }
 
@@ -346,7 +364,7 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 
 	backendClient := s.backendClient(namespace)
 	backendClient.EXPECT().Stat(
-		blob.Digest.Hex()).Return(blobinfo.New(int64(len(blob.Content))), nil).AnyTimes()
+		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil).AnyTimes()
 	backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
 
 	remote := "some-remote-origin"

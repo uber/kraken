@@ -5,7 +5,7 @@
 package mockbackend
 
 import (
-	blobinfo "code.uber.internal/infra/kraken/lib/backend/blobinfo"
+	core "code.uber.internal/infra/kraken/core"
 	gomock "github.com/golang/mock/gomock"
 	io "io"
 	reflect "reflect"
@@ -60,9 +60,9 @@ func (mr *MockClientMockRecorder) List(arg0 interface{}) *gomock.Call {
 }
 
 // Stat mocks base method
-func (m *MockClient) Stat(arg0 string) (*blobinfo.Info, error) {
+func (m *MockClient) Stat(arg0 string) (*core.BlobInfo, error) {
 	ret := m.ctrl.Call(m, "Stat", arg0)
-	ret0, _ := ret[0].(*blobinfo.Info)
+	ret0, _ := ret[0].(*core.BlobInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

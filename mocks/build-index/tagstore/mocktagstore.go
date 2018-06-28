@@ -50,19 +50,6 @@ func (mr *MockStoreMockRecorder) Get(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockStore)(nil).Get), arg0, arg1)
 }
 
-// Has mocks base method
-func (m *MockStore) Has(arg0 string) (bool, error) {
-	ret := m.ctrl.Call(m, "Has", arg0)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Has indicates an expected call of Has
-func (mr *MockStoreMockRecorder) Has(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Has", reflect.TypeOf((*MockStore)(nil).Has), arg0)
-}
-
 // Put mocks base method
 func (m *MockStore) Put(arg0 string, arg1 core.Digest, arg2 time.Duration) error {
 	ret := m.ctrl.Call(m, "Put", arg0, arg1, arg2)

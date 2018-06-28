@@ -8,7 +8,6 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
@@ -101,7 +100,7 @@ func TestExecNoopWhenFileAlreadyUploaded(t *testing.T) {
 	task := NewTask(core.TagFixture(), blob.Digest.Hex())
 
 	client := mocks.client(task.Namespace)
-	client.EXPECT().Stat(blob.Digest.Hex()).Return(blobinfo.New(blob.Length()), nil)
+	client.EXPECT().Stat(blob.Digest.Hex()).Return(core.NewBlobInfo(blob.Length()), nil)
 
 	executor := mocks.new()
 

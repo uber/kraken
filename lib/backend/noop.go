@@ -3,8 +3,8 @@ package backend
 import (
 	"io"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 )
 
 // NoopNamespace is a special namespace which always returns a NoopClient.
@@ -17,7 +17,7 @@ const NoopNamespace = "__noop__"
 type NoopClient struct{}
 
 // Stat always returns ErrBlobNotFound.
-func (c NoopClient) Stat(name string) (*blobinfo.Info, error) {
+func (c NoopClient) Stat(name string) (*core.BlobInfo, error) {
 	return nil, backenderrors.ErrBlobNotFound
 }
 

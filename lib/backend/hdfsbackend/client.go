@@ -10,8 +10,8 @@ import (
 	"net/url"
 	"strconv"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -51,7 +51,7 @@ type fileStatusResponse struct {
 }
 
 // Stat returns blob info for name.
-func (c *Client) Stat(name string) (*blobinfo.Info, error) {
+func (c *Client) Stat(name string) (*core.BlobInfo, error) {
 	path, err := c.pather.BlobPath(name)
 	if err != nil {
 		return nil, fmt.Errorf("blob path: %s", err)
@@ -77,7 +77,7 @@ func (c *Client) Stat(name string) (*blobinfo.Info, error) {
 		if err := json.NewDecoder(resp.Body).Decode(&fsr); err != nil {
 			return nil, fmt.Errorf("decode body: %s", err)
 		}
-		return blobinfo.New(fsr.FileStatus.Length), nil
+		return core.NewBlobInfo(fsr.FileStatus.Length), nil
 	}
 	return nil, errAllNameNodesUnavailable
 }

@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,8 +25,8 @@ type Client interface {
 	DeleteBlob(d core.Digest) error
 	TransferBlob(d core.Digest, blob io.Reader) error
 
-	CheckBlob(namespace string, d core.Digest) (bool, error)
-	CheckLocalBlob(namespace string, d core.Digest) (bool, error)
+	Stat(namespace string, d core.Digest) (*core.BlobInfo, error)
+	StatLocal(namespace string, d core.Digest) (*core.BlobInfo, error)
 
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
@@ -86,36 +87,44 @@ func (c *HTTPClient) Locations(d core.Digest) ([]string, error) {
 	return locs, nil
 }
 
-// CheckBlob returns error if the origin does not have a blob for d.
-func (c *HTTPClient) CheckBlob(namespace string, d core.Digest) (bool, error) {
-	_, err := httputil.Head(fmt.Sprintf(
+// Stat returns blob info. It returns error if the origin does not have a blob
+// for d.
+func (c *HTTPClient) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
+	return c.stat(namespace, d, false)
+}
+
+// StatLocal returns blob info. It returns error if the origin does not have a blob
+// for d locally.
+func (c *HTTPClient) StatLocal(namespace string, d core.Digest) (*core.BlobInfo, error) {
+	return c.stat(namespace, d, true)
+}
+
+func (c *HTTPClient) stat(namespace string, d core.Digest, local bool) (*core.BlobInfo, error) {
+	u := fmt.Sprintf(
 		"http://%s/internal/namespace/%s/blobs/%s",
 		c.addr,
 		url.PathEscape(namespace),
-		d))
-	if err != nil {
-		if httputil.IsNotFound(err) {
-			return false, nil
-		}
-		return false, err
+		d)
+	if local {
+		u += "?local=true"
 	}
-	return true, nil
-}
 
-// CheckLocalBlob returns error if the origin does not have a blob for d.
-func (c *HTTPClient) CheckLocalBlob(namespace string, d core.Digest) (bool, error) {
-	_, err := httputil.Head(fmt.Sprintf(
-		"http://%s/internal/namespace/%s/blobs/%s?local=true",
-		c.addr,
-		url.PathEscape(namespace),
-		d))
+	r, err := httputil.Head(u)
 	if err != nil {
 		if httputil.IsNotFound(err) {
-			return false, nil
+			return nil, ErrBlobNotFound
 		}
-		return false, err
+		return nil, err
 	}
-	return true, nil
+	var size int64
+	hdr := r.Header.Get("Content-Length")
+	if hdr != "" {
+		size, err = strconv.ParseInt(hdr, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return core.NewBlobInfo(size), nil
 }
 
 // DeleteBlob deletes the blob corresponding to d.

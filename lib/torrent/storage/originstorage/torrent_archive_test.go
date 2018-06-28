@@ -7,7 +7,6 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -64,7 +63,7 @@ func TestTorrentArchiveStatNoExistTriggersRefresh(t *testing.T) {
 	blob := core.SizedBlobFixture(100, pieceLength)
 
 	mocks.backendClient.EXPECT().Stat(
-		blob.Digest.Hex()).Return(blobinfo.New(int64(len(blob.Content))), nil)
+		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
 	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
@@ -91,7 +90,7 @@ func TestTorrentArchiveGetTorrentNoExistTriggersRefresh(t *testing.T) {
 	blob := core.SizedBlobFixture(100, pieceLength)
 
 	mocks.backendClient.EXPECT().Stat(
-		blob.Digest.Hex()).Return(blobinfo.New(int64(len(blob.Content))), nil)
+		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
 	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
@@ -118,7 +117,7 @@ func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 	blob := core.SizedBlobFixture(100, pieceLength)
 
 	mocks.backendClient.EXPECT().Stat(
-		blob.Digest.Hex()).Return(blobinfo.New(int64(len(blob.Content))), nil)
+		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
 	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
