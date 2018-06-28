@@ -137,10 +137,10 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 		return handler.Errorf("get dependencies: %s", err)
 	}
 	for _, dep := range deps {
-		if ok, err := s.localOriginClient.CheckBlob(tag, dep); err != nil {
-			return handler.Errorf("check blob: %s", err)
-		} else if !ok {
+		if _, err := s.localOriginClient.Stat(tag, dep); err == blobclient.ErrBlobNotFound {
 			return handler.Errorf("cannot upload tag, missing dependency %s", dep)
+		} else if err != nil {
+			return handler.Errorf("check blob: %s", err)
 		}
 	}
 

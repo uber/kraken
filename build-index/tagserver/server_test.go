@@ -10,7 +10,6 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/mocks/build-index/tagclient"
 	"code.uber.internal/infra/kraken/mocks/build-index/tagstore"
@@ -124,7 +123,7 @@ func TestPut(t *testing.T) {
 
 	mocks.tagTypes.EXPECT().GetDependencyResolver(tag).Return(tagDependencyResolver, nil)
 	tagDependencyResolver.EXPECT().Resolve(tag, digest).Return(core.DigestList{digest}, nil)
-	mocks.originClient.EXPECT().CheckBlob(tag, digest).Return(true, nil)
+	mocks.originClient.EXPECT().Stat(tag, digest).Return(core.NewBlobInfo(256), nil)
 	mocks.store.EXPECT().Put(tag, digest, time.Duration(0)).Return(nil)
 	mocks.provider.EXPECT().Provide(_testLocalReplica).Return(localReplicaClient)
 	localReplicaClient.EXPECT().DuplicatePut(
@@ -208,7 +207,7 @@ func TestHas(t *testing.T) {
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
 
-	mocks.backendClient.EXPECT().Stat(tag).Return(blobinfo.New(int64(len(digest.String()))), nil)
+	mocks.backendClient.EXPECT().Stat(tag).Return(core.NewBlobInfo(int64(len(digest.String()))), nil)
 
 	ok, err := client.Has(tag)
 	require.NoError(err)

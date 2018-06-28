@@ -3,7 +3,7 @@ package backend
 import (
 	"io"
 
-	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
+	"code.uber.internal/infra/kraken/core"
 )
 
 // Client defines an interface for accessing blobs on a remote storage backend.
@@ -17,7 +17,7 @@ type Client interface {
 	// Stat is useful when we need to quickly know if a blob exists (and maybe
 	// some basic information about it), without downloading the entire blob,
 	// which may be very large.
-	Stat(name string) (*blobinfo.Info, error)
+	Stat(name string) (*core.BlobInfo, error)
 
 	// Upload uploads src into name.
 	Upload(name string, src io.Reader) error

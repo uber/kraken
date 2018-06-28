@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strconv"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
@@ -37,7 +37,7 @@ func (c *Client) Addr() string {
 }
 
 // Stat returns blob info for name.
-func (c *Client) Stat(name string) (*blobinfo.Info, error) {
+func (c *Client) Stat(name string) (*core.BlobInfo, error) {
 	resp, err := httputil.Head(
 		fmt.Sprintf("http://%s/files/%s", c.config.Addr, url.PathEscape(name)))
 	if err != nil {
@@ -50,7 +50,7 @@ func (c *Client) Stat(name string) (*blobinfo.Info, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse size: %s", err)
 	}
-	return blobinfo.New(size), nil
+	return core.NewBlobInfo(size), nil
 }
 
 // Upload uploads src to name.

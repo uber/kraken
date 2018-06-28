@@ -47,16 +47,17 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 
 	// Run many times to make sure we eventually hit unavailable masters.
 	for i := 0; i < 100; i++ {
-		blob := core.NewBlobFixture()
+		blob := core.SizedBlobFixture(256, 8)
 
 		s.writeBackManager.EXPECT().Add(
 			writeback.MatchTask(writeback.NewTask(
 				backend.NoopNamespace, blob.Digest.Hex()))).Return(nil)
 		require.NoError(cc.UploadBlob(backend.NoopNamespace, blob.Digest, bytes.NewReader(blob.Content)))
 
-		ok, err := cc.CheckBlob(backend.NoopNamespace, blob.Digest)
+		bi, err := cc.Stat(backend.NoopNamespace, blob.Digest)
 		require.NoError(err)
-		require.True(ok)
+		require.NotNil(bi)
+		require.Equal(int64(256), bi.Size)
 
 		mi, err := cc.GetMetaInfo(backend.NoopNamespace, blob.Digest)
 		require.NoError(err)
@@ -89,7 +90,7 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 
 	require.Error(cc.UploadBlob(backend.NoopNamespace, blob.Digest, bytes.NewReader(blob.Content)))
 
-	_, err = cc.CheckBlob(backend.NoopNamespace, blob.Digest)
+	_, err = cc.Stat(backend.NoopNamespace, blob.Digest)
 	require.Error(err)
 
 	_, err = cc.GetMetaInfo(backend.NoopNamespace, blob.Digest)
@@ -210,7 +211,7 @@ func TestClusterClientOverwriteMetainfo(t *testing.T) {
 	require.NoError(err)
 }
 
-func TestClusterClientCheckBlobContinueWhenNotFound(t *testing.T) {
+func TestClusterClientStatContinueWhenNotFound(t *testing.T) {
 	require := require.New(t)
 
 	ctrl := gomock.NewController(t)
@@ -220,7 +221,7 @@ func TestClusterClientCheckBlobContinueWhenNotFound(t *testing.T) {
 
 	cc := blobclient.NewClusterClient(mockResolver)
 
-	blob := core.NewBlobFixture()
+	blob := core.SizedBlobFixture(256, 8)
 	namespace := core.TagFixture()
 
 	mockClient := mockblobclient.NewMockClient(ctrl)
@@ -228,11 +229,12 @@ func TestClusterClientCheckBlobContinueWhenNotFound(t *testing.T) {
 	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient, mockClient}, nil)
 
 	gomock.InOrder(
-		mockClient.EXPECT().CheckBlob(namespace, blob.Digest).Return(false, nil),
-		mockClient.EXPECT().CheckBlob(namespace, blob.Digest).Return(true, nil),
+		mockClient.EXPECT().Stat(namespace, blob.Digest).Return(nil, blobclient.ErrBlobNotFound),
+		mockClient.EXPECT().Stat(namespace, blob.Digest).Return(core.NewBlobInfo(256), nil),
 	)
 
-	ok, err := cc.CheckBlob(namespace, blob.Digest)
+	bi, err := cc.Stat(namespace, blob.Digest)
 	require.NoError(err)
-	require.True(ok)
+	require.NotNil(bi)
+	require.Equal(int64(256), bi.Size)
 }

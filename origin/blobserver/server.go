@@ -147,7 +147,7 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/internal/peercontext", handler.Wrap(s.getPeerContextHandler))
 
-	r.Head("/internal/namespace/:namespace/blobs/:digest", handler.Wrap(s.checkBlobHandler))
+	r.Head("/internal/namespace/:namespace/blobs/:digest", handler.Wrap(s.statHandler))
 
 	r.Get("/internal/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(s.getMetaInfoHandler))
 
@@ -165,8 +165,8 @@ func (s *Server) healthCheckHandler(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
-// checkBlobHandler checks if blob data exists.
-func (s *Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error {
+// statHandler returns blob info if it exists.
+func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
 	checkLocal, err := strconv.ParseBool(httputil.GetQueryArg(r, "local", "false"))
 	if err != nil {
 		return handler.Errorf("parse arg `local` as bool: %s", err)
@@ -183,27 +183,39 @@ func (s *Server) checkBlobHandler(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 
-	ok, err := blobExists(s.cas, d)
-	if err != nil {
-		return err
-	}
-	if !ok && !checkLocal {
-		client, err := s.backends.GetClient(namespace)
-		if err != nil {
-			return handler.Errorf("get backend client: %s", err)
-		}
-		if _, err := client.Stat(d.Hex()); err == nil {
-			ok = true
-		} else if err != backenderrors.ErrBlobNotFound {
-			return fmt.Errorf("backend stat: %s", err)
-		}
-	}
-
-	if !ok {
+	bi, err := s.stat(namespace, d, checkLocal)
+	if os.IsNotExist(err) {
 		return handler.ErrorStatus(http.StatusNotFound)
+	} else if err != nil {
+		return fmt.Errorf("stat: %s", err)
 	}
+	w.Header().Set("Content-Length", strconv.FormatInt(bi.Size, 10))
 	log.Debugf("successfully check blob %s exists", d.Hex())
 	return nil
+}
+
+func (s *Server) stat(namespace string, d core.Digest, checkLocal bool) (*core.BlobInfo, error) {
+	fi, err := s.cas.GetCacheFileStat(d.Hex())
+	if err == nil {
+		return core.NewBlobInfo(fi.Size()), nil
+	} else if os.IsNotExist(err) {
+		if !checkLocal {
+			client, err := s.backends.GetClient(namespace)
+			if err != nil {
+				return nil, fmt.Errorf("get backend client: %s", err)
+			}
+			if bi, err := client.Stat(d.Hex()); err == nil {
+				return bi, nil
+			} else if err == backenderrors.ErrBlobNotFound {
+				return nil, os.ErrNotExist
+			} else {
+				return nil, fmt.Errorf("backend stat: %s", err)
+			}
+		}
+		return nil, err // os.ErrNotExist
+	}
+
+	return nil, fmt.Errorf("stat cache file: %s", err)
 }
 
 func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) error {

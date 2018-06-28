@@ -7,8 +7,8 @@ import (
 	"io"
 	"os"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/backend/blobinfo"
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
@@ -66,7 +66,7 @@ func NewClient(config Config, userAuth UserAuthConfig) (*Client, error) {
 }
 
 // Stat returns blob info for name.
-func (c *Client) Stat(name string) (*blobinfo.Info, error) {
+func (c *Client) Stat(name string) (*core.BlobInfo, error) {
 	path, err := c.pather.BlobPath(name)
 	if err != nil {
 		return nil, fmt.Errorf("blob path: %s", err)
@@ -85,7 +85,7 @@ func (c *Client) Stat(name string) (*blobinfo.Info, error) {
 	if output.ContentLength != nil {
 		size = *output.ContentLength
 	}
-	return blobinfo.New(size), nil
+	return core.NewBlobInfo(size), nil
 }
 
 type exceededCapError error
