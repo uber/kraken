@@ -367,3 +367,37 @@ include go-build/rules.mk
 
 go-build/rules.mk:
 		git submodule update --init
+
+# TERRAMAN INTEGRATION TESTS
+
+TERRAMAN_PATH=terraman
+export TERRAMAN_CONFIG_FILE?= $(CURDIR)/$(BUILD_DIR)/terraman_host_config.json
+TERRAMAN_APP_ID=terraman
+
+$(TERRAMAN_CONFIG_FILE):
+	$(TERRAMAN_PATH) start --http -v --app-id=$(TERRAMAN_APP_ID) --port=0 --json-file=$(TERRAMAN_CONFIG_FILE)
+	echo "Path to TerraMan Config: $(TERRAMAN_CONFIG_FILE)"
+
+.PHONY: cleanup-terraman
+cleanup-terraman:
+	rm -f $(TERRAMAN_CONFIG_FILE)
+	$(TERRAMAN_PATH) stop-all --app-id=$(TERRAMAN_APP_ID)
+
+# Integration tests, for local testing. TerraMan should be up and running in order this to work
+.PHONY: run_terraman
+run_terraman: export RUN_INT_TESTS=1
+run_terraman: $(FAUX_VENDOR) install-all bins $(TERRAMAN_CONFIG_FILE)
+
+connect-terrablob-kraken:
+		-docker network create integration-net
+		-docker network connect integration-net terraman.terrablob
+		-docker network connect integration-net kraken-origin
+
+.PHONY: terrablob-integration
+terrablob-integration: export RUN_TERRABLOB_TESTS=1
+terrablob-integration: run_terraman run_origin connect-terrablob-kraken
+		$(MAKE) -e -f Makefile test \
+		TEST_DIRS="./test/terrablobintegration/" \
+		TEST_FLAGS="-timeout=30m" \
+		RACE="-race" \
+		TEST_VERBOSITY_FLAG="-v"

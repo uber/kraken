@@ -69,3 +69,4 @@ testImport:
   subpackages:
   - assert
   - require
+- package: code.uber.internal/infra/terrablob-client.git
