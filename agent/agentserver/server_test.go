@@ -34,7 +34,7 @@ func TestDownload(t *testing.T) {
 	addr := mocks.startServer()
 	c := NewClient(addr)
 
-	r, err := c.Download(namespace, blob.Digest.Hex())
+	r, err := c.Download(namespace, blob.Digest)
 	require.NoError(err)
 	result, err := ioutil.ReadAll(r)
 	require.NoError(err)
@@ -128,5 +128,5 @@ func TestDeleteBlobHandler(t *testing.T) {
 
 	mocks.sched.EXPECT().RemoveTorrent(d.Hex()).Return(nil)
 
-	require.NoError(c.Delete(d.Hex()))
+	require.NoError(c.Delete(d))
 }
