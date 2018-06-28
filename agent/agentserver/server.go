@@ -11,6 +11,7 @@ import (
 	"github.com/pressly/chi"
 	"github.com/uber-go/tally"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
@@ -51,9 +52,9 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/health", handler.Wrap(s.healthHandler))
 
-	r.Get("/namespace/:namespace/blobs/:name", handler.Wrap(s.downloadBlobHandler))
+	r.Get("/namespace/:namespace/blobs/:digest", handler.Wrap(s.downloadBlobHandler))
 
-	r.Delete("/blobs/:name", handler.Wrap(s.deleteBlobHandler))
+	r.Delete("/blobs/:digest", handler.Wrap(s.deleteBlobHandler))
 
 	// Dangerous endpoint for running experiments.
 	r.Patch("/x/config/scheduler", handler.Wrap(s.patchSchedulerConfigHandler))
@@ -72,21 +73,20 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return err
 	}
-	name, err := httputil.ParseParam(r, "name")
+	d, err := parseDigest(r)
 	if err != nil {
 		return err
 	}
-
-	f, err := s.cads.Cache().GetFileReader(name)
+	f, err := s.cads.Cache().GetFileReader(d.Hex())
 	if err != nil {
 		if os.IsNotExist(err) || s.cads.InDownloadError(err) {
-			if err := s.sched.Download(namespace, name); err != nil {
+			if err := s.sched.Download(namespace, d.Hex()); err != nil {
 				if err == scheduler.ErrTorrentNotFound {
 					return handler.ErrorStatus(http.StatusNotFound)
 				}
 				return handler.Errorf("download torrent: %s", err)
 			}
-			f, err = s.cads.Cache().GetFileReader(name)
+			f, err = s.cads.Cache().GetFileReader(d.Hex())
 			if err != nil {
 				return handler.Errorf("store: %s", err)
 			}
@@ -101,12 +101,11 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 }
 
 func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error {
-	name, err := httputil.ParseParam(r, "name")
+	d, err := parseDigest(r)
 	if err != nil {
 		return err
 	}
-
-	if err := s.sched.RemoveTorrent(name); err != nil {
+	if err := s.sched.RemoveTorrent(d.Hex()); err != nil {
 		return handler.Errorf("remove torrent: %s", err)
 	}
 	return nil
@@ -141,4 +140,20 @@ func (s *Server) getBlacklistHandler(w http.ResponseWriter, r *http.Request) err
 		return handler.Errorf("json encode: %s", err)
 	}
 	return nil
+}
+
+func parseDigest(r *http.Request) (core.Digest, error) {
+	raw, err := httputil.ParseParam(r, "digest")
+	if err != nil {
+		return core.Digest{}, err
+	}
+	// TODO(codyg): Accept only a fully formed digest.
+	d, err := core.NewSHA256DigestFromHex(raw)
+	if err != nil {
+		d, err = core.ParseSHA256Digest(raw)
+		if err != nil {
+			return core.Digest{}, handler.Errorf("parse digest: %s", err).Status(http.StatusBadRequest)
+		}
+	}
+	return d, nil
 }

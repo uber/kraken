@@ -3,9 +3,9 @@ package agentserver
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
@@ -19,23 +19,21 @@ func NewClient(addr string) *Client {
 	return &Client{addr}
 }
 
-// Download returns the blob for namespace / name. Callers should close the
+// Download returns the blob for namespace / d. Callers should close the
 // returned ReadCloser when done reading the blob.
-func (c *Client) Download(namespace, name string) (io.ReadCloser, error) {
-	resp, err := httputil.Get(fmt.Sprintf(
-		"http://%s/namespace/%s/blobs/%s",
-		c.addr,
-		url.PathEscape(namespace),
-		name),
-		httputil.SendAcceptedCodes(http.StatusOK, http.StatusAccepted))
+func (c *Client) Download(namespace string, d core.Digest) (io.ReadCloser, error) {
+	resp, err := httputil.Get(
+		fmt.Sprintf(
+			"http://%s/namespace/%s/blobs/%s",
+			c.addr, url.PathEscape(namespace), d))
 	if err != nil {
 		return nil, err
 	}
 	return resp.Body, nil
 }
 
-// Delete deletes the torrent for name.
-func (c *Client) Delete(name string) error {
-	_, err := httputil.Delete(fmt.Sprintf("http://%s/blobs/%s", c.addr, name))
+// Delete deletes the torrent for d.
+func (c *Client) Delete(d core.Digest) error {
+	_, err := httputil.Delete(fmt.Sprintf("http://%s/blobs/%s", c.addr, d))
 	return err
 }
