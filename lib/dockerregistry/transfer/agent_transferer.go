@@ -29,6 +29,25 @@ func NewAgentTransferer(
 	return &AgentTransferer{cads, tags, sched}
 }
 
+// Stat returns blob info from local cache, and triggers download if the blob is
+// not available locally.
+func (t *AgentTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
+	fi, err := t.cads.Cache().GetFileStat(d.Hex())
+	if os.IsNotExist(err) {
+		if err := t.sched.Download(namespace, d.Hex()); err != nil {
+			return nil, fmt.Errorf("scheduler: %s", err)
+		}
+		fi, err = t.cads.Cache().GetFileStat(d.Hex())
+		if err != nil {
+			return nil, fmt.Errorf("stat cache: %s", err)
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("stat cache: %s", err)
+	}
+
+	return core.NewBlobInfo(fi.Size()), nil
+}
+
 // Download downloads blobs as torrent.
 func (t *AgentTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
 	f, err := t.cads.Cache().GetFileReader(d.Hex())

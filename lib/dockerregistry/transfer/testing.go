@@ -2,6 +2,7 @@ package transfer
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"code.uber.internal/infra/kraken/core"
@@ -20,6 +21,15 @@ func NewTestTransferer(cas *store.CAStore) ImageTransferer {
 		tags: make(map[string]core.Digest),
 		cas:  cas,
 	}
+}
+
+// Stat returns blob info from local cache.
+func (t *testTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
+	fi, err := t.cas.GetCacheFileStat(d.Hex())
+	if err != nil {
+		return nil, fmt.Errorf("stat cache file: %s", err)
+	}
+	return core.NewBlobInfo(fi.Size()), nil
 }
 
 func (t *testTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {

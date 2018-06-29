@@ -44,7 +44,7 @@ func TestStorageDriverGetContent(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetContent %s", tc.input), func(t *testing.T) {
 			require := require.New(t)
-			data, err := sd.GetContent(context.Background(), tc.input)
+			data, err := sd.GetContent(contextFixture(), tc.input)
 			if tc.err == nil {
 				require.NoError(err)
 				return
@@ -73,7 +73,7 @@ func TestStorageDriverReader(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetReader %s", tc.input), func(t *testing.T) {
 			require := require.New(t)
-			reader, err := sd.Reader(context.Background(), tc.input, 0)
+			reader, err := sd.Reader(contextFixture(), tc.input, 0)
 			data, err := ioutil.ReadAll(reader)
 			require.Equal(tc.data, data)
 			require.Equal(tc.err, err)
@@ -109,7 +109,7 @@ func TestStorageDriverPutContent(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("PutContent %s", tc.inputPath), func(t *testing.T) {
-			require.Equal(t, tc.err, sd.PutContent(context.Background(), tc.inputPath, tc.inputContent))
+			require.Equal(t, tc.err, sd.PutContent(contextFixture(), tc.inputPath, tc.inputContent))
 		})
 	}
 
@@ -135,14 +135,14 @@ func TestStorageDriverWriter(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetWriter %s", tc.input), func(t *testing.T) {
 			require := require.New(t)
-			w, err := sd.Writer(context.Background(), tc.input, false)
+			w, err := sd.Writer(contextFixture(), tc.input, false)
 			require.Equal(tc.err, err)
 			if err != nil {
 				return
 			}
 			w.Write(content)
 			w.Close()
-			r, err := sd.Reader(context.Background(), tc.input, 0)
+			r, err := sd.Reader(contextFixture(), tc.input, 0)
 			require.NoError(err)
 			defer r.Close()
 			data, err := ioutil.ReadAll(r)
@@ -171,7 +171,7 @@ func TestStorageDriverStat(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetStat %s", tc.input), func(t *testing.T) {
 			require := require.New(t)
-			fi, err := sd.Stat(context.Background(), tc.input)
+			fi, err := sd.Stat(contextFixture(), tc.input)
 			require.Equal(tc.err, err)
 			if err != nil {
 				return
@@ -200,7 +200,7 @@ func TestStorageDriverList(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("List %s", tc.input), func(t *testing.T) {
 			require := require.New(t)
-			list, err := sd.List(context.Background(), tc.input)
+			list, err := sd.List(contextFixture(), tc.input)
 			require.Equal(tc.err, err)
 			require.Equal(tc.list, list)
 		})
