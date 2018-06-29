@@ -9,7 +9,8 @@ RUN groupadd --gid 100001 udocker
 RUN useradd --uid 100001 -g udocker -d /home/udocker -m -s /bin/bash udocker
 USER udocker
 
-ADD ./ /home/udocker/kraken-build-index
+ADD ./config /home/udocker/kraken-build-index/config
+ADD ./localdb/migrations /home/udocker/kraken-build-index/localdb/migrations
 ADD build-index/build-index /usr/bin/kraken-build-index
 
 WORKDIR /home/udocker/kraken-build-index

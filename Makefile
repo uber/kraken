@@ -199,12 +199,14 @@ redis:
 	docker run -d -p 6380:6379 --name kraken-redis redis:latest
 
 .PHONY: tracker
-tracker: redis
+tracker:
 	-rm tracker/tracker
 	GOOS=linux GOARCH=amd64 make tracker/tracker
+
+docker_tracker: redis tracker
 	docker build -t kraken-tracker:dev -f docker/tracker/Dockerfile ./
 
-run_tracker: tracker redis
+run_tracker: docker_tracker redis
 	-docker stop kraken-tracker
 	-docker rm kraken-tracker
 	docker run -d \
@@ -225,9 +227,11 @@ build-index:
 	else \
 		GOOS=linux GOARCH=amd64 make build-index/build-index; \
 	fi
+
+docker_build-index: build-index
 	docker build -t kraken-build-index:dev -f docker/build-index/Dockerfile ./
 
-run_build-index: build-index
+run_build-index: docker_build-index
 	-docker stop kraken-build-index
 	-docker rm kraken-build-index
 	docker run -d \
@@ -250,9 +254,11 @@ origin:
 	else \
 		GOOS=linux GOARCH=amd64 make origin/origin; \
 	fi
+
+docker_origin: origin
 	docker build -t kraken-origin:dev -f docker/origin/Dockerfile ./
 
-run_origin: origin
+run_origin: docker_origin
 	-docker stop kraken-origin
 	-docker rm kraken-origin
 	docker run -d \
@@ -274,9 +280,11 @@ run_origin: origin
 agent:
 	-rm agent/agent
 	GOOS=linux GOARCH=amd64 make agent/agent
+
+docker_agent: agent
 	docker build -t kraken-agent:dev -f docker/agent/Dockerfile ./
 
-run_agent: agent
+run_agent: docker_agent
 	-docker stop kraken-agent
 	-docker rm kraken-agent
 	docker run -d \
@@ -293,9 +301,11 @@ run_agent: agent
 proxy:
 	-rm proxy/proxy
 	GOOS=linux GOARCH=amd64 make proxy/proxy
+
+docker_proxy: proxy
 	docker build -t kraken-proxy:dev -f docker/proxy/Dockerfile ./
 
-run_proxy: proxy
+run_proxy: docker_proxy
 	-docker stop kraken-proxy
 	-docker rm kraken-proxy
 	docker run -d \
@@ -310,8 +320,11 @@ run_proxy: proxy
 testfs:
 	-rm tools/bin/testfs/testfs
 	GOOS=linux GOARCH=amd64 make tools/bin/testfs/testfs
+
+docker_testfs: testfs
 	docker build -t kraken-testfs:dev -f docker/testfs/Dockerfile ./
-run_testfs: testfs
+
+run_testfs: docker_testfs
 	-docker stop kraken-testfs
 	-docker rm kraken-testfs
 	docker run -d \
@@ -329,7 +342,7 @@ bootstrap_integration:
 	source env/bin/activate
 	env/bin/pip install -r requirements-tests.txt
 
-build_integration: tracker origin agent proxy testfs tools/bin/puller/puller build-index docker_stop
+build_integration: docker_tracker docker_origin docker_agent docker_proxy docker_testfs tools/bin/puller/puller docker_build-index docker_stop
 
 run_integration: docker_stop
 	source env/bin/activate
@@ -354,10 +367,10 @@ linux-trackerload:
 	-rm tools/bin/trackerload/trackerload
 	GOOS=linux GOARCH=amd64 make tools/bin/trackerload/trackerload
 
-build_devcluster:
+build_devcluster: agent build-index origin proxy testfs tracker
 	docker build -t kraken-devcluster:latest -f docker/devcluster/Dockerfile ./
 
-run_devcluster:
+run_devcluster: docker_stop
 	-docker rm -f kraken-devcluster
 	docker run -d -p 7602:7602 -p 9003:9003 --hostname localhost --name kraken-devcluster kraken-devcluster:latest
 
@@ -386,16 +399,16 @@ cleanup-terraman:
 # Integration tests, for local testing. TerraMan should be up and running in order this to work
 .PHONY: run_terraman
 run_terraman: export RUN_INT_TESTS=1
-run_terraman: $(FAUX_VENDOR) install-all bins $(TERRAMAN_CONFIG_FILE)
+run_terraman: $(FAUX_VENDOR) $(TERRAMAN_CONFIG_FILE)
 
 connect-terrablob-kraken:
 		-docker network create integration-net
 		-docker network connect integration-net terraman.terrablob
-		-docker network connect integration-net kraken-origin
+		-docker network connect integration-net kraken-devcluster
 
 .PHONY: terrablob-integration
 terrablob-integration: export RUN_TERRABLOB_TESTS=1
-terrablob-integration: run_terraman run_origin connect-terrablob-kraken
+terrablob-integration: run_terraman run_devcluster connect-terrablob-kraken
 		$(MAKE) -e -f Makefile test \
 		TEST_DIRS="./test/terrablobintegration/" \
 		TEST_FLAGS="-timeout=30m" \

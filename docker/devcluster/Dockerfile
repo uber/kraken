@@ -24,8 +24,6 @@ RUN groupadd --gid 100001 udocker
 RUN useradd --uid 100001 -g udocker -d /home/udocker -m -s /bin/bash udocker
 USER udocker
 
-COPY ./ /home/udocker/kraken
-
 COPY agent/agent /usr/bin/kraken-agent
 COPY build-index/build-index /usr/bin/kraken-build-index
 COPY origin/origin /usr/bin/kraken-origin
@@ -38,4 +36,6 @@ WORKDIR /home/udocker/kraken
 EXPOSE 9003
 EXPOSE 7602
 
-CMD ./docker/devcluster/start.sh
+COPY ./config /home/udocker/kraken/config
+COPY ./docker/devcluster/start.sh /home/udocker/kraken/start.sh
+CMD ./start.sh

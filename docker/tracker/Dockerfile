@@ -9,7 +9,7 @@ RUN groupadd --gid 100001 udocker
 RUN useradd --uid 100001 -g udocker -d /home/udocker -m -s /bin/bash udocker
 USER udocker
 
-ADD ./ /home/udocker/kraken
+ADD ./config /home/udocker/kraken/config
 ADD tracker/tracker /usr/bin/tracker
 
 EXPOSE 26232
