@@ -9,7 +9,6 @@ RUN groupadd --gid 100001 udocker
 RUN useradd --uid 100001 -g udocker -d /home/udocker -m -s /bin/bash udocker
 USER udocker
 
-ADD ./ /home/udocker/kraken
 ADD tools/bin/testfs/testfs /usr/bin/kraken-testfs
 
 WORKDIR /home/udocker/kraken
