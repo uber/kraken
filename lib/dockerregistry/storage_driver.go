@@ -156,7 +156,7 @@ func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data
 	case _layers:
 		return d.blobs.getDigest(path)
 	case _blobs:
-		return d.blobs.getContent(path)
+		return d.blobs.getContent(ctx, path)
 	}
 	return nil, InvalidRequestError{path}
 }
@@ -173,7 +173,7 @@ func (d *KrakenStorageDriver) Reader(ctx context.Context, path string, offset in
 	case _uploads:
 		return d.uploads.reader(path, pathSubType, offset)
 	case _blobs:
-		return d.blobs.reader(path, offset)
+		return d.blobs.reader(ctx, path, offset)
 	default:
 		return nil, InvalidRequestError{path}
 	}
@@ -239,7 +239,7 @@ func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (storagedri
 	case _uploads:
 		return d.uploads.stat(path)
 	case _blobs:
-		return d.blobs.stat(path)
+		return d.blobs.stat(ctx, path)
 	default:
 		return nil, InvalidRequestError{path}
 	}

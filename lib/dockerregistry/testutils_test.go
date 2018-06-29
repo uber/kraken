@@ -9,6 +9,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils/dockerutil"
+
+	"github.com/docker/distribution/context"
 	"github.com/uber-go/tally"
 )
 
@@ -139,4 +141,8 @@ func getShardedRelativePath(name string) string {
 	}
 
 	return path.Join(filePath, name)
+}
+
+func contextFixture() context.Context {
+	return context.WithValues(context.Background(), map[string]interface{}{"vars.name": "dummy"})
 }

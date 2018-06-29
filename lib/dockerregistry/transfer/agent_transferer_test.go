@@ -66,3 +66,28 @@ func TestAgentTransfererDownloadCachesBlob(t *testing.T) {
 		require.Equal(blob.Content, b)
 	}
 }
+
+func TestAgentTransfererStat(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newAgentTransfererMocks(t)
+	defer cleanup()
+
+	transferer := mocks.new()
+
+	namespace := "docker/labrat:latest"
+	blob := core.NewBlobFixture()
+
+	mocks.sched.EXPECT().Download(
+		namespace, blob.Digest.Hex()).DoAndReturn(func(namespace, name string) error {
+
+		return store.RunDownload(mocks.cads, blob.Digest, blob.Content)
+	})
+
+	// Stat-ing multiple times should only call scheduler download once.
+	for i := 0; i < 10; i++ {
+		bi, err := transferer.Stat(namespace, blob.Digest)
+		require.NoError(err)
+		require.Equal(blob.Info(), bi)
+	}
+}

@@ -146,9 +146,13 @@ func (c *clusterClient) OverwriteMetaInfo(d core.Digest, pieceLength int64) erro
 
 // DownloadBlob pulls a blob from the origin cluster.
 func (c *clusterClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
-	return Poll(c.resolver, c.pollDownloadBackoff, d, func(client Client) error {
+	err := Poll(c.resolver, c.pollDownloadBackoff, d, func(client Client) error {
 		return client.DownloadBlob(namespace, d, dst)
 	})
+	if httputil.IsNotFound(err) {
+		err = ErrBlobNotFound
+	}
+	return err
 }
 
 // Owners returns the origin peers which own d.

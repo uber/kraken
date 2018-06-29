@@ -8,6 +8,9 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/origin/blobclient"
+	"code.uber.internal/infra/kraken/utils/log"
+
+	"github.com/docker/distribution/uuid"
 )
 
 // ProxyTransferer is a Transferer for proxy. Uploads/downloads blobs via the
@@ -27,15 +30,69 @@ func NewProxyTransferer(
 	return &ProxyTransferer{tags, originCluster, cas}
 }
 
-// Download only checks local cache from previous uploads and never downloads
-// from origin, to avoid downloading blobs when handling HEAD requests during
-// upload.
+// Stat returns blob info from origin cluster or local cache.
+func (t *ProxyTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
+	fi, err := t.cas.GetCacheFileStat(d.Hex())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return t.originStat(namespace, d)
+		}
+		return nil, fmt.Errorf("stat cache file: %s", err)
+	}
+	return core.NewBlobInfo(fi.Size()), nil
+}
+
+func (t *ProxyTransferer) originStat(namespace string, d core.Digest) (*core.BlobInfo, error) {
+	bi, err := t.originCluster.Stat(namespace, d)
+	if err != nil {
+		// `docker push` stats blobs before uploading them. If the blob is not
+		// found, it will upload it. However if remote blob storage is unavailable,
+		// this will be a 5XX error, and will short-circuit push. We must consider
+		// this class of error to be a 404 to allow pushes to succeed while remote
+		// storage is down (write-back will eventually persist the blobs).
+		if err != blobclient.ErrBlobNotFound {
+			log.With("digest", d).Info("Error stat-ing origin blob: %s", err)
+		}
+		return nil, ErrBlobNotFound
+	}
+	return bi, nil
+}
+
+// Download downloads the blob of name into the file store and returns a reader
+// to the newly downloaded file.
 func (t *ProxyTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
 	blob, err := t.cas.GetCacheFileReader(d.Hex())
-	if os.IsNotExist(err) {
-		return nil, ErrBlobNotFound
-	} else if err != nil {
-		return nil, fmt.Errorf("get cache reader %s: %s", d.Hex(), err)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return t.downloadFromOrigin(namespace, d)
+		}
+		return nil, fmt.Errorf("get cache file: %s", err)
+	}
+	return blob, nil
+}
+
+func (t *ProxyTransferer) downloadFromOrigin(namespace string, d core.Digest) (store.FileReader, error) {
+	tmp := fmt.Sprintf("%s.%s", d.Hex(), uuid.Generate().String())
+	if err := t.cas.CreateUploadFile(tmp, 0); err != nil {
+		return nil, fmt.Errorf("create upload file: %s", err)
+	}
+	w, err := t.cas.GetUploadFileReadWriter(tmp)
+	if err != nil {
+		return nil, fmt.Errorf("get upload writer: %s", err)
+	}
+	defer w.Close()
+	if err := t.originCluster.DownloadBlob(namespace, d, w); err != nil {
+		if err == blobclient.ErrBlobNotFound {
+			return nil, ErrBlobNotFound
+		}
+		return nil, fmt.Errorf("origin: %s", err)
+	}
+	if err := t.cas.MoveUploadFileToCache(tmp, d.Hex()); err != nil && !os.IsExist(err) {
+		return nil, fmt.Errorf("move upload file to cache: %s", err)
+	}
+	blob, err := t.cas.GetCacheFileReader(d.Hex())
+	if err != nil {
+		return nil, fmt.Errorf("get cache file: %s", err)
 	}
 	return blob, nil
 }
