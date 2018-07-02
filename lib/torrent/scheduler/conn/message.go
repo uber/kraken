@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	"code.uber.internal/infra/kraken/.gen/go/p2p"
+	"code.uber.internal/infra/kraken/.gen/go/proto/p2p"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"github.com/golang/protobuf/proto"
 )

@@ -9,8 +9,8 @@ RUN groupadd --gid 100001 udocker
 RUN useradd --uid 100001 -g udocker -d /home/udocker -m -s /bin/bash udocker
 USER udocker
 
-ADD ./config /home/udocker/kraken/config
-ADD proxy/proxy /usr/bin/kraken-proxy
+COPY ./config /home/udocker/kraken/config
+COPY proxy/proxy.linux /usr/bin/kraken-proxy
 
 EXPOSE 5054
 

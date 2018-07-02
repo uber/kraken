@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/.gen/go/p2p"
+	"code.uber.internal/infra/kraken/.gen/go/proto/p2p"
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"

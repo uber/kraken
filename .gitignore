@@ -17,7 +17,6 @@ tracker/tracker
 agent/agent
 origin/origin
 proxy/proxy
-cli/kraken-cli
 build-index/build-index
 tools/bin/puller/puller
 tools/bin/benchmarks/benchmarks
@@ -27,6 +26,14 @@ tools/bin/simulation/simulation
 tools/bin/testfs/testfs
 tools/bin/pexchange/pexchange
 tools/bin/trackerload/trackerload
+
+# Linux binaries
+tracker/tracker.linux
+agent/agent.linux
+origin/origin.linux
+proxy/proxy.linux
+build-index/build-index.linux
+tools/bin/testfs/testfs.linux
 
 # tmp migration files
 [0-9]*_-dir.go
