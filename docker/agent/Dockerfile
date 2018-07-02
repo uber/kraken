@@ -9,8 +9,8 @@ RUN groupadd --gid 100001 udocker
 RUN useradd --uid 100001 -g udocker -d /home/udocker -m -s /bin/bash udocker
 USER udocker
 
-ADD ./config /home/udocker/kraken/config
-ADD agent/agent /usr/bin/kraken-agent
+COPY ./config /home/udocker/kraken/config
+COPY agent/agent.linux /usr/bin/kraken-agent
 
 EXPOSE 5052
 

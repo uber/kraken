@@ -24,17 +24,18 @@ RUN groupadd --gid 100001 udocker
 RUN useradd --uid 100001 -g udocker -d /home/udocker -m -s /bin/bash udocker
 USER udocker
 
-COPY agent/agent /usr/bin/kraken-agent
-COPY build-index/build-index /usr/bin/kraken-build-index
-COPY origin/origin /usr/bin/kraken-origin
-COPY proxy/proxy /usr/bin/kraken-proxy
-COPY tools/bin/testfs/testfs /usr/bin/kraken-testfs
-COPY tracker/tracker /usr/bin/kraken-tracker
+COPY agent/agent.linux             /usr/bin/kraken-agent
+COPY build-index/build-index.linux /usr/bin/kraken-build-index
+COPY origin/origin.linux           /usr/bin/kraken-origin
+COPY proxy/proxy.linux             /usr/bin/kraken-proxy
+COPY tools/bin/testfs/testfs.linux /usr/bin/kraken-testfs
+COPY tracker/tracker.linux         /usr/bin/kraken-tracker
 
 WORKDIR /home/udocker/kraken
 
 EXPOSE 9003
 EXPOSE 7602
+EXPOSE 5367
 
 COPY ./config /home/udocker/kraken/config
 COPY ./docker/devcluster/start.sh /home/udocker/kraken/start.sh

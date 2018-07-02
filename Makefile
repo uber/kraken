@@ -36,25 +36,21 @@ PROGS = \
 	tools/bin/testfs/testfs \
 	tools/bin/trackerload/trackerload
 
-# define the list of proto buffers the service depends on
-PROTO_GENDIR ?= .gen
-PROTO_SRCS = lib/torrent/proto/p2p/p2p.proto
-GOBUILD_DIR = go-build
-
-MAKE_PROTO = go-build/protoc --plugin=go-build/protoc-gen-go --proto_path=$(dir $(patsubst %/,%,$(dir $(pb)))) --go_out=$(PROTO_GENDIR)/go $(pb)
-
 update-golden:
 	$(shell UBER_ENVIRONMENT=test UBER_CONFIG_DIR=`pwd`/config/origin go test ./client/cli/ -update 1>/dev/null)
 	@echo "generated golden files"
 
-proto:
-	@mkdir -p $(PROTO_GENDIR)/go
-	cd $(dir $(patsubst %/,%,$(GOBUILD_DIR)))
-	$(foreach pb, $(PROTO_SRCS), $(MAKE_PROTO);)
+GEN_DIR = .gen/go
+
+PROTO = $(GEN_DIR)/proto/p2p/p2p.pb.go
+
+$(PROTO): $(wildcard proto/*)
+	mkdir -p $(GEN_DIR)
+	go-build/protoc --plugin=go-build/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$@))
 
 tracker/tracker: $(wildcard tracker/*.go)
-agent/agent: proto $(wildcard agent/*.go)
-origin/origin: proto $(wildcard origin/*.go)
+agent/agent: $(PROTO) $(wildcard agent/*.go)
+origin/origin: $(PROTO) $(wildcard origin/*.go)
 tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 proxy/proxy: $(wildcard proxy/*.go)
 build-index/build-index: $(wildcard build-index/*.go)
@@ -72,6 +68,90 @@ bench:
 test:: redis
 
 jenkins:: redis
+
+.PHONY: redis
+redis:
+	-docker stop kraken-redis
+	-docker rm kraken-redis
+	docker pull redis
+	# TODO(codyg): I chose this random port to avoid conflicts in Jenkins. Obviously not ideal.
+	docker run -d -p 6380:6379 --name kraken-redis redis:latest
+
+# ==== INIT ====
+
+include go-build/rules.mk
+
+go-build/rules.mk:
+	git submodule update --init
+
+# ==== INTEGRATION ====
+
+BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) $(PROJECT_ROOT)/$(dir $@)
+
+# Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
+# This workaround builds the binary inside a linux container.
+OSX_CROSS_COMPILER = docker run --rm -it -v $(OLDGOPATH):/go -w /go/src/code.uber.internal/infra/kraken golang:latest go build -o ./$@ ./$(dir $@)
+
+LINUX_BINS = \
+	agent/agent.linux \
+	build-index/build-index.linux \
+	origin/origin.linux \
+	proxy/proxy.linux \
+	tools/bin/testfs/testfs.linux \
+	tracker/tracker.linux
+
+$(LINUX_BINS):: $(FAUXFILE) $(FAUX_VENDOR)
+
+agent/agent.linux:: $(PROTO) $(wildcard agent/*.go)
+	$(BUILD_LINUX)
+
+build-index/build-index.linux:: $(wildcard build-index/*.go)
+	if [[ $$OSTYPE == darwin* ]]; then $(OSX_CROSS_COMPILER); else $(BUILD_LINUX); fi
+
+origin/origin.linux:: $(PROTO) $(wildcard origin/*.go)
+	if [[ $$OSTYPE == darwin* ]]; then $(OSX_CROSS_COMPILER); else $(BUILD_LINUX); fi
+
+proxy/proxy.linux:: $(wildcard proxy/*.go)
+	$(BUILD_LINUX)
+
+tools/bin/testfs/testfs.linux:: $(wildcard tools/bin/testfs/*.go)
+	$(BUILD_LINUX)
+
+tracker/tracker.linux:: $(wildcard tracker/*.go)
+	$(BUILD_LINUX)
+
+clean::
+	@rm -f $(LINUX_BINS)
+
+.PHONY: docker_stop
+docker_stop:
+	-docker ps -a --format '{{.Names}}' | grep kraken | while read n; do docker rm -f $$n; done
+
+.PHONY: integration
+integration: $(LINUX_BINS) tools/bin/puller/puller docker_stop
+	docker build -t kraken-agent:dev -f docker/agent/Dockerfile ./
+	docker build -t kraken-build-index:dev -f docker/build-index/Dockerfile ./
+	docker build -t kraken-origin:dev -f docker/origin/Dockerfile ./
+	docker build -t kraken-proxy:dev -f docker/proxy/Dockerfile ./
+	docker build -t kraken-testfs:dev -f docker/testfs/Dockerfile ./
+	docker build -t kraken-tracker:dev -f docker/tracker/Dockerfile ./
+	if [ ! -d env ]; then virtualenv --setuptools env; fi
+	source env/bin/activate
+	env/bin/pip install -r requirements-tests.txt
+	env/bin/py.test --timeout=120 -v test/python
+
+.PHONY: runtest
+NAME?=test_
+runtest: docker_stop
+	source env/bin/activate
+	env/bin/py.test --timeout=120 -v test/python -k $(NAME)
+
+.PHONY: devcluster
+devcluster: $(LINUX_BINS) docker_stop
+	docker build -t kraken-devcluster:latest -f docker/devcluster/Dockerfile ./
+	docker run -d -p 5367:5367 -p 7602:7602 -p 9003:9003 --hostname localhost --name kraken-devcluster kraken-devcluster:latest
+
+# ==== MOCKS ====
 
 mockgen = GOPATH=$(OLDGOPATH) $(GLIDE_EXEC) -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
 
@@ -186,202 +266,7 @@ mocks:
 		-package mocktagreplication \
 		code.uber.internal/infra/kraken/lib/persistedretry/tagreplication RemoteValidator
 
-# Runs docker stop and docker rm on each container w/ silenced output.
-docker_stop:
-	-docker ps -a --format '{{.Names}}' | grep kraken | while read n; do docker rm -f $$n; done
-
-.PHONY: redis
-redis:
-	-docker stop kraken-redis
-	-docker rm kraken-redis
-	docker pull redis
-	# TODO(codyg): I chose this random port to avoid conflicts in Jenkins. Obviously not ideal.
-	docker run -d -p 6380:6379 --name kraken-redis redis:latest
-
-.PHONY: tracker
-tracker:
-	-rm tracker/tracker
-	GOOS=linux GOARCH=amd64 make tracker/tracker
-
-docker_tracker: redis tracker
-	docker build -t kraken-tracker:dev -f docker/tracker/Dockerfile ./
-
-run_tracker: docker_tracker redis
-	-docker stop kraken-tracker
-	-docker rm kraken-tracker
-	docker run -d \
-		--name=kraken-tracker \
-	    -e UBER_ENVIRONMENT=development \
-		-e UBER_CONFIG_DIR=config/tracker \
-		-p 26232:26232 \
-		kraken-tracker:dev
-
-.PHONY: build-index
-build-index:
-	-rm build-index/build-index
-	# Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
-	# This workaround builds the binary inside a linux container. 
-	# This takes a few seconds.
-	if [[ $$OSTYPE == darwin* ]]; then \
-		docker run --rm -it -v $(OLDGOPATH):/go -w /go/src/code.uber.internal/infra/kraken/build-index golang:latest go build; \
-	else \
-		GOOS=linux GOARCH=amd64 make build-index/build-index; \
-	fi
-
-docker_build-index: build-index
-	docker build -t kraken-build-index:dev -f docker/build-index/Dockerfile ./
-
-run_build-index: docker_build-index
-	-docker stop kraken-build-index
-	-docker rm kraken-build-index
-	docker run -d \
-		--name=kraken-build-index \
-		--hostname=192.168.65.1 \
-		-p 5263:5263 \
-		kraken-build-index:dev \
-		/home/udocker/kraken-build-index/build-index/build-index \
-		--config=build-index/development.yaml \
-		--cluster=test-cluster
-
-.PHONY: origin
-origin:
-	-rm origin/origin
-	# Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
-	# This workaround builds the binary inside a linux container. 
-	# This takes a few seconds.
-	if [[ $$OSTYPE == darwin* ]]; then \
-		docker run --rm -it -v $(OLDGOPATH):/go -w /go/src/code.uber.internal/infra/kraken/origin golang:latest go build; \
-	else \
-		GOOS=linux GOARCH=amd64 make origin/origin; \
-	fi
-
-docker_origin: origin
-	docker build -t kraken-origin:dev -f docker/origin/Dockerfile ./
-
-run_origin: docker_origin
-	-docker stop kraken-origin
-	-docker rm kraken-origin
-	docker run -d \
-		--name=kraken-origin \
-		--hostname=192.168.65.1 \
-		-e UBER_CONFIG_DIR=/home/udocker/kraken/config/origin \
-		-e UBER_ENVIRONMENT=development \
-		-e UBER_DATACENTER=sjc1 \
-		-p 9003:9003 \
-		-p 5081:5081 \
-		kraken-origin:dev \
-		/usr/bin/kraken-origin \
-		--peer_ip=192.168.65.1 \
-		--peer_port=5081 \
-		--blobserver_port=9003 \
-		--config=development.yaml
-
-.PHONY: agent
-agent:
-	-rm agent/agent
-	GOOS=linux GOARCH=amd64 make agent/agent
-
-docker_agent: agent
-	docker build -t kraken-agent:dev -f docker/agent/Dockerfile ./
-
-run_agent: docker_agent
-	-docker stop kraken-agent
-	-docker rm kraken-agent
-	docker run -d \
-	    --name=kraken-agent \
-		-e UBER_CONFIG_DIR=/home/udocker/kraken/config/agent \
-		-e UBER_ENVIRONMENT=development \
-		-e UBER_DATACENTER=sjc1 \
-		-p 5052:5052 \
-		-p 5082:5082 \
-		kraken-agent:dev \
-		/usr/bin/kraken-agent --peer_ip=192.168.65.1 --peer_port=5082
-
-.PHONY: proxy
-proxy:
-	-rm proxy/proxy
-	GOOS=linux GOARCH=amd64 make proxy/proxy
-
-docker_proxy: proxy
-	docker build -t kraken-proxy:dev -f docker/proxy/Dockerfile ./
-
-run_proxy: docker_proxy
-	-docker stop kraken-proxy
-	-docker rm kraken-proxy
-	docker run -d \
-		--name=kraken-proxy \
-		-e UBER_CONFIG_DIR=/home/udocker/kraken/config/proxy \
-		-e UBER_ENVIRONMENT=development \
-		-e UBER_DATACENTER=sjc1 \
-		-p 5367:5367 \
-		kraken-proxy:dev \
-		/usr/bin/kraken-proxy --config=development.yaml
-
-testfs:
-	-rm tools/bin/testfs/testfs
-	GOOS=linux GOARCH=amd64 make tools/bin/testfs/testfs
-
-docker_testfs: testfs
-	docker build -t kraken-testfs:dev -f docker/testfs/Dockerfile ./
-
-run_testfs: docker_testfs
-	-docker stop kraken-testfs
-	-docker rm kraken-testfs
-	docker run -d \
-		--name=kraken-testfs \
-		-p 9004:9004 \
-		kraken-testfs:dev \
-		/usr/bin/kraken-testfs --port=9004
-
-run_cluster: run_testfs run_origin run_proxy run_build-index
-
-bootstrap_integration:
-	if [ ! -d env ]; then \
-	   virtualenv --setuptools env ; \
-	fi;
-	source env/bin/activate
-	env/bin/pip install -r requirements-tests.txt
-
-build_integration: docker_tracker docker_origin docker_agent docker_proxy docker_testfs tools/bin/puller/puller docker_build-index docker_stop
-
-run_integration: docker_stop
-	source env/bin/activate
-	env/bin/py.test --timeout=120 -v test/python
-
-integration: bootstrap_integration build_integration run_integration
-
-NAME?=test_
-runtest: docker_stop
-	source env/bin/activate
-	env/bin/py.test --timeout=120 -v test/python -k $(NAME)
-
-linux-benchmarks:
-	-rm tools/bin/benchmarks/benchmarks
-	GOOS=linux GOARCH=amd64 make tools/bin/benchmarks/benchmarks
-
-linux-reload:
-	-rm tools/bin/reload/reload
-	GOOS=linux GOARCH=amd64 make tools/bin/reload/reload
-
-linux-trackerload:
-	-rm tools/bin/trackerload/trackerload
-	GOOS=linux GOARCH=amd64 make tools/bin/trackerload/trackerload
-
-build_devcluster: agent build-index origin proxy testfs tracker
-	docker build -t kraken-devcluster:latest -f docker/devcluster/Dockerfile ./
-
-run_devcluster: docker_stop
-	-docker rm -f kraken-devcluster
-	docker run -d -p 7602:7602 -p 9003:9003 --hostname localhost --name kraken-devcluster kraken-devcluster:latest
-
-devcluster: build_devcluster run_devcluster
-
-include go-build/rules.mk
-
-go-build/rules.mk:
-		git submodule update --init
-
-# TERRAMAN INTEGRATION TESTS
+# ==== TERRABLOB ====
 
 TERRAMAN_PATH=terraman
 export TERRAMAN_CONFIG_FILE?= $(CURDIR)/$(BUILD_DIR)/terraman_host_config.json
@@ -408,7 +293,7 @@ connect-terrablob-kraken:
 
 .PHONY: terrablob-integration
 terrablob-integration: export RUN_TERRABLOB_TESTS=1
-terrablob-integration: run_terraman run_devcluster connect-terrablob-kraken
+terrablob-integration: run_terraman devcluster connect-terrablob-kraken
 		$(MAKE) -e -f Makefile test \
 		TEST_DIRS="./test/terrablobintegration/" \
 		TEST_FLAGS="-timeout=30m" \
