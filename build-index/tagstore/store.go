@@ -14,6 +14,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/utils/dedup"
+	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
@@ -58,11 +59,15 @@ func New(
 	remotes tagreplication.Remotes,
 	tagClientProvider tagclient.Provider) Store {
 
+	if config.DisableFallback {
+		log.Warn("Fallback disabled for tag storage")
+	}
+
 	stats = stats.Tagged(map[string]string{
 		"module": "tagstore",
 	})
 
-	resolver := &tagResolver{fs, backends, remotes, tagClientProvider}
+	resolver := &tagResolver{fs, backends, config.DisableFallback, remotes, tagClientProvider}
 
 	cache := dedup.NewCache(config.Cache, clock.New(), resolver)
 

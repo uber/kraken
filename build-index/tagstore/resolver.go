@@ -23,6 +23,7 @@ type tagResolver struct {
 	backends *backend.Manager
 
 	// For falling back to other remotes if backends are not reachable.
+	disableFallback   bool
 	remotes           tagreplication.Remotes
 	tagClientProvider tagclient.Provider
 }
@@ -45,7 +46,7 @@ func (r *tagResolver) Resolve(ctx, key interface{}) (interface{}, error) {
 	}
 	// We must be able to disable fallback to prevent cycles when resolving
 	// from remotes.
-	if rctx.fallback {
+	if rctx.fallback && !r.disableFallback {
 		// XXX: Falling back to a remote build-index means that we will be
 		// caching tags that may not exist in our backend storage.
 		sources = append(sources, source{"remote", r.resolveFromRemotes})
