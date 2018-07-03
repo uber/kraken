@@ -74,7 +74,14 @@ func (t *AgentTransferer) Upload(namespace string, d core.Digest, blob store.Fil
 
 // GetTag gets manifest digest for tag.
 func (t *AgentTransferer) GetTag(tag string) (core.Digest, error) {
-	return t.tags.Get(tag)
+	d, err := t.tags.Get(tag)
+	if err != nil {
+		if err == tagclient.ErrTagNotFound {
+			return core.Digest{}, ErrTagNotFound
+		}
+		return core.Digest{}, fmt.Errorf("client get tag: %s", err)
+	}
+	return d, nil
 }
 
 // PostTag is not supported.

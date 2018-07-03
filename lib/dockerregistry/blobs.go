@@ -9,7 +9,6 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/docker/distribution/context"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
@@ -57,7 +56,6 @@ func (b *blobs) stat(ctx context.Context, path string) (storagedriver.FileInfo, 
 				Path:       digest.Hex(),
 			}
 		}
-		log.Errorf("Error stat-ing %s: %s", digest.Hex(), err)
 		return nil, fmt.Errorf("transferer stat: %s", err)
 	}
 	// Hacking the path, since kraken storage driver is also the consumer of this info.
@@ -106,8 +104,7 @@ func (b *blobs) getCacheReaderHelper(
 				Path:       digest.Hex(),
 			}
 		}
-		log.Errorf("Failed to download %s: %s", digest.Hex(), err)
-		return nil, fmt.Errorf("transferer stat: %s", err)
+		return nil, fmt.Errorf("transferer download: %s", err)
 	}
 
 	if _, err := r.Seek(offset, 0); err != nil {
