@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/build-index/tagclient"
@@ -90,4 +91,39 @@ func TestAgentTransfererStat(t *testing.T) {
 		require.NoError(err)
 		require.Equal(blob.Info(), bi)
 	}
+}
+
+func TestAgentTransfererGetTag(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newAgentTransfererMocks(t)
+	defer cleanup()
+
+	transferer := mocks.new()
+
+	tag := "docker/some-tag"
+	manifest := core.DigestFixture()
+
+	mocks.tags.EXPECT().Get(tag).Return(manifest, nil)
+
+	d, err := transferer.GetTag(tag)
+	require.NoError(err)
+	require.Equal(manifest, d)
+}
+
+func TestAgentTransfererGetTagNotFound(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newAgentTransfererMocks(t)
+	defer cleanup()
+
+	transferer := mocks.new()
+
+	tag := "docker/some-tag"
+
+	mocks.tags.EXPECT().Get(tag).Return(core.Digest{}, tagclient.ErrTagNotFound)
+
+	_, err := transferer.GetTag(tag)
+	require.Error(err)
+	require.Equal(ErrTagNotFound, err)
 }

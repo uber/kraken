@@ -106,7 +106,14 @@ func (t *ProxyTransferer) Upload(
 
 // GetTag returns the manifest digest for tag.
 func (t *ProxyTransferer) GetTag(tag string) (core.Digest, error) {
-	return t.tags.Get(tag)
+	d, err := t.tags.Get(tag)
+	if err != nil {
+		if err == tagclient.ErrTagNotFound {
+			return core.Digest{}, ErrTagNotFound
+		}
+		return core.Digest{}, fmt.Errorf("client get tag: %s", err)
+	}
+	return d, nil
 }
 
 // PostTag uploads d as the manifest digest for tag.

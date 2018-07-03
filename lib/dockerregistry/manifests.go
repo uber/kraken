@@ -5,7 +5,6 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
-	"code.uber.internal/infra/kraken/utils/log"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 )
 
@@ -46,6 +45,12 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 		}
 		digest, err = t.transferer.GetTag(fmt.Sprintf("%s:%s", repo, tag))
 		if err != nil {
+			if err == transfer.ErrTagNotFound {
+				return nil, storagedriver.PathNotFoundError{
+					DriverName: "kraken",
+					Path:       digest.String(),
+				}
+			}
 			return nil, fmt.Errorf("transferer get tag: %s", err)
 		}
 	case _revisions:
@@ -60,11 +65,13 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 
 	blob, err := t.transferer.Download(repo, digest)
 	if err != nil {
-		log.Errorf("Failed to download %s: %s", digest, err)
-		return nil, storagedriver.PathNotFoundError{
-			DriverName: "kraken",
-			Path:       digest.String(),
+		if err == transfer.ErrBlobNotFound {
+			return nil, storagedriver.PathNotFoundError{
+				DriverName: "kraken",
+				Path:       digest.String(),
+			}
 		}
+		return nil, fmt.Errorf("transferer download: %s", err)
 	}
 	defer blob.Close()
 
