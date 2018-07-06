@@ -34,6 +34,7 @@ func (p provider) Provide(addr string) Client { return New(addr) }
 // Client wraps tagserver endpoints.
 type Client interface {
 	Put(tag string, d core.Digest) error
+	PutAndReplicate(tag string, d core.Digest) error
 	Get(tag string) (core.Digest, error)
 	GetLocal(tag string) (core.Digest, error)
 	Has(tag string) (bool, error)
@@ -58,6 +59,13 @@ func New(addr string) Client {
 func (c *client) Put(tag string, d core.Digest) error {
 	_, err := httputil.Put(
 		fmt.Sprintf("http://%s/tags/%s/digest/%s", c.addr, url.PathEscape(tag), d.String()),
+		httputil.SendRetry())
+	return err
+}
+
+func (c *client) PutAndReplicate(tag string, d core.Digest) error {
+	_, err := httputil.Put(
+		fmt.Sprintf("http://%s/tags/%s/digest/%s?replicate=true", c.addr, url.PathEscape(tag), d.String()),
 		httputil.SendRetry())
 	return err
 }

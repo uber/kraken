@@ -171,6 +171,18 @@ func (mr *MockClientMockRecorder) Put(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockClient)(nil).Put), arg0, arg1)
 }
 
+// PutAndReplicate mocks base method
+func (m *MockClient) PutAndReplicate(arg0 string, arg1 core.Digest) error {
+	ret := m.ctrl.Call(m, "PutAndReplicate", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PutAndReplicate indicates an expected call of PutAndReplicate
+func (mr *MockClientMockRecorder) PutAndReplicate(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutAndReplicate", reflect.TypeOf((*MockClient)(nil).PutAndReplicate), arg0, arg1)
+}
+
 // Replicate mocks base method
 func (m *MockClient) Replicate(arg0 string) error {
 	ret := m.ctrl.Call(m, "Replicate", arg0)

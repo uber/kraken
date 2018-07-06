@@ -274,6 +274,42 @@ func TestListRepositoryNotFound(t *testing.T) {
 	require.Equal(tagclient.ErrRepoNotFound, err)
 }
 
+func TestPutAndReplicate(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := tagclient.New(addr)
+
+	tag := core.TagFixture()
+	digest := core.DigestFixture()
+	deps := core.DigestList{digest}
+	tagDependencyResolver := mocktagtype.NewMockDependencyResolver(mocks.ctrl)
+	localReplicaClient := mocktagclient.NewMockClient(mocks.ctrl)
+	task := tagreplication.NewTask(tag, digest, deps, _testRemote)
+	replicaClient := mocks.client()
+
+	gomock.InOrder(
+		mocks.tagTypes.EXPECT().GetDependencyResolver(tag).Return(tagDependencyResolver, nil),
+		tagDependencyResolver.EXPECT().Resolve(tag, digest).Return(core.DigestList{digest}, nil),
+		mocks.originClient.EXPECT().Stat(tag, digest).Return(core.NewBlobInfo(256), nil),
+		mocks.store.EXPECT().Put(tag, digest, time.Duration(0)).Return(nil),
+		mocks.provider.EXPECT().Provide(_testLocalReplica).Return(localReplicaClient),
+		localReplicaClient.EXPECT().DuplicatePut(
+			tag, digest, mocks.config.DuplicateReplicateStagger).Return(nil),
+		mocks.tagReplicationManager.EXPECT().Add(tagreplication.MatchTask(task)).Return(nil),
+		mocks.provider.EXPECT().Provide(_testLocalReplica).Return(replicaClient),
+		replicaClient.EXPECT().DuplicateReplicate(
+			tag, digest, deps, mocks.config.DuplicateReplicateStagger).Return(nil),
+	)
+
+	require.NoError(client.PutAndReplicate(tag, digest))
+}
+
 func TestReplicate(t *testing.T) {
 	require := require.New(t)
 

@@ -122,10 +122,7 @@ func TestProxyTransfererPostTag(t *testing.T) {
 
 	tag := "docker/some-tag"
 
-	gomock.InOrder(
-		mocks.tags.EXPECT().Put(tag, manifestDigest).Return(nil),
-		mocks.tags.EXPECT().Replicate(tag).Return(nil),
-	)
+	mocks.tags.EXPECT().PutAndReplicate(tag, manifestDigest).Return(nil)
 
 	require.NoError(transferer.PostTag(tag, manifestDigest))
 }
