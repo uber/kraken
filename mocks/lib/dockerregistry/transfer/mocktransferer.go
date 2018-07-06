@@ -85,6 +85,19 @@ func (mr *MockImageTransfererMockRecorder) PostTag(arg0, arg1 interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostTag", reflect.TypeOf((*MockImageTransferer)(nil).PostTag), arg0, arg1)
 }
 
+// Stat mocks base method
+func (m *MockImageTransferer) Stat(arg0 string, arg1 core.Digest) (*core.BlobInfo, error) {
+	ret := m.ctrl.Call(m, "Stat", arg0, arg1)
+	ret0, _ := ret[0].(*core.BlobInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Stat indicates an expected call of Stat
+func (mr *MockImageTransfererMockRecorder) Stat(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockImageTransferer)(nil).Stat), arg0, arg1)
+}
+
 // Upload mocks base method
 func (m *MockImageTransferer) Upload(arg0 string, arg1 core.Digest, arg2 base.FileReader) error {
 	ret := m.ctrl.Call(m, "Upload", arg0, arg1, arg2)

@@ -19,7 +19,7 @@ func (c CacheConfig) applyDefaults() CacheConfig {
 		c.TTL = 12 * time.Hour
 	}
 	if c.ErrorTTL == 0 {
-		c.ErrorTTL = 30 * time.Second
+		c.ErrorTTL = 1 * time.Second
 	}
 	if c.CleanupInterval == 0 {
 		c.CleanupInterval = 15 * time.Second

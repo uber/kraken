@@ -118,16 +118,8 @@ func (t *ProxyTransferer) GetTag(tag string) (core.Digest, error) {
 
 // PostTag uploads d as the manifest digest for tag.
 func (t *ProxyTransferer) PostTag(tag string, d core.Digest) error {
-	f, err := t.cas.GetCacheFileReader(d.Hex())
-	if err != nil {
-		return fmt.Errorf("cache: %s", err)
-	}
-	defer f.Close()
-	if err := t.tags.Put(tag, d); err != nil {
-		return fmt.Errorf("put tag: %s", err)
-	}
-	if err := t.tags.Replicate(tag); err != nil {
-		return fmt.Errorf("replicate tag: %s", err)
+	if err := t.tags.PutAndReplicate(tag, d); err != nil {
+		return fmt.Errorf("put and replicate tag: %s", err)
 	}
 	return nil
 }
