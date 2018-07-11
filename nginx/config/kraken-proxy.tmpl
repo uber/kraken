@@ -1,9 +1,9 @@
 upstream registry {
-  server unix:/var/run/kraken-proxy-registry.sock;
+  server unix:/var/run/udocker/kraken-proxy-registry.sock;
 }
 
 upstream registry-override {
-  server unix:/var/run/kraken-proxy-registry-override.sock;
+  server unix:/var/run/udocker/kraken-proxy-registry-override.sock;
 }
 
 server {

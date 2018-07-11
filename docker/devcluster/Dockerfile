@@ -20,7 +20,7 @@ RUN mkdir -p -m 777 /var/cache/udocker/kraken-proxy
 RUN mkdir -p -m 777 /var/cache/udocker/kraken-testfs
 RUN mkdir -p -m 777 /var/cache/udocker/kraken-tracker
 
-RUN chmod 777 /var/run
+RUN mkdir -p -m 777 /var/run/udocker
 
 RUN groupadd --gid 100001 udocker
 RUN useradd --uid 100001 -g udocker -d /home/udocker -m -s /bin/bash udocker
@@ -46,6 +46,6 @@ EXPOSE 5367
 EXPOSE 8991
 
 COPY ./config /home/udocker/kraken/config
-COPY ./proxy/nginx /home/udocker/kraken/proxy/nginx
+COPY ./nginx/config /home/udocker/kraken/nginx/config
 COPY ./docker/devcluster/start.sh /home/udocker/kraken/start.sh
 CMD ./start.sh
