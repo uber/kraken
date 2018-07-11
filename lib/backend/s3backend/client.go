@@ -1,7 +1,6 @@
 package s3backend
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -11,8 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/memsize"
-
+	"code.uber.internal/infra/kraken/utils/rwutil"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -31,7 +29,7 @@ type Client struct {
 
 // NewClient creates a new Client.
 func NewClient(config Config, userAuth UserAuthConfig) (*Client, error) {
-	config = config.applyDefaults()
+	config.applyDefaults()
 	if config.Username == "" {
 		return nil, errors.New("invalid config: username required")
 	}
@@ -88,22 +86,6 @@ func (c *Client) Stat(name string) (*core.BlobInfo, error) {
 	return core.NewBlobInfo(size), nil
 }
 
-type exceededCapError error
-
-// capBuffer is a buffer that returns errors if the buffer exceeds cap.
-type capBuffer struct {
-	cap int64
-	buf *aws.WriteAtBuffer
-}
-
-func (b *capBuffer) WriteAt(p []byte, pos int64) (n int, err error) {
-	if pos+int64(len(p)) > b.cap {
-		return 0, exceededCapError(
-			fmt.Errorf("buffer exceed max capacity %s", memsize.Format(uint64(b.cap))))
-	}
-	return b.buf.WriteAt(p, pos)
-}
-
 // Download downloads the content from a configured bucket and writes the
 // data to dst.
 func (c *Client) Download(name string, dst io.Writer) error {
@@ -117,8 +99,8 @@ func (c *Client) Download(name string, dst io.Writer) error {
 	// in-memory buffer and drain it into dst after the download is finished.
 	writerAt, ok := dst.(io.WriterAt)
 	if !ok {
-		log.With("name", name).Info("Using in-memory buffer for S3 download")
-		writerAt = &capBuffer{int64(c.config.BufferGuard), aws.NewWriteAtBuffer([]byte{})}
+		log.With("name", name).Info("Using in-memory buffer for TerraBlob download")
+		writerAt = rwutil.NewCappedBuffer(int(c.config.BufferGuard))
 	}
 
 	downloader := s3manager.NewDownloaderWithClient(c.svc, func(d *s3manager.Downloader) {
@@ -141,9 +123,9 @@ func (c *Client) Download(name string, dst io.Writer) error {
 		return err
 	}
 
-	if cbuf, ok := writerAt.(*capBuffer); ok {
-		if _, err := io.Copy(dst, bytes.NewReader(cbuf.buf.Bytes())); err != nil {
-			return fmt.Errorf("drain buffer: %s", err)
+	if capBuf, ok := writerAt.(*rwutil.CappedBuffer); ok {
+		if err = capBuf.DrainInto(dst); err != nil {
+			return err
 		}
 	}
 
