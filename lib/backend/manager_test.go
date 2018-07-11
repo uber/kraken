@@ -3,6 +3,7 @@ package backend
 import (
 	"testing"
 
+	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
 	"github.com/stretchr/testify/require"
 )
@@ -37,12 +38,6 @@ func TestManagerNamespaceMatching(t *testing.T) {
 	}
 }
 
-func TestManagerEmptyNamespace(t *testing.T) {
-	m := ManagerFixture()
-	_, err := m.GetClient("")
-	require.Error(t, err)
-}
-
 func TestManagerErrNamespaceNotFound(t *testing.T) {
 	m := ManagerFixture()
 	_, err := m.GetClient("no-match")
@@ -60,15 +55,15 @@ func TestManagerNamespaceOrdering(t *testing.T) {
 		{
 			Namespace: "foo/bar/.*",
 			Backend:   "testfs",
-			TestFS:    testfs.Config{Addr: fooBarAddr},
+			TestFS:    testfs.Config{Addr: fooBarAddr, NamePath: namepath.Identity},
 		}, {
 			Namespace: "foo/.*",
 			Backend:   "testfs",
-			TestFS:    testfs.Config{Addr: fooAddr},
+			TestFS:    testfs.Config{Addr: fooAddr, NamePath: namepath.Identity},
 		}, {
 			Namespace: ".*",
 			Backend:   "testfs",
-			TestFS:    testfs.Config{Addr: defaultAddr},
+			TestFS:    testfs.Config{Addr: defaultAddr, NamePath: namepath.Identity},
 		},
 	}
 
@@ -82,6 +77,7 @@ func TestManagerNamespaceOrdering(t *testing.T) {
 		"abc":         defaultAddr,
 		"xyz":         defaultAddr,
 		"bar/baz":     defaultAddr,
+		"":            defaultAddr,
 	} {
 		c, err := m.GetClient(ns)
 		require.NoError(err)

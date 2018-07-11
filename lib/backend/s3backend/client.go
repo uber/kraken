@@ -185,6 +185,6 @@ func isNotFound(err error) bool {
 }
 
 // List TODO(codyg): Implement S3 list.
-func (c *Client) List(dir string) ([]string, error) {
+func (c *Client) List(prefix string) ([]string, error) {
 	return nil, errors.New("unimplemented")
 }

@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
+	"strings"
 	"testing"
 
 	"code.uber.internal/infra/kraken/core"
@@ -24,15 +27,16 @@ type testServer struct {
 
 func (s *testServer) handler() http.Handler {
 	r := chi.NewRouter()
-	r.Get("/data/:blob", s.getName)
-	r.Get("/datanode", s.getData)
-	r.Put("/data/:blob", s.putName)
-	r.Put("/datanode", s.putData)
+	r.Get("/root*", s.getName)
+	r.Get("/datanode/*", s.getData)
+	r.Put("/root*", s.putName)
+	r.Put("/datanode/*", s.putData)
 	return r
 }
 
 func redirectToDataNode(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, fmt.Sprintf("http://%s/datanode", r.Host), http.StatusTemporaryRedirect)
+	datanode := fmt.Sprintf("http://%s/%s", r.Host, path.Join("datanode", r.URL.Path))
+	http.Redirect(w, r, datanode, http.StatusTemporaryRedirect)
 }
 
 func writeResponse(status int, body []byte) http.HandlerFunc {
@@ -54,7 +58,7 @@ func checkBody(t *testing.T, expected []byte) http.HandlerFunc {
 func configFixture(nodes ...string) Config {
 	return Config{
 		NameNodes:     nodes,
-		RootDirectory: "data",
+		RootDirectory: "root",
 		NamePath:      "identity",
 	}.applyDefaults()
 }
@@ -274,73 +278,93 @@ func TestClientStatNotFound(t *testing.T) {
 	require.Equal(backenderrors.ErrBlobNotFound, err)
 }
 
-func TestClientList(t *testing.T) {
-	require := require.New(t)
-
-	// Copied from webhdfs documentation.
-	resp := `
-		{
-		  "FileStatuses":
-		  {
-			"FileStatus":
-			[
-			  {
-				"accessTime"      : 1320171722771,
-				"blockSize"       : 33554432,
-				"group"           : "supergroup",
-				"length"          : 24930,
-				"modificationTime": 1320171722771,
-				"owner"           : "webuser",
-				"pathSuffix"      : "a.patch",
-				"permission"      : "644",
-				"replication"     : 1,
-				"type"            : "FILE"
-			  },
-			  {
-				"accessTime"      : 0,
-				"blockSize"       : 0,
-				"group"           : "supergroup",
-				"length"          : 0,
-				"modificationTime": 1320895981256,
-				"owner"           : "username",
-				"pathSuffix"      : "bar",
-				"permission"      : "711",
-				"replication"     : 0,
-				"type"            : "DIRECTORY"
-			  }
-			]
-		  }
-		}
-	`
-
-	server := &testServer{
-		getName: redirectToDataNode,
-		getData: writeResponse(http.StatusOK, []byte(resp)),
-	}
-	addr, stop := testutil.StartServer(server.handler())
-	defer stop()
-
-	client, err := NewClient(configFixture(addr))
-	require.NoError(err)
-
-	names, err := client.List("some dir")
-	require.NoError(err)
-	require.Equal([]string{"a.patch", "bar"}, names)
+func fileStatusFixture(name, ftype string) string {
+	return fmt.Sprintf(`
+	  {
+		"accessTime"      : 1320171722771,
+		"blockSize"       : 33554432,
+		"group"           : "supergroup",
+		"length"          : 24930,
+		"modificationTime": 1320171722771,
+		"owner"           : "webuser",
+		"pathSuffix"      : %q,
+		"permission"      : "644",
+		"replication"     : 1,
+		"type"            : %q
+	  }
+	`, name, ftype)
 }
 
-func TestClientListNotFound(t *testing.T) {
-	require := require.New(t)
+func fileStatusListFixture(fileStatuses ...string) string {
+	return fmt.Sprintf(`
+	  {
+		"FileStatuses": {
+		  "FileStatus": [%s]
+	    }
+	  }
+	`, strings.Join(fileStatuses, ","))
+}
 
-	server := &testServer{
-		getName: redirectToDataNode,
-		getData: writeResponse(http.StatusNotFound, nil),
+func TestClientList(t *testing.T) {
+	// Tests against the following directory structure:
+	//
+	//	  root/
+	//		foo/
+	//		  bar.txt
+	//        baz.txt
+	//		  cats/
+	//			meow.txt
+	//      emtpy/
+
+	tests := []struct {
+		desc     string
+		prefix   string
+		expected []string
+	}{
+		{"root", "", []string{"foo/bar.txt", "foo/baz.txt", "foo/cats/meow.txt"}},
+		{"directory", "foo/cats", []string{"foo/cats/meow.txt"}},
+		{"emtpy directory", "empty", nil},
 	}
-	addr, stop := testutil.StartServer(server.handler())
-	defer stop()
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			require := require.New(t)
 
-	client, err := NewClient(configFixture(addr))
-	require.NoError(err)
+			server := &testServer{
+				getName: redirectToDataNode,
+				getData: func(w http.ResponseWriter, r *http.Request) {
+					switch r.URL.Path {
+					case "/datanode/root":
+						io.WriteString(w, fileStatusListFixture(
+							fileStatusFixture("foo", "DIRECTORY"),
+							fileStatusFixture("empty", "DIRECTORY"),
+						))
+					case "/datanode/root/foo":
+						io.WriteString(w, fileStatusListFixture(
+							fileStatusFixture("bar.txt", "FILE"),
+							fileStatusFixture("baz.txt", "FILE"),
+							fileStatusFixture("cats", "DIRECTORY"),
+						))
+					case "/datanode/root/foo/cats":
+						io.WriteString(w, fileStatusListFixture(
+							fileStatusFixture("meow.txt", "FILE"),
+						))
+					case "/datanode/root/empty":
+						io.WriteString(w, fileStatusListFixture())
+					default:
+						w.WriteHeader(500)
+						fmt.Fprintf(w, "unknown data path: %s", r.URL.Path)
+					}
+				},
+			}
+			addr, stop := testutil.StartServer(server.handler())
+			defer stop()
 
-	_, err = client.List("some dir")
-	require.Equal(backenderrors.ErrDirNotFound, err)
+			client, err := NewClient(configFixture(addr))
+			require.NoError(err)
+
+			names, err := client.List(test.prefix)
+			require.NoError(err)
+			require.Equal(test.expected, names)
+		})
+	}
 }

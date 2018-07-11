@@ -31,7 +31,7 @@ func (c NoopClient) Download(name string, dst io.Writer) error {
 	return backenderrors.ErrBlobNotFound
 }
 
-// List always returns ErrDirNotFound.
-func (c NoopClient) List(dir string) ([]string, error) {
-	return nil, backenderrors.ErrDirNotFound
+// List always returns nil.
+func (c NoopClient) List(prefix string) ([]string, error) {
+	return nil, nil
 }

@@ -76,6 +76,6 @@ func (c *Client) Upload(name string, src io.Reader) error {
 }
 
 // List is not supported.
-func (c *Client) List(dir string) ([]string, error) {
+func (c *Client) List(prefix string) ([]string, error) {
 	return nil, errors.New("not supported")
 }

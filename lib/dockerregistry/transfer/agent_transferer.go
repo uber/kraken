@@ -89,7 +89,7 @@ func (t *AgentTransferer) PostTag(tag string, d core.Digest) error {
 	return errors.New("not supported")
 }
 
-// ListRepository is not supported.
-func (t *AgentTransferer) ListRepository(repo string) ([]string, error) {
+// ListTags is not supported.
+func (t *AgentTransferer) ListTags(prefix string) ([]string, error) {
 	return nil, errors.New("not supported")
 }

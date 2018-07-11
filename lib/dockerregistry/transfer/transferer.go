@@ -13,5 +13,5 @@ type ImageTransferer interface {
 
 	GetTag(tag string) (core.Digest, error)
 	PostTag(tag string, d core.Digest) error
-	ListRepository(repo string) ([]string, error)
+	ListTags(prefix string) ([]string, error)
 }

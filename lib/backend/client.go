@@ -26,7 +26,6 @@ type Client interface {
 	// backenderrors.ErrBlobNotFound when the blob was not found.
 	Download(name string, dst io.Writer) error
 
-	// List lists entries of dir. All implementations should return
-	// backenderrors.ErrDirNotFound when the dir is not found.
-	List(dir string) ([]string, error)
+	// List lists entries whose names start with prefix.
+	List(prefix string) ([]string, error)
 }

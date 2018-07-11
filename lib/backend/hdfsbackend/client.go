@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 
 	"code.uber.internal/infra/kraken/core"
@@ -44,42 +45,17 @@ func NewClient(config Config) (*Client, error) {
 	return &Client{config, pather}, nil
 }
 
-type fileStatusResponse struct {
-	FileStatus struct {
-		Length int64 `json:"length"`
-	} `json:"FileStatus"`
-}
-
 // Stat returns blob info for name.
 func (c *Client) Stat(name string) (*core.BlobInfo, error) {
 	path, err := c.pather.BlobPath(name)
 	if err != nil {
 		return nil, fmt.Errorf("blob path: %s", err)
 	}
-
-	v := url.Values{}
-	v.Set("op", "GETFILESTATUS")
-	c.setUserName(v)
-
-	for _, node := range c.config.NameNodes {
-		resp, err := httputil.Get(fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()))
-		if err != nil {
-			if retryable(err) {
-				continue
-			}
-			if httputil.IsNotFound(err) {
-				return nil, backenderrors.ErrBlobNotFound
-			}
-			return nil, err
-		}
-		defer resp.Body.Close()
-		var fsr fileStatusResponse
-		if err := json.NewDecoder(resp.Body).Decode(&fsr); err != nil {
-			return nil, fmt.Errorf("decode body: %s", err)
-		}
-		return core.NewBlobInfo(fsr.FileStatus.Length), nil
+	fs, err := c.getFileStatus(path)
+	if err != nil {
+		return nil, err
 	}
-	return nil, errAllNameNodesUnavailable
+	return core.NewBlobInfo(fs.Length), nil
 }
 
 // Download downloads name into dst.
@@ -214,21 +190,66 @@ func (c *Client) Upload(name string, src io.Reader) error {
 	return errAllNameNodesUnavailable
 }
 
-type listResponse struct {
-	FileStatuses struct {
-		FileStatus []struct {
-			PathSuffix string `json:"pathSuffix"`
-		} `json:"FileStatus"`
-	} `json:"FileStatuses"`
+// List lists names which start with prefix.
+func (c *Client) List(prefix string) ([]string, error) {
+	var results []string
+	err := c.collectFilenames(path.Join(c.pather.BasePath(), prefix), &results)
+	return results, err
 }
 
-// List lists names in dir.
-func (c *Client) List(dir string) ([]string, error) {
-	path, err := c.pather.DirPath(dir)
+func (c *Client) collectFilenames(prefix string, results *[]string) error {
+	contents, err := c.listFileStatus(prefix)
 	if err != nil {
-		return nil, fmt.Errorf("dir path: %s", err)
+		if httputil.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
+	for _, fs := range contents {
+		p := path.Join(prefix, fs.PathSuffix)
+		if fs.Type != "DIRECTORY" {
+			name, err := c.pather.NameFromBlobPath(p)
+			if err != nil {
+				log.With("path", p).Errorf("Error converting blob path into name: %s", err)
+				continue
+			}
+			*results = append(*results, name)
+			continue
+		}
+		if err := c.collectFilenames(p, results); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
+func (c *Client) getFileStatus(path string) (fileStatus, error) {
+	v := url.Values{}
+	v.Set("op", "GETFILESTATUS")
+	c.setUserName(v)
+
+	for _, node := range c.config.NameNodes {
+		resp, err := httputil.Get(fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()))
+		if err != nil {
+			if retryable(err) {
+				continue
+			}
+			if httputil.IsNotFound(err) {
+				return fileStatus{}, backenderrors.ErrBlobNotFound
+			}
+			return fileStatus{}, err
+		}
+		defer resp.Body.Close()
+		var fsr fileStatusResponse
+		if err := json.NewDecoder(resp.Body).Decode(&fsr); err != nil {
+			return fileStatus{}, fmt.Errorf("decode body: %s", err)
+		}
+		return fsr.FileStatus, nil
+	}
+	return fileStatus{}, errAllNameNodesUnavailable
+}
+
+func (c *Client) listFileStatus(path string) ([]fileStatus, error) {
 	v := url.Values{}
 	v.Set("op", "LISTSTATUS")
 	c.setUserName(v)
@@ -239,21 +260,14 @@ func (c *Client) List(dir string) ([]string, error) {
 			if retryable(err) {
 				continue
 			}
-			if httputil.IsNotFound(err) {
-				return nil, backenderrors.ErrDirNotFound
-			}
 			return nil, err
 		}
 		defer resp.Body.Close()
-		var lr listResponse
-		if err := json.NewDecoder(resp.Body).Decode(&lr); err != nil {
+		var lsr listStatusResponse
+		if err := json.NewDecoder(resp.Body).Decode(&lsr); err != nil {
 			return nil, fmt.Errorf("decode body: %s", err)
 		}
-		var names []string
-		for _, fs := range lr.FileStatuses.FileStatus {
-			names = append(names, fs.PathSuffix)
-		}
-		return names, nil
+		return lsr.FileStatuses.FileStatus, nil
 	}
 	return nil, errAllNameNodesUnavailable
 }

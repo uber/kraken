@@ -7,7 +7,9 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/metrics"
+	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/origin/blobclient"
+	"code.uber.internal/infra/kraken/proxy/registryoverride"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -15,6 +17,7 @@ import (
 func main() {
 	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
 	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-sjc1)")
+	port := flag.Int("port", 0, "Nginx port")
 	flag.Parse()
 
 	var config Config
@@ -23,6 +26,10 @@ func main() {
 	}
 
 	log.ConfigureLogger(config.ZapLogging)
+
+	if port == nil || *port == 0 {
+		log.Fatal("Argument -port required")
+	}
 
 	stats, closer, err := metrics.New(config.Metrics, *cluster)
 	if err != nil {
@@ -41,12 +48,26 @@ func main() {
 	}
 	originCluster := blobclient.NewClusterClient(r)
 
-	transferer := transfer.NewProxyTransferer(tagclient.New(config.BuildIndex), originCluster, cas)
+	tagClient := tagclient.New(config.BuildIndex)
+
+	transferer := transfer.NewProxyTransferer(tagClient, originCluster, cas)
 
 	registry, err := config.Registry.Build(config.Registry.ProxyParameters(transferer, cas, stats))
 	if err != nil {
 		log.Fatalf("Error creating registry: %s", err)
 	}
-	log.Info("Starting registry...")
-	log.Fatal(registry.ListenAndServe())
+	go func() {
+		log.Info("Starting registry...")
+		log.Fatal(registry.ListenAndServe())
+	}()
+
+	ros := registryoverride.NewServer(config.RegistryOverride, tagClient)
+	go func() {
+		log.Fatal(ros.ListenAndServe())
+	}()
+
+	log.Info("Starting nginx...")
+	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
+		"port": *port,
+	}))
 }

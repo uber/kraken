@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"strconv"
 	"time"
 
@@ -96,6 +97,8 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/tags/:tag", handler.Wrap(s.getTagHandler))
 
 	r.Get("/repositories/:repo/tags", handler.Wrap(s.listRepositoryHandler))
+
+	r.Get("/list/*", handler.Wrap(s.listHandler))
 
 	r.Post("/remotes/tags/:tag", handler.Wrap(s.replicateTagHandler))
 
@@ -217,6 +220,24 @@ func (s *Server) hasTagHandler(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
+	prefix := r.URL.Path[len("/list/"):]
+
+	client, err := s.backends.GetClient(prefix)
+	if err != nil {
+		return handler.Errorf("backend manager: %s", err)
+	}
+	names, err := client.List(prefix)
+	if err != nil {
+		return err
+	}
+	if err := json.NewEncoder(w).Encode(&names); err != nil {
+		return handler.Errorf("json encode: %s", err)
+	}
+	return nil
+}
+
+// TODO(codyg): Remove this.
 func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) error {
 	repo, err := httputil.ParseParam(r, "repo")
 	if err != nil {
@@ -227,11 +248,8 @@ func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return handler.Errorf("backend manager: %s", err)
 	}
-	tags, err := client.List(repo)
+	tags, err := client.List(path.Join(repo, "_manifest/tags"))
 	if err != nil {
-		if err == backenderrors.ErrDirNotFound {
-			return handler.ErrorStatus(http.StatusNotFound)
-		}
 		return err
 	}
 	if err := json.NewEncoder(w).Encode(&tags); err != nil {

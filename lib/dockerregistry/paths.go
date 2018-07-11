@@ -7,6 +7,8 @@ import (
 	"code.uber.internal/infra/kraken/core"
 )
 
+const _repositoryRoot = "/docker/registry/v2/repositories"
+
 // InvalidRegistryPathError indicates path error
 type InvalidRegistryPathError struct {
 	pathType PathType
@@ -50,23 +52,16 @@ const (
 
 // ParsePath returns PathType, PathSubtype, and error given path string
 func ParsePath(path string) (PathType, PathSubType, error) {
-	ok, subtype := matchManifestsPath(path)
-	if ok {
+	if ok, subtype := matchManifestsPath(path); ok {
 		return _manifests, subtype, nil
 	}
-
-	ok, subtype = matchUploadsPath(path)
-	if ok {
+	if ok, subtype := matchUploadsPath(path); ok {
 		return _uploads, subtype, nil
 	}
-
-	ok, subtype = matchLayersPath(path)
-	if ok {
+	if ok, subtype := matchLayersPath(path); ok {
 		return _layers, subtype, nil
 	}
-
-	ok, subtype = matchBlobsPath(path)
-	if ok {
+	if ok, subtype := matchBlobsPath(path); ok {
 		return _blobs, subtype, nil
 	}
 	return _invalidPathType, _invalidPathSubType, InvalidRegistryPathError{"all", path}

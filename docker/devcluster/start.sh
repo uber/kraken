@@ -33,6 +33,7 @@ UBER_CONFIG_DIR=$baseconfig/tracker /usr/bin/kraken-tracker \
 UBER_CONFIG_DIR=$baseconfig/proxy /usr/bin/kraken-proxy \
     -config=devcluster.yaml \
     -cluster=devcluster \
+    -port=5367 \
     &>/var/log/udocker/kraken-proxy/stdout.log &
 
 UBER_CONFIG_DIR=$baseconfig/agent /usr/bin/kraken-agent \
