@@ -2,9 +2,12 @@ package dockerregistry
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
+	"code.uber.internal/infra/kraken/utils/log"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 )
 
@@ -105,18 +108,48 @@ func (t *manifests) putContent(path string, subtype PathSubType) error {
 	return nil
 }
 
-func (t *manifests) list(path string, subtype PathSubType) ([]string, error) {
-	switch subtype {
-	case _tags:
-		repo, err := GetRepo(path)
-		if err != nil {
-			return nil, fmt.Errorf("get repo: %s", err)
-		}
-		manifests, err := t.transferer.ListRepository(repo)
-		if err != nil {
-			return nil, fmt.Errorf("list repository: %s", err)
-		}
-		return manifests, nil
+func (t *manifests) stat(path string) (storagedriver.FileInfo, error) {
+	repo, err := GetRepo(path)
+	if err != nil {
+		return nil, fmt.Errorf("get repo: %s", err)
 	}
-	return nil, &InvalidRequestError{path}
+	tag, _, err := GetManifestTag(path)
+	if err != nil {
+		return nil, fmt.Errorf("get manifest tag: %s", err)
+	}
+	if _, err := t.transferer.GetTag(fmt.Sprintf("%s:%s", repo, tag)); err != nil {
+		if err == transfer.ErrTagNotFound {
+			return nil, storagedriver.PathNotFoundError{
+				DriverName: "kraken",
+				Path:       path,
+			}
+		}
+		return nil, fmt.Errorf("get tag: %s", err)
+	}
+	return storagedriver.FileInfoInternal{
+		FileInfoFields: storagedriver.FileInfoFields{
+			Path:    path,
+			Size:    64,
+			ModTime: time.Now(),
+			IsDir:   false,
+		},
+	}, nil
+}
+
+func (t *manifests) list(path string) ([]string, error) {
+	prefix := path[len(_repositoryRoot):]
+	tags, err := t.transferer.ListTags(prefix)
+	if err != nil {
+		return nil, err
+	}
+	for i, tag := range tags {
+		// Strip repo prefix.
+		parts := strings.Split(tags[i], ":")
+		if len(parts) != 2 {
+			log.With("tag", tag).Warn("Repo list skipping tag, expected repo:tag format")
+			continue
+		}
+		tags[i] = parts[1]
+	}
+	return tags, nil
 }

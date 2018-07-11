@@ -2,6 +2,7 @@ package testfs
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -12,7 +13,6 @@ import (
 	"sync"
 
 	"code.uber.internal/infra/kraken/utils/handler"
-	"code.uber.internal/infra/kraken/utils/httputil"
 
 	"github.com/pressly/chi"
 )
@@ -36,10 +36,10 @@ func NewServer() *Server {
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/health", s.healthHandler)
-	r.Head("/files/:name", handler.Wrap(s.statHandler))
-	r.Get("/files/:name", handler.Wrap(s.downloadHandler))
-	r.Post("/files/:name", handler.Wrap(s.uploadHandler))
-	r.Get("/dir/:dir", handler.Wrap(s.listHandler))
+	r.Head("/files/*", handler.Wrap(s.statHandler))
+	r.Get("/files/*", handler.Wrap(s.downloadHandler))
+	r.Post("/files/*", handler.Wrap(s.uploadHandler))
+	r.Get("/list/*", handler.Wrap(s.listHandler))
 	return r
 }
 
@@ -56,10 +56,8 @@ func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
 	s.RLock()
 	defer s.RUnlock()
 
-	name, err := httputil.ParseParam(r, "name")
-	if err != nil {
-		return err
-	}
+	name := r.URL.Path[len("/files/"):]
+
 	info, err := os.Stat(s.path(name))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -76,10 +74,8 @@ func (s *Server) downloadHandler(w http.ResponseWriter, r *http.Request) error {
 	s.RLock()
 	defer s.RUnlock()
 
-	name, err := httputil.ParseParam(r, "name")
-	if err != nil {
-		return err
-	}
+	name := r.URL.Path[len("/files/"):]
+
 	f, err := os.Open(s.path(name))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -97,10 +93,8 @@ func (s *Server) uploadHandler(w http.ResponseWriter, r *http.Request) error {
 	s.Lock()
 	defer s.Unlock()
 
-	name, err := httputil.ParseParam(r, "name")
-	if err != nil {
-		return err
-	}
+	name := r.URL.Path[len("/files/"):]
+
 	p := s.path(name)
 	if err := os.MkdirAll(filepath.Dir(p), 0775); err != nil {
 		return handler.Errorf("mkdir: %s", err)
@@ -120,22 +114,31 @@ func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
 	s.RLock()
 	defer s.RUnlock()
 
-	dir, err := httputil.ParseParam(r, "dir")
-	if err != nil {
-		return err
-	}
-	infos, err := ioutil.ReadDir(s.path(dir))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return handler.ErrorStatus(http.StatusNotFound)
+	prefix := s.path(r.URL.Path[len("/list/"):])
+
+	var paths []string
+	err := filepath.Walk(prefix, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
 		}
-		return handler.Errorf("read dir: %s", err)
+		if info.IsDir() {
+			return nil
+		}
+		if path == prefix {
+			// Handle case where prefix is a file.
+			return nil
+		}
+		path, err = filepath.Rel(s.dir, path)
+		if err != nil {
+			return err
+		}
+		paths = append(paths, path)
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("walk: %s", err)
 	}
-	var names []string
-	for _, info := range infos {
-		names = append(names, info.Name())
-	}
-	if err := json.NewEncoder(w).Encode(&names); err != nil {
+	if err := json.NewEncoder(w).Encode(&paths); err != nil {
 		return handler.Errorf("json encode: %s", err)
 	}
 	return nil

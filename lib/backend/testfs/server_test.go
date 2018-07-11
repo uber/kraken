@@ -6,6 +6,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/utils/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +20,7 @@ func TestServerBlob(t *testing.T) {
 	addr, stop := testutil.StartServer(s.Handler())
 	defer stop()
 
-	c, err := NewClient(Config{Addr: addr})
+	c, err := NewClient(Config{Addr: addr, NamePath: namepath.Identity})
 	require.NoError(err)
 
 	blob := core.NewBlobFixture()
@@ -47,7 +48,7 @@ func TestServerTag(t *testing.T) {
 	addr, stop := testutil.StartServer(s.Handler())
 	defer stop()
 
-	c, err := NewClient(Config{Addr: addr})
+	c, err := NewClient(Config{Addr: addr, NamePath: namepath.Identity})
 	require.NoError(err)
 
 	tag := "labrat:latest"
@@ -61,6 +62,40 @@ func TestServerTag(t *testing.T) {
 }
 
 func TestServerList(t *testing.T) {
+	tests := []struct {
+		desc     string
+		prefix   string
+		expected []string
+	}{
+		{"root", "", []string{"a/b/c.txt", "a/b/d.txt", "x/y/z.txt"}},
+		{"dir", "a", []string{"a/b/c.txt", "a/b/d.txt"}},
+		{"file", "a/b/c.txt", nil},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			require := require.New(t)
+
+			s := NewServer()
+			defer s.Cleanup()
+
+			addr, stop := testutil.StartServer(s.Handler())
+			defer stop()
+
+			c, err := NewClient(Config{Addr: addr, Root: "root", NamePath: namepath.Identity})
+			require.NoError(err)
+
+			require.NoError(c.Upload("a/b/c.txt", bytes.NewBufferString("foo")))
+			require.NoError(c.Upload("a/b/d.txt", bytes.NewBufferString("bar")))
+			require.NoError(c.Upload("x/y/z.txt", bytes.NewBufferString("baz")))
+
+			names, err := c.List(test.prefix)
+			require.NoError(err)
+			require.ElementsMatch(test.expected, names)
+		})
+	}
+}
+
+func TestDockerTagList(t *testing.T) {
 	require := require.New(t)
 
 	s := NewServer()
@@ -69,14 +104,15 @@ func TestServerList(t *testing.T) {
 	addr, stop := testutil.StartServer(s.Handler())
 	defer stop()
 
-	c, err := NewClient(Config{Addr: addr})
+	c, err := NewClient(Config{Addr: addr, Root: "tags", NamePath: namepath.DockerTag})
 	require.NoError(err)
 
-	require.NoError(c.Upload("a/b/c", bytes.NewBufferString("foo")))
-	require.NoError(c.Upload("a/b/d", bytes.NewBufferString("bar")))
-	require.NoError(c.Upload("x/y/z", bytes.NewBufferString("baz")))
+	tags := []string{"foo:v0", "foo:latest", "bar:v0", "bar/baz:v0"}
+	for _, tag := range tags {
+		require.NoError(c.Upload(tag, bytes.NewBufferString(core.DigestFixture().String())))
+	}
 
-	names, err := c.List("a/b")
+	names, err := c.List("")
 	require.NoError(err)
-	require.ElementsMatch([]string{"c", "d"}, names)
+	require.ElementsMatch(tags, names)
 }

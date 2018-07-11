@@ -240,6 +240,8 @@ func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (storagedri
 		return d.uploads.stat(path)
 	case _blobs:
 		return d.blobs.stat(ctx, path)
+	case _manifests:
+		return d.manifests.stat(path)
 	default:
 		return nil, InvalidRequestError{path}
 	}
@@ -257,7 +259,7 @@ func (d *KrakenStorageDriver) List(ctx context.Context, path string) ([]string, 
 	case _uploads:
 		return d.uploads.list(path, pathSubType)
 	case _manifests:
-		return d.manifests.list(path, pathSubType)
+		return d.manifests.list(path)
 	default:
 		return nil, InvalidRequestError{path}
 	}

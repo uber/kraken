@@ -124,7 +124,7 @@ func (t *ProxyTransferer) PostTag(tag string, d core.Digest) error {
 	return nil
 }
 
-// ListRepository lists all tags of repo.
-func (t *ProxyTransferer) ListRepository(repo string) ([]string, error) {
-	return t.tags.ListRepository(repo)
+// ListTags lists all tags with prefix.
+func (t *ProxyTransferer) ListTags(prefix string) ([]string, error) {
+	return t.tags.List(prefix)
 }

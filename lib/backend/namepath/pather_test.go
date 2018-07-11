@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBlobPath(t *testing.T) {
+func TestBlobPathConversion(t *testing.T) {
 	tests := []struct {
 		pather   string
 		name     string
@@ -36,36 +36,10 @@ func TestBlobPath(t *testing.T) {
 			path, err := p.BlobPath(test.name)
 			require.NoError(err)
 			require.Equal(test.expected, path)
-		})
-	}
-}
 
-func TestDirPath(t *testing.T) {
-	tests := []struct {
-		pather   string
-		dir      string
-		expected string
-	}{
-		{
-			DockerTag,
-			"labrat",
-			"/root/docker/registry/v2/repositories/labrat/_manifests/tags",
-		}, {
-			Identity,
-			"foo",
-			"/root/foo",
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.pather, func(t *testing.T) {
-			require := require.New(t)
-
-			p, err := New("/root", test.pather)
+			original, err := p.NameFromBlobPath(path)
 			require.NoError(err)
-
-			path, err := p.DirPath(test.dir)
-			require.NoError(err)
-			require.Equal(test.expected, path)
+			require.Equal(test.name, original)
 		})
 	}
 }
@@ -95,4 +69,8 @@ func TestShardedDockerBlobErrors(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+func TestNameFromBlobPathErrors(t *testing.T) {
+	// TODO(codyg): Write me!
 }

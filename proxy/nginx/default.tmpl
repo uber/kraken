@@ -1,0 +1,27 @@
+upstream registry {
+  server unix:/var/run/kraken-proxy-registry.sock;
+}
+
+upstream registry-override {
+  server unix:/var/run/kraken-proxy-registry-override.sock;
+}
+
+server {
+  listen {{.port}};
+
+  client_max_body_size 256M;
+
+  access_log /var/log/udocker/kraken-proxy/nginx-access.log;
+  error_log /var/log/udocker/kraken-proxy/nginx-error.log;
+
+  gzip on;
+  gzip_types text/plain text/csv application/json;
+
+  location /v2/_catalog {
+    proxy_pass http://registry-override;
+  }
+
+  location / {
+    proxy_pass http://registry;
+  }
+}

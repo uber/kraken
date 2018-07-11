@@ -15,8 +15,7 @@ import (
 
 // Client errors.
 var (
-	ErrTagNotFound  = errors.New("tag not found")
-	ErrRepoNotFound = errors.New("repo not found")
+	ErrTagNotFound = errors.New("tag not found")
 )
 
 // Provider maps addresses into Clients.
@@ -38,6 +37,7 @@ type Client interface {
 	Get(tag string) (core.Digest, error)
 	GetLocal(tag string) (core.Digest, error)
 	Has(tag string) (bool, error)
+	List(prefix string) ([]string, error)
 	ListRepository(repo string) ([]string, error)
 	Replicate(tag string) error
 	Origin() (string, error)
@@ -127,14 +127,27 @@ func (c *client) Has(tag string) (bool, error) {
 	return true, nil
 }
 
+func (c *client) List(prefix string) ([]string, error) {
+	resp, err := httputil.Get(
+		fmt.Sprintf("http://%s/list/%s", c.addr, prefix),
+		httputil.SendRetry())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var names []string
+	if err := json.NewDecoder(resp.Body).Decode(&names); err != nil {
+		return nil, fmt.Errorf("json decode: %s", err)
+	}
+	return names, nil
+}
+
+// XXX: Deprecated. Use List instead.
 func (c *client) ListRepository(repo string) ([]string, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/repositories/%s/tags", c.addr, url.PathEscape(repo)),
 		httputil.SendRetry())
 	if err != nil {
-		if httputil.IsNotFound(err) {
-			return nil, ErrRepoNotFound
-		}
 		return nil, err
 	}
 	defer resp.Body.Close()

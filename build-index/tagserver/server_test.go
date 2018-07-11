@@ -248,14 +248,14 @@ func TestListRepository(t *testing.T) {
 	repo := "uber-usi/labrat"
 	tags := []string{"latest", "0000", "0001"}
 
-	mocks.backendClient.EXPECT().List(repo).Return(tags, nil)
+	mocks.backendClient.EXPECT().List(repo+"/_manifest/tags").Return(tags, nil)
 
 	result, err := client.ListRepository(repo)
 	require.NoError(err)
 	require.Equal(tags, result)
 }
 
-func TestListRepositoryNotFound(t *testing.T) {
+func TestList(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newServerMocks(t)
@@ -266,12 +266,34 @@ func TestListRepositoryNotFound(t *testing.T) {
 
 	client := tagclient.New(addr)
 
-	repo := "uber-usi/labrat"
+	prefix := "uber-usi/labrat/_manifests/tags"
+	names := []string{"latest", "0000", "0001"}
 
-	mocks.backendClient.EXPECT().List(repo).Return(nil, backenderrors.ErrDirNotFound)
+	mocks.backendClient.EXPECT().List(prefix).Return(names, nil)
 
-	_, err := client.ListRepository(repo)
-	require.Equal(tagclient.ErrRepoNotFound, err)
+	result, err := client.List(prefix)
+	require.NoError(err)
+	require.Equal(names, result)
+}
+
+func TestListEmptyPrefix(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := tagclient.New(addr)
+
+	names := []string{"a", "b", "c"}
+
+	mocks.backendClient.EXPECT().List("").Return(names, nil)
+
+	result, err := client.List("")
+	require.NoError(err)
+	require.Equal(names, result)
 }
 
 func TestPutAndReplicate(t *testing.T) {
