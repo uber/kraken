@@ -41,7 +41,7 @@ type AuthConfig struct {
 	} `yaml:"s3"`
 }
 
-func (c Config) applyDefaults() Config {
+func (c *Config) applyDefaults() {
 	if c.UploadPartSize == 0 {
 		c.UploadPartSize = int64(64 * memsize.MB)
 	}
@@ -60,5 +60,4 @@ func (c Config) applyDefaults() Config {
 	if c.RootDirectory == "" {
 		c.RootDirectory = "/"
 	}
-	return c
 }
