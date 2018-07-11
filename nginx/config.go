@@ -2,6 +2,7 @@ package nginx
 
 // Config defines nginx configuration.
 type Config struct {
-	Name     string `yaml:"name"`
+	// Template is the name of config template to populate, relative to the
+	// ./nginx/config directory.
 	Template string `yaml:"template"`
 }
