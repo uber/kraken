@@ -385,6 +385,38 @@ func TestDuplicateReplicate(t *testing.T) {
 	require.NoError(client.DuplicateReplicate(tag, digest, dependencies, delay))
 }
 
+func TestNoopReplicate(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	emptyRemotes, err := tagreplication.RemotesConfig{}.Build()
+	require.NoError(err)
+
+	mocks.remotes = emptyRemotes
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := tagclient.New(addr)
+
+	tag := core.TagFixture()
+	digest := core.DigestFixture()
+	deps := core.DigestList{digest}
+	tagDependencyResolver := mocktagtype.NewMockDependencyResolver(mocks.ctrl)
+
+	gomock.InOrder(
+		mocks.store.EXPECT().Get(tag, false).Return(digest, nil),
+		mocks.tagTypes.EXPECT().GetDependencyResolver(tag).Return(tagDependencyResolver, nil),
+		tagDependencyResolver.EXPECT().Resolve(tag, digest).Return(deps, nil),
+	)
+
+	// No replication tasks added or duplicated because no remotes are configured.
+
+	require.NoError(client.Replicate(tag))
+}
+
 func TestOrigin(t *testing.T) {
 	require := require.New(t)
 
