@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"code.uber.internal/infra/kraken/utils/stringset"
 )
@@ -20,20 +21,18 @@ type Config struct {
 
 	// Statically configured host names.
 	Static []string `yaml:"static"`
+
+	// TTL defines how long resolved host lists are cached for.
+	TTL time.Duration `yaml:"ttl"`
 }
 
-// Build resolves c into a set of addresses in 'ip:port' format. Build is very
-// flexible in what host strings are accepted. Names missing a port suffix will
-// have the provided port attached. Hosts with a port suffix will be untouched.
-// Either ip addresses or host names are allowed.
-//
-// Build also strips the local machine from the resolved address list, if present.
-// The local machine is identified by both its hostname and ip address, concatenated
-// with the provided port.
-//
-// An error is returned if a DNS record is supplied and resolves to an empty list
-// of addresses.
-func (c Config) Build(port int) (stringset.Set, error) {
+func (c *Config) applyDefaults() {
+	if c.TTL == 0 {
+		c.TTL = 5 * time.Second
+	}
+}
+
+func (c *Config) snapshot(port int) (stringset.Set, error) {
 	names, err := c.resolve()
 	if err != nil {
 		return nil, fmt.Errorf("resolve: %s", err)
@@ -53,7 +52,7 @@ func (c Config) Build(port int) (stringset.Set, error) {
 	return addrs.Sub(localAddrs), nil
 }
 
-func (c Config) resolve() (stringset.Set, error) {
+func (c *Config) resolve() (stringset.Set, error) {
 	if c.DNS == "" {
 		return stringset.FromSlice(c.Static), nil
 	}

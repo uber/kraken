@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/mocks/build-index/tagclient"
 	"code.uber.internal/infra/kraken/mocks/build-index/tagstore"
@@ -17,7 +18,6 @@ import (
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/mocks/lib/persistedretry"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
-	"code.uber.internal/infra/kraken/utils/stringset"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
@@ -29,7 +29,7 @@ const (
 	_testNamespace    = ".*"
 	_testOrigin       = "some-dns-record"
 	_testRemote       = "remote-build-index"
-	_testLocalReplica = "local-build-index"
+	_testLocalReplica = "local-build-index:3000"
 )
 
 type serverMocks struct {
@@ -43,6 +43,7 @@ type serverMocks struct {
 	tagTypes              *mocktagtype.MockManager
 	originClient          *mockblobclient.MockClusterClient
 	store                 *mocktagstore.MockStore
+	localReplicas         *hostlist.List
 }
 
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
@@ -72,6 +73,11 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 
 	store := mocktagstore.NewMockStore(ctrl)
 
+	localReplicas, err := hostlist.New(hostlist.Config{Static: []string{_testLocalReplica}}, 3000)
+	if err != nil {
+		panic(err)
+	}
+
 	return &serverMocks{
 		ctrl:                  ctrl,
 		config:                Config{DuplicateReplicateStagger: 20 * time.Minute},
@@ -83,6 +89,7 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 		originClient:          originClient,
 		tagTypes:              tagTypes,
 		store:                 store,
+		localReplicas:         localReplicas,
 	}, cleanup.Run
 }
 
@@ -97,7 +104,7 @@ func (m *serverMocks) handler() http.Handler {
 		m.backends,
 		_testOrigin,
 		m.originClient,
-		stringset.FromSlice([]string{_testLocalReplica}),
+		m.localReplicas,
 		m.store,
 		m.remotes,
 		m.tagReplicationManager,
