@@ -353,6 +353,10 @@ func (s *Server) putTag(tag string, d core.Digest, deps core.DigestList) error {
 
 func (s *Server) replicateTag(tag string, d core.Digest, deps core.DigestList) error {
 	destinations := s.remotes.Match(tag)
+	if len(destinations) == 0 {
+		return nil
+	}
+
 	for _, dest := range destinations {
 		task := tagreplication.NewTask(tag, d, deps, dest)
 		if err := s.tagReplicationManager.Add(task); err != nil {
