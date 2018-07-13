@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/build-index/tagstore"
 	"code.uber.internal/infra/kraken/build-index/tagtype"
 	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
@@ -65,9 +66,9 @@ func main() {
 		log.Fatalf("Error creating local db: %s", err)
 	}
 
-	localReplicas, err := config.LocalReplicas.Build(*port)
+	localReplicas, err := hostlist.New(config.LocalReplicas, *port)
 	if err != nil {
-		log.Fatalf("Error building local replica host list: %s", err)
+		log.Fatalf("Error creating local replica host list: %s", err)
 	}
 
 	remotes, err := config.Remotes.Build()

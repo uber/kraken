@@ -15,6 +15,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
@@ -22,7 +23,6 @@ import (
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/stringset"
 
 	"github.com/pressly/chi"
 	chimiddleware "github.com/pressly/chi/middleware"
@@ -36,7 +36,7 @@ type Server struct {
 	backends          *backend.Manager
 	localOriginDNS    string
 	localOriginClient blobclient.ClusterClient
-	localReplicas     stringset.Set
+	localReplicas     *hostlist.List
 	store             tagstore.Store
 
 	// For async new tag replication.
@@ -55,7 +55,7 @@ func New(
 	backends *backend.Manager,
 	localOriginDNS string,
 	localOriginClient blobclient.ClusterClient,
-	localReplicas stringset.Set,
+	localReplicas *hostlist.List,
 	store tagstore.Store,
 	remotes tagreplication.Remotes,
 	tagReplicationManager persistedretry.Manager,
@@ -340,8 +340,13 @@ func (s *Server) putTag(tag string, d core.Digest, deps core.DigestList) error {
 		return handler.Errorf("storage: %s", err)
 	}
 
+	localReplicas, err := s.localReplicas.Resolve()
+	if err != nil {
+		return fmt.Errorf("hostlist: %s", err)
+	}
+
 	var delay time.Duration
-	for addr := range s.localReplicas {
+	for addr := range localReplicas {
 		delay += s.config.DuplicatePutStagger
 		client := s.provider.Provide(addr)
 		if err := client.DuplicatePut(tag, d, delay); err != nil {
@@ -364,8 +369,13 @@ func (s *Server) replicateTag(tag string, d core.Digest, deps core.DigestList) e
 		}
 	}
 
+	localReplicas, err := s.localReplicas.Resolve()
+	if err != nil {
+		return fmt.Errorf("hostlist: %s", err)
+	}
+
 	var delay time.Duration
-	for addr := range s.localReplicas { // Loops in random order.
+	for addr := range localReplicas { // Loops in random order.
 		delay += s.config.DuplicateReplicateStagger
 		client := s.provider.Provide(addr)
 		if err := client.DuplicateReplicate(tag, d, deps, delay); err != nil {
