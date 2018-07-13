@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"regexp"
 	"strconv"
+	"sync"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
@@ -18,6 +20,8 @@ import (
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
+
+const _listConcurrency = 8
 
 var errAllNameNodesUnavailable = errors.New(
 	"exhausted the list of name nodes for the request without success")
@@ -190,37 +194,91 @@ func (c *Client) Upload(name string, src io.Reader) error {
 	return errAllNameNodesUnavailable
 }
 
+var (
+	_ignoreRegex = regexp.MustCompile(
+		"^.+/repositories/.+/(_layers|_uploads|_manifests/(revisions|tags/.+/index)).*")
+	_stopRegex = regexp.MustCompile("^.+/repositories/.+/_manifests$")
+)
+
 // List lists names which start with prefix.
 func (c *Client) List(prefix string) ([]string, error) {
-	var results []string
-	err := c.collectFilenames(path.Join(c.pather.BasePath(), prefix), &results)
-	return results, err
-}
+	root := path.Join(c.pather.BasePath(), prefix)
 
-func (c *Client) collectFilenames(prefix string, results *[]string) error {
-	contents, err := c.listFileStatus(prefix)
-	if err != nil {
-		if httputil.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-	for _, fs := range contents {
-		p := path.Join(prefix, fs.PathSuffix)
-		if fs.Type != "DIRECTORY" {
-			name, err := c.pather.NameFromBlobPath(p)
-			if err != nil {
-				log.With("path", p).Errorf("Error converting blob path into name: %s", err)
-				continue
+	var wg sync.WaitGroup
+	listJobs := make(chan string, _listConcurrency)
+	errc := make(chan error, _listConcurrency)
+
+	wg.Add(1)
+	listJobs <- root
+
+	go func() {
+		wg.Wait()
+		close(listJobs)
+	}()
+
+	var mu sync.Mutex
+	var files []string
+
+L:
+	for {
+		select {
+		case err := <-errc:
+			// Stop early on error.
+			return nil, err
+		case dir, ok := <-listJobs:
+			if !ok {
+				break L
 			}
-			*results = append(*results, name)
-			continue
-		}
-		if err := c.collectFilenames(p, results); err != nil {
-			return err
+			go func() {
+				defer wg.Done()
+
+				contents, err := c.listFileStatus(dir)
+				if err != nil {
+					if !httputil.IsNotFound(err) {
+						errc <- err
+					}
+					return
+				}
+
+				for _, fs := range contents {
+					p := path.Join(dir, fs.PathSuffix)
+
+					// TODO(codyg): This is an ugly hack to avoid walking through non-tags
+					// during Docker catalog. Ideally, only tags are located in the repositories
+					// directory, however in WBU2 HDFS, there are blobs here as well. At some
+					// point, we must migrate the data into a structure which cleanly divides
+					// blobs and tags (like we do in S3).
+					if _ignoreRegex.MatchString(p) {
+						continue
+					}
+
+					// TODO(codyg): Another ugly hack to speed up catalog performance by stopping
+					// early when we hit tags...
+					if _stopRegex.MatchString(p) {
+						p = path.Join(p, "tags/dummy/current/link")
+						fs.Type = "FILE"
+					}
+
+					if fs.Type == "DIRECTORY" {
+						wg.Add(1)
+						listJobs <- p
+						continue
+					}
+
+					name, err := c.pather.NameFromBlobPath(p)
+					if err != nil {
+						log.With("path", p).Errorf("Error converting blob path into name: %s", err)
+						continue
+					}
+					mu.Lock()
+					files = append(files, name)
+					mu.Unlock()
+				}
+			}()
 		}
 	}
-	return nil
+
+	return files, nil
 }
 
 func (c *Client) getFileStatus(path string) (fileStatus, error) {
