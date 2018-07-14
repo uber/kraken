@@ -9,7 +9,7 @@ upstream registry-override {
 server {
   listen {{.port}};
 
-  client_max_body_size 256M;
+  client_max_body_size 10G;
 
   access_log /var/log/udocker/kraken-proxy/nginx-access.log;
   error_log /var/log/udocker/kraken-proxy/nginx-error.log;
