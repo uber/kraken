@@ -178,16 +178,12 @@ func (s *Server) duplicatePutTagHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
-	fallback, err := strconv.ParseBool(httputil.GetQueryArg(r, "fallback", "true"))
-	if err != nil {
-		return handler.Errorf("parse fallback arg as bool: %s", err)
-	}
 	tag, err := httputil.ParseParam(r, "tag")
 	if err != nil {
 		return err
 	}
 
-	d, err := s.store.Get(tag, fallback)
+	d, err := s.store.Get(tag)
 	if err != nil {
 		if err == tagstore.ErrTagNotFound {
 			return handler.ErrorStatus(http.StatusNotFound)
@@ -264,7 +260,7 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 		return err
 	}
 
-	d, err := s.store.Get(tag, false)
+	d, err := s.store.Get(tag)
 	if err != nil {
 		if err == tagstore.ErrTagNotFound {
 			return handler.ErrorStatus(http.StatusNotFound)

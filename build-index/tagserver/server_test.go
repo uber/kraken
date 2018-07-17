@@ -153,30 +153,9 @@ func TestGet(t *testing.T) {
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
 
-	mocks.store.EXPECT().Get(tag, true).Return(digest, nil)
+	mocks.store.EXPECT().Get(tag).Return(digest, nil)
 
 	result, err := client.Get(tag)
-	require.NoError(err)
-	require.Equal(digest, result)
-}
-
-func TestGetLocal(t *testing.T) {
-	require := require.New(t)
-
-	mocks, cleanup := newServerMocks(t)
-	defer cleanup()
-
-	addr, stop := testutil.StartServer(mocks.handler())
-	defer stop()
-
-	client := tagclient.New(addr)
-
-	tag := core.TagFixture()
-	digest := core.DigestFixture()
-
-	mocks.store.EXPECT().Get(tag, false).Return(digest, nil)
-
-	result, err := client.GetLocal(tag)
 	require.NoError(err)
 	require.Equal(digest, result)
 }
@@ -194,7 +173,7 @@ func TestGetTagNotFound(t *testing.T) {
 
 	tag := core.TagFixture()
 
-	mocks.store.EXPECT().Get(tag, true).Return(core.Digest{}, tagstore.ErrTagNotFound)
+	mocks.store.EXPECT().Get(tag).Return(core.Digest{}, tagstore.ErrTagNotFound)
 
 	_, err := client.Get(tag)
 	require.Equal(tagclient.ErrTagNotFound, err)
@@ -358,7 +337,7 @@ func TestReplicate(t *testing.T) {
 	tagDependencyResolver := mocktagtype.NewMockDependencyResolver(mocks.ctrl)
 
 	gomock.InOrder(
-		mocks.store.EXPECT().Get(tag, false).Return(digest, nil),
+		mocks.store.EXPECT().Get(tag).Return(digest, nil),
 		mocks.tagTypes.EXPECT().GetDependencyResolver(tag).Return(tagDependencyResolver, nil),
 		tagDependencyResolver.EXPECT().Resolve(tag, digest).Return(deps, nil),
 		mocks.tagReplicationManager.EXPECT().Add(tagreplication.MatchTask(task)).Return(nil),
@@ -414,7 +393,7 @@ func TestNoopReplicate(t *testing.T) {
 	tagDependencyResolver := mocktagtype.NewMockDependencyResolver(mocks.ctrl)
 
 	gomock.InOrder(
-		mocks.store.EXPECT().Get(tag, false).Return(digest, nil),
+		mocks.store.EXPECT().Get(tag).Return(digest, nil),
 		mocks.tagTypes.EXPECT().GetDependencyResolver(tag).Return(tagDependencyResolver, nil),
 		tagDependencyResolver.EXPECT().Resolve(tag, digest).Return(deps, nil),
 	)
