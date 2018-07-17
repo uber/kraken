@@ -102,14 +102,7 @@ func main() {
 		log.Fatalf("Error creating write-back manager: %s", err)
 	}
 
-	tagStore := tagstore.New(
-		config.TagStore,
-		stats,
-		ss,
-		backends,
-		writeBackManager,
-		remotes,
-		tagclient.NewProvider())
+	tagStore := tagstore.New(stats, ss, backends, writeBackManager)
 
 	tagTypes, err := tagtype.NewManager(config.TagTypes, originClient)
 	if err != nil {

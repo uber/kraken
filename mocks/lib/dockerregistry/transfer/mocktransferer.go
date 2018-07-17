@@ -60,17 +60,17 @@ func (mr *MockImageTransfererMockRecorder) GetTag(arg0 interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTag", reflect.TypeOf((*MockImageTransferer)(nil).GetTag), arg0)
 }
 
-// ListRepository mocks base method
-func (m *MockImageTransferer) ListRepository(arg0 string) ([]string, error) {
-	ret := m.ctrl.Call(m, "ListRepository", arg0)
+// ListTags mocks base method
+func (m *MockImageTransferer) ListTags(arg0 string) ([]string, error) {
+	ret := m.ctrl.Call(m, "ListTags", arg0)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ListRepository indicates an expected call of ListRepository
-func (mr *MockImageTransfererMockRecorder) ListRepository(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRepository", reflect.TypeOf((*MockImageTransferer)(nil).ListRepository), arg0)
+// ListTags indicates an expected call of ListTags
+func (mr *MockImageTransfererMockRecorder) ListTags(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTags", reflect.TypeOf((*MockImageTransferer)(nil).ListTags), arg0)
 }
 
 // PostTag mocks base method

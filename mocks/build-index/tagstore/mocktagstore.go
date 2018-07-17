@@ -38,16 +38,16 @@ func (m *MockStore) EXPECT() *MockStoreMockRecorder {
 }
 
 // Get mocks base method
-func (m *MockStore) Get(arg0 string, arg1 bool) (core.Digest, error) {
-	ret := m.ctrl.Call(m, "Get", arg0, arg1)
+func (m *MockStore) Get(arg0 string) (core.Digest, error) {
+	ret := m.ctrl.Call(m, "Get", arg0)
 	ret0, _ := ret[0].(core.Digest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Get indicates an expected call of Get
-func (mr *MockStoreMockRecorder) Get(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockStore)(nil).Get), arg0, arg1)
+func (mr *MockStoreMockRecorder) Get(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockStore)(nil).Get), arg0)
 }
 
 // Put mocks base method
