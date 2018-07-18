@@ -43,6 +43,7 @@ WORKDIR /home/udocker/kraken
 EXPOSE 9003
 EXPOSE 7602
 EXPOSE 5367
+EXPOSE 5263
 EXPOSE 8991
 
 COPY ./config /home/udocker/kraken/config

@@ -2,12 +2,15 @@ package tagserver
 
 import (
 	"time"
+
+	"code.uber.internal/infra/kraken/utils/listener"
 )
 
 // Config defines Server configuration.
 type Config struct {
-	DuplicateReplicateStagger time.Duration `yaml:"duplicate_replicate_stagger"`
-	DuplicatePutStagger       time.Duration `yaml:"duplicate_put_stagger"`
+	Listener                  listener.Config `yaml:"listener"`
+	DuplicateReplicateStagger time.Duration   `yaml:"duplicate_replicate_stagger"`
+	DuplicatePutStagger       time.Duration   `yaml:"duplicate_put_stagger"`
 }
 
 func (c Config) applyDefaults() Config {

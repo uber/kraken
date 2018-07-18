@@ -67,7 +67,7 @@ func main() {
 	}()
 
 	log.Info("Starting nginx...")
-	log.Fatal(nginx.Run("kraken-proxy.tmpl", map[string]interface{}{
+	log.Fatal(nginx.Run("kraken-proxy", map[string]interface{}{
 		"port": *port,
 	}))
 }
