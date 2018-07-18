@@ -201,11 +201,11 @@ mocks:
 		-package mockbackend \
 		code.uber.internal/infra/kraken/lib/backend Client
 
-	mkdir -p mocks/tracker/mockstorage
+	mkdir -p mocks/tracker/mockpeerstore
 	$(mockgen) \
-		-destination=mocks/tracker/mockstorage/mockstorage.go \
-		-package mockstorage \
-		code.uber.internal/infra/kraken/tracker/storage Storage	
+		-destination=mocks/tracker/mockpeerstore/mockpeerstore.go \
+		-package mockpeerstore \
+		code.uber.internal/infra/kraken/tracker/peerstore Store
 
 	mkdir -p mocks/lib/torrent/mockstorage
 	$(mockgen) \

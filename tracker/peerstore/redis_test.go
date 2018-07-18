@@ -1,17 +1,24 @@
-package storage
+package peerstore
 
 import (
-	"bytes"
 	"testing"
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/randutil"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/garyburd/redigo/redis"
 	"github.com/stretchr/testify/require"
 )
+
+func redisConfigFixture() RedisConfig {
+	return RedisConfig{
+		Addr:              "localhost:6380",
+		PeerSetWindowSize: 30 * time.Second,
+		MaxPeerSetWindows: 4,
+		OriginsTTL:        5 * time.Minute,
+	}
+}
 
 func flushdb(config RedisConfig) {
 	c, err := redis.Dial("tcp", config.Addr)
@@ -23,14 +30,14 @@ func flushdb(config RedisConfig) {
 	}
 }
 
-func TestRedisStorageGetPeersPopulatesPeerInfoFields(t *testing.T) {
+func TestRedisStoreGetPeersPopulatesPeerInfoFields(t *testing.T) {
 	require := require.New(t)
 
 	config := redisConfigFixture()
 
 	flushdb(config)
 
-	s, err := NewRedisStorage(config, clock.New())
+	s, err := NewRedisStore(config, clock.New())
 	require.NoError(err)
 
 	h := core.InfoHashFixture()
@@ -45,7 +52,7 @@ func TestRedisStorageGetPeersPopulatesPeerInfoFields(t *testing.T) {
 	require.Equal(peers, []*core.PeerInfo{p})
 }
 
-func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
+func TestRedisStoreGetPeersFromMultipleWindows(t *testing.T) {
 	require := require.New(t)
 
 	config := redisConfigFixture()
@@ -57,7 +64,7 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 	clk := clock.NewMock()
 	clk.Set(time.Now())
 
-	s, err := NewRedisStorage(config, clk)
+	s, err := NewRedisStore(config, clk)
 	require.NoError(err)
 
 	// Reset time to the beginning of a window.
@@ -82,7 +89,7 @@ func TestRedisStorageGetPeersFromMultipleWindows(t *testing.T) {
 	require.Equal(core.SortedByPeerID(peers), core.SortedByPeerID(result))
 }
 
-func TestRedisStorageGetPeersLimit(t *testing.T) {
+func TestRedisStoreGetPeersLimit(t *testing.T) {
 	require := require.New(t)
 
 	config := redisConfigFixture()
@@ -94,7 +101,7 @@ func TestRedisStorageGetPeersLimit(t *testing.T) {
 	clk := clock.NewMock()
 	clk.Set(time.Now())
 
-	s, err := NewRedisStorage(config, clk)
+	s, err := NewRedisStore(config, clk)
 	require.NoError(err)
 
 	// Reset time to the beginning of a window.
@@ -120,14 +127,14 @@ func TestRedisStorageGetPeersLimit(t *testing.T) {
 	}
 }
 
-func TestRedisStorageGetPeersCollapsesCompleteBits(t *testing.T) {
+func TestRedisStoreGetPeersCollapsesCompleteBits(t *testing.T) {
 	require := require.New(t)
 
 	config := redisConfigFixture()
 
 	flushdb(config)
 
-	s, err := NewRedisStorage(config, clock.New())
+	s, err := NewRedisStore(config, clock.New())
 	require.NoError(err)
 
 	h := core.InfoHashFixture()
@@ -149,7 +156,7 @@ func TestRedisStorageGetPeersCollapsesCompleteBits(t *testing.T) {
 	require.True(peers[0].Complete)
 }
 
-func TestRedisStoragePeerExpiration(t *testing.T) {
+func TestRedisStorePeerExpiration(t *testing.T) {
 	require := require.New(t)
 
 	config := redisConfigFixture()
@@ -158,7 +165,7 @@ func TestRedisStoragePeerExpiration(t *testing.T) {
 
 	flushdb(config)
 
-	s, err := NewRedisStorage(config, clock.New())
+	s, err := NewRedisStore(config, clock.New())
 	require.NoError(err)
 
 	h := core.InfoHashFixture()
@@ -177,14 +184,14 @@ func TestRedisStoragePeerExpiration(t *testing.T) {
 	require.Empty(result)
 }
 
-func TestRedisStorageGetOriginsPopulatesPeerInfoFields(t *testing.T) {
+func TestRedisStoreGetOriginsPopulatesPeerInfoFields(t *testing.T) {
 	require := require.New(t)
 
 	config := redisConfigFixture()
 
 	flushdb(config)
 
-	s, err := NewRedisStorage(config, clock.New())
+	s, err := NewRedisStore(config, clock.New())
 	require.NoError(err)
 
 	h := core.InfoHashFixture()
@@ -197,14 +204,14 @@ func TestRedisStorageGetOriginsPopulatesPeerInfoFields(t *testing.T) {
 	require.Equal(origins, result)
 }
 
-func TestRedisStorageUpdateOriginsOverwritesExistingOrigins(t *testing.T) {
+func TestRedisStoreUpdateOriginsOverwritesExistingOrigins(t *testing.T) {
 	require := require.New(t)
 
 	config := redisConfigFixture()
 
 	flushdb(config)
 
-	s, err := NewRedisStorage(config, clock.New())
+	s, err := NewRedisStore(config, clock.New())
 	require.NoError(err)
 
 	h := core.InfoHashFixture()
@@ -233,7 +240,7 @@ func TestRedisStorageUpdateOriginsOverwritesExistingOrigins(t *testing.T) {
 	require.Equal(core.SortedByPeerID(newOrigins), core.SortedByPeerID(result))
 }
 
-func TestRedisStorageOriginsExpiration(t *testing.T) {
+func TestRedisStoreOriginsExpiration(t *testing.T) {
 	require := require.New(t)
 
 	config := redisConfigFixture()
@@ -241,7 +248,7 @@ func TestRedisStorageOriginsExpiration(t *testing.T) {
 
 	flushdb(config)
 
-	s, err := NewRedisStorage(config, clock.New())
+	s, err := NewRedisStore(config, clock.New())
 	require.NoError(err)
 
 	h := core.InfoHashFixture()
@@ -257,70 +264,4 @@ func TestRedisStorageOriginsExpiration(t *testing.T) {
 
 	result, err = s.GetOrigins(h)
 	require.Equal(err, ErrNoOrigins)
-}
-
-func TestRedisStorageSetAndGetMetaInfo(t *testing.T) {
-	require := require.New(t)
-
-	config := redisConfigFixture()
-
-	flushdb(config)
-
-	s, err := NewRedisStorage(config, clock.New())
-	require.NoError(err)
-
-	mi := core.MetaInfoFixture()
-
-	require.NoError(s.SetMetaInfo(mi))
-
-	raw, err := s.GetMetaInfo(mi.Name())
-	require.NoError(err)
-	result, err := core.DeserializeMetaInfo(raw)
-	require.NoError(err)
-	require.Equal(mi, result)
-}
-
-func TestRedisStorageSetMetaInfoConflict(t *testing.T) {
-	require := require.New(t)
-
-	config := redisConfigFixture()
-
-	flushdb(config)
-
-	s, err := NewRedisStorage(config, clock.New())
-	require.NoError(err)
-
-	blob := bytes.NewReader(randutil.Blob(32))
-
-	// Two metainfos for same file with different piece lengths.
-	mi1, err := core.NewMetaInfoFromBlob("some_name", blob, 1)
-	require.NoError(err)
-	mi2, err := core.NewMetaInfoFromBlob("some_name", blob, 2)
-	require.NoError(err)
-
-	require.NoError(s.SetMetaInfo(mi1))
-	require.Equal(ErrExists, s.SetMetaInfo(mi2))
-}
-
-func TestRedisStorageMetaInfoExpiration(t *testing.T) {
-	require := require.New(t)
-
-	config := redisConfigFixture()
-	config.MetaInfoTTL = 2 * time.Second
-
-	flushdb(config)
-
-	s, err := NewRedisStorage(config, clock.New())
-	require.NoError(err)
-
-	mi := core.MetaInfoFixture()
-
-	require.NoError(s.SetMetaInfo(mi))
-	_, err = s.GetMetaInfo(mi.Name())
-	require.NoError(err)
-
-	time.Sleep(3 * time.Second)
-
-	_, err = s.GetMetaInfo(mi.Name())
-	require.Equal(ErrNotFound, err)
 }

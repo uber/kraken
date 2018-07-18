@@ -8,10 +8,11 @@ import (
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
-	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/tracker/peerstore"
 	"code.uber.internal/infra/kraken/tracker/trackerserver"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/andres-erbsen/clock"
 )
 
 func main() {
@@ -32,14 +33,9 @@ func main() {
 	}
 	defer closer.Close()
 
-	storeProvider := storage.NewStoreProvider(config.Storage)
-	peerStore, err := storeProvider.GetPeerStore()
+	peerStore, err := peerstore.NewRedisStore(config.PeerStore.Redis, clock.New())
 	if err != nil {
 		log.Fatalf("Could not create PeerStore: %s", err)
-	}
-	torrentStore, err := storeProvider.GetMetaInfoStore()
-	if err != nil {
-		log.Fatalf("Could not create MetaInfoStore: %s", err)
 	}
 
 	policy, err := peerhandoutpolicy.NewPriorityPolicy(stats, config.PeerHandoutPolicy.Priority)
@@ -53,13 +49,7 @@ func main() {
 	}
 	originCluster := blobclient.NewClusterClient(r)
 
-	server := trackerserver.New(
-		config.TrackerServer,
-		stats,
-		policy,
-		peerStore,
-		torrentStore,
-		originCluster)
+	server := trackerserver.New(config.TrackerServer, stats, policy, peerStore, originCluster)
 
 	addr := fmt.Sprintf(":%d", config.Port)
 	log.Infof("Listening on %s", addr)

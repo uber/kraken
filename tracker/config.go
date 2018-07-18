@@ -5,7 +5,7 @@ import (
 
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
-	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/tracker/peerstore"
 	"code.uber.internal/infra/kraken/tracker/trackerserver"
 )
 
@@ -13,7 +13,7 @@ import (
 type Config struct {
 	ZapLogging        zap.Config               `yaml:"zap"`
 	Port              int                      `yaml:"port"`
-	Storage           storage.Config           `yaml:"storage"`
+	PeerStore         peerstore.Config         `yaml:"peerstore"`
 	TrackerServer     trackerserver.Config     `yaml:"trackerserver"`
 	PeerHandoutPolicy peerhandoutpolicy.Config `yaml:"peerhandoutpolicy"`
 	Origin            string                   `yaml:"origin"`
