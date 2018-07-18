@@ -14,9 +14,6 @@ server {
   access_log /var/log/udocker/kraken-proxy/nginx-access.log;
   error_log /var/log/udocker/kraken-proxy/nginx-error.log;
 
-  gzip on;
-  gzip_types text/plain text/csv application/json;
-
   location /v2/_catalog {
     proxy_pass http://registry-override;
   }

@@ -2,8 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"net/http"
 
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/build-index/tagserver"
@@ -17,6 +15,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/localdb"
 	"code.uber.internal/infra/kraken/metrics"
+	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -121,8 +120,12 @@ func main() {
 		tagReplicationManager,
 		tagclient.NewProvider(),
 		tagTypes)
+	go func() {
+		log.Fatal(server.ListenAndServe())
+	}()
 
-	addr := fmt.Sprintf(":%d", *port)
-	log.Infof("Listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, server.Handler()))
+	log.Info("Starting nginx...")
+	log.Fatal(nginx.Run("kraken-build-index", map[string]interface{}{
+		"port": *port,
+	}))
 }

@@ -7,55 +7,48 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"text/template"
 )
 
 // Assumes CWD is set to the project root.
 const _configDir = "./nginx/config"
 
-const (
-	_sitesAvailable = "/etc/nginx/sites-available"
-	_sitesEnabled   = "/etc/nginx/sites-enabled"
-)
-
 func abspath(name string) (string, error) {
 	return filepath.Abs(filepath.Join(_configDir, name))
 }
 
-// Run runs nginx configuration. templateName is relative to _configDir.
-func Run(templateName string, args map[string]interface{}) error {
-	templatePath, err := abspath(templateName)
+// Run runs nginx configuration.
+func Run(name string, args map[string]interface{}) error {
+	site, err := populateTemplate(name, args)
 	if err != nil {
-		return fmt.Errorf("template path: %s", err)
+		return fmt.Errorf("populate %s: %s", name, err)
 	}
-	src, err := populateTemplate(templatePath, args)
+	src, err := populateTemplate("base", map[string]interface{}{"site": string(site)})
 	if err != nil {
-		return fmt.Errorf("template: %s", err)
-	}
-	name := strings.TrimSuffix(templateName, filepath.Ext(templateName))
-
-	if err := addToSites(name, src); err != nil {
-		return err
+		return fmt.Errorf("populate base: %s", err)
 	}
 
-	config, err := abspath("default")
-	if err != nil {
-		return fmt.Errorf("default config path: %s", err)
+	conf := filepath.Join("/etc/nginx", name)
+	if err := ioutil.WriteFile(conf, src, 0755); err != nil {
+		return fmt.Errorf("write src: %s", err)
 	}
 
 	cmd := exec.Command(
 		"/usr/sbin/nginx",
 		"-g", "daemon off;",
-		"-c", config)
+		"-c", conf)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	return cmd.Run()
 }
 
-func populateTemplate(templatePath string, args map[string]interface{}) ([]byte, error) {
-	b, err := ioutil.ReadFile(templatePath)
+func populateTemplate(name string, args map[string]interface{}) ([]byte, error) {
+	p, err := abspath(name + ".tmpl")
+	if err != nil {
+		return nil, err
+	}
+	b, err := ioutil.ReadFile(p)
 	if err != nil {
 		return nil, fmt.Errorf("read: %s", err)
 	}
@@ -68,20 +61,4 @@ func populateTemplate(templatePath string, args map[string]interface{}) ([]byte,
 		return nil, fmt.Errorf("exec: %s", err)
 	}
 	return out.Bytes(), nil
-}
-
-func addToSites(name string, src []byte) error {
-	available := filepath.Join(_sitesAvailable, name)
-	if err := os.MkdirAll(_sitesAvailable, 0755); err != nil {
-		return err
-	}
-	if err := ioutil.WriteFile(available, src, 0755); err != nil {
-		return fmt.Errorf("write file: %s", err)
-	}
-
-	enabled := filepath.Join(_sitesEnabled, name)
-	if err := os.MkdirAll(_sitesEnabled, 0755); err != nil {
-		return err
-	}
-	return os.Symlink(available, enabled)
 }

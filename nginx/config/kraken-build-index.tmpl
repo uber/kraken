@@ -1,0 +1,26 @@
+proxy_cache_path /tmp/nginx/kraken-build-index-tags-cache keys_zone=tags:20m;
+
+upstream build-index {
+  server unix:/var/run/udocker/kraken-build-index.sock;
+}
+
+server {
+  listen {{.port}};
+
+  access_log /var/log/udocker/kraken-build-index/nginx-access.log;
+  error_log /var/log/udocker/kraken-build-index/nginx-error.log;
+
+  location / {
+    proxy_pass http://build-index;
+  }
+
+  location /tags {
+    proxy_pass http://build-index;
+
+    proxy_cache         tags;
+    proxy_cache_methods GET;
+    proxy_cache_valid   200 5m;
+    proxy_cache_valid   any 1s;
+    proxy_cache_lock    on;
+  }
+}
