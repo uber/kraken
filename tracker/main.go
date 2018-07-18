@@ -2,10 +2,9 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"net/http"
 
 	"code.uber.internal/infra/kraken/metrics"
+	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/peerstore"
@@ -50,8 +49,12 @@ func main() {
 	originCluster := blobclient.NewClusterClient(r)
 
 	server := trackerserver.New(config.TrackerServer, stats, policy, peerStore, originCluster)
+	go func() {
+		log.Fatal(server.ListenAndServe())
+	}()
 
-	addr := fmt.Sprintf(":%d", config.Port)
-	log.Infof("Listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, server.Handler()))
+	log.Info("Starting nginx...")
+	log.Fatal(nginx.Run("kraken-tracker", map[string]interface{}{
+		"port": config.Port,
+	}))
 }

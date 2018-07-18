@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/utils/dedup"
+	"code.uber.internal/infra/kraken/utils/listener"
 )
 
 // Config defines configuration for the tracker service.
@@ -17,6 +18,8 @@ type Config struct {
 	PeerHandoutLimit int `yaml:"announce_limit"`
 
 	AnnounceInterval time.Duration `yaml:"announce_interval"`
+
+	Listener listener.Config `yaml:"listener"`
 }
 
 func (c Config) applyDefaults() Config {

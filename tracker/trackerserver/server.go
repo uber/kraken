@@ -15,6 +15,8 @@ import (
 	"code.uber.internal/infra/kraken/tracker/peerstore"
 	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
+	"code.uber.internal/infra/kraken/utils/listener"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 // Server serves Tracker endpoints.
@@ -66,6 +68,12 @@ func (s *Server) Handler() http.Handler {
 	r.Mount("/debug", chimiddleware.Profiler())
 
 	return r
+}
+
+// ListenAndServe is a blocking call which runs s.
+func (s *Server) ListenAndServe() error {
+	log.Info("Starting tracker server on %s", s.config.Listener)
+	return listener.Serve(s.config.Listener, s.Handler())
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {

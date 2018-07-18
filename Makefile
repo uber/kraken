@@ -151,6 +151,7 @@ runtest: docker_stop
 devcluster: $(LINUX_BINS) docker_stop
 	docker build -t kraken-devcluster:latest -f docker/devcluster/Dockerfile ./
 	docker run -d -p 5263:5263 -p 5367:5367 -p 7602:7602 -p 9003:9003 -p 8991:8991 --hostname localhost --name kraken-devcluster kraken-devcluster:latest
+	docker logs -f kraken-devcluster
 
 # ==== MOCKS ====
 
