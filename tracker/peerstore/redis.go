@@ -1,4 +1,4 @@
-package storage
+package peerstore
 
 import (
 	"errors"
@@ -6,17 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/andres-erbsen/clock"
-	"github.com/garyburd/redigo/redis"
-
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/randutil"
-)
-
-// RedisStorage errors.
-var (
-	ErrNoOrigins = errors.New("no origins found")
+	"github.com/andres-erbsen/clock"
+	"github.com/garyburd/redigo/redis"
 )
 
 func peerSetKey(h core.InfoHash, window int64) string {
@@ -25,10 +19,6 @@ func peerSetKey(h core.InfoHash, window int64) string {
 
 func originsKey(h core.InfoHash) string {
 	return fmt.Sprintf("origins:%s", h.String())
-}
-
-func metaInfoKey(name string) string {
-	return fmt.Sprintf("metainfo:%s", name)
 }
 
 func serializePeer(p *core.PeerInfo) string {
@@ -64,23 +54,22 @@ func deserializePeer(s string) (id peerIdentity, complete bool, err error) {
 	return id, complete, nil
 }
 
-// RedisStorage provides fast lookup for peers and torrent metainfo with expiration.
-type RedisStorage struct {
+// RedisStore is a Store backed by Redis.
+type RedisStore struct {
 	config RedisConfig
 	pool   *redis.Pool
 	clk    clock.Clock
 }
 
-// NewRedisStorage creates a RedisStorage instance.
-func NewRedisStorage(config RedisConfig, clk clock.Clock) (*RedisStorage, error) {
-	config, err := config.applyDefaults()
-	if err != nil {
-		return nil, fmt.Errorf("configuration: %s", err)
+// NewRedisStore creates a new RedisStore.
+func NewRedisStore(config RedisConfig, clk clock.Clock) (*RedisStore, error) {
+	config.applyDefaults()
+
+	if config.Addr == "" {
+		return nil, errors.New("invalid config: missing addr")
 	}
 
-	log.Infof("Redis storage initializing with config:\n%s", config)
-
-	s := &RedisStorage{
+	s := &RedisStore{
 		config: config,
 		pool: &redis.Pool{
 			Dial: func() (redis.Conn, error) {
@@ -110,12 +99,12 @@ func NewRedisStorage(config RedisConfig, clk clock.Clock) (*RedisStorage, error)
 	return s, nil
 }
 
-func (s *RedisStorage) curPeerSetWindow() int64 {
+func (s *RedisStore) curPeerSetWindow() int64 {
 	t := s.clk.Now().Unix()
 	return t - (t % int64(s.config.PeerSetWindowSize.Seconds()))
 }
 
-func (s *RedisStorage) peerSetWindows() []int64 {
+func (s *RedisStore) peerSetWindows() []int64 {
 	cur := s.curPeerSetWindow()
 	ws := make([]int64, s.config.MaxPeerSetWindows)
 	for i := range ws {
@@ -125,7 +114,7 @@ func (s *RedisStorage) peerSetWindows() []int64 {
 }
 
 // UpdatePeer writes p to Redis with a TTL.
-func (s *RedisStorage) UpdatePeer(h core.InfoHash, p *core.PeerInfo) error {
+func (s *RedisStore) UpdatePeer(h core.InfoHash, p *core.PeerInfo) error {
 	c := s.pool.Get()
 	defer c.Close()
 
@@ -154,7 +143,7 @@ func (s *RedisStorage) UpdatePeer(h core.InfoHash, p *core.PeerInfo) error {
 }
 
 // GetPeers returns at most n PeerInfos associated with h.
-func (s *RedisStorage) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) {
+func (s *RedisStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) {
 	c := s.pool.Get()
 	defer c.Close()
 
@@ -197,7 +186,7 @@ func (s *RedisStorage) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error
 
 // GetOrigins returns all origin PeerInfos for h. Returns ErrNoOrigins if
 // no origins exist in Redis.
-func (s *RedisStorage) GetOrigins(h core.InfoHash) ([]*core.PeerInfo, error) {
+func (s *RedisStore) GetOrigins(h core.InfoHash) ([]*core.PeerInfo, error) {
 	c := s.pool.Get()
 	defer c.Close()
 
@@ -223,7 +212,7 @@ func (s *RedisStorage) GetOrigins(h core.InfoHash) ([]*core.PeerInfo, error) {
 }
 
 // UpdateOrigins overwrites all origin PeerInfos for h with the given origins.
-func (s *RedisStorage) UpdateOrigins(h core.InfoHash, origins []*core.PeerInfo) error {
+func (s *RedisStore) UpdateOrigins(h core.InfoHash, origins []*core.PeerInfo) error {
 	c := s.pool.Get()
 	defer c.Close()
 
@@ -235,44 +224,4 @@ func (s *RedisStorage) UpdateOrigins(h core.InfoHash, origins []*core.PeerInfo) 
 
 	_, err := c.Do("SETEX", originsKey(h), int(s.config.OriginsTTL.Seconds()), v)
 	return err
-}
-
-// GetMetaInfo returns metainfo for name. Returns ErrNotFound if no metainfo exists for name.
-func (s *RedisStorage) GetMetaInfo(name string) ([]byte, error) {
-	c := s.pool.Get()
-	defer c.Close()
-
-	b, err := redis.Bytes(c.Do("GET", metaInfoKey(name)))
-	if err != nil {
-		if err == redis.ErrNil {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-
-	return b, nil
-}
-
-// SetMetaInfo writes metainfo. Returns ErrExists if metainfo already exists for
-// mi's file name.
-func (s *RedisStorage) SetMetaInfo(mi *core.MetaInfo) error {
-	c := s.pool.Get()
-	defer c.Close()
-
-	b, err := mi.Serialize()
-	if err != nil {
-		return fmt.Errorf("serialize metainfo: %s", err)
-	}
-
-	r, err := c.Do(
-		"SET", metaInfoKey(mi.Name()), b,
-		"EX", strconv.Itoa(int(s.config.MetaInfoTTL.Seconds())),
-		"NX")
-	if err != nil {
-		return err
-	}
-	if r == nil {
-		return ErrExists
-	}
-	return nil
 }

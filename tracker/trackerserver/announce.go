@@ -7,7 +7,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
-	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/tracker/peerstore"
 	"code.uber.internal/infra/kraken/utils/errutil"
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -53,7 +53,7 @@ func (s *Server) getPeerHandout(
 	origins, err := s.peerStore.GetOrigins(h)
 	if err != nil {
 		tryUpdate := true
-		if err != storage.ErrNoOrigins {
+		if err != peerstore.ErrNoOrigins {
 			errs = append(errs, fmt.Errorf("origin peer storage error: %s", err))
 			tryUpdate = false
 		}

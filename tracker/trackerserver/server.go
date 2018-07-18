@@ -5,7 +5,6 @@ import (
 	"net/http"
 	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
 
-	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
 	chimiddleware "github.com/pressly/chi/middleware"
 	"github.com/uber-go/tally"
@@ -13,7 +12,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
-	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/tracker/peerstore"
 	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
 )
@@ -23,12 +22,9 @@ type Server struct {
 	config Config
 	stats  tally.Scope
 
-	peerStore     storage.PeerStore
+	peerStore     peerstore.Store
 	policy        *peerhandoutpolicy.PriorityPolicy
 	originCluster blobclient.ClusterClient
-
-	metaInfoStore      storage.MetaInfoStore
-	getMetaInfoLimiter *dedup.Limiter
 
 	tagCache *dedup.Cache
 }
@@ -38,8 +34,7 @@ func New(
 	config Config,
 	stats tally.Scope,
 	policy *peerhandoutpolicy.PriorityPolicy,
-	peerStore storage.PeerStore,
-	metaInfoStore storage.MetaInfoStore,
+	peerStore peerstore.Store,
 	originCluster blobclient.ClusterClient) *Server {
 
 	config = config.applyDefaults()
@@ -48,19 +43,12 @@ func New(
 		"module": "trackerserver",
 	})
 
-	getMetaInfoLimiter := dedup.NewLimiter(
-		config.GetMetaInfoLimit,
-		clock.New(),
-		&metaInfoGetter{stats, originCluster, metaInfoStore})
-
 	return &Server{
-		config:             config,
-		stats:              stats,
-		peerStore:          peerStore,
-		policy:             policy,
-		originCluster:      originCluster,
-		metaInfoStore:      metaInfoStore,
-		getMetaInfoLimiter: getMetaInfoLimiter,
+		config:        config,
+		stats:         stats,
+		peerStore:     peerStore,
+		policy:        policy,
+		originCluster: originCluster,
 	}
 }
 

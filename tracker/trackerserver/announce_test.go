@@ -7,7 +7,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
-	"code.uber.internal/infra/kraken/tracker/storage"
+	"code.uber.internal/infra/kraken/tracker/peerstore"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
@@ -96,7 +96,7 @@ func TestAnnounceMissingOriginsFetchesAndCachesOrigins(t *testing.T) {
 	mocks.peerStore.EXPECT().GetPeers(
 		blob.MetaInfo.InfoHash, gomock.Any()).Return(nil, nil)
 	mocks.peerStore.EXPECT().GetOrigins(
-		blob.MetaInfo.InfoHash).Return(nil, storage.ErrNoOrigins)
+		blob.MetaInfo.InfoHash).Return(nil, peerstore.ErrNoOrigins)
 	mocks.peerStore.EXPECT().UpdateOrigins(blob.MetaInfo.InfoHash, origins).Return(nil)
 
 	result, _, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
@@ -123,13 +123,13 @@ func TestAnnounceUnavailablePeerStoreCanStillProvideOrigins(t *testing.T) {
 
 	mocks.originCluster.EXPECT().Owners(blob.Digest).Return([]core.PeerContext{octx}, nil)
 
-	storageErr := errors.New("some storage error")
+	storeErr := errors.New("some storage error")
 
 	mocks.peerStore.EXPECT().UpdatePeer(
-		blob.MetaInfo.InfoHash, core.PeerInfoFromContext(pctx, false)).Return(storageErr)
+		blob.MetaInfo.InfoHash, core.PeerInfoFromContext(pctx, false)).Return(storeErr)
 	mocks.peerStore.EXPECT().GetPeers(
-		blob.MetaInfo.InfoHash, gomock.Any()).Return(nil, storageErr)
-	mocks.peerStore.EXPECT().GetOrigins(blob.MetaInfo.InfoHash).Return(nil, storageErr)
+		blob.MetaInfo.InfoHash, gomock.Any()).Return(nil, storeErr)
+	mocks.peerStore.EXPECT().GetOrigins(blob.MetaInfo.InfoHash).Return(nil, storeErr)
 
 	result, _, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
 	require.NoError(err)
@@ -159,7 +159,7 @@ func TestAnnouceNoOriginsAndUnavailableOriginClusterCanStillProvidePeers(t *test
 	mocks.peerStore.EXPECT().GetPeers(
 		blob.MetaInfo.InfoHash, gomock.Any()).Return(peers, nil)
 	mocks.peerStore.EXPECT().GetOrigins(
-		blob.MetaInfo.InfoHash).Return(nil, storage.ErrNoOrigins)
+		blob.MetaInfo.InfoHash).Return(nil, peerstore.ErrNoOrigins)
 
 	result, _, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
 	require.NoError(err)

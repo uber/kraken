@@ -1,21 +1,15 @@
-package storage
+package peerstore
 
 import (
-	"errors"
-	"fmt"
 	"time"
-
-	"gopkg.in/yaml.v2"
 )
 
-// Config defines storage configuration.
+// Config defines Store configuration.
 type Config struct {
-	PeerStore     string      `yaml:"peer_store"`
-	MetaInfoStore string      `yaml:"metainfo_store"`
-	Redis         RedisConfig `yaml:"redis"`
+	Redis RedisConfig `yaml:"redis"`
 }
 
-// RedisConfig defines configuration for Redis storage.
+// RedisConfig defines RedisStore configuration.
 type RedisConfig struct {
 	Addr              string        `yaml:"addr"`
 	DialTimeout       time.Duration `yaml:"dial_timeout"`
@@ -30,18 +24,7 @@ type RedisConfig struct {
 	OriginsTTL        time.Duration `yaml:"origins_ttl"`
 }
 
-func (c RedisConfig) String() string {
-	b, err := yaml.Marshal(c)
-	if err != nil {
-		return fmt.Sprintf("yaml marshal error: %s", err)
-	}
-	return string(b)
-}
-
-func (c RedisConfig) applyDefaults() (RedisConfig, error) {
-	if c.Addr == "" {
-		return c, errors.New("no addr configured")
-	}
+func (c *RedisConfig) applyDefaults() {
 	if c.DialTimeout == 0 {
 		c.DialTimeout = 5 * time.Second
 	}
@@ -72,5 +55,4 @@ func (c RedisConfig) applyDefaults() (RedisConfig, error) {
 	if c.OriginsTTL == 0 {
 		c.OriginsTTL = 5 * time.Minute
 	}
-	return c, nil
 }
