@@ -28,7 +28,7 @@ UBER_CONFIG_DIR=$baseconfig/build-index /usr/bin/kraken-build-index \
 UBER_CONFIG_DIR=$baseconfig/tracker /usr/bin/kraken-tracker \
     -config=devcluster.yaml \
     -cluster=devcluster \
-    &>/var/log/udocker/kraken-tracker/stdout.log &
+    &>/var/log/udocker/kraken/stdout.log &
 
 UBER_CONFIG_DIR=$baseconfig/proxy /usr/bin/kraken-proxy \
     -config=devcluster.yaml \
@@ -54,6 +54,9 @@ while : ; do
         status=$?
         if [ $status -ne 0 ]; then
             echo "$c exited unexpectedly. Logs:"
+            if [[ "$c" -eq "kraken-tracker" ]]; then
+                c=kraken
+            fi
             cat /var/log/udocker/$c/stdout.log
             exit 1
         fi

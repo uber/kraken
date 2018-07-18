@@ -11,14 +11,14 @@ RUN mkdir -p -m 777 /var/log/udocker/kraken-build-index
 RUN mkdir -p -m 777 /var/log/udocker/kraken-origin
 RUN mkdir -p -m 777 /var/log/udocker/kraken-proxy
 RUN mkdir -p -m 777 /var/log/udocker/kraken-testfs
-RUN mkdir -p -m 777 /var/log/udocker/kraken-tracker
+RUN mkdir -p -m 777 /var/log/udocker/kraken
 
 RUN mkdir -p -m 777 /var/cache/udocker/kraken-agent
 RUN mkdir -p -m 777 /var/cache/udocker/kraken-build-index
 RUN mkdir -p -m 777 /var/cache/udocker/kraken-origin
 RUN mkdir -p -m 777 /var/cache/udocker/kraken-proxy
 RUN mkdir -p -m 777 /var/cache/udocker/kraken-testfs
-RUN mkdir -p -m 777 /var/cache/udocker/kraken-tracker
+RUN mkdir -p -m 777 /var/cache/udocker/kraken
 
 RUN mkdir -p -m 777 /var/run/udocker
 

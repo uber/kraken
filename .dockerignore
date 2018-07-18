@@ -6,3 +6,11 @@ vendor
 .git
 .tmp
 .tmptest
+
+# Ignore non-Linux binaries.
+agent/agent
+build-index/build-index
+origin/origin
+proxy/proxy
+tools/bin/testfs/testfs
+tracker/tracker
