@@ -35,8 +35,8 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Announce mocks base method
-func (m *MockClient) Announce(arg0 string, arg1 core.InfoHash, arg2 bool) ([]*core.PeerInfo, time.Duration, error) {
-	ret := m.ctrl.Call(m, "Announce", arg0, arg1, arg2)
+func (m *MockClient) Announce(arg0 string, arg1 core.InfoHash, arg2 bool, arg3 int) ([]*core.PeerInfo, time.Duration, error) {
+	ret := m.ctrl.Call(m, "Announce", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].([]*core.PeerInfo)
 	ret1, _ := ret[1].(time.Duration)
 	ret2, _ := ret[2].(error)
@@ -44,6 +44,6 @@ func (m *MockClient) Announce(arg0 string, arg1 core.InfoHash, arg2 bool) ([]*co
 }
 
 // Announce indicates an expected call of Announce
-func (mr *MockClientMockRecorder) Announce(arg0, arg1, arg2 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Announce", reflect.TypeOf((*MockClient)(nil).Announce), arg0, arg1, arg2)
+func (mr *MockClientMockRecorder) Announce(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Announce", reflect.TypeOf((*MockClient)(nil).Announce), arg0, arg1, arg2, arg3)
 }

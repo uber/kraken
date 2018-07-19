@@ -26,7 +26,11 @@ type Response struct {
 
 // Client defines a client for announcing and getting peers.
 type Client interface {
-	Announce(name string, h core.InfoHash, complete bool) ([]*core.PeerInfo, time.Duration, error)
+	Announce(
+		name string,
+		h core.InfoHash,
+		complete bool,
+		version int) ([]*core.PeerInfo, time.Duration, error)
 }
 
 type client struct {
@@ -39,13 +43,20 @@ func New(pctx core.PeerContext, addr string) Client {
 	return &client{pctx, addr}
 }
 
+// Announce versionss.
+const (
+	V1 = 1
+	V2 = 2
+)
+
 // Announce announces the torrent identified by (name, h) with the number of
 // downloaded bytes. Returns a list of all other peers announcing for said torrent,
 // sorted by priority, and the interval for the next announce.
 func (c *client) Announce(
 	name string,
 	h core.InfoHash,
-	complete bool) (peers []*core.PeerInfo, interval time.Duration, err error) {
+	complete bool,
+	version int) (peers []*core.PeerInfo, interval time.Duration, err error) {
 
 	body, err := json.Marshal(&Request{
 		Name:     name,
@@ -55,8 +66,14 @@ func (c *client) Announce(
 	if err != nil {
 		return nil, 0, fmt.Errorf("marshal request: %s", err)
 	}
+	var url string
+	if version == V1 {
+		url = fmt.Sprintf("http://%s/announce", c.addr)
+	} else {
+		url = fmt.Sprintf("http://%s/announce/%s", c.addr, h.String())
+	}
 	httpResp, err := httputil.Get(
-		fmt.Sprintf("http://%s/announce", c.addr),
+		url,
 		httputil.SendBody(bytes.NewReader(body)),
 		httputil.SendTimeout(30*time.Second),
 		httputil.SendRetry())
@@ -82,7 +99,7 @@ func Disabled() Client {
 
 // Announce always returns error.
 func (c DisabledClient) Announce(
-	name string, h core.InfoHash, complete bool) ([]*core.PeerInfo, time.Duration, error) {
+	name string, h core.InfoHash, complete bool, version int) ([]*core.PeerInfo, time.Duration, error) {
 
 	return nil, 0, errors.New("announcing disabled")
 }

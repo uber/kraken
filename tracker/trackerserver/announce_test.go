@@ -2,6 +2,7 @@ package trackerserver
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,33 +16,38 @@ import (
 )
 
 func TestAnnounceSinglePeerResponse(t *testing.T) {
-	require := require.New(t)
+	for _, version := range []int{announceclient.V1, announceclient.V2} {
+		t.Run(fmt.Sprintf("V%d", version), func(t *testing.T) {
+			require := require.New(t)
 
-	config := Config{AnnounceInterval: 5 * time.Second}
+			config := Config{AnnounceInterval: 5 * time.Second}
 
-	mocks, cleanup := newServerMocks(t, config)
-	defer cleanup()
+			mocks, cleanup := newServerMocks(t, config)
+			defer cleanup()
 
-	addr, stop := testutil.StartServer(mocks.handler())
-	defer stop()
+			addr, stop := testutil.StartServer(mocks.handler())
+			defer stop()
 
-	blob := core.NewBlobFixture()
-	pctx := core.PeerContextFixture()
+			blob := core.NewBlobFixture()
+			pctx := core.PeerContextFixture()
 
-	client := announceclient.New(pctx, addr)
+			client := announceclient.New(pctx, addr)
 
-	peers := []*core.PeerInfo{core.PeerInfoFixture()}
+			peers := []*core.PeerInfo{core.PeerInfoFixture()}
 
-	mocks.peerStore.EXPECT().GetOrigins(blob.MetaInfo.InfoHash).Return(nil, nil)
-	mocks.peerStore.EXPECT().GetPeers(
-		blob.MetaInfo.InfoHash, gomock.Any()).Return(peers, nil)
-	mocks.peerStore.EXPECT().UpdatePeer(
-		blob.MetaInfo.InfoHash, core.PeerInfoFromContext(pctx, false)).Return(nil)
+			mocks.peerStore.EXPECT().GetOrigins(blob.MetaInfo.InfoHash).Return(nil, nil)
+			mocks.peerStore.EXPECT().GetPeers(
+				blob.MetaInfo.InfoHash, gomock.Any()).Return(peers, nil)
+			mocks.peerStore.EXPECT().UpdatePeer(
+				blob.MetaInfo.InfoHash, core.PeerInfoFromContext(pctx, false)).Return(nil)
 
-	result, interval, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
-	require.NoError(err)
-	require.Equal(peers, result)
-	require.Equal(config.AnnounceInterval, interval)
+			result, interval, err := client.Announce(
+				blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false, version)
+			require.NoError(err)
+			require.Equal(peers, result)
+			require.Equal(config.AnnounceInterval, interval)
+		})
+	}
 }
 
 func TestAnnounceReturnsCachedOrigin(t *testing.T) {
@@ -67,7 +73,8 @@ func TestAnnounceReturnsCachedOrigin(t *testing.T) {
 	mocks.peerStore.EXPECT().UpdatePeer(
 		blob.MetaInfo.InfoHash, core.PeerInfoFromContext(pctx, false)).Return(nil)
 
-	result, _, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
+	result, _, err := client.Announce(
+		blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false, announceclient.V2)
 	require.NoError(err)
 	require.Equal(origins, result)
 }
@@ -99,7 +106,8 @@ func TestAnnounceMissingOriginsFetchesAndCachesOrigins(t *testing.T) {
 		blob.MetaInfo.InfoHash).Return(nil, peerstore.ErrNoOrigins)
 	mocks.peerStore.EXPECT().UpdateOrigins(blob.MetaInfo.InfoHash, origins).Return(nil)
 
-	result, _, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
+	result, _, err := client.Announce(
+		blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false, announceclient.V2)
 	require.NoError(err)
 	require.Equal(origins, result)
 }
@@ -131,7 +139,8 @@ func TestAnnounceUnavailablePeerStoreCanStillProvideOrigins(t *testing.T) {
 		blob.MetaInfo.InfoHash, gomock.Any()).Return(nil, storeErr)
 	mocks.peerStore.EXPECT().GetOrigins(blob.MetaInfo.InfoHash).Return(nil, storeErr)
 
-	result, _, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
+	result, _, err := client.Announce(
+		blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false, announceclient.V2)
 	require.NoError(err)
 	require.Equal(origins, result)
 }
@@ -161,7 +170,8 @@ func TestAnnouceNoOriginsAndUnavailableOriginClusterCanStillProvidePeers(t *test
 	mocks.peerStore.EXPECT().GetOrigins(
 		blob.MetaInfo.InfoHash).Return(nil, peerstore.ErrNoOrigins)
 
-	result, _, err := client.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false)
+	result, _, err := client.Announce(
+		blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false, announceclient.V2)
 	require.NoError(err)
 	require.Equal(peers, result)
 }

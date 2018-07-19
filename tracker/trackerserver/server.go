@@ -62,7 +62,8 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.LatencyTimer(s.stats))
 
 	r.Get("/health", handler.Wrap(s.healthHandler))
-	r.Get("/announce", handler.Wrap(s.announceHandler))
+	r.Get("/announce", handler.Wrap(s.announceHandlerV1))
+	r.Get("/announce/:infohash", handler.Wrap(s.announceHandlerV2))
 	r.Get("/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(s.getMetaInfoHandler))
 
 	r.Mount("/debug", chimiddleware.Profiler())
