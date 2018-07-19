@@ -94,6 +94,7 @@ func (c *client) Get(tag string) (core.Digest, error) {
 func (c *client) Has(tag string) (bool, error) {
 	_, err := httputil.Head(
 		fmt.Sprintf("http://%s/tags/%s", c.addr, url.PathEscape(tag)),
+		httputil.SendTimeout(10*time.Second),
 		httputil.SendRetry())
 	if err != nil {
 		if httputil.IsNotFound(err) {
@@ -165,6 +166,7 @@ func (c *client) DuplicateReplicate(
 			"http://%s/internal/duplicate/remotes/tags/%s/digest/%s",
 			c.addr, url.PathEscape(tag), d.String()),
 		httputil.SendBody(bytes.NewReader(b)),
+		httputil.SendTimeout(10*time.Second),
 		httputil.SendRetry())
 	return err
 }
@@ -184,6 +186,7 @@ func (c *client) DuplicatePut(tag string, d core.Digest, delay time.Duration) er
 			"http://%s/internal/duplicate/tags/%s/digest/%s",
 			c.addr, url.PathEscape(tag), d.String()),
 		httputil.SendBody(bytes.NewReader(b)),
+		httputil.SendTimeout(10*time.Second),
 		httputil.SendRetry())
 	return err
 }
@@ -191,6 +194,7 @@ func (c *client) DuplicatePut(tag string, d core.Digest, delay time.Duration) er
 func (c *client) Origin() (string, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/origin", c.addr),
+		httputil.SendTimeout(5*time.Second),
 		httputil.SendRetry())
 	if err != nil {
 		return "", err

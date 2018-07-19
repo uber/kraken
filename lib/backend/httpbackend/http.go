@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
@@ -18,6 +19,7 @@ import (
 type Config struct {
 	UploadURL   string `yaml:"upload_url"`   // http upload post url
 	DownloadURL string `yaml:"download_url"` // http download get url
+	Timeout     time.Duration
 }
 
 // Client implements downloading/uploading object from/to S3
@@ -26,10 +28,13 @@ type Client struct {
 }
 
 func (c Config) applyDefaults() Config {
+	if c.Timeout == 0 {
+		c.Timeout = 180 * time.Second
+	}
 	return c
 }
 
-// NewClient creates s3 client from input parameters
+// NewClient creates http client from input parameters
 func NewClient(config Config) (*Client, error) {
 	return &Client{config: config.applyDefaults()}, nil
 }
@@ -52,7 +57,7 @@ func (c *Client) Download(name string, dst io.Writer) error {
 	}
 	log.Infof("Starting HTTP download from remote backend: %s", b.String())
 
-	resp, err := httputil.Get(b.String())
+	resp, err := httputil.Get(b.String(), httputil.SendTimeout(c.config.Timeout))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return backenderrors.ErrBlobNotFound
