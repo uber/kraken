@@ -72,7 +72,7 @@ func (s *Server) Handler() http.Handler {
 
 // ListenAndServe is a blocking call which runs s.
 func (s *Server) ListenAndServe() error {
-	log.Info("Starting tracker server on %s", s.config.Listener)
+	log.Infof("Starting tracker server on %s", s.config.Listener)
 	return listener.Serve(s.config.Listener, s.Handler())
 }
 

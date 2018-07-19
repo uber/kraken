@@ -125,7 +125,5 @@ func main() {
 	}()
 
 	log.Info("Starting nginx...")
-	log.Fatal(nginx.Run("kraken-build-index", map[string]interface{}{
-		"port": *port,
-	}))
+	log.Fatal(nginx.Run(config.Nginx, *port))
 }
