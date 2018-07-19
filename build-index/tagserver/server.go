@@ -349,12 +349,18 @@ func (s *Server) putTag(tag string, d core.Digest, deps core.DigestList) error {
 	}
 
 	var delay time.Duration
+	var successes int
 	for addr := range localReplicas {
 		delay += s.config.DuplicatePutStagger
 		client := s.provider.Provide(addr)
 		if err := client.DuplicatePut(tag, d, delay); err != nil {
 			log.Errorf("Error duplicating put task to %s: %s", addr, err)
+		} else {
+			successes++
 		}
+	}
+	if len(localReplicas) != 0 && successes == 0 {
+		s.stats.Counter("duplicate_put_failures").Inc(1)
 	}
 	return nil
 }
@@ -378,12 +384,18 @@ func (s *Server) replicateTag(tag string, d core.Digest, deps core.DigestList) e
 	}
 
 	var delay time.Duration
+	var successes int
 	for addr := range localReplicas { // Loops in random order.
 		delay += s.config.DuplicateReplicateStagger
 		client := s.provider.Provide(addr)
 		if err := client.DuplicateReplicate(tag, d, deps, delay); err != nil {
 			log.Errorf("Error duplicating replicate task to %s: %s", addr, err)
+		} else {
+			successes++
 		}
+	}
+	if len(localReplicas) != 0 && successes == 0 {
+		s.stats.Counter("duplicate_replicate_failures").Inc(1)
 	}
 	return nil
 }
