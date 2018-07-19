@@ -25,7 +25,7 @@ type proxyTransfererMocks struct {
 	cas           *store.CAStore
 }
 
-func newProxyTransfererMocks(t *testing.T) (*proxyTransfererMocks, func()) {
+func newReadWriteTransfererMocks(t *testing.T) (*proxyTransfererMocks, func()) {
 	var cleanup testutil.Cleanup
 
 	ctrl := gomock.NewController(t)
@@ -41,14 +41,14 @@ func newProxyTransfererMocks(t *testing.T) (*proxyTransfererMocks, func()) {
 	return &proxyTransfererMocks{tags, originCluster, cas}, cleanup.Run
 }
 
-func (m *proxyTransfererMocks) new() *ProxyTransferer {
-	return NewProxyTransferer(m.tags, m.originCluster, m.cas)
+func (m *proxyTransfererMocks) new() *ReadWriteTransferer {
+	return NewReadWriteTransferer(m.tags, m.originCluster, m.cas)
 }
 
-func TestProxyTransfererDownloadCachesBlob(t *testing.T) {
+func TestReadWriteTransfererDownloadCachesBlob(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newProxyTransfererMocks(t)
+	mocks, cleanup := newReadWriteTransfererMocks(t)
 	defer cleanup()
 
 	transferer := mocks.new()
@@ -69,10 +69,10 @@ func TestProxyTransfererDownloadCachesBlob(t *testing.T) {
 	}
 }
 
-func TestProxyTransfererGetTag(t *testing.T) {
+func TestReadWriteTransfererGetTag(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newProxyTransfererMocks(t)
+	mocks, cleanup := newReadWriteTransfererMocks(t)
 	defer cleanup()
 
 	transferer := mocks.new()
@@ -87,10 +87,10 @@ func TestProxyTransfererGetTag(t *testing.T) {
 	require.Equal(manifest, d)
 }
 
-func TestProxyTransfererGetTagNotFound(t *testing.T) {
+func TestReadWriteTransfererGetTagNotFound(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newProxyTransfererMocks(t)
+	mocks, cleanup := newReadWriteTransfererMocks(t)
 	defer cleanup()
 
 	transferer := mocks.new()
@@ -104,10 +104,10 @@ func TestProxyTransfererGetTagNotFound(t *testing.T) {
 	require.Equal(ErrTagNotFound, err)
 }
 
-func TestProxyTransfererPostTag(t *testing.T) {
+func TestReadWriteTransfererPostTag(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newProxyTransfererMocks(t)
+	mocks, cleanup := newReadWriteTransfererMocks(t)
 	defer cleanup()
 
 	transferer := mocks.new()
@@ -127,10 +127,10 @@ func TestProxyTransfererPostTag(t *testing.T) {
 	require.NoError(transferer.PostTag(tag, manifestDigest))
 }
 
-func TestProxyTransfererStatLocalBlob(t *testing.T) {
+func TestReadWriteTransfererStatLocalBlob(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newProxyTransfererMocks(t)
+	mocks, cleanup := newReadWriteTransfererMocks(t)
 	defer cleanup()
 
 	transferer := mocks.new()
@@ -145,10 +145,10 @@ func TestProxyTransfererStatLocalBlob(t *testing.T) {
 	require.Equal(blob.Info(), bi)
 }
 
-func TestProxyTransfererStatRemoteBlob(t *testing.T) {
+func TestReadWriteTransfererStatRemoteBlob(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newProxyTransfererMocks(t)
+	mocks, cleanup := newReadWriteTransfererMocks(t)
 	defer cleanup()
 
 	transferer := mocks.new()
@@ -163,10 +163,10 @@ func TestProxyTransfererStatRemoteBlob(t *testing.T) {
 	require.Equal(blob.Info(), bi)
 }
 
-func TestProxyTransfererStatNotFoundOnAnyOriginError(t *testing.T) {
+func TestReadWriteTransfererStatNotFoundOnAnyOriginError(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newProxyTransfererMocks(t)
+	mocks, cleanup := newReadWriteTransfererMocks(t)
 	defer cleanup()
 
 	transferer := mocks.new()

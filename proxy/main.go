@@ -50,9 +50,9 @@ func main() {
 
 	tagClient := tagclient.New(config.BuildIndex)
 
-	transferer := transfer.NewProxyTransferer(tagClient, originCluster, cas)
+	transferer := transfer.NewReadWriteTransferer(tagClient, originCluster, cas)
 
-	registry, err := config.Registry.Build(config.Registry.ProxyParameters(transferer, cas, stats))
+	registry, err := config.Registry.Build(config.Registry.ReadWriteParameters(transferer, cas, stats))
 	if err != nil {
 		log.Fatalf("Error creating registry: %s", err)
 	}

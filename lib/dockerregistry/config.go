@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	_proxy = "proxy"
-	_agent = "agent"
+	_rw = "rw"
+	_ro = "ro"
 )
 
 // Config defines registry configuration.
@@ -19,33 +19,33 @@ type Config struct {
 	Docker configuration.Configuration `yaml:"docker"`
 }
 
-// ProxyParameters builds proxy-specific parameters.
-func (c Config) ProxyParameters(
+// ReadWriteParameters builds parameters for a read-write driver.
+func (c Config) ReadWriteParameters(
 	transferer transfer.ImageTransferer,
 	cas *store.CAStore,
 	metrics tally.Scope) configuration.Parameters {
 
 	return configuration.Parameters{
-		"component":  _proxy,
-		"config":     c,
-		"transferer": transferer,
-		"castore":    cas,
-		"metrics":    metrics,
+		"constructor": _rw,
+		"config":      c,
+		"transferer":  transferer,
+		"castore":     cas,
+		"metrics":     metrics,
 	}
 }
 
-// AgentParameters builds agent-specific parameters.
-func (c Config) AgentParameters(
+// ReadOnlyParameters builds parameters for a read-only driver.
+func (c Config) ReadOnlyParameters(
 	transferer transfer.ImageTransferer,
 	bs BlobStore,
 	metrics tally.Scope) configuration.Parameters {
 
 	return configuration.Parameters{
-		"component":  _agent,
-		"config":     c,
-		"transferer": transferer,
-		"blobstore":  bs,
-		"metrics":    metrics,
+		"constructor": _ro,
+		"config":      c,
+		"transferer":  transferer,
+		"blobstore":   bs,
+		"metrics":     metrics,
 	}
 }
 

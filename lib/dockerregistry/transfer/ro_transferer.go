@@ -11,27 +11,27 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 )
 
-var _ ImageTransferer = (*AgentTransferer)(nil)
+var _ ImageTransferer = (*ReadOnlyTransferer)(nil)
 
-// AgentTransferer gets and posts manifest to tracker, and transfers blobs as torrent.
-type AgentTransferer struct {
+// ReadOnlyTransferer gets and posts manifest to tracker, and transfers blobs as torrent.
+type ReadOnlyTransferer struct {
 	cads  *store.CADownloadStore
 	tags  tagclient.Client
 	sched scheduler.Scheduler
 }
 
-// NewAgentTransferer creates a new AgentTransferer.
-func NewAgentTransferer(
+// NewReadOnlyTransferer creates a new ReadOnlyTransferer.
+func NewReadOnlyTransferer(
 	cads *store.CADownloadStore,
 	tags tagclient.Client,
-	sched scheduler.Scheduler) *AgentTransferer {
+	sched scheduler.Scheduler) *ReadOnlyTransferer {
 
-	return &AgentTransferer{cads, tags, sched}
+	return &ReadOnlyTransferer{cads, tags, sched}
 }
 
 // Stat returns blob info from local cache, and triggers download if the blob is
 // not available locally.
-func (t *AgentTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
+func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
 	fi, err := t.cads.Cache().GetFileStat(d.Hex())
 	if os.IsNotExist(err) {
 		if err := t.sched.Download(namespace, d.Hex()); err != nil {
@@ -49,7 +49,7 @@ func (t *AgentTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo,
 }
 
 // Download downloads blobs as torrent.
-func (t *AgentTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
+func (t *ReadOnlyTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
 	f, err := t.cads.Cache().GetFileReader(d.Hex())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -68,12 +68,12 @@ func (t *AgentTransferer) Download(namespace string, d core.Digest) (store.FileR
 }
 
 // Upload uploads blobs to a torrent network.
-func (t *AgentTransferer) Upload(namespace string, d core.Digest, blob store.FileReader) error {
+func (t *ReadOnlyTransferer) Upload(namespace string, d core.Digest, blob store.FileReader) error {
 	return errors.New("unsupported operation")
 }
 
 // GetTag gets manifest digest for tag.
-func (t *AgentTransferer) GetTag(tag string) (core.Digest, error) {
+func (t *ReadOnlyTransferer) GetTag(tag string) (core.Digest, error) {
 	d, err := t.tags.Get(tag)
 	if err != nil {
 		if err == tagclient.ErrTagNotFound {
@@ -85,11 +85,11 @@ func (t *AgentTransferer) GetTag(tag string) (core.Digest, error) {
 }
 
 // PostTag is not supported.
-func (t *AgentTransferer) PostTag(tag string, d core.Digest) error {
+func (t *ReadOnlyTransferer) PostTag(tag string, d core.Digest) error {
 	return errors.New("not supported")
 }
 
 // ListTags is not supported.
-func (t *AgentTransferer) ListTags(prefix string) ([]string, error) {
+func (t *ReadOnlyTransferer) ListTags(prefix string) ([]string, error) {
 	return nil, errors.New("not supported")
 }

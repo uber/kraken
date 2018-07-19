@@ -13,25 +13,25 @@ import (
 	"github.com/docker/distribution/uuid"
 )
 
-// ProxyTransferer is a Transferer for proxy. Uploads/downloads blobs via the
+// ReadWriteTransferer is a Transferer for proxy. Uploads/downloads blobs via the
 // local origin cluster, and posts/gets tags via the local build-index.
-type ProxyTransferer struct {
+type ReadWriteTransferer struct {
 	tags          tagclient.Client
 	originCluster blobclient.ClusterClient
 	cas           *store.CAStore
 }
 
-// NewProxyTransferer creates a new ProxyTransferer.
-func NewProxyTransferer(
+// NewReadWriteTransferer creates a new ReadWriteTransferer.
+func NewReadWriteTransferer(
 	tags tagclient.Client,
 	originCluster blobclient.ClusterClient,
-	cas *store.CAStore) *ProxyTransferer {
+	cas *store.CAStore) *ReadWriteTransferer {
 
-	return &ProxyTransferer{tags, originCluster, cas}
+	return &ReadWriteTransferer{tags, originCluster, cas}
 }
 
 // Stat returns blob info from origin cluster or local cache.
-func (t *ProxyTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
+func (t *ReadWriteTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
 	fi, err := t.cas.GetCacheFileStat(d.Hex())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -42,7 +42,7 @@ func (t *ProxyTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo,
 	return core.NewBlobInfo(fi.Size()), nil
 }
 
-func (t *ProxyTransferer) originStat(namespace string, d core.Digest) (*core.BlobInfo, error) {
+func (t *ReadWriteTransferer) originStat(namespace string, d core.Digest) (*core.BlobInfo, error) {
 	bi, err := t.originCluster.Stat(namespace, d)
 	if err != nil {
 		// `docker push` stats blobs before uploading them. If the blob is not
@@ -60,7 +60,7 @@ func (t *ProxyTransferer) originStat(namespace string, d core.Digest) (*core.Blo
 
 // Download downloads the blob of name into the file store and returns a reader
 // to the newly downloaded file.
-func (t *ProxyTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
+func (t *ReadWriteTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
 	blob, err := t.cas.GetCacheFileReader(d.Hex())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -71,7 +71,7 @@ func (t *ProxyTransferer) Download(namespace string, d core.Digest) (store.FileR
 	return blob, nil
 }
 
-func (t *ProxyTransferer) downloadFromOrigin(namespace string, d core.Digest) (store.FileReader, error) {
+func (t *ReadWriteTransferer) downloadFromOrigin(namespace string, d core.Digest) (store.FileReader, error) {
 	tmp := fmt.Sprintf("%s.%s", d.Hex(), uuid.Generate().String())
 	if err := t.cas.CreateUploadFile(tmp, 0); err != nil {
 		return nil, fmt.Errorf("create upload file: %s", err)
@@ -98,14 +98,14 @@ func (t *ProxyTransferer) downloadFromOrigin(namespace string, d core.Digest) (s
 }
 
 // Upload uploads blob to the origin cluster.
-func (t *ProxyTransferer) Upload(
+func (t *ReadWriteTransferer) Upload(
 	namespace string, d core.Digest, blob store.FileReader) error {
 
 	return t.originCluster.UploadBlob(namespace, d, blob)
 }
 
 // GetTag returns the manifest digest for tag.
-func (t *ProxyTransferer) GetTag(tag string) (core.Digest, error) {
+func (t *ReadWriteTransferer) GetTag(tag string) (core.Digest, error) {
 	d, err := t.tags.Get(tag)
 	if err != nil {
 		if err == tagclient.ErrTagNotFound {
@@ -117,7 +117,7 @@ func (t *ProxyTransferer) GetTag(tag string) (core.Digest, error) {
 }
 
 // PostTag uploads d as the manifest digest for tag.
-func (t *ProxyTransferer) PostTag(tag string, d core.Digest) error {
+func (t *ReadWriteTransferer) PostTag(tag string, d core.Digest) error {
 	if err := t.tags.PutAndReplicate(tag, d); err != nil {
 		return fmt.Errorf("put and replicate tag: %s", err)
 	}
@@ -125,6 +125,6 @@ func (t *ProxyTransferer) PostTag(tag string, d core.Digest) error {
 }
 
 // ListTags lists all tags with prefix.
-func (t *ProxyTransferer) ListTags(prefix string) ([]string, error) {
+func (t *ReadWriteTransferer) ListTags(prefix string) ([]string, error) {
 	return t.tags.List(prefix)
 }
