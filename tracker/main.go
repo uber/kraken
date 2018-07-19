@@ -54,7 +54,5 @@ func main() {
 	}()
 
 	log.Info("Starting nginx...")
-	log.Fatal(nginx.Run("kraken-tracker", map[string]interface{}{
-		"port": config.Port,
-	}))
+	log.Fatal(nginx.Run(config.Nginx, config.Port))
 }

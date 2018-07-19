@@ -17,18 +17,33 @@ func abspath(name string) (string, error) {
 	return filepath.Abs(filepath.Join(_configDir, name))
 }
 
+// Config defines nginx configuration.
+type Config struct {
+	Name     string `yaml:"name"`
+	CacheDir string `yaml:"cache_dir"`
+}
+
 // Run runs nginx configuration.
-func Run(name string, args map[string]interface{}) error {
-	site, err := populateTemplate(name, args)
-	if err != nil {
-		return fmt.Errorf("populate %s: %s", name, err)
+func Run(config Config, port int) error {
+	if err := os.MkdirAll(config.CacheDir, 0775); err != nil {
+		return err
 	}
-	src, err := populateTemplate("base", map[string]interface{}{"site": string(site)})
+
+	site, err := populateTemplate(config.Name, map[string]interface{}{
+		"cache_dir": config.CacheDir,
+		"port":      port,
+	})
+	if err != nil {
+		return fmt.Errorf("populate site: %s", err)
+	}
+	src, err := populateTemplate("base", map[string]interface{}{
+		"site": string(site),
+	})
 	if err != nil {
 		return fmt.Errorf("populate base: %s", err)
 	}
 
-	conf := filepath.Join("/etc/nginx", name)
+	conf := filepath.Join("/etc/nginx", config.Name)
 	if err := ioutil.WriteFile(conf, src, 0755); err != nil {
 		return fmt.Errorf("write src: %s", err)
 	}
