@@ -7,6 +7,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/mocks/tracker/announceclient"
+	"code.uber.internal/infra/kraken/tracker/announceclient"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
@@ -78,7 +79,7 @@ func TestAnnouncerAnnounceUpdatesInterval(t *testing.T) {
 	interval := 10 * time.Second
 	peers := []*core.PeerInfo{core.PeerInfoFixture()}
 
-	mocks.client.EXPECT().Announce(name, hash, false).Return(peers, interval, nil)
+	mocks.client.EXPECT().Announce(name, hash, false, announceclient.V1).Return(peers, interval, nil)
 
 	result, err := announcer.Announce(name, hash, false)
 	require.NoError(err)
@@ -110,7 +111,7 @@ func TestAnnouncerAnnounceErr(t *testing.T) {
 	hash := core.InfoHashFixture()
 	err := errors.New("some error")
 
-	mocks.client.EXPECT().Announce(name, hash, false).Return(nil, time.Duration(0), err)
+	mocks.client.EXPECT().Announce(name, hash, false, announceclient.V1).Return(nil, time.Duration(0), err)
 
 	_, aErr := announcer.Announce(name, hash, false)
 	require.Equal(err, aErr)
