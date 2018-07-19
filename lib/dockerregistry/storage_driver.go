@@ -73,20 +73,20 @@ func (factory *krakenStorageDriverFactory) Create(
 	params map[string]interface{}) (storagedriver.StorageDriver, error) {
 
 	// Common parameters.
-	component := getParam(params, "component").(string)
+	constructor := getParam(params, "constructor").(string)
 	config := getParam(params, "config").(Config)
 	transferer := getParam(params, "transferer").(transfer.ImageTransferer)
 	metrics := getParam(params, "metrics").(tally.Scope)
 
-	switch component {
-	case _proxy:
+	switch constructor {
+	case _rw:
 		castore := getParam(params, "castore").(*store.CAStore)
 		return NewReadWriteStorageDriver(config, castore, transferer, metrics), nil
-	case _agent:
+	case _ro:
 		blobstore := getParam(params, "blobstore").(BlobStore)
 		return NewReadOnlyStorageDriver(config, blobstore, transferer, metrics), nil
 	default:
-		return nil, fmt.Errorf("unknown component %s", component)
+		return nil, fmt.Errorf("unknown constructor %s", constructor)
 	}
 }
 

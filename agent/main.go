@@ -79,9 +79,9 @@ func main() {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
 
-	transferer := transfer.NewAgentTransferer(cads, tagclient.New(config.BuildIndex), sched)
+	transferer := transfer.NewReadOnlyTransferer(cads, tagclient.New(config.BuildIndex), sched)
 
-	registry, err := config.Registry.Build(config.Registry.AgentParameters(transferer, cads, stats))
+	registry, err := config.Registry.Build(config.Registry.ReadOnlyParameters(transferer, cads, stats))
 	if err != nil {
 		log.Fatalf("Failed to init registry: %s", err)
 	}

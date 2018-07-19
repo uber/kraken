@@ -21,7 +21,7 @@ type agentTransfererMocks struct {
 	sched *mockscheduler.MockScheduler
 }
 
-func newAgentTransfererMocks(t *testing.T) (*agentTransfererMocks, func()) {
+func newReadOnlyTransfererMocks(t *testing.T) (*agentTransfererMocks, func()) {
 	var cleanup testutil.Cleanup
 
 	cads, c := store.CADownloadStoreFixture()
@@ -37,14 +37,14 @@ func newAgentTransfererMocks(t *testing.T) (*agentTransfererMocks, func()) {
 	return &agentTransfererMocks{cads, tags, sched}, cleanup.Run
 }
 
-func (m *agentTransfererMocks) new() *AgentTransferer {
-	return NewAgentTransferer(m.cads, m.tags, m.sched)
+func (m *agentTransfererMocks) new() *ReadOnlyTransferer {
+	return NewReadOnlyTransferer(m.cads, m.tags, m.sched)
 }
 
-func TestAgentTransfererDownloadCachesBlob(t *testing.T) {
+func TestReadOnlyTransfererDownloadCachesBlob(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newAgentTransfererMocks(t)
+	mocks, cleanup := newReadOnlyTransfererMocks(t)
 	defer cleanup()
 
 	transferer := mocks.new()
@@ -68,10 +68,10 @@ func TestAgentTransfererDownloadCachesBlob(t *testing.T) {
 	}
 }
 
-func TestAgentTransfererStat(t *testing.T) {
+func TestReadOnlyTransfererStat(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newAgentTransfererMocks(t)
+	mocks, cleanup := newReadOnlyTransfererMocks(t)
 	defer cleanup()
 
 	transferer := mocks.new()
@@ -93,10 +93,10 @@ func TestAgentTransfererStat(t *testing.T) {
 	}
 }
 
-func TestAgentTransfererGetTag(t *testing.T) {
+func TestReadOnlyTransfererGetTag(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newAgentTransfererMocks(t)
+	mocks, cleanup := newReadOnlyTransfererMocks(t)
 	defer cleanup()
 
 	transferer := mocks.new()
@@ -111,10 +111,10 @@ func TestAgentTransfererGetTag(t *testing.T) {
 	require.Equal(manifest, d)
 }
 
-func TestAgentTransfererGetTagNotFound(t *testing.T) {
+func TestReadOnlyTransfererGetTagNotFound(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newAgentTransfererMocks(t)
+	mocks, cleanup := newReadOnlyTransfererMocks(t)
 	defer cleanup()
 
 	transferer := mocks.new()
