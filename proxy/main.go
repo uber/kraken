@@ -37,6 +37,8 @@ func main() {
 	}
 	defer closer.Close()
 
+	go metrics.EmitVersion(stats)
+
 	cas, err := store.NewCAStore(config.CAStore, stats)
 	if err != nil {
 		log.Fatalf("Failed to create store: %s", err)

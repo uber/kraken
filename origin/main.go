@@ -87,6 +87,8 @@ func main() {
 	}
 	defer closer.Close()
 
+	go metrics.EmitVersion(stats)
+
 	stats = stats.Tagged(map[string]string{
 		"origin": hostname,
 	})
