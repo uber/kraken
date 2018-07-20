@@ -11,6 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/tracker/trackerserver"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
+
 	"github.com/andres-erbsen/clock"
 )
 
@@ -31,6 +32,8 @@ func main() {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}
 	defer closer.Close()
+
+	go metrics.EmitVersion(stats)
 
 	peerStore, err := peerstore.NewRedisStore(config.PeerStore.Redis, clock.New())
 	if err != nil {

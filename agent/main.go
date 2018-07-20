@@ -57,6 +57,8 @@ func main() {
 	}
 	defer closer.Close()
 
+	go metrics.EmitVersion(stats)
+
 	pctx, err := core.NewPeerContext(
 		config.PeerIDFactory, *zone, *cluster, *peerIP, *peerPort, false)
 	if err != nil {

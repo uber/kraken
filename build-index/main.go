@@ -44,6 +44,8 @@ func main() {
 	}
 	defer closer.Close()
 
+	go metrics.EmitVersion(stats)
+
 	ss, err := store.NewSimpleStore(config.Store, stats)
 	if err != nil {
 		log.Fatalf("Error creating simple store: %s", err)
