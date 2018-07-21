@@ -89,10 +89,6 @@ func main() {
 
 	go metrics.EmitVersion(stats)
 
-	stats = stats.Tagged(map[string]string{
-		"origin": hostname,
-	})
-
 	cas, err := store.NewCAStore(config.CAStore, stats)
 	if err != nil {
 		log.Fatalf("Failed to create castore: %s", err)
