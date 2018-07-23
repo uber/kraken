@@ -23,8 +23,15 @@ func TestTorrentInfoPercentDownloaded(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("%d%%", test.expected), func(t *testing.T) {
+			require := require.New(t)
+
 			info := NewTorrentInfo(mi, test.bitfield)
-			require.Equal(t, test.expected, info.PercentDownloaded())
+			require.Equal(test.expected, info.PercentDownloaded())
+			require.Equal(test.bitfield, info.Bitfield())
+			require.Equal(int64(25), info.MaxPieceLength())
+			require.Equal(mi.InfoHash, info.InfoHash())
+			require.Equal(mi.Name(), info.Name())
+			require.Equal(mi.InfoHash.HexString(), info.String())
 		})
 	}
 }
