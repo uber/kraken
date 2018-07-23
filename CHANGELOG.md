@@ -1,3 +1,7 @@
+0.0.3 (unreleased)
+====
+- Fix build-index preprod M3 port (@codyg)
+
 0.0.2 (2018-07-23)
 ====
 - Fix version emitting (@codyg)
