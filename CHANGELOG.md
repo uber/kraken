@@ -1,6 +1,7 @@
-0.0.3 (unreleased)
+unreleased
 ====
 - Fix build-index preprod M3 port (@codyg)
+- Switch /var/run usage to /tmp (@codyg)
 
 0.0.2 (2018-07-23)
 ====
