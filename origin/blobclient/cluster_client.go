@@ -80,8 +80,10 @@ func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob io.Read
 	if err != nil {
 		return fmt.Errorf("resolve clients: %s", err)
 	}
-	// Shuffle clients to balance load.
-	shuffle(clients)
+
+	// We prefer the origin with highest hashing score so the first origin will handle
+	// replication to origins with lower score. This is because we want to reduce upload
+	// conflicts between local replicas.
 	for _, client := range clients {
 		err = client.UploadBlob(namespace, d, blob)
 		if httputil.IsNetworkError(err) {

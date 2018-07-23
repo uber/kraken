@@ -21,11 +21,15 @@ type uploader interface {
 }
 
 func runChunkedUpload(u uploader, d core.Digest, blob io.Reader, chunkSize int64) error {
+	if err := runChunkedUploadHelper(u, d, blob, chunkSize); err != nil && !httputil.IsConflict(err) {
+		return err
+	}
+	return nil
+}
+
+func runChunkedUploadHelper(u uploader, d core.Digest, blob io.Reader, chunkSize int64) error {
 	uid, err := u.start(d)
 	if err != nil {
-		if httputil.IsConflict(err) {
-			return nil
-		}
 		return err
 	}
 	var pos int64
