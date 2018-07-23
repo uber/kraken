@@ -1,4 +1,4 @@
-0.0.2 (unreleased)
+0.0.2 (2018-07-23)
 ====
 - Fix version emitting (@codyg)
 
