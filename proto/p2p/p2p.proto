@@ -23,6 +23,10 @@ message BitfieldMessage {
     string peerID        = 4;
     bytes  bitfieldBytes = 5;
     string namespace     = 6;
+
+    // remoteBitfieldBytes contains the binary sets of pieces downloaded of
+    // all peers that the sender is currently connected to.
+    map<string, bytes> remoteBitfieldBytes = 7;
 }
 
 // Requests a piece of the given index. Note: offset and length are unused fields

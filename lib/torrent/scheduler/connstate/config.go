@@ -9,6 +9,10 @@ type Config struct {
 	// Scheduler will maintain at once for each torrent.
 	MaxOpenConnectionsPerTorrent int `yaml:"max_open_conn"`
 
+	// MaxMutualConnections is the maximum number of mutual connections a peer
+	// can have and still connect with us.
+	MaxMutualConnections int `yaml:"max_mutual_conn"`
+
 	// DisableBlacklist disables the blacklisting of peers. Should only be used
 	// for testing purposes.
 	DisableBlacklist bool `yaml:"disable_blacklist"`
@@ -20,6 +24,10 @@ type Config struct {
 func (c Config) applyDefaults() Config {
 	if c.MaxOpenConnectionsPerTorrent == 0 {
 		c.MaxOpenConnectionsPerTorrent = 10
+	}
+	// Defaults to no mutual connection limit.
+	if c.MaxMutualConnections == 0 {
+		c.MaxMutualConnections = c.MaxOpenConnectionsPerTorrent
 	}
 	if c.BlacklistDuration == 0 {
 		c.BlacklistDuration = 30 * time.Second
