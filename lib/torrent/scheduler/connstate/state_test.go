@@ -86,9 +86,9 @@ func TestStateAddPendingPreventsDuplicates(t *testing.T) {
 	p := core.PeerIDFixture()
 	h := core.InfoHashFixture()
 
-	require.NoError(s.AddPending(p, h))
+	require.NoError(s.AddPending(p, h, nil))
 
-	require.Equal(ErrConnAlreadyPending, s.AddPending(p, h))
+	require.Equal(ErrConnAlreadyPending, s.AddPending(p, h, nil))
 }
 
 func TestStateAddPendingReservesCapacity(t *testing.T) {
@@ -102,9 +102,9 @@ func TestStateAddPendingReservesCapacity(t *testing.T) {
 	h := core.InfoHashFixture()
 
 	for i := 0; i < config.MaxOpenConnectionsPerTorrent; i++ {
-		require.NoError(s.AddPending(core.PeerIDFixture(), h))
+		require.NoError(s.AddPending(core.PeerIDFixture(), h, nil))
 	}
-	require.Equal(ErrTorrentAtCapacity, s.AddPending(core.PeerIDFixture(), h))
+	require.Equal(ErrTorrentAtCapacity, s.AddPending(core.PeerIDFixture(), h, nil))
 }
 
 func TestStateDeletePendingAllowsFutureAddPending(t *testing.T) {
@@ -115,9 +115,9 @@ func TestStateDeletePendingAllowsFutureAddPending(t *testing.T) {
 	p := core.PeerIDFixture()
 	h := core.InfoHashFixture()
 
-	require.NoError(s.AddPending(p, h))
+	require.NoError(s.AddPending(p, h, nil))
 	s.DeletePending(p, h)
-	require.NoError(s.AddPending(p, h))
+	require.NoError(s.AddPending(p, h, nil))
 }
 
 func TestStateDeletePendingFreesCapacity(t *testing.T) {
@@ -129,10 +129,10 @@ func TestStateDeletePendingFreesCapacity(t *testing.T) {
 	p1 := core.PeerIDFixture()
 	p2 := core.PeerIDFixture()
 
-	require.NoError(s.AddPending(p1, h))
-	require.Equal(ErrTorrentAtCapacity, s.AddPending(p2, h))
+	require.NoError(s.AddPending(p1, h, nil))
+	require.Equal(ErrTorrentAtCapacity, s.AddPending(p2, h, nil))
 	s.DeletePending(p1, h)
-	require.NoError(s.AddPending(p2, h))
+	require.NoError(s.AddPending(p2, h, nil))
 }
 
 func TestStateMovePendingToActivePreventsFuturePending(t *testing.T) {
@@ -143,9 +143,9 @@ func TestStateMovePendingToActivePreventsFuturePending(t *testing.T) {
 	c, cleanup := conn.Fixture()
 	defer cleanup()
 
-	require.NoError(s.AddPending(c.PeerID(), c.InfoHash()))
+	require.NoError(s.AddPending(c.PeerID(), c.InfoHash(), nil))
 	require.NoError(s.MovePendingToActive(c))
-	require.Equal(ErrConnAlreadyActive, s.AddPending(c.PeerID(), c.InfoHash()))
+	require.Equal(ErrConnAlreadyActive, s.AddPending(c.PeerID(), c.InfoHash(), nil))
 }
 
 func TestStateMovePendingToActiveRejectsNonPendingConns(t *testing.T) {
@@ -158,7 +158,7 @@ func TestStateMovePendingToActiveRejectsNonPendingConns(t *testing.T) {
 
 	require.Equal(ErrInvalidActiveTransition, s.MovePendingToActive(c))
 
-	require.NoError(s.AddPending(c.PeerID(), c.InfoHash()))
+	require.NoError(s.AddPending(c.PeerID(), c.InfoHash(), nil))
 	require.NoError(s.MovePendingToActive(c))
 	require.Equal(ErrInvalidActiveTransition, s.MovePendingToActive(c))
 }
@@ -171,7 +171,7 @@ func TestStateMovePendingToActiveRejectsClosedConns(t *testing.T) {
 	c, cleanup := conn.Fixture()
 	defer cleanup()
 
-	require.NoError(s.AddPending(c.PeerID(), c.InfoHash()))
+	require.NoError(s.AddPending(c.PeerID(), c.InfoHash(), nil))
 	c.Close()
 	require.Equal(ErrConnClosed, s.MovePendingToActive(c))
 }
@@ -186,11 +186,11 @@ func TestStateDeleteActiveFreesCapacity(t *testing.T) {
 
 	p2 := core.PeerIDFixture()
 
-	require.NoError(s.AddPending(c.PeerID(), c.InfoHash()))
+	require.NoError(s.AddPending(c.PeerID(), c.InfoHash(), nil))
 	require.NoError(s.MovePendingToActive(c))
-	require.Equal(ErrTorrentAtCapacity, s.AddPending(p2, c.InfoHash()))
+	require.Equal(ErrTorrentAtCapacity, s.AddPending(p2, c.InfoHash(), nil))
 	s.DeleteActive(c)
-	require.NoError(s.AddPending(p2, c.InfoHash()))
+	require.NoError(s.AddPending(p2, c.InfoHash(), nil))
 }
 
 func TestStateDeleteActiveNoopsWhenConnIsNotActive(t *testing.T) {
@@ -201,11 +201,11 @@ func TestStateDeleteActiveNoopsWhenConnIsNotActive(t *testing.T) {
 	c, cleanup := conn.Fixture()
 	defer cleanup()
 
-	require.NoError(s.AddPending(core.PeerIDFixture(), c.InfoHash()))
+	require.NoError(s.AddPending(core.PeerIDFixture(), c.InfoHash(), nil))
 
 	s.DeleteActive(c)
 
-	require.Equal(ErrTorrentAtCapacity, s.AddPending(core.PeerIDFixture(), c.InfoHash()))
+	require.Equal(ErrTorrentAtCapacity, s.AddPending(core.PeerIDFixture(), c.InfoHash(), nil))
 }
 
 func TestStateActiveConns(t *testing.T) {
@@ -220,7 +220,7 @@ func TestStateActiveConns(t *testing.T) {
 
 		conns[c.PeerID()] = c
 
-		require.NoError(s.AddPending(c.PeerID(), c.InfoHash()))
+		require.NoError(s.AddPending(c.PeerID(), c.InfoHash(), nil))
 		require.NoError(s.MovePendingToActive(c))
 	}
 
@@ -234,4 +234,23 @@ func TestStateActiveConns(t *testing.T) {
 		s.DeleteActive(c)
 	}
 	require.Empty(s.ActiveConns())
+}
+
+func TestMaxMutualConns(t *testing.T) {
+	require := require.New(t)
+
+	mutualConnLimit := 5
+	s := testState(Config{
+		MaxMutualConnections: mutualConnLimit, MaxOpenConnectionsPerTorrent: 20}, clock.New())
+
+	neighbors := make([]core.PeerID, 10)
+	h := core.InfoHashFixture()
+	for i := 0; i < 10; i++ {
+		peerID := core.PeerIDFixture()
+		neighbors[i] = peerID
+		require.NoError(s.AddPending(peerID, h, nil))
+	}
+	require.Equal(s.AddPending(core.PeerIDFixture(), h, neighbors), ErrTooManyMutualConns)
+	require.Equal(s.AddPending(core.PeerIDFixture(), h, neighbors[:mutualConnLimit+1]), ErrTooManyMutualConns)
+	require.NoError(s.AddPending(core.PeerIDFixture(), h, neighbors[:mutualConnLimit]))
 }
