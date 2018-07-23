@@ -1,7 +1,7 @@
 proxy_cache_path {{.cache_dir}}/tags keys_zone=tags:20m;
 
 upstream build-index {
-  server unix:/var/run/udocker/kraken-build-index.sock;
+  server unix:/tmp/kraken-build-index.sock;
 }
 
 server {
