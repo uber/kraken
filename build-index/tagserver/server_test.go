@@ -234,7 +234,12 @@ func TestListRepository(t *testing.T) {
 	repo := "uber-usi/labrat"
 	tags := []string{"latest", "0000", "0001"}
 
-	mocks.backendClient.EXPECT().List(repo+"/_manifests/tags").Return(tags, nil)
+	var names []string
+	for _, tag := range tags {
+		names = append(names, repo+":"+tag)
+	}
+
+	mocks.backendClient.EXPECT().List(repo+"/_manifests/tags").Return(names, nil)
 
 	result, err := client.ListRepository(repo)
 	require.NoError(err)

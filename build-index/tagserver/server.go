@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"code.uber.internal/infra/kraken/build-index/tagclient"
@@ -251,9 +252,19 @@ func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return handler.Errorf("backend manager: %s", err)
 	}
-	tags, err := client.List(path.Join(repo, "_manifests/tags"))
+	names, err := client.List(path.Join(repo, "_manifests/tags"))
 	if err != nil {
 		return err
+	}
+	var tags []string
+	for _, name := range names {
+		// Strip repo prefix.
+		parts := strings.Split(name, ":")
+		if len(parts) != 2 {
+			log.With("name", name).Warn("Repo list skipping name, expected repo:tag format")
+			continue
+		}
+		tags = append(tags, parts[1])
 	}
 	if err := json.NewEncoder(w).Encode(&tags); err != nil {
 		return handler.Errorf("json encode: %s", err)

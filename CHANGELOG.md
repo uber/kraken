@@ -1,5 +1,6 @@
 unreleased
 ====
+- Make tag list backwards compatible (@codyg)
 
 0.0.3 (2018-07-23)
 ====
