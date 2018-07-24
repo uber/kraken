@@ -1,5 +1,8 @@
 unreleased
 ====
+
+0.0.3 (2018-07-23)
+====
 - Fix build-index preprod M3 port (@codyg)
 - Switch /var/run usage to /tmp (@codyg)
 - Remove shuffling for upload origin location and add StatusConflict handling in origin uploader (@evelynl)
