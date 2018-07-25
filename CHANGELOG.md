@@ -1,3 +1,7 @@
+unreleased
+====
+- Add new wbu2 kraken_herd hosts to hash node config (@codyg)
+
 0.0.4 (2018-07-24)
 ====
 - Make tag list backwards compatible (@codyg)
