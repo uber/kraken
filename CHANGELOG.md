@@ -1,6 +1,8 @@
-unreleased
+0.0.4 (2018-07-24)
 ====
 - Make tag list backwards compatible (@codyg)
+- Replace SJC1/DCA1 origin hosts (@yiran)
+- Add release tooling (@codyg)
 
 0.0.3 (2018-07-23)
 ====
