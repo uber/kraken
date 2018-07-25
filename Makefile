@@ -84,6 +84,12 @@ include go-build/rules.mk
 go-build/rules.mk:
 	git submodule update --init
 
+# ==== TOOLS ====
+
+# Creates a release summary containing the build revisions of each component for the specified version.
+releases/%:
+	./scripts/release.sh $(notdir $@)
+
 # ==== INTEGRATION ====
 
 BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) $(PROJECT_ROOT)/$(dir $@)
