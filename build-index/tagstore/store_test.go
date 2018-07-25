@@ -48,8 +48,8 @@ func newStoreMocks(t *testing.T) (*storeMocks, func()) {
 	return &storeMocks{ctrl, ss, backends, backendClient, writeBackManager}, cleanup.Run
 }
 
-func (m *storeMocks) new() Store {
-	return New(tally.NoopScope, m.ss, m.backends, m.writeBackManager)
+func (m *storeMocks) new(config Config) Store {
+	return New(config, tally.NoopScope, m.ss, m.backends, m.writeBackManager)
 }
 
 func checkConcurrentGets(t *testing.T, store Store, tag string, expected core.Digest) {
@@ -71,12 +71,33 @@ func TestPutAndGetFromDisk(t *testing.T) {
 	mocks, cleanup := newStoreMocks(t)
 	defer cleanup()
 
-	store := mocks.new()
+	store := mocks.new(Config{})
 
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
 
 	mocks.writeBackManager.EXPECT().Add(
+		writeback.MatchTask(writeback.NewTask(tag, tag))).Return(nil)
+
+	require.NoError(store.Put(tag, digest, 0))
+
+	result, err := store.Get(tag)
+	require.NoError(err)
+	require.Equal(digest, result)
+}
+
+func TestPutAndGetFromDiskWriteThrough(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newStoreMocks(t)
+	defer cleanup()
+
+	store := mocks.new(Config{WriteThrough: true})
+
+	tag := core.TagFixture()
+	digest := core.DigestFixture()
+
+	mocks.writeBackManager.EXPECT().SyncExec(
 		writeback.MatchTask(writeback.NewTask(tag, tag))).Return(nil)
 
 	require.NoError(store.Put(tag, digest, 0))
@@ -92,7 +113,7 @@ func TestGetCachesOnDisk(t *testing.T) {
 	mocks, cleanup := newStoreMocks(t)
 	defer cleanup()
 
-	store := mocks.new()
+	store := mocks.new(Config{})
 
 	tag := core.TagFixture()
 	digest := core.DigestFixture()

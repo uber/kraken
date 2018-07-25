@@ -42,6 +42,7 @@ type Store interface {
 // 1. On-disk file store: persists tags for availability / write-back purposes.
 // 2. Remote storage: durable tag storage.
 type tagStore struct {
+	config           Config
 	fs               FileStore
 	backends         *backend.Manager
 	writeBackManager persistedretry.Manager
@@ -49,6 +50,7 @@ type tagStore struct {
 
 // New creates a new Store.
 func New(
+	config Config,
 	stats tally.Scope,
 	fs FileStore,
 	backends *backend.Manager,
@@ -59,6 +61,7 @@ func New(
 	})
 
 	return &tagStore{
+		config:           config,
 		fs:               fs,
 		backends:         backends,
 		writeBackManager: writeBackManager,
@@ -72,9 +75,16 @@ func (s *tagStore) Put(tag string, d core.Digest, writeBackDelay time.Duration) 
 	if _, err := s.fs.SetCacheFileMetadata(tag, metadata.NewPersist(true)); err != nil {
 		return fmt.Errorf("set persist metadata: %s", err)
 	}
+
 	task := writeback.NewTaskWithDelay(tag, tag, writeBackDelay)
-	if err := s.writeBackManager.Add(task); err != nil {
-		return fmt.Errorf("add write-back task: %s", err)
+	if s.config.WriteThrough {
+		if err := s.writeBackManager.SyncExec(task); err != nil {
+			return fmt.Errorf("sync exec write-back task: %s", err)
+		}
+	} else {
+		if err := s.writeBackManager.Add(task); err != nil {
+			return fmt.Errorf("add write-back task: %s", err)
+		}
 	}
 	return nil
 }
