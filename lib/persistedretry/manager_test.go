@@ -345,3 +345,22 @@ func TestManagerNoopsOnPendingTaskConflicts(t *testing.T) {
 
 	require.NoError(m.Add(task))
 }
+
+func TestManagerExec(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newManagerMocks(t)
+	defer cleanup()
+
+	task := mocks.task()
+
+	mocks.store.EXPECT().GetPending().Return(nil, nil)
+
+	m, err := mocks.new()
+	require.NoError(err)
+	defer m.Close()
+
+	mocks.executor.EXPECT().Exec(task).Return(nil)
+
+	require.NoError(m.SyncExec(task))
+}

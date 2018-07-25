@@ -2,6 +2,7 @@ package main
 
 import (
 	"code.uber.internal/infra/kraken/build-index/tagserver"
+	"code.uber.internal/infra/kraken/build-index/tagstore"
 	"code.uber.internal/infra/kraken/build-index/tagtype"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/hostlist"
@@ -28,6 +29,7 @@ type Config struct {
 	Origin         string                       `yaml:"origin"`
 	LocalDB        localdb.Config               `yaml:"localdb"`
 	LocalReplicas  hostlist.Config              `yaml:"local_replicas"`
+	TagStore       tagstore.Config              `yaml:"tag_store"`
 	Store          store.SimpleStoreConfig      `yaml:"store"`
 	WriteBack      persistedretry.Config        `yaml:"writeback"`
 	Nginx          nginx.Config                 `yaml:"nginx"`

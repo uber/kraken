@@ -258,3 +258,15 @@ func (m *MockManager) Close() {
 func (mr *MockManagerMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockManager)(nil).Close))
 }
+
+// SyncExec mocks base method
+func (m *MockManager) SyncExec(arg0 persistedretry.Task) error {
+	ret := m.ctrl.Call(m, "SyncExec", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SyncExec indicates an expected call of SyncExec
+func (mr *MockManagerMockRecorder) SyncExec(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncExec", reflect.TypeOf((*MockManager)(nil).SyncExec), arg0)
+}

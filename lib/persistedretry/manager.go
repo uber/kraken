@@ -19,6 +19,7 @@ var ErrManagerClosed = errors.New("manager closed")
 type Manager interface {
 	Add(Task) error
 	Close()
+	SyncExec(Task) error
 }
 
 type queue struct {
@@ -134,6 +135,18 @@ func (m *manager) Add(t Task) error {
 			return fmt.Errorf("enqueue: %s", err)
 		}
 	}
+	return nil
+}
+
+// SyncExec executes the task synchronously.
+// Tasks will NOT be added to the retry queue if fail.
+func (m *manager) SyncExec(t Task) error {
+	timer := m.stats.Timer("exec").Start()
+
+	if err := m.executor.Exec(t); err != nil {
+		return fmt.Errorf("exec: %s", err)
+	}
+	timer.Stop()
 	return nil
 }
 
