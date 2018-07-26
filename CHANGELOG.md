@@ -1,8 +1,10 @@
-unreleased
+0.0.5 (2018-07-26)
 ====
+- Add writeback flag to build-index (@evelynl)
 - Add new wbu2 kraken_herd hosts to hash node config (@codyg)
+- Fix IRN redis addr (@codyg)
 - Add acceptance testing tools (@codyg)
-- Add off-by-default mutual connection threshold to agent (@eoakes)
+- Add off-by-default mutual connection threshold to scheduler (@eoakes)
 
 0.0.4 (2018-07-24)
 ====
