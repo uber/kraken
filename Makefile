@@ -86,9 +86,50 @@ go-build/rules.mk:
 
 # ==== TOOLS ====
 
-# Creates a release summary containing the build revisions of each component for the specified version.
+# Creates a release summary containing the build revisions of each component
+# for the specified version.
 releases/%:
 	./scripts/release.sh $(notdir $@)
+
+# Below are simple acceptance tests for quickly checking the validity of newly
+# deployed components in production. They detect rudimentary errors, such as
+# containers in a crash loop, push failures, invalid tag lists, etc.
+#
+# WARNING: Manually verify that what you see is what you expect!
+
+.PHONY: acceptance/%
+
+# Runs acceptance tests on an origin host.
+acceptance/origin:
+	@test $(host)
+	@test $(registry) # Registry which test image is marked under on host.
+	@test $(repo)
+	@test $(tag)
+	@test $(namespace)
+	ssh $(host) 'bash -s origin' < ./test/acceptance/health.sh
+	ssh $(host) 'bash -s proxy' < ./test/acceptance/health.sh
+	ssh $(host) "bash -s $(namespace)" < ./test/acceptance/origin.sh
+	ssh $(host) "bash -s $(registry) $(repo) $(tag)" < ./test/acceptance/proxy.sh
+
+# Runs acceptance tests on a tracker host.
+acceptance/tracker:
+	@test $(host)
+	@test $(repo)
+	@test $(tag)
+	@test $(namespace)
+	@test $(digest)
+	ssh $(host) 'bash -s tracker' < ./test/acceptance/health.sh
+	ssh $(host) 'bash -s build-index' < ./test/acceptance/health.sh
+	ssh $(host) "bash -s $(repo) $(tag)" < ./test/acceptance/build-index.sh
+	ssh $(host) "bash -s $(namespace) $(digest)" < ./test/acceptance/tracker.sh
+
+# Runs acceptance tests on an agent host.
+acceptance/agent:
+	@test $(host)
+	@test $(repo)
+	@test $(tag)
+	ssh $(host) 'bash -s agent' < ./test/acceptance/health.sh
+	ssh $(host) "bash -s $(repo) $(tag)" < ./test/acceptance/agent.sh
 
 # ==== INTEGRATION ====
 
@@ -156,7 +197,10 @@ runtest: docker_stop
 .PHONY: devcluster
 devcluster: $(LINUX_BINS) docker_stop
 	docker build -t kraken-devcluster:latest -f docker/devcluster/Dockerfile ./
-	docker run -d -p 5263:5263 -p 5367:5367 -p 7602:7602 -p 9003:9003 -p 8991:8991 --hostname localhost --name kraken-devcluster kraken-devcluster:latest
+	docker run -d \
+		-p 5263:5263 -p 5367:5367 -p 7602:7602 -p 9003:9003 -p 8991:8991 -p 8351:8351 \
+		--hostname localhost --name kraken-devcluster \
+		kraken-devcluster:latest
 	docker logs -f kraken-devcluster
 
 # ==== MOCKS ====
