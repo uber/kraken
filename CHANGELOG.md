@@ -1,6 +1,7 @@
 unreleased
 ====
 - Add new wbu2 kraken_herd hosts to hash node config (@codyg)
+- Add acceptance testing tools (@codyg)
 
 0.0.4 (2018-07-24)
 ====
