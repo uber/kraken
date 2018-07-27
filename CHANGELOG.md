@@ -1,3 +1,7 @@
+unreleased
+====
+- Enable agent registry fallback in IRN (@codyg)
+
 0.0.5 (2018-07-26)
 ====
 - Add writeback flag to build-index (@evelynl)
