@@ -89,7 +89,7 @@ go-build/rules.mk:
 # Creates a release summary containing the build revisions of each component
 # for the specified version.
 releases/%:
-	./scripts/release.sh $(notdir $@)
+	./scripts/release.sh $(subst releases/,,$@)
 
 # Below are simple acceptance tests for quickly checking the validity of newly
 # deployed components in production. They detect rudimentary errors, such as
