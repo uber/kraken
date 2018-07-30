@@ -54,7 +54,7 @@ while : ; do
         status=$?
         if [ $status -ne 0 ]; then
             echo "$c exited unexpectedly. Logs:"
-            if [[ "$c" -eq "kraken-tracker" ]]; then
+            if [[ "$c" = "kraken-tracker" ]]; then
                 c=kraken
             fi
             cat /var/log/udocker/$c/stdout.log

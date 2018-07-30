@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/uber-go/tally"
@@ -16,6 +17,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/metrics"
+	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -33,6 +35,7 @@ func main() {
 	peerIP := flag.String("peer_ip", "", "ip which peer will announce itself as")
 	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
 	agentServerPort := flag.Int("agent_server_port", 0, "port which agent server will listen on")
+	agentRegistryPort := flag.Int("agent_registry_port", 5055, "port which agent registry listens on")
 	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
 	zone := flag.String("zone", "", "zone/datacenter name")
 	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-sjc1)")
@@ -102,5 +105,16 @@ func main() {
 
 	go heartbeat(stats)
 
-	select {}
+	// Wipe log files created by the old nginx process which ran as root.
+	// TODO(codyg): Swap these with the v2 log files once they are deleted.
+	for _, name := range []string{
+		"/var/log/udocker/kraken-agent/nginx-access.log",
+		"/var/log/udocker/kraken-agent/nginx-error.log",
+	} {
+		if err := os.Remove(name); err != nil && !os.IsNotExist(err) {
+			log.Warnf("Could not remove old root-owned nginx log: %s", err)
+		}
+	}
+
+	log.Fatal(nginx.Run(config.Nginx, *agentRegistryPort))
 }
