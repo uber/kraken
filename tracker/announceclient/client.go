@@ -66,13 +66,14 @@ func (c *client) Announce(
 	if err != nil {
 		return nil, 0, fmt.Errorf("marshal request: %s", err)
 	}
-	var url string
-	if version == V1 {
-		url = fmt.Sprintf("http://%s/announce", c.addr)
-	} else {
+	method := "GET"
+	url := fmt.Sprintf("http://%s/announce", c.addr)
+	if version == V2 {
+		method = "POST"
 		url = fmt.Sprintf("http://%s/announce/%s", c.addr, h.String())
 	}
-	httpResp, err := httputil.Get(
+	httpResp, err := httputil.Send(
+		method,
 		url,
 		httputil.SendBody(bytes.NewReader(body)),
 		httputil.SendTimeout(30*time.Second),
