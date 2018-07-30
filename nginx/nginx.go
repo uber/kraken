@@ -2,6 +2,7 @@ package nginx
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -21,10 +22,18 @@ func abspath(name string) (string, error) {
 type Config struct {
 	Name     string `yaml:"name"`
 	CacheDir string `yaml:"cache_dir"`
+	Backup   string `yaml:"backup"`
 }
 
 // Run runs nginx configuration.
 func Run(config Config, port int) error {
+	if config.Name == "" {
+		return errors.New("invalid config: name required")
+	}
+	if config.CacheDir == "" {
+		return errors.New("invalid config: cache_dir required")
+	}
+
 	if err := os.MkdirAll(config.CacheDir, 0775); err != nil {
 		return err
 	}
@@ -32,6 +41,7 @@ func Run(config Config, port int) error {
 	site, err := populateTemplate(config.Name, map[string]interface{}{
 		"cache_dir": config.CacheDir,
 		"port":      port,
+		"backup":    config.Backup,
 	})
 	if err != nil {
 		return fmt.Errorf("populate site: %s", err)

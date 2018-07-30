@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/metrics"
+	"code.uber.internal/infra/kraken/nginx"
 )
 
 // Config defines agent configuration.
@@ -24,4 +25,5 @@ type Config struct {
 	Tracker         string                      `yaml:"tracker"`
 	BuildIndex      string                      `yaml:"build_index"`
 	AgentServer     agentserver.Config          `yaml:"agentserver"`
+	Nginx           nginx.Config                `yaml:"nginx"`
 }
