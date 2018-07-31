@@ -2,6 +2,7 @@ package tagreplication
 
 import (
 	"fmt"
+	"time"
 
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
@@ -23,6 +24,10 @@ func NewExecutor(
 	originCluster blobclient.ClusterClient,
 	tagClientProvider tagclient.Provider) *Executor {
 
+	stats = stats.Tagged(map[string]string{
+		"module": "tagreplicationexecutor",
+	})
+
 	return &Executor{stats, originCluster, tagClientProvider}
 }
 
@@ -35,7 +40,7 @@ func (e *Executor) Name() string {
 // cluster, then replicates the tag to the remote build-index.
 func (e *Executor) Exec(r persistedretry.Task) error {
 	t := r.(*Task)
-
+	start := time.Now()
 	remoteTagClient := e.tagClientProvider.Provide(t.Destination)
 
 	if ok, err := remoteTagClient.Has(t.Tag); err == nil && ok {
@@ -48,7 +53,6 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 	if err != nil {
 		return fmt.Errorf("lookup remote origin cluster: %s", err)
 	}
-
 	for _, d := range t.Dependencies {
 		if err := e.originCluster.ReplicateToRemote(t.Tag, d, remoteOrigin); err != nil {
 			return fmt.Errorf("origin cluster replicate: %s", err)
@@ -58,6 +62,10 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 	if err := remoteTagClient.Put(t.Tag, t.Digest); err != nil {
 		return fmt.Errorf("put tag: %s", err)
 	}
+
+	// We don't want to time noops nor errors.
+	e.stats.Timer("replicate").Record(time.Since(start))
+	e.stats.Timer("lifetime").Record(time.Since(t.CreatedAt))
 
 	return nil
 }
