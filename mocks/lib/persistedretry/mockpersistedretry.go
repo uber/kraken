@@ -143,6 +143,18 @@ func (m *MockTask) EXPECT() *MockTaskMockRecorder {
 	return m.recorder
 }
 
+// GetFailures mocks base method
+func (m *MockTask) GetFailures() int {
+	ret := m.ctrl.Call(m, "GetFailures")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// GetFailures indicates an expected call of GetFailures
+func (mr *MockTaskMockRecorder) GetFailures() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFailures", reflect.TypeOf((*MockTask)(nil).GetFailures))
+}
+
 // GetLastAttempt mocks base method
 func (m *MockTask) GetLastAttempt() time.Time {
 	ret := m.ctrl.Call(m, "GetLastAttempt")

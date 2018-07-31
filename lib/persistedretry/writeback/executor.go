@@ -3,6 +3,7 @@ package writeback
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
@@ -47,7 +48,7 @@ func (e *Executor) Name() string {
 // that matches r's namespace.
 func (e *Executor) Exec(r persistedretry.Task) error {
 	t := r.(*Task)
-	if err := e.upload(t.Namespace, t.Name); err != nil {
+	if err := e.upload(t); err != nil {
 		return err
 	}
 	err := e.fs.DeleteCacheFileMetadata(t.Name, &metadata.Persist{})
@@ -57,38 +58,44 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 	return nil
 }
 
-func (e *Executor) upload(namespace, name string) error {
-	client, err := e.backends.GetClient(namespace)
+func (e *Executor) upload(t *Task) error {
+	start := time.Now()
+
+	client, err := e.backends.GetClient(t.Namespace)
 	if err != nil {
 		if err == backend.ErrNamespaceNotFound {
 			log.With(
-				"namespace", namespace,
-				"name", name).Info("Dropping writeback for unconfigured namespace")
+				"namespace", t.Namespace,
+				"name", t.Name).Info("Dropping writeback for unconfigured namespace")
 			return nil
 		}
 		return fmt.Errorf("get client: %s", err)
 	}
 
-	if _, err := client.Stat(name); err == nil {
+	if _, err := client.Stat(t.Name); err == nil {
 		// File already uploaded, no-op.
 		return nil
 	}
 
-	f, err := e.fs.GetCacheFileReader(name)
+	f, err := e.fs.GetCacheFileReader(t.Name)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Nothing we can do about this but make noise and drop the task.
 			e.stats.Counter("missing_files").Inc(1)
-			log.With("name", name).Error("Invariant violation: writeback cache file missing")
+			log.With("name", t.Name).Error("Invariant violation: writeback cache file missing")
 			return nil
 		}
 		return fmt.Errorf("get file: %s", err)
 	}
 	defer f.Close()
 
-	if err := client.Upload(name, f); err != nil {
+	if err := client.Upload(t.Name, f); err != nil {
 		return fmt.Errorf("upload: %s", err)
 	}
+
+	// We don't want to time noops nor errors.
+	e.stats.Timer("upload").Record(time.Since(start))
+	e.stats.Timer("lifetime").Record(time.Since(t.CreatedAt))
 
 	return nil
 }

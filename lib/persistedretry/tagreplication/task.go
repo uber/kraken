@@ -57,6 +57,11 @@ func (t *Task) GetLastAttempt() time.Time {
 	return t.LastAttempt
 }
 
+// GetFailures returns the number of times t has failed.
+func (t *Task) GetFailures() int {
+	return t.Failures
+}
+
 // Ready returns whether t is ready to run.
 func (t *Task) Ready() bool {
 	return time.Since(t.CreatedAt) >= t.Delay

@@ -141,13 +141,7 @@ func (m *manager) Add(t Task) error {
 // SyncExec executes the task synchronously.
 // Tasks will NOT be added to the retry queue if fail.
 func (m *manager) SyncExec(t Task) error {
-	timer := m.stats.Timer("exec").Start()
-
-	if err := m.executor.Exec(t); err != nil {
-		return fmt.Errorf("exec: %s", err)
-	}
-	timer.Stop()
-	return nil
+	return m.executor.Exec(t)
 }
 
 // Close waits for all workers to exit current task.
@@ -193,7 +187,7 @@ func (m *manager) worker(q *queue, limit time.Duration) {
 		case t := <-q.tasks:
 			q.counter.Inc(-1)
 			if err := m.exec(t); err != nil {
-				m.stats.Counter("task_failure").Inc(1)
+				m.stats.Counter("exec_failures").Inc(1)
 				log.With("task", t).Errorf("Failed to exec task: %s", err)
 			}
 			time.Sleep(limit)
@@ -232,17 +226,16 @@ func (m *manager) pollRetries() {
 }
 
 func (m *manager) exec(t Task) error {
-	timer := m.stats.Timer("exec").Start()
-	defer timer.Stop()
-
 	if err := m.executor.Exec(t); err != nil {
 		if err := m.store.MarkFailed(t); err != nil {
 			return fmt.Errorf("mark task as failed: %s", err)
 		}
-		log.With("task", t).Errorf("Task failed: %s", err)
+		log.With(
+			"task", t,
+			"failures", t.GetFailures()).Errorf("Task failed: %s", err)
+		m.stats.Counter("task_failures").Inc(1)
 		return nil
 	}
-
 	if err := m.store.Remove(t); err != nil {
 		return fmt.Errorf("remove task: %s", err)
 	}
