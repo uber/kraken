@@ -1,12 +1,12 @@
 package base
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
 	"reflect"
 	"runtime"
-	"sort"
 	"strings"
 	"testing"
 
@@ -24,13 +24,11 @@ func checkListNames(t *testing.T, factory FileEntryFactory, state FileState, exp
 	for _, e := range expected {
 		expectedNames = append(expectedNames, e.GetName())
 	}
-	sort.Strings(expectedNames)
 
 	names, err := factory.ListNames(state)
 	require.NoError(t, err)
 
-	sort.Strings(names)
-	require.Equal(t, expectedNames, names)
+	require.ElementsMatch(t, expectedNames, names)
 }
 
 func TestFileEntryFactoryListNames(t *testing.T) {
@@ -48,7 +46,8 @@ func TestFileEntryFactoryListNames(t *testing.T) {
 			// ListNames should show all created entries.
 			var entries []FileEntry
 			for i := 0; i < 100; i++ {
-				entry := factory.Create(core.DigestFixture().Hex(), state)
+				entry, err := factory.Create(core.DigestFixture().Hex(), state)
+				require.NoError(err)
 				require.NoError(entry.Create(state, 1))
 				entries = append(entries, entry)
 			}
@@ -59,6 +58,85 @@ func TestFileEntryFactoryListNames(t *testing.T) {
 				require.NoError(e.Delete())
 			}
 			checkListNames(t, factory, state, entries[50:])
+		})
+	}
+}
+
+func TestLocalFileEntryFactoryListNamesWithSlashes(t *testing.T) {
+	require := require.New(t)
+
+	state, _, _, cleanup := fileStatesFixture()
+	defer cleanup()
+
+	factory := NewLocalFileEntryFactory()
+
+	// ListNames should show all created entries.
+	var entries []FileEntry
+	for i := 0; i < 100; i++ {
+		name := fmt.Sprintf("dir%d/subdir", i)
+		entry, err := factory.Create(name, state)
+		require.NoError(err)
+		require.NoError(entry.Create(state, 1))
+		entries = append(entries, entry)
+	}
+	checkListNames(t, factory, state, entries)
+}
+
+func TestLocalFileEntryFactoryCreate(t *testing.T) {
+	state, _, _, cleanup := fileStatesFixture()
+	defer cleanup()
+
+	testCases := []struct {
+		desc string
+		name string
+	}{
+		{"simple", "foo"},
+		{"dot prefix", ".foo"},
+		{"dot suffix", "foo."},
+		{"dot reference", "fo.o"},
+		{"dot dot prefix", "..foo"},
+		{"dot dot suffix", "foo.."},
+		{"dot dot reference", "fo..o"},
+		{"slash references", "x/y/z"},
+		{"slash references and dot", "x/.y/z"},
+		{"slash references and dot dot", "x/..y/z"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			require := require.New(t)
+			factory := NewLocalFileEntryFactory()
+			_, err := factory.Create(tc.name, state)
+			require.NoError(err)
+		})
+	}
+}
+
+func TestLocalFileEntryFactoryCreateError(t *testing.T) {
+	state, _, _, cleanup := fileStatesFixture()
+	defer cleanup()
+
+	testCases := []struct {
+		desc string
+		name string
+	}{
+		{"slash prefix", "/foo"},
+		{"slash suffix", "foo/"},
+		{"slash prefix and suffix", "/foo/"},
+		{"dot slash prefix", "./foo"},
+		{"dot slash reference", "foo/./bar"},
+		{"slash dot suffix", "foo/."},
+		{"dot dot slash prefix", "../foo"},
+		{"dot dot slash reference", "foo/../bar"},
+		{"slash dot dot suffix", "foo/.."},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			require := require.New(t)
+			factory := NewLocalFileEntryFactory()
+			_, err := factory.Create(tc.name, state)
+			require.Equal(ErrInvalidName, err)
 		})
 	}
 }
@@ -75,7 +153,7 @@ func TestFileEntry(t *testing.T) {
 	tests := []func(require *require.Assertions, bundle *fileEntryTestBundle){
 		testCreate,
 		testCreateExisting,
-		testCreateFail,
+		testCreateWrongState,
 		testMoveFrom,
 		testMoveFromExisting,
 		testMoveFromWrongState,
@@ -144,7 +222,7 @@ func testCreateExisting(require *require.Assertions, bundle *fileEntryTestBundle
 	require.Equal(info.Size(), testFileSize)
 }
 
-func testCreateFail(require *require.Assertions, bundle *fileEntryTestBundle) {
+func testCreateWrongState(require *require.Assertions, bundle *fileEntryTestBundle) {
 	fe := bundle.entry
 	s2 := bundle.state2
 

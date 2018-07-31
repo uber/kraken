@@ -1,18 +1,16 @@
 package base
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/andres-erbsen/clock"
 	"golang.org/x/sync/syncmap"
-)
-
-const (
-	_testFileName = "test_file"
 )
 
 func fileStatesFixture() (state1, state2, state3 FileState, run func()) {
@@ -61,7 +59,10 @@ func fileEntryLocalFixture() (bundle *fileEntryTestBundle, run func()) {
 
 	state1, state2, state3, f := fileStatesFixture()
 	cleanup.Add(f)
-	entry := NewLocalFileEntryFactory().Create(_testFileName, state1)
+	entry, err := NewLocalFileEntryFactory().Create(core.DigestFixture().Hex(), state1)
+	if err != nil {
+		panic(fmt.Sprintf("create test file: %s", err))
+	}
 
 	return &fileEntryTestBundle{
 		state1: state1,
@@ -188,12 +189,13 @@ func newFileStoreFixture(createStore func(clk clock.Clock) *localFileStore) (*fi
 	}
 
 	// Create one test file in store
-	err := storeBundle.store.NewFileOp().CreateFile(_testFileName, storeBundle.state1, 5)
+	testFile := core.DigestFixture().Hex()
+	err := storeBundle.store.NewFileOp().CreateFile(testFile, storeBundle.state1, 5)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	storeBundle.files[storeBundle.state1] = _testFileName
+	storeBundle.files[storeBundle.state1] = testFile
 
 	return storeBundle, cleanup.Run
 }
