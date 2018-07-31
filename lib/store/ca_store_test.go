@@ -131,17 +131,18 @@ func TestCAStoreCreateUploadFileAndMoveToCache(t *testing.T) {
 	s, err := NewCAStore(config, tally.NoopScope)
 	require.NoError(err)
 
-	testFileName := "test_file.txt"
+	src := core.DigestFixture().Hex()
+	dst := core.DigestFixture().Hex()
 
-	require.NoError(s.CreateUploadFile(testFileName, 100))
-	_, err = os.Stat(path.Join(config.UploadDir, testFileName))
+	require.NoError(s.CreateUploadFile(src, 100))
+	_, err = os.Stat(path.Join(config.UploadDir, src))
 	require.NoError(err)
 
-	err = s.MoveUploadFileToCache(testFileName, "test_file_cache.txt")
+	err = s.MoveUploadFileToCache(src, dst)
 	require.NoError(err)
-	_, err = os.Stat(path.Join(config.UploadDir, testFileName))
+	_, err = os.Stat(path.Join(config.UploadDir, src[:2], src[2:4], src))
 	require.True(os.IsNotExist(err))
-	_, err = os.Stat(path.Join(config.CacheDir, "te", "st", "test_file_cache.txt"))
+	_, err = os.Stat(path.Join(config.CacheDir, dst[:2], dst[2:4], dst))
 	require.NoError(err)
 }
 

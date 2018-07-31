@@ -108,7 +108,11 @@ func (op *localFileOp) reloadFileEntryHelper(name string) (reloaded bool, err er
 
 	// Check if file exists on disk.
 	for state := range op.states {
-		fileEntry := op.s.fileEntryFactory.Create(name, state)
+		fileEntry, err := op.s.fileEntryFactory.Create(name, state)
+		if err != nil {
+			return false, fmt.Errorf("create: %s", err)
+		}
+
 		// Try load before acquiring lock first.
 		if err = fileEntry.Reload(state); err != nil {
 			continue
@@ -214,7 +218,10 @@ func (op *localFileOp) createFileHelper(
 
 	// Create new file entry.
 	err = nil
-	newEntry := op.s.fileEntryFactory.Create(name, targetState)
+	newEntry, err := op.s.fileEntryFactory.Create(name, targetState)
+	if err != nil {
+		return fmt.Errorf("create: %s", err)
+	}
 	actual, loaded := op.s.fileMap.LoadOrStore(name, newEntry, func(name string, entry FileEntry) error {
 		if sourcePath != "" {
 			err = newEntry.MoveFrom(targetState, sourcePath)

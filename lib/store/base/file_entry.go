@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"code.uber.internal/infra/kraken/lib/store/metadata"
@@ -16,6 +18,7 @@ import (
 // FileEntry errors.
 var (
 	ErrFilePersisted = errors.New("file is persisted")
+	ErrInvalidName   = errors.New("invalid name")
 )
 
 // FileState decides what directory a file is in.
@@ -38,7 +41,7 @@ func (s FileState) GetDirectory() string {
 type FileEntryFactory interface {
 	// Create creates a file entry given a state directory and a name.
 	// It calls GetRelativePath to generate the actual file path under given directory,
-	Create(name string, state FileState) FileEntry
+	Create(name string, state FileState) (FileEntry, error)
 
 	// GetRelativePath returns the relative path for a file entry.
 	// The path is relative to the state directory that file entry belongs to.
@@ -91,8 +94,14 @@ func NewLocalFileEntryFactory() FileEntryFactory {
 }
 
 // Create initializes and returns a FileEntry object.
-func (f *localFileEntryFactory) Create(name string, state FileState) FileEntry {
-	return newLocalFileEntry(state, name, f.GetRelativePath(name))
+func (f *localFileEntryFactory) Create(name string, state FileState) (FileEntry, error) {
+	if name != filepath.Clean(name) {
+		return nil, ErrInvalidName
+	}
+	if strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.HasPrefix(name, "../") {
+		return nil, ErrInvalidName
+	}
+	return newLocalFileEntry(state, name, f.GetRelativePath(name)), nil
 }
 
 // GetRelativePath returns name because file entries are stored flat under state directory.
@@ -102,15 +111,38 @@ func (f *localFileEntryFactory) GetRelativePath(name string) string {
 
 // ListNames returns the names of all entries in state's directory.
 func (f *localFileEntryFactory) ListNames(state FileState) ([]string, error) {
-	infos, err := ioutil.ReadDir(state.GetDirectory())
-	if err != nil {
-		return nil, err
-	}
 	var names []string
-	for _, info := range infos {
-		names = append(names, info.Name())
+
+	var readNames func(string) error
+	readNames = func(dir string) error {
+		infos, err := ioutil.ReadDir(dir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		for _, info := range infos {
+			if info.IsDir() {
+				if err := readNames(path.Join(dir, info.Name())); err != nil {
+					return err
+				}
+				continue
+			}
+			if info.Name() == DefaultDataFileName {
+				name, err := filepath.Rel(state.GetDirectory(), dir)
+				if err != nil {
+					return err
+				}
+				names = append(names, name)
+			}
+		}
+		return nil
 	}
-	return names, nil
+
+	err := readNames(state.GetDirectory())
+
+	return names, err
 }
 
 // casFileEntryFactory initializes localFileEntry obj.
@@ -124,8 +156,8 @@ func NewCASFileEntryFactory() FileEntryFactory {
 }
 
 // Create initializes and returns a FileEntry object.
-func (f *casFileEntryFactory) Create(name string, state FileState) FileEntry {
-	return newLocalFileEntry(state, name, f.GetRelativePath(name))
+func (f *casFileEntryFactory) Create(name string, state FileState) (FileEntry, error) {
+	return newLocalFileEntry(state, name, f.GetRelativePath(name)), nil
 }
 
 // GetRelativePath returns content-addressable file path under state directory.

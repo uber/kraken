@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"code.uber.internal/infra/kraken/core"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,7 +57,7 @@ func TestFileOp(t *testing.T) {
 func testCreateFile(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
-	fn := "testfile123"
+	fn := core.DigestFixture().Hex()
 	s1 := storeBundle.state1
 	s2 := storeBundle.state2
 
@@ -94,7 +95,7 @@ func testCreateFile(require *require.Assertions, storeBundle *fileStoreTestBundl
 func testCreateFileFail(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
-	fn := "testfile123"
+	fn := core.DigestFixture().Hex()
 	s1 := storeBundle.state1
 	s2 := storeBundle.state2
 	s3 := storeBundle.state3
@@ -116,7 +117,7 @@ func testCreateFileFail(require *require.Assertions, storeBundle *fileStoreTestB
 func testReloadFileEntry(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
-	fn := "testfileondisk"
+	fn := core.DigestFixture().Hex()
 	m := getMockMetadataOne()
 	m.content = []byte("foo")
 	s1 := storeBundle.state1

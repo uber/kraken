@@ -2,12 +2,13 @@ package base
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,8 @@ func TestLRUFileMapSizeLimit(t *testing.T) {
 	state := bundle.state1
 
 	insert := func(name string) {
-		entry := NewLocalFileEntryFactory().Create(name, state)
+		entry, err := NewLocalFileEntryFactory().Create(name, state)
+		require.NoError(err)
 		_, loaded := fm.LoadOrStore(name, entry, func(name string, entry FileEntry) error {
 			require.NoError(entry.Create(state, 0))
 			return nil
@@ -87,13 +89,16 @@ func TestLRUUpdateLastAccessTimeOnMoveFrom(t *testing.T) {
 
 	s1, s2 := bundle.state1, bundle.state2
 
-	source, err := ioutil.TempFile(s1.GetDirectory(), "")
+	name := core.DigestFixture().Hex()
+	fp := filepath.Join(s1.GetDirectory(), name)
+	f, err := os.Create(fp)
 	require.NoError(err)
+	f.Close()
 
-	require.NoError(store.NewFileOp().AcceptState(s2).MoveFileFrom(source.Name(), s2, source.Name()))
+	require.NoError(store.NewFileOp().AcceptState(s2).MoveFileFrom(name, s2, fp))
 
 	var lat metadata.LastAccessTime
-	require.NoError(store.NewFileOp().AcceptState(s2).GetFileMetadata(source.Name(), &lat))
+	require.NoError(store.NewFileOp().AcceptState(s2).GetFileMetadata(name, &lat))
 	require.Equal(t0.Truncate(time.Second), lat.Time)
 }
 
