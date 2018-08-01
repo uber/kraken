@@ -1,6 +1,17 @@
-unreleased
+0.0.6 (2018-08-01)
 ====
 - Enable agent registry fallback in IRN (@codyg)
+- Add configuration for IRN preprod (@codyg)
+- Handle intermediate directories in release tooling (@eoakes)
+- Remove hostname from origin stats (@codyg)
+- Change tracker v2 announce to POST (@codyg)
+- Move nginx into agent process (@codyg)
+- Reduce image size (@yiran)
+- Fix origin pinocchio (@yiran)
+- Enhance persistedretry logging / monitoring (@codyg)
+- Fix list for file entry name contains slashes (@evelynl)
+- Enable replication in prime (@evelynl)
+- Migrate proxy to port 5000 (@yiran)
 
 0.0.5 (2018-07-26)
 ====
