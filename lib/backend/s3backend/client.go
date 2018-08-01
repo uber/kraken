@@ -99,7 +99,7 @@ func (c *Client) Download(name string, dst io.Writer) error {
 	// in-memory buffer and drain it into dst after the download is finished.
 	writerAt, ok := dst.(io.WriterAt)
 	if !ok {
-		log.With("name", name).Info("Using in-memory buffer for TerraBlob download")
+		log.With("name", name).Info("Using in-memory buffer for S3 download")
 		writerAt = rwutil.NewCappedBuffer(int(c.config.BufferGuard))
 	}
 
