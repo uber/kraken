@@ -22,3 +22,20 @@ server {
     proxy_pass http://registry;
   }
 }
+
+server {
+  listen 5000;
+
+  client_max_body_size 10G;
+
+  access_log /var/log/udocker/kraken-proxy/nginx-access.log;
+  error_log /var/log/udocker/kraken-proxy/nginx-error.log;
+
+  location /v2/_catalog {
+    proxy_pass http://registry-override;
+  }
+
+  location / {
+    proxy_pass http://registry;
+  }
+}
