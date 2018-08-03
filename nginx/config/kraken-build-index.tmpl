@@ -1,4 +1,6 @@
 proxy_cache_path {{.cache_dir}}/tags keys_zone=tags:20m;
+proxy_cache_path {{.cache_dir}}/repositories keys_zone=repositories:20m;
+proxy_cache_path {{.cache_dir}}/list keys_zone=list:20m;
 
 upstream build-index {
   server unix:/tmp/kraken-build-index.sock;
@@ -20,6 +22,24 @@ server {
     proxy_cache         tags;
     proxy_cache_methods GET;
     proxy_cache_valid   200 5m;
+    proxy_cache_valid   any 1s;
+    proxy_cache_lock    on;
+  }
+
+  location ~* ^/repositories/.*/tags$ {
+    proxy_pass http://build-index;
+
+    proxy_cache         repositories;
+    proxy_cache_methods GET;
+    proxy_cache_valid   any 1s;
+    proxy_cache_lock    on;
+  }
+
+  location /list {
+    proxy_pass http://build-index;
+
+    proxy_cache         list;
+    proxy_cache_methods GET;
     proxy_cache_valid   any 1s;
     proxy_cache_lock    on;
   }

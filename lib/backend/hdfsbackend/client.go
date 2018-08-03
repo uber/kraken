@@ -21,8 +21,6 @@ import (
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
-const _listConcurrency = 8
-
 var errAllNameNodesUnavailable = errors.New(
 	"exhausted the list of name nodes for the request without success")
 
@@ -205,8 +203,8 @@ func (c *Client) List(prefix string) ([]string, error) {
 	root := path.Join(c.pather.BasePath(), prefix)
 
 	var wg sync.WaitGroup
-	listJobs := make(chan string, _listConcurrency)
-	errc := make(chan error, _listConcurrency)
+	listJobs := make(chan string, c.config.ListConcurrency)
+	errc := make(chan error, c.config.ListConcurrency)
 
 	wg.Add(1)
 	listJobs <- root
