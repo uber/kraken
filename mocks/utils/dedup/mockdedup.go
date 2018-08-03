@@ -7,6 +7,7 @@ package mockdedup
 import (
 	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+	time "time"
 )
 
 // MockResolver is a mock of Resolver interface
@@ -69,10 +70,11 @@ func (m *MockTaskRunner) EXPECT() *MockTaskRunnerMockRecorder {
 }
 
 // Run mocks base method
-func (m *MockTaskRunner) Run(arg0 interface{}) interface{} {
+func (m *MockTaskRunner) Run(arg0 interface{}) (interface{}, time.Duration) {
 	ret := m.ctrl.Call(m, "Run", arg0)
 	ret0, _ := ret[0].(interface{})
-	return ret0
+	ret1, _ := ret[1].(time.Duration)
+	return ret0, ret1
 }
 
 // Run indicates an expected call of Run

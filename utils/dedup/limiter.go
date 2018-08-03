@@ -10,9 +10,9 @@ import (
 // TaskGCInterval is the interval in which garbage collection of old tasks runs.
 const TaskGCInterval = time.Minute
 
-// TaskRunner runs against some input and produces some output.
+// TaskRunner runs against some input and produces some output w/ a ttl.
 type TaskRunner interface {
-	Run(input interface{}) interface{}
+	Run(input interface{}) (output interface{}, ttl time.Duration)
 }
 
 type task struct {
@@ -40,17 +40,16 @@ func (t *task) expired(now time.Time) bool {
 type Limiter struct {
 	sync.RWMutex
 	clk    clock.Clock
-	limit  time.Duration
 	runner TaskRunner
 	tasks  map[interface{}]*task
 	gc     *IntervalTrap
 }
 
-// NewLimiter creates a new Limiter for task constrained to limit.
-func NewLimiter(limit time.Duration, clk clock.Clock, runner TaskRunner) *Limiter {
+// NewLimiter creates a new Limiter for tasks. The limit is determined per task
+// via the TaskRunner.
+func NewLimiter(clk clock.Clock, runner TaskRunner) *Limiter {
 	l := &Limiter{
 		clk:    clk,
-		limit:  limit,
 		runner: runner,
 		tasks:  make(map[interface{}]*task),
 	}
@@ -95,11 +94,11 @@ func (l *Limiter) getOutput(t *task) interface{} {
 	t.running = true
 	t.cond.L.Unlock()
 
-	output := l.runner.Run(t.input)
+	output, ttl := l.runner.Run(t.input)
 
 	t.cond.L.Lock()
 	t.output = output
-	t.expiresAt = l.clk.Now().Add(l.limit)
+	t.expiresAt = l.clk.Now().Add(ttl)
 	t.running = false
 	t.cond.L.Unlock()
 
