@@ -21,8 +21,13 @@ import (
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
-var errAllNameNodesUnavailable = errors.New(
-	"exhausted the list of name nodes for the request without success")
+type allNameNodesFailedError struct {
+	err error
+}
+
+func (e allNameNodesFailedError) Error() string {
+	return fmt.Sprintf("all name nodes failed: %s", e.err)
+}
 
 func retryable(err error) bool {
 	return httputil.IsForbidden(err) || httputil.IsNetworkError(err)
@@ -72,16 +77,18 @@ func (c *Client) Download(name string, dst io.Writer) error {
 	c.setUserName(v)
 	c.setBuffersize(v)
 
+	var resp *http.Response
+	var nnErr error
 	for _, node := range c.config.NameNodes {
-		resp, err := httputil.Get(fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()))
-		if err != nil {
-			if retryable(err) {
+		resp, nnErr = httputil.Get(fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()))
+		if nnErr != nil {
+			if retryable(nnErr) {
 				continue
 			}
-			if httputil.IsNotFound(err) {
+			if httputil.IsNotFound(nnErr) {
 				return backenderrors.ErrBlobNotFound
 			}
-			return err
+			return nnErr
 		}
 		if n, err := io.Copy(dst, resp.Body); err != nil {
 			return fmt.Errorf("copy response: %s", err)
@@ -91,7 +98,7 @@ func (c *Client) Download(name string, dst io.Writer) error {
 		}
 		return nil
 	}
-	return errAllNameNodesUnavailable
+	return allNameNodesFailedError{nnErr}
 }
 
 type exceededCapError error
@@ -150,18 +157,20 @@ func (c *Client) Upload(name string, src io.Reader) error {
 	c.setBuffersize(v)
 	v.Set("overwrite", "true")
 
+	var nameresp, dataresp *http.Response
+	var nnErr error
 	for _, node := range c.config.NameNodes {
-		nameresp, err := httputil.Put(
+		nameresp, nnErr = httputil.Put(
 			fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()),
 			httputil.SendRedirect(func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse
 			}),
 			httputil.SendAcceptedCodes(http.StatusTemporaryRedirect, http.StatusPermanentRedirect))
-		if err != nil {
-			if retryable(err) {
+		if nnErr != nil {
+			if retryable(nnErr) {
 				continue
 			}
-			return err
+			return nnErr
 		}
 		defer nameresp.Body.Close()
 
@@ -171,25 +180,25 @@ func (c *Client) Upload(name string, src io.Reader) error {
 			return fmt.Errorf("missing location field in response header: %s", nameresp.Header)
 		}
 
-		dataresp, err := httputil.Put(
+		dataresp, nnErr = httputil.Put(
 			loc[0],
 			httputil.SendBody(readSeeker),
 			httputil.SendAcceptedCodes(http.StatusCreated))
-		if err != nil {
-			if retryable(err) {
+		if nnErr != nil {
+			if retryable(nnErr) {
 				// Reset reader for next retry.
 				if _, err := readSeeker.Seek(0, io.SeekStart); err != nil {
 					return fmt.Errorf("seek: %s", err)
 				}
 				continue
 			}
-			return err
+			return nnErr
 		}
 		defer dataresp.Body.Close()
 
 		return nil
 	}
-	return errAllNameNodesUnavailable
+	return allNameNodesFailedError{nnErr}
 }
 
 var (
@@ -284,16 +293,18 @@ func (c *Client) getFileStatus(path string) (fileStatus, error) {
 	v.Set("op", "GETFILESTATUS")
 	c.setUserName(v)
 
+	var resp *http.Response
+	var nnErr error
 	for _, node := range c.config.NameNodes {
-		resp, err := httputil.Get(fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()))
-		if err != nil {
-			if retryable(err) {
+		resp, nnErr = httputil.Get(fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()))
+		if nnErr != nil {
+			if retryable(nnErr) {
 				continue
 			}
-			if httputil.IsNotFound(err) {
+			if httputil.IsNotFound(nnErr) {
 				return fileStatus{}, backenderrors.ErrBlobNotFound
 			}
-			return fileStatus{}, err
+			return fileStatus{}, nnErr
 		}
 		defer resp.Body.Close()
 		var fsr fileStatusResponse
@@ -302,7 +313,7 @@ func (c *Client) getFileStatus(path string) (fileStatus, error) {
 		}
 		return fsr.FileStatus, nil
 	}
-	return fileStatus{}, errAllNameNodesUnavailable
+	return fileStatus{}, allNameNodesFailedError{nnErr}
 }
 
 func (c *Client) listFileStatus(path string) ([]fileStatus, error) {
@@ -310,13 +321,15 @@ func (c *Client) listFileStatus(path string) ([]fileStatus, error) {
 	v.Set("op", "LISTSTATUS")
 	c.setUserName(v)
 
+	var resp *http.Response
+	var nnErr error
 	for _, node := range c.config.NameNodes {
-		resp, err := httputil.Get(fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()))
-		if err != nil {
-			if retryable(err) {
+		resp, nnErr = httputil.Get(fmt.Sprintf("http://%s/%s?%s", node, path, v.Encode()))
+		if nnErr != nil {
+			if retryable(nnErr) {
 				continue
 			}
-			return nil, err
+			return nil, nnErr
 		}
 		defer resp.Body.Close()
 		var lsr listStatusResponse
@@ -325,7 +338,7 @@ func (c *Client) listFileStatus(path string) ([]fileStatus, error) {
 		}
 		return lsr.FileStatuses.FileStatus, nil
 	}
-	return nil, errAllNameNodesUnavailable
+	return nil, allNameNodesFailedError{nnErr}
 }
 
 func (c *Client) setBuffersize(v url.Values) {
