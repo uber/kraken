@@ -1,3 +1,10 @@
+0.0.7 (2018-08-03)
+====
+- SJC4/DCA4 configuration files (@codyg/@yiran)
+- Lower list concurrency / cache tag lists to prevent HDFS errors (@codyg)
+- Include original HDFS error when all name nodes fail (@codyg)
+- Make limiter task runner determine ttl (@codyg)
+
 0.0.6 (2018-08-01)
 ====
 - Enable agent registry fallback in IRN (@codyg)
