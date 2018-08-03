@@ -20,6 +20,8 @@ type Config struct {
 
 	// NamePath identifies which namepath.Pather to use.
 	NamePath string `yaml:"name_path"`
+
+	ListConcurrency int `yaml:"list_concurrency"`
 }
 
 func (c Config) applyDefaults() Config {
@@ -31,6 +33,9 @@ func (c Config) applyDefaults() Config {
 	}
 	if c.RootDirectory == "" {
 		c.RootDirectory = "webhdfs/v1/infra/dockerRegistry/"
+	}
+	if c.ListConcurrency == 0 {
+		c.ListConcurrency = 4
 	}
 	return c
 }
