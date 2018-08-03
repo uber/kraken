@@ -22,7 +22,7 @@ func TestLimiter(t *testing.T) {
 
 	runner := mockdedup.NewMockTaskRunner(ctrl)
 
-	limiter := NewLimiter(500*time.Millisecond, clock.New(), runner)
+	limiter := NewLimiter(clock.New(), runner)
 
 	input := "some input"
 	output := "some output"
@@ -34,7 +34,7 @@ func TestLimiter(t *testing.T) {
 
 	// TODO: Changing the amount of times the loop runs to 100 (instead of 1000) prevents the test from hanging
 	// but still, something is probably wrong with some part of this test.
-	runner.EXPECT().Run(input).Return(output).Times(4)
+	runner.EXPECT().Run(input).Return(output, 500*time.Millisecond).Times(4)
 
 	start := time.Now()
 	var wg sync.WaitGroup
@@ -53,19 +53,20 @@ func TestLimiter(t *testing.T) {
 
 type testRunner struct {
 	stop chan bool
+	ttl  time.Duration
 }
 
-func (r *testRunner) Run(input interface{}) interface{} {
+func (r *testRunner) Run(input interface{}) (interface{}, time.Duration) {
 	<-r.stop
-	return input
+	return input, r.ttl
 }
 
 func TestLimiterLongRunningTask(t *testing.T) {
 	require := require.New(t)
 
-	runner := &testRunner{make(chan bool)}
+	runner := &testRunner{make(chan bool), time.Second}
 
-	limiter := NewLimiter(time.Second, clock.New(), runner)
+	limiter := NewLimiter(clock.New(), runner)
 
 	input := "some input"
 
@@ -96,17 +97,18 @@ func TestLimiterTaskGC(t *testing.T) {
 	clk := clock.NewMock()
 	runner := mockdedup.NewMockTaskRunner(ctrl)
 
-	limiter := NewLimiter(100*time.Millisecond, clk, runner)
+	limiter := NewLimiter(clk, runner)
 
 	input := "some input"
 	output := "some output"
+	ttl := 100 * time.Millisecond
 
-	runner.EXPECT().Run(input).Return(output)
+	runner.EXPECT().Run(input).Return(output, ttl)
 	require.Equal(output, limiter.Run(input))
 	require.Equal(output, limiter.Run(input))
 
 	clk.Add(TaskGCInterval + 1)
-	runner.EXPECT().Run(input).Return(output)
+	runner.EXPECT().Run(input).Return(output, ttl)
 	require.Equal(output, limiter.Run(input))
 	require.Equal(output, limiter.Run(input))
 }
