@@ -39,9 +39,6 @@ func (r *clientResolver) Resolve(d core.Digest) ([]Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get locations: %s", err)
 	}
-	if len(locs) == 0 {
-		return nil, errors.New("no locations found")
-	}
 	var clients []Client
 	for _, loc := range locs {
 		clients = append(clients, r.provider.Provide(loc))

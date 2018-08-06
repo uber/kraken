@@ -17,10 +17,6 @@ func peerSetKey(h core.InfoHash, window int64) string {
 	return fmt.Sprintf("peerset:%s:%d", h.String(), window)
 }
 
-func originsKey(h core.InfoHash) string {
-	return fmt.Sprintf("origins:%s", h.String())
-}
-
 func serializePeer(p *core.PeerInfo) string {
 	var completeBit int
 	if p.Complete {
@@ -182,46 +178,4 @@ func (s *RedisStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 		peers = append(peers, p)
 	}
 	return peers, nil
-}
-
-// GetOrigins returns all origin PeerInfos for h. Returns ErrNoOrigins if
-// no origins exist in Redis.
-func (s *RedisStore) GetOrigins(h core.InfoHash) ([]*core.PeerInfo, error) {
-	c := s.pool.Get()
-	defer c.Close()
-
-	result, err := redis.String(c.Do("GET", originsKey(h)))
-	if err != nil {
-		if err == redis.ErrNil {
-			return nil, ErrNoOrigins
-		}
-		return nil, err
-	}
-
-	var origins []*core.PeerInfo
-	for _, s := range strings.Split(result, ",") {
-		id, complete, err := deserializePeer(s)
-		if err != nil {
-			log.Errorf("Error deserializing origin %q: %s", s, err)
-			continue
-		}
-		o := core.NewPeerInfo(id.peerID, id.ip, id.port, true, complete)
-		origins = append(origins, o)
-	}
-	return origins, nil
-}
-
-// UpdateOrigins overwrites all origin PeerInfos for h with the given origins.
-func (s *RedisStore) UpdateOrigins(h core.InfoHash, origins []*core.PeerInfo) error {
-	c := s.pool.Get()
-	defer c.Close()
-
-	var serializedOrigins []string
-	for _, o := range origins {
-		serializedOrigins = append(serializedOrigins, serializePeer(o))
-	}
-	v := strings.Join(serializedOrigins, ",")
-
-	_, err := c.Do("SETEX", originsKey(h), int(s.config.OriginsTTL.Seconds()), v)
-	return err
 }

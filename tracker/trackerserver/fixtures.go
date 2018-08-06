@@ -5,6 +5,7 @@ import (
 
 	"github.com/uber-go/tally"
 
+	"code.uber.internal/infra/kraken/tracker/originstore"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/peerstore"
 )
@@ -15,5 +16,5 @@ func Fixture() *Server {
 	config := Config{
 		AnnounceInterval: 250 * time.Millisecond,
 	}
-	return New(config, tally.NoopScope, policy, peerstore.TestStore(), nil)
+	return New(config, tally.NoopScope, policy, peerstore.TestStore(), originstore.NoopStore(), nil)
 }

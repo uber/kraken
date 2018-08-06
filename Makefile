@@ -216,6 +216,12 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
+	mkdir -p mocks/tracker/originstore
+	$(mockgen) \
+		-destination=mocks/tracker/originstore/mockoriginstore.go \
+		-package mockoriginstore \
+		code.uber.internal/infra/kraken/tracker/originstore Store
+
 	mkdir -p mocks/build-index/tagstore
 	$(mockgen) \
 		-destination=mocks/build-index/tagstore/mocktagstore.go \
@@ -252,17 +258,11 @@ mocks:
 		-package mockbackend \
 		code.uber.internal/infra/kraken/lib/backend Client
 
-	mkdir -p mocks/tracker/mockpeerstore
+	mkdir -p mocks/tracker/peerstore
 	$(mockgen) \
-		-destination=mocks/tracker/mockpeerstore/mockpeerstore.go \
+		-destination=mocks/tracker/peerstore/mockpeerstore.go \
 		-package mockpeerstore \
 		code.uber.internal/infra/kraken/tracker/peerstore Store
-
-	mkdir -p mocks/lib/torrent/mockstorage
-	$(mockgen) \
-		-destination=mocks/lib/torrent/mockstorage/mockstorage.go \
-		-package mockstorage \
-		code.uber.internal/infra/kraken/lib/torrent/storage Torrent
 
 	mkdir -p mocks/lib/store
 	$(mockgen) \

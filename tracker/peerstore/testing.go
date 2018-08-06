@@ -53,11 +53,3 @@ func (s *testStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) {
 	}
 	return copies, nil
 }
-
-func (s *testStore) GetOrigins(core.InfoHash) ([]*core.PeerInfo, error) {
-	return nil, nil
-}
-
-func (s *testStore) UpdateOrigins(core.InfoHash, []*core.PeerInfo) error {
-	return nil
-}

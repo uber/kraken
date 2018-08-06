@@ -21,7 +21,6 @@ type RedisConfig struct {
 	MaxIdleConns      int           `yaml:"max_idle_conns"`
 	MaxActiveConns    int           `yaml:"max_active_conns"`
 	IdleConnTimeout   time.Duration `yaml:"idle_conn_timeout"`
-	OriginsTTL        time.Duration `yaml:"origins_ttl"`
 }
 
 func (c *RedisConfig) applyDefaults() {
@@ -51,8 +50,5 @@ func (c *RedisConfig) applyDefaults() {
 	}
 	if c.IdleConnTimeout == 0 {
 		c.IdleConnTimeout = 60 * time.Second
-	}
-	if c.OriginsTTL == 0 {
-		c.OriginsTTL = 5 * time.Minute
 	}
 }
