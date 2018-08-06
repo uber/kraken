@@ -80,7 +80,8 @@ func (c *HTTPClient) Addr() string {
 func (c *HTTPClient) Locations(d core.Digest) ([]string, error) {
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/blobs/%s/locations", c.addr, d),
-		httputil.SendRetry())
+		httputil.SendRetry(),
+		httputil.SendTimeout(5*time.Second))
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +114,7 @@ func (c *HTTPClient) stat(namespace string, d core.Digest, local bool) (*core.Bl
 		u += "?local=true"
 	}
 
-	r, err := httputil.Head(u)
+	r, err := httputil.Head(u, httputil.SendTimeout(15*time.Second))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return nil, ErrBlobNotFound
@@ -194,8 +195,10 @@ func (c *HTTPClient) ReplicateToRemote(namespace string, d core.Digest, remoteDN
 // the request should be retried later. If no blob exists for d, returns a 404
 // httputil.StatusError.
 func (c *HTTPClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error) {
-	r, err := httputil.Get(fmt.Sprintf(
-		"http://%s/internal/namespace/%s/blobs/%s/metainfo", c.addr, url.PathEscape(namespace), d))
+	r, err := httputil.Get(
+		fmt.Sprintf("http://%s/internal/namespace/%s/blobs/%s/metainfo",
+			c.addr, url.PathEscape(namespace), d),
+		httputil.SendTimeout(15*time.Second))
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +225,9 @@ func (c *HTTPClient) OverwriteMetaInfo(d core.Digest, pieceLength int64) error {
 // GetPeerContext gets the PeerContext of the p2p client running alongside the Server.
 func (c *HTTPClient) GetPeerContext() (core.PeerContext, error) {
 	var pctx core.PeerContext
-	r, err := httputil.Get(fmt.Sprintf("http://%s/internal/peercontext", c.addr))
+	r, err := httputil.Get(
+		fmt.Sprintf("http://%s/internal/peercontext", c.addr),
+		httputil.SendTimeout(5*time.Second))
 	if err != nil {
 		return pctx, err
 	}
