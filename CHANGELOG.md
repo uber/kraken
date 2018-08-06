@@ -1,3 +1,8 @@
+0.0.8 (2018-08-06)
+====
+- Cache origin peer contexts / errors in tracker (@codyg)
+- Lower timeouts in blobclient (@codyg)
+
 0.0.7 (2018-08-03)
 ====
 - SJC4/DCA4 configuration files (@codyg/@yiran)
