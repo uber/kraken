@@ -6,6 +6,7 @@ import (
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/origin/blobclient"
+	"code.uber.internal/infra/kraken/tracker/originstore"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/peerstore"
 	"code.uber.internal/infra/kraken/tracker/trackerserver"
@@ -40,6 +41,9 @@ func main() {
 		log.Fatalf("Could not create PeerStore: %s", err)
 	}
 
+	originStore := originstore.New(
+		config.OriginStore, clock.New(), config.Origin, blobclient.NewProvider())
+
 	policy, err := peerhandoutpolicy.NewPriorityPolicy(stats, config.PeerHandoutPolicy.Priority)
 	if err != nil {
 		log.Fatalf("Could not load peer handout policy: %s", err)
@@ -51,7 +55,8 @@ func main() {
 	}
 	originCluster := blobclient.NewClusterClient(r)
 
-	server := trackerserver.New(config.TrackerServer, stats, policy, peerStore, originCluster)
+	server := trackerserver.New(
+		config.TrackerServer, stats, policy, peerStore, originStore, originCluster)
 	go func() {
 		log.Fatal(server.ListenAndServe())
 	}()

@@ -2,6 +2,7 @@ package blobclient
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -84,6 +85,9 @@ func (c *HTTPClient) Locations(d core.Digest) ([]string, error) {
 		return nil, err
 	}
 	locs := strings.Split(r.Header.Get("Origin-Locations"), ",")
+	if len(locs) == 0 {
+		return nil, errors.New("no locations found")
+	}
 	return locs, nil
 }
 

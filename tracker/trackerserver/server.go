@@ -11,6 +11,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/origin/blobclient"
+	"code.uber.internal/infra/kraken/tracker/originstore"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/peerstore"
 	"code.uber.internal/infra/kraken/utils/dedup"
@@ -24,8 +25,10 @@ type Server struct {
 	config Config
 	stats  tally.Scope
 
-	peerStore     peerstore.Store
-	policy        *peerhandoutpolicy.PriorityPolicy
+	peerStore   peerstore.Store
+	originStore originstore.Store
+	policy      *peerhandoutpolicy.PriorityPolicy
+
 	originCluster blobclient.ClusterClient
 
 	tagCache *dedup.Cache
@@ -37,6 +40,7 @@ func New(
 	stats tally.Scope,
 	policy *peerhandoutpolicy.PriorityPolicy,
 	peerStore peerstore.Store,
+	originStore originstore.Store,
 	originCluster blobclient.ClusterClient) *Server {
 
 	config = config.applyDefaults()
@@ -49,6 +53,7 @@ func New(
 		config:        config,
 		stats:         stats,
 		peerStore:     peerStore,
+		originStore:   originStore,
 		policy:        policy,
 		originCluster: originCluster,
 	}

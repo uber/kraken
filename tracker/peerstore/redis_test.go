@@ -16,7 +16,6 @@ func redisConfigFixture() RedisConfig {
 		Addr:              "localhost:6380",
 		PeerSetWindowSize: 30 * time.Second,
 		MaxPeerSetWindows: 4,
-		OriginsTTL:        5 * time.Minute,
 	}
 }
 
@@ -182,86 +181,4 @@ func TestRedisStorePeerExpiration(t *testing.T) {
 	result, err = s.GetPeers(h, 1)
 	require.NoError(err)
 	require.Empty(result)
-}
-
-func TestRedisStoreGetOriginsPopulatesPeerInfoFields(t *testing.T) {
-	require := require.New(t)
-
-	config := redisConfigFixture()
-
-	flushdb(config)
-
-	s, err := NewRedisStore(config, clock.New())
-	require.NoError(err)
-
-	h := core.InfoHashFixture()
-	origins := []*core.PeerInfo{core.OriginPeerInfoFixture()}
-
-	require.NoError(s.UpdateOrigins(h, origins))
-
-	result, err := s.GetOrigins(h)
-	require.NoError(err)
-	require.Equal(origins, result)
-}
-
-func TestRedisStoreUpdateOriginsOverwritesExistingOrigins(t *testing.T) {
-	require := require.New(t)
-
-	config := redisConfigFixture()
-
-	flushdb(config)
-
-	s, err := NewRedisStore(config, clock.New())
-	require.NoError(err)
-
-	h := core.InfoHashFixture()
-
-	initialOrigins := []*core.PeerInfo{
-		core.OriginPeerInfoFixture(),
-		core.OriginPeerInfoFixture(),
-	}
-
-	require.NoError(s.UpdateOrigins(h, initialOrigins))
-
-	result, err := s.GetOrigins(h)
-	require.NoError(err)
-	require.Equal(core.SortedByPeerID(initialOrigins), core.SortedByPeerID(result))
-
-	newOrigins := []*core.PeerInfo{
-		core.OriginPeerInfoFixture(),
-		core.OriginPeerInfoFixture(),
-		core.OriginPeerInfoFixture(),
-	}
-
-	require.NoError(s.UpdateOrigins(h, newOrigins))
-
-	result, err = s.GetOrigins(h)
-	require.NoError(err)
-	require.Equal(core.SortedByPeerID(newOrigins), core.SortedByPeerID(result))
-}
-
-func TestRedisStoreOriginsExpiration(t *testing.T) {
-	require := require.New(t)
-
-	config := redisConfigFixture()
-	config.OriginsTTL = time.Second
-
-	flushdb(config)
-
-	s, err := NewRedisStore(config, clock.New())
-	require.NoError(err)
-
-	h := core.InfoHashFixture()
-	origins := []*core.PeerInfo{core.OriginPeerInfoFixture()}
-
-	require.NoError(s.UpdateOrigins(h, origins))
-
-	result, err := s.GetOrigins(h)
-	require.NoError(err)
-	require.Len(result, 1)
-
-	time.Sleep(2 * time.Second)
-
-	result, err = s.GetOrigins(h)
-	require.Equal(err, ErrNoOrigins)
 }
