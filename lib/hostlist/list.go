@@ -13,8 +13,13 @@ import (
 	"github.com/andres-erbsen/clock"
 )
 
-// List defines a list of hosts, which is subject to change and cached with a TTL.
-type List struct {
+// List defines a list of hosts which is subject to change.
+type List interface {
+	Resolve() (stringset.Set, error)
+	ResolveNonLocal() (stringset.Set, error)
+}
+
+type list struct {
 	config Config
 	port   int
 
@@ -36,7 +41,7 @@ type List struct {
 //
 // An error is returned if a DNS record is supplied and resolves to an empty list
 // of addresses.
-func New(config Config, port int) (*List, error) {
+func New(config Config, port int) (List, error) {
 	config.applyDefaults()
 
 	localNames, err := getLocalNames()
@@ -48,7 +53,7 @@ func New(config Config, port int) (*List, error) {
 		return nil, fmt.Errorf("attach port to local names: %s", err)
 	}
 
-	l := &List{
+	l := &list{
 		config:     config,
 		port:       port,
 		localAddrs: localAddrs,
@@ -64,7 +69,7 @@ func New(config Config, port int) (*List, error) {
 }
 
 // Resolve returns a snapshot of l.
-func (l *List) Resolve() (stringset.Set, error) {
+func (l *list) Resolve() (stringset.Set, error) {
 	l.snapshotTrap.Trap()
 
 	l.mu.RLock()
@@ -76,7 +81,7 @@ func (l *List) Resolve() (stringset.Set, error) {
 // ResolveNonLocal returns a snapshot of l with the local machine stripped from
 // the snapshot, if present. The local machine is identified by both its hostname
 // and ip address, concatenated l's port.
-func (l *List) ResolveNonLocal() (stringset.Set, error) {
+func (l *list) ResolveNonLocal() (stringset.Set, error) {
 	snapshot, err := l.Resolve()
 	if err != nil {
 		return nil, err
@@ -85,14 +90,14 @@ func (l *List) ResolveNonLocal() (stringset.Set, error) {
 }
 
 type snapshotTask struct {
-	list *List
+	list *list
 }
 
 func (t *snapshotTask) Run() {
 	t.list.takeSnapshot()
 }
 
-func (l *List) takeSnapshot() {
+func (l *list) takeSnapshot() {
 	snapshot, err := l.resolve()
 	l.mu.Lock()
 	l.snapshot = snapshot
@@ -100,7 +105,7 @@ func (l *List) takeSnapshot() {
 	l.mu.Unlock()
 }
 
-func (l *List) resolve() (stringset.Set, error) {
+func (l *list) resolve() (stringset.Set, error) {
 	names, err := l.config.resolve()
 	if err != nil {
 		return nil, fmt.Errorf("config: %s", err)

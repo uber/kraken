@@ -38,7 +38,7 @@ type Server struct {
 	backends          *backend.Manager
 	localOriginDNS    string
 	localOriginClient blobclient.ClusterClient
-	cluster           *hostlist.List
+	cluster           hostlist.List
 	store             tagstore.Store
 
 	// For async new tag replication.
@@ -57,7 +57,7 @@ func New(
 	backends *backend.Manager,
 	localOriginDNS string,
 	localOriginClient blobclient.ClusterClient,
-	cluster *hostlist.List,
+	cluster hostlist.List,
 	store tagstore.Store,
 	remotes tagreplication.Remotes,
 	tagReplicationManager persistedretry.Manager,
