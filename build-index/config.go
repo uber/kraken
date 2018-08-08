@@ -28,7 +28,7 @@ type Config struct {
 	TagTypes       []tagtype.Config             `yaml:"tag_types"`
 	Origin         string                       `yaml:"origin"`
 	LocalDB        localdb.Config               `yaml:"localdb"`
-	LocalReplicas  hostlist.Config              `yaml:"local_replicas"`
+	Cluster        hostlist.Config              `yaml:"cluster"`
 	TagStore       tagstore.Config              `yaml:"tag_store"`
 	Store          store.SimpleStoreConfig      `yaml:"store"`
 	WriteBack      persistedretry.Config        `yaml:"writeback"`
