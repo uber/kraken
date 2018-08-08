@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
-	"strings"
 	"time"
 
 	"code.uber.internal/infra/kraken/utils/stringset"
@@ -32,90 +30,25 @@ func (c *Config) applyDefaults() {
 	}
 }
 
-func (c *Config) snapshot(port int) (stringset.Set, error) {
-	names, err := c.resolve()
-	if err != nil {
-		return nil, fmt.Errorf("resolve: %s", err)
-	}
-	addrs, err := attachPortIfMissing(names, port)
-	if err != nil {
-		return nil, fmt.Errorf("attach port to resolved names: %s", err)
-	}
-	localNames, err := getLocalNames()
-	if err != nil {
-		return nil, fmt.Errorf("get local names: %s", err)
-	}
-	localAddrs, err := attachPortIfMissing(localNames, port)
-	if err != nil {
-		return nil, fmt.Errorf("attach port to local names: %s", err)
-	}
-	return addrs.Sub(localAddrs), nil
-}
-
+// resolve returns either the static list of hosts, or the contents of the dns
+// record. If both or neither are supplied, returns error.
 func (c *Config) resolve() (stringset.Set, error) {
-	if c.DNS == "" {
+	if c.DNS == "" && len(c.Static) == 0 {
+		return nil, errors.New("no dns record or static list supplied")
+	}
+	if c.DNS != "" && len(c.Static) > 0 {
+		return nil, errors.New("both dns record and static list supplied")
+	}
+	if len(c.Static) > 0 {
 		return stringset.FromSlice(c.Static), nil
 	}
 	var r net.Resolver
-	addrs, err := r.LookupHost(context.Background(), c.DNS)
+	names, err := r.LookupHost(context.Background(), c.DNS)
 	if err != nil {
 		return nil, fmt.Errorf("resolve dns: %s", err)
 	}
-	if len(addrs) == 0 {
+	if len(names) == 0 {
 		return nil, errors.New("dns record empty")
 	}
-	return stringset.FromSlice(addrs), nil
-}
-
-func getLocalNames() (stringset.Set, error) {
-	result := make(stringset.Set)
-
-	// Add all local non-loopback ips.
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return nil, fmt.Errorf("interfaces: %s", err)
-	}
-	for _, i := range ifaces {
-		addrs, err := i.Addrs()
-		if err != nil {
-			return nil, fmt.Errorf("addrs of %v: %s", i, err)
-		}
-		for _, addr := range addrs {
-			ip := net.ParseIP(addr.String()).To4()
-			if ip == nil {
-				continue
-			}
-			if ip.IsLoopback() {
-				continue
-			}
-			result.Add(ip.String())
-		}
-	}
-
-	// Add local hostname just to be safe.
-	hostname, err := os.Hostname()
-	if err != nil {
-		return nil, fmt.Errorf("hostname: %s", err)
-	}
-	result.Add(hostname)
-
-	return result, nil
-}
-
-func attachPortIfMissing(names stringset.Set, port int) (stringset.Set, error) {
-	result := make(stringset.Set)
-	for name := range names {
-		parts := strings.Split(name, ":")
-		switch len(parts) {
-		case 1:
-			// Name is in 'host' format -- attach port.
-			name = fmt.Sprintf("%s:%d", parts[0], port)
-		case 2:
-			// No-op, name is already in "ip:port" format.
-		default:
-			return nil, fmt.Errorf("invalid name format: %s, expected 'host' or 'ip:port'", name)
-		}
-		result.Add(name)
-	}
-	return result, nil
+	return stringset.FromSlice(names), nil
 }

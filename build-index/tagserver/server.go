@@ -38,7 +38,7 @@ type Server struct {
 	backends          *backend.Manager
 	localOriginDNS    string
 	localOriginClient blobclient.ClusterClient
-	localReplicas     *hostlist.List
+	cluster           *hostlist.List
 	store             tagstore.Store
 
 	// For async new tag replication.
@@ -57,7 +57,7 @@ func New(
 	backends *backend.Manager,
 	localOriginDNS string,
 	localOriginClient blobclient.ClusterClient,
-	localReplicas *hostlist.List,
+	cluster *hostlist.List,
 	store tagstore.Store,
 	remotes tagreplication.Remotes,
 	tagReplicationManager persistedretry.Manager,
@@ -76,7 +76,7 @@ func New(
 		backends:              backends,
 		localOriginDNS:        localOriginDNS,
 		localOriginClient:     localOriginClient,
-		localReplicas:         localReplicas,
+		cluster:               cluster,
 		store:                 store,
 		remotes:               remotes,
 		tagReplicationManager: tagReplicationManager,
@@ -354,14 +354,14 @@ func (s *Server) putTag(tag string, d core.Digest, deps core.DigestList) error {
 		return handler.Errorf("storage: %s", err)
 	}
 
-	localReplicas, err := s.localReplicas.Resolve()
+	cluster, err := s.cluster.ResolveNonLocal()
 	if err != nil {
 		return fmt.Errorf("hostlist: %s", err)
 	}
 
 	var delay time.Duration
 	var successes int
-	for addr := range localReplicas {
+	for addr := range cluster {
 		delay += s.config.DuplicatePutStagger
 		client := s.provider.Provide(addr)
 		if err := client.DuplicatePut(tag, d, delay); err != nil {
@@ -370,7 +370,7 @@ func (s *Server) putTag(tag string, d core.Digest, deps core.DigestList) error {
 			successes++
 		}
 	}
-	if len(localReplicas) != 0 && successes == 0 {
+	if len(cluster) != 0 && successes == 0 {
 		s.stats.Counter("duplicate_put_failures").Inc(1)
 	}
 	return nil
@@ -389,14 +389,14 @@ func (s *Server) replicateTag(tag string, d core.Digest, deps core.DigestList) e
 		}
 	}
 
-	localReplicas, err := s.localReplicas.Resolve()
+	cluster, err := s.cluster.ResolveNonLocal()
 	if err != nil {
 		return fmt.Errorf("hostlist: %s", err)
 	}
 
 	var delay time.Duration
 	var successes int
-	for addr := range localReplicas { // Loops in random order.
+	for addr := range cluster { // Loops in random order.
 		delay += s.config.DuplicateReplicateStagger
 		client := s.provider.Provide(addr)
 		if err := client.DuplicateReplicate(tag, d, deps, delay); err != nil {
@@ -405,7 +405,7 @@ func (s *Server) replicateTag(tag string, d core.Digest, deps core.DigestList) e
 			successes++
 		}
 	}
-	if len(localReplicas) != 0 && successes == 0 {
+	if len(cluster) != 0 && successes == 0 {
 		s.stats.Counter("duplicate_replicate_failures").Inc(1)
 	}
 	return nil

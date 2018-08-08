@@ -23,7 +23,7 @@ import (
 
 func main() {
 	configFile := flag.String("config", "", "configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
-	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-sjc1)")
+	krakenCluster := flag.String("cluster", "", "Kraken cluster name (e.g. prod01-sjc1)")
 	port := flag.Int("port", 0, "tag server port")
 
 	flag.Parse()
@@ -38,7 +38,7 @@ func main() {
 	}
 	log.ConfigureLogger(config.ZapLogging)
 
-	stats, closer, err := metrics.New(config.Metrics, *cluster)
+	stats, closer, err := metrics.New(config.Metrics, *krakenCluster)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}
@@ -67,7 +67,7 @@ func main() {
 		log.Fatalf("Error creating local db: %s", err)
 	}
 
-	localReplicas, err := hostlist.New(config.LocalReplicas, *port)
+	cluster, err := hostlist.New(config.Cluster, *port)
 	if err != nil {
 		log.Fatalf("Error creating local replica host list: %s", err)
 	}
@@ -116,7 +116,7 @@ func main() {
 		backends,
 		config.Origin,
 		originClient,
-		localReplicas,
+		cluster,
 		tagStore,
 		remotes,
 		tagReplicationManager,

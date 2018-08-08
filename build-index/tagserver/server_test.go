@@ -26,10 +26,10 @@ import (
 )
 
 const (
-	_testNamespace    = ".*"
-	_testOrigin       = "some-dns-record"
-	_testRemote       = "remote-build-index"
-	_testLocalReplica = "local-build-index:3000"
+	_testNamespace = ".*"
+	_testOrigin    = "some-dns-record"
+	_testRemote    = "remote-build-index"
+	_testNeighbor  = "local-build-index:3000"
 )
 
 type serverMocks struct {
@@ -43,7 +43,7 @@ type serverMocks struct {
 	tagTypes              *mocktagtype.MockManager
 	originClient          *mockblobclient.MockClusterClient
 	store                 *mocktagstore.MockStore
-	localReplicas         *hostlist.List
+	cluster               *hostlist.List
 }
 
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
@@ -73,7 +73,7 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 
 	store := mocktagstore.NewMockStore(ctrl)
 
-	localReplicas, err := hostlist.New(hostlist.Config{Static: []string{_testLocalReplica}}, 3000)
+	cluster, err := hostlist.New(hostlist.Config{Static: []string{_testNeighbor}}, 3000)
 	if err != nil {
 		panic(err)
 	}
@@ -89,7 +89,7 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 		originClient:          originClient,
 		tagTypes:              tagTypes,
 		store:                 store,
-		localReplicas:         localReplicas,
+		cluster:               cluster,
 	}, cleanup.Run
 }
 
@@ -104,7 +104,7 @@ func (m *serverMocks) handler() http.Handler {
 		m.backends,
 		_testOrigin,
 		m.originClient,
-		m.localReplicas,
+		m.cluster,
 		m.store,
 		m.remotes,
 		m.tagReplicationManager,
@@ -126,14 +126,14 @@ func TestPut(t *testing.T) {
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
 	tagDependencyResolver := mocktagtype.NewMockDependencyResolver(mocks.ctrl)
-	localReplicaClient := mocktagclient.NewMockClient(mocks.ctrl)
+	neighborClient := mocktagclient.NewMockClient(mocks.ctrl)
 
 	mocks.tagTypes.EXPECT().GetDependencyResolver(tag).Return(tagDependencyResolver, nil)
 	tagDependencyResolver.EXPECT().Resolve(tag, digest).Return(core.DigestList{digest}, nil)
 	mocks.originClient.EXPECT().Stat(tag, digest).Return(core.NewBlobInfo(256), nil)
 	mocks.store.EXPECT().Put(tag, digest, time.Duration(0)).Return(nil)
-	mocks.provider.EXPECT().Provide(_testLocalReplica).Return(localReplicaClient)
-	localReplicaClient.EXPECT().DuplicatePut(
+	mocks.provider.EXPECT().Provide(_testNeighbor).Return(neighborClient)
+	neighborClient.EXPECT().DuplicatePut(
 		tag, digest, mocks.config.DuplicateReplicateStagger).Return(nil)
 
 	require.NoError(client.Put(tag, digest))
@@ -302,7 +302,7 @@ func TestPutAndReplicate(t *testing.T) {
 	digest := core.DigestFixture()
 	deps := core.DigestList{digest}
 	tagDependencyResolver := mocktagtype.NewMockDependencyResolver(mocks.ctrl)
-	localReplicaClient := mocktagclient.NewMockClient(mocks.ctrl)
+	neighborClient := mocktagclient.NewMockClient(mocks.ctrl)
 	task := tagreplication.NewTask(tag, digest, deps, _testRemote)
 	replicaClient := mocks.client()
 
@@ -311,11 +311,11 @@ func TestPutAndReplicate(t *testing.T) {
 		tagDependencyResolver.EXPECT().Resolve(tag, digest).Return(core.DigestList{digest}, nil),
 		mocks.originClient.EXPECT().Stat(tag, digest).Return(core.NewBlobInfo(256), nil),
 		mocks.store.EXPECT().Put(tag, digest, time.Duration(0)).Return(nil),
-		mocks.provider.EXPECT().Provide(_testLocalReplica).Return(localReplicaClient),
-		localReplicaClient.EXPECT().DuplicatePut(
+		mocks.provider.EXPECT().Provide(_testNeighbor).Return(neighborClient),
+		neighborClient.EXPECT().DuplicatePut(
 			tag, digest, mocks.config.DuplicateReplicateStagger).Return(nil),
 		mocks.tagReplicationManager.EXPECT().Add(tagreplication.MatchTask(task)).Return(nil),
-		mocks.provider.EXPECT().Provide(_testLocalReplica).Return(replicaClient),
+		mocks.provider.EXPECT().Provide(_testNeighbor).Return(replicaClient),
 		replicaClient.EXPECT().DuplicateReplicate(
 			tag, digest, deps, mocks.config.DuplicateReplicateStagger).Return(nil),
 	)
@@ -346,7 +346,7 @@ func TestReplicate(t *testing.T) {
 		mocks.tagTypes.EXPECT().GetDependencyResolver(tag).Return(tagDependencyResolver, nil),
 		tagDependencyResolver.EXPECT().Resolve(tag, digest).Return(deps, nil),
 		mocks.tagReplicationManager.EXPECT().Add(tagreplication.MatchTask(task)).Return(nil),
-		mocks.provider.EXPECT().Provide(_testLocalReplica).Return(replicaClient),
+		mocks.provider.EXPECT().Provide(_testNeighbor).Return(replicaClient),
 		replicaClient.EXPECT().DuplicateReplicate(
 			tag, digest, deps, mocks.config.DuplicateReplicateStagger).Return(nil),
 	)
