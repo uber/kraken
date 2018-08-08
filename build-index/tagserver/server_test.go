@@ -43,7 +43,7 @@ type serverMocks struct {
 	tagTypes              *mocktagtype.MockManager
 	originClient          *mockblobclient.MockClusterClient
 	store                 *mocktagstore.MockStore
-	cluster               *hostlist.List
+	cluster               hostlist.List
 }
 
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
@@ -73,11 +73,6 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 
 	store := mocktagstore.NewMockStore(ctrl)
 
-	cluster, err := hostlist.New(hostlist.Config{Static: []string{_testNeighbor}}, 3000)
-	if err != nil {
-		panic(err)
-	}
-
 	return &serverMocks{
 		ctrl:                  ctrl,
 		config:                Config{DuplicateReplicateStagger: 20 * time.Minute},
@@ -89,7 +84,7 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 		originClient:          originClient,
 		tagTypes:              tagTypes,
 		store:                 store,
-		cluster:               cluster,
+		cluster:               hostlist.Fixture(_testNeighbor),
 	}, cleanup.Run
 }
 

@@ -33,19 +33,6 @@ func (m *MockStore) EXPECT() *MockStoreMockRecorder {
 	return m.recorder
 }
 
-// GetOrigins mocks base method
-func (m *MockStore) GetOrigins(arg0 core.InfoHash) ([]*core.PeerInfo, error) {
-	ret := m.ctrl.Call(m, "GetOrigins", arg0)
-	ret0, _ := ret[0].([]*core.PeerInfo)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetOrigins indicates an expected call of GetOrigins
-func (mr *MockStoreMockRecorder) GetOrigins(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrigins", reflect.TypeOf((*MockStore)(nil).GetOrigins), arg0)
-}
-
 // GetPeers mocks base method
 func (m *MockStore) GetPeers(arg0 core.InfoHash, arg1 int) ([]*core.PeerInfo, error) {
 	ret := m.ctrl.Call(m, "GetPeers", arg0, arg1)
@@ -57,18 +44,6 @@ func (m *MockStore) GetPeers(arg0 core.InfoHash, arg1 int) ([]*core.PeerInfo, er
 // GetPeers indicates an expected call of GetPeers
 func (mr *MockStoreMockRecorder) GetPeers(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPeers", reflect.TypeOf((*MockStore)(nil).GetPeers), arg0, arg1)
-}
-
-// UpdateOrigins mocks base method
-func (m *MockStore) UpdateOrigins(arg0 core.InfoHash, arg1 []*core.PeerInfo) error {
-	ret := m.ctrl.Call(m, "UpdateOrigins", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateOrigins indicates an expected call of UpdateOrigins
-func (mr *MockStoreMockRecorder) UpdateOrigins(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrigins", reflect.TypeOf((*MockStore)(nil).UpdateOrigins), arg0, arg1)
 }
 
 // UpdatePeer mocks base method

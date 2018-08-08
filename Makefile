@@ -216,6 +216,12 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
+	mkdir -p mocks/lib/hostlist
+	$(mockgen) \
+		-destination=mocks/lib/hostlist/mocks.go \
+		-package mockhostlist \
+		code.uber.internal/infra/kraken/lib/hostlist List
+
 	mkdir -p mocks/tracker/originstore
 	$(mockgen) \
 		-destination=mocks/tracker/originstore/mockoriginstore.go \
