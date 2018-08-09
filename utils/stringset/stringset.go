@@ -66,3 +66,12 @@ func Equal(s1 Set, s2 Set) bool {
 	}
 	return true
 }
+
+// Copy returns a copy of s.
+func (s Set) Copy() Set {
+	c := make(Set, len(s))
+	for x := range s {
+		c.Add(x)
+	}
+	return c
+}
