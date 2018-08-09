@@ -45,7 +45,7 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 
 	if ok, err := remoteTagClient.Has(t.Tag); err == nil && ok {
 		// Remote index already has the tag, therefore dependencies have already
-		// been replicated. No-op.
+		// been replicated, and the remote has also replicated the tag. No-op.
 		return nil
 	}
 
@@ -59,8 +59,11 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 		}
 	}
 
-	if err := remoteTagClient.Put(t.Tag, t.Digest); err != nil {
-		return fmt.Errorf("put tag: %s", err)
+	// Put tag and triggers replication on the remote client.
+	// Replication will call Exec n^2 times but some will return early
+	// if remote has the tag already.
+	if err := remoteTagClient.PutAndReplicate(t.Tag, t.Digest); err != nil {
+		return fmt.Errorf("put and replicate tag: %s", err)
 	}
 
 	// We don't want to time noops nor errors.
