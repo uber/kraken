@@ -9,7 +9,7 @@ import (
 	"sort"
 )
 
-// min between two integers
+// min between two integers.
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -17,23 +17,23 @@ func min(a, b int) int {
 	return b
 }
 
-// HashFactory is a function object for Hash.New() constructor
+// HashFactory is a function object for Hash.New() constructor.
 type HashFactory func() hash.Hash
 
-// UIntToFloat is a conversion function from uint64 to float64
-// Int could be potentially very big integer, like 256 bits long
+// UIntToFloat is a conversion function from uint64 to float64.
+// Int could be potentially very big integer, like 256 bits long.
 type UIntToFloat func(bytesUInt []byte, maxValue []byte, hasher hash.Hash) float64
 
-// RendezvousHashNode represents a weighted node in a hashing schema
+// RendezvousHashNode represents a weighted node in a hashing schema.
 type RendezvousHashNode struct {
 	RHash  *RendezvousHash // parent hash structure with all the configuration
 	Label  string          // some string ientifying a unique node label
 	Weight int             // node weight, usually denotes node's capacity
 }
 
-// RendezvousHash represents a Rendezvous Hashing schema
-// It does not make any assumption about concurrency model so
-// synchronizing access to it is a caller's responsibility
+// RendezvousHash represents a Rendezvous Hashing schema.
+// It does not make any assumption about concurrency model so synchronizing
+// access to it is a caller's responsibility.
 type RendezvousHash struct {
 	Hash         HashFactory           // hash function
 	ScoreFunc    UIntToFloat           // conversion function from generated hash to float64
@@ -41,24 +41,24 @@ type RendezvousHash struct {
 	MaxHashValue []byte
 }
 
-// RendezvousNodesByScore is a predicat that supports sorting by score(key)
+// RendezvousNodesByScore is a predicat that supports sorting by score(key).
 type RendezvousNodesByScore struct {
 	key   string
 	nodes []*RendezvousHashNode
 }
 
-// Len return length
+// Len return length.
 func (a RendezvousNodesByScore) Len() int { return len(a.nodes) }
 
-// Swap swaps two elements
+// Swap swaps two elements.
 func (a RendezvousNodesByScore) Swap(i, j int) { a.nodes[i], a.nodes[j] = a.nodes[j], a.nodes[i] }
 
-// Less is a predicate '<' for a set
+// Less is a predicate '<' for a set.
 func (a RendezvousNodesByScore) Less(i, j int) bool {
 	return a.nodes[i].Score(a.key) < a.nodes[j].Score(a.key)
 }
 
-// NewRendezvousHash constructs and prepopulates a RendezvousHash object with some defaults
+// NewRendezvousHash constructs and prepopulates a RendezvousHash object.
 func NewRendezvousHash(hashFactory HashFactory, scoreFunc UIntToFloat) *RendezvousHash {
 	rh := &RendezvousHash{
 		Hash:      hashFactory,
@@ -99,13 +99,13 @@ func UInt64ToFloat64(bytesUInt []byte, maxValue []byte, hasher hash.Hash) float6
 	return float64(val) / fiftyThreeZeros
 }
 
-// BigIntToFloat64 converts BigInt to float64
+// BigIntToFloat64 converts BigInt to float64.
 func BigIntToFloat64(bytesUInt []byte, maxValue []byte, hasher hash.Hash) float64 {
 	maxHashFloat := new(big.Float)
 	maxHashFloat.SetInt(new(big.Int).SetBytes(maxValue))
 
 	hashInt := new(big.Int)
-	// checksumHash is being consumed as a big endian int
+	// checksumHash is being consumed as a big endian int.
 	hashInt.SetBytes(bytesUInt)
 
 	hashFloat := new(big.Float).SetInt(hashInt)
@@ -117,8 +117,9 @@ func BigIntToFloat64(bytesUInt []byte, maxValue []byte, hasher hash.Hash) float6
 
 	fl64value, _ := hashFloat.Quo(hashFloat, maxHashFloat).Float64()
 
-	// I don't expact that to happen, the accuracy of 256 bits division arithmetic is well within
-	// float'64 theoretical minimum for a single division and we always divide may a non zero constant
+	// I don't expact that to happen, the accuracy of 256 bits division
+	// arithmetic is well within float'64 theoretical minimum for a single
+	// division and we always divide with a non zero constant.
 	if hashFloat.IsInf() {
 		panic("Float64.Quo operation has failed")
 	}
@@ -126,9 +127,9 @@ func BigIntToFloat64(bytesUInt []byte, maxValue []byte, hasher hash.Hash) float6
 	return fl64value
 }
 
-// Score computes score of a key for this node
-// in accordance to Weighted Rendezvous Hash. It's using big golang float
-// key as hexidemical encoding of a byte array
+// Score computes score of a key for this node in accordance to Weighted
+// Rendezvous Hash. It's using big golang float key as hexidemical encoding of
+// a byte array.
 func (rhn *RendezvousHashNode) Score(key string) float64 {
 	hasher := rhn.RHash.Hash()
 
@@ -152,7 +153,7 @@ func (rhn *RendezvousHashNode) Score(key string) float64 {
 	return -float64(rhn.Weight) / math.Log(score)
 }
 
-// AddNode adds a node to a hashing ring
+// AddNode adds a node to a hashing ring.
 func (rh *RendezvousHash) AddNode(seed string, weight int) {
 	node := &RendezvousHashNode{
 		RHash:  rh,
@@ -162,7 +163,7 @@ func (rh *RendezvousHash) AddNode(seed string, weight int) {
 	rh.Nodes = append(rh.Nodes, node)
 }
 
-// RemoveNode removes a node from a hashing ring
+// RemoveNode removes a node from a hashing ring.
 func (rh *RendezvousHash) RemoveNode(name string) {
 	for i, node := range rh.Nodes {
 		if node.Label == name {
@@ -172,7 +173,7 @@ func (rh *RendezvousHash) RemoveNode(name string) {
 	}
 }
 
-// GetNode gets a node from a hashing ring and its index in array
+// GetNode gets a node from a hashing ring and its index in array.
 func (rh *RendezvousHash) GetNode(name string) (*RendezvousHashNode, int) {
 	for index, node := range rh.Nodes {
 		if node.Label == name {
@@ -182,9 +183,9 @@ func (rh *RendezvousHash) GetNode(name string) (*RendezvousHashNode, int) {
 	return nil, -1
 }
 
-// GetOrderedNodes gets an ordered set of N nodes for a key
-// where score(Node1) > score(N2) > ... score(NodeN)
-// Number of returned nodes = min(N, len(nodes))
+// GetOrderedNodes gets an ordered set of N nodes for a key where
+// score(Node1) > score(N2) > ... score(NodeN).
+// Number of returned nodes = min(N, len(nodes)).
 func (rh *RendezvousHash) GetOrderedNodes(key string, n int) ([]*RendezvousHashNode, error) {
 	nodes := make([]*RendezvousHashNode, len(rh.Nodes))
 	copy(nodes, rh.Nodes)
