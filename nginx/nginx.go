@@ -11,8 +11,12 @@ import (
 	"text/template"
 )
 
-// Assumes CWD is set to the project root.
-const _configDir = "./nginx/config"
+const (
+	// Assumes CWD is set to the project root.
+	_configDir = "./nginx/config"
+
+	_genDir = "/tmp/nginx"
+)
 
 func abspath(name string) (string, error) {
 	return filepath.Abs(filepath.Join(_configDir, name))
@@ -53,7 +57,10 @@ func Run(config Config, port int) error {
 		return fmt.Errorf("populate base: %s", err)
 	}
 
-	conf := filepath.Join("/etc/nginx", config.Name)
+	if err := os.MkdirAll(_genDir, 0775); err != nil {
+		return err
+	}
+	conf := filepath.Join(_genDir, config.Name)
 	if err := ioutil.WriteFile(conf, src, 0755); err != nil {
 		return fmt.Errorf("write src: %s", err)
 	}
