@@ -6,7 +6,8 @@ import (
 	"encoding/binary"
 	"hash"
 	"math"
-	"os"
+	"reflect"
+	"runtime"
 	"sort"
 	"testing"
 
@@ -14,202 +15,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func assertKeyDistribution(t *testing.T, rh *RendezvousHash, nodekeys NodeKeysTable, numKeys int, totalWeights float64, delta float64) {
-	for name, v := range nodekeys {
-		node, _ := rh.GetNode(name)
-		assert.NotEqual(t, node, nil)
-
-		// make sure the ratio of keys falling in a particular bucket
-		// conforms to general weight distribution within 1% accuracy
-		assert.InDelta(t, float64(len(v))/float64(numKeys), float64(node.Weight)/totalWeights, delta)
-	}
-
-}
-
-var (
-	hashes     []HashFactory
-	scoreFuncs []UIntToFloat
-	numKeys    int
-)
-
-func Murmur3Hash() hash.Hash {
-	h32 := murmur3.New64()
-	return h32
-}
-
-func TestMain(m *testing.M) {
-	hashes = []HashFactory{Murmur3Hash, sha256.New, md5.New}
-	scoreFuncs = []UIntToFloat{BigIntToFloat64, UInt64ToFloat64}
-	numKeys = 10000
-
-	os.Exit(m.Run())
-}
-
-func TestKeyDistribution(t *testing.T) {
-	for _, hash := range hashes {
-		for _, scoreFunc := range scoreFuncs {
-
-			t.Run("Ensure a weighted key distribution is in place", func(t *testing.T) {
-				rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
-				assertKeyDistribution(t, rh, nodekeys, numKeys, 1500.0, 0.02)
-			})
-		}
-	}
-}
-
-func TestAddRemoveNodes(t *testing.T) {
-	for _, hash := range hashes {
-		for _, scoreFunc := range scoreFuncs {
-
-			t.Run("Make sure removing nodes to WRH does not cause rehashing of the entire hashing ring", func(t *testing.T) {
-				rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
-
-				rh.RemoveNode("1")
-				assert.Equal(t, len(rh.Nodes), 3)
-
-				for name, v := range nodekeys {
-					if name == "1" { //obviously "1" node is going to be relocated to other nodes
-						continue
-					}
-					// the rmaining nodes should not change their allocation buckets
-					for key := range v {
-						nodes, _ := rh.GetOrderedNodes(key, 1)
-						assert.Equal(t, nodes[0].Label, name)
-					}
-				}
-			})
-			t.Run("Make sure adding nodes to WRH will only cause other nodes to lose some population of keys", func(t *testing.T) {
-				rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
-
-				rh.AddNode("4", 200)
-				nodekeys["4"] = make(map[string]struct{})
-
-				assert.Equal(t, len(rh.Nodes), 5)
-
-				for name, v := range nodekeys {
-					if name == "4" { //new node "4" will get some keys from other nodes
-						continue
-					}
-					// the remaining nodes should not change their allocation buckets
-					for key := range v {
-						nodes, _ := rh.GetOrderedNodes(key, 1)
-						if nodes[0].Label != name {
-							assert.Equal(t, nodes[0].Label, "4")
-							nodekeys[nodes[0].Label][key] = struct{}{}
-							delete(nodekeys[name], key)
-						}
-					}
-				}
-				assertKeyDistribution(t, rh, nodekeys, numKeys, 1700.0, 0.02)
-			})
-		}
-	}
-}
-
-type ByScore []float64
-
-func (a ByScore) Len() int           { return len(a) }
-func (a ByScore) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a ByScore) Less(i, j int) bool { return a[i] < a[j] }
-
-func TestGetOrderedNodes(t *testing.T) {
-	for _, hash := range hashes {
-		for _, scoreFunc := range scoreFuncs {
-
-			t.Run("Ensure the length of returned nodes", func(t *testing.T) {
-				rh, _ := RendezvousHashFixture(0, hash, scoreFunc, 100, 200, 400, 800)
-				keys := HashKeyFixture(1, hash)
-
-				var scores []float64
-				for _, node := range rh.Nodes {
-					score := node.Score(keys[0])
-					scores = append(scores, score)
-				}
-				sort.Sort(ByScore(scores))
-				nodes, _ := rh.GetOrderedNodes(keys[0], 4)
-				assert.Equal(t, len(nodes), 4)
-			})
-			t.Run("Ensure order of returned nodes", func(t *testing.T) {
-				rh, _ := RendezvousHashFixture(0, hash, scoreFunc, 100, 200, 400, 800)
-				keys := HashKeyFixture(1, hash)
-
-				var scores []float64
-				for _, node := range rh.Nodes {
-					score := node.Score(keys[0])
-					scores = append(scores, score)
-				}
-				sort.Sort(ByScore(scores))
-				nodes, _ := rh.GetOrderedNodes(keys[0], 4)
-				for index, node := range nodes {
-					score := node.Score(keys[0])
-					assert.Equal(t, score, scores[4-index-1])
-				}
-			})
-		}
-	}
-}
-
-func TestChangeCapacity(t *testing.T) {
-	for _, hash := range hashes {
-		for _, scoreFunc := range scoreFuncs {
-			t.Run("Ensure adding capacity in one of WRH nodes will relocate some keys to it", func(t *testing.T) {
-				rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
-
-				_, index := rh.GetNode("3")
-				rh.Nodes[index].Weight = 1000
-
-				for name, v := range nodekeys {
-					// some keys in nodes should change their allocation buckets to accomdate for
-					// new capacity on node "3"
-					for key := range v {
-						nodes, _ := rh.GetOrderedNodes(key, 1)
-						if nodes[0].Label != name {
-							assert.Equal(t, nodes[0].Label, "3")
-							nodekeys[nodes[0].Label][key] = struct{}{}
-							delete(nodekeys[name], key)
-						} else {
-							assert.Equal(t, nodes[0].Label, name)
-						}
-					}
-				}
-
-				// make sure we still keep the target distribution after resharding
-				assertKeyDistribution(t, rh, nodekeys, numKeys, 1700.0, 0.02)
-			})
-			t.Run("Ensure removing capacity in one of WRH nodes will move some keys from it to other nodes", func(t *testing.T) {
-				rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
-
-				_, index := rh.GetNode("3")
-				rh.Nodes[index].Weight = 200
-
-				for name, v := range nodekeys {
-					// the remaining nodes should not change their allocation buckets
-					for key := range v {
-						nodes, _ := rh.GetOrderedNodes(key, 1)
-						if nodes[0].Label != name {
-							assert.Equal(t, name, "3")
-							assert.NotEqual(t, nodes[0].Label, "3")
-							nodekeys[nodes[0].Label][key] = struct{}{}
-							delete(nodekeys[name], key)
-						} else {
-							assert.Equal(t, nodes[0].Label, name)
-						}
-					}
-				}
-
-				// make sure we still keep the target distribution after resharding
-				assertKeyDistribution(t, rh, nodekeys, numKeys, 900.0, 0.02)
-			})
-		}
-	}
-}
-
 func TestScoreFunctionFloatPrecision(t *testing.T) {
 	byteLength := []int{8, 16, 32} // 64, 128, 256 bits
 
 	for index, bl := range byteLength {
-		for indexScore, scoreFunc := range scoreFuncs {
-			//UInt64ToFloat64 can't work on values > 64 bits
+		for indexScore, scoreFunc := range []UIntToFloat{BigIntToFloat64, UInt64ToFloat64} {
+			// UInt64ToFloat64 can't work on values > 64 bits
 			if index > 0 && indexScore > 0 {
 				continue
 			}
@@ -270,27 +81,179 @@ func TestScoreFunctionUint64ToFloat64BadValues(t *testing.T) {
 	}
 }
 
-func benchmarkHashScore(hashFactory HashFactory, scoreFunc UIntToFloat, b *testing.B) {
-	keys := HashKeyFixture(1, hashFactory)
-	rh, _ := RendezvousHashFixture(0, hashFactory, scoreFunc, 100, 200, 400, 800)
+func TestKeyDistributionAndNodeChanges(t *testing.T) {
+	hashes := []struct {
+		name string
+		f    HashFactory
+	}{
+		{"murmur3", func() hash.Hash {
+			h32 := murmur3.New64()
+			return h32
+		}},
+		{"sha256", sha256.New},
+		{"md5", md5.New},
+	}
 
-	for i := 0; i < b.N; i++ {
-		rh.GetOrderedNodes(keys[0], 4)
+	scoreFuncs := []struct {
+		name string
+		f    UIntToFloat
+	}{
+		{"BigIntToFloat64", BigIntToFloat64},
+		{"UInt64ToFloat64", UInt64ToFloat64},
+	}
+	numKeys := 1000
+
+	tests := []func(int, HashFactory, UIntToFloat, *testing.T){
+		testKeyDistribution,
+		testAddNodes,
+		testRemoveNodes,
+		testReturnNodesLength,
+		testReturnNodesOrder,
+		testAddingCapacity,
+		testRemovingCapacity,
+	}
+
+	for _, hash := range hashes {
+		for _, scoreFunc := range scoreFuncs {
+			t.Run(hash.name+scoreFunc.name, func(t *testing.T) {
+				for _, test := range tests {
+					testName := runtime.FuncForPC(reflect.ValueOf(test).Pointer()).Name()
+					t.Run(testName, func(*testing.T) {
+						test(numKeys, hash.f, scoreFunc.f, t)
+					})
+				}
+			})
+		}
 	}
 }
 
-func BenchmarkMurmur3UInt64ToFloat64(b *testing.B) {
-	benchmarkHashScore(Murmur3Hash, UInt64ToFloat64, b)
+func testKeyDistribution(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
+	rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
+	assertKeyDistribution(t, rh, nodekeys, numKeys, 1500.0, 0.05)
 }
 
-func BenchmarkSha256UInt64ToFloat64(b *testing.B) {
-	benchmarkHashScore(sha256.New, UInt64ToFloat64, b)
+func testAddNodes(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
+	rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
+
+	rh.RemoveNode("1")
+	assert.Equal(t, len(rh.Nodes), 3)
+
+	for name, v := range nodekeys {
+		if name == "1" {
+			// "1" node is going to be relocated to other nodes.
+			continue
+		}
+		// The rmaining nodes should not change their allocation buckets.
+		for key := range v {
+			nodes, _ := rh.GetOrderedNodes(key, 1)
+			assert.Equal(t, nodes[0].Label, name)
+		}
+	}
 }
 
-func BenchmarkMurmur3BigIntToFloat64(b *testing.B) {
-	benchmarkHashScore(Murmur3Hash, BigIntToFloat64, b)
+func testRemoveNodes(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
+	rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
+
+	rh.AddNode("4", 200)
+	nodekeys["4"] = make(map[string]struct{})
+
+	assert.Equal(t, len(rh.Nodes), 5)
+
+	for name, v := range nodekeys {
+		if name == "4" {
+			// New node "4" will get some keys from other nodes.
+			continue
+		}
+		// Th remaining nodes should not change their allocation buckets.
+		for key := range v {
+			nodes, _ := rh.GetOrderedNodes(key, 1)
+			if nodes[0].Label != name {
+				assert.Equal(t, nodes[0].Label, "4")
+				nodekeys[nodes[0].Label][key] = struct{}{}
+				delete(nodekeys[name], key)
+			}
+		}
+	}
+	assertKeyDistribution(t, rh, nodekeys, numKeys, 1700.0, 0.05)
 }
 
-func BenchmarkSha256BigIntToFloat64(b *testing.B) {
-	benchmarkHashScore(sha256.New, BigIntToFloat64, b)
+func testReturnNodesLength(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
+	rh, _ := RendezvousHashFixture(0, hash, scoreFunc, 100, 200, 400, 800)
+	keys := HashKeyFixture(1, hash)
+
+	var scores []float64
+	for _, node := range rh.Nodes {
+		score := node.Score(keys[0])
+		scores = append(scores, score)
+	}
+	sort.Sort(ByScore(scores))
+	nodes, _ := rh.GetOrderedNodes(keys[0], 4)
+	assert.Equal(t, len(nodes), 4)
+}
+
+func testReturnNodesOrder(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
+	rh, _ := RendezvousHashFixture(0, hash, scoreFunc, 100, 200, 400, 800)
+	keys := HashKeyFixture(1, hash)
+
+	var scores []float64
+	for _, node := range rh.Nodes {
+		score := node.Score(keys[0])
+		scores = append(scores, score)
+	}
+	sort.Sort(ByScore(scores))
+	nodes, _ := rh.GetOrderedNodes(keys[0], 4)
+	for index, node := range nodes {
+		score := node.Score(keys[0])
+		assert.Equal(t, score, scores[4-index-1])
+	}
+}
+
+func testAddingCapacity(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
+	rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
+
+	_, index := rh.GetNode("3")
+	rh.Nodes[index].Weight = 1000
+
+	for name, v := range nodekeys {
+		// Some keys in nodes should change their allocation buckets
+		// accomdate for new capacity on node "3".
+		for key := range v {
+			nodes, _ := rh.GetOrderedNodes(key, 1)
+			if nodes[0].Label != name {
+				assert.Equal(t, nodes[0].Label, "3")
+				nodekeys[nodes[0].Label][key] = struct{}{}
+				delete(nodekeys[name], key)
+			} else {
+				assert.Equal(t, nodes[0].Label, name)
+			}
+		}
+	}
+
+	// Make sure we still keep the target distribution after resharding.
+	assertKeyDistribution(t, rh, nodekeys, numKeys, 1700.0, 0.05)
+}
+
+func testRemovingCapacity(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
+	rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
+
+	_, index := rh.GetNode("3")
+	rh.Nodes[index].Weight = 200
+
+	for name, v := range nodekeys {
+		// The remaining nodes should not change their allocation buckets.
+		for key := range v {
+			nodes, _ := rh.GetOrderedNodes(key, 1)
+			if nodes[0].Label != name {
+				assert.Equal(t, name, "3")
+				assert.NotEqual(t, nodes[0].Label, "3")
+				nodekeys[nodes[0].Label][key] = struct{}{}
+				delete(nodekeys[name], key)
+			} else {
+				assert.Equal(t, nodes[0].Label, name)
+			}
+		}
+	}
+
+	// Make sure we still keep the target distribution after resharding.
+	assertKeyDistribution(t, rh, nodekeys, numKeys, 900.0, 0.05)
 }
