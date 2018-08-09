@@ -58,7 +58,7 @@ func TestExecutor(t *testing.T) {
 			task.Tag, task.Dependencies[1], _testRemoteOrigin).Return(nil),
 		mocks.originCluster.EXPECT().ReplicateToRemote(
 			task.Tag, task.Dependencies[2], _testRemoteOrigin).Return(nil),
-		tagClient.EXPECT().Put(task.Tag, task.Digest).Return(nil),
+		tagClient.EXPECT().PutAndReplicate(task.Tag, task.Digest).Return(nil),
 	)
 
 	require.NoError(executor.Exec(task))
