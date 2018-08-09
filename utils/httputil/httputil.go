@@ -1,6 +1,7 @@
 package httputil
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -102,6 +103,7 @@ type sendOptions struct {
 	redirect      func(req *http.Request, via []*http.Request) error
 	retry         retryOptions
 	transport     http.RoundTripper
+	ctx           context.Context
 }
 
 // SendOption allows overriding defaults for the Send function.
@@ -171,6 +173,11 @@ func SendTransport(transport http.RoundTripper) SendOption {
 	return func(o *sendOptions) { o.transport = transport }
 }
 
+// SendContext sets the context for the HTTP client.
+func SendContext(ctx context.Context) SendOption {
+	return func(o *sendOptions) { o.ctx = ctx }
+}
+
 // Send sends an HTTP request. May return NetworkError or StatusError (see above).
 func Send(method, url string, options ...SendOption) (resp *http.Response, err error) {
 	opts := sendOptions{
@@ -180,6 +187,7 @@ func Send(method, url string, options ...SendOption) (resp *http.Response, err e
 		headers:       map[string]string{},
 		retry:         retryOptions{max: 1},
 		transport:     nil, // Use HTTP default.
+		ctx:           context.Background(),
 	}
 	for _, o := range options {
 		o(&opts)
@@ -189,6 +197,7 @@ func Send(method, url string, options ...SendOption) (resp *http.Response, err e
 	if err != nil {
 		return nil, fmt.Errorf("new request: %s", err)
 	}
+	req = req.WithContext(opts.ctx)
 
 	for key, val := range opts.headers {
 		req.Header.Set(key, val)

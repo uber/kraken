@@ -222,6 +222,12 @@ mocks:
 		-package mockhostlist \
 		code.uber.internal/infra/kraken/lib/hostlist List
 
+	mkdir -p mocks/lib/healthcheck
+	$(mockgen) \
+		-destination=mocks/lib/healthcheck/mocks.go \
+		-package mockhealthcheck \
+		code.uber.internal/infra/kraken/lib/healthcheck Checker,Filter
+
 	mkdir -p mocks/tracker/originstore
 	$(mockgen) \
 		-destination=mocks/tracker/originstore/mockoriginstore.go \
