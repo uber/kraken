@@ -2,13 +2,11 @@ package blobserver
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,7 +16,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
-	"code.uber.internal/infra/kraken/lib/hrw"
+	"code.uber.internal/infra/kraken/lib/hashring"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/middleware"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
@@ -42,10 +40,8 @@ const _uploadChunkSize = 16 * memsize.MB
 // Server defines a server that serves blob data for agent.
 type Server struct {
 	config            Config
-	label             string
 	addr              string
-	labelToAddr       map[string]string
-	hashState         *hrw.RendezvousHash
+	hashRing          hashring.Ring
 	cas               *store.CAStore
 	clientProvider    blobclient.Provider
 	stats             tally.Scope
@@ -67,6 +63,7 @@ func New(
 	config Config,
 	stats tally.Scope,
 	addr string,
+	hashRing hashring.Ring,
 	cas *store.CAStore,
 	clientProvider blobclient.Provider,
 	pctx core.PeerContext,
@@ -81,22 +78,14 @@ func New(
 		"module": "blobserver",
 	})
 
-	if len(config.HashNodes) == 0 {
-		return nil, errors.New("no hash nodes configured")
+	if !hashRing.Contains(addr) {
+		return nil, fmt.Errorf("%s not found in hash ring", addr)
 	}
-
-	currNode, ok := config.HashNodes[addr]
-	if !ok {
-		return nil, fmt.Errorf("host address %s not in configured hash nodes", addr)
-	}
-	label := currNode.Label
 
 	return &Server{
 		config:            config,
-		label:             label,
 		addr:              addr,
-		labelToAddr:       config.LabelToAddress(),
-		hashState:         config.HashState(),
+		hashRing:          hashRing,
 		cas:               cas,
 		clientProvider:    clientProvider,
 		stats:             stats,
@@ -293,10 +282,7 @@ func (s *Server) getLocationsHandler(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return err
 	}
-	locs, err := s.getLocations(d)
-	if err != nil {
-		return err
-	}
+	locs := s.hashRing.Locations(d)
 	w.Header().Set("Origin-Locations", strings.Join(locs, ","))
 	w.WriteHeader(http.StatusOK)
 	return nil
@@ -428,11 +414,7 @@ func (s *Server) replicateBlobLocally(d core.Digest) error {
 // applyToReplicas applies f to the replicas of d concurrently in random order,
 // not including the current origin. Passes the index of the iteration to f.
 func (s *Server) applyToReplicas(d core.Digest, f func(i int, c blobclient.Client) error) error {
-	locs, err := s.getLocations(d)
-	if err != nil {
-		return fmt.Errorf("get locations: %s", err)
-	}
-	replicas := stringset.FromSlice(locs)
+	replicas := stringset.FromSlice(s.hashRing.Locations(d))
 	replicas.Remove(s.addr)
 
 	var mu sync.Mutex
@@ -457,26 +439,9 @@ func (s *Server) applyToReplicas(d core.Digest, f func(i int, c blobclient.Clien
 	return errutil.Join(errs)
 }
 
-func (s *Server) getLocations(d core.Digest) ([]string, error) {
-	nodes, err := s.hashState.GetOrderedNodes(d.ShardID(), s.config.NumReplica)
-	if err != nil || len(nodes) == 0 {
-		return nil, handler.Errorf("get nodes: %s", err)
-	}
-	var locs []string
-	for _, node := range nodes {
-		locs = append(locs, s.labelToAddr[node.Label])
-	}
-	sort.Strings(locs)
-	return locs, nil
-}
-
 func (s *Server) ensureCorrectNode(d core.Digest) error {
-	nodes, err := s.hashState.GetOrderedNodes(d.ShardID(), s.config.NumReplica)
-	if err != nil || len(nodes) == 0 {
-		return handler.Errorf("get nodes: %s", err)
-	}
-	for _, node := range nodes {
-		if node.Label == s.label {
+	for _, loc := range s.hashRing.Locations(d) {
+		if loc == s.addr {
 			return nil
 		}
 	}

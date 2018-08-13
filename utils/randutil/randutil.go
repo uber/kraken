@@ -60,6 +60,11 @@ func Port() int {
 	return rand.Intn(65535) + 1
 }
 
+// Addr returns a random address in ip:port format.
+func Addr() string {
+	return fmt.Sprintf("%s:%d", IP(), Port())
+}
+
 // ShuffleInts shuffles the values of xs in place.
 func ShuffleInts(xs []int) {
 	for i := range xs {

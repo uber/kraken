@@ -7,6 +7,8 @@ import (
 	"math"
 	"math/big"
 	"sort"
+
+	"github.com/spaolacci/murmur3"
 )
 
 // min between two integers.
@@ -19,6 +21,9 @@ func min(a, b int) int {
 
 // HashFactory is a function object for Hash.New() constructor.
 type HashFactory func() hash.Hash
+
+// Murmur3Hash is a murmur3 HashFactory.
+func Murmur3Hash() hash.Hash { return murmur3.New64() }
 
 // UIntToFloat is a conversion function from uint64 to float64.
 // Int could be potentially very big integer, like 256 bits long.
@@ -186,14 +191,14 @@ func (rh *RendezvousHash) GetNode(name string) (*RendezvousHashNode, int) {
 // GetOrderedNodes gets an ordered set of N nodes for a key where
 // score(Node1) > score(N2) > ... score(NodeN).
 // Number of returned nodes = min(N, len(nodes)).
-func (rh *RendezvousHash) GetOrderedNodes(key string, n int) ([]*RendezvousHashNode, error) {
+func (rh *RendezvousHash) GetOrderedNodes(key string, n int) []*RendezvousHashNode {
 	nodes := make([]*RendezvousHashNode, len(rh.Nodes))
 	copy(nodes, rh.Nodes)
 
 	sort.Sort(sort.Reverse(&RendezvousNodesByScore{key: key, nodes: nodes}))
 
 	if n >= len(nodes) {
-		return nodes, nil
+		return nodes
 	}
-	return nodes[:n], nil
+	return nodes[:n]
 }

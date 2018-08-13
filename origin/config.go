@@ -6,6 +6,8 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
+	"code.uber.internal/infra/kraken/lib/hashring"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -20,6 +22,8 @@ import (
 type Config struct {
 	Verbose       bool
 	ZapLogging    zap.Config            `yaml:"zap"`
+	Cluster       hostlist.Config       `yaml:"cluster"`
+	HashRing      hashring.Config       `yaml:"hashring"`
 	BlobServer    blobserver.Config     `yaml:"blobserver"`
 	CAStore       store.CAStoreConfig   `yaml:"castore"`
 	Scheduler     scheduler.Config      `yaml:"scheduler"`

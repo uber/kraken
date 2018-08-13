@@ -26,7 +26,7 @@ func TestStatHandlerLocalNotFound(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
 	defer s.cleanup()
 
 	d := core.DigestFixture()
@@ -41,7 +41,7 @@ func TestStatHandlerNotFound(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
 	defer s.cleanup()
 
 	d := core.DigestFixture()
@@ -60,7 +60,7 @@ func TestStatHandlerReturnSize(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
 	defer s.cleanup()
 
 	client := cp.Provide(s.host)
@@ -82,7 +82,7 @@ func TestDownloadBlobHandlerNotFound(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
 	defer s.cleanup()
 
 	d := core.DigestFixture()
@@ -101,7 +101,7 @@ func TestDeleteBlob(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
 	defer s.cleanup()
 
 	client := cp.Provide(s.host)
@@ -123,22 +123,22 @@ func TestGetLocationsHandlerOK(t *testing.T) {
 	require := require.New(t)
 
 	cp := newTestClientProvider()
-	config := configFixture()
+	ring := hashRingSomeReplica()
 
-	s := newTestServer(t, master1, config, cp)
+	s := newTestServer(t, master1, ring, cp)
 	defer s.cleanup()
 
-	blob := computeBlobForHosts(config, master1, master2)
+	blob := computeBlobForHosts(ring, master1, master2)
 
 	locs, err := cp.Provide(s.host).Locations(blob.Digest)
 	require.NoError(err)
-	require.Equal([]string{master1, master2}, locs)
+	require.ElementsMatch([]string{master1, master2}, locs)
 }
 
 func TestIncorrectNodeErrors(t *testing.T) {
-	config := configFixture()
+	ring := hashRingSomeReplica()
 	namespace := core.TagFixture()
-	blob := computeBlobForHosts(config, master2, master3)
+	blob := computeBlobForHosts(ring, master2, master3)
 
 	tests := []struct {
 		name string
@@ -179,7 +179,7 @@ func TestIncorrectNodeErrors(t *testing.T) {
 
 			cp := newTestClientProvider()
 
-			s := newTestServer(t, master1, config, cp)
+			s := newTestServer(t, master1, ring, cp)
 			defer s.cleanup()
 
 			err := test.f(cp.Provide(s.host))
@@ -194,7 +194,7 @@ func TestGetPeerContextHandlerOK(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, configFixture(), cp)
+	s := newTestServer(t, master1, hashRingSomeReplica(), cp)
 	defer s.cleanup()
 
 	pctx, err := cp.Provide(master1).GetPeerContext()
@@ -205,17 +205,17 @@ func TestGetPeerContextHandlerOK(t *testing.T) {
 func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 	require := require.New(t)
 
-	config := configFixture()
+	ring := hashRingSomeReplica()
 	cp := newTestClientProvider()
 	namespace := core.TagFixture()
 
-	s1 := newTestServer(t, master1, config, cp)
+	s1 := newTestServer(t, master1, ring, cp)
 	defer s1.cleanup()
 
-	s2 := newTestServer(t, master2, config, cp)
+	s2 := newTestServer(t, master2, ring, cp)
 	defer s2.cleanup()
 
-	blob := computeBlobForHosts(config, s1.host, s2.host)
+	blob := computeBlobForHosts(ring, s1.host, s2.host)
 
 	backendClient := s1.backendClient(namespace)
 	backendClient.EXPECT().Stat(
@@ -248,7 +248,7 @@ func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
 	defer s.cleanup()
 
 	d := core.DigestFixture()
@@ -267,7 +267,7 @@ func TestTransferBlob(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
 	defer s.cleanup()
 
 	blob := core.NewBlobFixture()
@@ -290,7 +290,7 @@ func TestTransferBlob(t *testing.T) {
 func TestTransferBlobSmallChunkSize(t *testing.T) {
 	require := require.New(t)
 
-	s := newTestServer(t, master1, configMaxReplicaFixture(), newTestClientProvider())
+	s := newTestServer(t, master1, hashRingMaxReplica(), newTestClientProvider())
 	defer s.cleanup()
 
 	blob := core.SizedBlobFixture(1000, 1)
@@ -308,7 +308,7 @@ func TestOverwriteMetainfo(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
 	defer s.cleanup()
 
 	blob := core.NewBlobFixture()
@@ -334,7 +334,7 @@ func TestReplicateToRemote(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
 	defer s.cleanup()
 
 	blob := core.NewBlobFixture()
@@ -356,7 +356,7 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
 	defer s.cleanup()
 
 	blob := core.NewBlobFixture()
@@ -382,24 +382,23 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 func TestUploadBlobDuplicatesWriteBackTaskToReplicas(t *testing.T) {
 	require := require.New(t)
 
-	config := configFixture()
-	config.DuplicateWriteBackStagger = time.Minute
+	ring := hashRingSomeReplica()
 	namespace := core.TagFixture()
 
 	cp := newTestClientProvider()
 
-	s1 := newTestServer(t, master1, config, cp)
+	s1 := newTestServer(t, master1, ring, cp)
 	defer s1.cleanup()
 
-	s2 := newTestServer(t, master2, config, cp)
+	s2 := newTestServer(t, master2, ring, cp)
 	defer s2.cleanup()
 
-	blob := computeBlobForHosts(config, s1.host, s2.host)
+	blob := computeBlobForHosts(ring, s1.host, s2.host)
 
 	s1.writeBackManager.EXPECT().Add(
 		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex()))).Return(nil)
 	s2.writeBackManager.EXPECT().Add(
-		writeback.MatchTask(writeback.NewTaskWithDelay(namespace, blob.Digest.Hex(), time.Minute)))
+		writeback.MatchTask(writeback.NewTaskWithDelay(namespace, blob.Digest.Hex(), 30*time.Minute)))
 
 	err := cp.Provide(s1.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
@@ -415,15 +414,15 @@ func TestUploadBlobDuplicatesWriteBackTaskToReplicas(t *testing.T) {
 func TestUploadBlobRetriesWriteBackFailure(t *testing.T) {
 	require := require.New(t)
 
-	config := configNoReplicaFixture()
+	ring := hashRingNoReplica()
 	namespace := core.TagFixture()
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, config, cp)
+	s := newTestServer(t, master1, ring, cp)
 	defer s.cleanup()
 
-	blob := computeBlobForHosts(config, s.host)
+	blob := computeBlobForHosts(ring, s.host)
 
 	expectedTask := writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex()))
 
@@ -449,18 +448,17 @@ func TestUploadBlobRetriesWriteBackFailure(t *testing.T) {
 func TestUploadBlobResilientToDuplicationFailure(t *testing.T) {
 	require := require.New(t)
 
-	config := configFixture()
-	config.DuplicateWriteBackStagger = time.Minute
+	ring := hashRingSomeReplica()
 	namespace := core.TagFixture()
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, config, cp)
+	s := newTestServer(t, master1, ring, cp)
 	defer s.cleanup()
 
 	cp.register(master2, blobclient.New("dummy-addr"))
 
-	blob := computeBlobForHosts(config, s.host, master2)
+	blob := computeBlobForHosts(ring, s.host, master2)
 
 	s.writeBackManager.EXPECT().Add(
 		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex()))).Return(nil)
