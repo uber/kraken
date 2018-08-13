@@ -33,7 +33,7 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 
 	cp := newTestClientProvider()
 
-	s := newTestServer(t, master1, configMaxReplicaFixture(), cp)
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
 	defer s.cleanup()
 
 	// Register dummy master addresses so Provide can still create a Client for

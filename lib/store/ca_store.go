@@ -131,8 +131,8 @@ func initCASVolumes(dir string, volumes []Volume) error {
 	// Create 256 symlinks under dir.
 	for subdirIndex := 0; subdirIndex < 256; subdirIndex++ {
 		subdirName := fmt.Sprintf("%02X", subdirIndex)
-		nodes, err := rendezvousHash.GetOrderedNodes(subdirName, 1)
-		if len(nodes) != 1 || err != nil {
+		nodes := rendezvousHash.GetOrderedNodes(subdirName, 1)
+		if len(nodes) != 1 {
 			return fmt.Errorf("calculate volume for subdir: %s", subdirName)
 		}
 		sourcePath := path.Join(nodes[0].Label, path.Base(dir), subdirName)

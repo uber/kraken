@@ -13,6 +13,8 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
+	"code.uber.internal/infra/kraken/lib/hashring"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -26,9 +28,9 @@ import (
 )
 
 const (
-	master1 = "dummy-origin-master01-dca1"
-	master2 = "dummy-origin-master02-dca1"
-	master3 = "dummy-origin-master03-dca1"
+	master1 = "dummy-origin-master01-dca1:80"
+	master2 = "dummy-origin-master02-dca1:80"
+	master3 = "dummy-origin-master03-dca1:80"
 )
 
 func init() {
@@ -37,30 +39,19 @@ func init() {
 	log.ConfigureLogger(zapConfig)
 }
 
-func configFixture() Config {
-	return Config{
-		NumReplica: 2,
-		HashNodes: map[string]HashNodeConfig{
-			master1: {Label: "origin1", Weight: 100},
-			master2: {Label: "origin2", Weight: 100},
-			master3: {Label: "origin3", Weight: 100},
-		},
+func newHashRing(maxReplica int) hashring.Ring {
+	r, err := hashring.New(
+		hashring.Config{MaxReplica: maxReplica},
+		hostlist.Fixture(master1, master2, master3))
+	if err != nil {
+		panic(err)
 	}
+	return r
 }
 
-// configMaxReplicaFixture returns a config that ensures all blobs are replicated
-// to every master.
-func configMaxReplicaFixture() Config {
-	c := configFixture()
-	c.NumReplica = 3
-	return c
-}
-
-func configNoReplicaFixture() Config {
-	c := configFixture()
-	c.NumReplica = 1
-	return c
-}
+func hashRingNoReplica() hashring.Ring   { return newHashRing(1) }
+func hashRingSomeReplica() hashring.Ring { return newHashRing(2) }
+func hashRingMaxReplica() hashring.Ring  { return newHashRing(3) }
 
 // testClientProvider implements blobclient.ClientProvider. It maps origin hostnames to
 // the local addresses they are running on, such that Provide("dummy-origin")
@@ -87,7 +78,7 @@ func (p *testClientProvider) Provide(host string) blobclient.Client {
 
 func startServer(
 	host string,
-	config Config,
+	ring hashring.Ring,
 	cas *store.CAStore,
 	cp blobclient.Provider,
 	pctx core.PeerContext,
@@ -98,7 +89,7 @@ func startServer(
 
 	br := blobrefresh.New(blobrefresh.Config{}, tally.NoopScope, cas, bm, mg)
 
-	s, err := New(config, tally.NoopScope, host, cas, cp, pctx, bm, br, mg, writeBackManager)
+	s, err := New(Config{}, tally.NoopScope, host, ring, cas, cp, pctx, bm, br, mg, writeBackManager)
 	if err != nil {
 		panic(err)
 	}
@@ -109,7 +100,6 @@ func startServer(
 // Server and faciliates restarting Servers with new configuration.
 type testServer struct {
 	ctrl             *gomock.Controller
-	config           Config
 	host             string
 	addr             string
 	cas              *store.CAStore
@@ -120,7 +110,9 @@ type testServer struct {
 	cleanup          func()
 }
 
-func newTestServer(t *testing.T, host string, config Config, cp *testClientProvider) *testServer {
+func newTestServer(
+	t *testing.T, host string, ring hashring.Ring, cp *testClientProvider) *testServer {
+
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
@@ -140,7 +132,7 @@ func newTestServer(t *testing.T, host string, config Config, cp *testClientProvi
 
 	br := blobrefresh.New(blobrefresh.Config{}, tally.NoopScope, cas, bm, mg)
 
-	s, err := New(config, tally.NoopScope, host, cas, cp, pctx, bm, br, mg, writeBackManager)
+	s, err := New(Config{}, tally.NoopScope, host, ring, cas, cp, pctx, bm, br, mg, writeBackManager)
 	if err != nil {
 		panic(err)
 	}
@@ -152,7 +144,6 @@ func newTestServer(t *testing.T, host string, config Config, cp *testClientProvi
 
 	return &testServer{
 		ctrl:             ctrl,
-		config:           config,
 		host:             host,
 		addr:             addr,
 		cas:              cas,
@@ -178,34 +169,13 @@ func (s *testServer) remoteClient(name string) *mockblobclient.MockClient {
 	return client
 }
 
-// labelSet converts hosts into their corresponding labels as specified by config.
-func labelSet(config Config, hosts []string) stringset.Set {
-	s := make(stringset.Set)
-	for _, host := range hosts {
-		s.Add(config.HashNodes[host].Label)
-	}
-	return s
-}
-
-// hostsOwnShard returns true if shardID is owned by hosts.
-func hostsOwnShard(config Config, shardID string, hosts ...string) bool {
-	hashState := config.HashState()
-	nodes, err := hashState.GetOrderedNodes(shardID, config.NumReplica)
-	if err != nil {
-		log.Panicf("failed to get nodes for shard %q: %s", shardID, err)
-	}
-	labels := make(stringset.Set)
-	for _, node := range nodes {
-		labels.Add(node.Label)
-	}
-	return stringset.Equal(labelSet(config, hosts), labels)
-}
-
 // computeBlobForHosts generates a random digest / content which shards to hosts.
-func computeBlobForHosts(config Config, hosts ...string) *core.BlobFixture {
+func computeBlobForHosts(ring hashring.Ring, hosts ...string) *core.BlobFixture {
+	want := stringset.New(hosts...)
 	for {
 		blob := core.SizedBlobFixture(32, 4)
-		if hostsOwnShard(config, blob.Digest.ShardID(), hosts...) {
+		got := stringset.New(ring.Locations(blob.Digest)...)
+		if stringset.Equal(want, got) {
 			return blob
 		}
 	}

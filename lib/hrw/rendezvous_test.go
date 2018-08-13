@@ -4,7 +4,6 @@ import (
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/binary"
-	"hash"
 	"math"
 	"reflect"
 	"runtime"
@@ -86,10 +85,7 @@ func TestKeyDistributionAndNodeChanges(t *testing.T) {
 		name string
 		f    HashFactory
 	}{
-		{"murmur3", func() hash.Hash {
-			h32 := murmur3.New64()
-			return h32
-		}},
+		{"murmur3", Murmur3Hash},
 		{"sha256", sha256.New},
 		{"md5", md5.New},
 	}
@@ -145,7 +141,7 @@ func testAddNodes(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testi
 		}
 		// The rmaining nodes should not change their allocation buckets.
 		for key := range v {
-			nodes, _ := rh.GetOrderedNodes(key, 1)
+			nodes := rh.GetOrderedNodes(key, 1)
 			assert.Equal(t, nodes[0].Label, name)
 		}
 	}
@@ -166,7 +162,7 @@ func testRemoveNodes(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *te
 		}
 		// Th remaining nodes should not change their allocation buckets.
 		for key := range v {
-			nodes, _ := rh.GetOrderedNodes(key, 1)
+			nodes := rh.GetOrderedNodes(key, 1)
 			if nodes[0].Label != name {
 				assert.Equal(t, nodes[0].Label, "4")
 				nodekeys[nodes[0].Label][key] = struct{}{}
@@ -187,7 +183,7 @@ func testReturnNodesLength(numKeys int, hash HashFactory, scoreFunc UIntToFloat,
 		scores = append(scores, score)
 	}
 	sort.Sort(ByScore(scores))
-	nodes, _ := rh.GetOrderedNodes(keys[0], 4)
+	nodes := rh.GetOrderedNodes(keys[0], 4)
 	assert.Equal(t, len(nodes), 4)
 }
 
@@ -201,7 +197,7 @@ func testReturnNodesOrder(numKeys int, hash HashFactory, scoreFunc UIntToFloat, 
 		scores = append(scores, score)
 	}
 	sort.Sort(ByScore(scores))
-	nodes, _ := rh.GetOrderedNodes(keys[0], 4)
+	nodes := rh.GetOrderedNodes(keys[0], 4)
 	for index, node := range nodes {
 		score := node.Score(keys[0])
 		assert.Equal(t, score, scores[4-index-1])
@@ -218,7 +214,7 @@ func testAddingCapacity(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t 
 		// Some keys in nodes should change their allocation buckets
 		// accomdate for new capacity on node "3".
 		for key := range v {
-			nodes, _ := rh.GetOrderedNodes(key, 1)
+			nodes := rh.GetOrderedNodes(key, 1)
 			if nodes[0].Label != name {
 				assert.Equal(t, nodes[0].Label, "3")
 				nodekeys[nodes[0].Label][key] = struct{}{}
@@ -242,7 +238,7 @@ func testRemovingCapacity(numKeys int, hash HashFactory, scoreFunc UIntToFloat, 
 	for name, v := range nodekeys {
 		// The remaining nodes should not change their allocation buckets.
 		for key := range v {
-			nodes, _ := rh.GetOrderedNodes(key, 1)
+			nodes := rh.GetOrderedNodes(key, 1)
 			if nodes[0].Label != name {
 				assert.Equal(t, name, "3")
 				assert.NotEqual(t, nodes[0].Label, "3")

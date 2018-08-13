@@ -35,7 +35,7 @@ func RendezvousHashFixture(numKeys int, hashFactory HashFactory, scoreFunc UIntT
 	for i := 0; i < numKeys; i++ {
 		rand.Read(b)
 		key := hex.EncodeToString(b)
-		nodes, _ := rh.GetOrderedNodes(key, 1)
+		nodes := rh.GetOrderedNodes(key, 1)
 		keys[nodes[0].Label][key] = struct{}{}
 	}
 

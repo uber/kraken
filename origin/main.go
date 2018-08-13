@@ -10,6 +10,8 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
+	"code.uber.internal/infra/kraken/lib/hashring"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
@@ -53,7 +55,7 @@ func main() {
 	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
 	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
 	zone := flag.String("zone", "", "zone/datacenter name")
-	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-sjc1)")
+	krakenCluster := flag.String("cluster", "", "Kraken cluster name (e.g. prod01-sjc1)")
 
 	flag.Parse()
 
@@ -81,7 +83,7 @@ func main() {
 	zlog := log.ConfigureLogger(config.ZapLogging)
 	defer zlog.Sync()
 
-	stats, closer, err := metrics.New(config.Metrics, *cluster)
+	stats, closer, err := metrics.New(config.Metrics, *krakenCluster)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}
@@ -94,7 +96,8 @@ func main() {
 		log.Fatalf("Failed to create castore: %s", err)
 	}
 
-	pctx, err := core.NewPeerContext(config.PeerIDFactory, *zone, *cluster, *peerIP, *peerPort, true)
+	pctx, err := core.NewPeerContext(
+		config.PeerIDFactory, *zone, *krakenCluster, *peerIP, *peerPort, true)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
@@ -136,10 +139,21 @@ func main() {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
 
+	cluster, err := hostlist.New(config.Cluster, *blobServerPort)
+	if err != nil {
+		log.Fatalf("Error creating cluster host list: %s", err)
+	}
+
+	hashRing, err := hashring.New(config.HashRing, cluster)
+	if err != nil {
+		log.Fatalf("Error creating hash ring: %s", err)
+	}
+
 	server, err := blobserver.New(
 		config.BlobServer,
 		stats,
 		fmt.Sprintf("%s:%d", hostname, *blobServerPort),
+		hashRing,
 		cas,
 		blobclient.NewProvider(),
 		pctx,
