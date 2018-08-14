@@ -102,34 +102,27 @@ releases/%:
 # Runs acceptance tests on an origin host.
 acceptance/origin:
 	@test $(host)
-	@test $(registry) # Registry which test image is marked under on host.
-	@test $(repo)
-	@test $(tag)
-	@test $(namespace)
 	ssh $(host) 'bash -s origin' < ./test/acceptance/health.sh
 	ssh $(host) 'bash -s proxy' < ./test/acceptance/health.sh
-	ssh $(host) "bash -s $(namespace)" < ./test/acceptance/origin.sh
-	ssh $(host) "bash -s $(registry) $(repo) $(tag)" < ./test/acceptance/proxy.sh
+	ssh $(host) bash < ./test/acceptance/origin.sh
+	ssh $(host) bash < ./test/acceptance/proxy.sh
 
 # Runs acceptance tests on a tracker host.
 acceptance/tracker:
 	@test $(host)
-	@test $(repo)
 	@test $(tag)
-	@test $(namespace)
 	@test $(digest)
 	ssh $(host) 'bash -s tracker' < ./test/acceptance/health.sh
 	ssh $(host) 'bash -s build-index' < ./test/acceptance/health.sh
-	ssh $(host) "bash -s $(repo) $(tag)" < ./test/acceptance/build-index.sh
-	ssh $(host) "bash -s $(namespace) $(digest)" < ./test/acceptance/tracker.sh
+	ssh $(host) "bash -s $(tag)" < ./test/acceptance/build-index.sh
+	ssh $(host) "bash -s $(digest)" < ./test/acceptance/tracker.sh
 
 # Runs acceptance tests on an agent host.
 acceptance/agent:
 	@test $(host)
-	@test $(repo)
 	@test $(tag)
 	ssh $(host) 'bash -s agent' < ./test/acceptance/health.sh
-	ssh $(host) "bash -s $(repo) $(tag)" < ./test/acceptance/agent.sh
+	ssh $(host) "bash -s $(tag)" < ./test/acceptance/agent.sh
 
 # ==== INTEGRATION ====
 
