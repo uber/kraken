@@ -6,9 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/mocks/lib/healthcheck"
-	"code.uber.internal/infra/kraken/mocks/lib/hostlist"
 	"code.uber.internal/infra/kraken/utils/stringset"
 
 	"github.com/golang/mock/gomock"
@@ -26,26 +24,17 @@ func TestFilterCheckErrors(t *testing.T) {
 	x := "x:80"
 	y := "y:80"
 
-	f := NewFilter(
-		FilterConfig{Fails: 1, Passes: 1, Timeout: time.Second},
-		checker,
-		hostlist.Fixture(x, y))
-
-	require.Empty(f.GetHealthy())
+	f := NewFilter(Config{Fails: 1, Passes: 1}, checker)
 
 	checker.EXPECT().Check(gomock.Any(), x).Return(nil)
 	checker.EXPECT().Check(gomock.Any(), y).Return(nil)
 
-	require.NoError(f.Run())
-
-	require.Equal(stringset.New(x, y), f.GetHealthy())
+	require.Equal(stringset.New(x, y), f.Run(stringset.New(x, y)))
 
 	checker.EXPECT().Check(gomock.Any(), x).Return(errors.New("some error"))
 	checker.EXPECT().Check(gomock.Any(), y).Return(errors.New("some error"))
 
-	require.NoError(f.Run())
-
-	require.Empty(f.GetHealthy())
+	require.Empty(f.Run(stringset.New(x, y)))
 }
 
 func TestFilterCheckTimeout(t *testing.T) {
@@ -59,12 +48,7 @@ func TestFilterCheckTimeout(t *testing.T) {
 	x := "x:80"
 	y := "y:80"
 
-	f := NewFilter(
-		FilterConfig{Fails: 1, Passes: 1, Timeout: time.Second},
-		checker,
-		hostlist.Fixture(x, y))
-
-	require.Empty(f.GetHealthy())
+	f := NewFilter(Config{Fails: 1, Passes: 1, Timeout: time.Second}, checker)
 
 	checker.EXPECT().Check(gomock.Any(), x).Return(nil)
 	checker.EXPECT().Check(gomock.Any(), y).DoAndReturn(func(context.Context, string) error {
@@ -72,9 +56,7 @@ func TestFilterCheckTimeout(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(f.Run())
-
-	require.Equal(stringset.New(x), f.GetHealthy())
+	require.Equal(stringset.New(x), f.Run(stringset.New(x, y)))
 }
 
 func TestFilterSingleHostAlwaysHealthy(t *testing.T) {
@@ -87,58 +69,13 @@ func TestFilterSingleHostAlwaysHealthy(t *testing.T) {
 
 	x := "x:80"
 
-	f := NewFilter(
-		FilterConfig{Fails: 1, Passes: 1, Timeout: time.Second},
-		checker,
-		hostlist.Fixture(x))
-
-	require.Empty(f.GetHealthy())
+	f := NewFilter(Config{Fails: 1, Passes: 1}, checker)
 
 	// No health checks actually run since only single host is used.
-	require.NoError(f.Run())
-
-	require.Equal(stringset.New(x), f.GetHealthy())
+	require.Equal(stringset.New(x), f.Run(stringset.New(x)))
 }
 
-func TestFilterHostChanges(t *testing.T) {
-	require := require.New(t)
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	checker := mockhealthcheck.NewMockChecker(ctrl)
-	hosts := mockhostlist.NewMockList(ctrl)
-
-	x := "x:80"
-	y := "y:80"
-	z := "z:80"
-
-	f := NewFilter(
-		FilterConfig{Fails: 1, Passes: 1, Timeout: time.Second},
-		checker,
-		hosts)
-
-	require.Empty(f.GetHealthy())
-
-	hosts.EXPECT().ResolveNonLocal().Return(stringset.New(x, y), nil)
-	checker.EXPECT().Check(gomock.Any(), x).Return(nil)
-	checker.EXPECT().Check(gomock.Any(), y).Return(nil)
-
-	require.NoError(f.Run())
-
-	require.Equal(stringset.New(x, y), f.GetHealthy())
-
-	// x is removed and z is added.
-	hosts.EXPECT().ResolveNonLocal().Return(stringset.New(y, z), nil)
-	checker.EXPECT().Check(gomock.Any(), y).Return(nil)
-	checker.EXPECT().Check(gomock.Any(), z).Return(nil)
-
-	require.NoError(f.Run())
-
-	require.Equal(stringset.New(y, z), f.GetHealthy())
-}
-
-func TestFilterInit(t *testing.T) {
+func TestFilterNewHostsStartAsHealthy(t *testing.T) {
 	require := require.New(t)
 
 	ctrl := gomock.NewController(t)
@@ -149,14 +86,13 @@ func TestFilterInit(t *testing.T) {
 	x := "x:80"
 	y := "y:80"
 
-	f := NewFilter(
-		FilterConfig{Fails: 1, Passes: 1, Timeout: time.Second},
-		checker,
-		hostlist.Fixture(x, y))
+	f := NewFilter(Config{Fails: 2, Passes: 2}, checker)
 
-	require.Empty(f.GetHealthy())
+	checker.EXPECT().Check(gomock.Any(), x).Return(errors.New("some error")).Times(2)
+	checker.EXPECT().Check(gomock.Any(), y).Return(errors.New("some error")).Times(2)
 
-	require.NoError(f.Init())
-
-	require.Equal(stringset.New(x, y), f.GetHealthy())
+	// Even though health checks are failing, since Fails=2, it takes two Runs
+	// for the unhealthy addrs to be filtered out.
+	require.Equal(stringset.New(x, y), f.Run(stringset.New(x, y)))
+	require.Empty(f.Run(stringset.New(x, y)))
 }

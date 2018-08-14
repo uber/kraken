@@ -2,62 +2,40 @@ package healthcheck
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
-	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/utils/stringset"
 )
 
 // Filter filters out unhealthy hosts from a host list.
 type Filter interface {
-	Init() error
-	Run() error
-	GetHealthy() stringset.Set
+	Run(addrs stringset.Set) stringset.Set
 }
 
 type filter struct {
-	config  FilterConfig
+	config  Config
 	checker Checker
-	hosts   hostlist.List
 	state   *state
 }
 
-// NewFilter creates a Filter which applies checker to hosts to determine healthy
-// hosts. If hosts only resolves to a single host, it is always declared healthy.
-func NewFilter(config FilterConfig, checker Checker, hosts hostlist.List) Filter {
+// NewFilter creates a new Filter. Filter is stateful -- consecutive runs are required
+// to detect healthy / unhealthy hosts.
+func NewFilter(config Config, checker Checker) Filter {
 	config.applyDefaults()
 	return &filter{
 		config:  config,
 		checker: checker,
-		hosts:   hosts,
 		state:   newState(config),
 	}
 }
 
-// Init initializes the filter by assuming all resolved hosts are healthy. This
-// is necessary when an entire cluster is restarting -- we cannot wait for other
-// hosts to become healthy before starting, because they might be waiting for us
-// to become healthy before starting.
-func (f *filter) Init() error {
-	addrs, err := f.hosts.ResolveNonLocal()
-	if err != nil {
-		return fmt.Errorf("hostlist: %s", err)
-	}
-	f.state.override(addrs)
-	return nil
-}
-
-// Run runs the filter and updates the healthy hosts.
-func (f *filter) Run() error {
-	addrs, err := f.hosts.ResolveNonLocal()
-	if err != nil {
-		return fmt.Errorf("hostlist: %s", err)
-	}
+// Run applies checker to addrs against the current filter state and returns the
+// healthy entries. New entries in addrs not found in the current state are
+// assumed as initially healthy. If addrs only contains a single entry, it is
+// always considered healthy.
+func (f *filter) Run(addrs stringset.Set) stringset.Set {
 	if len(addrs) == 1 {
-		// If hosts resolves to a single address, always mark it as healthy.
-		f.state.override(addrs)
-		return nil
+		return addrs.Copy()
 	}
 
 	f.state.sync(addrs)
@@ -79,11 +57,6 @@ func (f *filter) Run() error {
 	}
 	wg.Wait()
 
-	return nil
-}
-
-// GetHealthy returns the latest healthy hosts.
-func (f *filter) GetHealthy() stringset.Set {
 	return f.state.getHealthy()
 }
 

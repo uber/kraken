@@ -81,6 +81,18 @@ func (mr *MockFilterMockRecorder) GetHealthy() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHealthy", reflect.TypeOf((*MockFilter)(nil).GetHealthy))
 }
 
+// GetUnhealthy mocks base method
+func (m *MockFilter) GetUnhealthy() stringset.Set {
+	ret := m.ctrl.Call(m, "GetUnhealthy")
+	ret0, _ := ret[0].(stringset.Set)
+	return ret0
+}
+
+// GetUnhealthy indicates an expected call of GetUnhealthy
+func (mr *MockFilterMockRecorder) GetUnhealthy() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUnhealthy", reflect.TypeOf((*MockFilter)(nil).GetUnhealthy))
+}
+
 // Init mocks base method
 func (m *MockFilter) Init() error {
 	ret := m.ctrl.Call(m, "Init")

@@ -13,23 +13,33 @@ import (
 // state is thread-safe.
 type state struct {
 	sync.Mutex
-	config  FilterConfig
+	config  Config
+	all     stringset.Set
 	healthy stringset.Set
 	trend   map[string]int
 }
 
-func newState(config FilterConfig) *state {
+func newState(config Config) *state {
 	return &state{
 		config:  config,
+		all:     stringset.New(),
 		healthy: stringset.New(),
 		trend:   make(map[string]int),
 	}
 }
 
-// sync removes any hosts in the current state if they are not in addrs.
+// sync sets the current state to addrs. New entries are initialized as healthy,
+// while existing entries not found in addrs are removed from s.
 func (s *state) sync(addrs stringset.Set) {
 	s.Lock()
 	defer s.Unlock()
+
+	for addr := range addrs {
+		if !s.all.Has(addr) {
+			s.all.Add(addr)
+			s.healthy.Add(addr)
+		}
+	}
 
 	for addr := range s.healthy {
 		if !addrs.Has(addr) {
@@ -37,15 +47,6 @@ func (s *state) sync(addrs stringset.Set) {
 			delete(s.trend, addr)
 		}
 	}
-}
-
-// override wipes all state and sets the current healthy hosts to addrs.
-func (s *state) override(addrs stringset.Set) {
-	s.Lock()
-	defer s.Unlock()
-
-	s.healthy = addrs.Copy()
-	s.trend = map[string]int{}
 }
 
 // failed marks addr as failed.
