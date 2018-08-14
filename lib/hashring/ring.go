@@ -26,6 +26,7 @@ type ring struct {
 
 // New creates a new Ring containing the initial resolved contents of cluster.
 func New(config Config, cluster hostlist.List) (Ring, error) {
+	config.applyDefaults()
 	addrs, err := cluster.Resolve()
 	if err != nil {
 		return nil, fmt.Errorf("hostlist: %s", err)
