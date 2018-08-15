@@ -11,6 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
 	"code.uber.internal/infra/kraken/lib/hashring"
+	"code.uber.internal/infra/kraken/lib/healthcheck"
 	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
@@ -144,10 +145,13 @@ func main() {
 		log.Fatalf("Error creating cluster host list: %s", err)
 	}
 
-	hashRing, err := hashring.New(config.HashRing, cluster)
+	healthCheckFilter := healthcheck.NewFilter(config.HealthCheck, healthcheck.Default())
+
+	hashRing, err := hashring.New(config.HashRing, cluster, healthCheckFilter)
 	if err != nil {
 		log.Fatalf("Error creating hash ring: %s", err)
 	}
+	go hashRing.Monitor(nil)
 
 	server, err := blobserver.New(
 		config.BlobServer,

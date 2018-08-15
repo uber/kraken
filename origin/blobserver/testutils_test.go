@@ -14,6 +14,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
 	"code.uber.internal/infra/kraken/lib/hashring"
+	"code.uber.internal/infra/kraken/lib/healthcheck"
 	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
@@ -42,7 +43,8 @@ func init() {
 func newHashRing(maxReplica int) hashring.Ring {
 	r, err := hashring.New(
 		hashring.Config{MaxReplica: maxReplica},
-		hostlist.Fixture(master1, master2, master3))
+		hostlist.Fixture(master1, master2, master3),
+		healthcheck.IdentityFilter{})
 	if err != nil {
 		panic(err)
 	}
