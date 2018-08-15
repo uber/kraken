@@ -9,12 +9,14 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
+	"github.com/uber-go/tally"
 )
 
 var _ ImageTransferer = (*ReadOnlyTransferer)(nil)
 
 // ReadOnlyTransferer gets and posts manifest to tracker, and transfers blobs as torrent.
 type ReadOnlyTransferer struct {
+	stats tally.Scope
 	cads  *store.CADownloadStore
 	tags  tagclient.Client
 	sched scheduler.Scheduler
@@ -22,11 +24,16 @@ type ReadOnlyTransferer struct {
 
 // NewReadOnlyTransferer creates a new ReadOnlyTransferer.
 func NewReadOnlyTransferer(
+	stats tally.Scope,
 	cads *store.CADownloadStore,
 	tags tagclient.Client,
 	sched scheduler.Scheduler) *ReadOnlyTransferer {
 
-	return &ReadOnlyTransferer{cads, tags, sched}
+	stats = stats.Tagged(map[string]string{
+		"module": "rotransferer",
+	})
+
+	return &ReadOnlyTransferer{stats, cads, tags, sched}
 }
 
 // Stat returns blob info from local cache, and triggers download if the blob is
@@ -77,8 +84,10 @@ func (t *ReadOnlyTransferer) GetTag(tag string) (core.Digest, error) {
 	d, err := t.tags.Get(tag)
 	if err != nil {
 		if err == tagclient.ErrTagNotFound {
+			t.stats.Counter("tag_not_found").Inc(1)
 			return core.Digest{}, ErrTagNotFound
 		}
+		t.stats.Counter("get_tag_error").Inc(1)
 		return core.Digest{}, fmt.Errorf("client get tag: %s", err)
 	}
 	return d, nil
