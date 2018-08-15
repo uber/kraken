@@ -10,11 +10,9 @@ import (
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils/dedup"
-	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/c2h5oh/datasize"
-	"github.com/docker/distribution/uuid"
 	"github.com/uber-go/tally"
 )
 
@@ -97,7 +95,7 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 		if err := r.metaInfoGenerator.Generate(d); err != nil {
 			return fmt.Errorf("generate metainfo: %s", err)
 		}
-		log.With("blob", d.Hex()).Info("Blob successfully refreshed")
+		r.stats.Counter("downloads").Inc(1)
 		for _, h := range hooks {
 			h.Run(d)
 		}
@@ -116,29 +114,8 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 }
 
 func (r *Refresher) download(client backend.Client, d core.Digest) error {
-	u := uuid.Generate().String()
-	if err := r.cas.CreateUploadFile(u, 0); err != nil {
-		return fmt.Errorf("create upload file: %s", err)
-	}
-	f, err := r.cas.GetUploadFileReadWriter(u)
-	if err != nil {
-		return fmt.Errorf("get upload writer: %s", err)
-	}
-	if err := client.Download(d.Hex(), f); err != nil {
-		return err
-	}
-	if _, err := f.Seek(0, 0); err != nil {
-		return fmt.Errorf("seek: %s", err)
-	}
-	fd, err := core.NewDigester().FromReader(f)
-	if err != nil {
-		return fmt.Errorf("compute digest: %s", err)
-	}
-	if fd != d {
-		return fmt.Errorf("invalid remote blob digest: got %s, expected %s", fd, d)
-	}
-	if err := r.cas.MoveUploadFileToCache(u, d.Hex()); err != nil {
-		return fmt.Errorf("move upload file to cache: %s", err)
-	}
-	return nil
+	name := d.Hex()
+	return r.cas.WriteCacheFile(name, func(w store.FileReadWriter) error {
+		return client.Download(name, w)
+	})
 }
