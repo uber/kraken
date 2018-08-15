@@ -78,6 +78,15 @@ func (s *CAStore) MoveUploadFileToCache(uploadName, cacheName string) error {
 // CreateCacheFile initializes a cache file for name from r. name should be a raw
 // hex sha256 digest, and the contents of r must hash to name.
 func (s *CAStore) CreateCacheFile(name string, r io.Reader) error {
+	return s.WriteCacheFile(name, func(w FileReadWriter) error {
+		_, err := io.Copy(w, r)
+		return err
+	})
+}
+
+// WriteCacheFile initializes a cache file for name by passing a temporary
+// upload file writer to the write function.
+func (s *CAStore) WriteCacheFile(name string, write func(w FileReadWriter) error) error {
 	tmp := fmt.Sprintf("%s.%s", name, uuid.Generate().String())
 	if err := s.CreateUploadFile(tmp, 0); err != nil {
 		return fmt.Errorf("create upload file: %s", err)
@@ -90,14 +99,17 @@ func (s *CAStore) CreateCacheFile(name string, r io.Reader) error {
 	}
 	defer w.Close()
 
-	digester := core.NewDigester()
-	r = digester.Tee(r)
-
-	if _, err := io.Copy(w, r); err != nil {
-		return fmt.Errorf("copy: %s", err)
+	if err := write(w); err != nil {
+		return err
 	}
 
-	actual := digester.Digest()
+	if _, err := w.Seek(0, 0); err != nil {
+		return fmt.Errorf("seek: %s", err)
+	}
+	actual, err := core.NewDigester().FromReader(w)
+	if err != nil {
+		return fmt.Errorf("compute digest: %s", err)
+	}
 	expected, err := core.NewSHA256DigestFromHex(name)
 	if err != nil {
 		return fmt.Errorf("new digest from file name: %s", err)
