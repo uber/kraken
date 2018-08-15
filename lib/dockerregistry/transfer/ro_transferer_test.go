@@ -13,6 +13,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 )
 
 type agentTransfererMocks struct {
@@ -38,7 +39,7 @@ func newReadOnlyTransfererMocks(t *testing.T) (*agentTransfererMocks, func()) {
 }
 
 func (m *agentTransfererMocks) new() *ReadOnlyTransferer {
-	return NewReadOnlyTransferer(m.cads, m.tags, m.sched)
+	return NewReadOnlyTransferer(tally.NoopScope, m.cads, m.tags, m.sched)
 }
 
 func TestReadOnlyTransfererDownloadCachesBlob(t *testing.T) {
