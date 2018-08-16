@@ -62,5 +62,9 @@ func main() {
 	}()
 
 	log.Info("Starting nginx...")
-	log.Fatal(nginx.Run(config.Nginx, config.Port))
+	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
+		"port": config.Port,
+		"server": nginx.GetServer(
+			config.TrackerServer.Listener.Net, config.TrackerServer.Listener.Addr),
+	}))
 }

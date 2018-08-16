@@ -26,27 +26,41 @@ func abspath(name string) (string, error) {
 type Config struct {
 	Name     string `yaml:"name"`
 	CacheDir string `yaml:"cache_dir"`
-	Backup   string `yaml:"backup"`
+	LogDir   string `yaml:"log_dir"`
 }
 
-// Run runs nginx configuration.
-func Run(config Config, port int) error {
+func (c *Config) inject(params map[string]interface{}) error {
+	for _, s := range []string{"cache_dir", "log_dir"} {
+		if _, ok := params[s]; ok {
+			return fmt.Errorf("invalid params: %s is reserved", s)
+		}
+	}
+	params["cache_dir"] = c.CacheDir
+	params["log_dir"] = c.LogDir
+	return nil
+}
+
+// Run injects params into an nginx configuration template and runs it.
+func Run(config Config, params map[string]interface{}) error {
 	if config.Name == "" {
 		return errors.New("invalid config: name required")
 	}
 	if config.CacheDir == "" {
 		return errors.New("invalid config: cache_dir required")
 	}
+	if config.LogDir == "" {
+		return errors.New("invalid config: log_dir required")
+	}
 
 	if err := os.MkdirAll(config.CacheDir, 0775); err != nil {
 		return err
 	}
 
-	site, err := populateTemplate(config.Name, map[string]interface{}{
-		"cache_dir": config.CacheDir,
-		"port":      port,
-		"backup":    config.Backup,
-	})
+	if err := config.inject(params); err != nil {
+		return err
+	}
+
+	site, err := populateTemplate(config.Name, params)
 	if err != nil {
 		return fmt.Errorf("populate site: %s", err)
 	}
@@ -93,4 +107,12 @@ func populateTemplate(name string, args map[string]interface{}) ([]byte, error) 
 		return nil, fmt.Errorf("exec: %s", err)
 	}
 	return out.Bytes(), nil
+}
+
+// GetServer returns a string for an nginx server directive value.
+func GetServer(net, addr string) string {
+	if net == "unix" {
+		return "unix:" + addr
+	}
+	return addr
 }

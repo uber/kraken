@@ -1,9 +1,9 @@
 upstream registry {
-  server unix:/tmp/kraken-proxy-registry.sock;
+  server {{.registry_server}};
 }
 
 upstream registry-override {
-  server unix:/tmp/kraken-proxy-registry-override.sock;
+  server {{.registry_override_server}};
 }
 
 server {
@@ -11,8 +11,8 @@ server {
 
   client_max_body_size 10G;
 
-  access_log /var/log/udocker/kraken-proxy/nginx-access.log;
-  error_log /var/log/udocker/kraken-proxy/nginx-error.log;
+  access_log {{.log_dir}}/nginx-access.log;
+  error_log {{.log_dir}}/nginx-error.log;
 
   location /v2/_catalog {
     proxy_pass http://registry-override;
@@ -28,8 +28,8 @@ server {
 
   client_max_body_size 10G;
 
-  access_log /var/log/udocker/kraken-proxy/nginx-access.log;
-  error_log /var/log/udocker/kraken-proxy/nginx-error.log;
+  access_log {{.log_dir}}/nginx-access.log;
+  error_log {{.log_dir}}/nginx-error.log;
 
   location /v2/_catalog {
     proxy_pass http://registry-override;
