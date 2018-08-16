@@ -116,5 +116,8 @@ func main() {
 		}
 	}
 
-	log.Fatal(nginx.Run(config.Nginx, *agentRegistryPort))
+	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
+		"port":            *agentRegistryPort,
+		"registry_backup": config.RegistryBackup,
+	}))
 }

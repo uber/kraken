@@ -1,14 +1,14 @@
 proxy_cache_path {{.cache_dir}}/metainfo levels=1:2 keys_zone=metainfo:10m max_size=256g;
 
 upstream tracker {
-  server unix:/tmp/kraken-tracker.sock;
+  server {{.server}};
 }
 
 server {
   listen {{.port}};
 
-  access_log /var/log/udocker/kraken/nginx-access.log;
-  error_log /var/log/udocker/kraken/nginx-error.log;
+  access_log {{.log_dir}}/nginx-access.log;
+  error_log {{.log_dir}}/nginx-error.log;
 
   location / {
     proxy_pass http://tracker;

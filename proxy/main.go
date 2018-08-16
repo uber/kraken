@@ -69,5 +69,11 @@ func main() {
 	}()
 
 	log.Info("Starting nginx...")
-	log.Fatal(nginx.Run(config.Nginx, *port))
+	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
+		"port": *port,
+		"registry_server": nginx.GetServer(
+			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
+		"registry_override_server": nginx.GetServer(
+			config.RegistryOverride.Listener.Net, config.RegistryOverride.Listener.Addr),
+	}))
 }

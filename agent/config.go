@@ -25,5 +25,6 @@ type Config struct {
 	Tracker         string                      `yaml:"tracker"`
 	BuildIndex      string                      `yaml:"build_index"`
 	AgentServer     agentserver.Config          `yaml:"agentserver"`
+	RegistryBackup  string                      `yaml:"registry_backup"`
 	Nginx           nginx.Config                `yaml:"nginx"`
 }
