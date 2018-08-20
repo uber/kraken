@@ -8,6 +8,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/mocks/tracker/announceclient"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
+	"go.uber.org/zap"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
@@ -56,7 +57,7 @@ func newAnnouncerMocks(t *testing.T) (*announcerMocks, func()) {
 }
 
 func (m *announcerMocks) newAnnouncer(config Config) *Announcer {
-	return New(config, m.client, m.events, m.clk)
+	return New(config, m.client, m.events, m.clk, zap.NewNop().Sugar())
 }
 
 func TestAnnouncerAnnounceUpdatesInterval(t *testing.T) {

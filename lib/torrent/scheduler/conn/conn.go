@@ -19,7 +19,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn/bandwidth"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
-	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
@@ -62,6 +61,8 @@ type Conn struct {
 	closed *atomic.Bool
 	done   chan struct{}  // Signals to readLoop / writeLoop to exit.
 	wg     sync.WaitGroup // Waits for readLoop / writeLoop to exit.
+
+	logger *zap.SugaredLogger
 }
 
 func newConn(
@@ -75,7 +76,8 @@ func newConn(
 	localPeerID core.PeerID,
 	remotePeerID core.PeerID,
 	info *storage.TorrentInfo,
-	openedByRemote bool) (*Conn, error) {
+	openedByRemote bool,
+	logger *zap.SugaredLogger) (*Conn, error) {
 
 	// Clear all deadlines set during handshake. Once a Conn is created, we
 	// rely on our own idle Conn management via preemption events.
@@ -100,6 +102,7 @@ func newConn(
 		receiver:       make(chan *Message, config.ReceiverBufferSize),
 		closed:         atomic.NewBool(false),
 		done:           make(chan struct{}),
+		logger:         logger,
 	}
 
 	c.start()
@@ -289,5 +292,5 @@ func (c *Conn) countBandwidth(direction string, n int64) {
 
 func (c *Conn) log(keysAndValues ...interface{}) *zap.SugaredLogger {
 	keysAndValues = append(keysAndValues, "remote_peer", c.peerID, "hash", c.infoHash)
-	return log.With(keysAndValues...)
+	return c.logger.With(keysAndValues...)
 }

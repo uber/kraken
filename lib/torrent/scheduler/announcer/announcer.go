@@ -5,10 +5,10 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
-	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
 	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // Config defines Announcer configuration.
@@ -40,10 +40,16 @@ type Announcer struct {
 	events   Events
 	interval *atomic.Int64
 	timer    *clock.Timer
+	logger   *zap.SugaredLogger
 }
 
 // New creates a new Announcer.
-func New(config Config, client announceclient.Client, events Events, clk clock.Clock) *Announcer {
+func New(
+	config Config,
+	client announceclient.Client,
+	events Events,
+	clk clock.Clock,
+	logger *zap.SugaredLogger) *Announcer {
 	config = config.applyDefaults()
 	return &Announcer{
 		config:   config,
@@ -51,12 +57,17 @@ func New(config Config, client announceclient.Client, events Events, clk clock.C
 		events:   events,
 		interval: atomic.NewInt64(int64(config.DefaultInterval)),
 		timer:    clk.Timer(config.DefaultInterval),
+		logger:   logger,
 	}
 }
 
 // Default creates a default Announcer.
-func Default(client announceclient.Client, events Events, clk clock.Clock) *Announcer {
-	return New(Config{}, client, events, clk)
+func Default(
+	client announceclient.Client,
+	events Events,
+	clk clock.Clock,
+	logger *zap.SugaredLogger) *Announcer {
+	return New(Config{}, client, events, clk, logger)
 }
 
 // Announce announces through the underlying client and returns the resulting
@@ -80,7 +91,7 @@ func (a *Announcer) Announce(
 	}
 	if a.interval.Swap(int64(interval)) != int64(interval) {
 		// Note: updated interval will take effect after next tick.
-		log.Infof("Announce interval updated to %s", interval)
+		a.logger.Infof("Announce interval updated to %s", interval)
 	}
 	return peers, nil
 }

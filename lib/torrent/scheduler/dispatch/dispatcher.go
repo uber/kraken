@@ -13,7 +13,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch/piecerequest"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/torrentlog"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/syncutil"
 
 	"github.com/andres-erbsen/clock"
@@ -63,6 +62,7 @@ type Dispatcher struct {
 	pendingPiecesDone     chan struct{}
 	completeOnce          sync.Once
 	events                Events
+	logger                *zap.SugaredLogger
 	torrentlog            *torrentlog.Logger
 }
 
@@ -75,9 +75,10 @@ func New(
 	events Events,
 	peerID core.PeerID,
 	t storage.Torrent,
+	logger *zap.SugaredLogger,
 	tlog *torrentlog.Logger) (*Dispatcher, error) {
 
-	d, err := newDispatcher(config, stats, clk, netevents, events, peerID, t, tlog)
+	d, err := newDispatcher(config, stats, clk, netevents, events, peerID, t, logger, tlog)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +102,7 @@ func newDispatcher(
 	events Events,
 	peerID core.PeerID,
 	t storage.Torrent,
+	logger *zap.SugaredLogger,
 	tlog *torrentlog.Logger) (*Dispatcher, error) {
 
 	config = config.applyDefaults()
@@ -129,6 +131,7 @@ func newDispatcher(
 		pieceRequestManager: pieceRequestManager,
 		pendingPiecesDone:   make(chan struct{}),
 		events:              events,
+		logger:              logger,
 		torrentlog:          tlog,
 	}, nil
 }
@@ -577,5 +580,5 @@ func (d *Dispatcher) handleComplete(p *peer) {
 
 func (d *Dispatcher) log(args ...interface{}) *zap.SugaredLogger {
 	args = append(args, "torrent", d.torrent)
-	return log.With(args...)
+	return d.logger.With(args...)
 }

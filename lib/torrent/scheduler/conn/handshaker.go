@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn/bandwidth"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
+	"go.uber.org/zap"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
@@ -179,7 +180,8 @@ func NewHandshaker(
 	clk clock.Clock,
 	networkEvents networkevent.Producer,
 	peerID core.PeerID,
-	events Events) *Handshaker {
+	events Events,
+	logger *zap.SugaredLogger) *Handshaker {
 
 	config = config.applyDefaults()
 	stats = stats.Tagged(map[string]string{
@@ -190,7 +192,7 @@ func NewHandshaker(
 		config:        config,
 		stats:         stats,
 		clk:           clk,
-		bandwidth:     bandwidth.NewLimiter(config.Bandwidth),
+		bandwidth:     bandwidth.NewLimiter(config.Bandwidth, logger),
 		networkEvents: networkEvents,
 		peerID:        peerID,
 		events:        events,
@@ -322,5 +324,6 @@ func (h *Handshaker) newConn(
 		h.peerID,
 		peerID,
 		info,
-		openedByRemote)
+		openedByRemote,
+		zap.NewNop().Sugar())
 }

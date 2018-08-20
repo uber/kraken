@@ -7,8 +7,8 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
-	"code.uber.internal/infra/kraken/utils/log"
 	"github.com/andres-erbsen/clock"
+	"go.uber.org/zap"
 )
 
 // State errors.
@@ -56,6 +56,7 @@ type State struct {
 	active      map[connKey]*conn.Conn
 	pending     map[connKey]bool
 	blacklist   map[connKey]*blacklistEntry
+	logger      *zap.SugaredLogger
 }
 
 // New creates a new State.
@@ -63,7 +64,8 @@ func New(
 	config Config,
 	clk clock.Clock,
 	localPeerID core.PeerID,
-	netevents networkevent.Producer) *State {
+	netevents networkevent.Producer,
+	logger *zap.SugaredLogger) *State {
 
 	config = config.applyDefaults()
 
@@ -76,6 +78,7 @@ func New(
 		active:      make(map[connKey]*conn.Conn),
 		pending:     make(map[connKey]bool),
 		blacklist:   make(map[connKey]*blacklistEntry),
+		logger:      logger,
 	}
 }
 
@@ -114,7 +117,7 @@ func (s *State) Blacklist(peerID core.PeerID, h core.InfoHash) error {
 	}
 	s.blacklist[k] = &blacklistEntry{s.clk.Now().Add(s.config.BlacklistDuration)}
 
-	log.With("peer", peerID, "hash", h).Infof(
+	s.log("peer", peerID, "hash", h).Infof(
 		"Connection blacklisted for %s", s.config.BlacklistDuration)
 	s.netevents.Produce(
 		networkevent.BlacklistConnEvent(h, s.localPeerID, peerID, s.config.BlacklistDuration))
@@ -161,7 +164,7 @@ func (s *State) AddPending(peerID core.PeerID, h core.InfoHash, neighbors []core
 	s.pending[k] = true
 	s.capacity[k.infoHash]--
 
-	log.With("peer", peerID, "hash", h).Infof(
+	s.log("peer", peerID, "hash", h).Infof(
 		"Added pending conn, capacity now at %d", s.capacity[k.infoHash])
 
 	return nil
@@ -176,7 +179,7 @@ func (s *State) DeletePending(peerID core.PeerID, h core.InfoHash) {
 	delete(s.pending, k)
 	s.capacity[k.infoHash]++
 
-	log.With("peer", peerID, "hash", h).Infof(
+	s.log("peer", peerID, "hash", h).Infof(
 		"Deleted pending conn, capacity now at %d", s.capacity[k.infoHash])
 }
 
@@ -192,7 +195,7 @@ func (s *State) MovePendingToActive(c *conn.Conn) error {
 	delete(s.pending, k)
 	s.active[k] = c
 
-	log.With("peer", k.peerID, "hash", k.infoHash).Info("Moved conn from pending to active")
+	s.log("peer", k.peerID, "hash", k.infoHash).Info("Moved conn from pending to active")
 	s.netevents.Produce(networkevent.AddActiveConnEvent(
 		c.InfoHash(), s.localPeerID, c.PeerID()))
 
@@ -211,7 +214,7 @@ func (s *State) DeleteActive(c *conn.Conn) {
 	delete(s.active, k)
 	s.capacity[k.infoHash]++
 
-	log.With("peer", k.peerID, "hash", k.infoHash).Infof(
+	s.log("peer", k.peerID, "hash", k.infoHash).Infof(
 		"Deleted active conn, capacity now at %d", s.capacity[k.infoHash])
 	s.netevents.Produce(networkevent.DropActiveConnEvent(
 		c.InfoHash(), s.localPeerID, c.PeerID()))
@@ -250,4 +253,8 @@ func (s *State) BlacklistSnapshot() []BlacklistedConn {
 		conns = append(conns, c)
 	}
 	return conns
+}
+
+func (s *State) log(args ...interface{}) *zap.SugaredLogger {
+	return s.logger.With(args...)
 }

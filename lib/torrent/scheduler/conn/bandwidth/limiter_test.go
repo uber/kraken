@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 const (
@@ -33,7 +34,7 @@ func TestLimiterReserveConcurrency(t *testing.T) {
 				EgressBitsPerSec:  bps,
 				IngressBitsPerSec: bps,
 				TokenSize:         1,
-			})
+			}, zap.NewNop().Sugar())
 
 			// This test starts a bunch of goroutines and see how many bytes they can
 			// reserve in nsecs.
@@ -87,7 +88,7 @@ func TestLimiterReserveBytesTokenScaling(t *testing.T) {
 				EgressBitsPerSec:  bps,
 				IngressBitsPerSec: bps,
 				TokenSize:         10, // Bucket has 8 tokens.
-			})
+			}, zap.NewNop().Sugar())
 
 			start := time.Now()
 			// Reserving two buckets full of tokens should take exactly one second.
@@ -113,7 +114,7 @@ func TestLimiterReserveBytesSmallerThanTokenSize(t *testing.T) {
 				EgressBitsPerSec:  bps,
 				IngressBitsPerSec: bps,
 				TokenSize:         10, // Bucket has 8 tokens.
-			})
+			}, zap.NewNop().Sugar())
 
 			start := time.Now()
 			// Reserving two buckets full of tokens should take exactly one second.
@@ -140,7 +141,7 @@ func TestLimiterReserveErrorWhenBytesLargerThanBucket(t *testing.T) {
 				EgressBitsPerSec:  bps,
 				IngressBitsPerSec: bps,
 				TokenSize:         10, // Bucket has 8 tokens.
-			})
+			}, zap.NewNop().Sugar())
 
 			require.Error(reserve(l, 12, direction))
 		})
