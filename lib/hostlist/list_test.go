@@ -14,12 +14,10 @@ func TestListResolve(t *testing.T) {
 	l, err := New(Config{Static: []string{"a", "b", "c"}}, 80)
 	require.NoError(err)
 
-	s, err := l.Resolve()
-	require.NoError(err)
-	require.ElementsMatch([]string{"a:80", "b:80", "c:80"}, s.ToSlice())
+	require.ElementsMatch([]string{"a:80", "b:80", "c:80"}, l.Resolve().ToSlice())
 }
 
-func TestListResolveNonLocal(t *testing.T) {
+func TestStripLocal(t *testing.T) {
 	require := require.New(t)
 
 	localNames, err := getLocalNames()
@@ -33,9 +31,10 @@ func TestListResolveNonLocal(t *testing.T) {
 	l, err := New(config, 80)
 	require.NoError(err)
 
-	s, err := l.ResolveNonLocal()
+	sl, err := StripLocal(l, 80)
 	require.NoError(err)
-	require.ElementsMatch([]string{"a:80", "b:80", "c:80"}, s.ToSlice())
+
+	require.ElementsMatch([]string{"a:80", "b:80", "c:80"}, sl.Resolve().ToSlice())
 }
 
 func TestAttachPortIfMissing(t *testing.T) {

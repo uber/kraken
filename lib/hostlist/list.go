@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"code.uber.internal/infra/kraken/utils/dedup"
+	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/stringset"
 
 	"github.com/andres-erbsen/clock"
@@ -15,21 +16,17 @@ import (
 
 // List defines a list of hosts which is subject to change.
 type List interface {
-	Resolve() (stringset.Set, error)
-	ResolveNonLocal() (stringset.Set, error)
+	Resolve() stringset.Set
 }
 
 type list struct {
 	config Config
 	port   int
 
-	localAddrs stringset.Set
-
 	snapshotTrap *dedup.IntervalTrap
 
 	mu       sync.RWMutex
 	snapshot stringset.Set
-	err      error
 }
 
 // New creates a new List.
@@ -41,52 +38,34 @@ type list struct {
 //
 // An error is returned if a DNS record is supplied and resolves to an empty list
 // of addresses.
+//
+// If List is backed by DNS, it will be periodically refreshed (defined by TTL
+// in config). If, after construction, there is an error resolving DNS, the
+// latest successful snapshot is used. As such, Resolve never returns an empty
+// set.
 func New(config Config, port int) (List, error) {
 	config.applyDefaults()
 
-	localNames, err := getLocalNames()
-	if err != nil {
-		return nil, fmt.Errorf("get local names: %s", err)
-	}
-	localAddrs, err := attachPortIfMissing(localNames, port)
-	if err != nil {
-		return nil, fmt.Errorf("attach port to local names: %s", err)
-	}
-
 	l := &list{
-		config:     config,
-		port:       port,
-		localAddrs: localAddrs,
+		config: config,
+		port:   port,
 	}
 	l.snapshotTrap = dedup.NewIntervalTrap(config.TTL, clock.New(), &snapshotTask{l})
 
-	l.takeSnapshot()
-	if l.err != nil {
+	if err := l.takeSnapshot(); err != nil {
 		// Fail fast if a snapshot cannot be initialized.
-		return nil, l.err
+		return nil, err
 	}
 	return l, nil
 }
 
-// Resolve returns a snapshot of l.
-func (l *list) Resolve() (stringset.Set, error) {
+func (l *list) Resolve() stringset.Set {
 	l.snapshotTrap.Trap()
 
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	return l.snapshot, l.err
-}
-
-// ResolveNonLocal returns a snapshot of l with the local machine stripped from
-// the snapshot, if present. The local machine is identified by both its hostname
-// and ip address, concatenated l's port.
-func (l *list) ResolveNonLocal() (stringset.Set, error) {
-	snapshot, err := l.Resolve()
-	if err != nil {
-		return nil, err
-	}
-	return snapshot.Sub(l.localAddrs), nil
+	return l.snapshot
 }
 
 type snapshotTask struct {
@@ -94,15 +73,20 @@ type snapshotTask struct {
 }
 
 func (t *snapshotTask) Run() {
-	t.list.takeSnapshot()
+	if err := t.list.takeSnapshot(); err != nil {
+		log.With("source", t.list.config).Errorf("Error taking hostlist snapshot: %s", err)
+	}
 }
 
-func (l *list) takeSnapshot() {
+func (l *list) takeSnapshot() error {
 	snapshot, err := l.resolve()
+	if err != nil {
+		return err
+	}
 	l.mu.Lock()
 	l.snapshot = snapshot
-	l.err = err
 	l.mu.Unlock()
+	return nil
 }
 
 func (l *list) resolve() (stringset.Set, error) {
@@ -115,6 +99,33 @@ func (l *list) resolve() (stringset.Set, error) {
 		return nil, fmt.Errorf("attach port to resolved names: %s", err)
 	}
 	return addrs, nil
+}
+
+type nonLocalList struct {
+	list       List
+	localAddrs stringset.Set
+}
+
+// StripLocal wraps a List and filters out the local machine, if present. The
+// local machine is identified by both its hostname and ip address, concatenated
+// with port.
+//
+// If the local machine is the only member of list, then Resolve returns an empty
+// set.
+func StripLocal(list List, port int) (List, error) {
+	localNames, err := getLocalNames()
+	if err != nil {
+		return nil, fmt.Errorf("get local names: %s", err)
+	}
+	localAddrs, err := attachPortIfMissing(localNames, port)
+	if err != nil {
+		return nil, fmt.Errorf("attach port to local names: %s", err)
+	}
+	return &nonLocalList{list, localAddrs}, nil
+}
+
+func (l *nonLocalList) Resolve() stringset.Set {
+	return l.list.Resolve().Sub(l.localAddrs)
 }
 
 func getLocalNames() (stringset.Set, error) {
@@ -133,9 +144,6 @@ func getLocalNames() (stringset.Set, error) {
 		for _, addr := range addrs {
 			ip := net.ParseIP(addr.String()).To4()
 			if ip == nil {
-				continue
-			}
-			if ip.IsLoopback() {
 				continue
 			}
 			result.Add(ip.String())

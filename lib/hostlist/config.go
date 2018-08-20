@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"code.uber.internal/infra/kraken/utils/stringset"
@@ -31,7 +32,8 @@ func (c *Config) applyDefaults() {
 }
 
 // resolve returns either the static list of hosts, or the contents of the dns
-// record. If both or neither are supplied, returns error.
+// record. If both or neither are supplied, returns error. Returns error if
+// the dns record is empty.
 func (c *Config) resolve() (stringset.Set, error) {
 	if c.DNS == "" && len(c.Static) == 0 {
 		return nil, errors.New("no dns record or static list supplied")
@@ -51,4 +53,14 @@ func (c *Config) resolve() (stringset.Set, error) {
 		return nil, errors.New("dns record empty")
 	}
 	return stringset.FromSlice(names), nil
+}
+
+func (c *Config) String() string {
+	if c.DNS != "" {
+		return c.DNS
+	}
+	if len(c.Static) > 0 {
+		return strings.Join(c.Static, ",")
+	}
+	return "invalid config"
 }

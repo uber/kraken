@@ -41,14 +41,10 @@ func init() {
 }
 
 func newHashRing(maxReplica int) hashring.Ring {
-	r, err := hashring.New(
+	return hashring.New(
 		hashring.Config{MaxReplica: maxReplica},
 		hostlist.Fixture(master1, master2, master3),
 		healthcheck.IdentityFilter{})
-	if err != nil {
-		panic(err)
-	}
-	return r
 }
 
 func hashRingNoReplica() hashring.Ring   { return newHashRing(1) }
