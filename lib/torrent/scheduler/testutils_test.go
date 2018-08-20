@@ -23,7 +23,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/torrentlog"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/lib/torrent/storage/agentstorage"
 	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
@@ -63,7 +62,7 @@ func configFixture() Config {
 		ConnState:          connstate.Config{},
 		Conn:               conn.ConfigFixture(),
 		Dispatch:           dispatch.Config{},
-		TorrentLog:         torrentlog.Config{Disable: true},
+		TorrentLog:         log.Config{Disable: true},
 	}.applyDefaults()
 }
 

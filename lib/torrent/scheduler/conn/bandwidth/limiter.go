@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
+	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
 
@@ -43,14 +43,14 @@ type Limiter struct {
 }
 
 // NewLimiter creates a new Limiter.
-func NewLimiter(config Config) *Limiter {
+func NewLimiter(config Config, logger *zap.SugaredLogger) *Limiter {
 	config = config.applyDefaults()
 
 	if config.Disable {
-		log.Warn("Bandwidth limits disabled")
+		logger.Warn("Bandwidth limits disabled")
 	} else {
-		log.Infof("Setting egress bandwidth to %s/sec", memsize.BitFormat(config.EgressBitsPerSec))
-		log.Infof("Setting ingress bandwidth to %s/sec", memsize.BitFormat(config.IngressBitsPerSec))
+		logger.Infof("Setting egress bandwidth to %s/sec", memsize.BitFormat(config.EgressBitsPerSec))
+		logger.Infof("Setting ingress bandwidth to %s/sec", memsize.BitFormat(config.IngressBitsPerSec))
 	}
 
 	etps := config.EgressBitsPerSec / config.TokenSize

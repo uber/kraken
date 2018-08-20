@@ -102,6 +102,8 @@ type scheduler struct {
 
 	torrentlog *torrentlog.Logger
 
+	logger *zap.SugaredLogger
+
 	// The following fields orchestrate the stopping of the scheduler.
 	stopOnce sync.Once      // Ensures the stop sequence is executed only once.
 	done     chan struct{}  // Signals all goroutines to exit.
@@ -138,6 +140,12 @@ func newScheduler(
 
 	config = config.applyDefaults()
 
+	logger, err := log.New(config.Log, nil)
+	if err != nil {
+		return nil, fmt.Errorf("log: %s", err)
+	}
+	slogger := logger.Sugar()
+
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", pctx.Port))
 	if err != nil {
 		return nil, err
@@ -163,9 +171,9 @@ func newScheduler(
 	}
 
 	handshaker := conn.NewHandshaker(
-		config.Conn, stats, overrides.clock, networkEvents, pctx.PeerID, eventLoop)
+		config.Conn, stats, overrides.clock, networkEvents, pctx.PeerID, eventLoop, slogger)
 
-	connState := connstate.New(config.ConnState, overrides.clock, pctx.PeerID, networkEvents)
+	connState := connstate.New(config.ConnState, overrides.clock, pctx.PeerID, networkEvents, slogger)
 
 	tlog, err := torrentlog.New(config.TorrentLog, pctx)
 	if err != nil {
@@ -187,9 +195,10 @@ func newScheduler(
 		preemptionTick:  preemptionTick,
 		emitStatsTick:   overrides.clock.Tick(config.EmitStatsInterval),
 		announceClient:  announceClient,
-		announcer:       announcer.Default(announceClient, eventLoop, overrides.clock),
+		announcer:       announcer.Default(announceClient, eventLoop, overrides.clock, slogger),
 		networkEvents:   networkEvents,
 		torrentlog:      tlog,
+		logger:          slogger,
 		done:            done,
 	}
 
@@ -433,6 +442,7 @@ func (s *scheduler) initTorrentControl(
 		s.eventLoop,
 		s.pctx.PeerID,
 		t,
+		s.logger,
 		s.torrentlog)
 	if err != nil {
 		return nil, fmt.Errorf("initialize dispatcher: %s", err)
@@ -460,5 +470,5 @@ func (s *scheduler) tearDownTorrentControl(ctrl *torrentControl, err error) {
 }
 
 func (s *scheduler) log(args ...interface{}) *zap.SugaredLogger {
-	return log.With(args...)
+	return s.logger.With(args...)
 }

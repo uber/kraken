@@ -16,6 +16,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
 	"code.uber.internal/infra/kraken/utils/bitsetutil"
 	"code.uber.internal/infra/kraken/utils/memsize"
+	"go.uber.org/zap"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
@@ -97,6 +98,7 @@ func testDispatcher(config Config, clk clock.Clock, t storage.Torrent) *Dispatch
 		noopEvents{},
 		core.PeerIDFixture(),
 		t,
+		zap.NewNop().Sugar(),
 		torrentlog.NewNopLogger())
 	if err != nil {
 		panic(err)

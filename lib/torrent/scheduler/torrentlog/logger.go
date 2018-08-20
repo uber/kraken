@@ -18,44 +18,6 @@ var (
 	errNegativeReceivedPieces = errors.New("negative value in received piece counts")
 )
 
-// Config defines Logger configuration.
-type Config struct {
-	Disable     bool   `yaml:"disable"`
-	ServiceName string `yaml:"service_name"`
-	LogPath     string `yaml:"log_path"`
-}
-
-func (c Config) build() (*zap.Logger, error) {
-	if c.Disable {
-		log.Warn("Torrent log disabled")
-		return zap.NewNop(), nil
-	}
-	return zap.Config{
-		Level: zap.NewAtomicLevel(),
-		Sampling: &zap.SamplingConfig{
-			Initial:    100,
-			Thereafter: 100,
-		},
-		Encoding: "json",
-		EncoderConfig: zapcore.EncoderConfig{
-			MessageKey:     "message",
-			NameKey:        "logger_name",
-			LevelKey:       "level",
-			TimeKey:        "ts",
-			CallerKey:      "caller",
-			StacktraceKey:  "stack",
-			EncodeLevel:    zapcore.CapitalLevelEncoder,
-			EncodeTime:     zapcore.EpochTimeEncoder,
-			EncodeDuration: zapcore.SecondsDurationEncoder,
-			EncodeCaller:   zapcore.ShortCallerEncoder,
-		},
-		OutputPaths: []string{c.LogPath},
-		InitialFields: map[string]interface{}{
-			"service_name": c.ServiceName,
-		},
-	}.Build()
-}
-
 // Logger wraps structured log entries for important torrent events. These events
 // are intended to be consumed at the cluster level via ELK, and are distinct from
 // the verbose stdout logs of the agent. In particular, Logger bridges host-agnostic
@@ -70,21 +32,22 @@ type Logger struct {
 }
 
 // New creates a new Logger.
-func New(config Config, pctx core.PeerContext) (*Logger, error) {
-	logger, err := config.build()
-	if err != nil {
-		return nil, fmt.Errorf("config: %s", err)
-	}
+func New(config log.Config, pctx core.PeerContext) (*Logger, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, fmt.Errorf("hostname: %s", err)
 	}
-	return &Logger{logger.With(
-		zap.String("hostname", hostname),
-		zap.String("zone", pctx.Zone),
-		zap.String("cluster", pctx.Cluster),
-		zap.String("peer_id", pctx.PeerID.String()),
-	)}, nil
+
+	logger, err := log.New(config, map[string]interface{}{
+		"hostname": hostname,
+		"zone":     pctx.Zone,
+		"cluster":  pctx.Cluster,
+		"peer_id":  pctx.PeerID.String(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("config: %s", err)
+	}
+	return &Logger{logger}, nil
 }
 
 // NewNopLogger returns a Logger containing a no-op zap logger for testing purposes.

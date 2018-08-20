@@ -6,6 +6,7 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
@@ -13,7 +14,7 @@ import (
 )
 
 func testState(config Config, clk clock.Clock) *State {
-	return New(config, clk, core.PeerIDFixture(), networkevent.NewTestProducer())
+	return New(config, clk, core.PeerIDFixture(), networkevent.NewTestProducer(), zap.NewNop().Sugar())
 }
 
 func TestStateBlacklist(t *testing.T) {

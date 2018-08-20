@@ -6,6 +6,7 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
+	"go.uber.org/zap"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
@@ -70,7 +71,8 @@ func HandshakerFixture(config Config) *Handshaker {
 		clock.New(),
 		networkevent.NewTestProducer(),
 		core.PeerIDFixture(),
-		noopEvents{})
+		noopEvents{},
+		zap.NewNop().Sugar())
 }
 
 // ConfigFixture returns a Config for testing.
