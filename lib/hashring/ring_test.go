@@ -1,7 +1,6 @@
 package hashring
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -42,11 +41,10 @@ func TestRingLocationsDistribution(t *testing.T) {
 
 			addrs := addrsFixture(test.clusterSize)
 
-			r, err := New(
+			r := New(
 				Config{MaxReplica: test.maxReplica},
 				hostlist.Fixture(addrs...),
 				healthcheck.IdentityFilter{})
-			require.NoError(err)
 
 			sampleSize := 2000
 
@@ -70,11 +68,10 @@ func TestRingLocationsFiltersOutUnhealthyHosts(t *testing.T) {
 
 	filter := healthcheck.NewManualFilter()
 
-	r, err := New(
+	r := New(
 		Config{MaxReplica: 3},
 		hostlist.Fixture(addrsFixture(10)...),
 		filter)
-	require.NoError(err)
 
 	d := core.DigestFixture()
 
@@ -82,7 +79,7 @@ func TestRingLocationsFiltersOutUnhealthyHosts(t *testing.T) {
 	require.Len(replicas, 3)
 
 	filter.Unhealthy.Add(replicas[0])
-	require.NoError(r.Refresh())
+	r.Refresh()
 
 	result := r.Locations(d)
 	require.Equal(replicas[1:], result)
@@ -93,11 +90,10 @@ func TestRingLocationsReturnsNextHealthyHostWhenReplicaSetUnhealthy(t *testing.T
 
 	filter := healthcheck.NewManualFilter()
 
-	r, err := New(
+	r := New(
 		Config{MaxReplica: 3},
 		hostlist.Fixture(addrsFixture(10)...),
 		filter)
-	require.NoError(err)
 
 	d := core.DigestFixture()
 
@@ -108,7 +104,7 @@ func TestRingLocationsReturnsNextHealthyHostWhenReplicaSetUnhealthy(t *testing.T
 	for _, addr := range replicas {
 		filter.Unhealthy.Add(addr)
 	}
-	require.NoError(r.Refresh())
+	r.Refresh()
 
 	// Should consistently select the next address.
 	var next []string
@@ -120,7 +116,7 @@ func TestRingLocationsReturnsNextHealthyHostWhenReplicaSetUnhealthy(t *testing.T
 
 	// Mark the next address as unhealthy.
 	filter.Unhealthy.Add(next[0])
-	require.NoError(r.Refresh())
+	r.Refresh()
 
 	// Should consistently select the address after next.
 	for i := 0; i < 10; i++ {
@@ -135,11 +131,10 @@ func TestRingLocationsReturnsFirstHostWhenAllHostsUnhealthy(t *testing.T) {
 
 	filter := healthcheck.NewBinaryFilter()
 
-	r, err := New(
+	r := New(
 		Config{MaxReplica: 3},
 		hostlist.Fixture(addrsFixture(10)...),
 		filter)
-	require.NoError(err)
 
 	d := core.DigestFixture()
 
@@ -147,7 +142,7 @@ func TestRingLocationsReturnsFirstHostWhenAllHostsUnhealthy(t *testing.T) {
 	require.Len(replicas, 3)
 
 	filter.Healthy = false
-	require.NoError(r.Refresh())
+	r.Refresh()
 
 	// Should consistently select the first replica once all are unhealthy.
 	for i := 0; i < 10; i++ {
@@ -164,8 +159,7 @@ func TestRingContains(t *testing.T) {
 	y := "y:80"
 	z := "z:80"
 
-	r, err := New(Config{}, hostlist.Fixture(x, y), healthcheck.IdentityFilter{})
-	require.NoError(err)
+	r := New(Config{}, hostlist.Fixture(x, y), healthcheck.IdentityFilter{})
 
 	require.True(r.Contains(x))
 	require.True(r.Contains(y))
@@ -184,15 +178,14 @@ func TestRingMonitor(t *testing.T) {
 	y := "y:80"
 
 	gomock.InOrder(
-		cluster.EXPECT().Resolve().Return(stringset.New(x), nil),
-		cluster.EXPECT().Resolve().Return(stringset.New(y), nil),
+		cluster.EXPECT().Resolve().Return(stringset.New(x)),
+		cluster.EXPECT().Resolve().Return(stringset.New(y)),
 	)
 
-	r, err := New(
+	r := New(
 		Config{RefreshInterval: time.Second},
 		cluster,
 		healthcheck.IdentityFilter{})
-	require.NoError(err)
 
 	stop := make(chan struct{})
 	defer close(stop)
@@ -204,40 +197,6 @@ func TestRingMonitor(t *testing.T) {
 
 	// Monitor should refresh the ring.
 	time.Sleep(1250 * time.Millisecond)
-
-	require.Equal([]string{y}, r.Locations(d))
-}
-
-func TestRingRefreshErrors(t *testing.T) {
-	require := require.New(t)
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	cluster := mockhostlist.NewMockList(ctrl)
-
-	filter := healthcheck.NewManualFilter()
-
-	x := "x:80"
-	y := "y:80"
-
-	gomock.InOrder(
-		cluster.EXPECT().Resolve().Return(stringset.New(x, y), nil),
-		cluster.EXPECT().Resolve().Return(nil, errors.New("some error")),
-	)
-
-	r, err := New(Config{}, cluster, filter)
-	require.NoError(err)
-
-	d := core.DigestFixture()
-
-	require.ElementsMatch([]string{x, y}, r.Locations(d))
-
-	filter.Unhealthy.Add(x)
-
-	// Refresh should be resilient to the 2nd resolve error and can still run
-	// health checks.
-	require.NoError(r.Refresh())
 
 	require.Equal([]string{y}, r.Locations(d))
 }
@@ -256,18 +215,17 @@ func TestRingRefreshUpdatesMembership(t *testing.T) {
 
 	// x is removed and z is added on the 2nd resolve.
 	gomock.InOrder(
-		cluster.EXPECT().Resolve().Return(stringset.New(x, y), nil),
-		cluster.EXPECT().Resolve().Return(stringset.New(y, z), nil),
+		cluster.EXPECT().Resolve().Return(stringset.New(x, y)),
+		cluster.EXPECT().Resolve().Return(stringset.New(y, z)),
 	)
 
-	r, err := New(Config{}, cluster, healthcheck.IdentityFilter{})
-	require.NoError(err)
+	r := New(Config{}, cluster, healthcheck.IdentityFilter{})
 
 	d := core.DigestFixture()
 
 	require.ElementsMatch([]string{x, y}, r.Locations(d))
 
-	require.NoError(r.Refresh())
+	r.Refresh()
 
 	require.ElementsMatch([]string{y, z}, r.Locations(d))
 }

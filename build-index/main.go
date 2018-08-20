@@ -71,6 +71,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating local replica host list: %s", err)
 	}
+	neighbors, err := hostlist.StripLocal(cluster, *port)
+	if err != nil {
+		log.Fatalf("Error stripping local machine from cluster list: %s", err)
+	}
 
 	remotes, err := config.Remotes.Build()
 	if err != nil {
@@ -116,7 +120,7 @@ func main() {
 		backends,
 		config.Origin,
 		originClient,
-		cluster,
+		neighbors,
 		tagStore,
 		remotes,
 		tagReplicationManager,

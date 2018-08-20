@@ -8,7 +8,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/healthcheck"
 	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/hrw"
-	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/stringset"
 )
 
@@ -28,7 +27,7 @@ type Ring interface {
 	Locations(d core.Digest) []string
 	Contains(addr string) bool
 	Monitor(stop <-chan struct{})
-	Refresh() error
+	Refresh()
 }
 
 type ring struct {
@@ -42,19 +41,16 @@ type ring struct {
 	healthy stringset.Set
 }
 
-// New creates a new Ring whose members are defined by cluster. If no initial
-// membership can be resolved, returns error.
-func New(config Config, cluster hostlist.List, filter healthcheck.Filter) (Ring, error) {
+// New creates a new Ring whose members are defined by cluster.
+func New(config Config, cluster hostlist.List, filter healthcheck.Filter) Ring {
 	config.applyDefaults()
 	r := &ring{
 		config:  config,
 		cluster: cluster,
 		filter:  filter,
 	}
-	if err := r.Refresh(); err != nil {
-		return nil, err
-	}
-	return r, nil
+	r.Refresh()
+	return r
 }
 
 // Locations returns an ordered replica set of healthy addresses which own d.
@@ -101,25 +97,14 @@ func (r *ring) Monitor(stop <-chan struct{}) {
 		case <-stop:
 			return
 		case <-time.After(r.config.RefreshInterval):
-			if err := r.Refresh(); err != nil {
-				panic("invariant violation: refresh failed for initialized ring: " + err.Error())
-			}
+			r.Refresh()
 		}
 	}
 }
 
 // Refresh updates the membership and health information of r.
-func (r *ring) Refresh() error {
-	latest, err := r.cluster.Resolve()
-	if err != nil {
-		if len(r.addrs) == 0 {
-			return err
-		}
-		// We can recover from this error by continuing to use the previous
-		// membership.
-		log.Errorf("Error resolving latest hash ring membership: %s", err)
-		latest = r.addrs
-	}
+func (r *ring) Refresh() {
+	latest := r.cluster.Resolve()
 
 	healthy := r.filter.Run(latest)
 
@@ -137,6 +122,4 @@ func (r *ring) Refresh() error {
 	r.hash = hash
 	r.healthy = healthy
 	r.mu.Unlock()
-
-	return nil
 }

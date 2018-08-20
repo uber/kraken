@@ -43,7 +43,7 @@ type serverMocks struct {
 	tagTypes              *mocktagtype.MockManager
 	originClient          *mockblobclient.MockClusterClient
 	store                 *mocktagstore.MockStore
-	cluster               hostlist.List
+	neighbors             hostlist.List
 }
 
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
@@ -84,7 +84,7 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 		originClient:          originClient,
 		tagTypes:              tagTypes,
 		store:                 store,
-		cluster:               hostlist.Fixture(_testNeighbor),
+		neighbors:             hostlist.Fixture(_testNeighbor),
 	}, cleanup.Run
 }
 
@@ -99,7 +99,7 @@ func (m *serverMocks) handler() http.Handler {
 		m.backends,
 		_testOrigin,
 		m.originClient,
-		m.cluster,
+		m.neighbors,
 		m.store,
 		m.remotes,
 		m.tagReplicationManager,

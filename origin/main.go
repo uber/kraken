@@ -147,10 +147,7 @@ func main() {
 
 	healthCheckFilter := healthcheck.NewFilter(config.HealthCheck, healthcheck.Default())
 
-	hashRing, err := hashring.New(config.HashRing, cluster, healthCheckFilter)
-	if err != nil {
-		log.Fatalf("Error creating hash ring: %s", err)
-	}
+	hashRing := hashring.New(config.HashRing, cluster, healthCheckFilter)
 	go hashRing.Monitor(nil)
 
 	server, err := blobserver.New(

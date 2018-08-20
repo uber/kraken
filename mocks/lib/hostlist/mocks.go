@@ -34,27 +34,13 @@ func (m *MockList) EXPECT() *MockListMockRecorder {
 }
 
 // Resolve mocks base method
-func (m *MockList) Resolve() (stringset.Set, error) {
+func (m *MockList) Resolve() stringset.Set {
 	ret := m.ctrl.Call(m, "Resolve")
 	ret0, _ := ret[0].(stringset.Set)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // Resolve indicates an expected call of Resolve
 func (mr *MockListMockRecorder) Resolve() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resolve", reflect.TypeOf((*MockList)(nil).Resolve))
-}
-
-// ResolveNonLocal mocks base method
-func (m *MockList) ResolveNonLocal() (stringset.Set, error) {
-	ret := m.ctrl.Call(m, "ResolveNonLocal")
-	ret0, _ := ret[0].(stringset.Set)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ResolveNonLocal indicates an expected call of ResolveNonLocal
-func (mr *MockListMockRecorder) ResolveNonLocal() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveNonLocal", reflect.TypeOf((*MockList)(nil).ResolveNonLocal))
 }
