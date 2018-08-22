@@ -140,7 +140,7 @@ func main() {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
 
-	cluster, err := hostlist.New(config.Cluster, *blobServerPort)
+	cluster, err := hostlist.New(config.Cluster)
 	if err != nil {
 		log.Fatalf("Error creating cluster host list: %s", err)
 	}

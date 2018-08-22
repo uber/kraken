@@ -11,30 +11,12 @@ import (
 func TestListResolve(t *testing.T) {
 	require := require.New(t)
 
-	l, err := New(Config{Static: []string{"a", "b", "c"}}, 80)
+	addrs := []string{"a:80", "b:80", "c:80"}
+
+	l, err := New(Config{Static: addrs})
 	require.NoError(err)
 
-	require.ElementsMatch([]string{"a:80", "b:80", "c:80"}, l.Resolve().ToSlice())
-}
-
-func TestStripLocal(t *testing.T) {
-	require := require.New(t)
-
-	localNames, err := getLocalNames()
-	require.NoError(err)
-	require.NotEmpty(localNames)
-
-	config := Config{
-		Static: append([]string{"a", "b", "c"}, localNames.ToSlice()...),
-	}
-
-	l, err := New(config, 80)
-	require.NoError(err)
-
-	sl, err := StripLocal(l, 80)
-	require.NoError(err)
-
-	require.ElementsMatch([]string{"a:80", "b:80", "c:80"}, sl.Resolve().ToSlice())
+	require.ElementsMatch(addrs, l.Resolve().ToSlice())
 }
 
 func TestAttachPortIfMissing(t *testing.T) {
@@ -46,4 +28,20 @@ func TestAttachPortIfMissing(t *testing.T) {
 func TestAttachPortIfMissingError(t *testing.T) {
 	_, err := attachPortIfMissing(stringset.New("a:b:c"), 7)
 	require.Error(t, err)
+}
+
+func TestInvalidConfig(t *testing.T) {
+	tests := []struct {
+		desc   string
+		config Config
+	}{
+		{"dns missing port", Config{DNS: "some-dns"}},
+		{"static missing port", Config{Static: []string{"a:80", "b"}}},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			_, err := New(test.config)
+			require.Error(t, err)
+		})
+	}
 }
