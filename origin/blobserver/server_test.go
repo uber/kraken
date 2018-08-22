@@ -135,60 +135,6 @@ func TestGetLocationsHandlerOK(t *testing.T) {
 	require.ElementsMatch([]string{master1, master2}, locs)
 }
 
-func TestIncorrectNodeErrors(t *testing.T) {
-	ring := hashRingSomeReplica()
-	namespace := core.TagFixture()
-	blob := computeBlobForHosts(ring, master2, master3)
-
-	tests := []struct {
-		name string
-		f    func(c blobclient.Client) error
-	}{
-		{
-			"Stat",
-			func(c blobclient.Client) error { _, err := c.Stat(namespace, blob.Digest); return err },
-		}, {
-			"DownloadBlob",
-			func(c blobclient.Client) error {
-				return c.DownloadBlob(namespace, blob.Digest, ioutil.Discard)
-			},
-		}, {
-			"TransferBlob",
-			func(c blobclient.Client) error {
-				return c.TransferBlob(blob.Digest, bytes.NewBufferString("blah"))
-			},
-		}, {
-			"GetMetaInfo",
-			func(c blobclient.Client) error {
-				_, err := c.GetMetaInfo(namespace, blob.Digest)
-				return err
-			},
-		}, {
-			"OverwriteMetaInfo",
-			func(c blobclient.Client) error { return c.OverwriteMetaInfo(blob.Digest, 64) },
-		}, {
-			"UploadBlob",
-			func(c blobclient.Client) error {
-				return c.UploadBlob(namespace, blob.Digest, bytes.NewBufferString("blah"))
-			},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			require := require.New(t)
-
-			cp := newTestClientProvider()
-
-			s := newTestServer(t, master1, ring, cp)
-			defer s.cleanup()
-
-			err := test.f(cp.Provide(s.host))
-			require.Error(err)
-			require.True(httputil.IsStatus(err, http.StatusBadRequest))
-		})
-	}
-}
-
 func TestGetPeerContextHandlerOK(t *testing.T) {
 	require := require.New(t)
 

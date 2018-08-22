@@ -171,9 +171,6 @@ func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if err := s.ensureCorrectNode(d); err != nil {
-		return err
-	}
 
 	bi, err := s.stat(namespace, d, checkLocal)
 	if os.IsNotExist(err) {
@@ -217,9 +214,6 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	}
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
-		return err
-	}
-	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
 	if err := s.downloadBlob(namespace, d, w); err != nil {
@@ -305,9 +299,6 @@ func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) erro
 	if err != nil {
 		return err
 	}
-	if err := s.ensureCorrectNode(d); err != nil {
-		return err
-	}
 	raw, err := s.getMetaInfo(namespace, d)
 	if err != nil {
 		return err
@@ -319,9 +310,6 @@ func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) erro
 func (s *Server) overwriteMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
-		return err
-	}
-	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
 	pieceLength, err := strconv.ParseInt(r.URL.Query().Get("piece_length"), 10, 64)
@@ -439,15 +427,6 @@ func (s *Server) applyToReplicas(d core.Digest, f func(i int, c blobclient.Clien
 	return errutil.Join(errs)
 }
 
-func (s *Server) ensureCorrectNode(d core.Digest) error {
-	for _, loc := range s.hashRing.Locations(d) {
-		if loc == s.addr {
-			return nil
-		}
-	}
-	return handler.Errorf("digest does not hash to this origin").Status(http.StatusBadRequest)
-}
-
 // downloadBlob downloads blob for d into dst. If no blob exists under d, a
 // download of the blob from the storage backend configured for namespace will
 // be initiated. This download is asynchronous and downloadBlob will immediately
@@ -483,9 +462,6 @@ func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return err
 	}
-	if err := s.ensureCorrectNode(d); err != nil {
-		return err
-	}
 	if ok, err := blobExists(s.cas, d); err != nil {
 		return handler.Errorf("check blob: %s", err)
 	} else if ok {
@@ -504,9 +480,6 @@ func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) er
 func (s *Server) startClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
-		return err
-	}
-	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
 	namespace, err := httputil.ParseParam(r, "namespace")
@@ -559,9 +532,6 @@ func (s *Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return err
 	}
-	if err := s.ensureCorrectNode(d); err != nil {
-		return err
-	}
 	uid, err := httputil.ParseParam(r, "uid")
 	if err != nil {
 		return err
@@ -585,9 +555,6 @@ func (s *Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) e
 func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
-		return err
-	}
-	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
 	namespace, err := httputil.ParseParam(r, "namespace")
@@ -631,9 +598,6 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 func (s *Server) duplicateCommitClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
-		return err
-	}
-	if err := s.ensureCorrectNode(d); err != nil {
 		return err
 	}
 	namespace, err := httputil.ParseParam(r, "namespace")
