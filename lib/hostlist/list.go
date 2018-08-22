@@ -14,14 +14,13 @@ import (
 	"github.com/andres-erbsen/clock"
 )
 
-// List defines a list of hosts which is subject to change.
+// List defines a list of addresses which is subject to change.
 type List interface {
 	Resolve() stringset.Set
 }
 
 type list struct {
-	config Config
-	port   int
+	resolver resolver
 
 	snapshotTrap *dedup.IntervalTrap
 
@@ -31,11 +30,6 @@ type list struct {
 
 // New creates a new List.
 //
-// List can be resolved into a set of addresses in 'ip:port' format. List is very
-// flexible in what host strings are accepted. Names missing a port suffix will
-// have a provided port attached. Hosts with a port suffix will be untouched.
-// Either ip addresses or host names are allowed.
-//
 // An error is returned if a DNS record is supplied and resolves to an empty list
 // of addresses.
 //
@@ -43,13 +37,15 @@ type list struct {
 // in config). If, after construction, there is an error resolving DNS, the
 // latest successful snapshot is used. As such, Resolve never returns an empty
 // set.
-func New(config Config, port int) (List, error) {
+func New(config Config) (List, error) {
 	config.applyDefaults()
 
-	l := &list{
-		config: config,
-		port:   port,
+	resolver, err := config.getResolver()
+	if err != nil {
+		return nil, fmt.Errorf("invalid config: %s", err)
 	}
+
+	l := &list{resolver: resolver}
 	l.snapshotTrap = dedup.NewIntervalTrap(config.TTL, clock.New(), &snapshotTask{l})
 
 	if err := l.takeSnapshot(); err != nil {
@@ -74,12 +70,12 @@ type snapshotTask struct {
 
 func (t *snapshotTask) Run() {
 	if err := t.list.takeSnapshot(); err != nil {
-		log.With("source", t.list.config).Errorf("Error taking hostlist snapshot: %s", err)
+		log.With("source", t.list.resolver).Errorf("Error taking hostlist snapshot: %s", err)
 	}
 }
 
 func (l *list) takeSnapshot() error {
-	snapshot, err := l.resolve()
+	snapshot, err := l.resolver.resolve()
 	if err != nil {
 		return err
 	}
@@ -87,18 +83,6 @@ func (l *list) takeSnapshot() error {
 	l.snapshot = snapshot
 	l.mu.Unlock()
 	return nil
-}
-
-func (l *list) resolve() (stringset.Set, error) {
-	names, err := l.config.resolve()
-	if err != nil {
-		return nil, fmt.Errorf("config: %s", err)
-	}
-	addrs, err := attachPortIfMissing(names, l.port)
-	if err != nil {
-		return nil, fmt.Errorf("attach port to resolved names: %s", err)
-	}
-	return addrs, nil
 }
 
 type nonLocalList struct {
