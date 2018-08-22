@@ -61,7 +61,7 @@ func (l *list) Resolve() stringset.Set {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	return l.snapshot
+	return l.snapshot.Copy()
 }
 
 type snapshotTask struct {
