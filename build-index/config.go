@@ -5,7 +5,6 @@ import (
 	"code.uber.internal/infra/kraken/build-index/tagstore"
 	"code.uber.internal/infra/kraken/build-index/tagtype"
 	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/lib/store"
@@ -29,7 +28,7 @@ type Config struct {
 	TagTypes       []tagtype.Config             `yaml:"tag_types"`
 	Origin         upstream.Config              `yaml:"origin"`
 	LocalDB        localdb.Config               `yaml:"localdb"`
-	Cluster        hostlist.Config              `yaml:"cluster"`
+	Cluster        upstream.Config              `yaml:"cluster"`
 	TagStore       tagstore.Config              `yaml:"tag_store"`
 	Store          store.SimpleStoreConfig      `yaml:"store"`
 	WriteBack      persistedretry.Config        `yaml:"writeback"`

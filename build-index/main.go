@@ -73,9 +73,9 @@ func main() {
 		log.Fatalf("Error creating local db: %s", err)
 	}
 
-	cluster, err := hostlist.New(config.Cluster)
+	cluster, err := config.Cluster.Build()
 	if err != nil {
-		log.Fatalf("Error creating local replica host list: %s", err)
+		log.Fatalf("Error building cluster host list: %s", err)
 	}
 	neighbors, err := hostlist.StripLocal(cluster, *port)
 	if err != nil {
