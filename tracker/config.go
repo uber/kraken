@@ -3,6 +3,7 @@ package main
 import (
 	"go.uber.org/zap"
 
+	"code.uber.internal/infra/kraken/lib/upstream"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/tracker/originstore"
@@ -19,7 +20,7 @@ type Config struct {
 	OriginStore       originstore.Config       `yaml:"originstore"`
 	TrackerServer     trackerserver.Config     `yaml:"trackerserver"`
 	PeerHandoutPolicy peerhandoutpolicy.Config `yaml:"peerhandoutpolicy"`
-	Origin            string                   `yaml:"origin"`
+	Origin            upstream.Config          `yaml:"origin"`
 	Metrics           metrics.Config           `yaml:"metrics"`
 	Nginx             nginx.Config             `yaml:"nginx"`
 }

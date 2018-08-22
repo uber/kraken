@@ -1,5 +1,7 @@
 package stringset
 
+import "errors"
+
 // Set is a nifty little wrapper for common set operations on a map. Because it
 // is equivalent to a map, make/range/len will still work with Set.
 type Set map[string]struct{}
@@ -74,4 +76,26 @@ func (s Set) Copy() Set {
 		c.Add(x)
 	}
 	return c
+}
+
+// Random returns a random element in s. Returns error if s is empty.
+func (s Set) Random() (string, error) {
+	for x := range s {
+		return x, nil
+	}
+	return "", errors.New("set is empty")
+}
+
+// Sample samples n random elements from s. If there are <= n elements in s,
+// returns the whole set.
+func (s Set) Sample(n int) Set {
+	c := make(Set, n)
+	for x := range s {
+		if n == 0 {
+			break
+		}
+		c.Add(x)
+		n--
+	}
+	return s
 }

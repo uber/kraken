@@ -56,11 +56,17 @@ func main() {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
 
-	r, err := blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin)
+	origins, err := config.Origin.Build()
 	if err != nil {
-		log.Fatalf("Error creating origin client resolver: %s", err)
+		log.Fatalf("Error building origin host list: %s", err)
 	}
+	r := blobclient.NewClientResolver(blobclient.NewProvider(), origins)
 	originClient := blobclient.NewClusterClient(r)
+
+	localOriginDNS, err := config.Origin.StableAddr()
+	if err != nil {
+		log.Fatalf("Error getting stable origin addr: %s", err)
+	}
 
 	localDB, err := localdb.New(config.LocalDB)
 	if err != nil {
@@ -118,7 +124,7 @@ func main() {
 		config.TagServer,
 		stats,
 		backends,
-		config.Origin,
+		localOriginDNS,
 		originClient,
 		neighbors,
 		tagStore,

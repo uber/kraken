@@ -41,18 +41,20 @@ func main() {
 		log.Fatalf("Could not create PeerStore: %s", err)
 	}
 
+	origins, err := config.Origin.Build()
+	if err != nil {
+		log.Fatalf("Error building origin host list: %s", err)
+	}
+
 	originStore := originstore.New(
-		config.OriginStore, clock.New(), config.Origin, blobclient.NewProvider())
+		config.OriginStore, clock.New(), origins, blobclient.NewProvider())
 
 	policy, err := peerhandoutpolicy.NewPriorityPolicy(stats, config.PeerHandoutPolicy.Priority)
 	if err != nil {
 		log.Fatalf("Could not load peer handout policy: %s", err)
 	}
 
-	r, err := blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin)
-	if err != nil {
-		log.Fatalf("Error creating origin client resolver: %s", err)
-	}
+	r := blobclient.NewClientResolver(blobclient.NewProvider(), origins)
 	originCluster := blobclient.NewClusterClient(r)
 
 	server := trackerserver.New(

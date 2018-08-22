@@ -11,7 +11,7 @@ import (
 func TestStateHealthTransition(t *testing.T) {
 	require := require.New(t)
 
-	s := newState(Config{Fails: 3, Passes: 2})
+	s := newState(FilterConfig{Fails: 3, Passes: 2})
 
 	addr := "foo:80"
 
@@ -49,7 +49,7 @@ func TestStateHealthTransition(t *testing.T) {
 func TestStateHealthTrendResets(t *testing.T) {
 	require := require.New(t)
 
-	s := newState(Config{Fails: 3, Passes: 2})
+	s := newState(FilterConfig{Fails: 3, Passes: 2})
 
 	addr := "foo:80"
 
@@ -81,7 +81,7 @@ func TestStateHealthTrendResets(t *testing.T) {
 func TestStateSync(t *testing.T) {
 	require := require.New(t)
 
-	s := newState(Config{Fails: 1, Passes: 1})
+	s := newState(FilterConfig{Fails: 1, Passes: 1})
 
 	addr1 := "foo:80"
 	addr2 := "bar:80"

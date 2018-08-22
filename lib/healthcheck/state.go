@@ -13,13 +13,13 @@ import (
 // state is thread-safe.
 type state struct {
 	sync.Mutex
-	config  Config
+	config  FilterConfig
 	all     stringset.Set
 	healthy stringset.Set
 	trend   map[string]int
 }
 
-func newState(config Config) *state {
+func newState(config FilterConfig) *state {
 	return &state{
 		config:  config,
 		all:     stringset.New(),

@@ -342,10 +342,10 @@ func TestReplicateToRemote(t *testing.T) {
 
 	require.NoError(cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content)))
 
-	remote := "some-remote-origin"
-	remoteClient := s.remoteClient(remote)
-	remoteClient.EXPECT().Locations(blob.Digest).Return([]string{remote}, nil)
-	remoteClient.EXPECT().UploadBlob(
+	remote := "remote:80"
+
+	remoteCluster := s.expectRemoteCluster(remote)
+	remoteCluster.EXPECT().UploadBlob(
 		namespace, blob.Digest, rwutil.MatchReader(blob.Content)).Return(nil)
 
 	require.NoError(cp.Provide(master1).ReplicateToRemote(namespace, blob.Digest, remote))
@@ -367,10 +367,10 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil).AnyTimes()
 	backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
 
-	remote := "some-remote-origin"
-	remoteClient := s.remoteClient(remote)
-	remoteClient.EXPECT().Locations(blob.Digest).Return([]string{remote}, nil)
-	remoteClient.EXPECT().UploadBlob(
+	remote := "remote:80"
+
+	remoteCluster := s.expectRemoteCluster(remote)
+	remoteCluster.EXPECT().UploadBlob(
 		namespace, blob.Digest, rwutil.MatchReader(blob.Content)).Return(nil)
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {

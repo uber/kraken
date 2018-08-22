@@ -9,6 +9,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -41,8 +42,7 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 	cp.register(master2, blobclient.New("http://localhost:0"))
 	cp.register(master3, blobclient.New("http://localhost:0"))
 
-	r, err := blobclient.NewClientResolver(cp, master1)
-	require.NoError(err)
+	r := blobclient.NewClientResolver(cp, hostlist.Fixture(master1))
 	cc := blobclient.NewClusterClient(r)
 
 	// Run many times to make sure we eventually hit unavailable masters.
@@ -82,15 +82,14 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 	cp.register(master2, blobclient.New("http://localhost:0"))
 	cp.register(master3, blobclient.New("http://localhost:0"))
 
-	r, err := blobclient.NewClientResolver(cp, master1)
-	require.NoError(err)
+	r := blobclient.NewClientResolver(cp, hostlist.Fixture(master1))
 	cc := blobclient.NewClusterClient(r)
 
 	blob := core.NewBlobFixture()
 
 	require.Error(cc.UploadBlob(backend.NoopNamespace, blob.Digest, bytes.NewReader(blob.Content)))
 
-	_, err = cc.Stat(backend.NoopNamespace, blob.Digest)
+	_, err := cc.Stat(backend.NoopNamespace, blob.Digest)
 	require.Error(err)
 
 	_, err = cc.GetMetaInfo(backend.NoopNamespace, blob.Digest)

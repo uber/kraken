@@ -9,6 +9,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/upstream"
 	"code.uber.internal/infra/kraken/localdb"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/nginx"
@@ -26,7 +27,7 @@ type Config struct {
 	Remotes        tagreplication.RemotesConfig `yaml:"remotes"`
 	TagReplication persistedretry.Config        `yaml:"tag_replication"`
 	TagTypes       []tagtype.Config             `yaml:"tag_types"`
-	Origin         string                       `yaml:"origin"`
+	Origin         upstream.Config              `yaml:"origin"`
 	LocalDB        localdb.Config               `yaml:"localdb"`
 	Cluster        hostlist.Config              `yaml:"cluster"`
 	TagStore       tagstore.Config              `yaml:"tag_store"`

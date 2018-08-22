@@ -17,7 +17,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/healthcheck"
 	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/metainfogen"
-	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/mocks/lib/persistedretry"
@@ -74,26 +73,6 @@ func (p *testClientProvider) Provide(host string) blobclient.Client {
 	return c
 }
 
-func startServer(
-	host string,
-	ring hashring.Ring,
-	cas *store.CAStore,
-	cp blobclient.Provider,
-	pctx core.PeerContext,
-	bm *backend.Manager,
-	writeBackManager persistedretry.Manager) (addr string, stop func()) {
-
-	mg := metainfogen.Fixture(cas, 4)
-
-	br := blobrefresh.New(blobrefresh.Config{}, tally.NoopScope, cas, bm, mg)
-
-	s, err := New(Config{}, tally.NoopScope, host, ring, cas, cp, pctx, bm, br, mg, writeBackManager)
-	if err != nil {
-		panic(err)
-	}
-	return testutil.StartServer(s.Handler())
-}
-
 // testServer is a convenience wrapper around the underlying components of a
 // Server and faciliates restarting Servers with new configuration.
 type testServer struct {
@@ -102,6 +81,7 @@ type testServer struct {
 	addr             string
 	cas              *store.CAStore
 	cp               *testClientProvider
+	clusterProvider  *mockblobclient.MockClusterProvider
 	pctx             core.PeerContext
 	backendManager   *backend.Manager
 	writeBackManager *mockpersistedretry.MockManager
@@ -117,6 +97,8 @@ func newTestServer(
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
 
+	clusterProvider := mockblobclient.NewMockClusterProvider(ctrl)
+
 	pctx := core.PeerContextFixture()
 
 	cas, c := store.CAStoreFixture()
@@ -130,7 +112,9 @@ func newTestServer(
 
 	br := blobrefresh.New(blobrefresh.Config{}, tally.NoopScope, cas, bm, mg)
 
-	s, err := New(Config{}, tally.NoopScope, host, ring, cas, cp, pctx, bm, br, mg, writeBackManager)
+	s, err := New(
+		Config{}, tally.NoopScope, host, ring, cas, cp, clusterProvider, pctx,
+		bm, br, mg, writeBackManager)
 	if err != nil {
 		panic(err)
 	}
@@ -146,6 +130,7 @@ func newTestServer(
 		addr:             addr,
 		cas:              cas,
 		cp:               cp,
+		clusterProvider:  clusterProvider,
 		pctx:             pctx,
 		backendManager:   bm,
 		writeBackManager: writeBackManager,
@@ -161,10 +146,10 @@ func (s *testServer) backendClient(namespace string) *mockbackend.MockClient {
 	return client
 }
 
-func (s *testServer) remoteClient(name string) *mockblobclient.MockClient {
-	client := mockblobclient.NewMockClient(s.ctrl)
-	s.cp.register(name, client)
-	return client
+func (s *testServer) expectRemoteCluster(dns string) *mockblobclient.MockClusterClient {
+	cc := mockblobclient.NewMockClusterClient(s.ctrl)
+	s.clusterProvider.EXPECT().Provide(dns).Return(cc, nil).MinTimes(1)
+	return cc
 }
 
 // computeBlobForHosts generates a random digest / content which shards to hosts.
