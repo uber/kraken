@@ -44,10 +44,12 @@ func main() {
 		log.Fatalf("Failed to create store: %s", err)
 	}
 
-	r, err := blobclient.NewClientResolver(blobclient.NewProvider(), config.Origin)
+	origins, err := config.Origin.Build()
 	if err != nil {
-		log.Fatalf("Error creating origin client resolver: %s", err)
+		log.Fatalf("Error building origin host list: %s", err)
 	}
+
+	r := blobclient.NewClientResolver(blobclient.NewProvider(), origins)
 	originCluster := blobclient.NewClusterClient(r)
 
 	tagClient := tagclient.New(config.BuildIndex)

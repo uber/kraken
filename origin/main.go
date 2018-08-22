@@ -157,6 +157,7 @@ func main() {
 		hashRing,
 		cas,
 		blobclient.NewProvider(),
+		blobclient.NewClusterProvider(),
 		pctx,
 		backendManager,
 		blobRefresher,

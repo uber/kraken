@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const _testDNS = "test-origin-cluster-dns"
+const _testDNS = "test-origin-cluster-dns:80"
 
 type storeMocks struct {
 	ctrl     *gomock.Controller
@@ -33,7 +34,7 @@ func newStoreMocks(t *testing.T) (*storeMocks, func()) {
 }
 
 func (m *storeMocks) new(config Config, clk clock.Clock) Store {
-	return New(config, clk, _testDNS, m.provider)
+	return New(config, clk, hostlist.Fixture(_testDNS), m.provider)
 }
 
 func (m *storeMocks) expectClient(addr string) *mockblobclient.MockClient {

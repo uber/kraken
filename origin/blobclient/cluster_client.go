@@ -9,11 +9,28 @@ import (
 	"sync"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/utils/backoff"
 	"code.uber.internal/infra/kraken/utils/errutil"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
+
+// Locations queries cluster for the locations of d.
+func Locations(p Provider, cluster hostlist.List, d core.Digest) (locs []string, err error) {
+	addrs := cluster.Resolve().Sample(3)
+	if len(addrs) == 0 {
+		return nil, errors.New("cluster is empty")
+	}
+	for addr := range addrs {
+		locs, err = p.Provide(addr).Locations(d)
+		if err != nil {
+			continue
+		}
+		break
+	}
+	return locs, err
+}
 
 // ClientResolver resolves digests into Clients of origins.
 type ClientResolver interface {
@@ -23,21 +40,18 @@ type ClientResolver interface {
 
 type clientResolver struct {
 	provider Provider
-	addr     string
+	cluster  hostlist.List
 }
 
 // NewClientResolver returns a new client resolver.
-func NewClientResolver(p Provider, addr string) (ClientResolver, error) {
-	if addr == "" {
-		return nil, errors.New("addr is empty")
-	}
-	return &clientResolver{p, addr}, nil
+func NewClientResolver(p Provider, cluster hostlist.List) ClientResolver {
+	return &clientResolver{p, cluster}
 }
 
 func (r *clientResolver) Resolve(d core.Digest) ([]Client, error) {
-	locs, err := r.provider.Provide(r.addr).Locations(d)
+	locs, err := Locations(r.provider, r.cluster, d)
 	if err != nil {
-		return nil, fmt.Errorf("get locations: %s", err)
+		return nil, err
 	}
 	var clients []Client
 	for _, loc := range locs {

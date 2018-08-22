@@ -80,7 +80,6 @@ func (c *HTTPClient) Addr() string {
 func (c *HTTPClient) Locations(d core.Digest) ([]string, error) {
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/blobs/%s/locations", c.addr, d),
-		httputil.SendRetry(),
 		httputil.SendTimeout(5*time.Second))
 	if err != nil {
 		return nil, err

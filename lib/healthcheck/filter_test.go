@@ -24,7 +24,7 @@ func TestFilterCheckErrors(t *testing.T) {
 	x := "x:80"
 	y := "y:80"
 
-	f := NewFilter(Config{Fails: 1, Passes: 1}, checker)
+	f := NewFilter(FilterConfig{Fails: 1, Passes: 1}, checker)
 
 	checker.EXPECT().Check(gomock.Any(), x).Return(nil)
 	checker.EXPECT().Check(gomock.Any(), y).Return(nil)
@@ -48,7 +48,7 @@ func TestFilterCheckTimeout(t *testing.T) {
 	x := "x:80"
 	y := "y:80"
 
-	f := NewFilter(Config{Fails: 1, Passes: 1, Timeout: time.Second}, checker)
+	f := NewFilter(FilterConfig{Fails: 1, Passes: 1, Timeout: time.Second}, checker)
 
 	checker.EXPECT().Check(gomock.Any(), x).Return(nil)
 	checker.EXPECT().Check(gomock.Any(), y).DoAndReturn(func(context.Context, string) error {
@@ -69,7 +69,7 @@ func TestFilterSingleHostAlwaysHealthy(t *testing.T) {
 
 	x := "x:80"
 
-	f := NewFilter(Config{Fails: 1, Passes: 1}, checker)
+	f := NewFilter(FilterConfig{Fails: 1, Passes: 1}, checker)
 
 	// No health checks actually run since only single host is used.
 	require.Equal(stringset.New(x), f.Run(stringset.New(x)))
@@ -86,7 +86,7 @@ func TestFilterNewHostsStartAsHealthy(t *testing.T) {
 	x := "x:80"
 	y := "y:80"
 
-	f := NewFilter(Config{Fails: 2, Passes: 2}, checker)
+	f := NewFilter(FilterConfig{Fails: 2, Passes: 2}, checker)
 
 	checker.EXPECT().Check(gomock.Any(), x).Return(errors.New("some error")).Times(2)
 	checker.EXPECT().Check(gomock.Any(), y).Return(errors.New("some error")).Times(2)

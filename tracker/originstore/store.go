@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/errutil"
@@ -27,18 +28,18 @@ type Store interface {
 
 type store struct {
 	config       Config
-	dns          string
+	origins      hostlist.List
 	provider     blobclient.Provider
 	locations    *dedup.Limiter // Caches results for origin locations per digest.
 	peerContexts *dedup.Limiter // Caches results for individual origin peer contexts.
 }
 
 // New creates a new Store.
-func New(config Config, clk clock.Clock, dns string, provider blobclient.Provider) Store {
+func New(config Config, clk clock.Clock, origins hostlist.List, provider blobclient.Provider) Store {
 	config.applyDefaults()
 	s := &store{
 		config:   config,
-		dns:      dns,
+		origins:  origins,
 		provider: provider,
 	}
 	s.locations = dedup.NewLimiter(clk, &locations{s})
@@ -79,7 +80,7 @@ type locationsResult struct {
 
 func (l *locations) Run(input interface{}) (interface{}, time.Duration) {
 	d := input.(core.Digest)
-	addrs, err := l.store.provider.Provide(l.store.dns).Locations(d)
+	addrs, err := blobclient.Locations(l.store.provider, l.store.origins, d)
 	ttl := l.store.config.LocationsTTL
 	if err != nil {
 		ttl = l.store.config.LocationsErrorTTL

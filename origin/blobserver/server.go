@@ -44,6 +44,7 @@ type Server struct {
 	hashRing          hashring.Ring
 	cas               *store.CAStore
 	clientProvider    blobclient.Provider
+	clusterProvider   blobclient.ClusterProvider
 	stats             tally.Scope
 	backends          *backend.Manager
 	blobRefresher     *blobrefresh.Refresher
@@ -66,6 +67,7 @@ func New(
 	hashRing hashring.Ring,
 	cas *store.CAStore,
 	clientProvider blobclient.Provider,
+	clusterProvider blobclient.ClusterProvider,
 	pctx core.PeerContext,
 	backends *backend.Manager,
 	blobRefresher *blobrefresh.Refresher,
@@ -88,6 +90,7 @@ func New(
 		hashRing:          hashRing,
 		cas:               cas,
 		clientProvider:    clientProvider,
+		clusterProvider:   clusterProvider,
 		stats:             stats,
 		backends:          backends,
 		blobRefresher:     blobRefresher,
@@ -235,12 +238,11 @@ func (s *Server) replicateToRemoteHandler(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return err
 	}
-	remoteDNS, err := httputil.ParseParam(r, "remote")
+	remote, err := httputil.ParseParam(r, "remote")
 	if err != nil {
 		return err
 	}
-
-	return s.replicateToRemote(namespace, d, remoteDNS)
+	return s.replicateToRemote(namespace, d, remote)
 }
 
 func (s *Server) replicateToRemote(namespace string, d core.Digest, remoteDNS string) error {
@@ -253,13 +255,11 @@ func (s *Server) replicateToRemote(namespace string, d core.Digest, remoteDNS st
 	}
 	defer f.Close()
 
-	r, err := blobclient.NewClientResolver(s.clientProvider, remoteDNS)
+	remote, err := s.clusterProvider.Provide(remoteDNS)
 	if err != nil {
-		return handler.Errorf("new client resolver: %s", err)
+		return handler.Errorf("remote cluster provider: %s", err)
 	}
-	remoteCluster := blobclient.NewClusterClient(r)
-
-	return remoteCluster.UploadBlob(namespace, d, f)
+	return remote.UploadBlob(namespace, d, f)
 }
 
 // deleteBlobHandler deletes blob data.

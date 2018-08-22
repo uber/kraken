@@ -13,14 +13,14 @@ type Filter interface {
 }
 
 type filter struct {
-	config  Config
+	config  FilterConfig
 	checker Checker
 	state   *state
 }
 
 // NewFilter creates a new Filter. Filter is stateful -- consecutive runs are required
 // to detect healthy / unhealthy hosts.
-func NewFilter(config Config, checker Checker) Filter {
+func NewFilter(config FilterConfig, checker Checker) Filter {
 	config.applyDefaults()
 	return &filter{
 		config:  config,
