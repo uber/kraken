@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/healthcheck"
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
@@ -34,13 +36,13 @@ type Client interface {
 }
 
 type client struct {
-	pctx core.PeerContext
-	addr string
+	pctx  core.PeerContext
+	hosts healthcheck.List
 }
 
 // New creates a new client.
-func New(pctx core.PeerContext, addr string) Client {
-	return &client{pctx, addr}
+func New(pctx core.PeerContext, hosts healthcheck.List) Client {
+	return &client{pctx, hosts}
 }
 
 // Announce versionss.
@@ -48,6 +50,13 @@ const (
 	V1 = 1
 	V2 = 2
 )
+
+func getEndpoint(version int, addr string, h core.InfoHash) (method, url string) {
+	if version == V1 {
+		return "GET", fmt.Sprintf("http://%s/announce", addr)
+	}
+	return "POST", fmt.Sprintf("http://%s/announce/%s", addr, h.String())
+}
 
 // Announce announces the torrent identified by (name, h) with the number of
 // downloaded bytes. Returns a list of all other peers announcing for said torrent,
@@ -66,27 +75,34 @@ func (c *client) Announce(
 	if err != nil {
 		return nil, 0, fmt.Errorf("marshal request: %s", err)
 	}
-	method := "GET"
-	url := fmt.Sprintf("http://%s/announce", c.addr)
-	if version == V2 {
-		method = "POST"
-		url = fmt.Sprintf("http://%s/announce/%s", c.addr, h.String())
+	addrs := c.hosts.Resolve().Sample(3)
+	if len(addrs) == 0 {
+		return nil, 0, errors.New("no hosts could be resolve")
 	}
-	httpResp, err := httputil.Send(
-		method,
-		url,
-		httputil.SendBody(bytes.NewReader(body)),
-		httputil.SendTimeout(30*time.Second),
-		httputil.SendRetry())
-	if err != nil {
-		return nil, 0, err
+	var httpResp *http.Response
+	for addr := range addrs {
+		method, url := getEndpoint(version, addr, h)
+		httpResp, err = httputil.Send(
+			method,
+			url,
+			httputil.SendBody(bytes.NewReader(body)),
+			httputil.SendTimeout(30*time.Second),
+			httputil.SendRetry())
+		if err != nil {
+			if httputil.IsNetworkError(err) {
+				c.hosts.Failed(addr)
+				continue
+			}
+			return nil, 0, err
+		}
+		defer httpResp.Body.Close()
+		var resp Response
+		if err := json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
+			return nil, 0, fmt.Errorf("decode response: %s", err)
+		}
+		return resp.Peers, resp.Interval, nil
 	}
-	defer httpResp.Body.Close()
-	var resp Response
-	if err := json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
-		return nil, 0, fmt.Errorf("decode response: %s", err)
-	}
-	return resp.Peers, resp.Interval, nil
+	return nil, 0, err
 }
 
 // DisabledClient rejects all announces. Suitable for origin peers which should

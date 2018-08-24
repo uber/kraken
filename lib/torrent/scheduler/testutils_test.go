@@ -17,6 +17,8 @@ import (
 	"github.com/uber-go/tally"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/healthcheck"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcequeue"
@@ -117,7 +119,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 		IP:     "localhost",
 		Port:   findFreePort(),
 	}
-	ac := announceclient.New(pctx, m.trackerAddr)
+	ac := announceclient.New(pctx, healthcheck.NoopFailed(hostlist.Fixture(m.trackerAddr)))
 	tp := networkevent.NewTestProducer()
 
 	s, err := newScheduler(config, ta, stats, pctx, ac, announcequeue.New(), tp, options...)

@@ -78,15 +78,20 @@ func main() {
 		log.Fatalf("Failed to create network event producer: %s", err)
 	}
 
+	trackers, err := config.Tracker.Build()
+	if err != nil {
+		log.Fatalf("Error building tracker upstream: %s", err)
+	}
+
 	sched, err := scheduler.NewAgentScheduler(
-		config.Scheduler, stats, pctx, cads, netevents, config.Tracker)
+		config.Scheduler, stats, pctx, cads, netevents, trackers)
 	if err != nil {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
 
 	buildIndexes, err := config.BuildIndex.Build()
 	if err != nil {
-		log.Fatalf("Error creating host list for build-index: %s", err)
+		log.Fatalf("Error building build-index upstream: %s", err)
 	}
 	tagClient := tagclient.NewClusterClient(buildIndexes)
 

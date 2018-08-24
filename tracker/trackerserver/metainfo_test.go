@@ -4,11 +4,18 @@ import (
 	"testing"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/healthcheck"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/tracker/metainfoclient"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/testutil"
+
 	"github.com/stretchr/testify/require"
 )
+
+func newMetaInfoClient(addr string) metainfoclient.Client {
+	return metainfoclient.New(healthcheck.NoopFailed(hostlist.Fixture(addr)))
+}
 
 func TestGetMetaInfoHandlerFetchesFromOrigin(t *testing.T) {
 	require := require.New(t)
@@ -26,7 +33,7 @@ func TestGetMetaInfoHandlerFetchesFromOrigin(t *testing.T) {
 
 	mocks.originCluster.EXPECT().GetMetaInfo(namespace, digest).Return(mi, nil)
 
-	client := metainfoclient.New(addr)
+	client := newMetaInfoClient(addr)
 
 	result, err := client.Download(namespace, digest.Hex())
 	require.NoError(err)
@@ -50,7 +57,7 @@ func TestGetMetaInfoHandlerPropagatesOriginError(t *testing.T) {
 	mocks.originCluster.EXPECT().GetMetaInfo(
 		namespace, digest).Return(nil, httputil.StatusError{Status: 599}).MinTimes(1)
 
-	client := metainfoclient.New(addr)
+	client := newMetaInfoClient(addr)
 
 	_, err = client.Download(namespace, digest.Hex())
 	require.Error(err)

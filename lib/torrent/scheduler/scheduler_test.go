@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/healthcheck"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
@@ -368,7 +370,7 @@ func TestPullInactiveTorrent(t *testing.T) {
 
 	// Force announce the scheduler for this torrent to simulate a peer which
 	// is registered in tracker but does not have the torrent in memory.
-	ac := announceclient.New(seeder.pctx, mocks.trackerAddr)
+	ac := announceclient.New(seeder.pctx, healthcheck.NoopFailed(hostlist.Fixture(mocks.trackerAddr)))
 	ac.Announce(blob.MetaInfo.Info.Name, blob.MetaInfo.InfoHash, false, announceclient.V1)
 
 	leecher := mocks.newPeer(config)
