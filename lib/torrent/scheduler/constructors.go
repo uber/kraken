@@ -3,6 +3,7 @@ package scheduler
 import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/blobrefresh"
+	"code.uber.internal/infra/kraken/lib/healthcheck"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcequeue"
@@ -21,14 +22,14 @@ func NewAgentScheduler(
 	pctx core.PeerContext,
 	cads *store.CADownloadStore,
 	netevents networkevent.Producer,
-	tracker string) (ReloadableScheduler, error) {
+	trackers healthcheck.List) (ReloadableScheduler, error) {
 
 	s, err := newScheduler(
 		config,
-		agentstorage.NewTorrentArchive(stats, cads, metainfoclient.New(tracker)),
+		agentstorage.NewTorrentArchive(stats, cads, metainfoclient.New(trackers)),
 		stats,
 		pctx,
-		announceclient.New(pctx, tracker),
+		announceclient.New(pctx, trackers),
 		announcequeue.New(),
 		netevents)
 	if err != nil {

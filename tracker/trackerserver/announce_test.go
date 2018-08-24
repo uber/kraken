@@ -7,12 +7,18 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/healthcheck"
+	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
+
+func newAnnounceClient(pctx core.PeerContext, addr string) announceclient.Client {
+	return announceclient.New(pctx, healthcheck.NoopFailed(hostlist.Fixture(addr)))
+}
 
 func TestAnnounceSinglePeerResponse(t *testing.T) {
 	for _, version := range []int{announceclient.V1, announceclient.V2} {
@@ -30,7 +36,7 @@ func TestAnnounceSinglePeerResponse(t *testing.T) {
 			blob := core.NewBlobFixture()
 			pctx := core.PeerContextFixture()
 
-			client := announceclient.New(pctx, addr)
+			client := newAnnounceClient(pctx, addr)
 
 			peers := []*core.PeerInfo{core.PeerInfoFixture()}
 
@@ -62,7 +68,7 @@ func TestAnnounceUnavailablePeerStoreCanStillProvideOrigins(t *testing.T) {
 	blob := core.NewBlobFixture()
 	origins := []*core.PeerInfo{core.OriginPeerInfoFixture()}
 
-	client := announceclient.New(pctx, addr)
+	client := newAnnounceClient(pctx, addr)
 
 	storeErr := errors.New("some storage error")
 
@@ -90,7 +96,7 @@ func TestAnnouceUnavailableOriginClusterCanStillProvidePeers(t *testing.T) {
 	pctx := core.PeerContextFixture()
 	blob := core.NewBlobFixture()
 
-	client := announceclient.New(pctx, addr)
+	client := newAnnounceClient(pctx, addr)
 
 	peers := []*core.PeerInfo{core.PeerInfoFixture()}
 

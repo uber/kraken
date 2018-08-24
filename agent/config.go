@@ -23,7 +23,7 @@ type Config struct {
 	Scheduler       scheduler.Config            `yaml:"scheduler"`
 	PeerIDFactory   core.PeerIDFactory          `yaml:"peer_id_factory"`
 	NetworkEvent    networkevent.Config         `yaml:"network_event"`
-	Tracker         string                      `yaml:"tracker"`
+	Tracker         upstream.PassiveConfig      `yaml:"tracker"`
 	BuildIndex      upstream.PassiveConfig      `yaml:"build_index"`
 	AgentServer     agentserver.Config          `yaml:"agentserver"`
 	RegistryBackup  string                      `yaml:"registry_backup"`
