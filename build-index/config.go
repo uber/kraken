@@ -26,9 +26,9 @@ type Config struct {
 	Remotes        tagreplication.RemotesConfig `yaml:"remotes"`
 	TagReplication persistedretry.Config        `yaml:"tag_replication"`
 	TagTypes       []tagtype.Config             `yaml:"tag_types"`
-	Origin         upstream.Config              `yaml:"origin"`
+	Origin         upstream.ActiveConfig        `yaml:"origin"`
 	LocalDB        localdb.Config               `yaml:"localdb"`
-	Cluster        upstream.Config              `yaml:"cluster"`
+	Cluster        upstream.ActiveConfig        `yaml:"cluster"`
 	TagStore       tagstore.Config              `yaml:"tag_store"`
 	Store          store.SimpleStoreConfig      `yaml:"store"`
 	WriteBack      persistedretry.Config        `yaml:"writeback"`

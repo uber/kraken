@@ -15,8 +15,8 @@ import (
 type Config struct {
 	CAStore          store.CAStoreConfig     `yaml:"castore"`
 	Registry         dockerregistry.Config   `yaml:"registry"`
-	BuildIndex       upstream.Config         `yaml:"build_index"`
-	Origin           upstream.Config         `yaml:"origin"`
+	BuildIndex       upstream.ActiveConfig   `yaml:"build_index"`
+	Origin           upstream.ActiveConfig   `yaml:"origin"`
 	ZapLogging       zap.Config              `yaml:"zap"`
 	Metrics          metrics.Config          `yaml:"metrics"`
 	RegistryOverride registryoverride.Config `yaml:"registryoverride"`

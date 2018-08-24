@@ -9,6 +9,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
+	"code.uber.internal/infra/kraken/lib/upstream"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/nginx"
 )
@@ -23,7 +24,7 @@ type Config struct {
 	PeerIDFactory   core.PeerIDFactory          `yaml:"peer_id_factory"`
 	NetworkEvent    networkevent.Config         `yaml:"network_event"`
 	Tracker         string                      `yaml:"tracker"`
-	BuildIndex      string                      `yaml:"build_index"`
+	BuildIndex      upstream.PassiveConfig      `yaml:"build_index"`
 	AgentServer     agentserver.Config          `yaml:"agentserver"`
 	RegistryBackup  string                      `yaml:"registry_backup"`
 	Nginx           nginx.Config                `yaml:"nginx"`
