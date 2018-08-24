@@ -20,7 +20,7 @@ type Config struct {
 	OriginStore       originstore.Config       `yaml:"originstore"`
 	TrackerServer     trackerserver.Config     `yaml:"trackerserver"`
 	PeerHandoutPolicy peerhandoutpolicy.Config `yaml:"peerhandoutpolicy"`
-	Origin            upstream.Config          `yaml:"origin"`
+	Origin            upstream.ActiveConfig    `yaml:"origin"`
 	Metrics           metrics.Config           `yaml:"metrics"`
 	Nginx             nginx.Config             `yaml:"nginx"`
 }

@@ -84,7 +84,13 @@ func main() {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
 
-	transferer := transfer.NewReadOnlyTransferer(stats, cads, tagclient.NewSingleClient(config.BuildIndex), sched)
+	buildIndexes, err := config.BuildIndex.Build()
+	if err != nil {
+		log.Fatalf("Error creating host list for build-index: %s", err)
+	}
+	tagClient := tagclient.NewClusterClient(buildIndexes)
+
+	transferer := transfer.NewReadOnlyTransferer(stats, cads, tagClient, sched)
 
 	registry, err := config.Registry.Build(config.Registry.ReadOnlyParameters(transferer, cads, stats))
 	if err != nil {
