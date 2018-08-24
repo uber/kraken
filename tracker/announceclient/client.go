@@ -86,8 +86,7 @@ func (c *client) Announce(
 			method,
 			url,
 			httputil.SendBody(bytes.NewReader(body)),
-			httputil.SendTimeout(30*time.Second),
-			httputil.SendRetry())
+			httputil.SendTimeout(15*time.Second))
 		if err != nil {
 			if httputil.IsNetworkError(err) {
 				c.hosts.Failed(addr)
