@@ -22,19 +22,19 @@ type HealthCheckConfig struct {
 	Disabled bool                      `yaml:"disabled"`
 }
 
-// Build creates a hostlist.List for port with built-in active health checks.
-func (c Config) Build() (hostlist.List, error) {
+// Build creates a healthcheck.List for port with built-in active health checks.
+func (c Config) Build() (healthcheck.List, error) {
 	hosts, err := hostlist.New(c.Hosts)
 	if err != nil {
 		return nil, err
 	}
 	if c.HealthCheck.Disabled {
 		log.With("hosts", c.Hosts).Warn("Health checks disabled")
-		return hosts, nil
+		return healthcheck.NoopFailed(hosts), nil
 	}
 	filter := healthcheck.NewFilter(c.HealthCheck.Filter, healthcheck.Default())
 	monitor := healthcheck.NewMonitor(c.HealthCheck.Monitor, hosts, filter)
-	return monitor, nil
+	return healthcheck.NoopFailed(monitor), nil
 }
 
 // StableAddr returns a stable address that can be advertised as the address

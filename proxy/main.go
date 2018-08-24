@@ -48,11 +48,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error building origin host list: %s", err)
 	}
-
 	r := blobclient.NewClientResolver(blobclient.NewProvider(), origins)
 	originCluster := blobclient.NewClusterClient(r)
 
-	tagClient := tagclient.New(config.BuildIndex)
+	buildIndexes, err := config.BuildIndex.Build()
+	if err != nil {
+		log.Fatalf("Error building build-index host list: %s", err)
+	}
+	tagClient := tagclient.NewClusterClient(buildIndexes)
 
 	transferer := transfer.NewReadWriteTransferer(tagClient, originCluster, cas)
 

@@ -84,7 +84,7 @@ func main() {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
 
-	transferer := transfer.NewReadOnlyTransferer(stats, cads, tagclient.New(config.BuildIndex), sched)
+	transferer := transfer.NewReadOnlyTransferer(stats, cads, tagclient.NewSingleClient(config.BuildIndex), sched)
 
 	registry, err := config.Registry.Build(config.Registry.ReadOnlyParameters(transferer, cads, stats))
 	if err != nil {
