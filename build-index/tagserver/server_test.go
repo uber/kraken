@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/healthcheck"
 	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/mocks/build-index/tagclient"
@@ -107,6 +108,10 @@ func (m *serverMocks) handler() http.Handler {
 		m.tagTypes).Handler()
 }
 
+func newClusterClient(addr string) tagclient.Client {
+	return tagclient.NewClusterClient(healthcheck.NoopFailed(hostlist.Fixture(addr)))
+}
+
 func TestPut(t *testing.T) {
 	require := require.New(t)
 
@@ -116,7 +121,7 @@ func TestPut(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(addr)
+	client := newClusterClient(addr)
 
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
@@ -143,7 +148,7 @@ func TestGet(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(addr)
+	client := newClusterClient(addr)
 
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
@@ -164,7 +169,7 @@ func TestGetTagNotFound(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(addr)
+	client := newClusterClient(addr)
 
 	tag := core.TagFixture()
 
@@ -183,7 +188,7 @@ func TestHas(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(addr)
+	client := newClusterClient(addr)
 
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
@@ -204,7 +209,7 @@ func TestHasNotFound(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(addr)
+	client := newClusterClient(addr)
 
 	tag := core.TagFixture()
 
@@ -224,7 +229,7 @@ func TestListRepository(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(addr)
+	client := newClusterClient(addr)
 
 	repo := "uber-usi/labrat"
 	tags := []string{"latest", "0000", "0001"}
@@ -250,7 +255,7 @@ func TestList(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(addr)
+	client := newClusterClient(addr)
 
 	prefix := "uber-usi/labrat/_manifests/tags"
 	names := []string{"latest", "0000", "0001"}
@@ -271,7 +276,7 @@ func TestListEmptyPrefix(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(addr)
+	client := newClusterClient(addr)
 
 	names := []string{"a", "b", "c"}
 
@@ -291,7 +296,7 @@ func TestPutAndReplicate(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(addr)
+	client := newClusterClient(addr)
 
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
@@ -327,7 +332,7 @@ func TestReplicate(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(addr)
+	client := newClusterClient(addr)
 
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
@@ -358,7 +363,7 @@ func TestDuplicateReplicate(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(addr)
+	client := tagclient.NewSingleClient(addr)
 
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
@@ -385,7 +390,7 @@ func TestNoopReplicate(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(addr)
+	client := newClusterClient(addr)
 
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
@@ -412,7 +417,7 @@ func TestOrigin(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.New(addr)
+	client := newClusterClient(addr)
 
 	result, err := client.Origin()
 	require.NoError(err)

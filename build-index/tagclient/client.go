@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/healthcheck"
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
@@ -17,18 +18,6 @@ import (
 var (
 	ErrTagNotFound = errors.New("tag not found")
 )
-
-// Provider maps addresses into Clients.
-type Provider interface {
-	Provide(addr string) Client
-}
-
-type provider struct{}
-
-// NewProvider creates a new Provider.
-func NewProvider() Provider { return provider{} }
-
-func (p provider) Provide(addr string) Client { return New(addr) }
 
 // Client wraps tagserver endpoints.
 type Client interface {
@@ -46,30 +35,30 @@ type Client interface {
 	DuplicatePut(tag string, d core.Digest, delay time.Duration) error
 }
 
-type client struct {
+type singleClient struct {
 	addr string
 }
 
-// New returns a new Client.
-func New(addr string) Client {
-	return &client{addr}
+// NewSingleClient returns a Client scoped to a single tagserver instance.
+func NewSingleClient(addr string) Client {
+	return &singleClient{addr}
 }
 
-func (c *client) Put(tag string, d core.Digest) error {
+func (c *singleClient) Put(tag string, d core.Digest) error {
 	_, err := httputil.Put(
 		fmt.Sprintf("http://%s/tags/%s/digest/%s", c.addr, url.PathEscape(tag), d.String()),
 		httputil.SendRetry())
 	return err
 }
 
-func (c *client) PutAndReplicate(tag string, d core.Digest) error {
+func (c *singleClient) PutAndReplicate(tag string, d core.Digest) error {
 	_, err := httputil.Put(
 		fmt.Sprintf("http://%s/tags/%s/digest/%s?replicate=true", c.addr, url.PathEscape(tag), d.String()),
 		httputil.SendRetry())
 	return err
 }
 
-func (c *client) Get(tag string) (core.Digest, error) {
+func (c *singleClient) Get(tag string) (core.Digest, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/tags/%s", c.addr, url.PathEscape(tag)),
 		httputil.SendRetry())
@@ -91,7 +80,7 @@ func (c *client) Get(tag string) (core.Digest, error) {
 	return d, nil
 }
 
-func (c *client) Has(tag string) (bool, error) {
+func (c *singleClient) Has(tag string) (bool, error) {
 	_, err := httputil.Head(
 		fmt.Sprintf("http://%s/tags/%s", c.addr, url.PathEscape(tag)),
 		httputil.SendTimeout(10*time.Second),
@@ -105,7 +94,7 @@ func (c *client) Has(tag string) (bool, error) {
 	return true, nil
 }
 
-func (c *client) List(prefix string) ([]string, error) {
+func (c *singleClient) List(prefix string) ([]string, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/list/%s", c.addr, prefix),
 		httputil.SendRetry())
@@ -121,7 +110,7 @@ func (c *client) List(prefix string) ([]string, error) {
 }
 
 // XXX: Deprecated. Use List instead.
-func (c *client) ListRepository(repo string) ([]string, error) {
+func (c *singleClient) ListRepository(repo string) ([]string, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/repositories/%s/tags", c.addr, url.PathEscape(repo)),
 		httputil.SendRetry())
@@ -141,7 +130,7 @@ type ReplicateRequest struct {
 	Dependencies []core.Digest `json:"dependencies"`
 }
 
-func (c *client) Replicate(tag string) error {
+func (c *singleClient) Replicate(tag string) error {
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/remotes/tags/%s", c.addr, url.PathEscape(tag)),
 		httputil.SendRetry())
@@ -154,7 +143,7 @@ type DuplicateReplicateRequest struct {
 	Delay        time.Duration   `json:"delay"`
 }
 
-func (c *client) DuplicateReplicate(
+func (c *singleClient) DuplicateReplicate(
 	tag string, d core.Digest, dependencies core.DigestList, delay time.Duration) error {
 
 	b, err := json.Marshal(DuplicateReplicateRequest{dependencies, delay})
@@ -176,7 +165,7 @@ type DuplicatePutRequest struct {
 	Delay time.Duration `json:"delay"`
 }
 
-func (c *client) DuplicatePut(tag string, d core.Digest, delay time.Duration) error {
+func (c *singleClient) DuplicatePut(tag string, d core.Digest, delay time.Duration) error {
 	b, err := json.Marshal(DuplicatePutRequest{delay})
 	if err != nil {
 		return fmt.Errorf("json marshal: %s", err)
@@ -191,7 +180,7 @@ func (c *client) DuplicatePut(tag string, d core.Digest, delay time.Duration) er
 	return err
 }
 
-func (c *client) Origin() (string, error) {
+func (c *singleClient) Origin() (string, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/origin", c.addr),
 		httputil.SendTimeout(5*time.Second),
@@ -205,4 +194,93 @@ func (c *client) Origin() (string, error) {
 		return "", fmt.Errorf("read body: %s", err)
 	}
 	return string(b), nil
+}
+
+type clusterClient struct {
+	hosts healthcheck.List
+}
+
+// NewClusterClient creates a Client which operates on tagserver instances as
+// a cluster.
+func NewClusterClient(hosts healthcheck.List) Client {
+	return &clusterClient{hosts}
+}
+
+func (cc *clusterClient) do(request func(c Client) error) error {
+	addrs := cc.hosts.Resolve().Sample(3)
+	if len(addrs) == 0 {
+		return errors.New("cluster client: no hosts could be resolved")
+	}
+	var err error
+	for addr := range addrs {
+		err = request(NewSingleClient(addr))
+		if httputil.IsNetworkError(err) {
+			cc.hosts.Failed(addr)
+			continue
+		}
+		break
+	}
+	return err
+}
+
+func (cc *clusterClient) Put(tag string, d core.Digest) error {
+	return cc.do(func(c Client) error { return c.Put(tag, d) })
+}
+
+func (cc *clusterClient) PutAndReplicate(tag string, d core.Digest) error {
+	return cc.do(func(c Client) error { return c.PutAndReplicate(tag, d) })
+}
+
+func (cc *clusterClient) Get(tag string) (d core.Digest, err error) {
+	err = cc.do(func(c Client) error {
+		d, err = c.Get(tag)
+		return err
+	})
+	return
+}
+
+func (cc *clusterClient) Has(tag string) (ok bool, err error) {
+	err = cc.do(func(c Client) error {
+		ok, err = c.Has(tag)
+		return err
+	})
+	return
+}
+
+func (cc *clusterClient) List(prefix string) (tags []string, err error) {
+	err = cc.do(func(c Client) error {
+		tags, err = c.List(prefix)
+		return err
+	})
+	return
+}
+
+func (cc *clusterClient) ListRepository(repo string) (tags []string, err error) {
+	err = cc.do(func(c Client) error {
+		tags, err = c.ListRepository(repo)
+		return err
+	})
+	return
+}
+
+func (cc *clusterClient) Replicate(tag string) error {
+	return cc.do(func(c Client) error { return c.Replicate(tag) })
+}
+
+func (cc *clusterClient) Origin() (origin string, err error) {
+	err = cc.do(func(c Client) error {
+		origin, err = c.Origin()
+		return err
+	})
+	return
+}
+
+func (cc *clusterClient) DuplicateReplicate(
+	tag string, d core.Digest, dependencies core.DigestList, delay time.Duration) error {
+
+	return errors.New("duplicate replicate not supported on cluster client")
+}
+
+func (cc *clusterClient) DuplicatePut(tag string, d core.Digest, delay time.Duration) error {
+	return errors.New("duplicate put not supported on cluster client")
 }
