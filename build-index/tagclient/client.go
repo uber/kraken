@@ -47,21 +47,21 @@ func NewSingleClient(addr string) Client {
 func (c *singleClient) Put(tag string, d core.Digest) error {
 	_, err := httputil.Put(
 		fmt.Sprintf("http://%s/tags/%s/digest/%s", c.addr, url.PathEscape(tag), d.String()),
-		httputil.SendRetry())
+		httputil.SendTimeout(30*time.Second))
 	return err
 }
 
 func (c *singleClient) PutAndReplicate(tag string, d core.Digest) error {
 	_, err := httputil.Put(
 		fmt.Sprintf("http://%s/tags/%s/digest/%s?replicate=true", c.addr, url.PathEscape(tag), d.String()),
-		httputil.SendRetry())
+		httputil.SendTimeout(30*time.Second))
 	return err
 }
 
 func (c *singleClient) Get(tag string) (core.Digest, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/tags/%s", c.addr, url.PathEscape(tag)),
-		httputil.SendRetry())
+		httputil.SendTimeout(10*time.Second))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return core.Digest{}, ErrTagNotFound
@@ -83,8 +83,7 @@ func (c *singleClient) Get(tag string) (core.Digest, error) {
 func (c *singleClient) Has(tag string) (bool, error) {
 	_, err := httputil.Head(
 		fmt.Sprintf("http://%s/tags/%s", c.addr, url.PathEscape(tag)),
-		httputil.SendTimeout(10*time.Second),
-		httputil.SendRetry())
+		httputil.SendTimeout(10*time.Second))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return false, nil
@@ -97,7 +96,7 @@ func (c *singleClient) Has(tag string) (bool, error) {
 func (c *singleClient) List(prefix string) ([]string, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/list/%s", c.addr, prefix),
-		httputil.SendRetry())
+		httputil.SendTimeout(60*time.Second))
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +112,7 @@ func (c *singleClient) List(prefix string) ([]string, error) {
 func (c *singleClient) ListRepository(repo string) ([]string, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/repositories/%s/tags", c.addr, url.PathEscape(repo)),
-		httputil.SendRetry())
+		httputil.SendTimeout(60*time.Second))
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +132,7 @@ type ReplicateRequest struct {
 func (c *singleClient) Replicate(tag string) error {
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/remotes/tags/%s", c.addr, url.PathEscape(tag)),
-		httputil.SendRetry())
+		httputil.SendTimeout(15*time.Second))
 	return err
 }
 
@@ -183,8 +182,7 @@ func (c *singleClient) DuplicatePut(tag string, d core.Digest, delay time.Durati
 func (c *singleClient) Origin() (string, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/origin", c.addr),
-		httputil.SendTimeout(5*time.Second),
-		httputil.SendRetry())
+		httputil.SendTimeout(5*time.Second))
 	if err != nil {
 		return "", err
 	}
