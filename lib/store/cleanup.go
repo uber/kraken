@@ -112,7 +112,7 @@ func (m *cleanupManager) scan(
 		if ready, err := m.readyForDeletion(op, name, info, tti, ttl); err != nil {
 			log.With("name", name).Errorf("Error checking if file expired: %s", err)
 		} else if ready {
-			if err := op.DeleteFile(name); err != nil {
+			if err := op.DeleteFile(name); err != nil && err != base.ErrFilePersisted {
 				log.With("name", name).Errorf("Error deleting expired file: %s", err)
 			}
 		}
