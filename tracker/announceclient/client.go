@@ -13,6 +13,9 @@ import (
 	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
+// ErrDisabled is returned when announce is disabled.
+var ErrDisabled = errors.New("announcing disabled")
+
 // Request defines an announce request.
 type Request struct {
 	Name     string         `json:"name"`
@@ -117,5 +120,5 @@ func Disabled() Client {
 func (c DisabledClient) Announce(
 	name string, h core.InfoHash, complete bool, version int) ([]*core.PeerInfo, time.Duration, error) {
 
-	return nil, 0, errors.New("announcing disabled")
+	return nil, 0, ErrDisabled
 }

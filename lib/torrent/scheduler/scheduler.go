@@ -250,7 +250,9 @@ func (s *scheduler) Stop() {
 func (s *scheduler) announce(d *dispatch.Dispatcher) {
 	peers, err := s.announcer.Announce(d.Name(), d.InfoHash(), d.Complete())
 	if err != nil {
-		s.eventLoop.Send(announceErrEvent{d.InfoHash(), err})
+		if err != announceclient.ErrDisabled {
+			s.eventLoop.Send(announceErrEvent{d.InfoHash(), err})
+		}
 		return
 	}
 	s.eventLoop.Send(announceResultEvent{d.InfoHash(), peers})
