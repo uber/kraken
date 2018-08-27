@@ -16,10 +16,12 @@ server {
 
   location /v2/_catalog {
     proxy_pass http://registry-override;
+    proxy_set_header Host $hostname:{{.port}};
   }
 
   location / {
     proxy_pass http://registry;
+    proxy_set_header Host $hostname:{{.port}};
   }
 }
 
@@ -33,9 +35,11 @@ server {
 
   location /v2/_catalog {
     proxy_pass http://registry-override;
+    proxy_set_header Host $hostname:5000;
   }
 
   location / {
     proxy_pass http://registry;
+    proxy_set_header Host $hostname:5000;
   }
 }
