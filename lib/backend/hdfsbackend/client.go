@@ -141,7 +141,6 @@ func (c *Client) Upload(name string, src io.Reader) error {
 			// Optimization to avoid draining an existing buffer.
 			b = buf.Bytes()
 		} else {
-			log.With("path", path).Info("Draining HDFS upload source into replayable buffer")
 			cbuf := &capBuffer{int64(c.config.BufferGuard), new(bytes.Buffer)}
 			if _, err := io.Copy(cbuf, src); err != nil {
 				return drainSrcError{err}

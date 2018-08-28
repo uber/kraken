@@ -3,6 +3,7 @@ package blobrefresh
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend"
@@ -10,6 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils/dedup"
+	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/c2h5oh/datasize"
@@ -87,11 +89,17 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 
 	id := namespace + ":" + d.Hex()
 	err = r.requests.Start(id, func() error {
-		timer := r.stats.Timer("download_remote_blob").Start()
+		start := time.Now()
 		if err := r.download(client, d); err != nil {
 			return err
 		}
-		timer.Stop()
+		t := time.Since(start)
+		r.stats.Timer("download_remote_blob").Record(t)
+		log.With(
+			"namespace", namespace,
+			"name", d.Hex(),
+			"download_time", t).Info("Downloaded remote blob")
+
 		if err := r.metaInfoGenerator.Generate(d); err != nil {
 			return fmt.Errorf("generate metainfo: %s", err)
 		}
