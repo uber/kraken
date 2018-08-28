@@ -99,7 +99,6 @@ func (c *Client) Download(name string, dst io.Writer) error {
 	// in-memory buffer and drain it into dst after the download is finished.
 	writerAt, ok := dst.(io.WriterAt)
 	if !ok {
-		log.With("name", name).Info("Using in-memory buffer for S3 download")
 		writerAt = rwutil.NewCappedBuffer(int(c.config.BufferGuard))
 	}
 
@@ -112,9 +111,6 @@ func (c *Client) Download(name string, dst io.Writer) error {
 		Bucket: aws.String(c.config.Bucket),
 		Key:    aws.String(path),
 	}
-
-	log.Infof("Starting S3 download from remote backend: (bucket: %s, key %s)",
-		c.config.Bucket, path)
 
 	if _, err := downloader.Download(writerAt, dlParams); err != nil {
 		if isNotFound(err) {
@@ -149,9 +145,6 @@ func (c *Client) Upload(name string, src io.Reader) error {
 		Key:    aws.String(path),
 		Body:   src,
 	}
-
-	log.Infof("Starting S3 upload to remote backend: (bucket: %s, key: %s)",
-		c.config.Bucket, path)
 
 	// TODO(igor): support resumable uploads, for now we're ignoring UploadOutput
 	// entirely

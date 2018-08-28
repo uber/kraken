@@ -10,7 +10,6 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/utils/httputil"
-	"code.uber.internal/infra/kraken/utils/log"
 )
 
 // Config defines http post/get upload/download urls
@@ -55,7 +54,6 @@ func (c *Client) Download(name string, dst io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("could not create a url: %s", err)
 	}
-	log.Infof("Starting HTTP download from remote backend: %s", b.String())
 
 	resp, err := httputil.Get(b.String(), httputil.SendTimeout(c.config.Timeout))
 	if err != nil {
