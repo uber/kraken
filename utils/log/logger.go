@@ -49,13 +49,13 @@ func New(c Config, fields map[string]interface{}) (*zap.Logger, error) {
 			LevelKey:       "level",
 			TimeKey:        "ts",
 			CallerKey:      "caller",
-			StacktraceKey:  "stack",
 			EncodeLevel:    zapcore.CapitalLevelEncoder,
 			EncodeTime:     zapcore.ISO8601TimeEncoder,
 			EncodeDuration: zapcore.SecondsDurationEncoder,
 			EncodeCaller:   zapcore.ShortCallerEncoder,
 		},
-		OutputPaths:   []string{c.Path},
-		InitialFields: fields,
+		DisableStacktrace: true,
+		OutputPaths:       []string{c.Path},
+		InitialFields:     fields,
 	}.Build()
 }
