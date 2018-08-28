@@ -1,5 +1,6 @@
 0.0.9 (2018-08-28)
 ====
+- Fix sjc4/dca6 config (@codyg)
 - Add phx3 config (@yiran)
 - Remove unnecessary origin torrent archive log (@codyg)
 - Add retry to httpbackend / clean up code (@codyg)
