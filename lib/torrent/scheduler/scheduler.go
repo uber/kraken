@@ -209,7 +209,7 @@ func newScheduler(
 		s.log().Warn("Blacklisting disabled")
 	}
 
-	log.Infof("Scheduler starting as peer %s on addr %s:%d", pctx.PeerID, pctx.IP, pctx.Port)
+	s.log().Infof("Scheduler starting as peer %s on addr %s:%d", pctx.PeerID, pctx.IP, pctx.Port)
 
 	s.start()
 
