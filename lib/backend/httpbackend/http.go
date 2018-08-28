@@ -47,30 +47,26 @@ func (c *Client) Stat(name string) (*core.BlobInfo, error) {
 // Download downloads the content from a configured url and writes the data
 // to dst.
 func (c *Client) Download(name string, dst io.Writer) error {
-	b := new(bytes.Buffer)
-
-	// using Fprintf instead of Sprintf to handle formatting errors
-	_, err := fmt.Fprintf(b, c.config.DownloadURL, name)
-	if err != nil {
-		return fmt.Errorf("could not create a url: %s", err)
+	// Use Fprintf instead of Sprintf to handle formatting errors.
+	var b bytes.Buffer
+	if _, err := fmt.Fprintf(&b, c.config.DownloadURL, name); err != nil {
+		return fmt.Errorf("format url: %s", err)
 	}
-
-	resp, err := httputil.Get(b.String(), httputil.SendTimeout(c.config.Timeout))
+	resp, err := httputil.Get(
+		b.String(),
+		httputil.SendTimeout(c.config.Timeout),
+		httputil.SendRetry())
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return backenderrors.ErrBlobNotFound
 		}
-		return fmt.Errorf("could not get a content from http backend: %s", err)
+		return err
 	}
-
 	defer resp.Body.Close()
-
-	_, err = io.Copy(dst, resp.Body)
-	if err != nil {
-		return fmt.Errorf("could not copy response buffer: %s", err)
+	if _, err := io.Copy(dst, resp.Body); err != nil {
+		return fmt.Errorf("copy: %s", err)
 	}
-
-	return err
+	return nil
 }
 
 // Upload is not supported.
