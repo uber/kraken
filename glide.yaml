@@ -63,10 +63,11 @@ import:
   - rate
 - package: github.com/hashicorp/golang-lru
 - package: github.com/mattn/go-sqlite3
+- package: code.uber.internal/infra/terrablob-client.git
+  version: 7e6dc37189899c983a6b8599342eb69d7537a4e7
 testImport:
 - package: github.com/stretchr/testify
-  version: ^1.1.4
+  version: ^1.2.2
   subpackages:
   - assert
   - require
-- package: code.uber.internal/infra/terrablob-client.git
