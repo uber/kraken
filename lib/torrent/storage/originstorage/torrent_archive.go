@@ -10,7 +10,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/willf/bitset"
 )
@@ -41,7 +40,6 @@ func (a *TorrentArchive) getMetaInfo(namespace, name string) (*core.MetaInfo, er
 			if refreshErr != nil {
 				return nil, fmt.Errorf("blob refresh: %s", refreshErr)
 			}
-			log.With("name", name).Infof("Missing torrent triggered remote blob refresh")
 			return nil, errors.New("refreshing blob")
 		}
 		return nil, err
