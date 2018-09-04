@@ -250,6 +250,8 @@ func (entry *localFileEntry) GetStat() (os.FileInfo, error) {
 }
 
 // Create creates a file on disk.
+// In the case of truncation failure, this function might leave a garbage file
+// on disk.
 func (entry *localFileEntry) Create(targetState FileState, size int64) error {
 	if entry.state != targetState {
 		return &FileStateError{
@@ -391,10 +393,8 @@ func (entry *localFileEntry) Move(targetState FileState) error {
 	// Update parent dir in memory.
 	entry.state = targetState
 
-	// Delete source dir. Ignore error.
-	os.RemoveAll(path.Dir(sourcePath))
-
-	return nil
+	// Delete source dir.
+	return os.RemoveAll(path.Dir(sourcePath))
 }
 
 // MoveTo moves data file out to an unmanaged location.
@@ -417,9 +417,8 @@ func (entry *localFileEntry) MoveTo(targetPath string) error {
 		return err
 	}
 
-	// Delete source dir. Ignore error.
-	os.RemoveAll(path.Dir(sourcePath))
-	return nil
+	// Delete source dir.
+	return os.RemoveAll(path.Dir(sourcePath))
 }
 
 // Delete removes file and all of its metedata files from disk. If persist
@@ -436,10 +435,8 @@ func (entry *localFileEntry) Delete() error {
 		}
 	}
 
-	// Remove files, ignore error.
-	os.RemoveAll(path.Dir(entry.GetPath()))
-
-	return nil
+	// Remove files.
+	return os.RemoveAll(path.Dir(entry.GetPath()))
 }
 
 // GetReader returns a FileReader object for read operations.
