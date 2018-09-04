@@ -7,10 +7,11 @@ import (
 
 // Config defines Logger configuration.
 type Config struct {
-	Disable     bool   `yaml:"disable"`
-	ServiceName string `yaml:"service_name"`
-	Path        string `yaml:"path"`
-	Encoding    string `yaml:"encoding"`
+	Disable     bool                `yaml:"disable"`
+	ServiceName string              `yaml:"service_name"`
+	Path        string              `yaml:"path"`
+	Encoding    string              `yaml:"encoding"`
+	EncodeTime  zapcore.TimeEncoder `yaml:"timeEncoder" json:"-"`
 }
 
 func (c Config) applyDefaults() Config {
@@ -50,7 +51,7 @@ func New(c Config, fields map[string]interface{}) (*zap.Logger, error) {
 			TimeKey:        "ts",
 			CallerKey:      "caller",
 			EncodeLevel:    zapcore.CapitalLevelEncoder,
-			EncodeTime:     zapcore.ISO8601TimeEncoder,
+			EncodeTime:     c.EncodeTime,
 			EncodeDuration: zapcore.SecondsDurationEncoder,
 			EncodeCaller:   zapcore.ShortCallerEncoder,
 		},
