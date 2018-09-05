@@ -120,7 +120,7 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/blobs/:digest/locations", handler.Wrap(s.getLocationsHandler))
 
 	r.Post("/namespace/:namespace/blobs/:digest/uploads", handler.Wrap(s.startClusterUploadHandler))
-	r.Patch("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.patchUploadHandler))
+	r.Patch("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.patchClusterUploadHandler))
 	r.Put("/namespace/:namespace/blobs/:digest/uploads/:uid", handler.Wrap(s.commitClusterUploadHandler))
 
 	r.Get("/namespace/:namespace/blobs/:digest", handler.Wrap(s.downloadBlobHandler))
@@ -130,7 +130,7 @@ func (s *Server) Handler() http.Handler {
 	// Internal endpoints:
 
 	r.Post("/internal/blobs/:digest/uploads", handler.Wrap(s.startTransferHandler))
-	r.Patch("/internal/blobs/:digest/uploads/:uid", handler.Wrap(s.patchUploadHandler))
+	r.Patch("/internal/blobs/:digest/uploads/:uid", handler.Wrap(s.patchTransferHandler))
 	r.Put("/internal/blobs/:digest/uploads/:uid", handler.Wrap(s.commitTransferHandler))
 
 	r.Delete("/internal/blobs/:digest", handler.Wrap(s.deleteBlobHandler))
@@ -476,40 +476,8 @@ func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) er
 	return nil
 }
 
-// startClusterUploadHandler initializes an upload for external uploads.
-func (s *Server) startClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
-	d, err := httputil.ParseDigest(r, "digest")
-	if err != nil {
-		return err
-	}
-	namespace, err := httputil.ParseParam(r, "namespace")
-	if err != nil {
-		return err
-	}
-	if ok, err := blobExists(s.cas, d); err != nil {
-		return handler.Errorf("check blob: %s", err)
-	} else if ok {
-		// Even if the blob was already uploaded and committed to cache, it's
-		// still possible that adding the write-back task failed. In this scenario,
-		// it's expected that the client might retry the entire upload (as opposed
-		// to just retrying the commit). We try to write-back and return 504
-		// just in case.
-		if err := s.writeBack(namespace, d, 0); err != nil {
-			return err
-		}
-		return handler.ErrorStatus(http.StatusConflict)
-	}
-	uid, err := s.uploader.start(d)
-	if err != nil {
-		return err
-	}
-	setUploadLocation(w, uid)
-	w.WriteHeader(http.StatusOK)
-	return nil
-}
-
-// patchUploadHandler uploads a chunk of a blob for both internal and external uploads.
-func (s *Server) patchUploadHandler(w http.ResponseWriter, r *http.Request) error {
+// patchTransferHandler uploads a chunk of a blob for internal uploads.
+func (s *Server) patchTransferHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		return err
@@ -536,7 +504,6 @@ func (s *Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return err
 	}
-
 	if err := s.uploader.verify(d, uid); err != nil {
 		return err
 	}
@@ -545,6 +512,62 @@ func (s *Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) e
 	}
 	if err := s.metaInfoGenerator.Generate(d); err != nil {
 		return handler.Errorf("generate metainfo: %s", err)
+	}
+	return nil
+}
+
+func (s *Server) handleUploadConflict(err error, namespace string, d core.Digest) error {
+	if herr, ok := err.(*handler.Error); ok && herr.GetStatus() == http.StatusConflict {
+		// Even if the blob was already uploaded and committed to cache, it's
+		// still possible that adding the write-back task failed. Clients short
+		// circuit on conflict and return success, so we must make sure that if we
+		// tell a client to stop before commit, the blob has been written back.
+		if err := s.writeBack(namespace, d, 0); err != nil {
+			return err
+		}
+	}
+	return err
+}
+
+// startClusterUploadHandler initializes an upload for external uploads.
+func (s *Server) startClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
+	d, err := httputil.ParseDigest(r, "digest")
+	if err != nil {
+		return err
+	}
+	namespace, err := httputil.ParseParam(r, "namespace")
+	if err != nil {
+		return err
+	}
+	uid, err := s.uploader.start(d)
+	if err != nil {
+		return s.handleUploadConflict(err, namespace, d)
+	}
+	setUploadLocation(w, uid)
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+// patchClusterUploadHandler uploads a chunk of a blob for external uploads.
+func (s *Server) patchClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
+	d, err := httputil.ParseDigest(r, "digest")
+	if err != nil {
+		return err
+	}
+	namespace, err := httputil.ParseParam(r, "namespace")
+	if err != nil {
+		return err
+	}
+	uid, err := httputil.ParseParam(r, "uid")
+	if err != nil {
+		return err
+	}
+	start, end, err := parseContentRange(r.Header)
+	if err != nil {
+		return err
+	}
+	if err := s.uploader.patch(d, uid, r.Body, start, end); err != nil {
+		return s.handleUploadConflict(err, namespace, d)
 	}
 	return nil
 }
@@ -570,7 +593,7 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 		return err
 	}
 	if err := s.uploader.commit(d, uid); err != nil {
-		return err
+		return s.handleUploadConflict(err, namespace, d)
 	}
 	if err := s.writeBack(namespace, d, 0); err != nil {
 		return err
