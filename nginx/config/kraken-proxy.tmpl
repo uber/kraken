@@ -16,12 +16,34 @@ server {
 
   location /v2/_catalog {
     proxy_pass http://registry-override;
-    proxy_set_header Host $hostname:{{.port}};
+
+    set $hostheader $hostname;
+    if ( $host = "localhost" ) {
+        set $hostheader "localhost";
+    }
+    if ( $host = "192.168.65.1" ) {
+        set $hostheader "192.168.65.1";
+    }
+    if ( $host = "host.docker.internal" ) {
+        set $hostheader "host.docker.internal";
+    }
+    proxy_set_header Host $hostheader:{{.port}};
   }
 
   location / {
     proxy_pass http://registry;
-    proxy_set_header Host $hostname:{{.port}};
+
+    set $hostheader $hostname;
+    if ( $host = "localhost" ) {
+        set $hostheader "localhost";
+    }
+    if ( $host = "192.168.65.1" ) {
+        set $hostheader "192.168.65.1";
+    }
+    if ( $host = "host.docker.internal" ) {
+        set $hostheader "host.docker.internal";
+    }
+    proxy_set_header Host $hostheader:{{.port}};
   }
 }
 
@@ -35,11 +57,33 @@ server {
 
   location /v2/_catalog {
     proxy_pass http://registry-override;
-    proxy_set_header Host $hostname:5000;
+
+    set $hostheader $hostname;
+    if ( $host = "localhost" ) {
+        set $hostheader "localhost";
+    }
+    if ( $host = "192.168.65.1" ) {
+        set $hostheader "192.168.65.1";
+    }
+    if ( $host = "host.docker.internal" ) {
+        set $hostheader "host.docker.internal";
+    }
+    proxy_set_header Host $hostheader:5000;
   }
 
   location / {
     proxy_pass http://registry;
-    proxy_set_header Host $hostname:5000;
+
+    set $hostheader $hostname;
+    if ( $host = "localhost" ) {
+        set $hostheader "localhost";
+    }
+    if ( $host = "192.168.65.1" ) {
+        set $hostheader "192.168.65.1";
+    }
+    if ( $host = "host.docker.internal" ) {
+        set $hostheader "host.docker.internal";
+    }
+    proxy_set_header Host $hostheader:5000;
   }
 }
