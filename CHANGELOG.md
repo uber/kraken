@@ -1,3 +1,11 @@
+0.0.10 (2018-09-05)
+====
+- Fix WBU2 config (@codyg)
+- Fix torrentlog timestamp (@codyg)
+- Do not swallow file deletion errors (@yiran)
+- Fix nginx header for opus client (@yiran)
+- Always attempt to write-back when returning 409 in origin blob upload (@codyg)
+
 0.0.9 (2018-08-28)
 ====
 - Fix sjc4/dca6 config (@codyg)
