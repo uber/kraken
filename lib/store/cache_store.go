@@ -51,6 +51,10 @@ func (s *cacheStore) DeleteCacheFileMetadata(name string, md metadata.Metadata) 
 	return s.newFileOp().DeleteFileMetadata(name, md)
 }
 
+func (s *cacheStore) ListCacheFiles() ([]string, error) {
+	return s.newFileOp().ListNames()
+}
+
 func (s *cacheStore) newFileOp() base.FileOp {
 	return s.backend.NewFileOp().AcceptState(s.state)
 }

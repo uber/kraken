@@ -18,8 +18,9 @@ var ErrManagerClosed = errors.New("manager closed")
 // Manager defines interface for a persisted retry manager.
 type Manager interface {
 	Add(Task) error
-	Close()
 	SyncExec(Task) error
+	Close()
+	Find(query interface{}) ([]Task, error)
 }
 
 type queue struct {
@@ -151,6 +152,10 @@ func (m *manager) Close() {
 		close(m.done)
 		m.wg.Wait()
 	})
+}
+
+func (m *manager) Find(query interface{}) ([]Task, error) {
+	return m.store.Find(query)
 }
 
 func (m *manager) enqueue(t Task, q *queue) error {

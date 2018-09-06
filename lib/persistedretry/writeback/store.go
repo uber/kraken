@@ -1,6 +1,7 @@
 package writeback
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -90,6 +91,26 @@ func (s *Store) Remove(r persistedretry.Task) error {
 	return err
 }
 
+// Find finds tasks matching query.
+func (s *Store) Find(query interface{}) ([]persistedretry.Task, error) {
+	var tasks []*Task
+	var err error
+	switch q := query.(type) {
+	case *NameQuery:
+		err = s.db.Select(&tasks, `
+			SELECT namespace, name, created_at, last_attempt, failures, delay
+			FROM writeback_task
+			WHERE name=?
+		`, q.name)
+	default:
+		return nil, errors.New("unknown query type")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return convert(tasks), nil
+}
+
 func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
 	query := fmt.Sprintf(`
 		INSERT INTO writeback_task (
@@ -127,9 +148,12 @@ func (s *Store) selectStatus(status string) ([]persistedretry.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	var result []persistedretry.Task
+	return convert(tasks), nil
+}
+
+func convert(tasks []*Task) (result []persistedretry.Task) {
 	for _, t := range tasks {
 		result = append(result, t)
 	}
-	return result, nil
+	return result
 }

@@ -13,6 +13,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -413,4 +414,117 @@ func TestUploadBlobResilientToDuplicationFailure(t *testing.T) {
 	require.NoError(err)
 
 	ensureHasBlob(t, cp.Provide(s.host), namespace, blob)
+}
+
+func TestForceCleanupTTL(t *testing.T) {
+	require := require.New(t)
+
+	ring := hashRingNoReplica()
+	namespace := core.TagFixture()
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, ring, cp)
+	defer s.cleanup()
+
+	client := cp.Provide(s.host)
+
+	blob := computeBlobForHosts(ring, s.host)
+
+	s.writeBackManager.EXPECT().Add(
+		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex()))).Return(nil)
+
+	require.NoError(client.UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content)))
+
+	ensureHasBlob(t, client, namespace, blob)
+
+	// Since the blob was just uploaded, it should not be deleted on force cleanup.
+	require.NoError(client.ForceCleanup(12 * time.Hour))
+	ensureHasBlob(t, client, namespace, blob)
+
+	s.clk.Add(14 * time.Hour)
+
+	s.writeBackManager.EXPECT().Find(writeback.NewNameQuery(blob.Digest.Hex())).Return(nil, nil)
+
+	require.NoError(client.ForceCleanup(12 * time.Hour))
+
+	_, err := client.StatLocal(namespace, blob.Digest)
+	require.Error(err)
+	require.Equal(blobclient.ErrBlobNotFound, err)
+}
+
+func TestForceCleanupNonOwner(t *testing.T) {
+	require := require.New(t)
+
+	ring := hashRingNoReplica()
+	namespace := core.TagFixture()
+
+	cp := newTestClientProvider()
+
+	s1 := newTestServer(t, master1, ring, cp)
+	defer s1.cleanup()
+
+	s2 := newTestServer(t, master2, ring, cp)
+	defer s2.cleanup()
+
+	client := cp.Provide(s1.host)
+
+	// s1 does not own blob, but will still accept the upload. On ForceCleanup, it
+	// should be removed.
+	blob := computeBlobForHosts(ring, s2.host)
+
+	s1.writeBackManager.EXPECT().Add(
+		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex()))).Return(nil)
+
+	s2.writeBackManager.EXPECT().Add(
+		writeback.MatchTask(writeback.NewTaskWithDelay(namespace, blob.Digest.Hex(), 30*time.Minute)))
+
+	require.NoError(client.UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content)))
+
+	ensureHasBlob(t, client, namespace, blob)
+
+	s1.writeBackManager.EXPECT().Find(writeback.NewNameQuery(blob.Digest.Hex())).Return(nil, nil)
+
+	require.NoError(client.ForceCleanup(12 * time.Hour))
+
+	_, err := client.StatLocal(namespace, blob.Digest)
+	require.Error(err)
+	require.Equal(blobclient.ErrBlobNotFound, err)
+}
+
+func TestForceCleanupWriteBackFailures(t *testing.T) {
+	require := require.New(t)
+
+	ring := hashRingNoReplica()
+	namespace := core.TagFixture()
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, ring, cp)
+	defer s.cleanup()
+
+	client := cp.Provide(s.host)
+
+	blob := computeBlobForHosts(ring, s.host)
+
+	task := writeback.NewTask(namespace, blob.Digest.Hex())
+
+	s.writeBackManager.EXPECT().Add(writeback.MatchTask(task)).Return(nil)
+
+	require.NoError(client.UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content)))
+
+	ensureHasBlob(t, client, namespace, blob)
+
+	s.clk.Add(14 * time.Hour)
+
+	// If there exists a writeback task, and it fails to manually execute it,
+	// the blob should not be deleted.
+	s.writeBackManager.EXPECT().Find(
+		writeback.NewNameQuery(blob.Digest.Hex())).Return([]persistedretry.Task{task}, nil)
+
+	s.writeBackManager.EXPECT().SyncExec(task).Return(errors.New("some error"))
+
+	require.NoError(client.ForceCleanup(12 * time.Hour))
+
+	ensureHasBlob(t, client, namespace, blob)
 }
