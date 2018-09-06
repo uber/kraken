@@ -1,6 +1,7 @@
 package tagreplication
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -88,6 +89,11 @@ func (s *Store) MarkFailed(r persistedretry.Task) error {
 // Remove removes r.
 func (s *Store) Remove(r persistedretry.Task) error {
 	return s.delete(r)
+}
+
+// Find is not supported.
+func (s *Store) Find(query interface{}) ([]persistedretry.Task, error) {
+	return nil, errors.New("not supported")
 }
 
 func (s *Store) addWithStatus(r persistedretry.Task, status string) error {

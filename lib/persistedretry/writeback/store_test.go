@@ -213,3 +213,37 @@ func TestDelay(t *testing.T) {
 	require.False(pending[0].Ready())
 	require.True(pending[1].Ready())
 }
+
+func TestFind(t *testing.T) {
+	require := require.New(t)
+
+	db, cleanup := localdb.Fixture()
+	defer cleanup()
+
+	store := NewStore(db)
+
+	task1 := TaskFixture()
+	task2 := TaskFixture()
+
+	require.NoError(store.AddPending(task1))
+	require.NoError(store.AddPending(task2))
+
+	result, err := store.Find(NewNameQuery(task1.Name))
+	require.NoError(err)
+	checkTasks(t, []*Task{task1}, result)
+}
+
+func TestFindEmpty(t *testing.T) {
+	require := require.New(t)
+
+	db, cleanup := localdb.Fixture()
+	defer cleanup()
+
+	store := NewStore(db)
+
+	require.NoError(store.AddPending(TaskFixture()))
+
+	result, err := store.Find(NewNameQuery("nonexistent name"))
+	require.NoError(err)
+	require.Empty(result)
+}

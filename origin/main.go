@@ -27,6 +27,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
 )
 
@@ -153,6 +154,7 @@ func main() {
 	server, err := blobserver.New(
 		config.BlobServer,
 		stats,
+		clock.New(),
 		fmt.Sprintf("%s:%d", hostname, *blobServerPort),
 		hashRing,
 		cas,

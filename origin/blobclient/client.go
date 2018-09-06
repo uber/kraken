@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -40,6 +41,8 @@ type Client interface {
 	ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error
 
 	GetPeerContext() (core.PeerContext, error)
+
+	ForceCleanup(ttl time.Duration) error
 }
 
 // Config defines HTTPClient configuration.
@@ -235,6 +238,16 @@ func (c *HTTPClient) GetPeerContext() (core.PeerContext, error) {
 		return pctx, err
 	}
 	return pctx, nil
+}
+
+// ForceCleanup forces cache cleanup to run.
+func (c *HTTPClient) ForceCleanup(ttl time.Duration) error {
+	v := url.Values{}
+	v.Add("ttl_hr", strconv.Itoa(int(math.Ceil(float64(ttl)/float64(time.Hour)))))
+	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/forcecleanup?%s", c.addr, v.Encode()),
+		httputil.SendTimeout(2*time.Minute))
+	return err
 }
 
 func min(a, b int64) int64 {

@@ -58,6 +58,19 @@ func (mr *MockStoreMockRecorder) AddPending(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPending", reflect.TypeOf((*MockStore)(nil).AddPending), arg0)
 }
 
+// Find mocks base method
+func (m *MockStore) Find(arg0 interface{}) ([]persistedretry.Task, error) {
+	ret := m.ctrl.Call(m, "Find", arg0)
+	ret0, _ := ret[0].([]persistedretry.Task)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Find indicates an expected call of Find
+func (mr *MockStoreMockRecorder) Find(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Find", reflect.TypeOf((*MockStore)(nil).Find), arg0)
+}
+
 // GetFailed mocks base method
 func (m *MockStore) GetFailed() ([]persistedretry.Task, error) {
 	ret := m.ctrl.Call(m, "GetFailed")
@@ -269,6 +282,19 @@ func (m *MockManager) Close() {
 // Close indicates an expected call of Close
 func (mr *MockManagerMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockManager)(nil).Close))
+}
+
+// Find mocks base method
+func (m *MockManager) Find(arg0 interface{}) ([]persistedretry.Task, error) {
+	ret := m.ctrl.Call(m, "Find", arg0)
+	ret0, _ := ret[0].([]persistedretry.Task)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Find indicates an expected call of Find
+func (mr *MockManagerMockRecorder) Find(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Find", reflect.TypeOf((*MockManager)(nil).Find), arg0)
 }
 
 // SyncExec mocks base method

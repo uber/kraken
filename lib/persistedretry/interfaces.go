@@ -33,6 +33,9 @@ type Store interface {
 
 	// Remove removes a task from the store.
 	Remove(Task) error
+
+	// Find returns tasks which match a query.
+	Find(query interface{}) ([]Task, error)
 }
 
 // Executor executes tasks.

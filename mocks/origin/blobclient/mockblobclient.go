@@ -84,6 +84,18 @@ func (mr *MockClientMockRecorder) DuplicateUploadBlob(arg0, arg1, arg2, arg3 int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DuplicateUploadBlob", reflect.TypeOf((*MockClient)(nil).DuplicateUploadBlob), arg0, arg1, arg2, arg3)
 }
 
+// ForceCleanup mocks base method
+func (m *MockClient) ForceCleanup(arg0 time.Duration) error {
+	ret := m.ctrl.Call(m, "ForceCleanup", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ForceCleanup indicates an expected call of ForceCleanup
+func (mr *MockClientMockRecorder) ForceCleanup(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceCleanup", reflect.TypeOf((*MockClient)(nil).ForceCleanup), arg0)
+}
+
 // GetMetaInfo mocks base method
 func (m *MockClient) GetMetaInfo(arg0 string, arg1 core.Digest) (*core.MetaInfo, error) {
 	ret := m.ctrl.Call(m, "GetMetaInfo", arg0, arg1)

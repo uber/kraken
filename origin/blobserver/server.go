@@ -31,6 +31,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/stringset"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
 	"github.com/uber-go/tally"
 )
@@ -40,12 +41,13 @@ const _uploadChunkSize = 16 * memsize.MB
 // Server defines a server that serves blob data for agent.
 type Server struct {
 	config            Config
+	stats             tally.Scope
+	clk               clock.Clock
 	addr              string
 	hashRing          hashring.Ring
 	cas               *store.CAStore
 	clientProvider    blobclient.Provider
 	clusterProvider   blobclient.ClusterProvider
-	stats             tally.Scope
 	backends          *backend.Manager
 	blobRefresher     *blobrefresh.Refresher
 	metaInfoGenerator *metainfogen.Generator
@@ -63,6 +65,7 @@ type Server struct {
 func New(
 	config Config,
 	stats tally.Scope,
+	clk clock.Clock,
 	addr string,
 	hashRing hashring.Ring,
 	cas *store.CAStore,
@@ -86,12 +89,13 @@ func New(
 
 	return &Server{
 		config:            config,
+		stats:             stats,
+		clk:               clk,
 		addr:              addr,
 		hashRing:          hashRing,
 		cas:               cas,
 		clientProvider:    clientProvider,
 		clusterProvider:   clusterProvider,
-		stats:             stats,
 		backends:          backends,
 		blobRefresher:     blobRefresher,
 		metaInfoGenerator: metaInfoGenerator,
@@ -126,6 +130,8 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/namespace/:namespace/blobs/:digest", handler.Wrap(s.downloadBlobHandler))
 
 	r.Post("/namespace/:namespace/blobs/:digest/remote/:remote", handler.Wrap(s.replicateToRemoteHandler))
+
+	r.Post("/forcecleanup", handler.Wrap(s.forceCleanupHandler))
 
 	// Internal endpoints:
 
@@ -659,4 +665,79 @@ func (s *Server) writeBack(namespace string, d core.Digest, delay time.Duration)
 		return handler.Errorf("generate metainfo: %s", err)
 	}
 	return nil
+}
+
+func (s *Server) forceCleanupHandler(w http.ResponseWriter, r *http.Request) error {
+	// Note, this API is intended to be executed manually (i.e. curl), hence the
+	// query arguments, usage of hours instead of nanoseconds, and JSON response
+	// enumerating deleted files / errors.
+
+	rawTTLHr := r.URL.Query().Get("ttl_hr")
+	if rawTTLHr == "" {
+		return handler.Errorf("query arg ttl_hr required").Status(http.StatusBadRequest)
+	}
+	ttlHr, err := strconv.Atoi(rawTTLHr)
+	if err != nil {
+		return handler.Errorf("invalid ttl_hr: %s", err).Status(http.StatusBadRequest)
+	}
+	ttl := time.Duration(ttlHr) * time.Hour
+
+	names, err := s.cas.ListCacheFiles()
+	if err != nil {
+		return err
+	}
+	var errs, deleted []string
+	for _, name := range names {
+		if ok, err := s.maybeDelete(name, ttl); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %s", name, err))
+		} else if ok {
+			deleted = append(deleted, name)
+		}
+	}
+	return json.NewEncoder(w).Encode(map[string]interface{}{
+		"deleted": deleted,
+		"errors":  errs,
+	})
+}
+
+func (s *Server) maybeDelete(name string, ttl time.Duration) (deleted bool, err error) {
+	d, err := core.NewSHA256DigestFromHex(name)
+	if err != nil {
+		return false, fmt.Errorf("parse digest: %s", err)
+	}
+	info, err := s.cas.GetCacheFileStat(name)
+	if err != nil {
+		return false, fmt.Errorf("store: %s", err)
+	}
+	expired := s.clk.Now().Sub(info.ModTime()) > ttl
+	owns := stringset.FromSlice(s.hashRing.Locations(d)).Has(s.addr)
+	if expired || !owns {
+		// Ensure file is backed up properly before deleting.
+		var pm metadata.Persist
+		if err := s.cas.GetCacheFileMetadata(name, &pm); err != nil && !os.IsNotExist(err) {
+			return false, fmt.Errorf("store: %s", err)
+		}
+		if pm.Value {
+			// Note: It is possible that no writeback tasks exist, but the file
+			// is persisted. We classify this as a leaked file which is safe to
+			// delete.
+			tasks, err := s.writeBackManager.Find(writeback.NewNameQuery(name))
+			if err != nil {
+				return false, fmt.Errorf("find writeback tasks: %s", err)
+			}
+			for _, task := range tasks {
+				if err := s.writeBackManager.SyncExec(task); err != nil {
+					return false, fmt.Errorf("writeback: %s", err)
+				}
+			}
+			if err := s.cas.DeleteCacheFileMetadata(name, &metadata.Persist{}); err != nil {
+				return false, fmt.Errorf("delete persist: %s", err)
+			}
+		}
+		if err := s.cas.DeleteCacheFile(name); err != nil {
+			return false, fmt.Errorf("delete: %s", err)
+		}
+		return true, nil
+	}
+	return false, nil
 }

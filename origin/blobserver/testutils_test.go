@@ -3,9 +3,11 @@ package blobserver
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
@@ -85,6 +87,7 @@ type testServer struct {
 	pctx             core.PeerContext
 	backendManager   *backend.Manager
 	writeBackManager *mockpersistedretry.MockManager
+	clk              *clock.Mock
 	cleanup          func()
 }
 
@@ -112,8 +115,11 @@ func newTestServer(
 
 	br := blobrefresh.New(blobrefresh.Config{}, tally.NoopScope, cas, bm, mg)
 
+	clk := clock.NewMock()
+	clk.Set(time.Now())
+
 	s, err := New(
-		Config{}, tally.NoopScope, host, ring, cas, cp, clusterProvider, pctx,
+		Config{}, tally.NoopScope, clk, host, ring, cas, cp, clusterProvider, pctx,
 		bm, br, mg, writeBackManager)
 	if err != nil {
 		panic(err)
@@ -134,6 +140,7 @@ func newTestServer(
 		pctx:             pctx,
 		backendManager:   bm,
 		writeBackManager: writeBackManager,
+		clk:              clk,
 		cleanup:          cleanup.Run,
 	}
 }
