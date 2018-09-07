@@ -40,6 +40,7 @@ type Torrent struct {
 	cads        caDownloadStore
 	pieces      []*piece
 	numComplete *atomic.Int32
+	committed   *atomic.Bool
 }
 
 // NewTorrent creates a new Torrent.
@@ -49,10 +50,12 @@ func NewTorrent(cads caDownloadStore, mi *core.MetaInfo) (*Torrent, error) {
 		return nil, fmt.Errorf("restore pieces: %s", err)
 	}
 
+	committed := false
 	if numComplete == len(pieces) {
 		if err := cads.MoveDownloadFileToCache(mi.Name()); err != nil && !os.IsExist(err) {
 			return nil, fmt.Errorf("move file to cache: %s", err)
 		}
+		committed = true
 	}
 
 	return &Torrent{
@@ -60,6 +63,7 @@ func NewTorrent(cads caDownloadStore, mi *core.MetaInfo) (*Torrent, error) {
 		metaInfo:    mi,
 		pieces:      pieces,
 		numComplete: atomic.NewInt32(int32(numComplete)),
+		committed:   atomic.NewBool(committed),
 	}, nil
 }
 
@@ -98,9 +102,10 @@ func (t *Torrent) MaxPieceLength() int64 {
 	return t.PieceLength(0)
 }
 
-// Complete indicates whether the torrent is complete or not.
+// Complete indicates whether the torrent is complete or not. Completeness is
+// defined by whether the torrent file has been committed to the cache directory.
 func (t *Torrent) Complete() bool {
-	return int(t.numComplete.Load()) == len(t.pieces)
+	return t.committed.Load()
 }
 
 // BytesDownloaded returns an estimate of the number of bytes downloaded in the
@@ -215,13 +220,14 @@ func (t *Torrent) WritePiece(src storage.PieceReader, pi int) error {
 		return fmt.Errorf("write piece: %s", err)
 	}
 
-	if t.Complete() {
+	if int(t.numComplete.Load()) == len(t.pieces) {
 		// Multiple threads may attempt to move the download file to cache, however
 		// only one will succeed while the others will receive (and ignore) file exist
 		// error.
 		if err := t.cads.MoveDownloadFileToCache(t.metaInfo.Info.Name); err != nil && !os.IsExist(err) {
 			return fmt.Errorf("download completed but failed to move file to cache directory: %s", err)
 		}
+		t.committed.Store(true)
 	}
 
 	return nil
