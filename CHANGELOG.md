@@ -1,3 +1,8 @@
+0.0.11 (2018-09-07)
+====
+- Add /forcecleanup endpoint to origin for manually freeing space (@codyg)
+- Fix torrent completeness race (@codyg)
+
 0.0.10 (2018-09-05)
 ====
 - Fix WBU2 config (@codyg)
