@@ -40,7 +40,7 @@ func NewReadOnlyTransferer(
 // not available locally.
 func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
 	fi, err := t.cads.Cache().GetFileStat(d.Hex())
-	if os.IsNotExist(err) {
+	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
 		if err := t.sched.Download(namespace, d.Hex()); err != nil {
 			return nil, fmt.Errorf("scheduler: %s", err)
 		}
@@ -51,25 +51,22 @@ func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobIn
 	} else if err != nil {
 		return nil, fmt.Errorf("stat cache: %s", err)
 	}
-
 	return core.NewBlobInfo(fi.Size()), nil
 }
 
 // Download downloads blobs as torrent.
 func (t *ReadOnlyTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
 	f, err := t.cads.Cache().GetFileReader(d.Hex())
-	if err != nil {
-		if os.IsNotExist(err) {
-			if err := t.sched.Download(namespace, d.Hex()); err != nil {
-				return nil, fmt.Errorf("scheduler: %s", err)
-			}
-			f, err = t.cads.Cache().GetFileReader(d.Hex())
-			if err != nil {
-				return nil, fmt.Errorf("cache: %s", err)
-			}
-		} else {
+	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
+		if err := t.sched.Download(namespace, d.Hex()); err != nil {
+			return nil, fmt.Errorf("scheduler: %s", err)
+		}
+		f, err = t.cads.Cache().GetFileReader(d.Hex())
+		if err != nil {
 			return nil, fmt.Errorf("cache: %s", err)
 		}
+	} else if err != nil {
+		return nil, fmt.Errorf("cache: %s", err)
 	}
 	return f, nil
 }
