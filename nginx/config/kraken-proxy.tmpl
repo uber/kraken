@@ -6,13 +6,14 @@ upstream registry-override {
   server {{.registry_override_server}};
 }
 
+{{range .ports}}
 server {
-  listen {{.port}};
+  listen {{.}};
 
   client_max_body_size 10G;
 
-  access_log {{.log_dir}}/nginx-access.log;
-  error_log {{.log_dir}}/nginx-error.log;
+  access_log {{$.log_dir}}/nginx-access.log;
+  error_log {{$.log_dir}}/nginx-error.log;
 
   location /v2/_catalog {
     proxy_pass http://registry-override;
@@ -27,7 +28,7 @@ server {
     if ( $host = "host.docker.internal" ) {
         set $hostheader "host.docker.internal";
     }
-    proxy_set_header Host $hostheader:{{.port}};
+    proxy_set_header Host $hostheader:{{.}};
   }
 
   location / {
@@ -43,47 +44,7 @@ server {
     if ( $host = "host.docker.internal" ) {
         set $hostheader "host.docker.internal";
     }
-    proxy_set_header Host $hostheader:{{.port}};
+    proxy_set_header Host $hostheader:{{.}};
   }
 }
-
-server {
-  listen 5000;
-
-  client_max_body_size 10G;
-
-  access_log {{.log_dir}}/nginx-access.log;
-  error_log {{.log_dir}}/nginx-error.log;
-
-  location /v2/_catalog {
-    proxy_pass http://registry-override;
-
-    set $hostheader $hostname;
-    if ( $host = "localhost" ) {
-        set $hostheader "localhost";
-    }
-    if ( $host = "192.168.65.1" ) {
-        set $hostheader "192.168.65.1";
-    }
-    if ( $host = "host.docker.internal" ) {
-        set $hostheader "host.docker.internal";
-    }
-    proxy_set_header Host $hostheader:5000;
-  }
-
-  location / {
-    proxy_pass http://registry;
-
-    set $hostheader $hostname;
-    if ( $host = "localhost" ) {
-        set $hostheader "localhost";
-    }
-    if ( $host = "192.168.65.1" ) {
-        set $hostheader "192.168.65.1";
-    }
-    if ( $host = "host.docker.internal" ) {
-        set $hostheader "host.docker.internal";
-    }
-    proxy_set_header Host $hostheader:5000;
-  }
-}
+{{end}}
