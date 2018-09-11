@@ -11,13 +11,15 @@ import (
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/proxy/registryoverride"
 	"code.uber.internal/infra/kraken/utils/configutil"
+	"code.uber.internal/infra/kraken/utils/flagutil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
 func main() {
 	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
 	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-sjc1)")
-	port := flag.Int("port", 0, "Nginx port")
+	var ports flagutil.Ints
+	flag.Var(&ports, "port", "ports to listen on (may specify multiple)")
 	flag.Parse()
 
 	var config Config
@@ -27,8 +29,8 @@ func main() {
 
 	log.ConfigureLogger(config.ZapLogging)
 
-	if port == nil || *port == 0 {
-		log.Fatal("Argument -port required")
+	if len(ports) == 0 {
+		log.Fatal("Must specify at least one -port")
 	}
 
 	stats, closer, err := metrics.New(config.Metrics, *cluster)
@@ -75,7 +77,7 @@ func main() {
 
 	log.Info("Starting nginx...")
 	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
-		"port": *port,
+		"ports": ports,
 		"registry_server": nginx.GetServer(
 			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
 		"registry_override_server": nginx.GetServer(
