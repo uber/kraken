@@ -1,8 +1,13 @@
 package transfer
 
 import (
+	"bytes"
+	"io"
 	"io/ioutil"
+	"os"
+	"sync"
 	"testing"
+	"time"
 
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/core"
@@ -127,4 +132,59 @@ func TestReadOnlyTransfererGetTagNotFound(t *testing.T) {
 	_, err := transferer.GetTag(tag)
 	require.Error(err)
 	require.Equal(ErrTagNotFound, err)
+}
+
+// TODO(codyg): This is a particularly ugly test that is a symptom of the lack
+// of abstraction surrounding scheduler / file store operations.
+func TestReadOnlyTransfererMultipleDownloadsOfSameBlob(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newReadOnlyTransfererMocks(t)
+	defer cleanup()
+
+	transferer := mocks.new()
+
+	namespace := "docker/labrat:latest"
+	blob := core.NewBlobFixture()
+
+	require.NoError(mocks.cads.CreateDownloadFile(blob.Digest.Hex(), blob.Length()))
+	w, err := mocks.cads.GetDownloadFileReadWriter(blob.Digest.Hex())
+	require.NoError(err)
+	_, err = io.Copy(w, bytes.NewReader(blob.Content))
+	require.NoError(err)
+
+	commit := make(chan struct{})
+
+	mocks.sched.EXPECT().Download(
+		namespace, blob.Digest.Hex()).DoAndReturn(func(namespace, name string) error {
+
+		<-commit
+
+		if err := mocks.cads.MoveDownloadFileToCache(name); !os.IsExist(err) {
+			return err
+		}
+		return nil
+	}).Times(10)
+
+	// Multiple clients trying to download the same file which is already in
+	// the download state should queue up until the file has been committed to
+	// the cache.
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := transferer.Download(namespace, blob.Digest)
+			require.NoError(err)
+			b, err := ioutil.ReadAll(result)
+			require.NoError(err)
+			require.Equal(blob.Content, b)
+		}()
+	}
+
+	time.Sleep(250 * time.Millisecond)
+
+	close(commit)
+
+	wg.Wait()
 }
