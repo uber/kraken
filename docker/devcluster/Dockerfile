@@ -1,4 +1,4 @@
-FROM debian:8
+FROM debian:9
 
 RUN apt-get update && apt-get install -y build-essential curl sqlite3 nginx sudo
 
