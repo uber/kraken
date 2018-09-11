@@ -1,3 +1,8 @@
+0.0.12 (2018-09-11)
+====
+- Do not error when file is in download state before scheduler download (@codyg)
+- Set torrentlog connection stats to debug level (@codyg)
+
 0.0.11 (2018-09-07)
 ====
 - Add /forcecleanup endpoint to origin for manually freeing space (@codyg)
