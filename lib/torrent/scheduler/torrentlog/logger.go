@@ -61,7 +61,7 @@ func (l *Logger) OutgoingConnectionAccept(
 	infoHash core.InfoHash,
 	remotePeerID core.PeerID) {
 
-	l.zap.Info(
+	l.zap.Debug(
 		"Outgoing connection accept",
 		zap.String("name", name),
 		zap.String("info_hash", infoHash.String()),
@@ -74,7 +74,7 @@ func (l *Logger) OutgoingConnectionReject(name string,
 	remotePeerID core.PeerID,
 	err error) {
 
-	l.zap.Info(
+	l.zap.Debug(
 		"Outgoing connection reject",
 		zap.String("name", name),
 		zap.String("info_hash", infoHash.String()),
@@ -88,7 +88,7 @@ func (l *Logger) IncomingConnectionAccept(
 	infoHash core.InfoHash,
 	remotePeerID core.PeerID) {
 
-	l.zap.Info(
+	l.zap.Debug(
 		"Incoming connection accept",
 		zap.String("name", name),
 		zap.String("info_hash", infoHash.String()),
@@ -102,7 +102,7 @@ func (l *Logger) IncomingConnectionReject(
 	remotePeerID core.PeerID,
 	err error) {
 
-	l.zap.Info(
+	l.zap.Debug(
 		"Incoming connection reject",
 		zap.String("name", name),
 		zap.String("info_hash", infoHash.String()),
@@ -112,7 +112,7 @@ func (l *Logger) IncomingConnectionReject(
 
 // SeedTimeout logs a seeding torrent being torn down due to timeout.
 func (l *Logger) SeedTimeout(name string, infoHash core.InfoHash) {
-	l.zap.Info(
+	l.zap.Debug(
 		"Seed timeout",
 		zap.String("name", name),
 		zap.String("info_hash", infoHash.String()))
@@ -120,7 +120,7 @@ func (l *Logger) SeedTimeout(name string, infoHash core.InfoHash) {
 
 // LeechTimeout logs a leeching torrent being torn down due to timeout.
 func (l *Logger) LeechTimeout(name string, infoHash core.InfoHash) {
-	l.zap.Info(
+	l.zap.Debug(
 		"Leech timeout",
 		zap.String("name", name),
 		zap.String("info_hash", infoHash.String()))
@@ -152,7 +152,7 @@ func (l *Logger) SeederSummaries(
 	infoHash core.InfoHash,
 	summaries SeederSummaries) error {
 
-	l.zap.Info(
+	l.zap.Debug(
 		"Seeder summaries",
 		zap.String("name", name),
 		zap.String("info_hash", infoHash.String()),
@@ -166,7 +166,7 @@ func (l *Logger) LeecherSummaries(
 	infoHash core.InfoHash,
 	summaries LeecherSummaries) error {
 
-	l.zap.Info(
+	l.zap.Debug(
 		"Leecher summaries",
 		zap.String("name", name),
 		zap.String("info_hash", infoHash.String()),

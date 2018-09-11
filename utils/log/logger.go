@@ -7,6 +7,7 @@ import (
 
 // Config defines Logger configuration.
 type Config struct {
+	Level       zapcore.Level       `yaml:"level"`
 	Disable     bool                `yaml:"disable"`
 	ServiceName string              `yaml:"service_name"`
 	Path        string              `yaml:"path"`
@@ -38,7 +39,7 @@ func New(c Config, fields map[string]interface{}) (*zap.Logger, error) {
 	}
 
 	return zap.Config{
-		Level: zap.NewAtomicLevel(),
+		Level: zap.NewAtomicLevelAt(c.Level),
 		Sampling: &zap.SamplingConfig{
 			Initial:    100,
 			Thereafter: 100,
