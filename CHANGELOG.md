@@ -1,3 +1,8 @@
+0.0.13 (2018-09-12)
+====
+- Allow specifying multiple custom ports for proxy (@codyg)
+- Run IRN proxy nginx as root to listen on port 80 (@codyg)
+
 0.0.12 (2018-09-11)
 ====
 - Do not error when file is in download state before scheduler download (@codyg)
