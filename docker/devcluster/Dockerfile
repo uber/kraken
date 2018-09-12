@@ -26,6 +26,10 @@ RUN groupadd --gid 100001 udocker
 RUN useradd --uid 100001 -g udocker -d /home/udocker -m -s /bin/bash udocker
 RUN usermod -aG sudo udocker
 
+# Allow proxy to run nginx as root.
+RUN mkdir -p /etc/sudoers.d/
+RUN echo 'udocker  ALL=(root) NOPASSWD: /usr/sbin/nginx' >> /etc/sudoers.d/kraken-proxy
+
 COPY ./docker/setup_nginx.sh /tmp/setup_nginx.sh
 RUN /tmp/setup_nginx.sh
 

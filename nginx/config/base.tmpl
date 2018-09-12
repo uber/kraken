@@ -1,6 +1,7 @@
 worker_processes 4;
 worker_rlimit_nofile 4096;
 pid /tmp/nginx.pid;
+user udocker udocker;
 
 events {
   worker_connections 2048;
