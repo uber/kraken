@@ -24,6 +24,7 @@ func abspath(name string) (string, error) {
 
 // Config defines nginx configuration.
 type Config struct {
+	Root     bool   `yaml:"root"`
 	Name     string `yaml:"name"`
 	CacheDir string `yaml:"cache_dir"`
 	LogDir   string `yaml:"log_dir"`
@@ -79,13 +80,13 @@ func Run(config Config, params map[string]interface{}) error {
 		return fmt.Errorf("write src: %s", err)
 	}
 
-	cmd := exec.Command(
-		"/usr/sbin/nginx",
-		"-g", "daemon off;",
-		"-c", conf)
+	args := []string{"/usr/sbin/nginx", "-g", "daemon off;", "-c", conf}
+	if config.Root {
+		args = append([]string{"sudo"}, args...)
+	}
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-
 	return cmd.Run()
 }
 
