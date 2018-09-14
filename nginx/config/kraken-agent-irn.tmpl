@@ -1,6 +1,8 @@
 upstream registry-backend {
   server 127.0.0.1:8991; # TODO(codyg): Change this to unix socket.
-  {{if ne .registry_backup ""}} server {{.registry_backup}} backup; {{end}}
+
+  # This is a hack, fallback to artifactory which uses https.
+  server unix:/tmp/kraken-agent-irn-backup.sock backup; 
 }
 
 server {
@@ -16,4 +18,12 @@ server {
     proxy_pass http://registry-backend;
     proxy_next_upstream error timeout http_404 http_500;
   }
+}
+
+server {
+    listen unix:/tmp/kraken-agent-irn-backup.sock;
+
+    location / {
+        proxy_pass https://docker-registry.pit-irn-1.uberatc.net;
+    }
 }
