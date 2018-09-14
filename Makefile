@@ -111,11 +111,10 @@ acceptance/origin:
 acceptance/tracker:
 	@test $(host)
 	@test $(tag)
-	@test $(digest)
 	ssh $(host) 'bash -s tracker' < ./test/acceptance/health.sh
 	ssh $(host) 'bash -s build-index' < ./test/acceptance/health.sh
 	ssh $(host) "bash -s $(tag)" < ./test/acceptance/build-index.sh
-	ssh $(host) "bash -s $(digest)" < ./test/acceptance/tracker.sh
+	ssh $(host) "bash -s $(tag)" < ./test/acceptance/tracker.sh
 
 # Runs acceptance tests on an agent host.
 acceptance/agent:
