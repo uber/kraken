@@ -1,3 +1,8 @@
+0.0.14 (2018-09-17)
+====
+- Acceptance test improvements (@codyg)
+- Make kraken-agent in atg fallback to artifactory (@evelynl)
+
 0.0.13 (2018-09-12)
 ====
 - Allow specifying multiple custom ports for proxy (@codyg)
