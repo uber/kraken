@@ -14,6 +14,11 @@ type Config struct {
 	// NamePath identifies which namepath.Pather to use.
 	NamePath string `yaml:"name_path"`
 
+	// UploadDirectory is scratch space, relative to RootDirectory, used for
+	// uploading files before moving them to content-addressable storage. Avoids
+	// partial uploads corrupting the content-addressable storage space.
+	UploadDirectory string `yaml:"upload_directory"`
+
 	WebHDFS webhdfs.Config `yaml:"webhdfs"`
 }
 
@@ -23,5 +28,8 @@ func (c *Config) applyDefaults() {
 	}
 	if c.ListConcurrency == 0 {
 		c.ListConcurrency = 4
+	}
+	if c.UploadDirectory == "" {
+		c.UploadDirectory = "_uploads"
 	}
 }

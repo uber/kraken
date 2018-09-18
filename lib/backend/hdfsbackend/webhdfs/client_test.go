@@ -34,7 +34,9 @@ func (s *testServer) handler() http.Handler {
 }
 
 func redirectToDataNode(w http.ResponseWriter, r *http.Request) {
-	datanode := fmt.Sprintf("http://%s/%s", r.Host, path.Join("datanode", r.URL.Path))
+	datanode := fmt.Sprintf(
+		"http://%s/%s?%s",
+		r.Host, path.Join("datanode", r.URL.Path), r.URL.Query().Encode())
 	http.Redirect(w, r, datanode, http.StatusTemporaryRedirect)
 }
 
@@ -220,6 +222,31 @@ func TestClientCreateErrorsWhenExceedsBufferGuard(t *testing.T) {
 	require.Error(err)
 	_, ok := err.(drainSrcError).err.(exceededCapError)
 	require.True(ok)
+}
+
+func TestClientRename(t *testing.T) {
+	require := require.New(t)
+
+	from := "root/from"
+	to := "root/to"
+
+	called := false
+
+	server := &testServer{
+		putName: redirectToDataNode,
+		putData: func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			require.Equal("/datanode/"+from, r.URL.Path)
+			require.Equal(to, r.URL.Query().Get("destination"))
+		},
+	}
+	addr, stop := testutil.StartServer(server.handler())
+	defer stop()
+
+	client := newClient(addr)
+
+	require.NoError(client.Rename(from, to))
+	require.True(called)
 }
 
 func TestClientGetFileStatus(t *testing.T) {
