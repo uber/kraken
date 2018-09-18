@@ -11,7 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/metainfogen"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
-	"code.uber.internal/infra/kraken/utils/rwutil"
+	"code.uber.internal/infra/kraken/utils/mockutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
@@ -64,7 +64,7 @@ func TestTorrentArchiveStatNoExistTriggersRefresh(t *testing.T) {
 
 	mocks.backendClient.EXPECT().Stat(
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
-	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content))
+	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		_, err := archive.Stat(namespace, blob.Digest.Hex())
@@ -91,7 +91,7 @@ func TestTorrentArchiveGetTorrentNoExistTriggersRefresh(t *testing.T) {
 
 	mocks.backendClient.EXPECT().Stat(
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
-	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content))
+	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		_, err := archive.GetTorrent(namespace, blob.Digest.Hex())
@@ -118,7 +118,7 @@ func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 
 	mocks.backendClient.EXPECT().Stat(
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
-	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content))
+	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		_, err := archive.Stat(namespace, blob.Digest.Hex())

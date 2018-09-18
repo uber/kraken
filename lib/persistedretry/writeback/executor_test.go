@@ -11,7 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
-	"code.uber.internal/infra/kraken/utils/rwutil"
+	"code.uber.internal/infra/kraken/utils/mockutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
@@ -75,7 +75,7 @@ func TestExec(t *testing.T) {
 
 	client := mocks.client(task.Namespace)
 	client.EXPECT().Stat(blob.Digest.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
-	client.EXPECT().Upload(blob.Digest.Hex(), rwutil.MatchReader(blob.Content)).Return(nil)
+	client.EXPECT().Upload(blob.Digest.Hex(), mockutil.MatchReader(blob.Content)).Return(nil)
 
 	executor := mocks.new()
 
@@ -165,7 +165,7 @@ func TestExecUploadFailure(t *testing.T) {
 	client := mocks.client(task.Namespace)
 	client.EXPECT().Stat(blob.Digest.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 	client.EXPECT().Upload(
-		blob.Digest.Hex(), rwutil.MatchReader(blob.Content)).Return(errors.New("some error"))
+		blob.Digest.Hex(), mockutil.MatchReader(blob.Content)).Return(errors.New("some error"))
 
 	executor := mocks.new()
 

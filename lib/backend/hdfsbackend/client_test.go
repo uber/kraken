@@ -9,7 +9,6 @@ import (
 	"code.uber.internal/infra/kraken/mocks/lib/backend/hdfsbackend/webhdfs"
 	"code.uber.internal/infra/kraken/utils/mockutil"
 	"code.uber.internal/infra/kraken/utils/randutil"
-	"code.uber.internal/infra/kraken/utils/rwutil"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
@@ -61,7 +60,7 @@ func TestClientDownload(t *testing.T) {
 
 	data := randutil.Text(32)
 
-	mocks.webhdfs.EXPECT().Open("root/test", rwutil.MatchWriter(data)).Return(nil)
+	mocks.webhdfs.EXPECT().Open("root/test", mockutil.MatchWriter(data)).Return(nil)
 
 	var b bytes.Buffer
 	require.NoError(client.Download("test", &b))
@@ -79,7 +78,7 @@ func TestClientUpload(t *testing.T) {
 	data := randutil.Text(32)
 
 	mocks.webhdfs.EXPECT().Create(
-		mockutil.MatchRegex("root/_uploads/.+"), rwutil.MatchReader(data)).Return(nil)
+		mockutil.MatchRegex("root/_uploads/.+"), mockutil.MatchReader(data)).Return(nil)
 
 	mocks.webhdfs.EXPECT().Rename(mockutil.MatchRegex("root/_uploads/.+"), "root/test").Return(nil)
 
