@@ -8,25 +8,24 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-)
 
-// ErrTLSDisabled is returned when TLS is disabled from config
-var ErrTLSDisabled = errors.New("TLS disabled")
+	"code.uber.internal/infra/kraken/utils/log"
+)
 
 // ErrEmptyCommonName is returned when common name is not provided for key generation.
 var ErrEmptyCommonName = errors.New("empty common name")
 
 // TLSConfig defines TLS configuration.
 type TLSConfig struct {
-	Enabled bool     `yaml:"enabled"`
-	Name    string   `yaml:"name"`
-	CA      X509Pair `yaml:"ca"`
-	Client  X509Pair `yaml:"client"`
+	Name   string   `yaml:"name"`
+	CA     X509Pair `yaml:"ca"`
+	Client X509Pair `yaml:"client"`
 }
 
 // X509Pair contains x509 cert configuration.
 // Both Cert and Key should be already in pem format.
 type X509Pair struct {
+	Enabled    bool   `yaml:"enabled"`
 	Cert       Secret `yaml:"cert"`
 	Key        Secret `yaml:"key"`
 	Passphrase Secret `yaml:"passphrase"`
@@ -37,10 +36,11 @@ type Secret struct {
 	Path string `yaml:"path"`
 }
 
-// Build builts tls.Config for http client.
-func (c TLSConfig) Build() (*tls.Config, error) {
-	if !c.Enabled {
-		return nil, ErrTLSDisabled
+// BuildClient builts tls.Config for http client.
+func (c TLSConfig) BuildClient() (*tls.Config, error) {
+	if !c.Client.Enabled {
+		log.Warnf("Client TLS is disabled")
+		return nil, nil
 	}
 	if c.Name == "" {
 		return nil, ErrEmptyCommonName

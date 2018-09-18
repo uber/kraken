@@ -13,7 +13,6 @@ import (
 	"code.uber.internal/infra/kraken/proxy/registryoverride"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/flagutil"
-	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
@@ -55,12 +54,9 @@ func main() {
 	r := blobclient.NewClientResolver(blobclient.NewProvider(), origins)
 	originCluster := blobclient.NewClusterClient(r)
 
-	tls, err := config.TLS.Build()
+	tls, err := config.TLS.BuildClient()
 	if err != nil {
-		if err != httputil.ErrTLSDisabled {
-			log.Fatalf("Error building client tls config: %s", err)
-		}
-		log.Warnf("TLS is disabled")
+		log.Fatalf("Error building client tls config: %s", err)
 	}
 
 	buildIndexes, err := config.BuildIndex.BuildWithHealthChecker(healthcheck.Default(tls))
