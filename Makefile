@@ -208,6 +208,12 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
+	mkdir -p mocks/lib/backend/hdfsbackend/webhdfs
+	$(mockgen) \
+		-destination=mocks/lib/backend/hdfsbackend/webhdfs/mocks.go \
+		-package mockwebhdfs \
+		code.uber.internal/infra/kraken/lib/backend/hdfsbackend/webhdfs Client
+
 	mkdir -p mocks/lib/hostlist
 	$(mockgen) \
 		-destination=mocks/lib/hostlist/mocks.go \
