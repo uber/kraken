@@ -3,14 +3,11 @@ package trackerserver
 import (
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/listener"
 )
 
 // Config defines configuration for the tracker service.
 type Config struct {
-	TagCache dedup.CacheConfig `yaml:"tag_cache"`
-
 	// Limits the number of unique metainfo requests to origin per namespace/digest.
 	GetMetaInfoLimit time.Duration `yaml:"get_metainfo_limit"`
 
