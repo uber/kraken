@@ -215,14 +215,9 @@ func Send(method, rawurl string, options ...SendOption) (resp *http.Response, er
 		o(&opts)
 	}
 
-	req, err := http.NewRequest(method, opts.url.String(), opts.body)
+	req, err := newRequest(method, opts)
 	if err != nil {
-		return nil, fmt.Errorf("new request: %s", err)
-	}
-	req = req.WithContext(opts.ctx)
-
-	for key, val := range opts.headers {
-		req.Header.Set(key, val)
+		return nil, err
 	}
 
 	client := http.Client{
@@ -236,6 +231,18 @@ func Send(method, rawurl string, options ...SendOption) (resp *http.Response, er
 			time.Sleep(opts.retry.interval)
 		}
 		resp, err = client.Do(req)
+		// Retry without tls. During migration there would be a time when the
+		// component receiving the tls request does not serve https response.
+		// TODO (@evelynl): disable retry after tls migration.
+		if err != nil && req.URL.Scheme == "https" {
+			var httpReq *http.Request
+			httpReq, err = newRequest(method, opts)
+			if err != nil {
+				return nil, err
+			}
+			httpReq.URL.Scheme = "http"
+			resp, err = client.Do(httpReq)
+		}
 		if err != nil {
 			continue
 		}
@@ -337,4 +344,17 @@ func ParseDigest(r *http.Request, name string) (core.Digest, error) {
 		return core.Digest{}, handler.Errorf("parse digest: %s", err).Status(http.StatusBadRequest)
 	}
 	return d, nil
+}
+
+func newRequest(method string, opts sendOptions) (*http.Request, error) {
+	req, err := http.NewRequest(method, opts.url.String(), opts.body)
+	if err != nil {
+		return nil, fmt.Errorf("new request: %s", err)
+	}
+	req = req.WithContext(opts.ctx)
+
+	for key, val := range opts.headers {
+		req.Header.Set(key, val)
+	}
+	return req, nil
 }

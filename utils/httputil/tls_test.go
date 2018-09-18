@@ -114,11 +114,12 @@ func genCerts(t *testing.T) (config *TLSConfig, cleanupfunc func()) {
 	cleanup.Add(c)
 
 	config = &TLSConfig{}
-	config.Enabled = true
 	config.Name = "kraken"
+	config.CA.Enabled = true
 	config.CA.Cert.Path = sCert
 	config.CA.Key.Path = sKey
 	config.CA.Passphrase.Path = sSecret
+	config.Client.Enabled = true
 	config.Client.Cert.Path = cCert
 	config.Client.Key.Path = cKey
 	config.Client.Passphrase.Path = cSecret
@@ -170,32 +171,50 @@ func startServer(t *testing.T, cert, key, passphrase string) (string, func()) {
 }
 
 func TestTLSClient(t *testing.T) {
-	require := require.New(t)
 	c, cleanup := genCerts(t)
 	defer cleanup()
-	tls, err := c.Build()
+	tls, err := c.BuildClient()
+	require.NoError(t, err)
 
-	addr, stop := startServer(t, c.CA.Cert.Path, c.CA.Key.Path, c.CA.Passphrase.Path)
-	defer stop()
+	t.Run("success", func(t *testing.T) {
+		require := require.New(t)
+		addr, stop := startServer(t, c.CA.Cert.Path, c.CA.Key.Path, c.CA.Passphrase.Path)
+		defer stop()
 
-	resp, err := Get("https://"+addr+"/", SendTLSTransport(tls))
-	require.NoError(err)
-	require.Equal(http.StatusOK, resp.StatusCode)
-}
+		resp, err := Get("https://"+addr+"/", SendTLSTransport(tls))
+		require.NoError(err)
+		require.Equal(http.StatusOK, resp.StatusCode)
+	})
 
-func TestTLSClientError(t *testing.T) {
-	require := require.New(t)
-	c, cleanup := genCerts(t)
-	defer cleanup()
+	t.Run("authentication failed", func(t *testing.T) {
+		require := require.New(t)
+		addr, stop := startServer(t, c.CA.Cert.Path, c.CA.Key.Path, c.CA.Passphrase.Path)
+		defer stop()
 
-	addr, stop := startServer(t, c.CA.Cert.Path, c.CA.Key.Path, c.CA.Passphrase.Path)
-	defer stop()
+		// Swap client and server certs. This should make verification fail.
+		badConfig := &TLSConfig{}
+		badConfig.Name = "kraken"
+		badConfig.CA = c.Client
+		badConfig.Client = c.CA
+		badtls, err := badConfig.BuildClient()
+		require.NoError(err)
 
-	// Create a different cert. Verification should fail.
-	c, cleanup = genCerts(t)
-	defer cleanup()
-	tls, err := c.Build()
+		_, err = Get("https://"+addr+"/", SendTLSTransport(badtls))
+		require.True(IsNetworkError(err))
+	})
 
-	_, err = Get("https://"+addr+"/", SendTLSTransport(tls))
-	require.True(IsNetworkError(err))
+	t.Run("fallback on http server", func(t *testing.T) {
+		require := require.New(t)
+		r := chi.NewRouter()
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintln(w, "OK")
+		})
+		addr, stop := testutil.StartServer(r)
+		defer stop()
+
+		resp, err := Get("https://"+addr+"/", SendTLSTransport(tls))
+		require.NoError(err)
+		require.Equal(http.StatusOK, resp.StatusCode)
+	})
 }

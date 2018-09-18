@@ -19,7 +19,6 @@ import (
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/utils/configutil"
-	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
@@ -95,12 +94,9 @@ func main() {
 		log.Fatalf("Error building build-index upstream: %s", err)
 	}
 
-	tls, err := config.TLS.Build()
+	tls, err := config.TLS.BuildClient()
 	if err != nil {
-		if err != httputil.ErrTLSDisabled {
-			log.Fatalf("Error building client tls config: %s", err)
-		}
-		log.Warnf("TLS is disabled")
+		log.Fatalf("Error building client tls config: %s", err)
 	}
 
 	tagClient := tagclient.NewClusterClient(buildIndexes, tls)
