@@ -83,3 +83,15 @@ func (m *MockClient) Open(arg0 string, arg1 io.Writer) error {
 func (mr *MockClientMockRecorder) Open(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockClient)(nil).Open), arg0, arg1)
 }
+
+// Rename mocks base method
+func (m *MockClient) Rename(arg0, arg1 string) error {
+	ret := m.ctrl.Call(m, "Rename", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Rename indicates an expected call of Rename
+func (mr *MockClientMockRecorder) Rename(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rename", reflect.TypeOf((*MockClient)(nil).Rename), arg0, arg1)
+}

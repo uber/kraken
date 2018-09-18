@@ -12,6 +12,8 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
+
+	"github.com/satori/go.uuid"
 )
 
 // Client is a backend.Client for HDFS.
@@ -65,11 +67,15 @@ func (c *Client) Download(name string, dst io.Writer) error {
 
 // Upload uploads src to name.
 func (c *Client) Upload(name string, src io.Reader) error {
-	path, err := c.pather.BlobPath(name)
+	uploadPath := path.Join(c.config.RootDirectory, c.config.UploadDirectory, uuid.NewV4().String())
+	blobPath, err := c.pather.BlobPath(name)
 	if err != nil {
 		return fmt.Errorf("blob path: %s", err)
 	}
-	return c.webhdfs.Create(path, src)
+	if err := c.webhdfs.Create(uploadPath, src); err != nil {
+		return err
+	}
+	return c.webhdfs.Rename(uploadPath, blobPath)
 }
 
 var (

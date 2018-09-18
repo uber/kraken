@@ -18,6 +18,7 @@ import (
 // Client wraps webhdfs operations.
 type Client interface {
 	Create(path string, src io.Reader) error
+	Rename(from, to string) error
 	Open(path string, dst io.Writer) error
 	GetFileStatus(path string) (FileStatus, error)
 	ListFileStatus(path string) ([]FileStatus, error)
@@ -142,6 +143,27 @@ func (c *client) Create(path string, src io.Reader) error {
 	return allNameNodesFailedError{nnErr}
 }
 
+func (c *client) Rename(from, to string) error {
+	v := c.values()
+	v.Set("op", "RENAME")
+	v.Set("destination", to)
+
+	var resp *http.Response
+	var nnErr error
+	for _, nn := range c.namenodes {
+		resp, nnErr = httputil.Put(fmt.Sprintf("http://%s/%s?%s", nn, from, v.Encode()))
+		if nnErr != nil {
+			if retryable(nnErr) {
+				continue
+			}
+			return nnErr
+		}
+		resp.Body.Close()
+		return nil
+	}
+	return allNameNodesFailedError{nnErr}
+}
+
 func (c *client) Open(path string, dst io.Writer) error {
 	v := c.values()
 	v.Set("op", "OPEN")
@@ -160,6 +182,7 @@ func (c *client) Open(path string, dst io.Writer) error {
 			}
 			return nnErr
 		}
+		defer resp.Body.Close()
 		if n, err := io.Copy(dst, resp.Body); err != nil {
 			return fmt.Errorf("copy response: %s", err)
 		} else if n != resp.ContentLength {
