@@ -14,7 +14,6 @@ import (
 	"code.uber.internal/infra/kraken/tracker/originstore"
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/peerstore"
-	"code.uber.internal/infra/kraken/utils/dedup"
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/listener"
 	"code.uber.internal/infra/kraken/utils/log"
@@ -30,8 +29,6 @@ type Server struct {
 	policy      *peerhandoutpolicy.PriorityPolicy
 
 	originCluster blobclient.ClusterClient
-
-	tagCache *dedup.Cache
 }
 
 // New creates a new Server.
