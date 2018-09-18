@@ -12,7 +12,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
-	"code.uber.internal/infra/kraken/utils/rwutil"
+	"code.uber.internal/infra/kraken/utils/mockutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
@@ -68,7 +68,7 @@ func TestRefresh(t *testing.T) {
 	blob := core.SizedBlobFixture(100, uint64(_testPieceLength))
 
 	client.EXPECT().Stat(blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
-	client.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
+	client.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
 
 	require.NoError(refresher.Refresh(namespace, blob.Digest))
 
@@ -123,7 +123,7 @@ func TestRefreshSizeLimitWithValidSize(t *testing.T) {
 	blob := core.SizedBlobFixture(100, uint64(_testPieceLength))
 
 	client.EXPECT().Stat(blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
-	client.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
+	client.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
 
 	require.NoError(refresher.Refresh(namespace, blob.Digest))
 

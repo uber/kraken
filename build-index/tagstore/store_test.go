@@ -11,7 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/mocks/lib/backend"
 	"code.uber.internal/infra/kraken/mocks/lib/persistedretry"
-	"code.uber.internal/infra/kraken/utils/rwutil"
+	"code.uber.internal/infra/kraken/utils/mockutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
@@ -119,7 +119,7 @@ func TestGetCachesOnDisk(t *testing.T) {
 	digest := core.DigestFixture()
 
 	mocks.backendClient.EXPECT().Download(
-		tag, rwutil.MatchWriter([]byte(digest.String()))).Return(nil)
+		tag, mockutil.MatchWriter([]byte(digest.String()))).Return(nil)
 
 	// Getting multiple times should only cause one backend Download.
 	for i := 0; i < 10; i++ {

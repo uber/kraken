@@ -12,7 +12,7 @@ import (
 	"code.uber.internal/infra/kraken/mocks/build-index/tagclient"
 	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/dockerutil"
-	"code.uber.internal/infra/kraken/utils/rwutil"
+	"code.uber.internal/infra/kraken/utils/mockutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
@@ -57,7 +57,7 @@ func TestReadWriteTransfererDownloadCachesBlob(t *testing.T) {
 	blob := core.NewBlobFixture()
 
 	mocks.originCluster.EXPECT().DownloadBlob(
-		namespace, blob.Digest, rwutil.MatchWriter(blob.Content)).Return(nil)
+		namespace, blob.Digest, mockutil.MatchWriter(blob.Content)).Return(nil)
 
 	// Downloading multiple times should only call blob download once.
 	for i := 0; i < 10; i++ {

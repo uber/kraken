@@ -18,7 +18,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/httputil"
-	"code.uber.internal/infra/kraken/utils/rwutil"
+	"code.uber.internal/infra/kraken/utils/mockutil"
 	"code.uber.internal/infra/kraken/utils/testutil"
 )
 
@@ -167,7 +167,7 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 	backendClient := s1.backendClient(namespace)
 	backendClient.EXPECT().Stat(
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil).AnyTimes()
-	backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
+	backendClient.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
 	require.True(httputil.IsAccepted(err))
@@ -293,7 +293,7 @@ func TestReplicateToRemote(t *testing.T) {
 
 	remoteCluster := s.expectRemoteCluster(remote)
 	remoteCluster.EXPECT().UploadBlob(
-		namespace, blob.Digest, rwutil.MatchReader(blob.Content)).Return(nil)
+		namespace, blob.Digest, mockutil.MatchReader(blob.Content)).Return(nil)
 
 	require.NoError(cp.Provide(master1).ReplicateToRemote(namespace, blob.Digest, remote))
 }
@@ -312,13 +312,13 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 	backendClient := s.backendClient(namespace)
 	backendClient.EXPECT().Stat(
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil).AnyTimes()
-	backendClient.EXPECT().Download(blob.Digest.Hex(), rwutil.MatchWriter(blob.Content)).Return(nil)
+	backendClient.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
 
 	remote := "remote:80"
 
 	remoteCluster := s.expectRemoteCluster(remote)
 	remoteCluster.EXPECT().UploadBlob(
-		namespace, blob.Digest, rwutil.MatchReader(blob.Content)).Return(nil)
+		namespace, blob.Digest, mockutil.MatchReader(blob.Content)).Return(nil)
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		err := cp.Provide(master1).ReplicateToRemote(namespace, blob.Digest, remote)
