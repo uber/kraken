@@ -56,4 +56,5 @@ EXPOSE 8351
 COPY ./config /home/udocker/kraken/config
 COPY ./nginx/config /home/udocker/kraken/nginx/config
 COPY ./docker/devcluster/start.sh /home/udocker/kraken/start.sh
+COPY ./test/tls /home/udocker/kraken/tls
 CMD ./start.sh

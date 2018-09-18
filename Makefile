@@ -169,12 +169,12 @@ docker_stop:
 .PHONY: integration
 NAME?=test_
 integration: $(LINUX_BINS) tools/bin/puller/puller docker_stop
-	docker build -t kraken-agent:dev -f docker/agent/Dockerfile ./
-	docker build -t kraken-build-index:dev -f docker/build-index/Dockerfile ./
-	docker build -t kraken-origin:dev -f docker/origin/Dockerfile ./
-	docker build -t kraken-proxy:dev -f docker/proxy/Dockerfile ./
-	docker build -t kraken-testfs:dev -f docker/testfs/Dockerfile ./
-	docker build -t kraken-tracker:dev -f docker/tracker/Dockerfile ./
+	docker build -q -t kraken-agent:dev -f docker/agent/Dockerfile ./
+	docker build -q -t kraken-build-index:dev -f docker/build-index/Dockerfile ./
+	docker build -q -t kraken-origin:dev -f docker/origin/Dockerfile ./
+	docker build -q -t kraken-proxy:dev -f docker/proxy/Dockerfile ./
+	docker build -q -t kraken-testfs:dev -f docker/testfs/Dockerfile ./
+	docker build -q -t kraken-tracker:dev -f docker/tracker/Dockerfile ./
 	if [ ! -d env ]; then virtualenv --setuptools env; fi
 	source env/bin/activate
 	env/bin/pip install -r requirements-tests.txt
@@ -188,7 +188,7 @@ runtest: docker_stop
 
 .PHONY: devcluster
 devcluster: $(LINUX_BINS) docker_stop
-	docker build -t kraken-devcluster:latest -f docker/devcluster/Dockerfile ./
+	docker build -q -t kraken-devcluster:latest -f docker/devcluster/Dockerfile ./
 	docker run -d \
 		-p 5000:5000 -p 5263:5263 -p 5367:5367 -p 7602:7602 -p 9003:9003 -p 8991:8991 -p 5055:5055 -p 8351:8351 \
 		--hostname 192.168.65.1 --name kraken-devcluster \

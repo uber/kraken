@@ -24,6 +24,11 @@ type ActiveHealthCheckConfig struct {
 
 // Build creates a healthcheck.List with built-in active health checks.
 func (c ActiveConfig) Build() (healthcheck.List, error) {
+	return c.BuildWithHealthChecker(healthcheck.Default(nil))
+}
+
+// BuildWithHealthChecker creates a healthcheck.List with customized health checks.
+func (c ActiveConfig) BuildWithHealthChecker(checker healthcheck.Checker) (healthcheck.List, error) {
 	hosts, err := hostlist.New(c.Hosts)
 	if err != nil {
 		return nil, err
@@ -32,7 +37,7 @@ func (c ActiveConfig) Build() (healthcheck.List, error) {
 		log.With("hosts", c.Hosts).Warn("Health checks disabled")
 		return healthcheck.NoopFailed(hosts), nil
 	}
-	filter := healthcheck.NewFilter(c.HealthCheck.Filter, healthcheck.Default())
+	filter := healthcheck.NewFilter(c.HealthCheck.Filter, checker)
 	monitor := healthcheck.NewMonitor(c.HealthCheck.Monitor, hosts, filter)
 	return healthcheck.NoopFailed(monitor), nil
 }

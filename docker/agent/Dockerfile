@@ -17,5 +17,6 @@ USER udocker
 COPY ./config /home/udocker/kraken/config
 COPY ./nginx/config /home/udocker/kraken/nginx/config
 COPY agent/agent.linux /usr/bin/kraken-agent
+COPY ./test/tls /home/udocker/kraken/tls
 
 WORKDIR /home/udocker/kraken

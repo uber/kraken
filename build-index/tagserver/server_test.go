@@ -109,7 +109,7 @@ func (m *serverMocks) handler() http.Handler {
 }
 
 func newClusterClient(addr string) tagclient.Client {
-	return tagclient.NewClusterClient(healthcheck.NoopFailed(hostlist.Fixture(addr)))
+	return tagclient.NewClusterClient(healthcheck.NoopFailed(hostlist.Fixture(addr)), nil)
 }
 
 func TestPut(t *testing.T) {
@@ -363,7 +363,7 @@ func TestDuplicateReplicate(t *testing.T) {
 	addr, stop := testutil.StartServer(mocks.handler())
 	defer stop()
 
-	client := tagclient.NewSingleClient(addr)
+	client := tagclient.NewSingleClient(addr, nil)
 
 	tag := core.TagFixture()
 	digest := core.DigestFixture()

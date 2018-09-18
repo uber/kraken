@@ -8,6 +8,7 @@ import (
 	"code.uber.internal/infra/kraken/build-index/tagstore"
 	"code.uber.internal/infra/kraken/build-index/tagtype"
 	"code.uber.internal/infra/kraken/lib/backend"
+	"code.uber.internal/infra/kraken/lib/healthcheck"
 	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/persistedretry"
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
@@ -18,6 +19,7 @@ import (
 	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
+	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
@@ -73,7 +75,15 @@ func main() {
 		log.Fatalf("Error creating local db: %s", err)
 	}
 
-	cluster, err := config.Cluster.Build()
+	tls, err := config.TLS.Build()
+	if err != nil {
+		if err != httputil.ErrTLSDisabled {
+			log.Fatalf("Error building client tls config: %s", err)
+		}
+		log.Warnf("TLS is disabled")
+	}
+
+	cluster, err := config.Cluster.BuildWithHealthChecker(healthcheck.Default(tls))
 	if err != nil {
 		log.Fatalf("Error building cluster host list: %s", err)
 	}
@@ -90,7 +100,7 @@ func main() {
 	tagReplicationExecutor := tagreplication.NewExecutor(
 		stats,
 		originClient,
-		tagclient.NewProvider())
+		tagclient.NewProvider(tls))
 	tagReplicationStore, err := tagreplication.NewStore(localDB, remotes)
 	if err != nil {
 		log.Fatalf("Error creating tag replication store: %s", err)
@@ -130,15 +140,18 @@ func main() {
 		tagStore,
 		remotes,
 		tagReplicationManager,
-		tagclient.NewProvider(),
+		tagclient.NewProvider(tls),
 		tagTypes)
 	go func() {
 		log.Fatal(server.ListenAndServe())
 	}()
 
 	log.Info("Starting nginx...")
-	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
-		"port":   *port,
-		"server": nginx.GetServer(config.TagServer.Listener.Net, config.TagServer.Listener.Addr),
-	}))
+	log.Fatal(nginx.RunWithTLS(
+		config.Nginx,
+		config.TLS,
+		map[string]interface{}{
+			"port":   *port,
+			"server": nginx.GetServer(config.TagServer.Listener.Net, config.TagServer.Listener.Addr),
+		}))
 }

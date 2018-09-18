@@ -2,6 +2,7 @@ package httputil
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -104,6 +105,11 @@ type sendOptions struct {
 	retry         retryOptions
 	transport     http.RoundTripper
 	ctx           context.Context
+
+	// This is not a valid http option. It provides a way to override
+	// parts of the url. For example, url.Scheme can be changed from
+	// http to https.
+	url *url.URL
 }
 
 // SendOption allows overriding defaults for the Send function.
@@ -168,6 +174,17 @@ func SendRetry(options ...RetryOption) SendOption {
 	return func(o *sendOptions) { o.retry = retry }
 }
 
+// SendTLSTransport sets the transport with TLS config for the HTTP client.
+func SendTLSTransport(config *tls.Config) SendOption {
+	return func(o *sendOptions) {
+		if config == nil {
+			return
+		}
+		o.transport = &http.Transport{TLSClientConfig: config}
+		o.url.Scheme = "https"
+	}
+}
+
 // SendTransport sets the transport for the HTTP client.
 func SendTransport(transport http.RoundTripper) SendOption {
 	return func(o *sendOptions) { o.transport = transport }
@@ -179,7 +196,11 @@ func SendContext(ctx context.Context) SendOption {
 }
 
 // Send sends an HTTP request. May return NetworkError or StatusError (see above).
-func Send(method, url string, options ...SendOption) (resp *http.Response, err error) {
+func Send(method, rawurl string, options ...SendOption) (resp *http.Response, err error) {
+	u, err := url.Parse(rawurl)
+	if err != nil {
+		return nil, fmt.Errorf("parse url: %s", err)
+	}
 	opts := sendOptions{
 		body:          nil,
 		timeout:       60 * time.Second,
@@ -188,12 +209,13 @@ func Send(method, url string, options ...SendOption) (resp *http.Response, err e
 		retry:         retryOptions{max: 1},
 		transport:     nil, // Use HTTP default.
 		ctx:           context.Background(),
+		url:           u,
 	}
 	for _, o := range options {
 		o(&opts)
 	}
 
-	req, err := http.NewRequest(method, url, opts.body)
+	req, err := http.NewRequest(method, opts.url.String(), opts.body)
 	if err != nil {
 		return nil, fmt.Errorf("new request: %s", err)
 	}

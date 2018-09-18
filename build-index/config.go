@@ -12,6 +12,7 @@ import (
 	"code.uber.internal/infra/kraken/localdb"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/nginx"
+	"code.uber.internal/infra/kraken/utils/httputil"
 
 	"go.uber.org/zap"
 )
@@ -33,4 +34,5 @@ type Config struct {
 	Store          store.SimpleStoreConfig      `yaml:"store"`
 	WriteBack      persistedretry.Config        `yaml:"writeback"`
 	Nginx          nginx.Config                 `yaml:"nginx"`
+	TLS            httputil.TLSConfig           `yaml:"tls"`
 }

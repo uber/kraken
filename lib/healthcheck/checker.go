@@ -2,6 +2,7 @@ package healthcheck
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 
 	"code.uber.internal/infra/kraken/utils/httputil"
@@ -13,15 +14,16 @@ type Checker interface {
 }
 
 // Default returns a Checker which makes a GET request against /health.
-func Default() Checker {
-	return defaultChecker{}
+func Default(tls *tls.Config) Checker {
+	return defaultChecker{tls}
 }
 
-type defaultChecker struct{}
+type defaultChecker struct{ tls *tls.Config }
 
 func (c defaultChecker) Check(ctx context.Context, addr string) error {
 	_, err := httputil.Get(
 		fmt.Sprintf("http://%s/health", addr),
-		httputil.SendContext(ctx))
+		httputil.SendContext(ctx),
+		httputil.SendTLSTransport(c.tls))
 	return err
 }

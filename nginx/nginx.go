@@ -9,6 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"text/template"
+
+	"code.uber.internal/infra/kraken/utils/httputil"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 const (
@@ -43,6 +46,11 @@ func (c *Config) inject(params map[string]interface{}) error {
 
 // Run injects params into an nginx configuration template and runs it.
 func Run(config Config, params map[string]interface{}) error {
+	return RunWithTLS(config, httputil.TLSConfig{Enabled: false}, params)
+}
+
+// RunWithTLS injects tls config and params into an nginx configuration template and runs it.
+func RunWithTLS(config Config, tls httputil.TLSConfig, params map[string]interface{}) error {
 	if config.Name == "" {
 		return errors.New("invalid config: name required")
 	}
@@ -51,6 +59,15 @@ func Run(config Config, params map[string]interface{}) error {
 	}
 	if config.LogDir == "" {
 		return errors.New("invalid config: log_dir required")
+	}
+	if !tls.Enabled {
+		log.Warn("Server TLS is disabled")
+	} else {
+		for _, f := range []string{tls.CA.Cert.Path, tls.CA.Key.Path, tls.CA.Passphrase.Path} {
+			if _, err := os.Stat(f); err != nil {
+				return fmt.Errorf("invalid TLS config: %s", err)
+			}
+		}
 	}
 
 	if err := os.MkdirAll(config.CacheDir, 0775); err != nil {
@@ -65,8 +82,13 @@ func Run(config Config, params map[string]interface{}) error {
 	if err != nil {
 		return fmt.Errorf("populate site: %s", err)
 	}
+
 	src, err := populateTemplate("base", map[string]interface{}{
-		"site": string(site),
+		"site":                string(site),
+		"ssl_enabled":         tls.Enabled,
+		"ssl_certificate":     tls.CA.Cert.Path,
+		"ssl_certificate_key": tls.CA.Key.Path,
+		"ssl_password_file":   tls.CA.Passphrase.Path,
 	})
 	if err != nil {
 		return fmt.Errorf("populate base: %s", err)
