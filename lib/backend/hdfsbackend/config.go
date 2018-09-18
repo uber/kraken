@@ -1,41 +1,27 @@
 package hdfsbackend
 
-import (
-	"github.com/c2h5oh/datasize"
-
-	"code.uber.internal/infra/kraken/utils/memsize"
-)
+import "code.uber.internal/infra/kraken/lib/backend/hdfsbackend/webhdfs"
 
 // Config defines configuration for all HDFS clients.
 type Config struct {
-	NameNodes []string `yaml:"namenodes"`
-	BuffSize  int64    `yaml:"buff_size"` // Default transfer block size.
-	UserName  string   `yaml:"username"`  // Auth username.
+	NameNodes     []string `yaml:"namenodes"`
+	UserName      string   `yaml:"username"`
+	RootDirectory string   `yaml:"root_directory"`
 
-	RootDirectory string `yaml:"root_directory"` // RootDirectory for WebHDFS docker registry path, default
-
-	// BufferGuard protects upload from draining the src reader into an oversized
-	// buffer when io.Seeker is not implemented.
-	BufferGuard datasize.ByteSize `yaml:"buffer_guard"`
+	// ListConcurrency is the number of threads used for listing.
+	ListConcurrency int `yaml:"list_concurrency"`
 
 	// NamePath identifies which namepath.Pather to use.
 	NamePath string `yaml:"name_path"`
 
-	ListConcurrency int `yaml:"list_concurrency"`
+	WebHDFS webhdfs.Config `yaml:"webhdfs"`
 }
 
-func (c Config) applyDefaults() Config {
-	if c.BuffSize == 0 {
-		c.BuffSize = int64(64 * memsize.MB)
-	}
-	if c.BufferGuard == 0 {
-		c.BufferGuard = 10 * datasize.MB
-	}
+func (c *Config) applyDefaults() {
 	if c.RootDirectory == "" {
 		c.RootDirectory = "webhdfs/v1/infra/dockerRegistry/"
 	}
 	if c.ListConcurrency == 0 {
 		c.ListConcurrency = 4
 	}
-	return c
 }

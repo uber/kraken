@@ -1,17 +1,18 @@
-package hdfsbackend
+package webhdfs
 
-type fileStatus struct {
+// FileStatus defines FILESTATUS response body.
+type FileStatus struct {
 	PathSuffix string `json:"pathSuffix"`
 	Type       string `json:"type"`
 	Length     int64  `json:"length"`
 }
 
 type fileStatusResponse struct {
-	FileStatus fileStatus `json:"FileStatus"`
+	FileStatus FileStatus `json:"FileStatus"`
 }
 
 type listStatusResponse struct {
 	FileStatuses struct {
-		FileStatus []fileStatus `json:"FileStatus"`
+		FileStatus []FileStatus `json:"FileStatus"`
 	} `json:"FileStatuses"`
 }
