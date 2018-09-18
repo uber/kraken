@@ -15,6 +15,8 @@ import (
 )
 
 func TestScoreFunctionFloatPrecision(t *testing.T) {
+	t.Parallel()
+
 	byteLength := []int{8, 16, 32} // 64, 128, 256 bits
 
 	for index, bl := range byteLength {
@@ -42,6 +44,8 @@ func TestScoreFunctionFloatPrecision(t *testing.T) {
 }
 
 func TestScoreFunctionUint64ToFloat64BadValues(t *testing.T) {
+	t.Parallel()
+
 	maxHashValue := make([]byte, 8)
 	for i := 0; i < 8; i++ {
 		maxHashValue[i] = 0xFF
@@ -81,6 +85,8 @@ func TestScoreFunctionUint64ToFloat64BadValues(t *testing.T) {
 }
 
 func TestKeyDistributionAndNodeChanges(t *testing.T) {
+	t.Parallel()
+
 	hashes := []struct {
 		name string
 		f    HashFactory
