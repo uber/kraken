@@ -12,6 +12,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/upstream"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/nginx"
+	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
 // Config defines agent configuration.
@@ -28,4 +29,5 @@ type Config struct {
 	AgentServer     agentserver.Config          `yaml:"agentserver"`
 	RegistryBackup  string                      `yaml:"registry_backup"`
 	Nginx           nginx.Config                `yaml:"nginx"`
+	TLS             httputil.TLSConfig          `yaml:"tls"`
 }

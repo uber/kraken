@@ -2,6 +2,7 @@ package tagclient
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,31 +38,35 @@ type Client interface {
 
 type singleClient struct {
 	addr string
+	tls  *tls.Config
 }
 
 // NewSingleClient returns a Client scoped to a single tagserver instance.
-func NewSingleClient(addr string) Client {
-	return &singleClient{addr}
+func NewSingleClient(addr string, config *tls.Config) Client {
+	return &singleClient{addr, config}
 }
 
 func (c *singleClient) Put(tag string, d core.Digest) error {
 	_, err := httputil.Put(
 		fmt.Sprintf("http://%s/tags/%s/digest/%s", c.addr, url.PathEscape(tag), d.String()),
-		httputil.SendTimeout(30*time.Second))
+		httputil.SendTimeout(30*time.Second),
+		httputil.SendTLSTransport(c.tls))
 	return err
 }
 
 func (c *singleClient) PutAndReplicate(tag string, d core.Digest) error {
 	_, err := httputil.Put(
 		fmt.Sprintf("http://%s/tags/%s/digest/%s?replicate=true", c.addr, url.PathEscape(tag), d.String()),
-		httputil.SendTimeout(30*time.Second))
+		httputil.SendTimeout(30*time.Second),
+		httputil.SendTLSTransport(c.tls))
 	return err
 }
 
 func (c *singleClient) Get(tag string) (core.Digest, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/tags/%s", c.addr, url.PathEscape(tag)),
-		httputil.SendTimeout(10*time.Second))
+		httputil.SendTimeout(10*time.Second),
+		httputil.SendTLSTransport(c.tls))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return core.Digest{}, ErrTagNotFound
@@ -83,7 +88,8 @@ func (c *singleClient) Get(tag string) (core.Digest, error) {
 func (c *singleClient) Has(tag string) (bool, error) {
 	_, err := httputil.Head(
 		fmt.Sprintf("http://%s/tags/%s", c.addr, url.PathEscape(tag)),
-		httputil.SendTimeout(10*time.Second))
+		httputil.SendTimeout(10*time.Second),
+		httputil.SendTLSTransport(c.tls))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return false, nil
@@ -96,7 +102,8 @@ func (c *singleClient) Has(tag string) (bool, error) {
 func (c *singleClient) List(prefix string) ([]string, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/list/%s", c.addr, prefix),
-		httputil.SendTimeout(60*time.Second))
+		httputil.SendTimeout(60*time.Second),
+		httputil.SendTLSTransport(c.tls))
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +119,8 @@ func (c *singleClient) List(prefix string) ([]string, error) {
 func (c *singleClient) ListRepository(repo string) ([]string, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/repositories/%s/tags", c.addr, url.PathEscape(repo)),
-		httputil.SendTimeout(60*time.Second))
+		httputil.SendTimeout(60*time.Second),
+		httputil.SendTLSTransport(c.tls))
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +140,8 @@ type ReplicateRequest struct {
 func (c *singleClient) Replicate(tag string) error {
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/remotes/tags/%s", c.addr, url.PathEscape(tag)),
-		httputil.SendTimeout(15*time.Second))
+		httputil.SendTimeout(15*time.Second),
+		httputil.SendTLSTransport(c.tls))
 	return err
 }
 
@@ -155,7 +164,8 @@ func (c *singleClient) DuplicateReplicate(
 			c.addr, url.PathEscape(tag), d.String()),
 		httputil.SendBody(bytes.NewReader(b)),
 		httputil.SendTimeout(10*time.Second),
-		httputil.SendRetry())
+		httputil.SendRetry(),
+		httputil.SendTLSTransport(c.tls))
 	return err
 }
 
@@ -175,14 +185,16 @@ func (c *singleClient) DuplicatePut(tag string, d core.Digest, delay time.Durati
 			c.addr, url.PathEscape(tag), d.String()),
 		httputil.SendBody(bytes.NewReader(b)),
 		httputil.SendTimeout(10*time.Second),
-		httputil.SendRetry())
+		httputil.SendRetry(),
+		httputil.SendTLSTransport(c.tls))
 	return err
 }
 
 func (c *singleClient) Origin() (string, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/origin", c.addr),
-		httputil.SendTimeout(5*time.Second))
+		httputil.SendTimeout(5*time.Second),
+		httputil.SendTLSTransport(c.tls))
 	if err != nil {
 		return "", err
 	}
@@ -196,12 +208,13 @@ func (c *singleClient) Origin() (string, error) {
 
 type clusterClient struct {
 	hosts healthcheck.List
+	tls   *tls.Config
 }
 
 // NewClusterClient creates a Client which operates on tagserver instances as
 // a cluster.
-func NewClusterClient(hosts healthcheck.List) Client {
-	return &clusterClient{hosts}
+func NewClusterClient(hosts healthcheck.List, config *tls.Config) Client {
+	return &clusterClient{hosts, config}
 }
 
 func (cc *clusterClient) do(request func(c Client) error) error {
@@ -211,7 +224,7 @@ func (cc *clusterClient) do(request func(c Client) error) error {
 	}
 	var err error
 	for addr := range addrs {
-		err = request(NewSingleClient(addr))
+		err = request(NewSingleClient(addr, cc.tls))
 		if httputil.IsNetworkError(err) {
 			cc.hosts.Failed(addr)
 			continue

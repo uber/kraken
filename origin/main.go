@@ -146,7 +146,7 @@ func main() {
 		log.Fatalf("Error creating cluster host list: %s", err)
 	}
 
-	healthCheckFilter := healthcheck.NewFilter(config.HealthCheck, healthcheck.Default())
+	healthCheckFilter := healthcheck.NewFilter(config.HealthCheck, healthcheck.Default(nil))
 
 	hashRing := hashring.New(config.HashRing, cluster, healthCheckFilter)
 	go hashRing.Monitor(nil)

@@ -9,6 +9,7 @@ import (
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/proxy/registryoverride"
+	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
 // Config defines proxy configuration
@@ -21,4 +22,5 @@ type Config struct {
 	Metrics          metrics.Config          `yaml:"metrics"`
 	RegistryOverride registryoverride.Config `yaml:"registryoverride"`
 	Nginx            nginx.Config            `yaml:"nginx"`
+	TLS              httputil.TLSConfig      `yaml:"tls"`
 }

@@ -5,6 +5,7 @@ import (
 
 	"code.uber.internal/infra/kraken/build-index/tagclient"
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
+	"code.uber.internal/infra/kraken/lib/healthcheck"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/nginx"
@@ -12,6 +13,7 @@ import (
 	"code.uber.internal/infra/kraken/proxy/registryoverride"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/flagutil"
+	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 )
 
@@ -53,11 +55,20 @@ func main() {
 	r := blobclient.NewClientResolver(blobclient.NewProvider(), origins)
 	originCluster := blobclient.NewClusterClient(r)
 
-	buildIndexes, err := config.BuildIndex.Build()
+	tls, err := config.TLS.Build()
+	if err != nil {
+		if err != httputil.ErrTLSDisabled {
+			log.Fatalf("Error building client tls config: %s", err)
+		}
+		log.Warnf("TLS is disabled")
+	}
+
+	buildIndexes, err := config.BuildIndex.BuildWithHealthChecker(healthcheck.Default(tls))
 	if err != nil {
 		log.Fatalf("Error building build-index host list: %s", err)
 	}
-	tagClient := tagclient.NewClusterClient(buildIndexes)
+
+	tagClient := tagclient.NewClusterClient(buildIndexes, tls)
 
 	transferer := transfer.NewReadWriteTransferer(tagClient, originCluster, cas)
 
