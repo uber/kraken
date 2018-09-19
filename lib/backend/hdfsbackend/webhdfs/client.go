@@ -15,7 +15,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
-// Client wraps webhdfs operations.
+// Client wraps webhdfs operations. All paths must be absolute.
 type Client interface {
 	Create(path string, src io.Reader) error
 	Rename(from, to string) error
@@ -103,7 +103,7 @@ func (c *client) Create(path string, src io.Reader) error {
 	var nnErr error
 	for _, nn := range c.namenodes {
 		nameresp, nnErr = httputil.Put(
-			fmt.Sprintf("http://%s/%s?%s", nn, path, v.Encode()),
+			fmt.Sprintf("http://%s%s?%s", nn, path, v.Encode()),
 			httputil.SendRedirect(func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse
 			}),
@@ -151,7 +151,7 @@ func (c *client) Rename(from, to string) error {
 	var resp *http.Response
 	var nnErr error
 	for _, nn := range c.namenodes {
-		resp, nnErr = httputil.Put(fmt.Sprintf("http://%s/%s?%s", nn, from, v.Encode()))
+		resp, nnErr = httputil.Put(fmt.Sprintf("http://%s%s?%s", nn, from, v.Encode()))
 		if nnErr != nil {
 			if retryable(nnErr) {
 				continue
@@ -172,7 +172,7 @@ func (c *client) Open(path string, dst io.Writer) error {
 	var resp *http.Response
 	var nnErr error
 	for _, nn := range c.namenodes {
-		resp, nnErr = httputil.Get(fmt.Sprintf("http://%s/%s?%s", nn, path, v.Encode()))
+		resp, nnErr = httputil.Get(fmt.Sprintf("http://%s%s?%s", nn, path, v.Encode()))
 		if nnErr != nil {
 			if retryable(nnErr) {
 				continue
@@ -201,7 +201,7 @@ func (c *client) GetFileStatus(path string) (FileStatus, error) {
 	var resp *http.Response
 	var nnErr error
 	for _, nn := range c.namenodes {
-		resp, nnErr = httputil.Get(fmt.Sprintf("http://%s/%s?%s", nn, path, v.Encode()))
+		resp, nnErr = httputil.Get(fmt.Sprintf("http://%s%s?%s", nn, path, v.Encode()))
 		if nnErr != nil {
 			if retryable(nnErr) {
 				continue
@@ -228,7 +228,7 @@ func (c *client) ListFileStatus(path string) ([]FileStatus, error) {
 	var resp *http.Response
 	var nnErr error
 	for _, nn := range c.namenodes {
-		resp, nnErr = httputil.Get(fmt.Sprintf("http://%s/%s?%s", nn, path, v.Encode()))
+		resp, nnErr = httputil.Get(fmt.Sprintf("http://%s%s?%s", nn, path, v.Encode()))
 		if nnErr != nil {
 			if retryable(nnErr) {
 				continue
