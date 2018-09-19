@@ -24,7 +24,7 @@ type Config struct {
 
 func (c *Config) applyDefaults() {
 	if c.RootDirectory == "" {
-		c.RootDirectory = "/webhdfs/v1/infra/dockerRegistry/"
+		c.RootDirectory = "/infra/dockerRegistry/"
 	}
 	if c.ListConcurrency == 0 {
 		c.ListConcurrency = 4
