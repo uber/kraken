@@ -26,10 +26,10 @@ type testServer struct {
 
 func (s *testServer) handler() http.Handler {
 	r := chi.NewRouter()
-	r.Get("/root*", s.getName)
-	r.Get("/datanode*", s.getData)
-	r.Put("/root*", s.putName)
-	r.Put("/datanode*", s.putData)
+	r.Get("/webhdfs/v1*", s.getName)
+	r.Get("/datanode/webhdfs/v1*", s.getData)
+	r.Put("/webhdfs/v1*", s.putName)
+	r.Put("/datanode/webhdfs/v1*", s.putData)
 	return r
 }
 
@@ -236,7 +236,7 @@ func TestClientRename(t *testing.T) {
 		putName: redirectToDataNode,
 		putData: func(w http.ResponseWriter, r *http.Request) {
 			called = true
-			require.Equal("/datanode"+from, r.URL.Path)
+			require.Equal("/datanode/webhdfs/v1"+from, r.URL.Path)
 			require.Equal(to, r.URL.Query().Get("destination"))
 		},
 	}
@@ -258,7 +258,7 @@ func TestClientMkdirs(t *testing.T) {
 		putName: redirectToDataNode,
 		putData: func(w http.ResponseWriter, r *http.Request) {
 			called = true
-			require.Equal("/datanode"+_testFile, r.URL.Path)
+			require.Equal("/datanode/webhdfs/v1"+_testFile, r.URL.Path)
 		},
 	}
 	addr, stop := testutil.StartServer(server.handler())
