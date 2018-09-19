@@ -249,6 +249,27 @@ func TestClientRename(t *testing.T) {
 	require.True(called)
 }
 
+func TestClientMkdirs(t *testing.T) {
+	require := require.New(t)
+
+	called := false
+
+	server := &testServer{
+		putName: redirectToDataNode,
+		putData: func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			require.Equal("/datanode"+_testFile, r.URL.Path)
+		},
+	}
+	addr, stop := testutil.StartServer(server.handler())
+	defer stop()
+
+	client := newClient(addr)
+
+	require.NoError(client.Mkdirs(_testFile))
+	require.True(called)
+}
+
 func TestClientGetFileStatus(t *testing.T) {
 	require := require.New(t)
 
