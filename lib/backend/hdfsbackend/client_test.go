@@ -26,7 +26,7 @@ func newClientMocks(t *testing.T) (*clientMocks, func()) {
 
 func (m *clientMocks) new() *Client {
 	c, err := NewClientWithWebHDFS(Config{
-		RootDirectory: "root",
+		RootDirectory: "/root",
 		NamePath:      "identity",
 	}, m.webhdfs)
 	if err != nil {
@@ -43,7 +43,7 @@ func TestClientStat(t *testing.T) {
 
 	client := mocks.new()
 
-	mocks.webhdfs.EXPECT().GetFileStatus("root/test").Return(webhdfs.FileStatus{Length: 32}, nil)
+	mocks.webhdfs.EXPECT().GetFileStatus("/root/test").Return(webhdfs.FileStatus{Length: 32}, nil)
 
 	info, err := client.Stat("test")
 	require.NoError(err)
@@ -60,7 +60,7 @@ func TestClientDownload(t *testing.T) {
 
 	data := randutil.Text(32)
 
-	mocks.webhdfs.EXPECT().Open("root/test", mockutil.MatchWriter(data)).Return(nil)
+	mocks.webhdfs.EXPECT().Open("/root/test", mockutil.MatchWriter(data)).Return(nil)
 
 	var b bytes.Buffer
 	require.NoError(client.Download("test", &b))
@@ -78,9 +78,9 @@ func TestClientUpload(t *testing.T) {
 	data := randutil.Text(32)
 
 	mocks.webhdfs.EXPECT().Create(
-		mockutil.MatchRegex("root/_uploads/.+"), mockutil.MatchReader(data)).Return(nil)
+		mockutil.MatchRegex("/root/_uploads/.+"), mockutil.MatchReader(data)).Return(nil)
 
-	mocks.webhdfs.EXPECT().Rename(mockutil.MatchRegex("root/_uploads/.+"), "root/test").Return(nil)
+	mocks.webhdfs.EXPECT().Rename(mockutil.MatchRegex("/root/_uploads/.+"), "/root/test").Return(nil)
 
 	require.NoError(client.Upload("test", bytes.NewReader(data)))
 }
@@ -114,7 +114,7 @@ func TestClientList(t *testing.T) {
 
 			client := mocks.new()
 
-			mocks.webhdfs.EXPECT().ListFileStatus("root").Return([]webhdfs.FileStatus{{
+			mocks.webhdfs.EXPECT().ListFileStatus("/root").Return([]webhdfs.FileStatus{{
 				PathSuffix: "foo",
 				Type:       "DIRECTORY",
 			}, {
@@ -122,7 +122,7 @@ func TestClientList(t *testing.T) {
 				Type:       "DIRECTORY",
 			}}, nil).MaxTimes(1)
 
-			mocks.webhdfs.EXPECT().ListFileStatus("root/foo").Return([]webhdfs.FileStatus{{
+			mocks.webhdfs.EXPECT().ListFileStatus("/root/foo").Return([]webhdfs.FileStatus{{
 				PathSuffix: "bar.txt",
 				Type:       "FILE",
 			}, {
@@ -133,12 +133,12 @@ func TestClientList(t *testing.T) {
 				Type:       "DIRECTORY",
 			}}, nil).MaxTimes(1)
 
-			mocks.webhdfs.EXPECT().ListFileStatus("root/foo/cats").Return([]webhdfs.FileStatus{{
+			mocks.webhdfs.EXPECT().ListFileStatus("/root/foo/cats").Return([]webhdfs.FileStatus{{
 				PathSuffix: "meow.txt",
 				Type:       "FILE",
 			}}, nil).MaxTimes(1)
 
-			mocks.webhdfs.EXPECT().ListFileStatus("root/empty").Return(nil, nil).MaxTimes(1)
+			mocks.webhdfs.EXPECT().ListFileStatus("/root/empty").Return(nil, nil).MaxTimes(1)
 
 			names, err := client.List(test.prefix)
 			require.NoError(err)

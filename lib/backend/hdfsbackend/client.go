@@ -1,6 +1,7 @@
 package hdfsbackend
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -36,6 +37,9 @@ func NewClient(config Config) (*Client, error) {
 // testing.
 func NewClientWithWebHDFS(config Config, webhdfs webhdfs.Client) (*Client, error) {
 	config.applyDefaults()
+	if !path.IsAbs(config.RootDirectory) {
+		return nil, errors.New("invalid config: root_directory must be absolute path")
+	}
 	pather, err := namepath.New(config.RootDirectory, config.NamePath)
 	if err != nil {
 		return nil, fmt.Errorf("namepath: %s", err)

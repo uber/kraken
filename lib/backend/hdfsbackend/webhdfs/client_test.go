@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const _testFile = "root/test"
+const _testFile = "/root/test"
 
 type testServer struct {
 	getName, getData, putName, putData http.HandlerFunc
@@ -27,9 +27,9 @@ type testServer struct {
 func (s *testServer) handler() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/root*", s.getName)
-	r.Get("/datanode/*", s.getData)
+	r.Get("/datanode*", s.getData)
 	r.Put("/root*", s.putName)
-	r.Put("/datanode/*", s.putData)
+	r.Put("/datanode*", s.putData)
 	return r
 }
 
@@ -227,8 +227,8 @@ func TestClientCreateErrorsWhenExceedsBufferGuard(t *testing.T) {
 func TestClientRename(t *testing.T) {
 	require := require.New(t)
 
-	from := "root/from"
-	to := "root/to"
+	from := "/root/from"
+	to := "/root/to"
 
 	called := false
 
@@ -236,7 +236,7 @@ func TestClientRename(t *testing.T) {
 		putName: redirectToDataNode,
 		putData: func(w http.ResponseWriter, r *http.Request) {
 			called = true
-			require.Equal("/datanode/"+from, r.URL.Path)
+			require.Equal("/datanode"+from, r.URL.Path)
 			require.Equal(to, r.URL.Query().Get("destination"))
 		},
 	}
@@ -318,7 +318,7 @@ func TestClientListFileStatus(t *testing.T) {
 
 	client := newClient(addr)
 
-	result, err := client.ListFileStatus("root")
+	result, err := client.ListFileStatus("/root")
 	require.NoError(err)
 	require.Equal([]FileStatus{{
 		PathSuffix: _testFile,
