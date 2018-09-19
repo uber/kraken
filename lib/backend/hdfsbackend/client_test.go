@@ -80,6 +80,8 @@ func TestClientUpload(t *testing.T) {
 	mocks.webhdfs.EXPECT().Create(
 		mockutil.MatchRegex("/root/_uploads/.+"), mockutil.MatchReader(data)).Return(nil)
 
+	mocks.webhdfs.EXPECT().Mkdirs("/root").Return(nil)
+
 	mocks.webhdfs.EXPECT().Rename(mockutil.MatchRegex("/root/_uploads/.+"), "/root/test").Return(nil)
 
 	require.NoError(client.Upload("test", bytes.NewReader(data)))

@@ -72,6 +72,18 @@ func (mr *MockClientMockRecorder) ListFileStatus(arg0 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFileStatus", reflect.TypeOf((*MockClient)(nil).ListFileStatus), arg0)
 }
 
+// Mkdirs mocks base method
+func (m *MockClient) Mkdirs(arg0 string) error {
+	ret := m.ctrl.Call(m, "Mkdirs", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Mkdirs indicates an expected call of Mkdirs
+func (mr *MockClientMockRecorder) Mkdirs(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Mkdirs", reflect.TypeOf((*MockClient)(nil).Mkdirs), arg0)
+}
+
 // Open mocks base method
 func (m *MockClient) Open(arg0 string, arg1 io.Writer) error {
 	ret := m.ctrl.Call(m, "Open", arg0, arg1)

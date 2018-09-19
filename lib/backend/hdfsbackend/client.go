@@ -79,6 +79,9 @@ func (c *Client) Upload(name string, src io.Reader) error {
 	if err := c.webhdfs.Create(uploadPath, src); err != nil {
 		return err
 	}
+	if err := c.webhdfs.Mkdirs(path.Dir(blobPath)); err != nil {
+		return err
+	}
 	return c.webhdfs.Rename(uploadPath, blobPath)
 }
 

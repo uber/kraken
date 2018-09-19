@@ -19,6 +19,7 @@ import (
 type Client interface {
 	Create(path string, src io.Reader) error
 	Rename(from, to string) error
+	Mkdirs(path string) error
 	Open(path string, dst io.Writer) error
 	GetFileStatus(path string) (FileStatus, error)
 	ListFileStatus(path string) ([]FileStatus, error)
@@ -152,6 +153,26 @@ func (c *client) Rename(from, to string) error {
 	var nnErr error
 	for _, nn := range c.namenodes {
 		resp, nnErr = httputil.Put(fmt.Sprintf("http://%s%s?%s", nn, from, v.Encode()))
+		if nnErr != nil {
+			if retryable(nnErr) {
+				continue
+			}
+			return nnErr
+		}
+		resp.Body.Close()
+		return nil
+	}
+	return allNameNodesFailedError{nnErr}
+}
+
+func (c *client) Mkdirs(path string) error {
+	v := c.values()
+	v.Set("op", "MKDIRS")
+
+	var resp *http.Response
+	var nnErr error
+	for _, nn := range c.namenodes {
+		resp, nnErr = httputil.Put(fmt.Sprintf("http://%s%s?%s", nn, path, v.Encode()))
 		if nnErr != nil {
 			if retryable(nnErr) {
 				continue
