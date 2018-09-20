@@ -47,7 +47,7 @@ type Server struct {
 	provider              tagclient.Provider
 
 	// For checking if a tag has all dependent blobs.
-	tagTypes tagtype.Manager
+	depResolver tagtype.DependencyResolver
 }
 
 // New creates a new Server.
@@ -62,7 +62,7 @@ func New(
 	remotes tagreplication.Remotes,
 	tagReplicationManager persistedretry.Manager,
 	provider tagclient.Provider,
-	tagTypes tagtype.Manager) *Server {
+	depResolver tagtype.DependencyResolver) *Server {
 
 	config = config.applyDefaults()
 
@@ -81,7 +81,7 @@ func New(
 		remotes:               remotes,
 		tagReplicationManager: tagReplicationManager,
 		provider:              provider,
-		tagTypes:              tagTypes,
+		depResolver:           depResolver,
 	}
 }
 
@@ -144,9 +144,9 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 		return handler.Errorf("parse query arg `replicate`: %s", err)
 	}
 
-	deps, err := s.getDeps(tag, d)
+	deps, err := s.depResolver.Resolve(tag, d)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve dependencies: %s", err)
 	}
 	if err := s.putTag(tag, d, deps); err != nil {
 		return err
@@ -285,9 +285,9 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 		}
 		return handler.Errorf("storage: %s", err)
 	}
-	deps, err := s.getDeps(tag, d)
+	deps, err := s.depResolver.Resolve(tag, d)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve dependencies: %s", err)
 	}
 	if err := s.replicateTag(tag, d, deps); err != nil {
 		return err
@@ -327,18 +327,6 @@ func (s *Server) getOriginHandler(w http.ResponseWriter, r *http.Request) error 
 		return handler.Errorf("write local origin dns: %s", err)
 	}
 	return nil
-}
-
-func (s *Server) getDeps(tag string, d core.Digest) (core.DigestList, error) {
-	depResolver, err := s.tagTypes.GetDependencyResolver(tag)
-	if err != nil {
-		return nil, handler.Errorf("get dependency resolver: %s", err)
-	}
-	deps, err := depResolver.Resolve(tag, d)
-	if err != nil {
-		return nil, handler.Errorf("get dependencies: %s", err)
-	}
-	return deps, nil
 }
 
 func (s *Server) putTag(tag string, d core.Digest, deps core.DigestList) error {

@@ -242,7 +242,7 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/build-index/tagtype/mocktagtype.go \
 		-package mocktagtype \
-		code.uber.internal/infra/kraken/build-index/tagtype Manager,DependencyResolver
+		code.uber.internal/infra/kraken/build-index/tagtype DependencyResolver
 
 	mkdir -p mocks/build-index/tagclient
 	$(mockgen) \

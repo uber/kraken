@@ -121,7 +121,7 @@ func main() {
 
 	tagStore := tagstore.New(config.TagStore, stats, ss, backends, writeBackManager)
 
-	tagTypes, err := tagtype.NewManager(config.TagTypes, originClient)
+	depResolver, err := tagtype.NewMap(config.TagTypes, originClient)
 	if err != nil {
 		log.Fatalf("Error creating tag type manager: %s", err)
 	}
@@ -137,7 +137,7 @@ func main() {
 		remotes,
 		tagReplicationManager,
 		tagclient.NewProvider(tls),
-		tagTypes)
+		depResolver)
 	go func() {
 		log.Fatal(server.ListenAndServe())
 	}()
