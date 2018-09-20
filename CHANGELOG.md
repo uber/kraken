@@ -4,6 +4,7 @@
 - Support TLS in build-index (disabled)
 - Use temporary upload directory and rename commit in HDFS to prevent partial layer uploads
 - Unit test performance improvements
+- Build time improvements
 - Simplify tagtype interfaces
 
 0.0.14 (2018-09-17)
