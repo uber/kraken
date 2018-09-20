@@ -1,3 +1,11 @@
+0.0.15 (2018-09-20)
+====
+- Upgrade all components to stretch
+- Support TLS in build-index (disabled)
+- Use temporary upload directory and rename commit in HDFS to prevent partial layer uploads
+- Unit test performance improvements
+- Simplify tagtype interfaces
+
 0.0.14 (2018-09-17)
 ====
 - Acceptance test improvements (@codyg)
