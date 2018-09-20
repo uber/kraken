@@ -48,12 +48,15 @@ $(PROTO): $(wildcard proto/*)
 	mkdir -p $(GEN_DIR)
 	go-build/protoc --plugin=go-build/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$@))
 
+$(PROGS): $(PROTO)
+
 tracker/tracker: $(wildcard tracker/*.go)
-agent/agent: $(PROTO) $(wildcard agent/*.go)
-origin/origin: $(PROTO) $(wildcard origin/*.go)
-tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
+agent/agent: $(wildcard agent/*.go)
+origin/origin: $(wildcard origin/*.go)
 proxy/proxy: $(wildcard proxy/*.go)
 build-index/build-index: $(wildcard build-index/*.go)
+
+tools/bin/puller/puller: $(wildcard tools/bin/puller/*.go)
 tools/bin/benchmarks/benchmarks: $(wildcard tools/bin/benchmarks/*.go)
 tools/bin/reload/reload: $(wildcard tools/bin/reload/*.go)
 tools/bin/simulation/simulation: $(wildcard tools/bin/simulation/*.go)
