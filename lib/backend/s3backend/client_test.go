@@ -139,3 +139,44 @@ func TestClientUpload(t *testing.T) {
 
 	require.NoError(client.Upload("test", data))
 }
+
+func TestClientList(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	client := mocks.new()
+
+	mocks.s3.EXPECT().ListObjectsPages(
+		&s3.ListObjectsInput{
+			Bucket:  aws.String("test-bucket"),
+			MaxKeys: aws.Int64(250),
+			Prefix:  aws.String("root/test"),
+		},
+		gomock.Any(),
+	).DoAndReturn(func(
+		input *s3.ListObjectsInput,
+		f func(page *s3.ListObjectsOutput, last bool) bool) error {
+
+		f(&s3.ListObjectsOutput{
+			Contents: []*s3.Object{
+				{Key: aws.String("root/test/a")},
+				{Key: aws.String("root/test/b")},
+			},
+		}, false)
+
+		f(&s3.ListObjectsOutput{
+			Contents: []*s3.Object{
+				{Key: aws.String("root/test/c")},
+				{Key: aws.String("root/test/d")},
+			},
+		}, true)
+
+		return nil
+	})
+
+	names, err := client.List("test")
+	require.NoError(err)
+	require.Equal([]string{"test/a", "test/b", "test/c", "test/d"}, names)
+}

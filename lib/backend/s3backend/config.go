@@ -18,7 +18,10 @@ type Config struct {
 	DownloadPartSize int64  `yaml:"download_part_size"` // part size s3 manager uses for download
 
 	UploadConcurrency   int `yaml:"upload_concurrency"`   // # of concurrent go-routines s3 manager uses for upload
-	DownloadConcurrency int `yaml:"donwload_concurrency"` // # of concurrent go-routines s3 manager uses for download
+	DownloadConcurrency int `yaml:"download_concurrency"` // # of concurrent go-routines s3 manager uses for download
+
+	// ListMaxKeys sets the max keys returned per page.
+	ListMaxKeys int `yaml:"list_max_keys"`
 
 	// BufferGuard protects download from downloading into an oversized buffer
 	// when io.WriterAt is not implemented.
@@ -57,7 +60,7 @@ func (c *Config) applyDefaults() {
 	if c.BufferGuard == 0 {
 		c.BufferGuard = 10 * datasize.MB
 	}
-	if c.RootDirectory == "" {
-		c.RootDirectory = "/"
+	if c.ListMaxKeys == 0 {
+		c.ListMaxKeys = 250
 	}
 }
