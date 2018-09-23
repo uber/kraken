@@ -4,19 +4,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
+	"path"
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
-	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/rwutil"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
@@ -24,11 +22,19 @@ import (
 type Client struct {
 	config Config
 	pather namepath.Pather
-	svc    s3iface.S3API
+	s3     S3
+}
+
+// Option allows setting optional Client parameters.
+type Option func(*Client)
+
+// WithS3 configures a Client with a custom S3 implementation.
+func WithS3(s3 S3) Option {
+	return func(c *Client) { c.s3 = s3 }
 }
 
 // NewClient creates a new Client.
-func NewClient(config Config, userAuth UserAuthConfig) (*Client, error) {
+func NewClient(config Config, userAuth UserAuthConfig, opts ...Option) (*Client, error) {
 	config.applyDefaults()
 	if config.Username == "" {
 		return nil, errors.New("invalid config: username required")
@@ -39,28 +45,39 @@ func NewClient(config Config, userAuth UserAuthConfig) (*Client, error) {
 	if config.Bucket == "" {
 		return nil, errors.New("invalid config: bucket required")
 	}
+	if !path.IsAbs(config.RootDirectory) {
+		return nil, errors.New("invalid config: root_directory must be absolute path")
+	}
 
 	pather, err := namepath.New(config.RootDirectory, config.NamePath)
 	if err != nil {
 		return nil, fmt.Errorf("namepath: %s", err)
 	}
 
-	var creds *credentials.Credentials
-	if auth, ok := userAuth[config.Username]; ok {
-		log.Info("S3 backend using Langley credentials")
-		creds = credentials.NewStaticCredentials(
-			auth.S3.AccessKeyID, auth.S3.AccessSecretKey, auth.S3.SessionToken)
-	} else {
-		log.Info("S3 backend using .aws/credentials")
-		if _, err := os.Stat(".aws/credentials"); os.IsNotExist(err) {
-			return nil, errors.New(".aws/credentials file does not exist")
-		}
-		creds = credentials.NewSharedCredentials("", config.Username)
+	auth, ok := userAuth[config.Username]
+	if !ok {
+		return nil, errors.New("auth not configured for username")
 	}
+	creds := credentials.NewStaticCredentials(
+		auth.S3.AccessKeyID, auth.S3.AccessSecretKey, auth.S3.SessionToken)
 
-	svc := s3.New(session.New(), aws.NewConfig().WithRegion(config.Region).WithCredentials(creds))
+	api := s3.New(session.New(), aws.NewConfig().WithRegion(config.Region).WithCredentials(creds))
 
-	return &Client{config, pather, svc}, nil
+	downloader := s3manager.NewDownloaderWithClient(api, func(d *s3manager.Downloader) {
+		d.PartSize = config.DownloadPartSize
+		d.Concurrency = config.DownloadConcurrency
+	})
+
+	uploader := s3manager.NewUploaderWithClient(api, func(u *s3manager.Uploader) {
+		u.PartSize = config.UploadPartSize
+		u.Concurrency = config.UploadConcurrency
+	})
+
+	client := &Client{config, pather, join{api, downloader, uploader}}
+	for _, opt := range opts {
+		opt(client)
+	}
+	return client, nil
 }
 
 // Stat returns blob info for name.
@@ -69,7 +86,7 @@ func (c *Client) Stat(name string) (*core.BlobInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("blob path: %s", err)
 	}
-	output, err := c.svc.HeadObject(&s3.HeadObjectInput{
+	output, err := c.s3.HeadObject(&s3.HeadObjectInput{
 		Bucket: aws.String(c.config.Bucket),
 		Key:    aws.String(path),
 	})
@@ -102,17 +119,11 @@ func (c *Client) Download(name string, dst io.Writer) error {
 		writerAt = rwutil.NewCappedBuffer(int(c.config.BufferGuard))
 	}
 
-	downloader := s3manager.NewDownloaderWithClient(c.svc, func(d *s3manager.Downloader) {
-		d.PartSize = c.config.DownloadPartSize // per part
-		d.Concurrency = c.config.DownloadConcurrency
-	})
-
-	dlParams := &s3.GetObjectInput{
+	input := &s3.GetObjectInput{
 		Bucket: aws.String(c.config.Bucket),
 		Key:    aws.String(path),
 	}
-
-	if _, err := downloader.Download(writerAt, dlParams); err != nil {
+	if _, err := c.s3.Download(writerAt, input); err != nil {
 		if isNotFound(err) {
 			return backenderrors.ErrBlobNotFound
 		}
@@ -134,22 +145,13 @@ func (c *Client) Upload(name string, src io.Reader) error {
 	if err != nil {
 		return fmt.Errorf("blob path: %s", err)
 	}
-
-	uploader := s3manager.NewUploaderWithClient(c.svc, func(u *s3manager.Uploader) {
-		u.PartSize = c.config.UploadPartSize // per part,
-		u.Concurrency = c.config.UploadConcurrency
-	})
-
-	upParams := &s3manager.UploadInput{
+	input := &s3manager.UploadInput{
 		Bucket: aws.String(c.config.Bucket),
 		Key:    aws.String(path),
 		Body:   src,
 	}
-
-	// TODO(igor): support resumable uploads, for now we're ignoring UploadOutput
-	// entirely
-	_, err = uploader.Upload(upParams, func(u *s3manager.Uploader) {
-		u.LeavePartsOnError = false // delete the parts if the upload fails.
+	_, err = c.s3.Upload(input, func(u *s3manager.Uploader) {
+		u.LeavePartsOnError = false // Delete the parts if the upload fails.
 	})
 	return err
 }

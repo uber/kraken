@@ -1,73 +1,141 @@
 package s3backend
 
 import (
-	"io/ioutil"
-	"net/http"
-	"os"
+	"bytes"
 	"testing"
 
-	"code.uber.internal/infra/kraken/utils/memsize"
+	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/mocks/lib/backend/s3backend"
+	"code.uber.internal/infra/kraken/utils/mockutil"
 	"code.uber.internal/infra/kraken/utils/randutil"
+	"code.uber.internal/infra/kraken/utils/rwutil"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
 
-func configFixture(region string, bucket string) Config {
-	return Config{
-		Username: "test-user",
-		Region:   region,
-		Bucket:   bucket,
-		NamePath: "identity",
+type clientMocks struct {
+	config   Config
+	userAuth UserAuthConfig
+	s3       *mocks3backend.MockS3
+}
+
+func newClientMocks(t *testing.T) (*clientMocks, func()) {
+	ctrl := gomock.NewController(t)
+
+	var auth AuthConfig
+	auth.S3.AccessKeyID = "accesskey"
+	auth.S3.AccessSecretKey = "secret"
+
+	return &clientMocks{
+		config: Config{
+			Username:      "test-user",
+			Region:        "test-region",
+			Bucket:        "test-bucket",
+			NamePath:      "identity",
+			RootDirectory: "/root",
+		},
+		userAuth: UserAuthConfig{"test-user": auth},
+		s3:       mocks3backend.NewMockS3(ctrl),
+	}, ctrl.Finish
+}
+
+func (m *clientMocks) new() *Client {
+	c, err := NewClient(m.config, m.userAuth, WithS3(m.s3))
+	if err != nil {
+		panic(err)
 	}
+	return c
 }
 
-func authFixture() UserAuthConfig {
-	var c AuthConfig
-	c.S3.AccessKeyID = "accesskey"
-	c.S3.AccessSecretKey = "secret"
-	return UserAuthConfig{"test-user": c}
-}
-
-func TestS3UploadSuccess(t *testing.T) {
+func TestClientStat(t *testing.T) {
 	require := require.New(t)
 
-	// generate 32KB of random data
-	b := randutil.Blob(32 * memsize.KB)
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
 
-	config := configFixture("us-west-1", "test_bucket")
+	client := mocks.new()
 
-	s3client, err := NewClient(config, authFixture())
+	var length int64 = 100
+
+	mocks.s3.EXPECT().HeadObject(&s3.HeadObjectInput{
+		Bucket: aws.String("test-bucket"),
+		Key:    aws.String("/root/test"),
+	}).Return(&s3.HeadObjectOutput{ContentLength: &length}, nil)
+
+	info, err := client.Stat("test")
 	require.NoError(err)
-	req, err := http.NewRequest("POST", "", nil)
-	require.NoError(err)
-
-	s3client.svc = NewS3Mock(b, req)
-
-	f, err := ioutil.TempFile("", "s3test")
-	require.NoError(err)
-	defer os.Remove(f.Name())
-
-	require.NoError(s3client.Upload(f.Name(), f))
+	require.Equal(core.NewBlobInfo(100), info)
 }
 
-func TestS3DownloadSuccess(t *testing.T) {
+func TestClientDownload(t *testing.T) {
 	require := require.New(t)
 
-	// generate 32KB of random data
-	b := randutil.Blob(32 * memsize.KB)
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
 
-	config := configFixture("us-west-1", "test_bucket")
+	client := mocks.new()
 
-	s3client, err := NewClient(config, authFixture())
-	require.NoError(err)
-	req, err := http.NewRequest("POST", "", nil)
-	require.NoError(err)
+	data := randutil.Text(32)
 
-	s3client.svc = NewS3Mock(b, req)
+	mocks.s3.EXPECT().Download(
+		mockutil.MatchWriterAt(data),
+		&s3.GetObjectInput{
+			Bucket: aws.String("test-bucket"),
+			Key:    aws.String("/root/test"),
+		},
+	).Return(int64(len(data)), nil)
 
-	f, err := ioutil.TempFile("", "s3test")
-	require.NoError(err)
-	defer os.Remove(f.Name())
+	var b bytes.Buffer
+	require.NoError(client.Download("test", &b))
+	require.Equal(data, b.Bytes())
+}
 
-	require.NoError(s3client.Download(f.Name(), f))
+func TestClientDownloadWithBuffer(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	client := mocks.new()
+
+	data := randutil.Text(32)
+
+	mocks.s3.EXPECT().Download(
+		mockutil.MatchWriterAt(data),
+		&s3.GetObjectInput{
+			Bucket: aws.String("test-bucket"),
+			Key:    aws.String("/root/test"),
+		},
+	).Return(int64(len(data)), nil)
+
+	// A plain io.Writer will require a buffer to download.
+	w := make(rwutil.PlainWriter, len(data))
+	require.NoError(client.Download("test", w))
+	require.Equal(data, []byte(w))
+}
+
+func TestClientUpload(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	client := mocks.new()
+
+	data := bytes.NewReader(randutil.Text(32))
+
+	mocks.s3.EXPECT().Upload(
+		&s3manager.UploadInput{
+			Bucket: aws.String("test-bucket"),
+			Key:    aws.String("/root/test"),
+			Body:   data,
+		},
+		gomock.Any(),
+	).Return(nil, nil)
+
+	require.NoError(client.Upload("test", data))
 }

@@ -63,6 +63,28 @@ func TestMatchWriter(t *testing.T) {
 	require.Equal(string(b), string(result))
 }
 
+func TestMatchWriterAt(t *testing.T) {
+	require := require.New(t)
+
+	f, err := ioutil.TempFile("", "")
+	require.NoError(err)
+	defer os.Remove(f.Name())
+
+	b := []byte("some text")
+
+	m := MatchWriterAt(b)
+
+	require.True(m.Matches(f))
+
+	// Reset file.
+	_, err = f.Seek(0, 0)
+	require.NoError(err)
+
+	// WriterAtMatcher should write to the file.
+	result, err := ioutil.ReadAll(f)
+	require.Equal(string(b), string(result))
+}
+
 func TestMatchRegex(t *testing.T) {
 	tests := []struct {
 		expected string

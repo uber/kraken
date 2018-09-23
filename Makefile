@@ -211,6 +211,16 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
+	mkdir -p mocks/lib/backend/s3backend
+	$(mockgen) \
+		-destination=mocks/lib/backend/s3backend/mocks.go \
+		-package mocks3backend \
+		code.uber.internal/infra/kraken/lib/backend/s3backend S3
+	
+	# mockgen doesn't play nice when importing vendor code. Must strip the vendor prefix
+	# from the imports.
+	sed -i '' s,code.uber.internal/infra/kraken/vendor/,, mocks/lib/backend/s3backend/mocks.go
+
 	mkdir -p mocks/lib/backend/hdfsbackend/webhdfs
 	$(mockgen) \
 		-destination=mocks/lib/backend/hdfsbackend/webhdfs/mocks.go \
