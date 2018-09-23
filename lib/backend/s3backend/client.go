@@ -9,6 +9,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
+	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/rwutil"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -161,7 +162,35 @@ func isNotFound(err error) bool {
 	return ok && awsErr.Code() == s3.ErrCodeNoSuchKey || awsErr.Code() == "NotFound"
 }
 
-// List TODO(codyg): Implement S3 list.
+// List lists names with start with prefix.
 func (c *Client) List(prefix string) ([]string, error) {
-	return nil, errors.New("unimplemented")
+	// For whatever reason, the S3 list API does not accept an absolute path
+	// for prefix. Thus, the root is stripped from the input and added manually
+	// to each output key.
+	var names []string
+	err := c.s3.ListObjectsPages(&s3.ListObjectsInput{
+		Bucket:  aws.String(c.config.Bucket),
+		MaxKeys: aws.Int64(int64(c.config.ListMaxKeys)),
+		Prefix:  aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
+	}, func(page *s3.ListObjectsOutput, last bool) bool {
+		for _, object := range page.Contents {
+			if object.Key == nil {
+				log.With(
+					"prefix", prefix,
+					"object", object).Error("List encountered nil S3 object key")
+				continue
+			}
+			name, err := c.pather.NameFromBlobPath(path.Join("/", *object.Key))
+			if err != nil {
+				log.With("key", *object.Key).Errorf("Error converting blob path into name: %s", err)
+				continue
+			}
+			names = append(names, name)
+		}
+		return true
+	})
+	if err != nil {
+		return nil, err
+	}
+	return names, nil
 }
