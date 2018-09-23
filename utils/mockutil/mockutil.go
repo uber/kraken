@@ -86,3 +86,31 @@ func (m *WriterMatcher) Matches(x interface{}) bool {
 func (m *WriterMatcher) String() string {
 	return "WriterMatcher"
 }
+
+// WriterAtMatcher is a gomock Matcher which matches any io.WriterAt, with the
+// side-effect of writing some give bytes.
+type WriterAtMatcher struct {
+	b []byte
+}
+
+// MatchWriterAt returns a new WriterAtMatcher which writes b to any io.WriterAt passed
+// to Matches.
+func MatchWriterAt(b []byte) *WriterAtMatcher {
+	return &WriterAtMatcher{b}
+}
+
+// Matches writes given bytes to x.
+func (m *WriterAtMatcher) Matches(x interface{}) bool {
+	w, ok := x.(io.WriterAt)
+	if !ok {
+		return false
+	}
+	if _, err := w.WriteAt(m.b, 0); err != nil {
+		panic(err)
+	}
+	return true
+}
+
+func (m *WriterAtMatcher) String() string {
+	return "WriterAtMatcher"
+}
