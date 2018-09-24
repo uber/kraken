@@ -27,6 +27,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/errutil"
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/httputil"
+	"code.uber.internal/infra/kraken/utils/listener"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
 	"code.uber.internal/infra/kraken/utils/stringset"
@@ -156,6 +157,12 @@ func (s *Server) Handler() http.Handler {
 	r.Mount("/", http.DefaultServeMux) // Serves /debug/pprof endpoints.
 
 	return r
+}
+
+// ListenAndServe is a blocking call which runs s.
+func (s *Server) ListenAndServe(h http.Handler) error {
+	log.Infof("Starting blob server on %s", s.config.Listener)
+	return listener.Serve(s.config.Listener, h)
 }
 
 func (s *Server) healthCheckHandler(w http.ResponseWriter, r *http.Request) error {
