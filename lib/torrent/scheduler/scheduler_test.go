@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/healthcheck"
 	"code.uber.internal/infra/kraken/lib/hostlist"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
+	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcequeue"
 	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
 	"code.uber.internal/infra/kraken/utils/bitsetutil"
@@ -188,7 +189,7 @@ func TestSeederTTI(t *testing.T) {
 	clk.Add(config.ConnTTI)
 
 	clk.Add(config.PreemptionInterval)
-	w.WaitFor(t, preemptionTickEvent{})
+	w.waitFor(t, preemptionTickEvent{})
 
 	// Then seeding torrents expire.
 	clk.Add(config.SeederTTI)
@@ -229,7 +230,7 @@ func TestLeecherTTI(t *testing.T) {
 
 	clk.Add(config.LeecherTTI)
 
-	w.WaitFor(t, preemptionTickEvent{})
+	w.waitFor(t, preemptionTickEvent{})
 
 	require.Equal(ErrTorrentTimeout, <-errc)
 
@@ -287,7 +288,7 @@ func TestEmitStatsEventTriggers(t *testing.T) {
 	mocks.newPeer(config, withEventLoop(w), withClock(clk))
 
 	clk.Add(config.EmitStatsInterval)
-	w.WaitFor(t, emitStatsEvent{})
+	w.waitFor(t, emitStatsEvent{})
 }
 
 func TestNetworkEvents(t *testing.T) {
@@ -406,7 +407,7 @@ func TestSchedulerReload(t *testing.T) {
 
 	download()
 
-	rs := makeReloadable(leecher.scheduler)
+	rs := makeReloadable(leecher.scheduler, func() announcequeue.Queue { return announcequeue.New() })
 	config.ConnTTL += 5 * time.Minute
 	rs.Reload(config)
 	leecher.scheduler = rs.scheduler
@@ -433,7 +434,7 @@ func TestSchedulerRemoveTorrent(t *testing.T) {
 	errc := make(chan error)
 	go func() { errc <- p.scheduler.Download(namespace, blob.MetaInfo.Name()) }()
 
-	w.WaitFor(t, newTorrentEvent{})
+	w.waitFor(t, newTorrentEvent{})
 
 	require.NoError(p.scheduler.RemoveTorrent(blob.MetaInfo.Name()))
 
@@ -462,7 +463,7 @@ type deadlockEvent struct {
 	release chan struct{}
 }
 
-func (e deadlockEvent) Apply(*scheduler) {
+func (e deadlockEvent) apply(*state) {
 	<-e.release
 }
 
@@ -482,7 +483,7 @@ func TestSchedulerProbeTimeoutsIfDeadlocked(t *testing.T) {
 	// Must release deadlock so Scheduler can shut down properly (only matters
 	// for testing).
 	release := make(chan struct{})
-	p.scheduler.eventLoop.Send(deadlockEvent{release})
+	p.scheduler.eventLoop.send(deadlockEvent{release})
 
 	require.Equal(ErrSendEventTimedOut, p.scheduler.Probe())
 

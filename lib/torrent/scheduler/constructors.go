@@ -35,7 +35,7 @@ func NewAgentScheduler(
 	if err != nil {
 		return nil, err
 	}
-	return makeReloadable(s), nil
+	return makeReloadable(s, func() announcequeue.Queue { return announcequeue.New() }), nil
 }
 
 // NewOriginScheduler creates and starts a ReloadableScheduler configured for an origin.
@@ -58,5 +58,5 @@ func NewOriginScheduler(
 	if err != nil {
 		return nil, err
 	}
-	return makeReloadable(s), nil
+	return makeReloadable(s, func() announcequeue.Queue { return announcequeue.Disabled() }), nil
 }

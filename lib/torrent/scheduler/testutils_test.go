@@ -200,9 +200,9 @@ type hasConnEvent struct {
 	result   chan bool
 }
 
-func (e hasConnEvent) Apply(s *scheduler) {
+func (e hasConnEvent) apply(s *state) {
 	found := false
-	conns := s.connState.ActiveConns()
+	conns := s.conns.ActiveConns()
 	for _, c := range conns {
 		if c.PeerID() == e.peerID && c.InfoHash() == e.infoHash {
 			found = true
@@ -217,7 +217,7 @@ func (e hasConnEvent) Apply(s *scheduler) {
 func waitForConnEstablished(t *testing.T, s *scheduler, peerID core.PeerID, infoHash core.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
-		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
+		s.eventLoop.send(hasConnEvent{peerID, infoHash, result})
 		return <-result
 	})
 	if err != nil {
@@ -232,7 +232,7 @@ func waitForConnEstablished(t *testing.T, s *scheduler, peerID core.PeerID, info
 func waitForConnRemoved(t *testing.T, s *scheduler, peerID core.PeerID, infoHash core.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
-		s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
+		s.eventLoop.send(hasConnEvent{peerID, infoHash, result})
 		return !<-result
 	})
 	if err != nil {
@@ -246,7 +246,7 @@ func waitForConnRemoved(t *testing.T, s *scheduler, peerID core.PeerID, infoHash
 // torrent of infoHash.
 func hasConn(s *scheduler, peerID core.PeerID, infoHash core.InfoHash) bool {
 	result := make(chan bool)
-	s.eventLoop.Send(hasConnEvent{peerID, infoHash, result})
+	s.eventLoop.send(hasConnEvent{peerID, infoHash, result})
 	return <-result
 }
 
@@ -255,7 +255,7 @@ type hasTorrentEvent struct {
 	result   chan bool
 }
 
-func (e hasTorrentEvent) Apply(s *scheduler) {
+func (e hasTorrentEvent) apply(s *state) {
 	_, ok := s.torrentControls[e.infoHash]
 	e.result <- ok
 }
@@ -263,7 +263,7 @@ func (e hasTorrentEvent) Apply(s *scheduler) {
 func waitForTorrentRemoved(t *testing.T, s *scheduler, infoHash core.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
-		s.eventLoop.Send(hasTorrentEvent{infoHash, result})
+		s.eventLoop.send(hasTorrentEvent{infoHash, result})
 		return !<-result
 	})
 	if err != nil {
@@ -276,7 +276,7 @@ func waitForTorrentRemoved(t *testing.T, s *scheduler, infoHash core.InfoHash) {
 func waitForTorrentAdded(t *testing.T, s *scheduler, infoHash core.InfoHash) {
 	err := testutil.PollUntilTrue(5*time.Second, func() bool {
 		result := make(chan bool)
-		s.eventLoop.Send(hasTorrentEvent{infoHash, result})
+		s.eventLoop.send(hasTorrentEvent{infoHash, result})
 		return <-result
 	})
 	if err != nil {
@@ -300,8 +300,8 @@ func newEventWatcher() *eventWatcher {
 	}
 }
 
-// WaitFor waits for e to send on w.
-func (w *eventWatcher) WaitFor(t *testing.T, e event) {
+// waitFor waits for e to send on w.
+func (w *eventWatcher) waitFor(t *testing.T, e event) {
 	name := reflect.TypeOf(e).Name()
 	timeout := time.After(5 * time.Second)
 	for {
@@ -316,22 +316,22 @@ func (w *eventWatcher) WaitFor(t *testing.T, e event) {
 	}
 }
 
-func (w *eventWatcher) Send(e event) bool {
-	if w.l.Send(e) {
+func (w *eventWatcher) send(e event) bool {
+	if w.l.send(e) {
 		go func() { w.events <- e }()
 		return true
 	}
 	return false
 }
 
-func (w *eventWatcher) SendTimeout(e event, timeout time.Duration) error {
+func (w *eventWatcher) sendTimeout(e event, timeout time.Duration) error {
 	panic("unimplemented")
 }
 
-func (w *eventWatcher) Run(s *scheduler) {
-	w.l.Run(s)
+func (w *eventWatcher) run(s *state) {
+	w.l.run(s)
 }
 
-func (w *eventWatcher) Stop() {
-	w.l.Stop()
+func (w *eventWatcher) stop() {
+	w.l.stop()
 }

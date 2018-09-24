@@ -9,7 +9,6 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
-	"github.com/willf/bitset"
 	"go.uber.org/zap"
 
 	"code.uber.internal/infra/kraken/core"
@@ -18,7 +17,6 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcer"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler/torrentlog"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/tracker/announceclient"
@@ -43,27 +41,6 @@ type Scheduler interface {
 	Probe() error
 }
 
-// torrentControl bundles torrent control structures.
-type torrentControl struct {
-	namespace    string
-	name         string
-	errors       []chan error
-	dispatcher   *dispatch.Dispatcher
-	complete     bool
-	localRequest bool
-}
-
-func newTorrentControl(
-	namespace, name string, d *dispatch.Dispatcher, localRequest bool) *torrentControl {
-
-	return &torrentControl{
-		namespace:    namespace,
-		name:         name,
-		dispatcher:   d,
-		localRequest: localRequest,
-	}
-}
-
 // scheduler manages global state for the peer. This includes:
 // - Opening torrents.
 // - Announcing to the tracker.
@@ -80,12 +57,6 @@ type scheduler struct {
 
 	handshaker *conn.Handshaker
 
-	// The following fields define the core scheduler "state", and should only
-	// be accessed from within the event loop.
-	torrentControls map[core.InfoHash]*torrentControl // Active seeding / leeching torrents.
-	connState       *connstate.State
-	announceQueue   announcequeue.Queue
-
 	eventLoop *liftedEventLoop
 
 	listener net.Listener
@@ -98,7 +69,7 @@ type scheduler struct {
 
 	announcer *announcer.Announcer
 
-	networkEvents networkevent.Producer
+	netevents networkevent.Producer
 
 	torrentlog *torrentlog.Logger
 
@@ -135,7 +106,7 @@ func newScheduler(
 	pctx core.PeerContext,
 	announceClient announceclient.Client,
 	announceQueue announcequeue.Queue,
-	networkEvents networkevent.Producer,
+	netevents networkevent.Producer,
 	options ...option) (*scheduler, error) {
 
 	config = config.applyDefaults()
@@ -171,12 +142,10 @@ func newScheduler(
 	}
 
 	handshaker, err := conn.NewHandshaker(
-		config.Conn, stats, overrides.clock, networkEvents, pctx.PeerID, eventLoop, slogger)
+		config.Conn, stats, overrides.clock, netevents, pctx.PeerID, eventLoop, slogger)
 	if err != nil {
 		return nil, fmt.Errorf("conn: %s", err)
 	}
-
-	connState := connstate.New(config.ConnState, overrides.clock, pctx.PeerID, networkEvents, slogger)
 
 	tlog, err := torrentlog.New(config.TorrentLog, pctx)
 	if err != nil {
@@ -184,25 +153,22 @@ func newScheduler(
 	}
 
 	s := &scheduler{
-		pctx:            pctx,
-		config:          config,
-		clock:           overrides.clock,
-		torrentArchive:  ta,
-		stats:           stats,
-		handshaker:      handshaker,
-		torrentControls: make(map[core.InfoHash]*torrentControl),
-		connState:       connState,
-		announceQueue:   announceQueue,
-		eventLoop:       eventLoop,
-		listener:        l,
-		preemptionTick:  preemptionTick,
-		emitStatsTick:   overrides.clock.Tick(config.EmitStatsInterval),
-		announceClient:  announceClient,
-		announcer:       announcer.Default(announceClient, eventLoop, overrides.clock, slogger),
-		networkEvents:   networkEvents,
-		torrentlog:      tlog,
-		logger:          slogger,
-		done:            done,
+		pctx:           pctx,
+		config:         config,
+		clock:          overrides.clock,
+		torrentArchive: ta,
+		stats:          stats,
+		handshaker:     handshaker,
+		eventLoop:      eventLoop,
+		listener:       l,
+		preemptionTick: preemptionTick,
+		emitStatsTick:  overrides.clock.Tick(config.EmitStatsInterval),
+		announceClient: announceClient,
+		announcer:      announcer.Default(announceClient, eventLoop, overrides.clock, slogger),
+		netevents:      netevents,
+		torrentlog:     tlog,
+		logger:         slogger,
+		done:           done,
 	}
 
 	if config.DisablePreemption {
@@ -214,7 +180,16 @@ func newScheduler(
 
 	s.log().Infof("Scheduler starting as peer %s on addr %s:%d", pctx.PeerID, pctx.IP, pctx.Port)
 
-	s.start()
+	// Warning: the goroutine running the event loop holds the only reference
+	// to state! Do not hand out references anywhere else!
+	state := &state{
+		sched:           s,
+		torrentControls: make(map[core.InfoHash]*torrentControl),
+		conns: connstate.New(
+			s.config.ConnState, s.clock, s.pctx.PeerID, s.netevents, s.logger),
+		announceQueue: announceQueue,
+	}
+	go s.start(state)
 
 	return s, nil
 }
@@ -226,39 +201,15 @@ func (s *scheduler) Stop() {
 
 		close(s.done)
 		s.listener.Close()
-		s.eventLoop.Stop()
+		s.eventLoop.send(shutdownEvent{})
 
 		// Waits for all loops to stop.
 		s.wg.Wait()
-
-		for _, c := range s.connState.ActiveConns() {
-			s.log("conn", c).Info("Closing conn to stop scheduler")
-			c.Close()
-		}
-
-		// Notify local clients of pending torrents that they will not complete.
-		for _, ctrl := range s.torrentControls {
-			ctrl.dispatcher.TearDown()
-			for _, errc := range ctrl.errors {
-				errc <- ErrSchedulerStopped
-			}
-		}
 
 		s.torrentlog.Sync()
 
 		s.log().Info("Scheduler stopped")
 	})
-}
-
-func (s *scheduler) announce(d *dispatch.Dispatcher) {
-	peers, err := s.announcer.Announce(d.Name(), d.InfoHash(), d.Complete())
-	if err != nil {
-		if err != announceclient.ErrDisabled {
-			s.eventLoop.Send(announceErrEvent{d.InfoHash(), err})
-		}
-		return
-	}
-	s.eventLoop.Send(announceResultEvent{d.InfoHash(), peers})
 }
 
 func (s *scheduler) doDownload(namespace, name string) (size int64, err error) {
@@ -272,7 +223,7 @@ func (s *scheduler) doDownload(namespace, name string) (size int64, err error) {
 
 	// Buffer size of 1 so sends do not block.
 	errc := make(chan error, 1)
-	if !s.eventLoop.Send(newTorrentEvent{namespace, t, errc}) {
+	if !s.eventLoop.send(newTorrentEvent{namespace, t, errc}) {
 		return 0, ErrSchedulerStopped
 	}
 	return t.Length(), <-errc
@@ -312,7 +263,7 @@ func (s *scheduler) Download(namespace, name string) error {
 // BlacklistSnapshot returns a snapshot of the current connection blacklist.
 func (s *scheduler) BlacklistSnapshot() ([]connstate.BlacklistedConn, error) {
 	result := make(chan []connstate.BlacklistedConn)
-	if !s.eventLoop.Send(blacklistSnapshotEvent{result}) {
+	if !s.eventLoop.send(blacklistSnapshotEvent{result}) {
 		return nil, ErrSchedulerStopped
 	}
 	return <-result, nil
@@ -323,7 +274,7 @@ func (s *scheduler) BlacklistSnapshot() ([]connstate.BlacklistedConn, error) {
 func (s *scheduler) RemoveTorrent(name string) error {
 	// Buffer size of 1 so sends do not block.
 	errc := make(chan error, 1)
-	if !s.eventLoop.Send(removeTorrentEvent{name, errc}) {
+	if !s.eventLoop.send(removeTorrentEvent{name, errc}) {
 		return ErrSchedulerStopped
 	}
 	return <-errc
@@ -331,23 +282,21 @@ func (s *scheduler) RemoveTorrent(name string) error {
 
 // Probe verifies that the scheduler event loop is running and unblocked.
 func (s *scheduler) Probe() error {
-	return s.eventLoop.SendTimeout(probeEvent{}, s.config.ProbeTimeout)
+	return s.eventLoop.sendTimeout(probeEvent{}, s.config.ProbeTimeout)
 }
 
-func (s *scheduler) start() {
+func (s *scheduler) start(state *state) {
 	s.wg.Add(4)
-	go s.runEventLoop()
+	go s.runEventLoop(state)
 	go s.listenLoop()
 	go s.tickerLoop()
 	go s.announceLoop()
 }
 
-// eventLoop handles eventLoop from the various channels of scheduler, providing synchronization to
-// all scheduler state.
-func (s *scheduler) runEventLoop() {
+func (s *scheduler) runEventLoop(state *state) {
 	defer s.wg.Done()
 
-	s.eventLoop.Run(s)
+	s.eventLoop.run(state)
 }
 
 // listenLoop accepts incoming connections.
@@ -369,7 +318,7 @@ func (s *scheduler) listenLoop() {
 				nc.Close()
 				return
 			}
-			s.eventLoop.Send(incomingHandshakeEvent{pc})
+			s.eventLoop.send(incomingHandshakeEvent{pc})
 		}()
 	}
 }
@@ -381,9 +330,9 @@ func (s *scheduler) tickerLoop() {
 	for {
 		select {
 		case <-s.preemptionTick:
-			s.eventLoop.Send(preemptionTickEvent{})
+			s.eventLoop.send(preemptionTickEvent{})
 		case <-s.emitStatsTick:
-			s.eventLoop.Send(emitStatsEvent{})
+			s.eventLoop.send(emitStatsEvent{})
 		case <-s.done:
 			return
 		}
@@ -397,81 +346,60 @@ func (s *scheduler) announceLoop() {
 	s.announcer.Ticker(s.done)
 }
 
-func (s *scheduler) addOutgoingConn(c *conn.Conn, b *bitset.BitSet, info *storage.TorrentInfo) error {
-	if err := s.connState.MovePendingToActive(c); err != nil {
-		return fmt.Errorf("cannot add conn to scheduler: %s", err)
-	}
-	ctrl, ok := s.torrentControls[info.InfoHash()]
-	if !ok {
-		return errors.New("torrent must be created before sending handshake")
-	}
-	if err := ctrl.dispatcher.AddPeer(c.PeerID(), b, c); err != nil {
-		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
-	}
-	return nil
-}
-
-func (s *scheduler) addIncomingConn(
-	namespace string, c *conn.Conn, b *bitset.BitSet, info *storage.TorrentInfo) error {
-
-	if err := s.connState.MovePendingToActive(c); err != nil {
-		return fmt.Errorf("cannot add conn to scheduler: %s", err)
-	}
-	ctrl, ok := s.torrentControls[info.InfoHash()]
-	if !ok {
-		t, err := s.torrentArchive.GetTorrent(namespace, info.Name())
-		if err != nil {
-			return fmt.Errorf("get torrent: %s", err)
-		}
-		ctrl, err = s.initTorrentControl(namespace, t, false)
-		if err != nil {
-			return fmt.Errorf("initialize torrent control: %s", err)
-		}
-	}
-	if err := ctrl.dispatcher.AddPeer(c.PeerID(), b, c); err != nil {
-		return fmt.Errorf("cannot add conn to dispatcher: %s", err)
-	}
-	return nil
-}
-
-// initTorrentControl initializes a new torrentControl for t. Overwrites any
-// existing torrentControl for t, so callers should check if one exists first.
-func (s *scheduler) initTorrentControl(
-	namespace string, t storage.Torrent, localRequest bool) (*torrentControl, error) {
-
-	d, err := dispatch.New(
-		s.config.Dispatch,
-		s.stats,
-		s.clock,
-		s.networkEvents,
-		s.eventLoop,
-		s.pctx.PeerID,
-		t,
-		s.logger,
-		s.torrentlog)
+func (s *scheduler) announce(name string, h core.InfoHash, complete bool) {
+	peers, err := s.announcer.Announce(name, h, complete)
 	if err != nil {
-		return nil, fmt.Errorf("initialize dispatcher: %s", err)
+		if err != announceclient.ErrDisabled {
+			s.eventLoop.send(announceErrEvent{h, err})
+		}
+		return
 	}
-	ctrl := newTorrentControl(namespace, t.Name(), d, localRequest)
-	s.announceQueue.Add(t.InfoHash())
-	s.networkEvents.Produce(networkevent.AddTorrentEvent(
-		t.InfoHash(), s.pctx.PeerID, t.Bitfield(), s.config.ConnState.MaxOpenConnectionsPerTorrent))
-	s.torrentControls[t.InfoHash()] = ctrl
-	return ctrl, nil
+	s.eventLoop.send(announceResultEvent{h, peers})
 }
 
-func (s *scheduler) tearDownTorrentControl(ctrl *torrentControl, err error) {
-	h := ctrl.dispatcher.InfoHash()
-	if !ctrl.complete {
-		ctrl.dispatcher.TearDown()
-		s.announceQueue.Eject(h)
-		for _, errc := range ctrl.errors {
-			errc <- err
-		}
-		s.networkEvents.Produce(networkevent.TorrentCancelledEvent(h, s.pctx.PeerID))
-		s.torrentArchive.DeleteTorrent(ctrl.dispatcher.Name())
+func (s *scheduler) failIncomingHandshake(pc *conn.PendingConn, err error) {
+	s.log(
+		"peer", pc.PeerID(),
+		"hash", pc.InfoHash()).Infof("Error accepting incoming handshake: %s", err)
+	pc.Close()
+	s.eventLoop.send(failedIncomingHandshakeEvent{pc.PeerID(), pc.InfoHash()})
+}
+
+// establishIncomingHandshake attempts to establish a pending conn initialized
+// by a remote peer. Success / failure is communicated via events.
+func (s *scheduler) establishIncomingHandshake(pc *conn.PendingConn, rb conn.RemoteBitfields) {
+	info, err := s.torrentArchive.Stat(pc.Namespace(), pc.Name())
+	if err != nil {
+		s.failIncomingHandshake(pc, fmt.Errorf("torrent stat: %s", err))
+		return
 	}
-	delete(s.torrentControls, h)
+	c, err := s.handshaker.Establish(pc, info, rb)
+	if err != nil {
+		s.failIncomingHandshake(pc, fmt.Errorf("establish handshake: %s", err))
+		return
+	}
+	s.torrentlog.IncomingConnectionAccept(pc.Name(), pc.InfoHash(), pc.PeerID())
+	s.eventLoop.send(incomingConnEvent{pc.Namespace(), c, pc.Bitfield(), info})
+}
+
+// initializeOutgoingHandshake attempts to initialize a conn to a remote peer.
+// Success / failure is communicated via events.
+func (s *scheduler) initializeOutgoingHandshake(
+	p *core.PeerInfo, info *storage.TorrentInfo, rb conn.RemoteBitfields, namespace string) {
+
+	addr := fmt.Sprintf("%s:%d", p.IP, p.Port)
+	result, err := s.handshaker.Initialize(p.PeerID, addr, info, rb, namespace)
+	if err != nil {
+		s.log(
+			"peer", p.PeerID,
+			"hash", info.InfoHash(),
+			"addr", addr).Infof("Error initializing outgoing handshake: %s", err)
+		s.eventLoop.send(failedOutgoingHandshakeEvent{p.PeerID, info.InfoHash()})
+		s.torrentlog.OutgoingConnectionReject(info.Name(), info.InfoHash(), p.PeerID, err)
+		return
+	}
+	s.torrentlog.OutgoingConnectionAccept(info.Name(), info.InfoHash(), p.PeerID)
+	s.eventLoop.send(outgoingConnEvent{result.Conn, result.Bitfield, info})
 }
 
 func (s *scheduler) log(args ...interface{}) *zap.SugaredLogger {
