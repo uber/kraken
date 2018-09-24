@@ -1,3 +1,7 @@
+0.0.16 (2018-09-24)
+====
+- Implement list for S3 backend
+
 0.0.15 (2018-09-20)
 ====
 - Upgrade all components to stretch
