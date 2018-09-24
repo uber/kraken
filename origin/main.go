@@ -21,6 +21,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/localdb"
 	"code.uber.internal/infra/kraken/metrics"
+	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/origin/blobserver"
 	"code.uber.internal/infra/kraken/utils/configutil"
@@ -171,7 +172,14 @@ func main() {
 
 	h := addTorrentDebugEndpoints(server.Handler(), sched)
 
-	addr := fmt.Sprintf(":%d", *blobServerPort)
-	log.Infof("Starting origin server on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, h))
+	go func() { log.Fatal(server.ListenAndServe(h)) }()
+
+	log.Info("Starting nginx...")
+	log.Fatal(nginx.RunWithTLS(
+		config.Nginx,
+		config.TLS,
+		map[string]interface{}{
+			"port":   *blobServerPort,
+			"server": nginx.GetServer(config.BlobServer.Listener.Net, config.BlobServer.Listener.Addr),
+		}))
 }

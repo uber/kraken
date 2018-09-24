@@ -16,7 +16,9 @@ import (
 	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	"code.uber.internal/infra/kraken/localdb"
 	"code.uber.internal/infra/kraken/metrics"
+	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/origin/blobserver"
+	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
 // Config defines origin server configuration.
@@ -38,4 +40,6 @@ type Config struct {
 	BlobRefresh   blobrefresh.Config       `yaml:"blobrefresh"`
 	LocalDB       localdb.Config           `yaml:"localdb"`
 	WriteBack     persistedretry.Config    `yaml:"writeback"`
+	Nginx         nginx.Config             `yaml:"nginx"`
+	TLS           httputil.TLSConfig       `yaml:"tls"`
 }
