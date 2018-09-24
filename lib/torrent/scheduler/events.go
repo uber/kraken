@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"fmt"
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
@@ -16,37 +15,37 @@ import (
 	"github.com/willf/bitset"
 )
 
-// event describes an external event which moves the scheduler into a new state.
-// While the event is applying, it is guaranteed to be the only accessor of
-// scheduler state.
+// event describes an external event which modifies state. While the event is
+// applying, it is guaranteed to be the only accessor of state.
 type event interface {
-	Apply(s *scheduler)
+	apply(*state)
 }
 
-// eventLoop represents a serialized list of events to be applied to a scheduler.
+// eventLoop represents a serialized list of events to be applied to scheduler
+// state.
 type eventLoop interface {
-	Send(event) bool
-	SendTimeout(e event, timeout time.Duration) error
-	Run(*scheduler)
-	Stop()
+	send(event) bool
+	sendTimeout(e event, timeout time.Duration) error
+	run(*state)
+	stop()
 }
 
-type defaultEventLoop struct {
+type baseEventLoop struct {
 	events chan event
 	done   chan struct{}
 }
 
-func newEventLoop() *defaultEventLoop {
-	return &defaultEventLoop{
+func newEventLoop() *baseEventLoop {
+	return &baseEventLoop{
 		events: make(chan event),
 		done:   make(chan struct{}),
 	}
 }
 
-// Send sends a new event into l. Should never be called by the same goroutine
-// running l (i.e. within Apply methods), else deadlock will occur. Returns false
+// send sends a new event into l. Should never be called by the same goroutine
+// running l (i.e. within apply methods), else deadlock will occur. Returns false
 // if the l is not running.
-func (l *defaultEventLoop) Send(e event) bool {
+func (l *baseEventLoop) send(e event) bool {
 	select {
 	case l.events <- e:
 		return true
@@ -55,7 +54,7 @@ func (l *defaultEventLoop) Send(e event) bool {
 	}
 }
 
-func (l *defaultEventLoop) SendTimeout(e event, timeout time.Duration) error {
+func (l *baseEventLoop) sendTimeout(e event, timeout time.Duration) error {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
@@ -68,19 +67,18 @@ func (l *defaultEventLoop) SendTimeout(e event, timeout time.Duration) error {
 	}
 }
 
-// Run processes events until done is closed.
-func (l *defaultEventLoop) Run(s *scheduler) {
+func (l *baseEventLoop) run(s *state) {
 	for {
 		select {
 		case e := <-l.events:
-			e.Apply(s)
+			e.apply(s)
 		case <-l.done:
 			return
 		}
 	}
 }
 
-func (l *defaultEventLoop) Stop() {
+func (l *baseEventLoop) stop() {
 	close(l.done)
 }
 
@@ -94,15 +92,15 @@ func liftEventLoop(l eventLoop) *liftedEventLoop {
 }
 
 func (l *liftedEventLoop) ConnClosed(c *conn.Conn) {
-	l.Send(connClosedEvent{c})
+	l.send(connClosedEvent{c})
 }
 
 func (l *liftedEventLoop) DispatcherComplete(d *dispatch.Dispatcher) {
-	l.Send(dispatcherCompleteEvent{d})
+	l.send(dispatcherCompleteEvent{d})
 }
 
 func (l *liftedEventLoop) AnnounceTick() {
-	l.Send(announceTickEvent{})
+	l.send(announceTickEvent{})
 }
 
 // connClosedEvent occurs when a connection is closed.
@@ -110,10 +108,10 @@ type connClosedEvent struct {
 	c *conn.Conn
 }
 
-// Apply ejects the conn from the scheduler's active connections.
-func (e connClosedEvent) Apply(s *scheduler) {
-	s.connState.DeleteActive(e.c)
-	if err := s.connState.Blacklist(e.c.PeerID(), e.c.InfoHash()); err != nil {
+// apply ejects the conn from the scheduler's active connections.
+func (e connClosedEvent) apply(s *state) {
+	s.conns.DeleteActive(e.c)
+	if err := s.conns.Blacklist(e.c.PeerID(), e.c.InfoHash()); err != nil {
 		s.log("conn", e.c).Infof("Cannot blacklist active conn: %s", err)
 	}
 }
@@ -123,50 +121,29 @@ type incomingHandshakeEvent struct {
 	pc *conn.PendingConn
 }
 
-// Apply rejects incoming handshakes when the scheduler is at capacity. If the
+// apply rejects incoming handshakes when the scheduler is at capacity. If the
 // scheduler has capacity for more connections, adds the peer/hash of the handshake
 // to the scheduler's pending connections and asynchronously attempts to establish
 // the connection.
-func (e incomingHandshakeEvent) Apply(s *scheduler) {
+func (e incomingHandshakeEvent) apply(s *state) {
 	peerNeighbors := make([]core.PeerID, len(e.pc.RemoteBitfields()))
 	var i int
 	for peerID := range e.pc.RemoteBitfields() {
 		peerNeighbors[i] = peerID
 		i++
 	}
-	if err := s.connState.AddPending(e.pc.PeerID(), e.pc.InfoHash(), peerNeighbors); err != nil {
+	if err := s.conns.AddPending(e.pc.PeerID(), e.pc.InfoHash(), peerNeighbors); err != nil {
 		s.log("peer", e.pc.PeerID(), "hash", e.pc.InfoHash()).Infof(
 			"Rejecting incoming handshake: %s", err)
-		s.torrentlog.IncomingConnectionReject(e.pc.Name(), e.pc.InfoHash(), e.pc.PeerID(), err)
+		s.sched.torrentlog.IncomingConnectionReject(e.pc.Name(), e.pc.InfoHash(), e.pc.PeerID(), err)
 		e.pc.Close()
 		return
 	}
-	var remoteBitfields conn.RemoteBitfields
+	var rb conn.RemoteBitfields
 	if ctrl, ok := s.torrentControls[e.pc.InfoHash()]; ok {
-		remoteBitfields = ctrl.dispatcher.RemoteBitfields()
+		rb = ctrl.dispatcher.RemoteBitfields()
 	}
-	go func(remoteBitfields conn.RemoteBitfields) {
-		fail := func(err error) {
-			s.log("peer", e.pc.PeerID(), "hash", e.pc.InfoHash()).Infof(
-				"Error processing incoming handshake: %s", err)
-			e.pc.Close()
-			s.eventLoop.Send(failedIncomingHandshakeEvent{e.pc.PeerID(), e.pc.InfoHash()})
-		}
-		info, err := s.torrentArchive.Stat(e.pc.Namespace(), e.pc.Name())
-		if err != nil {
-			fail(fmt.Errorf("torrent stat: %s", err))
-			return
-		}
-
-		c, err := s.handshaker.Establish(e.pc, info, remoteBitfields)
-		if err != nil {
-			fail(fmt.Errorf("establish handshake: %s", err))
-			return
-		}
-		s.torrentlog.IncomingConnectionAccept(e.pc.Name(), e.pc.InfoHash(), e.pc.PeerID())
-		s.eventLoop.Send(
-			incomingConnEvent{e.pc.Namespace(), c, e.pc.Bitfield(), info})
-	}(remoteBitfields)
+	go s.sched.establishIncomingHandshake(e.pc, rb)
 }
 
 // failedIncomingHandshakeEvent occurs when a pending incoming connection fails
@@ -176,8 +153,8 @@ type failedIncomingHandshakeEvent struct {
 	infoHash core.InfoHash
 }
 
-func (e failedIncomingHandshakeEvent) Apply(s *scheduler) {
-	s.connState.DeletePending(e.peerID, e.infoHash)
+func (e failedIncomingHandshakeEvent) apply(s *state) {
+	s.conns.DeletePending(e.peerID, e.infoHash)
 }
 
 // incomingConnEvent occurs when a pending incoming connection finishes handshaking.
@@ -188,8 +165,8 @@ type incomingConnEvent struct {
 	info      *storage.TorrentInfo
 }
 
-// Apply transitions a fully-handshaked incoming conn from pending to active.
-func (e incomingConnEvent) Apply(s *scheduler) {
+// apply transitions a fully-handshaked incoming conn from pending to active.
+func (e incomingConnEvent) apply(s *state) {
 	if err := s.addIncomingConn(e.namespace, e.c, e.bitfield, e.info); err != nil {
 		s.log("conn", e.c).Errorf("Error adding incoming conn: %s", err)
 		e.c.Close()
@@ -205,9 +182,9 @@ type failedOutgoingHandshakeEvent struct {
 	infoHash core.InfoHash
 }
 
-func (e failedOutgoingHandshakeEvent) Apply(s *scheduler) {
-	s.connState.DeletePending(e.peerID, e.infoHash)
-	if err := s.connState.Blacklist(e.peerID, e.infoHash); err != nil {
+func (e failedOutgoingHandshakeEvent) apply(s *state) {
+	s.conns.DeletePending(e.peerID, e.infoHash)
+	if err := s.conns.Blacklist(e.peerID, e.infoHash); err != nil {
 		s.log("peer", e.peerID, "hash", e.infoHash).Infof("Cannot blacklist pending conn: %s", err)
 	}
 }
@@ -219,8 +196,8 @@ type outgoingConnEvent struct {
 	info     *storage.TorrentInfo
 }
 
-// Apply transitions a fully-handshaked outgoing conn from pending to active.
-func (e outgoingConnEvent) Apply(s *scheduler) {
+// apply transitions a fully-handshaked outgoing conn from pending to active.
+func (e outgoingConnEvent) apply(s *state) {
 	if err := s.addOutgoingConn(e.c, e.bitfield, e.info); err != nil {
 		s.log("conn", e.c).Errorf("Error adding outgoing conn: %s", err)
 		e.c.Close()
@@ -232,9 +209,9 @@ func (e outgoingConnEvent) Apply(s *scheduler) {
 // announceTickEvent occurs when it is time to announce to the tracker.
 type announceTickEvent struct{}
 
-// Apply pulls the next dispatcher from the announce queue and asynchronously
+// apply pulls the next dispatcher from the announce queue and asynchronously
 // makes an announce request to the tracker.
-func (e announceTickEvent) Apply(s *scheduler) {
+func (e announceTickEvent) apply(s *state) {
 	h, ok := s.announceQueue.Next()
 	if !ok {
 		s.log().Debug("No torrents in announce queue")
@@ -245,11 +222,11 @@ func (e announceTickEvent) Apply(s *scheduler) {
 		s.log("hash", h).Error("Pulled unknown torrent off announce queue")
 		return
 	}
-	if ctrl.dispatcher.NumPeers() >= s.connState.MaxConnsPerTorrent() {
+	if ctrl.dispatcher.NumPeers() >= s.conns.MaxConnsPerTorrent() {
 		s.log("hash", h).Info("Skipping announce for fully saturated torrent")
 		return
 	}
-	go s.announce(ctrl.dispatcher)
+	go s.sched.announce(ctrl.dispatcher.Name(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
 }
 
 // announceResultEvent occurs when a successfully announced response was received
@@ -259,51 +236,38 @@ type announceResultEvent struct {
 	peers    []*core.PeerInfo
 }
 
-// Apply selects new peers returned via an announce response to open connections to
+// apply selects new peers returned via an announce response to open connections to
 // if there is capacity. These connections are added to the scheduler's pending
 // connections and handshaked asynchronously.
 //
 // Also marks the dispatcher as ready to announce again.
-func (e announceResultEvent) Apply(s *scheduler) {
+func (e announceResultEvent) apply(s *state) {
 	ctrl, ok := s.torrentControls[e.infoHash]
 	if !ok {
 		s.log("hash", e.infoHash).Info("Dispatcher closed after announce response received")
 		return
 	}
 	s.announceQueue.Ready(e.infoHash)
-	if ctrl.complete {
+	if ctrl.dispatcher.Complete() {
 		// Torrent is already complete, don't open any new connections.
 		return
 	}
 	for _, p := range e.peers {
-		if p.PeerID == s.pctx.PeerID {
+		if p.PeerID == s.sched.pctx.PeerID {
 			// Tracker may return our own peer.
 			continue
 		}
-		if s.connState.Blacklisted(p.PeerID, e.infoHash) {
+		if s.conns.Blacklisted(p.PeerID, e.infoHash) {
 			continue
 		}
-		if err := s.connState.AddPending(p.PeerID, e.infoHash, nil); err != nil {
+		if err := s.conns.AddPending(p.PeerID, e.infoHash, nil); err != nil {
 			if err == connstate.ErrTorrentAtCapacity {
 				break
 			}
 			continue
 		}
-		go func(p *core.PeerInfo) {
-			addr := fmt.Sprintf("%s:%d", p.IP, p.Port)
-			info := ctrl.dispatcher.Stat()
-			result, err := s.handshaker.Initialize(
-				p.PeerID, addr, info, ctrl.dispatcher.RemoteBitfields(), ctrl.namespace)
-			if err != nil {
-				s.log("peer", p.PeerID, "hash", e.infoHash, "addr", addr).Infof(
-					"Failed handshake: %s", err)
-				s.eventLoop.Send(failedOutgoingHandshakeEvent{p.PeerID, e.infoHash})
-				s.torrentlog.OutgoingConnectionReject(ctrl.name, e.infoHash, p.PeerID, err)
-				return
-			}
-			s.torrentlog.OutgoingConnectionAccept(ctrl.name, e.infoHash, p.PeerID)
-			s.eventLoop.Send(outgoingConnEvent{result.Conn, result.Bitfield, info})
-		}(p)
+		go s.sched.initializeOutgoingHandshake(
+			p, ctrl.dispatcher.Stat(), ctrl.dispatcher.RemoteBitfields(), ctrl.namespace)
 	}
 }
 
@@ -313,8 +277,8 @@ type announceErrEvent struct {
 	err      error
 }
 
-// Apply marks the dispatcher as ready to announce again.
-func (e announceErrEvent) Apply(s *scheduler) {
+// apply marks the dispatcher as ready to announce again.
+func (e announceErrEvent) apply(s *state) {
 	s.log("hash", e.infoHash).Errorf("Error announcing: %s", e.err)
 	s.announceQueue.Ready(e.infoHash)
 }
@@ -326,26 +290,26 @@ type newTorrentEvent struct {
 	errc      chan error
 }
 
-// Apply begins seeding / leeching a new torrent.
-func (e newTorrentEvent) Apply(s *scheduler) {
+// apply begins seeding / leeching a new torrent.
+func (e newTorrentEvent) apply(s *state) {
 	ctrl, ok := s.torrentControls[e.torrent.InfoHash()]
 	if !ok {
 		var err error
-		ctrl, err = s.initTorrentControl(e.namespace, e.torrent, true)
+		ctrl, err = s.addTorrent(e.namespace, e.torrent, true)
 		if err != nil {
 			e.errc <- err
 			return
 		}
 		s.log("torrent", e.torrent).Info("Added new torrent")
 	}
-	if ctrl.complete {
+	if ctrl.dispatcher.Complete() {
 		e.errc <- nil
 		return
 	}
 	ctrl.errors = append(ctrl.errors, e.errc)
 
 	// Immediately announce new torrents.
-	go s.announce(ctrl.dispatcher)
+	go s.sched.announce(ctrl.dispatcher.Name(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
 }
 
 // dispatcherCompleteEvent occurs when a dispatcher finishes downloading its torrent.
@@ -353,11 +317,11 @@ type dispatcherCompleteEvent struct {
 	dispatcher *dispatch.Dispatcher
 }
 
-// Apply marks the dispatcher for its final announce.
-func (e dispatcherCompleteEvent) Apply(s *scheduler) {
+// apply marks the dispatcher for its final announce.
+func (e dispatcherCompleteEvent) apply(s *state) {
 	infoHash := e.dispatcher.InfoHash()
 
-	s.connState.ClearBlacklist(infoHash)
+	s.conns.ClearBlacklist(infoHash)
 	s.announceQueue.Eject(infoHash)
 	ctrl, ok := s.torrentControls[infoHash]
 	if !ok {
@@ -367,31 +331,30 @@ func (e dispatcherCompleteEvent) Apply(s *scheduler) {
 	for _, errc := range ctrl.errors {
 		errc <- nil
 	}
-	ctrl.complete = true
 	if ctrl.localRequest {
 		// Normalize the download time for all torrent sizes to a per MB value.
 		// Skip torrents that are less than a MB in size because we can't measure
 		// at that granularity.
-		downloadTime := s.clock.Now().Sub(ctrl.dispatcher.CreatedAt())
+		downloadTime := s.sched.clock.Now().Sub(ctrl.dispatcher.CreatedAt())
 		lengthMB := ctrl.dispatcher.Length() / int64(memsize.MB)
 		if lengthMB > 0 {
-			s.stats.Timer("download_time_per_mb").Record(downloadTime / time.Duration(lengthMB))
+			s.sched.stats.Timer("download_time_per_mb").Record(downloadTime / time.Duration(lengthMB))
 		}
 	}
 
 	s.log("hash", infoHash).Info("Torrent complete")
-	s.networkEvents.Produce(networkevent.TorrentCompleteEvent(infoHash, s.pctx.PeerID))
+	s.sched.netevents.Produce(networkevent.TorrentCompleteEvent(infoHash, s.sched.pctx.PeerID))
 
 	// Immediately announce completed torrents.
-	go s.announce(ctrl.dispatcher)
+	go s.sched.announce(ctrl.dispatcher.Name(), ctrl.dispatcher.InfoHash(), true)
 }
 
 // preemptionTickEvent occurs periodically to preempt unneeded conns and remove
 // idle torrentControls.
 type preemptionTickEvent struct{}
 
-func (e preemptionTickEvent) Apply(s *scheduler) {
-	for _, c := range s.connState.ActiveConns() {
+func (e preemptionTickEvent) apply(s *state) {
+	for _, c := range s.conns.ActiveConns() {
 		ctrl, ok := s.torrentControls[c.InfoHash()]
 		if !ok {
 			s.log("conn", c).Error(
@@ -403,36 +366,36 @@ func (e preemptionTickEvent) Apply(s *scheduler) {
 			c.CreatedAt(),
 			ctrl.dispatcher.LastGoodPieceReceived(c.PeerID()),
 			ctrl.dispatcher.LastPieceSent(c.PeerID()))
-		if s.clock.Now().Sub(lastProgress) > s.config.ConnTTI {
+		if s.sched.clock.Now().Sub(lastProgress) > s.sched.config.ConnTTI {
 			s.log("conn", c).Info("Closing idle conn")
 			c.Close()
 			continue
 		}
-		if s.clock.Now().Sub(c.CreatedAt()) > s.config.ConnTTL {
+		if s.sched.clock.Now().Sub(c.CreatedAt()) > s.sched.config.ConnTTL {
 			s.log("conn", c).Info("Closing expired conn")
 			c.Close()
 			continue
 		}
 	}
 
-	for infoHash, ctrl := range s.torrentControls {
+	for h, ctrl := range s.torrentControls {
 		idleSeeder :=
-			ctrl.complete &&
-				s.clock.Now().Sub(ctrl.dispatcher.LastReadTime()) >= s.config.SeederTTI
+			ctrl.dispatcher.Complete() &&
+				s.sched.clock.Now().Sub(ctrl.dispatcher.LastReadTime()) >= s.sched.config.SeederTTI
 		if idleSeeder {
-			s.torrentlog.SeedTimeout(ctrl.name, infoHash)
+			s.sched.torrentlog.SeedTimeout(ctrl.dispatcher.Name(), h)
 		}
 
 		idleLeecher :=
-			!ctrl.complete &&
-				s.clock.Now().Sub(ctrl.dispatcher.LastWriteTime()) >= s.config.LeecherTTI
+			!ctrl.dispatcher.Complete() &&
+				s.sched.clock.Now().Sub(ctrl.dispatcher.LastWriteTime()) >= s.sched.config.LeecherTTI
 		if idleLeecher {
-			s.torrentlog.LeechTimeout(ctrl.name, infoHash)
+			s.sched.torrentlog.LeechTimeout(ctrl.dispatcher.Name(), h)
 		}
 
 		if idleSeeder || idleLeecher {
-			s.log("hash", infoHash, "inprogress", !ctrl.complete).Info("Removing idle torrent")
-			s.tearDownTorrentControl(ctrl, ErrTorrentTimeout)
+			s.log("hash", h, "inprogress", !ctrl.dispatcher.Complete()).Info("Removing idle torrent")
+			s.removeTorrent(h, ErrTorrentTimeout)
 		}
 	}
 }
@@ -440,17 +403,17 @@ func (e preemptionTickEvent) Apply(s *scheduler) {
 // emitStatsEvent occurs periodically to emit scheduler stats.
 type emitStatsEvent struct{}
 
-func (e emitStatsEvent) Apply(s *scheduler) {
-	s.stats.Gauge("torrents").Update(float64(len(s.torrentControls)))
-	s.stats.Gauge("conns").Update(float64(s.connState.NumActiveConns()))
+func (e emitStatsEvent) apply(s *state) {
+	s.sched.stats.Gauge("torrents").Update(float64(len(s.torrentControls)))
+	s.sched.stats.Gauge("conns").Update(float64(s.conns.NumActiveConns()))
 }
 
 type blacklistSnapshotEvent struct {
 	result chan []connstate.BlacklistedConn
 }
 
-func (e blacklistSnapshotEvent) Apply(s *scheduler) {
-	e.result <- s.connState.BlacklistSnapshot()
+func (e blacklistSnapshotEvent) apply(s *state) {
+	e.result <- s.conns.BlacklistSnapshot()
 }
 
 // removeTorrentEvent occurs when a torrent is manually removed via scheduler API.
@@ -459,16 +422,16 @@ type removeTorrentEvent struct {
 	errc chan error
 }
 
-func (e removeTorrentEvent) Apply(s *scheduler) {
-	for _, ctrl := range s.torrentControls {
+func (e removeTorrentEvent) apply(s *state) {
+	for h, ctrl := range s.torrentControls {
 		if ctrl.dispatcher.Name() == e.name {
 			s.log(
-				"hash", ctrl.dispatcher.InfoHash(),
-				"inprogress", !ctrl.complete).Info("Removing torrent")
-			s.tearDownTorrentControl(ctrl, ErrTorrentRemoved)
+				"hash", h,
+				"inprogress", !ctrl.dispatcher.Complete()).Info("Removing torrent")
+			s.removeTorrent(h, ErrTorrentRemoved)
 		}
 	}
-	e.errc <- s.torrentArchive.DeleteTorrent(e.name)
+	e.errc <- s.sched.torrentArchive.DeleteTorrent(e.name)
 }
 
 // probeEvent occurs when a probe is manually requested via scheduler API.
@@ -476,4 +439,23 @@ func (e removeTorrentEvent) Apply(s *scheduler) {
 // the event loop is healthy.
 type probeEvent struct{}
 
-func (e probeEvent) Apply(*scheduler) {}
+func (e probeEvent) apply(*state) {}
+
+// shutdownEvent stops the event loop and tears down all active torrents and
+// connections.
+type shutdownEvent struct{}
+
+func (e shutdownEvent) apply(s *state) {
+	for _, c := range s.conns.ActiveConns() {
+		s.log("conn", c).Info("Closing conn to stop scheduler")
+		c.Close()
+	}
+	// Notify local clients of pending torrents that they will not complete.
+	for _, ctrl := range s.torrentControls {
+		ctrl.dispatcher.TearDown()
+		for _, errc := range ctrl.errors {
+			errc <- ErrSchedulerStopped
+		}
+	}
+	s.sched.eventLoop.stop()
+}
