@@ -21,12 +21,7 @@ type Task struct {
 }
 
 // NewTask creates a new Task.
-func NewTask(namespace, name string) *Task {
-	return NewTaskWithDelay(namespace, name, 0)
-}
-
-// NewTaskWithDelay creates a new Task which will run after a given delay.
-func NewTaskWithDelay(namespace, name string, delay time.Duration) *Task {
+func NewTask(namespace, name string, delay time.Duration) *Task {
 	return &Task{
 		Namespace: namespace,
 		Name:      name,

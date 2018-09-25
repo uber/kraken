@@ -664,7 +664,7 @@ func (s *Server) writeBack(namespace string, d core.Digest, delay time.Duration)
 	if _, err := s.cas.SetCacheFileMetadata(d.Hex(), metadata.NewPersist(true)); err != nil {
 		return handler.Errorf("set persist metadata: %s", err)
 	}
-	task := writeback.NewTaskWithDelay(namespace, d.Hex(), delay)
+	task := writeback.NewTask(namespace, d.Hex(), delay)
 	if err := s.writeBackManager.Add(task); err != nil {
 		return handler.Errorf("add write-back task: %s", err)
 	}

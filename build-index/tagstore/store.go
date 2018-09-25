@@ -76,7 +76,7 @@ func (s *tagStore) Put(tag string, d core.Digest, writeBackDelay time.Duration) 
 		return fmt.Errorf("set persist metadata: %s", err)
 	}
 
-	task := writeback.NewTaskWithDelay(tag, tag, writeBackDelay)
+	task := writeback.NewTask(tag, tag, writeBackDelay)
 	if s.config.WriteThrough {
 		if err := s.writeBackManager.SyncExec(task); err != nil {
 			return fmt.Errorf("sync exec write-back task: %s", err)

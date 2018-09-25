@@ -77,7 +77,7 @@ func TestPutAndGetFromDisk(t *testing.T) {
 	digest := core.DigestFixture()
 
 	mocks.writeBackManager.EXPECT().Add(
-		writeback.MatchTask(writeback.NewTask(tag, tag))).Return(nil)
+		writeback.MatchTask(writeback.NewTask(tag, tag, 0))).Return(nil)
 
 	require.NoError(store.Put(tag, digest, 0))
 
@@ -98,7 +98,7 @@ func TestPutAndGetFromDiskWriteThrough(t *testing.T) {
 	digest := core.DigestFixture()
 
 	mocks.writeBackManager.EXPECT().SyncExec(
-		writeback.MatchTask(writeback.NewTask(tag, tag))).Return(nil)
+		writeback.MatchTask(writeback.NewTask(tag, tag, 0))).Return(nil)
 
 	require.NoError(store.Put(tag, digest, 0))
 
