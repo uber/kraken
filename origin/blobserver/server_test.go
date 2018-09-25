@@ -343,9 +343,9 @@ func TestUploadBlobDuplicatesWriteBackTaskToReplicas(t *testing.T) {
 	blob := computeBlobForHosts(ring, s1.host, s2.host)
 
 	s1.writeBackManager.EXPECT().Add(
-		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex()))).Return(nil)
+		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex(), 0))).Return(nil)
 	s2.writeBackManager.EXPECT().Add(
-		writeback.MatchTask(writeback.NewTaskWithDelay(namespace, blob.Digest.Hex(), 30*time.Minute)))
+		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex(), 30*time.Minute)))
 
 	err := cp.Provide(s1.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
@@ -371,7 +371,7 @@ func TestUploadBlobRetriesWriteBackFailure(t *testing.T) {
 
 	blob := computeBlobForHosts(ring, s.host)
 
-	expectedTask := writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex()))
+	expectedTask := writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex(), 0))
 
 	gomock.InOrder(
 		s.writeBackManager.EXPECT().Add(expectedTask).Return(errors.New("some error")),
@@ -408,7 +408,7 @@ func TestUploadBlobResilientToDuplicationFailure(t *testing.T) {
 	blob := computeBlobForHosts(ring, s.host, master2)
 
 	s.writeBackManager.EXPECT().Add(
-		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex()))).Return(nil)
+		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex(), 0))).Return(nil)
 
 	err := cp.Provide(s.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
@@ -432,7 +432,7 @@ func TestForceCleanupTTL(t *testing.T) {
 	blob := computeBlobForHosts(ring, s.host)
 
 	s.writeBackManager.EXPECT().Add(
-		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex()))).Return(nil)
+		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex(), 0))).Return(nil)
 
 	require.NoError(client.UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content)))
 
@@ -474,10 +474,10 @@ func TestForceCleanupNonOwner(t *testing.T) {
 	blob := computeBlobForHosts(ring, s2.host)
 
 	s1.writeBackManager.EXPECT().Add(
-		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex()))).Return(nil)
+		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex(), 0))).Return(nil)
 
 	s2.writeBackManager.EXPECT().Add(
-		writeback.MatchTask(writeback.NewTaskWithDelay(namespace, blob.Digest.Hex(), 30*time.Minute)))
+		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex(), 30*time.Minute)))
 
 	require.NoError(client.UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content)))
 
@@ -507,7 +507,7 @@ func TestForceCleanupWriteBackFailures(t *testing.T) {
 
 	blob := computeBlobForHosts(ring, s.host)
 
-	task := writeback.NewTask(namespace, blob.Digest.Hex())
+	task := writeback.NewTask(namespace, blob.Digest.Hex(), 0)
 
 	s.writeBackManager.EXPECT().Add(writeback.MatchTask(task)).Return(nil)
 

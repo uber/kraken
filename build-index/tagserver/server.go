@@ -313,7 +313,7 @@ func (s *Server) duplicateReplicateTagHandler(w http.ResponseWriter, r *http.Req
 	destinations := s.remotes.Match(tag)
 
 	for _, dest := range destinations {
-		task := tagreplication.NewTaskWithDelay(tag, d, req.Dependencies, dest, req.Delay)
+		task := tagreplication.NewTask(tag, d, req.Dependencies, dest, req.Delay)
 		if err := s.tagReplicationManager.Add(task); err != nil {
 			return handler.Errorf("add replicate task: %s", err)
 		}
@@ -368,7 +368,7 @@ func (s *Server) replicateTag(tag string, d core.Digest, deps core.DigestList) e
 	}
 
 	for _, dest := range destinations {
-		task := tagreplication.NewTask(tag, d, deps, dest)
+		task := tagreplication.NewTask(tag, d, deps, dest, 0)
 		if err := s.tagReplicationManager.Add(task); err != nil {
 			return handler.Errorf("add replicate task: %s", err)
 		}

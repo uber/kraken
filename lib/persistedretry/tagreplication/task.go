@@ -25,16 +25,6 @@ func NewTask(
 	tag string,
 	d core.Digest,
 	dependencies core.DigestList,
-	destination string) *Task {
-
-	return NewTaskWithDelay(tag, d, dependencies, destination, 0)
-}
-
-// NewTaskWithDelay creates a new Task which will be ran after a given delay.
-func NewTaskWithDelay(
-	tag string,
-	d core.Digest,
-	dependencies core.DigestList,
 	destination string,
 	delay time.Duration) *Task {
 

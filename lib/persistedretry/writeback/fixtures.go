@@ -11,5 +11,5 @@ import (
 func TaskFixture() *Task {
 	return NewTask(
 		fmt.Sprintf("namespace-%s", randutil.Hex(8)),
-		core.DigestFixture().Hex())
+		core.DigestFixture().Hex(), 0)
 }

@@ -301,7 +301,7 @@ func TestPutAndReplicate(t *testing.T) {
 	digest := core.DigestFixture()
 	deps := core.DigestList{digest}
 	neighborClient := mocktagclient.NewMockClient(mocks.ctrl)
-	task := tagreplication.NewTask(tag, digest, deps, _testRemote)
+	task := tagreplication.NewTask(tag, digest, deps, _testRemote, 0)
 	replicaClient := mocks.client()
 
 	gomock.InOrder(
@@ -334,7 +334,7 @@ func TestReplicate(t *testing.T) {
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
 	deps := core.DigestList{digest}
-	task := tagreplication.NewTask(tag, digest, deps, _testRemote)
+	task := tagreplication.NewTask(tag, digest, deps, _testRemote, 0)
 	replicaClient := mocks.client()
 
 	gomock.InOrder(
@@ -364,7 +364,7 @@ func TestDuplicateReplicate(t *testing.T) {
 	digest := core.DigestFixture()
 	dependencies := core.DigestListFixture(3)
 	delay := 5 * time.Minute
-	task := tagreplication.NewTaskWithDelay(tag, digest, dependencies, _testRemote, delay)
+	task := tagreplication.NewTask(tag, digest, dependencies, _testRemote, delay)
 
 	mocks.tagReplicationManager.EXPECT().Add(tagreplication.MatchTask(task)).Return(nil)
 
