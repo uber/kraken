@@ -31,6 +31,8 @@ type Config struct {
 	Name     string `yaml:"name"`
 	CacheDir string `yaml:"cache_dir"`
 	LogDir   string `yaml:"log_dir"`
+
+	tls httputil.TLSConfig
 }
 
 func (c *Config) inject(params map[string]interface{}) error {
@@ -44,13 +46,16 @@ func (c *Config) inject(params map[string]interface{}) error {
 	return nil
 }
 
-// Run injects params into an nginx configuration template and runs it.
-func Run(config Config, params map[string]interface{}) error {
-	return RunWithTLS(config, httputil.TLSConfig{CA: httputil.X509Pair{Enabled: false}}, params)
+// Option allows setting optional nginx configuration.
+type Option func(*Config)
+
+// WithTLS configures nginx configuration with tls.
+func WithTLS(tls httputil.TLSConfig) Option {
+	return func(c *Config) { c.tls = tls }
 }
 
-// RunWithTLS injects tls config and params into an nginx configuration template and runs it.
-func RunWithTLS(config Config, tls httputil.TLSConfig, params map[string]interface{}) error {
+// Run injects params into an nginx configuration template and runs it.
+func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	if config.Name == "" {
 		return errors.New("invalid config: name required")
 	}
@@ -60,10 +65,17 @@ func RunWithTLS(config Config, tls httputil.TLSConfig, params map[string]interfa
 	if config.LogDir == "" {
 		return errors.New("invalid config: log_dir required")
 	}
-	if !tls.CA.Enabled {
+	for _, opt := range opts {
+		opt(&config)
+	}
+	if !config.tls.CA.Enabled {
 		log.Warn("Server TLS is disabled")
 	} else {
-		for _, f := range []string{tls.CA.Cert.Path, tls.CA.Key.Path, tls.CA.Passphrase.Path} {
+		for _, f := range []string{
+			config.tls.CA.Cert.Path,
+			config.tls.CA.Key.Path,
+			config.tls.CA.Passphrase.Path,
+		} {
 			if _, err := os.Stat(f); err != nil {
 				return fmt.Errorf("invalid TLS config: %s", err)
 			}
@@ -85,10 +97,10 @@ func RunWithTLS(config Config, tls httputil.TLSConfig, params map[string]interfa
 
 	src, err := populateTemplate("base", map[string]interface{}{
 		"site":                string(site),
-		"ssl_enabled":         tls.CA.Enabled,
-		"ssl_certificate":     tls.CA.Cert.Path,
-		"ssl_certificate_key": tls.CA.Key.Path,
-		"ssl_password_file":   tls.CA.Passphrase.Path,
+		"ssl_enabled":         config.tls.CA.Enabled,
+		"ssl_certificate":     config.tls.CA.Cert.Path,
+		"ssl_certificate_key": config.tls.CA.Key.Path,
+		"ssl_password_file":   config.tls.CA.Passphrase.Path,
 	})
 	if err != nil {
 		return fmt.Errorf("populate base: %s", err)

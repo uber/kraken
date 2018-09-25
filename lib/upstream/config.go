@@ -13,6 +13,8 @@ import (
 type ActiveConfig struct {
 	Hosts       hostlist.Config         `yaml:"hosts"`
 	HealthCheck ActiveHealthCheckConfig `yaml:"healthcheck"`
+
+	checker healthcheck.Checker
 }
 
 // ActiveHealthCheckConfig wraps health check configuration.
@@ -22,13 +24,16 @@ type ActiveHealthCheckConfig struct {
 	Disabled bool                      `yaml:"disabled"`
 }
 
-// Build creates a healthcheck.List with built-in active health checks.
-func (c ActiveConfig) Build() (healthcheck.List, error) {
-	return c.BuildWithHealthChecker(healthcheck.Default(nil))
+// ActiveOption allows setting optional ActiveConfig parameters.
+type ActiveOption func(*ActiveConfig)
+
+// WithHealthCheck configures ActiveConfig with a custom health check.
+func WithHealthCheck(checker healthcheck.Checker) ActiveOption {
+	return func(c *ActiveConfig) { c.checker = checker }
 }
 
-// BuildWithHealthChecker creates a healthcheck.List with customized health checks.
-func (c ActiveConfig) BuildWithHealthChecker(checker healthcheck.Checker) (healthcheck.List, error) {
+// Build creates a healthcheck.List with built-in active health checks.
+func (c ActiveConfig) Build(opts ...ActiveOption) (healthcheck.List, error) {
 	hosts, err := hostlist.New(c.Hosts)
 	if err != nil {
 		return nil, err
@@ -37,7 +42,11 @@ func (c ActiveConfig) BuildWithHealthChecker(checker healthcheck.Checker) (healt
 		log.With("hosts", c.Hosts).Warn("Health checks disabled")
 		return healthcheck.NoopFailed(hosts), nil
 	}
-	filter := healthcheck.NewFilter(c.HealthCheck.Filter, checker)
+	c.checker = healthcheck.Default(nil)
+	for _, opt := range opts {
+		opt(&c)
+	}
+	filter := healthcheck.NewFilter(c.HealthCheck.Filter, c.checker)
 	monitor := healthcheck.NewMonitor(c.HealthCheck.Monitor, hosts, filter)
 	return healthcheck.NoopFailed(monitor), nil
 }

@@ -128,7 +128,7 @@ func newTestServer(
 	addr, stop := testutil.StartServer(s.Handler())
 	cleanup.Add(stop)
 
-	cp.register(host, blobclient.NewWithConfig(addr, blobclient.Config{ChunkSize: 16}))
+	cp.register(host, blobclient.New(addr, blobclient.WithChunkSize(16)))
 
 	return &testServer{
 		ctrl:             ctrl,

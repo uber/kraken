@@ -15,8 +15,7 @@ import (
 
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/utils/httputil"
-
-	"github.com/c2h5oh/datasize"
+	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
 // Client provides a wrapper around all Server HTTP endpoints.
@@ -45,33 +44,30 @@ type Client interface {
 	ForceCleanup(ttl time.Duration) error
 }
 
-// Config defines HTTPClient configuration.
-type Config struct {
-	ChunkSize datasize.ByteSize `yaml:"chunk_size"`
-}
-
-func (c Config) applyDefaults() Config {
-	if c.ChunkSize == 0 {
-		c.ChunkSize = 32 * datasize.MB
-	}
-	return c
-}
-
 // HTTPClient defines the Client implementation.
 type HTTPClient struct {
-	addr   string
-	config Config
+	addr      string
+	chunkSize uint64
 }
 
-// New returns a new HTTPClient scoped to addr with default config.
-func New(addr string) *HTTPClient {
-	return NewWithConfig(addr, Config{})
+// Option allows setting optional HTTPClient parameters.
+type Option func(*HTTPClient)
+
+// WithChunkSize configures an HTTPClient with a custom chunk size for uploads.
+func WithChunkSize(s uint64) Option {
+	return func(c *HTTPClient) { c.chunkSize = s }
 }
 
-// NewWithConfig returns a new HTTPClient scoped to addr with config.
-func NewWithConfig(addr string, config Config) *HTTPClient {
-	config = config.applyDefaults()
-	return &HTTPClient{addr, config}
+// New returns a new HTTPClient scoped to addr.
+func New(addr string, opts ...Option) *HTTPClient {
+	c := &HTTPClient{
+		addr:      addr,
+		chunkSize: 32 * memsize.MB,
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // Addr returns the address of the server the client is provisioned for.
@@ -146,14 +142,14 @@ func (c *HTTPClient) DeleteBlob(d core.Digest) error {
 // TransferBlob is an internal API which does not replicate the blob.
 func (c *HTTPClient) TransferBlob(d core.Digest, blob io.Reader) error {
 	tc := newTransferClient(c.addr)
-	return runChunkedUpload(tc, d, blob, int64(c.config.ChunkSize))
+	return runChunkedUpload(tc, d, blob, int64(c.chunkSize))
 }
 
 // UploadBlob uploads and replicates blob to the origin cluster, asynchronously
 // backing the blob up to the remote storage configured for namespace.
 func (c *HTTPClient) UploadBlob(namespace string, d core.Digest, blob io.Reader) error {
 	uc := newUploadClient(c.addr, namespace, _publicUpload, 0)
-	return runChunkedUpload(uc, d, blob, int64(c.config.ChunkSize))
+	return runChunkedUpload(uc, d, blob, int64(c.chunkSize))
 }
 
 // DuplicateUploadBlob duplicates an blob upload request, which will attempt to
@@ -162,7 +158,7 @@ func (c *HTTPClient) DuplicateUploadBlob(
 	namespace string, d core.Digest, blob io.Reader, delay time.Duration) error {
 
 	uc := newUploadClient(c.addr, namespace, _duplicateUpload, delay)
-	return runChunkedUpload(uc, d, blob, int64(c.config.ChunkSize))
+	return runChunkedUpload(uc, d, blob, int64(c.chunkSize))
 }
 
 // DownloadBlob downloads blob for d. If the blob of d is not available yet

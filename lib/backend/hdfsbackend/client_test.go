@@ -25,10 +25,11 @@ func newClientMocks(t *testing.T) (*clientMocks, func()) {
 }
 
 func (m *clientMocks) new() *Client {
-	c, err := NewClientWithWebHDFS(Config{
+	c, err := NewClient(Config{
+		NameNodes:     []string{"some-name-node"},
 		RootDirectory: "/root",
 		NamePath:      "identity",
-	}, m.webhdfs)
+	}, WithWebHDFS(m.webhdfs))
 	if err != nil {
 		panic(err)
 	}

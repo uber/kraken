@@ -243,7 +243,7 @@ func TestTransferBlobSmallChunkSize(t *testing.T) {
 	blob := core.SizedBlobFixture(1000, 1)
 	namespace := core.TagFixture()
 
-	client := blobclient.NewWithConfig(s.addr, blobclient.Config{ChunkSize: 13})
+	client := blobclient.New(s.addr, blobclient.WithChunkSize(13))
 
 	err := client.TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)

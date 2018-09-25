@@ -175,11 +175,11 @@ func main() {
 	go func() { log.Fatal(server.ListenAndServe(h)) }()
 
 	log.Info("Starting nginx...")
-	log.Fatal(nginx.RunWithTLS(
+	log.Fatal(nginx.Run(
 		config.Nginx,
-		config.TLS,
 		map[string]interface{}{
 			"port":   *blobServerPort,
 			"server": nginx.GetServer(config.BlobServer.Listener.Net, config.BlobServer.Listener.Addr),
-		}))
+		},
+		nginx.WithTLS(config.TLS)))
 }

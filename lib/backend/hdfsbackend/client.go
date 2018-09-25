@@ -24,18 +24,16 @@ type Client struct {
 	webhdfs webhdfs.Client
 }
 
-// NewClient returns a new Client.
-func NewClient(config Config) (*Client, error) {
-	webhdfs, err := webhdfs.NewClient(config.WebHDFS, config.NameNodes, config.UserName)
-	if err != nil {
-		return nil, err
-	}
-	return NewClientWithWebHDFS(config, webhdfs)
+// Option allows setting optional Client parameters.
+type Option func(*Client)
+
+// WithWebHDFS configures a Client with a custom webhdfs implementation.
+func WithWebHDFS(w webhdfs.Client) Option {
+	return func(c *Client) { c.webhdfs = w }
 }
 
-// NewClientWithWebHDFS returns a new Client with custom webhdfs. Useful for
-// testing.
-func NewClientWithWebHDFS(config Config, webhdfs webhdfs.Client) (*Client, error) {
+// NewClient returns a new Client.
+func NewClient(config Config, opts ...Option) (*Client, error) {
 	config.applyDefaults()
 	if !path.IsAbs(config.RootDirectory) {
 		return nil, errors.New("invalid config: root_directory must be absolute path")
@@ -44,7 +42,15 @@ func NewClientWithWebHDFS(config Config, webhdfs webhdfs.Client) (*Client, error
 	if err != nil {
 		return nil, fmt.Errorf("namepath: %s", err)
 	}
-	return &Client{config, pather, webhdfs}, nil
+	webhdfs, err := webhdfs.NewClient(config.WebHDFS, config.NameNodes, config.UserName)
+	if err != nil {
+		return nil, err
+	}
+	client := &Client{config, pather, webhdfs}
+	for _, opt := range opts {
+		opt(client)
+	}
+	return client, nil
 }
 
 // Stat returns blob info for name.
