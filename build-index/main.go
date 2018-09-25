@@ -14,6 +14,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
 	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/upstream"
 	"code.uber.internal/infra/kraken/localdb"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/nginx"
@@ -79,7 +80,7 @@ func main() {
 		log.Fatalf("Error building client tls config: %s", err)
 	}
 
-	cluster, err := config.Cluster.BuildWithHealthChecker(healthcheck.Default(tls))
+	cluster, err := config.Cluster.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))
 	if err != nil {
 		log.Fatalf("Error building cluster host list: %s", err)
 	}
@@ -143,11 +144,11 @@ func main() {
 	}()
 
 	log.Info("Starting nginx...")
-	log.Fatal(nginx.RunWithTLS(
+	log.Fatal(nginx.Run(
 		config.Nginx,
-		config.TLS,
 		map[string]interface{}{
 			"port":   *port,
 			"server": nginx.GetServer(config.TagServer.Listener.Net, config.TagServer.Listener.Addr),
-		}))
+		},
+		nginx.WithTLS(config.TLS)))
 }

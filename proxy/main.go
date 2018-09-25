@@ -7,6 +7,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
 	"code.uber.internal/infra/kraken/lib/healthcheck"
 	"code.uber.internal/infra/kraken/lib/store"
+	"code.uber.internal/infra/kraken/lib/upstream"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -59,7 +60,7 @@ func main() {
 		log.Fatalf("Error building client tls config: %s", err)
 	}
 
-	buildIndexes, err := config.BuildIndex.BuildWithHealthChecker(healthcheck.Default(tls))
+	buildIndexes, err := config.BuildIndex.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))
 	if err != nil {
 		log.Fatalf("Error building build-index host list: %s", err)
 	}
