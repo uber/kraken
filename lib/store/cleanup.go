@@ -19,7 +19,7 @@ type CleanupConfig struct {
 	Disabled bool          `yaml:"disabled"`
 	Interval time.Duration `yaml:"interval"` // How often cleanup runs.
 	TTI      time.Duration `yaml:"tti"`      // Time to idle based on last access time.
-	TTL      time.Duration `yaml:"ttl"`      // Time to live based on last update time.
+	TTL      time.Duration `yaml:"ttl"`      // Time to live regardless of access. If 0, disables TTL.
 }
 
 func (c CleanupConfig) applyDefaults() CleanupConfig {
@@ -28,9 +28,6 @@ func (c CleanupConfig) applyDefaults() CleanupConfig {
 	}
 	if c.TTI == 0 {
 		c.TTI = 6 * time.Hour
-	}
-	if c.TTL == 0 {
-		c.TTL = 24 * time.Hour
 	}
 	return c
 }
@@ -66,6 +63,9 @@ func (m *cleanupManager) addJob(tag string, config CleanupConfig, op base.FileOp
 	if config.Disabled {
 		log.Warnf("Cleanup disabled for %s", op)
 		return
+	}
+	if config.TTL == 0 {
+		log.Warnf("TTL disabled for %s", op)
 	}
 
 	ticker := m.clk.Ticker(config.Interval)
@@ -128,7 +128,7 @@ func (m *cleanupManager) readyForDeletion(
 	tti time.Duration,
 	ttl time.Duration) (bool, error) {
 
-	if m.clk.Now().Sub(info.ModTime()) > ttl {
+	if ttl > 0 && m.clk.Now().Sub(info.ModTime()) > ttl {
 		return true, nil
 	}
 
