@@ -138,7 +138,7 @@ func (l *Logger) DownloadSuccess(namespace, name string, size int64, downloadTim
 
 // DownloadFailure logs a failed download.
 func (l *Logger) DownloadFailure(namespace, name string, size int64, err error) {
-	l.zap.Info(
+	l.zap.Error(
 		"Download failure",
 		zap.String("namespace", namespace),
 		zap.String("name", name),
