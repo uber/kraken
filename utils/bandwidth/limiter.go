@@ -1,10 +1,13 @@
 package bandwidth
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
+	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/memsize"
+
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -23,12 +26,6 @@ type Config struct {
 }
 
 func (c Config) applyDefaults() Config {
-	if c.EgressBitsPerSec == 0 {
-		c.EgressBitsPerSec = 200 * memsize.Mbit
-	}
-	if c.IngressBitsPerSec == 0 {
-		c.IngressBitsPerSec = 300 * memsize.Mbit
-	}
 	if c.TokenSize == 0 {
 		c.TokenSize = memsize.Mbit
 	}
@@ -40,27 +37,51 @@ type Limiter struct {
 	config  Config
 	egress  *rate.Limiter
 	ingress *rate.Limiter
+	logger  *zap.SugaredLogger
+}
+
+// Option allows setting optional parameters in Limiter.
+type Option func(*Limiter)
+
+// WithLogger configures a Limiter with a custom logger.
+func WithLogger(logger *zap.SugaredLogger) Option {
+	return func(l *Limiter) { l.logger = logger }
 }
 
 // NewLimiter creates a new Limiter.
-func NewLimiter(config Config, logger *zap.SugaredLogger) *Limiter {
+func NewLimiter(config Config, opts ...Option) (*Limiter, error) {
 	config = config.applyDefaults()
 
-	if config.Disable {
-		logger.Warn("Bandwidth limits disabled")
-	} else {
-		logger.Infof("Setting egress bandwidth to %s/sec", memsize.BitFormat(config.EgressBitsPerSec))
-		logger.Infof("Setting ingress bandwidth to %s/sec", memsize.BitFormat(config.IngressBitsPerSec))
+	l := &Limiter{
+		config: config,
+		logger: log.Default(),
 	}
+	for _, opt := range opts {
+		opt(l)
+	}
+
+	if config.Disable {
+		l.logger.Warn("Bandwidth limits disabled")
+		return l, nil
+	}
+
+	if config.EgressBitsPerSec == 0 {
+		return nil, errors.New("invalid config: egress_bits_per_sec must be non-zero")
+	}
+	if config.IngressBitsPerSec == 0 {
+		return nil, errors.New("invalid config: ingress_bits_per_sec must be non-zero")
+	}
+
+	l.logger.Infof("Setting egress bandwidth to %s/sec", memsize.BitFormat(config.EgressBitsPerSec))
+	l.logger.Infof("Setting ingress bandwidth to %s/sec", memsize.BitFormat(config.IngressBitsPerSec))
 
 	etps := config.EgressBitsPerSec / config.TokenSize
 	itps := config.IngressBitsPerSec / config.TokenSize
 
-	return &Limiter{
-		config:  config,
-		egress:  rate.NewLimiter(rate.Limit(etps), int(etps)),
-		ingress: rate.NewLimiter(rate.Limit(itps), int(itps)),
-	}
+	l.egress = rate.NewLimiter(rate.Limit(etps), int(etps))
+	l.ingress = rate.NewLimiter(rate.Limit(itps), int(itps))
+
+	return l, nil
 }
 
 func (l *Limiter) reserve(rl *rate.Limiter, nbytes int64) error {

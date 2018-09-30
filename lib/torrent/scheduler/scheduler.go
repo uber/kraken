@@ -170,8 +170,11 @@ func newScheduler(
 		preemptionTick = overrides.clock.Tick(config.PreemptionInterval)
 	}
 
-	handshaker := conn.NewHandshaker(
+	handshaker, err := conn.NewHandshaker(
 		config.Conn, stats, overrides.clock, networkEvents, pctx.PeerID, eventLoop, slogger)
+	if err != nil {
+		return nil, fmt.Errorf("conn: %s", err)
+	}
 
 	connState := connstate.New(config.ConnState, overrides.clock, pctx.PeerID, networkEvents, slogger)
 

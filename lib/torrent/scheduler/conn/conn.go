@@ -16,9 +16,9 @@ import (
 	"code.uber.internal/infra/kraken/.gen/go/proto/p2p"
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn/bandwidth"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
 	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
+	"code.uber.internal/infra/kraken/utils/bandwidth"
 	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
