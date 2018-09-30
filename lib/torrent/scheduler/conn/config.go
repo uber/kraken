@@ -3,7 +3,8 @@ package conn
 import (
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn/bandwidth"
+	"code.uber.internal/infra/kraken/utils/bandwidth"
+	"code.uber.internal/infra/kraken/utils/memsize"
 )
 
 // Config is the configuration for individual live connections.
@@ -35,6 +36,12 @@ func (c Config) applyDefaults() Config {
 	}
 	if c.ReceiverBufferSize == 0 {
 		c.ReceiverBufferSize = 10000
+	}
+	if c.Bandwidth.EgressBitsPerSec == 0 {
+		c.Bandwidth.EgressBitsPerSec = 200 * memsize.Mbit
+	}
+	if c.Bandwidth.IngressBitsPerSec == 0 {
+		c.Bandwidth.IngressBitsPerSec = 300 * memsize.Mbit
 	}
 	return c
 }

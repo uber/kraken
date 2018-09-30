@@ -65,7 +65,7 @@ func Fixture() (*Conn, func()) {
 
 // HandshakerFixture returns a Handshaker for testing.
 func HandshakerFixture(config Config) *Handshaker {
-	return NewHandshaker(
+	h, err := NewHandshaker(
 		config,
 		tally.NewTestScope("", nil),
 		clock.New(),
@@ -73,6 +73,10 @@ func HandshakerFixture(config Config) *Handshaker {
 		core.PeerIDFixture(),
 		noopEvents{},
 		zap.NewNop().Sugar())
+	if err != nil {
+		panic(err)
+	}
+	return h
 }
 
 // ConfigFixture returns a Config for testing.

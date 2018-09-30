@@ -8,13 +8,13 @@ import (
 	"code.uber.internal/infra/kraken/.gen/go/proto/p2p"
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn/bandwidth"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"go.uber.org/zap"
+	"code.uber.internal/infra/kraken/utils/bandwidth"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 	"github.com/willf/bitset"
+	"go.uber.org/zap"
 )
 
 // RemoteBitfields represents the bitfields of an agent's peers for a given torrent.
@@ -181,22 +181,28 @@ func NewHandshaker(
 	networkEvents networkevent.Producer,
 	peerID core.PeerID,
 	events Events,
-	logger *zap.SugaredLogger) *Handshaker {
+	logger *zap.SugaredLogger) (*Handshaker, error) {
 
 	config = config.applyDefaults()
+
 	stats = stats.Tagged(map[string]string{
 		"module": "conn",
 	})
+
+	bl, err := bandwidth.NewLimiter(config.Bandwidth, bandwidth.WithLogger(logger))
+	if err != nil {
+		return nil, fmt.Errorf("bandwidth: %s", err)
+	}
 
 	return &Handshaker{
 		config:        config,
 		stats:         stats,
 		clk:           clk,
-		bandwidth:     bandwidth.NewLimiter(config.Bandwidth, logger),
+		bandwidth:     bl,
 		networkEvents: networkEvents,
 		peerID:        peerID,
 		events:        events,
-	}
+	}, nil
 }
 
 // Accept upgrades a raw network connection opened by a remote peer into a
