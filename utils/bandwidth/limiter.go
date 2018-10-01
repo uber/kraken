@@ -114,3 +114,37 @@ func (l *Limiter) ReserveEgress(nbytes int64) error {
 func (l *Limiter) ReserveIngress(nbytes int64) error {
 	return l.reserve(l.ingress, nbytes)
 }
+
+// Adjust divides the originally configured egress and ingress bps by denominator.
+// Note, because the original configuration is always used, multiple Adjust calls
+// have no affect on each other.
+func (l *Limiter) Adjust(denominator int) error {
+	if denominator <= 0 {
+		return errors.New("denominator must be greater than 0")
+	}
+
+	ebps := max(l.config.EgressBitsPerSec/l.config.TokenSize/uint64(denominator), 1)
+	ibps := max(l.config.IngressBitsPerSec/l.config.TokenSize/uint64(denominator), 1)
+
+	l.egress.SetLimit(rate.Limit(ebps))
+	l.ingress.SetLimit(rate.Limit(ibps))
+
+	return nil
+}
+
+// EgressLimit returns the current egress limit.
+func (l *Limiter) EgressLimit() int64 {
+	return int64(l.egress.Limit())
+}
+
+// IngressLimit returns the current ingress limit.
+func (l *Limiter) IngressLimit() int64 {
+	return int64(l.ingress.Limit())
+}
+
+func max(a, b uint64) uint64 {
+	if a > b {
+		return a
+	}
+	return b
+}

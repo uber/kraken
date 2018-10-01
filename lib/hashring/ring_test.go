@@ -7,6 +7,7 @@ import (
 	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/healthcheck"
 	"code.uber.internal/infra/kraken/lib/hostlist"
+	"code.uber.internal/infra/kraken/mocks/lib/hashring"
 	"code.uber.internal/infra/kraken/mocks/lib/hostlist"
 	"code.uber.internal/infra/kraken/utils/randutil"
 	"code.uber.internal/infra/kraken/utils/stringset"
@@ -228,4 +229,34 @@ func TestRingRefreshUpdatesMembership(t *testing.T) {
 	r.Refresh()
 
 	require.ElementsMatch([]string{y, z}, r.Locations(d))
+}
+
+func TestRingNotifiesWatchersOnMembershipChanges(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cluster := mockhostlist.NewMockList(ctrl)
+
+	watcher := mockhashring.NewMockWatcher(ctrl)
+
+	x := "x:80"
+	y := "y:80"
+	z := "z:80"
+
+	gomock.InOrder(
+		// Called during initial refresh when ring is created.
+		cluster.EXPECT().Resolve().Return(stringset.New(x, y)),
+		watcher.EXPECT().Notify(stringset.New(x, y)),
+
+		// Called on subsequent refresh.
+		cluster.EXPECT().Resolve().Return(stringset.New(x, y, z)),
+		watcher.EXPECT().Notify(stringset.New(x, y, z)),
+
+		// No changes does not notify.
+		cluster.EXPECT().Resolve().Return(stringset.New(x, y, z)),
+	)
+
+	r := New(Config{}, cluster, healthcheck.IdentityFilter{}, WithWatcher(watcher))
+	r.Refresh()
+	r.Refresh()
 }

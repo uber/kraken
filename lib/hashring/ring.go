@@ -13,6 +13,12 @@ import (
 
 const _defaultWeight = 100
 
+// Watcher allows clients to watch the ring for changes. Whenever membership
+// changes, each registered Watcher is notified with the latest hosts.
+type Watcher interface {
+	Notify(latest stringset.Set)
+}
+
 // Ring is a rendezvous hashing ring which calculates an ordered replica set
 // of healthy addresses which own any given digest.
 //
@@ -39,15 +45,30 @@ type ring struct {
 	addrs   stringset.Set
 	hash    *hrw.RendezvousHash
 	healthy stringset.Set
+
+	watchers []Watcher
+}
+
+// Option allows setting custom parameters for ring.
+type Option func(*ring)
+
+// WithWatcher adds a watcher to the ring. Can be used multiple times.
+func WithWatcher(w Watcher) Option {
+	return func(r *ring) { r.watchers = append(r.watchers, w) }
 }
 
 // New creates a new Ring whose members are defined by cluster.
-func New(config Config, cluster hostlist.List, filter healthcheck.Filter) Ring {
+func New(
+	config Config, cluster hostlist.List, filter healthcheck.Filter, opts ...Option) Ring {
+
 	config.applyDefaults()
 	r := &ring{
 		config:  config,
 		cluster: cluster,
 		filter:  filter,
+	}
+	for _, opt := range opts {
+		opt(r)
 	}
 	r.Refresh()
 	return r
@@ -114,6 +135,10 @@ func (r *ring) Refresh() {
 		hash = hrw.NewRendezvousHash(hrw.Murmur3Hash, hrw.UInt64ToFloat64)
 		for addr := range latest {
 			hash.AddNode(addr, _defaultWeight)
+		}
+		// Notify watchers.
+		for _, w := range r.watchers {
+			w.Notify(latest.Copy())
 		}
 	}
 

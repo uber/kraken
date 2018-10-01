@@ -149,7 +149,11 @@ func main() {
 
 	healthCheckFilter := healthcheck.NewFilter(config.HealthCheck, healthcheck.Default(nil))
 
-	hashRing := hashring.New(config.HashRing, cluster, healthCheckFilter)
+	hashRing := hashring.New(
+		config.HashRing,
+		cluster,
+		healthCheckFilter,
+		hashring.WithWatcher(backend.NewBandwidthWatcher(backendManager)))
 	go hashRing.Monitor(nil)
 
 	server, err := blobserver.New(
