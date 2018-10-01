@@ -13,17 +13,16 @@ import (
 // Config defines the union of configuration for all backends, where
 // the Backend field serves as the key for which backend is activated.
 type Config struct {
-	Namespace string `yaml:"namespace"`
-
-	// If enabled, throttles upload / download bandwidth.
-	Bandwidth bandwidth.Config `yaml:"bandwidth"`
-
+	Namespace string                  `yaml:"namespace"`
 	Backend   string                  `yaml:"backend"`
 	S3        s3backend.Config        `yaml:"s3"`
 	HDFS      hdfsbackend.Config      `yaml:"hdfs"`
 	TestFS    testfs.Config           `yaml:"testfs"`
 	HTTP      httpbackend.Config      `yaml:"http"`
 	TerraBlob terrablobbackend.Config `yaml:"terrablob"`
+
+	// If enabled, throttles upload / download bandwidth.
+	Bandwidth bandwidth.Config `yaml:"bandwidth"`
 }
 
 func (c Config) applyDefaults() Config {
