@@ -211,6 +211,12 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
+	mkdir -p mocks/lib/hashring
+	$(mockgen) \
+		-destination=mocks/lib/hashring/mocks.go \
+		-package mockhashring \
+		code.uber.internal/infra/kraken/lib/hashring Ring,Watcher
+
 	mkdir -p mocks/lib/backend/s3backend
 	$(mockgen) \
 		-destination=mocks/lib/backend/s3backend/mocks.go \

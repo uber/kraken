@@ -154,3 +154,31 @@ func TestLimiterReserveErrorWhenBytesLargerThanBucket(t *testing.T) {
 		})
 	}
 }
+
+func TestLimiterAdjust(t *testing.T) {
+	require := require.New(t)
+
+	l, err := NewLimiter(Config{
+		EgressBitsPerSec:  50,
+		IngressBitsPerSec: 10,
+		TokenSize:         1,
+		Enable:            true,
+	})
+	require.NoError(err)
+
+	// No subtests since we want to ensure the calls don't affect each other.
+	cases := []struct {
+		denom   int
+		egress  int64
+		ingress int64
+	}{
+		{10, 5, 1},
+		{5, 10, 2},
+		{100, 1, 1},
+	}
+	for _, c := range cases {
+		require.NoError(l.Adjust(c.denom))
+		require.Equal(c.egress, l.EgressLimit())
+		require.Equal(c.ingress, l.IngressLimit())
+	}
+}

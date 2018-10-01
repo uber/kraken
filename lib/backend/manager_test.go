@@ -6,6 +6,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
 	"code.uber.internal/infra/kraken/utils/bandwidth"
+	"code.uber.internal/infra/kraken/utils/stringset"
 	"github.com/stretchr/testify/require"
 )
 
@@ -86,19 +87,35 @@ func TestManagerNamespaceOrdering(t *testing.T) {
 	}
 }
 
-func TestManagerThrottleClient(t *testing.T) {
+func TestManagerBandwidth(t *testing.T) {
 	require := require.New(t)
 
 	m, err := NewManager([]Config{{
 		Namespace: ".*",
-		Bandwidth: bandwidth.Config{EgressBitsPerSec: 1, IngressBitsPerSec: 1, Enable: true},
-		Backend:   "testfs",
-		TestFS:    testfs.Config{Addr: "test-addr", NamePath: namepath.Identity},
+		Bandwidth: bandwidth.Config{
+			EgressBitsPerSec:  10,
+			IngressBitsPerSec: 50,
+			TokenSize:         1,
+			Enable:            true,
+		},
+		Backend: "testfs",
+		TestFS:  testfs.Config{Addr: "test-addr", NamePath: namepath.Identity},
 	}}, AuthConfig{})
 	require.NoError(err)
 
-	c, err := m.GetClient("foo")
-	require.NoError(err)
-	_, ok := c.(*throttledClient)
-	require.True(ok)
+	checkBandwidth := func(egress, ingress int64) {
+		c, err := m.GetClient("foo")
+		require.NoError(err)
+		tc, ok := c.(*throttledClient)
+		require.True(ok)
+		require.Equal(egress, tc.egressLimit())
+		require.Equal(ingress, tc.ingressLimit())
+	}
+
+	checkBandwidth(10, 50)
+
+	watcher := NewBandwidthWatcher(m)
+	watcher.Notify(stringset.New("a", "b"))
+
+	checkBandwidth(5, 25)
 }

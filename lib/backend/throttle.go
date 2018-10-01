@@ -6,6 +6,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/utils/bandwidth"
 	"code.uber.internal/infra/kraken/utils/log"
+	"code.uber.internal/infra/kraken/utils/stringset"
 )
 
 type throttledClient struct {
@@ -46,4 +47,34 @@ func (c *throttledClient) Download(name string, dst io.Writer) error {
 		// Ignore error.
 	}
 	return c.Client.Download(name, dst)
+}
+
+func (c *throttledClient) adjustBandwidth(denominator int) error {
+	return c.bandwidth.Adjust(denominator)
+}
+
+func (c *throttledClient) egressLimit() int64 {
+	return c.bandwidth.EgressLimit()
+}
+
+func (c *throttledClient) ingressLimit() int64 {
+	return c.bandwidth.IngressLimit()
+}
+
+// BandwidthWatcher is a hashring.Watcher which adjusts bandwidth on throttled
+// backends when hashring membership changes.
+type BandwidthWatcher struct {
+	manager *Manager
+}
+
+// NewBandwidthWatcher creates a new BandwidthWatcher for manager.
+func NewBandwidthWatcher(manager *Manager) *BandwidthWatcher {
+	return &BandwidthWatcher{manager}
+}
+
+// Notify splits bandwidth across the size of latest.
+func (w *BandwidthWatcher) Notify(latest stringset.Set) {
+	if err := w.manager.AdjustBandwidth(len(latest)); err != nil {
+		log.With("latest", latest.ToSlice()).Errorf("Error adjusting bandwidth: %s", err)
+	}
 }

@@ -11,6 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/terrablobbackend"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
 	"code.uber.internal/infra/kraken/utils/bandwidth"
+	"code.uber.internal/infra/kraken/utils/log"
 )
 
 // Manager errors.
@@ -87,6 +88,26 @@ func NewManager(configs []Config, auth AuthConfig) (*Manager, error) {
 		backends = append(backends, b)
 	}
 	return &Manager{backends}, nil
+}
+
+// AdjustBandwidth adjusts bandwidth limits across all throttled clients to the
+// originally configured bandwidth divided by denominator.
+func (m *Manager) AdjustBandwidth(denominator int) error {
+	for _, b := range m.backends {
+		tc, ok := b.client.(*throttledClient)
+		if !ok {
+			continue
+		}
+		if err := tc.adjustBandwidth(denominator); err != nil {
+			return err
+		}
+		log.With(
+			"namespace", b.regexp.String(),
+			"ingress", tc.ingressLimit(),
+			"egress", tc.egressLimit(),
+			"denominator", denominator).Info("Adjusted backend bandwidth")
+	}
+	return nil
 }
 
 // Register dynamically registers a namespace with a provided client. Register
