@@ -5,6 +5,7 @@ import (
 
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
+	"code.uber.internal/infra/kraken/utils/bandwidth"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,4 +84,21 @@ func TestManagerNamespaceOrdering(t *testing.T) {
 		require.NoError(err)
 		require.Equal(expected, c.(*testfs.Client).Addr(), "Namespace: %s", ns)
 	}
+}
+
+func TestManagerThrottleClient(t *testing.T) {
+	require := require.New(t)
+
+	m, err := NewManager([]Config{{
+		Namespace: ".*",
+		Bandwidth: bandwidth.Config{EgressBitsPerSec: 1, IngressBitsPerSec: 1, Enable: true},
+		Backend:   "testfs",
+		TestFS:    testfs.Config{Addr: "test-addr", NamePath: namepath.Identity},
+	}}, AuthConfig{})
+	require.NoError(err)
+
+	c, err := m.GetClient("foo")
+	require.NoError(err)
+	_, ok := c.(*throttledClient)
+	require.True(ok)
 }

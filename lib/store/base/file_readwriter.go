@@ -11,6 +11,7 @@ type FileReader interface {
 	io.ReaderAt
 	io.Seeker
 	io.Closer
+	Size() int64
 }
 
 // FileReadWriter provides read/write operation on a file.
@@ -19,7 +20,6 @@ type FileReadWriter interface {
 	io.Writer
 	io.WriterAt
 
-	Size() int64   // required by docker registry.
 	Cancel() error // required by docker registry.
 	Commit() error // required by docker registry.
 }
