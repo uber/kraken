@@ -22,7 +22,7 @@ type Config struct {
 	// token.
 	TokenSize uint64 `yaml:"token_size"`
 
-	Disable bool `yaml:"disable"`
+	Enable bool `yaml:"enable"`
 }
 
 func (c Config) applyDefaults() Config {
@@ -60,7 +60,7 @@ func NewLimiter(config Config, opts ...Option) (*Limiter, error) {
 		opt(l)
 	}
 
-	if config.Disable {
+	if !config.Enable {
 		l.logger.Warn("Bandwidth limits disabled")
 		return l, nil
 	}
@@ -85,7 +85,7 @@ func NewLimiter(config Config, opts ...Option) (*Limiter, error) {
 }
 
 func (l *Limiter) reserve(rl *rate.Limiter, nbytes int64) error {
-	if l.config.Disable {
+	if !l.config.Enable {
 		return nil
 	}
 	tokens := int(uint64(nbytes*8) / l.config.TokenSize)

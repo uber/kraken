@@ -33,6 +33,7 @@ func TestLimiterReserveConcurrency(t *testing.T) {
 				EgressBitsPerSec:  bps,
 				IngressBitsPerSec: bps,
 				TokenSize:         1,
+				Enable:            true,
 			})
 			require.NoError(err)
 
@@ -88,6 +89,7 @@ func TestLimiterReserveBytesTokenScaling(t *testing.T) {
 				EgressBitsPerSec:  bps,
 				IngressBitsPerSec: bps,
 				TokenSize:         10, // Bucket has 8 tokens.
+				Enable:            true,
 			})
 			require.NoError(err)
 
@@ -115,6 +117,7 @@ func TestLimiterReserveBytesSmallerThanTokenSize(t *testing.T) {
 				EgressBitsPerSec:  bps,
 				IngressBitsPerSec: bps,
 				TokenSize:         10, // Bucket has 8 tokens.
+				Enable:            true,
 			})
 			require.NoError(err)
 
@@ -143,6 +146,7 @@ func TestLimiterReserveErrorWhenBytesLargerThanBucket(t *testing.T) {
 				EgressBitsPerSec:  bps,
 				IngressBitsPerSec: bps,
 				TokenSize:         10, // Bucket has 8 tokens.
+				Enable:            true,
 			})
 			require.NoError(err)
 

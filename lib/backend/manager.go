@@ -10,11 +10,21 @@ import (
 	"code.uber.internal/infra/kraken/lib/backend/s3backend"
 	"code.uber.internal/infra/kraken/lib/backend/terrablobbackend"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
+	"code.uber.internal/infra/kraken/utils/bandwidth"
 )
 
 // Manager errors.
 var (
 	ErrNamespaceNotFound = errors.New("no matches for namespace")
+)
+
+// Available backends.
+const (
+	_s3        = "s3"
+	_hdfs      = "hdfs"
+	_http      = "http"
+	_terrablob = "terrablob"
+	_testfs    = "testfs"
 )
 
 type backend struct {
@@ -42,18 +52,19 @@ type Manager struct {
 func NewManager(configs []Config, auth AuthConfig) (*Manager, error) {
 	var backends []*backend
 	for _, config := range configs {
+		config = config.applyDefaults()
 		var c Client
 		var err error
 		switch config.Backend {
-		case "s3":
+		case _s3:
 			c, err = s3backend.NewClient(config.S3, auth.S3)
-		case "hdfs":
+		case _hdfs:
 			c, err = hdfsbackend.NewClient(config.HDFS)
-		case "http":
+		case _http:
 			c, err = httpbackend.NewClient(config.HTTP)
-		case "terrablob":
+		case _terrablob:
 			c, err = terrablobbackend.NewClient(config.TerraBlob)
-		case "testfs":
+		case _testfs:
 			c, err = testfs.NewClient(config.TestFS)
 		default:
 			return nil, fmt.Errorf(
@@ -61,6 +72,13 @@ func NewManager(configs []Config, auth AuthConfig) (*Manager, error) {
 		}
 		if err != nil {
 			return nil, fmt.Errorf("new client for backend %s: %s", config.Backend, err)
+		}
+		if config.Bandwidth.Enable {
+			l, err := bandwidth.NewLimiter(config.Bandwidth)
+			if err != nil {
+				return nil, fmt.Errorf("bandwidth: %s", err)
+			}
+			c = throttle(c, l)
 		}
 		b, err := newBackend(config.Namespace, c)
 		if err != nil {
