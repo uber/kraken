@@ -1,3 +1,11 @@
+0.0.17 (2018-10-01)
+====
+- Disable blob TTL everywhere but agent
+- Throttle upload / download bandwidth on storage backends (enabled for S3 only)
+- Set download failures to level=error in torrent log
+- Constructor options refactor
+- Add nginx in front of origin
+
 0.0.16 (2018-09-24)
 ====
 - Implement list for S3 backend
