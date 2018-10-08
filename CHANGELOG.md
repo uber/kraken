@@ -1,3 +1,7 @@
+0.0.18 (2018-10-08)
+====
+- Enable terrablob in IRN/WBU2
+
 0.0.17 (2018-10-01)
 ====
 - Disable blob TTL everywhere but agent
