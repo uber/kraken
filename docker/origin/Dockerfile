@@ -17,6 +17,7 @@ USER udocker
 COPY ./config /home/udocker/kraken/config
 COPY ./nginx/config /home/udocker/kraken/nginx/config
 COPY ./localdb/migrations /home/udocker/kraken/localdb/migrations
+COPY ./test/tls /home/udocker/kraken/tls
 COPY origin/origin.linux /usr/bin/kraken-origin
 
 WORKDIR /home/udocker/kraken

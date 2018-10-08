@@ -1,6 +1,8 @@
 package blobclient
 
-import "code.uber.internal/infra/kraken/lib/hostlist"
+import (
+	"code.uber.internal/infra/kraken/lib/hostlist"
+)
 
 // Provider defines an interface for creating Client scoped to an origin addr.
 type Provider interface {
@@ -8,17 +10,19 @@ type Provider interface {
 }
 
 // HTTPProvider provides HTTPClients.
-type HTTPProvider struct{}
+type HTTPProvider struct {
+	opts []Option
+}
 
 // NewProvider returns a new HTTPProvider.
-func NewProvider() HTTPProvider {
-	return HTTPProvider{}
+func NewProvider(opts ...Option) HTTPProvider {
+	return HTTPProvider{opts}
 }
 
 // Provide implements ClientProvider's Provide.
 // TODO(codyg): Make this return error.
 func (p HTTPProvider) Provide(addr string) Client {
-	return New(addr)
+	return New(addr, p.opts...)
 }
 
 // ClusterProvider creates ClusterClients from dns records.
@@ -28,11 +32,13 @@ type ClusterProvider interface {
 
 // HTTPClusterProvider provides ClusterClients backed by HTTP. Does not include
 // health checks.
-type HTTPClusterProvider struct{}
+type HTTPClusterProvider struct {
+	opts []Option
+}
 
 // NewClusterProvider returns a new HTTPClusterProvider.
-func NewClusterProvider() HTTPClusterProvider {
-	return HTTPClusterProvider{}
+func NewClusterProvider(opts ...Option) HTTPClusterProvider {
+	return HTTPClusterProvider{opts}
 }
 
 // Provide creates a new ClusterClient.
@@ -41,5 +47,5 @@ func (p HTTPClusterProvider) Provide(dns string) (ClusterClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewClusterClient(NewClientResolver(NewProvider(), hosts)), nil
+	return NewClusterClient(NewClientResolver(NewProvider(p.opts...), hosts)), nil
 }

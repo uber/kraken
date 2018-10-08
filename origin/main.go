@@ -147,7 +147,12 @@ func main() {
 		log.Fatalf("Error creating cluster host list: %s", err)
 	}
 
-	healthCheckFilter := healthcheck.NewFilter(config.HealthCheck, healthcheck.Default(nil))
+	tls, err := config.TLS.BuildClient()
+	if err != nil {
+		log.Fatalf("Error building client tls config: %s", err)
+	}
+
+	healthCheckFilter := healthcheck.NewFilter(config.HealthCheck, healthcheck.Default(tls))
 
 	hashRing := hashring.New(
 		config.HashRing,
@@ -163,8 +168,8 @@ func main() {
 		fmt.Sprintf("%s:%d", hostname, *blobServerPort),
 		hashRing,
 		cas,
-		blobclient.NewProvider(),
-		blobclient.NewClusterProvider(),
+		blobclient.NewProvider(blobclient.WithTLS(tls)),
+		blobclient.NewClusterProvider(blobclient.WithTLS(tls)),
 		pctx,
 		backendManager,
 		blobRefresher,

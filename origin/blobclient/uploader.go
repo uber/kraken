@@ -2,6 +2,7 @@ package blobclient
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -55,14 +56,17 @@ func runChunkedUploadHelper(u uploader, d core.Digest, blob io.Reader, chunkSize
 // transferClient executes chunked uploads for internal blob transfers.
 type transferClient struct {
 	addr string
+	tls  *tls.Config
 }
 
-func newTransferClient(addr string) *transferClient {
-	return &transferClient{addr}
+func newTransferClient(addr string, tls *tls.Config) *transferClient {
+	return &transferClient{addr, tls}
 }
 
 func (c *transferClient) start(d core.Digest) (uid string, err error) {
-	r, err := httputil.Post(fmt.Sprintf("http://%s/internal/blobs/%s/uploads", c.addr, d))
+	r, err := httputil.Post(
+		fmt.Sprintf("http://%s/internal/blobs/%s/uploads", c.addr, d),
+		httputil.SendTLSTransport(c.tls))
 	if err != nil {
 		return "", err
 	}
@@ -81,14 +85,16 @@ func (c *transferClient) patch(
 		httputil.SendBody(chunk),
 		httputil.SendHeaders(map[string]string{
 			"Content-Range": fmt.Sprintf("%d-%d", start, stop),
-		}))
+		}),
+		httputil.SendTLSTransport(c.tls))
 	return err
 }
 
 func (c *transferClient) commit(d core.Digest, uid string) error {
 	_, err := httputil.Put(
 		fmt.Sprintf("http://%s/internal/blobs/%s/uploads/%s", c.addr, d, uid),
-		httputil.SendTimeout(15*time.Minute))
+		httputil.SendTimeout(15*time.Minute),
+		httputil.SendTLSTransport(c.tls))
 	return err
 }
 
@@ -105,18 +111,20 @@ type uploadClient struct {
 	namespace  string
 	uploadType uploadType
 	delay      time.Duration
+	tls        *tls.Config
 }
 
 func newUploadClient(
-	addr string, namespace string, t uploadType, delay time.Duration) *uploadClient {
+	addr string, namespace string, t uploadType, delay time.Duration, tls *tls.Config) *uploadClient {
 
-	return &uploadClient{addr, namespace, t, delay}
+	return &uploadClient{addr, namespace, t, delay, tls}
 }
 
 func (c *uploadClient) start(d core.Digest) (uid string, err error) {
 	r, err := httputil.Post(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads",
-			c.addr, url.PathEscape(c.namespace), d))
+			c.addr, url.PathEscape(c.namespace), d),
+		httputil.SendTLSTransport(c.tls))
 	if err != nil {
 		return "", err
 	}
@@ -136,7 +144,8 @@ func (c *uploadClient) patch(
 		httputil.SendBody(chunk),
 		httputil.SendHeaders(map[string]string{
 			"Content-Range": fmt.Sprintf("%d-%d", start, stop),
-		}))
+		}),
+		httputil.SendTLSTransport(c.tls))
 	return err
 }
 
@@ -164,6 +173,7 @@ func (c *uploadClient) commit(d core.Digest, uid string) error {
 	_, err := httputil.Put(
 		fmt.Sprintf(template, c.addr, url.PathEscape(c.namespace), d, uid),
 		httputil.SendTimeout(15*time.Minute),
-		httputil.SendBody(body))
+		httputil.SendBody(body),
+		httputil.SendTLSTransport(c.tls))
 	return err
 }

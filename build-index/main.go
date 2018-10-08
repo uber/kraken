@@ -58,11 +58,17 @@ func main() {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
 
-	origins, err := config.Origin.Build()
+	tls, err := config.TLS.BuildClient()
+	if err != nil {
+		log.Fatalf("Error building client tls config: %s", err)
+	}
+
+	origins, err := config.Origin.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))
 	if err != nil {
 		log.Fatalf("Error building origin host list: %s", err)
 	}
-	r := blobclient.NewClientResolver(blobclient.NewProvider(), origins)
+
+	r := blobclient.NewClientResolver(blobclient.NewProvider(blobclient.WithTLS(tls)), origins)
 	originClient := blobclient.NewClusterClient(r)
 
 	localOriginDNS, err := config.Origin.StableAddr()
@@ -73,11 +79,6 @@ func main() {
 	localDB, err := localdb.New(config.LocalDB)
 	if err != nil {
 		log.Fatalf("Error creating local db: %s", err)
-	}
-
-	tls, err := config.TLS.BuildClient()
-	if err != nil {
-		log.Fatalf("Error building client tls config: %s", err)
 	}
 
 	cluster, err := config.Cluster.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))
