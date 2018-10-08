@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
 	"code.uber.internal/infra/kraken/tracker/peerstore"
 	"code.uber.internal/infra/kraken/tracker/trackerserver"
+	"code.uber.internal/infra/kraken/utils/httputil"
 )
 
 // Config defines tracker configuration.
@@ -23,4 +24,5 @@ type Config struct {
 	Origin            upstream.ActiveConfig    `yaml:"origin"`
 	Metrics           metrics.Config           `yaml:"metrics"`
 	Nginx             nginx.Config             `yaml:"nginx"`
+	TLS               httputil.TLSConfig       `yaml:"tls"`
 }

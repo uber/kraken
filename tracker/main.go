@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 
+	"code.uber.internal/infra/kraken/lib/healthcheck"
+	"code.uber.internal/infra/kraken/lib/upstream"
 	"code.uber.internal/infra/kraken/metrics"
 	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/origin/blobclient"
@@ -41,20 +43,25 @@ func main() {
 		log.Fatalf("Could not create PeerStore: %s", err)
 	}
 
-	origins, err := config.Origin.Build()
+	tls, err := config.TLS.BuildClient()
+	if err != nil {
+		log.Fatalf("Error building client tls config: %s", err)
+	}
+
+	origins, err := config.Origin.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))
 	if err != nil {
 		log.Fatalf("Error building origin host list: %s", err)
 	}
 
 	originStore := originstore.New(
-		config.OriginStore, clock.New(), origins, blobclient.NewProvider())
+		config.OriginStore, clock.New(), origins, blobclient.NewProvider(blobclient.WithTLS(tls)))
 
 	policy, err := peerhandoutpolicy.NewPriorityPolicy(stats, config.PeerHandoutPolicy.Priority)
 	if err != nil {
 		log.Fatalf("Could not load peer handout policy: %s", err)
 	}
 
-	r := blobclient.NewClientResolver(blobclient.NewProvider(), origins)
+	r := blobclient.NewClientResolver(blobclient.NewProvider(blobclient.WithTLS(tls)), origins)
 	originCluster := blobclient.NewClusterClient(r)
 
 	server := trackerserver.New(

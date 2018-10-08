@@ -16,6 +16,7 @@ USER udocker
 
 COPY ./config /home/udocker/kraken/config
 COPY ./nginx/config /home/udocker/kraken/nginx/config
+COPY ./test/tls /home/udocker/kraken/tls
 COPY ./tracker/tracker.linux /usr/bin/tracker
 
 WORKDIR /home/udocker/kraken

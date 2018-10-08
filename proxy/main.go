@@ -48,17 +48,18 @@ func main() {
 		log.Fatalf("Failed to create store: %s", err)
 	}
 
-	origins, err := config.Origin.Build()
-	if err != nil {
-		log.Fatalf("Error building origin host list: %s", err)
-	}
-	r := blobclient.NewClientResolver(blobclient.NewProvider(), origins)
-	originCluster := blobclient.NewClusterClient(r)
-
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
 		log.Fatalf("Error building client tls config: %s", err)
 	}
+
+	origins, err := config.Origin.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))
+	if err != nil {
+		log.Fatalf("Error building origin host list: %s", err)
+	}
+
+	r := blobclient.NewClientResolver(blobclient.NewProvider(blobclient.WithTLS(tls)), origins)
+	originCluster := blobclient.NewClusterClient(r)
 
 	buildIndexes, err := config.BuildIndex.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))
 	if err != nil {
