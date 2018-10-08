@@ -176,6 +176,7 @@ docker_stop:
 	-docker ps -a --format '{{.Names}}' | grep kraken | while read n; do docker rm -f $$n; done
 
 .PHONY: integration
+FILE?=
 NAME?=test_
 integration: $(LINUX_BINS) tools/bin/puller/puller docker_stop
 	docker build -q -t kraken-agent:dev -f docker/agent/Dockerfile ./
@@ -187,13 +188,13 @@ integration: $(LINUX_BINS) tools/bin/puller/puller docker_stop
 	if [ ! -d env ]; then virtualenv --setuptools env; fi
 	source env/bin/activate
 	env/bin/pip install -r requirements-tests.txt
-	env/bin/py.test --timeout=120 -v test/python -k $(NAME)
+	env/bin/py.test --timeout=120 -v -k $(NAME) test/python/$(FILE)
 
 .PHONY: runtest
 NAME?=test_
 runtest: docker_stop
 	source env/bin/activate
-	env/bin/py.test --timeout=120 -v test/python -k $(NAME)
+	env/bin/py.test --timeout=120 -v -k $(NAME) test/python
 
 .PHONY: devcluster
 devcluster: $(LINUX_BINS) docker_stop
