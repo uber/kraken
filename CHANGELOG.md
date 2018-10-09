@@ -1,3 +1,7 @@
+0.0.19 (2018-10-09)
+====
+- Remove agent registry backup from WBU2
+
 0.0.18 (2018-10-08)
 ====
 - Enable terrablob in IRN/WBU2
