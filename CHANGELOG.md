@@ -1,3 +1,7 @@
+0.0.20 (2018-10-10)
+====
+- Upgrade terrablob-client
+
 0.0.19 (2018-10-09)
 ====
 - Remove agent registry backup from WBU2
