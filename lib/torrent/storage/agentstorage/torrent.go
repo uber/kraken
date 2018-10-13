@@ -45,7 +45,7 @@ type Torrent struct {
 
 // NewTorrent creates a new Torrent.
 func NewTorrent(cads caDownloadStore, mi *core.MetaInfo) (*Torrent, error) {
-	pieces, numComplete, err := restorePieces(mi.Name(), cads, mi.Info.NumPieces())
+	pieces, numComplete, err := restorePieces(mi.Name(), cads, mi.NumPieces())
 	if err != nil {
 		return nil, fmt.Errorf("restore pieces: %s", err)
 	}
@@ -69,7 +69,7 @@ func NewTorrent(cads caDownloadStore, mi *core.MetaInfo) (*Torrent, error) {
 
 // Name returns the name of the target file.
 func (t *Torrent) Name() string {
-	return t.metaInfo.Info.Name
+	return t.metaInfo.Name()
 }
 
 // Stat returns the storage.TorrentInfo for t.
@@ -79,7 +79,7 @@ func (t *Torrent) Stat() *storage.TorrentInfo {
 
 // InfoHash returns the torrent metainfo hash.
 func (t *Torrent) InfoHash() core.InfoHash {
-	return t.metaInfo.InfoHash
+	return t.metaInfo.InfoHash()
 }
 
 // NumPieces returns the number of pieces in the torrent.
@@ -89,12 +89,12 @@ func (t *Torrent) NumPieces() int {
 
 // Length returns the length of the target file.
 func (t *Torrent) Length() int64 {
-	return t.metaInfo.Info.Length
+	return t.metaInfo.Length()
 }
 
 // PieceLength returns the length of piece pi.
 func (t *Torrent) PieceLength(pi int) int64 {
-	return t.metaInfo.Info.GetPieceLength(pi)
+	return t.metaInfo.GetPieceLength(pi)
 }
 
 // MaxPieceLength returns the longest piece length of the torrent.
@@ -111,7 +111,7 @@ func (t *Torrent) Complete() bool {
 // BytesDownloaded returns an estimate of the number of bytes downloaded in the
 // torrent.
 func (t *Torrent) BytesDownloaded() int64 {
-	return min(int64(t.numComplete.Load())*t.metaInfo.Info.PieceLength, t.metaInfo.Info.Length)
+	return min(int64(t.numComplete.Load())*t.metaInfo.PieceLength(), t.metaInfo.Length())
 }
 
 // Bitfield returns the bitfield of pieces where true denotes a complete piece
@@ -127,10 +127,10 @@ func (t *Torrent) Bitfield() *bitset.BitSet {
 }
 
 func (t *Torrent) String() string {
-	downloaded := int(float64(t.BytesDownloaded()) / float64(t.metaInfo.Info.Length) * 100)
+	downloaded := int(float64(t.BytesDownloaded()) / float64(t.metaInfo.Length()) * 100)
 	return fmt.Sprintf(
 		"torrent(name=%s, hash=%s, downloaded=%d%%)",
-		t.Name(), t.InfoHash().HexString(), downloaded)
+		t.Name(), t.InfoHash().Hex(), downloaded)
 }
 
 func (t *Torrent) getPiece(pi int) (*piece, error) {
@@ -159,7 +159,7 @@ func (t *Torrent) markPieceComplete(pi int) error {
 
 // writePiece writes data to piece pi. If the write succeeds, marks the piece as completed.
 func (t *Torrent) writePiece(src storage.PieceReader, pi int) error {
-	f, err := t.cads.GetDownloadFileReadWriter(t.metaInfo.Info.Name)
+	f, err := t.cads.GetDownloadFileReadWriter(t.metaInfo.Name())
 	if err != nil {
 		return fmt.Errorf("get download writer: %s", err)
 	}
@@ -174,7 +174,7 @@ func (t *Torrent) writePiece(src storage.PieceReader, pi int) error {
 	if _, err := io.Copy(f, r); err != nil {
 		return fmt.Errorf("copy: %s", err)
 	}
-	if h.Sum32() != t.metaInfo.Info.PieceSums[pi] {
+	if h.Sum32() != t.metaInfo.GetPieceSum(pi) {
 		return errors.New("invalid piece sum")
 	}
 
@@ -224,7 +224,7 @@ func (t *Torrent) WritePiece(src storage.PieceReader, pi int) error {
 		// Multiple threads may attempt to move the download file to cache, however
 		// only one will succeed while the others will receive (and ignore) file exist
 		// error.
-		if err := t.cads.MoveDownloadFileToCache(t.metaInfo.Info.Name); err != nil && !os.IsExist(err) {
+		if err := t.cads.MoveDownloadFileToCache(t.metaInfo.Name()); err != nil && !os.IsExist(err) {
 			return fmt.Errorf("download completed but failed to move file to cache directory: %s", err)
 		}
 		t.committed.Store(true)
@@ -276,7 +276,7 @@ func (t *Torrent) MissingPieces() []int {
 // getFileOffset calculates the offset in the torrent file given piece index.
 // Assumes pi is a valid piece index.
 func (t *Torrent) getFileOffset(pi int) int64 {
-	return t.metaInfo.Info.PieceLength * int64(pi)
+	return t.metaInfo.PieceLength() * int64(pi)
 }
 
 func min(a, b int64) int64 {

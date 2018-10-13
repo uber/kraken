@@ -147,7 +147,7 @@ func (p *testPeer) writeTorrent(namespace string, blob *core.BlobFixture) {
 		panic(err)
 	}
 	for i := 0; i < t.NumPieces(); i++ {
-		start := int64(i) * blob.MetaInfo.Info.PieceLength
+		start := int64(i) * blob.MetaInfo.PieceLength()
 		end := start + t.PieceLength(i)
 		if err := t.WritePiece(piecereader.NewBuffer(blob.Content[start:end]), i); err != nil {
 			panic(err)
@@ -158,7 +158,7 @@ func (p *testPeer) writeTorrent(namespace string, blob *core.BlobFixture) {
 func (p *testPeer) checkTorrent(t *testing.T, namespace string, blob *core.BlobFixture) {
 	require := require.New(t)
 
-	tor, err := p.torrentArchive.GetTorrent(namespace, blob.MetaInfo.Info.Name)
+	tor, err := p.torrentArchive.GetTorrent(namespace, blob.MetaInfo.Name())
 	require.NoError(err)
 
 	require.True(tor.Complete())

@@ -36,7 +36,7 @@ func SizedBlobFixture(size uint64, pieceLength uint64) *BlobFixture {
 	if err != nil {
 		panic(err)
 	}
-	mi, err := NewMetaInfoFromBlob(d.Hex(), bytes.NewReader(b), int64(pieceLength))
+	mi, err := NewMetaInfo(d, bytes.NewReader(b), int64(pieceLength))
 	if err != nil {
 		panic(err)
 	}
@@ -78,7 +78,7 @@ func MetaInfoFixture() *MetaInfo {
 
 // InfoHashFixture returns a randomly generated InfoHash.
 func InfoHashFixture() InfoHash {
-	return MetaInfoFixture().InfoHash
+	return MetaInfoFixture().InfoHash()
 }
 
 // DigestFixture returns a random Digest.

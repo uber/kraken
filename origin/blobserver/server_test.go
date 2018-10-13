@@ -181,7 +181,7 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 	mi, err = cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
 	require.NoError(err)
 	require.NotNil(mi)
-	require.Equal(len(blob.Content), int(mi.Info.Length))
+	require.Equal(len(blob.Content), int(mi.Length()))
 
 	// Ensure blob was replicated to other master.
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
@@ -266,14 +266,14 @@ func TestOverwriteMetainfo(t *testing.T) {
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
 	require.NoError(err)
-	require.Equal(int64(4), mi.Info.PieceLength)
+	require.Equal(int64(4), mi.PieceLength())
 
 	err = cp.Provide(master1).OverwriteMetaInfo(blob.Digest, 16)
 	require.NoError(err)
 
 	mi, err = cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
 	require.NoError(err)
-	require.Equal(int64(16), mi.Info.PieceLength)
+	require.Equal(int64(16), mi.PieceLength())
 }
 
 func TestReplicateToRemote(t *testing.T) {

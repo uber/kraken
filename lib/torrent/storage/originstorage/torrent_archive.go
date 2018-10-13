@@ -55,7 +55,7 @@ func (a *TorrentArchive) Stat(namespace, name string) (*storage.TorrentInfo, err
 	if err != nil {
 		return nil, err
 	}
-	bitfield := bitset.New(uint(mi.Info.NumPieces())).Complement()
+	bitfield := bitset.New(uint(mi.NumPieces())).Complement()
 	return storage.NewTorrentInfo(mi, bitfield), nil
 }
 

@@ -35,7 +35,7 @@ func TestTorrentCreate(t *testing.T) {
 	require.Equal(int64(7), tor.Length())
 	require.Equal(int64(2), tor.PieceLength(0))
 	require.Equal(int64(1), tor.PieceLength(3))
-	require.Equal(mi.InfoHash, tor.InfoHash())
+	require.Equal(mi.InfoHash(), tor.InfoHash())
 	require.True(tor.Complete())
 	require.Equal(int64(7), tor.BytesDownloaded())
 	require.Equal(bitsetutil.FromBools(true, true, true, true), tor.Bitfield())
@@ -62,7 +62,7 @@ func TestTorrentGetPieceReaderConcurrent(t *testing.T) {
 	for i := 0; i < tor.NumPieces(); i++ {
 		go func(i int) {
 			defer wg.Done()
-			start := i * int(mi.Info.PieceLength)
+			start := i * int(mi.PieceLength())
 			end := start + int(tor.PieceLength(i))
 			r, err := tor.GetPieceReader(i)
 			require.NoError(err)

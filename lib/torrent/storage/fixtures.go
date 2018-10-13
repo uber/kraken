@@ -9,6 +9,6 @@ import (
 // TorrentInfoFixture returns a randomly generated TorrentInfo for testing purposes.
 func TorrentInfoFixture(size, pieceLength uint64) *TorrentInfo {
 	mi := core.SizedBlobFixture(size, pieceLength).MetaInfo
-	bitfield := bitsetutil.FromBools(randutil.Bools(mi.Info.NumPieces())...)
+	bitfield := bitsetutil.FromBools(randutil.Bools(mi.NumPieces())...)
 	return NewTorrentInfo(mi, bitfield)
 }

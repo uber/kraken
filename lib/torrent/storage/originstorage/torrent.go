@@ -31,13 +31,13 @@ func NewTorrent(cas *store.CAStore, mi *core.MetaInfo) (*Torrent, error) {
 	return &Torrent{
 		cas:         cas,
 		metaInfo:    mi,
-		numComplete: atomic.NewInt32(int32(mi.Info.NumPieces())),
+		numComplete: atomic.NewInt32(int32(mi.NumPieces())),
 	}, nil
 }
 
 // Name returns the name of the target file.
 func (t *Torrent) Name() string {
-	return t.metaInfo.Info.Name
+	return t.metaInfo.Name()
 }
 
 // Stat returns the TorrentInfo for t.
@@ -47,22 +47,22 @@ func (t *Torrent) Stat() *storage.TorrentInfo {
 
 // InfoHash returns the torrent metainfo hash.
 func (t *Torrent) InfoHash() core.InfoHash {
-	return t.metaInfo.InfoHash
+	return t.metaInfo.InfoHash()
 }
 
 // NumPieces returns the number of pieces in the torrent.
 func (t *Torrent) NumPieces() int {
-	return t.metaInfo.Info.NumPieces()
+	return t.metaInfo.NumPieces()
 }
 
 // Length returns the length of the target file.
 func (t *Torrent) Length() int64 {
-	return t.metaInfo.Info.Length
+	return t.metaInfo.Length()
 }
 
 // PieceLength returns the length of piece pi.
 func (t *Torrent) PieceLength(pi int) int64 {
-	return t.metaInfo.Info.GetPieceLength(pi)
+	return t.metaInfo.GetPieceLength(pi)
 }
 
 // MaxPieceLength returns the longest piece length of the torrent.
@@ -77,7 +77,7 @@ func (t *Torrent) Complete() bool {
 
 // BytesDownloaded always returns the total number of bytes.
 func (t *Torrent) BytesDownloaded() int64 {
-	return t.metaInfo.Info.Length
+	return t.metaInfo.Length()
 }
 
 // WritePiece returns error, since Torrent is read-only.
@@ -91,8 +91,8 @@ func (t *Torrent) Bitfield() *bitset.BitSet {
 }
 
 func (t *Torrent) String() string {
-	downloaded := int(float64(t.BytesDownloaded()) / float64(t.metaInfo.Info.Length) * 100)
-	return fmt.Sprintf("torrent(hash=%s, downloaded=%d%%)", t.InfoHash().HexString(), downloaded)
+	downloaded := int(float64(t.BytesDownloaded()) / float64(t.metaInfo.Length()) * 100)
+	return fmt.Sprintf("torrent(hash=%s, downloaded=%d%%)", t.InfoHash().Hex(), downloaded)
 }
 
 type opener struct {
@@ -125,5 +125,5 @@ func (t *Torrent) MissingPieces() []int {
 // getFileOffset calculates the offset in the torrent file given piece index.
 // Assumes pi is a valid piece index.
 func (t *Torrent) getFileOffset(pi int) int64 {
-	return t.metaInfo.Info.PieceLength * int64(pi)
+	return t.metaInfo.PieceLength() * int64(pi)
 }
