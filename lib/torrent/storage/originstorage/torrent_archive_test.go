@@ -74,7 +74,7 @@ func TestTorrentArchiveStatNoExistTriggersRefresh(t *testing.T) {
 	info, err := archive.Stat(namespace, blob.Digest.Hex())
 	require.NoError(err)
 	require.Equal(blob.Digest.Hex(), info.Name())
-	require.Equal(blob.MetaInfo.InfoHash, info.InfoHash())
+	require.Equal(blob.MetaInfo.InfoHash(), info.InfoHash())
 	require.Equal(100, info.PercentDownloaded())
 }
 
@@ -101,7 +101,7 @@ func TestTorrentArchiveGetTorrentNoExistTriggersRefresh(t *testing.T) {
 	tor, err := archive.GetTorrent(namespace, blob.Digest.Hex())
 	require.NoError(err)
 	require.Equal(blob.Digest.Hex(), tor.Name())
-	require.Equal(blob.MetaInfo.InfoHash, tor.InfoHash())
+	require.Equal(blob.MetaInfo.InfoHash(), tor.InfoHash())
 	require.True(tor.Complete())
 }
 

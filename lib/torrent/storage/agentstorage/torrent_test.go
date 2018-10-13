@@ -23,7 +23,7 @@ import (
 )
 
 func prepareStore(cads *store.CADownloadStore, mi *core.MetaInfo) {
-	if err := cads.CreateDownloadFile(mi.Name(), mi.Info.Length); err != nil {
+	if err := cads.CreateDownloadFile(mi.Name(), mi.Length()); err != nil {
 		panic(err)
 	}
 	if _, err := cads.Download().SetMetadata(mi.Name(), metadata.NewTorrentMeta(mi)); err != nil {
@@ -50,7 +50,7 @@ func TestTorrentCreate(t *testing.T) {
 	require.Equal(int64(7), tor.Length())
 	require.Equal(int64(2), tor.PieceLength(0))
 	require.Equal(int64(1), tor.PieceLength(3))
-	require.Equal(mi.InfoHash, tor.InfoHash())
+	require.Equal(mi.InfoHash(), tor.InfoHash())
 	require.False(tor.Complete())
 	require.Equal(int64(0), tor.BytesDownloaded())
 	require.Equal(bitsetutil.FromBools(false, false, false, false), tor.Bitfield())
@@ -124,7 +124,7 @@ func TestTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 	for i := 0; i < tor.NumPieces(); i++ {
 		go func(i int) {
 			defer wg.Done()
-			start := i * int(blob.MetaInfo.Info.PieceLength)
+			start := i * int(blob.MetaInfo.PieceLength())
 			end := start + int(tor.PieceLength(i))
 			require.NoError(tor.WritePiece(piecereader.NewBuffer(blob.Content[start:end]), i))
 		}(i)

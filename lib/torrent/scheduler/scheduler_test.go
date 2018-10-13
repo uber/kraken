@@ -194,11 +194,11 @@ func TestSeederTTI(t *testing.T) {
 	// Then seeding torrents expire.
 	clk.Add(config.SeederTTI)
 
-	waitForTorrentRemoved(t, seeder.scheduler, blob.MetaInfo.InfoHash)
-	waitForTorrentRemoved(t, leecher.scheduler, blob.MetaInfo.InfoHash)
+	waitForTorrentRemoved(t, seeder.scheduler, blob.MetaInfo.InfoHash())
+	waitForTorrentRemoved(t, leecher.scheduler, blob.MetaInfo.InfoHash())
 
-	require.False(hasConn(seeder.scheduler, leecher.pctx.PeerID, blob.MetaInfo.InfoHash))
-	require.False(hasConn(leecher.scheduler, seeder.pctx.PeerID, blob.MetaInfo.InfoHash))
+	require.False(hasConn(seeder.scheduler, leecher.pctx.PeerID, blob.MetaInfo.InfoHash()))
+	require.False(hasConn(leecher.scheduler, seeder.pctx.PeerID, blob.MetaInfo.InfoHash()))
 
 	// Idle seeder should keep around the torrent file so it can still serve content.
 	_, err := seeder.torrentArchive.Stat(namespace, blob.MetaInfo.Name())
@@ -226,7 +226,7 @@ func TestLeecherTTI(t *testing.T) {
 	errc := make(chan error)
 	go func() { errc <- p.scheduler.Download(namespace, blob.MetaInfo.Name()) }()
 
-	waitForTorrentAdded(t, p.scheduler, blob.MetaInfo.InfoHash)
+	waitForTorrentAdded(t, p.scheduler, blob.MetaInfo.InfoHash())
 
 	clk.Add(config.LeecherTTI)
 
@@ -319,7 +319,7 @@ func TestNetworkEvents(t *testing.T) {
 
 	sid := seeder.pctx.PeerID
 	lid := leecher.pctx.PeerID
-	h := blob.MetaInfo.InfoHash
+	h := blob.MetaInfo.InfoHash()
 
 	waitForConnRemoved(t, seeder.scheduler, lid, h)
 	waitForConnRemoved(t, leecher.scheduler, sid, h)
@@ -372,7 +372,7 @@ func TestPullInactiveTorrent(t *testing.T) {
 	// Force announce the scheduler for this torrent to simulate a peer which
 	// is registered in tracker but does not have the torrent in memory.
 	ac := announceclient.New(seeder.pctx, healthcheck.NoopFailed(hostlist.Fixture(mocks.trackerAddr)))
-	ac.Announce(blob.MetaInfo.Info.Name, blob.MetaInfo.InfoHash, false, announceclient.V1)
+	ac.Announce(blob.MetaInfo.Name(), blob.MetaInfo.InfoHash(), false, announceclient.V1)
 
 	leecher := mocks.newPeer(config)
 

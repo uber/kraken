@@ -16,12 +16,12 @@ type TorrentInfo struct {
 // NewTorrentInfo creates a new TorrentInfo.
 func NewTorrentInfo(mi *core.MetaInfo, bitfield *bitset.BitSet) *TorrentInfo {
 	numComplete := bitfield.Count()
-	downloaded := int(float64(numComplete) / float64(len(mi.Info.PieceSums)) * 100)
+	downloaded := int(float64(numComplete) / float64(mi.NumPieces()) * 100)
 	return &TorrentInfo{mi, bitfield, downloaded}
 }
 
 func (i *TorrentInfo) String() string {
-	return i.InfoHash().HexString()
+	return i.InfoHash().Hex()
 }
 
 // Name returns the torrent file name.
@@ -31,12 +31,12 @@ func (i *TorrentInfo) Name() string {
 
 // InfoHash returns the hash torrent metainfo.
 func (i *TorrentInfo) InfoHash() core.InfoHash {
-	return i.metainfo.InfoHash
+	return i.metainfo.InfoHash()
 }
 
 // MaxPieceLength returns the max piece length of the torrent.
 func (i *TorrentInfo) MaxPieceLength() int64 {
-	return i.metainfo.Info.PieceLength
+	return i.metainfo.PieceLength()
 }
 
 // PercentDownloaded returns the percent of bytes downloaded as an integer

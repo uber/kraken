@@ -35,7 +35,7 @@ func (g *Generator) Generate(d core.Digest) error {
 		return fmt.Errorf("get cache file: %s", err)
 	}
 	pieceLength := g.pieceLengthConfig.get(info.Size())
-	mi, err := core.NewMetaInfoFromBlob(d.Hex(), f, pieceLength)
+	mi, err := core.NewMetaInfo(d, f, pieceLength)
 	if err != nil {
 		return fmt.Errorf("create metainfo: %s", err)
 	}

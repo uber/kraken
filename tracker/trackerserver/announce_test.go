@@ -42,12 +42,12 @@ func TestAnnounceSinglePeerResponse(t *testing.T) {
 
 			mocks.originStore.EXPECT().GetOrigins(blob.Digest).Return(nil, nil)
 			mocks.peerStore.EXPECT().GetPeers(
-				blob.MetaInfo.InfoHash, gomock.Any()).Return(peers, nil)
+				blob.MetaInfo.InfoHash(), gomock.Any()).Return(peers, nil)
 			mocks.peerStore.EXPECT().UpdatePeer(
-				blob.MetaInfo.InfoHash, core.PeerInfoFromContext(pctx, false)).Return(nil)
+				blob.MetaInfo.InfoHash(), core.PeerInfoFromContext(pctx, false)).Return(nil)
 
 			result, interval, err := client.Announce(
-				blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false, version)
+				blob.MetaInfo.Name(), blob.MetaInfo.InfoHash(), false, version)
 			require.NoError(err)
 			require.Equal(peers, result)
 			require.Equal(config.AnnounceInterval, interval)
@@ -73,13 +73,13 @@ func TestAnnounceUnavailablePeerStoreCanStillProvideOrigins(t *testing.T) {
 	storeErr := errors.New("some storage error")
 
 	mocks.peerStore.EXPECT().UpdatePeer(
-		blob.MetaInfo.InfoHash, core.PeerInfoFromContext(pctx, false)).Return(storeErr)
+		blob.MetaInfo.InfoHash(), core.PeerInfoFromContext(pctx, false)).Return(storeErr)
 	mocks.peerStore.EXPECT().GetPeers(
-		blob.MetaInfo.InfoHash, gomock.Any()).Return(nil, storeErr)
+		blob.MetaInfo.InfoHash(), gomock.Any()).Return(nil, storeErr)
 	mocks.originStore.EXPECT().GetOrigins(blob.Digest).Return(origins, nil)
 
 	result, _, err := client.Announce(
-		blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false, announceclient.V2)
+		blob.MetaInfo.Name(), blob.MetaInfo.InfoHash(), false, announceclient.V2)
 	require.NoError(err)
 	require.Equal(origins, result)
 }
@@ -101,13 +101,13 @@ func TestAnnouceUnavailableOriginClusterCanStillProvidePeers(t *testing.T) {
 	peers := []*core.PeerInfo{core.PeerInfoFixture()}
 
 	mocks.peerStore.EXPECT().UpdatePeer(
-		blob.MetaInfo.InfoHash, core.PeerInfoFromContext(pctx, false)).Return(nil)
+		blob.MetaInfo.InfoHash(), core.PeerInfoFromContext(pctx, false)).Return(nil)
 	mocks.peerStore.EXPECT().GetPeers(
-		blob.MetaInfo.InfoHash, gomock.Any()).Return(peers, nil)
+		blob.MetaInfo.InfoHash(), gomock.Any()).Return(peers, nil)
 	mocks.originStore.EXPECT().GetOrigins(blob.Digest).Return(nil, errors.New("some error"))
 
 	result, _, err := client.Announce(
-		blob.MetaInfo.Name(), blob.MetaInfo.InfoHash, false, announceclient.V2)
+		blob.MetaInfo.Name(), blob.MetaInfo.InfoHash(), false, announceclient.V2)
 	require.NoError(err)
 	require.Equal(peers, result)
 }

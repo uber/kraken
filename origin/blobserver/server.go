@@ -340,7 +340,7 @@ func (s *Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 	if err != nil {
 		return handler.Errorf("get cache file: %s", err)
 	}
-	mi, err := core.NewMetaInfoFromBlob(d.Hex(), f, pieceLength)
+	mi, err := core.NewMetaInfo(d, f, pieceLength)
 	if err != nil {
 		return handler.Errorf("create metainfo: %s", err)
 	}
