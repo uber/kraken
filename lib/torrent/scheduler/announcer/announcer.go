@@ -73,9 +73,9 @@ func Default(
 // Announce announces through the underlying client and returns the resulting
 // peer handout. Updates the announce interval if it has changed.
 func (a *Announcer) Announce(
-	name string, h core.InfoHash, complete bool) ([]*core.PeerInfo, error) {
+	d core.Digest, h core.InfoHash, complete bool) ([]*core.PeerInfo, error) {
 
-	peers, interval, err := a.client.Announce(name, h, complete, announceclient.V1)
+	peers, interval, err := a.client.Announce(d, h, complete, announceclient.V1)
 	if err != nil {
 		return nil, err
 	}

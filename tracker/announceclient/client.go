@@ -19,8 +19,21 @@ var ErrDisabled = errors.New("announcing disabled")
 // Request defines an announce request.
 type Request struct {
 	Name     string         `json:"name"`
+	Digest   *core.Digest   `json:"digest"` // Optional (for now).
 	InfoHash core.InfoHash  `json:"info_hash"`
 	Peer     *core.PeerInfo `json:"peer"`
+}
+
+// GetDigest is a backwards compatible accessor of the request digest.
+func (r *Request) GetDigest() (core.Digest, error) {
+	if r.Digest != nil {
+		return *r.Digest, nil
+	}
+	d, err := core.NewSHA256DigestFromHex(r.Name)
+	if err != nil {
+		return core.Digest{}, err
+	}
+	return d, nil
 }
 
 // Response defines an announce response.
@@ -32,7 +45,7 @@ type Response struct {
 // Client defines a client for announcing and getting peers.
 type Client interface {
 	Announce(
-		name string,
+		d core.Digest,
 		h core.InfoHash,
 		complete bool,
 		version int) ([]*core.PeerInfo, time.Duration, error)
@@ -61,17 +74,18 @@ func getEndpoint(version int, addr string, h core.InfoHash) (method, url string)
 	return "POST", fmt.Sprintf("http://%s/announce/%s", addr, h.String())
 }
 
-// Announce announces the torrent identified by (name, h) with the number of
+// Announce announces the torrent identified by (d, h) with the number of
 // downloaded bytes. Returns a list of all other peers announcing for said torrent,
 // sorted by priority, and the interval for the next announce.
 func (c *client) Announce(
-	name string,
+	d core.Digest,
 	h core.InfoHash,
 	complete bool,
 	version int) (peers []*core.PeerInfo, interval time.Duration, err error) {
 
 	body, err := json.Marshal(&Request{
-		Name:     name,
+		Name:     d.Hex(), // For backwards compatability. TODO(codyg): Remove.
+		Digest:   &d,
 		InfoHash: h,
 		Peer:     core.PeerInfoFromContext(c.pctx, complete),
 	})
@@ -118,7 +132,7 @@ func Disabled() Client {
 
 // Announce always returns error.
 func (c DisabledClient) Announce(
-	name string, h core.InfoHash, complete bool, version int) ([]*core.PeerInfo, time.Duration, error) {
+	d core.Digest, h core.InfoHash, complete bool, version int) ([]*core.PeerInfo, time.Duration, error) {
 
 	return nil, 0, ErrDisabled
 }

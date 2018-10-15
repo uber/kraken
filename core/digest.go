@@ -1,6 +1,7 @@
 package core
 
 import (
+	_ "crypto/sha256" // For computing digest.
 	"database/sql/driver"
 	"encoding/hex"
 	"encoding/json"
@@ -98,12 +99,10 @@ func (d *Digest) UnmarshalJSON(str []byte) error {
 	if err := json.Unmarshal(str, &raw); err != nil {
 		return err
 	}
-
 	digest, err := ParseSHA256Digest(raw)
 	if err != nil {
 		return err
 	}
-
 	*d = digest
 	return nil
 }

@@ -357,7 +357,7 @@ func (s *scheduler) announceLoop() {
 }
 
 func (s *scheduler) announce(d core.Digest, h core.InfoHash, complete bool) {
-	peers, err := s.announcer.Announce(d.Hex(), h, complete)
+	peers, err := s.announcer.Announce(d, h, complete)
 	if err != nil {
 		if err != announceclient.ErrDisabled {
 			s.eventLoop.send(announceErrEvent{h, err})
