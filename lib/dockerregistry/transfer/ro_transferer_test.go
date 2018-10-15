@@ -59,9 +59,9 @@ func TestReadOnlyTransfererDownloadCachesBlob(t *testing.T) {
 	blob := core.NewBlobFixture()
 
 	mocks.sched.EXPECT().Download(
-		namespace, blob.Digest.Hex()).DoAndReturn(func(namespace, name string) error {
+		namespace, blob.Digest).DoAndReturn(func(namespace string, d core.Digest) error {
 
-		return store.RunDownload(mocks.cads, blob.Digest, blob.Content)
+		return store.RunDownload(mocks.cads, d, blob.Content)
 	})
 
 	// Downloading multiple times should only call scheduler download once.
@@ -86,9 +86,9 @@ func TestReadOnlyTransfererStat(t *testing.T) {
 	blob := core.NewBlobFixture()
 
 	mocks.sched.EXPECT().Download(
-		namespace, blob.Digest.Hex()).DoAndReturn(func(namespace, name string) error {
+		namespace, blob.Digest).DoAndReturn(func(namespace string, d core.Digest) error {
 
-		return store.RunDownload(mocks.cads, blob.Digest, blob.Content)
+		return store.RunDownload(mocks.cads, d, blob.Content)
 	})
 
 	// Stat-ing multiple times should only call scheduler download once.
@@ -156,11 +156,11 @@ func TestReadOnlyTransfererMultipleDownloadsOfSameBlob(t *testing.T) {
 	commit := make(chan struct{})
 
 	mocks.sched.EXPECT().Download(
-		namespace, blob.Digest.Hex()).DoAndReturn(func(namespace, name string) error {
+		namespace, blob.Digest).DoAndReturn(func(namespace string, d core.Digest) error {
 
 		<-commit
 
-		if err := mocks.cads.MoveDownloadFileToCache(name); !os.IsExist(err) {
+		if err := mocks.cads.MoveDownloadFileToCache(d.Hex()); !os.IsExist(err) {
 			return err
 		}
 		return nil

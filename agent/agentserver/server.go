@@ -80,7 +80,7 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	f, err := s.cads.Cache().GetFileReader(d.Hex())
 	if err != nil {
 		if os.IsNotExist(err) || s.cads.InDownloadError(err) {
-			if err := s.sched.Download(namespace, d.Hex()); err != nil {
+			if err := s.sched.Download(namespace, d); err != nil {
 				if err == scheduler.ErrTorrentNotFound {
 					return handler.ErrorStatus(http.StatusNotFound)
 				}
@@ -105,7 +105,7 @@ func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
-	if err := s.sched.RemoveTorrent(d.Hex()); err != nil {
+	if err := s.sched.RemoveTorrent(d); err != nil {
 		return handler.Errorf("remove torrent: %s", err)
 	}
 	return nil

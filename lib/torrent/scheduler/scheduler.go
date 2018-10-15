@@ -35,9 +35,9 @@ var (
 // Scheduler defines operations for scheduler.
 type Scheduler interface {
 	Stop()
-	Download(namespace, name string) error
+	Download(namespace string, d core.Digest) error
 	BlacklistSnapshot() ([]connstate.BlacklistedConn, error)
-	RemoveTorrent(name string) error
+	RemoveTorrent(d core.Digest) error
 	Probe() error
 }
 
@@ -231,12 +231,7 @@ func (s *scheduler) doDownload(namespace string, d core.Digest) (size int64, err
 
 // Download downloads the torrent given metainfo. Once the torrent is downloaded,
 // it will begin seeding asynchronously.
-func (s *scheduler) Download(namespace, name string) error {
-	// TODO(codyg): Change Download to accept a digest.
-	d, err := core.NewSHA256DigestFromHex(name)
-	if err != nil {
-		return fmt.Errorf("parse digest: %s", err)
-	}
+func (s *scheduler) Download(namespace string, d core.Digest) error {
 	start := time.Now()
 	size, err := s.doDownload(namespace, d)
 	if err != nil {
@@ -274,14 +269,9 @@ func (s *scheduler) BlacklistSnapshot() ([]connstate.BlacklistedConn, error) {
 	return <-result, nil
 }
 
-// RemoveTorrent forcibly stops leeching / seeding torrent for name and removes
+// RemoveTorrent forcibly stops leeching / seeding torrent for d and removes
 // the torrent from disk.
-func (s *scheduler) RemoveTorrent(name string) error {
-	// TODO(codyg): Change RemoveTorrent to accept a digest.
-	d, err := core.NewSHA256DigestFromHex(name)
-	if err != nil {
-		return fmt.Errorf("parse digest: %s", err)
-	}
+func (s *scheduler) RemoveTorrent(d core.Digest) error {
 	// Buffer size of 1 so sends do not block.
 	errc := make(chan error, 1)
 	if !s.eventLoop.send(removeTorrentEvent{d, errc}) {

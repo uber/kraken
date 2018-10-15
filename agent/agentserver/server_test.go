@@ -26,9 +26,9 @@ func TestDownload(t *testing.T) {
 	namespace := core.TagFixture()
 	blob := core.NewBlobFixture()
 
-	mocks.sched.EXPECT().Download(namespace, blob.Digest.Hex()).DoAndReturn(
-		func(namespace, name string) error {
-			return store.RunDownload(mocks.cads, blob.Digest, blob.Content)
+	mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
+		func(namespace string, d core.Digest) error {
+			return store.RunDownload(mocks.cads, d, blob.Content)
 		})
 
 	addr := mocks.startServer()
@@ -126,7 +126,7 @@ func TestDeleteBlobHandler(t *testing.T) {
 	addr := mocks.startServer()
 	c := NewClient(addr)
 
-	mocks.sched.EXPECT().RemoveTorrent(d.Hex()).Return(nil)
+	mocks.sched.EXPECT().RemoveTorrent(d).Return(nil)
 
 	require.NoError(c.Delete(d))
 }
