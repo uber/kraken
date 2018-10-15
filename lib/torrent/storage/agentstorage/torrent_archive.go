@@ -62,7 +62,7 @@ func (a *TorrentArchive) CreateTorrent(namespace string, d core.Digest) (storage
 	var tm metadata.TorrentMeta
 	if err := a.cads.Any().GetMetadata(d.Hex(), &tm); os.IsNotExist(err) {
 		downloadTimer := a.stats.Timer("metainfo_download").Start()
-		mi, err := a.metaInfoClient.Download(namespace, d.Hex())
+		mi, err := a.metaInfoClient.Download(namespace, d)
 		if err != nil {
 			if err == metainfoclient.ErrNotFound {
 				return nil, storage.ErrNotFound

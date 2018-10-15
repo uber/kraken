@@ -21,7 +21,7 @@ var (
 
 // Client defines operations on torrent metainfo.
 type Client interface {
-	Download(namespace, name string) (*core.MetaInfo, error)
+	Download(namespace string, d core.Digest) (*core.MetaInfo, error)
 }
 
 type client struct {
@@ -36,16 +36,13 @@ func New(hosts healthcheck.List) Client {
 
 // Download returns the MetaInfo associated with name. Returns ErrNotFound if
 // no torrent exists under name.
-func (c *client) Download(namespace, name string) (*core.MetaInfo, error) {
-	d, err := core.NewSHA256DigestFromHex(name)
-	if err != nil {
-		return nil, fmt.Errorf("new digest: %s", err)
-	}
+func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, error) {
 	addrs := c.hosts.Resolve().Sample(3)
 	if len(addrs) == 0 {
 		return nil, errors.New("no hosts could be resolved")
 	}
 	var resp *http.Response
+	var err error
 	for addr := range addrs {
 		resp, err = httputil.PollAccepted(
 			fmt.Sprintf(
