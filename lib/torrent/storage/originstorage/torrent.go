@@ -35,9 +35,9 @@ func NewTorrent(cas *store.CAStore, mi *core.MetaInfo) (*Torrent, error) {
 	}, nil
 }
 
-// Name returns the name of the target file.
-func (t *Torrent) Name() string {
-	return t.metaInfo.Name()
+// Digest returns the digest of the target blob.
+func (t *Torrent) Digest() core.Digest {
+	return t.metaInfo.Digest()
 }
 
 // Stat returns the TorrentInfo for t.
@@ -100,7 +100,7 @@ type opener struct {
 }
 
 func (o *opener) Open() (store.FileReader, error) {
-	return o.torrent.cas.GetCacheFileReader(o.torrent.Name())
+	return o.torrent.cas.GetCacheFileReader(o.torrent.Digest().Hex())
 }
 
 // GetPieceReader returns a reader for piece pi.

@@ -67,13 +67,13 @@ func TestTorrentArchiveStatNoExistTriggersRefresh(t *testing.T) {
 	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		_, err := archive.Stat(namespace, blob.Digest.Hex())
+		_, err := archive.Stat(namespace, blob.Digest)
 		return err == nil
 	}))
 
-	info, err := archive.Stat(namespace, blob.Digest.Hex())
+	info, err := archive.Stat(namespace, blob.Digest)
 	require.NoError(err)
-	require.Equal(blob.Digest.Hex(), info.Name())
+	require.Equal(blob.Digest, info.Digest())
 	require.Equal(blob.MetaInfo.InfoHash(), info.InfoHash())
 	require.Equal(100, info.PercentDownloaded())
 }
@@ -94,13 +94,13 @@ func TestTorrentArchiveGetTorrentNoExistTriggersRefresh(t *testing.T) {
 	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		_, err := archive.GetTorrent(namespace, blob.Digest.Hex())
+		_, err := archive.GetTorrent(namespace, blob.Digest)
 		return err == nil
 	}))
 
-	tor, err := archive.GetTorrent(namespace, blob.Digest.Hex())
+	tor, err := archive.GetTorrent(namespace, blob.Digest)
 	require.NoError(err)
-	require.Equal(blob.Digest.Hex(), tor.Name())
+	require.Equal(blob.Digest, tor.Digest())
 	require.Equal(blob.MetaInfo.InfoHash(), tor.InfoHash())
 	require.True(tor.Complete())
 }
@@ -121,11 +121,11 @@ func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		_, err := archive.Stat(namespace, blob.Digest.Hex())
+		_, err := archive.Stat(namespace, blob.Digest)
 		return err == nil
 	}))
 
-	require.NoError(archive.DeleteTorrent(blob.Digest.Hex()))
+	require.NoError(archive.DeleteTorrent(blob.Digest))
 
 	_, err := mocks.cas.GetCacheFileStat(blob.Digest.Hex())
 	require.True(os.IsNotExist(err))

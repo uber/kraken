@@ -88,7 +88,7 @@ func (s *state) removeTorrent(h core.InfoHash, err error) {
 			errc <- err
 		}
 		s.sched.netevents.Produce(networkevent.TorrentCancelledEvent(h, s.sched.pctx.PeerID))
-		s.sched.torrentArchive.DeleteTorrent(ctrl.dispatcher.Name())
+		s.sched.torrentArchive.DeleteTorrent(ctrl.dispatcher.Digest())
 	}
 	delete(s.torrentControls, h)
 }
@@ -120,7 +120,7 @@ func (s *state) addIncomingConn(
 	}
 	ctrl, ok := s.torrentControls[info.InfoHash()]
 	if !ok {
-		t, err := s.sched.torrentArchive.GetTorrent(namespace, info.Name())
+		t, err := s.sched.torrentArchive.GetTorrent(namespace, info.Digest())
 		if err != nil {
 			return fmt.Errorf("get torrent: %s", err)
 		}

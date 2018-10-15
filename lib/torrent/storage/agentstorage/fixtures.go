@@ -31,7 +31,7 @@ func TorrentFixture(mi *core.MetaInfo) (*Torrent, func()) {
 		panic(err)
 	}
 
-	t, err := ta.CreateTorrent("noexist", mi.Name())
+	t, err := ta.CreateTorrent("noexist", mi.Digest())
 	if err != nil {
 		panic(err)
 	}

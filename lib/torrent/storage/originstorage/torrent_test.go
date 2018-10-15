@@ -3,7 +3,6 @@ package originstorage
 import (
 	"bytes"
 	"io/ioutil"
-	"path"
 	"sync"
 	"testing"
 
@@ -30,7 +29,7 @@ func TestTorrentCreate(t *testing.T) {
 	require.NoError(err)
 
 	// New torrent
-	require.Equal(path.Base(mi.Name()), tor.Name())
+	require.Equal(mi.Digest(), tor.Digest())
 	require.Equal(4, tor.NumPieces())
 	require.Equal(int64(7), tor.Length())
 	require.Equal(int64(2), tor.PieceLength(0))
