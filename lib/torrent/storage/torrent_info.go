@@ -24,9 +24,9 @@ func (i *TorrentInfo) String() string {
 	return i.InfoHash().Hex()
 }
 
-// Name returns the torrent file name.
-func (i *TorrentInfo) Name() string {
-	return i.metainfo.Name()
+// Digest returns the torrent's blob digest.
+func (i *TorrentInfo) Digest() core.Digest {
+	return i.metainfo.Digest()
 }
 
 // InfoHash returns the hash torrent metainfo.

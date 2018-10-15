@@ -7,6 +7,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/willf/bitset"
 
+	"code.uber.internal/infra/kraken/core"
 	"code.uber.internal/infra/kraken/lib/store"
 	"code.uber.internal/infra/kraken/lib/store/metadata"
 	"code.uber.internal/infra/kraken/lib/torrent/storage"
@@ -34,15 +35,15 @@ func NewTorrentArchive(
 	return &TorrentArchive{stats, cads, mic}
 }
 
-// Stat returns TorrentInfo for given file name. Returns os.ErrNotExist if the
+// Stat returns TorrentInfo for the given digest. Returns os.ErrNotExist if the
 // file does not exist. Ignores namespace.
-func (a *TorrentArchive) Stat(namespace, name string) (*storage.TorrentInfo, error) {
+func (a *TorrentArchive) Stat(namespace string, d core.Digest) (*storage.TorrentInfo, error) {
 	var tm metadata.TorrentMeta
-	if err := a.cads.Any().GetMetadata(name, &tm); err != nil {
+	if err := a.cads.Any().GetMetadata(d.Hex(), &tm); err != nil {
 		return nil, err
 	}
 	var psm pieceStatusMetadata
-	if err := a.cads.Any().GetMetadata(name, &psm); err != nil {
+	if err := a.cads.Any().GetMetadata(d.Hex(), &psm); err != nil {
 		return nil, err
 	}
 	b := bitset.New(uint(len(psm.pieces)))
@@ -57,11 +58,11 @@ func (a *TorrentArchive) Stat(namespace, name string) (*storage.TorrentInfo, err
 // CreateTorrent returns a Torrent for either an existing metainfo / file on
 // disk, or downloads metainfo and initializes the file. Returns ErrNotFound
 // if no metainfo was found.
-func (a *TorrentArchive) CreateTorrent(namespace, name string) (storage.Torrent, error) {
+func (a *TorrentArchive) CreateTorrent(namespace string, d core.Digest) (storage.Torrent, error) {
 	var tm metadata.TorrentMeta
-	if err := a.cads.Any().GetMetadata(name, &tm); os.IsNotExist(err) {
+	if err := a.cads.Any().GetMetadata(d.Hex(), &tm); os.IsNotExist(err) {
 		downloadTimer := a.stats.Timer("metainfo_download").Start()
-		mi, err := a.metaInfoClient.Download(namespace, name)
+		mi, err := a.metaInfoClient.Download(namespace, d.Hex())
 		if err != nil {
 			if err == metainfoclient.ErrNotFound {
 				return nil, storage.ErrNotFound
@@ -74,14 +75,14 @@ func (a *TorrentArchive) CreateTorrent(namespace, name string) (storage.Torrent,
 		// initialize a download file with metainfo that is rejected by file store,
 		// because someone else beats us to it. However, we catch a lucky break
 		// because the only piece of metainfo we use is file length -- which digest
-		// (i.e. name) is derived from, so it's "okay".
+		// is derived from, so it's "okay".
 		createErr := a.cads.CreateDownloadFile(mi.Name(), mi.Length())
 		if createErr != nil &&
 			!(a.cads.InDownloadError(createErr) || a.cads.InCacheError(createErr)) {
 			return nil, fmt.Errorf("create download file: %s", createErr)
 		}
 		tm.MetaInfo = mi
-		if err := a.cads.Any().GetOrSetMetadata(name, &tm); err != nil {
+		if err := a.cads.Any().GetOrSetMetadata(d.Hex(), &tm); err != nil {
 			return nil, fmt.Errorf("get or set metainfo: %s", err)
 		}
 	} else if err != nil {
@@ -95,9 +96,9 @@ func (a *TorrentArchive) CreateTorrent(namespace, name string) (storage.Torrent,
 }
 
 // GetTorrent returns a Torrent for an existing metainfo / file on disk. Ignores namespace.
-func (a *TorrentArchive) GetTorrent(namespace, name string) (storage.Torrent, error) {
+func (a *TorrentArchive) GetTorrent(namespace string, d core.Digest) (storage.Torrent, error) {
 	var tm metadata.TorrentMeta
-	if err := a.cads.Any().GetMetadata(name, &tm); err != nil {
+	if err := a.cads.Any().GetMetadata(d.Hex(), &tm); err != nil {
 		return nil, fmt.Errorf("get metainfo: %s", err)
 	}
 	t, err := NewTorrent(a.cads, tm.MetaInfo)
@@ -108,8 +109,8 @@ func (a *TorrentArchive) GetTorrent(namespace, name string) (storage.Torrent, er
 }
 
 // DeleteTorrent deletes a torrent from disk.
-func (a *TorrentArchive) DeleteTorrent(name string) error {
-	if err := a.cads.Any().DeleteFile(name); err != nil && !os.IsNotExist(err) {
+func (a *TorrentArchive) DeleteTorrent(d core.Digest) error {
+	if err := a.cads.Any().DeleteFile(d.Hex()); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil

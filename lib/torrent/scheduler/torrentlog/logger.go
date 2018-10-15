@@ -57,26 +57,26 @@ func NewNopLogger() *Logger {
 
 // OutgoingConnectionAccept logs an accepted outgoing connection.
 func (l *Logger) OutgoingConnectionAccept(
-	name string,
+	d core.Digest,
 	infoHash core.InfoHash,
 	remotePeerID core.PeerID) {
 
 	l.zap.Debug(
 		"Outgoing connection accept",
-		zap.String("name", name),
+		zap.String("name", d.Hex()),
 		zap.String("info_hash", infoHash.String()),
 		zap.String("remote_peer_id", remotePeerID.String()))
 }
 
 // OutgoingConnectionReject logs a rejected outgoing connection.
-func (l *Logger) OutgoingConnectionReject(name string,
+func (l *Logger) OutgoingConnectionReject(d core.Digest,
 	infoHash core.InfoHash,
 	remotePeerID core.PeerID,
 	err error) {
 
 	l.zap.Debug(
 		"Outgoing connection reject",
-		zap.String("name", name),
+		zap.String("name", d.Hex()),
 		zap.String("info_hash", infoHash.String()),
 		zap.String("remote_peer_id", remotePeerID.String()),
 		zap.Error(err))
@@ -84,77 +84,77 @@ func (l *Logger) OutgoingConnectionReject(name string,
 
 // IncomingConnectionAccept logs an accepted incoming connection.
 func (l *Logger) IncomingConnectionAccept(
-	name string,
+	d core.Digest,
 	infoHash core.InfoHash,
 	remotePeerID core.PeerID) {
 
 	l.zap.Debug(
 		"Incoming connection accept",
-		zap.String("name", name),
+		zap.String("name", d.Hex()),
 		zap.String("info_hash", infoHash.String()),
 		zap.String("remote_peer_id", remotePeerID.String()))
 }
 
 // IncomingConnectionReject logs a rejected incoming connection.
 func (l *Logger) IncomingConnectionReject(
-	name string,
+	d core.Digest,
 	infoHash core.InfoHash,
 	remotePeerID core.PeerID,
 	err error) {
 
 	l.zap.Debug(
 		"Incoming connection reject",
-		zap.String("name", name),
+		zap.String("name", d.Hex()),
 		zap.String("info_hash", infoHash.String()),
 		zap.String("remote_peer_id", remotePeerID.String()),
 		zap.Error(err))
 }
 
 // SeedTimeout logs a seeding torrent being torn down due to timeout.
-func (l *Logger) SeedTimeout(name string, infoHash core.InfoHash) {
+func (l *Logger) SeedTimeout(d core.Digest, infoHash core.InfoHash) {
 	l.zap.Debug(
 		"Seed timeout",
-		zap.String("name", name),
+		zap.String("name", d.Hex()),
 		zap.String("info_hash", infoHash.String()))
 }
 
 // LeechTimeout logs a leeching torrent being torn down due to timeout.
-func (l *Logger) LeechTimeout(name string, infoHash core.InfoHash) {
+func (l *Logger) LeechTimeout(d core.Digest, infoHash core.InfoHash) {
 	l.zap.Debug(
 		"Leech timeout",
-		zap.String("name", name),
+		zap.String("name", d.Hex()),
 		zap.String("info_hash", infoHash.String()))
 }
 
 // DownloadSuccess logs a successful download.
-func (l *Logger) DownloadSuccess(namespace, name string, size int64, downloadTime time.Duration) {
+func (l *Logger) DownloadSuccess(namespace string, d core.Digest, size int64, downloadTime time.Duration) {
 	l.zap.Info(
 		"Download success",
 		zap.String("namespace", namespace),
-		zap.String("name", name),
+		zap.String("name", d.Hex()),
 		zap.Int64("size", size),
 		zap.Duration("download_time", downloadTime))
 }
 
 // DownloadFailure logs a failed download.
-func (l *Logger) DownloadFailure(namespace, name string, size int64, err error) {
+func (l *Logger) DownloadFailure(namespace string, d core.Digest, size int64, err error) {
 	l.zap.Error(
 		"Download failure",
 		zap.String("namespace", namespace),
-		zap.String("name", name),
+		zap.String("name", d.Hex()),
 		zap.Int64("size", size),
 		zap.Error(err))
 }
 
 // SeederSummaries logs a summary of the pieces requested and received from peers for a torrent.
 func (l *Logger) SeederSummaries(
-	name string,
+	d core.Digest,
 	infoHash core.InfoHash,
 	summaries SeederSummaries) error {
 
 	l.zap.Debug(
 		"Seeder summaries",
-		zap.String("name", name),
+		zap.String("name", d.Hex()),
 		zap.String("info_hash", infoHash.String()),
 		zap.Array("seeder_summaries", summaries))
 	return nil
@@ -162,13 +162,13 @@ func (l *Logger) SeederSummaries(
 
 // LeecherSummaries logs a summary of the pieces requested by and sent to peers for a torrent.
 func (l *Logger) LeecherSummaries(
-	name string,
+	d core.Digest,
 	infoHash core.InfoHash,
 	summaries LeecherSummaries) error {
 
 	l.zap.Debug(
 		"Leecher summaries",
-		zap.String("name", name),
+		zap.String("name", d.Hex()),
 		zap.String("info_hash", infoHash.String()),
 		zap.Array("leecher_summaries", summaries))
 	return nil

@@ -47,7 +47,7 @@ func TestHandshakerSetsConnFieldsProperly(t *testing.T) {
 		pc, err := h1.Accept(nc)
 		require.NoError(err)
 		require.Equal(h2.peerID, pc.PeerID())
-		require.Equal(info.Name(), pc.Name())
+		require.Equal(info.Digest(), pc.Digest())
 		require.Equal(info.InfoHash(), pc.InfoHash())
 		require.Equal(info.Bitfield(), pc.Bitfield())
 		require.Equal(namespace, pc.Namespace())

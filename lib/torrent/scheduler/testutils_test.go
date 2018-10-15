@@ -142,7 +142,7 @@ func (m *testMocks) newPeers(n int, config Config) []*testPeer {
 // writeTorrent writes the given content into a torrent file into peers storage.
 // Useful for populating a completed torrent before seeding it.
 func (p *testPeer) writeTorrent(namespace string, blob *core.BlobFixture) {
-	t, err := p.torrentArchive.CreateTorrent(namespace, blob.MetaInfo.Name())
+	t, err := p.torrentArchive.CreateTorrent(namespace, blob.Digest)
 	if err != nil {
 		panic(err)
 	}
@@ -158,7 +158,7 @@ func (p *testPeer) writeTorrent(namespace string, blob *core.BlobFixture) {
 func (p *testPeer) checkTorrent(t *testing.T, namespace string, blob *core.BlobFixture) {
 	require := require.New(t)
 
-	tor, err := p.torrentArchive.GetTorrent(namespace, blob.MetaInfo.Name())
+	tor, err := p.torrentArchive.GetTorrent(namespace, blob.Digest)
 	require.NoError(err)
 
 	require.True(tor.Complete())

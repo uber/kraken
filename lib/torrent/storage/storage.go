@@ -24,7 +24,7 @@ type PieceReader interface {
 
 // Torrent represents a read/write interface for a torrent
 type Torrent interface {
-	Name() string
+	Digest() core.Digest
 	Stat() *TorrentInfo
 	NumPieces() int
 	Length() int64
@@ -45,8 +45,8 @@ type Torrent interface {
 
 // TorrentArchive creates and open torrent file
 type TorrentArchive interface {
-	Stat(namespace, name string) (*TorrentInfo, error)
-	CreateTorrent(namespace, name string) (Torrent, error)
-	GetTorrent(namespace, name string) (Torrent, error)
-	DeleteTorrent(name string) error
+	Stat(namespace string, d core.Digest) (*TorrentInfo, error)
+	CreateTorrent(namespace string, d core.Digest) (Torrent, error)
+	GetTorrent(namespace string, d core.Digest) (Torrent, error)
+	DeleteTorrent(d core.Digest) error
 }

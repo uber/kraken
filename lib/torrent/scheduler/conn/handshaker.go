@@ -52,7 +52,7 @@ func (rb RemoteBitfields) unmarshalBinary(rbBytes map[string][]byte) error {
 // in this package "handshake" and "bitfield message" are usually synonymous.
 type handshake struct {
 	peerID          core.PeerID
-	name            string
+	digest          core.Digest
 	infoHash        core.InfoHash
 	bitfield        *bitset.BitSet
 	remoteBitfields RemoteBitfields
@@ -72,7 +72,7 @@ func (h *handshake) toP2PMessage() (*p2p.Message, error) {
 		Type: p2p.Message_BITFIELD,
 		Bitfield: &p2p.BitfieldMessage{
 			PeerID:              h.peerID.String(),
-			Name:                h.name,
+			Name:                h.digest.Hex(),
 			InfoHash:            h.infoHash.String(),
 			BitfieldBytes:       b,
 			RemoteBitfieldBytes: rb,
@@ -93,6 +93,10 @@ func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
 	if err != nil {
 		return nil, fmt.Errorf("info hash: %s", err)
 	}
+	d, err := core.NewSHA256DigestFromHex(m.Bitfield.Name)
+	if err != nil {
+		return nil, fmt.Errorf("name: %s", err)
+	}
 	bitfield := bitset.New(0)
 	if err := bitfield.UnmarshalBinary(m.Bitfield.BitfieldBytes); err != nil {
 		return nil, err
@@ -106,7 +110,7 @@ func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
 		peerID:          peerID,
 		infoHash:        ih,
 		bitfield:        bitfield,
-		name:            m.Bitfield.Name,
+		digest:          d,
 		namespace:       m.Bitfield.Namespace,
 		remoteBitfields: remoteBitfields,
 	}, nil
@@ -124,9 +128,9 @@ func (pc *PendingConn) PeerID() core.PeerID {
 	return pc.handshake.peerID
 }
 
-// Name returns the name of the torrent the remote peer wants to open.
-func (pc *PendingConn) Name() string {
-	return pc.handshake.name
+// Digest returns the digest of the blob the remote peer wants to open.
+func (pc *PendingConn) Digest() core.Digest {
+	return pc.handshake.digest
 }
 
 // InfoHash returns the info hash of the torrent the remote peer wants to open.
@@ -264,7 +268,7 @@ func (h *Handshaker) sendHandshake(
 
 	hs := &handshake{
 		peerID:          h.peerID,
-		name:            info.Name(),
+		digest:          info.Digest(),
 		infoHash:        info.InfoHash(),
 		bitfield:        info.Bitfield(),
 		remoteBitfields: remoteBitfields,

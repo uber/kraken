@@ -136,9 +136,9 @@ func newDispatcher(
 	}, nil
 }
 
-// Name returns d's torrent name.
-func (d *Dispatcher) Name() string {
-	return d.torrent.Name()
+// Digest returns the blob digest for d's torrent.
+func (d *Dispatcher) Digest() core.Digest {
+	return d.torrent.Digest()
 }
 
 // InfoHash returns d's torrent hash.
@@ -296,7 +296,7 @@ func (d *Dispatcher) TearDown() {
 	})
 
 	if err := d.torrentlog.LeecherSummaries(
-		d.torrent.Name(), d.torrent.InfoHash(), summaries); err != nil {
+		d.torrent.Digest(), d.torrent.InfoHash(), summaries); err != nil {
 		d.log().Errorf("Error logging incoming piece request summary: %s", err)
 	}
 }
@@ -343,7 +343,7 @@ func (d *Dispatcher) complete() {
 	// Only log if we actually requested pieces from others.
 	if piecesRequestedTotal > 0 {
 		if err := d.torrentlog.SeederSummaries(
-			d.torrent.Name(), d.torrent.InfoHash(), summaries); err != nil {
+			d.torrent.Digest(), d.torrent.InfoHash(), summaries); err != nil {
 			d.log().Errorf("Error logging outgoing piece request summary: %s", err)
 		}
 	}

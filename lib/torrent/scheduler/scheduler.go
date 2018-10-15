@@ -212,8 +212,8 @@ func (s *scheduler) Stop() {
 	})
 }
 
-func (s *scheduler) doDownload(namespace, name string) (size int64, err error) {
-	t, err := s.torrentArchive.CreateTorrent(namespace, name)
+func (s *scheduler) doDownload(namespace string, d core.Digest) (size int64, err error) {
+	t, err := s.torrentArchive.CreateTorrent(namespace, d)
 	if err != nil {
 		if err == storage.ErrNotFound {
 			return 0, ErrTorrentNotFound
@@ -232,8 +232,13 @@ func (s *scheduler) doDownload(namespace, name string) (size int64, err error) {
 // Download downloads the torrent given metainfo. Once the torrent is downloaded,
 // it will begin seeding asynchronously.
 func (s *scheduler) Download(namespace, name string) error {
+	// TODO(codyg): Change Download to accept a digest.
+	d, err := core.NewSHA256DigestFromHex(name)
+	if err != nil {
+		return fmt.Errorf("parse digest: %s", err)
+	}
 	start := time.Now()
-	size, err := s.doDownload(namespace, name)
+	size, err := s.doDownload(namespace, d)
 	if err != nil {
 		var errTag string
 		switch err {
@@ -251,11 +256,11 @@ func (s *scheduler) Download(namespace, name string) error {
 		s.stats.Tagged(map[string]string{
 			"error": errTag,
 		}).Counter("download_errors").Inc(1)
-		s.torrentlog.DownloadFailure(namespace, name, size, err)
+		s.torrentlog.DownloadFailure(namespace, d, size, err)
 	} else {
 		downloadTime := time.Since(start)
 		recordDownloadTime(s.stats, size, downloadTime)
-		s.torrentlog.DownloadSuccess(namespace, name, size, downloadTime)
+		s.torrentlog.DownloadSuccess(namespace, d, size, downloadTime)
 	}
 	return err
 }
@@ -272,9 +277,14 @@ func (s *scheduler) BlacklistSnapshot() ([]connstate.BlacklistedConn, error) {
 // RemoveTorrent forcibly stops leeching / seeding torrent for name and removes
 // the torrent from disk.
 func (s *scheduler) RemoveTorrent(name string) error {
+	// TODO(codyg): Change RemoveTorrent to accept a digest.
+	d, err := core.NewSHA256DigestFromHex(name)
+	if err != nil {
+		return fmt.Errorf("parse digest: %s", err)
+	}
 	// Buffer size of 1 so sends do not block.
 	errc := make(chan error, 1)
-	if !s.eventLoop.send(removeTorrentEvent{name, errc}) {
+	if !s.eventLoop.send(removeTorrentEvent{d, errc}) {
 		return ErrSchedulerStopped
 	}
 	return <-errc
@@ -346,8 +356,8 @@ func (s *scheduler) announceLoop() {
 	s.announcer.Ticker(s.done)
 }
 
-func (s *scheduler) announce(name string, h core.InfoHash, complete bool) {
-	peers, err := s.announcer.Announce(name, h, complete)
+func (s *scheduler) announce(d core.Digest, h core.InfoHash, complete bool) {
+	peers, err := s.announcer.Announce(d.Hex(), h, complete)
 	if err != nil {
 		if err != announceclient.ErrDisabled {
 			s.eventLoop.send(announceErrEvent{h, err})
@@ -368,7 +378,7 @@ func (s *scheduler) failIncomingHandshake(pc *conn.PendingConn, err error) {
 // establishIncomingHandshake attempts to establish a pending conn initialized
 // by a remote peer. Success / failure is communicated via events.
 func (s *scheduler) establishIncomingHandshake(pc *conn.PendingConn, rb conn.RemoteBitfields) {
-	info, err := s.torrentArchive.Stat(pc.Namespace(), pc.Name())
+	info, err := s.torrentArchive.Stat(pc.Namespace(), pc.Digest())
 	if err != nil {
 		s.failIncomingHandshake(pc, fmt.Errorf("torrent stat: %s", err))
 		return
@@ -378,7 +388,7 @@ func (s *scheduler) establishIncomingHandshake(pc *conn.PendingConn, rb conn.Rem
 		s.failIncomingHandshake(pc, fmt.Errorf("establish handshake: %s", err))
 		return
 	}
-	s.torrentlog.IncomingConnectionAccept(pc.Name(), pc.InfoHash(), pc.PeerID())
+	s.torrentlog.IncomingConnectionAccept(pc.Digest(), pc.InfoHash(), pc.PeerID())
 	s.eventLoop.send(incomingConnEvent{pc.Namespace(), c, pc.Bitfield(), info})
 }
 
@@ -395,10 +405,10 @@ func (s *scheduler) initializeOutgoingHandshake(
 			"hash", info.InfoHash(),
 			"addr", addr).Infof("Error initializing outgoing handshake: %s", err)
 		s.eventLoop.send(failedOutgoingHandshakeEvent{p.PeerID, info.InfoHash()})
-		s.torrentlog.OutgoingConnectionReject(info.Name(), info.InfoHash(), p.PeerID, err)
+		s.torrentlog.OutgoingConnectionReject(info.Digest(), info.InfoHash(), p.PeerID, err)
 		return
 	}
-	s.torrentlog.OutgoingConnectionAccept(info.Name(), info.InfoHash(), p.PeerID)
+	s.torrentlog.OutgoingConnectionAccept(info.Digest(), info.InfoHash(), p.PeerID)
 	s.eventLoop.send(outgoingConnEvent{result.Conn, result.Bitfield, info})
 }
 

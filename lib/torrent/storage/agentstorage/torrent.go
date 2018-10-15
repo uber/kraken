@@ -67,9 +67,9 @@ func NewTorrent(cads caDownloadStore, mi *core.MetaInfo) (*Torrent, error) {
 	}, nil
 }
 
-// Name returns the name of the target file.
-func (t *Torrent) Name() string {
-	return t.metaInfo.Name()
+// Digest returns the digest of the target blob.
+func (t *Torrent) Digest() core.Digest {
+	return t.metaInfo.Digest()
 }
 
 // Stat returns the storage.TorrentInfo for t.
@@ -130,7 +130,7 @@ func (t *Torrent) String() string {
 	downloaded := int(float64(t.BytesDownloaded()) / float64(t.metaInfo.Length()) * 100)
 	return fmt.Sprintf(
 		"torrent(name=%s, hash=%s, downloaded=%d%%)",
-		t.Name(), t.InfoHash().Hex(), downloaded)
+		t.Digest().Hex(), t.InfoHash().Hex(), downloaded)
 }
 
 func (t *Torrent) getPiece(pi int) (*piece, error) {
@@ -143,14 +143,15 @@ func (t *Torrent) getPiece(pi int) (*piece, error) {
 // markPieceComplete must only be called once per piece.
 func (t *Torrent) markPieceComplete(pi int) error {
 	updated, err := t.cads.Download().SetMetadataAt(
-		t.Name(), &pieceStatusMetadata{}, []byte{byte(_complete)}, int64(pi))
+		t.Digest().Hex(), &pieceStatusMetadata{}, []byte{byte(_complete)}, int64(pi))
 	if err != nil {
 		return fmt.Errorf("write piece metadata: %s", err)
 	}
 	if !updated {
 		// This could mean there's another thread with a Torrent instance using
 		// the same file as us.
-		log.Errorf("Invariant violation: piece marked complete twice: piece %d in %s", pi, t.Name())
+		log.Errorf(
+			"Invariant violation: piece marked complete twice: piece %d in %s", pi, t.Digest().Hex())
 	}
 	t.pieces[pi].markComplete()
 	t.numComplete.Inc()
@@ -238,7 +239,7 @@ type opener struct {
 }
 
 func (o *opener) Open() (store.FileReader, error) {
-	return o.torrent.cads.Any().GetFileReader(o.torrent.Name())
+	return o.torrent.cads.Any().GetFileReader(o.torrent.Digest().Hex())
 }
 
 // GetPieceReader returns a reader for piece pi.

@@ -135,7 +135,7 @@ func (e incomingHandshakeEvent) apply(s *state) {
 	if err := s.conns.AddPending(e.pc.PeerID(), e.pc.InfoHash(), peerNeighbors); err != nil {
 		s.log("peer", e.pc.PeerID(), "hash", e.pc.InfoHash()).Infof(
 			"Rejecting incoming handshake: %s", err)
-		s.sched.torrentlog.IncomingConnectionReject(e.pc.Name(), e.pc.InfoHash(), e.pc.PeerID(), err)
+		s.sched.torrentlog.IncomingConnectionReject(e.pc.Digest(), e.pc.InfoHash(), e.pc.PeerID(), err)
 		e.pc.Close()
 		return
 	}
@@ -226,7 +226,7 @@ func (e announceTickEvent) apply(s *state) {
 		s.log("hash", h).Info("Skipping announce for fully saturated torrent")
 		return
 	}
-	go s.sched.announce(ctrl.dispatcher.Name(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
+	go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
 }
 
 // announceResultEvent occurs when a successfully announced response was received
@@ -309,7 +309,7 @@ func (e newTorrentEvent) apply(s *state) {
 	ctrl.errors = append(ctrl.errors, e.errc)
 
 	// Immediately announce new torrents.
-	go s.sched.announce(ctrl.dispatcher.Name(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
+	go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
 }
 
 // dispatcherCompleteEvent occurs when a dispatcher finishes downloading its torrent.
@@ -346,7 +346,7 @@ func (e dispatcherCompleteEvent) apply(s *state) {
 	s.sched.netevents.Produce(networkevent.TorrentCompleteEvent(infoHash, s.sched.pctx.PeerID))
 
 	// Immediately announce completed torrents.
-	go s.sched.announce(ctrl.dispatcher.Name(), ctrl.dispatcher.InfoHash(), true)
+	go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), true)
 }
 
 // preemptionTickEvent occurs periodically to preempt unneeded conns and remove
@@ -383,14 +383,14 @@ func (e preemptionTickEvent) apply(s *state) {
 			ctrl.dispatcher.Complete() &&
 				s.sched.clock.Now().Sub(ctrl.dispatcher.LastReadTime()) >= s.sched.config.SeederTTI
 		if idleSeeder {
-			s.sched.torrentlog.SeedTimeout(ctrl.dispatcher.Name(), h)
+			s.sched.torrentlog.SeedTimeout(ctrl.dispatcher.Digest(), h)
 		}
 
 		idleLeecher :=
 			!ctrl.dispatcher.Complete() &&
 				s.sched.clock.Now().Sub(ctrl.dispatcher.LastWriteTime()) >= s.sched.config.LeecherTTI
 		if idleLeecher {
-			s.sched.torrentlog.LeechTimeout(ctrl.dispatcher.Name(), h)
+			s.sched.torrentlog.LeechTimeout(ctrl.dispatcher.Digest(), h)
 		}
 
 		if idleSeeder || idleLeecher {
@@ -418,20 +418,20 @@ func (e blacklistSnapshotEvent) apply(s *state) {
 
 // removeTorrentEvent occurs when a torrent is manually removed via scheduler API.
 type removeTorrentEvent struct {
-	name string
-	errc chan error
+	digest core.Digest
+	errc   chan error
 }
 
 func (e removeTorrentEvent) apply(s *state) {
 	for h, ctrl := range s.torrentControls {
-		if ctrl.dispatcher.Name() == e.name {
+		if ctrl.dispatcher.Digest() == e.digest {
 			s.log(
 				"hash", h,
 				"inprogress", !ctrl.dispatcher.Complete()).Info("Removing torrent")
 			s.removeTorrent(h, ErrTorrentRemoved)
 		}
 	}
-	e.errc <- s.sched.torrentArchive.DeleteTorrent(e.name)
+	e.errc <- s.sched.torrentArchive.DeleteTorrent(e.digest)
 }
 
 // probeEvent occurs when a probe is manually requested via scheduler API.

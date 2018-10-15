@@ -59,12 +59,12 @@ func TestTorrentArchiveStatBitfield(t *testing.T) {
 
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(mi, nil).Times(1)
 
-	tor, err := archive.CreateTorrent(namespace, mi.Name())
+	tor, err := archive.CreateTorrent(namespace, mi.Digest())
 	require.NoError(err)
 
 	require.NoError(tor.WritePiece(piecereader.NewBuffer(blob.Content[2:3]), 2))
 
-	info, err := archive.Stat(namespace, mi.Name())
+	info, err := archive.Stat(namespace, mi.Digest())
 	require.NoError(err)
 	require.Equal(bitsetutil.FromBools(false, false, true, false), info.Bitfield())
 	require.Equal(int64(1), info.MaxPieceLength())
@@ -79,9 +79,9 @@ func TestTorrentArchiveStatNotExist(t *testing.T) {
 	archive := mocks.new()
 
 	namespace := core.TagFixture()
-	name := core.MetaInfoFixture().Name()
+	d := core.DigestFixture()
 
-	_, err := archive.Stat(namespace, name)
+	_, err := archive.Stat(namespace, d)
 	require.True(os.IsNotExist(err))
 }
 
@@ -98,7 +98,7 @@ func TestTorrentArchiveCreateTorrent(t *testing.T) {
 
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(mi, nil)
 
-	tor, err := archive.CreateTorrent(namespace, mi.Name())
+	tor, err := archive.CreateTorrent(namespace, mi.Digest())
 	require.NoError(err)
 	require.NotNil(tor)
 
@@ -108,7 +108,7 @@ func TestTorrentArchiveCreateTorrent(t *testing.T) {
 	require.Equal(mi, tm.MetaInfo)
 
 	// Create again reads from disk.
-	tor, err = archive.CreateTorrent(namespace, mi.Name())
+	tor, err = archive.CreateTorrent(namespace, mi.Digest())
 	require.NoError(err)
 	require.NotNil(tor)
 }
@@ -126,7 +126,7 @@ func TestTorrentArchiveCreateTorrentNotFound(t *testing.T) {
 
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(nil, metainfoclient.ErrNotFound)
 
-	_, err := archive.CreateTorrent(namespace, mi.Name())
+	_, err := archive.CreateTorrent(namespace, mi.Digest())
 	require.Equal(storage.ErrNotFound, err)
 }
 
@@ -143,13 +143,13 @@ func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(mi, nil)
 
-	tor, err := archive.CreateTorrent(namespace, mi.Name())
+	tor, err := archive.CreateTorrent(namespace, mi.Digest())
 	require.NoError(err)
 	require.NotNil(tor)
 
-	require.NoError(archive.DeleteTorrent(mi.Name()))
+	require.NoError(archive.DeleteTorrent(mi.Digest()))
 
-	_, err = archive.Stat(namespace, mi.Name())
+	_, err = archive.Stat(namespace, mi.Digest())
 	require.True(os.IsNotExist(err))
 }
 
@@ -172,7 +172,7 @@ func TestTorrentArchiveConcurrentGet(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			tor, err := archive.CreateTorrent(namespace, mi.Name())
+			tor, err := archive.CreateTorrent(namespace, mi.Digest())
 			require.NoError(err)
 			require.NotNil(tor)
 		}()
@@ -192,16 +192,16 @@ func TestTorrentArchiveGetTorrent(t *testing.T) {
 	namespace := core.TagFixture()
 
 	// Since metainfo is not yet on disk, get should fail.
-	_, err := archive.GetTorrent(namespace, mi.Name())
+	_, err := archive.GetTorrent(namespace, mi.Digest())
 	require.Error(err)
 
 	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Name()).Return(mi, nil)
 
-	_, err = archive.CreateTorrent(namespace, mi.Name())
+	_, err = archive.CreateTorrent(namespace, mi.Digest())
 	require.NoError(err)
 
 	// After creating the torrent, get should succeed.
-	tor, err := archive.GetTorrent(namespace, mi.Name())
+	tor, err := archive.GetTorrent(namespace, mi.Digest())
 	require.NoError(err)
 	require.NotNil(tor)
 }
