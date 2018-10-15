@@ -5,6 +5,7 @@
 package mockscheduler
 
 import (
+	core "code.uber.internal/infra/kraken/core"
 	scheduler "code.uber.internal/infra/kraken/lib/torrent/scheduler"
 	connstate "code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
 	gomock "github.com/golang/mock/gomock"
@@ -48,7 +49,7 @@ func (mr *MockReloadableSchedulerMockRecorder) BlacklistSnapshot() *gomock.Call 
 }
 
 // Download mocks base method
-func (m *MockReloadableScheduler) Download(arg0, arg1 string) error {
+func (m *MockReloadableScheduler) Download(arg0 string, arg1 core.Digest) error {
 	ret := m.ctrl.Call(m, "Download", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -82,7 +83,7 @@ func (mr *MockReloadableSchedulerMockRecorder) Reload(arg0 interface{}) *gomock.
 }
 
 // RemoveTorrent mocks base method
-func (m *MockReloadableScheduler) RemoveTorrent(arg0 string) error {
+func (m *MockReloadableScheduler) RemoveTorrent(arg0 core.Digest) error {
 	ret := m.ctrl.Call(m, "RemoveTorrent", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -140,7 +141,7 @@ func (mr *MockSchedulerMockRecorder) BlacklistSnapshot() *gomock.Call {
 }
 
 // Download mocks base method
-func (m *MockScheduler) Download(arg0, arg1 string) error {
+func (m *MockScheduler) Download(arg0 string, arg1 core.Digest) error {
 	ret := m.ctrl.Call(m, "Download", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -164,7 +165,7 @@ func (mr *MockSchedulerMockRecorder) Probe() *gomock.Call {
 }
 
 // RemoveTorrent mocks base method
-func (m *MockScheduler) RemoveTorrent(arg0 string) error {
+func (m *MockScheduler) RemoveTorrent(arg0 core.Digest) error {
 	ret := m.ctrl.Call(m, "RemoveTorrent", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0

@@ -41,7 +41,7 @@ func NewReadOnlyTransferer(
 func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
 	fi, err := t.cads.Cache().GetFileStat(d.Hex())
 	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
-		if err := t.sched.Download(namespace, d.Hex()); err != nil {
+		if err := t.sched.Download(namespace, d); err != nil {
 			return nil, fmt.Errorf("scheduler: %s", err)
 		}
 		fi, err = t.cads.Cache().GetFileStat(d.Hex())
@@ -58,7 +58,7 @@ func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobIn
 func (t *ReadOnlyTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
 	f, err := t.cads.Cache().GetFileReader(d.Hex())
 	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
-		if err := t.sched.Download(namespace, d.Hex()); err != nil {
+		if err := t.sched.Download(namespace, d); err != nil {
 			return nil, fmt.Errorf("scheduler: %s", err)
 		}
 		f, err = t.cads.Cache().GetFileReader(d.Hex())
