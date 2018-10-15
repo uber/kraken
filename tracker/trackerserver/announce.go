@@ -18,7 +18,11 @@ func (s *Server) announceHandlerV1(w http.ResponseWriter, r *http.Request) error
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		return handler.Errorf("json decode request: %s", err)
 	}
-	resp, err := s.announce(req.Name, req.InfoHash, req.Peer)
+	d, err := req.GetDigest()
+	if err != nil {
+		return handler.Errorf("get request digest: %s", err)
+	}
+	resp, err := s.announce(d, req.InfoHash, req.Peer)
 	if err != nil {
 		return err
 	}
@@ -41,7 +45,11 @@ func (s *Server) announceHandlerV2(w http.ResponseWriter, r *http.Request) error
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		return handler.Errorf("json decode request: %s", err)
 	}
-	resp, err := s.announce(req.Name, h, req.Peer)
+	d, err := req.GetDigest()
+	if err != nil {
+		return handler.Errorf("get request digest: %s", err)
+	}
+	resp, err := s.announce(d, h, req.Peer)
 	if err != nil {
 		return err
 	}
@@ -52,12 +60,8 @@ func (s *Server) announceHandlerV2(w http.ResponseWriter, r *http.Request) error
 }
 
 func (s *Server) announce(
-	name string, h core.InfoHash, peer *core.PeerInfo) (*announceclient.Response, error) {
+	d core.Digest, h core.InfoHash, peer *core.PeerInfo) (*announceclient.Response, error) {
 
-	d, err := core.NewSHA256DigestFromHex(name)
-	if err != nil {
-		return nil, fmt.Errorf("parse digest: %s", err)
-	}
 	if err := s.peerStore.UpdatePeer(h, peer); err != nil {
 		log.With(
 			"hash", h,

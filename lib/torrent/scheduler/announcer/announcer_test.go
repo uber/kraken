@@ -75,14 +75,14 @@ func TestAnnouncerAnnounceUpdatesInterval(t *testing.T) {
 	mocks.clk.Add(config.DefaultInterval)
 	mocks.events.expectTick(t)
 
-	name := core.DigestFixture().Hex()
+	d := core.DigestFixture()
 	hash := core.InfoHashFixture()
 	interval := 10 * time.Second
 	peers := []*core.PeerInfo{core.PeerInfoFixture()}
 
-	mocks.client.EXPECT().Announce(name, hash, false, announceclient.V1).Return(peers, interval, nil)
+	mocks.client.EXPECT().Announce(d, hash, false, announceclient.V1).Return(peers, interval, nil)
 
-	result, err := announcer.Announce(name, hash, false)
+	result, err := announcer.Announce(d, hash, false)
 	require.NoError(err)
 	require.Equal(peers, result)
 
@@ -108,12 +108,12 @@ func TestAnnouncerAnnounceErr(t *testing.T) {
 
 	go announcer.Ticker(nil)
 
-	name := core.DigestFixture().Hex()
+	d := core.DigestFixture()
 	hash := core.InfoHashFixture()
 	err := errors.New("some error")
 
-	mocks.client.EXPECT().Announce(name, hash, false, announceclient.V1).Return(nil, time.Duration(0), err)
+	mocks.client.EXPECT().Announce(d, hash, false, announceclient.V1).Return(nil, time.Duration(0), err)
 
-	_, aErr := announcer.Announce(name, hash, false)
+	_, aErr := announcer.Announce(d, hash, false)
 	require.Equal(err, aErr)
 }

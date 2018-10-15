@@ -35,7 +35,7 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Announce mocks base method
-func (m *MockClient) Announce(arg0 string, arg1 core.InfoHash, arg2 bool, arg3 int) ([]*core.PeerInfo, time.Duration, error) {
+func (m *MockClient) Announce(arg0 core.Digest, arg1 core.InfoHash, arg2 bool, arg3 int) ([]*core.PeerInfo, time.Duration, error) {
 	ret := m.ctrl.Call(m, "Announce", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].([]*core.PeerInfo)
 	ret1, _ := ret[1].(time.Duration)
