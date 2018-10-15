@@ -34,7 +34,7 @@ func TestDownloadTorrentWithSeederAndLeecher(t *testing.T) {
 	namespace := core.TagFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(
-		namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).Times(2)
+		namespace, blob.Digest).Return(blob.MetaInfo, nil).Times(2)
 
 	seeder.writeTorrent(namespace, blob)
 	require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
@@ -60,7 +60,7 @@ func TestDownloadManyTorrentsWithSeederAndLeecher(t *testing.T) {
 		blob := core.NewBlobFixture()
 
 		mocks.metaInfoClient.EXPECT().Download(
-			namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).Times(2)
+			namespace, blob.Digest).Return(blob.MetaInfo, nil).Times(2)
 
 		wg.Add(1)
 		go func() {
@@ -95,7 +95,7 @@ func TestDownloadManyTorrentsWithSeederAndManyLeechers(t *testing.T) {
 		blobs[i] = blob
 
 		mocks.metaInfoClient.EXPECT().Download(
-			namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).Times(6)
+			namespace, blob.Digest).Return(blob.MetaInfo, nil).Times(6)
 
 		seeder.writeTorrent(namespace, blob)
 		require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
@@ -132,7 +132,7 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 	blob := core.SizedBlobFixture(uint64(len(peers)*pieceLength), uint64(pieceLength))
 
 	mocks.metaInfoClient.EXPECT().Download(
-		namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).Times(len(peers))
+		namespace, blob.Digest).Return(blob.MetaInfo, nil).Times(len(peers))
 
 	var wg sync.WaitGroup
 	for i, p := range peers {
@@ -168,7 +168,7 @@ func TestSeederTTI(t *testing.T) {
 	namespace := core.TagFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(
-		namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).Times(2)
+		namespace, blob.Digest).Return(blob.MetaInfo, nil).Times(2)
 
 	clk := clock.NewMock()
 	w := newEventWatcher()
@@ -220,7 +220,7 @@ func TestLeecherTTI(t *testing.T) {
 	blob := core.NewBlobFixture()
 	namespace := core.TagFixture()
 
-	mocks.metaInfoClient.EXPECT().Download(namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil)
+	mocks.metaInfoClient.EXPECT().Download(namespace, blob.Digest).Return(blob.MetaInfo, nil)
 
 	p := mocks.newPeer(config, withEventLoop(w), withClock(clk))
 	errc := make(chan error)
@@ -250,7 +250,7 @@ func TestMultipleDownloadsForSameTorrentSucceed(t *testing.T) {
 
 	// Allow any number of downloads due to concurrency below.
 	mocks.metaInfoClient.EXPECT().Download(
-		namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).AnyTimes()
+		namespace, blob.Digest).Return(blob.MetaInfo, nil).AnyTimes()
 
 	config := configFixture()
 
@@ -309,7 +309,7 @@ func TestNetworkEvents(t *testing.T) {
 	namespace := core.TagFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(
-		namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).Times(2)
+		namespace, blob.Digest).Return(blob.MetaInfo, nil).Times(2)
 
 	seeder.writeTorrent(namespace, blob)
 	require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
@@ -362,7 +362,7 @@ func TestPullInactiveTorrent(t *testing.T) {
 	namespace := core.TagFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(
-		namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).Times(2)
+		namespace, blob.Digest).Return(blob.MetaInfo, nil).Times(2)
 
 	seeder := mocks.newPeer(config)
 
@@ -396,7 +396,7 @@ func TestSchedulerReload(t *testing.T) {
 		blob := core.NewBlobFixture()
 
 		mocks.metaInfoClient.EXPECT().Download(
-			namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil).Times(2)
+			namespace, blob.Digest).Return(blob.MetaInfo, nil).Times(2)
 
 		seeder.writeTorrent(namespace, blob)
 		require.NoError(seeder.scheduler.Download(namespace, blob.MetaInfo.Name()))
@@ -429,7 +429,7 @@ func TestSchedulerRemoveTorrent(t *testing.T) {
 	namespace := core.TagFixture()
 
 	mocks.metaInfoClient.EXPECT().Download(
-		namespace, blob.MetaInfo.Name()).Return(blob.MetaInfo, nil)
+		namespace, blob.Digest).Return(blob.MetaInfo, nil)
 
 	errc := make(chan error)
 	go func() { errc <- p.scheduler.Download(namespace, blob.MetaInfo.Name()) }()

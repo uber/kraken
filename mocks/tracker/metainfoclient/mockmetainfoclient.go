@@ -34,7 +34,7 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Download mocks base method
-func (m *MockClient) Download(arg0, arg1 string) (*core.MetaInfo, error) {
+func (m *MockClient) Download(arg0 string, arg1 core.Digest) (*core.MetaInfo, error) {
 	ret := m.ctrl.Call(m, "Download", arg0, arg1)
 	ret0, _ := ret[0].(*core.MetaInfo)
 	ret1, _ := ret[1].(error)
