@@ -76,7 +76,7 @@ func (a *TorrentArchive) CreateTorrent(namespace string, d core.Digest) (storage
 		// because someone else beats us to it. However, we catch a lucky break
 		// because the only piece of metainfo we use is file length -- which digest
 		// is derived from, so it's "okay".
-		createErr := a.cads.CreateDownloadFile(mi.Name(), mi.Length())
+		createErr := a.cads.CreateDownloadFile(mi.Digest().Hex(), mi.Length())
 		if createErr != nil &&
 			!(a.cads.InDownloadError(createErr) || a.cads.InCacheError(createErr)) {
 			return nil, fmt.Errorf("create download file: %s", createErr)

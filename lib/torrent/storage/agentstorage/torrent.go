@@ -45,14 +45,14 @@ type Torrent struct {
 
 // NewTorrent creates a new Torrent.
 func NewTorrent(cads caDownloadStore, mi *core.MetaInfo) (*Torrent, error) {
-	pieces, numComplete, err := restorePieces(mi.Name(), cads, mi.NumPieces())
+	pieces, numComplete, err := restorePieces(mi.Digest(), cads, mi.NumPieces())
 	if err != nil {
 		return nil, fmt.Errorf("restore pieces: %s", err)
 	}
 
 	committed := false
 	if numComplete == len(pieces) {
-		if err := cads.MoveDownloadFileToCache(mi.Name()); err != nil && !os.IsExist(err) {
+		if err := cads.MoveDownloadFileToCache(mi.Digest().Hex()); err != nil && !os.IsExist(err) {
 			return nil, fmt.Errorf("move file to cache: %s", err)
 		}
 		committed = true
@@ -160,7 +160,7 @@ func (t *Torrent) markPieceComplete(pi int) error {
 
 // writePiece writes data to piece pi. If the write succeeds, marks the piece as completed.
 func (t *Torrent) writePiece(src storage.PieceReader, pi int) error {
-	f, err := t.cads.GetDownloadFileReadWriter(t.metaInfo.Name())
+	f, err := t.cads.GetDownloadFileReadWriter(t.metaInfo.Digest().Hex())
 	if err != nil {
 		return fmt.Errorf("get download writer: %s", err)
 	}
@@ -225,7 +225,8 @@ func (t *Torrent) WritePiece(src storage.PieceReader, pi int) error {
 		// Multiple threads may attempt to move the download file to cache, however
 		// only one will succeed while the others will receive (and ignore) file exist
 		// error.
-		if err := t.cads.MoveDownloadFileToCache(t.metaInfo.Name()); err != nil && !os.IsExist(err) {
+		err := t.cads.MoveDownloadFileToCache(t.metaInfo.Digest().Hex())
+		if err != nil && !os.IsExist(err) {
 			return fmt.Errorf("download completed but failed to move file to cache directory: %s", err)
 		}
 		t.committed.Store(true)

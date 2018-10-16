@@ -104,7 +104,7 @@ func TestTorrentArchiveCreateTorrent(t *testing.T) {
 
 	// Check metainfo.
 	var tm metadata.TorrentMeta
-	require.NoError(mocks.cads.Any().GetMetadata(mi.Name(), &tm))
+	require.NoError(mocks.cads.Any().GetMetadata(mi.Digest().Hex(), &tm))
 	require.Equal(mi, tm.MetaInfo)
 
 	// Create again reads from disk.

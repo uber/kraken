@@ -22,10 +22,10 @@ import (
 )
 
 func prepareStore(cads *store.CADownloadStore, mi *core.MetaInfo) {
-	if err := cads.CreateDownloadFile(mi.Name(), mi.Length()); err != nil {
+	if err := cads.CreateDownloadFile(mi.Digest().Hex(), mi.Length()); err != nil {
 		panic(err)
 	}
-	if _, err := cads.Download().SetMetadata(mi.Name(), metadata.NewTorrentMeta(mi)); err != nil {
+	if _, err := cads.Download().SetMetadata(mi.Digest().Hex(), metadata.NewTorrentMeta(mi)); err != nil {
 		panic(err)
 	}
 }
@@ -137,7 +137,7 @@ func TestTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 	require.Nil(tor.MissingPieces())
 
 	// Check content
-	reader, err := cads.Cache().GetFileReader(blob.MetaInfo.Name())
+	reader, err := cads.Cache().GetFileReader(blob.MetaInfo.Digest().Hex())
 	require.NoError(err)
 	torrentBytes, err := ioutil.ReadAll(reader)
 	require.NoError(err)
@@ -201,7 +201,7 @@ func TestTorrentWriteSamePieceConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 
-	reader, err := cads.Cache().GetFileReader(blob.MetaInfo.Name())
+	reader, err := cads.Cache().GetFileReader(blob.MetaInfo.Digest().Hex())
 	require.NoError(err)
 	torrentBytes, err := ioutil.ReadAll(reader)
 	require.NoError(err)
