@@ -75,11 +75,6 @@ func (mi *MetaInfo) Digest() Digest {
 	return mi.digest
 }
 
-// Name returns the name of the original blob.
-func (mi *MetaInfo) Name() string {
-	return mi.info.Name
-}
-
 // Length returns the length of the original blob.
 func (mi *MetaInfo) Length() int64 {
 	return mi.info.Length
