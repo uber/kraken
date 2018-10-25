@@ -1,6 +1,6 @@
 FROM debian:9
 
-RUN apt-get update && apt-get install -y build-essential curl sqlite3 nginx sudo
+RUN apt-get update && apt-get install -y build-essential curl sqlite3 nginx sudo procps
 
 ADD http://download.redis.io/redis-stable.tar.gz /tmp/redis-stable.tar.gz
 RUN tar -xvzf /tmp/redis-stable.tar.gz -C /tmp
