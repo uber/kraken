@@ -159,7 +159,7 @@ func (c *Client) Upload(name string, src io.Reader) error {
 
 func isNotFound(err error) bool {
 	awsErr, ok := err.(awserr.Error)
-	return ok && awsErr.Code() == s3.ErrCodeNoSuchKey || awsErr.Code() == "NotFound"
+	return ok && (awsErr.Code() == s3.ErrCodeNoSuchKey || awsErr.Code() == "NotFound")
 }
 
 // List lists names with start with prefix.
