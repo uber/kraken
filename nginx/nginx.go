@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"text/template"
 
@@ -114,13 +115,19 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 		return fmt.Errorf("write src: %s", err)
 	}
 
+	stdoutLog := path.Join(config.LogDir, "nginx-stdout.log")
+	stdout, err := os.OpenFile(stdoutLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("open stdout log: %s", err)
+	}
+
 	args := []string{"/usr/sbin/nginx", "-g", "daemon off;", "-c", conf}
 	if config.Root {
 		args = append([]string{"sudo"}, args...)
 	}
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stdout
 	return cmd.Run()
 }
 
