@@ -1,3 +1,14 @@
+0.0.21 (2018-10-29)
+====
+- Scheduler state refactor
+- Remove unnecessary fields from metainfo
+- Change raw name string usage to typed digest in scheduler, announceclient, and metainfoclient
+- Fix origin phx3 configuration
+- Fix nil-pointer bug in s3 error handling
+- Remove pipe from run_cmd
+- Add replication config for wbu2 / irn1
+- Remove unnecessary logging
+
 0.0.20 (2018-10-10)
 ====
 - Upgrade terrablob-client
