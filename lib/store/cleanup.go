@@ -76,7 +76,7 @@ func (m *cleanupManager) addJob(tag string, config CleanupConfig, op base.FileOp
 		for {
 			select {
 			case <-ticker.C:
-				log.Infof("Performing cleanup of %s", op)
+				log.Debugf("Performing cleanup of %s", op)
 				usage, err := m.scan(op, config.TTI, config.TTL)
 				if err != nil {
 					log.Errorf("Error scanning %s: %s", op, err)
