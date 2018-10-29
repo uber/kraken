@@ -81,7 +81,7 @@ func Wrap(h ErrHandler) http.HandlerFunc {
 		} else {
 			status = http.StatusOK
 		}
-		if status >= 400 {
+		if status >= 400 && status != 404 {
 			log.Infof("%d %s %s %s", status, r.Method, r.URL.Path, errMsg)
 		}
 	}
