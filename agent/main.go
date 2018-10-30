@@ -83,8 +83,13 @@ func main() {
 		log.Fatalf("Error building tracker upstream: %s", err)
 	}
 
+	tls, err := config.TLS.BuildClient()
+	if err != nil {
+		log.Fatalf("Error building client tls config: %s", err)
+	}
+
 	sched, err := scheduler.NewAgentScheduler(
-		config.Scheduler, stats, pctx, cads, netevents, trackers)
+		config.Scheduler, stats, pctx, cads, netevents, trackers, tls)
 	if err != nil {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
@@ -92,11 +97,6 @@ func main() {
 	buildIndexes, err := config.BuildIndex.Build()
 	if err != nil {
 		log.Fatalf("Error building build-index upstream: %s", err)
-	}
-
-	tls, err := config.TLS.BuildClient()
-	if err != nil {
-		log.Fatalf("Error building client tls config: %s", err)
 	}
 
 	tagClient := tagclient.NewClusterClient(buildIndexes, tls)

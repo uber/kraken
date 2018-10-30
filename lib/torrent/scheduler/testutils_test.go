@@ -119,7 +119,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 		IP:     "localhost",
 		Port:   findFreePort(),
 	}
-	ac := announceclient.New(pctx, healthcheck.NoopFailed(hostlist.Fixture(m.trackerAddr)))
+	ac := announceclient.New(pctx, healthcheck.NoopFailed(hostlist.Fixture(m.trackerAddr)), nil)
 	tp := networkevent.NewTestProducer()
 
 	s, err := newScheduler(config, ta, stats, pctx, ac, announcequeue.New(), tp, options...)

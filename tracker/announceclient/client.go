@@ -2,6 +2,7 @@ package announceclient
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,11 +55,12 @@ type Client interface {
 type client struct {
 	pctx  core.PeerContext
 	hosts healthcheck.List
+	tls   *tls.Config
 }
 
 // New creates a new client.
-func New(pctx core.PeerContext, hosts healthcheck.List) Client {
-	return &client{pctx, hosts}
+func New(pctx core.PeerContext, hosts healthcheck.List, tls *tls.Config) Client {
+	return &client{pctx, hosts, tls}
 }
 
 // Announce versionss.
@@ -103,7 +105,8 @@ func (c *client) Announce(
 			method,
 			url,
 			httputil.SendBody(bytes.NewReader(body)),
-			httputil.SendTimeout(15*time.Second))
+			httputil.SendTimeout(15*time.Second),
+			httputil.SendTLSTransport(c.tls))
 		if err != nil {
 			if httputil.IsNetworkError(err) {
 				c.hosts.Failed(addr)
