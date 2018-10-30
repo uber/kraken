@@ -1,6 +1,7 @@
 package metainfoclient
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -26,12 +27,13 @@ type Client interface {
 
 type client struct {
 	hosts   healthcheck.List
+	tls     *tls.Config
 	backoff *backoff.Backoff
 }
 
 // New returns a new Client.
-func New(hosts healthcheck.List) Client {
-	return &client{hosts, backoff.New(backoff.Config{RetryTimeout: 15 * time.Minute})}
+func New(hosts healthcheck.List, tls *tls.Config) Client {
+	return &client{hosts, tls, backoff.New(backoff.Config{RetryTimeout: 15 * time.Minute})}
 }
 
 // Download returns the MetaInfo associated with name. Returns ErrNotFound if
@@ -49,7 +51,8 @@ func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, erro
 				"http://%s/namespace/%s/blobs/%s/metainfo",
 				addr, url.PathEscape(namespace), d),
 			c.backoff,
-			httputil.SendTimeout(15*time.Second))
+			httputil.SendTimeout(15*time.Second),
+			httputil.SendTLSTransport(c.tls))
 		if err != nil {
 			if httputil.IsNetworkError(err) {
 				c.hosts.Failed(addr)

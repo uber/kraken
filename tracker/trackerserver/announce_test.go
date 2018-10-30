@@ -17,7 +17,7 @@ import (
 )
 
 func newAnnounceClient(pctx core.PeerContext, addr string) announceclient.Client {
-	return announceclient.New(pctx, healthcheck.NoopFailed(hostlist.Fixture(addr)))
+	return announceclient.New(pctx, healthcheck.NoopFailed(hostlist.Fixture(addr)), nil)
 }
 
 func TestAnnounceSinglePeerResponse(t *testing.T) {

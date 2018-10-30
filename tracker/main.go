@@ -74,6 +74,6 @@ func main() {
 	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
 		"port": config.Port,
 		"server": nginx.GetServer(
-			config.TrackerServer.Listener.Net, config.TrackerServer.Listener.Addr),
-	}))
+			config.TrackerServer.Listener.Net, config.TrackerServer.Listener.Addr)},
+		nginx.WithTLS(config.TLS)))
 }
