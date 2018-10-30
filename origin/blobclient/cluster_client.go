@@ -113,7 +113,8 @@ func (c *clusterClient) GetMetaInfo(namespace string, d core.Digest) (mi *core.M
 	}
 	for _, client := range clients {
 		mi, err = client.GetMetaInfo(namespace, d)
-		if err != nil {
+		// Do not try the next replica on 202 errors.
+		if err != nil && !httputil.IsAccepted(err) {
 			continue
 		}
 		break
