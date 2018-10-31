@@ -55,6 +55,42 @@ http {
   # access_log /var/log/nginx/access.log;
   error_log /var/log/nginx/error.log;
 
+  # JSON log_format
+  log_format json escape=json '{'
+       '"verb":"$request_method",'
+       '"path":"$request_uri",'
+       '"bytes":$request_length,'
+       '"request_scheme":"$scheme",'
+       '"request_port":$server_port,'
+       '"request_host":"$http_host",'
+       '"clientip":"$remote_addr",'
+       '"agent":"$http_user_agent",'
+       '"response_redirect_location":"$sent_http_location",'
+       '"response_length":$bytes_sent,'
+       '"responseStatusCode":"$status",'
+       '"responseTime":$request_time,'
+       '"esStatusCode":"$status",'
+       '"content_type":"$content_type",'
+       '"email":"$http_x_auth_params_email",'
+       '"uberSource":"$http_x_uber_source",'
+       '"callsite":"$http_x_uber_callsite",'
+       '"app":"$http_x_uber_app",'
+       '"request":"$request_uri",'
+       '"connection":"$connection",'
+       '"connection_requests":$connection_requests,'
+       '"@timestamp":"$time_iso8601",'
+       '"@source_host":"$hostname",'
+       '"referer":"$http_referer",'
+       '"service_name":"kraken",'
+       '"message":"access log",'
+       '"logtype":"access_log",'
+       '"proxy_type":"nginx",'
+       '"server_protocol":"$server_protocol",'
+       '"proxy_host": "$proxy_host",'
+       '"upstream_address":"$upstream_addr",'
+       '"upstream_response_time":"$upstream_response_time"'
+     '}';
+
   ##
   # Gzip Settings
   ##
