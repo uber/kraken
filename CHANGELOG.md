@@ -1,3 +1,9 @@
+0.0.22 (2018-11-01)
+====
+- Short circuit ClusterClient.GetMetaInfo on 202
+- Remove hard-coded replicator hostnames from all zones
+- Disable muttley routing for terrablob backend (expect in IRN)
+
 0.0.21 (2018-10-29)
 ====
 - Scheduler state refactor
