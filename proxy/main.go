@@ -90,6 +90,6 @@ func main() {
 		"registry_server": nginx.GetServer(
 			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
 		"registry_override_server": nginx.GetServer(
-			config.RegistryOverride.Listener.Net, config.RegistryOverride.Listener.Addr),
-	}))
+			config.RegistryOverride.Listener.Net, config.RegistryOverride.Listener.Addr)},
+		nginx.WithTLS(config.TLS)))
 }
