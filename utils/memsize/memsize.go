@@ -4,21 +4,22 @@ import (
 	"fmt"
 )
 
-// Defines the number of bytes in each unit.
+// Defines number of bits in each bit unit.
+const (
+	bit uint64 = 1 << (10 * iota)
+	Kbit
+	Mbit
+	Gbit
+	Tbit
+)
+
+// Defines number of bytes in each byte unit.
 const (
 	B uint64 = 1 << (10 * iota)
 	KB
 	MB
 	GB
 	TB
-)
-
-// Defines number of bits in each unit.
-const (
-	Kbit uint64 = 8 * KB
-	Mbit        = 8 * MB
-	Gbit        = 8 * GB
-	Tbit        = 8 * TB
 )
 
 type unit struct {
