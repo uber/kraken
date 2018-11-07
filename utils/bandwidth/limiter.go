@@ -27,7 +27,7 @@ type Config struct {
 
 func (c Config) applyDefaults() Config {
 	if c.TokenSize == 0 {
-		c.TokenSize = memsize.Mbit
+		c.TokenSize = 8 * memsize.Mbit
 	}
 	return c
 }

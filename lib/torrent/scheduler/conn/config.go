@@ -38,10 +38,10 @@ func (c Config) applyDefaults() Config {
 		c.ReceiverBufferSize = 10000
 	}
 	if c.Bandwidth.EgressBitsPerSec == 0 {
-		c.Bandwidth.EgressBitsPerSec = 200 * memsize.Mbit
+		c.Bandwidth.EgressBitsPerSec = 200 * 8 * memsize.Mbit
 	}
 	if c.Bandwidth.IngressBitsPerSec == 0 {
-		c.Bandwidth.IngressBitsPerSec = 300 * memsize.Mbit
+		c.Bandwidth.IngressBitsPerSec = 300 * 8 * memsize.Mbit
 	}
 	return c
 }

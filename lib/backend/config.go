@@ -28,10 +28,10 @@ type Config struct {
 func (c Config) applyDefaults() Config {
 	if c.Backend == _s3 {
 		if c.Bandwidth.IngressBitsPerSec == 0 {
-			c.Bandwidth.IngressBitsPerSec = 10 * memsize.Gbit
+			c.Bandwidth.IngressBitsPerSec = 10 * 8 * memsize.Gbit
 		}
 		if c.Bandwidth.EgressBitsPerSec == 0 {
-			c.Bandwidth.EgressBitsPerSec = memsize.Gbit
+			c.Bandwidth.EgressBitsPerSec = 8 * memsize.Gbit
 		}
 	}
 	return c
