@@ -46,3 +46,38 @@ func GetIP(host string) (net.IP, error) {
 	}
 	return nil, errors.New("no ips found")
 }
+
+// GetLocalIP returns the ip address of the local machine.
+func GetLocalIP() (string, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return "", fmt.Errorf("interfaces: %s", err)
+	}
+	for _, i := range ifaces {
+		if i.Name != "eth0" {
+			continue
+		}
+		addrs, err := i.Addrs()
+		if err != nil {
+			return "", fmt.Errorf("addrs: %s", err)
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			ip = ip.To4()
+			if ip == nil {
+				continue
+			}
+			return ip.String(), nil
+		}
+	}
+	return "", errors.New("no ip found")
+}

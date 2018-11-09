@@ -27,6 +27,7 @@ import (
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/handler"
 	"code.uber.internal/infra/kraken/utils/log"
+	"code.uber.internal/infra/kraken/utils/netutil"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
@@ -161,11 +162,25 @@ func main() {
 		hashring.WithWatcher(backend.NewBandwidthWatcher(backendManager)))
 	go hashRing.Monitor(nil)
 
+	addr := fmt.Sprintf("%s:%d", hostname, *blobServerPort)
+	if !hashRing.Contains(addr) {
+		// When DNS is used for hash ring membership, the members will be IP
+		// addresses instead of hostnames.
+		ip, err := netutil.GetLocalIP()
+		if err != nil {
+			log.Fatalf("Error getting local ip: %s", err)
+		}
+		addr = fmt.Sprintf("%s:%d", ip, *blobServerPort)
+		if !hashRing.Contains(addr) {
+			log.Fatalf("Neither %s nor %s (port %d) found in hash ring", hostname, ip, *blobServerPort)
+		}
+	}
+
 	server, err := blobserver.New(
 		config.BlobServer,
 		stats,
 		clock.New(),
-		fmt.Sprintf("%s:%d", hostname, *blobServerPort),
+		addr,
 		hashRing,
 		cas,
 		blobclient.NewProvider(blobclient.WithTLS(tls)),
