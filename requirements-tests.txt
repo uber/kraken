@@ -4,3 +4,4 @@ docker==2.7.0
 pytest==3.0.6
 pytest-timeout==1.2.0
 zest.releaser==6.9
+pyyaml==3.12

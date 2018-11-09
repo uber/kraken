@@ -10,9 +10,8 @@ func TestRemotesMatch(t *testing.T) {
 	require := require.New(t)
 
 	remotes, err := RemotesConfig{
-		"foo/.*": []string{"a", "b"},
-		"bar/.*": []string{"a"},
-		"baz/.*": nil,
+		"a": []string{"foo/.*", "bar/.*"},
+		"b": []string{"foo/.*"},
 	}.Build()
 	require.NoError(err)
 
@@ -22,7 +21,7 @@ func TestRemotesMatch(t *testing.T) {
 		"baz/456": nil,
 		"xxx":     nil,
 	} {
-		require.Equal(expected, remotes.Match(tag), "Tag: %s", tag)
+		require.ElementsMatch(expected, remotes.Match(tag), "Tag: %s", tag)
 	}
 }
 
@@ -30,8 +29,10 @@ func TestRemotesValid(t *testing.T) {
 	require := require.New(t)
 
 	remotes, err := RemotesConfig{
-		"foo/.*": []string{"a", "b", "c"},
-		"bar/.*": []string{"d"},
+		"a": []string{"foo/.*"},
+		"b": []string{"foo/.*"},
+		"c": []string{"foo/.*"},
+		"d": []string{"bar/.*"},
 	}.Build()
 	require.NoError(err)
 

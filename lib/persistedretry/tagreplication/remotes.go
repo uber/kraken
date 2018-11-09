@@ -40,13 +40,15 @@ func (rs Remotes) Valid(tag, addr string) bool {
 }
 
 // RemotesConfig defines remote replication configuration which specifies which
-// build-indexes certain namespaces should be replicated to.
+// namespaces should be replicated to certain build-indexes.
 //
 // For example, given the configuration:
 //
-//   uber-usi/.*:
-//     - build-index-sjc1
-//     - build-index-dca1
+//   build-index-sjc1:
+//   - uber-usi/.*
+//
+//   build-index-dca1:
+//   - uber-usi/.*
 //
 // Any builds matching the uber-usi/.* namespace should be replicated to sjc1 and
 // dca1 build-indexes.
@@ -55,12 +57,12 @@ type RemotesConfig map[string][]string
 // Build builds configuration into Remotes.
 func (c RemotesConfig) Build() (Remotes, error) {
 	var remotes Remotes
-	for ns, addrs := range c {
-		re, err := regexp.Compile(ns)
-		if err != nil {
-			return nil, fmt.Errorf("regexp compile namespace %s: %s", ns, err)
-		}
-		for _, addr := range addrs {
+	for addr, namespaces := range c {
+		for _, ns := range namespaces {
+			re, err := regexp.Compile(ns)
+			if err != nil {
+				return nil, fmt.Errorf("regexp compile namespace %s: %s", ns, err)
+			}
 			remotes = append(remotes, &Remote{re, addr})
 		}
 	}
