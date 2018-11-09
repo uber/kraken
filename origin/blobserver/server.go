@@ -84,10 +84,6 @@ func New(
 		"module": "blobserver",
 	})
 
-	if !hashRing.Contains(addr) {
-		return nil, fmt.Errorf("%s not found in hash ring", addr)
-	}
-
 	return &Server{
 		config:            config,
 		stats:             stats,
