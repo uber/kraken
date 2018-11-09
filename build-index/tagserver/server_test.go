@@ -61,7 +61,7 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	require.NoError(t, backends.Register(_testNamespace, backendClient))
 
 	remotes, err := tagreplication.RemotesConfig{
-		_testNamespace: []string{_testRemote},
+		_testRemote: []string{_testNamespace},
 	}.Build()
 	if err != nil {
 		panic(err)
