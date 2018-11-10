@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
@@ -106,8 +106,9 @@ func TestLocalFileEntryFactoryCreate(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			require := require.New(t)
 			factory := NewLocalFileEntryFactory()
-			_, err := factory.Create(tc.name, state)
+			entry, err := factory.Create(tc.name, state)
 			require.NoError(err)
+			require.NotNil(entry)
 		})
 	}
 }
@@ -153,12 +154,13 @@ func TestFileEntry(t *testing.T) {
 	tests := []func(require *require.Assertions, bundle *fileEntryTestBundle){
 		testCreate,
 		testCreateExisting,
-		testCreateWrongState,
+		testCreateFail,
 		testMoveFrom,
 		testMoveFromExisting,
 		testMoveFromWrongState,
 		testMoveFromWrongSourcePath,
 		testMove,
+		testLinkTo,
 		testDelete,
 		testDeleteFailsForPersistedFile,
 		testGetMetadataAndSetMetadata,
@@ -222,7 +224,7 @@ func testCreateExisting(require *require.Assertions, bundle *fileEntryTestBundle
 	require.Equal(info.Size(), testFileSize)
 }
 
-func testCreateWrongState(require *require.Assertions, bundle *fileEntryTestBundle) {
+func testCreateFail(require *require.Assertions, bundle *fileEntryTestBundle) {
 	fe := bundle.entry
 	s2 := bundle.state2
 
@@ -359,7 +361,7 @@ func testMove(require *require.Assertions, bundle *fileEntryTestBundle) {
 	require.Error(err)
 	require.True(os.IsNotExist(err))
 	for _, s := range []FileState{s1, s2, s3} {
-		_, err = os.Stat(path.Join(s.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
+		_, err = os.Stat(filepath.Join(s.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
 		require.Error(err)
 		require.True(os.IsNotExist(err))
 	}
@@ -369,16 +371,35 @@ func testMove(require *require.Assertions, bundle *fileEntryTestBundle) {
 	require.NoError(fe.GetMetadata(mmresult))
 	require.Equal(mm.content, mmresult.content)
 
-	_, err = os.Stat(path.Join(s3.GetDirectory(), fn))
+	_, err = os.Stat(filepath.Join(s3.GetDirectory(), fn))
 	require.Nil(err)
-	_, err = os.Stat(path.Join(s1.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
+	_, err = os.Stat(filepath.Join(s1.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
 	require.Error(err)
 	require.True(os.IsNotExist(err))
-	_, err = os.Stat(path.Join(s2.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
+	_, err = os.Stat(filepath.Join(s2.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
 	require.Error(err)
 	require.True(os.IsNotExist(err))
-	_, err = os.Stat(path.Join(s3.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
+	_, err = os.Stat(filepath.Join(s3.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
 	require.NoError(err)
+}
+
+func testLinkTo(require *require.Assertions, bundle *fileEntryTestBundle) {
+	fe := bundle.entry
+	s1 := bundle.state1
+	s3 := bundle.state3
+
+	// Create file first.
+	testFileSize := int64(123)
+	err := fe.Create(s1, testFileSize)
+	testDstFile := filepath.Join(s3.GetDirectory(), "test_dst")
+
+	// LinkTo succeeds with correct source path.
+	require.NoError(fe.LinkTo(testDstFile))
+	_, err = os.Stat(testDstFile)
+	require.NoError(err)
+
+	// LinkTo fails with existing source path.
+	require.True(os.IsExist(fe.LinkTo(testDstFile)))
 }
 
 func testDelete(require *require.Assertions, bundle *fileEntryTestBundle) {
@@ -413,10 +434,10 @@ func testDelete(require *require.Assertions, bundle *fileEntryTestBundle) {
 	_, err = os.Stat(fp)
 	require.Error(err)
 	require.True(os.IsNotExist(err))
-	_, err = os.Stat(path.Join(s1.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
+	_, err = os.Stat(filepath.Join(s1.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
 	require.Error(err)
 	require.True(os.IsNotExist(err))
-	_, err = os.Stat(path.Join(s1.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
+	_, err = os.Stat(filepath.Join(s1.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
 	require.Error(err)
 	require.True(os.IsNotExist(err))
 }
@@ -451,6 +472,17 @@ func testGetMetadataAndSetMetadata(require *require.Assertions, bundle *fileEntr
 
 	// Read metadata.
 	result := getMockMetadataOne()
+	require.NoError(fe.GetMetadata(result))
+	require.Equal(m.content, result.content)
+
+	// Set metadata shorter.
+	m.content = randutil.Blob(4)
+	updated, err = fe.SetMetadata(m)
+	require.NoError(err)
+	require.True(updated)
+
+	// Read metadata.
+	result = getMockMetadataOne()
 	require.NoError(fe.GetMetadata(result))
 	require.Equal(m.content, result.content)
 }

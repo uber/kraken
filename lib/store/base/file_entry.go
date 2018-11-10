@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -61,10 +60,10 @@ type FileEntry interface {
 	GetStat() (os.FileInfo, error)
 
 	Create(targetState FileState, len int64) error
-	Reload(targetState FileState) error
+	Reload() error
 	MoveFrom(targetState FileState, sourcePath string) error
 	Move(targetState FileState) error
-	MoveTo(targetPath string) error
+	LinkTo(targetPath string) error
 	Delete() error
 
 	GetReader() (FileReader, error)
@@ -106,7 +105,7 @@ func (f *localFileEntryFactory) Create(name string, state FileState) (FileEntry,
 
 // GetRelativePath returns name because file entries are stored flat under state directory.
 func (f *localFileEntryFactory) GetRelativePath(name string) string {
-	return path.Join(name, DefaultDataFileName)
+	return filepath.Join(name, DefaultDataFileName)
 }
 
 // ListNames returns the names of all entries in state's directory.
@@ -124,7 +123,7 @@ func (f *localFileEntryFactory) ListNames(state FileState) ([]string, error) {
 		}
 		for _, info := range infos {
 			if info.IsDir() {
-				if err := readNames(path.Join(dir, info.Name())); err != nil {
+				if err := readNames(filepath.Join(dir, info.Name())); err != nil {
 					return err
 				}
 				continue
@@ -156,6 +155,7 @@ func NewCASFileEntryFactory() FileEntryFactory {
 }
 
 // Create initializes and returns a FileEntry object.
+// TODO: verify name.
 func (f *casFileEntryFactory) Create(name string, state FileState) (FileEntry, error) {
 	return newLocalFileEntry(state, name, f.GetRelativePath(name)), nil
 }
@@ -170,10 +170,10 @@ func (f *casFileEntryFactory) GetRelativePath(name string) string {
 	for i := 0; i < int(DefaultShardIDLength) && i < len(name)/2; i++ {
 		// (1 byte = 2 char of file name assumming file name is in HEX)
 		dirName := name[i*2 : i*2+2]
-		filePath = path.Join(filePath, dirName)
+		filePath = filepath.Join(filePath, dirName)
 	}
 
-	return path.Join(filePath, name, DefaultDataFileName)
+	return filepath.Join(filePath, name, DefaultDataFileName)
 }
 
 // ListNames returns the names of all entries within the shards of state.
@@ -193,7 +193,7 @@ func (f *casFileEntryFactory) ListNames(state FileState) ([]string, error) {
 				if !info.IsDir() {
 					continue
 				}
-				if err := readNames(path.Join(dir, info.Name()), depth-1); err != nil {
+				if err := readNames(filepath.Join(dir, info.Name()), depth-1); err != nil {
 					return err
 				}
 			}
@@ -241,7 +241,7 @@ func (entry *localFileEntry) GetName() string {
 
 // GetPath returns current path of the file.
 func (entry *localFileEntry) GetPath() string {
-	return path.Join(entry.state.GetDirectory(), entry.relativeDataPath)
+	return filepath.Join(entry.state.GetDirectory(), entry.relativeDataPath)
 }
 
 // GetStat returns a FileInfo describing the named file.
@@ -250,8 +250,6 @@ func (entry *localFileEntry) GetStat() (os.FileInfo, error) {
 }
 
 // Create creates a file on disk.
-// In the case of truncation failure, this function might leave a garbage file
-// on disk.
 func (entry *localFileEntry) Create(targetState FileState, size int64) error {
 	if entry.state != targetState {
 		return &FileStateError{
@@ -269,7 +267,7 @@ func (entry *localFileEntry) Create(targetState FileState, size int64) error {
 	}
 
 	// Create dir.
-	if err := os.MkdirAll(path.Dir(targetPath), DefaultDirPermission); err != nil {
+	if err := os.MkdirAll(filepath.Dir(targetPath), DefaultDirPermission); err != nil {
 		return err
 	}
 
@@ -284,7 +282,7 @@ func (entry *localFileEntry) Create(targetState FileState, size int64) error {
 	err = f.Truncate(size)
 	if err != nil {
 		// Try to delete file.
-		os.RemoveAll(path.Dir(targetPath))
+		os.RemoveAll(filepath.Dir(targetPath))
 		return err
 	}
 
@@ -292,7 +290,7 @@ func (entry *localFileEntry) Create(targetState FileState, size int64) error {
 }
 
 // Reload tries to reload a file that doesn't exist in memory from disk.
-func (entry *localFileEntry) Reload(targetState FileState) error {
+func (entry *localFileEntry) Reload() error {
 	// Verify the file is still on disk.
 	if _, err := os.Stat(entry.GetPath()); err != nil {
 		// Return os.ErrNotExist.
@@ -300,7 +298,7 @@ func (entry *localFileEntry) Reload(targetState FileState) error {
 	}
 
 	// Load metadata.
-	files, err := ioutil.ReadDir(path.Dir(entry.GetPath()))
+	files, err := ioutil.ReadDir(filepath.Dir(entry.GetPath()))
 	if err != nil {
 		return err
 	}
@@ -342,7 +340,7 @@ func (entry *localFileEntry) MoveFrom(targetState FileState, sourcePath string) 
 	}
 
 	// Create dir.
-	if err := os.MkdirAll(path.Dir(targetPath), DefaultDirPermission); err != nil {
+	if err := os.MkdirAll(filepath.Dir(targetPath), DefaultDirPermission); err != nil {
 		return err
 	}
 
@@ -355,12 +353,12 @@ func (entry *localFileEntry) MoveFrom(targetState FileState, sourcePath string) 
 // If for any reason the target path already exists, it will be overwritten.
 func (entry *localFileEntry) Move(targetState FileState) error {
 	sourcePath := entry.GetPath()
-	targetPath := path.Join(targetState.GetDirectory(), entry.relativeDataPath)
-	if err := os.MkdirAll(path.Dir(targetPath), DefaultDirPermission); err != nil {
+	targetPath := filepath.Join(targetState.GetDirectory(), entry.relativeDataPath)
+	if err := os.MkdirAll(filepath.Dir(targetPath), DefaultDirPermission); err != nil {
 		return err
 	}
 
-	// Get file stats, update size in memory.
+	// Get file stats.
 	if _, err := os.Stat(sourcePath); err != nil {
 		// Return os.ErrNotExist.
 		return err
@@ -370,7 +368,7 @@ func (entry *localFileEntry) Move(targetState FileState) error {
 	performCopy := func(md metadata.Metadata) error {
 		if md.Movable() {
 			sourceMetadataPath := entry.getMetadataPath(md)
-			targetMetadataPath := path.Join(path.Dir(targetPath), md.GetSuffix())
+			targetMetadataPath := filepath.Join(filepath.Dir(targetPath), md.GetSuffix())
 			bytes, err := ioutil.ReadFile(sourceMetadataPath)
 			if err != nil {
 				return err
@@ -394,31 +392,18 @@ func (entry *localFileEntry) Move(targetState FileState) error {
 	entry.state = targetState
 
 	// Delete source dir.
-	return os.RemoveAll(path.Dir(sourcePath))
+	return os.RemoveAll(filepath.Dir(sourcePath))
 }
 
-// MoveTo moves data file out to an unmanaged location.
-func (entry *localFileEntry) MoveTo(targetPath string) error {
-	sourcePath := entry.GetPath()
-
+// LinkTo creates a hardlink to an unmanaged path.
+func (entry *localFileEntry) LinkTo(targetPath string) error {
 	// Create dir.
-	if err := os.MkdirAll(path.Dir(targetPath), DefaultDirPermission); err != nil {
-		return err
-	}
-
-	// Get file stats, update size in memory.
-	if _, err := os.Stat(sourcePath); err != nil {
-		// Return os.ErrNotExist.
+	if err := os.MkdirAll(filepath.Dir(targetPath), DefaultDirPermission); err != nil {
 		return err
 	}
 
 	// Move data.
-	if err := os.Rename(sourcePath, targetPath); err != nil {
-		return err
-	}
-
-	// Delete source dir.
-	return os.RemoveAll(path.Dir(sourcePath))
+	return os.Link(entry.GetPath(), targetPath)
 }
 
 // Delete removes file and all of its metedata files from disk. If persist
@@ -436,7 +421,7 @@ func (entry *localFileEntry) Delete() error {
 	}
 
 	// Remove files.
-	return os.RemoveAll(path.Dir(entry.GetPath()))
+	return os.RemoveAll(filepath.Dir(entry.GetPath()))
 }
 
 // GetReader returns a FileReader object for read operations.
@@ -468,7 +453,7 @@ func (entry *localFileEntry) GetReadWriter() (FileReadWriter, error) {
 }
 
 func (entry *localFileEntry) getMetadataPath(md metadata.Metadata) string {
-	return path.Join(path.Dir(entry.GetPath()), md.GetSuffix())
+	return filepath.Join(filepath.Dir(entry.GetPath()), md.GetSuffix())
 }
 
 // AddMetadata adds a new metadata type to metadata. This is primirily used during reload.
@@ -543,7 +528,7 @@ func (entry *localFileEntry) GetOrSetMetadata(md metadata.Metadata) error {
 	if err != nil {
 		return fmt.Errorf("marshal metadata: %s", err)
 	}
-	filePath := path.Join(path.Dir(entry.GetPath()), md.GetSuffix())
+	filePath := filepath.Join(filepath.Dir(entry.GetPath()), md.GetSuffix())
 	if _, err := compareAndWriteFile(filePath, b); err != nil {
 		return err
 	}
@@ -586,7 +571,7 @@ func compareAndWriteFile(filePath string, b []byte) (bool, error) {
 	}
 
 	if os.IsNotExist(err) {
-		if err := os.MkdirAll(path.Dir(filePath), 0775); err != nil {
+		if err := os.MkdirAll(filepath.Dir(filePath), 0775); err != nil {
 			return false, err
 		}
 

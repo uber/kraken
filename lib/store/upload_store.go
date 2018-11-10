@@ -24,10 +24,7 @@ func newUploadStore(dir string) (*uploadStore, error) {
 		return nil, fmt.Errorf("mkdir: %s", err)
 	}
 	state := base.NewFileState(dir)
-	backend, err := base.NewLocalFileStore(clock.New())
-	if err != nil {
-		return nil, fmt.Errorf("new base fs: %s", err)
-	}
+	backend := base.NewLocalFileStore(clock.New())
 	return &uploadStore{state, backend}, nil
 }
 

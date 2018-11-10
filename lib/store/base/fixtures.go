@@ -10,7 +10,6 @@ import (
 	"code.uber.internal/infra/kraken/utils/testutil"
 
 	"github.com/andres-erbsen/clock"
-	"golang.org/x/sync/syncmap"
 )
 
 func fileStatesFixture() (state1, state2, state3 FileState, run func()) {
@@ -81,24 +80,6 @@ type fileMapTestBundle struct {
 	fm    FileMap
 }
 
-func fileMapSimpleFixture() (bundle *fileMapTestBundle, run func()) {
-	cleanup := &testutil.Cleanup{}
-	defer cleanup.Recover()
-
-	b, clean := fileEntryLocalFixture()
-	cleanup.Add(clean)
-
-	fm := &simpleFileMap{m: syncmap.Map{}}
-
-	return &fileMapTestBundle{
-		state1: b.state1,
-		state2: b.state2,
-		state3: b.state3,
-		entry:  b.entry,
-		fm:     fm,
-	}, cleanup.Run
-}
-
 func fileMapLRUFixture() (bundle *fileMapTestBundle, run func()) {
 	cleanup := &testutil.Cleanup{}
 	defer cleanup.Recover()
@@ -106,10 +87,7 @@ func fileMapLRUFixture() (bundle *fileMapTestBundle, run func()) {
 	b, clean := fileEntryLocalFixture()
 	cleanup.Add(clean)
 
-	fm, err := NewLRUFileMap(100, clock.New())
-	if err != nil {
-		log.Fatal(err)
-	}
+	fm := NewLRUFileMap(100, clock.New())
 
 	return &fileMapTestBundle{
 		state1: b.state1,
@@ -140,36 +118,29 @@ func (b *fileStoreTestBundle) recreateStore() {
 }
 
 func fileStoreDefaultFixture() (*fileStoreTestBundle, func()) {
-	return newFileStoreFixture(func(clk clock.Clock) *localFileStore {
-		store, err := NewLocalFileStore(clk)
-		if err != nil {
-			log.Fatal(err)
-		}
+	return fileStoreFixture(func(clk clock.Clock) *localFileStore {
+		store := NewLocalFileStore(clk)
 		return store.(*localFileStore)
 	})
 }
 
 func fileStoreCASFixture() (*fileStoreTestBundle, func()) {
-	return newFileStoreFixture(func(clk clock.Clock) *localFileStore {
-		store, err := NewCASFileStore(clk)
-		if err != nil {
-			log.Fatal(err)
-		}
+	return fileStoreFixture(func(clk clock.Clock) *localFileStore {
+		store := NewCASFileStore(clk)
 		return store.(*localFileStore)
 	})
 }
 
 func fileStoreLRUFixture(size int) (*fileStoreTestBundle, func()) {
-	return newFileStoreFixture(func(clk clock.Clock) *localFileStore {
-		store, err := NewLRUFileStore(size, clk)
-		if err != nil {
-			log.Fatal(err)
-		}
+	return fileStoreFixture(func(clk clock.Clock) *localFileStore {
+		store := NewLRUFileStore(size, clk)
 		return store.(*localFileStore)
 	})
 }
 
-func newFileStoreFixture(createStore func(clk clock.Clock) *localFileStore) (*fileStoreTestBundle, func()) {
+func fileStoreFixture(
+	createStore func(clk clock.Clock) *localFileStore) (*fileStoreTestBundle, func()) {
+
 	clk := clock.NewMock()
 	store := createStore(clk)
 	cleanup := &testutil.Cleanup{}

@@ -31,10 +31,7 @@ func NewCADownloadStore(config CADownloadStoreConfig, stats tally.Scope) (*CADow
 		}
 	}
 
-	backend, err := base.NewCASFileStore(clock.New())
-	if err != nil {
-		return nil, fmt.Errorf("new base store: %s", err)
-	}
+	backend := base.NewCASFileStore(clock.New())
 	downloadState := base.NewFileState(config.DownloadDir)
 	cacheState := base.NewFileState(config.CacheDir)
 

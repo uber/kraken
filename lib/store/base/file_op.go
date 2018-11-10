@@ -11,7 +11,7 @@ import (
 type lockLevel int
 
 const (
-	// lockLevelPeek is used as parameeter to lockHelper to indicate the lock is for peek.
+	// lockLevelPeek indicates lock for peek.
 	_lockLevelPeek lockLevel = iota
 	// lockLevelRead indicates lock for read.
 	_lockLevelRead
@@ -19,7 +19,8 @@ const (
 	_lockLevelWrite
 )
 
-// FileOp performs one file or metadata operation on FileStore, given a list of acceptable states.
+// FileOp performs one file or metadata operation on FileStore, given a list of
+// acceptable states.
 type FileOp interface {
 	AcceptState(state FileState) FileOp
 	GetAcceptableStates() map[FileState]interface{}
@@ -27,7 +28,7 @@ type FileOp interface {
 	CreateFile(name string, createState FileState, len int64) error
 	MoveFileFrom(name string, createState FileState, sourcePath string) error
 	MoveFile(name string, goalState FileState) error
-	MoveFileTo(name string, targetPath string) error
+	LinkFileTo(name string, targetPath string) error
 	DeleteFile(name string) error
 
 	GetFilePath(name string) (string, error)
@@ -51,11 +52,11 @@ type FileOp interface {
 
 var _ FileOp = (*localFileOp)(nil)
 
-// localFileOp is a short-lived obj that performs one file or metadata operation on local disk, given a list of
-// acceptable states.
+// localFileOp is a short-lived obj that performs one file or metadata operation
+// on local disk, given a list of acceptable states.
 type localFileOp struct {
 	s      *localFileStore
-	states map[FileState]interface{} // Set of states that's acceptable for the operation
+	states map[FileState]interface{} // Set of states that's acceptable.
 }
 
 // NewLocalFileOp inits a new FileOp obj.
@@ -99,14 +100,13 @@ func (op *localFileOp) verifyStateHelper(name string, entry FileEntry) error {
 // If reload succeeded, return true;
 // If file already exists in memory, return false;
 // If file is neither in memory or on disk, return false with os.ErrNotExist.
-// TODO: If file doesn't exist on disk, this function would still get a entry lock just to verify.
-// This might block actual file creation.
 func (op *localFileOp) reloadFileEntryHelper(name string) (reloaded bool, err error) {
 	if op.s.fileMap.Contains(name) {
 		return false, nil
 	}
 
 	// Check if file exists on disk.
+	// TODO: The states need to be guaranteed to be topologically sorted.
 	for state := range op.states {
 		fileEntry, err := op.s.fileEntryFactory.Create(name, state)
 		if err != nil {
@@ -114,26 +114,24 @@ func (op *localFileOp) reloadFileEntryHelper(name string) (reloaded bool, err er
 		}
 
 		// Try load before acquiring lock first.
-		if err = fileEntry.Reload(state); err != nil {
+		if err = fileEntry.Reload(); err != nil {
 			continue
 		}
 		// Try to store file entry into memory.
-		// It's possible the entry was just reloaded by another goroutine before this point, then
-		// false will be returned.
-		// It's also possible the entry was just added/reloaded and then deleted, in which case
-		// os.ErrNotExist will be returned, and the newly added file entry will be deleted from map.
-		_, loaded := op.s.fileMap.LoadOrStore(
-			name, fileEntry, func(name string, entry FileEntry) error {
-				// Verify the file is still on disk.
-				err = entry.Reload(state)
-				return err
-			})
-		if loaded {
-			return false, nil
-		} else if os.IsNotExist(err) {
-			continue
-		} else if err != nil {
+		if stored := op.s.fileMap.TryStore(name, fileEntry, func(name string, entry FileEntry) bool {
+			// Verify the file is still on disk.
+			err = entry.Reload()
+			return err == nil
+		}); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
 			return false, err
+		} else if !stored {
+			// The entry was just reloaded by another goroutine, return true.
+			// Since TryStore() updates LAT of existing entry, it's unlikely
+			// that the entry would be deleted before this function returns.
+			return true, nil
 		}
 		return true, nil
 	}
@@ -176,24 +174,26 @@ func (op *localFileOp) lockHelper(
 }
 
 func (op *localFileOp) deleteHelper(
-	name string, f func(name string, entry FileEntry) error) (err error) {
+	name string, f func(name string, entry FileEntry) bool) (err error) {
 	if _, err = op.reloadFileEntryHelper(name); err != nil {
 		return err
 	}
-	op.s.fileMap.Delete(name, func(name string, entry FileEntry) error {
+	op.s.fileMap.Delete(name, func(name string, entry FileEntry) bool {
 		err = op.verifyStateHelper(name, entry)
 		if err != nil {
-			return err
+			return false
 		}
+
 		return f(name, entry)
 	})
 	return err
 }
 
 // createFileHelper is a helper function that adds a new file to store.
-// it either moves the new file from a unmanaged location, or creates an empty file with specified size.
-// If file exists and is in one of the acceptable states, returns os.ErrExist.
-// If file exists but not in one of the acceptable states, returns FileStateError.
+// it either moves the new file from a unmanaged location, or creates an empty
+// file with specified size.
+// If file exists and is in an acceptable state, returns os.ErrExist.
+// If file exists but not in an acceptable state, returns FileStateError.
 func (op *localFileOp) createFileHelper(
 	name string, targetState FileState, sourcePath string, len int64) (err error) {
 	// Check if file exists in in-memory map and is in an acceptable state.
@@ -222,27 +222,30 @@ func (op *localFileOp) createFileHelper(
 	if err != nil {
 		return fmt.Errorf("create: %s", err)
 	}
-	actual, loaded := op.s.fileMap.LoadOrStore(name, newEntry, func(name string, entry FileEntry) error {
+	if stored := op.s.fileMap.TryStore(name, newEntry, func(name string, entry FileEntry) bool {
 		if sourcePath != "" {
 			err = newEntry.MoveFrom(targetState, sourcePath)
 			if err != nil {
-				return err
+				return false
 			}
 		} else {
 			err = newEntry.Create(targetState, len)
 			if err != nil {
-				return err
+				return false
 			}
 		}
-		return nil
-	})
-	if err != nil {
+		return true
+	}); err != nil {
 		return err
-	} else if loaded {
-		// Another goroutine created the entry before this one.
-		// Verify again for a correct error message.
-		if err := op.verifyStateHelper(name, actual); err != nil {
-			return err
+	} else if !stored {
+		// Another goroutine created the entry before this one, verify again for
+		// correct error message.
+		// Since TryStore() updates LAT of existing entry, it's unlikely that
+		// the entry would be deleted before this function returns.
+		if loadErr := op.lockHelper(name, _lockLevelRead, func(name string, entry FileEntry) {
+			return
+		}); loadErr != nil {
+			return loadErr
 		}
 		return os.ErrExist
 	}
@@ -251,27 +254,28 @@ func (op *localFileOp) createFileHelper(
 }
 
 // CreateFile creates an empty file with specified size.
-// If file exists and is in one of the acceptable states, returns os.ErrExist.
-// If file exists but not in one of the acceptable states, returns FileStateError.
+// If file exists and is in an acceptable state, returns os.ErrExist.
+// If file exists but not in an acceptable state, returns FileStateError.
 func (op *localFileOp) CreateFile(name string, targetState FileState, len int64) (err error) {
 	return op.createFileHelper(name, targetState, "", len)
 }
 
 // MoveFileFrom moves an unmanaged file into file store.
-// If file exists and is in one of the acceptable states, returns os.ErrExist.
-// If file exists but not in one of the acceptable states, returns FileStateError.
+// If file exists and is in an acceptable state, returns os.ErrExist.
+// If file exists but not in an acceptable state, returns FileStateError.
 func (op *localFileOp) MoveFileFrom(name string, targetState FileState, sourcePath string) (err error) {
 	return op.createFileHelper(name, targetState, sourcePath, -1)
 }
 
-// MoveFile moves a file to a different directory and updates its state accordingly, and moves all metadata that's
-// `movable`.
+// MoveFile moves a file to a different directory and updates its state
+// accordingly, and moves all metadata that's `movable`.
 func (op *localFileOp) MoveFile(name string, targetState FileState) (err error) {
 	if _, err = op.reloadFileEntryHelper(name); err != nil {
 		return err
 	}
 
-	// Verify that the file is not in target state, and is currently in one of the acceptable states.
+	// Verify that the file is not in target state, and is currently in one of
+	// the acceptable states.
 	loaded := op.s.fileMap.LoadForWrite(name, func(name string, entry FileEntry) {
 		currState := entry.GetState()
 		if currState == targetState {
@@ -298,11 +302,10 @@ func (op *localFileOp) MoveFile(name string, targetState FileState) (err error) 
 	return err
 }
 
-// MoveFileTo moves a file in file store to unmanaged location.
-func (op *localFileOp) MoveFileTo(name string, targetPath string) (err error) {
-	if loadErr := op.deleteHelper(name, func(name string, entry FileEntry) error {
-		err = entry.MoveTo(targetPath)
-		return nil
+// LinkFileTo create a hardlink to an unmanaged path.
+func (op *localFileOp) LinkFileTo(name string, targetPath string) (err error) {
+	if loadErr := op.lockHelper(name, _lockLevelRead, func(name string, entry FileEntry) {
+		err = entry.LinkTo(targetPath)
 	}); loadErr != nil {
 		return loadErr
 	}
@@ -311,9 +314,10 @@ func (op *localFileOp) MoveFileTo(name string, targetPath string) (err error) {
 
 // DeleteFile removes a file from disk and file map.
 func (op *localFileOp) DeleteFile(name string) (err error) {
-	if loadErr := op.deleteHelper(name, func(name string, entry FileEntry) error {
+	if loadErr := op.deleteHelper(name, func(name string, entry FileEntry) bool {
 		err = entry.Delete()
-		return nil
+		// Return true so the entry would be removed from map regardless.
+		return true
 	}); loadErr != nil {
 		return loadErr
 	}

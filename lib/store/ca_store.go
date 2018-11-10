@@ -36,10 +36,7 @@ func NewCAStore(config CAStoreConfig, stats tally.Scope) (*CAStore, error) {
 		return nil, fmt.Errorf("new upload store: %s", err)
 	}
 
-	cacheBackend, err := base.NewCASFileStoreWithLRUMap(config.Capacity, clock.New())
-	if err != nil {
-		return nil, fmt.Errorf("new base store: %s", err)
-	}
+	cacheBackend := base.NewCASFileStoreWithLRUMap(config.Capacity, clock.New())
 	cacheStore, err := newCacheStore(config.CacheDir, cacheBackend)
 	if err != nil {
 		return nil, fmt.Errorf("new cache store: %s", err)

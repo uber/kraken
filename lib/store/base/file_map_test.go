@@ -1,69 +1,48 @@
 package base
 
 import (
+	"fmt"
 	"os"
-	"reflect"
-	"runtime"
+	"path"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/store/metadata"
+
+	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
 
-// These tests should pass for all FileMap implementations
-func TestFileMap(t *testing.T) {
-	fileMaps := []struct {
-		name    string
-		fixture func() (bundle *fileMapTestBundle, cleanup func())
-	}{
-		{"SimpleFileMap", fileMapSimpleFixture},
-		{"LRUFileMap", fileMapLRUFixture},
-	}
+func TestFileMapTryStore(t *testing.T) {
+	require := require.New(t)
+	bundle, cleanup := fileMapLRUFixture()
+	defer cleanup()
 
-	tests := []func(require *require.Assertions, bundle *fileMapTestBundle){
-		testFileMapLoadOrStore,
-		testFileMapLoadOrStoreAborts,
-		testFileMapLoad,
-		testFileMapDelete,
-		testFileMapDeleteAbort,
-	}
-
-	for _, fm := range fileMaps {
-		t.Run(fm.name, func(t *testing.T) {
-			for _, test := range tests {
-				testName := runtime.FuncForPC(reflect.ValueOf(test).Pointer()).Name()
-				t.Run(testName, func(t *testing.T) {
-					require := require.New(t)
-					s, cleanup := fm.fixture()
-					defer cleanup()
-					test(require, s)
-				})
-			}
-		})
-	}
-}
-
-func testFileMapLoadOrStore(require *require.Assertions, bundle *fileMapTestBundle) {
 	fe := bundle.entry
 	s1 := bundle.state1
 	fm := bundle.fm
 
+	require.False(fm.Contains(fe.GetName()))
+
 	var wg sync.WaitGroup
-	var successCount, skippedCount, errCount uint32
+	var successCount, skippedCount, errorCount uint32
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			var err error
-			_, loaded := fm.LoadOrStore(fe.GetName(), fe, func(name string, entry FileEntry) error {
+			stored := fm.TryStore(fe.GetName(), fe, func(name string, entry FileEntry) bool {
 				err = fe.Create(s1, 0)
-				return err
+				return err == nil
 			})
-			if loaded {
+			if err != nil {
+				atomic.AddUint32(&errorCount, 1)
+			} else if !stored {
 				atomic.AddUint32(&skippedCount, 1)
-			} else if err != nil {
-				atomic.AddUint32(&errCount, 1)
 			} else {
 				atomic.AddUint32(&successCount, 1)
 			}
@@ -72,12 +51,18 @@ func testFileMapLoadOrStore(require *require.Assertions, bundle *fileMapTestBund
 	wg.Wait()
 
 	// Only one goroutine successfully stored the entry.
-	require.Equal(errCount, uint32(0))
+	require.Equal(errorCount, uint32(0))
 	require.Equal(skippedCount, uint32(99))
 	require.Equal(successCount, uint32(1))
+
+	require.True(fm.Contains(fe.GetName()))
 }
 
-func testFileMapLoadOrStoreAborts(require *require.Assertions, bundle *fileMapTestBundle) {
+func TestFileMapTryStoreAborts(t *testing.T) {
+	require := require.New(t)
+	bundle, cleanup := fileMapLRUFixture()
+	defer cleanup()
+
 	fe := bundle.entry
 	s1 := bundle.state1
 	fm := bundle.fm
@@ -92,15 +77,15 @@ func testFileMapLoadOrStoreAborts(require *require.Assertions, bundle *fileMapTe
 		go func() {
 			defer wg.Done()
 			var err error
-			_, loaded := fm.LoadOrStore(fe.GetName(), fe, func(name string, entry FileEntry) error {
+			stored := fm.TryStore(fe.GetName(), fe, func(name string, entry FileEntry) bool {
 				// Exit right away.
 				err = os.ErrNotExist
-				return err
+				return false
 			})
-			if loaded {
-				atomic.AddUint32(&skippedCount, 1)
-			} else if err != nil {
+			if err != nil {
 				atomic.AddUint32(&errorCount, 1)
+			} else if !stored {
+				atomic.AddUint32(&skippedCount, 1)
 			} else {
 				atomic.AddUint32(&successCount, 1)
 			}
@@ -108,14 +93,61 @@ func testFileMapLoadOrStoreAborts(require *require.Assertions, bundle *fileMapTe
 	}
 	wg.Wait()
 
-	// Some goroutines successfully stored the entry, executed f, encountered failure and removed the entry.
+	// Some goroutines successfully stored the entry, executed f, encountered
+	// failure and removed the entry.
 	// Others might have loaded the temp entries and skipped.
 	require.True(errorCount >= uint32(1))
 	require.True(errorCount+skippedCount == uint32(100))
 	require.Equal(successCount, uint32(0))
 }
 
-func testFileMapLoad(require *require.Assertions, bundle *fileMapTestBundle) {
+func TestFileMapLoadForRead(t *testing.T) {
+	require := require.New(t)
+	bundle, cleanup := fileMapLRUFixture()
+	defer cleanup()
+
+	fe := bundle.entry
+	s1 := bundle.state1
+	fm := bundle.fm
+
+	err := fe.Create(s1, 0)
+	require.NoError(err)
+
+	// Loading an non-existent entry does nothing.
+	testInt := 1
+	loaded := fm.LoadForWrite(fe.GetName(), func(name string, entry FileEntry) {
+		testInt = 2
+		return
+	})
+	require.False(loaded)
+	require.Equal(testInt, 1)
+
+	// Put entry into map.
+	stored := fm.TryStore(fe.GetName(), fe, func(name string, entry FileEntry) bool {
+		return true
+	})
+	require.True(stored)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			loaded := fm.LoadForRead(fe.GetName(), func(name string, entry FileEntry) {
+				_, err := fe.GetStat()
+				require.NoError(err)
+			})
+			require.True(loaded)
+		}()
+	}
+	wg.Wait()
+}
+
+func TestFileMapLoadForWrite(t *testing.T) {
+	require := require.New(t)
+	bundle, cleanup := fileMapLRUFixture()
+	defer cleanup()
+
 	fe := bundle.entry
 	s1 := bundle.state1
 	s2 := bundle.state2
@@ -134,10 +166,10 @@ func testFileMapLoad(require *require.Assertions, bundle *fileMapTestBundle) {
 	require.Equal(testInt, 1)
 
 	// Put entry into map.
-	_, loaded = fm.LoadOrStore(fe.GetName(), fe, func(name string, entry FileEntry) error {
-		return nil
+	stored := fm.TryStore(fe.GetName(), fe, func(name string, entry FileEntry) bool {
+		return true
 	})
-	require.False(loaded)
+	require.True(stored)
 
 	var wg sync.WaitGroup
 	var successCount, stateErrorCount, otherErrorCount uint32
@@ -163,24 +195,29 @@ func testFileMapLoad(require *require.Assertions, bundle *fileMapTestBundle) {
 	}
 	wg.Wait()
 
-	// Only first goroutine successfully executed Move(), the others encountered FileStateError.
+	// Only first goroutine successfully executed Move(), the others encountered
+	// FileStateError.
 	require.Equal(otherErrorCount, uint32(0))
 	require.Equal(stateErrorCount, uint32(99))
 	require.Equal(successCount, uint32(1))
 }
 
-func testFileMapDelete(require *require.Assertions, bundle *fileMapTestBundle) {
+func TestFileMapDelete(t *testing.T) {
+	require := require.New(t)
+	bundle, cleanup := fileMapLRUFixture()
+	defer cleanup()
+
 	fe := bundle.entry
 	s1 := bundle.state1
 	fm := bundle.fm
 
 	// Put entry into map.
 	var err error
-	_, loaded := fm.LoadOrStore(fe.GetName(), fe, func(name string, entry FileEntry) error {
+	stored := fm.TryStore(fe.GetName(), fe, func(name string, entry FileEntry) bool {
 		err = fe.Create(s1, 0)
-		return err
+		return err == nil
 	})
-	require.False(loaded)
+	require.True(stored)
 	require.NoError(err)
 
 	var wg sync.WaitGroup
@@ -191,9 +228,9 @@ func testFileMapDelete(require *require.Assertions, bundle *fileMapTestBundle) {
 			defer wg.Done()
 			var err error
 
-			deleted := fm.Delete(fe.GetName(), func(name string, entry FileEntry) error {
+			deleted := fm.Delete(fe.GetName(), func(name string, entry FileEntry) bool {
 				err = fe.Delete()
-				return err
+				return err == nil
 			})
 			if err != nil {
 				atomic.AddUint32(&errorCount, 1)
@@ -212,18 +249,22 @@ func testFileMapDelete(require *require.Assertions, bundle *fileMapTestBundle) {
 	require.Equal(successCount, uint32(1))
 }
 
-func testFileMapDeleteAbort(require *require.Assertions, bundle *fileMapTestBundle) {
+func TestFileMapDeleteAbort(t *testing.T) {
+	require := require.New(t)
+	bundle, cleanup := fileMapLRUFixture()
+	defer cleanup()
+
 	fe := bundle.entry
 	s1 := bundle.state1
 	fm := bundle.fm
 
 	// Put entry into map.
 	var err error
-	_, loaded := fm.LoadOrStore(fe.GetName(), fe, func(name string, entry FileEntry) error {
+	stored := fm.TryStore(fe.GetName(), fe, func(name string, entry FileEntry) bool {
 		err = fe.Create(s1, 0)
-		return err
+		return err == nil
 	})
-	require.False(loaded)
+	require.True(stored)
 	require.NoError(err)
 
 	var wg sync.WaitGroup
@@ -234,9 +275,9 @@ func testFileMapDeleteAbort(require *require.Assertions, bundle *fileMapTestBund
 			defer wg.Done()
 			var err error
 
-			deleted := fm.Delete(fe.GetName(), func(name string, entry FileEntry) error {
+			deleted := fm.Delete(fe.GetName(), func(name string, entry FileEntry) bool {
 				err = os.ErrNotExist
-				return nil
+				return true
 			})
 			if err != nil {
 				atomic.AddUint32(&errorCount, 1)
@@ -249,9 +290,192 @@ func testFileMapDeleteAbort(require *require.Assertions, bundle *fileMapTestBund
 	}
 	wg.Wait()
 
-	// The first goroutine encountered error but removed the entry from map anyway.
-	// Other goroutines skipped.
+	// The first goroutine encountered error, but removed the entry from map
+	// anyway. Other goroutines skipped.
 	require.Equal(errorCount, uint32(1))
 	require.Equal(skippedCount, uint32(99))
 	require.Equal(successCount, uint32(0))
+}
+
+func TestLRUFileMapSizeLimit(t *testing.T) {
+	require := require.New(t)
+	bundle, cleanup := fileStoreLRUFixture(100)
+	defer cleanup()
+
+	fm := bundle.store.fileMap
+	state := bundle.state1
+
+	insert := func(name string) {
+		entry, err := NewLocalFileEntryFactory().Create(name, state)
+		require.NoError(err)
+		stored := fm.TryStore(name, entry, func(name string, entry FileEntry) bool {
+			require.NoError(entry.Create(state, 0))
+			return true
+		})
+		require.True(stored)
+	}
+
+	// Generate 101 file names.
+	var names []string
+	for i := 0; i < 101; i++ {
+		names = append(names, fmt.Sprintf("test_file_%d", i))
+	}
+
+	// After inserting 100 files, the first file still exists in map.
+	for _, name := range names[:100] {
+		insert(name)
+	}
+	require.True(fm.Contains(names[0]))
+
+	// Insert one more file entry beyond size limit.
+	insert(names[100])
+
+	// The first file should have been removed.
+	require.False(fm.Contains(names[0]))
+}
+
+func TestLRUCreateLastAccessTimeOnCreateFile(t *testing.T) {
+	require := require.New(t)
+	bundle, cleanup := fileStoreLRUFixture(100)
+	defer cleanup()
+
+	store := bundle.store
+	clk := bundle.clk.(*clock.Mock)
+
+	t0 := time.Now()
+	clk.Set(t0)
+
+	fn := "testfile123"
+	s1 := bundle.state1
+
+	require.NoError(store.NewFileOp().AcceptState(s1).CreateFile(fn, s1, 5))
+
+	// Verify file exists.
+	_, err := os.Stat(path.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
+	require.NoError(err)
+
+	var lat metadata.LastAccessTime
+	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, &lat))
+	require.Equal(t0.Truncate(time.Second), lat.Time)
+}
+
+func TestLRUUpdateLastAccessTimeOnMoveFrom(t *testing.T) {
+	require := require.New(t)
+	bundle, cleanup := fileStoreLRUFixture(100)
+	defer cleanup()
+
+	store := bundle.store
+	clk := bundle.clk.(*clock.Mock)
+
+	t0 := time.Now()
+	clk.Set(t0)
+
+	s1, s2 := bundle.state1, bundle.state2
+
+	name := core.DigestFixture().Hex()
+	fp := filepath.Join(s1.GetDirectory(), name)
+	f, err := os.Create(fp)
+	require.NoError(err)
+	f.Close()
+
+	require.NoError(store.NewFileOp().AcceptState(s2).MoveFileFrom(name, s2, fp))
+
+	var lat metadata.LastAccessTime
+	require.NoError(store.NewFileOp().AcceptState(s2).GetFileMetadata(name, &lat))
+	require.Equal(t0.Truncate(time.Second), lat.Time)
+}
+
+func TestLRUUpdateLastAccessTimeOnMove(t *testing.T) {
+	require := require.New(t)
+	bundle, cleanup := fileStoreLRUFixture(100)
+	defer cleanup()
+
+	store := bundle.store
+	clk := bundle.clk.(*clock.Mock)
+
+	t0 := time.Now()
+	clk.Set(t0)
+
+	fn := "testfile123"
+	s1, s2 := bundle.state1, bundle.state2
+
+	require.NoError(store.NewFileOp().AcceptState(s1).CreateFile(fn, s1, 1))
+
+	clk.Add(time.Hour)
+	require.NoError(store.NewFileOp().AcceptState(s1).MoveFile(fn, s2))
+
+	var lat metadata.LastAccessTime
+	require.NoError(store.NewFileOp().AcceptState(s2).GetFileMetadata(fn, &lat))
+	require.Equal(clk.Now().Truncate(time.Second), lat.Time)
+}
+
+func TestLRUUpdateLastAccessTimeOnOpen(t *testing.T) {
+	require := require.New(t)
+	bundle, cleanup := fileStoreLRUFixture(100)
+	defer cleanup()
+
+	store := bundle.store
+	clk := bundle.clk.(*clock.Mock)
+
+	t0 := time.Now()
+	clk.Set(t0)
+
+	fn := "testfile123"
+	s1 := bundle.state1
+
+	require.NoError(store.NewFileOp().AcceptState(s1).CreateFile(fn, s1, 1))
+
+	checkLAT := func(op FileOp, expected time.Time) {
+		var lat metadata.LastAccessTime
+		require.NoError(op.GetFileMetadata(fn, &lat))
+		require.Equal(expected.Truncate(time.Second), lat.Time)
+	}
+
+	// No LAT change below resolution.
+	clk.Add(time.Minute)
+	_, err := store.NewFileOp().AcceptState(s1).GetFileReader(fn)
+	require.NoError(err)
+	checkLAT(store.NewFileOp().AcceptState(s1), t0)
+
+	clk.Add(time.Hour)
+	_, err = store.NewFileOp().AcceptState(s1).GetFileReader(fn)
+	require.NoError(err)
+	checkLAT(store.NewFileOp().AcceptState(s1), clk.Now())
+
+	clk.Add(time.Hour)
+	_, err = store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn)
+	require.NoError(err)
+	checkLAT(store.NewFileOp().AcceptState(s1), clk.Now())
+}
+
+func TestLRUKeepLastAccessTimeOnPeek(t *testing.T) {
+	require := require.New(t)
+	bundle, cleanup := fileStoreLRUFixture(100)
+	defer cleanup()
+
+	store := bundle.store
+	clk := bundle.clk.(*clock.Mock)
+
+	t0 := time.Now()
+	clk.Set(t0)
+
+	fn := "testfile123"
+	s1 := bundle.state1
+
+	require.NoError(store.NewFileOp().AcceptState(s1).CreateFile(fn, s1, 1))
+
+	clk.Add(time.Hour)
+	_, err := store.NewFileOp().AcceptState(s1).GetFileStat(fn)
+	require.NoError(err)
+
+	var lat metadata.LastAccessTime
+	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, &lat))
+	require.Equal(t0.Truncate(time.Second), lat.Time)
+
+	clk.Add(time.Hour)
+	_, err = store.NewFileOp().AcceptState(s1).GetFilePath(fn)
+	require.NoError(err)
+
+	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, &lat))
+	require.Equal(t0.Truncate(time.Second), lat.Time)
 }
