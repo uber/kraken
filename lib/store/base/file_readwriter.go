@@ -24,8 +24,8 @@ type FileReadWriter interface {
 	Commit() error // required by docker registry.
 }
 
-// LocalFileReadWriter implements FileReadWriter interface, provides read/write operation on a
-// local file.
+// LocalFileReadWriter implements FileReadWriter interface, provides read/write
+// operation on a local file.
 type localFileReadWriter struct {
 	entry      *localFileEntry
 	descriptor *os.File
@@ -45,7 +45,7 @@ func (readWriter localFileReadWriter) Write(p []byte) (int, error) {
 	return readWriter.descriptor.Write(p)
 }
 
-// WriteAt writes len(p) bytes from p to the underlying data stream at offset off.
+// WriteAt writes len(p) bytes from p to the underlying data stream at offset.
 func (readWriter localFileReadWriter) WriteAt(p []byte, offset int64) (int, error) {
 	return readWriter.descriptor.WriteAt(p, offset)
 }
@@ -60,8 +60,8 @@ func (readWriter localFileReadWriter) ReadAt(p []byte, offset int64) (int, error
 	return readWriter.descriptor.ReadAt(p, offset)
 }
 
-// Seek sets the offset for the next Read or Write on file to offset, interpreted according to
-// whence:
+// Seek sets the offset for the next Read or Write on file to offset,
+// interpreted according to whence:
 // 0 means relative to the origin of the file;
 // 1 means relative to the current offset;
 // 2 means relative to the end.

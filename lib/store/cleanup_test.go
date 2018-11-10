@@ -28,10 +28,7 @@ func fileOpFixture(clk clock.Clock) (base.FileState, base.FileOp, func()) {
 
 	state := base.NewFileState(dir)
 
-	store, err := base.NewLocalFileStore(clk)
-	if err != nil {
-		panic(err)
-	}
+	store := base.NewLocalFileStore(clk)
 
 	return state, store.NewFileOp().AcceptState(state), cleanup.Run
 }

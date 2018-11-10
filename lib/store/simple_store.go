@@ -29,10 +29,7 @@ func NewSimpleStore(config SimpleStoreConfig, stats tally.Scope) (*SimpleStore, 
 		return nil, fmt.Errorf("new upload store: %s", err)
 	}
 
-	cacheBackend, err := base.NewLocalFileStore(clock.New())
-	if err != nil {
-		return nil, fmt.Errorf("new base store: %s", err)
-	}
+	cacheBackend := base.NewLocalFileStore(clock.New())
 	cacheStore, err := newCacheStore(config.CacheDir, cacheBackend)
 	if err != nil {
 		return nil, fmt.Errorf("new cache store: %s", err)
