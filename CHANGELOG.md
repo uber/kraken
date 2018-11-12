@@ -1,3 +1,9 @@
+0.0.23 (2018-11-12)
+====
+- Add TLS config to tracker and proxy
+- Invert build-index image replication configuration
+- Support hash ring dns w/ ip membership
+
 0.0.22 (2018-11-01)
 ====
 - Short circuit ClusterClient.GetMetaInfo on 202
