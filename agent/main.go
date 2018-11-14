@@ -20,6 +20,7 @@ import (
 	"code.uber.internal/infra/kraken/nginx"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
+	"code.uber.internal/infra/kraken/utils/netutil"
 )
 
 // heartbeat periodically emits a counter metric which allows us to monitor the
@@ -61,6 +62,15 @@ func main() {
 	defer closer.Close()
 
 	go metrics.EmitVersion(stats)
+
+	if peerIP == nil || *peerIP == "" {
+		peerIP = new(string)
+		localIP, err := netutil.GetLocalIP()
+		if err != nil {
+			log.Fatalf("Error getting local ip: %s", err)
+		}
+		*peerIP = localIP
+	}
 
 	pctx, err := core.NewPeerContext(
 		config.PeerIDFactory, *zone, *cluster, *peerIP, *peerPort, false)

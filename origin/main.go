@@ -95,6 +95,15 @@ func main() {
 
 	go metrics.EmitVersion(stats)
 
+	if peerIP == nil || *peerIP == "" {
+		peerIP = new(string)
+		localIP, err := netutil.GetLocalIP()
+		if err != nil {
+			log.Fatalf("Error getting local ip: %s", err)
+		}
+		*peerIP = localIP
+	}
+
 	cas, err := store.NewCAStore(config.CAStore, stats)
 	if err != nil {
 		log.Fatalf("Failed to create castore: %s", err)
