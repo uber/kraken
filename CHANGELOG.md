@@ -1,3 +1,10 @@
+0.0.24 (2018-11-19)
+===
+- Remove dependency on KRAKEN_PEER_IP
+- Add port 5055 to proxy
+- Fix pinocchio file so container can be launched as non-root user
+- Increase proxy timeout to 3m
+
 0.0.23 (2018-11-12)
 ====
 - Add TLS config to tracker and proxy
