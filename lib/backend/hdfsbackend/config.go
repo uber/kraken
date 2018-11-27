@@ -20,6 +20,9 @@ type Config struct {
 	UploadDirectory string `yaml:"upload_directory"`
 
 	WebHDFS webhdfs.Config `yaml:"webhdfs"`
+
+	// Enables test-only behavior.
+	testing bool
 }
 
 func (c *Config) applyDefaults() {
