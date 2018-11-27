@@ -105,7 +105,7 @@ func (c *client) Announce(
 			method,
 			url,
 			httputil.SendBody(bytes.NewReader(body)),
-			httputil.SendTimeout(15*time.Second),
+			httputil.SendTimeout(10*time.Second),
 			httputil.SendTLSTransport(c.tls))
 		if err != nil {
 			if httputil.IsNetworkError(err) {
