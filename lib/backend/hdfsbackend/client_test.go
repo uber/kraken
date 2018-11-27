@@ -2,6 +2,8 @@ package hdfsbackend
 
 import (
 	"bytes"
+	"errors"
+	"path"
 	"testing"
 
 	"code.uber.internal/infra/kraken/core"
@@ -29,6 +31,7 @@ func (m *clientMocks) new() *Client {
 		NameNodes:     []string{"some-name-node"},
 		RootDirectory: "/root",
 		NamePath:      "identity",
+		testing:       true,
 	}, WithWebHDFS(m.webhdfs))
 	if err != nil {
 		panic(err)
@@ -148,4 +151,42 @@ func TestClientList(t *testing.T) {
 			require.Equal(test.expected, names)
 		})
 	}
+}
+
+func genRandomDirs(n int) []webhdfs.FileStatus {
+	var dirs []webhdfs.FileStatus
+	for i := 0; i < n; i++ {
+		dirs = append(dirs, webhdfs.FileStatus{
+			PathSuffix: string(randutil.Text(6)),
+			Type:       "DIRECTORY",
+		})
+	}
+	return dirs
+}
+
+func initDirectoryTree(mocks *clientMocks, dir string, width, depth int) {
+	if depth == 0 {
+		mocks.webhdfs.EXPECT().ListFileStatus(dir).
+			Return(nil, errors.New("some error")).MaxTimes(1)
+		return
+	}
+	children := genRandomDirs(width)
+	mocks.webhdfs.EXPECT().ListFileStatus(dir).Return(children, nil).MaxTimes(1)
+	for _, c := range children {
+		initDirectoryTree(mocks, path.Join(dir, c.PathSuffix), width, depth-1)
+	}
+}
+
+func TestClientListErrorDoesNotLeakGoroutines(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	client := mocks.new()
+
+	initDirectoryTree(mocks, "/root", 10, 3) // 1000 nodes.
+
+	_, err := client.List("")
+	require.Error(err)
 }

@@ -97,81 +97,127 @@ var (
 	_stopRegex = regexp.MustCompile("^.+/repositories/.+/_manifests$")
 )
 
+type listResult struct {
+	dir  string
+	list []webhdfs.FileStatus
+	err  error
+}
+
+func (c *Client) lister(done <-chan struct{}, listJobs <-chan string, results chan<- listResult) {
+	for {
+		select {
+		case <-done:
+			return
+		case dir := <-listJobs:
+			l, err := c.webhdfs.ListFileStatus(dir)
+			select {
+			case <-done:
+				return
+			case results <- listResult{dir, l, err}:
+			}
+		}
+	}
+}
+
+func (c *Client) sendAll(done <-chan struct{}, dirs []string, listJobs chan<- string) {
+	for _, d := range dirs {
+		select {
+		case <-done:
+			return
+		case listJobs <- d:
+		}
+	}
+}
+
 // List lists names which start with prefix.
 func (c *Client) List(prefix string) ([]string, error) {
 	root := path.Join(c.pather.BasePath(), prefix)
 
+	listJobs := make(chan string)
+	results := make(chan listResult)
+	done := make(chan struct{})
+
 	var wg sync.WaitGroup
-	listJobs := make(chan string, c.config.ListConcurrency)
-	errc := make(chan error, c.config.ListConcurrency)
 
-	wg.Add(1)
-	listJobs <- root
+	for i := 0; i < c.config.ListConcurrency; i++ {
+		wg.Add(1)
+		go func() {
+			c.lister(done, listJobs, results)
+			wg.Done()
+		}()
+	}
 
-	go func() {
-		wg.Wait()
-		close(listJobs)
+	defer func() {
+		close(done)
+		if c.config.testing {
+			// Waiting might be delayed if an early error is encountered but
+			// other goroutines are waiting on a long http timeout. Thus, we
+			// only wait for each spawned goroutine to exit during testing to
+			// assert that no goroutines leak.
+			wg.Wait()
+		}
 	}()
 
-	var mu sync.Mutex
 	var files []string
 
-L:
-	for {
-		select {
-		case err := <-errc:
-			// Stop early on error.
-			return nil, err
-		case dir, ok := <-listJobs:
-			if !ok {
-				break L
+	// Pending tracks the number of directories which are pending exploration.
+	// Invariant: there will be a result received for every increment made to
+	// pending.
+	pending := 1
+	listJobs <- root
+
+	for pending > 0 {
+		res := <-results
+		pending--
+		if res.err != nil {
+			if httputil.IsNotFound(res.err) {
+				continue
 			}
-			go func() {
-				defer wg.Done()
+			return nil, res.err
+		}
+		var dirs []string
+		for _, fs := range res.list {
+			p := path.Join(res.dir, fs.PathSuffix)
 
-				contents, err := c.webhdfs.ListFileStatus(dir)
+			// TODO(codyg): This is an ugly hack to avoid walking through non-tags
+			// during Docker catalog. Ideally, only tags are located in the repositories
+			// directory, however in WBU2 HDFS, there are blobs here as well. At some
+			// point, we must migrate the data into a structure which cleanly divides
+			// blobs and tags (like we do in S3).
+			if _ignoreRegex.MatchString(p) {
+				continue
+			}
+
+			// TODO(codyg): Another ugly hack to speed up catalog performance by stopping
+			// early when we hit tags...
+			if _stopRegex.MatchString(p) {
+				p = path.Join(p, "tags/dummy/current/link")
+				fs.Type = "FILE"
+			}
+
+			if fs.Type == "DIRECTORY" {
+				// Flat directory structures are common, so accumulate directories and send
+				// them to the listers in a single goroutine (as opposed to a goroutine per
+				// directory).
+				dirs = append(dirs, p)
+			} else {
+				name, err := c.pather.NameFromBlobPath(p)
 				if err != nil {
-					if !httputil.IsNotFound(err) {
-						errc <- err
-					}
-					return
+					log.With("path", p).Errorf("Error converting blob path into name: %s", err)
+					continue
 				}
-
-				for _, fs := range contents {
-					p := path.Join(dir, fs.PathSuffix)
-
-					// TODO(codyg): This is an ugly hack to avoid walking through non-tags
-					// during Docker catalog. Ideally, only tags are located in the repositories
-					// directory, however in WBU2 HDFS, there are blobs here as well. At some
-					// point, we must migrate the data into a structure which cleanly divides
-					// blobs and tags (like we do in S3).
-					if _ignoreRegex.MatchString(p) {
-						continue
-					}
-
-					// TODO(codyg): Another ugly hack to speed up catalog performance by stopping
-					// early when we hit tags...
-					if _stopRegex.MatchString(p) {
-						p = path.Join(p, "tags/dummy/current/link")
-						fs.Type = "FILE"
-					}
-
-					if fs.Type == "DIRECTORY" {
-						wg.Add(1)
-						listJobs <- p
-						continue
-					}
-
-					name, err := c.pather.NameFromBlobPath(p)
-					if err != nil {
-						log.With("path", p).Errorf("Error converting blob path into name: %s", err)
-						continue
-					}
-					mu.Lock()
-					files = append(files, name)
-					mu.Unlock()
-				}
+				files = append(files, name)
+			}
+		}
+		if len(dirs) > 0 {
+			// We cannot send list jobs and receive results in the same thread, else
+			// deadlock will occur.
+			wg.Add(1)
+			go func() {
+				c.sendAll(done, dirs, listJobs)
+				wg.Done()
 			}()
+			pending += len(dirs)
 		}
 	}
 
