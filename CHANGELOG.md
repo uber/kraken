@@ -1,5 +1,12 @@
+0.0.25 (2018-11-27)
+====
+- Support ib0 network interface for ip discovery
+- Replicate sparkdocker to WBU2
+- Fix goroutine leak in HDFS list
+- Decrease tracker timeouts / increase passive health check fail window
+
 0.0.24 (2018-11-19)
-===
+====
 - Remove dependency on KRAKEN_PEER_IP
 - Add port 5055 to proxy
 - Fix pinocchio file so container can be launched as non-root user
