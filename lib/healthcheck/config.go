@@ -59,6 +59,6 @@ func (c *PassiveConfig) applyDefaults() {
 		c.Fails = 3
 	}
 	if c.FailTimeout == 0 {
-		c.FailTimeout = 30 * time.Second
+		c.FailTimeout = 5 * time.Minute
 	}
 }

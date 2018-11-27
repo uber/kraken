@@ -51,7 +51,7 @@ func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, erro
 				"http://%s/namespace/%s/blobs/%s/metainfo",
 				addr, url.PathEscape(namespace), d),
 			c.backoff,
-			httputil.SendTimeout(15*time.Second),
+			httputil.SendTimeout(10*time.Second),
 			httputil.SendTLSTransport(c.tls))
 		if err != nil {
 			if httputil.IsNetworkError(err) {
