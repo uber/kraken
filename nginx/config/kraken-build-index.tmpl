@@ -40,7 +40,10 @@ server {
 
     proxy_cache         list;
     proxy_cache_methods GET;
+    proxy_cache_valid   200 30s;
     proxy_cache_valid   any 1s;
     proxy_cache_lock    on;
+
+    proxy_read_timeout 2m;
   }
 }
