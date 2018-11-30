@@ -30,7 +30,7 @@ func (c *Config) applyDefaults() {
 		c.RootDirectory = "/infra/dockerRegistry/"
 	}
 	if c.ListConcurrency == 0 {
-		c.ListConcurrency = 4
+		c.ListConcurrency = 16
 	}
 	if c.UploadDirectory == "" {
 		c.UploadDirectory = "_uploads"
