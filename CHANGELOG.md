@@ -1,3 +1,10 @@
+0.0.26 (2018-12-03)
+====
+- Replicate haproxy-agent to WBU2 and IRN, and jeffry to IRN
+- Increase build-index's list concurrency to 16
+- Enable HTTPS for kraken-agent in prime
+- Enable client TLS on proxy in prime
+
 0.0.25 (2018-11-27)
 ====
 - Support ib0 network interface for ip discovery
