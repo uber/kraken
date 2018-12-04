@@ -99,7 +99,7 @@ func (t *manifests) putContent(path string, subtype PathSubType) error {
 		if err != nil {
 			return fmt.Errorf("get manifest digest: %s", err)
 		}
-		if err := t.transferer.PostTag(fmt.Sprintf("%s:%s", repo, tag), digest); err != nil {
+		if err := t.transferer.PutTag(fmt.Sprintf("%s:%s", repo, tag), digest); err != nil {
 			return fmt.Errorf("post tag: %s", err)
 		}
 		return nil

@@ -73,16 +73,16 @@ func (mr *MockImageTransfererMockRecorder) ListTags(arg0 interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTags", reflect.TypeOf((*MockImageTransferer)(nil).ListTags), arg0)
 }
 
-// PostTag mocks base method
-func (m *MockImageTransferer) PostTag(arg0 string, arg1 core.Digest) error {
-	ret := m.ctrl.Call(m, "PostTag", arg0, arg1)
+// PutTag mocks base method
+func (m *MockImageTransferer) PutTag(arg0 string, arg1 core.Digest) error {
+	ret := m.ctrl.Call(m, "PutTag", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// PostTag indicates an expected call of PostTag
-func (mr *MockImageTransfererMockRecorder) PostTag(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostTag", reflect.TypeOf((*MockImageTransferer)(nil).PostTag), arg0, arg1)
+// PutTag indicates an expected call of PutTag
+func (mr *MockImageTransfererMockRecorder) PutTag(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutTag", reflect.TypeOf((*MockImageTransferer)(nil).PutTag), arg0, arg1)
 }
 
 // Stat mocks base method

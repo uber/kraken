@@ -68,7 +68,7 @@ func main() {
 
 	tagClient := tagclient.NewClusterClient(buildIndexes, tls)
 
-	transferer := transfer.NewReadWriteTransferer(tagClient, originCluster, cas)
+	transferer := transfer.NewReadWriteTransferer(stats, tagClient, originCluster, cas)
 
 	registry, err := config.Registry.Build(config.Registry.ReadWriteParameters(transferer, cas, stats))
 	if err != nil {

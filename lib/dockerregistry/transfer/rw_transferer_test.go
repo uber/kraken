@@ -17,6 +17,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 )
 
 type proxyTransfererMocks struct {
@@ -42,7 +43,7 @@ func newReadWriteTransfererMocks(t *testing.T) (*proxyTransfererMocks, func()) {
 }
 
 func (m *proxyTransfererMocks) new() *ReadWriteTransferer {
-	return NewReadWriteTransferer(m.tags, m.originCluster, m.cas)
+	return NewReadWriteTransferer(tally.NoopScope, m.tags, m.originCluster, m.cas)
 }
 
 func TestReadWriteTransfererDownloadCachesBlob(t *testing.T) {
@@ -104,7 +105,7 @@ func TestReadWriteTransfererGetTagNotFound(t *testing.T) {
 	require.Equal(ErrTagNotFound, err)
 }
 
-func TestReadWriteTransfererPostTag(t *testing.T) {
+func TestReadWriteTransfererPutTag(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newReadWriteTransfererMocks(t)
@@ -124,7 +125,7 @@ func TestReadWriteTransfererPostTag(t *testing.T) {
 
 	mocks.tags.EXPECT().PutAndReplicate(tag, manifestDigest).Return(nil)
 
-	require.NoError(transferer.PostTag(tag, manifestDigest))
+	require.NoError(transferer.PutTag(tag, manifestDigest))
 }
 
 func TestReadWriteTransfererStatLocalBlob(t *testing.T) {

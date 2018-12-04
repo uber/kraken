@@ -11,11 +11,13 @@ import (
 	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/docker/distribution/uuid"
+	"github.com/uber-go/tally"
 )
 
 // ReadWriteTransferer is a Transferer for proxy. Uploads/downloads blobs via the
 // local origin cluster, and posts/gets tags via the local build-index.
 type ReadWriteTransferer struct {
+	stats         tally.Scope
 	tags          tagclient.Client
 	originCluster blobclient.ClusterClient
 	cas           *store.CAStore
@@ -23,11 +25,16 @@ type ReadWriteTransferer struct {
 
 // NewReadWriteTransferer creates a new ReadWriteTransferer.
 func NewReadWriteTransferer(
+	stats tally.Scope,
 	tags tagclient.Client,
 	originCluster blobclient.ClusterClient,
 	cas *store.CAStore) *ReadWriteTransferer {
 
-	return &ReadWriteTransferer{tags, originCluster, cas}
+	stats = stats.Tagged(map[string]string{
+		"module": "rwtransferer",
+	})
+
+	return &ReadWriteTransferer{stats, tags, originCluster, cas}
 }
 
 // Stat returns blob info from origin cluster or local cache.
@@ -116,9 +123,10 @@ func (t *ReadWriteTransferer) GetTag(tag string) (core.Digest, error) {
 	return d, nil
 }
 
-// PostTag uploads d as the manifest digest for tag.
-func (t *ReadWriteTransferer) PostTag(tag string, d core.Digest) error {
+// PutTag uploads d as the manifest digest for tag.
+func (t *ReadWriteTransferer) PutTag(tag string, d core.Digest) error {
 	if err := t.tags.PutAndReplicate(tag, d); err != nil {
+		t.stats.Counter("put_tag_error").Inc(1)
 		return fmt.Errorf("put and replicate tag: %s", err)
 	}
 	return nil

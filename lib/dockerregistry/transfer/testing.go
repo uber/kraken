@@ -60,7 +60,7 @@ func (t *testTransferer) GetTag(tag string) (core.Digest, error) {
 	return d, nil
 }
 
-func (t *testTransferer) PostTag(tag string, d core.Digest) error {
+func (t *testTransferer) PutTag(tag string, d core.Digest) error {
 	p, err := t.tagPather.BlobPath(tag)
 	if err != nil {
 		return err
