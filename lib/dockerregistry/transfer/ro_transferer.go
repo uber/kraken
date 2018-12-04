@@ -90,8 +90,8 @@ func (t *ReadOnlyTransferer) GetTag(tag string) (core.Digest, error) {
 	return d, nil
 }
 
-// PostTag is not supported.
-func (t *ReadOnlyTransferer) PostTag(tag string, d core.Digest) error {
+// PutTag is not supported.
+func (t *ReadOnlyTransferer) PutTag(tag string, d core.Digest) error {
 	return errors.New("not supported")
 }
 

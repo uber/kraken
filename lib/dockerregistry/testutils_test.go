@@ -82,7 +82,7 @@ func (d *testDriver) setup() (*KrakenStorageDriver, testImageUploadBundle) {
 		log.Panic(err)
 	}
 
-	if err := d.transferer.PostTag(fmt.Sprintf("%s:%s", repoName, tagName), manifestDigest); err != nil {
+	if err := d.transferer.PutTag(fmt.Sprintf("%s:%s", repoName, tagName), manifestDigest); err != nil {
 		log.Panic(err)
 	}
 

@@ -12,6 +12,6 @@ type ImageTransferer interface {
 	Upload(namespace string, d core.Digest, blob store.FileReader) error
 
 	GetTag(tag string) (core.Digest, error)
-	PostTag(tag string, d core.Digest) error
+	PutTag(tag string, d core.Digest) error
 	ListTags(prefix string) ([]string, error)
 }
