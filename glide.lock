@@ -1,0 +1,259 @@
+hash: 430cd1155fb23f6842f3b7516b84bad48c326fd05e9a2db0e8b32243cd318eab
+updated: 2018-12-11T22:55:12.966126-08:00
+imports:
+- name: github.com/alecthomas/kingpin
+  version: 947dcec5ba9c011838740e680966fd7087a71d0d
+- name: github.com/alecthomas/template
+  version: a0175ee3bccc567396460bf5acd36800cb10c49c
+  subpackages:
+  - parse
+- name: github.com/alecthomas/units
+  version: 2efee857e7cfd4f3d0138cc3cbb1b4966962b93a
+- name: github.com/andres-erbsen/clock
+  version: 9e14626cd129ba01ccb6806bcca9d523e570aaf0
+- name: github.com/apache/thrift
+  version: 9549b25c77587b29be4e0b5c258221a4ed85d37a
+  subpackages:
+  - lib/go/thrift
+- name: github.com/aws/aws-sdk-go
+  version: 818fa5c274d4dee665096411e2bad037f47c31f7
+  subpackages:
+  - aws
+  - aws/awserr
+  - aws/awsutil
+  - aws/client
+  - aws/client/metadata
+  - aws/corehandlers
+  - aws/credentials
+  - aws/credentials/ec2rolecreds
+  - aws/credentials/endpointcreds
+  - aws/credentials/processcreds
+  - aws/credentials/stscreds
+  - aws/csm
+  - aws/defaults
+  - aws/ec2metadata
+  - aws/endpoints
+  - aws/request
+  - aws/session
+  - aws/signer/v4
+  - internal/ini
+  - internal/s3err
+  - internal/sdkio
+  - internal/sdkrand
+  - internal/sdkuri
+  - internal/shareddefaults
+  - private/protocol
+  - private/protocol/eventstream
+  - private/protocol/eventstream/eventstreamapi
+  - private/protocol/query
+  - private/protocol/query/queryutil
+  - private/protocol/rest
+  - private/protocol/restxml
+  - private/protocol/xml/xmlutil
+  - service/s3
+  - service/s3/s3iface
+  - service/s3/s3manager
+  - service/sts
+- name: github.com/bshuster-repo/logrus-logstash-hook
+  version: 1e961e8e173c48bdddbf90e4fc4df8eaf8a7e918
+- name: github.com/bshuster-repo/logrus-logstash-hook.git
+  version: 1e961e8e173c48bdddbf90e4fc4df8eaf8a7e918
+- name: github.com/bugsnag/bugsnag-go
+  version: b1d153021fcd90ca3f080db36bec96dc690fb274
+  subpackages:
+  - errors
+- name: github.com/bugsnag/osext
+  version: 0dd3f918b21bec95ace9dc86c7e70266cfc5c702
+- name: github.com/bugsnag/panicwrap
+  version: e2c28503fcd0675329da73bf48b33404db873782
+- name: github.com/c2h5oh/datasize
+  version: 4eba002a5eaea69cf8d235a388fc6b65ae68d2dd
+- name: github.com/cactus/go-statsd-client
+  version: 138b925ccdf617776955904ba7759fce64406cec
+  subpackages:
+  - statsd
+- name: github.com/docker/distribution
+  version: edc3ab29cdff8694dd6feb85cfeb4b5f1b38ed9c
+  subpackages:
+  - configuration
+  - context
+  - digest
+  - digestset
+  - health
+  - health/checks
+  - manifest
+  - manifest/manifestlist
+  - manifest/schema1
+  - manifest/schema2
+  - notifications
+  - reference
+  - registry
+  - registry/api/errcode
+  - registry/api/v2
+  - registry/auth
+  - registry/client
+  - registry/client/auth
+  - registry/client/auth/challenge
+  - registry/client/transport
+  - registry/handlers
+  - registry/listener
+  - registry/middleware/registry
+  - registry/middleware/repository
+  - registry/proxy
+  - registry/proxy/scheduler
+  - registry/storage
+  - registry/storage/cache
+  - registry/storage/cache/memory
+  - registry/storage/cache/redis
+  - registry/storage/driver
+  - registry/storage/driver/factory
+  - registry/storage/driver/middleware
+  - uuid
+  - version
+- name: github.com/docker/libtrust
+  version: fa567046d9b14f6aa788882a950d69651d230b21
+- name: github.com/facebookgo/clock
+  version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
+- name: github.com/garyburd/redigo
+  version: a69d19351219b6dd56f274f96d85a7014a2ec34e
+  subpackages:
+  - internal
+  - redis
+- name: github.com/golang/mock
+  version: b3e60bcdc577185fce3cf625fc96b62857ce5574
+  subpackages:
+  - gomock
+- name: github.com/golang/protobuf
+  version: 1d3f30b51784bec5aad268e59fd3c2fc1c2fe73f
+  subpackages:
+  - proto
+- name: github.com/gorilla/context
+  version: 14f550f51af52180c2eefed15e5fd18d63c0a64a
+- name: github.com/gorilla/handlers
+  version: 60c7bfde3e33c201519a200a4507a158cc03a17b
+- name: github.com/gorilla/mux
+  version: e3702bed27f0d39777b0b37b664b6280e8ef8fbf
+- name: github.com/hashicorp/golang-lru
+  version: 20f1fb78b0740ba8c3cb143a61e86ba5c8669768
+- name: github.com/inconshreveable/mousetrap
+  version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
+- name: github.com/jackpal/bencode-go
+  version: 227668e840fa94fd54b85018c733f73e73e06879
+- name: github.com/jmespath/go-jmespath
+  version: c2b33e8439af944379acbdd9c3a5fe0bc44bd8a5
+- name: github.com/jmoiron/sqlx
+  version: 82935fac6c1a317907c8f43ed3f7f85ea844a78b
+  subpackages:
+  - reflectx
+- name: github.com/jpillora/backoff
+  version: 3050d21c67d7c46b07ca1b5e1be0b26669c8d04c
+- name: github.com/mattn/go-sqlite3
+  version: 03cb0c0623bd3dd467afdec9f3e1d4deeca7890c
+- name: github.com/montanaflynn/stats
+  version: 1bf9dbcd8cbe1fdb75add3785b1d4a9a646269ab
+- name: github.com/opencontainers/go-digest
+  version: c9281466c8b2f606084ac71339773efd177436e7
+- name: github.com/pressly/chi
+  version: e6033ea75479391a4bce3918fc119cad31e1cb30
+  subpackages:
+  - middleware
+- name: github.com/pressly/goose
+  version: f9980cee258976cd89b5edeaee57983104b9180f
+- name: github.com/robfig/cron
+  version: b41be1df696709bb6395fe435af20370037c0b4c
+- name: github.com/satori/go.uuid
+  version: f58768cc1a7a7e77a3bd49e98cdd21419399b6a3
+- name: github.com/sirupsen/logrus
+  version: 55eb11d21d2a31a3cc93838241d04800f52e823d
+- name: github.com/spaolacci/murmur3
+  version: f09979ecbc725b9e6d41a297405f65e7e8804acc
+- name: github.com/spf13/cobra
+  version: 312092086bed4968099259622145a0c9ae280064
+- name: github.com/spf13/pflag
+  version: 5644820622454e71517561946e3d94b9f9db6842
+- name: github.com/stevvooe/resumable
+  version: 51ad44105773cafcbe91927f70ac68e1bf78f8b4
+  subpackages:
+  - sha256
+  - sha512
+- name: github.com/uber-common/bark
+  version: 362cbdc2431a7f2414126b4fb4914820b876fad4
+- name: github.com/uber-go/atomic
+  version: e682c1008ac17bf26d2e4b5ad6cdd08520ed0b22
+- name: github.com/uber-go/tally
+  version: 34be4a565ce6286a0ba91a54a81be3f6181ca2e2
+  subpackages:
+  - m3
+  - m3/customtransports
+  - m3/thrift
+  - m3/thriftudp
+  - statsd
+- name: github.com/willf/bitset
+  version: 71fa2377963fc761fc6556dd5895dff5816d4e8c
+- name: github.com/xenolf/lego
+  version: b05b54d1f69a31ceed92e2995243c5b17821c9e4
+  subpackages:
+  - acme
+- name: github.com/yvasiyarov/go-metrics
+  version: 57bccd1ccd43f94bb17fdd8bf3007059b802f85e
+- name: github.com/yvasiyarov/gorelic
+  version: a9bba5b9ab508a086f9a12b8c51fab68478e2128
+- name: github.com/yvasiyarov/newrelic_platform_go
+  version: b21fdbd4370f3717f3bbd2bf41c223bc273068e6
+- name: go.uber.org/atomic
+  version: 1ea20fb1cbb1cc08cbd0d913a96dead89aa18289
+- name: go.uber.org/multierr
+  version: 3c4937480c32f4c13a875a1829af76c98ca3d40a
+- name: go.uber.org/zap
+  version: 67bc79d13d155c02fd008f721863ff8cc5f30659
+  subpackages:
+  - buffer
+  - internal/bufferpool
+  - internal/color
+  - internal/exit
+  - zapcore
+- name: golang.org/x/crypto
+  version: 505ab145d0a99da450461ae2c1a9f6cd10d1f447
+  subpackages:
+  - curve25519
+  - ed25519
+  - ed25519/internal/edwards25519
+  - internal/chacha20
+  - internal/subtle
+  - poly1305
+  - ssh
+  - ssh/agent
+- name: golang.org/x/net
+  version: 4876518f9e71663000c348837735820161a42df7
+  subpackages:
+  - context
+- name: golang.org/x/sync
+  version: 42b317875d0fa942474b76e1b46a6060d720ae6e
+  subpackages:
+  - syncmap
+- name: golang.org/x/time
+  version: 85acf8d2951cb2a3bde7632f9ff273ef0379bcbd
+  subpackages:
+  - rate
+- name: gopkg.in/DATA-DOG/go-sqlmock.v1
+  version: d76b18b42f285b792bf985118980ce9eacea9d10
+- name: gopkg.in/validator.v2
+  version: 135c24b11c19e52befcae2ec3fca5d9b78c4e98e
+- name: gopkg.in/yaml.v2
+  version: bef53efd0c76e49e6de55ead051f886bea7e9420
+- name: rsc.io/letsencrypt
+  version: a019c9e6fce0c7132679dea13bd8df7c86ffe26c
+testImports:
+- name: github.com/davecgh/go-spew
+  version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d
+  subpackages:
+  - spew
+- name: github.com/pmezard/go-difflib
+  version: 792786c7400a136282c1664665ae0a8db921c6c2
+  subpackages:
+  - difflib
+- name: github.com/stretchr/testify
+  version: f35b8ab0b5a2cef36673838d662e249dd9c94686
+  subpackages:
+  - assert
+  - require
