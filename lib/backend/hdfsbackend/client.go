@@ -9,13 +9,37 @@ import (
 	"sync"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/hdfsbackend/webhdfs"
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/utils/httputil"
 	"code.uber.internal/infra/kraken/utils/log"
 
 	"github.com/satori/go.uuid"
+	"gopkg.in/yaml.v2"
 )
+
+const _hdfs = "hdfs"
+
+func init() {
+	backend.Register(_hdfs, &factory{})
+}
+
+type factory struct{}
+
+func (f *factory) Create(
+	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+
+	confBytes, err := yaml.Marshal(confRaw)
+	if err != nil {
+		return nil, errors.New("marshal hdfs config")
+	}
+	var config Config
+	if err := yaml.Unmarshal(confBytes, &config); err != nil {
+		return nil, errors.New("unmarshal hdfs config")
+	}
+	return NewClient(config)
+}
 
 // Client is a backend.Client for HDFS.
 type Client struct {
@@ -32,7 +56,7 @@ func WithWebHDFS(w webhdfs.Client) Option {
 	return func(c *Client) { c.webhdfs = w }
 }
 
-// NewClient returns a new Client.
+// NewClient creates a new Client for HDFS.
 func NewClient(config Config, opts ...Option) (*Client, error) {
 	config.applyDefaults()
 	if !path.IsAbs(config.RootDirectory) {

@@ -8,9 +8,35 @@ import (
 	"time"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/utils/httputil"
+
+	"gopkg.in/yaml.v2"
 )
+
+const _http = "http"
+
+func init() {
+	backend.Register(_http, &factory{})
+}
+
+type factory struct{}
+
+func (f *factory) Create(
+	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+
+	confBytes, err := yaml.Marshal(confRaw)
+	if err != nil {
+		return nil, errors.New("marshal http config")
+	}
+
+	var config Config
+	if err := yaml.Unmarshal(confBytes, &config); err != nil {
+		return nil, errors.New("unmarshal http config")
+	}
+	return NewClient(config)
+}
 
 // Config defines http post/get upload/download urls
 // and http connnection parameters. The URLs come with string format
@@ -33,7 +59,7 @@ func (c Config) applyDefaults() Config {
 	return c
 }
 
-// NewClient creates http client from input parameters
+// NewClient creates a new http Client.
 func NewClient(config Config) (*Client, error) {
 	return &Client{config: config.applyDefaults()}, nil
 }

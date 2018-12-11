@@ -1,10 +1,32 @@
 package backend
 
 import (
+	"fmt"
 	"io"
 
 	"code.uber.internal/infra/kraken/core"
 )
+
+var _factories = make(map[string]ClientFactory)
+
+// ClientFactory creates backend client given name.
+type ClientFactory interface {
+	Create(config interface{}, authConfig interface{}) (Client, error)
+}
+
+// Register registers new Factory with corresponding backend client name.
+func Register(name string, factory ClientFactory) {
+	_factories[name] = factory
+}
+
+// getFactory returns backend client factory given client name.
+func getFactory(name string) (ClientFactory, error) {
+	factory, ok := _factories[name]
+	if !ok {
+		return nil, fmt.Errorf("no backend client defined with name %s", name)
+	}
+	return factory, nil
+}
 
 // Client defines an interface for accessing blobs on a remote storage backend.
 //

@@ -7,17 +7,52 @@ import (
 	"path"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/utils/log"
 	"code.uber.internal/infra/kraken/utils/rwutil"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"gopkg.in/yaml.v2"
 )
+
+const _s3 = "s3"
+
+func init() {
+	backend.Register(_s3, &factory{})
+}
+
+type factory struct{}
+
+func (f *factory) Create(
+	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+
+	confBytes, err := yaml.Marshal(confRaw)
+	if err != nil {
+		return nil, errors.New("marshal s3 config")
+	}
+	authConfBytes, err := yaml.Marshal(authConfRaw)
+	if err != nil {
+		return nil, errors.New("marshal s3 auth config")
+	}
+
+	var config Config
+	if err := yaml.Unmarshal(confBytes, &config); err != nil {
+		return nil, errors.New("unmarshal s3 config")
+	}
+	var userAuth UserAuthConfig
+	if err := yaml.Unmarshal(authConfBytes, &userAuth); err != nil {
+		return nil, errors.New("unmarshal s3 auth config")
+	}
+
+	return NewClient(config, userAuth)
+}
 
 // Client implements a backend.Client for S3.
 type Client struct {
@@ -34,8 +69,10 @@ func WithS3(s3 S3) Option {
 	return func(c *Client) { c.s3 = s3 }
 }
 
-// NewClient creates a new Client.
-func NewClient(config Config, userAuth UserAuthConfig, opts ...Option) (*Client, error) {
+// NewClient creates a new Client for S3.
+func NewClient(
+	config Config, userAuth UserAuthConfig, opts ...Option) (*Client, error) {
+
 	config.applyDefaults()
 	if config.Username == "" {
 		return nil, errors.New("invalid config: username required")

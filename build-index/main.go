@@ -21,6 +21,13 @@ import (
 	"code.uber.internal/infra/kraken/origin/blobclient"
 	"code.uber.internal/infra/kraken/utils/configutil"
 	"code.uber.internal/infra/kraken/utils/log"
+
+	// Import all backend client packages to register them with backend manager.
+	_ "code.uber.internal/infra/kraken/lib/backend/hdfsbackend"
+	_ "code.uber.internal/infra/kraken/lib/backend/httpbackend"
+	_ "code.uber.internal/infra/kraken/lib/backend/s3backend"
+	_ "code.uber.internal/infra/kraken/lib/backend/terrablobbackend"
+	_ "code.uber.internal/infra/kraken/lib/backend/testfs"
 )
 
 func main() {

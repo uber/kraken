@@ -5,11 +5,6 @@ import (
 	"fmt"
 	"regexp"
 
-	"code.uber.internal/infra/kraken/lib/backend/hdfsbackend"
-	"code.uber.internal/infra/kraken/lib/backend/httpbackend"
-	"code.uber.internal/infra/kraken/lib/backend/s3backend"
-	"code.uber.internal/infra/kraken/lib/backend/terrablobbackend"
-	"code.uber.internal/infra/kraken/lib/backend/testfs"
 	"code.uber.internal/infra/kraken/utils/bandwidth"
 	"code.uber.internal/infra/kraken/utils/log"
 )
@@ -17,15 +12,6 @@ import (
 // Manager errors.
 var (
 	ErrNamespaceNotFound = errors.New("no matches for namespace")
-)
-
-// Available backends.
-const (
-	_s3        = "s3"
-	_hdfs      = "hdfs"
-	_http      = "http"
-	_terrablob = "terrablob"
-	_testfs    = "testfs"
 )
 
 type backend struct {
@@ -49,31 +35,29 @@ type Manager struct {
 	backends []*backend
 }
 
-// NewManager creates a new Manager.
+// NewManager creates a new backend Manager.
 func NewManager(configs []Config, auth AuthConfig) (*Manager, error) {
 	var backends []*backend
 	for _, config := range configs {
 		config = config.applyDefaults()
 		var c Client
-		var err error
-		switch config.Backend {
-		case _s3:
-			c, err = s3backend.NewClient(config.S3, auth.S3)
-		case _hdfs:
-			c, err = hdfsbackend.NewClient(config.HDFS)
-		case _http:
-			c, err = httpbackend.NewClient(config.HTTP)
-		case _terrablob:
-			c, err = terrablobbackend.NewClient(config.TerraBlob)
-		case _testfs:
-			c, err = testfs.NewClient(config.TestFS)
-		default:
-			return nil, fmt.Errorf(
-				"unknown backend for namespace %s: %s", config.Namespace, config.Backend)
+
+		if len(config.Backend) != 1 {
+			return nil, fmt.Errorf("no backend or more than one backend configured")
 		}
+		var name string
+		var backendConfig interface{}
+		for name, backendConfig = range config.Backend { // Pull the only key/value out of map
+		}
+		factory, err := getFactory(name)
 		if err != nil {
-			return nil, fmt.Errorf("new client for backend %s: %s", config.Backend, err)
+			return nil, fmt.Errorf("get backend client factory: %s", err)
 		}
+		c, err = factory.Create(backendConfig, auth[name])
+		if err != nil {
+			return nil, fmt.Errorf("create backend client: %s", err)
+		}
+
 		if config.Bandwidth.Enable {
 			l, err := bandwidth.NewLimiter(config.Bandwidth)
 			if err != nil {
@@ -94,7 +78,7 @@ func NewManager(configs []Config, auth AuthConfig) (*Manager, error) {
 // originally configured bandwidth divided by denominator.
 func (m *Manager) AdjustBandwidth(denominator int) error {
 	for _, b := range m.backends {
-		tc, ok := b.client.(*throttledClient)
+		tc, ok := b.client.(*ThrottledClient)
 		if !ok {
 			continue
 		}
@@ -103,8 +87,8 @@ func (m *Manager) AdjustBandwidth(denominator int) error {
 		}
 		log.With(
 			"namespace", b.regexp.String(),
-			"ingress", tc.ingressLimit(),
-			"egress", tc.egressLimit(),
+			"ingress", tc.IngressLimit(),
+			"egress", tc.EgressLimit(),
 			"denominator", denominator).Info("Adjusted backend bandwidth")
 	}
 	return nil

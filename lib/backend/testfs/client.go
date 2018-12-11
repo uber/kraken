@@ -9,10 +9,37 @@ import (
 	"strconv"
 
 	"code.uber.internal/infra/kraken/core"
+	"code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/utils/httputil"
+
+	"gopkg.in/yaml.v2"
 )
+
+const _testfs = "testfs"
+
+func init() {
+	backend.Register(_testfs, &factory{})
+}
+
+type factory struct{}
+
+func (f *factory) Create(
+	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+
+	confBytes, err := yaml.Marshal(confRaw)
+	if err != nil {
+		return nil, errors.New("marshal testfs config")
+	}
+
+	var config Config
+	if err := yaml.Unmarshal(confBytes, &config); err != nil {
+		return nil, errors.New("unmarshal testfs config")
+	}
+
+	return NewClient(config)
+}
 
 // Client wraps HTTP calls to Server.
 type Client struct {

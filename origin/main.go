@@ -31,6 +31,13 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
+
+	// Import all backend client packages to register them with backend manager.
+	_ "code.uber.internal/infra/kraken/lib/backend/hdfsbackend"
+	_ "code.uber.internal/infra/kraken/lib/backend/httpbackend"
+	_ "code.uber.internal/infra/kraken/lib/backend/s3backend"
+	_ "code.uber.internal/infra/kraken/lib/backend/terrablobbackend"
+	_ "code.uber.internal/infra/kraken/lib/backend/testfs"
 )
 
 // addTorrentDebugEndpoints mounts experimental debugging endpoints which are

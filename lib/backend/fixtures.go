@@ -19,17 +19,19 @@ func ManagerFixture() *Manager {
 	return m
 }
 
-type testClient struct {
+// TestClient is a backend client for testing.
+type TestClient struct {
 	sync.Mutex
 	blobs map[string][]byte
 }
 
 // ClientFixture returns an in-memory Client for testing purposes.
 func ClientFixture() Client {
-	return &testClient{blobs: make(map[string][]byte)}
+	return &TestClient{blobs: make(map[string][]byte)}
 }
 
-func (c *testClient) Stat(name string) (*core.BlobInfo, error) {
+// Stat returns blob info for name.
+func (c *TestClient) Stat(name string) (*core.BlobInfo, error) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -40,7 +42,8 @@ func (c *testClient) Stat(name string) (*core.BlobInfo, error) {
 	return core.NewBlobInfo(int64(len(b))), nil
 }
 
-func (c *testClient) Upload(name string, src io.Reader) error {
+// Upload uploads src to name.
+func (c *TestClient) Upload(name string, src io.Reader) error {
 	c.Lock()
 	defer c.Unlock()
 
@@ -52,7 +55,8 @@ func (c *testClient) Upload(name string, src io.Reader) error {
 	return nil
 }
 
-func (c *testClient) Download(name string, dst io.Writer) error {
+// Download downloads name into dst.
+func (c *TestClient) Download(name string, dst io.Writer) error {
 	c.Lock()
 	defer c.Unlock()
 
@@ -64,6 +68,7 @@ func (c *testClient) Download(name string, dst io.Writer) error {
 	return err
 }
 
-func (c *testClient) List(dir string) ([]string, error) {
+// List lists names with start with prefix.
+func (c *TestClient) List(dir string) ([]string, error) {
 	return nil, errors.New("not supported")
 }
