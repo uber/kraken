@@ -1,13 +1,16 @@
-package backend
+package backend_test
 
 import (
 	"testing"
 
+	. "code.uber.internal/infra/kraken/lib/backend"
 	"code.uber.internal/infra/kraken/lib/backend/namepath"
 	"code.uber.internal/infra/kraken/lib/backend/testfs"
 	"code.uber.internal/infra/kraken/utils/bandwidth"
 	"code.uber.internal/infra/kraken/utils/stringset"
+
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v2"
 )
 
 func TestManagerNamespaceMatching(t *testing.T) {
@@ -35,7 +38,7 @@ func TestManagerNamespaceMatching(t *testing.T) {
 
 			result, err := m.GetClient(test.namespace)
 			require.NoError(err)
-			require.True(test.expected.(*testClient) == result.(*testClient))
+			require.True(test.expected.(*TestClient) == result.(*TestClient))
 		})
 	}
 }
@@ -49,25 +52,29 @@ func TestManagerErrNamespaceNotFound(t *testing.T) {
 func TestManagerNamespaceOrdering(t *testing.T) {
 	require := require.New(t)
 
-	fooAddr := "testfs-foo"
 	fooBarAddr := "testfs-foo-bar"
+	fooAddr := "testfs-foo"
 	defaultAddr := "testfs-default"
 
-	configs := []Config{
-		{
-			Namespace: "foo/bar/.*",
-			Backend:   "testfs",
-			TestFS:    testfs.Config{Addr: fooBarAddr, NamePath: namepath.Identity},
-		}, {
-			Namespace: "foo/.*",
-			Backend:   "testfs",
-			TestFS:    testfs.Config{Addr: fooAddr, NamePath: namepath.Identity},
-		}, {
-			Namespace: ".*",
-			Backend:   "testfs",
-			TestFS:    testfs.Config{Addr: defaultAddr, NamePath: namepath.Identity},
-		},
-	}
+	configStr := `
+- namespace: foo/bar/.*
+  backend:
+      testfs:
+          addr: testfs-foo-bar
+          name_path: identity
+- namespace: foo/.*
+  backend:
+      testfs:
+          addr: testfs-foo
+          name_path: identity
+- namespace: .*
+  backend:
+      testfs:
+          addr: testfs-default
+          name_path: identity
+`
+	var configs []Config
+	require.NoError(yaml.Unmarshal([]byte(configStr), &configs))
 
 	m, err := NewManager(configs, AuthConfig{})
 	require.NoError(err)
@@ -98,18 +105,19 @@ func TestManagerBandwidth(t *testing.T) {
 			TokenSize:         1,
 			Enable:            true,
 		},
-		Backend: "testfs",
-		TestFS:  testfs.Config{Addr: "test-addr", NamePath: namepath.Identity},
+		Backend: map[string]interface{}{
+			"testfs": testfs.Config{Addr: "test-addr", NamePath: namepath.Identity},
+		},
 	}}, AuthConfig{})
 	require.NoError(err)
 
 	checkBandwidth := func(egress, ingress int64) {
 		c, err := m.GetClient("foo")
 		require.NoError(err)
-		tc, ok := c.(*throttledClient)
+		tc, ok := c.(*ThrottledClient)
 		require.True(ok)
-		require.Equal(egress, tc.egressLimit())
-		require.Equal(ingress, tc.ingressLimit())
+		require.Equal(egress, tc.EgressLimit())
+		require.Equal(ingress, tc.IngressLimit())
 	}
 
 	checkBandwidth(10, 50)

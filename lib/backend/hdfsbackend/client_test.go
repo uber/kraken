@@ -11,6 +11,7 @@ import (
 	"code.uber.internal/infra/kraken/mocks/lib/backend/hdfsbackend/webhdfs"
 	"code.uber.internal/infra/kraken/utils/mockutil"
 	"code.uber.internal/infra/kraken/utils/randutil"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )

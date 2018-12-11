@@ -9,14 +9,15 @@ import (
 	"code.uber.internal/infra/kraken/utils/stringset"
 )
 
-type throttledClient struct {
+// ThrottledClient is a backend client with speed limit.
+type ThrottledClient struct {
 	Client
 	bandwidth *bandwidth.Limiter
 }
 
 // throttle wraps client with bandwidth limits.
-func throttle(client Client, bandwidth *bandwidth.Limiter) *throttledClient {
-	return &throttledClient{client, bandwidth}
+func throttle(client Client, bandwidth *bandwidth.Limiter) *ThrottledClient {
+	return &ThrottledClient{client, bandwidth}
 }
 
 type sizer interface {
@@ -26,7 +27,8 @@ type sizer interface {
 // Ensure that we can get size from file store readers.
 var _ sizer = (store.FileReader)(nil)
 
-func (c *throttledClient) Upload(name string, src io.Reader) error {
+// Upload uploads src into name.
+func (c *ThrottledClient) Upload(name string, src io.Reader) error {
 	if s, ok := src.(sizer); ok {
 		// Only throttle if the src implements a Size method.
 		if err := c.bandwidth.ReserveEgress(s.Size()); err != nil {
@@ -37,7 +39,8 @@ func (c *throttledClient) Upload(name string, src io.Reader) error {
 	return c.Client.Upload(name, src)
 }
 
-func (c *throttledClient) Download(name string, dst io.Writer) error {
+// Download downloads name into dst.
+func (c *ThrottledClient) Download(name string, dst io.Writer) error {
 	info, err := c.Client.Stat(name)
 	if err != nil {
 		return err
@@ -49,15 +52,17 @@ func (c *throttledClient) Download(name string, dst io.Writer) error {
 	return c.Client.Download(name, dst)
 }
 
-func (c *throttledClient) adjustBandwidth(denominator int) error {
+func (c *ThrottledClient) adjustBandwidth(denominator int) error {
 	return c.bandwidth.Adjust(denominator)
 }
 
-func (c *throttledClient) egressLimit() int64 {
+// EgressLimit returns egress limit.
+func (c *ThrottledClient) EgressLimit() int64 {
 	return c.bandwidth.EgressLimit()
 }
 
-func (c *throttledClient) ingressLimit() int64 {
+// IngressLimit returns ingress limit.
+func (c *ThrottledClient) IngressLimit() int64 {
 	return c.bandwidth.IngressLimit()
 }
 
