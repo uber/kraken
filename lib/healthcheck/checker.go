@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 
-	"code.uber.internal/infra/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/httputil"
 )
 
 // Checker runs a health check against an address.

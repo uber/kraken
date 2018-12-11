@@ -13,13 +13,13 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"code.uber.internal/infra/kraken/.gen/go/proto/p2p"
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
-	"code.uber.internal/infra/kraken/utils/bandwidth"
-	"code.uber.internal/infra/kraken/utils/memsize"
+	"github.com/uber/kraken/.gen/go/proto/p2p"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/torrent/networkevent"
+	"github.com/uber/kraken/lib/torrent/storage"
+	"github.com/uber/kraken/lib/torrent/storage/piecereader"
+	"github.com/uber/kraken/utils/bandwidth"
+	"github.com/uber/kraken/utils/memsize"
 )
 
 // Maximum support protocol message size. Does not include piece payload.

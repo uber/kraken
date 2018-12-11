@@ -9,7 +9,7 @@ import (
 	"github.com/uber-go/tally"
 	"go.uber.org/atomic"
 
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/utils/log"
 )
 
 // ErrManagerClosed is returned when Add is called on a closed manager.

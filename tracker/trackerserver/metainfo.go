@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"code.uber.internal/infra/kraken/utils/handler"
-	"code.uber.internal/infra/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/handler"
+	"github.com/uber/kraken/utils/httputil"
 )
 
 func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {

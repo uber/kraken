@@ -5,8 +5,8 @@ import (
 	"io"
 	"net/url"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/httputil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/httputil"
 )
 
 // Client provides a wrapper for HTTP operations on an agent.

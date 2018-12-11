@@ -8,7 +8,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/mattn/go-sqlite3"
 
-	"code.uber.internal/infra/kraken/lib/persistedretry"
+	"github.com/uber/kraken/lib/persistedretry"
 )
 
 // Store stores tags to be replicated asynchronously.
@@ -163,7 +163,7 @@ func (s *Store) deleteInvalidTasks(rv RemoteValidator) error {
 
 func (s *Store) delete(r persistedretry.Task) error {
 	_, err := s.db.NamedExec(`
-		DELETE FROM replicate_tag_task 
+		DELETE FROM replicate_tag_task
 		WHERE tag=:tag AND destination=:destination`, r.(*Task))
 	return err
 }

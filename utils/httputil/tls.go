@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/utils/log"
 )
 
 // ErrEmptyCommonName is returned when common name is not provided for key generation.

@@ -8,9 +8,9 @@ import (
 	stdpath "path"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/dockerregistry/transfer"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/metadata"
 
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 )

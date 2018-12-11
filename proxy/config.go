@@ -3,13 +3,13 @@ package main
 import (
 	"go.uber.org/zap"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/upstream"
-	"code.uber.internal/infra/kraken/metrics"
-	"code.uber.internal/infra/kraken/nginx"
-	"code.uber.internal/infra/kraken/proxy/registryoverride"
-	"code.uber.internal/infra/kraken/utils/httputil"
+	"github.com/uber/kraken/lib/dockerregistry"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/upstream"
+	"github.com/uber/kraken/metrics"
+	"github.com/uber/kraken/nginx"
+	"github.com/uber/kraken/proxy/registryoverride"
+	"github.com/uber/kraken/utils/httputil"
 )
 
 // Config defines proxy configuration

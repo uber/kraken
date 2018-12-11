@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"code.uber.internal/infra/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/store/metadata"
 )
 
 type lockLevel int

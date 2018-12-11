@@ -3,17 +3,17 @@ package main
 import (
 	"flag"
 
-	"code.uber.internal/infra/kraken/lib/healthcheck"
-	"code.uber.internal/infra/kraken/lib/upstream"
-	"code.uber.internal/infra/kraken/metrics"
-	"code.uber.internal/infra/kraken/nginx"
-	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/tracker/originstore"
-	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
-	"code.uber.internal/infra/kraken/tracker/peerstore"
-	"code.uber.internal/infra/kraken/tracker/trackerserver"
-	"code.uber.internal/infra/kraken/utils/configutil"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/lib/healthcheck"
+	"github.com/uber/kraken/lib/upstream"
+	"github.com/uber/kraken/metrics"
+	"github.com/uber/kraken/nginx"
+	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/tracker/originstore"
+	"github.com/uber/kraken/tracker/peerhandoutpolicy"
+	"github.com/uber/kraken/tracker/peerstore"
+	"github.com/uber/kraken/tracker/trackerserver"
+	"github.com/uber/kraken/utils/configutil"
+	"github.com/uber/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
 )

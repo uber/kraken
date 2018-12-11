@@ -3,7 +3,7 @@ package announcequeue
 import (
 	"testing"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 
 	"github.com/stretchr/testify/require"
 )

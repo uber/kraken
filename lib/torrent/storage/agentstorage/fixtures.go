@@ -1,10 +1,10 @@
 package agentstorage
 
 import (
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/tracker/metainfoclient"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/tracker/metainfoclient"
+	"github.com/uber/kraken/utils/testutil"
 	"github.com/uber-go/tally"
 )
 

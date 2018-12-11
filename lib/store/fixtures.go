@@ -4,7 +4,7 @@ import (
 	"io/ioutil"
 	"os"
 
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/uber-go/tally"
 )

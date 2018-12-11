@@ -10,9 +10,9 @@ import (
 	"net/url"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/backoff"
-	"code.uber.internal/infra/kraken/utils/handler"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/backoff"
+	"github.com/uber/kraken/utils/handler"
 	"github.com/pressly/chi"
 )
 

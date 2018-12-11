@@ -3,8 +3,8 @@ package tagreplication
 import (
 	"fmt"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/randutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/randutil"
 )
 
 // TaskFixture creates a fixture of tagreplication.Task.

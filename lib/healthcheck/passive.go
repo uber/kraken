@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/hostlist"
-	"code.uber.internal/infra/kraken/utils/stringset"
+	"github.com/uber/kraken/lib/hostlist"
+	"github.com/uber/kraken/utils/stringset"
 
 	"github.com/andres-erbsen/clock"
 )

@@ -6,12 +6,12 @@ import (
 	"io"
 	"path"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/backend/namepath"
-	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/rwutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/lib/backend/namepath"
+	"github.com/uber/kraken/utils/log"
+	"github.com/uber/kraken/utils/rwutil"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"

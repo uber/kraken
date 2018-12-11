@@ -8,12 +8,12 @@ import (
 	"regexp"
 	"sync"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/backend/hdfsbackend/webhdfs"
-	"code.uber.internal/infra/kraken/lib/backend/namepath"
-	"code.uber.internal/infra/kraken/utils/httputil"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs"
+	"github.com/uber/kraken/lib/backend/namepath"
+	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/log"
 
 	"github.com/satori/go.uuid"
 	"gopkg.in/yaml.v2"

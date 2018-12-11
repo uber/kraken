@@ -6,7 +6,7 @@ import (
 	"os"
 	"path"
 
-	"code.uber.internal/infra/kraken/utils/osutil"
+	"github.com/uber/kraken/utils/osutil"
 )
 
 func createOrUpdateSymlink(sourcePath, targetPath string) error {

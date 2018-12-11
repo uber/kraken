@@ -1,7 +1,7 @@
 package metainfogen
 
 import (
-	"code.uber.internal/infra/kraken/lib/store"
+	"github.com/uber/kraken/lib/store"
 
 	"github.com/c2h5oh/datasize"
 )

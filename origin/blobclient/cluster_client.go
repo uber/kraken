@@ -8,12 +8,12 @@ import (
 	"net/http"
 	"sync"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/hostlist"
-	"code.uber.internal/infra/kraken/utils/backoff"
-	"code.uber.internal/infra/kraken/utils/errutil"
-	"code.uber.internal/infra/kraken/utils/httputil"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/hostlist"
+	"github.com/uber/kraken/utils/backoff"
+	"github.com/uber/kraken/utils/errutil"
+	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/log"
 )
 
 // Locations queries cluster for the locations of d.

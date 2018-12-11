@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
-	"code.uber.internal/infra/kraken/lib/store"
+	"github.com/uber/kraken/lib/dockerregistry/transfer"
+	"github.com/uber/kraken/lib/store"
 
 	"github.com/docker/distribution/context"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"

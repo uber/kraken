@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/stringset"
+	"github.com/uber/kraken/utils/stringset"
 )
 
 // Config defines a list of hosts using either a DNS record or a static list of

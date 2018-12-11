@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 )
 
 const _repositoryRoot = "/docker/registry/v2/repositories"

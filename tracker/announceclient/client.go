@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/healthcheck"
-	"code.uber.internal/infra/kraken/utils/httputil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/healthcheck"
+	"github.com/uber/kraken/utils/httputil"
 )
 
 // ErrDisabled is returned when announce is disabled.

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"io"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 
 	"github.com/willf/bitset"
 )

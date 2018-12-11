@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/memsize"
+	"github.com/uber/kraken/utils/memsize"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 )

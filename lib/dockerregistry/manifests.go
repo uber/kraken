@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/dockerregistry/transfer"
+	"github.com/uber/kraken/utils/log"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 )
 

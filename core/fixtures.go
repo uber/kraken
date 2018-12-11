@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"code.uber.internal/infra/kraken/utils/randutil"
+	"github.com/uber/kraken/utils/randutil"
 )
 
 // BlobFixture joins all information associated with a blob for testing convenience.

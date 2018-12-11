@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"code.uber.internal/infra/kraken/lib/store/base"
-	"code.uber.internal/infra/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/store/base"
+	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/andres-erbsen/clock"
 )
 

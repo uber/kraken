@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/bitsetutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/bitsetutil"
 
 	"github.com/stretchr/testify/require"
 	"github.com/willf/bitset"

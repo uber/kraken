@@ -6,9 +6,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/uber-go/tally"
 
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/mocks/lib/torrent/scheduler"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/mocks/lib/torrent/scheduler"
+	"github.com/uber/kraken/utils/testutil"
 )
 
 type serverMocks struct {

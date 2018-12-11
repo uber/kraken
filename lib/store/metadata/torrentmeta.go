@@ -3,7 +3,7 @@ package metadata
 import (
 	"regexp"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 )
 
 const _torrentMetaSuffix = "_torrentmeta"

@@ -3,18 +3,18 @@ package main
 import (
 	"flag"
 
-	"code.uber.internal/infra/kraken/build-index/tagclient"
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
-	"code.uber.internal/infra/kraken/lib/healthcheck"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/upstream"
-	"code.uber.internal/infra/kraken/metrics"
-	"code.uber.internal/infra/kraken/nginx"
-	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/proxy/registryoverride"
-	"code.uber.internal/infra/kraken/utils/configutil"
-	"code.uber.internal/infra/kraken/utils/flagutil"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/build-index/tagclient"
+	"github.com/uber/kraken/lib/dockerregistry/transfer"
+	"github.com/uber/kraken/lib/healthcheck"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/upstream"
+	"github.com/uber/kraken/metrics"
+	"github.com/uber/kraken/nginx"
+	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/proxy/registryoverride"
+	"github.com/uber/kraken/utils/configutil"
+	"github.com/uber/kraken/utils/flagutil"
+	"github.com/uber/kraken/utils/log"
 )
 
 func main() {

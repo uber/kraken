@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sync"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 )
 
 type testStore struct {

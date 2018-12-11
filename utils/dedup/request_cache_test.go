@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"regexp"
 
-	"code.uber.internal/infra/kraken/utils/bandwidth"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/utils/bandwidth"
+	"github.com/uber/kraken/utils/log"
 )
 
 // Manager errors.

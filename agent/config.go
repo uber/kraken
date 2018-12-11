@@ -3,16 +3,16 @@ package main
 import (
 	"go.uber.org/zap"
 
-	"code.uber.internal/infra/kraken/agent/agentserver"
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/dockerregistry"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
-	"code.uber.internal/infra/kraken/lib/upstream"
-	"code.uber.internal/infra/kraken/metrics"
-	"code.uber.internal/infra/kraken/nginx"
-	"code.uber.internal/infra/kraken/utils/httputil"
+	"github.com/uber/kraken/agent/agentserver"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/dockerregistry"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/torrent/networkevent"
+	"github.com/uber/kraken/lib/torrent/scheduler"
+	"github.com/uber/kraken/lib/upstream"
+	"github.com/uber/kraken/metrics"
+	"github.com/uber/kraken/nginx"
+	"github.com/uber/kraken/utils/httputil"
 )
 
 // Config defines agent configuration.

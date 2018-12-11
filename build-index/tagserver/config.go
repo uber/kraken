@@ -3,7 +3,7 @@ package tagserver
 import (
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/listener"
+	"github.com/uber/kraken/utils/listener"
 )
 
 // Config defines Server configuration.

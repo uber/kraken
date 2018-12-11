@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 )
 
 // Task contains information to write back a blob to remote storage.

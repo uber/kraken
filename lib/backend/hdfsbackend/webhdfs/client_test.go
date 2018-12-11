@@ -10,10 +10,10 @@ import (
 	"path"
 	"testing"
 
-	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/utils/randutil"
-	"code.uber.internal/infra/kraken/utils/rwutil"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/utils/randutil"
+	"github.com/uber/kraken/utils/rwutil"
+	"github.com/uber/kraken/utils/testutil"
 	"github.com/pressly/chi"
 	"github.com/stretchr/testify/require"
 )

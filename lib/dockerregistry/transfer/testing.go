@@ -6,9 +6,9 @@ import (
 	"path"
 	"strings"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/backend/namepath"
-	"code.uber.internal/infra/kraken/lib/store"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend/namepath"
+	"github.com/uber/kraken/lib/store"
 )
 
 type testTransferer struct {

@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/utils/handler"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/utils/handler"
 )
 
 // parseContentRange parses start / end integers from a Content-Range header.

@@ -1,7 +1,7 @@
 package healthcheck
 
 import (
-	"code.uber.internal/infra/kraken/lib/hostlist"
+	"github.com/uber/kraken/lib/hostlist"
 )
 
 // List is a hostlist.List which can be passively health checked.

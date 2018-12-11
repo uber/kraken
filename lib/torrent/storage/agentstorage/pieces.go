@@ -5,9 +5,9 @@ import (
 	"regexp"
 	"sync"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/store/metadata"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/log"
 )
 
 const _pieceStatusSuffix = "_status"

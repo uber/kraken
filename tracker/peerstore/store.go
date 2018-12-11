@@ -1,7 +1,7 @@
 package peerstore
 
 import (
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 )
 
 // Store provides storage for announcing peers.

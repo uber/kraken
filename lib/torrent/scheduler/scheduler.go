@@ -11,16 +11,16 @@ import (
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcequeue"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcer"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/torrentlog"
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/tracker/announceclient"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/torrent/networkevent"
+	"github.com/uber/kraken/lib/torrent/scheduler/announcequeue"
+	"github.com/uber/kraken/lib/torrent/scheduler/announcer"
+	"github.com/uber/kraken/lib/torrent/scheduler/conn"
+	"github.com/uber/kraken/lib/torrent/scheduler/connstate"
+	"github.com/uber/kraken/lib/torrent/scheduler/torrentlog"
+	"github.com/uber/kraken/lib/torrent/storage"
+	"github.com/uber/kraken/tracker/announceclient"
+	"github.com/uber/kraken/utils/log"
 )
 
 // Scheduler errors.

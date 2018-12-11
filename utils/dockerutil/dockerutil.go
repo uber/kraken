@@ -6,7 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/schema2"
 )

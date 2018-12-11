@@ -9,18 +9,18 @@ import (
 
 	"github.com/uber-go/tally"
 
-	"code.uber.internal/infra/kraken/agent/agentserver"
-	"code.uber.internal/infra/kraken/build-index/tagclient"
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
-	"code.uber.internal/infra/kraken/metrics"
-	"code.uber.internal/infra/kraken/nginx"
-	"code.uber.internal/infra/kraken/utils/configutil"
-	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/netutil"
+	"github.com/uber/kraken/agent/agentserver"
+	"github.com/uber/kraken/build-index/tagclient"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/dockerregistry/transfer"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/torrent/networkevent"
+	"github.com/uber/kraken/lib/torrent/scheduler"
+	"github.com/uber/kraken/metrics"
+	"github.com/uber/kraken/nginx"
+	"github.com/uber/kraken/utils/configutil"
+	"github.com/uber/kraken/utils/log"
+	"github.com/uber/kraken/utils/netutil"
 )
 
 // heartbeat periodically emits a counter metric which allows us to monitor the

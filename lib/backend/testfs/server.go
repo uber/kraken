@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"code.uber.internal/infra/kraken/utils/handler"
+	"github.com/uber/kraken/utils/handler"
 
 	"github.com/pressly/chi"
 )

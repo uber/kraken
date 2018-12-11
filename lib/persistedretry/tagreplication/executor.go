@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"code.uber.internal/infra/kraken/build-index/tagclient"
-	"code.uber.internal/infra/kraken/lib/persistedretry"
-	"code.uber.internal/infra/kraken/origin/blobclient"
+	"github.com/uber/kraken/build-index/tagclient"
+	"github.com/uber/kraken/lib/persistedretry"
+	"github.com/uber/kraken/origin/blobclient"
 
 	"github.com/uber-go/tally"
 )

@@ -4,9 +4,9 @@ import (
 	"math"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch/piecerequest"
-	"code.uber.internal/infra/kraken/utils/memsize"
-	"code.uber.internal/infra/kraken/utils/timeutil"
+	"github.com/uber/kraken/lib/torrent/scheduler/dispatch/piecerequest"
+	"github.com/uber/kraken/utils/memsize"
+	"github.com/uber/kraken/utils/timeutil"
 )
 
 // Config defines the configuration for piece dispatch.

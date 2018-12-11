@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 	"github.com/andres-erbsen/clock"
 	"github.com/willf/bitset"
 )

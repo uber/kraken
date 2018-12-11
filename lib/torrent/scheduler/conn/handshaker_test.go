@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/utils/bitsetutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/torrent/storage"
+	"github.com/uber/kraken/utils/bitsetutil"
 )
 
 func TestHandshakerSetsConnFieldsProperly(t *testing.T) {

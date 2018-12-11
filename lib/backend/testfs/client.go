@@ -8,11 +8,11 @@ import (
 	"path"
 	"strconv"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/backend/namepath"
-	"code.uber.internal/infra/kraken/utils/httputil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/lib/backend/namepath"
+	"github.com/uber/kraken/utils/httputil"
 
 	"gopkg.in/yaml.v2"
 )

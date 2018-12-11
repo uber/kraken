@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sync"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 )
 
 // TestClient is a thread-safe, in-memory client for simulating downloads.

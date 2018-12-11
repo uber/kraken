@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 
-	. "code.uber.internal/infra/kraken/lib/persistedretry"
-	"code.uber.internal/infra/kraken/mocks/lib/persistedretry"
+	. "github.com/uber/kraken/lib/persistedretry"
+	"github.com/uber/kraken/mocks/lib/persistedretry"
 )
 
 func waitForWorkers() {

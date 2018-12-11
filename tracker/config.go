@@ -3,14 +3,14 @@ package main
 import (
 	"go.uber.org/zap"
 
-	"code.uber.internal/infra/kraken/lib/upstream"
-	"code.uber.internal/infra/kraken/metrics"
-	"code.uber.internal/infra/kraken/nginx"
-	"code.uber.internal/infra/kraken/tracker/originstore"
-	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
-	"code.uber.internal/infra/kraken/tracker/peerstore"
-	"code.uber.internal/infra/kraken/tracker/trackerserver"
-	"code.uber.internal/infra/kraken/utils/httputil"
+	"github.com/uber/kraken/lib/upstream"
+	"github.com/uber/kraken/metrics"
+	"github.com/uber/kraken/nginx"
+	"github.com/uber/kraken/tracker/originstore"
+	"github.com/uber/kraken/tracker/peerhandoutpolicy"
+	"github.com/uber/kraken/tracker/peerstore"
+	"github.com/uber/kraken/tracker/trackerserver"
+	"github.com/uber/kraken/utils/httputil"
 )
 
 // Config defines tracker configuration.

@@ -3,10 +3,10 @@ package tagtype
 import (
 	"testing"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
-	"code.uber.internal/infra/kraken/utils/dockerutil"
-	"code.uber.internal/infra/kraken/utils/mockutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/mocks/origin/blobclient"
+	"github.com/uber/kraken/utils/dockerutil"
+	"github.com/uber/kraken/utils/mockutil"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"

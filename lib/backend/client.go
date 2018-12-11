@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 )
 
 var _factories = make(map[string]ClientFactory)

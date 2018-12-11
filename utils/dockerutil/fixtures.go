@@ -3,7 +3,7 @@ package dockerutil
 import (
 	"fmt"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 )
 
 // ManifestFixture creates a manifest blob for testing purposes.

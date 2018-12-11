@@ -5,10 +5,10 @@ import (
 	"log"
 	"path"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/utils/dockerutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/dockerregistry/transfer"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/utils/dockerutil"
 
 	"github.com/docker/distribution/context"
 	"github.com/uber-go/tally"

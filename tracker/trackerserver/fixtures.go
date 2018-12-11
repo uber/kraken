@@ -5,9 +5,9 @@ import (
 
 	"github.com/uber-go/tally"
 
-	"code.uber.internal/infra/kraken/tracker/originstore"
-	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
-	"code.uber.internal/infra/kraken/tracker/peerstore"
+	"github.com/uber/kraken/tracker/originstore"
+	"github.com/uber/kraken/tracker/peerhandoutpolicy"
+	"github.com/uber/kraken/tracker/peerstore"
 )
 
 // Fixture is a test utility which returns a tracker server with in-memory storage.

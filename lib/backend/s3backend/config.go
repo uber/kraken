@@ -3,7 +3,7 @@ package s3backend
 import (
 	"github.com/c2h5oh/datasize"
 
-	"code.uber.internal/infra/kraken/utils/memsize"
+	"github.com/uber/kraken/utils/memsize"
 )
 
 // Config defines s3 connection specific

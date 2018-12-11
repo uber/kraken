@@ -1,6 +1,6 @@
 package registryoverride
 
-import "code.uber.internal/infra/kraken/utils/listener"
+import "github.com/uber/kraken/utils/listener"
 
 // Config defines Server configuration.
 type Config struct {

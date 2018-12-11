@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"code.uber.internal/infra/kraken/lib/store/base"
+	"github.com/uber/kraken/lib/store/base"
 	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
 	"github.com/uber-go/tally"

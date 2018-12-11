@@ -11,12 +11,12 @@ import (
 	"github.com/pressly/chi"
 	"github.com/uber-go/tally"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/middleware"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
-	"code.uber.internal/infra/kraken/utils/handler"
-	"code.uber.internal/infra/kraken/utils/httputil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/middleware"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/torrent/scheduler"
+	"github.com/uber/kraken/utils/handler"
+	"github.com/uber/kraken/utils/httputil"
 )
 
 // Config defines Server configuration.

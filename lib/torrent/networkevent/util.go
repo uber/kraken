@@ -4,7 +4,7 @@ import (
 	"sort"
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/stringset"
+	"github.com/uber/kraken/utils/stringset"
 )
 
 type byTime []*Event

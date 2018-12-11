@@ -3,7 +3,7 @@ package healthcheck
 import (
 	"sync"
 
-	"code.uber.internal/infra/kraken/utils/stringset"
+	"github.com/uber/kraken/utils/stringset"
 )
 
 // state tracks the health status of a set of hosts. In particular, it tracks

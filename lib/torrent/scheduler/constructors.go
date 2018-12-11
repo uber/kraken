@@ -3,16 +3,16 @@ package scheduler
 import (
 	"crypto/tls"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/blobrefresh"
-	"code.uber.internal/infra/kraken/lib/healthcheck"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcequeue"
-	"code.uber.internal/infra/kraken/lib/torrent/storage/agentstorage"
-	"code.uber.internal/infra/kraken/lib/torrent/storage/originstorage"
-	"code.uber.internal/infra/kraken/tracker/announceclient"
-	"code.uber.internal/infra/kraken/tracker/metainfoclient"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/blobrefresh"
+	"github.com/uber/kraken/lib/healthcheck"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/torrent/networkevent"
+	"github.com/uber/kraken/lib/torrent/scheduler/announcequeue"
+	"github.com/uber/kraken/lib/torrent/storage/agentstorage"
+	"github.com/uber/kraken/lib/torrent/storage/originstorage"
+	"github.com/uber/kraken/tracker/announceclient"
+	"github.com/uber/kraken/tracker/metainfoclient"
 
 	"github.com/uber-go/tally"
 )

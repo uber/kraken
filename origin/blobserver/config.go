@@ -3,7 +3,7 @@ package blobserver
 import (
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/listener"
+	"github.com/uber/kraken/utils/listener"
 )
 
 // Config defines the configuration used by Origin cluster for hashing blob digests.

@@ -1,9 +1,9 @@
 package storage
 
 import (
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/bitsetutil"
-	"code.uber.internal/infra/kraken/utils/randutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/bitsetutil"
+	"github.com/uber/kraken/utils/randutil"
 )
 
 // TorrentInfoFixture returns a randomly generated TorrentInfo for testing purposes.

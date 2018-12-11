@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 
 	"github.com/willf/bitset"
 )

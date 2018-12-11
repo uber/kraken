@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io"
 
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/lib/dockerregistry/transfer"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/utils/log"
 
 	"github.com/docker/distribution/context"
 	storagedriver "github.com/docker/distribution/registry/storage/driver"

@@ -3,8 +3,8 @@ package backend
 import (
 	"io"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend/backenderrors"
 )
 
 // NoopNamespace is a special namespace which always returns a NoopClient.

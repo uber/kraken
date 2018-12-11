@@ -1,8 +1,8 @@
 package dockerregistry
 
 import (
-	"code.uber.internal/infra/kraken/lib/dockerregistry/transfer"
-	"code.uber.internal/infra/kraken/lib/store"
+	"github.com/uber/kraken/lib/dockerregistry/transfer"
+	"github.com/uber/kraken/lib/store"
 
 	"github.com/uber-go/tally"
 )

@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/mocks/tracker/announceclient"
-	"code.uber.internal/infra/kraken/tracker/announceclient"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/mocks/tracker/announceclient"
+	"github.com/uber/kraken/tracker/announceclient"
 	"go.uber.org/zap"
 
 	"github.com/andres-erbsen/clock"

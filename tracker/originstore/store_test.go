@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/hostlist"
-	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/hostlist"
+	"github.com/uber/kraken/mocks/origin/blobclient"
+	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"

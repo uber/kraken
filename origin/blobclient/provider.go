@@ -1,7 +1,7 @@
 package blobclient
 
 import (
-	"code.uber.internal/infra/kraken/lib/hostlist"
+	"github.com/uber/kraken/lib/hostlist"
 )
 
 // Provider defines an interface for creating Client scoped to an origin addr.

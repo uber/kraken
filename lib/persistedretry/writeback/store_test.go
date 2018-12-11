@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/persistedretry"
-	"code.uber.internal/infra/kraken/localdb"
+	"github.com/uber/kraken/lib/persistedretry"
+	"github.com/uber/kraken/localdb"
 	"github.com/stretchr/testify/require"
 )
 

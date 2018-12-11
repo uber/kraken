@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"code.uber.internal/infra/kraken/utils/memsize"
+	"github.com/uber/kraken/utils/memsize"
 )
 
 func TestMetaInfoGetPieceLength(t *testing.T) {
