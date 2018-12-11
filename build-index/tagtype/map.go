@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"regexp"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/origin/blobclient"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/origin/blobclient"
 )
 
 var errNamespaceNotFound = errors.New("no matches for namespace")

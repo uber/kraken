@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/httputil"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/testutil"
 	"github.com/pressly/chi"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"

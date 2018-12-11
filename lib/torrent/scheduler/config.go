@@ -3,10 +3,10 @@ package scheduler
 import (
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/lib/torrent/scheduler/conn"
+	"github.com/uber/kraken/lib/torrent/scheduler/connstate"
+	"github.com/uber/kraken/lib/torrent/scheduler/dispatch"
+	"github.com/uber/kraken/utils/log"
 )
 
 // Config is the Scheduler configuration.

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"code.uber.internal/infra/kraken/utils/handler"
+	"github.com/uber/kraken/utils/handler"
 	"github.com/stretchr/testify/require"
 )
 

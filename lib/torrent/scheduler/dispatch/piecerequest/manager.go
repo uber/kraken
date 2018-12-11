@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/syncutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/syncutil"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/willf/bitset"

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"net"
 
-	"code.uber.internal/infra/kraken/.gen/go/proto/p2p"
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/utils/bandwidth"
+	"github.com/uber/kraken/.gen/go/proto/p2p"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/torrent/networkevent"
+	"github.com/uber/kraken/lib/torrent/storage"
+	"github.com/uber/kraken/utils/bandwidth"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"

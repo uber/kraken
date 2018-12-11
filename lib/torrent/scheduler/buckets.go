@@ -3,7 +3,7 @@ package scheduler
 import (
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/memsize"
+	"github.com/uber/kraken/utils/memsize"
 	"github.com/uber-go/tally"
 )
 

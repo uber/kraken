@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"fmt"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/utils/dockerutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/docker/distribution"
 )
 

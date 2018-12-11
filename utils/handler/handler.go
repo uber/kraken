@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/utils/log"
 )
 
 // Error defines an HTTP handler error which encapsulates status and headers

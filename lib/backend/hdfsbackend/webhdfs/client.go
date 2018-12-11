@@ -11,9 +11,9 @@ import (
 	"path"
 	"strconv"
 
-	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/utils/httputil"
-	"code.uber.internal/infra/kraken/utils/memsize"
+	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/memsize"
 )
 
 // Client wraps webhdfs operations. All paths must be absolute.

@@ -9,14 +9,14 @@ import (
 	chimiddleware "github.com/pressly/chi/middleware"
 	"github.com/uber-go/tally"
 
-	"code.uber.internal/infra/kraken/lib/middleware"
-	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/tracker/originstore"
-	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
-	"code.uber.internal/infra/kraken/tracker/peerstore"
-	"code.uber.internal/infra/kraken/utils/handler"
-	"code.uber.internal/infra/kraken/utils/listener"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/lib/middleware"
+	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/tracker/originstore"
+	"github.com/uber/kraken/tracker/peerhandoutpolicy"
+	"github.com/uber/kraken/tracker/peerstore"
+	"github.com/uber/kraken/utils/handler"
+	"github.com/uber/kraken/utils/listener"
+	"github.com/uber/kraken/utils/log"
 )
 
 // Server serves Tracker endpoints.

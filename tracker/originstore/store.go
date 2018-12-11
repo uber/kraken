@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/hostlist"
-	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/utils/dedup"
-	"code.uber.internal/infra/kraken/utils/errutil"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/hostlist"
+	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/utils/dedup"
+	"github.com/uber/kraken/utils/errutil"
+	"github.com/uber/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
 )

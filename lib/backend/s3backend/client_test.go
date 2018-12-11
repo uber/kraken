@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"testing"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/mocks/lib/backend/s3backend"
-	"code.uber.internal/infra/kraken/utils/mockutil"
-	"code.uber.internal/infra/kraken/utils/randutil"
-	"code.uber.internal/infra/kraken/utils/rwutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/mocks/lib/backend/s3backend"
+	"github.com/uber/kraken/utils/mockutil"
+	"github.com/uber/kraken/utils/randutil"
+	"github.com/uber/kraken/utils/rwutil"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"

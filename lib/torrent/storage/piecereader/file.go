@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"code.uber.internal/infra/kraken/lib/store"
+	"github.com/uber/kraken/lib/store"
 )
 
 // Opener opens files.

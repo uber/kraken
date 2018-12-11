@@ -1,6 +1,6 @@
 package healthcheck
 
-import "code.uber.internal/infra/kraken/utils/stringset"
+import "github.com/uber/kraken/utils/stringset"
 
 // IdentityFilter is a Filter which never filters out any addresses.
 type IdentityFilter struct{}

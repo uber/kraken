@@ -14,9 +14,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/mocks/net/http"
-	"code.uber.internal/infra/kraken/utils/backoff"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/mocks/net/http"
+	"github.com/uber/kraken/utils/backoff"
 )
 
 const _testURL = "http://localhost:0/test"

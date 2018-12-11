@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	"code.uber.internal/infra/kraken/build-index/tagclient"
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
+	"github.com/uber/kraken/build-index/tagclient"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber-go/tally"
 )
 

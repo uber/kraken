@@ -3,8 +3,8 @@ package conn
 import (
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/bandwidth"
-	"code.uber.internal/infra/kraken/utils/memsize"
+	"github.com/uber/kraken/utils/bandwidth"
+	"github.com/uber/kraken/utils/memsize"
 )
 
 // Config is the configuration for individual live connections.

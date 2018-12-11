@@ -3,8 +3,8 @@ package scheduler
 import (
 	"sync"
 
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/announcequeue"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/lib/torrent/scheduler/announcequeue"
+	"github.com/uber/kraken/utils/log"
 )
 
 // ReloadableScheduler is a Scheduler which supports reloadable configuration.

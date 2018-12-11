@@ -8,11 +8,11 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 
-	"code.uber.internal/infra/kraken/lib/persistedretry"
-	. "code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
-	"code.uber.internal/infra/kraken/localdb"
-	"code.uber.internal/infra/kraken/mocks/lib/persistedretry/tagreplication"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/lib/persistedretry"
+	. "github.com/uber/kraken/lib/persistedretry/tagreplication"
+	"github.com/uber/kraken/localdb"
+	"github.com/uber/kraken/mocks/lib/persistedretry/tagreplication"
+	"github.com/uber/kraken/utils/testutil"
 	"github.com/stretchr/testify/require"
 )
 

@@ -3,10 +3,10 @@ package backend
 import (
 	"io"
 
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/utils/bandwidth"
-	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/stringset"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/utils/bandwidth"
+	"github.com/uber/kraken/utils/log"
+	"github.com/uber/kraken/utils/stringset"
 )
 
 // ThrottledClient is a backend client with speed limit.

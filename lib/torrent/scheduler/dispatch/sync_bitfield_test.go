@@ -3,7 +3,7 @@ package dispatch
 import (
 	"testing"
 
-	"code.uber.internal/infra/kraken/utils/bitsetutil"
+	"github.com/uber/kraken/utils/bitsetutil"
 
 	"github.com/stretchr/testify/require"
 )

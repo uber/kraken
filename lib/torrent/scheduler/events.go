@@ -3,14 +3,14 @@ package scheduler
 import (
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/dispatch"
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/utils/memsize"
-	"code.uber.internal/infra/kraken/utils/timeutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/torrent/networkevent"
+	"github.com/uber/kraken/lib/torrent/scheduler/conn"
+	"github.com/uber/kraken/lib/torrent/scheduler/connstate"
+	"github.com/uber/kraken/lib/torrent/scheduler/dispatch"
+	"github.com/uber/kraken/lib/torrent/storage"
+	"github.com/uber/kraken/utils/memsize"
+	"github.com/uber/kraken/utils/timeutil"
 
 	"github.com/willf/bitset"
 )

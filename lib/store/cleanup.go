@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/store/base"
-	"code.uber.internal/infra/kraken/lib/store/metadata"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/lib/store/base"
+	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"

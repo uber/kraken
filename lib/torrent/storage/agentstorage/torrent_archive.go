@@ -7,11 +7,11 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/willf/bitset"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/store/metadata"
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/tracker/metainfoclient"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/torrent/storage"
+	"github.com/uber/kraken/tracker/metainfoclient"
 )
 
 // TorrentArchive is capable of initializing torrents in the download directory

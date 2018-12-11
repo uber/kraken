@@ -7,9 +7,9 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/bitsetutil"
-	"code.uber.internal/infra/kraken/utils/syncutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/bitsetutil"
+	"github.com/uber/kraken/utils/syncutil"
 )
 
 func newManager(

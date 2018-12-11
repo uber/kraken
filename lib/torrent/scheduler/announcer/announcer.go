@@ -3,8 +3,8 @@ package announcer
 import (
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/tracker/announceclient"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/tracker/announceclient"
 
 	"github.com/andres-erbsen/clock"
 	"go.uber.org/atomic"

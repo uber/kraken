@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"code.uber.internal/infra/kraken/lib/store/metadata"
-	"code.uber.internal/infra/kraken/utils/stringset"
+	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/stringset"
 )
 
 // FileEntry errors.

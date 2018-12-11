@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/log"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

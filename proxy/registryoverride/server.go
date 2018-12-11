@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strings"
 
-	"code.uber.internal/infra/kraken/build-index/tagclient"
-	"code.uber.internal/infra/kraken/utils/handler"
-	"code.uber.internal/infra/kraken/utils/listener"
-	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/stringset"
+	"github.com/uber/kraken/build-index/tagclient"
+	"github.com/uber/kraken/utils/handler"
+	"github.com/uber/kraken/utils/listener"
+	"github.com/uber/kraken/utils/log"
+	"github.com/uber/kraken/utils/stringset"
 	"github.com/pressly/chi"
 )
 

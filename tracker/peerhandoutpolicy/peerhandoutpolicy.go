@@ -6,7 +6,7 @@ import (
 
 	"github.com/uber-go/tally"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 )
 
 type peerPriorityInfo struct {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/persistedretry"
+	"github.com/uber/kraken/lib/persistedretry"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/mattn/go-sqlite3"

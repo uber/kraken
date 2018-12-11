@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"code.uber.internal/infra/kraken/utils/httputil"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/log"
 )
 
 const (

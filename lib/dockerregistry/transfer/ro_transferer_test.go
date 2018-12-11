@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/build-index/tagclient"
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/mocks/build-index/tagclient"
-	"code.uber.internal/infra/kraken/mocks/lib/torrent/scheduler"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/build-index/tagclient"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/mocks/build-index/tagclient"
+	"github.com/uber/kraken/mocks/lib/torrent/scheduler"
+	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"

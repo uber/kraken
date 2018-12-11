@@ -3,12 +3,12 @@ package trackerserver
 import (
 	"testing"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/healthcheck"
-	"code.uber.internal/infra/kraken/lib/hostlist"
-	"code.uber.internal/infra/kraken/tracker/metainfoclient"
-	"code.uber.internal/infra/kraken/utils/httputil"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/healthcheck"
+	"github.com/uber/kraken/lib/hostlist"
+	"github.com/uber/kraken/tracker/metainfoclient"
+	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/stretchr/testify/require"
 )

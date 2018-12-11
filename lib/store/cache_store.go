@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"code.uber.internal/infra/kraken/lib/store/base"
-	"code.uber.internal/infra/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/store/base"
+	"github.com/uber/kraken/lib/store/metadata"
 )
 
 // cacheStore provides basic cache file operations. Intended to be embedded in

@@ -8,10 +8,10 @@ import (
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/torrent/networkevent"
+	"github.com/uber/kraken/lib/torrent/storage"
+	"github.com/uber/kraken/utils/testutil"
 )
 
 type noopEvents struct{}

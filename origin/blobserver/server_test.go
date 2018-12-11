@@ -11,15 +11,15 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/persistedretry"
-	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
-	"code.uber.internal/infra/kraken/lib/store/metadata"
-	"code.uber.internal/infra/kraken/origin/blobclient"
-	"code.uber.internal/infra/kraken/utils/httputil"
-	"code.uber.internal/infra/kraken/utils/mockutil"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/lib/persistedretry"
+	"github.com/uber/kraken/lib/persistedretry/writeback"
+	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/mockutil"
+	"github.com/uber/kraken/utils/testutil"
 )
 
 func TestStatHandlerLocalNotFound(t *testing.T) {

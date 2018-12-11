@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"testing"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/store/metadata"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/metadata"
 
 	"github.com/c2h5oh/datasize"
 	"github.com/stretchr/testify/require"

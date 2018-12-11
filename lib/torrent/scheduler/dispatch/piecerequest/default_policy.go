@@ -3,7 +3,7 @@ package piecerequest
 import (
 	"math/rand"
 
-	"code.uber.internal/infra/kraken/utils/syncutil"
+	"github.com/uber/kraken/utils/syncutil"
 
 	"github.com/willf/bitset"
 )

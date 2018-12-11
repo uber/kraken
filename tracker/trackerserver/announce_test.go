@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/healthcheck"
-	"code.uber.internal/infra/kraken/lib/hostlist"
-	"code.uber.internal/infra/kraken/tracker/announceclient"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/healthcheck"
+	"github.com/uber/kraken/lib/hostlist"
+	"github.com/uber/kraken/tracker/announceclient"
+	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"

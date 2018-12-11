@@ -1,4 +1,4 @@
-package: code.uber.internal/infra/kraken
+package: github.com/uber/kraken
 ignore:
 - go/doc
 import:
@@ -63,8 +63,6 @@ import:
   - rate
 - package: github.com/hashicorp/golang-lru
 - package: github.com/mattn/go-sqlite3
-- package: code.uber.internal/infra/terrablob-client.git
-  version: ^0.15.3
 - package: github.com/satori/go.uuid
   version: ^1.2.0
 testImport:

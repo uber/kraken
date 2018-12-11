@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"code.uber.internal/infra/kraken/utils/randutil"
-	"code.uber.internal/infra/kraken/utils/stringset"
+	"github.com/uber/kraken/utils/randutil"
+	"github.com/uber/kraken/utils/stringset"
 	"github.com/stretchr/testify/require"
 )
 

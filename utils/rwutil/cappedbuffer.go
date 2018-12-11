@@ -7,7 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 
-	"code.uber.internal/infra/kraken/utils/memsize"
+	"github.com/uber/kraken/utils/memsize"
 )
 
 type exceededCapError error

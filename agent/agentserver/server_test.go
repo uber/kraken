@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/connstate"
-	"code.uber.internal/infra/kraken/utils/httputil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/torrent/scheduler"
+	"github.com/uber/kraken/lib/torrent/scheduler/connstate"
+	"github.com/uber/kraken/utils/httputil"
 	"github.com/stretchr/testify/require"
 )
 

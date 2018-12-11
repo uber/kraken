@@ -7,9 +7,9 @@ import (
 	"os"
 	"path"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/hrw"
-	"code.uber.internal/infra/kraken/lib/store/base"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/hrw"
+	"github.com/uber/kraken/lib/store/base"
 	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
 	"github.com/spaolacci/murmur3"

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/store/metadata"
-	"code.uber.internal/infra/kraken/utils/randutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/randutil"
 
 	"github.com/stretchr/testify/require"
 )

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/memsize"
+	"github.com/uber/kraken/utils/log"
+	"github.com/uber/kraken/utils/memsize"
 
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"

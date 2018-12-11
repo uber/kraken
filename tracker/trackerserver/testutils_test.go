@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"testing"
 
-	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
-	"code.uber.internal/infra/kraken/mocks/tracker/originstore"
-	"code.uber.internal/infra/kraken/mocks/tracker/peerstore"
-	"code.uber.internal/infra/kraken/tracker/peerhandoutpolicy"
+	"github.com/uber/kraken/mocks/origin/blobclient"
+	"github.com/uber/kraken/mocks/tracker/originstore"
+	"github.com/uber/kraken/mocks/tracker/peerstore"
+	"github.com/uber/kraken/tracker/peerhandoutpolicy"
 
 	"github.com/golang/mock/gomock"
 	"github.com/uber-go/tally"

@@ -1,8 +1,8 @@
 package piecerequest
 
 import (
-	"code.uber.internal/infra/kraken/utils/heap"
-	"code.uber.internal/infra/kraken/utils/syncutil"
+	"github.com/uber/kraken/utils/heap"
+	"github.com/uber/kraken/utils/syncutil"
 
 	"github.com/willf/bitset"
 )

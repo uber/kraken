@@ -1,6 +1,6 @@
 package peerhandoutpolicy
 
-import "code.uber.internal/infra/kraken/core"
+import "github.com/uber/kraken/core"
 
 const _defaultPolicy = "default"
 

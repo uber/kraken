@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/torrent/storage"
+	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/andres-erbsen/clock"
 )
 

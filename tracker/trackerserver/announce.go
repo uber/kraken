@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/tracker/announceclient"
-	"code.uber.internal/infra/kraken/utils/errutil"
-	"code.uber.internal/infra/kraken/utils/handler"
-	"code.uber.internal/infra/kraken/utils/httputil"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/tracker/announceclient"
+	"github.com/uber/kraken/utils/errutil"
+	"github.com/uber/kraken/utils/handler"
+	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/log"
 )
 
 func (s *Server) announceHandlerV1(w http.ResponseWriter, r *http.Request) error {

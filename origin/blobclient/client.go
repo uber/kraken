@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/httputil"
-	"code.uber.internal/infra/kraken/utils/memsize"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/memsize"
 )
 
 // Client provides a wrapper around all Server HTTP endpoints.

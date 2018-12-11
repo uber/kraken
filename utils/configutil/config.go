@@ -55,7 +55,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"code.uber.internal/infra/kraken/utils/stringset"
+	"github.com/uber/kraken/utils/stringset"
 
 	"gopkg.in/validator.v2"
 	"gopkg.in/yaml.v2"

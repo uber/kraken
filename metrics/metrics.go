@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/utils/log"
 
 	"github.com/uber-go/tally"
 )

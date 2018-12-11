@@ -1,6 +1,6 @@
 package originstore
 
-import "code.uber.internal/infra/kraken/core"
+import "github.com/uber/kraken/core"
 
 type noopStore struct{}
 

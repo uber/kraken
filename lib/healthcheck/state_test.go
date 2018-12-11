@@ -3,7 +3,7 @@ package healthcheck
 import (
 	"testing"
 
-	"code.uber.internal/infra/kraken/utils/stringset"
+	"github.com/uber/kraken/utils/stringset"
 
 	"github.com/stretchr/testify/require"
 )

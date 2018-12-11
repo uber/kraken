@@ -6,11 +6,11 @@ import (
 	"path"
 	"testing"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/backend/hdfsbackend/webhdfs"
-	"code.uber.internal/infra/kraken/mocks/lib/backend/hdfsbackend/webhdfs"
-	"code.uber.internal/infra/kraken/utils/mockutil"
-	"code.uber.internal/infra/kraken/utils/randutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs"
+	"github.com/uber/kraken/mocks/lib/backend/hdfsbackend/webhdfs"
+	"github.com/uber/kraken/utils/mockutil"
+	"github.com/uber/kraken/utils/randutil"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"

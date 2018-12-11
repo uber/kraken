@@ -1,18 +1,18 @@
 package main
 
 import (
-	"code.uber.internal/infra/kraken/build-index/tagserver"
-	"code.uber.internal/infra/kraken/build-index/tagstore"
-	"code.uber.internal/infra/kraken/build-index/tagtype"
-	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/persistedretry"
-	"code.uber.internal/infra/kraken/lib/persistedretry/tagreplication"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/upstream"
-	"code.uber.internal/infra/kraken/localdb"
-	"code.uber.internal/infra/kraken/metrics"
-	"code.uber.internal/infra/kraken/nginx"
-	"code.uber.internal/infra/kraken/utils/httputil"
+	"github.com/uber/kraken/build-index/tagserver"
+	"github.com/uber/kraken/build-index/tagstore"
+	"github.com/uber/kraken/build-index/tagtype"
+	"github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/persistedretry"
+	"github.com/uber/kraken/lib/persistedretry/tagreplication"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/upstream"
+	"github.com/uber/kraken/localdb"
+	"github.com/uber/kraken/metrics"
+	"github.com/uber/kraken/nginx"
+	"github.com/uber/kraken/utils/httputil"
 
 	"go.uber.org/zap"
 )

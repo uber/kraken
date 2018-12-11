@@ -19,8 +19,8 @@ import (
 	"github.com/pressly/chi"
 	"github.com/stretchr/testify/require"
 
-	"code.uber.internal/infra/kraken/utils/randutil"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/utils/randutil"
+	"github.com/uber/kraken/utils/testutil"
 )
 
 func genKeyPair(t *testing.T, caPEM, caKeyPEM, caSercret []byte) (certPEM, keyPEM, secretBytes []byte) {

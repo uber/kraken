@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"code.uber.internal/infra/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/store/metadata"
 )
 
 const (

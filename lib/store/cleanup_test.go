@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/store/base"
-	"code.uber.internal/infra/kraken/lib/store/metadata"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store/base"
+	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"

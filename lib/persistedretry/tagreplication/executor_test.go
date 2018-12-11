@@ -3,8 +3,8 @@ package tagreplication
 import (
 	"testing"
 
-	"code.uber.internal/infra/kraken/mocks/build-index/tagclient"
-	"code.uber.internal/infra/kraken/mocks/origin/blobclient"
+	"github.com/uber/kraken/mocks/build-index/tagclient"
+	"github.com/uber/kraken/mocks/origin/blobclient"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"

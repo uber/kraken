@@ -7,9 +7,9 @@ import (
 	"strings"
 	"sync"
 
-	"code.uber.internal/infra/kraken/utils/dedup"
-	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/stringset"
+	"github.com/uber/kraken/utils/dedup"
+	"github.com/uber/kraken/utils/log"
+	"github.com/uber/kraken/utils/stringset"
 
 	"github.com/andres-erbsen/clock"
 )

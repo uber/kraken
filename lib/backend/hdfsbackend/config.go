@@ -1,6 +1,6 @@
 package hdfsbackend
 
-import "code.uber.internal/infra/kraken/lib/backend/hdfsbackend/webhdfs"
+import "github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs"
 
 // Config defines configuration for all HDFS clients.
 type Config struct {

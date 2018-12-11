@@ -8,14 +8,14 @@ import (
 	"os"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/persistedretry"
-	"code.uber.internal/infra/kraken/lib/persistedretry/writeback"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/store/metadata"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/lib/persistedretry"
+	"github.com/uber/kraken/lib/persistedretry/writeback"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/log"
 
 	"github.com/uber-go/tally"
 )

@@ -3,11 +3,11 @@ package backend_test
 import (
 	"testing"
 
-	. "code.uber.internal/infra/kraken/lib/backend"
-	"code.uber.internal/infra/kraken/lib/backend/namepath"
-	"code.uber.internal/infra/kraken/lib/backend/testfs"
-	"code.uber.internal/infra/kraken/utils/bandwidth"
-	"code.uber.internal/infra/kraken/utils/stringset"
+	. "github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/backend/namepath"
+	"github.com/uber/kraken/lib/backend/testfs"
+	"github.com/uber/kraken/utils/bandwidth"
+	"github.com/uber/kraken/utils/stringset"
 
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
@@ -24,7 +24,6 @@ func TestManagerNamespaceMatching(t *testing.T) {
 	}{
 		{"static", c1},
 		{"uber-usi/labrat", c2},
-		{"terrablob/maps_data", c3},
 	}
 	for _, test := range tests {
 		t.Run(test.namespace, func(t *testing.T) {
@@ -34,7 +33,6 @@ func TestManagerNamespaceMatching(t *testing.T) {
 
 			require.NoError(m.Register("static", c1))
 			require.NoError(m.Register("uber-usi/.*", c2))
-			require.NoError(m.Register("terrablob/.*", c3))
 
 			result, err := m.GetClient(test.namespace)
 			require.NoError(err)

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/utils/log"
 )
 
 // Producer emits events.

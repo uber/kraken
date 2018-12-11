@@ -5,7 +5,7 @@ import (
 	"io"
 	"testing"
 
-	"code.uber.internal/infra/kraken/utils/randutil"
+	"github.com/uber/kraken/utils/randutil"
 	"github.com/stretchr/testify/require"
 )
 

@@ -1,9 +1,9 @@
 package upstream
 
 import (
-	"code.uber.internal/infra/kraken/lib/healthcheck"
-	"code.uber.internal/infra/kraken/lib/hostlist"
-	"code.uber.internal/infra/kraken/utils/log"
+	"github.com/uber/kraken/lib/healthcheck"
+	"github.com/uber/kraken/lib/hostlist"
+	"github.com/uber/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
 )

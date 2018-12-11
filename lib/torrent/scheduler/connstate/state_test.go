@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/torrent/networkevent"
-	"code.uber.internal/infra/kraken/lib/torrent/scheduler/conn"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/torrent/networkevent"
+	"github.com/uber/kraken/lib/torrent/scheduler/conn"
 )
 
 func testState(config Config, clk clock.Clock) *State {

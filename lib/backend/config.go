@@ -1,8 +1,8 @@
 package backend
 
 import (
-	"code.uber.internal/infra/kraken/utils/bandwidth"
-	"code.uber.internal/infra/kraken/utils/memsize"
+	"github.com/uber/kraken/utils/bandwidth"
+	"github.com/uber/kraken/utils/memsize"
 )
 
 // Config defines the union of configuration for all backends. Only one is

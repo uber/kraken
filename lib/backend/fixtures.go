@@ -6,8 +6,8 @@ import (
 	"io/ioutil"
 	"sync"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend/backenderrors"
 )
 
 // ManagerFixture returns a Manager with no clients for testing purposes.

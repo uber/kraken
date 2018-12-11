@@ -6,10 +6,10 @@ import (
 	"sync"
 	"testing"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/torrent/storage/piecereader"
-	"code.uber.internal/infra/kraken/utils/bitsetutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/torrent/storage/piecereader"
+	"github.com/uber/kraken/utils/bitsetutil"
 
 	"github.com/stretchr/testify/require"
 )

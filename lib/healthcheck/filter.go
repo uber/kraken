@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"code.uber.internal/infra/kraken/utils/stringset"
+	"github.com/uber/kraken/utils/stringset"
 )
 
 // Filter filters out unhealthy hosts from a host list.

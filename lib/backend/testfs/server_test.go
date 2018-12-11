@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/backend/backenderrors"
-	"code.uber.internal/infra/kraken/lib/backend/namepath"
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/lib/backend/namepath"
+	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/stretchr/testify/require"
 )

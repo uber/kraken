@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"code.uber.internal/infra/kraken/utils/testutil"
+	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/jmoiron/sqlx"
 )

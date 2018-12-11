@@ -3,7 +3,7 @@ package announcequeue
 import (
 	"container/list"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 )
 
 // Queue manages a queue of torrents waiting to announce.

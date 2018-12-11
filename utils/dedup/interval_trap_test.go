@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/infra/kraken/mocks/utils/dedup"
-	. "code.uber.internal/infra/kraken/utils/dedup"
-	"code.uber.internal/infra/kraken/utils/randutil"
+	"github.com/uber/kraken/mocks/utils/dedup"
+	. "github.com/uber/kraken/utils/dedup"
+	"github.com/uber/kraken/utils/randutil"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"

@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"code.uber.internal/infra/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/store/metadata"
 )
 
 // Mock metadata

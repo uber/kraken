@@ -3,9 +3,9 @@ package metainfogen
 import (
 	"fmt"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/store"
-	"code.uber.internal/infra/kraken/lib/store/metadata"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/metadata"
 )
 
 // Generator wraps static piece length configuration in order to determinstically

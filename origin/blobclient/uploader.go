@@ -10,8 +10,8 @@ import (
 	"net/url"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/httputil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/httputil"
 )
 
 // uploader provides methods for executing a chunked upload.

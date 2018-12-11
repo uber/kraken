@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/utils/log"
-	"code.uber.internal/infra/kraken/utils/randutil"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/log"
+	"github.com/uber/kraken/utils/randutil"
 	"github.com/andres-erbsen/clock"
 	"github.com/garyburd/redigo/redis"
 )

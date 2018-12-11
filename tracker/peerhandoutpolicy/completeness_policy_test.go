@@ -4,7 +4,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"code.uber.internal/infra/kraken/core"
+	"github.com/uber/kraken/core"
 
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"

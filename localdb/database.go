@@ -3,8 +3,8 @@ package localdb
 import (
 	"fmt"
 
-	_ "code.uber.internal/infra/kraken/localdb/migrations" // Add migrations.
-	"code.uber.internal/infra/kraken/utils/osutil"
+	_ "github.com/uber/kraken/localdb/migrations" // Add migrations.
+	"github.com/uber/kraken/utils/osutil"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3" // SQL driver.

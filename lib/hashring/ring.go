@@ -4,11 +4,11 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/infra/kraken/core"
-	"code.uber.internal/infra/kraken/lib/healthcheck"
-	"code.uber.internal/infra/kraken/lib/hostlist"
-	"code.uber.internal/infra/kraken/lib/hrw"
-	"code.uber.internal/infra/kraken/utils/stringset"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/healthcheck"
+	"github.com/uber/kraken/lib/hostlist"
+	"github.com/uber/kraken/lib/hrw"
+	"github.com/uber/kraken/utils/stringset"
 )
 
 const _defaultWeight = 100
