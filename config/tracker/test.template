@@ -1,0 +1,36 @@
+extends: base.yaml
+
+port: {port}
+
+peerstore:
+  redis:
+    addr: {redis}
+
+origin:
+  hosts:
+    static: {origins}
+
+trackerserver:
+  announce_interval: 2s
+
+nginx:
+  cache_dir: /tmp/kraken-tracker-nginx/
+
+tls:
+  name: kraken
+  ca:
+    enabled: true
+    cert:
+      path: /home/udocker/kraken/tls/ca/server.crt
+    key:
+      path: /home/udocker/kraken/tls/ca/server.key
+    passphrase:
+      path: /home/udocker/kraken/tls/ca/passphrase
+  client:
+    enabled: true
+    cert:
+      path: /home/udocker/kraken/tls/client/client.crt
+    key:
+      path: /home/udocker/kraken/tls/client/client.key
+    passphrase:
+      path: /home/udocker/kraken/tls/client/passphrase

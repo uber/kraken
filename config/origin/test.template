@@ -1,0 +1,45 @@
+extends: base.yaml
+
+hashring:
+  max_replica: 2
+
+cluster:
+  static: {origins}
+
+metainfogen:
+  piece_lengths:
+    0: 1MB
+
+# Need stable peer ids for the origin so we can safely restart them.
+peer_id_factory: addr_hash
+
+backends:
+  - namespace: .*
+    backend:
+      testfs:
+        addr: {testfs}
+        root: blobs
+        name_path: identity
+
+writeback:
+  retry_interval: 100ms
+  poll_retries_interval: 250ms
+
+tls:
+  name: kraken
+  ca:
+    enabled: true
+    cert:
+      path: /home/udocker/kraken/tls/ca/server.crt
+    key:
+      path: /home/udocker/kraken/tls/ca/server.key
+    passphrase:
+      path: /home/udocker/kraken/tls/ca/passphrase
+  client:
+    enabled: true
+    cert:
+      path: /home/udocker/kraken/tls/client/client.crt
+    key:
+      path: /home/udocker/kraken/tls/client/client.key
+    passphrase:
+      path: /home/udocker/kraken/tls/client/passphrase

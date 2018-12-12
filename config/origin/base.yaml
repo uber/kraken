@@ -1,0 +1,55 @@
+zap:
+  level: info
+  development: false
+  encoding: console
+  disableStacktrace: true
+  encoderConfig:
+    messageKey: message
+    nameKey: logger_name
+    levelKey: level
+    timeKey: ts
+    callerKey: caller
+    stacktraceKey: stack
+    levelEncoder: capital
+    timeEncoder: iso8601
+    durationEncoder: seconds
+    callerEncoder: short
+  outputPaths:
+    - stdout
+    - /var/log/udocker/kraken-origin/stdout.log
+  errorOutputPaths:
+    - stdout
+    - /var/log/udocker/kraken-origin/stdout.log
+
+metainfogen:
+  piece_lengths:
+    0: 4MB # Use 4MB piece lengths for all file sizes (for now).
+
+peer_id_factory: addr_hash
+
+scheduler:
+  log:
+    timeEncoder: iso8601
+  torrentlog:
+    disable: true
+
+metrics:
+  m3:
+    service: kraken-origin
+
+localdb:
+  source: /var/cache/udocker/kraken-origin/origin.db
+
+castore:
+  upload_dir: /var/cache/udocker/kraken-origin/upload/
+  cache_dir:  /var/cache/udocker/kraken-origin/cache/
+
+blobserver:
+  listener:
+    net: unix
+    addr: /tmp/kraken-origin.sock
+
+nginx:
+  name: kraken-origin
+  cache_dir: /var/cache/udocker/kraken-origin/nginx/
+  log_dir: /var/log/udocker/kraken-origin/

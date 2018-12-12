@@ -1,0 +1,43 @@
+extends: base.yaml
+
+registry:
+  docker:
+    version: 0.1
+    log:
+      level: error
+    http:
+      net: tcp
+      addr: 0.0.0.0:8991
+
+scheduler:
+  connstate:
+    blacklist_duration: 5s
+
+peer_id_factory: random
+
+tracker:
+  hosts:
+    static: {trackers}
+
+build_index:
+  hosts:
+    static: {build_indexes}
+
+tls:
+  name: kraken
+  ca:
+    enabled: true
+    cert:
+      path: /home/udocker/kraken/tls/ca/server.crt
+    key:
+      path: /home/udocker/kraken/tls/ca/server.key
+    passphrase:
+      path: /home/udocker/kraken/tls/ca/passphrase
+  client:
+    enabled: true
+    cert:
+      path: /home/udocker/kraken/tls/client/client.crt
+    key:
+      path: /home/udocker/kraken/tls/client/client.key
+    passphrase:
+      path: /home/udocker/kraken/tls/client/passphrase

@@ -1,0 +1,31 @@
+extends: base.yaml
+
+origin:
+  hosts:
+    static: {origins}
+
+build_index:
+  hosts:
+    static: {build_indexes}
+
+nginx:
+  cache_dir: /tmp/kraken-proxy-nginx/
+
+tls:
+  name: kraken
+  ca:
+    enabled: false
+    cert:
+      path: /home/udocker/kraken/tls/ca/server.crt
+    key:
+      path: /home/udocker/kraken/tls/ca/server.key
+    passphrase:
+      path: /home/udocker/kraken/tls/ca/passphrase
+  client:
+    enabled: true
+    cert:
+      path: /home/udocker/kraken/tls/client/client.crt
+    key:
+      path: /home/udocker/kraken/tls/client/client.key
+    passphrase:
+      path: /home/udocker/kraken/tls/client/passphrase
