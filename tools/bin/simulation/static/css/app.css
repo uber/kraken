@@ -1,0 +1,12 @@
+.header {
+    margin-left: 8px;
+    margin-top: 8px;
+}
+
+.node {
+    stroke: #999999;
+}
+
+#highlight {
+    stroke: red;
+}
