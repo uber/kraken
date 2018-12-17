@@ -21,15 +21,10 @@ from uploader import Uploader
 from utils import format_insecure_curl, tls_opts
 
 
-# Our Python Docker client defaults to 1.30, but the jenkins machines are running
-# 1.24 so we need to set this manually (sigh). 
-JENKINS_DOCKER_SERVER_API_VERSION = '1.24'
-
-
 def get_docker_bridge():
     system = platform.system()
     if system == 'Darwin':
-        return '192.168.65.1'
+        return 'host.docker.internal'
     elif system == 'Linux':
         return '172.17.0.1'
     else:
@@ -87,7 +82,7 @@ class HealthCheck(object):
 
 
 def new_docker_container(name, image, command=None, environment=None, ports=None,
-                         volumes=None, hostname=None, health_check=None):
+                         volumes=None, health_check=None):
     """
     Creates and starts a detached Docker container. If health_check is specified,
     ensures the container is healthy before returning.
@@ -96,14 +91,13 @@ def new_docker_container(name, image, command=None, environment=None, ports=None
         # Set umask so jenkins user can delete files created by udocker user.
         command = ['bash', '-c', 'umask 0000 && {command}'.format(command=' '.join(command))]
 
-    c = docker.from_env(version=JENKINS_DOCKER_SERVER_API_VERSION).containers.run(
+    c = docker.from_env().containers.run(
         name=name,
         image=image,
         command=command,
         environment=environment,
         ports=ports,
         volumes=volumes,
-        hostname=hostname,
         detach=True)
     print 'Starting container {name} with id {id}'.format(name=c.name, id=c.id)
     try:
@@ -304,7 +298,6 @@ class Origin(Component):
         return new_docker_container(
             name=self.name,
             image='kraken-origin:dev',
-            hostname=self.instance.hostname,
             volumes=self.volumes,
             environment={'UBER_CONFIG_DIR': '/home/udocker/kraken/config/origin'},
             ports={
@@ -315,6 +308,7 @@ class Origin(Component):
                 '/usr/bin/kraken-origin',
                 '-config={config}'.format(config=self.config_file),
                 '-blobserver_port={port}'.format(port=self.instance.port),
+                '-blobserver_hostname={hostname}'.format(hostname=self.instance.hostname),
                 '-peer_ip={ip}'.format(ip=get_docker_bridge()),
                 '-peer_port={port}'.format(port=self.instance.peer_port),
             ],
@@ -363,7 +357,7 @@ class Agent(Component):
         self.name = 'kraken-agent-{id}-{zone}'.format(id=id, zone=zone)
 
         populate_config_template(
-            'agent', 
+            'agent',
             self.config_file,
             trackers=yaml_list([self.tracker.addr]),
             build_indexes=yaml_list([bi.addr for bi in self.build_indexes]))
@@ -439,7 +433,6 @@ class Proxy(Component):
         self.zone = zone
         self.origin_cluster = origin_cluster
         self.build_indexes = build_indexes
-        self.hostname = get_docker_bridge()
         self.port = find_free_port()
         self.config_file = 'test-{zone}.yaml'.format(zone=zone)
         self.name = 'kraken-proxy-{zone}'.format(zone=zone)
@@ -458,7 +451,6 @@ class Proxy(Component):
         return new_docker_container(
             name=self.name,
             image='kraken-proxy:dev',
-            hostname=self.hostname,
             ports={self.port: self.port},
             environment={
                 'UBER_CONFIG_DIR': '/home/udocker/kraken/config/proxy',
@@ -553,7 +545,6 @@ class BuildIndex(Component):
         return new_docker_container(
             name=self.name,
             image='kraken-build-index:dev',
-            hostname=self.instance.hostname,
             ports={self.port: self.port},
             environment={
                 'UBER_CONFIG_DIR': '/home/udocker/kraken/config/build-index',
@@ -590,7 +581,7 @@ class TestFS(Component):
         self.zone = zone
         self.port = find_free_port()
         self.start()
-    
+
     def new_container(self):
         return new_docker_container(
             name='kraken-testfs-{zone}'.format(zone=self.zone),
@@ -605,7 +596,7 @@ class TestFS(Component):
     def upload(self, name, blob):
         url = 'http://localhost:{port}/files/blobs/{name}'.format(port=self.port, name=name)
         res = requests.post(url, data=BytesIO(blob))
-        res.raise_for_status()        
+        res.raise_for_status()
 
     @property
     def addr(self):
