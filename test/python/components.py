@@ -202,7 +202,7 @@ class Component(object):
     def teardown(self):
         try:
             self.print_logs()
-            self.stop()
+            # self.stop()
         except Exception as e:
             print 'Teardown {name} failed: {e}'.format(name=self.container.name, e=e)
 
