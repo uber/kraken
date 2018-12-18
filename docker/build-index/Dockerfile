@@ -17,7 +17,7 @@ USER udocker
 COPY ./config /home/udocker/kraken-build-index/config
 COPY ./nginx/config /home/udocker/kraken-build-index/nginx/config
 COPY ./localdb/migrations /home/udocker/kraken-build-index/localdb/migrations
-COPY ./build-index/build-index.linux /usr/bin/kraken-build-index
+COPY ./build-index/build-index /usr/bin/kraken-build-index
 COPY ./test/tls /home/udocker/kraken/tls
 
 WORKDIR /home/udocker/kraken-build-index
