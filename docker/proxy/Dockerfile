@@ -16,7 +16,7 @@ USER udocker
 
 COPY ./config /home/udocker/kraken/config
 COPY ./nginx/config /home/udocker/kraken/nginx/config
-COPY ./proxy/proxy.linux /usr/bin/kraken-proxy
+COPY ./proxy/proxy /usr/bin/kraken-proxy
 COPY ./test/tls /home/udocker/kraken/tls
 
 EXPOSE 5054
