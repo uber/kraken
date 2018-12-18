@@ -28,12 +28,12 @@ tools/bin/pexchange/pexchange
 tools/bin/trackerload/trackerload
 
 # Linux binaries
-tracker/tracker.linux
-agent/agent.linux
-origin/origin.linux
-proxy/proxy.linux
-build-index/build-index.linux
-tools/bin/testfs/testfs.linux
+tracker/tracker
+agent/agent
+origin/origin
+proxy/proxy
+build-index/build-index
+tools/bin/testfs/testfs
 
 # tmp migration files
 [0-9]*_-dir.go

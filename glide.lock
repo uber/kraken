@@ -1,5 +1,5 @@
-hash: 430cd1155fb23f6842f3b7516b84bad48c326fd05e9a2db0e8b32243cd318eab
-updated: 2018-12-11T22:55:12.966126-08:00
+hash: b2cf6108c45a51a23eea46bb95c3a2110ebe925c180ca0aadc39bcf02910d9e0
+updated: 2018-12-17T21:02:05.714727-08:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
@@ -16,7 +16,7 @@ imports:
   subpackages:
   - lib/go/thrift
 - name: github.com/aws/aws-sdk-go
-  version: 818fa5c274d4dee665096411e2bad037f47c31f7
+  version: a21788f1964e28dc1e3932e595db6707ce8070cf
   subpackages:
   - aws
   - aws/awserr
@@ -54,8 +54,6 @@ imports:
   - service/s3/s3iface
   - service/s3/s3manager
   - service/sts
-- name: github.com/bshuster-repo/logrus-logstash-hook
-  version: 1e961e8e173c48bdddbf90e4fc4df8eaf8a7e918
 - name: github.com/bshuster-repo/logrus-logstash-hook.git
   version: 1e961e8e173c48bdddbf90e4fc4df8eaf8a7e918
 - name: github.com/bugsnag/bugsnag-go
@@ -73,12 +71,11 @@ imports:
   subpackages:
   - statsd
 - name: github.com/docker/distribution
-  version: edc3ab29cdff8694dd6feb85cfeb4b5f1b38ed9c
+  version: 48294d928ced5dd9b378f7fd7c6f5da3ff3f2c89
   subpackages:
   - configuration
   - context
   - digest
-  - digestset
   - health
   - health/checks
   - manifest
@@ -163,8 +160,10 @@ imports:
   version: b41be1df696709bb6395fe435af20370037c0b4c
 - name: github.com/satori/go.uuid
   version: f58768cc1a7a7e77a3bd49e98cdd21419399b6a3
-- name: github.com/sirupsen/logrus
+- name: github.com/Sirupsen/logrus
   version: 55eb11d21d2a31a3cc93838241d04800f52e823d
+  subpackages:
+  - formatters/logstash
 - name: github.com/spaolacci/murmur3
   version: f09979ecbc725b9e6d41a297405f65e7e8804acc
 - name: github.com/spf13/cobra
@@ -213,26 +212,25 @@ imports:
   - internal/exit
   - zapcore
 - name: golang.org/x/crypto
-  version: 505ab145d0a99da450461ae2c1a9f6cd10d1f447
+  version: c10c31b5e94b6f7a0283272dc2bb27163dcea24b
   subpackages:
-  - curve25519
-  - ed25519
-  - ed25519/internal/edwards25519
-  - internal/chacha20
-  - internal/subtle
-  - poly1305
   - ssh
   - ssh/agent
 - name: golang.org/x/net
   version: 4876518f9e71663000c348837735820161a42df7
   subpackages:
   - context
+  - context/ctxhttp
+  - http2
+  - http2/hpack
+  - internal/timeseries
+  - trace
 - name: golang.org/x/sync
   version: 42b317875d0fa942474b76e1b46a6060d720ae6e
   subpackages:
   - syncmap
 - name: golang.org/x/time
-  version: 85acf8d2951cb2a3bde7632f9ff273ef0379bcbd
+  version: a4bde12657593d5e90d0533a3e4fd95e635124cb
   subpackages:
   - rate
 - name: gopkg.in/DATA-DOG/go-sqlmock.v1
@@ -243,6 +241,11 @@ imports:
   version: bef53efd0c76e49e6de55ead051f886bea7e9420
 - name: rsc.io/letsencrypt
   version: a019c9e6fce0c7132679dea13bd8df7c86ffe26c
+  subpackages:
+  - vendor/github.com/xenolf/lego/acme
+  - vendor/gopkg.in/square/go-jose.v1
+  - vendor/gopkg.in/square/go-jose.v1/cipher
+  - vendor/gopkg.in/square/go-jose.v1/json
 testImports:
 - name: github.com/davecgh/go-spew
   version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d
