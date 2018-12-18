@@ -5,18 +5,7 @@ import:
 - package: github.com/uber-go/tally
   version: v2.1.0
 - package: github.com/docker/distribution
-  version: edc3ab29cdff8694dd6feb85cfeb4b5f1b38ed9c
-  subpackages:
-  - configuration
-  - context
-  - digest
-  - manifest/schema1
-  - manifest/schema2
-  - notifications
-  - registry
-  - registry/storage/driver
-  - registry/storage/driver/factory
-  - uuid
+  version: v2.6.2
 - package: github.com/garyburd/redigo
   version: ^1.0.0
   subpackages:
