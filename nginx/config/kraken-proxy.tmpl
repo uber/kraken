@@ -25,6 +25,9 @@ server {
     if ( $host = "localhost" ) {
         set $hostheader "localhost";
     }
+    if ( $host = "127.0.0.1" ) {
+        set $hostheader "127.0.0.1";
+    }
     if ( $host = "192.168.65.1" ) {
         set $hostheader "192.168.65.1";
     }
@@ -40,6 +43,9 @@ server {
     set $hostheader $hostname;
     if ( $host = "localhost" ) {
         set $hostheader "localhost";
+    }
+    if ( $host = "127.0.0.1" ) {
+        set $hostheader "127.0.0.1";
     }
     if ( $host = "192.168.65.1" ) {
         set $hostheader "192.168.65.1";
