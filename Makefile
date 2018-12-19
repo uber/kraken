@@ -112,9 +112,13 @@ devcluster: $(LINUX_BINS) docker_stop
 # ==== TOOLS ====
 
 LINUX_TOOLS = \
+	tools/bin/puller/puller \
 	tools/bin/reload/reload \
 	tools/bin/simulation/simulation \
 	tools/bin/trackerload/trackerload
+
+tools/bin/puller/puller:: $(wildcard tools/bin/puller/puller/*.go)
+	$(BUILD_LINUX)
 
 tools/bin/reload/reload:: $(wildcard tools/bin/reload/reload/*.go)
 	$(BUILD_LINUX)
