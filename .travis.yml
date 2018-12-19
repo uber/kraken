@@ -16,4 +16,5 @@ env:
   - PATH=$HOME/protoc/bin:$PATH
 
 script:
+  - make vendor
   - make integration
