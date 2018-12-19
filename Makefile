@@ -5,7 +5,7 @@ GO = go
 BUILD_FLAGS = -gcflags '-N -l'
 
 # Where to find your project
-PROJECT_ROOT = github.com/uber/kraken
+PROJECT_ROOT = $(GOPATH)/src/github.com/uber/kraken
 
 GEN_DIR = .gen/go
 

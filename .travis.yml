@@ -16,4 +16,4 @@ env:
   - PATH=$HOME/protoc/bin:$PATH
 
 script:
-    - make integration
+  - make integration
