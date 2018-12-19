@@ -19,21 +19,12 @@ origin/origin
 proxy/proxy
 build-index/build-index
 tools/bin/puller/puller
-tools/bin/benchmarks/benchmarks
 tools/bin/reload/reload
 tools/bin/reload-config/reload-config
 tools/bin/simulation/simulation
 tools/bin/testfs/testfs
 tools/bin/pexchange/pexchange
 tools/bin/trackerload/trackerload
-
-# Linux binaries
-tracker/tracker
-agent/agent
-origin/origin
-proxy/proxy
-build-index/build-index
-tools/bin/testfs/testfs
 
 # tmp migration files
 [0-9]*_-dir.go
