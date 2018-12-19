@@ -1,1 +1,1 @@
-# kraken :octopus:
+# Kraken :octopus:
