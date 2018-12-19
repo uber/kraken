@@ -6,29 +6,30 @@ ADD http://download.redis.io/redis-stable.tar.gz /tmp/redis-stable.tar.gz
 RUN tar -xvzf /tmp/redis-stable.tar.gz -C /tmp
 RUN cd /tmp/redis-stable && make install
 
-RUN mkdir -p -m 777 /var/log/udocker/kraken-agent
-RUN mkdir -p -m 777 /var/log/udocker/kraken-build-index
-RUN mkdir -p -m 777 /var/log/udocker/kraken-origin
-RUN mkdir -p -m 777 /var/log/udocker/kraken-proxy
-RUN mkdir -p -m 777 /var/log/udocker/kraken-testfs
-RUN mkdir -p -m 777 /var/log/udocker/kraken
+RUN mkdir -p -m 777 /var/log/kraken/kraken-agent
+RUN mkdir -p -m 777 /var/log/kraken/kraken-build-index
+RUN mkdir -p -m 777 /var/log/kraken/kraken-origin
+RUN mkdir -p -m 777 /var/log/kraken/kraken-proxy
+RUN mkdir -p -m 777 /var/log/kraken/kraken-testfs
+RUN mkdir -p -m 777 /var/log/kraken/kraken
 
-RUN mkdir -p -m 777 /var/cache/udocker/kraken-agent
-RUN mkdir -p -m 777 /var/cache/udocker/kraken-build-index
-RUN mkdir -p -m 777 /var/cache/udocker/kraken-origin
-RUN mkdir -p -m 777 /var/cache/udocker/kraken-proxy
-RUN mkdir -p -m 777 /var/cache/udocker/kraken-testfs
-RUN mkdir -p -m 777 /var/cache/udocker/kraken
+RUN mkdir -p -m 777 /var/cache/kraken/kraken-agent
+RUN mkdir -p -m 777 /var/cache/kraken/kraken-build-index
+RUN mkdir -p -m 777 /var/cache/kraken/kraken-origin
+RUN mkdir -p -m 777 /var/cache/kraken/kraken-proxy
+RUN mkdir -p -m 777 /var/cache/kraken/kraken-testfs
+RUN mkdir -p -m 777 /var/cache/kraken/kraken
 
-RUN mkdir -p -m 777 /var/run/udocker
+RUN mkdir -p -m 777 /var/run/kraken
 
 ARG USERNAME
 ARG USERID
+ARG HOMEDIR
 RUN useradd --uid ${USERID} ${USERNAME}
 
 # Allow proxy to run nginx as root.
 RUN mkdir -p /etc/sudoers.d/
-RUN echo 'udocker  ALL=(root) NOPASSWD: /usr/sbin/nginx' >> /etc/sudoers.d/kraken-proxy
+RUN echo '${USERNAME}  ALL=(root) NOPASSWD: /usr/sbin/nginx' >> /etc/sudoers.d/kraken-proxy
 
 COPY ./docker/setup_nginx.sh /tmp/setup_nginx.sh
 RUN /tmp/setup_nginx.sh ${USERNAME}
@@ -42,7 +43,7 @@ COPY ./proxy/proxy             /usr/bin/kraken-proxy
 COPY ./tools/bin/testfs/testfs /usr/bin/kraken-testfs
 COPY ./tracker/tracker         /usr/bin/kraken-tracker
 
-WORKDIR /home/udocker/kraken
+WORKDIR ${HOMEDIR}/kraken
 
 EXPOSE 9003
 EXPOSE 7602
@@ -53,8 +54,8 @@ EXPOSE 8991
 EXPOSE 5055
 EXPOSE 8351
 
-COPY ./config /home/udocker/kraken/config
-COPY ./nginx/config /home/udocker/kraken/nginx/config
-COPY ./docker/devcluster/start.sh /home/udocker/kraken/start.sh
-COPY ./test/tls /home/udocker/kraken/tls
+COPY ./config ${HOMEDIR}/kraken/config
+COPY ./nginx/config ${HOMEDIR}/kraken/nginx/config
+COPY ./docker/devcluster/start.sh ${HOMEDIR}/kraken/start.sh
+COPY ./test/tls ${HOMEDIR}/kraken/tls
 CMD ./start.sh

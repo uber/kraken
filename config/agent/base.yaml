@@ -16,10 +16,10 @@ zap:
     callerEncoder: short
   outputPaths:
     - stdout
-    - /var/log/udocker/kraken-agent/stdout.log
+    - /var/log/kraken/kraken-agent/stdout.log
   errorOutputPaths:
     - stdout
-    - /var/log/udocker/kraken-agent/stdout.log
+    - /var/log/kraken/kraken-agent/stdout.log
 
 metrics:
   m3:
@@ -30,7 +30,7 @@ scheduler:
     timeEncoder: iso8601
   torrentlog:
     service_name: kraken-agent
-    path: /var/log/udocker/kraken-agent/torrent.log
+    path: /var/log/kraken/kraken-agent/torrent.log
     encoding: json
     timeEncoder: epoch
   dispatch:
@@ -40,8 +40,8 @@ scheduler:
       enable: true
 
 store:
-  download_dir: /var/cache/udocker/kraken-agent/download/
-  cache_dir:  /var/cache/udocker/kraken-agent/cache/
+  download_dir: /var/cache/kraken/kraken-agent/download/
+  cache_dir:  /var/cache/kraken/kraken-agent/cache/
   download_cleanup:
     ttl: 24h
   cache_cleanup:
@@ -60,5 +60,5 @@ peer_id_factory: addr_hash
 
 nginx:
   name: kraken-agent
-  cache_dir: /var/cache/udocker/kraken-agent/nginx/
-  log_dir: /var/log/udocker/kraken-agent/
+  cache_dir: /var/cache/kraken/kraken-agent/nginx/
+  log_dir: /var/log/kraken/kraken-agent/

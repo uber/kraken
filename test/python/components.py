@@ -88,7 +88,7 @@ def new_docker_container(name, image, command=None, environment=None, ports=None
     ensures the container is healthy before returning.
     """
     if command:
-        # Set umask so jenkins user can delete files created by udocker user.
+        # Set umask so jenkins user can delete files created by non-jenkins user.
         command = ['bash', '-c', 'umask 0000 && {command}'.format(command=' '.join(command))]
 
     c = docker.from_env().containers.run(
@@ -157,7 +157,7 @@ def create_volumes(kname, cname):
     # container.
     config = abspath('config/{kname}'.format(kname=kname))
     volumes[config] = {
-        'bind': '/home/udocker/kraken/config/{kname}'.format(kname=kname),
+        'bind': '/root/kraken/config/{kname}'.format(kname=kname),
         'mode': 'ro',
     }
 
@@ -165,7 +165,7 @@ def create_volumes(kname, cname):
     # retaining their state on disk.
     cache = init_cache(cname)
     volumes[cache] = {
-        'bind': '/var/cache/udocker/kraken-{kname}/'.format(kname=kname),
+        'bind': '/var/cache/kraken/kraken-{kname}/'.format(kname=kname),
         'mode': 'rw',
     }
 
@@ -252,7 +252,7 @@ class Tracker(Component):
         return new_docker_container(
             name=self.name,
             image='kraken-tracker:dev',
-            environment={'UBER_CONFIG_DIR': '/home/udocker/kraken/config/tracker'},
+            environment={'UBER_CONFIG_DIR': '/root/kraken/config/tracker'},
             ports={self.port: self.port},
             volumes=self.volumes,
             command=['/usr/bin/tracker', '-config={config}'.format(config=self.config_file)],
@@ -299,7 +299,7 @@ class Origin(Component):
             name=self.name,
             image='kraken-origin:dev',
             volumes=self.volumes,
-            environment={'UBER_CONFIG_DIR': '/home/udocker/kraken/config/origin'},
+            environment={'UBER_CONFIG_DIR': '/root/kraken/config/origin'},
             ports={
                 self.instance.port: self.instance.port,
                 self.instance.peer_port: self.instance.peer_port,
@@ -371,7 +371,7 @@ class Agent(Component):
             name=self.name,
             image='kraken-agent:dev',
             environment={
-                'UBER_CONFIG_DIR': '/home/udocker/kraken/config/agent',
+                'UBER_CONFIG_DIR': '/root/kraken/config/agent',
                 'UBER_DATACENTER': self.zone,
             },
             ports={
@@ -453,7 +453,7 @@ class Proxy(Component):
             image='kraken-proxy:dev',
             ports={self.port: self.port},
             environment={
-                'UBER_CONFIG_DIR': '/home/udocker/kraken/config/proxy',
+                'UBER_CONFIG_DIR': '/root/kraken/config/proxy',
                 'UBER_DATACENTER': self.zone,
             },
             command=[
@@ -547,7 +547,7 @@ class BuildIndex(Component):
             image='kraken-build-index:dev',
             ports={self.port: self.port},
             environment={
-                'UBER_CONFIG_DIR': '/home/udocker/kraken/config/build-index',
+                'UBER_CONFIG_DIR': '/root/kraken/config/build-index',
                 'UBER_DATACENTER': self.zone,
             },
             command=[

@@ -1,9 +1,9 @@
 localdb:
-  source: /var/cache/udocker/kraken-build-index/index.db
+  source: /var/cache/kraken/kraken-build-index/index.db
 
 store:
-  upload_dir: /var/cache/udocker/kraken-build-index/upload/
-  cache_dir: /var/cache/udocker/kraken-build-index/cache/
+  upload_dir: /var/cache/kraken/kraken-build-index/upload/
+  cache_dir: /var/cache/kraken/kraken-build-index/cache/
 
 tag_store:
   write_through: true
@@ -26,10 +26,10 @@ zap:
     callerEncoder: short
   outputPaths:
     - stdout
-    - /var/log/udocker/kraken-build-index/stdout.log
+    - /var/log/kraken/kraken-build-index/stdout.log
   errorOutputPaths:
     - stdout
-    - /var/log/udocker/kraken-build-index/stdout.log
+    - /var/log/kraken/kraken-build-index/stdout.log
 
 metrics:
   m3:
@@ -42,5 +42,5 @@ tagserver:
 
 nginx:
   name: kraken-build-index
-  cache_dir: /var/cache/udocker/kraken-build-index/nginx/
-  log_dir: /var/log/udocker/kraken-build-index/
+  cache_dir: /var/cache/kraken/kraken-build-index/nginx/
+  log_dir: /var/log/kraken/kraken-build-index/
