@@ -13,11 +13,12 @@ PROTO = $(GEN_DIR)/proto/p2p/p2p.pb.go
 
 $(PROTO): $(wildcard proto/*)
 	mkdir -p $(GEN_DIR)
-	go-build/protoc --plugin=go-build/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$@))
+	go get -u github.com/golang/protobuf/protoc-gen-go
+	protoc --plugin=$(GOPATH)/bin/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$@))
 
 # ==== BASIC ====
 
-BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) $(PROJECT_ROOT)/$(dir $@)
+BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) ./$(dir $@)
 
 # Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
 # This workaround builds the binary inside a linux container.
@@ -52,6 +53,11 @@ tracker/tracker:: $(wildcard tracker/*.go)
 clean::
 	@rm -f $(LINUX_BINS)
 
+.PHONY: vendor
+vendor:
+	go get -v github.com/Masterminds/glide
+	$(GOPATH)/bin/glide install
+
 .PHONY: bins
 bins: $(LINUX_BINS)
 
@@ -76,13 +82,15 @@ docker_stop:
 .PHONY: integration
 FILE?=
 NAME?=test_
+USERNAME:=$(shell id -u -n)
+USERID:=$(shell id -u)
 integration: $(LINUX_BINS) tools/bin/puller/puller docker_stop
-	docker build -q -t kraken-agent:dev -f docker/agent/Dockerfile ./
-	docker build -q -t kraken-build-index:dev -f docker/build-index/Dockerfile ./
-	docker build -q -t kraken-origin:dev -f docker/origin/Dockerfile ./
-	docker build -q -t kraken-proxy:dev -f docker/proxy/Dockerfile ./
-	docker build -q -t kraken-testfs:dev -f docker/testfs/Dockerfile ./
-	docker build -q -t kraken-tracker:dev -f docker/tracker/Dockerfile ./
+	docker build -q -t kraken-agent:dev -f docker/agent/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
+	docker build -q -t kraken-build-index:dev -f docker/build-index/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
+	docker build -q -t kraken-origin:dev -f docker/origin/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
+	docker build -q -t kraken-proxy:dev -f docker/proxy/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
+	docker build -q -t kraken-testfs:dev -f docker/testfs/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
+	docker build -q -t kraken-tracker:dev -f docker/tracker/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	if [ ! -d env ]; then virtualenv --setuptools env; fi
 	source env/bin/activate
 	env/bin/pip install -r requirements-tests.txt
@@ -106,14 +114,18 @@ devcluster: $(LINUX_BINS) docker_stop
 # ==== TOOLS ====
 
 LINUX_TOOLS = \
+	tools/bin/puller/puller \
 	tools/bin/reload/reload \
 	tools/bin/simulation/simulation \
 	tools/bin/trackerload/trackerload
 
+tools/bin/puller/puller:: $(wildcard tools/bin/puller/puller/*.go)
+	$(BUILD_LINUX)
+
 tools/bin/reload/reload:: $(wildcard tools/bin/reload/reload/*.go)
 	$(BUILD_LINUX)
 
-tools/bin/simulation/simulation:: $(wildcard ttools/bin/simulation/simulation/*.go)
+tools/bin/simulation/simulation:: $(wildcard tools/bin/simulation/simulation/*.go)
 	$(BUILD_LINUX)
 
 tools/bin/trackerload/trackerload:: $(wildcard tools/bin/trackerload/trackerload/*.go)
@@ -132,13 +144,9 @@ bench:
 	$(ECHO_V)cd $(FAUXROOT); $(TEST_ENV)	\
 		$(GO) test -bench=. -run=$(TEST_DIRS)
 
-update-golden:
-	$(shell UBER_ENVIRONMENT=test UBER_CONFIG_DIR=`pwd`/config/origin go test ./client/cli/ -update 1>/dev/null)
-	@echo "generated golden files"
-
 # ==== MOCKS ====
 
-mockgen = $(GLIDE_EXEC) -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
+mockgen = $(GOPATH)/bin/glide -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
 
 # mockgen must be installed on the system to make this work. Install it by running
 # `go get github.com/golang/mock/mockgen`.
