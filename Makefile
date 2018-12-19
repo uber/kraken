@@ -53,6 +53,10 @@ tracker/tracker:: $(wildcard tracker/*.go)
 clean::
 	@rm -f $(LINUX_BINS)
 
+.PHONY: vendor
+vendor:
+	glide install
+
 .PHONY: bins
 bins: $(LINUX_BINS)
 
