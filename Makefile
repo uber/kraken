@@ -82,8 +82,8 @@ docker_stop:
 .PHONY: integration
 FILE?=
 NAME?=test_
-USERNAME=$(id -u -n)
-USERID=$(id -u)
+USERNAME:=$(shell id -u -n)
+USERID:=$(shell id -u)
 integration: $(LINUX_BINS) tools/bin/puller/puller docker_stop
 	docker build -q -t kraken-agent:dev -f docker/agent/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build -q -t kraken-build-index:dev -f docker/build-index/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
