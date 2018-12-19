@@ -11,8 +11,8 @@ def test_docker_image_replication(one_way_replicas):
     one_way_replicas.src.proxy.push(TEST_IMAGE)
 
     # Wait for replication to finish.
-    time.sleep(2)
-    
+    time.sleep(5)
+
     with one_way_replicas.dst.agent_factory.create() as agent:
         agent.pull(TEST_IMAGE)
 
