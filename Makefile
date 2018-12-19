@@ -55,7 +55,8 @@ clean::
 
 .PHONY: vendor
 vendor:
-	glide install
+	go get -v github.com/Masterminds/glide
+	$(GOPATH)/bin/glide install
 
 .PHONY: bins
 bins: $(LINUX_BINS)
@@ -139,7 +140,7 @@ bench:
 
 # ==== MOCKS ====
 
-mockgen = glide -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
+mockgen = $(GOPATH)/bin/glide -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
 
 # mockgen must be installed on the system to make this work. Install it by running
 # `go get github.com/golang/mock/mockgen`.
