@@ -6,13 +6,14 @@ RUN mkdir -p -m 777 /var/log/udocker/kraken-agent
 RUN mkdir -p -m 777 /var/cache/udocker/kraken-agent
 RUN mkdir -p -m 777 /var/run/udocker
 
-RUN groupadd --gid 100001 udocker
-RUN useradd --uid 100001 -g udocker -d /home/udocker -m -s /bin/bash udocker
+ARG USERNAME
+ARG USERID
+RUN useradd --uid ${USERID} -g ${USERNAME} ${USERNAME}
 
 COPY ./docker/setup_nginx.sh /tmp/setup_nginx.sh
-RUN /tmp/setup_nginx.sh
+RUN /tmp/setup_nginx.sh ${USERNAME}
 
-USER udocker
+USER ${USERNAME}
 
 COPY ./config /home/udocker/kraken/config
 COPY ./nginx/config /home/udocker/kraken/nginx/config

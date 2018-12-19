@@ -22,18 +22,18 @@ RUN mkdir -p -m 777 /var/cache/udocker/kraken
 
 RUN mkdir -p -m 777 /var/run/udocker
 
-RUN groupadd --gid 100001 udocker
-RUN useradd --uid 100001 -g udocker -d /home/udocker -m -s /bin/bash udocker
-RUN usermod -aG sudo udocker
+ARG USERNAME
+ARG USERID
+RUN useradd --uid ${USERID} -g ${USERNAME} ${USERNAME}
 
 # Allow proxy to run nginx as root.
 RUN mkdir -p /etc/sudoers.d/
 RUN echo 'udocker  ALL=(root) NOPASSWD: /usr/sbin/nginx' >> /etc/sudoers.d/kraken-proxy
 
 COPY ./docker/setup_nginx.sh /tmp/setup_nginx.sh
-RUN /tmp/setup_nginx.sh
+RUN /tmp/setup_nginx.sh ${USERNAME}
 
-USER udocker
+USER ${USERNAME}
 
 COPY ./agent/agent             /usr/bin/kraken-agent
 COPY ./build-index/build-index /usr/bin/kraken-build-index

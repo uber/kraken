@@ -140,7 +140,6 @@ def init_cache(cname):
     """
     cache = abspath('.tmptest/test-kraken-integration/{cname}/cache'.format(cname=cname))
     if os.path.exists(cache):
-        subprocess.check_call(['ls', '-la', cache])
         subprocess.check_call(['rm', '-rf', cache])
     os.makedirs(cache)
     os.chmod(cache, 0777)
