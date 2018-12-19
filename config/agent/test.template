@@ -28,16 +28,16 @@ tls:
   ca:
     enabled: true
     cert:
-      path: /home/kraken/kraken/tls/ca/server.crt
+      path: /root/kraken/tls/ca/server.crt
     key:
-      path: /home/kraken/kraken/tls/ca/server.key
+      path: /root/kraken/tls/ca/server.key
     passphrase:
-      path: /home/kraken/kraken/tls/ca/passphrase
+      path: /root/kraken/tls/ca/passphrase
   client:
     enabled: true
     cert:
-      path: /home/kraken/kraken/tls/client/client.crt
+      path: /root/kraken/tls/client/client.crt
     key:
-      path: /home/kraken/kraken/tls/client/client.key
+      path: /root/kraken/tls/client/client.key
     passphrase:
-      path: /home/kraken/kraken/tls/client/passphrase
+      path: /root/kraken/tls/client/passphrase
