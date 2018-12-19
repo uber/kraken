@@ -13,8 +13,9 @@ PROTO = $(GEN_DIR)/proto/p2p/p2p.pb.go
 
 $(PROTO): $(wildcard proto/*)
 	mkdir -p $(GEN_DIR)
+	go get -u github.com/golang/protobuf
 	go get -u github.com/golang/protobuf/protoc-gen-go
-	protoc --plugin=$(GOPATH)/bin/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$@))
+	$(GOPATH)/bin/protoc --plugin=$(GOPATH)/bin/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$@))
 
 # ==== BASIC ====
 
