@@ -83,6 +83,8 @@ docker_stop:
 FILE?=
 NAME?=test_
 integration: $(LINUX_BINS) tools/bin/puller/puller docker_stop
+	id -u -n
+	id -u
 	docker build -q -t kraken-agent:dev -f docker/agent/Dockerfile --build-arg USERID=$(id -u) --build-arg USERNAME=$(id -u -n) ./
 	docker build -q -t kraken-build-index:dev -f docker/build-index/Dockerfile --build-arg USERID=$(id -u) --build-arg USERNAME=$(id -u -n) ./
 	docker build -q -t kraken-origin:dev -f docker/origin/Dockerfile --build-arg USERID=$(id -u) --build-arg USERNAME=$(id -u -n) ./
