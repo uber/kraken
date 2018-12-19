@@ -113,7 +113,7 @@ LINUX_TOOLS = \
 tools/bin/reload/reload:: $(wildcard tools/bin/reload/reload/*.go)
 	$(BUILD_LINUX)
 
-tools/bin/simulation/simulation:: $(wildcard ttools/bin/simulation/simulation/*.go)
+tools/bin/simulation/simulation:: $(wildcard tools/bin/simulation/simulation/*.go)
 	$(BUILD_LINUX)
 
 tools/bin/trackerload/trackerload:: $(wildcard tools/bin/trackerload/trackerload/*.go)
