@@ -7,7 +7,7 @@ RUN mkdir -p -m 777 /var/cache/udocker/kraken-testfs
 
 ARG USERNAME
 ARG USERID
-RUN useradd --uid ${USERID} -g ${USERNAME} ${USERNAME}
+RUN useradd --uid ${USERID} ${USERNAME}
 USER ${USERNAME}
 
 COPY tools/bin/testfs/testfs /usr/bin/kraken-testfs

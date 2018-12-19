@@ -8,7 +8,7 @@ RUN mkdir -p -m 777 /var/run/udocker
 
 ARG USERNAME
 ARG USERID
-RUN useradd --uid ${USERID} -g ${USERNAME} ${USERNAME}
+RUN useradd --uid ${USERID} ${USERNAME}
 
 COPY ./docker/setup_nginx.sh /tmp/setup_nginx.sh
 RUN /tmp/setup_nginx.sh ${USERNAME}

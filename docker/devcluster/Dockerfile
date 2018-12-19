@@ -24,7 +24,7 @@ RUN mkdir -p -m 777 /var/run/udocker
 
 ARG USERNAME
 ARG USERID
-RUN useradd --uid ${USERID} -g ${USERNAME} ${USERNAME}
+RUN useradd --uid ${USERID} ${USERNAME}
 
 # Allow proxy to run nginx as root.
 RUN mkdir -p /etc/sudoers.d/
