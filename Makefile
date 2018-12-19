@@ -5,7 +5,7 @@ GO = go
 BUILD_FLAGS = -gcflags '-N -l'
 
 # Where to find your project
-PROJECT_ROOT = $(GOPATH)/src/github.com/uber/kraken
+PROJECT_ROOT = github.com/uber/kraken
 
 GEN_DIR = .gen/go
 
@@ -18,7 +18,7 @@ $(PROTO): $(wildcard proto/*)
 
 # ==== BASIC ====
 
-BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) $(PROJECT_ROOT)/$(dir $@)
+BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) ./$(dir $@)
 
 # Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
 # This workaround builds the binary inside a linux container.
