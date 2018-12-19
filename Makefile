@@ -13,7 +13,8 @@ PROTO = $(GEN_DIR)/proto/p2p/p2p.pb.go
 
 $(PROTO): $(wildcard proto/*)
 	mkdir -p $(GEN_DIR)
-	go-build/protoc --plugin=go-build/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$@))
+	go get -u github.com/golang/protobuf/protoc-gen-go
+	protoc --plugin=$(GOPATH)/bin/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$@))
 
 # ==== BASIC ====
 
@@ -132,13 +133,9 @@ bench:
 	$(ECHO_V)cd $(FAUXROOT); $(TEST_ENV)	\
 		$(GO) test -bench=. -run=$(TEST_DIRS)
 
-update-golden:
-	$(shell UBER_ENVIRONMENT=test UBER_CONFIG_DIR=`pwd`/config/origin go test ./client/cli/ -update 1>/dev/null)
-	@echo "generated golden files"
-
 # ==== MOCKS ====
 
-mockgen = $(GLIDE_EXEC) -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
+mockgen = glide -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
 
 # mockgen must be installed on the system to make this work. Install it by running
 # `go get github.com/golang/mock/mockgen`.
