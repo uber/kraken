@@ -1,6 +1,6 @@
 # Kraken :octopus:
 
-[![Build Status](https://travis-ci.com/uber/kraken.svg?branch=master)](https://travis-ci.com/uber/kraken)
+[![Build Status](https://travis-ci.org/uber/kraken.svg?branch=master)](https://travis-ci.org/uber/kraken)
 [![Github Release](https://img.shields.io/github/release/uber/kraken.svg)](https://github.com/uber/kraken/releases)
 
 Kraken is a highly scalable P2P blob distribution system for large docker images and content addressable blobs.
