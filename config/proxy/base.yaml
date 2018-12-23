@@ -1,6 +1,6 @@
 castore:
-  upload_dir: /var/cache/udocker/kraken-proxy/upload/
-  cache_dir:  /var/cache/udocker/kraken-proxy/cache/
+  upload_dir: /var/cache/kraken/kraken-proxy/upload/
+  cache_dir:  /var/cache/kraken/kraken-proxy/cache/
   capacity: 1024
 
 zap:
@@ -21,10 +21,10 @@ zap:
     callerEncoder: short
   outputPaths:
     - stdout
-    - /var/log/udocker/kraken-proxy/stdout.log
+    - /var/log/kraken/kraken-proxy/stdout.log
   errorOutputPaths:
     - stdout
-    - /var/log/udocker/kraken-proxy/stdout.log
+    - /var/log/kraken/kraken-proxy/stdout.log
 
 metrics:
   m3:
@@ -46,5 +46,5 @@ registryoverride:
 
 nginx:
   name: kraken-proxy
-  cache_dir: /var/cache/udocker/kraken-proxy/nginx/
-  log_dir: /var/log/udocker/kraken-proxy/
+  cache_dir: /var/cache/kraken/kraken-proxy/nginx/
+  log_dir: /var/log/kraken/kraken-proxy/

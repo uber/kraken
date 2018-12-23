@@ -2,9 +2,9 @@ FROM debian:9
 
 RUN apt-get update && apt-get install -y curl nginx
 
-RUN mkdir -p -m 777 /var/log/udocker/kraken-agent
-RUN mkdir -p -m 777 /var/cache/udocker/kraken-agent
-RUN mkdir -p -m 777 /var/run/udocker
+RUN mkdir -p -m 777 /var/log/kraken/kraken-agent
+RUN mkdir -p -m 777 /var/cache/kraken/kraken-agent
+RUN mkdir -p -m 777 /var/run/kraken
 
 ARG USERNAME
 ARG USERID
@@ -15,9 +15,9 @@ RUN /tmp/setup_nginx.sh ${USERNAME}
 
 USER ${USERNAME}
 
-COPY ./config /home/udocker/kraken/config
-COPY ./nginx/config /home/udocker/kraken/nginx/config
 COPY ./agent/agent /usr/bin/kraken-agent
-COPY ./test/tls /home/udocker/kraken/tls
+COPY ./config /etc/kraken/config
+COPY ./nginx/config /etc/kraken/nginx/config
+COPY ./test/tls /etc/kraken/tls
 
-WORKDIR /home/udocker/kraken
+WORKDIR /etc/kraken

@@ -6,7 +6,7 @@ go:
   - 1.11.x
 
 services:
-    - docker
+  - docker
 
 install:
   - go get -v -d google.golang.org/grpc

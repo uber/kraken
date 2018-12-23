@@ -21,16 +21,16 @@ tls:
   ca:
     enabled: true
     cert:
-      path: /home/udocker/kraken/tls/ca/server.crt
+      path: /etc/kraken/tls/ca/server.crt
     key:
-      path: /home/udocker/kraken/tls/ca/server.key
+      path: /etc/kraken/tls/ca/server.key
     passphrase:
-      path: /home/udocker/kraken/tls/ca/passphrase
+      path: /etc/kraken/tls/ca/passphrase
   client:
     enabled: true
     cert:
-      path: /home/udocker/kraken/tls/client/client.crt
+      path: /etc/kraken/tls/client/client.crt
     key:
-      path: /home/udocker/kraken/tls/client/client.key
+      path: /etc/kraken/tls/client/client.key
     passphrase:
-      path: /home/udocker/kraken/tls/client/passphrase
+      path: /etc/kraken/tls/client/passphrase
