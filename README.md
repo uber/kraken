@@ -40,7 +40,7 @@ Central P2P components that's not specific to docker images:
   - Tracks peers and seeders, instructs them to form a sparse graph
   - Self-healing hash ring
 
-## Kraken Build Index and Replcation
+## Kraken Build Index and Replication
 
 Components responsible for image tags and replication to other clusters.
 
