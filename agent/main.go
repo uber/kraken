@@ -135,8 +135,8 @@ func main() {
 	// Wipe log files created by the old nginx process which ran as root.
 	// TODO(codyg): Swap these with the v2 log files once they are deleted.
 	for _, name := range []string{
-		"/var/log/udocker/kraken-agent/nginx-access.log",
-		"/var/log/udocker/kraken-agent/nginx-error.log",
+		"/var/log/kraken/kraken-agent/nginx-access.log",
+		"/var/log/kraken/kraken-agent/nginx-error.log",
 	} {
 		if err := os.Remove(name); err != nil && !os.IsNotExist(err) {
 			log.Warnf("Could not remove old root-owned nginx log: %s", err)
