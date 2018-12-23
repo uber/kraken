@@ -1,6 +1,6 @@
 #!/bin/bash
 
-baseconfig=/root/kraken/config
+baseconfig=/etc/kraken/config
 
 redis-server &
 

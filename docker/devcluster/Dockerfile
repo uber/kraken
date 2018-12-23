@@ -24,7 +24,6 @@ RUN mkdir -p -m 777 /var/run/kraken
 
 ARG USERNAME
 ARG USERID
-ARG HOMEDIR
 RUN useradd --uid ${USERID} ${USERNAME}
 
 # Allow proxy to run nginx as root.
@@ -43,7 +42,7 @@ COPY ./proxy/proxy             /usr/bin/kraken-proxy
 COPY ./tools/bin/testfs/testfs /usr/bin/kraken-testfs
 COPY ./tracker/tracker         /usr/bin/kraken-tracker
 
-WORKDIR ${HOMEDIR}/kraken
+WORKDIR /etc/kraken
 
 EXPOSE 9003
 EXPOSE 7602
@@ -54,8 +53,8 @@ EXPOSE 8991
 EXPOSE 5055
 EXPOSE 8351
 
-COPY ./config ${HOMEDIR}/kraken/config
-COPY ./nginx/config ${HOMEDIR}/kraken/nginx/config
-COPY ./docker/devcluster/start.sh ${HOMEDIR}/kraken/start.sh
-COPY ./test/tls ${HOMEDIR}/kraken/tls
+COPY ./config /etc/kraken/config
+COPY ./nginx/config /etc/kraken/nginx/config
+COPY ./docker/devcluster/start.sh /etc/kraken/start.sh
+COPY ./test/tls /etc/kraken/tls
 CMD ./start.sh
