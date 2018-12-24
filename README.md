@@ -27,7 +27,7 @@ Kraken have multiple components, they are divided into components that's dedicat
 
 Central P2P components that's not specific to docker images:
 
-![](assets/kraken_core.png)
+![](assets/kraken_core.svg)
 
 - Agent
   - Deployed on every host
@@ -44,7 +44,7 @@ Central P2P components that's not specific to docker images:
 
 Components responsible for image tags and replication to other clusters.
 
-![](assets/kraken_build_index.png)
+![](assets/kraken_build_index.svg)
 
 - Proxy
   - Handled image upload and direct download
