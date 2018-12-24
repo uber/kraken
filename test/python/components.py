@@ -372,7 +372,6 @@ class Agent(Component):
             image='kraken-agent:dev',
             environment={
                 'UBER_CONFIG_DIR': '/etc/kraken/config/agent',
-                'UBER_DATACENTER': self.zone,
             },
             ports={
                 self.torrent_client_port: self.torrent_client_port,
@@ -454,7 +453,6 @@ class Proxy(Component):
             ports={self.port: self.port},
             environment={
                 'UBER_CONFIG_DIR': '/etc/kraken/config/proxy',
-                'UBER_DATACENTER': self.zone,
             },
             command=[
                 '/usr/bin/kraken-proxy',
@@ -548,7 +546,6 @@ class BuildIndex(Component):
             ports={self.port: self.port},
             environment={
                 'UBER_CONFIG_DIR': '/etc/kraken/config/build-index',
-                'UBER_DATACENTER': self.zone,
             },
             command=[
                 '/usr/bin/kraken-build-index',
