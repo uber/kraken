@@ -60,7 +60,7 @@ Components responsible for image tags and replication to other clusters.
 
 Download a 3G docker image with 2 layers onto 2600 hosts concurrently (5200 blob downloads), with 300MB/s speed limit on all agents, 5 trackers and 5 origins:
 
-![](assets/kraken_benchmark.png)
+![](assets/kraken_benchmark.svg)
 
 - p50 = 10s (At speed limit)
 - p99 = 18s
