@@ -68,7 +68,12 @@ Download a 3G docker image with 2 layers onto 2600 hosts concurrently (5200 blob
 
 # Usage
 
-
+All Kraken components can be deployed as docker containers.
+To build the Docker images, run:
+```
+make images
+```
+To start the containers, run the example scripts under scripts/development, which will start one container of each component using example config files.
 
 # Limitations
 

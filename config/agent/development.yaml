@@ -1,0 +1,43 @@
+extends: base.yaml
+
+registry:
+  docker:
+    version: 0.1
+    log:
+      level: error
+    http:
+      net: tcp
+      addr: 0.0.0.0:5555
+
+scheduler:
+  connstate:
+    blacklist_duration: 5s
+
+peer_id_factory: random
+
+tracker:
+  hosts:
+    static: ['host.docker.internal:5005']
+
+build_index:
+  hosts:
+    static: ['host.docker.internal:5006']
+
+tls:
+  name: kraken
+  ca:
+    enabled: true
+    cert:
+      path: /etc/kraken/tls/ca/server.crt
+    key:
+      path: /etc/kraken/tls/ca/server.key
+    passphrase:
+      path: /etc/kraken/tls/ca/passphrase
+  client:
+    enabled: true
+    cert:
+      path: /etc/kraken/tls/client/client.crt
+    key:
+      path: /etc/kraken/tls/client/client.key
+    passphrase:
+      path: /etc/kraken/tls/client/passphrase

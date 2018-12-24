@@ -178,7 +178,6 @@ class Component(object):
     the container property for exposing its underlying Docker container, and Component
     provides utilities acting upon said container.
     """
-
     def new_container(self):
         """
         Initializes a new container. All subclasses must implement this method.
