@@ -27,7 +27,7 @@ Kraken have multiple components, they are divided into components that's dedicat
 
 Central P2P components that's not specific to docker images:
 
-![](assets/kraken_core.svg)
+![](assets/kraken_core.svg | width=300)
 
 - Agent
   - Deployed on every host
@@ -40,11 +40,11 @@ Central P2P components that's not specific to docker images:
   - Tracks peers and seeders, instructs them to form a sparse graph
   - Self-healing hash ring
 
-## Kraken Build Index and Replication
+## Kraken Proxy and Build Index
 
 Components responsible for image tags and replication to other clusters.
 
-![](assets/kraken_build_index.svg)
+![](assets/kraken_build_index.svg | width=300)
 
 - Proxy
   - Handled image upload and direct download
@@ -55,3 +55,11 @@ Components responsible for image tags and replication to other clusters.
   - Powers image replication between clusters. Simple duplicated queues with retry
   - Pluggable storage
   - Self-healing hash ring
+
+# Benchmark
+
+# Usage
+
+# Limitations
+
+- If docker registry wasn't the bottleneck, switching to Kraken wouldn't speed up `docker pull` by much, because docker spends most of the time on data decompression.
