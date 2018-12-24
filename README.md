@@ -27,7 +27,7 @@ Kraken have multiple components, they are divided into components that's dedicat
 
 Central P2P components that's not specific to docker images:
 
-![](assets/kraken_core.svg | width=300)
+![](assets/kraken_core.svg)
 
 - Agent
   - Deployed on every host
@@ -44,7 +44,7 @@ Central P2P components that's not specific to docker images:
 
 Components responsible for image tags and replication to other clusters.
 
-![](assets/kraken_build_index.svg | width=300)
+![](assets/kraken_build_index.svg)
 
 - Proxy
   - Handled image upload and direct download
@@ -62,4 +62,5 @@ Components responsible for image tags and replication to other clusters.
 
 # Limitations
 
-- If docker registry wasn't the bottleneck, switching to Kraken wouldn't speed up `docker pull` by much, because docker spends most of the time on data decompression.
+- If docker registry throughput wasn't the bottleneck, switching to Kraken wouldn't speed up `docker pull` by much, because docker spends most of the time on data decompression. To actually speed up `docker pull`, consider switching to [Makisu](https://github.com/uber/makisu) to tweak compression ratio at build time, and then use Kraken to distribute the uncompressed image, at the cost of additional IO.
+- Kraken's cross cluster replication mechanism cannot handle tag mutation (handling that properly would require a globally consistent key-value store). If that's required, please consider implementing your own index component on top of your prefered key-value store solution.
