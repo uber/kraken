@@ -9,7 +9,7 @@ Some highlights of Kraken:
 - Highly scalable. It's capable of distributing docker images at throughput of 1TB/sec, and image size doesn't impact download speed. It can support clusters of 8k hosts and above.
 - Highly available. Kraken cluster would remain operational even if mutiple origin hosts were lost at the same time.
 - Secure. Supports bi-directional TLS between all components for image tags, and bi-directional TLS between image builder and Kraken for all data (if your image builder supports client-side TLS, like [Makisu](https://github.com/uber/makisu)).
-- Pluggable. It supports using S3/HDFS as storage backend, and it's easy to add more storage drivers. It can be setup as write-back cache with configurable TTL, so it can survive S3 outages without impacting functionality.
+- Pluggable storage options. It supports using S3/HDFS as storage backend, and it's easy to add more storage drivers. It can be setup as write-back cache with configurable TTL, so it can survive S3 outages without impacting functionality.
 - Lossless cross cluster replication. Kraken supports async replication between clusters based on namespace and repo name.
 - Minimal dependency. Other than plugable storage, Kraken only depends on DNS.
 
@@ -58,7 +58,7 @@ Components responsible for image tags and replication to other clusters.
 
 # Benchmark
 
-Download a 3G docker image with 2 layers onto 2600 hosts concurrently (5200 blob downloads), with 300MB/s speed limit on all agents, 5 trackers and 5 origins:
+Download a 3G docker image with 2 layers onto 2600 hosts concurrently (5200 blob downloads), with 300MB/s speed limit on all agents (using 5 trackers and 5 origins):
 
 ![](assets/kraken_benchmark.svg)
 
@@ -67,6 +67,8 @@ Download a 3G docker image with 2 layers onto 2600 hosts concurrently (5200 blob
 - p99.9 = 22s
 
 # Usage
+
+
 
 # Limitations
 
