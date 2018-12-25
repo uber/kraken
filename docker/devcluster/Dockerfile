@@ -22,9 +22,9 @@ RUN mkdir -p -m 777 /var/cache/kraken/kraken
 
 RUN mkdir -p -m 777 /var/run/kraken
 
-ARG USERNAME
-ARG USERID
-RUN useradd --uid ${USERID} ${USERNAME}
+ARG USERNAME="root"
+ARG USERID="0"
+RUN if [ ${USERID} != "0" ]; then useradd --uid ${USERID} ${USERNAME}; fi
 
 # Allow proxy to run nginx as root.
 RUN mkdir -p /etc/sudoers.d/

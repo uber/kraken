@@ -1,0 +1,37 @@
+extends: base.yaml
+
+port: 5003
+
+peerstore:
+  redis:
+    addr: {redis}
+
+origin:
+  hosts:
+    static:
+      - host.docker.internal:5004
+
+trackerserver:
+  announce_interval: 3s
+
+nginx:
+  cache_dir: /tmp/kraken-tracker-nginx/
+
+tls:
+  name: kraken
+  ca:
+    enabled: true
+    cert:
+      path: /etc/kraken/tls/ca/server.crt
+    key:
+      path: /etc/kraken/tls/ca/server.key
+    passphrase:
+      path: /etc/kraken/tls/ca/passphrase
+  client:
+    enabled: true
+    cert:
+      path: /etc/kraken/tls/client/client.crt
+    key:
+      path: /etc/kraken/tls/client/client.key
+    passphrase:
+      path: /etc/kraken/tls/client/passphrase

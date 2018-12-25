@@ -18,6 +18,8 @@ $(PROTO): $(wildcard proto/*)
 
 # ==== BASIC ====
 
+BUILD_NATIVE = $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) ./$(dir $@)
+
 BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) ./$(dir $@)
 
 # Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
@@ -49,6 +51,15 @@ tools/bin/testfs/testfs:: $(wildcard tools/bin/testfs/*.go)
 
 tracker/tracker:: $(wildcard tracker/*.go)
 	$(BUILD_LINUX)
+
+.PHONY: images
+images: $(LINUX_BINS)
+	docker build -q -t kraken-agent:dev -f docker/agent/Dockerfile ./
+	docker build -q -t kraken-build-index:dev -f docker/build-index/Dockerfile ./
+	docker build -q -t kraken-origin:dev -f docker/origin/Dockerfile ./
+	docker build -q -t kraken-proxy:dev -f docker/proxy/Dockerfile ./
+	docker build -q -t kraken-testfs:dev -f docker/testfs/Dockerfile ./
+	docker build -q -t kraken-tracker:dev -f docker/tracker/Dockerfile ./
 
 clean::
 	@rm -f $(LINUX_BINS)
@@ -113,26 +124,26 @@ devcluster: $(LINUX_BINS) docker_stop
 
 # ==== TOOLS ====
 
-LINUX_TOOLS = \
+NATIVE_TOOLS = \
 	tools/bin/puller/puller \
 	tools/bin/reload/reload \
 	tools/bin/simulation/simulation \
 	tools/bin/trackerload/trackerload
 
 tools/bin/puller/puller:: $(wildcard tools/bin/puller/puller/*.go)
-	$(BUILD_LINUX)
+	$(BUILD_NATIVE)
 
 tools/bin/reload/reload:: $(wildcard tools/bin/reload/reload/*.go)
-	$(BUILD_LINUX)
+	$(BUILD_NATIVE)
 
 tools/bin/simulation/simulation:: $(wildcard tools/bin/simulation/simulation/*.go)
-	$(BUILD_LINUX)
+	$(BUILD_NATIVE)
 
 tools/bin/trackerload/trackerload:: $(wildcard tools/bin/trackerload/trackerload/*.go)
-	$(BUILD_LINUX)
+	$(BUILD_NATIVE)
 
 .PHONY: tools
-tools: $(LINUX_TOOLS)
+tools: $(NATIVE_TOOLS)
 
 # Creates a release summary containing the build revisions of each component
 # for the specified version.
