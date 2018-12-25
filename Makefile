@@ -80,7 +80,7 @@ vendor:
 bins: $(LINUX_BINS)
 
 .PHONY: unit-test
-unit-test: vendor
+unit-test: vendor $(PROTO)
 	$(GOPATH)/bin/gocov test $(ALL_PKGS) --tags "unit" | $(GOPATH)/bin/gocov report
 
 # ==== INTEGRATION ====
@@ -106,7 +106,7 @@ FILE?=
 NAME?=test_
 USERNAME:=$(shell id -u -n)
 USERID:=$(shell id -u)
-integration: $(LINUX_BINS) tools/bin/puller/puller docker_stop
+integration: vendor $(LINUX_BINS) tools/bin/puller/puller docker_stop
 	docker build -q -t kraken-agent:dev -f docker/agent/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build -q -t kraken-build-index:dev -f docker/build-index/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build -q -t kraken-origin:dev -f docker/origin/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./

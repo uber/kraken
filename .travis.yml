@@ -22,6 +22,4 @@ env:
   - PATH=$HOME/protoc/bin:$PATH
 
 script:
-  - make vendor
-  - make unit-test
-  - make integration
+  - make unit-test integration
