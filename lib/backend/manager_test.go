@@ -16,7 +16,6 @@ import (
 func TestManagerNamespaceMatching(t *testing.T) {
 	c1 := ClientFixture()
 	c2 := ClientFixture()
-	c3 := ClientFixture()
 
 	tests := []struct {
 		namespace string

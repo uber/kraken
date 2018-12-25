@@ -7,6 +7,14 @@ BUILD_FLAGS = -gcflags '-N -l'
 # Where to find your project
 PROJECT_ROOT = github.com/uber/kraken
 
+ALL_SRC = $(shell find . -name "*.go" | grep -v -e vendor \
+	-e ".*/\..*" \
+	-e ".*/_.*" \
+	-e ".*/mocks.*" \
+	-e ".*/*.pb.go")
+
+ALL_PKGS = $(shell go list $(sort $(dir $(ALL_SRC))) | grep -v vendor)
+
 GEN_DIR = .gen/go
 
 PROTO = $(GEN_DIR)/proto/p2p/p2p.pb.go
@@ -64,7 +72,6 @@ images: $(LINUX_BINS)
 clean::
 	@rm -f $(LINUX_BINS)
 
-.PHONY: vendor
 vendor:
 	go get -v github.com/Masterminds/glide
 	$(GOPATH)/bin/glide install
@@ -72,11 +79,7 @@ vendor:
 .PHONY: bins
 bins: $(LINUX_BINS)
 
-# ==== INTEGRATION ====
-
-test:: redis
-
-jenkins:: redis
+# ==== TEST ====
 
 .PHONY: redis
 redis:
@@ -85,6 +88,10 @@ redis:
 	docker pull redis
 	# TODO(codyg): I chose this random port to avoid conflicts in Jenkins. Obviously not ideal.
 	docker run -d -p 6380:6379 --name kraken-redis redis:latest
+
+.PHONY: unit-test
+unit-test: vendor $(PROTO) redis
+	$(GOPATH)/bin/gocov test $(ALL_PKGS) --tags "unit" | $(GOPATH)/bin/gocov report
 
 .PHONY: docker_stop
 docker_stop:
@@ -95,7 +102,7 @@ FILE?=
 NAME?=test_
 USERNAME:=$(shell id -u -n)
 USERID:=$(shell id -u)
-integration: $(LINUX_BINS) tools/bin/puller/puller docker_stop
+integration: vendor $(LINUX_BINS) tools/bin/puller/puller docker_stop
 	docker build -q -t kraken-agent:dev -f docker/agent/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build -q -t kraken-build-index:dev -f docker/build-index/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build -q -t kraken-origin:dev -f docker/origin/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
@@ -149,11 +156,6 @@ tools: $(NATIVE_TOOLS)
 # for the specified version.
 releases/%:
 	./scripts/release.sh $(subst releases/,,$@)
-
-.PHONY: bench
-bench:
-	$(ECHO_V)cd $(FAUXROOT); $(TEST_ENV)	\
-		$(GO) test -bench=. -run=$(TEST_DIRS)
 
 # ==== MOCKS ====
 
