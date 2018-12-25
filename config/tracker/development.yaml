@@ -8,10 +8,11 @@ peerstore:
 
 origin:
   hosts:
-    static: ['host.docker.internal:5004']
+    static:
+      - host.docker.internal:5004
 
 trackerserver:
-  announce_interval: 2s
+  announce_interval: 3s
 
 nginx:
   cache_dir: /tmp/kraken-tracker-nginx/

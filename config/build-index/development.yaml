@@ -2,7 +2,8 @@ extends: base.yaml
 
 cluster:
   hosts:
-    static: ['host.docker.internal:5006']
+    static:
+      - host.docker.internal:5006
 
 backends:
   - namespace: .*
@@ -14,7 +15,8 @@ backends:
 
 origin:
   hosts:
-    static: ['host.docker.internal:5004']
+    static:
+      - host.docker.internal:5004
 
 remotes: {}
 
@@ -22,16 +24,10 @@ tag_replication:
   retry_interval: 100ms
   poll_retries_interval: 250ms
 
-tagserver:
-  cache:
-    ttl: 10ms
-    error_ttl: 10ms
-    cleanup_interval: 5ms
-  duplicate_replicate_stagger: 100ms
-
 tag_types:
   - namespace: .*
     type: docker
+    root: tags
 
 tag_store:
   write_through: false

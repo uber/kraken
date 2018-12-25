@@ -4,14 +4,8 @@ hashring:
   max_replica: 2
 
 cluster:
-  static: ['host.docker.internal:5004']
-
-metainfogen:
-  piece_lengths:
-    0: 1MB
-
-# Need stable peer ids for the origin so we can safely restart them.
-peer_id_factory: addr_hash
+  static:
+    - host.docker.internal:5004
 
 backends:
   - namespace: .*
@@ -24,6 +18,8 @@ backends:
 writeback:
   retry_interval: 100ms
   poll_retries_interval: 250ms
+
+peer_id_factory: random
 
 tls:
   name: kraken

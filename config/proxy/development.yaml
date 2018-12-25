@@ -2,11 +2,13 @@ extends: base.yaml
 
 origin:
   hosts:
-    static: ['host.docker.internal:5004']
+    static:
+      - host.docker.internal:5004
 
 build_index:
   hosts:
-    static: ['host.docker.internal:5006']
+    static:
+      - host.docker.internal:5006
 
 nginx:
   cache_dir: /tmp/kraken-proxy-nginx/
