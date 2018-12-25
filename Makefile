@@ -79,15 +79,7 @@ vendor:
 .PHONY: bins
 bins: $(LINUX_BINS)
 
-.PHONY: unit-test
-unit-test: vendor $(PROTO)
-	$(GOPATH)/bin/gocov test $(ALL_PKGS) --tags "unit" | $(GOPATH)/bin/gocov report
-
-# ==== INTEGRATION ====
-
-test:: redis
-
-jenkins:: redis
+# ==== TEST ====
 
 .PHONY: redis
 redis:
@@ -96,6 +88,10 @@ redis:
 	docker pull redis
 	# TODO(codyg): I chose this random port to avoid conflicts in Jenkins. Obviously not ideal.
 	docker run -d -p 6380:6379 --name kraken-redis redis:latest
+
+.PHONY: unit-test
+unit-test: vendor $(PROTO) redis
+	$(GOPATH)/bin/gocov test $(ALL_PKGS) --tags "unit" | $(GOPATH)/bin/gocov report
 
 .PHONY: docker_stop
 docker_stop:
