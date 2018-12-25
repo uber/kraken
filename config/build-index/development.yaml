@@ -1,0 +1,59 @@
+extends: base.yaml
+
+cluster:
+  hosts:
+    static:
+      - host.docker.internal:5006
+
+backends:
+  - namespace: .*
+    backend:
+      testfs:
+        addr: host.docker.internal:5005
+        root: tags
+        name_path: docker_tag
+
+origin:
+  hosts:
+    static:
+      - host.docker.internal:5004
+
+remotes: {}
+
+tag_replication:
+  retry_interval: 100ms
+  poll_retries_interval: 250ms
+
+tag_types:
+  - namespace: .*
+    type: docker
+    root: tags
+
+tag_store:
+  write_through: false
+
+writeback:
+  retry_interval: 100ms
+  poll_retries_interval: 250ms
+
+nginx:
+  cache_dir: /tmp/kraken-build-index-nginx/
+
+tls:
+  name: kraken
+  ca:
+    enabled: true
+    cert:
+      path: /etc/kraken/tls/ca/server.crt
+    key:
+      path: /etc/kraken/tls/ca/server.key
+    passphrase:
+      path: /etc/kraken/tls/ca/passphrase
+  client:
+    enabled: true
+    cert:
+      path: /etc/kraken/tls/client/client.crt
+    key:
+      path: /etc/kraken/tls/client/client.key
+    passphrase:
+      path: /etc/kraken/tls/client/passphrase
