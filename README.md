@@ -6,7 +6,9 @@
 Kraken is highly scalable P2P blob distribution system for large docker images and content addressable blobs.
 
 Some highlights of Kraken:
-- Highly scalable. It's capable of distributing docker images at throughput of 1TB/sec, and image size doesn't impact download speed. It can support clusters of 8k hosts and above.
+- Highly scalable. It's capable of distributing docker images at > 50% of max download speed limit (configurable) on every host; Cluster size and image size do not have notable impact on download speed.
+  - Supports at least 8k hosts per cluster.
+  - Supports blobs/layers of up to 20G.
 - Highly available. Kraken cluster would remain operational even if mutiple origin hosts were lost at the same time.
 - Secure. Supports bi-directional TLS between all components for image tags, and bi-directional TLS between image builder and Kraken for all data.
 - Pluggable storage options. It supports using S3/HDFS as storage backend, and it's easy to add more storage drivers. It can be setup as write-back cache with configurable TTL, so it can survive S3 outages without impacting functionality.
@@ -58,7 +60,9 @@ Components responsible for image tags and replication to other clusters.
 
 # Benchmark
 
-Download a 3G docker image with 2 layers onto 2600 hosts concurrently (5200 blob downloads), with 300MB/s speed limit on all agents (using 5 trackers and 5 origins):
+In our busiest cluster, Kraken distributes 1 million 0-100MB blobs, 600k 100MB-1G blobs, and 100k 1G+ blobs per day. At its peak production load, Kraken distributes 20K 100MB-1G blobs under 30 sec with ease.
+
+Following data is from a test where a 3G docker image with 2 layers is downloaded by 2600 hosts concurrently (5200 blob downloads), with 300MB/s speed limit on all agents (using 5 trackers and 5 origins):
 
 ![](assets/kraken_benchmark.svg)
 
