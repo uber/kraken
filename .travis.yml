@@ -20,4 +20,5 @@ env:
 
 script:
   - make vendor
+  - make unit-test
   - make integration

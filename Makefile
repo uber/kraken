@@ -7,6 +7,14 @@ BUILD_FLAGS = -gcflags '-N -l'
 # Where to find your project
 PROJECT_ROOT = github.com/uber/kraken
 
+ALL_SRC = $(shell find . -name "*.go" | grep -v -e vendor \
+	-e ".*/\..*" \
+	-e ".*/_.*" \
+	-e ".*/mocks.*" \
+	-e ".*/*.pb.go")
+
+ALL_PKGS = $(shell go list $(sort $(dir $(ALL_SRC))) | grep -v vendor)
+
 GEN_DIR = .gen/go
 
 PROTO = $(GEN_DIR)/proto/p2p/p2p.pb.go
@@ -64,13 +72,16 @@ images: $(LINUX_BINS)
 clean::
 	@rm -f $(LINUX_BINS)
 
-.PHONY: vendor
 vendor:
 	go get -v github.com/Masterminds/glide
 	$(GOPATH)/bin/glide install
 
 .PHONY: bins
 bins: $(LINUX_BINS)
+
+.PHONY: unit-test
+unit-test: vendor
+	$(GOPATH)/bin/gocov test $(ALL_PKGS) --tags "unit" | $(GOPATH)/bin/gocov report
 
 # ==== INTEGRATION ====
 
@@ -149,11 +160,6 @@ tools: $(NATIVE_TOOLS)
 # for the specified version.
 releases/%:
 	./scripts/release.sh $(subst releases/,,$@)
-
-.PHONY: bench
-bench:
-	$(ECHO_V)cd $(FAUXROOT); $(TEST_ENV)	\
-		$(GO) test -bench=. -run=$(TEST_DIRS)
 
 # ==== MOCKS ====
 
