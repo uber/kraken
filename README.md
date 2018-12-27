@@ -11,16 +11,14 @@ Some highlights of Kraken:
   - Supports arbitrarily large blobs/layers. We normally limit blob size to 20G to avoid storage space fluctuation.
 - Highly available. Kraken cluster would remain operational even if mutiple origin hosts were lost at the same time.
 - Secure. Supports bi-directional TLS between all components for image tags, and bi-directional TLS between image builder and Kraken for all data.
-- Pluggable storage options. It supports using S3/HDFS as storage backend, and it's easy to add more storage drivers. It can be setup as write-back cache with configurable TTL, so it can survive S3 outages without impacting functionality.
-- Lossless cross cluster replication. Kraken supports async replication between clusters based on namespace and repo name.
-- Minimal dependency. Other than plugable storage, Kraken only depends on DNS.
+- Pluggable storage options. It supports S3/HDFS as storage backend, and it's easy to add more options. It can be setup as write-back cache with configurable TTL, so it can survive S3 outages without impacting functionality.
+- Lossless cross cluster replication. Kraken supports async replication between clusters based on namespaces/repo names.
+- Minimal dependency. Other than plugable storage, Kraken only has optional dependency on DNS.
 
 Uber has been using Kraken in production since early 2018. In our busiest cluster, Kraken distributes 1 million 0-100MB blobs, 600k 100MB-1G blobs, and 100k 1G+ blobs per day. At its peak production load, Kraken distributes 20K 100MB-1G blobs under 30 sec with ease.
 
 - [Design](#design)
 - [Artitecture](#artitecture)
-  - [Kraken Core](#kraken-core)
-  - [Kraken Proxy and Build Index](#kraken-proxy-and-build-index)
 - [Benchmark](#benchmark)
 - [Usage](#usage)
 - [Comparison With Other Projects](#comparison-with-other-projects)
