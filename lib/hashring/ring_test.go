@@ -12,6 +12,7 @@ import (
 	"github.com/uber/kraken/utils/randutil"
 	"github.com/uber/kraken/utils/stringset"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
@@ -41,11 +42,14 @@ func TestRingLocationsDistribution(t *testing.T) {
 			require := require.New(t)
 
 			addrs := addrsFixture(test.clusterSize)
+			monitor := healthcheck.NewMonitor(
+				healthcheck.MonitorConfig{},
+				hostlist.Fixture(addrs...),
+				healthcheck.IdentityFilter{})
 
 			r := New(
 				Config{MaxReplica: test.maxReplica},
-				hostlist.Fixture(addrs...),
-				healthcheck.IdentityFilter{})
+				monitor)
 
 			sampleSize := 2000
 
@@ -67,12 +71,19 @@ func TestRingLocationsDistribution(t *testing.T) {
 func TestRingLocationsFiltersOutUnhealthyHosts(t *testing.T) {
 	require := require.New(t)
 
+	clk := clock.NewMock()
 	filter := healthcheck.NewManualFilter()
+	config := healthcheck.MonitorConfig{Interval: 1 * time.Second}
+	monitor := healthcheck.NewMonitor(
+		config,
+		hostlist.Fixture(addrsFixture(10)...),
+		filter,
+		healthcheck.WithClk(clk),
+	)
 
 	r := New(
 		Config{MaxReplica: 3},
-		hostlist.Fixture(addrsFixture(10)...),
-		filter)
+		monitor)
 
 	d := core.DigestFixture()
 
@@ -80,6 +91,7 @@ func TestRingLocationsFiltersOutUnhealthyHosts(t *testing.T) {
 	require.Len(replicas, 3)
 
 	filter.Unhealthy.Add(replicas[0])
+	clk.Add(config.Interval)
 	r.Refresh()
 
 	result := r.Locations(d)
@@ -89,12 +101,19 @@ func TestRingLocationsFiltersOutUnhealthyHosts(t *testing.T) {
 func TestRingLocationsReturnsNextHealthyHostWhenReplicaSetUnhealthy(t *testing.T) {
 	require := require.New(t)
 
+	clk := clock.NewMock()
 	filter := healthcheck.NewManualFilter()
+	config := healthcheck.MonitorConfig{Interval: 1 * time.Second}
+	monitor := healthcheck.NewMonitor(
+		config,
+		hostlist.Fixture(addrsFixture(10)...),
+		filter,
+		healthcheck.WithClk(clk),
+	)
 
 	r := New(
 		Config{MaxReplica: 3},
-		hostlist.Fixture(addrsFixture(10)...),
-		filter)
+		monitor)
 
 	d := core.DigestFixture()
 
@@ -105,6 +124,7 @@ func TestRingLocationsReturnsNextHealthyHostWhenReplicaSetUnhealthy(t *testing.T
 	for _, addr := range replicas {
 		filter.Unhealthy.Add(addr)
 	}
+	clk.Add(config.Interval)
 	r.Refresh()
 
 	// Should consistently select the next address.
@@ -117,6 +137,7 @@ func TestRingLocationsReturnsNextHealthyHostWhenReplicaSetUnhealthy(t *testing.T
 
 	// Mark the next address as unhealthy.
 	filter.Unhealthy.Add(next[0])
+	clk.Add(config.Interval)
 	r.Refresh()
 
 	// Should consistently select the address after next.
@@ -130,12 +151,19 @@ func TestRingLocationsReturnsNextHealthyHostWhenReplicaSetUnhealthy(t *testing.T
 func TestRingLocationsReturnsFirstHostWhenAllHostsUnhealthy(t *testing.T) {
 	require := require.New(t)
 
+	clk := clock.NewMock()
 	filter := healthcheck.NewBinaryFilter()
+	config := healthcheck.MonitorConfig{Interval: 1 * time.Second}
+	monitor := healthcheck.NewMonitor(
+		config,
+		hostlist.Fixture(addrsFixture(10)...),
+		filter,
+		healthcheck.WithClk(clk),
+	)
 
 	r := New(
 		Config{MaxReplica: 3},
-		hostlist.Fixture(addrsFixture(10)...),
-		filter)
+		monitor)
 
 	d := core.DigestFixture()
 
@@ -143,6 +171,7 @@ func TestRingLocationsReturnsFirstHostWhenAllHostsUnhealthy(t *testing.T) {
 	require.Len(replicas, 3)
 
 	filter.Healthy = false
+	clk.Add(config.Interval)
 	r.Refresh()
 
 	// Should consistently select the first replica once all are unhealthy.
@@ -160,7 +189,12 @@ func TestRingContains(t *testing.T) {
 	y := "y:80"
 	z := "z:80"
 
-	r := New(Config{}, hostlist.Fixture(x, y), healthcheck.IdentityFilter{})
+	monitor := healthcheck.NewMonitor(
+		healthcheck.MonitorConfig{},
+		hostlist.Fixture(x, y),
+		healthcheck.IdentityFilter{})
+
+	r := New(Config{}, monitor)
 
 	require.True(r.Contains(x))
 	require.True(r.Contains(y))
@@ -183,23 +217,60 @@ func TestRingMonitor(t *testing.T) {
 		cluster.EXPECT().Resolve().Return(stringset.New(y)),
 	)
 
-	r := New(
-		Config{RefreshInterval: time.Second},
+	clk := clock.NewMock()
+	config := healthcheck.MonitorConfig{Interval: 1 * time.Second}
+	monitor := healthcheck.NewMonitor(
+		config,
 		cluster,
-		healthcheck.IdentityFilter{})
+		healthcheck.IdentityFilter{},
+		healthcheck.WithClk(clk),
+	)
 
-	stop := make(chan struct{})
-	defer close(stop)
-	go r.Monitor(stop)
+	r := New(
+		Config{},
+		monitor)
 
 	d := core.DigestFixture()
 
 	require.Equal([]string{x}, r.Locations(d))
 
 	// Monitor should refresh the ring.
-	time.Sleep(1250 * time.Millisecond)
+	clk.Add(config.Interval)
 
 	require.Equal([]string{y}, r.Locations(d))
+}
+
+func TestRingPassive(t *testing.T) {
+	require := require.New(t)
+
+	clk := clock.NewMock()
+	config := healthcheck.PassiveConfig{Fails: 1, FailTimeout: 1 * time.Second}
+	p := healthcheck.NewPassive(
+		config,
+		clk,
+		hostlist.Fixture(addrsFixture(10)...))
+
+	r := New(
+		Config{MaxReplica: 3},
+		p)
+
+	d := core.DigestFixture()
+
+	replicas := r.Locations(d)
+	require.Len(replicas, 3)
+
+	r.Failed(replicas[0])
+	r.Refresh()
+
+	result := r.Locations(d)
+	require.Equal(replicas[1:], result)
+
+	// Refresh should remove host from failed list due to timeout.
+	clk.Add(config.FailTimeout + 1*time.Second)
+	r.Refresh()
+
+	result = r.Locations(d)
+	require.Equal(replicas[:], result)
 }
 
 func TestRingRefreshUpdatesMembership(t *testing.T) {
@@ -220,12 +291,22 @@ func TestRingRefreshUpdatesMembership(t *testing.T) {
 		cluster.EXPECT().Resolve().Return(stringset.New(y, z)),
 	)
 
-	r := New(Config{}, cluster, healthcheck.IdentityFilter{})
+	clk := clock.NewMock()
+	config := healthcheck.MonitorConfig{Interval: 1 * time.Second}
+	monitor := healthcheck.NewMonitor(
+		config,
+		cluster,
+		healthcheck.IdentityFilter{},
+		healthcheck.WithClk(clk),
+	)
+
+	r := New(Config{}, monitor)
 
 	d := core.DigestFixture()
 
 	require.ElementsMatch([]string{x, y}, r.Locations(d))
 
+	clk.Add(config.Interval)
 	r.Refresh()
 
 	require.ElementsMatch([]string{y, z}, r.Locations(d))
@@ -256,7 +337,18 @@ func TestRingNotifiesWatchersOnMembershipChanges(t *testing.T) {
 		cluster.EXPECT().Resolve().Return(stringset.New(x, y, z)),
 	)
 
-	r := New(Config{}, cluster, healthcheck.IdentityFilter{}, WithWatcher(watcher))
+	clk := clock.NewMock()
+	config := healthcheck.MonitorConfig{Interval: 1 * time.Second}
+	monitor := healthcheck.NewMonitor(
+		config,
+		cluster,
+		healthcheck.IdentityFilter{},
+		healthcheck.WithClk(clk),
+	)
+
+	r := New(Config{}, monitor, WithWatcher(watcher))
+	clk.Add(config.Interval)
 	r.Refresh()
+	clk.Add(config.Interval)
 	r.Refresh()
 }

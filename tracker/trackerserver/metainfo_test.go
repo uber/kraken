@@ -14,7 +14,7 @@ import (
 )
 
 func newMetaInfoClient(addr string) metainfoclient.Client {
-	return metainfoclient.New(healthcheck.NoopFailed(hostlist.Fixture(addr)), nil)
+	return metainfoclient.New(healthcheck.NoopList(hostlist.Fixture(addr)), nil)
 }
 
 func TestGetMetaInfoHandlerFetchesFromOrigin(t *testing.T) {
