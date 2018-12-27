@@ -18,7 +18,7 @@ Some highlights of Kraken:
 Uber has been using Kraken in production since early 2018. In our busiest cluster, Kraken distributes 1 million 0-100MB blobs, 600k 100MB-1G blobs, and 100k 1G+ blobs per day. At its peak production load, Kraken distributes 20K 100MB-1G blobs under 30 sec with ease.
 
 - [Design](#design)
-- [Artitecture](#artitecture)
+- [Architecture](#architecture)
 - [Benchmark](#benchmark)
 - [Usage](#usage)
 - [Comparison With Other Projects](#comparison-with-other-projects)
@@ -31,7 +31,7 @@ Visualization of a small Kraken cluster at work:
 
 The high level idea of Kraken, is to have a 3~5 node dedicated seeder cluster (origin) backed by S3/GCS/HDFS, and a agent with docker registry interface on every host, then let a central component (tracker) instruct seeders and agents to form a pseudo-random regular graph. Such a graph has high connectivity and small diameter, so all participants in a reasonally sized cluster can reach > 75% of max upload/download speed in theory, and performance doesn't degrade much as the blob size and cluster size increase.
 
-# Artitecture
+# Architecture
 
 Kraken have multiple components, they are divided into components that's dedicated to P2P distribution of content addressable blobs within a cluster, and components that's used for docker image upload and cross cluster replication.
 
