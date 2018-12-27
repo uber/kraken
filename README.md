@@ -12,7 +12,7 @@ Some highlights of Kraken:
 - Highly available. Kraken cluster would remain operational even if mutiple origin hosts were lost at the same time.
 - Secure. Supports bi-directional TLS between all components for image tags, and bi-directional TLS between image builder and Kraken for all data.
 - Pluggable storage options. It supports S3/HDFS as storage backend, and it's easy to add more options. It can be setup as write-back cache with configurable TTL, so it can survive S3 outages without impacting functionality.
-- Lossless cross cluster replication. Kraken supports async replication between clusters based on namespaces/repo names.
+- Lossless cross cluster replication. Kraken supports rule-based async replication between clusters.
 - Minimal dependency. Other than plugable storage, Kraken only has optional dependency on DNS.
 
 Uber has been using Kraken in production since early 2018. In our busiest cluster, Kraken distributes 1 million 0-100MB blobs, 600k 100MB-1G blobs, and 100k 1G+ blobs per day. At its peak production load, Kraken distributes 20K 100MB-1G blobs under 30 sec with ease.
@@ -97,9 +97,9 @@ Dragonfly cluster has a "supernode" that coordinates data transfer of all data i
 
 On top of that, Kraken is HA, it won't be affected by individual machine failures. Dragonfly doesn't seem to be HA.
 
-## LAD from facebook
+## LAD from Facebook
 
-LAD is used for P2P configuration deployment at facebook. It constructs a distribution tree based on network topology in Facebook's datacenter. Uber's datacenters have very low network oversubscription ratio, so there is no need to consider network topology, a global upload/download speed limit would suffice.
+LAD is used for P2P configuration deployment at Facebook. It constructs a distribution tree based on network topology in Facebook's datacenters. Uber's datacenters have very low network oversubscription ratio, so there is no need to consider network topology, a global upload/download speed limit would suffice.
 
 Besides, in a tree topology, the download speed of a child node would be a fraction of its parent's upload speed. In Kraken's network, all nodes can download at max speed, no single node would become the bottleneck.
 
