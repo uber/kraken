@@ -5,13 +5,13 @@ hashring:
 
 cluster:
   static:
-    - host.docker.internal:5004
+    - host.docker.internal:15004
 
 backends:
   - namespace: .*
     backend:
       testfs:
-        addr: host.docker.internal:5005
+        addr: host.docker.internal:15008
         root: blobs
         name_path: identity
 

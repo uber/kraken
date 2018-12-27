@@ -1,15 +1,15 @@
 extends: base.yaml
 
-port: 5003
+port: 15005
 
 peerstore:
   redis:
-    addr: {redis}
+    addr: 127.0.0.1:6380
 
 origin:
   hosts:
     static:
-      - host.docker.internal:5004
+      - host.docker.internal:15004
 
 trackerserver:
   announce_interval: 3s

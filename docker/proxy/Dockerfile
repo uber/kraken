@@ -20,6 +20,4 @@ COPY ./config /etc/kraken/config
 COPY ./nginx/config /etc/kraken/nginx/config
 COPY ./test/tls /etc/kraken/tls
 
-EXPOSE 5054
-
 WORKDIR /etc/kraken

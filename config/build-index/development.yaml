@@ -3,20 +3,20 @@ extends: base.yaml
 cluster:
   hosts:
     static:
-      - host.docker.internal:5006
+      - host.docker.internal:15006
 
 backends:
   - namespace: .*
     backend:
       testfs:
-        addr: host.docker.internal:5005
+        addr: host.docker.internal:15008
         root: tags
         name_path: docker_tag
 
 origin:
   hosts:
     static:
-      - host.docker.internal:5004
+      - host.docker.internal:15004
 
 remotes: {}
 
