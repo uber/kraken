@@ -15,11 +15,22 @@ Some highlights of Kraken:
 - Lossless cross cluster replication. Kraken supports async replication between clusters based on namespace and repo name.
 - Minimal dependency. Other than plugable storage, Kraken only depends on DNS.
 
+
+- [Design](#design)
+- [Artitecture](#artitecture)
+  - [Kraken Core](#kraken-core)
+  - [Kraken Proxy and Build Index](#kraken-proxy-and-build-index)
+- [Benchmark](#benchmark)
+- [Usage](#usage)
+- [Comparison With Other Projects](#comparison-with-other-projects)
+- [Limitations](#limitations)
+
+
 # Design
 Visualization of a small Kraken cluster at work:
 ![](assets/visualization.gif)
 
-The high level idea of Kraken, is to have a 3~5 node dedicated seeder cluster (origin) backed by S3/GCS/HDFS, and a agent with docker registry interface on every host, then let a central component (tracker) instruct seeders and agents to form a pseudo-random regular graph. In such a graph, all participants can reach > 75% of max upload/download speed in theory, and performance doesn't degrade much as the blob size and cluster size increases.
+The high level idea of Kraken, is to have a 3~5 node dedicated seeder cluster (origin) backed by S3/GCS/HDFS, and a agent with docker registry interface on every host, then let a central component (tracker) instruct seeders and agents to form a pseudo-random regular graph. Such a graph has high connectivity and small diameter, so all participants in a reasonally sized cluster can reach > 75% of max upload/download speed in theory, and performance doesn't degrade much as the blob size and cluster size increase.
 
 # Artitecture
 
@@ -81,8 +92,22 @@ To start one container of each component with development configs, run:
 make devcluster
 ```
 
+# Comparison With Other Projects
+
+## Dragonfly from Alibaba
+
+Dragonfly cluster has a "supernode" that coordinates data transfer of all data in a cluster. This is a design we considered in the very beginning of Kraken and decided not to use after doing some math. While the supernode would be able to make optimial decisions, the throughput of the whole cluster is limited by the processing power of one or a few hosts, and the performance would degrade linearly as either blob size or cluster size increases. Kraken scales much better with large cluster and large blobs.
+
+On top of that, Kraken is HA, it won't be affected by individual machine failures. Dragonfly doesn't seem to be HA.
+
+## LAD from facebook
+
+LAD is used for P2P configuration deployment at facebook. It constructs a distribution tree based on network topology in Facebook's datacenter. Uber's datacenters have very low network oversubscription ratio, so there is no need to consider network topology, a global upload/download speed limit would suffice.
+
+Besides, in a tree topology, the download speed of a child node would be a fraction of its parent's upload speed. In Kraken's network, all nodes can download at max speed, no single node would become the bottleneck.
+
 # Limitations
 
-- If docker registry throughput wasn't the bottleneck, switching to Kraken wouldn't speed up `docker pull` by much, because docker spends most of the time on data decompression. To actually speed up `docker pull`, consider switching to [Makisu](https://github.com/uber/makisu) to tweak compression ratio at build time, and then use Kraken to distribute uncompressed images, at the cost of additional IO.
+- If docker registry throughput wasn't the bottleneck in your deployment workflow, switching to Kraken wouldn't magically speed up your `docker pull`, because docker spends most of the time on data decompression. To actually speed up `docker pull`, consider switching to [Makisu](https://github.com/uber/makisu) to tweak compression ratio at build time, and then use Kraken to distribute uncompressed images, at the cost of additional IO.
 - Kraken's cross cluster replication mechanism cannot handle tag mutation (handling that properly would require a globally consistent key-value store). Updating an existing tag (like `latest`) will not trigger replication. If that's required, please consider implementing your own index component on top of your prefered key-value store solution.
 - Kraken is supposed to work with blobs of any size, and download speed wouldn't be impacted by blob size. However, as blobs grow bigger, GC and replication gets more expensive too, and could produce hotspot in origin cluster. In practice it's better to devide extra large blobs into <10G chunks.
