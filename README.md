@@ -15,6 +15,7 @@ Some highlights of Kraken:
 - Lossless cross cluster replication. Kraken supports async replication between clusters based on namespace and repo name.
 - Minimal dependency. Other than plugable storage, Kraken only depends on DNS.
 
+Uber has been using Kraken in production since early 2018. In our busiest cluster, Kraken distributes 1 million 0-100MB blobs, 600k 100MB-1G blobs, and 100k 1G+ blobs per day. At its peak production load, Kraken distributes 20K 100MB-1G blobs under 30 sec with ease.
 
 - [Design](#design)
 - [Artitecture](#artitecture)
@@ -69,8 +70,6 @@ Components responsible for image tags and replication to other clusters:
   - Self-healing hash ring
 
 # Benchmark
-
-In our busiest cluster, Kraken distributes 1 million 0-100MB blobs, 600k 100MB-1G blobs, and 100k 1G+ blobs per day. At its peak production load, Kraken distributes 20K 100MB-1G blobs under 30 sec with ease.
 
 Following data is from a test where a 3G docker image with 2 layers is downloaded by 2600 hosts concurrently (5200 blob downloads), with 300MB/s speed limit on all agents (using 5 trackers and 5 origins):
 
