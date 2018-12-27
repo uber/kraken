@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/uber/kraken.svg?branch=master)](https://travis-ci.org/uber/kraken)
 [![Github Release](https://img.shields.io/github/release/uber/kraken.svg)](https://github.com/uber/kraken/releases)
 
-Kraken is highly scalable P2P blob distribution system for large docker images and content addressable blobs.
+Kraken is a highly scalable P2P blob distribution system for large docker images and content addressable blobs.
 
 Some highlights of Kraken:
 - Highly scalable. It's capable of distributing docker images at > 50% of max download speed limit (configurable) on every host; Cluster size and image size do not have significant impact on download speed.
