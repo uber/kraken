@@ -254,7 +254,7 @@ class Tracker(Component):
             environment={'UBER_CONFIG_DIR': '/etc/kraken/config/tracker'},
             ports={self.port: self.port},
             volumes=self.volumes,
-            command=['/usr/bin/tracker', '-config={config}'.format(config=self.config_file)],
+            command=['/usr/bin/kraken-tracker', '-config={config}'.format(config=self.config_file)],
             health_check=HealthCheck(format_insecure_curl('localhost:{port}/health'.format(port=self.port))))
 
     @property
