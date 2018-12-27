@@ -19,7 +19,7 @@ Some highlights of Kraken:
 Visualization of a small Kraken cluster at work:
 ![](assets/visualization.gif)
 
-The high level idea of Kraken, is to have a 3~5 node dedicated seeder cluster (origin) backed by S3/GCS/HDFS, and a agent with docker registry interface on every host, then let a central component (tracker) instruct seeders and agents to form a pseudo-random regular graph. In such a graph, all participants can reach > 75% of max upload/download speed, and performance doesn't degrade much as the blob size and cluster size increases.
+The high level idea of Kraken, is to have a 3~5 node dedicated seeder cluster (origin) backed by S3/GCS/HDFS, and a agent with docker registry interface on every host, then let a central component (tracker) instruct seeders and agents to form a pseudo-random regular graph. In such a graph, all participants can reach > 75% of max upload/download speed in theory, and performance doesn't degrade much as the blob size and cluster size increases.
 
 # Artitecture
 
@@ -49,7 +49,7 @@ Components responsible for image tags and replication to other clusters:
 ![](assets/kraken_build_index.svg)
 
 - Proxy
-  - Handled image upload and direct download
+  - Handles image upload and direct download
 - Build Index
   - Mapping of human readable tag to blob hash (digest)
   - No consistency guarantees, client should use unique tags
