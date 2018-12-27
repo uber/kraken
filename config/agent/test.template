@@ -16,8 +16,11 @@ scheduler:
 peer_id_factory: random
 
 tracker:
-  hosts:
-    static: {trackers}
+  hashring:
+    max_replica: 2
+  cluster:
+    hosts:
+      static: {trackers}
 
 build_index:
   hosts:

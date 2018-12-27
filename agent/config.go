@@ -12,6 +12,7 @@ import (
 	"github.com/uber/kraken/lib/upstream"
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
+	"github.com/uber/kraken/tracker/trackerclient"
 	"github.com/uber/kraken/utils/httputil"
 )
 
@@ -24,7 +25,7 @@ type Config struct {
 	Scheduler       scheduler.Config            `yaml:"scheduler"`
 	PeerIDFactory   core.PeerIDFactory          `yaml:"peer_id_factory"`
 	NetworkEvent    networkevent.Config         `yaml:"network_event"`
-	Tracker         upstream.PassiveConfig      `yaml:"tracker"`
+	Tracker         trackerclient.Config        `yaml:"tracker"`
 	BuildIndex      upstream.PassiveConfig      `yaml:"build_index"`
 	AgentServer     agentserver.Config          `yaml:"agentserver"`
 	RegistryBackup  string                      `yaml:"registry_backup"`
