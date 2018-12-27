@@ -1,6 +1,7 @@
 package hashring
 
 import (
+	"runtime"
 	"testing"
 	"time"
 
@@ -79,6 +80,7 @@ func TestRingLocationsFiltersOutUnhealthyHosts(t *testing.T) {
 		hostlist.Fixture(addrsFixture(10)...),
 		filter,
 		healthcheck.WithClk(clk))
+	runtime.Gosched()
 
 	r := New(
 		Config{MaxReplica: 3},
@@ -108,6 +110,7 @@ func TestRingLocationsReturnsNextHealthyHostWhenReplicaSetUnhealthy(t *testing.T
 		hostlist.Fixture(addrsFixture(10)...),
 		filter,
 		healthcheck.WithClk(clk))
+	runtime.Gosched()
 
 	r := New(
 		Config{MaxReplica: 3},
@@ -157,6 +160,7 @@ func TestRingLocationsReturnsFirstHostWhenAllHostsUnhealthy(t *testing.T) {
 		hostlist.Fixture(addrsFixture(10)...),
 		filter,
 		healthcheck.WithClk(clk))
+	runtime.Gosched()
 
 	r := New(
 		Config{MaxReplica: 3},
@@ -221,6 +225,7 @@ func TestRingMonitor(t *testing.T) {
 		cluster,
 		healthcheck.IdentityFilter{},
 		healthcheck.WithClk(clk))
+	runtime.Gosched()
 
 	r := New(
 		Config{},
@@ -294,6 +299,7 @@ func TestRingRefreshUpdatesMembership(t *testing.T) {
 		cluster,
 		healthcheck.IdentityFilter{},
 		healthcheck.WithClk(clk))
+	runtime.Gosched()
 
 	r := New(Config{}, monitor)
 
@@ -339,6 +345,7 @@ func TestRingNotifiesWatchersOnMembershipChanges(t *testing.T) {
 		cluster,
 		healthcheck.IdentityFilter{},
 		healthcheck.WithClk(clk))
+	runtime.Gosched()
 
 	r := New(Config{}, monitor, WithWatcher(watcher))
 	clk.Add(config.Interval + config.Interval/3)
