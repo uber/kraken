@@ -76,7 +76,7 @@ func (m *Monitor) loop() {
 		select {
 		case <-m.stop:
 			return
-		case <-m.clk.After(m.config.Interval):
+		case <-m.clk.Tick(m.config.Interval):
 			all := m.hosts.Resolve()
 			healthy := m.filter.Run(all)
 			m.mu.Lock()
