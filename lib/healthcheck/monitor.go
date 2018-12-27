@@ -16,9 +16,9 @@ type Monitor struct {
 	hosts  hostlist.List
 	filter Filter
 
-	mu      sync.RWMutex
-	all     stringset.Set
-	healthy stringset.Set
+	mu              sync.RWMutex
+	resolvedAll     stringset.Set
+	resolvedHealthy stringset.Set
 
 	stop chan struct{}
 }
@@ -38,13 +38,13 @@ func NewMonitor(config MonitorConfig, hosts hostlist.List, filter Filter, opts .
 	config.applyDefaults()
 	all := hosts.Resolve()
 	m := &Monitor{
-		config:  config,
-		clk:     clock.New(),
-		hosts:   hosts,
-		filter:  filter,
-		all:     all,
-		healthy: all,
-		stop:    make(chan struct{}),
+		config:          config,
+		clk:             clock.New(),
+		hosts:           hosts,
+		filter:          filter,
+		resolvedAll:     all,
+		resolvedHealthy: all,
+		stop:            make(chan struct{}),
 	}
 
 	for _, opt := range opts {
@@ -60,7 +60,7 @@ func (m *Monitor) Resolve() (stringset.Set, stringset.Set) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	return m.healthy.Copy(), m.all.Copy()
+	return m.resolvedHealthy.Copy(), m.resolvedAll.Copy()
 }
 
 // Failed is noop for Monitor.
@@ -80,8 +80,8 @@ func (m *Monitor) loop() {
 			all := m.hosts.Resolve()
 			healthy := m.filter.Run(all)
 			m.mu.Lock()
-			m.all = all
-			m.healthy = healthy
+			m.resolvedAll = all
+			m.resolvedHealthy = healthy
 			m.mu.Unlock()
 		}
 	}

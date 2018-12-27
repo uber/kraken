@@ -22,9 +22,9 @@ type Passive struct {
 	clk    clock.Clock
 	hosts  hostlist.List
 
-	all       stringset.Set
-	unhealthy map[string]time.Time
-	failures  map[string][]time.Time
+	resolvedAll stringset.Set
+	unhealthy   map[string]time.Time
+	failures    map[string][]time.Time
 }
 
 // NewPassive creates a new Passive wrapping hosts. See PassiveConfig for a
@@ -32,12 +32,12 @@ type Passive struct {
 func NewPassive(config PassiveConfig, clk clock.Clock, hosts hostlist.List) *Passive {
 	config.applyDefaults()
 	return &Passive{
-		config:    config,
-		clk:       clk,
-		hosts:     hosts,
-		all:       hosts.Resolve(),
-		unhealthy: make(map[string]time.Time),
-		failures:  make(map[string][]time.Time),
+		config:      config,
+		clk:         clk,
+		hosts:       hosts,
+		resolvedAll: hosts.Resolve(),
+		unhealthy:   make(map[string]time.Time),
+		failures:    make(map[string][]time.Time),
 	}
 }
 
@@ -47,8 +47,8 @@ func (p *Passive) Resolve() (stringset.Set, stringset.Set) {
 	p.Lock()
 	defer p.Unlock()
 
-	p.all = p.hosts.Resolve()
-	healthy := p.all.Copy()
+	p.resolvedAll = p.hosts.Resolve()
+	healthy := p.resolvedAll.Copy()
 
 	for addr, t := range p.unhealthy {
 		if p.clk.Now().Sub(t) > p.config.FailTimeout {
@@ -59,9 +59,9 @@ func (p *Passive) Resolve() (stringset.Set, stringset.Set) {
 	}
 
 	if len(healthy) == 0 {
-		healthy = p.all.Copy()
+		healthy = p.resolvedAll.Copy()
 	}
-	return healthy, p.all.Copy()
+	return healthy, p.resolvedAll.Copy()
 }
 
 // Failed marks a request to addr as failed.
