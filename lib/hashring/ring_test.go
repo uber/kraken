@@ -92,7 +92,7 @@ func TestRingLocationsFiltersOutUnhealthyHosts(t *testing.T) {
 	require.Len(replicas, 3)
 
 	filter.Unhealthy.Add(replicas[0])
-	clk.Add(config.Interval + config.Interval/3)
+	clk.Add(config.Interval)
 	r.Refresh()
 
 	result := r.Locations(d)
@@ -125,7 +125,7 @@ func TestRingLocationsReturnsNextHealthyHostWhenReplicaSetUnhealthy(t *testing.T
 	for _, addr := range replicas {
 		filter.Unhealthy.Add(addr)
 	}
-	clk.Add(config.Interval + config.Interval/3)
+	clk.Add(config.Interval)
 	r.Refresh()
 
 	// Should consistently select the next address.
@@ -138,7 +138,7 @@ func TestRingLocationsReturnsNextHealthyHostWhenReplicaSetUnhealthy(t *testing.T
 
 	// Mark the next address as unhealthy.
 	filter.Unhealthy.Add(next[0])
-	clk.Add(config.Interval + config.Interval/3)
+	clk.Add(config.Interval)
 	r.Refresh()
 
 	// Should consistently select the address after next.
@@ -172,7 +172,7 @@ func TestRingLocationsReturnsFirstHostWhenAllHostsUnhealthy(t *testing.T) {
 	require.Len(replicas, 3)
 
 	filter.Healthy = false
-	clk.Add(config.Interval + config.Interval/3)
+	clk.Add(config.Interval)
 	r.Refresh()
 
 	// Should consistently select the first replica once all are unhealthy.
@@ -236,7 +236,7 @@ func TestRingMonitor(t *testing.T) {
 	require.Equal([]string{x}, r.Locations(d))
 
 	// Monitor should refresh the ring.
-	clk.Add(config.Interval + config.Interval/3)
+	clk.Add(config.Interval)
 
 	require.Equal([]string{y}, r.Locations(d))
 }
@@ -267,6 +267,8 @@ func TestRingPassive(t *testing.T) {
 	require.Equal(replicas[1:], result)
 
 	// Refresh should remove host from failed list due to timeout.
+	// Add more time because passive check does not use ticker so it is
+	// less accurate.
 	clk.Add(config.FailTimeout + config.FailTimeout/3)
 	r.Refresh()
 
@@ -307,7 +309,7 @@ func TestRingRefreshUpdatesMembership(t *testing.T) {
 
 	require.ElementsMatch([]string{x, y}, r.Locations(d))
 
-	clk.Add(config.Interval + config.Interval/3)
+	clk.Add(config.Interval)
 	r.Refresh()
 
 	require.ElementsMatch([]string{y, z}, r.Locations(d))
@@ -348,8 +350,8 @@ func TestRingNotifiesWatchersOnMembershipChanges(t *testing.T) {
 	runtime.Gosched()
 
 	r := New(Config{}, monitor, WithWatcher(watcher))
-	clk.Add(config.Interval + config.Interval/3)
+	clk.Add(config.Interval)
 	r.Refresh()
-	clk.Add(config.Interval + config.Interval/3)
+	clk.Add(config.Interval)
 	r.Refresh()
 }
