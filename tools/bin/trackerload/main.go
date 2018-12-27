@@ -8,8 +8,7 @@ import (
 	"time"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/healthcheck"
-	"github.com/uber/kraken/lib/hostlist"
+	"github.com/uber/kraken/lib/hashring"
 	"github.com/uber/kraken/tools/lib"
 	"github.com/uber/kraken/tracker/announceclient"
 
@@ -30,7 +29,7 @@ type result struct {
 func simulateAnnounce(
 	tracker string, pctx core.PeerContext, torrents []torrent, interval time.Duration, results chan result, tls *tls.Config) {
 
-	client := announceclient.New(pctx, healthcheck.NoopFailed(hostlist.Fixture(tracker)), tls)
+	client := announceclient.New(pctx, hashring.Fixture(tracker), tls)
 	i := rand.Intn(len(torrents))
 	for {
 		t := torrents[i]

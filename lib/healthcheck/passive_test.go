@@ -24,13 +24,19 @@ func TestPassiveUnhealthy(t *testing.T) {
 		clk,
 		hostlist.Fixture(x, y))
 
-	require.Equal(stringset.New(x, y), p.Resolve())
+	all := stringset.New(x, y)
+	resolvedHealthy, resolvedAll := p.Resolve()
+	require.Equal(all, resolvedHealthy)
+	require.Equal(all, resolvedAll)
 
 	for i := 0; i < 3; i++ {
 		p.Failed(x)
 	}
 
-	require.Equal(stringset.New(y), p.Resolve())
+	healthy := stringset.New(y)
+	resolvedHealthy, resolvedAll = p.Resolve()
+	require.Equal(healthy, resolvedHealthy)
+	require.Equal(all, resolvedAll)
 }
 
 func TestPassiveFailTimeout(t *testing.T) {
@@ -53,7 +59,10 @@ func TestPassiveFailTimeout(t *testing.T) {
 
 	p.Failed(x)
 
-	require.Equal(stringset.New(x, y), p.Resolve())
+	all := stringset.New(x, y)
+	resolvedHealthy, resolvedAll := p.Resolve()
+	require.Equal(all, resolvedHealthy)
+	require.Equal(all, resolvedAll)
 }
 
 func TestPassiveFailTimeoutAfterUnhealthy(t *testing.T) {
@@ -73,17 +82,25 @@ func TestPassiveFailTimeoutAfterUnhealthy(t *testing.T) {
 		p.Failed(x)
 	}
 
-	require.Equal(stringset.New(y), p.Resolve())
+	all := stringset.New(x, y)
+	healthy := stringset.New(y)
+	resolvedHealthy, resolvedAll := p.Resolve()
+	require.Equal(healthy, resolvedHealthy)
+	require.Equal(all, resolvedAll)
 
 	clk.Add(5 * time.Second)
 
 	// Stil unhealthy...
-	require.Equal(stringset.New(y), p.Resolve())
+	resolvedHealthy, resolvedAll = p.Resolve()
+	require.Equal(healthy, resolvedHealthy)
+	require.Equal(all, resolvedAll)
 
 	clk.Add(6 * time.Second)
 
 	// Timeout has now elapsed, host is healthy again.
-	require.Equal(stringset.New(x, y), p.Resolve())
+	resolvedHealthy, resolvedAll = p.Resolve()
+	require.Equal(all, resolvedHealthy)
+	require.Equal(all, resolvedAll)
 }
 
 func TestPassiveIgnoresAllUnhealthy(t *testing.T) {
@@ -104,5 +121,8 @@ func TestPassiveIgnoresAllUnhealthy(t *testing.T) {
 		p.Failed(y)
 	}
 
-	require.Equal(stringset.New(x, y), p.Resolve())
+	all := stringset.New(x, y)
+	resolvedHealthy, resolvedAll := p.Resolve()
+	require.Equal(all, resolvedHealthy)
+	require.Equal(all, resolvedAll)
 }

@@ -110,7 +110,7 @@ func (m *serverMocks) handler() http.Handler {
 }
 
 func newClusterClient(addr string) tagclient.Client {
-	return tagclient.NewClusterClient(healthcheck.NoopFailed(hostlist.Fixture(addr)), nil)
+	return tagclient.NewClusterClient(healthcheck.NoopList(hostlist.Fixture(addr)), nil)
 }
 
 func TestPut(t *testing.T) {

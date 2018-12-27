@@ -4,8 +4,9 @@ hashring:
   max_replica: 2
 
 cluster:
-  static:
-    - host.docker.internal:15004
+  hosts:
+    static:
+      - host.docker.internal:15004
 
 backends:
   - namespace: .*

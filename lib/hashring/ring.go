@@ -2,11 +2,9 @@ package hashring
 
 import (
 	"sync"
-	"time"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/healthcheck"
-	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/lib/hrw"
 	"github.com/uber/kraken/utils/stringset"
 )
@@ -22,9 +20,9 @@ type Watcher interface {
 // Ring is a rendezvous hashing ring which calculates an ordered replica set
 // of healthy addresses which own any given digest.
 //
-// Address membership within the ring is defined by a dynamic hostlist.List. On
+// Address membership within the ring is defined by a dynamic healtcheck.List. On
 // top of that, replica sets are filtered by the health status of their addresses.
-// Membership and health status may be refreshed by using Monitor.
+// Membership and health status may be refreshed by healthcheck.List.
 //
 // Ring maintains the invariant that it is always non-empty and can always provide
 // locations, although in some scenarios the provided locations are not guaranteed
@@ -32,14 +30,13 @@ type Watcher interface {
 type Ring interface {
 	Locations(d core.Digest) []string
 	Contains(addr string) bool
-	Monitor(stop <-chan struct{})
+	Failed(addr string)
 	Refresh()
 }
 
 type ring struct {
 	config  Config
-	cluster hostlist.List
-	filter  healthcheck.Filter
+	cluster healthcheck.List
 
 	mu      sync.RWMutex // Protects the following fields:
 	addrs   stringset.Set
@@ -59,13 +56,12 @@ func WithWatcher(w Watcher) Option {
 
 // New creates a new Ring whose members are defined by cluster.
 func New(
-	config Config, cluster hostlist.List, filter healthcheck.Filter, opts ...Option) Ring {
+	config Config, cluster healthcheck.List, opts ...Option) Ring {
 
 	config.applyDefaults()
 	r := &ring{
 		config:  config,
 		cluster: cluster,
-		filter:  filter,
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -80,6 +76,8 @@ func New(
 // the first address which owns d (regardless of health). As such, Locations
 // always returns a non-empty list.
 func (r *ring) Locations(d core.Digest) []string {
+	r.Refresh()
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -104,46 +102,39 @@ func (r *ring) Locations(d core.Digest) []string {
 
 // Contains returns whether the ring contains addr.
 func (r *ring) Contains(addr string) bool {
+	r.Refresh()
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	return r.addrs.Has(addr)
 }
 
-// Monitor refreshes the ring at the configured interval. Blocks until the
-// provided stop channel is closed.
-func (r *ring) Monitor(stop <-chan struct{}) {
-	for {
-		select {
-		case <-stop:
-			return
-		case <-time.After(r.config.RefreshInterval):
-			r.Refresh()
-		}
-	}
+// Failed marked an addr as temporarily unhealthy.
+// This is used for a passive healthcheck.List.
+func (r *ring) Failed(addr string) {
+	r.cluster.Failed(addr)
 }
 
 // Refresh updates the membership and health information of r.
 func (r *ring) Refresh() {
-	latest := r.cluster.Resolve()
-
-	healthy := r.filter.Run(latest)
+	healthy, all := r.cluster.Resolve()
 
 	hash := r.hash
-	if !stringset.Equal(r.addrs, latest) {
+	if !stringset.Equal(r.addrs, all) {
 		// Membership has changed -- update hash nodes.
 		hash = hrw.NewRendezvousHash(hrw.Murmur3Hash, hrw.UInt64ToFloat64)
-		for addr := range latest {
+		for addr := range all {
 			hash.AddNode(addr, _defaultWeight)
 		}
 		// Notify watchers.
 		for _, w := range r.watchers {
-			w.Notify(latest.Copy())
+			w.Notify(all.Copy())
 		}
 	}
 
 	r.mu.Lock()
-	r.addrs = latest
+	r.addrs = all
 	r.hash = hash
 	r.healthy = healthy
 	r.mu.Unlock()
