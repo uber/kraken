@@ -122,12 +122,7 @@ runtest: docker_stop
 
 .PHONY: devcluster
 devcluster: vendor $(LINUX_BINS) docker_stop images
-	./scripts/development/start_testfs.sh
-	./scripts/development/start_tracker.sh
-	./scripts/development/start_origin.sh
-	./scripts/development/start_build_index.sh
-	./scripts/development/start_agent.sh
-	./scripts/development/start_proxy.sh
+	./scripts/development/start_devcluster.sh
 
 # ==== TOOLS ====
 
