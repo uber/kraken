@@ -21,7 +21,7 @@ build-index/build-index
 tools/bin/puller/puller
 tools/bin/reload/reload
 tools/bin/reload-config/reload-config
-tools/bin/simulation/simulation
+tools/bin/visualization/visualization
 tools/bin/testfs/testfs
 tools/bin/pexchange/pexchange
 tools/bin/trackerload/trackerload
