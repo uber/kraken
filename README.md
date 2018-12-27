@@ -6,7 +6,7 @@
 Kraken is highly scalable P2P blob distribution system for large docker images and content addressable blobs.
 
 Some highlights of Kraken:
-- Highly scalable. It's capable of distributing docker images at > 50% of max download speed limit (configurable) on every host; Cluster size and image size do not have notable impact on download speed.
+- Highly scalable. It's capable of distributing docker images at > 50% of max download speed limit (configurable) on every host; Cluster size and image size do not have significant impact on download speed.
   - Supports at least 8k hosts per cluster.
   - Supports arbitrarily large blobs/layers. We normally limit blob size to 20G to avoid storage space fluctuation.
 - Highly available. Kraken cluster would remain operational even if mutiple origin hosts were lost at the same time.
@@ -93,7 +93,7 @@ make devcluster
 
 ## Dragonfly from Alibaba
 
-Dragonfly cluster has a "supernode" that coordinates data transfer of all data in a cluster. This is a design we considered in the very beginning of Kraken and decided not to use after doing some math. While the supernode would be able to make optimial decisions, the throughput of the whole cluster is limited by the processing power of one or a few hosts, and the performance would degrade linearly as either blob size or cluster size increases. Kraken scales much better with large cluster and large blobs.
+Dragonfly cluster has one or a few "supernodes" that coordinates transfer of every 4MB chunk of data in the cluster. This is a design we considered in the very beginning of Kraken and decided not to use after doing some math. While the supernode would be able to make optimial decisions, the throughput of the whole cluster is limited by the processing power of one or a few hosts, and the performance would degrade linearly as either blob size or cluster size increases. Kraken's tracker only helps orchestrate the connection graph, and leaves negotiation of actual data tranfer to individual peers, so Kraken scales much better with large cluster and large blobs.
 
 On top of that, Kraken is HA, it won't be affected by individual machine failures. Dragonfly doesn't seem to be HA.
 
