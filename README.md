@@ -76,7 +76,10 @@ To build the Docker images, run:
 ```
 make images
 ```
-To start the containers, run the example scripts under scripts/development, which will start one container of each component using example config files.
+To start one container of each component with development configs, run:
+```
+make devcluster
+```
 
 # Limitations
 
