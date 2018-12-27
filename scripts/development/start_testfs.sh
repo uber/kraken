@@ -1,7 +1,7 @@
 #!/bin/bash
 
 docker run -d \
-    -e UBER_CONFIG_DIR=/etc/kraken/config/build-index \
-    -p 5008:5008 \
-    kraken-build-index:dev \
-    /usr/bin/kraken-build-index -config=development.yaml -port=5008
+    -p 15008:15008 \
+    --name kraken-testfs \
+    kraken-testfs:dev \
+    /bin/bash -c "/usr/bin/kraken-testfs -port=15008 &>/var/log/kraken/kraken-testfs/stdout.log"

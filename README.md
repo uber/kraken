@@ -44,13 +44,12 @@ Central P2P components that's not specific to docker images:
 
 ## Kraken Proxy and Build Index
 
-Components responsible for image tags and replication to other clusters.
+Components responsible for image tags and replication to other clusters:
 
 ![](assets/kraken_build_index.svg)
 
 - Proxy
   - Handled image upload and direct download
-  - Contains Nginx internally
 - Build Index
   - Mapping of human readable tag to blob hash (digest)
   - No consistency guarantees, client should use unique tags

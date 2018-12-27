@@ -1,7 +1,8 @@
 #!/bin/bash
 
 docker run -d \
-    -e UBER_CONFIG_DIR=/etc/kraken/config/build-index \
-    -p 5007:5007 \
-    kraken-build-index:dev \
-    /usr/bin/kraken-build-index -config=development.yaml -port=5007
+    -e UBER_CONFIG_DIR=/etc/kraken/config/proxy \
+    -p 15007:15007 \
+    --name kraken-proxy \
+    kraken-proxy:dev \
+    /usr/bin/kraken-proxy -config=development.yaml -port=15007

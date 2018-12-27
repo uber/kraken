@@ -2,6 +2,7 @@
 
 docker run -d \
     -e UBER_CONFIG_DIR=/etc/kraken/config/build-index \
-    -p 5006:5006 \
+    -p 15006:15006 \
+    --name kraken-build-index \
     kraken-build-index:dev \
-    /usr/bin/kraken-build-index -config=development.yaml -port=5006
+    /usr/bin/kraken-build-index -config=development.yaml -port=15006
