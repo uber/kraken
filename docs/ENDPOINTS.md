@@ -10,7 +10,7 @@
 # Push And Pull Docker Images
 
 Kraken proxy implements all [docker registry V2 endpoints](https://docs.docker.com/registry/spec/api/).
-Kraken agent only implements the GET and HEAD endpoints of Docker registry.
+Kraken agent only implements the GET and HEAD endpoints of docker registry.
 
 ## Pushing Docker Images To Kraken Proxy
 
