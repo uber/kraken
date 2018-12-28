@@ -1,6 +1,6 @@
 #!/bin/bash
 
-baseconfig=/home/udocker/kraken/config
+baseconfig=/etc/kraken/config
 hostname=host.docker.internal
 
 redis-server --port 6380 &
@@ -9,7 +9,7 @@ sleep 3
 
 /usr/bin/kraken-testfs \
     -port=15008 \
-    &>/var/log/udocker/kraken-testfs/stdout.log &
+    &>/var/log/kraken/kraken-testfs/stdout.log &
 
 UBER_CONFIG_DIR=$baseconfig/origin /usr/bin/kraken-origin \
     -blobserver_hostname=$hostname \
@@ -17,21 +17,21 @@ UBER_CONFIG_DIR=$baseconfig/origin /usr/bin/kraken-origin \
     -peer_ip=$hostname \
     -peer_port=15003 \
     -config=development.yaml \
-    &>/var/log/udocker/kraken-origin/stdout.log &
+    &>/var/log/kraken/kraken-origin/stdout.log &
 
 UBER_CONFIG_DIR=$baseconfig/tracker /usr/bin/kraken-tracker \
     -config=development.yaml \
-    &>/var/log/udocker/kraken/stdout.log &
+    &>/var/log/kraken/kraken-tracker/stdout.log &
 
 UBER_CONFIG_DIR=$baseconfig/build-index /usr/bin/kraken-build-index \
     -config=development.yaml \
     -port=15006 \
-    &>/var/log/udocker/kraken-build-index/stdout.log &
+    &>/var/log/kraken/kraken-build-index/stdout.log &
 
 UBER_CONFIG_DIR=$baseconfig/proxy /usr/bin/kraken-proxy \
     -config=development.yaml \
     -port=15007 \
-    &>/var/log/udocker/kraken-proxy/stdout.log &
+    &>/var/log/kraken/kraken-proxy/stdout.log &
 
 sleep 3
 
@@ -42,7 +42,7 @@ while : ; do
         status=$?
         if [ $status -ne 0 ]; then
             echo "$c exited unexpectedly. Logs:"
-            tail -100 /var/log/udocker/$c/stdout.log
+            tail -100 /var/log/kraken/$c/stdout.log
             exit 1
         fi
     done
