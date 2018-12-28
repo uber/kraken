@@ -24,7 +24,6 @@ Uber has been using Kraken in production since early 2018. In our busiest cluste
 - [Comparison With Other Projects](#comparison-with-other-projects)
 - [Limitations](#limitations)
 
-
 # Design
 Visualization of a small Kraken cluster at work:
 ![](assets/visualization.gif)

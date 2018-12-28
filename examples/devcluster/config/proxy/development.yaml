@@ -1,0 +1,33 @@
+extends: base.yaml
+
+origin:
+  hosts:
+    static:
+      - host.docker.internal:15002
+
+build_index:
+  hosts:
+    static:
+      - host.docker.internal:15004
+
+nginx:
+  cache_dir: /tmp/kraken-proxy-nginx/
+
+tls:
+  name: kraken
+  ca:
+    enabled: false
+    cert:
+      path: /etc/kraken/tls/ca/server.crt
+    key:
+      path: /etc/kraken/tls/ca/server.key
+    passphrase:
+      path: /etc/kraken/tls/ca/passphrase
+  client:
+    enabled: true
+    cert:
+      path: /etc/kraken/tls/client/client.crt
+    key:
+      path: /etc/kraken/tls/client/client.key
+    passphrase:
+      path: /etc/kraken/tls/client/passphrase
