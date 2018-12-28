@@ -69,7 +69,7 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	for _, opt := range opts {
 		opt(&config)
 	}
-	if !config.tls.CA.Enabled {
+	if config.tls.CA.Disabled {
 		log.Warn("Server TLS is disabled")
 	} else {
 		for _, f := range []string{
@@ -98,7 +98,7 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 
 	src, err := populateTemplate("base", map[string]interface{}{
 		"site":                string(site),
-		"ssl_enabled":         config.tls.CA.Enabled,
+		"ssl_enabled":         !config.tls.CA.Disabled,
 		"ssl_certificate":     config.tls.CA.Cert.Path,
 		"ssl_certificate_key": config.tls.CA.Key.Path,
 		"ssl_password_file":   config.tls.CA.Passphrase.Path,
