@@ -68,6 +68,7 @@ images: $(LINUX_BINS)
 	docker build -q -t kraken-proxy:dev -f docker/proxy/Dockerfile ./
 	docker build -q -t kraken-testfs:dev -f docker/testfs/Dockerfile ./
 	docker build -q -t kraken-tracker:dev -f docker/tracker/Dockerfile ./
+	docker build -q -t kraken-herd:dev -f docker/herd/Dockerfile ./
 
 clean::
 	@rm -f $(LINUX_BINS)
@@ -122,7 +123,7 @@ runtest: docker_stop
 
 .PHONY: devcluster
 devcluster: vendor $(LINUX_BINS) docker_stop images
-	./scripts/development/start_devcluster.sh
+	./examples/devcluster/start_devcluster.sh
 
 # ==== TOOLS ====
 

@@ -2,12 +2,6 @@ FROM debian:9
 
 RUN apt-get update && apt-get install -y curl nginx
 
-# Install redis
-RUN apt-get install -y build-essential
-ADD http://download.redis.io/redis-stable.tar.gz /tmp/redis-stable.tar.gz
-RUN tar -xvzf /tmp/redis-stable.tar.gz -C /tmp
-RUN cd /tmp/redis-stable && make install
-
 RUN mkdir -p -m 777 /var/log/kraken/kraken-tracker
 RUN mkdir -p -m 777 /var/cache/kraken/kraken-tracker
 RUN mkdir -p -m 777 /var/run/kraken
