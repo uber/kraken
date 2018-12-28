@@ -106,7 +106,7 @@ func (c *client) Announce(
 			url,
 			httputil.SendBody(bytes.NewReader(body)),
 			httputil.SendTimeout(10*time.Second),
-			httputil.SendTLSTransport(c.tls))
+			httputil.SendTLS(c.tls))
 		if err != nil {
 			if httputil.IsNetworkError(err) {
 				c.ring.Failed(addr)

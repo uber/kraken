@@ -24,6 +24,6 @@ func (c defaultChecker) Check(ctx context.Context, addr string) error {
 	_, err := httputil.Get(
 		fmt.Sprintf("http://%s/health", addr),
 		httputil.SendContext(ctx),
-		httputil.SendTLSTransport(c.tls))
+		httputil.SendTLS(c.tls))
 	return err
 }

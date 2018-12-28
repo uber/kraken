@@ -115,11 +115,9 @@ func genCerts(t *testing.T) (config *TLSConfig, cleanupfunc func()) {
 
 	config = &TLSConfig{}
 	config.Name = "kraken"
-	config.CA.Enabled = true
 	config.CA.Cert.Path = sCert
 	config.CA.Key.Path = sKey
 	config.CA.Passphrase.Path = sSecret
-	config.Client.Enabled = true
 	config.Client.Cert.Path = cCert
 	config.Client.Key.Path = cKey
 	config.Client.Passphrase.Path = cSecret
@@ -127,7 +125,7 @@ func genCerts(t *testing.T) (config *TLSConfig, cleanupfunc func()) {
 	return config, cleanup.Run
 }
 
-func startServer(t *testing.T, cert, key, passphrase string) (string, func()) {
+func startTLSServer(t *testing.T, cert, key, passphrase string) (string, func()) {
 	require := require.New(t)
 	var err error
 	certPEM, err := parseCert(cert)
@@ -178,17 +176,17 @@ func TestTLSClient(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		require := require.New(t)
-		addr, stop := startServer(t, c.CA.Cert.Path, c.CA.Key.Path, c.CA.Passphrase.Path)
+		addr, stop := startTLSServer(t, c.CA.Cert.Path, c.CA.Key.Path, c.CA.Passphrase.Path)
 		defer stop()
 
-		resp, err := Get("https://"+addr+"/", SendTLSTransport(tls))
+		resp, err := Get("https://"+addr+"/", SendTLS(tls))
 		require.NoError(err)
 		require.Equal(http.StatusOK, resp.StatusCode)
 	})
 
 	t.Run("authentication failed", func(t *testing.T) {
 		require := require.New(t)
-		addr, stop := startServer(t, c.CA.Cert.Path, c.CA.Key.Path, c.CA.Passphrase.Path)
+		addr, stop := startTLSServer(t, c.CA.Cert.Path, c.CA.Key.Path, c.CA.Passphrase.Path)
 		defer stop()
 
 		// Swap client and server certs. This should make verification fail.
@@ -199,7 +197,7 @@ func TestTLSClient(t *testing.T) {
 		badtls, err := badConfig.BuildClient()
 		require.NoError(err)
 
-		_, err = Get("https://"+addr+"/", SendTLSTransport(badtls))
+		_, err = Get("https://"+addr+"/", SendTLS(badtls))
 		require.True(IsNetworkError(err))
 	})
 
@@ -213,7 +211,7 @@ func TestTLSClient(t *testing.T) {
 		addr, stop := testutil.StartServer(r)
 		defer stop()
 
-		resp, err := Get("https://"+addr+"/", SendTLSTransport(tls))
+		resp, err := Get("https://"+addr+"/", SendTLS(tls))
 		require.NoError(err)
 		require.Equal(http.StatusOK, resp.StatusCode)
 	})
