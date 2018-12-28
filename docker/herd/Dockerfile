@@ -32,11 +32,11 @@ RUN /tmp/setup_nginx.sh ${USERNAME}
 
 USER ${USERNAME}
 
-COPY ./build-index/build-index.linux /usr/bin/kraken-build-index
-COPY ./origin/origin.linux           /usr/bin/kraken-origin
-COPY ./proxy/proxy.linux             /usr/bin/kraken-proxy
-COPY ./tools/bin/testfs/testfs.linux /usr/bin/kraken-testfs
-COPY ./tracker/tracker.linux         /usr/bin/kraken-tracker
+COPY ./build-index/build-index /usr/bin/kraken-build-index
+COPY ./origin/origin           /usr/bin/kraken-origin
+COPY ./proxy/proxy             /usr/bin/kraken-proxy
+COPY ./tools/bin/testfs/testfs /usr/bin/kraken-testfs
+COPY ./tracker/tracker         /usr/bin/kraken-tracker
 
 WORKDIR /etc/kraken
 
