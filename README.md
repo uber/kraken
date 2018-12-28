@@ -83,7 +83,7 @@ To build the Docker images, run:
 ```
 make images
 ```
-To start a herd container (with origin, tracker, build-index and proxy) and two agent containers with development configs, run:
+To start a herd container (which contains origin, tracker, build-index and proxy) and two agent containers with development configs, run:
 ```
 make devcluster
 ```
