@@ -1,22 +1,26 @@
 extends: base.yaml
 
+port: 15003
+
+peerstore:
+  redis:
+    addr: 127.0.0.1:14001
+
 origin:
   hosts:
     static:
-      - host.docker.internal:15004
+      - host.docker.internal:15002
 
-build_index:
-  hosts:
-    static:
-      - host.docker.internal:15006
+trackerserver:
+  announce_interval: 3s
 
 nginx:
-  cache_dir: /tmp/kraken-proxy-nginx/
+  cache_dir: /tmp/kraken-tracker-nginx/
 
 tls:
   name: kraken
   ca:
-    enabled: false
+    enabled: true
     cert:
       path: /etc/kraken/tls/ca/server.crt
     key:

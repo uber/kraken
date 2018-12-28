@@ -1,21 +1,24 @@
 extends: base.yaml
 
-port: 15005
+backends:
+  - namespace: .*
+    backend:
+      testfs:
+        addr: host.docker.internal:14000
+        root: blobs
+        name_path: identity
 
-peerstore:
-  redis:
-    addr: 127.0.0.1:6380
-
-origin:
+cluster:
   hosts:
     static:
-      - host.docker.internal:15004
+      - host.docker.internal:15002
 
-trackerserver:
-  announce_interval: 3s
+hashring:
+  max_replica: 2
 
-nginx:
-  cache_dir: /tmp/kraken-tracker-nginx/
+writeback:
+  retry_interval: 100ms
+  poll_retries_interval: 250ms
 
 tls:
   name: kraken
