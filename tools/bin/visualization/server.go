@@ -51,7 +51,7 @@ func (s *server) handler() http.Handler {
 		http.Redirect(w, r, "/static/html/app.html", http.StatusSeeOther)
 	})
 
-	fs := http.FileServer(http.Dir("./tools/bin/simulation/static/"))
+	fs := http.FileServer(http.Dir("./tools/bin/visualization/static/"))
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fs))
 
 	r.HandleFunc("/events", s.getEvents)
