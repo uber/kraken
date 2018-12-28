@@ -14,7 +14,7 @@ nginx:
 tls:
   name: kraken
   ca:
-    disable: true
+    disabled: true
     cert:
       path: /etc/kraken/tls/ca/server.crt
     key:
