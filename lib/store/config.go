@@ -34,6 +34,7 @@ type SimpleStoreConfig struct {
 }
 
 // CADownloadStoreConfig defines CADownloadStore configuration.
+// TODO(evelynl94): rename
 type CADownloadStoreConfig struct {
 	DownloadDir     string        `yaml:"download_dir"`
 	CacheDir        string        `yaml:"cache_dir"`

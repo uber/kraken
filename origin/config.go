@@ -21,6 +21,7 @@ import (
 )
 
 // Config defines origin server configuration.
+// TODO(evelynl94): consolidate cluster and hashring.
 type Config struct {
 	Verbose       bool
 	ZapLogging    zap.Config            `yaml:"zap"`
