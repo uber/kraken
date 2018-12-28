@@ -47,5 +47,3 @@ WORKDIR /etc/kraken
 COPY ./config /etc/kraken/config
 COPY ./nginx/config /etc/kraken/nginx/config
 COPY ./test/tls /etc/kraken/tls
-COPY ./docker/herd/start.sh /etc/kraken/start.sh
-CMD ./start.sh

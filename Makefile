@@ -123,7 +123,7 @@ runtest: docker_stop
 
 .PHONY: devcluster
 devcluster: vendor $(LINUX_BINS) docker_stop images
-	./examples/devcluster/start_devcluster.sh
+	./examples/devcluster/start_herd_and_agent_containers.sh
 
 # ==== TOOLS ====
 

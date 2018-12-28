@@ -1,36 +1,37 @@
 #!/bin/bash
 
-baseconfig=/etc/kraken/config
-hostname=host.docker.internal
+source /etc/kraken/param.sh
 
-redis-server --port 6380 &
+CONFIG_DIR=/etc/kraken/config
+
+redis-server --port ${REDIS_PORT} &
 
 sleep 3
 
 /usr/bin/kraken-testfs \
-    -port=15008 \
+    -port=${TESTFS_PORT} \
     &>/var/log/kraken/kraken-testfs/stdout.log &
 
-UBER_CONFIG_DIR=$baseconfig/origin /usr/bin/kraken-origin \
-    -blobserver_hostname=$hostname \
-    -blobserver_port=15004 \
-    -peer_ip=$hostname \
-    -peer_port=15003 \
+UBER_CONFIG_DIR=${CONFIG_DIR}/origin /usr/bin/kraken-origin \
+    -blobserver_hostname=${HOSTNAME} \
+    -blobserver_port=${ORIGIN_SERVER_PORT} \
+    -peer_ip=${HOSTNAME} \
+    -peer_port=${ORIGIN_PEER_PORT} \
     -config=development.yaml \
     &>/var/log/kraken/kraken-origin/stdout.log &
 
-UBER_CONFIG_DIR=$baseconfig/tracker /usr/bin/kraken-tracker \
+UBER_CONFIG_DIR=${CONFIG_DIR}/tracker /usr/bin/kraken-tracker \
     -config=development.yaml \
     &>/var/log/kraken/kraken-tracker/stdout.log &
 
-UBER_CONFIG_DIR=$baseconfig/build-index /usr/bin/kraken-build-index \
+UBER_CONFIG_DIR=${CONFIG_DIR}/build-index /usr/bin/kraken-build-index \
     -config=development.yaml \
-    -port=15006 \
+    -port=${BUILD_INDEX_PORT} \
     &>/var/log/kraken/kraken-build-index/stdout.log &
 
-UBER_CONFIG_DIR=$baseconfig/proxy /usr/bin/kraken-proxy \
+UBER_CONFIG_DIR=${CONFIG_DIR}/proxy /usr/bin/kraken-proxy \
     -config=development.yaml \
-    -port=15007 \
+    -port=${PROXY_PORT} \
     &>/var/log/kraken/kraken-proxy/stdout.log &
 
 sleep 3
