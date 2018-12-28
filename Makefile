@@ -129,7 +129,7 @@ devcluster: vendor $(LINUX_BINS) docker_stop images
 NATIVE_TOOLS = \
 	tools/bin/puller/puller \
 	tools/bin/reload/reload \
-	tools/bin/simulation/simulation \
+	tools/bin/visualization/visualization \
 	tools/bin/trackerload/trackerload
 
 tools/bin/puller/puller:: $(wildcard tools/bin/puller/puller/*.go)
@@ -138,7 +138,7 @@ tools/bin/puller/puller:: $(wildcard tools/bin/puller/puller/*.go)
 tools/bin/reload/reload:: $(wildcard tools/bin/reload/reload/*.go)
 	$(BUILD_NATIVE)
 
-tools/bin/simulation/simulation:: $(wildcard tools/bin/simulation/simulation/*.go)
+tools/bin/visualization/visualization:: $(wildcard tools/bin/visualization/visualization/*.go)
 	$(BUILD_NATIVE)
 
 tools/bin/trackerload/trackerload:: $(wildcard tools/bin/trackerload/trackerload/*.go)
