@@ -11,12 +11,12 @@ backends:
 cluster:
   hosts:
     static:
-      - host.docker.internal:15006
+      - host.docker.internal:15004
 
 origin:
   hosts:
     static:
-      - host.docker.internal:15004
+      - host.docker.internal:15002
 
 remotes: {}
 

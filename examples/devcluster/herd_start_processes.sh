@@ -2,8 +2,6 @@
 
 source /etc/kraken/herd_param.sh
 
-CONFIG_DIR=/etc/kraken/config
-
 redis-server --port ${REDIS_PORT} &
 
 sleep 3
@@ -12,7 +10,7 @@ sleep 3
     -port=${TESTFS_PORT} \
     &>/var/log/kraken/kraken-testfs/stdout.log &
 
-UBER_CONFIG_DIR=${CONFIG_DIR}/origin /usr/bin/kraken-origin \
+UBER_CONFIG_DIR=/etc/kraken/config/origin /usr/bin/kraken-origin \
     -blobserver_hostname=${HOSTNAME} \
     -blobserver_port=${ORIGIN_SERVER_PORT} \
     -peer_ip=${HOSTNAME} \
@@ -20,16 +18,16 @@ UBER_CONFIG_DIR=${CONFIG_DIR}/origin /usr/bin/kraken-origin \
     -config=development.yaml \
     &>/var/log/kraken/kraken-origin/stdout.log &
 
-UBER_CONFIG_DIR=${CONFIG_DIR}/tracker /usr/bin/kraken-tracker \
+UBER_CONFIG_DIR=/etc/kraken/config/tracker /usr/bin/kraken-tracker \
     -config=development.yaml \
     &>/var/log/kraken/kraken-tracker/stdout.log &
 
-UBER_CONFIG_DIR=${CONFIG_DIR}/build-index /usr/bin/kraken-build-index \
+UBER_CONFIG_DIR=/etc/kraken/config/build-index /usr/bin/kraken-build-index \
     -config=development.yaml \
     -port=${BUILD_INDEX_PORT} \
     &>/var/log/kraken/kraken-build-index/stdout.log &
 
-UBER_CONFIG_DIR=${CONFIG_DIR}/proxy /usr/bin/kraken-proxy \
+UBER_CONFIG_DIR=/etc/kraken/config/proxy /usr/bin/kraken-proxy \
     -config=development.yaml \
     -port=${PROXY_PORT} \
     &>/var/log/kraken/kraken-proxy/stdout.log &

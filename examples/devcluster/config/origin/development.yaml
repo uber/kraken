@@ -11,7 +11,7 @@ backends:
 cluster:
   hosts:
     static:
-      - host.docker.internal:15004
+      - host.docker.internal:15002
 
 hashring:
   max_replica: 2

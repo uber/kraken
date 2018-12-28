@@ -15,12 +15,12 @@ tracker:
   cluster:
     hosts:
       static:
-        - host.docker.internal:15005
+        - host.docker.internal:15003
 
 build_index:
   hosts:
     static:
-      - host.docker.internal:15006
+      - host.docker.internal:15004
 
 tls:
   name: kraken
