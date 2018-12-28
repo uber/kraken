@@ -20,8 +20,6 @@ writeback:
   retry_interval: 100ms
   poll_retries_interval: 250ms
 
-peer_id_factory: random
-
 tls:
   name: kraken
   ca:

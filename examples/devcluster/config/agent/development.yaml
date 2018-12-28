@@ -1,16 +1,5 @@
 extends: base.yaml
 
-registry:
-  docker:
-    version: 0.1
-    log:
-      level: error
-    http:
-      net: tcp
-      addr: 0.0.0.0:8991 # TODO: Change this to unix socket.
-
-peer_id_factory: random
-
 tracker:
   cluster:
     hosts:
@@ -21,6 +10,15 @@ build_index:
   hosts:
     static:
       - host.docker.internal:15004
+
+registry:
+  docker:
+    version: 0.1
+    log:
+      level: error
+    http:
+      net: tcp
+      addr: 0.0.0.0:8991 # TODO: Change this to unix socket.
 
 tls:
   name: kraken
