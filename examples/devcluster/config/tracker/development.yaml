@@ -4,7 +4,7 @@ port: 15005
 
 peerstore:
   redis:
-    addr: 127.0.0.1:3680
+    addr: 127.0.0.1:14001
 
 origin:
   hosts:

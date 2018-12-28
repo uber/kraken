@@ -1,20 +1,20 @@
 extends: base.yaml
 
-hashring:
-  max_replica: 2
+backends:
+  - namespace: .*
+    backend:
+      testfs:
+        addr: host.docker.internal:14000
+        root: blobs
+        name_path: identity
 
 cluster:
   hosts:
     static:
       - host.docker.internal:15004
 
-backends:
-  - namespace: .*
-    backend:
-      testfs:
-        addr: host.docker.internal:15008
-        root: blobs
-        name_path: identity
+hashring:
+  max_replica: 2
 
 writeback:
   retry_interval: 100ms

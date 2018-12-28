@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source /etc/kraken/param.sh
+source /etc/kraken/herd_param.sh
 
 CONFIG_DIR=/etc/kraken/config
 

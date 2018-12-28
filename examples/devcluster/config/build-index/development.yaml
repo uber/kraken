@@ -1,17 +1,17 @@
 extends: base.yaml
 
-cluster:
-  hosts:
-    static:
-      - host.docker.internal:15006
-
 backends:
   - namespace: .*
     backend:
       testfs:
-        addr: host.docker.internal:15008
+        addr: host.docker.internal:14000
         root: tags
         name_path: docker_tag
+
+cluster:
+  hosts:
+    static:
+      - host.docker.internal:15006
 
 origin:
   hosts:
