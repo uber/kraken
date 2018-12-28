@@ -22,24 +22,24 @@ and production, and a development.yaml that contains configs specifically needed
 cluster using Docker-for-Mac, and need to updated for production setups.
 
 - Origin
-[base.yaml](../config/origin/base.yaml)
-[development.yaml](../examples/devcluster/config/origin/development.yaml)
+  - [base.yaml](../config/origin/base.yaml)
+  - [development.yaml](../examples/devcluster/config/origin/development.yaml)
 
 - Tracker
-[base.yaml](../config/tracker/base.yaml)
-[development.yaml](../examples/devcluster/config/tracker/development.yaml)
+  - [base.yaml](../config/tracker/base.yaml)
+  - [development.yaml](../examples/devcluster/config/tracker/development.yaml)
 
 - Build-index
-[base.yaml](../config/build-index/base.yaml)
-[development.yaml](../examples/devcluster/config/build-index/development.yaml)
+  - [base.yaml](../config/build-index/base.yaml)
+  - [development.yaml](../examples/devcluster/config/build-index/development.yaml)
 
 - Proxy
-[base.yaml](../config/proxy/base.yaml)
-[development.yaml](../examples/devcluster/config/proxy/development.yaml)
+  - [base.yaml](../config/proxy/base.yaml)
+  - [development.yaml](../examples/devcluster/config/proxy/development.yaml)
 
 - Agent
-[base.yaml](../config/agent/base.yaml)
-[development.yaml](../examples/devcluster/config/agent/development.yaml)
+  - [base.yaml](../config/agent/base.yaml)
+  - [development.yaml](../examples/devcluster/config/agent/development.yaml)
 
 # Configuring Peer To Peer Download
 Kraken's peer-to-peer network consists of agents, origins and trackers. Origins are a few dedicated seeders that downloads data from a storage backend (HDFS, S3, etc). Agents are leechers that download from each other and from origins and can later become seeders after they finish downloading. Agents announce to trackers periodically to update the torrent they are currently downloading and in return get a list of peers that are also downloading the same torrent. More details in [ARCHITECTURE.md](ARCHITECTURE.md)
