@@ -10,6 +10,7 @@ type Config struct {
 }
 
 // RedisConfig defines RedisStore configuration.
+// TODO(evelynl94): rename
 type RedisConfig struct {
 	Addr              string        `yaml:"addr"`
 	DialTimeout       time.Duration `yaml:"dial_timeout"`
@@ -17,7 +18,6 @@ type RedisConfig struct {
 	WriteTimeout      time.Duration `yaml:"write_timeout"`
 	PeerSetWindowSize time.Duration `yaml:"peer_set_window_size"`
 	MaxPeerSetWindows int           `yaml:"max_peer_set_windows"`
-	MetaInfoTTL       time.Duration `yaml:"metainfo_ttl"`
 	MaxIdleConns      int           `yaml:"max_idle_conns"`
 	MaxActiveConns    int           `yaml:"max_active_conns"`
 	IdleConnTimeout   time.Duration `yaml:"idle_conn_timeout"`
@@ -38,9 +38,6 @@ func (c *RedisConfig) applyDefaults() {
 	}
 	if c.MaxPeerSetWindows == 0 {
 		c.MaxPeerSetWindows = 5
-	}
-	if c.MetaInfoTTL == 0 {
-		c.MetaInfoTTL = 5 * time.Minute
 	}
 	if c.MaxIdleConns == 0 {
 		c.MaxIdleConns = 10

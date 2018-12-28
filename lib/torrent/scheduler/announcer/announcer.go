@@ -62,6 +62,7 @@ func New(
 }
 
 // Default creates a default Announcer.
+// TODO(evelynl94): make announce interval configurable.
 func Default(
 	client announceclient.Client,
 	events Events,
