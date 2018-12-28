@@ -23,6 +23,7 @@ registry:
 tls:
   name: kraken
   ca:
+    disabled: true
     cert:
       path: /etc/kraken/tls/ca/server.crt
     key:
