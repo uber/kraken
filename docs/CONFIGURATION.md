@@ -1,15 +1,14 @@
 **Table of Contents**
 - [Examples](#examples)
-
 - [Configuring Peer To Peer Download](#configuring-peer-to-peer-download)
-    - [Tracker peer set TTI](#tracker-peer-set-tti)
-    - [Bandwidth](#bandwidth)
-    - [Connection limit](#connection-limit)
-    - [Seeder TTI](#seeder-tti)
-    - [Torrent TTI on disk](#torrent-tti-on-disk)
+  - [Tracker peer set TTI](#tracker-peer-set-tti)
+  - [Bandwidth](#bandwidth)
+  - [Connection limit](#connection-limit)
+  - [Seeder TTI](#seeder-tti)
+  - [Torrent TTI on disk](#torrent-tti-on-disk)
 - [Configuring Hash Ring](#configuring-hash-ring)
-    - [Active health check](#active-health-check)
-    - [Passive health check](#passive-health-check)
+  - [Active health check](#active-health-check)
+  - [Passive health check](#passive-health-check)
 - [Configuring Storage Backend Bandwidth on Origin](#configuring-storage-backend-bandwidth-on-origin)
 
 # Examples

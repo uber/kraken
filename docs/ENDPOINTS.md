@@ -1,3 +1,12 @@
+**Table of Contents**
+
+- [Push And Pull Docker Images](#push-and-pull-docker-images)
+  - [Pushing Docker Images To Kraken Proxy](#pushing-docker-images-to-kraken-proxy)
+  - [Pulling Docker Images From Kraken Agent](#pulling-docker-images-from-kraken-agent)
+- [Upload and Download Generic Content Addressable Blobs](#upload-and-download-generic-content-addressable-blobs)
+  - [Uploading Blobs To Kraken Origin](#uploading-blobs-to-kraken-origin)
+  - [Downloading Blobs From Kraken Agent](#downloading-blobs-from-kraken-agent)
+
 # Push And Pull Docker Images
 
 Kraken proxy implements all [docker registry V2 endpoints](https://docs.docker.com/registry/spec/api/).
