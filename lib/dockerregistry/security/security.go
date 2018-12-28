@@ -4,10 +4,8 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
-	"path"
 
 	"github.com/uber/kraken/utils/httputil"
-	"github.com/uber/kraken/utils/pathutils"
 
 	"github.com/docker/docker-credential-helpers/client"
 	"github.com/docker/engine-api/types"
@@ -15,7 +13,7 @@ import (
 
 const tokenUsername = "<token>"
 
-var credentialHelperPrefix = path.Join(pathutils.DefaultInternalDir, "docker-credential-")
+var credentialHelperPrefix = "docker-credential-"
 
 // Config contains tls and basic auth configuration.
 type Config struct {
@@ -28,9 +26,6 @@ type Config struct {
 func (c Config) ApplyDefaults() Config {
 	if c.TLS == nil {
 		c.TLS = &httputil.TLSConfig{}
-	}
-	if c.TLS.CA.Cert.Path == "" {
-		c.TLS.CA.Cert.Path = pathutils.DefaultCACertsPath
 	}
 	return c
 }

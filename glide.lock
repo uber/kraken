@@ -1,5 +1,5 @@
-hash: b2cf6108c45a51a23eea46bb95c3a2110ebe925c180ca0aadc39bcf02910d9e0
-updated: 2018-12-17T21:02:05.714727-08:00
+hash: 86ad3f3a72d3a428fc548d3f42f7530ab411ed2fd0c0b04aee0eb87fbac7f311
+updated: 2018-12-28T13:21:50.416629-08:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
@@ -16,7 +16,7 @@ imports:
   subpackages:
   - lib/go/thrift
 - name: github.com/aws/aws-sdk-go
-  version: a21788f1964e28dc1e3932e595db6707ce8070cf
+  version: 3991042237b45cf58c9d5f34295942d5533c28c6
   subpackages:
   - aws
   - aws/awserr
@@ -107,6 +107,27 @@ imports:
   - registry/storage/driver/middleware
   - uuid
   - version
+- name: github.com/docker/docker-credential-helpers
+  version: 5241b46610f2491efdf9d1c85f1ddf5b02f6d962
+  subpackages:
+  - client
+  - credentials
+- name: github.com/docker/engine-api
+  version: 0df83fcc24fb4a997df5537526306fb55aa5dca8
+  subpackages:
+  - types
+  - types/blkiodev
+  - types/container
+  - types/filters
+  - types/network
+  - types/registry
+  - types/strslice
+- name: github.com/docker/go-connections
+  version: 34b5052da6b11e27f5f2e357b38b571ddddd3928
+  subpackages:
+  - nat
+- name: github.com/docker/go-units
+  version: 651fc226e7441360384da338d0fd37f2440ffbe3
 - name: github.com/docker/libtrust
   version: fa567046d9b14f6aa788882a950d69651d230b21
 - name: github.com/facebookgo/clock
@@ -212,25 +233,19 @@ imports:
   - internal/exit
   - zapcore
 - name: golang.org/x/crypto
-  version: c10c31b5e94b6f7a0283272dc2bb27163dcea24b
+  version: 505ab145d0a99da450461ae2c1a9f6cd10d1f447
   subpackages:
   - ssh
-  - ssh/agent
 - name: golang.org/x/net
   version: 4876518f9e71663000c348837735820161a42df7
   subpackages:
   - context
-  - context/ctxhttp
-  - http2
-  - http2/hpack
-  - internal/timeseries
-  - trace
 - name: golang.org/x/sync
   version: 42b317875d0fa942474b76e1b46a6060d720ae6e
   subpackages:
   - syncmap
 - name: golang.org/x/time
-  version: a4bde12657593d5e90d0533a3e4fd95e635124cb
+  version: 85acf8d2951cb2a3bde7632f9ff273ef0379bcbd
   subpackages:
   - rate
 - name: gopkg.in/DATA-DOG/go-sqlmock.v1
@@ -241,11 +256,6 @@ imports:
   version: bef53efd0c76e49e6de55ead051f886bea7e9420
 - name: rsc.io/letsencrypt
   version: a019c9e6fce0c7132679dea13bd8df7c86ffe26c
-  subpackages:
-  - vendor/github.com/xenolf/lego/acme
-  - vendor/gopkg.in/square/go-jose.v1
-  - vendor/gopkg.in/square/go-jose.v1/cipher
-  - vendor/gopkg.in/square/go-jose.v1/json
 testImports:
 - name: github.com/davecgh/go-spew
   version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d
