@@ -27,6 +27,10 @@ ARG USERNAME="root"
 ARG USERID="0"
 RUN if [ ${USERID} != "0" ]; then useradd --uid ${USERID} ${USERNAME}; fi
 
+# Allow proxy to run nginx as root.
+RUN if [ ${USERID} != "0" ]; then mkdir -p /etc/sudoers.d/ && \
+    echo '${USERNAME}  ALL=(root) NOPASSWD: /usr/sbin/nginx' >> /etc/sudoers.d/kraken-proxy; fi
+
 COPY ./docker/setup_nginx.sh /tmp/setup_nginx.sh
 RUN /tmp/setup_nginx.sh ${USERNAME}
 
