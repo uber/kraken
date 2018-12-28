@@ -83,10 +83,11 @@ To build the Docker images, run:
 ```
 make images
 ```
-To start one container of each component with development configs, run:
+To start a herd container (with origin, tracker, build-index and proxy) and two agent containers with development configs, run:
 ```
 make devcluster
 ```
+For more details on how to configure Kraken, please refer to the [documentation](docs/CONFIGURATION.md).
 
 # Comparison With Other Projects
 

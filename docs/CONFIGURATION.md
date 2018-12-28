@@ -1,4 +1,6 @@
 **Table of Contents**
+- [Examples](#examples)
+
 - [Configuring Peer To Peer Download](#configuring-peer-to-peer-download)
     - [Tracker peer set TTI](#tracker-peer-set-tti)
     - [Bandwidth](#bandwidth)
@@ -10,6 +12,34 @@
     - [Passive health check](#passive-health-check)
 - [Configuring Storage Backend Bandwidth on Origin](#configuring-storage-backend-bandwidth-on-origin)
 
+# Examples
+
+Here are some example configuration files we used for dev cluster (which can be started by running
+'make devcluster').
+
+They are split into a base.yaml that contains configs that we have been using for test, development
+and production, and a development.yaml that contains configs specifically needed for starting dev
+cluster using Docker-for-Mac, and need to updated for production setups.
+
+- Origin
+[base.yaml](../config/origin/base.yaml)
+[development.yaml](../examples/devcluster/config/origin/development.yaml)
+
+- Tracker
+[base.yaml](../config/tracker/base.yaml)
+[development.yaml](../examples/devcluster/config/tracker/development.yaml)
+
+- Build-index
+[base.yaml](../config/build-index/base.yaml)
+[development.yaml](../examples/devcluster/config/build-index/development.yaml)
+
+- Proxy
+[base.yaml](../config/proxy/base.yaml)
+[development.yaml](../examples/devcluster/config/proxy/development.yaml)
+
+- Agent
+[base.yaml](../config/agent/base.yaml)
+[development.yaml](../examples/devcluster/config/agent/development.yaml)
 
 # Configuring Peer To Peer Download
 Kraken's peer-to-peer network consists of agents, origins and trackers. Origins are a few dedicated seeders that downloads data from a storage backend (HDFS, S3, etc). Agents are leechers that download from each other and from origins and can later become seeders after they finish downloading. Agents announce to trackers periodically to update the torrent they are currently downloading and in return get a list of peers that are also downloading the same torrent. More details in [ARCHITECTURE.md](ARCHITECTURE.md)
@@ -22,8 +52,8 @@ Kraken's peer-to-peer network consists of agents, origins and trackers. Origins 
 >        peer_set_window_size: 1h
 >        max_peer_set_windows: 5
 >```
-As peers announce periodically to a tracker, the tracker stores the announce requests into several time window bucket. 
-Each announce request expires in `peer_set_window_size * max_peer_set_windows` time. 
+As peers announce periodically to a tracker, the tracker stores the announce requests into several time window bucket.
+Each announce request expires in `peer_set_window_size * max_peer_set_windows` time.
 
 Then, the tracker returns a random set of peers selecting from `max_peer_set_windows` number of time bucket.
 
@@ -72,7 +102,7 @@ Both agents and origins can be configured to cleanup idle torrents on disk perio
 >        tti: 1h
 >    download_cleanup:
 >        disabled: false
->        tti: 1h    
+>        tti: 1h
 >```
 
 For origins, the number of files can also be limited as origins are dedicated seeders and hence normally caches files on disk for longer time.
