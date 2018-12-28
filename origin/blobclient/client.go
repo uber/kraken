@@ -87,7 +87,7 @@ func (c *HTTPClient) Locations(d core.Digest) ([]string, error) {
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/blobs/%s/locations", c.addr, d),
 		httputil.SendTimeout(5*time.Second),
-		httputil.SendTLSTransport(c.tls))
+		httputil.SendTLS(c.tls))
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (c *HTTPClient) stat(namespace string, d core.Digest, local bool) (*core.Bl
 	r, err := httputil.Head(
 		u,
 		httputil.SendTimeout(15*time.Second),
-		httputil.SendTLSTransport(c.tls))
+		httputil.SendTLS(c.tls))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return nil, ErrBlobNotFound
@@ -146,7 +146,7 @@ func (c *HTTPClient) DeleteBlob(d core.Digest) error {
 	_, err := httputil.Delete(
 		fmt.Sprintf("http://%s/internal/blobs/%s", c.addr, d),
 		httputil.SendAcceptedCodes(http.StatusAccepted),
-		httputil.SendTLSTransport(c.tls))
+		httputil.SendTLS(c.tls))
 	return err
 }
 
@@ -180,7 +180,7 @@ func (c *HTTPClient) DuplicateUploadBlob(
 func (c *HTTPClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s", c.addr, url.PathEscape(namespace), d),
-		httputil.SendTLSTransport(c.tls))
+		httputil.SendTLS(c.tls))
 	if err != nil {
 		return err
 	}
@@ -198,7 +198,7 @@ func (c *HTTPClient) ReplicateToRemote(namespace string, d core.Digest, remoteDN
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/remote/%s",
 			c.addr, url.PathEscape(namespace), d, remoteDNS),
-		httputil.SendTLSTransport(c.tls))
+		httputil.SendTLS(c.tls))
 	return err
 }
 
@@ -211,7 +211,7 @@ func (c *HTTPClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInf
 		fmt.Sprintf("http://%s/internal/namespace/%s/blobs/%s/metainfo",
 			c.addr, url.PathEscape(namespace), d),
 		httputil.SendTimeout(15*time.Second),
-		httputil.SendTLSTransport(c.tls))
+		httputil.SendTLS(c.tls))
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +232,7 @@ func (c *HTTPClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInf
 func (c *HTTPClient) OverwriteMetaInfo(d core.Digest, pieceLength int64) error {
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/internal/blobs/%s/metainfo?piece_length=%d", c.addr, d, pieceLength),
-		httputil.SendTLSTransport(c.tls))
+		httputil.SendTLS(c.tls))
 	return err
 }
 
@@ -242,7 +242,7 @@ func (c *HTTPClient) GetPeerContext() (core.PeerContext, error) {
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/internal/peercontext", c.addr),
 		httputil.SendTimeout(5*time.Second),
-		httputil.SendTLSTransport(c.tls))
+		httputil.SendTLS(c.tls))
 	if err != nil {
 		return pctx, err
 	}
@@ -260,7 +260,7 @@ func (c *HTTPClient) ForceCleanup(ttl time.Duration) error {
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/forcecleanup?%s", c.addr, v.Encode()),
 		httputil.SendTimeout(2*time.Minute),
-		httputil.SendTLSTransport(c.tls))
+		httputil.SendTLS(c.tls))
 	return err
 }
 

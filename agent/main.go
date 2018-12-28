@@ -150,6 +150,6 @@ func main() {
 
 	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
 		"port":            *agentRegistryPort,
-		"registry_backup": config.RegistryBackup,
-	}))
+		"registry_backup": config.RegistryBackup},
+		nginx.WithTLS(config.TLS)))
 }

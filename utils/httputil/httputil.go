@@ -10,10 +10,10 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/pressly/chi"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/backoff"
 	"github.com/uber/kraken/utils/handler"
-	"github.com/pressly/chi"
 )
 
 // StatusError occurs if an HTTP response has an unexpected status code.
@@ -115,6 +115,11 @@ type sendOptions struct {
 // SendOption allows overriding defaults for the Send function.
 type SendOption func(*sendOptions)
 
+// SendNoop returns a no-op option.
+func SendNoop() SendOption {
+	return func(o *sendOptions) {}
+}
+
 // SendBody specifies a body for http request
 func SendBody(body io.Reader) SendOption {
 	return func(o *sendOptions) { o.body = body }
@@ -145,8 +150,10 @@ func SendRedirect(redirect func(req *http.Request, via []*http.Request) error) S
 }
 
 type retryOptions struct {
-	max      int
-	interval time.Duration
+	max               int
+	interval          time.Duration
+	backoffMultiplier float64
+	backoffMax        time.Duration
 }
 
 // RetryOption allows overriding defaults for the SendRetry option.
@@ -162,11 +169,23 @@ func RetryInterval(interval time.Duration) RetryOption {
 	return func(o *retryOptions) { o.interval = interval }
 }
 
+// RetryBackoff adds exponential backoff between retries.
+func RetryBackoff(backoffMultiplier float64) RetryOption {
+	return func(o *retryOptions) { o.backoffMultiplier = backoffMultiplier }
+}
+
+// RetryBackoffMax sets the max duration backoff can reach.
+func RetryBackoffMax(backoffMax time.Duration) RetryOption {
+	return func(o *retryOptions) { o.backoffMax = backoffMax }
+}
+
 // SendRetry will we retry the request on network / 5XX errors.
 func SendRetry(options ...RetryOption) SendOption {
 	retry := retryOptions{
-		max:      3,
-		interval: 250 * time.Millisecond,
+		max:               3,
+		interval:          250 * time.Millisecond,
+		backoffMultiplier: 1, // Defaults with no backoff.
+		backoffMax:        30 * time.Second,
 	}
 	for _, o := range options {
 		o(&retry)
@@ -174,13 +193,21 @@ func SendRetry(options ...RetryOption) SendOption {
 	return func(o *sendOptions) { o.retry = retry }
 }
 
-// SendTLSTransport sets the transport with TLS config for the HTTP client.
-func SendTLSTransport(config *tls.Config) SendOption {
+// SendTLS sets the transport with TLS config for the HTTP client.
+func SendTLS(config *tls.Config) SendOption {
 	return func(o *sendOptions) {
 		if config == nil {
 			return
 		}
 		o.transport = &http.Transport{TLSClientConfig: config}
+		o.url.Scheme = "https"
+	}
+}
+
+// SendTLSTransport sets the transport with TLS config for the HTTP client.
+func SendTLSTransport(transport http.RoundTripper) SendOption {
+	return func(o *sendOptions) {
+		o.transport = transport
 		o.url.Scheme = "https"
 	}
 }
@@ -226,9 +253,13 @@ func Send(method, rawurl string, options ...SendOption) (resp *http.Response, er
 		Transport:     opts.transport,
 	}
 
+	interval := opts.retry.interval
 	for i := 0; i < opts.retry.max; i++ {
 		if i > 0 {
-			time.Sleep(opts.retry.interval)
+			time.Sleep(interval)
+			interval = min(
+				time.Duration(float64(interval)*opts.retry.backoffMultiplier),
+				opts.retry.backoffMax)
 		}
 		resp, err = client.Do(req)
 		// Retry without tls. During migration there would be a time when the
@@ -352,9 +383,18 @@ func newRequest(method string, opts sendOptions) (*http.Request, error) {
 		return nil, fmt.Errorf("new request: %s", err)
 	}
 	req = req.WithContext(opts.ctx)
-
+	if opts.body == nil {
+		req.ContentLength = 0
+	}
 	for key, val := range opts.headers {
 		req.Header.Set(key, val)
 	}
 	return req, nil
+}
+
+func min(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
 }
