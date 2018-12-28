@@ -52,7 +52,7 @@ func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, erro
 				addr, url.PathEscape(namespace), d),
 			c.backoff,
 			httputil.SendTimeout(10*time.Second),
-			httputil.SendTLSTransport(c.tls))
+			httputil.SendTLS(c.tls))
 		if err != nil {
 			if httputil.IsNetworkError(err) {
 				c.ring.Failed(addr)

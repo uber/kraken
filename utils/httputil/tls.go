@@ -20,12 +20,15 @@ type TLSConfig struct {
 	Name   string   `yaml:"name"`
 	CA     X509Pair `yaml:"ca"`
 	Client X509Pair `yaml:"client"`
+
+	// Lazy init.
+	tls *tls.Config
 }
 
 // X509Pair contains x509 cert configuration.
 // Both Cert and Key should be already in pem format.
 type X509Pair struct {
-	Enabled    bool   `yaml:"enabled"`
+	Disabled   bool   `yaml:"disabled"`
 	Cert       Secret `yaml:"cert"`
 	Key        Secret `yaml:"key"`
 	Passphrase Secret `yaml:"passphrase"`
@@ -37,43 +40,58 @@ type Secret struct {
 }
 
 // BuildClient builts tls.Config for http client.
-func (c TLSConfig) BuildClient() (*tls.Config, error) {
-	if !c.Client.Enabled {
-		log.Warnf("Client TLS is disabled")
+func (c *TLSConfig) BuildClient() (*tls.Config, error) {
+	if c.Client.Disabled {
+		log.Infof("Client TLS is disabled")
 		return nil, nil
 	}
-	if c.Name == "" {
-		return nil, ErrEmptyCommonName
+	if c.tls != nil {
+		return c.tls, nil
 	}
 
-	caPool, err := createCertPool(c.CA.Cert.Path)
-	if err != nil {
-		return nil, fmt.Errorf("create cert pool: %s", err)
+	var caPool *x509.CertPool
+	var certs []tls.Certificate
+	var err error
+	if c.CA.Cert.Path != "" {
+		caPool, err = createCertPool(c.CA.Cert.Path)
+		if err != nil {
+			return nil, fmt.Errorf("create cert pool: %s", err)
+		}
 	}
-	certPEM, err := parseCert(c.Client.Cert.Path)
-	if err != nil {
-		return nil, fmt.Errorf("parse client cert: %s", err)
+	if c.Client.Cert.Path != "" {
+		certPEM, err := parseCert(c.Client.Cert.Path)
+		if err != nil {
+			return nil, fmt.Errorf("parse client cert: %s", err)
+		}
+		keyPEM, err := parseKey(c.Client.Key.Path, c.Client.Passphrase.Path)
+		if err != nil {
+			return nil, fmt.Errorf("parse client key: %s", err)
+		}
+		cert, err := tls.X509KeyPair(certPEM, keyPEM)
+		if err != nil {
+			return nil, fmt.Errorf("load client x509 key pair: %s", err)
+		}
+		certs = []tls.Certificate{cert}
 	}
-	keyPEM, err := parseKey(c.Client.Key.Path, c.Client.Passphrase.Path)
-	if err != nil {
-		return nil, fmt.Errorf("parse client key: %s", err)
-	}
-	cert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		return nil, fmt.Errorf("load client x509 key pair: %s", err)
-	}
-
-	return &tls.Config{
-		Certificates:             []tls.Certificate{cert},
+	c.tls = &tls.Config{
+		Certificates:             certs,
 		RootCAs:                  caPool,
 		ServerName:               c.Name,
 		PreferServerCipherSuites: true,
 		InsecureSkipVerify:       false, // This is important to enforce verification of server.
-	}, nil
+	}
+	return c.tls, nil
 }
 
 func createCertPool(paths ...string) (*x509.CertPool, error) {
-	pool := x509.NewCertPool()
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("create system cert pool: %s", err)
+	}
+	// No system certs provided. Create an empty cert pool.
+	if pool == nil {
+		pool = x509.NewCertPool()
+	}
 	for _, p := range paths {
 		pem, err := parseCert(p)
 		if err != nil {

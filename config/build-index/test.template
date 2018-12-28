@@ -46,7 +46,6 @@ nginx:
 tls:
   name: kraken
   ca:
-    enabled: true
     cert:
       path: /etc/kraken/tls/ca/server.crt
     key:
@@ -54,7 +53,6 @@ tls:
     passphrase:
       path: /etc/kraken/tls/ca/passphrase
   client:
-    enabled: true
     cert:
       path: /etc/kraken/tls/client/client.crt
     key:
