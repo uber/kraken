@@ -30,7 +30,7 @@ import (
 )
 
 func main() {
-	configFile := flag.String("config", "", "configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
+	configFile := flag.String("config", "", "configuration file path")
 	krakenCluster := flag.String("cluster", "", "Kraken cluster name (e.g. prod01-sjc1)")
 	port := flag.Int("port", 0, "tag server port")
 
