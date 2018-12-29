@@ -150,7 +150,7 @@ func filterCandidatesFromDirs(fname string, dirs []string) ([]string, error) {
 	candidate := getCandidate(fname, dirs)
 	fmt.Fprintf(os.Stderr, "candidate: %s\n", candidate)
 	if candidate == "" {
-		return nil, os.ErrNotExist
+		return nil, ErrNoFilesToLoad
 	}
 
 	for {
@@ -188,9 +188,9 @@ func filterCandidatesFromDirs(fname string, dirs []string) ([]string, error) {
 func Load(p string, config interface{}) error {
 	candidates, err := filterCandidatesFromDirs(
 		filepath.Base(p), []string{filepath.Dir(p)})
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && err != ErrNoFilesToLoad {
 		return fmt.Errorf("find config under %s: %s", filepath.Dir(p), err)
-	} else if os.IsNotExist(err) {
+	} else if err == ErrNoFilesToLoad {
 		candidates, err = FilterCandidates(p)
 		if err != nil {
 			return fmt.Errorf("find config under %s and %s: %s", filepath.Dir(p), configDirKey, err)
