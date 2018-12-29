@@ -147,6 +147,7 @@ func TestLoadFilesValidateOnce(t *testing.T) {
 
 	verr, ok := err.(ValidationError)
 	require.True(ok)
+	require.NotEmpty(verr.Error())
 
 	require.Equal(validator.ErrorArray{validator.ErrZeroValue}, verr.ErrForField("ListenAddress"))
 	require.Equal(validator.ErrorArray{validator.ErrZeroValue}, verr.ErrForField("Servers"))
@@ -157,6 +158,7 @@ func TestLoadFilesValidateOnce(t *testing.T) {
 
 	verr, ok = err.(ValidationError)
 	require.True(ok)
+	require.NotEmpty(verr.Error())
 
 	require.Equal(validator.ErrorArray{validator.ErrMin}, verr.ErrForField("BufferSpace"))
 
