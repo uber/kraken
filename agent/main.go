@@ -38,7 +38,7 @@ func main() {
 	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
 	agentServerPort := flag.Int("agent_server_port", 0, "port which agent server will listen on")
 	agentRegistryPort := flag.Int("agent_registry_port", 5055, "port which agent registry listens on")
-	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
+	configFile := flag.String("config", "", "configuration file path")
 	zone := flag.String("zone", "", "zone/datacenter name")
 	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-sjc1)")
 

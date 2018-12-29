@@ -63,7 +63,7 @@ func main() {
 	blobServerHostName := flag.String("blobserver_hostname", "", "optional hostname which blobserver will use to lookup a local host in a blob server hashnode config")
 	peerIP := flag.String("peer_ip", "", "ip which peer will announce itself as")
 	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
-	configFile := flag.String("config", "", "Configuration file that has to be loaded from one of UBER_CONFIG_DIR locations")
+	configFile := flag.String("config", "", "configuration file path")
 	zone := flag.String("zone", "", "zone/datacenter name")
 	krakenCluster := flag.String("cluster", "", "Kraken cluster name (e.g. prod01-sjc1)")
 

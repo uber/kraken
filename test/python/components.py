@@ -251,10 +251,12 @@ class Tracker(Component):
         return new_docker_container(
             name=self.name,
             image='kraken-tracker:dev',
-            environment={'UBER_CONFIG_DIR': '/etc/kraken/config/tracker'},
+            environment={},
             ports={self.port: self.port},
             volumes=self.volumes,
-            command=['/usr/bin/kraken-tracker', '-config={config}'.format(config=self.config_file)],
+            command=[
+                '/usr/bin/kraken-tracker',
+                '-config=/etc/kraken/config/tracker/{config}'.format(config=self.config_file)],
             health_check=HealthCheck(format_insecure_curl('localhost:{port}/health'.format(port=self.port))))
 
     @property
@@ -298,14 +300,14 @@ class Origin(Component):
             name=self.name,
             image='kraken-origin:dev',
             volumes=self.volumes,
-            environment={'UBER_CONFIG_DIR': '/etc/kraken/config/origin'},
+            environment={},
             ports={
                 self.instance.port: self.instance.port,
                 self.instance.peer_port: self.instance.peer_port,
             },
             command=[
                 '/usr/bin/kraken-origin',
-                '-config={config}'.format(config=self.config_file),
+                '-config=/etc/kraken/config/origin/{config}'.format(config=self.config_file),
                 '-blobserver_port={port}'.format(port=self.instance.port),
                 '-blobserver_hostname={hostname}'.format(hostname=self.instance.hostname),
                 '-peer_ip={ip}'.format(ip=get_docker_bridge()),
@@ -369,9 +371,7 @@ class Agent(Component):
         return new_docker_container(
             name=self.name,
             image='kraken-agent:dev',
-            environment={
-                'UBER_CONFIG_DIR': '/etc/kraken/config/agent',
-            },
+            environment={},
             ports={
                 self.torrent_client_port: self.torrent_client_port,
                 self.registry_port: self.registry_port,
@@ -380,7 +380,7 @@ class Agent(Component):
             volumes=self.volumes,
             command=[
                 '/usr/bin/kraken-agent',
-                '-config={config}'.format(config=self.config_file),
+                '-config=/etc/kraken/config/agent/{config}'.format(config=self.config_file),
                 '-peer_ip={}'.format(get_docker_bridge()),
                 '-peer_port={port}'.format(port=self.torrent_client_port),
                 '-agent_server_port={port}'.format(port=self.port),
@@ -450,12 +450,10 @@ class Proxy(Component):
             name=self.name,
             image='kraken-proxy:dev',
             ports={self.port: self.port},
-            environment={
-                'UBER_CONFIG_DIR': '/etc/kraken/config/proxy',
-            },
+            environment={},
             command=[
                 '/usr/bin/kraken-proxy',
-                '-config={config}'.format(config=self.config_file),
+                '-config=/etc/kraken/config/proxy/{config}'.format(config=self.config_file),
                 '-port={port}'.format(port=self.port),
             ],
             volumes=self.volumes,
@@ -543,12 +541,10 @@ class BuildIndex(Component):
             name=self.name,
             image='kraken-build-index:dev',
             ports={self.port: self.port},
-            environment={
-                'UBER_CONFIG_DIR': '/etc/kraken/config/build-index',
-            },
+            environment={},
             command=[
                 '/usr/bin/kraken-build-index',
-                '-config={config}'.format(config=self.config_file),
+                '-config=/etc/kraken/config/build-index/{config}'.format(config=self.config_file),
                 '-port={port}'.format(port=self.instance.port),
             ],
             volumes=self.volumes,

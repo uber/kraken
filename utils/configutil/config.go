@@ -63,9 +63,7 @@ import (
 
 const (
 	configDirKey = "UBER_CONFIG_DIR"
-)
 
-const (
 	configDir       = "config"
 	secretsFile     = "secrets.yaml"
 	configSeparator = ":"
@@ -141,7 +139,6 @@ func getCandidate(fname string, dirs []string) string {
 }
 
 func filterCandidatesFromDirs(fname string, dirs []string) ([]string, error) {
-
 	var paths []string
 	cSet := make(stringset.Set)
 
@@ -153,7 +150,7 @@ func filterCandidatesFromDirs(fname string, dirs []string) ([]string, error) {
 	candidate := getCandidate(fname, dirs)
 	fmt.Fprintf(os.Stderr, "candidate: %s\n", candidate)
 	if candidate == "" {
-		return nil, fmt.Errorf("file %s not found in %s", fname, dirs)
+		return nil, os.ErrNotExist
 	}
 
 	for {
@@ -185,12 +182,19 @@ func filterCandidatesFromDirs(fname string, dirs []string) ([]string, error) {
 	return paths, nil
 }
 
-// Load loads configuration based on environment variables
+// Load loads configuration based on config file name.
+// If config directory cannot be derived from file name, get it from environment
+// variables.
 func Load(fname string, config interface{}) error {
-	candidates, err := FilterCandidates(fname)
-
-	if err != nil {
+	candidates, err := filterCandidatesFromDirs(
+		filepath.Base(fname), []string{filepath.Dir(fname)})
+	if err != nil && !os.IsNotExist(err) {
 		return err
+	} else if os.IsNotExist(err) {
+		candidates, err = FilterCandidates(fname)
+		if err != nil {
+			return err
+		}
 	}
 
 	return LoadFiles(config, candidates...)
@@ -201,7 +205,6 @@ func Load(fname string, config interface{}) error {
 func LoadFile(fname string, config interface{}) error {
 	candidates, err := filterCandidatesFromDirs(
 		filepath.Base(fname), []string{filepath.Dir(fname)})
-
 	if err != nil {
 		return err
 	}

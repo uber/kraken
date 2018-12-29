@@ -10,25 +10,25 @@ sleep 3
     -port=${TESTFS_PORT} \
     &>/var/log/kraken/kraken-testfs/stdout.log &
 
-UBER_CONFIG_DIR=/etc/kraken/config/origin /usr/bin/kraken-origin \
+/usr/bin/kraken-origin \
+    -config=/etc/kraken/config/origin/development.yaml \
     -blobserver_hostname=${HOSTNAME} \
     -blobserver_port=${ORIGIN_SERVER_PORT} \
     -peer_ip=${HOSTNAME} \
     -peer_port=${ORIGIN_PEER_PORT} \
-    -config=development.yaml \
     &>/var/log/kraken/kraken-origin/stdout.log &
 
-UBER_CONFIG_DIR=/etc/kraken/config/tracker /usr/bin/kraken-tracker \
-    -config=development.yaml \
+/usr/bin/kraken-tracker \
+    -config=/etc/kraken/config/tracker/development.yaml \
     &>/var/log/kraken/kraken-tracker/stdout.log &
 
-UBER_CONFIG_DIR=/etc/kraken/config/build-index /usr/bin/kraken-build-index \
-    -config=development.yaml \
+/usr/bin/kraken-build-index \
+    -config=/etc/kraken/config/build-index/development.yaml \
     -port=${BUILD_INDEX_PORT} \
     &>/var/log/kraken/kraken-build-index/stdout.log &
 
-UBER_CONFIG_DIR=/etc/kraken/config/proxy /usr/bin/kraken-proxy \
-    -config=development.yaml \
+/usr/bin/kraken-proxy \
+    -config=/etc/kraken/config/proxy/development.yaml \
     -port=${PROXY_PORT} \
     &>/var/log/kraken/kraken-proxy/stdout.log &
 
