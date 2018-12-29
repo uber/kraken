@@ -1,14 +1,12 @@
 package configutil
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/validator.v2"
 )
@@ -76,30 +74,36 @@ type Zconfig struct {
 }
 
 func writeFile(t *testing.T, contents string) string {
+	require := require.New(t)
+
 	f, err := ioutil.TempFile("", "configtest")
-	require.NoError(t, err)
+	require.NoError(err)
 
 	defer f.Close()
 
 	_, err = f.Write([]byte(contents))
-	require.NoError(t, err)
+	require.NoError(err)
 
 	return f.Name()
 }
 
-func TestLoadFile(t *testing.T) {
+func TestLoad(t *testing.T) {
+	require := require.New(t)
+
 	fname := writeFile(t, goodConfig)
 	defer os.Remove(fname)
 
 	var cfg configuration
-	err := LoadFile(fname, &cfg)
-	require.NoError(t, err)
-	assert.Equal(t, "localhost:4385", cfg.ListenAddress)
-	assert.Equal(t, 1024, cfg.BufferSpace)
-	assert.Equal(t, []string{"somewhere-sjc1:8090", "somewhere-else-sjc1:8010"}, cfg.Servers)
+	err := Load(fname, &cfg)
+	require.NoError(err)
+	require.Equal("localhost:4385", cfg.ListenAddress)
+	require.Equal(1024, cfg.BufferSpace)
+	require.Equal([]string{"somewhere-sjc1:8090", "somewhere-else-sjc1:8010"}, cfg.Servers)
 }
 
 func TestLoadFilesExtends(t *testing.T) {
+	require := require.New(t)
+
 	fname := writeFile(t, goodConfig)
 	defer os.Remove(fname)
 
@@ -108,14 +112,16 @@ func TestLoadFilesExtends(t *testing.T) {
 	defer os.Remove(partial)
 
 	var cfg configuration
-	err := LoadFiles(&cfg, fname, partial)
-	require.NoError(t, err)
+	err := loadFiles(&cfg, fname, partial)
+	require.NoError(err)
 
-	assert.Equal(t, 8080, cfg.BufferSpace)
-	assert.Equal(t, "localhost:4385", cfg.ListenAddress)
+	require.Equal(8080, cfg.BufferSpace)
+	require.Equal("localhost:4385", cfg.ListenAddress)
 }
 
 func TestLoadFilesValidateOnce(t *testing.T) {
+	require := require.New(t)
+
 	const invalidConfig1 = `
     listen_address:
     buffer_space: 256
@@ -136,56 +142,62 @@ func TestLoadFilesValidateOnce(t *testing.T) {
 
 	// Either config by itself will not pass validation.
 	var cfg1 configuration
-	err := LoadFile(fname1, &cfg1)
-	require.Error(t, err)
+	err := Load(fname1, &cfg1)
+	require.Error(err)
 
 	verr, ok := err.(ValidationError)
-	require.True(t, ok)
+	require.True(ok)
 
-	assert.Equal(t, validator.ErrorArray{validator.ErrZeroValue}, verr.ErrForField("ListenAddress"))
-	assert.Equal(t, validator.ErrorArray{validator.ErrZeroValue}, verr.ErrForField("Servers"))
+	require.Equal(validator.ErrorArray{validator.ErrZeroValue}, verr.ErrForField("ListenAddress"))
+	require.Equal(validator.ErrorArray{validator.ErrZeroValue}, verr.ErrForField("Servers"))
 
 	var cfg2 configuration
-	err = LoadFile(fname2, &cfg2)
-	require.Error(t, err)
+	err = Load(fname2, &cfg2)
+	require.Error(err)
 
 	verr, ok = err.(ValidationError)
-	require.True(t, ok)
+	require.True(ok)
 
-	assert.Equal(t, validator.ErrorArray{validator.ErrMin}, verr.ErrForField("BufferSpace"))
+	require.Equal(validator.ErrorArray{validator.ErrMin}, verr.ErrForField("BufferSpace"))
 
 	// But merging load has no error.
 	var mergedCfg configuration
-	err = LoadFiles(&mergedCfg, fname1, fname2)
-	require.NoError(t, err)
+	err = loadFiles(&mergedCfg, fname1, fname2)
+	require.NoError(err)
 
-	assert.Equal(t, "localhost:8080", mergedCfg.ListenAddress)
-	assert.Equal(t, 256, mergedCfg.BufferSpace)
-	assert.Equal(t, []string{"somewhere-else-sjc1:8010"}, mergedCfg.Servers)
+	require.Equal("localhost:8080", mergedCfg.ListenAddress)
+	require.Equal(256, mergedCfg.BufferSpace)
+	require.Equal([]string{"somewhere-else-sjc1:8010"}, mergedCfg.Servers)
 }
 
 func TestMissingFile(t *testing.T) {
+	require := require.New(t)
+
 	var cfg configuration
-	err := LoadFile("./no-config.yaml", &cfg)
-	require.Error(t, err)
+	err := Load("./no-config.yaml", &cfg)
+	require.Error(err)
 }
 
 func TestInvalidYAML(t *testing.T) {
+	require := require.New(t)
+
 	var cfg configuration
-	err := LoadFile("./config_test.go", &cfg)
-	require.Error(t, err)
+	err := Load("./config_test.go", &cfg)
+	require.Error(err)
 }
 
 func TestInvalidConfig(t *testing.T) {
+	require := require.New(t)
+
 	fname := writeFile(t, invalidConfig)
 	defer os.Remove(fname)
 
 	var cfg configuration
-	err := LoadFile(fname, &cfg)
-	require.Error(t, err)
+	err := Load(fname, &cfg)
+	require.Error(err)
 
 	verr, ok := err.(ValidationError)
-	require.True(t, ok)
+	require.True(ok)
 
 	errors := map[string]validator.ErrorArray{
 		"BufferSpace":   {validator.ErrMin},
@@ -196,11 +208,13 @@ func TestInvalidConfig(t *testing.T) {
 	for field, errs := range errors {
 		fieldErr := verr.ErrForField(field)
 		require.NotNil(t, fieldErr, "Could not find field level error for %s", field)
-		assert.Equal(t, errs, fieldErr)
+		require.Equal(errs, fieldErr)
 	}
 }
 
 func TestExtendsConfig(t *testing.T) {
+	require := require.New(t)
+
 	fname := writeFile(t, goodConfig)
 	defer os.Remove(fname)
 
@@ -209,19 +223,21 @@ func TestExtendsConfig(t *testing.T) {
 	defer os.Remove(extendsfn)
 
 	var cfg configuration
-	err := LoadFile(extendsfn, &cfg)
-	require.NoError(t, err)
+	err := Load(extendsfn, &cfg)
+	require.NoError(err)
 
-	assert.Equal(t, "localhost:4385", cfg.ListenAddress)
-	assert.Equal(t, 512, cfg.BufferSpace)
-	assert.Equal(t, []string{"somewhere-sjc2:8090", "somewhere-else-sjc2:8010"}, cfg.Servers)
-	assert.Equal(t, "v1", cfg.X.Y.Z.K1)
-	assert.Equal(t, "v2", cfg.X.Y.Z.K2)
+	require.Equal("localhost:4385", cfg.ListenAddress)
+	require.Equal(512, cfg.BufferSpace)
+	require.Equal([]string{"somewhere-sjc2:8090", "somewhere-else-sjc2:8010"}, cfg.Servers)
+	require.Equal("v1", cfg.X.Y.Z.K1)
+	require.Equal("v2", cfg.X.Y.Z.K2)
 
-	assert.Equal(t, "val1", cfg.X.Y.V)
+	require.Equal("val1", cfg.X.Y.V)
 }
 
 func TestExtendsConfigDeep(t *testing.T) {
+	require := require.New(t)
+
 	fname := writeFile(t, goodConfig)
 	defer os.Remove(fname)
 
@@ -234,57 +250,50 @@ func TestExtendsConfigDeep(t *testing.T) {
 	defer os.Remove(extendsfn2)
 
 	var cfg configuration
-	err := LoadFile(extendsfn2, &cfg)
-	require.NoError(t, err)
+	err := Load(extendsfn2, &cfg)
+	require.NoError(err)
 
-	assert.Equal(t, "localhost:4385", cfg.ListenAddress)
-	assert.Equal(t, 256, cfg.BufferSpace)
-	assert.Equal(t, []string{"somewhere-sjc3:8090", "somewhere-else-sjc3:8010"}, cfg.Servers)
+	require.Equal("localhost:4385", cfg.ListenAddress)
+	require.Equal(256, cfg.BufferSpace)
+	require.Equal([]string{"somewhere-sjc3:8090", "somewhere-else-sjc3:8010"}, cfg.Servers)
 }
 
 func TestExtendsConfigCircularRef(t *testing.T) {
+	require := require.New(t)
+
 	f1, err := ioutil.TempFile("", "configtest")
-	require.NoError(t, err)
+	require.NoError(err)
 
 	f2, err := ioutil.TempFile("", "configtest")
-	require.NoError(t, err)
+	require.NoError(err)
 
 	f3, err := ioutil.TempFile("", "configtest")
-	require.NoError(t, err)
+	require.NoError(err)
 
 	defer f1.Close()
 	defer f2.Close()
 	defer f3.Close()
 
 	_, err = f1.Write([]byte(goodConfig))
-	require.NoError(t, err)
+	require.NoError(err)
 	defer os.Remove(f1.Name())
 
 	extends := fmt.Sprintf(goodExtendsConfig, filepath.Base(f3.Name()))
 	_, err = f2.Write([]byte(extends))
-	require.NoError(t, err)
+	require.NoError(err)
 
 	defer os.Remove(f2.Name())
 
 	extends2 := fmt.Sprintf(goodYetAnotherExtendsConfig, filepath.Base(f2.Name()))
 	_, err = f3.Write([]byte(extends2))
-	require.NoError(t, err)
+	require.NoError(err)
 
 	defer os.Remove(f3.Name())
 
 	var cfg configuration
-	err = LoadFile(f3.Name(), &cfg)
-	require.Error(t, err)
-	require.Equal(t, err, errors.New("cyclic reference in configuration extends detected"))
-}
-
-func populateTestDir(t *testing.T, dirname, filename, contents string) string {
-	tmp, err := ioutil.TempDir("", dirname)
-	require.NoError(t, err)
-	tmpfn := filepath.Join(tmp, filename)
-	err = ioutil.WriteFile(tmpfn, []byte(contents), 0666)
-	require.NoError(t, err)
-	return tmp
+	err = Load(f3.Name(), &cfg)
+	require.Error(err)
+	require.Contains(err.Error(), "cyclic reference in configuration extends detected")
 }
 
 func stubEnv(key, value string) func() {
@@ -326,21 +335,25 @@ func TestDefaultConfigFilesWithMultiplyConfigDir(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		require := require.New(t)
+
 		os.Setenv(configDirKey, tt.ConfigDir)
 		files, err := FilterCandidates("production-dca1.yaml")
-		require.NoError(t, err)
-		assert.Equal(t, tt.Result, files, "config files mismatch for %s", tt.ConfigDir)
+		require.NoError(err)
+		require.Equal(tt.Result, files, "config files mismatch for %s", tt.ConfigDir)
 	}
 }
 
 func TestLoadSingleConfigDir(t *testing.T) {
+	require := require.New(t)
+
 	defer stubEnv(configDirKey, "testdata/single")()
 
 	config := &configuration{}
 	err := Load("test.yaml", config)
-	require.NoError(t, err, "failed to load config from %v", os.Getenv(configDirKey))
+	require.NoError(err, "failed to load config from %v", os.Getenv(configDirKey))
 
-	assert.Equal(t, &configuration{
+	require.Equal(&configuration{
 		ListenAddress: "127.0.0.1:8080",
 		BufferSpace:   9000,
 		Servers:       []string{"127.0.0.1:01", "127.0.0.1:02"},
@@ -348,17 +361,13 @@ func TestLoadSingleConfigDir(t *testing.T) {
 	}, config, "configs mismatch for %s", os.Getenv(configDirKey))
 }
 
-func loadConfiguration(t *testing.T) *configuration {
-	config := &configuration{}
-	err := Load("production-dca1.yaml", config)
-	require.NoError(t, err, "failed to load config from %v", os.Getenv(configDirKey))
-	return config
-}
-
-func loadMultipleConfigDir(t *testing.T, dir string) *configuration {
+func loadMultipleConfigDir(require *require.Assertions, dir string) *configuration {
 	defer stubEnv(configDirKey, dir)()
 
-	return loadConfiguration(t)
+	config := &configuration{}
+	err := Load("production-dca1.yaml", config)
+	require.NoError(err, "failed to load config from %v", os.Getenv(configDirKey))
+	return config
 }
 
 func TestLoadMultipleConfigDir(t *testing.T) {
@@ -432,8 +441,10 @@ func TestLoadMultipleConfigDir(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		config := loadMultipleConfigDir(t, tt.ConfigDir)
-		assert.Equal(t, &tt.Configuration, config, "configs mismatch for %s", tt.ConfigDir)
+		require := require.New(t)
+
+		config := loadMultipleConfigDir(require, tt.ConfigDir)
+		require.Equal(&tt.Configuration, config, "configs mismatch for %s", tt.ConfigDir)
 	}
 }
 
@@ -461,8 +472,10 @@ func TestLoadMultipleConfigDirPriorityFullConflict(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		config := loadMultipleConfigDir(t, tt.ConfigDir)
-		assert.Equal(t, &tt.Configuration, config, "configs mismatch for %s", tt.ConfigDir)
+		require := require.New(t)
+
+		config := loadMultipleConfigDir(require, tt.ConfigDir)
+		require.Equal(&tt.Configuration, config, "configs mismatch for %s", tt.ConfigDir)
 	}
 }
 
@@ -496,7 +509,9 @@ func TestLoadMultipleConfigDirPriorityRelativeExtends(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		config := loadMultipleConfigDir(t, tt.ConfigDir)
-		assert.Equal(t, &tt.Configuration, config, "configs mismatch for %s", tt.ConfigDir)
+		require := require.New(t)
+
+		config := loadMultipleConfigDir(require, tt.ConfigDir)
+		require.Equal(&tt.Configuration, config, "configs mismatch for %s", tt.ConfigDir)
 	}
 }
