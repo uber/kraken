@@ -189,11 +189,11 @@ func Load(fname string, config interface{}) error {
 	candidates, err := filterCandidatesFromDirs(
 		filepath.Base(fname), []string{filepath.Dir(fname)})
 	if err != nil && !os.IsNotExist(err) {
-		return err
+		return fmt.Errorf("Get config from dir %s: %s", filepath.Dir(fname), err)
 	} else if os.IsNotExist(err) {
 		candidates, err = FilterCandidates(fname)
 		if err != nil {
-			return err
+			return fmt.Errorf("Get config from env var dir %s: %s", configDirKey, err)
 		}
 	}
 
