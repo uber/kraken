@@ -1,6 +1,8 @@
 package lockermap
 
 import (
+	"fmt"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -90,6 +92,29 @@ func TestMapLoadReturnsFalseWhenKeyDeletedBeforeValueLocked(t *testing.T) {
 	v.loading = false
 	m.Delete("k")
 	v.deleted <- true
+
+	wg.Wait()
+}
+
+func TestMapRange(t *testing.T) {
+	require := require.New(t)
+	var m Map
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < 10; i++ {
+		v := newTestValueCoordinatedLock()
+		require.True(m.TryStore(strconv.Itoa(i), v))
+		wg.Add(1)
+	}
+
+	go func() {
+		m.Range(func(k interface{}, v sync.Locker) bool {
+			fmt.Println("Iterating - ", k)
+			wg.Done()
+			return true
+		})
+	}()
 
 	wg.Wait()
 }

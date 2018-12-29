@@ -7,7 +7,7 @@ import (
 )
 
 // assertKeyDistribution makes sure the ratio of keys falls in a particular
-// bucket conforms to general weight distribution within 1% accuracy
+// bucket conforms to general weight distribution within accuracy.
 func assertKeyDistribution(t *testing.T, rh *RendezvousHash, nodekeys NodeKeysTable, numKeys int, totalWeights float64, delta float64) {
 	for name, v := range nodekeys {
 		node, _ := rh.GetNode(name)
