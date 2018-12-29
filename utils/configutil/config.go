@@ -206,7 +206,7 @@ func LoadFile(p string, config interface{}) error {
 	candidates, err := filterCandidatesFromDirs(
 		filepath.Base(p), []string{filepath.Dir(p)})
 	if err != nil {
-		return fmt.Errorf("find config under %s: %s", filepath.Dir(p), err)
+		return err
 	}
 
 	return LoadFiles(config, candidates...)
