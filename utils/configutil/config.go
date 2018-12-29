@@ -69,24 +69,26 @@ const (
 	configSeparator = ":"
 )
 
-// ErrNoFilesToLoad is returned when you attemp to call LoadFiles with no file paths
+// ErrNoFilesToLoad is returned when you attemp to call LoadFiles without valid
+// file paths.
 var ErrNoFilesToLoad = errors.New("attempt to load configuration with no files")
 
 // ErrCycleRef is returned when there are circular dependencies detected in
-// configuraiton files extending each other
+// configuraiton files extending each other.
 var ErrCycleRef = errors.New("cyclic reference in configuration extends detected")
 
-// Extends define a keywoword in config for extending a base configuration file
+// Extends define a keywoword in config for extending a base configuration file.
 type Extends struct {
 	Extends string `yaml:"extends"`
 }
 
-// ValidationError is the returned when a configuration fails to pass validation
+// ValidationError is the returned when a configuration fails to pass
+// validation.
 type ValidationError struct {
 	errorMap validator.ErrorMap
 }
 
-// ErrForField returns the validation error for the given field
+// ErrForField returns the validation error for the given field.
 func (e ValidationError) ErrForField(name string) error {
 	return e.errorMap[name]
 }
@@ -102,11 +104,13 @@ func (e ValidationError) Error() string {
 	return w.String()
 }
 
-// FilterCandidates filters candidate config files into only the ones that exist
+// FilterCandidates filters candidate config files into only the ones that
+// exist.
 func FilterCandidates(fname string) ([]string, error) {
 	realConfigDirs := []string{configDir}
 	// Allow overriding the directory config is loaded from, useful for tests
-	// inside subdirectories when the config/ dir is in the top-level of a project.
+	// inside subdirectories when the config dir is at the top-level of a
+	// project.
 	if configRoot := os.Getenv(configDirKey); configRoot != "" {
 		realConfigDirs = strings.Split(configRoot, configSeparator)
 	}
@@ -142,9 +146,8 @@ func filterCandidatesFromDirs(fname string, dirs []string) ([]string, error) {
 	var paths []string
 	cSet := make(stringset.Set)
 
-	// Go through all the 'extends' hierarchy until
-	// there is no base anymore or some reference cycles
-	// been detected.
+	// Go through all the 'extends' hierarchy until there is no base anymore or
+	// some reference cycles have been detected.
 	cSet.Add(fname)
 
 	candidate := getCandidate(fname, dirs)
@@ -161,7 +164,7 @@ func filterCandidatesFromDirs(fname string, dirs []string) ([]string, error) {
 
 		paths = append([]string{candidate}, paths...)
 		if extends != "" {
-			// prevent cycle references
+			// Prevent circular references.
 			if !cSet.Has(extends) {
 				candidate = path.Join(filepath.Dir(candidate), extends)
 				cSet.Add(extends)
@@ -173,7 +176,7 @@ func filterCandidatesFromDirs(fname string, dirs []string) ([]string, error) {
 		}
 	}
 
-	// append secrets
+	// Append secrets.
 	candidate = getCandidate(secretsFile, dirs)
 	if candidate != "" {
 		paths = append(paths, candidate)
@@ -185,48 +188,35 @@ func filterCandidatesFromDirs(fname string, dirs []string) ([]string, error) {
 // Load loads configuration based on config file name.
 // If config directory cannot be derived from file name, get it from environment
 // variables.
-func Load(p string, config interface{}) error {
+func Load(fname string, config interface{}) error {
 	candidates, err := filterCandidatesFromDirs(
-		filepath.Base(p), []string{filepath.Dir(p)})
+		filepath.Base(fname), []string{filepath.Dir(fname)})
 	if err != nil && err != ErrNoFilesToLoad {
-		return fmt.Errorf("find config under %s: %s", filepath.Dir(p), err)
+		return fmt.Errorf("find config under %s: %s", filepath.Dir(fname), err)
 	} else if err == ErrNoFilesToLoad {
-		candidates, err = FilterCandidates(p)
+		candidates, err = FilterCandidates(fname)
 		if err != nil {
-			return fmt.Errorf("find config under %s and %s: %s", filepath.Dir(p), configDirKey, err)
+			return fmt.Errorf(
+				"find config under %s and %s: %s", filepath.Dir(fname), configDirKey, err)
 		}
 	}
 
-	return LoadFiles(config, candidates...)
-}
-
-// LoadFile loads configuration based on config directory
-// where the input file is located
-func LoadFile(p string, config interface{}) error {
-	candidates, err := filterCandidatesFromDirs(
-		filepath.Base(p), []string{filepath.Dir(p)})
-	if err != nil {
-		return err
-	}
-
-	return LoadFiles(config, candidates...)
+	return loadFiles(config, candidates...)
 }
 
 // LoadFiles loads a list of files, deep-merging values.
-// This function is exposed for using from tests.  For production it's recommended
-// to use the default resolution and the Load() method.
-func LoadFiles(config interface{}, ps ...string) error {
-	if len(ps) == 0 {
+func loadFiles(config interface{}, fnames ...string) error {
+	if len(fnames) == 0 {
 		return ErrNoFilesToLoad
 	}
-	for _, p := range ps {
-		data, err := ioutil.ReadFile(p)
+	for _, fname := range fnames {
+		data, err := ioutil.ReadFile(fname)
 		if err != nil {
 			return err
 		}
 
 		if err := yaml.Unmarshal(data, config); err != nil {
-			return fmt.Errorf("unmarshal %s: %s", p, err)
+			return fmt.Errorf("unmarshal %s: %s", fname, err)
 		}
 	}
 
