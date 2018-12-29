@@ -185,15 +185,15 @@ func filterCandidatesFromDirs(fname string, dirs []string) ([]string, error) {
 // Load loads configuration based on config file name.
 // If config directory cannot be derived from file name, get it from environment
 // variables.
-func Load(fname string, config interface{}) error {
+func Load(p string, config interface{}) error {
 	candidates, err := filterCandidatesFromDirs(
-		filepath.Base(fname), []string{filepath.Dir(fname)})
+		filepath.Base(p), []string{filepath.Dir(p)})
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("Get config from dir %s: %s", filepath.Dir(fname), err)
+		return fmt.Errorf("find config under %s: %s", filepath.Dir(p), err)
 	} else if os.IsNotExist(err) {
-		candidates, err = FilterCandidates(fname)
+		candidates, err = FilterCandidates(p)
 		if err != nil {
-			return fmt.Errorf("Get config from env var dir %s: %s", configDirKey, err)
+			return fmt.Errorf("find config under %s and %s: %s", filepath.Dir(p), configDirKey, err)
 		}
 	}
 
@@ -202,11 +202,11 @@ func Load(fname string, config interface{}) error {
 
 // LoadFile loads configuration based on config directory
 // where the input file is located
-func LoadFile(fname string, config interface{}) error {
+func LoadFile(p string, config interface{}) error {
 	candidates, err := filterCandidatesFromDirs(
-		filepath.Base(fname), []string{filepath.Dir(fname)})
+		filepath.Base(p), []string{filepath.Dir(p)})
 	if err != nil {
-		return err
+		return fmt.Errorf("find config under %s: %s", filepath.Dir(p), err)
 	}
 
 	return LoadFiles(config, candidates...)
@@ -215,18 +215,18 @@ func LoadFile(fname string, config interface{}) error {
 // LoadFiles loads a list of files, deep-merging values.
 // This function is exposed for using from tests.  For production it's recommended
 // to use the default resolution and the Load() method.
-func LoadFiles(config interface{}, fnames ...string) error {
-	if len(fnames) == 0 {
+func LoadFiles(config interface{}, ps ...string) error {
+	if len(ps) == 0 {
 		return ErrNoFilesToLoad
 	}
-	for _, fname := range fnames {
-		data, err := ioutil.ReadFile(fname)
+	for _, p := range ps {
+		data, err := ioutil.ReadFile(p)
 		if err != nil {
 			return err
 		}
 
 		if err := yaml.Unmarshal(data, config); err != nil {
-			return fmt.Errorf("unmarshal %s: %s", fname, err)
+			return fmt.Errorf("unmarshal %s: %s", p, err)
 		}
 	}
 
