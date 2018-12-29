@@ -1,5 +1,8 @@
-`TODO(evelynl94)`
 # Kraken Core
+
+Central P2P components that's not specific to docker images:
+
+![](../assets/kraken_core.svg)
 
 ## Agent
   - Deployed on every host
@@ -15,6 +18,10 @@
   - Self-healing hash ring
 
 # Kraken Proxy and Build Index
+
+Components responsible for image tags and replication to other clusters:
+
+![](../assets/kraken_build_index.svg)
 
 ## Proxy
   - Handles image upload and direct download
