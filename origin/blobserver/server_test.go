@@ -50,7 +50,7 @@ func TestStatHandlerNotFound(t *testing.T) {
 
 	backendClient := s.backendClient(namespace)
 
-	backendClient.EXPECT().Stat(d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
+	backendClient.EXPECT().Stat(namespace, d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 
 	_, err := cp.Provide(master1).Stat(namespace, d)
 	require.Equal(blobclient.ErrBlobNotFound, err)
@@ -90,7 +90,7 @@ func TestDownloadBlobHandlerNotFound(t *testing.T) {
 	namespace := core.TagFixture()
 
 	backendClient := s.backendClient(namespace)
-	backendClient.EXPECT().Stat(d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
+	backendClient.EXPECT().Stat(namespace, d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 
 	err := cp.Provide(master1).DownloadBlob(namespace, d, ioutil.Discard)
 	require.Error(err)
@@ -165,9 +165,9 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 	blob := computeBlobForHosts(ring, s1.host, s2.host)
 
 	backendClient := s1.backendClient(namespace)
-	backendClient.EXPECT().Stat(
+	backendClient.EXPECT().Stat(namespace,
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil).AnyTimes()
-	backendClient.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
+	backendClient.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
 	require.True(httputil.IsAccepted(err))
@@ -202,7 +202,7 @@ func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 	namespace := core.TagFixture()
 
 	backendClient := s.backendClient(namespace)
-	backendClient.EXPECT().Stat(d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
+	backendClient.EXPECT().Stat(namespace, d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
 	require.True(httputil.IsNotFound(err))
@@ -310,9 +310,9 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 	namespace := core.TagFixture()
 
 	backendClient := s.backendClient(namespace)
-	backendClient.EXPECT().Stat(
+	backendClient.EXPECT().Stat(namespace,
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil).AnyTimes()
-	backendClient.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
+	backendClient.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
 
 	remote := "remote:80"
 

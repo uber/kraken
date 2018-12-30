@@ -17,17 +17,17 @@ const NoopNamespace = "__noop__"
 type NoopClient struct{}
 
 // Stat always returns ErrBlobNotFound.
-func (c NoopClient) Stat(name string) (*core.BlobInfo, error) {
+func (c NoopClient) Stat(namespace, name string) (*core.BlobInfo, error) {
 	return nil, backenderrors.ErrBlobNotFound
 }
 
 // Upload always returns nil.
-func (c NoopClient) Upload(name string, src io.Reader) error {
+func (c NoopClient) Upload(namespace, name string, src io.Reader) error {
 	return nil
 }
 
 // Download always returns ErrBlobNotFound.
-func (c NoopClient) Download(name string, dst io.Writer) error {
+func (c NoopClient) Download(namespace, name string, dst io.Writer) error {
 	return backenderrors.ErrBlobNotFound
 }
 

@@ -31,7 +31,7 @@ func ClientFixture() Client {
 }
 
 // Stat returns blob info for name.
-func (c *TestClient) Stat(name string) (*core.BlobInfo, error) {
+func (c *TestClient) Stat(namespace, name string) (*core.BlobInfo, error) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -43,7 +43,7 @@ func (c *TestClient) Stat(name string) (*core.BlobInfo, error) {
 }
 
 // Upload uploads src to name.
-func (c *TestClient) Upload(name string, src io.Reader) error {
+func (c *TestClient) Upload(namespace, name string, src io.Reader) error {
 	c.Lock()
 	defer c.Unlock()
 
@@ -56,7 +56,7 @@ func (c *TestClient) Upload(name string, src io.Reader) error {
 }
 
 // Download downloads name into dst.
-func (c *TestClient) Download(name string, dst io.Writer) error {
+func (c *TestClient) Download(namespace, name string, dst io.Writer) error {
 	c.Lock()
 	defer c.Unlock()
 

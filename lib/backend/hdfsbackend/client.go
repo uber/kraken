@@ -78,7 +78,7 @@ func NewClient(config Config, opts ...Option) (*Client, error) {
 }
 
 // Stat returns blob info for name.
-func (c *Client) Stat(name string) (*core.BlobInfo, error) {
+func (c *Client) Stat(namespace, name string) (*core.BlobInfo, error) {
 	path, err := c.pather.BlobPath(name)
 	if err != nil {
 		return nil, fmt.Errorf("blob path: %s", err)
@@ -91,7 +91,7 @@ func (c *Client) Stat(name string) (*core.BlobInfo, error) {
 }
 
 // Download downloads name into dst.
-func (c *Client) Download(name string, dst io.Writer) error {
+func (c *Client) Download(namespace, name string, dst io.Writer) error {
 	path, err := c.pather.BlobPath(name)
 	if err != nil {
 		return fmt.Errorf("blob path: %s", err)
@@ -100,7 +100,7 @@ func (c *Client) Download(name string, dst io.Writer) error {
 }
 
 // Upload uploads src to name.
-func (c *Client) Upload(name string, src io.Reader) error {
+func (c *Client) Upload(namespace, name string, src io.Reader) error {
 	uploadPath := path.Join(c.config.RootDirectory, c.config.UploadDirectory, uuid.NewV4().String())
 	blobPath, err := c.pather.BlobPath(name)
 	if err != nil {

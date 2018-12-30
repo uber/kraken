@@ -5,12 +5,12 @@ import (
 	"os"
 	"time"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/log"
-	"github.com/uber-go/tally"
 )
 
 // FileStore defines store operations required for write-back.
@@ -72,7 +72,7 @@ func (e *Executor) upload(t *Task) error {
 		return fmt.Errorf("get client: %s", err)
 	}
 
-	if _, err := client.Stat(t.Name); err == nil {
+	if _, err := client.Stat(t.Namespace, t.Name); err == nil {
 		// File already uploaded, no-op.
 		return nil
 	}
@@ -89,7 +89,7 @@ func (e *Executor) upload(t *Task) error {
 	}
 	defer f.Close()
 
-	if err := client.Upload(t.Name, f); err != nil {
+	if err := client.Upload(t.Namespace, t.Name, f); err != nil {
 		return fmt.Errorf("upload: %s", err)
 	}
 
