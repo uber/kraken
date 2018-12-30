@@ -121,3 +121,8 @@ func OriginContextFixture() PeerContext {
 func TagFixture() string {
 	return fmt.Sprintf("uber-usi/labrat:%s", randutil.Text(8))
 }
+
+// NamespaceFixture creates a random namespace.
+func NamespaceFixture() string {
+	return fmt.Sprintf("uber-usi/labrat-%s", randutil.Text(8))
+}

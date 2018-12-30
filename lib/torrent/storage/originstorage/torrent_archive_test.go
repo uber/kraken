@@ -62,9 +62,9 @@ func TestTorrentArchiveStatNoExistTriggersRefresh(t *testing.T) {
 
 	blob := core.SizedBlobFixture(100, pieceLength)
 
-	mocks.backendClient.EXPECT().Stat(
+	mocks.backendClient.EXPECT().Stat(namespace,
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
-	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content))
+	mocks.backendClient.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		_, err := archive.Stat(namespace, blob.Digest)
@@ -89,9 +89,9 @@ func TestTorrentArchiveGetTorrentNoExistTriggersRefresh(t *testing.T) {
 
 	blob := core.SizedBlobFixture(100, pieceLength)
 
-	mocks.backendClient.EXPECT().Stat(
+	mocks.backendClient.EXPECT().Stat(namespace,
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
-	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content))
+	mocks.backendClient.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		_, err := archive.GetTorrent(namespace, blob.Digest)
@@ -116,9 +116,9 @@ func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 
 	blob := core.SizedBlobFixture(100, pieceLength)
 
-	mocks.backendClient.EXPECT().Stat(
+	mocks.backendClient.EXPECT().Stat(namespace,
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
-	mocks.backendClient.EXPECT().Download(blob.Digest.Hex(), mockutil.MatchWriter(blob.Content))
+	mocks.backendClient.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content))
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		_, err := archive.Stat(namespace, blob.Digest)

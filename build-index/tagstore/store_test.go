@@ -119,7 +119,7 @@ func TestGetCachesOnDisk(t *testing.T) {
 	digest := core.DigestFixture()
 
 	mocks.backendClient.EXPECT().Download(
-		tag, mockutil.MatchWriter([]byte(digest.String()))).Return(nil)
+		tag, tag, mockutil.MatchWriter([]byte(digest.String()))).Return(nil)
 
 	// Getting multiple times should only cause one backend Download.
 	for i := 0; i < 10; i++ {

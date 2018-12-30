@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/memsize"
 	"github.com/uber/kraken/utils/randutil"
@@ -33,7 +34,7 @@ func TestHttpDownloadSuccess(t *testing.T) {
 	require.NoError(err)
 
 	var b bytes.Buffer
-	require.NoError(client.Download("data", &b))
+	require.NoError(client.Download(core.NamespaceFixture(), "data", &b))
 	require.Equal(blob, b.Bytes())
 }
 
@@ -53,7 +54,7 @@ func TestHttpDownloadFileNotFound(t *testing.T) {
 	require.NoError(err)
 
 	var b bytes.Buffer
-	require.Equal(backenderrors.ErrBlobNotFound, client.Download("data", &b))
+	require.Equal(backenderrors.ErrBlobNotFound, client.Download(core.NamespaceFixture(), "data", &b))
 }
 
 func TestDownloadMalformedURLThrowsError(t *testing.T) {
@@ -68,5 +69,5 @@ func TestDownloadMalformedURLThrowsError(t *testing.T) {
 	require.NoError(err)
 
 	var b bytes.Buffer
-	require.Error(client.Download("data", &b))
+	require.Error(client.Download(core.NamespaceFixture(), "data", &b))
 }

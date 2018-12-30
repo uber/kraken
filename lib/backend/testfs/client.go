@@ -65,7 +65,7 @@ func (c *Client) Addr() string {
 }
 
 // Stat returns blob info for name.
-func (c *Client) Stat(name string) (*core.BlobInfo, error) {
+func (c *Client) Stat(namespace, name string) (*core.BlobInfo, error) {
 	p, err := c.pather.BlobPath(name)
 	if err != nil {
 		return nil, fmt.Errorf("pather: %s", err)
@@ -86,7 +86,7 @@ func (c *Client) Stat(name string) (*core.BlobInfo, error) {
 }
 
 // Upload uploads src to name.
-func (c *Client) Upload(name string, src io.Reader) error {
+func (c *Client) Upload(namespace, name string, src io.Reader) error {
 	p, err := c.pather.BlobPath(name)
 	if err != nil {
 		return fmt.Errorf("pather: %s", err)
@@ -98,7 +98,7 @@ func (c *Client) Upload(name string, src io.Reader) error {
 }
 
 // Download downloads name to dst.
-func (c *Client) Download(name string, dst io.Writer) error {
+func (c *Client) Download(namespace, name string, dst io.Writer) error {
 	p, err := c.pather.BlobPath(name)
 	if err != nil {
 		return fmt.Errorf("pather: %s", err)
