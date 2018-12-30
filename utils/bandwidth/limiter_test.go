@@ -56,6 +56,8 @@ func TestLimiterDisabled(t *testing.T) {
 	require.NoError(err)
 	require.Nil(l.egress)
 	require.Nil(l.ingress)
+	require.NoError(reserve(l, 1, egress))
+	require.NoError(reserve(l, 1, ingress))
 }
 
 func TestLimiterReserveConcurrency(t *testing.T) {
