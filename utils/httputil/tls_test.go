@@ -168,6 +168,18 @@ func startTLSServer(t *testing.T, cert, key, passphrase string) (string, func())
 	return l.Addr().String(), func() { l.Close() }
 }
 
+func TestTLSClientDisabled(t *testing.T) {
+	require := require.New(t)
+
+	c, cleanup := genCerts(t)
+	defer cleanup()
+
+	c.Client.Disabled = true
+	tls, err := c.BuildClient()
+	require.NoError(err)
+	require.Nil(tls)
+}
+
 func TestTLSClient(t *testing.T) {
 	c, cleanup := genCerts(t)
 	defer cleanup()
