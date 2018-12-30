@@ -384,7 +384,7 @@ func TestLoadMultipleConfigDir(t *testing.T) {
 				BufferSpace:   2000,
 				Servers:       []string{"127.0.0.1:02"}, // each file contains single config attribute
 				Nodes: map[string]string{ // map in each config file will be merged
-					"configBProdzone2": "nodeB",
+					"configBProdZone2": "nodeB",
 				},
 			},
 		},
@@ -395,7 +395,7 @@ func TestLoadMultipleConfigDir(t *testing.T) {
 				BufferSpace:   1000,
 				Servers:       []string{"127.0.0.1:01"},
 				Nodes: map[string]string{
-					"configAProdzone2": "nodeA",
+					"configAProdZone2": "nodeA",
 				},
 			},
 		},
@@ -406,7 +406,7 @@ func TestLoadMultipleConfigDir(t *testing.T) {
 				BufferSpace:   3000,
 				Servers:       []string{"127.0.0.1:03"},
 				Nodes: map[string]string{
-					"configCProdzone2": "nodeC",
+					"configCProdZone2": "nodeC",
 				},
 			},
 		},
@@ -417,16 +417,16 @@ func TestLoadMultipleConfigDir(t *testing.T) {
 				BufferSpace:   1000,
 				Servers:       []string{"127.0.0.1:01"},
 				Nodes: map[string]string{
-					"configAProdzone2": "nodeA",
+					"configAProdZone2": "nodeA",
 				},
 			},
 		},
 		{
 			ConfigDir: "testdata/multiple/configA:testdata/configFullD", // one file contains single config attribute and one file contains whole config attributes
 			Configuration: configuration{
-				ListenAddress: "configFullDProdDCA:03",
+				ListenAddress: "configFullDProdZone2:03",
 				BufferSpace:   3000,
-				Servers:       []string{"configFullDProdDCA:03", "configFullDProdDCA:04"},
+				Servers:       []string{"configFullDProdZone2:03", "configFullDProdZone2:04"},
 			},
 		},
 		{
@@ -436,7 +436,7 @@ func TestLoadMultipleConfigDir(t *testing.T) {
 				BufferSpace:   1000,
 				Servers:       []string{"127.0.0.1:01"},
 				Nodes: map[string]string{
-					"configAProdzone2": "nodeA",
+					"configAProdZone2": "nodeA",
 				},
 			},
 		},
@@ -458,17 +458,17 @@ func TestLoadMultipleConfigDirPriorityFullConflict(t *testing.T) {
 		{
 			ConfigDir: "testdata/configFullD:testdata/configFullE",
 			Configuration: configuration{
-				ListenAddress: "configFullEProdDCA:03",
+				ListenAddress: "configFullEProdZone2:03",
 				BufferSpace:   6000,
-				Servers:       []string{"configFullEProdDCA:03", "configFullEProdDCA:04"},
+				Servers:       []string{"configFullEProdZone2:03", "configFullEProdZone2:04"},
 			},
 		},
 		{
 			ConfigDir: "testdata/configFullE:testdata/configFullD",
 			Configuration: configuration{
-				ListenAddress: "configFullDProdDCA:03",
+				ListenAddress: "configFullDProdZone2:03",
 				BufferSpace:   3000,
-				Servers:       []string{"configFullDProdDCA:03", "configFullDProdDCA:04"},
+				Servers:       []string{"configFullDProdZone2:03", "configFullDProdZone2:04"},
 			},
 		},
 	}
@@ -493,7 +493,7 @@ func TestLoadMultipleConfigDirPriorityRelativeExtends(t *testing.T) {
 				BufferSpace:   1000,
 				Servers:       []string{"127.0.0.1:05"},
 				Nodes: map[string]string{
-					"configGProdzone2": "nodeG",
+					"configGProdZone2": "nodeG",
 				},
 			},
 		},
@@ -504,7 +504,7 @@ func TestLoadMultipleConfigDirPriorityRelativeExtends(t *testing.T) {
 				BufferSpace:   1000,
 				Servers:       []string{"127.0.0.1:04"},
 				Nodes: map[string]string{
-					"configFProdzone2": "nodeF",
+					"configFProdZone2": "nodeF",
 				},
 			},
 		},
