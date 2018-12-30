@@ -21,8 +21,8 @@ X:
     Z:
       K1: v1
 servers:
-    - somewhere-sjc1:8090
-    - somewhere-else-sjc1:8010
+    - somewhere-zone1:8090
+    - somewhere-else-zone1:8010
 `
 
 	invalidConfig = `
@@ -98,7 +98,7 @@ func TestLoad(t *testing.T) {
 	require.NoError(err)
 	require.Equal("localhost:4385", cfg.ListenAddress)
 	require.Equal(1024, cfg.BufferSpace)
-	require.Equal([]string{"somewhere-sjc1:8090", "somewhere-else-sjc1:8010"}, cfg.Servers)
+	require.Equal([]string{"somewhere-zone1:8090", "somewhere-else-zone1:8010"}, cfg.Servers)
 }
 
 func TestLoadFilesExtends(t *testing.T) {
@@ -131,7 +131,7 @@ func TestLoadFilesValidateOnce(t *testing.T) {
 	const invalidConfig2 = `
     listen_address: "localhost:8080"
     servers:
-      - somewhere-else-sjc1:8010
+      - somewhere-else-zone1:8010
     `
 
 	fname1 := writeFile(t, invalidConfig1)
@@ -169,7 +169,7 @@ func TestLoadFilesValidateOnce(t *testing.T) {
 
 	require.Equal("localhost:8080", mergedCfg.ListenAddress)
 	require.Equal(256, mergedCfg.BufferSpace)
-	require.Equal([]string{"somewhere-else-sjc1:8010"}, mergedCfg.Servers)
+	require.Equal([]string{"somewhere-else-zone1:8010"}, mergedCfg.Servers)
 }
 
 func TestMissingFile(t *testing.T) {
@@ -318,21 +318,21 @@ func TestDefaultConfigFilesWithMultiplyConfigDir(t *testing.T) {
 			Result: []string{
 				"testdata/multiple/configB/base.yaml",
 				"testdata/multiple/configB/production.yaml",
-				"testdata/multiple/configB/production-dca1.yaml"},
+				"testdata/multiple/configB/production-zone2.yaml"},
 		},
 		{
 			ConfigDir: "./testdata/multiple/configA:./testdata/multiple/configB:./random/",
 			Result: []string{
 				"testdata/multiple/configB/base.yaml",
 				"testdata/multiple/configB/production.yaml",
-				"testdata/multiple/configB/production-dca1.yaml"},
+				"testdata/multiple/configB/production-zone2.yaml"},
 		},
 		{
 			ConfigDir: "./testdata/multiple/configA:",
 			Result: []string{
 				"testdata/multiple/configA/base.yaml",
 				"testdata/multiple/configA/production.yaml",
-				"testdata/multiple/configA/production-dca1.yaml"},
+				"testdata/multiple/configA/production-zone2.yaml"},
 		},
 	}
 
@@ -340,7 +340,7 @@ func TestDefaultConfigFilesWithMultiplyConfigDir(t *testing.T) {
 		require := require.New(t)
 
 		os.Setenv(configDirKey, tt.ConfigDir)
-		files, err := FilterCandidates("production-dca1.yaml")
+		files, err := FilterCandidates("production-zone2.yaml")
 		require.NoError(err)
 		require.Equal(tt.Result, files, "config files mismatch for %s", tt.ConfigDir)
 	}
@@ -367,7 +367,7 @@ func loadMultipleConfigDir(require *require.Assertions, dir string) *configurati
 	defer stubEnv(configDirKey, dir)()
 
 	config := &configuration{}
-	err := Load("production-dca1.yaml", config)
+	err := Load("production-zone2.yaml", config)
 	require.NoError(err, "failed to load config from %v", os.Getenv(configDirKey))
 	return config
 }
@@ -384,7 +384,7 @@ func TestLoadMultipleConfigDir(t *testing.T) {
 				BufferSpace:   2000,
 				Servers:       []string{"127.0.0.1:02"}, // each file contains single config attribute
 				Nodes: map[string]string{ // map in each config file will be merged
-					"configBProdDCA1": "nodeB",
+					"configBProdzone2": "nodeB",
 				},
 			},
 		},
@@ -395,7 +395,7 @@ func TestLoadMultipleConfigDir(t *testing.T) {
 				BufferSpace:   1000,
 				Servers:       []string{"127.0.0.1:01"},
 				Nodes: map[string]string{
-					"configAProdDCA1": "nodeA",
+					"configAProdzone2": "nodeA",
 				},
 			},
 		},
@@ -406,7 +406,7 @@ func TestLoadMultipleConfigDir(t *testing.T) {
 				BufferSpace:   3000,
 				Servers:       []string{"127.0.0.1:03"},
 				Nodes: map[string]string{
-					"configCProdDCA1": "nodeC",
+					"configCProdzone2": "nodeC",
 				},
 			},
 		},
@@ -417,7 +417,7 @@ func TestLoadMultipleConfigDir(t *testing.T) {
 				BufferSpace:   1000,
 				Servers:       []string{"127.0.0.1:01"},
 				Nodes: map[string]string{
-					"configAProdDCA1": "nodeA",
+					"configAProdzone2": "nodeA",
 				},
 			},
 		},
@@ -436,7 +436,7 @@ func TestLoadMultipleConfigDir(t *testing.T) {
 				BufferSpace:   1000,
 				Servers:       []string{"127.0.0.1:01"},
 				Nodes: map[string]string{
-					"configAProdDCA1": "nodeA",
+					"configAProdzone2": "nodeA",
 				},
 			},
 		},
@@ -493,7 +493,7 @@ func TestLoadMultipleConfigDirPriorityRelativeExtends(t *testing.T) {
 				BufferSpace:   1000,
 				Servers:       []string{"127.0.0.1:05"},
 				Nodes: map[string]string{
-					"configGProdDCA1": "nodeG",
+					"configGProdzone2": "nodeG",
 				},
 			},
 		},
@@ -504,7 +504,7 @@ func TestLoadMultipleConfigDirPriorityRelativeExtends(t *testing.T) {
 				BufferSpace:   1000,
 				Servers:       []string{"127.0.0.1:04"},
 				Nodes: map[string]string{
-					"configFProdDCA1": "nodeF",
+					"configFProdzone2": "nodeF",
 				},
 			},
 		},

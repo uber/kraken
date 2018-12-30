@@ -31,7 +31,7 @@ import (
 
 func main() {
 	configFile := flag.String("config", "", "configuration file path")
-	krakenCluster := flag.String("cluster", "", "Kraken cluster name (e.g. prod01-sjc1)")
+	krakenCluster := flag.String("cluster", "", "Kraken cluster name (e.g. prod01-zone1)")
 	port := flag.Int("port", 0, "tag server port")
 
 	flag.Parse()

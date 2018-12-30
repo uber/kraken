@@ -99,8 +99,8 @@ func DigestListFixture(n int) []Digest {
 func PeerContextFixture() PeerContext {
 	pctx, err := NewPeerContext(
 		RandomPeerIDFactory,
-		"sjc1",
-		"test01-sjc1",
+		"zone1",
+		"test01-zone1",
 		randutil.IP(),
 		randutil.Port(),
 		false)

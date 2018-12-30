@@ -44,14 +44,14 @@ func (rs Remotes) Valid(tag, addr string) bool {
 //
 // For example, given the configuration:
 //
-//   build-index-sjc1:
-//   - uber-usi/.*
+//   build-index-zone1:
+//   - namespace_foo/.*
 //
-//   build-index-dca1:
-//   - uber-usi/.*
+//   build-index-zone2:
+//   - namespace_foo/.*
 //
-// Any builds matching the uber-usi/.* namespace should be replicated to sjc1 and
-// dca1 build-indexes.
+// Any builds matching the namespace_foo/.* namespace should be replicated to
+// zone1 and zone2 build-indexes.
 type RemotesConfig map[string][]string
 
 // Build builds configuration into Remotes.

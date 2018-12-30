@@ -114,7 +114,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 
 	pctx := core.PeerContext{
 		PeerID: core.PeerIDFixture(),
-		Zone:   "sjc1",
+		Zone:   "zone1",
 		IP:     "localhost",
 		Port:   findFreePort(),
 	}
