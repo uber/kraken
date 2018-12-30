@@ -137,7 +137,7 @@ func (s *tagStore) resolveFromBackend(tag string) (core.Digest, error) {
 		return core.Digest{}, fmt.Errorf("backend manager: %s", err)
 	}
 	var b bytes.Buffer
-	if err := backendClient.Download(tag, &b); err != nil {
+	if err := backendClient.Download(tag, tag, &b); err != nil {
 		if err == backenderrors.ErrBlobNotFound {
 			return core.Digest{}, ErrTagNotFound
 		}

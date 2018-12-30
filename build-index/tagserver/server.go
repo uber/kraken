@@ -215,7 +215,7 @@ func (s *Server) hasTagHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return handler.Errorf("backend manager: %s", err)
 	}
-	if _, err := client.Stat(tag); err != nil {
+	if _, err := client.Stat(tag, tag); err != nil {
 		if err == backenderrors.ErrBlobNotFound {
 			return handler.ErrorStatus(http.StatusNotFound)
 		}

@@ -5,10 +5,11 @@
 package mockbackend
 
 import (
-	core "github.com/uber/kraken/core"
-	gomock "github.com/golang/mock/gomock"
 	io "io"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+	core "github.com/uber/kraken/core"
 )
 
 // MockClient is a mock of Client interface
@@ -35,15 +36,15 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Download mocks base method
-func (m *MockClient) Download(arg0 string, arg1 io.Writer) error {
-	ret := m.ctrl.Call(m, "Download", arg0, arg1)
+func (m *MockClient) Download(arg0, arg1 string, arg2 io.Writer) error {
+	ret := m.ctrl.Call(m, "Download", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Download indicates an expected call of Download
-func (mr *MockClientMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0, arg1)
+func (mr *MockClientMockRecorder) Download(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0, arg1, arg2)
 }
 
 // List mocks base method
@@ -60,26 +61,26 @@ func (mr *MockClientMockRecorder) List(arg0 interface{}) *gomock.Call {
 }
 
 // Stat mocks base method
-func (m *MockClient) Stat(arg0 string) (*core.BlobInfo, error) {
-	ret := m.ctrl.Call(m, "Stat", arg0)
+func (m *MockClient) Stat(arg0, arg1 string) (*core.BlobInfo, error) {
+	ret := m.ctrl.Call(m, "Stat", arg0, arg1)
 	ret0, _ := ret[0].(*core.BlobInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Stat indicates an expected call of Stat
-func (mr *MockClientMockRecorder) Stat(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockClient)(nil).Stat), arg0)
+func (mr *MockClientMockRecorder) Stat(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockClient)(nil).Stat), arg0, arg1)
 }
 
 // Upload mocks base method
-func (m *MockClient) Upload(arg0 string, arg1 io.Reader) error {
-	ret := m.ctrl.Call(m, "Upload", arg0, arg1)
+func (m *MockClient) Upload(arg0, arg1 string, arg2 io.Reader) error {
+	ret := m.ctrl.Call(m, "Upload", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Upload indicates an expected call of Upload
-func (mr *MockClientMockRecorder) Upload(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockClient)(nil).Upload), arg0, arg1)
+func (mr *MockClientMockRecorder) Upload(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockClient)(nil).Upload), arg0, arg1, arg2)
 }

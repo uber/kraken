@@ -66,13 +66,13 @@ func NewClient(config Config) (*Client, error) {
 
 // Stat always succeeds.
 // TODO(codyg): Support stat URL.
-func (c *Client) Stat(name string) (*core.BlobInfo, error) {
+func (c *Client) Stat(namespace, name string) (*core.BlobInfo, error) {
 	return core.NewBlobInfo(0), nil
 }
 
 // Download downloads the content from a configured url and writes the data
 // to dst.
-func (c *Client) Download(name string, dst io.Writer) error {
+func (c *Client) Download(namespace, name string, dst io.Writer) error {
 	// Use Fprintf instead of Sprintf to handle formatting errors.
 	var b bytes.Buffer
 	if _, err := fmt.Fprintf(&b, c.config.DownloadURL, name); err != nil {
@@ -96,7 +96,7 @@ func (c *Client) Download(name string, dst io.Writer) error {
 }
 
 // Upload is not supported.
-func (c *Client) Upload(name string, src io.Reader) error {
+func (c *Client) Upload(namespace, name string, src io.Reader) error {
 	return errors.New("not supported")
 }
 

@@ -28,7 +28,7 @@ type sizer interface {
 var _ sizer = (store.FileReader)(nil)
 
 // Upload uploads src into name.
-func (c *ThrottledClient) Upload(name string, src io.Reader) error {
+func (c *ThrottledClient) Upload(namespace, name string, src io.Reader) error {
 	if s, ok := src.(sizer); ok {
 		// Only throttle if the src implements a Size method.
 		if err := c.bandwidth.ReserveEgress(s.Size()); err != nil {
@@ -36,12 +36,12 @@ func (c *ThrottledClient) Upload(name string, src io.Reader) error {
 			// Ignore error.
 		}
 	}
-	return c.Client.Upload(name, src)
+	return c.Client.Upload(namespace, name, src)
 }
 
 // Download downloads name into dst.
-func (c *ThrottledClient) Download(name string, dst io.Writer) error {
-	info, err := c.Client.Stat(name)
+func (c *ThrottledClient) Download(namespace, name string, dst io.Writer) error {
+	info, err := c.Client.Stat(namespace, name)
 	if err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func (c *ThrottledClient) Download(name string, dst io.Writer) error {
 		log.With("name", name).Errorf("Error reserving ingress: %s", err)
 		// Ignore error.
 	}
-	return c.Client.Download(name, dst)
+	return c.Client.Download(namespace, name, dst)
 }
 
 func (c *ThrottledClient) adjustBandwidth(denominator int) error {

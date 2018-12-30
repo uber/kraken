@@ -192,7 +192,7 @@ func TestHas(t *testing.T) {
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
 
-	mocks.backendClient.EXPECT().Stat(tag).Return(core.NewBlobInfo(int64(len(digest.String()))), nil)
+	mocks.backendClient.EXPECT().Stat(tag, tag).Return(core.NewBlobInfo(int64(len(digest.String()))), nil)
 
 	ok, err := client.Has(tag)
 	require.NoError(err)
@@ -212,7 +212,7 @@ func TestHasNotFound(t *testing.T) {
 
 	tag := core.TagFixture()
 
-	mocks.backendClient.EXPECT().Stat(tag).Return(nil, backenderrors.ErrBlobNotFound)
+	mocks.backendClient.EXPECT().Stat(tag, tag).Return(nil, backenderrors.ErrBlobNotFound)
 
 	ok, err := client.Has(tag)
 	require.NoError(err)

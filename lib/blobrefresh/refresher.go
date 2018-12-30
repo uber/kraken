@@ -75,7 +75,7 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 	// Always check whether the blob is actually available and valid before
 	// returning a potential pending error. This ensures that the majority of
 	// errors are propogated quickly and syncronously.
-	info, err := client.Stat(d.Hex())
+	info, err := client.Stat(namespace, d.Hex())
 	if err != nil {
 		if err == backenderrors.ErrBlobNotFound {
 			return ErrNotFound
@@ -90,7 +90,7 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 	id := namespace + ":" + d.Hex()
 	err = r.requests.Start(id, func() error {
 		start := time.Now()
-		if err := r.download(client, d); err != nil {
+		if err := r.download(client, namespace, d); err != nil {
 			return err
 		}
 		t := time.Since(start)
@@ -121,9 +121,9 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 	}
 }
 
-func (r *Refresher) download(client backend.Client, d core.Digest) error {
+func (r *Refresher) download(client backend.Client, namespace string, d core.Digest) error {
 	name := d.Hex()
 	return r.cas.WriteCacheFile(name, func(w store.FileReadWriter) error {
-		return client.Download(name, w)
+		return client.Download(namespace, name, w)
 	})
 }

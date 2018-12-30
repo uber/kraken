@@ -50,7 +50,7 @@ func TestClientStat(t *testing.T) {
 
 	mocks.webhdfs.EXPECT().GetFileStatus("/root/test").Return(webhdfs.FileStatus{Length: 32}, nil)
 
-	info, err := client.Stat("test")
+	info, err := client.Stat(core.NamespaceFixture(), "test")
 	require.NoError(err)
 	require.Equal(core.NewBlobInfo(32), info)
 }
@@ -68,7 +68,7 @@ func TestClientDownload(t *testing.T) {
 	mocks.webhdfs.EXPECT().Open("/root/test", mockutil.MatchWriter(data)).Return(nil)
 
 	var b bytes.Buffer
-	require.NoError(client.Download("test", &b))
+	require.NoError(client.Download(core.NamespaceFixture(), "test", &b))
 	require.Equal(data, b.Bytes())
 }
 
@@ -89,7 +89,7 @@ func TestClientUpload(t *testing.T) {
 
 	mocks.webhdfs.EXPECT().Rename(mockutil.MatchRegex("/root/_uploads/.+"), "/root/test").Return(nil)
 
-	require.NoError(client.Upload("test", bytes.NewReader(data)))
+	require.NoError(client.Upload(core.NamespaceFixture(), "test", bytes.NewReader(data)))
 }
 
 func TestClientList(t *testing.T) {

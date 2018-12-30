@@ -202,7 +202,7 @@ func (s *Server) stat(namespace string, d core.Digest, checkLocal bool) (*core.B
 			if err != nil {
 				return nil, fmt.Errorf("get backend client: %s", err)
 			}
-			if bi, err := client.Stat(d.Hex()); err == nil {
+			if bi, err := client.Stat(namespace, d.Hex()); err == nil {
 				return bi, nil
 			} else if err == backenderrors.ErrBlobNotFound {
 				return nil, os.ErrNotExist

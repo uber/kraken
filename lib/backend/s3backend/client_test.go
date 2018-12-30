@@ -66,7 +66,7 @@ func TestClientStat(t *testing.T) {
 		Key:    aws.String("/root/test"),
 	}).Return(&s3.HeadObjectOutput{ContentLength: &length}, nil)
 
-	info, err := client.Stat("test")
+	info, err := client.Stat(core.NamespaceFixture(), "test")
 	require.NoError(err)
 	require.Equal(core.NewBlobInfo(100), info)
 }
@@ -90,7 +90,7 @@ func TestClientDownload(t *testing.T) {
 	).Return(int64(len(data)), nil)
 
 	var b bytes.Buffer
-	require.NoError(client.Download("test", &b))
+	require.NoError(client.Download(core.NamespaceFixture(), "test", &b))
 	require.Equal(data, b.Bytes())
 }
 
@@ -114,7 +114,7 @@ func TestClientDownloadWithBuffer(t *testing.T) {
 
 	// A plain io.Writer will require a buffer to download.
 	w := make(rwutil.PlainWriter, len(data))
-	require.NoError(client.Download("test", w))
+	require.NoError(client.Download(core.NamespaceFixture(), "test", w))
 	require.Equal(data, []byte(w))
 }
 
@@ -137,7 +137,7 @@ func TestClientUpload(t *testing.T) {
 		gomock.Any(),
 	).Return(nil, nil)
 
-	require.NoError(client.Upload("test", data))
+	require.NoError(client.Upload(core.NamespaceFixture(), "test", data))
 }
 
 func TestClientList(t *testing.T) {

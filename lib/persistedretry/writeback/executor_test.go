@@ -74,8 +74,8 @@ func TestExec(t *testing.T) {
 	task := NewTask(core.TagFixture(), blob.Digest.Hex(), 0)
 
 	client := mocks.client(task.Namespace)
-	client.EXPECT().Stat(blob.Digest.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
-	client.EXPECT().Upload(blob.Digest.Hex(), mockutil.MatchReader(blob.Content)).Return(nil)
+	client.EXPECT().Stat(task.Namespace, blob.Digest.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
+	client.EXPECT().Upload(task.Namespace, blob.Digest.Hex(), mockutil.MatchReader(blob.Content)).Return(nil)
 
 	executor := mocks.new()
 
@@ -100,7 +100,7 @@ func TestExecNoopWhenFileAlreadyUploaded(t *testing.T) {
 	task := NewTask(core.TagFixture(), blob.Digest.Hex(), 0)
 
 	client := mocks.client(task.Namespace)
-	client.EXPECT().Stat(blob.Digest.Hex()).Return(core.NewBlobInfo(blob.Length()), nil)
+	client.EXPECT().Stat(task.Namespace, blob.Digest.Hex()).Return(core.NewBlobInfo(blob.Length()), nil)
 
 	executor := mocks.new()
 
@@ -121,7 +121,7 @@ func TestExecNoopWhenFileMissing(t *testing.T) {
 	task := NewTask(core.TagFixture(), blob.Digest.Hex(), 0)
 
 	client := mocks.client(task.Namespace)
-	client.EXPECT().Stat(blob.Digest.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
+	client.EXPECT().Stat(task.Namespace, blob.Digest.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 
 	executor := mocks.new()
 
@@ -163,8 +163,8 @@ func TestExecUploadFailure(t *testing.T) {
 	task := NewTask(core.TagFixture(), blob.Digest.Hex(), 0)
 
 	client := mocks.client(task.Namespace)
-	client.EXPECT().Stat(blob.Digest.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
-	client.EXPECT().Upload(
+	client.EXPECT().Stat(task.Namespace, blob.Digest.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
+	client.EXPECT().Upload(task.Namespace,
 		blob.Digest.Hex(), mockutil.MatchReader(blob.Content)).Return(errors.New("some error"))
 
 	executor := mocks.new()
