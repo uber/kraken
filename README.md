@@ -26,7 +26,9 @@ load, Kraken distributes 20K 100MB-1G blobs in under 30 sec.
 - [Limitations](#limitations)
 
 # Design
+
 Visualization of a small Kraken cluster at work:
+
 ![](assets/visualization.gif)
 
 The high level idea of Kraken is to have a small number of dedicated hosts seed content to a network
