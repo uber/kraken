@@ -52,7 +52,7 @@ can be tagged and distributed through Kraken's underlying API.
 
 # Architecture
 
-![](assets/architecture.svg =500x)
+<img src="assets/architecture.svg" alt="architecture" style="width:500px;"/>
 
 - Agent
   - Deployed on every host
