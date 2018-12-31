@@ -9,10 +9,10 @@ Some highlights of Kraken:
 - Highly scalable. Cluster size has no impact on download speed (largest Kraken cluster at Uber is
   8k hosts).
 - Highly available. No component is a single point of failure.
-- Pluggable storage options. Kraken does not manage data -- it plugs into reliable blob storage
+- Pluggable storage options. Instead of managing data, Kraken plugs into reliable blob storage
   options, like S3 or HDFS. The storage interface is simple, and new options are easy to add.
 - Lossless cross cluster replication. Kraken supports rule-based async replication between clusters.
-- Minimal dependencies. Other than plugable storage, Kraken only has an optional dependency on DNS.
+- Minimal dependencies. Other than pluggable storage, Kraken only has an optional dependency on DNS.
 
 Kraken has been in production at Uber since early 2018. In our busiest cluster, Kraken distributes
 1 million 0-100MB blobs, 600k 100MB-1G blobs, and 100k 1G+ blobs per day. At its peak production
@@ -122,7 +122,7 @@ Comparison pending discussion with Dragonfly team.
   probably won't trigger, and most tag lookups will probably still return the old tag due to caching.
   If you need mutation (e.g. updating a `latest` tag), please consider implementing your own index
   component on top of a consistent key-value store.
-- Theoretically, Kraken should handle blobs of any size without performance degredation, but at Uber
-  we enforce a 20G limit and cannot endorse of the production use of ultra-large blobs (i.e. 100G+).
-  Kraken's garbage collection policies are TTL-based and quite simplistic. The primary risk is that
-  your disk space across the cluster will rapidly fluctuate and cause shortages.
+- Theoretically, Kraken should handle blobs of any size without significant performance degredation,
+  but at Uber we enforce a 20G limit and cannot endorse of the production use of ultra-large blobs
+  (i.e. 100G+). Kraken's garbage collection policies are TTL-based and quite simplistic. The primary
+  risk is that your disk space across the cluster will rapidly fluctuate and cause shortages.
