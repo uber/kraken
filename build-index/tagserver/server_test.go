@@ -138,6 +138,26 @@ func TestPut(t *testing.T) {
 	require.NoError(client.Put(tag, digest))
 }
 
+func TestDuplicatePut(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := tagclient.NewSingleClient(addr, nil)
+
+	tag := core.TagFixture()
+	digest := core.DigestFixture()
+	delay := 5 * time.Minute
+
+	mocks.store.EXPECT().Put(tag, digest, delay).Return(nil)
+
+	require.NoError(client.DuplicatePut(tag, digest, delay))
+}
+
 func TestGet(t *testing.T) {
 	require := require.New(t)
 
