@@ -34,7 +34,7 @@ Visualization of a small Kraken cluster at work:
 The high level idea of Kraken is to have a small number of dedicated hosts seed content to a network
 of agents running on each host in the cluster. Agents discover other peers through a central component
 which tracks who is downloading what. Agents will prefer to download from other agents seeding the
-desired content -- the dedicated seeders are only used by the first participants in the network to
+desired content, whereas the dedicated seeders are only used by the first participants in the network to
 kick things off.
 
 Docker registry interfaces are plopped on top of each peer in the network, such that images are
@@ -48,11 +48,11 @@ to blob digests. Docker images are mapped into these primitives like so:
 - The image tag maps to a manifest digest.
 
 Note, neither of these primitives is married exclusively to Docker registry. Non-Docker artifacts
-can be tagged and distributed through through Kraken's underlying API.
+can be tagged and distributed through Kraken's underlying API.
 
 # Architecture
 
-![](assets/architecture.svg)
+![](assets/architecture.svg =500x)
 
 - Agent
   - Deployed on every host
