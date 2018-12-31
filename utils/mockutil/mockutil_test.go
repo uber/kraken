@@ -35,10 +35,17 @@ func TestMatchReader(t *testing.T) {
 			require.NoError(err)
 
 			m := MatchReader([]byte(test.expected))
-
 			require.Equal(test.matches, m.Matches(f))
+			require.Equal(test.expected, m.String())
 		})
 	}
+}
+
+func TestMatchReaderTypeCheck(t *testing.T) {
+	require := require.New(t)
+
+	m := MatchReader([]byte("foo"))
+	require.False(m.Matches(nil))
 }
 
 func TestMatchWriter(t *testing.T) {
@@ -51,8 +58,8 @@ func TestMatchWriter(t *testing.T) {
 	b := []byte("some text")
 
 	m := MatchWriter(b)
-
 	require.True(m.Matches(f))
+	require.Equal("WriterMatcher", m.String())
 
 	// Reset file.
 	_, err = f.Seek(0, 0)
@@ -61,6 +68,13 @@ func TestMatchWriter(t *testing.T) {
 	// WriterMatcher should write to the file.
 	result, err := ioutil.ReadAll(f)
 	require.Equal(string(b), string(result))
+}
+
+func TestMatchWriterTypeCheck(t *testing.T) {
+	require := require.New(t)
+
+	m := MatchWriter([]byte("foo"))
+	require.False(m.Matches(nil))
 }
 
 func TestMatchWriterAt(t *testing.T) {
@@ -73,8 +87,8 @@ func TestMatchWriterAt(t *testing.T) {
 	b := []byte("some text")
 
 	m := MatchWriterAt(b)
-
 	require.True(m.Matches(f))
+	require.Equal("WriterAtMatcher", m.String())
 
 	// Reset file.
 	_, err = f.Seek(0, 0)
@@ -83,6 +97,13 @@ func TestMatchWriterAt(t *testing.T) {
 	// WriterAtMatcher should write to the file.
 	result, err := ioutil.ReadAll(f)
 	require.Equal(string(b), string(result))
+}
+
+func TestMatchWriterAtTypeCheck(t *testing.T) {
+	require := require.New(t)
+
+	m := MatchWriterAt([]byte("foo"))
+	require.False(m.Matches(nil))
 }
 
 func TestMatchRegex(t *testing.T) {
@@ -97,8 +118,18 @@ func TestMatchRegex(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("%q==%q", test.expected, test.actual), func(t *testing.T) {
+			require := require.New(t)
+
 			m := MatchRegex(test.expected)
-			require.Equal(t, test.matches, m.Matches(test.actual))
+			require.Equal(test.matches, m.Matches(test.actual))
+			require.Equal(test.expected, m.String())
 		})
 	}
+}
+
+func TestMatchRegexTypeCheck(t *testing.T) {
+	require := require.New(t)
+
+	m := MatchRegex("foo")
+	require.False(m.Matches(nil))
 }

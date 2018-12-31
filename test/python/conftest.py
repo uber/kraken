@@ -129,16 +129,16 @@ def one_way_replicas():
 
 @pytest.fixture
 def two_way_replicas():
-    Replicas = namedtuple('Replicas', ['sjc1', 'dca1'])
+    Replicas = namedtuple('Replicas', ['zone1', 'zone2'])
 
-    sjc1_build_index_instances = _create_build_index_instances()
-    dca1_build_index_instances = _create_build_index_instances()
+    zone1_build_index_instances = _create_build_index_instances()
+    zone2_build_index_instances = _create_build_index_instances()
 
     replicas = Replicas(
-        sjc1=Cluster('sjc1', sjc1_build_index_instances, [dca1_build_index_instances.values()[0]]),
-        dca1=Cluster('dca1', dca1_build_index_instances, [sjc1_build_index_instances.values()[0]]))
+        zone1=Cluster('zone1', zone1_build_index_instances, [zone2_build_index_instances.values()[0]]),
+        zone2=Cluster('zone2', zone2_build_index_instances, [zone1_build_index_instances.values()[0]]))
 
     yield replicas
 
-    replicas.sjc1.teardown()
-    replicas.dca1.teardown()
+    replicas.zone1.teardown()
+    replicas.zone2.teardown()

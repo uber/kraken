@@ -30,9 +30,9 @@ import (
 )
 
 const (
-	master1 = "dummy-origin-master01-dca1:80"
-	master2 = "dummy-origin-master02-dca1:80"
-	master3 = "dummy-origin-master03-dca1:80"
+	master1 = "dummy-origin-master01-zone2:80"
+	master2 = "dummy-origin-master02-zone2:80"
+	master3 = "dummy-origin-master03-zone2:80"
 )
 
 func init() {

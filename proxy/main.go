@@ -19,7 +19,7 @@ import (
 
 func main() {
 	configFile := flag.String("config", "", "configuration file path")
-	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-sjc1)")
+	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-zone1)")
 	var ports flagutil.Ints
 	flag.Var(&ports, "port", "ports to listen on (may specify multiple)")
 	flag.Parse()

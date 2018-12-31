@@ -28,6 +28,7 @@ func TestBackoffAttempts(t *testing.T) {
 		attempts++
 	}
 	require.Error(a.Err())
+	require.True(IsTimeoutError(a.Err()))
 	require.Equal(4, attempts)
 }
 

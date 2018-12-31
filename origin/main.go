@@ -65,7 +65,7 @@ func main() {
 	peerPort := flag.Int("peer_port", 0, "port which peer will announce itself as")
 	configFile := flag.String("config", "", "configuration file path")
 	zone := flag.String("zone", "", "zone/datacenter name")
-	krakenCluster := flag.String("cluster", "", "Kraken cluster name (e.g. prod01-sjc1)")
+	krakenCluster := flag.String("cluster", "", "Kraken cluster name (e.g. prod01-zone1)")
 
 	flag.Parse()
 
