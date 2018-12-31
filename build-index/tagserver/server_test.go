@@ -127,8 +127,7 @@ func TestHealth(t *testing.T) {
 	defer stop()
 
 	resp, err := httputil.Get(
-		fmt.Sprintf("http://%s/health", addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/health", addr))
 	defer resp.Body.Close()
 	require.NoError(err)
 	b, err := ioutil.ReadAll(resp.Body)
@@ -171,21 +170,18 @@ func TestPutInvalidParam(t *testing.T) {
 	defer stop()
 
 	_, err := httputil.Put(
-		fmt.Sprintf("http://%s/tags//digest/foo", addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/tags//digest/foo", addr))
 	require.Error(err)
 
 	tag := core.TagFixture()
 	_, err = httputil.Put(
-		fmt.Sprintf("http://%s/tags/%s/digest/foo", addr, url.PathEscape(tag)),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/tags/%s/digest/foo", addr, url.PathEscape(tag)))
 	require.Error(err)
 
 	digest := core.DigestFixture()
 	_, err = httputil.Put(
 		fmt.Sprintf("http://%s/tags/%s/digest/%s?replicate=bar",
-			addr, url.PathEscape(tag), digest.String()),
-		httputil.SendTimeout(10*time.Second))
+			addr, url.PathEscape(tag), digest.String()))
 	require.Error(err)
 }
 
@@ -219,14 +215,12 @@ func TestDuplicatePutInvalidParam(t *testing.T) {
 	defer stop()
 
 	_, err := httputil.Put(
-		fmt.Sprintf("http://%s/internal/duplicate/tags//digest/foo", addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/duplicate/tags//digest/foo", addr))
 	require.Error(err)
 
 	tag := core.TagFixture()
 	_, err = httputil.Put(
-		fmt.Sprintf("http://%s/internal/duplicate/tags/%s/digest/foo", addr, url.PathEscape(tag)),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/duplicate/tags/%s/digest/foo", addr, url.PathEscape(tag)))
 	require.Error(err)
 }
 func TestGet(t *testing.T) {
@@ -260,8 +254,7 @@ func TestGetInvalidParam(t *testing.T) {
 	defer stop()
 
 	_, err := httputil.Get(
-		fmt.Sprintf("http://%s/tags/", addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/tags/", addr))
 	require.Error(err)
 }
 
@@ -315,8 +308,7 @@ func TestHasInvalidParam(t *testing.T) {
 	defer stop()
 
 	_, err := httputil.Head(
-		fmt.Sprintf("http://%s/tags/", addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/tags/", addr))
 	require.Error(err)
 }
 func TestHasNotFound(t *testing.T) {
@@ -523,15 +515,13 @@ func TestDuplicateReplicateInvalidParam(t *testing.T) {
 	defer stop()
 
 	_, err := httputil.Post(
-		fmt.Sprintf("http://%s/internal/duplicate/remotes/tags//digest/foo", addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/duplicate/remotes/tags//digest/foo", addr))
 	require.Error(err)
 
 	tag := core.TagFixture()
 	_, err = httputil.Post(
 		fmt.Sprintf("http://%s/internal/duplicate/remotes/tags/%s/digest/foo",
-			addr, url.PathEscape(tag)),
-		httputil.SendTimeout(10*time.Second))
+			addr, url.PathEscape(tag)))
 	require.Error(err)
 }
 

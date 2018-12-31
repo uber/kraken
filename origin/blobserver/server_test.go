@@ -32,8 +32,7 @@ func TestHealth(t *testing.T) {
 	defer s.cleanup()
 
 	resp, err := httputil.Get(
-		fmt.Sprintf("http://%s/health", s.addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/health", s.addr))
 	defer resp.Body.Close()
 	require.NoError(err)
 	b, err := ioutil.ReadAll(resp.Body)
@@ -65,19 +64,16 @@ func TestStatHandlerInvalidParam(t *testing.T) {
 	defer s.cleanup()
 
 	_, err := httputil.Head(
-		fmt.Sprintf("http://%s/internal/namespace//blobs/foo", s.addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/namespace//blobs/foo", s.addr))
 	require.Error(err)
 
 	_, err = httputil.Head(
-		fmt.Sprintf("http://%s/internal/namespace/foo/blobs/bar", s.addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/namespace/foo/blobs/bar", s.addr))
 	require.Error(err)
 
 	d := core.DigestFixture()
 	_, err = httputil.Head(
-		fmt.Sprintf("http://%s/internal/namespace/foo/blobs/%s?local=bar", s.addr, d),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/namespace/foo/blobs/%s?local=bar", s.addr, d))
 	require.Error(err)
 }
 
@@ -131,13 +127,11 @@ func TestDownloadBlobInvalidParam(t *testing.T) {
 	defer s.cleanup()
 
 	_, err := httputil.Get(
-		fmt.Sprintf("http://%s/namespace//blobs/foo", s.addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/namespace//blobs/foo", s.addr))
 	require.Error(err)
 
 	_, err = httputil.Get(
-		fmt.Sprintf("http://%s/namespace/foo/blobs/bar", s.addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/namespace/foo/blobs/bar", s.addr))
 	require.Error(err)
 }
 
@@ -192,8 +186,7 @@ func TestDeleteBlobInvalidParam(t *testing.T) {
 	defer s.cleanup()
 
 	_, err := httputil.Delete(
-		fmt.Sprintf("http://%s/internal/blobs/foo", s.addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/blobs/foo", s.addr))
 	require.Error(err)
 }
 
@@ -295,13 +288,11 @@ func TestGetMetaInfoInvalidParam(t *testing.T) {
 	defer s.cleanup()
 
 	_, err := httputil.Get(
-		fmt.Sprintf("http://%s/internal/namespace//blobs/foo/metainfo", s.addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/namespace//blobs/foo/metainfo", s.addr))
 	require.Error(err)
 
 	_, err = httputil.Get(
-		fmt.Sprintf("http://%s/internal/namespace/foo/blobs/bar/metainfo", s.addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/namespace/foo/blobs/bar/metainfo", s.addr))
 	require.Error(err)
 }
 
@@ -339,34 +330,28 @@ func TestTransferBlobInvalidParam(t *testing.T) {
 	defer s.cleanup()
 
 	_, err := httputil.Post(
-		fmt.Sprintf("http://%s/internal/blobs/foo/uploads", s.addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/blobs/foo/uploads", s.addr))
 	require.Error(err)
 
 	d := core.DigestFixture()
 	_, err = httputil.Post(
-		fmt.Sprintf("http://%s/internal/blobs/%s/uploads", s.addr, d.String()),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/blobs/%s/uploads", s.addr, d.String()))
 	require.NoError(err)
 
 	_, err = httputil.Patch(
-		fmt.Sprintf("http://%s/internal/blobs/foo/uploads/bar", s.addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/blobs/foo/uploads/bar", s.addr))
 	require.Error(err)
 
 	_, err = httputil.Patch(
-		fmt.Sprintf("http://%s/internal/blobs/%s/uploads/bar", s.addr, d.String()),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/blobs/%s/uploads/bar", s.addr, d.String()))
 	require.Error(err)
 
 	_, err = httputil.Put(
-		fmt.Sprintf("http://%s/internal/blobs/foo/uploads/bar", s.addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/blobs/foo/uploads/bar", s.addr))
 	require.Error(err)
 
 	_, err = httputil.Put(
-		fmt.Sprintf("http://%s/internal/blobs/%s/uploads/bar", s.addr, d.String()),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/internal/blobs/%s/uploads/bar", s.addr, d.String()))
 	require.Error(err)
 }
 
@@ -443,13 +428,11 @@ func TestReplicateToRemoteInvalidParam(t *testing.T) {
 	defer s.cleanup()
 
 	_, err := httputil.Post(
-		fmt.Sprintf("http://%s/namespace//blobs/foo/remote/bar", s.addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/namespace//blobs/foo/remote/bar", s.addr))
 	require.Error(err)
 
 	_, err = httputil.Post(
-		fmt.Sprintf("http://%s/namespace/hello/blobs/foo/remote/bar", s.addr),
-		httputil.SendTimeout(10*time.Second))
+		fmt.Sprintf("http://%s/namespace/hello/blobs/foo/remote/bar", s.addr))
 	require.Error(err)
 }
 

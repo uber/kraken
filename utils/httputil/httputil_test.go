@@ -88,7 +88,7 @@ func TestSendRetryOnTransportErrors(t *testing.T) {
 	transport.EXPECT().RoundTrip(gomock.Any()).Return(nil, errors.New("some network error")).Times(3)
 
 	start := time.Now()
-	_, err := Post(
+	_, err := Get(
 		_testURL,
 		SendRetry(RetryMax(3), RetryInterval(200*time.Millisecond)),
 		SendTransport(transport))
@@ -107,7 +107,7 @@ func TestSendRetryOn5XX(t *testing.T) {
 	transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(503), nil).Times(3)
 
 	start := time.Now()
-	_, err := Head(
+	_, err := Get(
 		_testURL,
 		SendRetry(RetryMax(3), RetryInterval(200*time.Millisecond)),
 		SendTransport(transport))

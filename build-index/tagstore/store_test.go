@@ -143,9 +143,8 @@ func TestGetFromBackendNotFound(t *testing.T) {
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
 
-	mocks.backendClient.EXPECT().Download(
-		tag, tag,
-		mockutil.MatchWriter([]byte(digest.String()))).Return(backenderrors.ErrBlobNotFound)
+	w := mockutil.MatchWriter([]byte(digest.String()))
+	mocks.backendClient.EXPECT().Download(tag, tag, w).Return(backenderrors.ErrBlobNotFound)
 
 	_, err := store.Get(tag)
 	require.Error(err)
@@ -163,9 +162,8 @@ func TestGetFromBackendUnkownError(t *testing.T) {
 	tag := core.TagFixture()
 	digest := core.DigestFixture()
 
-	mocks.backendClient.EXPECT().Download(
-		tag, tag,
-		mockutil.MatchWriter([]byte(digest.String()))).Return(fmt.Errorf("test error"))
+	w := mockutil.MatchWriter([]byte(digest.String()))
+	mocks.backendClient.EXPECT().Download(tag, tag, w).Return(fmt.Errorf("test error"))
 
 	_, err := store.Get(tag)
 	require.Error(err)
