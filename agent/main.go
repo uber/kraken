@@ -40,7 +40,7 @@ func main() {
 	agentRegistryPort := flag.Int("agent_registry_port", 5055, "port which agent registry listens on")
 	configFile := flag.String("config", "", "configuration file path")
 	zone := flag.String("zone", "", "zone/datacenter name")
-	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-sjc1)")
+	cluster := flag.String("cluster", "", "cluster name (e.g. prod01-zone1)")
 
 	flag.Parse()
 

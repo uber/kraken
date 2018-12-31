@@ -20,6 +20,46 @@ func reserve(l *Limiter, nbytes int64, direction string) error {
 	return l.ReserveIngress(nbytes)
 }
 
+func TestLimiterInvalidConfig(t *testing.T) {
+	require := require.New(t)
+
+	bps := uint64(800) // 100 bytes.
+
+	_, err := NewLimiter(Config{
+		EgressBitsPerSec:  0,
+		IngressBitsPerSec: bps,
+		TokenSize:         1,
+		Enable:            true,
+	})
+	require.Error(err)
+
+	_, err = NewLimiter(Config{
+		EgressBitsPerSec:  bps,
+		IngressBitsPerSec: 0,
+		TokenSize:         1,
+		Enable:            true,
+	})
+	require.Error(err)
+}
+
+func TestLimiterDisabled(t *testing.T) {
+	require := require.New(t)
+
+	bps := uint64(800) // 100 bytes.
+
+	l, err := NewLimiter(Config{
+		EgressBitsPerSec:  bps,
+		IngressBitsPerSec: bps,
+		TokenSize:         1,
+		Enable:            false,
+	})
+	require.NoError(err)
+	require.Nil(l.egress)
+	require.Nil(l.ingress)
+	require.NoError(reserve(l, 1, egress))
+	require.NoError(reserve(l, 1, ingress))
+}
+
 func TestLimiterReserveConcurrency(t *testing.T) {
 	t.Parallel()
 
@@ -37,8 +77,8 @@ func TestLimiterReserveConcurrency(t *testing.T) {
 			})
 			require.NoError(err)
 
-			// This test starts a bunch of goroutines and see how many bytes they can
-			// reserve in nsecs.
+			// This test starts a bunch of goroutines and see how many bytes
+			// they can reserve in nsecs.
 			nsecs := 4
 
 			stop := make(chan struct{})
@@ -153,6 +193,19 @@ func TestLimiterReserveErrorWhenBytesLargerThanBucket(t *testing.T) {
 			require.Error(reserve(l, 12, direction))
 		})
 	}
+}
+
+func TestLimiterAdjustError(t *testing.T) {
+	require := require.New(t)
+
+	l, err := NewLimiter(Config{
+		EgressBitsPerSec:  50,
+		IngressBitsPerSec: 10,
+		TokenSize:         1,
+		Enable:            true,
+	})
+	require.NoError(err)
+	require.Error(l.Adjust(0))
 }
 
 func TestLimiterAdjust(t *testing.T) {

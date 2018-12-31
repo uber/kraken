@@ -1,6 +1,0 @@
-extends: production.yaml
-listen_address: configFullDProdDCA:03
-buffer_space: 3000
-servers:
-  - configFullDProdDCA:03
-  - configFullDProdDCA:04

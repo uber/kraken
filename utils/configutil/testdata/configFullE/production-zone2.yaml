@@ -1,0 +1,6 @@
+extends: production.yaml
+listen_address: configFullEProdZone2:03
+buffer_space: 6000
+servers:
+  - configFullEProdZone2:03
+  - configFullEProdZone2:04

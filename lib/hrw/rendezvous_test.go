@@ -131,7 +131,7 @@ func TestKeyDistributionAndNodeChanges(t *testing.T) {
 
 func testKeyDistribution(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
 	rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
-	assertKeyDistribution(t, rh, nodekeys, numKeys, 1500.0, 0.05)
+	assertKeyDistribution(t, rh, nodekeys, numKeys, 1500.0, 0.1)
 }
 
 func testAddNodes(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
@@ -176,7 +176,7 @@ func testRemoveNodes(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *te
 			}
 		}
 	}
-	assertKeyDistribution(t, rh, nodekeys, numKeys, 1700.0, 0.05)
+	assertKeyDistribution(t, rh, nodekeys, numKeys, 1700.0, 0.1)
 }
 
 func testReturnNodesLength(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
@@ -232,7 +232,7 @@ func testAddingCapacity(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t 
 	}
 
 	// Make sure we still keep the target distribution after resharding.
-	assertKeyDistribution(t, rh, nodekeys, numKeys, 1700.0, 0.05)
+	assertKeyDistribution(t, rh, nodekeys, numKeys, 1700.0, 0.1)
 }
 
 func testRemovingCapacity(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
@@ -257,5 +257,5 @@ func testRemovingCapacity(numKeys int, hash HashFactory, scoreFunc UIntToFloat, 
 	}
 
 	// Make sure we still keep the target distribution after resharding.
-	assertKeyDistribution(t, rh, nodekeys, numKeys, 900.0, 0.05)
+	assertKeyDistribution(t, rh, nodekeys, numKeys, 900.0, 0.1)
 }

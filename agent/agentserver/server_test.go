@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/lib/torrent/scheduler/connstate"
 	"github.com/uber/kraken/utils/httputil"
-	"github.com/stretchr/testify/require"
 )
 
 func TestDownload(t *testing.T) {
@@ -39,6 +39,50 @@ func TestDownload(t *testing.T) {
 	result, err := ioutil.ReadAll(r)
 	require.NoError(err)
 	require.Equal(string(blob.Content), string(result))
+}
+
+func TestDownloadNotFound(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	namespace := core.TagFixture()
+	blob := core.NewBlobFixture()
+
+	mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
+		func(namespace string, d core.Digest) error {
+			return scheduler.ErrTorrentNotFound
+		})
+
+	addr := mocks.startServer()
+	c := NewClient(addr)
+
+	_, err := c.Download(namespace, blob.Digest)
+	require.Error(err)
+	require.True(httputil.IsNotFound(err))
+}
+
+func TestDownloadUnknownError(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	namespace := core.TagFixture()
+	blob := core.NewBlobFixture()
+
+	mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
+		func(namespace string, d core.Digest) error {
+			return fmt.Errorf("test error")
+		})
+
+	addr := mocks.startServer()
+	c := NewClient(addr)
+
+	_, err := c.Download(namespace, blob.Digest)
+	require.Error(err)
+	require.True(httputil.IsStatus(err, 500))
 }
 
 func TestHealthHandler(t *testing.T) {

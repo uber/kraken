@@ -48,7 +48,7 @@ def test_docker_image_replication_resilient_to_build_index_data_loss(one_way_rep
     one_way_replicas.src.build_indexes[1].stop()
 
     # The replicate task should have been duplicated to the third build-index,
-    # so once dca1 is available it should replicate the image.
+    # so once zone2 is available it should replicate the image.
 
     time.sleep(2)
 

@@ -2,4 +2,4 @@ extends: ../configG/production.yaml
 servers:
   - 127.0.0.1:04
 nodes:
-  configFProdDCA1: nodeF
+  configFProdZone2: nodeF
