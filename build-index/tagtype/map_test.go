@@ -15,7 +15,7 @@ import (
 func testConfigs() []Config {
 	return []Config{
 		{Namespace: "namespace-foo/.*", Type: "docker"},
-		{Namespace: "replicator/.*", Type: "default"},
+		{Namespace: "namespace-bar/.*", Type: "default"},
 	}
 }
 
@@ -52,12 +52,27 @@ func TestMapResolveDefault(t *testing.T) {
 	m, err := NewMap(testConfigs(), originClient)
 	require.NoError(err)
 
-	tag := "replicator/repo-bar:0001"
+	tag := "namespace-bar/repo-bar:0001"
 	d := core.DigestFixture()
 
 	deps, err := m.Resolve(tag, d)
 	require.NoError(err)
 	require.Equal(core.DigestList{d}, deps)
+}
+
+func TestMapResolveUndefined(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	originClient := mockblobclient.NewMockClusterClient(ctrl)
+
+	conf := []Config{
+		{Namespace: "namespace-hello/.*", Type: "undefined"},
+	}
+	_, err := NewMap(conf, originClient)
+	require.Error(err)
 }
 
 func TestMapGetResolverNamespaceError(t *testing.T) {

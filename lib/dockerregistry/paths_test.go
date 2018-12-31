@@ -49,7 +49,7 @@ func TestRepositoriesPath(t *testing.T) {
 		{"single namespace manifest", "/v2/repositories/kraken/_manifests", "kraken"},
 		{"single namespace upload", "/v2/repositories/kraken/_uploads", "kraken"},
 		{"single namespace layer", "/v2/repositories/kraken/_layers", "kraken"},
-		{"multiple namespace manifest", "/v2/repositories/uber-usi/kraken/_manifests", "namespace-foo/kraken"},
+		{"multiple namespace manifest", "/v2/repositories/namespace-foo/kraken/_manifests", "namespace-foo/kraken"},
 	}
 
 	for _, tc := range testCases {

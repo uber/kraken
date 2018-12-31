@@ -1,7 +1,10 @@
 package tagserver
 
 import (
+	"fmt"
+	"io/ioutil"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -114,6 +117,25 @@ func newClusterClient(addr string) tagclient.Client {
 	return tagclient.NewClusterClient(healthcheck.NoopList(hostlist.Fixture(addr)), nil)
 }
 
+func TestHealth(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	resp, err := httputil.Get(
+		fmt.Sprintf("http://%s/health", addr),
+		httputil.SendTimeout(10*time.Second))
+	defer resp.Body.Close()
+	require.NoError(err)
+	b, err := ioutil.ReadAll(resp.Body)
+	require.NoError(err)
+	require.Equal("OK\n", string(b))
+}
+
 func TestPut(t *testing.T) {
 	require := require.New(t)
 
@@ -139,6 +161,34 @@ func TestPut(t *testing.T) {
 	require.NoError(client.Put(tag, digest))
 }
 
+func TestPutInvalidParam(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	_, err := httputil.Put(
+		fmt.Sprintf("http://%s/tags//digest/foo", addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+
+	tag := core.TagFixture()
+	_, err = httputil.Put(
+		fmt.Sprintf("http://%s/tags/%s/digest/foo", addr, url.PathEscape(tag)),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+
+	digest := core.DigestFixture()
+	_, err = httputil.Put(
+		fmt.Sprintf("http://%s/tags/%s/digest/%s?replicate=bar",
+			addr, url.PathEscape(tag), digest.String()),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+}
+
 func TestDuplicatePut(t *testing.T) {
 	require := require.New(t)
 
@@ -159,6 +209,26 @@ func TestDuplicatePut(t *testing.T) {
 	require.NoError(client.DuplicatePut(tag, digest, delay))
 }
 
+func TestDuplicatePutInvalidParam(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	_, err := httputil.Put(
+		fmt.Sprintf("http://%s/internal/duplicate/tags//digest/foo", addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+
+	tag := core.TagFixture()
+	_, err = httputil.Put(
+		fmt.Sprintf("http://%s/internal/duplicate/tags/%s/digest/foo", addr, url.PathEscape(tag)),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+}
 func TestGet(t *testing.T) {
 	require := require.New(t)
 
@@ -178,6 +248,21 @@ func TestGet(t *testing.T) {
 	result, err := client.Get(tag)
 	require.NoError(err)
 	require.Equal(digest, result)
+}
+
+func TestGetInvalidParam(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	_, err := httputil.Get(
+		fmt.Sprintf("http://%s/tags/", addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
 }
 
 func TestGetTagNotFound(t *testing.T) {
@@ -220,6 +305,20 @@ func TestHas(t *testing.T) {
 	require.True(ok)
 }
 
+func TestHasInvalidParam(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	_, err := httputil.Head(
+		fmt.Sprintf("http://%s/tags/", addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+}
 func TestHasNotFound(t *testing.T) {
 	require := require.New(t)
 
@@ -412,6 +511,28 @@ func TestDuplicateReplicate(t *testing.T) {
 	mocks.tagReplicationManager.EXPECT().Add(tagreplication.MatchTask(task)).Return(nil)
 
 	require.NoError(client.DuplicateReplicate(tag, digest, dependencies, delay))
+}
+
+func TestDuplicateReplicateInvalidParam(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/internal/duplicate/remotes/tags//digest/foo", addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+
+	tag := core.TagFixture()
+	_, err = httputil.Post(
+		fmt.Sprintf("http://%s/internal/duplicate/remotes/tags/%s/digest/foo",
+			addr, url.PathEscape(tag)),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
 }
 
 func TestNoopReplicate(t *testing.T) {
