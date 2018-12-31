@@ -3,6 +3,7 @@ package blobserver
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"testing"
@@ -22,6 +23,24 @@ import (
 	"github.com/uber/kraken/utils/testutil"
 )
 
+func TestHealth(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+	defer s.cleanup()
+
+	resp, err := httputil.Get(
+		fmt.Sprintf("http://%s/health", s.addr),
+		httputil.SendTimeout(10*time.Second))
+	defer resp.Body.Close()
+	require.NoError(err)
+	b, err := ioutil.ReadAll(resp.Body)
+	require.NoError(err)
+	require.Equal("OK\n", string(b))
+}
+
 func TestStatHandlerLocalNotFound(t *testing.T) {
 	require := require.New(t)
 
@@ -35,6 +54,31 @@ func TestStatHandlerLocalNotFound(t *testing.T) {
 
 	_, err := cp.Provide(s.host).StatLocal(namespace, d)
 	require.Equal(blobclient.ErrBlobNotFound, err)
+}
+
+func TestStatHandlerInvalidParam(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+	defer s.cleanup()
+
+	_, err := httputil.Head(
+		fmt.Sprintf("http://%s/internal/namespace//blobs/foo", s.addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+
+	_, err = httputil.Head(
+		fmt.Sprintf("http://%s/internal/namespace/foo/blobs/bar", s.addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+
+	d := core.DigestFixture()
+	_, err = httputil.Head(
+		fmt.Sprintf("http://%s/internal/namespace/foo/blobs/%s?local=bar", s.addr, d),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
 }
 
 func TestStatHandlerNotFound(t *testing.T) {
@@ -78,7 +122,26 @@ func TestStatHandlerReturnSize(t *testing.T) {
 	require.Equal(int64(256), bi.Size)
 }
 
-func TestDownloadBlobHandlerNotFound(t *testing.T) {
+func TestDownloadBlobInvalidParam(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+	defer s.cleanup()
+
+	_, err := httputil.Get(
+		fmt.Sprintf("http://%s/namespace//blobs/foo", s.addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+
+	_, err = httputil.Get(
+		fmt.Sprintf("http://%s/namespace/foo/blobs/bar", s.addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+}
+
+func TestDownloadBlobNotFound(t *testing.T) {
 	require := require.New(t)
 
 	cp := newTestClientProvider()
@@ -120,7 +183,21 @@ func TestDeleteBlob(t *testing.T) {
 	require.Equal(blobclient.ErrBlobNotFound, err)
 }
 
-func TestGetLocationsHandlerOK(t *testing.T) {
+func TestDeleteBlobInvalidParam(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+	defer s.cleanup()
+
+	_, err := httputil.Delete(
+		fmt.Sprintf("http://%s/internal/blobs/foo", s.addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+}
+
+func TestGetLocationsOK(t *testing.T) {
 	require := require.New(t)
 
 	cp := newTestClientProvider()
@@ -136,7 +213,7 @@ func TestGetLocationsHandlerOK(t *testing.T) {
 	require.ElementsMatch([]string{master1, master2}, locs)
 }
 
-func TestGetPeerContextHandlerOK(t *testing.T) {
+func TestGetPeerContextOK(t *testing.T) {
 	require := require.New(t)
 
 	cp := newTestClientProvider()
@@ -149,7 +226,7 @@ func TestGetPeerContextHandlerOK(t *testing.T) {
 	require.Equal(s.pctx, pctx)
 }
 
-func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
+func TestGetMetaInfoDownloadsBlobAndReplicates(t *testing.T) {
 	require := require.New(t)
 
 	ring := hashRingSomeReplica()
@@ -190,7 +267,7 @@ func TestGetMetaInfoHandlerDownloadsBlobAndReplicates(t *testing.T) {
 	}))
 }
 
-func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
+func TestGetMetaInfoBlobNotFound(t *testing.T) {
 	require := require.New(t)
 
 	cp := newTestClientProvider()
@@ -207,6 +284,25 @@ func TestGetMetaInfoHandlerBlobNotFound(t *testing.T) {
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
 	require.True(httputil.IsNotFound(err))
 	require.Nil(mi)
+}
+
+func TestGetMetaInfoInvalidParam(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+	defer s.cleanup()
+
+	_, err := httputil.Get(
+		fmt.Sprintf("http://%s/internal/namespace//blobs/foo/metainfo", s.addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+
+	_, err = httputil.Get(
+		fmt.Sprintf("http://%s/internal/namespace/foo/blobs/bar/metainfo", s.addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
 }
 
 func TestTransferBlob(t *testing.T) {
@@ -232,6 +328,46 @@ func TestTransferBlob(t *testing.T) {
 	err = cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
 	ensureHasBlob(t, cp.Provide(master1), namespace, blob)
+}
+
+func TestTransferBlobInvalidParam(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+	defer s.cleanup()
+
+	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/internal/blobs/foo/uploads", s.addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+
+	d := core.DigestFixture()
+	_, err = httputil.Post(
+		fmt.Sprintf("http://%s/internal/blobs/%s/uploads", s.addr, d.String()),
+		httputil.SendTimeout(10*time.Second))
+	require.NoError(err)
+
+	_, err = httputil.Patch(
+		fmt.Sprintf("http://%s/internal/blobs/foo/uploads/bar", s.addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+
+	_, err = httputil.Patch(
+		fmt.Sprintf("http://%s/internal/blobs/%s/uploads/bar", s.addr, d.String()),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+
+	_, err = httputil.Put(
+		fmt.Sprintf("http://%s/internal/blobs/foo/uploads/bar", s.addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+
+	_, err = httputil.Put(
+		fmt.Sprintf("http://%s/internal/blobs/%s/uploads/bar", s.addr, d.String()),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
 }
 
 func TestTransferBlobSmallChunkSize(t *testing.T) {
@@ -296,6 +432,25 @@ func TestReplicateToRemote(t *testing.T) {
 		namespace, blob.Digest, mockutil.MatchReader(blob.Content)).Return(nil)
 
 	require.NoError(cp.Provide(master1).ReplicateToRemote(namespace, blob.Digest, remote))
+}
+
+func TestReplicateToRemoteInvalidParam(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+	defer s.cleanup()
+
+	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/namespace//blobs/foo/remote/bar", s.addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
+
+	_, err = httputil.Post(
+		fmt.Sprintf("http://%s/namespace/hello/blobs/foo/remote/bar", s.addr),
+		httputil.SendTimeout(10*time.Second))
+	require.Error(err)
 }
 
 func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
