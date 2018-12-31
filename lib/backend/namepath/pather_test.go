@@ -14,8 +14,8 @@ func TestBlobPathConversion(t *testing.T) {
 	}{
 		{
 			DockerTag,
-			"labrat:latest",
-			"/root/docker/registry/v2/repositories/labrat/_manifests/tags/latest/current/link",
+			"repo-bar:latest",
+			"/root/docker/registry/v2/repositories/repo-bar/_manifests/tags/latest/current/link",
 		}, {
 			ShardedDockerBlob,
 			"ff85ceb9734a3c2fbb886e0f7cfc66b046eeeae953d8cb430dc5a7ace544b0e9",

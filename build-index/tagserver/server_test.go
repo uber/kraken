@@ -19,6 +19,7 @@ import (
 	"github.com/uber/kraken/mocks/lib/backend"
 	"github.com/uber/kraken/mocks/lib/persistedretry"
 	"github.com/uber/kraken/mocks/origin/blobclient"
+	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
@@ -250,7 +251,7 @@ func TestListRepository(t *testing.T) {
 
 	client := newClusterClient(addr)
 
-	repo := "uber-usi/labrat"
+	repo := "namespace-foo/repo-bar"
 	tags := []string{"latest", "0000", "0001"}
 
 	var names []string
@@ -276,7 +277,7 @@ func TestList(t *testing.T) {
 
 	client := newClusterClient(addr)
 
-	prefix := "uber-usi/labrat/_manifests/tags"
+	prefix := "namespace-foo/repo-bar/_manifests/tags"
 	names := []string{"latest", "0000", "0001"}
 
 	mocks.backendClient.EXPECT().List(prefix).Return(names, nil)
@@ -367,6 +368,28 @@ func TestReplicate(t *testing.T) {
 	)
 
 	require.NoError(client.Replicate(tag))
+}
+
+func TestReplicateNotFound(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := newClusterClient(addr)
+
+	tag := core.TagFixture()
+
+	gomock.InOrder(
+		mocks.store.EXPECT().Get(tag).Return(core.Digest{}, tagstore.ErrTagNotFound),
+	)
+
+	err := client.Replicate(tag)
+	require.Error(err)
+	require.True(httputil.IsNotFound(err))
 }
 
 func TestDuplicateReplicate(t *testing.T) {

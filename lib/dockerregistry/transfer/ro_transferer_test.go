@@ -55,7 +55,7 @@ func TestReadOnlyTransfererDownloadCachesBlob(t *testing.T) {
 
 	transferer := mocks.new()
 
-	namespace := "docker/labrat:latest"
+	namespace := "docker/repo-bar:latest"
 	blob := core.NewBlobFixture()
 
 	mocks.sched.EXPECT().Download(
@@ -82,7 +82,7 @@ func TestReadOnlyTransfererStat(t *testing.T) {
 
 	transferer := mocks.new()
 
-	namespace := "docker/labrat:latest"
+	namespace := "docker/repo-bar:latest"
 	blob := core.NewBlobFixture()
 
 	mocks.sched.EXPECT().Download(
@@ -144,7 +144,7 @@ func TestReadOnlyTransfererMultipleDownloadsOfSameBlob(t *testing.T) {
 
 	transferer := mocks.new()
 
-	namespace := "docker/labrat:latest"
+	namespace := "docker/repo-bar:latest"
 	blob := core.NewBlobFixture()
 
 	require.NoError(mocks.cads.CreateDownloadFile(blob.Digest.Hex(), blob.Length()))

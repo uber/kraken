@@ -117,12 +117,12 @@ func OriginContextFixture() PeerContext {
 	return octx
 }
 
-// TagFixture creates a random tag for service labrat.
+// TagFixture creates a random tag for service repo-bar.
 func TagFixture() string {
-	return fmt.Sprintf("uber-usi/labrat:%s", randutil.Text(8))
+	return fmt.Sprintf("namespace-foo/repo-bar:%s", randutil.Text(8))
 }
 
 // NamespaceFixture creates a random namespace.
 func NamespaceFixture() string {
-	return fmt.Sprintf("uber-usi/labrat-%s", randutil.Text(8))
+	return fmt.Sprintf("namespace-foo/repo-bar-%s", randutil.Text(8))
 }

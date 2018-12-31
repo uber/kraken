@@ -14,7 +14,7 @@ import (
 
 func testConfigs() []Config {
 	return []Config{
-		{Namespace: "uber-usi/.*", Type: "docker"},
+		{Namespace: "namespace-foo/.*", Type: "docker"},
 		{Namespace: "replicator/.*", Type: "default"},
 	}
 }
@@ -30,7 +30,7 @@ func TestMapResolveDocker(t *testing.T) {
 	m, err := NewMap(testConfigs(), originClient)
 	require.NoError(err)
 
-	tag := "uber-usi/labrat:0001"
+	tag := "namespace-foo/repo-bar:0001"
 	layers := core.DigestListFixture(3)
 	manifest, b := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
 
@@ -52,7 +52,7 @@ func TestMapResolveDefault(t *testing.T) {
 	m, err := NewMap(testConfigs(), originClient)
 	require.NoError(err)
 
-	tag := "replicator/labrat:0001"
+	tag := "replicator/repo-bar:0001"
 	d := core.DigestFixture()
 
 	deps, err := m.Resolve(tag, d)

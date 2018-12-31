@@ -54,7 +54,7 @@ func TestServerTag(t *testing.T) {
 	require.NoError(err)
 
 	ns := core.NamespaceFixture()
-	tag := "labrat:latest"
+	tag := "repo-bar:latest"
 	d := core.DigestFixture().String()
 
 	require.NoError(c.Upload(ns, tag, bytes.NewBufferString(d)))
