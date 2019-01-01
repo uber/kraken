@@ -2,22 +2,22 @@ import json
 import random
 import sets
 
-import networkx as nx
-
 """
-Random regular graph with connection limit of 5:
- - 5000 peers, 500MB: 17 iterations
- - 1000 peers, 10GB: p50 294 iterations, p100 298 iterations (84% ~ 85% speed)
+Procedural generated graph with soft connection limit of 5, max limit of 20:
+ - 5000 peers, 500MB: 18 iterations
+ - 1000 peers, 10GB: p50 297 iterations, p100 384 iterations (65% ~ 84% speed)
 """
 PEER_COUNT = 5000
 PIECE_COUNT = 125
 PIECE_TRANSMIT_LIMIT = 10  # Number of pieces uploaded/downloaded per iteration
-DEGREE = 5
+SOFT_CONNECTION_LIMIT = 5
+MAX_CONNECTION_LIMIT = 20
 
 
 class Peer(object):
     def __init__(self, name, piece_count):
         self.name = name
+        self.failed_connection_attempts = 0
         self.neighbors = sets.Set()
         self.pieces = [0]*piece_count
         self.completed = 0
@@ -62,7 +62,7 @@ class Peer(object):
         self.downloaded_current_turn += 1
         c[0].uploaded_current_turn += 1
 
-        print ('Peer %s downloaded one piece from neighbor %s. Total completed: %d.' % (self.name, c[0].name, self.completed))
+        # print ('Peer %s downloaded one piece from neighbor %s. Total completed: %d.' % (self.name, c[0].name, self.completed))
 
         if self.completed == len(self.pieces)-1:
             self.time = time
@@ -77,19 +77,29 @@ class PeerManager(object):
     def __init__(self):
         self.peers = []
 
-        g = nx.random_regular_graph(DEGREE, PEER_COUNT)
-        for n in g:
+        for n in range(PEER_COUNT):
             peer = Peer(str(n), PIECE_COUNT)
+            if n > 0:
+                random.shuffle(self.peers)
+                for candidate in self.peers:
+                    if len(candidate.neighbors) < MAX_CONNECTION_LIMIT:
+                        peer.connect(candidate)
+                        if len(peer.neighbors) >= SOFT_CONNECTION_LIMIT:
+                            break
+                    else:
+                        peer.failed_connection_attempts += 1
+                        if peer.failed_connection_attempts > 50:
+                            break
+
             self.peers.append(peer)
 
-        for e in g.edges():
-            self.peers[e[0]].connect(self.peers[e[1]])
-
+        self.peers.sort()
         for peer in self.peers:
             neighbors_str = ""
             for neighbor in peer.neighbors:
                 neighbors_str = neighbors_str + neighbor.name + "; "
-            print ('Peer %s is connected to peers %s' % (peer.name, neighbors_str))
+            print ('Peer %s failed %d connection attempts. Connected to peers %s' % (
+                peer.name, peer.failed_connection_attempts, neighbors_str))
 
         # Set peer 0 to be the seeder.
         self.peers[0].pieces = [1]*PIECE_COUNT
