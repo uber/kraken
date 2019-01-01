@@ -1,6 +1,14 @@
 extends: base.yaml
 
 backends:
+  - namespace: library/.*
+    backend:
+      registry_blob:
+        address: index.docker.io
+        security:
+          basic:
+            username: ""
+            password: ""
   - namespace: .*
     backend:
       testfs:
