@@ -11,6 +11,7 @@ import (
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/log"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -36,7 +37,8 @@ func (f *blobClientFactory) Create(
 	return NewBlobClient(config)
 }
 
-const _blobquery = "http://%s/v2/%s/blobs/%s"
+const _layerquery = "http://%s/v2/%s/blobs/sha256:%s"
+const _manifestquery = "http://%s/v2/%s/manifests/sha256:%s"
 
 // BlobClient stats and downloads blob from registry.
 type BlobClient struct {
@@ -55,23 +57,13 @@ func (c *BlobClient) Stat(namespace, name string) (*core.BlobInfo, error) {
 		return nil, fmt.Errorf("get security opt: %s", err)
 	}
 
-	URL := fmt.Sprintf(_blobquery, c.config.Address, namespace, name)
-	resp, err := httputil.Head(
-		URL,
-		opt,
-		httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound))
-	if err != nil {
-		return nil, fmt.Errorf("check blob exists: %s", err)
+	info, err := c.statHelper(namespace, name, _layerquery, opt)
+	if err != nil && err == backenderrors.ErrBlobNotFound {
+		// Docker registry does not support querying manifests with blob path.
+		log.Infof("Blob %s unknown to registry. Tring to stat manifest instead")
+		info, err = c.statHelper(namespace, name, _manifestquery, opt)
 	}
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, backenderrors.ErrBlobNotFound
-	}
-	size, err := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("parse blob size: %s", err)
-	}
-	return core.NewBlobInfo(size), nil
+	return info, err
 }
 
 // Download gets a blob from registry.
@@ -81,19 +73,49 @@ func (c *BlobClient) Download(namespace, name string, dst io.Writer) error {
 		return fmt.Errorf("get security opt: %s", err)
 	}
 
-	URL := fmt.Sprintf(_blobquery, c.config.Address, namespace, name)
+	err = c.downloadHelper(namespace, name, _layerquery, dst, opt)
+	if err != nil && err == backenderrors.ErrBlobNotFound {
+		// Docker registry does not support querying manifests with blob path.
+		log.Infof("Blob %s unknown to registry. Tring to download manifest instead")
+		err = c.downloadHelper(namespace, name, _manifestquery, dst, opt)
+	}
+	return err
+}
+
+func (c *BlobClient) statHelper(namespace, name, query string, opt httputil.SendOption) (*core.BlobInfo, error) {
+	URL := fmt.Sprintf(query, c.config.Address, namespace, name)
+	resp, err := httputil.Head(
+		URL,
+		opt,
+		httputil.SendAcceptedCodes(http.StatusOK))
+	if err != nil {
+		if httputil.IsNotFound(err) {
+			return nil, backenderrors.ErrBlobNotFound
+		}
+		return nil, fmt.Errorf("head blob: %s", err)
+	}
+
+	size, err := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parse blob size: %s", err)
+	}
+	return core.NewBlobInfo(size), nil
+}
+
+func (c *BlobClient) downloadHelper(namespace, name, query string, dst io.Writer, opt httputil.SendOption) error {
+	URL := fmt.Sprintf(query, c.config.Address, namespace, name)
 	resp, err := httputil.Get(
 		URL,
 		opt,
-		httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound))
+		httputil.SendAcceptedCodes(http.StatusOK))
 	if err != nil {
-		return fmt.Errorf("check blob exists: %s", err)
+		if httputil.IsNotFound(err) {
+			return backenderrors.ErrBlobNotFound
+		}
+		return fmt.Errorf("get blob: %s", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return backenderrors.ErrBlobNotFound
-	}
 	if _, err := io.Copy(dst, resp.Body); err != nil {
 		return fmt.Errorf("copy: %s", err)
 	}
