@@ -40,6 +40,8 @@ cluster using Docker-for-Mac, and need to updated for production setups.
   - [base.yaml](../config/agent/base.yaml)
   - [development.yaml](../examples/devcluster/config/agent/development.yaml)
 
+More in [examples/devcluster/README.md](../examples/devcluster/README.md)
+
 # Configuring Peer To Peer Download
 Kraken's peer-to-peer network consists of agents, origins and trackers. Origins are a few dedicated seeders that downloads data from a storage backend (HDFS, S3, etc). Agents are leechers that download from each other and from origins and can later become seeders after they finish downloading. Agents announce to trackers periodically to update the torrent they are currently downloading and in return get a list of peers that are also downloading the same torrent. More details in [ARCHITECTURE.md](ARCHITECTURE.md)
 

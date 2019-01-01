@@ -1,0 +1,23 @@
+## 1. Build
+`$ make devcluster`
+
+This command generates a `kraken-agent:dev` image containing an agent binary and a `kraken-herd:dev` image containing build-index, origin, proxy, and tracker binaries. 
+
+It also starts 2 agent docker containers and 1 herd container.
+
+## 2. Pulling from Docker Hub Library
+A simple registry storage backend is provided for read-only access to Docker registry. A library image can be pulled from agent.
+
+`$ docker pull localhost:14000/library/golang:1.11`
+
+Note, this backend is used for all `library/.*` repositories. For all the other repositories, a testfs storage backend is included in the `kraken-herd:dev` image, which is a simple http server that supports file uploading and downloading via port `14000`.
+
+## 3. Pushing a Test Image
+A test image can be pushed to the herd instance
+
+`$ docker push localhost:15000/<repo>:<tag>`
+
+## 4. Pull the Test Image
+Pull the test image from agent:
+
+`$ docker pull localhost:15000/<repo>:<tag>`
