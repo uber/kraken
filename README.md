@@ -123,7 +123,8 @@ Comparison pending discussion with Dragonfly team.
   probably won't trigger, and most tag lookups will probably still return the old tag due to caching.
   If you need mutation (e.g. updating a `latest` tag), please consider implementing your own index
   component on top of a consistent key-value store.
-- Theoretically, Kraken should handle blobs of any size without significant performance degredation,
+- Theoretically, Kraken should distribute blobs of any size without significant performance degredation,
   but at Uber we enforce a 20G limit and cannot endorse of the production use of ultra-large blobs
-  (i.e. 100G+). Kraken's garbage collection policies are TTL-based and quite simplistic. The primary
-  risk is that your disk space across the cluster will rapidly fluctuate and cause shortages.
+  (i.e. 100G+). Peers enforce connection limits on a per blob basis, and may starve other peers for
+  connections should they hold onto connections for too long. If you have ultra-large blobs you'd like to
+  distribute, we recommend breaking them into <10G chunks first.
