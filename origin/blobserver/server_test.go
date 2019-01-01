@@ -56,25 +56,41 @@ func TestStatHandlerLocalNotFound(t *testing.T) {
 }
 
 func TestStatHandlerInvalidParam(t *testing.T) {
-	require := require.New(t)
+	digest := core.DigestFixture()
 
-	cp := newTestClientProvider()
+	tests := []struct {
+		desc   string
+		path   string
+		status int
+	}{
+		{
+			"empty namespace",
+			fmt.Sprintf("internal/namespace//blobs/%s", digest),
+			http.StatusBadRequest,
+		}, {
+			"invalid digest",
+			"internal/namespace/foo/blobs/bar",
+			http.StatusBadRequest,
+		}, {
+			"invalid local param",
+			fmt.Sprintf("internal/namespace/foo/blobs/%s?local=bar", digest),
+			http.StatusInternalServerError,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			require := require.New(t)
 
-	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
-	defer s.cleanup()
+			cp := newTestClientProvider()
 
-	_, err := httputil.Head(
-		fmt.Sprintf("http://%s/internal/namespace//blobs/foo", s.addr))
-	require.Error(err)
+			s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+			defer s.cleanup()
 
-	_, err = httputil.Head(
-		fmt.Sprintf("http://%s/internal/namespace/foo/blobs/bar", s.addr))
-	require.Error(err)
-
-	d := core.DigestFixture()
-	_, err = httputil.Head(
-		fmt.Sprintf("http://%s/internal/namespace/foo/blobs/%s?local=bar", s.addr, d))
-	require.Error(err)
+			_, err := httputil.Head(fmt.Sprintf("http://%s/%s", s.addr, test.path))
+			require.Error(err)
+			require.True(httputil.IsStatus(err, test.status))
+		})
+	}
 }
 
 func TestStatHandlerNotFound(t *testing.T) {
@@ -119,20 +135,37 @@ func TestStatHandlerReturnSize(t *testing.T) {
 }
 
 func TestDownloadBlobInvalidParam(t *testing.T) {
-	require := require.New(t)
+	digest := core.DigestFixture()
 
-	cp := newTestClientProvider()
+	tests := []struct {
+		desc   string
+		path   string
+		status int
+	}{
+		{
+			"empty namespace",
+			fmt.Sprintf("namespace//blobs/%s", digest),
+			http.StatusBadRequest,
+		}, {
+			"invalid digest",
+			"namespace/foo/blobs/bar",
+			http.StatusBadRequest,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			require := require.New(t)
 
-	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
-	defer s.cleanup()
+			cp := newTestClientProvider()
 
-	_, err := httputil.Get(
-		fmt.Sprintf("http://%s/namespace//blobs/foo", s.addr))
-	require.Error(err)
+			s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+			defer s.cleanup()
 
-	_, err = httputil.Get(
-		fmt.Sprintf("http://%s/namespace/foo/blobs/bar", s.addr))
-	require.Error(err)
+			_, err := httputil.Get(fmt.Sprintf("http://%s/%s", s.addr, test.path))
+			require.Error(err)
+			require.True(httputil.IsStatus(err, test.status))
+		})
+	}
 }
 
 func TestDownloadBlobNotFound(t *testing.T) {
@@ -185,9 +218,9 @@ func TestDeleteBlobInvalidParam(t *testing.T) {
 	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
 	defer s.cleanup()
 
-	_, err := httputil.Delete(
-		fmt.Sprintf("http://%s/internal/blobs/foo", s.addr))
+	_, err := httputil.Delete(fmt.Sprintf("http://%s/internal/blobs/foo", s.addr))
 	require.Error(err)
+	require.True(httputil.IsStatus(err, http.StatusBadRequest))
 }
 
 func TestGetLocationsOK(t *testing.T) {
@@ -280,20 +313,37 @@ func TestGetMetaInfoBlobNotFound(t *testing.T) {
 }
 
 func TestGetMetaInfoInvalidParam(t *testing.T) {
-	require := require.New(t)
+	digest := core.DigestFixture()
 
-	cp := newTestClientProvider()
+	tests := []struct {
+		desc   string
+		path   string
+		status int
+	}{
+		{
+			"empty namespace",
+			fmt.Sprintf("internal/namespace//blobs/%s/metainfo", digest),
+			http.StatusBadRequest,
+		}, {
+			"invalid digest",
+			"internal/namespace/foo/blobs/bar/metainfo",
+			http.StatusBadRequest,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			require := require.New(t)
 
-	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
-	defer s.cleanup()
+			cp := newTestClientProvider()
 
-	_, err := httputil.Get(
-		fmt.Sprintf("http://%s/internal/namespace//blobs/foo/metainfo", s.addr))
-	require.Error(err)
+			s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+			defer s.cleanup()
 
-	_, err = httputil.Get(
-		fmt.Sprintf("http://%s/internal/namespace/foo/blobs/bar/metainfo", s.addr))
-	require.Error(err)
+			_, err := httputil.Get(fmt.Sprintf("http://%s/%s", s.addr, test.path))
+			require.Error(err)
+			require.True(httputil.IsStatus(err, test.status))
+		})
+	}
 }
 
 func TestTransferBlob(t *testing.T) {
@@ -322,37 +372,92 @@ func TestTransferBlob(t *testing.T) {
 }
 
 func TestTransferBlobInvalidParam(t *testing.T) {
-	require := require.New(t)
+	t.Run("StartInvalidDigest", func(t *testing.T) {
+		require := require.New(t)
 
-	cp := newTestClientProvider()
+		cp := newTestClientProvider()
+		s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+		defer s.cleanup()
 
-	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
-	defer s.cleanup()
+		_, err := httputil.Post(
+			fmt.Sprintf("http://%s/internal/blobs/foo/uploads", s.addr))
+		require.Error(err)
+		require.True(httputil.IsStatus(err, http.StatusBadRequest))
+	})
+	t.Run("PatchInvalidDigest", func(t *testing.T) {
+		require := require.New(t)
 
-	_, err := httputil.Post(
-		fmt.Sprintf("http://%s/internal/blobs/foo/uploads", s.addr))
-	require.Error(err)
+		cp := newTestClientProvider()
+		s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+		defer s.cleanup()
 
-	d := core.DigestFixture()
-	_, err = httputil.Post(
-		fmt.Sprintf("http://%s/internal/blobs/%s/uploads", s.addr, d.String()))
-	require.NoError(err)
+		d := core.DigestFixture()
+		_, err := httputil.Post(
+			fmt.Sprintf("http://%s/internal/blobs/%s/uploads", s.addr, d.String()))
+		require.NoError(err)
+		_, err = httputil.Patch(
+			fmt.Sprintf("http://%s/internal/blobs/foo/uploads/bar", s.addr),
+			httputil.SendHeaders(map[string]string{
+				"Content-Range": fmt.Sprintf("%d-%d", 0, 0),
+			}))
+		require.Error(err)
+		require.True(httputil.IsStatus(err, http.StatusBadRequest))
+	})
+	t.Run("PatchNonexistentUploadUUID", func(t *testing.T) {
+		require := require.New(t)
 
-	_, err = httputil.Patch(
-		fmt.Sprintf("http://%s/internal/blobs/foo/uploads/bar", s.addr))
-	require.Error(err)
+		cp := newTestClientProvider()
+		s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+		defer s.cleanup()
 
-	_, err = httputil.Patch(
-		fmt.Sprintf("http://%s/internal/blobs/%s/uploads/bar", s.addr, d.String()))
-	require.Error(err)
+		d := core.DigestFixture()
+		_, err := httputil.Post(
+			fmt.Sprintf("http://%s/internal/blobs/%s/uploads", s.addr, d.String()))
+		require.NoError(err)
 
-	_, err = httputil.Put(
-		fmt.Sprintf("http://%s/internal/blobs/foo/uploads/bar", s.addr))
-	require.Error(err)
+		_, err = httputil.Patch(
+			fmt.Sprintf("http://%s/internal/blobs/%s/uploads/bar", s.addr, d.String()),
+			httputil.SendHeaders(map[string]string{
+				"Content-Range": fmt.Sprintf("%d-%d", 0, 0),
+			}))
+		require.Error(err)
+		require.True(httputil.IsStatus(err, http.StatusNotFound))
+	})
+	t.Run("CommitInvalidDigest", func(t *testing.T) {
+		require := require.New(t)
 
-	_, err = httputil.Put(
-		fmt.Sprintf("http://%s/internal/blobs/%s/uploads/bar", s.addr, d.String()))
-	require.Error(err)
+		cp := newTestClientProvider()
+		s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+		defer s.cleanup()
+
+		d := core.DigestFixture()
+		_, err := httputil.Post(
+			fmt.Sprintf("http://%s/internal/blobs/%s/uploads", s.addr, d.String()))
+		require.NoError(err)
+
+		_, err = httputil.Put(
+			fmt.Sprintf("http://%s/internal/blobs/foo/uploads/bar", s.addr))
+		require.Error(err)
+		require.True(httputil.IsStatus(err, http.StatusBadRequest))
+	})
+	t.Run("CommitNonexistentUploadUUID", func(t *testing.T) {
+		require := require.New(t)
+
+		cp := newTestClientProvider()
+		s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+		defer s.cleanup()
+
+		d := core.DigestFixture()
+		_, err := httputil.Post(
+			fmt.Sprintf("http://%s/internal/blobs/%s/uploads", s.addr, d.String()))
+		require.NoError(err)
+
+		_, err = httputil.Put(
+			fmt.Sprintf("http://%s/internal/blobs/%s/uploads/bar", s.addr, d.String()))
+		require.Error(err)
+		fmt.Println(err)
+		require.True(httputil.IsStatus(err, http.StatusNotFound))
+	})
 }
 
 func TestTransferBlobSmallChunkSize(t *testing.T) {
@@ -420,20 +525,37 @@ func TestReplicateToRemote(t *testing.T) {
 }
 
 func TestReplicateToRemoteInvalidParam(t *testing.T) {
-	require := require.New(t)
+	digest := core.DigestFixture()
 
-	cp := newTestClientProvider()
+	tests := []struct {
+		desc   string
+		path   string
+		status int
+	}{
+		{
+			"empty namespace",
+			fmt.Sprintf("namespace//blobs/%s/remote/bar", digest),
+			http.StatusBadRequest,
+		}, {
+			"invalid digest",
+			"namespace/hello/blobs/foo/remote/bar",
+			http.StatusBadRequest,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			require := require.New(t)
 
-	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
-	defer s.cleanup()
+			cp := newTestClientProvider()
 
-	_, err := httputil.Post(
-		fmt.Sprintf("http://%s/namespace//blobs/foo/remote/bar", s.addr))
-	require.Error(err)
+			s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+			defer s.cleanup()
 
-	_, err = httputil.Post(
-		fmt.Sprintf("http://%s/namespace/hello/blobs/foo/remote/bar", s.addr))
-	require.Error(err)
+			_, err := httputil.Post(fmt.Sprintf("http://%s/%s", s.addr, test.path))
+			require.Error(err)
+			require.True(httputil.IsStatus(err, test.status))
+		})
+	}
 }
 
 func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
