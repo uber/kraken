@@ -16,5 +16,7 @@ func Fixture() *Server {
 	config := Config{
 		AnnounceInterval: 250 * time.Millisecond,
 	}
-	return New(config, tally.NoopScope, policy, peerstore.TestStore(), originstore.NoopStore(), nil)
+	return New(
+		config, tally.NoopScope, policy,
+		peerstore.NewTestStore(), originstore.NewNoopStore(), nil)
 }

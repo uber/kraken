@@ -22,7 +22,7 @@ func TestManagerNamespaceMatching(t *testing.T) {
 		expected  Client
 	}{
 		{"static", c1},
-		{"uber-usi/labrat", c2},
+		{"namespace-foo/repo-bar", c2},
 	}
 	for _, test := range tests {
 		t.Run(test.namespace, func(t *testing.T) {
@@ -31,7 +31,7 @@ func TestManagerNamespaceMatching(t *testing.T) {
 			m := ManagerFixture()
 
 			require.NoError(m.Register("static", c1))
-			require.NoError(m.Register("uber-usi/.*", c2))
+			require.NoError(m.Register("namespace-foo/.*", c2))
 
 			result, err := m.GetClient(test.namespace)
 			require.NoError(err)

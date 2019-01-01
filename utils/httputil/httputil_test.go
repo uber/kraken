@@ -37,6 +37,23 @@ func newResponse(status int) *http.Response {
 	return resp
 }
 
+func TestSendOptions(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	transport := mockhttp.NewMockRoundTripper(ctrl)
+
+	transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(499), nil)
+
+	_, err := Get(
+		_testURL,
+		SendTransport(transport),
+		SendAcceptedCodes(200, 499))
+	require.NoError(err)
+}
+
 func TestSendRetry(t *testing.T) {
 	require := require.New(t)
 
@@ -52,7 +69,9 @@ func TestSendRetry(t *testing.T) {
 	start := time.Now()
 	_, err := Get(
 		_testURL,
-		SendRetry(RetryMax(5), RetryInterval(200*time.Millisecond)),
+		SendRetry(
+			RetryMax(5), RetryInterval(200*time.Millisecond),
+			RetryBackoff(1), RetryBackoffMax(1*time.Second)),
 		SendTransport(transport))
 	require.NoError(err)
 	require.InDelta(400*time.Millisecond, time.Since(start), float64(50*time.Millisecond))

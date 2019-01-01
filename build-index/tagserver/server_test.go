@@ -1,7 +1,10 @@
 package tagserver
 
 import (
+	"fmt"
+	"io/ioutil"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -19,6 +22,7 @@ import (
 	"github.com/uber/kraken/mocks/lib/backend"
 	"github.com/uber/kraken/mocks/lib/persistedretry"
 	"github.com/uber/kraken/mocks/origin/blobclient"
+	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
@@ -113,6 +117,24 @@ func newClusterClient(addr string) tagclient.Client {
 	return tagclient.NewClusterClient(healthcheck.NoopList(hostlist.Fixture(addr)), nil)
 }
 
+func TestHealth(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	resp, err := httputil.Get(
+		fmt.Sprintf("http://%s/health", addr))
+	defer resp.Body.Close()
+	require.NoError(err)
+	b, err := ioutil.ReadAll(resp.Body)
+	require.NoError(err)
+	require.Equal("OK\n", string(b))
+}
+
 func TestPut(t *testing.T) {
 	require := require.New(t)
 
@@ -138,6 +160,46 @@ func TestPut(t *testing.T) {
 	require.NoError(client.Put(tag, digest))
 }
 
+func TestPutInvalidParam(t *testing.T) {
+	tag := core.TagFixture()
+	digest := core.DigestFixture()
+
+	tests := []struct {
+		desc   string
+		path   string
+		status int
+	}{
+		{
+			"empty tag",
+			fmt.Sprintf("tags//digest/%s", digest),
+			http.StatusBadRequest,
+		}, {
+			"invalid digest",
+			fmt.Sprintf("tags/%s/digest/foo", url.PathEscape(tag)),
+			http.StatusBadRequest,
+		}, {
+			"invalid replicate param",
+			fmt.Sprintf("tags/%s/digest/%s?replicate=bar", url.PathEscape(tag), digest),
+			http.StatusInternalServerError,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			require := require.New(t)
+
+			mocks, cleanup := newServerMocks(t)
+			defer cleanup()
+
+			addr, stop := testutil.StartServer(mocks.handler())
+			defer stop()
+
+			_, err := httputil.Put(fmt.Sprintf("http://%s/%s", addr, test.path))
+			require.Error(err)
+			require.True(httputil.IsStatus(err, test.status))
+		})
+	}
+}
+
 func TestDuplicatePut(t *testing.T) {
 	require := require.New(t)
 
@@ -156,6 +218,42 @@ func TestDuplicatePut(t *testing.T) {
 	mocks.store.EXPECT().Put(tag, digest, delay).Return(nil)
 
 	require.NoError(client.DuplicatePut(tag, digest, delay))
+}
+
+func TestDuplicatePutInvalidParam(t *testing.T) {
+	tag := core.TagFixture()
+	digest := core.DigestFixture()
+
+	tests := []struct {
+		desc   string
+		path   string
+		status int
+	}{
+		{
+			"empty tag",
+			fmt.Sprintf("internal/duplicate/tags//digest/%s", digest),
+			http.StatusBadRequest,
+		}, {
+			"invalid digest",
+			fmt.Sprintf("internal/duplicate/tags/%s/digest/foo", url.PathEscape(tag)),
+			http.StatusBadRequest,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			require := require.New(t)
+
+			mocks, cleanup := newServerMocks(t)
+			defer cleanup()
+
+			addr, stop := testutil.StartServer(mocks.handler())
+			defer stop()
+
+			_, err := httputil.Put(fmt.Sprintf("http://%s/%s", addr, test.path))
+			require.Error(err)
+			require.True(httputil.IsStatus(err, test.status))
+		})
+	}
 }
 
 func TestGet(t *testing.T) {
@@ -177,6 +275,20 @@ func TestGet(t *testing.T) {
 	result, err := client.Get(tag)
 	require.NoError(err)
 	require.Equal(digest, result)
+}
+
+func TestGetInvalidParam(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	_, err := httputil.Get(fmt.Sprintf("http://%s/tags/", addr))
+	require.Error(err)
+	require.True(httputil.IsStatus(err, http.StatusBadRequest))
 }
 
 func TestGetTagNotFound(t *testing.T) {
@@ -219,6 +331,20 @@ func TestHas(t *testing.T) {
 	require.True(ok)
 }
 
+func TestHasInvalidParam(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	_, err := httputil.Head(fmt.Sprintf("http://%s/tags/", addr))
+	require.Error(err)
+	require.True(httputil.IsStatus(err, http.StatusBadRequest))
+}
+
 func TestHasNotFound(t *testing.T) {
 	require := require.New(t)
 
@@ -250,7 +376,7 @@ func TestListRepository(t *testing.T) {
 
 	client := newClusterClient(addr)
 
-	repo := "uber-usi/labrat"
+	repo := "namespace-foo/repo-bar"
 	tags := []string{"latest", "0000", "0001"}
 
 	var names []string
@@ -276,7 +402,7 @@ func TestList(t *testing.T) {
 
 	client := newClusterClient(addr)
 
-	prefix := "uber-usi/labrat/_manifests/tags"
+	prefix := "namespace-foo/repo-bar/_manifests/tags"
 	names := []string{"latest", "0000", "0001"}
 
 	mocks.backendClient.EXPECT().List(prefix).Return(names, nil)
@@ -369,6 +495,28 @@ func TestReplicate(t *testing.T) {
 	require.NoError(client.Replicate(tag))
 }
 
+func TestReplicateNotFound(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := newClusterClient(addr)
+
+	tag := core.TagFixture()
+
+	gomock.InOrder(
+		mocks.store.EXPECT().Get(tag).Return(core.Digest{}, tagstore.ErrTagNotFound),
+	)
+
+	err := client.Replicate(tag)
+	require.Error(err)
+	require.True(httputil.IsNotFound(err))
+}
+
 func TestDuplicateReplicate(t *testing.T) {
 	require := require.New(t)
 
@@ -389,6 +537,42 @@ func TestDuplicateReplicate(t *testing.T) {
 	mocks.tagReplicationManager.EXPECT().Add(tagreplication.MatchTask(task)).Return(nil)
 
 	require.NoError(client.DuplicateReplicate(tag, digest, dependencies, delay))
+}
+
+func TestDuplicateReplicateInvalidParam(t *testing.T) {
+	tag := core.TagFixture()
+	digest := core.DigestFixture()
+
+	tests := []struct {
+		desc   string
+		path   string
+		status int
+	}{
+		{
+			"empty tag",
+			fmt.Sprintf("internal/duplicate/remotes/tags//digest/%s", digest),
+			http.StatusBadRequest,
+		}, {
+			"invalid digest",
+			fmt.Sprintf("internal/duplicate/remotes/tags/%s/digest/foo", url.PathEscape(tag)),
+			http.StatusInternalServerError,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			require := require.New(t)
+
+			mocks, cleanup := newServerMocks(t)
+			defer cleanup()
+
+			addr, stop := testutil.StartServer(mocks.handler())
+			defer stop()
+
+			_, err := httputil.Post(fmt.Sprintf("http://%s/%s", addr, test.path))
+			require.Error(err)
+			require.True(httputil.IsStatus(err, test.status))
+		})
+	}
 }
 
 func TestNoopReplicate(t *testing.T) {

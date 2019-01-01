@@ -13,7 +13,7 @@ type testStore struct {
 }
 
 // TestStore returns a thread-safe, in-memory peer store for testing purposes.
-func TestStore() Store {
+func NewTestStore() Store {
 	return &testStore{
 		torrents: make(map[core.InfoHash][]core.PeerInfo),
 	}
