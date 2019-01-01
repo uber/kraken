@@ -10,7 +10,9 @@ A simple registry storage backend is provided for read-only access to Docker reg
 
 `$ docker pull localhost:16000/library/golang:1.11`
 
-Note, this backend is used for all `library/.*` repositories. For all the other repositories, a testfs storage backend is included in the `kraken-herd:dev` image, which is a simple http server that supports file uploading and downloading via port `14000`.
+Note, this backend is used for all `library/.*` repositories. `library` is the default namespace for Docker Hub's standard public repositories.
+
+For all the other repositories, a testfs storage backend is included in the `kraken-herd:dev` image, which is a simple http server that supports file uploading and downloading via port `14000`. Testfs simply stores blobs and tags on filesystem.
 
 ## 3. Pushing a Test Image
 A test image can be pushed to the herd instance
