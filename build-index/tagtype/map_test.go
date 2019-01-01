@@ -14,8 +14,8 @@ import (
 
 func testConfigs() []Config {
 	return []Config{
-		{Namespace: "uber-usi/.*", Type: "docker"},
-		{Namespace: "replicator/.*", Type: "default"},
+		{Namespace: "namespace-foo/.*", Type: "docker"},
+		{Namespace: "namespace-bar/.*", Type: "default"},
 	}
 }
 
@@ -30,7 +30,7 @@ func TestMapResolveDocker(t *testing.T) {
 	m, err := NewMap(testConfigs(), originClient)
 	require.NoError(err)
 
-	tag := "uber-usi/labrat:0001"
+	tag := "namespace-foo/repo-bar:0001"
 	layers := core.DigestListFixture(3)
 	manifest, b := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
 
@@ -52,12 +52,27 @@ func TestMapResolveDefault(t *testing.T) {
 	m, err := NewMap(testConfigs(), originClient)
 	require.NoError(err)
 
-	tag := "replicator/labrat:0001"
+	tag := "namespace-bar/repo-bar:0001"
 	d := core.DigestFixture()
 
 	deps, err := m.Resolve(tag, d)
 	require.NoError(err)
 	require.Equal(core.DigestList{d}, deps)
+}
+
+func TestMapResolveUndefined(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	originClient := mockblobclient.NewMockClusterClient(ctrl)
+
+	conf := []Config{
+		{Namespace: "namespace-hello/.*", Type: "undefined"},
+	}
+	_, err := NewMap(conf, originClient)
+	require.Error(err)
 }
 
 func TestMapGetResolverNamespaceError(t *testing.T) {

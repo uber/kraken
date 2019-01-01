@@ -4,8 +4,8 @@ import "github.com/uber/kraken/core"
 
 type noopStore struct{}
 
-// NoopStore returns a Store which never returns origins. Useful for testing.
-func NoopStore() Store {
+// NewNoopStore returns a Store which never returns origins. Useful for testing.
+func NewNoopStore() Store {
 	return noopStore{}
 }
 

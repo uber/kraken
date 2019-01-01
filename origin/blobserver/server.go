@@ -162,7 +162,7 @@ func (s *Server) ListenAndServe(h http.Handler) error {
 }
 
 func (s *Server) healthCheckHandler(w http.ResponseWriter, r *http.Request) error {
-	w.WriteHeader(http.StatusOK)
+	fmt.Fprintln(w, "OK")
 	return nil
 }
 

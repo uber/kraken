@@ -1,12 +1,15 @@
 package tagstore_test
 
 import (
+	"fmt"
+	"io"
 	"sync"
 	"testing"
 
 	. "github.com/uber/kraken/build-index/tagstore"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/persistedretry/writeback"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/mocks/lib/backend"
@@ -127,4 +130,64 @@ func TestGetCachesOnDisk(t *testing.T) {
 		require.NoError(err)
 		require.Equal(digest, result)
 	}
+}
+
+func TestGetFromBackendNotFound(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newStoreMocks(t)
+	defer cleanup()
+
+	store := mocks.new(Config{})
+
+	tag := core.TagFixture()
+	digest := core.DigestFixture()
+
+	w := mockutil.MatchWriter([]byte(digest.String()))
+	mocks.backendClient.EXPECT().Download(tag, tag, w).Return(backenderrors.ErrBlobNotFound)
+
+	_, err := store.Get(tag)
+	require.Error(err)
+	require.Equal(ErrTagNotFound, err)
+}
+
+func TestGetFromBackendUnkownError(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newStoreMocks(t)
+	defer cleanup()
+
+	store := mocks.new(Config{})
+
+	tag := core.TagFixture()
+	digest := core.DigestFixture()
+
+	w := mockutil.MatchWriter([]byte(digest.String()))
+	mocks.backendClient.EXPECT().Download(tag, tag, w).Return(fmt.Errorf("test error"))
+
+	_, err := store.Get(tag)
+	require.Error(err)
+}
+
+func TestGetFromBackendInvalidValue(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newStoreMocks(t)
+	defer cleanup()
+
+	store := mocks.new(Config{})
+
+	tag := core.TagFixture()
+	digest := core.DigestFixture()
+
+	mocks.backendClient.EXPECT().Download(
+		tag, tag,
+		mockutil.MatchWriter([]byte(digest.String()))).DoAndReturn(
+		func(namespace, name string, dst io.Writer) error {
+			dst.Write([]byte("foo"))
+			return nil
+		})
+
+	_, err := store.Get(tag)
+	require.Error(err)
 }

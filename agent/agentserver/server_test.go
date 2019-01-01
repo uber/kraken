@@ -50,10 +50,7 @@ func TestDownloadNotFound(t *testing.T) {
 	namespace := core.TagFixture()
 	blob := core.NewBlobFixture()
 
-	mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
-		func(namespace string, d core.Digest) error {
-			return scheduler.ErrTorrentNotFound
-		})
+	mocks.sched.EXPECT().Download(namespace, blob.Digest).Return(scheduler.ErrTorrentNotFound)
 
 	addr := mocks.startServer()
 	c := NewClient(addr)
@@ -72,10 +69,7 @@ func TestDownloadUnknownError(t *testing.T) {
 	namespace := core.TagFixture()
 	blob := core.NewBlobFixture()
 
-	mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
-		func(namespace string, d core.Digest) error {
-			return fmt.Errorf("test error")
-		})
+	mocks.sched.EXPECT().Download(namespace, blob.Digest).Return(fmt.Errorf("test error"))
 
 	addr := mocks.startServer()
 	c := NewClient(addr)
