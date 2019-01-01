@@ -11,6 +11,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/httputil"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -38,6 +39,7 @@ func (f *tagClientFactory) Create(
 }
 
 const _tagquery = "http://%s/v2/%s/manifests/%s"
+const _v2ManifestType = "application/vnd.docker.distribution.manifest.v2+json"
 
 // TagClient stats and downloads tag from registry.
 type TagClient struct {
@@ -66,6 +68,7 @@ func (c *TagClient) Stat(namespace, name string) (*core.BlobInfo, error) {
 	resp, err := httputil.Head(
 		URL,
 		opt,
+		httputil.SendHeaders(map[string]string{"Accept": _v2ManifestType}),
 		httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound))
 	if err != nil {
 		return nil, fmt.Errorf("check blob exists: %s", err)
@@ -95,23 +98,25 @@ func (c *TagClient) Download(namespace, name string, dst io.Writer) error {
 	}
 
 	URL := fmt.Sprintf(_tagquery, c.config.Address, repo, tag)
-	resp, err := httputil.Head(
+	resp, err := httputil.Get(
 		URL,
 		opt,
+		httputil.SendHeaders(map[string]string{"Accept": _v2ManifestType}),
 		httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound))
 	if err != nil {
 		return fmt.Errorf("check blob exists: %s", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return backenderrors.ErrBlobNotFound
 	}
 
-	digest := resp.Header.Get("Docker-Content-Digest")
-	if digest == "" {
-		return fmt.Errorf("empty Docker-Content-Digest header")
+	_, digest, err := dockerutil.ParseManifestV2(resp.Body)
+	if err != nil {
+		return fmt.Errorf("parse manifest v2: %s", err)
 	}
-	if _, err := io.Copy(dst, strings.NewReader(digest)); err != nil {
+	if _, err := io.Copy(dst, strings.NewReader(digest.String())); err != nil {
 		return fmt.Errorf("copy: %s", err)
 	}
 	return nil
