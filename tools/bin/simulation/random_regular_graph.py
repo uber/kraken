@@ -4,7 +4,11 @@ import sets
 
 import networkx as nx
 
-
+"""
+Random regular graph with connection limit of 5:
+ - 5000 peers, 500MB: 17 sec
+ - 1000 peers, 10GB: p50 294 sec, p100 298 sec (84% ~ 85% speed)
+"""
 PEER_COUNT = 5000
 PIECE_COUNT = 125
 PIECE_TRANSMIT_LIMIT = 10  # Number of pieces uploaded/downloaded per "sec"
@@ -79,10 +83,15 @@ class PeerManager(object):
             self.peers.append(peer)
 
         for e in g.edges():
-            print ('Peer %s connected to peer %s.' % (self.peers[e[0]].name, self.peers[e[1]].name))
             self.peers[e[0]].connect(self.peers[e[1]])
 
-        # Set peer 0 to be the seeder]
+        for peer in self.peers:
+            neighbors_str = ""
+            for neighbor in peer.neighbors:
+                neighbors_str = neighbors_str + neighbor.name + "; "
+            print ('Peer %s is connected to peers %s' % (peer.name, neighbors_str))
+
+        # Set peer 0 to be the seeder.
         self.peers[0].pieces = [1]*PIECE_COUNT
         self.peers[0].completed = len(self.peers[0].pieces)
 
