@@ -118,7 +118,7 @@ Comparison pending discussion with Dragonfly team.
 
 - If Docker registry throughput is not the bottleneck in your deployment workflow, switching to
   Kraken will not magically speed up your `docker pull`. Instead, consider the lower hanging fruit
-  of reducing your image sizes by switching to [Makisu](https://github.com/uber/makisu).
+  of reducing your image sizes by building images with [Makisu](https://github.com/uber/makisu).
 - Mutating tags is allowed, however the behavior is undefined. A few things will go wrong: replication
   probably won't trigger, and most tag lookups will probably still return the old tag due to caching.
   If you need mutation (e.g. updating a `latest` tag), please consider implementing your own index
