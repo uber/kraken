@@ -35,7 +35,8 @@ The high level idea of Kraken is to have a small number of dedicated hosts seed 
 of agents running on each host in the cluster. Agents discover other peers through a central component
 which tracks who is downloading what. Agents will prefer to download from other agents seeding the
 desired content, whereas the dedicated seeders are only used by the first participants in the network to
-kick things off.
+kick things off. In practice, we use connection limits and randomization to form sparse graphs with
+small diameter so that in large networks, agents are never far from a seeder.
 
 Docker registry interfaces are plopped on top of each peer in the network, such that images are
 pushed to the dedicated seeders and pulled from the agents.
