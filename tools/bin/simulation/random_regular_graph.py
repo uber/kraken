@@ -6,12 +6,12 @@ import networkx as nx
 
 """
 Random regular graph with connection limit of 5:
- - 5000 peers, 500MB: 17 sec
- - 1000 peers, 10GB: p50 294 sec, p100 298 sec (84% ~ 85% speed)
+ - 5000 peers, 500MB: 17 iterations
+ - 1000 peers, 10GB: p50 294 iterations, p100 298 iterations (84% ~ 85% speed)
 """
 PEER_COUNT = 5000
 PIECE_COUNT = 125
-PIECE_TRANSMIT_LIMIT = 10  # Number of pieces uploaded/downloaded per "sec"
+PIECE_TRANSMIT_LIMIT = 10  # Number of pieces uploaded/downloaded per iteration
 DEGREE = 5
 
 

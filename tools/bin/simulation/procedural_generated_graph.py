@@ -4,12 +4,12 @@ import sets
 
 """
 Procedural generated graph with soft connection limit of 5, max limit of 20:
- - 5000 peers, 500MB: 18 sec
- - 1000 peers, 10GB: p50 297 sec, p100 384 sec (65% ~ 84% speed)
+ - 5000 peers, 500MB: 18 iterations
+ - 1000 peers, 10GB: p50 297 iterations, p100 384 iterations (65% ~ 84% speed)
 """
 PEER_COUNT = 5000
 PIECE_COUNT = 125
-PIECE_TRANSMIT_LIMIT = 10  # Number of pieces uploaded/downloaded per "sec"
+PIECE_TRANSMIT_LIMIT = 10  # Number of pieces uploaded/downloaded per iteration
 SOFT_CONNECTION_LIMIT = 5
 MAX_CONNECTION_LIMIT = 20
 
