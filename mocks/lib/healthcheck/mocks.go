@@ -5,9 +5,9 @@
 package mockhealthcheck
 
 import (
-	stringset "github.com/uber/kraken/utils/stringset"
 	context "context"
 	gomock "github.com/golang/mock/gomock"
+	stringset "github.com/uber/kraken/utils/stringset"
 	reflect "reflect"
 )
 
@@ -36,6 +36,7 @@ func (m *MockChecker) EXPECT() *MockCheckerMockRecorder {
 
 // Check mocks base method
 func (m *MockChecker) Check(arg0 context.Context, arg1 string) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Check", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -43,6 +44,7 @@ func (m *MockChecker) Check(arg0 context.Context, arg1 string) error {
 
 // Check indicates an expected call of Check
 func (mr *MockCheckerMockRecorder) Check(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Check", reflect.TypeOf((*MockChecker)(nil).Check), arg0, arg1)
 }
 
@@ -71,6 +73,7 @@ func (m *MockFilter) EXPECT() *MockFilterMockRecorder {
 
 // Run mocks base method
 func (m *MockFilter) Run(arg0 stringset.Set) stringset.Set {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Run", arg0)
 	ret0, _ := ret[0].(stringset.Set)
 	return ret0
@@ -78,5 +81,6 @@ func (m *MockFilter) Run(arg0 stringset.Set) stringset.Set {
 
 // Run indicates an expected call of Run
 func (mr *MockFilterMockRecorder) Run(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockFilter)(nil).Run), arg0)
 }

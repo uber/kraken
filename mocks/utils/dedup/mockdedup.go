@@ -35,6 +35,7 @@ func (m *MockTaskRunner) EXPECT() *MockTaskRunnerMockRecorder {
 
 // Run mocks base method
 func (m *MockTaskRunner) Run(arg0 interface{}) (interface{}, time.Duration) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Run", arg0)
 	ret0, _ := ret[0].(interface{})
 	ret1, _ := ret[1].(time.Duration)
@@ -43,6 +44,7 @@ func (m *MockTaskRunner) Run(arg0 interface{}) (interface{}, time.Duration) {
 
 // Run indicates an expected call of Run
 func (mr *MockTaskRunnerMockRecorder) Run(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockTaskRunner)(nil).Run), arg0)
 }
 
@@ -71,10 +73,12 @@ func (m *MockIntervalTask) EXPECT() *MockIntervalTaskMockRecorder {
 
 // Run mocks base method
 func (m *MockIntervalTask) Run() {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Run")
 }
 
 // Run indicates an expected call of Run
 func (mr *MockIntervalTaskMockRecorder) Run() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockIntervalTask)(nil).Run))
 }

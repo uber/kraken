@@ -157,12 +157,10 @@ releases/%:
 
 # ==== MOCKS ====
 
-mockgen = $(GOPATH)/bin/glide -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
+mockgen = $(GOPATH)/bin/mockgen
 
 # mockgen must be installed on the system to make this work. Install it by running
 # `go get github.com/golang/mock/mockgen`.
-# go-build/.go/bin/darwin-x86_64/glide-exec is also needed. build it by running
-# `cd go-build && make gobuild-bins`
 .PHONY: mocks
 mocks:
 	rm -rf mocks

@@ -5,8 +5,8 @@
 package mockpeerstore
 
 import (
-	core "github.com/uber/kraken/core"
 	gomock "github.com/golang/mock/gomock"
+	core "github.com/uber/kraken/core"
 	reflect "reflect"
 )
 
@@ -35,6 +35,7 @@ func (m *MockStore) EXPECT() *MockStoreMockRecorder {
 
 // GetPeers mocks base method
 func (m *MockStore) GetPeers(arg0 core.InfoHash, arg1 int) ([]*core.PeerInfo, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPeers", arg0, arg1)
 	ret0, _ := ret[0].([]*core.PeerInfo)
 	ret1, _ := ret[1].(error)
@@ -43,11 +44,13 @@ func (m *MockStore) GetPeers(arg0 core.InfoHash, arg1 int) ([]*core.PeerInfo, er
 
 // GetPeers indicates an expected call of GetPeers
 func (mr *MockStoreMockRecorder) GetPeers(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPeers", reflect.TypeOf((*MockStore)(nil).GetPeers), arg0, arg1)
 }
 
 // UpdatePeer mocks base method
 func (m *MockStore) UpdatePeer(arg0 core.InfoHash, arg1 *core.PeerInfo) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdatePeer", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -55,5 +58,6 @@ func (m *MockStore) UpdatePeer(arg0 core.InfoHash, arg1 *core.PeerInfo) error {
 
 // UpdatePeer indicates an expected call of UpdatePeer
 func (mr *MockStoreMockRecorder) UpdatePeer(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePeer", reflect.TypeOf((*MockStore)(nil).UpdatePeer), arg0, arg1)
 }

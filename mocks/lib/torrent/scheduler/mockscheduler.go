@@ -5,10 +5,10 @@
 package mockscheduler
 
 import (
+	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
 	scheduler "github.com/uber/kraken/lib/torrent/scheduler"
 	connstate "github.com/uber/kraken/lib/torrent/scheduler/connstate"
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
 )
 
@@ -37,6 +37,7 @@ func (m *MockReloadableScheduler) EXPECT() *MockReloadableSchedulerMockRecorder 
 
 // BlacklistSnapshot mocks base method
 func (m *MockReloadableScheduler) BlacklistSnapshot() ([]connstate.BlacklistedConn, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BlacklistSnapshot")
 	ret0, _ := ret[0].([]connstate.BlacklistedConn)
 	ret1, _ := ret[1].(error)
@@ -45,11 +46,13 @@ func (m *MockReloadableScheduler) BlacklistSnapshot() ([]connstate.BlacklistedCo
 
 // BlacklistSnapshot indicates an expected call of BlacklistSnapshot
 func (mr *MockReloadableSchedulerMockRecorder) BlacklistSnapshot() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlacklistSnapshot", reflect.TypeOf((*MockReloadableScheduler)(nil).BlacklistSnapshot))
 }
 
 // Download mocks base method
 func (m *MockReloadableScheduler) Download(arg0 string, arg1 core.Digest) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Download", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -57,11 +60,13 @@ func (m *MockReloadableScheduler) Download(arg0 string, arg1 core.Digest) error 
 
 // Download indicates an expected call of Download
 func (mr *MockReloadableSchedulerMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockReloadableScheduler)(nil).Download), arg0, arg1)
 }
 
 // Probe mocks base method
 func (m *MockReloadableScheduler) Probe() error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Probe")
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -69,21 +74,25 @@ func (m *MockReloadableScheduler) Probe() error {
 
 // Probe indicates an expected call of Probe
 func (mr *MockReloadableSchedulerMockRecorder) Probe() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Probe", reflect.TypeOf((*MockReloadableScheduler)(nil).Probe))
 }
 
 // Reload mocks base method
 func (m *MockReloadableScheduler) Reload(arg0 scheduler.Config) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Reload", arg0)
 }
 
 // Reload indicates an expected call of Reload
 func (mr *MockReloadableSchedulerMockRecorder) Reload(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reload", reflect.TypeOf((*MockReloadableScheduler)(nil).Reload), arg0)
 }
 
 // RemoveTorrent mocks base method
 func (m *MockReloadableScheduler) RemoveTorrent(arg0 core.Digest) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveTorrent", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -91,16 +100,19 @@ func (m *MockReloadableScheduler) RemoveTorrent(arg0 core.Digest) error {
 
 // RemoveTorrent indicates an expected call of RemoveTorrent
 func (mr *MockReloadableSchedulerMockRecorder) RemoveTorrent(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveTorrent", reflect.TypeOf((*MockReloadableScheduler)(nil).RemoveTorrent), arg0)
 }
 
 // Stop mocks base method
 func (m *MockReloadableScheduler) Stop() {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Stop")
 }
 
 // Stop indicates an expected call of Stop
 func (mr *MockReloadableSchedulerMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockReloadableScheduler)(nil).Stop))
 }
 
@@ -129,6 +141,7 @@ func (m *MockScheduler) EXPECT() *MockSchedulerMockRecorder {
 
 // BlacklistSnapshot mocks base method
 func (m *MockScheduler) BlacklistSnapshot() ([]connstate.BlacklistedConn, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BlacklistSnapshot")
 	ret0, _ := ret[0].([]connstate.BlacklistedConn)
 	ret1, _ := ret[1].(error)
@@ -137,11 +150,13 @@ func (m *MockScheduler) BlacklistSnapshot() ([]connstate.BlacklistedConn, error)
 
 // BlacklistSnapshot indicates an expected call of BlacklistSnapshot
 func (mr *MockSchedulerMockRecorder) BlacklistSnapshot() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlacklistSnapshot", reflect.TypeOf((*MockScheduler)(nil).BlacklistSnapshot))
 }
 
 // Download mocks base method
 func (m *MockScheduler) Download(arg0 string, arg1 core.Digest) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Download", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -149,11 +164,13 @@ func (m *MockScheduler) Download(arg0 string, arg1 core.Digest) error {
 
 // Download indicates an expected call of Download
 func (mr *MockSchedulerMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockScheduler)(nil).Download), arg0, arg1)
 }
 
 // Probe mocks base method
 func (m *MockScheduler) Probe() error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Probe")
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -161,11 +178,13 @@ func (m *MockScheduler) Probe() error {
 
 // Probe indicates an expected call of Probe
 func (mr *MockSchedulerMockRecorder) Probe() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Probe", reflect.TypeOf((*MockScheduler)(nil).Probe))
 }
 
 // RemoveTorrent mocks base method
 func (m *MockScheduler) RemoveTorrent(arg0 core.Digest) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveTorrent", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -173,15 +192,18 @@ func (m *MockScheduler) RemoveTorrent(arg0 core.Digest) error {
 
 // RemoveTorrent indicates an expected call of RemoveTorrent
 func (mr *MockSchedulerMockRecorder) RemoveTorrent(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveTorrent", reflect.TypeOf((*MockScheduler)(nil).RemoveTorrent), arg0)
 }
 
 // Stop mocks base method
 func (m *MockScheduler) Stop() {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Stop")
 }
 
 // Stop indicates an expected call of Stop
 func (mr *MockSchedulerMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockScheduler)(nil).Stop))
 }
