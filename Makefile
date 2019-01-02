@@ -157,7 +157,7 @@ releases/%:
 
 # ==== MOCKS ====
 
-mockgen = $(GOPATH)/bin/glide -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
+mockgen = $(GOPATH)/bin/mockgen
 
 # mockgen must be installed on the system to make this work. Install it by running
 # `go get github.com/golang/mock/mockgen`.
@@ -167,6 +167,8 @@ mockgen = $(GOPATH)/bin/glide -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/
 mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
+	go get -u github.com/golang/mock/gomock
+	go install github.com/golang/mock/mockgen
 
 	mkdir -p mocks/lib/hashring
 	$(mockgen) \
