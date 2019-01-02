@@ -11,7 +11,7 @@ import:
   subpackages:
   - redis
 - package: github.com/golang/mock
-  version: b3e60bcdc577185fce3cf625fc96b62857ce5574
+  version: ^1.2.0
   subpackages:
   - gomock
 - package: github.com/gorilla/mux
