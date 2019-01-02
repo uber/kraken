@@ -34,6 +34,7 @@ func (m *MockFileReadWriter) EXPECT() *MockFileReadWriterMockRecorder {
 
 // Cancel mocks base method
 func (m *MockFileReadWriter) Cancel() error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Cancel")
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -41,11 +42,13 @@ func (m *MockFileReadWriter) Cancel() error {
 
 // Cancel indicates an expected call of Cancel
 func (mr *MockFileReadWriterMockRecorder) Cancel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cancel", reflect.TypeOf((*MockFileReadWriter)(nil).Cancel))
 }
 
 // Close mocks base method
 func (m *MockFileReadWriter) Close() error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Close")
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -53,11 +56,13 @@ func (m *MockFileReadWriter) Close() error {
 
 // Close indicates an expected call of Close
 func (mr *MockFileReadWriterMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockFileReadWriter)(nil).Close))
 }
 
 // Commit mocks base method
 func (m *MockFileReadWriter) Commit() error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Commit")
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -65,11 +70,13 @@ func (m *MockFileReadWriter) Commit() error {
 
 // Commit indicates an expected call of Commit
 func (mr *MockFileReadWriterMockRecorder) Commit() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockFileReadWriter)(nil).Commit))
 }
 
 // Read mocks base method
 func (m *MockFileReadWriter) Read(arg0 []byte) (int, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Read", arg0)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
@@ -78,11 +85,13 @@ func (m *MockFileReadWriter) Read(arg0 []byte) (int, error) {
 
 // Read indicates an expected call of Read
 func (mr *MockFileReadWriterMockRecorder) Read(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockFileReadWriter)(nil).Read), arg0)
 }
 
 // ReadAt mocks base method
 func (m *MockFileReadWriter) ReadAt(arg0 []byte, arg1 int64) (int, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReadAt", arg0, arg1)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
@@ -91,11 +100,13 @@ func (m *MockFileReadWriter) ReadAt(arg0 []byte, arg1 int64) (int, error) {
 
 // ReadAt indicates an expected call of ReadAt
 func (mr *MockFileReadWriterMockRecorder) ReadAt(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadAt", reflect.TypeOf((*MockFileReadWriter)(nil).ReadAt), arg0, arg1)
 }
 
 // Seek mocks base method
 func (m *MockFileReadWriter) Seek(arg0 int64, arg1 int) (int64, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Seek", arg0, arg1)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
@@ -104,11 +115,13 @@ func (m *MockFileReadWriter) Seek(arg0 int64, arg1 int) (int64, error) {
 
 // Seek indicates an expected call of Seek
 func (mr *MockFileReadWriterMockRecorder) Seek(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seek", reflect.TypeOf((*MockFileReadWriter)(nil).Seek), arg0, arg1)
 }
 
 // Size mocks base method
 func (m *MockFileReadWriter) Size() int64 {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Size")
 	ret0, _ := ret[0].(int64)
 	return ret0
@@ -116,11 +129,13 @@ func (m *MockFileReadWriter) Size() int64 {
 
 // Size indicates an expected call of Size
 func (mr *MockFileReadWriterMockRecorder) Size() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Size", reflect.TypeOf((*MockFileReadWriter)(nil).Size))
 }
 
 // Write mocks base method
 func (m *MockFileReadWriter) Write(arg0 []byte) (int, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Write", arg0)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
@@ -129,11 +144,13 @@ func (m *MockFileReadWriter) Write(arg0 []byte) (int, error) {
 
 // Write indicates an expected call of Write
 func (mr *MockFileReadWriterMockRecorder) Write(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockFileReadWriter)(nil).Write), arg0)
 }
 
 // WriteAt mocks base method
 func (m *MockFileReadWriter) WriteAt(arg0 []byte, arg1 int64) (int, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WriteAt", arg0, arg1)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
@@ -142,5 +159,6 @@ func (m *MockFileReadWriter) WriteAt(arg0 []byte, arg1 int64) (int, error) {
 
 // WriteAt indicates an expected call of WriteAt
 func (mr *MockFileReadWriterMockRecorder) WriteAt(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteAt", reflect.TypeOf((*MockFileReadWriter)(nil).WriteAt), arg0, arg1)
 }

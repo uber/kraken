@@ -34,6 +34,7 @@ func (m *MockRemoteValidator) EXPECT() *MockRemoteValidatorMockRecorder {
 
 // Valid mocks base method
 func (m *MockRemoteValidator) Valid(arg0, arg1 string) bool {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Valid", arg0, arg1)
 	ret0, _ := ret[0].(bool)
 	return ret0
@@ -41,5 +42,6 @@ func (m *MockRemoteValidator) Valid(arg0, arg1 string) bool {
 
 // Valid indicates an expected call of Valid
 func (mr *MockRemoteValidatorMockRecorder) Valid(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Valid", reflect.TypeOf((*MockRemoteValidator)(nil).Valid), arg0, arg1)
 }
