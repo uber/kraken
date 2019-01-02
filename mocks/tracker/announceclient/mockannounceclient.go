@@ -5,8 +5,8 @@
 package mockannounceclient
 
 import (
-	core "github.com/uber/kraken/core"
 	gomock "github.com/golang/mock/gomock"
+	core "github.com/uber/kraken/core"
 	reflect "reflect"
 	time "time"
 )
@@ -36,6 +36,7 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 
 // Announce mocks base method
 func (m *MockClient) Announce(arg0 core.Digest, arg1 core.InfoHash, arg2 bool, arg3 int) ([]*core.PeerInfo, time.Duration, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Announce", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].([]*core.PeerInfo)
 	ret1, _ := ret[1].(time.Duration)
@@ -45,5 +46,6 @@ func (m *MockClient) Announce(arg0 core.Digest, arg1 core.InfoHash, arg2 bool, a
 
 // Announce indicates an expected call of Announce
 func (mr *MockClientMockRecorder) Announce(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Announce", reflect.TypeOf((*MockClient)(nil).Announce), arg0, arg1, arg2, arg3)
 }

@@ -1,5 +1,5 @@
-hash: 86ad3f3a72d3a428fc548d3f42f7530ab411ed2fd0c0b04aee0eb87fbac7f311
-updated: 2018-12-28T13:21:50.416629-08:00
+hash: c461d04dc787495857b5529e1f28d45874d44032558f75735e2c489f8676ff9c
+updated: 2019-01-01T18:49:07.187209-08:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
@@ -113,21 +113,24 @@ imports:
   - client
   - credentials
 - name: github.com/docker/engine-api
-  version: 0df83fcc24fb4a997df5537526306fb55aa5dca8
+  version: 4290f40c056686fcaa5c9caf02eac1dde9315adf
   subpackages:
   - types
   - types/blkiodev
   - types/container
   - types/filters
+  - types/mount
   - types/network
   - types/registry
   - types/strslice
+  - types/swarm
+  - types/versions
 - name: github.com/docker/go-connections
-  version: 34b5052da6b11e27f5f2e357b38b571ddddd3928
+  version: 97c2040d34dfae1d1b1275fa3a78dbdd2f41cf7e
   subpackages:
   - nat
 - name: github.com/docker/go-units
-  version: 651fc226e7441360384da338d0fd37f2440ffbe3
+  version: 2fb04c6466a548a03cb009c5569ee1ab1e35398e
 - name: github.com/docker/libtrust
   version: fa567046d9b14f6aa788882a950d69651d230b21
 - name: github.com/facebookgo/clock
@@ -138,7 +141,7 @@ imports:
   - internal
   - redis
 - name: github.com/golang/mock
-  version: b3e60bcdc577185fce3cf625fc96b62857ce5574
+  version: 51421b967af1f557f93a59e0057aaf15ca02e29c
   subpackages:
   - gomock
 - name: github.com/golang/protobuf
@@ -233,19 +236,24 @@ imports:
   - internal/exit
   - zapcore
 - name: golang.org/x/crypto
-  version: 505ab145d0a99da450461ae2c1a9f6cd10d1f447
+  version: c10c31b5e94b6f7a0283272dc2bb27163dcea24b
   subpackages:
   - ssh
 - name: golang.org/x/net
   version: 4876518f9e71663000c348837735820161a42df7
   subpackages:
   - context
+  - context/ctxhttp
+  - http2
+  - http2/hpack
+  - internal/timeseries
+  - trace
 - name: golang.org/x/sync
   version: 42b317875d0fa942474b76e1b46a6060d720ae6e
   subpackages:
   - syncmap
 - name: golang.org/x/time
-  version: 85acf8d2951cb2a3bde7632f9ff273ef0379bcbd
+  version: a4bde12657593d5e90d0533a3e4fd95e635124cb
   subpackages:
   - rate
 - name: gopkg.in/DATA-DOG/go-sqlmock.v1
@@ -256,6 +264,11 @@ imports:
   version: bef53efd0c76e49e6de55ead051f886bea7e9420
 - name: rsc.io/letsencrypt
   version: a019c9e6fce0c7132679dea13bd8df7c86ffe26c
+  subpackages:
+  - vendor/github.com/xenolf/lego/acme
+  - vendor/gopkg.in/square/go-jose.v1
+  - vendor/gopkg.in/square/go-jose.v1/cipher
+  - vendor/gopkg.in/square/go-jose.v1/json
 testImports:
 - name: github.com/davecgh/go-spew
   version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d

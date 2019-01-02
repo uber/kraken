@@ -5,8 +5,8 @@
 package mockoriginstore
 
 import (
-	core "github.com/uber/kraken/core"
 	gomock "github.com/golang/mock/gomock"
+	core "github.com/uber/kraken/core"
 	reflect "reflect"
 )
 
@@ -35,6 +35,7 @@ func (m *MockStore) EXPECT() *MockStoreMockRecorder {
 
 // GetOrigins mocks base method
 func (m *MockStore) GetOrigins(arg0 core.Digest) ([]*core.PeerInfo, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrigins", arg0)
 	ret0, _ := ret[0].([]*core.PeerInfo)
 	ret1, _ := ret[1].(error)
@@ -43,5 +44,6 @@ func (m *MockStore) GetOrigins(arg0 core.Digest) ([]*core.PeerInfo, error) {
 
 // GetOrigins indicates an expected call of GetOrigins
 func (mr *MockStoreMockRecorder) GetOrigins(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrigins", reflect.TypeOf((*MockStore)(nil).GetOrigins), arg0)
 }

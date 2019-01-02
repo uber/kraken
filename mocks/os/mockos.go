@@ -36,6 +36,7 @@ func (m *MockFileInfo) EXPECT() *MockFileInfoMockRecorder {
 
 // IsDir mocks base method
 func (m *MockFileInfo) IsDir() bool {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsDir")
 	ret0, _ := ret[0].(bool)
 	return ret0
@@ -43,11 +44,13 @@ func (m *MockFileInfo) IsDir() bool {
 
 // IsDir indicates an expected call of IsDir
 func (mr *MockFileInfoMockRecorder) IsDir() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDir", reflect.TypeOf((*MockFileInfo)(nil).IsDir))
 }
 
 // ModTime mocks base method
 func (m *MockFileInfo) ModTime() time.Time {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ModTime")
 	ret0, _ := ret[0].(time.Time)
 	return ret0
@@ -55,11 +58,13 @@ func (m *MockFileInfo) ModTime() time.Time {
 
 // ModTime indicates an expected call of ModTime
 func (mr *MockFileInfoMockRecorder) ModTime() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ModTime", reflect.TypeOf((*MockFileInfo)(nil).ModTime))
 }
 
 // Mode mocks base method
 func (m *MockFileInfo) Mode() os.FileMode {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Mode")
 	ret0, _ := ret[0].(os.FileMode)
 	return ret0
@@ -67,11 +72,13 @@ func (m *MockFileInfo) Mode() os.FileMode {
 
 // Mode indicates an expected call of Mode
 func (mr *MockFileInfoMockRecorder) Mode() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Mode", reflect.TypeOf((*MockFileInfo)(nil).Mode))
 }
 
 // Name mocks base method
 func (m *MockFileInfo) Name() string {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Name")
 	ret0, _ := ret[0].(string)
 	return ret0
@@ -79,11 +86,13 @@ func (m *MockFileInfo) Name() string {
 
 // Name indicates an expected call of Name
 func (mr *MockFileInfoMockRecorder) Name() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockFileInfo)(nil).Name))
 }
 
 // Size mocks base method
 func (m *MockFileInfo) Size() int64 {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Size")
 	ret0, _ := ret[0].(int64)
 	return ret0
@@ -91,11 +100,13 @@ func (m *MockFileInfo) Size() int64 {
 
 // Size indicates an expected call of Size
 func (mr *MockFileInfoMockRecorder) Size() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Size", reflect.TypeOf((*MockFileInfo)(nil).Size))
 }
 
 // Sys mocks base method
 func (m *MockFileInfo) Sys() interface{} {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Sys")
 	ret0, _ := ret[0].(interface{})
 	return ret0
@@ -103,5 +114,6 @@ func (m *MockFileInfo) Sys() interface{} {
 
 // Sys indicates an expected call of Sys
 func (mr *MockFileInfoMockRecorder) Sys() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sys", reflect.TypeOf((*MockFileInfo)(nil).Sys))
 }
