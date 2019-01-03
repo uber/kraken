@@ -198,7 +198,7 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/lib/healthcheck/mocks.go \
 		-package mockhealthcheck \
-		github.com/uber/kraken/lib/healthcheck Checker,Filter
+		github.com/uber/kraken/lib/healthcheck Checker,Filter,PassiveFilter
 
 	mkdir -p mocks/tracker/originstore
 	$(mockgen) \

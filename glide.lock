@@ -1,5 +1,5 @@
-hash: c461d04dc787495857b5529e1f28d45874d44032558f75735e2c489f8676ff9c
-updated: 2019-01-01T18:49:07.187209-08:00
+hash: a72b2be7b2f5934247e3b402e183a7d43848e42872235dff0a31506093fc3f35
+updated: 2019-01-03T12:13:04.309172-08:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
@@ -16,7 +16,7 @@ imports:
   subpackages:
   - lib/go/thrift
 - name: github.com/aws/aws-sdk-go
-  version: 3991042237b45cf58c9d5f34295942d5533c28c6
+  version: 1fae280bf2fb990480b751e0ba0d2428548c98b6
   subpackages:
   - aws
   - aws/awserr
@@ -113,24 +113,21 @@ imports:
   - client
   - credentials
 - name: github.com/docker/engine-api
-  version: 4290f40c056686fcaa5c9caf02eac1dde9315adf
+  version: 0df83fcc24fb4a997df5537526306fb55aa5dca8
   subpackages:
   - types
   - types/blkiodev
   - types/container
   - types/filters
-  - types/mount
   - types/network
   - types/registry
   - types/strslice
-  - types/swarm
-  - types/versions
 - name: github.com/docker/go-connections
-  version: 97c2040d34dfae1d1b1275fa3a78dbdd2f41cf7e
+  version: 34b5052da6b11e27f5f2e357b38b571ddddd3928
   subpackages:
   - nat
 - name: github.com/docker/go-units
-  version: 2fb04c6466a548a03cb009c5569ee1ab1e35398e
+  version: 651fc226e7441360384da338d0fd37f2440ffbe3
 - name: github.com/docker/libtrust
   version: fa567046d9b14f6aa788882a950d69651d230b21
 - name: github.com/facebookgo/clock
@@ -236,7 +233,7 @@ imports:
   - internal/exit
   - zapcore
 - name: golang.org/x/crypto
-  version: c10c31b5e94b6f7a0283272dc2bb27163dcea24b
+  version: 505ab145d0a99da450461ae2c1a9f6cd10d1f447
   subpackages:
   - ssh
 - name: golang.org/x/net
@@ -253,7 +250,7 @@ imports:
   subpackages:
   - syncmap
 - name: golang.org/x/time
-  version: a4bde12657593d5e90d0533a3e4fd95e635124cb
+  version: 85acf8d2951cb2a3bde7632f9ff273ef0379bcbd
   subpackages:
   - rate
 - name: gopkg.in/DATA-DOG/go-sqlmock.v1

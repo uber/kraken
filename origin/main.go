@@ -12,13 +12,13 @@ import (
 	"github.com/uber/kraken/lib/blobrefresh"
 	"github.com/uber/kraken/lib/hashring"
 	"github.com/uber/kraken/lib/healthcheck"
+	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/lib/metainfogen"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/persistedretry/writeback"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler"
-	"github.com/uber/kraken/lib/upstream"
 	"github.com/uber/kraken/localdb"
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
@@ -159,20 +159,24 @@ func main() {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
 
+	cluster, err := hostlist.New(config.Cluster)
+	if err != nil {
+		log.Fatalf("Error creating cluster host list: %s", err)
+	}
+
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
 		log.Fatalf("Error building client tls config: %s", err)
 	}
 
-	cluster, err := config.Cluster.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))
-	if err != nil {
-		log.Fatalf("Error creating cluster host list: %s", err)
-	}
+	healthCheckFilter := healthcheck.NewFilter(config.HealthCheck, healthcheck.Default(tls))
 
 	hashRing := hashring.New(
 		config.HashRing,
 		cluster,
+		healthCheckFilter,
 		hashring.WithWatcher(backend.NewBandwidthWatcher(backendManager)))
+	go hashRing.Monitor(nil)
 
 	addr := fmt.Sprintf("%s:%d", hostname, *blobServerPort)
 	if !hashRing.Contains(addr) {

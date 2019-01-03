@@ -5,9 +5,9 @@
 package mocks3backend
 
 import (
+	gomock "github.com/golang/mock/gomock"
 	s3 "github.com/aws/aws-sdk-go/service/s3"
 	s3manager "github.com/aws/aws-sdk-go/service/s3/s3manager"
-	gomock "github.com/golang/mock/gomock"
 	io "io"
 	reflect "reflect"
 )

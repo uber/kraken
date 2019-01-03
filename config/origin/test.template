@@ -4,8 +4,7 @@ hashring:
   max_replica: 2
 
 cluster:
-  hosts:
-    static: {origins}
+  static: {origins}
 
 metainfogen:
   piece_lengths:

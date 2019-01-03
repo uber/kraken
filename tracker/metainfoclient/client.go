@@ -26,26 +26,22 @@ type Client interface {
 }
 
 type client struct {
-	ring    hashring.Ring
+	ring    hashring.PassiveRing
 	tls     *tls.Config
 	backoff *backoff.Backoff
 }
 
 // New returns a new Client.
-func New(ring hashring.Ring, tls *tls.Config) Client {
+func New(ring hashring.PassiveRing, tls *tls.Config) Client {
 	return &client{ring, tls, backoff.New(backoff.Config{RetryTimeout: 15 * time.Minute})}
 }
 
 // Download returns the MetaInfo associated with name. Returns ErrNotFound if
 // no torrent exists under name.
 func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, error) {
-	addrs := c.ring.Locations(d)
-	if len(addrs) == 0 {
-		return nil, errors.New("no hosts could be resolved")
-	}
 	var resp *http.Response
 	var err error
-	for _, addr := range addrs {
+	for _, addr := range c.ring.Locations(d) {
 		resp, err = httputil.PollAccepted(
 			fmt.Sprintf(
 				"http://%s/namespace/%s/blobs/%s/metainfo",

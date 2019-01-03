@@ -53,17 +53,15 @@ func main() {
 		log.Fatalf("Error building origin host list: %s", err)
 	}
 
-	healthyOrigins := healthcheck.HostList(origins)
-
 	originStore := originstore.New(
-		config.OriginStore, clock.New(), healthyOrigins, blobclient.NewProvider(blobclient.WithTLS(tls)))
+		config.OriginStore, clock.New(), origins, blobclient.NewProvider(blobclient.WithTLS(tls)))
 
 	policy, err := peerhandoutpolicy.NewPriorityPolicy(stats, config.PeerHandoutPolicy.Priority)
 	if err != nil {
 		log.Fatalf("Could not load peer handout policy: %s", err)
 	}
 
-	r := blobclient.NewClientResolver(blobclient.NewProvider(blobclient.WithTLS(tls)), healthyOrigins)
+	r := blobclient.NewClientResolver(blobclient.NewProvider(blobclient.WithTLS(tls)), origins)
 	originCluster := blobclient.NewClusterClient(r)
 
 	server := trackerserver.New(

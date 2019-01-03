@@ -14,21 +14,15 @@ pkg/
 
 # Binary executable
 tracker/tracker
-tracker/tracker.linux
 agent/agent
-agent/agent.linux
 origin/origin
-origin/origin.linux
 proxy/proxy
-proxy/proxy.linux
 build-index/build-index
-build-index/build-index.linux
 tools/bin/puller/puller
 tools/bin/reload/reload
 tools/bin/reload-config/reload-config
 tools/bin/visualization/visualization
 tools/bin/testfs/testfs
-tools/bin/testfs/testfs.linux
 tools/bin/pexchange/pexchange
 tools/bin/trackerload/trackerload
 

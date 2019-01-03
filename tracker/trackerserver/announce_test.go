@@ -8,6 +8,7 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/hashring"
+	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/tracker/announceclient"
 	"github.com/uber/kraken/utils/testutil"
 
@@ -16,7 +17,7 @@ import (
 )
 
 func newAnnounceClient(pctx core.PeerContext, addr string) announceclient.Client {
-	return announceclient.New(pctx, hashring.Fixture(addr), nil)
+	return announceclient.New(pctx, hashring.NoopPassiveRing(hostlist.Fixture(addr)), nil)
 }
 
 func TestAnnounceSinglePeerResponse(t *testing.T) {
