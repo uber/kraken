@@ -33,6 +33,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	peerIP             string
+	peerPort           int
+	blobServerHostName string
+	blobServerPort     int
+	configFile         string
+	zone               string
+	krakenCluster      string
+
+	rootCmd = &cobra.Command{
+		Short: "kraken-origin serves as dedicated seeder in kraken's p2p network.",
+		Run: func(rootCmd *cobra.Command, args []string) {
+			run()
+		},
+	}
+)
+
 func init() {
 	rootCmd.PersistentFlags().StringVarP(
 		&peerIP, "peer-ip", "", "", "ip which peer will announce itself as")
@@ -50,28 +67,11 @@ func init() {
 		&krakenCluster, "cluster", "", "", "cluster name (e.g. prod01-zone1)")
 }
 
-var (
-	peerIP             string
-	peerPort           int
-	blobServerHostName string
-	blobServerPort     int
-	configFile         string
-	zone               string
-	krakenCluster      string
-
-	rootCmd = &cobra.Command{
-		Short: "kraken-origin serves as dedicated seeder in kraken's p2p network.",
-		Run: func(rootCmd *cobra.Command, args []string) {
-			start()
-		},
-	}
-)
-
 func Execute() {
 	rootCmd.Execute()
 }
 
-func start() {
+func run() {
 	if peerPort == 0 {
 		panic("must specify non-zero peer port")
 	}

@@ -16,6 +16,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	ports         []int
+	configFile    string
+	krakenCluster string
+
+	rootCmd = &cobra.Command{
+		Short: "kraken-proxy handles uploads and direct downloads",
+		Run: func(rootCmd *cobra.Command, args []string) {
+			run()
+		},
+	}
+)
+
 func init() {
 	rootCmd.PersistentFlags().IntSliceVar(
 		&ports, "port", []int{}, "port to listen on (may specify multiple)")
@@ -25,24 +38,11 @@ func init() {
 		&krakenCluster, "cluster", "", "", "cluster name (e.g. prod01-zone1)")
 }
 
-var (
-	ports         []int
-	configFile    string
-	krakenCluster string
-
-	rootCmd = &cobra.Command{
-		Short: "kraken-proxy handles uploads and direct downloads",
-		Run: func(rootCmd *cobra.Command, args []string) {
-			start()
-		},
-	}
-)
-
 func Execute() {
 	rootCmd.Execute()
 }
 
-func start() {
+func run() {
 	if len(ports) == 0 {
 		panic("must specify a port")
 	}

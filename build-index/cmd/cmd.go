@@ -23,6 +23,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	port          int
+	configFile    string
+	krakenCluster string
+
+	rootCmd = &cobra.Command{
+		Short: "kraken-index handles all tag related requests and cross cluster replications",
+		Run: func(rootCmd *cobra.Command, args []string) {
+			run()
+		},
+	}
+)
+
 func init() {
 	rootCmd.PersistentFlags().IntVarP(
 		&port, "port", "", 0, "tag server port")
@@ -32,24 +45,11 @@ func init() {
 		&krakenCluster, "cluster", "", "", "cluster name (e.g. prod01-zone1)")
 }
 
-var (
-	port          int
-	configFile    string
-	krakenCluster string
-
-	rootCmd = &cobra.Command{
-		Short: "kraken-index handles all tag related requests and cross cluster replications",
-		Run: func(rootCmd *cobra.Command, args []string) {
-			start()
-		},
-	}
-)
-
 func Execute() {
 	rootCmd.Execute()
 }
 
-func start() {
+func run() {
 	if port == 0 {
 		panic("must specify non-zero port")
 	}

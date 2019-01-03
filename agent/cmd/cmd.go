@@ -24,6 +24,24 @@ import (
 	"github.com/uber-go/tally"
 )
 
+var (
+	peerIP            string
+	peerPort          int
+	agentServerPort   int
+	agentRegistryPort int
+	configFile        string
+	zone              string
+	krakenCluster     string
+
+	rootCmd = &cobra.Command{
+		Short: "kraken-agent implements docker registry interface and downloads data as a peer " +
+			"in kraken's p2p network.",
+		Run: func(rootCmd *cobra.Command, args []string) {
+			run()
+		},
+	}
+)
+
 func init() {
 	rootCmd.PersistentFlags().StringVarP(
 		&peerIP, "peer-ip", "", "", "ip which peer will announce itself as")
@@ -41,29 +59,11 @@ func init() {
 		&krakenCluster, "cluster", "", "", "cluster name (e.g. prod01-zone1)")
 }
 
-var (
-	peerIP            string
-	peerPort          int
-	agentServerPort   int
-	agentRegistryPort int
-	configFile        string
-	zone              string
-	krakenCluster     string
-
-	rootCmd = &cobra.Command{
-		Short: "kraken-agent implements docker registry interface and downloads data as a peer " +
-			"in kraken's p2p network.",
-		Run: func(rootCmd *cobra.Command, args []string) {
-			start()
-		},
-	}
-)
-
 func Execute() {
 	rootCmd.Execute()
 }
 
-func start() {
+func run() {
 	if peerPort == 0 {
 		panic("must specify non-zero peer port")
 	}
