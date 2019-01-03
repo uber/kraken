@@ -255,8 +255,8 @@ class Tracker(Component):
             volumes=self.volumes,
             command=[
                 '/usr/bin/kraken-tracker',
-                '--config=/etc/kraken/config/tracker/{config}'.format(config=self.config_file)],
-                '--port={port}'.format(port=self.instance.port),
+                '--config=/etc/kraken/config/tracker/{config}'.format(config=self.config_file),
+                '--port={port}'.format(port=self.instance.port)],
             health_check=HealthCheck(format_insecure_curl('localhost:{port}/health'.format(port=self.port))))
 
     @property
