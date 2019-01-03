@@ -1,5 +1,5 @@
-hash: 86ad3f3a72d3a428fc548d3f42f7530ab411ed2fd0c0b04aee0eb87fbac7f311
-updated: 2018-12-28T13:21:50.416629-08:00
+hash: a72b2be7b2f5934247e3b402e183a7d43848e42872235dff0a31506093fc3f35
+updated: 2019-01-03T12:13:04.309172-08:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
@@ -16,7 +16,7 @@ imports:
   subpackages:
   - lib/go/thrift
 - name: github.com/aws/aws-sdk-go
-  version: 3991042237b45cf58c9d5f34295942d5533c28c6
+  version: 1fae280bf2fb990480b751e0ba0d2428548c98b6
   subpackages:
   - aws
   - aws/awserr
@@ -138,7 +138,7 @@ imports:
   - internal
   - redis
 - name: github.com/golang/mock
-  version: b3e60bcdc577185fce3cf625fc96b62857ce5574
+  version: 51421b967af1f557f93a59e0057aaf15ca02e29c
   subpackages:
   - gomock
 - name: github.com/golang/protobuf
@@ -240,6 +240,11 @@ imports:
   version: 4876518f9e71663000c348837735820161a42df7
   subpackages:
   - context
+  - context/ctxhttp
+  - http2
+  - http2/hpack
+  - internal/timeseries
+  - trace
 - name: golang.org/x/sync
   version: 42b317875d0fa942474b76e1b46a6060d720ae6e
   subpackages:
@@ -256,6 +261,11 @@ imports:
   version: bef53efd0c76e49e6de55ead051f886bea7e9420
 - name: rsc.io/letsencrypt
   version: a019c9e6fce0c7132679dea13bd8df7c86ffe26c
+  subpackages:
+  - vendor/github.com/xenolf/lego/acme
+  - vendor/gopkg.in/square/go-jose.v1
+  - vendor/gopkg.in/square/go-jose.v1/cipher
+  - vendor/gopkg.in/square/go-jose.v1/json
 testImports:
 - name: github.com/davecgh/go-spew
   version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d

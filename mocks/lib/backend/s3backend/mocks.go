@@ -5,9 +5,9 @@
 package mocks3backend
 
 import (
+	gomock "github.com/golang/mock/gomock"
 	s3 "github.com/aws/aws-sdk-go/service/s3"
 	s3manager "github.com/aws/aws-sdk-go/service/s3/s3manager"
-	gomock "github.com/golang/mock/gomock"
 	io "io"
 	reflect "reflect"
 )
@@ -37,6 +37,7 @@ func (m *MockS3) EXPECT() *MockS3MockRecorder {
 
 // Download mocks base method
 func (m *MockS3) Download(arg0 io.WriterAt, arg1 *s3.GetObjectInput, arg2 ...func(*s3manager.Downloader)) (int64, error) {
+	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
@@ -49,12 +50,14 @@ func (m *MockS3) Download(arg0 io.WriterAt, arg1 *s3.GetObjectInput, arg2 ...fun
 
 // Download indicates an expected call of Download
 func (mr *MockS3MockRecorder) Download(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockS3)(nil).Download), varargs...)
 }
 
 // HeadObject mocks base method
 func (m *MockS3) HeadObject(arg0 *s3.HeadObjectInput) (*s3.HeadObjectOutput, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HeadObject", arg0)
 	ret0, _ := ret[0].(*s3.HeadObjectOutput)
 	ret1, _ := ret[1].(error)
@@ -63,11 +66,13 @@ func (m *MockS3) HeadObject(arg0 *s3.HeadObjectInput) (*s3.HeadObjectOutput, err
 
 // HeadObject indicates an expected call of HeadObject
 func (mr *MockS3MockRecorder) HeadObject(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HeadObject", reflect.TypeOf((*MockS3)(nil).HeadObject), arg0)
 }
 
 // ListObjectsPages mocks base method
 func (m *MockS3) ListObjectsPages(arg0 *s3.ListObjectsInput, arg1 func(*s3.ListObjectsOutput, bool) bool) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListObjectsPages", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -75,11 +80,13 @@ func (m *MockS3) ListObjectsPages(arg0 *s3.ListObjectsInput, arg1 func(*s3.ListO
 
 // ListObjectsPages indicates an expected call of ListObjectsPages
 func (mr *MockS3MockRecorder) ListObjectsPages(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListObjectsPages", reflect.TypeOf((*MockS3)(nil).ListObjectsPages), arg0, arg1)
 }
 
 // Upload mocks base method
 func (m *MockS3) Upload(arg0 *s3manager.UploadInput, arg1 ...func(*s3manager.Uploader)) (*s3manager.UploadOutput, error) {
+	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0}
 	for _, a := range arg1 {
 		varargs = append(varargs, a)
@@ -92,6 +99,7 @@ func (m *MockS3) Upload(arg0 *s3manager.UploadInput, arg1 ...func(*s3manager.Upl
 
 // Upload indicates an expected call of Upload
 func (mr *MockS3MockRecorder) Upload(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0}, arg1...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockS3)(nil).Upload), varargs...)
 }

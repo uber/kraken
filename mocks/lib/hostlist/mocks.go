@@ -5,8 +5,8 @@
 package mockhostlist
 
 import (
-	stringset "github.com/uber/kraken/utils/stringset"
 	gomock "github.com/golang/mock/gomock"
+	stringset "github.com/uber/kraken/utils/stringset"
 	reflect "reflect"
 )
 
@@ -35,6 +35,7 @@ func (m *MockList) EXPECT() *MockListMockRecorder {
 
 // Resolve mocks base method
 func (m *MockList) Resolve() stringset.Set {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resolve")
 	ret0, _ := ret[0].(stringset.Set)
 	return ret0
@@ -42,5 +43,6 @@ func (m *MockList) Resolve() stringset.Set {
 
 // Resolve indicates an expected call of Resolve
 func (mr *MockListMockRecorder) Resolve() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resolve", reflect.TypeOf((*MockList)(nil).Resolve))
 }

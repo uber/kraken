@@ -5,9 +5,9 @@
 package mockhashring
 
 import (
+	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
 	stringset "github.com/uber/kraken/utils/stringset"
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
 )
 
@@ -36,6 +36,7 @@ func (m *MockRing) EXPECT() *MockRingMockRecorder {
 
 // Contains mocks base method
 func (m *MockRing) Contains(arg0 string) bool {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Contains", arg0)
 	ret0, _ := ret[0].(bool)
 	return ret0
@@ -43,11 +44,13 @@ func (m *MockRing) Contains(arg0 string) bool {
 
 // Contains indicates an expected call of Contains
 func (mr *MockRingMockRecorder) Contains(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Contains", reflect.TypeOf((*MockRing)(nil).Contains), arg0)
 }
 
 // Locations mocks base method
 func (m *MockRing) Locations(arg0 core.Digest) []string {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Locations", arg0)
 	ret0, _ := ret[0].([]string)
 	return ret0
@@ -55,26 +58,31 @@ func (m *MockRing) Locations(arg0 core.Digest) []string {
 
 // Locations indicates an expected call of Locations
 func (mr *MockRingMockRecorder) Locations(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Locations", reflect.TypeOf((*MockRing)(nil).Locations), arg0)
 }
 
 // Monitor mocks base method
 func (m *MockRing) Monitor(arg0 <-chan struct{}) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Monitor", arg0)
 }
 
 // Monitor indicates an expected call of Monitor
 func (mr *MockRingMockRecorder) Monitor(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Monitor", reflect.TypeOf((*MockRing)(nil).Monitor), arg0)
 }
 
 // Refresh mocks base method
 func (m *MockRing) Refresh() {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Refresh")
 }
 
 // Refresh indicates an expected call of Refresh
 func (mr *MockRingMockRecorder) Refresh() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Refresh", reflect.TypeOf((*MockRing)(nil).Refresh))
 }
 
@@ -103,10 +111,12 @@ func (m *MockWatcher) EXPECT() *MockWatcherMockRecorder {
 
 // Notify mocks base method
 func (m *MockWatcher) Notify(arg0 stringset.Set) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Notify", arg0)
 }
 
 // Notify indicates an expected call of Notify
 func (mr *MockWatcherMockRecorder) Notify(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Notify", reflect.TypeOf((*MockWatcher)(nil).Notify), arg0)
 }

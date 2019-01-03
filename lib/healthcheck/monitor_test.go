@@ -31,14 +31,9 @@ func TestActiveMonitor(t *testing.T) {
 		filter)
 	defer m.Stop()
 
-	all := stringset.New(x, y)
-	resolvedHealthy, resolvedAll := m.Resolve()
-	require.Equal(all, resolvedHealthy)
-	require.Equal(all, resolvedAll)
+	require.Equal(stringset.New(x, y), m.Resolve())
 
 	time.Sleep(1250 * time.Millisecond)
 
-	resolvedHealthy, resolvedAll = m.Resolve()
-	require.Equal(stringset.New(x), resolvedHealthy)
-	require.Equal(all, resolvedAll)
+	require.Equal(stringset.New(x), m.Resolve())
 }

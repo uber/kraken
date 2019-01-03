@@ -157,7 +157,7 @@ releases/%:
 
 # ==== MOCKS ====
 
-mockgen = $(GOPATH)/bin/glide -g $(GLIDE) -d $(GOPATH)/bin -x github.com/golang/mock/mockgen -- mockgen
+mockgen = mockgen
 
 # mockgen must be installed on the system to make this work. Install it by running
 # `go get github.com/golang/mock/mockgen`.
@@ -200,7 +200,7 @@ mocks:
 	$(mockgen) \
 		-destination=mocks/lib/healthcheck/mocks.go \
 		-package mockhealthcheck \
-		github.com/uber/kraken/lib/healthcheck Checker,Filter
+		github.com/uber/kraken/lib/healthcheck Checker,Filter,PassiveFilter
 
 	mkdir -p mocks/tracker/originstore
 	$(mockgen) \

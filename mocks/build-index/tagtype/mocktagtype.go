@@ -5,8 +5,8 @@
 package mocktagtype
 
 import (
-	core "github.com/uber/kraken/core"
 	gomock "github.com/golang/mock/gomock"
+	core "github.com/uber/kraken/core"
 	reflect "reflect"
 )
 
@@ -35,6 +35,7 @@ func (m *MockDependencyResolver) EXPECT() *MockDependencyResolverMockRecorder {
 
 // Resolve mocks base method
 func (m *MockDependencyResolver) Resolve(arg0 string, arg1 core.Digest) (core.DigestList, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resolve", arg0, arg1)
 	ret0, _ := ret[0].(core.DigestList)
 	ret1, _ := ret[1].(error)
@@ -43,5 +44,6 @@ func (m *MockDependencyResolver) Resolve(arg0 string, arg1 core.Digest) (core.Di
 
 // Resolve indicates an expected call of Resolve
 func (mr *MockDependencyResolverMockRecorder) Resolve(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resolve", reflect.TypeOf((*MockDependencyResolver)(nil).Resolve), arg0, arg1)
 }

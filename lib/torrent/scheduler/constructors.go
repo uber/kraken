@@ -24,15 +24,15 @@ func NewAgentScheduler(
 	pctx core.PeerContext,
 	cads *store.CADownloadStore,
 	netevents networkevent.Producer,
-	trackers hashring.Ring,
+	trackerRing hashring.PassiveRing,
 	tls *tls.Config) (ReloadableScheduler, error) {
 
 	s, err := newScheduler(
 		config,
-		agentstorage.NewTorrentArchive(stats, cads, metainfoclient.New(trackers, tls)),
+		agentstorage.NewTorrentArchive(stats, cads, metainfoclient.New(trackerRing, tls)),
 		stats,
 		pctx,
-		announceclient.New(pctx, trackers, tls),
+		announceclient.New(pctx, trackerRing, tls),
 		announcequeue.New(),
 		netevents)
 	if err != nil {

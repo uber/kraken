@@ -13,7 +13,6 @@ import (
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
-	"github.com/uber/kraken/lib/hashring"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler"
@@ -89,7 +88,7 @@ func main() {
 		log.Fatalf("Failed to create network event producer: %s", err)
 	}
 
-	trackers, err := config.Tracker.Cluster.Build()
+	trackerRing, err := config.Tracker.Build()
 	if err != nil {
 		log.Fatalf("Error building tracker upstream: %s", err)
 	}
@@ -99,12 +98,8 @@ func main() {
 		log.Fatalf("Error building client tls config: %s", err)
 	}
 
-	hashRing := hashring.New(
-		config.Tracker.HashRing,
-		trackers)
-
 	sched, err := scheduler.NewAgentScheduler(
-		config.Scheduler, stats, pctx, cads, netevents, hashRing, tls)
+		config.Scheduler, stats, pctx, cads, netevents, trackerRing, tls)
 	if err != nil {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}

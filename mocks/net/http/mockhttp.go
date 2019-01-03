@@ -35,6 +35,7 @@ func (m *MockRoundTripper) EXPECT() *MockRoundTripperMockRecorder {
 
 // RoundTrip mocks base method
 func (m *MockRoundTripper) RoundTrip(arg0 *http.Request) (*http.Response, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RoundTrip", arg0)
 	ret0, _ := ret[0].(*http.Response)
 	ret1, _ := ret[1].(error)
@@ -43,5 +44,6 @@ func (m *MockRoundTripper) RoundTrip(arg0 *http.Request) (*http.Response, error)
 
 // RoundTrip indicates an expected call of RoundTrip
 func (mr *MockRoundTripperMockRecorder) RoundTrip(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RoundTrip", reflect.TypeOf((*MockRoundTripper)(nil).RoundTrip), arg0)
 }

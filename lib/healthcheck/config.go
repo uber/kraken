@@ -41,8 +41,8 @@ func (c *MonitorConfig) applyDefaults() {
 	}
 }
 
-// PassiveConfig defines configuration for Passive.
-type PassiveConfig struct {
+// PassiveFilterConfig defines configuration for PassiveFilter.
+type PassiveFilterConfig struct {
 	// Fails is the number of failed requests that must occur during the FailTimeout
 	// period for a host to be marked as unhealthy.
 	Fails int `yaml:"fails"`
@@ -54,7 +54,7 @@ type PassiveConfig struct {
 	FailTimeout time.Duration `yaml:"fail_timeout"`
 }
 
-func (c *PassiveConfig) applyDefaults() {
+func (c *PassiveFilterConfig) applyDefaults() {
 	if c.Fails == 0 {
 		c.Fails = 3
 	}

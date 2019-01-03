@@ -10,6 +10,9 @@ func (f IdentityFilter) Run(addrs stringset.Set) stringset.Set {
 	return addrs.Copy()
 }
 
+// Failed no-ops.
+func (f IdentityFilter) Failed(addr string) {}
+
 // ManualFilter is a Filter whose unhealthy hosts can be manually changed.
 type ManualFilter struct {
 	Unhealthy stringset.Set

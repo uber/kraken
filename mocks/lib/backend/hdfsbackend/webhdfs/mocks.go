@@ -5,8 +5,8 @@
 package mockwebhdfs
 
 import (
-	webhdfs "github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs"
 	gomock "github.com/golang/mock/gomock"
+	webhdfs "github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs"
 	io "io"
 	reflect "reflect"
 )
@@ -36,6 +36,7 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 
 // Create mocks base method
 func (m *MockClient) Create(arg0 string, arg1 io.Reader) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -43,11 +44,13 @@ func (m *MockClient) Create(arg0 string, arg1 io.Reader) error {
 
 // Create indicates an expected call of Create
 func (mr *MockClientMockRecorder) Create(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockClient)(nil).Create), arg0, arg1)
 }
 
 // GetFileStatus mocks base method
 func (m *MockClient) GetFileStatus(arg0 string) (webhdfs.FileStatus, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFileStatus", arg0)
 	ret0, _ := ret[0].(webhdfs.FileStatus)
 	ret1, _ := ret[1].(error)
@@ -56,11 +59,13 @@ func (m *MockClient) GetFileStatus(arg0 string) (webhdfs.FileStatus, error) {
 
 // GetFileStatus indicates an expected call of GetFileStatus
 func (mr *MockClientMockRecorder) GetFileStatus(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFileStatus", reflect.TypeOf((*MockClient)(nil).GetFileStatus), arg0)
 }
 
 // ListFileStatus mocks base method
 func (m *MockClient) ListFileStatus(arg0 string) ([]webhdfs.FileStatus, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListFileStatus", arg0)
 	ret0, _ := ret[0].([]webhdfs.FileStatus)
 	ret1, _ := ret[1].(error)
@@ -69,11 +74,13 @@ func (m *MockClient) ListFileStatus(arg0 string) ([]webhdfs.FileStatus, error) {
 
 // ListFileStatus indicates an expected call of ListFileStatus
 func (mr *MockClientMockRecorder) ListFileStatus(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFileStatus", reflect.TypeOf((*MockClient)(nil).ListFileStatus), arg0)
 }
 
 // Mkdirs mocks base method
 func (m *MockClient) Mkdirs(arg0 string) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Mkdirs", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -81,11 +88,13 @@ func (m *MockClient) Mkdirs(arg0 string) error {
 
 // Mkdirs indicates an expected call of Mkdirs
 func (mr *MockClientMockRecorder) Mkdirs(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Mkdirs", reflect.TypeOf((*MockClient)(nil).Mkdirs), arg0)
 }
 
 // Open mocks base method
 func (m *MockClient) Open(arg0 string, arg1 io.Writer) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -93,11 +102,13 @@ func (m *MockClient) Open(arg0 string, arg1 io.Writer) error {
 
 // Open indicates an expected call of Open
 func (mr *MockClientMockRecorder) Open(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockClient)(nil).Open), arg0, arg1)
 }
 
 // Rename mocks base method
 func (m *MockClient) Rename(arg0, arg1 string) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Rename", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -105,5 +116,6 @@ func (m *MockClient) Rename(arg0, arg1 string) error {
 
 // Rename indicates an expected call of Rename
 func (mr *MockClientMockRecorder) Rename(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rename", reflect.TypeOf((*MockClient)(nil).Rename), arg0, arg1)
 }

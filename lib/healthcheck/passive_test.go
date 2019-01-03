@@ -2,127 +2,63 @@ package healthcheck
 
 import (
 	"testing"
-	"time"
+
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/uber/kraken/lib/hostlist"
+	"github.com/uber/kraken/mocks/lib/healthcheck"
 	"github.com/uber/kraken/utils/stringset"
-
-	"github.com/andres-erbsen/clock"
-	"github.com/stretchr/testify/require"
 )
 
-func TestPassiveUnhealthy(t *testing.T) {
+func TestPassiveResolve(t *testing.T) {
 	require := require.New(t)
 
-	clk := clock.NewMock()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	filter := mockhealthcheck.NewMockPassiveFilter(ctrl)
 
 	x := "x:80"
 	y := "y:80"
 
-	p := NewPassive(
-		PassiveConfig{Fails: 3, FailTimeout: 10 * time.Second},
-		clk,
-		hostlist.Fixture(x, y))
+	p := NewPassive(hostlist.Fixture(x, y), filter)
 
-	all := stringset.New(x, y)
-	resolvedHealthy, resolvedAll := p.Resolve()
-	require.Equal(all, resolvedHealthy)
-	require.Equal(all, resolvedAll)
+	filter.EXPECT().Run(stringset.New(x, y)).Return(stringset.New(x))
 
-	for i := 0; i < 3; i++ {
-		p.Failed(x)
-	}
-
-	healthy := stringset.New(y)
-	resolvedHealthy, resolvedAll = p.Resolve()
-	require.Equal(healthy, resolvedHealthy)
-	require.Equal(all, resolvedAll)
+	require.Equal(stringset.New(x), p.Resolve())
 }
 
-func TestPassiveFailTimeout(t *testing.T) {
+func TestPassiveResolveIgnoresAllUnhealthy(t *testing.T) {
 	require := require.New(t)
 
-	clk := clock.NewMock()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	filter := mockhealthcheck.NewMockPassiveFilter(ctrl)
 
 	x := "x:80"
 	y := "y:80"
 
-	p := NewPassive(
-		PassiveConfig{Fails: 3, FailTimeout: 10 * time.Second},
-		clk,
-		hostlist.Fixture(x, y))
+	p := NewPassive(hostlist.Fixture(x, y), filter)
 
-	p.Failed(x)
-	p.Failed(x)
+	filter.EXPECT().Run(stringset.New(x, y)).Return(stringset.New())
 
-	clk.Add(11 * time.Second)
-
-	p.Failed(x)
-
-	all := stringset.New(x, y)
-	resolvedHealthy, resolvedAll := p.Resolve()
-	require.Equal(all, resolvedHealthy)
-	require.Equal(all, resolvedAll)
+	require.Equal(stringset.New(x, y), p.Resolve())
 }
 
-func TestPassiveFailTimeoutAfterUnhealthy(t *testing.T) {
-	require := require.New(t)
+func TestPassiveFailed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	clk := clock.NewMock()
-
-	x := "x:80"
-	y := "y:80"
-
-	p := NewPassive(
-		PassiveConfig{Fails: 3, FailTimeout: 10 * time.Second},
-		clk,
-		hostlist.Fixture(x, y))
-
-	for i := 0; i < 3; i++ {
-		p.Failed(x)
-	}
-
-	all := stringset.New(x, y)
-	healthy := stringset.New(y)
-	resolvedHealthy, resolvedAll := p.Resolve()
-	require.Equal(healthy, resolvedHealthy)
-	require.Equal(all, resolvedAll)
-
-	clk.Add(5 * time.Second)
-
-	// Stil unhealthy...
-	resolvedHealthy, resolvedAll = p.Resolve()
-	require.Equal(healthy, resolvedHealthy)
-	require.Equal(all, resolvedAll)
-
-	clk.Add(6 * time.Second)
-
-	// Timeout has now elapsed, host is healthy again.
-	resolvedHealthy, resolvedAll = p.Resolve()
-	require.Equal(all, resolvedHealthy)
-	require.Equal(all, resolvedAll)
-}
-
-func TestPassiveIgnoresAllUnhealthy(t *testing.T) {
-	require := require.New(t)
-
-	clk := clock.NewMock()
+	filter := mockhealthcheck.NewMockPassiveFilter(ctrl)
 
 	x := "x:80"
 	y := "y:80"
 
-	p := NewPassive(
-		PassiveConfig{Fails: 3, FailTimeout: 10 * time.Second},
-		clk,
-		hostlist.Fixture(x, y))
+	p := NewPassive(hostlist.Fixture(x, y), filter)
 
-	for i := 0; i < 3; i++ {
-		p.Failed(x)
-		p.Failed(y)
-	}
+	filter.EXPECT().Failed(x)
 
-	all := stringset.New(x, y)
-	resolvedHealthy, resolvedAll := p.Resolve()
-	require.Equal(all, resolvedHealthy)
-	require.Equal(all, resolvedAll)
+	p.Failed(x)
 }
