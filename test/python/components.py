@@ -240,8 +240,7 @@ class Tracker(Component):
             'tracker',
             self.config_file,
             redis=self.redis.addr,
-            origins=yaml_list([o.addr for o in self.origin_cluster.origins]),
-            port=self.port)
+            origins=yaml_list([o.addr for o in self.origin_cluster.origins]))
 
         self.volumes = create_volumes('tracker', self.name)
 
@@ -256,7 +255,8 @@ class Tracker(Component):
             volumes=self.volumes,
             command=[
                 '/usr/bin/kraken-tracker',
-                '-config=/etc/kraken/config/tracker/{config}'.format(config=self.config_file)],
+                '--config=/etc/kraken/config/tracker/{config}'.format(config=self.config_file)],
+                '--port={port}'.format(port=self.instance.port),
             health_check=HealthCheck(format_insecure_curl('localhost:{port}/health'.format(port=self.port))))
 
     @property
@@ -307,11 +307,11 @@ class Origin(Component):
             },
             command=[
                 '/usr/bin/kraken-origin',
-                '-config=/etc/kraken/config/origin/{config}'.format(config=self.config_file),
-                '-blobserver_port={port}'.format(port=self.instance.port),
-                '-blobserver_hostname={hostname}'.format(hostname=self.instance.hostname),
-                '-peer_ip={ip}'.format(ip=get_docker_bridge()),
-                '-peer_port={port}'.format(port=self.instance.peer_port),
+                '--config=/etc/kraken/config/origin/{config}'.format(config=self.config_file),
+                '--blobserver-port={port}'.format(port=self.instance.port),
+                '--blobserver-hostname={hostname}'.format(hostname=self.instance.hostname),
+                '--peer-ip={ip}'.format(ip=get_docker_bridge()),
+                '--peer-port={port}'.format(port=self.instance.peer_port),
             ],
             health_check=HealthCheck(format_insecure_curl('https://localhost:{}/health'.format(self.instance.port))))
 
@@ -380,11 +380,11 @@ class Agent(Component):
             volumes=self.volumes,
             command=[
                 '/usr/bin/kraken-agent',
-                '-config=/etc/kraken/config/agent/{config}'.format(config=self.config_file),
-                '-peer_ip={}'.format(get_docker_bridge()),
-                '-peer_port={port}'.format(port=self.torrent_client_port),
-                '-agent_server_port={port}'.format(port=self.port),
-                '-agent_registry_port={port}'.format(port=self.registry_port),
+                '--config=/etc/kraken/config/agent/{config}'.format(config=self.config_file),
+                '--peer-ip={}'.format(get_docker_bridge()),
+                '--peer-port={port}'.format(port=self.torrent_client_port),
+                '--agent-server-port={port}'.format(port=self.port),
+                '--agent-registry-port={port}'.format(port=self.registry_port),
             ],
             health_check=HealthCheck('curl localhost:{port}/health'.format(port=self.port)))
 
@@ -453,8 +453,8 @@ class Proxy(Component):
             environment={},
             command=[
                 '/usr/bin/kraken-proxy',
-                '-config=/etc/kraken/config/proxy/{config}'.format(config=self.config_file),
-                '-port={port}'.format(port=self.port),
+                '--config=/etc/kraken/config/proxy/{config}'.format(config=self.config_file),
+                '--port={port}'.format(port=self.port),
             ],
             volumes=self.volumes,
             health_check=HealthCheck('curl localhost:{port}/v2/'.format(port=self.port)))
@@ -544,8 +544,8 @@ class BuildIndex(Component):
             environment={},
             command=[
                 '/usr/bin/kraken-build-index',
-                '-config=/etc/kraken/config/build-index/{config}'.format(config=self.config_file),
-                '-port={port}'.format(port=self.instance.port),
+                '--config=/etc/kraken/config/build-index/{config}'.format(config=self.config_file),
+                '--port={port}'.format(port=self.instance.port),
             ],
             volumes=self.volumes,
             health_check=HealthCheck(format_insecure_curl('https://localhost:{}/health'.format(self.instance.port))))
