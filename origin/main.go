@@ -8,7 +8,7 @@ import (
 	_ "github.com/uber/kraken/lib/backend/registrybackend"
 	_ "github.com/uber/kraken/lib/backend/s3backend"
 	_ "github.com/uber/kraken/lib/backend/testfs"
-	"github.com/wagoodman/dive/cmd"
+	"github.com/uber/kraken/origin/cmd"
 )
 
 func main() {
