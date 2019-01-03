@@ -6,9 +6,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/andres-erbsen/clock"
-	"github.com/pressly/chi"
-	"github.com/spf13/cobra"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/blobrefresh"
@@ -30,6 +27,10 @@ import (
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/netutil"
+
+	"github.com/andres-erbsen/clock"
+	"github.com/pressly/chi"
+	"github.com/spf13/cobra"
 )
 
 func init() {

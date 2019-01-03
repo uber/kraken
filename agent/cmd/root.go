@@ -6,8 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/spf13/cobra"
-	"github.com/uber-go/tally"
 	"github.com/uber/kraken/agent/agentserver"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
@@ -21,6 +19,9 @@ import (
 	"github.com/uber/kraken/utils/configutil"
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/netutil"
+
+	"github.com/spf13/cobra"
+	"github.com/uber-go/tally"
 )
 
 func init() {

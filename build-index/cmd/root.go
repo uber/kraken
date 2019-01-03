@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"github.com/spf13/cobra"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/build-index/tagserver"
 	"github.com/uber/kraken/build-index/tagstore"
@@ -20,6 +19,8 @@ import (
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/configutil"
 	"github.com/uber/kraken/utils/log"
+
+	"github.com/spf13/cobra"
 )
 
 func init() {

@@ -1,6 +1,6 @@
 package main
 
-import "github.com/uber/kraken/agent/cmd"
+import "github.com/uber/kraken/proxy/cmd"
 
 func main() {
 	cmd.Execute()

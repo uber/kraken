@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"go.uber.org/zap"
-
 	"github.com/uber/kraken/agent/agentserver"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry"
@@ -14,6 +12,8 @@ import (
 	"github.com/uber/kraken/nginx"
 	"github.com/uber/kraken/tracker/trackerclient"
 	"github.com/uber/kraken/utils/httputil"
+
+	"go.uber.org/zap"
 )
 
 // Config defines agent configuration.
