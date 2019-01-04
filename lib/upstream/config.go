@@ -1,6 +1,7 @@
 package upstream
 
 import (
+	"github.com/uber/kraken/lib/hashring"
 	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/utils/log"
@@ -72,8 +73,8 @@ func (c ActiveConfig) StableAddr() (string, error) {
 // PassiveConfig composes host configuruation for an upstream service with a
 // passive health check.
 type PassiveConfig struct {
-	Hosts       hostlist.Config           `yaml:"hosts"`
-	HealthCheck healthcheck.PassiveConfig `yaml:"healthcheck"`
+	Hosts       hostlist.Config                 `yaml:"hosts"`
+	HealthCheck healthcheck.PassiveFilterConfig `yaml:"healthcheck"`
 }
 
 // Build creates healthcheck.List enabled with passive health checks.
@@ -82,5 +83,24 @@ func (c PassiveConfig) Build() (healthcheck.List, error) {
 	if err != nil {
 		return nil, err
 	}
-	return healthcheck.NewPassive(c.HealthCheck, clock.New(), hosts), nil
+	f := healthcheck.NewPassiveFilter(c.HealthCheck, clock.New())
+	return healthcheck.NewPassive(hosts, f), nil
+}
+
+// PassiveRingConfig composes host configuration for an upstream service with
+// a passively health checked hash ring.
+type PassiveHashRingConfig struct {
+	Hosts       hostlist.Config                 `yaml:"hosts"`
+	HealthCheck healthcheck.PassiveFilterConfig `yaml:"healthcheck"`
+	HashRing    hashring.Config                 `yaml:"hashring"`
+}
+
+// Build creates a hashring.PassiveRing.
+func (c PassiveHashRingConfig) Build() (hashring.PassiveRing, error) {
+	hosts, err := hostlist.New(c.Hosts)
+	if err != nil {
+		return nil, err
+	}
+	f := healthcheck.NewPassiveFilter(c.HealthCheck, clock.New())
+	return hashring.NewPassive(c.HashRing, hosts, f), nil
 }

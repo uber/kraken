@@ -5,7 +5,7 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/blobrefresh"
-	"github.com/uber/kraken/lib/healthcheck"
+	"github.com/uber/kraken/lib/hashring"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler/announcequeue"
@@ -24,7 +24,7 @@ func NewAgentScheduler(
 	pctx core.PeerContext,
 	cads *store.CADownloadStore,
 	netevents networkevent.Producer,
-	trackers healthcheck.List,
+	trackers hashring.PassiveRing,
 	tls *tls.Config) (ReloadableScheduler, error) {
 
 	s, err := newScheduler(

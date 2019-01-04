@@ -17,17 +17,17 @@ import (
 
 // Config defines agent configuration.
 type Config struct {
-	ZapLogging      zap.Config                  `yaml:"zap"`
-	Metrics         metrics.Config              `yaml:"metrics"`
-	CADownloadStore store.CADownloadStoreConfig `yaml:"store"`
-	Registry        dockerregistry.Config       `yaml:"registry"`
-	Scheduler       scheduler.Config            `yaml:"scheduler"`
-	PeerIDFactory   core.PeerIDFactory          `yaml:"peer_id_factory"`
-	NetworkEvent    networkevent.Config         `yaml:"network_event"`
-	Tracker         upstream.PassiveConfig      `yaml:"tracker"`
-	BuildIndex      upstream.PassiveConfig      `yaml:"build_index"`
-	AgentServer     agentserver.Config          `yaml:"agentserver"`
-	RegistryBackup  string                      `yaml:"registry_backup"`
-	Nginx           nginx.Config                `yaml:"nginx"`
-	TLS             httputil.TLSConfig          `yaml:"tls"`
+	ZapLogging      zap.Config                     `yaml:"zap"`
+	Metrics         metrics.Config                 `yaml:"metrics"`
+	CADownloadStore store.CADownloadStoreConfig    `yaml:"store"`
+	Registry        dockerregistry.Config          `yaml:"registry"`
+	Scheduler       scheduler.Config               `yaml:"scheduler"`
+	PeerIDFactory   core.PeerIDFactory             `yaml:"peer_id_factory"`
+	NetworkEvent    networkevent.Config            `yaml:"network_event"`
+	Tracker         upstream.PassiveHashRingConfig `yaml:"tracker"`
+	BuildIndex      upstream.PassiveConfig         `yaml:"build_index"`
+	AgentServer     agentserver.Config             `yaml:"agentserver"`
+	RegistryBackup  string                         `yaml:"registry_backup"`
+	Nginx           nginx.Config                   `yaml:"nginx"`
+	TLS             httputil.TLSConfig             `yaml:"tls"`
 }
