@@ -4,7 +4,8 @@ import (
 	"testing"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/hashring"
+	"github.com/uber/kraken/lib/healthcheck"
+	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/tracker/metainfoclient"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/testutil"
@@ -13,7 +14,7 @@ import (
 )
 
 func newMetaInfoClient(addr string) metainfoclient.Client {
-	return metainfoclient.New(hashring.Fixture(addr), nil)
+	return metainfoclient.New(healthcheck.NoopFailed(hostlist.Fixture(addr)), nil)
 }
 
 func TestGetMetaInfoHandlerFetchesFromOrigin(t *testing.T) {

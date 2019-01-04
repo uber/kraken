@@ -40,7 +40,7 @@ func (c ActiveConfig) Build(opts ...ActiveOption) (healthcheck.List, error) {
 	}
 	if c.HealthCheck.Disabled {
 		log.With("hosts", c.Hosts).Warn("Health checks disabled")
-		return healthcheck.NoopList(hosts), nil
+		return healthcheck.NoopFailed(hosts), nil
 	}
 	c.checker = healthcheck.Default(nil)
 	for _, opt := range opts {
@@ -48,7 +48,7 @@ func (c ActiveConfig) Build(opts ...ActiveOption) (healthcheck.List, error) {
 	}
 	filter := healthcheck.NewFilter(c.HealthCheck.Filter, c.checker)
 	monitor := healthcheck.NewMonitor(c.HealthCheck.Monitor, hosts, filter)
-	return monitor, nil
+	return healthcheck.NoopFailed(monitor), nil
 }
 
 // StableAddr returns a stable address that can be advertised as the address

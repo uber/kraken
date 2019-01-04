@@ -24,19 +24,13 @@ func TestPassiveUnhealthy(t *testing.T) {
 		clk,
 		hostlist.Fixture(x, y))
 
-	all := stringset.New(x, y)
-	resolvedHealthy, resolvedAll := p.Resolve()
-	require.Equal(all, resolvedHealthy)
-	require.Equal(all, resolvedAll)
+	require.Equal(stringset.New(x, y), p.Resolve())
 
 	for i := 0; i < 3; i++ {
 		p.Failed(x)
 	}
 
-	healthy := stringset.New(y)
-	resolvedHealthy, resolvedAll = p.Resolve()
-	require.Equal(healthy, resolvedHealthy)
-	require.Equal(all, resolvedAll)
+	require.Equal(stringset.New(y), p.Resolve())
 }
 
 func TestPassiveFailTimeout(t *testing.T) {
@@ -59,10 +53,7 @@ func TestPassiveFailTimeout(t *testing.T) {
 
 	p.Failed(x)
 
-	all := stringset.New(x, y)
-	resolvedHealthy, resolvedAll := p.Resolve()
-	require.Equal(all, resolvedHealthy)
-	require.Equal(all, resolvedAll)
+	require.Equal(stringset.New(x, y), p.Resolve())
 }
 
 func TestPassiveFailTimeoutAfterUnhealthy(t *testing.T) {
@@ -82,25 +73,17 @@ func TestPassiveFailTimeoutAfterUnhealthy(t *testing.T) {
 		p.Failed(x)
 	}
 
-	all := stringset.New(x, y)
-	healthy := stringset.New(y)
-	resolvedHealthy, resolvedAll := p.Resolve()
-	require.Equal(healthy, resolvedHealthy)
-	require.Equal(all, resolvedAll)
+	require.Equal(stringset.New(y), p.Resolve())
 
 	clk.Add(5 * time.Second)
 
 	// Stil unhealthy...
-	resolvedHealthy, resolvedAll = p.Resolve()
-	require.Equal(healthy, resolvedHealthy)
-	require.Equal(all, resolvedAll)
+	require.Equal(stringset.New(y), p.Resolve())
 
 	clk.Add(6 * time.Second)
 
 	// Timeout has now elapsed, host is healthy again.
-	resolvedHealthy, resolvedAll = p.Resolve()
-	require.Equal(all, resolvedHealthy)
-	require.Equal(all, resolvedAll)
+	require.Equal(stringset.New(x, y), p.Resolve())
 }
 
 func TestPassiveIgnoresAllUnhealthy(t *testing.T) {
@@ -121,8 +104,5 @@ func TestPassiveIgnoresAllUnhealthy(t *testing.T) {
 		p.Failed(y)
 	}
 
-	all := stringset.New(x, y)
-	resolvedHealthy, resolvedAll := p.Resolve()
-	require.Equal(all, resolvedHealthy)
-	require.Equal(all, resolvedAll)
+	require.Equal(stringset.New(x, y), p.Resolve())
 }

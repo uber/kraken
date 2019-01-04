@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/hashring"
+	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/utils/backoff"
 	"github.com/uber/kraken/utils/httputil"
 )
@@ -26,26 +26,26 @@ type Client interface {
 }
 
 type client struct {
-	ring    hashring.Ring
+	hosts   healthcheck.List
 	tls     *tls.Config
 	backoff *backoff.Backoff
 }
 
 // New returns a new Client.
-func New(ring hashring.Ring, tls *tls.Config) Client {
-	return &client{ring, tls, backoff.New(backoff.Config{RetryTimeout: 15 * time.Minute})}
+func New(hosts healthcheck.List, tls *tls.Config) Client {
+	return &client{hosts, tls, backoff.New(backoff.Config{RetryTimeout: 15 * time.Minute})}
 }
 
 // Download returns the MetaInfo associated with name. Returns ErrNotFound if
 // no torrent exists under name.
 func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, error) {
-	addrs := c.ring.Locations(d)
+	addrs := c.hosts.Resolve().Sample(3)
 	if len(addrs) == 0 {
 		return nil, errors.New("no hosts could be resolved")
 	}
 	var resp *http.Response
 	var err error
-	for _, addr := range addrs {
+	for addr := range addrs {
 		resp, err = httputil.PollAccepted(
 			fmt.Sprintf(
 				"http://%s/namespace/%s/blobs/%s/metainfo",
@@ -55,7 +55,7 @@ func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, erro
 			httputil.SendTLS(c.tls))
 		if err != nil {
 			if httputil.IsNetworkError(err) {
-				c.ring.Failed(addr)
+				c.hosts.Failed(addr)
 				continue
 			}
 			if httputil.IsNotFound(err) {

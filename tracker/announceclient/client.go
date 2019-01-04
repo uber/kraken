@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/hashring"
+	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/utils/httputil"
 )
 
@@ -53,14 +53,14 @@ type Client interface {
 }
 
 type client struct {
-	pctx core.PeerContext
-	ring hashring.Ring
-	tls  *tls.Config
+	pctx  core.PeerContext
+	hosts healthcheck.List
+	tls   *tls.Config
 }
 
 // New creates a new client.
-func New(pctx core.PeerContext, ring hashring.Ring, tls *tls.Config) Client {
-	return &client{pctx, ring, tls}
+func New(pctx core.PeerContext, hosts healthcheck.List, tls *tls.Config) Client {
+	return &client{pctx, hosts, tls}
 }
 
 // Announce versionss.
@@ -94,12 +94,12 @@ func (c *client) Announce(
 	if err != nil {
 		return nil, 0, fmt.Errorf("marshal request: %s", err)
 	}
-	addrs := c.ring.Locations(d)
+	addrs := c.hosts.Resolve().Sample(3)
 	if len(addrs) == 0 {
 		return nil, 0, errors.New("no hosts could be resolve")
 	}
 	var httpResp *http.Response
-	for _, addr := range addrs {
+	for addr := range addrs {
 		method, url := getEndpoint(version, addr, h)
 		httpResp, err = httputil.Send(
 			method,
@@ -109,7 +109,7 @@ func (c *client) Announce(
 			httputil.SendTLS(c.tls))
 		if err != nil {
 			if httputil.IsNetworkError(err) {
-				c.ring.Failed(addr)
+				c.hosts.Failed(addr)
 				continue
 			}
 			return nil, 0, err
