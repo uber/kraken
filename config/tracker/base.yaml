@@ -1,5 +1,3 @@
-port: 8351
-
 zap:
   level: info
   development: false

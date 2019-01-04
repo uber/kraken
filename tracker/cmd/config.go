@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"go.uber.org/zap"
@@ -16,7 +16,6 @@ import (
 // Config defines tracker configuration.
 type Config struct {
 	ZapLogging        zap.Config               `yaml:"zap"`
-	Port              int                      `yaml:"port"`
 	PeerStore         peerstore.Config         `yaml:"peerstore"`
 	OriginStore       originstore.Config       `yaml:"originstore"`
 	TrackerServer     trackerserver.Config     `yaml:"trackerserver"`

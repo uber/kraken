@@ -1,8 +1,6 @@
-package main
+package cmd
 
 import (
-	"go.uber.org/zap"
-
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/blobrefresh"
@@ -18,6 +16,8 @@ import (
 	"github.com/uber/kraken/nginx"
 	"github.com/uber/kraken/origin/blobserver"
 	"github.com/uber/kraken/utils/httputil"
+
+	"go.uber.org/zap"
 )
 
 // Config defines origin server configuration.

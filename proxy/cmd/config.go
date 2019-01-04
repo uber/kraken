@@ -1,8 +1,6 @@
-package main
+package cmd
 
 import (
-	"go.uber.org/zap"
-
 	"github.com/uber/kraken/lib/dockerregistry"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/upstream"
@@ -10,6 +8,8 @@ import (
 	"github.com/uber/kraken/nginx"
 	"github.com/uber/kraken/proxy/registryoverride"
 	"github.com/uber/kraken/utils/httputil"
+
+	"go.uber.org/zap"
 )
 
 // Config defines proxy configuration
