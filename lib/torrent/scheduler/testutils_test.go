@@ -18,6 +18,7 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/hashring"
+	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler/announcequeue"
@@ -118,7 +119,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 		IP:     "localhost",
 		Port:   findFreePort(),
 	}
-	ac := announceclient.New(pctx, hashring.Fixture(m.trackerAddr), nil)
+	ac := announceclient.New(pctx, hashring.NoopPassiveRing(hostlist.Fixture(m.trackerAddr)), nil)
 	tp := networkevent.NewTestProducer()
 
 	s, err := newScheduler(config, ta, stats, pctx, ac, announcequeue.New(), tp, options...)

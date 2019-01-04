@@ -218,8 +218,7 @@ func NewClusterClient(hosts healthcheck.List, config *tls.Config) Client {
 }
 
 func (cc *clusterClient) do(request func(c Client) error) error {
-	addrs, _ := cc.hosts.Resolve()
-	addrs = addrs.Sample(3)
+	addrs := cc.hosts.Resolve().Sample(3)
 	if len(addrs) == 0 {
 		return errors.New("cluster client: no hosts could be resolved")
 	}

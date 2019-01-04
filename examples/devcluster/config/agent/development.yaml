@@ -1,10 +1,9 @@
 extends: base.yaml
 
 tracker:
-  cluster:
-    hosts:
-      static:
-        - host.docker.internal:15003
+  hosts:
+    static:
+      - host.docker.internal:15003
 
 build_index:
   hosts:

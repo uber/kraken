@@ -48,18 +48,6 @@ func (mr *MockRingMockRecorder) Contains(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Contains", reflect.TypeOf((*MockRing)(nil).Contains), arg0)
 }
 
-// Failed mocks base method
-func (m *MockRing) Failed(arg0 string) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Failed", arg0)
-}
-
-// Failed indicates an expected call of Failed
-func (mr *MockRingMockRecorder) Failed(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Failed", reflect.TypeOf((*MockRing)(nil).Failed), arg0)
-}
-
 // Locations mocks base method
 func (m *MockRing) Locations(arg0 core.Digest) []string {
 	m.ctrl.T.Helper()
@@ -72,6 +60,18 @@ func (m *MockRing) Locations(arg0 core.Digest) []string {
 func (mr *MockRingMockRecorder) Locations(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Locations", reflect.TypeOf((*MockRing)(nil).Locations), arg0)
+}
+
+// Monitor mocks base method
+func (m *MockRing) Monitor(arg0 <-chan struct{}) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Monitor", arg0)
+}
+
+// Monitor indicates an expected call of Monitor
+func (mr *MockRingMockRecorder) Monitor(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Monitor", reflect.TypeOf((*MockRing)(nil).Monitor), arg0)
 }
 
 // Refresh mocks base method

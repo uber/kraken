@@ -88,7 +88,7 @@ func run() {
 		log.Fatalf("Error building origin host list: %s", err)
 	}
 
-	r := blobclient.NewClientResolver(blobclient.NewProvider(blobclient.WithTLS(tls)), healthcheck.HostList(origins))
+	r := blobclient.NewClientResolver(blobclient.NewProvider(blobclient.WithTLS(tls)), origins)
 	originClient := blobclient.NewClusterClient(r)
 
 	localOriginDNS, err := config.Origin.StableAddr()
@@ -105,7 +105,7 @@ func run() {
 	if err != nil {
 		log.Fatalf("Error building cluster host list: %s", err)
 	}
-	neighbors, err := hostlist.StripLocal(healthcheck.HostList(cluster), port)
+	neighbors, err := hostlist.StripLocal(cluster, port)
 	if err != nil {
 		log.Fatalf("Error stripping local machine from cluster list: %s", err)
 	}

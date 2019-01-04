@@ -24,7 +24,7 @@ func NewAgentScheduler(
 	pctx core.PeerContext,
 	cads *store.CADownloadStore,
 	netevents networkevent.Producer,
-	trackers hashring.Ring,
+	trackers hashring.PassiveRing,
 	tls *tls.Config) (ReloadableScheduler, error) {
 
 	s, err := newScheduler(

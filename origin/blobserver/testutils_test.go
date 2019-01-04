@@ -42,13 +42,10 @@ func init() {
 }
 
 func newHashRing(maxReplica int) hashring.Ring {
-	monitor := healthcheck.NewMonitor(
-		healthcheck.MonitorConfig{},
-		hostlist.Fixture(master1, master2, master3),
-		healthcheck.IdentityFilter{})
 	return hashring.New(
 		hashring.Config{MaxReplica: maxReplica},
-		monitor)
+		hostlist.Fixture(master1, master2, master3),
+		healthcheck.IdentityFilter{})
 }
 
 func hashRingNoReplica() hashring.Ring   { return newHashRing(1) }

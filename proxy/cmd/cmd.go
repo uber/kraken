@@ -81,7 +81,7 @@ func run() {
 		log.Fatalf("Error building origin host list: %s", err)
 	}
 
-	r := blobclient.NewClientResolver(blobclient.NewProvider(blobclient.WithTLS(tls)), healthcheck.HostList(origins))
+	r := blobclient.NewClientResolver(blobclient.NewProvider(blobclient.WithTLS(tls)), origins)
 	originCluster := blobclient.NewClusterClient(r)
 
 	buildIndexes, err := config.BuildIndex.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))
