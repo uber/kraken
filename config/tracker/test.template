@@ -1,7 +1,5 @@
 extends: base.yaml
 
-port: {port}
-
 peerstore:
   redis:
     addr: {redis}
