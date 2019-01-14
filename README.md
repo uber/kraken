@@ -19,13 +19,12 @@ Following are some highlights of Kraken:
   are easy to add.
 - **Lossless cross cluster replication**. Kraken supports rule-based async replication between
   clusters.
-- Minimal dependencies. Other than pluggable storage, Kraken only has an optional dependency on DNS.
+- **Minimal dependencies**. Other than pluggable storage, Kraken only has an optional dependency on
+  DNS.
 
 Kraken has been in production at Uber since early 2018. In our busiest cluster, Kraken distributes
 1 million 0-100MB blobs, 600k 100MB-1G blobs, and 100k 1G+ blobs per day. At its peak production
 load, Kraken distributes 20K 100MB-1G blobs in under 30 sec.
-
-Kraken is a P2P-powered Docker registry which focuses on scalability and availability.
 
 - [Design](#design)
 - [Architecture](#architecture)
@@ -124,7 +123,7 @@ reliable hybrid cloud setup.
 - If Docker registry throughput is not the bottleneck in your deployment workflow, switching to
 Kraken will not magically speed up your `docker pull`. To actually speed up `docker pull`, consider
 switching to [Makisu](https://github.com/uber/makisu) to improve layer reusability at build time, or
-tweak compression ratios, since `docker pull` spends most of the time on data decompression.
+tweak compression ratios, as `docker pull` spends most of the time on data decompression.
 - Mutating tags is allowed, however the behavior is undefined. A few things will go wrong:
 replication probably won't trigger, and most tag lookups will probably still return the old tag due
 to caching. We are working supporting this functionality better. If you need mutation (e.g. updating
