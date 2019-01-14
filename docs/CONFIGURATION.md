@@ -43,9 +43,11 @@ cluster using Docker-for-Mac, and need to updated for production setups.
 More in [examples/devcluster/README.md](../examples/devcluster/README.md)
 
 # Configuring Peer To Peer Download
+
 Kraken's peer-to-peer network consists of agents, origins and trackers. Origins are a few dedicated seeders that downloads data from a storage backend (HDFS, S3, etc). Agents are leechers that download from each other and from origins and can later become seeders after they finish downloading. Agents announce to trackers periodically to update the torrent they are currently downloading and in return get a list of peers that are also downloading the same torrent. More details in [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## Tracker peer set TTI
+
 >tracker.yaml
 >```
 >peerstore:
@@ -61,6 +63,7 @@ Then, the tracker returns a random set of peers selecting from `max_peer_set_win
 ## Announce interval `TODO(evelynl94)`
 
 ## Bandwidth
+
 Download and upload bandwidths are configurable, avoiding peers to saturate the host network.
 >agent.yaml/origin.yaml
 >```
@@ -73,6 +76,7 @@ Download and upload bandwidths are configurable, avoiding peers to saturate the 
 >```
 
 ## Connection limit
+
 Number of connections per torrent can be limited by:
 >agent.yaml/origin.yaml
 >```
@@ -85,6 +89,7 @@ There is no limit on number of torrents a peer can download simultaneously.
 ## Pipeline limit `TODO(evelynl94)`
 
 ## Seeder TTI
+
 SeederTTI is the duration a completed torrent will exist without being read from before being removed from in-memory archive.
 >agent.yaml/origin.yaml
 >```
@@ -94,6 +99,7 @@ SeederTTI is the duration a completed torrent will exist without being read from
 However, until it is deleted by periodic storage purge, completed torrents will remain on disk and can be re-opened on another peer's request.
 
 ## Torrent TTI on disk
+
 Both agents and origins can be configured to cleanup idle torrents on disk periodically.
 >agent.yaml/origin.yaml
 >```
@@ -115,6 +121,7 @@ For origins, the number of files can also be limited as origins are dedicated se
 >```
 
 # Configuring Hash Ring
+
 Both orgin and tracker clusters are self-healing hash rings and both can be represented by either a dns name or a static list of hosts.
 
 We use redenzvous hashing for constructing ring membership.
@@ -127,9 +134,9 @@ Take an origin cluster for example:
 >cluster:
 >   hosts:
 >       static:
->       - origin1:15005
->       - origin2:15055
->       - origin3:15055
+>       - origin1:15002
+>       - origin2:15002
+>       - origin3:15002
 >```
 >origin-dns.yaml
 >```
@@ -137,12 +144,15 @@ Take an origin cluster for example:
 >   max_replica: 2
 >cluster:
 >   hosts:
->       dns: origin.example.com:15055
+>       dns: origin.example.com:15002
 >```
 
 ## Health check for hash rings
+
 When a node in the hash ring is considered as unhealthy, the ring client will route requests to the next healthy node with the highest score. There are two ways to do health check:
+
 ### Active health check
+
 Origins do health check for each other in the ring as the cluster is usually smaller.
 >origin.yaml
 >```
@@ -154,7 +164,9 @@ Origins do health check for each other in the ring as the cluster is usually sma
 >       monitor:
 >           interval: 30s
 Above configures health check ping from one origin to others every 30 seconds. If 3 or more consecutive health checkes fail for an origin, it is marked as unhealthy. Later, if 2 or more consecutive health checks succeed for the same origin, it is marked as healthy again. Initially, all hosts are healthy.
+
 ### Passive health check
+
 Agents health checks tracker, piggybacking on the announce requests.
 >agent.yaml
 >```
@@ -167,6 +179,7 @@ Agents health checks tracker, piggybacking on the announce requests.
 As shown in this example, if 3 or more consecutive announce requests to one tracker fail with network error, the host is marked as unhealthy for 5 minutes. The agent will not send requests to this host until after timeout.
 
 # Configuring Storage Backend Bandwidth on Origin
+
 When transfering data from and to its storage backend, origins can be configured with download and upload bandwidthes. Specially if you are using a cloud storage provider, this is helpful to prevent origins from saturating the network link.
 >origin.yaml
 >```
