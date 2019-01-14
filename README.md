@@ -8,8 +8,9 @@ Kraken is a P2P-powered Docker registry which focuses on scalability and availab
 # Features
 
 Following are some highlights of Kraken:
-- **Highly scalable**. It's capable of distributing docker images at > 50% of max download speed
-  limit on every host; Cluster size and image size do not have significant impact on download speed.
+- **Highly scalable**. Kraken is capable of distributing docker images at > 50% of max download
+  speed limit on every host. Cluster size and image size do not have significant impact on download
+  speed.
   - Supports at least 8k hosts per cluster.
   - Supports arbitrarily large blobs/layers. We normally limit max size to 20G for best performance.
 - **Highly available**. No component is a single point of failure.
