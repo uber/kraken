@@ -121,9 +121,20 @@ reliable hybrid cloud setup.
 
 # Limitations
 
-- If docker registry throughput wasn't the bottleneck in your deployment workflow, switching to Kraken wouldn't magically speed up your `docker pull`, because docker spends most of the time on data decompression. To actually speed up `docker pull`, consider switching to [Makisu](https://github.com/uber/makisu) to tweak compression ratio at build time, and then use Kraken to distribute uncompressed images, at the cost of additional IO.
-- Kraken's cross cluster replication mechanism cannot handle tag mutation (handling that properly would require a globally consistent key-value store). Updating an existing tag (like `latest`) will not trigger replication. If that's required, please consider implementing your own index component on top of your prefered key-value store solution.
-- Kraken is supposed to work with blobs of any size, and download speed wouldn't be impacted by blob size. However, as blobs grow bigger, GC and replication gets more expensive too, and could cause disk space fluctuation in origin cluster. In practice it's better to split extra large blobs into < 10G chunks.
+- If Docker registry throughput is not the bottleneck in your deployment workflow, switching to
+Kraken will not magically speed up your `docker pull`. To actually speed up `docker pull`, consider
+switching to [Makisu](https://github.com/uber/makisu) to improve layer reusability at build time, or
+tweak compression ratios, since `docker pull` spends most of the time on data decompression.
+- Mutating tags is allowed, however the behavior is undefined. A few things will go wrong:
+replication probably won't trigger, and most tag lookups will probably still return the old tag due
+to caching. We are working supporting this functionality better. If you need mutation (e.g. updating
+a latest tag) right now, please consider implementing your own index component on top of a
+consistent key-value store.
+- Theoretically, Kraken should distribute blobs of any size without significant performance
+degredation, but at Uber we enforce a 20G limit and cannot endorse of the production use of
+ultra-large blobs (i.e. 100G+). Peers enforce connection limits on a per blob basis, and new peers
+might be starved for connections if no peers become seeders relatively soon. If you have ultra-large
+blobs you'd like to distribute, we recommend breaking them into <10G chunks first.
 
 # Contributing
 
