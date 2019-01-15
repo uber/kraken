@@ -12,8 +12,11 @@ Kraken has been in production at Uber since early 2018. In our busiest cluster, 
 1 million 0-100MB blobs, 600k 100MB-1G blobs, and 100k 1G+ blobs per day. At its peak production
 load, Kraken distributes 20K 100MB-1G blobs in under 30 sec.
 
-Visualization of a small Kraken cluster at work:
+Below is the visualization of a small Kraken cluster at work:
+
 ![](assets/visualization.gif)
+
+# Table of Contents
 
 - [Features](#features)
 - [Design](#design)
@@ -106,6 +109,7 @@ containers with development configuration:
 $ make devcluster
 ```
 
+Protoc and Docker are required for making dev-cluster work on your laptop.
 For more information on devcluster, please check out devcluster [README](examples/devcluster/README.md).
 For information about how to configure and use Kraken, please refer to the [documentation](docs/CONFIGURATION.md).
 
