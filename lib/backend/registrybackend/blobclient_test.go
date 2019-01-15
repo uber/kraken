@@ -16,6 +16,15 @@ import (
 	"github.com/uber/kraken/utils/testutil"
 )
 
+func TestClientFactory(t *testing.T) {
+	require := require.New(t)
+
+	config := Config{}
+	f := blobClientFactory{}
+	_, err := f.Create(config, nil)
+	require.NoError(err)
+}
+
 func TestBlobDownloadBlobSuccess(t *testing.T) {
 	require := require.New(t)
 

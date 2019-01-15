@@ -39,6 +39,19 @@ func (m *clientMocks) new() *Client {
 	}
 	return c
 }
+func TestClientFactory(t *testing.T) {
+	require := require.New(t)
+
+	config := Config{
+		NameNodes:     []string{"some-name-node"},
+		RootDirectory: "/root",
+		NamePath:      "identity",
+		testing:       true,
+	}
+	f := factory{}
+	_, err := f.Create(config, nil)
+	require.NoError(err)
+}
 
 func TestClientStat(t *testing.T) {
 	require := require.New(t)

@@ -6,16 +6,21 @@ import (
 	. "github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/namepath"
 	"github.com/uber/kraken/lib/backend/testfs"
+	"github.com/uber/kraken/mocks/lib/backend"
 	"github.com/uber/kraken/utils/bandwidth"
 	"github.com/uber/kraken/utils/stringset"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
 
 func TestManagerNamespaceMatching(t *testing.T) {
-	c1 := ClientFixture()
-	c2 := ClientFixture()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	c1 := mockbackend.NewMockClient(ctrl)
+	c2 := mockbackend.NewMockClient(ctrl)
 
 	tests := []struct {
 		namespace string
@@ -35,15 +40,27 @@ func TestManagerNamespaceMatching(t *testing.T) {
 
 			result, err := m.GetClient(test.namespace)
 			require.NoError(err)
-			require.True(test.expected.(*TestClient) == result.(*TestClient))
+			require.True(
+				test.expected.(*mockbackend.MockClient) == result.(*mockbackend.MockClient))
 		})
 	}
 }
 
+func TestManagerErrDuplicateNamespace(t *testing.T) {
+	require := require.New(t)
+
+	c := &NoopClient{}
+	m := ManagerFixture()
+	require.NoError(m.Register("static", c))
+	require.Error(m.Register("static", c))
+}
+
 func TestManagerErrNamespaceNotFound(t *testing.T) {
+	require := require.New(t)
+
 	m := ManagerFixture()
 	_, err := m.GetClient("no-match")
-	require.Equal(t, ErrNamespaceNotFound, err)
+	require.Equal(ErrNamespaceNotFound, err)
 }
 
 func TestManagerNamespaceOrdering(t *testing.T) {

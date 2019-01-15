@@ -51,6 +51,25 @@ func (m *clientMocks) new() *Client {
 	return c
 }
 
+func TestClientFactory(t *testing.T) {
+	require := require.New(t)
+
+	config := Config{
+		Username:      "test-user",
+		Region:        "test-region",
+		Bucket:        "test-bucket",
+		NamePath:      "identity",
+		RootDirectory: "/root",
+	}
+	var auth AuthConfig
+	auth.S3.AccessKeyID = "accesskey"
+	auth.S3.AccessSecretKey = "secret"
+	userAuth := UserAuthConfig{"test-user": auth}
+	f := factory{}
+	_, err := f.Create(config, userAuth)
+	require.NoError(err)
+}
+
 func TestClientStat(t *testing.T) {
 	require := require.New(t)
 
