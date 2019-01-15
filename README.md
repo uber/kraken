@@ -101,8 +101,8 @@ containers with development configuration:
 $ make devcluster
 ```
 
-For more information on devcluster, please check out devcluster [README](examples/devcluster/README.md)
-For information about how to configure and use Kraken, please refer to the [documentation](docs/CONFIGURATION.md)
+For more information on devcluster, please check out devcluster [README](examples/devcluster/README.md).
+For information about how to configure and use Kraken, please refer to the [documentation](docs/CONFIGURATION.md).
 
 # Comparison With Other Projects
 
@@ -113,9 +113,9 @@ in the cluster.
 While the supernode would be able to make optimial decisions, the throughput of the whole cluster is
 limited by the processing power of one or a few hosts, and the performance would degrade linearly as
 either blob size or cluster size increases.
+
 Kraken's tracker only helps orchestrate the connection graph, and leaves negotiation of actual data
 tranfer to individual peers, so Kraken scales better with large blobs.
-
 On top of that, Kraken is HA and supports cross cluster replication, both are required for a
 reliable hybrid cloud setup.
 
