@@ -3,7 +3,27 @@
 [![Build Status](https://travis-ci.org/uber/kraken.svg?branch=master)](https://travis-ci.org/uber/kraken)
 [![Github Release](https://img.shields.io/github/release/uber/kraken.svg)](https://github.com/uber/kraken/releases)
 
-Kraken is a P2P-powered Docker registry which focuses on scalability and availability.
+Kraken is a P2P-powered Docker registry which focuses on scalability and availability. It is
+designed for docker image management, replication and distribribution in a hybrid cloud environment.
+With pluggable backend support, Kraken can also be plugged into existing docker registry setups
+simply as the distribution layer.
+
+Kraken has been in production at Uber since early 2018. In our busiest cluster, Kraken distributes
+1 million 0-100MB blobs, 600k 100MB-1G blobs, and 100k 1G+ blobs per day. At its peak production
+load, Kraken distributes 20K 100MB-1G blobs in under 30 sec.
+
+Visualization of a small Kraken cluster at work:
+![](assets/visualization.gif)
+
+- [Features](#features)
+- [Design](#design)
+- [Architecture](#architecture)
+- [Benchmark](#benchmark)
+- [Usage](#usage)
+- [Comparison With Other Projects](#comparison-with-other-projects)
+- [Limitations](#limitations)
+- [Contributing](#contributing)
+- [Contact](#contact)
 
 # Features
 
@@ -23,22 +43,7 @@ Following are some highlights of Kraken:
 - **Minimal dependencies**. Other than pluggable storage, Kraken only has an optional dependency on
   DNS.
 
-Kraken has been in production at Uber since early 2018. In our busiest cluster, Kraken distributes
-1 million 0-100MB blobs, 600k 100MB-1G blobs, and 100k 1G+ blobs per day. At its peak production
-load, Kraken distributes 20K 100MB-1G blobs in under 30 sec.
-
-- [Design](#design)
-- [Architecture](#architecture)
-- [Benchmark](#benchmark)
-- [Usage](#usage)
-- [Comparison With Other Projects](#comparison-with-other-projects)
-- [Limitations](#limitations)
-- [Contributing](#contributing)
-- [Contact](#contact)
-
 # Design
-Visualization of a small Kraken cluster at work:
-![](assets/visualization.gif)
 
 The high level idea of Kraken is to have a small number of dedicated hosts seed content to a network
 of agents running on each host in the cluster.
@@ -105,6 +110,20 @@ For more information on devcluster, please check out devcluster [README](example
 For information about how to configure and use Kraken, please refer to the [documentation](docs/CONFIGURATION.md).
 
 # Comparison With Other Projects
+
+## BitTorrent
+
+The P2P part of Kraken is similar to a traditional BitTorrent network, but not exactly the same.
+We started Kraken using BitTorrent protocol, but changed it later for easier integration with
+storage solutions and various performance optimizations.
+
+The problem Kraken is trying to solve is slightly different with what BitTorrent was designed for.
+Kraken's goal is to reduce global max download time and communication overhead in a stable
+environment, while BitTorrent's designed for unpreditable environment, so it needs to punish bad
+behaviors and tries to preserve more copies of scarce data.
+
+Despite the differences, we re-examine Kraken's protocol from time to time, and if it's feasible, we
+hope to make it compatible with BitTorrent again.
 
 ## Dragonfly from Alibaba
 
