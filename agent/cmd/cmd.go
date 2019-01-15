@@ -64,17 +64,17 @@ func Execute() {
 
 func run() {
 	if peerPort == 0 {
-		panic("must specify non-zero peer port")
+		log.Fatal("must specify non-zero peer port")
 	}
 	if agentServerPort == 0 {
-		panic("must specify non-zero agent server port")
+		log.Fatal("must specify non-zero agent server port")
 	}
 	if agentRegistryPort == 0 {
-		panic("must specify non-zero agent registry port")
+		log.Fatal("must specify non-zero agent registry port")
 	}
 	var config Config
 	if err := configutil.Load(configFile, &config); err != nil {
-		panic(err)
+		log.Fatalf("Failed to load config file: %s", err)
 	}
 
 	zlog := log.ConfigureLogger(config.ZapLogging)

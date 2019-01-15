@@ -73,10 +73,10 @@ func Execute() {
 
 func run() {
 	if peerPort == 0 {
-		panic("must specify non-zero peer port")
+		log.Fatal("must specify non-zero peer port")
 	}
 	if blobServerPort == 0 {
-		panic("must specify non-zero blob server port")
+		log.Fatal("must specify non-zero blob server port")
 	}
 
 	var hostname string
@@ -93,7 +93,7 @@ func run() {
 
 	var config Config
 	if err := configutil.Load(configFile, &config); err != nil {
-		panic(err)
+		log.Fatalf("Failed to load config file: %s", err)
 	}
 
 	zlog := log.ConfigureLogger(config.ZapLogging)

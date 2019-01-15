@@ -1,6 +1,7 @@
 package hashring
 
 import (
+	"log"
 	"sync"
 	"time"
 
@@ -85,7 +86,8 @@ func (r *ring) Locations(d core.Digest) []string {
 
 	nodes := r.hash.GetOrderedNodes(d.ShardID(), len(r.addrs))
 	if len(nodes) != len(r.addrs) {
-		panic("invariant violation: ordered hash nodes not equal to cluster size")
+		// This should not happen.
+		log.Fatal("invariant violation: ordered hash nodes not equal to cluster size")
 	}
 
 	if len(r.healthy) == 0 {

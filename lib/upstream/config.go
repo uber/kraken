@@ -65,7 +65,7 @@ func (c ActiveConfig) StableAddr() (string, error) {
 	}
 	addr, err := hosts.Resolve().Random()
 	if err != nil {
-		panic("invariant violation: " + err.Error())
+		log.Fatalf("invariant violation: %s", err.Error())
 	}
 	return addr, nil
 }

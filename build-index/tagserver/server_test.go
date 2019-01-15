@@ -68,7 +68,7 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 		_testRemote: []string{_testNamespace},
 	}.Build()
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	provider := mocktagclient.NewMockProvider(ctrl)

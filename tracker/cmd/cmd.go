@@ -45,7 +45,7 @@ func Execute() {
 func run() {
 	var config Config
 	if err := configutil.Load(configFile, &config); err != nil {
-		panic(err)
+		log.Fatalf("Failed to load config file: %s", err)
 	}
 	log.ConfigureLogger(config.ZapLogging)
 

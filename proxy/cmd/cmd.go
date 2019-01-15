@@ -44,12 +44,12 @@ func Execute() {
 
 func run() {
 	if len(ports) == 0 {
-		panic("must specify a port")
+		log.Fatal("must specify a port")
 	}
 
 	var config Config
 	if err := configutil.Load(configFile, &config); err != nil {
-		panic(err)
+		log.Fatalf("Failed to load config file: %s", err)
 	}
 
 	log.ConfigureLogger(config.ZapLogging)
