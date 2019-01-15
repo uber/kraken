@@ -119,7 +119,7 @@ storage solutions and various performance optimizations.
 
 The problem Kraken is trying to solve is slightly different with what BitTorrent was designed for.
 Kraken's goal is to reduce global max download time and communication overhead in a stable
-environment, while BitTorrent's designed for unpreditable environment, so it needs to punish bad
+environment, while BitTorrent's designed for unpredictable environment, so it needs to punish bad
 behaviors and tries to preserve more copies of scarce data.
 
 Despite the differences, we re-examine Kraken's protocol from time to time, and if it's feasible, we
