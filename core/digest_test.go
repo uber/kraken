@@ -39,6 +39,10 @@ func TestNewSHA256DigestFromHex(t *testing.T) {
 	require.Equal("sha256", d.Algo())
 	require.Equal("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", d.Hex())
 	require.Equal("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", d.String())
+	v, err := d.Value()
+	require.NoError(err)
+	require.Equal([]byte("\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""), v)
+	require.Equal("e3b0", d.ShardID())
 }
 
 func TestNewSHA256DigestFromHexError(t *testing.T) {
@@ -54,6 +58,10 @@ func TestParseSHA256Digest(t *testing.T) {
 	require.Equal("sha256", d.Algo())
 	require.Equal("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", d.Hex())
 	require.Equal("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", d.String())
+	v, err := d.Value()
+	require.NoError(err)
+	require.Equal([]byte("\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""), v)
+	require.Equal("e3b0", d.ShardID())
 }
 
 func TestParseSHA256DigestErrors(t *testing.T) {
@@ -93,6 +101,23 @@ func TestDigestMarshalJSON(t *testing.T) {
 	var result Digest
 	require.NoError(json.Unmarshal(b, &result))
 	require.Equal(digest, result)
+}
+
+func TestDigestUnmarshalJSONErrors(t *testing.T) {
+	tests := []struct {
+		desc  string
+		input string
+	}{
+		{"empty", ""},
+		{"invalid", "\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+		{"no algo", "\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			var d Digest
+			require.Error(t, d.UnmarshalJSON([]byte(test.input)))
+		})
+	}
 }
 
 func TestDigestListValue(t *testing.T) {
