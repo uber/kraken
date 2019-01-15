@@ -115,6 +115,19 @@ For information about how to configure and use Kraken, please refer to the [docu
 
 # Comparison With Other Projects
 
+## Dragonfly from Alibaba
+
+Dragonfly cluster has one or a few "supernodes" that coordinates transfer of every 4MB chunk of data
+in the cluster.
+While the supernode would be able to make optimial decisions, the throughput of the whole cluster is
+limited by the processing power of one or a few hosts, and the performance would degrade linearly as
+either blob size or cluster size increases.
+
+Kraken's tracker only helps orchestrate the connection graph, and leaves negotiation of actual data
+tranfer to individual peers, so Kraken scales better with large blobs.
+On top of that, Kraken is HA and supports cross cluster replication, both are required for a
+reliable hybrid cloud setup.
+
 ## BitTorrent
 
 Kraken was initially built with a BitTorrent driver, however we ended up implementing our own P2P
@@ -128,19 +141,6 @@ behaving peers and tries to preserve more copies of scarce data.
 
 Despite the differences, we re-examine Kraken's protocol from time to time, and if it's feasible, we
 hope to make it compatible with BitTorrent again.
-
-## Dragonfly from Alibaba
-
-Dragonfly cluster has one or a few "supernodes" that coordinates transfer of every 4MB chunk of data
-in the cluster.
-While the supernode would be able to make optimial decisions, the throughput of the whole cluster is
-limited by the processing power of one or a few hosts, and the performance would degrade linearly as
-either blob size or cluster size increases.
-
-Kraken's tracker only helps orchestrate the connection graph, and leaves negotiation of actual data
-tranfer to individual peers, so Kraken scales better with large blobs.
-On top of that, Kraken is HA and supports cross cluster replication, both are required for a
-reliable hybrid cloud setup.
 
 # Limitations
 
