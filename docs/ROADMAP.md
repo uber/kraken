@@ -35,5 +35,5 @@ visualization.
 
 # BitTorrent compatibility
 
-Kraken's torrent library is based on BitTorrent, but it's simplified and is not actually compatible
-with BitTorrent. if feasible, we will look into making it compatible with BitTorrent.
+Kraken's torrent library is based on a simplified version of BitTorrent, however it is not
+compatible with the BitTorrent protocol. We may investigate BitTorrent compatibility in the future.

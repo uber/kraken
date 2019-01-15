@@ -117,14 +117,14 @@ For information about how to configure and use Kraken, please refer to the [docu
 
 ## BitTorrent
 
-The P2P part of Kraken is similar to a traditional BitTorrent network, but not exactly the same.
-We started Kraken using BitTorrent protocol, but changed it later for easier integration with
-storage solutions and various performance optimizations.
+Kraken was initially built with a BitTorrent driver, however we ended up implementing our own P2P
+driver based on BitTorrent protocol to allow for tighter integration with storage solutions and more
+control over performance optimizations.
 
-The problem Kraken is trying to solve is slightly different with what BitTorrent was designed for.
-Kraken's goal is to reduce global max download time and communication overhead in a stable
-environment, while BitTorrent's designed for unpredictable environment, so it needs to punish bad
-behaviors and tries to preserve more copies of scarce data.
+Kraken's problem space is slightly different with what BitTorrent was designed for. Kraken's goal is
+to reduce global max download time and communication overhead in a stable environment, while
+BitTorrent's designed for unpredictable environment, so it needs to defend against malicious or bad
+behaving peers and tries to preserve more copies of scarce data.
 
 Despite the differences, we re-examine Kraken's protocol from time to time, and if it's feasible, we
 hope to make it compatible with BitTorrent again.
