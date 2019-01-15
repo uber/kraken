@@ -113,13 +113,13 @@ integration: vendor $(LINUX_BINS) docker_stop tools/bin/puller/puller
 	if [ ! -d env ]; then virtualenv --setuptools env; fi
 	source env/bin/activate
 	env/bin/pip install -r requirements-tests.txt
-	env/bin/py.test --timeout=120 -v -k $(NAME) test/python/$(FILE)
+	env/bin/py.test --timeout=120 -v -k $(NAME) integration/python/$(FILE)
 
 .PHONY: runtest
 NAME?=test_
 runtest: docker_stop
 	source env/bin/activate
-	env/bin/py.test --timeout=120 -v -k $(NAME) test/python
+	env/bin/py.test --timeout=120 -v -k $(NAME) integration/python
 
 .PHONY: devcluster
 devcluster: vendor $(LINUX_BINS) docker_stop images

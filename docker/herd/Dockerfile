@@ -46,4 +46,4 @@ WORKDIR /etc/kraken
 
 COPY ./config /etc/kraken/config
 COPY ./nginx/config /etc/kraken/nginx/config
-COPY ./test/tls /etc/kraken/tls
+COPY ./testdata/tls /etc/kraken/tls
