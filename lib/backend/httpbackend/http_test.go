@@ -16,6 +16,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestClientFactory(t *testing.T) {
+	require := require.New(t)
+
+	config := Config{}
+	f := factory{}
+	_, err := f.Create(config, nil)
+	require.NoError(err)
+}
+
 func TestHttpDownloadSuccess(t *testing.T) {
 	require := require.New(t)
 

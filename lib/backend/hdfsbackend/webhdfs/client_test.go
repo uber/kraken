@@ -14,6 +14,7 @@ import (
 	"github.com/uber/kraken/utils/randutil"
 	"github.com/uber/kraken/utils/rwutil"
 	"github.com/uber/kraken/utils/testutil"
+
 	"github.com/pressly/chi"
 	"github.com/stretchr/testify/require"
 )
@@ -62,6 +63,13 @@ func newClient(nodes ...string) Client {
 		panic(err)
 	}
 	return c
+}
+
+func TestNewClientError(t *testing.T) {
+	require := require.New(t)
+
+	_, err := NewClient(Config{}, nil, "")
+	require.Error(err)
 }
 
 func TestClientOpen(t *testing.T) {
