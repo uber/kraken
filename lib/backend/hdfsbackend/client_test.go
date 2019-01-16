@@ -39,6 +39,7 @@ func (m *clientMocks) new() *Client {
 	}
 	return c
 }
+
 func TestClientFactory(t *testing.T) {
 	require := require.New(t)
 
