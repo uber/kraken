@@ -1,12 +1,10 @@
 .cache
-.gen
 .idea
 .tmp
 .vscode
 *.test
 *.go~
 vendor/
-.gen
 
 # Fake source dir for jenkins and debian, which uses repo root as GOPATH
 ^bin/

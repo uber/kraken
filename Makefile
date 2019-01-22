@@ -15,15 +15,6 @@ ALL_SRC = $(shell find . -name "*.go" | grep -v -e vendor \
 
 ALL_PKGS = $(shell go list $(sort $(dir $(ALL_SRC))) | grep -v vendor)
 
-GEN_DIR = .gen/go
-
-PROTO = $(GEN_DIR)/proto/p2p/p2p.pb.go
-
-$(PROTO): $(wildcard proto/*)
-	mkdir -p $(GEN_DIR)
-	go get -u github.com/golang/protobuf/protoc-gen-go
-	protoc --plugin=$(GOPATH)/bin/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$@))
-
 # ==== BASIC ====
 
 BUILD_NATIVE = $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) ./$(dir $@)
@@ -42,13 +33,13 @@ LINUX_BINS = \
 	tools/bin/testfs/testfs \
 	tracker/tracker
 
-agent/agent:: $(PROTO) $(wildcard agent/*.go)
+agent/agent:: $(wildcard agent/*.go)
 	$(BUILD_LINUX)
 
 build-index/build-index:: $(wildcard build-index/*.go)
 	if [[ $$OSTYPE == darwin* ]]; then $(OSX_CROSS_COMPILER); else $(BUILD_LINUX); fi
 
-origin/origin:: $(PROTO) $(wildcard origin/*.go)
+origin/origin:: $(wildcard origin/*.go)
 	if [[ $$OSTYPE == darwin* ]]; then $(OSX_CROSS_COMPILER); else $(BUILD_LINUX); fi
 
 proxy/proxy:: $(wildcard proxy/*.go)
@@ -91,7 +82,7 @@ redis:
 	docker run -d -p 6380:6379 --name kraken-redis redis:latest
 
 .PHONY: unit-test
-unit-test: vendor $(PROTO) redis
+unit-test: vendor redis
 	$(GOPATH)/bin/gocov test $(ALL_PKGS) --tags "unit" | $(GOPATH)/bin/gocov report
 
 .PHONY: docker_stop
@@ -151,12 +142,32 @@ tools: $(NATIVE_TOOLS)
 releases/%:
 	./scripts/release.sh $(subst releases/,,$@)
 
-# ==== MOCKS ====
+# ==== CODE GENERATION ====
 
+# In order for kraken to be imported by other projects, we need to check in all
+# the generated code, otherwise dependency management tools would report errors
+# caused by missing dependencies of kraken itself.
+
+# protoc must be installed on the system to make this work.
+# Install it by by following instructions on:
+# https://github.com/protocolbuffers/protobuf.
+PROTOC_BIN = protoc
+
+PROTO = $(GEN_DIR)/proto/p2p/p2p.pb.go
+
+GEN_DIR = gen/go
+
+.PHONY: protoc
+protoc:
+	mkdir -p $(GEN_DIR)
+	go get -u github.com/golang/protobuf/protoc-gen-go
+	$(PROTOC_BIN) --plugin=$(GOPATH)/bin/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$(PROTO)))
+
+# mockgen must be installed on the system to make this work.
+# Install it by running:
+# `go get github.com/golang/mock/mockgen`.
 mockgen = $(GOPATH)/bin/mockgen
 
-# mockgen must be installed on the system to make this work. Install it by running
-# `go get github.com/golang/mock/mockgen`.
 .PHONY: mocks
 mocks:
 	rm -rf mocks

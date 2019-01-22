@@ -13,8 +13,8 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/uber/kraken/.gen/go/proto/p2p"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/gen/go/proto/p2p"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
