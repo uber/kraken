@@ -144,6 +144,10 @@ releases/%:
 
 # ==== CODE GENERATION ====
 
+# In order for kraken to be imported by other projects, we need to check in all
+# the generated code, otherwise dependency management tools would report errors
+# caused by missing dependencies of kraken itself.
+
 # protoc must be installed on the system to make this work.
 # Install it by by following instructions on https://github.com/protocolbuffers/protobuf.
 GEN_DIR = gen/go
