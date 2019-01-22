@@ -15,7 +15,7 @@ ALL_SRC = $(shell find . -name "*.go" | grep -v -e vendor \
 
 ALL_PKGS = $(shell go list $(sort $(dir $(ALL_SRC))) | grep -v vendor)
 
-GEN_DIR = .gen/go
+GEN_DIR = gen/go
 
 PROTO = $(GEN_DIR)/proto/p2p/p2p.pb.go
 

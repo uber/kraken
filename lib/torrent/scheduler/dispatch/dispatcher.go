@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uber/kraken/.gen/go/proto/p2p"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/gen/go/proto/p2p"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler/conn"
 	"github.com/uber/kraken/lib/torrent/scheduler/dispatch/piecerequest"

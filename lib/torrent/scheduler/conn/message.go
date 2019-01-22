@@ -7,9 +7,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/uber/kraken/.gen/go/proto/p2p"
-	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/golang/protobuf/proto"
+	"github.com/uber/kraken/gen/go/proto/p2p"
+	"github.com/uber/kraken/lib/torrent/storage"
 )
 
 // Message joins a protobuf message with an optional payload. The only p2p.Message
