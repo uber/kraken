@@ -149,14 +149,19 @@ releases/%:
 # caused by missing dependencies of kraken itself.
 
 # protoc must be installed on the system to make this work.
-# Install it by by following instructions on https://github.com/protocolbuffers/protobuf.
+# Install it by by following instructions on:
+# https://github.com/protocolbuffers/protobuf.
+PROTOC_BIN = protoc
+
+PROTO = $(GEN_DIR)/proto/p2p/p2p.pb.go
+
 GEN_DIR = gen/go
 
 .PHONY: protoc
-protoc: $(wildcard proto/*)
+protoc:
 	mkdir -p $(GEN_DIR)
 	go get -u github.com/golang/protobuf/protoc-gen-go
-	protoc --plugin=$(GOPATH)/bin/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$@))
+	$(PROTOC_BIN) --plugin=$(GOPATH)/bin/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$(PROTO)))
 
 # mockgen must be installed on the system to make this work.
 # Install it by running:
