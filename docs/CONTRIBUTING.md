@@ -16,7 +16,7 @@ Please follow standard fork-and-pull workflow.
 
 ## Setup
 
-Most tests and scripts assumes the developer to have protoc and Docker installed locally.
+Most tests and scripts assumes the developer to have Docker installed locally.
 To install dependencies:
 ```
 $ make vendor

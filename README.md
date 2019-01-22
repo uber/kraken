@@ -109,7 +109,7 @@ containers with development configuration:
 $ make devcluster
 ```
 
-Protoc and Docker are required for making dev-cluster work on your laptop.
+Docker is required for making dev-cluster work on your laptop.
 For more information on devcluster, please check out devcluster [README](examples/devcluster/README.md).
 For information about how to configure and use Kraken, please refer to the [documentation](docs/CONFIGURATION.md).
 
