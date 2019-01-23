@@ -47,6 +47,7 @@ import:
 - package: github.com/c2h5oh/datasize
 - package: github.com/jpillora/backoff
 - package: golang.org/x/crypto
+  version: 182114d582623c1caa54f73de9c7224e23a48487
   subpackages:
   - ssh
 - package: github.com/jmoiron/sqlx
