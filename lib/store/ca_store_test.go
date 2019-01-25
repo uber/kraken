@@ -51,9 +51,9 @@ func TestCAStoreInitVolumes(t *testing.T) {
 
 	// There should be 256 symlinks total, evenly distributed across the volumes.
 	require.Equal(256, (n1 + n2 + n3))
-	require.True(float32(n1)/255 > float32(0.25))
-	require.True(float32(n2)/255 > float32(0.25))
-	require.True(float32(n3)/255 > float32(0.25))
+	require.True(float32(n1)/256 > float32(0.25), "%d/256 should be >0.25", n1)
+	require.True(float32(n2)/256 > float32(0.25), "%d/256 should be >0.25", n2)
+	require.True(float32(n3)/256 > float32(0.25), "%d/256 should be >0.25", n3)
 }
 
 func TestCAStoreInitVolumesAfterChangingVolumes(t *testing.T) {
@@ -116,10 +116,10 @@ func TestCAStoreInitVolumesAfterChangingVolumes(t *testing.T) {
 
 	// Symlinks should be recreated.
 	require.Equal(256, (n1 + n2 + n3 + n4))
-	require.True(float32(n1)/255 > float32(0.15))
-	require.True(float32(n2)/255 > float32(0.15))
-	require.True(float32(n3)/255 > float32(0.15))
-	require.True(float32(n4)/255 > float32(0.15))
+	require.True(float32(n1)/256 > float32(0.15))
+	require.True(float32(n2)/256 > float32(0.15))
+	require.True(float32(n3)/256 > float32(0.15))
+	require.True(float32(n4)/256 > float32(0.15))
 }
 
 func TestCAStoreCreateUploadFileAndMoveToCache(t *testing.T) {
