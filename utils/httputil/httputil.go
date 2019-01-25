@@ -168,8 +168,7 @@ func SendRetry(options ...RetryOption) SendOption {
 	retry := retryOptions{
 		backoff: backoff.WithMaxRetries(
 			backoff.NewConstantBackOff(250*time.Millisecond),
-			3,
-		),
+			2),
 	}
 	for _, o := range options {
 		o(&retry)
