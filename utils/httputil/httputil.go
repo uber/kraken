@@ -332,14 +332,11 @@ func PollAccepted(
 		resp, err := Get(url, options...)
 		if err != nil {
 			if IsAccepted(err) {
-				println("next backoff")
 				d := b.NextBackOff()
 				if d == backoff.Stop {
-					println("stop")
 					break // Backoff timed out.
 				}
 				time.Sleep(d)
-				println("continue")
 				continue
 			}
 			return nil, err
