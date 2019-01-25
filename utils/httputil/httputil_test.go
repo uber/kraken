@@ -9,14 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pressly/chi"
-
+	"github.com/cenkalti/backoff"
 	"github.com/golang/mock/gomock"
+	"github.com/pressly/chi"
 	"github.com/stretchr/testify/require"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/mocks/net/http"
-	"github.com/uber/kraken/utils/backoff"
 )
 
 const _testURL = "http://localhost:0/test"
@@ -131,7 +130,7 @@ func TestPollAccepted(t *testing.T) {
 	start := time.Now()
 	_, err := PollAccepted(
 		_testURL,
-		backoff.New(backoff.Config{Min: 200 * time.Millisecond, Factor: 1}),
+		backoff.NewConstantBackOff(200*time.Millisecond),
 		SendTransport(transport))
 	require.NoError(err)
 	require.InDelta(400*time.Millisecond, time.Since(start), float64(50*time.Millisecond))
@@ -152,10 +151,29 @@ func TestPollAcceptedStatusError(t *testing.T) {
 	start := time.Now()
 	_, err := PollAccepted(
 		_testURL,
-		backoff.New(backoff.Config{Min: 200 * time.Millisecond, Factor: 1}),
+		backoff.NewConstantBackOff(200*time.Millisecond),
 		SendTransport(transport))
 	require.Error(err)
 	require.Equal(404, err.(StatusError).Status)
+	require.InDelta(400*time.Millisecond, time.Since(start), float64(50*time.Millisecond))
+}
+
+func TestPollAcceptedBackoffTimeout(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	transport := mockhttp.NewMockRoundTripper(ctrl)
+
+	transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(202), nil).Times(3)
+
+	start := time.Now()
+	_, err := PollAccepted(
+		_testURL,
+		backoff.WithMaxRetries(backoff.NewConstantBackOff(200*time.Millisecond), 2),
+		SendTransport(transport))
+	require.Error(err)
 	require.InDelta(400*time.Millisecond, time.Since(start), float64(50*time.Millisecond))
 }
 
