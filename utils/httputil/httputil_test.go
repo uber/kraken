@@ -69,8 +69,9 @@ func TestSendRetry(t *testing.T) {
 	_, err := Get(
 		_testURL,
 		SendRetry(
-			RetryMax(5), RetryInterval(200*time.Millisecond),
-			RetryBackoff(1), RetryBackoffMax(1*time.Second)),
+			RetryBackoff(backoff.WithMaxRetries(
+				backoff.NewConstantBackOff(200*time.Millisecond),
+				4))),
 		SendTransport(transport))
 	require.NoError(err)
 	require.InDelta(400*time.Millisecond, time.Since(start), float64(50*time.Millisecond))
@@ -89,7 +90,10 @@ func TestSendRetryOnTransportErrors(t *testing.T) {
 	start := time.Now()
 	_, err := Get(
 		_testURL,
-		SendRetry(RetryMax(3), RetryInterval(200*time.Millisecond)),
+		SendRetry(
+			RetryBackoff(backoff.WithMaxRetries(
+				backoff.NewConstantBackOff(200*time.Millisecond),
+				2))),
 		SendTransport(transport))
 	require.Error(err)
 	require.InDelta(400*time.Millisecond, time.Since(start), float64(50*time.Millisecond))
@@ -108,7 +112,10 @@ func TestSendRetryOn5XX(t *testing.T) {
 	start := time.Now()
 	_, err := Get(
 		_testURL,
-		SendRetry(RetryMax(3), RetryInterval(200*time.Millisecond)),
+		SendRetry(
+			RetryBackoff(backoff.WithMaxRetries(
+				backoff.NewConstantBackOff(200*time.Millisecond),
+				2))),
 		SendTransport(transport))
 	require.Error(err)
 	require.Equal(503, err.(StatusError).Status)
