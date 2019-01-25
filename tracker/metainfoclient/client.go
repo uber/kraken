@@ -39,6 +39,13 @@ func New(ring hashring.PassiveRing, tls *tls.Config) Client {
 // Download returns the MetaInfo associated with name. Returns ErrNotFound if
 // no torrent exists under name.
 func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, error) {
+	b := &backoff.ExponentialBackOff{
+		InitialInterval:     time.Second,
+		RandomizationFactor: 0.05,
+		Multiplier:          1.3,
+		MaxInterval:         5 * time.Second,
+		MaxElapsedTime:      15 * time.Minute,
+	}
 	var resp *http.Response
 	var err error
 	for _, addr := range c.ring.Locations(d) {

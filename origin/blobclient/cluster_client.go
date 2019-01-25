@@ -7,10 +7,12 @@ import (
 	"math/rand"
 	"net/http"
 	"sync"
+	"time"
+
+	"github.com/cenkalti/backoff"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/hostlist"
-	"github.com/uber/kraken/utils/backoff"
 	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
@@ -73,15 +75,22 @@ type ClusterClient interface {
 }
 
 type clusterClient struct {
-	resolver            ClientResolver
-	pollDownloadBackoff *backoff.Backoff
+	resolver ClientResolver
 }
 
 // NewClusterClient returns a new ClusterClient.
 func NewClusterClient(r ClientResolver) ClusterClient {
-	return &clusterClient{
-		resolver:            r,
-		pollDownloadBackoff: backoff.New(backoff.Config{}),
+	return &clusterClient{r}
+}
+
+// defaultPollBackOff returns the default backoff used on Poll operations.
+func (c *clusterClient) defaultPollBackOff() backoff.BackOff {
+	return &backoff.ExponentialBackOff{
+		InitialInterval:     time.Second,
+		RandomizationFactor: 0.05,
+		Multiplier:          1.3,
+		MaxInterval:         5 * time.Second,
+		MaxElapsedTime:      15 * time.Minute,
 	}
 }
 
@@ -160,7 +169,7 @@ func (c *clusterClient) OverwriteMetaInfo(d core.Digest, pieceLength int64) erro
 
 // DownloadBlob pulls a blob from the origin cluster.
 func (c *clusterClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
-	err := Poll(c.resolver, c.pollDownloadBackoff, d, func(client Client) error {
+	err := Poll(c.resolver, c.defaultPollBackOff(), d, func(client Client) error {
 		return client.DownloadBlob(namespace, d, dst)
 	})
 	if httputil.IsNotFound(err) {
@@ -215,7 +224,7 @@ func (c *clusterClient) Owners(d core.Digest) ([]core.PeerContext, error) {
 // ReplicateToRemote replicates d to a remote origin cluster.
 func (c *clusterClient) ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error {
 	// Re-use download backoff since replicate may download blobs.
-	return Poll(c.resolver, c.pollDownloadBackoff, d, func(client Client) error {
+	return Poll(c.resolver, c.defaultPollBackOff(), d, func(client Client) error {
 		return client.ReplicateToRemote(namespace, d, remoteDNS)
 	})
 }
@@ -230,7 +239,7 @@ func shuffle(cs []Client) {
 // Poll wraps requests for endpoints which require polling, due to a blob
 // being asynchronously fetched from remote storage in the origin cluster.
 func Poll(
-	r ClientResolver, b *backoff.Backoff, d core.Digest, makeRequest func(Client) error) error {
+	r ClientResolver, b backoff.BackOff, d core.Digest, makeRequest func(Client) error) error {
 
 	// By looping over clients in order, we will always prefer the same origin
 	// for making requests to loosely guarantee that only one origin needs to
@@ -242,12 +251,17 @@ func Poll(
 	var errs []error
 ORIGINS:
 	for _, client := range clients {
-		a := b.Attempts()
+		b.Reset()
 	POLL:
-		for a.WaitForNext() {
+		for {
 			if err := makeRequest(client); err != nil {
 				if serr, ok := err.(httputil.StatusError); ok {
 					if serr.Status == http.StatusAccepted {
+						d := b.NextBackOff()
+						if d == backoff.Stop {
+							break POLL // Backoff timed out.
+						}
+						time.Sleep(d)
 						continue POLL
 					}
 					if serr.Status < 500 {
@@ -259,7 +273,7 @@ ORIGINS:
 			}
 			return nil // Success!
 		}
-		errs = append(errs, fmt.Errorf("origin %s: 202 backoff: %s", client.Addr(), a.Err()))
+		errs = append(errs, fmt.Errorf("origin %s: backoff timed out on 202", client.Addr()))
 	}
 	return fmt.Errorf("all origins unavailable: %s", errutil.Join(errs))
 }

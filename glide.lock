@@ -1,5 +1,5 @@
-hash: 42b39af70e8ca7f32db72e4115ff9df5486846eb546b6c975ba7d1c3c29b2727
-updated: 2019-01-23T13:30:32.552518-08:00
+hash: 4a8060e04636df753ed28ff9599426bc03b4604950ad541a0412ab18f23dc803
+updated: 2019-01-25T10:07:31.335715-08:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
@@ -16,7 +16,7 @@ imports:
   subpackages:
   - lib/go/thrift
 - name: github.com/aws/aws-sdk-go
-  version: c1afd6c3340feedd0a2c1cd929dcb291d4bd09ba
+  version: 3503f7b53173f227ff96dc247983360cc7cb8463
   subpackages:
   - aws
   - aws/awserr
@@ -70,6 +70,8 @@ imports:
   version: 138b925ccdf617776955904ba7759fce64406cec
   subpackages:
   - statsd
+- name: github.com/cenkalti/backoff
+  version: 1e4cf3da559842a91afcb6ea6141451e6c30c618
 - name: github.com/docker/distribution
   version: 48294d928ced5dd9b378f7fd7c6f5da3ff3f2c89
   subpackages:
