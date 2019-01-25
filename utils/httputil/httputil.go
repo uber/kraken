@@ -152,42 +152,23 @@ func SendRedirect(redirect func(req *http.Request, via []*http.Request) error) S
 }
 
 type retryOptions struct {
-	max               int
-	interval          time.Duration
-	backoffMultiplier float64
-	backoffMax        time.Duration
+	backoff backoff.BackOff
 }
 
 // RetryOption allows overriding defaults for the SendRetry option.
 type RetryOption func(*retryOptions)
 
-// RetryMax sets the max number of retries.
-func RetryMax(max int) RetryOption {
-	return func(o *retryOptions) { o.max = max }
-}
-
-// RetryInterval sets the interval between retries.
-func RetryInterval(interval time.Duration) RetryOption {
-	return func(o *retryOptions) { o.interval = interval }
-}
-
 // RetryBackoff adds exponential backoff between retries.
-func RetryBackoff(backoffMultiplier float64) RetryOption {
-	return func(o *retryOptions) { o.backoffMultiplier = backoffMultiplier }
-}
-
-// RetryBackoffMax sets the max duration backoff can reach.
-func RetryBackoffMax(backoffMax time.Duration) RetryOption {
-	return func(o *retryOptions) { o.backoffMax = backoffMax }
+func RetryBackoff(b backoff.BackOff) RetryOption {
+	return func(o *retryOptions) { o.backoff = b }
 }
 
 // SendRetry will we retry the request on network / 5XX errors.
 func SendRetry(options ...RetryOption) SendOption {
 	retry := retryOptions{
-		max:               3,
-		interval:          250 * time.Millisecond,
-		backoffMultiplier: 1, // Defaults with no backoff.
-		backoffMax:        30 * time.Second,
+		backoff: backoff.WithMaxRetries(
+			backoff.NewConstantBackOff(250*time.Millisecond),
+			2),
 	}
 	for _, o := range options {
 		o(&retry)
@@ -225,7 +206,7 @@ func SendContext(ctx context.Context) SendOption {
 }
 
 // Send sends an HTTP request. May return NetworkError or StatusError (see above).
-func Send(method, rawurl string, options ...SendOption) (resp *http.Response, err error) {
+func Send(method, rawurl string, options ...SendOption) (*http.Response, error) {
 	u, err := url.Parse(rawurl)
 	if err != nil {
 		return nil, fmt.Errorf("parse url: %s", err)
@@ -235,7 +216,7 @@ func Send(method, rawurl string, options ...SendOption) (resp *http.Response, er
 		timeout:       60 * time.Second,
 		acceptedCodes: map[int]bool{http.StatusOK: true},
 		headers:       map[string]string{},
-		retry:         retryOptions{max: 1},
+		retry:         retryOptions{backoff: &backoff.StopBackOff{}},
 		transport:     nil, // Use HTTP default.
 		ctx:           context.Background(),
 		url:           u,
@@ -255,14 +236,8 @@ func Send(method, rawurl string, options ...SendOption) (resp *http.Response, er
 		Transport:     opts.transport,
 	}
 
-	interval := opts.retry.interval
-	for i := 0; i < opts.retry.max; i++ {
-		if i > 0 {
-			time.Sleep(interval)
-			interval = min(
-				time.Duration(float64(interval)*opts.retry.backoffMultiplier),
-				opts.retry.backoffMax)
-		}
+	var resp *http.Response
+	for {
 		resp, err = client.Do(req)
 		// Retry without tls. During migration there would be a time when the
 		// component receiving the tls request does not serve https response.
@@ -276,10 +251,12 @@ func Send(method, rawurl string, options ...SendOption) (resp *http.Response, er
 			httpReq.URL.Scheme = "http"
 			resp, err = client.Do(httpReq)
 		}
-		if err != nil {
-			continue
-		}
-		if resp.StatusCode >= 500 && !opts.acceptedCodes[resp.StatusCode] {
+		if err != nil || (resp.StatusCode >= 500 && !opts.acceptedCodes[resp.StatusCode]) {
+			d := opts.retry.backoff.NextBackOff()
+			if d == backoff.Stop {
+				break // Backoff timed out.
+			}
+			time.Sleep(d)
 			continue
 		}
 		break
