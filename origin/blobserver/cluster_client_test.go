@@ -13,9 +13,9 @@ import (
 	"github.com/uber/kraken/lib/persistedretry/writeback"
 	"github.com/uber/kraken/mocks/origin/blobclient"
 	"github.com/uber/kraken/origin/blobclient"
-	"github.com/uber/kraken/utils/backoff"
 	"github.com/uber/kraken/utils/httputil"
 
+	"github.com/cenkalti/backoff"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
@@ -123,10 +123,7 @@ func TestPollSkipsOriginOnTimeout(t *testing.T) {
 	mockClient1.EXPECT().Addr().Return("client1")
 	mockClient2.EXPECT().DownloadBlob(namespace, blob.Digest, nil).Return(nil)
 
-	b := backoff.New(backoff.Config{
-		Min:          100 * time.Millisecond,
-		RetryTimeout: 500 * time.Millisecond,
-	})
+	b := backoff.WithMaxRetries(backoff.NewConstantBackOff(100*time.Millisecond), 5)
 
 	require.NoError(blobclient.Poll(mockResolver, b, blob.Digest, func(c blobclient.Client) error {
 		return c.DownloadBlob(namespace, blob.Digest, nil)
@@ -153,10 +150,7 @@ func TestPollSkipsOriginOnNetworkErrors(t *testing.T) {
 	mockClient1.EXPECT().Addr().Return("client1")
 	mockClient2.EXPECT().DownloadBlob(namespace, blob.Digest, nil).Return(nil)
 
-	b := backoff.New(backoff.Config{
-		Min:          100 * time.Millisecond,
-		RetryTimeout: 500 * time.Millisecond,
-	})
+	b := backoff.WithMaxRetries(backoff.NewConstantBackOff(100*time.Millisecond), 5)
 
 	require.NoError(blobclient.Poll(mockResolver, b, blob.Digest, func(c blobclient.Client) error {
 		return c.DownloadBlob(namespace, blob.Digest, nil)

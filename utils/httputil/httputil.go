@@ -3,6 +3,7 @@ package httputil
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -10,9 +11,10 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/pressly/chi"
+
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/utils/backoff"
 	"github.com/uber/kraken/utils/handler"
 )
 
@@ -323,20 +325,28 @@ func Delete(url string, options ...SendOption) (*http.Response, error) {
 
 // PollAccepted wraps GET requests for endpoints which require 202-polling.
 func PollAccepted(
-	url string, backoff *backoff.Backoff, options ...SendOption) (*http.Response, error) {
+	url string, b backoff.BackOff, options ...SendOption) (*http.Response, error) {
 
-	a := backoff.Attempts()
-	for a.WaitForNext() {
+	b.Reset()
+	for {
 		resp, err := Get(url, options...)
 		if err != nil {
 			if IsAccepted(err) {
+				println("next backoff")
+				d := b.NextBackOff()
+				if d == backoff.Stop {
+					println("stop")
+					break // Backoff timed out.
+				}
+				time.Sleep(d)
+				println("continue")
 				continue
 			}
 			return nil, err
 		}
 		return resp, nil
 	}
-	return nil, fmt.Errorf("202 backoff: %s", a.Err())
+	return nil, errors.New("backoff timed out on 202 responses")
 }
 
 // GetQueryArg gets an argument from http.Request by name.

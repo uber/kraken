@@ -9,9 +9,10 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/cenkalti/backoff"
+
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/hashring"
-	"github.com/uber/kraken/utils/backoff"
 	"github.com/uber/kraken/utils/httputil"
 )
 
@@ -26,26 +27,18 @@ type Client interface {
 }
 
 type client struct {
-	ring    hashring.PassiveRing
-	tls     *tls.Config
-	backoff *backoff.Backoff
+	ring hashring.PassiveRing
+	tls  *tls.Config
 }
 
 // New returns a new Client.
 func New(ring hashring.PassiveRing, tls *tls.Config) Client {
-	return &client{ring, tls, backoff.New(backoff.Config{RetryTimeout: 15 * time.Minute})}
+	return &client{ring, tls}
 }
 
 // Download returns the MetaInfo associated with name. Returns ErrNotFound if
 // no torrent exists under name.
 func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, error) {
-	b := &backoff.ExponentialBackOff{
-		InitialInterval:     time.Second,
-		RandomizationFactor: 0.05,
-		Multiplier:          1.3,
-		MaxInterval:         5 * time.Second,
-		MaxElapsedTime:      15 * time.Minute,
-	}
 	var resp *http.Response
 	var err error
 	for _, addr := range c.ring.Locations(d) {
@@ -53,7 +46,14 @@ func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, erro
 			fmt.Sprintf(
 				"http://%s/namespace/%s/blobs/%s/metainfo",
 				addr, url.PathEscape(namespace), d),
-			c.backoff,
+			&backoff.ExponentialBackOff{
+				InitialInterval:     time.Second,
+				RandomizationFactor: 0.05,
+				Multiplier:          1.3,
+				MaxInterval:         5 * time.Second,
+				MaxElapsedTime:      15 * time.Minute,
+				Clock:               backoff.SystemClock,
+			},
 			httputil.SendTimeout(10*time.Second),
 			httputil.SendTLS(c.tls))
 		if err != nil {

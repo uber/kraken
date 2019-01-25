@@ -91,6 +91,7 @@ func (c *clusterClient) defaultPollBackOff() backoff.BackOff {
 		Multiplier:          1.3,
 		MaxInterval:         5 * time.Second,
 		MaxElapsedTime:      15 * time.Minute,
+		Clock:               backoff.SystemClock,
 	}
 }
 
@@ -273,7 +274,8 @@ ORIGINS:
 			}
 			return nil // Success!
 		}
-		errs = append(errs, fmt.Errorf("origin %s: backoff timed out on 202", client.Addr()))
+		errs = append(errs,
+			fmt.Errorf("origin %s: backoff timed out on 202 responses", client.Addr()))
 	}
 	return fmt.Errorf("all origins unavailable: %s", errutil.Join(errs))
 }
