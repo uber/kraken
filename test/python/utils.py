@@ -30,14 +30,15 @@ def format_insecure_curl(url):
         'curl',
         ## Use --insecure flag to disable server cert verification for test only.
         '--insecure',
-        '--cert /etc/kraken/tls/client/client.crt',
-        '--key /etc/kraken/tls/client/client_decrypted.key',
-        '--cacert /etc/kraken/tls/ca/server.crt',
         url,
     ])
 
-
 def tls_opts():
+    return {
+        'verify': False, ## Set verify=False to disable server cert verification for test only.
+    }
+
+def tls_opts_with_client_certs():
     return {
         'cert': ('test/tls/client/client.crt', 'test/tls/client/client_decrypted.key'),
         'verify': False, ## Set verify=False to disable server cert verification for test only.
