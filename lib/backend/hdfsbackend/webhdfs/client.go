@@ -10,7 +10,9 @@ import (
 	"net/url"
 	"path"
 	"strconv"
+	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/memsize"
@@ -51,6 +53,24 @@ func NewClient(config Config, namenodes []string, username string) (Client, erro
 		return nil, errors.New("namenodes required")
 	}
 	return &client{config, namenodes, username}, nil
+}
+
+// nameNodeBackOff returns the backoff used on all http requests to namenodes.
+// We use a fairly aggressive backoff to handle failover.
+//
+// TODO(codyg): Normally it is be the responsibility of the farthest downstream
+// client to handle retry, however the Mesos fetcher does not currently support
+// retry, and thus namenode failovers have caused task launch failures. Ideally
+// we can remove this once the Mesos fetcher is more reliable.
+func (c *client) nameNodeBackOff() backoff.BackOff {
+	b := &backoff.ExponentialBackOff{
+		InitialInterval:     2 * time.Second,
+		RandomizationFactor: 0.05,
+		Multiplier:          2,
+		MaxInterval:         30 * time.Second,
+		Clock:               backoff.SystemClock,
+	}
+	return backoff.WithMaxRetries(b, 5)
 }
 
 type exceededCapError error
@@ -106,6 +126,7 @@ func (c *client) Create(path string, src io.Reader) error {
 	for _, nn := range c.namenodes {
 		nameresp, nnErr = httputil.Put(
 			getURL(nn, path, v),
+			httputil.SendRetry(httputil.RetryBackoff(c.nameNodeBackOff())),
 			httputil.SendRedirect(func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse
 			}),
@@ -153,7 +174,9 @@ func (c *client) Rename(from, to string) error {
 	var resp *http.Response
 	var nnErr error
 	for _, nn := range c.namenodes {
-		resp, nnErr = httputil.Put(getURL(nn, from, v))
+		resp, nnErr = httputil.Put(
+			getURL(nn, from, v),
+			httputil.SendRetry(httputil.RetryBackoff(c.nameNodeBackOff())))
 		if nnErr != nil {
 			if retryable(nnErr) {
 				continue
@@ -174,7 +197,9 @@ func (c *client) Mkdirs(path string) error {
 	var resp *http.Response
 	var nnErr error
 	for _, nn := range c.namenodes {
-		resp, nnErr = httputil.Put(getURL(nn, path, v))
+		resp, nnErr = httputil.Put(
+			getURL(nn, path, v),
+			httputil.SendRetry(httputil.RetryBackoff(c.nameNodeBackOff())))
 		if nnErr != nil {
 			if retryable(nnErr) {
 				continue
@@ -195,7 +220,9 @@ func (c *client) Open(path string, dst io.Writer) error {
 	var resp *http.Response
 	var nnErr error
 	for _, nn := range c.namenodes {
-		resp, nnErr = httputil.Get(getURL(nn, path, v))
+		resp, nnErr = httputil.Get(
+			getURL(nn, path, v),
+			httputil.SendRetry(httputil.RetryBackoff(c.nameNodeBackOff())))
 		if nnErr != nil {
 			if retryable(nnErr) {
 				continue
@@ -224,7 +251,9 @@ func (c *client) GetFileStatus(path string) (FileStatus, error) {
 	var resp *http.Response
 	var nnErr error
 	for _, nn := range c.namenodes {
-		resp, nnErr = httputil.Get(getURL(nn, path, v))
+		resp, nnErr = httputil.Get(
+			getURL(nn, path, v),
+			httputil.SendRetry(httputil.RetryBackoff(c.nameNodeBackOff())))
 		if nnErr != nil {
 			if retryable(nnErr) {
 				continue
@@ -251,7 +280,9 @@ func (c *client) ListFileStatus(path string) ([]FileStatus, error) {
 	var resp *http.Response
 	var nnErr error
 	for _, nn := range c.namenodes {
-		resp, nnErr = httputil.Get(getURL(nn, path, v))
+		resp, nnErr = httputil.Get(
+			getURL(nn, path, v),
+			httputil.SendRetry(httputil.RetryBackoff(c.nameNodeBackOff())))
 		if nnErr != nil {
 			if retryable(nnErr) {
 				continue
