@@ -325,7 +325,7 @@ class OriginCluster(object):
     def __init__(self, origins):
         self.origins = origins
 
-    def _get_location(self, name):
+    def get_location(self, name):
         url = 'https://localhost:{port}/blobs/sha256:{name}/locations'.format(
             port=random.choice(self.origins).instance.port, name=name)
         res = requests.get(url, **tls_opts())
@@ -337,7 +337,7 @@ class OriginCluster(object):
         return addr
 
     def upload(self, name, blob):
-        addr = self._get_location(name)
+        addr = self.get_location(name)
         Uploader(addr).upload(name, blob)
 
     def __iter__(self):
