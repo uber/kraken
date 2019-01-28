@@ -9,6 +9,16 @@ import pytest
 import requests
 
 from utils import concurrently_apply
+from utils import tls_opts
+
+
+def test_origin_upload_no_client_cert(origin_cluster):
+    name, blob = _generate_blob()
+    addr = origin_cluster.get_location(name)
+    url = 'https://{addr}/namespace/testfs/blobs/sha256:{name}/uploads'.format(
+            addr=addr, name=name)
+    res = requests.post(url, **tls_opts())
+    assert res.status_code == 403
 
 
 def test_concurrent_agent_downloads(origin_cluster, agent_factory):
