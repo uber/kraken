@@ -91,21 +91,39 @@ func genFile(t *testing.T, bytesPEM []byte) (string, func()) {
 	return f.Name(), cleanup.Run
 }
 
-func genCerts(t *testing.T) (config *TLSConfig, cleanupfunc func()) {
+func genCerts(t *testing.T) (config *TLSConfig, serverCerts []X509Pair, cleanupfunc func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
+	// Create two CA certs.
 	// Server cert, which is also the root CA.
-	sCertPEM, sKeyPEM, sSecretBytes := genKeyPair(t, nil, nil, nil)
-	sSecret, c := genFile(t, sSecretBytes)
+	s1CertPEM, s1KeyPEM, s1SecretBytes := genKeyPair(t, nil, nil, nil)
+	s1Secret, c := genFile(t, s1SecretBytes)
 	cleanup.Add(c)
-	sCert, c := genFile(t, sCertPEM)
+	s1Cert, c := genFile(t, s1CertPEM)
 	cleanup.Add(c)
-	sKey, c := genFile(t, sKeyPEM)
+	s1Key, c := genFile(t, s1KeyPEM)
 	cleanup.Add(c)
+	s1 := X509Pair{
+		Cert:       Secret{s1Cert},
+		Key:        Secret{s1Key},
+		Passphrase: Secret{s1Secret},
+	}
+	s2CertPEM, s2KeyPEM, s2SecretBytes := genKeyPair(t, nil, nil, nil)
+	s2Secret, c := genFile(t, s2SecretBytes)
+	cleanup.Add(c)
+	s2Cert, c := genFile(t, s2CertPEM)
+	cleanup.Add(c)
+	s2Key, c := genFile(t, s2KeyPEM)
+	cleanup.Add(c)
+	s2 := X509Pair{
+		Cert:       Secret{s2Cert},
+		Key:        Secret{s2Key},
+		Passphrase: Secret{s2Secret},
+	}
 
 	// Client cert, signed with root CA.
-	cCertPEM, cKeyPEM, cSecretBytes := genKeyPair(t, sCertPEM, sKeyPEM, sSecretBytes)
+	cCertPEM, cKeyPEM, cSecretBytes := genKeyPair(t, s1CertPEM, s1KeyPEM, s1SecretBytes)
 	cSecret, c := genFile(t, cSecretBytes)
 	cleanup.Add(c)
 	cCert, c := genFile(t, cCertPEM)
@@ -115,17 +133,16 @@ func genCerts(t *testing.T) (config *TLSConfig, cleanupfunc func()) {
 
 	config = &TLSConfig{}
 	config.Name = "kraken"
-	config.CA.Cert.Path = sCert
-	config.CA.Key.Path = sKey
-	config.CA.Passphrase.Path = sSecret
+	config.CAs = []Secret{{s1Cert}, {s2Cert}}
 	config.Client.Cert.Path = cCert
 	config.Client.Key.Path = cKey
 	config.Client.Passphrase.Path = cSecret
 
-	return config, cleanup.Run
+	return config, []X509Pair{s1, s2}, cleanup.Run
 }
 
-func startTLSServer(t *testing.T, cert, key, passphrase string) (string, func()) {
+func startTLSServer(t *testing.T, cert, key, passphrase string, clientCAs []Secret) (string, func()) {
+	fmt.Println(key)
 	require := require.New(t)
 	var err error
 	certPEM, err := parseCert(cert)
@@ -134,7 +151,7 @@ func startTLSServer(t *testing.T, cert, key, passphrase string) (string, func())
 	require.NoError(err)
 	c, err := tls.X509KeyPair(certPEM, keyPEM)
 	require.NoError(err)
-	caPool, err := createCertPool(cert)
+	caPool, err := createCertPool(clientCAs...)
 	require.NoError(err)
 
 	config := &tls.Config{
@@ -171,7 +188,7 @@ func startTLSServer(t *testing.T, cert, key, passphrase string) (string, func())
 func TestTLSClientDisabled(t *testing.T) {
 	require := require.New(t)
 
-	c, cleanup := genCerts(t)
+	c, _, cleanup := genCerts(t)
 	defer cleanup()
 
 	c.Client.Disabled = true
@@ -181,31 +198,38 @@ func TestTLSClientDisabled(t *testing.T) {
 }
 
 func TestTLSClient(t *testing.T) {
-	c, cleanup := genCerts(t)
+	c, serverCerts, cleanup := genCerts(t)
 	defer cleanup()
 	tls, err := c.BuildClient()
 	require.NoError(t, err)
 
 	t.Run("success", func(t *testing.T) {
 		require := require.New(t)
-		addr, stop := startTLSServer(t, c.CA.Cert.Path, c.CA.Key.Path, c.CA.Passphrase.Path)
+		addr1, stop := startTLSServer(t, serverCerts[0].Cert.Path, serverCerts[0].Key.Path, serverCerts[0].Passphrase.Path, c.CAs)
 		defer stop()
 
-		resp, err := Get("https://"+addr+"/", SendTLS(tls))
+		resp, err := Get("https://"+addr1+"/", SendTLS(tls))
+		require.NoError(err)
+		require.Equal(http.StatusOK, resp.StatusCode)
+
+		addr2, stop := startTLSServer(t, serverCerts[1].Cert.Path, serverCerts[1].Key.Path, serverCerts[1].Passphrase.Path, c.CAs)
+		defer stop()
+
+		resp, err = Get("https://"+addr2+"/", SendTLS(tls))
 		require.NoError(err)
 		require.Equal(http.StatusOK, resp.StatusCode)
 	})
 
 	t.Run("authentication failed", func(t *testing.T) {
 		require := require.New(t)
-		addr, stop := startTLSServer(t, c.CA.Cert.Path, c.CA.Key.Path, c.CA.Passphrase.Path)
+		addr, stop := startTLSServer(t, serverCerts[0].Cert.Path, serverCerts[0].Key.Path, serverCerts[0].Passphrase.Path, c.CAs)
 		defer stop()
 
 		// Swap client and server certs. This should make verification fail.
 		badConfig := &TLSConfig{}
 		badConfig.Name = "kraken"
-		badConfig.CA = c.Client
-		badConfig.Client = c.CA
+		badConfig.Server = c.Client
+		badConfig.Client = c.Server
 		badtls, err := badConfig.BuildClient()
 		require.NoError(err)
 
