@@ -176,12 +176,7 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stdout
-	if err := cmd.Run(); err != nil {
-		log, _ := ioutil.ReadFile(stdoutLog)
-		fmt.Println(log)
-		return err
-	}
-	return nil
+	return cmd.Run()
 }
 
 func populateTemplate(tmpl string, args map[string]interface{}) ([]byte, error) {

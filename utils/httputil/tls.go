@@ -36,6 +36,15 @@ type X509Pair struct {
 	Passphrase Secret `yaml:"passphrase"`
 }
 
+// NewX509Pair creates a new X509Pair.
+func NewX509Pair(cert, key, passphrase Secret) X509Pair {
+	return X509Pair{
+		Cert:       cert,
+		Key:        key,
+		Passphrase: passphrase,
+	}
+}
+
 // Secret contains secret path configuration.
 type Secret struct {
 	Path string `yaml:"path"`
@@ -55,7 +64,7 @@ func (c *TLSConfig) BuildClient() (*tls.Config, error) {
 	var certs []tls.Certificate
 	var err error
 	if c.CAs != nil {
-		caPool, err = createCertPool(c.CAs...)
+		caPool, err = createCertPool(c.CAs)
 		if err != nil {
 			return nil, fmt.Errorf("create cert pool: %s", err)
 		}
@@ -87,7 +96,7 @@ func (c *TLSConfig) BuildClient() (*tls.Config, error) {
 
 // WriteCABundle writes a list of CA to a writer.
 func (c *TLSConfig) WriteCABundle(w io.Writer) error {
-	pems, err := concatSecrets(c.CAs...)
+	pems, err := concatSecrets(c.CAs)
 	if err != nil {
 		return fmt.Errorf("concat secrets: %s", err)
 	}
@@ -97,7 +106,7 @@ func (c *TLSConfig) WriteCABundle(w io.Writer) error {
 	return nil
 }
 
-func createCertPool(secrets ...Secret) (*x509.CertPool, error) {
+func createCertPool(secrets []Secret) (*x509.CertPool, error) {
 	pool, err := x509.SystemCertPool()
 	if err != nil {
 		return nil, fmt.Errorf("create system cert pool: %s", err)
@@ -106,7 +115,7 @@ func createCertPool(secrets ...Secret) (*x509.CertPool, error) {
 	if pool == nil {
 		pool = x509.NewCertPool()
 	}
-	pems, err := concatSecrets(secrets...)
+	pems, err := concatSecrets(secrets)
 	if err != nil {
 		return nil, fmt.Errorf("concat secrets: %s", err)
 	}
@@ -116,16 +125,14 @@ func createCertPool(secrets ...Secret) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-func concatSecrets(secrets ...Secret) ([]byte, error) {
+func concatSecrets(secrets []Secret) ([]byte, error) {
 	result := bytes.Buffer{}
 	for _, s := range secrets {
 		pem, err := parseCert(s.Path)
 		if err != nil {
 			return nil, fmt.Errorf("parse cert: %s", err)
 		}
-		if _, err := result.Write(pem); err != nil {
-			return nil, fmt.Errorf("write cert to buffer: %s", err)
-		}
+		result.Write(pem)
 	}
 	return result.Bytes(), nil
 }
