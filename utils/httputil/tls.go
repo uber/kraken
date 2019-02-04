@@ -36,15 +36,6 @@ type X509Pair struct {
 	Passphrase Secret `yaml:"passphrase"`
 }
 
-// NewX509Pair creates a new X509Pair.
-func NewX509Pair(cert, key, passphrase Secret) X509Pair {
-	return X509Pair{
-		Cert:       cert,
-		Key:        key,
-		Passphrase: passphrase,
-	}
-}
-
 // Secret contains secret path configuration.
 type Secret struct {
 	Path string `yaml:"path"`

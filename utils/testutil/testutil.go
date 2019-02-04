@@ -2,8 +2,10 @@ package testutil
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -72,4 +74,22 @@ func StartServer(h http.Handler) (addr string, stop func()) {
 	s := &http.Server{Handler: h}
 	go s.Serve(l)
 	return l.Addr().String(), func() { s.Close() }
+}
+
+// TempFile creates a temporary file. Returns its name and cleanup function.
+func TempFile(data []byte) (string, func()) {
+	var cleanup Cleanup
+	defer cleanup.Recover()
+
+	f, err := ioutil.TempFile(".", "")
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(func() { os.Remove(f.Name()) })
+	defer f.Close()
+	if _, err := f.Write(data); err != nil {
+		panic(err)
+	}
+
+	return f.Name(), cleanup.Run
 }

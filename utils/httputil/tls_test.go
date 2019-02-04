@@ -9,10 +9,8 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
@@ -76,37 +74,22 @@ func genKeyPair(t *testing.T, caPEM, caKeyPEM, caSercret []byte) (certPEM, keyPE
 	return cert.Bytes(), pem.EncodeToMemory(encrypted), secret
 }
 
-func genFile(t *testing.T, bytesPEM []byte) (string, func()) {
-	require := require.New(t)
-	var cleanup testutil.Cleanup
-	defer cleanup.Recover()
-
-	f, err := ioutil.TempFile(".", "")
-	require.NoError(err)
-	cleanup.Add(func() { os.Remove(f.Name()) })
-	defer f.Close()
-	_, err = f.Write(bytesPEM)
-	require.NoError(err)
-
-	return f.Name(), cleanup.Run
-}
-
 func genCerts(t *testing.T) (config *TLSConfig, cleanupfunc func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
 	// Server cert, which is also the root CA.
 	sCertPEM, sKeyPEM, sSecretBytes := genKeyPair(t, nil, nil, nil)
-	sCert, c := genFile(t, sCertPEM)
+	sCert, c := testutil.TempFile(sCertPEM)
 	cleanup.Add(c)
 
 	// Client cert, signed with root CA.
 	cCertPEM, cKeyPEM, cSecretBytes := genKeyPair(t, sCertPEM, sKeyPEM, sSecretBytes)
-	cSecret, c := genFile(t, cSecretBytes)
+	cSecret, c := testutil.TempFile(cSecretBytes)
 	cleanup.Add(c)
-	cCert, c := genFile(t, cCertPEM)
+	cCert, c := testutil.TempFile(cCertPEM)
 	cleanup.Add(c)
-	cKey, c := genFile(t, cKeyPEM)
+	cKey, c := testutil.TempFile(cKeyPEM)
 	cleanup.Add(c)
 
 	config = &TLSConfig{}
@@ -124,11 +107,11 @@ func startTLSServer(t *testing.T, clientCAs []Secret) (addr string, serverCA Sec
 	defer cleanup.Recover()
 
 	certPEM, keyPEM, passphrase := genKeyPair(t, nil, nil, nil)
-	certPath, c := genFile(t, certPEM)
+	certPath, c := testutil.TempFile(certPEM)
 	cleanup.Add(c)
-	passphrasePath, c := genFile(t, passphrase)
+	passphrasePath, c := testutil.TempFile(passphrase)
 	cleanup.Add(c)
-	keyPath, c := genFile(t, keyPEM)
+	keyPath, c := testutil.TempFile(keyPEM)
 	cleanup.Add(c)
 
 	require := require.New(t)
