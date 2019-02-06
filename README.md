@@ -151,7 +151,7 @@ tweak compression ratios, as `docker pull` spends most of the time on data decom
 - Mutating tags (e.g. updating a `latest` tag) is allowed, however a few things will not work: tag
 lookups immediately afterwards will still return the old value due to Nginx caching, and replication
 probably won't trigger. We are working on supporting this functionality better. If you need tag
-mutation support right now, please reduce cache interval of build-index component. If you also needs
+mutation support right now, please reduce cache interval of build-index component. If you also need
 replication in a multi-cluster setup, please consider setting up another docker registy as Kraken's
 backend.
 - Theoretically, Kraken should distribute blobs of any size without significant performance
