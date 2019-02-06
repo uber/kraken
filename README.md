@@ -150,8 +150,9 @@ switching to [Makisu](https://github.com/uber/makisu) to improve layer reusabili
 tweak compression ratios, as `docker pull` spends most of the time on data decompression.
 - Mutating tags (e.g. updating a `latest` tag) is allowed, however a few things will not work:
 replication probably won't trigger, and tag lookups immediately afterwards will still return the old
-value due to caching. We are working on supporting this functionality better. If you need tag
-mutation support right now, please consider setting up another docker registy as Kraken's backend.
+value due to Nginx caching. We are working on supporting this functionality better. If you need tag
+mutation support right now, please consider setting up another docker registy as Kraken's backend,
+and reduce cache interval of build-index component.
 - Theoretically, Kraken should distribute blobs of any size without significant performance
 degredation, but at Uber we enforce a 20G limit and cannot endorse of the production use of
 ultra-large blobs (i.e. 100G+). Peers enforce connection limits on a per blob basis, and new peers
