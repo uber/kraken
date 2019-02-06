@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/uber/kraken.svg?branch=master)](https://travis-ci.org/uber/kraken)
 [![Github Release](https://img.shields.io/github/release/uber/kraken.svg)](https://github.com/uber/kraken/releases)
 
-Kraken is a P2P-powered Docker registry which focuses on scalability and availability. It is
+Kraken is a P2P-powered docker registry which focuses on scalability and availability. It is
 designed for docker image management, replication and distribribution in a hybrid cloud environment.
 With pluggable backend support, Kraken can also be plugged into existing docker registry setups
 simply as the distribution layer.
@@ -62,7 +62,7 @@ as the blob size and cluster size increase.
 
 - Agent
   - Deployed on every host
-  - Implements Docker registry interface
+  - Implements docker registry interface
   - Announces available content to tracker
   - Connects to peers returned by tracker to download content
 - Origin
@@ -73,7 +73,7 @@ as the blob size and cluster size increase.
   - Tracks which peers have what content (both in-progress and completed)
   - Provides ordered lists of peers to connect to for any given blob
 - Proxy
-  - Implements Docker registry interface
+  - Implements docker registry interface
   - Uploads each image layer to the responsible origin (remember, origins form a hash ring)
   - Uploads tags to build-index
 - Build-Index
@@ -96,7 +96,7 @@ concurrently (5200 blob downloads), with 300MB/s speed limit on all agents (usin
 
 # Usage
 
-All Kraken components can be deployed as Docker containers. To build the Docker images:
+All Kraken components can be deployed as docker containers. To build the docker images:
 
 ```
 $ make images
