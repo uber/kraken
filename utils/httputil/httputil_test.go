@@ -122,6 +122,34 @@ func TestSendRetryOn5XX(t *testing.T) {
 	require.InDelta(400*time.Millisecond, time.Since(start), float64(50*time.Millisecond))
 }
 
+func TestSendRetryWithCodes(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	transport := mockhttp.NewMockRoundTripper(ctrl)
+
+	gomock.InOrder(
+		transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(400), nil),
+		transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(503), nil),
+		transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(404), nil),
+	)
+
+	start := time.Now()
+	_, err := Get(
+		_testURL,
+		SendRetry(
+			RetryBackoff(backoff.WithMaxRetries(
+				backoff.NewConstantBackOff(200*time.Millisecond),
+				2)),
+			RetryCodes(400, 404)),
+		SendTransport(transport))
+	require.Error(err)
+	require.Equal(404, err.(StatusError).Status) // Last code returned.
+	require.InDelta(400*time.Millisecond, time.Since(start), float64(50*time.Millisecond))
+}
+
 func TestPollAccepted(t *testing.T) {
 	require := require.New(t)
 

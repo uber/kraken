@@ -153,6 +153,7 @@ func SendRedirect(redirect func(req *http.Request, via []*http.Request) error) S
 
 type retryOptions struct {
 	backoff backoff.BackOff
+	extraCodes   map[int]bool
 }
 
 // RetryOption allows overriding defaults for the SendRetry option.
@@ -163,12 +164,25 @@ func RetryBackoff(b backoff.BackOff) RetryOption {
 	return func(o *retryOptions) { o.backoff = b }
 }
 
+// RetryCodes adds more status codes to be retried (in addition to the default
+// 5XX codes).
+//
+// WARNING: You better know what you're doing to retry anything non-5XX.
+func RetryCodes(codes ...int) RetryOption {
+	return func(o *retryOptions) {
+		for _, c := range codes {
+			o.extraCodes[c] = true
+		}
+	}
+}
+
 // SendRetry will we retry the request on network / 5XX errors.
 func SendRetry(options ...RetryOption) SendOption {
 	retry := retryOptions{
 		backoff: backoff.WithMaxRetries(
 			backoff.NewConstantBackOff(250*time.Millisecond),
 			2),
+		extraCodes: make(map[int]bool),
 	}
 	for _, o := range options {
 		o(&retry)
@@ -251,7 +265,9 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 			httpReq.URL.Scheme = "http"
 			resp, err = client.Do(httpReq)
 		}
-		if err != nil || (resp.StatusCode >= 500 && !opts.acceptedCodes[resp.StatusCode]) {
+		if err != nil ||
+			(resp.StatusCode >= 500 && !opts.acceptedCodes[resp.StatusCode]) ||
+			(opts.retry.extraCodes[resp.StatusCode]) {
 			d := opts.retry.backoff.NextBackOff()
 			if d == backoff.Stop {
 				break // Backoff timed out.
