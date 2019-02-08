@@ -220,9 +220,15 @@ func (c *client) Open(path string, dst io.Writer) error {
 	var resp *http.Response
 	var nnErr error
 	for _, nn := range c.namenodes {
+		// We retry 400s here because experience has shown the datanode this
+		// request gets redirected to is sometimes invalid, and will return a 400
+		// error. By retrying the request, we hope to eventually get redirected
+		// to a valid datanode.
 		resp, nnErr = httputil.Get(
 			getURL(nn, path, v),
-			httputil.SendRetry(httputil.RetryBackoff(c.nameNodeBackOff())))
+			httputil.SendRetry(
+				httputil.RetryBackoff(c.nameNodeBackOff()),
+				httputil.RetryCodes(http.StatusBadRequest)))
 		if nnErr != nil {
 			if retryable(nnErr) {
 				continue
