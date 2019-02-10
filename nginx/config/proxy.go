@@ -14,7 +14,7 @@ upstream registry-override {
 server {
   listen {{.}};
 
-  {{.client_verification}}
+  {{$.client_verification}}
 
   client_max_body_size 10G;
 
