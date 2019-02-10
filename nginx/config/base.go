@@ -1,3 +1,7 @@
+package config
+
+// BaseTmpl defines the nginx template which all components share.
+const BaseTmpl = `
 worker_processes 4;
 worker_rlimit_nofile 4096;
 pid /tmp/nginx.pid;
@@ -114,3 +118,4 @@ http {
 
   {{.site}}
 }
+`

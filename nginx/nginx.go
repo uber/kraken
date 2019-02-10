@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"text/template"
 
+	"github.com/uber/kraken/nginx/config"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 )
@@ -28,10 +29,11 @@ func abspath(name string) (string, error) {
 
 // Config defines nginx configuration.
 type Config struct {
-	Root     bool   `yaml:"root"`
-	Name     string `yaml:"name"`
-	CacheDir string `yaml:"cache_dir"`
-	LogDir   string `yaml:"log_dir"`
+	Root         bool   `yaml:"root"`
+	Name         string `yaml:"name"`
+	TemplatePath string `yaml:"template_path"`
+	CacheDir     string `yaml:"cache_dir"`
+	LogDir       string `yaml:"log_dir"`
 
 	tls httputil.TLSConfig
 }
@@ -47,6 +49,51 @@ func (c *Config) inject(params map[string]interface{}) error {
 	return nil
 }
 
+// GetTemplate returns the template content.
+func (c *Config) getTemplate() (string, error) {
+	if c.TemplatePath != "" {
+		b, err := ioutil.ReadFile(c.TemplatePath)
+		if err != nil {
+			return "", fmt.Errorf("read template: %s", err)
+		}
+		return string(b), nil
+	}
+	tmpl, err := config.GetDefaultTemplate(c.Name)
+	if err != nil {
+		return "", fmt.Errorf("get default template: %s", err)
+	}
+	return tmpl, nil
+}
+
+// Build builds nginx config.
+func (c *Config) Build(params map[string]interface{}) ([]byte, error) {
+	tmpl, err := c.getTemplate()
+	if err != nil {
+		return nil, fmt.Errorf("get template: %s", err)
+	}
+	site, err := populateTemplate(tmpl, params)
+	if err != nil {
+		return nil, fmt.Errorf("populate template: %s", err)
+	}
+
+	// Build nginx config with base template and component specific template.
+	tmpl, err = config.GetDefaultTemplate("base")
+	if err != nil {
+		return nil, fmt.Errorf("get default base template: %s", err)
+	}
+	src, err := populateTemplate(tmpl, map[string]interface{}{
+		"site":                string(site),
+		"ssl_enabled":         !c.tls.CA.Disabled,
+		"ssl_certificate":     c.tls.CA.Cert.Path,
+		"ssl_certificate_key": c.tls.CA.Key.Path,
+		"ssl_password_file":   c.tls.CA.Passphrase.Path,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("populate base: %s", err)
+	}
+	return src, nil
+}
+
 // Option allows setting optional nginx configuration.
 type Option func(*Config)
 
@@ -57,8 +104,8 @@ func WithTLS(tls httputil.TLSConfig) Option {
 
 // Run injects params into an nginx configuration template and runs it.
 func Run(config Config, params map[string]interface{}, opts ...Option) error {
-	if config.Name == "" {
-		return errors.New("invalid config: name required")
+	if config.Name == "" && config.TemplatePath == "" {
+		return errors.New("invalid config: name or template_path required")
 	}
 	if config.CacheDir == "" {
 		return errors.New("invalid config: cache_dir required")
@@ -91,20 +138,9 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 		return err
 	}
 
-	site, err := populateTemplate(config.Name, params)
+	src, err := config.Build(params)
 	if err != nil {
-		return fmt.Errorf("populate site: %s", err)
-	}
-
-	src, err := populateTemplate("base", map[string]interface{}{
-		"site":                string(site),
-		"ssl_enabled":         !config.tls.CA.Disabled,
-		"ssl_certificate":     config.tls.CA.Cert.Path,
-		"ssl_certificate_key": config.tls.CA.Key.Path,
-		"ssl_password_file":   config.tls.CA.Passphrase.Path,
-	})
-	if err != nil {
-		return fmt.Errorf("populate base: %s", err)
+		return fmt.Errorf("build nginx config: %s", err)
 	}
 
 	if err := os.MkdirAll(_genDir, 0775); err != nil {
@@ -131,16 +167,8 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	return cmd.Run()
 }
 
-func populateTemplate(name string, args map[string]interface{}) ([]byte, error) {
-	p, err := abspath(name + ".tmpl")
-	if err != nil {
-		return nil, err
-	}
-	b, err := ioutil.ReadFile(p)
-	if err != nil {
-		return nil, fmt.Errorf("read: %s", err)
-	}
-	t, err := template.New("nginx").Parse(string(b))
+func populateTemplate(tmpl string, args map[string]interface{}) ([]byte, error) {
+	t, err := template.New("nginx").Parse(tmpl)
 	if err != nil {
 		return nil, fmt.Errorf("parse: %s", err)
 	}
