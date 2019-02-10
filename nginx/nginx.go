@@ -71,6 +71,9 @@ func (c *Config) Build(params map[string]interface{}) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get template: %s", err)
 	}
+	if _, ok := params["client_verification"]; !ok {
+		params["client_verification"] = config.DefaultClientVerification
+	}
 	site, err := populateTemplate(tmpl, params)
 	if err != nil {
 		return nil, fmt.Errorf("populate template: %s", err)
