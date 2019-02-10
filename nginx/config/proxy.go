@@ -5,15 +5,15 @@ const ProxyTmpl = `
 upstream registry {
   server {{.registry_server}};
 }
-  
+
 upstream registry-override {
   server {{.registry_override_server}};
 }
-  
+
 {{range .ports}}
 server {
   listen {{.}};
-  
+
   ssl_verify_client optional;
   set $required_verified_client 1;
   if ($scheme = http) {
@@ -30,15 +30,15 @@ server {
   if ($verfied_client !~ ^(0.*|1SUCCESS)$) {
     return 403;
   }
-  
+
   client_max_body_size 10G;
-  
+
   access_log {{$.log_dir}}/nginx-access.log json;
   error_log {{$.log_dir}}/nginx-error.log;
-  
+
   # Committing large blobs might take a while.
   proxy_read_timeout 3m;
-  
+
   location /v2/_catalog {
     proxy_pass http://registry-override;
 
@@ -57,10 +57,10 @@ server {
     }
     proxy_set_header Host $hostheader:{{.}};
   }
-  
+
   location / {
     proxy_pass http://registry;
-  
+
     set $hostheader $hostname;
     if ( $host = "localhost" ) {
       set $hostheader "localhost";
@@ -77,5 +77,5 @@ server {
     proxy_set_header Host $hostheader:{{.}};
   }
 }
-{{end}}  
+{{end}}
 `

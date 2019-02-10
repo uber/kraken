@@ -24,7 +24,7 @@ server {
   if ($remote_addr = "127.0.0.1") {
     set $required_verified_client 0;
   }
-  
+
   set $verfied_client $required_verified_client$ssl_client_verify;
   if ($verfied_client !~ ^(0.*|1SUCCESS)$) {
     return 403;
