@@ -1,7 +1,7 @@
 package config
 
-// BuildIndexTmpl is the default build-index nginx tmpl.
-const BuildIndexTmpl = `
+// BuildIndexTemplate is the default build-index nginx tmpl.
+const BuildIndexTemplate = `
 proxy_cache_path {{.cache_dir}}/tags keys_zone=tags:20m;
 proxy_cache_path {{.cache_dir}}/repositories keys_zone=repositories:20m;
 proxy_cache_path {{.cache_dir}}/list keys_zone=list:20m;

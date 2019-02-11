@@ -1,7 +1,7 @@
 package config
 
-// TrackerTmpl is the default tracker nginx tmpl.
-const TrackerTmpl = `
+// TrackerTemplate is the default tracker nginx tmpl.
+const TrackerTemplate = `
 proxy_cache_path {{.cache_dir}}/metainfo levels=1:2 keys_zone=metainfo:10m max_size=256g;
 
 upstream tracker {

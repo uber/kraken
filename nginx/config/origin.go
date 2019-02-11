@@ -1,7 +1,7 @@
 package config
 
-// OriginTmpl is the default origin nginx tmpl.
-const OriginTmpl = `
+// OriginTemplate is the default origin nginx tmpl.
+const OriginTemplate = `
 server {
   listen {{.port}};
 

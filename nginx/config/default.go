@@ -4,13 +4,13 @@ import (
 	"fmt"
 )
 
-var _nameToDefaultTmpl = map[string]string{
-	"base":               BaseTmpl,
-	"kraken-agent":       AgentTmpl,
-	"kraken-origin":      OriginTmpl,
-	"kraken-build-index": BuildIndexTmpl,
-	"kraken-tracker":     TrackerTmpl,
-	"kraken-proxy":       ProxyTmpl,
+var _nameToDefaultTemplate = map[string]string{
+	"base":               BaseTemplate,
+	"kraken-agent":       AgentTemplate,
+	"kraken-origin":      OriginTemplate,
+	"kraken-build-index": BuildIndexTemplate,
+	"kraken-tracker":     TrackerTemplate,
+	"kraken-proxy":       ProxyTemplate,
 }
 
 // DefaultClientVerification is the default nginx configuration for
@@ -36,7 +36,7 @@ if ($verfied_client !~ ^(0.*|1SUCCESS)$) {
 
 // GetDefaultTemplate returns the tmpl given name.
 func GetDefaultTemplate(name string) (string, error) {
-	if tmpl, ok := _nameToDefaultTmpl[name]; ok {
+	if tmpl, ok := _nameToDefaultTemplate[name]; ok {
 		return tmpl, nil
 	}
 	return "", fmt.Errorf("name not found")

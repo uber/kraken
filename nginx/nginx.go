@@ -17,23 +17,21 @@ import (
 )
 
 const (
-	// Assumes CWD is set to the project root.
-	_configDir = "./nginx/config"
-
 	_genDir = "/tmp/nginx"
 )
 
-func abspath(name string) (string, error) {
-	return filepath.Abs(filepath.Join(_configDir, name))
-}
-
 // Config defines nginx configuration.
 type Config struct {
-	Root         bool   `yaml:"root"`
-	Name         string `yaml:"name"`
+	Root bool `yaml:"root"`
+
+	// Name defines the default nginx template for each component.
+	Name string `yaml:"name"`
+
+	// TemplatePath takes precedence over Name, overwrites default template.
 	TemplatePath string `yaml:"template_path"`
-	CacheDir     string `yaml:"cache_dir"`
-	LogDir       string `yaml:"log_dir"`
+
+	CacheDir string `yaml:"cache_dir"`
+	LogDir   string `yaml:"log_dir"`
 
 	tls httputil.TLSConfig
 }

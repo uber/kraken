@@ -1,7 +1,7 @@
 package config
 
-// ProxyTmpl is the default proxy nginx tmpl.
-const ProxyTmpl = `
+// ProxyTemplate is the default proxy nginx tmpl.
+const ProxyTemplate = `
 upstream registry {
   server {{.registry_server}};
 }
