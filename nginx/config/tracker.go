@@ -1,3 +1,7 @@
+package config
+
+// TrackerTemplate is the default tracker nginx tmpl.
+const TrackerTemplate = `
 proxy_cache_path {{.cache_dir}}/metainfo levels=1:2 keys_zone=metainfo:10m max_size=256g;
 
 upstream tracker {
@@ -7,19 +11,7 @@ upstream tracker {
 server {
   listen {{.port}};
 
-  ssl_verify_client optional;
-  set $required_verified_client 1;
-  if ($scheme = http) {
-      set $required_verified_client 0;
-  }
-  if ($request_method ~ ^(GET|HEAD)$) {
-      set $required_verified_client 0;
-  }
-  
-  set $verfied_client $required_verified_client$ssl_client_verify;
-  if ($verfied_client !~ ^(0.*|1SUCCESS)$) {
-    return 403;
-  }
+  {{.client_verification}}
 
   access_log {{.log_dir}}/nginx-access.log;
   error_log {{.log_dir}}/nginx-error.log;
@@ -38,3 +30,4 @@ server {
     proxy_cache_lock    on;
   }
 }
+`

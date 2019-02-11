@@ -1,3 +1,7 @@
+package config
+
+// BuildIndexTemplate is the default build-index nginx tmpl.
+const BuildIndexTemplate = `
 proxy_cache_path {{.cache_dir}}/tags keys_zone=tags:20m;
 proxy_cache_path {{.cache_dir}}/repositories keys_zone=repositories:20m;
 proxy_cache_path {{.cache_dir}}/list keys_zone=list:20m;
@@ -9,19 +13,7 @@ upstream build-index {
 server {
   listen {{.port}};
 
-  ssl_verify_client optional;
-  set $required_verified_client 1;
-  if ($scheme = http) {
-      set $required_verified_client 0;
-  }
-  if ($request_method ~ ^(GET|HEAD)$) {
-      set $required_verified_client 0;
-  }
-  
-  set $verfied_client $required_verified_client$ssl_client_verify;
-  if ($verfied_client !~ ^(0.*|1SUCCESS)$) {
-    return 403;
-  }
+  {{.client_verification}}
 
   access_log {{.log_dir}}/nginx-access.log;
   error_log {{.log_dir}}/nginx-error.log;
@@ -61,3 +53,4 @@ server {
     proxy_read_timeout 2m;
   }
 }
+`
