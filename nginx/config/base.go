@@ -35,10 +35,13 @@ http {
   # Proxy Settings
   ##
   
-  proxy_set_header           X-Forwarded-For   $proxy_add_x_forwarded_for;
-  proxy_set_header           X-Forwarded-Proto $scheme;
-  proxy_set_header           X-Real-IP         $remote_addr;
-  proxy_set_header           X-Original-URI    $request_uri;
+  proxy_set_header  X-Forwarded-For   $proxy_add_x_forwarded_for;
+  proxy_set_header  X-Forwarded-Proto $http_x_forwarded_proto;
+  proxy_set_header  X-Real-IP         $remote_addr;
+  proxy_set_header  X-Original-URI    $request_uri;
+  
+  # Overwrites http with $scheme if Location header is set to http by upstream.
+  proxy_redirect ~^http://[^:]+:\d+(/.+)$ $1; 
 
   ##
   # SSL Settings
