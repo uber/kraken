@@ -7,6 +7,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 
 	"github.com/uber/kraken/utils/log"
@@ -18,8 +19,9 @@ var ErrEmptyCommonName = errors.New("empty common name")
 // TLSConfig defines TLS configuration.
 type TLSConfig struct {
 	Name   string   `yaml:"name"`
-	CA     X509Pair `yaml:"ca"`
+	Server X509Pair `yaml:"server"`
 	Client X509Pair `yaml:"client"`
+	CAs    []Secret `yaml:"cas"`
 
 	// Lazy init.
 	tls *tls.Config
@@ -52,8 +54,8 @@ func (c *TLSConfig) BuildClient() (*tls.Config, error) {
 	var caPool *x509.CertPool
 	var certs []tls.Certificate
 	var err error
-	if c.CA.Cert.Path != "" {
-		caPool, err = createCertPool(c.CA.Cert.Path)
+	if c.CAs != nil {
+		caPool, err = createCertPool(c.CAs)
 		if err != nil {
 			return nil, fmt.Errorf("create cert pool: %s", err)
 		}
@@ -83,7 +85,19 @@ func (c *TLSConfig) BuildClient() (*tls.Config, error) {
 	return c.tls, nil
 }
 
-func createCertPool(paths ...string) (*x509.CertPool, error) {
+// WriteCABundle writes a list of CA to a writer.
+func (c *TLSConfig) WriteCABundle(w io.Writer) error {
+	pems, err := concatSecrets(c.CAs)
+	if err != nil {
+		return fmt.Errorf("concat secrets: %s", err)
+	}
+	if _, err := w.Write(pems); err != nil {
+		return fmt.Errorf("write cas: %s", err)
+	}
+	return nil
+}
+
+func createCertPool(secrets []Secret) (*x509.CertPool, error) {
 	pool, err := x509.SystemCertPool()
 	if err != nil {
 		return nil, fmt.Errorf("create system cert pool: %s", err)
@@ -92,16 +106,26 @@ func createCertPool(paths ...string) (*x509.CertPool, error) {
 	if pool == nil {
 		pool = x509.NewCertPool()
 	}
-	for _, p := range paths {
-		pem, err := parseCert(p)
+	pems, err := concatSecrets(secrets)
+	if err != nil {
+		return nil, fmt.Errorf("concat secrets: %s", err)
+	}
+	if ok := pool.AppendCertsFromPEM(pems); !ok {
+		return nil, fmt.Errorf("cannot append cert")
+	}
+	return pool, nil
+}
+
+func concatSecrets(secrets []Secret) ([]byte, error) {
+	result := bytes.Buffer{}
+	for _, s := range secrets {
+		pem, err := parseCert(s.Path)
 		if err != nil {
 			return nil, fmt.Errorf("parse cert: %s", err)
 		}
-		if ok := pool.AppendCertsFromPEM(pem); !ok {
-			return nil, fmt.Errorf("cannot append cert")
-		}
+		result.Write(pem)
 	}
-	return pool, nil
+	return result.Bytes(), nil
 }
 
 func parseCert(path string) ([]byte, error) {

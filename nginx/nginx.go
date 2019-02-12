@@ -20,6 +20,8 @@ const (
 	_genDir = "/tmp/nginx"
 )
 
+var _clientCABundle = path.Join(_genDir, "ca.crt")
+
 // Config defines nginx configuration.
 type Config struct {
 	Root bool `yaml:"root"`
@@ -83,11 +85,12 @@ func (c *Config) Build(params map[string]interface{}) ([]byte, error) {
 		return nil, fmt.Errorf("get default base template: %s", err)
 	}
 	src, err := populateTemplate(tmpl, map[string]interface{}{
-		"site":                string(site),
-		"ssl_enabled":         !c.tls.CA.Disabled,
-		"ssl_certificate":     c.tls.CA.Cert.Path,
-		"ssl_certificate_key": c.tls.CA.Key.Path,
-		"ssl_password_file":   c.tls.CA.Passphrase.Path,
+		"site":                   string(site),
+		"ssl_enabled":            !c.tls.Server.Disabled,
+		"ssl_certificate":        c.tls.Server.Cert.Path,
+		"ssl_certificate_key":    c.tls.Server.Key.Path,
+		"ssl_password_file":      c.tls.Server.Passphrase.Path,
+		"ssl_client_certificate": _clientCABundle,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("populate base: %s", err)
@@ -117,15 +120,15 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	for _, opt := range opts {
 		opt(&config)
 	}
-	if config.tls.CA.Disabled {
+	if config.tls.Server.Disabled {
 		log.Warn("Server TLS is disabled")
 	} else {
-		for _, f := range []string{
-			config.tls.CA.Cert.Path,
-			config.tls.CA.Key.Path,
-			config.tls.CA.Passphrase.Path,
-		} {
-			if _, err := os.Stat(f); err != nil {
+		for _, s := range append(
+			config.tls.CAs,
+			config.tls.Server.Cert,
+			config.tls.Server.Key,
+			config.tls.Server.Passphrase) {
+			if _, err := os.Stat(s.Path); err != nil {
 				return fmt.Errorf("invalid TLS config: %s", err)
 			}
 		}
@@ -151,6 +154,14 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	if err := ioutil.WriteFile(conf, src, 0755); err != nil {
 		return fmt.Errorf("write src: %s", err)
 	}
+	cabundle, err := os.Create(_clientCABundle)
+	if err != nil {
+		return fmt.Errorf("create cabundle: %s", err)
+	}
+	if err := config.tls.WriteCABundle(cabundle); err != nil {
+		return fmt.Errorf("write cabundle: %s", err)
+	}
+	cabundle.Close()
 
 	stdoutLog := path.Join(config.LogDir, "nginx-stdout.log")
 	stdout, err := os.OpenFile(stdoutLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
