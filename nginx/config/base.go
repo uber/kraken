@@ -46,7 +46,7 @@ http {
     # This is important to enforce client to use certificate.
     # The client of nginx cannot use a self-signed cert.
     ssl_verify_client on;
-    ssl_client_certificate {{.ssl_certificate}};
+    ssl_client_certificate {{.ssl_client_certificate}};
   {{end}}
   ssl_protocols TLSv1 TLSv1.1 TLSv1.2; # Dropping SSLv3, ref: POODLE
   ssl_prefer_server_ciphers on;
