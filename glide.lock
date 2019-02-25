@@ -1,5 +1,5 @@
-hash: 82f876e12a042475b6d1bc22905b83986342cd39a02317d08f2d27ac3220f4b6
-updated: 2019-02-25T15:06:28.442039-08:00
+hash: 4a7f5d3a3cd3546b8d89b8785d61893d21bef3072a4d055562c99b7970aa3ba9
+updated: 2019-02-25T15:24:49.06333-08:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
@@ -12,7 +12,7 @@ imports:
 - name: github.com/andres-erbsen/clock
   version: 9e14626cd129ba01ccb6806bcca9d523e570aaf0
 - name: github.com/apache/thrift
-  version: 9549b25c77587b29be4e0b5c258221a4ed85d37a
+  version: b2a4d4ae21c789b689dd162deb819665567f481c
   subpackages:
   - lib/go/thrift
 - name: github.com/aws/aws-sdk-go
@@ -135,8 +135,6 @@ imports:
   version: 2fb04c6466a548a03cb009c5569ee1ab1e35398e
 - name: github.com/docker/libtrust
   version: fa567046d9b14f6aa788882a950d69651d230b21
-- name: github.com/facebookgo/clock
-  version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
 - name: github.com/garyburd/redigo
   version: a69d19351219b6dd56f274f96d85a7014a2ec34e
   subpackages:
@@ -203,10 +201,8 @@ imports:
   - sha512
 - name: github.com/uber-common/bark
   version: 02d883c81a4e7b76904d97efb176efdf4be791bd
-- name: github.com/uber-go/atomic
-  version: e682c1008ac17bf26d2e4b5ad6cdd08520ed0b22
 - name: github.com/uber-go/tally
-  version: 34be4a565ce6286a0ba91a54a81be3f6181ca2e2
+  version: e9a67ec1839e1f6e5133dbcca2f57bec12fdeda2
   subpackages:
   - m3
   - m3/customtransports

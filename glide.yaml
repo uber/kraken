@@ -3,7 +3,7 @@ ignore:
 - go/doc
 import:
 - package: github.com/uber-go/tally
-  version: ^v2.1.0
+  version: ^v3
 - package: github.com/docker/distribution
   version: v2.6.2
 - package: github.com/garyburd/redigo
