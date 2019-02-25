@@ -1,5 +1,5 @@
-hash: 4a8060e04636df753ed28ff9599426bc03b4604950ad541a0412ab18f23dc803
-updated: 2019-01-25T10:07:31.335715-08:00
+hash: 82f876e12a042475b6d1bc22905b83986342cd39a02317d08f2d27ac3220f4b6
+updated: 2019-02-25T15:06:28.442039-08:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
@@ -16,7 +16,7 @@ imports:
   subpackages:
   - lib/go/thrift
 - name: github.com/aws/aws-sdk-go
-  version: 3503f7b53173f227ff96dc247983360cc7cb8463
+  version: b4d97e9cf75f3815bd694b8e0d6f9d81492c3586
   subpackages:
   - aws
   - aws/awserr
@@ -150,12 +150,10 @@ imports:
   version: 7011d38ac0d201eeddff4a4085a657c3da322d75
   subpackages:
   - proto
-- name: github.com/gorilla/context
-  version: 14f550f51af52180c2eefed15e5fd18d63c0a64a
 - name: github.com/gorilla/handlers
   version: 60c7bfde3e33c201519a200a4507a158cc03a17b
 - name: github.com/gorilla/mux
-  version: e3702bed27f0d39777b0b37b664b6280e8ef8fbf
+  version: a7962380ca08b5a188038c69871b8d3fbdf31e89
 - name: github.com/hashicorp/golang-lru
   version: 20f1fb78b0740ba8c3cb143a61e86ba5c8669768
 - name: github.com/inconshreveable/mousetrap
@@ -267,7 +265,7 @@ imports:
   subpackages:
   - rate
 - name: gopkg.in/DATA-DOG/go-sqlmock.v1
-  version: d76b18b42f285b792bf985118980ce9eacea9d10
+  version: 472e287dbafe67e526a3797165b64cb14f34705a
 - name: gopkg.in/square/go-jose.v1
   version: 6e50787b7338112747e64f32753fb4f9dbfb8f79
   subpackages:
