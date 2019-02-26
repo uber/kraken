@@ -26,7 +26,6 @@ from Queue import Queue
 from socket import socket
 from threading import Thread
 
-import docker
 import requests
 
 from uploader import Uploader
@@ -93,6 +92,53 @@ class HealthCheck(object):
         raise RuntimeError('Health check failure: {msg}'.format(msg=msg))
 
 
+class DockerContainer(object):
+
+    def __init__(self, name, image, command=None, ports=None, volumes=None):
+        self.name = name
+        self.image = image
+        
+        self.command = []
+        if command:
+            self.command = command
+
+        self.ports = []
+        if ports:
+            for i, o in ports.iteritems():
+                self.ports.extend(['-p', '{o}:{i}'.format(i=i, o=o)])
+        
+        self.volumes = []
+        if volumes:
+            for o, i in volumes.iteritems():
+                bind = i['bind']
+                mode = i['mode']
+                self.volumes.extend(['-v', '{o}:{bind}:{mode}'.format(o=o, bind=bind, mode=mode)]) 
+
+    def run(self):
+        cmd = [
+            'docker', 'run',
+            '-d',
+            '--name=' + self.name,
+        ]
+        cmd.extend(self.ports)
+        cmd.extend(self.volumes)
+        cmd.append(self.image)
+        cmd.extend(self.command)
+        assert subprocess.call(cmd) == 0
+
+    def logs(self):
+        subprocess.call(['docker', 'logs', self.name])
+
+    def remove(self, force=False):
+        cmd = [
+            'docker', 'rm',
+        ]
+        if force:
+            cmd.append('-f')
+        cmd.append(self.name)
+        assert subprocess.call(cmd) == 0
+
+
 def new_docker_container(name, image, command=None, environment=None, ports=None,
                          volumes=None, health_check=None):
     """
@@ -103,15 +149,14 @@ def new_docker_container(name, image, command=None, environment=None, ports=None
         # Set umask so jenkins user can delete files created by non-jenkins user.
         command = ['bash', '-c', 'umask 0000 && {command}'.format(command=' '.join(command))]
 
-    c = docker.from_env().containers.run(
+    c = DockerContainer(
         name=name,
         image=image,
         command=command,
-        environment=environment,
         ports=ports,
-        volumes=volumes,
-        detach=True)
-    print 'Starting container {name} with id {id}'.format(name=c.name, id=c.id)
+        volumes=volumes)
+    c.run()
+    print 'Starting container {}'.format(c.name)
     try:
         if health_check:
             health_check.run(c)
@@ -206,6 +251,10 @@ class Component(object):
 
     def restart(self, wipe_disk=False):
         self.stop(wipe_disk=wipe_disk)
+        # When a container is removed, there is a race condition
+        # when starting the container with the same command that causes
+        # start to fail.
+        time.sleep(1)
         self.start()
 
     def print_logs(self):
