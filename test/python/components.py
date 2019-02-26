@@ -26,7 +26,6 @@ from Queue import Queue
 from socket import socket
 from threading import Thread
 
-import yaml
 import docker
 import requests
 
@@ -530,12 +529,7 @@ class BuildIndex(Component):
         self.config_file = 'test-{zone}.yaml'.format(zone=zone)
         self.name = '{name}-{zone}'.format(name=self.instance.name, zone=zone)
 
-        remotes = {
-            'remotes': {
-                i.addr: ['.*']
-                for i in (remote_instances or [])
-            }
-        }
+        remotes = "remotes:\n{remotes}".format(remotes='\n'.join("  {addr}: [.*]".format(addr=i.addr) for i in (remote_instances or [])))
 
         populate_config_template(
             'build-index',
@@ -543,7 +537,7 @@ class BuildIndex(Component):
             testfs=testfs.addr,
             origins=yaml_list([o.addr for o in self.origin_cluster.origins]),
             cluster=yaml_list([i.addr for i in instances.values()]),
-            remotes=yaml.safe_dump(remotes))
+            remotes=remotes)
 
         self.volumes = create_volumes('build-index', self.name)
 
