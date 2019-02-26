@@ -22,6 +22,7 @@ import (
 
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/testutil"
+
 	"github.com/pressly/chi"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
@@ -57,13 +58,15 @@ func TestScopeByEndpoint(t *testing.T) {
 			_, err := httputil.Send(test.method, fmt.Sprintf("http://%s%s", addr, test.reqPath))
 			require.NoError(err)
 
-			counter, ok := stats.Snapshot().Counters()["count"]
-			require.True(ok)
-			require.Equal(map[string]string{
-				"endpoint": test.expectedEndpoint,
-				"method":   test.method,
-			}, counter.Tags())
-			require.Equal(int64(1), counter.Value())
+			require.Equal(1, len(stats.Snapshot().Counters()))
+			for _, v := range stats.Snapshot().Counters() {
+				require.Equal("count", v.Name())
+				require.Equal(int64(1), v.Value())
+				require.Equal(map[string]string{
+					"endpoint": test.expectedEndpoint,
+					"method":   test.method,
+				}, v.Tags())
+			}
 		})
 	}
 }
@@ -87,13 +90,15 @@ func TestLatencyTimer(t *testing.T) {
 
 	now := time.Now()
 
-	timer, ok := stats.Snapshot().Timers()["latency"]
-	require.True(ok)
-	require.WithinDuration(now, now.Add(timer.Values()[0]), 500*time.Millisecond)
-	require.Equal(map[string]string{
-		"endpoint": "foo",
-		"method":   "GET",
-	}, timer.Tags())
+	require.Equal(1, len(stats.Snapshot().Timers()))
+	for _, v := range stats.Snapshot().Timers() {
+		require.Equal("latency", v.Name())
+		require.WithinDuration(now, now.Add(v.Values()[0]), 500*time.Millisecond)
+		require.Equal(map[string]string{
+			"endpoint": "foo",
+			"method":   "GET",
+		}, v.Tags())
+	}
 }
 
 func TestStatusCounter(t *testing.T) {
@@ -138,13 +143,15 @@ func TestStatusCounter(t *testing.T) {
 				require.NoError(err)
 			}
 
-			counter, ok := stats.Snapshot().Counters()[test.expectedStatus]
-			require.True(ok)
-			require.Equal(int64(5), counter.Value())
-			require.Equal(map[string]string{
-				"endpoint": "foo",
-				"method":   "GET",
-			}, counter.Tags())
+			require.Equal(1, len(stats.Snapshot().Counters()))
+			for _, v := range stats.Snapshot().Counters() {
+				require.Equal(test.expectedStatus, v.Name())
+				require.Equal(int64(5), v.Value())
+				require.Equal(map[string]string{
+					"endpoint": "foo",
+					"method":   "GET",
+				}, v.Tags())
+			}
 		})
 	}
 }
