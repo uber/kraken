@@ -252,8 +252,10 @@ class Component(object):
     def restart(self, wipe_disk=False):
         self.stop(wipe_disk=wipe_disk)
         # When a container is removed, there is a race condition
-        # when starting the container with the same command that causes
-        # start to fail.
+        # when starting the container with the same command right away,
+        # which causes the start command to fail.
+        # Sleep for one second to make sure that the container is really
+        # removed from docker.
         time.sleep(1)
         self.start()
 
