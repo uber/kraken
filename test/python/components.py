@@ -26,9 +26,9 @@ from Queue import Queue
 from socket import socket
 from threading import Thread
 
-import yaml
 import docker
 import requests
+from ruamel.yaml import YAML
 
 from uploader import Uploader
 from utils import format_insecure_curl, tls_opts
@@ -543,7 +543,7 @@ class BuildIndex(Component):
             testfs=testfs.addr,
             origins=yaml_list([o.addr for o in self.origin_cluster.origins]),
             cluster=yaml_list([i.addr for i in instances.values()]),
-            remotes=yaml.safe_dump(remotes))
+            remotes=YAML().dump(remotes))
 
         self.volumes = create_volumes('build-index', self.name)
 
