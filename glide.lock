@@ -1,5 +1,5 @@
-hash: 4a8060e04636df753ed28ff9599426bc03b4604950ad541a0412ab18f23dc803
-updated: 2019-01-25T10:07:31.335715-08:00
+hash: 0f3f850f42103661af99f40f2f3f3c54bde04a4c1d914ad320302d08910a2938
+updated: 2019-02-25T15:39:04.852502-08:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
@@ -12,11 +12,11 @@ imports:
 - name: github.com/andres-erbsen/clock
   version: 9e14626cd129ba01ccb6806bcca9d523e570aaf0
 - name: github.com/apache/thrift
-  version: 9549b25c77587b29be4e0b5c258221a4ed85d37a
+  version: b2a4d4ae21c789b689dd162deb819665567f481c
   subpackages:
   - lib/go/thrift
 - name: github.com/aws/aws-sdk-go
-  version: 3503f7b53173f227ff96dc247983360cc7cb8463
+  version: b4d97e9cf75f3815bd694b8e0d6f9d81492c3586
   subpackages:
   - aws
   - aws/awserr
@@ -135,8 +135,6 @@ imports:
   version: 2fb04c6466a548a03cb009c5569ee1ab1e35398e
 - name: github.com/docker/libtrust
   version: fa567046d9b14f6aa788882a950d69651d230b21
-- name: github.com/facebookgo/clock
-  version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
 - name: github.com/garyburd/redigo
   version: a69d19351219b6dd56f274f96d85a7014a2ec34e
   subpackages:
@@ -150,12 +148,10 @@ imports:
   version: 7011d38ac0d201eeddff4a4085a657c3da322d75
   subpackages:
   - proto
-- name: github.com/gorilla/context
-  version: 14f550f51af52180c2eefed15e5fd18d63c0a64a
 - name: github.com/gorilla/handlers
   version: 60c7bfde3e33c201519a200a4507a158cc03a17b
 - name: github.com/gorilla/mux
-  version: e3702bed27f0d39777b0b37b664b6280e8ef8fbf
+  version: a7962380ca08b5a188038c69871b8d3fbdf31e89
 - name: github.com/hashicorp/golang-lru
   version: 20f1fb78b0740ba8c3cb143a61e86ba5c8669768
 - name: github.com/inconshreveable/mousetrap
@@ -205,10 +201,8 @@ imports:
   - sha512
 - name: github.com/uber-common/bark
   version: 02d883c81a4e7b76904d97efb176efdf4be791bd
-- name: github.com/uber-go/atomic
-  version: e682c1008ac17bf26d2e4b5ad6cdd08520ed0b22
 - name: github.com/uber-go/tally
-  version: 34be4a565ce6286a0ba91a54a81be3f6181ca2e2
+  version: e9a67ec1839e1f6e5133dbcca2f57bec12fdeda2
   subpackages:
   - m3
   - m3/customtransports
@@ -267,7 +261,7 @@ imports:
   subpackages:
   - rate
 - name: gopkg.in/DATA-DOG/go-sqlmock.v1
-  version: d76b18b42f285b792bf985118980ce9eacea9d10
+  version: 472e287dbafe67e526a3797165b64cb14f34705a
 - name: gopkg.in/square/go-jose.v1
   version: 6e50787b7338112747e64f32753fb4f9dbfb8f79
   subpackages:
