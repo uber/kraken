@@ -1,9 +1,9 @@
 ## 1. Build
 `$ make devcluster`
 
-This command generates a `kraken-agent:dev` image containing an agent binary and a `kraken-herd:dev` image containing build-index, origin, proxy, and tracker binaries. 
+This command creates a `kraken-agent:dev` image containing an agent binary and a `kraken-herd:dev` image containing build-index, origin, proxy, and tracker binaries. 
 
-It also starts 2 agent docker containers and 1 herd container.
+It starts 2 agent docker containers and 1 herd container. Docker-for-Mac is required for devcluster to work, because the development config files use host.docker.internal for address of all components.
 
 ## 2. Pulling from Docker Hub Library
 A simple registry storage backend is provided for read-only access to Docker registry. A library image can be pulled from agent.
