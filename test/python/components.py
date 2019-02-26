@@ -543,7 +543,7 @@ class BuildIndex(Component):
             testfs=testfs.addr,
             origins=yaml_list([o.addr for o in self.origin_cluster.origins]),
             cluster=yaml_list([i.addr for i in instances.values()]),
-            remotes=yaml.dump(remotes))
+            remotes=yaml.safe_dump(remotes))
 
         self.volumes = create_volumes('build-index', self.name)
 
