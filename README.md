@@ -9,8 +9,8 @@ With pluggable backend support, Kraken can also be plugged into existing docker 
 simply as the distribution layer.
 
 Kraken has been in production at Uber since early 2018. In our busiest cluster, Kraken distributes
-1 million 0-100MB blobs, 600k 100MB-1G blobs, and 100k 1G+ blobs per day. At its peak production
-load, Kraken distributes 20K 100MB-1G blobs in under 30 sec.
+more than 1 million blobs per day, including 100k 1G+ blobs. At its peak production load, Kraken
+distributes 20K 100MB-1G blobs in under 30 sec.
 
 Below is the visualization of a small Kraken cluster at work:
 
