@@ -64,7 +64,7 @@ import:
   subpackages:
   - client
 - package: github.com/cenkalti/backoff
-  version: ^2.1.1
+  version: ^2.0.0
 testImport:
 - package: github.com/stretchr/testify
   version: ^1.2.2
