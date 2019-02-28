@@ -1,5 +1,5 @@
-hash: 0f3f850f42103661af99f40f2f3f3c54bde04a4c1d914ad320302d08910a2938
-updated: 2019-02-25T15:39:04.852502-08:00
+hash: dfc009fb93d430fa1bc3dde16d3d8300108b44793e1ace64d95d58dfc49514a9
+updated: 2019-02-27T20:17:22.427609-08:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
@@ -16,7 +16,7 @@ imports:
   subpackages:
   - lib/go/thrift
 - name: github.com/aws/aws-sdk-go
-  version: b4d97e9cf75f3815bd694b8e0d6f9d81492c3586
+  version: 3248e106c35aafb9b982f5d086f0150faf24ee4e
   subpackages:
   - aws
   - aws/awserr
