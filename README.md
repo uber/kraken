@@ -4,7 +4,7 @@
 [![Github Release](https://img.shields.io/github/release/uber/kraken.svg)](https://github.com/uber/kraken/releases)
 
 Kraken is a P2P-powered docker registry which focuses on scalability and availability. It is
-designed for docker image management, replication and distribribution in a hybrid cloud environment.
+designed for docker image management, replication and distribution in a hybrid cloud environment.
 With pluggable backend support, Kraken can also be plugged into existing docker registry setups
 simply as the distribution layer.
 
@@ -52,7 +52,7 @@ The high level idea of Kraken is to have a small number of dedicated hosts seed 
 of agents running on each host in the cluster.
 A central component, tracker, will orchestrate all participants in the network to form a
 pseudo-random regular graph.
-Such a graph has high connectivity and small diameter, so all participants in a reasonally sized
+Such a graph has high connectivity and small diameter, so all participants in a reasonably sized
 cluster can reach > 80% of max upload/download speed in theory, and performance doesn't degrade much
 as the blob size and cluster size increase.
 
@@ -119,12 +119,12 @@ For information about how to configure and use Kraken, please refer to the [docu
 
 Dragonfly cluster has one or a few "supernodes" that coordinates transfer of every 4MB chunk of data
 in the cluster.
-While the supernode would be able to make optimial decisions, the throughput of the whole cluster is
+While the supernode would be able to make optimal decisions, the throughput of the whole cluster is
 limited by the processing power of one or a few hosts, and the performance would degrade linearly as
 either blob size or cluster size increases.
 
 Kraken's tracker only helps orchestrate the connection graph, and leaves negotiation of actual data
-tranfer to individual peers, so Kraken scales better with large blobs.
+transfer to individual peers, so Kraken scales better with large blobs.
 On top of that, Kraken is HA and supports cross cluster replication, both are required for a
 reliable hybrid cloud setup.
 
@@ -152,10 +152,10 @@ tweak compression ratios, as `docker pull` spends most of the time on data decom
 lookups immediately afterwards will still return the old value due to Nginx caching, and replication
 probably won't trigger. We are working on supporting this functionality better. If you need tag
 mutation support right now, please reduce cache interval of build-index component. If you also need
-replication in a multi-cluster setup, please consider setting up another docker registy as Kraken's
+replication in a multi-cluster setup, please consider setting up another docker registry as Kraken's
 backend.
 - Theoretically, Kraken should distribute blobs of any size without significant performance
-degredation, but at Uber we enforce a 20G limit and cannot endorse of the production use of
+degradation, but at Uber we enforce a 20G limit and cannot endorse of the production use of
 ultra-large blobs (i.e. 100G+). Peers enforce connection limits on a per blob basis, and new peers
 might be starved for connections if no peers become seeders relatively soon. If you have ultra-large
 blobs you'd like to distribute, we recommend breaking them into <10G chunks first.
