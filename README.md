@@ -3,10 +3,10 @@
 [![Build Status](https://travis-ci.org/uber/kraken.svg?branch=master)](https://travis-ci.org/uber/kraken)
 [![Github Release](https://img.shields.io/github/release/uber/kraken.svg)](https://github.com/uber/kraken/releases)
 
-Kraken is a P2P-powered docker registry which focuses on scalability and availability. It is
+Kraken is a P2P-powered docker registry that focuses on scalability and availability. It is
 designed for docker image management, replication and distribution in a hybrid cloud environment.
-With pluggable backend support, Kraken can also be plugged into existing docker registry setups
-simply as the distribution layer.
+With pluggable backend support, Kraken can easily integrate into existing docker registry setups
+as the distribution layer.
 
 Kraken has been in production at Uber since early 2018. In our busiest cluster, Kraken distributes
 more than 1 million blobs per day, including 100k 1G+ blobs. At its peak production load, Kraken
@@ -39,7 +39,7 @@ Following are some highlights of Kraken:
 - **Highly available**. No component is a single point of failure.
 - **Secure**. Support uploader authentication and data integrity protection through TLS.
 - **Pluggable storage options**. Instead of managing data, Kraken plugs into reliable blob storage
-  options, like S3, HDFS or another registry. The storage interface is simple, and new options
+  options, like S3, HDFS or another registry. The storage interface is simple and new options
   are easy to add.
 - **Lossless cross cluster replication**. Kraken supports rule-based async replication between
   clusters.
@@ -50,7 +50,7 @@ Following are some highlights of Kraken:
 
 The high level idea of Kraken is to have a small number of dedicated hosts seed content to a network
 of agents running on each host in the cluster.
-A central component, tracker, will orchestrate all participants in the network to form a
+A central component, the tracker, will orchestrate all participants in the network to form a
 pseudo-random regular graph.
 Such a graph has high connectivity and small diameter, so all participants in a reasonably sized
 cluster can reach > 80% of max upload/download speed in theory, and performance doesn't degrade much
@@ -134,10 +134,10 @@ Kraken was initially built with a BitTorrent driver, however we ended up impleme
 driver based on BitTorrent protocol to allow for tighter integration with storage solutions and more
 control over performance optimizations.
 
-Kraken's problem space is slightly different with what BitTorrent was designed for. Kraken's goal is
+Kraken's problem space is slightly different than what BitTorrent was designed for. Kraken's goal is
 to reduce global max download time and communication overhead in a stable environment, while
-BitTorrent's designed for unpredictable environment, so it needs to defend against malicious or bad
-behaving peers and tries to preserve more copies of scarce data.
+BitTorrent was designed for an unpredictable and adversarial environment, so it needs to preserve more
+copies of scarce data and defend against malicious or bad behaving peers.
 
 Despite the differences, we re-examine Kraken's protocol from time to time, and if it's feasible, we
 hope to make it compatible with BitTorrent again.
