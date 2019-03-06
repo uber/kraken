@@ -139,3 +139,5 @@ gopkg.in/yaml.v2 v2.0.0-20150116202057-bef53efd0c76 h1:j+MxZkyN6Wy/bPjhOnmIY+OtX
 gopkg.in/yaml.v2 v2.0.0-20150116202057-bef53efd0c76/go.mod h1:JAlM8MvJe8wmxCU4Bli9HhUf9+ttbYbLASfIpnQbh74=
 rsc.io/letsencrypt v0.0.0-20160420184355-a019c9e6fce0 h1:+0fTFkguUvjxkq+oTyDc6a5V3ePOoF1sH27GTcZY4bg=
 rsc.io/letsencrypt v0.0.0-20160420184355-a019c9e6fce0/go.mod h1:buyQKZ6IXrRnB7TdkHP0RyEybLx18HHyOSoTyoOLqNY=
+rsc.io/letsencrypt v0.0.2-0.20180417150253-800d85d42bc7 h1:fG4SQAX5iRpU0rwYQecKqr+p5et4Daj9bULYNiNjPpI=
+rsc.io/letsencrypt v0.0.2-0.20180417150253-800d85d42bc7/go.mod h1:buyQKZ6IXrRnB7TdkHP0RyEybLx18HHyOSoTyoOLqNY=

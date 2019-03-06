@@ -64,5 +64,5 @@ require (
 	gopkg.in/square/go-jose.v1 v1.1.1 // indirect
 	gopkg.in/validator.v2 v2.0.0-20180205153750-59c90c7046f6
 	gopkg.in/yaml.v2 v2.0.0-20150116202057-bef53efd0c76
-	rsc.io/letsencrypt v0.0.0-20160420184355-a019c9e6fce0 // indirect
+	rsc.io/letsencrypt v0.0.2-0.20180417150253-800d85d42bc7 // indirect
 )
