@@ -166,146 +166,81 @@ protoc:
 # mockgen must be installed on the system to make this work.
 # Install it by running:
 # `go get github.com/golang/mock/mockgen`.
-mockgen = $(GOPATH)/bin/mockgen
+mockgen = GO111MODULES=on $(GOPATH)/bin/mockgen
+
+define kraken_mockgen
+	mkdir -p mocks/$(1)
+	$(mockgen) \
+		-destination=mocks/$(1)/$(shell tr '[:upper:]' '[:lower:]' <<< $(3)).go \
+		-package $(2) \
+		$(PROJECT_ROOT)/$(1) $(3)
+
+endef
 
 .PHONY: mocks
 mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
-	mkdir -p mocks/lib/hashring
-	$(mockgen) \
-		-destination=mocks/lib/hashring/mocks.go \
-		-package mockhashring \
-		github.com/uber/kraken/lib/hashring Ring,Watcher
-
-	mkdir -p mocks/lib/backend/s3backend
-	$(mockgen) \
-		-destination=mocks/lib/backend/s3backend/mocks.go \
-		-package mocks3backend \
-		github.com/uber/kraken/lib/backend/s3backend S3
-
+	$(call kraken_mockgen,lib/backend/s3backend,mocks3backend,S3)
 	# mockgen doesn't play nice when importing vendor code. Must strip the vendor prefix
 	# from the imports.
-	sed -i '' s,github.com/uber/kraken/vendor/,, mocks/lib/backend/s3backend/mocks.go
+	sed -i '' s,github.com/uber/kraken/vendor/,, mocks/lib/backend/s3backend/s3.go
 
-	mkdir -p mocks/lib/backend/hdfsbackend/webhdfs
-	$(mockgen) \
-		-destination=mocks/lib/backend/hdfsbackend/webhdfs/mocks.go \
-		-package mockwebhdfs \
-		github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs Client
+	$(call kraken_mockgen,lib/hashring,mockhashring,Ring)
+	$(call kraken_mockgen,lib/hashring,mockhashring,Watcher)
 
-	mkdir -p mocks/lib/hostlist
-	$(mockgen) \
-		-destination=mocks/lib/hostlist/mocks.go \
-		-package mockhostlist \
-		github.com/uber/kraken/lib/hostlist List
+	$(call kraken_mockgen,lib/backend/hdfsbackend/webhdfs,mockwebhdfs,Client)
 
-	mkdir -p mocks/lib/healthcheck
-	$(mockgen) \
-		-destination=mocks/lib/healthcheck/mocks.go \
-		-package mockhealthcheck \
-		github.com/uber/kraken/lib/healthcheck Checker,Filter,PassiveFilter
+	$(call kraken_mockgen,lib/hostlist,mockhostlist,List)
 
-	mkdir -p mocks/tracker/originstore
-	$(mockgen) \
-		-destination=mocks/tracker/originstore/mockoriginstore.go \
-		-package mockoriginstore \
-		github.com/uber/kraken/tracker/originstore Store
+	$(call kraken_mockgen,lib/healthcheck,mockhealthcheck,Checker)
+	$(call kraken_mockgen,lib/healthcheck,mockhealthcheck,Filter)
+	$(call kraken_mockgen,lib/healthcheck,mockhealthcheck,PassiveFilter)
 
-	mkdir -p mocks/build-index/tagstore
-	$(mockgen) \
-		-destination=mocks/build-index/tagstore/mocktagstore.go \
-		-package mocktagstore \
-		github.com/uber/kraken/build-index/tagstore Store,FileStore
+	$(call kraken_mockgen,tracker/originstore,mockoriginstore,Store)
 
-	mkdir -p mocks/build-index/tagtype
-	$(mockgen) \
-		-destination=mocks/build-index/tagtype/mocktagtype.go \
-		-package mocktagtype \
-		github.com/uber/kraken/build-index/tagtype DependencyResolver
+	$(call kraken_mockgen,build-index/tagstore,mocktagstore,Store)
+	$(call kraken_mockgen,build-index/tagstore,mocktagstore,FileStore)
 
-	mkdir -p mocks/build-index/tagclient
-	$(mockgen) \
-		-destination=mocks/build-index/tagclient/mocktagclient.go \
-		-package mocktagclient \
-		github.com/uber/kraken/build-index/tagclient Provider,Client
+	$(call kraken_mockgen,build-index/tagtype,mocktagtype,DependencyResolver)
 
-	mkdir -p mocks/tracker/announceclient
-	$(mockgen) \
-		-destination=mocks/tracker/announceclient/mockannounceclient.go \
-		-package mockannounceclient \
-		github.com/uber/kraken/tracker/announceclient Client
+	$(call kraken_mockgen,build-index/tagclient,mocktagclient,Provider)
+	$(call kraken_mockgen,build-index/tagclient,mocktagclient,Client)
 
-	mkdir -p mocks/utils/dedup
-	$(mockgen) \
-		-destination=mocks/utils/dedup/mockdedup.go \
-		-package mockdedup \
-		github.com/uber/kraken/utils/dedup TaskRunner,IntervalTask
+	$(call kraken_mockgen,tracker/announceclient,mockannounceclient,Client)
 
-	mkdir -p mocks/lib/backend
-	$(mockgen) \
-		-destination=mocks/lib/backend/mockbackend.go \
-		-package mockbackend \
-		github.com/uber/kraken/lib/backend Client
+	$(call kraken_mockgen,utils/dedup,mockdedup,TaskRunner)
+	$(call kraken_mockgen,utils/dedup,mockdedup,IntervalTask)
 
-	mkdir -p mocks/tracker/peerstore
-	$(mockgen) \
-		-destination=mocks/tracker/peerstore/mockpeerstore.go \
-		-package mockpeerstore \
-		github.com/uber/kraken/tracker/peerstore Store
+	$(call kraken_mockgen,lib/backend,mockbackend,Client)
 
-	mkdir -p mocks/lib/store
-	$(mockgen) \
-		-destination=mocks/lib/store/mockstore.go \
-		-package mockstore \
-		github.com/uber/kraken/lib/store FileReadWriter
+	$(call kraken_mockgen,tracker/peerstore,mockpeerstore,Store)
 
-	mkdir -p mocks/lib/torrent/scheduler
-	$(mockgen) \
-		-destination=mocks/lib/torrent/scheduler/mockscheduler.go \
-		-package mockscheduler \
-		github.com/uber/kraken/lib/torrent/scheduler ReloadableScheduler,Scheduler
+	$(call kraken_mockgen,lib/store,mockstore,FileReadWriter)
 
-	mkdir -p mocks/origin/blobclient
-	$(mockgen) \
-		-destination=mocks/origin/blobclient/mockblobclient.go \
-		-package mockblobclient \
-		github.com/uber/kraken/origin/blobclient \
-		Client,Provider,ClusterClient,ClusterProvider,ClientResolver
+	$(call kraken_mockgen,lib/torrent/scheduler,mockscheduler,ReloadableScheduler)
+	$(call kraken_mockgen,lib/torrent/scheduler,mockscheduler,Scheduler)
 
-	mkdir -p mocks/lib/dockerregistry/transfer
-	$(mockgen) \
-		-destination=mocks/lib/dockerregistry/transfer/mocktransferer.go \
-		-package mocktransferer \
-		github.com/uber/kraken/lib/dockerregistry/transfer ImageTransferer
+	$(call kraken_mockgen,origin/blobclient,mockblobclient,Client)
+	$(call kraken_mockgen,origin/blobclient,mockblobclient,Provider)
+	$(call kraken_mockgen,origin/blobclient,mockblobclient,ClusterClient)
+	$(call kraken_mockgen,origin/blobclient,mockblobclient,ClusterProvider)
+	$(call kraken_mockgen,origin/blobclient,mockblobclient,ClientResolver)
 
-	mkdir -p mocks/tracker/metainfoclient
-	$(mockgen) \
-		-destination=mocks/tracker/metainfoclient/mockmetainfoclient.go \
-		-package mockmetainfoclient \
-		github.com/uber/kraken/tracker/metainfoclient Client
+	$(call kraken_mockgen,lib/dockerregistry/transfer,mocktransferer,ImageTransferer)
+
+	$(call kraken_mockgen,tracker/metainfoclient,mockmetainfoclient,Client)
+
+	$(call kraken_mockgen,lib/persistedretry,mockpersistedretry,Store)
+	$(call kraken_mockgen,lib/persistedretry,mockpersistedretry,Task)
+	$(call kraken_mockgen,lib/persistedretry,mockpersistedretry,Executor)
+	$(call kraken_mockgen,lib/persistedretry,mockpersistedretry,Manager)
+
+	$(call kraken_mockgen,lib/persistedretry/tagreplication,mocktagreplication,RemoteValidator)
 
 	mkdir -p mocks/os
-	$(mockgen) \
-		-destination=mocks/os/mockos.go \
-		-package mockos \
-		os FileInfo
+	$(mockgen) -destination=mocks/os/mockos.go -package mockos os FileInfo
 
 	mkdir -p mocks/net/http
-	$(mockgen) \
-		-destination=mocks/net/http/mockhttp.go \
-		-package mockhttp \
-		net/http RoundTripper
-
-	mkdir -p mocks/lib/persistedretry
-	$(mockgen) \
-		-destination=mocks/lib/persistedretry/mockpersistedretry.go \
-		-package mockpersistedretry \
-		github.com/uber/kraken/lib/persistedretry Store,Task,Executor,Manager
-
-	mkdir -p mocks/lib/persistedretry/tagreplication
-	$(mockgen) \
-		-destination=mocks/lib/persistedretry/tagreplication/mocktagreplication.go \
-		-package mocktagreplication \
-		github.com/uber/kraken/lib/persistedretry/tagreplication RemoteValidator
+	$(mockgen) -destination=mocks/net/http/mockhttp.go -package mockhttp net/http RoundTripper
