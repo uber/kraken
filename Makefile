@@ -65,7 +65,7 @@ clean::
 	@rm -f $(LINUX_BINS)
 
 vendor:
-	$(GO) mod vendor
+	$(GO) mod vendor || $(GO) mod vendor
 
 .PHONY: bins
 bins: $(LINUX_BINS)
