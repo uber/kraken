@@ -3,7 +3,7 @@ sudo: required
 language: go
 
 go:
-  - 1.11.x
+  - 1.11.1
 
 services:
   - docker
@@ -19,7 +19,7 @@ install:
   - mkdir -p "$HOME"/src && ln -s "$HOME"/protoc "$HOME"/src/protobuf
 
 env:
-  - PATH=$HOME/protoc/bin:$PATH
+  - PATH=$HOME/protoc/bin:$PATH GO111MODULE=on
 
 script:
   - make unit-test integration
