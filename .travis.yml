@@ -3,7 +3,7 @@ sudo: required
 language: go
 
 go:
-  - 1.11.x
+  - 1.11.1
 
 services:
   - docker
@@ -20,6 +20,7 @@ install:
 
 env:
   - PATH=$HOME/protoc/bin:$PATH
+  - GO111MODULE=on
 
 script:
   - make unit-test integration
