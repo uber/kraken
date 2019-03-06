@@ -16,7 +16,7 @@ package config
 // AgentTemplate is the default agent nginx tmpl.
 var AgentTemplate = `
 upstream registry-backend {
-  server 127.0.0.1:8991; # TODO(codyg): Change this to unix socket.
+  server {{.registry_server}};
   {{if ne .registry_backup ""}} server {{.registry_backup}} backup; {{end}}
 }
 

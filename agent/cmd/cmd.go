@@ -181,7 +181,9 @@ func run() {
 	}
 
 	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
-		"port":            agentRegistryPort,
+		"port": agentRegistryPort,
+		"registry_server": nginx.GetServer(
+			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
 		"registry_backup": config.RegistryBackup},
 		nginx.WithTLS(config.TLS)))
 }

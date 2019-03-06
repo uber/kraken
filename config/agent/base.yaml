@@ -53,8 +53,8 @@ registry:
     log:
       level: error
     http:
-      net: tcp
-      addr: 0.0.0.0:8991
+      net: unix
+      addr: /tmp/kraken-agent-registry.sock
 
 peer_id_factory: addr_hash
 
