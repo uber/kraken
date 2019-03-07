@@ -19,11 +19,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/andres-erbsen/clock"
+	"github.com/garyburd/redigo/redis"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/randutil"
-	"github.com/andres-erbsen/clock"
-	"github.com/garyburd/redigo/redis"
 )
 
 func peerSetKey(h core.InfoHash, window int64) string {
@@ -133,6 +133,7 @@ func (s *RedisStore) UpdatePeer(h core.InfoHash, p *core.PeerInfo) error {
 	// Add p to the current window.
 	k := peerSetKey(h, w)
 
+	fmt.Println("sadd", k, expireAt)
 	if err := c.Send("SADD", k, serializePeer(p)); err != nil {
 		return fmt.Errorf("send SADD: %s", err)
 	}
@@ -164,14 +165,20 @@ func (s *RedisStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 	// this is to decrease the number of windows.
 	windows := s.peerSetWindows()
 	randutil.ShuffleInt64s(windows)
+	fmt.Println("windows", windows)
 
 	// Eliminate duplicates from other windows and collapses complete bits.
 	selected := make(map[peerIdentity]bool)
 
 	var i int
 	for len(selected) < n && i < len(windows) {
-		result, err := redis.Strings(c.Do("SRANDMEMBER", peerSetKey(h, windows[i]), n-len(selected)))
-		if err != nil {
+		k := peerSetKey(h, windows[i])
+		fmt.Println("srandmember", k)
+		result, err := redis.Strings(c.Do("SRANDMEMBER", k, n-len(selected)))
+		if err == redis.ErrNil {
+			i++
+			continue
+		} else if err != nil {
 			return nil, err
 		}
 		for _, s := range result {

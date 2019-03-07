@@ -5,6 +5,8 @@ require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc // indirect
 	github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf // indirect
+	github.com/alicebob/gopher-json v0.0.0-20180125190556-5a6b3ba71ee6 // indirect
+	github.com/alicebob/miniredis v2.4.6+incompatible
 	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
 	github.com/aws/aws-sdk-go v1.17.6
@@ -26,6 +28,7 @@ require (
 	github.com/go-sql-driver/mysql v1.4.1 // indirect
 	github.com/golang/mock v1.2.0
 	github.com/golang/protobuf v1.2.0
+	github.com/gomodule/redigo v2.0.0+incompatible // indirect
 	github.com/gorilla/handlers v0.0.0-20150720190736-60c7bfde3e33 // indirect
 	github.com/gorilla/mux v1.7.0
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
@@ -49,6 +52,7 @@ require (
 	github.com/uber-go/tally v3.3.8+incompatible
 	github.com/willf/bitset v0.0.0-20180426185212-8ce1146b8621
 	github.com/xenolf/lego v0.0.0-20180425151241-8e9c5ac3e6bf // indirect
+	github.com/yuin/gopher-lua v0.0.0-20190206043414-8bfc7677f583 // indirect
 	github.com/yvasiyarov/go-metrics v0.0.0-20140926110328-57bccd1ccd43 // indirect
 	github.com/yvasiyarov/gorelic v0.0.0-20141212073537-a9bba5b9ab50 // indirect
 	github.com/yvasiyarov/newrelic_platform_go v0.0.0-20140908184405-b21fdbd4370f // indirect
