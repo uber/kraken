@@ -212,7 +212,7 @@ func TestTLSClientBadAuth(t *testing.T) {
 	require.NoError(err)
 
 	_, err = Get("https://"+addr+"/", SendTLS(badtls))
-	require.True(IsNetworkError(err))
+	require.True(IsBadRequest(err))
 }
 
 func TestTLSClientFallback(t *testing.T) {
