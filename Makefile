@@ -60,7 +60,6 @@ endef
 
 .PHONY: images
 images: $(LINUX_BINS)
-	docker build $(BUILD_QUIET) -t kraken-base -f docker/base/Dockerfile ./
 	docker build $(BUILD_QUIET) -t kraken-agent:$(PACKAGE_VERSION) -f docker/agent/Dockerfile ./
 	docker build $(BUILD_QUIET) -t kraken-build-index:$(PACKAGE_VERSION) -f docker/build-index/Dockerfile ./
 	docker build $(BUILD_QUIET) -t kraken-origin:$(PACKAGE_VERSION) -f docker/origin/Dockerfile ./
@@ -120,7 +119,6 @@ NAME?=test_
 USERNAME:=$(shell id -u -n)
 USERID:=$(shell id -u)
 integration: vendor $(LINUX_BINS) docker_stop tools/bin/puller/puller
-	docker build $(BUILD_QUIET) -t kraken-base -f docker/base/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-agent:$(PACKAGE_VERSION) -f docker/agent/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-build-index:$(PACKAGE_VERSION) -f docker/build-index/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-origin:$(PACKAGE_VERSION) -f docker/origin/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
