@@ -3,9 +3,9 @@
 [![Build Status](https://travis-ci.org/uber/kraken.svg?branch=master)](https://travis-ci.org/uber/kraken)
 [![Github Release](https://img.shields.io/github/release/uber/kraken.svg)](https://github.com/uber/kraken/releases)
 
-Kraken is a P2P-powered docker registry that focuses on scalability and availability. It is
-designed for docker image management, replication and distribution in a hybrid cloud environment.
-With pluggable backend support, Kraken can easily integrate into existing docker registry setups
+Kraken is a P2P-powered Docker registry that focuses on scalability and availability. It is
+designed for Docker image management, replication and distribution in a hybrid cloud environment.
+With pluggable backend support, Kraken can easily integrate into existing Docker registry setups
 as the distribution layer.
 
 Kraken has been in production at Uber since early 2018. In our busiest cluster, Kraken distributes
@@ -31,7 +31,7 @@ Below is the visualization of a small Kraken cluster at work:
 # Features
 
 Following are some highlights of Kraken:
-- **Highly scalable**. Kraken is capable of distributing docker images at > 50% of max download
+- **Highly scalable**. Kraken is capable of distributing Docker images at > 50% of max download
   speed limit on every host. Cluster size and image size do not have significant impact on download
   speed.
   - Supports at least 8k hosts per cluster.
@@ -62,7 +62,7 @@ as the blob size and cluster size increase.
 
 - Agent
   - Deployed on every host
-  - Implements docker registry interface
+  - Implements Docker registry interface
   - Announces available content to tracker
   - Connects to peers returned by tracker to download content
 - Origin
@@ -73,7 +73,7 @@ as the blob size and cluster size increase.
   - Tracks which peers have what content (both in-progress and completed)
   - Provides ordered lists of peers to connect to for any given blob
 - Proxy
-  - Implements docker registry interface
+  - Implements Docker registry interface
   - Uploads each image layer to the responsible origin (remember, origins form a hash ring)
   - Uploads tags to build-index
 - Build-Index
@@ -96,7 +96,7 @@ concurrently (5200 blob downloads), with 300MB/s speed limit on all agents (usin
 
 # Usage
 
-All Kraken components can be deployed as docker containers. To build the docker images:
+All Kraken components can be deployed as Docker containers. To build the Docker images:
 
 ```
 $ make images
@@ -152,7 +152,7 @@ tweak compression ratios, as `docker pull` spends most of the time on data decom
 lookups immediately afterwards will still return the old value due to Nginx caching, and replication
 probably won't trigger. We are working on supporting this functionality better. If you need tag
 mutation support right now, please reduce cache interval of build-index component. If you also need
-replication in a multi-cluster setup, please consider setting up another docker registry as Kraken's
+replication in a multi-cluster setup, please consider setting up another Docker registry as Kraken's
 backend.
 - Theoretically, Kraken should distribute blobs of any size without significant performance
 degradation, but at Uber we enforce a 20G limit and cannot endorse of the production use of
