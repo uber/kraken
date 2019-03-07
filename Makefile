@@ -168,13 +168,16 @@ protoc:
 # `go get github.com/golang/mock/mockgen`.
 mockgen = GO111MODULES=on $(GOPATH)/bin/mockgen
 
-define kraken_mockgen
+define lowercase
+$(shell tr '[:upper:]' '[:lower:]' <<< $(1))
+endef
+
+define add_mock
 	mkdir -p mocks/$(1)
 	$(mockgen) \
-		-destination=mocks/$(1)/$(shell tr '[:upper:]' '[:lower:]' <<< $(3)).go \
-		-package $(2) \
-		$(PROJECT_ROOT)/$(1) $(3)
-
+		-destination=mocks/$(1)/$(call lowercase,$(2)).go \
+		-package mock$(notdir $(1)) \
+		$(PROJECT_ROOT)/$(1) $(2)
 endef
 
 .PHONY: mocks
@@ -182,65 +185,61 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
-	$(call kraken_mockgen,lib/backend/s3backend,mocks3backend,S3)
+	$(call add_mock,lib/backend/s3backend,S3)
 	# mockgen doesn't play nice when importing vendor code. Must strip the vendor prefix
 	# from the imports.
 	sed -i '' s,github.com/uber/kraken/vendor/,, mocks/lib/backend/s3backend/s3.go
 
-	$(call kraken_mockgen,lib/hashring,mockhashring,Ring)
-	$(call kraken_mockgen,lib/hashring,mockhashring,Watcher)
+	$(call add_mock,lib/hashring,Ring)
+	$(call add_mock,lib/hashring,Watcher)
 
-	$(call kraken_mockgen,lib/backend/hdfsbackend/webhdfs,mockwebhdfs,Client)
+	$(call add_mock,lib/backend/hdfsbackend/webhdfs,Client)
 
-	$(call kraken_mockgen,lib/hostlist,mockhostlist,List)
+	$(call add_mock,lib/hostlist,List)
 
-	$(call kraken_mockgen,lib/healthcheck,mockhealthcheck,Checker)
-	$(call kraken_mockgen,lib/healthcheck,mockhealthcheck,Filter)
-	$(call kraken_mockgen,lib/healthcheck,mockhealthcheck,PassiveFilter)
+	$(call add_mock,lib/healthcheck,Checker)
+	$(call add_mock,lib/healthcheck,Filter)
+	$(call add_mock,lib/healthcheck,PassiveFilter)
 
-	$(call kraken_mockgen,tracker/originstore,mockoriginstore,Store)
+	$(call add_mock,tracker/originstore,Store)
 
-	$(call kraken_mockgen,build-index/tagstore,mocktagstore,Store)
-	$(call kraken_mockgen,build-index/tagstore,mocktagstore,FileStore)
+	$(call add_mock,build-index/tagstore,Store)
+	$(call add_mock,build-index/tagstore,FileStore)
 
-	$(call kraken_mockgen,build-index/tagtype,mocktagtype,DependencyResolver)
+	$(call add_mock,build-index/tagtype,DependencyResolver)
 
-	$(call kraken_mockgen,build-index/tagclient,mocktagclient,Provider)
-	$(call kraken_mockgen,build-index/tagclient,mocktagclient,Client)
+	$(call add_mock,build-index/tagclient,Provider)
+	$(call add_mock,build-index/tagclient,Client)
 
-	$(call kraken_mockgen,tracker/announceclient,mockannounceclient,Client)
+	$(call add_mock,tracker/announceclient,Client)
 
-	$(call kraken_mockgen,utils/dedup,mockdedup,TaskRunner)
-	$(call kraken_mockgen,utils/dedup,mockdedup,IntervalTask)
+	$(call add_mock,utils/dedup,TaskRunner)
+	$(call add_mock,utils/dedup,IntervalTask)
 
-	$(call kraken_mockgen,lib/backend,mockbackend,Client)
+	$(call add_mock,lib/backend,Client)
 
-	$(call kraken_mockgen,tracker/peerstore,mockpeerstore,Store)
+	$(call add_mock,tracker/peerstore,Store)
 
-	$(call kraken_mockgen,lib/store,mockstore,FileReadWriter)
+	$(call add_mock,lib/store,FileReadWriter)
 
-	$(call kraken_mockgen,lib/torrent/scheduler,mockscheduler,ReloadableScheduler)
-	$(call kraken_mockgen,lib/torrent/scheduler,mockscheduler,Scheduler)
+	$(call add_mock,lib/torrent/scheduler,ReloadableScheduler)
+	$(call add_mock,lib/torrent/scheduler,Scheduler)
 
-	$(call kraken_mockgen,origin/blobclient,mockblobclient,Client)
-	$(call kraken_mockgen,origin/blobclient,mockblobclient,Provider)
-	$(call kraken_mockgen,origin/blobclient,mockblobclient,ClusterClient)
-	$(call kraken_mockgen,origin/blobclient,mockblobclient,ClusterProvider)
-	$(call kraken_mockgen,origin/blobclient,mockblobclient,ClientResolver)
+	$(call add_mock,origin/blobclient,Client)
+	$(call add_mock,origin/blobclient,Provider)
+	$(call add_mock,origin/blobclient,ClusterClient)
+	$(call add_mock,origin/blobclient,ClusterProvider)
+	$(call add_mock,origin/blobclient,ClientResolver)
 
-	$(call kraken_mockgen,lib/dockerregistry/transfer,mocktransferer,ImageTransferer)
+	$(call add_mock,lib/dockerregistry/transfer,ImageTransferer)
 
-	$(call kraken_mockgen,tracker/metainfoclient,mockmetainfoclient,Client)
+	$(call add_mock,tracker/metainfoclient,Client)
 
-	$(call kraken_mockgen,lib/persistedretry,mockpersistedretry,Store)
-	$(call kraken_mockgen,lib/persistedretry,mockpersistedretry,Task)
-	$(call kraken_mockgen,lib/persistedretry,mockpersistedretry,Executor)
-	$(call kraken_mockgen,lib/persistedretry,mockpersistedretry,Manager)
+	$(call add_mock,lib/persistedretry,Store)
+	$(call add_mock,lib/persistedretry,Task)
+	$(call add_mock,lib/persistedretry,Executor)
+	$(call add_mock,lib/persistedretry,Manager)
 
-	$(call kraken_mockgen,lib/persistedretry/tagreplication,mocktagreplication,RemoteValidator)
+	$(call add_mock,lib/persistedretry/tagreplication,RemoteValidator)
 
-	mkdir -p mocks/os
-	$(mockgen) -destination=mocks/os/mockos.go -package mockos os FileInfo
-
-	mkdir -p mocks/net/http
-	$(mockgen) -destination=mocks/net/http/mockhttp.go -package mockhttp net/http RoundTripper
+	$(call add_mock,utils/httputil,RoundTripper)
