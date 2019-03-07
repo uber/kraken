@@ -23,7 +23,7 @@ BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUIL
 
 # Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
 # This workaround builds the binary inside a linux container.
-OSX_CROSS_COMPILER = docker run --rm -it -v $(GOPATH):/go -w /go/src/github.com/uber/kraken golang:1.11.1 go build -o ./$@ ./$(dir $@)
+CROSS_COMPILER = docker run --rm -it -v $(GOPATH):/go -w /go/src/github.com/uber/kraken golang:1.11.4 go build -o ./$@ ./$(dir $@)
 
 LINUX_BINS = \
 	agent/agent \
@@ -34,22 +34,22 @@ LINUX_BINS = \
 	tracker/tracker
 
 agent/agent:: $(wildcard agent/*.go)
-	$(BUILD_LINUX)
+	$(CROSS_COMPILER)
 
 build-index/build-index:: $(wildcard build-index/*.go)
-	if [[ $$OSTYPE == darwin* ]]; then $(OSX_CROSS_COMPILER); else $(BUILD_LINUX); fi
+	$(CROSS_COMPILER)
 
 origin/origin:: $(wildcard origin/*.go)
-	if [[ $$OSTYPE == darwin* ]]; then $(OSX_CROSS_COMPILER); else $(BUILD_LINUX); fi
+	$(CROSS_COMPILER)
 
 proxy/proxy:: $(wildcard proxy/*.go)
-	$(BUILD_LINUX)
+	$(CROSS_COMPILER)
 
 tools/bin/testfs/testfs:: $(wildcard tools/bin/testfs/*.go)
-	$(BUILD_LINUX)
+	$(CROSS_COMPILER)
 
 tracker/tracker:: $(wildcard tracker/*.go)
-	$(BUILD_LINUX)
+	$(CROSS_COMPILER)
 
 .PHONY: images
 images: $(LINUX_BINS)
