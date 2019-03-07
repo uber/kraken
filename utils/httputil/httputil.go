@@ -31,6 +31,9 @@ import (
 	"github.com/uber/kraken/utils/handler"
 )
 
+// RoundTripper is an alias of the http.RoundTripper for mocking purposes.
+type RoundTripper = http.RoundTripper
+
 // StatusError occurs if an HTTP response has an unexpected status code.
 type StatusError struct {
 	Method       string
@@ -165,8 +168,8 @@ func SendRedirect(redirect func(req *http.Request, via []*http.Request) error) S
 }
 
 type retryOptions struct {
-	backoff backoff.BackOff
-	extraCodes   map[int]bool
+	backoff    backoff.BackOff
+	extraCodes map[int]bool
 }
 
 // RetryOption allows overriding defaults for the SendRetry option.

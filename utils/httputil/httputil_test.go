@@ -28,7 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/mocks/net/http"
+	"github.com/uber/kraken/mocks/utils/httputil"
 )
 
 const _testURL = "http://localhost:0/test"
@@ -55,7 +55,7 @@ func TestSendOptions(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	transport := mockhttp.NewMockRoundTripper(ctrl)
+	transport := mockhttputil.NewMockRoundTripper(ctrl)
 
 	transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(499), nil)
 
@@ -72,7 +72,7 @@ func TestSendRetry(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	transport := mockhttp.NewMockRoundTripper(ctrl)
+	transport := mockhttputil.NewMockRoundTripper(ctrl)
 
 	for _, status := range []int{503, 500, 200} {
 		transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(status), nil)
@@ -96,7 +96,7 @@ func TestSendRetryOnTransportErrors(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	transport := mockhttp.NewMockRoundTripper(ctrl)
+	transport := mockhttputil.NewMockRoundTripper(ctrl)
 
 	transport.EXPECT().RoundTrip(gomock.Any()).Return(nil, errors.New("some network error")).Times(3)
 
@@ -118,7 +118,7 @@ func TestSendRetryOn5XX(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	transport := mockhttp.NewMockRoundTripper(ctrl)
+	transport := mockhttputil.NewMockRoundTripper(ctrl)
 
 	transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(503), nil).Times(3)
 
@@ -141,7 +141,7 @@ func TestSendRetryWithCodes(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	transport := mockhttp.NewMockRoundTripper(ctrl)
+	transport := mockhttputil.NewMockRoundTripper(ctrl)
 
 	gomock.InOrder(
 		transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(400), nil),
@@ -169,7 +169,7 @@ func TestPollAccepted(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	transport := mockhttp.NewMockRoundTripper(ctrl)
+	transport := mockhttputil.NewMockRoundTripper(ctrl)
 
 	for _, status := range []int{202, 202, 200} {
 		transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(status), nil)
@@ -190,7 +190,7 @@ func TestPollAcceptedStatusError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	transport := mockhttp.NewMockRoundTripper(ctrl)
+	transport := mockhttputil.NewMockRoundTripper(ctrl)
 
 	for _, status := range []int{202, 202, 404} {
 		transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(status), nil)
@@ -212,7 +212,7 @@ func TestPollAcceptedBackoffTimeout(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	transport := mockhttp.NewMockRoundTripper(ctrl)
+	transport := mockhttputil.NewMockRoundTripper(ctrl)
 
 	transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(202), nil).Times(3)
 
