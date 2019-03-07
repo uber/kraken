@@ -133,7 +133,6 @@ func (s *RedisStore) UpdatePeer(h core.InfoHash, p *core.PeerInfo) error {
 	// Add p to the current window.
 	k := peerSetKey(h, w)
 
-	fmt.Println("sadd", k, expireAt)
 	if err := c.Send("SADD", k, serializePeer(p)); err != nil {
 		return fmt.Errorf("send SADD: %s", err)
 	}
@@ -165,7 +164,6 @@ func (s *RedisStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 	// this is to decrease the number of windows.
 	windows := s.peerSetWindows()
 	randutil.ShuffleInt64s(windows)
-	fmt.Println("windows", windows)
 
 	// Eliminate duplicates from other windows and collapses complete bits.
 	selected := make(map[peerIdentity]bool)
@@ -173,7 +171,6 @@ func (s *RedisStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 	var i int
 	for len(selected) < n && i < len(windows) {
 		k := peerSetKey(h, windows[i])
-		fmt.Println("srandmember", k)
 		result, err := redis.Strings(c.Do("SRANDMEMBER", k, n-len(selected)))
 		if err == redis.ErrNil {
 			i++
