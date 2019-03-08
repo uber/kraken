@@ -67,10 +67,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// ErrNoFilesToLoad is returned when you attemp to call LoadFiles without valid
-// file paths.
-var ErrNoFilesToLoad = errors.New("attempt to load configuration with no files")
-
 // ErrCycleRef is returned when there are circular dependencies detected in
 // configuraiton files extending each other.
 var ErrCycleRef = errors.New("cyclic reference in configuration extends detected")
@@ -111,7 +107,7 @@ func Load(filename string, config interface{}) error {
 	if err != nil {
 		return err
 	}
-	return loadFiles(config, filenames...)
+	return loadFiles(config, filenames)
 }
 
 type getExtend func(filename string) (extends string, err error)
@@ -120,7 +116,7 @@ type getExtend func(filename string) (extends string, err error)
 // points to.
 func resolveExtends(filename string, extendReader getExtend) ([]string, error) {
 	filenames := []string{filename}
-	fileSet := make(stringset.Set)
+	seen := make(stringset.Set)
 	for {
 		extends, err := extendReader(filename)
 		if err != nil {
@@ -137,12 +133,12 @@ func resolveExtends(filename string, extendReader getExtend) ([]string, error) {
 		}
 
 		// Prevent circular references.
-		if fileSet.Has(extends) {
+		if seen.Has(extends) {
 			return nil, ErrCycleRef
 		}
 
 		filenames = append([]string{extends}, filenames...)
-		fileSet.Add(extends)
+		seen.Add(extends)
 		filename = extends
 	}
 	return filenames, nil
@@ -162,11 +158,7 @@ func readExtend(configFile string) (string, error) {
 }
 
 // loadFiles loads a list of files, deep-merging values.
-func loadFiles(config interface{}, fnames ...string) error {
-	if len(fnames) == 0 {
-		return ErrNoFilesToLoad
-	}
-
+func loadFiles(config interface{}, fnames []string) error {
 	for _, fname := range fnames {
 		data, err := ioutil.ReadFile(fname)
 		if err != nil {

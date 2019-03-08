@@ -125,7 +125,7 @@ func TestLoadFilesExtends(t *testing.T) {
 	defer os.Remove(partial)
 
 	var cfg configuration
-	err := loadFiles(&cfg, fname, partial)
+	err := loadFiles(&cfg, []string{fname, partial})
 	require.NoError(err)
 
 	require.Equal(8080, cfg.BufferSpace)
@@ -177,7 +177,7 @@ func TestLoadFilesValidateOnce(t *testing.T) {
 
 	// But merging load has no error.
 	var mergedCfg configuration
-	err = loadFiles(&mergedCfg, fname1, fname2)
+	err = loadFiles(&mergedCfg, []string{fname1, fname2})
 	require.NoError(err)
 
 	require.Equal("localhost:8080", mergedCfg.ListenAddress)
