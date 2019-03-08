@@ -170,23 +170,23 @@ func filterCandidatesFromDirs(fname string, dirs []string) ([]string, error) {
 	}
 
 	for {
+		paths = append([]string{candidate}, paths...)
 		extends, err := readExtend(candidate)
 		if err != nil {
 			return nil, err
-		}
-
-		paths = append([]string{candidate}, paths...)
-		if extends != "" {
-			// Prevent circular references.
-			if !cSet.Has(extends) {
-				candidate = path.Join(filepath.Dir(candidate), extends)
-				cSet.Add(extends)
-			} else {
-				return nil, ErrCycleRef
-			}
-		} else {
+		} else if extends == "" {
 			break
 		}
+
+		// Prevent circular references.
+		if cSet.Has(extends) {
+			return nil, ErrCycleRef
+		}
+
+		if !filepath.IsAbs(extends) {
+			candidate = path.Join(filepath.Dir(candidate), extends)
+		}
+		cSet.Add(extends)
 	}
 
 	// Append secrets.
