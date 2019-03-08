@@ -3,9 +3,11 @@ GO = GO111MODULE=on go
 
 # Flags to pass to go build
 BUILD_FLAGS = -gcflags '-N -l'
+BUILD_QUIET ?= -q
 
 # Where to find your project
 PROJECT_ROOT = github.com/uber/kraken
+PACKAGE_VERSION ?= $(shell git describe --always --tags)
 
 ALL_SRC = $(shell find . -name "*.go" | grep -v -e vendor \
 	-e ".*/\..*" \
@@ -18,7 +20,6 @@ ALL_PKGS = $(shell go list $(sort $(dir $(ALL_SRC))) | grep -v vendor)
 # ==== BASIC ====
 
 BUILD_NATIVE = $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) ./$(dir $@)
-
 BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) ./$(dir $@)
 
 # Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
@@ -32,6 +33,8 @@ LINUX_BINS = \
 	proxy/proxy \
 	tools/bin/testfs/testfs \
 	tracker/tracker
+
+REGISTRY ?= gcr.io/uber-container-tools
 
 agent/agent:: $(wildcard agent/*.go)
 	$(CROSS_COMPILER)
@@ -51,15 +54,37 @@ tools/bin/testfs/testfs:: $(wildcard tools/bin/testfs/*.go)
 tracker/tracker:: $(wildcard tracker/*.go)
 	$(CROSS_COMPILER)
 
+define tag_image
+	docker tag $(1):$(PACKAGE_VERSION) $(REGISTRY)/$(1):$(PACKAGE_VERSION)
+endef
+
 .PHONY: images
 images: $(LINUX_BINS)
-	docker build -q -t kraken-agent:dev -f docker/agent/Dockerfile ./
-	docker build -q -t kraken-build-index:dev -f docker/build-index/Dockerfile ./
-	docker build -q -t kraken-origin:dev -f docker/origin/Dockerfile ./
-	docker build -q -t kraken-proxy:dev -f docker/proxy/Dockerfile ./
-	docker build -q -t kraken-testfs:dev -f docker/testfs/Dockerfile ./
-	docker build -q -t kraken-tracker:dev -f docker/tracker/Dockerfile ./
-	docker build -q -t kraken-herd:dev -f docker/herd/Dockerfile ./
+	docker build $(BUILD_QUIET) -t kraken-agent:$(PACKAGE_VERSION) -f docker/agent/Dockerfile ./
+	docker build $(BUILD_QUIET) -t kraken-build-index:$(PACKAGE_VERSION) -f docker/build-index/Dockerfile ./
+	docker build $(BUILD_QUIET) -t kraken-origin:$(PACKAGE_VERSION) -f docker/origin/Dockerfile ./
+	docker build $(BUILD_QUIET) -t kraken-proxy:$(PACKAGE_VERSION) -f docker/proxy/Dockerfile ./
+	docker build $(BUILD_QUIET) -t kraken-testfs:$(PACKAGE_VERSION) -f docker/testfs/Dockerfile ./
+	docker build $(BUILD_QUIET) -t kraken-tracker:$(PACKAGE_VERSION) -f docker/tracker/Dockerfile ./
+	docker build $(BUILD_QUIET) -t kraken-herd:$(PACKAGE_VERSION) -f docker/herd/Dockerfile ./
+	$(call tag_image,kraken-agent)
+	$(call tag_image,kraken-build-index)
+	$(call tag_image,kraken-origin)
+	$(call tag_image,kraken-proxy)
+	$(call tag_image,kraken-proxy)
+	$(call tag_image,kraken-testfs)
+	$(call tag_image,kraken-tracker)
+	$(call tag_image,kraken-herd)
+
+.PHONY: publish
+publish: images
+	docker push $(REGISTRY)/kraken-agent:$(PACKAGE_VERSION)
+	docker push $(REGISTRY)/kraken-build-index:$(PACKAGE_VERSION)
+	docker push $(REGISTRY)/kraken-origin:$(PACKAGE_VERSION)
+	docker push $(REGISTRY)/kraken-proxy:$(PACKAGE_VERSION)
+	docker push $(REGISTRY)/kraken-testfs:$(PACKAGE_VERSION)
+	docker push $(REGISTRY)/kraken-tracker:$(PACKAGE_VERSION)
+	docker push $(REGISTRY)/kraken-herd:$(PACKAGE_VERSION)
 
 clean::
 	@rm -f $(LINUX_BINS)
@@ -94,16 +119,16 @@ NAME?=test_
 USERNAME:=$(shell id -u -n)
 USERID:=$(shell id -u)
 integration: vendor $(LINUX_BINS) docker_stop tools/bin/puller/puller
-	docker build -q -t kraken-agent:dev -f docker/agent/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
-	docker build -q -t kraken-build-index:dev -f docker/build-index/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
-	docker build -q -t kraken-origin:dev -f docker/origin/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
-	docker build -q -t kraken-proxy:dev -f docker/proxy/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
-	docker build -q -t kraken-testfs:dev -f docker/testfs/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
-	docker build -q -t kraken-tracker:dev -f docker/tracker/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
+	docker build $(BUILD_QUIET) -t kraken-agent:$(PACKAGE_VERSION) -f docker/agent/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
+	docker build $(BUILD_QUIET) -t kraken-build-index:$(PACKAGE_VERSION) -f docker/build-index/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
+	docker build $(BUILD_QUIET) -t kraken-origin:$(PACKAGE_VERSION) -f docker/origin/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
+	docker build $(BUILD_QUIET) -t kraken-proxy:$(PACKAGE_VERSION) -f docker/proxy/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
+	docker build $(BUILD_QUIET) -t kraken-testfs:$(PACKAGE_VERSION) -f docker/testfs/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
+	docker build $(BUILD_QUIET) -t kraken-tracker:$(PACKAGE_VERSION) -f docker/tracker/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	if [ ! -d env ]; then virtualenv --setuptools env; fi
 	source env/bin/activate
 	env/bin/pip install -r requirements-tests.txt
-	env/bin/py.test --timeout=120 -v -k $(NAME) test/python/$(FILE)
+	PACKAGE_VERSION=$(PACKAGE_VERSION) env/bin/py.test --timeout=120 -v -k $(NAME) test/python/$(FILE)
 
 .PHONY: runtest
 NAME?=test_

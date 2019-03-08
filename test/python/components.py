@@ -29,7 +29,7 @@ from threading import Thread
 import requests
 
 from uploader import Uploader
-from utils import format_insecure_curl, tls_opts
+from utils import format_insecure_curl, tls_opts, dev_tag
 
 
 def get_docker_bridge():
@@ -97,7 +97,7 @@ class DockerContainer(object):
     def __init__(self, name, image, command=None, ports=None, volumes=None):
         self.name = name
         self.image = image
-        
+
         self.command = []
         if command:
             self.command = command
@@ -106,13 +106,13 @@ class DockerContainer(object):
         if ports:
             for i, o in ports.iteritems():
                 self.ports.extend(['-p', '{o}:{i}'.format(i=i, o=o)])
-        
+
         self.volumes = []
         if volumes:
             for o, i in volumes.iteritems():
                 bind = i['bind']
                 mode = i['mode']
-                self.volumes.extend(['-v', '{o}:{bind}:{mode}'.format(o=o, bind=bind, mode=mode)]) 
+                self.volumes.extend(['-v', '{o}:{bind}:{mode}'.format(o=o, bind=bind, mode=mode)])
 
     def run(self):
         cmd = [
@@ -312,7 +312,7 @@ class Tracker(Component):
     def new_container(self):
         return new_docker_container(
             name=self.name,
-            image='kraken-tracker:dev',
+            image=dev_tag('kraken-tracker'),
             environment={},
             ports={self.port: self.port},
             volumes=self.volumes,
@@ -361,7 +361,7 @@ class Origin(Component):
     def new_container(self):
         return new_docker_container(
             name=self.name,
-            image='kraken-origin:dev',
+            image=dev_tag('kraken-origin'),
             volumes=self.volumes,
             environment={},
             ports={
@@ -433,7 +433,7 @@ class Agent(Component):
     def new_container(self):
         return new_docker_container(
             name=self.name,
-            image='kraken-agent:dev',
+            image=dev_tag('kraken-agent'),
             environment={},
             ports={
                 self.torrent_client_port: self.torrent_client_port,
@@ -511,7 +511,7 @@ class Proxy(Component):
     def new_container(self):
         return new_docker_container(
             name=self.name,
-            image='kraken-proxy:dev',
+            image=dev_tag('kraken-proxy'),
             ports={self.port: self.port},
             environment={},
             command=[
@@ -597,7 +597,7 @@ class BuildIndex(Component):
     def new_container(self):
         return new_docker_container(
             name=self.name,
-            image='kraken-build-index:dev',
+            image=dev_tag('kraken-build-index'),
             ports={self.port: self.port},
             environment={},
             command=[
@@ -635,7 +635,7 @@ class TestFS(Component):
     def new_container(self):
         return new_docker_container(
             name='kraken-testfs-{zone}'.format(zone=self.zone),
-            image='kraken-testfs:dev',
+            image=dev_tag('kraken-testfs'),
             ports={self.port: self.port},
             command=[
                 '/usr/bin/kraken-testfs',

@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import os
 from threading import Thread
 
 
@@ -56,3 +57,7 @@ def tls_opts_with_client_certs():
         'cert': ('test/tls/client/client.crt', 'test/tls/client/client_decrypted.key'),
         'verify': False, ## Set verify=False to disable server cert verification for test only.
     }
+
+def dev_tag(image_name):
+    tag = os.getenv("PACKAGE_VERSION", "latest")
+    return "{}:{}".format(image_name, tag)
