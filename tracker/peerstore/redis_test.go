@@ -19,26 +19,20 @@ import (
 
 	"github.com/uber/kraken/core"
 
+	"github.com/alicebob/miniredis"
 	"github.com/andres-erbsen/clock"
-	"github.com/garyburd/redigo/redis"
 	"github.com/stretchr/testify/require"
 )
 
 func redisConfigFixture() RedisConfig {
-	return RedisConfig{
-		Addr:              "localhost:6380",
-		PeerSetWindowSize: 30 * time.Second,
-		MaxPeerSetWindows: 4,
-	}
-}
-
-func flushdb(config RedisConfig) {
-	c, err := redis.Dial("tcp", config.Addr)
+	s, err := miniredis.Run()
 	if err != nil {
 		panic(err)
 	}
-	if _, err := c.Do("FLUSHDB"); err != nil {
-		panic(err)
+	return RedisConfig{
+		Addr:              s.Addr(),
+		PeerSetWindowSize: 30 * time.Second,
+		MaxPeerSetWindows: 4,
 	}
 }
 
@@ -46,8 +40,6 @@ func TestRedisStoreGetPeersPopulatesPeerInfoFields(t *testing.T) {
 	require := require.New(t)
 
 	config := redisConfigFixture()
-
-	flushdb(config)
 
 	s, err := NewRedisStore(config, clock.New())
 	require.NoError(err)
@@ -70,8 +62,6 @@ func TestRedisStoreGetPeersFromMultipleWindows(t *testing.T) {
 	config := redisConfigFixture()
 	config.PeerSetWindowSize = 10 * time.Second
 	config.MaxPeerSetWindows = 3
-
-	flushdb(config)
 
 	clk := clock.NewMock()
 	clk.Set(time.Now())
@@ -108,8 +98,6 @@ func TestRedisStoreGetPeersLimit(t *testing.T) {
 	config.PeerSetWindowSize = 10 * time.Second
 	config.MaxPeerSetWindows = 3
 
-	flushdb(config)
-
 	clk := clock.NewMock()
 	clk.Set(time.Now())
 
@@ -144,8 +132,6 @@ func TestRedisStoreGetPeersCollapsesCompleteBits(t *testing.T) {
 
 	config := redisConfigFixture()
 
-	flushdb(config)
-
 	s, err := NewRedisStore(config, clock.New())
 	require.NoError(err)
 
@@ -174,8 +160,6 @@ func TestRedisStorePeerExpiration(t *testing.T) {
 	config := redisConfigFixture()
 	config.PeerSetWindowSize = time.Second
 	config.MaxPeerSetWindows = 2
-
-	flushdb(config)
 
 	s, err := NewRedisStore(config, clock.New())
 	require.NoError(err)
