@@ -23,7 +23,7 @@ upstream registry-backend {
 server {
   listen {{.port}};
 
-  # Only allow agent to serve localhost request.
+  # Allow agent to only serve localhost request.
   allow 127.0.0.1;
   deny all;
 
