@@ -173,7 +173,6 @@ func (s *RedisStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 		k := peerSetKey(h, windows[i])
 		result, err := redis.Strings(c.Do("SRANDMEMBER", k, n-len(selected)))
 		if err == redis.ErrNil {
-			i++
 			continue
 		} else if err != nil {
 			return nil, err
@@ -186,7 +185,6 @@ func (s *RedisStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 			}
 			selected[id] = selected[id] || complete
 		}
-		i++
 	}
 
 	var peers []*core.PeerInfo
