@@ -14,8 +14,6 @@
 package peerstore
 
 import (
-	"math/rand"
-	"os"
 	"testing"
 	"time"
 
@@ -25,11 +23,6 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 )
-
-func TestMain(m *testing.M) {
-	rand.Seed(0)
-	os.Exit(m.Run())
-}
 
 func redisConfigFixture() RedisConfig {
 	s, err := miniredis.Run()

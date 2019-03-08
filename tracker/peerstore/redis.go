@@ -19,11 +19,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/andres-erbsen/clock"
-	"github.com/garyburd/redigo/redis"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/randutil"
+
+	"github.com/andres-erbsen/clock"
+	"github.com/garyburd/redigo/redis"
 )
 
 func peerSetKey(h core.InfoHash, window int64) string {
@@ -168,8 +169,7 @@ func (s *RedisStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 	// Eliminate duplicates from other windows and collapses complete bits.
 	selected := make(map[peerIdentity]bool)
 
-	var i int
-	for len(selected) < n && i < len(windows) {
+	for i := 0; len(selected) < n && i < len(windows); i++ {
 		k := peerSetKey(h, windows[i])
 		result, err := redis.Strings(c.Do("SRANDMEMBER", k, n-len(selected)))
 		if err == redis.ErrNil {
