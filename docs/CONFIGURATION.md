@@ -14,7 +14,7 @@
 # Examples
 
 Here are some example configuration files we used for dev cluster (which can be started by running
-'make devcluster').
+`make devcluster`).
 
 They are split into a base.yaml that contains configs that we have been using for test, development
 and production, and a development.yaml that contains configs specifically needed for starting dev
@@ -44,45 +44,45 @@ More in [examples/devcluster/README.md](../examples/devcluster/README.md)
 
 # Configuring Peer To Peer Download
 
-Kraken's peer-to-peer network consists of agents, origins and trackers. Origins are a few dedicated seeders that downloads data from a storage backend (HDFS, S3, etc). Agents are leechers that download from each other and from origins and can later become seeders after they finish downloading. Agents announce to trackers periodically to update the torrent they are currently downloading and in return get a list of peers that are also downloading the same torrent. More details in [ARCHITECTURE.md](ARCHITECTURE.md)
+Kraken's peer-to-peer network consists of agents, origins and trackers. Origins are special dedicated peers that seed data from a storage backend (HDFS, S3, etc). Agents are peers that download from each other and from origins. Agents periodically announce each torrent they are currently downloading to tracker, and in return, receive a list of peers that are also seeding the same torrent. More details in [ARCHITECTURE.md](ARCHITECTURE.md)
 
-## Tracker peer set TTI
+## Tracker Peer TTL
 
 >tracker.yaml
 >```
 >peerstore:
->    redis:
->        peer_set_window_size: 1h
->        max_peer_set_windows: 5
+>   redis:
+>     peer_set_window_size: 1h
+>     max_peer_set_windows: 5
 >```
 As peers announce periodically to a tracker, the tracker stores the announce requests into several time window bucket.
 Each announce request expires in `peer_set_window_size * max_peer_set_windows` time.
 
 Then, the tracker returns a random set of peers selecting from `max_peer_set_windows` number of time bucket.
 
-## Announce interval `TODO(evelynl94)`
+## Announce Interval `TODO(evelynl94)`
 
 ## Bandwidth
 
-Download and upload bandwidths are configurable, avoiding peers to saturate the host network.
+Download and upload bandwidths are configurable to prevent peers from saturating the host network.
 >agent.yaml/origin.yaml
 >```
 >scheduler:
->    conn:
->        bandwidth:
->            enable: true
->            egress_bits_per_sec: 1677721600  # 200*8 Mbit
->            ingress_bits_per_sec: 2516582400 # 300*8 Mbit
+>   conn:
+>     bandwidth:
+>       enable: true
+>       egress_bits_per_sec: 1677721600  # 200*8 Mbit
+>       ingress_bits_per_sec: 2516582400 # 300*8 Mbit
 >```
 
-## Connection limit
+## Connection Limits
 
 Number of connections per torrent can be limited by:
 >agent.yaml/origin.yaml
 >```
 >scheduler:
 >   connstate:
->       max_open_conn: 10
+>     max_open_conn: 10
 >```
 There is no limit on number of torrents a peer can download simultaneously.
 
@@ -90,33 +90,31 @@ There is no limit on number of torrents a peer can download simultaneously.
 
 ## Seeder TTI
 
-SeederTTI is the duration a completed torrent will exist without being read from before being removed from in-memory archive.
+SeederTTI (time-to-idle) is the duration a completed torrent will exist without being read from before being removed from in-memory archive.
 >agent.yaml/origin.yaml
 >```
 >scheduler:
->    seeder_tti: 5m
+>   seeder_tti: 5m
 >```
 However, until it is deleted by periodic storage purge, completed torrents will remain on disk and can be re-opened on another peer's request.
 
-## Torrent TTI on disk
+## Torrent TTI On Disk
 
 Both agents and origins can be configured to cleanup idle torrents on disk periodically.
 >agent.yaml/origin.yaml
 >```
 >store:
->    cache_cleanup:
->        disabled: false
->        tti: 1h
->    download_cleanup:
->        disabled: false
->        tti: 1h
+>   cache_cleanup:
+>     tti: 6h
+>   download_cleanup:
+>     tti: 6h
 >```
 
 For origins, the number of files can also be limited as origins are dedicated seeders and hence normally caches files on disk for longer time.
 >origin.yaml
 >```
 >store:
->    capacity: 1000000
+>   capacity: 1000000
 >
 >```
 
@@ -124,7 +122,7 @@ For origins, the number of files can also be limited as origins are dedicated se
 
 Both orgin and tracker clusters are self-healing hash rings and both can be represented by either a dns name or a static list of hosts.
 
-We use redenzvous hashing for constructing ring membership.
+We use rendezvous hashing for constructing ring membership.
 
 Take an origin cluster for example:
 >origin-static-hosts.yaml
@@ -133,10 +131,10 @@ Take an origin cluster for example:
 >   max_replica: 2
 >cluster:
 >   hosts:
->       static:
->       - origin1:15002
->       - origin2:15002
->       - origin3:15002
+>     static:
+>     - origin1:15002
+>     - origin2:15002
+>     - origin3:15002
 >```
 >origin-dns.yaml
 >```
@@ -144,49 +142,51 @@ Take an origin cluster for example:
 >   max_replica: 2
 >cluster:
 >   hosts:
->       dns: origin.example.com:15002
+>     dns: origin.example.com:15002
 >```
 
-## Health check for hash rings
+## Health Check For Hash Rings
 
 When a node in the hash ring is considered as unhealthy, the ring client will route requests to the next healthy node with the highest score. There are two ways to do health check:
 
-### Active health check
+### Active Health Check
 
 Origins do health check for each other in the ring as the cluster is usually smaller.
 >origin.yaml
 >```
 >cluster:
 >   healthcheck:
->       filter:
->           fails: 3
->           passes: 2
->       monitor:
->           interval: 30s
+>     filter:
+>       fails: 3
+>       passes: 2
+>     monitor:
+>       interval: 30s
 Above configures health check ping from one origin to others every 30 seconds. If 3 or more consecutive health checkes fail for an origin, it is marked as unhealthy. Later, if 2 or more consecutive health checks succeed for the same origin, it is marked as healthy again. Initially, all hosts are healthy.
 
-### Passive health check
+### Passive Health Check
 
 Agents health checks tracker, piggybacking on the announce requests.
 >agent.yaml
 >```
 >tracker:
 >   cluster:
->       healthcheck:
->           fails: 3
->           fail_timeout: 5m
+>     healthcheck:
+>       fails: 3
+>       fail_timeout: 5m
 >```
-As shown in this example, if 3 or more consecutive announce requests to one tracker fail with network error, the host is marked as unhealthy for 5 minutes. The agent will not send requests to this host until after timeout.
+As shown in this example, if 3 announce requests to one tracker fail with network error within 5 minutes, the host is marked as unhealthy for 5 minutes. The agent will not send requests to this host until after timeout.
 
 # Configuring Storage Backend Bandwidth on Origin
 
-When transfering data from and to its storage backend, origins can be configured with download and upload bandwidthes. Specially if you are using a cloud storage provider, this is helpful to prevent origins from saturating the network link.
+When transferring data from and to its storage backend, origins can be configured with download and upload bandwidths. This is useful when using cloud storage providers to prevent origins from saturating the network link.
 >origin.yaml
 >```
 >backends:
 >   - namespace: .*
+>     backend:
+>       s3: <omitted>
 >     bandwidth:
->         enabled: true
->         egress_bits_per_sec: 8589934592   # 8 Gbit
->         ingress_bits_per_sec: 85899345920 # 10*8 Gbit
+>       enabled: true
+>       egress_bits_per_sec: 8589934592   # 8 Gbit
+>       ingress_bits_per_sec: 85899345920 # 10*8 Gbit
 >```
