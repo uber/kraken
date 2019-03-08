@@ -23,6 +23,10 @@ upstream registry-backend {
 server {
   listen {{.port}};
 
+  # Only allow agent to serve localhost request.
+  allow 127.0.0.1;
+  deny all;
+
   {{.client_verification}}
 
   access_log {{.log_dir}}/nginx-access.v2.log;
