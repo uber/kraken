@@ -110,8 +110,11 @@ func run() {
 	var config Config
 	if err := configutil.Load(configFile, &config); err != nil {
 		panic(err)
-	} else if err := configutil.Load(secretsFile, &config); err != nil {
-		panic(err)
+	}
+	if secretsFile != "" {
+		if err := configutil.Load(secretsFile, &config); err != nil {
+			panic(err)
+		}
 	}
 
 	zlog := log.ConfigureLogger(config.ZapLogging)
