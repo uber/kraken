@@ -20,15 +20,10 @@
 // extends: base.yaml
 //
 // There is no multiple inheritance supported. Dependency tree suppossed to
-// form a directed acyclic graph(DAG).
+// form a linked list.
 //
 //
 // Values from multiple configurations within the same hierarchy are deep merged
-//
-// Package support multiple configuraton directories potentially having multiple files
-// with the the same name. In this the we just follow the path in extends and load all
-// the file accroding to the relative directory, i.e configA: base.yaml production.yaml(extends base.yaml), configB: base.yaml the load sequance
-// will be the following: configA(base.yaml), configA(production.yaml)
 //
 // Note regarding configuration merging:
 //   Array defined in YAML will be overriden based on load sequence.
@@ -63,28 +58,14 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/uber/kraken/utils/stringset"
 
 	"gopkg.in/validator.v2"
 	"gopkg.in/yaml.v2"
 )
-
-const (
-	configDirKey = "UBER_CONFIG_DIR"
-
-	configDir       = "config"
-	secretsFile     = "secrets.yaml"
-	configSeparator = ":"
-)
-
-// ErrNoFilesToLoad is returned when you attemp to call LoadFiles without valid
-// file paths.
-var ErrNoFilesToLoad = errors.New("attempt to load configuration with no files")
 
 // ErrCycleRef is returned when there are circular dependencies detected in
 // configuraiton files extending each other.
@@ -106,6 +87,7 @@ func (e ValidationError) ErrForField(name string) error {
 	return e.errorMap[name]
 }
 
+// Error implements the `error` interface.
 func (e ValidationError) Error() string {
 	var w bytes.Buffer
 
@@ -117,111 +99,66 @@ func (e ValidationError) Error() string {
 	return w.String()
 }
 
-// FilterCandidates filters candidate config files into only the ones that
-// exist.
-func FilterCandidates(fname string) ([]string, error) {
-	realConfigDirs := []string{configDir}
-	// Allow overriding the directory config is loaded from, useful for tests
-	// inside subdirectories when the config dir is at the top-level of a
-	// project.
-	if configRoot := os.Getenv(configDirKey); configRoot != "" {
-		realConfigDirs = strings.Split(configRoot, configSeparator)
+// Load loads configuration based on config file name. It will
+// follow extends directives and do a deep merge of those config
+// files.
+func Load(filename string, config interface{}) error {
+	filenames, err := resolveExtends(filename, readExtend)
+	if err != nil {
+		return err
 	}
-	return filterCandidatesFromDirs(fname, realConfigDirs)
+	return loadFiles(config, filenames)
+}
+
+type getExtend func(filename string) (extends string, err error)
+
+// resolveExtends returns the list of config paths that the original config `filename`
+// points to.
+func resolveExtends(filename string, extendReader getExtend) ([]string, error) {
+	filenames := []string{filename}
+	seen := make(stringset.Set)
+	for {
+		extends, err := extendReader(filename)
+		if err != nil {
+			return nil, err
+		} else if extends == "" {
+			break
+		}
+
+		// If the file path of the extends field in the config is not absolute
+		// we assume that it is in the same directory as the current config
+		// file.
+		if !filepath.IsAbs(extends) {
+			extends = path.Join(filepath.Dir(filename), extends)
+		}
+
+		// Prevent circular references.
+		if seen.Has(extends) {
+			return nil, ErrCycleRef
+		}
+
+		filenames = append([]string{extends}, filenames...)
+		seen.Add(extends)
+		filename = extends
+	}
+	return filenames, nil
 }
 
 func readExtend(configFile string) (string, error) {
-	var cfg Extends
-
 	data, err := ioutil.ReadFile(configFile)
 	if err != nil {
 		return "", err
 	}
 
+	var cfg Extends
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return "", fmt.Errorf("unmarshal %s: %s", configFile, err)
 	}
 	return cfg.Extends, nil
 }
 
-func getCandidate(fname string, dirs []string) string {
-	candidate := ""
-	for _, realConfigDir := range dirs {
-		configFile := path.Join(realConfigDir, fname)
-		if _, err := os.Stat(configFile); err == nil {
-			candidate = configFile
-		}
-	}
-	return candidate
-}
-
-func filterCandidatesFromDirs(fname string, dirs []string) ([]string, error) {
-	var paths []string
-	cSet := make(stringset.Set)
-
-	// Go through all the 'extends' hierarchy until there is no base anymore or
-	// some reference cycles have been detected.
-	cSet.Add(fname)
-
-	candidate := getCandidate(fname, dirs)
-	fmt.Fprintf(os.Stderr, "candidate: %s\n", candidate)
-	if candidate == "" {
-		return nil, ErrNoFilesToLoad
-	}
-
-	for {
-		extends, err := readExtend(candidate)
-		if err != nil {
-			return nil, err
-		}
-
-		paths = append([]string{candidate}, paths...)
-		if extends != "" {
-			// Prevent circular references.
-			if !cSet.Has(extends) {
-				candidate = path.Join(filepath.Dir(candidate), extends)
-				cSet.Add(extends)
-			} else {
-				return nil, ErrCycleRef
-			}
-		} else {
-			break
-		}
-	}
-
-	// Append secrets.
-	candidate = getCandidate(secretsFile, dirs)
-	if candidate != "" {
-		paths = append(paths, candidate)
-	}
-
-	return paths, nil
-}
-
-// Load loads configuration based on config file name.
-// If config directory cannot be derived from file name, get it from environment
-// variables.
-func Load(fname string, config interface{}) error {
-	candidates, err := filterCandidatesFromDirs(
-		filepath.Base(fname), []string{filepath.Dir(fname)})
-	if err != nil && err != ErrNoFilesToLoad {
-		return fmt.Errorf("find config under %s: %s", filepath.Dir(fname), err)
-	} else if err == ErrNoFilesToLoad {
-		candidates, err = FilterCandidates(fname)
-		if err != nil {
-			return fmt.Errorf(
-				"find config under %s and %s: %s", filepath.Dir(fname), configDirKey, err)
-		}
-	}
-
-	return loadFiles(config, candidates...)
-}
-
-// LoadFiles loads a list of files, deep-merging values.
-func loadFiles(config interface{}, fnames ...string) error {
-	if len(fnames) == 0 {
-		return ErrNoFilesToLoad
-	}
+// loadFiles loads a list of files, deep-merging values.
+func loadFiles(config interface{}, fnames []string) error {
 	for _, fname := range fnames {
 		data, err := ioutil.ReadFile(fname)
 		if err != nil {

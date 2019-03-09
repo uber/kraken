@@ -125,7 +125,7 @@ func TestLoadFilesExtends(t *testing.T) {
 	defer os.Remove(partial)
 
 	var cfg configuration
-	err := loadFiles(&cfg, fname, partial)
+	err := loadFiles(&cfg, []string{fname, partial})
 	require.NoError(err)
 
 	require.Equal(8080, cfg.BufferSpace)
@@ -177,7 +177,7 @@ func TestLoadFilesValidateOnce(t *testing.T) {
 
 	// But merging load has no error.
 	var mergedCfg configuration
-	err = loadFiles(&mergedCfg, fname1, fname2)
+	err = loadFiles(&mergedCfg, []string{fname1, fname2})
 	require.NoError(err)
 
 	require.Equal("localhost:8080", mergedCfg.ListenAddress)
@@ -311,222 +311,53 @@ func TestExtendsConfigCircularRef(t *testing.T) {
 	require.Contains(err.Error(), "cyclic reference in configuration extends detected")
 }
 
-func stubEnv(key, value string) func() {
-	old := os.Getenv(key)
-	os.Setenv(key, value)
-	return func() {
-		os.Setenv(key, old)
-	}
-}
-
-func TestDefaultConfigFilesWithMultiplyConfigDir(t *testing.T) {
-	defer stubEnv(configDirKey, "config")()
-
-	tests := []struct {
-		ConfigDir string
-		Result    []string
-	}{
-		{
-			ConfigDir: "testdata/multiple/configA:testdata/multiple/configB",
-			Result: []string{
-				"testdata/multiple/configB/base.yaml",
-				"testdata/multiple/configB/production.yaml",
-				"testdata/multiple/configB/production-zone2.yaml"},
-		},
-		{
-			ConfigDir: "./testdata/multiple/configA:./testdata/multiple/configB:./random/",
-			Result: []string{
-				"testdata/multiple/configB/base.yaml",
-				"testdata/multiple/configB/production.yaml",
-				"testdata/multiple/configB/production-zone2.yaml"},
-		},
-		{
-			ConfigDir: "./testdata/multiple/configA:",
-			Result: []string{
-				"testdata/multiple/configA/base.yaml",
-				"testdata/multiple/configA/production.yaml",
-				"testdata/multiple/configA/production-zone2.yaml"},
-		},
-	}
-
-	for _, tt := range tests {
-		require := require.New(t)
-
-		os.Setenv(configDirKey, tt.ConfigDir)
-		files, err := FilterCandidates("production-zone2.yaml")
-		require.NoError(err)
-		require.Equal(tt.Result, files, "config files mismatch for %s", tt.ConfigDir)
-	}
-}
-
-func TestLoadSingleConfigDir(t *testing.T) {
+func TestResolveExtends(t *testing.T) {
 	require := require.New(t)
 
-	defer stubEnv(configDirKey, "testdata/single")()
-
-	config := &configuration{}
-	err := Load("test.yaml", config)
-	require.NoError(err, "failed to load config from %v", os.Getenv(configDirKey))
-
-	require.Equal(&configuration{
-		ListenAddress: "127.0.0.1:8080",
-		BufferSpace:   9000,
-		Servers:       []string{"127.0.0.1:01", "127.0.0.1:02"},
-		Secret:        "shh",
-	}, config, "configs mismatch for %s", os.Getenv(configDirKey))
-}
-
-func loadMultipleConfigDir(require *require.Assertions, dir string) *configuration {
-	defer stubEnv(configDirKey, dir)()
-
-	config := &configuration{}
-	err := Load("production-zone2.yaml", config)
-	require.NoError(err, "failed to load config from %v", os.Getenv(configDirKey))
-	return config
-}
-
-func TestLoadMultipleConfigDir(t *testing.T) {
 	tests := []struct {
-		ConfigDir     string
-		Configuration configuration
+		fpath    string
+		extends  map[string]string
+		expected []string
+		err      error
 	}{
 		{
-			ConfigDir: "testdata/multiple/configA:testdata/multiple/configB",
-			Configuration: configuration{
-				ListenAddress: "127.0.0.1:2",
-				BufferSpace:   2000,
-				Servers:       []string{"127.0.0.1:02"}, // each file contains single config attribute
-				Nodes: map[string]string{ // map in each config file will be merged
-					"configBProdZone2": "nodeB",
-				},
-			},
+			fpath:    "/configs/c1",
+			extends:  map[string]string{},
+			expected: []string{"/configs/c1"},
 		},
 		{
-			ConfigDir: "testdata/multiple/configB:testdata/multiple/configA", // each file contains single config attribute
-			Configuration: configuration{
-				ListenAddress: "127.0.0.1:1",
-				BufferSpace:   1000,
-				Servers:       []string{"127.0.0.1:01"},
-				Nodes: map[string]string{
-					"configAProdZone2": "nodeA",
-				},
-			},
+			fpath:    "/configs/c1",
+			extends:  map[string]string{"/configs/c1": "/configs/c2"},
+			expected: []string{"/configs/c2", "/configs/c1"},
 		},
 		{
-			ConfigDir: "testdata/multiple/configA:testdata/multiple/configB:testdata/multiple/configC", // each file contains single config attribute
-			Configuration: configuration{
-				ListenAddress: "127.0.0.1:3",
-				BufferSpace:   3000,
-				Servers:       []string{"127.0.0.1:03"},
-				Nodes: map[string]string{
-					"configCProdZone2": "nodeC",
-				},
-			},
+			fpath:    "/configs/c1",
+			extends:  map[string]string{"/configs/c1": "c2"},
+			expected: []string{"/configs/c2", "/configs/c1"},
 		},
 		{
-			ConfigDir: "testdata/multiple/configB:testdata/multiple/configC:testdata/multiple/configA", // each file contains single config attribute
-			Configuration: configuration{
-				ListenAddress: "127.0.0.1:1",
-				BufferSpace:   1000,
-				Servers:       []string{"127.0.0.1:01"},
-				Nodes: map[string]string{
-					"configAProdZone2": "nodeA",
-				},
-			},
+			fpath:    "/configs/c1",
+			extends:  map[string]string{"/configs/c1": "c2", "/configs/c2": "c1"},
+			expected: nil,
+			err:      ErrCycleRef,
 		},
 		{
-			ConfigDir: "testdata/multiple/configA:testdata/configFullD", // one file contains single config attribute and one file contains whole config attributes
-			Configuration: configuration{
-				ListenAddress: "configFullDProdZone2:03",
-				BufferSpace:   3000,
-				Servers:       []string{"configFullDProdZone2:03", "configFullDProdZone2:04"},
-			},
-		},
-		{
-			ConfigDir: "testdata/configFullD:testdata/multiple/configA", // one file contains single config attribute and one file contains whole config attributes
-			Configuration: configuration{
-				ListenAddress: "127.0.0.1:1",
-				BufferSpace:   1000,
-				Servers:       []string{"127.0.0.1:01"},
-				Nodes: map[string]string{
-					"configAProdZone2": "nodeA",
-				},
-			},
+			fpath:    "/configs/c1",
+			extends:  map[string]string{"/configs/c1": "/etc/c2", "/etc/c2": "c3"},
+			expected: []string{"/etc/c3", "/etc/c2", "/configs/c1"},
 		},
 	}
 
 	for _, tt := range tests {
-		require := require.New(t)
-
-		config := loadMultipleConfigDir(require, tt.ConfigDir)
-		require.Equal(&tt.Configuration, config, "configs mismatch for %s", tt.ConfigDir)
-	}
-}
-
-func TestLoadMultipleConfigDirPriorityFullConflict(t *testing.T) {
-	tests := []struct {
-		ConfigDir     string
-		Configuration configuration
-	}{
-		{
-			ConfigDir: "testdata/configFullD:testdata/configFullE",
-			Configuration: configuration{
-				ListenAddress: "configFullEProdZone2:03",
-				BufferSpace:   6000,
-				Servers:       []string{"configFullEProdZone2:03", "configFullEProdZone2:04"},
-			},
-		},
-		{
-			ConfigDir: "testdata/configFullE:testdata/configFullD",
-			Configuration: configuration{
-				ListenAddress: "configFullDProdZone2:03",
-				BufferSpace:   3000,
-				Servers:       []string{"configFullDProdZone2:03", "configFullDProdZone2:04"},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		require := require.New(t)
-
-		config := loadMultipleConfigDir(require, tt.ConfigDir)
-		require.Equal(&tt.Configuration, config, "configs mismatch for %s", tt.ConfigDir)
-	}
-}
-
-func TestLoadMultipleConfigDirPriorityRelativeExtends(t *testing.T) {
-	tests := []struct {
-		ConfigDir     string
-		Configuration configuration
-	}{
-		{
-			ConfigDir: "testdata/multiple/configF:testdata/multiple/configG",
-			Configuration: configuration{
-				ListenAddress: "127.0.0.1:1",
-				BufferSpace:   1000,
-				Servers:       []string{"127.0.0.1:05"},
-				Nodes: map[string]string{
-					"configGProdZone2": "nodeG",
-				},
-			},
-		},
-		{
-			ConfigDir: "testdata/multiple/configG:testdata/multiple/configF",
-			Configuration: configuration{
-				ListenAddress: "127.0.0.1:1",
-				BufferSpace:   1000,
-				Servers:       []string{"127.0.0.1:04"},
-				Nodes: map[string]string{
-					"configFProdZone2": "nodeF",
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		require := require.New(t)
-
-		config := loadMultipleConfigDir(require, tt.ConfigDir)
-		require.Equal(&tt.Configuration, config, "configs mismatch for %s", tt.ConfigDir)
+		fn := func(filename string) (string, error) {
+			target, found := tt.extends[filename]
+			if !found {
+				return "", nil
+			}
+			return target, nil
+		}
+		filenames, err := resolveExtends(tt.fpath, fn)
+		require.Equal(tt.err, err)
+		require.Equal(tt.expected, filenames)
 	}
 }

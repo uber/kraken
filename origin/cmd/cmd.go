@@ -54,6 +54,7 @@ var (
 	configFile         string
 	zone               string
 	krakenCluster      string
+	secretsFile        string
 
 	rootCmd = &cobra.Command{
 		Short: "kraken-origin serves as dedicated seeder in kraken's p2p network.",
@@ -78,6 +79,8 @@ func init() {
 		&zone, "zone", "", "", "zone/datacenter name")
 	rootCmd.PersistentFlags().StringVarP(
 		&krakenCluster, "cluster", "", "", "cluster name (e.g. prod01-zone1)")
+	rootCmd.PersistentFlags().StringVarP(
+		&secretsFile, "secrets", "", "", "path to a secrets YAML file to load into configuration")
 }
 
 func Execute() {
@@ -107,6 +110,11 @@ func run() {
 	var config Config
 	if err := configutil.Load(configFile, &config); err != nil {
 		panic(err)
+	}
+	if secretsFile != "" {
+		if err := configutil.Load(secretsFile, &config); err != nil {
+			panic(err)
+		}
 	}
 
 	zlog := log.ConfigureLogger(config.ZapLogging)

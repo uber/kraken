@@ -33,6 +33,7 @@ var (
 	port          int
 	configFile    string
 	krakenCluster string
+	secretsFile   string
 
 	rootCmd = &cobra.Command{
 		Short: "kraken-tracker keeps track of all the peers and their data in the p2p network.",
@@ -49,6 +50,8 @@ func init() {
 		&configFile, "config", "", "", "configuration file path")
 	rootCmd.PersistentFlags().StringVarP(
 		&krakenCluster, "cluster", "", "", "cluster name (e.g. prod01-zone1)")
+	rootCmd.PersistentFlags().StringVarP(
+		&secretsFile, "secrets", "", "", "path to a secrets YAML file to load into configuration")
 }
 
 func Execute() {
@@ -59,6 +62,11 @@ func run() {
 	var config Config
 	if err := configutil.Load(configFile, &config); err != nil {
 		panic(err)
+	}
+	if secretsFile != "" {
+		if err := configutil.Load(secretsFile, &config); err != nil {
+			panic(err)
+		}
 	}
 	log.ConfigureLogger(config.ZapLogging)
 
