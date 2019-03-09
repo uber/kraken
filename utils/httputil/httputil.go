@@ -29,6 +29,7 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/handler"
+	"github.com/uber/kraken/utils/log"
 )
 
 // RoundTripper is an alias of the http.RoundTripper for mocking purposes.
@@ -128,6 +129,17 @@ type sendOptions struct {
 	// parts of the url. For example, url.Scheme can be changed from
 	// http to https.
 	url *url.URL
+
+	// This is not a valid http option. HTTP fallback is added to allow
+	// easier migration from http to https.
+	// In go1.11 and go1.12, the responses returned when http request is
+	// sent to https server are different in the fallback mode:
+	// go1.11 returns a network error whereas go1.12 returns BadRequest.
+	// This causes TestTLSClientBadAuth to fail because the test checks
+	// retry error.
+	// This flag is added to allow disabling http fallback in unit tests.
+	// NOTE: it does not impact how it runs in production.
+	httpFallbackDisabled bool
 }
 
 // SendOption allows overriding defaults for the Send function.
@@ -206,6 +218,13 @@ func SendRetry(options ...RetryOption) SendOption {
 	return func(o *sendOptions) { o.retry = retry }
 }
 
+// DisableHTTPFallback disables http fallback when https request fails.
+func DisableHTTPFallback() SendOption {
+	return func(o *sendOptions) {
+		o.httpFallbackDisabled = true
+	}
+}
+
 // SendTLS sets the transport with TLS config for the HTTP client.
 func SendTLS(config *tls.Config) SendOption {
 	return func(o *sendOptions) {
@@ -242,14 +261,15 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		return nil, fmt.Errorf("parse url: %s", err)
 	}
 	opts := sendOptions{
-		body:          nil,
-		timeout:       60 * time.Second,
-		acceptedCodes: map[int]bool{http.StatusOK: true},
-		headers:       map[string]string{},
-		retry:         retryOptions{backoff: &backoff.StopBackOff{}},
-		transport:     nil, // Use HTTP default.
-		ctx:           context.Background(),
-		url:           u,
+		body:                 nil,
+		timeout:              60 * time.Second,
+		acceptedCodes:        map[int]bool{http.StatusOK: true},
+		headers:              map[string]string{},
+		retry:                retryOptions{backoff: &backoff.StopBackOff{}},
+		transport:            nil, // Use HTTP default.
+		ctx:                  context.Background(),
+		url:                  u,
+		httpFallbackDisabled: false,
 	}
 	for _, o := range options {
 		o(&opts)
@@ -272,7 +292,8 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		// Retry without tls. During migration there would be a time when the
 		// component receiving the tls request does not serve https response.
 		// TODO (@evelynl): disable retry after tls migration.
-		if err != nil && req.URL.Scheme == "https" {
+		if err != nil && req.URL.Scheme == "https" && !opts.httpFallbackDisabled {
+			log.Warnf("Failed to send https request: %s. Retrying with http...", err)
 			var httpReq *http.Request
 			httpReq, err = newRequest(method, opts)
 			if err != nil {
