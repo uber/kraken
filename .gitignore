@@ -37,6 +37,8 @@ env
 *.test
 # Visual coverage report
 coverage.html
+# codecov coverage file
+coverage.txt
 
 # test db data
 db/data
