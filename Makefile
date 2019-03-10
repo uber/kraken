@@ -98,7 +98,8 @@ bins: $(LINUX_BINS)
 # ==== TEST ====
 .PHONY: unit-test
 unit-test: vendor
-	$(GOPATH)/bin/gocov test $(ALL_PKGS) --tags "unit" | $(GOPATH)/bin/gocov report
+	-rm coverage.txt
+	$(GO) test -race -coverprofile=coverage.txt $(ALL_PKGS) --tags "unit" 
 
 .PHONY: docker_stop
 docker_stop:
