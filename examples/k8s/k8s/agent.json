@@ -1,0 +1,41 @@
+---
+{
+    "apiVersion": "apps/v1",
+    "kind": "DaemonSet",
+    "metadata": {
+        "name": "kraken-agent",
+        "labels": {
+            "kraken": "true",
+            "kraken-app": "agent"
+        }
+    },
+    "spec": {
+        "selector": {
+            "matchLabels": {
+                "kraken-app": "agent"
+            }
+        },
+        "template": {
+            "metadata": {
+                "labels": {
+                    "kraken": "true",
+                    "kraken-app": "agent"
+                }
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "name": "main",
+                        "image": "gcr.io/uber-container-tools/kraken-agent:v0.1.0-22-g1363a91",
+                        "command": [
+                            "/bin/bash",
+                            "-c",
+                            "while true; do sleep 10; done"
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+}
+---

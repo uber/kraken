@@ -1,0 +1,77 @@
+---
+{
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+        "name": "kraken-tracker-0",
+        "labels": {
+            "kraken": "true"
+        }
+    },
+    "spec": {
+        "replicas": 1,
+        "selector": {
+            "matchLabels": {
+                "kraken-app": "tracker-0"
+            }
+        },
+        "template": {
+            "metadata": {
+                "labels": {
+                    "kraken": "true",
+                    "kraken-app": "tracker-0"
+                }
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "name": "redis",
+                        "image": "redis:5.0"
+                    },
+                    {
+                        "name": "main",
+                        "image": "gcr.io/uber-container-tools/kraken-tracker:v0.1.0-25-ga61fa4f",
+                        "command": [
+                            "/usr/bin/kraken-tracker",
+                            "--config=/etc/config/tracker.yaml",
+                            "--port=80"
+                        ],
+                        "volumeMounts": [
+                            {
+                                "name": "config",
+                                "mountPath": "/etc/config"
+                            }
+                        ]
+                    }
+                ],
+                "volumes": [
+                    {
+                        "name": "config",
+                        "configMap": { "name": "kraken" }
+                    }
+                ]
+            }
+        }
+    }
+}
+---
+{
+    "kind": "Service",
+    "apiVersion": "v1",
+    "metadata": {
+        "name": "kraken-tracker-0"
+    },
+    "spec": {
+        "selector": {
+            "kraken-app": "tracker-0"
+        },
+        "ports": [
+            {
+                "protocol": "TCP",
+                "port": 80,
+                "targetPort": 80
+            }
+        ]
+    }
+}
+---

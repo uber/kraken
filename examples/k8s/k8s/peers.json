@@ -1,0 +1,66 @@
+---
+{
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+        "name": "kraken-agent",
+        "labels": {
+            "kraken": "true"
+        }
+    },
+    "spec": {
+        "replicas": 1,
+        "selector": {
+            "matchLabels": {
+                "kraken-app": "agent"
+            }
+        },
+        "template": {
+            "metadata": {
+                "labels": {
+                    "kraken": "true",
+                    "kraken-app": "agent",
+                    "kraken-peer": "true"
+                }
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "name": "redis",
+                        "image": "redis:5.0"
+                    },
+                    {
+                        "name": "main",
+                        "image": "gcr.io/uber-container-tools/kraken-tracker:v0.1.0-22-g1363a91",
+                        "command": [
+                            "/bin/bash",
+                            "-c",
+                            "while true; do sleep 10; done"
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+}
+---
+{
+    "kind": "Service",
+    "apiVersion": "v1",
+    "metadata": {
+        "name": "kraken-peer"
+    },
+    "spec": {
+        "selector": {
+            "kraken-peer": "true"
+        },
+        "ports": [
+            {
+                "protocol": "TCP",
+                "port": 80,
+                "targetPort": 8080
+            }
+        ]
+    }
+}
+---
