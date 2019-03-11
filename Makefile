@@ -55,6 +55,7 @@ tracker/tracker:: $(wildcard tracker/*.go)
 	$(CROSS_COMPILER)
 
 define tag_image
+	docker tag $(1):$(PACKAGE_VERSION) $(1):dev
 	docker tag $(1):$(PACKAGE_VERSION) $(REGISTRY)/$(1):$(PACKAGE_VERSION)
 endef
 
@@ -99,7 +100,7 @@ bins: $(LINUX_BINS)
 .PHONY: unit-test
 unit-test: vendor
 	-rm coverage.txt
-	$(GO) test -race -coverprofile=coverage.txt $(ALL_PKGS) --tags "unit" 
+	$(GO) test -race -coverprofile=coverage.txt $(ALL_PKGS) --tags "unit"
 
 .PHONY: docker_stop
 docker_stop:
