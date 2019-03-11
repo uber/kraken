@@ -28,7 +28,6 @@
                         "name": "main",
                         "image": "gcr.io/uber-container-tools/kraken-agent:v0.1.0-25-ga61fa4f",
                         "command": [
-                            "/bin/bash", "-c", "while true; do sleep 10; done",
                             "/usr/bin/kraken-agent",
                             "--config=/etc/config/agent.yaml",
                             "--agent-server-port=80",
