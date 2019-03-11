@@ -15,6 +15,7 @@ package announcer
 
 import (
 	"errors"
+	"runtime"
 	"testing"
 	"time"
 
@@ -39,6 +40,7 @@ func newMockEvents() *mockEvents {
 func (e *mockEvents) AnnounceTick() { e.tick <- struct{}{} }
 
 func (e *mockEvents) expectTick(t *testing.T) {
+	runtime.Gosched()
 	select {
 	case <-e.tick:
 	case <-time.After(500 * time.Millisecond):
@@ -47,6 +49,7 @@ func (e *mockEvents) expectTick(t *testing.T) {
 }
 
 func (e *mockEvents) expectNoTick(t *testing.T) {
+	runtime.Gosched()
 	select {
 	case <-e.tick:
 		require.FailNow(t, "Unexpected tick")
