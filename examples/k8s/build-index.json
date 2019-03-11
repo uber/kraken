@@ -5,34 +5,45 @@
     "metadata": {
         "name": "kraken-build-index",
         "labels": {
-            "kraken": "true",
-            "kraken-app": "build-index"
+            "kraken": "true"
         }
     },
     "spec": {
         "replicas": 1,
         "selector": {
             "matchLabels": {
-                "kraken-app": "build-index"
+                "kraken-app": "build-index-0"
             }
         },
         "template": {
             "metadata": {
                 "labels": {
                     "kraken": "true",
-                    "kraken-app": "build-index"
+                    "kraken-app": "build-index-0"
                 }
             },
             "spec": {
                 "containers": [
                     {
                         "name": "main",
-                        "image": "gcr.io/uber-container-tools/kraken-build-index:v0.1.0-22-g1363a91",
+                        "image": "gcr.io/uber-container-tools/kraken-build-index:v0.1.0-25-ga61fa4f",
                         "command": [
-                            "/bin/bash",
-                            "-c",
-                            "while true; do sleep 10; done"
+                            "/usr/bin/kraken-build-index",
+                            "--config=/etc/config/build-index.yaml",
+                            "--port=80"
+                        ],
+                        "volumeMounts": [
+                            {
+                                "name": "config",
+                                "mountPath": "/etc/config"
+                            }
                         ]
+                    }
+                ],
+                "volumes": [
+                    {
+                        "name": "config",
+                        "configMap": { "name": "kraken" }
                     }
                 ]
             }
@@ -44,11 +55,11 @@
     "kind": "Service",
     "apiVersion": "v1",
     "metadata": {
-        "name": "kraken-build-index"
+        "name": "kraken-build-index-0"
     },
     "spec": {
         "selector": {
-            "kraken-app": "build-index"
+            "kraken-app": "build-index-0"
         },
         "ports": [
             {

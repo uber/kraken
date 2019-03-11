@@ -5,12 +5,11 @@
     "metadata": {
         "name": "kraken-proxy",
         "labels": {
-            "kraken": "true",
-            "kraken-app": "proxy"
+            "kraken": "true"
         }
     },
     "spec": {
-        "replicas": 2,
+        "replicas": 1,
         "selector": {
             "matchLabels": {
                 "kraken-app": "proxy"
@@ -27,12 +26,24 @@
                 "containers": [
                     {
                         "name": "main",
-                        "image": "gcr.io/uber-container-tools/kraken-proxy:v0.1.0-22-g1363a91",
+                        "image": "gcr.io/uber-container-tools/kraken-proxy:v0.1.0-25-ga61fa4f",
                         "command": [
-                            "/bin/bash",
-                            "-c",
-                            "while true; do sleep 10; done"
+                            "/usr/bin/kraken-proxy",
+                            "--config=/etc/config/proxy.yaml",
+                            "--port=80"
+                        ],
+                        "volumeMounts": [
+                            {
+                                "name": "config",
+                                "mountPath": "/etc/config"
+                            }
                         ]
+                    }
+                ],
+                "volumes": [
+                    {
+                        "name": "config",
+                        "configMap": { "name": "kraken" }
                     }
                 ]
             }

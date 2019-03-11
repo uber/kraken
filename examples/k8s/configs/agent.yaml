@@ -1,0 +1,17 @@
+extends: /etc/kraken/config/agent/base.yaml
+
+tracker:
+  hosts:
+    static:
+      - kraken-tracker-0:80
+
+build_index:
+  hosts:
+    static:
+      - kraken-build-index-0:80
+
+tls:
+  client:
+    disabled: true
+  server:
+    disabled: true
