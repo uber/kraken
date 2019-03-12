@@ -69,3 +69,10 @@ func (t *Task) GetFailures() int {
 func (t *Task) Ready() bool {
 	return time.Since(t.CreatedAt) >= t.Delay
 }
+
+// Tags returns the replication destination.
+func (t *Task) Tags() map[string]string {
+	return map[string]string{
+		"dest": t.Destination,
+	}
+}

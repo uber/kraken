@@ -20,6 +20,10 @@ type Task interface {
 	GetLastAttempt() time.Time
 	GetFailures() int
 	Ready() bool
+
+	// Tags returns tags describing the context of the task, which can be
+	// included on metrics to group related instances of a task.
+	Tags() map[string]string
 }
 
 // Store provides persisted storage for tasks.
