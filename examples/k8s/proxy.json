@@ -26,7 +26,7 @@
                 "containers": [
                     {
                         "name": "main",
-                        "image": "gcr.io/uber-container-tools/kraken-proxy:v0.1.0-25-ga61fa4f",
+                        "image": "gcr.io/uber-container-tools/kraken-proxy:v0.1.1",
                         "command": [
                             "/usr/bin/kraken-proxy",
                             "--config=/etc/config/proxy.yaml",
