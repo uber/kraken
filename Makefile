@@ -260,3 +260,8 @@ mocks:
 	$(call add_mock,lib/persistedretry/tagreplication,RemoteValidator)
 
 	$(call add_mock,utils/httputil,RoundTripper)
+
+# ==== MISC ====
+
+kubecluster:
+	cd ./examples/k8s && bash deploy.sh
