@@ -1,0 +1,34 @@
+extends: /etc/kraken/config/origin/base.yaml
+
+backends:
+  - namespace: library/.*
+    backend:
+      registry_blob:
+        address: index.docker.io
+        security:
+          basic:
+            username: ""
+            password: ""
+  - namespace: .*
+    backend:
+      testfs:
+        addr: kraken-testfs:80
+        root: blobs
+        name_path: identity
+
+cluster:
+  static:
+      - kraken-origin-0:80
+
+hashring:
+  max_replica: 2
+
+writeback:
+  retry_interval: 100ms
+  poll_retries_interval: 250ms
+
+tls:
+  client:
+    disabled: true
+  server:
+    disabled: true

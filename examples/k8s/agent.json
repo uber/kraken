@@ -1,0 +1,77 @@
+---
+{
+    "apiVersion": "apps/v1",
+    "kind": "DaemonSet",
+    "metadata": {
+        "name": "kraken-agent",
+        "labels": {
+            "kraken": "true"
+        }
+    },
+    "spec": {
+        "selector": {
+            "matchLabels": {
+                "kraken-app": "agent"
+            }
+        },
+        "template": {
+            "metadata": {
+                "labels": {
+                    "kraken": "true",
+                    "kraken-app": "agent",
+                    "kraken-peer": "true"
+                }
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "name": "main",
+                        "image": "gcr.io/uber-container-tools/kraken-agent:v0.1.1",
+                        "command": [
+                            "/usr/bin/kraken-agent",
+                            "--config=/etc/config/agent.yaml",
+                            "--agent-server-port=80",
+                            "--peer-port=8080",
+                            "--agent-registry-port=8081"
+                        ],
+                        "volumeMounts": [
+                            {
+                                "name": "config",
+                                "mountPath": "/etc/config"
+                            }
+                        ]
+                    }
+                ],
+                "volumes": [
+                    {
+                        "name": "config",
+                        "configMap": { "name": "kraken" }
+                    }
+                ]
+            }
+        }
+    }
+}
+---
+{
+    "kind": "Service",
+    "apiVersion": "v1",
+    "metadata": {
+        "name": "kraken-agent-registry"
+    },
+    "spec": {
+        "type": "NodePort",
+        "selector": {
+            "kraken-app": "agent"
+        },
+        "ports": [
+            {
+                "protocol": "TCP",
+                "port": 80,
+                "targetPort": 8081,
+                "nodePort": 30081
+            }
+        ]
+    }
+}
+---
