@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kraken
+data:
+  agent.yaml: |
+    extends: /etc/kraken/config/agent/base.yaml
+    {{- include "tls" . | nindent 4 }}
+    {{- include "trackers" . | nindent 4 }}
+    {{- include "build-index" . | nindent 4 }}
+
+  tracker.yaml: |
+    extends: /etc/kraken/config/tracker/base.yaml
+    {{- include "tls" . | nindent 4 }}
+    {{- include "origins" . | nindent 4 }}
+
+    peerstore:
+      redis:
+        addr: 127.0.0.1:6379
+
+    trackerserver:
+      announce_interval: 3s
+
+    nginx:
+      cache_dir: /tmp/kraken-tracker-nginx/
+
+  origin.yaml: |
+    extends: /etc/kraken/config/origin/base.yaml
+    {{- include "tls" . | nindent 4 }}
+    {{- include "origin-cluster" . | nindent 4 }}
+
+    backends:
+      {{- include "library-namespace" . | nindent 6 }}
+      - namespace: .*
+        backend:
+          testfs:
+            addr: kraken-testfs:80
+            root: blobs
+            name_path: identity
+
+    hashring:
+      max_replica: 2
+
+    writeback:
+      retry_interval: 100ms
+      poll_retries_interval: 250ms
+
+  build-index.yaml: |
+    extends: /etc/kraken/config/build-index/base.yaml
+    {{- include "tls" . | nindent 4 }}
+    {{- include "build-index-cluster" . | nindent 4 }}
+    {{- include "origins" . | nindent 4 }}
+
+    backends:
+      {{- include "library-namespace" . | nindent 6 }}
+      - namespace: .*
+        backend:
+          testfs:
+            addr: kraken-testfs:80
+            root: tags
+            name_path: docker_tag
+
+    remotes: {}
+
+    tag_replication:
+      retry_interval: 100ms
+      poll_retries_interval: 250ms
+
+    tag_types:
+      - namespace: .*
+        type: docker
+        root: tags
+
+    tag_store:
+      write_through: false
+
+    writeback:
+      retry_interval: 100ms
+      poll_retries_interval: 250ms
+
+    nginx:
+      cache_dir: /tmp/kraken-build-index-nginx/
+
+  proxy.yaml: |
+    extends: /etc/kraken/config/proxy/base.yaml
+    {{- include "tls" . | nindent 4 }}
+    {{- include "build-index" . | nindent 4 }}
+    {{- include "origins" . | nindent 4 }}
+
+    nginx:
+      cache_dir: /tmp/kraken-proxy-nginx/
