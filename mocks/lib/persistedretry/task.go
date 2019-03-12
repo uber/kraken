@@ -74,3 +74,17 @@ func (mr *MockTaskMockRecorder) Ready() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ready", reflect.TypeOf((*MockTask)(nil).Ready))
 }
+
+// Tags mocks base method
+func (m *MockTask) Tags() map[string]string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Tags")
+	ret0, _ := ret[0].(map[string]string)
+	return ret0
+}
+
+// Tags indicates an expected call of Tags
+func (mr *MockTaskMockRecorder) Tags() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tags", reflect.TypeOf((*MockTask)(nil).Tags))
+}
