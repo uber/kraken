@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/uber/kraken/core"
-	mockannounceclient "github.com/uber/kraken/mocks/tracker/announceclient"
+	"github.com/uber/kraken/mocks/tracker/announceclient"
 	"github.com/uber/kraken/tracker/announceclient"
 	"go.uber.org/zap"
 
