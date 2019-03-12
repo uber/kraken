@@ -5,7 +5,7 @@
     "metadata": {
         "name": "kraken-testfs",
         "labels": {
-            "kraken": "true",
+            "kraken": "true"
         }
     },
     "spec": {
