@@ -15,7 +15,6 @@ package announcer
 
 import (
 	"errors"
-	"runtime"
 	"testing"
 	"time"
 
@@ -29,6 +28,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// How long to wait for the Ticker goroutine to fire / not fire. Fairly large
+// to prevent flakey tests.
+const _tickerTimeout = time.Second
+
 type mockEvents struct {
 	tick chan struct{}
 }
@@ -40,20 +43,18 @@ func newMockEvents() *mockEvents {
 func (e *mockEvents) AnnounceTick() { e.tick <- struct{}{} }
 
 func (e *mockEvents) expectTick(t *testing.T) {
-	runtime.Gosched()
 	select {
 	case <-e.tick:
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(_tickerTimeout):
 		require.FailNow(t, "Tick timed out")
 	}
 }
 
 func (e *mockEvents) expectNoTick(t *testing.T) {
-	runtime.Gosched()
 	select {
 	case <-e.tick:
 		require.FailNow(t, "Unexpected tick")
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(_tickerTimeout):
 	}
 }
 
