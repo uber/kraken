@@ -9,42 +9,6 @@ data:
     {{- include "trackers" . | nindent 4 }}
     {{- include "build-index" . | nindent 4 }}
 
-  tracker.yaml: |
-    extends: /etc/kraken/config/tracker/base.yaml
-    {{- include "tls" . | nindent 4 }}
-    {{- include "origins" . | nindent 4 }}
-
-    peerstore:
-      redis:
-        addr: 127.0.0.1:6379
-
-    trackerserver:
-      announce_interval: 3s
-
-    nginx:
-      cache_dir: /tmp/kraken-tracker-nginx/
-
-  origin.yaml: |
-    extends: /etc/kraken/config/origin/base.yaml
-    {{- include "tls" . | nindent 4 }}
-    {{- include "origin-cluster" . | nindent 4 }}
-
-    backends:
-      {{- include "library-namespace" . | nindent 6 }}
-      - namespace: .*
-        backend:
-          testfs:
-            addr: kraken-testfs:80
-            root: blobs
-            name_path: identity
-
-    hashring:
-      max_replica: 2
-
-    writeback:
-      retry_interval: 100ms
-      poll_retries_interval: 250ms
-
   build-index.yaml: |
     extends: /etc/kraken/config/build-index/base.yaml
     {{- include "tls" . | nindent 4 }}
@@ -52,7 +16,14 @@ data:
     {{- include "origins" . | nindent 4 }}
 
     backends:
-      {{- include "library-namespace" . | nindent 6 }}
+      - namespace: library/.*
+        backend:
+          registry_tag:
+            address: index.docker.io
+            security:
+              basic:
+                username: ""
+                password: ""
       - namespace: .*
         backend:
           testfs:
@@ -81,6 +52,27 @@ data:
     nginx:
       cache_dir: /tmp/kraken-build-index-nginx/
 
+  origin.yaml: |
+    extends: /etc/kraken/config/origin/base.yaml
+    {{- include "tls" . | nindent 4 }}
+    {{- include "origin-cluster" . | nindent 4 }}
+
+    backends:
+      {{- include "library-namespace" . | nindent 6 }}
+      - namespace: .*
+        backend:
+          testfs:
+            addr: kraken-testfs:80
+            root: blobs
+            name_path: identity
+
+    hashring:
+      max_replica: 2
+
+    writeback:
+      retry_interval: 100ms
+      poll_retries_interval: 250ms
+
   proxy.yaml: |
     extends: /etc/kraken/config/proxy/base.yaml
     {{- include "tls" . | nindent 4 }}
@@ -89,3 +81,18 @@ data:
 
     nginx:
       cache_dir: /tmp/kraken-proxy-nginx/
+
+  tracker.yaml: |
+    extends: /etc/kraken/config/tracker/base.yaml
+    {{- include "tls" . | nindent 4 }}
+    {{- include "origins" . | nindent 4 }}
+
+    peerstore:
+      redis:
+        addr: 127.0.0.1:6379
+
+    trackerserver:
+      announce_interval: 3s
+
+    nginx:
+      cache_dir: /tmp/kraken-tracker-nginx/
