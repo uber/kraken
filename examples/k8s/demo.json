@@ -2,19 +2,19 @@
     "apiVersion": "apps/v1",
     "kind": "Deployment",
     "metadata": {
-        "name": "my-pod"
+        "name": "demo"
     },
     "spec": {
         "replicas": 1,
         "selector": {
             "matchLabels": {
-                "my-pod": "true"
+                "demo": "true"
             }
         },
         "template": {
             "metadata": {
                 "labels": {
-                    "my-pod": "true"
+                    "demo": "true"
                 }
             },
             "spec": {
