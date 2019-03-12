@@ -1,31 +1,29 @@
-{{- range $i, $e := until (int .Values.num_trackers) }}
----
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
-  name: kraken-tracker-{{$i}}
+  name: kraken-agent
   labels:
     kraken: 'true'
 spec:
-  replicas: 1
   selector:
     matchLabels:
-      kraken-app: tracker-{{$i}}
+      kraken-app: agent
   template:
     metadata:
       labels:
         kraken: 'true'
-        kraken-app: tracker-{{$i}}
+        kraken-app: agent
+        kraken-peer: 'true'
     spec:
       containers:
-      - name: redis
-        image: redis:5.0
       - name: main
-        image: gcr.io/uber-container-tools/kraken-tracker:v0.1.1
+        image: gcr.io/uber-container-tools/kraken-agent:v0.1.1
         command:
-        - /usr/bin/kraken-tracker
-        - --config=/etc/config/tracker.yaml
-        - --port=80
+        - /usr/bin/kraken-agent
+        - --config=/etc/config/agent.yaml
+        - --agent-server-port=80
+        - --peer-port=8080
+        - --agent-registry-port=8081
         volumeMounts:
         - name: config
           mountPath: /etc/config
@@ -37,14 +35,15 @@ spec:
 kind: Service
 apiVersion: v1
 metadata:
-  name: kraken-tracker-{{$i}}
+  name: kraken-agent-registry
   labels:
     kraken: 'true'
 spec:
+  type: NodePort
   selector:
-    kraken-app: tracker-{{$i}}
+    kraken-app: agent
   ports:
   - protocol: TCP
     port: 80
-    targetPort: 80
-{{- end -}}
+    targetPort: 8081
+    nodePort: {{ .Values.agent_registry_port }}

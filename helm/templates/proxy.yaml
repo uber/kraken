@@ -1,30 +1,27 @@
-{{- range $i, $e := until (int .Values.num_trackers) }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kraken-tracker-{{$i}}
+  name: kraken-proxy
   labels:
     kraken: 'true'
 spec:
-  replicas: 1
+  replicas: {{ .Values.num_proxies }}
   selector:
     matchLabels:
-      kraken-app: tracker-{{$i}}
+      kraken-app: proxy
   template:
     metadata:
       labels:
         kraken: 'true'
-        kraken-app: tracker-{{$i}}
+        kraken-app: proxy
     spec:
       containers:
-      - name: redis
-        image: redis:5.0
       - name: main
-        image: gcr.io/uber-container-tools/kraken-tracker:v0.1.1
+        image: gcr.io/uber-container-tools/kraken-proxy:v0.1.1
         command:
-        - /usr/bin/kraken-tracker
-        - --config=/etc/config/tracker.yaml
+        - /usr/bin/kraken-proxy
+        - --config=/etc/config/proxy.yaml
         - --port=80
         volumeMounts:
         - name: config
@@ -37,14 +34,13 @@ spec:
 kind: Service
 apiVersion: v1
 metadata:
-  name: kraken-tracker-{{$i}}
+  name: kraken-proxy
   labels:
     kraken: 'true'
 spec:
   selector:
-    kraken-app: tracker-{{$i}}
+    kraken-app: proxy
   ports:
   - protocol: TCP
     port: 80
     targetPort: 80
-{{- end -}}

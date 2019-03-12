@@ -3,29 +3,30 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kraken-tracker-{{$i}}
+  name: kraken-origin-{{$i}}
   labels:
     kraken: 'true'
 spec:
   replicas: 1
   selector:
     matchLabels:
-      kraken-app: tracker-{{$i}}
+      kraken-app: origin-{{$i}}
   template:
     metadata:
       labels:
         kraken: 'true'
-        kraken-app: tracker-{{$i}}
+        kraken-app: origin-{{$i}}
+        kraken-peer: 'true'
     spec:
       containers:
-      - name: redis
-        image: redis:5.0
       - name: main
-        image: gcr.io/uber-container-tools/kraken-tracker:v0.1.1
+        image: gcr.io/uber-container-tools/kraken-origin:v0.1.1
         command:
-        - /usr/bin/kraken-tracker
-        - --config=/etc/config/tracker.yaml
-        - --port=80
+        - /usr/bin/kraken-origin
+        - --config=/etc/config/origin.yaml
+        - --blobserver-hostname=kraken-origin-0
+        - --blobserver-port=80
+        - --peer-port=8080
         volumeMounts:
         - name: config
           mountPath: /etc/config
@@ -37,12 +38,12 @@ spec:
 kind: Service
 apiVersion: v1
 metadata:
-  name: kraken-tracker-{{$i}}
+  name: kraken-origin-{{$i}}
   labels:
     kraken: 'true'
 spec:
   selector:
-    kraken-app: tracker-{{$i}}
+    kraken-app: origin-{{$i}}
   ports:
   - protocol: TCP
     port: 80
