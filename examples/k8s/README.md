@@ -8,6 +8,9 @@ Kraken will come up with 1 origin, 1 tracker, 1 proxy and 1 build-index, but tho
 be > 1 in production. Each node will get a kraken agent and have `localhost:30081` as a pullable
 registry location.
 
+Kraken's backend will be a simple http fileserver: `testfs`. In production you would have S3 or
+HDFS instead of that.
+
 The deployment `demo.json` is an example of an application that got its image pulled from Kraken.
 
 ## Running the simple example
