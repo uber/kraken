@@ -112,11 +112,8 @@ your k8s cluster:
 ```
 $ helm install --name=kraken-demo ./helm
 ```
-The setup includes 3 trackers, origins and build-index pods, 1 proxy pod and an agent daemonset. 
-Once deployed, each and every node will have a docker registry API exposed on port 30081.
-After updating the backend config to use either a blob storage or another registry, you can pull
-images from `localhost:30081` instead of the registry you used previously. For an example pod spec
-that pulls images from Kraken agent, see [example](examples/k8s/demo.json).
+Once deployed, each and every node will have a docker registry API exposed on `localhost:30081`.
+For an example pod spec that pulls images from Kraken agent, see [example](examples/k8s/demo.json).
 
 For more information on k8s setup, see [README](examples/k8s/README.md).
 
