@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kraken-build-index
+  labels:
+    kraken: 'true'
+spec:
+  replicas: {{ .Values.build_index.replicas }}
+  selector:
+    matchLabels:
+      kraken-app: build-index
+  template:
+    metadata:
+      labels:
+        kraken: 'true'
+        kraken-app: build-index
+    spec:
+      containers:
+      - name: main
+        image: gcr.io/uber-container-tools/kraken-build-index:{{ .Values.kraken.tag }}
+        command:
+        - /bin/bash
+        - -c
+        - "sleep 30 && /usr/bin/kraken-build-index --config=/etc/config/build-index.yaml --port=80"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+      volumes:
+      - name: config
+        configMap:
+          name: kraken
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: kraken-build-index
+  labels:
+    kraken: 'true'
+spec:
+  clusterIP: None
+  selector:
+    kraken-app: build-index
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80

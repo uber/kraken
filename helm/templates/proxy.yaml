@@ -1,0 +1,46 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kraken-proxy
+  labels:
+    kraken: 'true'
+spec:
+  replicas: {{ .Values.proxy.replicas }}
+  selector:
+    matchLabels:
+      kraken-app: proxy
+  template:
+    metadata:
+      labels:
+        kraken: 'true'
+        kraken-app: proxy
+    spec:
+      containers:
+      - name: main
+        image: gcr.io/uber-container-tools/kraken-proxy:{{ .Values.kraken.tag }}
+        command:
+        - /usr/bin/kraken-proxy
+        - --config=/etc/config/proxy.yaml
+        - --port=80
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+      volumes:
+      - name: config
+        configMap:
+          name: kraken
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: kraken-proxy
+  labels:
+    kraken: 'true'
+spec:
+  selector:
+    kraken-app: proxy
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80

@@ -1,0 +1,15 @@
+kraken:
+  tag: v0.1.1
+  registry_port: 30081
+
+tracker:
+  replicas: 3
+
+build_index:
+  replicas: 3
+
+origin:
+  replicas: 3
+
+proxy:
+  replicas: 1

@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kraken-origin
+  labels:
+    kraken: 'true'
+spec:
+  replicas: {{ .Values.origin.replicas }}
+  selector:
+    matchLabels:
+      kraken-app: origin
+  template:
+    metadata:
+      labels:
+        kraken: 'true'
+        kraken-app: origin
+        kraken-peer: 'true'
+    spec:
+      containers:
+      - name: main
+        image: gcr.io/uber-container-tools/kraken-origin:{{ .Values.kraken.tag }}
+        command:
+        - /bin/bash
+        - -c
+        - "sleep 30 && /usr/bin/kraken-origin --config=/etc/config/origin.yaml --blobserver-port=80 --peer-port=8080"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+      volumes:
+      - name: config
+        configMap:
+          name: kraken
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: kraken-origin
+  labels:
+    kraken: 'true'
+spec:
+  clusterIP: None
+  selector:
+    kraken-app: origin
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
