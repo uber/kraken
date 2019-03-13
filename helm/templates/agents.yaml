@@ -46,4 +46,4 @@ spec:
   - protocol: TCP
     port: 80
     targetPort: 8081
-    nodePort: {{ .Values.agent_registry_port }}
+    nodePort: {{ .Values.kraken.registry_port }}

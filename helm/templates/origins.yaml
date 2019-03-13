@@ -22,7 +22,7 @@ spec:
         command:
         - /bin/bash
         - -c
-        - "sleep 30 && /usr/bin/kraken-origin --config=/etc/config/origin.yaml --blobserver-hostname=kraken-origin-0 --blobserver-port=80 --peer-port=8080"
+        - "sleep 30 && /usr/bin/kraken-origin --config=/etc/config/origin.yaml --blobserver-port=80 --peer-port=8080"
         volumeMounts:
         - name: config
           mountPath: /etc/config
