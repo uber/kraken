@@ -110,7 +110,7 @@ For information about how to configure and use Kraken, please refer to the [docu
 You can use our example Helm chart to deploy Kraken (with an example http fileserver backend) on
 your k8s cluster:
 ```
-helm install --name=kraken-demo ./helm
+$ helm install --name=kraken-demo ./helm
 ```
 The setup includes 3 trackers, origins and build-index pods, 1 proxy pod and an agent daemonset. 
 Once deployed, each and every node will have a docker registry API exposed on port 30081.
