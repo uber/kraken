@@ -251,7 +251,7 @@ func (m *manager) exec(t Task) error {
 		log.With(
 			"task", t,
 			"failures", t.GetFailures()).Errorf("Task failed: %s", err)
-		m.stats.Counter("task_failures").Inc(1)
+		m.stats.Tagged(t.Tags()).Counter("task_failures").Inc(1)
 		return nil
 	}
 	if err := m.store.Remove(t); err != nil {
