@@ -99,21 +99,32 @@ concurrently (5200 blob downloads), with 300MB/s speed limit on all agents (usin
 
 # Usage
 
-All Kraken components can be deployed as Docker containers. To build the Docker images:
+## Kraken on Kubernetes
 
+You can use our example Helm chart to deploy Kraken (with an example http fileserver backend) on your k8s cluster:
+```
+helm install --name=kraken-demo ./helm
+```
+The configuration includes 3 trackers, origins and build-index pods, 1 proxy pod and an agent daemonset. Once
+deployed, each and every node will have a docker registry API exposed on port 30081 (configurable).
+Once installed, you can use `localhost:30081` as the registry part of any image you run in a pod; see
+[example](examples/k8s/demo.json).
+
+## Devcluster
+All Kraken components can be deployed as Docker containers. To build the Docker images:
 ```
 $ make images
 ```
 
 To start a herd container (which contains origin, tracker, build-index and proxy) and two agent
 containers with development configuration:
-
 ```
 $ make devcluster
 ```
 
 Docker-for-Mac is required for making dev-cluster work on your laptop.
 For more information on devcluster, please check out devcluster [README](examples/devcluster/README.md).
+
 For information about how to configure and use Kraken, please refer to the [documentation](docs/CONFIGURATION.md).
 
 # Comparison With Other Projects
