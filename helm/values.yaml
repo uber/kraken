@@ -1,6 +1,15 @@
-num_trackers: 3
-num_build_index: 3
-num_origins: 3
-num_proxies: 1
+kraken:
+  tag: v0.1.1
+  registry_port: 30081
 
-agent_registry_port: 30081
+tracker:
+  replicas: 3
+
+build_index:
+  replicas: 3
+
+origin:
+  replicas: 3
+
+proxy:
+  replicas: 1

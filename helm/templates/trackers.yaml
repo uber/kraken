@@ -5,7 +5,7 @@ metadata:
   labels:
     kraken: 'true'
 spec:
-  replicas: {{ .Values.num_trackers }}
+  replicas: {{ .Values.tracker.replicas }}
   selector:
     matchLabels:
       kraken-app: tracker
@@ -19,7 +19,7 @@ spec:
       - name: redis
         image: redis:5.0
       - name: main
-        image: gcr.io/uber-container-tools/kraken-tracker:v0.1.1
+        image: gcr.io/uber-container-tools/kraken-tracker:{{ .Values.kraken.tag }}
         command:
         - /bin/bash
         - -c

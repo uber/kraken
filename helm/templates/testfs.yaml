@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: main
-        image: gcr.io/uber-container-tools/kraken-testfs:v0.1.1
+        image: gcr.io/uber-container-tools/kraken-testfs:{{ .Values.kraken.tag }}
         command:
         - /usr/bin/kraken-testfs
         - --port=80

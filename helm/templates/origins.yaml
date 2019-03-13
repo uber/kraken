@@ -5,7 +5,7 @@ metadata:
   labels:
     kraken: 'true'
 spec:
-  replicas: {{ .Values.num_origins }}
+  replicas: {{ .Values.origin.replicas }}
   selector:
     matchLabels:
       kraken-app: origin
@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: main
-        image: gcr.io/uber-container-tools/kraken-origin:v0.1.1
+        image: gcr.io/uber-container-tools/kraken-origin:{{ .Values.kraken.tag }}
         command:
         - /bin/bash
         - -c
