@@ -1,32 +1,28 @@
-{{- range $i, $e := until (int .Values.num_trackers) }}
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kraken-origin-{{$i}}
+  name: kraken-origin
   labels:
     kraken: 'true'
 spec:
-  replicas: 1
+  replicas: {{ .Values.num_origins }}
   selector:
     matchLabels:
-      kraken-app: origin-{{$i}}
+      kraken-app: origin
   template:
     metadata:
       labels:
         kraken: 'true'
-        kraken-app: origin-{{$i}}
+        kraken-app: origin
         kraken-peer: 'true'
     spec:
       containers:
       - name: main
         image: gcr.io/uber-container-tools/kraken-origin:v0.1.1
         command:
-        - /usr/bin/kraken-origin
-        - --config=/etc/config/origin.yaml
-        - --blobserver-hostname=kraken-origin-0
-        - --blobserver-port=80
-        - --peer-port=8080
+        - /bin/bash
+        - -c
+        - "sleep 30 && /usr/bin/kraken-origin --config=/etc/config/origin.yaml --blobserver-hostname=kraken-origin-0 --blobserver-port=80 --peer-port=8080"
         volumeMounts:
         - name: config
           mountPath: /etc/config
@@ -38,14 +34,14 @@ spec:
 kind: Service
 apiVersion: v1
 metadata:
-  name: kraken-origin-{{$i}}
+  name: kraken-origin
   labels:
     kraken: 'true'
 spec:
+  clusterIP: None
   selector:
-    kraken-app: origin-{{$i}}
+    kraken-app: origin
   ports:
   - protocol: TCP
     port: 80
     targetPort: 80
-{{- end -}}

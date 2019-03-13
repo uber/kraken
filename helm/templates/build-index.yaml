@@ -1,29 +1,27 @@
-{{- range $i, $e := until (int .Values.num_trackers) }}
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kraken-build-index-{{$i}}
+  name: kraken-build-index
   labels:
     kraken: 'true'
 spec:
-  replicas: 1
+  replicas: {{ .Values.num_build_index }}
   selector:
     matchLabels:
-      kraken-app: build-index-{{$i}}
+      kraken-app: build-index
   template:
     metadata:
       labels:
         kraken: 'true'
-        kraken-app: build-index-{{$i}}
+        kraken-app: build-index
     spec:
       containers:
       - name: main
         image: gcr.io/uber-container-tools/kraken-build-index:v0.1.1
         command:
-        - /usr/bin/kraken-build-index
-        - --config=/etc/config/build-index.yaml
-        - --port=80
+        - /bin/bash
+        - -c
+        - "sleep 30 && /usr/bin/kraken-build-index --config=/etc/config/build-index.yaml --port=80"
         volumeMounts:
         - name: config
           mountPath: /etc/config
@@ -35,14 +33,14 @@ spec:
 kind: Service
 apiVersion: v1
 metadata:
-  name: kraken-build-index-{{$i}}
+  name: kraken-build-index
   labels:
     kraken: 'true'
 spec:
+  clusterIP: None
   selector:
-    kraken-app: build-index-{{$i}}
+    kraken-app: build-index
   ports:
   - protocol: TCP
     port: 80
     targetPort: 80
-{{- end -}}

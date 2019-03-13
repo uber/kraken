@@ -4,10 +4,7 @@
 {{- define "trackers" -}}
 tracker:
   hosts:
-    static:
-{{- range $i, $e := until (int .Values.num_trackers) }}
-      - kraken-tracker-{{$i}}:80
-{{- end -}}
+    dns: kraken-tracker:80
 {{- end -}}
 
 
@@ -15,18 +12,12 @@ tracker:
 {{- define "origins" -}}
 origin:
   hosts:
-    static:
-{{- range $i, $e := until (int .Values.num_origins) }}
-      - kraken-origin-{{$i}}:80
-{{- end -}}
+    dns: kraken-origin:80
 {{- end -}}
 
 {{- define "origin-cluster" -}}
 cluster:
-  static:
-{{- range $i, $e := until (int .Values.num_origins) }}
-    - kraken-origin-{{$i}}:80
-{{- end -}}
+  dns: kraken-origin:80
 {{- end -}}
 
 
@@ -34,19 +25,13 @@ cluster:
 {{- define "build-index" -}}
 build_index:
   hosts:
-    static:
-{{- range $i, $e := until (int .Values.num_build_index) }}
-      - kraken-build-index-{{$i}}:80
-{{- end -}}
+    dns: kraken-build-index:80
 {{- end -}}
 
 {{- define "build-index-cluster" -}}
 cluster:
   hosts:
-    static:
-{{- range $i, $e := until (int .Values.num_build_index) }}
-      - kraken-build-index-{{$i}}:80
-{{- end -}}
+    dns: kraken-build-index:80
 {{- end -}}
 
 

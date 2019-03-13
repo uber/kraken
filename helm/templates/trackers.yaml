@@ -1,21 +1,19 @@
-{{- range $i, $e := until (int .Values.num_trackers) }}
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kraken-tracker-{{$i}}
+  name: kraken-tracker
   labels:
     kraken: 'true'
 spec:
-  replicas: 1
+  replicas: {{ .Values.num_trackers }}
   selector:
     matchLabels:
-      kraken-app: tracker-{{$i}}
+      kraken-app: tracker
   template:
     metadata:
       labels:
         kraken: 'true'
-        kraken-app: tracker-{{$i}}
+        kraken-app: tracker
     spec:
       containers:
       - name: redis
@@ -23,9 +21,9 @@ spec:
       - name: main
         image: gcr.io/uber-container-tools/kraken-tracker:v0.1.1
         command:
-        - /usr/bin/kraken-tracker
-        - --config=/etc/config/tracker.yaml
-        - --port=80
+        - /bin/bash
+        - -c
+        - "sleep 30 && /usr/bin/kraken-tracker --config=/etc/config/tracker.yaml --port=80"
         volumeMounts:
         - name: config
           mountPath: /etc/config
@@ -37,14 +35,14 @@ spec:
 kind: Service
 apiVersion: v1
 metadata:
-  name: kraken-tracker-{{$i}}
+  name: kraken-tracker
   labels:
     kraken: 'true'
 spec:
+  clusterIP: None
   selector:
-    kraken-app: tracker-{{$i}}
+    kraken-app: tracker
   ports:
   - protocol: TCP
     port: 80
     targetPort: 80
-{{- end -}}
