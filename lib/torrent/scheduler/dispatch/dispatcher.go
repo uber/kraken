@@ -332,7 +332,9 @@ func (d *Dispatcher) complete() {
 		} else {
 			// Notify in-progress peers that we have completed the torrent and
 			// all pieces are available.
-			p.messages.Send(conn.NewCompleteMessage())
+			if err := p.messages.Send(conn.NewCompleteMessage()); err != nil {
+				d.log("peer", p).Debug("Error sending complete message: %s", err)
+			}
 		}
 		return true
 	})
@@ -386,7 +388,7 @@ func (d *Dispatcher) maybeSendPieceRequests(p *peer, candidates *bitset.BitSet) 
 	}
 	for _, i := range pieces {
 		if err := p.messages.Send(conn.NewPieceRequestMessage(i, d.torrent.PieceLength(i))); err != nil {
-			// Connection closed.
+			d.log("peer", p, "piece", i).Debug("Error sending piece request message: %s", err);
 			d.pieceRequestManager.MarkUnsent(p.id, i)
 			return false, err
 		}
@@ -506,18 +508,23 @@ func (d *Dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
 		d.log("peer", p, "piece", i).Error("Rejecting piece request: chunk not supported")
-		p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, errChunkNotSupported))
+		if err := p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, errChunkNotSupported)); err != nil {
+			d.log("peer", p, "piece", i).Debug("Error sending piece request error message: %s", err);
+		}
 		return
 	}
 
 	payload, err := d.torrent.GetPieceReader(i)
 	if err != nil {
 		d.log("peer", p, "piece", i).Errorf("Error getting reader for requested piece: %s", err)
-		p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err))
+		if err := p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err)); err != nil {
+			d.log("peer", p, "piece", i).Debug("Error sending piece request error message: %s", err);
+		}
 		return
 	}
 
 	if err := p.messages.Send(conn.NewPiecePayloadMessage(i, payload)); err != nil {
+		d.log("peer", p, "piece", i).Debug("Error sending piece payload message: %s", err);
 		return
 	}
 
@@ -567,7 +574,9 @@ func (d *Dispatcher) handlePiecePayload(
 		}
 		pp := v.(*peer)
 
-		pp.messages.Send(conn.NewAnnouncePieceMessage(i))
+		if err := pp.messages.Send(conn.NewAnnouncePieceMessage(i)); err != nil {
+			d.log("peer", p, "piece", i).Debug("Error sending piece announcement message: %s", err);
+		}
 
 		return true
 	})
