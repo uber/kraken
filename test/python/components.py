@@ -29,7 +29,13 @@ from threading import Thread
 import requests
 
 from uploader import Uploader
-from utils import format_insecure_curl, tls_opts, dev_tag
+from utils import (
+    PortReservation,
+    dev_tag,
+    find_free_port,
+    format_insecure_curl,
+    tls_opts,
+)
 
 
 def get_docker_bridge():
@@ -166,14 +172,6 @@ def new_docker_container(name, image, command=None, environment=None, ports=None
         print_logs(c)
         raise
     return c
-
-
-def find_free_port():
-    s = socket()
-    s.bind(('', 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
 
 
 def populate_config_template(kname, filename, **kwargs):
@@ -334,8 +332,12 @@ class Origin(Component):
         def __init__(self, name):
             self.name = name
             self.hostname = get_docker_bridge()
-            self.port = find_free_port()
+            self.port_rez = PortReservation()
             self.peer_port = find_free_port()
+
+        @property
+        def port(self):
+            return self.port_rez.get()
 
         @property
         def addr(self):
@@ -359,6 +361,7 @@ class Origin(Component):
         self.start()
 
     def new_container(self):
+        self.instance.port_rez.release()
         return new_docker_container(
             name=self.name,
             image=dev_tag('kraken-origin'),
@@ -566,7 +569,11 @@ class BuildIndex(Component):
         def __init__(self, name):
             self.name = name
             self.hostname = get_docker_bridge()
-            self.port = find_free_port()
+            self.port_rez = PortReservation()
+
+        @property
+        def port(self):
+            return self.port_rez.get()
 
         @property
         def addr(self):
@@ -595,6 +602,7 @@ class BuildIndex(Component):
         self.start()
 
     def new_container(self):
+        self.instance.port_rez.release()
         return new_docker_container(
             name=self.name,
             image=dev_tag('kraken-build-index'),
@@ -603,10 +611,11 @@ class BuildIndex(Component):
             command=[
                 '/usr/bin/kraken-build-index',
                 '--config=/etc/kraken/config/build-index/{config}'.format(config=self.config_file),
-                '--port={port}'.format(port=self.instance.port),
+                '--port={port}'.format(port=self.port),
             ],
             volumes=self.volumes,
-            health_check=HealthCheck(format_insecure_curl('https://localhost:{}/health'.format(self.instance.port))))
+            health_check=HealthCheck(format_insecure_curl(
+                'https://localhost:{}/health'.format(self.port))))
 
     @property
     def port(self):
