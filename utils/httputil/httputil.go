@@ -260,7 +260,7 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 	if err != nil {
 		return nil, fmt.Errorf("parse url: %s", err)
 	}
-	opts := sendOptions{
+	opts := &sendOptions{
 		body:                 nil,
 		timeout:              60 * time.Second,
 		acceptedCodes:        map[int]bool{http.StatusOK: true},
@@ -272,7 +272,7 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		httpFallbackDisabled: false,
 	}
 	for _, o := range options {
-		o(&opts)
+		o(opts)
 	}
 
 	req, err := newRequest(method, opts)
@@ -280,7 +280,7 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		return nil, err
 	}
 
-	client := http.Client{
+	client := &http.Client{
 		Timeout:       opts.timeout,
 		CheckRedirect: opts.redirect,
 		Transport:     opts.transport,
@@ -294,13 +294,16 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		// TODO (@evelynl): disable retry after tls migration.
 		if err != nil && req.URL.Scheme == "https" && !opts.httpFallbackDisabled {
 			log.Warnf("Failed to send https request: %s. Retrying with http...", err)
-			var httpReq *http.Request
-			httpReq, err = newRequest(method, opts)
+			originalErr := err
+			resp, err = fallbackToHTTP(client, method, opts)
 			if err != nil {
-				return nil, err
+				// Sometimes the request fails for a reason unrelated to https.
+				// To keep this reason visible, we always include the original
+				// error.
+				err = fmt.Errorf(
+					"failed to fallback https to http, original https error: %s,\n"+
+						"fallback http error: %s", originalErr, err)
 			}
-			httpReq.URL.Scheme = "http"
-			resp, err = client.Do(httpReq)
 		}
 		if err != nil ||
 			(resp.StatusCode >= 500 && !opts.acceptedCodes[resp.StatusCode]) ||
@@ -414,7 +417,7 @@ func ParseDigest(r *http.Request, name string) (core.Digest, error) {
 	return d, nil
 }
 
-func newRequest(method string, opts sendOptions) (*http.Request, error) {
+func newRequest(method string, opts *sendOptions) (*http.Request, error) {
 	req, err := http.NewRequest(method, opts.url.String(), opts.body)
 	if err != nil {
 		return nil, fmt.Errorf("new request: %s", err)
@@ -427,6 +430,18 @@ func newRequest(method string, opts sendOptions) (*http.Request, error) {
 		req.Header.Set(key, val)
 	}
 	return req, nil
+}
+
+func fallbackToHTTP(
+	client *http.Client, method string, opts *sendOptions) (*http.Response, error) {
+
+	req, err := newRequest(method, opts)
+	if err != nil {
+		return nil, err
+	}
+	req.URL.Scheme = "http"
+
+	return client.Do(req)
 }
 
 func min(a, b time.Duration) time.Duration {
