@@ -233,3 +233,14 @@ func TestTLSClientFallback(t *testing.T) {
 	require.NoError(err)
 	require.Equal(http.StatusOK, resp.StatusCode)
 }
+
+func TestTLSClientFallbackError(t *testing.T) {
+	require := require.New(t)
+
+	c := &TLSConfig{}
+	tls, err := c.BuildClient()
+	require.NoError(err)
+
+	_, err = Get("https://some-non-existent-addr/", SendTLS(tls))
+	require.Error(err)
+}
