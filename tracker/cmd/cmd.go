@@ -14,8 +14,8 @@
 package cmd
 
 import (
-	"github.com/andres-erbsen/clock"
-	"github.com/spf13/cobra"
+	"flag"
+
 	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/lib/upstream"
 	"github.com/uber/kraken/metrics"
@@ -27,50 +27,46 @@ import (
 	"github.com/uber/kraken/tracker/trackerserver"
 	"github.com/uber/kraken/utils/configutil"
 	"github.com/uber/kraken/utils/log"
+
+	"github.com/andres-erbsen/clock"
 )
 
-var (
-	port          int
-	configFile    string
-	krakenCluster string
-	secretsFile   string
-
-	rootCmd = &cobra.Command{
-		Short: "kraken-tracker keeps track of all the peers and their data in the p2p network.",
-		Run: func(rootCmd *cobra.Command, args []string) {
-			run()
-		},
-	}
-)
-
-func init() {
-	rootCmd.PersistentFlags().IntVarP(
-		&port, "port", "", 0, "port to listen on")
-	rootCmd.PersistentFlags().StringVarP(
-		&configFile, "config", "", "", "configuration file path")
-	rootCmd.PersistentFlags().StringVarP(
-		&krakenCluster, "cluster", "", "", "cluster name (e.g. prod01-zone1)")
-	rootCmd.PersistentFlags().StringVarP(
-		&secretsFile, "secrets", "", "", "path to a secrets YAML file to load into configuration")
+// Flags define tracker CLI flags.
+type Flags struct {
+	Port          int
+	ConfigFile    string
+	KrakenCluster string
+	SecretsFile   string
 }
 
-func Execute() {
-	rootCmd.Execute()
+// ParseFlags parses tracker CLI flags.
+func ParseFlags() *Flags {
+	var flags Flags
+	flag.IntVar(
+		&flags.Port, "port", 0, "port to listen on")
+	flag.StringVar(
+		&flags.ConfigFile, "config", "", "configuration file path")
+	flag.StringVar(
+		&flags.KrakenCluster, "cluster", "", "cluster name (e.g. prod01-zone1)")
+	flag.StringVar(
+		&flags.SecretsFile, "secrets", "", "path to a secrets YAML file to load into configuration")
+	return &flags
 }
 
-func run() {
+// Run runs the tracker.
+func Run(flags *Flags) {
 	var config Config
-	if err := configutil.Load(configFile, &config); err != nil {
+	if err := configutil.Load(flags.ConfigFile, &config); err != nil {
 		panic(err)
 	}
-	if secretsFile != "" {
-		if err := configutil.Load(secretsFile, &config); err != nil {
+	if flags.SecretsFile != "" {
+		if err := configutil.Load(flags.SecretsFile, &config); err != nil {
 			panic(err)
 		}
 	}
 	log.ConfigureLogger(config.ZapLogging)
 
-	stats, closer, err := metrics.New(config.Metrics, krakenCluster)
+	stats, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}
@@ -112,7 +108,7 @@ func run() {
 
 	log.Info("Starting nginx...")
 	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
-		"port": port,
+		"port": flags.Port,
 		"server": nginx.GetServer(
 			config.TrackerServer.Listener.Net, config.TrackerServer.Listener.Addr)},
 		nginx.WithTLS(config.TLS)))

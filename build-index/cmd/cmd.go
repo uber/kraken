@@ -14,6 +14,8 @@
 package cmd
 
 import (
+	"flag"
+
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/build-index/tagserver"
 	"github.com/uber/kraken/build-index/tagstore"
@@ -32,56 +34,49 @@ import (
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/configutil"
 	"github.com/uber/kraken/utils/log"
-
-	"github.com/spf13/cobra"
 )
 
-var (
-	port          int
-	configFile    string
-	krakenCluster string
-	secretsFile   string
-
-	rootCmd = &cobra.Command{
-		Short: "kraken-index handles all tag related requests and cross cluster replications",
-		Run: func(rootCmd *cobra.Command, args []string) {
-			run()
-		},
-	}
-)
-
-func init() {
-	rootCmd.PersistentFlags().IntVarP(
-		&port, "port", "", 0, "tag server port")
-	rootCmd.PersistentFlags().StringVarP(
-		&configFile, "config", "", "", "configuration file path")
-	rootCmd.PersistentFlags().StringVarP(
-		&krakenCluster, "cluster", "", "", "cluster name (e.g. prod01-zone1)")
-	rootCmd.PersistentFlags().StringVarP(
-		&secretsFile, "secrets", "", "", "path to a secrets YAML file to load into configuration")
+// Flags defines build-index CLI flags.
+type Flags struct {
+	Port          int
+	ConfigFile    string
+	KrakenCluster string
+	SecretsFile   string
 }
 
-func Execute() {
-	rootCmd.Execute()
+// ParseFlags parses build-index CLI flags.
+func ParseFlags() *Flags {
+	var flags Flags
+	flag.IntVar(
+		&flags.Port, "port", 0, "tag server port")
+	flag.StringVar(
+		&flags.ConfigFile, "config", "", "configuration file path")
+	flag.StringVar(
+		&flags.KrakenCluster, "cluster", "", "cluster name (e.g. prod01-zone1)")
+	flag.StringVar(
+		&flags.SecretsFile, "secrets", "", "path to a secrets YAML file to load into configuration")
+	flag.Parse()
+	return &flags
 }
 
-func run() {
-	if port == 0 {
+// Run runs the build-index.
+func Run(flags *Flags) {
+	if flags.Port == 0 {
 		panic("must specify non-zero port")
 	}
 
 	var config Config
-	if err := configutil.Load(configFile, &config); err != nil {
+	if err := configutil.Load(flags.ConfigFile, &config); err != nil {
 		panic(err)
 	}
-	if secretsFile != "" {
-		if err := configutil.Load(secretsFile, &config); err != nil {
+	if flags.SecretsFile != "" {
+		if err := configutil.Load(flags.SecretsFile, &config); err != nil {
 			panic(err)
 		}
 	}
 	log.ConfigureLogger(config.ZapLogging)
 
-	stats, closer, err := metrics.New(config.Metrics, krakenCluster)
+	stats, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}
@@ -126,7 +121,7 @@ func run() {
 	if err != nil {
 		log.Fatalf("Error building cluster host list: %s", err)
 	}
-	neighbors, err := hostlist.StripLocal(cluster, port)
+	neighbors, err := hostlist.StripLocal(cluster, flags.Port)
 	if err != nil {
 		log.Fatalf("Error stripping local machine from cluster list: %s", err)
 	}
@@ -189,7 +184,7 @@ func run() {
 	log.Fatal(nginx.Run(
 		config.Nginx,
 		map[string]interface{}{
-			"port":   port,
+			"port":   flags.Port,
 			"server": nginx.GetServer(config.TagServer.Listener.Net, config.TagServer.Listener.Addr),
 		},
 		nginx.WithTLS(config.TLS)))
