@@ -32,6 +32,7 @@ const (
 	AddActiveConn    Name = "add_active_conn"
 	DropActiveConn   Name = "drop_active_conn"
 	BlacklistConn    Name = "blacklist_conn"
+	RequestPiece     Name = "request_piece"
 	ReceivePiece     Name = "receive_piece"
 	TorrentComplete  Name = "torrent_complete"
 	TorrentCancelled Name = "torrent_cancelled"
@@ -105,7 +106,15 @@ func BlacklistConnEvent(h core.InfoHash, self core.PeerID, peer core.PeerID, dur
 	return e
 }
 
-// ReceivePieceEvent returns an event for a piece received from peer.
+// RequestPieceEvent returns an event for a piece request sent to a peer.
+func RequestPieceEvent(h core.InfoHash, self core.PeerID, peer core.PeerID, piece int) *Event {
+	e := baseEvent(RequestPiece, h, self)
+	e.Peer = peer.String()
+	e.Piece = piece
+	return e
+}
+
+// ReceivePieceEvent returns an event for a piece received from a peer.
 func ReceivePieceEvent(h core.InfoHash, self core.PeerID, peer core.PeerID, piece int) *Event {
 	e := baseEvent(ReceivePiece, h, self)
 	e.Peer = peer.String()
