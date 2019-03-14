@@ -23,14 +23,15 @@ upstream registry-backend {
 server {
   listen {{.port}};
 
-  # Allow agent to only serve localhost request.
+  # Allow agent to only serve localhost and Docker default bridge requests.
   allow 127.0.0.1;
+  allow 172.17.0.1;
   deny all;
 
   {{.client_verification}}
 
   access_log {{.log_dir}}/nginx-access.v2.log;
-  error_log {{.log_dir}}/nginx-error.v2.log;
+  error_log {{.log_dir}}/nginx-error.v2.log debug;
 
   gzip on;
   gzip_types text/plain test/csv application/json;
