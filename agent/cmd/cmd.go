@@ -52,7 +52,7 @@ type Flags struct {
 func ParseFlags() *Flags {
 	var flags Flags
 	flag.StringVar(
-		&flags.PeerIP, "", "", "ip which peer will announce itself as")
+		&flags.PeerIP, "peer-ip", "", "ip which peer will announce itself as")
 	flag.IntVar(
 		&flags.PeerPort, "peer-port", 0, "port which peer will announce itself as")
 	flag.IntVar(
