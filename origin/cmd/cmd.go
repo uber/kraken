@@ -15,6 +15,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -43,76 +44,70 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/pressly/chi"
-	"github.com/spf13/cobra"
 )
 
-var (
-	peerIP             string
-	peerPort           int
-	blobServerHostName string
-	blobServerPort     int
-	configFile         string
-	zone               string
-	krakenCluster      string
-	secretsFile        string
-
-	rootCmd = &cobra.Command{
-		Short: "kraken-origin serves as dedicated seeder in kraken's p2p network.",
-		Run: func(rootCmd *cobra.Command, args []string) {
-			run()
-		},
-	}
-)
-
-func init() {
-	rootCmd.PersistentFlags().StringVarP(
-		&peerIP, "peer-ip", "", "", "ip which peer will announce itself as")
-	rootCmd.PersistentFlags().IntVarP(
-		&peerPort, "peer-port", "", 0, "port which peer will announce itself as")
-	rootCmd.PersistentFlags().StringVarP(
-		&blobServerHostName, "blobserver-hostname", "", "", "optional hostname to identify origin")
-	rootCmd.PersistentFlags().IntVarP(
-		&blobServerPort, "blobserver-port", "", 0, "port which blob server listens on")
-	rootCmd.PersistentFlags().StringVarP(
-		&configFile, "config", "", "", "configuration file path")
-	rootCmd.PersistentFlags().StringVarP(
-		&zone, "zone", "", "", "zone/datacenter name")
-	rootCmd.PersistentFlags().StringVarP(
-		&krakenCluster, "cluster", "", "", "cluster name (e.g. prod01-zone1)")
-	rootCmd.PersistentFlags().StringVarP(
-		&secretsFile, "secrets", "", "", "path to a secrets YAML file to load into configuration")
+// Flags defines origin CLI flags.
+type Flags struct {
+	PeerIP             string
+	PeerPort           int
+	BlobServerHostName string
+	BlobServerPort     int
+	ConfigFile         string
+	Zone               string
+	KrakenCluster      string
+	SecretsFile        string
 }
 
-func Execute() {
-	rootCmd.Execute()
+// ParseFlags parses origin CLI flags.
+func ParseFlags() *Flags {
+	var flags Flags
+	flag.StringVar(
+		&flags.PeerIP, "peer-ip", "", "ip which peer will announce itself as")
+	flag.IntVar(
+		&flags.PeerPort, "peer-port", 0, "port which peer will announce itself as")
+	flag.StringVar(
+		&flags.BlobServerHostName, "blobserver-hostname", "", "optional hostname to identify origin")
+	flag.IntVar(
+		&flags.BlobServerPort, "blobserver-port", 0, "port which blob server listens on")
+	flag.StringVar(
+		&flags.ConfigFile, "config", "", "configuration file path")
+	flag.StringVar(
+		&flags.Zone, "zone", "", "zone/datacenter name")
+	flag.StringVar(
+		&flags.KrakenCluster, "cluster", "", "cluster name (e.g. prod01-zone1)")
+	flag.StringVar(
+		&flags.SecretsFile, "secrets", "", "path to a secrets YAML file to load into configuration")
+	flag.Parse()
+	return &flags
 }
 
-func run() {
-	if peerPort == 0 {
+// Run runs the origin.
+func Run(flags *Flags) {
+	if flags.PeerPort == 0 {
 		panic("must specify non-zero peer port")
 	}
-	if blobServerPort == 0 {
+	if flags.BlobServerPort == 0 {
 		panic("must specify non-zero blob server port")
 	}
 
 	var hostname string
-	if blobServerHostName == "" {
+	if flags.BlobServerHostName == "" {
 		var err error
 		hostname, err = os.Hostname()
 		if err != nil {
 			log.Fatalf("Error getting hostname: %s", err)
 		}
 	} else {
-		hostname = blobServerHostName
+		hostname = flags.BlobServerHostName
 	}
 	log.Infof("Configuring origin with hostname '%s'", hostname)
 
 	var config Config
-	if err := configutil.Load(configFile, &config); err != nil {
+	if err := configutil.Load(flags.ConfigFile, &config); err != nil {
 		panic(err)
 	}
-	if secretsFile != "" {
-		if err := configutil.Load(secretsFile, &config); err != nil {
+	if flags.SecretsFile != "" {
+		if err := configutil.Load(flags.SecretsFile, &config); err != nil {
 			panic(err)
 		}
 	}
@@ -120,7 +115,7 @@ func run() {
 	zlog := log.ConfigureLogger(config.ZapLogging)
 	defer zlog.Sync()
 
-	stats, closer, err := metrics.New(config.Metrics, krakenCluster)
+	stats, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}
@@ -128,12 +123,12 @@ func run() {
 
 	go metrics.EmitVersion(stats)
 
-	if peerIP == "" {
+	if flags.PeerIP == "" {
 		localIP, err := netutil.GetLocalIP()
 		if err != nil {
 			log.Fatalf("Error getting local ip: %s", err)
 		}
-		peerIP = localIP
+		flags.PeerIP = localIP
 	}
 
 	cas, err := store.NewCAStore(config.CAStore, stats)
@@ -142,7 +137,7 @@ func run() {
 	}
 
 	pctx, err := core.NewPeerContext(
-		config.PeerIDFactory, zone, krakenCluster, peerIP, peerPort, true)
+		config.PeerIDFactory, flags.Zone, flags.KrakenCluster, flags.PeerIP, flags.PeerPort, true)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
@@ -203,7 +198,7 @@ func run() {
 		hashring.WithWatcher(backend.NewBandwidthWatcher(backendManager)))
 	go hashRing.Monitor(nil)
 
-	addr := fmt.Sprintf("%s:%d", hostname, blobServerPort)
+	addr := fmt.Sprintf("%s:%d", hostname, flags.BlobServerPort)
 	if !hashRing.Contains(addr) {
 		// When DNS is used for hash ring membership, the members will be IP
 		// addresses instead of hostnames.
@@ -211,9 +206,11 @@ func run() {
 		if err != nil {
 			log.Fatalf("Error getting local ip: %s", err)
 		}
-		addr = fmt.Sprintf("%s:%d", ip, blobServerPort)
+		addr = fmt.Sprintf("%s:%d", ip, flags.BlobServerPort)
 		if !hashRing.Contains(addr) {
-			log.Fatalf("Neither %s nor %s (port %d) found in hash ring", hostname, ip, blobServerPort)
+			log.Fatalf(
+				"Neither %s nor %s (port %d) found in hash ring",
+				hostname, ip, flags.BlobServerPort)
 		}
 	}
 
@@ -243,7 +240,7 @@ func run() {
 	log.Fatal(nginx.Run(
 		config.Nginx,
 		map[string]interface{}{
-			"port":   blobServerPort,
+			"port":   flags.BlobServerPort,
 			"server": nginx.GetServer(config.BlobServer.Listener.Net, config.BlobServer.Listener.Addr),
 		},
 		nginx.WithTLS(config.TLS)))

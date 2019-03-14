@@ -14,6 +14,7 @@
 package cmd
 
 import (
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -32,68 +33,61 @@ import (
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/netutil"
 
-	"github.com/spf13/cobra"
 	"github.com/uber-go/tally"
 )
 
-var (
-	peerIP            string
-	peerPort          int
-	agentServerPort   int
-	agentRegistryPort int
-	configFile        string
-	zone              string
-	krakenCluster     string
-	secretsFile       string
-
-	rootCmd = &cobra.Command{
-		Short: "kraken-agent implements docker registry interface and downloads data as a peer " +
-			"in kraken's p2p network.",
-		Run: func(rootCmd *cobra.Command, args []string) {
-			run()
-		},
-	}
-)
-
-func init() {
-	rootCmd.PersistentFlags().StringVarP(
-		&peerIP, "peer-ip", "", "", "ip which peer will announce itself as")
-	rootCmd.PersistentFlags().IntVarP(
-		&peerPort, "peer-port", "", 0, "port which peer will announce itself as")
-	rootCmd.PersistentFlags().IntVarP(
-		&agentServerPort, "agent-server-port", "", 0, "port which agent server listens on")
-	rootCmd.PersistentFlags().IntVarP(
-		&agentRegistryPort, "agent-registry-port", "", 0, "port which agent registry listens on")
-	rootCmd.PersistentFlags().StringVarP(
-		&configFile, "config", "", "", "configuration file path")
-	rootCmd.PersistentFlags().StringVarP(
-		&zone, "zone", "", "", "zone/datacenter name")
-	rootCmd.PersistentFlags().StringVarP(
-		&krakenCluster, "cluster", "", "", "cluster name (e.g. prod01-zone1)")
-	rootCmd.PersistentFlags().StringVarP(
-		&secretsFile, "secrets", "", "", "path to a secrets YAML file to load into configuration")
+// Flags defines agent CLI flags.
+type Flags struct {
+	PeerIP            string
+	PeerPort          int
+	AgentServerPort   int
+	AgentRegistryPort int
+	ConfigFile        string
+	Zone              string
+	KrakenCluster     string
+	SecretsFile       string
 }
 
-func Execute() {
-	rootCmd.Execute()
+// ParseFlags parses agent CLI flags.
+func ParseFlags() *Flags {
+	var flags Flags
+	flag.StringVar(
+		&flags.PeerIP, "peer-ip", "", "ip which peer will announce itself as")
+	flag.IntVar(
+		&flags.PeerPort, "peer-port", 0, "port which peer will announce itself as")
+	flag.IntVar(
+		&flags.AgentServerPort, "agent-server-port", 0, "port which agent server listens on")
+	flag.IntVar(
+		&flags.AgentRegistryPort, "agent-registry-port", 0, "port which agent registry listens on")
+	flag.StringVar(
+		&flags.ConfigFile, "config", "", "configuration file path")
+	flag.StringVar(
+		&flags.Zone, "zone", "", "zone/datacenter name")
+	flag.StringVar(
+		&flags.KrakenCluster, "cluster", "", "cluster name (e.g. prod01-zone1)")
+	flag.StringVar(
+		&flags.SecretsFile, "secrets", "", "path to a secrets YAML file to load into configuration")
+	flag.Parse()
+	return &flags
 }
 
-func run() {
-	if peerPort == 0 {
+// Run runs the agent.
+func Run(flags *Flags) {
+	if flags.PeerPort == 0 {
 		panic("must specify non-zero peer port")
 	}
-	if agentServerPort == 0 {
+	if flags.AgentServerPort == 0 {
 		panic("must specify non-zero agent server port")
 	}
-	if agentRegistryPort == 0 {
+	if flags.AgentRegistryPort == 0 {
 		panic("must specify non-zero agent registry port")
 	}
 	var config Config
-	if err := configutil.Load(configFile, &config); err != nil {
+	if err := configutil.Load(flags.ConfigFile, &config); err != nil {
 		panic(err)
 	}
-	if secretsFile != "" {
-		if err := configutil.Load(secretsFile, &config); err != nil {
+	if flags.SecretsFile != "" {
+		if err := configutil.Load(flags.SecretsFile, &config); err != nil {
 			panic(err)
 		}
 	}
@@ -101,7 +95,7 @@ func run() {
 	zlog := log.ConfigureLogger(config.ZapLogging)
 	defer zlog.Sync()
 
-	stats, closer, err := metrics.New(config.Metrics, krakenCluster)
+	stats, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}
@@ -109,16 +103,16 @@ func run() {
 
 	go metrics.EmitVersion(stats)
 
-	if peerIP == "" {
+	if flags.PeerIP == "" {
 		localIP, err := netutil.GetLocalIP()
 		if err != nil {
 			log.Fatalf("Error getting local ip: %s", err)
 		}
-		peerIP = localIP
+		flags.PeerIP = localIP
 	}
 
 	pctx, err := core.NewPeerContext(
-		config.PeerIDFactory, zone, krakenCluster, peerIP, peerPort, false)
+		config.PeerIDFactory, flags.Zone, flags.KrakenCluster, flags.PeerIP, flags.PeerPort, false)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
@@ -164,7 +158,7 @@ func run() {
 	}
 
 	agentServer := agentserver.New(config.AgentServer, stats, cads, sched)
-	addr := fmt.Sprintf(":%d", agentServerPort)
+	addr := fmt.Sprintf(":%d", flags.AgentServerPort)
 	log.Infof("Starting agent server on %s", addr)
 	go func() {
 		log.Fatal(http.ListenAndServe(addr, agentServer.Handler()))
@@ -189,7 +183,7 @@ func run() {
 	}
 
 	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
-		"port": agentRegistryPort,
+		"port": flags.AgentRegistryPort,
 		"registry_server": nginx.GetServer(
 			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
 		"registry_backup": config.RegistryBackup},
