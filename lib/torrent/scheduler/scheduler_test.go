@@ -348,6 +348,7 @@ func TestNetworkEvents(t *testing.T) {
 	leecherExpected := []*networkevent.Event{
 		networkevent.AddTorrentEvent(h, lid, bitsetutil.FromBools(false), config.ConnState.MaxOpenConnectionsPerTorrent),
 		networkevent.AddActiveConnEvent(h, lid, sid),
+		networkevent.RequestPieceEvent(h, lid, sid, 0),
 		networkevent.ReceivePieceEvent(h, lid, sid, 0),
 		networkevent.TorrentCompleteEvent(h, lid),
 		networkevent.DropActiveConnEvent(h, lid, sid),

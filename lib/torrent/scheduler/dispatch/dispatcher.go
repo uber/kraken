@@ -390,8 +390,10 @@ func (d *Dispatcher) maybeSendPieceRequests(p *peer, candidates *bitset.BitSet) 
 			d.pieceRequestManager.MarkUnsent(p.id, i)
 			return false, err
 		}
-		p.pstats.incrementPieceRequestsSent()
-	}
+		d.netevents.Produce(
+			networkevent.RequestPieceEvent(d.torrent.InfoHash(), d.localPeerID, p.id, i))
+			p.pstats.incrementPieceRequestsSent()
+		}
 	return true, nil
 }
 
