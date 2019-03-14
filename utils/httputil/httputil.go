@@ -297,6 +297,9 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 			originalErr := err
 			resp, err = fallbackToHTTP(client, method, opts)
 			if err != nil {
+				// Sometimes the request fails for a reason unrelated to https.
+				// To keep this reason visible, we always include the original
+				// error.
 				err = fmt.Errorf(
 					"failed to fallback https to http, original https error: %s,\n"+
 						"fallback http error: %s", originalErr, err)
