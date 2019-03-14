@@ -49,6 +49,7 @@ func ParseFlags() *Flags {
 		&flags.KrakenCluster, "cluster", "", "cluster name (e.g. prod01-zone1)")
 	flag.StringVar(
 		&flags.SecretsFile, "secrets", "", "path to a secrets YAML file to load into configuration")
+	flag.Parse()
 	return &flags
 }
 
