@@ -109,7 +109,7 @@ docker_stop:
 venv: requirements-tests.txt
 	virtualenv --python=$(shell which python2) --setuptools venv
 	source venv/bin/activate
-	pip install -r requirements-tests.txt
+	venv/bin/pip install -r requirements-tests.txt
 
 .PHONY: integration
 FILE?=
@@ -123,13 +123,13 @@ integration: venv vendor $(LINUX_BINS) docker_stop tools/bin/puller/puller
 	docker build $(BUILD_QUIET) -t kraken-proxy:$(PACKAGE_VERSION) -f docker/proxy/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-testfs:$(PACKAGE_VERSION) -f docker/testfs/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-tracker:$(PACKAGE_VERSION) -f docker/tracker/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
-	PACKAGE_VERSION=$(PACKAGE_VERSION) py.test --timeout=120 -v -k $(NAME) test/python/$(FILE)
+	PACKAGE_VERSION=$(PACKAGE_VERSION) venv/bin/py.test --timeout=120 -v -k $(NAME) test/python/$(FILE)
 
 .PHONY: runtest
 NAME?=test_
 runtest: venv docker_stop
 	source venv/bin/activate
-	py.test --timeout=120 -v -k $(NAME) test/python
+	venv/bin/py.test --timeout=120 -v -k $(NAME) test/python
 
 .PHONY: devcluster
 devcluster: vendor $(LINUX_BINS) docker_stop images
