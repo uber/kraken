@@ -29,7 +29,7 @@ tools/bin/trackerload/trackerload
 
 *.xml
 *.pyc
-env
+venv
 
 # Golang coverage files
 *.out

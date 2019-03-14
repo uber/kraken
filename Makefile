@@ -106,9 +106,9 @@ unit-test: vendor
 docker_stop:
 	-docker ps -a --format '{{.Names}}' | grep kraken | while read n; do docker rm -f $$n; done
 
-env:
-	virtualenv --python=$(shell which python2) --setuptools env
-	source env/bin/activate
+venv: requirements-tests.txt
+	virtualenv --python=$(shell which python2) --setuptools venv
+	source venv/bin/activate
 	pip install -r requirements-tests.txt
 
 .PHONY: integration
@@ -116,7 +116,7 @@ FILE?=
 NAME?=test_
 USERNAME:=$(shell id -u -n)
 USERID:=$(shell id -u)
-integration: env vendor $(LINUX_BINS) docker_stop tools/bin/puller/puller
+integration: venv vendor $(LINUX_BINS) docker_stop tools/bin/puller/puller
 	docker build $(BUILD_QUIET) -t kraken-agent:$(PACKAGE_VERSION) -f docker/agent/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-build-index:$(PACKAGE_VERSION) -f docker/build-index/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-origin:$(PACKAGE_VERSION) -f docker/origin/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
@@ -127,8 +127,8 @@ integration: env vendor $(LINUX_BINS) docker_stop tools/bin/puller/puller
 
 .PHONY: runtest
 NAME?=test_
-runtest: env docker_stop
-	source env/bin/activate
+runtest: venv docker_stop
+	source venv/bin/activate
 	py.test --timeout=120 -v -k $(NAME) test/python
 
 .PHONY: devcluster
