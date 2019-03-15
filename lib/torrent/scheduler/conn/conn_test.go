@@ -26,6 +26,8 @@ func TestConnClose(t *testing.T) {
 	c, cleanup := Fixture()
 	defer cleanup()
 
+	c.Start()
+
 	require.False(c.IsClosed())
 
 	var wg sync.WaitGroup

@@ -112,6 +112,7 @@ func (s *state) addOutgoingConn(c *conn.Conn, b *bitset.BitSet, info *storage.To
 	if err := s.conns.MovePendingToActive(c); err != nil {
 		return fmt.Errorf("move pending to active: %s", err)
 	}
+	c.Start()
 	ctrl, ok := s.torrentControls[info.InfoHash()]
 	if !ok {
 		return errors.New("torrent controls must be created before sending handshake")
@@ -131,6 +132,7 @@ func (s *state) addIncomingConn(
 	if err := s.conns.MovePendingToActive(c); err != nil {
 		return fmt.Errorf("move pending to active: %s", err)
 	}
+	c.Start()
 	ctrl, ok := s.torrentControls[info.InfoHash()]
 	if !ok {
 		t, err := s.sched.torrentArchive.GetTorrent(namespace, info.Digest())
