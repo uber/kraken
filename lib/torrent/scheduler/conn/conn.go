@@ -67,6 +67,8 @@ type Conn struct {
 	// Marks whether the connection was opened by the remote peer, or the local peer.
 	openedByRemote bool
 
+	startOnce sync.Once
+
 	sender   chan *Message
 	receiver chan *Message
 
@@ -125,9 +127,11 @@ func newConn(
 // close itself if it encounters an error reading/writing to the underlying
 // socket.
 func (c *Conn) Start() {
-	c.wg.Add(2)
-	go c.readLoop()
-	go c.writeLoop()
+	c.startOnce.Do(func() {
+		c.wg.Add(2)
+		go c.readLoop()
+		go c.writeLoop()
+	})
 }
 
 // PeerID returns the remote peer id.
