@@ -25,6 +25,9 @@ server {
   access_log {{.log_dir}}/nginx-access.log;
   error_log {{.log_dir}}/nginx-error.log;
 
+  gzip on;
+  gzip_types text/plain test/csv application/json;
+
   location / {
     proxy_pass http://{{.server}};
   }
