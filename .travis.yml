@@ -13,7 +13,7 @@ install:
   - for i in $(seq 1 5); do (dep ensure && break) || sleep 30; done # Install dependencies listed in the go.mod and go.sum files.
 
 env:
-  - PATH=$HOME/protoc/bin:$PATH GO111MODULE=on
+  - PATH=$HOME/protoc/bin:$PATH
 
 script:
   - make unit-test integration
