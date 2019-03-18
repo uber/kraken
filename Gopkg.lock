@@ -366,13 +366,6 @@
   version = "v1.6.0"
 
 [[projects]]
-  digest = "1:182765cec1c5c13b3b41e5accdb8a119114bc713aee60ff59d457b0af5cdc458"
-  name = "github.com/miekg/dns"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "01d59357d468872339068bcd5d55a00e2463051f"
-
-[[projects]]
   digest = "1:bc62c2c038cc8ae51b68f6d52570501a763bb71e78736a9f65d60762429864a9"
   name = "github.com/opencontainers/go-digest"
   packages = ["."]
@@ -483,11 +476,12 @@
   revision = "8ce1146b8621c95164efd9c8b1124cfa9b8afb4e"
 
 [[projects]]
-  digest = "1:fe3d56ee52483c6cbcc38d9d8aebf2366d7c13bd46d944becb1102a6a6fc6283"
+  digest = "1:89c9d02e49923a70a568dc3eac0aa7a947dc6d1c569f6807abf4b9a9168760e2"
   name = "github.com/xenolf/lego"
   packages = ["acme"]
   pruneopts = "UT"
-  revision = "8e9c5ac3e6bf1392a581eece36752e7360a3414b"
+  revision = "2952cdaebd4da7cd560e195343bdd3cb78a67643"
+  version = "v2.3.0"
 
 [[projects]]
   branch = "master"
@@ -555,26 +549,9 @@
   version = "v1.9.1"
 
 [[projects]]
-  branch = "master"
-  digest = "1:14fd9dd784a3af2b5bec3d1efcc4ff21abcd61651fb28ccc9672616182a88e30"
-  name = "golang.org/x/crypto"
-  packages = [
-    "ed25519",
-    "ed25519/internal/edwards25519",
-    "ocsp",
-  ]
-  pruneopts = "UT"
-  revision = "a1f597ede03a7bef967a422b5b3a5bd08805a01e"
-
-[[projects]]
-  digest = "1:c1213a68ecb3e450cde0aaeba3de6a8047750b9a188c4758d5a149a9075b1722"
+  digest = "1:852ec71a6b02aca278fc56c84d9c1a8a40ca7a5b0928f3b14c4a53517f0cf2c9"
   name = "golang.org/x/net"
-  packages = [
-    "context",
-    "internal/iana",
-    "ipv4",
-    "ipv6",
-  ]
+  packages = ["context"]
   pruneopts = "UT"
   revision = "4876518f9e71663000c348837735820161a42df7"
 
@@ -591,18 +568,6 @@
   packages = ["rate"]
   pruneopts = "UT"
   revision = "a4bde12657593d5e90d0533a3e4fd95e635124cb"
-
-[[projects]]
-  digest = "1:0871b828aa2261da49d0454ac8e83f2d5be63bf921cd10524e7698a07a16f9b9"
-  name = "gopkg.in/square/go-jose.v1"
-  packages = [
-    ".",
-    "cipher",
-    "json",
-  ]
-  pruneopts = "UT"
-  revision = "6e50787b7338112747e64f32753fb4f9dbfb8f79"
-  version = "v1.1.1"
 
 [[projects]]
   digest = "1:952adf11fb5bc868cb9d242af59dc4cbafcc8553efddd2124711c0aeb58df2b3"
