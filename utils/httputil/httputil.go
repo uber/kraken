@@ -29,7 +29,6 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/handler"
-	"github.com/uber/kraken/utils/log"
 )
 
 // RoundTripper is an alias of the http.RoundTripper for mocking purposes.
