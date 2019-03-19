@@ -293,7 +293,7 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		// component receiving the tls request does not serve https response.
 		// TODO (@evelynl): disable retry after tls migration.
 		if err != nil && req.URL.Scheme == "https" && !opts.httpFallbackDisabled {
-			log.Warnf("Failed to send https request: %s. Retrying with http...", err)
+			log.Debugf("Failed to send https request: %s. Retrying with http...", err)
 			originalErr := err
 			resp, err = fallbackToHTTP(client, method, opts)
 			if err != nil {
