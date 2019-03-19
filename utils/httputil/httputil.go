@@ -29,7 +29,6 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/handler"
-	"github.com/uber/kraken/utils/log"
 )
 
 // RoundTripper is an alias of the http.RoundTripper for mocking purposes.
@@ -293,7 +292,6 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		// component receiving the tls request does not serve https response.
 		// TODO (@evelynl): disable retry after tls migration.
 		if err != nil && req.URL.Scheme == "https" && !opts.httpFallbackDisabled {
-			log.Warnf("Failed to send https request: %s. Retrying with http...", err)
 			originalErr := err
 			resp, err = fallbackToHTTP(client, method, opts)
 			if err != nil {
