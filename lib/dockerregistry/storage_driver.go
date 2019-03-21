@@ -48,16 +48,9 @@ import (
 // 						hashstates/<algorithm>/<offset>
 //			-> blobs/<algorithm>
 //				<split directory content addressable storage>
-//
 
-const (
-	// Name of storage driver
-	Name            = "kraken"
-	retries         = 3
-	downloadTimeout = 120     //seconds
-	readtimeout     = 15 * 60 //seconds
-	writetimeout    = 15 * 60 //seconds
-)
+// Name of storage driver.
+const Name = "kraken"
 
 func init() {
 	factory.Register(Name, &krakenStorageDriverFactory{})
