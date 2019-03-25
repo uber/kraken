@@ -133,6 +133,12 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	for _, opt := range opts {
 		opt(&config)
 	}
+
+	// Create root directory for generated files for nginx.
+	if err := os.MkdirAll(_genDir, 0775); err != nil {
+		return err
+	}
+
 	if config.tls.Server.Disabled {
 		log.Warn("Server TLS is disabled")
 	} else {
@@ -145,6 +151,16 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 				return fmt.Errorf("invalid TLS config: %s", err)
 			}
 		}
+
+		// Concat all ca files into bundle.
+		cabundle, err := os.Create(_clientCABundle)
+		if err != nil {
+			return fmt.Errorf("create cabundle: %s", err)
+		}
+		if err := config.tls.WriteCABundle(cabundle); err != nil {
+			return fmt.Errorf("write cabundle: %s", err)
+		}
+		cabundle.Close()
 	}
 
 	if err := os.MkdirAll(config.CacheDir, 0775); err != nil {
@@ -160,21 +176,10 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 		return fmt.Errorf("build nginx config: %s", err)
 	}
 
-	if err := os.MkdirAll(_genDir, 0775); err != nil {
-		return err
-	}
 	conf := filepath.Join(_genDir, config.Name)
 	if err := ioutil.WriteFile(conf, src, 0755); err != nil {
 		return fmt.Errorf("write src: %s", err)
 	}
-	cabundle, err := os.Create(_clientCABundle)
-	if err != nil {
-		return fmt.Errorf("create cabundle: %s", err)
-	}
-	if err := config.tls.WriteCABundle(cabundle); err != nil {
-		return fmt.Errorf("write cabundle: %s", err)
-	}
-	cabundle.Close()
 
 	stdoutLog := path.Join(config.LogDir, "nginx-stdout.log")
 	stdout, err := os.OpenFile(stdoutLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
