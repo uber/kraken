@@ -167,14 +167,17 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	if err := ioutil.WriteFile(conf, src, 0755); err != nil {
 		return fmt.Errorf("write src: %s", err)
 	}
-	cabundle, err := os.Create(_clientCABundle)
-	if err != nil {
-		return fmt.Errorf("create cabundle: %s", err)
+
+	if !config.tls.Server.Disabled {
+		cabundle, err := os.Create(_clientCABundle)
+		if err != nil {
+			return fmt.Errorf("create cabundle: %s", err)
+		}
+		if err := config.tls.WriteCABundle(cabundle); err != nil {
+			return fmt.Errorf("write cabundle: %s", err)
+		}
+		cabundle.Close()
 	}
-	if err := config.tls.WriteCABundle(cabundle); err != nil {
-		return fmt.Errorf("write cabundle: %s", err)
-	}
-	cabundle.Close()
 
 	stdoutLog := path.Join(config.LogDir, "nginx-stdout.log")
 	stdout, err := os.OpenFile(stdoutLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
