@@ -20,7 +20,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/cenkalti/backoff"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
@@ -56,12 +55,10 @@ func (f *factory) Create(
 // and http connnection parameters. The URLs come with string format
 // specifiers and define how to pass sha256 parameters
 type Config struct {
-	UploadURL       string        `yaml:"upload_url"`   // http upload post url
-	DownloadURL     string        `yaml:"download_url"` // http download get url
-	DownloadTimeout time.Duration `yaml:"download_timeout"`
-
-	// Enables exponential backoff on download network errors.
-	EnableDownloadBackoff bool `yaml:"enable_download_backoff"`
+	UploadURL       string                            `yaml:"upload_url"`   // http upload post url
+	DownloadURL     string                            `yaml:"download_url"` // http download get url
+	DownloadTimeout time.Duration                     `yaml:"download_timeout"`
+	DownloadBackOff httputil.ExponentialBackOffConfig `yaml:"download_backoff"`
 }
 
 // Client implements downloading/uploading object from/to S3
@@ -98,7 +95,7 @@ func (c *Client) Download(namespace, name string, dst io.Writer) error {
 	resp, err := httputil.Get(
 		b.String(),
 		httputil.SendTimeout(c.config.DownloadTimeout),
-		httputil.SendRetry(httputil.RetryBackoff(c.downloadBackOff())))
+		httputil.SendRetry(httputil.RetryBackoff(c.config.DownloadBackOff.Build())))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return backenderrors.ErrBlobNotFound
@@ -120,18 +117,4 @@ func (c *Client) Upload(namespace, name string, src io.Reader) error {
 // List is not supported.
 func (c *Client) List(prefix string) ([]string, error) {
 	return nil, errors.New("not supported")
-}
-
-func (c *Client) downloadBackOff() backoff.BackOff {
-	if c.config.EnableDownloadBackoff {
-		b := &backoff.ExponentialBackOff{
-			InitialInterval:     2 * time.Second,
-			RandomizationFactor: 0.05,
-			Multiplier:          2,
-			MaxInterval:         30 * time.Second,
-			Clock:               backoff.SystemClock,
-		}
-		return backoff.WithMaxRetries(b, 5)
-	}
-	return &backoff.StopBackOff{}
 }
