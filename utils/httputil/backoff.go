@@ -36,8 +36,8 @@ func (c *ExponentialBackOffConfig) applyDefaults() {
 
 // Build creates a new ExponentialBackOff using c's settings (if enabled).
 func (c ExponentialBackOffConfig) Build() backoff.BackOff {
-	c.applyDefaults()
 	if c.Enabled {
+		c.applyDefaults()
 		b := &backoff.ExponentialBackOff{
 			InitialInterval:     c.InitialInterval,
 			RandomizationFactor: c.RandomizationFactor,
