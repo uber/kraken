@@ -176,6 +176,46 @@ Agents health checks tracker, piggybacking on the announce requests.
 >```
 As shown in this example, if 3 announce requests to one tracker fail with network error within 5 minutes, the host is marked as unhealthy for 5 minutes. The agent will not send requests to this host until after timeout.
 
+# Configuring Storage Backend for Origin and Build-Index
+
+Storage backends persist data distributed by Kraken. Kraken has support for HDFS, S3, http (readonly), and Docker Registry (readonly) as [backends](https://github.com/uber/kraken/tree/f0ff772ab06b1dca70b9aa3bfc62b3b466acf387/lib/backend). Origin and Build-Index choose backend based on the namespace of requested blob or tag.
+
+>origin.yaml
+>```
+>backends:
+> - namespace: library/.*
+>    backend:
+>      registry_blob:
+>        address: index.docker.io
+>        security:
+>          basic:
+>            username: ""
+>            password: ""
+> - namespace: test-domain/.*
+>    backend:
+>      http:
+>        download_url: http://test-domain:9000/download?sha256=%s
+>        download_backoff:
+>          enabled: true
+> - namespace: .*
+>   backend:
+>     s3:
+>       region: us-west-1
+>       bucket: test-bucket
+>       root_directory: /test-bucket/kraken/default/
+>       name_path: sharded_docker_blob
+>       username: kraken-user
+>   bandwidth:
+>     enable: true
+>
+>auth:
+>  s3:
+>    kraken-user:
+>      s3:
+>        aws: kraken-user
+>        aws_access_key_id: <keyid>
+>        aws_secret_access_key: <key>
+
 # Configuring Storage Backend Bandwidth on Origin
 
 When transferring data from and to its storage backend, origins can be configured with download and upload bandwidths. This is useful when using cloud storage providers to prevent origins from saturating the network link.
