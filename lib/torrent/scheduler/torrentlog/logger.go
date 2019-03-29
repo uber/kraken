@@ -194,16 +194,18 @@ func (l *Logger) Sync() {
 
 // SeederSummary contains information about piece requests to and pieces received from a peer.
 type SeederSummary struct {
-	PeerID         core.PeerID
-	RequestsSent   int
-	PiecesReceived int
+	PeerID                  core.PeerID
+	RequestsSent            int
+	GoodPiecesReceived      int
+	DuplicatePiecesReceived int
 }
 
 // MarshalLogObject marshals a SeederSummary for logging.
 func (s SeederSummary) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("peer_id", s.PeerID.String())
 	enc.AddInt("requests_sent", s.RequestsSent)
-	enc.AddInt("pieces_received", s.PiecesReceived)
+	enc.AddInt("good_pieces_received", s.GoodPiecesReceived)
+	enc.AddInt("duplicate_pieces_received", s.DuplicatePiecesReceived)
 	return nil
 }
 

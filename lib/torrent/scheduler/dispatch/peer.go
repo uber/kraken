@@ -92,10 +92,14 @@ func (p *peer) touchLastPieceSent() {
 // peerStats wraps stats collected for a given peer.
 type peerStats struct {
 	mu                    sync.Mutex
-	pieceRequestsSent     int // pieces we requested from the peer
-	pieceRequestsReceived int // pieces the peer requested from us
-	piecesSent            int // pieces we sent to the peer
-	piecesReceived        int // pieces we received from the peer
+	pieceRequestsSent       int // Pieces we requested from the peer.
+	pieceRequestsReceived   int // Pieces the peer requested from us.
+	piecesSent              int // Pieces we sent to the peer.
+
+	// Pieces we received from the peer that we didn't already have.
+	goodPiecesReceived int
+	// Pieces we received from the peer that we already had.
+	duplicatePiecesReceived int
 }
 
 func (s *peerStats) getPieceRequestsSent() int {
@@ -140,16 +144,30 @@ func (s *peerStats) incrementPiecesSent() {
 	s.piecesSent++
 }
 
-func (s *peerStats) getPiecesReceived() int {
+func (s *peerStats) getGoodPiecesReceived() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.piecesReceived
+	return s.goodPiecesReceived
 }
 
-func (s *peerStats) incrementPiecesReceived() {
+func (s *peerStats) incrementGoodPiecesReceived() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.piecesReceived++
+	s.goodPiecesReceived++
+}
+
+func (s *peerStats) getDuplicatePiecesReceived() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.duplicatePiecesReceived
+}
+
+func (s *peerStats) incrementDuplicatePiecesReceived() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.duplicatePiecesReceived++
 }

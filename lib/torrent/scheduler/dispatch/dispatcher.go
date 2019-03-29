@@ -347,7 +347,8 @@ func (d *Dispatcher) complete() {
 		summary := torrentlog.SeederSummary{
 			PeerID:         peerID,
 			RequestsSent:   requested,
-			PiecesReceived: pstats.getPiecesReceived(),
+			GoodPiecesReceived: pstats.getGoodPiecesReceived(),
+			DuplicatePiecesReceived: pstats.getDuplicatePiecesReceived(),
 		}
 		summaries = append(summaries, summary)
 		return true
@@ -544,6 +545,8 @@ func (d *Dispatcher) handlePiecePayload(
 		if err != storage.ErrPieceComplete {
 			d.log("peer", p, "piece", i).Errorf("Error writing piece payload: %s", err)
 			d.pieceRequestManager.MarkInvalid(p.id, i)
+		} else {
+			p.pstats.incrementDuplicatePiecesReceived()
 		}
 		return
 	}
@@ -551,7 +554,7 @@ func (d *Dispatcher) handlePiecePayload(
 	d.netevents.Produce(
 		networkevent.ReceivePieceEvent(d.torrent.InfoHash(), d.localPeerID, p.id, i))
 
-	p.pstats.incrementPiecesReceived()
+	p.pstats.incrementGoodPiecesReceived()
 	p.touchLastGoodPieceReceived()
 	if d.torrent.Complete() {
 		d.complete()
