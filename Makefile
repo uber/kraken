@@ -91,7 +91,8 @@ clean::
 	@rm -f $(LINUX_BINS)
 
 vendor:
-	glide i
+	go get -u github.com/Masterminds/glide
+	$(GOPATH)/bin/glide i
 
 .PHONY: bins
 bins: $(LINUX_BINS)
