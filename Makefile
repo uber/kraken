@@ -186,7 +186,7 @@ protoc:
 # mockgen must be installed on the system to make this work.
 # Install it by running:
 # `go get github.com/golang/mock/mockgen`.
-mockgen = GO111MODULES=on $(GOPATH)/bin/mockgen
+mockgen = $(GOPATH)/bin/mockgen
 
 define lowercase
 $(shell tr '[:upper:]' '[:lower:]' <<< $(1))
