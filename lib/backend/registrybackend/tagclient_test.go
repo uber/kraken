@@ -42,13 +42,13 @@ func TestTagDownloadSuccess(t *testing.T) {
 	namespace := strings.Split(tag, ":")[0]
 
 	r := chi.NewRouter()
-	r.Get(fmt.Sprintf("/v2/%s/manifests/:tag", namespace), func(w http.ResponseWriter, req *http.Request) {
+	r.Get(fmt.Sprintf("/v2/%s/manifests/{tag}", namespace), func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(manifest)))
 		w.Header().Set("Docker-Content-Digest", digest.String())
 		_, err := io.Copy(w, bytes.NewReader(manifest))
 		require.NoError(err)
 	})
-	r.Head(fmt.Sprintf("/v2/%s/manifests/:tag", namespace), func(w http.ResponseWriter, req *http.Request) {
+	r.Head(fmt.Sprintf("/v2/%s/manifests/{tag}", namespace), func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(manifest)))
 		w.Header().Set("Docker-Content-Digest", digest.String())
 		_, err := io.Copy(w, bytes.NewReader(manifest))
@@ -77,11 +77,11 @@ func TestTagDownloadFileNotFound(t *testing.T) {
 	namespace := strings.Split(tag, ":")[0]
 
 	r := chi.NewRouter()
-	r.Get(fmt.Sprintf("/v2/%s/manifests/:tag", namespace), func(w http.ResponseWriter, req *http.Request) {
+	r.Get(fmt.Sprintf("/v2/%s/manifests/{tag}", namespace), func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("file not found"))
 	})
-	r.Head(fmt.Sprintf("/v2/%s/manifests/:tag", namespace), func(w http.ResponseWriter, req *http.Request) {
+	r.Head(fmt.Sprintf("/v2/%s/manifests/{tag}", namespace), func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	})
 	addr, stop := testutil.StartServer(r)

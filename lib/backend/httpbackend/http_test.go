@@ -44,7 +44,7 @@ func TestHttpDownloadSuccess(t *testing.T) {
 	blob := randutil.Blob(32 * memsize.KB)
 
 	r := chi.NewRouter()
-	r.Get("/data/:blob", func(w http.ResponseWriter, req *http.Request) {
+	r.Get("/data/{blob}", func(w http.ResponseWriter, req *http.Request) {
 		_, err := io.Copy(w, bytes.NewReader(blob))
 		require.NoError(err)
 	})
@@ -64,7 +64,7 @@ func TestHttpDownloadFileNotFound(t *testing.T) {
 	require := require.New(t)
 
 	r := chi.NewRouter()
-	r.Get("/data/:blob", func(w http.ResponseWriter, req *http.Request) {
+	r.Get("/data/{blob}", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("file not found"))
 	})

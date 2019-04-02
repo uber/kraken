@@ -1,5 +1,5 @@
 SHELL = /bin/bash -o pipefail
-GO = GO111MODULE=on go
+GO = go
 
 # Flags to pass to go build
 BUILD_FLAGS = -gcflags '-N -l'
@@ -91,7 +91,7 @@ clean::
 	@rm -f $(LINUX_BINS)
 
 vendor:
-	$(GO) mod vendor
+	glide i
 
 .PHONY: bins
 bins: $(LINUX_BINS)

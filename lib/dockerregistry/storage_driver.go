@@ -14,6 +14,8 @@
 package dockerregistry
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -21,8 +23,7 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/log"
 
-	"github.com/docker/distribution/context"
-	storagedriver "github.com/docker/distribution/registry/storage/driver"
+	"github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/registry/storage/driver/factory"
 	"github.com/uber-go/tally"
 )
@@ -76,7 +77,7 @@ func getParam(params map[string]interface{}, name string) interface{} {
 }
 
 func (factory *krakenStorageDriverFactory) Create(
-	params map[string]interface{}) (storagedriver.StorageDriver, error) {
+	params map[string]interface{}) (driver.StorageDriver, error) {
 
 	// Common parameters.
 	constructor := getParam(params, "constructor").(string)
@@ -209,7 +210,7 @@ func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, conte
 }
 
 // Writer returns a writer of path
-func (d *KrakenStorageDriver) Writer(ctx context.Context, path string, append bool) (storagedriver.FileWriter, error) {
+func (d *KrakenStorageDriver) Writer(ctx context.Context, path string, append bool) (driver.FileWriter, error) {
 	log.Debugf("(*KrakenStorageDriver).Writer %s", path)
 	pathType, pathSubType, err := ParsePath(path)
 	if err != nil {
@@ -234,7 +235,7 @@ func (d *KrakenStorageDriver) Writer(ctx context.Context, path string, append bo
 }
 
 // Stat returns fileinfo of path
-func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (storagedriver.FileInfo, error) {
+func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (driver.FileInfo, error) {
 	log.Debugf("(*KrakenStorageDriver).Stat %s", path)
 	pathType, _, err := ParsePath(path)
 	if err != nil {
@@ -290,7 +291,7 @@ func (d *KrakenStorageDriver) Move(ctx context.Context, sourcePath string, destP
 // Delete deletes path
 func (d *KrakenStorageDriver) Delete(ctx context.Context, path string) error {
 	log.Debugf("(*KrakenStorageDriver).Delete %s", path)
-	return storagedriver.PathNotFoundError{
+	return driver.PathNotFoundError{
 		DriverName: "p2p",
 		Path:       path,
 	}
@@ -300,4 +301,9 @@ func (d *KrakenStorageDriver) Delete(ctx context.Context, path string) error {
 func (d *KrakenStorageDriver) URLFor(ctx context.Context, path string, options map[string]interface{}) (string, error) {
 	log.Debugf("(*KrakenStorageDriver).URLFor %s", path)
 	return "", fmt.Errorf("Not implemented")
+}
+
+// Walk is not implemented.
+func (d *KrakenStorageDriver) Walk(ctx context.Context, path string, f driver.WalkFn) error {
+	return errors.New("walk not implemented")
 }
