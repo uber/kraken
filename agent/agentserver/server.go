@@ -65,9 +65,9 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/health", handler.Wrap(s.healthHandler))
 
-	r.Get("/namespace/:namespace/blobs/:digest", handler.Wrap(s.downloadBlobHandler))
+	r.Get("/namespace/{namespace}/blobs/{digest}", handler.Wrap(s.downloadBlobHandler))
 
-	r.Delete("/blobs/:digest", handler.Wrap(s.deleteBlobHandler))
+	r.Delete("/blobs/{digest}", handler.Wrap(s.deleteBlobHandler))
 
 	// Dangerous endpoint for running experiments.
 	r.Patch("/x/config/scheduler", handler.Wrap(s.patchSchedulerConfigHandler))

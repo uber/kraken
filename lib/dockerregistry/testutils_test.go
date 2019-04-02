@@ -14,6 +14,7 @@
 package dockerregistry
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"path"
@@ -23,7 +24,6 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/dockerutil"
 
-	"github.com/docker/distribution/context"
 	"github.com/uber-go/tally"
 )
 
@@ -157,5 +157,5 @@ func getShardedRelativePath(name string) string {
 }
 
 func contextFixture() context.Context {
-	return context.WithValues(context.Background(), map[string]interface{}{"vars.name": "dummy"})
+	return context.WithValue(context.Background(), "vars.name", "dummy")
 }

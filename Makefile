@@ -1,5 +1,5 @@
 SHELL = /bin/bash -o pipefail
-GO = GO111MODULE=on go
+GO = go
 
 # Flags to pass to go build
 BUILD_FLAGS = -gcflags '-N -l'
@@ -91,7 +91,8 @@ clean::
 	@rm -f $(LINUX_BINS)
 
 vendor:
-	$(GO) mod vendor
+	go get -u github.com/Masterminds/glide
+	$(GOPATH)/bin/glide i
 
 .PHONY: bins
 bins: $(LINUX_BINS)
@@ -185,7 +186,7 @@ protoc:
 # mockgen must be installed on the system to make this work.
 # Install it by running:
 # `go get github.com/golang/mock/mockgen`.
-mockgen = GO111MODULES=on $(GOPATH)/bin/mockgen
+mockgen = $(GOPATH)/bin/mockgen
 
 define lowercase
 $(shell tr '[:upper:]' '[:lower:]' <<< $(1))

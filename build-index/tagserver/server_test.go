@@ -290,20 +290,6 @@ func TestGet(t *testing.T) {
 	require.Equal(digest, result)
 }
 
-func TestGetInvalidParam(t *testing.T) {
-	require := require.New(t)
-
-	mocks, cleanup := newServerMocks(t)
-	defer cleanup()
-
-	addr, stop := testutil.StartServer(mocks.handler())
-	defer stop()
-
-	_, err := httputil.Get(fmt.Sprintf("http://%s/tags/", addr))
-	require.Error(err)
-	require.True(httputil.IsStatus(err, http.StatusBadRequest))
-}
-
 func TestGetTagNotFound(t *testing.T) {
 	require := require.New(t)
 
@@ -342,20 +328,6 @@ func TestHas(t *testing.T) {
 	ok, err := client.Has(tag)
 	require.NoError(err)
 	require.True(ok)
-}
-
-func TestHasInvalidParam(t *testing.T) {
-	require := require.New(t)
-
-	mocks, cleanup := newServerMocks(t)
-	defer cleanup()
-
-	addr, stop := testutil.StartServer(mocks.handler())
-	defer stop()
-
-	_, err := httputil.Head(fmt.Sprintf("http://%s/tags/", addr))
-	require.Error(err)
-	require.True(httputil.IsStatus(err, http.StatusBadRequest))
 }
 
 func TestHasNotFound(t *testing.T) {

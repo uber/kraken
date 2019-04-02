@@ -24,7 +24,7 @@ import (
 )
 
 // tagEndpoint tags stats by endpoint path and method, ignoring any path variables.
-// For example, "/foo/:foo/bar/:bar" is tagged with endpoint "foo.bar"
+// For example, "/foo/{foo}/bar/{bar}" is tagged with endpoint "foo.bar"
 //
 // Note: tagEndpoint should always be called AFTER the "next" handler serves,
 // such that chi can populate proper route context with the path.
@@ -42,8 +42,8 @@ import (
 func tagEndpoint(stats tally.Scope, r *http.Request) tally.Scope {
 	ctx := chi.RouteContext(r.Context())
 	var staticParts []string
-	for _, part := range strings.Split(ctx.RoutePattern, "/") {
-		if len(part) == 0 || part[0] == ':' {
+	for _, part := range strings.Split(ctx.RoutePattern(), "/") {
+		if len(part) == 0 || isPathVariable(part) {
 			continue
 		}
 		staticParts = append(staticParts, part)
@@ -52,6 +52,11 @@ func tagEndpoint(stats tally.Scope, r *http.Request) tally.Scope {
 		"endpoint": strings.Join(staticParts, "."),
 		"method":   strings.ToUpper(r.Method),
 	})
+}
+
+// isPathVariable returns true if s is a path variable, e.g. "{foo}".
+func isPathVariable(s string) bool {
+	return len(s) >= 2 && s[0] == '{' && s[len(s)-1] == '}'
 }
 
 // LatencyTimer measures endpoint latencies.

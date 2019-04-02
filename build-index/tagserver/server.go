@@ -107,24 +107,24 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/health", handler.Wrap(s.healthHandler))
 
-	r.Put("/tags/:tag/digest/:digest", handler.Wrap(s.putTagHandler))
-	r.Head("/tags/:tag", handler.Wrap(s.hasTagHandler))
-	r.Get("/tags/:tag", handler.Wrap(s.getTagHandler))
+	r.Put("/tags/{tag}/digest/{digest}", handler.Wrap(s.putTagHandler))
+	r.Head("/tags/{tag}", handler.Wrap(s.hasTagHandler))
+	r.Get("/tags/{tag}", handler.Wrap(s.getTagHandler))
 
-	r.Get("/repositories/:repo/tags", handler.Wrap(s.listRepositoryHandler))
+	r.Get("/repositories/{repo}/tags", handler.Wrap(s.listRepositoryHandler))
 
 	r.Get("/list/*", handler.Wrap(s.listHandler))
 
-	r.Post("/remotes/tags/:tag", handler.Wrap(s.replicateTagHandler))
+	r.Post("/remotes/tags/{tag}", handler.Wrap(s.replicateTagHandler))
 
 	r.Get("/origin", handler.Wrap(s.getOriginHandler))
 
 	r.Post(
-		"/internal/duplicate/remotes/tags/:tag/digest/:digest",
+		"/internal/duplicate/remotes/tags/{tag}/digest/{digest}",
 		handler.Wrap(s.duplicateReplicateTagHandler))
 
 	r.Put(
-		"/internal/duplicate/tags/:tag/digest/:digest",
+		"/internal/duplicate/tags/{tag}/digest/{digest}",
 		handler.Wrap(s.duplicatePutTagHandler))
 
 	r.Mount("/debug", chimiddleware.Profiler())
