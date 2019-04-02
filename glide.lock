@@ -1,5 +1,5 @@
-hash: 574f760af2ee7761ada14a5bbe54eaa12da557f68295812a8da3f32a49982cb6
-updated: 2019-04-02T14:11:48.997536-07:00
+hash: b5df164903fc995063caa95ad3e038813a2e135f6fc370e56cccf7aa3371dcc1
+updated: 2019-04-02T14:25:48.113291-07:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
@@ -246,7 +246,6 @@ imports:
   version: 18bd95f470f9494ca07c36d877424729edc2455c
 - name: github.com/xenolf/lego
   version: 5d557fdc6d9ee2226c0cce65733ee686ad4bc8b1
-  repo: git@github.com:go-acme/lego.git
   subpackages:
   - acme
 - name: github.com/yvasiyarov/go-metrics
