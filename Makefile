@@ -90,11 +90,9 @@ publish: images
 clean::
 	@rm -f $(LINUX_BINS)
 
-GLIDE = $(GOPATH)/bin/glide
-
 vendor:
 	go get -u github.com/Masterminds/glide
-	$(GLIDE) i || $(GLIDE) i || $(GLIDE) i  # Yeah, I know.
+	$(GOPATH)/bin/glide i
 
 .PHONY: bins
 bins: $(LINUX_BINS)
