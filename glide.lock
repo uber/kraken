@@ -1,5 +1,5 @@
-hash: 53c0a012551012a0d6805f9e23fa2afefa0031fba87ba8368c0d3b5c399a968b
-updated: 2019-04-02T10:55:45.089014-07:00
+hash: b5df164903fc995063caa95ad3e038813a2e135f6fc370e56cccf7aa3371dcc1
+updated: 2019-04-02T13:02:10.919516-07:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
@@ -16,7 +16,7 @@ imports:
   subpackages:
   - lib/go/thrift
 - name: github.com/aws/aws-sdk-go
-  version: faec342d9a8d588e9d06be4516fe1bbefbae195d
+  version: 4e871608b534ce2562c8330cf41d001db1c5d7d3
   subpackages:
   - aws
   - aws/awserr
@@ -257,7 +257,7 @@ imports:
 - name: go.uber.org/atomic
   version: 1ea20fb1cbb1cc08cbd0d913a96dead89aa18289
 - name: go.uber.org/multierr
-  version: ddea229ff1dff9e6fe8a6c0344ac73b09e81fce5
+  version: 3c4937480c32f4c13a875a1829af76c98ca3d40a
 - name: go.uber.org/zap
   version: badef736563f8135e0add3232b06f58656da03c8
   subpackages:
