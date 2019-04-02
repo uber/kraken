@@ -10,7 +10,7 @@ services:
   - docker
 
 env:
-  - PATH=$HOME/protoc/bin:$PATH GO111MODULE=on
+  - PATH=$HOME/protoc/bin:$PATH
 
 script:
   - make unit-test integration
