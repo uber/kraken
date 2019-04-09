@@ -3,7 +3,7 @@
 - [Configuring Peer To Peer Download](#configuring-peer-to-peer-download)
   - [Tracker Peer TTL](#tracker-peer-ttl)
   - [Bandwidth](#bandwidth)
-  - [Connection Limit](#connection-limit)
+  - [Connection Limits](#connection-limits)
   - [Seeder TTI](#seeder-tti)
   - [Torrent TTI On Disk](#torrent-tti-on-disk)
 - [Configuring Hash Ring](#configuring-hash-ring)
