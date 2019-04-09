@@ -51,13 +51,16 @@ Following are some highlights of Kraken:
 
 # Design
 
-The high level idea of Kraken is to have a small number of dedicated hosts seed content to a network
-of agents running on each host in the cluster.
-A central component, the tracker, will orchestrate all participants in the network to form a
+The high level idea of Kraken is to have a small number of dedicated hosts seeding content to a 
+network of agents running on each host in the cluster. 
+
+A central component, the tracker, will orchestrate all participants in the network to form a 
 pseudo-random regular graph.
-Such a graph has high connectivity and small diameter, so all participants in a reasonably sized
-cluster can reach > 80% of max upload/download speed in theory, and performance doesn't degrade much
-as the blob size and cluster size increase.
+
+Such a graph has high connectivity and small diameter. As a result, even with only one seeder and
+having thousands of peers joining in the same second, all participants can reach a mininum of 80%
+max upload/download speed in theory (60% with current implementation), and performance doesn't
+degrade much as the blob size and cluster size increase.
 
 # Architecture
 
@@ -134,6 +137,7 @@ For more information on devcluster, please check out devcluster [README](example
 
 Dragonfly cluster has one or a few "supernodes" that coordinates transfer of every 4MB chunk of data
 in the cluster.
+
 While the supernode would be able to make optimal decisions, the throughput of the whole cluster is
 limited by the processing power of one or a few hosts, and the performance would degrade linearly as
 either blob size or cluster size increases.
