@@ -224,7 +224,7 @@ Example origin config that uses multiple backends:
 
 ## Read-Only Registry Backend
 
-For simple local testing with an insecure registry (assuming it listens on localhost:5000), you can configure the backend for origin and build-index accordingly:
+For simple local testing with an insecure registry (assuming it listens on `host.docker.internal:5000`), you can configure the backend for origin and build-index accordingly:
 
 >origin.yaml
 >```
@@ -232,7 +232,7 @@ For simple local testing with an insecure registry (assuming it listens on local
 >  - namespace: .*
 >    backend:
 >      registry_blob:
->        address: localhost:5000
+>        address: host.docker.internal:5000
 >        security:
 >          tls:
 >            client:
@@ -245,7 +245,7 @@ For simple local testing with an insecure registry (assuming it listens on local
 >  - namespace: .*
 >    backend:
 >      registry_tag:
->        address: localhost:5000
+>        address: host.docker.internal:5000
 >        security:
 >          tls:
 >            client:
