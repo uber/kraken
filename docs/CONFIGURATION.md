@@ -1,15 +1,17 @@
 **Table of Contents**
 - [Examples](#examples)
 - [Configuring Peer To Peer Download](#configuring-peer-to-peer-download)
-  - [Tracker peer set TTI](#tracker-peer-set-tti)
+  - [Tracker Peer TTL](#tracker-peer-ttl)
   - [Bandwidth](#bandwidth)
-  - [Connection limit](#connection-limit)
+  - [Connection Limit](#connection-limit)
   - [Seeder TTI](#seeder-tti)
-  - [Torrent TTI on disk](#torrent-tti-on-disk)
+  - [Torrent TTI On Disk](#torrent-tti-on-disk)
 - [Configuring Hash Ring](#configuring-hash-ring)
-  - [Active health check](#active-health-check)
-  - [Passive health check](#passive-health-check)
-- [Configuring Storage Backend Bandwidth on Origin](#configuring-storage-backend-bandwidth-on-origin)
+  - [Active Health Check](#active-health-check)
+  - [Passive Health Check](#passive-health-check)
+- [Configuring Storage Backend For Origin And Build-Index](#configuring-storage-backend-for-origin-and-build-index)
+  - [Read-Only Registry Backend](#read-only-registry-backend)
+  - [Bandwidth on Origin](#bandwidth-on-origin)
 
 # Examples
 
@@ -176,9 +178,13 @@ Agents health checks tracker, piggybacking on the announce requests.
 >```
 As shown in this example, if 3 announce requests to one tracker fail with network error within 5 minutes, the host is marked as unhealthy for 5 minutes. The agent will not send requests to this host until after timeout.
 
-# Configuring Storage Backend for Origin and Build-Index
+# Configuring Storage Backend For Origin And Build-Index
 
-Storage backends persist data distributed by Kraken. Kraken has support for HDFS, S3, http (readonly), and Docker Registry (readonly) as [backends](https://github.com/uber/kraken/tree/f0ff772ab06b1dca70b9aa3bfc62b3b466acf387/lib/backend). Origin and Build-Index choose backend based on the namespace of requested blob or tag.
+Storage backends are used by Origin and Build-Index for data persistence. Kraken has support for HDFS, S3, http (readonly), and Docker Registry (readonly) as [backends](https://github.com/uber/kraken/tree/master/lib/backend).
+
+Multiple backends can be used at the name time, configured based on namespaces of requested blob and tag  (for docker images, that means the part of image name before ":").
+
+Example origin config that uses multiple backends:
 
 >origin.yaml
 >```
@@ -216,17 +222,47 @@ Storage backends persist data distributed by Kraken. Kraken has support for HDFS
 >        aws_access_key_id: <keyid>
 >        aws_secret_access_key: <key>
 
-# Configuring Storage Backend Bandwidth on Origin
+## Read-Only Registry Backend
+
+For simple local testing with an insecure registry (assuming it listens on localhost:5000), you can configure the backend for origin and build-index accordingly:
+
+>origin.yaml
+>```
+>backends:
+>  - namespace: .*
+>    backend:
+>      registry_blob:
+>        address: localhost:5000
+>        security:
+>          tls:
+>            client:
+>              disabled: true
+>```
+
+>build-index.yaml
+>```
+>backends:
+>  - namespace: .*
+>    backend:
+>      registry_tag:
+>        address: localhost:5000
+>        security:
+>          tls:
+>            client:
+>              disabled: true
+>```
+
+## Bandwidth on Origin
 
 When transferring data from and to its storage backend, origins can be configured with download and upload bandwidths. This is useful when using cloud storage providers to prevent origins from saturating the network link.
 >origin.yaml
 >```
 >backends:
->   - namespace: .*
->     backend:
->       s3: <omitted>
->     bandwidth:
->       enabled: true
->       egress_bits_per_sec: 8589934592   # 8 Gbit
->       ingress_bits_per_sec: 85899345920 # 10*8 Gbit
+>  - namespace: .*
+>    backend:
+>      s3: <omitted>
+>    bandwidth:
+>      enabled: true
+>      egress_bits_per_sec: 8589934592   # 8 Gbit
+>      ingress_bits_per_sec: 85899345920 # 10*8 Gbit
 >```
