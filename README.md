@@ -1,6 +1,6 @@
 # Kraken :octopus:
 
-[![Build Status](https://travis-ci.org/uber/kraken.svg?branch=master)](https://travis-ci.org/uber/kraken)
+[![Build Status](https://travis-ci.com/uber/kraken.svg?branch=master)](https://travis-ci.com/uber/kraken)
 [![Github Release](https://img.shields.io/github/release/uber/kraken.svg)](https://github.com/uber/kraken/releases)
 [![GoDoc](https://godoc.org/github.com/uber/kraken?status.svg)](https://godoc.org/github.com/uber/kraken)
 [![GoReportCard](https://goreportcard.com/badge/github.com/uber/kraken)](https://goreportcard.com/report/github.com/uber/kraken)
@@ -51,10 +51,10 @@ Following are some highlights of Kraken:
 
 # Design
 
-The high level idea of Kraken is to have a small number of dedicated hosts seeding content to a 
-network of agents running on each host in the cluster. 
+The high level idea of Kraken is to have a small number of dedicated hosts seeding content to a
+network of agents running on each host in the cluster.
 
-A central component, the tracker, will orchestrate all participants in the network to form a 
+A central component, the tracker, will orchestrate all participants in the network to form a
 pseudo-random regular graph.
 
 Such a graph has high connectivity and small diameter. As a result, even with only one seeder and
