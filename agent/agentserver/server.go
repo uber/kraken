@@ -24,6 +24,7 @@ import (
 	"github.com/pressly/chi"
 	"github.com/uber-go/tally"
 
+	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/middleware"
 	"github.com/uber/kraken/lib/store"
@@ -41,6 +42,7 @@ type Server struct {
 	stats  tally.Scope
 	cads   *store.CADownloadStore
 	sched  scheduler.ReloadableScheduler
+	tags   tagclient.Client
 }
 
 // New creates a new Server.
@@ -48,12 +50,13 @@ func New(
 	config Config,
 	stats tally.Scope,
 	cads *store.CADownloadStore,
-	sched scheduler.ReloadableScheduler) *Server {
+	sched scheduler.ReloadableScheduler,
+	tags tagclient.Client) *Server {
 
 	stats = stats.Tagged(map[string]string{
 		"module": "agentserver",
 	})
-	return &Server{config, stats, cads, sched}
+	return &Server{config, stats, cads, sched, tags}
 }
 
 // Handler returns the HTTP handler.
@@ -64,6 +67,8 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.LatencyTimer(s.stats))
 
 	r.Get("/health", handler.Wrap(s.healthHandler))
+
+	r.Get("/tags/{tag}", handler.Wrap(s.getTagHandler))
 
 	r.Get("/namespace/{namespace}/blobs/{digest}", handler.Wrap(s.downloadBlobHandler))
 
@@ -78,6 +83,23 @@ func (s *Server) Handler() http.Handler {
 	r.Mount("/", http.DefaultServeMux)
 
 	return r
+}
+
+// getTagHandler proxies get tag requests to the build-index.
+func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
+	tag, err := httputil.ParseParam(r, "tag")
+	if err != nil {
+		return err
+	}
+	d, err := s.tags.Get(tag)
+	if err != nil {
+		if err == tagclient.ErrTagNotFound {
+			return handler.ErrorStatus(http.StatusNotFound)
+		}
+		return handler.Errorf("get tag: %s", err)
+	}
+	io.WriteString(w, d.String())
+	return nil
 }
 
 // downloadBlobHandler downloads a blob through p2p.

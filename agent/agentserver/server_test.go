@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/scheduler"
@@ -30,6 +31,41 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestGetTag(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	tag := core.TagFixture()
+	d := core.DigestFixture()
+
+	mocks.tags.EXPECT().Get(tag).Return(d, nil)
+
+	c := NewClient(mocks.startServer())
+
+	result, err := c.GetTag(tag)
+	require.NoError(err)
+	require.Equal(d, result)
+}
+
+func TestGetTagNotFound(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	tag := core.TagFixture()
+
+	mocks.tags.EXPECT().Get(tag).Return(core.Digest{}, tagclient.ErrTagNotFound)
+
+	c := NewClient(mocks.startServer())
+
+	_, err := c.GetTag(tag)
+	require.Error(err)
+	require.True(httputil.IsNotFound(err))
+}
 
 func TestDownload(t *testing.T) {
 	require := require.New(t)

@@ -21,12 +21,14 @@ import (
 
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/mocks/lib/torrent/scheduler"
+	"github.com/uber/kraken/mocks/build-index/tagclient"
 	"github.com/uber/kraken/utils/testutil"
 )
 
 type serverMocks struct {
 	cads    *store.CADownloadStore
 	sched   *mockscheduler.MockReloadableScheduler
+	tags    *mocktagclient.MockClient
 	cleanup *testutil.Cleanup
 }
 
@@ -41,11 +43,13 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 
 	sched := mockscheduler.NewMockReloadableScheduler(ctrl)
 
-	return &serverMocks{cads, sched, &cleanup}, cleanup.Run
+	tags := mocktagclient.NewMockClient(ctrl)
+
+	return &serverMocks{cads, sched, tags, &cleanup}, cleanup.Run
 }
 
 func (m *serverMocks) startServer() string {
-	s := New(Config{}, tally.NoopScope, m.cads, m.sched)
+	s := New(Config{}, tally.NoopScope, m.cads, m.sched, m.tags)
 	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
 	return addr
