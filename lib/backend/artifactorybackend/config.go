@@ -11,20 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package main
+package artifactorybackend
 
-import (
-	"github.com/uber/kraken/origin/cmd"
+import "github.com/uber/kraken/lib/backend/artifactorybackend/security"
 
-	// Import all backend client packages to register them with backend manager.
-	_ "github.com/uber/kraken/lib/backend/artifactorybackend"
-	_ "github.com/uber/kraken/lib/backend/hdfsbackend"
-	_ "github.com/uber/kraken/lib/backend/httpbackend"
-	_ "github.com/uber/kraken/lib/backend/registrybackend"
-	_ "github.com/uber/kraken/lib/backend/s3backend"
-	_ "github.com/uber/kraken/lib/backend/testfs"
-)
-
-func main() {
-	cmd.Execute()
+// Config defines the registry address and security options.
+type Config struct {
+	Address  string          `yaml:"address"`
+	Security security.Config `yaml:"security"`
 }

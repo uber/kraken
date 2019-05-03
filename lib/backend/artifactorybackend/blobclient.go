@@ -1,0 +1,167 @@
+// Copyright (c) 2016-2019 Uber Technologies, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package artifactorybackend
+
+import (
+	"errors"
+	"fmt"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/backend/artifactorybackend/security"
+	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/log"
+	"gopkg.in/yaml.v2"
+	"io"
+	"net/http"
+	"strconv"
+)
+
+const _registryblob = "artifactory_blob"
+
+func init() {
+	backend.Register(_registryblob, &blobClientFactory{})
+}
+
+type blobClientFactory struct{}
+
+func (f *blobClientFactory) Create(
+	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+
+	confBytes, err := yaml.Marshal(confRaw)
+	if err != nil {
+		return nil, errors.New("marshal hdfs config")
+	}
+	var config Config
+	if err := yaml.Unmarshal(confBytes, &config); err != nil {
+		return nil, errors.New("unmarshal hdfs config")
+	}
+	return NewBlobClient(config)
+}
+
+const _layerquery = "http://%s/v2/%s/blobs/sha256:%s"
+//const _layerquery = "http://%s/artifactory/docker/%s/sha256__%s"
+const _manifestquery = "http://%s/v2/%s/manifests/sha256:%s"
+
+// BlobClient stats and downloads blob from registry.
+type BlobClient struct {
+	config Config
+}
+
+// NewBlobClient creates a new BlobClient.
+func NewBlobClient(config Config) (*BlobClient, error) {
+	return &BlobClient{config}, nil
+}
+
+// Stat sends a HEAD request to registry for a blob and returns the blob size.
+func (c *BlobClient) Stat(namespace, name string) (*core.BlobInfo, error) {
+	opt, err := c.config.Security.GetHTTPOption(c.config.Address, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("get security opt: %s", err)
+	}
+
+	info, err := c.statHelper(namespace, name, _layerquery, opt)
+	if err != nil && err == backenderrors.ErrBlobNotFound {
+		// Docker registry does not support querying manifests with blob path.
+		log.Infof("namespace: %s, name: %s", namespace, name)
+		log.Infof("Blob %s unknown to registry. Tring to stat manifest instead", name)
+		info, err = c.statHelper(namespace, name, _manifestquery, opt)
+	}
+	return info, err
+}
+
+// Download gets a blob from registry.
+func (c *BlobClient) Download(namespace, name string, dst io.Writer) error {
+	opt, err := c.config.Security.GetHTTPOption(c.config.Address, namespace)
+	if err != nil {
+		return fmt.Errorf("get security opt: %s", err)
+	}
+
+	err = c.downloadHelper(namespace, name, _layerquery, dst, opt)
+	if err != nil && err == backenderrors.ErrBlobNotFound {
+		// Docker registry does not support querying manifests with blob path.
+		log.Infof("namespace: %s, name: %s", namespace, name)
+		log.Infof("Blob %s unknown to registry. Tring to download manifest instead", name)
+		err = c.downloadHelper(namespace, name, _manifestquery, dst, opt)
+	}
+	return err
+}
+
+func (c *BlobClient) statHelper(namespace, name, query string, opt httputil.SendOption) (*core.BlobInfo, error) {
+	// Get token first
+	// Token header like this: map[string]string{"Authorization": \
+	// "Bearer 12345"}
+	tokenHeader, err := security.GetAuthHeader(c.config.Address, opt)
+	if err != nil {
+		return nil, fmt.Errorf("token: %s", err)
+	}
+
+	URL := fmt.Sprintf(query, c.config.Address, namespace, name)
+	resp, err := httputil.Head(
+		URL,
+		opt,
+		httputil.SendHeaders(tokenHeader),
+		httputil.SendAcceptedCodes(http.StatusOK))
+	if err != nil {
+		if httputil.IsNotFound(err) {
+			return nil, backenderrors.ErrBlobNotFound
+		}
+		return nil, fmt.Errorf("head blob: %s", err)
+	}
+
+	size, err := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parse blob size: %s", err)
+	}
+	return core.NewBlobInfo(size), nil
+}
+
+func (c *BlobClient) downloadHelper(namespace, name, query string, dst io.Writer, opt httputil.SendOption) error {
+	// Get token first
+	// Token header like this: map[string]string{"Authorization": \
+	// "Bearer 12345"}
+	tokenHeader, err := security.GetAuthHeader(c.config.Address, opt)ß
+	if err != nil {
+		return fmt.Errorf("token: %s", err)
+	}
+
+	URL := fmt.Sprintf(query, c.config.Address, namespace, name)
+	resp, err := httputil.Get(
+		URL,
+		opt,
+		httputil.SendHeaders(tokenHeader),
+		httputil.SendAcceptedCodes(http.StatusOK))
+	if err != nil {
+		if httputil.IsNotFound(err) {
+			return backenderrors.ErrBlobNotFound
+		}
+		return fmt.Errorf("get blob: %s", err)
+	}
+	defer resp.Body.Close()
+
+	if _, err := io.Copy(dst, resp.Body); err != nil {
+		return fmt.Errorf("copy: %s", err)
+	}
+	return nil
+}
+
+// Upload is not supported as users can push directly to registry.
+func (c *BlobClient) Upload(namespace, name string, src io.Reader) error {
+	return errors.New("not supported")
+}
+
+// List is not supported for blobs.
+func (c *BlobClient) List(prefix string) ([]string, error) {
+	return nil, errors.New("not supported")
+}
