@@ -16,6 +16,7 @@ package agentserver
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/url"
 
 	"github.com/uber/kraken/core"
@@ -30,6 +31,23 @@ type Client struct {
 // NewClient creates a new client for an agent at addr.
 func NewClient(addr string) *Client {
 	return &Client{addr}
+}
+
+func (c *Client) GetTag(tag string) (core.Digest, error) {
+	resp, err := httputil.Get(fmt.Sprintf("http://%s/tags/%s", c.addr, url.PathEscape(tag)))
+	if err != nil {
+		return core.Digest{}, err
+	}
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return core.Digest{}, fmt.Errorf("read body: %s", err)
+	}
+	d, err := core.ParseSHA256Digest(string(b))
+	if err != nil {
+		return core.Digest{}, fmt.Errorf("parse digest: %s", err)
+	}
+	return d, nil
 }
 
 // Download returns the blob for namespace / d. Callers should close the
