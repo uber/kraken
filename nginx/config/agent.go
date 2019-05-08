@@ -39,6 +39,7 @@ server {
   location / {
     proxy_pass http://registry-backend;
     proxy_next_upstream error timeout http_404 http_500;
+    proxy_next_upstream_tries 3;
   }
 }
 `
