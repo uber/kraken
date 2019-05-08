@@ -22,15 +22,51 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
+
+	"github.com/uber/kraken/agent/agentclient"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/lib/torrent/scheduler/connstate"
+	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
+	mockscheduler "github.com/uber/kraken/mocks/lib/torrent/scheduler"
 	"github.com/uber/kraken/utils/httputil"
-
-	"github.com/stretchr/testify/require"
+	"github.com/uber/kraken/utils/testutil"
 )
+
+type serverMocks struct {
+	cads    *store.CADownloadStore
+	sched   *mockscheduler.MockReloadableScheduler
+	tags    *mocktagclient.MockClient
+	cleanup *testutil.Cleanup
+}
+
+func newServerMocks(t *testing.T) (*serverMocks, func()) {
+	var cleanup testutil.Cleanup
+
+	cads, c := store.CADownloadStoreFixture()
+	cleanup.Add(c)
+
+	ctrl := gomock.NewController(t)
+	cleanup.Add(ctrl.Finish)
+
+	sched := mockscheduler.NewMockReloadableScheduler(ctrl)
+
+	tags := mocktagclient.NewMockClient(ctrl)
+
+	return &serverMocks{cads, sched, tags, &cleanup}, cleanup.Run
+}
+
+func (m *serverMocks) startServer() string {
+	s := New(Config{}, tally.NoopScope, m.cads, m.sched, m.tags)
+	addr, stop := testutil.StartServer(s.Handler())
+	m.cleanup.Add(stop)
+	return addr
+}
 
 func TestGetTag(t *testing.T) {
 	require := require.New(t)
@@ -43,7 +79,7 @@ func TestGetTag(t *testing.T) {
 
 	mocks.tags.EXPECT().Get(tag).Return(d, nil)
 
-	c := NewClient(mocks.startServer())
+	c := agentclient.New(mocks.startServer())
 
 	result, err := c.GetTag(tag)
 	require.NoError(err)
@@ -60,11 +96,11 @@ func TestGetTagNotFound(t *testing.T) {
 
 	mocks.tags.EXPECT().Get(tag).Return(core.Digest{}, tagclient.ErrTagNotFound)
 
-	c := NewClient(mocks.startServer())
+	c := agentclient.New(mocks.startServer())
 
 	_, err := c.GetTag(tag)
 	require.Error(err)
-	require.True(httputil.IsNotFound(err))
+	require.Equal(agentclient.ErrTagNotFound, err)
 }
 
 func TestDownload(t *testing.T) {
@@ -82,7 +118,7 @@ func TestDownload(t *testing.T) {
 		})
 
 	addr := mocks.startServer()
-	c := NewClient(addr)
+	c := agentclient.New(addr)
 
 	r, err := c.Download(namespace, blob.Digest)
 	require.NoError(err)
@@ -103,7 +139,7 @@ func TestDownloadNotFound(t *testing.T) {
 	mocks.sched.EXPECT().Download(namespace, blob.Digest).Return(scheduler.ErrTorrentNotFound)
 
 	addr := mocks.startServer()
-	c := NewClient(addr)
+	c := agentclient.New(addr)
 
 	_, err := c.Download(namespace, blob.Digest)
 	require.Error(err)
@@ -122,7 +158,7 @@ func TestDownloadUnknownError(t *testing.T) {
 	mocks.sched.EXPECT().Download(namespace, blob.Digest).Return(fmt.Errorf("test error"))
 
 	addr := mocks.startServer()
-	c := NewClient(addr)
+	c := agentclient.New(addr)
 
 	_, err := c.Download(namespace, blob.Digest)
 	require.Error(err)
@@ -212,9 +248,9 @@ func TestDeleteBlobHandler(t *testing.T) {
 	d := core.DigestFixture()
 
 	addr := mocks.startServer()
-	c := NewClient(addr)
 
 	mocks.sched.EXPECT().RemoveTorrent(d).Return(nil)
 
-	require.NoError(c.Delete(d))
+	_, err := httputil.Delete(fmt.Sprintf("http://%s/blobs/%s", addr, d))
+	require.NoError(err)
 }

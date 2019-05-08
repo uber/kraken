@@ -11,9 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package agentserver
+package agentclient
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -23,19 +24,35 @@ import (
 	"github.com/uber/kraken/utils/httputil"
 )
 
-// Client provides a wrapper for HTTP operations on an agent.
-type Client struct {
+// Client errors.
+var (
+	ErrTagNotFound = errors.New("tag not found")
+)
+
+// Client defines a client for accessing the agent server.
+type Client interface {
+	GetTag(tag string) (core.Digest, error)
+	Download(namespace string, d core.Digest) (io.ReadCloser, error)
+}
+
+// HTTPClient provides a wrapper for HTTP operations on an agent.
+type HTTPClient struct {
 	addr string
 }
 
-// NewClient creates a new client for an agent at addr.
-func NewClient(addr string) *Client {
-	return &Client{addr}
+// New creates a new client for an agent at addr.
+func New(addr string) *HTTPClient {
+	return &HTTPClient{addr}
 }
 
-func (c *Client) GetTag(tag string) (core.Digest, error) {
+// GetTag resolves tag into a digest. Returns ErrTagNotFound if the tag does
+// not exist.
+func (c *HTTPClient) GetTag(tag string) (core.Digest, error) {
 	resp, err := httputil.Get(fmt.Sprintf("http://%s/tags/%s", c.addr, url.PathEscape(tag)))
 	if err != nil {
+		if httputil.IsNotFound(err) {
+			return core.Digest{}, ErrTagNotFound
+		}
 		return core.Digest{}, err
 	}
 	defer resp.Body.Close()
@@ -50,9 +67,9 @@ func (c *Client) GetTag(tag string) (core.Digest, error) {
 	return d, nil
 }
 
-// Download returns the blob for namespace / d. Callers should close the
-// returned ReadCloser when done reading the blob.
-func (c *Client) Download(namespace string, d core.Digest) (io.ReadCloser, error) {
+// Download returns the blob of d. Callers should close the returned ReadCloser
+// when done reading the blob.
+func (c *HTTPClient) Download(namespace string, d core.Digest) (io.ReadCloser, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf(
 			"http://%s/namespace/%s/blobs/%s",
@@ -61,10 +78,4 @@ func (c *Client) Download(namespace string, d core.Digest) (io.ReadCloser, error
 		return nil, err
 	}
 	return resp.Body, nil
-}
-
-// Delete deletes the torrent for d.
-func (c *Client) Delete(d core.Digest) error {
-	_, err := httputil.Delete(fmt.Sprintf("http://%s/blobs/%s", c.addr, d))
-	return err
 }
