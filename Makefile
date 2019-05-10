@@ -205,6 +205,8 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
+	$(call add_mock,agent/agentclient,Client)
+
 	$(call add_mock,lib/backend/s3backend,S3)
 	# mockgen doesn't play nice when importing vendor code. Must strip the vendor prefix
 	# from the imports.

@@ -157,7 +157,7 @@ func Run(flags *Flags) {
 		log.Fatalf("Failed to init registry: %s", err)
 	}
 
-	agentServer := agentserver.New(config.AgentServer, stats, cads, sched)
+	agentServer := agentserver.New(config.AgentServer, stats, cads, sched, tagClient)
 	addr := fmt.Sprintf(":%d", flags.AgentServerPort)
 	log.Infof("Starting agent server on %s", addr)
 	go func() {

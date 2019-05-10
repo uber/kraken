@@ -6,6 +6,8 @@ Please feel free to submit new issues.
 
 ## Contributing
 
+Start by reading our [coding style guidelines](STYLEGUIDE.md).
+
 Please follow standard fork-and-pull workflow.
 
 - Fork the repo on GitHub
