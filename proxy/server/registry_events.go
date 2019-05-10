@@ -2,7 +2,7 @@ package server
 
 import "time"
 
-// Notification holds all events.
+// Notification holds all events. refer to https://docs.docker.com/registry/notifications/
 type Notification struct {
 	Events []Event
 }
@@ -13,8 +13,6 @@ type Event struct {
 	TimeStamp time.Time
 	Action    string
 	Target    *Target
-	Request   *Request
-	Actor     *Actor
 }
 
 // Target holds information about the target of a event.
@@ -24,16 +22,4 @@ type Target struct {
 	Repository string
 	URL        string `json:"Url"`
 	Tag        string
-}
-
-// Actor holds information about actor.
-type Actor struct {
-	Name string
-}
-
-// Request holds information about a request.
-type Request struct {
-	ID        string `json:"Id"`
-	Method    string
-	UserAgent string
 }
