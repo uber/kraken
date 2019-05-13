@@ -28,7 +28,6 @@ import (
 	"github.com/uber/kraken/lib/persistedretry/writeback"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
-	"github.com/uber/kraken/utils/log"
 
 	"github.com/uber-go/tally"
 )
@@ -159,9 +158,6 @@ func (s *tagStore) resolveFromBackend(tag string) (core.Digest, error) {
 	d, err := core.ParseSHA256Digest(b.String())
 	if err != nil {
 		return core.Digest{}, fmt.Errorf("parse backend digest: %s", err)
-	}
-	if err := s.writeTagToDisk(tag, d); err != nil {
-		log.With("tag", tag).Errorf("Error writing tag to disk: %s", err)
 	}
 	return d, nil
 }
