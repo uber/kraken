@@ -3,7 +3,6 @@ sudo: required
 language: go
 
 go:
-  - 1.11.4
   - 1.12.x
 
 services:
