@@ -11,23 +11,24 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package server
+package proxyserver
 
 import (
 	"fmt"
 	"net/http"
 	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
+
 	"github.com/pressly/chi"
-	"github.com/uber/kraken/lib/middleware"
-	"github.com/uber/kraken/utils/handler"
-	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber-go/tally"
+	"github.com/uber/kraken/lib/middleware"
+	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/utils/handler"
 )
 
 // Server defines the proxy HTTP server.
 type Server struct {
 	stats          tally.Scope
-	preheatHandler Interface
+	preheatHandler *PreheatHandler
 }
 
 // New creates a new Server.
@@ -49,7 +50,7 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/health", handler.Wrap(s.healthHandler))
 
-	r.Post("/notifications", handler.Wrap(s.preheatHandler.Handle))
+	r.Post("/registry/notifications", handler.Wrap(s.preheatHandler.Handle))
 
 	// Serves /debug/pprof endpoints.
 	r.Mount("/", http.DefaultServeMux)

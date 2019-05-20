@@ -11,38 +11,35 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package server
+package proxyserver
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
-	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/utils/handler"
-	"github.com/uber/kraken/origin/blobclient"
-	"encoding/json"
 	"regexp"
-	"bytes"
-	"github.com/uber/kraken/utils/log"
-	"github.com/uber/kraken/utils/dockerutil"
-	"github.com/uber/kraken/utils/httputil"
 	"time"
-	"fmt"
+
 	"github.com/docker/distribution"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/utils/dockerutil"
+	"github.com/uber/kraken/utils/handler"
+	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/log"
 )
 
-const manifestPattern = `^application/vnd.docker.distribution.manifest.v\d\+(json|prettyjws)`
+var _manifestRegexp = regexp.MustCompile(`^application/vnd.docker.distribution.manifest.v\d\+(json|prettyjws)`)
 
-// Interface defines the interface of http handler
-type Interface interface {
-	Handle(w http.ResponseWriter, r *http.Request) error
-}
-
+// PreheatHandler defines the handler of preheat
 type PreheatHandler struct {
 	clusterClient blobclient.ClusterClient
 }
 
 // NewPreheatHandler creates a new preheat handler.
-func NewPreheatHandler(client blobclient.ClusterClient) Interface {
+func NewPreheatHandler(client blobclient.ClusterClient) *PreheatHandler {
 	return &PreheatHandler{client}
 }
 
@@ -58,10 +55,10 @@ func (ph *PreheatHandler) Handle(w http.ResponseWriter, r *http.Request) error {
 		namespace := event.Target.Repository
 		digest := event.Target.Digest
 
-		log.Infof("deal push image event: %s:%s", namespace, digest)
+		log.With("namespace", namespace, "digest", digest).Infof("deal push image event")
 		err := ph.process(namespace, digest)
 		if err != nil {
-			log.Errorf("preheat %s:%s failed, %s", namespace, digest, err)
+			log.With("namespace", namespace, "digest", digest).Errorf("handle preheat: %s", err)
 		}
 	}
 	return nil
@@ -75,14 +72,14 @@ func (ph *PreheatHandler) process(namespace, digest string) error {
 	for _, desc := range manifest.References() {
 		d, err := core.ParseSHA256Digest(string(desc.Digest))
 		if err != nil {
-			log.Errorf("parse digest %s:%s : %s", namespace, string(desc.Digest), err)
+			log.With("namespace", namespace, "digest", string(desc.Digest)).Errorf("parse digest: %s", err)
 			continue
 		}
 		go func() {
-			log.Infof("trigger origin cache: %s:%+v", namespace, d)
+			log.With("namespace", namespace).Debugf("trigger origin cache: %+v", d)
 			_, err = ph.clusterClient.GetMetaInfo(namespace, d)
 			if err != nil && !httputil.IsAccepted(err) {
-				log.Errorf("notify origin cache %s:%s failed: %s", namespace, digest, err)
+				log.With("namespace", namespace, "digest", digest).Errorf("notify origin cache: %s", err)
 			}
 		}()
 	}
@@ -98,7 +95,6 @@ func (ph *PreheatHandler) fetchManifest(namespace, digest string) (distribution.
 	buf := &bytes.Buffer{}
 	// there may be a gap between registry finish uploading manifest and send notification
 	// see https://github.com/docker/distribution/issues/2625
-	// retry when not found, retry 3 times with interval 100ms 200ms 400ms
 	interval := 100 * time.Millisecond
 	for i := 0; i < 4; i++ {
 		if i != 0 {
@@ -110,7 +106,7 @@ func (ph *PreheatHandler) fetchManifest(namespace, digest string) (distribution.
 		} else if err == blobclient.ErrBlobNotFound {
 			continue
 		} else {
-			return nil, fmt.Errorf("download manifest failed: %s", err)
+			return nil, fmt.Errorf("download manifest: %s", err)
 		}
 	}
 	if buf.Len() == 0 {
@@ -119,7 +115,7 @@ func (ph *PreheatHandler) fetchManifest(namespace, digest string) (distribution.
 
 	manifest, _, err := dockerutil.ParseManifestV2(buf)
 	if err != nil {
-		return nil, fmt.Errorf("Error parse manifest: %s ", err)
+		return nil, fmt.Errorf("parse manifest: %s", err)
 	}
 	return manifest, nil
 }
@@ -129,11 +125,7 @@ func filterEvents(notification *Notification) []*Event {
 	events := []*Event{}
 
 	for _, event := range notification.Events {
-		isManifest, err := regexp.MatchString(manifestPattern, event.Target.MediaType)
-		if err != nil {
-			continue
-		}
-
+		isManifest := _manifestRegexp.MatchString(event.Target.MediaType)
 		if !isManifest {
 			continue
 		}
