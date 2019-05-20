@@ -23,8 +23,8 @@ We plan to support TLS on torrent traffic.
 
 # Kubernetes Integration
 
-We are looking into integrating Kraken and Kubernetes, so Kraken can preheating hosts at the
-beginning of a rolling upgrade, and speed up deployment.
+We are looking into integrating Kraken with Kubernetes, so Kraken can preheat hosts at the beginning
+of rolling upgrades, and speed up deployments.
 
 This would require a Kubernetes scheduler that supports in-place upgrade.
 
