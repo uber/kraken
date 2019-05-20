@@ -54,6 +54,8 @@ tools/bin/testfs/testfs:: $(wildcard tools/bin/testfs/*.go)
 tracker/tracker:: $(wildcard tracker/*.go)
 	$(CROSS_COMPILER)
 
+$(LINUX_BINS):: vendor
+
 define tag_image
 	docker tag $(1):$(PACKAGE_VERSION) $(1):dev
 	docker tag $(1):$(PACKAGE_VERSION) $(REGISTRY)/$(1):$(PACKAGE_VERSION)
