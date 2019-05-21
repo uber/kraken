@@ -33,7 +33,7 @@ import (
 
 var _manifestRegexp = regexp.MustCompile(`^application/vnd.docker.distribution.manifest.v\d\+(json|prettyjws)`)
 
-// PreheatHandler defines the handler of preheat
+// PreheatHandler defines the handler of preheat.
 type PreheatHandler struct {
 	clusterClient blobclient.ClusterClient
 }
@@ -43,7 +43,7 @@ func NewPreheatHandler(client blobclient.ClusterClient) *PreheatHandler {
 	return &PreheatHandler{client}
 }
 
-// Handle notifies origins to cache the blob related to the image
+// Handle notifies origins to cache the blob related to the image.
 func (ph *PreheatHandler) Handle(w http.ResponseWriter, r *http.Request) error {
 	var notification Notification
 	if err := json.NewDecoder(r.Body).Decode(&notification); err != nil {
@@ -52,56 +52,56 @@ func (ph *PreheatHandler) Handle(w http.ResponseWriter, r *http.Request) error {
 
 	events := filterEvents(&notification)
 	for _, event := range events {
-		namespace := event.Target.Repository
+		repo := event.Target.Repository
 		digest := event.Target.Digest
 
-		log.With("namespace", namespace, "digest", digest).Infof("deal push image event")
-		err := ph.process(namespace, digest)
+		log.With("repo", repo, "digest", digest).Infof("deal push image event")
+		err := ph.process(repo, digest)
 		if err != nil {
-			log.With("namespace", namespace, "digest", digest).Errorf("handle preheat: %s", err)
+			log.With("repo", repo, "digest", digest).Errorf("handle preheat: %s", err)
 		}
 	}
 	return nil
 }
 
-func (ph *PreheatHandler) process(namespace, digest string) error {
-	manifest, err := ph.fetchManifest(namespace, digest)
+func (ph *PreheatHandler) process(repo, digest string) error {
+	manifest, err := ph.fetchManifest(repo, digest)
 	if err != nil {
 		return err
 	}
 	for _, desc := range manifest.References() {
 		d, err := core.ParseSHA256Digest(string(desc.Digest))
 		if err != nil {
-			log.With("namespace", namespace, "digest", string(desc.Digest)).Errorf("parse digest: %s", err)
+			log.With("repo", repo, "digest", string(desc.Digest)).Errorf("parse digest: %s", err)
 			continue
 		}
 		go func() {
-			log.With("namespace", namespace).Debugf("trigger origin cache: %+v", d)
-			_, err = ph.clusterClient.GetMetaInfo(namespace, d)
+			log.With("repo", repo).Debugf("trigger origin cache: %+v", d)
+			_, err = ph.clusterClient.GetMetaInfo(repo, d)
 			if err != nil && !httputil.IsAccepted(err) {
-				log.With("namespace", namespace, "digest", digest).Errorf("notify origin cache: %s", err)
+				log.With("repo", repo, "digest", digest).Errorf("notify origin cache: %s", err)
 			}
 		}()
 	}
 	return nil
 }
 
-func (ph *PreheatHandler) fetchManifest(namespace, digest string) (distribution.Manifest, error) {
+func (ph *PreheatHandler) fetchManifest(repo, digest string) (distribution.Manifest, error) {
 	d, err := core.ParseSHA256Digest(digest)
 	if err != nil {
 		return nil, fmt.Errorf("Error parse digest: %s ", err)
 	}
 
 	buf := &bytes.Buffer{}
-	// there may be a gap between registry finish uploading manifest and send notification
-	// see https://github.com/docker/distribution/issues/2625
+	// there may be a gap between registry finish uploading manifest and send notification.
+	// see https://github.com/docker/distribution/issues/2625.
 	interval := 100 * time.Millisecond
 	for i := 0; i < 4; i++ {
 		if i != 0 {
 			time.Sleep(interval)
 			interval = interval * 2
 		}
-		if err := ph.clusterClient.DownloadBlob(namespace, d, buf); err == nil {
+		if err := ph.clusterClient.DownloadBlob(repo, d, buf); err == nil {
 			break
 		} else if err == blobclient.ErrBlobNotFound {
 			continue
@@ -120,7 +120,7 @@ func (ph *PreheatHandler) fetchManifest(namespace, digest string) (distribution.
 	return manifest, nil
 }
 
-// filterEvents pick out the push manifest events
+// filterEvents pick out the push manifest events.
 func filterEvents(notification *Notification) []*Event {
 	events := []*Event{}
 

@@ -2,7 +2,7 @@ package proxyserver
 
 import "time"
 
-// Notification holds all events. refer to https://docs.docker.com/registry/notifications/
+// Notification holds all events. refer to https://docs.docker.com/registry/notifications/.
 type Notification struct {
 	Events []Event
 }
