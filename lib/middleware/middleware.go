@@ -95,7 +95,7 @@ func StatusCounter(stats tally.Scope) func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			recordw := &recordStatusWriter{w, false, http.StatusOK}
 			next.ServeHTTP(recordw, r)
-			tagEndpoint(stats, r).Counter(strconv.Itoa(recordw.code)).Inc(1)
+			tagEndpoint(stats, r).Counter("http_" + strconv.Itoa(recordw.code)).Inc(1)
 		})
 	}
 }
