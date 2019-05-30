@@ -225,21 +225,31 @@ type announceTickEvent struct{}
 // apply pulls the next dispatcher from the announce queue and asynchronously
 // makes an announce request to the tracker.
 func (e announceTickEvent) apply(s *state) {
-	h, ok := s.announceQueue.Next()
-	if !ok {
-		s.log().Debug("No torrents in announce queue")
-		return
+	var skipped []core.InfoHash
+	for {
+		h, ok := s.announceQueue.Next()
+		if !ok {
+			s.log().Debug("No torrents in announce queue")
+			break
+		}
+		ctrl, ok := s.torrentControls[h]
+		if !ok {
+			s.log("hash", h).Error("Pulled unknown torrent off announce queue")
+			continue
+		}
+		if ctrl.dispatcher.NumPeers() >= s.conns.MaxConnsPerTorrent() {
+			s.log("hash", h).Info("Skipping announce for fully saturated torrent")
+			skipped = append(skipped, h)
+			continue
+		}
+		go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
+		break
 	}
-	ctrl, ok := s.torrentControls[h]
-	if !ok {
-		s.log("hash", h).Error("Pulled unknown torrent off announce queue")
-		return
+	// Re-enqueue any torrents we pulled off and ignored, else we would never
+	// announce them again.
+	for _, h := range skipped {
+		s.announceQueue.Ready(h)
 	}
-	if ctrl.dispatcher.NumPeers() >= s.conns.MaxConnsPerTorrent() {
-		s.log("hash", h).Info("Skipping announce for fully saturated torrent")
-		return
-	}
-	go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
 }
 
 // announceResultEvent occurs when a successfully announced response was received
