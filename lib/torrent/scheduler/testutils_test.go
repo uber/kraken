@@ -41,7 +41,7 @@ import (
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/lib/torrent/storage/agentstorage"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
-	"github.com/uber/kraken/mocks/tracker/metainfoclient"
+	mockmetainfoclient "github.com/uber/kraken/mocks/tracker/metainfoclient"
 	"github.com/uber/kraken/tracker/announceclient"
 	"github.com/uber/kraken/tracker/trackerserver"
 	"github.com/uber/kraken/utils/log"
@@ -135,8 +135,11 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 	ac := announceclient.New(pctx, hashring.NoopPassiveRing(hostlist.Fixture(m.trackerAddr)), nil)
 	tp := networkevent.NewTestProducer()
 
-	s, err := newScheduler(config, ta, stats, pctx, ac, announcequeue.New(), tp, options...)
+	s, err := newScheduler(config, ta, stats, pctx, ac, tp, options...)
 	if err != nil {
+		panic(err)
+	}
+	if err := s.start(announcequeue.New()); err != nil {
 		panic(err)
 	}
 	cleanup.Add(s.Stop)

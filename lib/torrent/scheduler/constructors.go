@@ -15,6 +15,7 @@ package scheduler
 
 import (
 	"crypto/tls"
+	"fmt"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/blobrefresh"
@@ -46,12 +47,18 @@ func NewAgentScheduler(
 		stats,
 		pctx,
 		announceclient.New(pctx, trackers, tls),
-		announcequeue.New(),
 		netevents)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new scheduler: %s", err)
 	}
-	return makeReloadable(s, func() announcequeue.Queue { return announcequeue.New() }), nil
+
+	aq := func() announcequeue.Queue { return announcequeue.New() }
+	rs := makeReloadable(s, aq)
+	if err := rs.start(aq()); err != nil {
+		return nil, fmt.Errorf("start: %s", err)
+	}
+
+	return rs, nil
 }
 
 // NewOriginScheduler creates and starts a ReloadableScheduler configured for an origin.
@@ -69,10 +76,16 @@ func NewOriginScheduler(
 		stats,
 		pctx,
 		announceclient.Disabled(),
-		announcequeue.Disabled(),
 		netevents)
 	if err != nil {
 		return nil, err
 	}
-	return makeReloadable(s, func() announcequeue.Queue { return announcequeue.Disabled() }), nil
+
+	aq := func() announcequeue.Queue { return announcequeue.Disabled() }
+	rs := makeReloadable(s, aq)
+	if err := rs.start(aq()); err != nil {
+		return nil, fmt.Errorf("start: %s", err)
+	}
+
+	return rs, nil
 }
