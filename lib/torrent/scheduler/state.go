@@ -54,6 +54,16 @@ type state struct {
 	announceQueue   announcequeue.Queue
 }
 
+func newState(s *scheduler, aq announcequeue.Queue) *state {
+	return &state{
+		sched:           s,
+		torrentControls: make(map[core.InfoHash]*torrentControl),
+		conns: connstate.New(
+			s.config.ConnState, s.clock, s.pctx.PeerID, s.netevents, s.logger),
+		announceQueue: aq,
+	}
+}
+
 // addTorrent initializes a new torrentControl for t. Overwrites any existing
 // torrentControl for t, so callers should check if one exists first.
 func (s *state) addTorrent(
