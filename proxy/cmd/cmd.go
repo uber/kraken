@@ -16,6 +16,9 @@ package cmd
 import (
 	"flag"
 
+	"fmt"
+	"net/http"
+
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/healthcheck"
@@ -24,6 +27,7 @@ import (
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
 	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/proxy/proxyserver"
 	"github.com/uber/kraken/proxy/registryoverride"
 	"github.com/uber/kraken/utils/configutil"
 	"github.com/uber/kraken/utils/flagutil"
@@ -33,6 +37,7 @@ import (
 // Flags defines proxy CLI flags.
 type Flags struct {
 	Ports         flagutil.Ints
+	ServerPort    int
 	ConfigFile    string
 	KrakenCluster string
 	SecretsFile   string
@@ -43,6 +48,8 @@ func ParseFlags() *Flags {
 	var flags Flags
 	flag.Var(
 		&flags.Ports, "port", "port to listen on (may specify multiple)")
+	flag.IntVar(
+		&flags.ServerPort, "server-port", 0, "http server port to listen on")
 	flag.StringVar(
 		&flags.ConfigFile, "config", "", "configuration file path")
 	flag.StringVar(
@@ -109,6 +116,16 @@ func Run(flags *Flags) {
 	tagClient := tagclient.NewClusterClient(buildIndexes, tls)
 
 	transferer := transfer.NewReadWriteTransferer(stats, tagClient, originCluster, cas)
+
+	// open preheat function only when define a server-port
+	if flags.ServerPort != 0 {
+		server := proxyserver.New(stats, originCluster)
+		addr := fmt.Sprintf(":%d", flags.ServerPort)
+		log.Infof("Starting http server on %s", addr)
+		go func() {
+			log.Fatal(http.ListenAndServe(addr, server.Handler()))
+		}()
+	}
 
 	registry, err := config.Registry.Build(config.Registry.ReadWriteParameters(transferer, cas, stats))
 	if err != nil {

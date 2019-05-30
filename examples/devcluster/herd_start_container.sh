@@ -12,6 +12,7 @@ docker run -d \
     -p ${TRACKER_PORT}:${TRACKER_PORT} \
     -p ${BUILD_INDEX_PORT}:${BUILD_INDEX_PORT} \
     -p ${PROXY_PORT}:${PROXY_PORT} \
+    -p ${PROXY_SERVER_PORT}:${PROXY_SERVER_PORT} \
     -v $(pwd)/examples/devcluster/config/origin/development.yaml:/etc/kraken/config/origin/development.yaml \
     -v $(pwd)/examples/devcluster/config/tracker/development.yaml:/etc/kraken/config/tracker/development.yaml \
     -v $(pwd)/examples/devcluster/config/build-index/development.yaml:/etc/kraken/config/build-index/development.yaml \
