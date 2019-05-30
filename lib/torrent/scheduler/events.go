@@ -242,7 +242,8 @@ func (e announceTickEvent) apply(s *state) {
 			skipped = append(skipped, h)
 			continue
 		}
-		go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
+		go s.sched.announce(
+			ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
 		break
 	}
 	// Re-enqueue any torrents we pulled off and ignored, else we would never
