@@ -102,6 +102,8 @@ type noopEvents struct{}
 
 func (e noopEvents) DispatcherComplete(*Dispatcher) {}
 
+func (e noopEvents) PeerRemoved(core.PeerID, core.InfoHash) {}
+
 func testDispatcher(config Config, clk clock.Clock, t storage.Torrent) *Dispatcher {
 	d, err := newDispatcher(
 		config,
