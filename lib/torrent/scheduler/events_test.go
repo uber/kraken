@@ -14,6 +14,8 @@
 package scheduler
 
 import (
+	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -41,13 +43,36 @@ type mockEventLoop struct {
 	c chan event
 }
 
-func (l *mockEventLoop) expect(e event) {
+func (l *mockEventLoop) _next() (event, error) {
 	select {
-	case result := <-l.c:
-		require.Equal(l.t, e, result)
+	case e := <-l.c:
+		return e, nil
 	case <-time.After(5 * time.Second):
-		l.t.Fatalf("timed out waiting for %T to occur", e)
+		return nil, fmt.Errorf("timed out waiting for event")
 	}
+}
+
+// next returns the next event.
+func (l *mockEventLoop) next() event {
+	n, err := l._next()
+	require.NoError(l.t, err)
+	return n
+}
+
+// expect checks the next event is e and returns it.
+func (l *mockEventLoop) expect(e event) event {
+	n, err := l._next()
+	require.NoError(l.t, err)
+	require.Equal(l.t, n, e)
+	return n
+}
+
+// expectType checks the next event is the same type as e and returns it.
+func (l *mockEventLoop) expectType(e event) event {
+	n, err := l._next()
+	require.NoError(l.t, err)
+	require.Equal(l.t, reflect.TypeOf(e).Name(), reflect.TypeOf(n).Name())
+	return n
 }
 
 func (l *mockEventLoop) send(e event) bool {
@@ -164,68 +189,82 @@ func TestAnnounceTickEventSkipsFullTorrents(t *testing.T) {
 		},
 	})
 
-	full, err := state.addTorrent(_testNamespace, mocks.newTorrent(), true)
-	require.NoError(err)
-
-	info := full.dispatcher.Stat()
-
+	// Spin up some fake peers we can handshake against.
+	var peers []*core.PeerInfo
 	for i := 0; i < 5; i++ {
-		_, c, cleanup := conn.PipeFixture(conn.Config{}, info)
-		defer cleanup()
+		p, err := conn.NewFakePeer()
+		require.NoError(err)
+		defer p.Close()
 
-		require.NoError(state.conns.AddPending(c.PeerID(), c.InfoHash(), nil))
-		require.NoError(state.addOutgoingConn(c, info.Bitfield(), info))
+		peers = append(peers, p.PeerInfo())
 	}
 
-	empty, err := state.addTorrent(_testNamespace, mocks.newTorrent(), true)
+	// Announce a torrent and fully saturate its connections.
+	t1, err := state.addTorrent(_testNamespace, mocks.newTorrent(), true)
 	require.NoError(err)
 
-	// The first torrent is full and should be skipped, announcing the empty
-	// torrent.
 	mocks.announceClient.EXPECT().
 		Announce(
-			empty.dispatcher.Digest(),
-			empty.dispatcher.InfoHash(),
+			t1.dispatcher.Digest(),
+			t1.dispatcher.InfoHash(),
+			false,
+			announceclient.V1).
+		Return(peers, time.Second, nil)
+
+	announceTickEvent{}.apply(state)
+
+	mocks.eventLoop.expectType(announceResultEvent{}).apply(state)
+	for range peers {
+		mocks.eventLoop.expectType(outgoingConnEvent{}).apply(state)
+	}
+
+	// Add a second torrent (behind t1) and announce it. The first torrent is
+	// full and should be skipped, instead directly announcing the second empty
+	// torrent.
+	t2, err := state.addTorrent(_testNamespace, mocks.newTorrent(), true)
+	require.NoError(err)
+
+	mocks.announceClient.EXPECT().
+		Announce(
+			t2.dispatcher.Digest(),
+			t2.dispatcher.InfoHash(),
 			false,
 			announceclient.V1).
 		Return(nil, time.Second, nil)
 
 	announceTickEvent{}.apply(state)
 
-	// Empty torrent announced.
 	mocks.eventLoop.expect(announceResultEvent{
-		infoHash: empty.dispatcher.InfoHash(),
+		infoHash: t2.dispatcher.InfoHash(),
 	})
 
-	// The empty torrent is pending, so keep skipping full torrent.
+	// t1 is still full and t2 is pending, so nothing should happen.
 	announceTickEvent{}.apply(state)
 	announceTickEvent{}.apply(state)
 	announceTickEvent{}.apply(state)
 
-	// Remove a connection -- torrent is no longer full.
+	// Close a random connection -- t1 is no longer full.
 	c := state.conns.ActiveConns()[0]
 	c.Close()
-	// TODO(codyg): This is ugly. Conn fixtures aren't connected to our event
-	// loop, so we have to manually trigger the event.
-	connClosedEvent{c}.apply(state)
 
-	mocks.eventLoop.expect(peerRemovedEvent{
-		peerID:   c.PeerID(),
-		infoHash: c.InfoHash(),
-	})
+	// One of these is the conn closed, one of these is the peer removed. Can't
+	// determine which order they happen in.
+	// TODO(codyg): Fix this.
+	mocks.eventLoop.next().apply(state)
+	mocks.eventLoop.next().apply(state)
 
 	mocks.announceClient.EXPECT().
 		Announce(
-			full.dispatcher.Digest(),
-			full.dispatcher.InfoHash(),
+			t1.dispatcher.Digest(),
+			t1.dispatcher.InfoHash(),
 			false,
 			announceclient.V1).
 		Return(nil, time.Second, nil)
 
 	announceTickEvent{}.apply(state)
 
-	// Previously full torrent announced.
+	// Previously full torrent (which now has open conn slot) announced.
 	mocks.eventLoop.expect(announceResultEvent{
-		infoHash: full.dispatcher.InfoHash(),
+		infoHash: t1.dispatcher.InfoHash(),
 	})
 }

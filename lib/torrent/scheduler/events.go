@@ -112,10 +112,6 @@ func (l *liftedEventLoop) DispatcherComplete(d *dispatch.Dispatcher) {
 	l.send(dispatcherCompleteEvent{d})
 }
 
-func (l *liftedEventLoop) PeerRemoved(peerID core.PeerID, h core.InfoHash) {
-	l.send(peerRemovedEvent{peerID, h})
-}
-
 func (l *liftedEventLoop) AnnounceTick() {
 	l.send(announceTickEvent{})
 }
@@ -376,15 +372,6 @@ func (e dispatcherCompleteEvent) apply(s *state) {
 	// Immediately announce completed torrents.
 	go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), true)
 }
-
-// peerRemovedEvent occurs when a dispatcher removes a peer with a closed
-// connection. Currently is a no-op.
-type peerRemovedEvent struct {
-	peerID   core.PeerID
-	infoHash core.InfoHash
-}
-
-func (e peerRemovedEvent) apply(s *state) {}
 
 // preemptionTickEvent occurs periodically to preempt unneeded conns and remove
 // idle torrentControls.

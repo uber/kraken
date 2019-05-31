@@ -45,7 +45,6 @@ var (
 // Events defines Dispatcher events.
 type Events interface {
 	DispatcherComplete(*Dispatcher)
-	PeerRemoved(core.PeerID, core.InfoHash)
 }
 
 // Messages defines a subset of conn.Conn methods which Dispatcher requires to
@@ -444,7 +443,6 @@ func (d *Dispatcher) feed(p *peer) {
 		}
 	}
 	d.removePeer(p)
-	d.events.PeerRemoved(p.id, d.torrent.InfoHash())
 }
 
 func (d *Dispatcher) dispatch(p *peer, msg *conn.Message) error {
