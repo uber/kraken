@@ -16,7 +16,7 @@ before_script:
 
 script:
   - make unit-test integration
-  - "fossa --option: allow-unresolved:true" 
+  - "fossa --option allow-unresolved:true" 
 
 after_success:
   - bash <(curl -s https://codecov.io/bash)
