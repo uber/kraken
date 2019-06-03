@@ -40,6 +40,8 @@ var (
 type status int
 
 const (
+	// _uninit indicates the connection is uninitialized. This is the default
+	// status for empty entries.
 	_uninit status = iota
 	_pending
 	_active
