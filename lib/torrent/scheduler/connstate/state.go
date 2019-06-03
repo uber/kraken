@@ -83,8 +83,10 @@ type State struct {
 	localPeerID core.PeerID
 	logger      *zap.SugaredLogger
 
+	// All pending or active conns. These count towards conn capacity.
 	conns map[core.InfoHash]map[core.PeerID]entry
 
+	// All blacklisted conns. These do not count towards conn capacity.
 	blacklist map[connKey]*blacklistEntry
 }
 
@@ -128,9 +130,19 @@ func (s *State) ActiveConns() []*conn.Conn {
 	return active
 }
 
-// NumActiveConns returns the total number of active connections.
-func (s *State) NumActiveConns() int {
-	return len(s.ActiveConns())
+// Saturated returns true if h is at capacity and all the conns are active.
+func (s *State) Saturated(h core.InfoHash) bool {
+	peers, ok := s.conns[h]
+	if !ok {
+		return false
+	}
+	var active int
+	for _, e := range peers {
+		if e.status == _active {
+			active++
+		}
+	}
+	return active == s.config.MaxOpenConnectionsPerTorrent
 }
 
 // Blacklist blacklists peerID/h for the configured BlacklistDuration.
