@@ -236,14 +236,14 @@ func (e announceTickEvent) apply(s *state) {
 			s.log().Debug("No torrents in announce queue")
 			break
 		}
+		if s.conns.Saturated(h) {
+			s.log("hash", h).Debug("Skipping announce for fully saturated torrent")
+			skipped = append(skipped, h)
+			continue
+		}
 		ctrl, ok := s.torrentControls[h]
 		if !ok {
 			s.log("hash", h).Error("Pulled unknown torrent off announce queue")
-			continue
-		}
-		if ctrl.dispatcher.NumPeers() >= s.conns.MaxConnsPerTorrent() {
-			s.log("hash", h).Debug("Skipping announce for fully saturated torrent")
-			skipped = append(skipped, h)
 			continue
 		}
 		go s.sched.announce(
@@ -442,7 +442,6 @@ type emitStatsEvent struct{}
 
 func (e emitStatsEvent) apply(s *state) {
 	s.sched.stats.Gauge("torrents").Update(float64(len(s.torrentControls)))
-	s.sched.stats.Gauge("conns").Update(float64(s.conns.NumActiveConns()))
 }
 
 type blacklistSnapshotEvent struct {
