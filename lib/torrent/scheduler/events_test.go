@@ -43,7 +43,7 @@ type mockEventLoop struct {
 	c chan event
 }
 
-func (l *mockEventLoop) _next() (event, error) {
+func (l *mockEventLoop) next() (event, error) {
 	select {
 	case e := <-l.c:
 		return e, nil
@@ -52,16 +52,9 @@ func (l *mockEventLoop) _next() (event, error) {
 	}
 }
 
-// next returns the next event.
-func (l *mockEventLoop) next() event {
-	n, err := l._next()
-	require.NoError(l.t, err)
-	return n
-}
-
 // expect checks the next event is e and returns it.
 func (l *mockEventLoop) expect(e event) event {
-	n, err := l._next()
+	n, err := l.next()
 	require.NoError(l.t, err)
 	require.Equal(l.t, n, e)
 	return n
@@ -69,7 +62,7 @@ func (l *mockEventLoop) expect(e event) event {
 
 // expectType checks the next event is the same type as e and returns it.
 func (l *mockEventLoop) expectType(e event) event {
-	n, err := l._next()
+	n, err := l.next()
 	require.NoError(l.t, err)
 	require.Equal(l.t, reflect.TypeOf(e).Name(), reflect.TypeOf(n).Name())
 	return n
@@ -247,11 +240,7 @@ func TestAnnounceTickEventSkipsFullTorrents(t *testing.T) {
 	c := state.conns.ActiveConns()[0]
 	c.Close()
 
-	// One of these is the conn closed, one of these is the peer removed. Can't
-	// determine which order they happen in.
-	// TODO(codyg): Fix this.
-	mocks.eventLoop.next().apply(state)
-	mocks.eventLoop.next().apply(state)
+	mocks.eventLoop.expect(connClosedEvent{c}).apply(state)
 
 	mocks.announceClient.EXPECT().
 		Announce(
