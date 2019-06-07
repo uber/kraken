@@ -1,4 +1,4 @@
-<p align="center">
+<p>
   <img src="assets/kraken-logo-color.svg" width="200" height="200" title="Github Logo">
 </p>
 
