@@ -1,5 +1,5 @@
 <p>
-  <img src="assets/kraken-logo-color.svg" width="200" height="200" title="Github Logo">
+  <img src="assets/kraken-logo-color.svg" width="150" height="175" title="Github Logo">
 </p>
 
 [![Build Status][ci-img]][ci] [![Github Release][release-img]][release] [![GoDoc][doc-img]][doc] [![GoReportCard][report-img]][report] [![Codecov][cov-img]][cov]
