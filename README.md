@@ -1,8 +1,13 @@
-<p>
-  <img src="assets/kraken-logo-color.svg" width="140" height="175" title="Kraken Logo">
-</p>
+<p align="center"><img src="assets/kraken-logo-color.svg" width="175" title="Kraken Logo"></p>
 
-[![Build Status][ci-img]][ci] [![Github Release][release-img]][release] [![GoDoc][doc-img]][doc] [![GoReportCard][report-img]][report] [![Codecov][cov-img]][cov]
+<p align="center">
+</a>
+<a href="https://travis-ci.com/uber/kraken"><img src="https://travis-ci.com/uber/kraken.svg?branch=master"></a>
+<a href="https://github.com/uber/kraken/releases"><img src="https://img.shields.io/github/release/uber/kraken.svg" /></a>
+<a href="https://godoc.org/github.com/uber/kraken"><img src="https://godoc.org/github.com/uber/kraken?status.svg"></a>
+<a href="https://goreportcard.com/badge/github.com/uber/kraken"><img src="https://goreportcard.com/badge/github.com/uber/kraken"></a>
+<a href="https://codecov.io/gh/uber/kraken"><img src="https://codecov.io/gh/uber/kraken/branch/master/graph/badge.svg"></a>
+</p>
 
 Kraken is a P2P-powered Docker registry that focuses on scalability and availability. It is
 designed for Docker image management, replication and distribution in a hybrid cloud environment.
@@ -15,7 +20,9 @@ distributes 20K 100MB-1G blobs in under 30 sec.
 
 Below is the visualization of a small Kraken cluster at work:
 
-![](assets/visualization.gif)
+<p align="center">
+  <img src="assets/visualization.gif" title="Visualization">
+</p>
 
 # Table of Contents
 
@@ -184,15 +191,3 @@ Please check out our [guide](docs/CONTRIBUTING.md).
 # Contact
 
 To contact us, please join our [Slack channel](https://join.slack.com/t/uber-container-tools/shared_invite/enQtNTIxODAwMDEzNjM1LWIyNzUyMTk3NTAzZGY0MDkzMzQ1YTlmMTUwZmIwNDk3YTA0ZjZjZGRhMTM2NzI0OGM3OGNjMDZiZTI2ZTY5NWY).
-
-
-[ci-img]: https://travis-ci.com/uber/kraken.svg?branch=master
-[ci]: https://travis-ci.com/uber/kraken
-[release-img]: https://img.shields.io/github/release/uber/kraken.svg
-[release]: https://github.com/uber/kraken/releases
-[doc-img]: https://godoc.org/github.com/uber/kraken?status.svg
-[doc]: https://godoc.org/github.com/uber/kraken
-[report-img]: https://goreportcard.com/badge/github.com/uber/kraken
-[report]: https://goreportcard.com/report/github.com/uber/kraken
-[cov-img]: https://codecov.io/gh/uber/kraken/branch/master/graph/badge.svg
-[cov]: https://codecov.io/gh/uber/kraken
