@@ -1,6 +1,8 @@
-# Kraken [![Build Status][ci-img]][ci][![Github Release][release-img]][release][![GoDoc][doc-img]][doc][![GoReportCard][report-img]][report][![Codecov][cov-img]][cov]
+<p align="center">
+  <img src="assets/kraken-logo-color.svg" width="200" height="200" title="Github Logo">
+</p>
 
-<p align="center"><img src="assets/kraken-logo-color.svg" width="200" height="200" title="Github Logo"></p>
+[![Build Status][ci-img]][ci] [![Github Release][release-img]][release] [![GoDoc][doc-img]][doc] [![GoReportCard][report-img]][report] [![Codecov][cov-img]][cov]
 
 Kraken is a P2P-powered Docker registry that focuses on scalability and availability. It is
 designed for Docker image management, replication and distribution in a hybrid cloud environment.
