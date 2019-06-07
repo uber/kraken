@@ -191,15 +191,3 @@ Please check out our [guide](docs/CONTRIBUTING.md).
 # Contact
 
 To contact us, please join our [Slack channel](https://join.slack.com/t/uber-container-tools/shared_invite/enQtNTIxODAwMDEzNjM1LWIyNzUyMTk3NTAzZGY0MDkzMzQ1YTlmMTUwZmIwNDk3YTA0ZjZjZGRhMTM2NzI0OGM3OGNjMDZiZTI2ZTY5NWY).
-
-
-[ci-img]: https://travis-ci.com/uber/kraken.svg?branch=master
-[ci]: https://travis-ci.com/uber/kraken
-[release-img]: https://img.shields.io/github/release/uber/kraken.svg
-[release]: https://github.com/uber/kraken/releases
-[doc-img]: https://godoc.org/github.com/uber/kraken?status.svg
-[doc]: https://godoc.org/github.com/uber/kraken
-[report-img]: https://goreportcard.com/badge/github.com/uber/kraken
-[report]: https://goreportcard.com/report/github.com/uber/kraken
-[cov-img]: https://codecov.io/gh/uber/kraken/branch/master/graph/badge.svg
-[cov]: https://codecov.io/gh/uber/kraken
