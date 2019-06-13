@@ -214,6 +214,9 @@ mocks:
 	# from the imports.
 	sed -i '' s,github.com/uber/kraken/vendor/,, mocks/lib/backend/s3backend/s3.go
 
+	$(call add_mock,lib/backend/gcsbackend,GCS)
+	sed -i '' s,github.com/uber/kraken/vendor/,, mocks/lib/backend/gcsbackend/gcs.go
+
 	$(call add_mock,lib/hashring,Ring)
 	$(call add_mock,lib/hashring,Watcher)
 

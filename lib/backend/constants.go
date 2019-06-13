@@ -4,27 +4,24 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	   http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package main
+package backend
 
 import (
-	"github.com/uber/kraken/build-index/cmd"
+	"github.com/uber/kraken/utils/memsize"
 
-	// Import all backend client packages to register them with backend manager.
-	_ "github.com/uber/kraken/lib/backend/hdfsbackend"
-	_ "github.com/uber/kraken/lib/backend/httpbackend"
-	_ "github.com/uber/kraken/lib/backend/registrybackend"
-	_ "github.com/uber/kraken/lib/backend/s3backend"
-	_ "github.com/uber/kraken/lib/backend/gcsbackend"
-	_ "github.com/uber/kraken/lib/backend/testfs"
+	"github.com/c2h5oh/datasize"
 )
 
-func main() {
-	cmd.Run(cmd.ParseFlags())
-}
+const (
+DefaultPartSize    int64             = int64(64 * memsize.MB)
+DefaultBufferGuard datasize.ByteSize = 10 * datasize.MB
+DefaultConcurrency int               = 10
+DefaultListMaxKeys int               = 250
+)

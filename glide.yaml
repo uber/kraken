@@ -55,6 +55,12 @@ import:
   - client
 - package: github.com/cenkalti/backoff
   version: ^2.0.0
+- package: cloud.google.com/go
+  version: ^0.40.0
+- package: google.golang.org/api
+  version: ^0.6.0
+  subpackages:
+  - googleapi
 testImport:
 - package: github.com/stretchr/testify
   version: ^1.3.0
