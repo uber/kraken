@@ -12,7 +12,7 @@
 Kraken is a P2P-powered Docker registry that focuses on scalability and availability. It is
 designed for Docker image management, replication and distribution in a hybrid cloud environment.
 With pluggable backend support, Kraken can easily integrate into existing Docker registry setups
-as the distribution layer.
+as the distribution layer. 
 
 Kraken has been in production at Uber since early 2018. In our busiest cluster, Kraken distributes
 more than 1 million blobs per day, including 100k 1G+ blobs. At its peak production load, Kraken
@@ -65,7 +65,8 @@ pseudo-random regular graph.
 Such a graph has high connectivity and small diameter. As a result, even with only one seeder and
 having thousands of peers joining in the same second, all participants can reach a mininum of 80%
 max upload/download speed in theory (60% with current implementation), and performance doesn't
-degrade much as the blob size and cluster size increase.
+degrade much as the blob size and cluster size increase. For more details, see the team's [tech
+talk](https://www.youtube.com/watch?v=waVtYYSXkXU) at KubeCon + CloudNativeCon.
 
 # Architecture
 
