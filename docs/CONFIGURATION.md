@@ -222,6 +222,26 @@ Example origin config that uses multiple backends:
 >        aws_access_key_id: <keyid>
 >        aws_secret_access_key: <key>
 
+Example of GCS config
+
+>origin.yaml
+>```
+> - namespace: .*
+>   backend:
+>     gcs:
+>       username: kraken-user
+>       bucket: test-bucket
+>       root_directory: /test-bucket/kraken/default/
+>       name_path: sharded_docker_blob
+>   bandwidth:
+>     enable: true
+>
+>auth:
+>  gcs:
+>    kraken-user:
+>      gcs:
+>        access_blob: <service_account_key>
+
 ## Read-Only Registry Backend
 
 For simple local testing with an insecure registry (assuming it listens on `host.docker.internal:5000`), you can configure the backend for origin and build-index accordingly:
