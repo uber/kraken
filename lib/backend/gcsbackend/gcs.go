@@ -25,5 +25,5 @@ type GCS interface {
 	ObjectAttrs(objectName string) (*storage.ObjectAttrs, error)
 	Download(objectName string, w io.Writer) (int64, error)
 	Upload(objectName string, r io.Reader) (int64, error)
-	GetObjectIterator(prefix string)  iterator.Pageable
+	GetObjectIterator(prefix string) iterator.Pageable
 }

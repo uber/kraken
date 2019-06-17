@@ -14,11 +14,11 @@
 package gcsbackend
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"path"
-	"context"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
@@ -66,9 +66,9 @@ func (f *factory) Create(
 
 // Client implements a backend.Client for GCS.
 type Client struct {
-	config  Config
-	pather  namepath.Pather
-	gcs     GCS
+	config Config
+	pather namepath.Pather
+	gcs    GCS
 }
 
 // Option allows setting optional Client parameters.
@@ -121,7 +121,7 @@ func NewClient(
 	}
 
 	client := &Client{config, pather,
-				NewGCS(ctx, sClient.Bucket(config.Bucket), &config)}
+		NewGCS(ctx, sClient.Bucket(config.Bucket), &config)}
 
 	log.Infof("Initalized GCS backend with config: %s", config)
 	return client, nil
@@ -174,8 +174,8 @@ func (c *Client) List(prefix string) ([]string, error) {
 
 	absPrefix := path.Join(c.pather.BasePath(), prefix)
 	pageIterator := c.gcs.GetObjectIterator(absPrefix)
-	objectsPage := iterator.NewPager(pageIterator, c.config.ListMaxKeys,
-						"" /*Start at beginning*/)
+	// Start at beginning.
+	objectsPage := iterator.NewPager(pageIterator, c.config.ListMaxKeys, "")
 	_, err := objectsPage.NextPage(&names)
 	if err != nil {
 		return nil, err
@@ -188,7 +188,6 @@ func (c *Client) List(prefix string) ([]string, error) {
 func isObjectNotFound(err error) bool {
 	return err == storage.ErrObjectNotExist || err == storage.ErrBucketNotExist
 }
-
 
 // GCSImpl implements GCS interaface.
 type GCSImpl struct {
