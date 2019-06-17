@@ -15,10 +15,10 @@ package gcsbackend
 
 import (
 	"bytes"
-	"testing"
 	"fmt"
-	"strings"
 	"strconv"
+	"strings"
+	"testing"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/mocks/lib/backend/gcsbackend"
@@ -55,7 +55,7 @@ func newClientMocks(t *testing.T) (*clientMocks, func()) {
 			ListMaxKeys:   5,
 		},
 		userAuth: UserAuthConfig{"test-user": auth},
-		gcs:       mockgcsbackend.NewMockGCS(ctrl),
+		gcs:      mockgcsbackend.NewMockGCS(ctrl),
 	}, ctrl.Finish
 }
 
@@ -164,7 +164,7 @@ func (it *AlphaIterator) PageInfo() *iterator.PageInfo {
 func (it *AlphaIterator) next(pageSize int, pageToken string) (string, error) {
 	// A simple implementation that ignores the pageToken
 	for i := 0; i < pageSize; i++ {
-		it.elems = append(it.elems, "test/" + strconv.Itoa(i))
+		it.elems = append(it.elems, "test/"+strconv.Itoa(i))
 	}
 	return "", nil
 }

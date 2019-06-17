@@ -22,12 +22,12 @@ import (
 // Config defines gcs connection specific
 // parameters and authetication credentials
 type Config struct {
-	Username  string `yaml:"username"` // IAM username for selecting credentials.
-	Location  string `yaml:"location"` // Location of the bucket. Defautls to "US".
-	Bucket	  string `yaml:"bucket"`   // GCS bucket
+	Username string `yaml:"username"` // IAM username for selecting credentials.
+	Location string `yaml:"location"` // Location of the bucket. Defautls to "US".
+	Bucket   string `yaml:"bucket"`   // GCS bucket
 
-	RootDirectory	 string `yaml:"root_directory"`		// GCS root directory for docker images
-	UploadChunkSize  int64  `yaml:"upload_part_size"`	 // part size gcs manager uses for upload
+	RootDirectory   string `yaml:"root_directory"`   // GCS root directory for docker images
+	UploadChunkSize int64  `yaml:"upload_part_size"` // part size gcs manager uses for upload
 
 	// ListMaxKeys sets the max keys returned per page.
 	ListMaxKeys int `yaml:"list_max_keys"`
@@ -47,7 +47,7 @@ type UserAuthConfig map[string]AuthConfig
 // AuthConfig matches Langley format.
 type AuthConfig struct {
 	GCS struct {
-		AccessBlob	 string `yaml:"access_blob"`
+		AccessBlob string `yaml:"access_blob"`
 	} `yaml:"gcs"`
 }
 

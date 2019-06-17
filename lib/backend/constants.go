@@ -20,8 +20,8 @@ import (
 )
 
 const (
-DefaultPartSize    int64             = int64(64 * memsize.MB)
-DefaultBufferGuard datasize.ByteSize = 10 * datasize.MB
-DefaultConcurrency int               = 10
-DefaultListMaxKeys int               = 250
+	DefaultPartSize    int64             = int64(64 * memsize.MB)
+	DefaultBufferGuard datasize.ByteSize = 10 * datasize.MB
+	DefaultConcurrency int               = 10
+	DefaultListMaxKeys int               = 250
 )
