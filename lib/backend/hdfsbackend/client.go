@@ -167,7 +167,7 @@ func (c *Client) sendAll(done <-chan struct{}, dirs []string, listJobs chan<- st
 }
 
 // List lists names which start with prefix.
-func (c *Client) List(prefix string) ([]string, error) {
+func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, string, error) {
 	root := path.Join(c.pather.BasePath(), prefix)
 
 	listJobs := make(chan string)
@@ -210,7 +210,7 @@ func (c *Client) List(prefix string) ([]string, error) {
 			if httputil.IsNotFound(res.err) {
 				continue
 			}
-			return nil, res.err
+			return nil, "", res.err
 		}
 		var dirs []string
 		for _, fs := range res.list {
@@ -258,5 +258,5 @@ func (c *Client) List(prefix string) ([]string, error) {
 		}
 	}
 
-	return files, nil
+	return files, "", nil
 }

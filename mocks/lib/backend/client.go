@@ -7,6 +7,7 @@ package mockbackend
 import (
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
+	backend "github.com/uber/kraken/lib/backend"
 	io "io"
 	reflect "reflect"
 )
@@ -49,18 +50,19 @@ func (mr *MockClientMockRecorder) Download(arg0, arg1, arg2 interface{}) *gomock
 }
 
 // List mocks base method
-func (m *MockClient) List(arg0 string) ([]string, error) {
+func (m *MockClient) List(arg0 string, arg1 *backend.ListOptions) ([]string, string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List", arg0)
+	ret := m.ctrl.Call(m, "List", arg0, arg1)
 	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // List indicates an expected call of List
-func (mr *MockClientMockRecorder) List(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) List(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockClient)(nil).List), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockClient)(nil).List), arg0, arg1)
 }
 
 // Stat mocks base method

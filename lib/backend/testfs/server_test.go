@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/backend/namepath"
 	"github.com/uber/kraken/utils/testutil"
@@ -105,7 +106,7 @@ func TestServerList(t *testing.T) {
 			require.NoError(c.Upload(ns, "a/b/d.txt", bytes.NewBufferString("bar")))
 			require.NoError(c.Upload(ns, "x/y/z.txt", bytes.NewBufferString("baz")))
 
-			names, err := c.List(test.prefix)
+			names, _, err := c.List(test.prefix, &backend.ListOptions{})
 			require.NoError(err)
 			require.ElementsMatch(test.expected, names)
 		})
@@ -130,7 +131,7 @@ func TestDockerTagList(t *testing.T) {
 		require.NoError(c.Upload(ns, tag, bytes.NewBufferString(core.DigestFixture().String())))
 	}
 
-	names, err := c.List("")
+	names, _, err := c.List("", &backend.ListOptions{})
 	require.NoError(err)
 	require.ElementsMatch(tags, names)
 }

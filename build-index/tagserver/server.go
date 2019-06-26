@@ -244,7 +244,7 @@ func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return handler.Errorf("backend manager: %s", err)
 	}
-	names, err := client.List(prefix)
+	names, _, err := client.List(prefix, &backend.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -265,7 +265,7 @@ func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return handler.Errorf("backend manager: %s", err)
 	}
-	names, err := client.List(path.Join(repo, "_manifests/tags"))
+	names, _, err := client.List(path.Join(repo, "_manifests/tags"), &backend.ListOptions{})
 	if err != nil {
 		return err
 	}

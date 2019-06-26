@@ -169,7 +169,7 @@ func (c *Client) Upload(namespace, name string, src io.Reader) error {
 }
 
 // List lists names that start with prefix.
-func (c *Client) List(prefix string) ([]string, error) {
+func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, string, error) {
 	var names []string
 
 	absPrefix := path.Join(c.pather.BasePath(), prefix)
@@ -178,10 +178,10 @@ func (c *Client) List(prefix string) ([]string, error) {
 	objectsPage := iterator.NewPager(pageIterator, c.config.ListMaxKeys, "")
 	_, err := objectsPage.NextPage(&names)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	return names, nil
+	return names, "", nil
 }
 
 // isObjectNotFound is helper function for identify non-existing object error.

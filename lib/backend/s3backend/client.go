@@ -213,7 +213,7 @@ func isNotFound(err error) bool {
 }
 
 // List lists names with start with prefix.
-func (c *Client) List(prefix string) ([]string, error) {
+func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, string, error) {
 	// For whatever reason, the S3 list API does not accept an absolute path
 	// for prefix. Thus, the root is stripped from the input and added manually
 	// to each output key.
@@ -240,7 +240,7 @@ func (c *Client) List(prefix string) ([]string, error) {
 		return true
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return names, nil
+	return names, "", nil
 }
