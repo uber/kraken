@@ -219,6 +219,23 @@ func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, st
 	// to each output key.
 	var names []string
 
+	addObjectsToNames := func(objects []*s3.Object) {
+		for _, object := range objects {
+			if object.Key == nil {
+				log.With(
+					"prefix", prefix,
+					"object", object).Error("List encountered nil S3 object key")
+				continue
+			}
+			name, err := c.pather.NameFromBlobPath(path.Join("/", *object.Key))
+			if err != nil {
+				log.With("key", *object.Key).Errorf("Error converting blob path into name: %s", err)
+				continue
+			}
+			names = append(names, name)
+		}
+	}
+
 	if options != nil && options.Paginated {
 		listInput := &s3.ListObjectsV2Input{
 			Bucket:  aws.String(c.config.Bucket),
@@ -235,20 +252,7 @@ func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, st
 			return nil, "", err
 		}
 
-		for _, object := range listOutput.Contents {
-			if object.Key == nil {
-				log.With(
-					"prefix", prefix,
-					"object", object).Error("List encountered nil S3 object key")
-				continue
-			}
-			name, err := c.pather.NameFromBlobPath(path.Join("/", *object.Key))
-			if err != nil {
-				log.With("key", *object.Key).Errorf("Error converting blob path into name: %s", err)
-				continue
-			}
-			names = append(names, name)
-		}
+		addObjectsToNames(listOutput.Contents)
 
 		continuationToken := ""
 		if listOutput.IsTruncated != nil && *listOutput.IsTruncated && listOutput.NextContinuationToken != nil {
@@ -263,20 +267,7 @@ func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, st
 		MaxKeys: aws.Int64(int64(c.config.ListMaxKeys)),
 		Prefix:  aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
 	}, func(page *s3.ListObjectsOutput, last bool) bool {
-		for _, object := range page.Contents {
-			if object.Key == nil {
-				log.With(
-					"prefix", prefix,
-					"object", object).Error("List encountered nil S3 object key")
-				continue
-			}
-			name, err := c.pather.NameFromBlobPath(path.Join("/", *object.Key))
-			if err != nil {
-				log.With("key", *object.Key).Errorf("Error converting blob path into name: %s", err)
-				continue
-			}
-			names = append(names, name)
-		}
+		addObjectsToNames(page.Contents)
 		return true
 	})
 	if err != nil {
