@@ -218,6 +218,46 @@ func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, st
 	// for prefix. Thus, the root is stripped from the input and added manually
 	// to each output key.
 	var names []string
+
+	if options != nil && options.Paginated {
+		listInput := &s3.ListObjectsV2Input{
+			Bucket:  aws.String(c.config.Bucket),
+			MaxKeys: aws.Int64(options.MaxKeys),
+			Prefix:  aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
+		}
+
+		if options.ContinuationToken != "" {
+			listInput.ContinuationToken = aws.String(options.ContinuationToken)
+		}
+
+		listOutput, err := c.s3.ListObjectsV2(listInput)
+		if err != nil {
+			return nil, "", err
+		}
+
+		for _, object := range listOutput.Contents {
+			if object.Key == nil {
+				log.With(
+					"prefix", prefix,
+					"object", object).Error("List encountered nil S3 object key")
+				continue
+			}
+			name, err := c.pather.NameFromBlobPath(path.Join("/", *object.Key))
+			if err != nil {
+				log.With("key", *object.Key).Errorf("Error converting blob path into name: %s", err)
+				continue
+			}
+			names = append(names, name)
+		}
+
+		continuationToken := ""
+		if listOutput.IsTruncated != nil && *listOutput.IsTruncated && listOutput.NextContinuationToken != nil {
+			continuationToken = *listOutput.NextContinuationToken
+		}
+
+		return names, continuationToken, nil
+	}
+
 	err := c.s3.ListObjectsPages(&s3.ListObjectsInput{
 		Bucket:  aws.String(c.config.Bucket),
 		MaxKeys: aws.Int64(int64(c.config.ListMaxKeys)),

@@ -84,6 +84,21 @@ func (mr *MockS3MockRecorder) ListObjectsPages(arg0, arg1 interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListObjectsPages", reflect.TypeOf((*MockS3)(nil).ListObjectsPages), arg0, arg1)
 }
 
+// ListObjectsV2 mocks base method
+func (m *MockS3) ListObjectsV2(arg0 *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListObjectsV2", arg0)
+	ret0, _ := ret[0].(*s3.ListObjectsV2Output)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListObjectsV2 indicates an expected call of ListObjectsV2
+func (mr *MockS3MockRecorder) ListObjectsV2(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListObjectsV2", reflect.TypeOf((*MockS3)(nil).ListObjectsV2), arg0)
+}
+
 // Upload mocks base method
 func (m *MockS3) Upload(arg0 *s3manager.UploadInput, arg1 ...func(*s3manager.Uploader)) (*s3manager.UploadOutput, error) {
 	m.ctrl.T.Helper()
