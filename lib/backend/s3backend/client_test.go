@@ -213,3 +213,71 @@ func TestClientList(t *testing.T) {
 	require.NoError(err)
 	require.Equal([]string{"test/a", "test/b", "test/c", "test/d"}, names)
 }
+
+func TestClientListPaginated(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	client := mocks.new()
+
+	mocks.s3.EXPECT().ListObjectsV2(
+		&s3.ListObjectsV2Input{
+			Bucket:  aws.String("test-bucket"),
+			MaxKeys: aws.Int64(2),
+			Prefix:  aws.String("root/test"),
+		},
+	).DoAndReturn(func(input *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
+		return &s3.ListObjectsV2Output{
+			Contents: []*s3.Object{
+				&s3.Object{
+					Key: aws.String("root/test/a"),
+				},
+				&s3.Object{
+					Key: aws.String("root/test/b"),
+				},
+			},
+			IsTruncated: aws.Bool(true),
+			NextContinuationToken: aws.String("test-continuation-token"),
+		}, nil
+	})
+
+	mocks.s3.EXPECT().ListObjectsV2(
+		&s3.ListObjectsV2Input{
+			Bucket:  aws.String("test-bucket"),
+			MaxKeys: aws.Int64(2),
+			Prefix:  aws.String("root/test"),
+			ContinuationToken: aws.String("test-continuation-token"),
+		},
+	).DoAndReturn(func(input *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
+		return &s3.ListObjectsV2Output{
+			Contents: []*s3.Object{
+				&s3.Object{
+					Key: aws.String("root/test/c"),
+				},
+				&s3.Object{
+					Key: aws.String("root/test/d"),
+				},
+			},
+			IsTruncated: aws.Bool(false),
+		}, nil
+	})
+
+	names, continuationToken, err := client.List("test", &backend.ListOptions{
+		Paginated: true,
+		MaxKeys: 2,
+	})
+	require.NoError(err)
+	require.Equal([]string{"test/a", "test/b"}, names)
+	require.Equal("test-continuation-token", continuationToken)
+
+	names, continuationToken, err = client.List("test", &backend.ListOptions{
+		Paginated: true,
+		MaxKeys: 2,
+		ContinuationToken: continuationToken,
+	})
+	require.NoError(err)
+	require.Equal([]string{"test/c", "test/d"}, names)
+	require.Equal("", continuationToken)
+}
