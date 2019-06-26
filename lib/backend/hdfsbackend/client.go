@@ -167,9 +167,9 @@ func (c *Client) sendAll(done <-chan struct{}, dirs []string, listJobs chan<- st
 }
 
 // List lists names which start with prefix.
-func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, string, error) {
-	if options != nil && options.Paginated {
-		return nil, "", errors.New("pagination not supported")
+func (c *Client) List(prefix string, options backend.ListOptions) (*backend.ListResult, error) {
+	if options.Paginated {
+		return nil, errors.New("pagination not supported")
 	}
 
 	root := path.Join(c.pather.BasePath(), prefix)
@@ -214,7 +214,7 @@ func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, st
 			if httputil.IsNotFound(res.err) {
 				continue
 			}
-			return nil, "", res.err
+			return nil, res.err
 		}
 		var dirs []string
 		for _, fs := range res.list {
@@ -262,5 +262,7 @@ func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, st
 		}
 	}
 
-	return files, "", nil
+	return &backend.ListResult{
+		Names: files,
+	},  nil
 }

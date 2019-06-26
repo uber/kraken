@@ -209,9 +209,9 @@ func TestClientList(t *testing.T) {
 		return nil
 	})
 
-	names, _, err := client.List("test", &backend.ListOptions{})
+	result, err := client.List("test", backend.ListOptions{})
 	require.NoError(err)
-	require.Equal([]string{"test/a", "test/b", "test/c", "test/d"}, names)
+	require.Equal([]string{"test/a", "test/b", "test/c", "test/d"}, result.Names)
 }
 
 func TestClientListPaginated(t *testing.T) {
@@ -264,20 +264,20 @@ func TestClientListPaginated(t *testing.T) {
 		}, nil
 	})
 
-	names, continuationToken, err := client.List("test", &backend.ListOptions{
+	result, err := client.List("test", backend.ListOptions{
 		Paginated: true,
 		MaxKeys: 2,
 	})
 	require.NoError(err)
-	require.Equal([]string{"test/a", "test/b"}, names)
-	require.Equal("test-continuation-token", continuationToken)
+	require.Equal([]string{"test/a", "test/b"}, result.Names)
+	require.Equal("test-continuation-token", result.ContinuationToken)
 
-	names, continuationToken, err = client.List("test", &backend.ListOptions{
+	result, err = client.List("test", backend.ListOptions{
 		Paginated: true,
 		MaxKeys: 2,
-		ContinuationToken: continuationToken,
+		ContinuationToken: result.ContinuationToken,
 	})
 	require.NoError(err)
-	require.Equal([]string{"test/c", "test/d"}, names)
-	require.Equal("", continuationToken)
+	require.Equal([]string{"test/c", "test/d"}, result.Names)
+	require.Equal("", result.ContinuationToken)
 }

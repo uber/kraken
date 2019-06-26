@@ -213,7 +213,7 @@ func isNotFound(err error) bool {
 }
 
 // List lists names with start with prefix.
-func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, string, error) {
+func (c *Client) List(prefix string, options backend.ListOptions) (*backend.ListResult, error) {
 	// For whatever reason, the S3 list API does not accept an absolute path
 	// for prefix. Thus, the root is stripped from the input and added manually
 	// to each output key.
@@ -236,7 +236,7 @@ func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, st
 		}
 	}
 
-	if options != nil && options.Paginated {
+	if options.Paginated {
 		listInput := &s3.ListObjectsV2Input{
 			Bucket:  aws.String(c.config.Bucket),
 			MaxKeys: aws.Int64(options.MaxKeys),
@@ -249,7 +249,7 @@ func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, st
 
 		listOutput, err := c.s3.ListObjectsV2(listInput)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 
 		addObjectsToNames(listOutput.Contents)
@@ -259,7 +259,10 @@ func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, st
 			continuationToken = *listOutput.NextContinuationToken
 		}
 
-		return names, continuationToken, nil
+		return &backend.ListResult{
+			Names: names,
+			ContinuationToken: continuationToken,
+		}, nil
 	}
 
 	err := c.s3.ListObjectsPages(&s3.ListObjectsInput{
@@ -271,7 +274,9 @@ func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, st
 		return true
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return names, "", nil
+	return &backend.ListResult{
+		Names: names,
+	}, nil
 }

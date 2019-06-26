@@ -244,11 +244,11 @@ func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return handler.Errorf("backend manager: %s", err)
 	}
-	names, _, err := client.List(prefix, &backend.ListOptions{})
+	result, err := client.List(prefix, backend.ListOptions{})
 	if err != nil {
 		return err
 	}
-	if err := json.NewEncoder(w).Encode(&names); err != nil {
+	if err := json.NewEncoder(w).Encode(&result.Names); err != nil {
 		return handler.Errorf("json encode: %s", err)
 	}
 	return nil
@@ -265,12 +265,12 @@ func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return handler.Errorf("backend manager: %s", err)
 	}
-	names, _, err := client.List(path.Join(repo, "_manifests/tags"), &backend.ListOptions{})
+	result, err := client.List(path.Join(repo, "_manifests/tags"), backend.ListOptions{})
 	if err != nil {
 		return err
 	}
 	var tags []string
-	for _, name := range names {
+	for _, name := range result.Names {
 		// Strip repo prefix.
 		parts := strings.Split(name, ":")
 		if len(parts) != 2 {

@@ -106,9 +106,9 @@ func TestServerList(t *testing.T) {
 			require.NoError(c.Upload(ns, "a/b/d.txt", bytes.NewBufferString("bar")))
 			require.NoError(c.Upload(ns, "x/y/z.txt", bytes.NewBufferString("baz")))
 
-			names, _, err := c.List(test.prefix, &backend.ListOptions{})
+			result, err := c.List(test.prefix, backend.ListOptions{})
 			require.NoError(err)
-			require.ElementsMatch(test.expected, names)
+			require.ElementsMatch(test.expected, result.Names)
 		})
 	}
 }
@@ -131,7 +131,7 @@ func TestDockerTagList(t *testing.T) {
 		require.NoError(c.Upload(ns, tag, bytes.NewBufferString(core.DigestFixture().String())))
 	}
 
-	names, _, err := c.List("", &backend.ListOptions{})
+	result, err := c.List("", backend.ListOptions{})
 	require.NoError(err)
-	require.ElementsMatch(tags, names)
+	require.ElementsMatch(tags, result.Names)
 }

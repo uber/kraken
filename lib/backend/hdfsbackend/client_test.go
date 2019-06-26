@@ -175,9 +175,9 @@ func TestClientList(t *testing.T) {
 
 			mocks.webhdfs.EXPECT().ListFileStatus("/root/empty").Return(nil, nil).MaxTimes(1)
 
-			names, _, err := client.List(test.prefix, &backend.ListOptions{})
+			result, err := client.List(test.prefix, backend.ListOptions{})
 			require.NoError(err)
-			require.Equal(test.expected, names)
+			require.Equal(test.expected, result.Names)
 		})
 	}
 }
@@ -216,6 +216,6 @@ func TestClientListErrorDoesNotLeakGoroutines(t *testing.T) {
 
 	initDirectoryTree(mocks, "/root", 10, 3) // 1000 nodes.
 
-	_, _, err := client.List("", &backend.ListOptions{})
+	_, err := client.List("", backend.ListOptions{})
 	require.Error(err)
 }

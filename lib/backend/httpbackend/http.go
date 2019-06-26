@@ -115,6 +115,6 @@ func (c *Client) Upload(namespace, name string, src io.Reader) error {
 }
 
 // List is not supported.
-func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, string, error) {
-	return nil, "", errors.New("not supported")
+func (c *Client) List(prefix string, options backend.ListOptions) (*backend.ListResult, error) {
+	return nil, errors.New("not supported")
 }

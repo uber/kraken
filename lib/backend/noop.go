@@ -45,6 +45,6 @@ func (c NoopClient) Download(namespace, name string, dst io.Writer) error {
 }
 
 // List always returns nil.
-func (c NoopClient) List(prefix string, options *ListOptions) ([]string, string, error) {
-	return nil, "", nil
+func (c NoopClient) List(prefix string, options ListOptions) (*ListResult, error) {
+	return nil, nil
 }

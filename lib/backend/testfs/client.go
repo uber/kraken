@@ -132,28 +132,30 @@ func (c *Client) Download(namespace, name string, dst io.Writer) error {
 }
 
 // List lists names starting with prefix.
-func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, string, error) {
-	if options != nil && options.Paginated {
-		return nil, "", errors.New("pagination not supported")
+func (c *Client) List(prefix string, options backend.ListOptions) (*backend.ListResult, error) {
+	if options.Paginated {
+		return nil, errors.New("pagination not supported")
 	}
 
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/list/%s", c.config.Addr, path.Join(c.pather.BasePath(), prefix)))
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	var paths []string
 	if err := json.NewDecoder(resp.Body).Decode(&paths); err != nil {
-		return nil, "", fmt.Errorf("json: %s", err)
+		return nil, fmt.Errorf("json: %s", err)
 	}
 	var names []string
 	for _, p := range paths {
 		name, err := c.pather.NameFromBlobPath(p)
 		if err != nil {
-			return nil, "", fmt.Errorf("invalid path %s: %s", p, err)
+			return nil, fmt.Errorf("invalid path %s: %s", p, err)
 		}
 		names = append(names, name)
 	}
-	return names, "", nil
+	return &backend.ListResult{
+		Names: names,
+	}, nil
 }

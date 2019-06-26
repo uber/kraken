@@ -169,9 +169,9 @@ func (c *Client) Upload(namespace, name string, src io.Reader) error {
 }
 
 // List lists names that start with prefix.
-func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, string, error) {
-	if options != nil && options.Paginated {
-		return nil, "", errors.New("pagination not supported")
+func (c *Client) List(prefix string, options backend.ListOptions) (*backend.ListResult, error) {
+	if options.Paginated {
+		return nil, errors.New("pagination not supported")
 	}
 
 	var names []string
@@ -182,10 +182,12 @@ func (c *Client) List(prefix string, options *backend.ListOptions) ([]string, st
 	objectsPage := iterator.NewPager(pageIterator, c.config.ListMaxKeys, "")
 	_, err := objectsPage.NextPage(&names)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	return names, "", nil
+	return &backend.ListResult{
+		Names: names,
+	}, nil
 }
 
 // isObjectNotFound is helper function for identify non-existing object error.
