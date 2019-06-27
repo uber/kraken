@@ -213,10 +213,15 @@ func isNotFound(err error) bool {
 }
 
 // List lists names with start with prefix.
-func (c *Client) List(prefix string, options backend.ListOptions) (*backend.ListResult, error) {
+func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
 	// For whatever reason, the S3 list API does not accept an absolute path
 	// for prefix. Thus, the root is stripped from the input and added manually
 	// to each output key.
+	options := backend.DefaultListOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	var names []string
 
 	addObjectsToNames := func(objects []*s3.Object) {

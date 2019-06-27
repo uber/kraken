@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs"
 	"github.com/uber/kraken/mocks/lib/backend/hdfsbackend/webhdfs"
 	"github.com/uber/kraken/utils/mockutil"
@@ -175,7 +174,7 @@ func TestClientList(t *testing.T) {
 
 			mocks.webhdfs.EXPECT().ListFileStatus("/root/empty").Return(nil, nil).MaxTimes(1)
 
-			result, err := client.List(test.prefix, backend.ListOptions{})
+			result, err := client.List(test.prefix)
 			require.NoError(err)
 			require.Equal(test.expected, result.Names)
 		})
@@ -216,6 +215,6 @@ func TestClientListErrorDoesNotLeakGoroutines(t *testing.T) {
 
 	initDirectoryTree(mocks, "/root", 10, 3) // 1000 nodes.
 
-	_, err := client.List("", backend.ListOptions{})
+	_, err := client.List("")
 	require.Error(err)
 }

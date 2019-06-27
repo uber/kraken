@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/mocks/lib/backend/gcsbackend"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/randutil"
@@ -182,7 +181,7 @@ func TestClientList(t *testing.T) {
 		"/root/test",
 	).Return(Alphabets())
 
-	result, err := client.List("test", backend.ListOptions{})
+	result, err := client.List("test")
 	require.NoError(err)
 	require.Equal([]string{"test/0", "test/1", "test/2", "test/3", "test/4"}, result.Names)
 }

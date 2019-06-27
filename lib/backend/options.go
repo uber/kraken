@@ -20,3 +20,38 @@ type ListOptions struct {
 	MaxKeys int64
 	ContinuationToken string
 }
+
+// DefaultListOptions defines the defaults for list operations.
+func DefaultListOptions() *ListOptions {
+	return &ListOptions{
+		Paginated: false,
+		MaxKeys: 1000,
+		ContinuationToken: "",
+	}
+}
+
+// ListOption is used to configure list calls via variadic functional options.
+type ListOption func(*ListOptions)
+
+// ListWithPagination configures the list command to use pagination.
+func ListWithPagination() ListOption {
+	return func(opt *ListOptions) {
+		opt.Paginated = true
+	}
+}
+
+// ListWithMaxKeys configures the list command to return a max
+// number of keys if pagination is enabled.
+func ListWithMaxKeys(max int64) ListOption {
+	return func(opt *ListOptions) {
+		opt.MaxKeys = max
+	}
+}
+
+// ListWithContinuationToken configures the list command return
+// results starting at the continuation token if pagination is enabled.
+func ListWithContinuationToken(token string) ListOption {
+	return func(opt *ListOptions) {
+		opt.ContinuationToken = token
+	}
+}

@@ -169,7 +169,12 @@ func (c *Client) Upload(namespace, name string, src io.Reader) error {
 }
 
 // List lists names that start with prefix.
-func (c *Client) List(prefix string, options backend.ListOptions) (*backend.ListResult, error) {
+func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
+	options := backend.DefaultListOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	if options.Paginated {
 		return nil, errors.New("pagination not supported")
 	}

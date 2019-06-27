@@ -50,18 +50,23 @@ func (mr *MockClientMockRecorder) Download(arg0, arg1, arg2 interface{}) *gomock
 }
 
 // List mocks base method
-func (m *MockClient) List(arg0 string, arg1 backend.ListOptions) (*backend.ListResult, error) {
+func (m *MockClient) List(arg0 string, arg1 ...backend.ListOption) (*backend.ListResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List", arg0, arg1)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "List", varargs...)
 	ret0, _ := ret[0].(*backend.ListResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // List indicates an expected call of List
-func (mr *MockClientMockRecorder) List(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) List(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockClient)(nil).List), arg0, arg1)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockClient)(nil).List), varargs...)
 }
 
 // Stat mocks base method
