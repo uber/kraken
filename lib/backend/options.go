@@ -25,7 +25,7 @@ type ListOptions struct {
 func DefaultListOptions() *ListOptions {
 	return &ListOptions{
 		Paginated: false,
-		MaxKeys: 1000,
+		MaxKeys: int64(DefaultListMaxKeys),
 		ContinuationToken: "",
 	}
 }
