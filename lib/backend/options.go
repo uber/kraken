@@ -13,7 +13,7 @@
 // limitations under the License.
 package backend
 
-// ListOptions defines a the options which can be specified
+// ListOptions defines the options which can be specified
 // when listing names. It is used to enable pagination in list requests.
 type ListOptions struct {
 	Paginated bool
