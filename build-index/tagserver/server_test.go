@@ -369,7 +369,9 @@ func TestListRepository(t *testing.T) {
 		names = append(names, repo+":"+tag)
 	}
 
-	mocks.backendClient.EXPECT().List(repo+"/_manifests/tags").Return(names, nil)
+	mocks.backendClient.EXPECT().List(repo+"/_manifests/tags").Return(&backend.ListResult{
+		Names: names,
+	}, nil)
 
 	result, err := client.ListRepository(repo)
 	require.NoError(err)
@@ -390,7 +392,9 @@ func TestList(t *testing.T) {
 	prefix := "namespace-foo/repo-bar/_manifests/tags"
 	names := []string{"latest", "0000", "0001"}
 
-	mocks.backendClient.EXPECT().List(prefix).Return(names, nil)
+	mocks.backendClient.EXPECT().List(prefix).Return(&backend.ListResult{
+		Names: names,
+	}, nil)
 
 	result, err := client.List(prefix)
 	require.NoError(err)
@@ -410,7 +414,9 @@ func TestListEmptyPrefix(t *testing.T) {
 
 	names := []string{"a", "b", "c"}
 
-	mocks.backendClient.EXPECT().List("").Return(names, nil)
+	mocks.backendClient.EXPECT().List("").Return(&backend.ListResult{
+		Names: names,
+	}, nil)
 
 	result, err := client.List("")
 	require.NoError(err)

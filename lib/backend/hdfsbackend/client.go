@@ -167,7 +167,16 @@ func (c *Client) sendAll(done <-chan struct{}, dirs []string, listJobs chan<- st
 }
 
 // List lists names which start with prefix.
-func (c *Client) List(prefix string) ([]string, error) {
+func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
+	options := backend.DefaultListOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if options.Paginated {
+		return nil, errors.New("pagination not supported")
+	}
+
 	root := path.Join(c.pather.BasePath(), prefix)
 
 	listJobs := make(chan string)
@@ -258,5 +267,7 @@ func (c *Client) List(prefix string) ([]string, error) {
 		}
 	}
 
-	return files, nil
+	return &backend.ListResult{
+		Names: files,
+	},  nil
 }

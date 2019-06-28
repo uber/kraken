@@ -181,7 +181,7 @@ func TestClientList(t *testing.T) {
 		"/root/test",
 	).Return(Alphabets())
 
-	names, err := client.List("test")
+	result, err := client.List("test")
 	require.NoError(err)
-	require.Equal([]string{"test/0", "test/1", "test/2", "test/3", "test/4"}, names)
+	require.Equal([]string{"test/0", "test/1", "test/2", "test/3", "test/4"}, result.Names)
 }

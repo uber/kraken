@@ -35,6 +35,8 @@ type S3 interface {
 		options ...func(*s3manager.Uploader)) (*s3manager.UploadOutput, error)
 
 	ListObjectsPages(input *s3.ListObjectsInput, fn func(*s3.ListObjectsOutput, bool) bool) error
+
+	ListObjectsV2(input *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error)
 }
 
 type join struct {

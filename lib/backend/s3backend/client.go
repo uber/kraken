@@ -213,17 +213,19 @@ func isNotFound(err error) bool {
 }
 
 // List lists names with start with prefix.
-func (c *Client) List(prefix string) ([]string, error) {
+func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
 	// For whatever reason, the S3 list API does not accept an absolute path
 	// for prefix. Thus, the root is stripped from the input and added manually
 	// to each output key.
+	options := backend.DefaultListOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	var names []string
-	err := c.s3.ListObjectsPages(&s3.ListObjectsInput{
-		Bucket:  aws.String(c.config.Bucket),
-		MaxKeys: aws.Int64(int64(c.config.ListMaxKeys)),
-		Prefix:  aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
-	}, func(page *s3.ListObjectsOutput, last bool) bool {
-		for _, object := range page.Contents {
+
+	addObjectsToNames := func(objects []*s3.Object) {
+		for _, object := range objects {
 			if object.Key == nil {
 				log.With(
 					"prefix", prefix,
@@ -237,10 +239,49 @@ func (c *Client) List(prefix string) ([]string, error) {
 			}
 			names = append(names, name)
 		}
+	}
+
+	if options.Paginated {
+		listInput := &s3.ListObjectsV2Input{
+			Bucket:  aws.String(c.config.Bucket),
+			MaxKeys: aws.Int64(options.MaxKeys),
+			Prefix:  aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
+		}
+
+		if options.ContinuationToken != "" {
+			listInput.ContinuationToken = aws.String(options.ContinuationToken)
+		}
+
+		listOutput, err := c.s3.ListObjectsV2(listInput)
+		if err != nil {
+			return nil, err
+		}
+
+		addObjectsToNames(listOutput.Contents)
+
+		continuationToken := ""
+		if listOutput.IsTruncated != nil && *listOutput.IsTruncated && listOutput.NextContinuationToken != nil {
+			continuationToken = *listOutput.NextContinuationToken
+		}
+
+		return &backend.ListResult{
+			Names: names,
+			ContinuationToken: continuationToken,
+		}, nil
+	}
+
+	err := c.s3.ListObjectsPages(&s3.ListObjectsInput{
+		Bucket:  aws.String(c.config.Bucket),
+		MaxKeys: aws.Int64(int64(c.config.ListMaxKeys)),
+		Prefix:  aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
+	}, func(page *s3.ListObjectsOutput, last bool) bool {
+		addObjectsToNames(page.Contents)
 		return true
 	})
 	if err != nil {
 		return nil, err
 	}
-	return names, nil
+	return &backend.ListResult{
+		Names: names,
+	}, nil
 }
