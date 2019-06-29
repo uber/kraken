@@ -16,11 +16,13 @@ package gcsbackend
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/mocks/lib/backend/gcsbackend"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/randutil"
@@ -142,8 +144,8 @@ func TestClientUpload(t *testing.T) {
 	require.NoError(client.Upload(core.NamespaceFixture(), "test", dataReader))
 }
 
-func Alphabets() *AlphaIterator {
-	it := &AlphaIterator{}
+func Alphabets(t *testing.T, maxIterate int) *AlphaIterator {
+	it := &AlphaIterator{assert: require.New(t), maxIterate: maxIterate}
 	it.pageInfo, it.nextFunc = iterator.NewPageInfo(
 		it.next,
 		func() int { return len(it.elems) },
@@ -151,10 +153,13 @@ func Alphabets() *AlphaIterator {
 	return it
 }
 
+// Iterates from 0-maxIterate
 type AlphaIterator struct {
-	pageInfo *iterator.PageInfo
-	nextFunc func() error
-	elems    []string
+	assert     *require.Assertions
+	pageInfo   *iterator.PageInfo
+	nextFunc   func() error
+	elems      []string
+	maxIterate int
 }
 
 func (it *AlphaIterator) PageInfo() *iterator.PageInfo {
@@ -162,26 +167,49 @@ func (it *AlphaIterator) PageInfo() *iterator.PageInfo {
 }
 
 func (it *AlphaIterator) next(pageSize int, pageToken string) (string, error) {
-	// A simple implementation that ignores the pageToken
-	for i := 0; i < pageSize; i++ {
+	i := 0
+	if pageToken != "" {
+		var err error
+		i, err = strconv.Atoi(pageToken)
+		it.assert.NoError(err)
+	}
+	endCount := i + pageSize
+	for ; i < endCount && i < it.maxIterate; i++ {
 		it.elems = append(it.elems, "test/"+strconv.Itoa(i))
 	}
-	return "", nil
+	if i == it.maxIterate {
+		return "", nil
+	}
+	return strconv.Itoa(i), nil
 }
 
 func TestClientList(t *testing.T) {
 	require := require.New(t)
+	maxIterate := 100
 
 	mocks, cleanup := newClientMocks(t)
 	defer cleanup()
 
 	client := mocks.new()
 
-	mocks.gcs.EXPECT().GetObjectIterator(
-		"/root/test",
-	).Return(Alphabets())
+	contToken := ""
+	for i := 0; i < maxIterate; {
+		mocks.gcs.EXPECT().GetObjectIterator(
+			"/root/test",
+		).Return(Alphabets(t, maxIterate))
 
-	result, err := client.List("test")
-	require.NoError(err)
-	require.Equal([]string{"test/0", "test/1", "test/2", "test/3", "test/4"}, result.Names)
+		count := (rand.Int() % 10) + 1
+		result, err := client.List("test", backend.ListWithPagination(),
+			backend.ListWithMaxKeys(count),
+			backend.ListWithContinuationToken(contToken))
+		require.NoError(err)
+		var expected []string
+		for j := i; j < (i+count) && j < maxIterate; j++ {
+			expected = append(expected, "test/"+strconv.Itoa(j))
+		}
+		require.Equal(expected, result.Names)
+		contToken = result.ContinuationToken
+		i += count
+	}
+	require.Equal(contToken, "")
 }
