@@ -241,47 +241,39 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		}
 	}
 
+	maxKeys := int64(c.config.ListMaxKeys)
+	continuationToken := ""
 	if options.Paginated {
-		listInput := &s3.ListObjectsV2Input{
-			Bucket:  aws.String(c.config.Bucket),
-			MaxKeys: aws.Int64(int64(options.MaxKeys)),
-			Prefix:  aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
-		}
-
-		if options.ContinuationToken != "" {
-			listInput.ContinuationToken = aws.String(options.ContinuationToken)
-		}
-
-		listOutput, err := c.s3.ListObjectsV2(listInput)
-		if err != nil {
-			return nil, err
-		}
-
-		addObjectsToNames(listOutput.Contents)
-
-		continuationToken := ""
-		if listOutput.IsTruncated != nil && *listOutput.IsTruncated && listOutput.NextContinuationToken != nil {
-			continuationToken = *listOutput.NextContinuationToken
-		}
-
-		return &backend.ListResult{
-			Names: names,
-			ContinuationToken: continuationToken,
-		}, nil
+		maxKeys = int64(options.MaxKeys)
+		continuationToken = options.ContinuationToken
 	}
 
-	err := c.s3.ListObjectsPages(&s3.ListObjectsInput{
-		Bucket:  aws.String(c.config.Bucket),
-		MaxKeys: aws.Int64(int64(c.config.ListMaxKeys)),
-		Prefix:  aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
-	}, func(page *s3.ListObjectsOutput, last bool) bool {
+	nextContinuationToken := ""
+	err := c.s3.ListObjectsV2Pages(&s3.ListObjectsV2Input{
+		Bucket:            aws.String(c.config.Bucket),
+		MaxKeys:           aws.Int64(maxKeys),
+		Prefix:            aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
+		ContinuationToken: aws.String(continuationToken),
+	}, func(page *s3.ListObjectsV2Output, last bool) bool {
 		addObjectsToNames(page.Contents)
-		return true
+
+		if page.IsTruncated != nil && *page.IsTruncated && page.NextContinuationToken != nil {
+			nextContinuationToken = *page.NextContinuationToken
+		}
+
+		return options.Paginated
 	})
+
 	if err != nil {
 		return nil, err
 	}
+
+	if !options.Paginated {
+		nextContinuationToken = ""
+	}
+
 	return &backend.ListResult{
-		Names: names,
+		Names:             names,
+		ContinuationToken: nextContinuationToken,
 	}, nil
 }
