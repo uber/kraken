@@ -222,10 +222,23 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		opt(options)
 	}
 
-	var names []string
+	maxKeys := int64(c.config.ListMaxKeys)
+	continuationToken := ""
+	if options.Paginated {
+		maxKeys = int64(options.MaxKeys)
+		continuationToken = options.ContinuationToken
+	}
 
-	addObjectsToNames := func(objects []*s3.Object) {
-		for _, object := range objects {
+	var names []string
+	nextContinuationToken := ""
+
+	err := c.s3.ListObjectsV2Pages(&s3.ListObjectsV2Input{
+		Bucket:            aws.String(c.config.Bucket),
+		MaxKeys:           aws.Int64(maxKeys),
+		Prefix:            aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
+		ContinuationToken: aws.String(continuationToken),
+	}, func(page *s3.ListObjectsV2Output, last bool) bool {
+		for _, object := range page.Contents {
 			if object.Key == nil {
 				log.With(
 					"prefix", prefix,
@@ -239,23 +252,6 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 			}
 			names = append(names, name)
 		}
-	}
-
-	maxKeys := int64(c.config.ListMaxKeys)
-	continuationToken := ""
-	if options.Paginated {
-		maxKeys = int64(options.MaxKeys)
-		continuationToken = options.ContinuationToken
-	}
-
-	nextContinuationToken := ""
-	err := c.s3.ListObjectsV2Pages(&s3.ListObjectsV2Input{
-		Bucket:            aws.String(c.config.Bucket),
-		MaxKeys:           aws.Int64(maxKeys),
-		Prefix:            aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
-		ContinuationToken: aws.String(continuationToken),
-	}, func(page *s3.ListObjectsV2Output, last bool) bool {
-		addObjectsToNames(page.Contents)
 
 		if page.IsTruncated != nil && *page.IsTruncated && page.NextContinuationToken != nil {
 			nextContinuationToken = *page.NextContinuationToken
