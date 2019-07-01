@@ -193,19 +193,21 @@ func TestClientList(t *testing.T) {
 		input *s3.ListObjectsV2Input,
 		f func(page *s3.ListObjectsV2Output, last bool) bool) error {
 
-		f(&s3.ListObjectsV2Output{
+		shouldContinue := f(&s3.ListObjectsV2Output{
 			Contents: []*s3.Object{
 				{Key: aws.String("root/test/a")},
 				{Key: aws.String("root/test/b")},
 			},
 		}, false)
 
-		f(&s3.ListObjectsV2Output{
-			Contents: []*s3.Object{
-				{Key: aws.String("root/test/c")},
-				{Key: aws.String("root/test/d")},
-			},
-		}, true)
+		if shouldContinue {
+			f(&s3.ListObjectsV2Output{
+				Contents: []*s3.Object{
+					{Key: aws.String("root/test/c")},
+					{Key: aws.String("root/test/d")},
+				},
+			}, true)
+		}
 
 		return nil
 	})

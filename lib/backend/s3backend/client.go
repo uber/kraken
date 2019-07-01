@@ -257,7 +257,7 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 			nextContinuationToken = *page.NextContinuationToken
 		}
 
-		return options.Paginated
+		return !options.Paginated
 	})
 
 	if err != nil {
