@@ -17,7 +17,7 @@ package backend
 // when listing names. It is used to enable pagination in list requests.
 type ListOptions struct {
 	Paginated bool
-	MaxKeys int64
+	MaxKeys int
 	ContinuationToken string
 }
 
@@ -25,7 +25,7 @@ type ListOptions struct {
 func DefaultListOptions() *ListOptions {
 	return &ListOptions{
 		Paginated: false,
-		MaxKeys: int64(DefaultListMaxKeys),
+		MaxKeys: DefaultListMaxKeys,
 		ContinuationToken: "",
 	}
 }
@@ -42,7 +42,7 @@ func ListWithPagination() ListOption {
 
 // ListWithMaxKeys configures the list command to return a max
 // number of keys if pagination is enabled.
-func ListWithMaxKeys(max int64) ListOption {
+func ListWithMaxKeys(max int) ListOption {
 	return func(opt *ListOptions) {
 		opt.MaxKeys = max
 	}

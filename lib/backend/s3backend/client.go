@@ -244,7 +244,7 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 	if options.Paginated {
 		listInput := &s3.ListObjectsV2Input{
 			Bucket:  aws.String(c.config.Bucket),
-			MaxKeys: aws.Int64(options.MaxKeys),
+			MaxKeys: aws.Int64(int64(options.MaxKeys)),
 			Prefix:  aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
 		}
 

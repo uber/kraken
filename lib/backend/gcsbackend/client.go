@@ -175,23 +175,29 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		opt(options)
 	}
 
-	if options.Paginated {
-		return nil, errors.New("pagination not supported")
-	}
-
 	var names []string
 
 	absPrefix := path.Join(c.pather.BasePath(), prefix)
 	pageIterator := c.gcs.GetObjectIterator(absPrefix)
-	// Start at beginning.
-	objectsPage := iterator.NewPager(pageIterator, c.config.ListMaxKeys, "")
-	_, err := objectsPage.NextPage(&names)
+
+	maxKeys := c.config.ListMaxKeys
+	paginationToken := ""
+	if options.Paginated {
+		maxKeys = options.MaxKeys
+		paginationToken = options.ContinuationToken
+	}
+	objectsPage := iterator.NewPager(pageIterator, maxKeys, paginationToken)
+	continuationToken, err := objectsPage.NextPage(&names)
 	if err != nil {
 		return nil, err
 	}
+	if !options.Paginated {
+		continuationToken = ""
+	}
 
 	return &backend.ListResult{
-		Names: names,
+		Names:             names,
+		ContinuationToken: continuationToken,
 	}, nil
 }
 
