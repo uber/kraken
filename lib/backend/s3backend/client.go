@@ -222,6 +222,8 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		opt(options)
 	}
 
+	// If paginiated is enabled use the maximum number of keys requests from thhe options,
+	// otherwise fall back to the configuration's max keys
 	maxKeys := int64(c.config.ListMaxKeys)
 	continuationToken := ""
 	if options.Paginated {
@@ -231,7 +233,6 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 
 	var names []string
 	nextContinuationToken := ""
-
 	err := c.s3.ListObjectsV2Pages(&s3.ListObjectsV2Input{
 		Bucket:            aws.String(c.config.Bucket),
 		MaxKeys:           aws.Int64(maxKeys),
