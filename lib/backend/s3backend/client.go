@@ -254,11 +254,18 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 			names = append(names, name)
 		}
 
+
+		if int64(len(names)) < maxKeys {
+			// Continue iterating pages to get more keys
+			return true
+		}
+
+		// Attempt to capture the continuation token before we stop iterating pages
 		if page.IsTruncated != nil && *page.IsTruncated && page.NextContinuationToken != nil {
 			nextContinuationToken = *page.NextContinuationToken
 		}
 
-		return int64(len(names)) < maxKeys
+		return false
 	})
 
 	if err != nil {
