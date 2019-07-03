@@ -181,30 +181,33 @@ func TestClientList(t *testing.T) {
 
 	client := mocks.new()
 
-	mocks.s3.EXPECT().ListObjectsPages(
-		&s3.ListObjectsInput{
-			Bucket:  aws.String("test-bucket"),
-			MaxKeys: aws.Int64(250),
-			Prefix:  aws.String("root/test"),
+	mocks.s3.EXPECT().ListObjectsV2Pages(
+		&s3.ListObjectsV2Input{
+			Bucket:            aws.String("test-bucket"),
+			MaxKeys:           aws.Int64(250),
+			Prefix:            aws.String("root/test"),
+			ContinuationToken: aws.String(""),
 		},
 		gomock.Any(),
 	).DoAndReturn(func(
-		input *s3.ListObjectsInput,
-		f func(page *s3.ListObjectsOutput, last bool) bool) error {
+		input *s3.ListObjectsV2Input,
+		f func(page *s3.ListObjectsV2Output, last bool) bool) error {
 
-		f(&s3.ListObjectsOutput{
+		shouldContinue := f(&s3.ListObjectsV2Output{
 			Contents: []*s3.Object{
 				{Key: aws.String("root/test/a")},
 				{Key: aws.String("root/test/b")},
 			},
 		}, false)
 
-		f(&s3.ListObjectsOutput{
-			Contents: []*s3.Object{
-				{Key: aws.String("root/test/c")},
-				{Key: aws.String("root/test/d")},
-			},
-		}, true)
+		if shouldContinue {
+			f(&s3.ListObjectsV2Output{
+				Contents: []*s3.Object{
+					{Key: aws.String("root/test/c")},
+					{Key: aws.String("root/test/d")},
+				},
+			}, true)
+		}
 
 		return nil
 	})
@@ -222,46 +225,51 @@ func TestClientListPaginated(t *testing.T) {
 
 	client := mocks.new()
 
-	mocks.s3.EXPECT().ListObjectsV2(
+	mocks.s3.EXPECT().ListObjectsV2Pages(
 		&s3.ListObjectsV2Input{
-			Bucket:  aws.String("test-bucket"),
-			MaxKeys: aws.Int64(2),
-			Prefix:  aws.String("root/test"),
+			Bucket:            aws.String("test-bucket"),
+			MaxKeys:           aws.Int64(2),
+			Prefix:            aws.String("root/test"),
+			ContinuationToken: aws.String(""),
 		},
-	).DoAndReturn(func(input *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
-		return &s3.ListObjectsV2Output{
+		gomock.Any(),
+	).DoAndReturn(func(
+		input *s3.ListObjectsV2Input,
+		f func(page *s3.ListObjectsV2Output, last bool) bool) error {
+
+		f(&s3.ListObjectsV2Output{
 			Contents: []*s3.Object{
-				&s3.Object{
-					Key: aws.String("root/test/a"),
-				},
-				&s3.Object{
-					Key: aws.String("root/test/b"),
-				},
+				{Key: aws.String("root/test/a")},
+				{Key: aws.String("root/test/b")},
 			},
-			IsTruncated: aws.Bool(true),
+			IsTruncated:           aws.Bool(true),
 			NextContinuationToken: aws.String("test-continuation-token"),
-		}, nil
+		}, false)
+
+		return nil
 	})
 
-	mocks.s3.EXPECT().ListObjectsV2(
+	mocks.s3.EXPECT().ListObjectsV2Pages(
 		&s3.ListObjectsV2Input{
-			Bucket:  aws.String("test-bucket"),
-			MaxKeys: aws.Int64(2),
-			Prefix:  aws.String("root/test"),
+			Bucket:            aws.String("test-bucket"),
+			MaxKeys:           aws.Int64(2),
+			Prefix:            aws.String("root/test"),
 			ContinuationToken: aws.String("test-continuation-token"),
 		},
-	).DoAndReturn(func(input *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
-		return &s3.ListObjectsV2Output{
+		gomock.Any(),
+	).DoAndReturn(func(
+		input *s3.ListObjectsV2Input,
+		f func(page *s3.ListObjectsV2Output, last bool) bool) error {
+
+		f(&s3.ListObjectsV2Output{
 			Contents: []*s3.Object{
-				&s3.Object{
-					Key: aws.String("root/test/c"),
-				},
-				&s3.Object{
-					Key: aws.String("root/test/d"),
-				},
+				{Key: aws.String("root/test/c")},
+				{Key: aws.String("root/test/d")},
 			},
 			IsTruncated: aws.Bool(false),
-		}, nil
+		}, true)
+
+		return nil
 	})
 
 	result, err := client.List("test",

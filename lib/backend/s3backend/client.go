@@ -222,10 +222,24 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		opt(options)
 	}
 
-	var names []string
+	// If paginiated is enabled use the maximum number of keys requests from thhe options,
+	// otherwise fall back to the configuration's max keys
+	maxKeys := int64(c.config.ListMaxKeys)
+	continuationToken := ""
+	if options.Paginated {
+		maxKeys = int64(options.MaxKeys)
+		continuationToken = options.ContinuationToken
+	}
 
-	addObjectsToNames := func(objects []*s3.Object) {
-		for _, object := range objects {
+	var names []string
+	nextContinuationToken := ""
+	err := c.s3.ListObjectsV2Pages(&s3.ListObjectsV2Input{
+		Bucket:            aws.String(c.config.Bucket),
+		MaxKeys:           aws.Int64(maxKeys),
+		Prefix:            aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
+		ContinuationToken: aws.String(continuationToken),
+	}, func(page *s3.ListObjectsV2Output, last bool) bool {
+		for _, object := range page.Contents {
 			if object.Key == nil {
 				log.With(
 					"prefix", prefix,
@@ -239,49 +253,27 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 			}
 			names = append(names, name)
 		}
-	}
 
-	if options.Paginated {
-		listInput := &s3.ListObjectsV2Input{
-			Bucket:  aws.String(c.config.Bucket),
-			MaxKeys: aws.Int64(int64(options.MaxKeys)),
-			Prefix:  aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
+
+		if int64(len(names)) < maxKeys {
+			// Continue iterating pages to get more keys
+			return true
 		}
 
-		if options.ContinuationToken != "" {
-			listInput.ContinuationToken = aws.String(options.ContinuationToken)
+		// Attempt to capture the continuation token before we stop iterating pages
+		if page.IsTruncated != nil && *page.IsTruncated && page.NextContinuationToken != nil {
+			nextContinuationToken = *page.NextContinuationToken
 		}
 
-		listOutput, err := c.s3.ListObjectsV2(listInput)
-		if err != nil {
-			return nil, err
-		}
-
-		addObjectsToNames(listOutput.Contents)
-
-		continuationToken := ""
-		if listOutput.IsTruncated != nil && *listOutput.IsTruncated && listOutput.NextContinuationToken != nil {
-			continuationToken = *listOutput.NextContinuationToken
-		}
-
-		return &backend.ListResult{
-			Names: names,
-			ContinuationToken: continuationToken,
-		}, nil
-	}
-
-	err := c.s3.ListObjectsPages(&s3.ListObjectsInput{
-		Bucket:  aws.String(c.config.Bucket),
-		MaxKeys: aws.Int64(int64(c.config.ListMaxKeys)),
-		Prefix:  aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
-	}, func(page *s3.ListObjectsOutput, last bool) bool {
-		addObjectsToNames(page.Contents)
-		return true
+		return false
 	})
+
 	if err != nil {
 		return nil, err
 	}
+
 	return &backend.ListResult{
-		Names: names,
+		Names:             names,
+		ContinuationToken: nextContinuationToken,
 	}, nil
 }
