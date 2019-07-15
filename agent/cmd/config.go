@@ -43,4 +43,5 @@ type Config struct {
 	RegistryBackup  string                         `yaml:"registry_backup"`
 	Nginx           nginx.Config                   `yaml:"nginx"`
 	TLS             httputil.TLSConfig             `yaml:"tls"`
+	AllowedCidrs    []string                       `yaml:"allowed_cidrs"`
 }

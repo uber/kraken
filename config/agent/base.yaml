@@ -58,6 +58,11 @@ registry:
 
 peer_id_factory: addr_hash
 
+# Allow agent to only serve localhost and Docker default bridge requests.
+allowed_cidrs:
+  - 127.0.0.1
+  - 172.17.0.1
+
 nginx:
   name: kraken-agent
   cache_dir: /var/cache/kraken/kraken-agent/nginx/
