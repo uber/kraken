@@ -10,6 +10,7 @@ services:
 
 env:
   - PATH=$HOME/protoc/bin:$PATH
+  - GOPATH="" GO111MODULE=on
 
 before_script:
 - "curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | sudo bash"
