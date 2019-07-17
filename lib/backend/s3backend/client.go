@@ -225,10 +225,14 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 	// If paginiated is enabled use the maximum number of keys requests from thhe options,
 	// otherwise fall back to the configuration's max keys
 	maxKeys := int64(c.config.ListMaxKeys)
-	continuationToken := ""
+	var continuationToken *string
 	if options.Paginated {
 		maxKeys = int64(options.MaxKeys)
-		continuationToken = options.ContinuationToken
+		// An empty continuationToken should be left as nil when sending paginated list
+		// requests to s3
+		if options.ContinuationToken != "" {
+			continuationToken = aws.String(options.ContinuationToken)
+		}
 	}
 
 	var names []string
@@ -237,7 +241,7 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		Bucket:            aws.String(c.config.Bucket),
 		MaxKeys:           aws.Int64(maxKeys),
 		Prefix:            aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
-		ContinuationToken: aws.String(continuationToken),
+		ContinuationToken: continuationToken,
 	}, func(page *s3.ListObjectsV2Output, last bool) bool {
 		for _, object := range page.Contents {
 			if object.Key == nil {
