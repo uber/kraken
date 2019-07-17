@@ -186,7 +186,6 @@ func TestClientList(t *testing.T) {
 			Bucket:            aws.String("test-bucket"),
 			MaxKeys:           aws.Int64(250),
 			Prefix:            aws.String("root/test"),
-			ContinuationToken: aws.String(""),
 		},
 		gomock.Any(),
 	).DoAndReturn(func(
@@ -230,7 +229,6 @@ func TestClientListPaginated(t *testing.T) {
 			Bucket:            aws.String("test-bucket"),
 			MaxKeys:           aws.Int64(2),
 			Prefix:            aws.String("root/test"),
-			ContinuationToken: aws.String(""),
 		},
 		gomock.Any(),
 	).DoAndReturn(func(
