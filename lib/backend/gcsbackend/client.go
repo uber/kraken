@@ -175,8 +175,6 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		opt(options)
 	}
 
-	var names []string
-
 	absPrefix := path.Join(c.pather.BasePath(), prefix)
 	pageIterator := c.gcs.GetObjectIterator(absPrefix)
 
@@ -186,19 +184,17 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		maxKeys = options.MaxKeys
 		paginationToken = options.ContinuationToken
 	}
-	objectsPage := iterator.NewPager(pageIterator, maxKeys, paginationToken)
-	continuationToken, err := objectsPage.NextPage(&names)
+
+	pager := iterator.NewPager(pageIterator, maxKeys, paginationToken)
+	result, err := c.gcs.NextPage(pager)
 	if err != nil {
 		return nil, err
 	}
 	if !options.Paginated {
-		continuationToken = ""
+		result.ContinuationToken = ""
 	}
 
-	return &backend.ListResult{
-		Names:             names,
-		ContinuationToken: continuationToken,
-	}, nil
+	return result, nil
 }
 
 // isObjectNotFound is helper function for identify non-existing object error.
@@ -263,4 +259,23 @@ func (g *GCSImpl) GetObjectIterator(prefix string) iterator.Pageable {
 
 	query.Prefix = prefix
 	return g.bucket.Objects(g.ctx, &query)
+}
+
+func (g *GCSImpl) NextPage(pager *iterator.Pager) (*backend.ListResult,
+	error) {
+
+	var objectAttrs []*storage.ObjectAttrs
+	continuationToken, err := pager.NextPage(&objectAttrs)
+	if err != nil {
+		return nil, err
+	}
+
+	names := make([]string, len(objectAttrs))
+	for idx, objectAttr := range objectAttrs {
+		names[idx] = objectAttr.Name
+	}
+	return &backend.ListResult{
+		Names:             names,
+		ContinuationToken: continuationToken,
+	}, nil
 }

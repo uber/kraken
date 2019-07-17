@@ -7,6 +7,7 @@ package mockgcsbackend
 import (
 	storage "cloud.google.com/go/storage"
 	gomock "github.com/golang/mock/gomock"
+	backend "github.com/uber/kraken/lib/backend"
 	iterator "google.golang.org/api/iterator"
 	io "io"
 	reflect "reflect"
@@ -62,6 +63,21 @@ func (m *MockGCS) GetObjectIterator(arg0 string) iterator.Pageable {
 func (mr *MockGCSMockRecorder) GetObjectIterator(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetObjectIterator", reflect.TypeOf((*MockGCS)(nil).GetObjectIterator), arg0)
+}
+
+// NextPage mocks base method
+func (m *MockGCS) NextPage(arg0 *iterator.Pager) (*backend.ListResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NextPage", arg0)
+	ret0, _ := ret[0].(*backend.ListResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NextPage indicates an expected call of NextPage
+func (mr *MockGCSMockRecorder) NextPage(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextPage", reflect.TypeOf((*MockGCS)(nil).NextPage), arg0)
 }
 
 // ObjectAttrs mocks base method

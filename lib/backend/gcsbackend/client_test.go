@@ -193,20 +193,32 @@ func TestClientList(t *testing.T) {
 	client := mocks.new()
 
 	contToken := ""
+	mocks.gcs.EXPECT().GetObjectIterator(
+		"/root/test",
+	).AnyTimes().Return(Alphabets(t, maxIterate))
 	for i := 0; i < maxIterate; {
-		mocks.gcs.EXPECT().GetObjectIterator(
-			"/root/test",
-		).Return(Alphabets(t, maxIterate))
-
 		count := (rand.Int() % 10) + 1
-		result, err := client.List("test", backend.ListWithPagination(),
-			backend.ListWithMaxKeys(count),
-			backend.ListWithContinuationToken(contToken))
-		require.NoError(err)
 		var expected []string
 		for j := i; j < (i+count) && j < maxIterate; j++ {
 			expected = append(expected, "test/"+strconv.Itoa(j))
 		}
+
+		continuationToken := ""
+		if (i + count) < maxIterate {
+			strconv.Itoa(i + count)
+		}
+		result := &backend.ListResult{
+			Names:             expected,
+			ContinuationToken: continuationToken,
+		}
+		mocks.gcs.EXPECT().NextPage(
+			gomock.Any(),
+		).Return(result, nil)
+
+		result, err := client.List("test", backend.ListWithPagination(),
+			backend.ListWithMaxKeys(count),
+			backend.ListWithContinuationToken(contToken))
+		require.NoError(err)
 		require.Equal(expected, result.Names)
 		contToken = result.ContinuationToken
 		i += count
