@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -44,6 +45,11 @@ import (
 	"github.com/uber-go/tally"
 )
 
+const (
+	limitQ  string = "limit"
+	offsetQ string = "offset"
+)
+
 // Server provides tag operations for the build-index.
 type Server struct {
 	config            Config
@@ -61,6 +67,16 @@ type Server struct {
 
 	// For checking if a tag has all dependent blobs.
 	depResolver tagtype.DependencyResolver
+}
+
+// List Response with pagination.
+type ListResponse struct {
+	Links struct {
+		Next string `json:"next"`
+		Self string `json:"self"`
+	}
+	Size   int      `json:"size"`
+	Result []string `json:"result"`
 }
 
 // New creates a new Server.
@@ -244,11 +260,23 @@ func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return handler.Errorf("backend manager: %s", err)
 	}
-	result, err := client.List(prefix)
+
+	opts, err := buildPaginationOptions(r.URL)
 	if err != nil {
 		return err
 	}
-	if err := json.NewEncoder(w).Encode(&result.Names); err != nil {
+
+	result, err := client.List(prefix, opts...)
+	if err != nil {
+		return handler.Errorf("error listing from backend: %s", err)
+	}
+
+	resp, err := buildPaginationResponse(r.URL, result.ContinuationToken,
+		result.Names)
+	if err != nil {
+		return err
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		return handler.Errorf("json encode: %s", err)
 	}
 	return nil
@@ -265,10 +293,17 @@ func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return handler.Errorf("backend manager: %s", err)
 	}
-	result, err := client.List(path.Join(repo, "_manifests/tags"))
+
+	opts, err := buildPaginationOptions(r.URL)
 	if err != nil {
 		return err
 	}
+
+	result, err := client.List(path.Join(repo, "_manifests/tags"), opts...)
+	if err != nil {
+		return handler.Errorf("error listing from backend: %s", err)
+	}
+
 	var tags []string
 	for _, name := range result.Names {
 		// Strip repo prefix.
@@ -279,7 +314,12 @@ func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) e
 		}
 		tags = append(tags, parts[1])
 	}
-	if err := json.NewEncoder(w).Encode(&tags); err != nil {
+
+	resp, err := buildPaginationResponse(r.URL, result.ContinuationToken, tags)
+	if err != nil {
+		return err
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		return handler.Errorf("json encode: %s", err)
 	}
 	return nil
@@ -404,4 +444,70 @@ func (s *Server) replicateTag(tag string, d core.Digest, deps core.DigestList) e
 		s.stats.Counter("duplicate_replicate_failures").Inc(1)
 	}
 	return nil
+}
+
+func buildPaginationOptions(u *url.URL) ([]backend.ListOption, error) {
+	var opts []backend.ListOption
+	q := u.Query()
+	for k, v := range q {
+		if len(v) != 1 {
+			return nil, handler.Errorf(
+				"invalid query %s:%s", k, v).Status(http.StatusBadRequest)
+		}
+		switch k {
+		case limitQ:
+			limitCount, err := strconv.Atoi(v[0])
+			if err != nil {
+				return nil, handler.Errorf(
+					"invalid limit %s: %s", v, err).Status(http.StatusBadRequest)
+			}
+			if limitCount == 0 {
+				return nil, handler.Errorf(
+					"invalid limit %d", limitCount).Status(http.StatusBadRequest)
+			}
+			opts = append(opts, backend.ListWithMaxKeys(limitCount))
+		case offsetQ:
+			opts = append(opts, backend.ListWithContinuationToken(v[0]))
+		default:
+			return nil, handler.Errorf(
+				"invalid query %s", k).Status(http.StatusBadRequest)
+		}
+	}
+	if len(opts) > 0 {
+		// Enable pagination if either or both of the query param exists.
+		opts = append(opts, backend.ListWithPagination())
+	}
+
+	return opts, nil
+}
+
+func buildPaginationResponse(u *url.URL, continuationToken string,
+	result []string) (interface{}, error) {
+
+	if continuationToken == "" {
+		return result, nil
+	}
+
+	// Deep copy url.
+	nextUrl, err := url.Parse(u.String())
+	if err != nil {
+		return nil, handler.Errorf(
+			"invalid url string: %s", err).Status(http.StatusBadRequest)
+	}
+	v := url.Values{}
+	if limit := u.Query().Get(limitQ); limit != "" {
+		v.Add(limitQ, limit)
+	}
+	// ContinuationToken cannot be empty here.
+	v.Add(offsetQ, continuationToken)
+	nextUrl.RawQuery = v.Encode()
+
+	resp := ListResponse{
+		Size:   len(result),
+		Result: result,
+	}
+	resp.Links.Next = nextUrl.String()
+	resp.Links.Self = u.String()
+
+	return &resp, nil
 }

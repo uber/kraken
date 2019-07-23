@@ -17,6 +17,7 @@ import (
 	"io"
 
 	"cloud.google.com/go/storage"
+	"github.com/uber/kraken/lib/backend"
 	"google.golang.org/api/iterator"
 )
 
@@ -26,4 +27,5 @@ type GCS interface {
 	Download(objectName string, w io.Writer) (int64, error)
 	Upload(objectName string, r io.Reader) (int64, error)
 	GetObjectIterator(prefix string) iterator.Pageable
+	NextPage(pager *iterator.Pager) (*backend.ListResult, error)
 }
