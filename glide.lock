@@ -1,6 +1,16 @@
-hash: b5df164903fc995063caa95ad3e038813a2e135f6fc370e56cccf7aa3371dcc1
-updated: 2019-04-02T14:25:48.113291-07:00
+hash: 1c75c63dee3f083dd0b0b502f4f0caf9c6d9cbf504510db1b09151756378a33c
+updated: 2019-06-10T12:53:09.920438-07:00
 imports:
+- name: cloud.google.com/go
+  version: 457ea5c15ccf3b87db582c450e80101989da35f7
+  subpackages:
+  - compute/metadata
+  - iam
+  - internal
+  - internal/optional
+  - internal/trace
+  - internal/version
+  - storage
 - name: github.com/alecthomas/kingpin
   version: 947dcec5ba9c011838740e680966fd7087a71d0d
 - name: github.com/alecthomas/template
@@ -16,7 +26,7 @@ imports:
   subpackages:
   - lib/go/thrift
 - name: github.com/aws/aws-sdk-go
-  version: 4e871608b534ce2562c8330cf41d001db1c5d7d3
+  version: bdafd99f31a0103ec73bcabfc9498aef3252d515
   subpackages:
   - aws
   - aws/awserr
@@ -45,6 +55,7 @@ imports:
   - private/protocol
   - private/protocol/eventstream
   - private/protocol/eventstream/eventstreamapi
+  - private/protocol/json/jsonutil
   - private/protocol/query
   - private/protocol/query/queryutil
   - private/protocol/rest
@@ -76,7 +87,7 @@ imports:
   subpackages:
   - statsd
 - name: github.com/cenkalti/backoff
-  version: 1e4cf3da559842a91afcb6ea6141451e6c30c618
+  version: 2146c93394225c3732078705043ce9f26584d334
 - name: github.com/docker/distribution
   version: 2461543d988979529609e8cb6fca9ca190dc48da
   subpackages:
@@ -117,7 +128,7 @@ imports:
   - uuid
   - version
 - name: github.com/docker/docker-credential-helpers
-  version: 5241b46610f2491efdf9d1c85f1ddf5b02f6d962
+  version: 8a9f93a99ff87f416cc79f267c68151af0026f60
   subpackages:
   - client
   - credentials
@@ -154,19 +165,30 @@ imports:
 - name: github.com/gofrs/uuid
   version: 2593f3d8aa45b432942fe24758a279312d0f8719
 - name: github.com/golang/mock
-  version: 51421b967af1f557f93a59e0057aaf15ca02e29c
+  version: 9fa652df1129bef0e734c9cf9bf6dbae9ef3b9fa
   subpackages:
   - gomock
 - name: github.com/golang/protobuf
   version: b5d812f8a3706043e23a9cd5babf2e5423744d30
   subpackages:
   - proto
+  - protoc-gen-go/descriptor
+  - ptypes
+  - ptypes/any
+  - ptypes/duration
+  - ptypes/timestamp
+- name: github.com/googleapis/gax-go
+  version: bd5b16380fd03dc758d11cef74ba2e3bc8b0e8c2
+  subpackages:
+  - v2
 - name: github.com/gorilla/handlers
   version: ac6d24f88de4584385a0cb3a88f953d08a2f7a05
 - name: github.com/gorilla/mux
-  version: a7962380ca08b5a188038c69871b8d3fbdf31e89
+  version: ed099d42384823742bba0bf9a72b53b55c9e2e38
 - name: github.com/hashicorp/golang-lru
   version: 7087cb70de9f7a8bc0a10c375cb0d2280a8edf9c
+  subpackages:
+  - simplelru
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/jackpal/bencode-go
@@ -235,7 +257,7 @@ imports:
 - name: github.com/spf13/pflag
   version: 24fa6976df40757dce6aea913e7b81ade90530e1
 - name: github.com/uber-go/tally
-  version: e9a67ec1839e1f6e5133dbcca2f57bec12fdeda2
+  version: 24c699f78afd17db5aac42f83c1c5cad70254294
   subpackages:
   - m3
   - m3/customtransports
@@ -254,8 +276,26 @@ imports:
   version: 635ca6035f2355e29fc558effa613d0d5867aac8
 - name: github.com/yvasiyarov/newrelic_platform_go
   version: 9c099fbc30e90de5bb5c5f94aa5fd08f2daeaacd
+- name: go.opencensus.io
+  version: a092815c29e3a8fb79dfa966ad048ed20f1f8c01
+  subpackages:
+  - internal
+  - internal/tagencoding
+  - metric/metricdata
+  - metric/metricproducer
+  - plugin/ochttp
+  - plugin/ochttp/propagation/b3
+  - resource
+  - stats
+  - stats/internal
+  - stats/view
+  - tag
+  - trace
+  - trace/internal
+  - trace/propagation
+  - trace/tracestate
 - name: go.uber.org/atomic
-  version: 1ea20fb1cbb1cc08cbd0d913a96dead89aa18289
+  version: df976f2515e274675050de7b3f42545de80594fd
 - name: go.uber.org/multierr
   version: 3c4937480c32f4c13a875a1829af76c98ca3d40a
 - name: go.uber.org/zap
@@ -274,6 +314,20 @@ imports:
   version: 74de082e2cca95839e88aa0aeee5aadf6ce7710f
   subpackages:
   - context
+  - context/ctxhttp
+  - http/httpguts
+  - http2
+  - http2/hpack
+  - idna
+  - internal/timeseries
+  - trace
+- name: golang.org/x/oauth2
+  version: 0f29369cfe4552d0e4bcddc57cc75f4d7e672a33
+  subpackages:
+  - google
+  - internal
+  - jws
+  - jwt
 - name: golang.org/x/sync
   version: e225da77a7e68af35c70ccbf71af2b83e6acac3c
   subpackages:
@@ -282,10 +336,83 @@ imports:
   version: baf5eb976a8cd65845293cd814ea151018552292
   subpackages:
   - unix
+- name: golang.org/x/text
+  version: 342b2e1fbaa52c93f31447ad2c6abc048c63e475
+  subpackages:
+  - secure/bidirule
+  - transform
+  - unicode/bidi
+  - unicode/norm
 - name: golang.org/x/time
   version: 9d24e82272b4f38b78bc8cff74fa936d31ccd8ef
   subpackages:
   - rate
+- name: google.golang.org/api
+  version: aac82e61c0c8fe133c297b4b59316b9f481e1f0a
+  subpackages:
+  - gensupport
+  - googleapi
+  - googleapi/internal/uritemplates
+  - googleapi/transport
+  - internal
+  - iterator
+  - option
+  - storage/v1
+  - transport/http
+  - transport/http/internal/propagation
+- name: google.golang.org/appengine
+  version: b2f4a3cf3c67576a2ee09e1fe62656a5086ce880
+  subpackages:
+  - internal
+  - internal/base
+  - internal/datastore
+  - internal/log
+  - internal/remote_api
+  - internal/urlfetch
+  - urlfetch
+- name: google.golang.org/genproto
+  version: eb0b1bdb6ae60fcfc41b8d907b50dfb346112301
+  subpackages:
+  - googleapis/api/annotations
+  - googleapis/iam/v1
+  - googleapis/rpc/code
+  - googleapis/rpc/status
+  - googleapis/type/expr
+- name: google.golang.org/grpc
+  version: b681a11d086e32e91ee8e61afc22a2c3c7870aba
+  subpackages:
+  - balancer
+  - balancer/base
+  - balancer/roundrobin
+  - binarylog/grpc_binarylog_v1
+  - codes
+  - connectivity
+  - credentials
+  - credentials/internal
+  - encoding
+  - encoding/proto
+  - grpclog
+  - internal
+  - internal/backoff
+  - internal/balancerload
+  - internal/binarylog
+  - internal/channelz
+  - internal/envconfig
+  - internal/grpcrand
+  - internal/grpcsync
+  - internal/syscall
+  - internal/transport
+  - keepalive
+  - metadata
+  - naming
+  - peer
+  - resolver
+  - resolver/dns
+  - resolver/passthrough
+  - serviceconfig
+  - stats
+  - status
+  - tap
 - name: gopkg.in/validator.v2
   version: 135c24b11c19e52befcae2ec3fca5d9b78c4e98e
 - name: gopkg.in/yaml.v2

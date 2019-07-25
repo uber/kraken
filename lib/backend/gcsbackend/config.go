@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	   http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package s3backend
+package gcsbackend
 
 import (
 	"github.com/c2h5oh/datasize"
@@ -19,19 +19,15 @@ import (
 	"github.com/uber/kraken/lib/backend"
 )
 
-// Config defines s3 connection specific
+// Config defines gcs connection specific
 // parameters and authetication credentials
 type Config struct {
 	Username string `yaml:"username"` // IAM username for selecting credentials.
-	Region   string `yaml:"region"`   // AWS S3 region
-	Bucket   string `yaml:"bucket"`   // S3 bucket
+	Location string `yaml:"location"` // Location of the bucket. Defautls to "US".
+	Bucket   string `yaml:"bucket"`   // GCS bucket
 
-	RootDirectory    string `yaml:"root_directory"`     // S3 root directory for docker images
-	UploadPartSize   int64  `yaml:"upload_part_size"`   // part size s3 manager uses for upload
-	DownloadPartSize int64  `yaml:"download_part_size"` // part size s3 manager uses for download
-
-	UploadConcurrency   int `yaml:"upload_concurrency"`   // # of concurrent go-routines s3 manager uses for upload
-	DownloadConcurrency int `yaml:"download_concurrency"` // # of concurrent go-routines s3 manager uses for download
+	RootDirectory   string `yaml:"root_directory"`   // GCS root directory for docker images
+	UploadChunkSize int64  `yaml:"upload_part_size"` // part size gcs manager uses for upload
 
 	// ListMaxKeys sets the max keys returned per page.
 	ListMaxKeys int `yaml:"list_max_keys"`
@@ -50,25 +46,14 @@ type UserAuthConfig map[string]AuthConfig
 
 // AuthConfig matches Langley format.
 type AuthConfig struct {
-	S3 struct {
-		AccessKeyID     string `yaml:"aws_access_key_id"`
-		AccessSecretKey string `yaml:"aws_secret_access_key"`
-		SessionToken    string `yaml:"aws_session_token"`
-	} `yaml:"s3"`
+	GCS struct {
+		AccessBlob string `yaml:"access_blob"`
+	} `yaml:"gcs"`
 }
 
 func (c *Config) applyDefaults() {
-	if c.UploadPartSize == 0 {
-		c.UploadPartSize = backend.DefaultPartSize
-	}
-	if c.DownloadPartSize == 0 {
-		c.DownloadPartSize = backend.DefaultPartSize
-	}
-	if c.UploadConcurrency == 0 {
-		c.UploadConcurrency = backend.DefaultConcurrency
-	}
-	if c.DownloadConcurrency == 0 {
-		c.DownloadConcurrency = backend.DefaultConcurrency
+	if c.UploadChunkSize == 0 {
+		c.UploadChunkSize = backend.DefaultPartSize
 	}
 	if c.BufferGuard == 0 {
 		c.BufferGuard = backend.DefaultBufferGuard

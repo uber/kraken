@@ -174,9 +174,9 @@ func TestClientList(t *testing.T) {
 
 			mocks.webhdfs.EXPECT().ListFileStatus("/root/empty").Return(nil, nil).MaxTimes(1)
 
-			names, err := client.List(test.prefix)
+			result, err := client.List(test.prefix)
 			require.NoError(err)
-			require.Equal(test.expected, names)
+			require.Equal(test.expected, result.Names)
 		})
 	}
 }

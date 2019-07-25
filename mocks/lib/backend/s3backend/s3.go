@@ -70,18 +70,18 @@ func (mr *MockS3MockRecorder) HeadObject(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HeadObject", reflect.TypeOf((*MockS3)(nil).HeadObject), arg0)
 }
 
-// ListObjectsPages mocks base method
-func (m *MockS3) ListObjectsPages(arg0 *s3.ListObjectsInput, arg1 func(*s3.ListObjectsOutput, bool) bool) error {
+// ListObjectsV2Pages mocks base method
+func (m *MockS3) ListObjectsV2Pages(arg0 *s3.ListObjectsV2Input, arg1 func(*s3.ListObjectsV2Output, bool) bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListObjectsPages", arg0, arg1)
+	ret := m.ctrl.Call(m, "ListObjectsV2Pages", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// ListObjectsPages indicates an expected call of ListObjectsPages
-func (mr *MockS3MockRecorder) ListObjectsPages(arg0, arg1 interface{}) *gomock.Call {
+// ListObjectsV2Pages indicates an expected call of ListObjectsV2Pages
+func (mr *MockS3MockRecorder) ListObjectsV2Pages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListObjectsPages", reflect.TypeOf((*MockS3)(nil).ListObjectsPages), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListObjectsV2Pages", reflect.TypeOf((*MockS3)(nil).ListObjectsV2Pages), arg0, arg1)
 }
 
 // Upload mocks base method

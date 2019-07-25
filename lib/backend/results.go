@@ -11,20 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package main
+package backend
 
-import (
-	"github.com/uber/kraken/build-index/cmd"
-
-	// Import all backend client packages to register them with backend manager.
-	_ "github.com/uber/kraken/lib/backend/hdfsbackend"
-	_ "github.com/uber/kraken/lib/backend/httpbackend"
-	_ "github.com/uber/kraken/lib/backend/registrybackend"
-	_ "github.com/uber/kraken/lib/backend/s3backend"
-	_ "github.com/uber/kraken/lib/backend/gcsbackend"
-	_ "github.com/uber/kraken/lib/backend/testfs"
-)
-
-func main() {
-	cmd.Run(cmd.ParseFlags())
+// ListResult defines the response from a client list operation.
+// The names of the entries found will always be populated, and the
+// continuation token will only be populated if pagination was enabled
+// and there are remaining entries to list.
+type ListResult struct {
+	Names             []string
+	ContinuationToken string
 }

@@ -47,7 +47,7 @@ Following are some highlights of Kraken:
 - **Highly available**. No component is a single point of failure.
 - **Secure**. Support uploader authentication and data integrity protection through TLS.
 - **Pluggable storage options**. Instead of managing data, Kraken plugs into reliable blob storage
-  options, like S3, HDFS or another registry. The storage interface is simple and new options
+  options, like S3, GCS, HDFS or another registry. The storage interface is simple and new options
   are easy to add.
 - **Lossless cross cluster replication**. Kraken supports rule-based async replication between
   clusters.
@@ -79,7 +79,7 @@ talk](https://www.youtube.com/watch?v=waVtYYSXkXU) at KubeCon + CloudNativeCon.
   - Connects to peers returned by tracker to download content
 - Origin
   - Dedicated seeders
-  - Stores blobs as files on disk backed by pluggable storage (e.g. S3)
+  - Stores blobs as files on disk backed by pluggable storage (e.g. S3, GCS)
   - Forms a self-healing hash ring to distribute load
 - Tracker
   - Tracks which peers have what content (both in-progress and completed)
@@ -92,7 +92,7 @@ talk](https://www.youtube.com/watch?v=waVtYYSXkXU) at KubeCon + CloudNativeCon.
   - Mapping of human readable tag to blob digest
   - No consistency guarantees: client should use unique tags
   - Powers image replication between clusters (simple duplicated queues with retry)
-  - Stores tags as files on disk backed by pluggable storage (e.g. S3)
+  - Stores tags as files on disk backed by pluggable storage (e.g. S3, GCS)
 
 # Benchmark
 

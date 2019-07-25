@@ -4,27 +4,28 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	   http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package main
+package gcsbackend
 
 import (
-	"github.com/uber/kraken/build-index/cmd"
+	"io"
 
-	// Import all backend client packages to register them with backend manager.
-	_ "github.com/uber/kraken/lib/backend/hdfsbackend"
-	_ "github.com/uber/kraken/lib/backend/httpbackend"
-	_ "github.com/uber/kraken/lib/backend/registrybackend"
-	_ "github.com/uber/kraken/lib/backend/s3backend"
-	_ "github.com/uber/kraken/lib/backend/gcsbackend"
-	_ "github.com/uber/kraken/lib/backend/testfs"
+	"cloud.google.com/go/storage"
+	"github.com/uber/kraken/lib/backend"
+	"google.golang.org/api/iterator"
 )
 
-func main() {
-	cmd.Run(cmd.ParseFlags())
+// GCS defines the operations we use in the GCS api. Useful for mocking.
+type GCS interface {
+	ObjectAttrs(objectName string) (*storage.ObjectAttrs, error)
+	Download(objectName string, w io.Writer) (int64, error)
+	Upload(objectName string, r io.Reader) (int64, error)
+	GetObjectIterator(prefix string) iterator.Pageable
+	NextPage(pager *iterator.Pager) (*backend.ListResult, error)
 }

@@ -180,7 +180,7 @@ As shown in this example, if 3 announce requests to one tracker fail with networ
 
 # Configuring Storage Backend For Origin And Build-Index
 
-Storage backends are used by Origin and Build-Index for data persistence. Kraken has support for HDFS, S3, http (readonly), and Docker Registry (readonly) as [backends](https://github.com/uber/kraken/tree/master/lib/backend).
+Storage backends are used by Origin and Build-Index for data persistence. Kraken has support for S3, GCS, HDFS, http (readonly), and Docker Registry (readonly) as [backends](https://github.com/uber/kraken/tree/master/lib/backend).
 
 Multiple backends can be used at the name time, configured based on namespaces of requested blob and tag  (for docker images, that means the part of image name before ":").
 
@@ -203,7 +203,7 @@ Example origin config that uses multiple backends:
 >        download_url: http://test-domain:9000/download?sha256=%s
 >        download_backoff:
 >          enabled: true
-> - namespace: .*
+> - namespace: s3-images/.*
 >   backend:
 >     s3:
 >       region: us-west-1
@@ -211,6 +211,15 @@ Example origin config that uses multiple backends:
 >       root_directory: /test-bucket/kraken/default/
 >       name_path: sharded_docker_blob
 >       username: kraken-user
+>   bandwidth:
+>     enable: true
+> - namespace: gcs-images/.*
+>   backend:
+>     gcs:
+>       username: kraken-user
+>       bucket: test-bucket
+>       root_directory: /test-bucket/kraken/default/
+>       name_path: sharded_docker_blob
 >   bandwidth:
 >     enable: true
 >
@@ -221,6 +230,10 @@ Example origin config that uses multiple backends:
 >        aws: kraken-user
 >        aws_access_key_id: <keyid>
 >        aws_secret_access_key: <key>
+>  gcs:
+>    kraken-user:
+>      gcs:
+>        access_blob: <service_account_key>
 
 ## Read-Only Registry Backend
 

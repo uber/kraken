@@ -141,6 +141,6 @@ func (c *BlobClient) Upload(namespace, name string, src io.Reader) error {
 }
 
 // List is not supported for blobs.
-func (c *BlobClient) List(prefix string) ([]string, error) {
+func (c *BlobClient) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
 	return nil, errors.New("not supported")
 }
