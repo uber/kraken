@@ -1,8 +1,8 @@
 hash: 1c75c63dee3f083dd0b0b502f4f0caf9c6d9cbf504510db1b09151756378a33c
-updated: 2019-06-10T12:53:09.920438-07:00
+updated: 2019-07-24T17:42:46.606990809-07:00
 imports:
 - name: cloud.google.com/go
-  version: 457ea5c15ccf3b87db582c450e80101989da35f7
+  version: cdaaf98f9226c39dc162b8e55083b2fbc67b4674
   subpackages:
   - compute/metadata
   - iam
@@ -21,12 +21,8 @@ imports:
   version: 2efee857e7cfd4f3d0138cc3cbb1b4966962b93a
 - name: github.com/andres-erbsen/clock
   version: 9e14626cd129ba01ccb6806bcca9d523e570aaf0
-- name: github.com/apache/thrift
-  version: b2a4d4ae21c789b689dd162deb819665567f481c
-  subpackages:
-  - lib/go/thrift
 - name: github.com/aws/aws-sdk-go
-  version: bdafd99f31a0103ec73bcabfc9498aef3252d515
+  version: 77b6968988559d355ab953b6436eafe6a76e4a92
   subpackages:
   - aws
   - aws/awserr
@@ -56,15 +52,26 @@ imports:
   - private/protocol/eventstream
   - private/protocol/eventstream/eventstreamapi
   - private/protocol/json/jsonutil
+  - private/protocol/jsonrpc
   - private/protocol/query
   - private/protocol/query/queryutil
   - private/protocol/rest
   - private/protocol/restxml
   - private/protocol/xml/xmlutil
+  - service/ecr
   - service/s3
   - service/s3/s3iface
   - service/s3/s3manager
   - service/sts
+  - service/sts/stsiface
+- name: github.com/awslabs/amazon-ecr-credential-helper
+  version: b4a1707cec17b0533a5b9e9004ef4b59bcd0ca95
+  subpackages:
+  - ecr-login
+  - ecr-login/api
+  - ecr-login/cache
+  - ecr-login/config
+  - ecr-login/version
 - name: github.com/beorn7/perks
   version: 3a771d992973f24aa725d07868b467d1ddfceafb
   subpackages:
@@ -87,7 +94,7 @@ imports:
   subpackages:
   - statsd
 - name: github.com/cenkalti/backoff
-  version: 2146c93394225c3732078705043ce9f26584d334
+  version: 5267b6dd4d2666b980a911bf235efa276222cbe2
 - name: github.com/docker/distribution
   version: 2461543d988979529609e8cb6fca9ca190dc48da
   subpackages:
@@ -128,7 +135,7 @@ imports:
   - uuid
   - version
 - name: github.com/docker/docker-credential-helpers
-  version: 8a9f93a99ff87f416cc79f267c68151af0026f60
+  version: 54f0238b6bf101fc3ad3b34114cb5520beb562f5
   subpackages:
   - client
   - credentials
@@ -169,7 +176,7 @@ imports:
   subpackages:
   - gomock
 - name: github.com/golang/protobuf
-  version: b5d812f8a3706043e23a9cd5babf2e5423744d30
+  version: 6c65a5562fc06764971b7c5d05c76c75e84bdbf7
   subpackages:
   - proto
   - protoc-gen-go/descriptor
@@ -184,7 +191,7 @@ imports:
 - name: github.com/gorilla/handlers
   version: ac6d24f88de4584385a0cb3a88f953d08a2f7a05
 - name: github.com/gorilla/mux
-  version: ed099d42384823742bba0bf9a72b53b55c9e2e38
+  version: 00bdffe0f3c77e27d2cf6f5c70232a2d3e4d9c15
 - name: github.com/hashicorp/golang-lru
   version: 7087cb70de9f7a8bc0a10c375cb0d2280a8edf9c
   subpackages:
@@ -211,6 +218,8 @@ imports:
   version: c182affec369e30f25d3eb8cd8a478dee585ae7d
   subpackages:
   - pbutil
+- name: github.com/mitchellh/go-homedir
+  version: af06845cf3004701891bf4fdb884bfe4920b3727
 - name: github.com/opencontainers/go-digest
   version: ac19fd6e7483ff933754af248d80be865e543d22
 - name: github.com/opencontainers/image-spec
@@ -257,13 +266,14 @@ imports:
 - name: github.com/spf13/pflag
   version: 24fa6976df40757dce6aea913e7b81ade90530e1
 - name: github.com/uber-go/tally
-  version: 24c699f78afd17db5aac42f83c1c5cad70254294
+  version: f266f90e9c4d5894364039a324a05d061f2f34e2
   subpackages:
   - m3
   - m3/customtransports
   - m3/thrift
   - m3/thriftudp
   - statsd
+  - thirdparty/github.com/apache/thrift/lib/go/thrift
 - name: github.com/willf/bitset
   version: 18bd95f470f9494ca07c36d877424729edc2455c
 - name: github.com/xenolf/lego
@@ -348,7 +358,7 @@ imports:
   subpackages:
   - rate
 - name: google.golang.org/api
-  version: aac82e61c0c8fe133c297b4b59316b9f481e1f0a
+  version: 02490b97dff7cfde1995bd77de808fd27053bc87
   subpackages:
   - gensupport
   - googleapi
@@ -364,9 +374,11 @@ imports:
   version: b2f4a3cf3c67576a2ee09e1fe62656a5086ce880
   subpackages:
   - internal
+  - internal/app_identity
   - internal/base
   - internal/datastore
   - internal/log
+  - internal/modules
   - internal/remote_api
   - internal/urlfetch
   - urlfetch
