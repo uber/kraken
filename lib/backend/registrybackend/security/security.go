@@ -17,6 +17,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/awslabs/amazon-ecr-credential-helper/ecr-login"
+	"github.com/awslabs/amazon-ecr-credential-helper/ecr-login/api"
 	"github.com/uber/kraken/utils/httputil"
 
 	"github.com/docker/docker-credential-helpers/client"
@@ -78,22 +80,35 @@ func (c Config) getCredentials(helper, addr string) (types.AuthConfig, error) {
 }
 
 func (c Config) getCredentialFromHelper(helper, addr string) (types.AuthConfig, error) {
-	helperFullName := credentialHelperPrefix + helper
-	creds, err := client.Get(client.NewShellProgramFunc(helperFullName), addr)
-	if err != nil {
-		return types.AuthConfig{}, err
-	}
+	switch helper {
+	case "ecr-login":
+		client := ecr.ECRHelper{ClientFactory: api.DefaultClientFactory{}}
+		username, password, err := client.Get(addr)
+		if err != nil {
+			return types.AuthConfig{}, fmt.Errorf("get credentials from helper ECR: %s", err)
+		}
+		return types.AuthConfig{
+			Username: username,
+			Password: password,
+		}, nil
+	default:
+		helperFullName := credentialHelperPrefix + helper
+		creds, err := client.Get(client.NewShellProgramFunc(helperFullName), addr)
+		if err != nil {
+			return types.AuthConfig{}, err
+		}
 
-	var ret types.AuthConfig
-	if c.BasicAuth != nil {
-		ret = *c.BasicAuth
+		var ret types.AuthConfig
+		if c.BasicAuth != nil {
+			ret = *c.BasicAuth
+		}
+		ret.ServerAddress = addr
+		if creds.Username == tokenUsername {
+			ret.IdentityToken = creds.Secret
+		} else {
+			ret.Password = creds.Secret
+			ret.Username = creds.Username
+		}
+		return ret, nil
 	}
-	ret.ServerAddress = addr
-	if creds.Username == tokenUsername {
-		ret.IdentityToken = creds.Secret
-	} else {
-		ret.Password = creds.Secret
-		ret.Username = creds.Username
-	}
-	return ret, nil
 }
