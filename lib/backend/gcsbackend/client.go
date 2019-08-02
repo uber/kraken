@@ -186,14 +186,28 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 	}
 
 	pager := iterator.NewPager(pageIterator, maxKeys, paginationToken)
-	result, err := c.gcs.NextPage(pager)
+	blobs, continuationToken, err := c.gcs.NextPage(pager)
 	if err != nil {
 		return nil, err
 	}
+
+	var names []string
+	for _, b := range blobs {
+		name, err := c.pather.NameFromBlobPath(b)
+		if err != nil {
+			log.With("blob", b).Errorf("Error converting blob path into name: %s", err)
+			continue
+		}
+		names = append(names, name)
+	}
+	result := &backend.ListResult{
+		Names:             names,
+		ContinuationToken: continuationToken,
+	}
+
 	if !options.Paginated {
 		result.ContinuationToken = ""
 	}
-
 	return result, nil
 }
 
@@ -261,21 +275,18 @@ func (g *GCSImpl) GetObjectIterator(prefix string) iterator.Pageable {
 	return g.bucket.Objects(g.ctx, &query)
 }
 
-func (g *GCSImpl) NextPage(pager *iterator.Pager) (*backend.ListResult,
+func (g *GCSImpl) NextPage(pager *iterator.Pager) ([]string, string,
 	error) {
 
 	var objectAttrs []*storage.ObjectAttrs
 	continuationToken, err := pager.NextPage(&objectAttrs)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	names := make([]string, len(objectAttrs))
 	for idx, objectAttr := range objectAttrs {
 		names[idx] = objectAttr.Name
 	}
-	return &backend.ListResult{
-		Names:             names,
-		ContinuationToken: continuationToken,
-	}, nil
+	return names, continuationToken, nil
 }

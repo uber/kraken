@@ -199,21 +199,19 @@ func TestClientList(t *testing.T) {
 	for i := 0; i < maxIterate; {
 		count := (rand.Int() % 10) + 1
 		var expected []string
+		var ret []string
 		for j := i; j < (i+count) && j < maxIterate; j++ {
 			expected = append(expected, "test/"+strconv.Itoa(j))
+			ret = append(ret, "/root/test/"+strconv.Itoa(j))
 		}
 
 		continuationToken := ""
 		if (i + count) < maxIterate {
 			strconv.Itoa(i + count)
 		}
-		result := &backend.ListResult{
-			Names:             expected,
-			ContinuationToken: continuationToken,
-		}
 		mocks.gcs.EXPECT().NextPage(
 			gomock.Any(),
-		).Return(result, nil)
+		).Return(ret, continuationToken, nil)
 
 		result, err := client.List("test", backend.ListWithPagination(),
 			backend.ListWithMaxKeys(count),

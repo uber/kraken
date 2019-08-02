@@ -7,7 +7,6 @@ package mockgcsbackend
 import (
 	storage "cloud.google.com/go/storage"
 	gomock "github.com/golang/mock/gomock"
-	backend "github.com/uber/kraken/lib/backend"
 	iterator "google.golang.org/api/iterator"
 	io "io"
 	reflect "reflect"
@@ -66,12 +65,13 @@ func (mr *MockGCSMockRecorder) GetObjectIterator(arg0 interface{}) *gomock.Call 
 }
 
 // NextPage mocks base method
-func (m *MockGCS) NextPage(arg0 *iterator.Pager) (*backend.ListResult, error) {
+func (m *MockGCS) NextPage(arg0 *iterator.Pager) ([]string, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NextPage", arg0)
-	ret0, _ := ret[0].(*backend.ListResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // NextPage indicates an expected call of NextPage
