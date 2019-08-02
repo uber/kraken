@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//	   http://www.apache.org/licenses/LICENSE-2.0
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,268 +14,212 @@
 package gcsbackend
 
 import (
-	"context"
-	"errors"
+	"bytes"
 	"fmt"
-	"io"
-	"path"
+	"math/rand"
+	"strconv"
+	"strings"
+	"testing"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
-	"github.com/uber/kraken/lib/backend/backenderrors"
-	"github.com/uber/kraken/lib/backend/namepath"
-	"github.com/uber/kraken/utils/log"
+	"github.com/uber/kraken/mocks/lib/backend/gcsbackend"
+	"github.com/uber/kraken/utils/mockutil"
+	"github.com/uber/kraken/utils/randutil"
+	"github.com/uber/kraken/utils/rwutil"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
-	"google.golang.org/api/option"
-	"gopkg.in/yaml.v2"
+
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
 )
 
-const _gcs = "gcs"
-
-func init() {
-	backend.Register(_gcs, &factory{})
+type clientMocks struct {
+	config   Config
+	userAuth UserAuthConfig
+	gcs      *mockgcsbackend.MockGCS
 }
 
-type factory struct{}
+func newClientMocks(t *testing.T) (*clientMocks, func()) {
+	ctrl := gomock.NewController(t)
 
-func (f *factory) Create(
-	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+	var auth AuthConfig
+	auth.GCS.AccessBlob = "access_blob"
 
-	confBytes, err := yaml.Marshal(confRaw)
+	return &clientMocks{
+		config: Config{
+			Username:      "test-user",
+			Location:      "test-location",
+			Bucket:        "test-bucket",
+			NamePath:      "identity",
+			RootDirectory: "/root",
+			ListMaxKeys:   5,
+		},
+		userAuth: UserAuthConfig{"test-user": auth},
+		gcs:      mockgcsbackend.NewMockGCS(ctrl),
+	}, ctrl.Finish
+}
+
+func (m *clientMocks) new() *Client {
+	c, err := NewClient(m.config, m.userAuth, WithGCS(m.gcs))
 	if err != nil {
-		return nil, errors.New("marshal gcs config")
+		panic(err)
 	}
-	authConfBytes, err := yaml.Marshal(authConfRaw)
-	if err != nil {
-		return nil, errors.New("marshal gcs auth config")
-	}
-
-	var config Config
-	if err := yaml.Unmarshal(confBytes, &config); err != nil {
-		return nil, errors.New("unmarshal gcs config")
-	}
-	var userAuth UserAuthConfig
-	if err := yaml.Unmarshal(authConfBytes, &userAuth); err != nil {
-		return nil, errors.New("unmarshal gcs auth config")
-	}
-
-	return NewClient(config, userAuth)
+	return c
 }
 
-// Client implements a backend.Client for GCS.
-type Client struct {
-	config Config
-	pather namepath.Pather
-	gcs    GCS
+func TestClientFactory(t *testing.T) {
+	require := require.New(t)
+
+	config := Config{
+		Username:      "test-user",
+		Location:      "test-region",
+		Bucket:        "test-bucket",
+		NamePath:      "identity",
+		RootDirectory: "/root",
+	}
+	var auth AuthConfig
+	auth.GCS.AccessBlob = "access_blob"
+	userAuth := UserAuthConfig{"test-user": auth}
+	f := factory{}
+	_, err := f.Create(config, userAuth)
+	fmt.Println(err.Error())
+	require.True(strings.Contains(err.Error(), "invalid gcs credentials"))
 }
 
-// Option allows setting optional Client parameters.
-type Option func(*Client)
+func TestClientStat(t *testing.T) {
+	require := require.New(t)
 
-// WithGCS configures a Client with a custom GCS implementation.
-func WithGCS(gcs GCS) Option {
-	return func(c *Client) { c.gcs = gcs }
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	client := mocks.new()
+
+	var objectAttrs storage.ObjectAttrs
+	objectAttrs.Size = 100
+
+	mocks.gcs.EXPECT().ObjectAttrs("/root/test").Return(&objectAttrs, nil)
+
+	info, err := client.Stat(core.NamespaceFixture(), "test")
+	require.NoError(err)
+	require.Equal(core.NewBlobInfo(100), info)
 }
 
-// NewClient creates a new Client for GCS.
-func NewClient(
-	config Config, userAuth UserAuthConfig, opts ...Option) (*Client, error) {
+func TestClientDownload(t *testing.T) {
+	require := require.New(t)
 
-	config.applyDefaults()
-	if config.Username == "" {
-		return nil, errors.New("invalid config: username required")
-	}
-	if config.Bucket == "" {
-		return nil, errors.New("invalid config: bucket required")
-	}
-	if !path.IsAbs(config.RootDirectory) {
-		return nil, errors.New("invalid config: root_directory must be absolute path")
-	}
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
 
-	pather, err := namepath.New(config.RootDirectory, config.NamePath)
-	if err != nil {
-		return nil, fmt.Errorf("namepath: %s", err)
-	}
+	client := mocks.new()
+	data := randutil.Text(32)
 
-	auth, ok := userAuth[config.Username]
-	if !ok {
-		return nil, errors.New("auth not configured for username")
-	}
+	mocks.gcs.EXPECT().Download(
+		"/root/test",
+		mockutil.MatchWriter(data),
+	).Return(int64(len(data)), nil)
 
-	if len(opts) > 0 {
-		// For mock.
-		client := &Client{config, pather, nil}
-		for _, opt := range opts {
-			opt(client)
+	w := make(rwutil.PlainWriter, len(data))
+	require.NoError(client.Download(core.NamespaceFixture(), "test", w))
+	require.Equal(data, []byte(w))
+}
+
+func TestClientUpload(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	client := mocks.new()
+
+	data := randutil.Text(32)
+	dataReader := bytes.NewReader(data)
+
+	mocks.gcs.EXPECT().Upload(
+		"/root/test",
+		gomock.Any(),
+	).Return(int64(len(data)), nil)
+
+	require.NoError(client.Upload(core.NamespaceFixture(), "test", dataReader))
+}
+
+func Alphabets(t *testing.T, maxIterate int) *AlphaIterator {
+	it := &AlphaIterator{assert: require.New(t), maxIterate: maxIterate}
+	it.pageInfo, it.nextFunc = iterator.NewPageInfo(
+		it.next,
+		func() int { return len(it.elems) },
+		func() interface{} { e := it.elems; it.elems = nil; return e })
+	return it
+}
+
+// Iterates from 0-maxIterate
+type AlphaIterator struct {
+	assert     *require.Assertions
+	pageInfo   *iterator.PageInfo
+	nextFunc   func() error
+	elems      []string
+	maxIterate int
+}
+
+func (it *AlphaIterator) PageInfo() *iterator.PageInfo {
+	return it.pageInfo
+}
+
+func (it *AlphaIterator) next(pageSize int, pageToken string) (string, error) {
+	i := 0
+	if pageToken != "" {
+		var err error
+		i, err = strconv.Atoi(pageToken)
+		it.assert.NoError(err)
+	}
+	endCount := i + pageSize
+	for ; i < endCount && i < it.maxIterate; i++ {
+		it.elems = append(it.elems, "test/"+strconv.Itoa(i))
+	}
+	if i == it.maxIterate {
+		return "", nil
+	}
+	return strconv.Itoa(i), nil
+}
+
+func TestClientList(t *testing.T) {
+	require := require.New(t)
+	maxIterate := 100
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	client := mocks.new()
+
+	contToken := ""
+	mocks.gcs.EXPECT().GetObjectIterator(
+		"/root/test",
+	).AnyTimes().Return(Alphabets(t, maxIterate))
+	for i := 0; i < maxIterate; {
+		count := (rand.Int() % 10) + 1
+		var expected []string
+		var ret []string
+		for j := i; j < (i+count) && j < maxIterate; j++ {
+			expected = append(expected, "test/"+strconv.Itoa(j))
+			ret = append(ret, "/root/test/"+strconv.Itoa(j))
 		}
-		return client, nil
-	}
 
-	ctx := context.Background()
-	sClient, err := storage.NewClient(ctx,
-		option.WithCredentialsJSON([]byte(auth.GCS.AccessBlob)))
-	if err != nil {
-		return nil, fmt.Errorf("invalid gcs credentials: %s", err)
-	}
-
-	client := &Client{config, pather,
-		NewGCS(ctx, sClient.Bucket(config.Bucket), &config)}
-
-	log.Infof("Initalized GCS backend with config: %s", config)
-	return client, nil
-}
-
-// Stat returns blob info for name.
-func (c *Client) Stat(namespace, name string) (*core.BlobInfo, error) {
-	path, err := c.pather.BlobPath(name)
-	if err != nil {
-		return nil, fmt.Errorf("blob path: %s", err)
-	}
-
-	objectAttrs, err := c.gcs.ObjectAttrs(path)
-	if err != nil {
-		if isObjectNotFound(err) {
-			return nil, backenderrors.ErrBlobNotFound
+		continuationToken := ""
+		if (i + count) < maxIterate {
+			strconv.Itoa(i + count)
 		}
-		return nil, err
+		mocks.gcs.EXPECT().NextPage(
+			gomock.Any(),
+		).Return(ret, continuationToken, nil)
+
+		result, err := client.List("test", backend.ListWithPagination(),
+			backend.ListWithMaxKeys(count),
+			backend.ListWithContinuationToken(contToken))
+		require.NoError(err)
+		require.Equal(expected, result.Names)
+		contToken = result.ContinuationToken
+		i += count
 	}
-
-	return core.NewBlobInfo(objectAttrs.Size), nil
-}
-
-// Download downloads the content from a configured bucket and writes the
-// data to dst.
-func (c *Client) Download(namespace, name string, dst io.Writer) error {
-	path, err := c.pather.BlobPath(name)
-	if err != nil {
-		return fmt.Errorf("blob path: %s", err)
-	}
-
-	_, err = c.gcs.Download(path, dst)
-	return err
-}
-
-// Upload uploads src to a configured bucket.
-func (c *Client) Upload(namespace, name string, src io.Reader) error {
-	path, err := c.pather.BlobPath(name)
-	if err != nil {
-		return fmt.Errorf("blob path: %s", err)
-	}
-
-	_, err = c.gcs.Upload(path, src)
-	return err
-}
-
-// List lists names that start with prefix.
-func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
-	options := backend.DefaultListOptions()
-	for _, opt := range opts {
-		opt(options)
-	}
-
-	absPrefix := path.Join(c.pather.BasePath(), prefix)
-	pageIterator := c.gcs.GetObjectIterator(absPrefix)
-
-	maxKeys := c.config.ListMaxKeys
-	paginationToken := ""
-	if options.Paginated {
-		maxKeys = options.MaxKeys
-		paginationToken = options.ContinuationToken
-	}
-
-	pager := iterator.NewPager(pageIterator, maxKeys, paginationToken)
-	result, err := c.gcs.NextPage(pager)
-	if err != nil {
-		return nil, err
-	}
-	if !options.Paginated {
-		result.ContinuationToken = ""
-	}
-
-	return result, nil
-}
-
-// isObjectNotFound is helper function for identify non-existing object error.
-func isObjectNotFound(err error) bool {
-	return err == storage.ErrObjectNotExist || err == storage.ErrBucketNotExist
-}
-
-// GCSImpl implements GCS interaface.
-type GCSImpl struct {
-	ctx    context.Context
-	bucket *storage.BucketHandle
-	config *Config
-}
-
-func NewGCS(ctx context.Context, bucket *storage.BucketHandle,
-	config *Config) *GCSImpl {
-
-	return &GCSImpl{ctx, bucket, config}
-}
-
-func (g *GCSImpl) ObjectAttrs(objectName string) (*storage.ObjectAttrs, error) {
-	handle := g.bucket.Object(objectName)
-	return handle.Attrs(g.ctx)
-}
-
-func (g *GCSImpl) Download(objectName string, w io.Writer) (int64, error) {
-	rc, err := g.bucket.Object(objectName).NewReader(g.ctx)
-	if err != nil {
-		if isObjectNotFound(err) {
-			return 0, backenderrors.ErrBlobNotFound
-		}
-		return 0, err
-	}
-	defer rc.Close()
-
-	r, err := io.CopyN(w, rc, int64(g.config.BufferGuard))
-	if err != nil && err != io.EOF {
-		return 0, err
-	}
-
-	return r, nil
-}
-
-func (g *GCSImpl) Upload(objectName string, r io.Reader) (int64, error) {
-	wc := g.bucket.Object(objectName).NewWriter(g.ctx)
-	wc.ChunkSize = int(g.config.UploadChunkSize)
-
-	w, err := io.CopyN(wc, r, int64(g.config.UploadChunkSize))
-	if err != nil && err != io.EOF {
-		return 0, err
-	}
-
-	if err := wc.Close(); err != nil {
-		return 0, err
-	}
-
-	return w, nil
-}
-
-func (g *GCSImpl) GetObjectIterator(prefix string) iterator.Pageable {
-	var query storage.Query
-
-	query.Prefix = prefix
-	return g.bucket.Objects(g.ctx, &query)
-}
-
-func (g *GCSImpl) NextPage(pager *iterator.Pager) (*backend.ListResult,
-	error) {
-
-	var objectAttrs []*storage.ObjectAttrs
-	continuationToken, err := pager.NextPage(&objectAttrs)
-	if err != nil {
-		return nil, err
-	}
-
-	names := make([]string, len(objectAttrs))
-	for idx, objectAttr := range objectAttrs {
-		names[idx] = objectAttr.Name
-	}
-	return &backend.ListResult{
-		Names:             names,
-		ContinuationToken: continuationToken,
-	}, nil
+	require.Equal(contToken, "")
 }
