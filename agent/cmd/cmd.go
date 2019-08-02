@@ -131,6 +131,7 @@ func Run(flags *Flags) {
 	if err != nil {
 		log.Fatalf("Error building tracker upstream: %s", err)
 	}
+	go trackers.Monitor(nil)
 
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
