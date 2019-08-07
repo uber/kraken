@@ -21,7 +21,7 @@
                 "containers": [
                     {
                         "name": "main",
-                        "image": "localhost:30081/library/busybox:latest",
+                        "image": "127.0.0.1:30081/library/busybox:latest",
                         "command": [
                             "/bin/sh", "-c",
                             "while true; do sleep 10; done"
