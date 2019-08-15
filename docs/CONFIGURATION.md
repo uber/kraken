@@ -180,7 +180,7 @@ As shown in this example, if 3 announce requests to one tracker fail with networ
 
 # Configuring Storage Backend For Origin And Build-Index
 
-Storage backends are used by Origin and Build-Index for data persistence. Kraken has support for S3, GCS, HDFS, http (readonly), and Docker Registry (readonly) as [backends](https://github.com/uber/kraken/tree/master/lib/backend).
+Storage backends are used by Origin and Build-Index for data persistence. Kraken has support for S3, GCS, ECR, HDFS, http (readonly), and Docker Registry (readonly) as [backends](https://github.com/uber/kraken/tree/master/lib/backend).
 
 Multiple backends can be used at the name time, configured based on namespaces of requested blob and tag  (for docker images, that means the part of image name before ":").
 
@@ -203,6 +203,12 @@ Example origin config that uses multiple backends:
 >        download_url: http://test-domain:9000/download?sha256=%s
 >        download_backoff:
 >          enabled: true
+> - namespace: ecr-images/.*
+>   backend:
+>     registry_tag:
+>       address: 123456789012.dkr.ecr.<region>.amazonaws.com
+>       security:
+>         credsStore: 'ecr-login'
 > - namespace: s3-images/.*
 >   backend:
 >     s3:
