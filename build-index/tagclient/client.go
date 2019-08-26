@@ -19,10 +19,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/url"
+	"strconv"
 	"time"
 
+	"github.com/uber/kraken/build-index/tagmodels"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/utils/httputil"
@@ -40,7 +43,9 @@ type Client interface {
 	Get(tag string) (core.Digest, error)
 	Has(tag string) (bool, error)
 	List(prefix string) ([]string, error)
+	ListWithPagination(prefix string, filter ListFilter) (tagmodels.ListResponse, error)
 	ListRepository(repo string) ([]string, error)
+	ListRepositoryWithPagination(repo string, filter ListFilter) (tagmodels.ListResponse, error)
 	Replicate(tag string) error
 	Origin() (string, error)
 
@@ -52,6 +57,12 @@ type Client interface {
 type singleClient struct {
 	addr string
 	tls  *tls.Config
+}
+
+// ListFilter contains filter request for list with pagination operations.
+type ListFilter struct {
+	Offset string
+	Limit  int
 }
 
 // NewSingleClient returns a Client scoped to a single tagserver instance.
@@ -112,37 +123,90 @@ func (c *singleClient) Has(tag string) (bool, error) {
 	return true, nil
 }
 
-func (c *singleClient) List(prefix string) ([]string, error) {
-	resp, err := httputil.Get(
-		fmt.Sprintf("http://%s/list/%s", c.addr, prefix),
+func (c *singleClient) doListPaginated(urlFormat string, pathSub string,
+	filter ListFilter) (tagmodels.ListResponse, error) {
+
+	// Build query.
+	reqVal := url.Values{}
+	if filter.Offset != "" {
+		reqVal.Add(tagmodels.OffsetQ, filter.Offset)
+	}
+	if filter.Limit != 0 {
+		reqVal.Add(tagmodels.LimitQ, strconv.Itoa(filter.Limit))
+	}
+
+	// Fetch list response from server.
+	serverUrl := url.URL{
+		Scheme:   "http",
+		Host:     c.addr,
+		Path:     fmt.Sprintf(urlFormat, pathSub),
+		RawQuery: reqVal.Encode(),
+	}
+	var resp tagmodels.ListResponse
+	httpResp, err := httputil.Get(
+		serverUrl.String(),
 		httputil.SendTimeout(60*time.Second),
 		httputil.SendTLS(c.tls))
 	if err != nil {
-		return nil, err
+		return resp, err
 	}
-	defer resp.Body.Close()
+	defer httpResp.Body.Close()
+	if err := json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
+		return resp, fmt.Errorf("json decode: %s", err)
+	}
+
+	return resp, nil
+}
+
+func (c *singleClient) doList(pathSub string,
+	fn func(pathSub string, filter ListFilter) (tagmodels.ListResponse, error)) (
+	[]string, error) {
+
 	var names []string
-	if err := json.NewDecoder(resp.Body).Decode(&names); err != nil {
-		return nil, fmt.Errorf("json decode: %s", err)
+
+	offset := ""
+	for ok := true; ok; ok = (offset != "") {
+		filter := ListFilter{Offset: offset}
+		resp, err := fn(pathSub, filter)
+		if err != nil {
+			return nil, err
+		}
+		offset, err = resp.GetOffset()
+		if err != nil && err != io.EOF {
+			return nil, err
+		}
+		names = append(names, resp.Result...)
 	}
 	return names, nil
 }
 
+func (c *singleClient) List(prefix string) ([]string, error) {
+	return c.doList(prefix, func(prefix string, filter ListFilter) (
+		tagmodels.ListResponse, error) {
+
+		return c.ListWithPagination(prefix, filter)
+	})
+}
+
+func (c *singleClient) ListWithPagination(prefix string, filter ListFilter) (
+	tagmodels.ListResponse, error) {
+
+	return c.doListPaginated("list/%s", prefix, filter)
+}
+
 // XXX: Deprecated. Use List instead.
 func (c *singleClient) ListRepository(repo string) ([]string, error) {
-	resp, err := httputil.Get(
-		fmt.Sprintf("http://%s/repositories/%s/tags", c.addr, url.PathEscape(repo)),
-		httputil.SendTimeout(60*time.Second),
-		httputil.SendTLS(c.tls))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var tags []string
-	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
-		return nil, fmt.Errorf("json decode: %s", err)
-	}
-	return tags, nil
+	return c.doList(repo, func(repo string, filter ListFilter) (
+		tagmodels.ListResponse, error) {
+
+		return c.ListRepositoryWithPagination(repo, filter)
+	})
+}
+
+func (c *singleClient) ListRepositoryWithPagination(repo string,
+	filter ListFilter) (tagmodels.ListResponse, error) {
+
+	return c.doListPaginated("repositories/%s/tags", url.PathEscape(repo), filter)
 }
 
 // ReplicateRequest defines a Replicate request body.
@@ -279,9 +343,29 @@ func (cc *clusterClient) List(prefix string) (tags []string, err error) {
 	return
 }
 
+func (cc *clusterClient) ListWithPagination(prefix string, filter ListFilter) (
+	resp tagmodels.ListResponse, err error) {
+
+	err = cc.do(func(c Client) error {
+		resp, err = c.ListWithPagination(prefix, filter)
+		return err
+	})
+	return
+}
+
 func (cc *clusterClient) ListRepository(repo string) (tags []string, err error) {
 	err = cc.do(func(c Client) error {
 		tags, err = c.ListRepository(repo)
+		return err
+	})
+	return
+}
+
+func (cc *clusterClient) ListRepositoryWithPagination(repo string,
+	filter ListFilter) (resp tagmodels.ListResponse, err error) {
+
+	err = cc.do(func(c Client) error {
+		resp, err = c.ListRepositoryWithPagination(repo, filter)
 		return err
 	})
 	return

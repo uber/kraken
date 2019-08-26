@@ -6,6 +6,8 @@ package mocktagclient
 
 import (
 	gomock "github.com/golang/mock/gomock"
+	tagclient "github.com/uber/kraken/build-index/tagclient"
+	tagmodels "github.com/uber/kraken/build-index/tagmodels"
 	core "github.com/uber/kraken/core"
 	reflect "reflect"
 	time "time"
@@ -120,6 +122,36 @@ func (m *MockClient) ListRepository(arg0 string) ([]string, error) {
 func (mr *MockClientMockRecorder) ListRepository(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRepository", reflect.TypeOf((*MockClient)(nil).ListRepository), arg0)
+}
+
+// ListRepositoryWithPagination mocks base method
+func (m *MockClient) ListRepositoryWithPagination(arg0 string, arg1 tagclient.ListFilter) (tagmodels.ListResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRepositoryWithPagination", arg0, arg1)
+	ret0, _ := ret[0].(tagmodels.ListResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRepositoryWithPagination indicates an expected call of ListRepositoryWithPagination
+func (mr *MockClientMockRecorder) ListRepositoryWithPagination(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRepositoryWithPagination", reflect.TypeOf((*MockClient)(nil).ListRepositoryWithPagination), arg0, arg1)
+}
+
+// ListWithPagination mocks base method
+func (m *MockClient) ListWithPagination(arg0 string, arg1 tagclient.ListFilter) (tagmodels.ListResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListWithPagination", arg0, arg1)
+	ret0, _ := ret[0].(tagmodels.ListResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListWithPagination indicates an expected call of ListWithPagination
+func (mr *MockClientMockRecorder) ListWithPagination(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWithPagination", reflect.TypeOf((*MockClient)(nil).ListWithPagination), arg0, arg1)
 }
 
 // Origin mocks base method
