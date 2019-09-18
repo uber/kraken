@@ -275,3 +275,7 @@ mocks:
 
 kubecluster:
 	cd ./examples/k8s && bash deploy.sh
+
+.PHONY: docs
+docs:
+	@./scripts/mkdocs.sh -q serve
