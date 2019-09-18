@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 	"testing"
 	"time"
 
@@ -361,16 +362,31 @@ func TestListRepository(t *testing.T) {
 
 	client := newClusterClient(addr)
 
+	maxKeys := 3
 	repo := "namespace-foo/repo-bar"
-	tags := []string{"latest", "0000", "0001"}
-
-	var names []string
-	for _, tag := range tags {
-		names = append(names, repo+":"+tag)
+	tags := []string{"latest"}
+	names := []string{fmt.Sprintf("%s:%s", repo, tags[0])}
+	for i := 1; i < maxKeys*3; i++ {
+		tags = append(tags, fmt.Sprintf("00%s", strconv.Itoa(i)))
+		names = append(names, fmt.Sprintf("%s:%s", repo, tags[i]))
 	}
 
 	mocks.backendClient.EXPECT().List(repo+"/_manifests/tags").Return(&backend.ListResult{
-		Names: names,
+		Names:             names[:maxKeys],
+		ContinuationToken: "first",
+	}, nil)
+
+	// Func values are deeply equal if both are nil; otherwise they are not deeply
+	// equal. So gomock.Any().
+	mocks.backendClient.EXPECT().List(repo+"/_manifests/tags",
+		gomock.Any()).Return(&backend.ListResult{
+		Names:             names[maxKeys : maxKeys*2],
+		ContinuationToken: "second",
+	}, nil)
+
+	mocks.backendClient.EXPECT().List(repo+"/_manifests/tags",
+		gomock.Any()).Return(&backend.ListResult{
+		Names: names[maxKeys*2:],
 	}, nil)
 
 	result, err := client.ListRepository(repo)
@@ -389,11 +405,27 @@ func TestList(t *testing.T) {
 
 	client := newClusterClient(addr)
 
+	maxKeys := 3
 	prefix := "namespace-foo/repo-bar/_manifests/tags"
-	names := []string{"latest", "0000", "0001"}
+	names := []string{"latest"}
+	for i := 1; i < maxKeys*3; i++ {
+		names = append(names, fmt.Sprintf("00%s", strconv.Itoa(i)))
+	}
 
 	mocks.backendClient.EXPECT().List(prefix).Return(&backend.ListResult{
-		Names: names,
+		Names:             names[:maxKeys],
+		ContinuationToken: "first",
+	}, nil)
+
+	mocks.backendClient.EXPECT().List(prefix,
+		gomock.Any()).Return(&backend.ListResult{
+		Names:             names[maxKeys : maxKeys*2],
+		ContinuationToken: "second",
+	}, nil)
+
+	mocks.backendClient.EXPECT().List(prefix,
+		gomock.Any()).Return(&backend.ListResult{
+		Names: names[maxKeys*2:],
 	}, nil)
 
 	result, err := client.List(prefix)

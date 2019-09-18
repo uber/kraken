@@ -59,6 +59,9 @@ $ openssl x509 -req -days 365 -in client.csr -CA server.crt -CAkey server.key -C
 3. Verify
 $ openssl verify -verbose -CAfile server.crt client.crt
 
-4. Both client and server should enforce verification.
+4. Decrypt client key (because curl does not support encrypted key)
+$ openssl rsa -in client.key -out client_decrypted.key 
+
+5. Both client and server should enforce verification.
 - `InsecureSkipVerify` should be `false` in client and `ClientAuth` should be equal to `tls.RequireAndVerifyClientCert` in tls.Config.
 - In nginx config, `ssl_verify_client` should be `on`.

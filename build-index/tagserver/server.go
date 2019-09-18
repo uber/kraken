@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/uber/kraken/build-index/tagclient"
+	"github.com/uber/kraken/build-index/tagmodels"
 	"github.com/uber/kraken/build-index/tagstore"
 	"github.com/uber/kraken/build-index/tagtype"
 	"github.com/uber/kraken/core"
@@ -45,11 +46,6 @@ import (
 	"github.com/uber-go/tally"
 )
 
-const (
-	limitQ  string = "limit"
-	offsetQ string = "offset"
-)
-
 // Server provides tag operations for the build-index.
 type Server struct {
 	config            Config
@@ -67,16 +63,6 @@ type Server struct {
 
 	// For checking if a tag has all dependent blobs.
 	depResolver tagtype.DependencyResolver
-}
-
-// List Response with pagination.
-type ListResponse struct {
-	Links struct {
-		Next string `json:"next"`
-		Self string `json:"self"`
-	}
-	Size   int      `json:"size"`
-	Result []string `json:"result"`
 }
 
 // New creates a new Server.
@@ -253,6 +239,8 @@ func (s *Server) hasTagHandler(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// listHandler handles list images request. Response model
+// tagmodels.ListResponse.
 func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
 	prefix := r.URL.Path[len("/list/"):]
 
@@ -282,6 +270,8 @@ func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// listRepositoryHandler handles list images tag request. Response model
+// tagmodels.ListResponse.
 // TODO(codyg): Remove this.
 func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) error {
 	repo, err := httputil.ParseParam(r, "repo")
@@ -455,7 +445,7 @@ func buildPaginationOptions(u *url.URL) ([]backend.ListOption, error) {
 				"invalid query %s:%s", k, v).Status(http.StatusBadRequest)
 		}
 		switch k {
-		case limitQ:
+		case tagmodels.LimitQ:
 			limitCount, err := strconv.Atoi(v[0])
 			if err != nil {
 				return nil, handler.Errorf(
@@ -466,7 +456,7 @@ func buildPaginationOptions(u *url.URL) ([]backend.ListOption, error) {
 					"invalid limit %d", limitCount).Status(http.StatusBadRequest)
 			}
 			opts = append(opts, backend.ListWithMaxKeys(limitCount))
-		case offsetQ:
+		case tagmodels.OffsetQ:
 			opts = append(opts, backend.ListWithContinuationToken(v[0]))
 		default:
 			return nil, handler.Errorf(
@@ -482,31 +472,31 @@ func buildPaginationOptions(u *url.URL) ([]backend.ListOption, error) {
 }
 
 func buildPaginationResponse(u *url.URL, continuationToken string,
-	result []string) (interface{}, error) {
+	result []string) (*tagmodels.ListResponse, error) {
 
-	if continuationToken == "" {
-		return result, nil
+	nextUrlString := ""
+	if continuationToken != "" {
+		// Deep copy url.
+		nextUrl, err := url.Parse(u.String())
+		if err != nil {
+			return nil, handler.Errorf(
+				"invalid url string: %s", err).Status(http.StatusBadRequest)
+		}
+		v := url.Values{}
+		if limit := u.Query().Get(tagmodels.LimitQ); limit != "" {
+			v.Add(tagmodels.LimitQ, limit)
+		}
+		// ContinuationToken cannot be empty here.
+		v.Add(tagmodels.OffsetQ, continuationToken)
+		nextUrl.RawQuery = v.Encode()
+		nextUrlString = nextUrl.String()
 	}
 
-	// Deep copy url.
-	nextUrl, err := url.Parse(u.String())
-	if err != nil {
-		return nil, handler.Errorf(
-			"invalid url string: %s", err).Status(http.StatusBadRequest)
-	}
-	v := url.Values{}
-	if limit := u.Query().Get(limitQ); limit != "" {
-		v.Add(limitQ, limit)
-	}
-	// ContinuationToken cannot be empty here.
-	v.Add(offsetQ, continuationToken)
-	nextUrl.RawQuery = v.Encode()
-
-	resp := ListResponse{
+	resp := tagmodels.ListResponse{
 		Size:   len(result),
 		Result: result,
 	}
-	resp.Links.Next = nextUrl.String()
+	resp.Links.Next = nextUrlString
 	resp.Links.Self = u.String()
 
 	return &resp, nil
