@@ -45,6 +45,7 @@ var (
 // Events defines Dispatcher events.
 type Events interface {
 	DispatcherComplete(*Dispatcher)
+	PeerRemoved(core.PeerID, core.InfoHash)
 }
 
 // Messages defines a subset of conn.Conn methods which Dispatcher requires to
@@ -206,16 +207,6 @@ func (d *Dispatcher) LastReadTime() time.Time {
 // LastWriteTime returns when d's torrent was last written to.
 func (d *Dispatcher) LastWriteTime() time.Time {
 	return d.torrent.getLastWriteTime()
-}
-
-// NumPeers returns the number of peers connected to the dispatcher.
-func (d *Dispatcher) NumPeers() int {
-	var n int
-	d.peers.Range(func(k, v interface{}) bool {
-		n++
-		return true
-	})
-	return n
 }
 
 // Empty returns true if the Dispatcher has no peers.
@@ -453,6 +444,7 @@ func (d *Dispatcher) feed(p *peer) {
 		}
 	}
 	d.removePeer(p)
+	d.events.PeerRemoved(p.id, d.torrent.InfoHash())
 }
 
 func (d *Dispatcher) dispatch(p *peer, msg *conn.Message) error {

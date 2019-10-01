@@ -118,7 +118,6 @@ func newScheduler(
 	stats tally.Scope,
 	pctx core.PeerContext,
 	announceClient announceclient.Client,
-	announceQueue announcequeue.Queue,
 	netevents networkevent.Producer,
 	options ...option) (*scheduler, error) {
 
@@ -130,11 +129,8 @@ func newScheduler(
 	}
 	slogger := logger.Sugar()
 
-	l, err := net.Listen("tcp", fmt.Sprintf(":%d", pctx.Port))
-	if err != nil {
-		return nil, err
-	}
 	done := make(chan struct{})
+
 	stats = stats.Tagged(map[string]string{
 		"module": "scheduler",
 	})
@@ -173,7 +169,6 @@ func newScheduler(
 		stats:          stats,
 		handshaker:     handshaker,
 		eventLoop:      eventLoop,
-		listener:       l,
 		preemptionTick: preemptionTick,
 		emitStatsTick:  overrides.clock.Tick(config.EmitStatsInterval),
 		announceClient: announceClient,
@@ -191,20 +186,31 @@ func newScheduler(
 		s.log().Warn("Blacklisting disabled")
 	}
 
-	s.log().Infof("Scheduler starting as peer %s on addr %s:%d", pctx.PeerID, pctx.IP, pctx.Port)
-
-	// Warning: the goroutine running the event loop holds the only reference
-	// to state! Do not hand out references anywhere else!
-	state := &state{
-		sched:           s,
-		torrentControls: make(map[core.InfoHash]*torrentControl),
-		conns: connstate.New(
-			s.config.ConnState, s.clock, s.pctx.PeerID, s.netevents, s.logger),
-		announceQueue: announceQueue,
-	}
-	go s.start(state)
-
 	return s, nil
+}
+
+// start asynchronously starts all scheduler loops.
+//
+// Note: this has been split from the constructor so we can test against an
+// "unstarted" scheduler in certain cases.
+func (s *scheduler) start(aq announcequeue.Queue) error {
+	s.log().Infof(
+		"Scheduler starting as peer %s on addr %s:%d",
+		s.pctx.PeerID, s.pctx.IP, s.pctx.Port)
+
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", s.pctx.Port))
+	if err != nil {
+		return err
+	}
+	s.listener = l
+
+	s.wg.Add(4)
+	go s.runEventLoop(aq) // Careful, this should be the only reference to aq.
+	go s.listenLoop()
+	go s.tickerLoop()
+	go s.announceLoop()
+
+	return nil
 }
 
 // Stop shuts down the scheduler.
@@ -298,18 +304,10 @@ func (s *scheduler) Probe() error {
 	return s.eventLoop.sendTimeout(probeEvent{}, s.config.ProbeTimeout)
 }
 
-func (s *scheduler) start(state *state) {
-	s.wg.Add(4)
-	go s.runEventLoop(state)
-	go s.listenLoop()
-	go s.tickerLoop()
-	go s.announceLoop()
-}
-
-func (s *scheduler) runEventLoop(state *state) {
+func (s *scheduler) runEventLoop(aq announcequeue.Queue) {
 	defer s.wg.Done()
 
-	s.eventLoop.run(state)
+	s.eventLoop.run(newState(s, aq))
 }
 
 // listenLoop accepts incoming connections.

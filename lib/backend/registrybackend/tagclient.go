@@ -141,6 +141,6 @@ func (c *TagClient) Upload(namespace, name string, src io.Reader) error {
 }
 
 // List is not supported as users can list directly from registry.
-func (c *TagClient) List(prefix string) ([]string, error) {
+func (c *TagClient) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
 	return nil, errors.New("not supported")
 }

@@ -631,7 +631,7 @@ class BuildIndex(Component):
                 repo=urllib.quote(repo, safe=''))
         res = requests.get(url, **tls_opts())
         res.raise_for_status()
-        return res.json()
+        return res.json()['result']
 
 
 class TestFS(Component):

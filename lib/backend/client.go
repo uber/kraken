@@ -62,5 +62,5 @@ type Client interface {
 	Download(namespace, name string, dst io.Writer) error
 
 	// List lists entries whose names start with prefix.
-	List(prefix string) ([]string, error)
+	List(prefix string, opts ...ListOption) (*ListResult, error)
 }

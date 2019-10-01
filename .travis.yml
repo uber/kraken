@@ -3,7 +3,6 @@ sudo: required
 language: go
 
 go:
-  - 1.11.4
   - 1.12.x
 
 services:
@@ -17,7 +16,7 @@ before_script:
 
 script:
   - make unit-test integration
-  - fossa
+  - "GO111MODULE=on fossa --option allow-unresolved:true"
 
 after_success:
   - bash <(curl -s https://codecov.io/bash)

@@ -54,6 +54,8 @@ tools/bin/testfs/testfs:: $(wildcard tools/bin/testfs/*.go)
 tracker/tracker:: $(wildcard tracker/*.go)
 	$(CROSS_COMPILER)
 
+$(LINUX_BINS):: vendor
+
 define tag_image
 	docker tag $(1):$(PACKAGE_VERSION) $(1):dev
 	docker tag $(1):$(PACKAGE_VERSION) $(REGISTRY)/$(1):$(PACKAGE_VERSION)
@@ -212,6 +214,9 @@ mocks:
 	# from the imports.
 	sed -i '' s,github.com/uber/kraken/vendor/,, mocks/lib/backend/s3backend/s3.go
 
+	$(call add_mock,lib/backend/gcsbackend,GCS)
+	sed -i '' s,github.com/uber/kraken/vendor/,, mocks/lib/backend/gcsbackend/gcs.go
+
 	$(call add_mock,lib/hashring,Ring)
 	$(call add_mock,lib/hashring,Watcher)
 
@@ -270,3 +275,7 @@ mocks:
 
 kubecluster:
 	cd ./examples/k8s && bash deploy.sh
+
+.PHONY: docs
+docs:
+	@./scripts/mkdocs.sh -q serve

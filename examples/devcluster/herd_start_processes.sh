@@ -31,6 +31,7 @@ sleep 3
 /usr/bin/kraken-proxy \
     --config=/etc/kraken/config/proxy/development.yaml \
     --port=${PROXY_PORT} \
+    --server-port=${PROXY_SERVER_PORT} \
     &>/var/log/kraken/kraken-proxy/stdout.log &
 
 sleep 3

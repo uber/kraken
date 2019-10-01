@@ -213,16 +213,36 @@ func isNotFound(err error) bool {
 }
 
 // List lists names with start with prefix.
-func (c *Client) List(prefix string) ([]string, error) {
+func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
 	// For whatever reason, the S3 list API does not accept an absolute path
 	// for prefix. Thus, the root is stripped from the input and added manually
 	// to each output key.
+	options := backend.DefaultListOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	// If paginiated is enabled use the maximum number of keys requests from thhe options,
+	// otherwise fall back to the configuration's max keys
+	maxKeys := int64(c.config.ListMaxKeys)
+	var continuationToken *string
+	if options.Paginated {
+		maxKeys = int64(options.MaxKeys)
+		// An empty continuationToken should be left as nil when sending paginated list
+		// requests to s3
+		if options.ContinuationToken != "" {
+			continuationToken = aws.String(options.ContinuationToken)
+		}
+	}
+
 	var names []string
-	err := c.s3.ListObjectsPages(&s3.ListObjectsInput{
-		Bucket:  aws.String(c.config.Bucket),
-		MaxKeys: aws.Int64(int64(c.config.ListMaxKeys)),
-		Prefix:  aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
-	}, func(page *s3.ListObjectsOutput, last bool) bool {
+	nextContinuationToken := ""
+	err := c.s3.ListObjectsV2Pages(&s3.ListObjectsV2Input{
+		Bucket:            aws.String(c.config.Bucket),
+		MaxKeys:           aws.Int64(maxKeys),
+		Prefix:            aws.String(path.Join(c.pather.BasePath(), prefix)[1:]),
+		ContinuationToken: continuationToken,
+	}, func(page *s3.ListObjectsV2Output, last bool) bool {
 		for _, object := range page.Contents {
 			if object.Key == nil {
 				log.With(
@@ -237,10 +257,27 @@ func (c *Client) List(prefix string) ([]string, error) {
 			}
 			names = append(names, name)
 		}
-		return true
+
+
+		if int64(len(names)) < maxKeys {
+			// Continue iterating pages to get more keys
+			return true
+		}
+
+		// Attempt to capture the continuation token before we stop iterating pages
+		if page.IsTruncated != nil && *page.IsTruncated && page.NextContinuationToken != nil {
+			nextContinuationToken = *page.NextContinuationToken
+		}
+
+		return false
 	})
+
 	if err != nil {
 		return nil, err
 	}
-	return names, nil
+
+	return &backend.ListResult{
+		Names:             names,
+		ContinuationToken: nextContinuationToken,
+	}, nil
 }

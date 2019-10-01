@@ -1,0 +1,11 @@
+site_name: Kraken
+nav:
+  - Home: index.md
+  - Architecture: ARCHITECTURE.md
+  - Configuration: CONFIGURATIION.md
+  - Endpoints: ENDPOINTS.md
+  - 'Harbor Integration': INTEGRATEWITHHARBOR.md
+  - Contributing: CONTRIBUTING.md
+  - 'Style Guide': STYLEGUIDE.md
+  - Roadmap: ROADMAP.md
+theme: readthedocs

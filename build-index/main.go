@@ -21,6 +21,7 @@ import (
 	_ "github.com/uber/kraken/lib/backend/httpbackend"
 	_ "github.com/uber/kraken/lib/backend/registrybackend"
 	_ "github.com/uber/kraken/lib/backend/s3backend"
+	_ "github.com/uber/kraken/lib/backend/gcsbackend"
 	_ "github.com/uber/kraken/lib/backend/testfs"
 )
 

@@ -18,12 +18,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/uber/kraken/build-index/tagclient"
+	"github.com/uber/kraken/build-index/tagmodels"
 	"github.com/uber/kraken/build-index/tagstore"
 	"github.com/uber/kraken/build-index/tagtype"
 	"github.com/uber/kraken/core"
@@ -237,6 +239,8 @@ func (s *Server) hasTagHandler(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// listHandler handles list images request. Response model
+// tagmodels.ListResponse.
 func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
 	prefix := r.URL.Path[len("/list/"):]
 
@@ -244,16 +248,30 @@ func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return handler.Errorf("backend manager: %s", err)
 	}
-	names, err := client.List(prefix)
+
+	opts, err := buildPaginationOptions(r.URL)
 	if err != nil {
 		return err
 	}
-	if err := json.NewEncoder(w).Encode(&names); err != nil {
+
+	result, err := client.List(prefix, opts...)
+	if err != nil {
+		return handler.Errorf("error listing from backend: %s", err)
+	}
+
+	resp, err := buildPaginationResponse(r.URL, result.ContinuationToken,
+		result.Names)
+	if err != nil {
+		return err
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		return handler.Errorf("json encode: %s", err)
 	}
 	return nil
 }
 
+// listRepositoryHandler handles list images tag request. Response model
+// tagmodels.ListResponse.
 // TODO(codyg): Remove this.
 func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) error {
 	repo, err := httputil.ParseParam(r, "repo")
@@ -265,12 +283,19 @@ func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return handler.Errorf("backend manager: %s", err)
 	}
-	names, err := client.List(path.Join(repo, "_manifests/tags"))
+
+	opts, err := buildPaginationOptions(r.URL)
 	if err != nil {
 		return err
 	}
+
+	result, err := client.List(path.Join(repo, "_manifests/tags"), opts...)
+	if err != nil {
+		return handler.Errorf("error listing from backend: %s", err)
+	}
+
 	var tags []string
-	for _, name := range names {
+	for _, name := range result.Names {
 		// Strip repo prefix.
 		parts := strings.Split(name, ":")
 		if len(parts) != 2 {
@@ -279,7 +304,12 @@ func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) e
 		}
 		tags = append(tags, parts[1])
 	}
-	if err := json.NewEncoder(w).Encode(&tags); err != nil {
+
+	resp, err := buildPaginationResponse(r.URL, result.ContinuationToken, tags)
+	if err != nil {
+		return err
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		return handler.Errorf("json encode: %s", err)
 	}
 	return nil
@@ -404,4 +434,70 @@ func (s *Server) replicateTag(tag string, d core.Digest, deps core.DigestList) e
 		s.stats.Counter("duplicate_replicate_failures").Inc(1)
 	}
 	return nil
+}
+
+func buildPaginationOptions(u *url.URL) ([]backend.ListOption, error) {
+	var opts []backend.ListOption
+	q := u.Query()
+	for k, v := range q {
+		if len(v) != 1 {
+			return nil, handler.Errorf(
+				"invalid query %s:%s", k, v).Status(http.StatusBadRequest)
+		}
+		switch k {
+		case tagmodels.LimitQ:
+			limitCount, err := strconv.Atoi(v[0])
+			if err != nil {
+				return nil, handler.Errorf(
+					"invalid limit %s: %s", v, err).Status(http.StatusBadRequest)
+			}
+			if limitCount == 0 {
+				return nil, handler.Errorf(
+					"invalid limit %d", limitCount).Status(http.StatusBadRequest)
+			}
+			opts = append(opts, backend.ListWithMaxKeys(limitCount))
+		case tagmodels.OffsetQ:
+			opts = append(opts, backend.ListWithContinuationToken(v[0]))
+		default:
+			return nil, handler.Errorf(
+				"invalid query %s", k).Status(http.StatusBadRequest)
+		}
+	}
+	if len(opts) > 0 {
+		// Enable pagination if either or both of the query param exists.
+		opts = append(opts, backend.ListWithPagination())
+	}
+
+	return opts, nil
+}
+
+func buildPaginationResponse(u *url.URL, continuationToken string,
+	result []string) (*tagmodels.ListResponse, error) {
+
+	nextUrlString := ""
+	if continuationToken != "" {
+		// Deep copy url.
+		nextUrl, err := url.Parse(u.String())
+		if err != nil {
+			return nil, handler.Errorf(
+				"invalid url string: %s", err).Status(http.StatusBadRequest)
+		}
+		v := url.Values{}
+		if limit := u.Query().Get(tagmodels.LimitQ); limit != "" {
+			v.Add(tagmodels.LimitQ, limit)
+		}
+		// ContinuationToken cannot be empty here.
+		v.Add(tagmodels.OffsetQ, continuationToken)
+		nextUrl.RawQuery = v.Encode()
+		nextUrlString = nextUrl.String()
+	}
+
+	resp := tagmodels.ListResponse{
+		Size:   len(result),
+		Result: result,
+	}
+	resp.Links.Next = nextUrlString
+	resp.Links.Self = u.String()
+
+	return &resp, nil
 }

@@ -131,6 +131,7 @@ func Run(flags *Flags) {
 	if err != nil {
 		log.Fatalf("Error building tracker upstream: %s", err)
 	}
+	go trackers.Monitor(nil)
 
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
@@ -183,6 +184,7 @@ func Run(flags *Flags) {
 	}
 
 	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
+		"allowed_cidrs": config.AllowedCidrs,
 		"port": flags.AgentRegistryPort,
 		"registry_server": nginx.GetServer(
 			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),

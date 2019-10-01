@@ -102,6 +102,8 @@ type noopEvents struct{}
 
 func (e noopEvents) DispatcherComplete(*Dispatcher) {}
 
+func (e noopEvents) PeerRemoved(core.PeerID, core.InfoHash) {}
+
 func testDispatcher(config Config, clk clock.Clock, t storage.Torrent) *Dispatcher {
 	d, err := newDispatcher(
 		config,
@@ -413,31 +415,6 @@ func TestDispatcherHandleCompleteRequestsPieces(t *testing.T) {
 
 	require.Equal(map[int]int{0: 1}, numRequestsPerPiece(p.messages))
 	require.False(closed(p.messages))
-}
-
-func TestDispatcherNumPeers(t *testing.T) {
-	require := require.New(t)
-
-	blob := core.SizedBlobFixture(1, 1)
-
-	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
-	defer cleanup()
-
-	d := testDispatcher(Config{}, clock.NewMock(), torrent)
-
-	require.Equal(0, d.NumPeers())
-
-	m1 := newMockMessages()
-	require.NoError(d.AddPeer(core.PeerIDFixture(), bitsetutil.FromBools(false), m1))
-	require.Equal(1, d.NumPeers())
-
-	require.NoError(d.AddPeer(core.PeerIDFixture(), bitsetutil.FromBools(false), newMockMessages()))
-	require.Equal(2, d.NumPeers())
-
-	m1.Close()
-	time.Sleep(500 * time.Millisecond)
-
-	require.Equal(1, d.NumPeers())
 }
 
 func TestDispatcherPeerPieceCounts(t *testing.T) {

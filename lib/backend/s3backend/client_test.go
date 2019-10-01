@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/mocks/lib/backend/s3backend"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/randutil"
@@ -180,35 +181,109 @@ func TestClientList(t *testing.T) {
 
 	client := mocks.new()
 
-	mocks.s3.EXPECT().ListObjectsPages(
-		&s3.ListObjectsInput{
-			Bucket:  aws.String("test-bucket"),
-			MaxKeys: aws.Int64(250),
-			Prefix:  aws.String("root/test"),
+	mocks.s3.EXPECT().ListObjectsV2Pages(
+		&s3.ListObjectsV2Input{
+			Bucket:            aws.String("test-bucket"),
+			MaxKeys:           aws.Int64(250),
+			Prefix:            aws.String("root/test"),
 		},
 		gomock.Any(),
 	).DoAndReturn(func(
-		input *s3.ListObjectsInput,
-		f func(page *s3.ListObjectsOutput, last bool) bool) error {
+		input *s3.ListObjectsV2Input,
+		f func(page *s3.ListObjectsV2Output, last bool) bool) error {
 
-		f(&s3.ListObjectsOutput{
+		shouldContinue := f(&s3.ListObjectsV2Output{
 			Contents: []*s3.Object{
 				{Key: aws.String("root/test/a")},
 				{Key: aws.String("root/test/b")},
 			},
 		}, false)
 
-		f(&s3.ListObjectsOutput{
+		if shouldContinue {
+			f(&s3.ListObjectsV2Output{
+				Contents: []*s3.Object{
+					{Key: aws.String("root/test/c")},
+					{Key: aws.String("root/test/d")},
+				},
+			}, true)
+		}
+
+		return nil
+	})
+
+	result, err := client.List("test")
+	require.NoError(err)
+	require.Equal([]string{"test/a", "test/b", "test/c", "test/d"}, result.Names)
+}
+
+func TestClientListPaginated(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	client := mocks.new()
+
+	mocks.s3.EXPECT().ListObjectsV2Pages(
+		&s3.ListObjectsV2Input{
+			Bucket:            aws.String("test-bucket"),
+			MaxKeys:           aws.Int64(2),
+			Prefix:            aws.String("root/test"),
+		},
+		gomock.Any(),
+	).DoAndReturn(func(
+		input *s3.ListObjectsV2Input,
+		f func(page *s3.ListObjectsV2Output, last bool) bool) error {
+
+		f(&s3.ListObjectsV2Output{
+			Contents: []*s3.Object{
+				{Key: aws.String("root/test/a")},
+				{Key: aws.String("root/test/b")},
+			},
+			IsTruncated:           aws.Bool(true),
+			NextContinuationToken: aws.String("test-continuation-token"),
+		}, false)
+
+		return nil
+	})
+
+	mocks.s3.EXPECT().ListObjectsV2Pages(
+		&s3.ListObjectsV2Input{
+			Bucket:            aws.String("test-bucket"),
+			MaxKeys:           aws.Int64(2),
+			Prefix:            aws.String("root/test"),
+			ContinuationToken: aws.String("test-continuation-token"),
+		},
+		gomock.Any(),
+	).DoAndReturn(func(
+		input *s3.ListObjectsV2Input,
+		f func(page *s3.ListObjectsV2Output, last bool) bool) error {
+
+		f(&s3.ListObjectsV2Output{
 			Contents: []*s3.Object{
 				{Key: aws.String("root/test/c")},
 				{Key: aws.String("root/test/d")},
 			},
+			IsTruncated: aws.Bool(false),
 		}, true)
 
 		return nil
 	})
 
-	names, err := client.List("test")
+	result, err := client.List("test",
+		backend.ListWithPagination(),
+		backend.ListWithMaxKeys(2),
+	)
 	require.NoError(err)
-	require.Equal([]string{"test/a", "test/b", "test/c", "test/d"}, names)
+	require.Equal([]string{"test/a", "test/b"}, result.Names)
+	require.Equal("test-continuation-token", result.ContinuationToken)
+
+	result, err = client.List("test",
+		backend.ListWithPagination(),
+		backend.ListWithMaxKeys(2),
+		backend.ListWithContinuationToken(result.ContinuationToken),
+	)
+	require.NoError(err)
+	require.Equal([]string{"test/c", "test/d"}, result.Names)
+	require.Equal("", result.ContinuationToken)
 }
