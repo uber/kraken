@@ -45,6 +45,7 @@ var (
 // Events defines Dispatcher events.
 type Events interface {
 	DispatcherComplete(*Dispatcher)
+	PeerRemoved(core.PeerID, core.InfoHash)
 }
 
 // Messages defines a subset of conn.Conn methods which Dispatcher requires to
@@ -208,16 +209,6 @@ func (d *Dispatcher) LastWriteTime() time.Time {
 	return d.torrent.getLastWriteTime()
 }
 
-// NumPeers returns the number of peers connected to the dispatcher.
-func (d *Dispatcher) NumPeers() int {
-	var n int
-	d.peers.Range(func(k, v interface{}) bool {
-		n++
-		return true
-	})
-	return n
-}
-
 // Empty returns true if the Dispatcher has no peers.
 func (d *Dispatcher) Empty() bool {
 	empty := true
@@ -347,7 +338,8 @@ func (d *Dispatcher) complete() {
 		summary := torrentlog.SeederSummary{
 			PeerID:         peerID,
 			RequestsSent:   requested,
-			PiecesReceived: pstats.getPiecesReceived(),
+			GoodPiecesReceived: pstats.getGoodPiecesReceived(),
+			DuplicatePiecesReceived: pstats.getDuplicatePiecesReceived(),
 		}
 		summaries = append(summaries, summary)
 		return true
@@ -390,8 +382,10 @@ func (d *Dispatcher) maybeSendPieceRequests(p *peer, candidates *bitset.BitSet) 
 			d.pieceRequestManager.MarkUnsent(p.id, i)
 			return false, err
 		}
-		p.pstats.incrementPieceRequestsSent()
-	}
+		d.netevents.Produce(
+			networkevent.RequestPieceEvent(d.torrent.InfoHash(), d.localPeerID, p.id, i))
+			p.pstats.incrementPieceRequestsSent()
+		}
 	return true, nil
 }
 
@@ -450,6 +444,7 @@ func (d *Dispatcher) feed(p *peer) {
 		}
 	}
 	d.removePeer(p)
+	d.events.PeerRemoved(p.id, d.torrent.InfoHash())
 }
 
 func (d *Dispatcher) dispatch(p *peer, msg *conn.Message) error {
@@ -542,6 +537,8 @@ func (d *Dispatcher) handlePiecePayload(
 		if err != storage.ErrPieceComplete {
 			d.log("peer", p, "piece", i).Errorf("Error writing piece payload: %s", err)
 			d.pieceRequestManager.MarkInvalid(p.id, i)
+		} else {
+			p.pstats.incrementDuplicatePiecesReceived()
 		}
 		return
 	}
@@ -549,7 +546,7 @@ func (d *Dispatcher) handlePiecePayload(
 	d.netevents.Produce(
 		networkevent.ReceivePieceEvent(d.torrent.InfoHash(), d.localPeerID, p.id, i))
 
-	p.pstats.incrementPiecesReceived()
+	p.pstats.incrementGoodPiecesReceived()
 	p.touchLastGoodPieceReceived()
 	if d.torrent.Complete() {
 		d.complete()

@@ -323,7 +323,7 @@ func (h *Handshaker) fullHandshake(
 	if hs.peerID != peerID {
 		return nil, errors.New("unexpected peer id")
 	}
-	c, err := h.newConn(nc, peerID, info, true)
+	c, err := h.newConn(nc, peerID, info, false)
 	if err != nil {
 		return nil, fmt.Errorf("new conn: %s", err)
 	}

@@ -14,6 +14,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/uber/kraken/lib/torrent/scheduler/announcequeue"
@@ -39,17 +40,29 @@ func makeReloadable(s *scheduler, aq func() announcequeue.Queue) *reloadableSche
 // Reload restarts the Scheduler with new configuration. Panics if the Scheduler
 // fails to restart.
 func (rs *reloadableScheduler) Reload(config Config) {
+	if err := rs.reload(config); err != nil {
+		// Totally unrecoverable error -- rs.scheduler is now stopped and unusable,
+		// so let process die and restart with original config.
+		log.Fatalf("Failed to reload scheduler config: %s", err)
+	}
+}
+
+func (rs *reloadableScheduler) reload(config Config) error {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 
 	s := rs.scheduler
 	s.Stop()
+
 	n, err := newScheduler(
-		config, s.torrentArchive, s.stats, s.pctx, s.announceClient, rs.aq(), s.netevents)
+		config, s.torrentArchive, s.stats, s.pctx, s.announceClient, s.netevents)
 	if err != nil {
-		// Totally unrecoverable error -- rs.scheduler is now stopped and unusable,
-		// so let process die and restart with original config.
-		log.Fatalf("Failed to reload scheduler config: %s", err)
+		return fmt.Errorf("create new scheduler: %s", err)
 	}
 	rs.scheduler = n
+
+	if err := rs.scheduler.start(rs.aq()); err != nil {
+		return fmt.Errorf("start new scheduler: %s", err)
+	}
+	return nil
 }

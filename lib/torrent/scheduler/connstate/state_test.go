@@ -24,6 +24,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler/conn"
+	"github.com/uber/kraken/lib/torrent/storage"
 )
 
 func testState(config Config, clk clock.Clock) *State {
@@ -248,6 +249,39 @@ func TestStateActiveConns(t *testing.T) {
 		s.DeleteActive(c)
 	}
 	require.Empty(s.ActiveConns())
+}
+
+func TestStateSaturated(t *testing.T) {
+	require := require.New(t)
+
+	s := testState(Config{MaxOpenConnectionsPerTorrent: 10}, clock.New())
+
+	info := storage.TorrentInfoFixture(1, 1)
+
+	var conns []*conn.Conn
+	for i := 0; i < 10; i++ {
+		c, _, cleanup := conn.PipeFixture(conn.Config{}, info)
+		defer cleanup()
+
+		require.NoError(s.AddPending(c.PeerID(), info.InfoHash(), nil))
+		conns = append(conns, c)
+	}
+
+	// Pending conns do not count towards saturated.
+	require.False(s.Saturated(info.InfoHash()))
+
+	for i := 0; i < 9; i++ {
+		require.NoError(s.MovePendingToActive(conns[i]))
+		require.False(s.Saturated(info.InfoHash()))
+	}
+
+	// Adding 10th conn should mean we're saturated.
+	require.NoError(s.MovePendingToActive(conns[9]))
+	require.True(s.Saturated(info.InfoHash()))
+
+	// Removing one should mean we're no longer saturated.
+	s.DeleteActive(conns[5])
+	require.False(s.Saturated(info.InfoHash()))
 }
 
 func TestMaxMutualConns(t *testing.T) {

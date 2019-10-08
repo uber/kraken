@@ -3,20 +3,20 @@ sudo: required
 language: go
 
 go:
-  - 1.11.4
   - 1.12.x
 
 services:
   - docker
 
-install:
-  - for i in $(seq 1 5); do (go get -v && break) || sleep 30; done # Install dependencies listed in the go.mod and go.sum files.
-
 env:
-  - PATH=$HOME/protoc/bin:$PATH GO111MODULE=on
+  - PATH=$HOME/protoc/bin:$PATH
+
+before_script:
+- "curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | sudo bash"
 
 script:
   - make unit-test integration
+  - "GO111MODULE=on fossa --option allow-unresolved:true"
 
 after_success:
   - bash <(curl -s https://codecov.io/bash)

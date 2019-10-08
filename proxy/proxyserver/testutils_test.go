@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package agentserver
+package proxyserver
 
 import (
 	"testing"
@@ -19,33 +19,32 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/uber-go/tally"
 
-	"github.com/uber/kraken/lib/store"
-	"github.com/uber/kraken/mocks/lib/torrent/scheduler"
+	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
 	"github.com/uber/kraken/utils/testutil"
 )
 
 type serverMocks struct {
-	cads    *store.CADownloadStore
-	sched   *mockscheduler.MockReloadableScheduler
-	cleanup *testutil.Cleanup
+	originClient *mockblobclient.MockClusterClient
+	cleanup      *testutil.Cleanup
 }
 
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	var cleanup testutil.Cleanup
-
-	cads, c := store.CADownloadStoreFixture()
-	cleanup.Add(c)
+	defer cleanup.Recover()
 
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
 
-	sched := mockscheduler.NewMockReloadableScheduler(ctrl)
+	originClient := mockblobclient.NewMockClusterClient(ctrl)
 
-	return &serverMocks{cads, sched, &cleanup}, cleanup.Run
+	return &serverMocks{
+		originClient: originClient,
+		cleanup:      &cleanup,
+	}, cleanup.Run
 }
 
 func (m *serverMocks) startServer() string {
-	s := New(Config{}, tally.NoopScope, m.cads, m.sched)
+	s := New(tally.NoopScope, m.originClient)
 	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
 	return addr

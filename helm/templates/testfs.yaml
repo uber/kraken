@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kraken-testfs
+  labels:
+    kraken: 'true'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kraken-app: testfs
+  template:
+    metadata:
+      labels:
+        kraken: 'true'
+        kraken-app: testfs
+    spec:
+      containers:
+      - name: main
+        image: gcr.io/uber-container-tools/kraken-testfs:{{ .Values.kraken.tag }}
+        command:
+        - /usr/bin/kraken-testfs
+        - --port=80
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: kraken-testfs
+  labels:
+    kraken: 'true'
+spec:
+  selector:
+    kraken-app: testfs
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80

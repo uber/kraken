@@ -152,6 +152,7 @@ func TestManagerAddTaskFail(t *testing.T) {
 		mocks.executor.EXPECT().Exec(task).Return(errors.New("task failed")),
 		mocks.store.EXPECT().MarkFailed(task).Return(nil),
 		task.EXPECT().GetFailures().Return(1),
+		task.EXPECT().Tags().Return(nil),
 	)
 
 	m, err := mocks.new()

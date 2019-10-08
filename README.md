@@ -1,15 +1,18 @@
-# Kraken :octopus:
+<p align="center"><img src="assets/kraken-logo-color.svg" width="175" title="Kraken Logo"></p>
 
-[![Build Status](https://travis-ci.org/uber/kraken.svg?branch=master)](https://travis-ci.org/uber/kraken)
-[![Github Release](https://img.shields.io/github/release/uber/kraken.svg)](https://github.com/uber/kraken/releases)
-[![GoDoc](https://godoc.org/github.com/uber/kraken?status.svg)](https://godoc.org/github.com/uber/kraken)
-[![GoReportCard](https://goreportcard.com/badge/github.com/uber/kraken)](https://goreportcard.com/report/github.com/uber/kraken)
-[![Codecov](https://codecov.io/gh/uber/kraken/branch/master/graph/badge.svg)](https://codecov.io/gh/uber/kraken)
+<p align="center">
+</a>
+<a href="https://travis-ci.com/uber/kraken"><img src="https://travis-ci.com/uber/kraken.svg?branch=master"></a>
+<a href="https://github.com/uber/kraken/releases"><img src="https://img.shields.io/github/release/uber/kraken.svg" /></a>
+<a href="https://godoc.org/github.com/uber/kraken"><img src="https://godoc.org/github.com/uber/kraken?status.svg"></a>
+<a href="https://goreportcard.com/badge/github.com/uber/kraken"><img src="https://goreportcard.com/badge/github.com/uber/kraken"></a>
+<a href="https://codecov.io/gh/uber/kraken"><img src="https://codecov.io/gh/uber/kraken/branch/master/graph/badge.svg"></a>
+</p>
 
 Kraken is a P2P-powered Docker registry that focuses on scalability and availability. It is
 designed for Docker image management, replication and distribution in a hybrid cloud environment.
 With pluggable backend support, Kraken can easily integrate into existing Docker registry setups
-as the distribution layer.
+as the distribution layer. 
 
 Kraken has been in production at Uber since early 2018. In our busiest cluster, Kraken distributes
 more than 1 million blobs per day, including 100k 1G+ blobs. At its peak production load, Kraken
@@ -17,7 +20,9 @@ distributes 20K 100MB-1G blobs in under 30 sec.
 
 Below is the visualization of a small Kraken cluster at work:
 
-![](assets/visualization.gif)
+<p align="center">
+  <img src="assets/visualization.gif" title="Visualization">
+</p>
 
 # Table of Contents
 
@@ -37,12 +42,12 @@ Following are some highlights of Kraken:
 - **Highly scalable**. Kraken is capable of distributing Docker images at > 50% of max download
   speed limit on every host. Cluster size and image size do not have significant impact on download
   speed.
-  - Supports at least 8k hosts per cluster.
+  - Supports at least 15k hosts per cluster.
   - Supports arbitrarily large blobs/layers. We normally limit max size to 20G for best performance.
 - **Highly available**. No component is a single point of failure.
 - **Secure**. Support uploader authentication and data integrity protection through TLS.
 - **Pluggable storage options**. Instead of managing data, Kraken plugs into reliable blob storage
-  options, like S3, HDFS or another registry. The storage interface is simple and new options
+  options, like S3, GCS, ECR, HDFS or another registry. The storage interface is simple and new options
   are easy to add.
 - **Lossless cross cluster replication**. Kraken supports rule-based async replication between
   clusters.
@@ -51,13 +56,17 @@ Following are some highlights of Kraken:
 
 # Design
 
-The high level idea of Kraken is to have a small number of dedicated hosts seed content to a network
-of agents running on each host in the cluster.
+The high level idea of Kraken is to have a small number of dedicated hosts seeding content to a
+network of agents running on each host in the cluster.
+
 A central component, the tracker, will orchestrate all participants in the network to form a
 pseudo-random regular graph.
-Such a graph has high connectivity and small diameter, so all participants in a reasonably sized
-cluster can reach > 80% of max upload/download speed in theory, and performance doesn't degrade much
-as the blob size and cluster size increase.
+
+Such a graph has high connectivity and small diameter. As a result, even with only one seeder and
+having thousands of peers joining in the same second, all participants can reach a mininum of 80%
+max upload/download speed in theory (60% with current implementation), and performance doesn't
+degrade much as the blob size and cluster size increase. For more details, see the team's [tech
+talk](https://www.youtube.com/watch?v=waVtYYSXkXU) at KubeCon + CloudNativeCon.
 
 # Architecture
 
@@ -70,7 +79,7 @@ as the blob size and cluster size increase.
   - Connects to peers returned by tracker to download content
 - Origin
   - Dedicated seeders
-  - Stores blobs as files on disk backed by pluggable storage (e.g. S3)
+  - Stores blobs as files on disk backed by pluggable storage (e.g. S3, GCS, ECR)
   - Forms a self-healing hash ring to distribute load
 - Tracker
   - Tracks which peers have what content (both in-progress and completed)
@@ -83,7 +92,7 @@ as the blob size and cluster size increase.
   - Mapping of human readable tag to blob digest
   - No consistency guarantees: client should use unique tags
   - Powers image replication between clusters (simple duplicated queues with retry)
-  - Stores tags as files on disk backed by pluggable storage (e.g. S3)
+  - Stores tags as files on disk backed by pluggable storage (e.g. S3, GCS, ECR)
 
 # Benchmark
 
@@ -100,21 +109,33 @@ concurrently (5200 blob downloads), with 300MB/s speed limit on all agents (usin
 # Usage
 
 All Kraken components can be deployed as Docker containers. To build the Docker images:
-
 ```
 $ make images
 ```
+For information about how to configure and use Kraken, please refer to the [documentation](docs/CONFIGURATION.md).
+
+## Kraken on Kubernetes
+
+You can use our example Helm chart to deploy Kraken (with an example http fileserver backend) on
+your k8s cluster:
+```
+$ helm install --name=kraken-demo ./helm
+```
+Once deployed, each and every node will have a docker registry API exposed on `localhost:30081`.
+For an example pod spec that pulls images from Kraken agent, see [example](examples/k8s/demo.json).
+
+For more information on k8s setup, see [README](examples/k8s/README.md).
+
+## Devcluster
 
 To start a herd container (which contains origin, tracker, build-index and proxy) and two agent
 containers with development configuration:
-
 ```
 $ make devcluster
 ```
 
 Docker-for-Mac is required for making dev-cluster work on your laptop.
 For more information on devcluster, please check out devcluster [README](examples/devcluster/README.md).
-For information about how to configure and use Kraken, please refer to the [documentation](docs/CONFIGURATION.md).
 
 # Comparison With Other Projects
 
@@ -122,6 +143,7 @@ For information about how to configure and use Kraken, please refer to the [docu
 
 Dragonfly cluster has one or a few "supernodes" that coordinates transfer of every 4MB chunk of data
 in the cluster.
+
 While the supernode would be able to make optimal decisions, the throughput of the whole cluster is
 limited by the processing power of one or a few hosts, and the performance would degrade linearly as
 either blob size or cluster size increases.
@@ -169,4 +191,4 @@ Please check out our [guide](docs/CONTRIBUTING.md).
 
 # Contact
 
-To contact us, please join our [Slack channel](https://join.slack.com/t/uber-container-tools/shared_invite/enQtNTIxODAwMDEzNjM1LWIyNzUyMTk3NTAzZGY0MDkzMzQ1YTlmMTUwZmIwNDk3YTA0ZjZjZGRhMTM2NzI0OGM3OGNjMDZiZTI2ZTY5NWY).
+To contact us, please join our [Slack channel](https://join.slack.com/t/uber-container-tools/shared_invite/enQtNTIxODAwMDEzNjM1LWIwYzIxNmUwOGY3MmVmM2MxYTczOTQ4ZDU0YjAxMTA0NDgyNzdlZTA4ZWVkZGNlMDUzZDA1ZTJiZTQ4ZDY0YTM).

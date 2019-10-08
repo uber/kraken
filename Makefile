@@ -1,5 +1,5 @@
 SHELL = /bin/bash -o pipefail
-GO = GO111MODULE=on go
+GO = go
 
 # Flags to pass to go build
 BUILD_FLAGS = -gcflags '-N -l'
@@ -54,6 +54,8 @@ tools/bin/testfs/testfs:: $(wildcard tools/bin/testfs/*.go)
 tracker/tracker:: $(wildcard tracker/*.go)
 	$(CROSS_COMPILER)
 
+$(LINUX_BINS):: vendor
+
 define tag_image
 	docker tag $(1):$(PACKAGE_VERSION) $(1):dev
 	docker tag $(1):$(PACKAGE_VERSION) $(REGISTRY)/$(1):$(PACKAGE_VERSION)
@@ -91,7 +93,8 @@ clean::
 	@rm -f $(LINUX_BINS)
 
 vendor:
-	$(GO) mod vendor
+	go get -u github.com/Masterminds/glide
+	$(GOPATH)/bin/glide i
 
 .PHONY: bins
 bins: $(LINUX_BINS)
@@ -106,28 +109,30 @@ unit-test: vendor
 docker_stop:
 	-docker ps -a --format '{{.Names}}' | grep kraken | while read n; do docker rm -f $$n; done
 
+venv: requirements-tests.txt
+	virtualenv --python=$(shell which python2) --setuptools venv
+	source venv/bin/activate
+	venv/bin/pip install -r requirements-tests.txt
+
 .PHONY: integration
 FILE?=
 NAME?=test_
 USERNAME:=$(shell id -u -n)
 USERID:=$(shell id -u)
-integration: vendor $(LINUX_BINS) docker_stop tools/bin/puller/puller
+integration: venv vendor $(LINUX_BINS) docker_stop tools/bin/puller/puller
 	docker build $(BUILD_QUIET) -t kraken-agent:$(PACKAGE_VERSION) -f docker/agent/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-build-index:$(PACKAGE_VERSION) -f docker/build-index/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-origin:$(PACKAGE_VERSION) -f docker/origin/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-proxy:$(PACKAGE_VERSION) -f docker/proxy/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-testfs:$(PACKAGE_VERSION) -f docker/testfs/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-tracker:$(PACKAGE_VERSION) -f docker/tracker/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
-	if [ ! -d env ]; then virtualenv --setuptools env; fi
-	source env/bin/activate
-	env/bin/pip install -r requirements-tests.txt
-	PACKAGE_VERSION=$(PACKAGE_VERSION) env/bin/py.test --timeout=120 -v -k $(NAME) test/python/$(FILE)
+	PACKAGE_VERSION=$(PACKAGE_VERSION) venv/bin/py.test --timeout=120 -v -k $(NAME) test/python/$(FILE)
 
 .PHONY: runtest
 NAME?=test_
-runtest: docker_stop
-	source env/bin/activate
-	env/bin/py.test --timeout=120 -v -k $(NAME) test/python
+runtest: venv docker_stop
+	source venv/bin/activate
+	venv/bin/py.test --timeout=120 -v -k $(NAME) test/python
 
 .PHONY: devcluster
 devcluster: vendor $(LINUX_BINS) docker_stop images
@@ -183,7 +188,7 @@ protoc:
 # mockgen must be installed on the system to make this work.
 # Install it by running:
 # `go get github.com/golang/mock/mockgen`.
-mockgen = GO111MODULES=on $(GOPATH)/bin/mockgen
+mockgen = $(GOPATH)/bin/mockgen
 
 define lowercase
 $(shell tr '[:upper:]' '[:lower:]' <<< $(1))
@@ -202,10 +207,15 @@ mocks:
 	rm -rf mocks
 	mkdir -p $(GOPATH)/bin
 
+	$(call add_mock,agent/agentclient,Client)
+
 	$(call add_mock,lib/backend/s3backend,S3)
 	# mockgen doesn't play nice when importing vendor code. Must strip the vendor prefix
 	# from the imports.
 	sed -i '' s,github.com/uber/kraken/vendor/,, mocks/lib/backend/s3backend/s3.go
+
+	$(call add_mock,lib/backend/gcsbackend,GCS)
+	sed -i '' s,github.com/uber/kraken/vendor/,, mocks/lib/backend/gcsbackend/gcs.go
 
 	$(call add_mock,lib/hashring,Ring)
 	$(call add_mock,lib/hashring,Watcher)
@@ -260,3 +270,12 @@ mocks:
 	$(call add_mock,lib/persistedretry/tagreplication,RemoteValidator)
 
 	$(call add_mock,utils/httputil,RoundTripper)
+
+# ==== MISC ====
+
+kubecluster:
+	cd ./examples/k8s && bash deploy.sh
+
+.PHONY: docs
+docs:
+	@./scripts/mkdocs.sh -q serve

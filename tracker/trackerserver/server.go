@@ -78,8 +78,8 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/health", handler.Wrap(s.healthHandler))
 	r.Get("/announce", handler.Wrap(s.announceHandlerV1))
-	r.Post("/announce/:infohash", handler.Wrap(s.announceHandlerV2))
-	r.Get("/namespace/:namespace/blobs/:digest/metainfo", handler.Wrap(s.getMetaInfoHandler))
+	r.Post("/announce/{infohash}", handler.Wrap(s.announceHandlerV2))
+	r.Get("/namespace/{namespace}/blobs/{digest}/metainfo", handler.Wrap(s.getMetaInfoHandler))
 
 	r.Mount("/debug", chimiddleware.Profiler())
 

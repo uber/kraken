@@ -124,7 +124,7 @@ http {
   # Gzip Settings
   ##
 
-  gzip on;
+  gzip off;
   gzip_disable "msie6";
 
   # gzip_vary on;

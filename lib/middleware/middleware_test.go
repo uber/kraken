@@ -35,11 +35,11 @@ func TestScopeByEndpoint(t *testing.T) {
 		reqPath          string
 		expectedEndpoint string
 	}{
-		{"GET", "/foo/:foo/bar/:bar", "/foo/x/bar/y", "foo.bar"},
-		{"POST", "/foo/:foo/bar/:bar", "/foo/x/bar/y", "foo.bar"},
+		{"GET", "/foo/{foo}/bar/{bar}", "/foo/x/bar/y", "foo.bar"},
+		{"POST", "/foo/{foo}/bar/{bar}", "/foo/x/bar/y", "foo.bar"},
 		{"GET", "/a/b/c", "/a/b/c", "a.b.c"},
 		{"GET", "/", "/", ""},
-		{"GET", "/x/:a/:b/:c", "/x/a/b/c", "x"},
+		{"GET", "/x/{a}/{b}/{c}", "/x/a/b/c", "x"},
 	}
 
 	for _, test := range tests {
@@ -78,7 +78,7 @@ func TestLatencyTimer(t *testing.T) {
 
 	r := chi.NewRouter()
 	r.Use(LatencyTimer(stats))
-	r.Get("/foo/:foo", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/foo/{foo}", func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(200 * time.Millisecond)
 	})
 
@@ -133,7 +133,7 @@ func TestStatusCounter(t *testing.T) {
 
 			r := chi.NewRouter()
 			r.Use(StatusCounter(stats))
-			r.Get("/foo/:foo", test.handler)
+			r.Get("/foo/{foo}", test.handler)
 
 			addr, stop := testutil.StartServer(r)
 			defer stop()

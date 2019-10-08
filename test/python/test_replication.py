@@ -20,7 +20,7 @@ import pytest
 from conftest import TEST_IMAGE
 
 
-def test_docker_image_replication(one_way_replicas):
+def test_docker_image_replication_success(one_way_replicas):
     one_way_replicas.src.proxy.push(TEST_IMAGE)
 
     # Wait for replication to finish.

@@ -23,6 +23,11 @@ upstream registry-backend {
 server {
   listen {{.port}};
 
+  {{range .allowed_cidrs}}
+    allow {{.}};
+  {{end}}
+  deny all;
+
   {{.client_verification}}
 
   access_log {{.log_dir}}/nginx-access.v2.log;

@@ -123,28 +123,6 @@ func TestPutAndGetFromDiskWriteThrough(t *testing.T) {
 	require.Equal(digest, result)
 }
 
-func TestGetCachesOnDisk(t *testing.T) {
-	require := require.New(t)
-
-	mocks, cleanup := newStoreMocks(t)
-	defer cleanup()
-
-	store := mocks.new(Config{})
-
-	tag := core.TagFixture()
-	digest := core.DigestFixture()
-
-	mocks.backendClient.EXPECT().Download(
-		tag, tag, mockutil.MatchWriter([]byte(digest.String()))).Return(nil)
-
-	// Getting multiple times should only cause one backend Download.
-	for i := 0; i < 10; i++ {
-		result, err := store.Get(tag)
-		require.NoError(err)
-		require.Equal(digest, result)
-	}
-}
-
 func TestGetFromBackendNotFound(t *testing.T) {
 	require := require.New(t)
 

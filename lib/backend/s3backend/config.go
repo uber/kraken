@@ -16,7 +16,7 @@ package s3backend
 import (
 	"github.com/c2h5oh/datasize"
 
-	"github.com/uber/kraken/utils/memsize"
+	"github.com/uber/kraken/lib/backend"
 )
 
 // Config defines s3 connection specific
@@ -59,21 +59,21 @@ type AuthConfig struct {
 
 func (c *Config) applyDefaults() {
 	if c.UploadPartSize == 0 {
-		c.UploadPartSize = int64(64 * memsize.MB)
+		c.UploadPartSize = backend.DefaultPartSize
 	}
 	if c.DownloadPartSize == 0 {
-		c.DownloadPartSize = int64(64 * memsize.MB)
+		c.DownloadPartSize = backend.DefaultPartSize
 	}
 	if c.UploadConcurrency == 0 {
-		c.UploadConcurrency = 10
+		c.UploadConcurrency = backend.DefaultConcurrency
 	}
 	if c.DownloadConcurrency == 0 {
-		c.DownloadConcurrency = 10
+		c.DownloadConcurrency = backend.DefaultConcurrency
 	}
 	if c.BufferGuard == 0 {
-		c.BufferGuard = 10 * datasize.MB
+		c.BufferGuard = backend.DefaultBufferGuard
 	}
 	if c.ListMaxKeys == 0 {
-		c.ListMaxKeys = 250
+		c.ListMaxKeys = backend.DefaultListMaxKeys
 	}
 }

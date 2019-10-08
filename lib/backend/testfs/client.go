@@ -132,7 +132,16 @@ func (c *Client) Download(namespace, name string, dst io.Writer) error {
 }
 
 // List lists names starting with prefix.
-func (c *Client) List(prefix string) ([]string, error) {
+func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
+	options := backend.DefaultListOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if options.Paginated {
+		return nil, errors.New("pagination not supported")
+	}
+
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/list/%s", c.config.Addr, path.Join(c.pather.BasePath(), prefix)))
 	if err != nil {
@@ -151,5 +160,7 @@ func (c *Client) List(prefix string) ([]string, error) {
 		}
 		names = append(names, name)
 	}
-	return names, nil
+	return &backend.ListResult{
+		Names: names,
+	}, nil
 }

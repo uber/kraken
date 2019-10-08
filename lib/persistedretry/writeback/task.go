@@ -61,3 +61,8 @@ func (t *Task) GetFailures() int {
 func (t *Task) Ready() bool {
 	return time.Since(t.CreatedAt) >= t.Delay
 }
+
+// Tags is unused.
+func (t *Task) Tags() map[string]string {
+	return nil
+}

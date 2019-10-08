@@ -112,6 +112,10 @@ func (l *liftedEventLoop) DispatcherComplete(d *dispatch.Dispatcher) {
 	l.send(dispatcherCompleteEvent{d})
 }
 
+func (l *liftedEventLoop) PeerRemoved(peerID core.PeerID, h core.InfoHash) {
+	l.send(peerRemovedEvent{peerID, h})
+}
+
 func (l *liftedEventLoop) AnnounceTick() {
 	l.send(announceTickEvent{})
 }
@@ -225,21 +229,32 @@ type announceTickEvent struct{}
 // apply pulls the next dispatcher from the announce queue and asynchronously
 // makes an announce request to the tracker.
 func (e announceTickEvent) apply(s *state) {
-	h, ok := s.announceQueue.Next()
-	if !ok {
-		s.log().Debug("No torrents in announce queue")
-		return
+	var skipped []core.InfoHash
+	for {
+		h, ok := s.announceQueue.Next()
+		if !ok {
+			s.log().Debug("No torrents in announce queue")
+			break
+		}
+		if s.conns.Saturated(h) {
+			s.log("hash", h).Debug("Skipping announce for fully saturated torrent")
+			skipped = append(skipped, h)
+			continue
+		}
+		ctrl, ok := s.torrentControls[h]
+		if !ok {
+			s.log("hash", h).Error("Pulled unknown torrent off announce queue")
+			continue
+		}
+		go s.sched.announce(
+			ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
+		break
 	}
-	ctrl, ok := s.torrentControls[h]
-	if !ok {
-		s.log("hash", h).Error("Pulled unknown torrent off announce queue")
-		return
+	// Re-enqueue any torrents we pulled off and ignored, else we would never
+	// announce them again.
+	for _, h := range skipped {
+		s.announceQueue.Ready(h)
 	}
-	if ctrl.dispatcher.NumPeers() >= s.conns.MaxConnsPerTorrent() {
-		s.log("hash", h).Info("Skipping announce for fully saturated torrent")
-		return
-	}
-	go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
 }
 
 // announceResultEvent occurs when a successfully announced response was received
@@ -362,6 +377,15 @@ func (e dispatcherCompleteEvent) apply(s *state) {
 	go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), true)
 }
 
+// peerRemovedEvent occurs when a dispatcher removes a peer with a closed
+// connection. Currently is a no-op.
+type peerRemovedEvent struct {
+	peerID   core.PeerID
+	infoHash core.InfoHash
+}
+
+func (e peerRemovedEvent) apply(s *state) {}
+
 // preemptionTickEvent occurs periodically to preempt unneeded conns and remove
 // idle torrentControls.
 type preemptionTickEvent struct{}
@@ -418,7 +442,6 @@ type emitStatsEvent struct{}
 
 func (e emitStatsEvent) apply(s *state) {
 	s.sched.stats.Gauge("torrents").Update(float64(len(s.torrentControls)))
-	s.sched.stats.Gauge("conns").Update(float64(s.conns.NumActiveConns()))
 }
 
 type blacklistSnapshotEvent struct {

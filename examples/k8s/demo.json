@@ -1,0 +1,34 @@
+{
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+        "name": "demo"
+    },
+    "spec": {
+        "replicas": 1,
+        "selector": {
+            "matchLabels": {
+                "demo": "true"
+            }
+        },
+        "template": {
+            "metadata": {
+                "labels": {
+                    "demo": "true"
+                }
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "name": "main",
+                        "image": "127.0.0.1:30081/library/busybox:latest",
+                        "command": [
+                            "/bin/sh", "-c",
+                            "while true; do sleep 10; done"
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+}

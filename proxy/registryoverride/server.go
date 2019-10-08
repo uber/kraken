@@ -15,15 +15,19 @@ package registryoverride
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 
+	"github.com/pressly/chi"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/listener"
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/stringset"
-	"github.com/pressly/chi"
 )
 
 // Server overrides Docker registry endpoints.
@@ -54,13 +58,47 @@ type catalogResponse struct {
 	Repositories []string `json:"repositories"`
 }
 
+// catalogHandler handles catalog request.
+// https://docs.docker.com/registry/spec/api/#pagination for more reference.
 func (s *Server) catalogHandler(w http.ResponseWriter, r *http.Request) error {
-	tags, err := s.tagClient.List("")
+	limitQ := "n"
+	offsetQ := "last"
+
+	// Build request for ListWithPagination.
+	var filter tagclient.ListFilter
+	u := r.URL
+	q := u.Query()
+	for k, v := range q {
+		if len(v) != 1 {
+			return handler.Errorf(
+				"invalid query %s:%s", k, v).Status(http.StatusBadRequest)
+		}
+		switch k {
+		case limitQ:
+			limitCount, err := strconv.Atoi(v[0])
+			if err != nil {
+				return handler.Errorf(
+					"invalid limit %s: %s", v, err).Status(http.StatusBadRequest)
+			}
+			if limitCount == 0 {
+				return handler.Errorf(
+					"invalid limit %d", limitCount).Status(http.StatusBadRequest)
+			}
+			filter.Limit = limitCount
+		case offsetQ:
+			filter.Offset = v[0]
+		default:
+			return handler.Errorf("invalid query %s", k).Status(http.StatusBadRequest)
+		}
+	}
+
+	// List with pagination.
+	listResp, err := s.tagClient.ListWithPagination("", filter)
 	if err != nil {
 		return handler.Errorf("list: %s", err)
 	}
 	repos := stringset.New()
-	for _, tag := range tags {
+	for _, tag := range listResp.Result {
 		parts := strings.Split(tag, ":")
 		if len(parts) != 2 {
 			log.With("tag", tag).Errorf("Invalid tag format, expected repo:tag")
@@ -68,6 +106,32 @@ func (s *Server) catalogHandler(w http.ResponseWriter, r *http.Request) error {
 		}
 		repos.Add(parts[0])
 	}
+
+	// Build Link for response.
+	offset, err := listResp.GetOffset()
+	if err != nil && err != io.EOF {
+		return handler.Errorf("invalid offset %s", err)
+	}
+	if offset != "" {
+		nextUrl, err := url.Parse(u.String())
+		if err != nil {
+			return handler.Errorf(
+				"invalid url string: %s", err).Status(http.StatusBadRequest)
+		}
+		val, err := url.ParseQuery(nextUrl.RawQuery)
+		if err != nil {
+			return handler.Errorf(
+				"invalid url string: %s", err).Status(http.StatusBadRequest)
+		}
+		val.Set(offsetQ, offset)
+		nextUrl.RawQuery = val.Encode()
+
+		// Set header (https://docs.docker.com/registry/spec/api/#pagination),
+		// except the host and scheme.
+		// Link: <<url>?n=2&last=b>; rel="next"
+		w.Header().Set("Link", fmt.Sprintf("%s; rel=\"next\"", nextUrl.String()))
+	}
+
 	resp := catalogResponse{Repositories: repos.ToSlice()}
 	if err := json.NewEncoder(w).Encode(&resp); err != nil {
 		return handler.Errorf("json encode: %s", err)

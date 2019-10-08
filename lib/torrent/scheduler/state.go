@@ -54,6 +54,16 @@ type state struct {
 	announceQueue   announcequeue.Queue
 }
 
+func newState(s *scheduler, aq announcequeue.Queue) *state {
+	return &state{
+		sched:           s,
+		torrentControls: make(map[core.InfoHash]*torrentControl),
+		conns: connstate.New(
+			s.config.ConnState, s.clock, s.pctx.PeerID, s.netevents, s.logger),
+		announceQueue: aq,
+	}
+}
+
 // addTorrent initializes a new torrentControl for t. Overwrites any existing
 // torrentControl for t, so callers should check if one exists first.
 func (s *state) addTorrent(
@@ -112,6 +122,7 @@ func (s *state) addOutgoingConn(c *conn.Conn, b *bitset.BitSet, info *storage.To
 	if err := s.conns.MovePendingToActive(c); err != nil {
 		return fmt.Errorf("move pending to active: %s", err)
 	}
+	c.Start()
 	ctrl, ok := s.torrentControls[info.InfoHash()]
 	if !ok {
 		return errors.New("torrent controls must be created before sending handshake")
@@ -131,6 +142,7 @@ func (s *state) addIncomingConn(
 	if err := s.conns.MovePendingToActive(c); err != nil {
 		return fmt.Errorf("move pending to active: %s", err)
 	}
+	c.Start()
 	ctrl, ok := s.torrentControls[info.InfoHash()]
 	if !ok {
 		t, err := s.sched.torrentArchive.GetTorrent(namespace, info.Digest())

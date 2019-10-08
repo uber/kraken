@@ -14,6 +14,11 @@
 package cmd
 
 import (
+	"flag"
+
+	"fmt"
+	"net/http"
+
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/healthcheck"
@@ -22,64 +27,62 @@ import (
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
 	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/proxy/proxyserver"
 	"github.com/uber/kraken/proxy/registryoverride"
 	"github.com/uber/kraken/utils/configutil"
+	"github.com/uber/kraken/utils/flagutil"
 	"github.com/uber/kraken/utils/log"
-
-	"github.com/spf13/cobra"
 )
 
-var (
-	ports         []int
-	configFile    string
-	krakenCluster string
-	secretsFile   string
-
-	rootCmd = &cobra.Command{
-		Short: "kraken-proxy handles uploads and direct downloads",
-		Run: func(rootCmd *cobra.Command, args []string) {
-			run()
-		},
-	}
-)
-
-func init() {
-	rootCmd.PersistentFlags().IntSliceVar(
-		&ports, "port", []int{}, "port to listen on (may specify multiple)")
-	rootCmd.PersistentFlags().StringVarP(
-		&configFile, "config", "", "", "configuration file path")
-	rootCmd.PersistentFlags().StringVarP(
-		&krakenCluster, "cluster", "", "", "cluster name (e.g. prod01-zone1)")
-	rootCmd.PersistentFlags().StringVarP(
-		&secretsFile, "secrets", "", "", "path to a secrets YAML file to load into configuration")
+// Flags defines proxy CLI flags.
+type Flags struct {
+	Ports         flagutil.Ints
+	ServerPort    int
+	ConfigFile    string
+	KrakenCluster string
+	SecretsFile   string
 }
 
-func Execute() {
-	rootCmd.Execute()
+// ParseFlags parses proxy CLI flags.
+func ParseFlags() *Flags {
+	var flags Flags
+	flag.Var(
+		&flags.Ports, "port", "port to listen on (may specify multiple)")
+	flag.IntVar(
+		&flags.ServerPort, "server-port", 0, "http server port to listen on")
+	flag.StringVar(
+		&flags.ConfigFile, "config", "", "configuration file path")
+	flag.StringVar(
+		&flags.KrakenCluster, "cluster", "", "cluster name (e.g. prod01-zone1)")
+	flag.StringVar(
+		&flags.SecretsFile, "secrets", "", "path to a secrets YAML file to load into configuration")
+	flag.Parse()
+	return &flags
 }
 
-func run() {
-	if len(ports) == 0 {
+// Run runs the proxy.
+func Run(flags *Flags) {
+	if len(flags.Ports) == 0 {
 		panic("must specify a port")
 	}
 
 	var config Config
-	if err := configutil.Load(configFile, &config); err != nil {
+	if err := configutil.Load(flags.ConfigFile, &config); err != nil {
 		panic(err)
 	}
-	if secretsFile != "" {
-		if err := configutil.Load(secretsFile, &config); err != nil {
+	if flags.SecretsFile != "" {
+		if err := configutil.Load(flags.SecretsFile, &config); err != nil {
 			panic(err)
 		}
 	}
 
 	log.ConfigureLogger(config.ZapLogging)
 
-	if len(ports) == 0 {
+	if len(flags.Ports) == 0 {
 		log.Fatal("Must specify at least one -port")
 	}
 
-	stats, closer, err := metrics.New(config.Metrics, krakenCluster)
+	stats, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
 	if err != nil {
 		log.Fatalf("Failed to init metrics: %s", err)
 	}
@@ -114,6 +117,16 @@ func run() {
 
 	transferer := transfer.NewReadWriteTransferer(stats, tagClient, originCluster, cas)
 
+	// open preheat function only when define a server-port
+	if flags.ServerPort != 0 {
+		server := proxyserver.New(stats, originCluster)
+		addr := fmt.Sprintf(":%d", flags.ServerPort)
+		log.Infof("Starting http server on %s", addr)
+		go func() {
+			log.Fatal(http.ListenAndServe(addr, server.Handler()))
+		}()
+	}
+
 	registry, err := config.Registry.Build(config.Registry.ReadWriteParameters(transferer, cas, stats))
 	if err != nil {
 		log.Fatalf("Error creating registry: %s", err)
@@ -130,7 +143,7 @@ func run() {
 
 	log.Info("Starting nginx...")
 	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
-		"ports": ports,
+		"ports": flags.Ports,
 		"registry_server": nginx.GetServer(
 			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
 		"registry_override_server": nginx.GetServer(

@@ -21,7 +21,14 @@ However, blob content in torrent traffic is not encrypted, so it's still vulnera
 
 We plan to support TLS on torrent traffic.
 
-# Tag mutation
+# Kubernetes Integration
+
+We are looking into integrating Kraken with Kubernetes, so Kraken can preheat hosts at the beginning
+of rolling upgrades, and speed up deployments.
+
+This would require a Kubernetes scheduler that supports in-place upgrade.
+
+# Tag Mutation
 
 Mutating tags is allowed, but the behavior is undefined. Replication probably won't trigger, and
 most tag lookups could still return the old tag due to caching.
@@ -33,7 +40,7 @@ We plan to support tag mutation.
 Current visualization tool is based on agent logs. If feasible, we hope to support realtime
 visualization.
 
-# BitTorrent compatibility
+# BitTorrent Compatibility
 
 Kraken's torrent library is based on a simplified version of BitTorrent, however it is not
 compatible with the BitTorrent protocol. We may investigate BitTorrent compatibility in the future.

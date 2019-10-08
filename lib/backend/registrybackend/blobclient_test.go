@@ -45,11 +45,11 @@ func TestBlobDownloadBlobSuccess(t *testing.T) {
 	namespace := core.NamespaceFixture()
 
 	r := chi.NewRouter()
-	r.Get(fmt.Sprintf("/v2/%s/blobs/:blob", namespace), func(w http.ResponseWriter, req *http.Request) {
+	r.Get(fmt.Sprintf("/v2/%s/blobs/{blob}", namespace), func(w http.ResponseWriter, req *http.Request) {
 		_, err := io.Copy(w, bytes.NewReader(blob))
 		require.NoError(err)
 	})
-	r.Head(fmt.Sprintf("/v2/%s/blobs/:blob", namespace), func(w http.ResponseWriter, req *http.Request) {
+	r.Head(fmt.Sprintf("/v2/%s/blobs/{blob}", namespace), func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(blob)))
 	})
 	addr, stop := testutil.StartServer(r)
@@ -75,11 +75,11 @@ func TestBlobDownloadManifestSuccess(t *testing.T) {
 	namespace := core.NamespaceFixture()
 
 	r := chi.NewRouter()
-	r.Get(fmt.Sprintf("/v2/%s/manifests/:blob", namespace), func(w http.ResponseWriter, req *http.Request) {
+	r.Get(fmt.Sprintf("/v2/%s/manifests/{blob}", namespace), func(w http.ResponseWriter, req *http.Request) {
 		_, err := io.Copy(w, bytes.NewReader(blob))
 		require.NoError(err)
 	})
-	r.Head(fmt.Sprintf("/v2/%s/manifests/:blob", namespace), func(w http.ResponseWriter, req *http.Request) {
+	r.Head(fmt.Sprintf("/v2/%s/manifests/{blob}", namespace), func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(blob)))
 	})
 	addr, stop := testutil.StartServer(r)
@@ -104,11 +104,11 @@ func TestBlobDownloadFileNotFound(t *testing.T) {
 	namespace := core.NamespaceFixture()
 
 	r := chi.NewRouter()
-	r.Get(fmt.Sprintf("/v2/%s/blobs/:blob", namespace), func(w http.ResponseWriter, req *http.Request) {
+	r.Get(fmt.Sprintf("/v2/%s/blobs/{blob}", namespace), func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("file not found"))
 	})
-	r.Head(fmt.Sprintf("/v2/%s/blobs/:blob", namespace), func(w http.ResponseWriter, req *http.Request) {
+	r.Head(fmt.Sprintf("/v2/%s/blobs/{blob}", namespace), func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("file not found"))
 	})
