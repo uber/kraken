@@ -131,7 +131,7 @@ func (c *BlobClient) downloadHelper(namespace, name, query string, dst io.Writer
 	// Get token first
 	// Token header like this: map[string]string{"Authorization": \
 	// "Bearer 12345"}
-	tokenHeader, err := security.GetAuthHeader(c.config.Address, opt)ß
+	tokenHeader, err := security.GetAuthHeader(c.config.Address, opt)
 	if err != nil {
 		return fmt.Errorf("token: %s", err)
 	}

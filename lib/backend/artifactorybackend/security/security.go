@@ -114,7 +114,12 @@ func GetAuthHeader(address string, opt httputil.SendOption) (map[string]string, 
 		regToken.validInterval = int64(token.Expire) * 1e+9
 		log.Infof("Update regToken %v", regToken)
 	}
-	return regToken.tokenHeader, nil
+	// Deep copy to avoid race condition
+	res := make(map[string]string)
+	for k, v := range regToken.tokenHeader {
+		res[k] = v
+	}
+	return res, nil
 }
 
 func (c Config) getCredentials(helper, addr string) (types.AuthConfig, error) {
