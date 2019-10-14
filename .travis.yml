@@ -20,7 +20,7 @@ jobs:
       name: Unit Tests
       script:
         - make unit-test
-    - name: Unit Tests
+    - name: Integration Tests
       script:
         - make integration
     - stage: Compliance
