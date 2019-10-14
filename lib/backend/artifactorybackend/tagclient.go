@@ -16,7 +16,6 @@ package artifactorybackend
 import (
 	"errors"
 	"fmt"
-	"github.com/uber/kraken/lib/backend/artifactorybackend/security"
 	"io"
 	"net/http"
 	"strconv"
@@ -24,10 +23,12 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/backend/artifactorybackend/security"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
+
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -53,8 +54,14 @@ func (f *tagClientFactory) Create(
 	return NewTagClient(config)
 }
 
+/*
+ * Artifactory supports this API "http://%s/artifactory/api/docker/docker/%s/%s/manifest.json" as well, leave it here
+ * for future reference.
+ *
+ * - Elton Hu (Oct.14, 2019)
+ */
 const _tagquery = "http://%s/v2/%s/manifests/%s"
-//const _tagquery = "http://%s/artifactory/api/docker/docker/%s/%s/manifest.json"
+
 const _v2ManifestType = "application/vnd.docker.distribution.manifest.v2+json"
 
 // TagClient stats and downloads tag from registry.
@@ -159,12 +166,12 @@ func (c *TagClient) Download(namespace, name string, dst io.Writer) error {
 	return nil
 }
 
-// Upload is not supported as users can push directly to registry.
+// Upload is not supported as users can push directly to artifactory.
 func (c *TagClient) Upload(namespace, name string, src io.Reader) error {
 	return errors.New("not supported")
 }
 
-// List is not supported as users can list directly from registry.
+// List is not supported as users can list directly from artifactory.
 func (c *TagClient) List(prefix string) ([]string, error) {
 	return nil, errors.New("not supported")
 }

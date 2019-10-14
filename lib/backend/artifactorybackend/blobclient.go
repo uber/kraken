@@ -16,16 +16,18 @@ package artifactorybackend
 import (
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/artifactorybackend/security"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
+
 	"gopkg.in/yaml.v2"
-	"io"
-	"net/http"
-	"strconv"
 )
 
 const _registryblob = "artifactory_blob"
@@ -99,8 +101,8 @@ func (c *BlobClient) Download(namespace, name string, dst io.Writer) error {
 }
 
 func (c *BlobClient) statHelper(namespace, name, query string, opt httputil.SendOption) (*core.BlobInfo, error) {
-	// Get token first
-	// Token header like this: map[string]string{"Authorization": \
+	// Get token first.
+	// Token header looks like this: map[string]string{"Authorization": \
 	// "Bearer 12345"}
 	tokenHeader, err := security.GetAuthHeader(c.config.Address, opt)
 	if err != nil {
@@ -128,8 +130,8 @@ func (c *BlobClient) statHelper(namespace, name, query string, opt httputil.Send
 }
 
 func (c *BlobClient) downloadHelper(namespace, name, query string, dst io.Writer, opt httputil.SendOption) error {
-	// Get token first
-	// Token header like this: map[string]string{"Authorization": \
+	// Get token first.
+	// Token header looks like this: map[string]string{"Authorization": \
 	// "Bearer 12345"}
 	tokenHeader, err := security.GetAuthHeader(c.config.Address, opt)
 	if err != nil {
