@@ -15,6 +15,12 @@ package config
 
 // AgentTemplate is the default agent nginx tmpl.
 var AgentTemplate = `
+log_format upstream_time '$remote_addr - $remote_user [$time_local] '
+                         '"$request" $status $body_bytes_sent '
+                         '"$http_referer" "$http_user_agent" '
+                         'rt=$request_time uct="$upstream_connect_time" '
+                         'uht="$upstream_header_time" urt="$upstream_response_time"';
+
 upstream registry-backend {
   server {{.registry_server}};
   {{if ne .registry_backup ""}} server {{.registry_backup}} backup; {{end}}
@@ -30,7 +36,7 @@ server {
 
   {{.client_verification}}
 
-  access_log {{.log_dir}}/nginx-access.v2.log;
+  access_log {{.log_dir}}/nginx-access.v2.log upstream_time;
   error_log {{.log_dir}}/nginx-error.v2.log;
 
   gzip on;

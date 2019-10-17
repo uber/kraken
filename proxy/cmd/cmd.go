@@ -117,7 +117,7 @@ func Run(flags *Flags) {
 
 	transferer := transfer.NewReadWriteTransferer(stats, tagClient, originCluster, cas)
 
-	// open preheat function only when define a server-port
+	// Open preheat function only if server-port was defined.
 	if flags.ServerPort != 0 {
 		server := proxyserver.New(stats, originCluster)
 		addr := fmt.Sprintf(":%d", flags.ServerPort)
