@@ -15,12 +15,6 @@ package config
 
 // ProxyTemplate is the default proxy nginx tmpl.
 const ProxyTemplate = `
-log_format upstream_time '$remote_addr - $remote_user [$time_local] '
-                         '"$request" $status $body_bytes_sent '
-                         '"$http_referer" "$http_user_agent" '
-                         'rt=$request_time uct="$upstream_connect_time" '
-                         'uht="$upstream_header_time" urt="$upstream_response_time"';
-
 upstream registry {
   server {{.registry_server}};
 }
@@ -37,7 +31,7 @@ server {
 
   client_max_body_size 10G;
 
-  access_log {{$.log_dir}}/nginx-access.log upstream_time;
+  access_log {{$.log_dir}}/nginx-access.log json;
   error_log {{$.log_dir}}/nginx-error.log;
 
   gzip on;

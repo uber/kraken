@@ -17,12 +17,6 @@ package config
 const TrackerTemplate = `
 proxy_cache_path {{.cache_dir}}/metainfo levels=1:2 keys_zone=metainfo:10m max_size=256g;
 
-log_format upstream_time '$remote_addr - $remote_user [$time_local] '
-                         '"$request" $status $body_bytes_sent '
-                         '"$http_referer" "$http_user_agent" '
-                         'rt=$request_time uct="$upstream_connect_time" '
-                         'uht="$upstream_header_time" urt="$upstream_response_time"';
-
 upstream tracker {
   server {{.server}};
 }
@@ -32,7 +26,7 @@ server {
 
   {{.client_verification}}
 
-  access_log {{.log_dir}}/nginx-access.log upstream_time;
+  access_log {{.log_dir}}/nginx-access.log json;
   error_log {{.log_dir}}/nginx-error.log;
 
   location / {

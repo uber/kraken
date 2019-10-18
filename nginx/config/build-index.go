@@ -19,12 +19,6 @@ proxy_cache_path {{.cache_dir}}/tags keys_zone=tags:20m;
 proxy_cache_path {{.cache_dir}}/repositories keys_zone=repositories:20m;
 proxy_cache_path {{.cache_dir}}/list keys_zone=list:20m;
 
-log_format upstream_time '$remote_addr - $remote_user [$time_local] '
-                         '"$request" $status $body_bytes_sent '
-                         '"$http_referer" "$http_user_agent" '
-                         'rt=$request_time uct="$upstream_connect_time" '
-                         'uht="$upstream_header_time" urt="$upstream_response_time"';
-
 upstream build-index {
   server {{.server}};
 }
@@ -34,7 +28,7 @@ server {
 
   {{.client_verification}}
 
-  access_log {{.log_dir}}/nginx-access.log upstream_time;
+  access_log {{.log_dir}}/nginx-access.log json;
   error_log {{.log_dir}}/nginx-error.log;
 
   location / {
