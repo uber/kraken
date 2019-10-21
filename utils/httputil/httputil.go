@@ -16,12 +16,14 @@ package httputil
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff"
@@ -29,6 +31,7 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/handler"
+	"github.com/uber/kraken/utils/log"
 )
 
 // RoundTripper is an alias of the http.RoundTripper for mocking purposes.
@@ -41,6 +44,64 @@ type StatusError struct {
 	Status       int
 	Header       http.Header
 	ResponseDump string
+}
+
+// RegistryToken is a bearer token to be sent to a registry
+type registryToken struct {
+	mux sync.Mutex
+	tokenHeader map[string]string
+	startTime time.Time
+	// validInterval in ns
+	validInterval int64
+}
+
+var regToken = registryToken{tokenHeader: make(map[string]string)}
+
+type tokenAPIResponse struct {
+	Token string `json:"token"`
+	Expire uint32 `json:"expires_in"`
+}
+
+func GetAuthHeader(address string, opt SendOption) (map[string]string, error) {
+	const tokenQuery = "http://%s/v2/token"
+	const tolerance = 100
+
+	URL := fmt.Sprintf(tokenQuery, address)
+
+	regToken.mux.Lock()
+	defer regToken.mux.Unlock()
+	currentTime := time.Now()
+	if len(regToken.tokenHeader) == 0 || (currentTime.Sub(regToken.startTime).Nanoseconds() >= (regToken.validInterval -
+		tolerance)) {
+		// Need to obtain a new token
+		resp, err := Get(
+			URL,
+			opt)
+		if err != nil {
+			return nil, fmt.Errorf("get token: %s", err)
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read token response: %s", err)
+		}
+
+		token := tokenAPIResponse{}
+		err = json.Unmarshal(body, &token)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshal token API response: %s", err)
+		}
+		regToken.tokenHeader["Authorization"] = token.Token
+		regToken.startTime = currentTime
+		regToken.validInterval = int64(token.Expire) * 1e+9
+		log.Infof("Update regToken %v", regToken)
+	}
+	// Deep copy to avoid race condition
+	res := make(map[string]string)
+	for k, v := range regToken.tokenHeader {
+		res[k] = v
+	}
+	return res, nil
 }
 
 // NewStatusError returns a new StatusError.

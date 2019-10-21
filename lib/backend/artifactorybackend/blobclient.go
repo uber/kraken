@@ -22,7 +22,6 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
-	"github.com/uber/kraken/lib/backend/artifactorybackend/security"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
@@ -52,8 +51,13 @@ func (f *blobClientFactory) Create(
 	return NewBlobClient(config)
 }
 
+/*
+ * Artifactory supports this API "http://%s/artifactory/docker/%s/sha256__%s" as well, leave it here
+ * for future reference.
+ *
+ * - Elton Hu (Oct.17, 2019)
+ */
 const _layerquery = "http://%s/v2/%s/blobs/sha256:%s"
-//const _layerquery = "http://%s/artifactory/docker/%s/sha256__%s"
 const _manifestquery = "http://%s/v2/%s/manifests/sha256:%s"
 
 // BlobClient stats and downloads blob from registry.
@@ -104,7 +108,7 @@ func (c *BlobClient) statHelper(namespace, name, query string, opt httputil.Send
 	// Get token first.
 	// Token header looks like this: map[string]string{"Authorization": \
 	// "Bearer 12345"}
-	tokenHeader, err := security.GetAuthHeader(c.config.Address, opt)
+	tokenHeader, err := httputil.GetAuthHeader(c.config.Address, opt)
 	if err != nil {
 		return nil, fmt.Errorf("token: %s", err)
 	}
@@ -133,7 +137,7 @@ func (c *BlobClient) downloadHelper(namespace, name, query string, dst io.Writer
 	// Get token first.
 	// Token header looks like this: map[string]string{"Authorization": \
 	// "Bearer 12345"}
-	tokenHeader, err := security.GetAuthHeader(c.config.Address, opt)
+	tokenHeader, err := httputil.GetAuthHeader(c.config.Address, opt)
 	if err != nil {
 		return fmt.Errorf("token: %s", err)
 	}
@@ -164,6 +168,6 @@ func (c *BlobClient) Upload(namespace, name string, src io.Reader) error {
 }
 
 // List is not supported for blobs.
-func (c *BlobClient) List(prefix string) ([]string, error) {
+func (c *BlobClient) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
 	return nil, errors.New("not supported")
 }

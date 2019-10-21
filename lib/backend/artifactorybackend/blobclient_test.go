@@ -38,20 +38,57 @@ func TestClientFactory(t *testing.T) {
 	require.NoError(err)
 }
 
+func addTokenRoute(r *chi.Mux, require *require.Assertions) {
+	r.Get("/v2/token", func(w http.ResponseWriter, req *http.Request) {
+		_, err := w.Write([]byte(`{"token":"123456789","expires_in":3600}`))
+		require.NoError(err)
+	})
+}
+
+func createNewBlobsRouter(namespace string, blob []byte, require *require.Assertions, valid bool) (r *chi.Mux) {
+	r = chi.NewRouter()
+	addTokenRoute(r, require)
+	r.Get(fmt.Sprintf("/v2/%s/blobs/{blob}", namespace), func(w http.ResponseWriter, req *http.Request) {
+		if valid {
+			_, err := io.Copy(w, bytes.NewReader(blob))
+			require.NoError(err)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("file not found"))
+		}
+	})
+	r.Head(fmt.Sprintf("/v2/%s/blobs/{blob}", namespace), func(w http.ResponseWriter, req *http.Request) {
+		if valid {
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(blob)))
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("file not found"))
+		}
+	})
+
+	return
+}
+
+func createNewManifestRouter(namespace string, blob []byte, require *require.Assertions) (r *chi.Mux) {
+	r = chi.NewRouter()
+	addTokenRoute(r, require)
+	r.Get(fmt.Sprintf("/v2/%s/manifests/{blob}", namespace), func(w http.ResponseWriter, req *http.Request) {
+		_, err := io.Copy(w, bytes.NewReader(blob))
+		require.NoError(err)
+	})
+	r.Head(fmt.Sprintf("/v2/%s/manifests/{blob}", namespace), func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(blob)))
+	})
+
+	return
+}
+
 func TestBlobDownloadBlobSuccess(t *testing.T) {
 	require := require.New(t)
 
 	blob := randutil.Blob(32 * memsize.KB)
 	namespace := core.NamespaceFixture()
-
-	r := chi.NewRouter()
-	r.Get(fmt.Sprintf("/v2/%s/blobs/:blob", namespace), func(w http.ResponseWriter, req *http.Request) {
-		_, err := io.Copy(w, bytes.NewReader(blob))
-		require.NoError(err)
-	})
-	r.Head(fmt.Sprintf("/v2/%s/blobs/:blob", namespace), func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(blob)))
-	})
+	r := createNewBlobsRouter(namespace, blob, require, true)
 	addr, stop := testutil.StartServer(r)
 	defer stop()
 
@@ -74,14 +111,7 @@ func TestBlobDownloadManifestSuccess(t *testing.T) {
 	blob := randutil.Blob(32 * memsize.KB)
 	namespace := core.NamespaceFixture()
 
-	r := chi.NewRouter()
-	r.Get(fmt.Sprintf("/v2/%s/manifests/:blob", namespace), func(w http.ResponseWriter, req *http.Request) {
-		_, err := io.Copy(w, bytes.NewReader(blob))
-		require.NoError(err)
-	})
-	r.Head(fmt.Sprintf("/v2/%s/manifests/:blob", namespace), func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(blob)))
-	})
+	r := createNewManifestRouter(namespace, blob, require)
 	addr, stop := testutil.StartServer(r)
 	defer stop()
 
@@ -103,15 +133,7 @@ func TestBlobDownloadFileNotFound(t *testing.T) {
 
 	namespace := core.NamespaceFixture()
 
-	r := chi.NewRouter()
-	r.Get(fmt.Sprintf("/v2/%s/blobs/:blob", namespace), func(w http.ResponseWriter, req *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("file not found"))
-	})
-	r.Head(fmt.Sprintf("/v2/%s/blobs/:blob", namespace), func(w http.ResponseWriter, req *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("file not found"))
-	})
+	r := createNewBlobsRouter(namespace, nil, require, false)
 	addr, stop := testutil.StartServer(r)
 	defer stop()
 

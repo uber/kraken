@@ -23,7 +23,6 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
-	"github.com/uber/kraken/lib/backend/artifactorybackend/security"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/httputil"
@@ -90,7 +89,7 @@ func (c *TagClient) Stat(namespace, name string) (*core.BlobInfo, error) {
 	// Get token first
 	// Token header like this: map[string]string{"Authorization": \
 	// "Bearer 12345"}
-	headers, err := security.GetAuthHeader(c.config.Address, opt)
+	headers, err := httputil.GetAuthHeader(c.config.Address, opt)
 	if err != nil {
 		return nil, fmt.Errorf("token: %s", err)
 	}
@@ -133,7 +132,7 @@ func (c *TagClient) Download(namespace, name string, dst io.Writer) error {
 	// Get token first
 	// Token header like this: map[string]string{"Authorization": \
 	// "Bearer 12345"}
-	headers, err := security.GetAuthHeader(c.config.Address, opt)
+	headers, err := httputil.GetAuthHeader(c.config.Address, opt)
 
 	if err != nil {
 		return fmt.Errorf("token: %s", err)
@@ -172,6 +171,6 @@ func (c *TagClient) Upload(namespace, name string, src io.Reader) error {
 }
 
 // List is not supported as users can list directly from artifactory.
-func (c *TagClient) List(prefix string) ([]string, error) {
+func (c *TagClient) List(prefix string, opt ...backend.ListOption) (*backend.ListResult, error) {
 	return nil, errors.New("not supported")
 }
