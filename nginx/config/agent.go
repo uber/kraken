@@ -30,7 +30,7 @@ server {
 
   {{.client_verification}}
 
-  access_log {{.log_dir}}/nginx-access.v2.log json;
+  access_log {{.log_dir}}/nginx-access.v2.log;
   error_log {{.log_dir}}/nginx-error.v2.log;
 
   gzip on;
