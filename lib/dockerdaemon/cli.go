@@ -26,7 +26,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/uber/makisu/lib/log"
+	"github.com/uber/kraken/utils/log"
 
 	"golang.org/x/net/context/ctxhttp"
 )
