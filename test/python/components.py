@@ -470,6 +470,12 @@ class Agent(Component):
     def pull(self, image):
         return pull(self.registry, image)
 
+    def preload(self, image):
+        url = 'http://localhost:{port}/preload/tags/{image}'.format(
+            port=self.port, image=image)
+        res = requests.get(url, stream=True, timeout=60)
+        res.raise_for_status()
+
 
 class AgentFactory(object):
 

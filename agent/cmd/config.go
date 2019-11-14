@@ -44,4 +44,22 @@ type Config struct {
 	Nginx           nginx.Config                   `yaml:"nginx"`
 	TLS             httputil.TLSConfig             `yaml:"tls"`
 	AllowedCidrs    []string                       `yaml:"allowed_cidrs"`
+
+	// Configs For connecting to docker daemon for preload.
+	DockerHost          string `yaml:"docker_host"`
+	DockerScheme        string `yaml:"docker_scheme"`
+	DockerClientVersion string `yaml:"docker_version"`
+}
+
+func (c Config) applyDefaults() Config {
+	if c.DockerHost == "" {
+		c.DockerHost = "unix:///var/run/docker.sock"
+	}
+	if c.DockerScheme == "" {
+		c.DockerScheme = "http"
+	}
+	if c.DockerClientVersion == "" {
+		c.DockerClientVersion = "1.21"
+	}
+	return c
 }
