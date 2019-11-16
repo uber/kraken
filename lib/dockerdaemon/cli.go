@@ -51,10 +51,10 @@ func NewDockerClient(host, scheme, version string) (DockerClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse docker host `%s`: %s", host, err)
 	}
-	if u.Scheme != "unix" {
+	if u.Scheme != "unix" && u.Scheme != "http" {
 		return nil, fmt.Errorf("Protocol %s not supported", u.Scheme)
 	}
-	if len(u.Host) > len(syscall.RawSockaddrUnix{}.Path) {
+	if u.Scheme == "unix" && len(u.Host) > len(syscall.RawSockaddrUnix{}.Path) {
 		return nil, fmt.Errorf("Unix socket path %q is too long", u.Host)
 	}
 
