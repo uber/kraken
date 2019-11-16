@@ -31,8 +31,7 @@ import (
 	"golang.org/x/net/context/ctxhttp"
 )
 
-const maxUnixSocketPathSize = len(syscall.RawSockaddrUnix{}.Path)
-const defaultTimeout = 32 * time.Second
+const _defaultTimeout = 32 * time.Second
 
 // DockerClient is a docker daemon client.
 type DockerClient interface {
@@ -96,13 +95,13 @@ func parseHost(host string) (string, string, string, error) {
 func configureTransport(tr *http.Transport, protocol, addr string) error {
 	switch protocol {
 	case "unix":
-		if len(addr) > maxUnixSocketPathSize {
+		if len(addr) > len(syscall.RawSockaddrUnix{}.Path) {
 			return fmt.Errorf("Unix socket path %q is too long", addr)
 		}
 
 		tr.DisableCompression = true
 		tr.Dial = func(_, _ string) (net.Conn, error) {
-			return net.DialTimeout(protocol, addr, defaultTimeout)
+			return net.DialTimeout(protocol, addr, _defaultTimeout)
 		}
 		return nil
 	}
@@ -110,16 +109,51 @@ func configureTransport(tr *http.Transport, protocol, addr string) error {
 	return fmt.Errorf("Protocol %s not supported", protocol)
 }
 
+// ImagePull calls `docker pull` on an image.
+func (cli *dockerClient) ImagePull(ctx context.Context, registry, repo, tag string) error {
+	v := url.Values{}
+	fromImage := repo
+	if registry != "" {
+		fromImage = fmt.Sprintf("%s/%s", registry, repo)
+	}
+	v.Set("fromImage", fromImage)
+	v.Set("tag", tag)
+	headers := map[string][]string{"X-Registry-Auth": {""}}
+	return cli.post(ctx, "/images/create", v, nil, headers, true)
+}
+
 func (cli *dockerClient) post(
-	ctx context.Context, url string, query url.Values, body io.Reader,
+	ctx context.Context, urlPath string, query url.Values, body io.Reader,
 	header http.Header, streamRespBody bool) error {
 
+	// Construct request. It veries depending on client version.
+	var apiPath string
+	if cli.version != "" {
+		v := strings.TrimPrefix(cli.version, "v")
+		apiPath = fmt.Sprintf("%s/v%s%s", cli.basePath, v, urlPath)
+	} else {
+		apiPath = fmt.Sprintf("%s%s", cli.basePath, urlPath)
+	}
+	u := &url.URL{Path: apiPath}
+	if len(query) > 0 {
+		u.RawQuery = query.Encode()
+	}
+	apiPath = u.String()
 	if body == nil {
 		body = bytes.NewReader([]byte{})
 	}
-	resp, err := cli.doRequest(ctx, "POST", cli.getAPIPath(url, query), body, header)
+	req, err := http.NewRequest("POST", apiPath, body)
 	if err != nil {
-		return fmt.Errorf("post request: %s", err)
+		return fmt.Errorf("create request: %s", err)
+	}
+	req.Header = header
+	req.Host = "docker"
+	req.URL.Host = cli.addr
+	req.URL.Scheme = cli.scheme
+
+	resp, err := ctxhttp.Do(ctx, cli.client, req)
+	if err != nil {
+		return fmt.Errorf("send post request: %s", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
@@ -127,13 +161,13 @@ func (cli *dockerClient) post(
 		if err != nil {
 			return fmt.Errorf("read error resp: %s", err)
 		}
-		return fmt.Errorf("Error posting to %s: code %d, err: %s", url, resp.StatusCode, errMsg)
+		return fmt.Errorf("Error posting to %s: code %d, err: %s", urlPath, resp.StatusCode, errMsg)
 	}
 
-	// Docker daemon returns 200 before complete push
-	// it closes resp.Body after it finishes
+	// Docker daemon returns 200 before complete push.
+	// It closes resp.Body after it finishes.
 	if streamRespBody {
-		log.Debugf("Streaming resp body for %s", url)
+		log.Debugf("Streaming resp body for %s", urlPath)
 		progress, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("read resp body: %s", err)
@@ -142,41 +176,4 @@ func (cli *dockerClient) post(
 	}
 
 	return nil
-}
-
-func (cli *dockerClient) getAPIPath(p string, query url.Values) string {
-	var apiPath string
-	if cli.version != "" {
-		v := strings.TrimPrefix(cli.version, "v")
-		apiPath = fmt.Sprintf("%s/v%s%s", cli.basePath, v, p)
-	} else {
-		apiPath = fmt.Sprintf("%s%s", cli.basePath, p)
-	}
-
-	u := &url.URL{
-		Path: apiPath,
-	}
-	if len(query) > 0 {
-		u.RawQuery = query.Encode()
-	}
-	return u.String()
-}
-
-func (cli *dockerClient) doRequest(
-	ctx context.Context,
-	method string,
-	url string,
-	body io.Reader,
-	header http.Header) (*http.Response, error) {
-
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header = header
-	req.Host = "docker"
-	req.URL.Host = cli.addr
-	req.URL.Scheme = cli.scheme
-
-	return ctxhttp.Do(ctx, cli.client, req)
 }
