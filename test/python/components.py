@@ -430,6 +430,7 @@ class Agent(Component):
             build_indexes=yaml_list([bi.addr for bi in self.build_indexes]))
 
         self.volumes = create_volumes('agent', self.name)
+        self.volumes.append('/var/run/docker.sock')
 
         self.start()
 
