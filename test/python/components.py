@@ -207,7 +207,7 @@ def init_cache(cname):
     return cache
 
 
-def create_volumes(kname, cname):
+def create_volumes(kname, cname, local_cache=True):
     """
     Creates volume bindings for Kraken name `kname` and container name `cname`.
     """
@@ -222,13 +222,14 @@ def create_volumes(kname, cname):
         'mode': 'ro',
     }
 
-    # Mount local cache. Allows components to simulate unavailability whilst
-    # retaining their state on disk.
-    cache = init_cache(cname)
-    volumes[cache] = {
-        'bind': '/var/cache/kraken/kraken-{kname}/'.format(kname=kname),
-        'mode': 'rw',
-    }
+    if local_cache:
+        # Mount local cache. Allows components to simulate unavailability whilst
+        # retaining their state on disk.
+        cache = init_cache(cname)
+        volumes[cache] = {
+            'bind': '/var/cache/kraken/kraken-{kname}/'.format(kname=kname),
+            'mode': 'rw',
+        }
 
     return volumes
 
@@ -436,12 +437,18 @@ class Agent(Component):
             trackers=yaml_list([self.tracker.addr]),
             build_indexes=yaml_list([bi.addr for bi in self.build_indexes]))
 
-        self.volumes = create_volumes('agent', self.name)
         if self.with_docker_socket:
+            # In aditional to the need to mount docker socket, also avoid using
+            # local cache volume, otherwise the process would run as root and
+            # create local cache files that's hard to clean outside of the
+            # container.
+            self.volumes = create_volumes('agent', self.name, local_cache=False)
             self.volumes['/var/run/docker.sock'] = {
                 'bind': '/var/run/docker.sock',
                 'mode': 'rw',
             }
+        else:
+            self.volumes = create_volumes('agent', self.name)
 
         self.start()
 
