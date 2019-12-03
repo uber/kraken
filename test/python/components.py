@@ -430,7 +430,10 @@ class Agent(Component):
             build_indexes=yaml_list([bi.addr for bi in self.build_indexes]))
 
         self.volumes = create_volumes('agent', self.name)
-        self.volumes.append('/var/run/docker.sock')
+        self.volumes['/var/run/docker.sock'] = {
+            'bind': '/var/run/docker.sock',
+            'mode': 'rw',
+        }
 
         self.start()
 
@@ -472,9 +475,11 @@ class Agent(Component):
         return pull(self.registry, image)
 
     def preload(self, image):
-        url = 'http://localhost:{port}/preload/tags/{image}'.format(
-            port=self.port, image=image)
-        res = requests.get(url, stream=True, timeout=60)
+        url = 'http://127.0.0.1:{port}/preload/tags/{image}'.format(
+            port=self.port, image=urllib.quote(image, safe=''))
+        s = requests.session()
+        s.keep_alive = False
+        res = s.get(url, stream=True, timeout=60)
         res.raise_for_status()
 
 

@@ -47,33 +47,56 @@ type dockerClient struct {
 
 // NewDockerClient creates a new DockerClient.
 func NewDockerClient(host, scheme, version string) (DockerClient, error) {
-	u, err := url.Parse(host)
+	client, addr, basePath, err := parseHost(host)
 	if err != nil {
 		return nil, fmt.Errorf("parse docker host `%s`: %s", host, err)
-	}
-	if u.Scheme != "unix" && u.Scheme != "http" {
-		return nil, fmt.Errorf("Protocol %s not supported", u.Scheme)
-	}
-	if u.Scheme == "unix" && len(u.Host) > len(syscall.RawSockaddrUnix{}.Path) {
-		return nil, fmt.Errorf("Unix socket path %q is too long", u.Host)
-	}
-
-	transport := new(http.Transport)
-	transport.DisableCompression = true
-	transport.Dial = func(_, _ string) (net.Conn, error) {
-		return net.DialTimeout(u.Scheme, u.Host, _defaultTimeout)
-	}
-	client := &http.Client{
-		Transport: transport,
 	}
 
 	return &dockerClient{
 		version:  version,
 		scheme:   scheme,
-		addr:     u.Host,
-		basePath: u.Path,
+		addr:     addr,
+		basePath: basePath,
 		client:   client,
 	}, nil
+}
+
+// parseHost parse host URL and returns a HTTP client.
+// This is needed because url.Parse cannot correctly parse url of format
+// "unix:///...".
+func parseHost(host string) (*http.Client, string, string, error) {
+	strs := strings.SplitN(host, "://", 2)
+	if len(strs) == 1 {
+		return nil, "", "", fmt.Errorf("unable to parse docker host `%s`", host)
+	}
+
+	var basePath string
+	transport := new(http.Transport)
+
+	protocol, addr := strs[0], strs[1]
+	if protocol == "tcp" {
+		parsed, err := url.Parse("tcp://" + addr)
+		if err != nil {
+			return nil, "", "", err
+		}
+		addr = parsed.Host
+		basePath = parsed.Path
+	} else if protocol == "unix" {
+		if len(addr) > len(syscall.RawSockaddrUnix{}.Path) {
+			return nil, "", "", fmt.Errorf("Unix socket path %q is too long", addr)
+		}
+		transport.DisableCompression = true
+		transport.Dial = func(_, _ string) (net.Conn, error) {
+			return net.DialTimeout(protocol, addr, _defaultTimeout)
+		}
+	} else {
+		return nil, "", "", fmt.Errorf("Protocol %s not supported", protocol)
+	}
+
+	client := &http.Client{
+		Transport: transport,
+	}
+	return client, addr, basePath, nil
 }
 
 // ImagePull calls `docker pull` on an image.
