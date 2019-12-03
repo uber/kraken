@@ -117,8 +117,8 @@ venv: requirements-tests.txt
 .PHONY: integration
 FILE?=
 NAME?=test_
-USERNAME:=$(shell id -u -n)
-USERID:=$(shell id -u)
+USERNAME:=root
+USERID:=0
 integration: venv vendor $(LINUX_BINS) docker_stop tools/bin/puller/puller
 	docker build $(BUILD_QUIET) -t kraken-agent:$(PACKAGE_VERSION) -f docker/agent/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-build-index:$(PACKAGE_VERSION) -f docker/build-index/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
