@@ -13,11 +13,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
-import os
-import pwd
 import time
-
-import pytest
 
 from conftest import (
     TEST_IMAGE,
