@@ -34,15 +34,15 @@ func (m *MockDockerClient) EXPECT() *MockDockerClientMockRecorder {
 }
 
 // ImagePull mocks base method
-func (m *MockDockerClient) ImagePull(arg0 context.Context, arg1, arg2, arg3 string) error {
+func (m *MockDockerClient) ImagePull(arg0 context.Context, arg1, arg2 string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ImagePull", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "ImagePull", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ImagePull indicates an expected call of ImagePull
-func (mr *MockDockerClientMockRecorder) ImagePull(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockDockerClientMockRecorder) ImagePull(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImagePull", reflect.TypeOf((*MockDockerClient)(nil).ImagePull), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImagePull", reflect.TypeOf((*MockDockerClient)(nil).ImagePull), arg0, arg1, arg2)
 }

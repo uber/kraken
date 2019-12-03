@@ -33,7 +33,7 @@ const _defaultTimeout = 32 * time.Second
 
 // DockerClient is a docker daemon client.
 type DockerClient interface {
-	ImagePull(ctx context.Context, registry, repo, tag string) error
+	ImagePull(ctx context.Context, repo, tag string) error
 }
 
 type dockerClient struct {
@@ -41,12 +41,13 @@ type dockerClient struct {
 	scheme   string
 	addr     string
 	basePath string
+	registry string
 
 	client *http.Client
 }
 
 // NewDockerClient creates a new DockerClient.
-func NewDockerClient(host, scheme, version string) (DockerClient, error) {
+func NewDockerClient(host, scheme, version, registry string) (DockerClient, error) {
 	client, addr, basePath, err := parseHost(host)
 	if err != nil {
 		return nil, fmt.Errorf("parse docker host `%s`: %s", host, err)
@@ -57,6 +58,7 @@ func NewDockerClient(host, scheme, version string) (DockerClient, error) {
 		scheme:   scheme,
 		addr:     addr,
 		basePath: basePath,
+		registry: registry,
 		client:   client,
 	}, nil
 }
@@ -99,13 +101,10 @@ func parseHost(host string) (*http.Client, string, string, error) {
 	return client, addr, basePath, nil
 }
 
-// ImagePull calls `docker pull` on an image.
-func (cli *dockerClient) ImagePull(ctx context.Context, registry, repo, tag string) error {
+// ImagePull calls `docker pull` on an image from known registry.
+func (cli *dockerClient) ImagePull(ctx context.Context, repo, tag string) error {
 	v := url.Values{}
-	fromImage := repo
-	if registry != "" {
-		fromImage = fmt.Sprintf("%s/%s", registry, repo)
-	}
+	fromImage := fmt.Sprintf("%s/%s", cli.registry, repo)
 	v.Set("fromImage", fromImage)
 	v.Set("tag", tag)
 	headers := map[string][]string{"X-Registry-Auth": {""}}

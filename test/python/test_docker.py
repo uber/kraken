@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import sys
 import time
 
 import pytest
@@ -21,6 +22,9 @@ from conftest import (
     TEST_IMAGE,
     TEST_IMAGE_2,
 )
+
+DOCKER_ON_MAC = (sys.platform == 'darwin')
+DOCKER_ON_MAC_REASON = 'no permission to docker socket on mac'
 
 
 def test_proxy_push_and_pull(proxy):
@@ -43,6 +47,7 @@ def test_agent_pull(proxy, agent):
     agent.pull(TEST_IMAGE)
 
 
+# @pytest.mark.skipif(DOCKER_ON_MAC, reason=DOCKER_ON_MAC_REASON)
 def test_agent_preload(proxy, agent):
     proxy.push(TEST_IMAGE)
 

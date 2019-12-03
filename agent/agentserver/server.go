@@ -167,7 +167,7 @@ func (s *Server) preloadTagHandler(w http.ResponseWriter, r *http.Request) error
 	}
 	repo, tag := parts[0], parts[1]
 	if err := s.dockerCli.ImagePull(
-		context.Background(), r.Host, repo, tag); err != nil {
+		context.Background(), repo, tag); err != nil {
 
 		return handler.Errorf("trigger docker pull: %s", err)
 	}
