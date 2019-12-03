@@ -100,7 +100,7 @@ class HealthCheck(object):
 
 class DockerContainer(object):
 
-    def __init__(self, name, image, command=None, ports=None, volumes=None):
+    def __init__(self, name, image, command=None, ports=None, volumes=None, user=None):
         self.name = name
         self.image = image
 
@@ -120,6 +120,10 @@ class DockerContainer(object):
                 mode = i['mode']
                 self.volumes.extend(['-v', '{o}:{bind}:{mode}'.format(o=o, bind=bind, mode=mode)])
 
+        self.user = []
+        if user:
+            self.user = ['-u', user]
+
     def run(self):
         cmd = [
             'docker', 'run',
@@ -128,6 +132,7 @@ class DockerContainer(object):
         ]
         cmd.extend(self.ports)
         cmd.extend(self.volumes)
+        cmd.extend(self.user)
         cmd.append(self.image)
         cmd.extend(self.command)
         assert subprocess.call(cmd) == 0
@@ -146,7 +151,7 @@ class DockerContainer(object):
 
 
 def new_docker_container(name, image, command=None, environment=None, ports=None,
-                         volumes=None, health_check=None):
+                         volumes=None, health_check=None, user=None):
     """
     Creates and starts a detached Docker container. If health_check is specified,
     ensures the container is healthy before returning.
@@ -160,7 +165,8 @@ def new_docker_container(name, image, command=None, environment=None, ports=None
         image=image,
         command=command,
         ports=ports,
-        volumes=volumes)
+        volumes=volumes,
+        user=user)
     c.run()
     print 'Starting container {}'.format(c.name)
     try:
@@ -412,7 +418,7 @@ class OriginCluster(object):
 
 class Agent(Component):
 
-    def __init__(self, zone, id, tracker, build_indexes):
+    def __init__(self, zone, id, tracker, build_indexes, with_docker_socket=False):
         self.zone = zone
         self.id = id
         self.tracker = tracker
@@ -422,6 +428,7 @@ class Agent(Component):
         self.port = find_free_port()
         self.config_file = 'test-{zone}.yaml'.format(zone=zone)
         self.name = 'kraken-agent-{id}-{zone}'.format(id=id, zone=zone)
+        self.with_docker_socket = with_docker_socket
 
         populate_config_template(
             'agent',
@@ -430,14 +437,17 @@ class Agent(Component):
             build_indexes=yaml_list([bi.addr for bi in self.build_indexes]))
 
         self.volumes = create_volumes('agent', self.name)
-        self.volumes['/var/run/docker.sock'] = {
-            'bind': '/var/run/docker.sock',
-            'mode': 'rw',
-        }
+        if self.with_docker_socket:
+            self.volumes['/var/run/docker.sock'] = {
+                'bind': '/var/run/docker.sock',
+                'mode': 'rw',
+            }
 
         self.start()
 
     def new_container(self):
+        # Root user is needed for accessing docker socket.
+        user = 'root' if self.with_docker_socket else None
         return new_docker_container(
             name=self.name,
             image=dev_tag('kraken-agent'),
@@ -456,7 +466,8 @@ class Agent(Component):
                 '--agent-server-port={port}'.format(port=self.port),
                 '--agent-registry-port={port}'.format(port=self.registry_port),
             ],
-            health_check=HealthCheck('curl localhost:{port}/health'.format(port=self.port)))
+            health_check=HealthCheck('curl localhost:{port}/health'.format(port=self.port)),
+            user=user)
 
     @property
     def registry(self):
@@ -491,8 +502,8 @@ class AgentFactory(object):
         self.build_indexes = build_indexes
 
     @contextmanager
-    def create(self, n=1):
-        agents = [Agent(self.zone, i, self.tracker, self.build_indexes) for i in range(n)]
+    def create(self, n=1, with_docker_socket=False):
+        agents = [Agent(self.zone, i, self.tracker, self.build_indexes, with_docker_socket) for i in range(n)]
         try:
             if len(agents) == 1:
                 yield agents[0]

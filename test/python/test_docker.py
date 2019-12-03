@@ -24,9 +24,6 @@ from conftest import (
     TEST_IMAGE_2,
 )
 
-NON_ROOT = (os.environ.get('USERNAME') != 'root')
-NON_ROOT_REASON = 'no permission for writing to docker socket'
-
 
 def test_proxy_push_and_pull(proxy):
     proxy.push(TEST_IMAGE)
@@ -48,11 +45,11 @@ def test_agent_pull(proxy, agent):
     agent.pull(TEST_IMAGE)
 
 
-@pytest.mark.skipif(NON_ROOT, reason=NON_ROOT_REASON)
-def test_agent_preload(proxy, agent):
+def test_agent_preload(proxy, agent_factory):
     proxy.push(TEST_IMAGE)
 
-    agent.preload(TEST_IMAGE)
+    with agent_factory.create(with_docker_socket=True) as agent:
+        agent.preload(TEST_IMAGE)
 
 
 def test_proxy_list_repository_tags(proxy, build_index):
