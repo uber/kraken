@@ -49,7 +49,7 @@ type dockerClient struct {
 func NewDockerClient(host, scheme, version, registry string) (DockerClient, error) {
 	client, addr, basePath, err := parseHost(host)
 	if err != nil {
-		return nil, fmt.Errorf("parse docker host `%s`: %s", host, err)
+		return nil, fmt.Errorf("parse docker host %q: %s", host, err)
 	}
 
 	return &dockerClient{
@@ -62,7 +62,7 @@ func NewDockerClient(host, scheme, version, registry string) (DockerClient, erro
 	}, nil
 }
 
-// parseHost parse host URL and returns a HTTP client.
+// parseHost parses host URL and returns a HTTP client.
 // This is needed because url.Parse cannot correctly parse url of format
 // "unix:///...".
 func parseHost(host string) (*http.Client, string, string, error) {
@@ -84,14 +84,14 @@ func parseHost(host string) (*http.Client, string, string, error) {
 		basePath = parsed.Path
 	} else if protocol == "unix" {
 		if len(addr) > len(syscall.RawSockaddrUnix{}.Path) {
-			return nil, "", "", fmt.Errorf("Unix socket path %q is too long", addr)
+			return nil, "", "", fmt.Errorf("unix socket path %q is too long", addr)
 		}
 		transport.DisableCompression = true
 		transport.Dial = func(_, _ string) (net.Conn, error) {
 			return net.DialTimeout(protocol, addr, _defaultTimeout)
 		}
 	} else {
-		return nil, "", "", fmt.Errorf("Protocol %s not supported", protocol)
+		return nil, "", "", fmt.Errorf("protocol %s not supported", protocol)
 	}
 
 	client := &http.Client{
