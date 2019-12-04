@@ -271,7 +271,7 @@ func TestPreloadHandler(t *testing.T) {
 
 	tag := url.PathEscape("repo1:tag1")
 
-	mocks.dockerCli.EXPECT().ImagePull(context.Background(), "repo1", "tag1").Return(nil)
+	mocks.dockerCli.EXPECT().PullImage(context.Background(), "repo1", "tag1").Return(nil)
 
 	_, err := httputil.Get(fmt.Sprintf("http://%s/preload/tags/%s", addr, tag))
 	require.NoError(err)

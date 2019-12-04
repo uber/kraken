@@ -120,9 +120,7 @@ class DockerContainer(object):
                 mode = i['mode']
                 self.volumes.extend(['-v', '{o}:{bind}:{mode}'.format(o=o, bind=bind, mode=mode)])
 
-        self.user = []
-        if user:
-            self.user = ['-u', user]
+        self.user = ['-u', user] if user else []
 
     def run(self):
         cmd = [

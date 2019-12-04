@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -33,7 +32,7 @@ const _defaultTimeout = 32 * time.Second
 
 // DockerClient is a docker daemon client.
 type DockerClient interface {
-	ImagePull(ctx context.Context, repo, tag string) error
+	PullImage(ctx context.Context, repo, tag string) error
 }
 
 type dockerClient struct {
@@ -102,18 +101,13 @@ func parseHost(host string) (*http.Client, string, string, error) {
 }
 
 // ImagePull calls `docker pull` on an image from known registry.
-func (cli *dockerClient) ImagePull(ctx context.Context, repo, tag string) error {
-	v := url.Values{}
+func (cli *dockerClient) PullImage(ctx context.Context, repo, tag string) error {
+	query := url.Values{}
 	fromImage := fmt.Sprintf("%s/%s", cli.registry, repo)
-	v.Set("fromImage", fromImage)
-	v.Set("tag", tag)
+	query.Set("fromImage", fromImage)
+	query.Set("tag", tag)
 	headers := map[string][]string{"X-Registry-Auth": {""}}
-	return cli.post(ctx, "/images/create", v, headers, nil, true)
-}
-
-func (cli *dockerClient) post(
-	ctx context.Context, urlPath string, query url.Values, header http.Header,
-	body io.Reader, streamRespBody bool) error {
+	urlPath := "/images/create"
 
 	// Construct request. It veries depending on client version.
 	var apiPath string
@@ -127,14 +121,11 @@ func (cli *dockerClient) post(
 	if len(query) > 0 {
 		u.RawQuery = query.Encode()
 	}
-	if body == nil {
-		body = bytes.NewReader([]byte{})
-	}
-	req, err := http.NewRequest("POST", u.String(), body)
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader([]byte{}))
 	if err != nil {
 		return fmt.Errorf("create request: %s", err)
 	}
-	req.Header = header
+	req.Header = headers
 	req.Host = "docker"
 	req.URL.Host = cli.addr
 	req.URL.Scheme = cli.scheme
@@ -153,10 +144,8 @@ func (cli *dockerClient) post(
 	}
 
 	// Docker daemon returns 200 early. Close resp.Body after reading all.
-	if streamRespBody {
-		if _, err := ioutil.ReadAll(resp.Body); err != nil {
-			return fmt.Errorf("read resp body: %s", err)
-		}
+	if _, err := ioutil.ReadAll(resp.Body); err != nil {
+		return fmt.Errorf("read resp body: %s", err)
 	}
 
 	return nil

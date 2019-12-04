@@ -166,7 +166,7 @@ func (s *Server) preloadTagHandler(w http.ResponseWriter, r *http.Request) error
 		return handler.Errorf("failed to parse docker image tag")
 	}
 	repo, tag := parts[0], parts[1]
-	if err := s.dockerCli.ImagePull(
+	if err := s.dockerCli.PullImage(
 		context.Background(), repo, tag); err != nil {
 
 		return handler.Errorf("trigger docker pull: %s", err)
