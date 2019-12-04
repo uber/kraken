@@ -74,15 +74,6 @@ func ParseFlags() *Flags {
 
 // Run runs the agent.
 func Run(flags *Flags) {
-	if flags.PeerPort == 0 {
-		panic("must specify non-zero peer port")
-	}
-	if flags.AgentServerPort == 0 {
-		panic("must specify non-zero agent server port")
-	}
-	if flags.AgentRegistryPort == 0 {
-		panic("must specify non-zero agent registry port")
-	}
 	var config Config
 	if err := configutil.Load(flags.ConfigFile, &config); err != nil {
 		panic(err)
@@ -92,6 +83,21 @@ func Run(flags *Flags) {
 		if err := configutil.Load(flags.SecretsFile, &config); err != nil {
 			panic(err)
 		}
+	}
+	RunWithConfig(flags, config)
+}
+
+// RunWithConfig runs the agent, but ignores config/secrets flags and directly
+// uses the provided config struct.
+func RunWithConfig(flags *Flags, config Config) {
+	if flags.PeerPort == 0 {
+		panic("must specify non-zero peer port")
+	}
+	if flags.AgentServerPort == 0 {
+		panic("must specify non-zero agent server port")
+	}
+	if flags.AgentRegistryPort == 0 {
+		panic("must specify non-zero agent registry port")
 	}
 
 	zlog := log.ConfigureLogger(config.ZapLogging)
