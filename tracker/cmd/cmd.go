@@ -65,6 +65,12 @@ func Run(flags *Flags) {
 			panic(err)
 		}
 	}
+	RunWithConfig(flags, config)
+}
+
+// RunWithConfig runs the tracker, but ignores config/secrets flags and directly
+// uses the provided config struct.
+func RunWithConfig(flags *Flags, config Config) {
 	log.ConfigureLogger(config.ZapLogging)
 
 	stats, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)

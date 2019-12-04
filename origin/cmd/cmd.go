@@ -83,6 +83,21 @@ func ParseFlags() *Flags {
 
 // Run runs the origin.
 func Run(flags *Flags) {
+	var config Config
+	if err := configutil.Load(flags.ConfigFile, &config); err != nil {
+		panic(err)
+	}
+	if flags.SecretsFile != "" {
+		if err := configutil.Load(flags.SecretsFile, &config); err != nil {
+			panic(err)
+		}
+	}
+	RunWithConfig(flags, config)
+}
+
+// RunWithConfig runs the origin, but ignores config/secrets flags and directly
+// uses the provided config struct.
+func RunWithConfig(flags *Flags, config Config) {
 	if flags.PeerPort == 0 {
 		panic("must specify non-zero peer port")
 	}
@@ -101,16 +116,6 @@ func Run(flags *Flags) {
 		hostname = flags.BlobServerHostName
 	}
 	log.Infof("Configuring origin with hostname '%s'", hostname)
-
-	var config Config
-	if err := configutil.Load(flags.ConfigFile, &config); err != nil {
-		panic(err)
-	}
-	if flags.SecretsFile != "" {
-		if err := configutil.Load(flags.SecretsFile, &config); err != nil {
-			panic(err)
-		}
-	}
 
 	zlog := log.ConfigureLogger(config.ZapLogging)
 	defer zlog.Sync()

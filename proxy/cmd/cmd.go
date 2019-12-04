@@ -62,10 +62,6 @@ func ParseFlags() *Flags {
 
 // Run runs the proxy.
 func Run(flags *Flags) {
-	if len(flags.Ports) == 0 {
-		panic("must specify a port")
-	}
-
 	var config Config
 	if err := configutil.Load(flags.ConfigFile, &config); err != nil {
 		panic(err)
@@ -75,12 +71,17 @@ func Run(flags *Flags) {
 			panic(err)
 		}
 	}
+	RunWithConfig(flags, config)
+}
+
+// RunWithConfig runs the proxy, but ignores config/secrets flags and directly
+// uses the provided config struct.
+func RunWithConfig(flags *Flags, config Config) {
+	if len(flags.Ports) == 0 {
+		panic("must specify a port")
+	}
 
 	log.ConfigureLogger(config.ZapLogging)
-
-	if len(flags.Ports) == 0 {
-		log.Fatal("Must specify at least one -port")
-	}
 
 	stats, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
 	if err != nil {

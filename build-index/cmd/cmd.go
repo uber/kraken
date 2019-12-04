@@ -61,10 +61,6 @@ func ParseFlags() *Flags {
 
 // Run runs the build-index.
 func Run(flags *Flags) {
-	if flags.Port == 0 {
-		panic("must specify non-zero port")
-	}
-
 	var config Config
 	if err := configutil.Load(flags.ConfigFile, &config); err != nil {
 		panic(err)
@@ -74,6 +70,16 @@ func Run(flags *Flags) {
 			panic(err)
 		}
 	}
+	RunWithConfig(flags, config)
+}
+
+// RunWithConfig runs the build-index, but ignores config/secrets flags and directly
+// uses the provided config struct.
+func RunWithConfig(flags *Flags, config Config) {
+	if flags.Port == 0 {
+		panic("must specify non-zero port")
+	}
+
 	log.ConfigureLogger(config.ZapLogging)
 
 	stats, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
