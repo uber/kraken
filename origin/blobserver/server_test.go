@@ -676,7 +676,7 @@ func TestUploadBlobResilientToDuplicationFailure(t *testing.T) {
 	s := newTestServer(t, master1, ring, cp)
 	defer s.cleanup()
 
-	cp.register(master2, blobclient.New("dummy-addr"))
+	cp.register(master2, blobclient.New("localhost:0"))
 
 	blob := computeBlobForHosts(ring, s.host, master2)
 

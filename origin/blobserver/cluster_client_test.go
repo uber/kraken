@@ -52,8 +52,8 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 
 	// Register dummy master addresses so Provide can still create a Client for
 	// unavailable masters.
-	cp.register(master2, blobclient.New("http://localhost:0"))
-	cp.register(master3, blobclient.New("http://localhost:0"))
+	cp.register(master2, blobclient.New("localhost:0"))
+	cp.register(master3, blobclient.New("localhost:0"))
 
 	r := blobclient.NewClientResolver(cp, hostlist.Fixture(master1))
 	cc := blobclient.NewClusterClient(r)
@@ -91,9 +91,9 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 	require := require.New(t)
 
 	cp := newTestClientProvider()
-	cp.register(master1, blobclient.New("http://localhost:0"))
-	cp.register(master2, blobclient.New("http://localhost:0"))
-	cp.register(master3, blobclient.New("http://localhost:0"))
+	cp.register(master1, blobclient.New("localhost:0"))
+	cp.register(master2, blobclient.New("localhost:0"))
+	cp.register(master3, blobclient.New("localhost:0"))
 
 	r := blobclient.NewClientResolver(cp, hostlist.Fixture(master1))
 	cc := blobclient.NewClusterClient(r)
