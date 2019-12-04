@@ -100,7 +100,7 @@ class HealthCheck(object):
 
 class DockerContainer(object):
 
-    def __init__(self, name, image, command=None, ports=None, volumes=None):
+    def __init__(self, name, image, command=None, ports=None, volumes=None, user=None):
         self.name = name
         self.image = image
 
@@ -120,6 +120,8 @@ class DockerContainer(object):
                 mode = i['mode']
                 self.volumes.extend(['-v', '{o}:{bind}:{mode}'.format(o=o, bind=bind, mode=mode)])
 
+        self.user = ['-u', user] if user else []
+
     def run(self):
         cmd = [
             'docker', 'run',
@@ -128,6 +130,7 @@ class DockerContainer(object):
         ]
         cmd.extend(self.ports)
         cmd.extend(self.volumes)
+        cmd.extend(self.user)
         cmd.append(self.image)
         cmd.extend(self.command)
         assert subprocess.call(cmd) == 0
@@ -146,7 +149,7 @@ class DockerContainer(object):
 
 
 def new_docker_container(name, image, command=None, environment=None, ports=None,
-                         volumes=None, health_check=None):
+                         volumes=None, health_check=None, user=None):
     """
     Creates and starts a detached Docker container. If health_check is specified,
     ensures the container is healthy before returning.
@@ -160,7 +163,8 @@ def new_docker_container(name, image, command=None, environment=None, ports=None
         image=image,
         command=command,
         ports=ports,
-        volumes=volumes)
+        volumes=volumes,
+        user=user)
     c.run()
     print 'Starting container {}'.format(c.name)
     try:
@@ -201,7 +205,7 @@ def init_cache(cname):
     return cache
 
 
-def create_volumes(kname, cname):
+def create_volumes(kname, cname, local_cache=True):
     """
     Creates volume bindings for Kraken name `kname` and container name `cname`.
     """
@@ -216,13 +220,14 @@ def create_volumes(kname, cname):
         'mode': 'ro',
     }
 
-    # Mount local cache. Allows components to simulate unavailability whilst
-    # retaining their state on disk.
-    cache = init_cache(cname)
-    volumes[cache] = {
-        'bind': '/var/cache/kraken/kraken-{kname}/'.format(kname=kname),
-        'mode': 'rw',
-    }
+    if local_cache:
+        # Mount local cache. Allows components to simulate unavailability whilst
+        # retaining their state on disk.
+        cache = init_cache(cname)
+        volumes[cache] = {
+            'bind': '/var/cache/kraken/kraken-{kname}/'.format(kname=kname),
+            'mode': 'rw',
+        }
 
     return volumes
 
@@ -412,7 +417,7 @@ class OriginCluster(object):
 
 class Agent(Component):
 
-    def __init__(self, zone, id, tracker, build_indexes):
+    def __init__(self, zone, id, tracker, build_indexes, with_docker_socket=False):
         self.zone = zone
         self.id = id
         self.tracker = tracker
@@ -422,6 +427,7 @@ class Agent(Component):
         self.port = find_free_port()
         self.config_file = 'test-{zone}.yaml'.format(zone=zone)
         self.name = 'kraken-agent-{id}-{zone}'.format(id=id, zone=zone)
+        self.with_docker_socket = with_docker_socket
 
         populate_config_template(
             'agent',
@@ -429,11 +435,24 @@ class Agent(Component):
             trackers=yaml_list([self.tracker.addr]),
             build_indexes=yaml_list([bi.addr for bi in self.build_indexes]))
 
-        self.volumes = create_volumes('agent', self.name)
+        if self.with_docker_socket:
+            # In aditional to the need to mount docker socket, also avoid using
+            # local cache volume, otherwise the process would run as root and
+            # create local cache files that's hard to clean outside of the
+            # container.
+            self.volumes = create_volumes('agent', self.name, local_cache=False)
+            self.volumes['/var/run/docker.sock'] = {
+                'bind': '/var/run/docker.sock',
+                'mode': 'rw',
+            }
+        else:
+            self.volumes = create_volumes('agent', self.name)
 
         self.start()
 
     def new_container(self):
+        # Root user is needed for accessing docker socket.
+        user = 'root' if self.with_docker_socket else None
         return new_docker_container(
             name=self.name,
             image=dev_tag('kraken-agent'),
@@ -452,7 +471,8 @@ class Agent(Component):
                 '--agent-server-port={port}'.format(port=self.port),
                 '--agent-registry-port={port}'.format(port=self.registry_port),
             ],
-            health_check=HealthCheck('curl localhost:{port}/health'.format(port=self.port)))
+            health_check=HealthCheck('curl localhost:{port}/health'.format(port=self.port)),
+            user=user)
 
     @property
     def registry(self):
@@ -470,6 +490,14 @@ class Agent(Component):
     def pull(self, image):
         return pull(self.registry, image)
 
+    def preload(self, image):
+        url = 'http://127.0.0.1:{port}/preload/tags/{image}'.format(
+            port=self.port, image=urllib.quote(image, safe=''))
+        s = requests.session()
+        s.keep_alive = False
+        res = s.get(url, stream=True, timeout=60)
+        res.raise_for_status()
+
 
 class AgentFactory(object):
 
@@ -479,8 +507,8 @@ class AgentFactory(object):
         self.build_indexes = build_indexes
 
     @contextmanager
-    def create(self, n=1):
-        agents = [Agent(self.zone, i, self.tracker, self.build_indexes) for i in range(n)]
+    def create(self, n=1, with_docker_socket=False):
+        agents = [Agent(self.zone, i, self.tracker, self.build_indexes, with_docker_socket) for i in range(n)]
         try:
             if len(agents) == 1:
                 yield agents[0]

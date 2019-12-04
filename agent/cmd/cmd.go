@@ -23,6 +23,7 @@ import (
 	"github.com/uber/kraken/agent/agentserver"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/dockerdaemon"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/networkevent"
@@ -86,6 +87,7 @@ func Run(flags *Flags) {
 	if err := configutil.Load(flags.ConfigFile, &config); err != nil {
 		panic(err)
 	}
+	config = config.applyDefaults()
 	if flags.SecretsFile != "" {
 		if err := configutil.Load(flags.SecretsFile, &config); err != nil {
 			panic(err)
@@ -158,7 +160,15 @@ func Run(flags *Flags) {
 		log.Fatalf("Failed to init registry: %s", err)
 	}
 
-	agentServer := agentserver.New(config.AgentServer, stats, cads, sched, tagClient)
+	registryAddr := fmt.Sprintf("127.0.0.1:%d", flags.AgentRegistryPort)
+	dockerCli, err := dockerdaemon.NewDockerClient(
+		config.DockerHost, config.DockerScheme, config.DockerClientVersion, registryAddr)
+	if err != nil {
+		log.Fatalf("failed to init docker client for preload: %s", err)
+	}
+
+	agentServer := agentserver.New(
+		config.AgentServer, stats, cads, sched, tagClient, dockerCli)
 	addr := fmt.Sprintf(":%d", flags.AgentServerPort)
 	log.Infof("Starting agent server on %s", addr)
 	go func() {
@@ -185,7 +195,7 @@ func Run(flags *Flags) {
 
 	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
 		"allowed_cidrs": config.AllowedCidrs,
-		"port": flags.AgentRegistryPort,
+		"port":          flags.AgentRegistryPort,
 		"registry_server": nginx.GetServer(
 			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
 		"registry_backup": config.RegistryBackup},
