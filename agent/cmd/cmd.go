@@ -167,8 +167,7 @@ func RunWithConfig(flags *Flags, config Config) {
 	}
 
 	registryAddr := fmt.Sprintf("127.0.0.1:%d", flags.AgentRegistryPort)
-	dockerCli, err := dockerdaemon.NewDockerClient(
-		config.DockerHost, config.DockerScheme, config.DockerClientVersion, registryAddr)
+	dockerCli, err := dockerdaemon.NewDockerClient(config.DockerDaemon, registryAddr)
 	if err != nil {
 		log.Fatalf("failed to init docker client for preload: %s", err)
 	}
