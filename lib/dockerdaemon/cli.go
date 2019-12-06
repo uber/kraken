@@ -46,15 +46,17 @@ type dockerClient struct {
 }
 
 // NewDockerClient creates a new DockerClient.
-func NewDockerClient(host, scheme, version, registry string) (DockerClient, error) {
-	client, addr, basePath, err := parseHost(host)
+func NewDockerClient(config Config, registry string) (DockerClient, error) {
+	config = config.applyDefaults()
+
+	client, addr, basePath, err := parseHost(config.DockerHost)
 	if err != nil {
-		return nil, fmt.Errorf("parse docker host %q: %s", host, err)
+		return nil, fmt.Errorf("parse docker host %q: %s", config.DockerHost, err)
 	}
 
 	return &dockerClient{
-		version:  version,
-		scheme:   scheme,
+		version:  config.DockerClientVersion,
+		scheme:   config.DockerScheme,
 		addr:     addr,
 		basePath: basePath,
 		registry: registry,
