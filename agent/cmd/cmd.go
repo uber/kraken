@@ -78,7 +78,6 @@ func Run(flags *Flags) {
 	if err := configutil.Load(flags.ConfigFile, &config); err != nil {
 		panic(err)
 	}
-	config = config.applyDefaults()
 	if flags.SecretsFile != "" {
 		if err := configutil.Load(flags.SecretsFile, &config); err != nil {
 			panic(err)

@@ -47,6 +47,8 @@ type dockerClient struct {
 
 // NewDockerClient creates a new DockerClient.
 func NewDockerClient(config Config, registry string) (DockerClient, error) {
+	config = config.applyDefaults()
+
 	client, addr, basePath, err := parseHost(config.DockerHost)
 	if err != nil {
 		return nil, fmt.Errorf("parse docker host %q: %s", config.DockerHost, err)
