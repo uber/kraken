@@ -128,7 +128,6 @@ func Run(flags *Flags, opts ...Option) {
 			}
 		}
 	}
-	config = config.applyDefaults()
 
 	if overrides.logger != nil {
 		log.SetGlobalLogger(overrides.logger.Sugar())
