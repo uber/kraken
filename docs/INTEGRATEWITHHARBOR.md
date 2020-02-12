@@ -66,10 +66,10 @@ You should add more configuration about TLS if the domain name of your Harbor us
                 password: "XXXXX"
               tls:
                 client:
-                 cert:
-                  path: /etc/certs/XXX.crt
-                 key:
-                  path: /etc/certs/XXX.key
+                  cert:
+                    path: /etc/certs/XXX.crt
+                  key:
+                    path: /etc/certs/XXX.key
                 cas:
                   - path: /etc/certs/ca.crt
                   
