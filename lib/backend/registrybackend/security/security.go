@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sync"
 
 	"github.com/awslabs/amazon-ecr-credential-helper/ecr-login"
 	"github.com/awslabs/amazon-ecr-credential-helper/ecr-login/api"
@@ -63,6 +64,7 @@ type authenticator struct {
 	roundTripper     http.RoundTripper
 	credentialStore  auth.CredentialStore
 	challengeManager challenge.Manager
+	tokenHandlers    sync.Map
 }
 
 // NewAuthenticator returns a new authenticator for the given docker registry
@@ -104,9 +106,8 @@ func (a *authenticator) shouldAuth() bool {
 }
 
 func (a *authenticator) transport(repo string) http.RoundTripper {
-	// TODO: cache handlers (possibly keyed on repo)
 	basicHandler := auth.NewBasicHandler(a.credentialStore)
-	bearerHandler := auth.NewTokenHandlerWithOptions(auth.TokenHandlerOptions{
+	bearerHandler, _ := a.tokenHandlers.LoadOrStore(repo, auth.NewTokenHandlerWithOptions(auth.TokenHandlerOptions{
 		Transport:   a.roundTripper,
 		Credentials: a.credentialStore,
 		Scopes: []auth.Scope{
@@ -116,8 +117,8 @@ func (a *authenticator) transport(repo string) http.RoundTripper {
 			},
 		},
 		ClientID: "docker",
-	})
-	return transport.NewTransport(a.roundTripper, auth.NewAuthorizer(a.challengeManager, basicHandler, bearerHandler))
+	}))
+	return transport.NewTransport(a.roundTripper, auth.NewAuthorizer(a.challengeManager, basicHandler, bearerHandler.(auth.AuthenticationHandler)))
 }
 
 func (a *authenticator) updateChallenge() error {
