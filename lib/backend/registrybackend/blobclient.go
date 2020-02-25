@@ -60,7 +60,7 @@ type BlobClient struct {
 
 // NewBlobClient creates a new BlobClient.
 func NewBlobClient(config Config) (*BlobClient, error) {
-	return &BlobClient{config}, nil
+	return &BlobClient{config: config.applyDefaults()}, nil
 }
 
 // Stat sends a HEAD request to registry for a blob and returns the blob size.
@@ -120,7 +120,9 @@ func (c *BlobClient) downloadHelper(namespace, name, query string, dst io.Writer
 	resp, err := httputil.Get(
 		URL,
 		opt,
-		httputil.SendAcceptedCodes(http.StatusOK))
+		httputil.SendAcceptedCodes(http.StatusOK),
+		httputil.SendTimeout(c.config.Timeout),
+	)
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return backenderrors.ErrBlobNotFound

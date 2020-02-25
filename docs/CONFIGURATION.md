@@ -193,6 +193,7 @@ Example origin config that uses multiple backends:
 >    backend:
 >      registry_blob:
 >        address: index.docker.io
+>        timeout: 60s
 >        security:
 >          basic:
 >            username: ""
