@@ -26,6 +26,7 @@ type Config struct {
 	Region           string `yaml:"region"`           // AWS S3 region
 	Bucket           string `yaml:"bucket"`           // S3 bucket
 	Endpoint         string `yaml:"endpoint"`         // S3 endpoint
+	DisableSSL       bool   `yaml:"disable_ssl"`      // use clear HTTP when talking to endpoint
 	S3ForcePathStyle bool   `yaml:"force_path_style"` // use path style instead of DNS style
 
 	RootDirectory    string `yaml:"root_directory"`     // S3 root directory for docker images

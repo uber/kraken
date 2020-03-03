@@ -118,6 +118,10 @@ func NewClient(
 		awsConfig = awsConfig.WithEndpoint(config.Endpoint)
 	}
 
+	if config.DisableSSL {
+		awsConfig = awsConfig.WithDisableSSL(config.DisableSSL)
+	}
+
 	if config.S3ForcePathStyle {
 		awsConfig = awsConfig.WithS3ForcePathStyle(config.S3ForcePathStyle)
 	}
