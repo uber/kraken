@@ -118,6 +118,10 @@ func NewClient(
 		awsConfig = awsConfig.WithEndpoint(config.Endpoint)
 	}
 
+	if config.S3ForcePathStyle {
+		awsConfig = awsConfig.WithS3ForcePathStyle(config.S3ForcePathStyle)
+	}
+
 	api := s3.New(session.New(), awsConfig)
 
 	downloader := s3manager.NewDownloaderWithClient(api, func(d *s3manager.Downloader) {
