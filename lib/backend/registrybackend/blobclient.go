@@ -75,42 +75,42 @@ func NewBlobClient(config Config) (*BlobClient, error) {
 
 // Stat sends a HEAD request to registry for a blob and returns the blob size.
 func (c *BlobClient) Stat(namespace, name string) (*core.BlobInfo, error) {
-	opt, err := c.authenticator.Authenticate(namespace)
+	opts, err := c.authenticator.Authenticate(namespace)
 	if err != nil {
 		return nil, fmt.Errorf("get security opt: %s", err)
 	}
 
-	info, err := c.statHelper(namespace, name, _layerquery, opt)
+	info, err := c.statHelper(namespace, name, _layerquery, opts)
 	if err != nil && err == backenderrors.ErrBlobNotFound {
 		// Docker registry does not support querying manifests with blob path.
 		log.Infof("Blob %s unknown to registry. Tring to stat manifest instead", name)
-		info, err = c.statHelper(namespace, name, _manifestquery, opt)
+		info, err = c.statHelper(namespace, name, _manifestquery, opts)
 	}
 	return info, err
 }
 
 // Download gets a blob from registry.
 func (c *BlobClient) Download(namespace, name string, dst io.Writer) error {
-	opt, err := c.authenticator.Authenticate(namespace)
+	opts, err := c.authenticator.Authenticate(namespace)
 	if err != nil {
 		return fmt.Errorf("get security opt: %s", err)
 	}
 
-	err = c.downloadHelper(namespace, name, _layerquery, dst, opt)
+	err = c.downloadHelper(namespace, name, _layerquery, dst, opts)
 	if err != nil && err == backenderrors.ErrBlobNotFound {
 		// Docker registry does not support querying manifests with blob path.
 		log.Infof("Blob %s unknown to registry. Tring to download manifest instead", name)
-		err = c.downloadHelper(namespace, name, _manifestquery, dst, opt)
+		err = c.downloadHelper(namespace, name, _manifestquery, dst, opts)
 	}
 	return err
 }
 
-func (c *BlobClient) statHelper(namespace, name, query string, opt httputil.SendOption) (*core.BlobInfo, error) {
+func (c *BlobClient) statHelper(namespace, name, query string, opts []httputil.SendOption) (*core.BlobInfo, error) {
 	URL := fmt.Sprintf(query, c.config.Address, namespace, name)
 	resp, err := httputil.Head(
 		URL,
-		opt,
-		httputil.SendAcceptedCodes(http.StatusOK))
+		append(opts, httputil.SendAcceptedCodes(http.StatusOK))...,
+	)
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return nil, backenderrors.ErrBlobNotFound
@@ -125,13 +125,15 @@ func (c *BlobClient) statHelper(namespace, name, query string, opt httputil.Send
 	return core.NewBlobInfo(size), nil
 }
 
-func (c *BlobClient) downloadHelper(namespace, name, query string, dst io.Writer, opt httputil.SendOption) error {
+func (c *BlobClient) downloadHelper(namespace, name, query string, dst io.Writer, opts []httputil.SendOption) error {
 	URL := fmt.Sprintf(query, c.config.Address, namespace, name)
 	resp, err := httputil.Get(
 		URL,
-		opt,
-		httputil.SendAcceptedCodes(http.StatusOK),
-		httputil.SendTimeout(c.config.Timeout),
+		append(
+			opts,
+			httputil.SendAcceptedCodes(http.StatusOK),
+			httputil.SendTimeout(c.config.Timeout),
+		)...,
 	)
 	if err != nil {
 		if httputil.IsNotFound(err) {

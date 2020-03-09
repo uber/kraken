@@ -82,7 +82,7 @@ func (c *TagClient) Stat(namespace, name string) (*core.BlobInfo, error) {
 	}
 	repo, tag := tokens[0], tokens[1]
 
-	opt, err := c.authenticator.Authenticate(repo)
+	opts, err := c.authenticator.Authenticate(repo)
 	if err != nil {
 		return nil, fmt.Errorf("get security opt: %s", err)
 	}
@@ -90,9 +90,12 @@ func (c *TagClient) Stat(namespace, name string) (*core.BlobInfo, error) {
 	URL := fmt.Sprintf(_tagquery, c.config.Address, repo, tag)
 	resp, err := httputil.Head(
 		URL,
-		opt,
-		httputil.SendHeaders(map[string]string{"Accept": _v2ManifestType}),
-		httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound))
+		append(
+			opts,
+			httputil.SendHeaders(map[string]string{"Accept": _v2ManifestType}),
+			httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound),
+		)...,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("check blob exists: %s", err)
 	}
@@ -115,7 +118,7 @@ func (c *TagClient) Download(namespace, name string, dst io.Writer) error {
 	}
 	repo, tag := tokens[0], tokens[1]
 
-	opt, err := c.authenticator.Authenticate(repo)
+	opts, err := c.authenticator.Authenticate(repo)
 	if err != nil {
 		return fmt.Errorf("get security opt: %s", err)
 	}
@@ -123,9 +126,12 @@ func (c *TagClient) Download(namespace, name string, dst io.Writer) error {
 	URL := fmt.Sprintf(_tagquery, c.config.Address, repo, tag)
 	resp, err := httputil.Get(
 		URL,
-		opt,
-		httputil.SendHeaders(map[string]string{"Accept": _v2ManifestType}),
-		httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound))
+		append(
+			opts,
+			httputil.SendHeaders(map[string]string{"Accept": _v2ManifestType}),
+			httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound),
+		)...,
+	)
 	if err != nil {
 		return fmt.Errorf("check blob exists: %s", err)
 	}

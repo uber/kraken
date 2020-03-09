@@ -48,6 +48,7 @@ type Config struct {
 	TLS                    httputil.TLSConfig `yaml:"tls"`
 	BasicAuth              *types.AuthConfig  `yaml:"basic"`
 	RemoteCredentialsStore string             `yaml:"credsStore"`
+	EnableHTTPFallback     bool               `yaml:"enableHTTPFallback"`
 }
 
 // Authenticator creates send options to authenticate requests to registry
@@ -55,7 +56,7 @@ type Config struct {
 type Authenticator interface {
 	// Authenticate returns a send option to authenticate to the registry,
 	// scoped to the given image repository.
-	Authenticate(repo string) (httputil.SendOption, error)
+	Authenticate(repo string) ([]httputil.SendOption, error)
 }
 
 type authenticator struct {
@@ -89,18 +90,27 @@ func NewAuthenticator(address string, config Config) (Authenticator, error) {
 	}, nil
 }
 
-func (a *authenticator) Authenticate(repo string) (httputil.SendOption, error) {
+func (a *authenticator) Authenticate(repo string) ([]httputil.SendOption, error) {
 	config := a.config
+
+	var opts []httputil.SendOption
 	if config.TLS.Client.Disabled {
-		return httputil.SendNoop(), nil
+		opts = append(opts, httputil.SendNoop())
+		return opts, nil
+	}
+
+	if !config.EnableHTTPFallback {
+		opts = append(opts, httputil.DisableHTTPFallback())
 	}
 	if !a.shouldAuth() {
-		return httputil.SendTLSTransport(a.roundTripper), nil
+		opts = append(opts, httputil.SendTLSTransport(a.roundTripper))
+		return opts, nil
 	}
 	if err := a.updateChallenge(); err != nil {
 		return nil, fmt.Errorf("could not update auth challenge: %s", err)
 	}
-	return httputil.SendTLSTransport(a.transport(repo)), nil
+	opts = append(opts, httputil.SendTLSTransport(a.transport(repo)))
+	return opts, nil
 }
 
 func (a *authenticator) shouldAuth() bool {
