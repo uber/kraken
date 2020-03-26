@@ -1,0 +1,21 @@
+extends: /etc/kraken/config/origin/base.yaml
+{{ include "tls" . }}
+{{ include "origin-cluster" . }}
+
+backends:
+{{ with .Values.origin.extraBackends }}{{ tpl . $ | indent 2 }}{{ end }}
+{{ if .Values.testfs.enabled }}
+  - namespace: .*
+    backend:
+      testfs:
+        addr: kraken-testfs:80
+        root: blobs
+        name_path: identity
+{{ end }}
+
+hashring:
+  max_replica: 2
+
+writeback:
+  retry_interval: 100ms
+  poll_retries_interval: 250ms

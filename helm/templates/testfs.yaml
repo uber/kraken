@@ -1,9 +1,12 @@
+{{ if .Values.testfs.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kraken-testfs
   labels:
-    kraken: 'true'
+    app.kubernetes.io/name: kraken
+    app.kubernetes.io/component: testfs
+    app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   replicas: 1
   selector:
@@ -12,8 +15,13 @@ spec:
   template:
     metadata:
       labels:
-        kraken: 'true'
-        kraken-app: testfs
+        app.kubernetes.io/name: kraken
+        app.kubernetes.io/component: testfs
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      {{ with .Values.testfs.annotations -}}
+      annotations:
+{{ tpl . $ | indent 8 }}
+      {{- end }}
     spec:
       containers:
       - name: main
@@ -26,12 +34,13 @@ kind: Service
 apiVersion: v1
 metadata:
   name: kraken-testfs
-  labels:
-    kraken: 'true'
 spec:
   selector:
-    kraken-app: testfs
+    app.kubernetes.io/name: kraken
+    app.kubernetes.io/component: testfs
+    app.kubernetes.io/instance: {{ .Release.Name }}
   ports:
   - protocol: TCP
     port: 80
     targetPort: 80
+{{ end }}
