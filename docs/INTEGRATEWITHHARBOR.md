@@ -10,7 +10,7 @@ I will introduce how to integrate Harbor and Kraken here. And using the image ma
 
 So you can see that Harbor and Kraken share the same docker registry as backend storage. It will decouple Harbor and Kraken if they just share the storage but not higher level sharing. So we can push images into Harbor and pull them from Harbor or kraken.
 
-## Deploment
+## Deployment
 Here we use [helm chart](https://github.com/goharbor/harbor-helm) from Harbor community to deploy them. and also [helm chart](https://github.com/uber/kraken/tree/master/helm) from Kraken community to deploy them.
 
 We should modify two config file additionally,
