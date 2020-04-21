@@ -25,7 +25,7 @@ BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUIL
 
 # Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
 # This workaround builds the binary inside a linux container.
-CROSS_COMPILER = docker run --rm -it -v $(GOPATH):/go -e GO111MODULE=on -w /go/src/github.com/uber/kraken golang:1.11.4 go build -o ./$@ ./$(dir $@)
+CROSS_COMPILER = docker run --rm -it -v $(shell go env GOPATH):/go -e GO111MODULE=on -w /go/src/github.com/uber/kraken golang:1.11.4 go build -o ./$@ ./$(dir $@)
 
 LINUX_BINS = \
 	agent/agent \
@@ -180,12 +180,12 @@ GEN_DIR = gen/go
 protoc:
 	mkdir -p $(GEN_DIR)
 	go get -u github.com/golang/protobuf/protoc-gen-go
-	$(PROTOC_BIN) --plugin=$(GOPATH)/bin/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$(PROTO)))
+	$(PROTOC_BIN) --plugin=$(shell go env GOPATH)/bin/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$(PROTO)))
 
 # mockgen must be installed on the system to make this work.
 # Install it by running:
 # `go get github.com/golang/mock/mockgen`.
-mockgen = $(GOPATH)/bin/mockgen
+mockgen = $(shell go env GOPATH)/bin/mockgen
 
 define lowercase
 $(shell tr '[:upper:]' '[:lower:]' <<< $(1))
@@ -202,7 +202,7 @@ endef
 .PHONY: mocks
 mocks:
 	rm -rf mocks
-	mkdir -p $(GOPATH)/bin
+	mkdir -p $(shell go env GOPATH)/bin
 
 	$(call add_mock,agent/agentclient,Client)
 
