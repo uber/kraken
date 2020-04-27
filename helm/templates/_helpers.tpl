@@ -36,17 +36,6 @@ cluster:
 
 
 
-{{- define "library-namespace" -}}
-- namespace: library/.*
-  backend:
-    registry_blob:
-      address: index.docker.io
-      security:
-        basic:
-          username: ""
-          password: ""
-{{- end -}}
-
 {{- define "tls" -}}
 tls:
   client:
