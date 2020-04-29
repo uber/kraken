@@ -23,6 +23,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/lib/backend/registrybackend/security"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 	yaml "gopkg.in/yaml.v2"
@@ -55,17 +56,26 @@ const _manifestquery = "http://%s/v2/%s/manifests/sha256:%s"
 
 // BlobClient stats and downloads blob from registry.
 type BlobClient struct {
-	config Config
+	config        Config
+	authenticator security.Authenticator
 }
 
 // NewBlobClient creates a new BlobClient.
 func NewBlobClient(config Config) (*BlobClient, error) {
-	return &BlobClient{config: config.applyDefaults()}, nil
+	config = config.applyDefaults()
+	authenticator, err := security.NewAuthenticator(config.Address, config.Security)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tag client authenticator: %s", err)
+	}
+	return &BlobClient{
+		config:        config,
+		authenticator: authenticator,
+	}, nil
 }
 
 // Stat sends a HEAD request to registry for a blob and returns the blob size.
 func (c *BlobClient) Stat(namespace, name string) (*core.BlobInfo, error) {
-	opt, err := c.config.Security.GetHTTPOption(c.config.Address, namespace)
+	opt, err := c.authenticator.Authenticate(namespace)
 	if err != nil {
 		return nil, fmt.Errorf("get security opt: %s", err)
 	}
@@ -73,7 +83,7 @@ func (c *BlobClient) Stat(namespace, name string) (*core.BlobInfo, error) {
 	info, err := c.statHelper(namespace, name, _layerquery, opt)
 	if err != nil && err == backenderrors.ErrBlobNotFound {
 		// Docker registry does not support querying manifests with blob path.
-		log.Infof("Blob %s unknown to registry. Tring to stat manifest instead")
+		log.Infof("Blob %s unknown to registry. Tring to stat manifest instead", name)
 		info, err = c.statHelper(namespace, name, _manifestquery, opt)
 	}
 	return info, err
@@ -81,7 +91,7 @@ func (c *BlobClient) Stat(namespace, name string) (*core.BlobInfo, error) {
 
 // Download gets a blob from registry.
 func (c *BlobClient) Download(namespace, name string, dst io.Writer) error {
-	opt, err := c.config.Security.GetHTTPOption(c.config.Address, namespace)
+	opt, err := c.authenticator.Authenticate(namespace)
 	if err != nil {
 		return fmt.Errorf("get security opt: %s", err)
 	}
@@ -89,7 +99,7 @@ func (c *BlobClient) Download(namespace, name string, dst io.Writer) error {
 	err = c.downloadHelper(namespace, name, _layerquery, dst, opt)
 	if err != nil && err == backenderrors.ErrBlobNotFound {
 		// Docker registry does not support querying manifests with blob path.
-		log.Infof("Blob %s unknown to registry. Tring to download manifest instead")
+		log.Infof("Blob %s unknown to registry. Tring to download manifest instead", name)
 		err = c.downloadHelper(namespace, name, _manifestquery, dst, opt)
 	}
 	return err

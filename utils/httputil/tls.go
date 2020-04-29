@@ -67,7 +67,7 @@ func (c *TLSConfig) BuildClient() (*tls.Config, error) {
 	var caPool *x509.CertPool
 	var certs []tls.Certificate
 	var err error
-	if c.CAs != nil {
+	if len(c.CAs) > 0 {
 		caPool, err = createCertPool(c.CAs)
 		if err != nil {
 			return nil, fmt.Errorf("create cert pool: %s", err)
