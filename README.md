@@ -40,13 +40,15 @@ Below is the visualization of a small Kraken cluster at work:
 
 Following are some highlights of Kraken:
 - **Highly scalable**. Kraken is capable of distributing Docker images at > 50% of max download
-  the speed limit on every host. Cluster size and image size do not have a significant impact on download speed.
+  the speed limit on every host. Cluster size and image size do not have a significant impact on
+  download speed.
   - Supports at least 15k hosts per cluster.
   - Supports arbitrarily large blobs/layers. We normally limit max size to 20G for the best performance.
 - **Highly available**. No component is a single point of failure.
 - **Secure**. Support uploader authentication and data integrity protection through TLS.
 - **Pluggable storage options**. Instead of managing data, Kraken plugs into reliable blob storage
-  options, like S3, GCS, ECR, HDFS or another registry. The storage interface is simple and new options are easy to add.
+  options, like S3, GCS, ECR, HDFS or another registry. The storage interface is simple and new
+  options are easy to add.
 - **Lossless cross-cluster replication**. Kraken supports rule-based async replication between
   clusters.
 - **Minimal dependencies**. Other than pluggable storage, Kraken only has an optional dependency on
@@ -89,7 +91,7 @@ talk](https://www.youtube.com/watch?v=waVtYYSXkXU) at KubeCon + CloudNativeCon.
 - Build-Index
   - Mapping of the human-readable tag to blob digest
   - No consistency guarantees: the client should use unique tags
-  - Powers image replication between clusters (simply duplicated queues with retry)
+  - Powers image replication between clusters (simple duplicated queues with retry)
   - Stores tags as files on disk backed by pluggable storage (e.g. S3, GCS, ECR)
 
 # Benchmark
@@ -120,7 +122,7 @@ your k8s cluster:
 $ helm install --name=kraken-demo ./helm
 ```
 Once deployed, every node will have a docker registry API exposed on `localhost:30081`.
-For example pod spec that pulls images from Kraken agent, sees [example](examples/k8s/demo.json).
+For example pod spec that pulls images from Kraken agent, see [example](examples/k8s/demo.json).
 
 For more information on k8s setup, see [README](examples/k8s/README.md).
 
@@ -172,7 +174,7 @@ Kraken will not magically speed up your `docker pull`. To speed up `docker pull`
 switching to [Makisu](https://github.com/uber/makisu) to improve layer reusability at build time, or
 tweak compression ratios, as `docker pull` spends most of the time on data decompression.
 - Mutating tags (e.g. updating a `latest` tag) is allowed, however, a few things will not work: tag
-lookups immediately afterward will still return the old value due to Nginx caching, and replication
+lookups immediately afterwards will still return the old value due to Nginx caching, and replication
 probably won't trigger. We are working on supporting this functionality better. If you need tag
 mutation support right now, please reduce the cache interval of the build-index component. If you also need
 replication in a multi-cluster setup, please consider setting up another Docker registry as Kraken's
