@@ -135,8 +135,10 @@ func (s *CAStore) WriteCacheFile(name string, write func(w FileReadWriter) error
 	return nil
 }
 
+// verify verifies that name is a valid SHA256 digest, and checks if the given
+// blob content matches the digset unless explicitly skipped.
 func (s *CAStore) verify(r io.Reader, name string) error {
-	// Verify that expected name is valid.
+	// Verify that expected name is a valid SHA256 digest.
 	expected, err := core.NewSHA256DigestFromHex(name)
 	if err != nil {
 		return fmt.Errorf("new digest from file name: %s", err)
