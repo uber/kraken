@@ -31,6 +31,8 @@ import (
 
 // CAStore allows uploading / caching content-addressable files.
 type CAStore struct {
+	config CAStoreConfig
+
 	*uploadStore
 	*cacheStore
 	cleanup *cleanupManager
@@ -66,7 +68,7 @@ func NewCAStore(config CAStoreConfig, stats tally.Scope) (*CAStore, error) {
 	cleanup.addJob("upload", config.UploadCleanup, uploadStore.newFileOp())
 	cleanup.addJob("cache", config.CacheCleanup, cacheStore.newFileOp())
 
-	return &CAStore{uploadStore, cacheStore, cleanup}, nil
+	return &CAStore{config, uploadStore, cacheStore, cleanup}, nil
 }
 
 // Close terminates any goroutines started by s.
