@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"net/http"
 	"os"
 	"path"
 
@@ -88,7 +87,7 @@ func (s *CAStore) MoveUploadFileToCache(uploadName, cacheName string) error {
 		return fmt.Errorf("get file reader %s: %s", uploadName, err)
 	}
 	defer f.Close()
-	if err := s.verify(w, cacheName); err != nil {
+	if err := s.verify(f, cacheName); err != nil {
 		return fmt.Errorf("verify digest: %s", err)
 	}
 
@@ -147,12 +146,10 @@ func (s *CAStore) verify(r io.Reader, name string) error {
 		digester := core.NewDigester()
 		computed, err := digester.FromReader(r)
 		if err != nil {
-			return handler.Errorf("calculate digest: %s", err)
+			return fmt.Errorf("calculate digest: %s", err)
 		}
 		if computed != expected {
-			return handler.
-				Errorf("computed digest %s doesn't match expected value %s", computed, expected).
-				Status(http.StatusBadRequest)
+			return fmt.Errorf("computed digest %s doesn't match expected value %s", computed, expected)
 		}
 	}
 	return nil
