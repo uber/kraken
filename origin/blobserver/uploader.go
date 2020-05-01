@@ -18,10 +18,10 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/docker/distribution/uuid"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/handler"
-	"github.com/docker/distribution/uuid"
 )
 
 // uploader executes a chunked upload.
@@ -67,28 +67,6 @@ func (u *uploader) patch(
 	}
 	if _, err := io.CopyN(f, chunk, end-start); err != nil {
 		return handler.Errorf("copy: %s", err)
-	}
-	return nil
-}
-
-func (u *uploader) verify(d core.Digest, uid string) error {
-	digester := core.NewDigester()
-	f, err := u.cas.GetUploadFileReader(uid)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return handler.ErrorStatus(http.StatusNotFound)
-		}
-		return handler.Errorf("get upload file: %s", err)
-	}
-	defer f.Close()
-	computedDigest, err := digester.FromReader(f)
-	if err != nil {
-		return handler.Errorf("calculate digest: %s", err)
-	}
-	if computedDigest != d {
-		return handler.
-			Errorf("computed digest %s doesn't match parameter %s", computedDigest, d).
-			Status(http.StatusBadRequest)
 	}
 	return nil
 }

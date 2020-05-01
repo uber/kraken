@@ -17,16 +17,17 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"net/http"
 	"os"
 	"path"
 
-	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/hrw"
-	"github.com/uber/kraken/lib/store/base"
 	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
 	"github.com/spaolacci/murmur3"
 	"github.com/uber-go/tally"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/hrw"
+	"github.com/uber/kraken/lib/store/base"
 )
 
 // CAStore allows uploading / caching content-addressable files.
@@ -81,6 +82,16 @@ func (s *CAStore) MoveUploadFileToCache(uploadName, cacheName string) error {
 	if err != nil {
 		return err
 	}
+
+	f, err := s.uploadStore.newFileOp().GetFileReader(uploadName)
+	if err != nil {
+		return fmt.Errorf("get file reader %s: %s", uploadName, err)
+	}
+	defer f.Close()
+	if err := s.verify(w, cacheName); err != nil {
+		return fmt.Errorf("verify digest: %s", err)
+	}
+
 	defer s.DeleteUploadFile(uploadName)
 	return s.cacheStore.newFileOp().MoveFileFrom(cacheName, s.cacheStore.state, uploadPath)
 }
@@ -116,20 +127,33 @@ func (s *CAStore) WriteCacheFile(name string, write func(w FileReadWriter) error
 	if _, err := w.Seek(0, 0); err != nil {
 		return fmt.Errorf("seek: %s", err)
 	}
-	actual, err := core.NewDigester().FromReader(w)
-	if err != nil {
-		return fmt.Errorf("compute digest: %s", err)
+	if err := s.verify(w, name); err != nil {
+		return fmt.Errorf("verify digest: %s", err)
 	}
+	if err := s.MoveUploadFileToCache(tmp, name); err != nil && !os.IsExist(err) {
+		return fmt.Errorf("move upload file to cache: %s", err)
+	}
+	return nil
+}
+
+func (s *CAStore) verify(r io.Reader, name string) error {
+	// Verify that expected name is valid.
 	expected, err := core.NewSHA256DigestFromHex(name)
 	if err != nil {
 		return fmt.Errorf("new digest from file name: %s", err)
 	}
-	if actual != expected {
-		return fmt.Errorf("failed to verify data: digests do not match")
-	}
 
-	if err := s.MoveUploadFileToCache(tmp, name); err != nil && !os.IsExist(err) {
-		return fmt.Errorf("move upload file to cache: %s", err)
+	if !s.config.SkipHashVerification {
+		digester := core.NewDigester()
+		computed, err := digester.FromReader(r)
+		if err != nil {
+			return handler.Errorf("calculate digest: %s", err)
+		}
+		if computed != expected {
+			return handler.
+				Errorf("computed digest %s doesn't match expected value %s", computed, expected).
+				Status(http.StatusBadRequest)
+		}
 	}
 	return nil
 }
