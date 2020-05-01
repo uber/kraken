@@ -10,7 +10,6 @@ services:
 
 env:
   - PATH=$HOME/protoc/bin:$PATH
-  - GO111MODULE=on
 
 before_script:
 - "curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | sudo bash"
@@ -27,7 +26,7 @@ jobs:
     - stage: Compliance
       name: Fossa Check
       script:
-        - "GO111MODULE=on fossa --option allow-unresolved:true"
+        - "fossa --option allow-unresolved:true"
 
 after_success:
   - bash <(curl -s https://codecov.io/bash)
