@@ -73,6 +73,9 @@ func (u *uploader) patch(
 
 func (u *uploader) commit(d core.Digest, uid string) error {
 	if err := u.cas.MoveUploadFileToCache(uid, d.Hex()); err != nil {
+		if os.IsNotExist(err) {
+			return handler.ErrorStatus(http.StatusNotFound)
+		}
 		if os.IsExist(err) {
 			return handler.ErrorStatus(http.StatusConflict)
 		}

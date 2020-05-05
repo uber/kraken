@@ -20,9 +20,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/uber/kraken/core"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
+	"github.com/uber/kraken/core"
 )
 
 func TestCAStoreInitVolumes(t *testing.T) {
@@ -145,11 +145,18 @@ func TestCAStoreCreateUploadFileAndMoveToCache(t *testing.T) {
 	require.NoError(err)
 
 	src := core.DigestFixture().Hex()
-	dst := core.DigestFixture().Hex()
 
 	require.NoError(s.CreateUploadFile(src, 100))
 	_, err = os.Stat(path.Join(config.UploadDir, src))
 	require.NoError(err)
+
+	f, err := s.uploadStore.newFileOp().GetFileReader(src)
+	require.NoError(err)
+	defer f.Close()
+	digester := core.NewDigester()
+	digest, err := digester.FromReader(f)
+	require.NoError(err)
+	dst := digest.Hex()
 
 	err = s.MoveUploadFileToCache(src, dst)
 	require.NoError(err)
