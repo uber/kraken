@@ -2,7 +2,7 @@
 
 `$ make devcluster`
 
-This command creates a `kraken-agent` image containing an agent binary and a `kraken-herd` image containing build-index, origin, proxy, and tracker binaries. 
+This command creates a `kraken-agent` image containing an agent binary and a `kraken-herd` image containing build-index, origin, proxy, and tracker binaries.
 
 It starts 2 agent docker containers and 1 herd container. Docker-for-Mac is required for devcluster to work, because the development config files use host.docker.internal for address of all components.
 
@@ -10,7 +10,7 @@ It starts 2 agent docker containers and 1 herd container. Docker-for-Mac is requ
 
 A simple registry storage backend is provided for read-only access to Docker registry. A library image can be pulled from agent.
 
-`$ docker pull localhost:16000/library/golang:1.11`
+`$ docker pull localhost:16000/library/golang:1.14`
 
 Note, this backend is used for all `library/.*` repositories. `library` is the default namespace for Docker Hub's standard public repositories.
 

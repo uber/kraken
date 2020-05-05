@@ -1,6 +1,6 @@
 module github.com/uber/kraken
 
-go 1.12
+go 1.14
 
 require (
 	cloud.google.com/go v0.43.0
@@ -26,7 +26,7 @@ require (
 	github.com/go-chi/chi v0.0.0-20190316151245-d08916613452 // indirect
 	github.com/gofrs/uuid v0.0.0-20190320161447-2593f3d8aa45 // indirect
 	github.com/golang/mock v1.3.1
-	github.com/golang/protobuf v1.3.2
+	github.com/golang/protobuf v1.4.0
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
 	github.com/gorilla/handlers v0.0.0-20190227193432-ac6d24f88de4 // indirect
 	github.com/gorilla/mux v1.7.3

@@ -73,13 +73,11 @@ type authenticator struct {
 // token based authentication challenges. If TLS is disabled, no authentication
 // is attempted.
 func NewAuthenticator(address string, config Config) (Authenticator, error) {
+	rt := http.DefaultTransport.(*http.Transport).Clone()
 	tlsClientConfig, err := config.TLS.BuildClient()
 	if err != nil {
 		return nil, fmt.Errorf("build tls config for %q: %s", address, err)
 	}
-	// TODO: Rather than mutating the global default, we should Clone() the
-	// default http transport once project upgrades to go >= 1.13
-	rt := http.DefaultTransport.(*http.Transport)
 	rt.TLSClientConfig = tlsClientConfig
 	return &authenticator{
 		address:          address,
