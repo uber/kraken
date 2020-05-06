@@ -6,7 +6,7 @@ BUILD_FLAGS = -gcflags '-N -l'
 BUILD_QUIET ?= -q
 
 GOLANG_IMAGE ?= golang:1.14
-GOPROXY ?=
+GOPROXY ?= $(shell go env GOPROXY)
 
 # Where to find your project
 PROJECT_ROOT = github.com/uber/kraken
