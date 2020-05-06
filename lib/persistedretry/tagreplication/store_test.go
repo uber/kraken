@@ -21,12 +21,12 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 
+	"github.com/stretchr/testify/require"
 	"github.com/uber/kraken/lib/persistedretry"
 	. "github.com/uber/kraken/lib/persistedretry/tagreplication"
 	"github.com/uber/kraken/localdb"
-	"github.com/uber/kraken/mocks/lib/persistedretry/tagreplication"
+	mocktagreplication "github.com/uber/kraken/mocks/lib/persistedretry/tagreplication"
 	"github.com/uber/kraken/utils/testutil"
-	"github.com/stretchr/testify/require"
 )
 
 type storeMocks struct {
@@ -109,7 +109,7 @@ func TestDatabaseNotLocked(t *testing.T) {
 	store := mocks.new()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 200; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
