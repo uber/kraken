@@ -75,7 +75,7 @@ func TestDatabaseNotLocked(t *testing.T) {
 	store := NewStore(db)
 
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 500; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
