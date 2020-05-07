@@ -37,6 +37,8 @@ var _clientCABundle = path.Join(_genDir, "ca.crt")
 
 // Config defines nginx configuration.
 type Config struct {
+	Binary string `yaml:"binary"`
+
 	Root bool `yaml:"root"`
 
 	// Name defines the default nginx template for each component.
@@ -109,6 +111,13 @@ func (c *Config) Build(params map[string]interface{}) ([]byte, error) {
 		return nil, fmt.Errorf("populate base: %s", err)
 	}
 	return src, nil
+}
+
+func (c *Config) getBinary() string {
+	if c.Binary == "" {
+		return "/usr/sbin/nginx"
+	}
+	return c.Binary
 }
 
 // Option allows setting optional nginx configuration.
@@ -187,7 +196,7 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 		return fmt.Errorf("open stdout log: %s", err)
 	}
 
-	args := []string{"/usr/sbin/nginx", "-g", "daemon off;", "-c", conf}
+	args := []string{config.getBinary(), "-g", "daemon off;", "-c", conf}
 	if config.Root {
 		args = append([]string{"sudo"}, args...)
 	}
