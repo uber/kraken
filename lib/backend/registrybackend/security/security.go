@@ -92,14 +92,10 @@ func (a *authenticator) Authenticate(repo string) ([]httputil.SendOption, error)
 	config := a.config
 
 	var opts []httputil.SendOption
-	if config.TLS.Client.Disabled {
-		opts = append(opts, httputil.SendNoop())
-		return opts, nil
-	}
-
 	if !config.EnableHTTPFallback {
 		opts = append(opts, httputil.DisableHTTPFallback())
 	}
+
 	if !a.shouldAuth() {
 		opts = append(opts, httputil.SendTLSTransport(a.roundTripper))
 		return opts, nil
