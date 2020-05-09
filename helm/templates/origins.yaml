@@ -25,7 +25,7 @@ spec:
 {{ toYaml . | indent 6 }}{{ end }}
       containers:
       - name: main
-        image: gcr.io/uber-container-tools/kraken-origin:{{ .Values.kraken.tag }}
+        image: {{ .Values.kraken.repository }}/kraken-origin:{{ .Values.kraken.tag }}
         command:
         - /bin/bash
         - -c

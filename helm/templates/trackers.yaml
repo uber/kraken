@@ -27,7 +27,7 @@ spec:
       - name: redis
         image: redis:5.0
       - name: main
-        image: gcr.io/uber-container-tools/kraken-tracker:{{ .Values.kraken.tag }}
+        image: {{ .Values.kraken.repository }}/kraken-tracker:{{ .Values.kraken.tag }}
         command:
         - /bin/bash
         - -c
