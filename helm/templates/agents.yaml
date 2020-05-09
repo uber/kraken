@@ -29,7 +29,7 @@ spec:
       {{- end -}}
       containers:
       - name: main
-        image: gcr.io/uber-container-tools/kraken-agent:{{ .Values.kraken.tag }}
+        image: {{ .Values.kraken.repository }}/kraken-agent:{{ .Values.kraken.tag }}
         command:
         - /usr/bin/kraken-agent
         - --config={{ .Values.agent.config }}
@@ -61,4 +61,4 @@ spec:
     port: 80
     targetPort: 8081
     nodePort: {{ .Values.kraken.registry_port }}
-    externalTrafficPolicy: Local
+  externalTrafficPolicy: Local
