@@ -1,6 +1,7 @@
 kraken:
   repository: gcr.io/uber-container-tools
   tag: v0.1.1
+  imagePullPolicy: IfNotPresent
   registry_port: 30081
 
 tracker:

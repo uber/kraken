@@ -26,6 +26,7 @@ spec:
       containers:
       - name: main
         image: {{ .Values.kraken.repository }}/kraken-build-index:{{ .Values.kraken.tag }}
+        imagePullPolicy: {{ .Values.kraken.imagePullPolicy }}
         command:
         - /bin/bash
         - -c

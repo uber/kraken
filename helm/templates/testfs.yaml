@@ -26,6 +26,7 @@ spec:
       containers:
       - name: main
         image: {{ .Values.kraken.repository }}/kraken-testfs:{{ .Values.kraken.tag }}
+        imagePullPolicy: {{ .Values.kraken.imagePullPolicy }}
         command:
         - /usr/bin/kraken-testfs
         - --port=80
