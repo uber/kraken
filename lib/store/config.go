@@ -29,6 +29,8 @@ type CAStoreConfig struct {
 	Capacity      int           `yaml:"capacity"`
 	UploadCleanup CleanupConfig `yaml:"upload_cleanup"`
 	CacheCleanup  CleanupConfig `yaml:"cache_cleanup"`
+
+	SkipHashVerification bool `yaml:"skip_hash_verification"`
 }
 
 func (c CAStoreConfig) applyDefaults() CAStoreConfig {

@@ -20,17 +20,19 @@ import (
 	"os"
 	"path"
 
-	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/hrw"
-	"github.com/uber/kraken/lib/store/base"
 	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
 	"github.com/spaolacci/murmur3"
 	"github.com/uber-go/tally"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/hrw"
+	"github.com/uber/kraken/lib/store/base"
 )
 
 // CAStore allows uploading / caching content-addressable files.
 type CAStore struct {
+	config CAStoreConfig
+
 	*uploadStore
 	*cacheStore
 	cleanup *cleanupManager
@@ -66,7 +68,7 @@ func NewCAStore(config CAStoreConfig, stats tally.Scope) (*CAStore, error) {
 	cleanup.addJob("upload", config.UploadCleanup, uploadStore.newFileOp())
 	cleanup.addJob("cache", config.CacheCleanup, cacheStore.newFileOp())
 
-	return &CAStore{uploadStore, cacheStore, cleanup}, nil
+	return &CAStore{config, uploadStore, cacheStore, cleanup}, nil
 }
 
 // Close terminates any goroutines started by s.
@@ -81,6 +83,16 @@ func (s *CAStore) MoveUploadFileToCache(uploadName, cacheName string) error {
 	if err != nil {
 		return err
 	}
+
+	f, err := s.uploadStore.newFileOp().GetFileReader(uploadName)
+	if err != nil {
+		return fmt.Errorf("get file reader %s: %s", uploadName, err)
+	}
+	defer f.Close()
+	if err := s.verify(f, cacheName); err != nil {
+		return fmt.Errorf("verify digest: %s", err)
+	}
+
 	defer s.DeleteUploadFile(uploadName)
 	return s.cacheStore.newFileOp().MoveFileFrom(cacheName, s.cacheStore.state, uploadPath)
 }
@@ -116,20 +128,33 @@ func (s *CAStore) WriteCacheFile(name string, write func(w FileReadWriter) error
 	if _, err := w.Seek(0, 0); err != nil {
 		return fmt.Errorf("seek: %s", err)
 	}
-	actual, err := core.NewDigester().FromReader(w)
-	if err != nil {
-		return fmt.Errorf("compute digest: %s", err)
+	if err := s.verify(w, name); err != nil {
+		return fmt.Errorf("verify digest: %s", err)
 	}
+	if err := s.MoveUploadFileToCache(tmp, name); err != nil && !os.IsExist(err) {
+		return fmt.Errorf("move upload file to cache: %s", err)
+	}
+	return nil
+}
+
+// verify verifies that name is a valid SHA256 digest, and checks if the given
+// blob content matches the digset unless explicitly skipped.
+func (s *CAStore) verify(r io.Reader, name string) error {
+	// Verify that expected name is a valid SHA256 digest.
 	expected, err := core.NewSHA256DigestFromHex(name)
 	if err != nil {
 		return fmt.Errorf("new digest from file name: %s", err)
 	}
-	if actual != expected {
-		return fmt.Errorf("failed to verify data: digests do not match")
-	}
 
-	if err := s.MoveUploadFileToCache(tmp, name); err != nil && !os.IsExist(err) {
-		return fmt.Errorf("move upload file to cache: %s", err)
+	if !s.config.SkipHashVerification {
+		digester := core.NewDigester()
+		computed, err := digester.FromReader(r)
+		if err != nil {
+			return fmt.Errorf("calculate digest: %s", err)
+		}
+		if computed != expected {
+			return fmt.Errorf("computed digest %s doesn't match expected value %s", computed, expected)
+		}
 	}
 	return nil
 }
