@@ -3,15 +3,13 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kraken-testfs
-  labels:
-    app.kubernetes.io/name: kraken
-    app.kubernetes.io/component: testfs
-    app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      kraken-app: testfs
+      app.kubernetes.io/name: kraken
+      app.kubernetes.io/component: testfs
+      app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
       labels:
