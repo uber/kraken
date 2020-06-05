@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/gen/go/proto/p2p"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/utils/bitsetutil"
 )
@@ -86,4 +87,12 @@ func TestHandshakerSetsConnFieldsProperly(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+func TestHandshakerHandlesEmptyBitfield(t *testing.T) {
+	require := require.New(t)
+
+	var msg p2p.Message
+	_, err := handshakeFromP2PMessage(&msg)
+	require.Error(err)
 }
