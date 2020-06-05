@@ -98,24 +98,28 @@ func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
 	if m.Type != p2p.Message_BITFIELD {
 		return nil, fmt.Errorf("expected bitfield message, got %s", m.Type)
 	}
-	peerID, err := core.NewPeerID(m.Bitfield.PeerID)
+	bitfieldMsg := m.GetBitfield()
+	if bitfieldMsg == nil {
+		return nil, fmt.Errorf("empty bit field")
+	}
+	peerID, err := core.NewPeerID(bitfieldMsg.PeerID)
 	if err != nil {
 		return nil, fmt.Errorf("peer id: %s", err)
 	}
-	ih, err := core.NewInfoHashFromHex(m.Bitfield.InfoHash)
+	ih, err := core.NewInfoHashFromHex(bitfieldMsg.InfoHash)
 	if err != nil {
 		return nil, fmt.Errorf("info hash: %s", err)
 	}
-	d, err := core.NewSHA256DigestFromHex(m.Bitfield.Name)
+	d, err := core.NewSHA256DigestFromHex(bitfieldMsg.Name)
 	if err != nil {
 		return nil, fmt.Errorf("name: %s", err)
 	}
 	bitfield := bitset.New(0)
-	if err := bitfield.UnmarshalBinary(m.Bitfield.BitfieldBytes); err != nil {
+	if err := bitfield.UnmarshalBinary(bitfieldMsg.BitfieldBytes); err != nil {
 		return nil, err
 	}
 	remoteBitfields := make(RemoteBitfields)
-	if err := remoteBitfields.unmarshalBinary(m.Bitfield.RemoteBitfieldBytes); err != nil {
+	if err := remoteBitfields.unmarshalBinary(bitfieldMsg.RemoteBitfieldBytes); err != nil {
 		return nil, err
 	}
 
@@ -124,7 +128,7 @@ func handshakeFromP2PMessage(m *p2p.Message) (*handshake, error) {
 		infoHash:        ih,
 		bitfield:        bitfield,
 		digest:          d,
-		namespace:       m.Bitfield.Namespace,
+		namespace:       bitfieldMsg.Namespace,
 		remoteBitfields: remoteBitfields,
 	}, nil
 }
