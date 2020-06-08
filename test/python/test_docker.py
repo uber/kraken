@@ -15,8 +15,6 @@ from __future__ import absolute_import
 
 import time
 
-import pytest
-
 from conftest import (
     TEST_IMAGE,
     TEST_IMAGE_2,
@@ -41,6 +39,13 @@ def test_agent_pull(proxy, agent):
     proxy.push(TEST_IMAGE)
 
     agent.pull(TEST_IMAGE)
+
+
+def test_agent_preload(proxy, agent_factory):
+    proxy.push(TEST_IMAGE)
+
+    with agent_factory.create(with_docker_socket=True) as agent:
+        agent.preload(TEST_IMAGE)
 
 
 def test_proxy_list_repository_tags(proxy, build_index):
@@ -77,7 +82,7 @@ def test_docker_image_distribution_high_availability(testfs, proxy, origin_clust
 
     # PART 1: Backend storage is unavailable. We should still be able to upload
     # and distribute builds by relying on on-disk caches.
-    
+
     testfs.stop()
 
     proxy.push(TEST_IMAGE)

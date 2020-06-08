@@ -1,23 +1,30 @@
+{{ if .Values.testfs.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kraken-testfs
-  labels:
-    kraken: 'true'
 spec:
   replicas: 1
   selector:
     matchLabels:
-      kraken-app: testfs
+      app.kubernetes.io/name: kraken
+      app.kubernetes.io/component: testfs
+      app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        kraken: 'true'
-        kraken-app: testfs
+        app.kubernetes.io/name: kraken
+        app.kubernetes.io/component: testfs
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      {{ with .Values.testfs.annotations -}}
+      annotations:
+{{ tpl . $ | indent 8 }}
+      {{- end }}
     spec:
       containers:
       - name: main
-        image: gcr.io/uber-container-tools/kraken-testfs:{{ .Values.kraken.tag }}
+        image: {{ .Values.kraken.repository }}/kraken-testfs:{{ .Values.kraken.tag }}
+        imagePullPolicy: {{ .Values.kraken.imagePullPolicy }}
         command:
         - /usr/bin/kraken-testfs
         - --port=80
@@ -26,12 +33,13 @@ kind: Service
 apiVersion: v1
 metadata:
   name: kraken-testfs
-  labels:
-    kraken: 'true'
 spec:
   selector:
-    kraken-app: testfs
+    app.kubernetes.io/name: kraken
+    app.kubernetes.io/component: testfs
+    app.kubernetes.io/instance: {{ .Release.Name }}
   ports:
   - protocol: TCP
     port: 80
     targetPort: 80
+{{ end }}

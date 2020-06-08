@@ -1,0 +1,13 @@
+extends: /etc/kraken/config/tracker/base.yaml
+{{ include "tls" . }}
+{{ include "origins" . }}
+
+peerstore:
+  redis:
+    addr: 127.0.0.1:6379
+
+trackerserver:
+  announce_interval: 3s
+
+nginx:
+  cache_dir: /tmp/kraken-tracker-nginx/

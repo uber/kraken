@@ -112,7 +112,21 @@ func NewClient(
 	creds := credentials.NewStaticCredentials(
 		auth.S3.AccessKeyID, auth.S3.AccessSecretKey, auth.S3.SessionToken)
 
-	api := s3.New(session.New(), aws.NewConfig().WithRegion(config.Region).WithCredentials(creds))
+	awsConfig := aws.NewConfig().WithRegion(config.Region).WithCredentials(creds)
+
+	if config.Endpoint != "" {
+		awsConfig = awsConfig.WithEndpoint(config.Endpoint)
+	}
+
+	if config.DisableSSL {
+		awsConfig = awsConfig.WithDisableSSL(config.DisableSSL)
+	}
+
+	if config.S3ForcePathStyle {
+		awsConfig = awsConfig.WithS3ForcePathStyle(config.S3ForcePathStyle)
+	}
+
+	api := s3.New(session.New(), awsConfig)
 
 	downloader := s3manager.NewDownloaderWithClient(api, func(d *s3manager.Downloader) {
 		d.PartSize = config.DownloadPartSize

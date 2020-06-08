@@ -5,26 +5,28 @@ GO = go
 BUILD_FLAGS = -gcflags '-N -l'
 BUILD_QUIET ?= -q
 
+GOLANG_IMAGE ?= golang:1.14
+GOPROXY ?= $(shell go env GOPROXY)
+
 # Where to find your project
 PROJECT_ROOT = github.com/uber/kraken
 PACKAGE_VERSION ?= $(shell git describe --always --tags)
 
-ALL_SRC = $(shell find . -name "*.go" | grep -v -e vendor \
+ALL_SRC = $(shell find . -name "*.go" | grep -v \
 	-e ".*/\..*" \
 	-e ".*/_.*" \
 	-e ".*/mocks.*" \
 	-e ".*/*.pb.go")
 
-ALL_PKGS = $(shell go list $(sort $(dir $(ALL_SRC))) | grep -v vendor)
+ALL_PKGS = $(shell go list $(sort $(dir $(ALL_SRC))))
 
 # ==== BASIC ====
 
-BUILD_NATIVE = $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) ./$(dir $@)
 BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) ./$(dir $@)
 
 # Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
 # This workaround builds the binary inside a linux container.
-CROSS_COMPILER = docker run --rm -it -v $(GOPATH):/go -w /go/src/github.com/uber/kraken golang:1.11.4 go build -o ./$@ ./$(dir $@)
+CROSS_COMPILER = docker run --rm -it -v $(shell pwd):/go/src/github.com/uber/kraken -w /go/src/github.com/uber/kraken -e GOPROXY=$(GOPROXY) $(GOLANG_IMAGE) go build -o ./$@ ./$(dir $@)
 
 LINUX_BINS = \
 	agent/agent \
@@ -54,7 +56,7 @@ tools/bin/testfs/testfs:: $(wildcard tools/bin/testfs/*.go)
 tracker/tracker:: $(wildcard tracker/*.go)
 	$(CROSS_COMPILER)
 
-$(LINUX_BINS):: vendor
+$(LINUX_BINS)::
 
 define tag_image
 	docker tag $(1):$(PACKAGE_VERSION) $(1):dev
@@ -74,7 +76,6 @@ images: $(LINUX_BINS)
 	$(call tag_image,kraken-build-index)
 	$(call tag_image,kraken-origin)
 	$(call tag_image,kraken-proxy)
-	$(call tag_image,kraken-proxy)
 	$(call tag_image,kraken-testfs)
 	$(call tag_image,kraken-tracker)
 	$(call tag_image,kraken-herd)
@@ -92,18 +93,14 @@ publish: images
 clean::
 	@rm -f $(LINUX_BINS)
 
-vendor:
-	go get -u github.com/Masterminds/glide
-	$(GOPATH)/bin/glide i
-
 .PHONY: bins
 bins: $(LINUX_BINS)
 
 # ==== TEST ====
 .PHONY: unit-test
-unit-test: vendor
+unit-test:
 	-rm coverage.txt
-	$(GO) test -race -coverprofile=coverage.txt $(ALL_PKGS) --tags "unit"
+	$(GO) test -timeout=30s -race -coverprofile=coverage.txt $(ALL_PKGS) --tags "unit"
 
 .PHONY: docker_stop
 docker_stop:
@@ -119,7 +116,7 @@ FILE?=
 NAME?=test_
 USERNAME:=$(shell id -u -n)
 USERID:=$(shell id -u)
-integration: venv vendor $(LINUX_BINS) docker_stop tools/bin/puller/puller
+integration: venv $(LINUX_BINS) docker_stop tools/bin/puller/puller
 	docker build $(BUILD_QUIET) -t kraken-agent:$(PACKAGE_VERSION) -f docker/agent/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-build-index:$(PACKAGE_VERSION) -f docker/build-index/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-origin:$(PACKAGE_VERSION) -f docker/origin/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
@@ -135,29 +132,29 @@ runtest: venv docker_stop
 	venv/bin/py.test --timeout=120 -v -k $(NAME) test/python
 
 .PHONY: devcluster
-devcluster: vendor $(LINUX_BINS) docker_stop images
+devcluster: $(LINUX_BINS) docker_stop images
 	./examples/devcluster/herd_start_container.sh
 	./examples/devcluster/agent_one_start_container.sh
 	./examples/devcluster/agent_two_start_container.sh
 
 # ==== TOOLS ====
 
-NATIVE_TOOLS = \
+TOOLS = \
 	tools/bin/puller/puller \
 	tools/bin/reload/reload \
 	tools/bin/visualization/visualization
 
 tools/bin/puller/puller:: $(wildcard tools/bin/puller/puller/*.go)
-	$(BUILD_NATIVE)
+	$(CROSS_COMPILER)
 
 tools/bin/reload/reload:: $(wildcard tools/bin/reload/reload/*.go)
-	$(BUILD_NATIVE)
+	$(CROSS_COMPILER)
 
 tools/bin/visualization/visualization:: $(wildcard tools/bin/visualization/visualization/*.go)
-	$(BUILD_NATIVE)
+	$(CROSS_COMPILER)
 
 .PHONY: tools
-tools: $(NATIVE_TOOLS)
+tools: $(TOOLS)
 
 # Creates a release summary containing the build revisions of each component
 # for the specified version.
@@ -183,12 +180,12 @@ GEN_DIR = gen/go
 protoc:
 	mkdir -p $(GEN_DIR)
 	go get -u github.com/golang/protobuf/protoc-gen-go
-	$(PROTOC_BIN) --plugin=$(GOPATH)/bin/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$(PROTO)))
+	$(PROTOC_BIN) --plugin=$(shell go env GOPATH)/bin/protoc-gen-go --go_out=$(GEN_DIR) $(subst .pb.go,.proto,$(subst $(GEN_DIR)/,,$(PROTO)))
 
 # mockgen must be installed on the system to make this work.
 # Install it by running:
 # `go get github.com/golang/mock/mockgen`.
-mockgen = $(GOPATH)/bin/mockgen
+mockgen = $(shell go env GOPATH)/bin/mockgen
 
 define lowercase
 $(shell tr '[:upper:]' '[:lower:]' <<< $(1))
@@ -205,7 +202,7 @@ endef
 .PHONY: mocks
 mocks:
 	rm -rf mocks
-	mkdir -p $(GOPATH)/bin
+	mkdir -p $(shell go env GOPATH)/bin
 
 	$(call add_mock,agent/agentclient,Client)
 
@@ -258,6 +255,7 @@ mocks:
 	$(call add_mock,origin/blobclient,ClusterProvider)
 	$(call add_mock,origin/blobclient,ClientResolver)
 
+	$(call add_mock,lib/dockerdaemon,DockerClient)
 	$(call add_mock,lib/dockerregistry/transfer,ImageTransferer)
 
 	$(call add_mock,tracker/metainfoclient,Client)

@@ -1,15 +1,79 @@
 kraken:
+  repository: gcr.io/uber-container-tools
   tag: v0.1.1
+  imagePullPolicy: IfNotPresent
   registry_port: 30081
 
 tracker:
+  config: /etc/config/tracker.yaml
   replicas: 3
+  extraVolumes:
+#  - name: nginx-cache
+#    hostPath:
+#      path: /data/nginx
+  extraVolumeMounts:
+#  - name: nginx-cache
+#    mountPath: /var/cache/kraken/kraken-origin/nginx/
+#  annotations: |
+#    foo.example.com/release: "{{ .Release.Name }}"
+#  initContainers:
+#    - name: foo
+#      image: alpine:latest
+#      command: ["sh", "-c", "echo hello"]
+#      volumeMounts:
+#        - name: config
+#          mountPath: /etc/config
 
 build_index:
+  config: /etc/config/build-index.yaml
   replicas: 3
+  annotations:
+  extraVolumes:
+  extraVolumeMounts:
+  initContainers:
+#  extraBackends: |-
+#    - namespace: library/.*
+#      backend:
+#        registry_tag:
+#          address: my.private.registry
+#          security:
+#            basic:
+#              username: "joebloggs"
+#              password: "12345"
 
 origin:
+  config: /etc/config/origin.yaml
   replicas: 3
+  annotations:
+  extraVolumes:
+  extraVolumeMounts:
+  initContainers:
+#  extraBackends: |-
+#    - namespace: library/.*
+#      backend:
+#        registry_blob:
+#          address: my.private.registry
+#          security:
+#            basic:
+#              username: "joebloggs"
+#              password: "12345"
 
 proxy:
+  config: /etc/config/proxy.yaml
   replicas: 1
+  annotations:
+  extraVolumes:
+  extraVolumeMounts:
+  initContainers:
+
+agent:
+  config: /etc/config/agent.yaml
+  annotations:
+  extraVolumes:
+  extraVolumeMounts:
+  initContainers:
+  tolerations:
+#    - operator: "Exists"
+testfs:
+  enabled: true
+  annotations:

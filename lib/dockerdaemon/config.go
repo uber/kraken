@@ -11,25 +11,24 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package registrybackend
+package dockerdaemon
 
-import (
-	"time"
-
-	"github.com/uber/kraken/lib/backend/registrybackend/security"
-)
-
-// Config defines the registry address, timeout and security options.
+// Configs connecting to docker daemon.
 type Config struct {
-	Address  string          `yaml:"address"`
-	Timeout  time.Duration   `yaml:"timeout"`
-	Security security.Config `yaml:"security"`
+	DockerHost          string `yaml:"docker_host"`
+	DockerScheme        string `yaml:"docker_scheme"`
+	DockerClientVersion string `yaml:"docker_version"`
 }
 
-// Set default configuration
 func (c Config) applyDefaults() Config {
-	if c.Timeout == 0 {
-		c.Timeout = 60 * time.Second
+	if c.DockerHost == "" {
+		c.DockerHost = "unix:///var/run/docker.sock"
+	}
+	if c.DockerScheme == "" {
+		c.DockerScheme = "http"
+	}
+	if c.DockerClientVersion == "" {
+		c.DockerClientVersion = "1.21"
 	}
 	return c
 }

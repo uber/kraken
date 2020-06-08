@@ -1,6 +1,6 @@
 # This image combines all central components into one container, for easier
 # deployment and management.
-FROM debian:9
+FROM debian:10
 
 RUN apt-get update && apt-get install -y build-essential curl sqlite3 nginx sudo procps
 

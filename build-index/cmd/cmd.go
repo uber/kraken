@@ -34,6 +34,9 @@ import (
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/configutil"
 	"github.com/uber/kraken/utils/log"
+
+	"github.com/uber-go/tally"
+	"go.uber.org/zap"
 )
 
 // Flags defines build-index CLI flags.
@@ -59,28 +62,72 @@ func ParseFlags() *Flags {
 	return &flags
 }
 
+type options struct {
+	config  *Config
+	metrics tally.Scope
+	logger  *zap.Logger
+}
+
+// Option defines an optional Run parameter.
+type Option func(*options)
+
+// WithConfig ignores config/secrets flags and directly uses the provided config
+// struct.
+func WithConfig(c Config) Option {
+	return func(o *options) { o.config = &c }
+}
+
+// WithMetrics ignores metrics config and directly uses the provided tally scope.
+func WithMetrics(s tally.Scope) Option {
+	return func(o *options) { o.metrics = s }
+}
+
+// WithLogger ignores logging config and directly uses the provided logger.
+func WithLogger(l *zap.Logger) Option {
+	return func(o *options) { o.logger = l }
+}
+
 // Run runs the build-index.
-func Run(flags *Flags) {
+func Run(flags *Flags, opts ...Option) {
 	if flags.Port == 0 {
 		panic("must specify non-zero port")
 	}
 
-	var config Config
-	if err := configutil.Load(flags.ConfigFile, &config); err != nil {
-		panic(err)
+	var overrides options
+	for _, o := range opts {
+		o(&overrides)
 	}
-	if flags.SecretsFile != "" {
-		if err := configutil.Load(flags.SecretsFile, &config); err != nil {
+
+	var config Config
+	if overrides.config != nil {
+		config = *overrides.config
+	} else {
+		if err := configutil.Load(flags.ConfigFile, &config); err != nil {
 			panic(err)
 		}
+		if flags.SecretsFile != "" {
+			if err := configutil.Load(flags.SecretsFile, &config); err != nil {
+				panic(err)
+			}
+		}
 	}
-	log.ConfigureLogger(config.ZapLogging)
 
-	stats, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
-	if err != nil {
-		log.Fatalf("Failed to init metrics: %s", err)
+	if overrides.logger != nil {
+		log.SetGlobalLogger(overrides.logger.Sugar())
+	} else {
+		zlog := log.ConfigureLogger(config.ZapLogging)
+		defer zlog.Sync()
 	}
-	defer closer.Close()
+
+	stats := overrides.metrics
+	if stats == nil {
+		s, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
+		if err != nil {
+			log.Fatalf("Failed to init metrics: %s", err)
+		}
+		stats = s
+		defer closer.Close()
+	}
 
 	go metrics.EmitVersion(stats)
 

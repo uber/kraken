@@ -526,9 +526,6 @@ func (s *Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return err
 	}
-	if err := s.uploader.verify(d, uid); err != nil {
-		return err
-	}
 	if err := s.uploader.commit(d, uid); err != nil {
 		return err
 	}
@@ -611,9 +608,6 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 		return err
 	}
 
-	if err := s.uploader.verify(d, uid); err != nil {
-		return err
-	}
 	if err := s.uploader.commit(d, uid); err != nil {
 		return s.handleUploadConflict(err, namespace, d)
 	}
@@ -660,9 +654,6 @@ func (s *Server) duplicateCommitClusterUploadHandler(w http.ResponseWriter, r *h
 	}
 	delay := dr.Delay
 
-	if err := s.uploader.verify(d, uid); err != nil {
-		return err
-	}
 	if err := s.uploader.commit(d, uid); err != nil {
 		return err
 	}

@@ -2,46 +2,57 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kraken-tracker
-  labels:
-    kraken: 'true'
 spec:
   replicas: {{ .Values.tracker.replicas }}
   selector:
     matchLabels:
-      kraken-app: tracker
+      app.kubernetes.io/name: kraken
+      app.kubernetes.io/component: tracker
+      app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        kraken: 'true'
-        kraken-app: tracker
+        app.kubernetes.io/name: kraken
+        app.kubernetes.io/component: tracker
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      {{ with .Values.tracker.annotations -}}
+      annotations:
+{{ tpl . $ | indent 8 }}
+      {{- end }}
     spec:
+      {{ with .Values.tracker.initContainers -}}
+      initContainers:
+{{ tpl . $ | indent 6 }}{{- end }}
       containers:
       - name: redis
         image: redis:5.0
       - name: main
-        image: gcr.io/uber-container-tools/kraken-tracker:{{ .Values.kraken.tag }}
+        image: {{ .Values.kraken.repository }}/kraken-tracker:{{ .Values.kraken.tag }}
+        imagePullPolicy: {{ .Values.kraken.imagePullPolicy }}
         command:
         - /bin/bash
         - -c
-        - "sleep 30 && /usr/bin/kraken-tracker --config=/etc/config/tracker.yaml --port=80"
+        - "sleep 30 && /usr/bin/kraken-tracker --config={{ .Values.tracker.config }} --port=80"
         volumeMounts:
         - name: config
           mountPath: /etc/config
+{{ with .Values.tracker.extraVolumeMounts }}{{ toYaml . | indent 8 }}{{ end }}
       volumes:
       - name: config
         configMap:
           name: kraken
+{{ with .Values.tracker.extraVolumes }}{{ toYaml . | indent 6 }}{{ end }}
 ---
 kind: Service
 apiVersion: v1
 metadata:
   name: kraken-tracker
-  labels:
-    kraken: 'true'
 spec:
   clusterIP: None
   selector:
-    kraken-app: tracker
+    app.kubernetes.io/name: kraken
+    app.kubernetes.io/component: tracker
+    app.kubernetes.io/instance: {{ .Release.Name }}
   ports:
   - protocol: TCP
     port: 80

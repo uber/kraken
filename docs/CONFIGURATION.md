@@ -193,6 +193,7 @@ Example origin config that uses multiple backends:
 >    backend:
 >      registry_blob:
 >        address: index.docker.io
+>        timeout: 60s
 >        security:
 >          basic:
 >            username: ""
@@ -217,6 +218,17 @@ Example origin config that uses multiple backends:
 >       root_directory: /test-bucket/kraken/default/
 >       name_path: sharded_docker_blob
 >       username: kraken-user
+> - namespace: minio-images/.*
+>   backend:
+>     s3:
+>       region: us-east-1
+>       bucket: self-hosted-bucket
+>       root_directory: /kraken/default/
+>       name_path: sharded_docker_blob
+>       username: minio-user
+>       endpoint: http://172.17.0.1:9000
+>       disable_ssl: true
+>       force_path_style: true
 >   bandwidth:
 >     enable: true
 > - namespace: gcs-images/.*
@@ -234,6 +246,11 @@ Example origin config that uses multiple backends:
 >    kraken-user:
 >      s3:
 >        aws: kraken-user
+>        aws_access_key_id: <keyid>
+>        aws_secret_access_key: <key>
+>    minio-user:
+>      s3:
+>        aws: minio-user
 >        aws_access_key_id: <keyid>
 >        aws_secret_access_key: <key>
 >  gcs:

@@ -50,6 +50,11 @@ func ConfigureLogger(zapConfig zap.Config) *zap.SugaredLogger {
 	return _default
 }
 
+// SetGlobalLogger sets the global logger.
+func SetGlobalLogger(l *zap.SugaredLogger) {
+	_default = l
+}
+
 // Default returns the default global logger.
 func Default() *zap.SugaredLogger {
 	return _default

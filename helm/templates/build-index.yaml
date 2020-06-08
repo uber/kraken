@@ -2,44 +2,55 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kraken-build-index
-  labels:
-    kraken: 'true'
 spec:
   replicas: {{ .Values.build_index.replicas }}
   selector:
     matchLabels:
-      kraken-app: build-index
+      app.kubernetes.io/name: kraken
+      app.kubernetes.io/component: build-index
+      app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        kraken: 'true'
-        kraken-app: build-index
+        app.kubernetes.io/name: kraken
+        app.kubernetes.io/component: build-index
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      {{ with .Values.build_index.annotations -}}
+      annotations:
+{{ tpl . $ | indent 8 }}
+      {{- end }}
     spec:
+      {{ with .Values.build_index.initContainers -}}
+      initContainers:
+{{ toYaml . | indent 6 }}{{ end }}
       containers:
       - name: main
-        image: gcr.io/uber-container-tools/kraken-build-index:{{ .Values.kraken.tag }}
+        image: {{ .Values.kraken.repository }}/kraken-build-index:{{ .Values.kraken.tag }}
+        imagePullPolicy: {{ .Values.kraken.imagePullPolicy }}
         command:
         - /bin/bash
         - -c
-        - "sleep 30 && /usr/bin/kraken-build-index --config=/etc/config/build-index.yaml --port=80"
+        - "sleep 30 && /usr/bin/kraken-build-index --config={{ .Values.build_index.config }} --port=80"
         volumeMounts:
         - name: config
           mountPath: /etc/config
+{{ with .Values.build_index.extraVolumeMounts }}{{ toYaml . | indent 8 }}{{ end }}
       volumes:
       - name: config
         configMap:
           name: kraken
+{{ with .Values.build_index.extraVolumes }}{{ toYaml . | indent 6 }}{{ end }}
 ---
 kind: Service
 apiVersion: v1
 metadata:
   name: kraken-build-index
-  labels:
-    kraken: 'true'
 spec:
   clusterIP: None
   selector:
-    kraken-app: build-index
+    app.kubernetes.io/name: kraken
+    app.kubernetes.io/component: build-index
+    app.kubernetes.io/instance: {{ .Release.Name }}
   ports:
   - protocol: TCP
     port: 80

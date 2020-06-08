@@ -10,7 +10,7 @@ I will introduce how to integrate Harbor and Kraken here. And using the image ma
 
 So you can see that Harbor and Kraken share the same docker registry as backend storage. It will decouple Harbor and Kraken if they just share the storage but not higher level sharing. So we can push images into Harbor and pull them from Harbor or kraken.
 
-## Deploment
+## Deployment
 Here we use [helm chart](https://github.com/goharbor/harbor-helm) from Harbor community to deploy them. and also [helm chart](https://github.com/uber/kraken/tree/master/helm) from Kraken community to deploy them.
 
 We should modify two config file additionally,
@@ -52,7 +52,7 @@ kraken-origin,kraken-buildindex,
                 password: "XXXXX"
 ```
 
-You should add more configuration about TLS if the domain name of your Harbor use a private-signed SSL certificate. It will throws a X509 error if not.
+You should add more configuration about TLS if the domain name of your Harbor use a self-signed SSL certificate. It will throws a X509 error if not.
 
 ```
     backends:
@@ -66,10 +66,13 @@ You should add more configuration about TLS if the domain name of your Harbor us
                 password: "XXXXX"
               tls:
                 client:
-                 cert:
-                  path: /etc/certs/XXX.crt
-                 key:
-                  path: /etc/certs/XXX.key
+                  cert:
+                    path: /etc/certs/XXX.crt
+                  key:
+                    path: /etc/certs/XXX.key
+                cas:
+                  - path: /etc/certs/ca.crt
+                  
 ```
 
 You can pull images using a `localhost` domain by P2P distribution after you deploy kraken-agent in your k8s nodes using daemonSet.

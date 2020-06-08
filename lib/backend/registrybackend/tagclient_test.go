@@ -57,7 +57,7 @@ func TestTagDownloadSuccess(t *testing.T) {
 	addr, stop := testutil.StartServer(r)
 	defer stop()
 
-	config := Config{Address: addr}
+	config := newTestConfig(addr)
 	client, err := NewTagClient(config)
 	require.NoError(err)
 
@@ -87,7 +87,7 @@ func TestTagDownloadFileNotFound(t *testing.T) {
 	addr, stop := testutil.StartServer(r)
 	defer stop()
 
-	config := Config{Address: addr}
+	config := newTestConfig(addr)
 	client, err := NewTagClient(config)
 	require.NoError(err)
 

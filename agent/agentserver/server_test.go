@@ -15,16 +15,14 @@ package agentserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"testing"
 	"time"
-
-	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/require"
-	"github.com/uber-go/tally"
 
 	"github.com/uber/kraken/agent/agentclient"
 	"github.com/uber/kraken/build-index/tagclient"
@@ -33,16 +31,22 @@ import (
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/lib/torrent/scheduler/connstate"
 	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
+	mockdockerdaemon "github.com/uber/kraken/mocks/lib/dockerdaemon"
 	mockscheduler "github.com/uber/kraken/mocks/lib/torrent/scheduler"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/testutil"
+
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 )
 
 type serverMocks struct {
-	cads    *store.CADownloadStore
-	sched   *mockscheduler.MockReloadableScheduler
-	tags    *mocktagclient.MockClient
-	cleanup *testutil.Cleanup
+	cads      *store.CADownloadStore
+	sched     *mockscheduler.MockReloadableScheduler
+	tags      *mocktagclient.MockClient
+	dockerCli *mockdockerdaemon.MockDockerClient
+	cleanup   *testutil.Cleanup
 }
 
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
@@ -58,11 +62,13 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 
 	tags := mocktagclient.NewMockClient(ctrl)
 
-	return &serverMocks{cads, sched, tags, &cleanup}, cleanup.Run
+	dockerCli := mockdockerdaemon.NewMockDockerClient(ctrl)
+
+	return &serverMocks{cads, sched, tags, dockerCli, &cleanup}, cleanup.Run
 }
 
 func (m *serverMocks) startServer() string {
-	s := New(Config{}, tally.NoopScope, m.cads, m.sched, m.tags)
+	s := New(Config{}, tally.NoopScope, m.cads, m.sched, m.tags, m.dockerCli)
 	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
 	return addr
@@ -252,5 +258,21 @@ func TestDeleteBlobHandler(t *testing.T) {
 	mocks.sched.EXPECT().RemoveTorrent(d).Return(nil)
 
 	_, err := httputil.Delete(fmt.Sprintf("http://%s/blobs/%s", addr, d))
+	require.NoError(err)
+}
+
+func TestPreloadHandler(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr := mocks.startServer()
+
+	tag := url.PathEscape("repo1:tag1")
+
+	mocks.dockerCli.EXPECT().PullImage(context.Background(), "repo1", "tag1").Return(nil)
+
+	_, err := httputil.Get(fmt.Sprintf("http://%s/preload/tags/%s", addr, tag))
 	require.NoError(err)
 }

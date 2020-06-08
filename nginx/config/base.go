@@ -47,14 +47,14 @@ http {
   ##
   # Proxy Settings
   ##
-  
+
   proxy_set_header  X-Forwarded-For   $proxy_add_x_forwarded_for;
   proxy_set_header  X-Forwarded-Proto $http_x_forwarded_proto;
   proxy_set_header  X-Real-IP         $remote_addr;
   proxy_set_header  X-Original-URI    $request_uri;
-  
+
   # Overwrites http with $scheme if Location header is set to http by upstream.
-  proxy_redirect ~^http://[^:]+:\d+(/.+)$ $1; 
+  proxy_redirect ~^http://[^:]+:\d+(/.+)$ $1;
 
   ##
   # SSL Settings
@@ -75,7 +75,7 @@ http {
   {{end}}
   ssl_protocols TLSv1 TLSv1.1 TLSv1.2; # Dropping SSLv3, ref: POODLE
   ssl_prefer_server_ciphers on;
-  ssl_ciphers ECDH+AES256:ECDH+AES128:DH+3DES:!ADH:!AECDH:!MD5;
+  ssl_ciphers ECDH+AES256:ECDH+AES128:DH+3DES:!ADH:!AECDH:!MD5@SECLEVEL=1;
 
   ##
   # Logging Settings
@@ -96,6 +96,7 @@ http {
        '"agent":"$http_user_agent",'
        '"response_redirect_location":"$sent_http_location",'
        '"response_length":$bytes_sent,'
+       '"response_body_length":$body_bytes_sent,'
        '"responseStatusCode":"$status",'
        '"responseTime":$request_time,'
        '"esStatusCode":"$status",'

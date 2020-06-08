@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/localdb"
-	"github.com/stretchr/testify/require"
 )
 
 func checkTask(t *testing.T, expected *Task, result persistedretry.Task) {
@@ -75,7 +75,7 @@ func TestDatabaseNotLocked(t *testing.T) {
 	store := NewStore(db)
 
 	var wg sync.WaitGroup
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 200; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

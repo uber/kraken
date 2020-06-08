@@ -50,7 +50,7 @@ import (
 
 const testTempDir = "/tmp/kraken_scheduler"
 
-func init() {
+func Init() {
 	os.Mkdir(testTempDir, 0775)
 
 	debug := flag.Bool("scheduler.debug", false, "log all Scheduler debugging output")

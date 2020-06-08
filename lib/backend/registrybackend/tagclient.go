@@ -24,6 +24,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/lib/backend/registrybackend/security"
 	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/httputil"
 	yaml "gopkg.in/yaml.v2"
@@ -56,12 +57,21 @@ const _v2ManifestType = "application/vnd.docker.distribution.manifest.v2+json"
 
 // TagClient stats and downloads tag from registry.
 type TagClient struct {
-	config Config
+	config        Config
+	authenticator security.Authenticator
 }
 
 // NewTagClient creates a new TagClient.
 func NewTagClient(config Config) (*TagClient, error) {
-	return &TagClient{config}, nil
+	config = config.applyDefaults()
+	authenticator, err := security.NewAuthenticator(config.Address, config.Security)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tag client authenticator: %s", err)
+	}
+	return &TagClient{
+		config:        config,
+		authenticator: authenticator,
+	}, nil
 }
 
 // Stat sends a HEAD request to registry for a tag and returns the manifest size.
@@ -72,7 +82,7 @@ func (c *TagClient) Stat(namespace, name string) (*core.BlobInfo, error) {
 	}
 	repo, tag := tokens[0], tokens[1]
 
-	opt, err := c.config.Security.GetHTTPOption(c.config.Address, repo)
+	opts, err := c.authenticator.Authenticate(repo)
 	if err != nil {
 		return nil, fmt.Errorf("get security opt: %s", err)
 	}
@@ -80,9 +90,12 @@ func (c *TagClient) Stat(namespace, name string) (*core.BlobInfo, error) {
 	URL := fmt.Sprintf(_tagquery, c.config.Address, repo, tag)
 	resp, err := httputil.Head(
 		URL,
-		opt,
-		httputil.SendHeaders(map[string]string{"Accept": _v2ManifestType}),
-		httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound))
+		append(
+			opts,
+			httputil.SendHeaders(map[string]string{"Accept": _v2ManifestType}),
+			httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound),
+		)...,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("check blob exists: %s", err)
 	}
@@ -105,7 +118,7 @@ func (c *TagClient) Download(namespace, name string, dst io.Writer) error {
 	}
 	repo, tag := tokens[0], tokens[1]
 
-	opt, err := c.config.Security.GetHTTPOption(c.config.Address, repo)
+	opts, err := c.authenticator.Authenticate(repo)
 	if err != nil {
 		return fmt.Errorf("get security opt: %s", err)
 	}
@@ -113,9 +126,12 @@ func (c *TagClient) Download(namespace, name string, dst io.Writer) error {
 	URL := fmt.Sprintf(_tagquery, c.config.Address, repo, tag)
 	resp, err := httputil.Get(
 		URL,
-		opt,
-		httputil.SendHeaders(map[string]string{"Accept": _v2ManifestType}),
-		httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound))
+		append(
+			opts,
+			httputil.SendHeaders(map[string]string{"Accept": _v2ManifestType}),
+			httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound),
+		)...,
+	)
 	if err != nil {
 		return fmt.Errorf("check blob exists: %s", err)
 	}

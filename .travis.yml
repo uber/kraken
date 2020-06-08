@@ -3,7 +3,7 @@ sudo: required
 language: go
 
 go:
-  - 1.12.x
+  - 1.14.x
 
 services:
   - docker
@@ -14,9 +14,19 @@ env:
 before_script:
 - "curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | sudo bash"
 
-script:
-  - make unit-test integration
-  - "GO111MODULE=on fossa --option allow-unresolved:true"
+jobs:
+  include:
+    - stage: Tests
+      name: Unit Tests
+      script:
+        - make unit-test
+    - name: Integration Tests
+      script:
+        - make integration
+    - stage: Compliance
+      name: Fossa Check
+      script:
+        - "fossa --option allow-unresolved:true"
 
 after_success:
   - bash <(curl -s https://codecov.io/bash)
