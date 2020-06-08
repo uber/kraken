@@ -63,10 +63,6 @@ func NewMetaInfo(d Digest, blob io.Reader, pieceLength int64) (*MetaInfo, error)
 		Name:        d.Hex(),
 		Length:      length,
 	}
-	var buf bytes.Buffer
-	if err := bencode.Marshal(&buf, info); err != nil {
-		return nil, fmt.Errorf("bencode: %s", err)
-	}
 	h, err := info.Hash()
 	if err != nil {
 		return nil, fmt.Errorf("compute info hash: %s", err)
