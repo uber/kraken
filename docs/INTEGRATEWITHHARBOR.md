@@ -20,7 +20,7 @@ We should modify two config file additionally,
 As following,
 
 harbor-registry configmap
-```
+```yaml
 ## add the second endpoint in notifications
     notifications:
       endpoints:
@@ -40,7 +40,7 @@ harbor-registry configmap
 
 kraken-origin,kraken-buildindex,
 
-```
+```yaml
     backends:
       - namespace: .*
         backend:
@@ -54,7 +54,7 @@ kraken-origin,kraken-buildindex,
 
 You should add more configuration about TLS if the domain name of your Harbor use a self-signed SSL certificate. It will throws a X509 error if not.
 
-```
+```yaml
     backends:
       - namespace: .*
         backend:
@@ -77,14 +77,14 @@ You should add more configuration about TLS if the domain name of your Harbor us
 
 You can pull images using a `localhost` domain by P2P distribution after you deploy kraken-agent in your k8s nodes using daemonSet.
 
-For example, there is an image called  `hub.harbor.com/library/debain:latest`, then you can pull it using `localhost:13000/library/debain:latest`.
+For example, there is an image called  `hub.harbor.com/library/debian:latest`, then you can pull it using `localhost:13000/library/debian:latest`.
 
 ## Work flow
 I describe the work flow of pushing and pulling images briefly here,
-1. User push an image named `docker push hub.harbor.com/library/debain:latest` to Harbor.
+1. User push an image named `docker push hub.harbor.com/library/debian:latest` to Harbor.
 2. Harbor-registry will trigger a notification of pushManifest event to kraken-proxy.
-3. Kraken-proxy will fetch the manifest and notify kraken-origin to cache related blobs after receving the pushManifest event.
-4. User will try to pull image by `docker pull localhost:13000/library/debain:latest`
+3. Kraken-proxy will fetch the manifest and notify kraken-origin to cache related blobs after receiving the pushManifest event.
+4. User will try to pull image by `docker pull localhost:13000/library/debian:latest`
 5. Then the P2P distribution work flow. but kraken-origin has cached these blobs before P2P distribution starts. it will save the time of fetching blobs from harbor-registry.
 6. Pulling image is completed.
 
@@ -94,6 +94,6 @@ It has been a long time that this solution is used in Qingzhou Platform in NetEa
 Now we use Harbor for managing images and Kraken for distributing images, and it resolves the problem of distribution of huge number of images. there are thousands of images distributed everyday in our Qingzhou Platform.
 
 ## Notes
-It is important to limit the resouce quota of kraken-agent in k8s for it is deployed with containers of business. It will affect the containers of business if kraken-agent takes too much resource.
+It is important to limit the resource quota of kraken-agent in k8s for it is deployed with containers of business. It will affect the containers of business if kraken-agent takes too much resource.
 
 There are two aspects for resource quota. One is the resource limit of k8s pod, the other one is the bandwidth.

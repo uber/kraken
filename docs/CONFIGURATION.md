@@ -51,7 +51,7 @@ Kraken's peer-to-peer network consists of agents, origins and trackers. Origins 
 ## Tracker Peer TTL
 
 >tracker.yaml
->```
+>```yaml
 >peerstore:
 >   redis:
 >     peer_set_window_size: 1h
@@ -68,7 +68,7 @@ Then, the tracker returns a random set of peers selecting from `max_peer_set_win
 
 Download and upload bandwidths are configurable to prevent peers from saturating the host network.
 >agent.yaml/origin.yaml
->```
+>```yaml
 >scheduler:
 >   conn:
 >     bandwidth:
@@ -81,7 +81,7 @@ Download and upload bandwidths are configurable to prevent peers from saturating
 
 Number of connections per torrent can be limited by:
 >agent.yaml/origin.yaml
->```
+>```yaml
 >scheduler:
 >   connstate:
 >     max_open_conn: 10
@@ -94,7 +94,7 @@ There is no limit on number of torrents a peer can download simultaneously.
 
 SeederTTI (time-to-idle) is the duration a completed torrent will exist without being read from before being removed from in-memory archive.
 >agent.yaml/origin.yaml
->```
+>```yaml
 >scheduler:
 >   seeder_tti: 5m
 >```
@@ -104,7 +104,7 @@ However, until it is deleted by periodic storage purge, completed torrents will 
 
 Both agents and origins can be configured to cleanup idle torrents on disk periodically.
 >agent.yaml/origin.yaml
->```
+>```yaml
 >store:
 >   cache_cleanup:
 >     tti: 6h
@@ -114,7 +114,7 @@ Both agents and origins can be configured to cleanup idle torrents on disk perio
 
 For origins, the number of files can also be limited as origins are dedicated seeders and hence normally caches files on disk for longer time.
 >origin.yaml
->```
+>```yaml
 >store:
 >   capacity: 1000000
 >
@@ -128,7 +128,7 @@ We use rendezvous hashing for constructing ring membership.
 
 Take an origin cluster for example:
 >origin-static-hosts.yaml
->```
+>```yaml
 >hashring:
 >   max_replica: 2
 >cluster:
@@ -139,7 +139,7 @@ Take an origin cluster for example:
 >     - origin3:15002
 >```
 >origin-dns.yaml
->```
+>```yaml
 >hashring:
 >   max_replica: 2
 >cluster:
@@ -155,7 +155,7 @@ When a node in the hash ring is considered as unhealthy, the ring client will ro
 
 Origins do health check for each other in the ring as the cluster is usually smaller.
 >origin.yaml
->```
+>```yaml
 >cluster:
 >   healthcheck:
 >     filter:
@@ -163,13 +163,13 @@ Origins do health check for each other in the ring as the cluster is usually sma
 >       passes: 2
 >     monitor:
 >       interval: 30s
-Above configures health check ping from one origin to others every 30 seconds. If 3 or more consecutive health checkes fail for an origin, it is marked as unhealthy. Later, if 2 or more consecutive health checks succeed for the same origin, it is marked as healthy again. Initially, all hosts are healthy.
+Above configures health check ping from one origin to others every 30 seconds. If 3 or more consecutive health checks fail for an origin, it is marked as unhealthy. Later, if 2 or more consecutive health checks succeed for the same origin, it is marked as healthy again. Initially, all hosts are healthy.
 
 ### Passive Health Check
 
 Agents health checks tracker, piggybacking on the announce requests.
 >agent.yaml
->```
+>```yaml
 >tracker:
 >   cluster:
 >     healthcheck:
@@ -187,7 +187,7 @@ Multiple backends can be used at the name time, configured based on namespaces o
 Example origin config that uses multiple backends:
 
 >origin.yaml
->```
+>```yaml
 >backends:
 > - namespace: library/.*
 >    backend:
@@ -263,7 +263,7 @@ Example origin config that uses multiple backends:
 For simple local testing with an insecure registry (assuming it listens on `host.docker.internal:5000`), you can configure the backend for origin and build-index accordingly:
 
 >origin.yaml
->```
+>```yaml
 >backends:
 >  - namespace: .*
 >    backend:
@@ -276,7 +276,7 @@ For simple local testing with an insecure registry (assuming it listens on `host
 >```
 
 >build-index.yaml
->```
+>```yaml
 >backends:
 >  - namespace: .*
 >    backend:
@@ -292,7 +292,7 @@ For simple local testing with an insecure registry (assuming it listens on `host
 
 When transferring data from and to its storage backend, origins can be configured with download and upload bandwidths. This is useful when using cloud storage providers to prevent origins from saturating the network link.
 >origin.yaml
->```
+>```yaml
 >backends:
 >  - namespace: .*
 >    backend:
