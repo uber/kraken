@@ -12,7 +12,7 @@ Please read: https://talks.golang.org/2014/names.slide#1
 
 All comments, regardless of location, must have proper grammar, including proper capitalization and punctuation.
 
-```
+```go
 // this is a bad comment with bad grammar
 
 // This is a good comment with good grammar.
@@ -31,7 +31,7 @@ Comments should be kept under 80 characters.
 
 Long function signatures should be broken up like so:
 
-```
+```go
 func Foo(
     bar int,
     baz bool,
@@ -43,7 +43,7 @@ func Foo(
  
 And callsites:
  
-```
+```go
 // If it fits on a 2nd line:
 x, err := Foo(
     1, false, []int{1, 2, 3})
@@ -62,7 +62,7 @@ with blank lines when the code reads just fine without them.
 
 Bad:
 
-```
+```go
 func (s *State) DeletePending(peerID core.PeerID, h core.InfoHash) {
 	k := connKey{peerID, h}
   
@@ -81,7 +81,7 @@ func (s *State) DeletePending(peerID core.PeerID, h core.InfoHash) {
 
 Good:
 
-```
+```go
 func (s *State) DeletePending(peerID core.PeerID, h core.InfoHash) {
 	k := connKey{peerID, h}
 	if !s.pending[k] {
