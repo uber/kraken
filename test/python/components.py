@@ -273,30 +273,10 @@ class Component(object):
             print 'Teardown {name} failed: {e}'.format(name=self.container.name, e=e)
 
 
-class Redis(Component):
-
-    def __init__(self, zone):
-        self.zone = zone
-        self.port = find_free_port()
-        self.start()
-
-    def new_container(self):
-        return new_docker_container(
-            name='kraken-redis-{zone}'.format(zone=self.zone),
-            image='redis:latest',
-            ports={6379: self.port},
-            health_check=HealthCheck('redis-cli ping'))
-
-    @property
-    def addr(self):
-        return '{}:{}'.format(get_docker_bridge(), self.port)
-
-
 class Tracker(Component):
 
-    def __init__(self, zone, redis, origin_cluster):
+    def __init__(self, zone, origin_cluster):
         self.zone = zone
-        self.redis = redis
         self.origin_cluster = origin_cluster
         self.port = find_free_port()
         self.config_file = 'test-{zone}.yaml'.format(zone=zone)
@@ -305,7 +285,6 @@ class Tracker(Component):
         populate_config_template(
             'tracker',
             self.config_file,
-            redis=self.redis.addr,
             origins=yaml_list([o.addr for o in self.origin_cluster.origins]))
 
         self.volumes = create_volumes('tracker', self.name)
@@ -717,9 +696,7 @@ class Cluster(object):
             for name in origin_instances
         ])
 
-        self.redis = self._register(Redis(zone))
-
-        self.tracker = self._register(Tracker(zone, self.redis, self.origin_cluster))
+        self.tracker = self._register(Tracker(zone, self.origin_cluster))
 
         self.build_indexes = []
         for name in local_build_index_instances:

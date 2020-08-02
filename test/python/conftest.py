@@ -26,7 +26,6 @@ from components import (
     Origin,
     OriginCluster,
     Proxy,
-    Redis,
     TestFS,
     Tracker,
     find_free_port,
@@ -54,15 +53,8 @@ TEST_IMAGE_2 = _setup_test_image('redis:latest')
 
 
 @pytest.fixture
-def redis():
-    redis = Redis(DEFAULT)
-    yield redis
-    redis.teardown()
-
-
-@pytest.fixture
-def tracker(redis, origin_cluster, testfs):
-    tracker = Tracker(DEFAULT, redis, origin_cluster)
+def tracker(origin_cluster, testfs):
+    tracker = Tracker(DEFAULT, origin_cluster)
     yield tracker
     tracker.teardown()
 
