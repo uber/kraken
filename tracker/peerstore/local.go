@@ -98,6 +98,8 @@ func (s *LocalStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 
 	// We rely on random map iteration to pick n random peers.
 	for id, p := range g.peers {
+		// Note, we elect to return slightly expired entries rather than iterate
+		// until we find n valid entries.
 		result = append(result, core.NewPeerInfo(id, p.ip, p.port, false /* origin */, p.complete))
 		if len(result) == n {
 			break
@@ -205,9 +207,15 @@ func (s *LocalStore) cleanupExpiredPeerEntries() {
 			// expired entries.
 			continue
 		}
+
 		g.mu.Lock()
 		for _, id := range expired {
-			delete(g.peers, id)
+			// Must re-check the expiresAt timestamp in case an update occurred
+			// before we could acquire the write lock.
+			p, ok := g.peers[id]
+			if ok && s.clk.Now().After(p.expiresAt) {
+				delete(g.peers, id)
+			}
 		}
 		g.mu.Unlock()
 	}
@@ -218,7 +226,19 @@ func (s *LocalStore) cleanupExpiredPeerGroups() {
 	defer s.mu.Unlock()
 
 	for h, g := range s.peerGroups {
+		g.mu.RLock()
+		valid := s.clk.Now().Before(g.lastExpiresAt)
+		g.mu.RUnlock()
+
+		if valid {
+			// Fast path -- no need to acquire a write lock if the group is
+			// still valid.
+			continue
+		}
+
 		g.mu.Lock()
+		// Must re-check the lastExpiresAt timestamp in case an update
+		// occurred before we could acquire the write lock.
 		if s.clk.Now().After(g.lastExpiresAt) {
 			delete(s.peerGroups, h)
 			g.deleted = true

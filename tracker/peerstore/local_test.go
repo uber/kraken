@@ -70,6 +70,7 @@ func TestLocalStoreExpiration(t *testing.T) {
 	// Manually triggered for testing purposes. Nothing has expired, so
 	// should be a noop.
 	s.cleanupExpiredPeerEntries()
+	s.cleanupExpiredPeerGroups()
 
 	peers, err = s.GetPeers(h1, 3)
 	require.NoError(t, err)
