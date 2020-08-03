@@ -23,6 +23,8 @@ import (
 
 // Store provides storage for announcing peers.
 type Store interface {
+	// Close cleans up any Store resources.
+	Close()
 
 	// GetPeers returns at most n random peers announcing for h.
 	GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error)

@@ -1,3 +1,16 @@
+// Copyright (c) 2016-2020 Uber Technologies, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package peerstore
 
 import (
@@ -6,23 +19,29 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/utils/dedup"
 )
 
-const _peerGroupCleanupInterval = time.Hour
+const (
+	_cleanupExpiredPeerEntriesInterval = 5 * time.Minute
+	_cleanupExpiredPeerGroupsInterval  = time.Hour
+)
 
 // LocalStore is an in-memory Store implementation.
 type LocalStore struct {
-	config  LocalConfig
-	clk     clock.Clock
-	cleanup *dedup.IntervalTrap
+	config                          LocalConfig
+	clk                             clock.Clock
+	cleanupExpiredPeerEntriesTicker *time.Ticker
+	cleanupExpiredPeerGroupsTicker  *time.Ticker
+
+	stopOnce sync.Once
+	stop     chan struct{}
 
 	mu         sync.RWMutex
 	peerGroups map[core.InfoHash]*peerGroup
 }
 
 type peerGroup struct {
-	mu            sync.Mutex
+	mu            sync.RWMutex
 	peers         map[core.PeerID]*peerEntry
 	lastExpiresAt time.Time
 	deleted       bool
@@ -35,24 +54,24 @@ type peerEntry struct {
 	expiresAt time.Time
 }
 
-type cleanupTask struct {
-	store *LocalStore
-}
-
-func (t *cleanupTask) Run() {
-	t.store.runCleanup()
-}
-
 // NewLocalStore creates a new LocalStore.
 func NewLocalStore(config LocalConfig, clk clock.Clock) *LocalStore {
 	config.applyDefaults()
 	s := &LocalStore{
-		config:     config,
-		clk:        clk,
-		peerGroups: make(map[core.InfoHash]*peerGroup),
+		config:                          config,
+		clk:                             clk,
+		cleanupExpiredPeerEntriesTicker: time.NewTicker(_cleanupExpiredPeerEntriesInterval),
+		cleanupExpiredPeerGroupsTicker:  time.NewTicker(_cleanupExpiredPeerGroupsInterval),
+		stop:                            make(chan struct{}),
+		peerGroups:                      make(map[core.InfoHash]*peerGroup),
 	}
-	s.cleanup = dedup.NewIntervalTrap(_peerGroupCleanupInterval, clk, &cleanupTask{s})
+	go s.cleanupTask()
 	return s
+}
+
+// Close implements Store.
+func (s *LocalStore) Close() {
+	s.stopOnce.Do(func() { close(s.stop) })
 }
 
 // GetPeers implements Store.
@@ -69,19 +88,12 @@ func (s *LocalStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 		return nil, nil
 	}
 
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	now := s.clk.Now()
-	var result []*core.PeerInfo
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 
 	// We rely on random map iteration to pick n random peers.
+	var result []*core.PeerInfo
 	for id, p := range g.peers {
-		if now.After(p.expiresAt) {
-			// Clean up any expired peers we run into.
-			delete(g.peers, id)
-			continue
-		}
 		result = append(result, core.NewPeerInfo(id, p.ip, p.port, false /* origin */, p.complete))
 		if len(result) == n {
 			break
@@ -92,8 +104,6 @@ func (s *LocalStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 
 // UpdatePeer implements Store.
 func (s *LocalStore) UpdatePeer(h core.InfoHash, p *core.PeerInfo) error {
-	s.cleanup.Trap()
-
 	g := s.getOrInitLockedPeerGroup(h)
 	defer g.mu.Unlock()
 
@@ -106,16 +116,18 @@ func (s *LocalStore) UpdatePeer(h core.InfoHash, p *core.PeerInfo) error {
 		expiresAt: expiresAt,
 	}
 
-	// Allows runCleanup to quickly determine when the last peerEntry expires.
+	// Allows cleanupExpiredPeerGroups to quickly determine when the last
+	// peerEntry expires.
 	g.lastExpiresAt = expiresAt
 
 	return nil
 }
 
 func (s *LocalStore) getOrInitLockedPeerGroup(h core.InfoHash) *peerGroup {
-	// We must take care to handle a race condition against runCleanup. Consider
-	// two goroutines, A and B, where A executes getOrInitLockedPeerGroup and B
-	// executes runCleanup:
+	// We must take care to handle a race condition against
+	// cleanupExpiredPeerGroups. Consider two goroutines, A and B, where A
+	// executes getOrInitLockedPeerGroup and B executes
+	// cleanupExpiredPeerGroups:
 	//
 	// A: locks s.mu, reads g from s.peerGroups, unlocks s.mu
 	// B: locks s.mu, locks g.mu, deletes g from s.peerGroups, unlocks g.mu
@@ -146,7 +158,46 @@ func (s *LocalStore) getOrInitLockedPeerGroup(h core.InfoHash) *peerGroup {
 	}
 }
 
-func (s *LocalStore) runCleanup() {
+func (s *LocalStore) cleanupTask() {
+	for {
+		select {
+		case <-s.cleanupExpiredPeerEntriesTicker.C:
+			s.cleanupExpiredPeerEntries()
+		case <-s.cleanupExpiredPeerGroupsTicker.C:
+			s.cleanupExpiredPeerGroups()
+		case <-s.stop:
+			return
+		}
+	}
+}
+
+func (s *LocalStore) cleanupExpiredPeerEntries() {
+	s.mu.RLock()
+	hashes := make([]core.InfoHash, 0, len(s.peerGroups))
+	for h := range s.peerGroups {
+		hashes = append(hashes, h)
+	}
+	s.mu.RUnlock()
+
+	for _, h := range hashes {
+		s.mu.RLock()
+		g, ok := s.peerGroups[h]
+		s.mu.RUnlock()
+		if !ok {
+			continue
+		}
+
+		g.mu.Lock()
+		for id, p := range g.peers {
+			if s.clk.Now().After(p.expiresAt) {
+				delete(g.peers, id)
+			}
+		}
+		g.mu.Unlock()
+	}
+}
+
+func (s *LocalStore) cleanupExpiredPeerGroups() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

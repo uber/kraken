@@ -1,3 +1,16 @@
+// Copyright (c) 2016-2020 Uber Technologies, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package peerstore
 
 import (
@@ -16,6 +29,7 @@ func TestLocalStoreExpiration(t *testing.T) {
 	clk.Set(now)
 
 	s := NewLocalStore(LocalConfig{TTL: 10 * time.Minute}, clk)
+	defer s.Close()
 
 	h1 := core.InfoHashFixture()
 
@@ -52,6 +66,9 @@ func TestLocalStoreExpiration(t *testing.T) {
 
 	clk.Add(5*time.Minute + 1)
 
+	// Manually triggered for testing purposes.
+	s.cleanupExpiredPeerEntries()
+
 	// p1 and p2 are now expired.
 	peers, err = s.GetPeers(h1, 3)
 	require.NoError(t, err)
@@ -59,26 +76,19 @@ func TestLocalStoreExpiration(t *testing.T) {
 
 	clk.Add(5*time.Minute + 1)
 
+	// Manually triggered for testing purposes.
+	s.cleanupExpiredPeerEntries()
+
 	// p3 is now expired.
 	peers, err = s.GetPeers(h1, 1)
 	require.NoError(t, err)
 	require.Empty(t, peers)
 
-	clk.Add(_peerGroupCleanupInterval)
-
-	h2 := core.InfoHashFixture()
-	p4 := core.PeerInfoFixture()
-
-	// An arbitrary UpdatePeer call should trigger the cleanup trap.
 	// Unfortunately we must reach into the LocalStore's private state
 	// to determine whether cleanup actually occurred.
 	require.Contains(t, s.peerGroups, h1)
-	require.NoError(t, s.UpdatePeer(h2, p4))
+	s.cleanupExpiredPeerGroups()
 	require.NotContains(t, s.peerGroups, h1)
-
-	peers, err = s.GetPeers(h2, 1)
-	require.NoError(t, err)
-	require.Equal(t, []*core.PeerInfo{p4}, peers)
 }
 
 func TestLocalStoreConcurrency(t *testing.T) {

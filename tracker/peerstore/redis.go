@@ -109,6 +109,9 @@ func NewRedisStore(config RedisConfig, clk clock.Clock) (*RedisStore, error) {
 	return s, nil
 }
 
+// Close implements Store.
+func (s *RedisStore) Close() {}
+
 func (s *RedisStore) curPeerSetWindow() int64 {
 	t := s.clk.Now().Unix()
 	return t - (t % int64(s.config.PeerSetWindowSize.Seconds()))

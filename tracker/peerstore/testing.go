@@ -32,6 +32,8 @@ func NewTestStore() Store {
 	}
 }
 
+func (s *testStore) Close() {}
+
 func (s *testStore) UpdatePeer(h core.InfoHash, p *core.PeerInfo) error {
 	s.Lock()
 	defer s.Unlock()
