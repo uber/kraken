@@ -93,6 +93,7 @@ func TestLocalStoreExpiration(t *testing.T) {
 
 func TestLocalStoreConcurrency(t *testing.T) {
 	s := NewLocalStore(LocalConfig{TTL: time.Millisecond}, clock.New())
+	defer s.Close()
 
 	hashes := []core.InfoHash{
 		core.InfoHashFixture(),

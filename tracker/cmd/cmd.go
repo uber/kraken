@@ -125,6 +125,7 @@ func Run(flags *Flags, opts ...Option) {
 	if err != nil {
 		log.Fatalf("Could not create PeerStore: %s", err)
 	}
+	defer peerStore.Close()
 
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
