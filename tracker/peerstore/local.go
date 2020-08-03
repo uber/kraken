@@ -136,7 +136,7 @@ func (s *LocalStore) getOrInitLockedPeerGroup(h core.InfoHash) *peerGroup {
 	// At this point, A is holding onto a peerGroup reference which has been
 	// deleted from the peerGroups map, and thus has no choice but to attempt to
 	// reload a new peerGroup. Since the cleanup interval is quite large, it is
-	// *extremeley* unlikely this for-loop will execute more than twice.
+	// *extremely* unlikely this for-loop will execute more than twice.
 	for {
 		s.mu.Lock()
 		g, ok := s.peerGroups[h]
