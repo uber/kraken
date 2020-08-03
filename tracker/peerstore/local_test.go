@@ -32,6 +32,8 @@ func TestLocalStoreExpiration(t *testing.T) {
 	defer s.Close()
 
 	h1 := core.InfoHashFixture()
+	
+	// No peers initially.
 
 	peers, err := s.GetPeers(h1, 0)
 	require.NoError(t, err)
@@ -47,8 +49,13 @@ func TestLocalStoreExpiration(t *testing.T) {
 	p2 := core.PeerInfoFixture()
 	require.NoError(t, s.UpdatePeer(h1, p2))
 
+	// Two peers with some different n values.
+
 	peers, err = s.GetPeers(h1, 2)
 	require.NoError(t, err)
+	require.ElementsMatch(t, []*core.PeerInfo{p1, p2}, peers)
+
+	peers, err = s.GetPeers(h1, 50)
 	require.ElementsMatch(t, []*core.PeerInfo{p1, p2}, peers)
 
 	peers, err = s.GetPeers(h1, 1)
@@ -59,6 +66,10 @@ func TestLocalStoreExpiration(t *testing.T) {
 
 	p3 := core.PeerInfoFixture()
 	require.NoError(t, s.UpdatePeer(h1, p3))
+
+	// Manually triggered for testing purposes. Nothing has expired, so
+	// should be a noop.
+	s.cleanupExpiredPeerEntries()
 
 	peers, err = s.GetPeers(h1, 3)
 	require.NoError(t, err)

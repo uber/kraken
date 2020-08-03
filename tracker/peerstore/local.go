@@ -91,8 +91,12 @@ func (s *LocalStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
+	if len(g.peers) < n {
+		n = len(g.peers)
+	}
+	result := make([]*core.PeerInfo, 0, n)
+
 	// We rely on random map iteration to pick n random peers.
-	var result []*core.PeerInfo
 	for id, p := range g.peers {
 		result = append(result, core.NewPeerInfo(id, p.ip, p.port, false /* origin */, p.complete))
 		if len(result) == n {
@@ -187,11 +191,23 @@ func (s *LocalStore) cleanupExpiredPeerEntries() {
 			continue
 		}
 
-		g.mu.Lock()
+		var expired []core.PeerID
+		g.mu.RLock()
 		for id, p := range g.peers {
 			if s.clk.Now().After(p.expiresAt) {
-				delete(g.peers, id)
+				expired = append(expired, id)
 			}
+		}
+		g.mu.RUnlock()
+
+		if len(expired) == 0 {
+			// Fast path -- no need to acquire a write lock if there are no
+			// expired entries.
+			continue
+		}
+		g.mu.Lock()
+		for _, id := range expired {
+			delete(g.peers, id)
 		}
 		g.mu.Unlock()
 	}
