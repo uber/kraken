@@ -18,13 +18,29 @@ import (
 )
 
 // Config defines Store configuration.
+//
+// NOTE: By default, the LocalStore implementation is used. Redis configuration
+// is ignored unless RedisConfig.Enabled is true.
 type Config struct {
+	Local LocalConfig `yaml:"local"`
 	Redis RedisConfig `yaml:"redis"`
+}
+
+// LocalConfig defines LocalStore configuration.
+type LocalConfig struct {
+	TTL time.Duration `yaml:"ttl"`
+}
+
+func (c *LocalConfig) applyDefaults() {
+	if c.TTL == 0 {
+		c.TTL = 5 * time.Hour
+	}
 }
 
 // RedisConfig defines RedisStore configuration.
 // TODO(evelynl94): rename
 type RedisConfig struct {
+	Enabled           bool          `yaml:"enabled"`
 	Addr              string        `yaml:"addr"`
 	DialTimeout       time.Duration `yaml:"dial_timeout"`
 	ReadTimeout       time.Duration `yaml:"read_timeout"`

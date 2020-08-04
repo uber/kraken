@@ -14,15 +14,35 @@
 package peerstore
 
 import (
+	"fmt"
+
+	"github.com/andres-erbsen/clock"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/log"
 )
 
 // Store provides storage for announcing peers.
 type Store interface {
+	// Close cleans up any Store resources.
+	Close()
 
 	// GetPeers returns at most n random peers announcing for h.
 	GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error)
 
 	// UpdatePeer updates peer fields.
 	UpdatePeer(h core.InfoHash, peer *core.PeerInfo) error
+}
+
+// New creates a new Store implementation based on config.
+func New(config Config) (Store, error) {
+	if config.Redis.Enabled {
+		log.Info("Redis peer store enabled")
+		s, err := NewRedisStore(config.Redis, clock.New())
+		if err != nil {
+			return nil, fmt.Errorf("new redis store: %s", err)
+		}
+		return s, nil
+	}
+	log.Info("Defaulting to local peer store")
+	return NewLocalStore(config.Local, clock.New()), nil
 }

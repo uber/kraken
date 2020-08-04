@@ -121,10 +121,11 @@ func Run(flags *Flags, opts ...Option) {
 
 	go metrics.EmitVersion(stats)
 
-	peerStore, err := peerstore.NewRedisStore(config.PeerStore.Redis, clock.New())
+	peerStore, err := peerstore.New(config.PeerStore)
 	if err != nil {
 		log.Fatalf("Could not create PeerStore: %s", err)
 	}
+	defer peerStore.Close()
 
 	tls, err := config.TLS.BuildClient()
 	if err != nil {

@@ -1,9 +1,5 @@
 extends: base.yaml
 
-peerstore:
-  redis:
-    addr: {redis}
-
 origin:
   hosts:
     static: {origins}
