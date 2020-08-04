@@ -14,11 +14,13 @@
 package peerstore
 
 import (
+	"math/rand"
 	"sync"
 	"time"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber/kraken/core"
+	_ "github.com/uber/kraken/utils/randutil" // For seeded global rand.
 )
 
 const (
@@ -41,13 +43,18 @@ type LocalStore struct {
 }
 
 type peerGroup struct {
-	mu            sync.RWMutex
-	peers         map[core.PeerID]*peerEntry
+	mu sync.RWMutex
+
+	// Same peerEntry references in both, just indexed differently.
+	peerList []*peerEntry
+	peerMap  map[core.PeerID]*peerEntry
+
 	lastExpiresAt time.Time
 	deleted       bool
 }
 
 type peerEntry struct {
+	id        core.PeerID
 	ip        string
 	port      int
 	complete  bool
@@ -76,11 +83,6 @@ func (s *LocalStore) Close() {
 
 // GetPeers implements Store.
 func (s *LocalStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) {
-	if n <= 0 {
-		// Simpler for below logic to assume positive n.
-		return nil, nil
-	}
-
 	s.mu.RLock()
 	g, ok := s.peerGroups[h]
 	s.mu.RUnlock()
@@ -91,19 +93,24 @@ func (s *LocalStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
-	if len(g.peers) < n {
-		n = len(g.peers)
+	if len(g.peerList) < n {
+		n = len(g.peerList)
 	}
+	if n <= 0 {
+		return nil, nil
+	}
+
 	result := make([]*core.PeerInfo, 0, n)
 
-	// We rely on random map iteration to pick n random peers.
-	for id, p := range g.peers {
+	// Select n random indexes.
+	indexes := rand.Perm(len(g.peerList))
+	indexes = indexes[:n]
+
+	for _, i := range indexes {
 		// Note, we elect to return slightly expired entries rather than iterate
 		// until we find n valid entries.
-		result = append(result, core.NewPeerInfo(id, p.ip, p.port, false /* origin */, p.complete))
-		if len(result) == n {
-			break
-		}
+		e := g.peerList[i]
+		result = append(result, core.NewPeerInfo(e.id, e.ip, e.port, false /* origin */, e.complete))
 	}
 	return result, nil
 }
@@ -113,18 +120,21 @@ func (s *LocalStore) UpdatePeer(h core.InfoHash, p *core.PeerInfo) error {
 	g := s.getOrInitLockedPeerGroup(h)
 	defer g.mu.Unlock()
 
-	expiresAt := s.clk.Now().Add(s.config.TTL)
-
-	g.peers[p.PeerID] = &peerEntry{
-		ip:        p.IP,
-		port:      p.Port,
-		complete:  p.Complete,
-		expiresAt: expiresAt,
+	e, ok := g.peerMap[p.PeerID]
+	if !ok {
+		e = &peerEntry{}
+		g.peerList = append(g.peerList, e)
+		g.peerMap[p.PeerID] = e
 	}
+	e.id = p.PeerID
+	e.ip = p.IP
+	e.port = p.Port
+	e.complete = p.Complete
+	e.expiresAt = s.clk.Now().Add(s.config.TTL)
 
 	// Allows cleanupExpiredPeerGroups to quickly determine when the last
 	// peerEntry expires.
-	g.lastExpiresAt = expiresAt
+	g.lastExpiresAt = e.expiresAt
 
 	return nil
 }
@@ -148,7 +158,7 @@ func (s *LocalStore) getOrInitLockedPeerGroup(h core.InfoHash) *peerGroup {
 		g, ok := s.peerGroups[h]
 		if !ok {
 			g = &peerGroup{
-				peers:         make(map[core.PeerID]*peerEntry),
+				peerMap:       make(map[core.PeerID]*peerEntry),
 				lastExpiresAt: s.clk.Now().Add(s.config.TTL),
 			}
 			s.peerGroups[h] = g
@@ -193,11 +203,11 @@ func (s *LocalStore) cleanupExpiredPeerEntries() {
 			continue
 		}
 
-		var expired []core.PeerID
+		var expired []int
 		g.mu.RLock()
-		for id, p := range g.peers {
-			if s.clk.Now().After(p.expiresAt) {
-				expired = append(expired, id)
+		for i, e := range g.peerList {
+			if s.clk.Now().After(e.expiresAt) {
+				expired = append(expired, i)
 			}
 		}
 		g.mu.RUnlock()
@@ -209,13 +219,29 @@ func (s *LocalStore) cleanupExpiredPeerEntries() {
 		}
 
 		g.mu.Lock()
-		for _, id := range expired {
+		for j := len(expired) - 1; j >= 0; j-- {
+			// Loop over expired indexes in reverse orders to perform fast slice
+			// element removal.
+			i := expired[j]
+
+			if i >= len(g.peerList) {
+				// Technically we're the only goroutine deleting peer entries,
+				// but let's play it safe.
+				continue
+			}
+			e := g.peerList[i]
+
 			// Must re-check the expiresAt timestamp in case an update occurred
 			// before we could acquire the write lock.
-			p, ok := g.peers[id]
-			if ok && s.clk.Now().After(p.expiresAt) {
-				delete(g.peers, id)
+			if s.clk.Now().Before(e.expiresAt) {
+				continue
 			}
+
+			// Remove the expired index.
+			g.peerList[i] = g.peerList[len(g.peerList)-1]
+			g.peerList = g.peerList[:len(g.peerList)-1]
+
+			delete(g.peerMap, e.id)
 		}
 		g.mu.Unlock()
 	}

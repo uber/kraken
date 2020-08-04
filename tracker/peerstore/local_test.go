@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/andres-erbsen/clock"
+	"github.com/stretchr/testify/require"
 	"github.com/uber/kraken/core"
 )
 
@@ -32,7 +32,7 @@ func TestLocalStoreExpiration(t *testing.T) {
 	defer s.Close()
 
 	h1 := core.InfoHashFixture()
-	
+
 	// No peers initially.
 
 	peers, err := s.GetPeers(h1, 0)
@@ -71,6 +71,14 @@ func TestLocalStoreExpiration(t *testing.T) {
 	// should be a noop.
 	s.cleanupExpiredPeerEntries()
 	s.cleanupExpiredPeerGroups()
+
+	peers, err = s.GetPeers(h1, 3)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []*core.PeerInfo{p1, p2, p3}, peers)
+
+	// Update existing peer.
+	p3.Complete = true
+	require.NoError(t, s.UpdatePeer(h1, p3))
 
 	peers, err = s.GetPeers(h1, 3)
 	require.NoError(t, err)
