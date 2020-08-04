@@ -189,21 +189,15 @@ func (s *LocalStore) cleanupTask() {
 
 func (s *LocalStore) cleanupExpiredPeerEntries() {
 	s.mu.RLock()
-	hashes := make([]core.InfoHash, 0, len(s.peerGroups))
-	for h := range s.peerGroups {
-		hashes = append(hashes, h)
+	groups := make([]*peerGroup, 0, len(s.peerGroups))
+	for _, g := range s.peerGroups {
+		groups = append(groups, g)
 	}
 	s.mu.RUnlock()
 
-	for _, h := range hashes {
-		s.mu.RLock()
-		g, ok := s.peerGroups[h]
-		s.mu.RUnlock()
-		if !ok {
-			continue
-		}
-
+	for _, g := range groups {
 		var expired []int
+
 		g.mu.RLock()
 		for i, e := range g.peerList {
 			if s.clk.Now().After(e.expiresAt) {
