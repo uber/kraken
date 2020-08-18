@@ -45,5 +45,5 @@ type Config struct {
 	Nginx           nginx.Config                   `yaml:"nginx"`
 	TLS             httputil.TLSConfig             `yaml:"tls"`
 	AllowedCidrs    []string                       `yaml:"allowed_cidrs"`
-	DockerDaemon    dockerdaemon.Config            `yaml:docker_daemon`
+	DockerDaemon    dockerdaemon.Config            `yaml:"docker_daemon"`
 }
