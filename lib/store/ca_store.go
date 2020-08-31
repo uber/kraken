@@ -83,6 +83,7 @@ func (s *CAStore) MoveUploadFileToCache(uploadName, cacheName string) error {
 	if err != nil {
 		return err
 	}
+	defer s.DeleteUploadFile(uploadName)
 
 	f, err := s.uploadStore.newFileOp().GetFileReader(uploadName)
 	if err != nil {
@@ -93,7 +94,6 @@ func (s *CAStore) MoveUploadFileToCache(uploadName, cacheName string) error {
 		return fmt.Errorf("verify digest: %s", err)
 	}
 
-	defer s.DeleteUploadFile(uploadName)
 	return s.cacheStore.newFileOp().MoveFileFrom(cacheName, s.cacheStore.state, uploadPath)
 }
 
@@ -123,13 +123,6 @@ func (s *CAStore) WriteCacheFile(name string, write func(w FileReadWriter) error
 
 	if err := write(w); err != nil {
 		return err
-	}
-
-	if _, err := w.Seek(0, 0); err != nil {
-		return fmt.Errorf("seek: %s", err)
-	}
-	if err := s.verify(w, name); err != nil {
-		return fmt.Errorf("verify digest: %s", err)
 	}
 	if err := s.MoveUploadFileToCache(tmp, name); err != nil && !os.IsExist(err) {
 		return fmt.Errorf("move upload file to cache: %s", err)
