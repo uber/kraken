@@ -31,6 +31,13 @@ import (
 	"github.com/uber/kraken/utils/handler"
 )
 
+var retryableCodes = map[int]struct{}{
+	http.StatusTooManyRequests:    {},
+	http.StatusBadGateway:         {},
+	http.StatusServiceUnavailable: {},
+	http.StatusGatewayTimeout:     {},
+}
+
 // RoundTripper is an alias of the http.RoundTripper for mocking purposes.
 type RoundTripper = http.RoundTripper
 
@@ -96,6 +103,18 @@ func IsAccepted(err error) bool {
 // IsForbidden returns true if statis code is 403 "forbidden"
 func IsForbidden(err error) bool {
 	return IsStatus(err, http.StatusForbidden)
+}
+
+func isRetryable(code int) bool {
+	_, ok := retryableCodes[code]
+	return ok
+}
+
+// IsRetryable returns true if the statis code indicates that the request is
+// retryable.
+func IsRetryable(err error) bool {
+	statusErr, ok := err.(StatusError)
+	return ok && isRetryable(statusErr.Status)
 }
 
 // NetworkError occurs on any Send error which occurred while trying to send
@@ -304,7 +323,7 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 			}
 		}
 		if err != nil ||
-			(resp.StatusCode >= 500 && !opts.acceptedCodes[resp.StatusCode]) ||
+			(isRetryable(resp.StatusCode) && !opts.acceptedCodes[resp.StatusCode]) ||
 			(opts.retry.extraCodes[resp.StatusCode]) {
 			d := opts.retry.backoff.NextBackOff()
 			if d == backoff.Stop {
