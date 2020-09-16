@@ -74,7 +74,7 @@ func TestSendRetry(t *testing.T) {
 
 	transport := mockhttputil.NewMockRoundTripper(ctrl)
 
-	for _, status := range []int{503, 500, 200} {
+	for _, status := range []int{503, 502, 200} {
 		transport.EXPECT().RoundTrip(gomock.Any()).Return(newResponse(status), nil)
 	}
 
