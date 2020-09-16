@@ -120,7 +120,9 @@ func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob io.Read
 	// conflicts between local replicas.
 	for _, client := range clients {
 		err = client.UploadBlob(namespace, d, blob)
-		if httputil.IsNetworkError(err) {
+		// Allow retry on another origin if the current upstream is temporarily
+		// unavailable or under high load.
+		if httputil.IsNetworkError(err) || httputil.IsRetryable(err) {
 			continue
 		}
 		break

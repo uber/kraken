@@ -170,6 +170,29 @@ func TestPollSkipsOriginOnNetworkErrors(t *testing.T) {
 	}))
 }
 
+func TestPollSkipsOriginOnRetryableError(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
+
+	mockResolver := mockblobclient.NewMockClientResolver(ctrl)
+	cc := blobclient.NewClusterClient(mockResolver)
+
+	mockClient1 := mockblobclient.NewMockClient(ctrl)
+	mockClient2 := mockblobclient.NewMockClient(ctrl)
+
+	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
+
+	mockClient1.EXPECT().UploadBlob(namespace, blob.Digest, nil).Return(httputil.StatusError{Status: 503})
+	mockClient2.EXPECT().UploadBlob(namespace, blob.Digest, nil).Return(nil)
+
+	require.NoError(cc.UploadBlob(namespace, blob.Digest, nil))
+}
+
 func TestClusterClientReturnsErrorOnNoAvailableOrigins(t *testing.T) {
 	require := require.New(t)
 
