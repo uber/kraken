@@ -37,6 +37,8 @@ var _clientCABundle = path.Join(_genDir, "ca.crt")
 
 // Config defines nginx configuration.
 type Config struct {
+	Binary string `yaml:"binary"`
+
 	Root bool `yaml:"root"`
 
 	// Name defines the default nginx template for each component.
@@ -49,6 +51,12 @@ type Config struct {
 	LogDir   string `yaml:"log_dir"`
 
 	tls httputil.TLSConfig
+}
+
+func (c *Config) applyDefaults() {
+	if c.Binary == "" {
+		c.Binary = "/usr/sbin/nginx"
+	}
 }
 
 func (c *Config) inject(params map[string]interface{}) error {
@@ -121,6 +129,7 @@ func WithTLS(tls httputil.TLSConfig) Option {
 
 // Run injects params into an nginx configuration template and runs it.
 func Run(config Config, params map[string]interface{}, opts ...Option) error {
+	config.applyDefaults()
 	if config.Name == "" && config.TemplatePath == "" {
 		return errors.New("invalid config: name or template_path required")
 	}
@@ -187,7 +196,7 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 		return fmt.Errorf("open stdout log: %s", err)
 	}
 
-	args := []string{"/usr/sbin/nginx", "-g", "daemon off;", "-c", conf}
+	args := []string{config.Binary, "-g", "daemon off;", "-c", conf}
 	if config.Root {
 		args = append([]string{"sudo"}, args...)
 	}
