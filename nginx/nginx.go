@@ -53,6 +53,12 @@ type Config struct {
 	tls httputil.TLSConfig
 }
 
+func (c *Config) applyDefaults() {
+	if c.Binary == "" {
+		c.Binary = "/usr/sbin/nginx"
+	}
+}
+
 func (c *Config) inject(params map[string]interface{}) error {
 	for _, s := range []string{"cache_dir", "log_dir"} {
 		if _, ok := params[s]; ok {
@@ -113,13 +119,6 @@ func (c *Config) Build(params map[string]interface{}) ([]byte, error) {
 	return src, nil
 }
 
-func (c *Config) getBinary() string {
-	if c.Binary == "" {
-		return "/usr/sbin/nginx"
-	}
-	return c.Binary
-}
-
 // Option allows setting optional nginx configuration.
 type Option func(*Config)
 
@@ -130,6 +129,7 @@ func WithTLS(tls httputil.TLSConfig) Option {
 
 // Run injects params into an nginx configuration template and runs it.
 func Run(config Config, params map[string]interface{}, opts ...Option) error {
+	config.applyDefaults()
 	if config.Name == "" && config.TemplatePath == "" {
 		return errors.New("invalid config: name or template_path required")
 	}
@@ -196,7 +196,7 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 		return fmt.Errorf("open stdout log: %s", err)
 	}
 
-	args := []string{config.getBinary(), "-g", "daemon off;", "-c", conf}
+	args := []string{config.Binary, "-g", "daemon off;", "-c", conf}
 	if config.Root {
 		args = append([]string{"sudo"}, args...)
 	}
