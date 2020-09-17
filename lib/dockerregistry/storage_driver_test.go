@@ -22,8 +22,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/uber/kraken/core"
+	"github.com/docker/distribution/registry/storage/driver"
+	"github.com/docker/distribution/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/randutil"
 )
 
 func TestStorageDriverGetContent(t *testing.T) {
@@ -40,6 +43,7 @@ func TestStorageDriverGetContent(t *testing.T) {
 	if err != nil {
 		log.Panic(err)
 	}
+	newBlobPath := genBlobDataPath(core.DigestFixture().Hex())
 
 	testCases := []struct {
 		input string
@@ -52,6 +56,7 @@ func TestStorageDriverGetContent(t *testing.T) {
 		{genManifestTagCurrentLinkPath(testImage.repo, testImage.tag, testImage.manifest), []byte("sha256:" + testImage.manifest), nil},
 		{genManifestRevisionLinkPath(testImage.repo, testImage.manifest), []byte("sha256:" + testImage.manifest), nil},
 		{genBlobDataPath(testImage.layer1.Digest.Hex()), testImage.layer1.Content, nil},
+		{newBlobPath, nil, driver.PathNotFoundError{DriverName: "kraken", Path: newBlobPath}},
 	}
 
 	for _, tc := range testCases {
@@ -73,6 +78,7 @@ func TestStorageDriverReader(t *testing.T) {
 	defer cleanup()
 
 	sd, testImage := td.setup()
+	newBlobPath := genBlobDataPath(core.DigestFixture().Hex())
 
 	testCases := []struct {
 		input string
@@ -81,12 +87,17 @@ func TestStorageDriverReader(t *testing.T) {
 	}{
 		{genUploadDataPath(testImage.upload), []byte(uploadContent), nil},
 		{genBlobDataPath(testImage.layer1.Digest.Hex()), testImage.layer1.Content, nil},
+		{newBlobPath, nil, driver.PathNotFoundError{DriverName: "kraken", Path: newBlobPath}},
 	}
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetReader %s", tc.input), func(t *testing.T) {
 			require := require.New(t)
 			reader, err := sd.Reader(contextFixture(), tc.input, 0)
+			if tc.err != nil {
+				require.Equal(tc.err, err)
+				return
+			}
 			data, err := ioutil.ReadAll(reader)
 			require.Equal(tc.data, data)
 			require.Equal(tc.err, err)
@@ -134,6 +145,7 @@ func TestStorageDriverWriter(t *testing.T) {
 	defer cleanup()
 
 	sd, testImage := td.setup()
+	newUploadPath := genUploadDataPath(uuid.Generate().String())
 
 	testCases := []struct {
 		input string
@@ -141,6 +153,7 @@ func TestStorageDriverWriter(t *testing.T) {
 		err   error
 	}{
 		{genUploadDataPath(testImage.upload), []byte(uploadContent), nil},
+		{newUploadPath, nil, driver.PathNotFoundError{DriverName: "kraken", Path: newUploadPath}},
 		{genBlobDataPath(testImage.layer1.Digest.Hex()), nil, InvalidRequestError{genBlobDataPath(testImage.layer1.Digest.Hex())}},
 	}
 
@@ -170,6 +183,7 @@ func TestStorageDriverStat(t *testing.T) {
 	defer cleanup()
 
 	sd, testImage := td.setup()
+	newManifestPath := genManifestTagCurrentLinkPath(string(randutil.Text(4)), string(randutil.Text(4)), core.DigestFixture().Hex())
 
 	testCases := []struct {
 		input string
@@ -179,6 +193,7 @@ func TestStorageDriverStat(t *testing.T) {
 	}{
 		{genBlobDataPath(testImage.layer1.Digest.Hex()), testImage.layer1.Digest.Hex(), int64(len(testImage.layer1.Content)), nil},
 		{genUploadDataPath(testImage.upload), testImage.upload, int64(len(uploadContent)), nil},
+		{newManifestPath, "", 0, driver.PathNotFoundError{DriverName: "kraken", Path: newManifestPath}},
 	}
 
 	for _, tc := range testCases {

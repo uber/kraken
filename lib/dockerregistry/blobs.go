@@ -64,13 +64,7 @@ func (b *blobs) stat(ctx context.Context, path string) (storagedriver.FileInfo, 
 	}
 	bi, err := b.transferer.Stat(repo, digest)
 	if err != nil {
-		if err == transfer.ErrBlobNotFound {
-			return nil, storagedriver.PathNotFoundError{
-				DriverName: "kraken",
-				Path:       digest.Hex(),
-			}
-		}
-		return nil, fmt.Errorf("transferer stat: %s", err)
+		return nil, fmt.Errorf("transferer stat: %w", err)
 	}
 	// Hacking the path, since kraken storage driver is also the consumer of this info.
 	// Instead of the relative path from root that docker registry expected, just use content hash.
@@ -112,13 +106,7 @@ func (b *blobs) getCacheReaderHelper(
 
 	r, err := b.transferer.Download(repo, digest)
 	if err != nil {
-		if err == transfer.ErrBlobNotFound {
-			return nil, storagedriver.PathNotFoundError{
-				DriverName: "kraken",
-				Path:       digest.Hex(),
-			}
-		}
-		return nil, fmt.Errorf("transferer download: %s", err)
+		return nil, fmt.Errorf("transferer download: %w", err)
 	}
 
 	if _, err := r.Seek(offset, 0); err != nil {

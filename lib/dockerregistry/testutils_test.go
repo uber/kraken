@@ -24,6 +24,7 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/dockerutil"
 
+	"github.com/docker/distribution/uuid"
 	"github.com/uber-go/tally"
 )
 
@@ -32,7 +33,6 @@ const (
 	tagName          = "latest"
 	hashStateContent = "this is a test hashstate"
 	uploadContent    = "this is a test upload"
-	uploadUUID       = "a20fe261-0060-467f-a44e-46eba3798d63"
 )
 
 // TODO(codyg): Get rid of this and all of the above constants.
@@ -60,6 +60,7 @@ func (d *testDriver) setup() (*KrakenStorageDriver, testImageUploadBundle) {
 	sd := NewReadWriteStorageDriver(Config{}, d.cas, d.transferer, tally.NoopScope)
 
 	// Create upload
+	uploadUUID := uuid.Generate().String()
 	path := genUploadStartedAtPath(uploadUUID)
 	if err := sd.uploads.putContent(path, _startedat, nil); err != nil {
 		log.Panic(err)
