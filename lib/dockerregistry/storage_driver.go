@@ -67,17 +67,13 @@ func (e InvalidRequestError) Error() string {
 	return fmt.Sprintf("invalid request: %s", e.path)
 }
 
-// toDriverError wraps ErrNotExist and ErrBlobNotFound errors to
-// driver.PathNotFoundError.
 func toDriverError(err error, path string) error {
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) ||
-			errors.Is(err, transfer.ErrBlobNotFound) ||
-			errors.Is(err, transfer.ErrTagNotFound) {
-			return driver.PathNotFoundError{
-				DriverName: "kraken",
-				Path:       path,
-			}
+	if errors.Is(err, os.ErrNotExist) ||
+		errors.Is(err, transfer.ErrBlobNotFound) ||
+		errors.Is(err, transfer.ErrTagNotFound) {
+		return driver.PathNotFoundError{
+			DriverName: Name,
+			Path:       path,
 		}
 	}
 	return err
@@ -165,13 +161,14 @@ func (d *KrakenStorageDriver) Name() string {
 
 // GetContent returns content in the path
 // sample path: /docker/registry/v2/repositories/external/ubuntu/_layers/sha256/a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4/link
-func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data []byte, err error) {
+func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) ([]byte, error) {
 	log.Debugf("(*KrakenStorageDriver).GetContent %s", path)
 	pathType, pathSubType, err := ParsePath(path)
 	if err != nil {
 		return nil, err
 	}
 
+	var data []byte
 	switch pathType {
 	case _manifests:
 		data, err = d.manifests.getDigest(path, pathSubType)
@@ -191,13 +188,14 @@ func (d *KrakenStorageDriver) GetContent(ctx context.Context, path string) (data
 }
 
 // Reader returns a reader of path at offset
-func (d *KrakenStorageDriver) Reader(ctx context.Context, path string, offset int64) (reader io.ReadCloser, err error) {
+func (d *KrakenStorageDriver) Reader(ctx context.Context, path string, offset int64) (io.ReadCloser, error) {
 	log.Debugf("(*KrakenStorageDriver).Reader %s", path)
 	pathType, pathSubType, err := ParsePath(path)
 	if err != nil {
 		return nil, err
 	}
 
+	var reader io.ReadCloser
 	switch pathType {
 	case _uploads:
 		reader, err = d.uploads.reader(path, pathSubType, offset)
@@ -265,13 +263,14 @@ func (d *KrakenStorageDriver) Writer(ctx context.Context, path string, append bo
 }
 
 // Stat returns fileinfo of path
-func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (info driver.FileInfo, err error) {
+func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (driver.FileInfo, error) {
 	log.Debugf("(*KrakenStorageDriver).Stat %s", path)
 	pathType, _, err := ParsePath(path)
 	if err != nil {
 		return nil, err
 	}
 
+	var info driver.FileInfo
 	switch pathType {
 	case _uploads:
 		info, err = d.uploads.stat(path)
@@ -289,13 +288,14 @@ func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (info drive
 }
 
 // List returns a list of content given path
-func (d *KrakenStorageDriver) List(ctx context.Context, path string) (l []string, err error) {
+func (d *KrakenStorageDriver) List(ctx context.Context, path string) ([]string, error) {
 	log.Debugf("(*KrakenStorageDriver).List %s", path)
 	pathType, pathSubType, err := ParsePath(path)
 	if err != nil {
 		return nil, err
 	}
 
+	var l []string
 	switch pathType {
 	case _uploads:
 		l, err = d.uploads.list(path, pathSubType)
@@ -320,18 +320,21 @@ func (d *KrakenStorageDriver) Move(ctx context.Context, sourcePath string, destP
 
 	switch pathType {
 	case _uploads:
-		//return d.uploads.move(sourcePath, destPath)
-		return toDriverError(d.uploads.move(sourcePath, destPath), sourcePath)
+		err = d.uploads.move(sourcePath, destPath)
 	default:
 		return InvalidRequestError{sourcePath + " to " + destPath}
 	}
+	if err != nil {
+		return toDriverError(err, sourcePath)
+	}
+	return nil
 }
 
 // Delete deletes path
 func (d *KrakenStorageDriver) Delete(ctx context.Context, path string) error {
 	log.Debugf("(*KrakenStorageDriver).Delete %s", path)
 	return driver.PathNotFoundError{
-		DriverName: "kraken",
+		DriverName: Name,
 		Path:       path,
 	}
 }
