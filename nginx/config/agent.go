@@ -30,8 +30,8 @@ server {
 
   {{.client_verification}}
 
-  access_log {{.log_dir}}/nginx-access.v2.log;
-  error_log {{.log_dir}}/nginx-error.v2.log;
+  access_log {{.access_log_path}};
+  error_log {{.error_log_path}};
 
   gzip on;
   gzip_types text/plain test/csv application/json;

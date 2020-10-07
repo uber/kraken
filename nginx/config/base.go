@@ -81,9 +81,6 @@ http {
   # Logging Settings
   ##
 
-  # access_log /var/log/nginx/access.log;
-  error_log /var/log/nginx/error.log;
-
   # JSON log_format
   log_format json '{'
        '"verb":"$request_method",'
