@@ -38,25 +38,8 @@ LINUX_BINS = \
 
 REGISTRY ?= gcr.io/uber-container-tools
 
-agent/agent:: $(wildcard agent/*.go)
+$(LINUX_BINS):: $(ALL_SRC)
 	$(CROSS_COMPILER)
-
-build-index/build-index:: $(wildcard build-index/*.go)
-	$(CROSS_COMPILER)
-
-origin/origin:: $(wildcard origin/*.go)
-	$(CROSS_COMPILER)
-
-proxy/proxy:: $(wildcard proxy/*.go)
-	$(CROSS_COMPILER)
-
-tools/bin/testfs/testfs:: $(wildcard tools/bin/testfs/*.go)
-	$(CROSS_COMPILER)
-
-tracker/tracker:: $(wildcard tracker/*.go)
-	$(CROSS_COMPILER)
-
-$(LINUX_BINS)::
 
 define tag_image
 	docker tag $(1):$(PACKAGE_VERSION) $(1):dev
