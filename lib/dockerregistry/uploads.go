@@ -83,10 +83,10 @@ func (u *casUploads) reader(path string, subtype PathSubType, offset int64) (io.
 		}
 		r, err := u.cas.GetUploadFileReader(uuid)
 		if err != nil {
-			return nil, fmt.Errorf("get reader: %s", err)
+			return nil, fmt.Errorf("get reader: %w", err)
 		}
 		if _, err := r.Seek(offset, io.SeekStart); err != nil {
-			return nil, fmt.Errorf("seek: %s", err)
+			return nil, fmt.Errorf("seek: %w", err)
 		}
 		return r, nil
 	}
@@ -101,11 +101,11 @@ func (u *casUploads) putContent(path string, subtype PathSubType, content []byte
 	switch subtype {
 	case _startedat:
 		if err := u.cas.CreateUploadFile(uuid, 0); err != nil {
-			return fmt.Errorf("create upload file: %s", err)
+			return fmt.Errorf("create upload file: %w", err)
 		}
 		s := newStartedAtMetadata(time.Now())
 		if err := u.cas.SetUploadFileMetadata(uuid, s); err != nil {
-			return fmt.Errorf("set started at: %s", err)
+			return fmt.Errorf("set started at: %w", err)
 		}
 		return nil
 	case _hashstates:
@@ -128,10 +128,10 @@ func (u *casUploads) putBlobContent(path string, content []byte) error {
 		return fmt.Errorf("get digest: %s", err)
 	}
 	if err := u.cas.CreateCacheFile(d.Hex(), bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("create cache file: %s", err)
+		return fmt.Errorf("create cache file: %w", err)
 	}
 	if err := u.transferer.Upload("TODO", d, store.NewBufferFileReader(content)); err != nil {
-		return fmt.Errorf("upload: %s", err)
+		return fmt.Errorf("upload: %w", err)
 	}
 	return nil
 }
@@ -199,14 +199,14 @@ func (u *casUploads) move(uploadPath, blobPath string) error {
 		return fmt.Errorf("get blob uuid: %s", err)
 	}
 	if err := u.cas.MoveUploadFileToCache(uuid, d.Hex()); err != nil {
-		return fmt.Errorf("move upload file to cache: %s", err)
+		return fmt.Errorf("move upload file to cache: %w", err)
 	}
 	f, err := u.cas.GetCacheFileReader(d.Hex())
 	if err != nil {
-		return fmt.Errorf("get cache file: %s", err)
+		return fmt.Errorf("get cache file: %w", err)
 	}
 	if err := u.transferer.Upload("TODO", d, f); err != nil {
-		return fmt.Errorf("upload: %s", err)
+		return fmt.Errorf("upload: %w", err)
 	}
 	return nil
 }

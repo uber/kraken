@@ -18,10 +18,10 @@ import (
 	"strings"
 	"time"
 
+	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/utils/log"
-	storagedriver "github.com/docker/distribution/registry/storage/driver"
 )
 
 const (
@@ -61,13 +61,7 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 		}
 		digest, err = t.transferer.GetTag(fmt.Sprintf("%s:%s", repo, tag))
 		if err != nil {
-			if err == transfer.ErrTagNotFound {
-				return nil, storagedriver.PathNotFoundError{
-					DriverName: "kraken",
-					Path:       digest.String(),
-				}
-			}
-			return nil, fmt.Errorf("transferer get tag: %s", err)
+			return nil, fmt.Errorf("transferer get tag: %w", err)
 		}
 	case _revisions:
 		var err error
@@ -81,13 +75,7 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 
 	blob, err := t.transferer.Download(repo, digest)
 	if err != nil {
-		if err == transfer.ErrBlobNotFound {
-			return nil, storagedriver.PathNotFoundError{
-				DriverName: "kraken",
-				Path:       digest.String(),
-			}
-		}
-		return nil, fmt.Errorf("transferer download: %s", err)
+		return nil, fmt.Errorf("transferer download: %w", err)
 	}
 	defer blob.Close()
 
@@ -113,7 +101,7 @@ func (t *manifests) putContent(path string, subtype PathSubType) error {
 			return fmt.Errorf("get manifest digest: %s", err)
 		}
 		if err := t.transferer.PutTag(fmt.Sprintf("%s:%s", repo, tag), digest); err != nil {
-			return fmt.Errorf("post tag: %s", err)
+			return fmt.Errorf("post tag: %w", err)
 		}
 		return nil
 	}
@@ -131,13 +119,7 @@ func (t *manifests) stat(path string) (storagedriver.FileInfo, error) {
 		return nil, fmt.Errorf("get manifest tag: %s", err)
 	}
 	if _, err := t.transferer.GetTag(fmt.Sprintf("%s:%s", repo, tag)); err != nil {
-		if err == transfer.ErrTagNotFound {
-			return nil, storagedriver.PathNotFoundError{
-				DriverName: "kraken",
-				Path:       path,
-			}
-		}
-		return nil, fmt.Errorf("get tag: %s", err)
+		return nil, fmt.Errorf("get tag: %w", err)
 	}
 	return storagedriver.FileInfoInternal{
 		FileInfoFields: storagedriver.FileInfoFields{

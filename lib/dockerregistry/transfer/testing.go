@@ -14,7 +14,6 @@
 package transfer
 
 import (
-	"errors"
 	"fmt"
 	"path"
 	"strings"
@@ -48,7 +47,7 @@ func NewTestTransferer(cas *store.CAStore) ImageTransferer {
 func (t *testTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
 	fi, err := t.cas.GetCacheFileStat(d.Hex())
 	if err != nil {
-		return nil, fmt.Errorf("stat cache file: %s", err)
+		return nil, fmt.Errorf("stat cache file: %w", err)
 	}
 	return core.NewBlobInfo(fi.Size()), nil
 }
@@ -68,7 +67,7 @@ func (t *testTransferer) GetTag(tag string) (core.Digest, error) {
 	}
 	d, ok := t.tags[p]
 	if !ok {
-		return core.Digest{}, errors.New("tag not found")
+		return core.Digest{}, ErrTagNotFound
 	}
 	return d, nil
 }
