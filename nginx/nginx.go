@@ -52,6 +52,7 @@ type Config struct {
 	LogDir string `yaml:"log_dir"`
 
 	// Optional log path overrides.
+	StdoutLogPath string `yaml:"stdout_log_path"`
 	AccessLogPath string `yaml:"access_log_path"`
 	ErrorLogPath  string `yaml:"error_log_path"`
 
@@ -61,6 +62,12 @@ type Config struct {
 func (c *Config) applyDefaults() error {
 	if c.Binary == "" {
 		c.Binary = "/usr/sbin/nginx"
+	}
+	if c.StdoutLogPath == "" {
+		if c.LogDir == "" {
+			return errors.New("one of log_dir or stdout_log_path must be set")
+		}
+		c.StdoutLogPath = filepath.Join(c.LogDir, "nginx-stdout.log")
 	}
 	if c.AccessLogPath == "" {
 		if c.LogDir == "" {
@@ -208,8 +215,7 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 		return fmt.Errorf("write src: %s", err)
 	}
 
-	stdoutLog := path.Join(config.LogDir, "nginx-stdout.log")
-	stdout, err := os.OpenFile(stdoutLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	stdout, err := os.OpenFile(config.StdoutLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("open stdout log: %s", err)
 	}
