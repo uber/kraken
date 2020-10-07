@@ -48,25 +48,44 @@ type Config struct {
 	TemplatePath string `yaml:"template_path"`
 
 	CacheDir string `yaml:"cache_dir"`
-	LogDir   string `yaml:"log_dir"`
+
+	LogDir string `yaml:"log_dir"`
+
+	// Optional log path overrides.
+	AccessLogPath string `yaml:"access_log_path"`
+	ErrorLogPath  string `yaml:"error_log_path"`
 
 	tls httputil.TLSConfig
 }
 
-func (c *Config) applyDefaults() {
+func (c *Config) applyDefaults() error {
 	if c.Binary == "" {
 		c.Binary = "/usr/sbin/nginx"
 	}
+	if c.AccessLogPath == "" {
+		if c.LogDir == "" {
+			return errors.New("one of log_dir or access_log_path must be set")
+		}
+		c.AccessLogPath = filepath.Join(c.LogDir, "nginx-access.log")
+	}
+	if c.ErrorLogPath == "" {
+		if c.LogDir == "" {
+			return errors.New("one of log_dir or error_log_path must be set")
+		}
+		c.ErrorLogPath = filepath.Join(c.LogDir, "nginx-error.log")
+	}
+	return nil
 }
 
 func (c *Config) inject(params map[string]interface{}) error {
-	for _, s := range []string{"cache_dir", "log_dir"} {
+	for _, s := range []string{"cache_dir", "access_log_path", "error_log_path"} {
 		if _, ok := params[s]; ok {
 			return fmt.Errorf("invalid params: %s is reserved", s)
 		}
 	}
 	params["cache_dir"] = c.CacheDir
-	params["log_dir"] = c.LogDir
+	params["access_log_path"] = c.AccessLogPath
+	params["error_log_path"] = c.ErrorLogPath
 	return nil
 }
 
@@ -129,15 +148,14 @@ func WithTLS(tls httputil.TLSConfig) Option {
 
 // Run injects params into an nginx configuration template and runs it.
 func Run(config Config, params map[string]interface{}, opts ...Option) error {
-	config.applyDefaults()
+	if err := config.applyDefaults(); err != nil {
+		return fmt.Errorf("invalid config: %s", err)
+	}
 	if config.Name == "" && config.TemplatePath == "" {
 		return errors.New("invalid config: name or template_path required")
 	}
 	if config.CacheDir == "" {
 		return errors.New("invalid config: cache_dir required")
-	}
-	if config.LogDir == "" {
-		return errors.New("invalid config: log_dir required")
 	}
 	for _, opt := range opts {
 		opt(&config)
