@@ -20,7 +20,7 @@ Here are some example configuration files we used for dev cluster (which can be 
 
 They are split into a base.yaml that contains configs that we have been using for test, development
 and production, and a development.yaml that contains configs specifically needed for starting dev
-cluster using Docker-for-Mac, and need to updated for production setups.
+cluster using Docker-for-Mac, and need to be updated for production setups.
 
 - Origin
   - [base.yaml](../config/origin/base.yaml)
@@ -57,7 +57,7 @@ Kraken's peer-to-peer network consists of agents, origins and trackers. Origins 
 >     peer_set_window_size: 1h
 >     max_peer_set_windows: 5
 >```
-As peers announce periodically to a tracker, the tracker stores the announce requests into several time window bucket.
+As peers announce periodically to a tracker, the tracker stores the announce requests into several time window buckets.
 Each announce request expires in `peer_set_window_size * max_peer_set_windows` time.
 
 Then, the tracker returns a random set of peers selecting from `max_peer_set_windows` number of time bucket.
@@ -98,7 +98,7 @@ SeederTTI (time-to-idle) is the duration a completed torrent will exist without 
 >scheduler:
 >   seeder_tti: 5m
 >```
-However, until it is deleted by periodic storage purge, completed torrents will remain on disk and can be re-opened on another peer's request.
+However, until they are deleted by periodic storage purge, completed torrents will remain on disk and can be re-opened on another peer's request.
 
 ## Torrent TTI On Disk
 
@@ -112,7 +112,7 @@ Both agents and origins can be configured to cleanup idle torrents on disk perio
 >     tti: 6h
 >```
 
-For origins, the number of files can also be limited as origins are dedicated seeders and hence normally caches files on disk for longer time.
+For origins, the number of files can also be limited as origins are dedicated seeders and hence normally cache files on disk for longer time.
 >origin.yaml
 >```yaml
 >store:
@@ -122,7 +122,7 @@ For origins, the number of files can also be limited as origins are dedicated se
 
 # Configuring Hash Ring
 
-Both orgin and tracker clusters are self-healing hash rings and both can be represented by either a dns name or a static list of hosts.
+Both origin and tracker clusters are self-healing hash rings and both can be represented by either a dns name or a static list of hosts.
 
 We use rendezvous hashing for constructing ring membership.
 
@@ -167,7 +167,7 @@ Above configures health check ping from one origin to others every 30 seconds. I
 
 ### Passive Health Check
 
-Agents health checks tracker, piggybacking on the announce requests.
+Agents health check tracker, piggybacking on the announce requests.
 >agent.yaml
 >```yaml
 >tracker:
@@ -290,7 +290,7 @@ For simple local testing with an insecure registry (assuming it listens on `host
 
 ## Bandwidth on Origin
 
-When transferring data from and to its storage backend, origins can be configured with download and upload bandwidths. This is useful when using cloud storage providers to prevent origins from saturating the network link.
+When transferring data from and to their storage backend, origins can be configured with download and upload bandwidths. This is useful when using cloud storage providers to prevent origins from saturating the network link.
 >origin.yaml
 >```yaml
 >backends:
