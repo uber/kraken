@@ -32,8 +32,9 @@ func Register(name string, factory ClientFactory) {
 	_factories[name] = factory
 }
 
-// getFactory returns backend client factory given client name.
-func getFactory(name string) (ClientFactory, error) {
+// GetFactory returns backend client factory given client name.
+// This function should stay public to allow for wrapper custom backends.
+func GetFactory(name string) (ClientFactory, error) {
 	factory, ok := _factories[name]
 	if !ok {
 		return nil, fmt.Errorf("no backend client defined with name %s", name)
