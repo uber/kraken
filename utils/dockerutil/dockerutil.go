@@ -19,21 +19,18 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/uber/kraken/core"
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/schema2"
+	"github.com/uber/kraken/core"
 )
 
 // ParseManifestV2 returns a parsed v2 manifest and its digest
-func ParseManifestV2(r io.Reader) (distribution.Manifest, core.Digest, error) {
-	b, err := ioutil.ReadAll(r)
+func ParseManifestV2(r io.Reader) (manifest distribution.Manifest, digest core.Digest, err error) {
+	manifest, digest, err = ParseManifest(schema2.MediaTypeManifest, r)
 	if err != nil {
-		return nil, core.Digest{}, fmt.Errorf("read: %s", err)
+		return
 	}
-	manifest, desc, err := distribution.UnmarshalManifest(schema2.MediaTypeManifest, b)
-	if err != nil {
-		return nil, core.Digest{}, fmt.Errorf("unmarshal manifest: %s", err)
-	}
+
 	deserializedManifest, ok := manifest.(*schema2.DeserializedManifest)
 	if !ok {
 		return nil, core.Digest{}, errors.New("expected schema2.DeserializedManifest")
@@ -41,6 +38,20 @@ func ParseManifestV2(r io.Reader) (distribution.Manifest, core.Digest, error) {
 	version := deserializedManifest.Manifest.Versioned.SchemaVersion
 	if version != 2 {
 		return nil, core.Digest{}, fmt.Errorf("unsupported manifest version: %d", version)
+	}
+
+	return
+}
+
+// ParseManifest returns a parsed manifest and its digest
+func ParseManifest(contentType string, r io.Reader) (distribution.Manifest, core.Digest, error) {
+	b, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("read: %s", err)
+	}
+	manifest, desc, err := distribution.UnmarshalManifest(contentType, b)
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("unmarshal manifest: %s", err)
 	}
 	d, err := core.ParseSHA256Digest(string(desc.Digest))
 	if err != nil {
