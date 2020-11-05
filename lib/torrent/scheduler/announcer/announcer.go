@@ -89,7 +89,7 @@ func Default(
 func (a *Announcer) Announce(
 	d core.Digest, h core.InfoHash, complete bool) ([]*core.PeerInfo, error) {
 
-	peers, interval, err := a.client.Announce(d, h, complete, announceclient.V1)
+	peers, interval, err := a.client.Announce(d, h, complete, announceclient.V2)
 	if err != nil {
 		return nil, err
 	}

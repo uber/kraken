@@ -97,7 +97,7 @@ func TestAnnouncerAnnounceUpdatesInterval(t *testing.T) {
 	interval := 10 * time.Second
 	peers := []*core.PeerInfo{core.PeerInfoFixture()}
 
-	mocks.client.EXPECT().Announce(d, hash, false, announceclient.V1).Return(peers, interval, nil)
+	mocks.client.EXPECT().Announce(d, hash, false, announceclient.V2).Return(peers, interval, nil)
 
 	result, err := announcer.Announce(d, hash, false)
 	require.NoError(err)
@@ -129,7 +129,7 @@ func TestAnnouncerAnnounceErr(t *testing.T) {
 	hash := core.InfoHashFixture()
 	err := errors.New("some error")
 
-	mocks.client.EXPECT().Announce(d, hash, false, announceclient.V1).Return(nil, time.Duration(0), err)
+	mocks.client.EXPECT().Announce(d, hash, false, announceclient.V2).Return(nil, time.Duration(0), err)
 
 	_, aErr := announcer.Announce(d, hash, false)
 	require.Equal(err, aErr)
