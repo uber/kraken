@@ -21,6 +21,9 @@ import (
 	"strconv"
 	"strings"
 
+	// import schema1 to have it register its unmarshalling functions with github.com/docker/distribution.RegisterManifestSchema()
+	_ "github.com/docker/distribution/manifest/schema1"
+	"github.com/docker/distribution/manifest/schema2"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
@@ -141,9 +144,14 @@ func (c *TagClient) Download(namespace, name string, dst io.Writer) error {
 		return backenderrors.ErrBlobNotFound
 	}
 
-	_, digest, err := dockerutil.ParseManifestV2(resp.Body)
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/vnd.docker.distribution.manifest") {
+		contentType = schema2.MediaTypeManifest
+	}
+
+	_, digest, err := dockerutil.ParseManifest(contentType, resp.Body)
 	if err != nil {
-		return fmt.Errorf("parse manifest v2: %s", err)
+		return fmt.Errorf("parse manifest: %s", err)
 	}
 	if _, err := io.Copy(dst, strings.NewReader(digest.String())); err != nil {
 		return fmt.Errorf("copy: %s", err)
