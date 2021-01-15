@@ -56,45 +56,49 @@ type Secret struct {
 
 // BuildClient builts tls.Config for http client.
 func (c *TLSConfig) BuildClient() (*tls.Config, error) {
-	if c.Client.Disabled {
-		log.Infof("Client TLS is disabled")
-		return nil, nil
-	}
 	if c.tls != nil {
 		return c.tls, nil
 	}
 
-	var caPool *x509.CertPool
-	var certs []tls.Certificate
-	var err error
-	if len(c.CAs) > 0 {
-		caPool, err = createCertPool(c.CAs)
-		if err != nil {
-			return nil, fmt.Errorf("create cert pool: %s", err)
-		}
-	}
-	if c.Client.Cert.Path != "" {
-		certPEM, err := parseCert(c.Client.Cert.Path)
-		if err != nil {
-			return nil, fmt.Errorf("parse client cert: %s", err)
-		}
-		keyPEM, err := parseKey(c.Client.Key.Path, c.Client.Passphrase.Path)
-		if err != nil {
-			return nil, fmt.Errorf("parse client key: %s", err)
-		}
-		cert, err := tls.X509KeyPair(certPEM, keyPEM)
-		if err != nil {
-			return nil, fmt.Errorf("load client x509 key pair: %s", err)
-		}
-		certs = []tls.Certificate{cert}
-	}
-	c.tls = &tls.Config{
-		Certificates:             certs,
-		RootCAs:                  caPool,
-		ServerName:               c.Name,
+	config := &tls.Config{
 		PreferServerCipherSuites: true,
-		InsecureSkipVerify:       false, // This is important to enforce verification of server.
 	}
+
+	if c.Server.Disabled {
+		log.Warnf("Server cert verification is disabled")
+		config.InsecureSkipVerify = true
+	} else {
+		config.InsecureSkipVerify = false // This is important to enforce verification of server.
+		config.ServerName = c.Name
+		if len(c.CAs) > 0 {
+			var err error
+			config.RootCAs, err = createCertPool(c.CAs)
+			if err != nil {
+				return nil, fmt.Errorf("create cert pool: %s", err)
+			}
+		}
+	}
+
+	if c.Client.Disabled {
+		log.Infof("Client TLS is disabled")
+	} else {
+		if c.Client.Cert.Path != "" {
+			certPEM, err := parseCert(c.Client.Cert.Path)
+			if err != nil {
+				return nil, fmt.Errorf("parse client cert: %s", err)
+			}
+			keyPEM, err := parseKey(c.Client.Key.Path, c.Client.Passphrase.Path)
+			if err != nil {
+				return nil, fmt.Errorf("parse client key: %s", err)
+			}
+			cert, err := tls.X509KeyPair(certPEM, keyPEM)
+			if err != nil {
+				return nil, fmt.Errorf("load client x509 key pair: %s", err)
+			}
+			config.Certificates = []tls.Certificate{cert}
+		}
+	}
+	c.tls = config
 	return c.tls, nil
 }
 
