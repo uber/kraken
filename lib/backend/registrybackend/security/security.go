@@ -72,17 +72,16 @@ type authenticator struct {
 // address, TLS, and credentials configuration. It supports both basic auth and
 // token based authentication challenges. If TLS is disabled, no authentication
 // is attempted.
-func NewAuthenticator(address string, config Config) (Authenticator, error) {
-	rt := http.DefaultTransport.(*http.Transport).Clone()
+func NewAuthenticator(address string, config Config, transport *http.Transport) (Authenticator, error) {
 	tlsClientConfig, err := config.TLS.BuildClient()
 	if err != nil {
 		return nil, fmt.Errorf("build tls config for %q: %s", address, err)
 	}
-	rt.TLSClientConfig = tlsClientConfig
+	transport.TLSClientConfig = tlsClientConfig
 	return &authenticator{
 		address:          address,
 		config:           config,
-		roundTripper:     rt,
+		roundTripper:     transport,
 		credentialStore:  newCredentialStore(address, config),
 		challengeManager: challenge.NewSimpleManager(),
 	}, nil

@@ -20,8 +20,10 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pressly/chi"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
@@ -96,4 +98,70 @@ func TestTagDownloadFileNotFound(t *testing.T) {
 
 	var b bytes.Buffer
 	require.Equal(backenderrors.ErrBlobNotFound, client.Download(tag, tag, &b))
+}
+
+func TestTagDownloadHeaderTimeout(t *testing.T) {
+	require := require.New(t)
+
+	imageConfig := core.NewBlobFixture()
+	layer1 := core.NewBlobFixture()
+	layer2 := core.NewBlobFixture()
+	digest, manifest := dockerutil.ManifestFixture(
+		imageConfig.Digest, layer1.Digest, layer2.Digest)
+
+	tag := core.TagFixture()
+	namespace := strings.Split(tag, ":")[0]
+
+	r := chi.NewRouter()
+	r.Get(fmt.Sprintf("/v2/%s/manifests/{tag}", namespace), func(w http.ResponseWriter, req *http.Request) {
+		time.Sleep(time.Second)
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(manifest)))
+		w.Header().Set("Docker-Content-Digest", digest.String())
+		_, _ = io.Copy(w, bytes.NewReader(manifest))
+	})
+	r.Head(fmt.Sprintf("/v2/%s/manifests/{tag}", namespace), func(w http.ResponseWriter, req *http.Request) {
+		time.Sleep(time.Second)
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(manifest)))
+		w.Header().Set("Docker-Content-Digest", digest.String())
+		_, _ = io.Copy(w, bytes.NewReader(manifest))
+	})
+	addr, stop := testutil.StartServer(r)
+	defer stop()
+
+	config := newTestConfig(addr)
+	config.ResponseHeaderTimeout = 100 * time.Millisecond
+	client, err := NewTagClient(config)
+	require.NoError(err)
+
+	_, err = client.Stat(tag, tag)
+	if assert.NotNil(t, err) {
+		assert.Contains(t, err.Error(), "timeout awaiting response headers")
+	}
+
+	var b bytes.Buffer
+	err = client.Download(tag, tag, &b)
+	if assert.NotNil(t, err) {
+		assert.Contains(t, err.Error(), "timeout awaiting response headers")
+	}
+}
+
+func TestTagDownloadConnectTimeout(t *testing.T) {
+	require := require.New(t)
+
+	// unroutable address, courtesy of https://stackoverflow.com/a/904609/4867444
+	config := newTestConfig("10.255.255.1")
+	config.ConnectTimeout = 100 * time.Millisecond
+	client, err := NewTagClient(config)
+	require.NoError(err)
+
+	_, err = client.Stat("dummynamespace", "image:tag")
+	if assert.NotNil(t, err) {
+		assert.Contains(t, err.Error(), "i/o timeout")
+	}
+
+	var b bytes.Buffer
+	err = client.Download("dummynamespace", "image:tag", &b)
+	if assert.NotNil(t, err) {
+		assert.Contains(t, err.Error(), "i/o timeout")
+	}
 }

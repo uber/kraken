@@ -14,6 +14,8 @@
 package registrybackend
 
 import (
+	"net"
+	"net/http"
 	"time"
 
 	"github.com/uber/kraken/lib/backend/registrybackend/security"
@@ -21,9 +23,13 @@ import (
 
 // Config defines the registry address, timeout and security options.
 type Config struct {
-	Address  string          `yaml:"address"`
-	Timeout  time.Duration   `yaml:"timeout"`
-	Security security.Config `yaml:"security"`
+	Address string        `yaml:"address"`
+	Timeout time.Duration `yaml:"timeout"`
+	// ConnectTimeout limits the time spent establishing the TCP connection (if a new one is needed).
+	ConnectTimeout time.Duration `yaml:"connect_timeout"`
+	// ResponseHeaderTimeout limits the time spent reading the headers of the response.
+	ResponseHeaderTimeout time.Duration   `yaml:"response_header_timeout"`
+	Security              security.Config `yaml:"security"`
 }
 
 // Set default configuration
@@ -32,4 +38,22 @@ func (c Config) applyDefaults() Config {
 		c.Timeout = 60 * time.Second
 	}
 	return c
+}
+
+func (c Config) Authenticator() (security.Authenticator, error) {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+
+	if c.ConnectTimeout != 0 {
+		dialer := &net.Dialer{
+			Timeout:   c.ConnectTimeout,
+			KeepAlive: 30 * time.Second,
+		}
+		transport.DialContext = dialer.DialContext
+	}
+
+	if c.ResponseHeaderTimeout != 0 {
+		transport.ResponseHeaderTimeout = c.ResponseHeaderTimeout
+	}
+
+	return security.NewAuthenticator(c.Address, c.Security, transport)
 }
