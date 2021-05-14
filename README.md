@@ -56,7 +56,7 @@ Following are some highlights of Kraken:
 
 # Design
 
-The high-level idea of Kraken is to have a small number of dedicated hosts seeding content to a
+The High-level idea of Kraken is to have a small number of dedicated hosts seeding content to a
 network of agents running on each host in the cluster.
 
 A central component, the tracker, will orchestrate all participants in the network to form a
