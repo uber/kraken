@@ -188,7 +188,7 @@ func (c *HTTPClient) DuplicateUploadBlob(
 
 // DownloadBlob downloads blob for d. If the blob of d is not available yet
 // (i.e. still downloading), returns 202 httputil.StatusError, indicating that
-// the request shoudl be retried later. If not blob exists for d, returns a 404
+// the request should be retried later. If not blob exists for d, returns a 404
 // httputil.StatusError.
 func (c *HTTPClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
 	r, err := httputil.Get(
