@@ -36,15 +36,6 @@ type Manager interface {
 	Find(query interface{}) ([]Task, error)
 }
 
-type queue struct {
-	tasks   chan Task
-	counter tally.Counter
-}
-
-func newQueue(size int, counter tally.Counter) *queue {
-	return &queue{make(chan Task, size), counter}
-}
-
 type manager struct {
 	config   Config
 	stats    tally.Scope
@@ -53,8 +44,8 @@ type manager struct {
 
 	wg sync.WaitGroup
 
-	incoming *queue
-	retries  *queue
+	incoming chan Task
+	retries  chan Task
 
 	closeOnce sync.Once
 	done      chan struct{}
@@ -75,8 +66,8 @@ func NewManager(
 		stats:    stats,
 		store:    store,
 		executor: executor,
-		incoming: newQueue(config.IncomingBuffer, stats.Counter("incoming")),
-		retries:  newQueue(config.RetryBuffer, stats.Counter("retries")),
+		incoming: make(chan Task, config.IncomingBuffer),
+		retries:  make(chan Task, config.RetryBuffer),
 		done:     make(chan struct{}),
 	}
 	if err := m.markPendingTasksAsFailed(); err != nil {
@@ -171,10 +162,9 @@ func (m *manager) Find(query interface{}) ([]Task, error) {
 	return m.store.Find(query)
 }
 
-func (m *manager) enqueue(t Task, q *queue) error {
+func (m *manager) enqueue(t Task, tasks chan Task) error {
 	select {
-	case q.tasks <- t:
-		q.counter.Inc(1)
+	case tasks <- t:
 	default:
 		// If task queue is full, fallback task to failure state so it can be
 		// picked up by a retry round.
@@ -195,15 +185,14 @@ func (m *manager) retry(t Task) error {
 	return nil
 }
 
-func (m *manager) worker(q *queue, limit time.Duration) {
+func (m *manager) worker(tasks chan Task, limit time.Duration) {
 	defer m.wg.Done()
 
 	for {
 		select {
 		case <-m.done:
 			return
-		case t := <-q.tasks:
-			q.counter.Inc(-1)
+		case t := <-tasks:
 			if err := m.exec(t); err != nil {
 				m.stats.Counter("exec_failures").Inc(1)
 				log.With("task", t).Errorf("Failed to exec task: %s", err)
