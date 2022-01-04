@@ -41,6 +41,7 @@ func TestLimiterInvalidConfig(t *testing.T) {
 	_, err := NewLimiter(Config{
 		EgressBitsPerSec:  0,
 		IngressBitsPerSec: bps,
+		MaxBlobSize:       1000,
 		TokenSize:         1,
 		Enable:            true,
 	})
@@ -49,6 +50,16 @@ func TestLimiterInvalidConfig(t *testing.T) {
 	_, err = NewLimiter(Config{
 		EgressBitsPerSec:  bps,
 		IngressBitsPerSec: 0,
+		MaxBlobSize:       1000,
+		TokenSize:         1,
+		Enable:            true,
+	})
+	require.Error(err)
+
+	_, err = NewLimiter(Config{
+		EgressBitsPerSec:  bps,
+		IngressBitsPerSec: bps,
+		MaxBlobSize:       0,
 		TokenSize:         1,
 		Enable:            true,
 	})
@@ -85,6 +96,7 @@ func TestLimiterReserveConcurrency(t *testing.T) {
 			l, err := NewLimiter(Config{
 				EgressBitsPerSec:  bps,
 				IngressBitsPerSec: bps,
+				MaxBlobSize:       100,
 				TokenSize:         1,
 				Enable:            true,
 			})
@@ -141,6 +153,7 @@ func TestLimiterReserveBytesTokenScaling(t *testing.T) {
 			l, err := NewLimiter(Config{
 				EgressBitsPerSec:  bps,
 				IngressBitsPerSec: bps,
+				MaxBlobSize:       10,
 				TokenSize:         10, // Bucket has 8 tokens.
 				Enable:            true,
 			})
@@ -169,6 +182,7 @@ func TestLimiterReserveBytesSmallerThanTokenSize(t *testing.T) {
 			l, err := NewLimiter(Config{
 				EgressBitsPerSec:  bps,
 				IngressBitsPerSec: bps,
+				MaxBlobSize:       10,
 				TokenSize:         10, // Bucket has 8 tokens.
 				Enable:            true,
 			})
@@ -198,6 +212,7 @@ func TestLimiterReserveErrorWhenBytesLargerThanBucket(t *testing.T) {
 			l, err := NewLimiter(Config{
 				EgressBitsPerSec:  bps,
 				IngressBitsPerSec: bps,
+				MaxBlobSize:       11,
 				TokenSize:         10, // Bucket has 8 tokens.
 				Enable:            true,
 			})
@@ -214,6 +229,7 @@ func TestLimiterAdjustError(t *testing.T) {
 	l, err := NewLimiter(Config{
 		EgressBitsPerSec:  50,
 		IngressBitsPerSec: 10,
+		MaxBlobSize:       1000,
 		TokenSize:         1,
 		Enable:            true,
 	})
@@ -227,6 +243,7 @@ func TestLimiterAdjust(t *testing.T) {
 	l, err := NewLimiter(Config{
 		EgressBitsPerSec:  50,
 		IngressBitsPerSec: 10,
+		MaxBlobSize:       1000,
 		TokenSize:         1,
 		Enable:            true,
 	})

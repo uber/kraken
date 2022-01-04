@@ -21,6 +21,7 @@ import (
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/memsize"
 
+	"github.com/c2h5oh/datasize"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -29,6 +30,11 @@ import (
 type Config struct {
 	EgressBitsPerSec  uint64 `yaml:"egress_bits_per_sec"`
 	IngressBitsPerSec uint64 `yaml:"ingress_bits_per_sec"`
+
+	// MaxBlobSize defines the largest blob that Kraken supports. In theory this
+	// parameter should be unified across the project, but for now it's
+	// duplicated here to define the max burst size of the limiter.
+	MaxBlobSize datasize.ByteSize `yaml:"max_blob_size"`
 
 	// TokenSize defines the granularity of a token in the bucket. It is used to
 	// avoid integer overflow errors that would occur if we mapped each bit to a
@@ -84,15 +90,19 @@ func NewLimiter(config Config, opts ...Option) (*Limiter, error) {
 	if config.IngressBitsPerSec == 0 {
 		return nil, errors.New("invalid config: ingress_bits_per_sec must be non-zero")
 	}
+	if config.MaxBlobSize == 0 {
+		return nil, errors.New("invalid config:  max_blob_size must be non-zero")
+	}
 
 	l.logger.Infof("Setting egress bandwidth to %s/sec", memsize.BitFormat(config.EgressBitsPerSec))
 	l.logger.Infof("Setting ingress bandwidth to %s/sec", memsize.BitFormat(config.IngressBitsPerSec))
 
 	etps := config.EgressBitsPerSec / config.TokenSize
 	itps := config.IngressBitsPerSec / config.TokenSize
+	burst := uint64(config.MaxBlobSize) * 8 / config.TokenSize
 
-	l.egress = rate.NewLimiter(rate.Limit(etps), int(etps))
-	l.ingress = rate.NewLimiter(rate.Limit(itps), int(itps))
+	l.egress = rate.NewLimiter(rate.Limit(etps), int(burst))
+	l.ingress = rate.NewLimiter(rate.Limit(itps), int(burst))
 
 	return l, nil
 }
