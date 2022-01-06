@@ -61,5 +61,5 @@ require (
 	golang.org/x/tools v0.0.0-20191114200427-caa0b0f7d508 // indirect
 	google.golang.org/api v0.7.0
 	gopkg.in/validator.v2 v2.0.0-20180514200540-135c24b11c19
-	gopkg.in/yaml.v2 v2.2.2
+	gopkg.in/yaml.v2 v2.2.8
 )
