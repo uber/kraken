@@ -82,7 +82,7 @@ bins: $(LINUX_BINS)
 # ==== TEST ====
 .PHONY: unit-test
 unit-test:
-	-rm coverage.txt
+	-rm -f coverage.txt
 	$(GO) test -timeout=30s -race -coverprofile=coverage.txt $(ALL_PKGS) --tags "unit"
 
 .PHONY: docker_stop

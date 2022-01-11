@@ -64,7 +64,7 @@ type TagClient struct {
 // NewTagClient creates a new TagClient.
 func NewTagClient(config Config) (*TagClient, error) {
 	config = config.applyDefaults()
-	authenticator, err := security.NewAuthenticator(config.Address, config.Security)
+	authenticator, err := config.Authenticator()
 	if err != nil {
 		return nil, fmt.Errorf("cannot create tag client authenticator: %s", err)
 	}
