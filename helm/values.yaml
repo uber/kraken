@@ -31,15 +31,15 @@ build_index:
   extraVolumes:
   extraVolumeMounts:
   initContainers:
-#  extraBackends: |-
-#    - namespace: library/.*
-#      backend:
-#        registry_tag:
-#          address: my.private.registry
-#          security:
-#            basic:
-#              username: "joebloggs"
-#              password: "12345"
+  extraBackends: |-
+   - namespace: library/.*
+     backend:
+       registry_tag:
+         address: index.docker.io
+         security:
+           basic:
+            username: ""
+            password: ""
 
 origin:
   config: /etc/config/origin.yaml
@@ -48,15 +48,15 @@ origin:
   extraVolumes:
   extraVolumeMounts:
   initContainers:
-#  extraBackends: |-
-#    - namespace: library/.*
-#      backend:
-#        registry_blob:
-#          address: my.private.registry
-#          security:
-#            basic:
-#              username: "joebloggs"
-#              password: "12345"
+  extraBackends: |-
+   - namespace: library/.*
+     backend:
+       registry_blob:
+         address: index.docker.io
+         security:
+           basic:
+            username: ""
+            password: ""
 
 proxy:
   config: /etc/config/proxy.yaml
@@ -75,5 +75,5 @@ agent:
   tolerations:
 #    - operator: "Exists"
 testfs:
-  enabled: true
+  enabled: false
   annotations:
