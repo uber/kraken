@@ -22,7 +22,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pressly/chi"
+	"github.com/go-chi/chi"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/listener"

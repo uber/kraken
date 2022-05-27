@@ -32,7 +32,7 @@ import (
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/httputil"
 
-	"github.com/pressly/chi"
+	"github.com/go-chi/chi"
 	"github.com/uber-go/tally"
 )
 

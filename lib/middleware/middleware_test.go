@@ -23,7 +23,7 @@ import (
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/testutil"
 
-	"github.com/pressly/chi"
+	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 )

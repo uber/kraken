@@ -23,7 +23,7 @@ require (
 	github.com/docker/go-units v0.0.0-20181030082039-2fb04c6466a5 // indirect
 	github.com/docker/libtrust v0.0.0-20160708172513-aabc10ec26b7 // indirect
 	github.com/garyburd/redigo v1.6.0
-	github.com/go-chi/chi v0.0.0-20190316151245-d08916613452 // indirect
+	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/gofrs/uuid v0.0.0-20190320161447-2593f3d8aa45 // indirect
 	github.com/golang/mock v1.4.4
 	github.com/golang/protobuf v1.3.3
@@ -37,7 +37,6 @@ require (
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/mattn/go-sqlite3 v1.14.0
 	github.com/opencontainers/go-digest v0.0.0-20190228220655-ac19fd6e7483
-	github.com/pressly/chi v4.0.2+incompatible
 	github.com/pressly/goose v2.6.0+incompatible
 	github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90 // indirect
 	github.com/prometheus/common v0.2.0 // indirect

@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pressly/chi"
+	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/require"
 
 	"github.com/uber/kraken/utils/randutil"

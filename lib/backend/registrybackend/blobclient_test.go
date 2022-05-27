@@ -20,7 +20,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/pressly/chi"
+	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/require"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"

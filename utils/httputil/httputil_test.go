@@ -24,7 +24,7 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/golang/mock/gomock"
-	"github.com/pressly/chi"
+	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/require"
 
 	"github.com/uber/kraken/core"

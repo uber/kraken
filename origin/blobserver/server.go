@@ -46,7 +46,7 @@ import (
 	"github.com/uber/kraken/utils/stringset"
 
 	"github.com/andres-erbsen/clock"
-	"github.com/pressly/chi"
+	"github.com/go-chi/chi"
 	"github.com/uber-go/tally"
 )
 
