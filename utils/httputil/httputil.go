@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
-	"github.com/pressly/chi"
+	"github.com/go-chi/chi"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/handler"

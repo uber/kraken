@@ -27,7 +27,7 @@ import (
 
 	"github.com/uber/kraken/utils/handler"
 
-	"github.com/pressly/chi"
+	"github.com/go-chi/chi"
 )
 
 // Server provides HTTP endpoints for operating on files on disk.

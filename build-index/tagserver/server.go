@@ -41,7 +41,7 @@ import (
 	"github.com/uber/kraken/utils/listener"
 	"github.com/uber/kraken/utils/log"
 
-	"github.com/pressly/chi"
+	"github.com/go-chi/chi"
 	chimiddleware "github.com/pressly/chi/middleware"
 	"github.com/uber-go/tally"
 )

@@ -28,7 +28,7 @@ import (
 	"github.com/uber/kraken/utils/rwutil"
 	"github.com/uber/kraken/utils/testutil"
 
-	"github.com/pressly/chi"
+	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/require"
 )
 
