@@ -42,7 +42,7 @@ import (
 	"github.com/uber/kraken/utils/log"
 
 	"github.com/go-chi/chi"
-	chimiddleware "github.com/pressly/chi/middleware"
+	chimiddleware "github.com/go-chi/chi/middleware"
 	"github.com/uber-go/tally"
 )
 
