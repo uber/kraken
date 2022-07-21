@@ -22,6 +22,7 @@ import (
 	"github.com/uber/kraken/agent/agentserver"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/containerruntime"
 	"github.com/uber/kraken/lib/containerruntime/dockerdaemon"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/store"
@@ -209,7 +210,10 @@ func Run(flags *Flags, opts ...Option) {
 		log.Warn("please move docker config under \"container_runtime\"")
 		containerRuntimeCfg.Docker = config.DockerDaemon
 	}
-	containerRuntimeFactory := containerruntime.NewFactory(containerRuntimeCfg, registryAddr)
+	containerRuntimeFactory, err := containerruntime.NewFactory(containerRuntimeCfg, registryAddr)
+	if err != nil {
+		log.Fatalf("Failed to create container runtime factory: %s", err)
+	}
 
 	agentServer := agentserver.New(
 		config.AgentServer, stats, cads, sched, tagClient, containerRuntimeFactory)
