@@ -15,6 +15,7 @@ require (
 	github.com/c2h5oh/datasize v0.0.0-20171227191756-4eba002a5eae
 	github.com/cactus/go-statsd-client v3.1.1+incompatible
 	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/containerd/containerd v1.6.6
 	github.com/docker/distribution v0.0.0-20191024225408-dee21c0394b5
 	github.com/docker/docker-credential-helpers v0.6.3
 	github.com/docker/engine-api v0.0.0-20160908232104-4290f40c0566

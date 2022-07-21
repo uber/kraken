@@ -16,7 +16,8 @@ package cmd
 import (
 	"github.com/uber/kraken/agent/agentserver"
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/dockerdaemon"
+	"github.com/uber/kraken/lib/containerruntime"
+	"github.com/uber/kraken/lib/containerruntime/dockerdaemon"
 	"github.com/uber/kraken/lib/dockerregistry"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/networkevent"
@@ -31,19 +32,22 @@ import (
 
 // Config defines agent configuration.
 type Config struct {
-	ZapLogging      zap.Config                     `yaml:"zap"`
-	Metrics         metrics.Config                 `yaml:"metrics"`
-	CADownloadStore store.CADownloadStoreConfig    `yaml:"store"`
-	Registry        dockerregistry.Config          `yaml:"registry"`
-	Scheduler       scheduler.Config               `yaml:"scheduler"`
-	PeerIDFactory   core.PeerIDFactory             `yaml:"peer_id_factory"`
-	NetworkEvent    networkevent.Config            `yaml:"network_event"`
-	Tracker         upstream.PassiveHashRingConfig `yaml:"tracker"`
-	BuildIndex      upstream.PassiveConfig         `yaml:"build_index"`
-	AgentServer     agentserver.Config             `yaml:"agentserver"`
-	RegistryBackup  string                         `yaml:"registry_backup"`
-	Nginx           nginx.Config                   `yaml:"nginx"`
-	TLS             httputil.TLSConfig             `yaml:"tls"`
-	AllowedCidrs    []string                       `yaml:"allowed_cidrs"`
-	DockerDaemon    dockerdaemon.Config            `yaml:"docker_daemon"`
+	ZapLogging       zap.Config                     `yaml:"zap"`
+	Metrics          metrics.Config                 `yaml:"metrics"`
+	CADownloadStore  store.CADownloadStoreConfig    `yaml:"store"`
+	Registry         dockerregistry.Config          `yaml:"registry"`
+	Scheduler        scheduler.Config               `yaml:"scheduler"`
+	PeerIDFactory    core.PeerIDFactory             `yaml:"peer_id_factory"`
+	NetworkEvent     networkevent.Config            `yaml:"network_event"`
+	Tracker          upstream.PassiveHashRingConfig `yaml:"tracker"`
+	BuildIndex       upstream.PassiveConfig         `yaml:"build_index"`
+	AgentServer      agentserver.Config             `yaml:"agentserver"`
+	RegistryBackup   string                         `yaml:"registry_backup"`
+	Nginx            nginx.Config                   `yaml:"nginx"`
+	TLS              httputil.TLSConfig             `yaml:"tls"`
+	AllowedCidrs     []string                       `yaml:"allowed_cidrs"`
+	ContainerRuntime containerruntime.Config        `yaml:"container_runtime"`
+
+	// Deprecated
+	DockerDaemon dockerdaemon.Config `yaml:"docker_daemon"`
 }

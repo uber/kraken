@@ -22,7 +22,7 @@ import (
 	"github.com/uber/kraken/agent/agentserver"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/dockerdaemon"
+	"github.com/uber/kraken/lib/containerruntime/dockerdaemon"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/networkevent"
@@ -203,13 +203,16 @@ func Run(flags *Flags, opts ...Option) {
 	}
 
 	registryAddr := fmt.Sprintf("127.0.0.1:%d", flags.AgentRegistryPort)
-	dockerCli, err := dockerdaemon.NewDockerClient(config.DockerDaemon, registryAddr)
-	if err != nil {
-		log.Fatalf("failed to init docker client for preload: %s", err)
+	containerRuntimeCfg := config.ContainerRuntime
+	dockerdaemonCfg := dockerdaemon.Config{}
+	if config.DockerDaemon != dockerdaemonCfg {
+		log.Warn("please move docker config under \"container_runtime\"")
+		containerRuntimeCfg.Docker = config.DockerDaemon
 	}
+	containerRuntimeFactory := containerruntime.NewFactory(containerRuntimeCfg, registryAddr)
 
 	agentServer := agentserver.New(
-		config.AgentServer, stats, cads, sched, tagClient, dockerCli)
+		config.AgentServer, stats, cads, sched, tagClient, containerRuntimeFactory)
 	addr := fmt.Sprintf(":%d", flags.AgentServerPort)
 	log.Infof("Starting agent server on %s", addr)
 	go func() {
