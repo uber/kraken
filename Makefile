@@ -238,7 +238,9 @@ mocks:
 	$(call add_mock,origin/blobclient,ClusterProvider)
 	$(call add_mock,origin/blobclient,ClientResolver)
 
-	$(call add_mock,lib/dockerdaemon,DockerClient)
+	$(call add_mock,lib/containerruntime,Factory)
+	$(call add_mock,lib/containerruntime/containerd,Client)
+	$(call add_mock,lib/containerruntime/dockerdaemon,DockerClient)
 	$(call add_mock,lib/dockerregistry/transfer,ImageTransferer)
 
 	$(call add_mock,tracker/metainfoclient,Client)

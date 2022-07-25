@@ -31,7 +31,9 @@ import (
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/lib/torrent/scheduler/connstate"
 	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
-	mockdockerdaemon "github.com/uber/kraken/mocks/lib/dockerdaemon"
+	mockcontainerruntime "github.com/uber/kraken/mocks/lib/containerruntime"
+	mockcontainerd "github.com/uber/kraken/mocks/lib/containerruntime/containerd"
+	mockdockerdaemon "github.com/uber/kraken/mocks/lib/containerruntime/dockerdaemon"
 	mockscheduler "github.com/uber/kraken/mocks/lib/torrent/scheduler"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/testutil"
@@ -42,11 +44,13 @@ import (
 )
 
 type serverMocks struct {
-	cads      *store.CADownloadStore
-	sched     *mockscheduler.MockReloadableScheduler
-	tags      *mocktagclient.MockClient
-	dockerCli *mockdockerdaemon.MockDockerClient
-	cleanup   *testutil.Cleanup
+	cads             *store.CADownloadStore
+	sched            *mockscheduler.MockReloadableScheduler
+	tags             *mocktagclient.MockClient
+	dockerCli        *mockdockerdaemon.MockDockerClient
+	containerdCli    *mockcontainerd.MockClient
+	containerRuntime *mockcontainerruntime.MockFactory
+	cleanup          *testutil.Cleanup
 }
 
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
@@ -63,12 +67,15 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	tags := mocktagclient.NewMockClient(ctrl)
 
 	dockerCli := mockdockerdaemon.NewMockDockerClient(ctrl)
-
-	return &serverMocks{cads, sched, tags, dockerCli, &cleanup}, cleanup.Run
+	containerdCli := mockcontainerd.NewMockClient(ctrl)
+	containerruntime := mockcontainerruntime.NewMockFactory(ctrl)
+	return &serverMocks{
+		cads, sched, tags, dockerCli, containerdCli,
+		containerruntime, &cleanup}, cleanup.Run
 }
 
 func (m *serverMocks) startServer() string {
-	s := New(Config{}, tally.NoopScope, m.cads, m.sched, m.tags, m.dockerCli)
+	s := New(Config{}, tally.NoopScope, m.cads, m.sched, m.tags, m.containerRuntime)
 	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
 	return addr
@@ -262,17 +269,58 @@ func TestDeleteBlobHandler(t *testing.T) {
 }
 
 func TestPreloadHandler(t *testing.T) {
-	require := require.New(t)
-
-	mocks, cleanup := newServerMocks(t)
-	defer cleanup()
-
-	addr := mocks.startServer()
-
 	tag := url.PathEscape("repo1:tag1")
+	tests := []struct {
+		name          string
+		url           string
+		setup         func(*serverMocks)
+		expectedError string
+	}{
+		{
+			name: "success docker",
+			url:  fmt.Sprintf("/preload/tags/%s", tag),
+			setup: func(mocks *serverMocks) {
+				mocks.dockerCli.EXPECT().
+					PullImage(context.Background(), "repo1", "tag1").Return(nil)
+				mocks.containerRuntime.EXPECT().
+					DockerClient().Return(mocks.dockerCli)
+			},
+		},
+		{
+			name: "success containerd",
+			url:  fmt.Sprintf("/preload/tags/%s?runtime=containerd&namespace=name.space1", tag),
+			setup: func(mocks *serverMocks) {
+				mocks.containerdCli.EXPECT().
+					PullImage(context.Background(), "name.space1", "repo1", "tag1").Return(nil)
+				mocks.containerRuntime.EXPECT().
+					ContainerdClient().Return(mocks.containerdCli)
+			},
+		},
+		{
+			name:          "unsupported runtime",
+			url:           fmt.Sprintf("/preload/tags/%s?runtime=crio", tag),
+			setup:         func(_ *serverMocks) {},
+			expectedError: "/preload/tags/repo1:tag1?runtime=crio 500: unsupported container runtime",
+		},
+	}
 
-	mocks.dockerCli.EXPECT().PullImage(context.Background(), "repo1", "tag1").Return(nil)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
 
-	_, err := httputil.Get(fmt.Sprintf("http://%s/preload/tags/%s", addr, tag))
-	require.NoError(err)
+			mocks, cleanup := newServerMocks(t)
+			defer cleanup()
+
+			tt.setup(mocks)
+			addr := mocks.startServer()
+
+			_, err := httputil.Get(fmt.Sprintf("http://%s%s", addr, tt.url))
+			if tt.expectedError != "" {
+				require.EqualError(err,
+					fmt.Sprintf("GET http://%s%s", addr, tt.expectedError))
+			} else {
+				require.NoError(err)
+			}
+		})
+	}
 }
