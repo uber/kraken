@@ -19,18 +19,33 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/uber/kraken/core"
 	"github.com/docker/distribution"
+	"github.com/docker/distribution/manifest/manifestlist"
 	"github.com/docker/distribution/manifest/schema2"
+	"github.com/uber/kraken/core"
 )
 
-// ParseManifestV2 returns a parsed v2 manifest and its digest
-func ParseManifestV2(r io.Reader) (distribution.Manifest, core.Digest, error) {
+const _v2ManifestType = "application/vnd.docker.distribution.manifest.v2+json"
+const _v2ManifestListType = "application/vnd.docker.distribution.manifest.list.v2+json"
+
+func ParseManifest(r io.Reader) (distribution.Manifest, core.Digest, error) {
 	b, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, core.Digest{}, fmt.Errorf("read: %s", err)
 	}
-	manifest, desc, err := distribution.UnmarshalManifest(schema2.MediaTypeManifest, b)
+
+	manifest, d, err := ParseManifestV2(b)
+	if err == nil {
+		return manifest, d, err
+	}
+
+	// Retry with v2 manifest list.
+	return ParseManifestV2List(b)
+}
+
+// ParseManifestV2 returns a parsed v2 manifest and its digest.
+func ParseManifestV2(bytes []byte) (distribution.Manifest, core.Digest, error) {
+	manifest, desc, err := distribution.UnmarshalManifest(schema2.MediaTypeManifest, bytes)
 	if err != nil {
 		return nil, core.Digest{}, fmt.Errorf("unmarshal manifest: %s", err)
 	}
@@ -49,6 +64,27 @@ func ParseManifestV2(r io.Reader) (distribution.Manifest, core.Digest, error) {
 	return manifest, d, nil
 }
 
+// ParseManifestV2List returns a parsed v2 manifest list and its digest.
+func ParseManifestV2List(bytes []byte) (distribution.Manifest, core.Digest, error) {
+	manifestList, desc, err := distribution.UnmarshalManifest(manifestlist.MediaTypeManifestList, bytes)
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("unmarshal manifestlist: %s", err)
+	}
+	deserializedManifestList, ok := manifestList.(*manifestlist.DeserializedManifestList)
+	if !ok {
+		return nil, core.Digest{}, errors.New("expected manifestlist.DeserializedManifestList")
+	}
+	version := deserializedManifestList.ManifestList.Versioned.SchemaVersion
+	if version != 2 {
+		return nil, core.Digest{}, fmt.Errorf("unsupported manifest list version: %d", version)
+	}
+	d, err := core.ParseSHA256Digest(string(desc.Digest))
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("parse digest: %s", err)
+	}
+	return manifestList, d, nil
+}
+
 // GetManifestReferences returns a list of references by a V2 manifest
 func GetManifestReferences(manifest distribution.Manifest) ([]core.Digest, error) {
 	var refs []core.Digest
@@ -60,4 +96,8 @@ func GetManifestReferences(manifest distribution.Manifest) ([]core.Digest, error
 		refs = append(refs, d)
 	}
 	return refs, nil
+}
+
+func GetSupportedManifestTypes() string {
+	return fmt.Sprintf("%s,%s", _v2ManifestType, _v2ManifestListType)
 }

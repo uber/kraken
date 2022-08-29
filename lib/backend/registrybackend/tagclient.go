@@ -53,7 +53,6 @@ func (f *tagClientFactory) Create(
 }
 
 const _tagquery = "http://%s/v2/%s/manifests/%s"
-const _v2ManifestType = "application/vnd.docker.distribution.manifest.v2+json"
 
 // TagClient stats and downloads tag from registry.
 type TagClient struct {
@@ -92,7 +91,7 @@ func (c *TagClient) Stat(namespace, name string) (*core.BlobInfo, error) {
 		URL,
 		append(
 			opts,
-			httputil.SendHeaders(map[string]string{"Accept": _v2ManifestType}),
+			httputil.SendHeaders(map[string]string{"Accept": dockerutil.GetSupportedManifestTypes()}),
 			httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound),
 		)...,
 	)
@@ -128,7 +127,7 @@ func (c *TagClient) Download(namespace, name string, dst io.Writer) error {
 		URL,
 		append(
 			opts,
-			httputil.SendHeaders(map[string]string{"Accept": _v2ManifestType}),
+			httputil.SendHeaders(map[string]string{"Accept": dockerutil.GetSupportedManifestTypes()}),
 			httputil.SendAcceptedCodes(http.StatusOK, http.StatusNotFound),
 		)...,
 	)
@@ -141,7 +140,7 @@ func (c *TagClient) Download(namespace, name string, dst io.Writer) error {
 		return backenderrors.ErrBlobNotFound
 	}
 
-	_, digest, err := dockerutil.ParseManifestV2(resp.Body)
+	_, digest, err := dockerutil.ParseManifest(resp.Body)
 	if err != nil {
 		return fmt.Errorf("parse manifest v2: %s", err)
 	}
