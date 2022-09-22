@@ -113,7 +113,7 @@ func (ph *PreheatHandler) fetchManifest(repo, digest string) (distribution.Manif
 		return nil, fmt.Errorf("manifest not found")
 	}
 
-	manifest, _, err := dockerutil.ParseManifestV2(buf)
+	manifest, _, err := dockerutil.ParseManifest(buf)
 	if err != nil {
 		return nil, fmt.Errorf("parse manifest: %s", err)
 	}

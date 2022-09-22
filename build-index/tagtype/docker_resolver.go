@@ -17,10 +17,10 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/docker/distribution"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/dockerutil"
-	"github.com/docker/distribution"
 )
 
 type dockerResolver struct {
@@ -45,7 +45,7 @@ func (r *dockerResolver) downloadManifest(tag string, d core.Digest) (distributi
 	if err := r.originClient.DownloadBlob(tag, d, buf); err != nil {
 		return nil, fmt.Errorf("download blob: %s", err)
 	}
-	manifest, _, err := dockerutil.ParseManifestV2(buf)
+	manifest, _, err := dockerutil.ParseManifest(buf)
 	if err != nil {
 		return nil, fmt.Errorf("parse manifest: %s", err)
 	}
