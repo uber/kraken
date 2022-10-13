@@ -287,7 +287,7 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		transport:            nil, // Use HTTP default.
 		ctx:                  context.Background(),
 		url:                  u,
-		httpFallbackDisabled: false,
+		httpFallbackDisabled: true,
 	}
 	for _, o := range options {
 		o(opts)
