@@ -20,6 +20,10 @@ upstream registry-backend {
   {{if ne .registry_backup ""}} server {{.registry_backup}} backup; {{end}}
 }
 
+upstream agent-server {
+  server {{.agent_server}};
+}
+
 server {
   listen {{.port}};
 
@@ -35,6 +39,10 @@ server {
 
   gzip on;
   gzip_types text/plain test/csv application/json;
+
+  location /health {
+    proxy_pass http://agent-server;
+  }
 
   location / {
     proxy_pass http://registry-backend;

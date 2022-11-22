@@ -235,6 +235,7 @@ func Run(flags *Flags, opts ...Option) {
 		"port":          flags.AgentRegistryPort,
 		"registry_server": nginx.GetServer(
 			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
+		"agent_server":    fmt.Sprintf("127.0.0.1:%d", flags.AgentServerPort),
 		"registry_backup": config.RegistryBackup},
 		nginx.WithTLS(config.TLS)))
 }
