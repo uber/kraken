@@ -190,7 +190,7 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
 	if err := s.sched.Probe(); err != nil {
 		return handler.Errorf("probe torrent client: %s", err)
 	}
-	fmt.Fprintln(w, "OK")
+	io.WriteString(w, "OK")
 	return nil
 }
 
