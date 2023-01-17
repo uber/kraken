@@ -17,9 +17,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber/kraken/lib/store/base"
 	"github.com/uber/kraken/lib/store/metadata"
-	"github.com/andres-erbsen/clock"
 )
 
 // uploadStore provides basic upload file operations. Intended to be embedded

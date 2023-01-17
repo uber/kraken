@@ -21,6 +21,7 @@ import (
 
 	"github.com/uber/kraken/lib/store/base"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/diskspaceutil"
 	"github.com/uber/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
@@ -29,11 +30,18 @@ import (
 
 // CleanupConfig defines configuration for periodically cleaning up idle files.
 type CleanupConfig struct {
-	Disabled bool          `yaml:"disabled"`
-	Interval time.Duration `yaml:"interval"` // How often cleanup runs.
-	TTI      time.Duration `yaml:"tti"`      // Time to idle based on last access time.
-	TTL      time.Duration `yaml:"ttl"`      // Time to live regardless of access. If 0, disables TTL.
+	Disabled            bool          `yaml:"disabled"`
+	Interval            time.Duration `yaml:"interval"`             // How often cleanup runs.
+	TTI                 time.Duration `yaml:"tti"`                  // Time to idle based on last access time.
+	TTL                 time.Duration `yaml:"ttl"`                  // Time to live regardless of access. If 0, disables TTL.
+	AggressiveThreshold int           `yaml:"aggressive_threshold"` // The disk util threshold to trigger aggressive cleanup. If 0, disables aggressive cleanup.
+	AggressiveTTL       time.Duration `yaml:"aggressive_ttL"`       // Time to live regardless of access if aggressive cleanup is triggered.
 }
+
+type (
+	// Define a func type for mocking diskSpaceUtil function.
+	diskSpaceUtilFunc func() (int, error)
+)
 
 func (c CleanupConfig) applyDefaults() CleanupConfig {
 	if c.Interval == 0 {
@@ -42,6 +50,13 @@ func (c CleanupConfig) applyDefaults() CleanupConfig {
 	if c.TTI == 0 {
 		c.TTI = 6 * time.Hour
 	}
+
+	if c.AggressiveThreshold != 0 {
+		if c.AggressiveTTL == 0 {
+			c.AggressiveTTL = 1 * time.Hour
+		}
+	}
+
 	return c
 }
 
@@ -81,6 +96,10 @@ func (m *cleanupManager) addJob(tag string, config CleanupConfig, op base.FileOp
 		log.Warnf("TTL disabled for %s", op)
 	}
 
+	if config.AggressiveThreshold == 0 {
+		log.Warnf("Aggressive cleanup disabled for %s", op)
+	}
+
 	ticker := m.clk.Ticker(config.Interval)
 
 	usageGauge := m.stats.Tagged(map[string]string{"job": tag}).Gauge("disk_usage")
@@ -90,7 +109,8 @@ func (m *cleanupManager) addJob(tag string, config CleanupConfig, op base.FileOp
 			select {
 			case <-ticker.C:
 				log.Debugf("Performing cleanup of %s", op)
-				usage, err := m.scan(op, config.TTI, config.TTL)
+				ttl := m.checkAggressiveCleanup(op, config, diskspaceutil.DiskSpaceUtil)
+				usage, err := m.scan(op, config.TTI, ttl)
 				if err != nil {
 					log.Errorf("Error scanning %s: %s", op, err)
 				}
@@ -152,4 +172,19 @@ func (m *cleanupManager) readyForDeletion(
 		return false, fmt.Errorf("get file lat: %s", err)
 	}
 	return m.clk.Now().Sub(lat.Time) > tti, nil
+}
+
+func (m *cleanupManager) checkAggressiveCleanup(op base.FileOp, config CleanupConfig, util diskSpaceUtilFunc) time.Duration {
+	if config.AggressiveThreshold != 0 {
+		diskspaceutil, err := util()
+		if err != nil {
+			log.Errorf("Error checking disk space util %s: %s", op, err)
+			return config.TTL
+		}
+		if diskspaceutil >= config.AggressiveThreshold {
+			log.Debugf("Aggressive cleanup of %s triggers with disk space util %d", op, diskspaceutil)
+			return config.AggressiveTTL
+		}
+	}
+	return config.TTL
 }
