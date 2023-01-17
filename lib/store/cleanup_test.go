@@ -14,6 +14,7 @@
 package store
 
 import (
+	"errors"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -227,4 +228,34 @@ func TestCleanupManageDiskUsage(t *testing.T) {
 	usage, err := m.scan(op, time.Hour, time.Hour)
 	require.NoError(err)
 	require.Equal(int64(500), usage)
+}
+
+func TestCleanupManagerAggressive(t *testing.T) {
+	require := require.New(t)
+
+	config := CleanupConfig{
+		AggressiveThreshold: 80,
+		TTL:                 10 * time.Second,
+		AggressiveTTL:       5 * time.Second,
+	}
+
+	clk := clock.NewMock()
+	m, err := newCleanupManager(clk, tally.NoopScope)
+	require.NoError(err)
+	defer m.stop()
+
+	_, op, cleanup := fileOpFixture(clk)
+	defer cleanup()
+
+	require.Equal(m.checkAggressiveCleanup(op, config, func() (int, error) {
+		return 90, nil
+	}), 5*time.Second)
+
+	require.Equal(m.checkAggressiveCleanup(op, config, func() (int, error) {
+		return 60, nil
+	}), 10*time.Second)
+
+	require.Equal(m.checkAggressiveCleanup(op, config, func() (int, error) {
+		return 0, errors.New("fake error")
+	}), 10*time.Second)
 }
