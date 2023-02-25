@@ -56,8 +56,8 @@ require (
 	go.uber.org/atomic v1.5.0
 	go.uber.org/multierr v1.4.0 // indirect
 	go.uber.org/zap v1.10.0
-	golang.org/x/net v0.0.0-20210825183410-e898025ed96a
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/net v0.7.0
+	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
 	google.golang.org/api v0.22.0
 	gopkg.in/validator.v2 v2.0.0-20180514200540-135c24b11c19
