@@ -40,7 +40,7 @@ func (c *Impl) PullImage(ctx context.Context, ns, repo, tag string) error {
 	}
 	defer client.Close()
 
-	_, err = client.Pull(ctx, fmt.Sprintf("%s/%s:%s", c.registry, repo, tag))
+	_, err = client.Pull(ctx, fmt.Sprintf("%s/%s:%s", c.registry, repo, tag), containerd.WithPullUnpack)
 	if err != nil {
 		return fmt.Errorf("containerd pull image: %s", err)
 	}
