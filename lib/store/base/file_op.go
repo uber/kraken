@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -47,8 +47,8 @@ type FileOp interface {
 	GetFilePath(name string) (string, error)
 	GetFileStat(name string) (os.FileInfo, error)
 
-	GetFileReader(name string) (FileReader, error)
-	GetFileReadWriter(name string) (FileReadWriter, error)
+	GetFileReader(name string, readPartSize int) (FileReader, error)
+	GetFileReadWriter(name string, readPartSize, writePartSize int) (FileReadWriter, error)
 
 	GetFileMetadata(name string, md metadata.Metadata) error
 	SetFileMetadata(name string, md metadata.Metadata) (bool, error)
@@ -358,9 +358,9 @@ func (op *localFileOp) GetFileStat(name string) (info os.FileInfo, err error) {
 }
 
 // GetFileReader returns a FileReader object for read operations.
-func (op *localFileOp) GetFileReader(name string) (r FileReader, err error) {
+func (op *localFileOp) GetFileReader(name string, readPartSize int) (r FileReader, err error) {
 	if loadErr := op.lockHelper(name, _lockLevelRead, func(name string, entry FileEntry) {
-		r, err = entry.GetReader()
+		r, err = entry.GetReader(readPartSize)
 	}); loadErr != nil {
 		return nil, loadErr
 	}
@@ -368,9 +368,9 @@ func (op *localFileOp) GetFileReader(name string) (r FileReader, err error) {
 }
 
 // GetFileReadWriter returns a FileReadWriter object for read/write operations.
-func (op *localFileOp) GetFileReadWriter(name string) (w FileReadWriter, err error) {
+func (op *localFileOp) GetFileReadWriter(name string, readPartSize, writePartSize int) (w FileReadWriter, err error) {
 	if loadErr := op.lockHelper(name, _lockLevelWrite, func(name string, entry FileEntry) {
-		w, err = entry.GetReadWriter()
+		w, err = entry.GetReadWriter(readPartSize, writePartSize)
 	}); loadErr != nil {
 		return nil, loadErr
 	}

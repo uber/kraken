@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,8 +25,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/uber/kraken/core"
 	"github.com/stretchr/testify/require"
+	"github.com/uber/kraken/core"
 )
 
 // These tests should pass for all FileStore/FileOp implementations
@@ -158,7 +158,7 @@ func testReloadFileEntry(require *require.Assertions, storeBundle *fileStoreTest
 	require.False(ok)
 
 	// GetFileReader should load file from disk into map, including metadata.
-	_, err = store.NewFileOp().AcceptState(s1).GetFileReader(fn)
+	_, err = store.NewFileOp().AcceptState(s1).GetFileReader(fn, 0 /* readPartSize */)
 	require.NoError(err)
 	ok = store.fileMap.Contains(fn)
 	require.True(ok)
@@ -177,14 +177,14 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	if !ok {
 		log.Fatal("file not found in state1")
 	}
-
+	partSize := 100
 	// Update content
-	readWriterState2, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn)
+	readWriterState2, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn, partSize, partSize)
 	require.NoError(err)
 	_, err = readWriterState2.Write([]byte{'t', 'e', 's', 't', '\n'})
 	require.NoError(err)
 	readWriterState2.Close()
-	readWriterState2, err = store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn)
+	readWriterState2, err = store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn, partSize, partSize)
 	require.NoError(err)
 
 	// Move from state1 to state2
@@ -194,7 +194,7 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	require.NoError(err)
 	_, err = os.Stat(filepath.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
 	require.True(os.IsNotExist(err))
-	_, err = store.NewFileOp().AcceptState(s2).GetFileReader(fn)
+	_, err = store.NewFileOp().AcceptState(s2).GetFileReader(fn, partSize)
 	require.NoError(err)
 
 	// Move from state1 to state3 would fail with state error
@@ -203,7 +203,7 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	require.True(IsFileStateError(err))
 
 	// Create new readWriter at new state
-	readWriterState1, err := store.NewFileOp().AcceptState(s2).GetFileReadWriter(fn)
+	readWriterState1, err := store.NewFileOp().AcceptState(s2).GetFileReadWriter(fn, partSize, partSize)
 	require.NoError(err)
 	// Check content
 	dataState1, err := ioutil.ReadAll(readWriterState1)
@@ -232,7 +232,7 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	_, err = os.Stat(filepath.Join(s2.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
 	require.NoError(err)
 	// Check content again
-	readWriterStateMoved, err := store.NewFileOp().AcceptState(s2).GetFileReadWriter(fn)
+	readWriterStateMoved, err := store.NewFileOp().AcceptState(s2).GetFileReadWriter(fn, partSize, partSize)
 	require.NoError(err)
 	dataMoved, err := ioutil.ReadAll(readWriterStateMoved)
 	require.NoError(err)
@@ -242,7 +242,7 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	// Move back to state1
 	err = store.NewFileOp().AcceptState(s2).MoveFile(fn, s1)
 	require.NoError(err)
-	_, err = store.NewFileOp().AcceptState(s1).GetFileReader(fn)
+	_, err = store.NewFileOp().AcceptState(s1).GetFileReader(fn, partSize)
 	require.NoError(err)
 }
 
@@ -273,7 +273,7 @@ func testDeleteFile(require *require.Assertions, storeBundle *fileStoreTestBundl
 	content := "this a test for read after delete"
 
 	// Write to file
-	rw, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn)
+	rw, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn, 100 /*readPartSize*/, 100 /*writePartSize*/)
 	require.NoError(err)
 	rw.Write([]byte(content))
 
@@ -298,7 +298,7 @@ func testDeleteFile(require *require.Assertions, storeBundle *fileStoreTestBundl
 	rw.Close()
 
 	// Get deleted file should fail
-	_, err = store.NewFileOp().AcceptState(s1).GetFileReader(fn)
+	_, err = store.NewFileOp().AcceptState(s1).GetFileReader(fn, 100 /*readPartSize */)
 	require.True(os.IsNotExist(err))
 }
 
@@ -312,7 +312,7 @@ func testGetFileReader(require *require.Assertions, storeBundle *fileStoreTestBu
 	}
 
 	// Get ReadWriter and modify the file.
-	readWriter, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn)
+	readWriter, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn, 100 /*readPartSize */, 100 /*writePartSize*/)
 	require.NoError(err)
 	defer readWriter.Close()
 	_, err = readWriter.Write([]byte{'t', 'e', 's', 't', '\n'})
@@ -324,7 +324,7 @@ func testGetFileReader(require *require.Assertions, storeBundle *fileStoreTestBu
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			reader, err := store.NewFileOp().AcceptState(s1).GetFileReader(fn)
+			reader, err := store.NewFileOp().AcceptState(s1).GetFileReader(fn, 100 /*readPartSize */)
 			require.NoError(err)
 
 			b := make([]byte, 5)
@@ -341,7 +341,7 @@ func testGetFileReader(require *require.Assertions, storeBundle *fileStoreTestBu
 	}
 	wg.Wait()
 
-	reader, err := store.NewFileOp().AcceptState(s1).GetFileReader(fn)
+	reader, err := store.NewFileOp().AcceptState(s1).GetFileReader(fn, 100 /*readPartSize */)
 	require.NoError(err)
 	reader.Close()
 }
@@ -361,7 +361,7 @@ func testGetFileReadWriter(require *require.Assertions, storeBundle *fileStoreTe
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			readWriter, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn)
+			readWriter, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn, 100 /*readPartSize */, 100 /*writePartSize*/)
 			require.NoError(err)
 
 			_, err = readWriter.Write([]byte{'t', 'e', 's', 't', '\n'})
@@ -384,7 +384,7 @@ func testGetFileReadWriter(require *require.Assertions, storeBundle *fileStoreTe
 	wg.Wait()
 
 	// Verify content.
-	reader, err := store.NewFileOp().AcceptState(s1).GetFileReader(fn)
+	reader, err := store.NewFileOp().AcceptState(s1).GetFileReader(fn, 100 /*readPartSize */)
 	require.NoError(err)
 
 	b := make([]byte, 5)

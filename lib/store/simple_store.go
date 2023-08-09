@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,10 +18,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/uber/kraken/lib/store/base"
 	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
 	"github.com/uber-go/tally"
+	"github.com/uber/kraken/lib/store/base"
 )
 
 // SimpleStore allows uploading / caching raw files of any format.
@@ -37,13 +37,13 @@ func NewSimpleStore(config SimpleStoreConfig, stats tally.Scope) (*SimpleStore, 
 		"module": "simplestore",
 	})
 
-	uploadStore, err := newUploadStore(config.UploadDir)
+	uploadStore, err := newUploadStore(config.UploadDir, config.ReadPartSize, config.WritePartSize)
 	if err != nil {
 		return nil, fmt.Errorf("new upload store: %s", err)
 	}
 
 	cacheBackend := base.NewLocalFileStore(clock.New())
-	cacheStore, err := newCacheStore(config.CacheDir, cacheBackend)
+	cacheStore, err := newCacheStore(config.CacheDir, cacheBackend, config.ReadPartSize)
 	if err != nil {
 		return nil, fmt.Errorf("new cache store: %s", err)
 	}

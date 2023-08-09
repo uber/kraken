@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,9 +27,12 @@ import (
 type uploadStore struct {
 	state   base.FileState
 	backend base.FileStore
+
+	readPartSize  int
+	writePartSize int
 }
 
-func newUploadStore(dir string) (*uploadStore, error) {
+func newUploadStore(dir string, readPartSize, writePartSize int) (*uploadStore, error) {
 	// Always wipe upload directory on startup.
 	os.RemoveAll(dir)
 
@@ -38,7 +41,7 @@ func newUploadStore(dir string) (*uploadStore, error) {
 	}
 	state := base.NewFileState(dir)
 	backend := base.NewLocalFileStore(clock.New())
-	return &uploadStore{state, backend}, nil
+	return &uploadStore{state, backend, readPartSize, writePartSize}, nil
 }
 
 func (s *uploadStore) CreateUploadFile(name string, length int64) error {
@@ -50,11 +53,11 @@ func (s *uploadStore) GetUploadFileStat(name string) (os.FileInfo, error) {
 }
 
 func (s *uploadStore) GetUploadFileReader(name string) (FileReader, error) {
-	return s.newFileOp().GetFileReader(name)
+	return s.newFileOp().GetFileReader(name, s.readPartSize)
 }
 
 func (s *uploadStore) GetUploadFileReadWriter(name string) (FileReadWriter, error) {
-	return s.newFileOp().GetFileReadWriter(name)
+	return s.newFileOp().GetFileReadWriter(name, s.readPartSize, s.writePartSize)
 }
 
 func (s *uploadStore) GetUploadFileMetadata(name string, md metadata.Metadata) error {

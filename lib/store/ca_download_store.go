@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,10 +17,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/uber/kraken/lib/store/base"
-	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
+	"github.com/uber/kraken/lib/store/base"
+	"github.com/uber/kraken/lib/store/metadata"
 )
 
 // CADownloadStore allows simultaneously downloading and uploading
@@ -30,6 +30,8 @@ type CADownloadStore struct {
 	downloadState base.FileState
 	cacheState    base.FileState
 	cleanup       *cleanupManager
+	readPartSize  int
+	writePartSize int
 }
 
 // NewCADownloadStore creates a new CADownloadStore.
@@ -66,6 +68,8 @@ func NewCADownloadStore(config CADownloadStoreConfig, stats tally.Scope) (*CADow
 		downloadState: downloadState,
 		cacheState:    cacheState,
 		cleanup:       cleanup,
+		readPartSize:  config.ReadPartSize,
+		writePartSize: config.WritePartSize,
 	}, nil
 }
 
@@ -81,7 +85,7 @@ func (s *CADownloadStore) CreateDownloadFile(name string, length int64) error {
 
 // GetDownloadFileReadWriter returns a FileReadWriter for name.
 func (s *CADownloadStore) GetDownloadFileReadWriter(name string) (FileReadWriter, error) {
-	return s.backend.NewFileOp().AcceptState(s.downloadState).GetFileReadWriter(name)
+	return s.backend.NewFileOp().AcceptState(s.downloadState).GetFileReadWriter(name, s.readPartSize, s.writePartSize)
 }
 
 // MoveDownloadFileToCache moves a download file to the cache.
@@ -157,7 +161,7 @@ func (s *CADownloadStore) Any() *CADownloadStoreScope {
 
 // GetFileReader returns a reader for name.
 func (a *CADownloadStoreScope) GetFileReader(name string) (FileReader, error) {
-	return a.op.GetFileReader(name)
+	return a.op.GetFileReader(name, a.store.readPartSize)
 }
 
 // GetFileStat returns file info for name.
