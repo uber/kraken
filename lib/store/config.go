@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,6 +29,10 @@ type CAStoreConfig struct {
 	Capacity      int           `yaml:"capacity"`
 	UploadCleanup CleanupConfig `yaml:"upload_cleanup"`
 	CacheCleanup  CleanupConfig `yaml:"cache_cleanup"`
+	// Part size limit for each file read. 0 means no limit.
+	ReadPartSize int `yaml:"read_part_size"`
+	// Part size limit for each file write. 0 means no limit.
+	WritePartSize int `yaml:"write_part_size"`
 
 	SkipHashVerification bool `yaml:"skip_hash_verification"`
 }
@@ -46,6 +50,10 @@ type SimpleStoreConfig struct {
 	CacheDir      string        `yaml:"cache_dir"`
 	UploadCleanup CleanupConfig `yaml:"upload_cleanup"`
 	CacheCleanup  CleanupConfig `yaml:"cache_cleanup"`
+	// Part size limit for each file read. 0 means no limit.
+	ReadPartSize int `yaml:"read_part_size"`
+	// Part size limit for each file write. 0 means no limit.
+	WritePartSize int `yaml:"write_part_size"`
 }
 
 // CADownloadStoreConfig defines CADownloadStore configuration.
@@ -55,4 +63,8 @@ type CADownloadStoreConfig struct {
 	CacheDir        string        `yaml:"cache_dir"`
 	DownloadCleanup CleanupConfig `yaml:"download_cleanup"`
 	CacheCleanup    CleanupConfig `yaml:"cache_cleanup"`
+	// Part size limit for each file read. 0 means no limit.
+	ReadPartSize int `yaml:"read_part_size"`
+	// Part size limit for each file write. 0 means no limit.
+	WritePartSize int `yaml:"write_part_size"`
 }

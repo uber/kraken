@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,20 +24,21 @@ import (
 // cacheStore provides basic cache file operations. Intended to be embedded in
 // higher level structs.
 type cacheStore struct {
-	state   base.FileState
-	backend base.FileStore
+	state        base.FileState
+	backend      base.FileStore
+	readPartSize int
 }
 
-func newCacheStore(dir string, backend base.FileStore) (*cacheStore, error) {
+func newCacheStore(dir string, backend base.FileStore, readPartSize int) (*cacheStore, error) {
 	if err := os.MkdirAll(dir, 0775); err != nil {
 		return nil, fmt.Errorf("mkdir: %s", err)
 	}
 	state := base.NewFileState(dir)
-	return &cacheStore{state, backend}, nil
+	return &cacheStore{state, backend, readPartSize}, nil
 }
 
 func (s *cacheStore) GetCacheFileReader(name string) (FileReader, error) {
-	return s.newFileOp().GetFileReader(name)
+	return s.newFileOp().GetFileReader(name, s.readPartSize)
 }
 
 func (s *cacheStore) GetCacheFileStat(name string) (os.FileInfo, error) {

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -79,8 +79,8 @@ type FileEntry interface {
 	LinkTo(targetPath string) error
 	Delete() error
 
-	GetReader() (FileReader, error)
-	GetReadWriter() (FileReadWriter, error)
+	GetReader(readPartSize int) (FileReader, error)
+	GetReadWriter(readPartSize, writePartSize int) (FileReadWriter, error)
 
 	AddMetadata(md metadata.Metadata) error
 
@@ -438,29 +438,32 @@ func (entry *localFileEntry) Delete() error {
 }
 
 // GetReader returns a FileReader object for read operations.
-func (entry *localFileEntry) GetReader() (FileReader, error) {
+func (entry *localFileEntry) GetReader(readPartSize int) (FileReader, error) {
 	f, err := os.OpenFile(entry.GetPath(), os.O_RDONLY, 0775)
 	if err != nil {
 		return nil, err
 	}
 
 	reader := &localFileReadWriter{
-		entry:      entry,
-		descriptor: f,
+		entry:        entry,
+		descriptor:   f,
+		readPartSize: readPartSize,
 	}
 	return reader, nil
 }
 
 // GetReadWriter returns a FileReadWriter object for read/write operations.
-func (entry *localFileEntry) GetReadWriter() (FileReadWriter, error) {
+func (entry *localFileEntry) GetReadWriter(readPartSize, writePartSize int) (FileReadWriter, error) {
 	f, err := os.OpenFile(entry.GetPath(), os.O_RDWR, 0775)
 	if err != nil {
 		return nil, err
 	}
 
 	readWriter := &localFileReadWriter{
-		entry:      entry,
-		descriptor: f,
+		entry:         entry,
+		descriptor:    f,
+		readPartSize:  readPartSize,
+		writePartSize: writePartSize,
 	}
 	return readWriter, nil
 }

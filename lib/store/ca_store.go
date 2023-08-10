@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -46,13 +46,13 @@ func NewCAStore(config CAStoreConfig, stats tally.Scope) (*CAStore, error) {
 		"module": "castore",
 	})
 
-	uploadStore, err := newUploadStore(config.UploadDir)
+	uploadStore, err := newUploadStore(config.UploadDir, config.ReadPartSize, config.WritePartSize)
 	if err != nil {
 		return nil, fmt.Errorf("new upload store: %s", err)
 	}
 
 	cacheBackend := base.NewCASFileStoreWithLRUMap(config.Capacity, clock.New())
-	cacheStore, err := newCacheStore(config.CacheDir, cacheBackend)
+	cacheStore, err := newCacheStore(config.CacheDir, cacheBackend, config.ReadPartSize)
 	if err != nil {
 		return nil, fmt.Errorf("new cache store: %s", err)
 	}
@@ -85,7 +85,7 @@ func (s *CAStore) MoveUploadFileToCache(uploadName, cacheName string) error {
 	}
 	defer s.DeleteUploadFile(uploadName)
 
-	f, err := s.uploadStore.newFileOp().GetFileReader(uploadName)
+	f, err := s.uploadStore.newFileOp().GetFileReader(uploadName, s.uploadStore.readPartSize)
 	if err != nil {
 		return fmt.Errorf("get file reader %s: %s", uploadName, err)
 	}

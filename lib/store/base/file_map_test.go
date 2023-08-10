@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -446,17 +446,17 @@ func TestLRUUpdateLastAccessTimeOnOpen(t *testing.T) {
 
 	// No LAT change below resolution.
 	clk.Add(time.Minute)
-	_, err := store.NewFileOp().AcceptState(s1).GetFileReader(fn)
+	_, err := store.NewFileOp().AcceptState(s1).GetFileReader(fn, 0 /* readPartSize */)
 	require.NoError(err)
 	checkLAT(store.NewFileOp().AcceptState(s1), t0)
 
 	clk.Add(time.Hour)
-	_, err = store.NewFileOp().AcceptState(s1).GetFileReader(fn)
+	_, err = store.NewFileOp().AcceptState(s1).GetFileReader(fn, 0 /* readPartSize */)
 	require.NoError(err)
 	checkLAT(store.NewFileOp().AcceptState(s1), clk.Now())
 
 	clk.Add(time.Hour)
-	_, err = store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn)
+	_, err = store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn, 0 /* readPartSize */, 0 /*writePartSize*/)
 	require.NoError(err)
 	checkLAT(store.NewFileOp().AcceptState(s1), clk.Now())
 }
