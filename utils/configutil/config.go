@@ -55,11 +55,13 @@ package configutil
 
 import (
 	"bytes"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/uber/kraken/utils/stringset"
 
@@ -177,4 +179,14 @@ func loadFiles(config interface{}, fnames []string) error {
 		}
 	}
 	return nil
+}
+
+// ReadAsCSV reads a csv string and return the string slice.
+func ReadAsCSV(val string) ([]string, error) {
+	if val == "" {
+		return []string{}, nil
+	}
+	stringReader := strings.NewReader(val)
+	csvReader := csv.NewReader(stringReader)
+	return csvReader.Read()
 }
