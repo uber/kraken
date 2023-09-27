@@ -32,12 +32,12 @@ To pull docker images from local kraken agent, run:
 ```
 docker pull localhost:{agent_registry_port}/{repo}:{tag}
 ```
-Note: kraken agent use different ports for docker registry endpoints and generic content addressable blobs. Please make sure you are using the port configured via `agent_registry_port`.
+Note: kraken agent uses different ports for docker registry endpoints and generic content addressable blobs. Please make sure you are using the port configured via `agent_registry_port`.
 
 # Upload and Download Generic Content Addressable Blobs
 
 Kraken's usecase is not limited to docker images.
-It exposes a separate set of endpoints for uploading and downloading generic [content addressable](https://en.wikipedia.org/wiki/Content-addressable_storage) blobs that's identified by SHA256 hash of the content.
+It exposes a separate set of endpoints for uploading and downloading generic [content addressable](https://en.wikipedia.org/wiki/Content-addressable_storage) blobs that are identified by SHA256 hash of the content.
 Kraken proxy and build-index are not used in this usecase.
 Uploads will be handled by Kraken origin, and downloads still go through Kraken agent.
 
