@@ -73,7 +73,7 @@ http {
     ssl_verify_client on;
     ssl_client_certificate {{.ssl_client_certificate}};
   {{end}}
-  ssl_protocols TLSv1 TLSv1.1 TLSv1.2; # Dropping SSLv3, ref: POODLE
+  ssl_protocols TLSv1.1 TLSv1.2; # Dropping SSLv3, ref: POODLE
   ssl_prefer_server_ciphers on;
   ssl_ciphers ECDH+AES256:ECDH+AES128:DH+3DES:!ADH:!AECDH:!MD5@SECLEVEL=1;
 
