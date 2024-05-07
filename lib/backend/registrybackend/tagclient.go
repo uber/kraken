@@ -159,3 +159,8 @@ func (c *TagClient) Upload(namespace, name string, src io.Reader) error {
 func (c *TagClient) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
 	return nil, errors.New("not supported")
 }
+
+// BackendName returns of the name of the client's backend.
+func (c *TagClient) BackendName() string {
+	return _registrytag
+}

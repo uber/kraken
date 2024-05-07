@@ -164,3 +164,8 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		Names: names,
 	}, nil
 }
+
+// BackendName returns of the name of the client's backend.
+func (c *Client) BackendName() string {
+	return _testfs
+}

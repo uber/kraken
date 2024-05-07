@@ -158,3 +158,8 @@ func (c *BlobClient) Upload(namespace, name string, src io.Reader) error {
 func (c *BlobClient) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
 	return nil, errors.New("not supported")
 }
+
+// BackendName returns of the name of the client's backend.
+func (c *BlobClient) BackendName() string {
+	return _registryblob
+}

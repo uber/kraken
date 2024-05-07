@@ -211,6 +211,11 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 	return result, nil
 }
 
+// BackendName returns of the name of the client's backend.
+func (c *Client) BackendName() string {
+	return _gcs
+}
+
 // isObjectNotFound is helper function for identify non-existing object error.
 func isObjectNotFound(err error) bool {
 	return err == storage.ErrObjectNotExist || err == storage.ErrBucketNotExist

@@ -48,3 +48,8 @@ func (c NoopClient) Download(namespace, name string, dst io.Writer) error {
 func (c NoopClient) List(prefix string, opts ...ListOption) (*ListResult, error) {
 	return nil, nil
 }
+
+// BackendName returns of the name of the client's backend.
+func (c NoopClient) BackendName() string {
+	return NoopNamespace
+}

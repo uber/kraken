@@ -63,4 +63,7 @@ type Client interface {
 
 	// List lists entries whose names start with prefix.
 	List(prefix string, opts ...ListOption) (*ListResult, error)
+
+	// BackendName returns of the name of the client's backend.
+	BackendName() string
 }

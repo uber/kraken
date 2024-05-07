@@ -31,8 +31,10 @@ import (
 
 type factory struct{}
 
+const _shadow = "shadow"
+
 func (f *factory) Name() string {
-	return "shadow"
+	return _shadow
 }
 
 func (f *factory) Create(
@@ -221,4 +223,9 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		return nil, err
 	}
 	return res, nil
+}
+
+// BackendName returns of the name of the client's backend.
+func (c *Client) BackendName() string {
+	return _shadow
 }

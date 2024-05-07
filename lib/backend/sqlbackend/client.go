@@ -32,8 +32,10 @@ import (
 
 type factory struct{}
 
+const _sql = "sql"
+
 func (f *factory) Name() string {
-	return "sql"
+	return _sql
 }
 
 func (f *factory) Create(
@@ -223,6 +225,11 @@ func (c *Client) List(prefix string, _ ...backend.ListOption) (*backend.ListResu
 	default:
 		return dockerTagsQuery(c, prefix)
 	}
+}
+
+// BackendName returns of the name of the client's backend.
+func (c *Client) BackendName() string {
+	return _sql
 }
 
 func dockerCatalogQuery(c *Client) (*backend.ListResult, error) {

@@ -128,6 +128,11 @@ func (c *Client) Upload(namespace, name string, src io.Reader) error {
 	return c.webhdfs.Rename(uploadPath, blobPath)
 }
 
+// BackendName returns of the name of the client's backend.
+func (c *Client) BackendName() string {
+	return _hdfs
+}
+
 var (
 	_ignoreRegex = regexp.MustCompile(
 		"^.+/repositories/.+/(_layers|_uploads|_manifests/(revisions|tags/.+/index)).*")
@@ -269,5 +274,5 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 
 	return &backend.ListResult{
 		Names: files,
-	},  nil
+	}, nil
 }
