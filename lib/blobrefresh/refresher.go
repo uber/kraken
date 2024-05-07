@@ -107,7 +107,7 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 			return err
 		}
 		t := time.Since(start)
-		r.stats.Timer("download_remote_blob").Record(t)
+		r.stats.Tagged(map[string]string{"backend": client.BackendName()}).Timer("download_remote_blob").Record(t)
 		log.With(
 			"namespace", namespace,
 			"name", d.Hex(),

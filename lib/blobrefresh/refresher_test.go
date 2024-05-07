@@ -81,6 +81,7 @@ func TestRefresh(t *testing.T) {
 	blob := core.SizedBlobFixture(100, uint64(_testPieceLength))
 
 	client.EXPECT().Stat(namespace, blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
+	client.EXPECT().BackendName().Return("mockbackend")
 	client.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
 
 	require.NoError(refresher.Refresh(namespace, blob.Digest))
@@ -136,6 +137,7 @@ func TestRefreshSizeLimitWithValidSize(t *testing.T) {
 	blob := core.SizedBlobFixture(100, uint64(_testPieceLength))
 
 	client.EXPECT().Stat(namespace, blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
+	client.EXPECT().BackendName().Return("mockbackend")
 	client.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
 
 	require.NoError(refresher.Refresh(namespace, blob.Digest))
