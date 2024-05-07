@@ -20,6 +20,7 @@ import (
 	"io"
 	"path"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
@@ -41,7 +42,7 @@ func init() {
 type factory struct{}
 
 func (f *factory) Create(
-	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+	confRaw interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
@@ -61,13 +62,14 @@ func (f *factory) Create(
 		return nil, errors.New("unmarshal gcs auth config")
 	}
 
-	return NewClient(config, userAuth)
+	return NewClient(config, userAuth, stats)
 }
 
 // Client implements a backend.Client for GCS.
 type Client struct {
 	config Config
 	pather namepath.Pather
+	stats  tally.Scope
 	gcs    GCS
 }
 
@@ -81,7 +83,7 @@ func WithGCS(gcs GCS) Option {
 
 // NewClient creates a new Client for GCS.
 func NewClient(
-	config Config, userAuth UserAuthConfig, opts ...Option) (*Client, error) {
+	config Config, userAuth UserAuthConfig, stats tally.Scope, opts ...Option) (*Client, error) {
 
 	config.applyDefaults()
 	if config.Username == "" {
@@ -106,7 +108,7 @@ func NewClient(
 
 	if len(opts) > 0 {
 		// For mock.
-		client := &Client{config, pather, nil}
+		client := &Client{config, pather, stats, nil}
 		for _, opt := range opts {
 			opt(client)
 		}
@@ -120,7 +122,7 @@ func NewClient(
 		return nil, fmt.Errorf("invalid gcs credentials: %s", err)
 	}
 
-	client := &Client{config, pather,
+	client := &Client{config, pather, stats,
 		NewGCS(ctx, sClient.Bucket(config.Bucket), &config)}
 
 	log.Infof("Initalized GCS backend with config: %s", config)

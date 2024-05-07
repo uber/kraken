@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
@@ -38,7 +39,7 @@ func init() {
 type blobClientFactory struct{}
 
 func (f *blobClientFactory) Create(
-	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+	confRaw interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
@@ -48,7 +49,7 @@ func (f *blobClientFactory) Create(
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
 		return nil, errors.New("unmarshal hdfs config")
 	}
-	return NewBlobClient(config)
+	return NewBlobClient(config, stats)
 }
 
 const _layerquery = "http://%s/v2/%s/blobs/sha256:%s"
@@ -58,10 +59,11 @@ const _manifestquery = "http://%s/v2/%s/manifests/sha256:%s"
 type BlobClient struct {
 	config        Config
 	authenticator security.Authenticator
+	stats         tally.Scope
 }
 
 // NewBlobClient creates a new BlobClient.
-func NewBlobClient(config Config) (*BlobClient, error) {
+func NewBlobClient(config Config, stats tally.Scope) (*BlobClient, error) {
 	config = config.applyDefaults()
 	authenticator, err := security.NewAuthenticator(config.Address, config.Security)
 	if err != nil {
@@ -70,6 +72,7 @@ func NewBlobClient(config Config) (*BlobClient, error) {
 	return &BlobClient{
 		config:        config,
 		authenticator: authenticator,
+		stats:         stats,
 	}, nil
 }
 

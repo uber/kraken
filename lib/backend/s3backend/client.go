@@ -19,6 +19,7 @@ import (
 	"io"
 	"path"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
@@ -44,7 +45,7 @@ func init() {
 type factory struct{}
 
 func (f *factory) Create(
-	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+	confRaw interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
@@ -64,13 +65,14 @@ func (f *factory) Create(
 		return nil, errors.New("unmarshal s3 auth config")
 	}
 
-	return NewClient(config, userAuth)
+	return NewClient(config, userAuth, stats)
 }
 
 // Client implements a backend.Client for S3.
 type Client struct {
 	config Config
 	pather namepath.Pather
+	stats  tally.Scope
 	s3     S3
 }
 
@@ -84,7 +86,7 @@ func WithS3(s3 S3) Option {
 
 // NewClient creates a new Client for S3.
 func NewClient(
-	config Config, userAuth UserAuthConfig, opts ...Option) (*Client, error) {
+	config Config, userAuth UserAuthConfig, stats tally.Scope, opts ...Option) (*Client, error) {
 
 	config.applyDefaults()
 	if config.Username == "" {
@@ -138,7 +140,7 @@ func NewClient(
 		u.Concurrency = config.UploadConcurrency
 	})
 
-	client := &Client{config, pather, join{api, downloader, uploader}}
+	client := &Client{config, pather, stats, join{api, downloader, uploader}}
 	for _, opt := range opts {
 		opt(client)
 	}
@@ -271,7 +273,6 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 			}
 			names = append(names, name)
 		}
-
 
 		if int64(len(names)) < maxKeys {
 			// Continue iterating pages to get more keys

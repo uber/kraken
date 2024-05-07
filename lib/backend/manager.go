@@ -20,6 +20,8 @@ import (
 
 	"github.com/uber/kraken/utils/bandwidth"
 	"github.com/uber/kraken/utils/log"
+
+	"github.com/uber-go/tally"
 )
 
 // Manager errors.
@@ -49,7 +51,7 @@ type Manager struct {
 }
 
 // NewManager creates a new backend Manager.
-func NewManager(configs []Config, auth AuthConfig) (*Manager, error) {
+func NewManager(configs []Config, auth AuthConfig, stats tally.Scope) (*Manager, error) {
 	var backends []*backend
 	for _, config := range configs {
 		config = config.applyDefaults()
@@ -66,7 +68,7 @@ func NewManager(configs []Config, auth AuthConfig) (*Manager, error) {
 		if err != nil {
 			return nil, fmt.Errorf("get backend client factory: %s", err)
 		}
-		c, err = factory.Create(backendConfig, auth[name])
+		c, err = factory.Create(backendConfig, auth[name], stats)
 		if err != nil {
 			return nil, fmt.Errorf("create backend client: %s", err)
 		}

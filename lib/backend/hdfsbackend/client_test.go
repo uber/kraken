@@ -19,6 +19,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs"
 	"github.com/uber/kraken/mocks/lib/backend/hdfsbackend/webhdfs"
@@ -46,7 +47,7 @@ func (m *clientMocks) new() *Client {
 		RootDirectory: "/root",
 		NamePath:      "identity",
 		testing:       true,
-	}, WithWebHDFS(m.webhdfs))
+	}, tally.NoopScope, WithWebHDFS(m.webhdfs))
 	if err != nil {
 		panic(err)
 	}
@@ -63,7 +64,7 @@ func TestClientFactory(t *testing.T) {
 		testing:       true,
 	}
 	f := factory{}
-	_, err := f.Create(config, nil)
+	_, err := f.Create(config, nil, tally.NoopScope)
 	require.NoError(err)
 }
 

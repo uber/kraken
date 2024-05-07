@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/dockerutil"
@@ -58,7 +59,7 @@ func TestTagDownloadSuccess(t *testing.T) {
 	defer stop()
 
 	config := newTestConfig(addr)
-	client, err := NewTagClient(config)
+	client, err := NewTagClient(config, tally.NoopScope)
 	require.NoError(err)
 
 	info, err := client.Stat(tag, tag)
@@ -88,7 +89,7 @@ func TestTagDownloadFileNotFound(t *testing.T) {
 	defer stop()
 
 	config := newTestConfig(addr)
-	client, err := NewTagClient(config)
+	client, err := NewTagClient(config, tally.NoopScope)
 	require.NoError(err)
 
 	_, err = client.Stat(tag, tag)

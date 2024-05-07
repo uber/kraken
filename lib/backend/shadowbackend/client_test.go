@@ -15,12 +15,14 @@ package shadowbackend
 
 import (
 	"bytes"
-	mockbackend "github.com/uber/kraken/mocks/lib/backend"
+	"errors"
 	"io"
 	"reflect"
 	"strings"
 	"testing"
-	"errors"
+
+	"github.com/uber-go/tally"
+	mockbackend "github.com/uber/kraken/mocks/lib/backend"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -77,7 +79,7 @@ func TestClientFactory(t *testing.T) {
 	}
 
 	f := factory{}
-	c, err := f.Create(config, authCfg)
+	c, err := f.Create(config, authCfg, tally.NoopScope)
 	require.NoError(t, err)
 	require.NotNil(t, c)
 }
@@ -169,7 +171,7 @@ func TestGetBackendClient(t *testing.T) {
 	for testName, tt := range testCases {
 		t.Run(testName, func(t *testing.T) {
 
-			client, err := getBackendClient(tt.cfg, tt.authCfg)
+			client, err := getBackendClient(tt.cfg, tt.authCfg, tally.NoopScope)
 
 			if tt.expectedErr != "" {
 				assert.EqualError(t, err, tt.expectedErr)

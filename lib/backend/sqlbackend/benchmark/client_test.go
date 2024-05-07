@@ -25,6 +25,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/backend/sqlbackend"
@@ -46,7 +47,7 @@ const connString = ":memory:"
 // are no non-benchmark tests. Instead, each benchmark test will call generateTestData(), which will load the database
 // if it is not already loaded. After this, we reset the benchmark timers before beginning the test.
 func TestMain(m *testing.M) {
-	c, err := sqlbackend.NewClient(sqlbackend.Config{Dialect: dialect, ConnectionString: connString}, sqlbackend.UserAuthConfig{})
+	c, err := sqlbackend.NewClient(sqlbackend.Config{Dialect: dialect, ConnectionString: connString}, sqlbackend.UserAuthConfig{}, tally.NoopScope)
 	if err != nil {
 		panic(err)
 	}

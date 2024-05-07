@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/mocks/lib/backend/s3backend"
@@ -58,7 +59,7 @@ func newClientMocks(t *testing.T) (*clientMocks, func()) {
 }
 
 func (m *clientMocks) new() *Client {
-	c, err := NewClient(m.config, m.userAuth, WithS3(m.s3))
+	c, err := NewClient(m.config, m.userAuth, tally.NoopScope, WithS3(m.s3))
 	if err != nil {
 		panic(err)
 	}
@@ -80,7 +81,7 @@ func TestClientFactory(t *testing.T) {
 	auth.S3.AccessSecretKey = "secret"
 	userAuth := UserAuthConfig{"test-user": auth}
 	f := factory{}
-	_, err := f.Create(config, userAuth)
+	_, err := f.Create(config, userAuth, tally.NoopScope)
 	require.NoError(err)
 }
 

@@ -186,7 +186,7 @@ func Run(flags *Flags, opts ...Option) {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
 
-	backendManager, err := backend.NewManager(config.Backends, config.Auth)
+	backendManager, err := backend.NewManager(config.Backends, config.Auth, stats)
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}

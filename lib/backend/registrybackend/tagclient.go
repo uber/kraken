@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
@@ -39,7 +40,7 @@ func init() {
 type tagClientFactory struct{}
 
 func (f *tagClientFactory) Create(
-	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+	confRaw interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
@@ -49,7 +50,7 @@ func (f *tagClientFactory) Create(
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
 		return nil, errors.New("unmarshal hdfs config")
 	}
-	return NewTagClient(config)
+	return NewTagClient(config, stats)
 }
 
 const _tagquery = "http://%s/v2/%s/manifests/%s"
@@ -58,10 +59,11 @@ const _tagquery = "http://%s/v2/%s/manifests/%s"
 type TagClient struct {
 	config        Config
 	authenticator security.Authenticator
+	stats         tally.Scope
 }
 
 // NewTagClient creates a new TagClient.
-func NewTagClient(config Config) (*TagClient, error) {
+func NewTagClient(config Config, stats tally.Scope) (*TagClient, error) {
 	config = config.applyDefaults()
 	authenticator, err := security.NewAuthenticator(config.Address, config.Security)
 	if err != nil {
@@ -70,6 +72,7 @@ func NewTagClient(config Config) (*TagClient, error) {
 	return &TagClient{
 		config:        config,
 		authenticator: authenticator,
+		stats:         stats,
 	}, nil
 }
 
