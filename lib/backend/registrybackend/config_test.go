@@ -14,13 +14,17 @@
 
 package registrybackend
 
-import "github.com/uber/kraken/lib/backend/registrybackend/security"
+import (
+	"github.com/uber/kraken/lib/backend/registrybackend/security"
+	"github.com/uber/kraken/utils/httputil"
+)
 
 func newTestConfig(addr string) Config {
 	return Config{
 		Address: addr,
 		Security: security.Config{
-			EnableHTTPFallback: true,
+			TLS: httputil.TLSConfig{Server: httputil.X509Pair{Disabled: true}, Client: httputil.X509Pair{Disabled: true}},
+			EnableHTTPFallback: false,
 		},
 	}
 }
