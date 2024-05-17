@@ -50,14 +50,15 @@ import (
 
 // Flags defines origin CLI flags.
 type Flags struct {
-	PeerIP             string
-	PeerPort           int
-	BlobServerHostName string
-	BlobServerPort     int
-	ConfigFile         string
-	Zone               string
-	KrakenCluster      string
-	SecretsFile        string
+	PeerIP              string
+	PeerPort            int
+	BlobServerHostName  string
+	BlobServerPort      int
+	ConfigFile          string
+	Zone                string
+	KrakenCluster       string
+	SecretsFile         string
+	SupportedInterfaces string
 }
 
 // ParseFlags parses origin CLI flags.
@@ -79,6 +80,9 @@ func ParseFlags() *Flags {
 		&flags.KrakenCluster, "cluster", "", "cluster name (e.g. prod01-zone1)")
 	flag.StringVar(
 		&flags.SecretsFile, "secrets", "", "path to a secrets YAML file to load into configuration")
+	flag.StringVar(
+		&flags.SupportedInterfaces, "supported-interfaces", "eth0,ib0",
+		"an ordered csv list of ip interfaces from which host ip is determined (e.g. eth0,ib0)")
 	flag.Parse()
 	return &flags
 }
@@ -168,7 +172,11 @@ func Run(flags *Flags, opts ...Option) {
 	log.Infof("Configuring origin with hostname '%s'", hostname)
 
 	if flags.PeerIP == "" {
-		localIP, err := netutil.GetLocalIP()
+		supportedInterfaces, err := configutil.ReadAsCSV(flags.SupportedInterfaces)
+		if err != nil {
+			log.Fatalf("Error parsing supported interfaces: %s", err)
+		}
+		localIP, err := netutil.GetLocalIP(supportedInterfaces)
 		if err != nil {
 			log.Fatalf("Error getting local ip: %s", err)
 		}
@@ -246,7 +254,11 @@ func Run(flags *Flags, opts ...Option) {
 	if !hashRing.Contains(addr) {
 		// When DNS is used for hash ring membership, the members will be IP
 		// addresses instead of hostnames.
-		ip, err := netutil.GetLocalIP()
+		supportedInterfaces, err := configutil.ReadAsCSV(flags.SupportedInterfaces)
+		if err != nil {
+			log.Fatalf("Error parsing supported interfaces: %s", err)
+		}
+		ip, err := netutil.GetLocalIP(supportedInterfaces)
 		if err != nil {
 			log.Fatalf("Error getting local ip: %s", err)
 		}

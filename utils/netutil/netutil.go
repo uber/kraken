@@ -20,10 +20,6 @@ import (
 	"time"
 )
 
-// _supportedInterfaces is an ordered list of ip interfaces from which
-// host ip is determined.
-var _supportedInterfaces = []string{"eth0", "ib0"}
-
 func min(a, b time.Duration) time.Duration {
 	if a < b {
 		return a
@@ -65,7 +61,7 @@ func GetIP(host string) (net.IP, error) {
 }
 
 // GetLocalIP returns the ip address of the local machine.
-func GetLocalIP() (string, error) {
+func GetLocalIP(supportedInterfaces []string) (string, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return "", fmt.Errorf("interfaces: %s", err)
@@ -95,7 +91,7 @@ func GetLocalIP() (string, error) {
 			break
 		}
 	}
-	for _, i := range _supportedInterfaces {
+	for _, i := range supportedInterfaces {
 		if ip, ok := ips[i]; ok {
 			return ip, nil
 		}
