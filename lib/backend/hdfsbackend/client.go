@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"sync"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs"
@@ -41,7 +42,7 @@ func init() {
 type factory struct{}
 
 func (f *factory) Create(
-	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+	confRaw interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
@@ -51,7 +52,7 @@ func (f *factory) Create(
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
 		return nil, errors.New("unmarshal hdfs config")
 	}
-	return NewClient(config)
+	return NewClient(config, stats)
 }
 
 // Client is a backend.Client for HDFS.
@@ -59,6 +60,7 @@ type Client struct {
 	config  Config
 	pather  namepath.Pather
 	webhdfs webhdfs.Client
+	stats   tally.Scope
 }
 
 // Option allows setting optional Client parameters.
@@ -70,7 +72,7 @@ func WithWebHDFS(w webhdfs.Client) Option {
 }
 
 // NewClient creates a new Client for HDFS.
-func NewClient(config Config, opts ...Option) (*Client, error) {
+func NewClient(config Config, stats tally.Scope, opts ...Option) (*Client, error) {
 	config.applyDefaults()
 	if !path.IsAbs(config.RootDirectory) {
 		return nil, errors.New("invalid config: root_directory must be absolute path")
@@ -83,7 +85,7 @@ func NewClient(config Config, opts ...Option) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	client := &Client{config, pather, webhdfs}
+	client := &Client{config, pather, webhdfs, stats}
 	for _, opt := range opts {
 		opt(client)
 	}
@@ -269,5 +271,5 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 
 	return &backend.ListResult{
 		Names: files,
-	},  nil
+	}, nil
 }

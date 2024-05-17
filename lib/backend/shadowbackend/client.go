@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
@@ -36,7 +37,7 @@ func (f *factory) Name() string {
 }
 
 func (f *factory) Create(
-	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+	confRaw interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
@@ -47,7 +48,7 @@ func (f *factory) Create(
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
 		return nil, fmt.Errorf("unmarshal shadow config: %v", err)
 	}
-	return NewClient(config, authConfRaw)
+	return NewClient(config, authConfRaw, stats)
 }
 
 // Client implements a backend.Client for shadow mode. See the README for full details on what shadow mode means.
@@ -55,19 +56,20 @@ type Client struct {
 	cfg    Config
 	active backend.Client
 	shadow backend.Client
+	stats  tally.Scope
 }
 
 // Option allows setting optional Client parameters.
 type Option func(*Client)
 
 // NewClient creates a new shadow Client
-func NewClient(config Config, authConfRaw interface{}) (*Client, error) {
-	a, err := getBackendClient(config.ActiveClientConfig, authConfRaw)
+func NewClient(config Config, authConfRaw interface{}, stats tally.Scope) (*Client, error) {
+	a, err := getBackendClient(config.ActiveClientConfig, authConfRaw, stats)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := getBackendClient(config.ShadowClientConfig, authConfRaw)
+	s, err := getBackendClient(config.ShadowClientConfig, authConfRaw, stats)
 	if err != nil {
 		return nil, err
 	}
@@ -76,10 +78,11 @@ func NewClient(config Config, authConfRaw interface{}) (*Client, error) {
 		cfg:    config,
 		active: a,
 		shadow: s,
+		stats:  stats,
 	}, nil
 }
 
-func getBackendClient(backendConfig map[string]interface{}, authConfRaw interface{}) (backend.Client, error) {
+func getBackendClient(backendConfig map[string]interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
 	var name string
 	var confRaw interface{}
 
@@ -101,7 +104,7 @@ func getBackendClient(backendConfig map[string]interface{}, authConfRaw interfac
 			if err := yaml.Unmarshal(authConfBytes, &userAuth); err != nil {
 				return nil, fmt.Errorf("unmarshal sql auth config: %s", err)
 			}
-			return sqlbackend.NewClient(config, userAuth)
+			return sqlbackend.NewClient(config, userAuth, stats)
 		case "hdfs":
 			confBytes, err := yaml.Marshal(confRaw)
 			if err != nil {
@@ -113,7 +116,7 @@ func getBackendClient(backendConfig map[string]interface{}, authConfRaw interfac
 				return nil, fmt.Errorf("unmarshal hdfs config: %s", err)
 			}
 
-			return hdfsbackend.NewClient(config)
+			return hdfsbackend.NewClient(config, stats)
 		case "s3":
 			confBytes, err := yaml.Marshal(confRaw)
 			if err != nil {
@@ -130,7 +133,7 @@ func getBackendClient(backendConfig map[string]interface{}, authConfRaw interfac
 				return nil, fmt.Errorf("unmarshal s3 auth config: %s", err)
 			}
 
-			return s3backend.NewClient(config, userAuth)
+			return s3backend.NewClient(config, userAuth, stats)
 		case "testfs":
 			confBytes, err := yaml.Marshal(confRaw)
 			if err != nil {
@@ -142,7 +145,7 @@ func getBackendClient(backendConfig map[string]interface{}, authConfRaw interfac
 				return nil, fmt.Errorf("unmarshal testfs config: %s", err)
 			}
 
-			return testfs.NewClient(config)
+			return testfs.NewClient(config, stats)
 		default:
 			return nil, fmt.Errorf("unsupported backend type '%s'", name)
 		}

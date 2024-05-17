@@ -16,6 +16,7 @@ package testfs
 import (
 	"testing"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/backend/namepath"
 
 	"github.com/stretchr/testify/require"
@@ -29,6 +30,6 @@ func TestClientFactory(t *testing.T) {
 		NamePath: namepath.Identity,
 	}
 	f := factory{}
-	_, err := f.Create(config, nil)
+	_, err := f.Create(config, nil, tally.NoopScope)
 	require.NoError(err)
 }

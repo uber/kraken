@@ -13,9 +13,11 @@
 // limitations under the License.
 package backend
 
+import "github.com/uber-go/tally"
+
 // ManagerFixture returns a Manager with no clients for testing purposes.
 func ManagerFixture() *Manager {
-	m, err := NewManager(nil, AuthConfig{})
+	m, err := NewManager(nil, AuthConfig{}, tally.NoopScope)
 	if err != nil {
 		panic(err)
 	}

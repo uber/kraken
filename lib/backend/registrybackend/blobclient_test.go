@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/memsize"
@@ -34,7 +35,7 @@ func TestClientFactory(t *testing.T) {
 
 	config := Config{}
 	f := blobClientFactory{}
-	_, err := f.Create(config, nil)
+	_, err := f.Create(config, nil, tally.NoopScope)
 	require.NoError(err)
 }
 
@@ -56,7 +57,7 @@ func TestBlobDownloadBlobSuccess(t *testing.T) {
 	defer stop()
 
 	config := newTestConfig(addr)
-	client, err := NewBlobClient(config)
+	client, err := NewBlobClient(config, tally.NoopScope)
 	require.NoError(err)
 
 	info, err := client.Stat(namespace, "data")
@@ -86,7 +87,7 @@ func TestBlobDownloadManifestSuccess(t *testing.T) {
 	defer stop()
 
 	config := newTestConfig(addr)
-	client, err := NewBlobClient(config)
+	client, err := NewBlobClient(config, tally.NoopScope)
 	require.NoError(err)
 
 	info, err := client.Stat(namespace, "data")
@@ -116,7 +117,7 @@ func TestBlobDownloadFileNotFound(t *testing.T) {
 	defer stop()
 
 	config := newTestConfig(addr)
-	client, err := NewBlobClient(config)
+	client, err := NewBlobClient(config, tally.NoopScope)
 	require.NoError(err)
 
 	_, err = client.Stat(namespace, "data")

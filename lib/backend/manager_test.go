@@ -16,6 +16,7 @@ package backend_test
 import (
 	"testing"
 
+	"github.com/uber-go/tally"
 	. "github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/namepath"
 	"github.com/uber/kraken/lib/backend/testfs"
@@ -103,7 +104,7 @@ func TestManagerNamespaceOrdering(t *testing.T) {
 	var configs []Config
 	require.NoError(yaml.Unmarshal([]byte(configStr), &configs))
 
-	m, err := NewManager(configs, AuthConfig{})
+	m, err := NewManager(configs, AuthConfig{}, tally.NoopScope)
 	require.NoError(err)
 
 	for ns, expected := range map[string]string{
@@ -135,7 +136,7 @@ func TestManagerBandwidth(t *testing.T) {
 		Backend: map[string]interface{}{
 			"testfs": testfs.Config{Addr: "test-addr", NamePath: namepath.Identity},
 		},
-	}}, AuthConfig{})
+	}}, AuthConfig{}, tally.NoopScope)
 	require.NoError(err)
 
 	checkBandwidth := func(egress, ingress int64) {

@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/memsize"
@@ -34,7 +35,7 @@ func TestClientFactory(t *testing.T) {
 
 	config := Config{}
 	f := factory{}
-	_, err := f.Create(config, nil)
+	_, err := f.Create(config, nil, tally.NoopScope)
 	require.NoError(err)
 }
 
@@ -52,7 +53,7 @@ func TestHttpDownloadSuccess(t *testing.T) {
 	defer stop()
 
 	config := Config{DownloadURL: "http://" + addr + "/data/%s"}
-	client, err := NewClient(config)
+	client, err := NewClient(config, tally.NoopScope)
 	require.NoError(err)
 
 	var b bytes.Buffer
@@ -72,7 +73,7 @@ func TestHttpDownloadFileNotFound(t *testing.T) {
 	defer stop()
 
 	config := Config{DownloadURL: "http://" + addr + "/data/%s"}
-	client, err := NewClient(config)
+	client, err := NewClient(config, tally.NoopScope)
 	require.NoError(err)
 
 	var b bytes.Buffer
@@ -87,7 +88,7 @@ func TestDownloadMalformedURLThrowsError(t *testing.T) {
 	defer stop()
 
 	config := Config{DownloadURL: "http://" + addr + "/data"}
-	client, err := NewClient(config)
+	client, err := NewClient(config, tally.NoopScope)
 	require.NoError(err)
 
 	var b bytes.Buffer

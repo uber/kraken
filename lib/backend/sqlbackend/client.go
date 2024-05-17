@@ -24,6 +24,7 @@ import (
 	// Import mysql and sqlite to register them with GORM
 	_ "github.com/jinzhu/gorm/dialects/mysql"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
@@ -37,7 +38,7 @@ func (f *factory) Name() string {
 }
 
 func (f *factory) Create(
-	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+	confRaw interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
@@ -58,17 +59,18 @@ func (f *factory) Create(
 		return nil, errors.New("unmarshal s3 auth config")
 	}
 
-	return NewClient(config, userAuth)
+	return NewClient(config, userAuth, stats)
 }
 
 // Client implements a backend.Client for SQL.
 type Client struct {
-	cfg Config
-	db  *gorm.DB
+	cfg   Config
+	db    *gorm.DB
+	stats tally.Scope
 }
 
 // NewClient creates a new Client for a SQL database.
-func NewClient(config Config, authConfig UserAuthConfig) (*Client, error) {
+func NewClient(config Config, authConfig UserAuthConfig, stats tally.Scope) (*Client, error) {
 	conStr, err := getDBConnectionString(config, authConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error building database connection string: %v", err)
@@ -82,7 +84,7 @@ func NewClient(config Config, authConfig UserAuthConfig) (*Client, error) {
 
 	db.LogMode(config.DebugLogging)
 
-	client := &Client{config, db}
+	client := &Client{config, db, stats}
 	return client, nil
 }
 

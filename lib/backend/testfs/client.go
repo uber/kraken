@@ -21,6 +21,7 @@ import (
 	"path"
 	"strconv"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
@@ -39,7 +40,7 @@ func init() {
 type factory struct{}
 
 func (f *factory) Create(
-	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+	confRaw interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
@@ -51,17 +52,18 @@ func (f *factory) Create(
 		return nil, errors.New("unmarshal testfs config")
 	}
 
-	return NewClient(config)
+	return NewClient(config, stats)
 }
 
 // Client wraps HTTP calls to Server.
 type Client struct {
 	config Config
 	pather namepath.Pather
+	stats  tally.Scope
 }
 
 // NewClient returns a new Client.
-func NewClient(config Config) (*Client, error) {
+func NewClient(config Config, stats tally.Scope) (*Client, error) {
 	if config.Addr == "" {
 		return nil, errors.New("no addr configured")
 	}
@@ -69,7 +71,7 @@ func NewClient(config Config) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("namepath: %s", err)
 	}
-	return &Client{config, pather}, nil
+	return &Client{config, pather, stats}, nil
 }
 
 // Addr returns the configured server address.

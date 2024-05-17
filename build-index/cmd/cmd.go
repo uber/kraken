@@ -136,7 +136,7 @@ func Run(flags *Flags, opts ...Option) {
 		log.Fatalf("Error creating simple store: %s", err)
 	}
 
-	backends, err := backend.NewManager(config.Backends, config.Auth)
+	backends, err := backend.NewManager(config.Backends, config.Auth, stats)
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}

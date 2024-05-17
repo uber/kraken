@@ -20,6 +20,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
@@ -37,7 +38,7 @@ func init() {
 type factory struct{}
 
 func (f *factory) Create(
-	confRaw interface{}, authConfRaw interface{}) (backend.Client, error) {
+	confRaw interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
@@ -48,7 +49,7 @@ func (f *factory) Create(
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
 		return nil, errors.New("unmarshal http config")
 	}
-	return NewClient(config)
+	return NewClient(config, stats)
 }
 
 // Config defines http post/get upload/download urls
@@ -64,6 +65,7 @@ type Config struct {
 // Client implements downloading/uploading object from/to S3
 type Client struct {
 	config Config
+	stats  tally.Scope
 }
 
 func (c Config) applyDefaults() Config {
@@ -74,8 +76,8 @@ func (c Config) applyDefaults() Config {
 }
 
 // NewClient creates a new http Client.
-func NewClient(config Config) (*Client, error) {
-	return &Client{config: config.applyDefaults()}, nil
+func NewClient(config Config, stats tally.Scope) (*Client, error) {
+	return &Client{config: config.applyDefaults(), stats: stats}, nil
 }
 
 // Stat always succeeds.

@@ -21,6 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 )
@@ -36,7 +37,7 @@ func generateSingleTag(sqlClient *Client, repo string, tag string) Tag {
 }
 
 func newClient() *Client {
-	sqlClient, err := NewClient(Config{Dialect: "sqlite3", ConnectionString: ":memory:"}, UserAuthConfig{})
+	sqlClient, err := NewClient(Config{Dialect: "sqlite3", ConnectionString: ":memory:"}, UserAuthConfig{}, tally.NoopScope)
 	if err != nil {
 		panic(err)
 	}
@@ -47,7 +48,7 @@ func TestClientFactory(t *testing.T) {
 	config := Config{Dialect: "sqlite3", ConnectionString: ":memory:"}
 
 	f := factory{}
-	_, err := f.Create(config, nil)
+	_, err := f.Create(config, nil, tally.NoopScope)
 	require.NoError(t, err)
 }
 
@@ -55,7 +56,7 @@ func TestClientFactoryAuth(t *testing.T) {
 	config := Config{Dialect: "sqlite3", ConnectionString: ":memory:"}
 
 	f := factory{}
-	_, err := f.Create(config, nil)
+	_, err := f.Create(config, nil, tally.NoopScope)
 	require.NoError(t, err)
 }
 

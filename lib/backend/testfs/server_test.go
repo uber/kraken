@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/backend/namepath"
@@ -34,7 +35,7 @@ func TestServerBlob(t *testing.T) {
 	addr, stop := testutil.StartServer(s.Handler())
 	defer stop()
 
-	c, err := NewClient(Config{Addr: addr, NamePath: namepath.Identity})
+	c, err := NewClient(Config{Addr: addr, NamePath: namepath.Identity}, tally.NoopScope)
 	require.NoError(err)
 
 	blob := core.NewBlobFixture()
@@ -63,7 +64,7 @@ func TestServerTag(t *testing.T) {
 	addr, stop := testutil.StartServer(s.Handler())
 	defer stop()
 
-	c, err := NewClient(Config{Addr: addr, NamePath: namepath.Identity})
+	c, err := NewClient(Config{Addr: addr, NamePath: namepath.Identity}, tally.NoopScope)
 	require.NoError(err)
 
 	ns := core.NamespaceFixture()
@@ -98,7 +99,7 @@ func TestServerList(t *testing.T) {
 			defer stop()
 
 			ns := core.NamespaceFixture()
-			c, err := NewClient(Config{Addr: addr, Root: "root", NamePath: namepath.Identity})
+			c, err := NewClient(Config{Addr: addr, Root: "root", NamePath: namepath.Identity}, tally.NoopScope)
 			require.NoError(err)
 
 			require.NoError(c.Upload(ns, "a/b/c.txt", bytes.NewBufferString("foo")))
@@ -121,7 +122,7 @@ func TestDockerTagList(t *testing.T) {
 	addr, stop := testutil.StartServer(s.Handler())
 	defer stop()
 
-	c, err := NewClient(Config{Addr: addr, Root: "tags", NamePath: namepath.DockerTag})
+	c, err := NewClient(Config{Addr: addr, Root: "tags", NamePath: namepath.DockerTag}, tally.NoopScope)
 	require.NoError(err)
 
 	ns := core.NamespaceFixture()
