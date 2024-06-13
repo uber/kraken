@@ -122,7 +122,7 @@ For origins, the number of files can also be limited as origins are dedicated se
 
 # Configuring Hash Ring
 
-Both orgin and tracker clusters are self-healing hash rings and both can be represented by either a dns name or a static list of hosts.
+Both origin and tracker clusters are self-healing hash rings and both can be represented by either a dns name or a static list of hosts.
 
 We use rendezvous hashing for constructing ring membership.
 
