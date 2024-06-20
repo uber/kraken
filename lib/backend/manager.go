@@ -64,7 +64,7 @@ func NewManager(configs []Config, auth AuthConfig, stats tally.Scope) (*Manager,
 		var backendConfig interface{}
 		for name, backendConfig = range config.Backend { // Pull the only key/value out of map
 		}
-		factory, err := getFactory(name)
+		factory, err := GetFactory(name)
 		if err != nil {
 			return nil, fmt.Errorf("get backend client factory: %s", err)
 		}
