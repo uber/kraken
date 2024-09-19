@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -47,7 +47,7 @@ func (f *factory) Create(
 
 	authConfBytes, err := yaml.Marshal(authConfRaw)
 	if err != nil {
-		return nil, errors.New("marshal s3 auth config")
+		return nil, errors.New("marshal sql auth config")
 	}
 
 	var config Config
@@ -56,7 +56,7 @@ func (f *factory) Create(
 	}
 	var userAuth UserAuthConfig
 	if err := yaml.Unmarshal(authConfBytes, &userAuth); err != nil {
-		return nil, errors.New("unmarshal s3 auth config")
+		return nil, errors.New("unmarshal sql auth config")
 	}
 
 	return NewClient(config, userAuth, stats)

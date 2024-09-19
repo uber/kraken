@@ -37,7 +37,7 @@ func (f *factory) Name() string {
 }
 
 func (f *factory) Create(
-	confRaw interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
+	confRaw interface{}, masterAuthConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
@@ -48,7 +48,7 @@ func (f *factory) Create(
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
 		return nil, fmt.Errorf("unmarshal shadow config: %v", err)
 	}
-	return NewClient(config, authConfRaw, stats)
+	return NewClient(config, masterAuthConfRaw, stats)
 }
 
 // Client implements a backend.Client for shadow mode. See the README for full details on what shadow mode means.
@@ -63,13 +63,19 @@ type Client struct {
 type Option func(*Client)
 
 // NewClient creates a new shadow Client
-func NewClient(config Config, authConfRaw interface{}, stats tally.Scope) (*Client, error) {
-	a, err := getBackendClient(config.ActiveClientConfig, authConfRaw, stats)
+func NewClient(config Config, masterAuthConfRaw interface{}, stats tally.Scope) (*Client, error) {
+	// By contrast to the other backends, the shadow backend mode receives the whole master auth file,
+	// as it needs to parse the auth credentials of both the active and shadow backends.
+	aAuthConfig, sAuthConfig, err := extractAuthConfigs(config, masterAuthConfRaw)
+	if err != nil {
+		return nil, err
+	}
+	a, err := getBackendClient(config.ActiveClientConfig, aAuthConfig, stats)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := getBackendClient(config.ShadowClientConfig, authConfRaw, stats)
+	s, err := getBackendClient(config.ShadowClientConfig, sAuthConfig, stats)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +86,42 @@ func NewClient(config Config, authConfRaw interface{}, stats tally.Scope) (*Clie
 		shadow: s,
 		stats:  stats,
 	}, nil
+}
+
+func extractAuthConfigs(config Config, masterAuthConfRaw interface{}) (interface{}, interface{}, error) {
+	aName, sName, err := getBackendNames(config)
+	if err != nil {
+		return nil, nil, err
+	}
+	masterAuth, ok := masterAuthConfRaw.(map[string]interface{})
+	if !ok {
+		return nil, nil, fmt.Errorf("cannot parse master auth config")
+	}
+	aAuth, ok := masterAuth[aName]
+	if !ok {
+		return nil, nil, fmt.Errorf("active backend auth config missing")
+	}
+	sAuth, ok := masterAuth[sName]
+	if !ok {
+		return nil, nil, fmt.Errorf("shadow backend auth config missing")
+	}
+	return aAuth, sAuth, nil
+}
+
+func getBackendNames(config Config) (string, string, error) {
+	if len(config.ActiveClientConfig) != 1 {
+		return "", "", fmt.Errorf("no active backend or more than one active backend configured")
+	}
+	if len(config.ShadowClientConfig) != 1 {
+		return "", "", fmt.Errorf("no shadow backend or more than one shadow backend configured")
+	}
+	var aName string
+	var sName string
+	for aName = range config.ActiveClientConfig { // Map should have only 1 key/value
+	}
+	for sName = range config.ShadowClientConfig { // Map should have only 1 key/value
+	}
+	return aName, sName, nil
 }
 
 func getBackendClient(backendConfig map[string]interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
