@@ -68,16 +68,7 @@ func NewManager(configs []Config, auth AuthConfig, stats tally.Scope) (*Manager,
 		if err != nil {
 			return nil, fmt.Errorf("get backend client factory: %s", err)
 		}
-		var backendAuthConfig interface{}
-		// Normally, when creating a backend client, we only need to pass its own auth credentials to its Create function.
-		// However, the shadow backend mode requires the auth configs of 2 backends (e.g. GCS and S3),
-		// thus we pass the whole AuthConfig (which includes the credentials of all used backends) to it. 
-		if backendName == "shadow" {
-			backendAuthConfig = auth
-		} else {
-			backendAuthConfig = auth[backendName]
-		}
-		c, err = factory.Create(backendConfig, backendAuthConfig, stats)
+		c, err = factory.Create(backendConfig, auth, stats)
 		if err != nil {
 			return nil, fmt.Errorf("create backend client: %s", err)
 		}

@@ -67,19 +67,38 @@ func newClient(mocks *clientMocks) *Client {
 
 func TestClientFactory(t *testing.T) {
 	sqlCfg := sqlbackend.Config{Dialect: "sqlite3", ConnectionString: ":memory:"}
-	testfsCfg := testfs.Config{Addr: "localhost:1234", NamePath: "docker_tag", Root: "tags"}
-	var auth s3backend.AuthConfig
-	auth.S3.AccessKeyID = "accesskey"
-	auth.S3.AccessSecretKey = "secret"
-	authCfg := s3backend.UserAuthConfig{"test-user": auth}
+	s3Cfg := s3backend.Config{
+		Username:      "test-user",
+		Region:        "test-region",
+		Bucket:        "test-bucket",
+		NamePath:      "identity",
+		RootDirectory: "/root",
+	}
+
+	var s3Auth s3backend.AuthConfig
+	s3Auth.S3.AccessKeyID = "accesskey"
+	s3Auth.S3.AccessSecretKey = "secret"
+	s3AuthCfg := s3backend.UserAuthConfig{"test-user": s3Auth}
+
+
+	sqlAuthCfg := sqlbackend.UserAuthConfig{
+		"testuser": sqlbackend.AuthConfig{
+			SQL: sqlbackend.SQL{
+				User:     "captain_marvel",
+				Password: "higher_further_faster",
+			},
+		},
+	}
+
+	masterAuthCfg := backend.AuthConfig{"s3": s3AuthCfg, "sql": sqlAuthCfg}
 
 	config := Config{
 		ActiveClientConfig: map[string]interface{}{"sql": sqlCfg},
-		ShadowClientConfig: map[string]interface{}{"testfs": testfsCfg},
+		ShadowClientConfig: map[string]interface{}{"s3": s3Cfg},
 	}
 
 	f := factory{}
-	c, err := f.Create(config, authCfg, tally.NoopScope)
+	c, err := f.Create(config, masterAuthCfg, tally.NoopScope)
 	require.NoError(t, err)
 	require.NotNil(t, c)
 }

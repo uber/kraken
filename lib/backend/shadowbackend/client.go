@@ -37,7 +37,7 @@ func (f *factory) Name() string {
 }
 
 func (f *factory) Create(
-	confRaw interface{}, masterAuthConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
+	confRaw interface{}, masterAuthConfig backend.AuthConfig, stats tally.Scope) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
@@ -48,7 +48,7 @@ func (f *factory) Create(
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
 		return nil, fmt.Errorf("unmarshal shadow config: %v", err)
 	}
-	return NewClient(config, masterAuthConfRaw, stats)
+	return NewClient(config, masterAuthConfig, stats)
 }
 
 // Client implements a backend.Client for shadow mode. See the README for full details on what shadow mode means.
@@ -63,10 +63,8 @@ type Client struct {
 type Option func(*Client)
 
 // NewClient creates a new shadow Client
-func NewClient(config Config, masterAuthConfRaw interface{}, stats tally.Scope) (*Client, error) {
-	// By contrast to the other backends, the shadow backend mode receives the whole master auth file,
-	// as it needs to parse the auth credentials of both the active and shadow backends.
-	aAuthConfig, sAuthConfig, err := extractAuthConfigs(config, masterAuthConfRaw)
+func NewClient(config Config, masterAuthConfig backend.AuthConfig, stats tally.Scope) (*Client, error) {
+	aAuthConfig, sAuthConfig, err := extractAuthConfigs(config, masterAuthConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -88,20 +86,17 @@ func NewClient(config Config, masterAuthConfRaw interface{}, stats tally.Scope) 
 	}, nil
 }
 
-func extractAuthConfigs(config Config, masterAuthConfRaw interface{}) (interface{}, interface{}, error) {
+func extractAuthConfigs(config Config, masterAuthConfig backend.AuthConfig) (interface{}, interface{}, error) {
 	aName, sName, err := getBackendNames(config)
 	if err != nil {
 		return nil, nil, err
 	}
-	masterAuth, ok := masterAuthConfRaw.(map[string]interface{})
-	if !ok {
-		return nil, nil, fmt.Errorf("cannot parse master auth config")
-	}
-	aAuth, ok := masterAuth[aName]
+
+	aAuth, ok := masterAuthConfig[aName]
 	if !ok {
 		return nil, nil, fmt.Errorf("active backend auth config missing")
 	}
-	sAuth, ok := masterAuth[sName]
+	sAuth, ok := masterAuthConfig[sName]
 	if !ok {
 		return nil, nil, fmt.Errorf("shadow backend auth config missing")
 	}

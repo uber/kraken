@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -83,8 +83,9 @@ func TestClientFactory(t *testing.T) {
 	var auth AuthConfig
 	auth.GCS.AccessBlob = "access_blob"
 	userAuth := UserAuthConfig{"test-user": auth}
+	masterAuth := backend.AuthConfig{_gcs: userAuth}
 	f := factory{}
-	_, err := f.Create(config, userAuth, tally.NoopScope)
+	_, err := f.Create(config, masterAuth, tally.NoopScope)
 	fmt.Println(err.Error())
 	require.True(strings.Contains(err.Error(), "invalid gcs credentials"))
 }
