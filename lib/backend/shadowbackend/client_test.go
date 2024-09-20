@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -88,16 +88,62 @@ func TestClientFactory(t *testing.T) {
 		},
 	}
 
-	masterAuthCfg := backend.AuthConfig{"s3": s3AuthCfg, "sql": sqlAuthCfg}
-	config := Config{
-		ActiveClientConfig: map[string]interface{}{"sql": sqlCfg},
-		ShadowClientConfig: map[string]interface{}{"s3": s3Cfg},
+	for _, tc := range []struct {
+		config           Config
+		masterAuthConfig backend.AuthConfig
+		wantErrMsg       string
+	}{
+		{
+			config: Config{
+				ActiveClientConfig: map[string]interface{}{"sql": sqlCfg},
+				ShadowClientConfig: map[string]interface{}{"s3": s3Cfg},
+			},
+			masterAuthConfig: backend.AuthConfig{"s3": s3AuthCfg, "sql": sqlAuthCfg},
+			wantErrMsg:       "",
+		},
+		{
+			config: Config{
+				ActiveClientConfig: map[string]interface{}{"sql": sqlCfg, "s3": s3Cfg},
+				ShadowClientConfig: map[string]interface{}{"s3": s3Cfg},
+			},
+			masterAuthConfig: backend.AuthConfig{"s3": s3AuthCfg, "sql": sqlAuthCfg},
+			wantErrMsg:       "no active backend or more than one active backend configured",
+		},
+		{
+			config: Config{
+				ActiveClientConfig: map[string]interface{}{"s3": s3Cfg},
+				ShadowClientConfig: map[string]interface{}{"sql": sqlCfg, "s3": s3Cfg},
+			},
+			masterAuthConfig: backend.AuthConfig{"s3": s3AuthCfg, "sql": sqlAuthCfg},
+			wantErrMsg:       "no shadow backend or more than one shadow backend configured",
+		},
+		{
+			config: Config{
+				ActiveClientConfig: map[string]interface{}{"gcs": sqlCfg},
+				ShadowClientConfig: map[string]interface{}{"s3": s3Cfg},
+			},
+			masterAuthConfig: backend.AuthConfig{"s3": s3AuthCfg, "sql": sqlAuthCfg},
+			wantErrMsg:       "active backend auth config missing",
+		},
+		{
+			config: Config{
+				ActiveClientConfig: map[string]interface{}{"sql": sqlCfg},
+				ShadowClientConfig: map[string]interface{}{"gcs": s3Cfg},
+			},
+			masterAuthConfig: backend.AuthConfig{"s3": s3AuthCfg, "sql": sqlAuthCfg},
+			wantErrMsg:       "shadow backend auth config missing",
+		},
+	} {
+		f := factory{}
+		c, err := f.Create(tc.config, tc.masterAuthConfig, tally.NoopScope)
+		if tc.wantErrMsg == "" {
+			require.NoError(t, err)
+			require.NotNil(t, c)
+		} else {
+			require.Equal(t, tc.wantErrMsg, err.Error())
+			require.Nil(t, c)
+		}
 	}
-
-	f := factory{}
-	c, err := f.Create(config, masterAuthCfg, tally.NoopScope)
-	require.NoError(t, err)
-	require.NotNil(t, c)
 }
 
 func TestGetBackendClient(t *testing.T) {
