@@ -79,8 +79,6 @@ func TestClientFactory(t *testing.T) {
 	s3Auth.S3.AccessKeyID = "accesskey"
 	s3Auth.S3.AccessSecretKey = "secret"
 	s3AuthCfg := s3backend.UserAuthConfig{"test-user": s3Auth}
-
-
 	sqlAuthCfg := sqlbackend.UserAuthConfig{
 		"testuser": sqlbackend.AuthConfig{
 			SQL: sqlbackend.SQL{
@@ -91,7 +89,6 @@ func TestClientFactory(t *testing.T) {
 	}
 
 	masterAuthCfg := backend.AuthConfig{"s3": s3AuthCfg, "sql": sqlAuthCfg}
-
 	config := Config{
 		ActiveClientConfig: map[string]interface{}{"sql": sqlCfg},
 		ShadowClientConfig: map[string]interface{}{"s3": s3Cfg},
