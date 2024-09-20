@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -60,15 +60,15 @@ func NewManager(configs []Config, auth AuthConfig, stats tally.Scope) (*Manager,
 		if len(config.Backend) != 1 {
 			return nil, fmt.Errorf("no backend or more than one backend configured")
 		}
-		var name string
+		var backendName string
 		var backendConfig interface{}
-		for name, backendConfig = range config.Backend { // Pull the only key/value out of map
+		for backendName, backendConfig = range config.Backend { // Pull the only key/value out of map
 		}
-		factory, err := getFactory(name)
+		factory, err := getFactory(backendName)
 		if err != nil {
 			return nil, fmt.Errorf("get backend client factory: %s", err)
 		}
-		c, err = factory.Create(backendConfig, auth[name], stats)
+		c, err = factory.Create(backendConfig, auth, stats)
 		if err != nil {
 			return nil, fmt.Errorf("create backend client: %s", err)
 		}

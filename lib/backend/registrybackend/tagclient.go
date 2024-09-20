@@ -40,7 +40,7 @@ func init() {
 type tagClientFactory struct{}
 
 func (f *tagClientFactory) Create(
-	confRaw interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
+	confRaw interface{}, masterAuthConfig backend.AuthConfig, stats tally.Scope) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
