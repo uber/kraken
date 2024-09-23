@@ -25,7 +25,7 @@ var _factories = make(map[string]ClientFactory)
 
 // ClientFactory creates backend client given name.
 type ClientFactory interface {
-	Create(config interface{}, authConfig interface{}, stats tally.Scope) (Client, error)
+	Create(config interface{}, masterAuthConfig AuthConfig, stats tally.Scope) (Client, error)
 }
 
 // Register registers new Factory with corresponding backend client name.

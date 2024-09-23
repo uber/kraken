@@ -80,8 +80,9 @@ func TestClientFactory(t *testing.T) {
 	auth.S3.AccessKeyID = "accesskey"
 	auth.S3.AccessSecretKey = "secret"
 	userAuth := UserAuthConfig{"test-user": auth}
+	masterAuth := backend.AuthConfig{_s3: userAuth}
 	f := factory{}
-	_, err := f.Create(config, userAuth, tally.NoopScope)
+	_, err := f.Create(config, masterAuth, tally.NoopScope)
 	require.NoError(err)
 }
 

@@ -243,6 +243,13 @@ func DisableHTTPFallback() SendOption {
 	}
 }
 
+// EnableHTTPFallback enables http fallback when https request fails.
+func EnableHTTPFallback() SendOption {
+	return func(o *sendOptions) {
+		o.httpFallbackDisabled = false
+	}
+}
+
 // SendTLS sets the transport with TLS config for the HTTP client.
 func SendTLS(config *tls.Config) SendOption {
 	return func(o *sendOptions) {

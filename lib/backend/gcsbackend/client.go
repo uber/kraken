@@ -42,13 +42,13 @@ func init() {
 type factory struct{}
 
 func (f *factory) Create(
-	confRaw interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
+	confRaw interface{}, masterAuthConfig backend.AuthConfig, stats tally.Scope) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
 		return nil, errors.New("marshal gcs config")
 	}
-	authConfBytes, err := yaml.Marshal(authConfRaw)
+	authConfBytes, err := yaml.Marshal(masterAuthConfig[_gcs])
 	if err != nil {
 		return nil, errors.New("marshal gcs auth config")
 	}
