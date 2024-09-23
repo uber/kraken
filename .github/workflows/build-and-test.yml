@@ -22,7 +22,7 @@ jobs:
       - name: Build
         run: go build -v ./...
       - name: Test with the Go CLI
-        run: go test $(go list ./... | grep -v /api/apitest) -cover -json > TestResults-${{ matrix.go-version }}.json
+        run: go test $(go list ./...) -cover -json > TestResults-${{ matrix.go-version }}.json
       - name: Upload Go test results
         uses: actions/upload-artifact@v4
         with:
