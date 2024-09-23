@@ -97,9 +97,12 @@ func (a *authenticator) Authenticate(repo string) ([]httputil.SendOption, error)
 		return opts, nil
 	}
 
-	if !config.EnableHTTPFallback {
+	if config.EnableHTTPFallback {
+		opts = append(opts, httputil.EnableHTTPFallback())
+	} else {
 		opts = append(opts, httputil.DisableHTTPFallback())
 	}
+
 	if !a.shouldAuth() {
 		opts = append(opts, httputil.SendTLSTransport(a.roundTripper))
 		return opts, nil
