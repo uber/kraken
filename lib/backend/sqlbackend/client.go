@@ -33,6 +33,10 @@ import (
 
 const _sql = "sql"
 
+func init() {
+	backend.Register(_sql, &factory{})
+}
+
 type factory struct{}
 
 func (f *factory) Name() string {
