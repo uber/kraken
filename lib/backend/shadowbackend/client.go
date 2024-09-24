@@ -30,10 +30,16 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const _shadow = "shadow"
+
+func init() {
+	backend.Register(_shadow, &factory{})
+}
+
 type factory struct{}
 
 func (f *factory) Name() string {
-	return "shadow"
+	return _shadow
 }
 
 func (f *factory) Create(
