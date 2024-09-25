@@ -178,7 +178,7 @@ func (c credentialStore) Basic(*url.URL) (string, string) {
 	if c.config.PasswordFile != "" {
 		passwordBytes, err := ioutil.ReadFile(c.config.PasswordFile)
 		if err == nil {
-			return basic.Username, (string)(passwordBytes)
+			return basic.Username, string(passwordBytes)
 		}
 	}
 	return basic.Username, basic.Password
