@@ -9,7 +9,7 @@ require (
 	github.com/alicebob/gopher-json v0.0.0-20180125190556-5a6b3ba71ee6 // indirect
 	github.com/alicebob/miniredis v2.5.0+incompatible
 	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129
-	github.com/aws/aws-sdk-go v1.21.4
+	github.com/aws/aws-sdk-go v1.34.0
 	github.com/awslabs/amazon-ecr-credential-helper v0.3.1
 	github.com/bugsnag/bugsnag-go v1.5.0 // indirect
 	github.com/bugsnag/panicwrap v0.0.0-20180510051541-1d162ee1264c // indirect
