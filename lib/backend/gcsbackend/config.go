@@ -39,7 +39,11 @@ type Config struct {
 	// NamePath identifies which namepath.Pather to use.
 	NamePath string `yaml:"name_path"`
 
+	// TransferManagerWorkerCount sets the number of workers for the transfer manager.
 	TransferManagerWorkerCount int `yaml:"transfer_manager_worker_count"`
+
+	//DownloadPartSize sets the part size for download
+	DownloadPartSize int64 `yaml:"download_part_size"`
 }
 
 // UserAuthConfig defines authentication configuration overlayed by Langley.
@@ -64,6 +68,9 @@ func (c *Config) applyDefaults() {
 		c.ListMaxKeys = backend.DefaultListMaxKeys
 	}
 	if c.TransferManagerWorkerCount == 0 {
-		c.TransferManagerWorkerCount = backend.DefaultTransferManagerWorkerCount
+		c.TransferManagerWorkerCount = backend.DefaultConcurrency
+	}
+	if c.DownloadPartSize == 0 {
+		c.DownloadPartSize = backend.DefaultPartSize
 	}
 }

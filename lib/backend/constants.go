@@ -24,5 +24,4 @@ const (
 	DefaultBufferGuard                datasize.ByteSize = 10 * datasize.MB
 	DefaultConcurrency                int               = 10
 	DefaultListMaxKeys                int               = 250
-	DefaultTransferManagerWorkerCount int               = 16
 )

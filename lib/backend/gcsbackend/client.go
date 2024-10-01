@@ -124,7 +124,7 @@ func NewClient(
 		return nil, fmt.Errorf("invalid gcs credentials: %s", err)
 	}
 
-	downloader, err := transfermanager.NewDownloader(sClient, transfermanager.WithWorkers(config.TransferManagerWorkerCount))
+	downloader, err := transfermanager.NewDownloader(sClient, transfermanager.WithWorkers(config.TransferManagerWorkerCount), transfermanager.WithPartSize(config.DownloadPartSize))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create downloader: %s", err)
 	}
