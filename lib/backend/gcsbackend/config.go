@@ -38,6 +38,8 @@ type Config struct {
 
 	// NamePath identifies which namepath.Pather to use.
 	NamePath string `yaml:"name_path"`
+
+	TransferManagerWorkerCount int `yaml:"transfer_manager_worker_count"`
 }
 
 // UserAuthConfig defines authentication configuration overlayed by Langley.
@@ -60,5 +62,8 @@ func (c *Config) applyDefaults() {
 	}
 	if c.ListMaxKeys == 0 {
 		c.ListMaxKeys = backend.DefaultListMaxKeys
+	}
+	if c.TransferManagerWorkerCount == 0 {
+		c.TransferManagerWorkerCount = backend.DefaultTransferManagerWorkerCount
 	}
 }
