@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,6 +21,7 @@ import (
 	"github.com/uber/kraken/build-index/tagstore"
 	"github.com/uber/kraken/build-index/tagtype"
 	"github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/backend/gcsbackend"
 	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/lib/persistedretry"
@@ -110,6 +111,14 @@ func Run(flags *Flags, opts ...Option) {
 				panic(err)
 			}
 		}
+	}
+
+	if len(config.GCSServiceAccounts) != 0 {
+		gcsUserAuthConfig, err := gcsbackend.BuildUserAuthConfig(config.GCSServiceAccounts)
+		if err != nil {
+			panic(err)
+		}
+		config.Auth["gcs"] = gcsUserAuthConfig
 	}
 
 	if overrides.logger != nil {

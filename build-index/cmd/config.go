@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,6 +18,7 @@ import (
 	"github.com/uber/kraken/build-index/tagstore"
 	"github.com/uber/kraken/build-index/tagtype"
 	"github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/backend/gcsbackend"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/persistedretry/tagreplication"
 	"github.com/uber/kraken/lib/store"
@@ -32,20 +33,21 @@ import (
 
 // Config defines build-index configuration.
 type Config struct {
-	ZapLogging     zap.Config                   `yaml:"zap"`
-	Metrics        metrics.Config               `yaml:"metrics"`
-	Backends       []backend.Config             `yaml:"backends"`
-	Auth           backend.AuthConfig           `yaml:"auth"`
-	TagServer      tagserver.Config             `yaml:"tagserver"`
-	Remotes        tagreplication.RemotesConfig `yaml:"remotes"`
-	TagReplication persistedretry.Config        `yaml:"tag_replication"`
-	TagTypes       []tagtype.Config             `yaml:"tag_types"`
-	Origin         upstream.ActiveConfig        `yaml:"origin"`
-	LocalDB        localdb.Config               `yaml:"localdb"`
-	Cluster        upstream.ActiveConfig        `yaml:"cluster"`
-	TagStore       tagstore.Config              `yaml:"tag_store"`
-	Store          store.SimpleStoreConfig      `yaml:"store"`
-	WriteBack      persistedretry.Config        `yaml:"writeback"`
-	Nginx          nginx.Config                 `yaml:"nginx"`
-	TLS            httputil.TLSConfig           `yaml:"tls"`
+	ZapLogging         zap.Config                   `yaml:"zap"`
+	Metrics            metrics.Config               `yaml:"metrics"`
+	Backends           []backend.Config             `yaml:"backends"`
+	Auth               backend.AuthConfig           `yaml:"auth"`
+	TagServer          tagserver.Config             `yaml:"tagserver"`
+	Remotes            tagreplication.RemotesConfig `yaml:"remotes"`
+	TagReplication     persistedretry.Config        `yaml:"tag_replication"`
+	TagTypes           []tagtype.Config             `yaml:"tag_types"`
+	Origin             upstream.ActiveConfig        `yaml:"origin"`
+	LocalDB            localdb.Config               `yaml:"localdb"`
+	Cluster            upstream.ActiveConfig        `yaml:"cluster"`
+	TagStore           tagstore.Config              `yaml:"tag_store"`
+	Store              store.SimpleStoreConfig      `yaml:"store"`
+	WriteBack          persistedretry.Config        `yaml:"writeback"`
+	Nginx              nginx.Config                 `yaml:"nginx"`
+	TLS                httputil.TLSConfig           `yaml:"tls"`
+	GCSServiceAccounts []gcsbackend.ServiceAccount  `yaml:"gcs_service_accounts"`
 }

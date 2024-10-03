@@ -74,14 +74,14 @@ func BuildUserAuthConfig(sas []ServiceAccount) (UserAuthConfig, error) {
 	gcsUserAuthConfig := UserAuthConfig{}
 
 	for _, sa := range sas {
-		var dataBytes []byte
-		dataBytes, err := os.ReadFile(sa.Path)
+		var accessBlobBytes []byte
+		accessBlobBytes, err := os.ReadFile(sa.Path)
 		if err != nil {
 			return nil, err
 		}
 
-		var data string
-		err = yaml.Unmarshal(dataBytes, data)
+		var accessBlob string
+		err = yaml.Unmarshal(accessBlobBytes, accessBlob)
 		if err != nil {
 			return nil, err
 		}
@@ -90,7 +90,7 @@ func BuildUserAuthConfig(sas []ServiceAccount) (UserAuthConfig, error) {
 			GCS: struct {
 				AccessBlob string `yaml:"access_blob"`
 			}{
-				AccessBlob: data,
+				AccessBlob: accessBlob,
 			},
 		}
 	}
