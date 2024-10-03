@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//	   http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,8 +15,10 @@ package gcsbackend
 
 import (
 	"github.com/c2h5oh/datasize"
+	"os"
 
 	"github.com/uber/kraken/lib/backend"
+	"gopkg.in/yaml.v2"
 )
 
 // Config defines gcs connection specific
@@ -51,6 +53,11 @@ type AuthConfig struct {
 	} `yaml:"gcs"`
 }
 
+type ServiceAccount struct {
+	Name string `yaml:"name"`
+	Path string `yaml:"path"`
+}
+
 func (c *Config) applyDefaults() {
 	if c.UploadChunkSize == 0 {
 		c.UploadChunkSize = backend.DefaultPartSize
@@ -61,4 +68,31 @@ func (c *Config) applyDefaults() {
 	if c.ListMaxKeys == 0 {
 		c.ListMaxKeys = backend.DefaultListMaxKeys
 	}
+}
+
+func BuildUserAuthConfig(sas []ServiceAccount) (UserAuthConfig, error) {
+	gcsUserAuthConfig := UserAuthConfig{}
+
+	for _, sa := range sas {
+		var dataBytes []byte
+		dataBytes, err := os.ReadFile(sa.Path)
+		if err != nil {
+			return nil, err
+		}
+
+		var data string
+		err = yaml.Unmarshal(dataBytes, data)
+		if err != nil {
+			return nil, err
+		}
+
+		gcsUserAuthConfig[sa.Name] = AuthConfig{
+			GCS: struct {
+				AccessBlob string `yaml:"access_blob"`
+			}{
+				AccessBlob: data,
+			},
+		}
+	}
+	return gcsUserAuthConfig, nil
 }
