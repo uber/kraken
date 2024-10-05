@@ -31,7 +31,7 @@ type Config struct {
 func (c Config) applyDefaults() Config {
 	for k := range c.Backend {
 		// TODO: don't hard code backend client name
-		if k == "s3" {
+		if k == "s3" || k == "gcs"{
 			if c.Bandwidth.IngressBitsPerSec == 0 {
 				c.Bandwidth.IngressBitsPerSec = 10 * 8 * memsize.Gbit
 			}
