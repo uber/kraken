@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//	   http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,8 +26,10 @@ import (
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/backend/namepath"
 	"github.com/uber/kraken/utils/log"
+	"github.com/uber/kraken/utils/rwutil"
 
 	"cloud.google.com/go/storage"
+	"cloud.google.com/go/storage/transfermanager"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"gopkg.in/yaml.v2"
@@ -122,8 +124,13 @@ func NewClient(
 		return nil, fmt.Errorf("invalid gcs credentials: %s", err)
 	}
 
+	downloader, err := transfermanager.NewDownloader(sClient, transfermanager.WithWorkers(config.TransferManagerWorkerCount), transfermanager.WithPartSize(config.DownloadPartSize))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create downloader: %s", err)
+	}
+
 	client := &Client{config, pather, stats,
-		NewGCS(ctx, sClient.Bucket(config.Bucket), &config)}
+		NewGCS(ctx, sClient.Bucket(config.Bucket), &config, downloader)}
 
 	log.Infof("Initalized GCS backend with config: %s", config)
 	return client, nil
@@ -220,15 +227,15 @@ func isObjectNotFound(err error) bool {
 
 // GCSImpl implements GCS interaface.
 type GCSImpl struct {
-	ctx    context.Context
-	bucket *storage.BucketHandle
-	config *Config
+	ctx        context.Context
+	bucket     *storage.BucketHandle
+	config     *Config
+	downloader *transfermanager.Downloader
 }
 
 func NewGCS(ctx context.Context, bucket *storage.BucketHandle,
-	config *Config) *GCSImpl {
-
-	return &GCSImpl{ctx, bucket, config}
+	config *Config, downloader *transfermanager.Downloader) *GCSImpl {
+	return &GCSImpl{ctx, bucket, config, downloader}
 }
 
 func (g *GCSImpl) ObjectAttrs(objectName string) (*storage.ObjectAttrs, error) {
@@ -237,20 +244,50 @@ func (g *GCSImpl) ObjectAttrs(objectName string) (*storage.ObjectAttrs, error) {
 }
 
 func (g *GCSImpl) Download(objectName string, w io.Writer) (int64, error) {
-	rc, err := g.bucket.Object(objectName).NewReader(g.ctx)
-	if err != nil {
+	//Create a capped buffer if the writer is not a WriterAt
+	writerAt, ok := w.(io.WriterAt)
+	if !ok {
+		writerAt = rwutil.NewCappedBuffer(int(g.config.BufferGuard))
+	}
+
+	// Create the download input for the transfer manager
+	in := &transfermanager.DownloadObjectInput{
+		Bucket:      g.config.Bucket,
+		Object:      objectName,
+		Destination: writerAt,
+	}
+
+	// Download the object
+	if err := g.downloader.DownloadObject(g.ctx, in); err != nil {
 		if isObjectNotFound(err) {
 			return 0, backenderrors.ErrBlobNotFound
 		}
 		return 0, err
 	}
-	defer rc.Close()
 
-	r, err := io.CopyN(w, rc, int64(g.config.BufferGuard))
-	if err != nil && err != io.EOF {
+	// Wait for the download to finish and close the writer
+	results, err := g.downloader.WaitAndClose()
+	if err != nil {
 		return 0, err
 	}
 
+	// Calculate the total size of the downloaded object
+	r := int64(0)
+	for _, out := range results {
+		if out.Err != nil {
+			return 0, out.Err
+		}
+		r += out.Attrs.Size
+	}
+
+	// Drain the capped buffer into the writer
+	if capBuf, ok := writerAt.(*rwutil.CappedBuffer); ok {
+		if err = capBuf.DrainInto(w); err != nil {
+			return 0, err
+		}
+	}
+
+	// Return the total size of the downloaded object
 	return r, nil
 }
 
