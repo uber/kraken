@@ -17,10 +17,14 @@ import (
 	"syscall"
 )
 
-const path = "/"
 
 // Helper method to get disk util.
 func DiskSpaceUtil() (int, error) {
+	path := "/"
+	return DiskSpaceAtPathUtil(path)
+}
+
+func DiskSpaceAtPathUtil(path string) (int, error) {
 	fs := syscall.Statfs_t{}
 	err := syscall.Statfs(path, &fs)
 	if err != nil {
@@ -31,5 +35,4 @@ func DiskSpaceUtil() (int, error) {
 	diskFree := fs.Bfree * uint64(fs.Bsize)
 	diskUsed := diskAll - diskFree
 	return int(diskUsed * 100 / diskAll), nil
-
 }
