@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/bandwidth"
 	"github.com/uber/kraken/utils/log"
 
@@ -28,13 +29,16 @@ import (
 var (
 	ErrNamespaceNotFound = errors.New("no matches for namespace")
 )
+const isReadyNamespace = "isReadyNamespace"
+const isReadyName = "38a03d499119bc417b8a6a016f2cb4540b9f9cc0c13e4da42a73867120d3e908"
 
 type backend struct {
 	regexp *regexp.Regexp
 	client Client
+	mustReady bool
 }
 
-func newBackend(namespace string, c Client) (*backend, error) {
+func newBackend(namespace string, c Client, mustReady bool) (*backend, error) {
 	re, err := regexp.Compile(namespace)
 	if err != nil {
 		return nil, fmt.Errorf("regexp: %s", err)
@@ -42,6 +46,7 @@ func newBackend(namespace string, c Client) (*backend, error) {
 	return &backend{
 		regexp: re,
 		client: c,
+		mustReady: mustReady,
 	}, nil
 }
 
@@ -80,7 +85,7 @@ func NewManager(configs []Config, auth AuthConfig, stats tally.Scope) (*Manager,
 			}
 			c = throttle(c, l)
 		}
-		b, err := newBackend(config.Namespace, c)
+		b, err := newBackend(config.Namespace, c, config.MustReady)
 		if err != nil {
 			return nil, fmt.Errorf("new backend for namespace %s: %s", config.Namespace, err)
 		}
@@ -112,13 +117,13 @@ func (m *Manager) AdjustBandwidth(denominator int) error {
 // Register dynamically registers a namespace with a provided client. Register
 // should be primarily used for testing purposes -- normally, namespaces should
 // be statically configured and provided upon construction of the Manager.
-func (m *Manager) Register(namespace string, c Client) error {
+func (m *Manager) Register(namespace string, c Client, mustReady bool) error {
 	for _, b := range m.backends {
 		if b.regexp.String() == namespace {
 			return fmt.Errorf("namespace %s already exists", namespace)
 		}
 	}
-	b, err := newBackend(namespace, c)
+	b, err := newBackend(namespace, c, mustReady)
 	if err != nil {
 		return fmt.Errorf("new backend: %s", err)
 	}
@@ -138,4 +143,19 @@ func (m *Manager) GetClient(namespace string) (Client, error) {
 		}
 	}
 	return nil, ErrNamespaceNotFound
+}
+
+// IsReady returns whether the backends are ready (reachable).
+// A backend must be explicitly configured as required for readiness to be checked.
+func (m *Manager) IsReady() (bool, error) {
+	for _, b := range m.backends {
+		if !b.mustReady {
+			continue
+		}
+		_, err := b.client.Stat(isReadyNamespace, isReadyName)
+		if err != nil && err != backenderrors.ErrBlobNotFound {
+			return false, fmt.Errorf("backend for namespace %s not ready: %s", b.regexp.String(), err)
+		}
+	}
+	return true, nil
 }

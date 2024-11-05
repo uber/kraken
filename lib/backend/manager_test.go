@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,10 +14,13 @@
 package backend_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/uber-go/tally"
+	"github.com/uber/kraken/core"
 	. "github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/backend/namepath"
 	"github.com/uber/kraken/lib/backend/testfs"
 	"github.com/uber/kraken/mocks/lib/backend"
@@ -49,8 +52,8 @@ func TestManagerNamespaceMatching(t *testing.T) {
 
 			m := ManagerFixture()
 
-			require.NoError(m.Register("static", c1))
-			require.NoError(m.Register("namespace-foo/.*", c2))
+			require.NoError(m.Register("static", c1, false))
+			require.NoError(m.Register("namespace-foo/.*", c2, false))
 
 			result, err := m.GetClient(test.namespace)
 			require.NoError(err)
@@ -65,8 +68,8 @@ func TestManagerErrDuplicateNamespace(t *testing.T) {
 
 	c := &NoopClient{}
 	m := ManagerFixture()
-	require.NoError(m.Register("static", c))
-	require.Error(m.Register("static", c))
+	require.NoError(m.Register("static", c, false))
+	require.Error(m.Register("static", c, false))
 }
 
 func TestManagerErrNamespaceNotFound(t *testing.T) {
@@ -154,4 +157,86 @@ func TestManagerBandwidth(t *testing.T) {
 	watcher.Notify(stringset.New("a", "b"))
 
 	checkBandwidth(5, 25)
+}
+
+func TestManagerIsReady(t *testing.T) {
+	const isReadyNamespace = "isReadyNamespace"
+	const isReadyName = "38a03d499119bc417b8a6a016f2cb4540b9f9cc0c13e4da42a73867120d3e908"
+
+	n1 := "foo/*"
+	n2 := "bar/*"
+
+	tests := []struct {
+		name         string
+		mustReady1   bool
+		mustReady2   bool
+		mockStat1Err error
+		mockStat2Err error
+		expectedRes  bool
+		expectedErr  error
+	}{
+		{
+			name:         "both required, both pass (one with nil, one with NotFound)",
+			mustReady1:   true,
+			mustReady2:   true,
+			mockStat1Err: nil,
+			mockStat2Err: backenderrors.ErrBlobNotFound,
+			expectedRes:  true,
+			expectedErr:  nil,
+		},
+		{
+			name:         "both required, only second fails",
+			mustReady1:   true,
+			mustReady2:   true,
+			mockStat1Err: nil,
+			mockStat2Err: errors.New("network error"),
+			expectedRes:  false,
+			expectedErr:  errors.New("backend for namespace bar/* not ready: network error"),
+		},
+		{
+			name:         "second required, only first fails",
+			mustReady1:   false,
+			mustReady2:   true,
+			mockStat1Err: errors.New("network error"),
+			mockStat2Err: backenderrors.ErrBlobNotFound,
+			expectedRes:  true,
+			expectedErr:  nil,
+		},
+	}
+
+	for _, tc := range tests {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		c1 := mockbackend.NewMockClient(ctrl)
+		c2 := mockbackend.NewMockClient(ctrl)
+
+		t.Run(tc.name, func(t *testing.T) {
+			require := require.New(t)
+
+			m := ManagerFixture()
+
+			mockStat1 := &core.BlobInfo{}
+			mockStat2 := &core.BlobInfo{}
+			if tc.mockStat1Err != nil {
+				mockStat1 = nil
+			}
+			if tc.mockStat2Err != nil {
+				mockStat2 = nil
+			}
+
+			c1.EXPECT().Stat(isReadyNamespace, isReadyName).Return(mockStat1, tc.mockStat1Err).AnyTimes()
+			c2.EXPECT().Stat(isReadyNamespace, isReadyName).Return(mockStat2, tc.mockStat2Err).AnyTimes()
+
+			require.NoError(m.Register(n1, c1, tc.mustReady1))
+			require.NoError(m.Register(n2, c2, tc.mustReady2))
+
+			res, err := m.IsReady()
+			require.Equal(tc.expectedRes, res)
+			if tc.expectedErr == nil {
+				require.NoError(err)
+			} else {
+				require.Equal(tc.expectedErr, err)
+			}
+		})
+	}
 }

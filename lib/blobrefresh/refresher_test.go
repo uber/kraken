@@ -63,7 +63,7 @@ func (m *refresherMocks) new() *Refresher {
 
 func (m *refresherMocks) newClient(namespace string) *mockbackend.MockClient {
 	client := mockbackend.NewMockClient(m.ctrl)
-	m.backends.Register(namespace, client)
+	m.backends.Register(namespace, client, false)
 	return client
 }
 
