@@ -30,6 +30,9 @@ var (
 	ErrNamespaceNotFound = errors.New("no matches for namespace")
 )
 
+const isReadyNamespace = "isReadyNamespace"
+const isReadyName = "38a03d499119bc417b8a6a016f2cb4540b9f9cc0c13e4da42a73867120d3e908"
+
 type backend struct {
 	regexp    *regexp.Regexp
 	client    Client
