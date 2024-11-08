@@ -143,7 +143,7 @@ func (m *Manager) GetClient(namespace string) (Client, error) {
 	return nil, ErrNamespaceNotFound
 }
 
-// IsReady returns whether the backends are ready (reachable).
+// CheckReadiness returns whether the backends are ready (available).
 // A backend must be explicitly configured as required for readiness to be checked.
 func (m *Manager) CheckReadiness() error {
 	for _, b := range m.backends {

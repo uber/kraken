@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/persistedretry/writeback"
@@ -51,6 +53,60 @@ func TestHealth(t *testing.T) {
 	b, err := ioutil.ReadAll(resp.Body)
 	require.NoError(err)
 	require.Equal("OK\n", string(b))
+}
+
+func TestReadiness(t *testing.T) {
+	for _, tc := range []struct {
+		mockStatErr    error
+		expectedErrMsg string
+		status         int
+	}{
+		{
+			mockStatErr:    nil,
+			expectedErrMsg: "",
+			status:         http.StatusOK,
+		},
+		{
+			mockStatErr:    backenderrors.ErrBlobNotFound,
+			expectedErrMsg: "",
+			status:         http.StatusOK,
+		},
+		{
+			mockStatErr:    errors.New("failed due to backend error"),
+			expectedErrMsg: fmt.Sprintf("not ready to serve traffic: backend for namespace '%s' not ready: failed due to backend error", backend.ReadinessCheckNamespace),
+			status:         http.StatusServiceUnavailable,
+		},
+	} {
+		require := require.New(t)
+
+		cp := newTestClientProvider()
+
+		s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+		defer s.cleanup()
+
+		backendClient := s.backendClient(backend.ReadinessCheckNamespace, true)
+		mockStat := &core.BlobInfo{}
+		if tc.mockStatErr != nil {
+			mockStat = nil
+		}
+
+		backendClient.EXPECT().Stat(backend.ReadinessCheckNamespace, backend.ReadinessCheckName).Return(mockStat, tc.mockStatErr)
+
+		resp, err := httputil.Get(
+			fmt.Sprintf("http://%s/readiness", s.addr))
+
+		if tc.status == http.StatusOK {
+			defer resp.Body.Close()
+			require.Equal(tc.status, resp.StatusCode)
+			require.NoError(err)
+			b, _ := ioutil.ReadAll(resp.Body)
+			require.Equal("OK\n", string(b))
+		} else {
+			require.True(httputil.IsStatus(err, tc.status))
+			require.True(strings.Contains(err.Error(), tc.expectedErrMsg))
+			require.Nil(resp)
+		}
+	}
 }
 
 func TestStatHandlerLocalNotFound(t *testing.T) {
@@ -117,7 +173,7 @@ func TestStatHandlerNotFound(t *testing.T) {
 	d := core.DigestFixture()
 	namespace := core.TagFixture()
 
-	backendClient := s.backendClient(namespace)
+	backendClient := s.backendClient(namespace, false)
 
 	backendClient.EXPECT().Stat(namespace, d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 
@@ -192,7 +248,7 @@ func TestDownloadBlobNotFound(t *testing.T) {
 	d := core.DigestFixture()
 	namespace := core.TagFixture()
 
-	backendClient := s.backendClient(namespace)
+	backendClient := s.backendClient(namespace, false)
 	backendClient.EXPECT().Stat(namespace, d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 
 	err := cp.Provide(master1).DownloadBlob(namespace, d, ioutil.Discard)
@@ -280,7 +336,7 @@ func TestGetMetaInfoDownloadsBlobAndReplicates(t *testing.T) {
 
 	blob := computeBlobForHosts(ring, s1.host, s2.host)
 
-	backendClient := s1.backendClient(namespace)
+	backendClient := s1.backendClient(namespace, false)
 	backendClient.EXPECT().Stat(namespace,
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil).AnyTimes()
 	backendClient.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
@@ -317,7 +373,7 @@ func TestGetMetaInfoBlobNotFound(t *testing.T) {
 	d := core.DigestFixture()
 	namespace := core.TagFixture()
 
-	backendClient := s.backendClient(namespace)
+	backendClient := s.backendClient(namespace, false)
 	backendClient.EXPECT().Stat(namespace, d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 
 	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
@@ -582,7 +638,7 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 	blob := core.NewBlobFixture()
 	namespace := core.TagFixture()
 
-	backendClient := s.backendClient(namespace)
+	backendClient := s.backendClient(namespace, false)
 	backendClient.EXPECT().Stat(namespace,
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil).AnyTimes()
 	backendClient.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)

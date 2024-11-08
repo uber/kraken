@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -130,6 +130,7 @@ func (s *Server) Handler() http.Handler {
 	// Public endpoints:
 
 	r.Get("/health", handler.Wrap(s.healthCheckHandler))
+	r.Get("/readiness", handler.Wrap(s.readinessCheckHandler))
 
 	r.Get("/blobs/{digest}/locations", handler.Wrap(s.getLocationsHandler))
 
@@ -175,6 +176,15 @@ func (s *Server) ListenAndServe(h http.Handler) error {
 }
 
 func (s *Server) healthCheckHandler(w http.ResponseWriter, r *http.Request) error {
+	fmt.Fprintln(w, "OK")
+	return nil
+}
+
+func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) error {
+	err := s.backends.CheckReadiness()
+	if err != nil {
+		return handler.Errorf("not ready to serve traffic: %s", err).Status(http.StatusServiceUnavailable)
+	}
 	fmt.Fprintln(w, "OK")
 	return nil
 }
