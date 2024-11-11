@@ -30,4 +30,5 @@ const (
 var (
 	ReadinessCheckNamespace string = core.NamespaceFixture()
 	ReadinessCheckName      string = core.DigestFixture().Hex()
+	ReadinessCheckDigest, _        = core.NewSHA256DigestFromHex(ReadinessCheckName)
 )
