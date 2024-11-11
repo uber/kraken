@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -36,6 +36,7 @@ import (
 type Client interface {
 	Addr() string
 
+	CheckReadiness() error
 	Locations(d core.Digest) ([]string, error)
 	DeleteBlob(d core.Digest) error
 	TransferBlob(d core.Digest, blob io.Reader) error
@@ -93,6 +94,17 @@ func New(addr string, opts ...Option) *HTTPClient {
 // Addr returns the address of the server the client is provisioned for.
 func (c *HTTPClient) Addr() string {
 	return c.addr
+}
+
+func (c *HTTPClient) CheckReadiness() error {
+	_, err := httputil.Get(
+		fmt.Sprintf("http://%s/readiness", c.addr),
+		httputil.SendTimeout(5*time.Second),
+		httputil.SendTLS(c.tls))
+	if err != nil {
+		return fmt.Errorf("origin not ready: %v", err)
+	}
+	return nil
 }
 
 // Locations returns the origin server addresses which d is sharded on.

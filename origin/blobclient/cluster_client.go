@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,6 +25,7 @@ import (
 	"github.com/cenkalti/backoff"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/httputil"
@@ -49,7 +50,7 @@ func Locations(p Provider, cluster hostlist.List, d core.Digest) (locs []string,
 
 // ClientResolver resolves digests into Clients of origins.
 type ClientResolver interface {
-	// Resolve must return an ordered, stable list of Clients for origins owning d.
+	// Resolve must return an ordered, stable, non-empty list of Clients for origins owning d.
 	Resolve(d core.Digest) ([]Client, error)
 }
 
@@ -78,6 +79,7 @@ func (r *clientResolver) Resolve(d core.Digest) ([]Client, error) {
 // ClusterClient defines a top-level origin cluster client which handles blob
 // location resolution and retries.
 type ClusterClient interface {
+	CheckReadiness() error
 	UploadBlob(namespace string, d core.Digest, blob io.Reader) error
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
@@ -106,6 +108,15 @@ func (c *clusterClient) defaultPollBackOff() backoff.BackOff {
 		MaxElapsedTime:      15 * time.Minute,
 		Clock:               backoff.SystemClock,
 	}
+}
+
+func (c *clusterClient) CheckReadiness() error {
+	clients, err := c.resolver.Resolve(backend.ReadinessCheckDigest)
+	if err != nil {
+		return fmt.Errorf("resolve clients: %s", err)
+	}
+	shuffle(clients)
+	return clients[0].CheckReadiness()
 }
 
 // UploadBlob uploads blob to origin cluster. See Client.UploadBlob for more details.
