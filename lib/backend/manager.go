@@ -29,12 +29,10 @@ import (
 var (
 	ErrNamespaceNotFound = errors.New("no matches for namespace")
 )
-const isReadyNamespace = "isReadyNamespace"
-const isReadyName = "38a03d499119bc417b8a6a016f2cb4540b9f9cc0c13e4da42a73867120d3e908"
 
 type backend struct {
-	regexp *regexp.Regexp
-	client Client
+	regexp    *regexp.Regexp
+	client    Client
 	mustReady bool
 }
 
@@ -44,8 +42,8 @@ func newBackend(namespace string, c Client, mustReady bool) (*backend, error) {
 		return nil, fmt.Errorf("regexp: %s", err)
 	}
 	return &backend{
-		regexp: re,
-		client: c,
+		regexp:    re,
+		client:    c,
 		mustReady: mustReady,
 	}, nil
 }
@@ -147,15 +145,15 @@ func (m *Manager) GetClient(namespace string) (Client, error) {
 
 // IsReady returns whether the backends are ready (reachable).
 // A backend must be explicitly configured as required for readiness to be checked.
-func (m *Manager) IsReady() (bool, error) {
+func (m *Manager) CheckReadiness() error {
 	for _, b := range m.backends {
 		if !b.mustReady {
 			continue
 		}
-		_, err := b.client.Stat(isReadyNamespace, isReadyName)
+		_, err := b.client.Stat(ReadinessCheckNamespace, ReadinessCheckName)
 		if err != nil && err != backenderrors.ErrBlobNotFound {
-			return false, fmt.Errorf("backend for namespace %s not ready: %s", b.regexp.String(), err)
+			return fmt.Errorf("backend for namespace '%s' not ready: %s", b.regexp.String(), err)
 		}
 	}
-	return true, nil
+	return nil
 }

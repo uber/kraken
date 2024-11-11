@@ -19,6 +19,7 @@ import (
 
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
 	. "github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/backend/namepath"
@@ -159,10 +160,7 @@ func TestManagerBandwidth(t *testing.T) {
 	checkBandwidth(5, 25)
 }
 
-func TestManagerIsReady(t *testing.T) {
-	const isReadyNamespace = "isReadyNamespace"
-	const isReadyName = "38a03d499119bc417b8a6a016f2cb4540b9f9cc0c13e4da42a73867120d3e908"
-
+func TestManagerCheckReadiness(t *testing.T) {
 	n1 := "foo/*"
 	n2 := "bar/*"
 
@@ -191,7 +189,7 @@ func TestManagerIsReady(t *testing.T) {
 			mockStat1Err: nil,
 			mockStat2Err: errors.New("network error"),
 			expectedRes:  false,
-			expectedErr:  errors.New("backend for namespace bar/* not ready: network error"),
+			expectedErr:  errors.New("backend for namespace 'bar/*' not ready: network error"),
 		},
 		{
 			name:         "second required, only first fails",
@@ -224,14 +222,13 @@ func TestManagerIsReady(t *testing.T) {
 				mockStat2 = nil
 			}
 
-			c1.EXPECT().Stat(isReadyNamespace, isReadyName).Return(mockStat1, tc.mockStat1Err).AnyTimes()
-			c2.EXPECT().Stat(isReadyNamespace, isReadyName).Return(mockStat2, tc.mockStat2Err).AnyTimes()
+			c1.EXPECT().Stat(backend.ReadinessCheckNamespace, backend.ReadinessCheckName).Return(mockStat1, tc.mockStat1Err).AnyTimes()
+			c2.EXPECT().Stat(backend.ReadinessCheckNamespace, backend.ReadinessCheckName).Return(mockStat2, tc.mockStat2Err).AnyTimes()
 
 			require.NoError(m.Register(n1, c1, tc.mustReady1))
 			require.NoError(m.Register(n2, c2, tc.mustReady2))
 
-			res, err := m.IsReady()
-			require.Equal(tc.expectedRes, res)
+			err := m.CheckReadiness()
 			if tc.expectedErr == nil {
 				require.NoError(err)
 			} else {
