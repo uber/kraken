@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -38,6 +38,7 @@ var (
 
 // Client wraps tagserver endpoints.
 type Client interface {
+	CheckReadiness() error
 	Put(tag string, d core.Digest) error
 	PutAndReplicate(tag string, d core.Digest) error
 	Get(tag string) (core.Digest, error)
@@ -68,6 +69,14 @@ type ListFilter struct {
 // NewSingleClient returns a Client scoped to a single tagserver instance.
 func NewSingleClient(addr string, config *tls.Config) Client {
 	return &singleClient{addr, config}
+}
+
+func (c *singleClient) CheckReadiness() error {
+	_, err := httputil.Get(
+		fmt.Sprintf("http://%s/readiness", c.addr),
+		httputil.SendTimeout(5*time.Second),
+		httputil.SendTLS(c.tls))
+	return err
 }
 
 func (c *singleClient) Put(tag string, d core.Digest) error {
@@ -309,6 +318,33 @@ func (cc *clusterClient) do(request func(c Client) error) error {
 		break
 	}
 	return err
+}
+
+// doOnce tries the request on only one randomly chosen client without any retries if it fails.
+func (cc *clusterClient) doOnce(request func(c Client) error) error {
+	addrs := cc.hosts.Resolve().Sample(1)
+	if len(addrs) == 0 {
+		return errors.New("cluster client: no hosts could be resolved")
+	}
+	// read the only sampled addr
+	var addr string
+	for addr = range addrs {
+	}
+	err := request(NewSingleClient(addr, cc.tls))
+	if httputil.IsNetworkError(err) {
+		cc.hosts.Failed(addr)
+	}
+	return err
+}
+
+func (cc *clusterClient) CheckReadiness() error {
+	return cc.doOnce(func(c Client) error {
+		err := c.CheckReadiness()
+		if err != nil {
+			return fmt.Errorf("build index not ready: %v", err)
+		}
+		return nil
+	})
 }
 
 func (cc *clusterClient) Put(tag string, d core.Digest) error {
