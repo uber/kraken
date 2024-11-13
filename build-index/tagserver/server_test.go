@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,10 +14,12 @@
 package tagserver
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"testing"
 	"time"
@@ -147,6 +149,53 @@ func TestHealth(t *testing.T) {
 	b, err := ioutil.ReadAll(resp.Body)
 	require.NoError(err)
 	require.Equal("OK\n", string(b))
+}
+
+func TestCheckReadiness(t *testing.T) {
+	for _, tc := range []struct {
+		name                  string
+		mockStatErr           error
+		expectedErrMsgPattern string
+	}{
+		{
+			name:                  "success",
+			mockStatErr:           nil,
+			expectedErrMsgPattern: "",
+		},
+		{
+			name:                  "failure, 503 (since Stat fails)",
+			mockStatErr:           errors.New("test error"),
+			expectedErrMsgPattern: fmt.Sprintf(`build index not ready: GET http://127\.0\.0\.1:\d+/readiness 503: not ready to serve traffic: backend for namespace 'foo-bar/\*' not ready: test error`),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require := require.New(t)
+
+			mocks, cleanup := newServerMocks(t)
+			defer cleanup()
+
+			addr, stop := testutil.StartServer(mocks.handler())
+			defer stop()
+
+			client := newClusterClient(addr)
+			backendClient := mockbackend.NewMockClient(mocks.ctrl)
+			require.NoError(mocks.backends.Register("foo-bar/*", backendClient, true))
+
+			mockStat := &core.BlobInfo{}
+			if tc.mockStatErr != nil {
+				mockStat = nil
+			}
+			backendClient.EXPECT().Stat(backend.ReadinessCheckNamespace, backend.ReadinessCheckName).Return(mockStat, tc.mockStatErr)
+
+			err := client.CheckReadiness()
+			if tc.expectedErrMsgPattern == "" {
+				require.Nil(err)
+			} else {
+				r, _ := regexp.Compile(tc.expectedErrMsgPattern)
+				require.True(r.MatchString(err.Error()))
+			}
+		})
+	}
 }
 
 func TestPut(t *testing.T) {
