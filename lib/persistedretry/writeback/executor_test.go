@@ -61,7 +61,7 @@ func (m *executorMocks) new() *Executor {
 
 func (m *executorMocks) client(namespace string) *mockbackend.MockClient {
 	client := mockbackend.NewMockClient(m.ctrl)
-	if err := m.backends.Register(namespace, client); err != nil {
+	if err := m.backends.Register(namespace, client, false); err != nil {
 		panic(err)
 	}
 	return client

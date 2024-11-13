@@ -57,7 +57,7 @@ func newStoreMocks(t *testing.T) (*storeMocks, func()) {
 
 	backends := backend.ManagerFixture()
 	backendClient := mockbackend.NewMockClient(ctrl)
-	require.NoError(t, backends.Register(_testNamespace, backendClient))
+	require.NoError(t, backends.Register(_testNamespace, backendClient, false))
 
 	writeBackManager := mockpersistedretry.NewMockManager(ctrl)
 

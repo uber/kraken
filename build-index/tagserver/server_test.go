@@ -76,7 +76,7 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 
 	backends := backend.ManagerFixture()
 	backendClient := mockbackend.NewMockClient(ctrl)
-	require.NoError(t, backends.Register(_testNamespace, backendClient))
+	require.NoError(t, backends.Register(_testNamespace, backendClient, false))
 
 	remotes, err := tagreplication.RemotesConfig{
 		_testRemote: []string{_testNamespace},

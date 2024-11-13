@@ -160,7 +160,7 @@ func newTestServer(
 
 func (s *testServer) backendClient(namespace string) *mockbackend.MockClient {
 	client := mockbackend.NewMockClient(s.ctrl)
-	if err := s.backendManager.Register(namespace, client); err != nil {
+	if err := s.backendManager.Register(namespace, client, false); err != nil {
 		panic(err)
 	}
 	return client

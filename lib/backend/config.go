@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,12 +26,14 @@ type Config struct {
 
 	// If enabled, throttles upload / download bandwidth.
 	Bandwidth bandwidth.Config `yaml:"bandwidth"`
+	// Whether the service readiness endpoint will check the backend's readiness.
+	MustReady bool             `yaml:"must_ready"`
 }
 
 func (c Config) applyDefaults() Config {
 	for k := range c.Backend {
 		// TODO: don't hard code backend client name
-		if k == "s3" || k == "gcs"{
+		if k == "s3" || k == "gcs" {
 			if c.Bandwidth.IngressBitsPerSec == 0 {
 				c.Bandwidth.IngressBitsPerSec = 10 * 8 * memsize.Gbit
 			}
