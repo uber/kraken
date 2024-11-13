@@ -19,7 +19,6 @@ import (
 
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/backend"
 	. "github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/backend/namepath"
@@ -222,8 +221,8 @@ func TestManagerCheckReadiness(t *testing.T) {
 				mockStat2 = nil
 			}
 
-			c1.EXPECT().Stat(backend.ReadinessCheckNamespace, backend.ReadinessCheckName).Return(mockStat1, tc.mockStat1Err).AnyTimes()
-			c2.EXPECT().Stat(backend.ReadinessCheckNamespace, backend.ReadinessCheckName).Return(mockStat2, tc.mockStat2Err).AnyTimes()
+			c1.EXPECT().Stat(ReadinessCheckNamespace, ReadinessCheckName).Return(mockStat1, tc.mockStat1Err).AnyTimes()
+			c2.EXPECT().Stat(ReadinessCheckNamespace, ReadinessCheckName).Return(mockStat2, tc.mockStat2Err).AnyTimes()
 
 			require.NoError(m.Register(n1, c1, tc.mustReady1))
 			require.NoError(m.Register(n2, c2, tc.mustReady2))
