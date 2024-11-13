@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -56,7 +56,7 @@ func TestBlobDownloadBlobSuccess(t *testing.T) {
 	addr, stop := testutil.StartServer(r)
 	defer stop()
 
-	config := newTestConfig(addr)
+	config := Config{Address: addr}
 	client, err := NewBlobClient(config, tally.NoopScope)
 	require.NoError(err)
 
@@ -86,7 +86,7 @@ func TestBlobDownloadManifestSuccess(t *testing.T) {
 	addr, stop := testutil.StartServer(r)
 	defer stop()
 
-	config := newTestConfig(addr)
+	config := Config{Address: addr}
 	client, err := NewBlobClient(config, tally.NoopScope)
 	require.NoError(err)
 
@@ -116,7 +116,7 @@ func TestBlobDownloadFileNotFound(t *testing.T) {
 	addr, stop := testutil.StartServer(r)
 	defer stop()
 
-	config := newTestConfig(addr)
+	config := Config{Address: addr}
 	client, err := NewBlobClient(config, tally.NoopScope)
 	require.NoError(err)
 

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -48,7 +48,6 @@ type Config struct {
 	TLS                    httputil.TLSConfig `yaml:"tls"`
 	BasicAuth              *types.AuthConfig  `yaml:"basic"`
 	RemoteCredentialsStore string             `yaml:"credsStore"`
-	EnableHTTPFallback     bool               `yaml:"enableHTTPFallback"`
 }
 
 // Authenticator creates send options to authenticate requests to registry
@@ -95,12 +94,6 @@ func (a *authenticator) Authenticate(repo string) ([]httputil.SendOption, error)
 	if config.TLS.Client.Disabled {
 		opts = append(opts, httputil.SendNoop())
 		return opts, nil
-	}
-
-	if config.EnableHTTPFallback {
-		opts = append(opts, httputil.EnableHTTPFallback())
-	} else {
-		opts = append(opts, httputil.DisableHTTPFallback())
 	}
 
 	if !a.shouldAuth() {
