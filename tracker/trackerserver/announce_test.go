@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,6 +16,7 @@ package trackerserver
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -31,6 +32,50 @@ import (
 
 func newAnnounceClient(pctx core.PeerContext, addr string) announceclient.Client {
 	return announceclient.New(pctx, hashring.NoopPassiveRing(hostlist.Fixture(addr)), nil)
+}
+
+func TestCheckHealth(t *testing.T) {
+	for _, tc := range []struct {
+		name                string
+		serverIsUp          bool
+		expectedErrMsgRegex string
+	}{
+		{
+			name:                "success",
+			serverIsUp:          true,
+			expectedErrMsgRegex: "",
+		},
+		{
+			name:                "failure",
+			serverIsUp:          false,
+			expectedErrMsgRegex: `tracker not ready: network error: Get "http://127\.0\.0\.1:\d+/health": dial tcp 127\.0\.0\.1:\d+: connect: connection refused`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require := require.New(t)
+
+			mocks, cleanup := newServerMocks(t, Config{})
+			defer cleanup()
+
+			addr, stop := testutil.StartServer(mocks.handler())
+			if tc.serverIsUp {
+				defer stop()
+			} else {
+				stop()
+			}
+
+			pctx := core.PeerContextFixture()
+			client := newAnnounceClient(pctx, addr)
+
+			err := client.CheckHealth()
+			if tc.expectedErrMsgRegex == "" {
+				require.NoError(err)
+			} else {
+				r, _ := regexp.Compile(tc.expectedErrMsgRegex)
+				require.True(r.MatchString(err.Error()))
+			}
+		})
+	}
 }
 
 func TestAnnounceSinglePeerResponse(t *testing.T) {

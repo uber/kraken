@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/hashring"
 	"github.com/uber/kraken/utils/httputil"
 )
@@ -58,6 +59,8 @@ type Response struct {
 
 // Client defines a client for announcing and getting peers.
 type Client interface {
+	// CheckHealth calls a tracker's health endpoint.
+	CheckHealth() error
 	Announce(
 		d core.Digest,
 		h core.InfoHash,
@@ -87,6 +90,18 @@ func getEndpoint(version int, addr string, h core.InfoHash) (method, url string)
 		return "GET", fmt.Sprintf("http://%s/announce", addr)
 	}
 	return "POST", fmt.Sprintf("http://%s/announce/%s", addr, h.String())
+}
+
+func (c *client) CheckHealth() error {
+	addr := c.ring.Locations(backend.ReadinessCheckDigest)[0]
+	_, err := httputil.Get(
+		fmt.Sprintf("http://%s/health", addr),
+		httputil.SendTimeout(2*time.Second),
+		httputil.SendTLS(c.tls))
+	if err != nil {
+		return fmt.Errorf("tracker not ready: %v", err)
+	}
+	return nil
 }
 
 // Announce announces the torrent identified by (d, h) with the number of
@@ -140,6 +155,10 @@ type DisabledClient struct{}
 // Disabled returns a new DisabledClient.
 func Disabled() Client {
 	return DisabledClient{}
+}
+
+func (c DisabledClient) CheckHealth() error {
+	return nil
 }
 
 // Announce always returns error.
