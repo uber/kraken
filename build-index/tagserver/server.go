@@ -151,6 +151,10 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return handler.Errorf("not ready to serve traffic: %s", err).Status(http.StatusServiceUnavailable)
 	}
+	err = s.localOriginClient.CheckReadiness()
+	if err != nil {
+		return handler.Errorf("not ready to serve traffic: %s", err).Status(http.StatusServiceUnavailable)
+	}
 	fmt.Fprintln(w, "OK")
 	return nil
 }

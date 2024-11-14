@@ -155,17 +155,32 @@ func TestCheckReadiness(t *testing.T) {
 	for _, tc := range []struct {
 		name                  string
 		mockStatErr           error
+		mockOriginErr         error
 		expectedErrMsgPattern string
 	}{
 		{
 			name:                  "success",
 			mockStatErr:           nil,
+			mockOriginErr:         nil,
 			expectedErrMsgPattern: "",
 		},
 		{
-			name:                  "failure, 503 (since Stat fails)",
-			mockStatErr:           errors.New("test error"),
-			expectedErrMsgPattern: fmt.Sprintf(`build index not ready: GET http://127\.0\.0\.1:\d+/readiness 503: not ready to serve traffic: backend for namespace 'foo-bar/\*' not ready: test error`),
+			name:                  "failure, 503 (only Stat fails)",
+			mockStatErr:           errors.New("backend storage error"),
+			mockOriginErr:         nil,
+			expectedErrMsgPattern: fmt.Sprintf(`build index not ready: GET http://127\.0\.0\.1:\d+/readiness 503: not ready to serve traffic: backend for namespace 'foo-bar/\*' not ready: backend storage error`),
+		},
+		{
+			name:                  "failure, 503 (only origin fails)",
+			mockStatErr:           nil,
+			mockOriginErr:         errors.New("origin error"),
+			expectedErrMsgPattern: fmt.Sprintf(`build index not ready: GET http://127\.0\.0\.1:\d+/readiness 503: not ready to serve traffic: origin error`),
+		},
+		{
+			name:                  "failure, 503 (both fail)",
+			mockStatErr:           errors.New("backend storage error"),
+			mockOriginErr:         errors.New("origin error"),
+			expectedErrMsgPattern: fmt.Sprintf(`build index not ready: GET http://127\.0\.0\.1:\d+/readiness 503: not ready to serve traffic: backend for namespace 'foo-bar/\*' not ready: backend storage error`),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -186,6 +201,7 @@ func TestCheckReadiness(t *testing.T) {
 				mockStat = nil
 			}
 			backendClient.EXPECT().Stat(backend.ReadinessCheckNamespace, backend.ReadinessCheckName).Return(mockStat, tc.mockStatErr)
+			mocks.originClient.EXPECT().CheckReadiness().Return(tc.mockOriginErr).AnyTimes()
 
 			err := client.CheckReadiness()
 			if tc.expectedErrMsgPattern == "" {
