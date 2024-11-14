@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,6 +16,7 @@ package trackerserver
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -31,6 +32,48 @@ import (
 
 func newAnnounceClient(pctx core.PeerContext, addr string) announceclient.Client {
 	return announceclient.New(pctx, hashring.NoopPassiveRing(hostlist.Fixture(addr)), nil)
+}
+
+func TestCheckReadiness(t *testing.T) {
+	for _, tc := range []struct {
+		name                  string
+		mockOriginErr         error
+		expectedErrMsgPattern string
+	}{
+		{
+			name:                  "success",
+			mockOriginErr:         nil,
+			expectedErrMsgPattern: "",
+		},
+		{
+			name:                  "failure, 503 (origin fails)",
+			mockOriginErr:         errors.New("origin error"),
+			expectedErrMsgPattern: fmt.Sprintf(`tracker not ready: GET http://127\.0\.0\.1:\d+/readiness 503: not ready to serve traffic: origin error`),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require := require.New(t)
+
+			mocks, cleanup := newServerMocks(t, Config{})
+			defer cleanup()
+
+			addr, stop := testutil.StartServer(mocks.handler())
+			defer stop()
+
+			mocks.originCluster.EXPECT().CheckReadiness().Return(tc.mockOriginErr)
+
+			pctx := core.PeerContextFixture()
+			client := newAnnounceClient(pctx, addr)
+
+			err := client.CheckReadiness()
+			if tc.expectedErrMsgPattern == "" {
+				require.Nil(err)
+			} else {
+				r, _ := regexp.Compile(tc.expectedErrMsgPattern)
+				require.True(r.MatchString(err.Error()))
+			}
+		})
+	}
 }
 
 func TestAnnounceSinglePeerResponse(t *testing.T) {
