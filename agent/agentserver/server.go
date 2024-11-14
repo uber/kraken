@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,6 +22,7 @@ import (
 	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
@@ -29,6 +30,7 @@ import (
 	"github.com/uber/kraken/lib/middleware"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/scheduler"
+	"github.com/uber/kraken/tracker/announceclient"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/httputil"
 
@@ -46,6 +48,7 @@ type Server struct {
 	cads             *store.CADownloadStore
 	sched            scheduler.ReloadableScheduler
 	tags             tagclient.Client
+	ac               announceclient.Client
 	containerRuntime containerruntime.Factory
 }
 
@@ -56,13 +59,22 @@ func New(
 	cads *store.CADownloadStore,
 	sched scheduler.ReloadableScheduler,
 	tags tagclient.Client,
+	ac announceclient.Client,
 	containerRuntime containerruntime.Factory) *Server {
 
 	stats = stats.Tagged(map[string]string{
 		"module": "agentserver",
 	})
 
-	return &Server{config, stats, cads, sched, tags, containerRuntime}
+	return &Server{
+		config:           config,
+		stats:            stats,
+		cads:             cads,
+		sched:            sched,
+		tags:             tags,
+		ac:               ac,
+		containerRuntime: containerRuntime,
+	}
 }
 
 // Handler returns the HTTP handler.
@@ -73,6 +85,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.LatencyTimer(s.stats))
 
 	r.Get("/health", handler.Wrap(s.healthHandler))
+	r.Get("/readiness", handler.Wrap(s.readinessCheckHandler))
 
 	r.Get("/tags/{tag}", handler.Wrap(s.getTagHandler))
 
@@ -189,6 +202,34 @@ func (s *Server) preloadTagHandler(w http.ResponseWriter, r *http.Request) error
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
 	if err := s.sched.Probe(); err != nil {
 		return handler.Errorf("probe torrent client: %s", err)
+	}
+	io.WriteString(w, "OK")
+	return nil
+}
+
+func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) error {
+	var schedErr, buildIndexErr, trackerErr error
+	var wg sync.WaitGroup
+
+	wg.Add(3)
+	go func() {
+		schedErr = s.sched.Probe()
+		wg.Done()
+	}()
+	go func() {
+		buildIndexErr = s.tags.CheckReadiness()
+		wg.Done()
+	}()
+	go func() {
+		trackerErr = s.ac.CheckReadiness()
+		wg.Done()
+	}()
+
+	wg.Wait()
+	if schedErr != nil || buildIndexErr != nil || trackerErr != nil {
+		return handler.Errorf("agent not ready, scheduler error: %v\n"+
+			"build index error: %v\n"+
+			"tracker error: %v", schedErr, buildIndexErr, trackerErr).Status(http.StatusServiceUnavailable)
 	}
 	io.WriteString(w, "OK")
 	return nil

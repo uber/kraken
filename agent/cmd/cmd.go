@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,6 +30,7 @@ import (
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
+	"github.com/uber/kraken/tracker/announceclient"
 	"github.com/uber/kraken/utils/configutil"
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/netutil"
@@ -183,8 +184,9 @@ func Run(flags *Flags, opts ...Option) {
 		log.Fatalf("Error building client tls config: %s", err)
 	}
 
+	announceClient := announceclient.New(pctx, trackers, tls)
 	sched, err := scheduler.NewAgentScheduler(
-		config.Scheduler, stats, pctx, cads, netevents, trackers, tls)
+		config.Scheduler, stats, pctx, cads, netevents, trackers, announceClient, tls)
 	if err != nil {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
@@ -216,7 +218,7 @@ func Run(flags *Flags, opts ...Option) {
 	}
 
 	agentServer := agentserver.New(
-		config.AgentServer, stats, cads, sched, tagClient, containerRuntimeFactory)
+		config.AgentServer, stats, cads, sched, tagClient, announceClient, containerRuntimeFactory)
 	addr := fmt.Sprintf(":%d", flags.AgentServerPort)
 	log.Infof("Starting agent server on %s", addr)
 	go func() {
