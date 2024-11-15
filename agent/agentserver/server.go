@@ -224,12 +224,17 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 		trackerErr = s.ac.CheckReadiness()
 		wg.Done()
 	}()
-
 	wg.Wait()
-	if schedErr != nil || buildIndexErr != nil || trackerErr != nil {
-		return handler.Errorf("agent not ready, scheduler error: %v\n"+
-			"build index error: %v\n"+
-			"tracker error: %v", schedErr, buildIndexErr, trackerErr).Status(http.StatusServiceUnavailable)
+
+	// TODO(akalpakchiev): Replace with errors.Join once upgraded to Go 1.20+.
+	errMsgs := []string{}
+	for _, err := range []error{schedErr, buildIndexErr, trackerErr} {
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
+	}
+	if len(errMsgs) != 0 {
+		return handler.Errorf("agent not ready: %v", strings.Join(errMsgs, "\n")).Status(http.StatusServiceUnavailable)
 	}
 	io.WriteString(w, "OK")
 	return nil

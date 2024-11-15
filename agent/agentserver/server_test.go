@@ -231,21 +231,28 @@ func TestReadinessCheckHandler(t *testing.T) {
 			probeErr:              errors.New("test scheduler error"),
 			buildIndexErr:         nil,
 			trackerErr:            nil,
-			expectedErrMsgPattern: `GET http://127\.0\.0\.1:\d+/readiness 503: agent not ready, scheduler error: test scheduler error\nbuild index error: <nil>\ntracker error: <nil>`,
+			expectedErrMsgPattern: `GET http://127\.0\.0\.1:\d+/readiness 503: agent not ready: test scheduler error`,
 		},
 		{
 			desc:                  "failure (build index not ready)",
 			probeErr:              nil,
 			buildIndexErr:         errors.New("build index not ready"),
 			trackerErr:            nil,
-			expectedErrMsgPattern: `GET http://127\.0\.0\.1:\d+/readiness 503: agent not ready, scheduler error: <nil>\nbuild index error: build index not ready\ntracker error: <nil>`,
+			expectedErrMsgPattern: `GET http://127\.0\.0\.1:\d+/readiness 503: agent not ready: build index not ready`,
 		},
 		{
 			desc:                  "failure (tracker not ready)",
 			probeErr:              nil,
 			buildIndexErr:         nil,
 			trackerErr:            errors.New("tracker not ready"),
-			expectedErrMsgPattern: `GET http://127\.0\.0\.1:\d+/readiness 503: agent not ready, scheduler error: <nil>\nbuild index error: <nil>\ntracker error: tracker not ready`,
+			expectedErrMsgPattern: `GET http://127\.0\.0\.1:\d+/readiness 503: agent not ready: tracker not ready`,
+		},
+		{
+			desc:                  "failure (all conditions fail)",
+			probeErr:              errors.New("test scheduler error"),
+			buildIndexErr:         errors.New("build index not ready"),
+			trackerErr:            errors.New("tracker not ready"),
+			expectedErrMsgPattern: `GET http://127\.0\.0\.1:\d+/readiness 503: agent not ready: test scheduler error\nbuild index not ready\ntracker not ready`,
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
