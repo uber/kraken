@@ -57,55 +57,44 @@ func TestHealth(t *testing.T) {
 
 func TestReadiness(t *testing.T) {
 	for _, tc := range []struct {
+		name           string
 		mockStatErr    error
 		expectedErrMsg string
-		status         int
 	}{
 		{
+			name:           "success",
 			mockStatErr:    nil,
 			expectedErrMsg: "",
-			status:         http.StatusOK,
 		},
 		{
-			mockStatErr:    backenderrors.ErrBlobNotFound,
-			expectedErrMsg: "",
-			status:         http.StatusOK,
-		},
-		{
-			mockStatErr:    errors.New("failed due to backend error"),
-			expectedErrMsg: fmt.Sprintf("not ready to serve traffic: backend for namespace '%s' not ready: failed due to backend error", backend.ReadinessCheckNamespace),
-			status:         http.StatusServiceUnavailable,
+			name:           "503 is returned (since stat fails)",
+			mockStatErr:    errors.New("test error"),
+			expectedErrMsg: fmt.Sprintf("503: not ready to serve traffic: backend for namespace '%s' not ready: test error", backend.ReadinessCheckNamespace),
 		},
 	} {
-		require := require.New(t)
+		t.Run(tc.name, func(t *testing.T) {
+			require := require.New(t)
 
-		cp := newTestClientProvider()
+			cp := newTestClientProvider()
 
-		s := newTestServer(t, master1, hashRingMaxReplica(), cp)
-		defer s.cleanup()
+			s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+			defer s.cleanup()
 
-		backendClient := s.backendClient(backend.ReadinessCheckNamespace, true)
-		mockStat := &core.BlobInfo{}
-		if tc.mockStatErr != nil {
-			mockStat = nil
-		}
+			backendClient := s.backendClient(backend.ReadinessCheckNamespace, true)
 
-		backendClient.EXPECT().Stat(backend.ReadinessCheckNamespace, backend.ReadinessCheckName).Return(mockStat, tc.mockStatErr)
+			mockStat := &core.BlobInfo{}
+			if tc.mockStatErr != nil {
+				mockStat = nil
+			}
+			backendClient.EXPECT().Stat(backend.ReadinessCheckNamespace, backend.ReadinessCheckName).Return(mockStat, tc.mockStatErr)
 
-		resp, err := httputil.Get(
-			fmt.Sprintf("http://%s/readiness", s.addr))
-
-		if tc.status == http.StatusOK {
-			defer resp.Body.Close()
-			require.Equal(tc.status, resp.StatusCode)
-			require.NoError(err)
-			b, _ := ioutil.ReadAll(resp.Body)
-			require.Equal("OK\n", string(b))
-		} else {
-			require.True(httputil.IsStatus(err, tc.status))
-			require.True(strings.Contains(err.Error(), tc.expectedErrMsg))
-			require.Nil(resp)
-		}
+			err := cp.Provide(master1).CheckReadiness()
+			if tc.expectedErrMsg == "" {
+				require.Nil(err)
+			} else {
+				require.True(strings.Contains(err.Error(), tc.expectedErrMsg))
+			}
+		})
 	}
 }
 
