@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -108,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.LatencyTimer(s.stats))
 
 	r.Get("/health", handler.Wrap(s.healthHandler))
+	r.Get("/readiness", handler.Wrap(s.readinessCheckHandler))
 
 	r.Put("/tags/{tag}/digest/{digest}", handler.Wrap(s.putTagHandler))
 	r.Head("/tags/{tag}", handler.Wrap(s.hasTagHandler))
@@ -141,6 +142,19 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
+	fmt.Fprintln(w, "OK")
+	return nil
+}
+
+func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) error {
+	err := s.backends.CheckReadiness()
+	if err != nil {
+		return handler.Errorf("not ready to serve traffic: %s", err).Status(http.StatusServiceUnavailable)
+	}
+	err = s.localOriginClient.CheckReadiness()
+	if err != nil {
+		return handler.Errorf("not ready to serve traffic: %s", err).Status(http.StatusServiceUnavailable)
+	}
 	fmt.Fprintln(w, "OK")
 	return nil
 }
