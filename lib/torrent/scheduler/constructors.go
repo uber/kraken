@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -39,6 +39,7 @@ func NewAgentScheduler(
 	cads *store.CADownloadStore,
 	netevents networkevent.Producer,
 	trackers hashring.PassiveRing,
+	announceClient announceclient.Client,
 	tls *tls.Config) (ReloadableScheduler, error) {
 
 	s, err := newScheduler(
@@ -46,7 +47,7 @@ func NewAgentScheduler(
 		agentstorage.NewTorrentArchive(stats, cads, metainfoclient.New(trackers, tls)),
 		stats,
 		pctx,
-		announceclient.New(pctx, trackers, tls),
+		announceClient,
 		netevents)
 	if err != nil {
 		return nil, fmt.Errorf("new scheduler: %s", err)
