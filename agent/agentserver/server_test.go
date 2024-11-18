@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	mockcontainerd "github.com/uber/kraken/mocks/lib/containerruntime/containerd"
 	mockdockerdaemon "github.com/uber/kraken/mocks/lib/containerruntime/dockerdaemon"
 	mockscheduler "github.com/uber/kraken/mocks/lib/torrent/scheduler"
+	mockannounceclient "github.com/uber/kraken/mocks/tracker/announceclient"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/testutil"
 
@@ -49,6 +51,7 @@ type serverMocks struct {
 	tags             *mocktagclient.MockClient
 	dockerCli        *mockdockerdaemon.MockDockerClient
 	containerdCli    *mockcontainerd.MockClient
+	ac               *mockannounceclient.MockClient
 	containerRuntime *mockcontainerruntime.MockFactory
 	cleanup          *testutil.Cleanup
 }
@@ -68,14 +71,15 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 
 	dockerCli := mockdockerdaemon.NewMockDockerClient(ctrl)
 	containerdCli := mockcontainerd.NewMockClient(ctrl)
+	ac := mockannounceclient.NewMockClient(ctrl)
 	containerruntime := mockcontainerruntime.NewMockFactory(ctrl)
 	return &serverMocks{
-		cads, sched, tags, dockerCli, containerdCli,
+		cads, sched, tags, dockerCli, containerdCli, ac,
 		containerruntime, &cleanup}, cleanup.Run
 }
 
 func (m *serverMocks) startServer() string {
-	s := New(Config{}, tally.NoopScope, m.cads, m.sched, m.tags, m.containerRuntime)
+	s := New(Config{}, tally.NoopScope, m.cads, m.sched, m.tags, m.ac, m.containerRuntime)
 	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
 	return addr
@@ -202,6 +206,71 @@ func TestHealthHandler(t *testing.T) {
 				require.Error(err)
 			} else {
 				require.NoError(err)
+			}
+		})
+	}
+}
+
+func TestReadinessCheckHandler(t *testing.T) {
+	for _, tc := range []struct {
+		desc          string
+		probeErr      error
+		buildIndexErr error
+		trackerErr    error
+		wantErr       string
+	}{
+		{
+			desc:          "success",
+			probeErr:      nil,
+			buildIndexErr: nil,
+			trackerErr:    nil,
+			wantErr:       "",
+		},
+		{
+			desc:          "failure (probe fails)",
+			probeErr:      errors.New("test scheduler error"),
+			buildIndexErr: nil,
+			trackerErr:    nil,
+			wantErr:       "GET http://{address}/readiness 503: agent not ready: test scheduler error",
+		},
+		{
+			desc:          "failure (build index not ready)",
+			probeErr:      nil,
+			buildIndexErr: errors.New("build index not ready"),
+			trackerErr:    nil,
+			wantErr:       "GET http://{address}/readiness 503: agent not ready: build index not ready",
+		},
+		{
+			desc:          "failure (tracker not ready)",
+			probeErr:      nil,
+			buildIndexErr: nil,
+			trackerErr:    errors.New("tracker not ready"),
+			wantErr:       "GET http://{address}/readiness 503: agent not ready: tracker not ready",
+		},
+		{
+			desc:          "failure (all conditions fail)",
+			probeErr:      errors.New("test scheduler error"),
+			buildIndexErr: errors.New("build index not ready"),
+			trackerErr:    errors.New("tracker not ready"),
+			wantErr:       "GET http://{address}/readiness 503: agent not ready: test scheduler error\nbuild index not ready\ntracker not ready",
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			require := require.New(t)
+
+			mocks, cleanup := newServerMocks(t)
+			defer cleanup()
+
+			mocks.sched.EXPECT().Probe().Return(tc.probeErr)
+			mocks.tags.EXPECT().CheckReadiness().Return(tc.buildIndexErr)
+			mocks.ac.EXPECT().CheckReadiness().Return(tc.trackerErr)
+
+			addr := mocks.startServer()
+			_, err := httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
+			if tc.wantErr == "" {
+				require.Nil(err)
+			} else {
+				require.EqualError(err, strings.ReplaceAll(tc.wantErr, "{address}", addr))
 			}
 		})
 	}
