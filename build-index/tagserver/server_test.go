@@ -19,8 +19,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -153,34 +153,34 @@ func TestHealth(t *testing.T) {
 
 func TestCheckReadiness(t *testing.T) {
 	for _, tc := range []struct {
-		name                  string
-		mockStatErr           error
-		mockOriginErr         error
-		expectedErrMsgPattern string
+		name      string
+		statErr   error
+		originErr error
+		wantErr   string
 	}{
 		{
-			name:                  "success",
-			mockStatErr:           nil,
-			mockOriginErr:         nil,
-			expectedErrMsgPattern: "",
+			name:      "success",
+			statErr:   nil,
+			originErr: nil,
+			wantErr:   "",
 		},
 		{
-			name:                  "failure, 503 (only Stat fails)",
-			mockStatErr:           errors.New("backend storage error"),
-			mockOriginErr:         nil,
-			expectedErrMsgPattern: fmt.Sprintf(`build index not ready: GET http://127\.0\.0\.1:\d+/readiness 503: not ready to serve traffic: backend for namespace 'foo-bar/\*' not ready: backend storage error`),
+			name:      "failure, 503 (only Stat fails)",
+			statErr:   errors.New("backend storage error"),
+			originErr: nil,
+			wantErr:   "build index not ready: GET http://{address}/readiness 503: not ready to serve traffic: backend for namespace 'foo-bar/*' not ready: backend storage error",
 		},
 		{
-			name:                  "failure, 503 (only origin fails)",
-			mockStatErr:           nil,
-			mockOriginErr:         errors.New("origin error"),
-			expectedErrMsgPattern: fmt.Sprintf(`build index not ready: GET http://127\.0\.0\.1:\d+/readiness 503: not ready to serve traffic: origin error`),
+			name:      "failure, 503 (only origin fails)",
+			statErr:   nil,
+			originErr: errors.New("origin error"),
+			wantErr:   "build index not ready: GET http://{address}/readiness 503: not ready to serve traffic: origin error",
 		},
 		{
-			name:                  "failure, 503 (both fail)",
-			mockStatErr:           errors.New("backend storage error"),
-			mockOriginErr:         errors.New("origin error"),
-			expectedErrMsgPattern: fmt.Sprintf(`build index not ready: GET http://127\.0\.0\.1:\d+/readiness 503: not ready to serve traffic: backend for namespace 'foo-bar/\*' not ready: backend storage error`),
+			name:      "failure, 503 (both fail)",
+			statErr:   errors.New("backend storage error"),
+			originErr: errors.New("origin error"),
+			wantErr:   "build index not ready: GET http://{address}/readiness 503: not ready to serve traffic: backend for namespace 'foo-bar/*' not ready: backend storage error",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -197,18 +197,17 @@ func TestCheckReadiness(t *testing.T) {
 			require.NoError(mocks.backends.Register("foo-bar/*", backendClient, true))
 
 			mockStat := &core.BlobInfo{}
-			if tc.mockStatErr != nil {
+			if tc.statErr != nil {
 				mockStat = nil
 			}
-			backendClient.EXPECT().Stat(backend.ReadinessCheckNamespace, backend.ReadinessCheckName).Return(mockStat, tc.mockStatErr)
-			mocks.originClient.EXPECT().CheckReadiness().Return(tc.mockOriginErr).AnyTimes()
+			backendClient.EXPECT().Stat(backend.ReadinessCheckNamespace, backend.ReadinessCheckName).Return(mockStat, tc.statErr)
+			mocks.originClient.EXPECT().CheckReadiness().Return(tc.originErr).AnyTimes()
 
 			err := client.CheckReadiness()
-			if tc.expectedErrMsgPattern == "" {
+			if tc.wantErr == "" {
 				require.Nil(err)
 			} else {
-				r, _ := regexp.Compile(tc.expectedErrMsgPattern)
-				require.True(r.MatchString(err.Error()))
+				require.EqualError(err, strings.ReplaceAll(tc.wantErr, "{address}", addr))
 			}
 		})
 	}

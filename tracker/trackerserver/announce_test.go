@@ -16,7 +16,7 @@ package trackerserver
 import (
 	"errors"
 	"fmt"
-	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,19 +36,19 @@ func newAnnounceClient(pctx core.PeerContext, addr string) announceclient.Client
 
 func TestCheckReadiness(t *testing.T) {
 	for _, tc := range []struct {
-		name                  string
-		mockOriginErr         error
-		expectedErrMsgPattern string
+		name      string
+		originErr error
+		wantErr   string
 	}{
 		{
-			name:                  "success",
-			mockOriginErr:         nil,
-			expectedErrMsgPattern: "",
+			name:      "success",
+			originErr: nil,
+			wantErr:   "",
 		},
 		{
-			name:                  "failure, 503 (origin fails)",
-			mockOriginErr:         errors.New("origin error"),
-			expectedErrMsgPattern: fmt.Sprintf(`tracker not ready: GET http://127\.0\.0\.1:\d+/readiness 503: not ready to serve traffic: origin error`),
+			name:      "failure, 503 (origin fails)",
+			originErr: errors.New("origin error"),
+			wantErr:   "tracker not ready: GET http://{address}/readiness 503: not ready to serve traffic: origin error",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -60,17 +60,16 @@ func TestCheckReadiness(t *testing.T) {
 			addr, stop := testutil.StartServer(mocks.handler())
 			defer stop()
 
-			mocks.originCluster.EXPECT().CheckReadiness().Return(tc.mockOriginErr)
+			mocks.originCluster.EXPECT().CheckReadiness().Return(tc.originErr)
 
 			pctx := core.PeerContextFixture()
 			client := newAnnounceClient(pctx, addr)
 
 			err := client.CheckReadiness()
-			if tc.expectedErrMsgPattern == "" {
+			if tc.wantErr == "" {
 				require.Nil(err)
 			} else {
-				r, _ := regexp.Compile(tc.expectedErrMsgPattern)
-				require.True(r.MatchString(err.Error()))
+				require.EqualError(err, strings.ReplaceAll(tc.wantErr, "{address}", addr))
 			}
 		})
 	}
