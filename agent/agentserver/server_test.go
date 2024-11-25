@@ -279,71 +279,73 @@ func TestReadinessCheckHandler(t *testing.T) {
 
 func TestReadinessCheckHandlerCache(t *testing.T) {
 	testErr := errors.New("test-err")
-	type call struct {
-		success bool
-	}
 
 	for _, tc := range []struct {
-		desc              string
-		readinessCacheTTL time.Duration
-		waitInvalidation  bool
-		expCalls          []call
-		setupMocks        func(m *serverMocks)
+		desc                  string
+		readinessCacheTTL     time.Duration
+		waitInvalidation      bool
+		wantFirstCallSuccess  bool
+		wantSecondCallSuccess bool
+		setupMocks            func(m *serverMocks)
 	}{
 		{
-			desc:              "call 1 succeeds, so second call succeeds without checks",
-			readinessCacheTTL: 10 * time.Minute,
-			waitInvalidation:  false,
-			expCalls:          []call{{success: true}, {success: true}},
+			desc:                  "call 1 succeeds, so second call succeeds without checks",
+			readinessCacheTTL:     10 * time.Minute,
+			waitInvalidation:      false,
+			wantFirstCallSuccess:  true,
+			wantSecondCallSuccess: true,
 			setupMocks: func(m *serverMocks) {
-				m.sched.EXPECT().Probe().Return(nil).Times(1)
-				m.tags.EXPECT().CheckReadiness().Return(nil).Times(1)
-				m.ac.EXPECT().CheckReadiness().Return(nil).Times(1)
+				m.sched.EXPECT().Probe().Return(nil)
+				m.tags.EXPECT().CheckReadiness().Return(nil)
+				m.ac.EXPECT().CheckReadiness().Return(nil)
 			},
 		},
 		{
-			desc:              "call 1 fails, so second call performs checks",
-			readinessCacheTTL: 10 * time.Minute,
-			waitInvalidation:  false,
-			expCalls:          []call{{success: false}, {success: true}},
+			desc:                  "call 1 fails, so second call performs checks",
+			readinessCacheTTL:     10 * time.Minute,
+			waitInvalidation:      false,
+			wantFirstCallSuccess:  false,
+			wantSecondCallSuccess: true,
 			setupMocks: func(m *serverMocks) {
-				m.sched.EXPECT().Probe().Return(testErr).Times(1)
-				m.tags.EXPECT().CheckReadiness().Return(testErr).Times(1)
-				m.ac.EXPECT().CheckReadiness().Return(testErr).Times(1)
+				m.sched.EXPECT().Probe().Return(testErr)
+				m.tags.EXPECT().CheckReadiness().Return(testErr)
+				m.ac.EXPECT().CheckReadiness().Return(testErr)
 
-				m.sched.EXPECT().Probe().Return(nil).Times(1)
-				m.tags.EXPECT().CheckReadiness().Return(nil).Times(1)
-				m.ac.EXPECT().CheckReadiness().Return(nil).Times(1)
+				m.sched.EXPECT().Probe().Return(nil)
+				m.tags.EXPECT().CheckReadiness().Return(nil)
+				m.ac.EXPECT().CheckReadiness().Return(nil)
 			},
 		},
 		{
-			desc:              "call 1 succeeds, but cache becomes invalid, so second call performs checks",
-			readinessCacheTTL: 10 * time.Minute,
-			waitInvalidation:  true,
-			expCalls:          []call{{success: true}, {success: false}},
+			desc:                  "call 1 succeeds, but cache becomes invalid, so second call performs checks",
+			readinessCacheTTL:     10 * time.Minute,
+			waitInvalidation:      true,
+			wantFirstCallSuccess:  true,
+			wantSecondCallSuccess: false,
 			setupMocks: func(m *serverMocks) {
-				m.sched.EXPECT().Probe().Return(nil).Times(1)
-				m.tags.EXPECT().CheckReadiness().Return(nil).Times(1)
-				m.ac.EXPECT().CheckReadiness().Return(nil).Times(1)
+				m.sched.EXPECT().Probe().Return(nil)
+				m.tags.EXPECT().CheckReadiness().Return(nil)
+				m.ac.EXPECT().CheckReadiness().Return(nil)
 
-				m.sched.EXPECT().Probe().Return(testErr).Times(1)
-				m.tags.EXPECT().CheckReadiness().Return(testErr).Times(1)
-				m.ac.EXPECT().CheckReadiness().Return(testErr).Times(1)
+				m.sched.EXPECT().Probe().Return(testErr)
+				m.tags.EXPECT().CheckReadiness().Return(testErr)
+				m.ac.EXPECT().CheckReadiness().Return(testErr)
 			},
 		},
 		{
-			desc:              "call 1 succeeds, but caching is disabled, so second call performs checks",
-			readinessCacheTTL: 0,
-			waitInvalidation:  false,
-			expCalls:          []call{{success: true}, {success: false}},
+			desc:                  "call 1 succeeds, but caching is disabled, so second call performs checks",
+			readinessCacheTTL:     0,
+			waitInvalidation:      false,
+			wantFirstCallSuccess:  true,
+			wantSecondCallSuccess: false,
 			setupMocks: func(m *serverMocks) {
-				m.sched.EXPECT().Probe().Return(nil).Times(1)
-				m.tags.EXPECT().CheckReadiness().Return(nil).Times(1)
-				m.ac.EXPECT().CheckReadiness().Return(nil).Times(1)
+				m.sched.EXPECT().Probe().Return(nil)
+				m.tags.EXPECT().CheckReadiness().Return(nil)
+				m.ac.EXPECT().CheckReadiness().Return(nil)
 
-				m.sched.EXPECT().Probe().Return(testErr).Times(1)
-				m.tags.EXPECT().CheckReadiness().Return(testErr).Times(1)
-				m.ac.EXPECT().CheckReadiness().Return(testErr).Times(1)
+				m.sched.EXPECT().Probe().Return(testErr)
+				m.tags.EXPECT().CheckReadiness().Return(testErr)
+				m.ac.EXPECT().CheckReadiness().Return(testErr)
 			},
 		},
 	} {
@@ -356,7 +358,7 @@ func TestReadinessCheckHandlerCache(t *testing.T) {
 
 			s, addr := mocks.startServer(Config{readinessCacheTTL: tc.readinessCacheTTL})
 			_, err := httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
-			if tc.expCalls[0].success {
+			if tc.wantFirstCallSuccess {
 				require.NoError(err)
 			} else {
 				require.Error(err)
@@ -368,7 +370,7 @@ func TestReadinessCheckHandlerCache(t *testing.T) {
 			}
 
 			_, err = httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
-			if tc.expCalls[1].success {
+			if tc.wantSecondCallSuccess {
 				require.NoError(err)
 			} else {
 				require.Error(err)
