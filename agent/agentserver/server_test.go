@@ -278,35 +278,73 @@ func TestReadinessCheckHandler(t *testing.T) {
 }
 
 func TestReadinessCheckHandlerCache(t *testing.T) {
+	testErr := errors.New("test-err")
+	type call struct {
+		success bool
+	}
+
 	for _, tc := range []struct {
 		desc              string
-		firstCallErr      error
 		readinessCacheTTL time.Duration
 		waitInvalidation  bool
+		expCalls          []call
+		setupMocks        func(m *serverMocks)
 	}{
 		{
-			desc:              "call 1 succeeds, so second call automatically succeeds",
-			firstCallErr:      nil,
+			desc:              "call 1 succeeds, so second call succeeds without checks",
 			readinessCacheTTL: 10 * time.Minute,
 			waitInvalidation:  false,
+			expCalls:          []call{{success: true}, {success: true}},
+			setupMocks: func(m *serverMocks) {
+				m.sched.EXPECT().Probe().Return(nil).Times(1)
+				m.tags.EXPECT().CheckReadiness().Return(nil).Times(1)
+				m.ac.EXPECT().CheckReadiness().Return(nil).Times(1)
+			},
 		},
 		{
 			desc:              "call 1 fails, so second call performs checks",
-			firstCallErr:      errors.New("test-error"),
 			readinessCacheTTL: 10 * time.Minute,
 			waitInvalidation:  false,
+			expCalls:          []call{{success: false}, {success: true}},
+			setupMocks: func(m *serverMocks) {
+				m.sched.EXPECT().Probe().Return(testErr).Times(1)
+				m.tags.EXPECT().CheckReadiness().Return(testErr).Times(1)
+				m.ac.EXPECT().CheckReadiness().Return(testErr).Times(1)
+
+				m.sched.EXPECT().Probe().Return(nil).Times(1)
+				m.tags.EXPECT().CheckReadiness().Return(nil).Times(1)
+				m.ac.EXPECT().CheckReadiness().Return(nil).Times(1)
+			},
 		},
 		{
 			desc:              "call 1 succeeds, but cache becomes invalid, so second call performs checks",
-			firstCallErr:      nil,
 			readinessCacheTTL: 10 * time.Minute,
 			waitInvalidation:  true,
+			expCalls:          []call{{success: true}, {success: false}},
+			setupMocks: func(m *serverMocks) {
+				m.sched.EXPECT().Probe().Return(nil).Times(1)
+				m.tags.EXPECT().CheckReadiness().Return(nil).Times(1)
+				m.ac.EXPECT().CheckReadiness().Return(nil).Times(1)
+
+				m.sched.EXPECT().Probe().Return(testErr).Times(1)
+				m.tags.EXPECT().CheckReadiness().Return(testErr).Times(1)
+				m.ac.EXPECT().CheckReadiness().Return(testErr).Times(1)
+			},
 		},
 		{
 			desc:              "call 1 succeeds, but caching is disabled, so second call performs checks",
-			firstCallErr:      nil,
 			readinessCacheTTL: 0,
 			waitInvalidation:  false,
+			expCalls:          []call{{success: true}, {success: false}},
+			setupMocks: func(m *serverMocks) {
+				m.sched.EXPECT().Probe().Return(nil).Times(1)
+				m.tags.EXPECT().CheckReadiness().Return(nil).Times(1)
+				m.ac.EXPECT().CheckReadiness().Return(nil).Times(1)
+
+				m.sched.EXPECT().Probe().Return(testErr).Times(1)
+				m.tags.EXPECT().CheckReadiness().Return(testErr).Times(1)
+				m.ac.EXPECT().CheckReadiness().Return(testErr).Times(1)
+			},
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -314,21 +352,12 @@ func TestReadinessCheckHandlerCache(t *testing.T) {
 			mocks, cleanup := newServerMocks(t)
 			defer cleanup()
 
-			mocks.sched.EXPECT().Probe().Return(tc.firstCallErr).Times(1)
-			mocks.tags.EXPECT().CheckReadiness().Return(tc.firstCallErr).Times(1)
-			mocks.ac.EXPECT().CheckReadiness().Return(tc.firstCallErr).Times(1)
-			if tc.firstCallErr != nil || tc.waitInvalidation || tc.readinessCacheTTL == 0 {
-				mocks.sched.EXPECT().Probe().Return(nil).Times(1)
-				mocks.tags.EXPECT().CheckReadiness().Return(nil).Times(1)
-				mocks.ac.EXPECT().CheckReadiness().Return(nil).Times(1)
-			}
+			tc.setupMocks(mocks)
 
 			s, addr := mocks.startServer(Config{readinessCacheTTL: tc.readinessCacheTTL})
-			r, err := httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
-			if tc.firstCallErr == nil {
-				require.Nil(err)
-				respBody, _ := ioutil.ReadAll(r.Body)
-				require.Equal("OK", string(respBody))
+			_, err := httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
+			if tc.expCalls[0].success {
+				require.NoError(err)
 			} else {
 				require.Error(err)
 			}
@@ -338,10 +367,12 @@ func TestReadinessCheckHandlerCache(t *testing.T) {
 				s.lastReady = s.lastReady.Add(-1 * tc.readinessCacheTTL)
 			}
 
-			r, err = httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
-			require.Nil(err)
-			respBody, _ := ioutil.ReadAll(r.Body)
-			require.Equal("OK", string(respBody))
+			_, err = httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
+			if tc.expCalls[1].success {
+				require.NoError(err)
+			} else {
+				require.Error(err)
+			}
 		})
 	}
 }
