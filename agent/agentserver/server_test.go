@@ -78,11 +78,11 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 		containerruntime, &cleanup}, cleanup.Run
 }
 
-func (m *serverMocks) startServer() string {
-	s := New(Config{}, tally.NoopScope, m.cads, m.sched, m.tags, m.ac, m.containerRuntime)
+func (m *serverMocks) startServer(c Config) (*Server, string) {
+	s := New(c, tally.NoopScope, m.cads, m.sched, m.tags, m.ac, m.containerRuntime)
 	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
-	return addr
+	return s, addr
 }
 
 func TestGetTag(t *testing.T) {
@@ -95,8 +95,8 @@ func TestGetTag(t *testing.T) {
 	d := core.DigestFixture()
 
 	mocks.tags.EXPECT().Get(tag).Return(d, nil)
-
-	c := agentclient.New(mocks.startServer())
+	_, addr := mocks.startServer(Config{})
+	c := agentclient.New(addr)
 
 	result, err := c.GetTag(tag)
 	require.NoError(err)
@@ -113,7 +113,8 @@ func TestGetTagNotFound(t *testing.T) {
 
 	mocks.tags.EXPECT().Get(tag).Return(core.Digest{}, tagclient.ErrTagNotFound)
 
-	c := agentclient.New(mocks.startServer())
+	_, addr := mocks.startServer(Config{})
+	c := agentclient.New(addr)
 
 	_, err := c.GetTag(tag)
 	require.Error(err)
@@ -134,7 +135,7 @@ func TestDownload(t *testing.T) {
 			return store.RunDownload(mocks.cads, d, blob.Content)
 		})
 
-	addr := mocks.startServer()
+	_, addr := mocks.startServer(Config{})
 	c := agentclient.New(addr)
 
 	r, err := c.Download(namespace, blob.Digest)
@@ -155,7 +156,7 @@ func TestDownloadNotFound(t *testing.T) {
 
 	mocks.sched.EXPECT().Download(namespace, blob.Digest).Return(scheduler.ErrTorrentNotFound)
 
-	addr := mocks.startServer()
+	_, addr := mocks.startServer(Config{})
 	c := agentclient.New(addr)
 
 	_, err := c.Download(namespace, blob.Digest)
@@ -174,7 +175,7 @@ func TestDownloadUnknownError(t *testing.T) {
 
 	mocks.sched.EXPECT().Download(namespace, blob.Digest).Return(fmt.Errorf("test error"))
 
-	addr := mocks.startServer()
+	_, addr := mocks.startServer(Config{})
 	c := agentclient.New(addr)
 
 	_, err := c.Download(namespace, blob.Digest)
@@ -199,7 +200,7 @@ func TestHealthHandler(t *testing.T) {
 
 			mocks.sched.EXPECT().Probe().Return(test.probeErr)
 
-			addr := mocks.startServer()
+			_, addr := mocks.startServer(Config{})
 
 			_, err := httputil.Get(fmt.Sprintf("http://%s/health", addr))
 			if test.probeErr != nil {
@@ -265,12 +266,114 @@ func TestReadinessCheckHandler(t *testing.T) {
 			mocks.tags.EXPECT().CheckReadiness().Return(tc.buildIndexErr)
 			mocks.ac.EXPECT().CheckReadiness().Return(tc.trackerErr)
 
-			addr := mocks.startServer()
+			_, addr := mocks.startServer(Config{})
 			_, err := httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
 			if tc.wantErr == "" {
 				require.Nil(err)
 			} else {
 				require.EqualError(err, strings.ReplaceAll(tc.wantErr, "{address}", addr))
+			}
+		})
+	}
+}
+
+func TestReadinessCheckHandlerCache(t *testing.T) {
+	testErr := errors.New("test-err")
+
+	for _, tc := range []struct {
+		desc                  string
+		readinessCacheTTL     time.Duration
+		waitInvalidation      bool
+		wantFirstCallSuccess  bool
+		wantSecondCallSuccess bool
+		setupMocks            func(m *serverMocks)
+	}{
+		{
+			desc:                  "call 1 succeeds, so second call succeeds without checks",
+			readinessCacheTTL:     10 * time.Minute,
+			waitInvalidation:      false,
+			wantFirstCallSuccess:  true,
+			wantSecondCallSuccess: true,
+			setupMocks: func(m *serverMocks) {
+				m.sched.EXPECT().Probe().Return(nil)
+				m.tags.EXPECT().CheckReadiness().Return(nil)
+				m.ac.EXPECT().CheckReadiness().Return(nil)
+			},
+		},
+		{
+			desc:                  "call 1 fails, so second call performs checks",
+			readinessCacheTTL:     10 * time.Minute,
+			waitInvalidation:      false,
+			wantFirstCallSuccess:  false,
+			wantSecondCallSuccess: true,
+			setupMocks: func(m *serverMocks) {
+				m.sched.EXPECT().Probe().Return(testErr)
+				m.tags.EXPECT().CheckReadiness().Return(testErr)
+				m.ac.EXPECT().CheckReadiness().Return(testErr)
+
+				m.sched.EXPECT().Probe().Return(nil)
+				m.tags.EXPECT().CheckReadiness().Return(nil)
+				m.ac.EXPECT().CheckReadiness().Return(nil)
+			},
+		},
+		{
+			desc:                  "call 1 succeeds, but cache becomes invalid, so second call performs checks",
+			readinessCacheTTL:     10 * time.Minute,
+			waitInvalidation:      true,
+			wantFirstCallSuccess:  true,
+			wantSecondCallSuccess: false,
+			setupMocks: func(m *serverMocks) {
+				m.sched.EXPECT().Probe().Return(nil)
+				m.tags.EXPECT().CheckReadiness().Return(nil)
+				m.ac.EXPECT().CheckReadiness().Return(nil)
+
+				m.sched.EXPECT().Probe().Return(testErr)
+				m.tags.EXPECT().CheckReadiness().Return(testErr)
+				m.ac.EXPECT().CheckReadiness().Return(testErr)
+			},
+		},
+		{
+			desc:                  "call 1 succeeds, but caching is disabled, so second call performs checks",
+			readinessCacheTTL:     0,
+			waitInvalidation:      false,
+			wantFirstCallSuccess:  true,
+			wantSecondCallSuccess: false,
+			setupMocks: func(m *serverMocks) {
+				m.sched.EXPECT().Probe().Return(nil)
+				m.tags.EXPECT().CheckReadiness().Return(nil)
+				m.ac.EXPECT().CheckReadiness().Return(nil)
+
+				m.sched.EXPECT().Probe().Return(testErr)
+				m.tags.EXPECT().CheckReadiness().Return(testErr)
+				m.ac.EXPECT().CheckReadiness().Return(testErr)
+			},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			require := require.New(t)
+			mocks, cleanup := newServerMocks(t)
+			defer cleanup()
+
+			tc.setupMocks(mocks)
+
+			s, addr := mocks.startServer(Config{readinessCacheTTL: tc.readinessCacheTTL})
+			_, err := httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
+			if tc.wantFirstCallSuccess {
+				require.NoError(err)
+			} else {
+				require.Error(err)
+			}
+
+			if tc.waitInvalidation {
+				// To avoid using time.Sleep, we can rollback the server's lastReady variable to simulate cache invalidation.
+				s.lastReady = s.lastReady.Add(-1 * tc.readinessCacheTTL)
+			}
+
+			_, err = httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
+			if tc.wantSecondCallSuccess {
+				require.NoError(err)
+			} else {
+				require.Error(err)
 			}
 		})
 	}
@@ -282,7 +385,7 @@ func TestPatchSchedulerConfigHandler(t *testing.T) {
 	mocks, cleanup := newServerMocks(t)
 	defer cleanup()
 
-	addr := mocks.startServer()
+	_, addr := mocks.startServer(Config{})
 
 	config := scheduler.Config{
 		ConnTTI: time.Minute,
@@ -311,7 +414,7 @@ func TestGetBlacklistHandler(t *testing.T) {
 	}}
 	mocks.sched.EXPECT().BlacklistSnapshot().Return(blacklist, nil)
 
-	addr := mocks.startServer()
+	_, addr := mocks.startServer(Config{})
 
 	resp, err := httputil.Get(fmt.Sprintf("http://%s/x/blacklist", addr))
 	require.NoError(err)
@@ -329,7 +432,7 @@ func TestDeleteBlobHandler(t *testing.T) {
 
 	d := core.DigestFixture()
 
-	addr := mocks.startServer()
+	_, addr := mocks.startServer(Config{})
 
 	mocks.sched.EXPECT().RemoveTorrent(d).Return(nil)
 
@@ -381,7 +484,7 @@ func TestPreloadHandler(t *testing.T) {
 			defer cleanup()
 
 			tt.setup(mocks)
-			addr := mocks.startServer()
+			_, addr := mocks.startServer(Config{})
 
 			_, err := httputil.Get(fmt.Sprintf("http://%s%s", addr, tt.url))
 			if tt.expectedError != "" {

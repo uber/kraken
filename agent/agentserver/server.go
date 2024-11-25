@@ -23,6 +23,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
@@ -39,7 +40,10 @@ import (
 )
 
 // Config defines Server configuration.
-type Config struct{}
+type Config struct {
+	// How long a successful readiness check is valid for. If 0, disable caching successful readiness.
+	readinessCacheTTL time.Duration `yaml:"readiness_cache_ttl"`
+}
 
 // Server defines the agent HTTP server.
 type Server struct {
@@ -50,6 +54,7 @@ type Server struct {
 	tags             tagclient.Client
 	ac               announceclient.Client
 	containerRuntime containerruntime.Factory
+	lastReady        time.Time
 }
 
 // New creates a new Server.
@@ -208,6 +213,14 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) error {
+	if s.config.readinessCacheTTL != 0 {
+		rCacheValid := s.lastReady.Add(s.config.readinessCacheTTL).After(time.Now())
+		if rCacheValid {
+			io.WriteString(w, "OK")
+			return nil
+		}
+	}
+
 	var schedErr, buildIndexErr, trackerErr error
 	var wg sync.WaitGroup
 
@@ -236,6 +249,8 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 	if len(errMsgs) != 0 {
 		return handler.Errorf("agent not ready: %v", strings.Join(errMsgs, "\n")).Status(http.StatusServiceUnavailable)
 	}
+
+	s.lastReady = time.Now()
 	io.WriteString(w, "OK")
 	return nil
 }
