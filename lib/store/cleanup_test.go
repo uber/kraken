@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,6 +14,7 @@
 package store
 
 import (
+	// "errors"
 	"errors"
 	"io/ioutil"
 	"os"
@@ -50,7 +51,8 @@ func fileOpFixture(clk clock.Clock) (base.FileState, base.FileOp, func()) {
 func TestCleanupManagerAddJob(t *testing.T) {
 	require := require.New(t)
 
-	clk := clock.New()
+	clk := clock.NewMock()
+	clk.Set(time.Now())
 
 	m, err := newCleanupManager(clk, tally.NoopScope)
 	require.NoError(err)
@@ -69,7 +71,7 @@ func TestCleanupManagerAddJob(t *testing.T) {
 
 	require.NoError(op.CreateFile(name, state, 0))
 
-	time.Sleep(2 * time.Second)
+	clk.Add(2 * time.Second)
 
 	_, err = op.GetFileStat(name)
 	require.True(os.IsNotExist(err))
@@ -80,8 +82,10 @@ func TestCleanupManagerDeleteIdleFiles(t *testing.T) {
 
 	clk := clock.NewMock()
 	clk.Set(time.Now())
-	tti := 6 * time.Hour
-	ttl := 24 * time.Hour
+	config := CleanupConfig{
+		TTI: 6 * time.Hour,
+		TTL: 24 * time.Hour,
+	}
 
 	m, err := newCleanupManager(clk, tally.NoopScope)
 	require.NoError(err)
@@ -100,15 +104,14 @@ func TestCleanupManagerDeleteIdleFiles(t *testing.T) {
 		require.NoError(op.CreateFile(name, state, 0))
 	}
 
-	clk.Add(tti + 1)
+	clk.Add(config.TTI + 1)
 
 	active := names[50:]
 	for _, name := range active {
 		require.NoError(op.CreateFile(name, state, 0))
 	}
 
-	_, err = m.scan(op, tti, ttl)
-	require.NoError(err)
+	m.clean(tally.NoopScope, config, op)
 
 	for _, name := range idle {
 		_, err := op.GetFileStat(name)
@@ -125,8 +128,10 @@ func TestCleanupManagerDeleteExpiredFiles(t *testing.T) {
 
 	clk := clock.NewMock()
 	clk.Set(time.Now())
-	tti := 6 * time.Hour
-	ttl := 24 * time.Hour
+	config := CleanupConfig{
+		TTI: 6 * time.Hour,
+		TTL: 24 * time.Hour,
+	}
 
 	m, err := newCleanupManager(clk, tally.NoopScope)
 	require.NoError(err)
@@ -143,18 +148,16 @@ func TestCleanupManagerDeleteExpiredFiles(t *testing.T) {
 		require.NoError(op.CreateFile(name, state, 0))
 	}
 
-	_, err = m.scan(op, tti, ttl)
-	require.NoError(err)
+	m.clean(tally.NoopScope, config, op)
 
 	for _, name := range names {
 		_, err := op.GetFileStat(name)
 		require.NoError(err)
 	}
 
-	clk.Add(ttl + 1)
+	clk.Add(config.TTL + 1)
 
-	_, err = m.scan(op, tti, ttl)
-	require.NoError(err)
+	m.clean(tally.NoopScope, config, op)
 
 	for _, name := range names {
 		_, err := op.GetFileStat(name)
@@ -167,8 +170,10 @@ func TestCleanupManagerSkipsPersistedFiles(t *testing.T) {
 
 	clk := clock.NewMock()
 	clk.Set(time.Now())
-	tti := 48 * time.Hour
-	ttl := 24 * time.Hour
+	config := CleanupConfig{
+		TTI: 48 * time.Hour,
+		TTL: 24 * time.Hour,
+	}
 
 	m, err := newCleanupManager(clk, tally.NoopScope)
 	require.NoError(err)
@@ -194,10 +199,9 @@ func TestCleanupManagerSkipsPersistedFiles(t *testing.T) {
 		require.NoError(err)
 	}
 
-	clk.Add(tti + 1)
+	clk.Add(config.TTI + 1)
 
-	_, err = m.scan(op, tti, ttl)
-	require.NoError(err)
+	m.clean(tally.NoopScope, config, op)
 
 	for _, name := range idle {
 		_, err := op.GetFileStat(name)
@@ -209,10 +213,39 @@ func TestCleanupManagerSkipsPersistedFiles(t *testing.T) {
 	}
 }
 
-func TestCleanupManageDiskUsage(t *testing.T) {
+func TestCleanupManagerSize(t *testing.T) {
 	require := require.New(t)
 
 	clk := clock.New()
+
+	m, err := newCleanupManager(clk, tally.NoopScope)
+	require.NoError(err)
+	defer m.stop()
+
+	state, op, cleanup := fileOpFixture(clk)
+	defer cleanup()
+
+	s, err := size(op)
+	require.Nil(err)
+	require.Equal(int64(0), s)
+
+	for i := 0; i < 10; i++ {
+		require.NoError(op.CreateFile(core.DigestFixture().Hex(), state, 5))
+	}
+
+	s, err = size(op)
+	require.Nil(err)
+	require.Equal(int64(50), s)
+}
+
+func TestCleanupManagerDiskMetrics(t *testing.T) {
+	require := require.New(t)
+
+	clk := clock.New()
+	config := CleanupConfig{
+		TTI: 1 * time.Hour,
+		TTL: 1 * time.Hour,
+	}
 
 	m, err := newCleanupManager(clk, tally.NoopScope)
 	require.NoError(err)
@@ -225,37 +258,77 @@ func TestCleanupManageDiskUsage(t *testing.T) {
 		require.NoError(op.CreateFile(core.DigestFixture().Hex(), state, 5))
 	}
 
-	usage, err := m.scan(op, time.Hour, time.Hour)
-	require.NoError(err)
-	require.Equal(int64(500), usage)
+	testStats := tally.NewTestScope("", map[string]string{})
+	m.clean(testStats, config, op)
+	snapshot := testStats.Snapshot()
+	usageGauge, ok := snapshot.Gauges()["disk_usage+"]
+	require.True(ok)
+	require.Equal(float64(500), usageGauge.Value())
 }
 
-func TestCleanupManagerAggressive(t *testing.T) {
-	require := require.New(t)
+func TestCleanupManagerCalculateTTL(t *testing.T) {
+	for _, tc := range []struct {
+		desc              string
+		config            CleanupConfig
+		calculateDiskUtil diskUtilFn
+		wantTTL           time.Duration
+	}{
+		{
+			desc: "aggressive cleanup disabled",
+			config: CleanupConfig{
+				TTI: 10 * time.Minute,
+				TTL: 30 * time.Minute,
+			},
+			calculateDiskUtil: nil,
+			wantTTL:           30 * time.Minute,
+		},
+		{
+			desc: "aggressive cleanup enabled, disk util below threshold",
+			config: CleanupConfig{
+				TTI: 10 * time.Minute,
+				TTL: 30 * time.Minute,
 
-	config := CleanupConfig{
-		AggressiveThreshold: 80,
-		TTL:                 10 * time.Second,
-		AggressiveTTL:       5 * time.Second,
+				AggressiveThreshold: 50,
+				AggressiveTTL:       5 * time.Minute,
+			},
+			calculateDiskUtil: func(op base.FileOp, c CleanupConfig) (int, error) { return 49, nil },
+			wantTTL:           30 * time.Minute,
+		},
+		{
+			desc: "aggressive cleanup enabled, disk util passed threshold",
+			config: CleanupConfig{
+				TTI: 10 * time.Minute,
+				TTL: 30 * time.Minute,
+
+				AggressiveThreshold: 50,
+				AggressiveTTL:       5 * time.Minute,
+			},
+			calculateDiskUtil: func(op base.FileOp, c CleanupConfig) (int, error) { return 50, nil },
+			wantTTL:           5 * time.Minute,
+		},
+		{
+			desc: "aggressive cleanup enabled, disk util could not be calculated",
+			config: CleanupConfig{
+				TTI: 10 * time.Minute,
+				TTL: 30 * time.Minute,
+
+				AggressiveThreshold: 50,
+				AggressiveTTL:       5 * time.Minute,
+			},
+			calculateDiskUtil: func(op base.FileOp, c CleanupConfig) (int, error) { return 0, errors.New("test-error") },
+			wantTTL:           30 * time.Minute,
+		},
+	} {
+		require := require.New(t)
+
+		clk := clock.New()
+		m, err := newCleanupManager(clk, tally.NoopScope)
+		require.NoError(err)
+		defer m.stop()
+
+		_, op, cleanup := fileOpFixture(clk)
+		defer cleanup()
+
+		require.Equal(tc.wantTTL, m.calculateTTL(tally.NoopScope, op, tc.config, tc.calculateDiskUtil))
 	}
-
-	clk := clock.NewMock()
-	m, err := newCleanupManager(clk, tally.NoopScope)
-	require.NoError(err)
-	defer m.stop()
-
-	_, op, cleanup := fileOpFixture(clk)
-	defer cleanup()
-
-	require.Equal(m.checkAggressiveCleanup(op, config, func() (int, error) {
-		return 90, nil
-	}), 5*time.Second)
-
-	require.Equal(m.checkAggressiveCleanup(op, config, func() (int, error) {
-		return 60, nil
-	}), 10*time.Second)
-
-	require.Equal(m.checkAggressiveCleanup(op, config, func() (int, error) {
-		return 0, errors.New("fake error")
-	}), 10*time.Second)
 }
