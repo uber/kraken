@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -73,9 +73,9 @@ http {
     ssl_verify_client on;
     ssl_client_certificate {{.ssl_client_certificate}};
   {{end}}
-  ssl_protocols TLSv1.1 TLSv1.2; # Dropping SSLv3, ref: POODLE
+  ssl_protocols TLSv1.2; # Dropping SSLv3, ref: POODLE
   ssl_prefer_server_ciphers on;
-  ssl_ciphers ECDH+AES256:ECDH+AES128:DH+3DES:!ADH:!AECDH:!MD5@SECLEVEL=1;
+  ssl_ciphers ECDH+AES256:ECDH+AES128:DH+3DES:!ADH:!AECDH:!MD5:!SHA1:!aNULL:!eNULL@SECLEVEL=2;
 
   ##
   # Logging Settings
