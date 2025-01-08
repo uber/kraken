@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -61,7 +61,7 @@ type Config struct {
 
 func (c *Config) applyDefaults() error {
 	if c.Binary == "" {
-		c.Binary = "/usr/sbin/nginx"
+		c.Binary = "/opt/homebrew/bin/nginx"
 	}
 	if c.StdoutLogPath == "" {
 		if c.LogDir == "" {
@@ -215,10 +215,7 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 		return fmt.Errorf("write src: %s", err)
 	}
 
-	stdout, err := os.OpenFile(config.StdoutLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("open stdout log: %s", err)
-	}
+	stdout := os.Stdout
 
 	args := []string{config.Binary, "-g", "daemon off;", "-c", conf}
 	if config.Root {
