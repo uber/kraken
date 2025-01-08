@@ -31,14 +31,19 @@ var _nameToDefaultTemplate = map[string]string{
 const DefaultClientVerification = `
 ssl_verify_client on;
 set $required_verified_client 1;
+
+# If the remote IP is 127.0.0.1, set ssl_verify_client to optional and allow no verification
 if ($remote_addr = "127.0.0.1") {
   ssl_verify_client optional;
   set $required_verified_client 0;
 }
 
-set $verfied_client $required_verified_client$ssl_client_verify;
-if ($verfied_client !~ ^(0.*|1SUCCESS)$) {
-  return 403;
+# Check client verification status
+set $verified_client $ssl_client_verify;
+if ($required_verified_client = 1) {
+  if ($verified_client !~ ^SUCCESS$) {
+    return 403;
+  }
 }
 `
 
