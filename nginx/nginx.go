@@ -61,7 +61,7 @@ type Config struct {
 
 func (c *Config) applyDefaults() error {
 	if c.Binary == "" {
-		c.Binary = "/opt/homebrew/bin/nginx"
+		c.Binary = "/usr/sbin/nginx"
 	}
 	if c.StdoutLogPath == "" {
 		if c.LogDir == "" {
