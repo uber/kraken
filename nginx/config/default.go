@@ -34,9 +34,6 @@ set $required_verified_client 1;
 if ($scheme = http) {
   set $required_verified_client 0;
 }
-if ($request_method ~ ^(GET|HEAD)$) {
-  set $required_verified_client 0;
-}
 if ($remote_addr = "127.0.0.1") {
   set $required_verified_client 0;
 }
