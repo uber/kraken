@@ -48,7 +48,7 @@ func New(addr string) *HTTPClient {
 // GetTag resolves tag into a digest. Returns ErrTagNotFound if the tag does
 // not exist.
 func (c *HTTPClient) GetTag(tag string) (core.Digest, error) {
-	resp, err := httputil.Get(fmt.Sprintf("https://%s/tags/%s", c.addr, url.PathEscape(tag)))
+	resp, err := httputil.Get(fmt.Sprintf("http://%s/tags/%s", c.addr, url.PathEscape(tag)))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return core.Digest{}, ErrTagNotFound
