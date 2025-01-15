@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -48,7 +48,7 @@ func New(addr string) *HTTPClient {
 // GetTag resolves tag into a digest. Returns ErrTagNotFound if the tag does
 // not exist.
 func (c *HTTPClient) GetTag(tag string) (core.Digest, error) {
-	resp, err := httputil.Get(fmt.Sprintf("http://%s/tags/%s", c.addr, url.PathEscape(tag)))
+	resp, err := httputil.Get(fmt.Sprintf("https://%s/tags/%s", c.addr, url.PathEscape(tag)))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return core.Digest{}, ErrTagNotFound
