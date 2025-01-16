@@ -30,6 +30,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 type clientMocks struct {
@@ -82,7 +83,7 @@ func TestClientFactory(t *testing.T) {
 	userAuth := UserAuthConfig{"test-user": auth}
 	masterAuth := backend.AuthConfig{_s3: userAuth}
 	f := factory{}
-	_, err := f.Create(config, masterAuth, tally.NoopScope)
+	_, err := f.Create(config, masterAuth, tally.NoopScope, zap.NewNop().Sugar())
 	require.NoError(err)
 }
 

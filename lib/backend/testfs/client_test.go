@@ -20,6 +20,7 @@ import (
 	"github.com/uber/kraken/lib/backend/namepath"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestClientFactory(t *testing.T) {
@@ -30,6 +31,6 @@ func TestClientFactory(t *testing.T) {
 		NamePath: namepath.Identity,
 	}
 	f := factory{}
-	_, err := f.Create(config, nil, tally.NoopScope)
+	_, err := f.Create(config, nil, tally.NoopScope, zap.NewNop().Sugar())
 	require.NoError(err)
 }

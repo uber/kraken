@@ -34,6 +34,7 @@ import (
 	"github.com/uber/kraken/lib/backend/s3backend"
 	"github.com/uber/kraken/lib/backend/sqlbackend"
 	"github.com/uber/kraken/lib/backend/testfs"
+	"go.uber.org/zap"
 )
 
 type clientMocks struct {
@@ -135,7 +136,7 @@ func TestClientFactory(t *testing.T) {
 		},
 	} {
 		f := factory{}
-		c, err := f.Create(tc.config, tc.masterAuthConfig, tally.NoopScope)
+		c, err := f.Create(tc.config, tc.masterAuthConfig, tally.NoopScope, zap.NewNop().Sugar())
 		if tc.wantErrMsg == "" {
 			require.NoError(t, err)
 			require.NotNil(t, c)

@@ -24,6 +24,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
+	"go.uber.org/zap"
 )
 
 func generateSingleTag(sqlClient *Client, repo string, tag string) Tag {
@@ -48,7 +49,7 @@ func TestClientFactory(t *testing.T) {
 	config := Config{Dialect: "sqlite3", ConnectionString: ":memory:"}
 
 	f := factory{}
-	_, err := f.Create(config, nil, tally.NoopScope)
+	_, err := f.Create(config, nil, tally.NoopScope, zap.NewNop().Sugar())
 	require.NoError(t, err)
 }
 
@@ -56,7 +57,7 @@ func TestClientFactoryAuth(t *testing.T) {
 	config := Config{Dialect: "sqlite3", ConnectionString: ":memory:"}
 
 	f := factory{}
-	_, err := f.Create(config, nil, tally.NoopScope)
+	_, err := f.Create(config, nil, tally.NoopScope, zap.NewNop().Sugar())
 	require.NoError(t, err)
 }
 

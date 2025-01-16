@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,15 +17,16 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/uber/kraken/core"
 	"github.com/uber-go/tally"
+	"github.com/uber/kraken/core"
+	"go.uber.org/zap"
 )
 
 var _factories = make(map[string]ClientFactory)
 
 // ClientFactory creates backend client given name.
 type ClientFactory interface {
-	Create(config interface{}, masterAuthConfig AuthConfig, stats tally.Scope) (Client, error)
+	Create(config interface{}, masterAuthConfig AuthConfig, stats tally.Scope, logger *zap.SugaredLogger) (Client, error)
 }
 
 // Register registers new Factory with corresponding backend client name.

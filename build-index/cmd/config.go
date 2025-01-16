@@ -34,6 +34,7 @@ import (
 type Config struct {
 	ZapLogging     zap.Config                   `yaml:"zap"`
 	Metrics        metrics.Config               `yaml:"metrics"`
+  BackendManager backend.ManagerConfig   `yaml:"backend_manager"`
 	Backends       []backend.Config             `yaml:"backends"`
 	Auth           backend.AuthConfig           `yaml:"auth"`
 	TagServer      tagserver.Config             `yaml:"tagserver"`

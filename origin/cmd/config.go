@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -37,23 +37,24 @@ import (
 // Config defines origin server configuration.
 // TODO(evelynl94): consolidate cluster and hashring.
 type Config struct {
-	Verbose       bool
-	ZapLogging    zap.Config               `yaml:"zap"`
-	Cluster       hostlist.Config          `yaml:"cluster"`
-	HashRing      hashring.Config          `yaml:"hashring"`
-	HealthCheck   healthcheck.FilterConfig `yaml:"healthcheck"`
-	BlobServer    blobserver.Config        `yaml:"blobserver"`
-	CAStore       store.CAStoreConfig      `yaml:"castore"`
-	Scheduler     scheduler.Config         `yaml:"scheduler"`
-	NetworkEvent  networkevent.Config      `yaml:"network_event"`
-	PeerIDFactory core.PeerIDFactory       `yaml:"peer_id_factory"`
-	Metrics       metrics.Config           `yaml:"metrics"`
-	MetaInfoGen   metainfogen.Config       `yaml:"metainfogen"`
-	Backends      []backend.Config         `yaml:"backends"`
-	Auth          backend.AuthConfig       `yaml:"auth"`
-	BlobRefresh   blobrefresh.Config       `yaml:"blobrefresh"`
-	LocalDB       localdb.Config           `yaml:"localdb"`
-	WriteBack     persistedretry.Config    `yaml:"writeback"`
-	Nginx         nginx.Config             `yaml:"nginx"`
-	TLS           httputil.TLSConfig       `yaml:"tls"`
+	Verbose        bool
+	ZapLogging     zap.Config               `yaml:"zap"`
+	Cluster        hostlist.Config          `yaml:"cluster"`
+	HashRing       hashring.Config          `yaml:"hashring"`
+	HealthCheck    healthcheck.FilterConfig `yaml:"healthcheck"`
+	BlobServer     blobserver.Config        `yaml:"blobserver"`
+	CAStore        store.CAStoreConfig      `yaml:"castore"`
+	Scheduler      scheduler.Config         `yaml:"scheduler"`
+	NetworkEvent   networkevent.Config      `yaml:"network_event"`
+	PeerIDFactory  core.PeerIDFactory       `yaml:"peer_id_factory"`
+	Metrics        metrics.Config           `yaml:"metrics"`
+	MetaInfoGen    metainfogen.Config       `yaml:"metainfogen"`
+	BackendManager backend.ManagerConfig    `yaml:"backend_manager"`
+	Backends       []backend.Config         `yaml:"backends"`
+	Auth           backend.AuthConfig       `yaml:"auth"`
+	BlobRefresh    blobrefresh.Config       `yaml:"blobrefresh"`
+	LocalDB        localdb.Config           `yaml:"localdb"`
+	WriteBack      persistedretry.Config    `yaml:"writeback"`
+	Nginx          nginx.Config             `yaml:"nginx"`
+	TLS            httputil.TLSConfig       `yaml:"tls"`
 }
