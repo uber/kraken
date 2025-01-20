@@ -215,7 +215,10 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 		return fmt.Errorf("write src: %s", err)
 	}
 
-	stdout := os.Stdout
+	stdout, err := os.OpenFile(config.StdoutLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("open stdout log: %s", err)
+	}
 
 	args := []string{config.Binary, "-g", "daemon off;", "-c", conf}
 	if config.Root {
