@@ -34,6 +34,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 type clientMocks struct {
@@ -85,7 +86,7 @@ func TestClientFactory(t *testing.T) {
 	userAuth := UserAuthConfig{"test-user": auth}
 	masterAuth := backend.AuthConfig{_gcs: userAuth}
 	f := factory{}
-	_, err := f.Create(config, masterAuth, tally.NoopScope)
+	_, err := f.Create(config, masterAuth, tally.NoopScope, zap.NewNop().Sugar())
 	fmt.Println(err.Error())
 	require.True(strings.Contains(err.Error(), "invalid gcs credentials"))
 }

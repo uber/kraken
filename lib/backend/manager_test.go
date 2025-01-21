@@ -107,7 +107,7 @@ func TestManagerNamespaceOrdering(t *testing.T) {
 	var configs []Config
 	require.NoError(yaml.Unmarshal([]byte(configStr), &configs))
 
-	m, err := NewManager(configs, AuthConfig{}, tally.NoopScope)
+	m, err := NewManager(ManagerConfig{}, configs, AuthConfig{}, tally.NoopScope)
 	require.NoError(err)
 
 	for ns, expected := range map[string]string{
@@ -128,18 +128,20 @@ func TestManagerNamespaceOrdering(t *testing.T) {
 func TestManagerBandwidth(t *testing.T) {
 	require := require.New(t)
 
-	m, err := NewManager([]Config{{
-		Namespace: ".*",
-		Bandwidth: bandwidth.Config{
-			EgressBitsPerSec:  10,
-			IngressBitsPerSec: 50,
-			TokenSize:         1,
-			Enable:            true,
-		},
-		Backend: map[string]interface{}{
-			"testfs": testfs.Config{Addr: "test-addr", NamePath: namepath.Identity},
-		},
-	}}, AuthConfig{}, tally.NoopScope)
+	m, err := NewManager(
+		ManagerConfig{},
+		[]Config{{
+			Namespace: ".*",
+			Bandwidth: bandwidth.Config{
+				EgressBitsPerSec:  10,
+				IngressBitsPerSec: 50,
+				TokenSize:         1,
+				Enable:            true,
+			},
+			Backend: map[string]interface{}{
+				"testfs": testfs.Config{Addr: "test-addr", NamePath: namepath.Identity},
+			},
+		}}, AuthConfig{}, tally.NoopScope)
 	require.NoError(err)
 
 	checkBandwidth := func(egress, ingress int64) {

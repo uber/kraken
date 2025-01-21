@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,11 +13,13 @@
 // limitations under the License.
 package backend
 
-import "github.com/uber-go/tally"
+import (
+	"github.com/uber-go/tally"
+)
 
 // ManagerFixture returns a Manager with no clients for testing purposes.
 func ManagerFixture() *Manager {
-	m, err := NewManager(nil, AuthConfig{}, tally.NoopScope)
+	m, err := NewManager(ManagerConfig{}, nil, AuthConfig{}, tally.NoopScope)
 	if err != nil {
 		panic(err)
 	}

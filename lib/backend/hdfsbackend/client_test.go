@@ -28,6 +28,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 type clientMocks struct {
@@ -64,7 +65,7 @@ func TestClientFactory(t *testing.T) {
 		testing:       true,
 	}
 	f := factory{}
-	_, err := f.Create(config, nil, tally.NoopScope)
+	_, err := f.Create(config, nil, tally.NoopScope, zap.NewNop().Sugar())
 	require.NoError(err)
 }
 

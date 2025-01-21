@@ -28,6 +28,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestClientFactory(t *testing.T) {
@@ -35,7 +36,7 @@ func TestClientFactory(t *testing.T) {
 
 	config := Config{}
 	f := factory{}
-	_, err := f.Create(config, nil, tally.NoopScope)
+	_, err := f.Create(config, nil, tally.NoopScope, zap.NewNop().Sugar())
 	require.NoError(err)
 }
 

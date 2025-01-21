@@ -28,6 +28,7 @@ import (
 	"github.com/uber/kraken/utils/memsize"
 	"github.com/uber/kraken/utils/randutil"
 	"github.com/uber/kraken/utils/testutil"
+	"go.uber.org/zap"
 )
 
 func TestClientFactory(t *testing.T) {
@@ -35,7 +36,7 @@ func TestClientFactory(t *testing.T) {
 
 	config := Config{}
 	f := blobClientFactory{}
-	_, err := f.Create(config, nil, tally.NoopScope)
+	_, err := f.Create(config, nil, tally.NoopScope, zap.NewNop().Sugar())
 	require.NoError(err)
 }
 

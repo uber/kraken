@@ -28,6 +28,7 @@ import (
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 	yaml "gopkg.in/yaml.v2"
+	"go.uber.org/zap"
 )
 
 const _registryblob = "registry_blob"
@@ -39,7 +40,7 @@ func init() {
 type blobClientFactory struct{}
 
 func (f *blobClientFactory) Create(
-	confRaw interface{}, masterAuthConfig backend.AuthConfig, stats tally.Scope) (backend.Client, error) {
+confRaw interface{}, masterAuthConfig backend.AuthConfig, stats tally.Scope, _ *zap.SugaredLogger) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {

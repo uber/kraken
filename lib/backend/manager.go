@@ -53,8 +53,19 @@ type Manager struct {
 	backends []*backend
 }
 
+// ManagerConfig is config for backend manager.
+type ManagerConfig struct {
+	Log log.Config `yaml:"log"`
+}
+
 // NewManager creates a new backend Manager.
-func NewManager(configs []Config, auth AuthConfig, stats tally.Scope) (*Manager, error) {
+func NewManager(managerConfig ManagerConfig, configs []Config, auth AuthConfig, stats tally.Scope) (*Manager, error) {
+	logger, err := log.New(managerConfig.Log, nil)
+	if err != nil {
+		return nil, fmt.Errorf("log: %s", err)
+	}
+	slogger := logger.Sugar()
+
 	var backends []*backend
 	for _, config := range configs {
 		config = config.applyDefaults()
@@ -71,7 +82,7 @@ func NewManager(configs []Config, auth AuthConfig, stats tally.Scope) (*Manager,
 		if err != nil {
 			return nil, fmt.Errorf("get backend client factory: %s", err)
 		}
-		c, err = factory.Create(backendConfig, auth, stats)
+		c, err = factory.Create(backendConfig, auth, stats, slogger)
 		if err != nil {
 			return nil, fmt.Errorf("create backend client: %s", err)
 		}
