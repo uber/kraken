@@ -75,7 +75,7 @@ http {
   {{end}}
   ssl_protocols TLSv1.2; # Dropping SSLv3, ref: POODLE
   ssl_prefer_server_ciphers on;
-  ssl_ciphers ECDH+AES256:ECDH+AES128:DH+3DES:!ADH:!AECDH:!MD5:!SHA1:!aNULL:!eNULL@SECLEVEL=2;
+  ssl_ciphers ECDH+AES256:ECDH+AES128:!ADH:!AECDH:!MD5:!SHA1:!aNULL:!eNULL@SECLEVEL=2;
 
   ##
   # Logging Settings
