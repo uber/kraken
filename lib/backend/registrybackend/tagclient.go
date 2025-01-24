@@ -53,7 +53,7 @@ func (f *tagClientFactory) Create(
 	return NewTagClient(config, stats)
 }
 
-const _tagquery = "http://%s/v2/%s/manifests/%s"
+const _tagquery = "https://%s/v2/%s/manifests/%s"
 
 // TagClient stats and downloads tag from registry.
 type TagClient struct {
