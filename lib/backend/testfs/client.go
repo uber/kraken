@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//	http://www.apache.org/licenses/LICENSE-2.0
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -85,7 +85,8 @@ func (c *Client) Stat(namespace, name string) (*core.BlobInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("pather: %s", err)
 	}
-	resp, err := httputil.Head(fmt.Sprintf("http://%s/files/%s", c.config.Addr, p))
+	resp, err := httputil.Head(
+		fmt.Sprintf("https://%s/files/%s", c.config.Addr, p))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return nil, backenderrors.ErrBlobNotFound
@@ -106,7 +107,7 @@ func (c *Client) Upload(namespace, name string, src io.Reader) error {
 		return fmt.Errorf("pather: %s", err)
 	}
 	_, err = httputil.Post(
-		fmt.Sprintf("http://%s/files/%s", c.config.Addr, p),
+		fmt.Sprintf("https://%s/files/%s", c.config.Addr, p),
 		httputil.SendBody(src))
 	return err
 }
@@ -117,7 +118,8 @@ func (c *Client) Download(namespace, name string, dst io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("pather: %s", err)
 	}
-	resp, err := httputil.Get(fmt.Sprintf("http://%s/files/%s", c.config.Addr, p))
+	resp, err := httputil.Get(
+		fmt.Sprintf("https://%s/files/%s", c.config.Addr, p))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return backenderrors.ErrBlobNotFound
@@ -143,7 +145,7 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 	}
 
 	resp, err := httputil.Get(
-		fmt.Sprintf("http://%s/list/%s", c.config.Addr, path.Join(c.pather.BasePath(), prefix)))
+		fmt.Sprintf("https://%s/list/%s", c.config.Addr, path.Join(c.pather.BasePath(), prefix)))
 	if err != nil {
 		return nil, err
 	}
