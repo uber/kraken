@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,12 +31,6 @@ var _nameToDefaultTemplate = map[string]string{
 const DefaultClientVerification = `
 ssl_verify_client optional;
 set $required_verified_client 1;
-if ($scheme = http) {
-  set $required_verified_client 0;
-}
-if ($request_method ~ ^(GET|HEAD)$) {
-  set $required_verified_client 0;
-}
 if ($remote_addr = "127.0.0.1") {
   set $required_verified_client 0;
 }
