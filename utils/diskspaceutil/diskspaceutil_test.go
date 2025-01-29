@@ -8,10 +8,19 @@ import (
 	"github.com/uber/kraken/utils/diskspaceutil"
 )
 
-func TestParseManifestV2List(t *testing.T) {
-	util, err := diskspaceutil.DiskSpaceUtil()
-	require.NoError(t, err)
+func TestFileSystemUtil(t *testing.T) {
+	require := require.New(t)
+	fsUtil, err := diskspaceutil.FileSystemUtil()
+	require.NoError(err)
 
-	require.Equal(t, true, util > 0)
-	require.Equal(t, true, util < 100)
+	require.Equal(true, fsUtil > 0)
+	require.Equal(true, fsUtil < 100)
+}
+
+func TestFileSystemSize(t *testing.T) {
+	require := require.New(t)
+	fsSize, err := diskspaceutil.FileSystemSize()
+	require.NoError(err)
+
+	require.Equal(true, fsSize > 0)
 }
