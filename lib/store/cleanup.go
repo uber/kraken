@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -102,25 +102,35 @@ func (m *cleanupManager) addJob(tag string, config CleanupConfig, op base.FileOp
 
 	ticker := m.clk.Ticker(config.Interval)
 
-	usageGauge := m.stats.Tagged(map[string]string{"job": tag}).Gauge("disk_usage")
-
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
-				log.Debugf("Performing cleanup of %s", op)
-				ttl := m.checkAggressiveCleanup(op, config, diskspaceutil.DiskSpaceUtil)
-				usage, err := m.scan(op, config.TTI, ttl)
-				if err != nil {
-					log.Errorf("Error scanning %s: %s", op, err)
-				}
-				usageGauge.Update(float64(usage))
+				m.cleanup(tag, config, op)
 			case <-m.stopc:
 				ticker.Stop()
 				return
 			}
 		}
 	}()
+}
+
+func (m *cleanupManager) cleanup(tag string, config CleanupConfig, op base.FileOp) {
+	log.Debugf("Performing cleanup of %s", op)
+	stats := m.stats.Tagged(map[string]string{"job": tag})
+
+	usagePercent, err := diskspaceutil.DiskSpaceUtil()
+	if err != nil {
+		log.Errorf("Error checking disk space util %s: %s", op, err)
+	} else {
+		stats.Gauge("disk_usage_percent").Update(float64(usagePercent))
+	}
+	ttl := m.calculateCleanupTTL(op, config, usagePercent)
+	usage, err := m.scan(op, config.TTI, ttl)
+	if err != nil {
+		log.Errorf("Error scanning %s: %s", op, err)
+	}
+	stats.Gauge("disk_usage").Update(float64(usage))
 }
 
 func (m *cleanupManager) stop() {
@@ -174,17 +184,10 @@ func (m *cleanupManager) readyForDeletion(
 	return m.clk.Now().Sub(lat.Time) > tti, nil
 }
 
-func (m *cleanupManager) checkAggressiveCleanup(op base.FileOp, config CleanupConfig, util diskSpaceUtilFunc) time.Duration {
-	if config.AggressiveThreshold != 0 {
-		diskspaceutil, err := util()
-		if err != nil {
-			log.Errorf("Error checking disk space util %s: %s", op, err)
-			return config.TTL
-		}
-		if diskspaceutil >= config.AggressiveThreshold {
-			log.Debugf("Aggressive cleanup of %s triggers with disk space util %d", op, diskspaceutil)
-			return config.AggressiveTTL
-		}
+func (m *cleanupManager) calculateCleanupTTL(op base.FileOp, config CleanupConfig, usagePercent int) time.Duration {
+	if usagePercent < config.AggressiveThreshold || config.AggressiveThreshold == 0 {
+		return config.TTL
 	}
-	return config.TTL
+	log.Debugf("Aggressive cleanup of %s triggers with disk space util %d", op, usagePercent)
+	return config.AggressiveTTL
 }
