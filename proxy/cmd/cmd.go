@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,6 @@ package cmd
 
 import (
 	"flag"
-
 	"fmt"
 	"net/http"
 
@@ -161,7 +160,7 @@ func Run(flags *Flags, opts ...Option) {
 
 	// Open preheat function only if server-port was defined.
 	if flags.ServerPort != 0 {
-		server := proxyserver.New(stats, originCluster)
+		server := proxyserver.New(stats, originCluster, tagClient)
 		addr := fmt.Sprintf(":%d", flags.ServerPort)
 		log.Infof("Starting http server on %s", addr)
 		go func() {

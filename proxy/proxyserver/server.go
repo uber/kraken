@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,6 +15,7 @@ package proxyserver
 
 import (
 	"fmt"
+	"github.com/uber/kraken/build-index/tagclient"
 	"net/http"
 	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
 
@@ -27,18 +28,22 @@ import (
 
 // Server defines the proxy HTTP server.
 type Server struct {
-	stats          tally.Scope
-	preheatHandler *PreheatHandler
+	stats           tally.Scope
+	preheatHandler  *PreheatHandler
+	PrefetchHandler *PrefetchHandler
 }
 
 // New creates a new Server.
 func New(
 	stats tally.Scope,
-	client blobclient.ClusterClient) *Server {
+	client blobclient.ClusterClient,
+	tagClient tagclient.Client) *Server {
 
 	return &Server{
 		stats.Tagged(map[string]string{"module": "proxyserver"}),
-		NewPreheatHandler(client)}
+		NewPreheatHandler(client),
+		NewPrefetchHandler(client, tagClient),
+	}
 }
 
 // Handler returns the HTTP handler.
@@ -51,6 +56,7 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/health", handler.Wrap(s.healthHandler))
 
 	r.Post("/registry/notifications", handler.Wrap(s.preheatHandler.Handle))
+	r.Post("/registry/prefetch", handler.Wrap(s.PrefetchHandler.Handle))
 
 	// Serves /debug/pprof endpoints.
 	r.Mount("/", http.DefaultServeMux)
