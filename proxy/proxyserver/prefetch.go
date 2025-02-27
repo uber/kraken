@@ -1,12 +1,13 @@
 package proxyserver
 
 import (
+	"encoding/json"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/handler"
-	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 	"net/http"
+	"strings"
 )
 
 // Copyright (c) 2016-2019 Uber Technologies, Inc.
@@ -29,6 +30,11 @@ type PrefetchHandler struct {
 	tagClient     tagclient.Client
 }
 
+// PrefetchBody defines the body of preheat.
+type PrefetchBody struct {
+	Tag string `json:"tag"`
+}
+
 // NewPrefetchHandler creates a new preheat handler.
 func NewPrefetchHandler(client blobclient.ClusterClient, tagClient tagclient.Client) *PrefetchHandler {
 	return &PrefetchHandler{client, tagClient}
@@ -36,20 +42,21 @@ func NewPrefetchHandler(client blobclient.ClusterClient, tagClient tagclient.Cli
 
 // Handle notifies origins to cache the blob related to the image.
 func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) error {
-	tag, err := httputil.ParseParam(r, "tag")
-	if err != nil {
-		return err
+	var prefetchBody PrefetchBody
+	if err := json.NewDecoder(r.Body).Decode(&prefetchBody); err != nil {
+		return handler.Errorf("decode body: %s", err)
 	}
-	d, err := ph.tagClient.Get(tag)
+	d, err := ph.tagClient.Get(prefetchBody.Tag)
 	if err != nil {
 		return handler.Errorf("get tag: %s", err)
 	}
-	meta, err := ph.clusterClient.GetMetaInfo("", d)
+	namespace := strings.Split(prefetchBody.Tag, "/")[1]
+	meta, err := ph.clusterClient.GetMetaInfo(namespace, d)
 	if err != nil {
 		return handler.Errorf("get meta info: %s", err)
 	}
 	log.Infof("Length: %d", meta.Length())
-	if err := ph.clusterClient.DownloadBlob("", d, w); err != nil {
+	if err := ph.clusterClient.DownloadBlob(namespace, d, w); err != nil {
 		log.Errorf("Failed to download blob: %s", err)
 	}
 	return nil
