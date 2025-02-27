@@ -46,11 +46,13 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) error 
 	if err := json.NewDecoder(r.Body).Decode(&prefetchBody); err != nil {
 		return handler.Errorf("decode body: %s", err)
 	}
-	d, err := ph.tagClient.Get(prefetchBody.Tag)
+	split := strings.Split(prefetchBody.Tag, "/")
+	d, err := ph.tagClient.Get(split[2])
 	if err != nil {
 		return handler.Errorf("get tag: %s", err)
 	}
-	namespace := strings.Split(prefetchBody.Tag, "/")[1]
+	namespace := split[1]
+
 	meta, err := ph.clusterClient.GetMetaInfo(namespace, d)
 	if err != nil {
 		return handler.Errorf("get meta info: %s", err)
