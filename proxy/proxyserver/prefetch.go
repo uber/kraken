@@ -49,7 +49,7 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) error 
 	split := strings.Split(prefetchBody.Tag, "/")
 	log.Infof("Tag: %s", split[2])
 	log.Infof("Namespace: %s", split[1])
-	d, err := ph.tagClient.Get(split[2])
+	d, err := ph.tagClient.Get(split[1] + "%2F" + split[2])
 	if err != nil {
 		return handler.Errorf("get tag: %s", err)
 	}
