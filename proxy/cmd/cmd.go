@@ -16,6 +16,7 @@ package cmd
 import (
 	"flag"
 	"fmt"
+	"github.com/uber/kraken/lib/containerruntime"
 	"net/http"
 
 	"github.com/uber/kraken/build-index/tagclient"
@@ -158,9 +159,13 @@ func Run(flags *Flags, opts ...Option) {
 
 	transferer := transfer.NewReadWriteTransferer(stats, tagClient, originCluster, cas)
 
+	registryAddr := fmt.Sprintf("127.0.0.1:%d", 5055)
+	containerRuntimeCfg := config.ContainerRuntime
+	containerRuntimeFactory, err := containerruntime.NewFactory(containerRuntimeCfg, registryAddr)
+
 	// Open preheat function only if server-port was defined.
 	if flags.ServerPort != 0 {
-		server := proxyserver.New(stats, originCluster, tagClient)
+		server := proxyserver.New(stats, originCluster, containerRuntimeFactory)
 		addr := fmt.Sprintf(":%d", flags.ServerPort)
 		log.Infof("Starting http server on %s", addr)
 		go func() {
