@@ -14,6 +14,7 @@
 package cmd
 
 import (
+	"github.com/uber/kraken/lib/containerruntime"
 	"github.com/uber/kraken/lib/dockerregistry"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/upstream"
@@ -36,4 +37,5 @@ type Config struct {
 	RegistryOverride registryoverride.Config `yaml:"registryoverride"`
 	Nginx            nginx.Config            `yaml:"nginx"`
 	TLS              httputil.TLSConfig      `yaml:"tls"`
+	ContainerRuntime containerruntime.Config `yaml:"container_runtime"`
 }
