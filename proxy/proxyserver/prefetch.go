@@ -1,8 +1,13 @@
 package proxyserver
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"github.com/docker/distribution/manifest/manifestlist"
+	"github.com/docker/distribution/manifest/schema2"
 	"github.com/uber/kraken/build-index/tagclient"
+	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/log"
@@ -60,8 +65,54 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) error 
 		return handler.Errorf("get meta info: %s", err)
 	}
 	log.Infof("Size: %d", stat.Size)
-	if err := ph.clusterClient.DownloadBlob(namespace, d, w); err != nil {
+	buf := &bytes.Buffer{}
+	if err := ph.clusterClient.DownloadBlob(namespace, d, buf); err != nil {
 		log.Errorf("Failed to download blob: %s", err)
+	}
+
+	var manifestList manifestlist.ManifestList
+	if err := json.NewDecoder(buf).Decode(&manifestList); err != nil {
+		log.Errorf("Failed to parse manifestList: %s", err)
+		var manifest schema2.Manifest
+		if err := json.NewDecoder(buf).Decode(&manifest); err != nil {
+			return fmt.Errorf("error parsing JSON: %v", err)
+		}
+
+		for _, layer := range manifest.Layers {
+			d, err := core.NewSHA256DigestFromHex(layer.Digest.Hex())
+			if err != nil {
+				return fmt.Errorf("error parsing digest: %v", err)
+			}
+			if err := ph.clusterClient.DownloadBlob(namespace, d, buf); err != nil {
+				log.Errorf("Failed to download blob: %s", err)
+			}
+		}
+	} else {
+		for _, manifestDescriptor := range manifestList.Manifests {
+			buf := &bytes.Buffer{}
+			d, err := core.NewSHA256DigestFromHex(manifestDescriptor.Digest.Hex())
+			if err != nil {
+				return fmt.Errorf("error parsing digest: %v", err)
+			}
+			if err := ph.clusterClient.DownloadBlob(namespace, d, buf); err != nil {
+				log.Errorf("Failed to download blob: %s", err)
+			}
+
+			var manifest schema2.Manifest
+			if err := json.NewDecoder(buf).Decode(&manifest); err != nil {
+				return fmt.Errorf("error parsing JSON: %v", err)
+			}
+
+			for _, layer := range manifest.Layers {
+				d, err := core.NewSHA256DigestFromHex(layer.Digest.Hex())
+				if err != nil {
+					return fmt.Errorf("error parsing digest: %v", err)
+				}
+				if err := ph.clusterClient.DownloadBlob(namespace, d, buf); err != nil {
+					log.Errorf("Failed to download blob: %s", err)
+				}
+			}
+		}
 	}
 	return nil
 }
