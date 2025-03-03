@@ -15,7 +15,7 @@ package proxyserver
 
 import (
 	"fmt"
-	"github.com/uber/kraken/lib/containerruntime"
+	"github.com/uber/kraken/build-index/tagclient"
 	"net/http"
 	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
 
@@ -37,12 +37,12 @@ type Server struct {
 func New(
 	stats tally.Scope,
 	client blobclient.ClusterClient,
-	containerRuntime containerruntime.Factory) *Server {
+	tagClient tagclient.Client) *Server {
 
 	return &Server{
 		stats.Tagged(map[string]string{"module": "proxyserver"}),
 		NewPreheatHandler(client),
-		NewPrefetchHandler(client, containerRuntime),
+		NewPrefetchHandler(client, tagClient),
 	}
 }
 

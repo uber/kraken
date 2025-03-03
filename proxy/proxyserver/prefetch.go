@@ -1,9 +1,8 @@
 package proxyserver
 
 import (
-	"context"
 	"encoding/json"
-	"github.com/uber/kraken/lib/containerruntime"
+	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/log"
@@ -27,8 +26,8 @@ import (
 
 // PrefetchHandler defines the handler of preheat.
 type PrefetchHandler struct {
-	clusterClient    blobclient.ClusterClient
-	containerRuntime containerruntime.Factory
+	clusterClient blobclient.ClusterClient
+	tagClient     tagclient.Client
 }
 
 // PrefetchBody defines the body of preheat.
@@ -37,8 +36,8 @@ type PrefetchBody struct {
 }
 
 // NewPrefetchHandler creates a new preheat handler.
-func NewPrefetchHandler(client blobclient.ClusterClient, containerRuntime containerruntime.Factory) *PrefetchHandler {
-	return &PrefetchHandler{client, containerRuntime}
+func NewPrefetchHandler(client blobclient.ClusterClient, tagClient tagclient.Client) *PrefetchHandler {
+	return &PrefetchHandler{client, tagClient}
 }
 
 // Handle notifies origins to cache the blob related to the image.
@@ -47,17 +46,22 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) error 
 	if err := json.NewDecoder(r.Body).Decode(&prefetchBody); err != nil {
 		return handler.Errorf("decode body: %s", err)
 	}
-	split := strings.Split(prefetchBody.Tag, ":")
-	log.Infof("Tag: %s", split[1])
-	log.Infof("Repo: %s", split[0])
-	return ph.preloadTagHandler(w, split[1], split[0])
-}
+	split := strings.Split(prefetchBody.Tag, "/")
+	log.Infof("Tag: %s", split[2])
+	log.Infof("Namespace: %s", split[1])
+	d, err := ph.tagClient.Get(split[1] + "%2F" + split[2])
+	if err != nil {
+		return handler.Errorf("get tag: %s", err)
+	}
+	namespace := split[1]
 
-// preloadTagHandler triggers docker daemon to download specified docker image.
-func (ph *PrefetchHandler) preloadTagHandler(w http.ResponseWriter, tag string, repo string) error {
-	if err := ph.containerRuntime.DockerClient().
-		PullImage(context.Background(), repo, tag); err != nil {
-		return handler.Errorf("docker pull: %s", err)
+	stat, err := ph.clusterClient.Stat(namespace, d)
+	if err != nil {
+		return handler.Errorf("get meta info: %s", err)
+	}
+	log.Infof("Size: %d", stat.Size)
+	if err := ph.clusterClient.DownloadBlob(namespace, d, w); err != nil {
+		log.Errorf("Failed to download blob: %s", err)
 	}
 	return nil
 }
