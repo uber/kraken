@@ -12,7 +12,7 @@ import (
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/log"
-	"io"
+	"io/ioutil"
 	"net/http"
 	"strings"
 )
@@ -53,7 +53,7 @@ func NewPrefetchHandler(client blobclient.ClusterClient, tagClient tagclient.Cli
 func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) error {
 	var reqBody prefetchBody
 	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
-		bodyBytes, err := io.ReadAll(r.Body)
+		bodyBytes, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			return handler.Errorf("failed to read body: %s", err)
 		}
