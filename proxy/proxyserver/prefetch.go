@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/manifestlist"
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/uber/kraken/build-index/tagclient"
@@ -11,6 +12,7 @@ import (
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/log"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -35,8 +37,10 @@ type PrefetchHandler struct {
 	tagClient     tagclient.Client
 }
 
-// PrefetchBody defines the body of preheat.
-type PrefetchBody struct {
+// prefetchBody defines the body of preheat.
+type prefetchBody struct {
+	// Tag is the tag of the image. The format api expect is: address/namespace/tag.
+	// Example: 127.0.0.1:5055/uber-usi/abacus-go:bkt1-produ-1700103798-0154d
 	Tag string `json:"tag"`
 }
 
@@ -45,74 +49,142 @@ func NewPrefetchHandler(client blobclient.ClusterClient, tagClient tagclient.Cli
 	return &PrefetchHandler{client, tagClient}
 }
 
-// Handle notifies origins to cache the blob related to the image.
+// Handle processes the prefetch request.
 func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) error {
-	var prefetchBody PrefetchBody
-	if err := json.NewDecoder(r.Body).Decode(&prefetchBody); err != nil {
-		return handler.Errorf("decode body: %s", err)
-	}
-	split := strings.Split(prefetchBody.Tag, "/")
-	log.Infof("Tag: %s", split[2])
-	log.Infof("Namespace: %s", split[1])
-	d, err := ph.tagClient.Get(split[1] + "%2F" + split[2])
-	if err != nil {
-		return handler.Errorf("get tag: %s", err)
-	}
-	namespace := split[1]
-
-	stat, err := ph.clusterClient.Stat(namespace, d)
-	if err != nil {
-		return handler.Errorf("get meta info: %s", err)
-	}
-	log.Infof("Size: %d", stat.Size)
-	buf := &bytes.Buffer{}
-	if err := ph.clusterClient.DownloadBlob(namespace, d, buf); err != nil {
-		log.Errorf("Failed to download blob: %s", err)
-	}
-
-	var manifestList manifestlist.ManifestList
-	if err := json.NewDecoder(buf).Decode(&manifestList); err != nil {
-		log.Errorf("Failed to parse manifestList: %s", err)
-		var manifest schema2.Manifest
-		if err := json.NewDecoder(buf).Decode(&manifest); err != nil {
-			return fmt.Errorf("error parsing JSON: %v", err)
+	var reqBody prefetchBody
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			return handler.Errorf("failed to read body: %s", err)
 		}
+		log.With("error", err, "body", string(bodyBytes)).Error("Failed to decode request body")
+		return handler.Errorf("failed to decode body: %s", err)
+	}
 
-		for _, layer := range manifest.Layers {
-			d, err := core.NewSHA256DigestFromHex(layer.Digest.Hex())
-			if err != nil {
-				return fmt.Errorf("error parsing digest: %v", err)
-			}
-			if err := ph.clusterClient.DownloadBlob(namespace, d, buf); err != nil {
-				log.Errorf("Failed to download blob: %s", err)
+	namespace, tag, err := parseTag(reqBody.Tag)
+	if err != nil {
+		return handler.Errorf("tag: %s, invalid tag format: %s", reqBody.Tag, err)
+	}
+
+	tagRequest := fmt.Sprintf("%s%%2F%s", namespace, tag)
+	digest, err := ph.tagClient.Get(tagRequest)
+	if err != nil {
+		return handler.Errorf("tag request: %s, failed to get tag: %s", tagRequest, err)
+	}
+
+	stat, err := ph.clusterClient.Stat(namespace, digest)
+	if err != nil {
+		return fmt.Errorf("failed to get meta info: %w", err)
+	}
+	log.Infof("Namespace: %s, Tag: %s, Size: %d", namespace, tag, stat.Size)
+
+	buf := &bytes.Buffer{}
+	if err := ph.clusterClient.DownloadBlob(namespace, digest, buf); err != nil {
+		return handler.Errorf("error downloading manifest blob: %s", err)
+	}
+
+	// Process manifest (ManifestList or single Manifest)
+	size, digests, err := ph.processManifest(namespace, buf)
+	if err != nil {
+		return handler.Errorf("failed to process manifest: %s", err)
+	}
+
+	// todo: move to config
+	if size <= 5_000_000_000 {
+		for _, digest := range digests {
+			buf.Reset()
+			// todo: no need to download into the buffer
+			if err := ph.clusterClient.DownloadBlob(namespace, digest, buf); err != nil {
+				return handler.Errorf("digest %s, namespace %s, error downloading blob: %s", digest, namespace, err)
 			}
 		}
 	} else {
-		for _, manifestDescriptor := range manifestList.Manifests {
-			buf := &bytes.Buffer{}
-			d, err := core.NewSHA256DigestFromHex(manifestDescriptor.Digest.Hex())
-			if err != nil {
-				return fmt.Errorf("error parsing digest: %v", err)
-			}
-			if err := ph.clusterClient.DownloadBlob(namespace, d, buf); err != nil {
-				log.Errorf("Failed to download blob: %s", err)
-			}
-
-			var manifest schema2.Manifest
-			if err := json.NewDecoder(buf).Decode(&manifest); err != nil {
-				return fmt.Errorf("error parsing JSON: %v", err)
-			}
-
-			for _, layer := range manifest.Layers {
-				d, err := core.NewSHA256DigestFromHex(layer.Digest.Hex())
-				if err != nil {
-					return fmt.Errorf("error parsing digest: %v", err)
-				}
-				if err := ph.clusterClient.DownloadBlob(namespace, d, buf); err != nil {
-					log.Errorf("Failed to download blob: %s", err)
-				}
-			}
-		}
+		log.With("size", size, "tag", reqBody.Tag).Info("Size is too large, skipping preheat")
 	}
 	return nil
+}
+
+// parseTag extracts namespace and tag from a given tag string.
+func parseTag(tag string) (namespace, name string, err error) {
+	parts := strings.Split(tag, "/")
+	if len(parts) < 3 {
+		return "", "", fmt.Errorf("invalid tag format: %s", tag)
+	}
+	return parts[1], parts[2], nil
+}
+
+// processManifest handles both ManifestLists and single Manifests.
+func (ph *PrefetchHandler) processManifest(namespace string, buf *bytes.Buffer) (int64, []core.Digest, error) {
+	// Try to decode as ManifestList
+	var manifestList manifestlist.ManifestList
+	if err := json.NewDecoder(buf).Decode(&manifestList); err == nil && len(manifestList.Manifests) > 0 {
+		log.With("namespace", namespace).Info("Processing manifest list...")
+		return ph.processManifestList(namespace, manifestList)
+	}
+
+	var manifest schema2.Manifest
+	if err := json.NewDecoder(buf).Decode(&manifest); err != nil {
+		return 0, nil, fmt.Errorf("failed to parse single manifest: %w", err)
+	}
+
+	return ph.processLayers(namespace, manifest.Layers)
+}
+
+// processManifestList iterates over the manifest list and processes each entry.
+func (ph *PrefetchHandler) processManifestList(namespace string, manifestList manifestlist.ManifestList) (int64, []core.Digest, error) {
+	digestsResult := make([]core.Digest, 0)
+	sizeResult := int64(0)
+	buf := &bytes.Buffer{}
+	for _, manifestDescriptor := range manifestList.Manifests {
+		manifestDigestHex := manifestDescriptor.Digest.Hex()
+		digest, err := core.NewSHA256DigestFromHex(manifestDigestHex)
+		if err != nil {
+			return 0, nil, handler.Errorf("digest %s, failed to parse manifest digest: %s", manifestDigestHex, err)
+		}
+
+		stat, err := ph.clusterClient.Stat(namespace, digest)
+		if err != nil {
+			return 0, nil, fmt.Errorf("failed to get meta info: %w", err)
+		}
+
+		sizeResult += stat.Size
+		if err := ph.clusterClient.DownloadBlob(namespace, digest, buf); err != nil {
+			log.Errorf("Failed to download manifest blob: %s", err)
+			continue
+		}
+
+		var manifest schema2.Manifest
+		if err := json.NewDecoder(buf).Decode(&manifest); err != nil {
+			return 0, nil, handler.Errorf("failed to parse manifest: %s", err)
+		}
+
+		size, digests, err := ph.processLayers(namespace, manifest.Layers)
+		if err != nil {
+			return 0, nil, err
+		}
+		digestsResult = append(digestsResult, digests...)
+		sizeResult += size
+		buf.Reset()
+	}
+	return sizeResult, digestsResult, nil
+}
+
+// processLayers downloads all layers in a manifest.
+func (ph *PrefetchHandler) processLayers(namespace string, layers []distribution.Descriptor) (int64, []core.Digest, error) {
+	digests := make([]core.Digest, 0, len(layers))
+	size := int64(0)
+	for _, layer := range layers {
+		digest, err := core.NewSHA256DigestFromHex(layer.Digest.Hex())
+		if err != nil {
+			return 0, nil, fmt.Errorf("failed to parse layer digest: %w", err)
+		}
+
+		stat, err := ph.clusterClient.Stat(namespace, digest)
+		if err != nil {
+			return 0, nil, fmt.Errorf("failed to get meta info: %w", err)
+		}
+		size += stat.Size
+		digests = append(digests, digest)
+	}
+	return size, digests, nil
 }

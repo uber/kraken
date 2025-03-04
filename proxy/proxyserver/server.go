@@ -30,7 +30,7 @@ import (
 type Server struct {
 	stats           tally.Scope
 	preheatHandler  *PreheatHandler
-	PrefetchHandler *PrefetchHandler
+	prefetchHandler *PrefetchHandler
 }
 
 // New creates a new Server.
@@ -56,7 +56,7 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/health", handler.Wrap(s.healthHandler))
 
 	r.Post("/registry/notifications", handler.Wrap(s.preheatHandler.Handle))
-	r.Post("/registry/prefetch", handler.Wrap(s.PrefetchHandler.Handle))
+	r.Post("/registry/prefetch", handler.Wrap(s.prefetchHandler.Handle))
 
 	// Serves /debug/pprof endpoints.
 	r.Mount("/", http.DefaultServeMux)
