@@ -74,7 +74,7 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) error 
 
 	stat, err := ph.clusterClient.Stat(namespace, digest)
 	if err != nil {
-		return fmt.Errorf("failed to get meta info: %w", err)
+		return handler.Errorf("failed to get meta info: %w", err)
 	}
 	log.Infof("Namespace: %s, Tag: %s, Size: %d", namespace, tag, stat.Size)
 
@@ -88,6 +88,7 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return handler.Errorf("failed to process manifest: %s", err)
 	}
+	size += stat.Size
 
 	// todo: move to config
 	if size <= 5_000_000_000 {
@@ -115,16 +116,26 @@ func parseTag(tag string) (namespace, name string, err error) {
 
 // processManifest handles both ManifestLists and single Manifests.
 func (ph *PrefetchHandler) processManifest(namespace string, buf *bytes.Buffer) (int64, []core.Digest, error) {
+	reader := bytes.NewReader(buf.Bytes())
 	// Try to decode as ManifestList
 	var manifestList manifestlist.ManifestList
-	if err := json.NewDecoder(buf).Decode(&manifestList); err == nil && len(manifestList.Manifests) > 0 {
+	if err := json.NewDecoder(reader).Decode(&manifestList); err == nil && len(manifestList.Manifests) > 0 {
 		log.With("namespace", namespace).Info("Processing manifest list...")
 		return ph.processManifestList(namespace, manifestList)
 	}
 
+	_, err := reader.Seek(0, 0)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to shift the buffer offset: %s", err)
+	}
 	var manifest schema2.Manifest
-	if err := json.NewDecoder(buf).Decode(&manifest); err != nil {
-		return 0, nil, fmt.Errorf("failed to parse single manifest: %w", err)
+	if err := json.NewDecoder(reader).Decode(&manifest); err != nil {
+		content, err := ioutil.ReadAll(reader)
+		if err != nil {
+			return 0, nil, fmt.Errorf("failed to read single manifest: %s", err)
+		}
+		log.With("namespace", namespace).Errorf("Failed to decode single manifest %s", string(content))
+		return 0, nil, fmt.Errorf("failed to parse single manifest: %s", err)
 	}
 
 	return ph.processLayers(namespace, manifest.Layers)
@@ -139,7 +150,7 @@ func (ph *PrefetchHandler) processManifestList(namespace string, manifestList ma
 		manifestDigestHex := manifestDescriptor.Digest.Hex()
 		digest, err := core.NewSHA256DigestFromHex(manifestDigestHex)
 		if err != nil {
-			return 0, nil, handler.Errorf("digest %s, failed to parse manifest digest: %s", manifestDigestHex, err)
+			return 0, nil, fmt.Errorf("digest %s, failed to parse manifest digest: %s", manifestDigestHex, err)
 		}
 
 		stat, err := ph.clusterClient.Stat(namespace, digest)
@@ -155,7 +166,7 @@ func (ph *PrefetchHandler) processManifestList(namespace string, manifestList ma
 
 		var manifest schema2.Manifest
 		if err := json.NewDecoder(buf).Decode(&manifest); err != nil {
-			return 0, nil, handler.Errorf("failed to parse manifest: %s", err)
+			return 0, nil, fmt.Errorf("failed to parse manifest: %s", err)
 		}
 
 		size, digests, err := ph.processLayers(namespace, manifest.Layers)
