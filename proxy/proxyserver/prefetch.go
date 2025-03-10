@@ -14,7 +14,6 @@ import (
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 	"go.uber.org/zap"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -162,7 +161,7 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) {
 
 	if size > ph.threshold {
 		for _, digest := range digests {
-			if err := ph.clusterClient.DownloadBlob(namespace, digest, io.Discard); err != nil {
+			if err := ph.clusterClient.DownloadBlob(namespace, digest, ioutil.Discard); err != nil {
 				// ignore errors which are due to the blob not being available yet
 				if serr, ok := err.(httputil.StatusError); ok && serr.Status == http.StatusAccepted {
 					continue
