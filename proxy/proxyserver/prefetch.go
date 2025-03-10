@@ -91,7 +91,7 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) error 
 	size += stat.Size
 
 	// todo: move to config
-	if size <= 5_000_000_000 {
+	if size <= 100_000_000_000 {
 		for _, digest := range digests {
 			buf.Reset()
 			// todo: no need to download into the buffer
