@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,6 +21,10 @@ upstream registry {
 
 upstream registry-override {
   server {{.registry_override_server}};
+}
+
+upstream proxy-server {
+  server {{.proxy-server}};
 }
 
 {{range .ports}}
@@ -42,6 +46,25 @@ server {
 
   location /v2/_catalog {
     proxy_pass http://registry-override;
+
+    set $hostheader $hostname;
+    if ( $host = "localhost" ) {
+      set $hostheader "localhost";
+    }
+    if ( $host = "127.0.0.1" ) {
+      set $hostheader "127.0.0.1";
+    }
+    if ( $host = "192.168.65.1" ) {
+      set $hostheader "192.168.65.1";
+    }
+    if ( $host = "host.docker.internal" ) {
+      set $hostheader "host.docker.internal";
+    }
+    proxy_set_header Host $hostheader:{{.}};
+  }
+
+  location /proxy {
+    proxy_pass http://proxy-server;
 
     set $hostheader $hostname;
     if ( $host = "localhost" ) {

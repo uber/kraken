@@ -16,6 +16,8 @@ package proxyserver
 import (
 	"fmt"
 	"github.com/uber/kraken/build-index/tagclient"
+	"github.com/uber/kraken/utils/listener"
+	"github.com/uber/kraken/utils/log"
 	"net/http"
 	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
 
@@ -31,18 +33,23 @@ type Server struct {
 	stats           tally.Scope
 	preheatHandler  *PreheatHandler
 	prefetchHandler *PrefetchHandler
+	config          Config
 }
 
 // New creates a new Server.
 func New(
 	stats tally.Scope,
+	config Config,
 	client blobclient.ClusterClient,
 	tagClient tagclient.Client) *Server {
 
+	metricsScope := stats.Tagged(map[string]string{"module": "proxyserver"})
+
 	return &Server{
-		stats.Tagged(map[string]string{"module": "proxyserver"}),
+		metricsScope,
 		NewPreheatHandler(client),
-		NewPrefetchHandler(client, tagClient),
+		NewPrefetchHandler(client, tagClient, config.Threshold, metricsScope),
+		config,
 	}
 }
 
@@ -56,7 +63,7 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/health", handler.Wrap(s.healthHandler))
 
 	r.Post("/registry/notifications", handler.Wrap(s.preheatHandler.Handle))
-	r.Post("/registry/prefetch", handler.Wrap(s.prefetchHandler.Handle))
+	r.Post("/v1/registry/prefetch", handler.Wrap(s.prefetchHandler.Handle))
 
 	// Serves /debug/pprof endpoints.
 	r.Mount("/", http.DefaultServeMux)
@@ -67,4 +74,9 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
 	fmt.Fprintln(w, "OK")
 	return nil
+}
+
+func (s *Server) ListenAndServe() error {
+	log.Infof("Starting proxy server on %s", s.config.Listener)
+	return listener.Serve(s.config.Listener, s.Handler())
 }

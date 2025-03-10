@@ -19,6 +19,7 @@ import (
 	"github.com/uber/kraken/lib/upstream"
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
+	"github.com/uber/kraken/proxy/proxyserver"
 	"github.com/uber/kraken/proxy/registryoverride"
 	"github.com/uber/kraken/utils/httputil"
 
@@ -35,5 +36,6 @@ type Config struct {
 	Metrics          metrics.Config          `yaml:"metrics"`
 	RegistryOverride registryoverride.Config `yaml:"registryoverride"`
 	Nginx            nginx.Config            `yaml:"nginx"`
+	Server           proxyserver.Config      `yaml:"server"`
 	TLS              httputil.TLSConfig      `yaml:"tls"`
 }
