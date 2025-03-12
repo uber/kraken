@@ -35,7 +35,7 @@ type Config struct {
 	ZapLogging       zap.Config              `yaml:"zap"`
 	Metrics          metrics.Config          `yaml:"metrics"`
 	RegistryOverride registryoverride.Config `yaml:"registryoverride"`
-	Nginx            nginx.Config            `yaml:"nginx"`
 	Server           proxyserver.Config      `yaml:"server"`
+	Nginx            nginx.Config            `yaml:"nginx"`
 	TLS              httputil.TLSConfig      `yaml:"tls"`
 }

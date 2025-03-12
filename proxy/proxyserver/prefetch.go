@@ -17,6 +17,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // Copyright (c) 2016-2019 Uber Technologies, Inc.
@@ -94,13 +95,13 @@ func newPrefetchError(status int, msg string, traceId string) *prefetchError {
 	}
 }
 
-func writeBadRequestPrefetchError(w http.ResponseWriter, msg string, traceId string) {
+func writeBadRequestError(w http.ResponseWriter, msg string, traceId string) {
 	status := http.StatusBadRequest
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(newPrefetchError(status, msg, traceId))
 }
 
-func writeInternalErrorPrefetchError(w http.ResponseWriter, msg string, traceId string) {
+func writeInternalError(w http.ResponseWriter, msg string, traceId string) {
 	status := http.StatusInternalServerError
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(newPrefetchError(status, msg, traceId))
@@ -115,69 +116,87 @@ func NewPrefetchHandler(client blobclient.ClusterClient, tagClient tagclient.Cli
 func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	var reqBody prefetchBody
 	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
-		writeBadRequestPrefetchError(w, fmt.Sprintf("failed to decode request body: %s", err), "")
-		bodyBytes, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			log.Errorf("failed to read body: %s", err)
-		}
-		log.With("error", err, "body", string(bodyBytes)).Error("Failed to decode request body")
+		writeBadRequestError(w, fmt.Sprintf("failed to decode request body: %s", err), "")
+		log.With("error", err).Error("Failed to decode request body")
 		return
 	}
 	logger := log.With("trace_id", reqBody.TraceId)
 
 	namespace, tag, err := parseTag(reqBody.Tag)
 	if err != nil {
-		writeBadRequestPrefetchError(w, fmt.Sprintf("tag: %s, invalid tag format: %s", reqBody.Tag, err), reqBody.TraceId)
+		writeBadRequestError(w, fmt.Sprintf("tag: %s, invalid tag format: %s", reqBody.Tag, err), reqBody.TraceId)
 		return
 	}
 
 	tagRequest := fmt.Sprintf("%s%%2F%s", namespace, tag)
 	digest, err := ph.tagClient.Get(tagRequest)
 	if err != nil {
-		writeInternalErrorPrefetchError(w, fmt.Sprintf("tag request: %s, failed to get tag: %s", tagRequest, err), reqBody.TraceId)
+		writeInternalError(w, fmt.Sprintf("tag request: %s, failed to get tag: %s", tagRequest, err), reqBody.TraceId)
 		return
 	}
 
 	stat, err := ph.clusterClient.Stat(namespace, digest)
 	if err != nil {
-		writeInternalErrorPrefetchError(w, fmt.Sprintf("digest %s, failed to get meta info: %s", digest, err), reqBody.TraceId)
+		writeInternalError(w, fmt.Sprintf("digest %s, failed to get meta info: %s", digest, err), reqBody.TraceId)
 		return
 	}
 	logger.Infof("Namespace: %s, Tag: %s, Size: %d", namespace, tag, stat.Size)
 
 	buf := &bytes.Buffer{}
 	if err := ph.clusterClient.DownloadBlob(namespace, digest, buf); err != nil {
-		writeInternalErrorPrefetchError(w, fmt.Sprintf("error downloading manifest blob: %s", err), reqBody.TraceId)
+		writeInternalError(w, fmt.Sprintf("error downloading manifest blob: %s", err), reqBody.TraceId)
 		return
 	}
 
 	// Process manifest (ManifestList or single Manifest)
 	size, digests, err := ph.processManifest(logger, namespace, buf.Bytes())
 	if err != nil {
-		writeInternalErrorPrefetchError(w, fmt.Sprintf("failed to process manifest: %s", err), reqBody.TraceId)
+		writeInternalError(w, fmt.Sprintf("failed to process manifest: %s", err), reqBody.TraceId)
 		return
 	}
 	size += stat.Size
 
-	if size > ph.threshold {
-		for _, digest := range digests {
-			if err := ph.clusterClient.DownloadBlob(namespace, digest, ioutil.Discard); err != nil {
-				// ignore errors which are due to the blob not being available yet
-				if serr, ok := err.(httputil.StatusError); ok && serr.Status == http.StatusAccepted {
-					continue
-				}
-				writeInternalErrorPrefetchError(w, fmt.Sprintf("digest %s, namespace %s, error downloading blob: %s", digest, namespace, err), reqBody.TraceId)
-				return
-			}
-		}
-	} else {
-		ph.metrics.Counter("below_threshold").Inc(1)
+	metrics := ph.metrics.SubScope("prefetch")
+	if size < ph.threshold {
+		metrics.Counter("below_threshold").Inc(1)
 		logger.With("size", size, "tag", reqBody.Tag, "threshold", ph.threshold).Info("Size is too large, skipping prefetch")
 		writePrefetchResponse(w, http.StatusUnprocessableEntity, reqBody.Tag, fmt.Sprintf("prefetching not initiated as imagesize < %d", ph.threshold), reqBody.TraceId)
 		return
 	}
-	ph.metrics.Counter("prefetched").Inc(1)
+
+	metrics.Counter("initiated").Inc(1)
 	writePrefetchResponse(w, http.StatusOK, reqBody.Tag, "prefetching initiated successfully", reqBody.TraceId)
+
+	go func() {
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+		var errList []error
+
+		for _, digest := range digests {
+			wg.Add(1)
+			go func(digest core.Digest) {
+				defer wg.Done()
+				if err := ph.clusterClient.DownloadBlob(namespace, digest, ioutil.Discard); err != nil {
+					if serr, ok := err.(httputil.StatusError); ok && serr.Status == http.StatusAccepted {
+						return
+					}
+					mu.Lock()
+					errList = append(errList, fmt.Errorf("digest %s, namespace %s, error downloading blob: %w", digest, namespace, err))
+					mu.Unlock()
+				}
+			}(digest)
+		}
+
+		wg.Wait()
+
+		// Log errors if any
+		if len(errList) > 0 {
+			metrics.Counter("failed").Inc(1)
+			for _, err := range errList {
+				logger.With("error", err).Error("Error downloading blob")
+			}
+		}
+	}()
 }
 
 // parseTag extracts namespace and tag from a given tag string.
