@@ -63,7 +63,7 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/health", handler.Wrap(s.healthHandler))
 
 	r.Post("/registry/notifications", handler.Wrap(s.preheatHandler.Handle))
-	r.Post("/v1/registry/prefetch", s.prefetchHandler.Handle)
+	r.Post("/proxy/v1/registry/prefetch", s.prefetchHandler.Handle)
 
 	// Serves /debug/pprof endpoints.
 	r.Mount("/", http.DefaultServeMux)
