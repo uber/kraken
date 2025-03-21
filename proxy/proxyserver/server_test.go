@@ -151,7 +151,7 @@ func TestPrefetchWithoutTag(t *testing.T) {
 
 	addr := mocks.startServer()
 
-	_, err := httputil.Post(fmt.Sprintf("http://%s/v1/registry/prefetch", addr))
+	_, err := httputil.Post(fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr))
 	require.Error(err)
 	require.True(httputil.IsStatus(err, http.StatusBadRequest))
 }
