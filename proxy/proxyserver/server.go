@@ -48,7 +48,7 @@ func New(
 	return &Server{
 		metricsScope,
 		NewPreheatHandler(client),
-		NewPrefetchHandler(client, tagClient, config.Threshold, metricsScope),
+		NewPrefetchHandler(client, tagClient, metricsScope),
 		config,
 	}
 }

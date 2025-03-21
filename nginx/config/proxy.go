@@ -24,7 +24,7 @@ upstream registry-override {
 }
 
 upstream proxy-server {
-  server {{.proxy-server}};
+  server {{.proxy_server}};
 }
 
 {{range .ports}}
@@ -64,6 +64,9 @@ server {
   }
 
   location /proxy {
+    limit_req zone=per_ip_limit burst=20 nodelay;
+    limit_req_status 429;
+
     proxy_pass http://proxy-server;
 
     set $hostheader $hostname;
