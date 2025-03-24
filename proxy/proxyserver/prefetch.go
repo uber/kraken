@@ -133,13 +133,7 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w, fmt.Sprintf("tag request: %s, failed to get tag: %s", tagRequest, err), reqBody.TraceId)
 		return
 	}
-
-	stat, err := ph.clusterClient.Stat(namespace, digest)
-	if err != nil {
-		writeInternalError(w, fmt.Sprintf("digest %s, failed to get meta info: %s", digest, err), reqBody.TraceId)
-		return
-	}
-	logger.Infof("Namespace: %s, Tag: %s, Size: %d", namespace, tag, stat.Size)
+	logger.Infof("Namespace: %s, Tag: %s", namespace, tag)
 
 	buf := &bytes.Buffer{}
 	if err := ph.clusterClient.DownloadBlob(namespace, digest, buf); err != nil {
