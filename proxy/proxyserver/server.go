@@ -43,12 +43,10 @@ func New(
 	client blobclient.ClusterClient,
 	tagClient tagclient.Client) *Server {
 
-	metricsScope := stats.Tagged(map[string]string{"module": "proxyserver"})
-
 	return &Server{
-		metricsScope,
+		stats,
 		NewPreheatHandler(client),
-		NewPrefetchHandler(client, tagClient, metricsScope),
+		NewPrefetchHandler(client, tagClient, stats),
 		config,
 	}
 }

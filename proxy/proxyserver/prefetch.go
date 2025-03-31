@@ -4,6 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/manifestlist"
 	"github.com/docker/distribution/manifest/schema2"
@@ -14,44 +20,38 @@ import (
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 	"go.uber.org/zap"
-	"io/ioutil"
-	"net/http"
-	"strings"
-	"sync"
 )
 
-// Copyright (c) 2016-2019 Uber Technologies, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Constants for prefetch status.
+const (
+	StatusSuccess = "success"
+	StatusFailure = "failure"
+)
 
-// PrefetchHandler defines the handler of preheat.
+// PrefetchHandler handles prefetch requests.
 type PrefetchHandler struct {
 	clusterClient blobclient.ClusterClient
 	tagClient     tagclient.Client
-
-	metrics tally.Scope
+	metrics       tally.Scope
 }
 
-// prefetchBody defines the body of preheat.
+// countWriter is an io.Writer that wraps another writer and counts the number of bytes written.
+type countWriter struct {
+	writer io.Writer
+	count  int64
+}
+
+func (cw *countWriter) Write(p []byte) (int, error) {
+	n, err := cw.writer.Write(p)
+	cw.count += int64(n)
+	return n, err
+}
+
+// Request and response payloads.
 type prefetchBody struct {
-	// Tag is the tag of the image. The format api expect is: address/namespace/tag.
-	// Example: 127.0.0.1:5055/uber-usi/abacus-go:bkt1-produ-1700103798-0154d
 	Tag     string `json:"tag"`
 	TraceId string `json:"trace_id"`
 }
-
-const StatusSuccess = "success"
-const StatusFailure = "failure"
 
 type prefetchResponse struct {
 	Tag        string `json:"tag"`
@@ -59,21 +59,6 @@ type prefetchResponse struct {
 	Status     string `json:"status"`
 	Message    string `json:"message"`
 	TraceId    string `json:"trace_id"`
-}
-
-func newPrefetchResponse(tag string, msg string, traceId string) *prefetchResponse {
-	return &prefetchResponse{
-		Tag:        tag,
-		Prefetched: true,
-		Status:     StatusSuccess,
-		Message:    msg,
-		TraceId:    traceId,
-	}
-}
-
-func writePrefetchResponse(w http.ResponseWriter, status int, tag string, msg string, traceId string) {
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(newPrefetchResponse(tag, msg, traceId))
 }
 
 type prefetchError struct {
@@ -84,7 +69,28 @@ type prefetchError struct {
 	TraceId    string `json:"trace_id,omitempty"`
 }
 
-func newPrefetchError(status int, msg string, traceId string) *prefetchError {
+// NewPrefetchHandler constructs a new PrefetchHandler.
+func NewPrefetchHandler(client blobclient.ClusterClient, tagClient tagclient.Client, metrics tally.Scope) *PrefetchHandler {
+	return &PrefetchHandler{
+		clusterClient: client,
+		tagClient:     tagClient,
+		metrics:       metrics.SubScope("prefetch"),
+	}
+}
+
+// newPrefetchResponse constructs a successful response.
+func newPrefetchResponse(tag, msg, traceId string) *prefetchResponse {
+	return &prefetchResponse{
+		Tag:        tag,
+		Prefetched: true,
+		Status:     StatusSuccess,
+		Message:    msg,
+		TraceId:    traceId,
+	}
+}
+
+// newPrefetchError constructs an error response.
+func newPrefetchError(status int, msg, traceId string) *prefetchError {
 	return &prefetchError{
 		Error:      http.StatusText(status),
 		Prefetched: false,
@@ -94,25 +100,27 @@ func newPrefetchError(status int, msg string, traceId string) *prefetchError {
 	}
 }
 
-func writeBadRequestError(w http.ResponseWriter, msg string, traceId string) {
-	status := http.StatusBadRequest
+// writeJSON writes the JSON payload with the given HTTP status.
+func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(newPrefetchError(status, msg, traceId))
+	json.NewEncoder(w).Encode(payload)
 }
 
-func writeInternalError(w http.ResponseWriter, msg string, traceId string) {
-	status := http.StatusInternalServerError
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(newPrefetchError(status, msg, traceId))
+func writeBadRequestError(w http.ResponseWriter, msg, traceId string) {
+	writeJSON(w, http.StatusBadRequest, newPrefetchError(http.StatusBadRequest, msg, traceId))
 }
 
-// NewPrefetchHandler creates a new preheat handler.
-func NewPrefetchHandler(client blobclient.ClusterClient, tagClient tagclient.Client, metrics tally.Scope) *PrefetchHandler {
-	return &PrefetchHandler{client, tagClient, metrics}
+func writeInternalError(w http.ResponseWriter, msg, traceId string) {
+	writeJSON(w, http.StatusInternalServerError, newPrefetchError(http.StatusInternalServerError, msg, traceId))
+}
+
+func writePrefetchResponse(w http.ResponseWriter, tag, msg, traceId string) {
+	writeJSON(w, http.StatusOK, newPrefetchResponse(tag, msg, traceId))
 }
 
 // Handle processes the prefetch request.
 func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) {
+	ph.metrics.Counter("requests").Inc(1)
 	var reqBody prefetchBody
 	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
 		writeBadRequestError(w, fmt.Sprintf("failed to decode request body: %s", err), "")
@@ -148,40 +156,49 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ph.metrics.SubScope("prefetch").Counter("initiated").Inc(1)
+	writePrefetchResponse(w, reqBody.Tag, "prefetching initiated successfully", reqBody.TraceId)
+
+	// Prefetch blobs asynchronously.
+	go ph.prefetchBlobs(logger, namespace, digests)
+}
+
+// prefetchBlobs downloads blobs in parallel.
+func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace string, digests []core.Digest) {
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errList []error
 	metrics := ph.metrics.SubScope("prefetch")
-	metrics.Counter("initiated").Inc(1)
-	writePrefetchResponse(w, http.StatusOK, reqBody.Tag, "prefetching initiated successfully", reqBody.TraceId)
 
-	go func() {
-		var wg sync.WaitGroup
-		var mu sync.Mutex
-		var errList []error
-
-		for _, digest := range digests {
-			wg.Add(1)
-			go func(digest core.Digest) {
-				defer wg.Done()
-				if err := ph.clusterClient.DownloadBlob(namespace, digest, ioutil.Discard); err != nil {
-					if serr, ok := err.(httputil.StatusError); ok && serr.Status == http.StatusAccepted {
-						return
-					}
-					mu.Lock()
-					errList = append(errList, fmt.Errorf("digest %s, namespace %s, error downloading blob: %w", digest, namespace, err))
-					mu.Unlock()
+	for _, d := range digests {
+		wg.Add(1)
+		go func(digest core.Digest) {
+			defer wg.Done()
+			blobStart := time.Now()
+			cw := &countWriter{writer: io.Discard}
+			err := ph.clusterClient.DownloadBlob(namespace, digest, cw)
+			blobDuration := time.Since(blobStart)
+			metrics.Timer("blob_download_time").Record(blobDuration)
+			metrics.Counter("bytes_downloaded").Inc(cw.count)
+			if err != nil {
+				if serr, ok := err.(httputil.StatusError); ok && serr.Status == http.StatusAccepted {
+					return
 				}
-			}(digest)
-		}
-
-		wg.Wait()
-
-		// Log errors if any
-		if len(errList) > 0 {
-			metrics.Counter("failed").Inc(1)
-			for _, err := range errList {
-				logger.With("error", err).Error("Error downloading blob")
+				mu.Lock()
+				errList = append(errList, fmt.Errorf("digest %s, namespace %s, error downloading blob: %w", digest, namespace, err))
+				mu.Unlock()
 			}
+		}(d)
+	}
+
+	wg.Wait()
+
+	if len(errList) > 0 {
+		metrics.Counter("failed").Inc(1)
+		for _, err := range errList {
+			logger.With("error", err).Error("Error downloading blob")
 		}
-	}()
+	}
 }
 
 // parseTag extracts namespace and tag from a given tag string.
@@ -195,57 +212,61 @@ func parseTag(tag string) (namespace, name string, err error) {
 
 // processManifest handles both ManifestLists and single Manifests.
 func (ph *PrefetchHandler) processManifest(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) ([]core.Digest, error) {
-	reader := bytes.NewReader(manifestBytes)
-
-	var manifestList manifestlist.ManifestList
-	if err := json.NewDecoder(reader).Decode(&manifestList); err == nil && len(manifestList.Manifests) > 0 {
-		logger.With("namespace", namespace).Info("Processing manifest list")
-		return ph.processManifestList(logger, namespace, manifestList)
+	// Attempt to process as a manifest list.
+	digests, err := ph.tryProcessManifestList(logger, namespace, manifestBytes)
+	if err == nil && len(digests) > 0 {
+		return digests, nil
 	}
 
-	reader = bytes.NewReader(manifestBytes) // Reset reader for second attempt
+	// Fallback to single manifest.
 	var manifest schema2.Manifest
-	if err := json.NewDecoder(reader).Decode(&manifest); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(manifestBytes)).Decode(&manifest); err != nil {
 		logger.With("namespace", namespace).Errorf("Failed to parse single manifest: %v", err)
 		return nil, fmt.Errorf("invalid single manifest: %w", err)
 	}
-
 	return ph.processLayers(manifest.Layers)
 }
 
+// tryProcessManifestList attempts to decode a manifest list.
+func (ph *PrefetchHandler) tryProcessManifestList(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) ([]core.Digest, error) {
+	var manifestList manifestlist.ManifestList
+	if err := json.NewDecoder(bytes.NewReader(manifestBytes)).Decode(&manifestList); err != nil || len(manifestList.Manifests) == 0 {
+		return nil, fmt.Errorf("not a valid manifest list")
+	}
+	logger.With("namespace", namespace).Info("Processing manifest list")
+	return ph.processManifestList(logger, namespace, manifestList)
+}
+
+// processManifestList processes a manifest list.
 func (ph *PrefetchHandler) processManifestList(logger *zap.SugaredLogger, namespace string, manifestList manifestlist.ManifestList) ([]core.Digest, error) {
-	digestsResult := make([]core.Digest, 0)
-	buf := &bytes.Buffer{}
-	for _, manifestDescriptor := range manifestList.Manifests {
-		manifestDigestHex := manifestDescriptor.Digest.Hex()
+	var allDigests []core.Digest
+	for _, descriptor := range manifestList.Manifests {
+		manifestDigestHex := descriptor.Digest.Hex()
 		digest, err := core.NewSHA256DigestFromHex(manifestDigestHex)
 		if err != nil {
-			return nil, fmt.Errorf("digest %s, failed to parse manifest digest: %s", manifestDigestHex, err)
+			return nil, fmt.Errorf("failed to parse manifest digest %s: %w", manifestDigestHex, err)
 		}
-
+		buf := &bytes.Buffer{}
 		if err := ph.clusterClient.DownloadBlob(namespace, digest, buf); err != nil {
 			logger.Errorf("Failed to download manifest blob: %s", err)
 			continue
 		}
-
 		var manifest schema2.Manifest
 		if err := json.NewDecoder(buf).Decode(&manifest); err != nil {
-			return nil, fmt.Errorf("failed to parse manifest: %s", err)
+			return nil, fmt.Errorf("failed to parse manifest: %w", err)
 		}
-
 		digests, err := ph.processLayers(manifest.Layers)
 		if err != nil {
 			return nil, err
 		}
-		digestsResult = append(digestsResult, digests...)
-		buf.Reset()
+		allDigests = append(allDigests, digests...)
 	}
-	return digestsResult, nil
+	return allDigests, nil
 }
 
+// processLayers converts layer descriptors to a list of core.Digest.
 func (ph *PrefetchHandler) processLayers(layers []distribution.Descriptor) ([]core.Digest, error) {
 	digests := make([]core.Digest, 0, len(layers))
-
 	for _, layer := range layers {
 		digest, err := core.NewSHA256DigestFromHex(layer.Digest.Hex())
 		if err != nil {
