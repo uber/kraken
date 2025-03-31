@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"strings"
 	"sync"
@@ -175,7 +176,7 @@ func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace st
 		go func(digest core.Digest) {
 			defer wg.Done()
 			blobStart := time.Now()
-			cw := &countWriter{writer: io.Discard}
+			cw := &countWriter{writer: ioutil.Discard}
 			err := ph.clusterClient.DownloadBlob(namespace, digest, cw)
 			blobDuration := time.Since(blobStart)
 			metrics.Timer("blob_download_time").Record(blobDuration)
