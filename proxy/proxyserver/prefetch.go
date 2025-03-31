@@ -169,7 +169,6 @@ func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace st
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var errList []error
-	metrics := ph.metrics.SubScope("prefetch")
 
 	for _, d := range digests {
 		wg.Add(1)
@@ -179,8 +178,8 @@ func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace st
 			cw := &countWriter{writer: ioutil.Discard}
 			err := ph.clusterClient.DownloadBlob(namespace, digest, cw)
 			blobDuration := time.Since(blobStart)
-			metrics.Timer("blob_download_time").Record(blobDuration)
-			metrics.Counter("bytes_downloaded").Inc(cw.count)
+			ph.metrics.Timer("blob_download_time").Record(blobDuration)
+			ph.metrics.Counter("bytes_downloaded").Inc(cw.count)
 			if err != nil {
 				if serr, ok := err.(httputil.StatusError); ok && serr.Status == http.StatusAccepted {
 					return
@@ -195,7 +194,7 @@ func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace st
 	wg.Wait()
 
 	if len(errList) > 0 {
-		metrics.Counter("failed").Inc(1)
+		ph.metrics.Counter("failed").Inc(1)
 		for _, err := range errList {
 			logger.With("error", err).Error("Error downloading blob")
 		}
