@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -34,18 +33,6 @@ type PrefetchHandler struct {
 	clusterClient blobclient.ClusterClient
 	tagClient     tagclient.Client
 	metrics       tally.Scope
-}
-
-// countWriter is an io.Writer that wraps another writer and counts the number of bytes written.
-type countWriter struct {
-	writer io.Writer
-	count  int64
-}
-
-func (cw *countWriter) Write(p []byte) (int, error) {
-	n, err := cw.writer.Write(p)
-	cw.count += int64(n)
-	return n, err
 }
 
 // Request and response payloads.
@@ -151,7 +138,7 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Process manifest (ManifestList or single Manifest)
-	digests, err := ph.processManifest(logger, namespace, buf.Bytes())
+	size, digests, err := ph.processManifest(logger, namespace, buf.Bytes())
 	if err != nil {
 		writeInternalError(w, fmt.Sprintf("failed to process manifest: %s", err), reqBody.TraceId)
 		return
@@ -161,11 +148,11 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	writePrefetchResponse(w, reqBody.Tag, "prefetching initiated successfully", reqBody.TraceId)
 
 	// Prefetch blobs asynchronously.
-	go ph.prefetchBlobs(logger, namespace, digests)
+	go ph.prefetchBlobs(logger, namespace, digests, size)
 }
 
 // prefetchBlobs downloads blobs in parallel.
-func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace string, digests []core.Digest) {
+func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace string, digests []core.Digest, size int64) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var errList []error
@@ -175,11 +162,10 @@ func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace st
 		go func(digest core.Digest) {
 			defer wg.Done()
 			blobStart := time.Now()
-			cw := &countWriter{writer: ioutil.Discard}
-			err := ph.clusterClient.DownloadBlob(namespace, digest, cw)
+			err := ph.clusterClient.DownloadBlob(namespace, digest, ioutil.Discard)
 			blobDuration := time.Since(blobStart)
 			ph.metrics.Timer("blob_download_time").Record(blobDuration)
-			ph.metrics.Counter("bytes_downloaded").Inc(cw.count)
+			ph.metrics.Counter("bytes_downloaded").Inc(size)
 			if err != nil {
 				if serr, ok := err.(httputil.StatusError); ok && serr.Status == http.StatusAccepted {
 					return
@@ -211,40 +197,41 @@ func parseTag(tag string) (namespace, name string, err error) {
 }
 
 // processManifest handles both ManifestLists and single Manifests.
-func (ph *PrefetchHandler) processManifest(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) ([]core.Digest, error) {
+func (ph *PrefetchHandler) processManifest(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) (int64, []core.Digest, error) {
 	// Attempt to process as a manifest list.
-	digests, err := ph.tryProcessManifestList(logger, namespace, manifestBytes)
+	size, digests, err := ph.tryProcessManifestList(logger, namespace, manifestBytes)
 	if err == nil && len(digests) > 0 {
-		return digests, nil
+		return size, digests, nil
 	}
 
 	// Fallback to single manifest.
 	var manifest schema2.Manifest
 	if err := json.NewDecoder(bytes.NewReader(manifestBytes)).Decode(&manifest); err != nil {
 		logger.With("namespace", namespace).Errorf("Failed to parse single manifest: %v", err)
-		return nil, fmt.Errorf("invalid single manifest: %w", err)
+		return 0, nil, fmt.Errorf("invalid single manifest: %w", err)
 	}
 	return ph.processLayers(manifest.Layers)
 }
 
 // tryProcessManifestList attempts to decode a manifest list.
-func (ph *PrefetchHandler) tryProcessManifestList(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) ([]core.Digest, error) {
+func (ph *PrefetchHandler) tryProcessManifestList(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) (int64, []core.Digest, error) {
 	var manifestList manifestlist.ManifestList
 	if err := json.NewDecoder(bytes.NewReader(manifestBytes)).Decode(&manifestList); err != nil || len(manifestList.Manifests) == 0 {
-		return nil, fmt.Errorf("not a valid manifest list")
+		return 0, nil, fmt.Errorf("not a valid manifest list")
 	}
 	logger.With("namespace", namespace).Info("Processing manifest list")
 	return ph.processManifestList(logger, namespace, manifestList)
 }
 
 // processManifestList processes a manifest list.
-func (ph *PrefetchHandler) processManifestList(logger *zap.SugaredLogger, namespace string, manifestList manifestlist.ManifestList) ([]core.Digest, error) {
+func (ph *PrefetchHandler) processManifestList(logger *zap.SugaredLogger, namespace string, manifestList manifestlist.ManifestList) (int64, []core.Digest, error) {
 	var allDigests []core.Digest
+	size := int64(0)
 	for _, descriptor := range manifestList.Manifests {
 		manifestDigestHex := descriptor.Digest.Hex()
 		digest, err := core.NewSHA256DigestFromHex(manifestDigestHex)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse manifest digest %s: %w", manifestDigestHex, err)
+			return 0, nil, fmt.Errorf("failed to parse manifest digest %s: %w", manifestDigestHex, err)
 		}
 		buf := &bytes.Buffer{}
 		if err := ph.clusterClient.DownloadBlob(namespace, digest, buf); err != nil {
@@ -253,26 +240,29 @@ func (ph *PrefetchHandler) processManifestList(logger *zap.SugaredLogger, namesp
 		}
 		var manifest schema2.Manifest
 		if err := json.NewDecoder(buf).Decode(&manifest); err != nil {
-			return nil, fmt.Errorf("failed to parse manifest: %w", err)
+			return 0, nil, fmt.Errorf("failed to parse manifest: %w", err)
 		}
-		digests, err := ph.processLayers(manifest.Layers)
+		l, digests, err := ph.processLayers(manifest.Layers)
 		if err != nil {
-			return nil, err
+			return 0, nil, err
 		}
+		size += l
 		allDigests = append(allDigests, digests...)
 	}
-	return allDigests, nil
+	return size, allDigests, nil
 }
 
 // processLayers converts layer descriptors to a list of core.Digest.
-func (ph *PrefetchHandler) processLayers(layers []distribution.Descriptor) ([]core.Digest, error) {
+func (ph *PrefetchHandler) processLayers(layers []distribution.Descriptor) (int64, []core.Digest, error) {
 	digests := make([]core.Digest, 0, len(layers))
+	l := int64(0)
 	for _, layer := range layers {
 		digest, err := core.NewSHA256DigestFromHex(layer.Digest.Hex())
 		if err != nil {
-			return nil, fmt.Errorf("invalid layer digest: %w", err)
+			return 0, nil, fmt.Errorf("invalid layer digest: %w", err)
 		}
 		digests = append(digests, digest)
+		l += layer.Size
 	}
-	return digests, nil
+	return l, digests, nil
 }
