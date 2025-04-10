@@ -66,8 +66,8 @@ func NewPrefetchHandler(client blobclient.ClusterClient, tagClient tagclient.Cli
 	}
 }
 
-// newPrefetchResponse constructs a successful response.
-func newPrefetchResponse(tag, msg, traceId string) *prefetchResponse {
+// newPrefetchSuccessResponse constructs a successful response.
+func newPrefetchSuccessResponse(tag, msg, traceId string) *prefetchResponse {
 	return &prefetchResponse{
 		Tag:        tag,
 		Prefetched: true,
@@ -103,7 +103,7 @@ func writeInternalError(w http.ResponseWriter, msg, traceId string) {
 }
 
 func writePrefetchResponse(w http.ResponseWriter, tag, msg, traceId string) {
-	writeJSON(w, http.StatusOK, newPrefetchResponse(tag, msg, traceId))
+	writeJSON(w, http.StatusOK, newPrefetchSuccessResponse(tag, msg, traceId))
 }
 
 // Handle processes the prefetch request.
