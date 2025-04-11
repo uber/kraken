@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +33,7 @@ const (
 type PrefetchHandler struct {
 	clusterClient blobclient.ClusterClient
 	tagClient     tagclient.Client
+	tagParser     TagParser
 	metrics       tally.Scope
 }
 
@@ -57,11 +59,36 @@ type prefetchError struct {
 	TraceId    string `json:"trace_id,omitempty"`
 }
 
+type TagParser interface {
+	ParseTag(tag string) (namespace, name string, err error)
+}
+
+type DefaultTagParser struct{}
+
+// ParseTag implements the TagParser interface.
+// Expects tag strings in the format <hostname>/<namespace>/<imagename:tag>.
+func (p *DefaultTagParser) ParseTag(tag string) (namespace, name string, err error) {
+	parts := strings.Split(tag, "/")
+	if len(parts) < 3 {
+		return "", "", fmt.Errorf("invalid tag format: %s", tag)
+	}
+	return parts[1], parts[2], nil
+}
+
 // NewPrefetchHandler constructs a new PrefetchHandler.
-func NewPrefetchHandler(client blobclient.ClusterClient, tagClient tagclient.Client, metrics tally.Scope) *PrefetchHandler {
+func NewPrefetchHandler(
+	client blobclient.ClusterClient,
+	tagClient tagclient.Client,
+	tagParser TagParser,
+	metrics tally.Scope,
+) *PrefetchHandler {
+	if tagParser == nil {
+		tagParser = &DefaultTagParser{}
+	}
 	return &PrefetchHandler{
 		clusterClient: client,
 		tagClient:     tagClient,
+		tagParser:     tagParser,
 		metrics:       metrics.SubScope("prefetch"),
 	}
 }
@@ -90,8 +117,20 @@ func newPrefetchError(status int, msg, traceId string) *prefetchError {
 
 // writeJSON writes the JSON payload with the given HTTP status.
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+
+	response, err := json.Marshal(payload)
+	if err != nil {
+		log.With("payload", payload).Errorf("Failed to marshal JSON: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	// Write the status code and the encoded JSON response.
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(payload)
+	if _, err := w.Write(response); err != nil {
+		log.With("payload", payload).Errorf("Failed to write response: %v", err)
+	}
 }
 
 func writeBadRequestError(w http.ResponseWriter, msg, traceId string) {
@@ -117,13 +156,13 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 	logger := log.With("trace_id", reqBody.TraceId)
 
-	namespace, tag, err := parseTag(reqBody.Tag)
+	namespace, tag, err := ph.tagParser.ParseTag(reqBody.Tag)
 	if err != nil {
 		writeBadRequestError(w, fmt.Sprintf("tag: %s, invalid tag format: %s", reqBody.Tag, err), reqBody.TraceId)
 		return
 	}
 
-	tagRequest := fmt.Sprintf("%s%%2F%s", namespace, tag)
+	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
 	digest, err := ph.tagClient.Get(tagRequest)
 	if err != nil {
 		writeInternalError(w, fmt.Sprintf("tag request: %s, failed to get tag: %s", tagRequest, err), reqBody.TraceId)
@@ -185,15 +224,6 @@ func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace st
 			logger.With("error", err).Error("Error downloading blob")
 		}
 	}
-}
-
-// parseTag extracts namespace and tag from a given tag string.
-func parseTag(tag string) (namespace, name string, err error) {
-	parts := strings.Split(tag, "/")
-	if len(parts) < 3 {
-		return "", "", fmt.Errorf("invalid tag format: %s", tag)
-	}
-	return parts[1], parts[2], nil
 }
 
 // processManifest handles both ManifestLists and single Manifests.
