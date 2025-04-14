@@ -26,7 +26,7 @@ jobs:
 
       # Add CGO_CFLAGS environment variable to suppress the warning
       - name: Build
-        run: go build -v ./...
+        run: go build ./...
         env:
           CGO_CFLAGS: "-Wno-return-local-addr"
 

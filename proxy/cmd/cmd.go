@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,10 +15,6 @@ package cmd
 
 import (
 	"flag"
-
-	"fmt"
-	"net/http"
-
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/healthcheck"
@@ -40,7 +36,6 @@ import (
 // Flags defines proxy CLI flags.
 type Flags struct {
 	Ports         flagutil.Ints
-	ServerPort    int
 	ConfigFile    string
 	KrakenCluster string
 	SecretsFile   string
@@ -51,8 +46,6 @@ func ParseFlags() *Flags {
 	var flags Flags
 	flag.Var(
 		&flags.Ports, "port", "port to listen on (may specify multiple)")
-	flag.IntVar(
-		&flags.ServerPort, "server-port", 0, "http server port to listen on")
 	flag.StringVar(
 		&flags.ConfigFile, "config", "", "configuration file path")
 	flag.StringVar(
@@ -159,15 +152,10 @@ func Run(flags *Flags, opts ...Option) {
 
 	transferer := transfer.NewReadWriteTransferer(stats, tagClient, originCluster, cas)
 
-	// Open preheat function only if server-port was defined.
-	if flags.ServerPort != 0 {
-		server := proxyserver.New(stats, originCluster)
-		addr := fmt.Sprintf(":%d", flags.ServerPort)
-		log.Infof("Starting http server on %s", addr)
-		go func() {
-			log.Fatal(http.ListenAndServe(addr, server.Handler()))
-		}()
-	}
+	server := proxyserver.New(stats, config.Server, originCluster, tagClient)
+	go func() {
+		log.Fatalf("Error starting proxy server %s", server.ListenAndServe())
+	}()
 
 	registry, err := config.Registry.Build(config.Registry.ReadWriteParameters(transferer, cas, stats))
 	if err != nil {
@@ -189,6 +177,7 @@ func Run(flags *Flags, opts ...Option) {
 		"registry_server": nginx.GetServer(
 			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
 		"registry_override_server": nginx.GetServer(
-			config.RegistryOverride.Listener.Net, config.RegistryOverride.Listener.Addr)},
+			config.RegistryOverride.Listener.Net, config.RegistryOverride.Listener.Addr),
+		"proxy_server": nginx.GetServer(config.Server.Listener.Net, config.Server.Listener.Addr)},
 		nginx.WithTLS(config.TLS)))
 }

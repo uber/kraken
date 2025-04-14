@@ -288,10 +288,3 @@ func (c *HTTPClient) ForceCleanup(ttl time.Duration) error {
 		httputil.SendTLS(c.tls))
 	return err
 }
-
-func min(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
-}
