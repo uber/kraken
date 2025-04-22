@@ -15,8 +15,13 @@ package proxyserver
 
 import (
 	"fmt"
+	"github.com/docker/distribution"
+	ms "github.com/docker/distribution/manifest"
+	"github.com/docker/distribution/manifest/manifestlist"
+	"github.com/opencontainers/go-digest"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/uber/kraken/utils/dockerutil"
@@ -197,11 +202,117 @@ func TestPrefetch(t *testing.T) {
 		TraceId: "abc",
 	})
 
-	mocks.tagClient.EXPECT().Get(fmt.Sprintf("%s%%2F%s", namespace, tag)).Return(manifest, nil)
+	tagReq := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
+	mocks.tagClient.EXPECT().Get(tagReq).Return(manifest, nil)
 	mocks.originClient.EXPECT().DownloadBlob(namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
 	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[1], ioutil.Discard).Return(nil)
 	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[2], ioutil.Discard).Return(nil)
 	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr),
+		httputil.SendBody(bytes.NewReader(b)))
+	require.NoError(err)
+}
+
+func TestPrefetchError(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr := mocks.startServer()
+
+	repo := "kraken-test"
+	namespace := "preheat"
+	tag := "abcdef:v1.0.0"
+
+	layers := core.DigestListFixture(3)
+	manifest, bs := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
+
+	b, _ := json.Marshal(prefetchBody{
+		Tag:     fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
+		TraceId: "abc",
+	})
+
+	tagReq := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
+	mocks.tagClient.EXPECT().Get(tagReq).Return(manifest, nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[1], ioutil.Discard).Return(fmt.Errorf("error"))
+	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[2], ioutil.Discard).Return(nil)
+	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr),
+		httputil.SendBody(bytes.NewReader(b)))
+	require.NoError(err)
+}
+
+func toBytes(list manifestlist.ManifestList) ([]byte, error) {
+	data, err := json.Marshal(list)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func TestPrefetchManifestList(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr := mocks.startServer()
+
+	repo := "kraken-test"
+	namespace := "preheat"
+	tag := "abcdef:v1.0.0"
+
+	layers1 := core.DigestListFixture(3)
+	layers2 := core.DigestListFixture(3)
+	manifest1, bs1 := dockerutil.ManifestFixture(layers1[0], layers1[1], layers1[2])
+	manifest2, bs2 := dockerutil.ManifestFixture(layers2[0], layers2[1], layers2[2])
+	descs := []manifestlist.ManifestDescriptor{
+		{
+			Descriptor: distribution.Descriptor{
+				Digest: digest.NewDigestFromHex(manifest1.Algo(), manifest1.Hex()),
+			},
+		},
+		{
+			Descriptor: distribution.Descriptor{
+				Digest: digest.NewDigestFromHex(manifest2.Algo(), manifest2.Hex()),
+			},
+		},
+	}
+	manifestList := manifestlist.ManifestList{
+		Versioned: ms.Versioned{
+			SchemaVersion: 2,
+			MediaType:     "application/vnd.docker.distribution.manifest.list.v2+json",
+		},
+		Manifests: descs,
+	}
+
+	b, _ := json.Marshal(prefetchBody{
+		Tag:     fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
+		TraceId: "abc",
+	})
+
+	raw, err := toBytes(manifestList)
+	d, err := core.NewDigester().FromBytes(raw)
+	if err != nil {
+		panic(err)
+	}
+
+	d1, _ := core.NewSHA256DigestFromHex(descs[0].Digest.Hex())
+	d2, _ := core.NewSHA256DigestFromHex(descs[1].Digest.Hex())
+
+	tagReq := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
+	mocks.tagClient.EXPECT().Get(tagReq).Return(d, nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, d, mockutil.MatchWriter(raw)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, d1, mockutil.MatchWriter(bs1)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, d2, mockutil.MatchWriter(bs2)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, layers1[1], ioutil.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, layers1[2], ioutil.Discard).Return(nil)
+
+	mocks.originClient.EXPECT().DownloadBlob(namespace, layers2[1], ioutil.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, layers2[2], ioutil.Discard).Return(nil)
+	_, err = httputil.Post(
 		fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr),
 		httputil.SendBody(bytes.NewReader(b)))
 	require.NoError(err)
