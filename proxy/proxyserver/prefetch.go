@@ -212,6 +212,8 @@ func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace st
 				mu.Lock()
 				errList = append(errList, fmt.Errorf("digest %s, namespace %s, error downloading blob: %w", digest, namespace, err))
 				mu.Unlock()
+			} else {
+				ph.metrics.Counter("blobs_downloaded").Inc(1)
 			}
 		}(d)
 	}
