@@ -15,25 +15,11 @@ jobs:
         go-version: ['1.14']
     steps:
       - uses: actions/checkout@v4
-      - name: Install Python 2.7
-        run: |
-          apt-get update
-          apt-get install -y python2 python2-dev curl make docker.io
-          ln -sf /usr/bin/python2 /usr/bin/python
-
-      - name: Bootstrap pip for Python 2
-        run: |
-          curl -sS https://bootstrap.pypa.io/pip/2.7/get-pip.py -o get-pip.py
-          python2 get-pip.py
-          python2 -m pip install --upgrade virtualenv setuptools
-
-      - name: Run integration tests via Make
-        run: make integration
       - name: Set up Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-          
+
       - name: Display Go version
         run: go version
 
@@ -57,3 +43,17 @@ jobs:
         with:
           name: Go-results-${{ matrix.go-version }}
           path: TestResults-${{ matrix.go-version }}.json
+      - name: Install Python 2.7
+        run: |
+          apt-get update
+          apt-get install -y python2 python2-dev curl make docker.io
+          ln -sf /usr/bin/python2 /usr/bin/python
+
+      - name: Bootstrap pip for Python 2
+        run: |
+          curl -sS https://bootstrap.pypa.io/pip/2.7/get-pip.py -o get-pip.py
+          python2 get-pip.py
+          python2 -m pip install --upgrade virtualenv setuptools
+
+      - name: Run integration tests via Make
+        run: make integration
