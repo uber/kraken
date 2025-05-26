@@ -29,9 +29,8 @@ jobs:
 
       - name: Install dependencies
         env:
-          # bypass the public proxy (optional)
           GIT_SSL_NO_VERIFY: true
-          GOPROXY: direct
+          GOPROXY: "https://proxy.golang.org,direct"
           GOSUMDB: off
           GOINSECURE: "*"
         run: go mod download
