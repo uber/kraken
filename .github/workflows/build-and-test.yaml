@@ -18,7 +18,7 @@ jobs:
       - name: Install Python 2 from apt
         run: |
           apt-get update
-          apt-get install -y python2 python2-dev
+          apt-get install -y python2 python2-dev python2-pip
           ln -sf /usr/bin/python2 /usr/bin/python
           python2 -m pip install --upgrade pip virtualenv setuptools
       
