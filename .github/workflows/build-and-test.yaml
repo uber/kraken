@@ -29,7 +29,7 @@ jobs:
           GIT_SSL_NO_VERIFY: true
           GOPROXY: direct
           GOSUMDB: off
-          GOINSECURE: *
+          GOINSECURE: "*"
         run: go mod download
 
       # Add CGO_CFLAGS environment variable to suppress the warning
