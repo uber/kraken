@@ -15,6 +15,10 @@ jobs:
         go-version: ['1.14']
     steps:
       - uses: actions/checkout@v4
+      - name: Install system deps
+        run: |
+          apt-get update
+          apt-get install -y git curl make docker.io
       - name: Set up Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
@@ -52,7 +56,7 @@ jobs:
       - name: Install Python 2.7
         run: |
           apt-get update
-          apt-get install -y python2 python2-dev curl make docker.io
+          apt-get install -y python2 python2-dev
           ln -sf /usr/bin/python2 /usr/bin/python
 
       - name: Bootstrap pip for Python 2
