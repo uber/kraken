@@ -26,13 +26,12 @@ require (
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
 	github.com/docker/go-metrics v0.0.0-20181218153428-b84716841b82 // indirect
 	github.com/docker/libtrust v0.0.0-20160708172513-aabc10ec26b7 // indirect
-	github.com/garyburd/redigo v1.6.0
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/gofrs/uuid v0.0.0-20190320161447-2593f3d8aa45 // indirect
 	github.com/gogo/googleapis v1.4.1 // indirect
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.0
-	github.com/gomodule/redigo v2.0.0+incompatible // indirect
+	github.com/gomodule/redigo v1.9.2
 	github.com/gorilla/handlers v0.0.0-20190227193432-ac6d24f88de4 // indirect
 	github.com/gorilla/mux v1.7.3
 	github.com/imdario/mergo v0.3.13 // indirect
@@ -45,7 +44,7 @@ require (
 	github.com/pressly/goose v2.6.0+incompatible
 	github.com/satori/go.uuid v1.2.0
 	github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.8.4
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect
 	github.com/uber-go/tally v3.3.11+incompatible
 	github.com/willf/bitset v0.0.0-20190228212526-18bd95f470f9
