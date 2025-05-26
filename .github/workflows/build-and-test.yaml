@@ -24,6 +24,12 @@ jobs:
         run: go version
 
       - name: Install dependencies
+        env:
+          # bypass the public proxy (optional)
+          GIT_SSL_NO_VERIFY: true
+          GOPROXY: direct
+          GOSUMDB: off
+          GOINSECURE: *
         run: go mod download
 
       # Add CGO_CFLAGS environment variable to suppress the warning
