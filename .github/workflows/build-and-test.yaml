@@ -17,9 +17,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Python 2 from apt
         run: |
-          sudo apt-get update
-          sudo apt-get install -y python2 python2-dev
-          sudo ln -sf /usr/bin/python2 /usr/bin/python  # optional: make `python` → `python2`
+          apt-get update
+          apt-get install -y python2 python2-dev
+          ln -sf /usr/bin/python2 /usr/bin/python
           python2 -m pip install --upgrade pip virtualenv setuptools
       
 
