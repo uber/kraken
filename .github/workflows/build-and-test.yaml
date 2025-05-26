@@ -13,10 +13,13 @@ jobs:
         go-version: ['1.14']
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python 2.7
-        uses: actions/setup-python@v4
-        with:
-          python-version: '2.7'
+      - name: Install Python 2 from apt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python2 python2-dev
+          sudo ln -sf /usr/bin/python2 /usr/bin/python  # optional: make `python` → `python2`
+          python2 -m pip install --upgrade pip virtualenv setuptools
+      
 
       - name: Run integration tests via Make
         run: make integration

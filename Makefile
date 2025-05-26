@@ -90,8 +90,8 @@ docker_stop:
 	-docker ps -a --format '{{.Names}}' | grep kraken | while read n; do docker rm -f $$n; done
 
 venv: requirements-tests.txt
-	virtualenv --python=$(shell which python2) --setuptools venv
-	source venv/bin/activate
+	virtualenv --python=$(shell which python2) venv
+	venv/bin/pip install --upgrade pip setuptools
 	venv/bin/pip install -r requirements-tests.txt
 
 .PHONY: integration
