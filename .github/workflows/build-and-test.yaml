@@ -18,7 +18,7 @@ jobs:
       - name: Install Python 2.7
         run: |
           apt-get update
-          apt-get install -y python2 python2-dev curl make
+          apt-get install -y python2 python2-dev curl make docker.io
           ln -sf /usr/bin/python2 /usr/bin/python
 
       - name: Bootstrap pip for Python 2
