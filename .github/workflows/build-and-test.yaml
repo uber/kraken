@@ -3,7 +3,6 @@ name: Build and Test
 # Trigger the action on push and pull requests
 on:
   push:
-  pull_request:
 
 jobs:
   build:
