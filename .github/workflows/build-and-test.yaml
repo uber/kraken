@@ -45,11 +45,15 @@ jobs:
         with:
           name: Go-results-${{ matrix.go-version }}
           path: TestResults-${{ matrix.go-version }}.json
-      - name: Install Python 2.7 and dev headers
+      - name: Install Python 2.7 via deadsnakes
         run: |
           sudo apt-get update
-          sudo apt-get install -y python2 python2-dev python2-distutils curl
-          sudo ln -sf /usr/bin/python2 /usr/bin/python
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository ppa:deadsnakes/ppa -y
+          sudo apt-get update
+          sudo apt-get install -y python2.7 python2.7-dev python2.7-distutils
+          sudo ln -sf /usr/bin/python2.7 /usr/bin/python2
+          sudo ln -sf /usr/bin/python2.7 /usr/bin/python
 
       - name: Bootstrap pip for Python 2
         run: |
