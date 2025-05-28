@@ -45,15 +45,17 @@ jobs:
         with:
           name: Go-results-${{ matrix.go-version }}
           path: TestResults-${{ matrix.go-version }}.json
-      - name: Set up Python 2.7
-        uses: actions/setup-python@v2
-        with:
-          python-version: '2.7'
-
-      - name: Verify & bootstrap
+      - name: Install Python 2.7 and dev headers
         run: |
-          python --version
-          python -m pip install --upgrade virtualenv setuptools
+          sudo apt-get update
+          sudo apt-get install -y python2 python2-dev python2-distutils curl
+          sudo ln -sf /usr/bin/python2 /usr/bin/python
+
+      - name: Bootstrap pip for Python 2
+        run: |
+          curl -sS https://bootstrap.pypa.io/pip/2.7/get-pip.py -o get-pip.py
+          python2 get-pip.py
+          python2 -m pip install --upgrade virtualenv setuptools
 
       - name: Run integration tests via Make
         run: make integration
