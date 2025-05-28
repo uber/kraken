@@ -26,7 +26,7 @@ BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUIL
 
 # Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
 # This workaround builds the binary inside a linux container.
-CROSS_COMPILER = docker run --rm -v $(shell pwd):/go/src/github.com/uber/kraken -w /go/src/github.com/uber/kraken -e GIT_SSL_NO_VERIFY=true -e GOPROXY=$(GOPROXY) -e GOSUMDB=off -e GOINSECURE="*" $(GOLANG_IMAGE) go build -mod=vendor -o ./$@ ./$(dir $@)
+CROSS_COMPILER = docker run --rm -v $(shell pwd):/go/src/github.com/uber/kraken -w /go/src/github.com/uber/kraken -e GIT_SSL_NO_VERIFY=true -e GOPROXY=$(GOPROXY) -e GOSUMDB=off -e GOINSECURE="*" $(GOLANG_IMAGE) go build -o ./$@ ./$(dir $@)
 
 LINUX_BINS = \
 	agent/agent \
