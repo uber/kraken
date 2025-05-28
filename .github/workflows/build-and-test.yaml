@@ -18,7 +18,7 @@ jobs:
       - name: Install system deps
         run: |
           apt-get update
-          apt-get install -y git curl make docker.io
+          apt-get install -y git curl make docker.io gcc
       - name: Set up Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
