@@ -14,8 +14,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install system deps
         run: |
-          apt-get update
-          apt-get install -y git curl make docker.io gcc
+          sudo apt-get update
+          sudo apt-get install -y git curl make docker.io gcc
       - name: Set up Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
@@ -49,17 +49,15 @@ jobs:
         with:
           name: Go-results-${{ matrix.go-version }}
           path: TestResults-${{ matrix.go-version }}.json
-      - name: Install Python 2.7
-        run: |
-          apt-get update
-          apt-get install -y python2 python2-dev
-          ln -sf /usr/bin/python2 /usr/bin/python
+      - name: Set up Python 2.7
+        uses: actions/setup-python@v2
+        with:
+          python-version: '2.7'
 
-      - name: Bootstrap pip for Python 2
+      - name: Verify & bootstrap
         run: |
-          curl -sS https://bootstrap.pypa.io/pip/2.7/get-pip.py -o get-pip.py
-          python2 get-pip.py
-          python2 -m pip install --upgrade virtualenv setuptools
+          python --version
+          python -m pip install --upgrade virtualenv setuptools
 
       - name: Run integration tests via Make
         run: make integration
