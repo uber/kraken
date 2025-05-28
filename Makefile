@@ -24,21 +24,9 @@ ALL_PKGS = $(shell go list $(sort $(dir $(ALL_SRC))))
 
 BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) ./$(dir $@)
 
-REPO_ROOT := $(shell git rev-parse --show-toplevel)
-
 # Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
 # This workaround builds the binary inside a linux container.
-CROSS_COMPILER = \
-	docker run --rm \
-	  -v $(REPO_ROOT):/go/src/github.com/uber/kraken \
-	  -w /go/src/github.com/uber/kraken \
-	  -e GO111MODULE=on \
-	  -e GIT_SSL_NO_VERIFY=true \
-	  -e GOPROXY=$(GOPROXY) \
-	  -e GOSUMDB=off \
-	  -e GOINSECURE="*" \
-	  $(GOLANG_IMAGE) \
-	  go build -o ./$@ ./$(dir $@)
+CROSS_COMPILER = docker run --rm -v $(CURDIR):/go/src/github.com/uber/kraken -w /go/src/github.com/uber/kraken -e GO111MODULE=on -e GIT_SSL_NO_VERIFY=true -e GOPROXY=$(GOPROXY) -e GOSUMDB=off -e GOINSECURE="*" $(GOLANG_IMAGE) go build -o ./$@ ./$(dir $@)
 
 LINUX_BINS = \
 	agent/agent \
