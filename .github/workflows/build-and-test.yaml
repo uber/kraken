@@ -12,10 +12,6 @@ jobs:
         go-version: ['1.14']
     steps:
       - uses: actions/checkout@v4
-      - name: Install system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git curl make docker.io gcc
       - name: Set up Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
