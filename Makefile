@@ -24,6 +24,8 @@ ALL_PKGS = $(shell go list $(sort $(dir $(ALL_SRC))))
 
 BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) ./$(dir $@)
 
+# ==== BASIC ====
+
 ifdef RUNNER_WORKSPACE
 REPO_ROOT := $(RUNNER_WORKSPACE)
 else
@@ -34,8 +36,8 @@ endif
 # This workaround builds the binary inside a linux container.
 CROSS_COMPILER = \
   docker run --rm \
-    -v $(REPO_ROOT):/go/src/github.com/uber/kraken \
-    -w /go/src/github.com/uber/kraken \
+    -v $(REPO_ROOT):/app \
+    -w /app \
     -e GIT_SSL_NO_VERIFY=true \
     -e GOPROXY=$(GOPROXY) \
     -e GOSUMDB=off \
@@ -45,12 +47,12 @@ CROSS_COMPILER = \
     go build -o ./$@ ./$(dir $@)
 
 LINUX_BINS = \
-	agent/agent \
-	build-index/build-index \
-	origin/origin \
-	proxy/proxy \
-	tools/bin/testfs/testfs \
-	tracker/tracker
+    agent/agent \
+    build-index/build-index \
+    origin/origin \
+    proxy/proxy \
+    tools/bin/testfs/testfs \
+    tracker/tracker
 
 REGISTRY ?= gcr.io/uber-container-tools
 
