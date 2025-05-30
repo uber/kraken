@@ -80,43 +80,22 @@ class HealthCheck(object):
     def run(self, container):
         start_time = time.time()
         successes = 0
-        last_output = ''
-        last_error = ''
-        
+        msg = ''
         while time.time() - start_time < self.timeout:
             try:
                 # We can't use container.exec_run since it doesn't expose exit code.
-                # Capture both stdout and stderr
-                cmd = ['docker', 'exec', '-e', 'OPENSSL_CONF=/dev/null', container.name, 'sh', '-c', self.cmd]
-                output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+                subprocess.check_output(
+                    'docker exec {name} {cmd}'.format(name=container.name, cmd=self.cmd),
+                    shell=True)
                 successes += 1
                 if successes >= self.min_consecutive_successes:
                     return
-            except subprocess.CalledProcessError as e:
-                last_output = e.output.decode('utf-8') if e.output else ''
-                last_error = str(e)
-                successes = 0
             except Exception as e:
-                last_error = str(e)
+                msg = str(e)
                 successes = 0
             time.sleep(self.interval)
 
-        error_msg = f'Health check failure for container {container.name}:\n'
-        if last_output:
-            error_msg += f'Last output: {last_output}\n'
-        if last_error:
-            error_msg += f'Last error: {last_error}'
-        raise RuntimeError(error_msg)
-
-
-def cleanup_container(name):
-    """
-    Force removes a container if it exists, ignoring errors if it doesn't.
-    """
-    try:
-        subprocess.call(['docker', 'rm', '-f', name], stderr=subprocess.DEVNULL)
-    except:
-        pass  # Ignore any errors
+        raise RuntimeError('Health check failure: {msg}'.format(msg=msg))
 
 
 class DockerContainer(object):
@@ -144,9 +123,6 @@ class DockerContainer(object):
         self.user = ['-u', user] if user else []
 
     def run(self):
-        # Clean up any existing container with the same name
-        cleanup_container(self.name)
-        
         cmd = [
             'docker', 'run',
             '-d',
@@ -219,21 +195,12 @@ def populate_config_template(kname, filename, **kwargs):
                 'cert': {'path': '/etc/kraken/tls/ca/server.crt'},
                 'key': {'path': '/etc/kraken/tls/ca/server.key'},
                 'passphrase': {'path': '/etc/kraken/tls/ca/passphrase'},
-                'disabled': False  # Enable TLS for server
             },
             'client': {
                 'cert': {'path': '/etc/kraken/tls/client/client.crt'},
                 'key': {'path': '/etc/kraken/tls/client/client.key'},
                 'passphrase': {'path': '/etc/kraken/tls/client/passphrase'},
             }
-        },
-        'nginx': {
-            'ssl_enabled': True,
-            'ssl_certificate': '/etc/kraken/tls/ca/server.crt',
-            'ssl_certificate_key': '/etc/kraken/tls/ca/server.key',
-            'ssl_password_file': '/etc/kraken/tls/ca/passphrase',
-            'ssl_client_certificate': '/etc/kraken/tls/ca/server.crt',
-            'client_verification': True
         }
     })
 
@@ -306,15 +273,7 @@ class Component(object):
         self.container = self.new_container()
 
     def stop(self, wipe_disk=False):
-        """
-        Stops and removes the container. If wipe_disk is True, also removes the cache.
-        """
-        try:
-            self.container.remove(force=True)
-        except:
-            # If normal removal fails, force remove
-            cleanup_container(self.container.name)
-        
+        self.container.remove(force=True)
         if wipe_disk:
             cache = init_cache(self.container.name)
 
@@ -332,20 +291,11 @@ class Component(object):
         print_logs(self.container)
 
     def teardown(self):
-        """
-        Prints logs and removes the container. Will attempt to remove container
-        even if printing logs fails.
-        """
         try:
             self.print_logs()
-        except:
-            pass  # Ignore log printing errors
-        finally:
-            try:
-                self.stop()
-            except:
-                # If normal stop fails, force remove
-                cleanup_container(self.container.name)
+            self.stop()
+        except Exception as e:
+            print('Teardown {name} failed: {e}'.format(name=self.container.name, e=e))
 
 
 class Tracker(Component):
@@ -450,18 +400,15 @@ class OriginCluster(object):
     def __init__(self, origins):
         self.origins = origins
 
-    def get_location(self, name, use_client_certs=True):
-        origin = random.choice(self.origins)
-        # For internal communication, use the docker bridge address with HTTPS
-        url = 'https://{host}:{port}/blobs/sha256:{name}/locations'.format(
-            host=get_docker_bridge(),
-            port=origin.instance.port,
-            name=name)
-        tls_options = tls_opts_with_client_certs() if use_client_certs else tls_opts()
-        res = requests.get(url, **tls_options)
+    def get_location(self, name):
+        url = 'https://localhost:{port}/blobs/sha256:{name}/locations'.format(
+            port=random.choice(self.origins).instance.port, name=name)
+        res = requests.get(url, **tls_opts_with_client_certs())
         res.raise_for_status()
         addr = random.choice(res.headers['Origin-Locations'].split(','))
-        # Keep the docker bridge address for internal communication
+        # Origin addresses are configured under the bridge network, but we
+        # need to speak via localhost.
+        addr = addr.replace(get_docker_bridge(), 'localhost')
         return addr
 
     def upload(self, name, blob):
@@ -608,11 +555,11 @@ class Proxy(Component):
                 '--port={port}'.format(port=self.port),
             ],
             volumes=self.volumes,
-            health_check=HealthCheck('curl --insecure --cert /etc/kraken/tls/client/client.crt --key /etc/kraken/tls/client/client_decrypted.key --ciphers DEFAULT@SECLEVEL=1 https://localhost:{port}/v2/'.format(port=self.port)))
+            health_check=HealthCheck('curl localhost:{port}/v2/'.format(port=self.port)))
 
     @property
     def registry(self):
-        return '{host}:{port}'.format(host=get_docker_bridge(), port=self.port)
+        return '127.0.0.1:{port}'.format(port=self.port)
 
     def push(self, image):
         proxy_image = '{reg}/{img}'.format(reg=self.registry, img=image)
