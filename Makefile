@@ -47,14 +47,9 @@ CROSS_COMPILER = \
     -e GO111MODULE=on \
     $(GOLANG_IMAGE) \
     bash -c " \
-      echo '--- Debugging in Container ---'; \
-      echo 'Current working directory: $$(pwd)'; \
-      echo 'Files in current directory:'; \
-      ls -la; \
-      echo 'Contents of go.mod:'; \
-      cat go.mod || echo 'go.mod not found or unreadable!'; \
-      echo 'Go Environment variables:'; \
-      go env; \
+      echo '--- Debugging Mount Point ---'; \
+      echo 'Contents of /app:'; \
+      ls -la /app; \
       echo '--- Running Go Build ---'; \
       go build -o ./$@ ./$(dir $@); \
     "
