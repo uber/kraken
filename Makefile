@@ -34,6 +34,8 @@ endif
 
 # Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
 # This workaround builds the binary inside a linux container.
+# Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
+# This workaround builds the binary inside a linux container.
 CROSS_COMPILER = \
   docker run --rm \
     -v $(REPO_ROOT):/app \
@@ -44,7 +46,18 @@ CROSS_COMPILER = \
     -e GOINSECURE="*" \
     -e GO111MODULE=on \
     $(GOLANG_IMAGE) \
-    go build -o ./$@ ./$(dir $@)
+    bash -c " \
+      echo '--- Debugging in Container ---'; \
+      echo 'Current working directory: $$(pwd)'; \
+      echo 'Files in current directory:'; \
+      ls -la; \
+      echo 'Contents of go.mod:'; \
+      cat go.mod || echo 'go.mod not found or unreadable!'; \
+      echo 'Go Environment variables:'; \
+      go env; \
+      echo '--- Running Go Build ---'; \
+      go build -o ./$@ ./$(dir $@); \
+    "
 
 LINUX_BINS = \
     agent/agent \
