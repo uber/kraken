@@ -27,7 +27,7 @@ BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUIL
 # ==== BASIC ====
 
 ifdef RUNNER_WORKSPACE
-REPO_ROOT := $(RUNNER_WORKSPACE)
+REPO_ROOT := $(RUNNER_WORKSPACE)/kraken
 else
 REPO_ROOT := $(CURDIR)
 endif
