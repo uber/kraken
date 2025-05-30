@@ -96,7 +96,7 @@ def format_insecure_curl(url):
 
 def tls_opts():
     return {
-        'verify': False, ## Set verify=False to disable server cert verification for test only.
+        'verify': False,  # Disable server cert verification for test only
     }
 
 
@@ -106,7 +106,7 @@ def tls_opts_with_client_certs():
             '/etc/kraken/tls/client/client.crt',
             '/etc/kraken/tls/client/client_decrypted.key'
         ),
-        'verify': False, ## Set verify=False to disable server cert verification for test only.
+        'verify': False,  # Disable server cert verification for test only
     }
 
 

@@ -27,7 +27,7 @@ from .utils import tls_opts
 
 def test_origin_upload_no_client_cert(origin_cluster):
     name, blob = _generate_blob()
-    addr = origin_cluster.get_location(name)
+    addr = origin_cluster.get_location(name, use_client_certs=False)
     url = 'https://{addr}/namespace/testfs/blobs/sha256:{name}/uploads'.format(
             addr=addr, name=name)
     res = requests.post(url, **tls_opts())
