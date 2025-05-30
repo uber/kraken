@@ -14,8 +14,13 @@
 from __future__ import absolute_import
 
 import os
+from os.path import abspath, dirname, join
 from socket import socket
 from threading import Thread
+
+
+# Get the root directory of the project (two levels up from this file)
+ROOT_DIR = abspath(join(dirname(__file__), "../.."))
 
 
 def find_free_port():
@@ -82,8 +87,9 @@ def concurrently_apply(f, inputs):
 def format_insecure_curl(url):
     return ' '.join([
         'curl',
-        ## Use --insecure flag to disable server cert verification for test only.
-        '--insecure',
+        '--insecure',  # Disable server cert verification for test only
+        '--cert', '/etc/kraken/tls/client/client.crt',
+        '--key', '/etc/kraken/tls/client/client_decrypted.key',
         url,
     ])
 
@@ -96,7 +102,10 @@ def tls_opts():
 
 def tls_opts_with_client_certs():
     return {
-        'cert': ('test/tls/client/client.crt', 'test/tls/client/client_decrypted.key'),
+        'cert': (
+            '/etc/kraken/tls/client/client.crt',
+            '/etc/kraken/tls/client/client_decrypted.key'
+        ),
         'verify': False, ## Set verify=False to disable server cert verification for test only.
     }
 

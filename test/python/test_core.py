@@ -21,8 +21,8 @@ from threading import Thread
 import pytest
 import requests
 
-from utils import concurrently_apply
-from utils import tls_opts
+from .utils import concurrently_apply
+from .utils import tls_opts
 
 
 def test_origin_upload_no_client_cert(origin_cluster):
@@ -158,5 +158,5 @@ def test_agent_download_resilient_to_initial_offline_origin(origin_cluster, agen
 def _generate_blob():
     blob = os.urandom(5 * 1 << 20) # 5MB
     h = hashlib.sha256()
-    h.update(blob)
+    h.update(blob if isinstance(blob, bytes) else blob.encode('utf-8'))
     return h.hexdigest(), blob

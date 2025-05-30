@@ -15,9 +15,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-      - uses: LizardByte/setup-python-action@master
+      - uses: actions/setup-python@v5
         with:
-          python-version: '2.7'
+          python-version: '3.12'
 
       - name: Display Go version
         run: go version
@@ -47,12 +47,6 @@ jobs:
         with:
           name: Go-results-${{ matrix.go-version }}
           path: TestResults-${{ matrix.go-version }}.json
-
-      - name: Bootstrap pip for Python 2
-        run: |
-          curl -sS https://bootstrap.pypa.io/pip/2.7/get-pip.py -o get-pip.py
-          python2 get-pip.py
-          python2 -m pip install --upgrade virtualenv setuptools
 
       - name: Run integration tests via Make
         run: make integration

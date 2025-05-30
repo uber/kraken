@@ -46,13 +46,7 @@ CROSS_COMPILER = \
     -e GOINSECURE="*" \
     -e GO111MODULE=on \
     $(GOLANG_IMAGE) \
-    bash -c " \
-      echo '--- Debugging Mount Point ---'; \
-      echo 'Contents of /app:'; \
-      ls -la /app; \
-      echo '--- Running Go Build ---'; \
-      go build -o ./$@ ./$(dir $@); \
-    "
+    go build -o ./$@ ./$(dir $@);
 
 LINUX_BINS = \
     agent/agent \
@@ -115,8 +109,12 @@ unit-test:
 docker_stop:
 	-docker ps -a --format '{{.Names}}' | grep kraken | while read n; do docker rm -f $$n; done
 
-venv: requirements-tests.txt
-	virtualenv --python=$(shell which python2) venv
+.PHONY: clean_venv
+clean_venv:
+	rm -rf venv
+
+venv: clean_venv requirements-tests.txt
+	python3 -m venv venv
 	venv/bin/pip install --upgrade pip setuptools
 	venv/bin/pip install -r requirements-tests.txt
 
@@ -132,13 +130,12 @@ integration: venv $(LINUX_BINS) docker_stop tools/bin/puller/puller
 	docker build $(BUILD_QUIET) -t kraken-proxy:$(PACKAGE_VERSION) -f docker/proxy/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-testfs:$(PACKAGE_VERSION) -f docker/testfs/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-tracker:$(PACKAGE_VERSION) -f docker/tracker/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
-	PACKAGE_VERSION=$(PACKAGE_VERSION) venv/bin/py.test --timeout=120 -v -k $(NAME) test/python/$(FILE)
+	cd test && PYTHONPATH=. PACKAGE_VERSION=$(PACKAGE_VERSION) PYTHONWARNINGS=ignore ../venv/bin/python3 -m pytest --timeout=120 -v -k $(NAME) python/$(FILE)
 
 .PHONY: runtest
 NAME?=test_
 runtest: venv docker_stop
-	source venv/bin/activate
-	venv/bin/py.test --timeout=120 -v -k $(NAME) test/python
+	cd test && PYTHONPATH=. PYTHONWARNINGS=ignore ../venv/bin/python3 -m pytest --timeout=120 -v -k $(NAME) python
 
 .PHONY: devcluster
 devcluster: $(LINUX_BINS) docker_stop images

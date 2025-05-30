@@ -18,8 +18,7 @@ from collections import namedtuple
 
 import pytest
 
-from components import (
-    Agent,
+from .components import (
     AgentFactory,
     BuildIndex,
     Cluster,
@@ -28,8 +27,6 @@ from components import (
     Proxy,
     TestFS,
     Tracker,
-    find_free_port,
-    get_docker_bridge,
 )
 
 DEFAULT = 'default'
@@ -123,7 +120,7 @@ def one_way_replicas():
     dst_build_index_instances = _create_build_index_instances()
 
     replicas = Replicas(
-        src=Cluster('src', src_build_index_instances, [dst_build_index_instances.values()[0]]),
+        src=Cluster('src', src_build_index_instances, [list(dst_build_index_instances.values())[0]]),
         dst=Cluster('dst', dst_build_index_instances))
 
     yield replicas
@@ -140,8 +137,8 @@ def two_way_replicas():
     zone2_build_index_instances = _create_build_index_instances()
 
     replicas = Replicas(
-        zone1=Cluster('zone1', zone1_build_index_instances, [zone2_build_index_instances.values()[0]]),
-        zone2=Cluster('zone2', zone2_build_index_instances, [zone1_build_index_instances.values()[0]]))
+        zone1=Cluster('zone1', zone1_build_index_instances, [list(zone2_build_index_instances.values())[0]]),
+        zone2=Cluster('zone2', zone2_build_index_instances, [list(zone1_build_index_instances.values())[0]]))
 
     yield replicas
 

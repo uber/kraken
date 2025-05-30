@@ -18,25 +18,25 @@ import platform
 import random
 import subprocess
 import time
-import urllib
+import urllib.parse as urllib
 from contextlib import contextmanager
 from io import BytesIO
-from os.path import abspath
-from Queue import Queue
-from socket import socket
-from threading import Thread
+from os.path import abspath, dirname, join
 
 import requests
 
-from uploader import Uploader
-from utils import (
+from .uploader import Uploader
+from .utils import (
     PortReservation,
     dev_tag,
     find_free_port,
     format_insecure_curl,
     tls_opts,
+    tls_opts_with_client_certs,
 )
 
+# Get the root directory of the project (two levels up from this file)
+ROOT_DIR = abspath(join(dirname(__file__), "../.."))
 
 def get_docker_bridge():
     system = platform.system()
@@ -52,10 +52,10 @@ def print_logs(container):
     title = ' {name} logs '.format(name=container.name)
     left_border = '<' * 20
     right_border = '>' * 20
-    fill = ('<' * (len(title) / 2)) + ('>' * (len(title) / 2))
-    print '{l}{title}{r}'.format(l=left_border, title=title, r=right_border)
-    print container.logs()
-    print '{l}{fill}{r}'.format(l=left_border, fill=fill, r=right_border)
+    fill = ('<' * (len(title) // 2)) + ('>' * (len(title) // 2))
+    print('{l}{title}{r}'.format(l=left_border, title=title, r=right_border))
+    print(container.logs())
+    print('{l}{fill}{r}'.format(l=left_border, fill=fill, r=right_border))
 
 
 def yaml_list(l):
@@ -110,12 +110,12 @@ class DockerContainer(object):
 
         self.ports = []
         if ports:
-            for i, o in ports.iteritems():
+            for i, o in ports.items():
                 self.ports.extend(['-p', '{o}:{i}'.format(i=i, o=o)])
 
         self.volumes = []
         if volumes:
-            for o, i in volumes.iteritems():
+            for o, i in volumes.items():
                 bind = i['bind']
                 mode = i['mode']
                 self.volumes.extend(['-v', '{o}:{bind}:{mode}'.format(o=o, bind=bind, mode=mode)])
@@ -166,12 +166,12 @@ def new_docker_container(name, image, command=None, environment=None, ports=None
         volumes=volumes,
         user=user)
     c.run()
-    print 'Starting container {}'.format(c.name)
+    print('Starting container {}'.format(c.name))
     try:
         if health_check:
             health_check.run(c)
         else:
-            print 'No health checks supplied for {name}'.format(name=c.name)
+            print('No health checks supplied for {name}'.format(name=c.name))
     except:
         print_logs(c)
         raise
@@ -183,8 +183,26 @@ def populate_config_template(kname, filename, **kwargs):
     Populates a test config template with kwargs for Kraken name `kname`
     and writes the result to the config directory of `kname` with filename.
     """
-    template = abspath('config/{kname}/test.template'.format(kname=kname))
-    yaml = abspath('config/{kname}/{filename}'.format(kname=kname, filename=filename))
+    template = join(ROOT_DIR, 'config', kname, 'test.template')
+    yaml = join(ROOT_DIR, 'config', kname, filename)
+
+    # Add TLS configuration to ensure proper certificate verification
+    kwargs.update({
+        'tls': {
+            'name': 'kraken',
+            'cas': [{'path': '/etc/kraken/tls/ca/server.crt'}],
+            'server': {
+                'cert': {'path': '/etc/kraken/tls/ca/server.crt'},
+                'key': {'path': '/etc/kraken/tls/ca/server.key'},
+                'passphrase': {'path': '/etc/kraken/tls/ca/passphrase'},
+            },
+            'client': {
+                'cert': {'path': '/etc/kraken/tls/client/client.crt'},
+                'key': {'path': '/etc/kraken/tls/client/client.key'},
+                'passphrase': {'path': '/etc/kraken/tls/client/passphrase'},
+            }
+        }
+    })
 
     with open(template) as f:
         config = f.read().format(**kwargs)
@@ -197,11 +215,11 @@ def init_cache(cname):
     """
     Wipes and initializes a cache dir for container name `cname`.
     """
-    cache = abspath('.tmptest/test-kraken-integration/{cname}/cache'.format(cname=cname))
+    cache = join(ROOT_DIR, '.tmptest', 'test-kraken-integration', cname, 'cache')
     if os.path.exists(cache):
         subprocess.check_call(['rm', '-rf', cache])
     os.makedirs(cache)
-    os.chmod(cache, 0777)
+    os.chmod(cache, 0o777)
     return cache
 
 
@@ -214,9 +232,16 @@ def create_volumes(kname, cname, local_cache=True):
     # Mount configuration directory. This is necessary for components which
     # populate templates and need to mount the populated template into the
     # container.
-    config = abspath('config/{kname}'.format(kname=kname))
+    config = join(ROOT_DIR, 'config', kname)
     volumes[config] = {
         'bind': '/etc/kraken/config/{kname}'.format(kname=kname),
+        'mode': 'ro',
+    }
+
+    # Mount TLS certificates
+    tls_dir = join(ROOT_DIR, 'test/tls')
+    volumes[tls_dir] = {
+        'bind': '/etc/kraken/tls',
         'mode': 'ro',
     }
 
@@ -270,7 +295,7 @@ class Component(object):
             self.print_logs()
             self.stop()
         except Exception as e:
-            print 'Teardown {name} failed: {e}'.format(name=self.container.name, e=e)
+            print('Teardown {name} failed: {e}'.format(name=self.container.name, e=e))
 
 
 class Tracker(Component):
@@ -378,7 +403,7 @@ class OriginCluster(object):
     def get_location(self, name):
         url = 'https://localhost:{port}/blobs/sha256:{name}/locations'.format(
             port=random.choice(self.origins).instance.port, name=name)
-        res = requests.get(url, **tls_opts())
+        res = requests.get(url, **tls_opts_with_client_certs())
         res.raise_for_status()
         addr = random.choice(res.headers['Origin-Locations'].split(','))
         # Origin addresses are configured under the bridge network, but we
@@ -636,7 +661,7 @@ class BuildIndex(Component):
         url = 'https://localhost:{port}/repositories/{repo}/tags'.format(
                 port=self.port,
                 repo=urllib.quote(repo, safe=''))
-        res = requests.get(url, **tls_opts())
+        res = requests.get(url, **tls_opts_with_client_certs())
         res.raise_for_status()
         return res.json()['result']
 

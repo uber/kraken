@@ -17,7 +17,7 @@ import time
 
 import pytest
 
-from conftest import TEST_IMAGE
+from .conftest import TEST_IMAGE
 
 
 def test_docker_image_replication_success(one_way_replicas):
