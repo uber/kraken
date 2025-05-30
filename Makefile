@@ -34,14 +34,15 @@ endif
 # This workaround builds the binary inside a linux container.
 CROSS_COMPILER = \
   docker run --rm \
-    -v $(REPO_ROOT):/go/src \
+    -v $(REPO_ROOT):/go/src/github.com/uber/kraken \
     -w /go/src/github.com/uber/kraken \
     -e GIT_SSL_NO_VERIFY=true \
     -e GOPROXY=$(GOPROXY) \
     -e GOSUMDB=off \
     -e GOINSECURE="*" \
+    -e GO111MODULE=on \
     $(GOLANG_IMAGE) \
-    go build -o ./$@ $(PROJECT_ROOT)/$(dir $@)
+    go build -o ./$@ ./$(dir $@)
 
 LINUX_BINS = \
 	agent/agent \
