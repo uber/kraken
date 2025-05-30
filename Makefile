@@ -36,7 +36,6 @@ CROSS_COMPILER = \
   docker run --rm \
     -v $(REPO_ROOT):/go/src/github.com/uber/kraken \
     -w /go/src/github.com/uber/kraken \
-    -e GO111MODULE=on \
     -e GIT_SSL_NO_VERIFY=true \
     -e GOPROXY=$(GOPROXY) \
     -e GOSUMDB=off \
