@@ -24,6 +24,7 @@ from io import BytesIO
 from os.path import abspath, dirname, join
 
 import requests
+import docker
 
 from .uploader import Uploader
 from .utils import (
@@ -34,6 +35,8 @@ from .utils import (
     tls_opts,
     tls_opts_with_client_certs,
 )
+
+docker_client = docker.from_env()
 
 # Get the root directory of the project (two levels up from this file)
 ROOT_DIR = abspath(join(dirname(__file__), "../.."))
@@ -85,13 +88,27 @@ class HealthCheck(object):
         msg = ''
         while time.time() - start_time < self.timeout:
             try:
-                # We can't use container.exec_run since it doesn't expose exit code.
-                subprocess.check_output(
-                    'docker exec {name} {cmd}'.format(name=container.name, cmd=self.cmd),
-                    shell=True)
-                successes += 1
-                if successes >= self.min_consecutive_successes:
-                    return
+                # Use Docker SDK's exec_run instead of shell command
+                if isinstance(container, DockerContainer):
+                    # If it's our DockerContainer wrapper, use the internal container
+                    docker_container = container._container
+                else:
+                    # If it's already a Docker SDK container
+                    docker_container = container
+                
+                result = docker_container.exec_run(
+                    cmd=['sh', '-c', self.cmd],
+                    user='root'  # Some health checks might need root access
+                )
+                
+                # exec_run returns a tuple (exit_code, output)
+                if result.exit_code == 0:
+                    successes += 1
+                    if successes >= self.min_consecutive_successes:
+                        return
+                else:
+                    msg = result.output.decode('utf-8')
+                    successes = 0
             except Exception as e:
                 msg = str(e)
                 successes = 0
@@ -105,52 +122,66 @@ class DockerContainer(object):
     def __init__(self, name, image, command=None, ports=None, volumes=None, user=None):
         self.name = name
         self.image = image
-
-        self.command = []
-        if command:
-            self.command = command
-
-        self.ports = []
+        self.command = command or []
+        
+        # Convert ports to Docker SDK format
+        self.ports = {}
         if ports:
-            for i, o in ports.items():
-                self.ports.extend(['-p', '{o}:{i}'.format(i=i, o=o)])
-
-        self.volumes = []
+            for container_port, host_port in ports.items():
+                # Format: {container_port/proto: ('127.0.0.1', None)} for dynamic port allocation
+                self.ports[f'{container_port}/tcp'] = ('127.0.0.1', host_port)
+        
+        # Convert volumes to Docker SDK format
+        self.volumes = {}
         if volumes:
-            for o, i in volumes.items():
-                bind = i['bind']
-                mode = i['mode']
-                self.volumes.extend(['-v', '{o}:{bind}:{mode}'.format(o=o, bind=bind, mode=mode)])
-
-        self.user = ['-u', user] if user else []
+            for host_path, config in volumes.items():
+                self.volumes[host_path] = {
+                    'bind': config['bind'],
+                    'mode': config['mode']
+                }
+        
+        self.user = user
+        self._container = None
 
     def run(self):
-        cmd = [
-            'docker', 'run',
-            '-d',
-            '--name=' + self.name,
-        ]
-        cmd.extend(self.ports)
-        cmd.extend(self.volumes)
-        cmd.extend(self.user)
-        cmd.append(self.image)
-        cmd.extend(self.command)
-        assert subprocess.call(cmd) == 0
+        try:
+            # Remove any existing container with the same name
+            try:
+                old_container = docker_client.containers.get(self.name)
+                old_container.remove(force=True)
+            except docker.errors.NotFound:
+                pass
+
+            # Create and start the container
+            self._container = docker_client.containers.run(
+                self.image,
+                name=self.name,
+                command=self.command,
+                detach=True,
+                ports=self.ports,
+                volumes=self.volumes,
+                user=self.user
+            )
+            
+            return True
+        except docker.errors.APIError as e:
+            print(f"Failed to start container {self.name}: {str(e)}")
+            return False
 
     def logs(self):
-        subprocess.call(['docker', 'logs', self.name])
+        if self._container:
+            print(self._container.logs().decode('utf-8'))
 
     def remove(self, force=False):
-        cmd = [
-            'docker', 'rm',
-        ]
-        if force:
-            cmd.append('-f')
-        cmd.append(self.name)
-        assert subprocess.call(cmd) == 0
+        if self._container:
+            try:
+                self._container.remove(force=force)
+                self._container = None
+            except docker.errors.APIError as e:
+                print(f"Failed to remove container {self.name}: {str(e)}")
 
 
-def new_docker_container(name, image, command=None, environment=None, ports=None,
+def new_docker_container(name, image, command=None, ports=None,
                          volumes=None, health_check=None, user=None):
     """
     Creates and starts a detached Docker container. If health_check is specified,
@@ -351,7 +382,6 @@ class Tracker(Component):
         return new_docker_container(
             name=self.name,
             image=dev_tag('kraken-tracker'),
-            environment={},
             ports={self.port: self.port},
             volumes=self.volumes,
             command=[
@@ -406,7 +436,6 @@ class Origin(Component):
             name=self.name,
             image=dev_tag('kraken-origin'),
             volumes=self.volumes,
-            environment={},
             ports={
                 self.instance.port: self.instance.port,
                 self.instance.peer_port: self.instance.peer_port,
@@ -494,7 +523,6 @@ class Agent(Component):
         return new_docker_container(
             name=self.name,
             image=dev_tag('kraken-agent'),
-            environment={},
             ports={
                 self.torrent_client_port: self.torrent_client_port,
                 self.registry_port: self.registry_port,
@@ -582,7 +610,6 @@ class Proxy(Component):
             name=self.name,
             image=dev_tag('kraken-proxy'),
             ports={self.port: self.port},
-            environment={},
             command=[
                 '/usr/bin/kraken-proxy',
                 '--config=/etc/kraken/config/proxy/{config}'.format(config=self.config_file),
@@ -673,7 +700,6 @@ class BuildIndex(Component):
             name=self.name,
             image=dev_tag('kraken-build-index'),
             ports={self.port: self.port},
-            environment={},
             command=[
                 '/usr/bin/kraken-build-index',
                 '--config=/etc/kraken/config/build-index/{config}'.format(config=self.config_file),
