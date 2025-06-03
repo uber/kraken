@@ -58,6 +58,4 @@ tls:
     cert:
       path: /etc/kraken/tls/client/client.crt
     key:
-      path: /etc/kraken/tls/client/client.key
-    passphrase:
-      path: /etc/kraken/tls/client/passphrase
+      path: /etc/kraken/tls/client/client_decrypted.key

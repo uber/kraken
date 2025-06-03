@@ -22,20 +22,17 @@ ALL_PKGS = $(shell go list $(sort $(dir $(ALL_SRC))))
 
 # ==== BASIC ====
 
-BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) ./$(dir $@)
-
-# ==== BASIC ====
-
 ifdef RUNNER_WORKSPACE
 REPO_ROOT := $(RUNNER_WORKSPACE)/kraken
 else
 REPO_ROOT := $(CURDIR)
 endif
 
+UNAME_S := $(shell uname -s)
+
 # Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
 # This workaround builds the binary inside a linux container.
-# Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
-# This workaround builds the binary inside a linux container.
+# However, for tools like puller that don't use cgo, we can build natively on macOS.
 CROSS_COMPILER = \
   docker run --rm \
     -v $(REPO_ROOT):/app \
@@ -48,6 +45,12 @@ CROSS_COMPILER = \
     $(GOLANG_IMAGE) \
     go build -o ./$@ ./$(dir $@);
 
+NATIVE_COMPILER = GOOS=$(shell echo $(UNAME_S) | tr '[:upper:]' '[:lower:]') GOARCH=amd64 go build -o $@ ./$(dir $@)
+
+# Tools that can be built natively on macOS
+NATIVE_TOOLS = tools/bin/puller/puller tools/bin/reload/reload tools/bin/visualization/visualization
+
+# Binaries that require Linux build
 LINUX_BINS = \
     agent/agent \
     build-index/build-index \
@@ -58,8 +61,15 @@ LINUX_BINS = \
 
 REGISTRY ?= gcr.io/uber-container-tools
 
-$(LINUX_BINS):: $(ALL_SRC)
+$(LINUX_BINS): $(ALL_SRC)
 	$(CROSS_COMPILER)
+
+$(NATIVE_TOOLS): $(ALL_SRC)
+ifeq ($(UNAME_S),Darwin)
+	$(NATIVE_COMPILER)
+else
+	$(CROSS_COMPILER)
+endif
 
 define tag_image
 	docker tag $(1):$(PACKAGE_VERSION) $(1):dev
@@ -150,17 +160,8 @@ TOOLS = \
 	tools/bin/reload/reload \
 	tools/bin/visualization/visualization
 
-tools/bin/puller/puller:: $(wildcard tools/bin/puller/puller/*.go)
-	$(CROSS_COMPILER)
-
-tools/bin/reload/reload:: $(wildcard tools/bin/reload/reload/*.go)
-	$(CROSS_COMPILER)
-
-tools/bin/visualization/visualization:: $(wildcard tools/bin/visualization/visualization/*.go)
-	$(CROSS_COMPILER)
-
 .PHONY: tools
-tools: $(TOOLS)
+tools: $(NATIVE_TOOLS)
 
 # Creates a release summary containing the build revisions of each component
 # for the specified version.

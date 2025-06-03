@@ -103,8 +103,8 @@ def tls_opts():
 def tls_opts_with_client_certs():
     return {
         'cert': (
-            '/etc/kraken/tls/client/client.crt',
-            '/etc/kraken/tls/client/client_decrypted.key'
+            join(ROOT_DIR, 'test/tls/client/client.crt'),
+            join(ROOT_DIR, 'test/tls/client/client_decrypted.key')
         ),
         'verify': False, ## Set verify=False to disable server cert verification for test only.
     }

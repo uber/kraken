@@ -64,9 +64,11 @@ def yaml_list(l):
 
 def pull(source, image):
     cmd = [
-        'tools/bin/puller/puller', '-source', source, '-image', image,
+        join(ROOT_DIR, 'tools/bin/puller/puller'), '-source', source, '-image', image,
     ]
-    assert subprocess.call(cmd, stderr=subprocess.STDOUT) == 0
+    env = os.environ.copy()
+    env['KRAKEN_ROOT'] = ROOT_DIR
+    assert subprocess.call(cmd, stderr=subprocess.STDOUT, env=env) == 0
 
 
 class HealthCheck(object):
@@ -270,12 +272,29 @@ class Component(object):
         raise NotImplementedError
 
     def start(self):
+        # Clean up any existing container with this name before starting
+        try:
+            subprocess.call(['docker', 'rm', '-f', self.name], stderr=subprocess.DEVNULL)
+        except:
+            pass  # Ignore cleanup errors on init
         self.container = self.new_container()
 
     def stop(self, wipe_disk=False):
-        self.container.remove(force=True)
+        """
+        Stops and removes the container. If wipe_disk is True, also removes the cache.
+        """
+        try:
+            # First try to remove by container object
+            self.container.remove(force=True)
+        except:
+            # If that fails, try to remove by name
+            try:
+                subprocess.call(['docker', 'rm', '-f', self.name], stderr=subprocess.DEVNULL)
+            except:
+                pass  # Ignore any errors in cleanup
+        
         if wipe_disk:
-            cache = init_cache(self.container.name)
+            cache = init_cache(self.name)
 
     def restart(self, wipe_disk=False):
         self.stop(wipe_disk=wipe_disk)
@@ -291,11 +310,23 @@ class Component(object):
         print_logs(self.container)
 
     def teardown(self):
+        """
+        Prints logs and removes the container. Will attempt to remove container
+        even if printing logs fails.
+        """
         try:
             self.print_logs()
-            self.stop()
         except Exception as e:
-            print('Teardown {name} failed: {e}'.format(name=self.container.name, e=e))
+            print('Failed to get logs for {}: {}'.format(self.name, e))
+        finally:
+            try:
+                self.stop()
+            except:
+                # If normal stop fails, try force remove by name
+                try:
+                    subprocess.call(['docker', 'rm', '-f', self.name], stderr=subprocess.DEVNULL)
+                except:
+                    pass  # Ignore any errors in cleanup
 
 
 class Tracker(Component):
@@ -400,10 +431,13 @@ class OriginCluster(object):
     def __init__(self, origins):
         self.origins = origins
 
-    def get_location(self, name):
+    def get_location(self, name, use_client_certs=True):
+        origin = random.choice(self.origins)
         url = 'https://localhost:{port}/blobs/sha256:{name}/locations'.format(
-            port=random.choice(self.origins).instance.port, name=name)
-        res = requests.get(url, **tls_opts_with_client_certs())
+            port=origin.instance.port,
+            name=name)
+        tls_options = tls_opts_with_client_certs() if use_client_certs else tls_opts()
+        res = requests.get(url, **tls_options)
         res.raise_for_status()
         addr = random.choice(res.headers['Origin-Locations'].split(','))
         # Origin addresses are configured under the bridge network, but we
@@ -412,7 +446,7 @@ class OriginCluster(object):
         return addr
 
     def upload(self, name, blob):
-        addr = self.get_location(name)
+        addr = self.get_location(name, use_client_certs=False)
         Uploader(addr).upload(name, blob)
 
     def __iter__(self):
@@ -671,11 +705,12 @@ class TestFS(Component):
     def __init__(self, zone):
         self.zone = zone
         self.port = find_free_port()
+        self.name = 'kraken-testfs-{zone}'.format(zone=zone)
         self.start()
 
     def new_container(self):
         return new_docker_container(
-            name='kraken-testfs-{zone}'.format(zone=self.zone),
+            name=self.name,
             image=dev_tag('kraken-testfs'),
             ports={self.port: self.port},
             command=[

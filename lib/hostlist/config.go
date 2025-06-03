@@ -106,7 +106,20 @@ func (r *dnsResolver) resolve() (stringset.Set, error) {
 	if len(names) == 0 {
 		return nil, errors.New("dns record empty")
 	}
-	addrs, err := attachPortIfMissing(stringset.FromSlice(names), r.port)
+
+	// Filter out IPv6 addresses
+	var ipv4Names []string
+	for _, name := range names {
+		ip := net.ParseIP(name)
+		if ip != nil && ip.To4() != nil {
+			ipv4Names = append(ipv4Names, name)
+		}
+	}
+	if len(ipv4Names) == 0 {
+		return nil, fmt.Errorf("no IPv4 addresses found for %s", r.dns)
+	}
+
+	addrs, err := attachPortIfMissing(stringset.FromSlice(ipv4Names), r.port)
 	if err != nil {
 		return nil, fmt.Errorf("attach port to dns contents: %s", err)
 	}
