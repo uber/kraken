@@ -197,7 +197,7 @@ func TestPrefetch(t *testing.T) {
 		TraceId: "abc",
 	})
 
-	mocks.tagClient.EXPECT().Get(fmt.Sprintf("%s%%2F%s", namespace, tag)).Return(manifest, nil)
+	mocks.tagClient.EXPECT().Get(fmt.Sprintf("preheat%%2Fabcdef%%3Av1.0.0", namespace, tag)).Return(manifest, nil)
 	mocks.originClient.EXPECT().DownloadBlob(namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
 	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[1], ioutil.Discard).Return(nil)
 	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[2], ioutil.Discard).Return(nil)

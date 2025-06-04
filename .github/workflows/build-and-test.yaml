@@ -40,7 +40,7 @@ jobs:
       - name: Test with the Go CLI
         run: |
           set -o pipefail
-          go test $(go list ./...) -cover -json | tee TestResults-1.14.json
+          go test $(go list ./...) -cover
         env:
           CGO_CFLAGS: "-Wno-return-local-addr"
 
