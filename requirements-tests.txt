@@ -2,4 +2,3 @@ pytest>=7.0.0
 pytest-timeout>=2.1.0
 requests>=2.31.0
 setuptools>=69.0.0
-docker>=7.0.0
