@@ -46,7 +46,7 @@ func New(
 
 	return &Server{
 		stats,
-		NewPreheatHandler(client),
+		NewPreheatHandler(client, synchronous),
 		NewPrefetchHandler(client, tagClient, &DefaultTagParser{}, stats, synchronous),
 		config,
 	}
