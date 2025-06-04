@@ -36,43 +36,43 @@ DEFAULT = 'default'
 docker_client = docker.from_env()
 
 
-@pytest.fixture(scope='session')
-def docker_network():
-    """Create a dedicated Docker network for test containers."""
-    # Create a unique network name using the session ID
-    network_name = f'kraken-test-network'
-
-    try:
-        # Remove any existing network with this name
-        try:
-            network = docker_client.networks.get(network_name)
-            network.remove()
-        except docker.errors.NotFound:
-            pass
-
-        # Create a new network
-        network = docker_client.networks.create(
-            name=network_name,
-            driver='bridge',
-            attachable=True,
-            # Use internal subnet to avoid conflicts
-            ipam=docker.types.IPAMConfig(
-                pool_configs=[docker.types.IPAMPool(
-                    subnet='172.28.0.0/16'
-                )]
-            )
-        )
-
-        yield network
-
-        # Cleanup: remove the network after all tests
-        try:
-            network.remove()
-        except:
-            pass  # Ignore cleanup errors
-
-    except Exception as e:
-        pytest.fail(f"Failed to setup Docker network: {str(e)}")
+# @pytest.fixture(scope='session')
+# def docker_network():
+#     """Create a dedicated Docker network for test containers."""
+#     # Create a unique network name using the session ID
+#     network_name = f'kraken-test-network'
+#
+#     try:
+#         # Remove any existing network with this name
+#         try:
+#             network = docker_client.networks.get(network_name)
+#             network.remove()
+#         except docker.errors.NotFound:
+#             pass
+#
+#         # Create a new network
+#         network = docker_client.networks.create(
+#             name=network_name,
+#             driver='bridge',
+#             attachable=True,
+#             # Use internal subnet to avoid conflicts
+#             ipam=docker.types.IPAMConfig(
+#                 pool_configs=[docker.types.IPAMPool(
+#                     subnet='172.28.0.0/16'
+#                 )]
+#             )
+#         )
+#
+#         yield network
+#
+#         # Cleanup: remove the network after all tests
+#         try:
+#             network.remove()
+#         except:
+#             pass  # Ignore cleanup errors
+#
+#     except Exception as e:
+#         pytest.fail(f"Failed to setup Docker network: {str(e)}")
 
 
 # It turns out that URL path escaping Docker tags is a common bug which is very
@@ -93,20 +93,20 @@ TEST_IMAGE_2 = _setup_test_image('redis:latest')
 
 
 @pytest.fixture
-def tracker(origin_cluster, testfs, docker_network):
-    tracker = Tracker(DEFAULT, origin_cluster, network=docker_network)
+def tracker(origin_cluster, testfs):
+    tracker = Tracker(DEFAULT, origin_cluster)
     yield tracker
     tracker.teardown()
 
 
 @pytest.fixture
-def origin_cluster(testfs, docker_network):
+def origin_cluster(testfs):
     instances = {
         name: Origin.Instance(name)
         for name in ('kraken-origin-01', 'kraken-origin-02', 'kraken-origin-03')
     }
     origin_cluster = OriginCluster([
-        Origin(DEFAULT, instances, name, testfs, network=docker_network)
+        Origin(DEFAULT, instances, name, testfs)
         for name in instances
     ])
     yield origin_cluster
@@ -126,24 +126,24 @@ def agent(agent_factory):
 
 
 @pytest.fixture
-def proxy(origin_cluster, build_index, docker_network):
-    proxy = Proxy(DEFAULT, origin_cluster, [build_index], network=docker_network)
+def proxy(origin_cluster, build_index):
+    proxy = Proxy(DEFAULT, origin_cluster, [build_index])
     yield proxy
     proxy.teardown()
 
 
 @pytest.fixture
-def build_index(origin_cluster, testfs, docker_network):
+def build_index(origin_cluster, testfs):
     name = 'kraken-build-index-01'
     instances = {name: BuildIndex.Instance(name)}
-    build_index = BuildIndex(DEFAULT, instances, name, origin_cluster, testfs, {}, network=docker_network)
+    build_index = BuildIndex(DEFAULT, instances, name, origin_cluster, testfs, {})
     yield build_index
     build_index.teardown()
 
 
 @pytest.fixture
-def testfs(docker_network):
-    testfs = TestFS(DEFAULT, network=docker_network)
+def testfs():
+    testfs = TestFS(DEFAULT)
     yield testfs
     testfs.teardown()
 
