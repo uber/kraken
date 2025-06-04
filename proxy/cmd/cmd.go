@@ -152,7 +152,7 @@ func Run(flags *Flags, opts ...Option) {
 
 	transferer := transfer.NewReadWriteTransferer(stats, tagClient, originCluster, cas)
 
-	server := proxyserver.New(stats, config.Server, originCluster, tagClient)
+	server := proxyserver.New(stats, config.Server, originCluster, tagClient, false)
 	go func() {
 		log.Fatalf("Error starting proxy server %s", server.ListenAndServe())
 	}()
