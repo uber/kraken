@@ -119,11 +119,10 @@ class HealthCheck(object):
 
 class DockerContainer(object):
 
-    def __init__(self, name, image, command=None, ports=None, volumes=None, user=None, network=None):
+    def __init__(self, name, image, command=None, ports=None, volumes=None, user=None):
         self.name = name
         self.image = image
         self.command = command or []
-        self.network = network
         
         # Convert ports to Docker SDK format
         self.ports = {}
@@ -161,8 +160,7 @@ class DockerContainer(object):
                 detach=True,
                 ports=self.ports,
                 volumes=self.volumes,
-                user=self.user,
-                network=self.network.name if self.network else None
+                user=self.user
             )
             
             return True
@@ -364,13 +362,12 @@ class Component(object):
 
 class Tracker(Component):
 
-    def __init__(self, zone, origin_cluster, network=None):
+    def __init__(self, zone, origin_cluster):
         self.zone = zone
         self.origin_cluster = origin_cluster
         self.port = find_free_port()
         self.config_file = 'test-{zone}.yaml'.format(zone=zone)
         self.name = 'kraken-tracker-{zone}'.format(zone=zone)
-        self.network = network
 
         populate_config_template(
             'tracker',
@@ -416,13 +413,12 @@ class Origin(Component):
         def addr(self):
             return '{}:{}'.format(self.hostname, self.port)
 
-    def __init__(self, zone, instances, name, testfs, network=None):
+    def __init__(self, zone, instances, name, testfs):
         self.zone = zone
         self.instance = instances[name]
         self.testfs = testfs
         self.config_file = 'test-{zone}.yaml'.format(zone=zone)
         self.name = '{name}-{zone}'.format(name=self.instance.name, zone=zone)
-        self.network = network
 
         populate_config_template(
             'origin',
@@ -591,14 +587,13 @@ class AgentFactory(object):
 
 class Proxy(Component):
 
-    def __init__(self, zone, origin_cluster, build_indexes, network=None):
+    def __init__(self, zone, origin_cluster, build_indexes):
         self.zone = zone
         self.origin_cluster = origin_cluster
         self.build_indexes = build_indexes
         self.port = find_free_port()
         self.config_file = 'test-{zone}.yaml'.format(zone=zone)
         self.name = 'kraken-proxy-{zone}'.format(zone=zone)
-        self.network = network
 
         populate_config_template(
             'proxy',
@@ -677,14 +672,13 @@ class BuildIndex(Component):
         def addr(self):
             return '{}:{}'.format(self.hostname, self.port)
 
-    def __init__(self, zone, instances, name, origin_cluster, testfs, remote_instances=None, network=None):
+    def __init__(self, zone, instances, name, origin_cluster, testfs, remote_instances=None):
         self.zone = zone
         self.instance = instances[name]
         self.origin_cluster = origin_cluster
         self.testfs = testfs
         self.config_file = 'test-{zone}.yaml'.format(zone=zone)
         self.name = '{name}-{zone}'.format(name=self.instance.name, zone=zone)
-        self.network = network
 
         remotes = "remotes:\n{remotes}".format(remotes='\n'.join("  {addr}: [.*]".format(addr=i.addr) for i in (remote_instances or [])))
 
@@ -734,11 +728,10 @@ class BuildIndex(Component):
 
 class TestFS(Component):
 
-    def __init__(self, zone, network=None):
+    def __init__(self, zone):
         self.zone = zone
         self.port = find_free_port()
         self.name = 'kraken-testfs-{zone}'.format(zone=zone)
-        self.network = network
         self.start()
 
     def new_container(self):
