@@ -38,7 +38,9 @@ jobs:
 
       # Run tests with CGO_CFLAGS set
       - name: Test with the Go CLI
-        run: go test $(go list ./...) -cover -json | tee TestResults-${{ matrix.go-version }}.json
+        run: |
+          set -o pipefail
+          go test $(go list ./...) -cover -json | tee TestResults-1.14.json
         env:
           CGO_CFLAGS: "-Wno-return-local-addr"
 
