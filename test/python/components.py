@@ -66,9 +66,7 @@ def pull(source, image):
     cmd = [
         join(ROOT_DIR, 'tools/bin/puller/puller'), '-source', source, '-image', image,
     ]
-    env = os.environ.copy()
-    env['KRAKEN_ROOT'] = ROOT_DIR
-    assert subprocess.call(cmd, stderr=subprocess.STDOUT, env=env) == 0
+    assert subprocess.call(cmd, stderr=subprocess.STDOUT) == 0
 
 
 class HealthCheck(object):
@@ -187,24 +185,6 @@ def populate_config_template(kname, filename, **kwargs):
     """
     template = join(ROOT_DIR, 'config', kname, 'test.template')
     yaml = join(ROOT_DIR, 'config', kname, filename)
-
-    # Add TLS configuration to ensure proper certificate verification
-    kwargs.update({
-        'tls': {
-            'name': 'kraken',
-            'cas': [{'path': '/etc/kraken/tls/ca/server.crt'}],
-            'server': {
-                'cert': {'path': '/etc/kraken/tls/ca/server.crt'},
-                'key': {'path': '/etc/kraken/tls/ca/server.key'},
-                'passphrase': {'path': '/etc/kraken/tls/ca/passphrase'},
-            },
-            'client': {
-                'cert': {'path': '/etc/kraken/tls/client/client.crt'},
-                'key': {'path': '/etc/kraken/tls/client/client.key'},
-                'passphrase': {'path': '/etc/kraken/tls/client/passphrase'},
-            }
-        }
-    })
 
     with open(template) as f:
         config = f.read().format(**kwargs)
