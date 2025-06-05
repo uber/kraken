@@ -88,8 +88,6 @@ def format_insecure_curl(url):
     return ' '.join([
         'curl',
         '--insecure',  # Disable server cert verification for test only
-        '--cert', '/etc/kraken/tls/client/client.crt',
-        '--key', '/etc/kraken/tls/client/client_decrypted.key',
         url,
     ])
 

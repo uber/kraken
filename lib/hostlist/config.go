@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -107,19 +107,7 @@ func (r *dnsResolver) resolve() (stringset.Set, error) {
 		return nil, errors.New("dns record empty")
 	}
 
-	// Filter out IPv6 addresses
-	var ipv4Names []string
-	for _, name := range names {
-		ip := net.ParseIP(name)
-		if ip != nil && ip.To4() != nil {
-			ipv4Names = append(ipv4Names, name)
-		}
-	}
-	if len(ipv4Names) == 0 {
-		return nil, fmt.Errorf("no IPv4 addresses found for %s", r.dns)
-	}
-
-	addrs, err := attachPortIfMissing(stringset.FromSlice(ipv4Names), r.port)
+	addrs, err := attachPortIfMissing(stringset.FromSlice(names), r.port)
 	if err != nil {
 		return nil, fmt.Errorf("attach port to dns contents: %s", err)
 	}
