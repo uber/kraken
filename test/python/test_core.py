@@ -21,6 +21,7 @@ from threading import Thread
 import pytest
 import requests
 
+from .conftest import TEST_IMAGE
 from .utils import concurrently_apply
 from .utils import tls_opts
 
@@ -29,7 +30,7 @@ def test_origin_upload_no_client_cert(origin_cluster):
     name, blob = _generate_blob()
     addr = origin_cluster.get_location(name, use_client_certs=False)
     url = 'https://{addr}/namespace/testfs/blobs/sha256:{name}/uploads'.format(
-            addr=addr, name=name)
+        addr=addr, name=name)
     res = requests.post(url, **tls_opts())
     assert res.status_code == 403
 
@@ -62,6 +63,13 @@ def test_agent_download_after_remote_backend_upload(testfs, agent):
     testfs.upload(name, blob)
 
     agent.download(name, blob)
+
+
+def test_proxy_prefetch(proxy, agent):
+    proxy.push(TEST_IMAGE)
+    proxy.prefetch(TEST_IMAGE)
+
+    agent.pull(TEST_IMAGE)
 
 
 def test_agent_download_after_origin_data_loss_after_origin_upload(origin_cluster, agent):
@@ -135,6 +143,7 @@ def test_agent_download_resilient_to_initial_offline_origin(origin_cluster, agen
         origin.stop()
 
     result = {'error': None}
+
     def download():
         try:
             agent.download(name, blob)
@@ -156,7 +165,7 @@ def test_agent_download_resilient_to_initial_offline_origin(origin_cluster, agen
 
 
 def _generate_blob():
-    blob = os.urandom(5 * 1 << 20) # 5MB
+    blob = os.urandom(5 * 1 << 20)  # 5MB
     h = hashlib.sha256()
     h.update(blob if isinstance(blob, bytes) else blob.encode('utf-8'))
     return h.hexdigest(), blob

@@ -607,6 +607,14 @@ class Proxy(Component):
     def pull(self, image):
         pull(self.registry, image)
 
+    def prefetch(self, image):
+        proxy_image = '{reg}/{img}'.format(reg=self.registry, img=image)
+        url = 'http://localhost:{port}/proxy/v1/registry/prefetch'.format(port=self.port)
+        headers = {'Content-Type': 'application/json'}
+        data = {'tag': proxy_image}
+        res = requests.post(url, headers=headers, json=data)
+        res.raise_for_status()
+
 
 class BuildIndex(Component):
 
