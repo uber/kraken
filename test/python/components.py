@@ -582,7 +582,6 @@ class Proxy(Component):
             ['docker', 'push', proxy_image],
         ]:
             subprocess.check_call(command)
-        return proxy_image
 
     def push_as(self, image, new_tag):
         repo = image.split(':')[0]
