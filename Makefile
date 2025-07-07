@@ -80,7 +80,7 @@ endef
 images: $(LINUX_BINS)
 	docker build $(BUILD_QUIET) -t kraken-agent:$(PACKAGE_VERSION) -f docker/agent/Dockerfile ./
 	docker build $(BUILD_QUIET) -t kraken-build-index:$(PACKAGE_VERSION) -f docker/build-index/Dockerfile ./
-	docker build --no-cache $(BUILD_QUIET) -t kraken-origin:$(PACKAGE_VERSION) -f docker/origin/Dockerfile ./
+	docker build $(BUILD_QUIET) -t kraken-origin:$(PACKAGE_VERSION) -f docker/origin/Dockerfile ./
 	docker build $(BUILD_QUIET) -t kraken-proxy:$(PACKAGE_VERSION) -f docker/proxy/Dockerfile ./
 	docker build $(BUILD_QUIET) -t kraken-testfs:$(PACKAGE_VERSION) -f docker/testfs/Dockerfile ./
 	docker build $(BUILD_QUIET) -t kraken-tracker:$(PACKAGE_VERSION) -f docker/tracker/Dockerfile ./
