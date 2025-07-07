@@ -66,8 +66,8 @@ def test_agent_download_after_remote_backend_upload(testfs, agent):
 
 
 def test_proxy_prefetch(proxy, agent):
-    proxy.push(TEST_IMAGE)
-    proxy.prefetch(TEST_IMAGE)
+    image_name = proxy.push(TEST_IMAGE)
+    proxy.prefetch(image_name)
 
     agent.pull(TEST_IMAGE)
 
