@@ -41,12 +41,13 @@ func New(
 	stats tally.Scope,
 	config Config,
 	client blobclient.ClusterClient,
-	tagClient tagclient.Client) *Server {
+	tagClient tagclient.Client,
+	synchronous bool) *Server {
 
 	return &Server{
 		stats,
-		NewPreheatHandler(client),
-		NewPrefetchHandler(client, tagClient, &DefaultTagParser{}, stats),
+		NewPreheatHandler(client, synchronous),
+		NewPrefetchHandler(client, tagClient, &DefaultTagParser{}, stats, synchronous),
 		config,
 	}
 }

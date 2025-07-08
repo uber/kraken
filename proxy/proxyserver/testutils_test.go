@@ -50,7 +50,7 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 }
 
 func (m *serverMocks) startServer() string {
-	s := New(tally.NoopScope, m.config, m.originClient, m.tagClient)
+	s := New(tally.NoopScope, m.config, m.originClient, m.tagClient, true)
 	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
 	return addr
