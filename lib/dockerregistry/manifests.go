@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,6 +15,7 @@ package dockerregistry
 
 import (
 	"fmt"
+	"github.com/uber-go/tally"
 	"strings"
 	"time"
 
@@ -33,11 +34,17 @@ const (
 )
 
 type manifests struct {
-	transferer transfer.ImageTransferer
+	transferer   transfer.ImageTransferer
+	verification func(repo string, digest core.Digest) (bool, error)
+	metrics      tally.Scope
 }
 
-func newManifests(transferer transfer.ImageTransferer) *manifests {
-	return &manifests{transferer}
+func newManifests(
+	transferer transfer.ImageTransferer,
+	verification func(repo string, digest core.Digest) (bool, error),
+	metrics tally.Scope,
+) *manifests {
+	return &manifests{transferer, verification, metrics}
 }
 
 // getDigest downloads and returns manifest digest.
@@ -71,6 +78,17 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 		}
 	default:
 		return nil, &InvalidRequestError{path}
+	}
+
+	valid, err := t.verification(repo, digest)
+	if err != nil {
+		return nil, fmt.Errorf("verification failed: %w", err)
+	}
+	if !valid {
+		t.metrics.Counter(getFailureCounter).Inc(1)
+	} else {
+		t.metrics.Counter(getSuccessCounter).Inc(1)
+		log.With("repo", repo, "digest", digest).Info("Manifest found")
 	}
 
 	blob, err := t.transferer.Download(repo, digest)

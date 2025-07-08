@@ -14,11 +14,14 @@
 package main
 
 import (
+	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry"
 	"github.com/uber/kraken/proxy/cmd"
 )
 
 func main() {
-	dockerregistry.RegisterKrakenStorageDriver()
+	dockerregistry.RegisterKrakenStorageDriver(func(repo string, digest core.Digest) (bool, error) {
+		return true, nil
+	})
 	cmd.Run(cmd.ParseFlags())
 }
