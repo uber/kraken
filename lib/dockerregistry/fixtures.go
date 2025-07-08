@@ -14,6 +14,7 @@
 package dockerregistry
 
 import (
+	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/store"
 
@@ -23,6 +24,8 @@ import (
 // StorageDriverFixture creates a storage driver for testing purposes.
 func StorageDriverFixture() (*KrakenStorageDriver, func()) {
 	cas, cleanup := store.CAStoreFixture()
-	sd := NewReadWriteStorageDriver(Config{}, cas, transfer.NewTestTransferer(cas), tally.NoopScope)
+	sd := NewReadWriteStorageDriver(Config{}, cas, transfer.NewTestTransferer(cas), func(repo string, digest core.Digest) (bool, error) {
+		return true, nil
+	}, tally.NoopScope)
 	return sd, cleanup
 }
