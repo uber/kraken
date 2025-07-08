@@ -54,7 +54,7 @@ import (
 // Name of storage driver.
 const Name = "kraken"
 
-func init() {
+func RegisterKrakenStorageDriver() {
 	factory.Register(Name, &krakenStorageDriverFactory{})
 }
 
