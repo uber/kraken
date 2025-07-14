@@ -103,19 +103,19 @@ func WithLogger(l *zap.Logger) Option {
 
 // App represents the agent application with all its components.
 type App struct {
-	config  Config
-	flags   *Flags
-	stats   tally.Scope
-	logger  *zap.Logger
-	
+	config Config
+	flags  *Flags
+	stats  tally.Scope
+	logger *zap.Logger
+
 	// Components
-	peerContext     *core.PeerContext
-	cads            *store.CADownloadStore
-	scheduler       scheduler.ReloadableScheduler
-	tagClient       tagclient.Client
-	registry        *registry.Registry
-	agentServer     *agentserver.Server
-	
+	peerContext core.PeerContext
+	cads        *store.CADownloadStore
+	scheduler   scheduler.ReloadableScheduler
+	tagClient   tagclient.Client
+	registry    *registry.Registry
+	agentServer *agentserver.Server
+
 	// Cleanup functions
 	cleanup []func()
 }
@@ -126,27 +126,27 @@ func NewApp(flags *Flags, opts ...Option) (*App, error) {
 		flags:   flags,
 		cleanup: make([]func(), 0),
 	}
-	
+
 	if err := app.parseOptions(opts...); err != nil {
 		return nil, fmt.Errorf("parse options: %w", err)
 	}
-	
+
 	if err := app.validateFlags(); err != nil {
 		return nil, fmt.Errorf("validate flags: %w", err)
 	}
-	
+
 	if err := app.loadConfig(); err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
-	
+
 	if err := app.setupLogging(); err != nil {
 		return nil, fmt.Errorf("setup logging: %w", err)
 	}
-	
+
 	if err := app.setupMetrics(); err != nil {
 		return nil, fmt.Errorf("setup metrics: %w", err)
 	}
-	
+
 	return app, nil
 }
 
@@ -155,7 +155,7 @@ func (a *App) parseOptions(opts ...Option) error {
 	for _, o := range opts {
 		o(&overrides)
 	}
-	
+
 	if overrides.config != nil {
 		a.config = *overrides.config
 	}
@@ -165,7 +165,7 @@ func (a *App) parseOptions(opts ...Option) error {
 	if overrides.logger != nil {
 		a.logger = overrides.logger
 	}
-	
+
 	return nil
 }
 
@@ -183,7 +183,7 @@ func (a *App) validateFlags() error {
 }
 
 func (a *App) loadConfig() error {
-	if a.config == (Config{}) {
+	if a.config.PeerIDFactory == "" && a.flags.ConfigFile != "" {
 		if err := configutil.Load(a.flags.ConfigFile, &a.config); err != nil {
 			return fmt.Errorf("load config file: %w", err)
 		}
@@ -216,7 +216,7 @@ func (a *App) setupMetrics() error {
 		a.stats = s
 		a.cleanup = append(a.cleanup, func() { closer.Close() })
 	}
-	
+
 	go metrics.EmitVersion(a.stats)
 	return nil
 }
@@ -230,13 +230,13 @@ func (a *App) setupPeerContext() error {
 		}
 		peerIP = localIP
 	}
-	
+
 	pctx, err := core.NewPeerContext(
 		a.config.PeerIDFactory, a.flags.Zone, a.flags.KrakenCluster, peerIP, a.flags.PeerPort, false)
 	if err != nil {
 		return fmt.Errorf("create peer context: %w", err)
 	}
-	
+
 	a.peerContext = pctx
 	return nil
 }
@@ -255,25 +255,25 @@ func (a *App) setupScheduler() error {
 	if err != nil {
 		return fmt.Errorf("create network event producer: %w", err)
 	}
-	
+
 	trackers, err := a.config.Tracker.Build()
 	if err != nil {
 		return fmt.Errorf("build tracker upstream: %w", err)
 	}
 	go trackers.Monitor(nil)
-	
+
 	tls, err := a.config.TLS.BuildClient()
 	if err != nil {
 		return fmt.Errorf("build client TLS config: %w", err)
 	}
-	
+
 	announceClient := announceclient.New(a.peerContext, trackers, tls)
 	sched, err := scheduler.NewAgentScheduler(
 		a.config.Scheduler, a.stats, a.peerContext, a.cads, netevents, trackers, announceClient, tls)
 	if err != nil {
 		return fmt.Errorf("create scheduler: %w", err)
 	}
-	
+
 	a.scheduler = sched
 	return nil
 }
@@ -283,52 +283,52 @@ func (a *App) setupTagClient() error {
 	if err != nil {
 		return fmt.Errorf("build build-index upstream: %w", err)
 	}
-	
+
 	tls, err := a.config.TLS.BuildClient()
 	if err != nil {
 		return fmt.Errorf("build client TLS config: %w", err)
 	}
-	
+
 	a.tagClient = tagclient.NewClusterClient(buildIndexes, tls)
 	return nil
 }
 
 func (a *App) setupRegistry() error {
 	transferer := transfer.NewReadOnlyTransferer(a.stats, a.cads, a.tagClient, a.scheduler)
-	
+
 	registry, err := a.config.Registry.Build(a.config.Registry.ReadOnlyParameters(transferer, a.cads, a.stats))
 	if err != nil {
 		return fmt.Errorf("init registry: %w", err)
 	}
-	
+
 	a.registry = registry
 	return nil
 }
 
 func (a *App) setupAgentServer() error {
 	registryAddr := fmt.Sprintf("127.0.0.1:%d", a.flags.AgentRegistryPort)
-	
+
 	containerRuntimeCfg := a.config.ContainerRuntime
 	dockerdaemonCfg := dockerdaemon.Config{}
 	if a.config.DockerDaemon != dockerdaemonCfg {
 		log.Warn("please move docker config under \"container_runtime\"")
 		containerRuntimeCfg.Docker = a.config.DockerDaemon
 	}
-	
+
 	containerRuntimeFactory, err := containerruntime.NewFactory(containerRuntimeCfg, registryAddr)
 	if err != nil {
 		return fmt.Errorf("create container runtime factory: %w", err)
 	}
-	
+
 	tls, err := a.config.TLS.BuildClient()
 	if err != nil {
 		return fmt.Errorf("build client TLS config: %w", err)
 	}
-	
+
 	announceClient := announceclient.New(a.peerContext, nil, tls)
 	a.agentServer = agentserver.New(
 		a.config.AgentServer, a.stats, a.cads, a.scheduler, a.tagClient, announceClient, containerRuntimeFactory)
-	
+
 	return nil
 }
 
@@ -345,13 +345,13 @@ func (a *App) Initialize() error {
 		{"registry", a.setupRegistry},
 		{"agent server", a.setupAgentServer},
 	}
-	
+
 	for _, step := range setupSteps {
 		if err := step.fn(); err != nil {
 			return fmt.Errorf("setup %s: %w", step.name, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -359,28 +359,28 @@ func (a *App) Initialize() error {
 func (a *App) Run(ctx context.Context) error {
 	agentAddr := fmt.Sprintf(":%d", a.flags.AgentServerPort)
 	log.Infof("Starting agent server on %s", agentAddr)
-	
+
 	agentSrv := &http.Server{
 		Addr:    agentAddr,
 		Handler: a.agentServer.Handler(),
 	}
-	
+
 	go func() {
 		if err := agentSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Errorf("Agent server error: %v", err)
 		}
 	}()
-	
+
 	log.Info("Starting registry...")
 	go func() {
 		if err := a.registry.ListenAndServe(); err != nil {
 			log.Errorf("Registry error: %v", err)
 		}
 	}()
-	
+
 	// Start heartbeat
 	go a.heartbeat()
-	
+
 	// Start nginx
 	nginxDone := make(chan error, 1)
 	go func() {
@@ -394,7 +394,7 @@ func (a *App) Run(ctx context.Context) error {
 			nginx.WithTLS(a.config.TLS))
 		nginxDone <- err
 	}()
-	
+
 	// Wait for context cancellation or nginx error
 	select {
 	case <-ctx.Done():
@@ -409,16 +409,16 @@ func (a *App) shutdown(agentSrv *http.Server) error {
 	// Shutdown agent server gracefully
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	
+
 	if err := agentSrv.Shutdown(shutdownCtx); err != nil {
 		log.Errorf("Agent server shutdown error: %v", err)
 	}
-	
+
 	// Run cleanup functions
 	for i := len(a.cleanup) - 1; i >= 0; i-- {
 		a.cleanup[i]()
 	}
-	
+
 	return nil
 }
 
@@ -435,11 +435,11 @@ func Run(flags *Flags, opts ...Option) {
 	if err != nil {
 		log.Fatalf("Failed to create app: %v", err)
 	}
-	
+
 	if err := app.Initialize(); err != nil {
 		log.Fatalf("Failed to initialize app: %v", err)
 	}
-	
+
 	ctx := context.Background()
 	if err := app.Run(ctx); err != nil {
 		log.Fatalf("App run error: %v", err)
