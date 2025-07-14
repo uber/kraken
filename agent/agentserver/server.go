@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"go.uber.org/zap"
 	"io"
 	"net/http"
 	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
@@ -26,6 +25,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
@@ -56,9 +57,6 @@ type Config struct {
 	// Timeout for readiness checks
 	ReadinessTimeout time.Duration `yaml:"readiness_timeout"`
 
-	// Maximum request body size for patch operations
-	MaxRequestBodySize int64 `yaml:"max_request_body_size"`
-
 	// Enable detailed request logging
 	EnableRequestLogging bool `yaml:"enable_request_logging"`
 }
@@ -73,9 +71,6 @@ func (c *Config) applyDefaults() {
 	}
 	if c.ReadinessTimeout == 0 {
 		c.ReadinessTimeout = 30 * time.Second
-	}
-	if c.MaxRequestBodySize == 0 {
-		c.MaxRequestBodySize = 1024 * 1024 // 1MB
 	}
 }
 
@@ -100,8 +95,8 @@ func New(
 	sched scheduler.ReloadableScheduler,
 	tags tagclient.Client,
 	ac announceclient.Client,
-	containerRuntime containerruntime.Factory) *Server {
-
+	containerRuntime containerruntime.Factory,
+) *Server {
 	config.applyDefaults()
 
 	stats = stats.Tagged(map[string]string{
@@ -184,7 +179,7 @@ func (s *Server) getLogger(ctx context.Context) *zap.SugaredLogger {
 func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	logger := s.getLogger(ctx)
-	
+
 	tag, err := httputil.ParseParam(r, "tag")
 	if err != nil {
 		return handler.Errorf("parse tag param: %s", err).Status(http.StatusBadRequest)
@@ -507,9 +502,6 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 func (s *Server) patchSchedulerConfigHandler(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	logger := s.getLogger(ctx)
-
-	// Limit request body size
-	r.Body = http.MaxBytesReader(w, r.Body, s.config.MaxRequestBodySize)
 	defer r.Body.Close()
 
 	logger.Debugw("patching scheduler config")
