@@ -58,3 +58,4 @@ env*
 
 # For integration tests.
 .tmptest/
+.golangci.yml
