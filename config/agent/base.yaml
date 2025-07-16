@@ -65,7 +65,6 @@ agentserver:
   readiness_timeout: 30s           # nginx timeout for health checks
   
   # Request configuration
-  max_request_body_size: 1MB       # Maximum size for patch requests
   enable_request_logging: false    # Enable detailed request logging
 
 # Allow agent to only serve localhost and Docker default bridge requests.
