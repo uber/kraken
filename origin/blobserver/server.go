@@ -44,15 +44,12 @@ import (
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/listener"
 	"github.com/uber/kraken/utils/log"
-	"github.com/uber/kraken/utils/memsize"
 	"github.com/uber/kraken/utils/stringset"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/go-chi/chi"
 	"github.com/uber-go/tally"
 )
-
-const _uploadChunkSize = 16 * memsize.MB
 
 // Server defines a server that serves blob data for agent.
 type Server struct {
@@ -75,21 +72,21 @@ type Server struct {
 	// a given torrent, however this requires blob server to understand the
 	// context of the p2p client running alongside it.
 	pctx core.PeerContext
-	
+
 	// Resource management
 	downloadSemaphore chan struct{}
 	uploadSemaphore   chan struct{}
-	
+
 	// Metrics
-	downloadTimer        tally.Timer
-	uploadTimer          tally.Timer
-	replicationTimer     tally.Timer
-	downloadCounter      tally.Counter
-	uploadCounter        tally.Counter
-	replicationCounter   tally.Counter
-	errorCounter         tally.Counter
-	timeoutCounter       tally.Counter
-	resourceLeakCounter  tally.Counter
+	downloadTimer       tally.Timer
+	uploadTimer         tally.Timer
+	replicationTimer    tally.Timer
+	downloadCounter     tally.Counter
+	uploadCounter       tally.Counter
+	replicationCounter  tally.Counter
+	errorCounter        tally.Counter
+	timeoutCounter      tally.Counter
+	resourceLeakCounter tally.Counter
 }
 
 // New initializes a new Server.
@@ -155,7 +152,6 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.StatusCounter(s.stats))
 	r.Use(middleware.LatencyTimer(s.stats))
 	r.Use(s.requestTracingMiddleware)
-	r.Use(s.requestValidationMiddleware)
 
 	// Public endpoints:
 
@@ -204,21 +200,21 @@ func (s *Server) requestTracingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := fmt.Sprintf("%d", rand.Int63())
 		start := time.Now()
-		
+
 		// Add request ID to context for downstream handlers
 		ctx := context.WithValue(r.Context(), "request_id", requestID)
 		r = r.WithContext(ctx)
-		
+
 		// Add request ID to response headers for debugging
 		w.Header().Set("X-Request-ID", requestID)
-		
+
 		log.With(
 			"request_id", requestID,
 			"method", r.Method,
 			"path", r.URL.Path,
 			"remote_addr", r.RemoteAddr,
 		).Info("Request started")
-		
+
 		defer func() {
 			duration := time.Since(start)
 			log.With(
@@ -228,18 +224,7 @@ func (s *Server) requestTracingMiddleware(next http.Handler) http.Handler {
 				"duration_ms", duration.Milliseconds(),
 			).Info("Request completed")
 		}()
-		
-		next.ServeHTTP(w, r)
-	})
-}
 
-// requestValidationMiddleware validates request size and other basic requirements
-func (s *Server) requestValidationMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.ContentLength > s.config.MaxRequestSize {
-			http.Error(w, "Request too large", http.StatusRequestEntityTooLarge)
-			return
-		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -258,15 +243,15 @@ func (s *Server) healthCheckHandler(w http.ResponseWriter, r *http.Request) erro
 func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) error {
 	ctx, cancel := context.WithTimeout(r.Context(), s.config.ReadinessTimeout)
 	defer cancel()
-	
+
 	requestID := s.getRequestID(r)
 	logger := log.With("request_id", requestID, "operation", "readiness_check")
-	
+
 	done := make(chan error, 1)
 	go func() {
 		done <- s.backends.CheckReadiness()
 	}()
-	
+
 	select {
 	case err := <-done:
 		if err != nil {
@@ -287,22 +272,22 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
 	ctx, cancel := context.WithTimeout(r.Context(), s.config.BackendTimeout)
 	defer cancel()
-	
+
 	requestID := s.getRequestID(r)
 	logger := log.With("request_id", requestID, "operation", "stat")
-	
+
 	checkLocal, err := strconv.ParseBool(httputil.GetQueryArg(r, "local", "false"))
 	if err != nil {
 		logger.Errorf("Failed to parse local parameter: %s", err)
 		return handler.Errorf("parse arg `local` as bool: %s", err)
 	}
-	
+
 	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
 		logger.Errorf("Failed to parse namespace parameter: %s", err)
 		return err
 	}
-	
+
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		logger.Errorf("Failed to parse digest parameter: %s", err)
@@ -320,7 +305,7 @@ func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
 		logger.Errorf("Blob stat failed: %s", err)
 		return fmt.Errorf("stat: %s", err)
 	}
-	
+
 	w.Header().Set("Content-Length", strconv.FormatInt(bi.Size, 10))
 	logger.With("size", bi.Size).Info("Blob stat completed successfully")
 	return nil
@@ -330,26 +315,27 @@ func (s *Server) stat(ctx context.Context, namespace string, d core.Digest, chec
 	fi, err := s.cas.GetCacheFileStat(d.Hex())
 	if err == nil {
 		return core.NewBlobInfo(fi.Size()), nil
-	} else if os.IsNotExist(err) {
+	}
+	if os.IsNotExist(err) {
 		if !checkLocal {
 			client, err := s.backends.GetClient(namespace)
 			if err != nil {
 				return nil, fmt.Errorf("get backend client: %s", err)
 			}
-			
+
 			done := make(chan struct {
-				bi *core.BlobInfo
+				bi  *core.BlobInfo
 				err error
 			}, 1)
-			
+
 			go func() {
 				bi, err := client.Stat(namespace, d.Hex())
 				done <- struct {
-					bi *core.BlobInfo
+					bi  *core.BlobInfo
 					err error
 				}{bi, err}
 			}()
-			
+
 			select {
 			case result := <-done:
 				if result.err == nil {
@@ -373,25 +359,25 @@ func (s *Server) stat(ctx context.Context, namespace string, d core.Digest, chec
 func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	ctx, cancel := context.WithTimeout(r.Context(), s.config.DownloadTimeout)
 	defer cancel()
-	
+
 	requestID := s.getRequestID(r)
 	logger := log.With("request_id", requestID, "operation", "download")
-	
+
 	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
 		logger.Errorf("Failed to parse namespace parameter: %s", err)
 		return err
 	}
-	
+
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		logger.Errorf("Failed to parse digest parameter: %s", err)
 		return err
 	}
-	
+
 	logger = logger.With("namespace", namespace, "digest", d.Hex())
 	logger.Info("Starting blob download")
-	
+
 	// Acquire download semaphore
 	select {
 	case s.downloadSemaphore <- struct{}{}:
@@ -400,17 +386,17 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 		logger.Error("Download semaphore acquisition timed out")
 		return handler.Errorf("download queue full").Status(http.StatusServiceUnavailable)
 	}
-	
+
 	s.downloadCounter.Inc(1)
 	timer := s.downloadTimer.Start()
 	defer timer.Stop()
-	
+
 	if err := s.downloadBlob(ctx, namespace, d, w); err != nil {
 		s.errorCounter.Inc(1)
 		logger.Errorf("Download failed: %s", err)
 		return err
 	}
-	
+
 	setOctetStreamContentType(w)
 	logger.Info("Download completed successfully")
 	return nil
@@ -419,41 +405,41 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 func (s *Server) replicateToRemoteHandler(w http.ResponseWriter, r *http.Request) error {
 	ctx, cancel := context.WithTimeout(r.Context(), s.config.ReplicationTimeout)
 	defer cancel()
-	
+
 	requestID := s.getRequestID(r)
 	logger := log.With("request_id", requestID, "operation", "replicate_to_remote")
-	
+
 	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
 		logger.Errorf("Failed to parse namespace parameter: %s", err)
 		return err
 	}
-	
+
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		logger.Errorf("Failed to parse digest parameter: %s", err)
 		return err
 	}
-	
+
 	remote, err := httputil.ParseParam(r, "remote")
 	if err != nil {
 		logger.Errorf("Failed to parse remote parameter: %s", err)
 		return err
 	}
-	
+
 	logger = logger.With("namespace", namespace, "digest", d.Hex(), "remote", remote)
 	logger.Info("Starting remote replication")
-	
+
 	s.replicationCounter.Inc(1)
 	timer := s.replicationTimer.Start()
 	defer timer.Stop()
-	
+
 	if err := s.replicateToRemote(ctx, namespace, d, remote); err != nil {
 		s.errorCounter.Inc(1)
 		logger.Errorf("Remote replication failed: %s", err)
 		return err
 	}
-	
+
 	logger.Info("Remote replication completed successfully")
 	return nil
 }
@@ -477,12 +463,12 @@ func (s *Server) replicateToRemote(ctx context.Context, namespace string, d core
 	if err != nil {
 		return handler.Errorf("remote cluster provider: %s", err)
 	}
-	
+
 	done := make(chan error, 1)
 	go func() {
 		done <- remote.UploadBlob(namespace, d, f)
 	}()
-	
+
 	select {
 	case err := <-done:
 		return err
@@ -496,22 +482,22 @@ func (s *Server) replicateToRemote(ctx context.Context, namespace string, d core
 func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error {
 	requestID := s.getRequestID(r)
 	logger := log.With("request_id", requestID, "operation", "delete")
-	
+
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		logger.Errorf("Failed to parse digest parameter: %s", err)
 		return err
 	}
-	
+
 	logger = logger.With("digest", d.Hex())
 	logger.Info("Starting blob deletion")
-	
+
 	if err := s.deleteBlob(d); err != nil {
 		s.errorCounter.Inc(1)
 		logger.Errorf("Blob deletion failed: %s", err)
 		return err
 	}
-	
+
 	setContentLength(w, 0)
 	w.WriteHeader(http.StatusAccepted)
 	logger.Info("Blob deletion completed successfully")
@@ -521,20 +507,20 @@ func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error
 func (s *Server) getLocationsHandler(w http.ResponseWriter, r *http.Request) error {
 	requestID := s.getRequestID(r)
 	logger := log.With("request_id", requestID, "operation", "get_locations")
-	
+
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		logger.Errorf("Failed to parse digest parameter: %s", err)
 		return err
 	}
-	
+
 	logger = logger.With("digest", d.Hex())
 	logger.Info("Getting blob locations")
-	
+
 	locs := s.hashRing.Locations(d)
 	w.Header().Set("Origin-Locations", strings.Join(locs, ","))
 	w.WriteHeader(http.StatusOK)
-	
+
 	logger.With("locations", locs).Info("Blob locations retrieved successfully")
 	return nil
 }
@@ -543,15 +529,15 @@ func (s *Server) getLocationsHandler(w http.ResponseWriter, r *http.Request) err
 func (s *Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) error {
 	requestID := s.getRequestID(r)
 	logger := log.With("request_id", requestID, "operation", "get_peer_context")
-	
+
 	logger.Info("Getting peer context")
-	
+
 	if err := json.NewEncoder(w).Encode(s.pctx); err != nil {
 		s.errorCounter.Inc(1)
 		logger.Errorf("Failed to encode peer context: %s", err)
 		return handler.Errorf("error converting peer context to json: %s", err)
 	}
-	
+
 	logger.Info("Peer context retrieved successfully")
 	return nil
 }
@@ -559,32 +545,32 @@ func (s *Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) e
 func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
 	ctx, cancel := context.WithTimeout(r.Context(), s.config.BackendTimeout)
 	defer cancel()
-	
+
 	requestID := s.getRequestID(r)
 	logger := log.With("request_id", requestID, "operation", "get_metainfo")
-	
+
 	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
 		logger.Errorf("Failed to parse namespace parameter: %s", err)
 		return err
 	}
-	
+
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		logger.Errorf("Failed to parse digest parameter: %s", err)
 		return err
 	}
-	
+
 	logger = logger.With("namespace", namespace, "digest", d.Hex())
 	logger.Info("Getting metainfo")
-	
+
 	raw, err := s.getMetaInfo(ctx, namespace, d)
 	if err != nil {
 		s.errorCounter.Inc(1)
 		logger.Errorf("Failed to get metainfo: %s", err)
 		return err
 	}
-	
+
 	w.Write(raw)
 	logger.Info("Metainfo retrieved successfully")
 	return nil
@@ -593,28 +579,28 @@ func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) erro
 func (s *Server) overwriteMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
 	requestID := s.getRequestID(r)
 	logger := log.With("request_id", requestID, "operation", "overwrite_metainfo")
-	
+
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		logger.Errorf("Failed to parse digest parameter: %s", err)
 		return err
 	}
-	
+
 	pieceLength, err := strconv.ParseInt(r.URL.Query().Get("piece_length"), 10, 64)
 	if err != nil {
 		logger.Errorf("Failed to parse piece_length parameter: %s", err)
 		return handler.Errorf("invalid piece_length argument: %s", err).Status(http.StatusBadRequest)
 	}
-	
+
 	logger = logger.With("digest", d.Hex(), "piece_length", pieceLength)
 	logger.Info("Overwriting metainfo")
-	
+
 	if err := s.overwriteMetaInfo(d, pieceLength); err != nil {
 		s.errorCounter.Inc(1)
 		logger.Errorf("Failed to overwrite metainfo: %s", err)
 		return err
 	}
-	
+
 	logger.Info("Metainfo overwritten successfully")
 	return nil
 }
@@ -633,16 +619,16 @@ func (s *Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 			log.Errorf("Failed to close file reader in overwriteMetaInfo: %s", closeErr)
 		}
 	}()
-	
+
 	mi, err := core.NewMetaInfo(d, f, pieceLength)
 	if err != nil {
 		return handler.Errorf("create metainfo: %s", err)
 	}
-	
+
 	if _, err := s.cas.SetCacheFileMetadata(d.Hex(), metadata.NewTorrentMeta(mi)); err != nil {
 		return handler.Errorf("set metainfo: %s", err)
 	}
-	
+
 	return nil
 }
 
@@ -667,7 +653,7 @@ type localReplicationHook struct {
 func (h *localReplicationHook) Run(d core.Digest) {
 	timer := h.server.stats.Timer("replicate_blob").Start()
 	defer timer.Stop()
-	
+
 	if err := h.server.replicateBlobLocally(d); err != nil {
 		// Don't return error here as we only want to cache storage backend errors.
 		log.With("blob", d.Hex()).Errorf("Error replicating remote blob: %s", err)
@@ -699,7 +685,7 @@ func (s *Server) startRemoteBlobDownload(
 func (s *Server) replicateBlobLocally(d core.Digest) error {
 	ctx, cancel := context.WithTimeout(context.Background(), s.config.ReplicationTimeout)
 	defer cancel()
-	
+
 	return s.applyToReplicas(ctx, d, func(i int, client blobclient.Client) error {
 		f, err := s.cas.GetCacheFileReader(d.Hex())
 		if err != nil {
@@ -711,12 +697,12 @@ func (s *Server) replicateBlobLocally(d core.Digest) error {
 				log.Errorf("Failed to close file reader in replicateBlobLocally: %s", closeErr)
 			}
 		}()
-		
+
 		done := make(chan error, 1)
 		go func() {
 			done <- client.TransferBlob(d, f)
 		}()
-		
+
 		select {
 		case err := <-done:
 			if err != nil {
@@ -753,14 +739,14 @@ func (s *Server) applyToReplicas(ctx context.Context, d core.Digest, f func(i in
 		}(i, replica)
 		i++
 	}
-	
+
 	// Wait for all goroutines to complete or context to be cancelled
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
 		return errutil.Join(errs)
@@ -793,7 +779,7 @@ func (s *Server) downloadBlob(ctx context.Context, namespace string, d core.Dige
 		_, err := io.Copy(dst, f)
 		done <- err
 	}()
-	
+
 	select {
 	case err := <-done:
 		if err != nil {
@@ -820,16 +806,16 @@ func (s *Server) deleteBlob(d core.Digest) error {
 func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) error {
 	requestID := s.getRequestID(r)
 	logger := log.With("request_id", requestID, "operation", "start_transfer")
-	
+
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		logger.Errorf("Failed to parse digest parameter: %s", err)
 		return err
 	}
-	
+
 	logger = logger.With("digest", d.Hex())
 	logger.Info("Starting internal transfer")
-	
+
 	if ok, err := blobExists(s.cas, d); err != nil {
 		s.errorCounter.Inc(1)
 		logger.Errorf("Failed to check blob existence: %s", err)
@@ -838,14 +824,14 @@ func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) er
 		logger.Info("Blob already exists")
 		return handler.ErrorStatus(http.StatusConflict)
 	}
-	
+
 	uid, err := s.uploader.start(d)
 	if err != nil {
 		s.errorCounter.Inc(1)
 		logger.Errorf("Failed to start upload: %s", err)
 		return err
 	}
-	
+
 	setUploadLocation(w, uid)
 	w.WriteHeader(http.StatusOK)
 	logger.With("upload_id", uid).Info("Internal transfer started successfully")
@@ -856,34 +842,34 @@ func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) er
 func (s *Server) patchTransferHandler(w http.ResponseWriter, r *http.Request) error {
 	requestID := s.getRequestID(r)
 	logger := log.With("request_id", requestID, "operation", "patch_transfer")
-	
+
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		logger.Errorf("Failed to parse digest parameter: %s", err)
 		return err
 	}
-	
+
 	uid, err := httputil.ParseParam(r, "uid")
 	if err != nil {
 		logger.Errorf("Failed to parse uid parameter: %s", err)
 		return err
 	}
-	
+
 	start, end, err := parseContentRange(r.Header)
 	if err != nil {
 		logger.Errorf("Failed to parse content range: %s", err)
 		return err
 	}
-	
+
 	logger = logger.With("digest", d.Hex(), "upload_id", uid, "start", start, "end", end)
 	logger.Info("Patching internal transfer")
-	
+
 	if err := s.uploader.patch(d, uid, r.Body, start, end); err != nil {
 		s.errorCounter.Inc(1)
 		logger.Errorf("Failed to patch transfer: %s", err)
 		return err
 	}
-	
+
 	logger.Info("Internal transfer patched successfully")
 	return nil
 }
@@ -1129,5 +1115,3 @@ func (s *Server) getRequestID(r *http.Request) string {
 	}
 	return "unknown"
 }
-
-
