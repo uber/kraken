@@ -987,7 +987,7 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 	if err := s.writeBack(namespace, d, 0); err != nil {
 		return err
 	}
-	err = s.applyToReplicas(d, func(i int, client blobclient.Client) error {
+	err = s.applyToReplicas(r.Context(), d, func(i int, client blobclient.Client) error {
 		delay := s.config.DuplicateWriteBackStagger * time.Duration(i+1)
 		f, err := s.cas.GetCacheFileReader(d.Hex())
 		if err != nil {
@@ -1130,65 +1130,4 @@ func (s *Server) getRequestID(r *http.Request) string {
 	return "unknown"
 }
 
-// setOctetStreamContentType sets the content type to application/octet-stream
-func setOctetStreamContentType(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/octet-stream")
-}
 
-// setContentLength sets the content length header
-func setContentLength(w http.ResponseWriter, length int) {
-	w.Header().Set("Content-Length", strconv.Itoa(length))
-}
-
-// setUploadLocation sets the upload location header
-func setUploadLocation(w http.ResponseWriter, uid string) {
-	w.Header().Set("Location", uid)
-}
-
-// blobExists checks if a blob exists in the cache
-func blobExists(cas *store.CAStore, d core.Digest) (bool, error) {
-	_, err := cas.GetCacheFileStat(d.Hex())
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return false, err
-}
-
-// parseContentRange parses the content range header
-func parseContentRange(headers http.Header) (start, end int64, err error) {
-	rangeHeader := headers.Get("Content-Range")
-	if rangeHeader == "" {
-		return 0, 0, fmt.Errorf("missing Content-Range header")
-	}
-	
-	// Parse "bytes start-end/total" format
-	parts := strings.Split(rangeHeader, " ")
-	if len(parts) != 2 || parts[0] != "bytes" {
-		return 0, 0, fmt.Errorf("invalid Content-Range format")
-	}
-	
-	rangeParts := strings.Split(parts[1], "/")
-	if len(rangeParts) != 2 {
-		return 0, 0, fmt.Errorf("invalid Content-Range format")
-	}
-	
-	startEndParts := strings.Split(rangeParts[0], "-")
-	if len(startEndParts) != 2 {
-		return 0, 0, fmt.Errorf("invalid Content-Range format")
-	}
-	
-	start, err = strconv.ParseInt(startEndParts[0], 10, 64)
-	if err != nil {
-		return 0, 0, fmt.Errorf("invalid start range: %s", err)
-	}
-	
-	end, err = strconv.ParseInt(startEndParts[1], 10, 64)
-	if err != nil {
-		return 0, 0, fmt.Errorf("invalid end range: %s", err)
-	}
-	
-	return start, end, nil
-}

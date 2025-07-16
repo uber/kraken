@@ -14,6 +14,7 @@
 package cmd
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -44,6 +45,7 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/go-chi/chi"
+	"github.com/jmoiron/sqlx"
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 )
@@ -110,18 +112,43 @@ func WithLogger(l *zap.Logger) Option {
 
 // Run runs the origin.
 func Run(flags *Flags, opts ...Option) {
-	if flags.PeerPort == 0 {
-		panic("must specify non-zero peer port")
-	}
-	if flags.BlobServerPort == 0 {
-		panic("must specify non-zero blob server port")
-	}
+	validateFlags(flags)
 
 	var overrides options
 	for _, o := range opts {
 		o(&overrides)
 	}
 
+	config := setupConfiguration(flags, &overrides)
+	logger := setupLogging(config, &overrides)
+	defer func() {
+		if logger != nil {
+			logger.Sync()
+		}
+	}()
+
+	stats, statsCloser := setupMetrics(config, flags, &overrides)
+	defer statsCloser()
+
+	hostname := setupHostname(flags)
+	peerIP := setupPeerIP(flags)
+
+	components := setupCoreComponents(config, flags, hostname, peerIP, stats)
+	server := setupBlobServer(config, flags, hostname, components, stats)
+
+	startServices(config, flags, server, components.scheduler)
+}
+
+func validateFlags(flags *Flags) {
+	if flags.PeerPort == 0 {
+		panic("must specify non-zero peer port")
+	}
+	if flags.BlobServerPort == 0 {
+		panic("must specify non-zero blob server port")
+	}
+}
+
+func setupConfiguration(flags *Flags, overrides *options) Config {
 	var config Config
 	if overrides.config != nil {
 		config = *overrides.config
@@ -135,26 +162,34 @@ func Run(flags *Flags, opts ...Option) {
 			}
 		}
 	}
+	return config
+}
 
+func setupLogging(config Config, overrides *options) *zap.Logger {
 	if overrides.logger != nil {
 		log.SetGlobalLogger(overrides.logger.Sugar())
+		return overrides.logger
 	} else {
 		zlog := log.ConfigureLogger(config.ZapLogging)
-		defer zlog.Sync()
+		return zlog.Desugar()
+	}
+}
+
+func setupMetrics(config Config, flags *Flags, overrides *options) (tally.Scope, func()) {
+	if overrides.metrics != nil {
+		return overrides.metrics, func() {}
 	}
 
-	stats := overrides.metrics
-	if stats == nil {
-		s, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
-		if err != nil {
-			log.Fatalf("Failed to init metrics: %s", err)
-		}
-		stats = s
-		defer closer.Close()
+	s, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
+	if err != nil {
+		log.Fatalf("Failed to init metrics: %s", err)
 	}
 
-	go metrics.EmitVersion(stats)
+	go metrics.EmitVersion(s)
+	return s, func() { closer.Close() }
+}
 
+func setupHostname(flags *Flags) string {
 	var hostname string
 	if flags.BlobServerHostName == "" {
 		var err error
@@ -166,36 +201,96 @@ func Run(flags *Flags, opts ...Option) {
 		hostname = flags.BlobServerHostName
 	}
 	log.Infof("Configuring origin with hostname '%s'", hostname)
+	return hostname
+}
 
+func setupPeerIP(flags *Flags) string {
 	if flags.PeerIP == "" {
 		localIP, err := netutil.GetLocalIP()
 		if err != nil {
 			log.Fatalf("Error getting local ip: %s", err)
 		}
-		flags.PeerIP = localIP
+		return localIP
 	}
+	return flags.PeerIP
+}
 
+type coreComponents struct {
+	cas              *store.CAStore
+	pctx             core.PeerContext
+	backendManager   *backend.Manager
+	writeBackManager persistedretry.Manager
+	metaInfoGen      *metainfogen.Generator
+	blobRefresher    *blobrefresh.Refresher
+	scheduler        scheduler.ReloadableScheduler
+	hashRing         hashring.Ring
+	tls              *tls.Config
+}
+
+func setupCoreComponents(config Config, flags *Flags, hostname, peerIP string, stats tally.Scope) *coreComponents {
+	cas := setupCAStore(config, stats)
+	pctx := setupPeerContext(config, flags, peerIP)
+	backendManager := setupBackendManager(config, stats)
+
+	localDB := setupLocalDB(config)
+	writeBackManager := setupWriteBackManager(config, stats, cas, backendManager, localDB)
+	metaInfoGen := setupMetaInfoGenerator(config, cas)
+	blobRefresher := setupBlobRefresher(config, stats, cas, backendManager, metaInfoGen)
+
+	netevents := setupNetworkEvents(config)
+	schedulerInstance := setupScheduler(config, stats, pctx, cas, netevents, blobRefresher)
+
+	cluster := setupCluster(config)
+	tlsConfig := setupTLS(config)
+	hashRing := setupHashRing(config, flags, hostname, cluster, tlsConfig, backendManager)
+
+	return &coreComponents{
+		cas:              cas,
+		pctx:             pctx,
+		backendManager:   backendManager,
+		writeBackManager: writeBackManager,
+		metaInfoGen:      metaInfoGen,
+		blobRefresher:    blobRefresher,
+		scheduler:        schedulerInstance,
+		hashRing:         hashRing,
+		tls:              tlsConfig,
+	}
+}
+
+func setupCAStore(config Config, stats tally.Scope) *store.CAStore {
 	cas, err := store.NewCAStore(config.CAStore, stats)
 	if err != nil {
 		log.Fatalf("Failed to create castore: %s", err)
 	}
+	return cas
+}
 
+func setupPeerContext(config Config, flags *Flags, peerIP string) core.PeerContext {
 	pctx, err := core.NewPeerContext(
-		config.PeerIDFactory, flags.Zone, flags.KrakenCluster, flags.PeerIP, flags.PeerPort, true)
+		config.PeerIDFactory, flags.Zone, flags.KrakenCluster, peerIP, flags.PeerPort, true)
 	if err != nil {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
+	return pctx
+}
 
+func setupBackendManager(config Config, stats tally.Scope) *backend.Manager {
 	backendManager, err := backend.NewManager(config.BackendManager, config.Backends, config.Auth, stats)
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
+	return backendManager
+}
 
+func setupLocalDB(config Config) *sqlx.DB {
 	localDB, err := localdb.New(config.LocalDB)
 	if err != nil {
 		log.Fatalf("Error creating local db: %s", err)
 	}
+	return localDB
+}
 
+func setupWriteBackManager(config Config, stats tally.Scope, cas *store.CAStore, backendManager *backend.Manager, localDB *sqlx.DB) persistedretry.Manager {
 	writeBackManager, err := persistedretry.NewManager(
 		config.WriteBack,
 		stats,
@@ -204,35 +299,55 @@ func Run(flags *Flags, opts ...Option) {
 	if err != nil {
 		log.Fatalf("Error creating write-back manager: %s", err)
 	}
+	return writeBackManager
+}
 
+func setupMetaInfoGenerator(config Config, cas *store.CAStore) *metainfogen.Generator {
 	metaInfoGenerator, err := metainfogen.New(config.MetaInfoGen, cas)
 	if err != nil {
 		log.Fatalf("Error creating metainfo generator: %s", err)
 	}
+	return metaInfoGenerator
+}
 
-	blobRefresher := blobrefresh.New(config.BlobRefresh, stats, cas, backendManager, metaInfoGenerator)
+func setupBlobRefresher(config Config, stats tally.Scope, cas *store.CAStore, backendManager *backend.Manager, metaInfoGen *metainfogen.Generator) *blobrefresh.Refresher {
+	return blobrefresh.New(config.BlobRefresh, stats, cas, backendManager, metaInfoGen)
+}
 
+func setupNetworkEvents(config Config) networkevent.Producer {
 	netevents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
 		log.Fatalf("Error creating network event producer: %s", err)
 	}
+	return netevents
+}
 
+func setupScheduler(config Config, stats tally.Scope, pctx core.PeerContext, cas *store.CAStore, netevents networkevent.Producer, blobRefresher *blobrefresh.Refresher) scheduler.ReloadableScheduler {
 	sched, err := scheduler.NewOriginScheduler(
 		config.Scheduler, stats, pctx, cas, netevents, blobRefresher)
 	if err != nil {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
+	return sched
+}
 
+func setupCluster(config Config) hostlist.List {
 	cluster, err := hostlist.New(config.Cluster)
 	if err != nil {
 		log.Fatalf("Error creating cluster host list: %s", err)
 	}
+	return cluster
+}
 
+func setupTLS(config Config) *tls.Config {
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
 		log.Fatalf("Error building client tls config: %s", err)
 	}
+	return tls
+}
 
+func setupHashRing(config Config, flags *Flags, hostname string, cluster hostlist.List, tls *tls.Config, backendManager *backend.Manager) hashring.Ring {
 	healthCheckFilter := healthcheck.NewFilter(config.HealthCheck, healthcheck.Default(tls))
 
 	hashRing := hashring.New(
@@ -242,6 +357,7 @@ func Run(flags *Flags, opts ...Option) {
 		hashring.WithWatcher(backend.NewBandwidthWatcher(backendManager)))
 	go hashRing.Monitor(nil)
 
+	// Validate that this origin is in the hash ring
 	addr := fmt.Sprintf("%s:%d", hostname, flags.BlobServerPort)
 	if !hashRing.Contains(addr) {
 		// When DNS is used for hash ring membership, the members will be IP
@@ -258,24 +374,34 @@ func Run(flags *Flags, opts ...Option) {
 		}
 	}
 
+	return hashRing
+}
+
+func setupBlobServer(config Config, flags *Flags, hostname string, components *coreComponents, stats tally.Scope) *blobserver.Server {
+	addr := fmt.Sprintf("%s:%d", hostname, flags.BlobServerPort)
+
 	server, err := blobserver.New(
 		config.BlobServer,
 		stats,
 		clock.New(),
 		addr,
-		hashRing,
-		cas,
-		blobclient.NewProvider(blobclient.WithTLS(tls)),
-		blobclient.NewClusterProvider(blobclient.WithTLS(tls)),
-		pctx,
-		backendManager,
-		blobRefresher,
-		metaInfoGenerator,
-		writeBackManager)
+		components.hashRing,
+		components.cas,
+		blobclient.NewProvider(blobclient.WithTLS(components.tls)),
+		blobclient.NewClusterProvider(blobclient.WithTLS(components.tls)),
+		components.pctx,
+		components.backendManager,
+		components.blobRefresher,
+		components.metaInfoGen,
+		components.writeBackManager)
 	if err != nil {
 		log.Fatalf("Error initializing blob server: %s", err)
 	}
 
+	return server
+}
+
+func startServices(config Config, flags *Flags, server *blobserver.Server, sched scheduler.ReloadableScheduler) {
 	h := addTorrentDebugEndpoints(server.Handler(), sched)
 
 	go func() { log.Fatal(server.ListenAndServe(h)) }()
