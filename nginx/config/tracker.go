@@ -29,10 +29,36 @@ server {
   access_log {{.access_log_path}};
   error_log {{.error_log_path}};
 
+  # Timeout configurations from tracker server config
+  proxy_connect_timeout {{.readiness_timeout}};
+  proxy_send_timeout {{.announce_timeout}};
+  proxy_read_timeout {{.announce_timeout}};
+
   location / {
     proxy_pass http://tracker;
+    
+    # Pass original client info
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
   }
 
+  # Health and readiness checks with shorter timeout
+  location ~ ^/(health|readiness)$ {
+    proxy_pass http://tracker;
+    
+    proxy_read_timeout {{.readiness_timeout}};
+    proxy_send_timeout {{.readiness_timeout}};
+    
+    # Pass original client info
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  # Metainfo requests need longer timeout (cached)
   location ~* ^/namespace/.*/blobs/.*/metainfo$ {
     proxy_pass http://tracker;
 
@@ -41,6 +67,31 @@ server {
     proxy_cache_valid   200 5m;
     proxy_cache_valid   any 1s;
     proxy_cache_lock    on;
+    
+    # Use metainfo timeout for these operations
+    proxy_read_timeout {{.metainfo_timeout}};
+    proxy_send_timeout {{.metainfo_timeout}};
+    
+    # Pass original client info
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  # Announce operations
+  location ~ ^/announce {
+    proxy_pass http://tracker;
+    
+    # Use announce timeout for these operations
+    proxy_read_timeout {{.announce_timeout}};
+    proxy_send_timeout {{.announce_timeout}};
+    
+    # Pass original client info
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
   }
 }
 `

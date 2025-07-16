@@ -28,8 +28,53 @@ server {
   gzip on;
   gzip_types text/plain test/csv application/json;
 
+  # Timeout configurations from origin server config
+  proxy_connect_timeout {{.backend_timeout}};
+  proxy_send_timeout {{.upload_timeout}};
+  proxy_read_timeout {{.download_timeout}};
+  
+  # Keepalive settings
+  proxy_buffering off;
+  proxy_request_buffering off;
+
   location / {
     proxy_pass http://{{.server}};
+    
+    # Pass original client info
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  # Special handling for upload operations with longer timeout
+  location ~ ^/namespace/.*/blobs/.*/uploads {
+    proxy_pass http://{{.server}};
+    
+    # Use upload timeout for these operations
+    proxy_read_timeout {{.upload_timeout}};
+    proxy_send_timeout {{.upload_timeout}};
+    
+    # Pass original client info
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  # Replication operations with their own timeout
+  location ~ ^/namespace/.*/blobs/.*/remote {
+    proxy_pass http://{{.server}};
+    
+    # Use replication timeout for these operations
+    proxy_read_timeout {{.replication_timeout}};
+    proxy_send_timeout {{.replication_timeout}};
+    
+    # Pass original client info
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
   }
 }
 `

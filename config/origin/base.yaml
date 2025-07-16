@@ -48,6 +48,17 @@ blobserver:
   listener:
     net: unix
     addr: /tmp/kraken-origin.sock
+  
+  # Timeout configurations (also used by nginx)
+  download_timeout: 5m       # nginx proxy_read_timeout for downloads
+  upload_timeout: 10m        # nginx proxy_read_timeout/send_timeout for uploads  
+  replication_timeout: 3m    # nginx timeout for replication operations
+  backend_timeout: 2m        # nginx proxy_connect_timeout
+  readiness_timeout: 30s     # internal readiness check timeout
+  
+  # Concurrency limits
+  max_concurrent_downloads: 10
+  max_concurrent_uploads: 5
 
 nginx:
   name: kraken-origin

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,6 +23,7 @@ import (
 	"path"
 	"path/filepath"
 	"text/template"
+	"time"
 
 	"github.com/uber/kraken/nginx/config"
 	"github.com/uber/kraken/utils/httputil"
@@ -248,4 +249,22 @@ func GetServer(net, addr string) string {
 		return "unix:" + addr
 	}
 	return addr
+}
+
+func FormatDurationForNginx(d time.Duration) string {
+	// Add 30s buffer to ensure Go server times out first for observability
+	bufferedDuration := d + (30 * time.Second)
+
+	if bufferedDuration >= time.Minute {
+		minutes := int(bufferedDuration.Minutes())
+		if bufferedDuration == time.Duration(minutes)*time.Minute {
+			return fmt.Sprintf("%dm", minutes)
+		}
+	}
+	if bufferedDuration >= time.Second {
+		seconds := int(bufferedDuration.Seconds())
+		return fmt.Sprintf("%ds", seconds)
+	}
+	// Fallback to milliseconds for very short durations
+	return fmt.Sprintf("%dms", bufferedDuration.Milliseconds())
 }

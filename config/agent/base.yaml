@@ -58,6 +58,16 @@ registry:
 
 peer_id_factory: addr_hash
 
+agentserver:
+  # Timeout configurations (also used by nginx)
+  download_timeout: 5m             # nginx proxy_read_timeout for downloads
+  container_runtime_timeout: 10m   # nginx timeout for container operations (pull/preload)
+  readiness_timeout: 30s           # nginx timeout for health checks
+  
+  # Request configuration
+  max_request_body_size: 1MB       # Maximum size for patch requests
+  enable_request_logging: false    # Enable detailed request logging
+
 # Allow agent to only serve localhost and Docker default bridge requests.
 allowed_cidrs:
   - 127.0.0.1

@@ -40,6 +40,16 @@ trackerserver:
   listener:
     net: unix
     addr: /tmp/kraken-tracker.sock
+  
+  # Timeout configurations (also used by nginx)
+  metainfo_timeout: 2m    # nginx proxy_read_timeout for metainfo requests to origins
+  announce_timeout: 30s   # nginx proxy_read_timeout for announce operations
+  readiness_timeout: 30s  # nginx timeout for health checks
+  
+  # Rate limiting
+  get_metainfo_limit: 1s  # Limits unique metainfo requests per namespace/digest
+  announce_limit: 50      # Maximum peers returned on each announce
+  announce_interval: 3s   # How often peers should announce
 
 nginx:
   name: kraken-tracker
