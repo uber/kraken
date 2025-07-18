@@ -13,9 +13,11 @@ RUN if [ ${USERID} != "0" ]; then useradd --uid ${USERID} ${USERNAME}; fi
 COPY ./docker/setup_nginx.sh /tmp/setup_nginx.sh
 RUN /tmp/setup_nginx.sh ${USERNAME}
 
+COPY ./origin/origin /usr/bin/kraken-origin
+RUN chmod +x /usr/bin/kraken-origin
+
 USER ${USERNAME}
 
-COPY ./origin/origin /usr/bin/kraken-origin
 COPY ./config /etc/kraken/config
 COPY ./nginx/config /etc/kraken/nginx/config
 COPY ./localdb/migrations /etc/kraken/localdb/migrations

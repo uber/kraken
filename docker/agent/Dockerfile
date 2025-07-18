@@ -13,9 +13,11 @@ RUN if [ ${USERID} != "0" ]; then useradd --uid ${USERID} ${USERNAME}; fi
 COPY ./docker/setup_nginx.sh /tmp/setup_nginx.sh
 RUN /tmp/setup_nginx.sh ${USERNAME}
 
+COPY ./agent/agent /usr/bin/kraken-agent
+RUN chmod +x /usr/bin/kraken-agent
+
 USER ${USERNAME}
 
-COPY ./agent/agent /usr/bin/kraken-agent
 COPY ./config /etc/kraken/config
 COPY ./nginx/config /etc/kraken/nginx/config
 COPY ./test/tls /etc/kraken/tls
