@@ -4,7 +4,7 @@ This codelab will guide you through setting up and testing Kraken, a P2P-powered
 
 ## What is Kraken?
 
-Kraken is a P2P-powered Docker registry that focuses on scalability and availability. It distributes Docker images using peer-to-peer technology, reducing the load on central servers and improving download speeds, especially for large deployments.
+Kraken is a P2P powered Docker registry that focuses on scalability and availability. It distributes Docker images using peer-to-peer technology, reducing the load on central servers and improving download speeds, especially for large deployments.
 
 ### Key Components:
 - **Agent**: Deployed on each host, implements Docker registry interface, handles P2P distribution
@@ -385,122 +385,6 @@ To stop and remove all Kraken containers:
 ```bash
 make docker_stop
 ```
-
-## Step 10: Scaling Up - Adding More Agents
-
-To better demonstrate P2P distribution benefits, you can add more agents to your cluster:
-
-### Quick Setup - Additional Agents
-
-I've created scripts to easily add 3 more agents (bringing total to 5 agents):
-
-```bash
-# Start 3 additional agents (ports 18000, 19000, 20000)
-./start_additional_agents.sh
-
-# Verify all agents are running
-docker ps --filter name=kraken
-
-# Test P2P distribution across all agents
-docker pull localhost:18000/test/hello-world:latest
-docker pull localhost:19000/test/hello-world:latest
-docker pull localhost:20000/test/hello-world:latest
-```
-
-### Manual Agent Creation
-
-To create additional agents manually, follow this pattern:
-
-1. **Create parameter file** (`examples/devcluster/agent_X_param.sh`):
-```bash
-# Define agent ports (increment by 1000)
-AGENT_REGISTRY_PORT=21000  # For agent six
-AGENT_PEER_PORT=21001
-AGENT_SERVER_PORT=21002
-
-# Hostname for docker for mac
-HOSTNAME=host.docker.internal
-
-# Container config
-AGENT_CONTAINER_NAME=kraken-agent-six
-```
-
-2. **Create start script** (`examples/devcluster/agent_X_start_container.sh`):
-```bash
-#!/bin/bash
-set -ex
-source examples/devcluster/agent_X_param.sh
-
-docker run -d \
-    -p ${AGENT_PEER_PORT}:${AGENT_PEER_PORT} \
-    -p ${AGENT_SERVER_PORT}:${AGENT_SERVER_PORT} \
-    -p ${AGENT_REGISTRY_PORT}:${AGENT_REGISTRY_PORT} \
-    -v $(pwd)/examples/devcluster/config/agent/development.yaml:/etc/kraken/config/agent/development.yaml \
-    --name ${AGENT_CONTAINER_NAME} \
-    kraken-agent:dev \
-    /usr/bin/kraken-agent --config=/etc/kraken/config/agent/development.yaml --peer-ip=${HOSTNAME} --peer-port=${AGENT_PEER_PORT} --agent-server-port=${AGENT_SERVER_PORT} --agent-registry-port=${AGENT_REGISTRY_PORT}
-```
-
-3. **Make executable and run**:
-```bash
-chmod +x examples/devcluster/agent_X_start_container.sh
-./examples/devcluster/agent_X_start_container.sh
-```
-
-### P2P Testing at Scale
-
-With multiple agents, you can test true P2P benefits:
-
-```bash
-# Push a larger image for better P2P demonstration
-docker tag ubuntu:latest localhost:15000/test/ubuntu:latest
-docker push localhost:15000/test/ubuntu:latest
-
-# Pull simultaneously from all agents to see P2P sharing
-docker pull localhost:16000/test/ubuntu:latest &
-docker pull localhost:17000/test/ubuntu:latest &
-docker pull localhost:18000/test/ubuntu:latest &
-docker pull localhost:19000/test/ubuntu:latest &
-docker pull localhost:20000/test/ubuntu:latest &
-wait
-
-# Monitor logs to see peer coordination
-docker logs -f kraken-agent-one
-```
-
-### Current Agent Endpoints
-
-With the additional agents, you now have:
-
-| Agent | Registry Port | Purpose |
-|-------|---------------|---------|
-| **Proxy** | 15000 | Push images here |
-| **Agent One** | 16000 | Pull images (P2P) |
-| **Agent Two** | 17000 | Pull images (P2P) |
-| **Agent Three** | 18000 | Pull images (P2P) |
-| **Agent Four** | 19000 | Pull images (P2P) |
-| **Agent Five** | 20000 | Pull images (P2P) |
-
-### Cleanup Additional Agents
-
-```bash
-# Stop additional agents
-./stop_additional_agents.sh
-
-# Or stop all Kraken containers
-make docker_stop
-```
-
-### Port Management
-
-Each agent needs 3 ports:
-- Registry port (for Docker API)
-- Peer port (for P2P communication)
-- Server port (for internal agent API)
-
-The pattern is: Base port + 0/1/2 (e.g., 18000/18001/18002)
-
-Ensure ports don't conflict with other services on your system.
 
 ## Troubleshooting
 
