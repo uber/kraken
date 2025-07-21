@@ -1,47 +1,72 @@
 #!/bin/bash
 
-# kraken-pull.sh - Wrapper script for consistent image naming
+# kraken-pull.sh - Wrapper script for consistent image naming with mandatory agent host
 
 HERD_HOST=${HERD_HOST:-localhost:15000}
-AGENT_HOSTS=(
-    "localhost:16000"
-    "localhost:17000" 
-    "localhost:18000"
-)
 
 kraken_pull() {
     local image_name=$1
-    local prefer_agent=${2:-""}
+    local agent_host=$2
     
-    # If preferred agent specified, try that first
-    if [ ! -z "$prefer_agent" ]; then
-        echo "Attempting pull from preferred agent: $prefer_agent"
-        if docker pull ${prefer_agent}/${image_name}; then
-            docker tag ${prefer_agent}/${image_name} ${image_name}
-            docker rmi ${prefer_agent}/${image_name}
-            echo "Successfully pulled: ${image_name}"
-            return 0
-        fi
+    # Validate required parameters
+    if [ -z "$image_name" ]; then
+        echo "Error: Image name is required"
+        echo "Usage: kraken-pull.sh <image:tag> <agent_host:port>"
+        echo "Example: kraken-pull.sh test/mysql:latest localhost:16000"
+        return 1
     fi
     
-    # Try each agent in order
-    for agent in "${AGENT_HOSTS[@]}"; do
-        echo "Attempting pull from agent: $agent"
-        if docker pull ${agent}/${image_name}; then
-            docker tag ${agent}/${image_name} ${image_name}
-            docker rmi ${agent}/${image_name}
-            echo "Successfully pulled: ${image_name}"
-            return 0
-        fi
-    done
+    if [ -z "$agent_host" ]; then
+        echo "Error: Agent host is required"
+        echo "Usage: kraken-pull.sh <image:tag> <agent_host:port>"
+        echo "Example: kraken-pull.sh test/mysql:latest localhost:16000"
+        echo "         kraken-pull.sh test/mysql:latest 10.0.1.101:16000"
+        return 1
+    fi
     
-    # Fallback to herd
-    echo "Pulling from herd: $HERD_HOST"
-    docker pull ${HERD_HOST}/${image_name}
-    docker tag ${HERD_HOST}/${image_name} ${image_name}
-    docker rmi ${HERD_HOST}/${image_name}
-    echo "Successfully pulled: ${image_name}"
+    echo "Pulling ${image_name} from agent: ${agent_host}"
+    
+    # Try the specified agent first
+    if docker pull ${agent_host}/${image_name}; then
+        docker tag ${agent_host}/${image_name} ${image_name}
+        docker rmi ${agent_host}/${image_name}
+        echo "✓ Successfully pulled via agent: ${image_name}"
+        return 0
+    fi
+    
+    # Fallback to herd if agent fails
+    echo "Agent pull failed, falling back to herd: $HERD_HOST"
+    if docker pull ${HERD_HOST}/${image_name}; then
+        docker tag ${HERD_HOST}/${image_name} ${image_name}
+        docker rmi ${HERD_HOST}/${image_name}
+        echo "✓ Successfully pulled via herd: ${image_name}"
+        return 0
+    fi
+    
+    echo "✗ Failed to pull ${image_name} from both agent and herd"
+    return 1
 }
 
-# Usage: kraken-pull.sh image:tag [preferred_agent]
+# Validate arguments
+if [ $# -lt 2 ]; then
+    echo "Error: Missing required arguments"
+    echo "Usage: kraken-pull.sh <image:tag> <agent_host:port>"
+    echo ""
+    echo "Examples:"
+    echo "  # Local devcluster"
+    echo "  kraken-pull.sh test/mysql:latest localhost:16000"
+    echo ""
+    echo "  # Multi-host deployment"
+    echo "  kraken-pull.sh company/app:v1.0 10.0.1.101:16000"
+    echo ""
+    echo "  # BMS deployment (same port, different hosts)"
+    echo "  kraken-pull.sh company/app:v1.0 bms-node-1:16000"
+    echo "  kraken-pull.sh company/app:v1.0 bms-node-2:16000"
+    echo ""
+    echo "Environment variables:"
+    echo "  HERD_HOST - Fallback herd endpoint (default: localhost:15000)"
+    exit 1
+fi
+
+# Execute the pull
 kraken_pull "$1" "$2"
