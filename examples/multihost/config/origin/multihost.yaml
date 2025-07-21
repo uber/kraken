@@ -1,0 +1,41 @@
+extends: base.yaml
+
+backends:
+  - namespace: library/.*
+    backend:
+      registry_blob:
+        address: index.docker.io
+        security:
+          basic:
+            username: ""
+            password: ""
+  - namespace: company/.*
+    backend:
+      testfs:
+        addr: ${HERD_HOST_IP}:14000
+        root: blobs
+        name_path: identity
+  - namespace: .*
+    backend:
+      testfs:
+        addr: ${HERD_HOST_IP}:14000
+        root: blobs
+        name_path: identity
+
+cluster:
+  static:
+    - ${HERD_HOST_IP}:15002
+
+hashring:
+  max_replica: 2
+
+writeback:
+  retry_interval: 100ms
+  poll_retries_interval: 250ms
+
+tls:
+  name: kraken
+  server:
+    disabled: true
+  client:
+    disabled: true

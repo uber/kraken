@@ -1,0 +1,21 @@
+extends: base.yaml
+
+origin:
+  hosts:
+    static:
+      - ${HERD_HOST_IP}:15002
+
+build_index:
+  hosts:
+    static:
+      - ${HERD_HOST_IP}:15004
+
+nginx:
+  cache_dir: /tmp/kraken-proxy-nginx/
+
+tls:
+  name: kraken
+  server:
+    disabled: true
+  client:
+    disabled: true

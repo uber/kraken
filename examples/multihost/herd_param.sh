@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# Define optional storage ports.
+TESTFS_PORT=14000
+REDIS_PORT=14001
+
+# Define herd ports.
+PROXY_PORT=15000
+ORIGIN_PEER_PORT=15001
+ORIGIN_SERVER_PORT=15002
+TRACKER_PORT=15003
+BUILD_INDEX_PORT=15004
+PROXY_SERVER_PORT=15005
+
+# Hostname for multi-host deployment
+HERD_HOST_IP=${HERD_HOST_IP:-localhost}
+HOSTNAME=${HERD_HOST_IP}
+
+# Allow external access
+BIND_ADDRESS="0.0.0.0"

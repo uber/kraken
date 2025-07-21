@@ -1,0 +1,23 @@
+extends: base.yaml
+
+peerstore:
+  redis:
+    addr: 127.0.0.1:14001
+
+origin:
+  hosts:
+    static:
+      - ${HERD_HOST_IP}:15002
+
+trackerserver:
+  announce_interval: 3s
+
+nginx:
+  cache_dir: /tmp/kraken-tracker-nginx/
+
+tls:
+  name: kraken
+  server:
+    disabled: true
+  client:
+    disabled: true

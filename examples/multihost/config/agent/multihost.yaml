@@ -1,0 +1,18 @@
+extends: base.yaml
+
+tracker:
+  hosts:
+    static:
+      - ${HERD_HOST_IP}:15003
+
+build_index:
+  hosts:
+    static:
+      - ${HERD_HOST_IP}:15004
+
+tls:
+  name: kraken
+  server:
+    disabled: true
+  client:
+    disabled: true
