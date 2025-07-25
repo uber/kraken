@@ -64,7 +64,7 @@ type Config struct {
 // applyDefaults sets default values for configuration.
 func (c *Config) applyDefaults() {
 	if c.DownloadTimeout == 0 {
-		c.DownloadTimeout = 5 * time.Minute
+		c.DownloadTimeout = 15 * time.Minute
 	}
 	if c.ContainerRuntimeTimeout == 0 {
 		c.ContainerRuntimeTimeout = 10 * time.Minute
