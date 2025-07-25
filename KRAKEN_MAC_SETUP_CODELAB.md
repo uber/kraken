@@ -423,9 +423,77 @@ make docker_stop
 
 ### Common Issues
 
+#### **403 Forbidden on Agent Endpoints (Port Blocking)**
+
+**Problem**: Getting 403 Forbidden when testing agent endpoints.
+```bash
+curl http://localhost:16000/v2/
+# Returns: 403 Forbidden nginx/1.18.0
+
+curl http://localhost:17000/v2/
+# Returns: 403 Forbidden nginx/1.18.0
+```
+
+**Root Cause**: Firewalls or softwares often block non-standard ports like 16000-17000.
+
+**Solution 1: Use Standard Ports (Recommended)**
+
+Edit `examples/devcluster/agent_one_param.sh`:
+```bash
+# Define agent ports.
+AGENT_REGISTRY_PORT=8080  # Changed from 16000
+AGENT_PEER_PORT=8081      # Changed from 16001
+AGENT_SERVER_PORT=8082    # Changed from 16002
+
+# Rest of file unchanged...
+```
+
+Edit `examples/devcluster/agent_two_param.sh`:
+```bash
+# Define agent ports.
+AGENT_REGISTRY_PORT=8090  # Changed from 17000
+AGENT_PEER_PORT=8091      # Changed from 17001
+AGENT_SERVER_PORT=8092    # Changed from 17002
+
+# Rest of file unchanged...
+```
+
+Restart the cluster.
+```bash
+make docker_stop
+make devcluster
+```
+
+Test with new ports.
+```bash
+curl http://localhost:8080/v2/   # Should return: {}
+curl http://localhost:8090/v2/   # Should return: {}
+```
+
+**Solution 2: Diagnostic Commands**
+
+To confirm if it's a firewall issue:
+```bash
+# Test from inside containers (bypasses firewall)
+docker exec kraken-agent-one curl -s http://localhost:16000/v2/
+docker exec kraken-agent-two curl -s http://localhost:17000/v2/
+
+# Check port connectivity
+nc -zv localhost 16000
+nc -zv localhost 17000
+
+# Verify Docker port mapping
+docker port kraken-agent-one
+docker port kraken-agent-two
+```
+
+If internal container tests return `{}` but external tests fail, it confirms firewall blocking.
+
+#### **Other Common Issues**
+
 1. **Permission Denied Errors**: Make sure you applied the `chmod +x` fixes to all Dockerfiles
 2. **TLS Certificate Errors**: Ensure all configuration files have `disabled: true` for both server and client TLS
-3. **Port Conflicts**: Make sure ports 14000-17002 are not in use by other applications
+3. **Port Conflicts**: Make sure ports are not in use by other applications
 4. **Docker Desktop**: Make sure Docker Desktop is running and `host.docker.internal` is available
 
 ### Getting Help
