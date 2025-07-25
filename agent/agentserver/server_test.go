@@ -15,7 +15,6 @@ package agentserver
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -232,28 +231,28 @@ func TestReadinessCheckHandler(t *testing.T) {
 			probeErr:      errors.New("test scheduler error"),
 			buildIndexErr: nil,
 			trackerErr:    nil,
-			wantErr:       "GET http://{address}/readiness 503: agent not ready: test scheduler error",
+			wantErr:       "GET http://{address}/readiness 503: agent not ready: scheduler: test scheduler error",
 		},
 		{
 			desc:          "failure (build index not ready)",
 			probeErr:      nil,
 			buildIndexErr: errors.New("build index not ready"),
 			trackerErr:    nil,
-			wantErr:       "GET http://{address}/readiness 503: agent not ready: build index not ready",
+			wantErr:       "GET http://{address}/readiness 503: agent not ready: build-index: build index not ready",
 		},
 		{
 			desc:          "failure (tracker not ready)",
 			probeErr:      nil,
 			buildIndexErr: nil,
 			trackerErr:    errors.New("tracker not ready"),
-			wantErr:       "GET http://{address}/readiness 503: agent not ready: tracker not ready",
+			wantErr:       "GET http://{address}/readiness 503: agent not ready: tracker: tracker not ready",
 		},
 		{
 			desc:          "failure (all conditions fail)",
 			probeErr:      errors.New("test scheduler error"),
 			buildIndexErr: errors.New("build index not ready"),
 			trackerErr:    errors.New("tracker not ready"),
-			wantErr:       "GET http://{address}/readiness 503: agent not ready: test scheduler error\nbuild index not ready\ntracker not ready",
+			wantErr:       "GET http://{address}/readiness 503: agent not ready: build-index: build index not ready\nscheduler: test scheduler error\ntracker: tracker not ready",
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -356,7 +355,7 @@ func TestReadinessCheckHandlerCache(t *testing.T) {
 
 			tc.setupMocks(mocks)
 
-			s, addr := mocks.startServer(Config{readinessCacheTTL: tc.readinessCacheTTL})
+			s, addr := mocks.startServer(Config{ReadinessCacheTTL: tc.readinessCacheTTL})
 			_, err := httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
 			if tc.wantFirstCallSuccess {
 				require.NoError(err)
@@ -453,7 +452,7 @@ func TestPreloadHandler(t *testing.T) {
 			url:  fmt.Sprintf("/preload/tags/%s", tag),
 			setup: func(mocks *serverMocks) {
 				mocks.dockerCli.EXPECT().
-					PullImage(context.Background(), "repo1", "tag1").Return(nil)
+					PullImage(gomock.Any(), "repo1", "tag1").Return(nil)
 				mocks.containerRuntime.EXPECT().
 					DockerClient().Return(mocks.dockerCli)
 			},
@@ -463,7 +462,7 @@ func TestPreloadHandler(t *testing.T) {
 			url:  fmt.Sprintf("/preload/tags/%s?runtime=containerd&namespace=name.space1", tag),
 			setup: func(mocks *serverMocks) {
 				mocks.containerdCli.EXPECT().
-					PullImage(context.Background(), "name.space1", "repo1", "tag1").Return(nil)
+					PullImage(gomock.Any(), "name.space1", "repo1", "tag1").Return(nil)
 				mocks.containerRuntime.EXPECT().
 					ContainerdClient().Return(mocks.containerdCli)
 			},
@@ -472,7 +471,7 @@ func TestPreloadHandler(t *testing.T) {
 			name:          "unsupported runtime",
 			url:           fmt.Sprintf("/preload/tags/%s?runtime=crio", tag),
 			setup:         func(_ *serverMocks) {},
-			expectedError: "/preload/tags/repo1:tag1?runtime=crio 500: unsupported container runtime",
+			expectedError: "/preload/tags/repo1:tag1?runtime=crio 500: unsupported container runtime: crio",
 		},
 	}
 
