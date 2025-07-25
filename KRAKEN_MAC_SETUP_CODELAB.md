@@ -263,26 +263,56 @@ Check that all containers are running:
 docker ps --filter name=kraken
 ```
 
-You should see three containers running:
-- `kraken-herd`
-- `kraken-agent-one` 
-- `kraken-agent-two`
-
-Test the registry endpoints:
-
-```bash
-# Test proxy endpoint (for pushing)
-curl http://localhost:15000/v2/
-
-# Test agent endpoints (for pulling)
-curl http://localhost:16000/v2/
-curl http://localhost:17000/v2/
-
-# Test backend storage
-curl http://localhost:14000/health
+**Expected Output:**
+```
+CONTAINER ID   IMAGE              COMMAND                  CREATED         STATUS         PORTS                                                                                                                  NAMES
+295abac48744   kraken-agent:dev   "/usr/bin/kraken-age…"   3 minutes ago   Up 3 minutes   0.0.0.0:17000-17002->17000-17002/tcp, :::17000-17002->17000-17002/tcp                                                  kraken-agent-two
+7159ab30731d   kraken-agent:dev   "/usr/bin/kraken-age…"   3 minutes ago   Up 3 minutes   0.0.0.0:16000-16002->16000-16002/tcp, :::16000-16002->16000-16002/tcp                                                  kraken-agent-one
+12560448ad3b   kraken-herd:dev    "./herd_start_proces…"   3 minutes ago   Up 3 minutes   0.0.0.0:14000->14000/tcp, :::14000->14000/tcp, 0.0.0.0:15000-15005->15000-15005/tcp, :::15000-15005->15000-15005/tcp   kraken-herd
 ```
 
-All should return successful responses.
+You should see **three containers running** with **STATUS = "Up"**:
+- **`kraken-herd`**: Central services (proxy, origin, tracker, build-index, testfs)
+- **`kraken-agent-one`**: First agent instance (ports 16000-16002)
+- **`kraken-agent-two`**: Second agent instance (ports 17000-17002)
+
+Test the registry endpoints.
+
+**Test proxy endpoint (for pushing)**
+```bash
+curl http://localhost:15000/v2/
+```
+**Expected Response**
+```json
+{}
+```
+**Test kraken-agent-one endpoints (for pulling)**
+```bash
+
+curl http://localhost:16000/v2/
+```
+**Expected Response**
+```json
+{}
+```
+**Test kraken-agent-two endpoints (for pulling)**
+```bash
+curl http://localhost:17000/v2/
+```
+**Expected Response**
+```json
+{}
+```
+**Test backend storage**
+```bash
+curl http://localhost:14000/health
+```
+**Expected Response**
+```text
+OK
+```
+
+All should return successful responses with **HTTP 200 OK** status.
 
 ## Step 6: Test Image Push and Pull
 
