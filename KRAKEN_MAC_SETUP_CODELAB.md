@@ -319,7 +319,10 @@ All should return successful responses with **HTTP 200 OK** status.
 ### Push an Image to Kraken
 
 ```bash
-# Tag an existing image for Kraken
+# Pull an example image
+docker pull hello-world
+
+# Tag the image for Kraken
 docker tag hello-world localhost:15000/test/hello-world:latest
 
 # Push to Kraken (goes through the proxy)
