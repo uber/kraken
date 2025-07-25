@@ -278,39 +278,12 @@ You should see **three containers running** with **STATUS = "Up"**:
 
 Test the registry endpoints.
 
-**Test proxy endpoint (for pushing)**
-```bash
-curl http://localhost:15000/v2/
-```
-**Expected Response**
-```json
-{}
-```
-**Test kraken-agent-one endpoints (for pulling)**
-```bash
-
-curl http://localhost:16000/v2/
-```
-**Expected Response**
-```json
-{}
-```
-**Test kraken-agent-two endpoints (for pulling)**
-```bash
-curl http://localhost:17000/v2/
-```
-**Expected Response**
-```json
-{}
-```
-**Test backend storage**
-```bash
-curl http://localhost:14000/health
-```
-**Expected Response**
-```text
-OK
-```
+| Component             | Command                               | Expected Response |
+| :-------------------- | :------------------------------------ | :---------------- |
+| **Proxy (Pushing)** |  `curl http://localhost:15000/v2/`     | `{}`              |
+| **Kraken Agent One (Pulling)** |  `curl http://localhost:16000/v2/`     | `{}`              |
+| **Kraken Agent Two (Pulling)** |  `curl http://localhost:17000/v2/`     | `{}`              |
+| **Backend Storage** | `curl http://localhost:14000/health`  | `OK`              |
 
 All should return successful responses with **HTTP 200 OK** status.
 
