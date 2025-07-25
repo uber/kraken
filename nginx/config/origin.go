@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -33,7 +33,19 @@ server {
   proxy_send_timeout {{.upload_timeout}};
   proxy_read_timeout {{.download_timeout}};
   
-  # Keepalive settings
+  # Disable buffering for large blob transfers
+  # 
+  # proxy_buffering off: Stream responses directly from upstream to client
+  # instead of buffering entire response in nginx memory/disk. Critical for
+  # large container image layers (multi-GB) to avoid memory exhaustion and
+  # provide immediate streaming to clients.
+  #
+  # proxy_request_buffering off: Stream request body directly to upstream
+  # instead of buffering entire request. Enables immediate upload streaming
+  # for large image pushes without requiring disk space for temporary files.
+  #
+  # Without these settings, nginx would buffer entire blobs before forwarding,
+  # causing high memory usage, storage requirements, and delayed transfers.
   proxy_buffering off;
   proxy_request_buffering off;
 

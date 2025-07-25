@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,6 +30,10 @@ server {
   error_log {{.error_log_path}};
 
   # Timeout configurations from tracker server config
+  #
+  # proxy_connect_timeout: Maximum time to establish connection to tracker backend.
+  # Uses readiness_timeout since connection establishment should be fast for
+  # healthy tracker instances. Slow connections indicate network or server issues.
   proxy_connect_timeout {{.readiness_timeout}};
   proxy_send_timeout {{.announce_timeout}};
   proxy_read_timeout {{.announce_timeout}};
