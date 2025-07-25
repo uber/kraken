@@ -397,6 +397,9 @@ To really see the P2P benefits, try pushing and pulling larger images:
 
 ```bash
 # Use a larger image
+docker pull postgres:latest
+
+# Tag and push to Kraken
 docker tag postgres:latest localhost:15000/test/postgres:latest
 docker push localhost:15000/test/postgres:latest
 
