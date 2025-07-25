@@ -316,6 +316,9 @@ docker pull localhost:17000/test/hello-world:latest
 
 ```bash
 # Try with a larger image to see more P2P benefits
+docker pull nginx:latest
+
+# Tag and push to Kraken
 docker tag nginx:latest localhost:15000/test/nginx:latest
 docker push localhost:15000/test/nginx:latest
 
