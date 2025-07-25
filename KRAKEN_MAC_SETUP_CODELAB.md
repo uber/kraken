@@ -504,20 +504,14 @@ If internal container tests return `{}` but external tests fail, it confirms fir
 
 ## What You've Accomplished
 
-🎉 **Congratulations!** You've successfully:
+**Congratulations!** You've successfully
 
-1. ✅ Set up a complete Kraken P2P Docker registry
-2. ✅ Fixed binary permission issues in Dockerfiles
-3. ✅ Resolved TLS configuration problems
-4. ✅ Tested image push and pull workflows
-5. ✅ Experienced P2P distribution in action
-6. ✅ Learned how Kraken's architecture works
-
-You now have a working P2P Docker registry that can:
-- Scale to thousands of nodes
-- Distribute large images efficiently
-- Reduce load on central storage
-- Provide high availability with no single point of failure
+1. Set up a complete Kraken P2P Docker registry
+2. Fixed binary permission issues in Dockerfiles
+3. Resolved TLS configuration problems
+4. Tested image push and pull workflows
+5. Experienced P2P distribution in action
+6. Learned how Kraken's architecture works
 
 ## Next Steps
 
