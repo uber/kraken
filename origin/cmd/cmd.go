@@ -410,8 +410,12 @@ func startServices(config Config, flags *Flags, server *blobserver.Server, sched
 	log.Fatal(nginx.Run(
 		config.Nginx,
 		map[string]interface{}{
-			"port":   flags.BlobServerPort,
-			"server": nginx.GetServer(config.BlobServer.Listener.Net, config.BlobServer.Listener.Addr),
+			"port":               flags.BlobServerPort,
+			"server":             nginx.GetServer(config.BlobServer.Listener.Net, config.BlobServer.Listener.Addr),
+			"download_timeout":   nginx.FormatDurationForNginx(config.BlobServer.DownloadTimeout),
+			"upload_timeout":     nginx.FormatDurationForNginx(config.BlobServer.UploadTimeout),
+			"backend_timeout":    nginx.FormatDurationForNginx(config.BlobServer.BackendTimeout),
+			"replication_timeout": nginx.FormatDurationForNginx(config.BlobServer.ReplicationTimeout),
 		},
 		nginx.WithTLS(config.TLS)))
 }

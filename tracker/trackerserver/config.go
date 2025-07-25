@@ -30,6 +30,11 @@ type Config struct {
 	AnnounceInterval time.Duration `yaml:"announce_interval"`
 
 	Listener listener.Config `yaml:"listener"`
+
+	// Timeout configurations
+	MetaInfoTimeout  time.Duration `yaml:"metainfo_timeout"`   // Timeout for metainfo requests to origins
+	AnnounceTimeout  time.Duration `yaml:"announce_timeout"`   // Timeout for announce operations  
+	ReadinessTimeout time.Duration `yaml:"readiness_timeout"`  // Timeout for readiness checks
 }
 
 func (c Config) applyDefaults() Config {
@@ -41,6 +46,15 @@ func (c Config) applyDefaults() Config {
 	}
 	if c.AnnounceInterval == 0 {
 		c.AnnounceInterval = 3 * time.Second
+	}
+	if c.MetaInfoTimeout == 0 {
+		c.MetaInfoTimeout = 2 * time.Minute
+	}
+	if c.AnnounceTimeout == 0 {
+		c.AnnounceTimeout = 30 * time.Second
+	}
+	if c.ReadinessTimeout == 0 {
+		c.ReadinessTimeout = 30 * time.Second
 	}
 	return c
 }

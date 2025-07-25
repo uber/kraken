@@ -158,6 +158,11 @@ func Run(flags *Flags, opts ...Option) {
 	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
 		"port": flags.Port,
 		"server": nginx.GetServer(
-			config.TrackerServer.Listener.Net, config.TrackerServer.Listener.Addr)},
+			config.TrackerServer.Listener.Net, config.TrackerServer.Listener.Addr),
+		// Pass timeout parameters from tracker server config
+		"metainfo_timeout":  nginx.FormatDurationForNginx(config.TrackerServer.MetaInfoTimeout),
+		"announce_timeout":  nginx.FormatDurationForNginx(config.TrackerServer.AnnounceTimeout), 
+		"readiness_timeout": nginx.FormatDurationForNginx(config.TrackerServer.ReadinessTimeout),
+	},
 		nginx.WithTLS(config.TLS)))
 }

@@ -40,13 +40,44 @@ server {
   gzip on;
   gzip_types text/plain test/csv application/json;
 
+  # Timeout configurations from agent server config
+  proxy_connect_timeout {{.readiness_timeout}};
+  proxy_send_timeout {{.download_timeout}};
+  proxy_read_timeout {{.download_timeout}};
+
   location ~ ^/(health|readiness)$ {
     proxy_pass http://agent-server;
+    
+    # Use shorter timeout for health checks
+    proxy_read_timeout {{.readiness_timeout}};
+    proxy_send_timeout {{.readiness_timeout}};
+  }
+
+  # Container runtime operations (preload/pull) need longer timeouts
+  location ~ ^/preload/ {
+    proxy_pass http://agent-server;
+    
+    # Use container runtime timeout for these operations
+    proxy_read_timeout {{.container_runtime_timeout}};
+    proxy_send_timeout {{.container_runtime_timeout}};
+  }
+
+  # Download operations
+  location ~ ^/namespace/.*/blobs/ {
+    proxy_pass http://agent-server;
+    
+    # Use download timeout for blob operations
+    proxy_read_timeout {{.download_timeout}};
+    proxy_send_timeout {{.download_timeout}};
   }
 
   location / {
     proxy_pass http://registry-backend;
     proxy_next_upstream error timeout http_404 http_500;
+    
+    # Standard timeouts for registry operations
+    proxy_read_timeout {{.download_timeout}};
+    proxy_send_timeout {{.download_timeout}};
   }
 }
 `

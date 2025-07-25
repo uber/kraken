@@ -390,8 +390,12 @@ func (a *App) Run(ctx context.Context) error {
 			"registry_server": nginx.GetServer(
 				a.config.Registry.Docker.HTTP.Net, a.config.Registry.Docker.HTTP.Addr),
 			"agent_server":    fmt.Sprintf("127.0.0.1:%d", a.flags.AgentServerPort),
-			"registry_backup": a.config.RegistryBackup},
-			nginx.WithTLS(a.config.TLS))
+			"registry_backup": a.config.RegistryBackup,
+			// Pass timeout parameters from agent server config
+			"download_timeout":           nginx.FormatDurationForNginx(a.config.AgentServer.DownloadTimeout),
+			"container_runtime_timeout":  nginx.FormatDurationForNginx(a.config.AgentServer.ContainerRuntimeTimeout),
+			"readiness_timeout":         nginx.FormatDurationForNginx(a.config.AgentServer.ReadinessTimeout),
+		}, nginx.WithTLS(a.config.TLS))
 		nginxDone <- err
 	}()
 
