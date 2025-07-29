@@ -3,6 +3,12 @@ name: Build and Test
 # Trigger the action on push and pull requests
 on:
   push:
+  pull_request:
+    branches: [ main, master ]
+  pull_request_target:  # For forks - runs in context of target repo
+    branches: [ main, master ]
+    types: [ opened, synchronize, reopened ]
+
 
 jobs:
   build:
