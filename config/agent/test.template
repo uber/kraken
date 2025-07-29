@@ -6,6 +6,10 @@ scheduler:
 
 peer_id_factory: random
 
+container_runtime:
+  docker:
+    docker_version: "1.24"
+
 tracker:
   hosts:
     static: {trackers}

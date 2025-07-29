@@ -160,6 +160,8 @@ func parseKey(path, passphrasePath string) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read passphrase file: %s", err)
 		}
+		// Trim any newlines from the passphrase
+		passphrase = bytes.TrimSpace(passphrase)
 		keyBytes, err := decryptPEMBlock(keyPEM, passphrase)
 		if err != nil {
 			return nil, fmt.Errorf("decrypt key: %s", err)

@@ -15,7 +15,7 @@ from __future__ import absolute_import
 
 import time
 
-from conftest import (
+from .conftest import (
     TEST_IMAGE,
     TEST_IMAGE_2,
 )
@@ -70,7 +70,7 @@ def test_proxy_catalog(proxy):
         proxy.push(TEST_IMAGE)
         proxy.push(TEST_IMAGE_2)
 
-    repos = map(lambda img: img.split(':')[0], (TEST_IMAGE, TEST_IMAGE_2))
+    repos = list(map(lambda img: img.split(':')[0], (TEST_IMAGE, TEST_IMAGE_2)))
 
     assert sorted(proxy.catalog()) == sorted(repos)
 

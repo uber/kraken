@@ -35,6 +35,7 @@ type PrefetchHandler struct {
 	tagClient     tagclient.Client
 	tagParser     TagParser
 	metrics       tally.Scope
+	synchronous   bool
 }
 
 // Request and response payloads.
@@ -81,6 +82,7 @@ func NewPrefetchHandler(
 	tagClient tagclient.Client,
 	tagParser TagParser,
 	metrics tally.Scope,
+	synchronous bool,
 ) *PrefetchHandler {
 	if tagParser == nil {
 		tagParser = &DefaultTagParser{}
@@ -90,6 +92,7 @@ func NewPrefetchHandler(
 		tagClient:     tagClient,
 		tagParser:     tagParser,
 		metrics:       metrics.SubScope("prefetch"),
+		synchronous:   synchronous,
 	}
 }
 
@@ -186,8 +189,12 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ph.metrics.SubScope("prefetch").Counter("initiated").Inc(1)
 	writePrefetchResponse(w, reqBody.Tag, "prefetching initiated successfully", reqBody.TraceId)
 
-	// Prefetch blobs asynchronously.
-	go ph.prefetchBlobs(logger, namespace, digests, size)
+	if ph.synchronous {
+		ph.prefetchBlobs(logger, namespace, digests, size)
+	} else {
+		// Prefetch blobs asynchronously.
+		go ph.prefetchBlobs(logger, namespace, digests, size)
+	}
 }
 
 // prefetchBlobs downloads blobs in parallel.

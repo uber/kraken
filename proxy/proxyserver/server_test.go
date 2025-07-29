@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/uber/kraken/utils/dockerutil"
@@ -197,7 +198,8 @@ func TestPrefetch(t *testing.T) {
 		TraceId: "abc",
 	})
 
-	mocks.tagClient.EXPECT().Get(fmt.Sprintf("%s%%2F%s", namespace, tag)).Return(manifest, nil)
+	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
+	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
 	mocks.originClient.EXPECT().DownloadBlob(namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
 	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[1], ioutil.Discard).Return(nil)
 	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[2], ioutil.Discard).Return(nil)
