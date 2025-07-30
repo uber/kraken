@@ -58,13 +58,19 @@ RUN if [ ${USERID} != "0" ]; then mkdir -p /etc/sudoers.d/ && \
 COPY ./docker/setup_nginx.sh /tmp/setup_nginx.sh
 RUN /tmp/setup_nginx.sh ${USERNAME}
 
-USER ${USERNAME}
-
 COPY ./build-index/build-index /usr/bin/kraken-build-index
 COPY ./origin/origin           /usr/bin/kraken-origin
 COPY ./proxy/proxy             /usr/bin/kraken-proxy
 COPY ./tools/bin/testfs/testfs /usr/bin/kraken-testfs
 COPY ./tracker/tracker         /usr/bin/kraken-tracker
+
+RUN chmod +x /usr/bin/kraken-build-index && \
+    chmod +x /usr/bin/kraken-origin && \
+    chmod +x /usr/bin/kraken-proxy && \
+    chmod +x /usr/bin/kraken-testfs && \
+    chmod +x /usr/bin/kraken-tracker
+
+USER ${USERNAME}
 
 WORKDIR /etc/kraken
 
