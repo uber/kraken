@@ -1,11 +1,7 @@
 FROM debian:12
 
 # Fix repository configuration for Debian 12 (bookworm) with CDN mirror for better stability
-RUN rm -f /etc/apt/sources.list.d/debian.sources && \
-    echo "deb http://cdn-fastly.deb.debian.org/debian bookworm main" > /etc/apt/sources.list && \
-    echo "deb http://security.debian.org/debian-security bookworm-security main" >> /etc/apt/sources.list && \
-    echo "deb http://cdn-fastly.deb.debian.org/debian bookworm-updates main" >> /etc/apt/sources.list && \
-    echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until && \
+RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until && \
     echo 'Acquire::AllowInsecureRepositories "true";' >> /etc/apt/apt.conf.d/99no-check-valid-until && \
     echo 'Acquire::Retries "15";' >> /etc/apt/apt.conf.d/99no-check-valid-until && \
     echo 'Acquire::http::Timeout "120";' >> /etc/apt/apt.conf.d/99no-check-valid-until
