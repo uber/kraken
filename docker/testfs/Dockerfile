@@ -8,9 +8,10 @@ RUN mkdir -p -m 777 /var/cache/kraken/kraken-testfs
 ARG USERNAME="root"
 ARG USERID="0"
 RUN if [ ${USERID} != "0" ]; then useradd --uid ${USERID} ${USERNAME}; fi
-USER ${USERNAME}
 
 COPY tools/bin/testfs/testfs /usr/bin/kraken-testfs
 RUN chmod +x /usr/bin/kraken-testfs
+
+USER ${USERNAME}
 
 WORKDIR /etc/kraken
