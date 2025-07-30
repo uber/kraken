@@ -30,6 +30,11 @@ metrics:
   m3:
     service: kraken-proxy
 
+server:
+  listener:
+    net: unix
+    addr: /tmp/kraken-proxy.sock
+
 registry:
   docker:
     version: 0.1

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -36,11 +36,12 @@ var _manifestRegexp = regexp.MustCompile(`^application/vnd.docker.distribution.m
 // PreheatHandler defines the handler of preheat.
 type PreheatHandler struct {
 	clusterClient blobclient.ClusterClient
+	synchronous   bool
 }
 
 // NewPreheatHandler creates a new preheat handler.
-func NewPreheatHandler(client blobclient.ClusterClient) *PreheatHandler {
-	return &PreheatHandler{client}
+func NewPreheatHandler(client blobclient.ClusterClient, synchronous bool) *PreheatHandler {
+	return &PreheatHandler{client, synchronous}
 }
 
 // Handle notifies origins to cache the blob related to the image.
@@ -75,13 +76,18 @@ func (ph *PreheatHandler) process(repo, digest string) error {
 			log.With("repo", repo, "digest", string(desc.Digest)).Errorf("parse digest: %s", err)
 			continue
 		}
-		go func() {
+		f := func() {
 			log.With("repo", repo).Debugf("trigger origin cache: %+v", d)
 			_, err = ph.clusterClient.GetMetaInfo(repo, d)
 			if err != nil && !httputil.IsAccepted(err) {
 				log.With("repo", repo, "digest", digest).Errorf("notify origin cache: %s", err)
 			}
-		}()
+		}
+		if ph.synchronous {
+			f()
+		} else {
+			go f()
+		}
 	}
 	return nil
 }

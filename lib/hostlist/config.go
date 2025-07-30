@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -106,6 +106,7 @@ func (r *dnsResolver) resolve() (stringset.Set, error) {
 	if len(names) == 0 {
 		return nil, errors.New("dns record empty")
 	}
+
 	addrs, err := attachPortIfMissing(stringset.FromSlice(names), r.port)
 	if err != nil {
 		return nil, fmt.Errorf("attach port to dns contents: %s", err)

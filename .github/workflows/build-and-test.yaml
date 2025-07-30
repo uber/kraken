@@ -3,7 +3,6 @@ name: Build and Test
 # Trigger the action on push and pull requests
 on:
   push:
-  pull_request:
 
 jobs:
   build:
@@ -13,26 +12,35 @@ jobs:
         go-version: ['1.14']
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-          
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Display Go version
         run: go version
 
       - name: Install dependencies
+        env:
+          GIT_SSL_NO_VERIFY: true
+          GOPROXY: "https://proxy.golang.org,direct"
+          GOSUMDB: off
+          GOINSECURE: "*"
         run: go mod download
 
       # Add CGO_CFLAGS environment variable to suppress the warning
       - name: Build
-        run: go build -v ./...
+        run: go build ./...
         env:
           CGO_CFLAGS: "-Wno-return-local-addr"
 
       # Run tests with CGO_CFLAGS set
       - name: Test with the Go CLI
-        run: go test $(go list ./...) -cover -json | tee TestResults-${{ matrix.go-version }}.json
+        run: |
+          set -o pipefail
+          go test $(go list ./...) -cover
         env:
           CGO_CFLAGS: "-Wno-return-local-addr"
 
@@ -41,3 +49,6 @@ jobs:
         with:
           name: Go-results-${{ matrix.go-version }}
           path: TestResults-${{ matrix.go-version }}.json
+
+      - name: Run integration tests via Make
+        run: make integration

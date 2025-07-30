@@ -249,6 +249,7 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 		return err
 	}
 	if err := s.downloadBlob(namespace, d, w); err != nil {
+		log.With("namespace", namespace).Errorf("Error downloading blob: %s", err)
 		return err
 	}
 	setOctetStreamContentType(w)
