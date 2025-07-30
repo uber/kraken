@@ -22,24 +22,54 @@ ALL_PKGS = $(shell go list $(sort $(dir $(ALL_SRC))))
 
 # ==== BASIC ====
 
-BUILD_LINUX = GOOS=linux GOARCH=amd64 $(GO) build -i -o $@ $(BUILD_FLAGS) $(BUILD_GC_FLAGS) $(BUILD_VERSION_FLAGS) ./$(dir $@)
+ifdef RUNNER_WORKSPACE
+REPO_ROOT := $(RUNNER_WORKSPACE)/kraken
+else
+REPO_ROOT := $(CURDIR)
+endif
+
+UNAME_S := $(shell uname -s)
 
 # Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
 # This workaround builds the binary inside a linux container.
-CROSS_COMPILER = docker run --rm -it -v $(shell pwd):/go/src/github.com/uber/kraken -w /go/src/github.com/uber/kraken -e GOPROXY=$(GOPROXY) $(GOLANG_IMAGE) go build -o ./$@ ./$(dir $@)
+# However, for tools like puller that don't use cgo, we can build natively on macOS.
+CROSS_COMPILER = \
+  docker run --rm \
+    -v $(REPO_ROOT):/app \
+    -w /app \
+    -e GIT_SSL_NO_VERIFY=true \
+    -e GOPROXY=$(GOPROXY) \
+    -e GOSUMDB=off \
+    -e GOINSECURE="*" \
+    -e GO111MODULE=on \
+    $(GOLANG_IMAGE) \
+    go build -o ./$@ ./$(dir $@);
 
+NATIVE_COMPILER = GOOS=$(shell echo $(UNAME_S) | tr '[:upper:]' '[:lower:]') GOARCH=amd64 go build -o $@ ./$(dir $@)
+
+# Tools that can be built natively on macOS
+NATIVE_TOOLS = tools/bin/puller/puller tools/bin/reload/reload tools/bin/visualization/visualization
+
+# Binaries that require Linux build
 LINUX_BINS = \
-	agent/agent \
-	build-index/build-index \
-	origin/origin \
-	proxy/proxy \
-	tools/bin/testfs/testfs \
-	tracker/tracker
+    agent/agent \
+    build-index/build-index \
+    origin/origin \
+    proxy/proxy \
+    tools/bin/testfs/testfs \
+    tracker/tracker
 
 REGISTRY ?= gcr.io/uber-container-tools
 
-$(LINUX_BINS):: $(ALL_SRC)
+$(LINUX_BINS): $(ALL_SRC)
 	$(CROSS_COMPILER)
+
+$(NATIVE_TOOLS): $(ALL_SRC)
+ifeq ($(UNAME_S),Darwin)
+	$(NATIVE_COMPILER)
+else
+	$(CROSS_COMPILER)
+endif
 
 define tag_image
 	docker tag $(1):$(PACKAGE_VERSION) $(1):dev
@@ -89,9 +119,13 @@ unit-test:
 docker_stop:
 	-docker ps -a --format '{{.Names}}' | grep kraken | while read n; do docker rm -f $$n; done
 
-venv: requirements-tests.txt
-	virtualenv --python=$(shell which python2) --setuptools venv
-	source venv/bin/activate
+.PHONY: clean_venv
+clean_venv:
+	rm -rf venv
+
+venv: clean_venv requirements-tests.txt
+	python3 -m venv venv
+	venv/bin/pip install --upgrade pip setuptools
 	venv/bin/pip install -r requirements-tests.txt
 
 .PHONY: integration
@@ -106,13 +140,12 @@ integration: venv $(LINUX_BINS) docker_stop tools/bin/puller/puller
 	docker build $(BUILD_QUIET) -t kraken-proxy:$(PACKAGE_VERSION) -f docker/proxy/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-testfs:$(PACKAGE_VERSION) -f docker/testfs/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
 	docker build $(BUILD_QUIET) -t kraken-tracker:$(PACKAGE_VERSION) -f docker/tracker/Dockerfile --build-arg USERID=$(USERID) --build-arg USERNAME=$(USERNAME) ./
-	PACKAGE_VERSION=$(PACKAGE_VERSION) venv/bin/py.test --timeout=120 -v -k $(NAME) test/python/$(FILE)
+	cd test && PYTHONPATH=. PACKAGE_VERSION=$(PACKAGE_VERSION) PYTHONWARNINGS=ignore ../venv/bin/python3 -m pytest --timeout=120 -v -k $(NAME) python/$(FILE)
 
 .PHONY: runtest
 NAME?=test_
 runtest: venv docker_stop
-	source venv/bin/activate
-	venv/bin/py.test --timeout=120 -v -k $(NAME) test/python
+	cd test && PYTHONPATH=. PYTHONWARNINGS=ignore ../venv/bin/python3 -m pytest --timeout=120 -v -k $(NAME) python
 
 .PHONY: devcluster
 devcluster: $(LINUX_BINS) docker_stop images
@@ -127,17 +160,8 @@ TOOLS = \
 	tools/bin/reload/reload \
 	tools/bin/visualization/visualization
 
-tools/bin/puller/puller:: $(wildcard tools/bin/puller/puller/*.go)
-	$(CROSS_COMPILER)
-
-tools/bin/reload/reload:: $(wildcard tools/bin/reload/reload/*.go)
-	$(CROSS_COMPILER)
-
-tools/bin/visualization/visualization:: $(wildcard tools/bin/visualization/visualization/*.go)
-	$(CROSS_COMPILER)
-
 .PHONY: tools
-tools: $(TOOLS)
+tools: $(NATIVE_TOOLS)
 
 # Creates a release summary containing the build revisions of each component
 # for the specified version.

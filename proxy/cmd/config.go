@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,6 +19,7 @@ import (
 	"github.com/uber/kraken/lib/upstream"
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
+	"github.com/uber/kraken/proxy/proxyserver"
 	"github.com/uber/kraken/proxy/registryoverride"
 	"github.com/uber/kraken/utils/httputil"
 
@@ -34,6 +35,7 @@ type Config struct {
 	ZapLogging       zap.Config              `yaml:"zap"`
 	Metrics          metrics.Config          `yaml:"metrics"`
 	RegistryOverride registryoverride.Config `yaml:"registryoverride"`
+	Server           proxyserver.Config      `yaml:"server"`
 	Nginx            nginx.Config            `yaml:"nginx"`
 	TLS              httputil.TLSConfig      `yaml:"tls"`
 }

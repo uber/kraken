@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,6 +14,7 @@
 package proxyserver
 
 import (
+	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -25,7 +26,9 @@ import (
 
 type serverMocks struct {
 	originClient *mockblobclient.MockClusterClient
+	tagClient    *mocktagclient.MockClient
 	cleanup      *testutil.Cleanup
+	config       Config
 }
 
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
@@ -36,15 +39,18 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	cleanup.Add(ctrl.Finish)
 
 	originClient := mockblobclient.NewMockClusterClient(ctrl)
+	tagClient := mocktagclient.NewMockClient(ctrl)
 
 	return &serverMocks{
 		originClient: originClient,
+		tagClient:    tagClient,
 		cleanup:      &cleanup,
+		config:       Config{},
 	}, cleanup.Run
 }
 
 func (m *serverMocks) startServer() string {
-	s := New(tally.NoopScope, m.originClient)
+	s := New(tally.NoopScope, m.config, m.originClient, m.tagClient, true)
 	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
 	return addr

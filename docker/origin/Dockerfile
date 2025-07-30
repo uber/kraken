@@ -1,6 +1,21 @@
 FROM debian:10
 
-RUN apt-get update && apt-get install -y curl sqlite3 nginx
+RUN apt-get clean \
+ && rm -rf /var/lib/apt/lists/* \
+ && \
+   ( \
+     unset http_proxy https_proxy no_proxy && \
+     apt-get update -o Acquire::Retries=3 -o Acquire::http::No-Cache=true \
+   ) \
+ && \
+   ( \
+     unset http_proxy https_proxy no_proxy && \
+     apt-get install -y --no-install-recommends \
+       curl \
+       sqlite3 \
+       nginx \
+   ) \
+ && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p -m 777 /var/log/kraken/kraken-origin
 RUN mkdir -p -m 777 /var/cache/kraken/kraken-origin

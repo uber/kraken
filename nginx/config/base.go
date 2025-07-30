@@ -26,6 +26,7 @@ events {
 }
 
 http {
+  limit_req_zone $binary_remote_addr zone=per_ip_limit:10m rate=100r/s;
 
   ##
   # Basic Settings

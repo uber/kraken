@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/uber/kraken/utils/dockerutil"
@@ -139,6 +140,71 @@ func TestPreheat(t *testing.T) {
 	mocks.originClient.EXPECT().GetMetaInfo(repo, layers[2]).Return(nil, nil)
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/registry/notifications", addr),
+		httputil.SendBody(bytes.NewReader(b)))
+	require.NoError(err)
+}
+
+func TestPrefetchWithoutTag(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr := mocks.startServer()
+
+	_, err := httputil.Post(fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr))
+	require.Error(err)
+	require.True(httputil.IsStatus(err, http.StatusBadRequest))
+}
+
+func TestPrefetchMalformedTag(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr := mocks.startServer()
+
+	b, _ := json.Marshal(prefetchBody{
+		TraceId: "abc",
+		Tag:     "invalid",
+	})
+
+	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr),
+		httputil.SendBody(bytes.NewReader(b)),
+	)
+	require.Error(err)
+	require.True(httputil.IsStatus(err, http.StatusBadRequest))
+}
+
+func TestPrefetch(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr := mocks.startServer()
+
+	repo := "kraken-test"
+	namespace := "preheat"
+	tag := "abcdef:v1.0.0"
+
+	layers := core.DigestListFixture(3)
+	manifest, bs := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
+
+	b, _ := json.Marshal(prefetchBody{
+		Tag:     fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
+		TraceId: "abc",
+	})
+
+	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
+	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[1], ioutil.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[2], ioutil.Discard).Return(nil)
+	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr),
 		httputil.SendBody(bytes.NewReader(b)))
 	require.NoError(err)
 }
