@@ -40,9 +40,7 @@ server {
   gzip on;
   gzip_types text/plain test/csv application/json;
 
-  location ~ ^/(health|readiness)$ {
-    proxy_pass http://agent-server;
-  }
+{{healthEndpoint "http://agent-server"}}
 
   location / {
     proxy_pass http://registry-backend;

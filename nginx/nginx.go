@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -169,7 +169,7 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	}
 
 	// Create root directory for generated files for nginx.
-	if err := os.MkdirAll(_genDir, 0775); err != nil {
+	if err := os.MkdirAll(_genDir, 0o775); err != nil {
 		return err
 	}
 
@@ -197,7 +197,7 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 		cabundle.Close()
 	}
 
-	if err := os.MkdirAll(config.CacheDir, 0775); err != nil {
+	if err := os.MkdirAll(config.CacheDir, 0o775); err != nil {
 		return err
 	}
 
@@ -211,11 +211,11 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	}
 
 	conf := filepath.Join(_genDir, config.Name)
-	if err := ioutil.WriteFile(conf, src, 0755); err != nil {
+	if err := ioutil.WriteFile(conf, src, 0o755); err != nil {
 		return fmt.Errorf("write src: %s", err)
 	}
 
-	stdout, err := os.OpenFile(config.StdoutLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	stdout, err := os.OpenFile(config.StdoutLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("open stdout log: %s", err)
 	}
@@ -231,7 +231,10 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 }
 
 func populateTemplate(tmpl string, args map[string]interface{}) ([]byte, error) {
-	t, err := template.New("nginx").Parse(tmpl)
+	funcMap := template.FuncMap{
+		"healthEndpoint": generateHealthEndpoint,
+	}
+	t, err := template.New("nginx").Funcs(funcMap).Parse(tmpl)
 	if err != nil {
 		return nil, fmt.Errorf("parse: %s", err)
 	}
@@ -240,6 +243,16 @@ func populateTemplate(tmpl string, args map[string]interface{}) ([]byte, error) 
 		return nil, fmt.Errorf("exec: %s", err)
 	}
 	return out.Bytes(), nil
+}
+
+// generateHealthEndpoint creates a standardized health endpoint location block.
+// Usage in templates: {{healthEndpoint "http://upstream-name"}}
+func generateHealthEndpoint(upstream string) string {
+	return fmt.Sprintf(`  # Health and readiness checks without logging to reduce noise
+  location ~ ^/(health|readiness)$ {
+    access_log off;  # Disable logging for health checks
+    proxy_pass %s;
+  }`, upstream)
 }
 
 // GetServer returns a string for an nginx server directive value.
