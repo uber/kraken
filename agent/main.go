@@ -17,10 +17,11 @@ import (
 	"github.com/uber/kraken/agent/cmd"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry"
+	"github.com/uber/kraken/lib/store"
 )
 
 func main() {
-	dockerregistry.RegisterKrakenStorageDriver(func(repo string, digest core.Digest) (bool, error) {
+	dockerregistry.RegisterKrakenStorageDriver(func(repo string, digest core.Digest, blob store.FileReader) (bool, error) {
 		return true, nil
 	})
 	cmd.Run(cmd.ParseFlags())

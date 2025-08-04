@@ -55,7 +55,7 @@ import (
 // Name of storage driver.
 const Name = "kraken"
 
-func RegisterKrakenStorageDriver(verification func(repo string, digest core.Digest) (bool, error)) {
+func RegisterKrakenStorageDriver(verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error)) {
 	factory.Register(Name, &krakenStorageDriverFactory{verification})
 }
 
@@ -81,7 +81,7 @@ func toDriverError(err error, path string) error {
 }
 
 type krakenStorageDriverFactory struct {
-	verification func(repo string, digest core.Digest) (bool, error)
+	verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error)
 }
 
 func getParam(params map[string]interface{}, name string) interface{} {
@@ -128,7 +128,7 @@ func NewReadWriteStorageDriver(
 	config Config,
 	cas *store.CAStore,
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest) (bool, error),
+	verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error),
 	metrics tally.Scope) *KrakenStorageDriver {
 
 	return &KrakenStorageDriver{
@@ -146,7 +146,7 @@ func NewReadOnlyStorageDriver(
 	config Config,
 	bs BlobStore,
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest) (bool, error),
+	verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error),
 	metrics tally.Scope) *KrakenStorageDriver {
 
 	return &KrakenStorageDriver{

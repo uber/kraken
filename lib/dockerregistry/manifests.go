@@ -16,6 +16,7 @@ package dockerregistry
 import (
 	"fmt"
 	"github.com/uber-go/tally"
+	"github.com/uber/kraken/lib/store"
 	"strings"
 	"time"
 
@@ -35,13 +36,13 @@ const (
 
 type manifests struct {
 	transferer   transfer.ImageTransferer
-	verification func(repo string, digest core.Digest) (bool, error)
+	verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error)
 	metrics      tally.Scope
 }
 
 func newManifests(
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest) (bool, error),
+	verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error),
 	metrics tally.Scope,
 ) *manifests {
 	return &manifests{transferer, verification, metrics}
@@ -80,7 +81,13 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 		return nil, &InvalidRequestError{path}
 	}
 
-	valid, err := t.verification(repo, digest)
+	blob, err := t.transferer.Download(repo, digest)
+	if err != nil {
+		return nil, fmt.Errorf("transferer download: %w", err)
+	}
+	defer blob.Close()
+
+	valid, err := t.verification(repo, digest, blob)
 	if err != nil {
 		return nil, fmt.Errorf("verification failed: %w", err)
 	}
@@ -90,12 +97,6 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 		t.metrics.Counter(getSuccessCounter).Inc(1)
 		log.With("repo", repo, "digest", digest).Info("Manifest found")
 	}
-
-	blob, err := t.transferer.Download(repo, digest)
-	if err != nil {
-		return nil, fmt.Errorf("transferer download: %w", err)
-	}
-	defer blob.Close()
 
 	return []byte(digest.String()), nil
 }
