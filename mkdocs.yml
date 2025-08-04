@@ -2,7 +2,7 @@ site_name: Kraken
 nav:
   - Home: index.md
   - Architecture: ARCHITECTURE.md
-  - Configuration: CONFIGURATIION.md
+  - Configuration: CONFIGURATION.md
   - Endpoints: ENDPOINTS.md
   - 'Harbor Integration': INTEGRATEWITHHARBOR.md
   - Contributing: CONTRIBUTING.md
