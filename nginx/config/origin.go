@@ -28,7 +28,7 @@ server {
   gzip on;
   gzip_types text/plain test/csv application/json;
 
-{{healthEndpoint "http://{{.server}}"}}
+{{healthEndpoint .server}}
 
   location / {
     proxy_pass http://{{.server}};

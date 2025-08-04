@@ -44,7 +44,7 @@ server {
   # Committing large blobs might take a while.
   proxy_read_timeout 3m;
 
-{{healthEndpoint "http://proxy-server"}}
+{{healthEndpoint "proxy-server"}}
 
   location /v2/_catalog {
     proxy_pass http://registry-override;

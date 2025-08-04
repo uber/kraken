@@ -29,7 +29,7 @@ server {
   access_log {{.access_log_path}};
   error_log {{.error_log_path}};
 
-{{healthEndpoint "http://tracker"}}
+{{healthEndpoint "tracker"}}
 
   location / {
     proxy_pass http://tracker;
