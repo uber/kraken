@@ -63,10 +63,6 @@ server {
       set $hostheader "host.docker.internal";
     }
     proxy_set_header Host $hostheader:{{.}};
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Original-URI $request_uri;
   }
 
   location /proxy {
@@ -89,10 +85,6 @@ server {
       set $hostheader "host.docker.internal";
     }
     proxy_set_header Host $hostheader:{{.}};
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Original-URI $request_uri;
   }
 
   location / {
@@ -112,10 +104,6 @@ server {
       set $hostheader "host.docker.internal";
     }
     proxy_set_header Host $hostheader:{{.}};
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Original-URI $request_uri;
   }
 }
 {{end}}

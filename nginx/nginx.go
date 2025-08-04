@@ -248,7 +248,7 @@ func populateTemplate(tmpl string, args map[string]interface{}) ([]byte, error) 
 // generateHealthEndpoint creates a standardized health endpoint location block.
 // Usage in templates: {{healthEndpoint "http://upstream-name"}}
 func generateHealthEndpoint(upstream string) string {
-	return fmt.Sprintf(`  # Health and readiness checks without logging to reduce noise
+	return fmt.Sprintf(`
   location ~ ^/(health|readiness)$ {
     access_log off;  # Disable logging for health checks
     proxy_pass %s;
