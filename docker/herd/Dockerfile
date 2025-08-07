@@ -25,6 +25,7 @@ RUN apt-get clean \
        nginx \
        sudo \
        procps \
+       gettext-base \
    ) \
  && rm -rf /var/lib/apt/lists/*
 

@@ -10,17 +10,20 @@ if [ -z "$HERD_HOST_IP" ]; then
     exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MULTIHOST_DIR="$(dirname "$SCRIPT_DIR")"
+
 export HERD_HOST_IP
 
 echo "=== Deploying Kraken Herd on ${HERD_HOST_IP} ==="
 
 # Build images if needed
 echo "Building Kraken images..."
-make images
+(cd "$MULTIHOST_DIR/../../" && make images)
 
 # Start herd
 echo "Starting herd container..."
-./examples/multihost/herd_start_container.sh
+(cd "$MULTIHOST_DIR" && HERD_HOST_IP="$HERD_HOST_IP" ./herd_start_container.sh)
 
 echo ""
 echo "=== Herd Deployment Complete! ==="

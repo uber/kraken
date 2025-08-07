@@ -9,7 +9,7 @@ if [ -z "$HERD_HOST_IP" ]; then
     exit 1
 fi
 
-source examples/multihost/herd_param.sh
+source herd_param.sh
 
 echo "Starting Kraken Herd on ${HERD_HOST_IP}..."
 
@@ -24,12 +24,12 @@ docker run -d \
     -p ${PROXY_SERVER_PORT}:${PROXY_SERVER_PORT} \
     -e HERD_HOST_IP=${HERD_HOST_IP} \
     -e HOSTNAME=${HERD_HOST_IP} \
-    -v $(pwd)/examples/multihost/config/origin/multihost.yaml:/etc/kraken/config/origin/multihost.yaml \
-    -v $(pwd)/examples/multihost/config/tracker/multihost.yaml:/etc/kraken/config/tracker/multihost.yaml \
-    -v $(pwd)/examples/multihost/config/build-index/multihost.yaml:/etc/kraken/config/build-index/multihost.yaml \
-    -v $(pwd)/examples/multihost/config/proxy/multihost.yaml:/etc/kraken/config/proxy/multihost.yaml \
-    -v $(pwd)/examples/multihost/herd_param.sh:/etc/kraken/herd_param.sh \
-    -v $(pwd)/examples/multihost/herd_start_processes.sh:/etc/kraken/herd_start_processes.sh \
+    -v $(pwd)/config/origin/multihost.yaml:/etc/kraken/config/origin/multihost.yaml \
+    -v $(pwd)/config/tracker/multihost.yaml:/etc/kraken/config/tracker/multihost.yaml \
+    -v $(pwd)/config/build-index/multihost.yaml:/etc/kraken/config/build-index/multihost.yaml \
+    -v $(pwd)/config/proxy/multihost.yaml:/etc/kraken/config/proxy/multihost.yaml \
+    -v $(pwd)/herd_param.sh:/etc/kraken/herd_param.sh \
+    -v $(pwd)/herd_start_processes.sh:/etc/kraken/herd_start_processes.sh \
     --name kraken-herd-multihost \
     kraken-herd:dev ./herd_start_processes.sh
 

@@ -8,7 +8,6 @@ sleep 3
 
 /usr/bin/kraken-testfs \
     --port=${TESTFS_PORT} \
-    --addr=${BIND_ADDRESS}:${TESTFS_PORT} \
     &>/var/log/kraken/kraken-testfs/stdout.log &
 
 # Substitute environment variables in config files
@@ -28,20 +27,16 @@ envsubst < /etc/kraken/config/proxy/multihost.yaml > /tmp/proxy.yaml
 /usr/bin/kraken-tracker \
     --config=/tmp/tracker.yaml \
     --port=${TRACKER_PORT} \
-    --addr=${BIND_ADDRESS}:${TRACKER_PORT} \
     &>/var/log/kraken/kraken-tracker/stdout.log &
 
 /usr/bin/kraken-build-index \
     --config=/tmp/build-index.yaml \
     --port=${BUILD_INDEX_PORT} \
-    --addr=${BIND_ADDRESS}:${BUILD_INDEX_PORT} \
     &>/var/log/kraken/kraken-build-index/stdout.log &
 
 /usr/bin/kraken-proxy \
     --config=/tmp/proxy.yaml \
     --port=${PROXY_PORT} \
-    --server-port=${PROXY_SERVER_PORT} \
-    --addr=${BIND_ADDRESS}:${PROXY_PORT} \
     &>/var/log/kraken/kraken-proxy/stdout.log &
 
 sleep 3

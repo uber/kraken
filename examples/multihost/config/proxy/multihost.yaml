@@ -1,4 +1,58 @@
-extends: base.yaml
+castore:
+  upload_dir: /var/cache/kraken/kraken-proxy/upload/
+  cache_dir:  /var/cache/kraken/kraken-proxy/cache/
+  capacity: 1024
+
+zap:
+  level: info
+  development: false
+  encoding: console
+  disableStacktrace: true
+  encoderConfig:
+    messageKey: message
+    nameKey: logger_name
+    levelKey: level
+    timeKey: ts
+    callerKey: caller
+    stacktraceKey: stack
+    levelEncoder: capital
+    timeEncoder: iso8601
+    durationEncoder: seconds
+    callerEncoder: short
+  outputPaths:
+    - stdout
+    - /var/log/kraken/kraken-proxy/stdout.log
+  errorOutputPaths:
+    - stdout
+    - /var/log/kraken/kraken-proxy/stdout.log
+
+metrics:
+  m3:
+    service: kraken-proxy
+
+server:
+  listener:
+    net: unix
+    addr: /tmp/kraken-proxy.sock
+
+registry:
+  docker:
+    version: 0.1
+    log:
+      level: error
+    http:
+      net: unix
+      addr: /tmp/kraken-proxy-registry.sock
+
+registryoverride:
+  listener:
+    net: unix
+    addr: /tmp/kraken-proxy-registry-override.sock
+
+nginx:
+  name: kraken-proxy
+  cache_dir: /var/cache/kraken/kraken-proxy/nginx/
+  log_dir: /var/log/kraken/kraken-proxy/
 
 origin:
   hosts:

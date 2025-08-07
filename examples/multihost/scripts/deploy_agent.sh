@@ -26,7 +26,7 @@ fi
 
 # Start agent
 echo "Starting agent container..."
-./examples/multihost/agent_start_container.sh
+../agent_start_container.sh
 
 echo ""
 echo "=== Agent Deployment Complete! ==="

@@ -63,8 +63,17 @@ chmod +x test/*.sh
 
 ### Local Testing
 ```bash
-# Deploy herd locally
+# Option 1: Use the deploy script (builds images automatically)
 ./scripts/deploy_herd.sh localhost
+
+# Option 2: Deploy herd directly (if images already built)
+cd examples/multihost  # if not already there
+HERD_HOST_IP=localhost ./herd_start_container.sh
+
+# Verify services are running
+curl http://localhost:15000/v2/     # Proxy endpoint (should return {})
+curl http://localhost:15003/health  # Tracker health check (should return OK)
+curl http://localhost:14000/        # TestFS (returns 404, which is normal)
 
 # Deploy local agents (simulating different hosts)
 ./scripts/deploy_agent.sh localhost localhost
