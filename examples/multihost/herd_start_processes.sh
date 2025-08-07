@@ -20,7 +20,7 @@ envsubst < /etc/kraken/config/proxy/multihost.yaml > /tmp/proxy.yaml
     --config=/tmp/origin.yaml \
     --blobserver-hostname=${HOSTNAME} \
     --blobserver-port=${ORIGIN_SERVER_PORT} \
-    --peer-ip=${HOSTNAME} \
+    --peer-ip=${HERD_HOST_IP} \
     --peer-port=${ORIGIN_PEER_PORT} \
     &>/var/log/kraken/kraken-origin/stdout.log &
 

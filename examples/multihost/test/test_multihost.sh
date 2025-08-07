@@ -18,7 +18,12 @@ sleep 10
 
 # Step 2: Pull from agent
 echo "3. Pulling from agent (should use P2P)..."
-./examples/multihost/test/kraken-pull.sh test/hello-world:latest ${AGENT_HOSTS}:16000
+
+# Determine the correct path to kraken-pull.sh based on current directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+KRAKEN_PULL_SCRIPT="$SCRIPT_DIR/kraken-pull.sh"
+
+$KRAKEN_PULL_SCRIPT test/hello-world:latest ${AGENT_HOSTS}:16000
 
 echo "4. Verifying image..."
 docker images | grep hello-world

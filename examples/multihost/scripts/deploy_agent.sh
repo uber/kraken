@@ -11,6 +11,9 @@ if [ -z "$HERD_HOST_IP" ] || [ -z "$AGENT_HOST_IP" ]; then
     exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MULTIHOST_DIR="$(dirname "$SCRIPT_DIR")"
+
 export HERD_HOST_IP
 export AGENT_HOST_IP
 
@@ -26,7 +29,7 @@ fi
 
 # Start agent
 echo "Starting agent container..."
-../agent_start_container.sh
+(cd "$MULTIHOST_DIR" && HERD_HOST_IP="$HERD_HOST_IP" AGENT_HOST_IP="$AGENT_HOST_IP" ./agent_start_container.sh)
 
 echo ""
 echo "=== Agent Deployment Complete! ==="

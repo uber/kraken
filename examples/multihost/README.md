@@ -78,6 +78,18 @@ curl http://localhost:14000/        # TestFS (returns 404, which is normal)
 # Deploy local agents (simulating different hosts)
 ./scripts/deploy_agent.sh localhost localhost
 
+# Verify agent is running
+curl http://localhost:16000/v2/     # Agent endpoint (should return {})
+
+# Test the complete workflow
+./test/test_multihost.sh localhost localhost
+
+# Expected behavior:
+# 1. Image pushes to herd successfully
+# 2. Agent attempts P2P pull (may timeout on first pull - this is normal)
+# 3. Falls back to herd and succeeds
+# 4. Subsequent pulls will use P2P distribution between agents
+
 # Test
 ./test/test_multihost.sh localhost localhost
 ```

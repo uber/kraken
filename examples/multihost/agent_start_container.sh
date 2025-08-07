@@ -15,13 +15,10 @@ if [ -z "$AGENT_HOST_IP" ]; then
     exit 1
 fi
 
-source examples/multihost/agent_param.sh
+source agent_param.sh
 
 echo "Starting Kraken Agent on ${AGENT_HOST_IP}..."
 echo "Connecting to Herd at ${HERD_HOST_IP}..."
-
-# Create config with environment variable substitution
-envsubst < $(pwd)/examples/multihost/config/agent/multihost.yaml > /tmp/agent_config.yaml
 
 # Start kraken agent with multi-host configuration
 docker run -d \
@@ -30,7 +27,7 @@ docker run -d \
     -p ${AGENT_REGISTRY_PORT}:${AGENT_REGISTRY_PORT} \
     -e HERD_HOST_IP=${HERD_HOST_IP} \
     -e AGENT_HOST_IP=${AGENT_HOST_IP} \
-    -v /tmp/agent_config.yaml:/etc/kraken/config/agent/multihost.yaml \
+    -v $(pwd)/config/agent/multihost.yaml:/etc/kraken/config/agent/multihost.yaml \
     --name ${AGENT_CONTAINER_NAME}-$(hostname) \
     kraken-agent:dev \
     /usr/bin/kraken-agent \
