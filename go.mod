@@ -32,7 +32,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.0
 	github.com/gomodule/redigo v1.8.9
-	github.com/gorilla/handlers v0.0.0-20190227193432-ac6d24f88de4 // indirect
+	github.com/gorilla/handlers v1.3.0 // indirect
 	github.com/gorilla/mux v1.7.3
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/jackpal/bencode-go v0.0.0-20180813173944-227668e840fa
