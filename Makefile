@@ -5,7 +5,7 @@ GO = go
 BUILD_FLAGS = -gcflags '-N -l'
 BUILD_QUIET ?= -q
 
-GOLANG_IMAGE ?= golang:1.14
+GOLANG_IMAGE ?= golang:1.23.11
 GOPROXY ?= $(shell go env GOPROXY)
 
 # Where to find your project
@@ -43,9 +43,9 @@ CROSS_COMPILER = \
     -e GOINSECURE="*" \
     -e GO111MODULE=on \
     $(GOLANG_IMAGE) \
-    go build -o ./$@ ./$(dir $@);
+    go build -buildvcs=false -o ./$@ ./$(dir $@);
 
-NATIVE_COMPILER = GOOS=$(shell echo $(UNAME_S) | tr '[:upper:]' '[:lower:]') GOARCH=amd64 go build -o $@ ./$(dir $@)
+NATIVE_COMPILER = GOOS=$(shell echo $(UNAME_S) | tr '[:upper:]' '[:lower:]') GOARCH=amd64 go build -buildvcs=false -o $@ ./$(dir $@)
 
 # Tools that can be built natively on macOS
 NATIVE_TOOLS = tools/bin/puller/puller tools/bin/reload/reload tools/bin/visualization/visualization
