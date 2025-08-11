@@ -27,11 +27,10 @@ import (
 )
 
 const (
-	pullTimer            = "dockertag.time.pull"
-	createSuccessCounter = "dockertag.success.create"
-	createFailureCounter = "dockertag.failure.create"
-	getSuccessCounter    = "dockertag.success.get"
-	getFailureCounter    = "dockertag.failure.get"
+	verificationSuccessCounter = "verification_success"
+	verificationFailureCounter = "verification_failure"
+	verificationErrorCounter   = "verification_error"
+	verificationDuration       = "verification_duration"
 )
 
 type manifests struct {
@@ -87,16 +86,24 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 	}
 	defer blob.Close()
 
+	_, _ = t.verify(path, repo, digest, blob)
+	return []byte(digest.String()), nil
+}
+
+func (t *manifests) verify(path string, repo string, digest core.Digest, blob store.FileReader) (bool, error) {
+	sw := t.metrics.Timer(verificationDuration).Start()
+	defer sw.Stop()
 	valid, err := t.verification(repo, digest, blob)
 	if err != nil {
+		t.metrics.Counter(verificationErrorCounter).Inc(1)
 		log.With("repo", repo, "digest", digest).Errorf("Error while performing image validation %s", err)
 	} else if valid {
-		t.metrics.Counter(getSuccessCounter).Inc(1)
+		t.metrics.Counter(verificationSuccessCounter).Inc(1)
 	} else {
-		t.metrics.Counter(getFailureCounter).Inc(1)
+		t.metrics.Counter(verificationFailureCounter).Inc(1)
+		log.With("repo", repo, "digest", digest).Warnf("Could not verify image %s", path)
 	}
-
-	return []byte(digest.String()), nil
+	return valid, nil
 }
 
 func (t *manifests) putContent(path string, subtype PathSubType) error {
