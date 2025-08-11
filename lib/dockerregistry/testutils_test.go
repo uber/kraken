@@ -57,8 +57,8 @@ func newTestDriver() (*testDriver, func()) {
 }
 
 func (d *testDriver) setup() (*KrakenStorageDriver, testImageUploadBundle) {
-	defaultVerificationFunc := func(repo string, digest core.Digest, blob store.FileReader) (bool, error) {
-		return true, nil
+	defaultVerificationFunc := func(repo string, digest core.Digest, blob store.FileReader) (VerificationDecision, error) {
+		return DecisionSkip, nil
 	}
 	sd := NewReadWriteStorageDriver(Config{}, d.cas, d.transferer, defaultVerificationFunc, tally.NoopScope)
 

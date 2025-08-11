@@ -17,9 +17,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/uber/kraken/core"
 	"io"
 	"os"
+
+	"github.com/uber/kraken/core"
 
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/store"
@@ -56,13 +57,13 @@ import (
 const Name = "kraken"
 
 func RegisterKrakenStorageDriver() {
-	defaultVerificationFunc := func(repo string, digest core.Digest, blob store.FileReader) (bool, error) {
-		return true, nil
+	defaultVerificationFunc := func(repo string, digest core.Digest, blob store.FileReader) (VerificationDecision, error) {
+		return DecisionAllow, nil
 	}
 	RegisterKrakenStorageDriverWithImageVerification(defaultVerificationFunc)
 }
 
-func RegisterKrakenStorageDriverWithImageVerification(verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error)) {
+func RegisterKrakenStorageDriverWithImageVerification(verification func(repo string, digest core.Digest, blob store.FileReader) (VerificationDecision, error)) {
 	factory.Register(Name, &krakenStorageDriverFactory{verification})
 }
 
@@ -88,7 +89,7 @@ func toDriverError(err error, path string) error {
 }
 
 type krakenStorageDriverFactory struct {
-	verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error)
+	verification func(repo string, digest core.Digest, blob store.FileReader) (VerificationDecision, error)
 }
 
 func getParam(params map[string]interface{}, name string) interface{} {
@@ -135,7 +136,7 @@ func NewReadWriteStorageDriver(
 	config Config,
 	cas *store.CAStore,
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error),
+	verification func(repo string, digest core.Digest, blob store.FileReader) (VerificationDecision, error),
 	metrics tally.Scope) *KrakenStorageDriver {
 
 	return &KrakenStorageDriver{
@@ -153,7 +154,7 @@ func NewReadOnlyStorageDriver(
 	config Config,
 	bs BlobStore,
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error),
+	verification func(repo string, digest core.Digest, blob store.FileReader) (VerificationDecision, error),
 	metrics tally.Scope) *KrakenStorageDriver {
 
 	return &KrakenStorageDriver{

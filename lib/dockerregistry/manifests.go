@@ -15,10 +15,11 @@ package dockerregistry
 
 import (
 	"fmt"
-	"github.com/uber-go/tally"
-	"github.com/uber/kraken/lib/store"
 	"strings"
 	"time"
+
+	"github.com/uber-go/tally"
+	"github.com/uber/kraken/lib/store"
 
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/uber/kraken/core"
@@ -33,15 +34,23 @@ const (
 	verificationDuration       = "verification_duration"
 )
 
+type VerificationDecision int
+
+const (
+	DecisionAllow VerificationDecision = iota
+	DecisionDeny
+	DecisionSkip
+)
+
 type manifests struct {
 	transferer   transfer.ImageTransferer
-	verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error)
+	verification func(repo string, digest core.Digest, blob store.FileReader) (VerificationDecision, error)
 	metrics      tally.Scope
 }
 
 func newManifests(
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error),
+	verification func(repo string, digest core.Digest, blob store.FileReader) (VerificationDecision, error),
 	metrics tally.Scope,
 ) *manifests {
 	return &manifests{transferer, verification, metrics}
@@ -93,17 +102,27 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 func (t *manifests) verify(path string, repo string, digest core.Digest, blob store.FileReader) (bool, error) {
 	sw := t.metrics.Timer(verificationDuration).Start()
 	defer sw.Stop()
-	valid, err := t.verification(repo, digest, blob)
+	decision, err := t.verification(repo, digest, blob)
 	if err != nil {
 		t.metrics.Counter(verificationErrorCounter).Inc(1)
 		log.With("repo", repo, "digest", digest).Errorf("Error while performing image validation %s", err)
-	} else if valid {
+		return false, err
+	}
+	switch decision {
+	case DecisionAllow:
 		t.metrics.Counter(verificationSuccessCounter).Inc(1)
-	} else {
+		return true, nil
+	case DecisionDeny:
 		t.metrics.Counter(verificationFailureCounter).Inc(1)
 		log.With("repo", repo, "digest", digest).Warnf("Could not verify image %s", path)
+		return false, nil
+	case DecisionSkip:
+		log.With("repo", repo, "digest", digest).Debugf("Verification skipped for %s", path)
+		return true, nil
+	default:
+		t.metrics.Counter(verificationErrorCounter).Inc(1)
+		return false, fmt.Errorf("unknown verification decision: %d", decision)
 	}
-	return valid, nil
 }
 
 func (t *manifests) putContent(path string, subtype PathSubType) error {

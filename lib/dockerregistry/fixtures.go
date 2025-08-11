@@ -24,8 +24,8 @@ import (
 // StorageDriverFixture creates a storage driver for testing purposes.
 func StorageDriverFixture() (*KrakenStorageDriver, func()) {
 	cas, cleanup := store.CAStoreFixture()
-	defaultVerificationFunc := func(repo string, digest core.Digest, blob store.FileReader) (bool, error) {
-		return true, nil
+	defaultVerificationFunc := func(repo string, digest core.Digest, blob store.FileReader) (VerificationDecision, error) {
+		return DecisionSkip, nil
 	}
 	sd := NewReadWriteStorageDriver(Config{}, cas, transfer.NewTestTransferer(cas), defaultVerificationFunc, tally.NoopScope)
 	return sd, cleanup
