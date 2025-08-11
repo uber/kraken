@@ -57,7 +57,7 @@ func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, erro
 	for _, addr := range c.ring.Locations(d) {
 		resp, err = httputil.PollAccepted(
 			fmt.Sprintf(
-				"https://%s/namespace/%s/blobs/%s/metainfo",
+				"http://%s/namespace/%s/blobs/%s/metainfo",
 				addr, url.PathEscape(namespace), d),
 			&backoff.ExponentialBackOff{
 				InitialInterval:     time.Second,
