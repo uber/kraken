@@ -55,7 +55,14 @@ import (
 // Name of storage driver.
 const Name = "kraken"
 
-func RegisterKrakenStorageDriver(verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error)) {
+func RegisterKrakenStorageDriver() {
+	defaultVerificationFunc := func(repo string, digest core.Digest, blob store.FileReader) (bool, error) {
+		return true, nil
+	}
+	RegisterKrakenStorageDriverWithImageVerification(defaultVerificationFunc)
+}
+
+func RegisterKrakenStorageDriverWithImageVerification(verification func(repo string, digest core.Digest, blob store.FileReader) (bool, error)) {
 	factory.Register(Name, &krakenStorageDriverFactory{verification})
 }
 

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -57,7 +57,7 @@ func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, erro
 	for _, addr := range c.ring.Locations(d) {
 		resp, err = httputil.PollAccepted(
 			fmt.Sprintf(
-				"http://%s/namespace/%s/blobs/%s/metainfo",
+				"https://%s/namespace/%s/blobs/%s/metainfo",
 				addr, url.PathEscape(namespace), d),
 			&backoff.ExponentialBackOff{
 				InitialInterval:     time.Second,

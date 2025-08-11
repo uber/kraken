@@ -89,13 +89,11 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 
 	valid, err := t.verification(repo, digest, blob)
 	if err != nil {
-		return nil, fmt.Errorf("verification failed: %w", err)
-	}
-	if !valid {
-		t.metrics.Counter(getFailureCounter).Inc(1)
-	} else {
+		log.With("repo", repo, "digest", digest).Errorf("Error while performing image validation %s", err)
+	} else if valid {
 		t.metrics.Counter(getSuccessCounter).Inc(1)
-		log.With("repo", repo, "digest", digest).Info("Manifest found")
+	} else {
+		t.metrics.Counter(getFailureCounter).Inc(1)
 	}
 
 	return []byte(digest.String()), nil
