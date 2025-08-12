@@ -37,9 +37,9 @@ const (
 type VerificationDecision int
 
 const (
-	DecisionAllow VerificationDecision = iota
+	DecisionSkip VerificationDecision = iota
 	DecisionDeny
-	DecisionSkip
+	DecisionAllow
 )
 
 type manifests struct {

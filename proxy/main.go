@@ -19,6 +19,7 @@ import (
 )
 
 func main() {
-	dockerregistry.RegisterKrakenStorageDriver()
-	cmd.Run(cmd.ParseFlags())
+	cmd.Run(cmd.ParseFlags(), cmd.WithEffect(func() {
+		dockerregistry.RegisterKrakenStorageDriver()
+	}))
 }
