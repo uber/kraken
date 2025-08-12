@@ -1,0 +1,13 @@
+# golangci-lint configuration file
+# See https://golangci-lint.run/usage/configuration/ for more options
+linters:
+  enable:
+    - errcheck # Check for unchecked errors
+    - gosimple # Suggest code simplifications
+    - govet # Examine Go source code and reports suspicious constructs
+    - ineffassign # Detect ineffectual assignments
+    - staticcheck # Static analysis checks
+    - unused # Check for unused constants, variables, functions and types
+    - gofmt # Check whether code was gofmt-ed
+    - misspell # Find commonly misspelled English words in comments
+    - exportloopref # Check for pointers to enclosing loop variables
