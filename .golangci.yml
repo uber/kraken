@@ -9,6 +9,11 @@ linters:
     - ineffassign # Detect ineffectual assignments
     - staticcheck # Static analysis checks
     - unused # Check for unused constants, variables, functions and types
-    - gofmt # Check whether code was gofmt-ed
     - misspell # Find commonly misspelled English words in comments
     - exportloopref # Check for pointers to enclosing loop variables
+formatters:
+  settings:
+    gofmt:
+      # Simplify code: gofmt with `-s` option.
+      # Default: true
+      simplify: false
