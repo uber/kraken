@@ -1,5 +1,6 @@
 # golangci-lint configuration file
 # See https://golangci-lint.run/usage/configuration/ for more options
+version: "2"
 linters:
   enable:
     - errcheck # Check for unchecked errors
