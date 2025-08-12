@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -50,7 +50,7 @@ func TestHealth(t *testing.T) {
 		fmt.Sprintf("http://%s/health", s.addr))
 	defer resp.Body.Close()
 	require.NoError(err)
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	require.NoError(err)
 	require.Equal("OK\n", string(b))
 }
@@ -240,7 +240,7 @@ func TestDownloadBlobNotFound(t *testing.T) {
 	backendClient := s.backendClient(namespace, false)
 	backendClient.EXPECT().Stat(namespace, d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 
-	err := cp.Provide(master1).DownloadBlob(namespace, d, ioutil.Discard)
+	err := cp.Provide(master1).DownloadBlob(namespace, d, io.Discard)
 	require.Error(err)
 	require.Equal(http.StatusNotFound, err.(httputil.StatusError).Status)
 }

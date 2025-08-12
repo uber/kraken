@@ -17,7 +17,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -80,7 +80,7 @@ func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, erro
 			return nil, err
 		}
 		defer resp.Body.Close()
-		b, err := ioutil.ReadAll(resp.Body)
+		b, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("read body: %s", err)
 		}

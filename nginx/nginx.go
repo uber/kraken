@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -99,7 +98,7 @@ func (c *Config) inject(params map[string]interface{}) error {
 // GetTemplate returns the template content.
 func (c *Config) getTemplate() (string, error) {
 	if c.TemplatePath != "" {
-		b, err := ioutil.ReadFile(c.TemplatePath)
+		b, err := os.ReadFile(c.TemplatePath)
 		if err != nil {
 			return "", fmt.Errorf("read template: %s", err)
 		}
@@ -211,7 +210,7 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	}
 
 	conf := filepath.Join(_genDir, config.Name)
-	if err := ioutil.WriteFile(conf, src, 0o755); err != nil {
+	if err := os.WriteFile(conf, src, 0o755); err != nil {
 		return fmt.Errorf("write src: %s", err)
 	}
 

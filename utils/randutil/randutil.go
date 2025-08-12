@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,7 +16,6 @@ package randutil
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"time"
 )
@@ -46,7 +45,7 @@ func Blob(n uint64) []byte {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	lr := io.LimitReader(r, int64(n))
-	b, _ := ioutil.ReadAll(lr)
+	b, _ := io.ReadAll(lr)
 
 	return b
 }

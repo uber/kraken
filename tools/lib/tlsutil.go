@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,7 +16,7 @@ package lib
 import (
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"github.com/uber/kraken/utils/httputil"
 
@@ -29,7 +29,7 @@ func ReadTLSFile(path *string) (*tls.Config, error) {
 	if path == nil {
 		return nil, nil
 	}
-	data, err := ioutil.ReadFile(*path)
+	data, err := os.ReadFile(*path)
 	if err != nil {
 		return nil, fmt.Errorf("read tls config: %s", err)
 	}

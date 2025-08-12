@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"os/exec"
@@ -120,7 +119,7 @@ func pullManifest(client http.Client, source string, name string, reference stri
 	}
 
 	version := resp.Header.Get("Content-Type")
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}

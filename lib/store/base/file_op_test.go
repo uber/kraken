@@ -14,7 +14,7 @@
 package base
 
 import (
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -206,9 +206,9 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	readWriterState1, err := store.NewFileOp().AcceptState(s2).GetFileReadWriter(fn, partSize, partSize)
 	require.NoError(err)
 	// Check content
-	dataState1, err := ioutil.ReadAll(readWriterState1)
+	dataState1, err := io.ReadAll(readWriterState1)
 	require.NoError(err)
-	dataState2, err := ioutil.ReadAll(readWriterState2)
+	dataState2, err := io.ReadAll(readWriterState2)
 	require.NoError(err)
 	require.Equal(dataState1, dataState2)
 	require.Equal([]byte{'t', 'e', 's', 't', '\n'}, dataState1)
@@ -218,9 +218,9 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	// Check content again
 	readWriterState1.Seek(0, 0)
 	readWriterState2.Seek(0, 0)
-	dataState1, err = ioutil.ReadAll(readWriterState1)
+	dataState1, err = io.ReadAll(readWriterState1)
 	require.NoError(err)
-	dataState2, err = ioutil.ReadAll(readWriterState2)
+	dataState2, err = io.ReadAll(readWriterState2)
 	require.NoError(err)
 	require.Equal(dataState1, dataState2)
 	require.Equal([]byte{'1', 'e', 's', 't', '\n'}, dataState1)
@@ -234,7 +234,7 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	// Check content again
 	readWriterStateMoved, err := store.NewFileOp().AcceptState(s2).GetFileReadWriter(fn, partSize, partSize)
 	require.NoError(err)
-	dataMoved, err := ioutil.ReadAll(readWriterStateMoved)
+	dataMoved, err := io.ReadAll(readWriterStateMoved)
 	require.NoError(err)
 	require.Equal([]byte{'1', 'e', 's', 't', '\n'}, dataMoved)
 	readWriterStateMoved.Close()
@@ -285,13 +285,13 @@ func testDeleteFile(require *require.Assertions, storeBundle *fileStoreTestBundl
 
 	// Existing readwriter should still work after deletion
 	rw.Seek(0, 0)
-	data, err := ioutil.ReadAll(rw)
+	data, err := io.ReadAll(rw)
 	require.NoError(err)
 	require.Equal(content, string(data))
 
 	rw.Write([]byte(content))
 	rw.Seek(0, 0)
-	data, err = ioutil.ReadAll(rw)
+	data, err = io.ReadAll(rw)
 	require.NoError(err)
 	require.Equal(content+content, string(data))
 

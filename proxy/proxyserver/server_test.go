@@ -15,7 +15,7 @@ package proxyserver
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"testing"
@@ -44,7 +44,7 @@ func TestHealth(t *testing.T) {
 		fmt.Sprintf("http://%s/health", addr))
 	defer resp.Body.Close()
 	require.NoError(err)
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	require.NoError(err)
 	require.Equal("OK\n", string(b))
 }
@@ -201,8 +201,8 @@ func TestPrefetch(t *testing.T) {
 	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
 	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
 	mocks.originClient.EXPECT().DownloadBlob(namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
-	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[1], ioutil.Discard).Return(nil)
-	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[2], ioutil.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[1], io.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[2], io.Discard).Return(nil)
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr),
 		httputil.SendBody(bytes.NewReader(b)))

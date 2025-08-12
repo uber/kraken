@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"time"
@@ -53,7 +52,7 @@ type StatusError struct {
 // NewStatusError returns a new StatusError.
 func NewStatusError(resp *http.Response) StatusError {
 	defer resp.Body.Close()
-	respBytes, err := ioutil.ReadAll(resp.Body)
+	respBytes, err := io.ReadAll(resp.Body)
 	respDump := string(respBytes)
 	if err != nil {
 		respDump = fmt.Sprintf("failed to dump response: %s", err)

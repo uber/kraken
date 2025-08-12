@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -38,7 +37,7 @@ type Server struct {
 
 // NewServer creates a new Server.
 func NewServer() *Server {
-	dir, err := ioutil.TempDir("/tmp", "kraken-testfs")
+	dir, err := os.MkdirTemp("/tmp", "kraken-testfs")
 	if err != nil {
 		panic(err)
 	}

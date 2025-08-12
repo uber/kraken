@@ -15,7 +15,7 @@ package store
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"testing"
 
 	"github.com/uber/kraken/core"
@@ -36,7 +36,7 @@ func TestSimpleStoreCreateCacheFile(t *testing.T) {
 
 	f, err := s.GetCacheFileReader(tag)
 	require.NoError(err)
-	result, err := ioutil.ReadAll(f)
+	result, err := io.ReadAll(f)
 	require.NoError(err)
 	require.Equal(d, string(result))
 }

@@ -15,7 +15,7 @@ package originstorage
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"sync"
 	"testing"
 
@@ -79,7 +79,7 @@ func TestTorrentGetPieceReaderConcurrent(t *testing.T) {
 			r, err := tor.GetPieceReader(i)
 			require.NoError(err)
 			defer r.Close()
-			result, err := ioutil.ReadAll(r)
+			result, err := io.ReadAll(r)
 			require.NoError(err)
 			require.Equal(blob.Content[start:end], result)
 		}(i)

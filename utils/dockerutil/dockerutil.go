@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,7 +17,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/manifestlist"
@@ -29,7 +28,7 @@ const _v2ManifestType = "application/vnd.docker.distribution.manifest.v2+json"
 const _v2ManifestListType = "application/vnd.docker.distribution.manifest.list.v2+json"
 
 func ParseManifest(r io.Reader) (distribution.Manifest, core.Digest, error) {
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return nil, core.Digest{}, fmt.Errorf("read: %s", err)
 	}

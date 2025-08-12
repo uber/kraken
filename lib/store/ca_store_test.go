@@ -15,7 +15,7 @@ package store
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"path"
 	"strings"
@@ -32,15 +32,15 @@ func TestCAStoreInitVolumes(t *testing.T) {
 	config, cleanup := CAStoreConfigFixture()
 	defer cleanup()
 
-	volume1, err := ioutil.TempDir("/tmp", "volume")
+	volume1, err := os.MkdirTemp("/tmp", "volume")
 	require.NoError(err)
 	defer os.RemoveAll(volume1)
 
-	volume2, err := ioutil.TempDir("/tmp", "volume")
+	volume2, err := os.MkdirTemp("/tmp", "volume")
 	require.NoError(err)
 	defer os.RemoveAll(volume2)
 
-	volume3, err := ioutil.TempDir("/tmp", "volume")
+	volume3, err := os.MkdirTemp("/tmp", "volume")
 	require.NoError(err)
 	defer os.RemoveAll(volume3)
 
@@ -53,11 +53,11 @@ func TestCAStoreInitVolumes(t *testing.T) {
 	_, err = NewCAStore(config, tally.NoopScope)
 	require.NoError(err)
 
-	v1Files, err := ioutil.ReadDir(path.Join(volume1, path.Base(config.CacheDir)))
+	v1Files, err := os.ReadDir(path.Join(volume1, path.Base(config.CacheDir)))
 	require.NoError(err)
-	v2Files, err := ioutil.ReadDir(path.Join(volume2, path.Base(config.CacheDir)))
+	v2Files, err := os.ReadDir(path.Join(volume2, path.Base(config.CacheDir)))
 	require.NoError(err)
-	v3Files, err := ioutil.ReadDir(path.Join(volume3, path.Base(config.CacheDir)))
+	v3Files, err := os.ReadDir(path.Join(volume3, path.Base(config.CacheDir)))
 	require.NoError(err)
 	n1 := len(v1Files)
 	n2 := len(v2Files)
@@ -76,15 +76,15 @@ func TestCAStoreInitVolumesAfterChangingVolumes(t *testing.T) {
 	config, cleanup := CAStoreConfigFixture()
 	defer cleanup()
 
-	volume1, err := ioutil.TempDir("/tmp", "volume")
+	volume1, err := os.MkdirTemp("/tmp", "volume")
 	require.NoError(err)
 	defer os.RemoveAll(volume1)
 
-	volume2, err := ioutil.TempDir("/tmp", "volume")
+	volume2, err := os.MkdirTemp("/tmp", "volume")
 	require.NoError(err)
 	defer os.RemoveAll(volume2)
 
-	volume3, err := ioutil.TempDir("/tmp", "volume")
+	volume3, err := os.MkdirTemp("/tmp", "volume")
 	require.NoError(err)
 	defer os.RemoveAll(volume3)
 
@@ -99,7 +99,7 @@ func TestCAStoreInitVolumesAfterChangingVolumes(t *testing.T) {
 
 	// Add one more volume, recreate file store.
 
-	volume4, err := ioutil.TempDir("/tmp", "volume")
+	volume4, err := os.MkdirTemp("/tmp", "volume")
 	require.NoError(err)
 	defer os.RemoveAll(volume3)
 
@@ -109,7 +109,7 @@ func TestCAStoreInitVolumesAfterChangingVolumes(t *testing.T) {
 	require.NoError(err)
 
 	var n1, n2, n3, n4 int
-	links, err := ioutil.ReadDir(config.CacheDir)
+	links, err := os.ReadDir(config.CacheDir)
 	require.NoError(err)
 	for _, link := range links {
 		source, err := os.Readlink(path.Join(config.CacheDir, link.Name()))
@@ -213,6 +213,6 @@ func TestCAStoreCreateCacheFile(t *testing.T) {
 	require.NoError(err)
 	r2, err := s.GetCacheFileReader(computedDigest.Hex())
 	require.NoError(err)
-	b2, err := ioutil.ReadAll(r2)
+	b2, err := io.ReadAll(r2)
 	require.Equal(s1, string(b2))
 }
