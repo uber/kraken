@@ -6,20 +6,17 @@ on:
   pull_request:
     branches: [ master ]
 
+env:
+  GO_VERSION: '1.23'
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ['1.23.11']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Display Go version
         run: go version
@@ -32,13 +29,19 @@ jobs:
           GOINSECURE: "*"
         run: go mod download
 
-      # Add CGO_CFLAGS environment variable to suppress the warning
       - name: Build
         run: go build ./...
         env:
           CGO_CFLAGS: "-Wno-return-local-addr"
 
-      # Run tests with CGO_CFLAGS set
+  unit_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
       - name: Test with the Go CLI
         run: |
           set -o pipefail
@@ -49,8 +52,16 @@ jobs:
       - name: Upload Go test results
         uses: actions/upload-artifact@v4
         with:
-          name: Go-results-${{ matrix.go-version }}
-          path: TestResults-${{ matrix.go-version }}.json
+          name: Go-results-${{ env.GO_VERSION }}
+          path: TestResults-${{ env.GO_VERSION }}.json
+
+  integration_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Run integration tests via Make
         run: make integration
