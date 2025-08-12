@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -33,18 +33,17 @@ type rangeConfig struct {
 // pieceLengthConfig represents a sorted list joining file size to torrent piece
 // length for all files under said size, for example, these ranges:
 //
-//   [
-//     (0, 1mb),
-//     (2gb, 4mb),
-//     (4gb, 8mb),
-//   ]
+//	[
+//	  (0, 1mb),
+//	  (2gb, 4mb),
+//	  (4gb, 8mb),
+//	]
 //
 // are interpreted as:
 //
-//   N < 2gb           : 1mb
-//   N >= 2gb, N < 4gb : 4mb
-//   N >= 4gb          : 8mb
-//
+//	N < 2gb           : 1mb
+//	N >= 2gb, N < 4gb : 4mb
+//	N >= 4gb          : 8mb
 type pieceLengthConfig struct {
 	ranges []rangeConfig
 }

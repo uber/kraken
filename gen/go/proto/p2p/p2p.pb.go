@@ -19,9 +19,11 @@
 Package p2p is a generated protocol buffer package.
 
 It is generated from these files:
+
 	proto/p2p/p2p.proto
 
 It has these top-level messages:
+
 	BitfieldMessage
 	PieceRequestMessage
 	PiecePayloadMessage

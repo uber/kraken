@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -42,7 +42,8 @@ func (l *DigestList) Scan(src interface{}) error {
 
 // Digest can be represented in a string like "<algorithm>:<hex_digest_string>"
 // Example:
-// 	 sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+//
+//	sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 type Digest struct {
 	algo string
 	hex  string
@@ -127,14 +128,16 @@ func (d Digest) String() string {
 
 // Algo returns the algo part of the digest.
 // Example:
-//   sha256
+//
+//	sha256
 func (d Digest) Algo() string {
 	return d.algo
 }
 
 // Hex returns the hex part of the digest.
 // Example:
-//   e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+//
+//	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 func (d Digest) Hex() string {
 	return d.hex
 }
