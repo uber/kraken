@@ -30,6 +30,19 @@ endif
 
 UNAME_S := $(shell uname -s)
 
+# ==== GIT HOOKS ====
+.PHONY: install-hooks
+install-hooks:
+	@echo "Installing git hooks and checking for golangci-lint..."
+	@if ! command -v golangci-lint >/dev/null 2>&1; then \
+		echo "ERROR: golangci-lint not found in PATH. Please install golangci-lint before proceeding."; \
+		exit 1; \
+	fi
+	@chmod +x .githooks/pre-commit
+	git config core.hooksPath .githooks
+	@echo "Git hooks installed successfully!"
+	@echo "Pre-commit hook will now run golangci-lint on new changes"
+
 # Cross compiling cgo for sqlite3 is not well supported in Mac OSX.
 # This workaround builds the binary inside a linux container.
 # However, for tools like puller that don't use cgo, we can build natively on macOS.
