@@ -16,7 +16,7 @@ package lib
 import (
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"github.com/uber/kraken/utils/httputil"
 
@@ -29,7 +29,7 @@ func ReadTLSFile(path *string) (*tls.Config, error) {
 	if path == nil {
 		return nil, nil
 	}
-	data, err := ioutil.ReadFile(*path)
+	data, err := os.ReadFile(*path)
 	if err != nil {
 		return nil, fmt.Errorf("read tls config: %s", err)
 	}

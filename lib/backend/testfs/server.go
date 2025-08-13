@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -38,7 +37,7 @@ type Server struct {
 
 // NewServer creates a new Server.
 func NewServer() *Server {
-	dir, err := ioutil.TempDir("/tmp", "kraken-testfs")
+	dir, err := os.MkdirTemp("/tmp", "kraken-testfs")
 	if err != nil {
 		panic(err)
 	}

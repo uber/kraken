@@ -17,7 +17,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/manifestlist"
@@ -29,7 +28,7 @@ const _v2ManifestType = "application/vnd.docker.distribution.manifest.v2+json"
 const _v2ManifestListType = "application/vnd.docker.distribution.manifest.list.v2+json"
 
 func ParseManifest(r io.Reader) (distribution.Manifest, core.Digest, error) {
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return nil, core.Digest{}, fmt.Errorf("read: %s", err)
 	}

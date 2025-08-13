@@ -16,7 +16,6 @@ package mockutil
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"regexp"
 )
 
@@ -61,7 +60,7 @@ func (m *ReaderMatcher) Matches(x interface{}) bool {
 	if !ok {
 		return false
 	}
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		panic(err)
 	}

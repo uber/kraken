@@ -15,7 +15,6 @@ package store
 
 import (
 	"bytes"
-	"io/ioutil"
 	"os"
 	"path"
 
@@ -64,7 +63,7 @@ func walkDirectory(rootDir string, depth int, f func(string) error) error {
 			}
 		}
 	} else {
-		infos, err := ioutil.ReadDir(rootDir)
+		infos, err := os.ReadDir(rootDir)
 		if err != nil {
 			return err
 		}

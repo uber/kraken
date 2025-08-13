@@ -16,7 +16,7 @@ package dockerregistry
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"math/rand"
 	"testing"
@@ -98,7 +98,7 @@ func TestStorageDriverReader(t *testing.T) {
 				require.Equal(tc.err, err)
 				return
 			}
-			data, err := ioutil.ReadAll(reader)
+			data, err := io.ReadAll(reader)
 			require.Equal(tc.data, data)
 			require.Equal(tc.err, err)
 		})
@@ -171,7 +171,7 @@ func TestStorageDriverWriter(t *testing.T) {
 			r, err := sd.Reader(contextFixture(), tc.input, 0)
 			require.NoError(err)
 			defer r.Close()
-			data, err := ioutil.ReadAll(r)
+			data, err := io.ReadAll(r)
 			require.NoError(err)
 			require.Equal(content, data)
 		})
@@ -250,7 +250,7 @@ func TestStorageDriverMove(t *testing.T) {
 
 	reader, err := td.cas.GetCacheFileReader(d.Hex())
 	require.NoError(err)
-	data, err := ioutil.ReadAll(reader)
+	data, err := io.ReadAll(reader)
 	require.NoError(err)
 	require.Equal(uploadContent, string(data))
 }

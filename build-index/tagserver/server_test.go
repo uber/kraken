@@ -16,7 +16,7 @@ package tagserver
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -146,7 +146,7 @@ func TestHealth(t *testing.T) {
 		fmt.Sprintf("http://%s/health", addr))
 	defer resp.Body.Close()
 	require.NoError(err)
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	require.NoError(err)
 	require.Equal("OK\n", string(b))
 }

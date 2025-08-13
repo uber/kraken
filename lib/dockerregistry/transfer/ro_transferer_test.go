@@ -16,7 +16,6 @@ package transfer
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"os"
 	"sync"
 	"testing"
@@ -81,7 +80,7 @@ func TestReadOnlyTransfererDownloadCachesBlob(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, err := transferer.Download(namespace, blob.Digest)
 		require.NoError(err)
-		b, err := ioutil.ReadAll(result)
+		b, err := io.ReadAll(result)
 		require.NoError(err)
 		require.Equal(blob.Content, b)
 	}
@@ -189,7 +188,7 @@ func TestReadOnlyTransfererMultipleDownloadsOfSameBlob(t *testing.T) {
 			defer wg.Done()
 			result, err := transferer.Download(namespace, blob.Digest)
 			require.NoError(err)
-			b, err := ioutil.ReadAll(result)
+			b, err := io.ReadAll(result)
 			require.NoError(err)
 			require.Equal(blob.Content, b)
 		}()

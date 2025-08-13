@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"path"
@@ -63,7 +63,7 @@ func writeResponse(status int, body []byte) http.HandlerFunc {
 
 func checkBody(t *testing.T, expected []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		b, err := ioutil.ReadAll(r.Body)
+		b, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		require.Equal(t, string(expected), string(b))
 		w.WriteHeader(http.StatusCreated)
@@ -141,7 +141,7 @@ func TestClientOpenErrBlobNotFound(t *testing.T) {
 
 	client := newClient(addr)
 
-	f, err := ioutil.TempFile("", "hdfs3test")
+	f, err := os.CreateTemp("", "hdfs3test")
 	require.NoError(err)
 	defer os.Remove(f.Name())
 

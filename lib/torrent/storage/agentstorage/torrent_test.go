@@ -16,7 +16,7 @@ package agentstorage
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"sync"
 	"testing"
@@ -107,7 +107,7 @@ func TestTorrentWriteComplete(t *testing.T) {
 	r, err := tor.GetPieceReader(0)
 	require.NoError(err)
 	defer r.Close()
-	result, err := ioutil.ReadAll(r)
+	result, err := io.ReadAll(r)
 	require.NoError(err)
 	require.Equal(blob.Content, result)
 
@@ -152,7 +152,7 @@ func TestTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 	// Check content
 	reader, err := cads.Cache().GetFileReader(blob.MetaInfo.Digest().Hex())
 	require.NoError(err)
-	torrentBytes, err := ioutil.ReadAll(reader)
+	torrentBytes, err := io.ReadAll(reader)
 	require.NoError(err)
 	require.Equal(blob.Content, torrentBytes)
 }
@@ -202,7 +202,7 @@ func TestTorrentWriteSamePieceConcurrent(t *testing.T) {
 				}
 				defer r.Close()
 
-				result, err := ioutil.ReadAll(r)
+				result, err := io.ReadAll(r)
 				require.NoError(err)
 				require.Equal(1, len(result))
 				require.Equal(1, len(result))
@@ -216,7 +216,7 @@ func TestTorrentWriteSamePieceConcurrent(t *testing.T) {
 
 	reader, err := cads.Cache().GetFileReader(blob.MetaInfo.Digest().Hex())
 	require.NoError(err)
-	torrentBytes, err := ioutil.ReadAll(reader)
+	torrentBytes, err := io.ReadAll(reader)
 	require.NoError(err)
 	require.Equal(blob.Content, torrentBytes)
 }

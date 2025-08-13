@@ -16,7 +16,6 @@ package randutil
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"time"
 )
@@ -46,7 +45,7 @@ func Blob(n uint64) []byte {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	lr := io.LimitReader(r, int64(n))
-	b, _ := ioutil.ReadAll(lr)
+	b, _ := io.ReadAll(lr)
 
 	return b
 }

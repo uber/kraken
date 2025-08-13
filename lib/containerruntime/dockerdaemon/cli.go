@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -138,7 +138,7 @@ func (cli *dockerClient) PullImage(ctx context.Context, repo, tag string) error 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		errMsg, err := ioutil.ReadAll(resp.Body)
+		errMsg, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("read error resp: %s", err)
 		}
@@ -146,7 +146,7 @@ func (cli *dockerClient) PullImage(ctx context.Context, repo, tag string) error 
 	}
 
 	// Docker daemon returns 200 early. Close resp.Body after reading all.
-	if _, err := ioutil.ReadAll(resp.Body); err != nil {
+	if _, err := io.ReadAll(resp.Body); err != nil {
 		return fmt.Errorf("read resp body: %s", err)
 	}
 

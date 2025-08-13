@@ -56,7 +56,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path"
 	"path/filepath"
 
@@ -144,7 +144,7 @@ func resolveExtends(filename string, extendReader getExtend) ([]string, error) {
 }
 
 func readExtend(configFile string) (string, error) {
-	data, err := ioutil.ReadFile(configFile)
+	data, err := os.ReadFile(configFile)
 	if err != nil {
 		return "", err
 	}
@@ -159,7 +159,7 @@ func readExtend(configFile string) (string, error) {
 // loadFiles loads a list of files, deep-merging values.
 func loadFiles(config interface{}, fnames []string) error {
 	for _, fname := range fnames {
-		data, err := ioutil.ReadFile(fname)
+		data, err := os.ReadFile(fname)
 		if err != nil {
 			return err
 		}

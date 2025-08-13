@@ -14,7 +14,7 @@
 package blobrefresh
 
 import (
-	"io/ioutil"
+	"io"
 	"os"
 	"testing"
 	"time"
@@ -92,7 +92,7 @@ func TestRefresh(t *testing.T) {
 
 	f, err := mocks.cas.GetCacheFileReader(blob.Digest.Hex())
 	require.NoError(err)
-	result, err := ioutil.ReadAll(f)
+	result, err := io.ReadAll(f)
 	require.Equal(string(blob.Content), string(result))
 
 	var tm metadata.TorrentMeta

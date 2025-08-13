@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"net/http"
 	"net/url"
@@ -241,7 +240,7 @@ func (c *HTTPClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInf
 		return nil, err
 	}
 	defer r.Body.Close()
-	raw, err := ioutil.ReadAll(r.Body)
+	raw, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read body: %s", err)
 	}

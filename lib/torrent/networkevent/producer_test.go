@@ -16,7 +16,6 @@ package networkevent
 import (
 	"bufio"
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -33,7 +32,7 @@ func TestProducerCreatesAndReusesFile(t *testing.T) {
 	peer1 := core.PeerIDFixture()
 	peer2 := core.PeerIDFixture()
 
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	require.NoError(err)
 	defer os.RemoveAll(dir)
 

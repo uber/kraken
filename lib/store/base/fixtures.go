@@ -15,7 +15,6 @@ package base
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 
@@ -29,23 +28,23 @@ func fileStatesFixture() (state1, state2, state3 FileState, run func()) {
 	cleanup := &testutil.Cleanup{}
 	defer cleanup.Recover()
 
-	root, err := ioutil.TempDir("/tmp", "store_test")
+	root, err := os.MkdirTemp("/tmp", "store_test")
 	if err != nil {
 		log.Fatal(err)
 	}
 	cleanup.Add(func() { os.RemoveAll(root) })
 
-	state1Dir, err := ioutil.TempDir(root, "state1")
+	state1Dir, err := os.MkdirTemp(root, "state1")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	state2Dir, err := ioutil.TempDir(root, "state2")
+	state2Dir, err := os.MkdirTemp(root, "state2")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	state3Dir, err := ioutil.TempDir(root, "state3")
+	state3Dir, err := os.MkdirTemp(root, "state3")
 	if err != nil {
 		log.Fatal(err)
 	}

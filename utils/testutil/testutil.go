@@ -15,7 +15,6 @@ package testutil
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -94,7 +93,7 @@ func TempFile(data []byte) (string, func()) {
 	var cleanup Cleanup
 	defer cleanup.Recover()
 
-	f, err := ioutil.TempFile(".", "")
+	f, err := os.CreateTemp(".", "")
 	if err != nil {
 		panic(err)
 	}

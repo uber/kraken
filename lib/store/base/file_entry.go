@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,7 +126,7 @@ func (f *localFileEntryFactory) ListNames(state FileState) ([]string, error) {
 
 	var readNames func(string) error
 	readNames = func(dir string) error {
-		infos, err := ioutil.ReadDir(dir)
+		infos, err := os.ReadDir(dir)
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil
@@ -195,7 +194,7 @@ func (f *casFileEntryFactory) ListNames(state FileState) ([]string, error) {
 
 	var readNames func(string, int) error
 	readNames = func(dir string, depth int) error {
-		infos, err := ioutil.ReadDir(dir)
+		infos, err := os.ReadDir(dir)
 		if err != nil {
 			return err
 		}
@@ -311,7 +310,7 @@ func (entry *localFileEntry) Reload() error {
 	}
 
 	// Load metadata.
-	files, err := ioutil.ReadDir(filepath.Dir(entry.GetPath()))
+	files, err := os.ReadDir(filepath.Dir(entry.GetPath()))
 	if err != nil {
 		return err
 	}
@@ -382,7 +381,7 @@ func (entry *localFileEntry) Move(targetState FileState) error {
 		if md.Movable() {
 			sourceMetadataPath := entry.getMetadataPath(md)
 			targetMetadataPath := filepath.Join(filepath.Dir(targetPath), md.GetSuffix())
-			bytes, err := ioutil.ReadFile(sourceMetadataPath)
+			bytes, err := os.ReadFile(sourceMetadataPath)
 			if err != nil {
 				return err
 			}
@@ -487,7 +486,7 @@ func (entry *localFileEntry) AddMetadata(md metadata.Metadata) error {
 // GetMetadata reads and unmarshals metadata into md.
 func (entry *localFileEntry) GetMetadata(md metadata.Metadata) error {
 	filePath := entry.getMetadataPath(md)
-	b, err := ioutil.ReadFile(filePath)
+	b, err := os.ReadFile(filePath)
 	if err != nil {
 		return err
 	}
@@ -591,7 +590,7 @@ func compareAndWriteFile(filePath string, b []byte) (bool, error) {
 			return false, err
 		}
 
-		if err := ioutil.WriteFile(filePath, b, 0775); err != nil {
+		if err := os.WriteFile(filePath, b, 0775); err != nil {
 			return false, err
 		}
 		return true, nil

@@ -15,7 +15,6 @@ package store
 
 import (
 	"errors"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -34,7 +33,7 @@ func fileOpFixture(clk clock.Clock) (base.FileState, base.FileOp, func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
-	dir, err := ioutil.TempDir("/tmp", "cleanup_test")
+	dir, err := os.MkdirTemp("/tmp", "cleanup_test")
 	if err != nil {
 		panic(err)
 	}

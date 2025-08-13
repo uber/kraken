@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/url"
 	"strings"
 	"testing"
@@ -140,7 +140,7 @@ func TestDownload(t *testing.T) {
 
 	r, err := c.Download(namespace, blob.Digest)
 	require.NoError(err)
-	result, err := ioutil.ReadAll(r)
+	result, err := io.ReadAll(r)
 	require.NoError(err)
 	require.Equal(string(blob.Content), string(result))
 }

@@ -14,7 +14,6 @@
 package store
 
 import (
-	"io/ioutil"
 	"os"
 
 	"github.com/uber/kraken/utils/testutil"
@@ -23,7 +22,7 @@ import (
 )
 
 func tempdir(cleanup *testutil.Cleanup, name string) string {
-	d, err := ioutil.TempDir("/tmp", name)
+	d, err := os.MkdirTemp("/tmp", name)
 	if err != nil {
 		panic(err)
 	}

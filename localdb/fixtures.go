@@ -14,7 +14,6 @@
 package localdb
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -28,7 +27,7 @@ func Fixture() (*sqlx.DB, func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
-	tmpdir, err := ioutil.TempDir(".", "test-db-")
+	tmpdir, err := os.MkdirTemp(".", "test-db-")
 	if err != nil {
 		panic(err)
 	}

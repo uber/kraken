@@ -16,7 +16,6 @@ package core
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"strings"
 	"testing"
 
@@ -71,7 +70,7 @@ func TestTeeReader(t *testing.T) {
 
 	_, err := io.Copy(w, tr)
 	require.NoError(err)
-	b, err := ioutil.ReadAll(w)
+	b, err := io.ReadAll(w)
 	require.NoError(err)
 	require.Equal(_testStr, string(b))
 

@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 
 	"github.com/uber/kraken/utils/log"
 )
@@ -142,7 +142,7 @@ func concatSecrets(secrets []Secret) ([]byte, error) {
 }
 
 func parseCert(path string) ([]byte, error) {
-	certBytes, err := ioutil.ReadFile(path)
+	certBytes, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read file: %s", err)
 	}
@@ -151,12 +151,12 @@ func parseCert(path string) ([]byte, error) {
 
 // parseKey reads key from file and decrypts if passphrase is provided.
 func parseKey(path, passphrasePath string) ([]byte, error) {
-	keyPEM, err := ioutil.ReadFile(path)
+	keyPEM, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read file: %s", err)
 	}
 	if passphrasePath != "" {
-		passphrase, err := ioutil.ReadFile(passphrasePath)
+		passphrase, err := os.ReadFile(passphrasePath)
 		if err != nil {
 			return nil, fmt.Errorf("read passphrase file: %s", err)
 		}

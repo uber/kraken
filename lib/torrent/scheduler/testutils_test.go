@@ -15,7 +15,7 @@ package scheduler
 
 import (
 	"flag"
-	"io/ioutil"
+	"io"
 	"net"
 	"os"
 	"reflect"
@@ -185,7 +185,7 @@ func (p *testPeer) checkTorrent(t *testing.T, namespace string, blob *core.BlobF
 		pr, err := tor.GetPieceReader(i)
 		require.NoError(err)
 		defer pr.Close()
-		pieceData, err := ioutil.ReadAll(pr)
+		pieceData, err := io.ReadAll(pr)
 		require.NoError(err)
 		copy(cursor, pieceData)
 		cursor = cursor[tor.PieceLength(i):]

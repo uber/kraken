@@ -15,7 +15,6 @@ package configutil
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -89,7 +88,7 @@ type Zconfig struct {
 func writeFile(t *testing.T, contents string) string {
 	require := require.New(t)
 
-	f, err := ioutil.TempFile("", "configtest")
+	f, err := os.CreateTemp("", "configtest")
 	require.NoError(err)
 
 	defer f.Close()
@@ -276,13 +275,13 @@ func TestExtendsConfigDeep(t *testing.T) {
 func TestExtendsConfigCircularRef(t *testing.T) {
 	require := require.New(t)
 
-	f1, err := ioutil.TempFile("", "configtest")
+	f1, err := os.CreateTemp("", "configtest")
 	require.NoError(err)
 
-	f2, err := ioutil.TempFile("", "configtest")
+	f2, err := os.CreateTemp("", "configtest")
 	require.NoError(err)
 
-	f3, err := ioutil.TempFile("", "configtest")
+	f3, err := os.CreateTemp("", "configtest")
 	require.NoError(err)
 
 	defer f1.Close()

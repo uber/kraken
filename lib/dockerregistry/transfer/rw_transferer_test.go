@@ -16,7 +16,7 @@ package transfer
 import (
 	"bytes"
 	"errors"
-	"io/ioutil"
+	"io"
 	"testing"
 
 	"github.com/uber/kraken/build-index/tagclient"
@@ -77,7 +77,7 @@ func TestReadWriteTransfererDownloadCachesBlob(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, err := transferer.Download(namespace, blob.Digest)
 		require.NoError(err)
-		b, err := ioutil.ReadAll(result)
+		b, err := io.ReadAll(result)
 		require.NoError(err)
 		require.Equal(blob.Content, b)
 	}

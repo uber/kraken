@@ -15,7 +15,7 @@ package blobserver
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"sort"
 	"testing"
 	"time"
@@ -108,7 +108,7 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 	_, err = cc.GetMetaInfo(backend.NoopNamespace, blob.Digest)
 	require.Error(err)
 
-	require.Error(cc.DownloadBlob(backend.NoopNamespace, blob.Digest, ioutil.Discard))
+	require.Error(cc.DownloadBlob(backend.NoopNamespace, blob.Digest, io.Discard))
 
 	_, err = cc.Owners(blob.Digest)
 	require.Error(err)

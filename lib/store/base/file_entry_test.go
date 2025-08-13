@@ -15,7 +15,6 @@ package base
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -259,7 +258,7 @@ func testMoveFrom(require *require.Assertions, bundle *fileEntryTestBundle) {
 	s3 := bundle.state3
 
 	fp := fe.GetPath()
-	testSourceFile, err := ioutil.TempFile(s3.GetDirectory(), "")
+	testSourceFile, err := os.CreateTemp(s3.GetDirectory(), "")
 	require.NoError(err)
 
 	// MoveFrom succeeds with correct state and source path.
@@ -275,7 +274,7 @@ func testMoveFromExisting(require *require.Assertions, bundle *fileEntryTestBund
 	s3 := bundle.state3
 
 	fp := fe.GetPath()
-	testSourceFile, err := ioutil.TempFile(s3.GetDirectory(), "")
+	testSourceFile, err := os.CreateTemp(s3.GetDirectory(), "")
 	require.NoError(err)
 
 	// MoveFrom succeeds with correct state and source path.
@@ -285,7 +284,7 @@ func testMoveFromExisting(require *require.Assertions, bundle *fileEntryTestBund
 	require.NoError(err)
 
 	// MoveFrom fails with existing file.
-	testSourceFile2, err := ioutil.TempFile(s3.GetDirectory(), "")
+	testSourceFile2, err := os.CreateTemp(s3.GetDirectory(), "")
 	err = fe.MoveFrom(s1, testSourceFile2.Name())
 	require.True(os.IsExist(err))
 	_, err = os.Stat(fp)
@@ -298,7 +297,7 @@ func testMoveFromWrongState(require *require.Assertions, bundle *fileEntryTestBu
 	s3 := bundle.state3
 
 	fp := fe.GetPath()
-	testSourceFile, err := ioutil.TempFile(s3.GetDirectory(), "")
+	testSourceFile, err := os.CreateTemp(s3.GetDirectory(), "")
 	require.NoError(err)
 
 	// MoveFrom fails with wrong state.
