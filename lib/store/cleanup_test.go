@@ -14,20 +14,19 @@
 package store
 
 import (
-	"errors"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/andres-erbsen/clock"
+	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store/base"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/testutil"
-
-	"github.com/andres-erbsen/clock"
-	"github.com/stretchr/testify/require"
-	"github.com/uber-go/tally"
 )
 
 func fileOpFixture(clk clock.Clock) (base.FileState, base.FileOp, func()) {
@@ -231,31 +230,46 @@ func TestCleanupManageDiskUsage(t *testing.T) {
 }
 
 func TestCleanupManagerAggressive(t *testing.T) {
-	require := require.New(t)
-
-	config := CleanupConfig{
+	aggressiveOnConfig := CleanupConfig{
 		AggressiveThreshold: 80,
 		TTL:                 10 * time.Second,
 		AggressiveTTL:       5 * time.Second,
 	}
+	aggressiveOffConfig := CleanupConfig{
+		TTL: 10 * time.Second,
+	}
 
-	clk := clock.NewMock()
-	m, err := newCleanupManager(clk, tally.NoopScope)
-	require.NoError(err)
-	defer m.stop()
+	for _, tc := range []struct {
+		config       CleanupConfig
+		usagePercent int
+		expectedTTL  time.Duration
+	}{
+		{
+			config:       aggressiveOnConfig,
+			usagePercent: aggressiveOnConfig.AggressiveThreshold,
+			expectedTTL:  aggressiveOnConfig.AggressiveTTL,
+		},
+		{
+			config:       aggressiveOnConfig,
+			usagePercent: aggressiveOnConfig.AggressiveThreshold - 20,
+			expectedTTL:  aggressiveOnConfig.TTL,
+		},
+		{
+			config:       aggressiveOffConfig,
+			usagePercent: rand.Intn(101),
+			expectedTTL:  aggressiveOffConfig.TTL,
+		},
+	} {
+		require := require.New(t)
 
-	_, op, cleanup := fileOpFixture(clk)
-	defer cleanup()
+		clk := clock.NewMock()
+		m, err := newCleanupManager(clk, tally.NoopScope)
+		require.NoError(err)
+		defer m.stop()
 
-	require.Equal(m.checkAggressiveCleanup(op, config, func() (int, error) {
-		return 90, nil
-	}), 5*time.Second)
+		_, op, cleanup := fileOpFixture(clk)
+		defer cleanup()
 
-	require.Equal(m.checkAggressiveCleanup(op, config, func() (int, error) {
-		return 60, nil
-	}), 10*time.Second)
-
-	require.Equal(m.checkAggressiveCleanup(op, config, func() (int, error) {
-		return 0, errors.New("fake error")
-	}), 10*time.Second)
+		require.Equal(m.calculateCleanupTTL(op, tc.config, tc.usagePercent), tc.expectedTTL)
+	}
 }
