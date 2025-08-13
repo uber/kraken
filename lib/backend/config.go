@@ -27,7 +27,7 @@ type Config struct {
 	// If enabled, throttles upload / download bandwidth.
 	Bandwidth bandwidth.Config `yaml:"bandwidth"`
 	// Whether the service readiness endpoint will check the backend's readiness.
-	MustReady bool             `yaml:"must_ready"`
+	MustReady bool `yaml:"must_ready"`
 }
 
 func (c Config) applyDefaults() Config {

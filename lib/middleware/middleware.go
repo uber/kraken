@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,14 +31,13 @@ import (
 //
 // Wrong:
 //
-//     tagEndpoint(stats, r).Counter("n").Inc(1)
-//     next.ServeHTTP(w, r)
+//	tagEndpoint(stats, r).Counter("n").Inc(1)
+//	next.ServeHTTP(w, r)
 //
 // Right:
 //
-//     next.ServeHTTP(w, r)
-//     tagEndpoint(stats, r).Counter("n").Inc(1)
-//
+//	next.ServeHTTP(w, r)
+//	tagEndpoint(stats, r).Counter("n").Inc(1)
 func tagEndpoint(stats tally.Scope, r *http.Request) tally.Scope {
 	ctx := chi.RouteContext(r.Context())
 	var staticParts []string

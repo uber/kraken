@@ -13,10 +13,10 @@ import (
 	reflect "reflect"
 	time "time"
 
+	gomock "github.com/golang/mock/gomock"
 	tagclient "github.com/uber/kraken/build-index/tagclient"
 	tagmodels "github.com/uber/kraken/build-index/tagmodels"
 	core "github.com/uber/kraken/core"
-	gomock "github.com/golang/mock/gomock"
 )
 
 // MockClient is a mock of Client interface.

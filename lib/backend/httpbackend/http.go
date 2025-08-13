@@ -26,8 +26,8 @@ import (
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/httputil"
 
-	"gopkg.in/yaml.v2"
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
 )
 
 const _http = "http"

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,35 +22,34 @@
 // There is no multiple inheritance supported. Dependency tree suppossed to
 // form a linked list.
 //
-//
-// Values from multiple configurations within the same hierarchy are deep merged
+// # Values from multiple configurations within the same hierarchy are deep merged
 //
 // Note regarding configuration merging:
-//   Array defined in YAML will be overriden based on load sequence.
-//   e.g. in the base.yaml:
-//        sports:
-//           - football
-//        in the development.yaml:
-//        extends: base.yaml
-//        sports:
-//           - basketball
-//        after the merge:
-//        sports:
-//           - basketball  // only keep the latest one
 //
-//   Map defined in YAML will be merged together based on load sequence.
-//   e.g. in the base.yaml:
-//        sports:
-//           football: true
-//        in the development.yaml:
-//        extends: base.yaml
-//        sports:
-//           basketball: true
-//        after the merge:
-//        sports:  // combine all the map fields
-//           football: true
-//           basketball: true
+//	Array defined in YAML will be overriden based on load sequence.
+//	e.g. in the base.yaml:
+//	     sports:
+//	        - football
+//	     in the development.yaml:
+//	     extends: base.yaml
+//	     sports:
+//	        - basketball
+//	     after the merge:
+//	     sports:
+//	        - basketball  // only keep the latest one
 //
+//	Map defined in YAML will be merged together based on load sequence.
+//	e.g. in the base.yaml:
+//	     sports:
+//	        football: true
+//	     in the development.yaml:
+//	     extends: base.yaml
+//	     sports:
+//	        basketball: true
+//	     after the merge:
+//	     sports:  // combine all the map fields
+//	        football: true
+//	        basketball: true
 package configutil
 
 import (
