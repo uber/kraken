@@ -15,7 +15,7 @@ from __future__ import absolute_import
 
 import requests
 
-from utils import tls_opts_with_client_certs
+from .utils import tls_opts_with_client_certs
 
 
 class Uploader(object):
@@ -33,7 +33,7 @@ class Uploader(object):
     def _patch(self, name, uid, start, stop, chunk):
         url = 'https://{addr}/namespace/testfs/blobs/sha256:{name}/uploads/{uid}'.format(
             addr=self.addr, name=name, uid=uid)
-        res = requests.patch(url, headers={'Content-Range': '%d-%d' % (start, stop)}, data=chunk, **tls_opts_with_client_certs())
+        res = requests.patch(url, headers={'Content-Range': '{}-{}'.format(start, stop)}, data=chunk, **tls_opts_with_client_certs())
         res.raise_for_status()
 
     def _commit(self, name, uid):

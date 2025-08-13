@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -160,6 +160,8 @@ func parseKey(path, passphrasePath string) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read passphrase file: %s", err)
 		}
+		// Trim any newlines from the passphrase
+		passphrase = bytes.TrimSpace(passphrase)
 		keyBytes, err := decryptPEMBlock(keyPEM, passphrase)
 		if err != nil {
 			return nil, fmt.Errorf("decrypt key: %s", err)
