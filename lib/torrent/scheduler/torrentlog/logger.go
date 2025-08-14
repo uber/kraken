@@ -14,21 +14,14 @@
 package torrentlog
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/log"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-)
-
-var (
-	errEmptyReceivedPieces    = errors.New("empty received piece counts")
-	errNegativeReceivedPieces = errors.New("negative value in received piece counts")
 )
 
 // Logger wraps structured log entries for important torrent events. These events

@@ -33,8 +33,6 @@ import (
 	"github.com/uber-go/tally"
 )
 
-const pieceLength = 4
-
 type archiveMocks struct {
 	cads           *store.CADownloadStore
 	metaInfoClient *mockmetainfoclient.MockClient
