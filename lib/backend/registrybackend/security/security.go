@@ -48,7 +48,6 @@ type Config struct {
 	TLS                    httputil.TLSConfig `yaml:"tls"`
 	BasicAuth              *types.AuthConfig  `yaml:"basic"`
 	RemoteCredentialsStore string             `yaml:"credsStore"`
-	EnableHTTPFallback     bool               `yaml:"enableHTTPFallback"`
 }
 
 // Authenticator creates send options to authenticate requests to registry
@@ -95,12 +94,6 @@ func (a *authenticator) Authenticate(repo string) ([]httputil.SendOption, error)
 	if config.TLS.Client.Disabled {
 		opts = append(opts, httputil.SendNoop())
 		return opts, nil
-	}
-
-	if config.EnableHTTPFallback {
-		opts = append(opts, httputil.EnableHTTPFallback())
-	} else {
-		opts = append(opts, httputil.DisableHTTPFallback())
 	}
 
 	if !a.shouldAuth() {

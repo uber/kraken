@@ -57,7 +57,7 @@ func TestBlobDownloadBlobSuccess(t *testing.T) {
 	addr, stop := testutil.StartServer(r)
 	defer stop()
 
-	config := newTestConfig(addr)
+	config := Config{Address: addr}
 	client, err := NewBlobClient(config, tally.NoopScope)
 	require.NoError(err)
 
@@ -87,7 +87,7 @@ func TestBlobDownloadManifestSuccess(t *testing.T) {
 	addr, stop := testutil.StartServer(r)
 	defer stop()
 
-	config := newTestConfig(addr)
+	config := Config{Address: addr}
 	client, err := NewBlobClient(config, tally.NoopScope)
 	require.NoError(err)
 
@@ -117,7 +117,7 @@ func TestBlobDownloadFileNotFound(t *testing.T) {
 	addr, stop := testutil.StartServer(r)
 	defer stop()
 
-	config := newTestConfig(addr)
+	config := Config{Address: addr}
 	client, err := NewBlobClient(config, tally.NoopScope)
 	require.NoError(err)
 
