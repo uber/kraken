@@ -35,3 +35,18 @@ To build docker images:
 ```
 $ make images
 ```
+
+## Linting
+
+Krake uses [golangci-lint](https://github.com/golangci/golangci-lint) for checking Go code quality.
+
+### Prerequisite
+Install `golangci-lint` and ensure it is in your `PATH`. (macOS example: `brew install golangci-lint`).  
+Official instructions: https://golangci-lint.run/docs/welcome/install/
+
+### Quick Checklist
+1. Install `golangci-lint`.
+2. Verify: `golangci-lint version`.
+3. Install Git hooks (runs lint automatically on each commit): `make install-hooks`
+4. Make changes and commit (the hook blocks commits on lint errors).
+5. If the hook fails, fix the reported issues and retry the commit.
