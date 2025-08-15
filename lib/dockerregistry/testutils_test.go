@@ -57,7 +57,7 @@ func newTestDriver() (*testDriver, func()) {
 }
 
 func (d *testDriver) setup() (*KrakenStorageDriver, testImageUploadBundle) {
-	sd := NewReadWriteStorageDriver(Config{}, d.cas, d.transferer, tally.NoopScope)
+	sd := NewReadWriteStorageDriver(Config{}, d.cas, d.transferer, DefaultVerificationFunc, tally.NoopScope)
 
 	// Create upload
 	uploadUUID := uuid.Generate().String()

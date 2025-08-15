@@ -20,6 +20,8 @@ import (
 	"io"
 	"os"
 
+	"github.com/uber/kraken/core"
+
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/log"
@@ -54,8 +56,16 @@ import (
 // Name of storage driver.
 const Name = "kraken"
 
-func init() {
-	factory.Register(Name, &krakenStorageDriverFactory{})
+var DefaultVerificationFunc = func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error) {
+	return DecisionSkip, nil
+}
+
+func RegisterKrakenStorageDriver() {
+	RegisterKrakenStorageDriverWithImageVerification(DefaultVerificationFunc)
+}
+
+func RegisterKrakenStorageDriverWithImageVerification(verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)) {
+	factory.Register(Name, &krakenStorageDriverFactory{verification})
 }
 
 // InvalidRequestError implements error and contains the path that is not supported
@@ -79,7 +89,9 @@ func toDriverError(err error, path string) error {
 	return err
 }
 
-type krakenStorageDriverFactory struct{}
+type krakenStorageDriverFactory struct {
+	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)
+}
 
 func getParam(params map[string]interface{}, name string) interface{} {
 	p, ok := params[name]
@@ -101,10 +113,10 @@ func (factory *krakenStorageDriverFactory) Create(
 	switch constructor {
 	case _rw:
 		castore := getParam(params, "castore").(*store.CAStore)
-		return NewReadWriteStorageDriver(config, castore, transferer, metrics), nil
+		return NewReadWriteStorageDriver(config, castore, transferer, factory.verification, metrics), nil
 	case _ro:
 		blobstore := getParam(params, "blobstore").(BlobStore)
-		return NewReadOnlyStorageDriver(config, blobstore, transferer, metrics), nil
+		return NewReadOnlyStorageDriver(config, blobstore, transferer, factory.verification, metrics), nil
 	default:
 		return nil, fmt.Errorf("unknown constructor %s", constructor)
 	}
@@ -125,6 +137,7 @@ func NewReadWriteStorageDriver(
 	config Config,
 	cas *store.CAStore,
 	transferer transfer.ImageTransferer,
+	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
 	metrics tally.Scope) *KrakenStorageDriver {
 
 	return &KrakenStorageDriver{
@@ -132,7 +145,7 @@ func NewReadWriteStorageDriver(
 		transferer: transferer,
 		blobs:      newBlobs(cas, transferer),
 		uploads:    newCASUploads(cas, transferer),
-		manifests:  newManifests(transferer),
+		manifests:  newManifests(transferer, verification, metrics),
 		metrics:    metrics,
 	}
 }
@@ -142,6 +155,7 @@ func NewReadOnlyStorageDriver(
 	config Config,
 	bs BlobStore,
 	transferer transfer.ImageTransferer,
+	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
 	metrics tally.Scope) *KrakenStorageDriver {
 
 	return &KrakenStorageDriver{
@@ -149,7 +163,7 @@ func NewReadOnlyStorageDriver(
 		transferer: transferer,
 		blobs:      newBlobs(bs, transferer),
 		uploads:    disabledUploads{},
-		manifests:  newManifests(transferer),
+		manifests:  newManifests(transferer, verification, metrics),
 		metrics:    metrics,
 	}
 }

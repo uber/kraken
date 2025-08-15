@@ -60,6 +60,7 @@ type options struct {
 	config  *Config
 	metrics tally.Scope
 	logger  *zap.Logger
+	effect  func()
 }
 
 // Option defines an optional Run parameter.
@@ -79,6 +80,11 @@ func WithMetrics(s tally.Scope) Option {
 // WithLogger ignores logging config and directly uses the provided logger.
 func WithLogger(l *zap.Logger) Option {
 	return func(o *options) { o.logger = l }
+}
+
+// WithEffect runs any setup component requires
+func WithEffect(f func()) Option {
+	return func(o *options) { o.effect = f }
 }
 
 // Run runs the proxy.
@@ -124,6 +130,10 @@ func Run(flags *Flags, opts ...Option) {
 	}
 
 	go metrics.EmitVersion(stats)
+
+	if overrides.effect != nil {
+		overrides.effect()
+	}
 
 	cas, err := store.NewCAStore(config.CAStore, stats)
 	if err != nil {

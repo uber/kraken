@@ -18,6 +18,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/uber-go/tally"
+	"github.com/uber/kraken/lib/store"
+
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
@@ -25,27 +28,51 @@ import (
 )
 
 const (
-	pullTimer            = "dockertag.time.pull"
-	createSuccessCounter = "dockertag.success.create"
-	createFailureCounter = "dockertag.failure.create"
-	getSuccessCounter    = "dockertag.success.get"
-	getFailureCounter    = "dockertag.failure.get"
+	signatureVerificationSuccessCounter = "signature_verification_success"
+	signatureVerificationFailureCounter = "signature_verification_failure"
+	signatureVerificationErrorCounter   = "signature_verification_error"
+	signatureVerificationDuration       = "signature_verification_duration"
+)
+
+type SignatureVerificationDecision int
+
+const (
+	DecisionSkip SignatureVerificationDecision = iota
+	DecisionDeny
+	DecisionAllow
 )
 
 type manifests struct {
-	transferer transfer.ImageTransferer
+	transferer   transfer.ImageTransferer
+	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)
+	metrics      tally.Scope
 }
 
-func newManifests(transferer transfer.ImageTransferer) *manifests {
-	return &manifests{transferer}
+func newManifests(
+	transferer transfer.ImageTransferer,
+	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
+	metrics tally.Scope,
+) *manifests {
+	return &manifests{transferer, verification, metrics}
 }
 
-// getDigest downloads and returns manifest digest.
-// This is the only place storage driver would download a manifest blob via
-// torrent scheduler or origin because it has namespace information.
-// The caller of storage driver would first call this function to resolve
-// the manifest link (and downloads manifest blob),
-// then call Stat or Reader which would assume the blob is on disk already.
+// getDigest resolves and downloads a manifest blob (by tag or digest) and
+// returns its digest as bytes.
+//
+// Behavior
+//  1. Extracts the repository from the provided registry path.
+//  2. If subtype is tags, resolves the tag to a digest using the transferer;
+//     if subtype is revisions, parses the digest directly from the path.
+//  3. Downloads the manifest blob via the transferer using (repo, digest).
+//  4. Opportunistically invokes verify to run signature/image checks and
+//     record metrics/logs. Verification result is not enforced here.
+//  5. Returns the digest in ASCII string form as a byte slice.
+//
+// Notes
+//   - This is the single place where a manifest is actually fetched via the
+//     transferer (torrent/origin), since it has the namespace (repo) context.
+//   - Callers typically invoke getDigest first to ensure the blob is local,
+//     then call Stat/Reader which assume the blob is already on disk.
 func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) {
 	repo, err := GetRepo(path)
 	if err != nil {
@@ -79,7 +106,52 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 	}
 	defer blob.Close()
 
+	_, _ = t.verify(path, repo, digest, blob)
 	return []byte(digest.String()), nil
+}
+
+// verify runs signature/image verification for a downloaded manifest blob and
+// records metrics/logs around the decision and duration.
+//
+// Returns
+//   - (true, nil)  when verification is allowed or intentionally skipped.
+//   - (false, nil) when verification explicitly denies.
+//   - (false, err) on verification errors or unknown decisions.
+//
+// Metrics
+//   - signature_verification_duration (timer): end-to-end verification latency.
+//   - signature_verification_success  (counter): allow decisions.
+//   - signature_verification_failure  (counter): deny decisions.
+//   - signature_verification_error    (counter): errors/unknown decisions.
+//
+// Logging
+//   - Error on verification error (includes repo/digest).
+//   - Warn  on deny (includes original path).
+//   - Debug on skip.
+func (t *manifests) verify(path string, repo string, digest core.Digest, blob store.FileReader) (bool, error) {
+	stopwatch := t.metrics.Timer(signatureVerificationDuration).Start()
+	defer stopwatch.Stop()
+	decision, err := t.verification(repo, digest, blob)
+	if err != nil {
+		t.metrics.Counter(signatureVerificationErrorCounter).Inc(1)
+		log.With("repo", repo, "digest", digest).Errorf("Error while performing image validation %s", err)
+		return false, err
+	}
+	switch decision {
+	case DecisionAllow:
+		t.metrics.Counter(signatureVerificationSuccessCounter).Inc(1)
+		return true, nil
+	case DecisionDeny:
+		t.metrics.Counter(signatureVerificationFailureCounter).Inc(1)
+		log.With("repo", repo, "digest", digest).Warnf("Verification failed %s", path)
+		return false, nil
+	case DecisionSkip:
+		log.With("repo", repo, "digest", digest).Debugf("Verification skipped for %s", path)
+		return true, nil
+	default:
+		t.metrics.Counter(signatureVerificationErrorCounter).Inc(1)
+		return false, fmt.Errorf("unknown verification decision: %d", decision)
+	}
 }
 
 func (t *manifests) putContent(path string, subtype PathSubType) error {
