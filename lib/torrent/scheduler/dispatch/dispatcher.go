@@ -36,10 +36,7 @@ import (
 )
 
 var (
-	errPeerAlreadyDispatched   = errors.New("peer is already dispatched for the torrent")
-	errPieceOutOfBounds        = errors.New("piece index out of bounds")
-	errChunkNotSupported       = errors.New("reading / writing chunk of piece not supported")
-	errRepeatedBitfieldMessage = errors.New("received repeated bitfield message")
+	errChunkNotSupported = errors.New("reading / writing chunk of piece not supported")
 )
 
 // Events defines Dispatcher events.

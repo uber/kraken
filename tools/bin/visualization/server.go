@@ -79,9 +79,3 @@ func (s *server) getEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
-
-type byTime []networkevent.Event
-
-func (s byTime) Len() int           { return len(s) }
-func (s byTime) Less(i, j int) bool { return s[i].Time.Before(s[j].Time) }
-func (s byTime) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
