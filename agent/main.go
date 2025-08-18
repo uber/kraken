@@ -13,8 +13,13 @@
 // limitations under the License.
 package main
 
-import "github.com/uber/kraken/agent/cmd"
+import (
+	"github.com/uber/kraken/agent/cmd"
+	"github.com/uber/kraken/lib/dockerregistry"
+)
 
 func main() {
-	cmd.Run(cmd.ParseFlags())
+	cmd.Run(cmd.ParseFlags(), cmd.WithEffect(func() {
+		dockerregistry.RegisterKrakenStorageDriver()
+	}))
 }
