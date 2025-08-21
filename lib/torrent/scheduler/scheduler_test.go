@@ -116,9 +116,7 @@ func TestDownloadManyTorrentsWithSeederAndManyLeechers(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for _, blob := range blobs {
-		blob := blob
 		for _, p := range leechers {
-			p := p
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -158,7 +156,6 @@ func TestDownloadTorrentWhenPeersAllHaveDifferentPiece(t *testing.T) {
 		copy(piece, blob.Content[start:stop])
 		require.NoError(tor.WritePiece(piecereader.NewBuffer(piece), i))
 
-		p := p
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

@@ -25,6 +25,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/andres-erbsen/clock"
+	"github.com/go-chi/chi"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
@@ -42,15 +45,8 @@ import (
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/listener"
 	"github.com/uber/kraken/utils/log"
-	"github.com/uber/kraken/utils/memsize"
 	"github.com/uber/kraken/utils/stringset"
-
-	"github.com/andres-erbsen/clock"
-	"github.com/go-chi/chi"
-	"github.com/uber-go/tally"
 )
-
-const _uploadChunkSize = 16 * memsize.MB
 
 // Server defines a server that serves blob data for agent.
 type Server struct {

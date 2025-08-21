@@ -5,9 +5,10 @@
 package mockdedup
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
 	time "time"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockTaskRunner is a mock of TaskRunner interface

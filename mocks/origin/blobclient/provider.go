@@ -5,9 +5,10 @@
 package mockblobclient
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	blobclient "github.com/uber/kraken/origin/blobclient"
-	reflect "reflect"
 )
 
 // MockProvider is a mock of Provider interface

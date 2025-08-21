@@ -10,10 +10,11 @@
 package mockblobclient
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	core "github.com/uber/kraken/core"
 	io "io"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+	core "github.com/uber/kraken/core"
 )
 
 // MockClusterClient is a mock of ClusterClient interface.

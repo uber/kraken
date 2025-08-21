@@ -54,10 +54,6 @@ type Conn struct {
 
 	events Events
 
-	mu                    sync.Mutex // Protects the following fields:
-	lastGoodPieceReceived time.Time
-	lastPieceSent         time.Time
-
 	nc            net.Conn
 	config        Config
 	clk           clock.Clock

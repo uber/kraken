@@ -5,9 +5,10 @@
 package mockhostlist
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	stringset "github.com/uber/kraken/utils/stringset"
-	reflect "reflect"
 )
 
 // MockList is a mock of List interface

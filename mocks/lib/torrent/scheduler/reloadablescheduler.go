@@ -5,11 +5,12 @@
 package mockscheduler
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
 	scheduler "github.com/uber/kraken/lib/torrent/scheduler"
 	connstate "github.com/uber/kraken/lib/torrent/scheduler/connstate"
-	reflect "reflect"
 )
 
 // MockReloadableScheduler is a mock of ReloadableScheduler interface

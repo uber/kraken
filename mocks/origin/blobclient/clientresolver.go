@@ -5,10 +5,11 @@
 package mockblobclient
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
 	blobclient "github.com/uber/kraken/origin/blobclient"
-	reflect "reflect"
 )
 
 // MockClientResolver is a mock of ClientResolver interface

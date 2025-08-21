@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/uber/kraken/mocks/utils/dedup"
+	mockdedup "github.com/uber/kraken/mocks/utils/dedup"
 	. "github.com/uber/kraken/utils/dedup"
 	"github.com/uber/kraken/utils/randutil"
 

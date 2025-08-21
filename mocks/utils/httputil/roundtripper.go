@@ -5,9 +5,10 @@
 package mockhttputil
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	http "net/http"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockRoundTripper is a mock of RoundTripper interface

@@ -5,9 +5,10 @@
 package mockpersistedretry
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	persistedretry "github.com/uber/kraken/lib/persistedretry"
-	reflect "reflect"
 )
 
 // MockManager is a mock of Manager interface

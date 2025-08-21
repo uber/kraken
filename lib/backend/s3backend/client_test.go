@@ -20,7 +20,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
-	"github.com/uber/kraken/mocks/lib/backend/s3backend"
+	mocks3backend "github.com/uber/kraken/mocks/lib/backend/s3backend"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/randutil"
 	"github.com/uber/kraken/utils/rwutil"

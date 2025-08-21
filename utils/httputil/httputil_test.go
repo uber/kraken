@@ -28,7 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/mocks/utils/httputil"
+	mockhttputil "github.com/uber/kraken/mocks/utils/httputil"
 )
 
 const _testURL = "http://localhost:0/test"

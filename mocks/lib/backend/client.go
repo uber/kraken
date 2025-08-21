@@ -5,11 +5,12 @@
 package mockbackend
 
 import (
+	io "io"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
 	backend "github.com/uber/kraken/lib/backend"
-	io "io"
-	reflect "reflect"
 )
 
 // MockClient is a mock of Client interface

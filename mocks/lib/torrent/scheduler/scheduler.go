@@ -5,10 +5,11 @@
 package mockscheduler
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
 	connstate "github.com/uber/kraken/lib/torrent/scheduler/connstate"
-	reflect "reflect"
 )
 
 // MockScheduler is a mock of Scheduler interface

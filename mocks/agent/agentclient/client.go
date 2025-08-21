@@ -5,10 +5,11 @@
 package mockagentclient
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	core "github.com/uber/kraken/core"
 	io "io"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+	core "github.com/uber/kraken/core"
 )
 
 // MockClient is a mock of Client interface

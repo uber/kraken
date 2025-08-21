@@ -5,8 +5,9 @@
 package mockstore
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockFileReadWriter is a mock of FileReadWriter interface

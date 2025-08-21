@@ -5,9 +5,10 @@
 package mocktagclient
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	tagclient "github.com/uber/kraken/build-index/tagclient"
-	reflect "reflect"
 )
 
 // MockProvider is a mock of Provider interface

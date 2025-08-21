@@ -17,19 +17,17 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/uber/kraken/mocks/origin/blobclient"
-	"github.com/uber/kraken/mocks/tracker/originstore"
-	"github.com/uber/kraken/mocks/tracker/peerstore"
-	"github.com/uber/kraken/tracker/peerhandoutpolicy"
-
 	"github.com/golang/mock/gomock"
 	"github.com/uber-go/tally"
+	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
+	mockoriginstore "github.com/uber/kraken/mocks/tracker/originstore"
+	mockpeerstore "github.com/uber/kraken/mocks/tracker/peerstore"
+	"github.com/uber/kraken/tracker/peerhandoutpolicy"
 )
 
 type serverMocks struct {
 	config        Config
 	policy        *peerhandoutpolicy.PriorityPolicy
-	ctrl          *gomock.Controller
 	peerStore     *mockpeerstore.MockStore
 	originStore   *mockoriginstore.MockStore
 	originCluster *mockblobclient.MockClusterClient
