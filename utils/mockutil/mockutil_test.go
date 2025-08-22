@@ -80,6 +80,7 @@ func TestMatchWriter(t *testing.T) {
 
 	// WriterMatcher should write to the file.
 	result, err := io.ReadAll(f)
+	require.NoError(err)
 	require.Equal(string(b), string(result))
 }
 
@@ -109,6 +110,7 @@ func TestMatchWriterAt(t *testing.T) {
 
 	// WriterAtMatcher should write to the file.
 	result, err := io.ReadAll(f)
+	require.NoError(err)
 	require.Equal(string(b), string(result))
 }
 

@@ -5,10 +5,11 @@
 package mockcontainerruntime
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	containerd "github.com/uber/kraken/lib/containerruntime/containerd"
 	dockerdaemon "github.com/uber/kraken/lib/containerruntime/dockerdaemon"
-	reflect "reflect"
 )
 
 // MockFactory is a mock of Factory interface

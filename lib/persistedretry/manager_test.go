@@ -24,7 +24,7 @@ import (
 	"github.com/uber-go/tally"
 
 	. "github.com/uber/kraken/lib/persistedretry"
-	"github.com/uber/kraken/mocks/lib/persistedretry"
+	mockpersistedretry "github.com/uber/kraken/mocks/lib/persistedretry"
 )
 
 func waitForWorkers() {

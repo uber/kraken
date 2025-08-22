@@ -16,12 +16,11 @@ package tagreplication
 import (
 	"testing"
 
-	"github.com/uber/kraken/mocks/build-index/tagclient"
-	"github.com/uber/kraken/mocks/origin/blobclient"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
+	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
+	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
 )
 
 const (

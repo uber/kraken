@@ -228,21 +228,6 @@ func (e hasConnEvent) apply(s *state) {
 	e.result <- found
 }
 
-// waitForConnEstablished waits until s has established a connection to peerID for the
-// torrent of infoHash.
-func waitForConnEstablished(t *testing.T, s *scheduler, peerID core.PeerID, infoHash core.InfoHash) {
-	err := testutil.PollUntilTrue(5*time.Second, func() bool {
-		result := make(chan bool)
-		s.eventLoop.send(hasConnEvent{peerID, infoHash, result})
-		return <-result
-	})
-	if err != nil {
-		t.Fatalf(
-			"scheduler=%s did not establish conn to peer=%s hash=%s: %s",
-			s.pctx.PeerID, peerID, infoHash, err)
-	}
-}
-
 // waitForConnRemoved waits until s has closed the connection to peerID for the
 // torrent of infoHash.
 func waitForConnRemoved(t *testing.T, s *scheduler, peerID core.PeerID, infoHash core.InfoHash) {

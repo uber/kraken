@@ -5,11 +5,12 @@
 package mocks3backend
 
 import (
+	io "io"
+	reflect "reflect"
+
 	s3 "github.com/aws/aws-sdk-go/service/s3"
 	s3manager "github.com/aws/aws-sdk-go/service/s3/s3manager"
 	gomock "github.com/golang/mock/gomock"
-	io "io"
-	reflect "reflect"
 )
 
 // MockS3 is a mock of S3 interface

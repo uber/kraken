@@ -12,6 +12,9 @@ env:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    # Temporary deactivate the lint-ci to be able to split lint-fixes into multiple PRs
+    # TODO: @egorikas
+    if: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

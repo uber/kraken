@@ -14,8 +14,9 @@
 package proxyserver
 
 import (
-	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
 	"testing"
+
+	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
 
 	"github.com/golang/mock/gomock"
 	"github.com/uber-go/tally"

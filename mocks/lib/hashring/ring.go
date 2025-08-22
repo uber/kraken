@@ -5,9 +5,10 @@
 package mockhashring
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
-	reflect "reflect"
 )
 
 // MockRing is a mock of Ring interface

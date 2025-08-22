@@ -24,8 +24,8 @@ import (
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
-	"github.com/uber/kraken/mocks/build-index/tagclient"
-	"github.com/uber/kraken/mocks/lib/torrent/scheduler"
+	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
+	mockscheduler "github.com/uber/kraken/mocks/lib/torrent/scheduler"
 	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"

@@ -24,6 +24,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/build-index/tagstore"
 	"github.com/uber/kraken/core"
@@ -32,18 +35,14 @@ import (
 	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/lib/persistedretry/tagreplication"
-	"github.com/uber/kraken/mocks/build-index/tagclient"
-	"github.com/uber/kraken/mocks/build-index/tagstore"
-	"github.com/uber/kraken/mocks/build-index/tagtype"
-	"github.com/uber/kraken/mocks/lib/backend"
-	"github.com/uber/kraken/mocks/lib/persistedretry"
-	"github.com/uber/kraken/mocks/origin/blobclient"
+	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
+	mocktagstore "github.com/uber/kraken/mocks/build-index/tagstore"
+	mocktagtype "github.com/uber/kraken/mocks/build-index/tagtype"
+	mockbackend "github.com/uber/kraken/mocks/lib/backend"
+	mockpersistedretry "github.com/uber/kraken/mocks/lib/persistedretry"
+	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/testutil"
-
-	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/require"
-	"github.com/uber-go/tally"
 )
 
 const (

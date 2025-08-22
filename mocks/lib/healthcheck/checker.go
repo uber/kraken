@@ -6,8 +6,9 @@ package mockhealthcheck
 
 import (
 	context "context"
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockChecker is a mock of Checker interface

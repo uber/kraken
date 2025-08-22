@@ -5,11 +5,12 @@
 package mockgcsbackend
 
 import (
+	io "io"
+	reflect "reflect"
+
 	storage "cloud.google.com/go/storage"
 	gomock "github.com/golang/mock/gomock"
 	iterator "google.golang.org/api/iterator"
-	io "io"
-	reflect "reflect"
 )
 
 // MockGCS is a mock of GCS interface

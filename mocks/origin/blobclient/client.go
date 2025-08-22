@@ -10,11 +10,12 @@
 package mockblobclient
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	core "github.com/uber/kraken/core"
 	io "io"
 	reflect "reflect"
 	time "time"
+
+	gomock "github.com/golang/mock/gomock"
+	core "github.com/uber/kraken/core"
 )
 
 // MockClient is a mock of Client interface.

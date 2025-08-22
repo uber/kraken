@@ -16,7 +16,6 @@ package tagstore_test
 import (
 	"fmt"
 	"io"
-	"sync"
 	"testing"
 
 	. "github.com/uber/kraken/build-index/tagstore"
@@ -25,8 +24,8 @@ import (
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/persistedretry/writeback"
 	"github.com/uber/kraken/lib/store"
-	"github.com/uber/kraken/mocks/lib/backend"
-	"github.com/uber/kraken/mocks/lib/persistedretry"
+	mockbackend "github.com/uber/kraken/mocks/lib/backend"
+	mockpersistedretry "github.com/uber/kraken/mocks/lib/persistedretry"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/testutil"
 
@@ -66,19 +65,6 @@ func newStoreMocks(t *testing.T) (*storeMocks, func()) {
 
 func (m *storeMocks) new(config Config) Store {
 	return New(config, tally.NoopScope, m.ss, m.backends, m.writeBackManager)
-}
-
-func checkConcurrentGets(t *testing.T, store Store, tag string, expected core.Digest) {
-	t.Helper()
-
-	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-		}()
-	}
-	wg.Wait()
 }
 
 func TestPutAndGetFromDisk(t *testing.T) {
