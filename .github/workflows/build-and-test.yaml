@@ -10,22 +10,23 @@ env:
   GO_VERSION: '1.23'
 
 jobs:
-# Temporary deactivate the lint-ci to be able to split lint-fixes into multiple PRs
-# TODO: @egorikas
-#  lint:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v4
-#      - uses: actions/setup-go@v5
-#        with:
-#          go-version: ${{ env.GO_VERSION }}
-#
-#      - name: golangci-lint
-#        uses: golangci/golangci-lint-action@v8
-#        with:
-#          version: latest
-#          # Only run on new issues in pull requests
-#          only-new-issues: true
+  lint:
+    runs-on: ubuntu-latest
+    # Temporary deactivate the lint-ci to be able to split lint-fixes into multiple PRs
+    # TODO: @egorikas
+    if: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          # Only run on new issues in pull requests
+          only-new-issues: true
 
   build:
     runs-on: ubuntu-latest
