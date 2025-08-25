@@ -27,7 +27,6 @@ jobs:
           version: latest
           # Only run on new issues in pull requests
           only-new-issues: true
-
   build:
     runs-on: ubuntu-latest
     steps:
@@ -51,7 +50,6 @@ jobs:
         run: go build ./...
         env:
           CGO_CFLAGS: "-Wno-return-local-addr"
-
   unit_tests:
     runs-on: ubuntu-latest
     steps:
@@ -62,15 +60,15 @@ jobs:
 
       - name: Test with the Go CLI
         run: |
+
           set -o pipefail
-          go test $(go list ./...) -cover
+          go test $(go list ./...) -v -json > TestResults-${{ env.GO_VERSION }}.json
         env:
           CGO_CFLAGS: "-Wno-return-local-addr"
-
       - name: Upload Go test results
         uses: actions/upload-artifact@v4
         with:
-          name: Go-results-${{ env.GO_VERSION }}
+          name: unit-test-results-${{ env.GO_VERSION }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: TestResults-${{ env.GO_VERSION }}.json
 
   integration_tests:
