@@ -145,7 +145,7 @@ func TestStatusCounter(t *testing.T) {
 
 			require.Equal(1, len(stats.Snapshot().Counters()))
 			for _, v := range stats.Snapshot().Counters() {
-				require.Equal(test.expectedStatus, v.Name())
+				require.Equal("http_" + test.expectedStatus, v.Name())
 				require.Equal(int64(5), v.Value())
 				require.Equal(map[string]string{
 					"endpoint": "foo",
