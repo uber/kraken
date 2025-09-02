@@ -23,7 +23,7 @@ jobs:
         with:
           version: latest
           # Only run on new issues in pull requests
-          only-new-issues: true
+          # only-new-issues: true
 
   build:
     runs-on: ubuntu-latest
