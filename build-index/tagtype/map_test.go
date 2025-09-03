@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/mocks/origin/blobclient"
+	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
 	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/mockutil"
 

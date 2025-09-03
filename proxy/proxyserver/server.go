@@ -15,11 +15,12 @@ package proxyserver
 
 import (
 	"fmt"
+	"net/http"
+	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
+
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/utils/listener"
 	"github.com/uber/kraken/utils/log"
-	"net/http"
-	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
 
 	"github.com/go-chi/chi"
 	"github.com/uber-go/tally"

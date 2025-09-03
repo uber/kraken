@@ -17,16 +17,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/lib/hostlist"
-	"github.com/uber/kraken/mocks/lib/hashring"
-	"github.com/uber/kraken/mocks/lib/hostlist"
+	mockhashring "github.com/uber/kraken/mocks/lib/hashring"
+	mockhostlist "github.com/uber/kraken/mocks/lib/hostlist"
 	"github.com/uber/kraken/utils/randutil"
 	"github.com/uber/kraken/utils/stringset"
-
-	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/require"
 )
 
 func addrsFixture(n int) []string {

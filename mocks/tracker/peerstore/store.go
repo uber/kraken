@@ -5,9 +5,10 @@
 package mockpeerstore
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
-	reflect "reflect"
 )
 
 // MockStore is a mock of Store interface

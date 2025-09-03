@@ -73,7 +73,6 @@ func PullImage(source, repo, tag string, useDocker bool) error {
 	var errs errutil.MultiError
 	for _, d := range layerDigests {
 		wg.Add(1)
-		d := d
 		go func() {
 			defer wg.Done()
 			err := pullLayer(http.Client{Timeout: transferTimeout}, source, repo, d)

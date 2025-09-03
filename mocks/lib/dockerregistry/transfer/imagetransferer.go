@@ -5,10 +5,11 @@
 package mocktransfer
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
 	base "github.com/uber/kraken/lib/store/base"
-	reflect "reflect"
 )
 
 // MockImageTransferer is a mock of ImageTransferer interface

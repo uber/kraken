@@ -5,9 +5,10 @@
 package mocktagtype
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
-	reflect "reflect"
 )
 
 // MockDependencyResolver is a mock of DependencyResolver interface

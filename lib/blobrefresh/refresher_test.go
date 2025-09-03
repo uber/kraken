@@ -19,18 +19,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/metainfogen"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
-	"github.com/uber/kraken/mocks/lib/backend"
+	mockbackend "github.com/uber/kraken/mocks/lib/backend"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/testutil"
-
-	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/require"
-	"github.com/uber-go/tally"
 )
 
 const _testPieceLength = 10
@@ -93,6 +92,7 @@ func TestRefresh(t *testing.T) {
 	f, err := mocks.cas.GetCacheFileReader(blob.Digest.Hex())
 	require.NoError(err)
 	result, err := io.ReadAll(f)
+	require.NoError(err)
 	require.Equal(string(blob.Content), string(result))
 
 	var tm metadata.TorrentMeta

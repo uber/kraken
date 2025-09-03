@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/uber/kraken/lib/hostlist"
-	"github.com/uber/kraken/mocks/lib/healthcheck"
+	mockhealthcheck "github.com/uber/kraken/mocks/lib/healthcheck"
 	"github.com/uber/kraken/utils/stringset"
 
 	"github.com/golang/mock/gomock"

@@ -5,8 +5,9 @@
 package mocktagreplication
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockRemoteValidator is a mock of RemoteValidator interface

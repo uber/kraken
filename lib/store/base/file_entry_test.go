@@ -285,6 +285,7 @@ func testMoveFromExisting(require *require.Assertions, bundle *fileEntryTestBund
 
 	// MoveFrom fails with existing file.
 	testSourceFile2, err := os.CreateTemp(s3.GetDirectory(), "")
+	require.NoError(err)
 	err = fe.MoveFrom(s1, testSourceFile2.Name())
 	require.True(os.IsExist(err))
 	_, err = os.Stat(fp)
@@ -403,6 +404,7 @@ func testLinkTo(require *require.Assertions, bundle *fileEntryTestBundle) {
 	// Create file first.
 	testFileSize := int64(123)
 	err := fe.Create(s1, testFileSize)
+	require.NoError(err)
 	testDstFile := filepath.Join(s3.GetDirectory(), "test_dst")
 
 	// LinkTo succeeds with correct source path.

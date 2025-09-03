@@ -56,6 +56,7 @@ func TestLocalStoreExpiration(t *testing.T) {
 	require.ElementsMatch(t, []*core.PeerInfo{p1, p2}, peers)
 
 	peers, err = s.GetPeers(h1, 50)
+	require.NoError(t, err)
 	require.ElementsMatch(t, []*core.PeerInfo{p1, p2}, peers)
 
 	peers, err = s.GetPeers(h1, 1)

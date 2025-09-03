@@ -5,9 +5,10 @@
 package mockmetainfoclient
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
-	reflect "reflect"
 )
 
 // MockClient is a mock of Client interface

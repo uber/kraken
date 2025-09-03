@@ -23,7 +23,7 @@ import (
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
-	"github.com/uber/kraken/mocks/tracker/metainfoclient"
+	mockmetainfoclient "github.com/uber/kraken/mocks/tracker/metainfoclient"
 	"github.com/uber/kraken/tracker/metainfoclient"
 	"github.com/uber/kraken/utils/bitsetutil"
 	"github.com/uber/kraken/utils/testutil"

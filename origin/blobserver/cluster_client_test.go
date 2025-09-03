@@ -16,7 +16,6 @@ package blobserver
 import (
 	"bytes"
 	"io"
-	"sort"
 	"testing"
 	"time"
 
@@ -24,7 +23,7 @@ import (
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/lib/persistedretry/writeback"
-	"github.com/uber/kraken/mocks/origin/blobclient"
+	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/httputil"
 
@@ -32,15 +31,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
-
-func toAddrs(clients []blobclient.Client) []string {
-	var addrs []string
-	for _, c := range clients {
-		addrs = append(addrs, c.Addr())
-	}
-	sort.Strings(addrs)
-	return addrs
-}
 
 func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 	require := require.New(t)

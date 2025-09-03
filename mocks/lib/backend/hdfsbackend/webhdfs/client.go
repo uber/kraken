@@ -5,10 +5,11 @@
 package mockwebhdfs
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	webhdfs "github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs"
 	io "io"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+	webhdfs "github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs"
 )
 
 // MockClient is a mock of Client interface

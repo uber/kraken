@@ -22,7 +22,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs"
-	"github.com/uber/kraken/mocks/lib/backend/hdfsbackend/webhdfs"
+	mockwebhdfs "github.com/uber/kraken/mocks/lib/backend/hdfsbackend/webhdfs"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/randutil"
 

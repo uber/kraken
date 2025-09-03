@@ -15,6 +15,7 @@ package cmd
 
 import (
 	"flag"
+
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/healthcheck"

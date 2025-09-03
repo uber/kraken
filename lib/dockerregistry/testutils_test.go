@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"path"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
@@ -69,7 +68,6 @@ func (d *testDriver) setup() (*KrakenStorageDriver, testImageUploadBundle) {
 	if err := sd.uploads.putContent(path, _hashstates, []byte(hashStateContent)); err != nil {
 		log.Panic(err)
 	}
-	path = genUploadDataPath(uploadUUID)
 
 	writer, err := d.cas.GetUploadFileReadWriter(uploadUUID)
 	if err != nil {
@@ -144,17 +142,6 @@ func genBlobDataPath(digest string) string {
 
 func genManifestListPath(repo string) string {
 	return fmt.Sprintf("/docker/registry/v2/repositories/%s/_manifests/tags", repo)
-}
-
-func getShardedRelativePath(name string) string {
-	filePath := ""
-	for i := 0; i < 2 && i < len(name)/2; i++ {
-		// (1 byte = 2 char of file name assumming file name is in HEX)
-		dirName := name[i*2 : i*2+2]
-		filePath = path.Join(filePath, dirName)
-	}
-
-	return path.Join(filePath, name)
 }
 
 func contextFixture() context.Context {

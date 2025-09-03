@@ -5,11 +5,12 @@
 package mocktagstore
 
 import (
+	io "io"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	base "github.com/uber/kraken/lib/store/base"
 	metadata "github.com/uber/kraken/lib/store/metadata"
-	io "io"
-	reflect "reflect"
 )
 
 // MockFileStore is a mock of FileStore interface
