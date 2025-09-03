@@ -62,14 +62,9 @@ jobs:
         run: |
 
           set -o pipefail
-          go test $(go list ./...) -v -json > TestResults-${{ env.GO_VERSION }}.json
+          go test $(go list ./...) -v -cover
         env:
           CGO_CFLAGS: "-Wno-return-local-addr"
-      - name: Upload Go test results
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-test-results-${{ env.GO_VERSION }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: TestResults-${{ env.GO_VERSION }}.json
 
   integration_tests:
     runs-on: ubuntu-latest
