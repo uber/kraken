@@ -2,6 +2,8 @@ name: Build and Test
 
 # Trigger the action on push and pull requests
 on:
+  push:
+    branches: [ master ]
   pull_request:
     branches: [ master ]
 
@@ -60,7 +62,6 @@ jobs:
 
       - name: Test with the Go CLI
         run: |
-
           set -o pipefail
           go test $(go list ./...) -v -json > TestResults-${{ env.GO_VERSION }}.json
         env:

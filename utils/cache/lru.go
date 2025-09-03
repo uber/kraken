@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2019 Uber Technologies, Inc.
+// Copyright (c) 2016-2025 Uber Technologies, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ func NewLRUCache(maxSize int, ttl time.Duration) *LRUCache {
 func (c *LRUCache) Has(key string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	expireTime, exists := c.entries[key]
 	if !exists || time.Now().After(expireTime) {
 		return false
@@ -59,21 +59,21 @@ func (c *LRUCache) Has(key string) bool {
 func (c *LRUCache) Add(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	now := time.Now()
 	expireTime := now.Add(c.ttl)
-	
+
 	// If key already exists, update expiration and move to end
 	if _, exists := c.entries[key]; exists {
 		c.entries[key] = expireTime
 		c.moveToEnd(key)
 		return
 	}
-	
+
 	// Add new entry
 	c.entries[key] = expireTime
 	c.lruOrder = append(c.lruOrder, key)
-	
+
 	// Evict expired and oldest entries if needed
 	c.evict()
 }
@@ -82,11 +82,11 @@ func (c *LRUCache) Add(key string) {
 func (c *LRUCache) Delete(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	if _, exists := c.entries[key]; !exists {
 		return
 	}
-	
+
 	delete(c.entries, key)
 	for i, k := range c.lruOrder {
 		if k == key {
@@ -107,7 +107,7 @@ func (c *LRUCache) Size() int {
 func (c *LRUCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.entries = make(map[string]time.Time)
 	c.lruOrder = c.lruOrder[:0]
 }
@@ -116,7 +116,7 @@ func (c *LRUCache) Clear() {
 // This method assumes the caller already holds a write lock.
 func (c *LRUCache) evict() {
 	now := time.Now()
-	
+
 	// Remove expired entries
 	i := 0
 	for i < len(c.lruOrder) {
@@ -128,7 +128,7 @@ func (c *LRUCache) evict() {
 			i++
 		}
 	}
-	
+
 	// Enforce size limit by removing oldest entries
 	for len(c.entries) > c.maxSize {
 		oldest := c.lruOrder[0]
