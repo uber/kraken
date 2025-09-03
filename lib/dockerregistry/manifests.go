@@ -16,7 +16,6 @@ package dockerregistry
 import (
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/uber-go/tally"
@@ -25,6 +24,7 @@ import (
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
+	"github.com/uber/kraken/utils/cache"
 	"github.com/uber/kraken/utils/log"
 )
 
@@ -35,8 +35,8 @@ const (
 	signatureVerificationDuration       = "signature_verification_duration"
 	
 	// Verification cache configuration
-	defaultVerificationCacheSize = 300          // Maximum number of entries
-	defaultVerificationCacheTTL  = 1 * time.Hour // TTL for verification cache entries
+	defaultVerificationCacheSize = 300          	// Maximum number of entries
+	defaultVerificationCacheTTL  = 5 * time.Minute 	// TTL for verification cache entries
 )
 
 type SignatureVerificationDecision int
@@ -47,92 +47,7 @@ const (
 	DecisionAllow
 )
 
-// boundedCache provides a simple LRU cache with both size and TTL limits
-type boundedCache struct {
-	mu       sync.RWMutex
-	entries  map[string]time.Time // key -> expiration time
-	lruOrder []string             // keys in LRU order (oldest first)
-	maxSize  int
-	ttl      time.Duration
-}
 
-func newBoundedCache(maxSize int, ttl time.Duration) *boundedCache {
-	return &boundedCache{
-		entries:  make(map[string]time.Time),
-		lruOrder: make([]string, 0, maxSize),
-		maxSize:  maxSize,
-		ttl:      ttl,
-	}
-}
-
-// has checks if key exists and hasn't expired
-func (c *boundedCache) has(key string) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	
-	expireTime, exists := c.entries[key]
-	if !exists || time.Now().After(expireTime) {
-		return false
-	}
-	return true
-}
-
-// add marks a key as cached (non-blocking)
-func (c *boundedCache) add(key string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	
-	now := time.Now()
-	expireTime := now.Add(c.ttl)
-	
-	// If key already exists, update expiration and move to end
-	if _, exists := c.entries[key]; exists {
-		c.entries[key] = expireTime
-		c.moveToEnd(key)
-		return
-	}
-	
-	// Add new entry
-	c.entries[key] = expireTime
-	c.lruOrder = append(c.lruOrder, key)
-	
-	// Evict expired and oldest entries if needed
-	c.evict()
-}
-
-// evict removes expired entries and enforces size limit
-func (c *boundedCache) evict() {
-	now := time.Now()
-	
-	// Remove expired entries
-	i := 0
-	for i < len(c.lruOrder) {
-		key := c.lruOrder[i]
-		if expireTime, exists := c.entries[key]; !exists || now.After(expireTime) {
-			delete(c.entries, key)
-			c.lruOrder = append(c.lruOrder[:i], c.lruOrder[i+1:]...)
-		} else {
-			i++
-		}
-	}
-	
-	// Enforce size limit by removing oldest entries
-	for len(c.entries) > c.maxSize {
-		oldest := c.lruOrder[0]
-		delete(c.entries, oldest)
-		c.lruOrder = c.lruOrder[1:]
-	}
-}
-
-// moveToEnd moves key to end of LRU order
-func (c *boundedCache) moveToEnd(key string) {
-	for i, k := range c.lruOrder {
-		if k == key {
-			c.lruOrder = append(append(c.lruOrder[:i], c.lruOrder[i+1:]...), key)
-			break
-		}
-	}
-}
 
 type manifests struct {
 	transferer   transfer.ImageTransferer
@@ -140,7 +55,7 @@ type manifests struct {
 	metrics      tally.Scope
 	
 	// Cache to track verified (repo, digest) combinations to avoid duplicate verification
-	verifiedCache *boundedCache
+	verifiedCache *cache.LRUCache
 }
 
 func newManifests(
@@ -152,7 +67,7 @@ func newManifests(
 		transferer:    transferer,
 		verification:  verification,
 		metrics:       metrics,
-		verifiedCache: newBoundedCache(defaultVerificationCacheSize, defaultVerificationCacheTTL),
+		verifiedCache: cache.NewLRUCache(defaultVerificationCacheSize, defaultVerificationCacheTTL),
 	}
 }
 
@@ -209,10 +124,10 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 	// Only verify if we haven't already verified this (repo, digest) combination
 	cacheKey := fmt.Sprintf("%s:%s", repo, digest.String())
 	
-	if !t.verifiedCache.has(cacheKey) {
+	if !t.verifiedCache.Has(cacheKey) {
 		// Run verification and cache the result
 		_, _ = t.verify(path, repo, digest, blob)
-		t.verifiedCache.add(cacheKey)
+		t.verifiedCache.Add(cacheKey)
 	}
 	
 	return []byte(digest.String()), nil
