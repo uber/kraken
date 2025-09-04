@@ -121,13 +121,13 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 
 	// Only verify if we haven't already verified this (repo, digest) combination
 	cacheKey := fmt.Sprintf("%s:%s", repo, digest.String())
+	shouldEmitMetrics := !t.verifiedCache.Has(cacheKey)
 
-	if !t.verifiedCache.Has(cacheKey) {
-		// Run verification and cache the result
-		_, _ = t.verify(path, repo, digest, blob)
+	_, _ = t.verify(path, repo, digest, blob, shouldEmitMetrics)
+
+	if shouldEmitMetrics {
 		t.verifiedCache.Add(cacheKey)
 	}
-
 	return []byte(digest.String()), nil
 }
 
@@ -149,28 +149,48 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 //   - Error on verification error (includes repo/digest).
 //   - Warn  on deny (includes original path).
 //   - Debug on skip.
-func (t *manifests) verify(path string, repo string, digest core.Digest, blob store.FileReader) (bool, error) {
-	stopwatch := t.metrics.Timer(signatureVerificationDuration).Start()
-	defer stopwatch.Stop()
+func (t *manifests) verify(
+	path string,
+	repo string,
+	digest core.Digest,
+	blob store.FileReader,
+	emitMetrics bool,
+) (bool, error) {
+	// Always measure duration, but only emit if not cached
+	var stopwatch tally.Stopwatch
+	if emitMetrics {
+		stopwatch = t.metrics.Timer(signatureVerificationDuration).Start()
+		defer stopwatch.Stop()
+	}
+
 	decision, err := t.verification(repo, digest, blob)
 	if err != nil {
-		t.metrics.Counter(signatureVerificationErrorCounter).Inc(1)
+		if emitMetrics {
+			t.metrics.Counter(signatureVerificationErrorCounter).Inc(1)
+		}
 		log.With("repo", repo, "digest", digest).Errorf("Error while performing image validation %s", err)
 		return false, err
 	}
+
 	switch decision {
 	case DecisionAllow:
-		t.metrics.Counter(signatureVerificationSuccessCounter).Inc(1)
+		if emitMetrics {
+			t.metrics.Counter(signatureVerificationSuccessCounter).Inc(1)
+		}
 		return true, nil
 	case DecisionDeny:
-		t.metrics.Counter(signatureVerificationFailureCounter).Inc(1)
+		if emitMetrics {
+			t.metrics.Counter(signatureVerificationFailureCounter).Inc(1)
+		}
 		log.With("repo", repo, "digest", digest).Warnf("Verification failed %s", path)
 		return false, nil
 	case DecisionSkip:
 		log.With("repo", repo, "digest", digest).Debugf("Verification skipped for %s", path)
 		return true, nil
 	default:
-		t.metrics.Counter(signatureVerificationErrorCounter).Inc(1)
+		if emitMetrics {
+			t.metrics.Counter(signatureVerificationErrorCounter).Inc(1)
+		}
 		return false, fmt.Errorf("unknown verification decision: %d", decision)
 	}
 }
