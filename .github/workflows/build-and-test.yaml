@@ -62,7 +62,7 @@ jobs:
         run: |
 
           set -o pipefail
-          go test $(go list ./...) -v -cover
+          go test $(go list ./...) -cover
         env:
           CGO_CFLAGS: "-Wno-return-local-addr"
 
