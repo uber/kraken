@@ -75,7 +75,8 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	containerruntime := mockcontainerruntime.NewMockFactory(ctrl)
 	return &serverMocks{
 		cads, sched, tags, dockerCli, containerdCli, ac,
-		containerruntime, &cleanup}, cleanup.Run
+		containerruntime, &cleanup,
+	}, cleanup.Run
 }
 
 func (m *serverMocks) startServer(c Config) (*Server, string) {
