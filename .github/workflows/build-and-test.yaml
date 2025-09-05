@@ -71,6 +71,11 @@ jobs:
         with:
           name: unit-test-results-${{ env.GO_VERSION }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: TestResults-${{ env.GO_VERSION }}.json
+      - name: Run Benchmarks
+        run: |
+          go test $(go list ./...) -bench=. -benchmem -run=^$
+        env:
+          CGO_CFLAGS: "-Wno-return-local-addr"
 
   integration_tests:
     runs-on: ubuntu-latest

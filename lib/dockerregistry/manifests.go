@@ -52,7 +52,7 @@ type manifests struct {
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)
 	metrics      tally.Scope
 
-	// Cache to track verified (repo, digest) combinations to avoid duplicate verification
+	// Cache to track verified (repo, digest) combinations to avoid duplicate metric emission.
 	verifiedCache *cache.LRUCache
 }
 
