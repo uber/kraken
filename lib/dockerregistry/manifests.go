@@ -24,6 +24,7 @@ import (
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
+	"github.com/uber/kraken/utils/cache"
 	"github.com/uber/kraken/utils/log"
 )
 
@@ -32,6 +33,10 @@ const (
 	signatureVerificationFailureCounter = "signature_verification_failure"
 	signatureVerificationErrorCounter   = "signature_verification_error"
 	signatureVerificationDuration       = "signature_verification_duration"
+
+	// Verification cache configuration
+	defaultVerificationCacheSize = 300             // Maximum number of entries
+	defaultVerificationCacheTTL  = 5 * time.Minute // TTL for verification cache entries
 )
 
 type SignatureVerificationDecision int
@@ -46,6 +51,9 @@ type manifests struct {
 	transferer   transfer.ImageTransferer
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)
 	metrics      tally.Scope
+
+	// Cache to track verified (repo, digest) combinations to avoid duplicate metric emission.
+	verifiedCache *cache.LRUCache
 }
 
 func newManifests(
@@ -53,7 +61,12 @@ func newManifests(
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
 	metrics tally.Scope,
 ) *manifests {
-	return &manifests{transferer, verification, metrics}
+	return &manifests{
+		transferer:    transferer,
+		verification:  verification,
+		metrics:       metrics,
+		verifiedCache: cache.NewLRUCache(defaultVerificationCacheSize, defaultVerificationCacheTTL),
+	}
 }
 
 // getDigest resolves and downloads a manifest blob (by tag or digest) and
@@ -106,7 +119,15 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 	}
 	defer blob.Close()
 
-	_, _ = t.verify(path, repo, digest, blob)
+	// Only verify if we haven't already verified this (repo, digest) combination
+	cacheKey := fmt.Sprintf("%s:%s", repo, digest.String())
+	shouldEmitMetrics := !t.verifiedCache.Has(cacheKey)
+
+	_, _ = t.verify(path, repo, digest, blob, shouldEmitMetrics)
+
+	if shouldEmitMetrics {
+		t.verifiedCache.Add(cacheKey)
+	}
 	return []byte(digest.String()), nil
 }
 
@@ -128,28 +149,48 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 //   - Error on verification error (includes repo/digest).
 //   - Warn  on deny (includes original path).
 //   - Debug on skip.
-func (t *manifests) verify(path string, repo string, digest core.Digest, blob store.FileReader) (bool, error) {
-	stopwatch := t.metrics.Timer(signatureVerificationDuration).Start()
-	defer stopwatch.Stop()
+func (t *manifests) verify(
+	path string,
+	repo string,
+	digest core.Digest,
+	blob store.FileReader,
+	emitMetrics bool,
+) (bool, error) {
+	// Always measure duration, but only emit if not cached
+	var stopwatch tally.Stopwatch
+	if emitMetrics {
+		stopwatch = t.metrics.Timer(signatureVerificationDuration).Start()
+		defer stopwatch.Stop()
+	}
+
 	decision, err := t.verification(repo, digest, blob)
 	if err != nil {
-		t.metrics.Counter(signatureVerificationErrorCounter).Inc(1)
+		if emitMetrics {
+			t.metrics.Counter(signatureVerificationErrorCounter).Inc(1)
+		}
 		log.With("repo", repo, "digest", digest).Errorf("Error while performing image validation %s", err)
 		return false, err
 	}
+
 	switch decision {
 	case DecisionAllow:
-		t.metrics.Counter(signatureVerificationSuccessCounter).Inc(1)
+		if emitMetrics {
+			t.metrics.Counter(signatureVerificationSuccessCounter).Inc(1)
+		}
 		return true, nil
 	case DecisionDeny:
-		t.metrics.Counter(signatureVerificationFailureCounter).Inc(1)
+		if emitMetrics {
+			t.metrics.Counter(signatureVerificationFailureCounter).Inc(1)
+		}
 		log.With("repo", repo, "digest", digest).Warnf("Verification failed %s", path)
 		return false, nil
 	case DecisionSkip:
 		log.With("repo", repo, "digest", digest).Debugf("Verification skipped for %s", path)
 		return true, nil
 	default:
-		t.metrics.Counter(signatureVerificationErrorCounter).Inc(1)
+		if emitMetrics {
+			t.metrics.Counter(signatureVerificationErrorCounter).Inc(1)
+		}
 		return false, fmt.Errorf("unknown verification decision: %d", decision)
 	}
 }

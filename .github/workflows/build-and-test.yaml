@@ -3,6 +3,7 @@ name: Build and Test
 # Trigger the action on push and pull requests
 on:
   push:
+    branches: [ master ]
   pull_request:
     branches: [ master ]
 
@@ -26,7 +27,8 @@ jobs:
         with:
           version: latest
           # Only run on new issues in pull requests
-          only-new-issues: true
+          # only-new-issues: true
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -60,7 +62,6 @@ jobs:
 
       - name: Test with the Go CLI
         run: |
-
           set -o pipefail
           go test $(go list ./...) -v -json > TestResults-${{ env.GO_VERSION }}.json
         env:
@@ -70,6 +71,11 @@ jobs:
         with:
           name: unit-test-results-${{ env.GO_VERSION }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: TestResults-${{ env.GO_VERSION }}.json
+      - name: Run Benchmarks
+        run: |
+          go test $(go list ./...) -bench=. -benchmem -run=^$
+        env:
+          CGO_CFLAGS: "-Wno-return-local-addr"
 
   integration_tests:
     runs-on: ubuntu-latest
