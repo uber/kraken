@@ -64,6 +64,11 @@ jobs:
         run: go test $(go list ./...) -cover
         env:
           CGO_CFLAGS: "-Wno-return-local-addr"
+      - name: Run Benchmarks
+        run: |
+          go test $(go list ./...) -bench=. -benchmem -run=^$
+        env:
+          CGO_CFLAGS: "-Wno-return-local-addr"
 
   integration_tests:
     runs-on: ubuntu-latest
