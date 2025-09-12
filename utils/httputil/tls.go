@@ -180,7 +180,7 @@ func decryptPEMBlock(data, secret []byte) ([]byte, error) {
 	if block == nil || len(block.Bytes) < 1 {
 		return nil, errors.New("empty block")
 	}
-	decoded, err := x509.DecryptPEMBlock(block, secret)
+	decoded, err := x509.DecryptPEMBlock(block, secret) //nolint:staticcheck
 	if err != nil {
 		return nil, fmt.Errorf("decrypt block: %s", err)
 	}

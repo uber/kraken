@@ -22,7 +22,7 @@ import (
 
 // Mock metadata
 func init() {
-	metadata.Register(regexp.MustCompile("_mocksuffix_\\w+"), &mockMetadataFactory{})
+	metadata.Register(regexp.MustCompile(`_mocksuffix_\w+`), &mockMetadataFactory{})
 	metadata.Register(regexp.MustCompile("_mockmovable"), &mockMetadataFactoryMovable{})
 }
 

@@ -66,7 +66,7 @@ func genKeyPair(t *testing.T, caPEM, caKeyPEM, caSercret []byte) (certPEM, keyPE
 		require.NoError(err)
 		block, _ = pem.Decode(caKeyPEM)
 		require.NotNil(block)
-		decoded, err := x509.DecryptPEMBlock(block, caSercret)
+		decoded, err := x509.DecryptPEMBlock(block, caSercret) //nolint:staticcheck
 		require.NoError(err)
 		caKey, err := x509.ParsePKCS1PrivateKey(decoded)
 		require.NoError(err)
@@ -82,7 +82,7 @@ func genKeyPair(t *testing.T, caPEM, caKeyPEM, caSercret []byte) (certPEM, keyPE
 	// Encode cert and key to PEM format.
 	cert := &bytes.Buffer{}
 	require.NoError(pem.Encode(cert, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}))
-	encrypted, err := x509.EncryptPEMBlock(rand.Reader, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(priv), secret, x509.PEMCipherAES256)
+	encrypted, err := x509.EncryptPEMBlock(rand.Reader, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(priv), secret, x509.PEMCipherAES256) //nolint:staticcheck
 	require.NoError(err)
 	return cert.Bytes(), pem.EncodeToMemory(encrypted), secret
 }

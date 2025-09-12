@@ -139,7 +139,6 @@ func getLayerDigestsFromManifest(manifest *distribution.Manifest) ([]string, err
 		for _, fsLayer := range fsLayers {
 			digests = append(digests, fsLayer.BlobSum.String())
 		}
-		break
 	case *schema2.DeserializedManifest:
 		layerDescriptors := (*manifest).(*schema2.DeserializedManifest).Layers
 		for _, descriptor := range layerDescriptors {
@@ -148,7 +147,6 @@ func getLayerDigestsFromManifest(manifest *distribution.Manifest) ([]string, err
 		// for schema2, we also need a config layer
 		config := (*manifest).(*schema2.DeserializedManifest).Config
 		digests = append(digests, config.Digest.String())
-		break
 	default:
 		mt, _, err := (*manifest).Payload()
 		if err == nil {

@@ -31,7 +31,7 @@ func init() {
 	metadata.Register(regexp.MustCompile(_startedAtSuffix), &startedAtMetadataFactory{})
 
 	// TODO(evelynl): use _ instead of /, otherwise it won't support reload.
-	metadata.Register(regexp.MustCompile("_hashstates/\\w+/\\w+$"), &hashStateMetadataFactory{})
+	metadata.Register(regexp.MustCompile(`_hashstates/\w+/\w+$`), &hashStateMetadataFactory{})
 }
 
 type startedAtMetadataFactory struct{}

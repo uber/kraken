@@ -607,7 +607,7 @@ func compareAndWriteFile(filePath string, b []byte) (bool, error) {
 	if _, err := f.Read(buf); err != nil {
 		return false, err
 	}
-	if bytes.Compare(buf, b) == 0 {
+	if bytes.Equal(buf, b) {
 		return false, nil
 	}
 
