@@ -180,6 +180,9 @@ func decryptPEMBlock(data, secret []byte) ([]byte, error) {
 	if block == nil || len(block.Bytes) < 1 {
 		return nil, errors.New("empty block")
 	}
+	// x509.DecryptPEMBlock is deprecated, but it replacement requires additional coding and changes in the encryption algorithm.
+	// given all the tls tests are skipped, @egorikas didn't feel confident enough to fix the code.
+	// so, the lint warning is ignored for now, potentially the tests will be recovered, then the code should be fixed.
 	decoded, err := x509.DecryptPEMBlock(block, secret) //nolint:staticcheck
 	if err != nil {
 		return nil, fmt.Errorf("decrypt block: %s", err)
