@@ -21,15 +21,13 @@ import (
 	"path"
 	"strconv"
 
-	"github.com/uber/kraken/utils/closers"
-
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/backend/namepath"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/httputil"
-
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
