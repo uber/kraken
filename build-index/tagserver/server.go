@@ -142,7 +142,10 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
-	fmt.Fprintln(w, "OK")
+	_, err := fmt.Fprintln(w, "OK")
+	if err != nil {
+		return handler.Errorf("write health check: %s", err)
+	}
 	return nil
 }
 
@@ -155,7 +158,10 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return handler.Errorf("not ready to serve traffic: %s", err).Status(http.StatusServiceUnavailable)
 	}
-	fmt.Fprintln(w, "OK")
+	_, err = fmt.Fprintln(w, "OK")
+	if err != nil {
+		return handler.Errorf("write readiness check: %s", err)
+	}
 	return nil
 }
 

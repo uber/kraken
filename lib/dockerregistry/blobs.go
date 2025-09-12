@@ -21,6 +21,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/uber/kraken/utils/closers"
+
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/store"
 
@@ -86,7 +88,7 @@ func (b *blobs) getContent(ctx context.Context, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer r.Close()
+	defer closers.Close(r)
 	return io.ReadAll(r)
 }
 

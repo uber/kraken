@@ -19,6 +19,8 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/uber/kraken/utils/log"
+
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
@@ -68,7 +70,10 @@ func TestHttpDownloadFileNotFound(t *testing.T) {
 	r := chi.NewRouter()
 	r.Get("/data/{blob}", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("file not found"))
+		_, err := w.Write([]byte("file not found"))
+		if err != nil {
+			log.Error(err)
+		}
 	})
 	addr, stop := testutil.StartServer(r)
 	defer stop()

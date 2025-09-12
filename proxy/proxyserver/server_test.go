@@ -42,7 +42,7 @@ func TestHealth(t *testing.T) {
 
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/health", addr))
-	defer resp.Body.Close()
+	defer require.NoError(resp.Body.Close())
 	require.NoError(err)
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(err)
@@ -70,7 +70,7 @@ func TestPreheatNoPushManifestEvent(t *testing.T) {
 
 	addr := mocks.startServer()
 
-	b, _ := json.Marshal(Notification{
+	b, err := json.Marshal(Notification{
 		Events: []Event{
 			{
 				ID:        "1",
@@ -96,8 +96,9 @@ func TestPreheatNoPushManifestEvent(t *testing.T) {
 			},
 		},
 	})
+	require.NoError(err)
 
-	_, err := httputil.Post(
+	_, err = httputil.Post(
 		fmt.Sprintf("http://%s/registry/notifications", addr),
 		httputil.SendBody(bytes.NewReader(b)))
 	require.NoError(err)

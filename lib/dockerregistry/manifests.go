@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/uber/kraken/utils/closers"
+
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/store"
 
@@ -117,13 +119,14 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 	if err != nil {
 		return nil, fmt.Errorf("transferer download: %w", err)
 	}
-	defer blob.Close()
+	defer closers.Close(blob)
 
 	// Only verify if we haven't already verified this (repo, digest) combination
 	cacheKey := fmt.Sprintf("%s:%s", repo, digest.String())
 	shouldEmitMetrics := !t.verifiedCache.Has(cacheKey)
 
-	_, _ = t.verify(path, repo, digest, blob, shouldEmitMetrics)
+	// the functionality is not activated yet, so errors are ignored
+	_, _ = t.verify(path, repo, digest, blob, shouldEmitMetrics) //nolint:errcheck
 
 	if shouldEmitMetrics {
 		t.verifiedCache.Add(cacheKey)

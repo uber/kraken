@@ -166,11 +166,12 @@ func TestStorageDriverWriter(t *testing.T) {
 			if err != nil {
 				return
 			}
-			w.Write(content)
-			w.Close()
+			_, err = w.Write(content)
+			require.NoError(err)
+			require.NoError(w.Close())
 			r, err := sd.Reader(contextFixture(), tc.input, 0)
 			require.NoError(err)
-			defer r.Close()
+			defer require.NoError(r.Close())
 			data, err := io.ReadAll(r)
 			require.NoError(err)
 			require.Equal(content, data)

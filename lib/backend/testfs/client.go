@@ -21,6 +21,8 @@ import (
 	"path"
 	"strconv"
 
+	"github.com/uber/kraken/utils/closers"
+
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
@@ -127,7 +129,7 @@ func (c *Client) Download(namespace, name string, dst io.Writer) error {
 		}
 		return err
 	}
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 	if _, err := io.Copy(dst, resp.Body); err != nil {
 		return fmt.Errorf("copy: %s", err)
 	}
@@ -150,7 +152,7 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 	var paths []string
 	if err := json.NewDecoder(resp.Body).Decode(&paths); err != nil {
 		return nil, fmt.Errorf("json: %s", err)

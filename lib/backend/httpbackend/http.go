@@ -20,6 +20,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/uber/kraken/utils/closers"
+
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
@@ -105,7 +107,7 @@ func (c *Client) Download(namespace, name string, dst io.Writer) error {
 		}
 		return err
 	}
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 	if _, err := io.Copy(dst, resp.Body); err != nil {
 		return fmt.Errorf("copy: %s", err)
 	}
