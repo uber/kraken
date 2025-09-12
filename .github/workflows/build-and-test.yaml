@@ -61,16 +61,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Test with the Go CLI
-        run: |
-          set -o pipefail
-          go test $(go list ./...) -v -json > TestResults-${{ env.GO_VERSION }}.json
+        run: go test $(go list ./...) -cover
         env:
           CGO_CFLAGS: "-Wno-return-local-addr"
-      - name: Upload Go test results
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-test-results-${{ env.GO_VERSION }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: TestResults-${{ env.GO_VERSION }}.json
       - name: Run Benchmarks
         run: |
           go test $(go list ./...) -bench=. -benchmem -run=^$
