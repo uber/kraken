@@ -255,9 +255,7 @@ func (op *localFileOp) createFileHelper(
 		// correct error message.
 		// Since TryStore() updates LAT of existing entry, it's unlikely that
 		// the entry would be deleted before this function returns.
-		if loadErr := op.lockHelper(name, _lockLevelRead, func(name string, entry FileEntry) {
-			return
-		}); loadErr != nil {
+		if loadErr := op.lockHelper(name, _lockLevelRead, func(name string, entry FileEntry) {}); loadErr != nil {
 			return loadErr
 		}
 		return os.ErrExist

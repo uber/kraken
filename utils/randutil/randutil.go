@@ -20,10 +20,6 @@ import (
 	"time"
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 func choose(n uint64, choices string) []byte {
 	b := make([]byte, n)
 	for i := range b {

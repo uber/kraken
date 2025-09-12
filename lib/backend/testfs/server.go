@@ -159,6 +159,6 @@ func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
 // path normalizes some file or directory entry into a path.
 func (s *Server) path(entry string) string {
 	// Allows listing tags by repo.
-	entry = strings.Replace(entry, ":", "/", -1)
+	entry = strings.ReplaceAll(entry, ":", "/")
 	return filepath.Join(s.dir, entry)
 }

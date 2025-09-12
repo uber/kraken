@@ -129,7 +129,11 @@ func NewClient(
 		awsConfig = awsConfig.WithS3ForcePathStyle(config.S3ForcePathStyle)
 	}
 
-	api := s3.New(session.New(), awsConfig)
+	sess, err := session.NewSession(awsConfig)
+	if err != nil {
+		return nil, fmt.Errorf("create AWS session: %s", err)
+	}
+	api := s3.New(sess)
 
 	downloader := s3manager.NewDownloaderWithClient(api, func(d *s3manager.Downloader) {
 		d.PartSize = config.DownloadPartSize

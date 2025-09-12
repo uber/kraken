@@ -142,7 +142,7 @@ func (cli *dockerClient) PullImage(ctx context.Context, repo, tag string) error 
 		if err != nil {
 			return fmt.Errorf("read error resp: %s", err)
 		}
-		return fmt.Errorf("Error posting to %s: code %d, err: %s", urlPath, resp.StatusCode, errMsg)
+		return fmt.Errorf("error posting to %s: code %d, err: %s", urlPath, resp.StatusCode, errMsg)
 	}
 
 	// Docker daemon returns 200 early. Close resp.Body after reading all.

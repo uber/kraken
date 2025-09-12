@@ -81,11 +81,7 @@ func (p *PriorityPolicy) SortPeers(source *core.PeerInfo, peers []*core.PeerInfo
 	for k := 0; k < len(peerPriorities); k++ {
 		p := peerPriorities[k]
 		peers[k] = p.peer
-		if _, ok := priorityCounts[p.label]; ok {
-			priorityCounts[p.label]++
-		} else {
-			priorityCounts[p.label] = 1
-		}
+		priorityCounts[p.label]++
 	}
 	peers = peers[:len(peerPriorities)]
 

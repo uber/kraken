@@ -68,7 +68,7 @@ func TestTagDownloadSuccess(t *testing.T) {
 
 	var b bytes.Buffer
 	require.NoError(client.Download(tag, tag, &b))
-	require.Equal(digest.String(), string(b.Bytes()))
+	require.Equal(digest.String(), b.String())
 }
 
 func TestTagDownloadFileNotFound(t *testing.T) {

@@ -64,7 +64,7 @@ func (m *ReaderMatcher) Matches(x interface{}) bool {
 	if err != nil {
 		panic(err)
 	}
-	return bytes.Compare(m.expected, b) == 0
+	return bytes.Equal(m.expected, b)
 }
 
 func (m *ReaderMatcher) String() string {
