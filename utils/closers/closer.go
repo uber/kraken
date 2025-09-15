@@ -9,7 +9,7 @@ import (
 )
 
 // Close closes the closer. A message will be logged.
-// The main reason for the helper existence is to have an utulity for defer io.Closer() statements.
+// The main reason for the helper existence is to have a utility for defer io.Closer() statements.
 func Close(closer io.Closer) {
 	if closer != nil {
 		err := closer.Close()
