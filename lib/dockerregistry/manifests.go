@@ -125,7 +125,10 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 	cacheKey := fmt.Sprintf("%s:%s", repo, digest.String())
 	shouldEmitMetrics := !t.verifiedCache.Has(cacheKey)
 
-	// the functionality is not activated yet, so errors are ignored
+	// Signature verification is currently not enforced: errors from t.verify are ignored.
+	// This is intentional because verification enforcement is planned for a future release.
+	// Risks: manifests may be accepted without verification, which could allow untrusted content.
+	// TODO: Remove error ignoring and enforce verification once the feature is activated.
 	_, _ = t.verify(path, repo, digest, blob, shouldEmitMetrics) //nolint:errcheck
 
 	if shouldEmitMetrics {
