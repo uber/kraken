@@ -27,6 +27,7 @@ import (
 	"github.com/uber/kraken/build-index/tagmodels"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/healthcheck"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/httputil"
 )
 
@@ -158,7 +159,7 @@ func (c *singleClient) doListPaginated(urlFormat string, pathSub string,
 	if err != nil {
 		return resp, err
 	}
-	defer httpResp.Body.Close()
+	defer closers.Close(httpResp.Body)
 	if err := json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
 		return resp, fmt.Errorf("json decode: %s", err)
 	}

@@ -17,6 +17,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"strconv"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // NodeKeysTable is a Node to keys map utility type
@@ -32,7 +35,7 @@ type NodeKeysTable map[string]map[string]struct{}
 // RendezvousHashFixture(10, sha256.New, 100, 200, 300) there will be a RendezvousHash object created
 // with 3 nodes "0": 100, "1":200, "2":300
 // The fixture will return RendezvousHash object and the node key buckets table
-func RendezvousHashFixture(numKeys int, hashFactory HashFactory, scoreFunc UIntToFloat, weights ...int) (*RendezvousHash, map[string]map[string]struct{}) {
+func RendezvousHashFixture(t *testing.T, numKeys int, hashFactory HashFactory, scoreFunc UIntToFloat, weights ...int) (*RendezvousHash, map[string]map[string]struct{}) {
 	rh := NewRendezvousHash(hashFactory, scoreFunc)
 
 	keys := NodeKeysTable{}
@@ -46,7 +49,8 @@ func RendezvousHashFixture(numKeys int, hashFactory HashFactory, scoreFunc UIntT
 	}
 	// 1500 the sum of all weights
 	for i := 0; i < numKeys; i++ {
-		rand.Read(b)
+		_, err := rand.Read(b)
+		require.NoError(t, err)
 		key := hex.EncodeToString(b)
 		nodes := rh.GetOrderedNodes(key, 1)
 		keys[nodes[0].Label][key] = struct{}{}

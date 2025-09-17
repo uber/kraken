@@ -16,6 +16,7 @@ package agentclient
 import (
 	"errors"
 	"fmt"
+	"github.com/uber/kraken/utils/closers"
 	"io"
 	"net/url"
 
@@ -54,7 +55,7 @@ func (c *HTTPClient) GetTag(tag string) (core.Digest, error) {
 		}
 		return core.Digest{}, err
 	}
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return core.Digest{}, fmt.Errorf("read body: %s", err)

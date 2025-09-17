@@ -25,6 +25,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/uber/kraken/utils/closers"
 	"golang.org/x/net/context/ctxhttp"
 )
 
@@ -136,7 +137,7 @@ func (cli *dockerClient) PullImage(ctx context.Context, repo, tag string) error 
 	if err != nil {
 		return fmt.Errorf("send post request: %s", err)
 	}
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 	if resp.StatusCode != 200 {
 		errMsg, err := io.ReadAll(resp.Body)
 		if err != nil {

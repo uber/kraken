@@ -143,12 +143,12 @@ func TestKeyDistributionAndNodeChanges(t *testing.T) {
 }
 
 func testKeyDistribution(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
-	rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
+	rh, nodekeys := RendezvousHashFixture(t, numKeys, hash, scoreFunc, 100, 200, 400, 800)
 	assertKeyDistribution(t, rh, nodekeys, numKeys, 1500.0, 0.1)
 }
 
 func testAddNodes(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
-	rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
+	rh, nodekeys := RendezvousHashFixture(t, numKeys, hash, scoreFunc, 100, 200, 400, 800)
 
 	rh.RemoveNode("1")
 	assert.Equal(t, len(rh.Nodes), 3)
@@ -167,7 +167,7 @@ func testAddNodes(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testi
 }
 
 func testRemoveNodes(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
-	rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
+	rh, nodekeys := RendezvousHashFixture(t, numKeys, hash, scoreFunc, 100, 200, 400, 800)
 
 	rh.AddNode("4", 200)
 	nodekeys["4"] = make(map[string]struct{})
@@ -193,7 +193,7 @@ func testRemoveNodes(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *te
 }
 
 func testReturnNodesLength(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
-	rh, _ := RendezvousHashFixture(0, hash, scoreFunc, 100, 200, 400, 800)
+	rh, _ := RendezvousHashFixture(t, 0, hash, scoreFunc, 100, 200, 400, 800)
 	keys := HashKeyFixture(1, hash)
 
 	var scores []float64
@@ -207,7 +207,7 @@ func testReturnNodesLength(numKeys int, hash HashFactory, scoreFunc UIntToFloat,
 }
 
 func testReturnNodesOrder(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
-	rh, _ := RendezvousHashFixture(0, hash, scoreFunc, 100, 200, 400, 800)
+	rh, _ := RendezvousHashFixture(t, 0, hash, scoreFunc, 100, 200, 400, 800)
 	keys := HashKeyFixture(1, hash)
 
 	var scores []float64
@@ -224,7 +224,7 @@ func testReturnNodesOrder(numKeys int, hash HashFactory, scoreFunc UIntToFloat, 
 }
 
 func testAddingCapacity(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
-	rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
+	rh, nodekeys := RendezvousHashFixture(t, numKeys, hash, scoreFunc, 100, 200, 400, 800)
 
 	_, index := rh.GetNode("3")
 	rh.Nodes[index].Weight = 1000
@@ -249,7 +249,7 @@ func testAddingCapacity(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t 
 }
 
 func testRemovingCapacity(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
-	rh, nodekeys := RendezvousHashFixture(numKeys, hash, scoreFunc, 100, 200, 400, 800)
+	rh, nodekeys := RendezvousHashFixture(t, numKeys, hash, scoreFunc, 100, 200, 400, 800)
 
 	_, index := rh.GetNode("3")
 	rh.Nodes[index].Weight = 200

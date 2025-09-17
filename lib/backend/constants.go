@@ -21,14 +21,14 @@ import (
 )
 
 const (
-	DefaultPartSize    int64             = int64(64 * memsize.MB)
-	DefaultBufferGuard datasize.ByteSize = 10 * datasize.MB
-	DefaultConcurrency int               = 10
-	DefaultListMaxKeys int               = 250
+	DefaultPartSize        = int64(64 * memsize.MB)
+	DefaultBufferGuard     = 10 * datasize.MB
+	DefaultConcurrency int = 10
+	DefaultListMaxKeys int = 250
 )
 
 var (
-	ReadinessCheckNamespace string = core.NamespaceFixture()
-	ReadinessCheckName      string = core.DigestFixture().Hex()
-	ReadinessCheckDigest, _        = core.NewSHA256DigestFromHex(ReadinessCheckName)
+	ReadinessCheckNamespace = core.NamespaceFixture()
+	ReadinessCheckName      = core.DigestFixture().Hex()
+	ReadinessCheckDigest, _ = core.NewSHA256DigestFromHex(ReadinessCheckName) //nolint:errcheck
 )

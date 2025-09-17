@@ -15,6 +15,7 @@ package base
 
 import (
 	"container/list"
+	"go.uber.org/zap"
 	"os"
 	"sync"
 	"time"
@@ -120,7 +121,10 @@ func (fm *lruFileMap) syncGetAndTouch(name string) (*fileEntryWithAccessTime, bo
 		// Only update if new timestamp is <timeResolution> newer than previous
 		// value.
 		e.lastAccessTime = t
-		e.fe.SetMetadata(metadata.NewLastAccessTime(t))
+		_, err := e.fe.SetMetadata(metadata.NewLastAccessTime(t))
+		if err != nil {
+			log.Desugar().Error("Error setting metadata", zap.String("name", e.fe.GetName()), zap.Error(err))
+		}
 	}
 
 	return e, true
@@ -230,7 +234,10 @@ func (fm *lruFileMap) TryStore(name string, entry FileEntry, f func(string, File
 			// Only update if new timestamp is <timeResolution> newer than
 			// previous value.
 			e.lastAccessTime = t
-			e.fe.SetMetadata(metadata.NewLastAccessTime(t))
+			_, err := e.fe.SetMetadata(metadata.NewLastAccessTime(t))
+			if err != nil {
+				log.Desugar().Error("Error setting metadata", zap.String("name", e.fe.GetName()), zap.Error(err))
+			}
 		}
 
 		return false

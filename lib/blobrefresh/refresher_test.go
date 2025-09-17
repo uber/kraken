@@ -39,6 +39,7 @@ type refresherMocks struct {
 	cas      *store.CAStore
 	backends *backend.Manager
 	config   Config
+	t        *testing.T
 }
 
 func newRefresherMocks(t *testing.T) (*refresherMocks, func()) {
@@ -53,7 +54,7 @@ func newRefresherMocks(t *testing.T) (*refresherMocks, func()) {
 
 	backends := backend.ManagerFixture()
 
-	return &refresherMocks{ctrl, cas, backends, Config{}}, cleanup.Run
+	return &refresherMocks{ctrl, cas, backends, Config{}, t}, cleanup.Run
 }
 
 func (m *refresherMocks) new() *Refresher {
@@ -62,7 +63,8 @@ func (m *refresherMocks) new() *Refresher {
 
 func (m *refresherMocks) newClient(namespace string) *mockbackend.MockClient {
 	client := mockbackend.NewMockClient(m.ctrl)
-	m.backends.Register(namespace, client, false)
+	err := m.backends.Register(namespace, client, false)
+	require.NoError(m.t, err)
 	return client
 }
 

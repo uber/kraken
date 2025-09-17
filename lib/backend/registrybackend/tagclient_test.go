@@ -80,7 +80,8 @@ func TestTagDownloadFileNotFound(t *testing.T) {
 	r := chi.NewRouter()
 	r.Get(fmt.Sprintf("/v2/%s/manifests/{tag}", namespace), func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("file not found"))
+		_, err := w.Write([]byte("file not found"))
+		require.NoError(err)
 	})
 	r.Head(fmt.Sprintf("/v2/%s/manifests/{tag}", namespace), func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

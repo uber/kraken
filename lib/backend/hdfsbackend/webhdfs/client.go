@@ -25,6 +25,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/uber/kraken/utils/closers"
+
 	"github.com/cenkalti/backoff"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/httputil"
@@ -150,7 +152,7 @@ func (c *client) Create(path string, src io.Reader) error {
 			}
 			return nnErr
 		}
-		defer nameresp.Body.Close()
+		defer closers.Close(nameresp.Body)
 
 		// Follow redirect location manually per WebHDFS protocol.
 		loc, ok := nameresp.Header["Location"]
@@ -172,7 +174,7 @@ func (c *client) Create(path string, src io.Reader) error {
 			}
 			return nnErr
 		}
-		defer dataresp.Body.Close()
+		defer closers.Close(dataresp.Body)
 
 		return nil
 	}
@@ -196,8 +198,7 @@ func (c *client) Rename(from, to string) error {
 			}
 			return nnErr
 		}
-		resp.Body.Close()
-		return nil
+		return resp.Body.Close()
 	}
 	return allNameNodesFailedError{nnErr}
 }
@@ -219,8 +220,7 @@ func (c *client) Mkdirs(path string) error {
 			}
 			return nnErr
 		}
-		resp.Body.Close()
-		return nil
+		return resp.Body.Close()
 	}
 	return allNameNodesFailedError{nnErr}
 }
@@ -251,7 +251,7 @@ func (c *client) Open(path string, dst io.Writer) error {
 			}
 			return nnErr
 		}
-		defer resp.Body.Close()
+		defer closers.Close(resp.Body)
 		if n, err := io.Copy(dst, resp.Body); err != nil {
 			return fmt.Errorf("copy response: %s", err)
 		} else if n != resp.ContentLength {

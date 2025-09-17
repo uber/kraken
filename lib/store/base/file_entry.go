@@ -17,6 +17,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/uber/kraken/utils/closers"
+	"github.com/uber/kraken/utils/log"
+	"go.uber.org/zap"
 	"os"
 	"path/filepath"
 	"strings"
@@ -288,13 +291,16 @@ func (entry *localFileEntry) Create(targetState FileState, size int64) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer closers.Close(f)
 
 	// Change size.
 	err = f.Truncate(size)
 	if err != nil {
 		// Try to delete file.
-		os.RemoveAll(filepath.Dir(targetPath))
+		removeErr := os.RemoveAll(filepath.Dir(targetPath))
+		if removeErr != nil {
+			log.Desugar().Error("failed to remove file after truncate error", zap.Error(err))
+		}
 		return err
 	}
 
@@ -321,7 +327,10 @@ func (entry *localFileEntry) Reload() error {
 			md := metadata.CreateFromSuffix(currFile.Name())
 			if md != nil {
 				// Add metadata
-				entry.AddMetadata(md)
+				err = entry.AddMetadata(md)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
