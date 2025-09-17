@@ -33,8 +33,6 @@ import (
 )
 
 func TestHealth(t *testing.T) {
-	require := require.New(t)
-
 	mocks, cleanup := newServerMocks(t)
 	defer cleanup()
 
@@ -42,11 +40,13 @@ func TestHealth(t *testing.T) {
 
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/health", addr))
-	defer require.NoError(resp.Body.Close())
-	require.NoError(err)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
 	b, err := io.ReadAll(resp.Body)
-	require.NoError(err)
-	require.Equal("OK\n", string(b))
+	require.NoError(t, err)
+	require.Equal(t, "OK\n", string(b))
+	require.NoError(t, resp.Body.Close())
 }
 
 func TestPreheatInvalidEventBody(t *testing.T) {

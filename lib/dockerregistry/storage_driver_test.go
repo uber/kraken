@@ -160,21 +160,20 @@ func TestStorageDriverWriter(t *testing.T) {
 	content := []byte("this is a test for upload writer")
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("GetWriter %s", tc.input), func(t *testing.T) {
-			require := require.New(t)
 			w, err := sd.Writer(contextFixture(), tc.input, false)
-			require.Equal(tc.err, err)
+			require.Equal(t, tc.err, err)
 			if err != nil {
 				return
 			}
 			_, err = w.Write(content)
-			require.NoError(err)
-			require.NoError(w.Close())
+			require.NoError(t, err)
+			require.NoError(t, w.Close())
 			r, err := sd.Reader(contextFixture(), tc.input, 0)
-			require.NoError(err)
-			defer require.NoError(r.Close())
+			require.NoError(t, err)
 			data, err := io.ReadAll(r)
-			require.NoError(err)
-			require.Equal(content, data)
+			require.NoError(t, err)
+			require.Equal(t, content, data)
+			require.NoError(t, r.Close())
 		})
 	}
 }
