@@ -16,7 +16,6 @@ package tagserver
 import (
 	"encoding/json"
 	"fmt"
-	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"net/url"
@@ -41,6 +40,7 @@ import (
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/listener"
 	"github.com/uber/kraken/utils/log"
+	"go.uber.org/zap"
 
 	"github.com/go-chi/chi"
 	chimiddleware "github.com/go-chi/chi/middleware"
