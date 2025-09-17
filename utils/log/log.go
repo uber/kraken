@@ -60,6 +60,11 @@ func Default() *zap.SugaredLogger {
 	return _default
 }
 
+// Desugar returns and non sugared global logger.
+func Desugar() *zap.Logger {
+	return Default().Desugar()
+}
+
 // Debug uses fmt.Sprint to construct and log a message.
 func Debug(args ...interface{}) {
 	Default().Debug(args...)

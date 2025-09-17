@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/uber/kraken/utils/closers"
+
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/store"
 
@@ -117,13 +119,17 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 	if err != nil {
 		return nil, fmt.Errorf("transferer download: %w", err)
 	}
-	defer blob.Close()
+	defer closers.Close(blob)
 
 	// Only verify if we haven't already verified this (repo, digest) combination
 	cacheKey := fmt.Sprintf("%s:%s", repo, digest.String())
 	shouldEmitMetrics := !t.verifiedCache.Has(cacheKey)
 
-	_, _ = t.verify(path, repo, digest, blob, shouldEmitMetrics)
+	// Signature verification is currently not enforced: errors from t.verify are ignored.
+	// This is intentional because verification enforcement is planned for a future release.
+	// Risks: manifests may be accepted without verification, which could allow untrusted content.
+	// TODO: Remove error ignoring and enforce verification once the feature is activated.
+	_, _ = t.verify(path, repo, digest, blob, shouldEmitMetrics) //nolint:errcheck
 
 	if shouldEmitMetrics {
 		t.verifiedCache.Add(cacheKey)

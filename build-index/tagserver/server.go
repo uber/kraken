@@ -40,6 +40,7 @@ import (
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/listener"
 	"github.com/uber/kraken/utils/log"
+	"go.uber.org/zap"
 
 	"github.com/go-chi/chi"
 	chimiddleware "github.com/go-chi/chi/middleware"
@@ -142,20 +143,30 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
-	fmt.Fprintln(w, "OK")
+	_, err := fmt.Fprintln(w, "OK")
+	if err != nil {
+		log.Desugar().Error("Health check write failed", zap.Error(err))
+		return handler.Errorf("write health check: %s", err)
+	}
 	return nil
 }
 
 func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) error {
 	err := s.backends.CheckReadiness()
 	if err != nil {
+		log.Desugar().Error("Backends readiness check failed", zap.Error(err))
 		return handler.Errorf("not ready to serve traffic: %s", err).Status(http.StatusServiceUnavailable)
 	}
 	err = s.localOriginClient.CheckReadiness()
 	if err != nil {
+		log.Desugar().Error("Origin readiness check failed", zap.Error(err))
 		return handler.Errorf("not ready to serve traffic: %s", err).Status(http.StatusServiceUnavailable)
 	}
-	fmt.Fprintln(w, "OK")
+	_, err = fmt.Fprintln(w, "OK")
+	if err != nil {
+		log.Desugar().Error("Readiness check write failed", zap.Error(err))
+		return handler.Errorf("write readiness check: %s", err)
+	}
 	return nil
 }
 

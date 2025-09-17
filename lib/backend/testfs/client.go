@@ -26,8 +26,8 @@ import (
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/backend/namepath"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/httputil"
-
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
@@ -127,7 +127,7 @@ func (c *Client) Download(namespace, name string, dst io.Writer) error {
 		}
 		return err
 	}
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 	if _, err := io.Copy(dst, resp.Body); err != nil {
 		return fmt.Errorf("copy: %s", err)
 	}
@@ -150,7 +150,7 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 	var paths []string
 	if err := json.NewDecoder(resp.Body).Decode(&paths); err != nil {
 		return nil, fmt.Errorf("json: %s", err)

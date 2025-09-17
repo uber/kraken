@@ -73,8 +73,16 @@ func (d *testDriver) setup() (*KrakenStorageDriver, testImageUploadBundle) {
 	if err != nil {
 		log.Panic(err)
 	}
-	defer writer.Close()
-	writer.Write([]byte(uploadContent))
+	defer func() {
+		err := writer.Close()
+		if err != nil {
+			log.Panic(err)
+		}
+	}()
+	_, err = writer.Write([]byte(uploadContent))
+	if err != nil {
+		log.Panic(err)
+	}
 
 	config := core.NewBlobFixture()
 	layer1 := core.NewBlobFixture()

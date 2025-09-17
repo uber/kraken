@@ -68,7 +68,8 @@ func TestHttpDownloadFileNotFound(t *testing.T) {
 	r := chi.NewRouter()
 	r.Get("/data/{blob}", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("file not found"))
+		_, err := w.Write([]byte("file not found"))
+		require.NoError(err)
 	})
 	addr, stop := testutil.StartServer(r)
 	defer stop()

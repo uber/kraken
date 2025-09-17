@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/uber/kraken/utils/closers"
+
 	"github.com/containerd/containerd"
 )
 
@@ -38,7 +40,7 @@ func (c *Impl) PullImage(ctx context.Context, ns, repo, tag string) error {
 	if err != nil {
 		return fmt.Errorf("new containerd client: %s", err)
 	}
-	defer client.Close()
+	defer closers.Close(client)
 
 	_, err = client.Pull(ctx, fmt.Sprintf("%s/%s:%s", c.registry, repo, tag), containerd.WithPullUnpack)
 	if err != nil {

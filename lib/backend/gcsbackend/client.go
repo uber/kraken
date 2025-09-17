@@ -20,6 +20,8 @@ import (
 	"io"
 	"path"
 
+	"github.com/uber/kraken/utils/closers"
+
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
@@ -245,7 +247,7 @@ func (g *GCSImpl) Download(objectName string, w io.Writer) (int64, error) {
 		}
 		return 0, err
 	}
-	defer rc.Close()
+	defer closers.Close(rc)
 
 	r, err := io.CopyN(w, rc, int64(g.config.BufferGuard))
 	if err != nil && err != io.EOF {

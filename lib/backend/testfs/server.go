@@ -24,6 +24,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/uber/kraken/utils/log"
+
 	"github.com/uber/kraken/utils/handler"
 
 	"github.com/go-chi/chi"
@@ -57,11 +59,17 @@ func (s *Server) Handler() http.Handler {
 
 // Cleanup cleans up the underlying directory of s.
 func (s *Server) Cleanup() {
-	os.RemoveAll(s.dir)
+	err := os.RemoveAll(s.dir)
+	if err != nil {
+		log.Error(err)
+	}
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("OK"))
+	_, err := w.Write([]byte("OK"))
+	if err != nil {
+		log.Error(err)
+	}
 }
 
 func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {

@@ -20,6 +20,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/uber/kraken/utils/closers"
+
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
@@ -145,7 +147,7 @@ func (c *BlobClient) downloadHelper(namespace, name, query string, dst io.Writer
 		}
 		return fmt.Errorf("get blob: %s", err)
 	}
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 
 	if _, err := io.Copy(dst, resp.Body); err != nil {
 		return fmt.Errorf("copy: %s", err)

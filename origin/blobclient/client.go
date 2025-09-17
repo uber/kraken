@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/uber/kraken/utils/closers"
+
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/memsize"
@@ -208,7 +210,7 @@ func (c *HTTPClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer
 	if err != nil {
 		return err
 	}
-	defer r.Body.Close()
+	defer closers.Close(r.Body)
 	if _, err := io.Copy(dst, r.Body); err != nil {
 		return fmt.Errorf("copy body: %s", err)
 	}
@@ -239,7 +241,7 @@ func (c *HTTPClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInf
 	if err != nil {
 		return nil, err
 	}
-	defer r.Body.Close()
+	defer closers.Close(r.Body)
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read body: %s", err)
@@ -270,7 +272,7 @@ func (c *HTTPClient) GetPeerContext() (core.PeerContext, error) {
 	if err != nil {
 		return pctx, err
 	}
-	defer r.Body.Close()
+	defer closers.Close(r.Body)
 	if err := json.NewDecoder(r.Body).Decode(&pctx); err != nil {
 		return pctx, err
 	}

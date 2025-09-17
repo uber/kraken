@@ -40,7 +40,8 @@ func TestFromBytes(t *testing.T) {
 	require := require.New(t)
 
 	d := NewDigester()
-	d.FromBytes([]byte(_testStr))
+	_, err := d.FromBytes([]byte(_testStr))
+	require.NoError(err)
 
 	hexDigest := d.Digest().Hex()
 	require.NoError(ValidateSHA256(hexDigest))
@@ -52,7 +53,8 @@ func TestFromReader(t *testing.T) {
 
 	d := NewDigester()
 	r := strings.NewReader(_testStr)
-	d.FromReader(r)
+	_, err := d.FromReader(r)
+	require.NoError(err)
 
 	hexDigest := d.Digest().Hex()
 	require.NoError(ValidateSHA256(hexDigest))
