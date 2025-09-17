@@ -16,6 +16,7 @@ package tagserver
 import (
 	"encoding/json"
 	"fmt"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"net/url"
@@ -144,6 +145,7 @@ func (s *Server) ListenAndServe() error {
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
 	_, err := fmt.Fprintln(w, "OK")
 	if err != nil {
+		log.Desugar().Error("Health check write failed", zap.Error(err))
 		return handler.Errorf("write health check: %s", err)
 	}
 	return nil
@@ -152,14 +154,17 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) error {
 	err := s.backends.CheckReadiness()
 	if err != nil {
+		log.Desugar().Error("Backends readiness check failed", zap.Error(err))
 		return handler.Errorf("not ready to serve traffic: %s", err).Status(http.StatusServiceUnavailable)
 	}
 	err = s.localOriginClient.CheckReadiness()
 	if err != nil {
+		log.Desugar().Error("Origin readiness check failed", zap.Error(err))
 		return handler.Errorf("not ready to serve traffic: %s", err).Status(http.StatusServiceUnavailable)
 	}
 	_, err = fmt.Fprintln(w, "OK")
 	if err != nil {
+		log.Desugar().Error("Readiness check write failed", zap.Error(err))
 		return handler.Errorf("write readiness check: %s", err)
 	}
 	return nil

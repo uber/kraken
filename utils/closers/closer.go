@@ -14,9 +14,11 @@ func Close(closer io.Closer) {
 	if closer != nil {
 		err := closer.Close()
 		if err != nil {
-			// zap.Stack provides cleaner stack traces than debug.Stack(),
-			// it cuts itself from the stack trace.
-			log.Error(err, " ", zap.Stack("stack").String)
+			log.Desugar().Error(
+				"failed to close a closer",
+				zap.Error(err),
+				zap.Stack("stack"),
+			)
 		}
 	}
 }
