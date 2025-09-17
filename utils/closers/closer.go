@@ -3,9 +3,8 @@ package closers
 import (
 	"io"
 
-	"go.uber.org/zap"
-
 	"github.com/uber/kraken/utils/log"
+	"go.uber.org/zap"
 )
 
 // Close closes the closer. A message will be logged.
