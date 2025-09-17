@@ -16,11 +16,11 @@ package agentclient
 import (
 	"errors"
 	"fmt"
-	"github.com/uber/kraken/utils/closers"
 	"io"
 	"net/url"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/httputil"
 )
 

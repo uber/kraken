@@ -15,15 +15,14 @@ package base
 
 import (
 	"container/list"
-	"go.uber.org/zap"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/log"
-
-	"github.com/andres-erbsen/clock"
+	"go.uber.org/zap"
 )
 
 // FileMap is a thread-safe name -> FileEntry map.

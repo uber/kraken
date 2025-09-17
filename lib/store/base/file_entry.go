@@ -17,16 +17,16 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/uber/kraken/utils/closers"
-	"github.com/uber/kraken/utils/log"
-	"go.uber.org/zap"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/closers"
+	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/stringset"
+	"go.uber.org/zap"
 )
 
 // FileEntry errors.
