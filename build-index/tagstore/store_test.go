@@ -161,8 +161,8 @@ func TestGetFromBackendInvalidValue(t *testing.T) {
 		tag, tag,
 		mockutil.MatchWriter([]byte(digest.String()))).DoAndReturn(
 		func(namespace, name string, dst io.Writer) error {
-			dst.Write([]byte("foo"))
-			return nil
+			_, err := dst.Write([]byte("foo"))
+			return err
 		})
 
 	_, err := store.Get(tag)

@@ -24,9 +24,11 @@ import (
 	"testing"
 
 	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/randutil"
 	"github.com/uber/kraken/utils/rwutil"
 	"github.com/uber/kraken/utils/testutil"
+	"go.uber.org/zap"
 
 	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/require"
@@ -57,7 +59,10 @@ func redirectToDataNode(w http.ResponseWriter, r *http.Request) {
 func writeResponse(status int, body []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
-		w.Write(body)
+		_, err := w.Write(body)
+		if err != nil {
+			log.Desugar().Error("failed to write response", zap.Error(err))
+		}
 	}
 }
 
