@@ -148,16 +148,15 @@ func Run(flags *Flags, opts ...Option) {
 	r := blobclient.NewClientResolver(blobclient.NewProvider(blobclient.WithTLS(tls)), origins)
 	originCluster := blobclient.NewClusterClient(r)
 
-	server := trackerserver.New(
-		config.TrackerServer, stats, policy, peerStore, originStore, originCluster)
+	server := trackerserver.New(config.TrackerServer, stats, policy, peerStore, originStore, originCluster)
 	go func() {
 		log.Fatal(server.ListenAndServe())
 	}()
 
 	log.Info("Starting nginx...")
 	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
-		"port": flags.Port,
-		"server": nginx.GetServer(
-			config.TrackerServer.Listener.Net, config.TrackerServer.Listener.Addr)},
-		nginx.WithTLS(config.TLS)))
+		"port":             flags.Port,
+		"server":           nginx.GetServer(config.TrackerServer.Listener.Net, config.TrackerServer.Listener.Addr),
+		"metainfo_timeout": nginx.FormatDurationForNginx(config.TrackerServer.MetaInfoTimeout),
+	}, nginx.WithTLS(config.TLS)))
 }

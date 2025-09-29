@@ -41,6 +41,10 @@ trackerserver:
     net: unix
     addr: /tmp/kraken-tracker.sock
 
+  # Timeout configurations (also used by nginx)
+  metainfo_timeout: 2m    # nginx proxy_read_timeout for metainfo requests to origins
+  readiness_timeout: 30s  # nginx timeout for health checks
+
 nginx:
   name: kraken-tracker
   cache_dir: /var/cache/kraken/kraken-tracker/nginx/

@@ -42,9 +42,22 @@ server {
 
 {{healthEndpoint "agent-server"}}
 
+  # Download operations
+  location ~ ^/namespace/.*/blobs/ {
+    proxy_pass http://agent-server;
+    
+    # Use download timeout for blob operations
+    proxy_read_timeout {{.download_timeout}};
+    proxy_send_timeout {{.download_timeout}};
+  }
+
   location / {
     proxy_pass http://registry-backend;
     proxy_next_upstream error timeout http_404 http_500;
+
+	# Standard timeouts for registry operations
+    proxy_read_timeout {{.download_timeout}};
+    proxy_send_timeout {{.download_timeout}};
   }
 }
 `

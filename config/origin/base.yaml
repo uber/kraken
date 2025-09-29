@@ -49,6 +49,12 @@ blobserver:
     net: unix
     addr: /tmp/kraken-origin.sock
 
+  # Timeout configurations (also used by nginx)
+  download_timeout: 15m      # nginx proxy_read_timeout for downloads
+  upload_timeout: 10m        # nginx proxy_read_timeout/send_timeout for uploads  
+  replication_timeout: 3m    # nginx timeout for replication operations
+  backend_timeout: 2m        # nginx proxy_connect_timeout
+
 nginx:
   name: kraken-origin
   cache_dir: /var/cache/kraken/kraken-origin/nginx/
