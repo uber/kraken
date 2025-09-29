@@ -47,6 +47,13 @@ type Config struct {
 	DownloadTimeout time.Duration `yaml:"download_timeout"`
 }
 
+func (c Config) applyDefaults() Config {
+	if c.DownloadTimeout == 0 {
+		c.DownloadTimeout = 15 * time.Minute
+	}
+	return c
+}
+
 // Server defines the agent HTTP server.
 type Server struct {
 	config           Config
@@ -69,6 +76,8 @@ func New(
 	ac announceclient.Client,
 	containerRuntime containerruntime.Factory,
 ) *Server {
+	config = config.applyDefaults()
+
 	stats = stats.Tagged(map[string]string{
 		"module": "agentserver",
 	})
