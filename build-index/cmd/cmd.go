@@ -144,6 +144,7 @@ func Run(flags *Flags, opts ...Option) {
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
+	defer closers.Close(backends)
 
 	tls, err := config.TLS.BuildClient()
 	if err != nil {

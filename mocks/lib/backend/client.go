@@ -13,30 +13,44 @@ import (
 	backend "github.com/uber/kraken/lib/backend"
 )
 
-// MockClient is a mock of Client interface
+// MockClient is a mock of Client interface.
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
 }
 
-// MockClientMockRecorder is the mock recorder for MockClient
+// MockClientMockRecorder is the mock recorder for MockClient.
 type MockClientMockRecorder struct {
 	mock *MockClient
 }
 
-// NewMockClient creates a new mock instance
+// NewMockClient creates a new mock instance.
 func NewMockClient(ctrl *gomock.Controller) *MockClient {
 	mock := &MockClient{ctrl: ctrl}
 	mock.recorder = &MockClientMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
-// Download mocks base method
+// Close mocks base method.
+func (m *MockClient) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockClientMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockClient)(nil).Close))
+}
+
+// Download mocks base method.
 func (m *MockClient) Download(arg0, arg1 string, arg2 io.Writer) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Download", arg0, arg1, arg2)
@@ -44,13 +58,13 @@ func (m *MockClient) Download(arg0, arg1 string, arg2 io.Writer) error {
 	return ret0
 }
 
-// Download indicates an expected call of Download
+// Download indicates an expected call of Download.
 func (mr *MockClientMockRecorder) Download(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0, arg1, arg2)
 }
 
-// List mocks base method
+// List mocks base method.
 func (m *MockClient) List(arg0 string, arg1 ...backend.ListOption) (*backend.ListResult, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0}
@@ -63,14 +77,14 @@ func (m *MockClient) List(arg0 string, arg1 ...backend.ListOption) (*backend.Lis
 	return ret0, ret1
 }
 
-// List indicates an expected call of List
+// List indicates an expected call of List.
 func (mr *MockClientMockRecorder) List(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0}, arg1...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockClient)(nil).List), varargs...)
 }
 
-// Stat mocks base method
+// Stat mocks base method.
 func (m *MockClient) Stat(arg0, arg1 string) (*core.BlobInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Stat", arg0, arg1)
@@ -79,13 +93,13 @@ func (m *MockClient) Stat(arg0, arg1 string) (*core.BlobInfo, error) {
 	return ret0, ret1
 }
 
-// Stat indicates an expected call of Stat
+// Stat indicates an expected call of Stat.
 func (mr *MockClientMockRecorder) Stat(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockClient)(nil).Stat), arg0, arg1)
 }
 
-// Upload mocks base method
+// Upload mocks base method.
 func (m *MockClient) Upload(arg0, arg1 string, arg2 io.Reader) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Upload", arg0, arg1, arg2)
@@ -93,7 +107,7 @@ func (m *MockClient) Upload(arg0, arg1 string, arg2 io.Reader) error {
 	return ret0
 }
 
-// Upload indicates an expected call of Upload
+// Upload indicates an expected call of Upload.
 func (mr *MockClientMockRecorder) Upload(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockClient)(nil).Upload), arg0, arg1, arg2)

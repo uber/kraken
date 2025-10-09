@@ -163,3 +163,8 @@ func (c *TagClient) Upload(namespace, name string, src io.Reader) error {
 func (c *TagClient) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
 	return nil, errors.New("not supported")
 }
+
+// Close is noop as no resources to close
+func (c *TagClient) Close() error {
+	return nil
+}

@@ -65,4 +65,7 @@ type Client interface {
 
 	// List lists entries whose names start with prefix.
 	List(prefix string, opts ...ListOption) (*ListResult, error)
+
+	// Close can be used to close any resources held by the client.
+	Close() error
 }

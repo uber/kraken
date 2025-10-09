@@ -281,3 +281,8 @@ func dockerTagsQuery(c *Client, prefix string) (*backend.ListResult, error) {
 		Names: names,
 	}, nil
 }
+
+// Close closes the client and releases any held resources.
+func (c *Client) Close() error {
+	return c.db.Close()
+}

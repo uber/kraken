@@ -74,6 +74,7 @@ type Client struct {
 	pather namepath.Pather
 	stats  tally.Scope
 	gcs    GCS
+	sClient *storage.Client
 }
 
 // Option allows setting optional Client parameters.
@@ -111,7 +112,7 @@ func NewClient(
 
 	if len(opts) > 0 {
 		// For mock.
-		client := &Client{config, pather, stats, nil}
+		client := &Client{config, pather, stats, nil, nil}
 		for _, opt := range opts {
 			opt(client)
 		}
@@ -126,7 +127,7 @@ func NewClient(
 	}
 
 	client := &Client{config, pather, stats,
-		NewGCS(ctx, sClient.Bucket(config.Bucket), &config)}
+		NewGCS(ctx, sClient.Bucket(config.Bucket), &config), sClient}
 
 	log.Infof("Initalized GCS backend with config: %s", config)
 	return client, nil
@@ -214,6 +215,15 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		result.ContinuationToken = ""
 	}
 	return result, nil
+}
+
+// Close closes the storage client
+func (c *Client) Close() error {
+	if c.sClient == nil {
+		// Nothing to close
+		return nil
+	}
+	return c.sClient.Close()
 }
 
 // isObjectNotFound is helper function for identify non-existing object error.
