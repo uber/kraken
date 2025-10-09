@@ -164,3 +164,8 @@ func (c *BlobClient) Upload(namespace, name string, src io.Reader) error {
 func (c *BlobClient) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
 	return nil, errors.New("not supported")
 }
+
+func (c *BlobClient) Close() error {
+	// no resources to close
+	return nil
+}

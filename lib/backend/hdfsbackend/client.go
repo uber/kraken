@@ -274,3 +274,9 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		Names: files,
 	}, nil
 }
+
+// Close closes the client and releases any held resources.
+func (c *Client) Close() error {
+	// No resources to close for HDFS client
+	return nil
+}

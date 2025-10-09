@@ -123,3 +123,9 @@ func (c *Client) Upload(namespace, name string, src io.Reader) error {
 func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListResult, error) {
 	return nil, errors.New("not supported")
 }
+
+// Close closes the client and releases any held resources.
+func (c *Client) Close() error {
+	// No resources to close for http client
+	return nil
+}

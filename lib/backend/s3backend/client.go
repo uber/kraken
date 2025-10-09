@@ -301,3 +301,9 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		ContinuationToken: nextContinuationToken,
 	}, nil
 }
+
+// Close closes the client and releases any held resources.
+func (c *Client) Close() error {
+	// No resources to close for S3 client
+	return nil
+}

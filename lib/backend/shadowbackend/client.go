@@ -269,3 +269,21 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 	}
 	return res, nil
 }
+
+// Close closes the client and releases any held resources.
+func (c *Client) Close() error {
+	// Close both active and shadow clients
+	var activeErr, shadowErr error
+	if c.active != nil {
+		activeErr = c.active.Close()
+	}
+	if c.shadow != nil {
+		shadowErr = c.shadow.Close()
+	}
+
+	// Return the first error encountered, if any
+	if activeErr != nil {
+		return activeErr
+	}
+	return shadowErr
+}

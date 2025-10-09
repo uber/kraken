@@ -37,6 +37,7 @@ import (
 	"github.com/uber/kraken/nginx"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/origin/blobserver"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/configutil"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/log"
@@ -190,6 +191,7 @@ func Run(flags *Flags, opts ...Option) {
 	if err != nil {
 		log.Fatalf("Error creating backend manager: %s", err)
 	}
+	defer closers.Close(backendManager)
 
 	localDB, err := localdb.New(config.LocalDB)
 	if err != nil {
