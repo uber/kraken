@@ -21,6 +21,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	mocks3backend "github.com/uber/kraken/mocks/lib/backend/s3backend"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/randutil"
 	"github.com/uber/kraken/utils/rwutil"
@@ -94,6 +95,7 @@ func TestClientStat(t *testing.T) {
 	defer cleanup()
 
 	client := mocks.new()
+	defer closers.Close(client)
 
 	var length int64 = 100
 
@@ -114,6 +116,7 @@ func TestClientDownload(t *testing.T) {
 	defer cleanup()
 
 	client := mocks.new()
+	defer closers.Close(client)
 
 	data := randutil.Text(32)
 
@@ -137,6 +140,7 @@ func TestClientDownloadWithBuffer(t *testing.T) {
 	defer cleanup()
 
 	client := mocks.new()
+	defer closers.Close(client)
 
 	data := randutil.Text(32)
 
@@ -161,6 +165,7 @@ func TestClientUpload(t *testing.T) {
 	defer cleanup()
 
 	client := mocks.new()
+	defer closers.Close(client)
 
 	data := bytes.NewReader(randutil.Text(32))
 
@@ -183,6 +188,7 @@ func TestClientList(t *testing.T) {
 	defer cleanup()
 
 	client := mocks.new()
+	defer closers.Close(client)
 
 	mocks.s3.EXPECT().ListObjectsV2Pages(
 		&s3.ListObjectsV2Input{
@@ -226,6 +232,7 @@ func TestClientListPaginated(t *testing.T) {
 	defer cleanup()
 
 	client := mocks.new()
+	defer closers.Close(client)
 
 	mocks.s3.EXPECT().ListObjectsV2Pages(
 		&s3.ListObjectsV2Input{

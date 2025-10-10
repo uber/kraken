@@ -25,6 +25,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	mockgcsbackend "github.com/uber/kraken/mocks/lib/backend/gcsbackend"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/randutil"
 	"github.com/uber/kraken/utils/rwutil"
@@ -98,6 +99,7 @@ func TestClientStat(t *testing.T) {
 	defer cleanup()
 
 	client := mocks.new()
+	defer closers.Close(client)
 
 	var objectAttrs storage.ObjectAttrs
 	objectAttrs.Size = 100
@@ -116,6 +118,7 @@ func TestClientDownload(t *testing.T) {
 	defer cleanup()
 
 	client := mocks.new()
+	defer closers.Close(client)
 	data := randutil.Text(32)
 
 	mocks.gcs.EXPECT().Download(
@@ -194,6 +197,7 @@ func TestClientList(t *testing.T) {
 	defer cleanup()
 
 	client := mocks.new()
+	defer closers.Close(client)
 
 	contToken := ""
 	mocks.gcs.EXPECT().GetObjectIterator(

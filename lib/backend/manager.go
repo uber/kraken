@@ -168,3 +168,16 @@ func (m *Manager) CheckReadiness() error {
 	}
 	return nil
 }
+
+func (m *Manager) Close() error {
+	totalErrors := make([]error, 0)
+	for _, b := range m.backends {
+		if err := b.client.Close(); err != nil {
+			totalErrors = append(totalErrors, fmt.Errorf("closing backend for namespace '%s': %s", b.regexp.String(), err))
+		}
+	}
+	if len(totalErrors) > 0 {
+		return errors.Join(totalErrors...)
+	}
+	return nil
+}

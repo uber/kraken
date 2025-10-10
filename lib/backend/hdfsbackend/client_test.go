@@ -23,6 +23,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs"
 	mockwebhdfs "github.com/uber/kraken/mocks/lib/backend/hdfsbackend/webhdfs"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/randutil"
 
@@ -76,6 +77,7 @@ func TestClientStat(t *testing.T) {
 	defer cleanup()
 
 	client := mocks.new()
+	defer closers.Close(client)
 
 	mocks.webhdfs.EXPECT().GetFileStatus("/root/test").Return(webhdfs.FileStatus{Length: 32}, nil)
 
@@ -149,6 +151,7 @@ func TestClientList(t *testing.T) {
 			defer cleanup()
 
 			client := mocks.new()
+			defer closers.Close(client)
 
 			mocks.webhdfs.EXPECT().ListFileStatus("/root").Return([]webhdfs.FileStatus{{
 				PathSuffix: "foo",
@@ -214,6 +217,7 @@ func TestClientListErrorDoesNotLeakGoroutines(t *testing.T) {
 	defer cleanup()
 
 	client := mocks.new()
+	defer closers.Close(client)
 
 	initDirectoryTree(mocks, "/root", 10, 3) // 1000 nodes.
 

@@ -167,3 +167,9 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 		Names: names,
 	}, nil
 }
+
+// Close closes the client and releases any held resources.
+func (c *Client) Close() error {
+	// No resources to close for testfs client
+	return nil
+}

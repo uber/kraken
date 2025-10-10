@@ -48,3 +48,9 @@ func (c NoopClient) Download(namespace, name string, dst io.Writer) error {
 func (c NoopClient) List(prefix string, opts ...ListOption) (*ListResult, error) {
 	return nil, nil
 }
+
+// Close closes the client and releases any held resources.
+func (c NoopClient) Close() error {
+	// No resources to close for noop client
+	return nil
+}

@@ -29,6 +29,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/backend/sqlbackend"
+	"github.com/uber/kraken/utils/closers"
 )
 
 var sqlClient *sqlbackend.Client
@@ -52,6 +53,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	sqlClient = c
+	defer closers.Close(sqlClient)
 	os.Exit(m.Run())
 }
 
