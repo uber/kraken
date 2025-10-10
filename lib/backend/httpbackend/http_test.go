@@ -22,6 +22,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/memsize"
 	"github.com/uber/kraken/utils/randutil"
 	"github.com/uber/kraken/utils/testutil"
@@ -56,6 +57,7 @@ func TestHttpDownloadSuccess(t *testing.T) {
 	config := Config{DownloadURL: "http://" + addr + "/data/%s"}
 	client, err := NewClient(config, tally.NoopScope)
 	require.NoError(err)
+	defer closers.Close(client)
 
 	var b bytes.Buffer
 	require.NoError(client.Download(core.NamespaceFixture(), "data", &b))
@@ -77,6 +79,7 @@ func TestHttpDownloadFileNotFound(t *testing.T) {
 	config := Config{DownloadURL: "http://" + addr + "/data/%s"}
 	client, err := NewClient(config, tally.NoopScope)
 	require.NoError(err)
+	defer closers.Close(client)
 
 	var b bytes.Buffer
 	require.Equal(backenderrors.ErrBlobNotFound, client.Download(core.NamespaceFixture(), "data", &b))
@@ -92,6 +95,7 @@ func TestDownloadMalformedURLThrowsError(t *testing.T) {
 	config := Config{DownloadURL: "http://" + addr + "/data"}
 	client, err := NewClient(config, tally.NoopScope)
 	require.NoError(err)
+	defer closers.Close(client)
 
 	var b bytes.Buffer
 	require.Error(client.Download(core.NamespaceFixture(), "data", &b))

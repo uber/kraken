@@ -26,6 +26,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/testutil"
 )
@@ -61,6 +62,7 @@ func TestTagDownloadSuccess(t *testing.T) {
 	config := newTestConfig(addr)
 	client, err := NewTagClient(config, tally.NoopScope)
 	require.NoError(err)
+	defer closers.Close(client)
 
 	info, err := client.Stat(tag, tag)
 	require.NoError(err)
@@ -92,6 +94,7 @@ func TestTagDownloadFileNotFound(t *testing.T) {
 	config := newTestConfig(addr)
 	client, err := NewTagClient(config, tally.NoopScope)
 	require.NoError(err)
+	defer closers.Close(client)
 
 	_, err = client.Stat(tag, tag)
 	require.Equal(backenderrors.ErrBlobNotFound, err)

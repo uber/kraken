@@ -21,6 +21,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/backend/namepath"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/stretchr/testify/require"
@@ -37,6 +38,7 @@ func TestServerBlob(t *testing.T) {
 
 	c, err := NewClient(Config{Addr: addr, NamePath: namepath.Identity}, tally.NoopScope)
 	require.NoError(err)
+	defer closers.Close(c)
 
 	blob := core.NewBlobFixture()
 	ns := core.NamespaceFixture()
@@ -66,6 +68,7 @@ func TestServerTag(t *testing.T) {
 
 	c, err := NewClient(Config{Addr: addr, NamePath: namepath.Identity}, tally.NoopScope)
 	require.NoError(err)
+	defer closers.Close(c)
 
 	ns := core.NamespaceFixture()
 	tag := "repo-bar:latest"
@@ -101,6 +104,7 @@ func TestServerList(t *testing.T) {
 			ns := core.NamespaceFixture()
 			c, err := NewClient(Config{Addr: addr, Root: "root", NamePath: namepath.Identity}, tally.NoopScope)
 			require.NoError(err)
+			defer closers.Close(c)
 
 			require.NoError(c.Upload(ns, "a/b/c.txt", bytes.NewBufferString("foo")))
 			require.NoError(c.Upload(ns, "a/b/d.txt", bytes.NewBufferString("bar")))
@@ -124,6 +128,7 @@ func TestDockerTagList(t *testing.T) {
 
 	c, err := NewClient(Config{Addr: addr, Root: "tags", NamePath: namepath.DockerTag}, tally.NoopScope)
 	require.NoError(err)
+	defer closers.Close(c)
 
 	ns := core.NamespaceFixture()
 	tags := []string{"foo:v0", "foo:latest", "bar:v0", "bar/baz:v0"}

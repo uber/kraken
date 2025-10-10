@@ -25,6 +25,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/memsize"
 	"github.com/uber/kraken/utils/randutil"
 	"github.com/uber/kraken/utils/testutil"
@@ -60,6 +61,7 @@ func TestBlobDownloadBlobSuccess(t *testing.T) {
 	config := newTestConfig(addr)
 	client, err := NewBlobClient(config, tally.NoopScope)
 	require.NoError(err)
+	defer closers.Close(client)
 
 	info, err := client.Stat(namespace, "data")
 	require.NoError(err)
@@ -90,6 +92,7 @@ func TestBlobDownloadManifestSuccess(t *testing.T) {
 	config := newTestConfig(addr)
 	client, err := NewBlobClient(config, tally.NoopScope)
 	require.NoError(err)
+	defer closers.Close(client)
 
 	info, err := client.Stat(namespace, "data")
 	require.NoError(err)
@@ -122,6 +125,7 @@ func TestBlobDownloadFileNotFound(t *testing.T) {
 	config := newTestConfig(addr)
 	client, err := NewBlobClient(config, tally.NoopScope)
 	require.NoError(err)
+	defer closers.Close(client)
 
 	_, err = client.Stat(namespace, "data")
 	require.Equal(backenderrors.ErrBlobNotFound, err)
