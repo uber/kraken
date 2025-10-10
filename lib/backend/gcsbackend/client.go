@@ -70,10 +70,10 @@ func (f *factory) Create(
 
 // Client implements a backend.Client for GCS.
 type Client struct {
-	config Config
-	pather namepath.Pather
-	stats  tally.Scope
-	gcs    GCS
+	config  Config
+	pather  namepath.Pather
+	stats   tally.Scope
+	gcs     GCS
 	sClient *storage.Client
 }
 
@@ -112,7 +112,13 @@ func NewClient(
 
 	if len(opts) > 0 {
 		// For mock.
-		client := &Client{config, pather, stats, nil, nil}
+		client := &Client{
+			config:  config,
+			pather:  pather,
+			stats:   stats,
+			gcs:     nil,
+			sClient: nil,
+		}
 		for _, opt := range opts {
 			opt(client)
 		}
@@ -126,8 +132,13 @@ func NewClient(
 		return nil, fmt.Errorf("invalid gcs credentials: %s", err)
 	}
 
-	client := &Client{config, pather, stats,
-		NewGCS(ctx, sClient.Bucket(config.Bucket), &config), sClient}
+	client := &Client{
+		config:  config,
+		pather:  pather,
+		stats:   stats,
+		gcs:     NewGCS(ctx, sClient.Bucket(config.Bucket), &config),
+		sClient: sClient,
+	}
 
 	log.Infof("Initalized GCS backend with config: %s", config)
 	return client, nil
@@ -220,7 +231,6 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 // Close closes the storage client
 func (c *Client) Close() error {
 	if c.sClient == nil {
-		// Nothing to close
 		return nil
 	}
 	return c.sClient.Close()

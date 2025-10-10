@@ -177,7 +177,7 @@ func (m *Manager) Close() error {
 		}
 	}
 	if len(totalErrors) > 0 {
-		return fmt.Errorf("encountered errors closing backends: %v", totalErrors)
+		return errors.Join(totalErrors...)
 	}
 	return nil
 }

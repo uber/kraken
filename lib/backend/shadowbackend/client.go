@@ -272,16 +272,16 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 
 // Close closes the client and releases any held resources.
 func (c *Client) Close() error {
-	errors := make([]error, 0)
+	allErrors := make([]error, 0)
 	if err := c.active.Close(); err != nil {
-		errors = append(errors, err)
+		allErrors = append(allErrors, err)
 	}
 	if err := c.shadow.Close(); err != nil {
-		errors = append(errors, err)
+		allErrors = append(allErrors, err)
 	}
 
-	if len(errors) > 0 {
-		return fmt.Errorf("encountered errors closing: %v", errors)
+	if len(allErrors) > 0 {
+		return errors.Join(allErrors...)
 	}
 	return nil
 }
