@@ -44,7 +44,7 @@ func TestClose_LogsError(t *testing.T) {
 		zapcore.NewCore(
 			zapcore.NewConsoleEncoder(zap.NewProductionEncoderConfig()),
 			zapcore.AddSync(&buf),
-			zapcore.ErrorLevel,
+			zapcore.DebugLevel,
 		),
 	).Sugar()
 	log.SetGlobalLogger(logger)
