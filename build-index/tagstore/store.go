@@ -85,7 +85,7 @@ func (s *tagStore) Put(tag string, d core.Digest, writeBackDelay time.Duration) 
 	log.With("tag", tag, "digest", d.String(), "writeback_delay", writeBackDelay).Debug("Storing tag to disk")
 
 	if err := s.writeTagToDisk(tag, d); err != nil {
-		log.With("tag", tag, "digest", d.String()).Errorf("Failed to write tag to disk: %s", err)
+		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to write tag to disk")
 		return fmt.Errorf("write tag to disk: %s", err)
 	}
 	if _, err := s.fs.SetCacheFileMetadata(tag, metadata.NewPersist(true)); err != nil {
