@@ -558,15 +558,6 @@ func (s *Server) replicateTag(tag string, d core.Digest, deps core.DigestList) e
 	return nil
 }
 
-// digestListToStrings converts a DigestList to a slice of strings for logging
-func digestListToStrings(digests core.DigestList) []string {
-	result := make([]string, len(digests))
-	for i, d := range digests {
-		result[i] = d.String()
-	}
-	return result
-}
-
 func buildPaginationOptions(u *url.URL) ([]backend.ListOption, error) {
 	var opts []backend.ListOption
 	q := u.Query()
