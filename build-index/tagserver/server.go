@@ -313,7 +313,7 @@ func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
 
 	result, err := client.List(prefix, opts...)
 	if err != nil {
-		log.With("prefix", prefix).Errorf("Failed to list from backend: %s", err)
+		log.With("prefix", prefix, "error", err).Error("Failed to list from backend")
 		return handler.Errorf("error listing from backend: %s", err)
 	}
 
