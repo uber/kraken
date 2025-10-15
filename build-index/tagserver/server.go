@@ -203,7 +203,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	if replicate {
 		log.With("tag", tag, "digest", d.String()).Info("Starting tag replication")
 		if err := s.replicateTag(tag, d, deps); err != nil {
-			log.With("tag", tag, "digest", d.String()).Errorf("Failed to replicate tag: %s", err)
+			log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to replicate tag")
 			return err
 		}
 		log.With("tag", tag, "digest", d.String()).Info("Successfully replicated tag")
