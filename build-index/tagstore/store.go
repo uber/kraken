@@ -28,6 +28,7 @@ import (
 	"github.com/uber/kraken/lib/persistedretry/writeback"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/log"
 
 	"github.com/uber-go/tally"
 )
@@ -66,8 +67,8 @@ func New(
 	stats tally.Scope,
 	fs FileStore,
 	backends *backend.Manager,
-	writeBackManager persistedretry.Manager) Store {
-
+	writeBackManager persistedretry.Manager,
+) Store {
 	stats = stats.Tagged(map[string]string{
 		"module": "tagstore",
 	})
@@ -81,20 +82,29 @@ func New(
 }
 
 func (s *tagStore) Put(tag string, d core.Digest, writeBackDelay time.Duration) error {
+	log.With("tag", tag, "digest", d.String(), "writeback_delay", writeBackDelay).Debug("Storing tag to disk")
+
 	if err := s.writeTagToDisk(tag, d); err != nil {
+		log.With("tag", tag, "digest", d.String()).Errorf("Failed to write tag to disk: %s", err)
 		return fmt.Errorf("write tag to disk: %s", err)
 	}
 	if _, err := s.fs.SetCacheFileMetadata(tag, metadata.NewPersist(true)); err != nil {
+		log.With("tag", tag, "digest", d.String()).Errorf("Failed to set persist metadata: %s", err)
 		return fmt.Errorf("set persist metadata: %s", err)
 	}
 
 	task := writeback.NewTask(tag, tag, writeBackDelay)
 	if s.config.WriteThrough {
+		log.With("tag", tag, "digest", d.String()).Debug("Using write-through mode for tag")
 		if err := s.writeBackManager.SyncExec(task); err != nil {
+			log.With("tag", tag, "digest", d.String()).Errorf("Failed to sync write-back tag to backend: %s", err)
 			return fmt.Errorf("sync exec write-back task: %s", err)
 		}
+		log.With("tag", tag, "digest", d.String()).Info("Tag written to backend synchronously")
 	} else {
+		log.With("tag", tag, "digest", d.String(), "delay", writeBackDelay).Debug("Adding async write-back task for tag")
 		if err := s.writeBackManager.Add(task); err != nil {
+			log.With("tag", tag, "digest", d.String()).Errorf("Failed to add write-back task: %s", err)
 			return fmt.Errorf("add write-back task: %s", err)
 		}
 	}
@@ -124,40 +134,56 @@ func (s *tagStore) writeTagToDisk(tag string, d core.Digest) error {
 }
 
 func (s *tagStore) resolveFromDisk(tag string) (core.Digest, error) {
+	log.With("tag", tag).Debug("Attempting to resolve tag from disk cache")
+
 	f, err := s.fs.GetCacheFileReader(tag)
 	if err != nil {
 		if os.IsNotExist(err) {
+			log.With("tag", tag).Debug("Tag not found in disk cache")
 			return core.Digest{}, ErrTagNotFound
 		}
+		log.With("tag", tag).Errorf("Failed to read tag from disk cache: %s", err)
 		return core.Digest{}, fmt.Errorf("fs: %s", err)
 	}
 	defer f.Close()
 	var b bytes.Buffer
 	if _, err := io.Copy(&b, f); err != nil {
+		log.With("tag", tag).Errorf("Failed to copy tag data from disk: %s", err)
 		return core.Digest{}, fmt.Errorf("copy from fs: %s", err)
 	}
 	d, err := core.ParseSHA256Digest(b.String())
 	if err != nil {
+		log.With("tag", tag, "raw_value", b.String()).Errorf("Failed to parse digest from disk cache: %s", err)
 		return core.Digest{}, fmt.Errorf("parse fs digest: %s", err)
 	}
+
+	log.With("tag", tag, "digest", d.String()).Debug("Successfully resolved tag from disk cache")
 	return d, nil
 }
 
 func (s *tagStore) resolveFromBackend(tag string) (core.Digest, error) {
+	log.With("tag", tag).Debug("Attempting to resolve tag from backend")
+
 	backendClient, err := s.backends.GetClient(tag)
 	if err != nil {
+		log.With("tag", tag).Errorf("Failed to get backend client: %s", err)
 		return core.Digest{}, fmt.Errorf("backend manager: %s", err)
 	}
 	var b bytes.Buffer
 	if err := backendClient.Download(tag, tag, &b); err != nil {
 		if err == backenderrors.ErrBlobNotFound {
+			log.With("tag", tag).Debug("Tag not found in backend")
 			return core.Digest{}, ErrTagNotFound
 		}
+		log.With("tag", tag).Errorf("Failed to download tag from backend: %s", err)
 		return core.Digest{}, fmt.Errorf("backend client: %s", err)
 	}
 	d, err := core.ParseSHA256Digest(b.String())
 	if err != nil {
+		log.With("tag", tag, "raw_value", b.String()).Errorf("Failed to parse digest from backend: %s", err)
 		return core.Digest{}, fmt.Errorf("parse backend digest: %s", err)
 	}
+
+	log.With("tag", tag, "digest", d.String()).Info("Successfully resolved tag from backend")
 	return d, nil
 }
