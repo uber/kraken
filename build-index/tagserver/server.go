@@ -191,7 +191,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("resolve dependencies: %s", err)
 	}
 
-	log.With("tag", tag, "digest", d.String(), "dependency_count", len(deps), "dependencies", digestListToStrings(deps)).Debug("Resolved dependencies")
+	log.With("tag", tag, "digest", d.String(), "dependency_count", len(deps)).Debug("Resolved dependencies")
 
 	if err := s.putTag(tag, d, deps); err != nil {
 		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to put tag")
