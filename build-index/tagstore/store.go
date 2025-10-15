@@ -153,7 +153,7 @@ func (s *tagStore) resolveFromDisk(tag string) (core.Digest, error) {
 	}
 	d, err := core.ParseSHA256Digest(b.String())
 	if err != nil {
-		log.With("tag", tag, "raw_value", b.String()).Errorf("Failed to parse digest from disk cache: %s", err)
+		log.With("tag", tag).Errorf("Failed to parse digest from disk cache: %s", err)
 		return core.Digest{}, fmt.Errorf("parse fs digest: %s", err)
 	}
 
@@ -180,7 +180,7 @@ func (s *tagStore) resolveFromBackend(tag string) (core.Digest, error) {
 	}
 	d, err := core.ParseSHA256Digest(b.String())
 	if err != nil {
-		log.With("tag", tag, "raw_value", b.String()).Errorf("Failed to parse digest from backend: %s", err)
+		log.With("tag", tag).Errorf("Failed to parse digest from backend: %s", err)
 		return core.Digest{}, fmt.Errorf("parse backend digest: %s", err)
 	}
 
