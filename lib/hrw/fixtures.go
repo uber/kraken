@@ -16,6 +16,7 @@ package hrw
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -65,7 +66,9 @@ func HashKeyFixture(numKeys int, hashFactory HashFactory) []string {
 	b := make([]byte, 64)
 
 	for i := 0; i < numKeys; i++ {
-		rand.Read(b)
+		if _, err := rand.Read(b); err != nil {
+			panic(fmt.Sprintf("failed to read random bytes: %s", err))
+		}
 		key := hex.EncodeToString(b)
 		keys = append(keys, key)
 	}

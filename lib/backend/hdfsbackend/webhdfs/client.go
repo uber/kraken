@@ -282,7 +282,7 @@ func (c *client) GetFileStatus(path string) (FileStatus, error) {
 			}
 			return FileStatus{}, nnErr
 		}
-		defer resp.Body.Close()
+		defer closers.Close(resp.Body)
 		var fsr fileStatusResponse
 		if err := json.NewDecoder(resp.Body).Decode(&fsr); err != nil {
 			return FileStatus{}, fmt.Errorf("decode body: %s", err)
@@ -308,7 +308,7 @@ func (c *client) ListFileStatus(path string) ([]FileStatus, error) {
 			}
 			return nil, nnErr
 		}
-		defer resp.Body.Close()
+		defer closers.Close(resp.Body)
 		var lsr listStatusResponse
 		if err := json.NewDecoder(resp.Body).Decode(&lsr); err != nil {
 			return nil, fmt.Errorf("decode body: %s", err)

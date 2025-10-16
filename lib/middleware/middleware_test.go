@@ -44,8 +44,6 @@ func TestScopeByEndpoint(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.method+" "+test.path, func(t *testing.T) {
-			require := require.New(t)
-
 			stats := tally.NewTestScope("", nil)
 
 			r := chi.NewRouter()
@@ -56,13 +54,13 @@ func TestScopeByEndpoint(t *testing.T) {
 			defer stop()
 
 			_, err := httputil.Send(test.method, fmt.Sprintf("http://%s%s", addr, test.reqPath))
-			require.NoError(err)
+			require.NoError(t, err)
 
-			require.Equal(1, len(stats.Snapshot().Counters()))
+			require.Equal(t, 1, len(stats.Snapshot().Counters()))
 			for _, v := range stats.Snapshot().Counters() {
-				require.Equal("count", v.Name())
-				require.Equal(int64(1), v.Value())
-				require.Equal(map[string]string{
+				require.Equal(t, "count", v.Name())
+				require.Equal(t, int64(1), v.Value())
+				require.Equal(t, map[string]string{
 					"endpoint": test.expectedEndpoint,
 					"method":   test.method,
 				}, v.Tags())
@@ -72,8 +70,6 @@ func TestScopeByEndpoint(t *testing.T) {
 }
 
 func TestLatencyTimer(t *testing.T) {
-	require := require.New(t)
-
 	stats := tally.NewTestScope("", nil)
 
 	r := chi.NewRouter()
@@ -86,15 +82,15 @@ func TestLatencyTimer(t *testing.T) {
 	defer stop()
 
 	_, err := httputil.Get(fmt.Sprintf("http://%s/foo/x", addr))
-	require.NoError(err)
+	require.NoError(t, err)
 
 	now := time.Now()
 
-	require.Equal(1, len(stats.Snapshot().Timers()))
+	require.Equal(t, 1, len(stats.Snapshot().Timers()))
 	for _, v := range stats.Snapshot().Timers() {
-		require.Equal("latency", v.Name())
-		require.WithinDuration(now, now.Add(v.Values()[0]), 500*time.Millisecond)
-		require.Equal(map[string]string{
+		require.Equal(t, "latency", v.Name())
+		require.WithinDuration(t, now, now.Add(v.Values()[0]), 500*time.Millisecond)
+		require.Equal(t, map[string]string{
 			"endpoint": "foo",
 			"method":   "GET",
 		}, v.Tags())
@@ -104,50 +100,59 @@ func TestLatencyTimer(t *testing.T) {
 func TestStatusCounter(t *testing.T) {
 	tests := []struct {
 		desc           string
-		handler        func(http.ResponseWriter, *http.Request)
+		handler        func(*testing.T) http.HandlerFunc
 		expectedStatus string
 	}{
 		{
 			"empty handler counts 200",
-			func(http.ResponseWriter, *http.Request) {},
+			func(*testing.T) http.HandlerFunc {
+				return func(http.ResponseWriter, *http.Request) {}
+			},
 			"200",
 		}, {
 			"writes count 200",
-			func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "OK") },
+			func(t *testing.T) http.HandlerFunc {
+				return func(w http.ResponseWriter, _ *http.Request) {
+					_, err := io.WriteString(w, "OK")
+					require.NoError(t, err)
+				}
+			},
 			"200",
 		}, {
 			"write header",
-			func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(500) },
+			func(*testing.T) http.HandlerFunc {
+				return func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(500) }
+			},
 			"500",
 		}, {
 			"multiple write header calls only measures first call",
-			func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(400); w.WriteHeader(500) },
+			func(*testing.T) http.HandlerFunc {
+				return func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(400); w.WriteHeader(500) }
+			},
 			"400",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			require := require.New(t)
-
 			stats := tally.NewTestScope("", nil)
 
 			r := chi.NewRouter()
 			r.Use(StatusCounter(stats))
-			r.Get("/foo/{foo}", test.handler)
+			r.Get("/foo/{foo}", test.handler(t))
 
 			addr, stop := testutil.StartServer(r)
 			defer stop()
 
 			for i := 0; i < 5; i++ {
 				_, err := http.Get(fmt.Sprintf("http://%s/foo/x", addr))
-				require.NoError(err)
+				require.NoError(t, err)
 			}
 
-			require.Equal(1, len(stats.Snapshot().Counters()))
+			require.Equal(t, 1, len(stats.Snapshot().Counters()))
 			for _, v := range stats.Snapshot().Counters() {
-				require.Equal(test.expectedStatus, v.Name())
-				require.Equal(int64(5), v.Value())
-				require.Equal(map[string]string{
+				require.Equal(t, test.expectedStatus, v.Name())
+				require.Equal(t, int64(5), v.Value())
+				require.Equal(t, map[string]string{
 					"endpoint": "foo",
 					"method":   "GET",
 				}, v.Tags())

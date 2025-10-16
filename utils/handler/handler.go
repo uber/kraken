@@ -90,7 +90,9 @@ func Wrap(h ErrHandler) http.HandlerFunc {
 				errMsg = e.Error()
 			}
 			w.WriteHeader(status)
-			w.Write([]byte(errMsg))
+			if _, err := w.Write([]byte(errMsg)); err != nil {
+				log.With("err", err).Error("failed to write error response")
+			}
 		} else {
 			status = http.StatusOK
 		}
