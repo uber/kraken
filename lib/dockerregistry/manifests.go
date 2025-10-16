@@ -20,11 +20,11 @@ import (
 
 	"github.com/uber/kraken/utils/closers"
 
-	"github.com/uber/kraken/lib/store"
-
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
+
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
+	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/log"
 )
 
