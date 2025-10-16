@@ -35,7 +35,9 @@ const (
 // HealthHandler tells haproxy we'fre still alive
 func HealthHandler(w http.ResponseWriter, request *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte("OK"))
+	if _, err := w.Write([]byte("OK")); err != nil {
+		log.With("err", err).Error("failed to write health response")
+	}
 }
 
 // NotificationHandler receives docker push notification
@@ -78,7 +80,9 @@ func (n *NotificationHandler) Handler(w http.ResponseWriter, r *http.Request) {
 				case n.queue <- 'c':
 					time.Sleep(2 * time.Second)
 					go func() {
-						PullImage(localSource, repo, tag, n.useDocker)
+						if err := PullImage(localSource, repo, tag, n.useDocker); err != nil {
+							log.With("err", err).Errorf("Failed to pull image %s:%s", repo, tag)
+						}
 						<-n.queue
 					}()
 				default:
@@ -91,5 +95,7 @@ func (n *NotificationHandler) Handler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	resString := "OK"
-	w.Write([]byte(resString))
+	if _, err := w.Write([]byte(resString)); err != nil {
+		log.With("err", err).Error("failed to write notification response")
+	}
 }

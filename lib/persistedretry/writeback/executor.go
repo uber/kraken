@@ -23,6 +23,7 @@ import (
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
 )
 
@@ -101,7 +102,7 @@ func (e *Executor) upload(t *Task) error {
 		}
 		return fmt.Errorf("get file: %s", err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 
 	if err := client.Upload(t.Namespace, t.Name, f); err != nil {
 		return fmt.Errorf("upload: %s", err)

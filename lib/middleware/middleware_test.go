@@ -45,7 +45,6 @@ func TestScopeByEndpoint(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.method+" "+test.path, func(t *testing.T) {
 			require := require.New(t)
-
 			stats := tally.NewTestScope("", nil)
 
 			r := chi.NewRouter()
@@ -73,7 +72,6 @@ func TestScopeByEndpoint(t *testing.T) {
 
 func TestLatencyTimer(t *testing.T) {
 	require := require.New(t)
-
 	stats := tally.NewTestScope("", nil)
 
 	r := chi.NewRouter()
@@ -104,40 +102,50 @@ func TestLatencyTimer(t *testing.T) {
 func TestStatusCounter(t *testing.T) {
 	tests := []struct {
 		desc           string
-		handler        func(http.ResponseWriter, *http.Request)
+		handler        func(*testing.T) http.HandlerFunc
 		expectedStatus string
 	}{
 		{
 			"empty handler counts 200",
-			func(http.ResponseWriter, *http.Request) {},
+			func(*testing.T) http.HandlerFunc {
+				return func(http.ResponseWriter, *http.Request) {}
+			},
 			"200",
 		}, {
 			"writes count 200",
-			func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "OK") },
+			func(t *testing.T) http.HandlerFunc {
+				return func(w http.ResponseWriter, _ *http.Request) {
+					_, err := io.WriteString(w, "OK")
+					require.NoError(t, err)
+				}
+			},
 			"200",
 		}, {
 			"write header",
-			func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(500) },
+			func(*testing.T) http.HandlerFunc {
+				return func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(500) }
+			},
 			"500",
 		}, {
 			"multiple write header calls only measures first call",
-			func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(400); w.WriteHeader(500) },
+			func(*testing.T) http.HandlerFunc {
+				return func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(400); w.WriteHeader(500) }
+			},
 			"400",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			require := require.New(t)
-
 			stats := tally.NewTestScope("", nil)
 
 			r := chi.NewRouter()
 			r.Use(StatusCounter(stats))
-			r.Get("/foo/{foo}", test.handler)
+			r.Get("/foo/{foo}", test.handler(t))
 
 			addr, stop := testutil.StartServer(r)
 			defer stop()
 
+			require := require.New(t)
 			for i := 0; i < 5; i++ {
 				_, err := http.Get(fmt.Sprintf("http://%s/foo/x", addr))
 				require.NoError(err)

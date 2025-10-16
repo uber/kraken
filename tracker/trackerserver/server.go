@@ -99,11 +99,15 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return handler.Errorf("not ready to serve traffic: %s", err).Status(http.StatusServiceUnavailable)
 	}
-	fmt.Fprintln(w, "OK")
+	if _, err := fmt.Fprintln(w, "OK"); err != nil {
+		return fmt.Errorf("write response: %s", err)
+	}
 	return nil
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
-	fmt.Fprintln(w, "OK")
+	if _, err := fmt.Fprintln(w, "OK"); err != nil {
+		return fmt.Errorf("write response: %s", err)
+	}
 	return nil
 }

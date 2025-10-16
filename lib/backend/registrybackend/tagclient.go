@@ -26,6 +26,7 @@ import (
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/backend/registrybackend/security"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/httputil"
 	"go.uber.org/zap"
@@ -138,7 +139,7 @@ func (c *TagClient) Download(namespace, name string, dst io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("check blob exists: %s", err)
 	}
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 
 	if resp.StatusCode == http.StatusNotFound {
 		return backenderrors.ErrBlobNotFound

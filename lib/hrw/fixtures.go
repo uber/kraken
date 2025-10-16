@@ -16,6 +16,7 @@ package hrw
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -60,15 +61,17 @@ func RendezvousHashFixture(t *testing.T, numKeys int, hashFactory HashFactory, s
 }
 
 // HashKeyFixture generate #numkeys random keys according to a hash function
-func HashKeyFixture(numKeys int, hashFactory HashFactory) []string {
+func HashKeyFixture(numKeys int, hashFactory HashFactory) ([]string, error) {
 	var keys []string
 	b := make([]byte, 64)
 
 	for i := 0; i < numKeys; i++ {
-		rand.Read(b)
+		if _, err := rand.Read(b); err != nil {
+			return nil, fmt.Errorf("failed to read random bytes: %w", err)
+		}
 		key := hex.EncodeToString(b)
 		keys = append(keys, key)
 	}
 
-	return keys
+	return keys, nil
 }

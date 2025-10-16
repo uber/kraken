@@ -25,6 +25,7 @@ import (
 
 	"github.com/spaolacci/murmur3"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestScoreFunctionFloatPrecision(t *testing.T) {
@@ -193,8 +194,11 @@ func testRemoveNodes(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *te
 }
 
 func testReturnNodesLength(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
+	require := require.New(t)
+
 	rh, _ := RendezvousHashFixture(t, 0, hash, scoreFunc, 100, 200, 400, 800)
-	keys := HashKeyFixture(1, hash)
+	keys, err := HashKeyFixture(1, hash)
+	require.NoError(err)
 
 	var scores []float64
 	for _, node := range rh.Nodes {
@@ -207,8 +211,11 @@ func testReturnNodesLength(numKeys int, hash HashFactory, scoreFunc UIntToFloat,
 }
 
 func testReturnNodesOrder(numKeys int, hash HashFactory, scoreFunc UIntToFloat, t *testing.T) {
+	require := require.New(t)
+
 	rh, _ := RendezvousHashFixture(t, 0, hash, scoreFunc, 100, 200, 400, 800)
-	keys := HashKeyFixture(1, hash)
+	keys, err := HashKeyFixture(1, hash)
+	require.NoError(err)
 
 	var scores []float64
 	for _, node := range rh.Nodes {

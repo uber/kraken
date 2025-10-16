@@ -15,7 +15,9 @@ package cmd
 
 import (
 	"flag"
+	"fmt"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/healthcheck"
@@ -26,11 +28,10 @@ import (
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/proxy/proxyserver"
 	"github.com/uber/kraken/proxy/registryoverride"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/configutil"
 	"github.com/uber/kraken/utils/flagutil"
 	"github.com/uber/kraken/utils/log"
-
-	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 )
 
@@ -117,7 +118,11 @@ func Run(flags *Flags, opts ...Option) {
 		log.SetGlobalLogger(overrides.logger.Sugar())
 	} else {
 		zlog := log.ConfigureLogger(config.ZapLogging)
-		defer zlog.Sync()
+		defer func() {
+			if err := zlog.Sync(); err != nil {
+				fmt.Printf("Failed to sync logger: %s", err)
+			}
+		}()
 	}
 
 	stats := overrides.metrics
@@ -127,7 +132,7 @@ func Run(flags *Flags, opts ...Option) {
 			log.Fatalf("Failed to init metrics: %s", err)
 		}
 		stats = s
-		defer closer.Close()
+		defer closers.Close(closer)
 	}
 
 	go metrics.EmitVersion(stats)

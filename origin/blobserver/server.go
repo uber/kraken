@@ -397,7 +397,9 @@ func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) erro
 			Debug("getMetaInfo returned non-nil error")
 		return err
 	}
-	w.Write(raw)
+	if _, err := w.Write(raw); err != nil {
+		return fmt.Errorf("write response: %s", err)
+	}
 	log.With("namespace", namespace, "digest", d.Hex()).Debug("Successfully retrieved metainfo")
 	return nil
 }

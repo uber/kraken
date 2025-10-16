@@ -73,7 +73,9 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
-	fmt.Fprintln(w, "OK")
+	if _, err := fmt.Fprintln(w, "OK"); err != nil {
+		return fmt.Errorf("write response: %s", err)
+	}
 	return nil
 }
 

@@ -33,7 +33,9 @@ import (
 	"github.com/uber/kraken/lib/store/base"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/cache"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
+	"go.uber.org/zap"
 )
 
 const _drainDuration = 100 * time.Millisecond
@@ -167,6 +169,16 @@ func (s *CAStore) Close() {
 	s.cleanup.stop()
 }
 
+// deferDeleteUploadFile returns a deferred function that deletes an upload file
+// and logs any errors that occur during deletion.
+func (s *CAStore) deferDeleteUploadFile(uploadName string) func() {
+	return func() {
+		if err := s.DeleteUploadFile(uploadName); err != nil {
+			log.Desugar().Error("Failed to delete upload file", zap.Error(err), zap.String("upload_name", uploadName))
+		}
+	}
+}
+
 // MoveUploadFileToCache commits uploadName as cacheName. Clients are expected
 // to validate the content of the upload file matches the cacheName digest.
 func (s *CAStore) MoveUploadFileToCache(uploadName, cacheName string) error {
@@ -174,13 +186,13 @@ func (s *CAStore) MoveUploadFileToCache(uploadName, cacheName string) error {
 	if err != nil {
 		return err
 	}
-	defer s.DeleteUploadFile(uploadName)
+	defer s.deferDeleteUploadFile(uploadName)()
 
 	f, err := s.uploadStore.newFileOp().GetFileReader(uploadName, s.uploadStore.readPartSize)
 	if err != nil {
 		return fmt.Errorf("get file reader %s: %s", uploadName, err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 	if err := s.verify(f, cacheName); err != nil {
 		return fmt.Errorf("verify digest: %s", err)
 	}
@@ -209,13 +221,13 @@ func (s *CAStore) writeCacheFile(name string, write func(w FileReadWriter) error
 	if err := s.CreateUploadFile(tmp, 0); err != nil {
 		return fmt.Errorf("create upload file: %s", err)
 	}
-	defer s.DeleteUploadFile(tmp)
+	defer s.deferDeleteUploadFile(tmp)()
 
 	w, err := s.GetUploadFileReadWriter(tmp)
 	if err != nil {
 		return fmt.Errorf("get upload writer: %s", err)
 	}
-	defer w.Close()
+	defer closers.Close(w)
 
 	if err := write(w); err != nil {
 		return err

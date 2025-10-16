@@ -106,7 +106,7 @@ func (c *singleClient) Get(tag string) (core.Digest, error) {
 		}
 		return core.Digest{}, err
 	}
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return core.Digest{}, fmt.Errorf("read body: %s", err)
@@ -284,7 +284,7 @@ func (c *singleClient) Origin() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("read body: %s", err)

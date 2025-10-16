@@ -44,7 +44,11 @@ func Generate(size uint64, numLayers int) (name string, err error) {
 	if err != nil {
 		return "", fmt.Errorf("temp dir: %s", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() {
+		if removeErr := os.RemoveAll(dir); removeErr != nil {
+			log.Printf("failed to remove temp dir %s: %s", dir, removeErr)
+		}
+	}()
 
 	name = fmt.Sprintf("kraken-test-image-%s", filepath.Base(dir))
 
