@@ -33,39 +33,47 @@ func noop() error {
 }
 
 func TestRequestCacheStartPreventsDuplicates(t *testing.T) {
+	require := require.New(t)
+
 	d := NewRequestCache(RequestCacheConfig{}, clock.New())
 
 	id := "foo"
 
-	require.NoError(t, d.Start(id, block))
-	require.Equal(t, ErrRequestPending, d.Start(id, block))
+	require.NoError(d.Start(id, block))
+	require.Equal(ErrRequestPending, d.Start(id, block))
 }
 
 func TestRequestCacheStartClearsPendingWhenFuncDone(t *testing.T) {
+	require := require.New(t)
+
 	d := NewRequestCache(RequestCacheConfig{}, clock.New())
 
 	id := "foo"
 
-	require.NoError(t, d.Start(id, noop))
-	require.NoError(t, testutil.PollUntilTrue(5*time.Second, func() bool {
+	require.NoError(d.Start(id, noop))
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		return d.Start(id, noop) == nil
 	}))
 }
 
 func TestRequestCacheCachesErrors(t *testing.T) {
+	require := require.New(t)
+
 	clk := clock.NewMock()
 	d := NewRequestCache(RequestCacheConfig{}, clk)
 
 	id := "foo"
 	err := errors.New("some error")
 
-	require.NoError(t, d.Start(id, func() error { return err }))
-	require.NoError(t, testutil.PollUntilTrue(5*time.Second, func() bool {
+	require.NoError(d.Start(id, func() error { return err }))
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		return d.Start(id, noop) == err
 	}))
 }
 
 func TestRequestCacheExpiresErrors(t *testing.T) {
+	require := require.New(t)
+
 	config := RequestCacheConfig{
 		ErrorTTL: 5 * time.Second,
 	}
@@ -75,17 +83,19 @@ func TestRequestCacheExpiresErrors(t *testing.T) {
 	id := "foo"
 	err := errors.New("some error")
 
-	require.NoError(t, d.Start(id, func() error { return err }))
-	require.NoError(t, testutil.PollUntilTrue(5*time.Second, func() bool {
+	require.NoError(d.Start(id, func() error { return err }))
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		return d.Start(id, noop) == err
 	}))
 
 	clk.Add(config.ErrorTTL + 1)
 
-	require.NoError(t, d.Start(id, noop))
+	require.NoError(d.Start(id, noop))
 }
 
 func TestRequestCacheExpiresNotFoundErrorsIndependently(t *testing.T) {
+	require := require.New(t)
+
 	config := RequestCacheConfig{
 		ErrorTTL:    5 * time.Second,
 		NotFoundTTL: 30 * time.Second,
@@ -97,18 +107,18 @@ func TestRequestCacheExpiresNotFoundErrorsIndependently(t *testing.T) {
 	errNotFound := errors.New("error not found")
 	d.SetNotFound(func(err error) bool { return err == errNotFound })
 
-	require.NoError(t, d.Start(id, func() error { return errNotFound }))
-	require.NoError(t, testutil.PollUntilTrue(5*time.Second, func() bool {
+	require.NoError(d.Start(id, func() error { return errNotFound }))
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		return d.Start(id, noop) == errNotFound
 	}))
 
 	clk.Add(config.ErrorTTL + 1)
 
-	require.Equal(t, errNotFound, d.Start(id, noop))
+	require.Equal(errNotFound, d.Start(id, noop))
 
 	clk.Add(config.NotFoundTTL + 1)
 
-	require.NoError(t, d.Start(id, noop))
+	require.NoError(d.Start(id, noop))
 }
 
 func TestRequestCacheStartCleansUpCachedErrors(t *testing.T) {
@@ -142,6 +152,8 @@ func TestRequestCacheStartCleansUpCachedErrors(t *testing.T) {
 }
 
 func TestRequestCacheLimitsNumberOfWorkers(t *testing.T) {
+	require := require.New(t)
+
 	config := RequestCacheConfig{
 		NumWorkers:  1,
 		BusyTimeout: 100 * time.Millisecond,
@@ -150,13 +162,13 @@ func TestRequestCacheLimitsNumberOfWorkers(t *testing.T) {
 
 	exit := make(chan bool)
 
-	require.NoError(t, d.Start("a", func() error {
+	require.NoError(d.Start("a", func() error {
 		<-exit
 		return nil
 	}))
-	require.Equal(t, ErrWorkersBusy, d.Start("b", noop))
+	require.Equal(ErrWorkersBusy, d.Start("b", noop))
 
 	// After a's function exits, the worker should be released.
 	exit <- true
-	require.NoError(t, d.Start("b", noop))
+	require.NoError(d.Start("b", noop))
 }

@@ -44,6 +44,7 @@ func TestScopeByEndpoint(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.method+" "+test.path, func(t *testing.T) {
+			require := require.New(t)
 			stats := tally.NewTestScope("", nil)
 
 			r := chi.NewRouter()
@@ -54,13 +55,13 @@ func TestScopeByEndpoint(t *testing.T) {
 			defer stop()
 
 			_, err := httputil.Send(test.method, fmt.Sprintf("http://%s%s", addr, test.reqPath))
-			require.NoError(t, err)
+			require.NoError(err)
 
-			require.Equal(t, 1, len(stats.Snapshot().Counters()))
+			require.Equal(1, len(stats.Snapshot().Counters()))
 			for _, v := range stats.Snapshot().Counters() {
-				require.Equal(t, "count", v.Name())
-				require.Equal(t, int64(1), v.Value())
-				require.Equal(t, map[string]string{
+				require.Equal("count", v.Name())
+				require.Equal(int64(1), v.Value())
+				require.Equal(map[string]string{
 					"endpoint": test.expectedEndpoint,
 					"method":   test.method,
 				}, v.Tags())
@@ -70,6 +71,7 @@ func TestScopeByEndpoint(t *testing.T) {
 }
 
 func TestLatencyTimer(t *testing.T) {
+	require := require.New(t)
 	stats := tally.NewTestScope("", nil)
 
 	r := chi.NewRouter()
@@ -82,15 +84,15 @@ func TestLatencyTimer(t *testing.T) {
 	defer stop()
 
 	_, err := httputil.Get(fmt.Sprintf("http://%s/foo/x", addr))
-	require.NoError(t, err)
+	require.NoError(err)
 
 	now := time.Now()
 
-	require.Equal(t, 1, len(stats.Snapshot().Timers()))
+	require.Equal(1, len(stats.Snapshot().Timers()))
 	for _, v := range stats.Snapshot().Timers() {
-		require.Equal(t, "latency", v.Name())
-		require.WithinDuration(t, now, now.Add(v.Values()[0]), 500*time.Millisecond)
-		require.Equal(t, map[string]string{
+		require.Equal("latency", v.Name())
+		require.WithinDuration(now, now.Add(v.Values()[0]), 500*time.Millisecond)
+		require.Equal(map[string]string{
 			"endpoint": "foo",
 			"method":   "GET",
 		}, v.Tags())
@@ -143,16 +145,17 @@ func TestStatusCounter(t *testing.T) {
 			addr, stop := testutil.StartServer(r)
 			defer stop()
 
+			require := require.New(t)
 			for i := 0; i < 5; i++ {
 				_, err := http.Get(fmt.Sprintf("http://%s/foo/x", addr))
-				require.NoError(t, err)
+				require.NoError(err)
 			}
 
-			require.Equal(t, 1, len(stats.Snapshot().Counters()))
+			require.Equal(1, len(stats.Snapshot().Counters()))
 			for _, v := range stats.Snapshot().Counters() {
-				require.Equal(t, test.expectedStatus, v.Name())
-				require.Equal(t, int64(5), v.Value())
-				require.Equal(t, map[string]string{
+				require.Equal(test.expectedStatus, v.Name())
+				require.Equal(int64(5), v.Value())
+				require.Equal(map[string]string{
 					"endpoint": "foo",
 					"method":   "GET",
 				}, v.Tags())

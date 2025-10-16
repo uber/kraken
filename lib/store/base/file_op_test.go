@@ -42,7 +42,7 @@ func TestFileOp(t *testing.T) {
 		}},
 	}
 
-	tests := []func(t *testing.T, storeBundle *fileStoreTestBundle){
+	tests := []func(require *require.Assertions, storeBundle *fileStoreTestBundle){
 		testCreateFile,
 		testCreateFileFail,
 		testReloadFileEntry,
@@ -63,14 +63,15 @@ func TestFileOp(t *testing.T) {
 				t.Run(testName, func(t *testing.T) {
 					s, cleanup := store.fixture()
 					defer cleanup()
-					test(t, s)
+					require := require.New(t)
+					test(require, s)
 				})
 			}
 		})
 	}
 }
 
-func testCreateFile(t *testing.T, storeBundle *fileStoreTestBundle) {
+func testCreateFile(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
 	fn := core.DigestFixture().Hex()
@@ -93,22 +94,22 @@ func testCreateFile(t *testing.T, storeBundle *fileStoreTestBundle) {
 	}
 	wg.Wait()
 
-	require.Equal(t, successCount, uint32(1))
-	require.Equal(t, existsErrorCount, uint32(99))
+	require.Equal(successCount, uint32(1))
+	require.Equal(existsErrorCount, uint32(99))
 
 	// Verify file exists.
 	_, err := os.Stat(filepath.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
-	require.NoError(t, err)
+	require.NoError(err)
 
 	// Create file again with different target state, but include state of existing file as an acceptable state.
 	err = store.NewFileOp().AcceptState(s1).CreateFile(fn, s2, 5)
-	require.Error(t, err)
-	require.True(t, os.IsExist(err))
+	require.Error(err)
+	require.True(os.IsExist(err))
 	_, err = os.Stat(filepath.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
-	require.NoError(t, err)
+	require.NoError(err)
 }
 
-func testCreateFileFail(t *testing.T, storeBundle *fileStoreTestBundle) {
+func testCreateFileFail(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
 	fn := core.DigestFixture().Hex()
@@ -118,20 +119,20 @@ func testCreateFileFail(t *testing.T, storeBundle *fileStoreTestBundle) {
 
 	// Create empty file
 	err := store.NewFileOp().AcceptState(s1).CreateFile(fn, s1, 5)
-	require.NoError(t, err)
+	require.NoError(err)
 	_, err = os.Stat(filepath.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
-	require.NoError(t, err)
+	require.NoError(err)
 
 	// Create file again with different target state
 	err = store.NewFileOp().AcceptState(s3).CreateFile(fn, s2, 5)
-	require.Error(t, err)
-	require.True(t, IsFileStateError(err))
-	require.True(t, strings.HasPrefix(err.Error(), "failed to perform"))
+	require.Error(err)
+	require.True(IsFileStateError(err))
+	require.True(strings.HasPrefix(err.Error(), "failed to perform"))
 	_, err = os.Stat(filepath.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
-	require.NoError(t, err)
+	require.NoError(err)
 }
 
-func testReloadFileEntry(t *testing.T, storeBundle *fileStoreTestBundle) {
+func testReloadFileEntry(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
 	fn := core.DigestFixture().Hex()
@@ -140,33 +141,33 @@ func testReloadFileEntry(t *testing.T, storeBundle *fileStoreTestBundle) {
 	s1 := storeBundle.state1
 
 	// Create file
-	require.NoError(t, store.NewFileOp().CreateFile(fn, s1, 5))
+	require.NoError(store.NewFileOp().CreateFile(fn, s1, 5))
 	_, err := os.Stat(filepath.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
-	require.NoError(t, err)
+	require.NoError(err)
 	_, err = store.NewFileOp().AcceptState(s1).GetFileStat(fn)
-	require.NoError(t, err)
+	require.NoError(err)
 	ok := store.fileMap.Contains(fn)
-	require.True(t, ok)
+	require.True(ok)
 	_, err = store.NewFileOp().AcceptState(s1).SetFileMetadata(fn, m)
-	require.NoError(t, err)
+	require.NoError(err)
 
 	// Recreate store nukes store's in memory map
 	storeBundle.recreateStore()
 	store = storeBundle.store
 	ok = store.fileMap.Contains(fn)
-	require.False(t, ok)
+	require.False(ok)
 
 	// GetFileReader should load file from disk into map, including metadata.
 	_, err = store.NewFileOp().AcceptState(s1).GetFileReader(fn, 0 /* readPartSize */)
-	require.NoError(t, err)
+	require.NoError(err)
 	ok = store.fileMap.Contains(fn)
-	require.True(t, ok)
+	require.True(ok)
 	result := getMockMetadataOne()
-	require.NoError(t, store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, result))
-	require.Equal(t, m.content, result.content)
+	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, result))
+	require.Equal(m.content, result.content)
 }
 
-func testMoveFile(t *testing.T, storeBundle *fileStoreTestBundle) {
+func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
 	s1 := storeBundle.state1
@@ -179,75 +180,75 @@ func testMoveFile(t *testing.T, storeBundle *fileStoreTestBundle) {
 	partSize := 100
 	// Update content
 	readWriterState2, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn, partSize, partSize)
-	require.NoError(t, err)
+	require.NoError(err)
 	_, err = readWriterState2.Write([]byte{'t', 'e', 's', 't', '\n'})
-	require.NoError(t, err)
-	require.NoError(t, readWriterState2.Close())
+	require.NoError(err)
+	require.NoError(readWriterState2.Close())
 	readWriterState2, err = store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn, partSize, partSize)
-	require.NoError(t, err)
+	require.NoError(err)
 
 	// Move from state1 to state2
 	err = store.NewFileOp().AcceptState(s1).MoveFile(fn, s2)
-	require.NoError(t, err)
+	require.NoError(err)
 	_, err = os.Stat(filepath.Join(s2.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
-	require.NoError(t, err)
+	require.NoError(err)
 	_, err = os.Stat(filepath.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
-	require.True(t, os.IsNotExist(err))
+	require.True(os.IsNotExist(err))
 	_, err = store.NewFileOp().AcceptState(s2).GetFileReader(fn, partSize)
-	require.NoError(t, err)
+	require.NoError(err)
 
 	// Move from state1 to state3 would fail with state error
 	err = store.NewFileOp().AcceptState(s1).MoveFile(fn, s3)
-	require.Error(t, err)
-	require.True(t, IsFileStateError(err))
+	require.Error(err)
+	require.True(IsFileStateError(err))
 
 	// Create new readWriter at new state
 	readWriterState1, err := store.NewFileOp().AcceptState(s2).GetFileReadWriter(fn, partSize, partSize)
-	require.NoError(t, err)
+	require.NoError(err)
 	// Check content
 	dataState1, err := io.ReadAll(readWriterState1)
-	require.NoError(t, err)
+	require.NoError(err)
 	dataState2, err := io.ReadAll(readWriterState2)
-	require.NoError(t, err)
-	require.Equal(t, dataState1, dataState2)
-	require.Equal(t, []byte{'t', 'e', 's', 't', '\n'}, dataState1)
+	require.NoError(err)
+	require.Equal(dataState1, dataState2)
+	require.Equal([]byte{'t', 'e', 's', 't', '\n'}, dataState1)
 	// Write with old readWriter
 	_, err = readWriterState1.WriteAt([]byte{'1'}, 0)
-	require.NoError(t, err)
+	require.NoError(err)
 	// Check content again
 	_, err = readWriterState1.Seek(0, 0)
-	require.NoError(t, err)
+	require.NoError(err)
 	_, err = readWriterState2.Seek(0, 0)
-	require.NoError(t, err)
+	require.NoError(err)
 	dataState1, err = io.ReadAll(readWriterState1)
-	require.NoError(t, err)
+	require.NoError(err)
 	dataState2, err = io.ReadAll(readWriterState2)
-	require.NoError(t, err)
-	require.Equal(t, dataState1, dataState2)
-	require.Equal(t, []byte{'1', 'e', 's', 't', '\n'}, dataState1)
+	require.NoError(err)
+	require.Equal(dataState1, dataState2)
+	require.Equal([]byte{'1', 'e', 's', 't', '\n'}, dataState1)
 	// Close on last opened readwriter removes hardlink
-	require.NoError(t, readWriterState2.Close())
+	require.NoError(readWriterState2.Close())
 	_, err = os.Stat(filepath.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
-	require.True(t, os.IsNotExist(err))
-	require.NoError(t, readWriterState1.Close())
+	require.True(os.IsNotExist(err))
+	require.NoError(readWriterState1.Close())
 	_, err = os.Stat(filepath.Join(s2.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
-	require.NoError(t, err)
+	require.NoError(err)
 	// Check content again
 	readWriterStateMoved, err := store.NewFileOp().AcceptState(s2).GetFileReadWriter(fn, partSize, partSize)
-	require.NoError(t, err)
+	require.NoError(err)
 	dataMoved, err := io.ReadAll(readWriterStateMoved)
-	require.NoError(t, err)
-	require.Equal(t, []byte{'1', 'e', 's', 't', '\n'}, dataMoved)
-	require.NoError(t, readWriterStateMoved.Close())
+	require.NoError(err)
+	require.Equal([]byte{'1', 'e', 's', 't', '\n'}, dataMoved)
+	require.NoError(readWriterStateMoved.Close())
 
 	// Move back to state1
 	err = store.NewFileOp().AcceptState(s2).MoveFile(fn, s1)
-	require.NoError(t, err)
+	require.NoError(err)
 	_, err = store.NewFileOp().AcceptState(s1).GetFileReader(fn, partSize)
-	require.NoError(t, err)
+	require.NoError(err)
 }
 
-func testLinkFileTo(t *testing.T, storeBundle *fileStoreTestBundle) {
+func testLinkFileTo(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
 	s1 := storeBundle.state1
@@ -258,12 +259,12 @@ func testLinkFileTo(t *testing.T, storeBundle *fileStoreTestBundle) {
 	}
 
 	dst := filepath.Join(s3.GetDirectory(), "test_dst")
-	require.NoError(t, store.NewFileOp().AcceptState(s1).LinkFileTo(fn, dst))
+	require.NoError(store.NewFileOp().AcceptState(s1).LinkFileTo(fn, dst))
 	_, err := os.Stat(dst)
-	require.NoError(t, err)
+	require.NoError(err)
 }
 
-func testDeleteFile(t *testing.T, storeBundle *fileStoreTestBundle) {
+func testDeleteFile(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
 	s1 := storeBundle.state1
@@ -275,39 +276,39 @@ func testDeleteFile(t *testing.T, storeBundle *fileStoreTestBundle) {
 
 	// Write to file
 	rw, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn, 100 /*readPartSize*/, 100 /*writePartSize*/)
-	require.NoError(t, err)
+	require.NoError(err)
 	_, err = rw.Write([]byte(content))
-	require.NoError(t, err)
+	require.NoError(err)
 
 	// Confirm deletion
 	err = store.NewFileOp().AcceptState(s1).DeleteFile(fn)
-	require.NoError(t, err)
+	require.NoError(err)
 	_, err = os.Stat(filepath.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
-	require.True(t, os.IsNotExist(err))
+	require.True(os.IsNotExist(err))
 
 	// Existing readwriter should still work after deletion
 	_, err = rw.Seek(0, 0)
-	require.NoError(t, err)
+	require.NoError(err)
 	data, err := io.ReadAll(rw)
-	require.NoError(t, err)
-	require.Equal(t, content, string(data))
+	require.NoError(err)
+	require.Equal(content, string(data))
 
 	_, err = rw.Write([]byte(content))
-	require.NoError(t, err)
+	require.NoError(err)
 	_, err = rw.Seek(0, 0)
-	require.NoError(t, err)
+	require.NoError(err)
 	data, err = io.ReadAll(rw)
-	require.NoError(t, err)
-	require.Equal(t, content+content, string(data))
+	require.NoError(err)
+	require.Equal(content+content, string(data))
 
-	require.NoError(t, rw.Close())
+	require.NoError(rw.Close())
 
 	// Get deleted file should fail
 	_, err = store.NewFileOp().AcceptState(s1).GetFileReader(fn, 100 /*readPartSize */)
-	require.True(t, os.IsNotExist(err))
+	require.True(os.IsNotExist(err))
 }
 
-func testGetFileReader(t *testing.T, storeBundle *fileStoreTestBundle) {
+func testGetFileReader(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
 	s1 := storeBundle.state1
@@ -318,12 +319,12 @@ func testGetFileReader(t *testing.T, storeBundle *fileStoreTestBundle) {
 
 	// Get ReadWriter and modify the file.
 	readWriter, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn, 100 /*readPartSize */, 100 /*writePartSize*/)
-	require.NoError(t, err)
+	require.NoError(err)
 	defer func() {
-		require.NoError(t, readWriter.Close())
+		require.NoError(readWriter.Close())
 	}()
 	_, err = readWriter.Write([]byte{'t', 'e', 's', 't', '\n'})
-	require.NoError(t, err)
+	require.NoError(err)
 
 	// Test getFileReader.
 	var wg sync.WaitGroup
@@ -332,28 +333,28 @@ func testGetFileReader(t *testing.T, storeBundle *fileStoreTestBundle) {
 		go func() {
 			defer wg.Done()
 			reader, err := store.NewFileOp().AcceptState(s1).GetFileReader(fn, 100 /*readPartSize */)
-			require.NoError(t, err)
+			require.NoError(err)
 
 			b := make([]byte, 5)
 			_, err = reader.Seek(0, 0)
-			require.NoError(t, err)
+			require.NoError(err)
 			l, err := reader.ReadAt(b, 0)
-			require.NoError(t, err)
-			require.Equal(t, l, 5)
-			require.Equal(t, string(b[:l]), "test\n")
+			require.NoError(err)
+			require.Equal(l, 5)
+			require.Equal(string(b[:l]), "test\n")
 
 			err = reader.Close()
-			require.NoError(t, err)
+			require.NoError(err)
 		}()
 	}
 	wg.Wait()
 
 	reader, err := store.NewFileOp().AcceptState(s1).GetFileReader(fn, 100 /*readPartSize */)
-	require.NoError(t, err)
-	require.NoError(t, reader.Close())
+	require.NoError(err)
+	require.NoError(reader.Close())
 }
 
-func testGetFileReadWriter(t *testing.T, storeBundle *fileStoreTestBundle) {
+func testGetFileReadWriter(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
 	s1 := storeBundle.state1
@@ -369,44 +370,44 @@ func testGetFileReadWriter(t *testing.T, storeBundle *fileStoreTestBundle) {
 		go func() {
 			defer wg.Done()
 			readWriter, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn, 100 /*readPartSize */, 100 /*writePartSize*/)
-			require.NoError(t, err)
+			require.NoError(err)
 
 			_, err = readWriter.Write([]byte{'t', 'e', 's', 't', '\n'})
-			require.NoError(t, err)
+			require.NoError(err)
 
 			b := make([]byte, 3)
 			_, err = readWriter.Seek(1, 0)
-			require.NoError(t, err)
+			require.NoError(err)
 			l, err := readWriter.Read(b)
-			require.NoError(t, err)
-			require.Equal(t, l, 3)
-			require.Equal(t, string(b[:l]), "est")
+			require.NoError(err)
+			require.Equal(l, 3)
+			require.Equal(string(b[:l]), "est")
 			_, err = readWriter.Seek(0, 0)
-			require.NoError(t, err)
+			require.NoError(err)
 
 			err = readWriter.Close()
-			require.NoError(t, err)
+			require.NoError(err)
 		}()
 	}
 	wg.Wait()
 
 	// Verify content.
 	reader, err := store.NewFileOp().AcceptState(s1).GetFileReader(fn, 100 /*readPartSize */)
-	require.NoError(t, err)
+	require.NoError(err)
 
 	b := make([]byte, 5)
 	_, err = reader.Seek(0, 0)
-	require.NoError(t, err)
+	require.NoError(err)
 	l, err := reader.ReadAt(b, 0)
-	require.NoError(t, err)
-	require.Equal(t, l, 5)
-	require.Equal(t, string(b[:l]), "test\n")
+	require.NoError(err)
+	require.Equal(l, 5)
+	require.Equal(string(b[:l]), "test\n")
 
 	err = reader.Close()
-	require.NoError(t, err)
+	require.NoError(err)
 }
 
-func testGetOrSetFileMetadataConcurrently(t *testing.T, storeBundle *fileStoreTestBundle) {
+func testGetOrSetFileMetadataConcurrently(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
 	s1 := storeBundle.state1
@@ -426,19 +427,19 @@ func testGetOrSetFileMetadataConcurrently(t *testing.T, storeBundle *fileStoreTe
 
 			m := getMockMetadataOne()
 			m.content = original
-			require.NoError(t, store.NewFileOp().AcceptState(s1).GetOrSetFileMetadata(fn, m))
-			require.Equal(t, original, m.content)
+			require.NoError(store.NewFileOp().AcceptState(s1).GetOrSetFileMetadata(fn, m))
+			require.Equal(original, m.content)
 		}()
 	}
 	wg.Wait()
 
 	// Verify content
 	m := getMockMetadataOne()
-	require.NoError(t, store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, m))
-	require.Equal(t, original, m.content)
+	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, m))
+	require.Equal(original, m.content)
 }
 
-func testSetFileMetadataAtConcurrently(t *testing.T, storeBundle *fileStoreTestBundle) {
+func testSetFileMetadataAtConcurrently(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
 	s1 := storeBundle.state1
@@ -450,8 +451,8 @@ func testSetFileMetadataAtConcurrently(t *testing.T, storeBundle *fileStoreTestB
 	m := getMockMetadataOne()
 	m.content = make([]byte, 50)
 	updated, err := store.NewFileOp().AcceptState(s1).SetFileMetadata(fn, m)
-	require.True(t, updated)
-	require.NoError(t, err)
+	require.True(updated)
+	require.NoError(err)
 
 	// Get ReadWriter and modify file concurrently.
 	var wg sync.WaitGroup
@@ -462,20 +463,20 @@ func testSetFileMetadataAtConcurrently(t *testing.T, storeBundle *fileStoreTestB
 
 			_, err := store.NewFileOp().AcceptState(s1).SetFileMetadataAt(fn, m, []byte("f"), int64(offset))
 			// require.True(ok)
-			require.NoError(t, err)
+			require.NoError(err)
 		}(i)
 	}
 	wg.Wait()
 
 	// Verify content
-	require.NoError(t, store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, m))
-	require.Equal(t, 50, len(m.content))
+	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, m))
+	require.Equal(50, len(m.content))
 	for i := 0; i < 50; i++ {
-		require.Equal(t, byte('f'), m.content[i])
+		require.Equal(byte('f'), m.content[i])
 	}
 }
 
-func testDeleteFileMetadata(t *testing.T, storeBundle *fileStoreTestBundle) {
+func testDeleteFileMetadata(require *require.Assertions, storeBundle *fileStoreTestBundle) {
 	store := storeBundle.store
 
 	s1 := storeBundle.state1
@@ -487,14 +488,14 @@ func testDeleteFileMetadata(t *testing.T, storeBundle *fileStoreTestBundle) {
 	m := getMockMetadataOne()
 
 	// DeleteFileMetadata doesn't return error if the file doesn't exist.
-	require.NoError(t, store.NewFileOp().AcceptState(s1).DeleteFileMetadata(fn, m))
+	require.NoError(store.NewFileOp().AcceptState(s1).DeleteFileMetadata(fn, m))
 
 	m.content = make([]byte, 1)
 	updated, err := store.NewFileOp().AcceptState(s1).SetFileMetadata(fn, m)
-	require.True(t, updated)
-	require.NoError(t, err)
+	require.True(updated)
+	require.NoError(err)
 
-	require.NoError(t, store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, m))
-	require.NoError(t, store.NewFileOp().AcceptState(s1).DeleteFileMetadata(fn, m))
-	require.Error(t, store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, m))
+	require.NoError(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, m))
+	require.NoError(store.NewFileOp().AcceptState(s1).DeleteFileMetadata(fn, m))
+	require.Error(store.NewFileOp().AcceptState(s1).GetFileMetadata(fn, m))
 }
