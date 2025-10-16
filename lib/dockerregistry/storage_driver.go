@@ -102,8 +102,8 @@ func getParam(params map[string]interface{}, name string) interface{} {
 }
 
 func (factory *krakenStorageDriverFactory) Create(
-	params map[string]interface{}) (driver.StorageDriver, error) {
-
+	params map[string]interface{},
+) (driver.StorageDriver, error) {
 	// Common parameters.
 	constructor := getParam(params, "constructor").(string)
 	config := getParam(params, "config").(Config)
@@ -138,14 +138,14 @@ func NewReadWriteStorageDriver(
 	cas *store.CAStore,
 	transferer transfer.ImageTransferer,
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
-	metrics tally.Scope) *KrakenStorageDriver {
-
+	metrics tally.Scope,
+) *KrakenStorageDriver {
 	return &KrakenStorageDriver{
 		config:     config,
 		transferer: transferer,
 		blobs:      newBlobs(cas, transferer),
 		uploads:    newCASUploads(cas, transferer),
-		manifests:  newManifests(transferer, verification, metrics),
+		manifests:  newManifests(transferer, verification),
 		metrics:    metrics,
 	}
 }
@@ -156,14 +156,14 @@ func NewReadOnlyStorageDriver(
 	bs BlobStore,
 	transferer transfer.ImageTransferer,
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
-	metrics tally.Scope) *KrakenStorageDriver {
-
+	metrics tally.Scope,
+) *KrakenStorageDriver {
 	return &KrakenStorageDriver{
 		config:     config,
 		transferer: transferer,
 		blobs:      newBlobs(bs, transferer),
 		uploads:    disabledUploads{},
-		manifests:  newManifests(transferer, verification, metrics),
+		manifests:  newManifests(transferer, verification),
 		metrics:    metrics,
 	}
 }
