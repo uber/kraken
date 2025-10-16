@@ -1,0 +1,32 @@
+name: labeler
+
+on: [pull_request]
+
+jobs:
+  labeler:
+    permissions:
+      pull-requests: write
+      contents: read
+      issues: write
+    runs-on: ubuntu-latest
+    name: Label the PR size
+    steps:
+      - uses: codelytv/pr-size-labeler@v1
+        with:
+          s_label: 'size/s'
+          s_max_size: '10'
+          m_label: 'size/m'
+          m_max_size: '100'
+          l_label: 'size/l'
+          l_max_size: '150'
+          xl_label: 'size/xl'
+          fail_if_xl: 'true'
+          message_if_xl: >
+            This PR exceeds the recommended size of 150 lines.
+            Please make sure you are NOT addressing multiple issues with one PR.
+            Note this PR might be rejected due to its size.
+          github_api_url: 'https://api.github.com'
+          ignore_file_deletions: 'true'
+          ignore_line_deletions: 'true'
+          files_to_ignore: ''
+
