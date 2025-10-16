@@ -28,7 +28,6 @@ import (
 
 	"github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/registry/storage/driver/factory"
-	"github.com/uber-go/tally"
 )
 
 // The path layout in the storage backend is roughly as follows:
@@ -126,7 +125,6 @@ type KrakenStorageDriver struct {
 	blobs      *blobs
 	uploads    uploads
 	manifests  *manifests
-	metrics    tally.Scope
 }
 
 // NewReadWriteStorageDriver creates a KrakenStorageDriver which can push / pull blobs.
