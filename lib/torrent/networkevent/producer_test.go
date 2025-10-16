@@ -61,7 +61,9 @@ func TestProducerCreatesAndReusesFile(t *testing.T) {
 
 	f, err := os.Open(config.LogPath)
 	require.NoError(t, err)
-	defer require.NoError(t, f.Close())
+	defer func() {
+		require.NoError(t, f.Close())
+	}()
 
 	var results []*Event
 	s := bufio.NewScanner(f)

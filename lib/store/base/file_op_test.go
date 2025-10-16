@@ -319,7 +319,9 @@ func testGetFileReader(t *testing.T, storeBundle *fileStoreTestBundle) {
 	// Get ReadWriter and modify the file.
 	readWriter, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn, 100 /*readPartSize */, 100 /*writePartSize*/)
 	require.NoError(t, err)
-	defer require.NoError(t, readWriter.Close())
+	defer func() {
+		require.NoError(t, readWriter.Close())
+	}()
 	_, err = readWriter.Write([]byte{'t', 'e', 's', 't', '\n'})
 	require.NoError(t, err)
 

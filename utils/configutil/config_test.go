@@ -89,17 +89,19 @@ func writeFile(t *testing.T, contents string) string {
 	f, err := os.CreateTemp("", "configtest")
 	require.NoError(t, err)
 
-	defer require.NoError(t, f.Close())
-
 	_, err = f.Write([]byte(contents))
 	require.NoError(t, err)
+
+	require.NoError(t, f.Close())
 
 	return f.Name()
 }
 
 func TestLoad(t *testing.T) {
 	fname := writeFile(t, goodConfig)
-	defer require.NoError(t, os.Remove(fname))
+	defer func() {
+		require.NoError(t, os.Remove(fname))
+	}()
 
 	var cfg configuration
 	err := Load(fname, &cfg)
@@ -111,11 +113,15 @@ func TestLoad(t *testing.T) {
 
 func TestLoadFilesExtends(t *testing.T) {
 	fname := writeFile(t, goodConfig)
-	defer require.NoError(t, os.Remove(fname))
+	defer func() {
+		require.NoError(t, os.Remove(fname))
+	}()
 
 	partialConfig := "buffer_space: 8080"
 	partial := writeFile(t, partialConfig)
-	defer require.NoError(t, os.Remove(partial))
+	defer func() {
+		require.NoError(t, os.Remove(partial))
+	}()
 
 	var cfg configuration
 	err := loadFiles(&cfg, []string{fname, partial})
@@ -139,10 +145,14 @@ func TestLoadFilesValidateOnce(t *testing.T) {
     `
 
 	fname1 := writeFile(t, invalidConfig1)
-	defer require.NoError(t, os.Remove(fname1))
+	defer func() {
+		require.NoError(t, os.Remove(fname1))
+	}()
 
 	fname2 := writeFile(t, invalidConfig2)
-	defer require.NoError(t, os.Remove(invalidConfig2))
+	defer func() {
+		require.NoError(t, os.Remove(fname2))
+	}()
 
 	// Either config by itself will not pass validation.
 	var cfg1 configuration
@@ -190,7 +200,9 @@ func TestInvalidYAML(t *testing.T) {
 
 func TestInvalidConfig(t *testing.T) {
 	fname := writeFile(t, invalidConfig)
-	defer require.NoError(t, os.Remove(fname))
+	defer func() {
+		require.NoError(t, os.Remove(fname))
+	}()
 
 	var cfg configuration
 	err := Load(fname, &cfg)
@@ -214,11 +226,15 @@ func TestInvalidConfig(t *testing.T) {
 
 func TestExtendsConfig(t *testing.T) {
 	fname := writeFile(t, goodConfig)
-	defer require.NoError(t, os.Remove(fname))
+	defer func() {
+		require.NoError(t, os.Remove(fname))
+	}()
 
 	extends := fmt.Sprintf(goodExtendsConfig, filepath.Base(fname))
 	extendsfn := writeFile(t, extends)
-	defer require.NoError(t, os.Remove(extendsfn))
+	defer func() {
+		require.NoError(t, os.Remove(extendsfn))
+	}()
 
 	var cfg configuration
 	err := Load(extendsfn, &cfg)
@@ -235,15 +251,21 @@ func TestExtendsConfig(t *testing.T) {
 
 func TestExtendsConfigDeep(t *testing.T) {
 	fname := writeFile(t, goodConfig)
-	defer require.NoError(t, os.Remove(fname))
+	defer func() {
+		require.NoError(t, os.Remove(fname))
+	}()
 
 	extends := fmt.Sprintf(goodExtendsConfig, filepath.Base(fname))
 	extendsfn := writeFile(t, extends)
-	defer require.NoError(t, os.Remove(extendsfn))
+	defer func() {
+		require.NoError(t, os.Remove(extendsfn))
+	}()
 
 	extends2 := fmt.Sprintf(goodYetAnotherExtendsConfig, filepath.Base(extends))
 	extendsfn2 := writeFile(t, extends2)
-	defer require.NoError(t, os.Remove(extendsfn2))
+	defer func() {
+		require.NoError(t, os.Remove(extendsfn2))
+	}()
 
 	var cfg configuration
 	err := Load(extendsfn2, &cfg)
@@ -264,25 +286,37 @@ func TestExtendsConfigCircularRef(t *testing.T) {
 	f3, err := os.CreateTemp("", "configtest")
 	require.NoError(t, err)
 
-	defer require.NoError(t, f1.Close())
-	defer require.NoError(t, f2.Close())
-	defer require.NoError(t, f3.Close())
+	defer func() {
+		require.NoError(t, f1.Close())
+	}()
+	defer func() {
+		require.NoError(t, f2.Close())
+	}()
+	defer func() {
+		require.NoError(t, f3.Close())
+	}()
 
 	_, err = f1.Write([]byte(goodConfig))
 	require.NoError(t, err)
-	defer require.NoError(t, os.Remove(f1.Name()))
+	defer func() {
+		require.NoError(t, os.Remove(f1.Name()))
+	}()
 
 	extends := fmt.Sprintf(goodExtendsConfig, filepath.Base(f3.Name()))
 	_, err = f2.Write([]byte(extends))
 	require.NoError(t, err)
 
-	defer require.NoError(t, os.Remove(f2.Name()))
+	defer func() {
+		require.NoError(t, os.Remove(f2.Name()))
+	}()
 
 	extends2 := fmt.Sprintf(goodYetAnotherExtendsConfig, filepath.Base(f2.Name()))
 	_, err = f3.Write([]byte(extends2))
 	require.NoError(t, err)
 
-	defer require.NoError(t, os.Remove(f3.Name()))
+	defer func() {
+		require.NoError(t, os.Remove(f3.Name()))
+	}()
 
 	var cfg configuration
 	err = Load(f3.Name(), &cfg)
