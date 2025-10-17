@@ -20,25 +20,12 @@ import (
 
 	"github.com/uber/kraken/utils/closers"
 
-	"github.com/uber-go/tally"
-	"github.com/uber/kraken/lib/store"
-
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
+
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
-	"github.com/uber/kraken/utils/cache"
+	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/log"
-)
-
-const (
-	signatureVerificationSuccessCounter = "signature_verification_success"
-	signatureVerificationFailureCounter = "signature_verification_failure"
-	signatureVerificationErrorCounter   = "signature_verification_error"
-	signatureVerificationDuration       = "signature_verification_duration"
-
-	// Verification cache configuration
-	defaultVerificationCacheSize = 300             // Maximum number of entries
-	defaultVerificationCacheTTL  = 5 * time.Minute // TTL for verification cache entries
 )
 
 type SignatureVerificationDecision int
@@ -52,22 +39,15 @@ const (
 type manifests struct {
 	transferer   transfer.ImageTransferer
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)
-	metrics      tally.Scope
-
-	// Cache to track verified (repo, digest) combinations to avoid duplicate metric emission.
-	verifiedCache *cache.LRUCache
 }
 
 func newManifests(
 	transferer transfer.ImageTransferer,
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
-	metrics tally.Scope,
 ) *manifests {
 	return &manifests{
-		transferer:    transferer,
-		verification:  verification,
-		metrics:       metrics,
-		verifiedCache: cache.NewLRUCache(defaultVerificationCacheSize, defaultVerificationCacheTTL),
+		transferer:   transferer,
+		verification: verification,
 	}
 }
 
@@ -80,7 +60,7 @@ func newManifests(
 //     if subtype is revisions, parses the digest directly from the path.
 //  3. Downloads the manifest blob via the transferer using (repo, digest).
 //  4. Opportunistically invokes verify to run signature/image checks and
-//     record metrics/logs. Verification result is not enforced here.
+//     record logs. Verification result is not enforced here.
 //  5. Returns the digest in ASCII string form as a byte slice.
 //
 // Notes
@@ -121,35 +101,21 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 	}
 	defer closers.Close(blob)
 
-	// Only verify if we haven't already verified this (repo, digest) combination
-	cacheKey := fmt.Sprintf("%s:%s", repo, digest.String())
-	shouldEmitMetrics := !t.verifiedCache.Has(cacheKey)
-
 	// Signature verification is currently not enforced: errors from t.verify are ignored.
 	// This is intentional because verification enforcement is planned for a future release.
 	// Risks: manifests may be accepted without verification, which could allow untrusted content.
 	// TODO: Remove error ignoring and enforce verification once the feature is activated.
-	_, _ = t.verify(path, repo, digest, blob, shouldEmitMetrics) //nolint:errcheck
-
-	if shouldEmitMetrics {
-		t.verifiedCache.Add(cacheKey)
-	}
+	_, _ = t.verify(path, repo, digest, blob) //nolint:errcheck
 	return []byte(digest.String()), nil
 }
 
 // verify runs signature/image verification for a downloaded manifest blob and
-// records metrics/logs around the decision and duration.
+// logs around the decision.
 //
 // Returns
 //   - (true, nil)  when verification is allowed or intentionally skipped.
 //   - (false, nil) when verification explicitly denies.
 //   - (false, err) on verification errors or unknown decisions.
-//
-// Metrics
-//   - signature_verification_duration (timer): end-to-end verification latency.
-//   - signature_verification_success  (counter): allow decisions.
-//   - signature_verification_failure  (counter): deny decisions.
-//   - signature_verification_error    (counter): errors/unknown decisions.
 //
 // Logging
 //   - Error on verification error (includes repo/digest).
@@ -160,43 +126,23 @@ func (t *manifests) verify(
 	repo string,
 	digest core.Digest,
 	blob store.FileReader,
-	emitMetrics bool,
 ) (bool, error) {
-	// Always measure duration, but only emit if not cached
-	var stopwatch tally.Stopwatch
-	if emitMetrics {
-		stopwatch = t.metrics.Timer(signatureVerificationDuration).Start()
-		defer stopwatch.Stop()
-	}
-
 	decision, err := t.verification(repo, digest, blob)
 	if err != nil {
-		if emitMetrics {
-			t.metrics.Counter(signatureVerificationErrorCounter).Inc(1)
-		}
 		log.With("repo", repo, "digest", digest).Errorf("Error while performing image validation %s", err)
 		return false, err
 	}
 
 	switch decision {
 	case DecisionAllow:
-		if emitMetrics {
-			t.metrics.Counter(signatureVerificationSuccessCounter).Inc(1)
-		}
 		return true, nil
 	case DecisionDeny:
-		if emitMetrics {
-			t.metrics.Counter(signatureVerificationFailureCounter).Inc(1)
-		}
 		log.With("repo", repo, "digest", digest).Warnf("Verification failed %s", path)
 		return false, nil
 	case DecisionSkip:
 		log.With("repo", repo, "digest", digest).Debugf("Verification skipped for %s", path)
 		return true, nil
 	default:
-		if emitMetrics {
-			t.metrics.Counter(signatureVerificationErrorCounter).Inc(1)
-		}
 		return false, fmt.Errorf("unknown verification decision: %d", decision)
 	}
 }

@@ -28,7 +28,6 @@ import (
 
 	"github.com/docker/distribution/registry/storage/driver"
 	"github.com/docker/distribution/registry/storage/driver/factory"
-	"github.com/uber-go/tally"
 )
 
 // The path layout in the storage backend is roughly as follows:
@@ -101,22 +100,19 @@ func getParam(params map[string]interface{}, name string) interface{} {
 	return p
 }
 
-func (factory *krakenStorageDriverFactory) Create(
-	params map[string]interface{}) (driver.StorageDriver, error) {
-
+func (factory *krakenStorageDriverFactory) Create(params map[string]interface{}) (driver.StorageDriver, error) {
 	// Common parameters.
 	constructor := getParam(params, "constructor").(string)
 	config := getParam(params, "config").(Config)
 	transferer := getParam(params, "transferer").(transfer.ImageTransferer)
-	metrics := getParam(params, "metrics").(tally.Scope)
 
 	switch constructor {
 	case _rw:
 		castore := getParam(params, "castore").(*store.CAStore)
-		return NewReadWriteStorageDriver(config, castore, transferer, factory.verification, metrics), nil
+		return NewReadWriteStorageDriver(config, castore, transferer, factory.verification), nil
 	case _ro:
 		blobstore := getParam(params, "blobstore").(BlobStore)
-		return NewReadOnlyStorageDriver(config, blobstore, transferer, factory.verification, metrics), nil
+		return NewReadOnlyStorageDriver(config, blobstore, transferer, factory.verification), nil
 	default:
 		return nil, fmt.Errorf("unknown constructor %s", constructor)
 	}
@@ -129,7 +125,6 @@ type KrakenStorageDriver struct {
 	blobs      *blobs
 	uploads    uploads
 	manifests  *manifests
-	metrics    tally.Scope
 }
 
 // NewReadWriteStorageDriver creates a KrakenStorageDriver which can push / pull blobs.
@@ -137,16 +132,13 @@ func NewReadWriteStorageDriver(
 	config Config,
 	cas *store.CAStore,
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
-	metrics tally.Scope) *KrakenStorageDriver {
-
+	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)) *KrakenStorageDriver {
 	return &KrakenStorageDriver{
 		config:     config,
 		transferer: transferer,
 		blobs:      newBlobs(cas, transferer),
 		uploads:    newCASUploads(cas, transferer),
-		manifests:  newManifests(transferer, verification, metrics),
-		metrics:    metrics,
+		manifests:  newManifests(transferer, verification),
 	}
 }
 
@@ -155,16 +147,13 @@ func NewReadOnlyStorageDriver(
 	config Config,
 	bs BlobStore,
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
-	metrics tally.Scope) *KrakenStorageDriver {
-
+	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)) *KrakenStorageDriver {
 	return &KrakenStorageDriver{
 		config:     config,
 		transferer: transferer,
 		blobs:      newBlobs(bs, transferer),
 		uploads:    disabledUploads{},
-		manifests:  newManifests(transferer, verification, metrics),
-		metrics:    metrics,
+		manifests:  newManifests(transferer, verification),
 	}
 }
 
