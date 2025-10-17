@@ -304,16 +304,16 @@ func (s *Server) replicateToRemote(namespace string, d core.Digest, remoteDNS st
 	remote, err := s.clusterProvider.Provide(remoteDNS)
 	if err != nil {
 		duration := time.Since(start)
-		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize, "duration_ms", duration.Milliseconds()).Errorf("Failed to get remote cluster provider: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to get remote cluster provider: %s", err)
 		return handler.Errorf("remote cluster provider: %s", err)
 	}
 	if err := remote.UploadBlob(namespace, d, f); err != nil {
 		duration := time.Since(start)
-		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize, "duration_ms", duration.Milliseconds()).Errorf("Failed to upload blob to remote: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to upload blob to remote: %s", err)
 		return err
 	}
 	duration := time.Since(start)
-	log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize, "duration_ms", duration.Milliseconds()).Info("Successfully replicated to remote")
+	log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize, "duration_s", duration.Seconds()).Info("Successfully replicated to remote")
 	return nil
 }
 
@@ -419,7 +419,7 @@ func (s *Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 func (s *Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
 	var tm metadata.TorrentMeta
 	if err := s.cas.GetCacheFileMetadata(d.Hex(), &tm); os.IsNotExist(err) {
-		log.With("namespace", namespace, "digest", d.Hex()).Debug("Metainfo not found, initiating blob download")
+		log.With("namespace", namespace, "digest", d.Hex()).Debug("Metainfo not found in cache, initiating blob download")
 		return nil, s.startRemoteBlobDownload(namespace, d, true)
 	} else if err != nil {
 		log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to get cache metadata: %s", err)
@@ -439,13 +439,13 @@ func (h *localReplicationHook) Run(d core.Digest) {
 	if err := h.server.replicateBlobLocally(d); err != nil {
 		// Don't return error here as we only want to cache storage backend errors.
 		duration := time.Since(start)
-		log.With("digest", d.Hex(), "duration_ms", duration.Milliseconds()).Errorf("Error replicating remote blob: %s", err)
+		log.With("digest", d.Hex(), "duration_s", duration.Seconds()).Errorf("Error replicating remote blob: %s", err)
 		h.server.stats.Counter("replicate_blob_errors").Inc(1)
 		return
 	}
 	timer.Stop()
 	duration := time.Since(start)
-	log.With("digest", d.Hex(), "duration_ms", duration.Milliseconds()).Info("Successfully completed local replication")
+	log.With("digest", d.Hex(), "duration_s", duration.Seconds()).Info("Successfully completed local replication")
 }
 
 func (s *Server) startRemoteBlobDownload(
@@ -490,11 +490,11 @@ func (s *Server) replicateBlobLocally(d core.Digest) error {
 		}
 		if err := client.TransferBlob(d, f); err != nil {
 			duration := time.Since(start)
-			log.With("digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_ms", duration.Milliseconds()).Errorf("Failed to transfer blob: %s", err)
+			log.With("digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to transfer blob: %s", err)
 			return fmt.Errorf("transfer blob: %s", err)
 		}
 		duration := time.Since(start)
-		log.With("digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_ms", duration.Milliseconds()).Debug("Successfully transferred blob to replica")
+		log.With("digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_s", duration.Seconds()).Debug("Successfully transferred blob to replica")
 		return nil
 	})
 }
@@ -605,6 +605,7 @@ func (s *Server) patchTransferHandler(w http.ResponseWriter, r *http.Request) er
 		log.With("digest", d.Hex(), "uid", uid, "start", start, "end", end).Errorf("Failed to patch upload: %s", err)
 		return err
 	}
+	log.With("digest", d.Hex(), "uid", uid, "start", start, "end", end).Debug("Successfully patched transfer upload chunk")
 	return nil
 }
 
@@ -692,6 +693,7 @@ func (s *Server) patchClusterUploadHandler(w http.ResponseWriter, r *http.Reques
 		log.With("namespace", namespace, "digest", d.Hex(), "uid", uid).Errorf("Failed to patch cluster upload: %s", err)
 		return s.handleUploadConflict(err, namespace, d)
 	}
+	log.With("namespace", namespace, "digest", d.Hex(), "uid", uid, "start", start, "end", end).Debug("Successfully patched upload chunk")
 	return nil
 }
 
@@ -739,17 +741,17 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 		}
 		if err := client.DuplicateUploadBlob(namespace, d, f, delay); err != nil {
 			duration := time.Since(replicaStart)
-			log.With("namespace", namespace, "digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_ms", duration.Milliseconds()).Errorf("Failed to duplicate upload: %s", err)
+			log.With("namespace", namespace, "digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to duplicate upload: %s", err)
 			return fmt.Errorf("duplicate upload: %s", err)
 		}
 		duration := time.Since(replicaStart)
-		log.With("namespace", namespace, "digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_ms", duration.Milliseconds()).Debug("Successfully duplicated upload")
+		log.With("namespace", namespace, "digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_s", duration.Seconds()).Debug("Successfully duplicated upload")
 		return nil
 	})
 	if err != nil {
 		s.stats.Counter("duplicate_write_back_errors").Inc(1)
 		replicateDuration := time.Since(replicateStart)
-		log.With("namespace", namespace, "digest", d.Hex(), "replication_duration_ms", replicateDuration.Milliseconds()).Errorf("Error duplicating write-back task to replicas: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "replication_duration_m", replicateDuration.Seconds()).Errorf("Error duplicating write-back task to replicas: %s", err)
 	}
 	log.With("namespace", namespace, "digest", d.Hex()).Info("Successfully committed cluster upload")
 	return nil
