@@ -189,7 +189,7 @@ func (e incomingConnEvent) apply(s *state) {
 		e.c.Close()
 		return
 	}
-	s.log("conn", e.c).Info("Added incoming conn")
+	s.log("conn", e.c).Debug("Added incoming conn")
 }
 
 // failedOutgoingHandshakeEvent occurs when a pending incoming connection fails
@@ -416,16 +416,14 @@ func (e preemptionTickEvent) apply(s *state) {
 	}
 
 	for h, ctrl := range s.torrentControls {
-		idleSeeder :=
-			ctrl.dispatcher.Complete() &&
-				s.sched.clock.Now().Sub(ctrl.dispatcher.LastReadTime()) >= s.sched.config.SeederTTI
+		idleSeeder := ctrl.dispatcher.Complete() &&
+			s.sched.clock.Now().Sub(ctrl.dispatcher.LastReadTime()) >= s.sched.config.SeederTTI
 		if idleSeeder {
 			s.sched.torrentlog.SeedTimeout(ctrl.dispatcher.Digest(), h)
 		}
 
-		idleLeecher :=
-			!ctrl.dispatcher.Complete() &&
-				s.sched.clock.Now().Sub(ctrl.dispatcher.LastWriteTime()) >= s.sched.config.LeecherTTI
+		idleLeecher := !ctrl.dispatcher.Complete() &&
+			s.sched.clock.Now().Sub(ctrl.dispatcher.LastWriteTime()) >= s.sched.config.LeecherTTI
 		if idleLeecher {
 			s.sched.torrentlog.LeechTimeout(ctrl.dispatcher.Digest(), h)
 		}

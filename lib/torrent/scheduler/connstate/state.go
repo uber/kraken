@@ -98,8 +98,8 @@ func New(
 	clk clock.Clock,
 	localPeerID core.PeerID,
 	netevents networkevent.Producer,
-	logger *zap.SugaredLogger) *State {
-
+	logger *zap.SugaredLogger,
+) *State {
 	config = config.applyDefaults()
 
 	return &State{
@@ -154,8 +154,7 @@ func (s *State) Blacklist(peerID core.PeerID, h core.InfoHash) error {
 	}
 	s.blacklist[k] = &blacklistEntry{s.clk.Now().Add(s.config.BlacklistDuration)}
 
-	s.log("peer", peerID, "hash", h).Infof(
-		"Connection blacklisted for %s", s.config.BlacklistDuration)
+	s.log("peer", peerID, "hash", h).Warnf("Connection blacklisted for %s", s.config.BlacklistDuration)
 	s.netevents.Produce(
 		networkevent.BlacklistConnEvent(h, s.localPeerID, peerID, s.config.BlacklistDuration))
 
@@ -189,8 +188,7 @@ func (s *State) AddPending(peerID core.PeerID, h core.InfoHash, neighbors []core
 			return ErrTooManyMutualConns
 		}
 		s.put(h, peerID, entry{status: _pending})
-		s.log("hash", h, "peer", peerID).Infof(
-			"Added pending conn, capacity now at %d", s.capacity(h))
+		s.log("hash", h, "peer", peerID).Debugf("Added pending conn, capacity now at %d", s.capacity(h))
 		return nil
 	case _pending:
 		return ErrConnAlreadyPending
@@ -207,7 +205,7 @@ func (s *State) DeletePending(peerID core.PeerID, h core.InfoHash) {
 		return
 	}
 	s.delete(h, peerID)
-	s.log("hash", h, "peer", peerID).Infof(
+	s.log("hash", h, "peer", peerID).Debugf(
 		"Deleted pending conn, capacity now at %d", s.capacity(h))
 }
 
@@ -221,7 +219,7 @@ func (s *State) MovePendingToActive(c *conn.Conn) error {
 	}
 	s.put(c.InfoHash(), c.PeerID(), entry{status: _active, conn: c})
 
-	s.log("hash", c.InfoHash(), "peer", c.PeerID()).Info("Moved conn from pending to active")
+	s.log("hash", c.InfoHash(), "peer", c.PeerID()).Debug("Moved conn from pending to active")
 	s.netevents.Produce(networkevent.AddActiveConnEvent(c.InfoHash(), s.localPeerID, c.PeerID()))
 
 	return nil
@@ -240,8 +238,7 @@ func (s *State) DeleteActive(c *conn.Conn) {
 	}
 	s.delete(c.InfoHash(), c.PeerID())
 
-	s.log("hash", c.InfoHash(), "peer", c.PeerID()).Infof(
-		"Deleted active conn, capacity now at %d", s.capacity(c.InfoHash()))
+	s.log("hash", c.InfoHash(), "peer", c.PeerID()).Debugf("Deleted active conn, capacity now at %d", s.capacity(c.InfoHash()))
 	s.netevents.Produce(networkevent.DropActiveConnEvent(
 		c.InfoHash(), s.localPeerID, c.PeerID()))
 }

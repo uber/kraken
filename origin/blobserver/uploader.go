@@ -22,6 +22,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/handler"
+	"github.com/uber/kraken/utils/log"
 )
 
 // uploader executes a chunked upload.
@@ -35,51 +36,68 @@ func newUploader(cas *store.CAStore) *uploader {
 
 func (u *uploader) start(d core.Digest) (uid string, err error) {
 	if ok, err := blobExists(u.cas, d); err != nil {
+		log.With("digest", d.Hex()).Errorf("Failed to check if blob exists: %s", err)
 		return "", err
 	} else if ok {
+		log.With("digest", d.Hex()).Debug("Blob already exists, cannot start new upload")
 		return "", handler.ErrorStatus(http.StatusConflict)
 	}
 	uid = uuid.Generate().String()
 	if err := u.cas.CreateUploadFile(uid, 0); err != nil {
+		log.With("digest", d.Hex(), "uid", uid).Errorf("Failed to create upload file: %s", err)
 		return "", handler.Errorf("create upload file: %s", err)
 	}
+	log.With("digest", d.Hex(), "uid", uid).Debug("Created upload file")
 	return uid, nil
 }
 
 func (u *uploader) patch(
-	d core.Digest, uid string, chunk io.Reader, start, end int64) error {
-
+	d core.Digest, uid string, chunk io.Reader, start, end int64,
+) error {
 	if ok, err := blobExists(u.cas, d); err != nil {
+		log.With("digest", d.Hex(), "uid", uid).Errorf("Failed to check if blob exists: %s", err)
 		return err
 	} else if ok {
+		log.With("digest", d.Hex(), "uid", uid).Debug("Blob already exists, cannot patch upload")
 		return handler.ErrorStatus(http.StatusConflict)
 	}
 	f, err := u.cas.GetUploadFileReadWriter(uid)
 	if err != nil {
 		if os.IsNotExist(err) {
+			log.With("digest", d.Hex(), "uid", uid).Warn("Upload file not found")
 			return handler.ErrorStatus(http.StatusNotFound)
 		}
+		log.With("digest", d.Hex(), "uid", uid).Errorf("Failed to get upload file: %s", err)
 		return handler.Errorf("get upload file: %s", err)
 	}
 	defer f.Close()
 	if _, err := f.Seek(start, 0); err != nil {
+		log.With("digest", d.Hex(), "uid", uid, "offset", start).Errorf("Failed to seek to offset: %s", err)
 		return handler.Errorf("seek offset %d: %s", start, err).Status(http.StatusBadRequest)
 	}
-	if _, err := io.CopyN(f, chunk, end-start); err != nil {
+	chunkSize := end - start
+	if _, err := io.CopyN(f, chunk, chunkSize); err != nil {
+		log.With("digest", d.Hex(), "uid", uid, "start", start, "end", end, "chunk_size", chunkSize).Errorf("Failed to copy chunk data: %s", err)
 		return handler.Errorf("copy: %s", err)
 	}
+	log.With("digest", d.Hex(), "uid", uid, "start", start, "end", end, "chunk_size", chunkSize).Debug("Successfully patched upload chunk")
 	return nil
 }
 
 func (u *uploader) commit(d core.Digest, uid string) error {
+	log.With("digest", d.Hex(), "uid", uid).Debug("Moving upload file to cache")
 	if err := u.cas.MoveUploadFileToCache(uid, d.Hex()); err != nil {
 		if os.IsNotExist(err) {
+			log.With("digest", d.Hex(), "uid", uid).Warn("Upload file not found during commit")
 			return handler.ErrorStatus(http.StatusNotFound)
 		}
 		if os.IsExist(err) {
+			log.With("digest", d.Hex(), "uid", uid).Debug("Blob already exists in cache")
 			return handler.ErrorStatus(http.StatusConflict)
 		}
+		log.With("digest", d.Hex(), "uid", uid).Errorf("Failed to move upload file to cache: %s", err)
 		return handler.Errorf("move upload file to cache: %s", err)
 	}
+	log.With("digest", d.Hex(), "uid", uid).Info("Successfully committed upload to cache")
 	return nil
 }
