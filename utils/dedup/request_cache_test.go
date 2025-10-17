@@ -122,8 +122,6 @@ func TestRequestCacheExpiresNotFoundErrorsIndependently(t *testing.T) {
 }
 
 func TestRequestCacheStartCleansUpCachedErrors(t *testing.T) {
-	require := require.New(t)
-
 	config := RequestCacheConfig{
 		ErrorTTL:        5 * time.Second,
 		CleanupInterval: 10 * time.Second,
@@ -133,24 +131,24 @@ func TestRequestCacheStartCleansUpCachedErrors(t *testing.T) {
 
 	err := errors.New("some error")
 
-	require.NoError(d.Start("a", func() error { return err }))
-	require.NoError(d.Start("b", func() error { return err }))
-	require.NoError(d.Start("c", noop))
+	require.NoError(t, d.Start("a", func() error { return err }))
+	require.NoError(t, d.Start("b", func() error { return err }))
+	require.NoError(t, d.Start("c", noop))
 
-	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+	require.NoError(t, testutil.PollUntilTrue(5*time.Second, func() bool {
 		return d.Start("a", noop) == err
 	}))
-	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+	require.NoError(t, testutil.PollUntilTrue(5*time.Second, func() bool {
 		return d.Start("b", noop) == err
 	}))
 
 	clk.Add(config.ErrorTTL)
 	clk.Add(config.CleanupInterval)
 
-	d.Start("c", noop)
+	require.NoError(t, d.Start("c", noop))
 
 	// Start should trigger cleanup.
-	require.Empty(d.errors)
+	require.Empty(t, d.errors)
 }
 
 func TestRequestCacheLimitsNumberOfWorkers(t *testing.T) {

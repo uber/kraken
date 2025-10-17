@@ -61,9 +61,9 @@ func TestFileOp(t *testing.T) {
 			for _, test := range tests {
 				testName := runtime.FuncForPC(reflect.ValueOf(test).Pointer()).Name()
 				t.Run(testName, func(t *testing.T) {
-					require := require.New(t)
 					s, cleanup := store.fixture()
 					defer cleanup()
+					require := require.New(t)
 					test(require, s)
 				})
 			}
@@ -320,7 +320,9 @@ func testGetFileReader(require *require.Assertions, storeBundle *fileStoreTestBu
 	// Get ReadWriter and modify the file.
 	readWriter, err := store.NewFileOp().AcceptState(s1).GetFileReadWriter(fn, 100 /*readPartSize */, 100 /*writePartSize*/)
 	require.NoError(err)
-	defer readWriter.Close()
+	defer func() {
+		require.NoError(readWriter.Close())
+	}()
 	_, err = readWriter.Write([]byte{'t', 'e', 's', 't', '\n'})
 	require.NoError(err)
 
@@ -349,7 +351,7 @@ func testGetFileReader(require *require.Assertions, storeBundle *fileStoreTestBu
 
 	reader, err := store.NewFileOp().AcceptState(s1).GetFileReader(fn, 100 /*readPartSize */)
 	require.NoError(err)
-	reader.Close()
+	require.NoError(reader.Close())
 }
 
 func testGetFileReadWriter(require *require.Assertions, storeBundle *fileStoreTestBundle) {

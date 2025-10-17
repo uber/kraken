@@ -32,6 +32,7 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/tracker/announceclient"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/httputil"
 
@@ -125,7 +126,9 @@ func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
 		}
 		return handler.Errorf("get tag: %s", err)
 	}
-	io.WriteString(w, d.String())
+	if _, err := io.WriteString(w, d.String()); err != nil {
+		return fmt.Errorf("write response: %s", err)
+	}
 	return nil
 }
 
@@ -208,7 +211,9 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
 	if err := s.sched.Probe(); err != nil {
 		return handler.Errorf("probe torrent client: %s", err)
 	}
-	io.WriteString(w, "OK")
+	if _, err := io.WriteString(w, "OK"); err != nil {
+		return fmt.Errorf("write response: %s", err)
+	}
 	return nil
 }
 
@@ -216,7 +221,9 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 	if s.config.readinessCacheTTL != 0 {
 		rCacheValid := s.lastReady.Add(s.config.readinessCacheTTL).After(time.Now())
 		if rCacheValid {
-			io.WriteString(w, "OK")
+			if _, err := io.WriteString(w, "OK"); err != nil {
+				return fmt.Errorf("write response: %s", err)
+			}
 			return nil
 		}
 	}
@@ -251,14 +258,16 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 	}
 
 	s.lastReady = time.Now()
-	io.WriteString(w, "OK")
+	if _, err := io.WriteString(w, "OK"); err != nil {
+		return fmt.Errorf("write response: %s", err)
+	}
 	return nil
 }
 
 // patchSchedulerConfigHandler restarts the agent torrent scheduler with
 // the config in request body.
 func (s *Server) patchSchedulerConfigHandler(w http.ResponseWriter, r *http.Request) error {
-	defer r.Body.Close()
+	defer closers.Close(r.Body)
 	var config scheduler.Config
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
 		return handler.Errorf("json decode: %s", err).Status(http.StatusBadRequest)

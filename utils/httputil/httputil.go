@@ -27,6 +27,7 @@ import (
 	"github.com/go-chi/chi"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/handler"
 )
 
@@ -51,7 +52,7 @@ type StatusError struct {
 
 // NewStatusError returns a new StatusError.
 func NewStatusError(resp *http.Response) StatusError {
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 	respBytes, err := io.ReadAll(resp.Body)
 	respDump := string(respBytes)
 	if err != nil {

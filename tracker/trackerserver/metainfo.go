@@ -47,6 +47,8 @@ func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) erro
 		return fmt.Errorf("serialize metainfo: %s", err)
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(b)
+	if _, err := w.Write(b); err != nil {
+		return fmt.Errorf("write response: %s", err)
+	}
 	return nil
 }

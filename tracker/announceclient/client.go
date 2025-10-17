@@ -25,6 +25,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/hashring"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/httputil"
 )
 
@@ -137,7 +138,7 @@ func (c *client) Announce(
 			}
 			return nil, 0, err
 		}
-		defer httpResp.Body.Close()
+		defer closers.Close(httpResp.Body)
 		var resp Response
 		if err := json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
 			return nil, 0, fmt.Errorf("decode response: %s", err)

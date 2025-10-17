@@ -86,54 +86,52 @@ type Zconfig struct {
 }
 
 func writeFile(t *testing.T, contents string) string {
-	require := require.New(t)
-
 	f, err := os.CreateTemp("", "configtest")
-	require.NoError(err)
-
-	defer f.Close()
+	require.NoError(t, err)
 
 	_, err = f.Write([]byte(contents))
-	require.NoError(err)
+	require.NoError(t, err)
+
+	require.NoError(t, f.Close())
 
 	return f.Name()
 }
 
 func TestLoad(t *testing.T) {
-	require := require.New(t)
-
 	fname := writeFile(t, goodConfig)
-	defer os.Remove(fname)
+	defer func() {
+		require.NoError(t, os.Remove(fname))
+	}()
 
 	var cfg configuration
 	err := Load(fname, &cfg)
-	require.NoError(err)
-	require.Equal("localhost:4385", cfg.ListenAddress)
-	require.Equal(1024, cfg.BufferSpace)
-	require.Equal([]string{"somewhere-zone1:8090", "somewhere-else-zone1:8010"}, cfg.Servers)
+	require.NoError(t, err)
+	require.Equal(t, "localhost:4385", cfg.ListenAddress)
+	require.Equal(t, 1024, cfg.BufferSpace)
+	require.Equal(t, []string{"somewhere-zone1:8090", "somewhere-else-zone1:8010"}, cfg.Servers)
 }
 
 func TestLoadFilesExtends(t *testing.T) {
-	require := require.New(t)
-
 	fname := writeFile(t, goodConfig)
-	defer os.Remove(fname)
+	defer func() {
+		require.NoError(t, os.Remove(fname))
+	}()
 
 	partialConfig := "buffer_space: 8080"
 	partial := writeFile(t, partialConfig)
-	defer os.Remove(partial)
+	defer func() {
+		require.NoError(t, os.Remove(partial))
+	}()
 
 	var cfg configuration
 	err := loadFiles(&cfg, []string{fname, partial})
-	require.NoError(err)
+	require.NoError(t, err)
 
-	require.Equal(8080, cfg.BufferSpace)
-	require.Equal("localhost:4385", cfg.ListenAddress)
+	require.Equal(t, 8080, cfg.BufferSpace)
+	require.Equal(t, "localhost:4385", cfg.ListenAddress)
 }
 
 func TestLoadFilesValidateOnce(t *testing.T) {
-	require := require.New(t)
-
 	const invalidConfig1 = `
     listen_address:
     buffer_space: 256
@@ -147,71 +145,71 @@ func TestLoadFilesValidateOnce(t *testing.T) {
     `
 
 	fname1 := writeFile(t, invalidConfig1)
-	defer os.Remove(fname1)
+	defer func() {
+		require.NoError(t, os.Remove(fname1))
+	}()
 
 	fname2 := writeFile(t, invalidConfig2)
-	defer os.Remove(invalidConfig2)
+	defer func() {
+		require.NoError(t, os.Remove(fname2))
+	}()
 
 	// Either config by itself will not pass validation.
 	var cfg1 configuration
 	err := Load(fname1, &cfg1)
-	require.Error(err)
+	require.Error(t, err)
 
 	verr, ok := err.(ValidationError)
-	require.True(ok)
-	require.NotEmpty(verr.Error())
+	require.True(t, ok)
+	require.NotEmpty(t, verr.Error())
 
-	require.Equal(validator.ErrorArray{validator.ErrZeroValue}, verr.ErrForField("ListenAddress"))
-	require.Equal(validator.ErrorArray{validator.ErrZeroValue}, verr.ErrForField("Servers"))
+	require.Equal(t, validator.ErrorArray{validator.ErrZeroValue}, verr.ErrForField("ListenAddress"))
+	require.Equal(t, validator.ErrorArray{validator.ErrZeroValue}, verr.ErrForField("Servers"))
 
 	var cfg2 configuration
 	err = Load(fname2, &cfg2)
-	require.Error(err)
+	require.Error(t, err)
 
 	verr, ok = err.(ValidationError)
-	require.True(ok)
-	require.NotEmpty(verr.Error())
+	require.True(t, ok)
+	require.NotEmpty(t, verr.Error())
 
-	require.Equal(validator.ErrorArray{validator.ErrMin}, verr.ErrForField("BufferSpace"))
+	require.Equal(t, validator.ErrorArray{validator.ErrMin}, verr.ErrForField("BufferSpace"))
 
 	// But merging load has no error.
 	var mergedCfg configuration
 	err = loadFiles(&mergedCfg, []string{fname1, fname2})
-	require.NoError(err)
+	require.NoError(t, err)
 
-	require.Equal("localhost:8080", mergedCfg.ListenAddress)
-	require.Equal(256, mergedCfg.BufferSpace)
-	require.Equal([]string{"somewhere-else-zone1:8010"}, mergedCfg.Servers)
+	require.Equal(t, "localhost:8080", mergedCfg.ListenAddress)
+	require.Equal(t, 256, mergedCfg.BufferSpace)
+	require.Equal(t, []string{"somewhere-else-zone1:8010"}, mergedCfg.Servers)
 }
 
 func TestMissingFile(t *testing.T) {
-	require := require.New(t)
-
 	var cfg configuration
 	err := Load("./no-config.yaml", &cfg)
-	require.Error(err)
+	require.Error(t, err)
 }
 
 func TestInvalidYAML(t *testing.T) {
-	require := require.New(t)
-
 	var cfg configuration
 	err := Load("./config_test.go", &cfg)
-	require.Error(err)
+	require.Error(t, err)
 }
 
 func TestInvalidConfig(t *testing.T) {
-	require := require.New(t)
-
 	fname := writeFile(t, invalidConfig)
-	defer os.Remove(fname)
+	defer func() {
+		require.NoError(t, os.Remove(fname))
+	}()
 
 	var cfg configuration
 	err := Load(fname, &cfg)
-	require.Error(err)
+	require.Error(t, err)
 
 	verr, ok := err.(ValidationError)
-	require.True(ok)
+	require.True(t, ok)
 
 	errors := map[string]validator.ErrorArray{
 		"BufferSpace":   {validator.ErrMin},
@@ -222,97 +220,111 @@ func TestInvalidConfig(t *testing.T) {
 	for field, errs := range errors {
 		fieldErr := verr.ErrForField(field)
 		require.NotNil(t, fieldErr, "Could not find field level error for %s", field)
-		require.Equal(errs, fieldErr)
+		require.Equal(t, errs, fieldErr)
 	}
 }
 
 func TestExtendsConfig(t *testing.T) {
-	require := require.New(t)
-
 	fname := writeFile(t, goodConfig)
-	defer os.Remove(fname)
+	defer func() {
+		require.NoError(t, os.Remove(fname))
+	}()
 
 	extends := fmt.Sprintf(goodExtendsConfig, filepath.Base(fname))
 	extendsfn := writeFile(t, extends)
-	defer os.Remove(extendsfn)
+	defer func() {
+		require.NoError(t, os.Remove(extendsfn))
+	}()
 
 	var cfg configuration
 	err := Load(extendsfn, &cfg)
-	require.NoError(err)
+	require.NoError(t, err)
 
-	require.Equal("localhost:4385", cfg.ListenAddress)
-	require.Equal(512, cfg.BufferSpace)
-	require.Equal([]string{"somewhere-sjc2:8090", "somewhere-else-sjc2:8010"}, cfg.Servers)
-	require.Equal("v1", cfg.X.Y.Z.K1)
-	require.Equal("v2", cfg.X.Y.Z.K2)
+	require.Equal(t, "localhost:4385", cfg.ListenAddress)
+	require.Equal(t, 512, cfg.BufferSpace)
+	require.Equal(t, []string{"somewhere-sjc2:8090", "somewhere-else-sjc2:8010"}, cfg.Servers)
+	require.Equal(t, "v1", cfg.X.Y.Z.K1)
+	require.Equal(t, "v2", cfg.X.Y.Z.K2)
 
-	require.Equal("val1", cfg.X.Y.V)
+	require.Equal(t, "val1", cfg.X.Y.V)
 }
 
 func TestExtendsConfigDeep(t *testing.T) {
-	require := require.New(t)
-
 	fname := writeFile(t, goodConfig)
-	defer os.Remove(fname)
+	defer func() {
+		require.NoError(t, os.Remove(fname))
+	}()
 
 	extends := fmt.Sprintf(goodExtendsConfig, filepath.Base(fname))
 	extendsfn := writeFile(t, extends)
-	defer os.Remove(extendsfn)
+	defer func() {
+		require.NoError(t, os.Remove(extendsfn))
+	}()
 
 	extends2 := fmt.Sprintf(goodYetAnotherExtendsConfig, filepath.Base(extends))
 	extendsfn2 := writeFile(t, extends2)
-	defer os.Remove(extendsfn2)
+	defer func() {
+		require.NoError(t, os.Remove(extendsfn2))
+	}()
 
 	var cfg configuration
 	err := Load(extendsfn2, &cfg)
-	require.NoError(err)
+	require.NoError(t, err)
 
-	require.Equal("localhost:4385", cfg.ListenAddress)
-	require.Equal(256, cfg.BufferSpace)
-	require.Equal([]string{"somewhere-sjc3:8090", "somewhere-else-sjc3:8010"}, cfg.Servers)
+	require.Equal(t, "localhost:4385", cfg.ListenAddress)
+	require.Equal(t, 256, cfg.BufferSpace)
+	require.Equal(t, []string{"somewhere-sjc3:8090", "somewhere-else-sjc3:8010"}, cfg.Servers)
 }
 
 func TestExtendsConfigCircularRef(t *testing.T) {
-	require := require.New(t)
-
 	f1, err := os.CreateTemp("", "configtest")
-	require.NoError(err)
+	require.NoError(t, err)
 
 	f2, err := os.CreateTemp("", "configtest")
-	require.NoError(err)
+	require.NoError(t, err)
 
 	f3, err := os.CreateTemp("", "configtest")
-	require.NoError(err)
+	require.NoError(t, err)
 
-	defer f1.Close()
-	defer f2.Close()
-	defer f3.Close()
+	defer func() {
+		require.NoError(t, f1.Close())
+	}()
+	defer func() {
+		require.NoError(t, f2.Close())
+	}()
+	defer func() {
+		require.NoError(t, f3.Close())
+	}()
 
 	_, err = f1.Write([]byte(goodConfig))
-	require.NoError(err)
-	defer os.Remove(f1.Name())
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, os.Remove(f1.Name()))
+	}()
 
 	extends := fmt.Sprintf(goodExtendsConfig, filepath.Base(f3.Name()))
 	_, err = f2.Write([]byte(extends))
-	require.NoError(err)
+	require.NoError(t, err)
 
-	defer os.Remove(f2.Name())
+	defer func() {
+		require.NoError(t, os.Remove(f2.Name()))
+	}()
 
 	extends2 := fmt.Sprintf(goodYetAnotherExtendsConfig, filepath.Base(f2.Name()))
 	_, err = f3.Write([]byte(extends2))
-	require.NoError(err)
+	require.NoError(t, err)
 
-	defer os.Remove(f3.Name())
+	defer func() {
+		require.NoError(t, os.Remove(f3.Name()))
+	}()
 
 	var cfg configuration
 	err = Load(f3.Name(), &cfg)
-	require.Error(err)
-	require.Contains(err.Error(), "cyclic reference in configuration extends detected")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cyclic reference in configuration extends detected")
 }
 
 func TestResolveExtends(t *testing.T) {
-	require := require.New(t)
-
 	tests := []struct {
 		fpath    string
 		extends  map[string]string
@@ -356,7 +368,7 @@ func TestResolveExtends(t *testing.T) {
 			return target, nil
 		}
 		filenames, err := resolveExtends(tt.fpath, fn)
-		require.Equal(tt.err, err)
-		require.Equal(tt.expected, filenames)
+		require.Equal(t, tt.err, err)
+		require.Equal(t, tt.expected, filenames)
 	}
 }

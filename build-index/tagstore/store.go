@@ -28,6 +28,7 @@ import (
 	"github.com/uber/kraken/lib/persistedretry/writeback"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/closers"
 
 	"github.com/uber-go/tally"
 )
@@ -131,7 +132,7 @@ func (s *tagStore) resolveFromDisk(tag string) (core.Digest, error) {
 		}
 		return core.Digest{}, fmt.Errorf("fs: %s", err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 	var b bytes.Buffer
 	if _, err := io.Copy(&b, f); err != nil {
 		return core.Digest{}, fmt.Errorf("copy from fs: %s", err)

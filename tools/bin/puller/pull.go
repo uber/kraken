@@ -24,13 +24,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uber/kraken/utils/errutil"
-	"github.com/uber/kraken/utils/log"
-
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/schema1"
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/opencontainers/go-digest"
+	"github.com/uber/kraken/utils/closers"
+	"github.com/uber/kraken/utils/errutil"
+	"github.com/uber/kraken/utils/log"
 )
 
 // guessDigest returns digest from the URL.
@@ -107,7 +107,7 @@ func pullManifest(client http.Client, source string, name string, reference stri
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 
 	if resp.StatusCode == 404 {
 		return nil, fmt.Errorf("manifest not found")
@@ -135,17 +135,25 @@ func getLayerDigestsFromManifest(manifest *distribution.Manifest) ([]string, err
 	// Get layers from manifest
 	switch (*manifest).(type) {
 	case *schema1.SignedManifest:
-		fsLayers := (*manifest).(*schema1.SignedManifest).FSLayers
+		signedManifest, ok := (*manifest).(*schema1.SignedManifest)
+		if !ok {
+			return nil, fmt.Errorf("failed to cast to SignedManifest")
+		}
+		fsLayers := signedManifest.FSLayers
 		for _, fsLayer := range fsLayers {
 			digests = append(digests, fsLayer.BlobSum.String())
 		}
 	case *schema2.DeserializedManifest:
-		layerDescriptors := (*manifest).(*schema2.DeserializedManifest).Layers
+		deserializedManifest, ok := (*manifest).(*schema2.DeserializedManifest)
+		if !ok {
+			return nil, fmt.Errorf("failed to cast to DeserializedManifest")
+		}
+		layerDescriptors := deserializedManifest.Layers
 		for _, descriptor := range layerDescriptors {
 			digests = append(digests, descriptor.Digest.String())
 		}
 		// for schema2, we also need a config layer
-		config := (*manifest).(*schema2.DeserializedManifest).Config
+		config := deserializedManifest.Config
 		digests = append(digests, config.Digest.String())
 	default:
 		mt, _, err := (*manifest).Payload()
@@ -165,7 +173,7 @@ func pullLayer(client http.Client, source, name string, layerDigest string) erro
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer closers.Close(resp.Body)
 
 	if resp.StatusCode != 200 {
 		respDump, errDump := httputil.DumpResponse(resp, true)

@@ -20,21 +20,16 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/uber/kraken/core"
-
 	"github.com/stretchr/testify/require"
+	"github.com/uber/kraken/core"
 )
 
 func TestProducerCreatesAndReusesFile(t *testing.T) {
-	require := require.New(t)
-
 	h := core.InfoHashFixture()
 	peer1 := core.PeerIDFixture()
 	peer2 := core.PeerIDFixture()
 
-	dir, err := os.MkdirTemp("", "")
-	require.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	config := Config{
 		Enabled: true,
@@ -50,45 +45,45 @@ func TestProducerCreatesAndReusesFile(t *testing.T) {
 
 	// First producer should create the file.
 	p, err := NewProducer(config)
-	require.NoError(err)
+	require.NoError(t, err)
 	for _, e := range events[:2] {
 		p.Produce(e)
 	}
-	require.NoError(p.Close())
+	require.NoError(t, p.Close())
 
 	// Second producer should reuse the existing file.
 	p, err = NewProducer(config)
-	require.NoError(err)
+	require.NoError(t, err)
 	for _, e := range events[2:] {
 		p.Produce(e)
 	}
-	require.NoError(p.Close())
+	require.NoError(t, p.Close())
 
 	f, err := os.Open(config.LogPath)
-	require.NoError(err)
-	defer f.Close()
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, f.Close())
+	}()
 
 	var results []*Event
 	s := bufio.NewScanner(f)
 	s.Split(bufio.ScanLines)
 	for s.Scan() {
 		e := new(Event)
-		require.NoError(json.Unmarshal(s.Bytes(), e))
+		require.NoError(t, json.Unmarshal(s.Bytes(), e))
 		results = append(results, e)
 	}
 
-	require.Equal(StripTimestamps(events), StripTimestamps(results))
+	require.Equal(t, StripTimestamps(events), StripTimestamps(results))
 }
 
 func TestDisabledProducerNoops(t *testing.T) {
-	require := require.New(t)
-
 	h := core.InfoHashFixture()
 	peer1 := core.PeerIDFixture()
 	peer2 := core.PeerIDFixture()
 
 	p, err := NewProducer(Config{})
-	require.NoError(err)
+	require.NoError(t, err)
 
 	p.Produce(ReceivePieceEvent(h, peer1, peer2, 1))
 }

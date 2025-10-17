@@ -27,6 +27,9 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/hrw"
 	"github.com/uber/kraken/lib/store/base"
+	"github.com/uber/kraken/utils/closers"
+	"github.com/uber/kraken/utils/log"
+	"go.uber.org/zap"
 )
 
 // CAStore allows uploading / caching content-addressable files.
@@ -83,13 +86,17 @@ func (s *CAStore) MoveUploadFileToCache(uploadName, cacheName string) error {
 	if err != nil {
 		return err
 	}
-	defer s.DeleteUploadFile(uploadName)
+	defer func() {
+		if err := s.DeleteUploadFile(uploadName); err != nil {
+			log.Desugar().Error("Failed to delete upload file", zap.Error(err), zap.String("upload_name", uploadName))
+		}
+	}()
 
 	f, err := s.uploadStore.newFileOp().GetFileReader(uploadName, s.uploadStore.readPartSize)
 	if err != nil {
 		return fmt.Errorf("get file reader %s: %s", uploadName, err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 	if err := s.verify(f, cacheName); err != nil {
 		return fmt.Errorf("verify digest: %s", err)
 	}
@@ -113,13 +120,17 @@ func (s *CAStore) WriteCacheFile(name string, write func(w FileReadWriter) error
 	if err := s.CreateUploadFile(tmp, 0); err != nil {
 		return fmt.Errorf("create upload file: %s", err)
 	}
-	defer s.DeleteUploadFile(tmp)
+	defer func() {
+		if err := s.DeleteUploadFile(tmp); err != nil {
+			log.Desugar().Error("Failed to delete upload file", zap.Error(err), zap.String("upload_name", tmp))
+		}
+	}()
 
 	w, err := s.GetUploadFileReadWriter(tmp)
 	if err != nil {
 		return fmt.Errorf("get upload writer: %s", err)
 	}
-	defer w.Close()
+	defer closers.Close(w)
 
 	if err := write(w); err != nil {
 		return err

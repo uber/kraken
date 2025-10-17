@@ -332,7 +332,9 @@ func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) erro
 	if err != nil {
 		return err
 	}
-	w.Write(raw)
+	if _, err := w.Write(raw); err != nil {
+		return fmt.Errorf("write response: %s", err)
+	}
 	return nil
 }
 
