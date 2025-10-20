@@ -302,7 +302,7 @@ func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
 
 	client, err := s.backends.GetClient(prefix)
 	if err != nil {
-		log.With("prefix", prefix).Errorf("Failed to get backend client for list: %s", err)
+		log.With("prefix", prefix, "error", err).Error("Failed to get backend client for list")
 		return handler.Errorf("backend manager: %s", err)
 	}
 
