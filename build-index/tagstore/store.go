@@ -89,7 +89,7 @@ func (s *tagStore) Put(tag string, d core.Digest, writeBackDelay time.Duration) 
 		return fmt.Errorf("write tag to disk: %s", err)
 	}
 	if _, err := s.fs.SetCacheFileMetadata(tag, metadata.NewPersist(true)); err != nil {
-		log.With("tag", tag, "digest", d.String()).Errorf("Failed to set persist metadata: %s", err)
+		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to set persist metadata")
 		return fmt.Errorf("set persist metadata: %s", err)
 	}
 
