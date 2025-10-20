@@ -187,7 +187,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 
 	deps, err := s.depResolver.Resolve(tag, d)
 	if err != nil {
-		log.With("tag", tag, "digest", d.String()).Errorf("Failed to resolve dependencies: %s", err)
+		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to resolve dependencies")
 		return fmt.Errorf("resolve dependencies: %s", err)
 	}
 
