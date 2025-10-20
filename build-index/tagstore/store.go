@@ -102,7 +102,7 @@ func (s *tagStore) Put(tag string, d core.Digest, writeBackDelay time.Duration) 
 		}
 		log.With("tag", tag, "digest", d.String()).Info("Tag written to backend synchronously")
 	} else {
-		log.With("tag", tag, "digest", d.String(), "delay", writeBackDelay).Debug("Adding async write-back task for tag")
+		log.With("tag", tag, "digest", d.String(), "writeback_delay", writeBackDelay).Debug("Adding async write-back task for tag")
 		if err := s.writeBackManager.Add(task); err != nil {
 			log.With("tag", tag, "digest", d.String()).Errorf("Failed to add write-back task: %s", err)
 			return fmt.Errorf("add write-back task: %s", err)
