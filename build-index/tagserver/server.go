@@ -262,6 +262,7 @@ func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
 	log.With("tag", tag, "digest", d.String()).Debug("Successfully retrieved tag")
 
 	if _, err := io.WriteString(w, d.String()); err != nil {
+		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to write digest")
 		return handler.Errorf("write digest: %s", err)
 	}
 	return nil
