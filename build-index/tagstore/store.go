@@ -97,7 +97,7 @@ func (s *tagStore) Put(tag string, d core.Digest, writeBackDelay time.Duration) 
 	if s.config.WriteThrough {
 		log.With("tag", tag, "digest", d.String()).Debug("Using write-through mode for tag")
 		if err := s.writeBackManager.SyncExec(task); err != nil {
-			log.With("tag", tag, "digest", d.String()).Errorf("Failed to sync write-back tag to backend: %s", err)
+			log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to sync write-back tag to backend")
 			return fmt.Errorf("sync exec write-back task: %s", err)
 		}
 		log.With("tag", tag, "digest", d.String()).Info("Tag written to backend synchronously")
