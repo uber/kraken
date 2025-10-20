@@ -478,7 +478,7 @@ func (s *Server) putTag(tag string, d core.Digest, deps core.DigestList) error {
 	log.With("tag", tag, "digest", d.String()).Debug("All dependencies validated successfully")
 
 	if err := s.store.Put(tag, d, 0); err != nil {
-		log.With("tag", tag, "digest", d.String()).Errorf("Failed to store tag: %s", err)
+		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to store tag")
 		return handler.Errorf("storage: %s", err)
 	}
 
