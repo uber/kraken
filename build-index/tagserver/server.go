@@ -495,7 +495,7 @@ func (s *Server) putTag(tag string, d core.Digest, deps core.DigestList) error {
 		delay += s.config.DuplicatePutStagger
 		client := s.provider.Provide(addr)
 		if err := client.DuplicatePut(tag, d, delay); err != nil {
-			log.With("tag", tag, "digest", d.String(), "neighbor", addr, "delay", delay).Errorf("Failed to duplicate put to neighbor: %s", err)
+			log.With("tag", tag, "digest", d.String(), "neighbor", addr, "delay", delay, "error", err).Error("Failed to duplicate put to neighbor")
 		} else {
 			successes++
 			log.With("tag", tag, "digest", d.String(), "neighbor", addr, "delay", delay).Debug("Successfully duplicated put to neighbor")
