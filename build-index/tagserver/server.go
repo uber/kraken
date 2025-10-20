@@ -231,7 +231,7 @@ func (s *Server) duplicatePutTagHandler(w http.ResponseWriter, r *http.Request) 
 	log.With("tag", tag, "digest", d.String(), "delay", delay).Debug("Received duplicate put request from neighbor")
 
 	if err := s.store.Put(tag, d, delay); err != nil {
-		log.With("tag", tag, "digest", d.String(), "delay", delay).Errorf("Failed to store tag from duplicate put: %s", err)
+		log.With("tag", tag, "digest", d.String(), "delay", delay, "error", err).Error("Failed to store tag from duplicate put")
 		return handler.Errorf("storage: %s", err)
 	}
 
