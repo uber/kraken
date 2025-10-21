@@ -102,10 +102,11 @@ func setupCosignTest(t *testing.T) *cosignTestSetup {
 
 	cleanupFunc := func() {
 		cleanup()
-		os.RemoveAll(tempDir)
-		// Clean up the specific signature files created during this test
+		// Clean up temporary directory and signature files
+		// Errors are ignored as these are cleanup operations
+		os.RemoveAll(tempDir) //nolint:errcheck
 		for _, sigFile := range signatureFiles {
-			os.Remove(sigFile)
+			os.Remove(sigFile) //nolint:errcheck
 		}
 	}
 
@@ -189,7 +190,9 @@ func generateCosignKeyPair(keyPath, certPath string) error {
 	if err != nil {
 		return err
 	}
-	defer keyFile.Close()
+	defer func() {
+		keyFile.Close() //nolint:errcheck
+	}()
 
 	keyPEM := pem.EncodeToMemory(&pem.Block{
 		Type:  "RSA PRIVATE KEY",
@@ -205,7 +208,9 @@ func generateCosignKeyPair(keyPath, certPath string) error {
 	if err != nil {
 		return err
 	}
-	defer certFile.Close()
+	defer func() {
+		certFile.Close() //nolint:errcheck
+	}()
 
 	certPEM := pem.EncodeToMemory(&pem.Block{
 		Type:  "CERTIFICATE",
@@ -251,7 +256,9 @@ func signManifestWithCosign(repo, tag string, digest core.Digest, keyPath string
 	if err != nil {
 		return "", err
 	}
-	defer signatureFile.Close()
+	defer func() {
+		signatureFile.Close() //nolint:errcheck
+	}()
 
 	// Write a mock signature
 	_, err = fmt.Fprintf(signatureFile, "mock-signature-for-%s", digest.Hex())
@@ -299,7 +306,7 @@ func TestCosignIntegration_VerificationFailure(t *testing.T) {
 
 	// Remove the signature file to simulate verification failure
 	signaturePath := fmt.Sprintf("%s.sig", setup.manifestDigest.Hex())
-	os.Remove(signaturePath)
+	os.Remove(signaturePath) //nolint:errcheck
 
 	// Create a new verification function that will deny
 	verification := func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error) {
