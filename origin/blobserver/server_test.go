@@ -192,6 +192,26 @@ func TestStatHandlerReturnSize(t *testing.T) {
 	require.Equal(int64(256), bi.Size)
 }
 
+func TestPrefetchHandler(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+	defer s.cleanup()
+
+	client := cp.Provide(s.host)
+	blob := core.SizedBlobFixture(256, 8)
+	namespace := core.TagFixture()
+
+	require.NoError(client.TransferBlob(blob.Digest, bytes.NewReader(blob.Content)))
+
+	ensureHasBlob(t, cp.Provide(s.host), namespace, blob)
+
+	err := cp.Provide(master1).PrefetchBlob(namespace, blob.Digest)
+	require.NoError(err)
+}
+
 func TestDownloadBlobInvalidParam(t *testing.T) {
 	digest := core.DigestFixture()
 
