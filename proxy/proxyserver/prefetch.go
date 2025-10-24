@@ -231,7 +231,6 @@ func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace st
 				"min_threshold", ph.minBlobSizeBytes,
 			).Infof("Skipping blob: size below minimum threshold")
 			ph.metrics.Counter("blobs_skipped_too_small").Inc(1)
-			ph.metrics.Counter("bytes_skipped").Inc(b.size)
 			continue
 		}
 		if b.size > ph.maxBlobSizeBytes {
@@ -241,7 +240,6 @@ func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace st
 				"max_threshold", ph.maxBlobSizeBytes,
 			).Infof("Skipping blob: size exceeds maximum threshold")
 			ph.metrics.Counter("blobs_skipped_too_large").Inc(1)
-			ph.metrics.Counter("bytes_skipped").Inc(b.size)
 			continue
 		}
 
