@@ -31,11 +31,19 @@ const (
 
 // PrefetchHandler handles prefetch requests.
 type PrefetchHandler struct {
-	clusterClient blobclient.ClusterClient
-	tagClient     tagclient.Client
-	tagParser     TagParser
-	metrics       tally.Scope
-	synchronous   bool
+	clusterClient    blobclient.ClusterClient
+	tagClient        tagclient.Client
+	tagParser        TagParser
+	metrics          tally.Scope
+	synchronous      bool
+	minBlobSizeBytes int64 // Minimum size in bytes for a blob to be prefetched. 0 means no minimum.
+	maxBlobSizeBytes int64 // Maximum size in bytes for a blob to be prefetched. 0 means no maximum.
+}
+
+// blobInfo holds digest and size information for a blob.
+type blobInfo struct {
+	digest core.Digest
+	size   int64
 }
 
 // Request and response payloads.
@@ -83,16 +91,27 @@ func NewPrefetchHandler(
 	tagParser TagParser,
 	metrics tally.Scope,
 	synchronous bool,
+	minBlobSizeBytes int64,
+	maxBlobSizeBytes int64,
 ) *PrefetchHandler {
 	if tagParser == nil {
 		tagParser = &DefaultTagParser{}
 	}
+	// Apply defaults if not configured
+	if minBlobSizeBytes == 0 {
+		minBlobSizeBytes = int64(DefaultPrefetchMinBlobSize)
+	}
+	if maxBlobSizeBytes == 0 {
+		maxBlobSizeBytes = int64(DefaultPrefetchMaxBlobSize)
+	}
 	return &PrefetchHandler{
-		clusterClient: client,
-		tagClient:     tagClient,
-		tagParser:     tagParser,
-		metrics:       metrics.SubScope("prefetch"),
-		synchronous:   synchronous,
+		clusterClient:    client,
+		tagClient:        tagClient,
+		tagParser:        tagParser,
+		metrics:          metrics.SubScope("prefetch"),
+		synchronous:      synchronous,
+		minBlobSizeBytes: minBlobSizeBytes,
+		maxBlobSizeBytes: maxBlobSizeBytes,
 	}
 }
 
@@ -180,7 +199,7 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Process manifest (ManifestList or single Manifest)
-	size, digests, err := ph.processManifest(logger, namespace, buf.Bytes())
+	blobs, err := ph.processManifest(logger, namespace, buf.Bytes())
 	if err != nil {
 		writeInternalError(w, fmt.Sprintf("failed to process manifest: %s", err), reqBody.TraceId)
 		return
@@ -190,39 +209,61 @@ func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	writePrefetchResponse(w, reqBody.Tag, "prefetching initiated successfully", reqBody.TraceId)
 
 	if ph.synchronous {
-		ph.prefetchBlobs(logger, namespace, digests, size)
+		ph.prefetchBlobs(logger, namespace, blobs)
 	} else {
 		// Prefetch blobs asynchronously.
-		go ph.prefetchBlobs(logger, namespace, digests, size)
+		go ph.prefetchBlobs(logger, namespace, blobs)
 	}
 }
 
-// prefetchBlobs downloads blobs in parallel.
-func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace string, digests []core.Digest, size int64) {
+// prefetchBlobs downloads blobs in parallel, filtering by size threshold.
+func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace string, blobs []blobInfo) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var errList []error
 
-	for _, d := range digests {
+	for _, b := range blobs {
+		// Skip blobs that are outside the size range [min, max]
+		if b.size < ph.minBlobSizeBytes {
+			logger.With(
+				"digest", b.digest,
+				"size", b.size,
+				"min_threshold", ph.minBlobSizeBytes,
+			).Infof("Skipping blob: size below minimum threshold")
+			ph.metrics.Counter("blobs_skipped_too_small").Inc(1)
+			ph.metrics.Counter("bytes_skipped").Inc(b.size)
+			continue
+		}
+		if b.size > ph.maxBlobSizeBytes {
+			logger.With(
+				"digest", b.digest,
+				"size", b.size,
+				"max_threshold", ph.maxBlobSizeBytes,
+			).Infof("Skipping blob: size exceeds maximum threshold")
+			ph.metrics.Counter("blobs_skipped_too_large").Inc(1)
+			ph.metrics.Counter("bytes_skipped").Inc(b.size)
+			continue
+		}
+
 		wg.Add(1)
-		go func(digest core.Digest) {
+		go func(blob blobInfo) {
 			defer wg.Done()
 			blobStart := time.Now()
-			err := ph.clusterClient.DownloadBlob(namespace, digest, io.Discard)
+			err := ph.clusterClient.DownloadBlob(namespace, blob.digest, io.Discard)
 			blobDuration := time.Since(blobStart)
 			ph.metrics.Timer("blob_download_time").Record(blobDuration)
-			ph.metrics.Counter("bytes_downloaded").Inc(size)
+			ph.metrics.Counter("bytes_downloaded").Inc(blob.size)
 			if err != nil {
 				if serr, ok := err.(httputil.StatusError); ok && serr.Status == http.StatusAccepted {
 					return
 				}
 				mu.Lock()
-				errList = append(errList, fmt.Errorf("digest %s, namespace %s, error downloading blob: %w", digest, namespace, err))
+				errList = append(errList, fmt.Errorf("digest %s, namespace %s, error downloading blob: %w", blob.digest, namespace, err))
 				mu.Unlock()
 			} else {
 				ph.metrics.Counter("blobs_downloaded").Inc(1)
 			}
-		}(d)
+		}(b)
 	}
 
 	wg.Wait()
@@ -236,41 +277,40 @@ func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace st
 }
 
 // processManifest handles both ManifestLists and single Manifests.
-func (ph *PrefetchHandler) processManifest(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) (int64, []core.Digest, error) {
+func (ph *PrefetchHandler) processManifest(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) ([]blobInfo, error) {
 	// Attempt to process as a manifest list.
-	size, digests, err := ph.tryProcessManifestList(logger, namespace, manifestBytes)
-	if err == nil && len(digests) > 0 {
-		return size, digests, nil
+	blobs, err := ph.tryProcessManifestList(logger, namespace, manifestBytes)
+	if err == nil && len(blobs) > 0 {
+		return blobs, nil
 	}
 
 	// Fallback to single manifest.
 	var manifest schema2.Manifest
 	if err := json.NewDecoder(bytes.NewReader(manifestBytes)).Decode(&manifest); err != nil {
 		logger.With("namespace", namespace).Errorf("Failed to parse single manifest: %v", err)
-		return 0, nil, fmt.Errorf("invalid single manifest: %w", err)
+		return nil, fmt.Errorf("invalid single manifest: %w", err)
 	}
 	return ph.processLayers(manifest.Layers)
 }
 
 // tryProcessManifestList attempts to decode a manifest list.
-func (ph *PrefetchHandler) tryProcessManifestList(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) (int64, []core.Digest, error) {
+func (ph *PrefetchHandler) tryProcessManifestList(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) ([]blobInfo, error) {
 	var manifestList manifestlist.ManifestList
 	if err := json.NewDecoder(bytes.NewReader(manifestBytes)).Decode(&manifestList); err != nil || len(manifestList.Manifests) == 0 {
-		return 0, nil, fmt.Errorf("not a valid manifest list")
+		return nil, fmt.Errorf("not a valid manifest list")
 	}
 	logger.With("namespace", namespace).Info("Processing manifest list")
 	return ph.processManifestList(logger, namespace, manifestList)
 }
 
 // processManifestList processes a manifest list.
-func (ph *PrefetchHandler) processManifestList(logger *zap.SugaredLogger, namespace string, manifestList manifestlist.ManifestList) (int64, []core.Digest, error) {
-	var allDigests []core.Digest
-	size := int64(0)
+func (ph *PrefetchHandler) processManifestList(logger *zap.SugaredLogger, namespace string, manifestList manifestlist.ManifestList) ([]blobInfo, error) {
+	var allBlobs []blobInfo
 	for _, descriptor := range manifestList.Manifests {
 		manifestDigestHex := descriptor.Digest.Hex()
 		digest, err := core.NewSHA256DigestFromHex(manifestDigestHex)
 		if err != nil {
-			return 0, nil, fmt.Errorf("failed to parse manifest digest %s: %w", manifestDigestHex, err)
+			return nil, fmt.Errorf("failed to parse manifest digest %s: %w", manifestDigestHex, err)
 		}
 		buf := &bytes.Buffer{}
 		if err := ph.clusterClient.DownloadBlob(namespace, digest, buf); err != nil {
@@ -279,29 +319,29 @@ func (ph *PrefetchHandler) processManifestList(logger *zap.SugaredLogger, namesp
 		}
 		var manifest schema2.Manifest
 		if err := json.NewDecoder(buf).Decode(&manifest); err != nil {
-			return 0, nil, fmt.Errorf("failed to parse manifest: %w", err)
+			return nil, fmt.Errorf("failed to parse manifest: %w", err)
 		}
-		l, digests, err := ph.processLayers(manifest.Layers)
+		blobs, err := ph.processLayers(manifest.Layers)
 		if err != nil {
-			return 0, nil, err
+			return nil, err
 		}
-		size += l
-		allDigests = append(allDigests, digests...)
+		allBlobs = append(allBlobs, blobs...)
 	}
-	return size, allDigests, nil
+	return allBlobs, nil
 }
 
-// processLayers converts layer descriptors to a list of core.Digest.
-func (ph *PrefetchHandler) processLayers(layers []distribution.Descriptor) (int64, []core.Digest, error) {
-	digests := make([]core.Digest, 0, len(layers))
-	l := int64(0)
+// processLayers converts layer descriptors to a list of blobInfo with size information.
+func (ph *PrefetchHandler) processLayers(layers []distribution.Descriptor) ([]blobInfo, error) {
+	blobs := make([]blobInfo, 0, len(layers))
 	for _, layer := range layers {
 		digest, err := core.NewSHA256DigestFromHex(layer.Digest.Hex())
 		if err != nil {
-			return 0, nil, fmt.Errorf("invalid layer digest: %w", err)
+			return nil, fmt.Errorf("invalid layer digest: %w", err)
 		}
-		digests = append(digests, digest)
-		l += layer.Size
+		blobs = append(blobs, blobInfo{
+			digest: digest,
+			size:   layer.Size,
+		})
 	}
-	return l, digests, nil
+	return blobs, nil
 }

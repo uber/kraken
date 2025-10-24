@@ -43,12 +43,12 @@ func New(
 	config Config,
 	client blobclient.ClusterClient,
 	tagClient tagclient.Client,
-	synchronous bool) *Server {
-
+	synchronous bool,
+) *Server {
 	return &Server{
 		stats,
 		NewPreheatHandler(client, synchronous),
-		NewPrefetchHandler(client, tagClient, &DefaultTagParser{}, stats, synchronous),
+		NewPrefetchHandler(client, tagClient, &DefaultTagParser{}, stats, synchronous, int64(config.PrefetchMinBlobSize), int64(config.PrefetchMaxBlobSize)),
 		config,
 	}
 }
