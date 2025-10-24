@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,14 @@ const (
 	StatusSuccess = "success"
 	StatusFailure = "failure"
 )
+
+// this is mounted from the host's `/opt/uber/jobcontroller/kraken-proxy/default/mnt/data/prefetch_config.json`
+const _configFilePath = "/var/cache/udocker/kraken-proxy/prefetch_config.json"
+
+type PrefetchHyperparams struct {
+	MinBlobSizeBytes int64 `json:"min_blob_size_bytes"`
+	MaxBlobSizeBytes int64 `json:"max_blob_size_bytes"`
+}
 
 // PrefetchHandler handles prefetch requests.
 type PrefetchHandler struct {
@@ -84,6 +93,37 @@ func (p *DefaultTagParser) ParseTag(tag string) (namespace, name string, err err
 	return parts[1], parts[2], nil
 }
 
+// optionally adjust the config without redeploying
+func overwriteConfig(min, max int64, logger *zap.SugaredLogger) (resMin, resMax int64) {
+	configFile, err := os.Open(_configFilePath)
+	if err != nil {
+		logger.Infof("Failed to open dynamic proxy prefetch config file at %s: %v", _configFilePath, err)
+		fmt.Printf("Failed to open dynamic proxy prefetch config file at %s: %v", _configFilePath, err)
+		return min, max
+	}
+
+	defer configFile.Close()
+	configData, err := io.ReadAll(configFile)
+	if err != nil {
+		logger.Infof("Failed to read proxy prefetch config file: %v", err)
+		fmt.Printf("Failed to read proxy prefetch config file: %v", err)
+		return min, max
+	}
+
+	var hyperparams PrefetchHyperparams
+	if err := json.Unmarshal(configData, &hyperparams); err != nil {
+		logger.Infof("Failed to unmarshal proxy prefetch hyperparameters: %v", err)
+		fmt.Printf("Failed to unmarshal proxy prefetch hyperparameters: %v", err)
+		return min, max
+	}
+
+	logger.Infof("Loading proxy prefetch hyperparameters: MinBlobSizeBytes=%d, MaxBlobSizeBytes=%d",
+		hyperparams.MinBlobSizeBytes, hyperparams.MaxBlobSizeBytes)
+	fmt.Printf("Loading proxy prefetch hyperparameters: MinBlobSizeBytes=%d, MaxBlobSizeBytes=%d",
+		hyperparams.MinBlobSizeBytes, hyperparams.MaxBlobSizeBytes)
+	return hyperparams.MinBlobSizeBytes, hyperparams.MaxBlobSizeBytes
+}
+
 // NewPrefetchHandler constructs a new PrefetchHandler.
 func NewPrefetchHandler(
 	client blobclient.ClusterClient,
@@ -104,6 +144,10 @@ func NewPrefetchHandler(
 	if maxBlobSizeBytes == 0 {
 		maxBlobSizeBytes = int64(DefaultPrefetchMaxBlobSize)
 	}
+
+	logger := log.With("dynamic", "true")
+	minBlobSizeBytes, maxBlobSizeBytes = overwriteConfig(minBlobSizeBytes, maxBlobSizeBytes, logger)
+
 	return &PrefetchHandler{
 		clusterClient:    client,
 		tagClient:        tagClient,
