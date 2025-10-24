@@ -34,6 +34,13 @@ server:
   listener:
     net: unix
     addr: /tmp/kraken-proxy.sock
+  # Minimum size for a blob to be prefetched. Default: 0 (no minimum).
+  # Supports units: B, KB, MB, GB, TB (or K, M, G, T)
+  # Examples: "50M", "100MB", "1G", "500M"
+  prefetch_min_blob_size: 0
+  # Maximum size for a blob to be prefetched. Default: 50G.
+  # Examples: "10G", "50GB", "100G"
+  prefetch_max_blob_size: "50G"
 
 registry:
   docker:
