@@ -43,6 +43,10 @@ server {
     proxy_cache_valid   200 5m;
     proxy_cache_valid   any 1s;
     proxy_cache_lock    on;
+
+	# Use metainfo timeout for these operations
+    proxy_read_timeout {{.metainfo_timeout}};
+    proxy_send_timeout {{.metainfo_timeout}};
   }
 }
 `
