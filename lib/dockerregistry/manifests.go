@@ -22,6 +22,7 @@ import (
 
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/store"
@@ -39,15 +40,18 @@ const (
 type manifests struct {
 	transferer   transfer.ImageTransferer
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)
+	metrics      tally.Scope
 }
 
 func newManifests(
 	transferer transfer.ImageTransferer,
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
+	metrics tally.Scope,
 ) *manifests {
 	return &manifests{
 		transferer:   transferer,
 		verification: verification,
+		metrics:      metrics,
 	}
 }
 
@@ -130,14 +134,26 @@ func (t *manifests) verify(
 	decision, err := t.verification(repo, digest, blob)
 	if err != nil {
 		log.With("repo", repo, "digest", digest).Errorf("Error while performing image validation %s", err)
+		t.metrics.Tagged(map[string]string{
+			"repo":   repo,
+			"digest": digest.String(),
+		}).Counter("verification_error").Inc(1)
 		return false, err
 	}
 
 	switch decision {
 	case DecisionAllow:
+		t.metrics.Tagged(map[string]string{
+			"repo":   repo,
+			"digest": digest.String(),
+		}).Counter("verification_success").Inc(1)
 		return true, nil
 	case DecisionDeny:
 		log.With("repo", repo, "digest", digest).Warnf("Verification failed %s", path)
+		t.metrics.Tagged(map[string]string{
+			"repo":   repo,
+			"digest": digest.String(),
+		}).Counter("verification_failure").Inc(1)
 		return false, nil
 	case DecisionSkip:
 		log.With("repo", repo, "digest", digest).Debugf("Verification skipped for %s", path)

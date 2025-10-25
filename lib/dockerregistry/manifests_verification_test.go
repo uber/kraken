@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/dockerutil"
@@ -58,7 +59,7 @@ func buildDriverWithVerification(t *testing.T, decision SignatureVerificationDec
 		require.Equal(t, manifestDigest, vDigest)
 		return decision, retErr
 	}
-	sd := NewReadWriteStorageDriver(Config{}, td.cas, td.transferer, verif)
+	sd := NewReadWriteStorageDriver(Config{}, td.cas, td.transferer, verif, tally.NoopScope)
 
 	// Path that triggers manifests.getDigest → verify
 	path := genManifestTagCurrentLinkPath(repo, tag, manifestDigest.Hex())
