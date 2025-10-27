@@ -16,6 +16,7 @@ package store
 import (
 	"fmt"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -127,18 +128,25 @@ func (m *cleanupManager) stop() {
 	m.stopOnce.Do(func() { close(m.stopc) })
 }
 
+type fInfo struct {
+	name         string
+	accessTime   time.Time
+	downloadTime time.Time
+	size         int64
+}
+
 // cleanup cleans op from idle or expired files and returns its size BEFORE cleanup.
 // It works in one of two possible modes:
 //  1. tti + ttl based cleanup - the default.
 //  2. aggressive cleanup - triggered on high disk usage. By default, it is ttl- and threshold-based.
 //     However, it can also be custom policy- and threshold-based, when a `customPolicy` and a `config.AggressiveLowerThreshold` are provided.
-//     Then the cache is cleaned until the lower threshold is reached, prioritizing blobs for deletion based on the `customPolicy`.
-func (m *cleanupManager) cleanup(op base.FileOp, config CleanupConfig, customPolicy func()) (usage int64, err error) {
+//     Then the cache is cleaned until the lower threshold is reached, prioritizing blobs for deletion based on the `customPolicy`, which is a fn passed to [slices.SortFunc].
+func (m *cleanupManager) cleanup(op base.FileOp, config CleanupConfig, customPolicy func(a, b fInfo) int) (usage int64, err error) {
 	shouldAggro := m.shouldAggro(op, config, diskspaceutil.Usage)
 	customPolicyBasedCleanup := shouldAggro && customPolicy != nil && config.AggressiveLowerThreshold != 0
 
 	if customPolicyBasedCleanup {
-		return m.customPolicyBasedCleanup()
+		return m.customPolicyBasedCleanup(op, config, customPolicy, diskspaceutil.Usage)
 	}
 
 	ttl := config.TTL
@@ -151,9 +159,62 @@ func (m *cleanupManager) cleanup(op base.FileOp, config CleanupConfig, customPol
 	return m.ttlBasedCleanup(op, config.TTI, ttl, lowerThreshold, diskspaceutil.Usage)
 }
 
-func (m *cleanupManager) customPolicyBasedCleanup() (usage int64, err error) {
-	// will be implemented in the next PR
-	return
+func (m *cleanupManager) customPolicyBasedCleanup(op base.FileOp, config CleanupConfig, customPolicy func(a, b fInfo) int, diskUsageFn diskUsageFn) (usage int64, err error) {
+	names, err := op.ListNames()
+	if err != nil {
+		return 0, fmt.Errorf("list names: %s", err)
+	}
+
+	var fInfos []fInfo
+	var totalUsage int64
+	for _, name := range names {
+		fStat, err := op.GetFileStat(name)
+		if err != nil {
+			log.With("name", name).Errorf("Error getting file stat: %s", err)
+			continue
+		}
+		fInfo := fInfo{
+			name:         name,
+			downloadTime: fStat.ModTime(),
+			size:         fStat.Size(),
+		}
+		totalUsage += fStat.Size()
+
+		var accessTime metadata.LastAccessTime
+		if err := op.GetFileMetadata(name, &accessTime); os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			log.With("name", name).Errorf("Error getting file metadata: %s", err)
+			continue
+		}
+		fInfo.accessTime = accessTime.Time
+		fInfos = append(fInfos, fInfo)
+	}
+
+	slices.SortFunc(fInfos, customPolicy)
+
+	dInfo, err := diskUsageFn()
+	if err != nil {
+		return 0, fmt.Errorf("get disk usage info %s: %s", op, err)
+	}
+
+	minBytes := dInfo.TotalBytes * uint64(config.AggressiveLowerThreshold) / 100
+
+	remainDeleteBytes := int64(dInfo.TotalBytes) - int64(minBytes)
+	for _, file := range fInfos {
+		if remainDeleteBytes <= 0 {
+			break
+		}
+		err := op.DeleteFile(file.name)
+		if err != nil && err != base.ErrFilePersisted {
+			log.With("name", file.name).Errorf("Error deleting expired file: %s", err)
+		}
+		if err == nil {
+			remainDeleteBytes -= file.size
+		}
+	}
+	return totalUsage, nil
 }
 
 func (m *cleanupManager) ttlBasedCleanup(
