@@ -270,3 +270,52 @@ func TestCleanupManagerAggressive(t *testing.T) {
 		return diskspaceutil.UsageInfo{}, errors.New("fake error")
 	}))
 }
+
+func TestCachedInAgentPolicy(t *testing.T) {
+	now := time.Now()
+	for name, tt := range map[string]struct {
+		left    fInfo
+		right   fInfo
+		wantRes int
+	}{
+		"left downloaded by consumer, right is not": {
+			left: fInfo{
+				downloadTime: now.Add(-1 * time.Minute),
+				accessTime:   now,
+			},
+			right: fInfo{
+				downloadTime: now,
+				accessTime:   now.Add(time.Second / 10),
+			},
+			wantRes: -1,
+		},
+		"left for sure in agent, right is not": {
+			left: fInfo{
+				downloadTime: now.Add(-46 * time.Minute),
+				accessTime:   now,
+			},
+			right: fInfo{
+				downloadTime: now.Add(-44 * time.Minute),
+				accessTime:   now,
+			},
+			wantRes: -1,
+		},
+		"no heuristic worked out, LRU policy used, right is more recently used": {
+			left: fInfo{
+				downloadTime: now.Add(-10 * time.Minute),
+				accessTime:   now.Add(-1 * time.Minute),
+			},
+			right: fInfo{
+				downloadTime: now.Add(-10 * time.Minute),
+				accessTime:   now,
+			},
+			wantRes: int(-1 * time.Minute),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require := require.New(t)
+			require.Equal(tt.wantRes, cachedInAgentPolicy(tt.left, tt.right))
+			require.Equal(-tt.wantRes, cachedInAgentPolicy(tt.right, tt.left))
+		})
+	}
+}

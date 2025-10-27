@@ -111,7 +111,7 @@ func (m *cleanupManager) addJob(tag string, config CleanupConfig, op base.FileOp
 			select {
 			case <-ticker.C:
 				log.Debugf("Performing cleanup of %s", op)
-				usage, err := m.cleanup(op, config, nil)
+				usage, err := m.cleanup(op, config, cachedInAgentPolicy)
 				if err != nil {
 					log.Errorf("Error scanning %s: %s", op, err)
 				}
@@ -133,6 +133,53 @@ type fInfo struct {
 	accessTime   time.Time
 	downloadTime time.Time
 	size         int64
+}
+
+// cachedInAgentPolicy is a custom cleanup policy that prioritizes discarding blobs already distributed to agents.
+// cachedInAgentPolicy is passed to [slices.SortFunc]
+func cachedInAgentPolicy(left, right fInfo) int {
+	// For context, the order when downloading a file is:
+	// 1. Upon downloading the last byte of a file, its download time is set.
+	// 2. The application logic sets the access time.
+	// 3. no-op - The file is moved from the upload dir to the upload cache, but this changes neither the access nor download times.
+	// 4. [optional] File is downloaded by a consumer (proxy or agent) and the access time is updated.
+
+	if isDownloadedByConsumer(left) && !isDownloadedByConsumer(right) {
+		return -1
+	}
+	if !isDownloadedByConsumer(left) && isDownloadedByConsumer(right) {
+		return 1
+	}
+	// At this point, both files must be downloaded by a consumer (proxy/agent).
+
+	// The ifs below check if one file is for sure cached by an agent, while the other isn't.
+	if forSureInAgent(left) && !forSureInAgent(right) {
+		return -1
+	}
+	if !forSureInAgent(left) && forSureInAgent(right) {
+		return 1
+	}
+
+	// If none of the heuristics above work out, we default to a basic LRU cache, keeping the most recently accessed files.
+	return int(left.accessTime.Sub(right.accessTime))
+}
+
+// A file must be downloaded by a consumer if the diff is > 1s,
+// as to trigger a download an 202 HTTP is made to the origin,
+// after which the consumer backs off for at least 1s before trying to download again.
+// During the 1s+ backoff, the access time and download time are almost the same.
+func isDownloadedByConsumer(f fInfo) bool {
+	return accessDownloadDiff(f) > 1*time.Second
+}
+
+func accessDownloadDiff(f fInfo) time.Duration {
+	return f.downloadTime.Sub(f.accessTime).Abs()
+}
+
+// If a file is accessed long after it has been downloaded,
+// it must have gotten prefetched by proxy earlier and now an agent consumed it.
+func forSureInAgent(f fInfo) bool {
+	return accessDownloadDiff(f) > 45*time.Minute
 }
 
 // cleanup cleans op from idle or expired files and returns its size BEFORE cleanup.
@@ -181,7 +228,8 @@ func (m *cleanupManager) customPolicyBasedCleanup(op base.FileOp, config Cleanup
 		totalUsage += fStat.Size()
 
 		var accessTime metadata.LastAccessTime
-		if err := op.GetFileMetadata(name, &accessTime); os.IsNotExist(err) {
+		err = op.GetFileMetadata(name, &accessTime)
+		if os.IsNotExist(err) {
 			continue
 		}
 		if err != nil {
