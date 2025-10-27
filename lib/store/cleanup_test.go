@@ -22,6 +22,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store/base"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/diskspaceutil"
 	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/andres-erbsen/clock"
@@ -257,15 +258,15 @@ func TestCleanupManagerAggressive(t *testing.T) {
 	_, op, cleanup := fileOpFixture(clk)
 	defer cleanup()
 
-	require.Equal(true, m.shouldAggro(op, config, func() (int, error) {
-		return 90, nil
+	require.True(m.shouldAggro(op, config, func() (diskspaceutil.UsageInfo, error) {
+		return diskspaceutil.UsageInfo{Util: 90}, nil
 	}))
 
-	require.Equal(false, m.shouldAggro(op, config, func() (int, error) {
-		return 60, nil
+	require.Equal(false, m.shouldAggro(op, config, func() (diskspaceutil.UsageInfo, error) {
+		return diskspaceutil.UsageInfo{Util: 60}, nil
 	}))
 
-	require.Equal(false, m.shouldAggro(op, config, func() (int, error) {
-		return 0, errors.New("fake error")
+	require.Equal(false, m.shouldAggro(op, config, func() (diskspaceutil.UsageInfo, error) {
+		return diskspaceutil.UsageInfo{}, errors.New("fake error")
 	}))
 }

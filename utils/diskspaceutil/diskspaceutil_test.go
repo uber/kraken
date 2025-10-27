@@ -8,10 +8,13 @@ import (
 	"github.com/uber/kraken/utils/diskspaceutil"
 )
 
-func TestParseManifestV2List(t *testing.T) {
-	util, err := diskspaceutil.DiskSpaceUtil()
-	require.NoError(t, err)
+func TestUsage(t *testing.T) {
+	require := require.New(t)
+	usage, err := diskspaceutil.Usage()
+	require.NoError(err)
 
-	require.Equal(t, true, util > 0)
-	require.Equal(t, true, util < 100)
+	require.True(usage.TotalBytes > 0)
+	require.True(usage.FreeBytes > 0)
+	require.True(usage.UsedBytes > 0)
+	require.True(usage.Util > 0)
 }
