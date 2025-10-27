@@ -30,12 +30,13 @@ import (
 
 // CleanupConfig defines configuration for periodically cleaning up idle files.
 type CleanupConfig struct {
-	Disabled            bool          `yaml:"disabled"`
-	Interval            time.Duration `yaml:"interval"`             // How often cleanup runs.
-	TTI                 time.Duration `yaml:"tti"`                  // Time to idle based on last access time.
-	TTL                 time.Duration `yaml:"ttl"`                  // Time to live regardless of access. If 0, disables TTL.
-	AggressiveThreshold int           `yaml:"aggressive_threshold"` // The disk util threshold to trigger aggressive cleanup. If 0, disables aggressive cleanup.
-	AggressiveTTL       time.Duration `yaml:"aggressive_ttL"`       // Time to live regardless of access if aggressive cleanup is triggered.
+	Disabled                 bool          `yaml:"disabled"`
+	Interval                 time.Duration `yaml:"interval"`                   // How often cleanup runs.
+	TTI                      time.Duration `yaml:"tti"`                        // Time to idle based on last access time.
+	TTL                      time.Duration `yaml:"ttl"`                        // Time to live regardless of access. If 0, disables TTL.
+	AggressiveThreshold      int           `yaml:"aggressive_threshold"`       // The disk util threshold to trigger aggressive cleanup. If 0, disables aggressive cleanup.
+	AggressiveTTL            time.Duration `yaml:"aggressive_ttL"`             // Time to live regardless of access if aggressive cleanup is triggered.
+	AggressiveLowerThreshold int           `yaml:"aggressive_lower_threshold"` // The lower disk util threshold in percent, below which aggressive cleanup will stop. If 0, no lower threshold.
 }
 
 type (
@@ -109,8 +110,7 @@ func (m *cleanupManager) addJob(tag string, config CleanupConfig, op base.FileOp
 			select {
 			case <-ticker.C:
 				log.Debugf("Performing cleanup of %s", op)
-				ttl := m.checkAggressiveCleanup(op, config, diskspaceutil.DiskSpaceUtil)
-				usage, err := m.scan(op, config.TTI, ttl)
+				usage, err := m.cleanup(op, config, nil)
 				if err != nil {
 					log.Errorf("Error scanning %s: %s", op, err)
 				}
@@ -127,9 +127,33 @@ func (m *cleanupManager) stop() {
 	m.stopOnce.Do(func() { close(m.stopc) })
 }
 
-// scan scans the op for idle or expired files. Also returns the total disk usage
-// of op.
-func (m *cleanupManager) scan(
+// cleanup cleans op from idle or expired files and returns its size BEFORE cleanup.
+// It works in one of two possible modes:
+//  1. tti + ttl based cleanup - the default.
+//  2. aggressive cleanup - triggered on high disk usage. By default, it is ttl- and threshold-based.
+//     However, it can also be custom policy- and threshold-based, when a `customPolicy` and a `config.AggressiveLowerThreshold` are provided.
+//     Then the cache is cleaned until the lower threshold is reached, prioritizing blobs for deletion based on the `customPolicy`.
+func (m *cleanupManager) cleanup(op base.FileOp, config CleanupConfig, customPolicy func()) (usage int64, err error) {
+	shouldAggro := m.shouldAggro(op, config, diskspaceutil.DiskSpaceUtil)
+	customPolicyBasedCleanup := shouldAggro && customPolicy != nil && config.AggressiveLowerThreshold != 0
+
+	if customPolicyBasedCleanup {
+		return m.customPolicyBasedCleanup()
+	}
+
+	ttl := config.TTL
+	if shouldAggro {
+		ttl = config.AggressiveTTL
+	}
+	return m.ttlBasedCleanup(op, config.TTI, ttl)
+}
+
+func (m *cleanupManager) customPolicyBasedCleanup() (usage int64, err error) {
+	// will be implemented in the next PR
+	return
+}
+
+func (m *cleanupManager) ttlBasedCleanup(
 	op base.FileOp, tti time.Duration, ttl time.Duration) (usage int64, err error) {
 
 	names, err := op.ListNames()
@@ -174,17 +198,19 @@ func (m *cleanupManager) readyForDeletion(
 	return m.clk.Now().Sub(lat.Time) > tti, nil
 }
 
-func (m *cleanupManager) checkAggressiveCleanup(op base.FileOp, config CleanupConfig, util diskSpaceUtilFunc) time.Duration {
-	if config.AggressiveThreshold != 0 {
-		diskspaceutil, err := util()
-		if err != nil {
-			log.Errorf("Error checking disk space util %s: %s", op, err)
-			return config.TTL
-		}
-		if diskspaceutil >= config.AggressiveThreshold {
-			log.Debugf("Aggressive cleanup of %s triggers with disk space util %d", op, diskspaceutil)
-			return config.AggressiveTTL
-		}
+func (m *cleanupManager) shouldAggro(op base.FileOp, config CleanupConfig, util diskSpaceUtilFunc) bool {
+	if config.AggressiveThreshold == 0 {
+		return false
 	}
-	return config.TTL
+
+	diskspaceutil, err := util()
+	if err != nil {
+		log.Errorf("Error checking disk space util %s: %s", op, err)
+		return false
+	}
+	if diskspaceutil >= config.AggressiveThreshold {
+		log.Warnf("Aggressive cleanup of %s triggers with disk space util %d", op, diskspaceutil)
+		return true
+	}
+	return false
 }
