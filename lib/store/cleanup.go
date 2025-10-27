@@ -40,8 +40,8 @@ type CleanupConfig struct {
 }
 
 type (
-	// Define a func type for mocking diskSpaceUtil function.
-	diskSpaceUtilFunc func() (int, error)
+	// for mocking
+	diskUsageFn func() (diskspaceutil.UsageInfo, error)
 )
 
 func (c CleanupConfig) applyDefaults() CleanupConfig {
@@ -134,7 +134,7 @@ func (m *cleanupManager) stop() {
 //     However, it can also be custom policy- and threshold-based, when a `customPolicy` and a `config.AggressiveLowerThreshold` are provided.
 //     Then the cache is cleaned until the lower threshold is reached, prioritizing blobs for deletion based on the `customPolicy`.
 func (m *cleanupManager) cleanup(op base.FileOp, config CleanupConfig, customPolicy func()) (usage int64, err error) {
-	shouldAggro := m.shouldAggro(op, config, diskspaceutil.DiskSpaceUtil)
+	shouldAggro := m.shouldAggro(op, config, diskspaceutil.Usage)
 	customPolicyBasedCleanup := shouldAggro && customPolicy != nil && config.AggressiveLowerThreshold != 0
 
 	if customPolicyBasedCleanup {
@@ -142,10 +142,13 @@ func (m *cleanupManager) cleanup(op base.FileOp, config CleanupConfig, customPol
 	}
 
 	ttl := config.TTL
+	lowerThreshold := 0
 	if shouldAggro {
 		ttl = config.AggressiveTTL
+		lowerThreshold = config.AggressiveLowerThreshold
 	}
-	return m.ttlBasedCleanup(op, config.TTI, ttl)
+
+	return m.ttlBasedCleanup(op, config.TTI, ttl, lowerThreshold, diskspaceutil.Usage)
 }
 
 func (m *cleanupManager) customPolicyBasedCleanup() (usage int64, err error) {
@@ -154,7 +157,20 @@ func (m *cleanupManager) customPolicyBasedCleanup() (usage int64, err error) {
 }
 
 func (m *cleanupManager) ttlBasedCleanup(
-	op base.FileOp, tti time.Duration, ttl time.Duration) (usage int64, err error) {
+	op base.FileOp, tti time.Duration, ttl time.Duration, aggroUtilLowerThreshold int, diskUsageFn diskUsageFn) (scannedBytes int64, err error) {
+
+	var lowThresholdBytes uint64 = 0
+	respectLowThreshold := false
+	var dInfo diskspaceutil.UsageInfo
+	if aggroUtilLowerThreshold != 0 {
+		dInfo, err = diskUsageFn()
+		if err != nil {
+			log.Errorf("Error getting disk usage info %s: %s", op, err)
+		} else {
+			respectLowThreshold = true
+			lowThresholdBytes = (dInfo.TotalBytes * uint64(aggroUtilLowerThreshold)) / 100
+		}
+	}
 
 	names, err := op.ListNames()
 	if err != nil {
@@ -166,16 +182,20 @@ func (m *cleanupManager) ttlBasedCleanup(
 			log.With("name", name).Errorf("Error getting file stat: %s", err)
 			continue
 		}
-		if ready, err := m.readyForDeletion(op, name, info, tti, ttl); err != nil {
+		ready, err := m.readyForDeletion(op, name, info, tti, ttl)
+		if err != nil {
 			log.With("name", name).Errorf("Error checking if file expired: %s", err)
-		} else if ready {
+		}
+
+		lowThresholdBreached := respectLowThreshold && ((dInfo.UsedBytes - uint64(scannedBytes)) <= lowThresholdBytes)
+		if ready && !lowThresholdBreached {
 			if err := op.DeleteFile(name); err != nil && err != base.ErrFilePersisted {
 				log.With("name", name).Errorf("Error deleting expired file: %s", err)
 			}
 		}
-		usage += info.Size()
+		scannedBytes += info.Size()
 	}
-	return usage, nil
+	return scannedBytes, nil
 }
 
 func (m *cleanupManager) readyForDeletion(
@@ -198,18 +218,18 @@ func (m *cleanupManager) readyForDeletion(
 	return m.clk.Now().Sub(lat.Time) > tti, nil
 }
 
-func (m *cleanupManager) shouldAggro(op base.FileOp, config CleanupConfig, util diskSpaceUtilFunc) bool {
+func (m *cleanupManager) shouldAggro(op base.FileOp, config CleanupConfig, diskUsageFn diskUsageFn) bool {
 	if config.AggressiveThreshold == 0 {
 		return false
 	}
 
-	diskspaceutil, err := util()
+	diskUsage, err := diskUsageFn()
 	if err != nil {
-		log.Errorf("Error checking disk space util %s: %s", op, err)
+		log.Errorf("Error getting disk usage info %s: %s", op, err)
 		return false
 	}
-	if diskspaceutil >= config.AggressiveThreshold {
-		log.Warnf("Aggressive cleanup of %s triggers with disk space util %d", op, diskspaceutil)
+	if diskUsage.Util >= config.AggressiveThreshold {
+		log.Warnf("Aggressive cleanup of %s triggers with disk space util %d", op, diskUsage.Util)
 		return true
 	}
 	return false
