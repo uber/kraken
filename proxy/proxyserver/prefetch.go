@@ -3,6 +3,7 @@ package proxyserver
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,9 +36,9 @@ type PrefetchHandler struct {
 	tagClient        tagclient.Client
 	tagParser        TagParser
 	metrics          tally.Scope
-	synchronous      bool
 	minBlobSizeBytes int64 // Minimum size in bytes for a blob to be prefetched. 0 means no minimum.
 	maxBlobSizeBytes int64 // Maximum size in bytes for a blob to be prefetched. 0 means no maximum.
+	v1Synchronous    bool
 }
 
 // blobInfo holds digest and size information for a blob.
@@ -90,9 +91,9 @@ func NewPrefetchHandler(
 	tagClient tagclient.Client,
 	tagParser TagParser,
 	metrics tally.Scope,
-	synchronous bool,
 	minBlobSizeBytes int64,
 	maxBlobSizeBytes int64,
+	v1Synchronous bool,
 ) *PrefetchHandler {
 	if tagParser == nil {
 		tagParser = &DefaultTagParser{}
@@ -109,7 +110,7 @@ func NewPrefetchHandler(
 		tagClient:        tagClient,
 		tagParser:        tagParser,
 		metrics:          metrics.SubScope("prefetch"),
-		synchronous:      synchronous,
+		v1Synchronous:    v1Synchronous,
 		minBlobSizeBytes: minBlobSizeBytes,
 		maxBlobSizeBytes: maxBlobSizeBytes,
 	}
@@ -167,79 +168,89 @@ func writePrefetchResponse(w http.ResponseWriter, tag, msg, traceId string) {
 	writeJSON(w, http.StatusOK, newPrefetchSuccessResponse(tag, msg, traceId))
 }
 
-// Handle processes the prefetch request.
-func (ph *PrefetchHandler) Handle(w http.ResponseWriter, r *http.Request) {
+// HandleV1 processes the prefetch request.
+func (ph *PrefetchHandler) HandleV1(w http.ResponseWriter, r *http.Request) {
+	input, errOccurred := ph.preparePrefetch(w, r)
+	if errOccurred {
+		return
+	}
+
+	ph.metrics.SubScope("prefetch").Counter("initiated").Inc(1)
+	writePrefetchResponse(w, input.tag, "prefetching initiated successfully", input.traceID)
+
+	if ph.v1Synchronous {
+		ph.downloadBlobs(input)
+	} else {
+		// Download blobs asynchronously.
+		go ph.downloadBlobs(input)
+	}
+}
+
+type prefetchInput struct {
+	blobs     []blobInfo
+	namespace string
+	logger    *zap.SugaredLogger
+	tag       string
+	traceID   string
+}
+
+// preparePrefetch parses the request, calls build-index to get the image manifest SHA,
+// downloads the manifest(s) from the origin cluster, parses them, and returns the blobs layers to prefetch.
+// If an error occurs, preparePrefetch returns the appropriate HTTP response.
+func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Request) (res *prefetchInput, errOccurred bool) {
 	ph.metrics.Counter("requests").Inc(1)
 	var reqBody prefetchBody
 	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
 		writeBadRequestError(w, fmt.Sprintf("failed to decode request body: %s", err), "")
 		log.With("error", err).Error("Failed to decode request body")
-		return
+		return nil, true
 	}
 	logger := log.With("trace_id", reqBody.TraceId)
 
 	namespace, tag, err := ph.tagParser.ParseTag(reqBody.Tag)
 	if err != nil {
 		writeBadRequestError(w, fmt.Sprintf("tag: %s, invalid tag format: %s", reqBody.Tag, err), reqBody.TraceId)
-		return
+		return nil, true
 	}
 
 	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
 	digest, err := ph.tagClient.Get(tagRequest)
 	if err != nil {
 		writeInternalError(w, fmt.Sprintf("tag request: %s, failed to get tag: %s", tagRequest, err), reqBody.TraceId)
-		return
+		return nil, true
 	}
 	logger.Infof("Namespace: %s, Tag: %s", namespace, tag)
 
 	buf := &bytes.Buffer{}
 	if err := ph.clusterClient.DownloadBlob(namespace, digest, buf); err != nil {
 		writeInternalError(w, fmt.Sprintf("error downloading manifest blob: %s", err), reqBody.TraceId)
-		return
+		return nil, true
 	}
 
 	// Process manifest (ManifestList or single Manifest)
 	blobs, err := ph.processManifest(logger, namespace, buf.Bytes())
 	if err != nil {
 		writeInternalError(w, fmt.Sprintf("failed to process manifest: %s", err), reqBody.TraceId)
-		return
+		return nil, true
 	}
 
-	ph.metrics.SubScope("prefetch").Counter("initiated").Inc(1)
-	writePrefetchResponse(w, reqBody.Tag, "prefetching initiated successfully", reqBody.TraceId)
-
-	if ph.synchronous {
-		ph.prefetchBlobs(logger, namespace, blobs)
-	} else {
-		// Prefetch blobs asynchronously.
-		go ph.prefetchBlobs(logger, namespace, blobs)
-	}
+	return &prefetchInput{
+		blobs:     blobs,
+		namespace: namespace,
+		logger:    logger,
+		tag:       tag,
+		traceID:   reqBody.TraceId,
+	}, false
 }
 
-// prefetchBlobs downloads blobs in parallel, filtering by size threshold.
-func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace string, blobs []blobInfo) {
+// downloadBlobs downloads blobs in parallel.
+func (ph *PrefetchHandler) downloadBlobs(input *prefetchInput) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var errList []error
 
-	for _, b := range blobs {
-		// Skip blobs that are outside the size range [min, max]
-		if b.size < ph.minBlobSizeBytes {
-			logger.With(
-				"digest", b.digest,
-				"size", b.size,
-				"min_threshold", ph.minBlobSizeBytes,
-			).Infof("Skipping blob: size below minimum threshold")
-			ph.metrics.Counter("blobs_skipped_too_small").Inc(1)
-			continue
-		}
-		if b.size > ph.maxBlobSizeBytes {
-			logger.With(
-				"digest", b.digest,
-				"size", b.size,
-				"max_threshold", ph.maxBlobSizeBytes,
-			).Infof("Skipping blob: size exceeds maximum threshold")
-			ph.metrics.Counter("blobs_skipped_too_large").Inc(1)
+	for _, b := range input.blobs {
+		if ph.shouldSkipPrefetch(b, input.logger) {
 			continue
 		}
 
@@ -247,7 +258,7 @@ func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace st
 		go func(blob blobInfo) {
 			defer wg.Done()
 			blobStart := time.Now()
-			err := ph.clusterClient.DownloadBlob(namespace, blob.digest, io.Discard)
+			err := ph.clusterClient.DownloadBlob(input.namespace, blob.digest, io.Discard)
 			blobDuration := time.Since(blobStart)
 			ph.metrics.Timer("blob_download_time").Record(blobDuration)
 			ph.metrics.Counter("bytes_downloaded").Inc(blob.size)
@@ -256,7 +267,7 @@ func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace st
 					return
 				}
 				mu.Lock()
-				errList = append(errList, fmt.Errorf("digest %s, namespace %s, error downloading blob: %w", blob.digest, namespace, err))
+				errList = append(errList, fmt.Errorf("digest %s, namespace %s, error downloading blob: %w", blob.digest, input.namespace, err))
 				mu.Unlock()
 			} else {
 				ph.metrics.Counter("blobs_downloaded").Inc(1)
@@ -269,9 +280,32 @@ func (ph *PrefetchHandler) prefetchBlobs(logger *zap.SugaredLogger, namespace st
 	if len(errList) > 0 {
 		ph.metrics.Counter("failed").Inc(1)
 		for _, err := range errList {
-			logger.With("error", err).Error("Error downloading blob")
+			input.logger.With("error", err).Error("Error downloading blob")
 		}
 	}
+}
+
+// Skip blobs that are outside the size range [min, max]
+func (ph *PrefetchHandler) shouldSkipPrefetch(b blobInfo, logger *zap.SugaredLogger) bool {
+	if b.size < ph.minBlobSizeBytes {
+		logger.With(
+			"digest", b.digest,
+			"size", b.size,
+			"min_threshold", ph.minBlobSizeBytes,
+		).Infof("Skipping blob: size below minimum threshold")
+		ph.metrics.Counter("blobs_skipped_too_small").Inc(1)
+		return true
+	}
+	if b.size > ph.maxBlobSizeBytes {
+		logger.With(
+			"digest", b.digest,
+			"size", b.size,
+			"max_threshold", ph.maxBlobSizeBytes,
+		).Infof("Skipping blob: size exceeds maximum threshold")
+		ph.metrics.Counter("blobs_skipped_too_large").Inc(1)
+		return true
+	}
+	return false
 }
 
 // processManifest handles both ManifestLists and single Manifests.
@@ -342,4 +376,57 @@ func (ph *PrefetchHandler) processLayers(layers []distribution.Descriptor) ([]bl
 		})
 	}
 	return blobs, nil
+}
+
+// HandleV2 is a *mostly* idempotent operation that preheats the origin cluster's cache with the provided image.
+// For each image layer:
+// - if it is not present, it is prefetched by the origins asynchronously.
+// - if it is present, no-op.
+// The operation is "mostly" idempotent, as while it does not cause image layer redownloads,
+// it ALWAYS 1) calls BI to get the manifest SHA and 2) downloads all image manifests from the origins.
+func (ph *PrefetchHandler) HandleV2(w http.ResponseWriter, r *http.Request) {
+	input, errOccurred := ph.preparePrefetch(w, r)
+	if errOccurred {
+		return
+	}
+
+	err := ph.triggerPrefetchBlobs(input)
+	if err != nil {
+		writeInternalError(w, fmt.Sprintf("failed to trigger image prefetch: %s", err), input.traceID)
+		input.logger.Errorf("Failed to trigger image prefetch")
+		return
+	}
+
+	ph.metrics.SubScope("prefetch").Counter("initiated").Inc(1)
+	writePrefetchResponse(w, input.tag, "prefetching initiated successfully", input.traceID)
+}
+
+// triggerPrefetchBlobs triggers a blob prefetch for all blobs in parallel.
+func (ph *PrefetchHandler) triggerPrefetchBlobs(input *prefetchInput) error {
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errList []error
+
+	for _, b := range input.blobs {
+		if ph.shouldSkipPrefetch(b, input.logger) {
+			continue
+		}
+
+		wg.Add(1)
+		go func(digest core.Digest) {
+			defer wg.Done()
+			err := ph.clusterClient.PrefetchBlob(input.namespace, digest)
+			if err != nil {
+				mu.Lock()
+				errList = append(errList, fmt.Errorf("digest %q, namespace %q, blob prefetch failure: %w", digest, input.namespace, err))
+				mu.Unlock()
+			}
+		}(b.digest)
+	}
+	wg.Wait()
+
+	if len(errList) != 0 {
+		return fmt.Errorf("at least one layer could not be prefetched: %w", errors.Join(errList...))
+	}
+	return nil
 }
