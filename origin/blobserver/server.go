@@ -281,11 +281,7 @@ func (s *Server) prefetchBlobHandler(w http.ResponseWriter, r *http.Request) err
 		return err
 	}
 
-	err = s.prefetchBlob(namespace, d)
-	if httputil.IsAccepted(err) {
-		return err
-	}
-	if err != nil {
+	if err := s.prefetchBlob(namespace, d); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusOK)
