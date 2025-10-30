@@ -209,8 +209,7 @@ func (c *clusterClient) DownloadBlob(namespace string, d core.Digest, dst io.Wri
 }
 
 // PrefetchBlob preheats a blob in the origin cluster for downloading.
-// Its behavior is the same as the single origin client's PrefetchBlob,
-// read its comment there for more info.
+// Check [Client].PrefetchBlob's comment for more info.
 func (c *clusterClient) PrefetchBlob(namespace string, d core.Digest) error {
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
@@ -220,17 +219,17 @@ func (c *clusterClient) PrefetchBlob(namespace string, d core.Digest) error {
 	var errs []error
 	for _, client := range clients {
 		err = client.PrefetchBlob(namespace, d)
-		if err == nil || httputil.IsAccepted(err) {
-			// success, propagate error code
-			return err
+		if err == nil {
+			return nil
 		}
+
 		if httputil.IsNotFound(err) {
 			// no need to iterate over other origins
-			return err
+			return ErrBlobNotFound
 		}
 		errs = append(errs, err)
-		continue
 	}
+
 	return fmt.Errorf("all origins unavailable: %w", errors.Join(errs...))
 }
 

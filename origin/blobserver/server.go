@@ -40,6 +40,7 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/httputil"
@@ -323,7 +324,7 @@ func (s *Server) replicateToRemote(namespace string, d core.Digest, remoteDNS st
 		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS).Errorf("Failed to get cache file reader: %s", err)
 		return handler.Errorf("file store: %s", err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 
 	remote, err := s.clusterProvider.Provide(remoteDNS)
 	if err != nil {
@@ -567,7 +568,7 @@ func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) er
 			Errorf("Failed to get cache file reader: %s", err)
 		return handler.Errorf("get cache file: %s", err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 
 	if _, err := io.Copy(dst, f); err != nil {
 		log.With("namespace", namespace, "digest", d.Hex(), _operation, "download").
@@ -581,7 +582,7 @@ func (s *Server) prefetchBlob(namespace string, d core.Digest) error {
 	f, err := s.cas.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
 		log.With("namespace", namespace, "digest", d.Hex(), _operation, "prefetch").
-			Info("blob not in cache, initiating download from backend")
+			Info("Blob not in cache, initiating download from backend")
 		return s.startRemoteBlobDownload(namespace, d, true)
 	}
 	if err != nil {
@@ -589,7 +590,7 @@ func (s *Server) prefetchBlob(namespace string, d core.Digest) error {
 			Errorf("Failed to get cache file reader: %s", err)
 		return handler.Errorf("get cache file: %s", err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 	log.With("namespace", namespace, "digest", d.Hex(), _operation, "prefetch").
 		Info("Prefetch successful, blob already in cache")
 	return nil

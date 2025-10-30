@@ -220,13 +220,12 @@ func (c *HTTPClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer
 	return nil
 }
 
-// PrefetchBlob is an idempotent operation that preheats the origin's cache with the given blob.
-// If the blob is not present, it is downloaded asynchronously and "202 Accepted" is returned.
-// If the blob is already present, "200 OK" is returned.
-// If the blob doesn't exist, "404 Not Found" is returned.
+// PrefetchBlob is an asynchronous, idempotent operation that preheats the origin's cache with the given blob.
+// If the blob is not present, it is downloaded asynchronously. If the blob is present, this is a no-op.
 func (c *HTTPClient) PrefetchBlob(namespace string, d core.Digest) error {
 	r, err := httputil.Post(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/prefetch", c.addr, url.PathEscape(namespace), d),
+		httputil.SendAcceptedCodes(http.StatusOK, http.StatusAccepted),
 		httputil.SendTLS(c.tls))
 	if err != nil {
 		return err
