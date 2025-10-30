@@ -14,6 +14,7 @@
 package proxyserver
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -158,7 +159,7 @@ func TestPrefetchWithoutTag(t *testing.T) {
 	require.True(httputil.IsStatus(err, http.StatusBadRequest))
 }
 
-func TestPrefetchMalformedTag(t *testing.T) {
+func TestPrefetchV1MalformedTag(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newServerMocks(t)
@@ -179,7 +180,7 @@ func TestPrefetchMalformedTag(t *testing.T) {
 	require.True(httputil.IsStatus(err, http.StatusBadRequest))
 }
 
-func TestPrefetch(t *testing.T) {
+func TestPrefetchV1(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newServerMocks(t)
@@ -208,4 +209,94 @@ func TestPrefetch(t *testing.T) {
 		fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr),
 		httputil.SendBody(bytes.NewReader(b)))
 	require.NoError(err)
+}
+
+func TestPrefetchV2(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr := mocks.startServer()
+
+	repo := "kraken-test"
+	namespace := "preheat"
+	tag := "abcdef:v1.0.0"
+
+	layers := core.DigestListFixture(3)
+	manifest, bs := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
+
+	b, _ := json.Marshal(prefetchBody{
+		Tag:     fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
+		TraceId: "abc",
+	})
+
+	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
+	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
+
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[1]).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[2]).Return(nil)
+	res, err := httputil.Post(
+		fmt.Sprintf("http://%s/proxy/v2/registry/prefetch", addr),
+		httputil.SendBody(bytes.NewReader(b)))
+	require.NoError(err)
+
+	var resBody prefetchResponse
+	resBodyBytes, err := io.ReadAll(res.Body)
+	require.NoError(err)
+	err = json.Unmarshal(resBodyBytes, &resBody)
+	require.NoError(err)
+
+	require.Equal(prefetchResponse{
+		Message:    "prefetching initiated successfully",
+		TraceId:    "abc",
+		Status:     "success",
+		Tag:        "abcdef:v1.0.0",
+		Prefetched: true,
+	}, resBody)
+}
+
+func TestPrefetchV2OriginError(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr := mocks.startServer()
+
+	repo := "kraken-test"
+	namespace := "preheat"
+	tag := "abcdef:v1.0.0"
+
+	layers := core.DigestListFixture(3)
+	manifest, bs := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
+
+	b, _ := json.Marshal(prefetchBody{
+		Tag:     fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
+		TraceId: "abc",
+	})
+
+	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
+	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
+	mocks.originClient.EXPECT().DownloadBlob(namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
+
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[1]).Return(errors.New("foo err"))
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[2]).Return(nil)
+	_, err := httputil.Post(
+		fmt.Sprintf("http://%s/proxy/v2/registry/prefetch", addr),
+		httputil.SendBody(bytes.NewReader(b)))
+	serr, ok := err.(httputil.StatusError)
+	require.True(ok)
+	require.True(httputil.IsStatus(serr, http.StatusInternalServerError))
+
+	var resBody prefetchResponse
+	err = json.Unmarshal([]byte(serr.ResponseDump), &resBody)
+	require.NoError(err)
+	require.Equal(prefetchResponse{
+		Message:    fmt.Sprintf("failed to trigger image prefetch: at least one layer could not be prefetched: digest %q, namespace %q, blob prefetch failure: foo err", layers[1], namespace),
+		TraceId:    "abc",
+		Status:     "failure",
+		Prefetched: false,
+	}, resBody)
 }

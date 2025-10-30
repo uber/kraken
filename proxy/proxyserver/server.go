@@ -48,7 +48,7 @@ func New(
 	return &Server{
 		stats,
 		NewPreheatHandler(client, synchronous),
-		NewPrefetchHandler(client, tagClient, &DefaultTagParser{}, stats, synchronous, int64(config.PrefetchMinBlobSize), int64(config.PrefetchMaxBlobSize)),
+		NewPrefetchHandler(client, tagClient, &DefaultTagParser{}, stats, int64(config.PrefetchMinBlobSize), int64(config.PrefetchMaxBlobSize), synchronous),
 		config,
 	}
 }
@@ -63,7 +63,8 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/health", handler.Wrap(s.healthHandler))
 
 	r.Post("/registry/notifications", handler.Wrap(s.preheatHandler.Handle))
-	r.Post("/proxy/v1/registry/prefetch", s.prefetchHandler.Handle)
+	r.Post("/proxy/v1/registry/prefetch", s.prefetchHandler.HandleV1)
+	r.Post("/proxy/v2/registry/prefetch", s.prefetchHandler.HandleV2)
 
 	// Serves /debug/pprof endpoints.
 	r.Mount("/", http.DefaultServeMux)
