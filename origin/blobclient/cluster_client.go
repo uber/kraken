@@ -76,12 +76,15 @@ func (r *clientResolver) Resolve(d core.Digest) ([]Client, error) {
 	return clients, nil
 }
 
+var _ ClusterClient = &clusterClient{}
+
 // ClusterClient defines a top-level origin cluster client which handles blob
 // location resolution and retries.
 type ClusterClient interface {
 	CheckReadiness() error
 	UploadBlob(namespace string, d core.Digest, blob io.Reader) error
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
+	PrefetchBlob(namespace string, d core.Digest) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	Stat(namespace string, d core.Digest) (*core.BlobInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
@@ -203,6 +206,31 @@ func (c *clusterClient) DownloadBlob(namespace string, d core.Digest, dst io.Wri
 		err = ErrBlobNotFound
 	}
 	return err
+}
+
+// PrefetchBlob preheats a blob in the origin cluster for downloading.
+// Check [Client].PrefetchBlob's comment for more info.
+func (c *clusterClient) PrefetchBlob(namespace string, d core.Digest) error {
+	clients, err := c.resolver.Resolve(d)
+	if err != nil {
+		return fmt.Errorf("resolve clients: %w", err)
+	}
+
+	var errs []error
+	for _, client := range clients {
+		err = client.PrefetchBlob(namespace, d)
+		if err == nil {
+			return nil
+		}
+
+		if httputil.IsNotFound(err) {
+			// no need to iterate over other origins
+			return ErrBlobNotFound
+		}
+		errs = append(errs, err)
+	}
+
+	return fmt.Errorf("all origins unavailable: %w", errors.Join(errs...))
 }
 
 // Owners returns the origin peers which own d.

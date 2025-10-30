@@ -40,6 +40,7 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/httputil"
@@ -47,6 +48,8 @@ import (
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/stringset"
 )
+
+const _operation = "operation"
 
 // Server defines a server that serves blob data for agent.
 type Server struct {
@@ -135,6 +138,7 @@ func (s *Server) Handler() http.Handler {
 	r.Put("/namespace/{namespace}/blobs/{digest}/uploads/{uid}", handler.Wrap(s.commitClusterUploadHandler))
 
 	r.Get("/namespace/{namespace}/blobs/{digest}", handler.Wrap(s.downloadBlobHandler))
+	r.Post("/namespace/{namespace}/blobs/{digest}/prefetch", handler.Wrap(s.prefetchBlobHandler))
 
 	r.Post("/namespace/{namespace}/blobs/{digest}/remote/{remote}", handler.Wrap(s.replicateToRemoteHandler))
 
@@ -263,6 +267,27 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	return nil
 }
 
+// prefetchBlobHandler is an idempotent operation that preheats the origin's cache with the given blob.
+// If the blob is not present, it is downloaded asynchronously and "202 Accepted" is returned.
+// If the blob is already present, "200 OK" is returned.
+// If the blob doesn't exist, "404 Not Found" is returned.
+func (s *Server) prefetchBlobHandler(w http.ResponseWriter, r *http.Request) error {
+	namespace, err := httputil.ParseParam(r, "namespace")
+	if err != nil {
+		return err
+	}
+	d, err := httputil.ParseDigest(r, "digest")
+	if err != nil {
+		return err
+	}
+
+	if err := s.prefetchBlob(namespace, d); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
 func (s *Server) replicateToRemoteHandler(w http.ResponseWriter, r *http.Request) error {
 	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
@@ -299,7 +324,7 @@ func (s *Server) replicateToRemote(namespace string, d core.Digest, remoteDNS st
 		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS).Errorf("Failed to get cache file reader: %s", err)
 		return handler.Errorf("file store: %s", err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 
 	remote, err := s.clusterProvider.Provide(remoteDNS)
 	if err != nil {
@@ -534,18 +559,40 @@ func (s *Server) applyToReplicas(d core.Digest, f func(i int, c blobclient.Clien
 func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error {
 	f, err := s.cas.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
-		log.With("namespace", namespace, "digest", d.Hex()).Info("Blob not in cache, initiating download from backend")
+		log.With("namespace", namespace, "digest", d.Hex(), _operation, "download").
+			Info("Blob not in cache, initiating download from backend")
 		return s.startRemoteBlobDownload(namespace, d, true)
-	} else if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to get cache file reader: %s", err)
+	}
+	if err != nil {
+		log.With("namespace", namespace, "digest", d.Hex(), _operation, "download").
+			Errorf("Failed to get cache file reader: %s", err)
 		return handler.Errorf("get cache file: %s", err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 
 	if _, err := io.Copy(dst, f); err != nil {
-		log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to copy blob data: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), _operation, "download").
+			Errorf("Failed to copy blob data: %s", err)
 		return handler.Errorf("copy blob: %s", err)
 	}
+	return nil
+}
+
+func (s *Server) prefetchBlob(namespace string, d core.Digest) error {
+	f, err := s.cas.GetCacheFileReader(d.Hex())
+	if os.IsNotExist(err) {
+		log.With("namespace", namespace, "digest", d.Hex(), _operation, "prefetch").
+			Info("Blob not in cache, initiating download from backend")
+		return s.startRemoteBlobDownload(namespace, d, true)
+	}
+	if err != nil {
+		log.With("namespace", namespace, "digest", d.Hex(), _operation, "prefetch").
+			Errorf("Failed to get cache file reader: %s", err)
+		return handler.Errorf("get cache file: %s", err)
+	}
+	defer closers.Close(f)
+	log.With("namespace", namespace, "digest", d.Hex(), _operation, "prefetch").
+		Info("Prefetch successful, blob already in cache")
 	return nil
 }
 

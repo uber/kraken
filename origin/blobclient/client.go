@@ -33,6 +33,8 @@ import (
 	"github.com/uber/kraken/utils/memsize"
 )
 
+var _ Client = &HTTPClient{}
+
 // Client provides a wrapper around all Server HTTP endpoints.
 type Client interface {
 	Addr() string
@@ -52,6 +54,7 @@ type Client interface {
 	DuplicateUploadBlob(namespace string, d core.Digest, blob io.Reader, delay time.Duration) error
 
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
+	PrefetchBlob(namespace string, d core.Digest) error
 
 	ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error
 
@@ -201,7 +204,7 @@ func (c *HTTPClient) DuplicateUploadBlob(
 
 // DownloadBlob downloads blob for d. If the blob of d is not available yet
 // (i.e. still downloading), returns 202 httputil.StatusError, indicating that
-// the request shoudl be retried later. If not blob exists for d, returns a 404
+// the request should be retried later. If not blob exists for d, returns a 404
 // httputil.StatusError.
 func (c *HTTPClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
 	r, err := httputil.Get(
@@ -214,6 +217,20 @@ func (c *HTTPClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer
 	if _, err := io.Copy(dst, r.Body); err != nil {
 		return fmt.Errorf("copy body: %s", err)
 	}
+	return nil
+}
+
+// PrefetchBlob is an asynchronous, idempotent operation that preheats the origin's cache with the given blob.
+// If the blob is not present, it is downloaded asynchronously. If the blob is present, this is a no-op.
+func (c *HTTPClient) PrefetchBlob(namespace string, d core.Digest) error {
+	r, err := httputil.Post(
+		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/prefetch", c.addr, url.PathEscape(namespace), d),
+		httputil.SendAcceptedCodes(http.StatusOK, http.StatusAccepted),
+		httputil.SendTLS(c.tls))
+	if err != nil {
+		return err
+	}
+	defer closers.Close(r.Body)
 	return nil
 }
 
