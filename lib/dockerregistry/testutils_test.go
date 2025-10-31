@@ -24,6 +24,7 @@ import (
 	"github.com/uber/kraken/utils/dockerutil"
 
 	"github.com/docker/distribution/uuid"
+	"github.com/uber-go/tally"
 )
 
 const (
@@ -55,7 +56,7 @@ func newTestDriver() (*testDriver, func()) {
 }
 
 func (d *testDriver) setup() (*KrakenStorageDriver, testImageUploadBundle) {
-	sd := NewReadWriteStorageDriver(Config{}, d.cas, d.transferer, DefaultVerificationFunc)
+	sd := NewReadWriteStorageDriver(Config{}, d.cas, d.transferer, DefaultVerificationFunc, tally.NoopScope)
 
 	// Create upload
 	uploadUUID := uuid.Generate().String()
