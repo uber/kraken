@@ -13,12 +13,25 @@
 // limitations under the License.
 package store
 
+import (
+	"time"
+)
+
 // Volume - if provided, volumes are used to store the actual files.
 // Symlinks will be created under state directories.
 // This configuration is needed on hosts with multiple disks.
 type Volume struct {
 	Location string
 	Weight   int
+}
+
+// MemoryCacheConfig defines memory cache configuration.
+type MemoryCacheConfig struct {
+	Enabled         bool          `yaml:"enabled"`
+	MaxSize         int64         `yaml:"max_size"`
+	DrainWorkers    int           `yaml:"drain_workers"`
+	DrainMaxRetries int           `yaml:"drain_max_retries"`
+	TTL             time.Duration `yaml:"ttl"`
 }
 
 // CAStoreConfig defines CAStore configuration.
@@ -35,11 +48,22 @@ type CAStoreConfig struct {
 	WritePartSize int `yaml:"write_part_size"`
 
 	SkipHashVerification bool `yaml:"skip_hash_verification"`
+
+	MemoryCache MemoryCacheConfig `yaml:"memory_cache"`
 }
 
 func (c CAStoreConfig) applyDefaults() CAStoreConfig {
 	if c.Capacity == 0 {
 		c.Capacity = 1 << 20 // 1 million
+	}
+	if c.MemoryCache.DrainWorkers == 0 {
+		c.MemoryCache.DrainWorkers = 10
+	}
+	if c.MemoryCache.TTL == 0 {
+		c.MemoryCache.TTL = 5 * time.Minute
+	}
+	if c.MemoryCache.DrainMaxRetries == 0 {
+		c.MemoryCache.DrainMaxRetries = 3
 	}
 	return c
 }
