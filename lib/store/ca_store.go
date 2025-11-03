@@ -22,6 +22,7 @@ import (
 	"os"
 	"path"
 	"sync"
+	"time"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
@@ -35,10 +36,25 @@ import (
 	"github.com/uber/kraken/utils/log"
 )
 
+const _drainDuration = 100 * time.Millisecond
+
+var drainDurationBuckets = append(
+	tally.DurationBuckets{0},
+	tally.MustMakeExponentialDurationBuckets(100*time.Millisecond, 2, 12)...,
+)
+
 // drainItem represents an item in the drain queue for async disk writing.
 type drainItem struct {
 	entry   *cache.MemoryEntry
 	retries int
+}
+
+type drain struct {
+	queue     *list.List
+	mu        sync.Mutex
+	stopChan  chan struct{}
+	wg        sync.WaitGroup
+	histogram tally.Histogram
 }
 
 // CAStore allows uploading / caching content-addressable files.
@@ -53,9 +69,7 @@ type CAStore struct {
 
 	memCache *cache.BlobMemoryCache
 
-	drainQueue *list.List
-	drainMu    sync.Mutex
-
+	drain       *drain
 	ttlStopChan chan struct{}
 	ttlWg       sync.WaitGroup
 }
@@ -107,8 +121,8 @@ func newCAStore(config CAStoreConfig, stats tally.Scope, clk clock.Clock) (*CASt
 	if config.MemoryCache.Enabled {
 		memCache := createMemoryCache(&config, stats)
 		cas.memCache = memCache
-		cas.drainQueue = list.New()
 		initMemCacheCleanupJob(cas)
+		startDrainWorkers(cas)
 	}
 
 	return cas, nil
@@ -126,8 +140,25 @@ func initMemCacheCleanupJob(cas *CAStore) {
 	go cas.memoryCacheCleanupWorker()
 }
 
+func startDrainWorkers(cas *CAStore) {
+	cas.drain = &drain{
+		histogram: cas.stats.Histogram("drain_duration", drainDurationBuckets),
+		stopChan:  make(chan struct{}),
+		queue:     list.New(),
+	}
+	for range cas.config.MemoryCache.DrainWorkers {
+		cas.drain.wg.Add(1)
+		go cas.drainWorker()
+	}
+}
+
 // Close terminates any goroutines started by s.
 func (s *CAStore) Close() {
+	if s.drain != nil && s.drain.stopChan != nil {
+		close(s.drain.stopChan)
+		s.drain.wg.Wait()
+	}
+
 	if s.ttlStopChan != nil {
 		close(s.ttlStopChan)
 		s.ttlWg.Wait()
@@ -291,9 +322,9 @@ func (s *CAStore) generateMetadataFromFile(name string, pieceLength int64) error
 }
 
 func (s *CAStore) addItemForDiskSync(item *drainItem) {
-	s.drainMu.Lock()
-	defer s.drainMu.Unlock()
-	s.drainQueue.PushBack(item)
+	s.drain.mu.Lock()
+	defer s.drain.mu.Unlock()
+	s.drain.queue.PushBack(item)
 }
 
 // verify verifies that name is a valid SHA256 digest, and checks if the given
@@ -340,6 +371,80 @@ func (s *CAStore) cleanupMemoryCacheExpiredEntries() {
 	if len(expiredNames) > 0 {
 		s.memCache.RemoveBatch(expiredNames)
 	}
+}
+
+func (s *CAStore) drainWorker() {
+	defer s.drain.wg.Done()
+
+	ticker := s.clk.Ticker(_drainDuration)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.drainNext()
+		case <-s.drain.stopChan:
+			return
+		}
+	}
+}
+
+func (s *CAStore) dequeueNextDrainItem() *drainItem {
+	s.drain.mu.Lock()
+	defer s.drain.mu.Unlock()
+
+	if s.drain.queue.Len() == 0 {
+		return nil
+	}
+
+	elem := s.drain.queue.Front()
+	s.drain.queue.Remove(elem)
+	item, ok := elem.Value.(*drainItem)
+	if !ok {
+		// Shouldn't happen, but good to check
+		return nil
+	}
+	return item
+}
+
+func (s *CAStore) drainNext() {
+	item := s.dequeueNextDrainItem()
+	if item == nil {
+		return
+	}
+
+	err := s.writeDrainItemToDisk(item.entry)
+	if err != nil {
+		if item.retries < s.config.MemoryCache.DrainMaxRetries {
+			s.addItemForDiskSync(&drainItem{
+				entry:   item.entry,
+				retries: item.retries + 1,
+			})
+			return
+		}
+		s.memCache.Remove(item.entry.Name)
+		s.stats.Counter("drain_error").Inc(1)
+		return
+	}
+
+	s.drain.histogram.RecordDuration(s.clk.Now().Sub(item.entry.CreatedAt))
+	s.memCache.Remove(item.entry.Name)
+}
+
+func (s *CAStore) writeDrainItemToDisk(entry *cache.MemoryEntry) error {
+	if err := s.WriteCacheFile(entry.Name, func(w FileReadWriter) error {
+		_, err := w.Write(entry.Data)
+		return err
+	}); err != nil {
+		return fmt.Errorf("write blob: %s", err)
+	}
+
+	tm := metadata.NewTorrentMeta(entry.MetaInfo)
+	if _, err := s.SetCacheFileMetadata(entry.Name, tm); err != nil {
+		return fmt.Errorf("write metadata: %s", err)
+	}
+
+	return nil
 }
 
 func initCASVolumes(dir string, volumes []Volume) error {
