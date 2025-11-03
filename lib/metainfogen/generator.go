@@ -14,6 +14,7 @@
 package metainfogen
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/uber/kraken/core"
@@ -56,4 +57,18 @@ func (g *Generator) Generate(d core.Digest) error {
 		return fmt.Errorf("set metainfo: %s", err)
 	}
 	return nil
+}
+
+// GenerateFromBuffer generates metainfo from the buffer
+func (g *Generator) GenerateFromBuffer(name string, data []byte) (*core.MetaInfo, error) {
+	digest, err := core.NewSHA256DigestFromHex(name)
+	if err != nil {
+		return nil, fmt.Errorf("new digest from hex: %s", err)
+	}
+	pieceLength := g.pieceLengthConfig.get(int64(len(data)))
+	metaInfo, err := core.NewMetaInfo(digest, bytes.NewReader(data), pieceLength)
+	if err != nil {
+		return nil, fmt.Errorf("generate metainfo: %w", err)
+	}
+	return metaInfo, nil
 }
