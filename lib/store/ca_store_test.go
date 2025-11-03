@@ -20,6 +20,7 @@ import (
 	"path"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
@@ -215,4 +216,20 @@ func TestCAStoreCreateCacheFile(t *testing.T) {
 	require.NoError(err)
 	b2, err := io.ReadAll(r2)
 	require.Equal(s1, string(b2))
+}
+func TestCAStoreConfig_WithMemoryCache(t *testing.T) {
+	require := require.New(t)
+
+	config, cleanup := CAStoreConfigFixture()
+	defer cleanup()
+
+	require.Equal(int64(0), config.MemoryCache.MaxSize)
+	require.Equal(0, config.MemoryCache.DrainWorkers)
+	require.Equal(0, config.MemoryCache.DrainMaxRetries)
+
+	config = config.applyDefaults()
+
+	require.Equal(10, config.MemoryCache.DrainWorkers)
+	require.Equal(3, config.MemoryCache.DrainMaxRetries)
+	require.Equal(5*time.Minute, config.MemoryCache.TTL)
 }
