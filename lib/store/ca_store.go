@@ -19,6 +19,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sync"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/docker/distribution/uuid"
@@ -27,19 +28,32 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/hrw"
 	"github.com/uber/kraken/lib/store/base"
+	"github.com/uber/kraken/utils/cache"
 )
 
 // CAStore allows uploading / caching content-addressable files.
 type CAStore struct {
 	config CAStoreConfig
+	stats  tally.Scope
+	clk    clock.Clock
 
 	*uploadStore
 	*cacheStore
 	cleanup *cleanupManager
+
+	memCache *cache.BlobMemoryCache
+
+	ttlStopChan chan struct{}
+	ttlWg       sync.WaitGroup
 }
 
 // NewCAStore creates a new CAStore.
 func NewCAStore(config CAStoreConfig, stats tally.Scope) (*CAStore, error) {
+	return newCAStore(config, stats, clock.New())
+}
+
+// newCAStore creates a new CAStore with clock injected
+func newCAStore(config CAStoreConfig, stats tally.Scope, clk clock.Clock) (*CAStore, error) {
 	config = config.applyDefaults()
 
 	stats = stats.Tagged(map[string]string{
@@ -51,7 +65,7 @@ func NewCAStore(config CAStoreConfig, stats tally.Scope) (*CAStore, error) {
 		return nil, fmt.Errorf("new upload store: %s", err)
 	}
 
-	cacheBackend := base.NewCASFileStoreWithLRUMap(config.Capacity, clock.New())
+	cacheBackend := base.NewCASFileStoreWithLRUMap(config.Capacity, clk)
 	cacheStore, err := newCacheStore(config.CacheDir, cacheBackend, config.ReadPartSize)
 	if err != nil {
 		return nil, fmt.Errorf("new cache store: %s", err)
@@ -61,18 +75,50 @@ func NewCAStore(config CAStoreConfig, stats tally.Scope) (*CAStore, error) {
 		return nil, fmt.Errorf("init cas volumes: %s", err)
 	}
 
-	cleanup, err := newCleanupManager(clock.New(), stats)
+	cleanup, err := newCleanupManager(clk, stats)
 	if err != nil {
 		return nil, fmt.Errorf("new cleanup manager: %s", err)
 	}
 	cleanup.addJob("upload", config.UploadCleanup, uploadStore.newFileOp())
 	cleanup.addJob("cache", config.CacheCleanup, cacheStore.newFileOp())
 
-	return &CAStore{config, uploadStore, cacheStore, cleanup}, nil
+	cas := &CAStore{
+		config:      config,
+		stats:       stats,
+		clk:         clk,
+		uploadStore: uploadStore,
+		cacheStore:  cacheStore,
+		cleanup:     cleanup,
+	}
+
+	if config.MemoryCache.Enabled {
+		memCache := createMemoryCache(&config, stats)
+		cas.memCache = memCache
+		initMemCacheCleanupJob(cas)
+	}
+
+	return cas, nil
+}
+
+func createMemoryCache(config *CAStoreConfig, stats tally.Scope) *cache.BlobMemoryCache {
+	return cache.NewBlobMemoryCache(cache.BlobMemoryCacheConfig{
+		MaxSize: config.MemoryCache.MaxSize,
+	}, stats)
+}
+
+func initMemCacheCleanupJob(cas *CAStore) {
+	cas.ttlStopChan = make(chan struct{})
+	cas.ttlWg.Add(1)
+	go cas.memoryCacheCleanupWorker()
 }
 
 // Close terminates any goroutines started by s.
 func (s *CAStore) Close() {
+	if s.ttlStopChan != nil {
+		close(s.ttlStopChan)
+		s.ttlWg.Wait()
+	}
+
 	s.cleanup.stop()
 }
 
@@ -150,6 +196,30 @@ func (s *CAStore) verify(r io.Reader, name string) error {
 		}
 	}
 	return nil
+}
+
+func (s *CAStore) memoryCacheCleanupWorker() {
+	defer s.ttlWg.Done()
+
+	ticker := s.clk.Ticker(s.config.MemoryCache.TTLInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.cleanupMemoryCacheExpiredEntries()
+		case <-s.ttlStopChan:
+			return
+		}
+	}
+}
+
+func (s *CAStore) cleanupMemoryCacheExpiredEntries() {
+	expiredNames := s.memCache.GetExpiredEntries(s.clk.Now(), s.config.MemoryCache.TTL)
+
+	if len(expiredNames) > 0 {
+		s.memCache.RemoveBatch(expiredNames)
+	}
 }
 
 func initCASVolumes(dir string, volumes []Volume) error {

@@ -140,3 +140,37 @@ func (c *BlobMemoryCache) TotalBytes() int64 {
 	defer c.mu.RUnlock()
 	return c.totalSize
 }
+
+// GetExpiredEntries returns names of entries older than TTL.
+// Uses RLock for minimal contention (allows concurrent reads).
+func (c *BlobMemoryCache) GetExpiredEntries(now time.Time, ttl time.Duration) []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	var expiredNames []string
+
+	for name, entry := range c.entries {
+		if now.Sub(entry.CreatedAt) > ttl {
+			expiredNames = append(expiredNames, name)
+		}
+	}
+
+	return expiredNames
+}
+
+// RemoveBatch removes multiple entries atomically.
+// Uses Lock for batch deletion (single lock acquisition for entire batch).
+func (c *BlobMemoryCache) RemoveBatch(names []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for _, name := range names {
+		entry, exists := c.entries[name]
+		if !exists {
+			continue
+		}
+		delete(c.entries, name)
+		c.totalSize -= entry.Size()
+	}
+	c.stats.Gauge("total_size_bytes").Update(float64(c.totalSize))
+}

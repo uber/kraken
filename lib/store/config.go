@@ -32,6 +32,7 @@ type MemoryCacheConfig struct {
 	DrainWorkers    int           `yaml:"drain_workers"`
 	DrainMaxRetries int           `yaml:"drain_max_retries"`
 	TTL             time.Duration `yaml:"ttl"`
+	TTLInterval     time.Duration `yaml:"ttl_interval"`
 }
 
 // CAStoreConfig defines CAStore configuration.
@@ -64,6 +65,9 @@ func (c CAStoreConfig) applyDefaults() CAStoreConfig {
 	}
 	if c.MemoryCache.DrainMaxRetries == 0 {
 		c.MemoryCache.DrainMaxRetries = 3
+	}
+	if c.MemoryCache.TTLInterval == 0 {
+		c.MemoryCache.TTLInterval = 1 * time.Minute
 	}
 	return c
 }
