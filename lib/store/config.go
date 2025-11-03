@@ -28,7 +28,7 @@ type Volume struct {
 // MemoryCacheConfig defines memory cache configuration.
 type MemoryCacheConfig struct {
 	Enabled         bool          `yaml:"enabled"`
-	MaxSize         int64         `yaml:"max_size"`
+	MaxSize         uint64        `yaml:"max_size"`
 	DrainWorkers    int           `yaml:"drain_workers"`
 	DrainMaxRetries int           `yaml:"drain_max_retries"`
 	TTL             time.Duration `yaml:"ttl"`

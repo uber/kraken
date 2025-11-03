@@ -225,7 +225,7 @@ func TestCAStoreConfig_WithMemoryCache(t *testing.T) {
 	config, cleanup := CAStoreConfigFixture()
 	defer cleanup()
 
-	require.Equal(int64(0), config.MemoryCache.MaxSize)
+	require.Equal(uint64(0), config.MemoryCache.MaxSize)
 	require.Equal(0, config.MemoryCache.DrainWorkers)
 	require.Equal(0, config.MemoryCache.DrainMaxRetries)
 	require.Equal(time.Duration(0), config.MemoryCache.TTLInterval)
@@ -333,8 +333,7 @@ func TestCAStore_TTLCleanup(t *testing.T) {
 				Data:      []byte("test data"),
 				CreatedAt: now.Add(-tt.entryAge),
 			}
-			added, err := s.memCache.Add(entry)
-			require.NoError(t, err)
+			added := s.memCache.Add(entry)
 			require.True(t, added)
 
 			s.cleanupMemoryCacheExpiredEntries()
