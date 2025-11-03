@@ -261,6 +261,8 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	}
 	log.With("namespace", namespace, "digest", d.Hex()).Info("Starting blob download")
 	if err := s.downloadBlob(namespace, d, w); err != nil {
+		log.With("namespace", namespace, "digest", d.Hex(), "error", err).
+			Debug("downloadBlob returned non-nil error")
 		return err
 	}
 	setOctetStreamContentType(w)
@@ -391,6 +393,8 @@ func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) erro
 	log.With("namespace", namespace, "digest", d.Hex()).Debug("Getting metainfo")
 	raw, err := s.getMetaInfo(namespace, d)
 	if err != nil {
+		log.With("namespace", namespace, "digest", d.Hex(), "error", err).
+			Debug("getMetaInfo returned non-nil error")
 		return err
 	}
 	w.Write(raw)
