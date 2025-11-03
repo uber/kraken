@@ -29,11 +29,11 @@ import (
 func TestBlobMemoryCache_Add(t *testing.T) {
 	tests := []struct {
 		name            string
-		maxSize         int64
+		maxSize         uint64
 		entries         []*MemoryEntry
 		expectedAdded   []bool
 		expectedEntries int
-		expectedBytes   int64
+		expectedBytes   uint64
 	}{
 		{
 			name:    "success",
@@ -62,7 +62,7 @@ func TestBlobMemoryCache_Add(t *testing.T) {
 				{Name: "blob1", Data: make([]byte, 500), CreatedAt: time.Now()},
 				{Name: "blob1", Data: make([]byte, 500), CreatedAt: time.Now()},
 			},
-			expectedAdded:   []bool{true, true},
+			expectedAdded:   []bool{true, false}, // Second returns false (already exists)
 			expectedEntries: 1,
 			expectedBytes:   500,
 		},
@@ -96,10 +96,24 @@ func TestBlobMemoryCache_Add(t *testing.T) {
 			)
 
 			for i, entry := range tt.entries {
-				added, err := cache.Add(entry)
-				require.NoError(t, err)
-				assert.Equal(t, tt.expectedAdded[i], added)
+				// Try to reserve space first
+				reserved := cache.TryReserve(entry.Size())
 
+				var added bool
+				if reserved {
+					// Add the entry
+					added = cache.Add(entry)
+
+					if !added {
+						// Entry already existed, release the reservation
+						cache.ReleaseReservation(entry.Size())
+					}
+				} else {
+					// Reservation failed, cannot add
+					added = false
+				}
+
+				assert.Equal(t, tt.expectedAdded[i], added)
 			}
 
 			assert.Equal(t, tt.expectedEntries, cache.NumEntries())
@@ -122,12 +136,13 @@ func TestBlobMemoryCache_Add_MultipleBlobs(t *testing.T) {
 			CreatedAt: time.Now(),
 		}
 
-		added, err := cache.Add(entry)
-		require.NoError(t, err)
-		assert.True(t, added)
+		reserved := cache.TryReserve(entry.Size())
+		require.True(t, reserved)
+
+		cache.Add(entry)
 	}
 
-	assert.Equal(t, int64(1500), cache.TotalBytes())
+	assert.Equal(t, uint64(1500), cache.TotalBytes())
 	assert.Equal(t, 3, cache.NumEntries())
 
 	// Try to add one more that exceeds capacity
@@ -137,10 +152,9 @@ func TestBlobMemoryCache_Add_MultipleBlobs(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 
-	added, err := cache.Add(entry)
-	require.NoError(t, err)
-	assert.False(t, added, "Should fail when total would exceed capacity")
-	assert.Equal(t, int64(1500), cache.TotalBytes(), "Size should not change")
+	reserved := cache.TryReserve(entry.Size())
+	assert.False(t, reserved, "Should fail to reserve when total would exceed capacity")
+	assert.Equal(t, uint64(1500), cache.TotalBytes(), "Size should not change")
 	assert.Equal(t, 3, cache.NumEntries())
 }
 
@@ -181,8 +195,9 @@ func TestBlobMemoryCache_Get(t *testing.T) {
 			)
 
 			if tt.setupEntry != nil {
-				_, err := cache.Add(tt.setupEntry)
-				require.NoError(t, err)
+				reserved := cache.TryReserve(tt.setupEntry.Size())
+				require.True(t, reserved)
+				cache.Add(tt.setupEntry)
 			}
 
 			result := cache.Get(tt.lookupKey)
@@ -190,7 +205,7 @@ func TestBlobMemoryCache_Get(t *testing.T) {
 			if tt.expectFound {
 				require.NotNil(t, result)
 				assert.Equal(t, tt.expectedName, result.Name)
-				assert.Equal(t, int64(tt.expectedDataSize), result.Size())
+				assert.Equal(t, uint64(tt.expectedDataSize), result.Size())
 			} else {
 				assert.Nil(t, result)
 			}
@@ -212,8 +227,10 @@ func TestBlobMemoryCache_Get_WithMetaInfo(t *testing.T) {
 		MetaInfo:  metaInfo,
 		CreatedAt: time.Now(),
 	}
-	_, err := cache.Add(entry)
-	require.NoError(t, err)
+
+	reserved := cache.TryReserve(entry.Size())
+	require.True(t, reserved)
+	cache.Add(entry)
 
 	result := cache.Get(digest.Hex())
 
@@ -227,7 +244,7 @@ func TestBlobMemoryCache_Remove(t *testing.T) {
 		setupEntry    *MemoryEntry
 		removeKey     string
 		expectedSize  int
-		expectedBytes int64
+		expectedBytes uint64
 		shouldExist   bool
 	}{
 		{
@@ -260,8 +277,9 @@ func TestBlobMemoryCache_Remove(t *testing.T) {
 			)
 
 			if tt.setupEntry != nil {
-				_, err := cache.Add(tt.setupEntry)
-				require.NoError(t, err)
+				reserved := cache.TryReserve(tt.setupEntry.Size())
+				require.True(t, reserved)
+				cache.Add(tt.setupEntry)
 			}
 
 			cache.Remove(tt.removeKey)
@@ -288,9 +306,9 @@ func TestBlobMemoryCache_Remove_AllowsReAdd(t *testing.T) {
 		Data:      make([]byte, 600),
 		CreatedAt: time.Now(),
 	}
-	added, err := cache.Add(entry1)
-	require.NoError(t, err)
-	require.True(t, added)
+	reserved := cache.TryReserve(entry1.Size())
+	require.True(t, reserved)
+	cache.Add(entry1)
 
 	// Try to add another blob - should fail due to capacity
 	entry2 := &MemoryEntry{
@@ -298,18 +316,17 @@ func TestBlobMemoryCache_Remove_AllowsReAdd(t *testing.T) {
 		Data:      make([]byte, 500),
 		CreatedAt: time.Now(),
 	}
-	added, err = cache.Add(entry2)
-	require.NoError(t, err)
-	assert.False(t, added)
+	reserved = cache.TryReserve(entry2.Size())
+	assert.False(t, reserved)
 
 	// Remove first blob
 	cache.Remove("blob1")
 
 	// Now second blob should fit
-	added, err = cache.Add(entry2)
-	require.NoError(t, err)
-	assert.True(t, added)
-	assert.Equal(t, int64(500), cache.TotalBytes())
+	reserved = cache.TryReserve(entry2.Size())
+	require.True(t, reserved)
+	cache.Add(entry2)
+	assert.Equal(t, uint64(500), cache.TotalBytes())
 }
 
 func TestBlobMemoryCache_ConcurrentAdd(t *testing.T) {
@@ -333,8 +350,10 @@ func TestBlobMemoryCache_ConcurrentAdd(t *testing.T) {
 					Data:      make([]byte, 100),
 					CreatedAt: time.Now(),
 				}
-				_, err := cache.Add(entry)
-				require.NoError(t, err)
+				reserved := cache.TryReserve(entry.Size())
+				if reserved {
+					cache.Add(entry)
+				}
 			}
 		}(i)
 	}
@@ -343,7 +362,7 @@ func TestBlobMemoryCache_ConcurrentAdd(t *testing.T) {
 
 	// All entries should be added (no race conditions)
 	assert.Equal(t, numGoroutines*entriesPerGoroutine, cache.NumEntries())
-	assert.Equal(t, int64(numGoroutines*entriesPerGoroutine*100), cache.TotalBytes())
+	assert.Equal(t, uint64(numGoroutines*entriesPerGoroutine*100), cache.TotalBytes())
 }
 
 func TestBlobMemoryCache_ConcurrentReadWrite(t *testing.T) {
@@ -359,8 +378,9 @@ func TestBlobMemoryCache_ConcurrentReadWrite(t *testing.T) {
 			Data:      make([]byte, 100),
 			CreatedAt: time.Now(),
 		}
-		_, err := cache.Add(entry)
-		require.NoError(t, err)
+		reserved := cache.TryReserve(entry.Size())
+		require.True(t, reserved)
+		cache.Add(entry)
 	}
 
 	var wg sync.WaitGroup
@@ -386,8 +406,10 @@ func TestBlobMemoryCache_ConcurrentReadWrite(t *testing.T) {
 				Data:      make([]byte, 100),
 				CreatedAt: time.Now(),
 			}
-			_, err := cache.Add(entry)
-			require.NoError(t, err)
+			reserved := cache.TryReserve(entry.Size())
+			if reserved {
+				cache.Add(entry)
+			}
 		}(i)
 	}
 
@@ -417,15 +439,16 @@ func TestBlobMemoryCache_SizeAndTotalBytes(t *testing.T) {
 	}
 
 	for _, entry := range entries {
-		_, err := cache.Add(entry)
-		require.NoError(t, err)
+		reserved := cache.TryReserve(entry.Size())
+		require.True(t, reserved)
+		cache.Add(entry)
 	}
 
 	assert.Equal(t, 3, cache.NumEntries())
-	assert.Equal(t, int64(600), cache.TotalBytes())
+	assert.Equal(t, uint64(600), cache.TotalBytes())
 
 	cache.Remove("blob2")
 
 	assert.Equal(t, 2, cache.NumEntries())
-	assert.Equal(t, int64(400), cache.TotalBytes())
+	assert.Equal(t, uint64(400), cache.TotalBytes())
 }
