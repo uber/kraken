@@ -59,6 +59,11 @@ func (g *Generator) Generate(d core.Digest) error {
 	return nil
 }
 
+// Get the piece length for the blob
+func (g *Generator) GetPieceLength(size int64) int64 {
+	return g.pieceLengthConfig.get(size)
+}
+
 // GenerateFromBuffer generates metainfo from the buffer
 func (g *Generator) GenerateFromBuffer(name string, data []byte) (*core.MetaInfo, error) {
 	digest, err := core.NewSHA256DigestFromHex(name)

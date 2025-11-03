@@ -103,7 +103,9 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 	id := namespace + ":" + d.Hex()
 	err = r.requests.Start(id, func() error {
 		start := time.Now()
-		if err := r.download(client, namespace, d); err != nil {
+		pieceLength := r.metaInfoGenerator.GetPieceLength(int64(size))
+		err := r.download(client, namespace, d, size.Bytes(), pieceLength)
+		if err != nil {
 			return err
 		}
 		t := time.Since(start)
@@ -112,10 +114,6 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 			"namespace", namespace,
 			"name", d.Hex(),
 			"download_time", t).Info("Downloaded remote blob")
-
-		if err := r.metaInfoGenerator.Generate(d); err != nil {
-			return fmt.Errorf("generate metainfo: %s", err)
-		}
 		r.stats.Counter("downloads").Inc(1)
 		for _, h := range hooks {
 			h.Run(d)
@@ -134,9 +132,9 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 	}
 }
 
-func (r *Refresher) download(client backend.Client, namespace string, d core.Digest) error {
+func (r *Refresher) download(client backend.Client, namespace string, d core.Digest, size uint64, pieceLength int64) error {
 	name := d.Hex()
-	return r.cas.WriteCacheFile(name, func(w store.FileReadWriter) error {
+	return r.cas.WriteBlobToCacheWithMetaInfo(name, size, func(w store.FileReadWriter) error {
 		return client.Download(namespace, name, w)
-	})
+	}, pieceLength)
 }

@@ -130,3 +130,8 @@ func (b *BufferReadWriter) Cancel() error {
 func (b *BufferReadWriter) Commit() error {
 	return nil
 }
+
+// Bytes returns the full buffer
+func (b *BufferReadWriter) Bytes() []byte {
+	return b.buf.Bytes()
+}

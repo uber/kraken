@@ -14,6 +14,8 @@
 package store
 
 import (
+	"bytes"
+	"container/list"
 	"fmt"
 	"hash"
 	"io"
@@ -28,8 +30,16 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/hrw"
 	"github.com/uber/kraken/lib/store/base"
+	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/cache"
+	"github.com/uber/kraken/utils/log"
 )
+
+// drainItem represents an item in the drain queue for async disk writing.
+type drainItem struct {
+	entry   *cache.MemoryEntry
+	retries int
+}
 
 // CAStore allows uploading / caching content-addressable files.
 type CAStore struct {
@@ -42,6 +52,9 @@ type CAStore struct {
 	cleanup *cleanupManager
 
 	memCache *cache.BlobMemoryCache
+
+	drainQueue *list.List
+	drainMu    sync.Mutex
 
 	ttlStopChan chan struct{}
 	ttlWg       sync.WaitGroup
@@ -94,6 +107,7 @@ func newCAStore(config CAStoreConfig, stats tally.Scope, clk clock.Clock) (*CASt
 	if config.MemoryCache.Enabled {
 		memCache := createMemoryCache(&config, stats)
 		cas.memCache = memCache
+		cas.drainQueue = list.New()
 		initMemCacheCleanupJob(cas)
 	}
 
@@ -155,6 +169,11 @@ func (s *CAStore) CreateCacheFile(name string, r io.Reader) error {
 // WriteCacheFile initializes a cache file for name by passing a temporary
 // upload file writer to the write function.
 func (s *CAStore) WriteCacheFile(name string, write func(w FileReadWriter) error) error {
+	return s.writeCacheFile(name, write, false, 0)
+}
+
+// this function writes cache file with an option to write metadata alongside
+func (s *CAStore) writeCacheFile(name string, write func(w FileReadWriter) error, addMetadata bool, pieceLength int64) error {
 	tmp := fmt.Sprintf("%s.%s", name, uuid.Generate().String())
 	if err := s.CreateUploadFile(tmp, 0); err != nil {
 		return fmt.Errorf("create upload file: %s", err)
@@ -173,7 +192,108 @@ func (s *CAStore) WriteCacheFile(name string, write func(w FileReadWriter) error
 	if err := s.MoveUploadFileToCache(tmp, name); err != nil && !os.IsExist(err) {
 		return fmt.Errorf("move upload file to cache: %s", err)
 	}
+	if addMetadata {
+		return s.generateMetadataFromFile(name, pieceLength)
+	}
 	return nil
+}
+
+// WriteBlobToCacheWithMetaInfo writes a blob and its metadata to disk,
+// potentially going through a write-through memory cache, if memory is available.
+func (s *CAStore) WriteBlobToCacheWithMetaInfo(
+	name string,
+	size uint64,
+	write func(w FileReadWriter) error,
+	pieceLength int64) error {
+	if s.config.MemoryCache.Enabled && s.memCache.TryReserve(size) {
+		err := s.addToMemoryCache(name, write, pieceLength)
+		if err == nil {
+			return nil
+		}
+		log.With("blob", name).Errorf("error while trying to add the blob to memory cache: %w", err)
+		s.memCache.ReleaseReservation(size)
+	}
+	addMetadata := true
+	return s.writeCacheFile(name, write, addMetadata, pieceLength)
+}
+
+// CheckInMemCache returns true if the blob is present in memcache
+// Used in tests
+func (s *CAStore) CheckInMemCache(name string) bool {
+	return s.memCache.Get(name) != nil
+}
+
+func (s *CAStore) addToMemoryCache(
+	name string,
+	write func(w FileReadWriter) error,
+	pieceLength int64,
+) error {
+	tmpWriter := base.NewBufferReadWriter()
+
+	if err := write(tmpWriter); err != nil {
+		return err
+	}
+
+	data := tmpWriter.Bytes()
+	metaInfo, err := s.generateMetadataFromBytes(name, data, pieceLength)
+	if err != nil {
+		return  fmt.Errorf("generating metainfo: %w", err)
+	}
+
+	entry := &cache.MemoryEntry{
+		Name:      name,
+		Data:      data,
+		MetaInfo:  metaInfo,
+		CreatedAt: s.clk.Now(),
+	}
+
+	if added := s.memCache.Add(entry); !added {
+		// this can happen when concurrent goroutines try to add same blob
+		return fmt.Errorf("entry already in in-memory cache")
+	}
+
+	s.addItemForDiskSync(&drainItem{
+		entry:   entry,
+		retries: 0,
+	})
+	return nil
+}
+
+func (s *CAStore) generateMetadataFromBytes(name string, data []byte, pieceLength int64) (*core.MetaInfo, error) {
+	digest, err := core.NewSHA256DigestFromHex(name)
+	if err != nil {
+		return nil, fmt.Errorf("new digest from hex: %s", err)
+	}
+	metaInfo, err := core.NewMetaInfo(digest, bytes.NewReader(data), pieceLength)
+	if err != nil {
+		return nil, fmt.Errorf("generate metainfo: %w", err)
+	}
+	return metaInfo, nil
+}
+
+func (s *CAStore) generateMetadataFromFile(name string, pieceLength int64) error {
+	d, err := core.NewSHA256DigestFromHex(name)
+	if err != nil {
+		return fmt.Errorf("get digest from file: %w", err)
+	}
+	f, err := s.GetCacheFileReader(name)
+	if err != nil {
+		return fmt.Errorf("get cache file: %w", err)
+	}
+	mi, err := core.NewMetaInfo(d, f, pieceLength)
+	if err != nil {
+		return fmt.Errorf("create metainfo: %w", err)
+	}
+	if _, err := s.SetCacheFileMetadata(d.Hex(), metadata.NewTorrentMeta(mi)); err != nil {
+		return fmt.Errorf("set metainfo: %w", err)
+	}
+	return nil
+}
+
+func (s *CAStore) addItemForDiskSync(item *drainItem) {
+	s.drainMu.Lock()
+	defer s.drainMu.Unlock()
+	s.drainQueue.PushBack(item)
 }
 
 // verify verifies that name is a valid SHA256 digest, and checks if the given

@@ -19,6 +19,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/cache"
+	"github.com/uber/kraken/utils/closers"
 )
 
 func TestCAStoreInitVolumes(t *testing.T) {
@@ -364,4 +366,416 @@ func TestCAStore_CloseWithTTLWorker(t *testing.T) {
 	require.NoError(err)
 
 	s.Close()
+}
+
+func TestCAStore_WriteBlobToCacheWithMetaInfo_Success(t *testing.T) {
+	tests := []struct {
+		name              string
+		memoryCacheConfig MemoryCacheConfig
+		testData          []byte
+		expectInMemCache  bool
+		expectOnDisk      bool
+	}{
+		{
+			name: "memory cache success",
+			memoryCacheConfig: MemoryCacheConfig{
+				Enabled: true,
+				MaxSize: 1024 * 1024,
+				TTL:     time.Hour,
+			},
+			testData:         []byte("test data for memory cache"),
+			expectInMemCache: true,
+			expectOnDisk:     false,
+		},
+		{
+			name: "cache full - fallback to disk",
+			memoryCacheConfig: MemoryCacheConfig{
+				Enabled: true,
+				MaxSize: 100,
+				TTL:     time.Hour,
+			},
+			testData:         make([]byte, 200),
+			expectInMemCache: false,
+			expectOnDisk:     true,
+		},
+		{
+			name: "cache disabled - write to disk",
+			memoryCacheConfig: MemoryCacheConfig{
+				Enabled: false,
+			},
+			testData:         []byte("test data"),
+			expectInMemCache: false,
+			expectOnDisk:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, cleanup := CAStoreConfigFixture()
+			defer cleanup()
+
+			config.MemoryCache = tt.memoryCacheConfig
+
+			// Initialize test data if needed
+			if len(tt.testData) == 200 {
+				for i := range tt.testData {
+					tt.testData[i] = byte(i % 256)
+				}
+			}
+
+			mockClock := clock.NewMock()
+			s, err := newCAStore(config, tally.NoopScope, mockClock)
+			require.NoError(t, err)
+			defer s.Close()
+
+			digest, err := core.NewDigester().FromBytes(tt.testData)
+			require.NoError(t, err)
+			name := digest.Hex()
+
+			err = s.WriteBlobToCacheWithMetaInfo(name, uint64(len(tt.testData)),
+				func(w FileReadWriter) error {
+					_, err := w.Write(tt.testData)
+					return err
+				},
+				256*1024,
+			)
+
+			require.NoError(t, err)
+
+			if config.MemoryCache.Enabled {
+				inMemCache := s.CheckInMemCache(name)
+				require.Equal(t, tt.expectInMemCache, inMemCache)
+
+				if tt.expectInMemCache {
+					entry := s.memCache.Get(name)
+					require.NotNil(t, entry, "Blob should be in memory cache")
+					require.Equal(t, tt.testData, entry.Data)
+					require.NotNil(t, entry.MetaInfo, "MetaInfo should be generated")
+				}
+			}
+
+			if tt.expectOnDisk {
+				r, err := s.GetCacheFileReader(name)
+				require.NoError(t, err)
+				defer closers.Close(r)
+				readData, err := io.ReadAll(r)
+				require.NoError(t, err)
+				require.Equal(t, tt.testData, readData, "Blob should be on disk")
+			}
+		})
+	}
+}
+
+func TestCAStore_WriteBlobToCacheWithMetaInfo_Errors(t *testing.T) {
+	tests := []struct {
+		name            string
+		writeShouldFail bool
+		expectError     bool
+	}{
+		{
+			name:            "write error",
+			writeShouldFail: true,
+			expectError:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, cleanup := CAStoreConfigFixture()
+			defer cleanup()
+
+			config.MemoryCache = MemoryCacheConfig{
+				Enabled: true,
+				MaxSize: 1024 * 1024,
+				TTL:     time.Hour,
+			}
+
+			mockClock := clock.NewMock()
+			s, err := newCAStore(config, tally.NoopScope, mockClock)
+			require.NoError(t, err)
+			defer s.Close()
+
+			testData := []byte("test data")
+			digest, err := core.NewDigester().FromBytes(testData)
+			require.NoError(t, err)
+			name := digest.Hex()
+
+			err = s.WriteBlobToCacheWithMetaInfo(name, uint64(len(testData)),
+				func(w FileReadWriter) error {
+					if tt.writeShouldFail {
+						return fmt.Errorf("write error")
+					}
+					_, err := w.Write(testData)
+					return err
+				},
+				256*1024,
+			)
+
+			if tt.expectError {
+				require.Error(t, err)
+				require.False(t, s.CheckInMemCache(name), "Blob should not be in memory cache on error")
+				return
+			}
+
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestCAStore_WriteBlobToCacheWithMetaInfo_SequentialDuplicates(t *testing.T) {
+	config, cleanup := CAStoreConfigFixture()
+	defer cleanup()
+
+	config.MemoryCache = MemoryCacheConfig{
+		Enabled: true,
+		MaxSize: 1024 * 1024,
+		TTL:     time.Hour,
+	}
+
+	mockClock := clock.NewMock()
+	s, err := newCAStore(config, tally.NoopScope, mockClock)
+	require.NoError(t, err)
+	defer s.Close()
+
+	testData := []byte("duplicate test data")
+	digest, err := core.NewDigester().FromBytes(testData)
+	require.NoError(t, err)
+	name := digest.Hex()
+
+	// First write - should add to cache
+	err = s.WriteBlobToCacheWithMetaInfo(name, uint64(len(testData)),
+		func(w FileReadWriter) error {
+			_, err := w.Write(testData)
+			return err
+		},
+		256*1024,
+	)
+	require.NoError(t, err)
+	require.True(t, s.CheckInMemCache(name), "First write should add to memory cache")
+
+	entry := s.memCache.Get(name)
+	require.NotNil(t, entry, "Blob should be in cache after first write")
+	initialSize := s.memCache.TotalBytes()
+
+	// Second write - should be a no-op (duplicate)
+	err = s.WriteBlobToCacheWithMetaInfo(name, uint64(len(testData)),
+		func(w FileReadWriter) error {
+			_, err := w.Write(testData)
+			return err
+		},
+		256*1024,
+	)
+	require.NoError(t, err)
+	require.True(t, s.CheckInMemCache(name), "Entry should still be in memory cache")
+
+	// Verify no reservation leak
+	finalSize := s.memCache.TotalBytes()
+	require.Equal(t, initialSize, finalSize, "Cache size should not change on duplicate write")
+	require.NotNil(t, s.memCache.Get(name), "Entry should still be in cache")
+}
+
+func TestCAStore_WriteBlobToCacheWithMetaInfo_ReservationFails(t *testing.T) {
+	tests := []struct {
+		name                string
+		cacheSize           uint64
+		firstBlobSize       int
+		secondBlobSize      int
+		expectFirstInCache  bool
+		expectSecondInCache bool
+	}{
+		{
+			name:                "reservation fails when cache full",
+			cacheSize:           1000,
+			firstBlobSize:       600,
+			secondBlobSize:      500,
+			expectFirstInCache:  true,
+			expectSecondInCache: false,
+		},
+		{
+			name:                "reservation succeeds when space available",
+			cacheSize:           2000,
+			firstBlobSize:       600,
+			secondBlobSize:      500,
+			expectFirstInCache:  true,
+			expectSecondInCache: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, cleanup := CAStoreConfigFixture()
+			defer cleanup()
+
+			config.MemoryCache = MemoryCacheConfig{
+				Enabled: true,
+				MaxSize: tt.cacheSize,
+				TTL:     time.Hour,
+			}
+
+			mockClock := clock.NewMock()
+			s, err := newCAStore(config, tally.NoopScope, mockClock)
+			require.NoError(t, err)
+			defer s.Close()
+
+			// Add first blob
+			data1 := make([]byte, tt.firstBlobSize)
+			digest1, err := core.NewDigester().FromBytes(data1)
+			require.NoError(t, err)
+
+			err = s.WriteBlobToCacheWithMetaInfo(digest1.Hex(), uint64(tt.firstBlobSize),
+				func(w FileReadWriter) error {
+					_, err := w.Write(data1)
+					return err
+				},
+				256*1024,
+			)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectFirstInCache, s.CheckInMemCache(digest1.Hex()))
+
+			// Try to add second blob
+			data2 := make([]byte, tt.secondBlobSize)
+			for i := range data2 {
+				data2[i] = byte(i % 256)
+			}
+			digest2, err := core.NewDigester().FromBytes(data2)
+			require.NoError(t, err)
+
+			err = s.WriteBlobToCacheWithMetaInfo(digest2.Hex(), uint64(tt.secondBlobSize),
+				func(w FileReadWriter) error {
+					_, err := w.Write(data2)
+					return err
+				},
+				256*1024,
+			)
+
+			require.NoError(t, err)
+			inMemCache := s.CheckInMemCache(digest2.Hex())
+			require.Equal(t, tt.expectSecondInCache, inMemCache)
+
+			if tt.expectSecondInCache {
+				entry := s.memCache.Get(digest2.Hex())
+				require.NotNil(t, entry, "Second blob should be in cache")
+			} else {
+				// Only verify on disk when not in cache
+				r, err := s.GetCacheFileReader(digest2.Hex())
+				require.NoError(t, err)
+				defer closers.Close(r)
+				readData, err := io.ReadAll(r)
+				require.NoError(t, err)
+				require.Equal(t, data2, readData, "Second blob should be on disk")
+			}
+		})
+	}
+}
+
+func TestCAStore_WriteBlobToCacheWithMetaInfo_Multiple(t *testing.T) {
+	tests := []struct {
+		name             string
+		entries          []string
+		expectedQueueLen int
+	}{
+		{
+			name:             "single entry",
+			entries:          []string{"data1"},
+			expectedQueueLen: 1,
+		},
+		{
+			name:             "three entries",
+			entries:          []string{"data1", "data2", "data3"},
+			expectedQueueLen: 3,
+		},
+		{
+			name:             "five entries",
+			entries:          []string{"data1", "data2", "data3", "data4", "data5"},
+			expectedQueueLen: 5,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, cleanup := CAStoreConfigFixture()
+			defer cleanup()
+
+			config.MemoryCache = MemoryCacheConfig{
+				Enabled: true,
+				MaxSize: 10 * 1024 * 1024,
+				TTL:     time.Hour,
+			}
+
+			mockClock := clock.NewMock()
+			s, err := newCAStore(config, tally.NoopScope, mockClock)
+			require.NoError(t, err)
+			defer s.Close()
+
+			for _, dataStr := range tt.entries {
+				data := []byte(dataStr)
+				digest, err := core.NewDigester().FromBytes(data)
+				require.NoError(t, err)
+				name := digest.Hex()
+
+				err = s.WriteBlobToCacheWithMetaInfo(name, uint64(len(data)),
+					func(w FileReadWriter) error {
+						_, err := w.Write(data)
+						return err
+					},
+					256*1024,
+				)
+
+				require.NoError(t, err)
+				require.True(t, s.CheckInMemCache(name), "Blob %s should be added to memory cache", dataStr)
+			}
+
+			s.drainMu.Lock()
+			queueLen := s.drainQueue.Len()
+			s.drainMu.Unlock()
+			require.Equal(t, tt.expectedQueueLen, queueLen)
+		})
+	}
+}
+
+func TestCAStore_ConcurrentDuplicateWrites(t *testing.T) {
+	require := require.New(t)
+
+	config, cleanup := CAStoreConfigFixture()
+	defer cleanup()
+
+	config.MemoryCache = MemoryCacheConfig{
+		Enabled: true,
+		MaxSize: 1024 * 1024,
+		TTL:     time.Hour,
+	}
+
+	mockClock := clock.NewMock()
+	s, err := newCAStore(config, tally.NoopScope, mockClock)
+	require.NoError(err)
+	defer s.Close()
+
+	testData := []byte("concurrent test data")
+	digest, err := core.NewDigester().FromBytes(testData)
+	require.NoError(err)
+	name := digest.Hex()
+
+	initialSize := s.memCache.TotalBytes()
+
+	// Write same blob concurrently 10 times
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			require.NoError(s.WriteBlobToCacheWithMetaInfo(name, uint64(len(testData)),
+				func(w FileReadWriter) error {
+					_, err := w.Write(testData)
+					return err
+				},
+				256*1024,
+			))
+		}()
+	}
+	wg.Wait()
+
+	// Verify no reservation leak - exactly one entry added
+	expectedSize := initialSize + uint64(len(testData))
+	require.Equal(expectedSize, s.memCache.TotalBytes(), "No reservation leak")
+	require.True(s.CheckInMemCache(name), "Entry should be in cache")
 }
