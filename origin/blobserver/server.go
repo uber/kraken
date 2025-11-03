@@ -55,6 +55,7 @@ const _operation = "operation"
 type Server struct {
 	config            Config
 	stats             tally.Scope
+	metrics           *metrics
 	clk               clock.Clock
 	addr              string
 	hashRing          hashring.Ring
@@ -99,6 +100,7 @@ func New(
 	return &Server{
 		config:            config,
 		stats:             stats,
+		metrics:           newMetrics(stats),
 		clk:               clk,
 		addr:              addr,
 		hashRing:          hashRing,
@@ -259,7 +261,8 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	}
 	log.With("namespace", namespace, "digest", d.Hex()).Info("Starting blob download")
 	if err := s.downloadBlob(namespace, d, w); err != nil {
-		log.With("namespace", namespace, "digest", d.Hex()).Errorf("Error downloading blob: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "error", err).
+			Debug("downloadBlob returned non-nil error")
 		return err
 	}
 	setOctetStreamContentType(w)
@@ -390,7 +393,8 @@ func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) erro
 	log.With("namespace", namespace, "digest", d.Hex()).Debug("Getting metainfo")
 	raw, err := s.getMetaInfo(namespace, d)
 	if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to get metainfo: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "error", err).
+			Debug("getMetaInfo returned non-nil error")
 		return err
 	}
 	w.Write(raw)
@@ -443,11 +447,14 @@ func (s *Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 // "202 Accepted" server error.
 func (s *Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
 	var tm metadata.TorrentMeta
-	if err := s.cas.GetCacheFileMetadata(d.Hex(), &tm); os.IsNotExist(err) {
+	err := s.cas.GetCacheFileMetadata(d.Hex(), &tm)
+	if os.IsNotExist(err) {
 		log.With("namespace", namespace, "digest", d.Hex()).Debug("Metainfo not found in cache, initiating blob download")
 		return nil, s.startRemoteBlobDownload(namespace, d, true)
-	} else if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to get cache metadata: %s", err)
+	}
+	if err != nil {
+		log.With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("get cache metadata: %s", err)).
+			Errorf("Failed to get metainfo")
 		return nil, handler.Errorf("get cache metadata: %s", err)
 	}
 	return tm.Serialize()
@@ -460,12 +467,12 @@ type localReplicationHook struct {
 func (h *localReplicationHook) Run(d core.Digest) {
 	start := time.Now()
 	log.With("digest", d.Hex()).Info("Starting local replication")
-	timer := h.server.stats.Timer("replicate_blob").Start()
+	timer := h.server.metrics.replicateBlobTimer.Start()
 	if err := h.server.replicateBlobLocally(d); err != nil {
 		// Don't return error here as we only want to cache storage backend errors.
 		duration := time.Since(start)
 		log.With("digest", d.Hex(), "duration_s", duration.Seconds()).Errorf("Error replicating remote blob: %s", err)
-		h.server.stats.Counter("replicate_blob_errors").Inc(1)
+		h.server.metrics.replicateBlobErrors.Inc(1)
 		return
 	}
 	timer.Stop()
@@ -559,20 +566,20 @@ func (s *Server) applyToReplicas(d core.Digest, f func(i int, c blobclient.Clien
 func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error {
 	f, err := s.cas.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
-		log.With("namespace", namespace, "digest", d.Hex(), _operation, "download").
+		log.With("namespace", namespace, "digest", d.Hex()).
 			Info("Blob not in cache, initiating download from backend")
 		return s.startRemoteBlobDownload(namespace, d, true)
 	}
 	if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), _operation, "download").
-			Errorf("Failed to get cache file reader: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("Failed to get cache file reader: %s", err)).
+			Error("Download blob failure")
 		return handler.Errorf("get cache file: %s", err)
 	}
 	defer closers.Close(f)
 
 	if _, err := io.Copy(dst, f); err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), _operation, "download").
-			Errorf("Failed to copy blob data: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("Failed to copy blob data: %s", err)).
+			Error("Download blob failure")
 		return handler.Errorf("copy blob: %s", err)
 	}
 	return nil
@@ -581,17 +588,18 @@ func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) er
 func (s *Server) prefetchBlob(namespace string, d core.Digest) error {
 	f, err := s.cas.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
-		log.With("namespace", namespace, "digest", d.Hex(), _operation, "prefetch").
+		log.With("namespace", namespace, "digest", d.Hex()).
 			Info("Blob not in cache, initiating download from backend")
 		return s.startRemoteBlobDownload(namespace, d, true)
 	}
 	if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), _operation, "prefetch").
-			Errorf("Failed to get cache file reader: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("Failed to get cache file reader: %s", err)).
+			Error("Prefetch blob failure")
 		return handler.Errorf("get cache file: %s", err)
 	}
 	defer closers.Close(f)
-	log.With("namespace", namespace, "digest", d.Hex(), _operation, "prefetch").
+
+	log.With("namespace", namespace, "digest", d.Hex()).
 		Info("Prefetch successful, blob already in cache")
 	return nil
 }
@@ -796,7 +804,7 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 		return nil
 	})
 	if err != nil {
-		s.stats.Counter("duplicate_write_back_errors").Inc(1)
+		s.metrics.duplicateWritebackErrors.Inc(1)
 		replicateDuration := time.Since(replicateStart)
 		log.With("namespace", namespace, "digest", d.Hex(), "replication_duration_m", replicateDuration.Seconds()).Errorf("Error duplicating write-back task to replicas: %s", err)
 	}
