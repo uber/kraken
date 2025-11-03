@@ -29,6 +29,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/cache"
 	"github.com/uber/kraken/utils/closers"
+	"github.com/uber/kraken/utils/testutil"
 )
 
 func TestCAStoreInitVolumes(t *testing.T) {
@@ -725,9 +726,9 @@ func TestCAStore_WriteBlobToCacheWithMetaInfo_Multiple(t *testing.T) {
 				require.True(t, s.CheckInMemCache(name), "Blob %s should be added to memory cache", dataStr)
 			}
 
-			s.drainMu.Lock()
-			queueLen := s.drainQueue.Len()
-			s.drainMu.Unlock()
+			s.drain.mu.Lock()
+			queueLen := s.drain.queue.Len()
+			s.drain.mu.Unlock()
 			require.Equal(t, tt.expectedQueueLen, queueLen)
 		})
 	}
@@ -778,4 +779,91 @@ func TestCAStore_ConcurrentDuplicateWrites(t *testing.T) {
 	expectedSize := initialSize + uint64(len(testData))
 	require.Equal(expectedSize, s.memCache.TotalBytes(), "No reservation leak")
 	require.True(s.CheckInMemCache(name), "Entry should be in cache")
+}
+
+func TestCAStore_DrainWorkers(t *testing.T) {
+	tests := []struct {
+		name            string
+		drainWorkers    int
+		drainMaxRetries int
+		blobSize        uint64
+		chunkSize       uint64
+	}{
+		{
+			name:            "single worker drains blob",
+			drainWorkers:    1,
+			drainMaxRetries: 3,
+			blobSize:        1024,
+			chunkSize:       256,
+		},
+		{
+			name:            "multiple workers drain blob",
+			drainWorkers:    2,
+			drainMaxRetries: 3,
+			blobSize:        1024,
+			chunkSize:       256,
+		},
+		{
+			name:            "large blob",
+			drainWorkers:    2,
+			drainMaxRetries: 3,
+			blobSize:        10 * 1024,
+			chunkSize:       1024,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := CAStoreConfig{
+				UploadDir: t.TempDir(),
+				CacheDir:  t.TempDir(),
+				MemoryCache: MemoryCacheConfig{
+					Enabled:         true,
+					MaxSize:         1024 * 1024,
+					DrainWorkers:    tt.drainWorkers,
+					DrainMaxRetries: tt.drainMaxRetries,
+					TTL:             time.Hour,
+				},
+			}
+
+			mockClock := clock.NewMock()
+			cas, err := newCAStore(config, tally.NoopScope, mockClock)
+			require.NoError(t, err)
+			defer cas.Close()
+
+			// Create a test blob
+			blob := core.SizedBlobFixture(tt.blobSize, tt.chunkSize)
+
+			// Write to cache (should go to memory)
+			err = cas.WriteBlobToCacheWithMetaInfo(
+				blob.Digest.Hex(),
+				uint64(len(blob.Content)),
+				func(w FileReadWriter) error {
+					_, err := w.Write(blob.Content)
+					return err
+				},
+				256*1024,
+			)
+			require.NoError(t, err)
+
+			// Verify blob is in memory cache
+			entry := cas.memCache.Get(blob.Digest.Hex())
+			require.NotNil(t, entry, "Blob should be in memory cache")
+
+			// Poll until blob is drained or timeout
+			require.NoError(t, testutil.PollUntilTrue(500*time.Millisecond, func() bool {
+				mockClock.Add(100 * time.Millisecond)
+				return cas.memCache.Get(blob.Digest.Hex()) == nil
+			}))
+			// Verify blob is on disk
+			reader, err := cas.GetCacheFileReader(blob.Digest.Hex())
+			require.NoError(t, err)
+			defer closers.Close(reader)
+
+			diskData := make([]byte, len(blob.Content))
+			_, err = reader.Read(diskData)
+			require.NoError(t, err)
+			require.Equal(t, blob.Content, diskData, "Disk data should match original")
+		})
+	}
 }

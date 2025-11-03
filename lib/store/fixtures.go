@@ -16,6 +16,7 @@ package store
 import (
 	"os"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/uber-go/tally"
@@ -54,6 +55,22 @@ func CAStoreFixture() (*CAStore, func()) {
 	cleanup.Add(c)
 
 	s, err := NewCAStore(config, tally.NoopScope)
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(s.Close)
+
+	return s, cleanup.Run
+}
+
+// CAStoreFixtureWithClock returns a CAStore with a custom clock for testing purposes.
+// This is useful for tests that need to control time, such as preventing automatic
+// drain operations in memory cache tests.
+func CAStoreFixtureWithClock(config CAStoreConfig, clk clock.Clock) (*CAStore, func()) {
+	var cleanup testutil.Cleanup
+	defer cleanup.Recover()
+
+	s, err := newCAStore(config, tally.NoopScope, clk)
 	if err != nil {
 		panic(err)
 	}
