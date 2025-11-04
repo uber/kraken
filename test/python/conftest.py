@@ -14,6 +14,7 @@
 from __future__ import absolute_import
 
 import subprocess
+import time
 from collections import namedtuple
 
 import pytest
@@ -27,6 +28,8 @@ from .components import (
     Proxy,
     TestFS,
     Tracker,
+    find_free_port,
+    get_docker_bridge,
 )
 
 DEFAULT = 'default'
@@ -57,13 +60,20 @@ def tracker(origin_cluster, testfs):
 
 
 @pytest.fixture
-def origin_cluster(testfs):
+def origin_cluster(testfs, statsd_exporter):
+    http_port, statsd_port = statsd_exporter
+
     instances = {
         name: Origin.Instance(name)
         for name in ('kraken-origin-01', 'kraken-origin-02', 'kraken-origin-03')
     }
+
+    statsd_host_port = '{docker_bridge}:{statsd_port}'.format(
+        docker_bridge=get_docker_bridge(),
+        statsd_port=statsd_port)
+
     origin_cluster = OriginCluster([
-        Origin(DEFAULT, instances, name, testfs)
+        Origin(DEFAULT, instances, name, testfs, statsd_host_port=statsd_host_port)
         for name in instances
     ])
     yield origin_cluster
@@ -103,6 +113,45 @@ def testfs():
     testfs = TestFS(DEFAULT)
     yield testfs
     testfs.teardown()
+
+
+@pytest.fixture
+def statsd_exporter():
+    """StatsD exporter for collecting metrics from origins."""
+    # Clean up any existing container with this name
+    try:
+        subprocess.call(['docker', 'rm', '-f', 'kraken-statsd-exporter'],
+                       stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+    statsd_port = find_free_port()  # Use dynamic port to avoid conflicts
+    http_port = find_free_port()
+
+    # Start statsd_exporter with both HTTP (TCP) and StatsD (UDP) ports
+    subprocess.check_call([
+        'docker', 'run', '-d',
+        '--name=kraken-statsd-exporter',
+        '-p', f'{http_port}:9102/tcp',
+        '-p', f'{statsd_port}:9125/udp',
+        'prom/statsd-exporter:latest'
+    ])
+
+    # Wait for it to be healthy
+    time.sleep(2)
+
+    # Create a dummy container object for cleanup
+    class StatsdContainer:
+        def __init__(self, name):
+            self.name = name
+        def remove(self, force=False):
+            subprocess.call(['docker', 'rm', '-f', self.name], stderr=subprocess.DEVNULL)
+
+    container = StatsdContainer('kraken-statsd-exporter')
+
+    # Return both ports as a tuple
+    yield (http_port, statsd_port)
+    container.remove(force=True)
 
 
 def _create_build_index_instances():

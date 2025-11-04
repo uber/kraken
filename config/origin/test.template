@@ -25,6 +25,12 @@ writeback:
   retry_interval: 100ms
   poll_retries_interval: 250ms
 
+metrics:
+  backend: statsd
+  statsd:
+    host_port: {statsd_host_port}
+    prefix: kraken.origin
+
 tls:
   name: kraken
   cas:

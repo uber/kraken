@@ -42,6 +42,18 @@ func NewBufferReadWriter() *BufferReadWriter {
 	}
 }
 
+func GetBufferReadWriter(b []byte) *BufferReadWriter {
+	buf := aws.NewWriteAtBuffer(b)
+	// Although this is default, this is explicitly set to notify that we are reserving
+	// only as much capacity as needed
+	buf.GrowthCoeff = 1
+
+	return &BufferReadWriter{
+		buf:    buf,
+		offset: 0,
+	}
+}
+
 // Write implements io.Writer by using WriteAt with current write offset.
 func (b *BufferReadWriter) Write(p []byte) (n int, err error) {
 	n, err = b.buf.WriteAt(p, b.offset)
