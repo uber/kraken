@@ -33,16 +33,18 @@ scheduler:
   torrentlog:
     disable: true
 
-metrics:
-  m3:
-    service: kraken-origin
-
 localdb:
   source: /var/cache/kraken/kraken-origin/origin.db
 
 castore:
   upload_dir: /var/cache/kraken/kraken-origin/upload/
   cache_dir:  /var/cache/kraken/kraken-origin/cache/
+  memory_cache:
+    enabled: true
+    max_size: 1048576
+    ttl: 2s
+    drain_workers: 2
+    drain_max_retries: 3
 
 blobserver:
   listener:

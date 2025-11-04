@@ -363,18 +363,24 @@ class Origin(Component):
         def addr(self):
             return '{}:{}'.format(self.hostname, self.port)
 
-    def __init__(self, zone, instances, name, testfs):
+    def __init__(self, zone, instances, name, testfs, statsd_host_port=None):
         self.zone = zone
         self.instance = instances[name]
         self.testfs = testfs
         self.config_file = 'test-{zone}.yaml'.format(zone=zone)
         self.name = '{name}-{zone}'.format(name=self.instance.name, zone=zone)
 
+        if statsd_host_port is None:
+            statsd_host_port = '{bridge}:{port}'.format(
+                bridge=get_docker_bridge(),
+                port=find_free_port())
+
         populate_config_template(
             'origin',
             self.config_file,
             origins=yaml_list([i.addr for i in instances.values()]),
-            testfs=self.testfs.addr)
+            testfs=self.testfs.addr,
+            statsd_host_port=statsd_host_port)
 
         self.volumes = create_volumes('origin', self.name)
 
