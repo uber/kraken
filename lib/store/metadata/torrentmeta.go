@@ -65,3 +65,7 @@ func (m *TorrentMeta) Deserialize(b []byte) error {
 	m.MetaInfo = mi
 	return nil
 }
+
+func GetTorrentMetadataSuffix() string {
+	return _torrentMetaSuffix
+}
