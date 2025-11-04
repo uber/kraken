@@ -268,7 +268,7 @@ func (s *CAStore) addToMemoryCache(
 	data := tmpWriter.Bytes()
 	metaInfo, err := s.generateMetadataFromBytes(name, data, pieceLength)
 	if err != nil {
-		return  fmt.Errorf("generating metainfo: %w", err)
+		return fmt.Errorf("generating metainfo: %w", err)
 	}
 
 	entry := &cache.MemoryEntry{
@@ -446,6 +446,97 @@ func (s *CAStore) writeDrainItemToDisk(entry *cache.MemoryEntry) error {
 
 	return nil
 }
+
+// GetCacheFileReader overrides cacheStore.GetCacheFileReader to check
+// memory cache first before reading from disk.
+func (s *CAStore) GetCacheFileReader(name string) (FileReader, error) {
+	if s.memCache != nil {
+		if entry := s.memCache.Get(name); entry != nil {
+			return NewBufferFileReader(entry.Data), nil
+		}
+	}
+
+	return s.cacheStore.GetCacheFileReader(name)
+}
+
+// GetCacheFileMetadata overrides cacheStore.GetCacheFileMetadata to serve
+// TorrentMeta from memory cache when available.
+func (s *CAStore) GetCacheFileMetadata(name string, md metadata.Metadata) error {
+	if s.memCache != nil && md.GetSuffix() == metadata.GetTorrentMetadataSuffix() {
+		if entry := s.memCache.Get(name); entry != nil {
+			if entry.MetaInfo == nil {
+				// shouldn't happen, but good to check
+				return fmt.Errorf("entry %s doesn't have any metainfo", entry.Name)
+			}
+			// Serialize and deserialize for consistency with disk behavior
+			b, err := entry.MetaInfo.Serialize()
+			if err != nil {
+				return fmt.Errorf("serialize metainfo: %s", err)
+			}
+			return md.Deserialize(b)
+		}
+	}
+
+	// Fallback to disk
+	return s.cacheStore.GetCacheFileMetadata(name, md)
+}
+
+// GetCacheFileStat overrides cacheStore.GetCacheFileStat to check memory cache first.
+func (s *CAStore) GetCacheFileStat(name string) (os.FileInfo, error) {
+	if s.memCache != nil {
+		if entry := s.memCache.Get(name); entry != nil {
+			return &memoryFileInfo{
+				name:    name,
+				size:    int64(entry.Size()),
+				modTime: entry.CreatedAt,
+			}, nil
+		}
+	}
+	return s.cacheStore.GetCacheFileStat(name)
+}
+
+// ListCacheFiles overrides cacheStore.ListCacheFiles to include memory cache entries.
+func (s *CAStore) ListCacheFiles() ([]string, error) {
+	diskFiles, err := s.cacheStore.ListCacheFiles()
+	if err != nil {
+		return nil, err
+	}
+
+	if s.memCache == nil {
+		return diskFiles, nil
+	}
+	memNames := s.memCache.ListNames()
+	allFiles := make(map[string]bool)
+	for _, name := range diskFiles {
+		allFiles[name] = true
+	}
+	for _, name := range memNames {
+		allFiles[name] = true
+	}
+
+	result := make([]string, 0, len(allFiles))
+	for name := range allFiles {
+		result = append(result, name)
+	}
+
+	return result, nil
+}
+
+var _ os.FileInfo = &memoryFileInfo{}
+
+// memoryFileInfo implements os.FileInfo for memory cache entries.
+type memoryFileInfo struct {
+	name    string
+	size    int64
+	modTime time.Time
+}
+
+func (f *memoryFileInfo) Name() string       { return f.name }
+func (f *memoryFileInfo) Size() int64        { return f.size }
+func (f *memoryFileInfo) Mode() os.FileMode  { return os.ModePerm }
+func (f *memoryFileInfo) ModTime() time.Time { return f.modTime }
+func (f *memoryFileInfo) IsDir() bool        { return false }
+func (f *memoryFileInfo) Sys() interface{}   { return nil }
 
 func initCASVolumes(dir string, volumes []Volume) error {
 	if len(volumes) == 0 {
