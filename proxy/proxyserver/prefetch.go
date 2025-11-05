@@ -35,10 +35,13 @@ type PrefetchHandler struct {
 	clusterClient    blobclient.ClusterClient
 	tagClient        tagclient.Client
 	tagParser        TagParser
-	metrics          tally.Scope
 	minBlobSizeBytes int64 // Minimum size in bytes for a blob to be prefetched. 0 means no minimum.
 	maxBlobSizeBytes int64 // Maximum size in bytes for a blob to be prefetched. 0 means no maximum.
 	v1Synchronous    bool
+
+	metrics            tally.Scope
+	getManifestLatency tally.Histogram
+	getTagLatency      tally.Histogram
 }
 
 // blobInfo holds digest and size information for a blob.
@@ -105,14 +108,18 @@ func NewPrefetchHandler(
 	if maxBlobSizeBytes == 0 {
 		maxBlobSizeBytes = int64(DefaultPrefetchMaxBlobSize)
 	}
+	m := metrics.SubScope("prefetch")
 	return &PrefetchHandler{
 		clusterClient:    client,
 		tagClient:        tagClient,
 		tagParser:        tagParser,
-		metrics:          metrics.SubScope("prefetch"),
 		v1Synchronous:    v1Synchronous,
 		minBlobSizeBytes: minBlobSizeBytes,
 		maxBlobSizeBytes: maxBlobSizeBytes,
+
+		metrics:            m,
+		getManifestLatency: m.Histogram("download_manifest_latency", tally.MustMakeExponentialDurationBuckets(1*time.Second, 2, 12)),
+		getTagLatency:      m.Histogram("get_tag_latency", tally.MustMakeExponentialDurationBuckets(100*time.Millisecond, 2, 10)),
 	}
 }
 
@@ -222,7 +229,7 @@ func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Reques
 		writeInternalError(w, fmt.Sprintf("tag request: %s, failed to get tag: %s", tagRequest, err), reqBody.TraceId)
 		return nil, true
 	}
-	ph.metrics.Histogram("get_tag_latency", tally.MustMakeExponentialDurationBuckets(100*time.Millisecond, 2, 10)).RecordDuration(time.Since(startTime))
+	ph.getTagLatency.RecordDuration(time.Since(startTime))
 	logger.Infof("Namespace: %s, Tag: %s", namespace, tag)
 
 	buf := &bytes.Buffer{}
@@ -233,7 +240,7 @@ func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Reques
 		writeInternalError(w, fmt.Sprintf("error downloading manifest blob: %s", err), reqBody.TraceId)
 		return nil, true
 	}
-	ph.metrics.Histogram("download_manifest_latency", tally.MustMakeExponentialDurationBuckets(1*time.Second, 2, 12)).RecordDuration(time.Since(startTime))
+	ph.getManifestLatency.RecordDuration(time.Since(startTime))
 
 	// Process manifest (ManifestList or single Manifest)
 	blobs, err := ph.processManifest(logger, namespace, buf.Bytes())
@@ -359,7 +366,7 @@ func (ph *PrefetchHandler) processManifestList(logger *zap.SugaredLogger, namesp
 			logger.With("error", err).Error("Failed to download manifest blob")
 			continue
 		}
-		ph.metrics.Histogram("download_manifest_latency", tally.MustMakeExponentialDurationBuckets(1*time.Second, 2, 12)).RecordDuration(time.Since(startTime))
+		ph.getManifestLatency.RecordDuration(time.Since(startTime))
 		var manifest schema2.Manifest
 		if err := json.NewDecoder(buf).Decode(&manifest); err != nil {
 			return nil, fmt.Errorf("failed to parse manifest: %w", err)
