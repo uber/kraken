@@ -14,6 +14,7 @@
 package store
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -27,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/cache"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/testutil"
@@ -864,6 +866,326 @@ func TestCAStore_DrainWorkers(t *testing.T) {
 			_, err = reader.Read(diskData)
 			require.NoError(t, err)
 			require.Equal(t, blob.Content, diskData, "Disk data should match original")
+		})
+	}
+}
+
+func TestCAStore_GetCacheFileReader(t *testing.T) {
+	tests := []struct {
+		name              string
+		memoryCacheConfig MemoryCacheConfig
+		testData          string
+		addToMemory       bool
+		addToDisk         bool
+	}{
+		{
+			name: "read from memory cache",
+			memoryCacheConfig: MemoryCacheConfig{
+				Enabled: true,
+				MaxSize: 1024 * 1024,
+				TTL:     time.Hour,
+			},
+			testData:    "test data from memory",
+			addToMemory: true,
+			addToDisk:   false,
+		},
+		{
+			name: "read from disk when memory cache disabled",
+			memoryCacheConfig: MemoryCacheConfig{
+				Enabled: false,
+			},
+			testData:    "test data no memory cache",
+			addToMemory: false,
+			addToDisk:   true,
+		},
+		{
+			name: "read from disk when memory cache enabled",
+			memoryCacheConfig: MemoryCacheConfig{
+				Enabled: true,
+				MaxSize: 1024 * 1024,
+				TTL:     time.Hour,
+			},
+			testData:    "test data from disk",
+			addToMemory: false,
+			addToDisk:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, cleanup := CAStoreConfigFixture()
+			defer cleanup()
+
+			config.MemoryCache = tt.memoryCacheConfig
+
+			s, err := NewCAStore(config, tally.NoopScope)
+			require.NoError(t, err)
+			defer s.Close()
+
+			if !tt.memoryCacheConfig.Enabled {
+				require.Nil(t, s.memCache)
+			}
+
+			data := []byte(tt.testData)
+			digest, err := core.NewDigester().FromBytes(data)
+			require.NoError(t, err)
+			name := digest.Hex()
+
+			if tt.addToMemory {
+				entry := &cache.MemoryEntry{
+					Name:      name,
+					Data:      data,
+					CreatedAt: time.Now(),
+				}
+				added := s.memCache.Add(entry)
+				require.True(t, added)
+			}
+
+			if tt.addToDisk {
+				err = s.CreateCacheFile(name, bytes.NewReader(data))
+				require.NoError(t, err)
+			}
+
+			// Read from cache
+			reader, err := s.GetCacheFileReader(name)
+			require.NoError(t, err)
+			defer closers.Close(reader)
+
+			readData, err := io.ReadAll(reader)
+			require.NoError(t, err)
+			require.Equal(t, data, readData)
+		})
+	}
+}
+
+func TestCAStore_GetCacheFileMetadata(t *testing.T) {
+	tests := []struct {
+		name              string
+		memoryCacheConfig MemoryCacheConfig
+		testData          string
+	}{
+		{
+			name: "read metadata from memory",
+			memoryCacheConfig: MemoryCacheConfig{
+				Enabled: true,
+				MaxSize: 1024 * 1024,
+				TTL:     time.Hour,
+			},
+			testData: "test data for metadata",
+		},
+		{
+			name: "read metadata from disk when not in memory",
+			memoryCacheConfig: MemoryCacheConfig{
+				Enabled: true,
+				MaxSize: 1024 * 1024,
+				TTL:     time.Hour,
+			},
+			testData: "test data from disk",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, cleanup := CAStoreConfigFixture()
+			defer cleanup()
+
+			config.MemoryCache = tt.memoryCacheConfig
+
+			s, err := NewCAStore(config, tally.NoopScope)
+			require.NoError(t, err)
+			defer s.Close()
+
+			data := []byte(tt.testData)
+			digest, err := core.NewDigester().FromBytes(data)
+			require.NoError(t, err)
+			name := digest.Hex()
+
+			metaInfo, err := core.NewMetaInfo(digest, bytes.NewReader(data), 256*1024)
+			require.NoError(t, err)
+
+			if tt.name == "read metadata from memory" {
+				// Add to memory cache
+				entry := &cache.MemoryEntry{
+					Name:      name,
+					Data:      data,
+					MetaInfo:  metaInfo,
+					CreatedAt: time.Now(),
+				}
+				added := s.memCache.Add(entry)
+				require.True(t, added)
+			} else {
+				// Write to disk only
+				err = s.CreateCacheFile(name, bytes.NewReader(data))
+				require.NoError(t, err)
+
+				tm := metadata.NewTorrentMeta(metaInfo)
+				_, err = s.SetCacheFileMetadata(name, tm)
+				require.NoError(t, err)
+			}
+
+			// Read metadata
+			tm := metadata.NewTorrentMeta(nil)
+			err = s.GetCacheFileMetadata(name, tm)
+			require.NoError(t, err)
+			require.NotNil(t, tm.MetaInfo)
+			require.Equal(t, digest, tm.MetaInfo.Digest())
+		})
+	}
+}
+
+func TestCAStore_GetCacheFileStat(t *testing.T) {
+	tests := []struct {
+		name              string
+		memoryCacheConfig MemoryCacheConfig
+		testData          string
+	}{
+		{
+			name: "get stat from memory",
+			memoryCacheConfig: MemoryCacheConfig{
+				Enabled: true,
+				MaxSize: 1024 * 1024,
+				TTL:     time.Hour,
+			},
+			testData: "test data for stat",
+		},
+		{
+			name: "get stat with large data",
+			memoryCacheConfig: MemoryCacheConfig{
+				Enabled: true,
+				MaxSize: 1024 * 1024,
+				TTL:     time.Hour,
+			},
+			testData: string(make([]byte, 10000)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, cleanup := CAStoreConfigFixture()
+			defer cleanup()
+
+			config.MemoryCache = tt.memoryCacheConfig
+
+			s, err := NewCAStore(config, tally.NoopScope)
+			require.NoError(t, err)
+			defer s.Close()
+
+			data := []byte(tt.testData)
+			digest, err := core.NewDigester().FromBytes(data)
+			require.NoError(t, err)
+			name := digest.Hex()
+
+			entry := &cache.MemoryEntry{
+				Name:      name,
+				Data:      data,
+				CreatedAt: time.Now(),
+			}
+			added := s.memCache.Add(entry)
+			require.True(t, added)
+
+			// Get stat from memory
+			fi, err := s.GetCacheFileStat(name)
+			require.NoError(t, err)
+			require.Equal(t, name, fi.Name())
+			require.Equal(t, int64(len(data)), fi.Size())
+			require.False(t, fi.IsDir())
+		})
+	}
+}
+
+func TestCAStore_ListCacheFiles(t *testing.T) {
+	tests := []struct {
+		name              string
+		memoryCacheConfig MemoryCacheConfig
+		memoryEntries     []string
+		diskEntries       []string
+	}{
+		{
+			name: "includes both memory and disk files",
+			memoryCacheConfig: MemoryCacheConfig{
+				Enabled: true,
+				MaxSize: 1024 * 1024,
+				TTL:     time.Hour,
+			},
+			memoryEntries: []string{"in memory only"},
+			diskEntries:   []string{"on disk only"},
+		},
+		{
+			name: "includes multiple memory entries",
+			memoryCacheConfig: MemoryCacheConfig{
+				Enabled: true,
+				MaxSize: 1024 * 1024,
+				TTL:     time.Hour,
+			},
+			memoryEntries: []string{"memory1", "memory2", "memory3"},
+			diskEntries:   []string{"disk1"},
+		},
+		{
+			name: "memory cache disabled lists only disk",
+			memoryCacheConfig: MemoryCacheConfig{
+				Enabled: false,
+			},
+			memoryEntries: []string{},
+			diskEntries:   []string{"disk1", "disk2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, cleanup := CAStoreConfigFixture()
+			defer cleanup()
+
+			config.MemoryCache = tt.memoryCacheConfig
+
+			s, err := NewCAStore(config, tally.NoopScope)
+			require.NoError(t, err)
+			defer s.Close()
+
+			expectedFiles := make(map[string]bool)
+
+			// Add entries to memory
+			for _, dataStr := range tt.memoryEntries {
+				data := []byte(dataStr)
+				digest, err := core.NewDigester().FromBytes(data)
+				require.NoError(t, err)
+				name := digest.Hex()
+
+				entry := &cache.MemoryEntry{
+					Name:      name,
+					Data:      data,
+					CreatedAt: time.Now(),
+				}
+				added := s.memCache.Add(entry)
+				require.True(t, added)
+
+				expectedFiles[name] = true
+			}
+
+			// Add entries to disk
+			for _, dataStr := range tt.diskEntries {
+				data := []byte(dataStr)
+				digest, err := core.NewDigester().FromBytes(data)
+				require.NoError(t, err)
+				name := digest.Hex()
+
+				err = s.CreateCacheFile(name, bytes.NewReader(data))
+				require.NoError(t, err)
+
+				expectedFiles[name] = true
+			}
+
+			// List should include all expected files
+			files, err := s.ListCacheFiles()
+			require.NoError(t, err)
+
+			fileMap := make(map[string]bool)
+			for _, f := range files {
+				fileMap[f] = true
+			}
+
+			for name := range expectedFiles {
+				require.True(t, fileMap[name], "Should include file: %s", name)
+			}
 		})
 	}
 }

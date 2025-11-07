@@ -196,3 +196,15 @@ func (c *BlobMemoryCache) RemoveBatch(names []string) {
 	}
 	c.stats.Gauge("total_size_bytes").Update(float64(c.totalSize))
 }
+
+// ListNames returns all entry names in the cache.
+func (c *BlobMemoryCache) ListNames() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	names := make([]string, 0, len(c.entries))
+	for name := range c.entries {
+		names = append(names, name)
+	}
+	return names
+}
