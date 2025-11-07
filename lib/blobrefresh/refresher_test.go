@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
@@ -28,6 +29,7 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
 	mockbackend "github.com/uber/kraken/mocks/lib/backend"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/testutil"
 )
@@ -164,9 +166,10 @@ func TestRefreshWithMemoryCache(t *testing.T) {
 		TTL:     time.Hour,
 	}
 
-	cas, err := store.NewCAStore(config, tally.NoopScope)
-	require.NoError(err)
-	defer cas.Close()
+	// Use mock clock to prevent automatic drain during test
+	mockClock := clock.NewMock()
+	cas, cleanup := store.CAStoreFixtureWithClock(config, mockClock)
+	defer cleanup()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -174,7 +177,7 @@ func TestRefreshWithMemoryCache(t *testing.T) {
 	backends := backend.ManagerFixture()
 	namespace := core.TagFixture()
 	client := mockbackend.NewMockClient(ctrl)
-	err = backends.Register(namespace, client, false)
+	err := backends.Register(namespace, client, false)
 	require.NoError(err)
 
 	refresher := New(Config{}, tally.NoopScope, cas, backends, metainfogen.Fixture(cas, _testPieceLength))
@@ -187,9 +190,25 @@ func TestRefreshWithMemoryCache(t *testing.T) {
 	// Refresh should complete successfully with memory cache enabled
 	require.NoError(refresher.Refresh(namespace, blob.Digest))
 
-	// Poll until blob is available (async download completes)
+	// Poll until blob is available in memory (async download completes)
 	// With memory cache enabled, blob will be in memory first, then drained to disk
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		return cas.CheckInMemCache(blob.Digest.Hex())
 	}))
+
+	// Poll until blob is drained to disk (no longer in memory cache)
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		mockClock.Add(100 * time.Millisecond)
+		return !cas.CheckInMemCache(blob.Digest.Hex())
+	}))
+
+	// Verify blob is accessible from disk
+	reader, err := cas.GetCacheFileReader(blob.Digest.Hex())
+	require.NoError(err)
+	defer closers.Close(reader)
+
+	diskData := make([]byte, len(blob.Content))
+	_, err = reader.Read(diskData)
+	require.NoError(err)
+	require.Equal(blob.Content, diskData)
 }
