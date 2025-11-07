@@ -1,7 +1,9 @@
 castore:
   upload_dir: /var/cache/kraken/kraken-proxy/upload/
   cache_dir:  /var/cache/kraken/kraken-proxy/cache/
-  capacity: 1024
+  # In-memory LRU cache capacity for tracking cached blobs.
+  # Production default: 100000 (100k entries)
+  capacity: 100000
 
 zap:
   level: info
