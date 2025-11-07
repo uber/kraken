@@ -50,3 +50,46 @@ func TestGenerate(t *testing.T) {
 	require.NoError(cas.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
 	require.Equal(blob.MetaInfo, tm.MetaInfo)
 }
+
+func TestGenerateFromBuffer(t *testing.T) {
+	require := require.New(t)
+
+	cas, cleanup := store.CAStoreFixture()
+	defer cleanup()
+
+	pieceLength := 10
+
+	generator, err := New(Config{
+		PieceLengths: map[datasize.ByteSize]datasize.ByteSize{
+			0: datasize.ByteSize(pieceLength),
+		},
+	}, cas)
+	require.NoError(err)
+
+	blob := core.SizedBlobFixture(100, uint64(pieceLength))
+
+	// Generate metainfo from buffer
+	metaInfo, err := generator.GenerateFromBuffer(blob.Digest.Hex(), blob.Content)
+	require.NoError(err)
+	require.NotNil(metaInfo)
+	require.Equal(blob.MetaInfo.InfoHash(), metaInfo.InfoHash())
+}
+
+func TestGenerateFromBuffer_InvalidDigest(t *testing.T) {
+	require := require.New(t)
+
+	cas, cleanup := store.CAStoreFixture()
+	defer cleanup()
+
+	generator, err := New(Config{
+		PieceLengths: map[datasize.ByteSize]datasize.ByteSize{
+			0: 10,
+		},
+	}, cas)
+	require.NoError(err)
+
+	// Invalid hex digest name should return error
+	_, err = generator.GenerateFromBuffer("invalid-digest", []byte("test data"))
+	require.Error(err)
+	require.Contains(err.Error(), "new digest from hex")
+}
