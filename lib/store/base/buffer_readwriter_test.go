@@ -40,7 +40,7 @@ func TestBufferReadWriter_Write(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			buf := NewBufferReadWriter()
+			buf := NewBufferReadWriter(0)
 
 			for _, data := range tt.writes {
 				n, err := buf.Write(data)
@@ -102,7 +102,7 @@ func TestBufferReadWriter_WriteAt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			buf := NewBufferReadWriter()
+			buf := NewBufferReadWriter(0)
 
 			for _, op := range tt.operations {
 				n, err := buf.WriteAt(op.data, op.offset)
@@ -132,7 +132,7 @@ func TestBufferReadWriter_Read(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			buf := NewBufferReadWriter()
+			buf := NewBufferReadWriter(0)
 			_, err := buf.Write(tt.setupData)
 			require.NoError(t, err)
 			_, err = buf.Seek(0, io.SeekStart)
@@ -168,7 +168,7 @@ func TestBufferReadWriter_ReadAt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			buf := NewBufferReadWriter()
+			buf := NewBufferReadWriter(0)
 			_, err := buf.Write(tt.setupData)
 			require.NoError(t, err)
 
@@ -242,7 +242,7 @@ func TestBufferReadWriter_Seek(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			buf := NewBufferReadWriter()
+			buf := NewBufferReadWriter(0)
 			_, err := buf.Write(tt.setupData)
 			require.NoError(t, err)
 
@@ -268,7 +268,7 @@ func TestBufferReadWriter_Seek(t *testing.T) {
 }
 
 func TestBufferReadWriter_SeekCurrent(t *testing.T) {
-	buf := NewBufferReadWriter()
+	buf := NewBufferReadWriter(0)
 	_, err := buf.Write([]byte("hello world"))
 	require.NoError(t, err)
 
@@ -298,7 +298,7 @@ func TestBufferReadWriter_TestReader(t *testing.T) {
 		to provide comprehensive I/O capabilities for content-addressable storage operations.`,
 	)
 
-	buf := NewBufferReadWriter()
+	buf := NewBufferReadWriter(0)
 	_, err := buf.Write(content)
 	require.NoError(t, err)
 

@@ -237,7 +237,7 @@ func (s *CAStore) WriteBlobToCacheWithMetaInfo(
 	write func(w FileReadWriter) error,
 	pieceLength int64) error {
 	if s.config.MemoryCache.Enabled && s.memCache.TryReserve(size) {
-		err := s.addToMemoryCache(name, write, pieceLength)
+		err := s.addToMemoryCache(name, write, size, pieceLength)
 		if err == nil {
 			return nil
 		}
@@ -257,9 +257,10 @@ func (s *CAStore) CheckInMemCache(name string) bool {
 func (s *CAStore) addToMemoryCache(
 	name string,
 	write func(w FileReadWriter) error,
+	size uint64,
 	pieceLength int64,
 ) error {
-	tmpWriter := base.NewBufferReadWriter()
+	tmpWriter := base.NewBufferReadWriter(size)
 
 	if err := write(tmpWriter); err != nil {
 		return err
