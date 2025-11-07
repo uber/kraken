@@ -147,3 +147,49 @@ func TestRefreshSizeLimitWithValidSize(t *testing.T) {
 		return !os.IsNotExist(err)
 	}))
 }
+
+// TestRefreshWithMemoryCache tests that refresh works correctly when memory cache is enabled.
+// This verifies the metainfo generation optimization where metainfo is generated inline
+// when blob is buffered in memory, avoiding duplicate generation.
+func TestRefreshWithMemoryCache(t *testing.T) {
+	require := require.New(t)
+
+	// Create CAStore config with memory cache enabled
+	config, configCleanup := store.CAStoreConfigFixture()
+	defer configCleanup()
+
+	config.MemoryCache = store.MemoryCacheConfig{
+		Enabled: true,
+		MaxSize: 10 * 1024 * 1024, // 10MB
+		TTL:     time.Hour,
+	}
+
+	cas, err := store.NewCAStore(config, tally.NoopScope)
+	require.NoError(err)
+	defer cas.Close()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	backends := backend.ManagerFixture()
+	namespace := core.TagFixture()
+	client := mockbackend.NewMockClient(ctrl)
+	err = backends.Register(namespace, client, false)
+	require.NoError(err)
+
+	refresher := New(Config{}, tally.NoopScope, cas, backends, metainfogen.Fixture(cas, _testPieceLength))
+
+	blob := core.SizedBlobFixture(100, uint64(_testPieceLength))
+
+	client.EXPECT().Stat(namespace, blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
+	client.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
+
+	// Refresh should complete successfully with memory cache enabled
+	require.NoError(refresher.Refresh(namespace, blob.Digest))
+
+	// Poll until blob is available (async download completes)
+	// With memory cache enabled, blob will be in memory first, then drained to disk
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		return cas.CheckInMemCache(blob.Digest.Hex())
+	}))
+}
