@@ -20,6 +20,7 @@ import (
 
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/log"
 )
 
 // MemoryEntry represents a blob stored in memory cache.
@@ -31,13 +32,13 @@ type MemoryEntry struct {
 }
 
 // Size returns the size of the data in MemoryEntry
-func (m *MemoryEntry) Size() int64 {
-	return int64(len(m.Data))
+func (m *MemoryEntry) Size() uint64 {
+	return uint64(len(m.Data))
 }
 
 // BlobMemoryCacheConfig defines configuration for BlobMemoryCache.
 type BlobMemoryCacheConfig struct {
-	MaxSize int64 // Maximum memory in bytes
+	MaxSize uint64 // Maximum memory in bytes
 }
 
 // BlobMemoryCache provides a simple in-memory cache for blob data with capacity management.
@@ -49,7 +50,7 @@ type BlobMemoryCache struct {
 	// Storage
 	mu        sync.RWMutex
 	entries   map[string]*MemoryEntry
-	totalSize int64
+	totalSize uint64 // Includes both actual entries and reserved space
 }
 
 // NewBlobMemoryCache creates a new BlobMemoryCache with the specified configuration.
@@ -65,31 +66,23 @@ func NewBlobMemoryCache(
 }
 
 // Add attempts to add an entry to the memory cache.
-// Returns true if successfully added, false if insufficient space.
+// NOTE: TryReserve must have succeeded, else unexpected behavior will happen
 // This operation uses a write lock for exclusive access.
-func (c *BlobMemoryCache) Add(entry *MemoryEntry) (bool, error) {
+func (c *BlobMemoryCache) Add(entry *MemoryEntry) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Check if already exists
 	if _, exists := c.entries[entry.Name]; exists {
-		return true, nil // Already in cache, success
+		// already exists, return
+		// the caller should call release reservation if this happens else
+		// there can be cases of over reservation
+		return false
 	}
 
-	size := entry.Size()
-	// Check capacity
-	if c.totalSize+size > c.config.MaxSize {
-		return false, nil // Not enough space, return
-	}
-
-	// Add to cache
 	c.entries[entry.Name] = entry
-	c.totalSize += size
-
 	c.stats.Counter("entries_added").Inc(1)
 	c.stats.Gauge("total_size_bytes").Update(float64(c.totalSize))
-
-	return true, nil
+	return true
 }
 
 // Get retrieves an entry from the memory cache.
@@ -135,10 +128,39 @@ func (c *BlobMemoryCache) NumEntries() int {
 }
 
 // TotalBytes returns the current total size in bytes.
-func (c *BlobMemoryCache) TotalBytes() int64 {
+func (c *BlobMemoryCache) TotalBytes() uint64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.totalSize
+}
+
+// TryReserve attempts to reserve space for buffering before adding to cache.
+// Returns true if space was reserved, false if insufficient space.
+// Reservation is tracked in totalSize to prevent OOM conditions.
+func (c *BlobMemoryCache) TryReserve(size uint64) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.totalSize+size > c.config.MaxSize {
+		return false
+	}
+	c.totalSize += size // Reservation counts as part of totalSize
+	return true
+}
+
+// ReleaseReservation releases previously reserved space.
+// This is called when a reservation won't be used (e.g., download failed, entry already exists).
+func (c *BlobMemoryCache) ReleaseReservation(size uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if size > c.totalSize {
+		// This shouldn't happen
+		log.With("size", size,
+			"totalSize", c.totalSize).Error("unexpected behavior while releasing reservation")
+		return
+	}
+	c.totalSize -= size
 }
 
 // GetExpiredEntries returns names of entries older than TTL.
