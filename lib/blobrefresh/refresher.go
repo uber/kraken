@@ -68,7 +68,7 @@ func New(
 		"module": "blobrefresh",
 	})
 
-	requests := dedup.NewRequestCache(dedup.RequestCacheConfig{}, clock.New())
+	requests := dedup.NewRequestCache(config.RequestCache, clock.New())
 	requests.SetNotFound(func(err error) bool { return err == backenderrors.ErrBlobNotFound })
 
 	return &Refresher{config, stats, requests, cas, backends, metaInfoGenerator}

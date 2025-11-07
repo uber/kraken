@@ -13,11 +13,18 @@
 // limitations under the License.
 package blobrefresh
 
-import "github.com/c2h5oh/datasize"
+import (
+	"github.com/c2h5oh/datasize"
+	"github.com/uber/kraken/utils/dedup"
+)
 
 // Config defines Refresher configuration.
 type Config struct {
 	// Limits the size of blobs which origin will accept. A 0 size limit means
 	// blob size is unbounded.
 	SizeLimit datasize.ByteSize `yaml:"size_limit"`
+
+	// RequestCache configures the in-memory cache for deduplicating blob
+	// download requests and caching errors.
+	RequestCache dedup.RequestCacheConfig `yaml:"request_cache"`
 }

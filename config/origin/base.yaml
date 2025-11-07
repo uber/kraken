@@ -43,6 +43,23 @@ localdb:
 castore:
   upload_dir: /var/cache/kraken/kraken-origin/upload/
   cache_dir:  /var/cache/kraken/kraken-origin/cache/
+  # In-memory LRU cache capacity for tracking cached blobs.
+  # Default: 1000000 (1 million entries)
+  capacity: 1000000
+
+blobrefresh:
+  # In-memory request cache configuration for deduplicating blob downloads
+  request_cache:
+    # TTL for caching "not found" errors to prevent repeated lookups
+    not_found_ttl: 15s
+    # TTL for caching other errors to prevent request storms
+    error_ttl: 15s
+    # Interval for cleaning up expired cache entries
+    cleanup_interval: 5s
+    # Maximum number of concurrent workers for blob downloads
+    num_workers: 10000
+    # Timeout when waiting for an available worker
+    busy_timeout: 5s
 
 blobserver:
   listener:
