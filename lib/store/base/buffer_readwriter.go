@@ -29,9 +29,10 @@ type BufferReadWriter struct {
 	offset int64
 }
 
-// NewBufferReadWriter creates a new BufferReadWriter.
-func NewBufferReadWriter() *BufferReadWriter {
-	buf := aws.NewWriteAtBuffer([]byte{})
+// NewBufferReadWriter creates a new BufferReadWriter with an initial capacity of size bytes.
+func NewBufferReadWriter(size uint64) *BufferReadWriter {
+	bytesSlice := make([]byte, 0, size)
+	buf := aws.NewWriteAtBuffer(bytesSlice)
 	// Although this is default, this is explicitly set to notify that we are reserving
 	// only as much capacity as needed
 	buf.GrowthCoeff = 1
