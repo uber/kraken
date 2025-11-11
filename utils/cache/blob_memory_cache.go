@@ -142,6 +142,7 @@ func (c *BlobMemoryCache) TryReserve(size uint64) bool {
 	defer c.mu.Unlock()
 
 	if c.totalSize+size > c.config.MaxSize {
+		c.stats.Counter("reserve_failure").Inc(1)
 		return false
 	}
 	c.totalSize += size // Reservation counts as part of totalSize

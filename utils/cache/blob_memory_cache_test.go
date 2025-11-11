@@ -452,3 +452,51 @@ func TestBlobMemoryCache_SizeAndTotalBytes(t *testing.T) {
 	assert.Equal(t, 2, cache.NumEntries())
 	assert.Equal(t, uint64(400), cache.TotalBytes())
 }
+
+func TestBlobMemoryCache_TryReserve_ReserveFailedCounter(t *testing.T) {
+	tests := []struct {
+		name              string
+		maxSize           uint64
+		firstReserveSize  uint64
+		secondReserveSize uint64
+		expectMetrics     bool
+	}{
+		{
+			name:              "emits reserve_failed when capacity exceeded",
+			maxSize:           1000,
+			firstReserveSize:  800,
+			secondReserveSize: 300,
+			expectMetrics:     true,
+		},
+		{
+			name:              "does not emit reserve_failed when within capacity",
+			maxSize:           1000,
+			firstReserveSize:  500,
+			secondReserveSize: 400,
+			expectMetrics:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testScope := tally.NewTestScope("test", nil)
+			cache := NewBlobMemoryCache(
+				BlobMemoryCacheConfig{MaxSize: tt.maxSize},
+				testScope,
+			)
+
+			cache.TryReserve(tt.firstReserveSize)
+			cache.TryReserve(tt.secondReserveSize)
+
+			snapshot := testScope.Snapshot()
+			counters := snapshot.Counters()
+			reserveFailedCounter, exists := counters["test.blob_memory_cache.reserve_failure+"]
+			if !tt.expectMetrics {
+				assert.False(t, exists)
+			} else {
+				require.True(t, exists, "reserve_failed counter should exist when failures occur")
+				assert.Equal(t, int64(1), reserveFailedCounter.Value())
+			}
+		})
+	}
+}
