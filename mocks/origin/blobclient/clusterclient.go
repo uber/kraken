@@ -15,7 +15,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
-	store "github.com/uber/kraken/lib/store"
 )
 
 // MockClusterClient is a mock of ClusterClient interface.
@@ -158,7 +157,7 @@ func (mr *MockClusterClientMockRecorder) Stat(namespace, d any) *gomock.Call {
 }
 
 // UploadBlob mocks base method.
-func (m *MockClusterClient) UploadBlob(namespace string, d core.Digest, blob store.FileReader) error {
+func (m *MockClusterClient) UploadBlob(namespace string, d core.Digest, blob io.ReadSeeker) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UploadBlob", namespace, d, blob)
 	ret0, _ := ret[0].(error)
