@@ -144,7 +144,7 @@ func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob io.Read
 			attemptLogger.Debug("Blob upload succeeded")
 			return nil
 		}
-		attemptLogger.With("error", err).Warn("Blob upload failed")
+		attemptLogger.With("error", err).Error("Blob upload failed")
 
 		// Non-retryable error - don't try other origins
 		if !httputil.IsNetworkError(err) && !httputil.IsRetryable(err) {
