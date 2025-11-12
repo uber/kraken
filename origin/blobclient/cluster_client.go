@@ -27,6 +27,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/hostlist"
+	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
@@ -82,7 +83,7 @@ var _ ClusterClient = &clusterClient{}
 // location resolution and retries.
 type ClusterClient interface {
 	CheckReadiness() error
-	UploadBlob(namespace string, d core.Digest, blob io.Reader) error
+	UploadBlob(namespace string, d core.Digest, blob store.FileReader) error
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
 	PrefetchBlob(namespace string, d core.Digest) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
@@ -123,7 +124,7 @@ func (c *clusterClient) CheckReadiness() error {
 }
 
 // UploadBlob uploads blob to origin cluster. See Client.UploadBlob for more details.
-func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob io.Reader) (err error) {
+func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob store.FileReader) (err error) {
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
 		return fmt.Errorf("resolve clients: %s", err)
@@ -149,12 +150,10 @@ func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob io.Read
 		// Allow retry on another origin if the current upstream is temporarily
 		// unavailable or under high load.
 		if httputil.IsNetworkError(err) || httputil.IsRetryable(err) {
-			if seeker, ok := blob.(io.Seeker); ok {
-				attemptLogger.Info("Rewinding blob reader for retry")
-				if _, seekErr := seeker.Seek(0, io.SeekStart); seekErr != nil {
-					attemptLogger.With("error", seekErr).Error("Failed to rewind blob reader for retry")
-					return fmt.Errorf("rewind blob for retry after %d attempts: %w", i+1, seekErr)
-				}
+			attemptLogger.Info("Rewinding blob reader for retry")
+			if _, seekErr := blob.Seek(0, io.SeekStart); seekErr != nil {
+				attemptLogger.With("error", seekErr).Error("Failed to rewind blob reader for retry")
+				return fmt.Errorf("rewind blob for retry after %d attempts: %w", i, seekErr)
 			}
 			continue
 		}
