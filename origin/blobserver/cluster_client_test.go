@@ -177,7 +177,9 @@ func TestPollSkipsOriginOnRetryableError(t *testing.T) {
 
 	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
 
+	mockClient1.EXPECT().Addr().Return("client1").AnyTimes()
 	mockClient1.EXPECT().UploadBlob(namespace, blob.Digest, nil).Return(httputil.StatusError{Status: 503})
+	mockClient2.EXPECT().Addr().Return("client2").AnyTimes()
 	mockClient2.EXPECT().UploadBlob(namespace, blob.Digest, nil).Return(nil)
 
 	require.NoError(cc.UploadBlob(namespace, blob.Digest, nil))

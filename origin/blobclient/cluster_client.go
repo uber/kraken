@@ -128,17 +128,38 @@ func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob io.Read
 	if err != nil {
 		return fmt.Errorf("resolve clients: %s", err)
 	}
+	logger := log.With("namespace", namespace, "digest", d.Hex())
+	logger.Debug("Starting blob upload to origin cluster")
 
 	// We prefer the origin with highest hashing score so the first origin will handle
 	// replication to origins with lower score. This is because we want to reduce upload
 	// conflicts between local replicas.
-	for _, client := range clients {
+	for i, client := range clients {
+		originAddr := client.Addr()
+		attemptLogger := logger.With("origin", originAddr, "attempt", i)
+
+		attemptLogger.Debug("Attempting blob upload to origin")
 		err = client.UploadBlob(namespace, d, blob)
+		if err == nil {
+			attemptLogger.Info("Blob upload succeeded")
+			return nil
+		}
+		attemptLogger.With("error", err).Warn("Blob upload failed")
+
 		// Allow retry on another origin if the current upstream is temporarily
 		// unavailable or under high load.
 		if httputil.IsNetworkError(err) || httputil.IsRetryable(err) {
+			if seeker, ok := blob.(io.Seeker); ok {
+				attemptLogger.Info("Rewinding blob reader for retry")
+				if _, seekErr := seeker.Seek(0, io.SeekStart); seekErr != nil {
+					attemptLogger.With("error", seekErr).Error("Failed to rewind blob reader for retry")
+					return fmt.Errorf("rewind blob for retry after %d attempts: %w", i+1, seekErr)
+				}
+			}
 			continue
 		}
+
+		// Non-retryable error or no more origins
 		break
 	}
 	return err
@@ -294,8 +315,8 @@ func shuffle(cs []Client) {
 // Poll wraps requests for endpoints which require polling, due to a blob
 // being asynchronously fetched from remote storage in the origin cluster.
 func Poll(
-	r ClientResolver, b backoff.BackOff, d core.Digest, makeRequest func(Client) error) error {
-
+	r ClientResolver, b backoff.BackOff, d core.Digest, makeRequest func(Client) error,
+) error {
 	// By looping over clients in order, we will always prefer the same origin
 	// for making requests to loosely guarantee that only one origin needs to
 	// fetch the file from remote backend.
