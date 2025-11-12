@@ -141,7 +141,7 @@ func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob io.Read
 		attemptLogger.Debug("Attempting blob upload to origin")
 		err = client.UploadBlob(namespace, d, blob)
 		if err == nil {
-			attemptLogger.Info("Blob upload succeeded")
+			attemptLogger.Debug("Blob upload succeeded")
 			return nil
 		}
 		attemptLogger.With("error", err).Warn("Blob upload failed")
@@ -153,7 +153,7 @@ func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob io.Read
 
 		// Allow retry on another origin if the current upstream is temporarily
 		// unavailable or under high load.
-		attemptLogger.Info("Rewinding blob reader for retry")
+		attemptLogger.Debug("Rewinding blob reader for retry")
 		if _, seekErr := blob.Seek(0, io.SeekStart); seekErr != nil {
 			attemptLogger.With("error", seekErr).Error("Failed to rewind blob reader for retry")
 			return fmt.Errorf("rewind blob for retry after %d attempts: %w", i, seekErr)
