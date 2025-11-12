@@ -286,8 +286,9 @@ func Run(flags *Flags, opts ...Option) {
 	log.Fatal(nginx.Run(
 		config.Nginx,
 		map[string]interface{}{
-			"port":   flags.BlobServerPort,
-			"server": nginx.GetServer(config.BlobServer.Listener.Net, config.BlobServer.Listener.Addr),
+			"port":               flags.BlobServerPort,
+			"server":             nginx.GetServer(config.BlobServer.Listener.Net, config.BlobServer.Listener.Addr),
+			"proxy_read_timeout": config.Nginx.ProxyTimeout,
 		},
 		nginx.WithTLS(config.TLS)))
 }
