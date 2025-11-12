@@ -32,6 +32,12 @@ type Config struct {
 	// Interval at which retries should be polled from storage.
 	PollRetriesInterval time.Duration `yaml:"poll_retries_interval"`
 
+	// Number of retries for synchronous task execution.
+	SyncRetries int `yaml:"sync_retries"`
+
+	// Initial delay between synchronous retries (will use exponential backoff).
+	SyncRetryDelay time.Duration `yaml:"sync_retry_delay"`
+
 	// Flags that zero-value channel sizes should not have defaults applied.
 	Testing bool
 }
@@ -51,6 +57,12 @@ func (c Config) applyDefaults() Config {
 	}
 	if c.RetryInterval == 0 {
 		c.RetryInterval = 30 * time.Second
+	}
+	if c.SyncRetries == 0 {
+		c.SyncRetries = 3
+	}
+	if c.SyncRetryDelay == 0 {
+		c.SyncRetryDelay = 500 * time.Millisecond
 	}
 	if !c.Testing {
 		if c.IncomingBuffer == 0 {

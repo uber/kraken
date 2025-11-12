@@ -59,6 +59,10 @@ type tagStore struct {
 	fs               FileStore
 	backends         *backend.Manager
 	writeBackManager persistedretry.Manager
+
+	// writeBackStrategy determines how tags are written to backend storage.
+	// Set at initialization based on WriteThrough config.
+	writeBackStrategy func(tag string, d core.Digest, task persistedretry.Task) error
 }
 
 // New creates a new Store.
@@ -73,42 +77,33 @@ func New(
 		"module": "tagstore",
 	})
 
-	return &tagStore{
+	s := &tagStore{
 		config:           config,
 		fs:               fs,
 		backends:         backends,
 		writeBackManager: writeBackManager,
 	}
+
+	// Set write-back strategy based on configuration
+	if config.WriteThrough {
+		s.writeBackStrategy = s.writeThroughStrategy
+	} else {
+		s.writeBackStrategy = s.asyncWriteBackStrategy
+	}
+
+	return s
 }
 
 func (s *tagStore) Put(tag string, d core.Digest, writeBackDelay time.Duration) error {
-	log.With("tag", tag, "digest", d.String(), "writeback_delay", writeBackDelay).Debug("Storing tag to disk")
-
 	if err := s.writeTagToDisk(tag, d); err != nil {
-		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to write tag to disk")
 		return fmt.Errorf("write tag to disk: %s", err)
 	}
 	if _, err := s.fs.SetCacheFileMetadata(tag, metadata.NewPersist(true)); err != nil {
-		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to set persist metadata")
 		return fmt.Errorf("set persist metadata: %s", err)
 	}
 
 	task := writeback.NewTask(tag, tag, writeBackDelay)
-	if s.config.WriteThrough {
-		log.With("tag", tag, "digest", d.String()).Debug("Using write-through mode for tag")
-		if err := s.writeBackManager.SyncExec(task); err != nil {
-			log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to sync write-back tag to backend")
-			return fmt.Errorf("sync exec write-back task: %s", err)
-		}
-		log.With("tag", tag, "digest", d.String()).Info("Tag written to backend synchronously")
-	} else {
-		log.With("tag", tag, "digest", d.String(), "writeback_delay", writeBackDelay).Debug("Adding async write-back task for tag")
-		if err := s.writeBackManager.Add(task); err != nil {
-			log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to add write-back task")
-			return fmt.Errorf("add write-back task: %s", err)
-		}
-	}
-	return nil
+	return s.writeBackStrategy(tag, d, task)
 }
 
 func (s *tagStore) Get(tag string) (d core.Digest, err error) {
@@ -123,6 +118,22 @@ func (s *tagStore) Get(tag string) (d core.Digest, err error) {
 		break
 	}
 	return d, err
+}
+
+// writeThroughStrategy writes tags synchronously to backend storage.
+func (s *tagStore) writeThroughStrategy(tag string, d core.Digest, task persistedretry.Task) error {
+	if err := s.writeBackManager.SyncExec(task); err != nil {
+		return fmt.Errorf("sync exec write-back task: %s", err)
+	}
+	return nil
+}
+
+// asyncWriteBackStrategy queues tags for asynchronous write-back to backend storage.
+func (s *tagStore) asyncWriteBackStrategy(tag string, d core.Digest, task persistedretry.Task) error {
+	if err := s.writeBackManager.Add(task); err != nil {
+		return fmt.Errorf("add write-back task: %s", err)
+	}
+	return nil
 }
 
 func (s *tagStore) writeTagToDisk(tag string, d core.Digest) error {
