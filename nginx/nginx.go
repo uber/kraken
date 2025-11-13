@@ -126,6 +126,10 @@ func (c *Config) Build(params map[string]interface{}) ([]byte, error) {
 	if _, ok := params["client_verification"]; !ok {
 		params["client_verification"] = config.DefaultClientVerification
 	}
+	// Add proxy_read_timeout to params for site template
+	if _, ok := params["proxy_read_timeout"]; !ok {
+		params["proxy_read_timeout"] = c.ProxyTimeout
+	}
 	site, err := populateTemplate(tmpl, params)
 	if err != nil {
 		return nil, fmt.Errorf("populate template: %s", err)
@@ -143,7 +147,6 @@ func (c *Config) Build(params map[string]interface{}) ([]byte, error) {
 		"ssl_certificate_key":    c.tls.Server.Key.Path,
 		"ssl_password_file":      c.tls.Server.Passphrase.Path,
 		"ssl_client_certificate": _clientCABundle,
-		"proxy_read_timeout":     c.ProxyTimeout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("populate base: %s", err)
