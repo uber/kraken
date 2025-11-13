@@ -115,9 +115,18 @@ func (c *BlobMemoryCache) Remove(name string) {
 	}
 
 	delete(c.entries, name)
-	c.totalSize -= entry.Size()
-
+	c.decrementTotalSize(entry.Size(), name)
 	c.stats.Gauge("total_size_bytes").Update(float64(c.totalSize))
+}
+
+func (c *BlobMemoryCache) decrementTotalSize(size uint64, name string) {
+	if size > c.totalSize {
+		log.With("entry", name, "entry_size", size,
+			"totalSize", c.totalSize).Error("totalSize underflow detected")
+		c.totalSize = 0
+		return
+	}
+	c.totalSize -= size
 }
 
 // NumEntries returns the current number of entries in the cache.
@@ -193,7 +202,7 @@ func (c *BlobMemoryCache) RemoveBatch(names []string) {
 			continue
 		}
 		delete(c.entries, name)
-		c.totalSize -= entry.Size()
+		c.decrementTotalSize(entry.Size(), name)
 	}
 	c.stats.Gauge("total_size_bytes").Update(float64(c.totalSize))
 }

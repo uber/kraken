@@ -500,3 +500,24 @@ func TestBlobMemoryCache_TryReserve_ReserveFailedCounter(t *testing.T) {
 		})
 	}
 }
+
+func TestBlobMemoryCache_Remove_NoUnderFlow(t *testing.T) {
+	cache := NewBlobMemoryCache(
+		BlobMemoryCacheConfig{MaxSize: 1000},
+		tally.NoopScope,
+	)
+
+	reserved := cache.TryReserve(100)
+	require.True(t, reserved)
+	entry := &MemoryEntry{
+		Name:      "blob1",
+		Data:      make([]byte, 500),
+		CreatedAt: time.Now(),
+	}
+
+	cache.Add(entry)
+	cache.Remove("blob1")
+
+	assert.Equal(t, 0, cache.NumEntries())
+	assert.Equal(t, uint64(0), cache.TotalBytes())
+}
