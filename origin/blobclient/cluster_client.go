@@ -148,7 +148,7 @@ func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob io.Read
 
 		// Non-retryable error - don't try other origins
 		if !httputil.IsNetworkError(err) && !httputil.IsRetryable(err) {
-			break
+			return err
 		}
 
 		// Allow retry on another origin if the current upstream is temporarily
