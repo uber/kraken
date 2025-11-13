@@ -237,6 +237,7 @@ func (s *CAStore) WriteBlobToCacheWithMetaInfo(
 	write func(w FileReadWriter) error,
 	pieceLength int64) error {
 	if s.config.MemoryCache.Enabled && s.memCache.TryReserve(size) {
+		log.With("name", name, "size", size).Debug("successfully reserved cache")
 		err := s.addToMemoryCache(name, write, size, pieceLength)
 		if err == nil {
 			return nil
@@ -283,6 +284,8 @@ func (s *CAStore) addToMemoryCache(
 		// this can happen when concurrent goroutines try to add same blob
 		return fmt.Errorf("entry already in in-memory cache")
 	}
+
+	log.With("name", name, "size", entry.Size(), "cap", cap(data)).Debug("successfully added to cache")
 
 	s.addItemForDiskSync(&drainItem{
 		entry:   entry,
