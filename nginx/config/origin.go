@@ -28,6 +28,9 @@ server {
   gzip on;
   gzip_types text/plain test/csv application/json;
 
+  # Committing large blobs might take a while.
+  proxy_read_timeout {{.proxy_read_timeout}};
+
 {{healthEndpoint .server}}
 
   location / {
