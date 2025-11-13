@@ -82,7 +82,7 @@ var _ ClusterClient = &clusterClient{}
 // location resolution and retries.
 type ClusterClient interface {
 	CheckReadiness() error
-	UploadBlob(namespace string, d core.Digest, blob io.Reader) error
+	UploadBlob(namespace string, d core.Digest, blob io.ReadSeeker) error
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
 	PrefetchBlob(namespace string, d core.Digest) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
@@ -123,23 +123,41 @@ func (c *clusterClient) CheckReadiness() error {
 }
 
 // UploadBlob uploads blob to origin cluster. See Client.UploadBlob for more details.
-func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob io.Reader) (err error) {
+func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob io.ReadSeeker) (err error) {
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
 		return fmt.Errorf("resolve clients: %s", err)
 	}
+	logger := log.With("namespace", namespace, "digest", d.Hex())
+	logger.Debug("Starting blob upload to origin cluster")
 
 	// We prefer the origin with highest hashing score so the first origin will handle
 	// replication to origins with lower score. This is because we want to reduce upload
 	// conflicts between local replicas.
-	for _, client := range clients {
+	for i, client := range clients {
+		originAddr := client.Addr()
+		attemptLogger := logger.With("origin", originAddr, "attempt", i)
+
+		attemptLogger.Debug("Attempting blob upload to origin")
 		err = client.UploadBlob(namespace, d, blob)
+		if err == nil {
+			attemptLogger.Debug("Blob upload succeeded")
+			return nil
+		}
+		attemptLogger.With("error", err).Error("Blob upload failed")
+
+		// Non-retryable error - don't try other origins
+		if !httputil.IsNetworkError(err) && !httputil.IsRetryable(err) {
+			return err
+		}
+
 		// Allow retry on another origin if the current upstream is temporarily
 		// unavailable or under high load.
-		if httputil.IsNetworkError(err) || httputil.IsRetryable(err) {
-			continue
+		attemptLogger.Debug("Rewinding blob reader for retry")
+		if _, seekErr := blob.Seek(0, io.SeekStart); seekErr != nil {
+			attemptLogger.With("error", seekErr).Error("Failed to rewind blob reader for retry")
+			return fmt.Errorf("rewind blob for retry after %d attempts: %w", i, seekErr)
 		}
-		break
 	}
 	return err
 }
@@ -294,8 +312,8 @@ func shuffle(cs []Client) {
 // Poll wraps requests for endpoints which require polling, due to a blob
 // being asynchronously fetched from remote storage in the origin cluster.
 func Poll(
-	r ClientResolver, b backoff.BackOff, d core.Digest, makeRequest func(Client) error) error {
-
+	r ClientResolver, b backoff.BackOff, d core.Digest, makeRequest func(Client) error,
+) error {
 	// By looping over clients in order, we will always prefer the same origin
 	// for making requests to loosely guarantee that only one origin needs to
 	// fetch the file from remote backend.

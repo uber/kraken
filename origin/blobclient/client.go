@@ -196,8 +196,8 @@ func (c *HTTPClient) UploadBlob(namespace string, d core.Digest, blob io.Reader)
 // DuplicateUploadBlob duplicates an blob upload request, which will attempt to
 // write-back at the given delay.
 func (c *HTTPClient) DuplicateUploadBlob(
-	namespace string, d core.Digest, blob io.Reader, delay time.Duration) error {
-
+	namespace string, d core.Digest, blob io.Reader, delay time.Duration,
+) error {
 	uc := newUploadClient(c.addr, namespace, _duplicateUpload, delay, c.tls)
 	return runChunkedUpload(uc, d, blob, int64(c.chunkSize))
 }
