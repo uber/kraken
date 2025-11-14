@@ -243,13 +243,14 @@ func Run(flags *Flags, opts ...Option) {
 	go heartbeat(stats)
 
 	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
-		"allowed_cidrs": config.AllowedCidrs,
-		"port":          flags.AgentRegistryPort,
-		"registry_server": nginx.GetServer(
-			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
+		"allowed_cidrs":   config.AllowedCidrs,
+		"port":            flags.AgentRegistryPort,
+		"registry_server": nginx.GetServer(config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
 		"agent_server":    fmt.Sprintf("127.0.0.1:%d", flags.AgentServerPort),
-		"registry_backup": config.RegistryBackup},
-		nginx.WithTLS(config.TLS)))
+		"registry_backup": config.RegistryBackup,
+		// Pass timeout parameters from agent server config
+		"download_timeout": nginx.FormatDurationForNginx(config.AgentServer.DownloadTimeout),
+	}, nginx.WithTLS(config.TLS)))
 }
 
 // heartbeat periodically emits a counter metric which allows us to monitor the

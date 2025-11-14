@@ -29,7 +29,8 @@ type Config struct {
 
 	AnnounceInterval time.Duration `yaml:"announce_interval"`
 
-	Listener listener.Config `yaml:"listener"`
+	Listener        listener.Config `yaml:"listener"`
+	MetaInfoTimeout time.Duration   `yaml:"metainfo_timeout"` // Timeout for metainfo requests to origins
 }
 
 func (c Config) applyDefaults() Config {
@@ -41,6 +42,9 @@ func (c Config) applyDefaults() Config {
 	}
 	if c.AnnounceInterval == 0 {
 		c.AnnounceInterval = 3 * time.Second
+	}
+	if c.MetaInfoTimeout == 0 {
+		c.MetaInfoTimeout = 2 * time.Minute
 	}
 	return c
 }

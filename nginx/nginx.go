@@ -22,6 +22,7 @@ import (
 	"path"
 	"path/filepath"
 	"text/template"
+	"time"
 
 	"github.com/uber/kraken/nginx/config"
 	"github.com/uber/kraken/utils/httputil"
@@ -260,4 +261,34 @@ func GetServer(net, addr string) string {
 		return "unix:" + addr
 	}
 	return addr
+}
+
+// FormatDurationForNginx converts a Go time.Duration to an nginx-compatible timeout string.
+//
+// This function adds a 30-second buffer to the input duration to ensure that the Go server
+// times out before nginx does. This approach provides better observability and error handling
+// because the Go application can return structured error responses with proper HTTP status codes,
+// rather than nginx returning generic 504 Gateway Timeout errors.
+//
+// Timeout Strategy:
+//   - Go server timeout: d (original duration)
+//   - Nginx timeout: d + 30s (buffered duration)
+//   - This ensures Go responds with proper errors before nginx cuts the connection
+//
+// Format: Always returns seconds format (e.g., "60s", "150s", "3600s") for simplicity.
+// Nginx accepts both seconds and minutes formats, so this approach works universally.
+//
+// Examples:
+//
+//	FormatDurationForNginx(5 * time.Minute)     // "330s"  (5m + 30s = 330s)
+//	FormatDurationForNginx(2 * time.Minute)     // "150s"  (2m + 30s = 150s)
+//	FormatDurationForNginx(30 * time.Second)    // "60s"   (30s + 30s = 60s)
+//	FormatDurationForNginx(10 * time.Second)    // "40s"   (10s + 30s = 40s)
+//	FormatDurationForNginx(500 * time.Millisecond) // "30s" (500ms + 30s = 30.5s → 30s)
+//
+// Note: Nginx accepts both "60s" and "1m" formats. This function uses seconds for consistency.
+func FormatDurationForNginx(d time.Duration) string {
+	bufferedDuration := d + (30 * time.Second)
+	seconds := int(bufferedDuration.Seconds())
+	return fmt.Sprintf("%ds", seconds)
 }
