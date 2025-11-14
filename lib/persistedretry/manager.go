@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/uber-go/tally"
 	"go.uber.org/atomic"
 
@@ -54,8 +55,8 @@ type manager struct {
 
 // NewManager creates a new Manager.
 func NewManager(
-	config Config, stats tally.Scope, store Store, executor Executor) (Manager, error) {
-
+	config Config, stats tally.Scope, store Store, executor Executor,
+) (Manager, error) {
 	stats = stats.Tagged(map[string]string{
 		"module":   "persistedretry",
 		"executor": executor.Name(),
@@ -143,10 +144,26 @@ func (m *manager) Add(t Task) error {
 	return nil
 }
 
-// SyncExec executes the task synchronously.
-// Tasks will NOT be added to the retry queue if fail.
+// SyncExec executes the task synchronously with retry logic.
+// Tasks will NOT be added to the retry queue if fail, but will be retried
+// in-place according to the configured SyncRetries and SyncRetryDelay.
 func (m *manager) SyncExec(t Task) error {
-	return m.executor.Exec(t)
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = m.config.SyncRetryDelay
+	b.MaxElapsedTime = 0                           // No time limit, only retry count limit
+	maxRetries := uint64(m.config.SyncRetries - 1) // -1 because first attempt doesn't count as retry
+	bo := backoff.WithMaxRetries(b, maxRetries)
+
+	attempt := 0
+	operation := func() error {
+		attempt++
+		return m.executor.Exec(t)
+	}
+
+	if err := backoff.Retry(operation, bo); err != nil {
+		return fmt.Errorf("sync task failed after %d attempts: %w", attempt, err)
+	}
+	return nil
 }
 
 // Close waits for all workers to exit current task.
