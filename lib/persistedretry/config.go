@@ -13,7 +13,11 @@
 // limitations under the License.
 package persistedretry
 
-import "time"
+import (
+	"time"
+
+	"github.com/uber/kraken/utils/httputil"
+)
 
 // Config defines Manager configuration.
 type Config struct {
@@ -32,11 +36,8 @@ type Config struct {
 	// Interval at which retries should be polled from storage.
 	PollRetriesInterval time.Duration `yaml:"poll_retries_interval"`
 
-	// Number of retries for synchronous task execution.
-	SyncRetries int `yaml:"sync_retries"`
-
-	// Initial delay between synchronous retries (will use exponential backoff).
-	SyncRetryDelay time.Duration `yaml:"sync_retry_delay"`
+	// Exponential backoff configuration for synchronous task execution.
+	SyncRetryBackoff httputil.ExponentialBackOffConfig `yaml:"sync_retry_backoff"`
 
 	// Flags that zero-value channel sizes should not have defaults applied.
 	Testing bool
@@ -58,11 +59,16 @@ func (c Config) applyDefaults() Config {
 	if c.RetryInterval == 0 {
 		c.RetryInterval = 30 * time.Second
 	}
-	if c.SyncRetries == 0 {
-		c.SyncRetries = 3
-	}
-	if c.SyncRetryDelay == 0 {
-		c.SyncRetryDelay = 500 * time.Millisecond
+	if !c.SyncRetryBackoff.Enabled {
+		// Apply defaults for sync retry backoff to maintain backward compatibility
+		c.SyncRetryBackoff = httputil.ExponentialBackOffConfig{
+			Enabled:             true,
+			InitialInterval:     500 * time.Millisecond,
+			RandomizationFactor: 0.05,
+			Multiplier:          2,
+			MaxInterval:         30 * time.Second,
+			MaxRetries:          2, // 2 retries = 3 total attempts (1 initial + 2 retries)
+		}
 	}
 	if !c.Testing {
 		if c.IncomingBuffer == 0 {

@@ -146,13 +146,9 @@ func (m *manager) Add(t Task) error {
 
 // SyncExec executes the task synchronously with retry logic.
 // Tasks will NOT be added to the retry queue if fail, but will be retried
-// in-place according to the configured SyncRetries and SyncRetryDelay.
+// in-place according to the configured SyncRetryBackoff.
 func (m *manager) SyncExec(t Task) error {
-	b := backoff.NewExponentialBackOff()
-	b.InitialInterval = m.config.SyncRetryDelay
-	b.MaxElapsedTime = 0                           // No time limit, only retry count limit
-	maxRetries := uint64(m.config.SyncRetries - 1) // -1 because first attempt doesn't count as retry
-	bo := backoff.WithMaxRetries(b, maxRetries)
+	bo := m.config.SyncRetryBackoff.Build()
 
 	attempt := 0
 	operation := func() error {
