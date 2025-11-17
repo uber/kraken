@@ -150,14 +150,12 @@ func (m *manager) Add(t Task) error {
 func (m *manager) SyncExec(t Task) error {
 	bo := m.config.SyncRetryBackoff.Build()
 
-	attempt := 0
 	operation := func() error {
-		attempt++
 		return m.executor.Exec(t)
 	}
 
 	if err := backoff.Retry(operation, bo); err != nil {
-		return fmt.Errorf("sync task failed after %d attempts: %w", attempt, err)
+		return fmt.Errorf("sync task failed: %w", err)
 	}
 	return nil
 }
