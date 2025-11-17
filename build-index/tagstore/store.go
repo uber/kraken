@@ -62,7 +62,7 @@ type tagStore struct {
 
 	// writeBackStrategy determines how tags are written to backend storage.
 	// Set at initialization based on WriteThrough config.
-	writeBackStrategy func(tag string, d core.Digest, task persistedretry.Task) error
+	writeBackStrategy func(task persistedretry.Task) error
 }
 
 // New creates a new Store.
@@ -103,7 +103,7 @@ func (s *tagStore) Put(tag string, d core.Digest, writeBackDelay time.Duration) 
 	}
 
 	task := writeback.NewTask(tag, tag, writeBackDelay)
-	return s.writeBackStrategy(tag, d, task)
+	return s.writeBackStrategy(task)
 }
 
 func (s *tagStore) Get(tag string) (d core.Digest, err error) {
@@ -121,7 +121,7 @@ func (s *tagStore) Get(tag string) (d core.Digest, err error) {
 }
 
 // writeThroughStrategy writes tags synchronously to backend storage.
-func (s *tagStore) writeThroughStrategy(tag string, d core.Digest, task persistedretry.Task) error {
+func (s *tagStore) writeThroughStrategy(task persistedretry.Task) error {
 	if err := s.writeBackManager.SyncExec(task); err != nil {
 		return fmt.Errorf("sync exec write-back task: %s", err)
 	}
@@ -129,7 +129,7 @@ func (s *tagStore) writeThroughStrategy(tag string, d core.Digest, task persiste
 }
 
 // asyncWriteBackStrategy queues tags for asynchronous write-back to backend storage.
-func (s *tagStore) asyncWriteBackStrategy(tag string, d core.Digest, task persistedretry.Task) error {
+func (s *tagStore) asyncWriteBackStrategy(task persistedretry.Task) error {
 	if err := s.writeBackManager.Add(task); err != nil {
 		return fmt.Errorf("add write-back task: %s", err)
 	}
