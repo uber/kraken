@@ -55,6 +55,9 @@ type Config struct {
 	AccessLogPath string `yaml:"access_log_path"`
 	ErrorLogPath  string `yaml:"error_log_path"`
 
+	// ProxyTimeout defines the proxy_read_timeout for nginx (e.g. "15m", "3m", "60s")
+	ProxyTimeout string `yaml:"proxy_timeout"`
+
 	tls httputil.TLSConfig
 }
 
@@ -79,6 +82,9 @@ func (c *Config) applyDefaults() error {
 			return errors.New("one of log_dir or error_log_path must be set")
 		}
 		c.ErrorLogPath = filepath.Join(c.LogDir, "nginx-error.log")
+	}
+	if c.ProxyTimeout == "" {
+		c.ProxyTimeout = "3m"
 	}
 	return nil
 }
@@ -119,6 +125,10 @@ func (c *Config) Build(params map[string]interface{}) ([]byte, error) {
 	}
 	if _, ok := params["client_verification"]; !ok {
 		params["client_verification"] = config.DefaultClientVerification
+	}
+	// Add proxy_read_timeout to params for site template
+	if _, ok := params["proxy_read_timeout"]; !ok {
+		params["proxy_read_timeout"] = c.ProxyTimeout
 	}
 	site, err := populateTemplate(tmpl, params)
 	if err != nil {
