@@ -23,11 +23,27 @@ import (
 type Config struct {
 	Listener                  listener.Config `yaml:"listener"`
 	DuplicateWriteBackStagger time.Duration   `yaml:"duplicate_write_back_stagger"`
+	DownloadTimeout           time.Duration   `yaml:"download_timeout"`
+	UploadTimeout             time.Duration   `yaml:"upload_timeout"`
+	ReplicationTimeout        time.Duration   `yaml:"replication_timeout"`
+	BackendTimeout            time.Duration   `yaml:"backend_timeout"`
 }
 
 func (c Config) applyDefaults() Config {
 	if c.DuplicateWriteBackStagger == 0 {
 		c.DuplicateWriteBackStagger = 30 * time.Minute
+	}
+	if c.DownloadTimeout == 0 {
+		c.DownloadTimeout = 15 * time.Minute
+	}
+	if c.UploadTimeout == 0 {
+		c.UploadTimeout = 10 * time.Minute
+	}
+	if c.ReplicationTimeout == 0 {
+		c.ReplicationTimeout = 3 * time.Minute
+	}
+	if c.BackendTimeout == 0 {
+		c.BackendTimeout = 2 * time.Minute
 	}
 	return c
 }
