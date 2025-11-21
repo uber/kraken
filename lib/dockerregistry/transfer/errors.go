@@ -13,10 +13,50 @@
 // limitations under the License.
 package transfer
 
-import "errors"
+import "fmt"
 
 // ErrBlobNotFound is returned when a blob is not found by transferer.
-var ErrBlobNotFound = errors.New("blob not found")
+type ErrBlobNotFound struct {
+	Digest string
+	Reason string
+}
+
+func (e ErrBlobNotFound) Error() string {
+	if e.Reason != "" {
+		return fmt.Sprintf("blob %s not found: %s", e.Digest, e.Reason)
+	}
+	return fmt.Sprintf("blob %s not found", e.Digest)
+}
 
 // ErrTagNotFound is returned when a tag is not found by transferer.
-var ErrTagNotFound = errors.New("tag not found")
+type ErrTagNotFound struct {
+	Tag    string
+	Reason string
+}
+
+func (e ErrTagNotFound) Error() string {
+	if e.Reason != "" {
+		return fmt.Sprintf("tag %s not found: %s", e.Tag, e.Reason)
+	}
+	return fmt.Sprintf("tag %s not found", e.Tag)
+}
+
+// IsBlobNotFound checks if an error is ErrBlobNotFound.
+func IsBlobNotFound(err error) bool {
+	_, ok := err.(ErrBlobNotFound)
+	if ok {
+		return true
+	}
+	_, ok = err.(*ErrBlobNotFound)
+	return ok
+}
+
+// IsTagNotFound checks if an error is ErrTagNotFound.
+func IsTagNotFound(err error) bool {
+	_, ok := err.(ErrTagNotFound)
+	if ok {
+		return true
+	}
+	_, ok = err.(*ErrTagNotFound)
+	return ok
+}

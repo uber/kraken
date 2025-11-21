@@ -118,13 +118,15 @@ func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+
 	d, err := s.tags.Get(tag)
+	if err == tagclient.ErrTagNotFound {
+		return handler.ErrorStatus(http.StatusNotFound)
+	}
 	if err != nil {
-		if err == tagclient.ErrTagNotFound {
-			return handler.ErrorStatus(http.StatusNotFound)
-		}
 		return handler.Errorf("get tag: %s", err)
 	}
+
 	io.WriteString(w, d.String())
 	return nil
 }
@@ -139,23 +141,38 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return err
 	}
+
 	f, err := s.cads.Cache().GetFileReader(d.Hex())
-	if err != nil {
-		if os.IsNotExist(err) || s.cads.InDownloadError(err) {
-			if err := s.sched.Download(namespace, d); err != nil {
-				if err == scheduler.ErrTorrentNotFound {
-					return handler.ErrorStatus(http.StatusNotFound)
-				}
-				return handler.Errorf("download torrent: %s", err)
-			}
-			f, err = s.cads.Cache().GetFileReader(d.Hex())
-			if err != nil {
-				return handler.Errorf("store: %s", err)
-			}
-		} else {
-			return handler.Errorf("store: %s", err)
+
+	// Happy path: file already exists in cache
+	if err == nil {
+		if _, err := io.Copy(w, f); err != nil {
+			return fmt.Errorf("copy file: %s", err)
 		}
+		return nil
 	}
+
+	// If error is not recoverable, return error
+	if !os.IsNotExist(err) && !s.cads.InDownloadError(err) {
+		return handler.Errorf("store: %s", err)
+	}
+
+	// File doesn't exist or is in wrong state, trigger P2P download
+	if err := s.sched.Download(namespace, d); err != nil {
+		if err == scheduler.ErrTorrentNotFound {
+			return handler.ErrorStatus(http.StatusNotFound)
+		}
+		return handler.Errorf("download torrent: %s", err)
+	}
+
+	// Get file reader after download completes
+	// Use Any() to check both download and cache directories, as the file
+	// might still be in the process of being moved from download to cache.
+	f, err = s.cads.Any().GetFileReader(d.Hex())
+	if err != nil {
+		return handler.Errorf("store: %s", err)
+	}
+
 	if _, err := io.Copy(w, f); err != nil {
 		return fmt.Errorf("copy file: %s", err)
 	}

@@ -40,8 +40,8 @@ func NewReadOnlyTransferer(
 	stats tally.Scope,
 	cads *store.CADownloadStore,
 	tags tagclient.Client,
-	sched scheduler.Scheduler) *ReadOnlyTransferer {
-
+	sched scheduler.Scheduler,
+) *ReadOnlyTransferer {
 	stats = stats.Tagged(map[string]string{
 		"module": "rotransferer",
 	})
@@ -49,38 +49,102 @@ func NewReadOnlyTransferer(
 	return &ReadOnlyTransferer{stats, cads, tags, sched}
 }
 
+// mapSchedulerError converts scheduler errors to appropriate transferer errors.
+func mapSchedulerError(err error, d core.Digest) error {
+	switch err {
+	case scheduler.ErrTorrentNotFound:
+		return ErrBlobNotFound{
+			Digest: d.Hex(),
+			Reason: "torrent not found in tracker",
+		}
+	case scheduler.ErrTorrentTimeout:
+		return ErrBlobNotFound{
+			Digest: d.Hex(),
+			Reason: "download timed out",
+		}
+	case scheduler.ErrTorrentRemoved:
+		return ErrBlobNotFound{
+			Digest: d.Hex(),
+			Reason: "torrent was removed",
+		}
+	case scheduler.ErrSchedulerStopped:
+		return fmt.Errorf("scheduler unavailable: scheduler is stopped")
+	case scheduler.ErrSendEventTimedOut:
+		return fmt.Errorf("scheduler unavailable: event loop busy")
+	default:
+		return fmt.Errorf("scheduler download failed: %w", err)
+	}
+}
+
 // Stat returns blob info from local cache, and triggers download if the blob is
 // not available locally.
 func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
 	fi, err := t.cads.Cache().GetFileStat(d.Hex())
-	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
-		if err := t.sched.Download(namespace, d); err != nil {
-			return nil, fmt.Errorf("scheduler: %s", err)
-		}
-		fi, err = t.cads.Cache().GetFileStat(d.Hex())
-		if err != nil {
-			return nil, fmt.Errorf("stat cache: %s", err)
-		}
-	} else if err != nil {
-		return nil, fmt.Errorf("stat cache: %s", err)
+
+	// Happy path: file already exists in cache
+	if err == nil {
+		return core.NewBlobInfo(fi.Size()), nil
 	}
-	return core.NewBlobInfo(fi.Size()), nil
+
+	// If error is not recoverable, return error
+	if !os.IsNotExist(err) && !t.cads.InDownloadError(err) {
+		return nil, fmt.Errorf("stat cache: %w", err)
+	}
+
+	// File doesn't exist or is in wrong state, trigger P2P download
+	if err := t.sched.Download(namespace, d); err != nil {
+		return nil, mapSchedulerError(err, d)
+	}
+
+	// Stat file after download completes
+	// Use Any() to check both download and cache directories, as the file
+	// might still be in the process of being moved from download to cache.
+	fi, err = t.cads.Any().GetFileStat(d.Hex())
+	if err == nil {
+		return core.NewBlobInfo(fi.Size()), nil
+	}
+	if os.IsNotExist(err) {
+		return nil, ErrBlobNotFound{
+			Digest: d.Hex(),
+			Reason: "file not found after download",
+		}
+	}
+	return nil, fmt.Errorf("stat cache after download: %w", err)
 }
 
 // Download downloads blobs as torrent.
 func (t *ReadOnlyTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
 	f, err := t.cads.Cache().GetFileReader(d.Hex())
-	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
-		if err := t.sched.Download(namespace, d); err != nil {
-			return nil, fmt.Errorf("scheduler: %s", err)
-		}
-		f, err = t.cads.Cache().GetFileReader(d.Hex())
-		if err != nil {
-			return nil, fmt.Errorf("cache: %s", err)
-		}
-	} else if err != nil {
-		return nil, fmt.Errorf("cache: %s", err)
+
+	// Happy path: file already exists in cache
+	if err == nil {
+		return f, nil
 	}
+
+	// If error is not recoverable, return error
+	if !os.IsNotExist(err) && !t.cads.InDownloadError(err) {
+		return nil, fmt.Errorf("get cache file: %w", err)
+	}
+
+	// File doesn't exist or is in wrong state, trigger P2P download
+	if err := t.sched.Download(namespace, d); err != nil {
+		return nil, mapSchedulerError(err, d)
+	}
+
+	// Get file reader after download completes
+	// Use Any() to check both download and cache directories, as the file
+	// might still be in the process of being moved from download to cache.
+	f, err = t.cads.Any().GetFileReader(d.Hex())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrBlobNotFound{
+				Digest: d.Hex(),
+				Reason: "file not found after download",
+			}
+		}
+		return nil, fmt.Errorf("get file reader after download: %w", err)
+	}
+
 	return f, nil
 }
 
@@ -92,15 +156,18 @@ func (t *ReadOnlyTransferer) Upload(namespace string, d core.Digest, blob store.
 // GetTag gets manifest digest for tag.
 func (t *ReadOnlyTransferer) GetTag(tag string) (core.Digest, error) {
 	d, err := t.tags.Get(tag)
-	if err != nil {
-		if err == tagclient.ErrTagNotFound {
-			t.stats.Counter("tag_not_found").Inc(1)
-			return core.Digest{}, ErrTagNotFound
-		}
-		t.stats.Counter("get_tag_error").Inc(1)
-		return core.Digest{}, fmt.Errorf("client get tag: %s", err)
+	if err == nil {
+		return d, nil
 	}
-	return d, nil
+	if err == tagclient.ErrTagNotFound {
+		t.stats.Counter("tag_not_found").Inc(1)
+		return core.Digest{}, ErrTagNotFound{
+			Tag:    tag,
+			Reason: "not found in build-index",
+		}
+	}
+	t.stats.Counter("get_tag_error").Inc(1)
+	return core.Digest{}, fmt.Errorf("client get tag: %w", err)
 }
 
 // PutTag is not supported.

@@ -77,15 +77,20 @@ func (e InvalidRequestError) Error() string {
 }
 
 func toDriverError(err error, path string) error {
+	// Check for "not found" errors -> return 404
 	if errors.Is(err, os.ErrNotExist) ||
-		errors.Is(err, transfer.ErrBlobNotFound) ||
-		errors.Is(err, transfer.ErrTagNotFound) {
+		transfer.IsBlobNotFound(err) ||
+		transfer.IsTagNotFound(err) {
 		return driver.PathNotFoundError{
 			DriverName: Name,
 			Path:       path,
 		}
 	}
-	return err
+	log.Errorf("Storage driver error for path %s: %v", path, err)
+	return driver.Error{
+		DriverName: Name,
+		Enclosed:   err,
+	}
 }
 
 type krakenStorageDriverFactory struct {
@@ -132,7 +137,8 @@ func NewReadWriteStorageDriver(
 	config Config,
 	cas *store.CAStore,
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)) *KrakenStorageDriver {
+	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
+) *KrakenStorageDriver {
 	return &KrakenStorageDriver{
 		config:     config,
 		transferer: transferer,
@@ -147,7 +153,8 @@ func NewReadOnlyStorageDriver(
 	config Config,
 	bs BlobStore,
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)) *KrakenStorageDriver {
+	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
+) *KrakenStorageDriver {
 	return &KrakenStorageDriver{
 		config:     config,
 		transferer: transferer,
