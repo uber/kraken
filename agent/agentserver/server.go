@@ -144,10 +144,10 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	}
 
 	f, err := s.cads.Cache().GetFileReader(d.Hex())
-	defer closers.Close(f)
 
 	// Happy path: file already exists in cache
 	if err == nil {
+		defer closers.Close(f)
 		if _, err := io.Copy(w, f); err != nil {
 			return fmt.Errorf("copy file: %w", err)
 		}
@@ -174,6 +174,7 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return handler.Errorf("store: %s", err)
 	}
+	defer closers.Close(f)
 
 	if _, err := io.Copy(w, f); err != nil {
 		return fmt.Errorf("copy file: %w", err)

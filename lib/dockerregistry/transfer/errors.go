@@ -47,19 +47,11 @@ func (e ErrTagNotFound) Error() string {
 // IsBlobNotFound checks if an error is ErrBlobNotFound.
 func IsBlobNotFound(err error) bool {
 	var e ErrBlobNotFound
-	if errors.As(err, &e) {
-		return true
-	}
-	var ePtr *ErrBlobNotFound
-	return errors.As(err, &ePtr)
+	return errors.As(err, &e)
 }
 
 // IsTagNotFound checks if an error is ErrTagNotFound.
 func IsTagNotFound(err error) bool {
 	var e ErrTagNotFound
-	if errors.As(err, &e) {
-		return true
-	}
-	var ePtr *ErrTagNotFound
-	return errors.As(err, &ePtr)
+	return errors.As(err, &e)
 }
