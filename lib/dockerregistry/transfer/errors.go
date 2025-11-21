@@ -13,7 +13,10 @@
 // limitations under the License.
 package transfer
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // ErrBlobNotFound is returned when a blob is not found by transferer.
 type ErrBlobNotFound struct {
@@ -43,20 +46,20 @@ func (e ErrTagNotFound) Error() string {
 
 // IsBlobNotFound checks if an error is ErrBlobNotFound.
 func IsBlobNotFound(err error) bool {
-	_, ok := err.(ErrBlobNotFound)
-	if ok {
+	var e ErrBlobNotFound
+	if errors.As(err, &e) {
 		return true
 	}
-	_, ok = err.(*ErrBlobNotFound)
-	return ok
+	var ePtr *ErrBlobNotFound
+	return errors.As(err, &ePtr)
 }
 
 // IsTagNotFound checks if an error is ErrTagNotFound.
 func IsTagNotFound(err error) bool {
-	_, ok := err.(ErrTagNotFound)
-	if ok {
+	var e ErrTagNotFound
+	if errors.As(err, &e) {
 		return true
 	}
-	_, ok = err.(*ErrTagNotFound)
-	return ok
+	var ePtr *ErrTagNotFound
+	return errors.As(err, &ePtr)
 }

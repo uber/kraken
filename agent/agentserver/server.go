@@ -32,6 +32,7 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/tracker/announceclient"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/httputil"
 
@@ -65,8 +66,8 @@ func New(
 	sched scheduler.ReloadableScheduler,
 	tags tagclient.Client,
 	ac announceclient.Client,
-	containerRuntime containerruntime.Factory) *Server {
-
+	containerRuntime containerruntime.Factory,
+) *Server {
 	stats = stats.Tagged(map[string]string{
 		"module": "agentserver",
 	})
@@ -143,11 +144,12 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	}
 
 	f, err := s.cads.Cache().GetFileReader(d.Hex())
+	defer closers.Close(f)
 
 	// Happy path: file already exists in cache
 	if err == nil {
 		if _, err := io.Copy(w, f); err != nil {
-			return fmt.Errorf("copy file: %s", err)
+			return fmt.Errorf("copy file: %w", err)
 		}
 		return nil
 	}
@@ -174,7 +176,7 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	}
 
 	if _, err := io.Copy(w, f); err != nil {
-		return fmt.Errorf("copy file: %s", err)
+		return fmt.Errorf("copy file: %w", err)
 	}
 	return nil
 }
