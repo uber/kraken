@@ -137,8 +137,7 @@ func NewReadWriteStorageDriver(
 	config Config,
 	cas *store.CAStore,
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
-) *KrakenStorageDriver {
+	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)) *KrakenStorageDriver {
 	return &KrakenStorageDriver{
 		config:     config,
 		transferer: transferer,
@@ -153,8 +152,7 @@ func NewReadOnlyStorageDriver(
 	config Config,
 	bs BlobStore,
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
-) *KrakenStorageDriver {
+	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)) *KrakenStorageDriver {
 	return &KrakenStorageDriver{
 		config:     config,
 		transferer: transferer,

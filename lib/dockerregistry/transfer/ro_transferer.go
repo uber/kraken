@@ -40,8 +40,7 @@ func NewReadOnlyTransferer(
 	stats tally.Scope,
 	cads *store.CADownloadStore,
 	tags tagclient.Client,
-	sched scheduler.Scheduler,
-) *ReadOnlyTransferer {
+	sched scheduler.Scheduler) *ReadOnlyTransferer {
 	stats = stats.Tagged(map[string]string{
 		"module": "rotransferer",
 	})

@@ -41,8 +41,7 @@ func NewReadWriteTransferer(
 	stats tally.Scope,
 	tags tagclient.Client,
 	originCluster blobclient.ClusterClient,
-	cas *store.CAStore,
-) *ReadWriteTransferer {
+	cas *store.CAStore) *ReadWriteTransferer {
 	stats = stats.Tagged(map[string]string{
 		"module": "rwtransferer",
 	})
@@ -125,8 +124,7 @@ func (t *ReadWriteTransferer) downloadFromOrigin(namespace string, d core.Digest
 
 // Upload uploads blob to the origin cluster.
 func (t *ReadWriteTransferer) Upload(
-	namespace string, d core.Digest, blob store.FileReader,
-) error {
+	namespace string, d core.Digest, blob store.FileReader) error {
 	return t.originCluster.UploadBlob(namespace, d, blob)
 }
 

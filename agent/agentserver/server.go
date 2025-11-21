@@ -66,8 +66,7 @@ func New(
 	sched scheduler.ReloadableScheduler,
 	tags tagclient.Client,
 	ac announceclient.Client,
-	containerRuntime containerruntime.Factory,
-) *Server {
+	containerRuntime containerruntime.Factory) *Server {
 	stats = stats.Tagged(map[string]string{
 		"module": "agentserver",
 	})
