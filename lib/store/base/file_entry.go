@@ -304,7 +304,7 @@ func (entry *localFileEntry) Create(targetState FileState, size int64) error {
 		return err
 	}
 
-	return f.Close()
+	return nil
 }
 
 // Reload tries to reload a file that doesn't exist in memory from disk.
