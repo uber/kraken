@@ -51,29 +51,16 @@ func NewReadOnlyTransferer(
 
 // mapSchedulerError converts scheduler errors to appropriate transferer errors.
 func mapSchedulerError(err error, d core.Digest) error {
-	switch err {
-	case scheduler.ErrTorrentNotFound:
+	// torrent not found → 404
+	if err == scheduler.ErrTorrentNotFound {
 		return ErrBlobNotFound{
 			Digest: d.Hex(),
 			Reason: "torrent not found in tracker",
 		}
-	case scheduler.ErrTorrentTimeout:
-		return ErrBlobNotFound{
-			Digest: d.Hex(),
-			Reason: "download timed out",
-		}
-	case scheduler.ErrTorrentRemoved:
-		return ErrBlobNotFound{
-			Digest: d.Hex(),
-			Reason: "torrent was removed",
-		}
-	case scheduler.ErrSchedulerStopped:
-		return fmt.Errorf("scheduler unavailable: scheduler is stopped")
-	case scheduler.ErrSendEventTimedOut:
-		return fmt.Errorf("scheduler unavailable: event loop busy")
-	default:
-		return fmt.Errorf("scheduler download failed: %w", err)
 	}
+
+	// All other scheduler errors → 500 with context
+	return fmt.Errorf("download blob %s: %w", d.Hex(), err)
 }
 
 // Stat returns blob info from local cache, and triggers download if the blob is
