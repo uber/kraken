@@ -125,7 +125,7 @@ func (t *ReadOnlyTransferer) Download(namespace string, d core.Digest) (store.Fi
 		if os.IsNotExist(err) {
 			return nil, ErrBlobNotFound{
 				Digest: d.Hex(),
-				Reason: "file not found after download",
+				Reason: "file not found on disk after download",
 			}
 		}
 		return nil, fmt.Errorf("get file reader after download: %w", err)
