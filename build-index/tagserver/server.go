@@ -172,15 +172,15 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	tag, err := httputil.ParseParam(r, "tag")
 	if err != nil {
-		return err
+		return fmt.Errorf("put tag handler: %w", err)
 	}
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
-		return err
+		return fmt.Errorf("put tag handler: %w", err)
 	}
 	replicate, err := strconv.ParseBool(httputil.GetQueryArg(r, "replicate", "false"))
 	if err != nil {
-		return handler.Errorf("parse query arg `replicate`: %s", err)
+		return handler.Errorf("put tag handler: parse query arg `replicate`: %s", err)
 	}
 
 	log.With("tag", tag, "digest", d.String(), "replicate", replicate).Info("Putting tag")
@@ -188,14 +188,14 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	deps, err := s.depResolver.Resolve(tag, d)
 	if err != nil {
 		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to resolve dependencies")
-		return fmt.Errorf("resolve dependencies: %s", err)
+		return fmt.Errorf("put tag handler: %w", err)
 	}
 
 	log.With("tag", tag, "digest", d.String(), "dependency_count", len(deps)).Debug("Resolved dependencies")
 
 	if err := s.putTag(tag, d, deps); err != nil {
 		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to put tag")
-		return err
+		return fmt.Errorf("put tag handler: %w", err)
 	}
 
 	log.With("tag", tag, "digest", d.String()).Info("Successfully put tag")
@@ -204,7 +204,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 		log.With("tag", tag, "digest", d.String()).Info("Starting tag replication")
 		if err := s.replicateTag(tag, d, deps); err != nil {
 			log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to replicate tag")
-			return err
+			return fmt.Errorf("put tag handler: %w", err)
 		}
 		log.With("tag", tag, "digest", d.String()).Info("Successfully replicated tag")
 	}

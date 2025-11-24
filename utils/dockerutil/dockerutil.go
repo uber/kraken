@@ -24,8 +24,10 @@ import (
 	"github.com/uber/kraken/core"
 )
 
-const _v2ManifestType = "application/vnd.docker.distribution.manifest.v2+json"
-const _v2ManifestListType = "application/vnd.docker.distribution.manifest.list.v2+json"
+const (
+	_v2ManifestType     = "application/vnd.docker.distribution.manifest.v2+json"
+	_v2ManifestListType = "application/vnd.docker.distribution.manifest.list.v2+json"
+)
 
 func ParseManifest(r io.Reader) (distribution.Manifest, core.Digest, error) {
 	b, err := io.ReadAll(r)
@@ -90,7 +92,7 @@ func GetManifestReferences(manifest distribution.Manifest) ([]core.Digest, error
 	for _, desc := range manifest.References() {
 		d, err := core.ParseSHA256Digest(string(desc.Digest))
 		if err != nil {
-			return nil, fmt.Errorf("parse digest: %s", err)
+			return nil, fmt.Errorf("get manifest references: %w", err)
 		}
 		refs = append(refs, d)
 	}

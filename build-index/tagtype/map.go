@@ -17,9 +17,11 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"time"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/utils/httputil"
 )
 
 var errNamespaceNotFound = errors.New("no matches for namespace")
@@ -59,7 +61,15 @@ func NewMap(configs []Config, originClient blobclient.ClusterClient) (*Map, erro
 		var sr *subResolver
 		switch config.Type {
 		case "docker":
-			sr = &subResolver{re, &dockerResolver{originClient}}
+			backoffConfig := httputil.ExponentialBackOffConfig{
+				Enabled:             true,
+				InitialInterval:     500 * time.Millisecond,
+				RandomizationFactor: 0.05,
+				Multiplier:          2,
+				MaxInterval:         30 * time.Second,
+				MaxRetries:          5,
+			}
+			sr = &subResolver{re, &dockerResolver{originClient, backoffConfig}}
 		case "default":
 			sr = &subResolver{re, &defaultResolver{}}
 		default:
