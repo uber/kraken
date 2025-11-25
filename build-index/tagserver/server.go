@@ -411,7 +411,7 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 
 	if err := s.replicateTag(tag, d, deps); err != nil {
 		log.With("tag", tag, "digest", d.String()).Errorf("Failed to replicate tag: %s", err)
-		return fmt.Errorf("replicate tag handler: %w", err)
+		return err
 	}
 
 	log.With("tag", tag, "digest", d.String()).Info("Successfully initiated tag replication")
