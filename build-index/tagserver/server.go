@@ -251,10 +251,10 @@ func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
 
 	d, err := s.store.Get(tag)
 	if err != nil {
-		log.With("tag", tag).Errorf("Failed to get tag from storage: %s", err)
 		if err == tagstore.ErrTagNotFound {
 			return handler.ErrorStatus(http.StatusNotFound)
 		}
+		log.With("tag", tag).Errorf("Failed to get tag from storage: %s", err)
 		return handler.Errorf("storage: %s", err)
 	}
 
