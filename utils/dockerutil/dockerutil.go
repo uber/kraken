@@ -92,7 +92,7 @@ func GetManifestReferences(manifest distribution.Manifest) ([]core.Digest, error
 	for _, desc := range manifest.References() {
 		d, err := core.ParseSHA256Digest(string(desc.Digest))
 		if err != nil {
-			return nil, fmt.Errorf("get manifest references: %w", err)
+			return nil, fmt.Errorf("parse digest: %w", err)
 		}
 		refs = append(refs, d)
 	}

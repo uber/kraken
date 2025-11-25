@@ -36,11 +36,11 @@ type dockerResolver struct {
 func (r *dockerResolver) Resolve(tag string, d core.Digest) (core.DigestList, error) {
 	m, err := r.downloadManifest(tag, d)
 	if err != nil {
-		return nil, fmt.Errorf("resolve dependencies: %w", err)
+		return nil, fmt.Errorf("download manifest: %w", err)
 	}
 	deps, err := dockerutil.GetManifestReferences(m)
 	if err != nil {
-		return nil, fmt.Errorf("resolve dependencies: %w", err)
+		return nil, fmt.Errorf("get manifest references: %w", err)
 	}
 	return append(deps, d), nil
 }
@@ -64,7 +64,6 @@ func (r *dockerResolver) downloadManifest(tag string, d core.Digest) (distributi
 		}
 
 		if err != blobclient.ErrBlobNotFound &&
-			!httputil.IsRetryable(err) &&
 			!httputil.IsNetworkError(err) {
 			return backoff.Permanent(err)
 		}
@@ -73,11 +72,11 @@ func (r *dockerResolver) downloadManifest(tag string, d core.Digest) (distributi
 	}
 
 	if err := backoff.Retry(retryFunc, r.backoffConfig.Build()); err != nil {
-		return nil, fmt.Errorf("download manifest: %w", err)
+		return nil, err
 	}
 	manifest, _, err := dockerutil.ParseManifest(buf)
 	if err != nil {
-		return nil, fmt.Errorf("download manifest: %w", err)
+		return nil, fmt.Errorf("parse manifest: %w", err)
 	}
 	return manifest, nil
 }

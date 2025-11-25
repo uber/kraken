@@ -180,7 +180,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	}
 	replicate, err := strconv.ParseBool(httputil.GetQueryArg(r, "replicate", "false"))
 	if err != nil {
-		return fmt.Errorf("put tag handler: parse query arg `replicate`: %w", err)
+		return fmt.Errorf("parse query arg `replicate`: %w", err)
 	}
 
 	log.With("tag", tag, "digest", d.String(), "replicate", replicate).Info("Putting tag")
@@ -188,14 +188,14 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	deps, err := s.depResolver.Resolve(tag, d)
 	if err != nil {
 		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to resolve dependencies")
-		return fmt.Errorf("put tag handler: %w", err)
+		return fmt.Errorf("resolve dependencies: %w", err)
 	}
 
 	log.With("tag", tag, "digest", d.String(), "dependency_count", len(deps)).Debug("Resolved dependencies")
 
 	if err := s.putTag(tag, d, deps); err != nil {
 		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to put tag")
-		return fmt.Errorf("put tag handler: %w", err)
+		return err
 	}
 
 	log.With("tag", tag, "digest", d.String()).Info("Successfully put tag")
@@ -204,7 +204,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 		log.With("tag", tag, "digest", d.String()).Info("Starting tag replication")
 		if err := s.replicateTag(tag, d, deps); err != nil {
 			log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to replicate tag")
-			return fmt.Errorf("put tag handler: %w", err)
+			return err
 		}
 		log.With("tag", tag, "digest", d.String()).Info("Successfully replicated tag")
 	}
@@ -466,9 +466,9 @@ func (s *Server) putTag(tag string, d core.Digest, deps core.DigestList) error {
 
 	for _, dep := range deps {
 		if _, err := s.localOriginClient.Stat(tag, dep); err == blobclient.ErrBlobNotFound {
-			return fmt.Errorf("put tag: cannot upload tag, missing dependency %s", dep)
+			return fmt.Errorf("cannot upload tag, missing dependency %s", dep)
 		} else if err != nil {
-			return fmt.Errorf("put tag: check blob: %w", err)
+			return fmt.Errorf("check blob: %w", err)
 		}
 	}
 
@@ -522,7 +522,7 @@ func (s *Server) replicateTag(tag string, d core.Digest, deps core.DigestList) e
 	for _, dest := range destinations {
 		task := tagreplication.NewTask(tag, d, deps, dest, 0)
 		if err := s.tagReplicationManager.Add(task); err != nil {
-			return fmt.Errorf("replicate tag: add replicate task: %w", err)
+			return fmt.Errorf("add replicate task: %w", err)
 		}
 		log.With("tag", tag, "digest", d.String(), "destination", dest).Debug("Added remote replication task")
 	}
