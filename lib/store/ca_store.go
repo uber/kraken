@@ -281,7 +281,7 @@ func (s *CAStore) addToMemoryCache(
 	}
 
 	if added := s.memCache.Add(entry); !added {
-		// this can happen when concurrent goroutines try to add same blob
+		// Multiple goroutines are trying to add the same blob (which should never happen).
 		return fmt.Errorf("entry already in in-memory cache")
 	}
 

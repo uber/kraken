@@ -231,6 +231,7 @@ func (s *scheduler) Stop() {
 	})
 }
 
+// doDownload schedules a blob for download, returning only once it's downloaded.
 func (s *scheduler) doDownload(namespace string, d core.Digest) (size int64, err error) {
 	t, err := s.torrentArchive.CreateTorrent(namespace, d)
 	if err != nil {
@@ -319,7 +320,7 @@ func (s *scheduler) listenLoop() {
 		nc, err := s.listener.Accept()
 		if err != nil {
 			// TODO Need some way to make this gracefully exit.
-			s.log().Infof("Error accepting new conn, exiting listen loop: %s", err)
+			s.log().Errorf("Error accepting new conn, exiting listen loop: %s", err)
 			return
 		}
 		go func() {

@@ -25,7 +25,7 @@ import (
 type pieceSelectionPolicy interface {
 	selectPieces(
 		limit int,
-		valid func(int) bool, // whether the given piece is a valid selection or not
-		candidates *bitset.BitSet,
+		valid func(pieceIdx int) bool, // whether the given piece is a valid selection or not
+		pieceCandidates *bitset.BitSet,
 		numPeersByPiece syncutil.Counters) ([]int, error)
 }

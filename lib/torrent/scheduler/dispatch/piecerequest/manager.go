@@ -100,7 +100,7 @@ func NewManager(
 // reserved under other peers.
 func (m *Manager) ReservePieces(
 	peerID core.PeerID,
-	candidates *bitset.BitSet,
+	pieceCandidates *bitset.BitSet,
 	numPeersByPiece syncutil.Counters,
 	allowDuplicates bool) ([]int, error) {
 
@@ -112,8 +112,8 @@ func (m *Manager) ReservePieces(
 		return nil, nil
 	}
 
-	valid := func(i int) bool { return m.validRequest(peerID, i, allowDuplicates) }
-	pieces, err := m.policy.selectPieces(quota, valid, candidates, numPeersByPiece)
+	valid := func(pieceIdx int) bool { return m.validRequest(peerID, pieceIdx, allowDuplicates) }
+	pieces, err := m.policy.selectPieces(quota, valid, pieceCandidates, numPeersByPiece)
 	if err != nil {
 		return nil, err
 	}
@@ -221,8 +221,8 @@ func (m *Manager) GetFailedRequests() []Request {
 	return failed
 }
 
-func (m *Manager) validRequest(peerID core.PeerID, i int, allowDuplicates bool) bool {
-	for _, r := range m.requests[i] {
+func (m *Manager) validRequest(peerID core.PeerID, pieceIdx int, allowDuplicates bool) bool {
+	for _, r := range m.requests[pieceIdx] {
 		if r.Status == StatusPending && !m.expired(r) {
 			if r.PeerID == peerID {
 				return false

@@ -73,6 +73,7 @@ func (c *BlobMemoryCache) Add(entry *MemoryEntry) bool {
 	defer c.mu.Unlock()
 
 	if _, exists := c.entries[entry.Name]; exists {
+		log.Errorf("invariant violation: blob already in mem cache - caller should be deduplicating requests")
 		// already exists, return
 		// the caller should call release reservation if this happens else
 		// there can be cases of over reservation
