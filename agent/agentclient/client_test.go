@@ -65,7 +65,7 @@ func TestGetTag(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			s := httptest.NewServer(http.HandlerFunc(test.handler))
-			defer s.Close()
+			t.Cleanup(s.Close)
 
 			c := New(s.Listener.Addr().String())
 			d, err := c.GetTag(tag)
@@ -111,7 +111,7 @@ func TestDownload(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			s := httptest.NewServer(http.HandlerFunc(test.handler))
-			defer s.Close()
+			t.Cleanup(s.Close)
 
 			c := New(s.Listener.Addr().String())
 			r, err := c.Download(namespace, digest)
