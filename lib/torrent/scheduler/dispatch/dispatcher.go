@@ -365,8 +365,8 @@ func (d *Dispatcher) maybeRequestMorePieces(p *peer) (bool, error) {
 	return d.maybeSendPieceRequests(p, candidates)
 }
 
-func (d *Dispatcher) maybeSendPieceRequests(p *peer, candidates *bitset.BitSet) (bool, error) {
-	pieces, err := d.pieceRequestManager.ReservePieces(p.id, candidates, d.numPeersByPiece, d.endgame())
+func (d *Dispatcher) maybeSendPieceRequests(p *peer, pieceCandidates *bitset.BitSet) (bool, error) {
+	pieces, err := d.pieceRequestManager.ReservePieces(p.id, pieceCandidates, d.numPeersByPiece, d.endgame())
 	if err != nil {
 		return false, err
 	}

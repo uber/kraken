@@ -31,15 +31,15 @@ func newRarestFirstPolicy() *rarestFirstPolicy {
 
 func (p *rarestFirstPolicy) selectPieces(
 	limit int,
-	valid func(int) bool,
-	candidates *bitset.BitSet,
+	valid func(pieceIdx int) bool,
+	pieceCandidates *bitset.BitSet,
 	numPeersByPiece syncutil.Counters) ([]int, error) {
 
 	candidateQueue := heap.NewPriorityQueue()
-	for i, e := candidates.NextSet(0); e; i, e = candidates.NextSet(i + 1) {
+	for pieceIdx, ok := pieceCandidates.NextSet(0); ok; pieceIdx, ok = pieceCandidates.NextSet(pieceIdx + 1) {
 		candidateQueue.Push(&heap.Item{
-			Value:    int(i),
-			Priority: numPeersByPiece.Get(int(i)),
+			Value:    int(pieceIdx),
+			Priority: numPeersByPiece.Get(int(pieceIdx)),
 		})
 	}
 
