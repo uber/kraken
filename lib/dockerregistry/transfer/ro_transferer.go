@@ -40,7 +40,8 @@ func NewReadOnlyTransferer(
 	stats tally.Scope,
 	cads *store.CADownloadStore,
 	tags tagclient.Client,
-	sched scheduler.Scheduler) *ReadOnlyTransferer {
+	sched scheduler.Scheduler,
+) *ReadOnlyTransferer {
 	stats = stats.Tagged(map[string]string{
 		"module": "rotransferer",
 	})
@@ -67,17 +68,14 @@ func mapSchedulerError(err error, d core.Digest) error {
 func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
 	fi, err := t.cads.Cache().GetFileStat(d.Hex())
 
-	// Happy path: file already exists in cache
 	if err == nil {
 		return core.NewBlobInfo(fi.Size()), nil
 	}
 
-	// If error is not recoverable, return error
 	if !os.IsNotExist(err) && !t.cads.InDownloadError(err) {
 		return nil, fmt.Errorf("stat cache: %w", err)
 	}
 
-	// File doesn't exist or is in wrong state, trigger P2P download
 	if err := t.sched.Download(namespace, d); err != nil {
 		return nil, mapSchedulerError(err, d)
 	}
@@ -102,17 +100,14 @@ func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobIn
 func (t *ReadOnlyTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
 	f, err := t.cads.Cache().GetFileReader(d.Hex())
 
-	// Happy path: file already exists in cache
 	if err == nil {
 		return f, nil
 	}
 
-	// If error is not recoverable, return error
 	if !os.IsNotExist(err) && !t.cads.InDownloadError(err) {
 		return nil, fmt.Errorf("get cache file: %w", err)
 	}
 
-	// File doesn't exist or is in wrong state, trigger P2P download
 	if err := t.sched.Download(namespace, d); err != nil {
 		return nil, mapSchedulerError(err, d)
 	}

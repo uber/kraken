@@ -66,7 +66,8 @@ func New(
 	sched scheduler.ReloadableScheduler,
 	tags tagclient.Client,
 	ac announceclient.Client,
-	containerRuntime containerruntime.Factory) *Server {
+	containerRuntime containerruntime.Factory,
+) *Server {
 	stats = stats.Tagged(map[string]string{
 		"module": "agentserver",
 	})
@@ -144,7 +145,6 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 
 	f, err := s.cads.Cache().GetFileReader(d.Hex())
 
-	// Happy path: file already exists in cache
 	if err == nil {
 		defer closers.Close(f)
 		if _, err := io.Copy(w, f); err != nil {
@@ -153,12 +153,10 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 		return nil
 	}
 
-	// If error is not recoverable, return error
 	if !os.IsNotExist(err) && !s.cads.InDownloadError(err) {
 		return handler.Errorf("store: %s", err)
 	}
 
-	// File doesn't exist or is in wrong state, trigger P2P download
 	if err := s.sched.Download(namespace, d); err != nil {
 		if err == scheduler.ErrTorrentNotFound {
 			return handler.ErrorStatus(http.StatusNotFound)
