@@ -58,6 +58,10 @@ registry:
 
 peer_id_factory: addr_hash
 
+agentserver:
+  # Timeout configurations (also used by nginx)
+  download_timeout: 15m            # nginx proxy_read_timeout for downloads
+
 # Allow agent to only serve localhost and Docker default bridge requests.
 allowed_cidrs:
   - 127.0.0.1

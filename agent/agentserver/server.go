@@ -43,6 +43,15 @@ import (
 type Config struct {
 	// How long a successful readiness check is valid for. If 0, disable caching successful readiness.
 	readinessCacheTTL time.Duration `yaml:"readiness_cache_ttl"`
+	// Timeout configurations
+	DownloadTimeout time.Duration `yaml:"download_timeout"`
+}
+
+func (c Config) applyDefaults() Config {
+	if c.DownloadTimeout == 0 {
+		c.DownloadTimeout = 15 * time.Minute
+	}
+	return c
 }
 
 // Server defines the agent HTTP server.
@@ -65,7 +74,9 @@ func New(
 	sched scheduler.ReloadableScheduler,
 	tags tagclient.Client,
 	ac announceclient.Client,
-	containerRuntime containerruntime.Factory) *Server {
+	containerRuntime containerruntime.Factory,
+) *Server {
+	config = config.applyDefaults()
 
 	stats = stats.Tagged(map[string]string{
 		"module": "agentserver",
