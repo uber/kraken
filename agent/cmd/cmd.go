@@ -255,8 +255,20 @@ func Run(flags *Flags, opts ...Option) {
 // heartbeat periodically emits a counter metric which allows us to monitor the
 // number of active agents.
 func heartbeat(stats tally.Scope) {
-	for {
-		stats.Counter("heartbeat").Inc(1)
-		time.Sleep(10 * time.Second)
-	}
+	ticker := time.NewTicker(10 * time.Second)
+    heartbeatWithTicker(stats, ticker, make(chan struct{})) // never closed
+}
+
+// heartbeatWithTicker periodically emits a counter metric which allows us to monitor the
+// number of active agents, using the provided ticker and done channel to control its lifecycle.
+func heartbeatWithTicker(stats tally.Scope, ticker *time.Ticker, done <-chan struct{}) {
+    for {
+        select {
+        case <-ticker.C:
+            stats.Counter("heartbeat").Inc(1)
+        case <-done:
+            ticker.Stop()
+            return
+        }
+    }
 }
