@@ -50,16 +50,32 @@ func newTestDockerResolver(ctrl *gomock.Controller) (*dockerResolver, *mockblobc
 	return resolver, originClient
 }
 
-func TestDockerResolver_DownloadManifest_Success(t *testing.T) {
+// setupDockerResolverTest sets up common test dependencies.
+// Returns require, ctrl, resolver, and mockOrigin.
+func setupDockerResolverTest(t *testing.T) (*require.Assertions, *gomock.Controller, *dockerResolver, *mockblobclient.MockClusterClient) {
 	require := require.New(t)
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	t.Cleanup(ctrl.Finish)
 
 	resolver, mockOrigin := newTestDockerResolver(ctrl)
+
+	return require, ctrl, resolver, mockOrigin
+}
+
+// setupDockerResolverTestWithManifest sets up common test dependencies with manifest fixtures.
+// Returns require, ctrl, resolver, mockOrigin, tag, layers, manifest digest, and manifest bytes.
+func setupDockerResolverTestWithManifest(t *testing.T) (*require.Assertions, *gomock.Controller, *dockerResolver, *mockblobclient.MockClusterClient, string, core.DigestList, core.Digest, []byte) {
+	require, ctrl, resolver, mockOrigin := setupDockerResolverTest(t)
 
 	tag := "repo/image:v1.0"
 	layers := core.DigestListFixture(3)
 	manifest, manifestBytes := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
+
+	return require, ctrl, resolver, mockOrigin, tag, layers, manifest, manifestBytes
+}
+
+func TestDockerResolver_DownloadManifest_Success(t *testing.T) {
+	require, _, resolver, mockOrigin, tag, _, manifest, manifestBytes := setupDockerResolverTestWithManifest(t)
 
 	// Expect successful download on first attempt
 	mockOrigin.EXPECT().
@@ -72,15 +88,7 @@ func TestDockerResolver_DownloadManifest_Success(t *testing.T) {
 }
 
 func TestDockerResolver_DownloadManifest_RetryOnBlobNotFound(t *testing.T) {
-	require := require.New(t)
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	resolver, mockOrigin := newTestDockerResolver(ctrl)
-
-	tag := "repo/image:v1.0"
-	layers := core.DigestListFixture(3)
-	manifest, manifestBytes := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
+	require, _, resolver, mockOrigin, tag, _, manifest, manifestBytes := setupDockerResolverTestWithManifest(t)
 
 	// First attempt fails with blob not found, second succeeds
 	gomock.InOrder(
@@ -98,11 +106,7 @@ func TestDockerResolver_DownloadManifest_RetryOnBlobNotFound(t *testing.T) {
 }
 
 func TestDockerResolver_DownloadManifest_ExhaustedRetries(t *testing.T) {
-	require := require.New(t)
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	resolver, mockOrigin := newTestDockerResolver(ctrl)
+	require, _, resolver, mockOrigin := setupDockerResolverTest(t)
 
 	tag := "repo/image:v1.0"
 	manifest := core.DigestFixture()
@@ -120,11 +124,7 @@ func TestDockerResolver_DownloadManifest_ExhaustedRetries(t *testing.T) {
 }
 
 func TestDockerResolver_DownloadManifest_PermanentError(t *testing.T) {
-	require := require.New(t)
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	resolver, mockOrigin := newTestDockerResolver(ctrl)
+	require, _, resolver, mockOrigin := setupDockerResolverTest(t)
 
 	tag := "repo/image:v1.0"
 	manifest := core.DigestFixture()
@@ -143,15 +143,7 @@ func TestDockerResolver_DownloadManifest_PermanentError(t *testing.T) {
 }
 
 func TestDockerResolver_DownloadManifest_BufferResetBetweenRetries(t *testing.T) {
-	require := require.New(t)
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	resolver, mockOrigin := newTestDockerResolver(ctrl)
-
-	tag := "repo/image:v1.0"
-	layers := core.DigestListFixture(3)
-	manifest, manifestBytes := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
+	require, _, resolver, mockOrigin, tag, _, manifest, manifestBytes := setupDockerResolverTestWithManifest(t)
 
 	partialData := []byte("partial corrupt data")
 
@@ -176,11 +168,7 @@ func TestDockerResolver_DownloadManifest_BufferResetBetweenRetries(t *testing.T)
 }
 
 func TestDockerResolver_DownloadManifest_InvalidManifestFormat(t *testing.T) {
-	require := require.New(t)
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	resolver, mockOrigin := newTestDockerResolver(ctrl)
+	require, _, resolver, mockOrigin := setupDockerResolverTest(t)
 
 	tag := "repo/image:v1.0"
 	manifest := core.DigestFixture()
@@ -200,15 +188,7 @@ func TestDockerResolver_DownloadManifest_InvalidManifestFormat(t *testing.T) {
 }
 
 func TestDockerResolver_Resolve_Success(t *testing.T) {
-	require := require.New(t)
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	resolver, mockOrigin := newTestDockerResolver(ctrl)
-
-	tag := "repo/image:v1.0"
-	layers := core.DigestListFixture(3)
-	manifest, manifestBytes := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
+	require, _, resolver, mockOrigin, tag, layers, manifest, manifestBytes := setupDockerResolverTestWithManifest(t)
 
 	mockOrigin.EXPECT().
 		DownloadBlob(tag, manifest, mockutil.MatchWriter(manifestBytes)).
@@ -220,11 +200,7 @@ func TestDockerResolver_Resolve_Success(t *testing.T) {
 }
 
 func TestDockerResolver_Resolve_DownloadError(t *testing.T) {
-	require := require.New(t)
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	resolver, mockOrigin := newTestDockerResolver(ctrl)
+	require, _, resolver, mockOrigin := setupDockerResolverTest(t)
 
 	tag := "repo/image:v1.0"
 	manifest := core.DigestFixture()
@@ -242,15 +218,7 @@ func TestDockerResolver_Resolve_DownloadError(t *testing.T) {
 }
 
 func TestDockerResolver_Resolve_WithRetries(t *testing.T) {
-	require := require.New(t)
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	resolver, mockOrigin := newTestDockerResolver(ctrl)
-
-	tag := "repo/image:v1.0"
-	layers := core.DigestListFixture(3)
-	manifest, manifestBytes := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
+	require, _, resolver, mockOrigin, tag, layers, manifest, manifestBytes := setupDockerResolverTestWithManifest(t)
 
 	// Fails twice, succeeds on third attempt
 	gomock.InOrder(
