@@ -252,23 +252,41 @@ func Run(flags *Flags, opts ...Option) {
 		nginx.WithTLS(config.TLS)))
 }
 
+// heartbeatTicker provides the minimal ticker contract required by heartbeat.
+type heartbeatTicker interface {
+	Chan() <-chan time.Time
+	Stop()
+}
+
+type timeTicker struct {
+	inner *time.Ticker
+}
+
+func (t *timeTicker) Chan() <-chan time.Time {
+	return t.inner.C
+}
+
+func (t *timeTicker) Stop() {
+	t.inner.Stop()
+}
+
 // heartbeat periodically emits a counter metric which allows us to monitor the
 // number of active agents.
 func heartbeat(stats tally.Scope) {
-	ticker := time.NewTicker(10 * time.Second)
-    heartbeatWithTicker(stats, ticker, make(chan struct{})) // never closed
+	ticker := &timeTicker{inner: time.NewTicker(10 * time.Second)}
+	heartbeatWithTicker(stats, ticker, nil)
 }
 
 // heartbeatWithTicker periodically emits a counter metric which allows us to monitor the
 // number of active agents, using the provided ticker and done channel to control its lifecycle.
-func heartbeatWithTicker(stats tally.Scope, ticker *time.Ticker, done <-chan struct{}) {
-    for {
-        select {
-        case <-ticker.C:
-            stats.Counter("heartbeat").Inc(1)
-        case <-done:
-            ticker.Stop()
-            return
-        }
-    }
+func heartbeatWithTicker(stats tally.Scope, ticker heartbeatTicker, done <-chan struct{}) {
+	for {
+		select {
+		case <-ticker.Chan():
+			stats.Counter("heartbeat").Inc(1)
+		case <-done:
+			ticker.Stop()
+			return
+		}
+	}
 }

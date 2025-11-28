@@ -3,9 +3,11 @@ package cmd
 import (
 	"flag"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
@@ -114,16 +116,44 @@ func TestRunValidation(t *testing.T) {
 	}
 }
 func TestHeartbeatWithTicker(t *testing.T) {
-    scope := tally.NewTestScope("", nil)
-    ticker := time.NewTicker(5 * time.Millisecond)
-    done := make(chan struct{})
+	scope := tally.NewTestScope("", nil)
+	mockClock := clock.NewMock()
+	mockTicker := mockClock.Ticker(100 * time.Millisecond)
+	done := make(chan struct{})
 
-    go heartbeatWithTicker(scope, ticker, done)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		heartbeatWithTicker(scope, clockTicker{ticker: mockTicker}, done)
+	}()
 
-    // wait for a few ticks
-    time.Sleep(20 * time.Millisecond)
-    close(done)
+	for i := 0; i < 3; i++ {
+		mockClock.Add(100 * time.Millisecond)
+	}
 
-    snapshot := scope.Snapshot()
-    require.True(t, snapshot.Counters()["heartbeat+"].Value() >= 3, "expected at least 3 heartbeats")
+	require.Eventually(t, func() bool {
+		snapshot := scope.Snapshot()
+		for _, counter := range snapshot.Counters() {
+			if counter.Name() == "heartbeat" && counter.Value() >= 3 {
+				return true
+			}
+		}
+		return false
+	}, time.Second, 10*time.Millisecond)
+
+	close(done)
+	wg.Wait()
+}
+
+type clockTicker struct {
+	ticker *clock.Ticker
+}
+
+func (t clockTicker) Chan() <-chan time.Time {
+	return t.ticker.C
+}
+
+func (t clockTicker) Stop() {
+	t.ticker.Stop()
 }
