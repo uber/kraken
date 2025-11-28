@@ -45,6 +45,8 @@ server {
     proxy_cache_valid   200 5m;
     proxy_cache_valid   any 1s;
     proxy_cache_lock    on;
+
+    proxy_read_timeout {{.proxy_read_timeout}};
   }
 
   location ~* ^/repositories/.*/tags$ {
@@ -65,7 +67,7 @@ server {
     proxy_cache_valid   any 1s;
     proxy_cache_lock    on;
 
-    proxy_read_timeout 2m;
+    proxy_read_timeout {{.proxy_read_timeout}};
   }
 }
 `

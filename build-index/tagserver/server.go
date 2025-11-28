@@ -180,7 +180,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	}
 	replicate, err := strconv.ParseBool(httputil.GetQueryArg(r, "replicate", "false"))
 	if err != nil {
-		return handler.Errorf("parse query arg `replicate`: %s", err)
+		return fmt.Errorf("parse query arg `replicate`: %w", err)
 	}
 
 	log.With("tag", tag, "digest", d.String(), "replicate", replicate).Info("Putting tag")
@@ -188,7 +188,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	deps, err := s.depResolver.Resolve(tag, d)
 	if err != nil {
 		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to resolve dependencies")
-		return fmt.Errorf("resolve dependencies: %s", err)
+		return fmt.Errorf("resolve dependencies: %w", err)
 	}
 
 	log.With("tag", tag, "digest", d.String(), "dependency_count", len(deps)).Debug("Resolved dependencies")
@@ -252,7 +252,6 @@ func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
 	d, err := s.store.Get(tag)
 	if err != nil {
 		if err == tagstore.ErrTagNotFound {
-			log.With("tag", tag).Debug("Tag not found")
 			return handler.ErrorStatus(http.StatusNotFound)
 		}
 		log.With("tag", tag).Errorf("Failed to get tag from storage: %s", err)
@@ -465,21 +464,18 @@ func (s *Server) getOriginHandler(w http.ResponseWriter, r *http.Request) error 
 func (s *Server) putTag(tag string, d core.Digest, deps core.DigestList) error {
 	log.With("tag", tag, "digest", d.String(), "dependency_count", len(deps)).Debug("Validating tag dependencies")
 
-	for i, dep := range deps {
+	for _, dep := range deps {
 		if _, err := s.localOriginClient.Stat(tag, dep); err == blobclient.ErrBlobNotFound {
-			log.With("tag", tag, "digest", d.String(), "missing_dependency", dep.String(), "dependency_index", i).Error("Missing dependency blob")
-			return handler.Errorf("cannot upload tag, missing dependency %s", dep)
+			return fmt.Errorf("cannot upload tag, missing dependency %s", dep)
 		} else if err != nil {
-			log.With("tag", tag, "digest", d.String(), "dependency", dep.String(), "dependency_index", i).Errorf("Failed to check dependency blob: %s", err)
-			return handler.Errorf("check blob: %s", err)
+			return fmt.Errorf("check blob: %w", err)
 		}
 	}
 
 	log.With("tag", tag, "digest", d.String()).Debug("All dependencies validated successfully")
 
 	if err := s.store.Put(tag, d, 0); err != nil {
-		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to store tag")
-		return handler.Errorf("storage: %s", err)
+		return fmt.Errorf("storage: %w", err)
 	}
 
 	log.With("tag", tag, "digest", d.String()).Info("Tag stored locally")
@@ -526,8 +522,7 @@ func (s *Server) replicateTag(tag string, d core.Digest, deps core.DigestList) e
 	for _, dest := range destinations {
 		task := tagreplication.NewTask(tag, d, deps, dest, 0)
 		if err := s.tagReplicationManager.Add(task); err != nil {
-			log.With("tag", tag, "digest", d.String(), "destination", dest).Errorf("Failed to add remote replication task: %s", err)
-			return handler.Errorf("add replicate task: %s", err)
+			return fmt.Errorf("add replicate task: %w", err)
 		}
 		log.With("tag", tag, "digest", d.String(), "destination", dest).Debug("Added remote replication task")
 	}
