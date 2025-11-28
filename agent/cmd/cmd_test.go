@@ -51,37 +51,35 @@ func TestParseFlags(t *testing.T) {
 	assert.Equal(t, "secrets.yaml", flags.SecretsFile)
 }
 
-func TestOptions(t *testing.T) {
-	t.Run("WithConfig", func(t *testing.T) {
-		var o options
-		c := Config{RegistryBackup: "test"}
-		WithConfig(c)(&o)
-		assert.Equal(t, "test", o.config.RegistryBackup)
-	})
+func TestWithConfigOption(t *testing.T) {
+	var o options
+	c := Config{RegistryBackup: "test"}
+	WithConfig(c)(&o)
+	assert.Equal(t, "test", o.config.RegistryBackup)
+}
 
-	t.Run("WithMetrics", func(t *testing.T) {
-		var o options
-		s := tally.NoopScope
-		WithMetrics(s)(&o)
-		assert.Equal(t, s, o.metrics)
-	})
+func TestWithMetricsOption(t *testing.T) {
+	var o options
+	s := tally.NoopScope
+	WithMetrics(s)(&o)
+	assert.Equal(t, s, o.metrics)
+}
 
-	t.Run("WithLogger", func(t *testing.T) {
-		var o options
-		l := zap.NewNop()
-		WithLogger(l)(&o)
-		assert.Equal(t, l, o.logger)
-	})
+func TestWithLoggerOption(t *testing.T) {
+	var o options
+	l := zap.NewNop()
+	WithLogger(l)(&o)
+	assert.Equal(t, l, o.logger)
+}
 
-	t.Run("WithEffect", func(t *testing.T) {
-		var o options
-		called := false
-		f := func() { called = true }
-		WithEffect(f)(&o)
-		assert.NotNil(t, o.effect)
-		o.effect()
-		assert.True(t, called)
-	})
+func TestWithEffectOption(t *testing.T) {
+	var o options
+	called := false
+	f := func() { called = true }
+	WithEffect(f)(&o)
+	assert.NotNil(t, o.effect)
+	o.effect()
+	assert.True(t, called)
 }
 
 func TestRunValidation(t *testing.T) {
