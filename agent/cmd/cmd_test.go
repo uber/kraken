@@ -123,7 +123,7 @@ func TestHeartbeatWithTicker(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		heartbeatWithTicker(scope, clockTicker{ticker: mockTicker}, done)
+		heartbeat(scope, clockTicker{ticker: mockTicker}, done)
 	}()
 
 	for i := 0; i < 3; i++ {
@@ -141,6 +141,7 @@ func TestHeartbeatWithTicker(t *testing.T) {
 	}, time.Second, 10*time.Millisecond)
 
 	close(done)
+	mockTicker.Stop()
 	wg.Wait()
 }
 

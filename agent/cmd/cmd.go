@@ -17,6 +17,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/uber/kraken/agent/agentserver"
@@ -231,25 +232,44 @@ func Run(flags *Flags, opts ...Option) {
 		config.AgentServer, stats, cads, sched, tagClient, announceClient, containerRuntimeFactory)
 	addr := fmt.Sprintf(":%d", flags.AgentServerPort)
 	log.Infof("Starting agent server on %s", addr)
+	heartbeatTicker := &timeTicker{inner: time.NewTicker(10 * time.Second)}
+	heartbeatDone := make(chan struct{})
+	var heartbeatStop sync.Once
+	stopHeartbeat := func() {
+		heartbeatStop.Do(func() {
+			close(heartbeatDone)
+			heartbeatTicker.Stop()
+		})
+	}
+
+	go heartbeat(stats, heartbeatTicker, heartbeatDone)
 	go func() {
-		log.Fatal(http.ListenAndServe(addr, agentServer.Handler()))
+		if err := http.ListenAndServe(addr, agentServer.Handler()); err != nil {
+			stopHeartbeat()
+			log.Fatal(err)
+		}
 	}()
 
 	log.Info("Starting registry...")
 	go func() {
-		log.Fatal(registry.ListenAndServe())
+		if err := registry.ListenAndServe(); err != nil {
+			stopHeartbeat()
+			log.Fatal(err)
+		}
 	}()
 
-	go heartbeat(stats)
-
-	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
+	if err := nginx.Run(config.Nginx, map[string]interface{}{
 		"allowed_cidrs": config.AllowedCidrs,
 		"port":          flags.AgentRegistryPort,
 		"registry_server": nginx.GetServer(
 			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
 		"agent_server":    fmt.Sprintf("127.0.0.1:%d", flags.AgentServerPort),
 		"registry_backup": config.RegistryBackup},
-		nginx.WithTLS(config.TLS)))
+		nginx.WithTLS(config.TLS)); err != nil {
+		stopHeartbeat()
+		log.Fatal(err)
+	}
+	stopHeartbeat()
 }
 
 // heartbeatTicker provides the minimal ticker contract required by heartbeat.
@@ -271,21 +291,13 @@ func (t *timeTicker) Stop() {
 }
 
 // heartbeat periodically emits a counter metric which allows us to monitor the
-// number of active agents.
-func heartbeat(stats tally.Scope) {
-	ticker := &timeTicker{inner: time.NewTicker(10 * time.Second)}
-	heartbeatWithTicker(stats, ticker, nil)
-}
-
-// heartbeatWithTicker periodically emits a counter metric which allows us to monitor the
 // number of active agents, using the provided ticker and done channel to control its lifecycle.
-func heartbeatWithTicker(stats tally.Scope, ticker heartbeatTicker, done <-chan struct{}) {
+func heartbeat(stats tally.Scope, ticker heartbeatTicker, done <-chan struct{}) {
 	for {
 		select {
 		case <-ticker.Chan():
 			stats.Counter("heartbeat").Inc(1)
 		case <-done:
-			ticker.Stop()
 			return
 		}
 	}
