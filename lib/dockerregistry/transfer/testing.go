@@ -67,7 +67,10 @@ func (t *testTransferer) GetTag(tag string) (core.Digest, error) {
 	}
 	d, ok := t.tags[p]
 	if !ok {
-		return core.Digest{}, ErrTagNotFound
+		return core.Digest{}, ErrTagNotFound{
+			Tag:    tag,
+			Reason: "not found in test transferer",
+		}
 	}
 	return d, nil
 }
