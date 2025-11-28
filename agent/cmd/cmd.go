@@ -243,6 +243,7 @@ func Run(flags *Flags, opts ...Option) {
 	}
 
 	go heartbeat(stats, heartbeatTicker, heartbeatDone)
+	defer stopHeartbeat()
 	go func() {
 		if err := http.ListenAndServe(addr, agentServer.Handler()); err != nil {
 			stopHeartbeat()
@@ -269,7 +270,6 @@ func Run(flags *Flags, opts ...Option) {
 		stopHeartbeat()
 		log.Fatal(err)
 	}
-	stopHeartbeat()
 }
 
 // heartbeatTicker provides the minimal ticker contract required by heartbeat.
