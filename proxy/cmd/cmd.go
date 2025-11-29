@@ -14,6 +14,7 @@
 package cmd
 
 import (
+	"context"
 	"flag"
 
 	"github.com/uber/kraken/build-index/tagclient"
@@ -29,6 +30,7 @@ import (
 	"github.com/uber/kraken/utils/configutil"
 	"github.com/uber/kraken/utils/flagutil"
 	"github.com/uber/kraken/utils/log"
+	"github.com/uber/kraken/utils/shutdown"
 
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
@@ -94,6 +96,9 @@ func Run(flags *Flags, opts ...Option) {
 		panic("must specify a port")
 	}
 
+	sh := shutdown.New(context.Background())
+	ctx := sh.Context()
+
 	var overrides options
 	for _, o := range opts {
 		o(&overrides)
@@ -117,17 +122,24 @@ func Run(flags *Flags, opts ...Option) {
 		log.SetGlobalLogger(overrides.logger.Sugar())
 	} else {
 		zlog := log.ConfigureLogger(config.ZapLogging)
-		defer zlog.Sync()
+		sh.AddCleanup(func() error {
+			return zlog.Sync()
+		})
 	}
 
 	stats := overrides.metrics
 	if stats == nil {
 		s, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
 		if err != nil {
-			log.Fatalf("Failed to init metrics: %s", err)
+			sh.Exitf(1, "Failed to init metrics: %s", err)
 		}
 		stats = s
-		defer closer.Close()
+		sh.AddCleanup(func() error {
+			if err := closer.Close(); err != nil {
+				log.Errorf("Error closing metrics: %s", err)
+			}
+			return nil
+		})
 	}
 
 	go metrics.EmitVersion(stats)
@@ -138,17 +150,17 @@ func Run(flags *Flags, opts ...Option) {
 
 	cas, err := store.NewCAStore(config.CAStore, stats)
 	if err != nil {
-		log.Fatalf("Failed to create store: %s", err)
+		sh.Exitf(1, "Failed to create store: %s", err)
 	}
 
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
-		log.Fatalf("Error building client tls config: %s", err)
+		sh.Exitf(1, "Error building client tls config: %s", err)
 	}
 
 	origins, err := config.Origin.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))
 	if err != nil {
-		log.Fatalf("Error building origin host list: %s", err)
+		sh.Exitf(1, "Error building origin host list: %s", err)
 	}
 
 	r := blobclient.NewClientResolver(blobclient.NewProvider(blobclient.WithTLS(tls)), origins)
@@ -156,7 +168,7 @@ func Run(flags *Flags, opts ...Option) {
 
 	buildIndexes, err := config.BuildIndex.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))
 	if err != nil {
-		log.Fatalf("Error building build-index host list: %s", err)
+		sh.Exitf(1, "Error building build-index host list: %s", err)
 	}
 
 	tagClient := tagclient.NewClusterClient(buildIndexes, tls)
@@ -164,31 +176,59 @@ func Run(flags *Flags, opts ...Option) {
 	transferer := transfer.NewReadWriteTransferer(stats, tagClient, originCluster, cas)
 
 	server := proxyserver.New(stats, config.Server, originCluster, tagClient, false)
-	go func() {
-		log.Fatalf("Error starting proxy server %s", server.ListenAndServe())
-	}()
 
 	registry, err := config.Registry.Build(config.Registry.ReadWriteParameters(transferer, cas, stats))
 	if err != nil {
-		log.Fatalf("Error creating registry: %s", err)
+		sh.Exitf(1, "Error creating registry: %s", err)
 	}
-	go func() {
-		log.Info("Starting registry...")
-		log.Fatal(registry.ListenAndServe())
-	}()
 
 	ros := registryoverride.NewServer(config.RegistryOverride, tagClient)
+
+	// Channel to collect errors from goroutines
+	errChan := make(chan error, 3)
+
+	// Start proxy server
 	go func() {
-		log.Fatal(ros.ListenAndServe())
+		if err := server.ListenAndServe(); err != nil {
+			errChan <- err
+		}
+	}()
+
+	// Start registry
+	go func() {
+		log.Info("Starting registry...")
+		if err := registry.ListenAndServe(); err != nil {
+			errChan <- err
+		}
+	}()
+
+	// Start registry override server
+	go func() {
+		if err := ros.ListenAndServe(); err != nil {
+			errChan <- err
+		}
 	}()
 
 	log.Info("Starting nginx...")
-	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
-		"ports": flags.Ports,
-		"registry_server": nginx.GetServer(
-			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
-		"registry_override_server": nginx.GetServer(
-			config.RegistryOverride.Listener.Net, config.RegistryOverride.Listener.Addr),
-		"proxy_server": nginx.GetServer(config.Server.Listener.Net, config.Server.Listener.Addr)},
-		nginx.WithTLS(config.TLS)))
+	go func() {
+		if err := nginx.Run(config.Nginx, map[string]interface{}{
+			"ports": flags.Ports,
+			"registry_server": nginx.GetServer(
+				config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
+			"registry_override_server": nginx.GetServer(
+				config.RegistryOverride.Listener.Net, config.RegistryOverride.Listener.Addr),
+			"proxy_server": nginx.GetServer(config.Server.Listener.Net, config.Server.Listener.Addr)},
+			nginx.WithTLS(config.TLS)); err != nil {
+			errChan <- err
+		}
+	}()
+
+	// Wait for context cancellation or error
+	select {
+	case <-ctx.Done():
+		log.Info("Received shutdown signal")
+		sh.Shutdown()
+	case err := <-errChan:
+		sh.Exit(err, 1)
+	}
 }

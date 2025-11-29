@@ -14,6 +14,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -42,6 +43,7 @@ import (
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/netutil"
+	"github.com/uber/kraken/utils/shutdown"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/go-chi/chi"
@@ -118,6 +120,9 @@ func Run(flags *Flags, opts ...Option) {
 		panic("must specify non-zero blob server port")
 	}
 
+	sh := shutdown.New(context.Background())
+	ctx := sh.Context()
+
 	var overrides options
 	for _, o := range opts {
 		o(&overrides)
@@ -141,17 +146,24 @@ func Run(flags *Flags, opts ...Option) {
 		log.SetGlobalLogger(overrides.logger.Sugar())
 	} else {
 		zlog := log.ConfigureLogger(config.ZapLogging)
-		defer zlog.Sync()
+		sh.AddCleanup(func() error {
+			return zlog.Sync()
+		})
 	}
 
 	stats := overrides.metrics
 	if stats == nil {
 		s, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
 		if err != nil {
-			log.Fatalf("Failed to init metrics: %s", err)
+			sh.Exitf(1, "Failed to init metrics: %s", err)
 		}
 		stats = s
-		defer closer.Close()
+		sh.AddCleanup(func() error {
+			if err := closer.Close(); err != nil {
+				log.Errorf("Error closing metrics: %s", err)
+			}
+			return nil
+		})
 	}
 
 	go metrics.EmitVersion(stats)
@@ -161,7 +173,7 @@ func Run(flags *Flags, opts ...Option) {
 		var err error
 		hostname, err = os.Hostname()
 		if err != nil {
-			log.Fatalf("Error getting hostname: %s", err)
+			sh.Exitf(1, "Error getting hostname: %s", err)
 		}
 	} else {
 		hostname = flags.BlobServerHostName
@@ -171,31 +183,34 @@ func Run(flags *Flags, opts ...Option) {
 	if flags.PeerIP == "" {
 		localIP, err := netutil.GetLocalIP()
 		if err != nil {
-			log.Fatalf("Error getting local ip: %s", err)
+			sh.Exitf(1, "Error getting local ip: %s", err)
 		}
 		flags.PeerIP = localIP
 	}
 
 	cas, err := store.NewCAStore(config.CAStore, stats)
 	if err != nil {
-		log.Fatalf("Failed to create castore: %s", err)
+		sh.Exitf(1, "Failed to create castore: %s", err)
 	}
 
 	pctx, err := core.NewPeerContext(
 		config.PeerIDFactory, flags.Zone, flags.KrakenCluster, flags.PeerIP, flags.PeerPort, true)
 	if err != nil {
-		log.Fatalf("Failed to create peer context: %s", err)
+		sh.Exitf(1, "Failed to create peer context: %s", err)
 	}
 
 	backendManager, err := backend.NewManager(config.BackendManager, config.Backends, config.Auth, stats)
 	if err != nil {
-		log.Fatalf("Error creating backend manager: %s", err)
+		sh.Exitf(1, "Error creating backend manager: %s", err)
 	}
-	defer closers.Close(backendManager)
+	sh.AddCleanup(func() error {
+		closers.Close(backendManager)
+		return nil
+	})
 
 	localDB, err := localdb.New(config.LocalDB)
 	if err != nil {
-		log.Fatalf("Error creating local db: %s", err)
+		sh.Exitf(1, "Error creating local db: %s", err)
 	}
 
 	writeBackManager, err := persistedretry.NewManager(
@@ -204,35 +219,35 @@ func Run(flags *Flags, opts ...Option) {
 		writeback.NewStore(localDB),
 		writeback.NewExecutor(stats, cas, backendManager))
 	if err != nil {
-		log.Fatalf("Error creating write-back manager: %s", err)
+		sh.Exitf(1, "Error creating write-back manager: %s", err)
 	}
 
 	metaInfoGenerator, err := metainfogen.New(config.MetaInfoGen, cas)
 	if err != nil {
-		log.Fatalf("Error creating metainfo generator: %s", err)
+		sh.Exitf(1, "Error creating metainfo generator: %s", err)
 	}
 
 	blobRefresher := blobrefresh.New(config.BlobRefresh, stats, cas, backendManager, metaInfoGenerator)
 
 	netevents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
-		log.Fatalf("Error creating network event producer: %s", err)
+		sh.Exitf(1, "Error creating network event producer: %s", err)
 	}
 
 	sched, err := scheduler.NewOriginScheduler(
 		config.Scheduler, stats, pctx, cas, netevents, blobRefresher)
 	if err != nil {
-		log.Fatalf("Error creating scheduler: %s", err)
+		sh.Exitf(1, "Error creating scheduler: %s", err)
 	}
 
 	cluster, err := hostlist.New(config.Cluster)
 	if err != nil {
-		log.Fatalf("Error creating cluster host list: %s", err)
+		sh.Exitf(1, "Error creating cluster host list: %s", err)
 	}
 
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
-		log.Fatalf("Error building client tls config: %s", err)
+		sh.Exitf(1, "Error building client tls config: %s", err)
 	}
 
 	healthCheckFilter := healthcheck.NewFilter(config.HealthCheck, healthcheck.Default(tls))
@@ -250,11 +265,11 @@ func Run(flags *Flags, opts ...Option) {
 		// addresses instead of hostnames.
 		ip, err := netutil.GetLocalIP()
 		if err != nil {
-			log.Fatalf("Error getting local ip: %s", err)
+			sh.Exitf(1, "Error getting local ip: %s", err)
 		}
 		addr = fmt.Sprintf("%s:%d", ip, flags.BlobServerPort)
 		if !hashRing.Contains(addr) {
-			log.Fatalf(
+			sh.Exitf(1,
 				"Neither %s nor %s (port %d) found in hash ring",
 				hostname, ip, flags.BlobServerPort)
 		}
@@ -275,21 +290,42 @@ func Run(flags *Flags, opts ...Option) {
 		metaInfoGenerator,
 		writeBackManager)
 	if err != nil {
-		log.Fatalf("Error initializing blob server: %s", err)
+		sh.Exitf(1, "Error initializing blob server: %s", err)
 	}
 
 	h := addTorrentDebugEndpoints(server.Handler(), sched)
 
-	go func() { log.Fatal(server.ListenAndServe(h)) }()
+	// Channel to collect errors from goroutines
+	errChan := make(chan error, 2)
+
+	// Start blob server
+	go func() {
+		if err := server.ListenAndServe(h); err != nil {
+			errChan <- err
+		}
+	}()
 
 	log.Info("Starting nginx...")
-	log.Fatal(nginx.Run(
-		config.Nginx,
-		map[string]interface{}{
-			"port":   flags.BlobServerPort,
-			"server": nginx.GetServer(config.BlobServer.Listener.Net, config.BlobServer.Listener.Addr),
-		},
-		nginx.WithTLS(config.TLS)))
+	go func() {
+		if err := nginx.Run(
+			config.Nginx,
+			map[string]interface{}{
+				"port":   flags.BlobServerPort,
+				"server": nginx.GetServer(config.BlobServer.Listener.Net, config.BlobServer.Listener.Addr),
+			},
+			nginx.WithTLS(config.TLS)); err != nil {
+			errChan <- err
+		}
+	}()
+
+	// Wait for context cancellation or error
+	select {
+	case <-ctx.Done():
+		log.Info("Received shutdown signal")
+		sh.Shutdown()
+	case err := <-errChan:
+		sh.Exit(err, 1)
+	}
 }
 
 // addTorrentDebugEndpoints mounts experimental debugging endpoints which are

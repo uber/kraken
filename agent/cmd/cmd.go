@@ -14,6 +14,7 @@
 package cmd
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/http"
@@ -35,6 +36,7 @@ import (
 	"github.com/uber/kraken/utils/configutil"
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/netutil"
+	"github.com/uber/kraken/utils/shutdown"
 
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
@@ -118,6 +120,9 @@ func Run(flags *Flags, opts ...Option) {
 		panic("must specify non-zero agent registry port")
 	}
 
+	sh := shutdown.New(context.Background())
+	ctx := sh.Context()
+
 	var overrides options
 	for _, o := range opts {
 		o(&overrides)
@@ -141,17 +146,24 @@ func Run(flags *Flags, opts ...Option) {
 		log.SetGlobalLogger(overrides.logger.Sugar())
 	} else {
 		zlog := log.ConfigureLogger(config.ZapLogging)
-		defer zlog.Sync()
+		sh.AddCleanup(func() error {
+			return zlog.Sync()
+		})
 	}
 
 	stats := overrides.metrics
 	if stats == nil {
 		s, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
 		if err != nil {
-			log.Fatalf("Failed to init metrics: %s", err)
+			sh.Exitf(1, "Failed to init metrics: %s", err)
 		}
 		stats = s
-		defer closer.Close()
+		sh.AddCleanup(func() error {
+			if err := closer.Close(); err != nil {
+				log.Errorf("Error closing metrics: %s", err)
+			}
+			return nil
+		})
 	}
 
 	go metrics.EmitVersion(stats)
@@ -159,7 +171,7 @@ func Run(flags *Flags, opts ...Option) {
 	if flags.PeerIP == "" {
 		localIP, err := netutil.GetLocalIP()
 		if err != nil {
-			log.Fatalf("Error getting local ip: %s", err)
+			sh.Exitf(1, "Error getting local ip: %s", err)
 		}
 		flags.PeerIP = localIP
 	}
@@ -171,40 +183,40 @@ func Run(flags *Flags, opts ...Option) {
 	pctx, err := core.NewPeerContext(
 		config.PeerIDFactory, flags.Zone, flags.KrakenCluster, flags.PeerIP, flags.PeerPort, false)
 	if err != nil {
-		log.Fatalf("Failed to create peer context: %s", err)
+		sh.Exitf(1, "Failed to create peer context: %s", err)
 	}
 
 	cads, err := store.NewCADownloadStore(config.CADownloadStore, stats)
 	if err != nil {
-		log.Fatalf("Failed to create local store: %s", err)
+		sh.Exitf(1, "Failed to create local store: %s", err)
 	}
 
 	netevents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
-		log.Fatalf("Failed to create network event producer: %s", err)
+		sh.Exitf(1, "Failed to create network event producer: %s", err)
 	}
 
 	trackers, err := config.Tracker.Build()
 	if err != nil {
-		log.Fatalf("Error building tracker upstream: %s", err)
+		sh.Exitf(1, "Error building tracker upstream: %s", err)
 	}
 	go trackers.Monitor(nil)
 
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
-		log.Fatalf("Error building client tls config: %s", err)
+		sh.Exitf(1, "Error building client tls config: %s", err)
 	}
 
 	announceClient := announceclient.New(pctx, trackers, tls)
 	sched, err := scheduler.NewAgentScheduler(
 		config.Scheduler, stats, pctx, cads, netevents, trackers, announceClient, tls)
 	if err != nil {
-		log.Fatalf("Error creating scheduler: %s", err)
+		sh.Exitf(1, "Error creating scheduler: %s", err)
 	}
 
 	buildIndexes, err := config.BuildIndex.Build()
 	if err != nil {
-		log.Fatalf("Error building build-index upstream: %s", err)
+		sh.Exitf(1, "Error building build-index upstream: %s", err)
 	}
 
 	tagClient := tagclient.NewClusterClient(buildIndexes, tls)
@@ -213,7 +225,7 @@ func Run(flags *Flags, opts ...Option) {
 
 	registry, err := config.Registry.Build(config.Registry.ReadOnlyParameters(transferer, cads, stats))
 	if err != nil {
-		log.Fatalf("Failed to init registry: %s", err)
+		sh.Exitf(1, "Failed to init registry: %s", err)
 	}
 
 	registryAddr := fmt.Sprintf("127.0.0.1:%d", flags.AgentRegistryPort)
@@ -225,13 +237,14 @@ func Run(flags *Flags, opts ...Option) {
 	}
 	containerRuntimeFactory, err := containerruntime.NewFactory(containerRuntimeCfg, registryAddr)
 	if err != nil {
-		log.Fatalf("Failed to create container runtime factory: %s", err)
+		sh.Exitf(1, "Failed to create container runtime factory: %s", err)
 	}
 
 	agentServer := agentserver.New(
 		config.AgentServer, stats, cads, sched, tagClient, announceClient, containerRuntimeFactory)
 	addr := fmt.Sprintf(":%d", flags.AgentServerPort)
 	log.Infof("Starting agent server on %s", addr)
+
 	heartbeatTicker := &timeTicker{inner: time.NewTicker(10 * time.Second)}
 	heartbeatDone := make(chan struct{})
 	var heartbeatStop sync.Once
@@ -241,34 +254,51 @@ func Run(flags *Flags, opts ...Option) {
 			heartbeatTicker.Stop()
 		})
 	}
+	sh.AddCleanup(func() error {
+		stopHeartbeat()
+		return nil
+	})
 
 	go heartbeat(stats, heartbeatTicker, heartbeatDone)
-	defer stopHeartbeat()
+
+	// Channel to collect errors from goroutines
+	errChan := make(chan error, 3)
+
+	// Start agent server
 	go func() {
 		if err := http.ListenAndServe(addr, agentServer.Handler()); err != nil {
-			stopHeartbeat()
-			log.Fatal(err)
+			errChan <- err
 		}
 	}()
 
 	log.Info("Starting registry...")
 	go func() {
 		if err := registry.ListenAndServe(); err != nil {
-			stopHeartbeat()
-			log.Fatal(err)
+			errChan <- err
 		}
 	}()
 
-	if err := nginx.Run(config.Nginx, map[string]interface{}{
-		"allowed_cidrs": config.AllowedCidrs,
-		"port":          flags.AgentRegistryPort,
-		"registry_server": nginx.GetServer(
-			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
-		"agent_server":    fmt.Sprintf("127.0.0.1:%d", flags.AgentServerPort),
-		"registry_backup": config.RegistryBackup},
-		nginx.WithTLS(config.TLS)); err != nil {
-		stopHeartbeat()
-		log.Fatal(err)
+	// Start nginx
+	go func() {
+		if err := nginx.Run(config.Nginx, map[string]interface{}{
+			"allowed_cidrs": config.AllowedCidrs,
+			"port":          flags.AgentRegistryPort,
+			"registry_server": nginx.GetServer(
+				config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
+			"agent_server":    fmt.Sprintf("127.0.0.1:%d", flags.AgentServerPort),
+			"registry_backup": config.RegistryBackup},
+			nginx.WithTLS(config.TLS)); err != nil {
+			errChan <- err
+		}
+	}()
+
+	// Wait for context cancellation or error
+	select {
+	case <-ctx.Done():
+		log.Info("Received shutdown signal")
+		sh.Shutdown()
+	case err := <-errChan:
+		sh.Exit(err, 1)
 	}
 }
 
