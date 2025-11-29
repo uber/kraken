@@ -14,6 +14,7 @@
 package cmd
 
 import (
+	"context"
 	"flag"
 
 	"github.com/uber/kraken/lib/healthcheck"
@@ -27,6 +28,7 @@ import (
 	"github.com/uber/kraken/tracker/trackerserver"
 	"github.com/uber/kraken/utils/configutil"
 	"github.com/uber/kraken/utils/log"
+	"github.com/uber/kraken/utils/shutdown"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
@@ -83,6 +85,9 @@ func WithLogger(l *zap.Logger) Option {
 
 // Run runs the tracker.
 func Run(flags *Flags, opts ...Option) {
+	sh := shutdown.New(context.Background())
+	ctx := sh.Context()
+
 	var overrides options
 	for _, o := range opts {
 		o(&overrides)
@@ -106,35 +111,45 @@ func Run(flags *Flags, opts ...Option) {
 		log.SetGlobalLogger(overrides.logger.Sugar())
 	} else {
 		zlog := log.ConfigureLogger(config.ZapLogging)
-		defer zlog.Sync()
+		sh.AddCleanup(func() error {
+			return zlog.Sync()
+		})
 	}
 
 	stats := overrides.metrics
 	if stats == nil {
 		s, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
 		if err != nil {
-			log.Fatalf("Failed to init metrics: %s", err)
+			sh.Exitf(1, "Failed to init metrics: %s", err)
 		}
 		stats = s
-		defer closer.Close()
+		sh.AddCleanup(func() error {
+			if err := closer.Close(); err != nil {
+				log.Errorf("Error closing metrics: %s", err)
+			}
+			return nil
+		})
 	}
 
 	go metrics.EmitVersion(stats)
 
 	peerStore, err := peerstore.New(config.PeerStore)
 	if err != nil {
-		log.Fatalf("Could not create PeerStore: %s", err)
+		sh.Exitf(1, "Could not create PeerStore: %s", err)
 	}
-	defer peerStore.Close()
+	sh.AddCleanup(func() error {
+		peerStore.Close()
+		return nil
+	})
 
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
-		log.Fatalf("Error building client tls config: %s", err)
+		sh.Exitf(1, "Error building client tls config: %s", err)
 	}
 
 	origins, err := config.Origin.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))
 	if err != nil {
-		log.Fatalf("Error building origin host list: %s", err)
+		sh.Exitf(1, "Error building origin host list: %s", err)
 	}
 
 	originStore := originstore.New(
@@ -142,7 +157,7 @@ func Run(flags *Flags, opts ...Option) {
 
 	policy, err := peerhandoutpolicy.NewPriorityPolicy(stats, config.PeerHandoutPolicy.Priority)
 	if err != nil {
-		log.Fatalf("Could not load peer handout policy: %s", err)
+		sh.Exitf(1, "Could not load peer handout policy: %s", err)
 	}
 
 	r := blobclient.NewClientResolver(blobclient.NewProvider(blobclient.WithTLS(tls)), origins)
@@ -150,14 +165,32 @@ func Run(flags *Flags, opts ...Option) {
 
 	server := trackerserver.New(
 		config.TrackerServer, stats, policy, peerStore, originStore, originCluster)
+
+	// Start tracker server
+	errChan := make(chan error, 1)
 	go func() {
-		log.Fatal(server.ListenAndServe())
+		if err := server.ListenAndServe(); err != nil {
+			errChan <- err
+		}
 	}()
 
 	log.Info("Starting nginx...")
-	log.Fatal(nginx.Run(config.Nginx, map[string]interface{}{
-		"port": flags.Port,
-		"server": nginx.GetServer(
-			config.TrackerServer.Listener.Net, config.TrackerServer.Listener.Addr)},
-		nginx.WithTLS(config.TLS)))
+	go func() {
+		if err := nginx.Run(config.Nginx, map[string]interface{}{
+			"port": flags.Port,
+			"server": nginx.GetServer(
+				config.TrackerServer.Listener.Net, config.TrackerServer.Listener.Addr)},
+			nginx.WithTLS(config.TLS)); err != nil {
+			errChan <- err
+		}
+	}()
+
+	// Wait for context cancellation or error
+	select {
+	case <-ctx.Done():
+		log.Info("Received shutdown signal")
+		sh.Shutdown()
+	case err := <-errChan:
+		sh.Exit(err, 1)
+	}
 }
