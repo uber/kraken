@@ -113,6 +113,56 @@ func TestRunValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRequiredPorts(t *testing.T) {
+	tests := []struct {
+		desc        string
+		flags       Flags
+		shouldPanic bool
+		panicMsg    string
+	}{
+		{
+			desc: "valid ports",
+			flags: Flags{
+				PeerPort:          1,
+				AgentServerPort:   2,
+				AgentRegistryPort: 3,
+			},
+		},
+		{
+			desc:        "missing peer port",
+			flags:       Flags{AgentServerPort: 1, AgentRegistryPort: 1},
+			shouldPanic: true,
+			panicMsg:    "must specify non-zero peer port",
+		},
+		{
+			desc:        "missing agent server port",
+			flags:       Flags{PeerPort: 1, AgentRegistryPort: 1},
+			shouldPanic: true,
+			panicMsg:    "must specify non-zero agent server port",
+		},
+		{
+			desc:        "missing agent registry port",
+			flags:       Flags{PeerPort: 1, AgentServerPort: 1},
+			shouldPanic: true,
+			panicMsg:    "must specify non-zero agent registry port",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			if test.shouldPanic {
+				assert.PanicsWithValue(t, test.panicMsg, func() {
+					validateRequiredPorts(&test.flags)
+				})
+			} else {
+				assert.NotPanics(t, func() {
+					validateRequiredPorts(&test.flags)
+				})
+			}
+		})
+	}
+}
 func TestHeartbeatWithTicker(t *testing.T) {
 	scope := tally.NewTestScope("", nil)
 	mockClock := clock.NewMock()
