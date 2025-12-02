@@ -108,15 +108,7 @@ func WithEffect(f func()) Option {
 
 // Run runs the agent.
 func Run(flags *Flags, opts ...Option) {
-	if flags.PeerPort == 0 {
-		panic("must specify non-zero peer port")
-	}
-	if flags.AgentServerPort == 0 {
-		panic("must specify non-zero agent server port")
-	}
-	if flags.AgentRegistryPort == 0 {
-		panic("must specify non-zero agent registry port")
-	}
+	validateRequiredPorts(flags)
 
 	var overrides options
 	for _, o := range opts {
@@ -269,6 +261,19 @@ func Run(flags *Flags, opts ...Option) {
 		nginx.WithTLS(config.TLS)); err != nil {
 		stopHeartbeat()
 		log.Fatal(err)
+	}
+}
+
+// validateRequiredPorts panics if any required port flags are not set.
+func validateRequiredPorts(flags *Flags) {
+	if flags.PeerPort == 0 {
+		panic("must specify non-zero peer port")
+	}
+	if flags.AgentServerPort == 0 {
+		panic("must specify non-zero agent server port")
+	}
+	if flags.AgentRegistryPort == 0 {
+		panic("must specify non-zero agent registry port")
 	}
 }
 
