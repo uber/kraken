@@ -115,7 +115,7 @@ func TestReadWriteTransfererGetTagNotFound(t *testing.T) {
 
 	_, err := transferer.GetTag(tag)
 	require.Error(err)
-	require.Equal(ErrTagNotFound, err)
+	require.True(IsTagNotFound(err))
 }
 
 func TestReadWriteTransfererPutTag(t *testing.T) {
@@ -191,5 +191,5 @@ func TestReadWriteTransfererStatNotFoundOnAnyOriginError(t *testing.T) {
 	mocks.originCluster.EXPECT().Stat(namespace, blob.Digest).Return(nil, errors.New("any error"))
 
 	_, err := transferer.Stat(namespace, blob.Digest)
-	require.Equal(ErrBlobNotFound, err)
+	require.True(IsBlobNotFound(err))
 }
