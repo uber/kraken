@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"flag"
+	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -112,6 +115,84 @@ func TestRunValidation(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestRunUsesProvidedConfig(t *testing.T) {
+	flags := &Flags{
+		PeerIP:            "127.0.0.1",
+		PeerPort:          1,
+		AgentServerPort:   2,
+		AgentRegistryPort: 3,
+		ConfigFile:        "/path/that/does/not/exist",
+	}
+
+	const sentinel = "effect invoked"
+	called := false
+
+	assert.PanicsWithValue(t, sentinel, func() {
+		Run(
+			flags,
+			WithConfig(Config{}),
+			WithMetrics(tally.NewTestScope("", nil)),
+			WithLogger(zap.NewNop()),
+			WithEffect(func() {
+				called = true
+				panic(sentinel)
+			}),
+		)
+	})
+
+	assert.True(t, called, "effect should be invoked")
+}
+
+func TestRunPanicsWhenConfigLoadFails(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.yaml")
+
+	flags := &Flags{
+		PeerPort:          1,
+		AgentServerPort:   2,
+		AgentRegistryPort: 3,
+		ConfigFile:        missing,
+	}
+
+	expected := fmt.Sprintf("open %s: no such file or directory", missing)
+
+	assert.PanicsWithError(t, expected, func() {
+		Run(
+			flags,
+			WithMetrics(tally.NewTestScope("", nil)),
+			WithLogger(zap.NewNop()),
+		)
+	})
+}
+
+func TestRunPanicsWhenSecretsLoadFails(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+
+	configPath := filepath.Join(filepath.Dir(filename), "..", "..", "config", "agent", "base.yaml")
+	require.FileExists(t, configPath)
+
+	tempDir := t.TempDir()
+	missingSecrets := filepath.Join(tempDir, "missing-secrets.yaml")
+
+	flags := &Flags{
+		PeerPort:          1,
+		AgentServerPort:   2,
+		AgentRegistryPort: 3,
+		ConfigFile:        configPath,
+		SecretsFile:       missingSecrets,
+	}
+
+	expected := fmt.Sprintf("open %s: no such file or directory", missingSecrets)
+
+	assert.PanicsWithError(t, expected, func() {
+		Run(
+			flags,
+			WithMetrics(tally.NewTestScope("", nil)),
+			WithLogger(zap.NewNop()),
+		)
+	})
 }
 
 func TestValidateRequiredPorts(t *testing.T) {
