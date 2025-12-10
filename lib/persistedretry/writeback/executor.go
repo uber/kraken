@@ -74,6 +74,7 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 func (e *Executor) upload(t *Task) error {
 	start := time.Now()
 
+	log.With("namespace", t.Namespace, "name", t.Name).Info("Start upload cache file to the remote backend")
 	client, err := e.backends.GetClient(t.Namespace)
 	if err != nil {
 		if err == backend.ErrNamespaceNotFound {
@@ -105,6 +106,7 @@ func (e *Executor) upload(t *Task) error {
 	if err := client.Upload(t.Namespace, t.Name, f); err != nil {
 		return fmt.Errorf("upload: %s", err)
 	}
+	log.With("namespace", t.Namespace, "name", t.Name).Info("Uploaded cache file to remote backend")
 
 	// We don't want to time noops nor errors.
 	e.stats.Timer("upload").Record(time.Since(start))
