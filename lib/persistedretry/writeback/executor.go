@@ -74,7 +74,7 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 func (e *Executor) upload(t *Task) error {
 	start := time.Now()
 
-	log.With("namespace", t.Namespace, "name", t.Name).Info("Start upload cache file to the remote backend")
+	log.With("namespace", t.Namespace, "name", t.Name).Info("Uploading cache file to the remote backend")
 	client, err := e.backends.GetClient(t.Namespace)
 	if err != nil {
 		if err == backend.ErrNamespaceNotFound {
