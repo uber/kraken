@@ -280,18 +280,9 @@ func (m *manager) reportQueueMetrics() {
 			m.stats.Gauge("queue.retries.size").Update(float64(retriesLen))
 			m.stats.Gauge("queue.total.size").Update(float64(totalLen))
 
-			var incomingUtil float64
-			if m.config.IncomingBuffer > 0 {
-				incomingUtil = float64(incomingLen) / float64(m.config.IncomingBuffer) * 100
-			} else {
-				incomingUtil = 0
-			}
-			var retriesUtil float64
-			if m.config.RetryBuffer > 0 {
-				retriesUtil = float64(retriesLen) / float64(m.config.RetryBuffer) * 100
-			} else {
-				retriesUtil = 0
-			}
+			incomingUtil := float64(incomingLen) / float64(m.config.IncomingBuffer) * 100
+			retriesUtil := float64(retriesLen) / float64(m.config.RetryBuffer) * 100
+
 			m.stats.Gauge("queue.incoming.utilization_pct").Update(incomingUtil)
 			m.stats.Gauge("queue.retries.utilization_pct").Update(retriesUtil)
 
