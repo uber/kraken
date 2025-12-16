@@ -29,6 +29,8 @@ import (
 // ErrManagerClosed is returned when Add is called on a closed manager.
 var ErrManagerClosed = errors.New("manager closed")
 
+const reportQueueMetricsInterval = 5 * time.Second
+
 // Manager defines interface for a persisted retry manager.
 type Manager interface {
 	Add(Task) error
@@ -189,7 +191,15 @@ func (m *manager) enqueue(t Task, tasks chan Task) error {
 		}
 	default:
 		m.stats.Counter("tasks.dropped.queue_full").Inc(1)
-		log.Errorf("Task queue full, marking task as failed for later retry")
+		var queueType string
+		if tasks == m.incoming {
+			queueType = "incoming"
+		} else if tasks == m.retries {
+			queueType = "retries"
+		} else {
+			queueType = "unknown"
+		}
+		log.Errorf("Task queue full (%s), marking task as failed for later retry", queueType)
 		if err := m.store.MarkFailed(t); err != nil {
 			return fmt.Errorf("mark task as failed: %s", err)
 		}
@@ -256,7 +266,7 @@ func (m *manager) pollRetries() {
 
 func (m *manager) reportQueueMetrics() {
 	defer m.wg.Done()
-	ticker := time.NewTicker(5 * time.Second) // Report every 5 seconds
+	ticker := time.NewTicker(reportQueueMetricsInterval)
 	defer ticker.Stop()
 
 	for {
