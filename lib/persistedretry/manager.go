@@ -114,6 +114,9 @@ func (m *manager) start() error {
 	m.wg.Add(1)
 	go m.tickerLoop()
 
+	m.wg.Add(1)
+	go m.reportQueueMetrics()
+
 	return nil
 }
 
@@ -122,6 +125,8 @@ func (m *manager) Add(t Task) error {
 	if m.closed.Load() {
 		return ErrManagerClosed
 	}
+	m.stats.Counter("tasks.added").Inc(1)
+
 	ready := t.Ready()
 	var err error
 	if ready {
@@ -137,7 +142,7 @@ func (m *manager) Add(t Task) error {
 		return fmt.Errorf("store: %s", err)
 	}
 	if ready {
-		if err := m.enqueue(t, m.incoming); err != nil {
+		if err := m.enqueue(t, m.incoming, "incoming"); err != nil {
 			return fmt.Errorf("enqueue: %s", err)
 		}
 	}
@@ -173,12 +178,14 @@ func (m *manager) Find(query interface{}) ([]Task, error) {
 	return m.store.Find(query)
 }
 
-func (m *manager) enqueue(t Task, tasks chan Task) error {
+func (m *manager) enqueue(t Task, tasks chan Task, queueName string) error {
+	queueStats := m.stats.Tagged(map[string]string{"queue": queueName})
 	select {
 	case tasks <- t:
+		queueStats.Gauge("queue.size_on_add").Update(float64(len(tasks)))
 	default:
-		// If task queue is full, fallback task to failure state so it can be
-		// picked up by a retry round.
+		queueStats.Counter("tasks.dropped.queue_full").Inc(1)
+		log.Errorf("Task queue full (%s), marking task as failed for later retry", queueName)
 		if err := m.store.MarkFailed(t); err != nil {
 			return fmt.Errorf("mark task as failed: %s", err)
 		}
@@ -190,7 +197,7 @@ func (m *manager) retry(t Task) error {
 	if err := m.store.MarkPending(t); err != nil {
 		return fmt.Errorf("mark pending: %s", err)
 	}
-	if err := m.enqueue(t, m.retries); err != nil {
+	if err := m.enqueue(t, m.retries, "retries"); err != nil {
 		return fmt.Errorf("enqueue: %s", err)
 	}
 	return nil
@@ -240,6 +247,38 @@ func (m *manager) pollRetries() {
 				log.With("task", t).Errorf("Error adding retry task: %s", err)
 			}
 		}
+	}
+}
+
+func (m *manager) reportQueueMetrics() {
+	defer m.wg.Done()
+	ticker := time.NewTicker(m.config.WorkqueueMetricsEmitInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.reportQueueStats("incoming", m.incoming, m.config.IncomingBuffer)
+			m.reportQueueStats("retries", m.retries, m.config.RetryBuffer)
+			m.stats.Gauge("queue.total.size").Update(float64(len(m.incoming) + len(m.retries)))
+
+		case <-m.done:
+			return
+		}
+	}
+}
+
+func (m *manager) reportQueueStats(name string, tasks chan Task, capacity int) {
+	queueStats := m.stats.Tagged(map[string]string{"queue": name})
+	size := len(tasks)
+	util := float64(size) / float64(capacity) * 100
+
+	queueStats.Gauge("queue.size").Update(float64(size))
+	queueStats.Gauge("queue.utilization_pct").Update(util)
+
+	if util > 80 {
+		log.With("queue", name, "size", size, "capacity", capacity, "utilization_pct", util).
+			Warn("Writeback queue is near capacity")
 	}
 }
 

@@ -39,6 +39,9 @@ type Config struct {
 	// Exponential backoff configuration for synchronous task execution.
 	SyncRetryBackoff httputil.ExponentialBackOffConfig `yaml:"sync_retry_backoff"`
 
+	// Interval at which workqueue metrics should be emitted.
+	WorkqueueMetricsEmitInterval time.Duration `yaml:"workqueue_metrics_emit_interval"`
+
 	// Flags that zero-value channel sizes should not have defaults applied.
 	Testing bool
 }
@@ -69,6 +72,9 @@ func (c Config) applyDefaults() Config {
 			MaxInterval:         30 * time.Second,
 			MaxRetries:          2, // 2 retries = 3 total attempts (1 initial + 2 retries)
 		}
+	}
+	if c.WorkqueueMetricsEmitInterval == 0 {
+		c.WorkqueueMetricsEmitInterval = 5 * time.Second
 	}
 	if !c.Testing {
 		if c.IncomingBuffer == 0 {
