@@ -114,6 +114,9 @@ func (m *manager) start() error {
 	m.wg.Add(1)
 	go m.tickerLoop()
 
+	m.wg.Add(1)
+	go m.reportQueueMetrics()
+
 	return nil
 }
 
@@ -122,6 +125,8 @@ func (m *manager) Add(t Task) error {
 	if m.closed.Load() {
 		return ErrManagerClosed
 	}
+	m.stats.Counter("tasks.added").Inc(1)
+
 	ready := t.Ready()
 	var err error
 	if ready {
@@ -176,9 +181,15 @@ func (m *manager) Find(query interface{}) ([]Task, error) {
 func (m *manager) enqueue(t Task, tasks chan Task) error {
 	select {
 	case tasks <- t:
+		queueSize := len(tasks)
+		if tasks == m.incoming {
+			m.stats.Gauge("queue.incoming.size_on_add").Update(float64(queueSize))
+		} else if tasks == m.retries {
+			m.stats.Gauge("queue.retries.size_on_add").Update(float64(queueSize))
+		}
 	default:
-		// If task queue is full, fallback task to failure state so it can be
-		// picked up by a retry round.
+		m.stats.Counter("tasks.dropped.queue_full").Inc(1)
+		log.Errorf("Task queue full, marking task as failed for later retry")
 		if err := m.store.MarkFailed(t); err != nil {
 			return fmt.Errorf("mark task as failed: %s", err)
 		}
@@ -239,6 +250,42 @@ func (m *manager) pollRetries() {
 			if err := m.retry(t); err != nil {
 				log.With("task", t).Errorf("Error adding retry task: %s", err)
 			}
+		}
+	}
+}
+
+func (m *manager) reportQueueMetrics() {
+	defer m.wg.Done()
+	ticker := time.NewTicker(5 * time.Second) // Report every 5 seconds
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			incomingLen := len(m.incoming)
+			retriesLen := len(m.retries)
+			totalLen := incomingLen + retriesLen
+
+			m.stats.Gauge("queue.incoming.size").Update(float64(incomingLen))
+			m.stats.Gauge("queue.retries.size").Update(float64(retriesLen))
+			m.stats.Gauge("queue.total.size").Update(float64(totalLen))
+
+			incomingUtil := float64(incomingLen) / float64(m.config.IncomingBuffer) * 100
+			retriesUtil := float64(retriesLen) / float64(m.config.RetryBuffer) * 100
+			m.stats.Gauge("queue.incoming.utilization_pct").Update(incomingUtil)
+			m.stats.Gauge("queue.retries.utilization_pct").Update(retriesUtil)
+
+			if incomingUtil > 80 {
+				log.With("size", incomingLen, "capacity", m.config.IncomingBuffer, "utilization_pct", incomingUtil).
+					Warn("Incoming writeback queue is near capacity")
+			}
+			if retriesUtil > 80 {
+				log.With("size", retriesLen, "capacity", m.config.RetryBuffer, "utilization_pct", retriesUtil).
+					Warn("Retry writeback queue is near capacity")
+			}
+
+		case <-m.done:
+			return
 		}
 	}
 }
