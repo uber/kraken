@@ -29,8 +29,6 @@ import (
 // ErrManagerClosed is returned when Add is called on a closed manager.
 var ErrManagerClosed = errors.New("manager closed")
 
-const reportQueueMetricsInterval = 5 * time.Second
-
 // Manager defines interface for a persisted retry manager.
 type Manager interface {
 	Add(Task) error
@@ -144,7 +142,7 @@ func (m *manager) Add(t Task) error {
 		return fmt.Errorf("store: %s", err)
 	}
 	if ready {
-		if err := m.enqueue(t, m.incoming); err != nil {
+		if err := m.enqueue(t, m.incoming, "incoming"); err != nil {
 			return fmt.Errorf("enqueue: %s", err)
 		}
 	}
@@ -180,26 +178,14 @@ func (m *manager) Find(query interface{}) ([]Task, error) {
 	return m.store.Find(query)
 }
 
-func (m *manager) enqueue(t Task, tasks chan Task) error {
+func (m *manager) enqueue(t Task, tasks chan Task, queueName string) error {
+	queueStats := m.stats.Tagged(map[string]string{"queue": queueName})
 	select {
 	case tasks <- t:
-		queueSize := len(tasks)
-		if tasks == m.incoming {
-			m.stats.Gauge("queue.incoming.size_on_add").Update(float64(queueSize))
-		} else if tasks == m.retries {
-			m.stats.Gauge("queue.retries.size_on_add").Update(float64(queueSize))
-		}
+		queueStats.Gauge("queue.size_on_add").Update(float64(len(tasks)))
 	default:
-		m.stats.Counter("tasks.dropped.queue_full").Inc(1)
-		var queueType string
-		if tasks == m.incoming {
-			queueType = "incoming"
-		} else if tasks == m.retries {
-			queueType = "retries"
-		} else {
-			queueType = "unknown"
-		}
-		log.Errorf("Task queue full (%s), marking task as failed for later retry", queueType)
+		queueStats.Counter("tasks.dropped.queue_full").Inc(1)
+		log.Errorf("Task queue full (%s), marking task as failed for later retry", queueName)
 		if err := m.store.MarkFailed(t); err != nil {
 			return fmt.Errorf("mark task as failed: %s", err)
 		}
@@ -211,7 +197,7 @@ func (m *manager) retry(t Task) error {
 	if err := m.store.MarkPending(t); err != nil {
 		return fmt.Errorf("mark pending: %s", err)
 	}
-	if err := m.enqueue(t, m.retries); err != nil {
+	if err := m.enqueue(t, m.retries, "retries"); err != nil {
 		return fmt.Errorf("enqueue: %s", err)
 	}
 	return nil
@@ -266,38 +252,33 @@ func (m *manager) pollRetries() {
 
 func (m *manager) reportQueueMetrics() {
 	defer m.wg.Done()
-	ticker := time.NewTicker(reportQueueMetricsInterval)
+	ticker := time.NewTicker(m.config.WorkqueueMetricsEmitInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			incomingLen := len(m.incoming)
-			retriesLen := len(m.retries)
-			totalLen := incomingLen + retriesLen
-
-			m.stats.Gauge("queue.incoming.size").Update(float64(incomingLen))
-			m.stats.Gauge("queue.retries.size").Update(float64(retriesLen))
-			m.stats.Gauge("queue.total.size").Update(float64(totalLen))
-
-			incomingUtil := float64(incomingLen) / float64(m.config.IncomingBuffer) * 100
-			retriesUtil := float64(retriesLen) / float64(m.config.RetryBuffer) * 100
-
-			m.stats.Gauge("queue.incoming.utilization_pct").Update(incomingUtil)
-			m.stats.Gauge("queue.retries.utilization_pct").Update(retriesUtil)
-
-			if incomingUtil > 80 {
-				log.With("size", incomingLen, "capacity", m.config.IncomingBuffer, "utilization_pct", incomingUtil).
-					Warn("Incoming writeback queue is near capacity")
-			}
-			if retriesUtil > 80 {
-				log.With("size", retriesLen, "capacity", m.config.RetryBuffer, "utilization_pct", retriesUtil).
-					Warn("Retry writeback queue is near capacity")
-			}
+			m.reportQueueStats("incoming", m.incoming, m.config.IncomingBuffer)
+			m.reportQueueStats("retries", m.retries, m.config.RetryBuffer)
+			m.stats.Gauge("queue.total.size").Update(float64(len(m.incoming) + len(m.retries)))
 
 		case <-m.done:
 			return
 		}
+	}
+}
+
+func (m *manager) reportQueueStats(name string, tasks chan Task, capacity int) {
+	queueStats := m.stats.Tagged(map[string]string{"queue": name})
+	size := len(tasks)
+	util := float64(size) / float64(capacity) * 100
+
+	queueStats.Gauge("queue.size").Update(float64(size))
+	queueStats.Gauge("queue.utilization_pct").Update(util)
+
+	if util > 80 {
+		log.With("queue", name, "size", size, "capacity", capacity, "utilization_pct", util).
+			Warn("Writeback queue is near capacity")
 	}
 }
 
