@@ -24,6 +24,7 @@ import (
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/log"
 
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 )
@@ -131,8 +132,10 @@ func (u *casUploads) putBlobContent(path string, content []byte) error {
 		return fmt.Errorf("create cache file: %w", err)
 	}
 	if err := u.transferer.Upload("TODO", d, store.NewBufferFileReader(content)); err != nil {
+		log.With("digest", d, "size", len(content)).Errorf("Failed to upload blob: %s", err)
 		return fmt.Errorf("upload: %w", err)
 	}
+	log.With("digest", d, "size", len(content)).Debugf("Blob uploaded")
 	return nil
 }
 
@@ -206,8 +209,10 @@ func (u *casUploads) move(uploadPath, blobPath string) error {
 		return fmt.Errorf("get cache file: %w", err)
 	}
 	if err := u.transferer.Upload("TODO", d, f); err != nil {
+		log.With("uuid", uuid, "digest", d).Errorf("Failed to upload blob: %s", err)
 		return fmt.Errorf("upload: %w", err)
 	}
+	log.With("uuid", uuid, "digest", d).Debugf("Blob uploaded")
 	return nil
 }
 

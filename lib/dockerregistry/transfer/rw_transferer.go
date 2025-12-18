@@ -31,6 +31,8 @@ import (
 // local origin cluster, and posts/gets tags via the local build-index.
 type ReadWriteTransferer struct {
 	stats         tally.Scope
+	successStats  tally.Scope
+	failureStats  tally.Scope
 	tags          tagclient.Client
 	originCluster blobclient.ClusterClient
 	cas           *store.CAStore
@@ -41,54 +43,61 @@ func NewReadWriteTransferer(
 	stats tally.Scope,
 	tags tagclient.Client,
 	originCluster blobclient.ClusterClient,
-	cas *store.CAStore) *ReadWriteTransferer {
-
+	cas *store.CAStore,
+) *ReadWriteTransferer {
 	stats = stats.Tagged(map[string]string{
 		"module": "rwtransferer",
 	})
 
-	return &ReadWriteTransferer{stats, tags, originCluster, cas}
+	return &ReadWriteTransferer{
+		stats:         stats,
+		successStats:  stats.Tagged(map[string]string{"result": "success"}),
+		failureStats:  stats.Tagged(map[string]string{"result": "failure"}),
+		tags:          tags,
+		originCluster: originCluster,
+		cas:           cas,
+	}
 }
 
 // Stat returns blob info from origin cluster or local cache.
 func (t *ReadWriteTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
 	fi, err := t.cas.GetCacheFileStat(d.Hex())
-	if err != nil {
-		if os.IsNotExist(err) {
-			return t.originStat(namespace, d)
-		}
-		return nil, fmt.Errorf("stat cache file: %s", err)
+	if err == nil {
+		return core.NewBlobInfo(fi.Size()), nil
 	}
-	return core.NewBlobInfo(fi.Size()), nil
+	if os.IsNotExist(err) {
+		return t.originStat(namespace, d)
+	}
+	return nil, fmt.Errorf("stat cache file: %s", err)
 }
 
 func (t *ReadWriteTransferer) originStat(namespace string, d core.Digest) (*core.BlobInfo, error) {
 	bi, err := t.originCluster.Stat(namespace, d)
-	if err != nil {
-		// `docker push` stats blobs before uploading them. If the blob is not
-		// found, it will upload it. However if remote blob storage is unavailable,
-		// this will be a 5XX error, and will short-circuit push. We must consider
-		// this class of error to be a 404 to allow pushes to succeed while remote
-		// storage is down (write-back will eventually persist the blobs).
-		if err != blobclient.ErrBlobNotFound {
-			log.With("digest", d).Info("Error stat-ing origin blob: %s", err)
-		}
-		return nil, ErrBlobNotFound
+	if err == nil {
+		return bi, nil
 	}
-	return bi, nil
+	// `docker push` stats blobs before uploading them. If the blob is not
+	// found, it will upload it. However if remote blob storage is unavailable,
+	// this will be a 5XX error, and will short-circuit push. We must consider
+	// this class of error to be a 404 to allow pushes to succeed while remote
+	// storage is down (write-back will eventually persist the blobs).
+	if err != blobclient.ErrBlobNotFound {
+		log.With("digest", d).Info("Error stat-ing origin blob: %s", err)
+	}
+	return nil, ErrBlobNotFound
 }
 
 // Download downloads the blob of name into the file store and returns a reader
 // to the newly downloaded file.
 func (t *ReadWriteTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
 	blob, err := t.cas.GetCacheFileReader(d.Hex())
-	if err != nil {
-		if os.IsNotExist(err) {
-			return t.downloadFromOrigin(namespace, d)
-		}
-		return nil, fmt.Errorf("get cache file: %s", err)
+	if err == nil {
+		return blob, nil
 	}
-	return blob, nil
+	if os.IsNotExist(err) {
+		return t.downloadFromOrigin(namespace, d)
+	}
+	return nil, fmt.Errorf("get cache file: %s", err)
 }
 
 func (t *ReadWriteTransferer) downloadFromOrigin(namespace string, d core.Digest) (store.FileReader, error) {
@@ -119,29 +128,36 @@ func (t *ReadWriteTransferer) downloadFromOrigin(namespace string, d core.Digest
 
 // Upload uploads blob to the origin cluster.
 func (t *ReadWriteTransferer) Upload(
-	namespace string, d core.Digest, blob store.FileReader) error {
-
-	return t.originCluster.UploadBlob(namespace, d, blob)
+	namespace string, d core.Digest, blob store.FileReader,
+) error {
+	if err := t.originCluster.UploadBlob(namespace, d, blob); err != nil {
+		t.failureStats.Counter("upload_blob").Inc(1)
+		return err
+	}
+	t.successStats.Counter("upload_blob").Inc(1)
+	return nil
 }
 
 // GetTag returns the manifest digest for tag.
 func (t *ReadWriteTransferer) GetTag(tag string) (core.Digest, error) {
 	d, err := t.tags.Get(tag)
-	if err != nil {
-		if err == tagclient.ErrTagNotFound {
-			return core.Digest{}, ErrTagNotFound
-		}
-		return core.Digest{}, fmt.Errorf("client get tag: %s", err)
+	if err == nil {
+		return d, nil
 	}
-	return d, nil
+
+	if err == tagclient.ErrTagNotFound {
+		return core.Digest{}, ErrTagNotFound
+	}
+	return core.Digest{}, fmt.Errorf("client get tag: %s", err)
 }
 
 // PutTag uploads d as the manifest digest for tag.
 func (t *ReadWriteTransferer) PutTag(tag string, d core.Digest) error {
 	if err := t.tags.PutAndReplicate(tag, d); err != nil {
-		t.stats.Counter("put_tag_error").Inc(1)
+		t.failureStats.Counter("put_tag").Inc(1)
 		return fmt.Errorf("put and replicate tag: %s", err)
 	}
+	t.successStats.Counter("put_tag").Inc(1)
 	return nil
 }
 
