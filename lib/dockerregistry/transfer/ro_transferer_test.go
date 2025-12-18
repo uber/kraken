@@ -143,7 +143,7 @@ func TestReadOnlyTransfererGetTagNotFound(t *testing.T) {
 
 	_, err := transferer.GetTag(tag)
 	require.Error(err)
-	require.Equal(ErrTagNotFound, err)
+	require.True(IsTagNotFound(err))
 }
 
 // TODO(codyg): This is a particularly ugly test that is a symptom of the lack

@@ -77,15 +77,20 @@ func (e InvalidRequestError) Error() string {
 }
 
 func toDriverError(err error, path string) error {
+	// Check for "not found" errors -> return 404
 	if errors.Is(err, os.ErrNotExist) ||
-		errors.Is(err, transfer.ErrBlobNotFound) ||
-		errors.Is(err, transfer.ErrTagNotFound) {
+		transfer.IsBlobNotFound(err) ||
+		transfer.IsTagNotFound(err) {
 		return driver.PathNotFoundError{
 			DriverName: Name,
 			Path:       path,
 		}
 	}
-	return err
+	log.Errorf("Storage driver error for path %s: %v", path, err)
+	return driver.Error{
+		DriverName: Name,
+		Enclosed:   err,
+	}
 }
 
 type krakenStorageDriverFactory struct {
