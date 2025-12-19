@@ -212,7 +212,7 @@ func (u *casUploads) move(uploadPath, blobPath string) error {
 		log.With("uuid", uuid, "digest", d).Errorf("Failed to upload blob: %s", err)
 		return fmt.Errorf("upload: %w", err)
 	}
-	log.With("uuid", uuid, "digest", d).Debugf("Blob uploaded")
+	log.With("uuid", uuid, "digest", d).Debug("Blob uploaded")
 	return nil
 }
 
