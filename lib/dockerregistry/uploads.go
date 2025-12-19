@@ -135,7 +135,7 @@ func (u *casUploads) putBlobContent(path string, content []byte) error {
 		log.With("digest", d, "size", len(content)).Errorf("Failed to upload blob: %s", err)
 		return fmt.Errorf("upload: %w", err)
 	}
-	log.With("digest", d, "size", len(content)).Debugf("Blob uploaded")
+	log.With("digest", d, "size", len(content)).Debug("Blob uploaded")
 	return nil
 }
 
