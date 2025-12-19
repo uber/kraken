@@ -29,218 +29,9 @@ git clone https://github.com/uber/kraken.git
 cd kraken
 ```
 
-## Step 2: Fix Binary Permissions (Required Fix)
+## Step 2: Build and Start Kraken
 
-The original Dockerfiles have a permission issue where the binaries aren't executable. We need to fix this:
-
-### Fix Agent Dockerfile
-
-Edit `docker/agent/Dockerfile` and add `chmod +x` after copying the binary:
-
-```dockerfile
-# Find this section:
-COPY ./agent/agent /usr/bin/kraken-agent
-# Add this line after it:
-RUN chmod +x /usr/bin/kraken-agent
-
-USER ${USERNAME}
-```
-
-### Fix All Other Dockerfiles
-
-Apply the same fix to other Dockerfiles:
-
-**docker/origin/Dockerfile:**
-```dockerfile
-COPY ./origin/origin /usr/bin/kraken-origin
-RUN chmod +x /usr/bin/kraken-origin
-
-USER ${USERNAME}
-```
-
-**docker/tracker/Dockerfile:**
-```dockerfile
-COPY ./tracker/tracker /usr/bin/kraken-tracker
-RUN chmod +x /usr/bin/kraken-tracker
-
-USER ${USERNAME}
-```
-
-**docker/proxy/Dockerfile:**
-```dockerfile
-COPY ./proxy/proxy /usr/bin/kraken-proxy
-RUN chmod +x /usr/bin/kraken-proxy
-
-USER ${USERNAME}
-```
-
-**docker/build-index/Dockerfile:**
-```dockerfile
-COPY ./build-index/build-index /usr/bin/kraken-build-index
-RUN chmod +x /usr/bin/kraken-build-index
-
-USER ${USERNAME}
-```
-
-**docker/testfs/Dockerfile:**
-```dockerfile
-COPY tools/bin/testfs/testfs /usr/bin/kraken-testfs
-RUN chmod +x /usr/bin/kraken-testfs
-
-USER ${USERNAME}
-```
-
-**docker/herd/Dockerfile:**
-```dockerfile
-COPY ./build-index/build-index /usr/bin/kraken-build-index
-COPY ./origin/origin           /usr/bin/kraken-origin
-COPY ./proxy/proxy             /usr/bin/kraken-proxy
-COPY ./tools/bin/testfs/testfs /usr/bin/kraken-testfs
-COPY ./tracker/tracker         /usr/bin/kraken-tracker
-
-RUN chmod +x /usr/bin/kraken-build-index && \
-    chmod +x /usr/bin/kraken-origin && \
-    chmod +x /usr/bin/kraken-proxy && \
-    chmod +x /usr/bin/kraken-testfs && \
-    chmod +x /usr/bin/kraken-tracker
-
-USER ${USERNAME}
-```
-
-## Step 3: Fix TLS Configuration (Required Fix)
-
-The development configuration has TLS mismatches. We need to disable TLS consistently across all services for local development.
-
-### Fix Build-Index Configuration
-
-Edit `examples/devcluster/config/build-index/development.yaml`:
-
-Find the `tls:` section and add `disabled: true` for both server and client:
-
-```yaml
-tls:
-  name: kraken
-  cas:
-  - path: /etc/kraken/tls/ca/server.crt
-  server:
-    disabled: true  # Add this line
-    cert:
-      path: /etc/kraken/tls/ca/server.crt
-    key:
-      path: /etc/kraken/tls/ca/server.key
-    passphrase:
-      path: /etc/kraken/tls/ca/passphrase
-  client:
-    disabled: true  # Add this line
-    cert:
-      path: /etc/kraken/tls/client/client.crt
-    key:
-      path: /etc/kraken/tls/client/client.key
-    passphrase:
-      path: /etc/kraken/tls/client/passphrase
-```
-
-### Fix Origin Configuration
-
-Edit `examples/devcluster/config/origin/development.yaml` and apply the same TLS fix:
-
-```yaml
-tls:
-  name: kraken
-  cas:
-  - path: /etc/kraken/tls/ca/server.crt
-  server:
-    disabled: true  # Add this line
-    cert:
-      path: /etc/kraken/tls/ca/server.crt
-    key:
-      path: /etc/kraken/tls/ca/server.key
-    passphrase:
-      path: /etc/kraken/tls/ca/passphrase
-  client:
-    disabled: true  # Add this line
-    cert:
-      path: /etc/kraken/tls/client/client.crt
-    key:
-      path: /etc/kraken/tls/client/client.key
-    passphrase:
-      path: /etc/kraken/tls/client/passphrase
-```
-
-### Fix Tracker Configuration
-
-Edit `examples/devcluster/config/tracker/development.yaml`:
-
-```yaml
-tls:
-  name: kraken
-  cas:
-  - path: /etc/kraken/tls/ca/server.crt
-  server:
-    disabled: true  # Add this line
-    cert:
-      path: /etc/kraken/tls/ca/server.crt
-    key:
-      path: /etc/kraken/tls/ca/server.key
-    passphrase:
-      path: /etc/kraken/tls/ca/passphrase
-  client:
-    disabled: true  # Add this line
-    cert:
-      path: /etc/kraken/tls/client/client.crt
-    key:
-      path: /etc/kraken/tls/client/client.key
-    passphrase:
-      path: /etc/kraken/tls/client/passphrase
-```
-
-### Fix Proxy Configuration
-
-Edit `examples/devcluster/config/proxy/development.yaml`:
-
-```yaml
-tls:
-  name: kraken
-  cas:
-  - path: /etc/kraken/tls/ca/server.crt
-  server:
-    disabled: true  # Already present, verify it's there
-    cert:
-      path: /etc/kraken/tls/ca/server.crt
-    key:
-      path: /etc/kraken/tls/ca/server.key
-    passphrase:
-      path: /etc/kraken/tls/ca/passphrase
-  client:
-    disabled: true  # Add this line
-    cert:
-      path: /etc/kraken/tls/client/client.crt
-    key:
-      path: /etc/kraken/tls/client/client.key
-    passphrase:
-      path: /etc/kraken/tls/client/passphrase
-```
-
-### Fix Agent Configuration
-
-Edit `examples/devcluster/config/agent/development.yaml`:
-
-Find the `client:` section under `tls:` and add `disabled: true`:
-
-```yaml
-  client:
-    disabled: true  # Add this line
-    cert:
-      path: /etc/kraken/tls/client/client.crt
-    key:
-      path: /etc/kraken/tls/client/client.key
-    passphrase:
-      path: /etc/kraken/tls/client/passphrase
-```
-
-## Step 4: Build and Start Kraken
-
-Now that we've fixed the configuration issues, let's build and start Kraken:
+Let's build and start Kraken:
 
 ```bash
 # Build binaries and start the development cluster
@@ -255,7 +46,7 @@ This command will:
    - `kraken-agent-one`: First agent instance
    - `kraken-agent-two`: Second agent instance
 
-## Step 5: Verify the Setup
+## Step 3: Verify the Setup
 
 Check that all containers are running:
 
@@ -287,7 +78,7 @@ Test the registry endpoints.
 
 All should return successful responses with **HTTP 200 OK** status.
 
-## Step 6: Test Image Push and Pull
+## Step 4: Test Image Push and Pull
 
 ### Push an Image to Kraken
 
@@ -327,7 +118,7 @@ docker pull localhost:16000/test/nginx:latest
 docker pull localhost:17000/test/nginx:latest
 ```
 
-## Step 7: Monitor P2P Activity
+## Step 5: Monitor P2P Activity
 
 To see the P2P distribution in action, monitor the logs:
 
@@ -345,7 +136,7 @@ Look for log entries showing:
 - Blob transfers between agents
 - Origin seeding activity
 
-## Step 8: Understanding the Architecture
+## Step 6: Understanding the Architecture
 
 ### Port Mapping
 
@@ -365,7 +156,7 @@ Look for log entries showing:
 2. **Pull Flow**: `docker pull localhost:16000/...` → Agent → Tracker (find peers) → P2P download from other agents/origin
 3. **P2P Magic**: When multiple agents pull the same image, they share data directly with each other
 
-## Step 9: Advanced Testing
+## Step 7: Advanced Testing
 
 ### Test P2P Benefits
 
@@ -470,10 +261,8 @@ If internal container tests return `{}` but external tests fail, it confirms fir
 
 #### **Other Common Issues**
 
-1. **Permission Denied Errors**: Make sure you applied the `chmod +x` fixes to all Dockerfiles
-2. **TLS Certificate Errors**: Ensure all configuration files have `disabled: true` for both server and client TLS
-3. **Port Conflicts**: Make sure ports are not in use by other applications
-4. **Docker Desktop**: Make sure Docker Desktop is running and `host.docker.internal` is available
+- **Port Conflicts**: Make sure ports are not in use by other applications
+- **Docker Desktop**: Make sure Docker Desktop is running and `host.docker.internal` is available
 
 ### Getting Help
 
@@ -486,11 +275,9 @@ If internal container tests return `{}` but external tests fail, it confirms fir
 **Congratulations!** You've successfully
 
 1. Set up a complete Kraken P2P Docker registry
-2. Fixed binary permission issues in Dockerfiles
-3. Resolved TLS configuration problems
-4. Tested image push and pull workflows
-5. Experienced P2P distribution in action
-6. Learned how Kraken's architecture works
+2. Tested image push and pull workflows
+3. Experienced P2P distribution in action
+4. Learned how Kraken's architecture works
 
 ## Next Steps
 
