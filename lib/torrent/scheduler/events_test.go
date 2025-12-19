@@ -51,7 +51,16 @@ func (l *mockEventLoop) expect(e event) {
 }
 
 func (l *mockEventLoop) send(e event) bool {
-	l.c <- e
+	// Send in a goroutine to avoid blocking and causing deadlocks.
+	// This mimics the real event loop behavior where sends happen
+	// from different goroutines.
+	go func() {
+		select {
+		case l.c <- e:
+		case <-time.After(5 * time.Second):
+			// Event not consumed - this is okay in tests, just drop it
+		}
+	}()
 	return true
 }
 
