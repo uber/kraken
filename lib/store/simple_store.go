@@ -23,7 +23,6 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/store/base"
 	"github.com/uber/kraken/utils/closers"
-	"github.com/uber/kraken/utils/log"
 )
 
 // SimpleStore allows uploading / caching raw files of any format.
@@ -71,11 +70,7 @@ func (s *SimpleStore) MoveUploadFileToCache(uploadName, cacheName string) error 
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := s.DeleteUploadFile(uploadName); err != nil {
-			log.With("upload_name", uploadName).Debugf("Failed to delete upload file: %s", err)
-		}
-	}()
+	defer s.deferDeleteUploadFile(uploadName)()
 	return s.cacheStore.newFileOp().MoveFileFrom(cacheName, s.cacheStore.state, uploadPath)
 }
 
@@ -85,11 +80,7 @@ func (s *SimpleStore) CreateCacheFile(name string, r io.Reader) error {
 	if err := s.CreateUploadFile(tmp, 0); err != nil {
 		return fmt.Errorf("create upload file: %s", err)
 	}
-	defer func() {
-		if err := s.DeleteUploadFile(tmp); err != nil {
-			log.With("upload_name", tmp).Debugf("Failed to delete upload file: %s", err)
-		}
-	}()
+	defer s.deferDeleteUploadFile(tmp)()
 
 	w, err := s.GetUploadFileReadWriter(tmp)
 	if err != nil {

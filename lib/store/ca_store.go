@@ -35,7 +35,6 @@ import (
 	"github.com/uber/kraken/utils/cache"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
-	"go.uber.org/zap"
 )
 
 const _drainDuration = 100 * time.Millisecond
@@ -167,16 +166,6 @@ func (s *CAStore) Close() {
 	}
 
 	s.cleanup.stop()
-}
-
-// deferDeleteUploadFile returns a deferred function that deletes an upload file
-// and logs any errors that occur during deletion.
-func (s *CAStore) deferDeleteUploadFile(uploadName string) func() {
-	return func() {
-		if err := s.DeleteUploadFile(uploadName); err != nil {
-			log.Desugar().Error("Failed to delete upload file", zap.Error(err), zap.String("upload_name", uploadName))
-		}
-	}
 }
 
 // MoveUploadFileToCache commits uploadName as cacheName. Clients are expected
