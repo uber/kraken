@@ -33,6 +33,7 @@ import (
 	"github.com/uber/kraken/lib/store/base"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/cache"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
 )
 
@@ -174,13 +175,13 @@ func (s *CAStore) MoveUploadFileToCache(uploadName, cacheName string) error {
 	if err != nil {
 		return err
 	}
-	defer s.DeleteUploadFile(uploadName)
+	defer s.deferDeleteUploadFile(uploadName)()
 
 	f, err := s.uploadStore.newFileOp().GetFileReader(uploadName, s.uploadStore.readPartSize)
 	if err != nil {
 		return fmt.Errorf("get file reader %s: %s", uploadName, err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 	if err := s.verify(f, cacheName); err != nil {
 		return fmt.Errorf("verify digest: %s", err)
 	}
@@ -209,13 +210,13 @@ func (s *CAStore) writeCacheFile(name string, write func(w FileReadWriter) error
 	if err := s.CreateUploadFile(tmp, 0); err != nil {
 		return fmt.Errorf("create upload file: %s", err)
 	}
-	defer s.DeleteUploadFile(tmp)
+	defer s.deferDeleteUploadFile(tmp)()
 
 	w, err := s.GetUploadFileReadWriter(tmp)
 	if err != nil {
 		return fmt.Errorf("get upload writer: %s", err)
 	}
-	defer w.Close()
+	defer closers.Close(w)
 
 	if err := write(w); err != nil {
 		return err

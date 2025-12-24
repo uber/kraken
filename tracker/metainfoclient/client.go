@@ -23,9 +23,9 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
-
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/hashring"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/httputil"
 )
 
@@ -79,7 +79,7 @@ func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, erro
 			}
 			return nil, err
 		}
-		defer resp.Body.Close()
+		defer closers.Close(resp.Body)
 		b, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("read body: %s", err)

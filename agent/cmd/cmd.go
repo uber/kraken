@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/agent/agentserver"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
@@ -32,11 +33,10 @@ import (
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
 	"github.com/uber/kraken/tracker/announceclient"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/configutil"
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/netutil"
-
-	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 )
 
@@ -133,7 +133,11 @@ func Run(flags *Flags, opts ...Option) {
 		log.SetGlobalLogger(overrides.logger.Sugar())
 	} else {
 		zlog := log.ConfigureLogger(config.ZapLogging)
-		defer zlog.Sync()
+		defer func() {
+			if err := zlog.Sync(); err != nil {
+				fmt.Printf("Failed to sync logger: %s", err)
+			}
+		}()
 	}
 
 	stats := overrides.metrics
@@ -143,7 +147,7 @@ func Run(flags *Flags, opts ...Option) {
 			log.Fatalf("Failed to init metrics: %s", err)
 		}
 		stats = s
-		defer closer.Close()
+		defer closers.Close(closer)
 	}
 
 	go metrics.EmitVersion(stats)

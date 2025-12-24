@@ -22,6 +22,7 @@ import (
 	"github.com/docker/distribution/uuid"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/store/base"
+	"github.com/uber/kraken/utils/closers"
 )
 
 // SimpleStore allows uploading / caching raw files of any format.
@@ -69,7 +70,7 @@ func (s *SimpleStore) MoveUploadFileToCache(uploadName, cacheName string) error 
 	if err != nil {
 		return err
 	}
-	defer s.DeleteUploadFile(uploadName)
+	defer s.deferDeleteUploadFile(uploadName)()
 	return s.cacheStore.newFileOp().MoveFileFrom(cacheName, s.cacheStore.state, uploadPath)
 }
 
@@ -79,13 +80,13 @@ func (s *SimpleStore) CreateCacheFile(name string, r io.Reader) error {
 	if err := s.CreateUploadFile(tmp, 0); err != nil {
 		return fmt.Errorf("create upload file: %s", err)
 	}
-	defer s.DeleteUploadFile(tmp)
+	defer s.deferDeleteUploadFile(tmp)()
 
 	w, err := s.GetUploadFileReadWriter(tmp)
 	if err != nil {
 		return fmt.Errorf("get upload writer: %s", err)
 	}
-	defer w.Close()
+	defer closers.Close(w)
 
 	if _, err := io.Copy(w, r); err != nil {
 		return fmt.Errorf("copy: %s", err)

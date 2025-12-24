@@ -20,9 +20,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/uber/kraken/core"
-
 	"github.com/stretchr/testify/require"
+	"github.com/uber/kraken/core"
 )
 
 func TestProducerCreatesAndReusesFile(t *testing.T) {
@@ -32,9 +31,7 @@ func TestProducerCreatesAndReusesFile(t *testing.T) {
 	peer1 := core.PeerIDFixture()
 	peer2 := core.PeerIDFixture()
 
-	dir, err := os.MkdirTemp("", "")
-	require.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	config := Config{
 		Enabled: true,
@@ -66,7 +63,9 @@ func TestProducerCreatesAndReusesFile(t *testing.T) {
 
 	f, err := os.Open(config.LogPath)
 	require.NoError(err)
-	defer f.Close()
+	defer func() {
+		require.NoError(f.Close())
+	}()
 
 	var results []*Event
 	s := bufio.NewScanner(f)

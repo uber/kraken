@@ -24,6 +24,7 @@ import (
 	"text/template"
 
 	"github.com/uber/kraken/nginx/config"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 )
@@ -203,7 +204,7 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 		if err := config.tls.WriteCABundle(cabundle); err != nil {
 			return fmt.Errorf("write cabundle: %s", err)
 		}
-		cabundle.Close()
+		closers.Close(cabundle)
 	}
 
 	if err := os.MkdirAll(config.CacheDir, 0o775); err != nil {
