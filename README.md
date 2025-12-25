@@ -37,8 +37,8 @@ Below is the visualization of a small Kraken cluster at work:
 # Features
 
 Following are some highlights of Kraken:
-- **Highly scalable**. Kraken is capable of distributing Docker images at > 50% of max download
-  the speed limit on every host. Cluster size and image size do not have a significant impact on
+- **Highly scalable**. Kraken is capable of distributing Docker images at > 50% of the max download
+  speed limit on every host. Cluster size and image size do not have a significant impact on
   download speed.
   - Supports at least 15k hosts per cluster.
   - Supports arbitrarily large blobs/layers. We normally limit max size to 20G for the best performance.
