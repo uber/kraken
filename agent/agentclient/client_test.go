@@ -26,7 +26,8 @@ func TestGetTag(t *testing.T) {
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodGet, r.Method)
 				require.Equal(t, "/tags/latest", r.URL.Path)
-				fmt.Fprint(w, digest.String())
+				_, err := fmt.Fprint(w, digest.String())
+				require.NoError(t, err)
 			},
 			wantDigest: digest,
 		},
@@ -47,7 +48,8 @@ func TestGetTag(t *testing.T) {
 		{
 			desc: "invalid digest response",
 			handler: func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprint(w, "invalid-digest")
+				_, err := fmt.Fprint(w, "invalid-digest")
+				require.NoError(t, err)
 			},
 			wantErr: true,
 		},
@@ -56,7 +58,8 @@ func TestGetTag(t *testing.T) {
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Length", "10")
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("123"))
+				_, err := w.Write([]byte("123"))
+				require.NoError(t, err)
 			},
 			wantErr: true,
 		},
@@ -95,7 +98,8 @@ func TestDownload(t *testing.T) {
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodGet, r.Method)
 				require.Equal(t, fmt.Sprintf("/namespace/%s/blobs/%s", namespace, digest), r.URL.Path)
-				fmt.Fprint(w, content)
+				_, err := fmt.Fprint(w, content)
+				require.NoError(t, err)
 			},
 			want: content,
 		},
@@ -119,7 +123,9 @@ func TestDownload(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				defer r.Close()
+				defer func() {
+					require.NoError(t, r.Close())
+				}()
 				b, err := io.ReadAll(r)
 				require.NoError(t, err)
 				require.Equal(t, test.want, string(b))

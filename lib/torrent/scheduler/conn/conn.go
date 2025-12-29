@@ -32,6 +32,7 @@ import (
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
 	"github.com/uber/kraken/utils/bandwidth"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/memsize"
 )
 
@@ -179,7 +180,7 @@ func (c *Conn) Close() {
 	}
 	go func() {
 		close(c.done)
-		c.nc.Close()
+		closers.Close(c.nc)
 		c.wg.Wait()
 		c.events.ConnClosed(c)
 	}()
@@ -248,7 +249,7 @@ func (c *Conn) readLoop() {
 }
 
 func (c *Conn) sendPiecePayload(pr storage.PieceReader) error {
-	defer pr.Close()
+	defer closers.Close(pr)
 
 	if err := c.bandwidth.ReserveEgress(int64(pr.Length())); err != nil {
 		// TODO(codyg): This is bad. Consider alerting here.

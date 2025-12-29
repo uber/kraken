@@ -16,29 +16,28 @@ package localdb
 import (
 	"os"
 	"path/filepath"
-
-	"github.com/uber/kraken/utils/testutil"
+	"testing"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/stretchr/testify/require"
+	"github.com/uber/kraken/utils/testutil"
 )
 
 // Fixture returns a temporary test database for testing.
-func Fixture() (*sqlx.DB, func()) {
+func Fixture(t *testing.T) (*sqlx.DB, func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
 	tmpdir, err := os.MkdirTemp(".", "test-db-")
-	if err != nil {
-		panic(err)
-	}
-	cleanup.Add(func() { os.RemoveAll(tmpdir) })
+	require.NoError(t, err)
+	cleanup.Add(func() {
+		require.NoError(t, os.RemoveAll(tmpdir))
+	})
 
 	source := filepath.Join(tmpdir, "test.db")
 
 	db, err := New(Config{Source: source})
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, err)
 
 	return db, cleanup.Run
 }

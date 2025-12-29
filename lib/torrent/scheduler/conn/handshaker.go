@@ -18,14 +18,14 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/andres-erbsen/clock"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/gen/go/proto/p2p"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/utils/bandwidth"
-
-	"github.com/andres-erbsen/clock"
-	"github.com/uber-go/tally"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/willf/bitset"
 	"go.uber.org/zap"
 )
@@ -172,7 +172,7 @@ func (pc *PendingConn) Namespace() string {
 
 // Close closes the connection.
 func (pc *PendingConn) Close() {
-	pc.nc.Close()
+	closers.Close(pc.nc)
 }
 
 // HandshakeResult wraps data returned from a successful handshake.
@@ -271,7 +271,7 @@ func (h *Handshaker) Initialize(
 	}
 	r, err := h.fullHandshake(nc, peerID, info, remoteBitfields, namespace)
 	if err != nil {
-		nc.Close()
+		closers.Close(nc)
 		return nil, err
 	}
 	return r, nil

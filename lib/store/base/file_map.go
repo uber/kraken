@@ -93,7 +93,8 @@ func NewLATFileMap(clk clock.Clock) FileMap {
 func (fm *lruFileMap) get(name string) (*fileEntryWithAccessTime, bool) {
 	if element, ok := fm.elements[name]; ok {
 		fm.queue.MoveToFront(element)
-		return element.Value.(*fileEntryWithAccessTime), ok
+		entry, ok := element.Value.(*fileEntryWithAccessTime)
+		return entry, ok
 	}
 	return nil, false
 }
@@ -140,7 +141,8 @@ func (fm *lruFileMap) add(name string, e *fileEntryWithAccessTime) bool {
 
 func (fm *lruFileMap) getOldest() (*fileEntryWithAccessTime, bool) {
 	if e := fm.queue.Back(); e != nil {
-		return e.Value.(*fileEntryWithAccessTime), true
+		entry, ok := e.Value.(*fileEntryWithAccessTime)
+		return entry, ok
 	}
 	return nil, false
 }
@@ -149,7 +151,8 @@ func (fm *lruFileMap) remove(name string) (*fileEntryWithAccessTime, bool) {
 	if e, ok := fm.elements[name]; ok {
 		delete(fm.elements, name)
 		fm.queue.Remove(e)
-		return e.Value.(*fileEntryWithAccessTime), ok
+		entry, ok := e.Value.(*fileEntryWithAccessTime)
+		return entry, ok
 	}
 	return nil, false
 }

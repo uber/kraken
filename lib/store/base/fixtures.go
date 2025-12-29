@@ -32,7 +32,11 @@ func fileStatesFixture() (state1, state2, state3 FileState, run func()) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	cleanup.Add(func() { os.RemoveAll(root) })
+	cleanup.Add(func() {
+		if err := os.RemoveAll(root); err != nil {
+			log.Fatal(err)
+		}
+	})
 
 	state1Dir, err := os.MkdirTemp(root, "state1")
 	if err != nil {

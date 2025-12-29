@@ -388,7 +388,7 @@ func TestLRUUpdateLastAccessTimeOnMoveFrom(t *testing.T) {
 	fp := filepath.Join(s1.GetDirectory(), name)
 	f, err := os.Create(fp)
 	require.NoError(err)
-	f.Close()
+	require.NoError(f.Close())
 
 	require.NoError(store.NewFileOp().AcceptState(s2).MoveFileFrom(name, s2, fp))
 

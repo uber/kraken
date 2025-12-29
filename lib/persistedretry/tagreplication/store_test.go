@@ -41,7 +41,7 @@ func newStoreMocks(t *testing.T) (*storeMocks, func()) {
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
 
-	db, c := localdb.Fixture()
+	db, c := localdb.Fixture(t)
 	cleanup.Add(c)
 
 	rv := mocktagreplication.NewMockRemoteValidator(ctrl)
