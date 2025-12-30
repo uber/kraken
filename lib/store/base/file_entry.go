@@ -527,7 +527,7 @@ func (entry *localFileEntry) SetMetadataAt(
 	if err != nil {
 		return false, err
 	}
-	defer f.Close()
+	defer closers.Close(f)
 
 	prev := make([]byte, len(b))
 	if _, err := f.ReadAt(prev, offset); err != nil {
@@ -609,7 +609,7 @@ func compareAndWriteFile(filePath string, b []byte) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer f.Close()
+	defer closers.Close(f)
 
 	// Compare with existing data, overwrite if different.
 	buf := make([]byte, int(fs.Size()))
