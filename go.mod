@@ -3,7 +3,7 @@ module github.com/uber/kraken
 go 1.23.11
 
 require (
-	cloud.google.com/go/storage v1.6.0
+	cloud.google.com/go/storage v1.28.1
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/alicebob/miniredis v2.5.0+incompatible
 	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129
@@ -18,7 +18,7 @@ require (
 	github.com/docker/engine-api v0.0.0-20160908232104-4290f40c0566
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/golang/mock v1.6.0
-	github.com/golang/protobuf v1.5.0
+	github.com/golang/protobuf v1.5.3
 	github.com/gomodule/redigo v1.8.9
 	github.com/gorilla/handlers v1.3.0 // indirect
 	github.com/gorilla/mux v1.7.3
@@ -30,7 +30,7 @@ require (
 	github.com/pressly/goose v2.6.0+incompatible
 	github.com/satori/go.uuid v1.2.0
 	github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72
-	github.com/stretchr/testify v1.7.4
+	github.com/stretchr/testify v1.8.1
 	github.com/uber-go/tally v3.3.11+incompatible
 	github.com/willf/bitset v0.0.0-20190228212526-18bd95f470f9
 	go.uber.org/atomic v1.5.0
@@ -38,13 +38,15 @@ require (
 	golang.org/x/net v0.41.0
 	golang.org/x/sync v0.16.0
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
-	google.golang.org/api v0.22.0
+	google.golang.org/api v0.110.0
 	gopkg.in/validator.v2 v2.0.0-20180514200540-135c24b11c19
 	gopkg.in/yaml.v2 v2.3.0
 )
 
 require (
-	cloud.google.com/go v0.57.0 // indirect
+	cloud.google.com/go v0.110.0 // indirect
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
+	cloud.google.com/go/iam v0.13.0 // indirect
 	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/Microsoft/go-winio v0.4.17 // indirect
 	github.com/Microsoft/hcsshim v0.9.3 // indirect
@@ -73,12 +75,14 @@ require (
 	github.com/gogo/googleapis v1.4.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
-	github.com/googleapis/gax-go/v2 v2.0.5 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
+	github.com/google/uuid v1.3.0 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
+	github.com/googleapis/gax-go/v2 v2.7.0 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af // indirect
-	github.com/jstemmer/go-junit-report v0.9.1 // indirect
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
@@ -99,7 +103,7 @@ require (
 	github.com/yvasiyarov/go-metrics v0.0.0-20150112132944-c25f46c4b940 // indirect
 	github.com/yvasiyarov/gorelic v0.0.0-20180809112600-635ca6035f23 // indirect
 	github.com/yvasiyarov/newrelic_platform_go v0.0.0-20160601141957-9c099fbc30e9 // indirect
-	go.opencensus.io v0.22.3 // indirect
+	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/multierr v1.4.0 // indirect
 	go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee // indirect
 	golang.org/x/crypto v0.40.0 // indirect
@@ -109,10 +113,11 @@ require (
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect
-	google.golang.org/appengine v1.6.6 // indirect
-	google.golang.org/genproto v0.0.0-20200527145253-8367513e4ece // indirect
-	google.golang.org/grpc v1.40.0 // indirect
-	google.golang.org/protobuf v1.27.1 // indirect
+	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
+	google.golang.org/appengine v1.6.7 // indirect
+	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
+	google.golang.org/grpc v1.56.3 // indirect
+	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/tools v0.0.1-2020.1.3 // indirect
 )
