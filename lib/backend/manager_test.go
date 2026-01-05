@@ -57,8 +57,11 @@ func TestManagerNamespaceMatching(t *testing.T) {
 
 			result, err := m.GetClient(test.namespace)
 			require.NoError(err)
-			require.True(
-				test.expected.(*mockbackend.MockClient) == result.(*mockbackend.MockClient))
+			expectedClient, ok1 := test.expected.(*mockbackend.MockClient)
+			require.True(ok1)
+			resultClient, ok2 := result.(*mockbackend.MockClient)
+			require.True(ok2)
+			require.True(expectedClient == resultClient)
 		})
 	}
 }
@@ -121,7 +124,9 @@ func TestManagerNamespaceOrdering(t *testing.T) {
 	} {
 		c, err := m.GetClient(ns)
 		require.NoError(err)
-		require.Equal(expected, c.(*testfs.Client).Addr(), "Namespace: %s", ns)
+		client, ok := c.(*testfs.Client)
+		require.True(ok)
+		require.Equal(expected, client.Addr(), "Namespace: %s", ns)
 	}
 }
 

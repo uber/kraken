@@ -21,6 +21,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
 
 	"github.com/docker/distribution/uuid"
@@ -109,7 +110,7 @@ func (t *ReadWriteTransferer) downloadFromOrigin(namespace string, d core.Digest
 	if err != nil {
 		return nil, fmt.Errorf("get upload writer: %s", err)
 	}
-	defer w.Close()
+	defer closers.Close(w)
 	if err := t.originCluster.DownloadBlob(namespace, d, w); err != nil {
 		if err == blobclient.ErrBlobNotFound {
 			return nil, ErrBlobNotFound

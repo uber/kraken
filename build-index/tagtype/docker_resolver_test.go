@@ -153,7 +153,8 @@ func TestDockerResolver_DownloadManifest_BufferResetBetweenRetries(t *testing.T)
 		mockOrigin.EXPECT().
 			DownloadBlob(tag, manifest, gomock.Any()).
 			DoAndReturn(func(tag string, d core.Digest, dst io.Writer) error {
-				dst.Write(partialData)
+				_, err := dst.Write(partialData)
+				require.NoError(err)
 				return blobclient.ErrBlobNotFound
 			}),
 		mockOrigin.EXPECT().
@@ -177,7 +178,8 @@ func TestDockerResolver_DownloadManifest_InvalidManifestFormat(t *testing.T) {
 	mockOrigin.EXPECT().
 		DownloadBlob(tag, manifest, gomock.Any()).
 		DoAndReturn(func(tag string, d core.Digest, dst io.Writer) error {
-			dst.Write([]byte("invalid manifest json"))
+			_, err := dst.Write([]byte("invalid manifest json"))
+			require.NoError(err)
 			return nil
 		})
 

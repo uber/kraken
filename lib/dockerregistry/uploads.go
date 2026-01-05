@@ -180,13 +180,15 @@ func (u *casUploads) list(path string, subtype PathSubType) ([]string, error) {
 	switch subtype {
 	case _hashstates:
 		var paths []string
-		u.cas.RangeUploadMetadata(uuid, func(md metadata.Metadata) error {
+		if err := u.cas.RangeUploadMetadata(uuid, func(md metadata.Metadata) error {
 			if hs, ok := md.(*hashStateMetadata); ok {
 				p := stdpath.Join("localstore", "_uploads", uuid, hs.dockerPath())
 				paths = append(paths, p)
 			}
 			return nil
-		})
+		}); err != nil {
+			return nil, err
+		}
 		return paths, nil
 	}
 	return nil, InvalidRequestError{path}

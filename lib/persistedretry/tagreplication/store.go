@@ -60,11 +60,15 @@ func (s *Store) AddFailed(r persistedretry.Task) error {
 
 // MarkPending marks r as pending.
 func (s *Store) MarkPending(r persistedretry.Task) error {
+	t, ok := r.(*Task)
+	if !ok {
+		return fmt.Errorf("expected *Task, got %T", r)
+	}
 	res, err := s.db.NamedExec(`
 		UPDATE replicate_tag_task
 		SET status = "pending"
 		WHERE tag=:tag AND destination=:destination
-	`, r.(*Task))
+	`, t)
 	if err != nil {
 		return err
 	}
@@ -78,7 +82,10 @@ func (s *Store) MarkPending(r persistedretry.Task) error {
 
 // MarkFailed marks r as failed.
 func (s *Store) MarkFailed(r persistedretry.Task) error {
-	t := r.(*Task)
+	t, ok := r.(*Task)
+	if !ok {
+		return fmt.Errorf("expected *Task, got %T", r)
+	}
 	res, err := s.db.NamedExec(`
 		UPDATE replicate_tag_task
 		SET last_attempt = CURRENT_TIMESTAMP,
@@ -131,7 +138,11 @@ func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
 			%q
 		)
 	`, status)
-	_, err := s.db.NamedExec(query, r.(*Task))
+	t, ok := r.(*Task)
+	if !ok {
+		return fmt.Errorf("expected *Task, got %T", r)
+	}
+	_, err := s.db.NamedExec(query, t)
 	if se, ok := err.(sqlite3.Error); ok {
 		if se.ExtendedCode == sqlite3.ErrConstraintPrimaryKey {
 			return persistedretry.ErrTaskExists
@@ -175,8 +186,12 @@ func (s *Store) deleteInvalidTasks(rv RemoteValidator) error {
 }
 
 func (s *Store) delete(r persistedretry.Task) error {
+	t, ok := r.(*Task)
+	if !ok {
+		return fmt.Errorf("expected *Task, got %T", r)
+	}
 	_, err := s.db.NamedExec(`
 		DELETE FROM replicate_tag_task
-		WHERE tag=:tag AND destination=:destination`, r.(*Task))
+		WHERE tag=:tag AND destination=:destination`, t)
 	return err
 }

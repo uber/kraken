@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
 
 	"github.com/uber/kraken/utils/handler"
@@ -123,7 +124,7 @@ func (s *Server) uploadHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return handler.Errorf("create: %s", err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 	if _, err := io.Copy(f, r.Body); err != nil {
 		return handler.Errorf("copy: %s", err)
 	}

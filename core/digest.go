@@ -37,7 +37,11 @@ func (l DigestList) Value() (driver.Value, error) {
 
 // Scan unmarshals []byte to a list of Digest.
 func (l *DigestList) Scan(src interface{}) error {
-	return json.Unmarshal(src.([]byte), l)
+	bytes, ok := src.([]byte)
+	if !ok {
+		return fmt.Errorf("expected []byte, got %T", src)
+	}
+	return json.Unmarshal(bytes, l)
 }
 
 // Digest can be represented in a string like "<algorithm>:<hex_digest_string>"
@@ -99,7 +103,11 @@ func (d Digest) Value() (driver.Value, error) {
 
 // Scan unmarshals []byte to a Digest.
 func (d *Digest) Scan(src interface{}) error {
-	return json.Unmarshal(src.([]byte), d)
+	bytes, ok := src.([]byte)
+	if !ok {
+		return fmt.Errorf("expected []byte, got %T", src)
+	}
+	return json.Unmarshal(bytes, d)
 }
 
 // UnmarshalJSON unmarshals "<algorithm>:<hex_digest_string>" to Digest.

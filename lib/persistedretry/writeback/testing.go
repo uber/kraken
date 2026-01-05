@@ -31,7 +31,11 @@ func MatchTask(task *Task) *TaskMatcher {
 // Matches compares two tasks. It ignores checking for time.
 func (m *TaskMatcher) Matches(x interface{}) bool {
 	expected := m.task
-	result := *(x.(*Task))
+	taskPtr, ok := x.(*Task)
+	if !ok {
+		return false
+	}
+	result := *taskPtr
 
 	expected.CreatedAt = time.Time{}
 	result.CreatedAt = time.Time{}

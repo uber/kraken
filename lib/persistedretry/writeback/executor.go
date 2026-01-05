@@ -61,7 +61,10 @@ func (e *Executor) Name() string {
 // Exec uploads the cache file corresponding to r's digest to the remote backend
 // that matches r's namespace.
 func (e *Executor) Exec(r persistedretry.Task) error {
-	t := r.(*Task)
+	t, ok := r.(*Task)
+	if !ok {
+		return fmt.Errorf("expected *Task, got %T", r)
+	}
 	if err := e.upload(t); err != nil {
 		return err
 	}

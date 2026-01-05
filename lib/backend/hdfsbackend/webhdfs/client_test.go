@@ -148,7 +148,7 @@ func TestClientOpenErrBlobNotFound(t *testing.T) {
 
 	f, err := os.CreateTemp("", "hdfs3test")
 	require.NoError(err)
-	defer os.Remove(f.Name())
+	t.Cleanup(func() { require.NoError(os.Remove(f.Name())) })
 
 	var b bytes.Buffer
 	require.Equal(backenderrors.ErrBlobNotFound, client.Open(_testFile, &b))
