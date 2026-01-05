@@ -58,7 +58,7 @@ func (s *Store) AddFailed(r persistedretry.Task) error {
 func (s *Store) MarkPending(r persistedretry.Task) error {
 	t, ok := r.(*Task)
 	if !ok {
-		return fmt.Errorf("task is not *Task")
+		return fmt.Errorf("expected *Task, got %T", r)
 	}
 	res, err := s.db.NamedExec(`
 		UPDATE writeback_task
@@ -80,7 +80,7 @@ func (s *Store) MarkPending(r persistedretry.Task) error {
 func (s *Store) MarkFailed(r persistedretry.Task) error {
 	t, ok := r.(*Task)
 	if !ok {
-		return fmt.Errorf("task is not *Task")
+		return fmt.Errorf("expected *Task, got %T", r)
 	}
 	res, err := s.db.NamedExec(`
 		UPDATE writeback_task
@@ -106,7 +106,7 @@ func (s *Store) MarkFailed(r persistedretry.Task) error {
 func (s *Store) Remove(r persistedretry.Task) error {
 	t, ok := r.(*Task)
 	if !ok {
-		return fmt.Errorf("task is not *Task")
+		return fmt.Errorf("expected *Task, got %T", r)
 	}
 	_, err := s.db.NamedExec(`
 		DELETE FROM writeback_task
@@ -155,7 +155,7 @@ func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
 	`, status)
 	t, ok := r.(*Task)
 	if !ok {
-		return fmt.Errorf("task is not *Task")
+		return fmt.Errorf("expected *Task, got %T", r)
 	}
 	_, err := s.db.NamedExec(query, t)
 	if se, ok := err.(sqlite3.Error); ok {

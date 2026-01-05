@@ -75,7 +75,7 @@ type authenticator struct {
 func NewAuthenticator(address string, config Config) (Authenticator, error) {
 	httpTransport, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
-		return nil, fmt.Errorf("http.DefaultTransport is not *http.Transport")
+		return nil, fmt.Errorf("expected http.DefaultTransport to be *http.Transport, got %T", http.DefaultTransport)
 	}
 	rt := httpTransport.Clone()
 	tlsClientConfig, err := config.TLS.BuildClient()
@@ -141,7 +141,7 @@ func (a *authenticator) transport(repo string) (http.RoundTripper, error) {
 	}))
 	authHandler, ok := bearerHandler.(auth.AuthenticationHandler)
 	if !ok {
-		return nil, fmt.Errorf("bearerHandler is not auth.AuthenticationHandler")
+		return nil, fmt.Errorf("expected bearerHandler to be auth.AuthenticationHandler, got %T", bearerHandler)
 	}
 	return transport.NewTransport(a.roundTripper, auth.NewAuthorizer(a.challengeManager, basicHandler, authHandler)), nil
 }

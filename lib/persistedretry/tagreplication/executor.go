@@ -54,7 +54,7 @@ func (e *Executor) Name() string {
 func (e *Executor) Exec(r persistedretry.Task) error {
 	t, ok := r.(*Task)
 	if !ok {
-		return fmt.Errorf("task is not *Task")
+		return fmt.Errorf("expected *Task, got %T", r)
 	}
 	start := time.Now()
 	remoteTagClient := e.tagClientProvider.Provide(t.Destination)
