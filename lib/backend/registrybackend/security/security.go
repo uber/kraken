@@ -73,7 +73,11 @@ type authenticator struct {
 // token based authentication challenges. If TLS is disabled, no authentication
 // is attempted.
 func NewAuthenticator(address string, config Config) (Authenticator, error) {
-	rt := http.DefaultTransport.(*http.Transport).Clone()
+	httpTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, fmt.Errorf("http.DefaultTransport is not *http.Transport")
+	}
+	rt := httpTransport.Clone()
 	tlsClientConfig, err := config.TLS.BuildClient()
 	if err != nil {
 		return nil, fmt.Errorf("build tls config for %q: %s", address, err)
@@ -110,7 +114,11 @@ func (a *authenticator) Authenticate(repo string) ([]httputil.SendOption, error)
 	if err := a.updateChallenge(); err != nil {
 		return nil, fmt.Errorf("could not update auth challenge: %s", err)
 	}
-	opts = append(opts, httputil.SendTLSTransport(a.transport(repo)))
+	tr, err := a.transport(repo)
+	if err != nil {
+		return nil, err
+	}
+	opts = append(opts, httputil.SendTLSTransport(tr))
 	return opts, nil
 }
 
@@ -118,7 +126,7 @@ func (a *authenticator) shouldAuth() bool {
 	return a.config.BasicAuth != nil || a.config.RemoteCredentialsStore != ""
 }
 
-func (a *authenticator) transport(repo string) http.RoundTripper {
+func (a *authenticator) transport(repo string) (http.RoundTripper, error) {
 	basicHandler := auth.NewBasicHandler(a.credentialStore)
 	bearerHandler, _ := a.tokenHandlers.LoadOrStore(repo, auth.NewTokenHandlerWithOptions(auth.TokenHandlerOptions{
 		Transport:   a.roundTripper,
@@ -131,7 +139,11 @@ func (a *authenticator) transport(repo string) http.RoundTripper {
 		},
 		ClientID: "docker",
 	}))
-	return transport.NewTransport(a.roundTripper, auth.NewAuthorizer(a.challengeManager, basicHandler, bearerHandler.(auth.AuthenticationHandler)))
+	authHandler, ok := bearerHandler.(auth.AuthenticationHandler)
+	if !ok {
+		return nil, fmt.Errorf("bearerHandler is not auth.AuthenticationHandler")
+	}
+	return transport.NewTransport(a.roundTripper, auth.NewAuthorizer(a.challengeManager, basicHandler, authHandler)), nil
 }
 
 func (a *authenticator) updateChallenge() error {

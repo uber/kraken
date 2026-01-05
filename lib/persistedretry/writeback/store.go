@@ -56,11 +56,15 @@ func (s *Store) AddFailed(r persistedretry.Task) error {
 
 // MarkPending marks r as pending.
 func (s *Store) MarkPending(r persistedretry.Task) error {
+	t, ok := r.(*Task)
+	if !ok {
+		return fmt.Errorf("task is not *Task")
+	}
 	res, err := s.db.NamedExec(`
 		UPDATE writeback_task
 		SET status = "pending"
 		WHERE namespace=:namespace AND name=:name
-	`, r.(*Task))
+	`, t)
 	if err != nil {
 		return err
 	}
@@ -74,7 +78,10 @@ func (s *Store) MarkPending(r persistedretry.Task) error {
 
 // MarkFailed marks r as failed.
 func (s *Store) MarkFailed(r persistedretry.Task) error {
-	t := r.(*Task)
+	t, ok := r.(*Task)
+	if !ok {
+		return fmt.Errorf("task is not *Task")
+	}
 	res, err := s.db.NamedExec(`
 		UPDATE writeback_task
 		SET last_attempt = CURRENT_TIMESTAMP,
@@ -97,10 +104,14 @@ func (s *Store) MarkFailed(r persistedretry.Task) error {
 
 // Remove removes r.
 func (s *Store) Remove(r persistedretry.Task) error {
+	t, ok := r.(*Task)
+	if !ok {
+		return fmt.Errorf("task is not *Task")
+	}
 	_, err := s.db.NamedExec(`
 		DELETE FROM writeback_task
 		WHERE namespace=:namespace AND name=:name
-	`, r.(*Task))
+	`, t)
 	return err
 }
 
@@ -142,7 +153,11 @@ func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
 			%q
 		)
 	`, status)
-	_, err := s.db.NamedExec(query, r.(*Task))
+	t, ok := r.(*Task)
+	if !ok {
+		return fmt.Errorf("task is not *Task")
+	}
+	_, err := s.db.NamedExec(query, t)
 	if se, ok := err.(sqlite3.Error); ok {
 		if se.ExtendedCode == sqlite3.ErrConstraintPrimaryKey {
 			return persistedretry.ErrTaskExists

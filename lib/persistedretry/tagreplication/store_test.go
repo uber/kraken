@@ -61,7 +61,9 @@ func checkTask(t *testing.T, expected *Task, result persistedretry.Task) {
 	t.Helper()
 
 	expectedCopy := *expected
-	resultCopy := *(result.(*Task))
+	resultTask, ok := result.(*Task)
+	require.True(t, ok)
+	resultCopy := *resultTask
 
 	require.InDelta(t, expectedCopy.CreatedAt.Unix(), resultCopy.CreatedAt.Unix(), 1)
 	expectedCopy.CreatedAt = time.Time{}
@@ -133,8 +135,8 @@ func TestDeleteInvalidTasks(t *testing.T) {
 	task1 := TaskFixture()
 	task2 := TaskFixture()
 
-	store.AddPending(task1)
-	store.AddFailed(task2)
+	require.NoError(store.AddPending(task1))
+	require.NoError(store.AddFailed(task2))
 
 	mocks.rv.EXPECT().Valid(task1.Tag, task1.Destination).Return(false)
 	mocks.rv.EXPECT().Valid(task2.Tag, task2.Destination).Return(false)

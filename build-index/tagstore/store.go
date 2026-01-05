@@ -28,6 +28,7 @@ import (
 	"github.com/uber/kraken/lib/persistedretry/writeback"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
 
 	"github.com/uber-go/tally"
@@ -156,7 +157,7 @@ func (s *tagStore) resolveFromDisk(tag string) (core.Digest, error) {
 		log.With("tag", tag).Errorf("Failed to read tag from disk cache: %s", err)
 		return core.Digest{}, fmt.Errorf("fs: %s", err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 	var b bytes.Buffer
 	if _, err := io.Copy(&b, f); err != nil {
 		log.With("tag", tag).Errorf("Failed to copy tag data from disk: %s", err)

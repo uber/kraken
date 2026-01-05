@@ -102,16 +102,31 @@ func getParam(params map[string]interface{}, name string) interface{} {
 
 func (factory *krakenStorageDriverFactory) Create(params map[string]interface{}) (driver.StorageDriver, error) {
 	// Common parameters.
-	constructor := getParam(params, "constructor").(string)
-	config := getParam(params, "config").(Config)
-	transferer := getParam(params, "transferer").(transfer.ImageTransferer)
+	constructor, ok := getParam(params, "constructor").(string)
+	if !ok {
+		return nil, fmt.Errorf("constructor param is not string")
+	}
+	config, ok := getParam(params, "config").(Config)
+	if !ok {
+		return nil, fmt.Errorf("config param is not Config")
+	}
+	transferer, ok := getParam(params, "transferer").(transfer.ImageTransferer)
+	if !ok {
+		return nil, fmt.Errorf("transferer param is not transfer.ImageTransferer")
+	}
 
 	switch constructor {
 	case _rw:
-		castore := getParam(params, "castore").(*store.CAStore)
+		castore, ok := getParam(params, "castore").(*store.CAStore)
+		if !ok {
+			return nil, fmt.Errorf("castore param is not *store.CAStore")
+		}
 		return NewReadWriteStorageDriver(config, castore, transferer, factory.verification), nil
 	case _ro:
-		blobstore := getParam(params, "blobstore").(BlobStore)
+		blobstore, ok := getParam(params, "blobstore").(BlobStore)
+		if !ok {
+			return nil, fmt.Errorf("blobstore param is not BlobStore")
+		}
 		return NewReadOnlyStorageDriver(config, blobstore, transferer, factory.verification), nil
 	default:
 		return nil, fmt.Errorf("unknown constructor %s", constructor)

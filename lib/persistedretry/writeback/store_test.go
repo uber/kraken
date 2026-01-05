@@ -27,7 +27,9 @@ func checkTask(t *testing.T, expected *Task, result persistedretry.Task) {
 	t.Helper()
 
 	expectedCopy := *expected
-	resultCopy := *(result.(*Task))
+	resultTask, ok := result.(*Task)
+	require.True(t, ok)
+	resultCopy := *resultTask
 
 	require.InDelta(t, expectedCopy.CreatedAt.Unix(), resultCopy.CreatedAt.Unix(), 1)
 	expectedCopy.CreatedAt = time.Time{}

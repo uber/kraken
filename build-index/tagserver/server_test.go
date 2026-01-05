@@ -143,8 +143,8 @@ func TestHealth(t *testing.T) {
 
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/health", addr))
-	defer resp.Body.Close()
 	require.NoError(err)
+	t.Cleanup(func() { require.NoError(resp.Body.Close()) })
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(err)
 	require.Equal("OK\n", string(b))

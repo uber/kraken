@@ -52,7 +52,10 @@ func (e *Executor) Name() string {
 // Exec replicates a tag's blob dependencies to the task's remote origin
 // cluster, then replicates the tag to the remote build-index.
 func (e *Executor) Exec(r persistedretry.Task) error {
-	t := r.(*Task)
+	t, ok := r.(*Task)
+	if !ok {
+		return fmt.Errorf("task is not *Task")
+	}
 	start := time.Now()
 	remoteTagClient := e.tagClientProvider.Provide(t.Destination)
 
