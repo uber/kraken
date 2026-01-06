@@ -14,6 +14,7 @@
 package blobclient
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -84,7 +85,11 @@ type ClusterClient interface {
 	CheckReadiness() error
 	UploadBlob(namespace string, d core.Digest, blob io.ReadSeeker) error
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
+	// DownloadBlobWithContext downloads blob with context for tracing propagation.
+	DownloadBlobWithContext(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error
 	PrefetchBlob(namespace string, d core.Digest) error
+	// PrefetchBlobWithContext prefetches blob with context for tracing propagation.
+	PrefetchBlobWithContext(ctx context.Context, namespace string, d core.Digest) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	Stat(namespace string, d core.Digest) (*core.BlobInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
@@ -217,8 +222,13 @@ func (c *clusterClient) OverwriteMetaInfo(d core.Digest, pieceLength int64) erro
 
 // DownloadBlob pulls a blob from the origin cluster.
 func (c *clusterClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
+	return c.DownloadBlobWithContext(context.Background(), namespace, d, dst)
+}
+
+// DownloadBlobWithContext pulls a blob from the origin cluster with context for tracing.
+func (c *clusterClient) DownloadBlobWithContext(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error {
 	err := Poll(c.resolver, c.defaultPollBackOff(), d, func(client Client) error {
-		return client.DownloadBlob(namespace, d, dst)
+		return client.DownloadBlobWithContext(ctx, namespace, d, dst)
 	})
 	if httputil.IsNotFound(err) {
 		err = ErrBlobNotFound
@@ -229,6 +239,11 @@ func (c *clusterClient) DownloadBlob(namespace string, d core.Digest, dst io.Wri
 // PrefetchBlob preheats a blob in the origin cluster for downloading.
 // Check [Client].PrefetchBlob's comment for more info.
 func (c *clusterClient) PrefetchBlob(namespace string, d core.Digest) error {
+	return c.PrefetchBlobWithContext(context.Background(), namespace, d)
+}
+
+// PrefetchBlobWithContext preheats a blob in the origin cluster with context for tracing.
+func (c *clusterClient) PrefetchBlobWithContext(ctx context.Context, namespace string, d core.Digest) error {
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
 		return fmt.Errorf("resolve clients: %w", err)
@@ -236,7 +251,7 @@ func (c *clusterClient) PrefetchBlob(namespace string, d core.Digest) error {
 
 	var errs []error
 	for _, client := range clients {
-		err = client.PrefetchBlob(namespace, d)
+		err = client.PrefetchBlobWithContext(ctx, namespace, d)
 		if err == nil {
 			return nil
 		}

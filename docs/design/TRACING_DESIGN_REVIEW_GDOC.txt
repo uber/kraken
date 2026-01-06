@@ -1,0 +1,286 @@
+KRAKEN DISTRIBUTED TRACING - DESIGN REVIEW
+
+Author: [Your Name]
+Date: January 6, 2026
+Status: Pending Review
+
+════════════════════════════════════════════════════════════════════════════════
+
+1. PROJECT GOALS
+
+What We're Building
+Add distributed tracing to Kraken to enable visibility into blob download/upload operations across services.
+
+In Scope
+• Trace blob downloads — Agent → Scheduler → Tracker request flow
+• Trace blob uploads — Client → Proxy → Origin → Storage Backend  
+• Trace replication — Cross-cluster blob replication workflows
+• Uber integration — Use existing Jaeger/M3 infrastructure
+• Low overhead — <1% performance impact on critical paths
+
+Out of Scope
+• P2P communication — Dispatcher, peer connections, piece exchanges will NOT be traced
+• Custom storage backends or visualization UIs
+
+════════════════════════════════════════════════════════════════════════════════
+
+2. TRACING LIBRARY ANALYSIS: JAEGER VS SIGNOZ
+
+Overview
+
+                        JAEGER                      SIGNOZ
+Origin                  Uber (CNCF Graduated)       Open-source startup
+Protocol                OTLP, Thrift, gRPC          OTLP
+Storage                 Cassandra, ES, Kafka        ClickHouse
+Go SDK                  OpenTelemetry (official)    OpenTelemetry
+
+
+Comparison
+
+CRITERION               JAEGER          SIGNOZ          WINNER
+─────────────────────────────────────────────────────────────────
+Uber Ecosystem Fit      Native M3       No integration  → Jaeger
+                        integration     needed
+                        
+Performance             100K+ services  Less proven     → Jaeger
+                        ~500ns/span     at scale
+                        
+OpenTelemetry Support   Full            Full            → Tie
+
+Operational Burden      Already at Uber New system      → Jaeger
+
+All-in-one Observability Traces only    Traces+Metrics  → SigNoz
+                                        +Logs unified
+                                        
+Query Performance       Degrades with   ClickHouse      → SigNoz
+                        volume          is fast
+
+
+RECOMMENDATION: Use Jaeger with OpenTelemetry SDK
+
+Rationale:
+1. Already part of Uber's infrastructure — no new systems to deploy/maintain
+2. Proven at Uber scale (handles 100K+ services)
+3. OpenTelemetry SDK provides vendor flexibility if we ever need to switch
+4. Lower operational overhead — leverage existing Jaeger collectors
+
+════════════════════════════════════════════════════════════════════════════════
+
+3. REQUEST FLOW SCHEMA
+
+3.1 Blob Download Flow
+
+    ┌──────────────────────────────────────────────────────────┐
+    │                  BLOB DOWNLOAD - ACTUAL FLOW             │
+    └──────────────────────────────────────────────────────────┘
+    
+    Docker Client
+         │
+         │  GET /v2/{repo}/blobs/{digest}
+         ▼
+    ┌─────────┐
+    │  AGENT  │  SPAN: agent.download_blob ← TRACEABLE (HTTP)
+    │         │  → attributes: namespace, digest
+    └────┬────┘
+         │
+         │  Cache miss? → Scheduler
+         ▼
+    ┌─────────┐      HTTP POST /announce/{infohash}
+    │SCHEDULER│  ─────────────────────────────────────►  ┌─────────┐
+    │         │                                          │ TRACKER │
+    │         │  ◄─────────────────────────────────────  │         │
+    └────┬────┘      Returns peer list (HTTP)            └─────────┘
+         │               ↑
+         │               │
+         │    SPAN: announce.request ← TRACEABLE (HTTP)
+         │    SPAN: tracker.announce ← TRACEABLE (HTTP)
+         │
+         ▼
+    ┌───────────────────────────────────────┐
+    │    PIECE EXCHANGE (NOT TRACED)        │
+    │                                       │
+    │  Agent ↔ Peers/Origins via TCP+Proto  │
+    │  (BitTorrent protocol, NOT HTTP)      │
+    │                                       │
+    └───────────────────────────────────────┘
+         │
+         │  Downloaded to local cache
+         ▼
+    ┌─────────┐
+    │  AGENT  │  SPAN: agent.download_blob.complete ← TRACEABLE
+    │  CACHE  │  → attributes: size, duration
+    └─────────┘
+
+
+    ┌──────────────────────────────────────────────────────────┐
+    │          ORIGIN BACKEND FETCH (when Origin cache miss)   │
+    └──────────────────────────────────────────────────────────┘
+    
+    When Origin receives piece request but doesn't have the blob:
+    
+    ┌─────────┐
+    │ ORIGIN  │  SPAN: origin.blob_refresh ← TRACEABLE
+    │         │  → triggered internally
+    └────┬────┘
+         │
+         │  Fetch from storage backend
+         ▼
+    ┌───────────┐
+    │  BACKEND  │  SPAN: backend.download ← TRACEABLE
+    │ (S3/GCS)  │  → attributes: backend_type, bucket, duration_ms
+    └─────┬─────┘
+         │
+         │  Write to Origin cache
+         ▼
+    ┌───────────┐
+    │  ORIGIN   │  SPAN: cache.write ← TRACEABLE
+    │  CACHE    │  → attributes: path, size
+    └───────────┘
+
+
+SUMMARY - What's traceable:
+✅ Agent HTTP entry point
+✅ Agent → Tracker (HTTP announce)  
+✅ Tracker → Agent (HTTP response)
+✅ Origin → Backend (S3/GCS fetch)
+✅ Agent completion
+
+❌ Agent ↔ Peers piece exchange (TCP+Protobuf, not HTTP)
+❌ Agent ↔ Origin piece exchange (TCP+Protobuf, not HTTP)
+
+
+3.2 Blob Upload Flow
+
+    ┌──────────────────────────────────────────────────────────┐
+    │                   BLOB UPLOAD TRACE                      │
+    └──────────────────────────────────────────────────────────┘
+    
+    Docker Client
+         │
+         │  POST/PATCH/PUT upload flow
+         ▼
+    ┌─────────┐
+    │  PROXY  │  SPAN: proxy.upload
+    │         │  → attributes: namespace, repo, upload_id
+    └────┬────┘
+         │
+         │  Forward blob to origin
+         ▼
+    ┌─────────┐
+    │ ORIGIN  │  SPAN: origin.store_blob
+    │         │  → attributes: digest, size, replicate
+    └────┬────┘
+         │
+         │  Upload to storage backend
+         ▼
+    ┌─────────┐
+    │ BACKEND │  SPAN: backend.upload
+    │ (S3/GCS)│  → attributes: backend_type, bucket, duration
+    └─────────┘
+
+
+3.3 Span Summary
+
+TRACE                   SPANS       WHAT'S TRACED
+─────────────────────────────────────────────────────────────────
+Blob Download (Agent)   4 spans     agent.download_blob (entry)
+                                    announce.request (HTTP to Tracker)
+                                    tracker.announce (Tracker side)
+                                    agent.download_blob.complete
+
+Piece Exchange          -           NOT TRACED (TCP+Protobuf, not HTTP)
+
+Origin Backend Fetch    3 spans     origin.blob_refresh → 
+                                    backend.download → cache.write
+
+Blob Upload             3 spans     Proxy → Origin → Backend
+
+Replication             3 spans     Origin → Origin (cross-cluster)
+
+════════════════════════════════════════════════════════════════════════════════
+
+4. PERFORMANCE OVERHEAD MITIGATION PLAN
+
+4.1 Performance Budget
+
+METRIC                  TARGET          ACCEPTABLE MAX
+───────────────────────────────────────────────────────
+Latency impact          <0.5%           <1%
+CPU overhead            <0.3%           <0.5%
+Memory per trace        <5KB            <10KB
+Span creation time      <500ns          <1µs
+
+
+4.2 Mitigation Strategies
+
+STRATEGY 1: Sampling
+
+Default: 10% sampling rate — Only 1 in 10 requests will be traced.
+
+Path-based rules:
+• /health        → 0%   (Never trace)
+• /readiness     → 0%   (Never trace)  
+• /announce/*    → 5%   (High-frequency, lower rate)
+• /blobs/*       → 20%  (Important operations, higher rate)
+
+
+STRATEGY 2: Async Batched Export
+
+Traces are batched and exported asynchronously — never blocking request processing.
+
+    Request Thread              Background Exporter
+         │                            │
+         │  create span (~500ns)      │
+         │  ─────────────────────►    │
+         │                            │  (queue span)
+         │  continue processing       │
+         │                            │
+         │                            │  every 5s: batch export
+         │                            │  ─────────────────────► Jaeger
+
+Config:
+• Batch timeout: 5 seconds
+• Max batch size: 512 spans
+• Queue size: 2048 spans
+
+
+STRATEGY 3: No P2P Tracing
+
+The highest-volume operations (peer connections, piece exchanges) are explicitly excluded. This eliminates potentially millions of spans per day.
+
+
+4.3 Overhead Validation Plan
+
+Before production rollout:
+
+TEST                METHOD                      SUCCESS CRITERIA
+─────────────────────────────────────────────────────────────────
+Microbenchmark      Benchmark span creation     <1µs per span
+Load test           Compare with/without        <1% latency P99 diff
+Memory test         Profile under load          <5% memory increase
+CPU test            Profile under load          <0.5% CPU increase
+
+════════════════════════════════════════════════════════════════════════════════
+
+5. OPEN QUESTIONS FOR REVIEW
+
+#   QUESTION                                            NEED ANSWER FROM
+────────────────────────────────────────────────────────────────────────
+1   Is 10% default sampling rate acceptable?            Performance/SRE
+2   Any additional endpoints to exclude from tracing?   Team
+3   Jaeger collector endpoint/config for Kraken?        Infra
+4   Trace retention policy requirements?                SRE
+
+════════════════════════════════════════════════════════════════════════════════
+
+6. NEXT STEPS (Pending Approval)
+
+1. Week 2: Implement pkg/tracing core package
+2. Week 3: Integrate into Agent, Origin, Tracker, Proxy
+3. Week 4: Performance validation and production rollout
+
+════════════════════════════════════════════════════════════════════════════════
+
+Requesting review by: [Reviewer Names]
+Review deadline: January 13, 2026
+

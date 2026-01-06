@@ -35,6 +35,10 @@ server {
 
   location / {
     proxy_pass http://build-index;
+
+    # Propagate W3C Trace Context headers for distributed tracing
+    proxy_set_header traceparent $http_traceparent;
+    proxy_set_header tracestate $http_tracestate;
   }
 
   location /tags {
@@ -47,6 +51,10 @@ server {
     proxy_cache_lock    on;
 
     proxy_read_timeout {{.proxy_read_timeout}};
+
+    # Propagate W3C Trace Context headers for distributed tracing
+    proxy_set_header traceparent $http_traceparent;
+    proxy_set_header tracestate $http_tracestate;
   }
 
   location ~* ^/repositories/.*/tags$ {
@@ -56,6 +64,10 @@ server {
     proxy_cache_methods GET;
     proxy_cache_valid   any 1s;
     proxy_cache_lock    on;
+
+    # Propagate W3C Trace Context headers for distributed tracing
+    proxy_set_header traceparent $http_traceparent;
+    proxy_set_header tracestate $http_tracestate;
   }
 
   location /list {
@@ -68,6 +80,10 @@ server {
     proxy_cache_lock    on;
 
     proxy_read_timeout {{.proxy_read_timeout}};
+
+    # Propagate W3C Trace Context headers for distributed tracing
+    proxy_set_header traceparent $http_traceparent;
+    proxy_set_header tracestate $http_tracestate;
   }
 }
 `

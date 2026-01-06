@@ -14,6 +14,7 @@
 package blobclient
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -54,7 +55,11 @@ type Client interface {
 	DuplicateUploadBlob(namespace string, d core.Digest, blob io.Reader, delay time.Duration) error
 
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
+	// DownloadBlobWithContext downloads blob with context for tracing propagation.
+	DownloadBlobWithContext(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error
 	PrefetchBlob(namespace string, d core.Digest) error
+	// PrefetchBlobWithContext prefetches blob with context for tracing propagation.
+	PrefetchBlobWithContext(ctx context.Context, namespace string, d core.Digest) error
 
 	ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error
 
@@ -68,6 +73,7 @@ type HTTPClient struct {
 	addr      string
 	chunkSize uint64
 	tls       *tls.Config
+	transport http.RoundTripper // Optional traced transport
 }
 
 // Option allows setting optional HTTPClient parameters.
@@ -81,6 +87,11 @@ func WithChunkSize(s uint64) Option {
 // WithTLS configures an HTTPClient with tls configuration.
 func WithTLS(tls *tls.Config) Option {
 	return func(c *HTTPClient) { c.tls = tls }
+}
+
+// WithTransport configures an HTTPClient with a custom transport (e.g., for tracing).
+func WithTransport(t http.RoundTripper) Option {
+	return func(c *HTTPClient) { c.transport = t }
 }
 
 // New returns a new HTTPClient scoped to addr.
@@ -207,9 +218,21 @@ func (c *HTTPClient) DuplicateUploadBlob(
 // the request should be retried later. If not blob exists for d, returns a 404
 // httputil.StatusError.
 func (c *HTTPClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
+	return c.DownloadBlobWithContext(context.Background(), namespace, d, dst)
+}
+
+// DownloadBlobWithContext downloads blob with context for tracing propagation.
+func (c *HTTPClient) DownloadBlobWithContext(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error {
+	opts := []httputil.SendOption{
+		httputil.SendTLS(c.tls),
+		httputil.SendContext(ctx),
+	}
+	if c.transport != nil {
+		opts = append(opts, httputil.SendTransport(c.transport))
+	}
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s", c.addr, url.PathEscape(namespace), d),
-		httputil.SendTLS(c.tls))
+		opts...)
 	if err != nil {
 		return err
 	}
@@ -223,10 +246,22 @@ func (c *HTTPClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer
 // PrefetchBlob is an asynchronous, idempotent operation that preheats the origin's cache with the given blob.
 // If the blob is not present, it is downloaded asynchronously. If the blob is present, this is a no-op.
 func (c *HTTPClient) PrefetchBlob(namespace string, d core.Digest) error {
+	return c.PrefetchBlobWithContext(context.Background(), namespace, d)
+}
+
+// PrefetchBlobWithContext prefetches blob with context for tracing propagation.
+func (c *HTTPClient) PrefetchBlobWithContext(ctx context.Context, namespace string, d core.Digest) error {
+	opts := []httputil.SendOption{
+		httputil.SendAcceptedCodes(http.StatusOK, http.StatusAccepted),
+		httputil.SendTLS(c.tls),
+		httputil.SendContext(ctx),
+	}
+	if c.transport != nil {
+		opts = append(opts, httputil.SendTransport(c.transport))
+	}
 	r, err := httputil.Post(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/prefetch", c.addr, url.PathEscape(namespace), d),
-		httputil.SendAcceptedCodes(http.StatusOK, http.StatusAccepted),
-		httputil.SendTLS(c.tls))
+		opts...)
 	if err != nil {
 		return err
 	}

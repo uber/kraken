@@ -25,6 +25,7 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler"
+	"github.com/uber/kraken/lib/tracing"
 	"github.com/uber/kraken/localdb"
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
@@ -48,6 +49,7 @@ type Config struct {
 	NetworkEvent   networkevent.Config      `yaml:"network_event"`
 	PeerIDFactory  core.PeerIDFactory       `yaml:"peer_id_factory"`
 	Metrics        metrics.Config           `yaml:"metrics"`
+	Tracing        tracing.Config           `yaml:"tracing"`
 	MetaInfoGen    metainfogen.Config       `yaml:"metainfogen"`
 	BackendManager backend.ManagerConfig    `yaml:"backend_manager"`
 	Backends       []backend.Config         `yaml:"backends"`

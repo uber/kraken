@@ -15,6 +15,7 @@ package proxyserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -24,11 +25,13 @@ import (
 
 	"github.com/docker/distribution"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/tracing"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 var _manifestRegexp = regexp.MustCompile(`^application/vnd.docker.distribution.manifest.v\d\+(json|prettyjws)`)
@@ -46,18 +49,22 @@ func NewPreheatHandler(client blobclient.ClusterClient, synchronous bool) *Prehe
 
 // Handle notifies origins to cache the blob related to the image.
 func (ph *PreheatHandler) Handle(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
 	var notification Notification
 	if err := json.NewDecoder(r.Body).Decode(&notification); err != nil {
 		return handler.Errorf("decode body: %s", err)
 	}
 
 	events := filterEvents(&notification)
+	tracing.SetSpanAttributes(ctx, attribute.Int("events.count", len(events)))
+
 	for _, event := range events {
 		repo := event.Target.Repository
 		digest := event.Target.Digest
 
 		log.With("repo", repo, "digest", digest).Infof("deal push image event")
-		err := ph.process(repo, digest)
+		err := ph.process(ctx, repo, digest)
 		if err != nil {
 			log.With("repo", repo, "digest", digest).Errorf("handle preheat: %s", err)
 		}
@@ -65,12 +72,23 @@ func (ph *PreheatHandler) Handle(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (ph *PreheatHandler) process(repo, digest string) error {
-	manifest, err := ph.fetchManifest(repo, digest)
+func (ph *PreheatHandler) process(ctx context.Context, repo, digest string) error {
+	ctx, endSpan := tracing.StartSpanWithAttributes(ctx, "preheat.process",
+		tracing.AttrRepo.String(repo),
+		tracing.AttrDigest.String(digest),
+	)
+	defer endSpan()
+
+	manifest, err := ph.fetchManifest(ctx, repo, digest)
 	if err != nil {
+		tracing.RecordSpanError(ctx, err)
 		return err
 	}
-	for _, desc := range manifest.References() {
+
+	refs := manifest.References()
+	tracing.SetSpanAttributes(ctx, attribute.Int("layers.count", len(refs)))
+
+	for _, desc := range refs {
 		d, err := core.ParseSHA256Digest(string(desc.Digest))
 		if err != nil {
 			log.With("repo", repo, "digest", string(desc.Digest)).Errorf("parse digest: %s", err)
@@ -92,9 +110,13 @@ func (ph *PreheatHandler) process(repo, digest string) error {
 	return nil
 }
 
-func (ph *PreheatHandler) fetchManifest(repo, digest string) (distribution.Manifest, error) {
+func (ph *PreheatHandler) fetchManifest(ctx context.Context, repo, digest string) (distribution.Manifest, error) {
+	ctx, endSpan := tracing.StartSpan(ctx, "preheat.fetchManifest")
+	defer endSpan()
+
 	d, err := core.ParseSHA256Digest(digest)
 	if err != nil {
+		tracing.RecordSpanError(ctx, err)
 		return nil, fmt.Errorf("Error parse digest: %s ", err)
 	}
 
@@ -112,15 +134,19 @@ func (ph *PreheatHandler) fetchManifest(repo, digest string) (distribution.Manif
 		} else if err == blobclient.ErrBlobNotFound {
 			continue
 		} else {
+			tracing.RecordSpanError(ctx, err)
 			return nil, fmt.Errorf("download manifest: %s", err)
 		}
 	}
 	if buf.Len() == 0 {
-		return nil, fmt.Errorf("manifest not found")
+		err := fmt.Errorf("manifest not found")
+		tracing.RecordSpanError(ctx, err)
+		return nil, err
 	}
 
 	manifest, _, err := dockerutil.ParseManifest(buf)
 	if err != nil {
+		tracing.RecordSpanError(ctx, err)
 		return nil, fmt.Errorf("parse manifest: %s", err)
 	}
 	return manifest, nil

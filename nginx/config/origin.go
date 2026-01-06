@@ -35,6 +35,10 @@ server {
 
   location / {
     proxy_pass http://{{.server}};
+
+    # Propagate W3C Trace Context headers for distributed tracing
+    proxy_set_header traceparent $http_traceparent;
+    proxy_set_header tracestate $http_tracestate;
   }
 }
 `

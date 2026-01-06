@@ -45,6 +45,10 @@ server {
   location / {
     proxy_pass http://registry-backend;
     proxy_next_upstream error timeout http_404 http_500;
+
+    # Propagate W3C Trace Context headers for distributed tracing
+    proxy_set_header traceparent $http_traceparent;
+    proxy_set_header tracestate $http_tracestate;
   }
 }
 `

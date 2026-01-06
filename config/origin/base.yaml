@@ -21,6 +21,14 @@ zap:
     - stdout
     - /var/log/kraken/kraken-origin/stdout.log
 
+# Distributed tracing configuration (Jaeger via OTLP)
+tracing:
+  enabled: false  # Set to true to enable tracing
+  service_name: kraken-origin
+  agent_host: localhost  # Jaeger/OTLP collector host
+  agent_port: 4318       # OTLP HTTP port (Jaeger supports this natively)
+  sampling_rate: 1.0     # Sample 100% for testing (reduce in production)
+
 metainfogen:
   piece_lengths:
     0: 4MB # Use 4MB piece lengths for all file sizes (for now).

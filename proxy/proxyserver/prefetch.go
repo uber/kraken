@@ -2,6 +2,7 @@ package proxyserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,9 +19,11 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/tracing"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 )
 
@@ -194,6 +197,7 @@ func (ph *PrefetchHandler) HandleV1(w http.ResponseWriter, r *http.Request) {
 }
 
 type prefetchInput struct {
+	ctx       context.Context
 	blobs     []blobInfo
 	namespace string
 	logger    *zap.SugaredLogger
@@ -205,9 +209,14 @@ type prefetchInput struct {
 // downloads the manifest(s) from the origin cluster, parses them, and returns the blobs layers to prefetch.
 // If an error occurs, preparePrefetch returns the appropriate HTTP response.
 func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Request) (res *prefetchInput, errOccurred bool) {
+	ctx := r.Context()
+	ctx, endSpan := tracing.StartSpan(ctx, "prefetch.prepare")
+	defer endSpan()
+
 	ph.metrics.Counter("requests").Inc(1)
 	var reqBody prefetchBody
 	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		tracing.RecordSpanError(ctx, err)
 		writeBadRequestError(w, fmt.Sprintf("failed to decode request body: %s", err), "")
 		log.With("error", err).Error("Failed to decode request body")
 		return nil, true
@@ -216,14 +225,21 @@ func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Reques
 
 	namespace, tag, err := ph.tagParser.ParseTag(reqBody.Tag)
 	if err != nil {
+		tracing.RecordSpanError(ctx, err)
 		writeBadRequestError(w, fmt.Sprintf("tag: %s, invalid tag format: %s", reqBody.Tag, err), reqBody.TraceId)
 		return nil, true
 	}
+
+	tracing.SetSpanAttributes(ctx,
+		attribute.String("tag", reqBody.Tag),
+		attribute.String("namespace", namespace),
+	)
 
 	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
 	startTime := time.Now()
 	digest, err := ph.tagClient.Get(tagRequest)
 	if err != nil {
+		tracing.RecordSpanError(ctx, err)
 		ph.metrics.Counter("get_tag_error").Inc(1)
 		logger.With("error", err).Error("Failed to get manifest tag")
 		writeInternalError(w, fmt.Sprintf("tag request: %s, failed to get tag: %s", tagRequest, err), reqBody.TraceId)
@@ -234,7 +250,8 @@ func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Reques
 
 	buf := &bytes.Buffer{}
 	startTime = time.Now()
-	if err := ph.clusterClient.DownloadBlob(namespace, digest, buf); err != nil {
+	if err := ph.clusterClient.DownloadBlobWithContext(ctx, namespace, digest, buf); err != nil {
+		tracing.RecordSpanError(ctx, err)
 		ph.metrics.Counter("download_manifest_error").Inc(1)
 		logger.With("error", err).Error("Failed to download manifest blob")
 		writeInternalError(w, fmt.Sprintf("error downloading manifest blob: %s", err), reqBody.TraceId)
@@ -243,13 +260,17 @@ func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Reques
 	ph.getManifestLatency.RecordDuration(time.Since(startTime))
 
 	// Process manifest (ManifestList or single Manifest)
-	blobs, err := ph.processManifest(logger, namespace, buf.Bytes())
+	blobs, err := ph.processManifest(ctx, logger, namespace, buf.Bytes())
 	if err != nil {
+		tracing.RecordSpanError(ctx, err)
 		writeInternalError(w, fmt.Sprintf("failed to process manifest: %s", err), reqBody.TraceId)
 		return nil, true
 	}
 
+	tracing.SetSpanAttributes(ctx, attribute.Int("blobs.count", len(blobs)))
+
 	return &prefetchInput{
+		ctx:       ctx,
 		blobs:     blobs,
 		namespace: namespace,
 		logger:    logger,
@@ -260,6 +281,9 @@ func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Reques
 
 // downloadBlobs downloads blobs in parallel.
 func (ph *PrefetchHandler) downloadBlobs(input *prefetchInput) {
+	ctx, endSpan := tracing.StartSpan(input.ctx, "prefetch.downloadBlobs")
+	defer endSpan()
+
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var errList []error
@@ -273,7 +297,7 @@ func (ph *PrefetchHandler) downloadBlobs(input *prefetchInput) {
 		go func(blob blobInfo) {
 			defer wg.Done()
 			blobStart := time.Now()
-			err := ph.clusterClient.DownloadBlob(input.namespace, blob.digest, io.Discard)
+			err := ph.clusterClient.DownloadBlobWithContext(ctx, input.namespace, blob.digest, io.Discard)
 			blobDuration := time.Since(blobStart)
 			ph.metrics.Timer("blob_download_time").Record(blobDuration)
 			ph.metrics.Counter("bytes_downloaded").Inc(blob.size)
@@ -293,6 +317,7 @@ func (ph *PrefetchHandler) downloadBlobs(input *prefetchInput) {
 	wg.Wait()
 
 	if len(errList) > 0 {
+		tracing.RecordSpanError(ctx, errors.Join(errList...))
 		ph.metrics.Counter("failed").Inc(1)
 		for _, err := range errList {
 			input.logger.With("error", err).Error("Error downloading blob")
@@ -324,9 +349,9 @@ func (ph *PrefetchHandler) shouldSkipPrefetch(b blobInfo, logger *zap.SugaredLog
 }
 
 // processManifest handles both ManifestLists and single Manifests.
-func (ph *PrefetchHandler) processManifest(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) ([]blobInfo, error) {
+func (ph *PrefetchHandler) processManifest(ctx context.Context, logger *zap.SugaredLogger, namespace string, manifestBytes []byte) ([]blobInfo, error) {
 	// Attempt to process as a manifest list.
-	blobs, err := ph.tryProcessManifestList(logger, namespace, manifestBytes)
+	blobs, err := ph.tryProcessManifestList(ctx, logger, namespace, manifestBytes)
 	if err == nil && len(blobs) > 0 {
 		return blobs, nil
 	}
@@ -341,17 +366,17 @@ func (ph *PrefetchHandler) processManifest(logger *zap.SugaredLogger, namespace 
 }
 
 // tryProcessManifestList attempts to decode a manifest list.
-func (ph *PrefetchHandler) tryProcessManifestList(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) ([]blobInfo, error) {
+func (ph *PrefetchHandler) tryProcessManifestList(ctx context.Context, logger *zap.SugaredLogger, namespace string, manifestBytes []byte) ([]blobInfo, error) {
 	var manifestList manifestlist.ManifestList
 	if err := json.NewDecoder(bytes.NewReader(manifestBytes)).Decode(&manifestList); err != nil || len(manifestList.Manifests) == 0 {
 		return nil, fmt.Errorf("not a valid manifest list")
 	}
 	logger.With("namespace", namespace).Info("Processing manifest list")
-	return ph.processManifestList(logger, namespace, manifestList)
+	return ph.processManifestList(ctx, logger, namespace, manifestList)
 }
 
 // processManifestList processes a manifest list.
-func (ph *PrefetchHandler) processManifestList(logger *zap.SugaredLogger, namespace string, manifestList manifestlist.ManifestList) ([]blobInfo, error) {
+func (ph *PrefetchHandler) processManifestList(ctx context.Context, logger *zap.SugaredLogger, namespace string, manifestList manifestlist.ManifestList) ([]blobInfo, error) {
 	var allBlobs []blobInfo
 	for _, descriptor := range manifestList.Manifests {
 		manifestDigestHex := descriptor.Digest.Hex()
@@ -361,7 +386,7 @@ func (ph *PrefetchHandler) processManifestList(logger *zap.SugaredLogger, namesp
 		}
 		buf := &bytes.Buffer{}
 		startTime := time.Now()
-		if err := ph.clusterClient.DownloadBlob(namespace, digest, buf); err != nil {
+		if err := ph.clusterClient.DownloadBlobWithContext(ctx, namespace, digest, buf); err != nil {
 			ph.metrics.Counter("download_manifest_error").Inc(1)
 			logger.With("error", err).Error("Failed to download manifest blob")
 			continue
@@ -421,6 +446,9 @@ func (ph *PrefetchHandler) HandleV2(w http.ResponseWriter, r *http.Request) {
 
 // triggerPrefetchBlobs triggers a blob prefetch for all blobs in parallel.
 func (ph *PrefetchHandler) triggerPrefetchBlobs(input *prefetchInput) error {
+	ctx, endSpan := tracing.StartSpan(input.ctx, "prefetch.triggerBlobs")
+	defer endSpan()
+
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var errList []error
@@ -433,7 +461,7 @@ func (ph *PrefetchHandler) triggerPrefetchBlobs(input *prefetchInput) error {
 		wg.Add(1)
 		go func(digest core.Digest) {
 			defer wg.Done()
-			err := ph.clusterClient.PrefetchBlob(input.namespace, digest)
+			err := ph.clusterClient.PrefetchBlobWithContext(ctx, input.namespace, digest)
 			if err != nil {
 				mu.Lock()
 				errList = append(errList, fmt.Errorf("digest %q, namespace %q, blob prefetch failure: %w", digest, input.namespace, err))
@@ -444,7 +472,9 @@ func (ph *PrefetchHandler) triggerPrefetchBlobs(input *prefetchInput) error {
 	wg.Wait()
 
 	if len(errList) != 0 {
-		return fmt.Errorf("at least one layer could not be prefetched: %w", errors.Join(errList...))
+		err := fmt.Errorf("at least one layer could not be prefetched: %w", errors.Join(errList...))
+		tracing.RecordSpanError(ctx, err)
+		return err
 	}
 	return nil
 }

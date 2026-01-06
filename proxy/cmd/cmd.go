@@ -14,6 +14,7 @@
 package cmd
 
 import (
+	"context"
 	"flag"
 	"fmt"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/tracing"
 	"github.com/uber/kraken/lib/upstream"
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
@@ -137,6 +139,21 @@ func Run(flags *Flags, opts ...Option) {
 
 	go metrics.EmitVersion(stats)
 
+	// Initialize tracing
+	shutdownTracing, err := tracing.InitProvider(context.Background(), config.Tracing)
+	if err != nil {
+		log.Fatalf("Failed to init tracing: %s", err)
+	}
+	defer shutdownTracing(context.Background())
+
+	if config.Tracing.Enabled {
+		log.Infof("Tracing enabled: service=%s agent=%s:%d sampling=%.2f",
+			config.Tracing.ServiceName,
+			config.Tracing.AgentHost,
+			config.Tracing.AgentPort,
+			config.Tracing.SamplingRate)
+	}
+
 	if overrides.effect != nil {
 		overrides.effect()
 	}
@@ -156,7 +173,13 @@ func Run(flags *Flags, opts ...Option) {
 		log.Fatalf("Error building origin host list: %s", err)
 	}
 
-	r := blobclient.NewClientResolver(blobclient.NewProvider(blobclient.WithTLS(tls)), origins)
+	// Configure blobclient with traced transport if tracing is enabled
+	blobClientOpts := []blobclient.Option{blobclient.WithTLS(tls)}
+	if config.Tracing.Enabled {
+		blobClientOpts = append(blobClientOpts, blobclient.WithTransport(tracing.NewHTTPTransportWithTLS(tls)))
+	}
+
+	r := blobclient.NewClientResolver(blobclient.NewProvider(blobClientOpts...), origins)
 	originCluster := blobclient.NewClusterClient(r)
 
 	buildIndexes, err := config.BuildIndex.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))

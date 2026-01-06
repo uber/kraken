@@ -39,6 +39,7 @@ import (
 	"github.com/uber/kraken/lib/persistedretry/writeback"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/tracing"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/errutil"
@@ -124,6 +125,9 @@ func (s *Server) Addr() string {
 // Handler returns an http handler for the blob server.
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
+
+	// Tracing middleware should be first to capture full request lifecycle
+	r.Use(tracing.HTTPMiddleware("kraken-origin"))
 
 	r.Use(middleware.StatusCounter(s.stats))
 	r.Use(middleware.LatencyTimer(s.stats))

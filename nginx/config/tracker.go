@@ -33,6 +33,10 @@ server {
 
   location / {
     proxy_pass http://tracker;
+
+    # Propagate W3C Trace Context headers for distributed tracing
+    proxy_set_header traceparent $http_traceparent;
+    proxy_set_header tracestate $http_tracestate;
   }
 
   location ~* ^/namespace/.*/blobs/.*/metainfo$ {
@@ -43,6 +47,10 @@ server {
     proxy_cache_valid   200 5m;
     proxy_cache_valid   any 1s;
     proxy_cache_lock    on;
+
+    # Propagate W3C Trace Context headers for distributed tracing
+    proxy_set_header traceparent $http_traceparent;
+    proxy_set_header tracestate $http_tracestate;
   }
 }
 `

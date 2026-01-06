@@ -19,6 +19,7 @@ import (
 	_ "net/http/pprof" // Registers /debug/pprof endpoints in http.DefaultServeMux.
 
 	"github.com/uber/kraken/build-index/tagclient"
+	"github.com/uber/kraken/lib/tracing"
 	"github.com/uber/kraken/utils/listener"
 	"github.com/uber/kraken/utils/log"
 
@@ -56,6 +57,9 @@ func New(
 // Handler returns the HTTP handler.
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
+
+	// Tracing middleware should be first to capture full request lifecycle
+	r.Use(tracing.HTTPMiddleware("kraken-proxy"))
 
 	r.Use(middleware.StatusCounter(s.stats))
 	r.Use(middleware.LatencyTimer(s.stats))

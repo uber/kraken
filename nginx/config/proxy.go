@@ -63,6 +63,10 @@ server {
       set $hostheader "host.docker.internal";
     }
     proxy_set_header Host $hostheader:{{.}};
+
+    # Propagate W3C Trace Context headers for distributed tracing
+    proxy_set_header traceparent $http_traceparent;
+    proxy_set_header tracestate $http_tracestate;
   }
 
   location /proxy {
@@ -85,6 +89,10 @@ server {
       set $hostheader "host.docker.internal";
     }
     proxy_set_header Host $hostheader:{{.}};
+
+    # Propagate W3C Trace Context headers for distributed tracing
+    proxy_set_header traceparent $http_traceparent;
+    proxy_set_header tracestate $http_tracestate;
   }
 
   location / {
@@ -104,6 +112,10 @@ server {
       set $hostheader "host.docker.internal";
     }
     proxy_set_header Host $hostheader:{{.}};
+
+    # Propagate W3C Trace Context headers for distributed tracing
+    proxy_set_header traceparent $http_traceparent;
+    proxy_set_header tracestate $http_tracestate;
   }
 }
 {{end}}

@@ -30,6 +30,14 @@ metrics:
   m3:
     service: kraken-proxy
 
+# Distributed tracing configuration (Jaeger via OTLP)
+tracing:
+  enabled: false  # Set to true to enable tracing
+  service_name: kraken-proxy
+  agent_host: localhost  # Jaeger/OTLP collector host
+  agent_port: 4318       # OTLP HTTP port (Jaeger supports this natively)
+  sampling_rate: 1.0     # Sample 100% for testing (reduce in production)
+
 server:
   listener:
     net: unix
