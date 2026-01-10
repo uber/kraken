@@ -16,7 +16,6 @@ package cmd
 import (
 	"github.com/uber/kraken/lib/dockerregistry"
 	"github.com/uber/kraken/lib/store"
-	"github.com/uber/kraken/lib/tracing"
 	"github.com/uber/kraken/lib/upstream"
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
@@ -35,7 +34,6 @@ type Config struct {
 	Origin           upstream.ActiveConfig   `yaml:"origin"`
 	ZapLogging       zap.Config              `yaml:"zap"`
 	Metrics          metrics.Config          `yaml:"metrics"`
-	Tracing          tracing.Config          `yaml:"tracing"`
 	RegistryOverride registryoverride.Config `yaml:"registryoverride"`
 	Server           proxyserver.Config      `yaml:"server"`
 	Nginx            nginx.Config            `yaml:"nginx"`

@@ -14,7 +14,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -33,7 +32,6 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler"
-	"github.com/uber/kraken/lib/tracing"
 	"github.com/uber/kraken/localdb"
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
@@ -161,21 +159,6 @@ func Run(flags *Flags, opts ...Option) {
 	}
 
 	go metrics.EmitVersion(stats)
-
-	// Initialize tracing
-	shutdownTracing, err := tracing.InitProvider(context.Background(), config.Tracing)
-	if err != nil {
-		log.Fatalf("Failed to init tracing: %s", err)
-	}
-	defer shutdownTracing(context.Background())
-
-	if config.Tracing.Enabled {
-		log.Infof("Tracing enabled: service=%s agent=%s:%d sampling=%.2f",
-			config.Tracing.ServiceName,
-			config.Tracing.AgentHost,
-			config.Tracing.AgentPort,
-			config.Tracing.SamplingRate)
-	}
 
 	var hostname string
 	if flags.BlobServerHostName == "" {

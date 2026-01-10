@@ -14,7 +14,6 @@
 package cmd
 
 import (
-	"context"
 	"flag"
 	"fmt"
 
@@ -139,21 +138,6 @@ func Run(flags *Flags, opts ...Option) {
 
 	go metrics.EmitVersion(stats)
 
-	// Initialize tracing
-	shutdownTracing, err := tracing.InitProvider(context.Background(), config.Tracing)
-	if err != nil {
-		log.Fatalf("Failed to init tracing: %s", err)
-	}
-	defer shutdownTracing(context.Background())
-
-	if config.Tracing.Enabled {
-		log.Infof("Tracing enabled: service=%s agent=%s:%d sampling=%.2f",
-			config.Tracing.ServiceName,
-			config.Tracing.AgentHost,
-			config.Tracing.AgentPort,
-			config.Tracing.SamplingRate)
-	}
-
 	if overrides.effect != nil {
 		overrides.effect()
 	}
@@ -173,10 +157,10 @@ func Run(flags *Flags, opts ...Option) {
 		log.Fatalf("Error building origin host list: %s", err)
 	}
 
-	// Configure blobclient with traced transport if tracing is enabled
-	blobClientOpts := []blobclient.Option{blobclient.WithTLS(tls)}
-	if config.Tracing.Enabled {
-		blobClientOpts = append(blobClientOpts, blobclient.WithTransport(tracing.NewHTTPTransportWithTLS(tls)))
+	// Configure blobclient with traced transport (uses global tracer from UberFX)
+	blobClientOpts := []blobclient.Option{
+		blobclient.WithTLS(tls),
+		blobclient.WithTransport(tracing.NewHTTPTransportWithTLS(tls)),
 	}
 
 	r := blobclient.NewClientResolver(blobclient.NewProvider(blobClientOpts...), origins)
