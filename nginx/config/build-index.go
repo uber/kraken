@@ -39,6 +39,8 @@ server {
     # Propagate W3C Trace Context headers for distributed tracing
     proxy_set_header traceparent $http_traceparent;
     proxy_set_header tracestate $http_tracestate;
+    # Jaeger debug header for forcing trace sampling
+    proxy_set_header jaeger-debug-id $http_jaeger_debug_id;
   }
 
   location /tags {
@@ -55,6 +57,8 @@ server {
     # Propagate W3C Trace Context headers for distributed tracing
     proxy_set_header traceparent $http_traceparent;
     proxy_set_header tracestate $http_tracestate;
+    # Jaeger debug header for forcing trace sampling
+    proxy_set_header jaeger-debug-id $http_jaeger_debug_id;
   }
 
   location ~* ^/repositories/.*/tags$ {
@@ -68,6 +72,8 @@ server {
     # Propagate W3C Trace Context headers for distributed tracing
     proxy_set_header traceparent $http_traceparent;
     proxy_set_header tracestate $http_tracestate;
+    # Jaeger debug header for forcing trace sampling
+    proxy_set_header jaeger-debug-id $http_jaeger_debug_id;
   }
 
   location /list {
@@ -84,6 +90,8 @@ server {
     # Propagate W3C Trace Context headers for distributed tracing
     proxy_set_header traceparent $http_traceparent;
     proxy_set_header tracestate $http_tracestate;
+    # Jaeger debug header for forcing trace sampling
+    proxy_set_header jaeger-debug-id $http_jaeger_debug_id;
   }
 }
 `
