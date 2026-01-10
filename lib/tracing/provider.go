@@ -19,7 +19,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc" // Changed from otlptracehttp
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -43,9 +43,9 @@ func InitProvider(ctx context.Context, cfg Config) (func(context.Context) error,
 
 	// Create OTLP HTTP exporter (Jaeger supports OTLP on port 4318)
 	endpoint := fmt.Sprintf("%s:%d", cfg.AgentHost, cfg.AgentPort)
-	client := otlptracehttp.NewClient(
-		otlptracehttp.WithEndpoint(endpoint),
-		otlptracehttp.WithInsecure(), // Use HTTP instead of HTTPS
+	client := otlptracegrpc.NewClient(
+		otlptracegrpc.WithEndpoint(endpoint),
+		otlptracegrpc.WithInsecure(), // Use HTTP instead of HTTPS
 	)
 
 	exporter, err := otlptrace.New(ctx, client)
@@ -83,4 +83,3 @@ func InitProvider(ctx context.Context, cfg Config) (func(context.Context) error,
 
 	return tp.Shutdown, nil
 }
-
