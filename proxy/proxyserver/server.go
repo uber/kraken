@@ -28,6 +28,7 @@ import (
 	"github.com/uber/kraken/lib/middleware"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/handler"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -72,6 +73,7 @@ func traceHeadersMiddleware(next http.Handler) http.Handler {
 // traceSpanMiddleware logs span context AFTER otelhttp creates the span.
 func traceSpanMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check span from otelhttp
 		spanCtx := trace.SpanContextFromContext(r.Context())
 		log.With(
 			"path", r.URL.Path,
@@ -81,7 +83,24 @@ func traceSpanMiddleware(next http.Handler) http.Handler {
 			"is_valid", spanCtx.IsValid(),
 			"is_remote", spanCtx.IsRemote(),
 		).Info("[TRACE DEBUG] Span context from otelhttp")
-		next.ServeHTTP(w, r)
+
+		// Manually test creating a span with the global tracer
+		tp := otel.GetTracerProvider()
+		tracer := tp.Tracer("kraken-proxy-debug")
+		ctx, testSpan := tracer.Start(r.Context(), "debug-test-span")
+		testSpanCtx := testSpan.SpanContext()
+		log.With(
+			"tracer_provider_type", fmt.Sprintf("%T", tp),
+			"tracer_type", fmt.Sprintf("%T", tracer),
+			"test_trace_id", testSpanCtx.TraceID().String(),
+			"test_span_id", testSpanCtx.SpanID().String(),
+			"test_is_sampled", testSpanCtx.IsSampled(),
+			"test_is_valid", testSpanCtx.IsValid(),
+			"test_is_recording", testSpan.IsRecording(),
+		).Info("[TRACE DEBUG] Manual span creation test")
+		testSpan.End()
+
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
