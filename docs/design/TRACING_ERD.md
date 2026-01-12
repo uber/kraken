@@ -33,7 +33,7 @@ This document outlines the design for implementing distributed tracing in the Kr
 - Improved debugging of cross-component failures
 - Operational insights into cluster behavior
 
-**Scope Note:** P2P communication (dispatcher, peer connections, piece exchanges) is explicitly **out of scope** for this project. Tracing will cover HTTP API endpoints and service-to-service calls only.
+**Scope Note:** P2P communication (dispatcher, peer connections, piece exchanges) will not be implemented in the initial phase. Options for P2P tracing are documented in this ERD for future consideration. Initial implementation covers HTTP API endpoints and service-to-service calls only.
 
 ---
 
@@ -55,12 +55,10 @@ This document outlines the design for implementing distributed tracing in the Kr
 
 | ID | Non-Goal | Rationale |
 |----|----------|-----------|
-| NG1 | **Tracing P2P communication** | Explicit requirement - P2P layer is out of scope |
-| NG2 | Tracing individual piece exchanges | Too granular; would create excessive overhead |
-| NG3 | Tracing peer connections or dispatcher internals | Part of P2P layer - excluded |
-| NG4 | Real-time trace visualization UI | Will use existing Jaeger/SigNoz UIs |
-| NG5 | Custom trace storage backend | Leverage existing infrastructure |
-| NG6 | Tracing internal goroutine scheduling | Not actionable; adds noise |
+| NG1 | **Tracing P2P communication (initial implementation)** | P2P layer uses raw TCP with custom protobuf. Options are documented in this ERD but not implemented in the initial phase. |
+| NG2 | Building a custom tracing UI | Will leverage existing Jaeger UI already deployed at Uber |
+| NG3 | Custom trace storage backend | Will use existing Jaeger/observability infrastructure; no new storage systems |
+| NG4 | Tracing internal goroutine scheduling | Not actionable; adds noise |
 
 ---
 
