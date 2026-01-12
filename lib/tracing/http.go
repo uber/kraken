@@ -15,14 +15,47 @@ package tracing
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net/http"
+	"sync"
 
+	"github.com/uber/kraken/utils/log"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 )
+
+var debugTracerOnce sync.Once
+
+// debugGlobalTracer logs information about the global tracer provider.
+// Called once when HTTPMiddleware is first used.
+func debugGlobalTracer(serviceName string) {
+	debugTracerOnce.Do(func() {
+		tp := otel.GetTracerProvider()
+		tpType := fmt.Sprintf("%T", tp)
+
+		// Get a tracer to check if it's functional
+		tracer := tp.Tracer(serviceName)
+		tracerType := fmt.Sprintf("%T", tracer)
+
+		log.With(
+			"tracer_provider_type", tpType,
+			"tracer_type", tracerType,
+			"service_name", serviceName,
+		).Info("[TRACE DEBUG] Global TracerProvider info")
+
+		// Check if it's a noop tracer (means jaegerfx didn't set it up)
+		if tpType == "*trace.noopTracerProvider" || tpType == "trace.noopTracerProvider" {
+			log.Warn("[TRACE DEBUG] WARNING: Using no-op tracer! jaegerfx may not have initialized the global tracer.")
+		}
+	})
+}
 
 // HTTPMiddleware returns a middleware that traces incoming HTTP requests.
 // The serviceName is used to identify spans from this service in Jaeger.
 func HTTPMiddleware(serviceName string) func(http.Handler) http.Handler {
+	// Debug: log tracer provider info once
+	debugGlobalTracer(serviceName)
+
 	return func(next http.Handler) http.Handler {
 		return otelhttp.NewHandler(next, serviceName,
 			otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
@@ -54,4 +87,3 @@ func NewHTTPClient() *http.Client {
 		Transport: NewHTTPTransport(nil),
 	}
 }
-
