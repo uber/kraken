@@ -48,6 +48,7 @@ import (
 	"github.com/uber/kraken/utils/listener"
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/stringset"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const _operation = "operation"
@@ -122,12 +123,48 @@ func (s *Server) Addr() string {
 	return s.addr
 }
 
+// traceHeadersMiddleware logs incoming trace headers BEFORE otelhttp processes them.
+func traceHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.With(
+			"path", r.URL.Path,
+			"traceparent", r.Header.Get("traceparent"),
+			"tracestate", r.Header.Get("tracestate"),
+			"jaeger-debug-id", r.Header.Get("jaeger-debug-id"),
+			"uber-trace-id", r.Header.Get("uber-trace-id"),
+		).Info("[TRACE DEBUG] Incoming request headers")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// traceSpanMiddleware logs span context AFTER otelhttp creates the span.
+func traceSpanMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		spanCtx := trace.SpanContextFromContext(r.Context())
+		log.With(
+			"path", r.URL.Path,
+			"trace_id", spanCtx.TraceID().String(),
+			"span_id", spanCtx.SpanID().String(),
+			"is_sampled", spanCtx.IsSampled(),
+			"is_valid", spanCtx.IsValid(),
+			"is_remote", spanCtx.IsRemote(),
+		).Info("[TRACE DEBUG] Span context from otelhttp")
+		next.ServeHTTP(w, r)
+	})
+}
+
 // Handler returns an http handler for the blob server.
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
 
+	// Debug: log incoming trace headers (REMOVE AFTER DEBUGGING)
+	r.Use(traceHeadersMiddleware)
+
 	// Tracing middleware should be first to capture full request lifecycle
 	r.Use(tracing.HTTPMiddleware("kraken-origin"))
+
+	// Debug: log span context after otelhttp (REMOVE AFTER DEBUGGING)
+	r.Use(traceSpanMiddleware)
 
 	r.Use(middleware.StatusCounter(s.stats))
 	r.Use(middleware.LatencyTimer(s.stats))
