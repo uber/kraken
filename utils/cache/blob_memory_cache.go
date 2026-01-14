@@ -123,7 +123,7 @@ func (c *BlobMemoryCache) Remove(name string) {
 func (c *BlobMemoryCache) decrementTotalSize(size uint64, name string) {
 	if size > c.totalSize {
 		log.With("entry", name, "entry_size", size,
-			"totalSize", c.totalSize).Error("totalSize underflow detected")
+			"totalSize", c.totalSize).Debug("totalSize underflow detected")
 		c.totalSize = 0
 		return
 	}
