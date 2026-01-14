@@ -78,9 +78,9 @@ func TestTorrentGetPieceReaderConcurrent(t *testing.T) {
 			end := start + int(tor.PieceLength(i))
 			r, err := tor.GetPieceReader(i)
 			require.NoError(err)
-			t.Cleanup(func() {
+			defer func() {
 				require.NoError(r.Close())
-			})
+			}()
 			result, err := io.ReadAll(r)
 			require.NoError(err)
 			require.Equal(blob.Content[start:end], result)
