@@ -202,9 +202,9 @@ func TestTorrentWriteSamePieceConcurrent(t *testing.T) {
 					require.Equal(errPieceNotComplete, err)
 					continue
 				}
-				t.Cleanup(func() {
+				defer func() {
 					require.NoError(r.Close())
-				})
+				}()
 
 				result, err := io.ReadAll(r)
 				require.NoError(err)
