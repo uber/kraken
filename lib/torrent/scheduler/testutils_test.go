@@ -160,11 +160,9 @@ func (p *testPeer) checkTorrent(t *testing.T, namespace string, blob *core.BlobF
 	for i := 0; i < tor.NumPieces(); i++ {
 		pr, err := tor.GetPieceReader(i)
 		require.NoError(err)
-		t.Cleanup(func() {
-			require.NoError(pr.Close())
-		})
 		pieceData, err := io.ReadAll(pr)
 		require.NoError(err)
+		require.NoError(pr.Close())
 		copy(cursor, pieceData)
 		cursor = cursor[tor.PieceLength(i):]
 	}
