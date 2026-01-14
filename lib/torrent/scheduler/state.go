@@ -111,7 +111,9 @@ func (s *state) removeTorrent(h core.InfoHash, err error) {
 			errc <- err
 		}
 		s.sched.netevents.Produce(networkevent.TorrentCancelledEvent(h, s.sched.pctx.PeerID))
-		s.sched.torrentArchive.DeleteTorrent(ctrl.dispatcher.Digest())
+		if err := s.sched.torrentArchive.DeleteTorrent(ctrl.dispatcher.Digest()); err != nil {
+			s.sched.log().Errorf("Error deleting torrent from archive: %s", err)
+		}
 	}
 	delete(s.torrentControls, h)
 }

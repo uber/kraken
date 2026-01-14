@@ -35,7 +35,9 @@ type uploadStore struct {
 
 func newUploadStore(dir string, readPartSize, writePartSize int) (*uploadStore, error) {
 	// Always wipe upload directory on startup.
-	os.RemoveAll(dir)
+	if err := os.RemoveAll(dir); err != nil {
+		log.Errorf("Error removing upload directory: %s", err)
+	}
 
 	if err := os.MkdirAll(dir, 0775); err != nil {
 		return nil, fmt.Errorf("mkdir: %s", err)

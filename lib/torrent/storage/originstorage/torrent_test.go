@@ -36,7 +36,7 @@ func TestTorrentCreate(t *testing.T) {
 	blob := core.SizedBlobFixture(7, 2)
 	mi := blob.MetaInfo
 
-	cas.CreateCacheFile(mi.Digest().Hex(), bytes.NewReader(blob.Content))
+	require.NoError(cas.CreateCacheFile(mi.Digest().Hex(), bytes.NewReader(blob.Content)))
 
 	tor, err := NewTorrent(cas, mi)
 	require.NoError(err)
@@ -64,7 +64,7 @@ func TestTorrentGetPieceReaderConcurrent(t *testing.T) {
 	blob := core.SizedBlobFixture(7, 2)
 	mi := blob.MetaInfo
 
-	cas.CreateCacheFile(mi.Digest().Hex(), bytes.NewReader(blob.Content))
+	require.NoError(cas.CreateCacheFile(mi.Digest().Hex(), bytes.NewReader(blob.Content)))
 
 	tor, err := NewTorrent(cas, mi)
 	require.NoError(err)
@@ -78,7 +78,9 @@ func TestTorrentGetPieceReaderConcurrent(t *testing.T) {
 			end := start + int(tor.PieceLength(i))
 			r, err := tor.GetPieceReader(i)
 			require.NoError(err)
-			defer r.Close()
+			t.Cleanup(func() {
+				require.NoError(r.Close())
+			})
 			result, err := io.ReadAll(r)
 			require.NoError(err)
 			require.Equal(blob.Content[start:end], result)
@@ -97,7 +99,7 @@ func TestTorrentWritePieceError(t *testing.T) {
 	blob := core.SizedBlobFixture(7, 2)
 	mi := blob.MetaInfo
 
-	cas.CreateCacheFile(mi.Digest().Hex(), bytes.NewReader(blob.Content))
+	require.NoError(cas.CreateCacheFile(mi.Digest().Hex(), bytes.NewReader(blob.Content)))
 
 	tor, err := NewTorrent(cas, mi)
 	require.NoError(err)

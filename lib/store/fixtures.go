@@ -27,7 +27,11 @@ func tempdir(cleanup *testutil.Cleanup, name string) string {
 	if err != nil {
 		panic(err)
 	}
-	cleanup.Add(func() { os.RemoveAll(d) })
+	cleanup.Add(func() {
+		if err := os.RemoveAll(d); err != nil {
+			panic(err)
+		}
+	})
 	return d
 }
 

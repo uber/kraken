@@ -92,15 +92,21 @@ func TestCAStoreInitVolumesAfterChangingVolumes(t *testing.T) {
 
 	volume1, err := os.MkdirTemp("/tmp", "volume")
 	require.NoError(err)
-	defer os.RemoveAll(volume1)
+	t.Cleanup(func() {
+		require.NoError(os.RemoveAll(volume1))
+	})
 
 	volume2, err := os.MkdirTemp("/tmp", "volume")
 	require.NoError(err)
-	defer os.RemoveAll(volume2)
+	t.Cleanup(func() {
+		require.NoError(os.RemoveAll(volume2))
+	})
 
 	volume3, err := os.MkdirTemp("/tmp", "volume")
 	require.NoError(err)
-	defer os.RemoveAll(volume3)
+	t.Cleanup(func() {
+		require.NoError(os.RemoveAll(volume3))
+	})
 
 	config.Volumes = []Volume{
 		{Location: volume1, Weight: 100},
@@ -115,7 +121,9 @@ func TestCAStoreInitVolumesAfterChangingVolumes(t *testing.T) {
 
 	volume4, err := os.MkdirTemp("/tmp", "volume")
 	require.NoError(err)
-	defer os.RemoveAll(volume3)
+	t.Cleanup(func() {
+		require.NoError(os.RemoveAll(volume4))
+	})
 
 	config.Volumes = append(config.Volumes, Volume{Location: volume4, Weight: 100})
 

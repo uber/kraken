@@ -24,6 +24,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/storage"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/testutil"
 )
 
@@ -49,8 +50,8 @@ func PipeFixture(
 	defer cleanup.Recover()
 
 	nc1, nc2 := net.Pipe()
-	cleanup.Add(func() { nc1.Close() })
-	cleanup.Add(func() { nc2.Close() })
+	cleanup.Add(func() { closers.Close(nc1) })
+	cleanup.Add(func() { closers.Close(nc2) })
 
 	var err error
 

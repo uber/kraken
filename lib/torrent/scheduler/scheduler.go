@@ -33,6 +33,7 @@ import (
 	"github.com/uber/kraken/lib/torrent/scheduler/torrentlog"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/tracker/announceclient"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
 )
 
@@ -219,7 +220,7 @@ func (s *scheduler) Stop() {
 		s.log().Info("Stopping scheduler...")
 
 		close(s.done)
-		s.listener.Close()
+		closers.Close(s.listener)
 		s.eventLoop.send(shutdownEvent{})
 
 		// Waits for all loops to stop.
@@ -327,7 +328,7 @@ func (s *scheduler) listenLoop() {
 			pc, err := s.handshaker.Accept(nc)
 			if err != nil {
 				s.log().Infof("Error accepting handshake, closing net conn: %s", err)
-				nc.Close()
+				closers.Close(nc)
 				return
 			}
 			s.eventLoop.send(incomingHandshakeEvent{pc})

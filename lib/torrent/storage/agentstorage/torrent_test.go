@@ -106,7 +106,9 @@ func TestTorrentWriteComplete(t *testing.T) {
 
 	r, err := tor.GetPieceReader(0)
 	require.NoError(err)
-	defer r.Close()
+	t.Cleanup(func() {
+		require.NoError(r.Close())
+	})
 	result, err := io.ReadAll(r)
 	require.NoError(err)
 	require.Equal(blob.Content, result)
@@ -200,7 +202,9 @@ func TestTorrentWriteSamePieceConcurrent(t *testing.T) {
 					require.Equal(errPieceNotComplete, err)
 					continue
 				}
-				defer r.Close()
+				t.Cleanup(func() {
+					require.NoError(r.Close())
+				})
 
 				result, err := io.ReadAll(r)
 				require.NoError(err)

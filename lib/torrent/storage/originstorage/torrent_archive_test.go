@@ -51,7 +51,7 @@ func newArchiveMocks(t *testing.T, namespace string) (*archiveMocks, func()) {
 
 	backendClient := mockbackend.NewMockClient(ctrl)
 	backends := backend.ManagerFixture()
-	backends.Register(namespace, backendClient, false)
+	require.NoError(t, backends.Register(namespace, backendClient, false))
 
 	blobRefresher := blobrefresh.New(
 		blobrefresh.Config{}, tally.NoopScope, cas, backends, metainfogen.Fixture(cas, pieceLength))
