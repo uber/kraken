@@ -32,7 +32,9 @@ func TestHandshakerSetsConnFieldsProperly(t *testing.T) {
 
 	l1, err := net.Listen("tcp", "localhost:0")
 	require.NoError(err)
-	defer l1.Close()
+	t.Cleanup(func() {
+		require.NoError(l1.Close())
+	})
 
 	config := ConfigFixture()
 	namespace := core.TagFixture()
@@ -93,7 +95,9 @@ func TestHandshakerHandlesEmptyBitfield(t *testing.T) {
 
 	l1, err := net.Listen("tcp", "localhost:0")
 	require.NoError(err)
-	defer l1.Close()
+	t.Cleanup(func() {
+		require.NoError(l1.Close())
+	})
 
 	config := ConfigFixture()
 	h1 := HandshakerFixture(config)

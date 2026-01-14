@@ -51,7 +51,11 @@ func NewMockFileReadWriter(content []byte) (*MockFileReadWriter, func()) {
 		panic(err)
 	}
 	name := tmp.Name()
-	cleanup.Add(func() { os.Remove(name) })
+	cleanup.Add(func() {
+		if err := os.Remove(name); err != nil {
+			panic(err)
+		}
+	})
 
 	if _, err := tmp.Write(content); err != nil {
 		panic(err)

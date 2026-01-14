@@ -14,21 +14,16 @@
 package scheduler
 
 import (
-	"flag"
 	"io"
 	"net"
-	"os"
 	"reflect"
 	"strconv"
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
-
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/hashring"
 	"github.com/uber/kraken/lib/hostlist"
@@ -47,25 +42,6 @@ import (
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/testutil"
 )
-
-const testTempDir = "/tmp/kraken_scheduler"
-
-func Init() {
-	os.Mkdir(testTempDir, 0775)
-
-	debug := flag.Bool("scheduler.debug", false, "log all Scheduler debugging output")
-	flag.Parse()
-
-	zapConfig := zap.NewProductionConfig()
-	zapConfig.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
-	zapConfig.Encoding = "console"
-
-	if !*debug {
-		zapConfig.OutputPaths = []string{}
-	}
-
-	log.ConfigureLogger(zapConfig)
-}
 
 func configFixture() Config {
 	return Config{
@@ -184,9 +160,9 @@ func (p *testPeer) checkTorrent(t *testing.T, namespace string, blob *core.BlobF
 	for i := 0; i < tor.NumPieces(); i++ {
 		pr, err := tor.GetPieceReader(i)
 		require.NoError(err)
-		defer pr.Close()
 		pieceData, err := io.ReadAll(pr)
 		require.NoError(err)
+		require.NoError(pr.Close())
 		copy(cursor, pieceData)
 		cursor = cursor[tor.PieceLength(i):]
 	}

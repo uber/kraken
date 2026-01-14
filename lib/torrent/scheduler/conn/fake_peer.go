@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
 
 	"github.com/willf/bitset"
@@ -72,7 +73,7 @@ func (p *FakePeer) PeerInfo() *core.PeerInfo {
 
 // Close shuts down the peer.
 func (p *FakePeer) Close() {
-	p.listener.Close()
+	closers.Close(p.listener)
 }
 
 func (p *FakePeer) handshakeConns() error {

@@ -38,7 +38,11 @@ func fileOpFixture(clk clock.Clock) (base.FileState, base.FileOp, func()) {
 	if err != nil {
 		panic(err)
 	}
-	cleanup.Add(func() { os.RemoveAll(dir) })
+	cleanup.Add(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			panic(err)
+		}
+	})
 
 	state := base.NewFileState(dir)
 

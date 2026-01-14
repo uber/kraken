@@ -26,6 +26,7 @@ import (
 	"github.com/uber/kraken/lib/torrent/scheduler/dispatch/piecerequest"
 	"github.com/uber/kraken/lib/torrent/scheduler/torrentlog"
 	"github.com/uber/kraken/lib/torrent/storage"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/syncutil"
 
 	"github.com/andres-erbsen/clock"
@@ -235,7 +236,11 @@ func (d *Dispatcher) AddPeer(
 	if err != nil {
 		return err
 	}
-	go d.maybeRequestMorePieces(p)
+	go func() {
+		if _, err := d.maybeRequestMorePieces(p); err != nil {
+			d.log("peer", p).Errorf("Error requesting pieces: %s", err)
+		}
+	}()
 	go d.feed(p)
 	return nil
 }
@@ -320,7 +325,9 @@ func (d *Dispatcher) complete() {
 		} else {
 			// Notify in-progress peers that we have completed the torrent and
 			// all pieces are available.
-			p.messages.Send(conn.NewCompleteMessage())
+			if err := p.messages.Send(conn.NewCompleteMessage()); err != nil {
+				d.log("peer", p).Errorf("Error sending complete message: %s", err)
+			}
 		}
 		return true
 	})
@@ -440,7 +447,9 @@ func (d *Dispatcher) feed(p *peer) {
 			d.log().Errorf("Error dispatching message: %s", err)
 		}
 	}
-	d.removePeer(p)
+	if err := d.removePeer(p); err != nil {
+		d.log().Errorf("Error removing peer: %s", err)
+	}
 	d.events.PeerRemoved(p.id, d.torrent.InfoHash())
 }
 
@@ -483,7 +492,9 @@ func (d *Dispatcher) handleAnnouncePiece(p *peer, msg *p2p.AnnouncePieceMessage)
 	p.bitfield.Set(uint(i), true)
 	d.numPeersByPiece.Increment(int(i))
 
-	d.maybeRequestMorePieces(p)
+	if _, err := d.maybeRequestMorePieces(p); err != nil {
+		d.log("peer", p).Errorf("Error requesting more pieces: %s", err)
+	}
 }
 
 func (d *Dispatcher) isFullPiece(i, offset, length int) bool {
@@ -496,14 +507,18 @@ func (d *Dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
 		d.log("peer", p, "piece", i).Error("Rejecting piece request: chunk not supported")
-		p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, errChunkNotSupported))
+		if err := p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, errChunkNotSupported)); err != nil {
+			d.log("peer", p, "piece", i).Errorf("Error sending error message: %s", err)
+		}
 		return
 	}
 
 	payload, err := d.torrent.GetPieceReader(i)
 	if err != nil {
 		d.log("peer", p, "piece", i).Errorf("Error getting reader for requested piece: %s", err)
-		p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err))
+		if err := p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err)); err != nil {
+			d.log("peer", p, "piece", i).Errorf("Error sending error message: %s", err)
+		}
 		return
 	}
 
@@ -521,7 +536,7 @@ func (d *Dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 func (d *Dispatcher) handlePiecePayload(
 	p *peer, msg *p2p.PiecePayloadMessage, payload storage.PieceReader) {
 
-	defer payload.Close()
+	defer closers.Close(payload)
 
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
@@ -551,7 +566,9 @@ func (d *Dispatcher) handlePiecePayload(
 
 	d.pieceRequestManager.Clear(i)
 
-	d.maybeRequestMorePieces(p)
+	if _, err := d.maybeRequestMorePieces(p); err != nil {
+		d.log("peer", p).Errorf("Error requesting more pieces: %s", err)
+	}
 
 	d.peers.Range(func(k, v interface{}) bool {
 		if k.(core.PeerID) == p.id {
@@ -559,7 +576,9 @@ func (d *Dispatcher) handlePiecePayload(
 		}
 		pp := v.(*peer)
 
-		pp.messages.Send(conn.NewAnnouncePieceMessage(i))
+		if err := pp.messages.Send(conn.NewAnnouncePieceMessage(i)); err != nil {
+			d.log("peer", pp).Errorf("Error sending announce piece message: %s", err)
+		}
 
 		return true
 	})
@@ -581,7 +600,9 @@ func (d *Dispatcher) handleComplete(p *peer) {
 		p.messages.Close()
 	} else {
 		p.bitfield.SetAll(true)
-		d.maybeRequestMorePieces(p)
+		if _, err := d.maybeRequestMorePieces(p); err != nil {
+			d.log("peer", p).Errorf("Error requesting more pieces: %s", err)
+		}
 	}
 }
 

@@ -149,7 +149,8 @@ func TestDispatcherSendUniquePieceRequestsWithinLimit(t *testing.T) {
 			defer wg.Done()
 			p, err := d.addPeer(core.PeerIDFixture(), peerBitfield, newMockMessages())
 			require.NoError(err)
-			d.maybeRequestMorePieces(p)
+			_, err = d.maybeRequestMorePieces(p)
+			require.NoError(err)
 			for i, n := range numRequestsPerPiece(p.messages) {
 				require.True(n <= 1)
 				mu.Lock()
@@ -190,7 +191,8 @@ func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 	// p1 has both pieces and sends requests for both.
 	p1, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(true, true), newMockMessages())
 	require.NoError(err)
-	d.maybeRequestMorePieces(p1)
+	_, err = d.maybeRequestMorePieces(p1)
+	require.NoError(err)
 	require.Equal(map[int]int{
 		0: 1,
 		1: 1,
@@ -200,14 +202,16 @@ func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 	p2, err := d.addPeer(
 		core.PeerIDFixture(), bitsetutil.FromBools(true, false), newMockMessages())
 	require.NoError(err)
-	d.maybeRequestMorePieces(p2)
+	_, err = d.maybeRequestMorePieces(p2)
+	require.NoError(err)
 	require.Equal(map[int]int{}, numRequestsPerPiece(p2.messages))
 
 	// p3 has piece 1 and sends no piece requests.
 	p3, err := d.addPeer(
 		core.PeerIDFixture(), bitsetutil.FromBools(false, true), newMockMessages())
 	require.NoError(err)
-	d.maybeRequestMorePieces(p3)
+	_, err = d.maybeRequestMorePieces(p3)
+	require.NoError(err)
 	require.Equal(map[int]int{}, numRequestsPerPiece(p3.messages))
 
 	clk.Add(d.pieceRequestTimeout + 1)
@@ -250,7 +254,8 @@ func TestDispatcherSendErrorsMarksPieceRequestsUnsent(t *testing.T) {
 	p1.messages.Close()
 
 	// Send should fail since p1 messages are closed.
-	d.maybeRequestMorePieces(p1)
+	_, err = d.maybeRequestMorePieces(p1)
+	require.Error(err)
 
 	require.Equal(map[int]int{}, numRequestsPerPiece(p1.messages))
 
@@ -258,7 +263,8 @@ func TestDispatcherSendErrorsMarksPieceRequestsUnsent(t *testing.T) {
 	require.NoError(err)
 
 	// Send should succeed since pending requests were marked unsent.
-	d.maybeRequestMorePieces(p2)
+	_, err = d.maybeRequestMorePieces(p2)
+	require.NoError(err)
 
 	require.Equal(map[int]int{
 		0: 1,
@@ -305,14 +311,16 @@ func TestDispatcherEndgame(t *testing.T) {
 	p1, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(true), newMockMessages())
 	require.NoError(err)
 
-	d.maybeRequestMorePieces(p1)
+	_, err = d.maybeRequestMorePieces(p1)
+	require.NoError(err)
 	require.Equal(map[int]int{0: 1}, numRequestsPerPiece(p1.messages))
 
 	p2, err := d.addPeer(core.PeerIDFixture(), bitsetutil.FromBools(true), newMockMessages())
 	require.NoError(err)
 
 	// Should send duplicate request for piece 0 since we're in endgame.
-	d.maybeRequestMorePieces(p2)
+	_, err = d.maybeRequestMorePieces(p2)
+	require.NoError(err)
 	require.Equal(map[int]int{0: 1}, numRequestsPerPiece(p2.messages))
 }
 
@@ -436,12 +444,12 @@ func TestDispatcherPeerPieceCounts(t *testing.T) {
 	require.Equal(0, d.numPeersByPiece.Get(1))
 	require.Equal(0, d.numPeersByPiece.Get(2))
 
-	d.dispatch(p, conn.NewAnnouncePieceMessage(2))
+	require.NoError(d.dispatch(p, conn.NewAnnouncePieceMessage(2)))
 
 	require.Equal(1, d.numPeersByPiece.Get(2))
 
-	d.dispatch(p, conn.NewAnnouncePieceMessage(0))
-	d.dispatch(p, conn.NewAnnouncePieceMessage(0))
+	require.NoError(d.dispatch(p, conn.NewAnnouncePieceMessage(0)))
+	require.NoError(d.dispatch(p, conn.NewAnnouncePieceMessage(0)))
 
 	require.Equal(2, d.numPeersByPiece.Get(0))
 
@@ -466,7 +474,7 @@ func TestDispatcherPeerPieceCounts(t *testing.T) {
 	require.Equal(1, d.numPeersByPiece.Get(1))
 	require.Equal(3, d.numPeersByPiece.Get(2))
 
-	d.removePeer(p)
+	require.NoError(d.removePeer(p))
 
 	require.Equal(3, d.numPeersByPiece.Get(0))
 	require.Equal(1, d.numPeersByPiece.Get(1))
