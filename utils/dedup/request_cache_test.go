@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/andres-erbsen/clock"
@@ -35,7 +36,7 @@ func noop() error {
 func TestRequestCacheStartPreventsDuplicates(t *testing.T) {
 	require := require.New(t)
 
-	d := NewRequestCache(RequestCacheConfig{}, clock.New())
+	d := NewRequestCache(RequestCacheConfig{}, clock.New(), tally.NoopScope)
 
 	id := "foo"
 
@@ -46,7 +47,7 @@ func TestRequestCacheStartPreventsDuplicates(t *testing.T) {
 func TestRequestCacheStartClearsPendingWhenFuncDone(t *testing.T) {
 	require := require.New(t)
 
-	d := NewRequestCache(RequestCacheConfig{}, clock.New())
+	d := NewRequestCache(RequestCacheConfig{}, clock.New(), tally.NoopScope)
 
 	id := "foo"
 
@@ -60,7 +61,7 @@ func TestRequestCacheCachesErrors(t *testing.T) {
 	require := require.New(t)
 
 	clk := clock.NewMock()
-	d := NewRequestCache(RequestCacheConfig{}, clk)
+	d := NewRequestCache(RequestCacheConfig{}, clk, tally.NoopScope)
 
 	id := "foo"
 	err := errors.New("some error")
@@ -78,7 +79,7 @@ func TestRequestCacheExpiresErrors(t *testing.T) {
 		ErrorTTL: 5 * time.Second,
 	}
 	clk := clock.NewMock()
-	d := NewRequestCache(config, clk)
+	d := NewRequestCache(config, clk, tally.NoopScope)
 
 	id := "foo"
 	err := errors.New("some error")
@@ -101,7 +102,7 @@ func TestRequestCacheExpiresNotFoundErrorsIndependently(t *testing.T) {
 		NotFoundTTL: 30 * time.Second,
 	}
 	clk := clock.NewMock()
-	d := NewRequestCache(config, clk)
+	d := NewRequestCache(config, clk, tally.NoopScope)
 
 	id := "foo"
 	errNotFound := errors.New("error not found")
@@ -129,7 +130,7 @@ func TestRequestCacheStartCleansUpCachedErrors(t *testing.T) {
 		CleanupInterval: 10 * time.Second,
 	}
 	clk := clock.NewMock()
-	d := NewRequestCache(config, clk)
+	d := NewRequestCache(config, clk, tally.NoopScope)
 
 	err := errors.New("some error")
 
@@ -160,7 +161,7 @@ func TestRequestCacheLimitsNumberOfWorkers(t *testing.T) {
 		NumWorkers:  1,
 		BusyTimeout: 100 * time.Millisecond,
 	}
-	d := NewRequestCache(config, clock.New())
+	d := NewRequestCache(config, clock.New(), tally.NoopScope)
 
 	exit := make(chan bool)
 

@@ -212,7 +212,9 @@ func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Reques
 		log.With("error", err).Error("Failed to decode request body")
 		return nil, true
 	}
-	logger := log.With("trace_id", reqBody.TraceId)
+	logger := log.
+		With("trace_id", reqBody.TraceId).
+		With("image tag", reqBody.Tag)
 
 	namespace, tag, err := ph.tagParser.ParseTag(reqBody.Tag)
 	if err != nil {
