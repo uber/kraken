@@ -214,7 +214,7 @@ func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Reques
 	}
 	logger := log.
 		With("trace_id", reqBody.TraceId).
-		With("image tag", reqBody.Tag)
+		With("image_tag", reqBody.Tag)
 
 	namespace, tag, err := ph.tagParser.ParseTag(reqBody.Tag)
 	if err != nil {

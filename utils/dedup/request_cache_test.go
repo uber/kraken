@@ -175,3 +175,52 @@ func TestRequestCacheLimitsNumberOfWorkers(t *testing.T) {
 	exit <- true
 	require.NoError(d.Start("b", noop))
 }
+
+func TestRequestCacheEmitsNumRequests(t *testing.T) {
+	require := require.New(t)
+
+	testStats := tally.NewTestScope("", map[string]string{
+		"module": "test",
+	})
+	assertGauge := func(wantNumRequests float64) {
+		require.Eventually(func() bool {
+			numRequestsGauge, ok := testStats.Snapshot().Gauges()["num_requests+module=dedup"]
+			if !ok {
+				return false
+			}
+			return wantNumRequests == numRequestsGauge.Value()
+		}, time.Second, 10*time.Millisecond)
+	}
+
+	d := NewRequestCache(RequestCacheConfig{}, clock.New(), testStats)
+	assertGauge(0)
+
+	exit := make(chan bool)
+
+	require.NoError(d.Start("a", func() error {
+		<-exit
+		return nil
+	}))
+	assertGauge(1)
+
+	require.NoError(d.Start("b", func() error {
+		<-exit
+		return nil
+	}))
+	assertGauge(2)
+
+	exit <- true
+	assertGauge(1)
+
+	require.NoError(d.Start("c", func() error {
+		<-exit
+		return nil
+	}))
+	assertGauge(2)
+
+	exit <- true
+	assertGauge(1)
+
+	exit <- true
+	assertGauge(0)
+}
