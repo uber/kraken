@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/andres-erbsen/clock"
+	"github.com/uber-go/tally"
 )
 
 // RequestCacheConfig defines RequestCache configuration.
@@ -79,6 +80,7 @@ type ErrorMatcher func(error) bool
 type RequestCache struct {
 	config RequestCacheConfig
 	clk    clock.Clock
+	stats  tally.Scope
 
 	mu         sync.Mutex // Protects access to the following fields:
 	pending    map[string]bool
@@ -90,11 +92,17 @@ type RequestCache struct {
 }
 
 // NewRequestCache creates a new RequestCache.
-func NewRequestCache(config RequestCacheConfig, clk clock.Clock) *RequestCache {
+func NewRequestCache(config RequestCacheConfig, clk clock.Clock, stats tally.Scope) *RequestCache {
 	config.applyDefaults()
+	stats = stats.Tagged(map[string]string{
+		"module": "dedup",
+	})
+	stats.Gauge("num_requests").Update(0)
+
 	return &RequestCache{
 		config:     config,
 		clk:        clk,
+		stats:      stats,
 		pending:    make(map[string]bool),
 		errors:     make(map[string]*cachedError),
 		lastClean:  clk.Now(),
@@ -189,6 +197,7 @@ func (c *RequestCache) error(id string, err error) {
 func (c *RequestCache) reserveWorker() error {
 	select {
 	case c.numWorkers <- struct{}{}:
+		c.stats.Gauge("num_requests").Update(float64(len(c.numWorkers)))
 		return nil
 	case <-c.clk.After(c.config.BusyTimeout):
 		return ErrWorkersBusy
@@ -197,4 +206,5 @@ func (c *RequestCache) reserveWorker() error {
 
 func (c *RequestCache) releaseWorker() {
 	<-c.numWorkers
+	c.stats.Gauge("num_requests").Update(float64(len(c.numWorkers)))
 }
