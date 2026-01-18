@@ -44,6 +44,10 @@ import (
 	"github.com/go-chi/chi"
 	chimiddleware "github.com/go-chi/chi/middleware"
 	"github.com/uber-go/tally"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Server provides tag operations for the build-index.
@@ -63,6 +67,8 @@ type Server struct {
 
 	// For checking if a tag has all dependent blobs.
 	depResolver tagtype.DependencyResolver
+
+	tracer trace.Tracer
 }
 
 // New creates a new Server.
@@ -78,6 +84,7 @@ func New(
 	tagReplicationManager persistedretry.Manager,
 	provider tagclient.Provider,
 	depResolver tagtype.DependencyResolver,
+	tracer trace.Tracer,
 ) *Server {
 	config = config.applyDefaults()
 
@@ -97,6 +104,7 @@ func New(
 		tagReplicationManager: tagReplicationManager,
 		provider:              provider,
 		depResolver:           depResolver,
+		tracer:                tracer,
 	}
 }
 
@@ -109,8 +117,12 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/health", handler.Wrap(s.healthHandler))
 	r.Get("/readiness", handler.Wrap(s.readinessCheckHandler))
+	tracingMiddleware := otelhttp.NewMiddleware("kraken-build-index",
+		otelhttp.WithTracerProvider(otel.GetTracerProvider()))
 
-	r.Put("/tags/{tag}/digest/{digest}", handler.Wrap(s.putTagHandler))
+	// Docker push endpoint
+	r.With(tracingMiddleware).Put("/tags/{tag}/digest/{digest}", handler.Wrap(s.putTagHandler))
+
 	r.Head("/tags/{tag}", handler.Wrap(s.hasTagHandler))
 	r.Get("/tags/{tag}", handler.Wrap(s.getTagHandler))
 
@@ -170,44 +182,62 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 }
 
 func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
+	ctx, span := s.tracer.Start(r.Context(), "build_index.put_tag")
+	defer span.End()
+
 	tag, err := httputil.ParseParam(r, "tag")
 	if err != nil {
+		span.RecordError(err)
 		return err
 	}
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
+		span.RecordError(err)
 		return err
 	}
 	replicate, err := strconv.ParseBool(httputil.GetQueryArg(r, "replicate", "false"))
 	if err != nil {
+		span.RecordError(err)
 		return fmt.Errorf("parse query arg `replicate`: %w", err)
 	}
 
-	log.With("tag", tag, "digest", d.String(), "replicate", replicate).Info("Putting tag")
+	span.SetAttributes(
+		attribute.String("tag", tag),
+		attribute.String("digest", d.String()),
+		attribute.Bool("replicate", replicate),
+	)
+
+	log.WithTraceContext(ctx).With("tag", tag, "digest", d.String(), "replicate", replicate).Info("Putting tag")
 
 	deps, err := s.depResolver.Resolve(tag, d)
 	if err != nil {
-		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to resolve dependencies")
+		log.WithTraceContext(ctx).With("tag", tag, "digest", d.String(), "error", err).Error("Failed to resolve dependencies")
+		span.RecordError(err)
 		return fmt.Errorf("resolve dependencies: %w", err)
 	}
 
-	log.With("tag", tag, "digest", d.String(), "dependency_count", len(deps)).Debug("Resolved dependencies")
+	span.SetAttributes(attribute.Int("dependency_count", len(deps)))
+	log.WithTraceContext(ctx).With("tag", tag, "digest", d.String(), "dependency_count", len(deps)).Debug("Resolved dependencies")
 
 	if err := s.putTag(tag, d, deps); err != nil {
-		log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to put tag")
+		log.WithTraceContext(ctx).With("tag", tag, "digest", d.String(), "error", err).Error("Failed to put tag")
+		span.RecordError(err)
 		return err
 	}
 
-	log.With("tag", tag, "digest", d.String()).Info("Successfully put tag")
+	log.WithTraceContext(ctx).With("tag", tag, "digest", d.String()).Info("Successfully put tag")
 
 	if replicate {
-		log.With("tag", tag, "digest", d.String()).Info("Starting tag replication")
+		log.WithTraceContext(ctx).With("tag", tag, "digest", d.String()).Info("Starting tag replication")
 		if err := s.replicateTag(tag, d, deps); err != nil {
-			log.With("tag", tag, "digest", d.String(), "error", err).Error("Failed to replicate tag")
+			log.WithTraceContext(ctx).With("tag", tag, "digest", d.String(), "error", err).Error("Failed to replicate tag")
+			span.RecordError(err)
 			return err
 		}
-		log.With("tag", tag, "digest", d.String()).Info("Successfully replicated tag")
+		log.WithTraceContext(ctx).With("tag", tag, "digest", d.String()).Info("Successfully replicated tag")
 	}
+
+	span.SetAttributes(attribute.Bool("success", true))
 	w.WriteHeader(http.StatusOK)
 	return nil
 }
