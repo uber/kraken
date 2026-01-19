@@ -11,30 +11,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockTask is a mock of Task interface
+// MockTask is a mock of Task interface.
 type MockTask struct {
 	ctrl     *gomock.Controller
 	recorder *MockTaskMockRecorder
 }
 
-// MockTaskMockRecorder is the mock recorder for MockTask
+// MockTaskMockRecorder is the mock recorder for MockTask.
 type MockTaskMockRecorder struct {
 	mock *MockTask
 }
 
-// NewMockTask creates a new mock instance
+// NewMockTask creates a new mock instance.
 func NewMockTask(ctrl *gomock.Controller) *MockTask {
 	mock := &MockTask{ctrl: ctrl}
 	mock.recorder = &MockTaskMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockTask) EXPECT() *MockTaskMockRecorder {
 	return m.recorder
 }
 
-// GetFailures mocks base method
+// GetFailures mocks base method.
 func (m *MockTask) GetFailures() int {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFailures")
@@ -42,13 +42,13 @@ func (m *MockTask) GetFailures() int {
 	return ret0
 }
 
-// GetFailures indicates an expected call of GetFailures
+// GetFailures indicates an expected call of GetFailures.
 func (mr *MockTaskMockRecorder) GetFailures() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFailures", reflect.TypeOf((*MockTask)(nil).GetFailures))
 }
 
-// GetLastAttempt mocks base method
+// GetLastAttempt mocks base method.
 func (m *MockTask) GetLastAttempt() time.Time {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLastAttempt")
@@ -56,13 +56,13 @@ func (m *MockTask) GetLastAttempt() time.Time {
 	return ret0
 }
 
-// GetLastAttempt indicates an expected call of GetLastAttempt
+// GetLastAttempt indicates an expected call of GetLastAttempt.
 func (mr *MockTaskMockRecorder) GetLastAttempt() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastAttempt", reflect.TypeOf((*MockTask)(nil).GetLastAttempt))
 }
 
-// Ready mocks base method
+// Ready mocks base method.
 func (m *MockTask) Ready() bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Ready")
@@ -70,13 +70,13 @@ func (m *MockTask) Ready() bool {
 	return ret0
 }
 
-// Ready indicates an expected call of Ready
+// Ready indicates an expected call of Ready.
 func (mr *MockTaskMockRecorder) Ready() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ready", reflect.TypeOf((*MockTask)(nil).Ready))
 }
 
-// Tags mocks base method
+// Tags mocks base method.
 func (m *MockTask) Tags() map[string]string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Tags")
@@ -84,7 +84,7 @@ func (m *MockTask) Tags() map[string]string {
 	return ret0
 }
 
-// Tags indicates an expected call of Tags
+// Tags indicates an expected call of Tags.
 func (mr *MockTaskMockRecorder) Tags() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tags", reflect.TypeOf((*MockTask)(nil).Tags))

@@ -11,30 +11,30 @@ import (
 	persistedretry "github.com/uber/kraken/lib/persistedretry"
 )
 
-// MockStore is a mock of Store interface
+// MockStore is a mock of Store interface.
 type MockStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockStoreMockRecorder
 }
 
-// MockStoreMockRecorder is the mock recorder for MockStore
+// MockStoreMockRecorder is the mock recorder for MockStore.
 type MockStoreMockRecorder struct {
 	mock *MockStore
 }
 
-// NewMockStore creates a new mock instance
+// NewMockStore creates a new mock instance.
 func NewMockStore(ctrl *gomock.Controller) *MockStore {
 	mock := &MockStore{ctrl: ctrl}
 	mock.recorder = &MockStoreMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockStore) EXPECT() *MockStoreMockRecorder {
 	return m.recorder
 }
 
-// AddFailed mocks base method
+// AddFailed mocks base method.
 func (m *MockStore) AddFailed(arg0 persistedretry.Task) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddFailed", arg0)
@@ -42,13 +42,13 @@ func (m *MockStore) AddFailed(arg0 persistedretry.Task) error {
 	return ret0
 }
 
-// AddFailed indicates an expected call of AddFailed
+// AddFailed indicates an expected call of AddFailed.
 func (mr *MockStoreMockRecorder) AddFailed(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddFailed", reflect.TypeOf((*MockStore)(nil).AddFailed), arg0)
 }
 
-// AddPending mocks base method
+// AddPending mocks base method.
 func (m *MockStore) AddPending(arg0 persistedretry.Task) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddPending", arg0)
@@ -56,13 +56,13 @@ func (m *MockStore) AddPending(arg0 persistedretry.Task) error {
 	return ret0
 }
 
-// AddPending indicates an expected call of AddPending
+// AddPending indicates an expected call of AddPending.
 func (mr *MockStoreMockRecorder) AddPending(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPending", reflect.TypeOf((*MockStore)(nil).AddPending), arg0)
 }
 
-// Find mocks base method
+// Find mocks base method.
 func (m *MockStore) Find(arg0 interface{}) ([]persistedretry.Task, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Find", arg0)
@@ -71,13 +71,13 @@ func (m *MockStore) Find(arg0 interface{}) ([]persistedretry.Task, error) {
 	return ret0, ret1
 }
 
-// Find indicates an expected call of Find
+// Find indicates an expected call of Find.
 func (mr *MockStoreMockRecorder) Find(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Find", reflect.TypeOf((*MockStore)(nil).Find), arg0)
 }
 
-// GetFailed mocks base method
+// GetFailed mocks base method.
 func (m *MockStore) GetFailed() ([]persistedretry.Task, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFailed")
@@ -86,13 +86,13 @@ func (m *MockStore) GetFailed() ([]persistedretry.Task, error) {
 	return ret0, ret1
 }
 
-// GetFailed indicates an expected call of GetFailed
+// GetFailed indicates an expected call of GetFailed.
 func (mr *MockStoreMockRecorder) GetFailed() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFailed", reflect.TypeOf((*MockStore)(nil).GetFailed))
 }
 
-// GetPending mocks base method
+// GetPending mocks base method.
 func (m *MockStore) GetPending() ([]persistedretry.Task, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPending")
@@ -101,13 +101,13 @@ func (m *MockStore) GetPending() ([]persistedretry.Task, error) {
 	return ret0, ret1
 }
 
-// GetPending indicates an expected call of GetPending
+// GetPending indicates an expected call of GetPending.
 func (mr *MockStoreMockRecorder) GetPending() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPending", reflect.TypeOf((*MockStore)(nil).GetPending))
 }
 
-// MarkFailed mocks base method
+// MarkFailed mocks base method.
 func (m *MockStore) MarkFailed(arg0 persistedretry.Task) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MarkFailed", arg0)
@@ -115,13 +115,13 @@ func (m *MockStore) MarkFailed(arg0 persistedretry.Task) error {
 	return ret0
 }
 
-// MarkFailed indicates an expected call of MarkFailed
+// MarkFailed indicates an expected call of MarkFailed.
 func (mr *MockStoreMockRecorder) MarkFailed(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkFailed", reflect.TypeOf((*MockStore)(nil).MarkFailed), arg0)
 }
 
-// MarkPending mocks base method
+// MarkPending mocks base method.
 func (m *MockStore) MarkPending(arg0 persistedretry.Task) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MarkPending", arg0)
@@ -129,13 +129,13 @@ func (m *MockStore) MarkPending(arg0 persistedretry.Task) error {
 	return ret0
 }
 
-// MarkPending indicates an expected call of MarkPending
+// MarkPending indicates an expected call of MarkPending.
 func (mr *MockStoreMockRecorder) MarkPending(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPending", reflect.TypeOf((*MockStore)(nil).MarkPending), arg0)
 }
 
-// Remove mocks base method
+// Remove mocks base method.
 func (m *MockStore) Remove(arg0 persistedretry.Task) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Remove", arg0)
@@ -143,7 +143,7 @@ func (m *MockStore) Remove(arg0 persistedretry.Task) error {
 	return ret0
 }
 
-// Remove indicates an expected call of Remove
+// Remove indicates an expected call of Remove.
 func (mr *MockStoreMockRecorder) Remove(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockStore)(nil).Remove), arg0)

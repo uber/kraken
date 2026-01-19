@@ -12,30 +12,30 @@ import (
 	webhdfs "github.com/uber/kraken/lib/backend/hdfsbackend/webhdfs"
 )
 
-// MockClient is a mock of Client interface
+// MockClient is a mock of Client interface.
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
 }
 
-// MockClientMockRecorder is the mock recorder for MockClient
+// MockClientMockRecorder is the mock recorder for MockClient.
 type MockClientMockRecorder struct {
 	mock *MockClient
 }
 
-// NewMockClient creates a new mock instance
+// NewMockClient creates a new mock instance.
 func NewMockClient(ctrl *gomock.Controller) *MockClient {
 	mock := &MockClient{ctrl: ctrl}
 	mock.recorder = &MockClientMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
-// Create mocks base method
+// Create mocks base method.
 func (m *MockClient) Create(arg0 string, arg1 io.Reader) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", arg0, arg1)
@@ -43,13 +43,13 @@ func (m *MockClient) Create(arg0 string, arg1 io.Reader) error {
 	return ret0
 }
 
-// Create indicates an expected call of Create
+// Create indicates an expected call of Create.
 func (mr *MockClientMockRecorder) Create(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockClient)(nil).Create), arg0, arg1)
 }
 
-// GetFileStatus mocks base method
+// GetFileStatus mocks base method.
 func (m *MockClient) GetFileStatus(arg0 string) (webhdfs.FileStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFileStatus", arg0)
@@ -58,13 +58,13 @@ func (m *MockClient) GetFileStatus(arg0 string) (webhdfs.FileStatus, error) {
 	return ret0, ret1
 }
 
-// GetFileStatus indicates an expected call of GetFileStatus
+// GetFileStatus indicates an expected call of GetFileStatus.
 func (mr *MockClientMockRecorder) GetFileStatus(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFileStatus", reflect.TypeOf((*MockClient)(nil).GetFileStatus), arg0)
 }
 
-// ListFileStatus mocks base method
+// ListFileStatus mocks base method.
 func (m *MockClient) ListFileStatus(arg0 string) ([]webhdfs.FileStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListFileStatus", arg0)
@@ -73,13 +73,13 @@ func (m *MockClient) ListFileStatus(arg0 string) ([]webhdfs.FileStatus, error) {
 	return ret0, ret1
 }
 
-// ListFileStatus indicates an expected call of ListFileStatus
+// ListFileStatus indicates an expected call of ListFileStatus.
 func (mr *MockClientMockRecorder) ListFileStatus(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFileStatus", reflect.TypeOf((*MockClient)(nil).ListFileStatus), arg0)
 }
 
-// Mkdirs mocks base method
+// Mkdirs mocks base method.
 func (m *MockClient) Mkdirs(arg0 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Mkdirs", arg0)
@@ -87,13 +87,13 @@ func (m *MockClient) Mkdirs(arg0 string) error {
 	return ret0
 }
 
-// Mkdirs indicates an expected call of Mkdirs
+// Mkdirs indicates an expected call of Mkdirs.
 func (mr *MockClientMockRecorder) Mkdirs(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Mkdirs", reflect.TypeOf((*MockClient)(nil).Mkdirs), arg0)
 }
 
-// Open mocks base method
+// Open mocks base method.
 func (m *MockClient) Open(arg0 string, arg1 io.Writer) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", arg0, arg1)
@@ -101,13 +101,13 @@ func (m *MockClient) Open(arg0 string, arg1 io.Writer) error {
 	return ret0
 }
 
-// Open indicates an expected call of Open
+// Open indicates an expected call of Open.
 func (mr *MockClientMockRecorder) Open(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockClient)(nil).Open), arg0, arg1)
 }
 
-// Rename mocks base method
+// Rename mocks base method.
 func (m *MockClient) Rename(arg0, arg1 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Rename", arg0, arg1)
@@ -115,7 +115,7 @@ func (m *MockClient) Rename(arg0, arg1 string) error {
 	return ret0
 }
 
-// Rename indicates an expected call of Rename
+// Rename indicates an expected call of Rename.
 func (mr *MockClientMockRecorder) Rename(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rename", reflect.TypeOf((*MockClient)(nil).Rename), arg0, arg1)

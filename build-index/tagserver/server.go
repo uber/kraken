@@ -139,7 +139,7 @@ func (s *Server) Handler() http.Handler {
 		"/internal/duplicate/remotes/tags/{tag}/digest/{digest}",
 		handler.Wrap(s.duplicateReplicateTagHandler))
 
-	r.Put(
+	r.With(tracingMiddleware).Put(
 		"/internal/duplicate/tags/{tag}/digest/{digest}",
 		handler.Wrap(s.duplicatePutTagHandler))
 
@@ -244,30 +244,44 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) duplicatePutTagHandler(w http.ResponseWriter, r *http.Request) error {
+	ctx, span := s.tracer.Start(r.Context(), "build_index.duplicate_put_tag")
+	defer span.End()
+
 	tag, err := httputil.ParseParam(r, "tag")
 	if err != nil {
+		span.RecordError(err)
 		return err
 	}
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
+		span.RecordError(err)
 		return err
 	}
 
 	var req tagclient.DuplicatePutRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		span.RecordError(err)
 		return handler.Errorf("decode body: %s", err)
 	}
 	delay := req.Delay
 
-	log.With("tag", tag, "digest", d.String(), "delay", delay).Debug("Received duplicate put request from neighbor")
+	span.SetAttributes(
+		attribute.String("tag", tag),
+		attribute.String("digest", d.String()),
+		attribute.Int64("delay_ms", delay.Milliseconds()),
+	)
 
-	if err := s.store.Put(tag, d, delay); err != nil {
-		log.With("tag", tag, "digest", d.String(), "delay", delay, "error", err).Error("Failed to store tag from duplicate put")
+	log.WithTraceContext(ctx).With("tag", tag, "digest", d.String(), "delay", delay).Debug("Received duplicate put request from neighbor")
+
+	if err := s.store.Put(ctx, tag, d, delay); err != nil {
+		log.WithTraceContext(ctx).With("tag", tag, "digest", d.String(), "delay", delay, "error", err).Error("Failed to store tag from duplicate put")
+		span.RecordError(err)
 		return handler.Errorf("storage: %s", err)
 	}
 
-	log.With("tag", tag, "digest", d.String(), "delay", delay).Info("Successfully stored tag from duplicate put")
+	log.WithTraceContext(ctx).With("tag", tag, "digest", d.String(), "delay", delay).Info("Successfully stored tag from duplicate put")
 
+	span.SetAttributes(attribute.Bool("success", true))
 	w.WriteHeader(http.StatusOK)
 	return nil
 }
@@ -505,7 +519,7 @@ func (s *Server) putTag(ctx context.Context, tag string, d core.Digest, deps cor
 
 	log.WithTraceContext(ctx).With("tag", tag, "digest", d.String()).Debug("All dependencies validated successfully")
 
-	if err := s.store.Put(tag, d, 0); err != nil {
+	if err := s.store.Put(ctx, tag, d, 0); err != nil {
 		return fmt.Errorf("storage: %w", err)
 	}
 
