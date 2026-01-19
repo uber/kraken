@@ -15,13 +15,17 @@ package writeback
 
 import (
 	"context"
+<<<<<<< HEAD
 	"encoding/hex"
+=======
+>>>>>>> bba1aae (Tracing executor tasks)
 	"fmt"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/uber/kraken/core"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Task contains information to write back a blob to remote storage.
@@ -64,6 +68,10 @@ func NewTaskWithContext(ctx context.Context, namespace, name string, delay time.
 		Delay:     delay,
 	}
 
+<<<<<<< HEAD
+=======
+	// Capture trace context if available
+>>>>>>> bba1aae (Tracing executor tasks)
 	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.IsValid() {
 		t.TraceID = spanCtx.TraceID().String()
 		t.SpanID = spanCtx.SpanID().String()

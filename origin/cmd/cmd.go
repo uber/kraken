@@ -46,6 +46,7 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/go-chi/chi"
 	"github.com/uber-go/tally"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 )
 
@@ -202,11 +203,12 @@ func Run(flags *Flags, opts ...Option) {
 		log.Fatalf("Error creating local db: %s", err)
 	}
 
+	tracer := otel.Tracer("kraken-origin")
 	writeBackManager, err := persistedretry.NewManager(
 		config.WriteBack,
 		stats,
 		writeback.NewStore(localDB),
-		writeback.NewExecutor(stats, cas, backendManager))
+		writeback.NewExecutor(stats, cas, backendManager, tracer))
 	if err != nil {
 		log.Fatalf("Error creating write-back manager: %s", err)
 	}

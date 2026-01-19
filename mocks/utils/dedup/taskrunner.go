@@ -11,30 +11,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockTaskRunner is a mock of TaskRunner interface
+// MockTaskRunner is a mock of TaskRunner interface.
 type MockTaskRunner struct {
 	ctrl     *gomock.Controller
 	recorder *MockTaskRunnerMockRecorder
 }
 
-// MockTaskRunnerMockRecorder is the mock recorder for MockTaskRunner
+// MockTaskRunnerMockRecorder is the mock recorder for MockTaskRunner.
 type MockTaskRunnerMockRecorder struct {
 	mock *MockTaskRunner
 }
 
-// NewMockTaskRunner creates a new mock instance
+// NewMockTaskRunner creates a new mock instance.
 func NewMockTaskRunner(ctrl *gomock.Controller) *MockTaskRunner {
 	mock := &MockTaskRunner{ctrl: ctrl}
 	mock.recorder = &MockTaskRunnerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockTaskRunner) EXPECT() *MockTaskRunnerMockRecorder {
 	return m.recorder
 }
 
-// Run mocks base method
+// Run mocks base method.
 func (m *MockTaskRunner) Run(arg0 interface{}) (interface{}, time.Duration) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Run", arg0)
@@ -43,7 +43,7 @@ func (m *MockTaskRunner) Run(arg0 interface{}) (interface{}, time.Duration) {
 	return ret0, ret1
 }
 
-// Run indicates an expected call of Run
+// Run indicates an expected call of Run.
 func (mr *MockTaskRunnerMockRecorder) Run(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockTaskRunner)(nil).Run), arg0)

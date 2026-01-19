@@ -11,30 +11,30 @@ import (
 	stringset "github.com/uber/kraken/utils/stringset"
 )
 
-// MockFilter is a mock of Filter interface
+// MockFilter is a mock of Filter interface.
 type MockFilter struct {
 	ctrl     *gomock.Controller
 	recorder *MockFilterMockRecorder
 }
 
-// MockFilterMockRecorder is the mock recorder for MockFilter
+// MockFilterMockRecorder is the mock recorder for MockFilter.
 type MockFilterMockRecorder struct {
 	mock *MockFilter
 }
 
-// NewMockFilter creates a new mock instance
+// NewMockFilter creates a new mock instance.
 func NewMockFilter(ctrl *gomock.Controller) *MockFilter {
 	mock := &MockFilter{ctrl: ctrl}
 	mock.recorder = &MockFilterMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockFilter) EXPECT() *MockFilterMockRecorder {
 	return m.recorder
 }
 
-// Run mocks base method
+// Run mocks base method.
 func (m *MockFilter) Run(arg0 stringset.Set) stringset.Set {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Run", arg0)
@@ -42,7 +42,7 @@ func (m *MockFilter) Run(arg0 stringset.Set) stringset.Set {
 	return ret0
 }
 
-// Run indicates an expected call of Run
+// Run indicates an expected call of Run.
 func (mr *MockFilterMockRecorder) Run(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockFilter)(nil).Run), arg0)

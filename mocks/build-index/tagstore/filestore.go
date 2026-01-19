@@ -13,30 +13,30 @@ import (
 	metadata "github.com/uber/kraken/lib/store/metadata"
 )
 
-// MockFileStore is a mock of FileStore interface
+// MockFileStore is a mock of FileStore interface.
 type MockFileStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockFileStoreMockRecorder
 }
 
-// MockFileStoreMockRecorder is the mock recorder for MockFileStore
+// MockFileStoreMockRecorder is the mock recorder for MockFileStore.
 type MockFileStoreMockRecorder struct {
 	mock *MockFileStore
 }
 
-// NewMockFileStore creates a new mock instance
+// NewMockFileStore creates a new mock instance.
 func NewMockFileStore(ctrl *gomock.Controller) *MockFileStore {
 	mock := &MockFileStore{ctrl: ctrl}
 	mock.recorder = &MockFileStoreMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockFileStore) EXPECT() *MockFileStoreMockRecorder {
 	return m.recorder
 }
 
-// CreateCacheFile mocks base method
+// CreateCacheFile mocks base method.
 func (m *MockFileStore) CreateCacheFile(arg0 string, arg1 io.Reader) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateCacheFile", arg0, arg1)
@@ -44,13 +44,13 @@ func (m *MockFileStore) CreateCacheFile(arg0 string, arg1 io.Reader) error {
 	return ret0
 }
 
-// CreateCacheFile indicates an expected call of CreateCacheFile
+// CreateCacheFile indicates an expected call of CreateCacheFile.
 func (mr *MockFileStoreMockRecorder) CreateCacheFile(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCacheFile", reflect.TypeOf((*MockFileStore)(nil).CreateCacheFile), arg0, arg1)
 }
 
-// GetCacheFileReader mocks base method
+// GetCacheFileReader mocks base method.
 func (m *MockFileStore) GetCacheFileReader(arg0 string) (base.FileReader, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCacheFileReader", arg0)
@@ -59,13 +59,13 @@ func (m *MockFileStore) GetCacheFileReader(arg0 string) (base.FileReader, error)
 	return ret0, ret1
 }
 
-// GetCacheFileReader indicates an expected call of GetCacheFileReader
+// GetCacheFileReader indicates an expected call of GetCacheFileReader.
 func (mr *MockFileStoreMockRecorder) GetCacheFileReader(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCacheFileReader", reflect.TypeOf((*MockFileStore)(nil).GetCacheFileReader), arg0)
 }
 
-// SetCacheFileMetadata mocks base method
+// SetCacheFileMetadata mocks base method.
 func (m *MockFileStore) SetCacheFileMetadata(arg0 string, arg1 metadata.Metadata) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetCacheFileMetadata", arg0, arg1)
@@ -74,7 +74,7 @@ func (m *MockFileStore) SetCacheFileMetadata(arg0 string, arg1 metadata.Metadata
 	return ret0, ret1
 }
 
-// SetCacheFileMetadata indicates an expected call of SetCacheFileMetadata
+// SetCacheFileMetadata indicates an expected call of SetCacheFileMetadata.
 func (mr *MockFileStoreMockRecorder) SetCacheFileMetadata(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCacheFileMetadata", reflect.TypeOf((*MockFileStore)(nil).SetCacheFileMetadata), arg0, arg1)
