@@ -11,30 +11,30 @@ import (
 	core "github.com/uber/kraken/core"
 )
 
-// MockRing is a mock of Ring interface
+// MockRing is a mock of Ring interface.
 type MockRing struct {
 	ctrl     *gomock.Controller
 	recorder *MockRingMockRecorder
 }
 
-// MockRingMockRecorder is the mock recorder for MockRing
+// MockRingMockRecorder is the mock recorder for MockRing.
 type MockRingMockRecorder struct {
 	mock *MockRing
 }
 
-// NewMockRing creates a new mock instance
+// NewMockRing creates a new mock instance.
 func NewMockRing(ctrl *gomock.Controller) *MockRing {
 	mock := &MockRing{ctrl: ctrl}
 	mock.recorder = &MockRingMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockRing) EXPECT() *MockRingMockRecorder {
 	return m.recorder
 }
 
-// Contains mocks base method
+// Contains mocks base method.
 func (m *MockRing) Contains(arg0 string) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Contains", arg0)
@@ -42,13 +42,13 @@ func (m *MockRing) Contains(arg0 string) bool {
 	return ret0
 }
 
-// Contains indicates an expected call of Contains
+// Contains indicates an expected call of Contains.
 func (mr *MockRingMockRecorder) Contains(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Contains", reflect.TypeOf((*MockRing)(nil).Contains), arg0)
 }
 
-// Locations mocks base method
+// Locations mocks base method.
 func (m *MockRing) Locations(arg0 core.Digest) []string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Locations", arg0)
@@ -56,31 +56,31 @@ func (m *MockRing) Locations(arg0 core.Digest) []string {
 	return ret0
 }
 
-// Locations indicates an expected call of Locations
+// Locations indicates an expected call of Locations.
 func (mr *MockRingMockRecorder) Locations(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Locations", reflect.TypeOf((*MockRing)(nil).Locations), arg0)
 }
 
-// Monitor mocks base method
+// Monitor mocks base method.
 func (m *MockRing) Monitor(arg0 <-chan struct{}) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Monitor", arg0)
 }
 
-// Monitor indicates an expected call of Monitor
+// Monitor indicates an expected call of Monitor.
 func (mr *MockRingMockRecorder) Monitor(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Monitor", reflect.TypeOf((*MockRing)(nil).Monitor), arg0)
 }
 
-// Refresh mocks base method
+// Refresh mocks base method.
 func (m *MockRing) Refresh() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Refresh")
 }
 
-// Refresh indicates an expected call of Refresh
+// Refresh indicates an expected call of Refresh.
 func (mr *MockRingMockRecorder) Refresh() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Refresh", reflect.TypeOf((*MockRing)(nil).Refresh))
