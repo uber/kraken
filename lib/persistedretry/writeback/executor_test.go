@@ -29,6 +29,7 @@ import (
 	mockbackend "github.com/uber/kraken/mocks/lib/backend"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/testutil"
+	"go.opentelemetry.io/otel"
 )
 
 type executorMocks struct {
@@ -55,7 +56,8 @@ func newExecutorMocks(t *testing.T) (*executorMocks, func()) {
 }
 
 func (m *executorMocks) new() *Executor {
-	return NewExecutor(tally.NoopScope, m.cas, m.backends)
+	tracer := otel.Tracer("test-writeback")
+	return NewExecutor(tally.NoopScope, m.cas, m.backends, tracer)
 }
 
 func (m *executorMocks) client(namespace string) *mockbackend.MockClient {

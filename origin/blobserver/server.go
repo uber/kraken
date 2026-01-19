@@ -14,6 +14,7 @@
 package blobserver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -688,14 +689,14 @@ func (s *Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-func (s *Server) handleUploadConflict(err error, namespace string, d core.Digest) error {
+func (s *Server) handleUploadConflict(ctx context.Context, err error, namespace string, d core.Digest) error {
 	if herr, ok := err.(*handler.Error); ok && herr.GetStatus() == http.StatusConflict {
 		// Even if the blob was already uploaded and committed to cache, it's
 		// still possible that adding the write-back task failed. Clients short
 		// circuit on conflict and return success, so we must make sure that if we
 		// tell a client to stop before commit, the blob has been written back.
 		log.With("namespace", namespace, "digest", d.Hex()).Debug("Handling upload conflict, ensuring write-back")
-		if err := s.writeBack(namespace, d, 0); err != nil {
+		if err := s.writeBack(ctx, namespace, d, 0); err != nil {
 			log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to ensure write-back on conflict: %s", err)
 			return err
 		}
@@ -717,7 +718,7 @@ func (s *Server) startClusterUploadHandler(w http.ResponseWriter, r *http.Reques
 	uid, err := s.uploader.start(d)
 	if err != nil {
 		log.With("namespace", namespace, "digest", d.Hex()).Warnf("Failed to start cluster upload: %s", err)
-		return s.handleUploadConflict(err, namespace, d)
+		return s.handleUploadConflict(r.Context(), err, namespace, d)
 	}
 	setUploadLocation(w, uid)
 	w.WriteHeader(http.StatusOK)
@@ -746,7 +747,7 @@ func (s *Server) patchClusterUploadHandler(w http.ResponseWriter, r *http.Reques
 	log.With("namespace", namespace, "digest", d.Hex(), "uid", uid, "start", start, "end", end).Debug("Patching cluster upload chunk")
 	if err := s.uploader.patch(d, uid, r.Body, start, end); err != nil {
 		log.With("namespace", namespace, "digest", d.Hex(), "uid", uid).Errorf("Failed to patch cluster upload: %s", err)
-		return s.handleUploadConflict(err, namespace, d)
+		return s.handleUploadConflict(r.Context(), err, namespace, d)
 	}
 	log.With("namespace", namespace, "digest", d.Hex(), "uid", uid, "start", start, "end", end).Debug("Successfully patched upload chunk")
 	return nil
@@ -772,9 +773,9 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 	log.With("namespace", namespace, "digest", d.Hex(), "uid", uid).Info("Committing cluster upload")
 	if err := s.uploader.commit(d, uid); err != nil {
 		log.With("namespace", namespace, "digest", d.Hex(), "uid", uid).Errorf("Failed to commit cluster upload: %s", err)
-		return s.handleUploadConflict(err, namespace, d)
+		return s.handleUploadConflict(r.Context(), err, namespace, d)
 	}
-	if err := s.writeBack(namespace, d, 0); err != nil {
+	if err := s.writeBack(r.Context(), namespace, d, 0); err != nil {
 		log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to write back blob: %s", err)
 		return err
 	}
@@ -840,7 +841,7 @@ func (s *Server) duplicateCommitClusterUploadHandler(w http.ResponseWriter, r *h
 		log.With("namespace", namespace, "digest", d.Hex(), "uid", uid).Errorf("Failed to commit duplicate upload: %s", err)
 		return err
 	}
-	if err := s.writeBack(namespace, d, delay); err != nil {
+	if err := s.writeBack(r.Context(), namespace, d, delay); err != nil {
 		log.With("namespace", namespace, "digest", d.Hex(), "delay", delay).Errorf("Failed to write back duplicate: %s", err)
 		return err
 	}
@@ -848,13 +849,13 @@ func (s *Server) duplicateCommitClusterUploadHandler(w http.ResponseWriter, r *h
 	return nil
 }
 
-func (s *Server) writeBack(namespace string, d core.Digest, delay time.Duration) error {
+func (s *Server) writeBack(ctx context.Context, namespace string, d core.Digest, delay time.Duration) error {
 	log.With("namespace", namespace, "digest", d.Hex(), "delay", delay).Debug("Starting write-back process")
 	if _, err := s.cas.SetCacheFileMetadata(d.Hex(), metadata.NewPersist(true)); err != nil {
 		log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to set persist metadata: %s", err)
 		return handler.Errorf("set persist metadata: %s", err)
 	}
-	task := writeback.NewTask(namespace, d.Hex(), delay)
+	task := writeback.NewTaskWithContext(ctx, namespace, d.Hex(), delay)
 	if err := s.writeBackManager.Add(task); err != nil {
 		log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to add write-back task: %s", err)
 		return handler.Errorf("add write-back task: %s", err)
