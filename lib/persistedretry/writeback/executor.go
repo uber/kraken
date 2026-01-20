@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
+
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/store"
@@ -27,6 +28,7 @@ import (
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -51,13 +53,12 @@ func NewExecutor(
 	stats tally.Scope,
 	fs FileStore,
 	backends *backend.Manager,
-	tracer trace.Tracer,
 ) *Executor {
 	stats = stats.Tagged(map[string]string{
 		"module": "writebackexecutor",
 	})
 
-	return &Executor{stats, fs, backends, tracer}
+	return &Executor{stats, fs, backends, otel.Tracer("kraken-writeback")}
 }
 
 // Name returns the executor name.

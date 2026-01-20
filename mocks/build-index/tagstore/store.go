@@ -5,12 +5,10 @@
 package mocktagstore
 
 import (
-	"context"
 	reflect "reflect"
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-
 	core "github.com/uber/kraken/core"
 )
 
@@ -52,16 +50,16 @@ func (mr *MockStoreMockRecorder) Get(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockStore)(nil).Get), arg0)
 }
 
-// Put mocks base metho
-func (m *MockStore) Put(arg0 context.Context, arg1 string, arg2 core.Digest, arg3 time.Duration) error {
+// Put mocks base method
+func (m *MockStore) Put(arg0 string, arg1 core.Digest, arg2 time.Duration) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Put", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "Put", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Put indicates an expected call of Put
-func (mr *MockStoreMockRecorder) Put(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockStoreMockRecorder) Put(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockStore)(nil).Put), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockStore)(nil).Put), arg0, arg1, arg2)
 }
