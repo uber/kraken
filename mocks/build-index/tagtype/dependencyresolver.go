@@ -11,30 +11,30 @@ import (
 	core "github.com/uber/kraken/core"
 )
 
-// MockDependencyResolver is a mock of DependencyResolver interface.
+// MockDependencyResolver is a mock of DependencyResolver interface
 type MockDependencyResolver struct {
 	ctrl     *gomock.Controller
 	recorder *MockDependencyResolverMockRecorder
 }
 
-// MockDependencyResolverMockRecorder is the mock recorder for MockDependencyResolver.
+// MockDependencyResolverMockRecorder is the mock recorder for MockDependencyResolver
 type MockDependencyResolverMockRecorder struct {
 	mock *MockDependencyResolver
 }
 
-// NewMockDependencyResolver creates a new mock instance.
+// NewMockDependencyResolver creates a new mock instance
 func NewMockDependencyResolver(ctrl *gomock.Controller) *MockDependencyResolver {
 	mock := &MockDependencyResolver{ctrl: ctrl}
 	mock.recorder = &MockDependencyResolverMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockDependencyResolver) EXPECT() *MockDependencyResolverMockRecorder {
 	return m.recorder
 }
 
-// Resolve mocks base method.
+// Resolve mocks base method
 func (m *MockDependencyResolver) Resolve(arg0 string, arg1 core.Digest) (core.DigestList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resolve", arg0, arg1)
@@ -43,7 +43,7 @@ func (m *MockDependencyResolver) Resolve(arg0 string, arg1 core.Digest) (core.Di
 	return ret0, ret1
 }
 
-// Resolve indicates an expected call of Resolve.
+// Resolve indicates an expected call of Resolve
 func (mr *MockDependencyResolverMockRecorder) Resolve(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resolve", reflect.TypeOf((*MockDependencyResolver)(nil).Resolve), arg0, arg1)

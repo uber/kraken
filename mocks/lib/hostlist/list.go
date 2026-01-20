@@ -11,30 +11,30 @@ import (
 	stringset "github.com/uber/kraken/utils/stringset"
 )
 
-// MockList is a mock of List interface.
+// MockList is a mock of List interface
 type MockList struct {
 	ctrl     *gomock.Controller
 	recorder *MockListMockRecorder
 }
 
-// MockListMockRecorder is the mock recorder for MockList.
+// MockListMockRecorder is the mock recorder for MockList
 type MockListMockRecorder struct {
 	mock *MockList
 }
 
-// NewMockList creates a new mock instance.
+// NewMockList creates a new mock instance
 func NewMockList(ctrl *gomock.Controller) *MockList {
 	mock := &MockList{ctrl: ctrl}
 	mock.recorder = &MockListMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockList) EXPECT() *MockListMockRecorder {
 	return m.recorder
 }
 
-// Resolve mocks base method.
+// Resolve mocks base method
 func (m *MockList) Resolve() stringset.Set {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resolve")
@@ -42,7 +42,7 @@ func (m *MockList) Resolve() stringset.Set {
 	return ret0
 }
 
-// Resolve indicates an expected call of Resolve.
+// Resolve indicates an expected call of Resolve
 func (mr *MockListMockRecorder) Resolve() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resolve", reflect.TypeOf((*MockList)(nil).Resolve))

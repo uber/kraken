@@ -12,30 +12,30 @@ import (
 	connstate "github.com/uber/kraken/lib/torrent/scheduler/connstate"
 )
 
-// MockScheduler is a mock of Scheduler interface.
+// MockScheduler is a mock of Scheduler interface
 type MockScheduler struct {
 	ctrl     *gomock.Controller
 	recorder *MockSchedulerMockRecorder
 }
 
-// MockSchedulerMockRecorder is the mock recorder for MockScheduler.
+// MockSchedulerMockRecorder is the mock recorder for MockScheduler
 type MockSchedulerMockRecorder struct {
 	mock *MockScheduler
 }
 
-// NewMockScheduler creates a new mock instance.
+// NewMockScheduler creates a new mock instance
 func NewMockScheduler(ctrl *gomock.Controller) *MockScheduler {
 	mock := &MockScheduler{ctrl: ctrl}
 	mock.recorder = &MockSchedulerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockScheduler) EXPECT() *MockSchedulerMockRecorder {
 	return m.recorder
 }
 
-// BlacklistSnapshot mocks base method.
+// BlacklistSnapshot mocks base method
 func (m *MockScheduler) BlacklistSnapshot() ([]connstate.BlacklistedConn, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BlacklistSnapshot")
@@ -44,13 +44,13 @@ func (m *MockScheduler) BlacklistSnapshot() ([]connstate.BlacklistedConn, error)
 	return ret0, ret1
 }
 
-// BlacklistSnapshot indicates an expected call of BlacklistSnapshot.
+// BlacklistSnapshot indicates an expected call of BlacklistSnapshot
 func (mr *MockSchedulerMockRecorder) BlacklistSnapshot() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlacklistSnapshot", reflect.TypeOf((*MockScheduler)(nil).BlacklistSnapshot))
 }
 
-// Download mocks base method.
+// Download mocks base method
 func (m *MockScheduler) Download(arg0 string, arg1 core.Digest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Download", arg0, arg1)
@@ -58,13 +58,13 @@ func (m *MockScheduler) Download(arg0 string, arg1 core.Digest) error {
 	return ret0
 }
 
-// Download indicates an expected call of Download.
+// Download indicates an expected call of Download
 func (mr *MockSchedulerMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockScheduler)(nil).Download), arg0, arg1)
 }
 
-// Probe mocks base method.
+// Probe mocks base method
 func (m *MockScheduler) Probe() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Probe")
@@ -72,13 +72,13 @@ func (m *MockScheduler) Probe() error {
 	return ret0
 }
 
-// Probe indicates an expected call of Probe.
+// Probe indicates an expected call of Probe
 func (mr *MockSchedulerMockRecorder) Probe() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Probe", reflect.TypeOf((*MockScheduler)(nil).Probe))
 }
 
-// RemoveTorrent mocks base method.
+// RemoveTorrent mocks base method
 func (m *MockScheduler) RemoveTorrent(arg0 core.Digest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveTorrent", arg0)
@@ -86,19 +86,19 @@ func (m *MockScheduler) RemoveTorrent(arg0 core.Digest) error {
 	return ret0
 }
 
-// RemoveTorrent indicates an expected call of RemoveTorrent.
+// RemoveTorrent indicates an expected call of RemoveTorrent
 func (mr *MockSchedulerMockRecorder) RemoveTorrent(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveTorrent", reflect.TypeOf((*MockScheduler)(nil).RemoveTorrent), arg0)
 }
 
-// Stop mocks base method.
+// Stop mocks base method
 func (m *MockScheduler) Stop() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Stop")
 }
 
-// Stop indicates an expected call of Stop.
+// Stop indicates an expected call of Stop
 func (mr *MockSchedulerMockRecorder) Stop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockScheduler)(nil).Stop))
