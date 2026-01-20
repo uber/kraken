@@ -231,7 +231,7 @@ func TestPut(t *testing.T) {
 
 	mocks.depResolver.EXPECT().Resolve(tag, digest).Return(core.DigestList{digest}, nil)
 	mocks.originClient.EXPECT().Stat(tag, digest).Return(core.NewBlobInfo(256), nil)
-	mocks.store.EXPECT().Put(gomock.Any(), tag, digest, time.Duration(0)).Return(nil)
+	mocks.store.EXPECT().Put(tag, digest, time.Duration(0)).Return(nil)
 	mocks.provider.EXPECT().Provide(_testNeighbor).Return(neighborClient)
 	neighborClient.EXPECT().DuplicatePut(
 		tag, digest, mocks.config.DuplicateReplicateStagger).Return(nil)
@@ -294,7 +294,7 @@ func TestDuplicatePut(t *testing.T) {
 	digest := core.DigestFixture()
 	delay := 5 * time.Minute
 
-	mocks.store.EXPECT().Put(gomock.Any(), tag, digest, delay).Return(nil)
+	mocks.store.EXPECT().Put(tag, digest, delay).Return(nil)
 
 	require.NoError(client.DuplicatePut(tag, digest, delay))
 }
@@ -541,7 +541,7 @@ func TestPutAndReplicate(t *testing.T) {
 	gomock.InOrder(
 		mocks.depResolver.EXPECT().Resolve(tag, digest).Return(core.DigestList{digest}, nil),
 		mocks.originClient.EXPECT().Stat(tag, digest).Return(core.NewBlobInfo(256), nil),
-		mocks.store.EXPECT().Put(gomock.Any(), tag, digest, time.Duration(0)).Return(nil),
+		mocks.store.EXPECT().Put(tag, digest, time.Duration(0)).Return(nil),
 		mocks.provider.EXPECT().Provide(_testNeighbor).Return(neighborClient),
 		neighborClient.EXPECT().DuplicatePut(
 			tag, digest, mocks.config.DuplicateReplicateStagger).Return(nil),
