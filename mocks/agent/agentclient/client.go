@@ -5,6 +5,7 @@
 package mockagentclient
 
 import (
+	context "context"
 	io "io"
 	reflect "reflect"
 
@@ -36,31 +37,31 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Download mocks base method
-func (m *MockClient) Download(arg0 string, arg1 core.Digest) (io.ReadCloser, error) {
+func (m *MockClient) Download(arg0 context.Context, arg1 string, arg2 core.Digest) (io.ReadCloser, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Download", arg0, arg1)
+	ret := m.ctrl.Call(m, "Download", arg0, arg1, arg2)
 	ret0, _ := ret[0].(io.ReadCloser)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Download indicates an expected call of Download
-func (mr *MockClientMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) Download(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0, arg1, arg2)
 }
 
 // GetTag mocks base method
-func (m *MockClient) GetTag(arg0 string) (core.Digest, error) {
+func (m *MockClient) GetTag(arg0 context.Context, arg1 string) (core.Digest, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTag", arg0)
+	ret := m.ctrl.Call(m, "GetTag", arg0, arg1)
 	ret0, _ := ret[0].(core.Digest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetTag indicates an expected call of GetTag
-func (mr *MockClientMockRecorder) GetTag(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) GetTag(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTag", reflect.TypeOf((*MockClient)(nil).GetTag), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTag", reflect.TypeOf((*MockClient)(nil).GetTag), arg0, arg1)
 }
