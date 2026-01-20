@@ -139,7 +139,7 @@ func (s *Server) Handler() http.Handler {
 		"/internal/duplicate/remotes/tags/{tag}/digest/{digest}",
 		handler.Wrap(s.duplicateReplicateTagHandler))
 
-	r.With(tracingMiddleware).Put(
+	r.Put(
 		"/internal/duplicate/tags/{tag}/digest/{digest}",
 		handler.Wrap(s.duplicatePutTagHandler))
 
