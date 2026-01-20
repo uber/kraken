@@ -12,30 +12,30 @@ import (
 	core "github.com/uber/kraken/core"
 )
 
-// MockClient is a mock of Client interface.
+// MockClient is a mock of Client interface
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
 }
 
-// MockClientMockRecorder is the mock recorder for MockClient.
+// MockClientMockRecorder is the mock recorder for MockClient
 type MockClientMockRecorder struct {
 	mock *MockClient
 }
 
-// NewMockClient creates a new mock instance.
+// NewMockClient creates a new mock instance
 func NewMockClient(ctrl *gomock.Controller) *MockClient {
 	mock := &MockClient{ctrl: ctrl}
 	mock.recorder = &MockClientMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
-// Download mocks base method.
+// Download mocks base method
 func (m *MockClient) Download(arg0 string, arg1 core.Digest) (io.ReadCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Download", arg0, arg1)
@@ -44,13 +44,13 @@ func (m *MockClient) Download(arg0 string, arg1 core.Digest) (io.ReadCloser, err
 	return ret0, ret1
 }
 
-// Download indicates an expected call of Download.
+// Download indicates an expected call of Download
 func (mr *MockClientMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0, arg1)
 }
 
-// GetTag mocks base method.
+// GetTag mocks base method
 func (m *MockClient) GetTag(arg0 string) (core.Digest, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTag", arg0)
@@ -59,7 +59,7 @@ func (m *MockClient) GetTag(arg0 string) (core.Digest, error) {
 	return ret0, ret1
 }
 
-// GetTag indicates an expected call of GetTag.
+// GetTag indicates an expected call of GetTag
 func (mr *MockClientMockRecorder) GetTag(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTag", reflect.TypeOf((*MockClient)(nil).GetTag), arg0)
