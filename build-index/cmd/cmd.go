@@ -201,13 +201,11 @@ func Run(flags *Flags, opts ...Option) {
 		log.Fatalf("Error creating tag replication manager: %s", err)
 	}
 
-	tracer := otel.Tracer("kraken-build-index")
-
 	writeBackManager, err := persistedretry.NewManager(
 		config.WriteBack,
 		stats,
 		writeback.NewStore(localDB),
-		writeback.NewExecutor(stats, ss, backends, tracer))
+		writeback.NewExecutor(stats, ss, backends))
 	if err != nil {
 		log.Fatalf("Error creating write-back manager: %s", err)
 	}
@@ -218,6 +216,7 @@ func Run(flags *Flags, opts ...Option) {
 	if err != nil {
 		log.Fatalf("Error creating tag type manager: %s", err)
 	}
+	tracer := otel.Tracer("kraken-build-index")
 
 	server := tagserver.New(
 		config.TagServer,

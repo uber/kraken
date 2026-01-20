@@ -15,7 +15,6 @@ package tagstore
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -47,7 +46,7 @@ type FileStore interface {
 
 // Store defines tag storage operations.
 type Store interface {
-	Put(ctx context.Context, tag string, d core.Digest, writeBackDelay time.Duration) error
+	Put(tag string, d core.Digest, writeBackDelay time.Duration) error
 	Get(tag string) (core.Digest, error)
 }
 
@@ -89,7 +88,7 @@ func New(
 	return s
 }
 
-func (s *tagStore) Put(ctx context.Context, tag string, d core.Digest, writeBackDelay time.Duration) error {
+func (s *tagStore) Put(tag string, d core.Digest, writeBackDelay time.Duration) error {
 	if err := s.writeTagToDisk(tag, d); err != nil {
 		return fmt.Errorf("write tag to disk: %s", err)
 	}
@@ -97,7 +96,7 @@ func (s *tagStore) Put(ctx context.Context, tag string, d core.Digest, writeBack
 		return fmt.Errorf("set persist metadata: %s", err)
 	}
 
-	task := writeback.NewTaskWithContext(ctx, tag, tag, writeBackDelay)
+	task := writeback.NewTask(tag, tag, writeBackDelay)
 	return s.writeBackStrategy(task)
 }
 
