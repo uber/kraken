@@ -56,8 +56,7 @@ func newExecutorMocks(t *testing.T) (*executorMocks, func()) {
 }
 
 func (m *executorMocks) new() *Executor {
-	tracer := otel.Tracer("test-writeback")
-	return NewExecutor(tally.NoopScope, m.cas, m.backends, tracer)
+	return NewExecutor(tally.NoopScope, m.cas, m.backends)
 }
 
 func (m *executorMocks) client(namespace string) *mockbackend.MockClient {
