@@ -14,7 +14,6 @@
 package tagstore_test
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"testing"
@@ -81,7 +80,7 @@ func TestPutAndGetFromDisk(t *testing.T) {
 	mocks.writeBackManager.EXPECT().Add(
 		writeback.MatchTask(writeback.NewTask(tag, tag, 0))).Return(nil)
 
-	require.NoError(store.Put(context.Background(), tag, digest, 0))
+	require.NoError(store.Put(tag, digest, 0))
 
 	result, err := store.Get(tag)
 	require.NoError(err)
@@ -102,7 +101,7 @@ func TestPutAndGetFromDiskWriteThrough(t *testing.T) {
 	mocks.writeBackManager.EXPECT().SyncExec(
 		writeback.MatchTask(writeback.NewTask(tag, tag, 0))).Return(nil)
 
-	require.NoError(store.Put(context.Background(), tag, digest, 0))
+	require.NoError(store.Put(tag, digest, 0))
 
 	result, err := store.Get(tag)
 	require.NoError(err)
