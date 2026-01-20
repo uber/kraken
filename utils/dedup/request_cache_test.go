@@ -163,16 +163,16 @@ func TestRequestCacheLimitsNumberOfWorkers(t *testing.T) {
 	}
 	d := NewRequestCache(config, clock.New(), tally.NoopScope)
 
-	exit := make(chan bool)
+	exitCh := make(chan bool)
 
 	require.NoError(d.Start("a", func() error {
-		<-exit
+		<-exitCh
 		return nil
 	}))
 	require.Equal(ErrWorkersBusy, d.Start("b", noop))
 
 	// After a's function exits, the worker should be released.
-	exit <- true
+	exitCh <- true
 	require.NoError(d.Start("b", noop))
 }
 
@@ -182,7 +182,7 @@ func TestRequestCacheEmitsNumRequests(t *testing.T) {
 	testStats := tally.NewTestScope("", map[string]string{
 		"module": "test",
 	})
-	assertGauge := func(wantNumRequests float64) {
+	assertNumRequestsMetricValue := func(wantNumRequests float64) {
 		require.Eventually(func() bool {
 			numRequestsGauge, ok := testStats.Snapshot().Gauges()["num_requests+module=dedup"]
 			if !ok {
@@ -193,34 +193,35 @@ func TestRequestCacheEmitsNumRequests(t *testing.T) {
 	}
 
 	d := NewRequestCache(RequestCacheConfig{}, clock.New(), testStats)
-	assertGauge(0)
 
-	exit := make(chan bool)
+	exitCh := make(chan bool)
+	startRequest := func(requestID string) {
+		require.NoError(d.Start(requestID, func() error {
+			<-exitCh
+			return nil
+		}))
+	}
+	finishRequest := func() {
+		exitCh <- true
+	}
 
-	require.NoError(d.Start("a", func() error {
-		<-exit
-		return nil
-	}))
-	assertGauge(1)
+	assertNumRequestsMetricValue(0)
 
-	require.NoError(d.Start("b", func() error {
-		<-exit
-		return nil
-	}))
-	assertGauge(2)
+	startRequest("a")
+	assertNumRequestsMetricValue(1)
 
-	exit <- true
-	assertGauge(1)
+	startRequest("b")
+	assertNumRequestsMetricValue(2)
 
-	require.NoError(d.Start("c", func() error {
-		<-exit
-		return nil
-	}))
-	assertGauge(2)
+	finishRequest()
+	assertNumRequestsMetricValue(1)
 
-	exit <- true
-	assertGauge(1)
+	startRequest("c")
+	assertNumRequestsMetricValue(2)
 
-	exit <- true
-	assertGauge(0)
+	finishRequest()
+	assertNumRequestsMetricValue(1)
+
+	finishRequest()
+	assertNumRequestsMetricValue(0)
 }
