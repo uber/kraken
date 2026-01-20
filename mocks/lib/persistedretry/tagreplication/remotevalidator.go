@@ -10,30 +10,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockRemoteValidator is a mock of RemoteValidator interface.
+// MockRemoteValidator is a mock of RemoteValidator interface
 type MockRemoteValidator struct {
 	ctrl     *gomock.Controller
 	recorder *MockRemoteValidatorMockRecorder
 }
 
-// MockRemoteValidatorMockRecorder is the mock recorder for MockRemoteValidator.
+// MockRemoteValidatorMockRecorder is the mock recorder for MockRemoteValidator
 type MockRemoteValidatorMockRecorder struct {
 	mock *MockRemoteValidator
 }
 
-// NewMockRemoteValidator creates a new mock instance.
+// NewMockRemoteValidator creates a new mock instance
 func NewMockRemoteValidator(ctrl *gomock.Controller) *MockRemoteValidator {
 	mock := &MockRemoteValidator{ctrl: ctrl}
 	mock.recorder = &MockRemoteValidatorMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockRemoteValidator) EXPECT() *MockRemoteValidatorMockRecorder {
 	return m.recorder
 }
 
-// Valid mocks base method.
+// Valid mocks base method
 func (m *MockRemoteValidator) Valid(arg0, arg1 string) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Valid", arg0, arg1)
@@ -41,7 +41,7 @@ func (m *MockRemoteValidator) Valid(arg0, arg1 string) bool {
 	return ret0
 }
 
-// Valid indicates an expected call of Valid.
+// Valid indicates an expected call of Valid
 func (mr *MockRemoteValidatorMockRecorder) Valid(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Valid", reflect.TypeOf((*MockRemoteValidator)(nil).Valid), arg0, arg1)
