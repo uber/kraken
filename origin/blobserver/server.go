@@ -178,8 +178,8 @@ func (s *Server) ListenAndServe(h http.Handler) error {
 }
 
 func (s *Server) healthCheckHandler(w http.ResponseWriter, r *http.Request) error {
-	fmt.Fprintln(w, "OK")
-	return nil
+	_, err := fmt.Fprintln(w, "OK")
+	return err
 }
 
 func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) error {
@@ -187,8 +187,8 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return handler.Errorf("not ready to serve traffic: %s", err).Status(http.StatusServiceUnavailable)
 	}
-	fmt.Fprintln(w, "OK")
-	return nil
+	_, err = fmt.Fprintln(w, "OK")
+	return err
 }
 
 // statHandler returns blob info if it exists.

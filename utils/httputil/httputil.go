@@ -25,9 +25,9 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/go-chi/chi"
-
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/handler"
+	"github.com/uber/kraken/utils/log"
 )
 
 var retryableCodes = map[int]struct{}{
@@ -51,7 +51,11 @@ type StatusError struct {
 
 // NewStatusError returns a new StatusError.
 func NewStatusError(resp *http.Response) StatusError {
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Errorf("Failed to close response body: %s", err)
+		}
+	}()
 	respBytes, err := io.ReadAll(resp.Body)
 	respDump := string(respBytes)
 	if err != nil {
