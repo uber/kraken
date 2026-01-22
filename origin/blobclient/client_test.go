@@ -32,569 +32,565 @@ import (
 	"github.com/uber/kraken/utils/memsize"
 )
 
+// testServer creates a test HTTP server and returns a client configured to use it.
+// The server is automatically closed when the test completes.
+func testServer(t *testing.T, handler http.HandlerFunc, opts ...Option) *HTTPClient {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	return New(stripHTTPPrefix(server.URL), opts...)
+}
+
+// statusHandler returns a handler that responds with the given status code.
+func statusHandler(status int) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+	}
+}
+
+// statusWithBodyHandler returns a handler that responds with status and body.
+func statusWithBodyHandler(status int, body []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		w.Write(body)
+	}
+}
+
+// stripHTTPPrefix removes the http:// prefix from a test server URL.
+func stripHTTPPrefix(url string) string {
+	return strings.TrimPrefix(url, "http://")
+}
+
+// errorWriter is a writer that always returns an error.
+type errorWriter struct{}
+
+func (e *errorWriter) Write(p []byte) (n int, err error) {
+	return 0, errors.New("write error")
+}
+
 func TestNew(t *testing.T) {
-	t.Run("default values", func(t *testing.T) {
-		require := require.New(t)
+	tests := []struct {
+		name          string
+		addr          string
+		opts          []Option
+		wantAddr      string
+		wantChunkSize uint64
+		wantTLS       bool
+	}{
+		{
+			name:          "default values",
+			addr:          "localhost:8080",
+			opts:          nil,
+			wantAddr:      "localhost:8080",
+			wantChunkSize: 32 * memsize.MB,
+			wantTLS:       false,
+		},
+		{
+			name:          "with custom chunk size",
+			addr:          "localhost:8080",
+			opts:          []Option{WithChunkSize(64 * memsize.MB)},
+			wantAddr:      "localhost:8080",
+			wantChunkSize: 64 * memsize.MB,
+			wantTLS:       false,
+		},
+		{
+			name:          "with TLS config",
+			addr:          "localhost:8080",
+			opts:          []Option{WithTLS(&tls.Config{InsecureSkipVerify: true})},
+			wantAddr:      "localhost:8080",
+			wantChunkSize: 32 * memsize.MB,
+			wantTLS:       true,
+		},
+		{
+			name: "with multiple options",
+			addr: "localhost:8080",
+			opts: []Option{
+				WithChunkSize(16 * memsize.MB),
+				WithTLS(&tls.Config{InsecureSkipVerify: true}),
+			},
+			wantAddr:      "localhost:8080",
+			wantChunkSize: 16 * memsize.MB,
+			wantTLS:       true,
+		},
+	}
 
-		client := New("localhost:8080")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			client := New(tt.addr, tt.opts...)
 
-		require.Equal("localhost:8080", client.addr)
-		require.Equal(uint64(32*memsize.MB), client.chunkSize)
-		require.Nil(client.tls)
-	})
-
-	t.Run("with custom chunk size", func(t *testing.T) {
-		require := require.New(t)
-
-		client := New("localhost:8080", WithChunkSize(64*memsize.MB))
-
-		require.Equal(uint64(64*memsize.MB), client.chunkSize)
-	})
-
-	t.Run("with TLS config", func(t *testing.T) {
-		require := require.New(t)
-
-		tlsConfig := &tls.Config{InsecureSkipVerify: true}
-		client := New("localhost:8080", WithTLS(tlsConfig))
-
-		require.Equal(tlsConfig, client.tls)
-	})
-
-	t.Run("with multiple options", func(t *testing.T) {
-		require := require.New(t)
-
-		tlsConfig := &tls.Config{InsecureSkipVerify: true}
-		client := New("localhost:8080",
-			WithChunkSize(16*memsize.MB),
-			WithTLS(tlsConfig))
-
-		require.Equal(uint64(16*memsize.MB), client.chunkSize)
-		require.Equal(tlsConfig, client.tls)
-	})
+			require.Equal(tt.wantAddr, client.addr)
+			require.Equal(tt.wantChunkSize, client.chunkSize)
+			if tt.wantTLS {
+				require.NotNil(client.tls)
+			} else {
+				require.Nil(client.tls)
+			}
+		})
+	}
 }
 
 func TestAddr(t *testing.T) {
 	require := require.New(t)
-
 	client := New("test-host:9999")
-
 	require.Equal("test-host:9999", client.Addr())
 }
 
 func TestCheckReadiness(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		require := require.New(t)
+	tests := []struct {
+		name       string
+		status     int
+		wantErr    bool
+		errContain string
+	}{
+		{
+			name:    "success",
+			status:  http.StatusOK,
+			wantErr: false,
+		},
+		{
+			name:       "not ready",
+			status:     http.StatusServiceUnavailable,
+			wantErr:    true,
+			errContain: "origin not ready",
+		},
+	}
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal("/readiness", r.URL.Path)
-			require.Equal(http.MethodGet, r.Method)
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal("/readiness", r.URL.Path)
+				require.Equal(http.MethodGet, r.Method)
+				w.WriteHeader(tt.status)
+			})
 
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.CheckReadiness()
-		require.NoError(err)
-	})
-
-	t.Run("not ready", func(t *testing.T) {
-		require := require.New(t)
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusServiceUnavailable)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.CheckReadiness()
-		require.Error(err)
-		require.Contains(err.Error(), "origin not ready")
-	})
+			err := client.CheckReadiness()
+			if tt.wantErr {
+				require.Error(err)
+				if tt.errContain != "" {
+					require.Contains(err.Error(), tt.errContain)
+				}
+			} else {
+				require.NoError(err)
+			}
+		})
+	}
 }
 
 func TestLocations(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		require := require.New(t)
+	tests := []struct {
+		name          string
+		locations     string
+		status        int
+		wantLocations []string
+		wantErr       bool
+	}{
+		{
+			name:          "multiple locations",
+			locations:     "origin1:8080,origin2:8080,origin3:8080",
+			status:        http.StatusOK,
+			wantLocations: []string{"origin1:8080", "origin2:8080", "origin3:8080"},
+			wantErr:       false,
+		},
+		{
+			name:          "single location",
+			locations:     "origin1:8080",
+			status:        http.StatusOK,
+			wantLocations: []string{"origin1:8080"},
+			wantErr:       false,
+		},
+		{
+			name:    "server error",
+			status:  http.StatusInternalServerError,
+			wantErr: true,
+		},
+	}
 
-		d := core.DigestFixture()
-		expectedLocations := []string{"origin1:8080", "origin2:8080", "origin3:8080"}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			d := core.DigestFixture()
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal(fmt.Sprintf("/blobs/%s/locations", d), r.URL.Path)
-			require.Equal(http.MethodGet, r.Method)
+			client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(fmt.Sprintf("/blobs/%s/locations", d), r.URL.Path)
+				require.Equal(http.MethodGet, r.Method)
+				if tt.locations != "" {
+					w.Header().Set("Origin-Locations", tt.locations)
+				}
+				w.WriteHeader(tt.status)
+			})
 
-			w.Header().Set("Origin-Locations", strings.Join(expectedLocations, ","))
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		locs, err := client.Locations(d)
-		require.NoError(err)
-		require.Equal(expectedLocations, locs)
-	})
-
-	t.Run("single location", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		expectedLocations := []string{"origin1:8080"}
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Origin-Locations", "origin1:8080")
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		locs, err := client.Locations(d)
-		require.NoError(err)
-		require.Equal(expectedLocations, locs)
-	})
-
-	t.Run("server error", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		_, err := client.Locations(d)
-		require.Error(err)
-	})
+			locs, err := client.Locations(d)
+			if tt.wantErr {
+				require.Error(err)
+			} else {
+				require.NoError(err)
+				require.Equal(tt.wantLocations, locs)
+			}
+		})
+	}
 }
 
 func TestStat(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		require := require.New(t)
+	tests := []struct {
+		name          string
+		namespace     string
+		contentLength string
+		status        int
+		wantSize      int64
+		wantErr       error
+		wantErrMsg    string
+	}{
+		{
+			name:          "success",
+			namespace:     "test-namespace",
+			contentLength: "1024",
+			status:        http.StatusOK,
+			wantSize:      1024,
+		},
+		{
+			name:      "not found returns ErrBlobNotFound",
+			namespace: "test-namespace",
+			status:    http.StatusNotFound,
+			wantErr:   ErrBlobNotFound,
+		},
+		{
+			name:       "server error",
+			namespace:  "test-namespace",
+			status:     http.StatusInternalServerError,
+			wantErrMsg: "500",
+		},
+		{
+			name:      "no content length header",
+			namespace: "test-namespace",
+			status:    http.StatusOK,
+			wantSize:  0,
+		},
+		{
+			name:          "namespace with special characters",
+			namespace:     "namespace/with/slashes",
+			contentLength: "512",
+			status:        http.StatusOK,
+			wantSize:      512,
+		},
+	}
 
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-		expectedSize := int64(1024)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			d := core.DigestFixture()
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal(fmt.Sprintf("/internal/namespace/%s/blobs/%s", namespace, d), r.URL.Path)
-			require.Equal(http.MethodHead, r.Method)
-			require.Empty(r.URL.Query().Get("local"))
+			client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(http.MethodHead, r.Method)
+				require.Contains(r.URL.Path, "/internal/namespace/")
+				require.Empty(r.URL.Query().Get("local"))
 
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", expectedSize))
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
+				if tt.contentLength != "" {
+					w.Header().Set("Content-Length", tt.contentLength)
+				}
+				w.WriteHeader(tt.status)
+			})
 
-		client := New(stripHTTPPrefix(server.URL))
+			info, err := client.Stat(tt.namespace, d)
+			if tt.wantErr != nil {
+				require.Equal(tt.wantErr, err)
+			} else if tt.wantErrMsg != "" {
+				require.Error(err)
+				require.Contains(err.Error(), tt.wantErrMsg)
+			} else {
+				require.NoError(err)
+				require.NotNil(info)
+				require.Equal(tt.wantSize, info.Size)
+			}
+		})
+	}
 
-		info, err := client.Stat(namespace, d)
-		require.NoError(err)
-		require.NotNil(info)
-		require.Equal(expectedSize, info.Size)
-	})
-
-	t.Run("not found returns ErrBlobNotFound", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusNotFound)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		_, err := client.Stat(namespace, d)
-		require.Equal(ErrBlobNotFound, err)
-	})
-
-	t.Run("server error", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		_, err := client.Stat(namespace, d)
-		require.Error(err)
-		require.NotEqual(ErrBlobNotFound, err)
-	})
-
-	t.Run("no content length header", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		info, err := client.Stat(namespace, d)
-		require.NoError(err)
-		require.NotNil(info)
-		require.Equal(int64(0), info.Size)
-	})
-
-	t.Run("namespace with special characters", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "namespace/with/slashes"
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// URL should have properly escaped namespace
-			require.Contains(r.URL.Path, "/internal/namespace/")
-			w.Header().Set("Content-Length", "512")
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		info, err := client.Stat(namespace, d)
-		require.NoError(err)
-		require.NotNil(info)
-	})
-
+	// Special case: invalid content length header (requires connection hijacking)
 	t.Run("invalid content length header", func(t *testing.T) {
 		require := require.New(t)
-
 		d := core.DigestFixture()
-		namespace := "test-namespace"
 
-		// Use a raw TCP handler to send an invalid Content-Length that Go's stdlib won't catch
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Hijack the connection to send raw response
 			hijacker, ok := w.(http.Hijacker)
 			if !ok {
 				t.Fatal("cannot hijack connection")
 			}
 			conn, buf, _ := hijacker.Hijack()
-			defer conn.Close()
-			
-			// Send raw HTTP response with invalid Content-Length
+			t.Cleanup(func() { conn.Close() })
+
 			buf.WriteString("HTTP/1.1 200 OK\r\n")
 			buf.WriteString("Content-Length: not-a-number\r\n")
 			buf.WriteString("\r\n")
 			buf.Flush()
 		}))
-		defer server.Close()
+		t.Cleanup(server.Close)
 
 		client := New(stripHTTPPrefix(server.URL))
-
-		_, err := client.Stat(namespace, d)
+		_, err := client.Stat("test-namespace", d)
 		require.Error(err)
 	})
 }
 
 func TestStatLocal(t *testing.T) {
-	t.Run("success with local param", func(t *testing.T) {
-		require := require.New(t)
+	tests := []struct {
+		name     string
+		status   int
+		size     int64
+		wantErr  error
+		wantSize int64
+	}{
+		{
+			name:     "success with local param",
+			status:   http.StatusOK,
+			size:     2048,
+			wantSize: 2048,
+		},
+		{
+			name:    "not found returns ErrBlobNotFound",
+			status:  http.StatusNotFound,
+			wantErr: ErrBlobNotFound,
+		},
+	}
 
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-		expectedSize := int64(2048)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			d := core.DigestFixture()
+			namespace := "test-namespace"
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal(fmt.Sprintf("/internal/namespace/%s/blobs/%s", namespace, d), r.URL.Path)
-			require.Equal(http.MethodHead, r.Method)
-			require.Equal("true", r.URL.Query().Get("local"))
+			client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(http.MethodHead, r.Method)
+				require.Equal("true", r.URL.Query().Get("local"))
 
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", expectedSize))
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
+				if tt.size > 0 {
+					w.Header().Set("Content-Length", fmt.Sprintf("%d", tt.size))
+				}
+				w.WriteHeader(tt.status)
+			})
 
-		client := New(stripHTTPPrefix(server.URL))
-
-		info, err := client.StatLocal(namespace, d)
-		require.NoError(err)
-		require.NotNil(info)
-		require.Equal(expectedSize, info.Size)
-	})
-
-	t.Run("not found returns ErrBlobNotFound", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal("true", r.URL.Query().Get("local"))
-			w.WriteHeader(http.StatusNotFound)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		_, err := client.StatLocal(namespace, d)
-		require.Equal(ErrBlobNotFound, err)
-	})
+			info, err := client.StatLocal(namespace, d)
+			if tt.wantErr != nil {
+				require.Equal(tt.wantErr, err)
+			} else {
+				require.NoError(err)
+				require.NotNil(info)
+				require.Equal(tt.wantSize, info.Size)
+			}
+		})
+	}
 }
 
 func TestDeleteBlob(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		require := require.New(t)
+	tests := []struct {
+		name    string
+		status  int
+		wantErr bool
+	}{
+		{
+			name:    "success",
+			status:  http.StatusAccepted,
+			wantErr: false,
+		},
+		{
+			name:    "server error",
+			status:  http.StatusInternalServerError,
+			wantErr: true,
+		},
+	}
 
-		d := core.DigestFixture()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			d := core.DigestFixture()
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal(fmt.Sprintf("/internal/blobs/%s", d), r.URL.Path)
-			require.Equal(http.MethodDelete, r.Method)
+			client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(fmt.Sprintf("/internal/blobs/%s", d), r.URL.Path)
+				require.Equal(http.MethodDelete, r.Method)
+				w.WriteHeader(tt.status)
+			})
 
-			w.WriteHeader(http.StatusAccepted)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.DeleteBlob(d)
-		require.NoError(err)
-	})
-
-	t.Run("server error", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.DeleteBlob(d)
-		require.Error(err)
-	})
+			err := client.DeleteBlob(d)
+			if tt.wantErr {
+				require.Error(err)
+			} else {
+				require.NoError(err)
+			}
+		})
+	}
 }
 
 func TestDownloadBlob(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		require := require.New(t)
+	tests := []struct {
+		name        string
+		status      int
+		content     []byte
+		useErrWrite bool
+		wantErr     bool
+		errContain  string
+	}{
+		{
+			name:    "success",
+			status:  http.StatusOK,
+			content: []byte("test blob content for download"),
+			wantErr: false,
+		},
+		{
+			name:    "not found",
+			status:  http.StatusNotFound,
+			wantErr: true,
+		},
+		{
+			name:    "accepted status (blob still downloading)",
+			status:  http.StatusAccepted,
+			wantErr: true,
+		},
+		{
+			name:    "large blob download",
+			status:  http.StatusOK,
+			content: bytes.Repeat([]byte("x"), 1024*1024), // 1MB
+			wantErr: false,
+		},
+		{
+			name:        "write error during copy",
+			status:      http.StatusOK,
+			content:     []byte("test blob content"),
+			useErrWrite: true,
+			wantErr:     true,
+			errContain:  "copy body",
+		},
+	}
 
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-		expectedContent := []byte("test blob content for download")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			d := core.DigestFixture()
+			namespace := "test-namespace"
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal(fmt.Sprintf("/namespace/%s/blobs/%s", namespace, d), r.URL.Path)
-			require.Equal(http.MethodGet, r.Method)
+			client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(fmt.Sprintf("/namespace/%s/blobs/%s", namespace, d), r.URL.Path)
+				require.Equal(http.MethodGet, r.Method)
+				w.WriteHeader(tt.status)
+				if tt.content != nil {
+					w.Write(tt.content)
+				}
+			})
 
-			w.WriteHeader(http.StatusOK)
-			w.Write(expectedContent)
-		}))
-		defer server.Close()
+			var dst io.Writer
+			var buf bytes.Buffer
+			if tt.useErrWrite {
+				dst = &errorWriter{}
+			} else {
+				dst = &buf
+			}
 
-		client := New(stripHTTPPrefix(server.URL))
-
-		var buf bytes.Buffer
-		err := client.DownloadBlob(namespace, d, &buf)
-		require.NoError(err)
-		require.Equal(expectedContent, buf.Bytes())
-	})
-
-	t.Run("not found", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusNotFound)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		var buf bytes.Buffer
-		err := client.DownloadBlob(namespace, d, &buf)
-		require.Error(err)
-	})
-
-	t.Run("accepted status (blob still downloading)", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusAccepted)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		var buf bytes.Buffer
-		err := client.DownloadBlob(namespace, d, &buf)
-		require.Error(err)
-	})
-
-	t.Run("large blob download", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-		largeContent := bytes.Repeat([]byte("x"), 1024*1024) // 1MB
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			w.Write(largeContent)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		var buf bytes.Buffer
-		err := client.DownloadBlob(namespace, d, &buf)
-		require.NoError(err)
-		require.Equal(largeContent, buf.Bytes())
-	})
-
-	t.Run("write error during copy", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-		content := []byte("test blob content")
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			w.Write(content)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.DownloadBlob(namespace, d, &errorWriter{})
-		require.Error(err)
-		require.Contains(err.Error(), "copy body")
-	})
+			err := client.DownloadBlob(namespace, d, dst)
+			if tt.wantErr {
+				require.Error(err)
+				if tt.errContain != "" {
+					require.Contains(err.Error(), tt.errContain)
+				}
+			} else {
+				require.NoError(err)
+				require.Equal(tt.content, buf.Bytes())
+			}
+		})
+	}
 }
 
 func TestPrefetchBlob(t *testing.T) {
-	t.Run("success with 200", func(t *testing.T) {
-		require := require.New(t)
+	tests := []struct {
+		name    string
+		status  int
+		wantErr bool
+	}{
+		{
+			name:    "success with 200",
+			status:  http.StatusOK,
+			wantErr: false,
+		},
+		{
+			name:    "success with 202 accepted",
+			status:  http.StatusAccepted,
+			wantErr: false,
+		},
+		{
+			name:    "server error",
+			status:  http.StatusInternalServerError,
+			wantErr: true,
+		},
+	}
 
-		d := core.DigestFixture()
-		namespace := "test-namespace"
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			d := core.DigestFixture()
+			namespace := "test-namespace"
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal(fmt.Sprintf("/namespace/%s/blobs/%s/prefetch", namespace, d), r.URL.Path)
-			require.Equal(http.MethodPost, r.Method)
+			client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(fmt.Sprintf("/namespace/%s/blobs/%s/prefetch", namespace, d), r.URL.Path)
+				require.Equal(http.MethodPost, r.Method)
+				w.WriteHeader(tt.status)
+			})
 
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.PrefetchBlob(namespace, d)
-		require.NoError(err)
-	})
-
-	t.Run("success with 202 accepted", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusAccepted)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.PrefetchBlob(namespace, d)
-		require.NoError(err)
-	})
-
-	t.Run("server error", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.PrefetchBlob(namespace, d)
-		require.Error(err)
-	})
+			err := client.PrefetchBlob(namespace, d)
+			if tt.wantErr {
+				require.Error(err)
+			} else {
+				require.NoError(err)
+			}
+		})
+	}
 }
 
 func TestReplicateToRemote(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		require := require.New(t)
+	tests := []struct {
+		name    string
+		status  int
+		wantErr bool
+	}{
+		{
+			name:    "success",
+			status:  http.StatusOK,
+			wantErr: false,
+		},
+		{
+			name:    "accepted (blob not ready)",
+			status:  http.StatusAccepted,
+			wantErr: true,
+		},
+	}
 
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-		remoteDNS := "remote-origin.example.com"
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			d := core.DigestFixture()
+			namespace := "test-namespace"
+			remoteDNS := "remote-origin.example.com"
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal(fmt.Sprintf("/namespace/%s/blobs/%s/remote/%s", namespace, d, remoteDNS), r.URL.Path)
-			require.Equal(http.MethodPost, r.Method)
+			client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(fmt.Sprintf("/namespace/%s/blobs/%s/remote/%s", namespace, d, remoteDNS), r.URL.Path)
+				require.Equal(http.MethodPost, r.Method)
+				w.WriteHeader(tt.status)
+			})
 
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.ReplicateToRemote(namespace, d, remoteDNS)
-		require.NoError(err)
-	})
-
-	t.Run("accepted (blob not ready)", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-		remoteDNS := "remote-origin.example.com"
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusAccepted)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.ReplicateToRemote(namespace, d, remoteDNS)
-		require.Error(err)
-	})
+			err := client.ReplicateToRemote(namespace, d, remoteDNS)
+			if tt.wantErr {
+				require.Error(err)
+			} else {
+				require.NoError(err)
+			}
+		})
+	}
 }
 
 func TestGetMetaInfo(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		require := require.New(t)
-
 		blob := core.NewBlobFixture()
 		namespace := "test-namespace"
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 			require.Equal(fmt.Sprintf("/internal/namespace/%s/blobs/%s/metainfo", namespace, blob.Digest), r.URL.Path)
 			require.Equal(http.MethodGet, r.Method)
 
@@ -602,10 +598,7 @@ func TestGetMetaInfo(t *testing.T) {
 			require.NoError(err)
 			w.WriteHeader(http.StatusOK)
 			w.Write(raw)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
+		})
 
 		mi, err := client.GetMetaInfo(namespace, blob.Digest)
 		require.NoError(err)
@@ -614,103 +607,91 @@ func TestGetMetaInfo(t *testing.T) {
 		require.Equal(blob.MetaInfo.Length(), mi.Length())
 	})
 
-	t.Run("not found", func(t *testing.T) {
-		require := require.New(t)
+	errorTests := []struct {
+		name       string
+		status     int
+		body       []byte
+		errContain string
+	}{
+		{
+			name:   "not found",
+			status: http.StatusNotFound,
+		},
+		{
+			name:   "accepted (still downloading)",
+			status: http.StatusAccepted,
+		},
+		{
+			name:       "invalid metainfo response",
+			status:     http.StatusOK,
+			body:       []byte("invalid metainfo data"),
+			errContain: "deserialize metainfo",
+		},
+	}
 
-		d := core.DigestFixture()
-		namespace := "test-namespace"
+	for _, tt := range errorTests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			d := core.DigestFixture()
+			namespace := "test-namespace"
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusNotFound)
-		}))
-		defer server.Close()
+			client := testServer(t, statusWithBodyHandler(tt.status, tt.body))
 
-		client := New(stripHTTPPrefix(server.URL))
-
-		_, err := client.GetMetaInfo(namespace, d)
-		require.Error(err)
-	})
-
-	t.Run("accepted (still downloading)", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusAccepted)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		_, err := client.GetMetaInfo(namespace, d)
-		require.Error(err)
-	})
-
-	t.Run("invalid metainfo response", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		namespace := "test-namespace"
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("invalid metainfo data"))
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		_, err := client.GetMetaInfo(namespace, d)
-		require.Error(err)
-		require.Contains(err.Error(), "deserialize metainfo")
-	})
+			_, err := client.GetMetaInfo(namespace, d)
+			require.Error(err)
+			if tt.errContain != "" {
+				require.Contains(err.Error(), tt.errContain)
+			}
+		})
+	}
 }
 
 func TestOverwriteMetaInfo(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		require := require.New(t)
+	tests := []struct {
+		name        string
+		pieceLength int64
+		status      int
+		wantErr     bool
+	}{
+		{
+			name:        "success",
+			pieceLength: 1024 * 1024,
+			status:      http.StatusOK,
+			wantErr:     false,
+		},
+		{
+			name:        "server error",
+			pieceLength: 1024,
+			status:      http.StatusInternalServerError,
+			wantErr:     true,
+		},
+	}
 
-		d := core.DigestFixture()
-		pieceLength := int64(1024 * 1024) // 1MB
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			d := core.DigestFixture()
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal(fmt.Sprintf("/internal/blobs/%s/metainfo", d), r.URL.Path)
-			require.Equal(http.MethodPost, r.Method)
-			require.Equal(fmt.Sprintf("%d", pieceLength), r.URL.Query().Get("piece_length"))
+			client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(fmt.Sprintf("/internal/blobs/%s/metainfo", d), r.URL.Path)
+				require.Equal(http.MethodPost, r.Method)
+				require.Equal(fmt.Sprintf("%d", tt.pieceLength), r.URL.Query().Get("piece_length"))
+				w.WriteHeader(tt.status)
+			})
 
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.OverwriteMetaInfo(d, pieceLength)
-		require.NoError(err)
-	})
-
-	t.Run("server error", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.OverwriteMetaInfo(d, 1024)
-		require.Error(err)
-	})
+			err := client.OverwriteMetaInfo(d, tt.pieceLength)
+			if tt.wantErr {
+				require.Error(err)
+			} else {
+				require.NoError(err)
+			}
+		})
+	}
 }
 
 func TestGetPeerContext(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		require := require.New(t)
-
 		expectedPctx := core.PeerContext{
 			IP:      "192.168.1.100",
 			Port:    8080,
@@ -720,16 +701,12 @@ func TestGetPeerContext(t *testing.T) {
 			Origin:  true,
 		}
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 			require.Equal("/internal/peercontext", r.URL.Path)
 			require.Equal(http.MethodGet, r.Method)
-
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(expectedPctx)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
+		})
 
 		pctx, err := client.GetPeerContext()
 		require.NoError(err)
@@ -740,205 +717,187 @@ func TestGetPeerContext(t *testing.T) {
 		require.Equal(expectedPctx.Origin, pctx.Origin)
 	})
 
-	t.Run("server error", func(t *testing.T) {
-		require := require.New(t)
+	errorTests := []struct {
+		name   string
+		status int
+		body   []byte
+	}{
+		{
+			name:   "server error",
+			status: http.StatusInternalServerError,
+		},
+		{
+			name:   "invalid JSON response",
+			status: http.StatusOK,
+			body:   []byte("invalid json"),
+		},
+	}
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
-		}))
-		defer server.Close()
+	for _, tt := range errorTests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			client := testServer(t, statusWithBodyHandler(tt.status, tt.body))
 
-		client := New(stripHTTPPrefix(server.URL))
-
-		_, err := client.GetPeerContext()
-		require.Error(err)
-	})
-
-	t.Run("invalid JSON response", func(t *testing.T) {
-		require := require.New(t)
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("invalid json"))
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		_, err := client.GetPeerContext()
-		require.Error(err)
-	})
+			_, err := client.GetPeerContext()
+			require.Error(err)
+		})
+	}
 }
 
 func TestForceCleanup(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		require := require.New(t)
+	tests := []struct {
+		name      string
+		ttl       time.Duration
+		wantTTLHr string
+		status    int
+		wantErr   bool
+	}{
+		{
+			name:      "success",
+			ttl:       24 * time.Hour,
+			wantTTLHr: "24",
+			status:    http.StatusOK,
+			wantErr:   false,
+		},
+		{
+			name:      "fractional TTL rounds up",
+			ttl:       90 * time.Minute,
+			wantTTLHr: "2",
+			status:    http.StatusOK,
+			wantErr:   false,
+		},
+		{
+			name:      "server error",
+			ttl:       time.Hour,
+			wantTTLHr: "1",
+			status:    http.StatusInternalServerError,
+			wantErr:   true,
+		},
+	}
 
-		ttl := 24 * time.Hour
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal("/forcecleanup", r.URL.Path)
-			require.Equal(http.MethodPost, r.Method)
-			require.Equal("24", r.URL.Query().Get("ttl_hr"))
+			client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal("/forcecleanup", r.URL.Path)
+				require.Equal(http.MethodPost, r.Method)
+				require.Equal(tt.wantTTLHr, r.URL.Query().Get("ttl_hr"))
+				w.WriteHeader(tt.status)
+			})
 
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.ForceCleanup(ttl)
-		require.NoError(err)
-	})
-
-	t.Run("fractional TTL rounds up", func(t *testing.T) {
-		require := require.New(t)
-
-		ttl := 90 * time.Minute // 1.5 hours should round up to 2
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal("2", r.URL.Query().Get("ttl_hr"))
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.ForceCleanup(ttl)
-		require.NoError(err)
-	})
-
-	t.Run("server error", func(t *testing.T) {
-		require := require.New(t)
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.ForceCleanup(time.Hour)
-		require.Error(err)
-	})
+			err := client.ForceCleanup(tt.ttl)
+			if tt.wantErr {
+				require.Error(err)
+			} else {
+				require.NoError(err)
+			}
+		})
+	}
 }
 
 func TestTransferBlob(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		require := require.New(t)
+	tests := []struct {
+		name             string
+		content          []byte
+		uploadID         string
+		startStatus      int
+		patchStatus      int
+		commitStatus     int
+		setLocation      bool
+		wantErr          bool
+		errContain       string
+		wantRequestCount int
+	}{
+		{
+			name:             "success",
+			content:          []byte("test blob content"),
+			uploadID:         "upload-123",
+			startStatus:      http.StatusOK,
+			patchStatus:      http.StatusOK,
+			commitStatus:     http.StatusOK,
+			setLocation:      true,
+			wantErr:          false,
+			wantRequestCount: 3,
+		},
+		{
+			name:        "start upload fails",
+			content:     []byte("test blob content"),
+			startStatus: http.StatusInternalServerError,
+			wantErr:     true,
+		},
+		{
+			name:        "missing location header",
+			content:     []byte("test blob content"),
+			startStatus: http.StatusOK,
+			setLocation: false,
+			wantErr:     true,
+			errContain:  "Location header not set",
+		},
+		{
+			name:         "conflict is ignored",
+			content:      []byte("test blob content"),
+			uploadID:     "upload-123",
+			startStatus:  http.StatusOK,
+			patchStatus:  http.StatusOK,
+			commitStatus: http.StatusConflict,
+			setLocation:  true,
+			wantErr:      false,
+		},
+	}
 
-		d := core.DigestFixture()
-		content := []byte("test blob content")
-		uploadID := "upload-123"
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			d := core.DigestFixture()
+			requestCount := 0
 
-		requestCount := 0
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			requestCount++
+			client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+				requestCount++
 
-			switch {
-			case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/uploads"):
-				// Start upload
-				require.Equal(fmt.Sprintf("/internal/blobs/%s/uploads", d), r.URL.Path)
-				w.Header().Set("Location", uploadID)
-				w.WriteHeader(http.StatusOK)
+				switch {
+				case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/uploads"):
+					if tt.setLocation {
+						w.Header().Set("Location", tt.uploadID)
+					}
+					w.WriteHeader(tt.startStatus)
 
-			case r.Method == http.MethodPatch:
-				// Patch chunk
-				require.Contains(r.URL.Path, uploadID)
-				require.NotEmpty(r.Header.Get("Content-Range"))
-				w.WriteHeader(http.StatusOK)
+				case r.Method == http.MethodPatch:
+					require.Contains(r.URL.Path, tt.uploadID)
+					require.NotEmpty(r.Header.Get("Content-Range"))
+					w.WriteHeader(tt.patchStatus)
 
-			case r.Method == http.MethodPut:
-				// Commit upload
-				require.Contains(r.URL.Path, uploadID)
-				w.WriteHeader(http.StatusOK)
+				case r.Method == http.MethodPut:
+					require.Contains(r.URL.Path, tt.uploadID)
+					w.WriteHeader(tt.commitStatus)
+				}
+			}, WithChunkSize(uint64(len(tt.content)+1)))
+
+			err := client.TransferBlob(d, bytes.NewReader(tt.content))
+			if tt.wantErr {
+				require.Error(err)
+				if tt.errContain != "" {
+					require.Contains(err.Error(), tt.errContain)
+				}
+			} else {
+				require.NoError(err)
+				if tt.wantRequestCount > 0 {
+					require.Equal(tt.wantRequestCount, requestCount)
+				}
 			}
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL), WithChunkSize(uint64(len(content)+1)))
-
-		err := client.TransferBlob(d, bytes.NewReader(content))
-		require.NoError(err)
-		require.Equal(3, requestCount) // start + patch + commit
-	})
-
-	t.Run("start upload fails", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		content := []byte("test blob content")
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.TransferBlob(d, bytes.NewReader(content))
-		require.Error(err)
-	})
-
-	t.Run("missing location header", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		content := []byte("test blob content")
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Don't set Location header
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL))
-
-		err := client.TransferBlob(d, bytes.NewReader(content))
-		require.Error(err)
-		require.Contains(err.Error(), "Location header not set")
-	})
-
-	t.Run("conflict is ignored", func(t *testing.T) {
-		require := require.New(t)
-
-		d := core.DigestFixture()
-		content := []byte("test blob content")
-		uploadID := "upload-123"
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case r.Method == http.MethodPost:
-				w.Header().Set("Location", uploadID)
-				w.WriteHeader(http.StatusOK)
-			case r.Method == http.MethodPatch:
-				w.WriteHeader(http.StatusOK)
-			case r.Method == http.MethodPut:
-				w.WriteHeader(http.StatusConflict) // Blob already exists
-			}
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL), WithChunkSize(uint64(len(content)+1)))
-
-		err := client.TransferBlob(d, bytes.NewReader(content))
-		require.NoError(err) // Conflict should be ignored
-	})
+		})
+	}
 }
 
 func TestUploadBlob(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		require := require.New(t)
-
 		d := core.DigestFixture()
 		namespace := "test-namespace"
 		content := []byte("test blob content")
 		uploadID := "upload-456"
 
-		requestCount := 0
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			requestCount++
-
+		client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/uploads"):
 				require.Contains(r.URL.Path, fmt.Sprintf("/namespace/%s/blobs/%s/uploads", namespace, d))
@@ -953,14 +912,10 @@ func TestUploadBlob(t *testing.T) {
 			case r.Method == http.MethodPut:
 				require.Contains(r.URL.Path, namespace)
 				require.Contains(r.URL.Path, uploadID)
-				// Should be public upload, not duplicate
 				require.NotContains(r.URL.Path, "/internal/duplicate/")
 				w.WriteHeader(http.StatusOK)
 			}
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL), WithChunkSize(uint64(len(content)+1)))
+		}, WithChunkSize(uint64(len(content)+1)))
 
 		err := client.UploadBlob(namespace, d, bytes.NewReader(content))
 		require.NoError(err)
@@ -968,15 +923,14 @@ func TestUploadBlob(t *testing.T) {
 
 	t.Run("chunked upload with multiple chunks", func(t *testing.T) {
 		require := require.New(t)
-
 		d := core.DigestFixture()
 		namespace := "test-namespace"
 		content := []byte("test blob content that is longer than chunk size")
 		uploadID := "upload-789"
 		chunkSize := uint64(10)
-
 		patchCount := 0
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/uploads"):
 				w.Header().Set("Location", uploadID)
@@ -989,10 +943,7 @@ func TestUploadBlob(t *testing.T) {
 			case r.Method == http.MethodPut:
 				w.WriteHeader(http.StatusOK)
 			}
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL), WithChunkSize(chunkSize))
+		}, WithChunkSize(chunkSize))
 
 		err := client.UploadBlob(namespace, d, bytes.NewReader(content))
 		require.NoError(err)
@@ -1003,14 +954,13 @@ func TestUploadBlob(t *testing.T) {
 func TestDuplicateUploadBlob(t *testing.T) {
 	t.Run("success with delay", func(t *testing.T) {
 		require := require.New(t)
-
 		d := core.DigestFixture()
 		namespace := "test-namespace"
 		content := []byte("test blob content")
 		uploadID := "upload-dup"
 		delay := 5 * time.Minute
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/uploads"):
 				w.Header().Set("Location", uploadID)
@@ -1020,10 +970,8 @@ func TestDuplicateUploadBlob(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 
 			case r.Method == http.MethodPut:
-				// Should be duplicate upload endpoint
 				require.Contains(r.URL.Path, "/internal/duplicate/namespace/")
 
-				// Check request body for delay
 				body, _ := io.ReadAll(r.Body)
 				var req DuplicateCommitUploadRequest
 				err := json.Unmarshal(body, &req)
@@ -1032,10 +980,7 @@ func TestDuplicateUploadBlob(t *testing.T) {
 
 				w.WriteHeader(http.StatusOK)
 			}
-		}))
-		defer server.Close()
-
-		client := New(stripHTTPPrefix(server.URL), WithChunkSize(uint64(len(content)+1)))
+		}, WithChunkSize(uint64(len(content)+1)))
 
 		err := client.DuplicateUploadBlob(namespace, d, bytes.NewReader(content), delay)
 		require.NoError(err)
@@ -1045,17 +990,4 @@ func TestDuplicateUploadBlob(t *testing.T) {
 // TestClientInterface ensures HTTPClient implements Client interface
 func TestClientInterface(t *testing.T) {
 	var _ Client = (*HTTPClient)(nil)
-}
-
-// errorWriter is a writer that always returns an error
-type errorWriter struct{}
-
-func (e *errorWriter) Write(p []byte) (n int, err error) {
-	return 0, errors.New("write error")
-}
-
-// stripHTTPPrefix removes the http:// prefix from a test server URL
-// to match the expected address format for the client.
-func stripHTTPPrefix(url string) string {
-	return strings.TrimPrefix(url, "http://")
 }
