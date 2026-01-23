@@ -3,7 +3,6 @@ package blobclient_test
 import (
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -133,7 +132,7 @@ func TestClusterLocations(t *testing.T) {
 			}
 
 			require.NoError(err)
-			require.True(reflect.DeepEqual(got, tt.want), "got %v, want %v", got, tt.want)
+			require.Equal(tt.want, got)
 		})
 	}
 }
