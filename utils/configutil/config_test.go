@@ -90,8 +90,9 @@ func writeFile(t *testing.T, contents string) string {
 
 	f, err := os.CreateTemp("", "configtest")
 	require.NoError(err)
-
-	defer f.Close()
+	t.Cleanup(func() {
+		require.NoError(f.Close())
+	})
 
 	_, err = f.Write([]byte(contents))
 	require.NoError(err)
@@ -103,7 +104,9 @@ func TestLoad(t *testing.T) {
 	require := require.New(t)
 
 	fname := writeFile(t, goodConfig)
-	defer os.Remove(fname)
+	t.Cleanup(func() {
+		require.NoError(os.Remove(fname))
+	})
 
 	var cfg configuration
 	err := Load(fname, &cfg)
@@ -117,11 +120,15 @@ func TestLoadFilesExtends(t *testing.T) {
 	require := require.New(t)
 
 	fname := writeFile(t, goodConfig)
-	defer os.Remove(fname)
+	t.Cleanup(func() {
+		require.NoError(os.Remove(fname))
+	})
 
 	partialConfig := "buffer_space: 8080"
 	partial := writeFile(t, partialConfig)
-	defer os.Remove(partial)
+	t.Cleanup(func() {
+		require.NoError(os.Remove(partial))
+	})
 
 	var cfg configuration
 	err := loadFiles(&cfg, []string{fname, partial})
@@ -147,10 +154,14 @@ func TestLoadFilesValidateOnce(t *testing.T) {
     `
 
 	fname1 := writeFile(t, invalidConfig1)
-	defer os.Remove(fname1)
+	t.Cleanup(func() {
+		require.NoError(os.Remove(fname1))
+	})
 
 	fname2 := writeFile(t, invalidConfig2)
-	defer os.Remove(invalidConfig2)
+	t.Cleanup(func() {
+		require.NoError(os.Remove(fname2))
+	})
 
 	// Either config by itself will not pass validation.
 	var cfg1 configuration
@@ -204,7 +215,9 @@ func TestInvalidConfig(t *testing.T) {
 	require := require.New(t)
 
 	fname := writeFile(t, invalidConfig)
-	defer os.Remove(fname)
+	t.Cleanup(func() {
+		require.NoError(os.Remove(fname))
+	})
 
 	var cfg configuration
 	err := Load(fname, &cfg)
@@ -277,16 +290,21 @@ func TestExtendsConfigCircularRef(t *testing.T) {
 
 	f1, err := os.CreateTemp("", "configtest")
 	require.NoError(err)
+	t.Cleanup(func() {
+		require.NoError(f1.Close())
+	})
 
 	f2, err := os.CreateTemp("", "configtest")
 	require.NoError(err)
+	t.Cleanup(func() {
+		require.NoError(f2.Close())
+	})
 
 	f3, err := os.CreateTemp("", "configtest")
 	require.NoError(err)
-
-	defer f1.Close()
-	defer f2.Close()
-	defer f3.Close()
+	t.Cleanup(func() {
+		require.NoError(f3.Close())
+	})
 
 	_, err = f1.Write([]byte(goodConfig))
 	require.NoError(err)

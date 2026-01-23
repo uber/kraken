@@ -148,7 +148,7 @@ func TestRequestCacheStartCleansUpCachedErrors(t *testing.T) {
 	clk.Add(config.ErrorTTL)
 	clk.Add(config.CleanupInterval)
 
-	d.Start("c", noop)
+	require.NoError(d.Start("c", noop))
 
 	// Start should trigger cleanup.
 	require.Empty(d.errors)

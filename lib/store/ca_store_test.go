@@ -175,7 +175,9 @@ func TestCAStoreCreateUploadFileAndMoveToCache(t *testing.T) {
 
 	f, err := s.uploadStore.newFileOp().GetFileReader(src, 0 /* readPartSize */)
 	require.NoError(err)
-	defer f.Close()
+	t.Cleanup(func() {
+		require.NoError(f.Close())
+	})
 	digester := core.NewDigester()
 	digest, err := digester.FromReader(f)
 	require.NoError(err)
@@ -206,7 +208,9 @@ func TestCAStoreCreateUploadFileAndMoveToCacheFailure(t *testing.T) {
 
 	f, err := s.uploadStore.newFileOp().GetFileReader(src, 0 /* readPartSize */)
 	require.NoError(err)
-	defer f.Close()
+	t.Cleanup(func() {
+		require.NoError(f.Close())
+	})
 	digester := core.NewDigester()
 	digest, err := digester.FromReader(f)
 	require.NoError(err)
