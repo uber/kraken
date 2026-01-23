@@ -131,7 +131,9 @@ func TestSendRetryOn5XX(t *testing.T) {
 				2))),
 		SendTransport(transport))
 	require.Error(err)
-	require.Equal(503, err.(StatusError).Status)
+	statusErr, ok := err.(StatusError)
+	require.True(ok, "expected StatusError")
+	require.Equal(503, statusErr.Status)
 	require.InDelta(400*time.Millisecond, time.Since(start), float64(50*time.Millisecond))
 }
 

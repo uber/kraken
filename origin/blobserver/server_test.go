@@ -264,7 +264,9 @@ func TestDownloadBlobNotFound(t *testing.T) {
 
 	err := cp.Provide(master1).DownloadBlob(namespace, d, io.Discard)
 	require.Error(err)
-	require.Equal(http.StatusNotFound, err.(httputil.StatusError).Status)
+	statusErr, ok := err.(httputil.StatusError)
+	require.True(ok, "expected httputil.StatusError")
+	require.Equal(http.StatusNotFound, statusErr.Status)
 }
 
 func TestDeleteBlob(t *testing.T) {

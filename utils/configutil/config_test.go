@@ -243,11 +243,15 @@ func TestExtendsConfig(t *testing.T) {
 	require := require.New(t)
 
 	fname := writeFile(t, goodConfig)
-	defer os.Remove(fname)
+	t.Cleanup(func() {
+		require.NoError(os.Remove(fname))
+	})
 
 	extends := fmt.Sprintf(goodExtendsConfig, filepath.Base(fname))
 	extendsfn := writeFile(t, extends)
-	defer os.Remove(extendsfn)
+	t.Cleanup(func() {
+		require.NoError(os.Remove(extendsfn))
+	})
 
 	var cfg configuration
 	err := Load(extendsfn, &cfg)
@@ -266,15 +270,21 @@ func TestExtendsConfigDeep(t *testing.T) {
 	require := require.New(t)
 
 	fname := writeFile(t, goodConfig)
-	defer os.Remove(fname)
+	t.Cleanup(func() {
+		require.NoError(os.Remove(fname))
+	})
 
 	extends := fmt.Sprintf(goodExtendsConfig, filepath.Base(fname))
 	extendsfn := writeFile(t, extends)
-	defer os.Remove(extendsfn)
+	t.Cleanup(func() {
+		require.NoError(os.Remove(extendsfn))
+	})
 
 	extends2 := fmt.Sprintf(goodYetAnotherExtendsConfig, filepath.Base(extends))
 	extendsfn2 := writeFile(t, extends2)
-	defer os.Remove(extendsfn2)
+	t.Cleanup(func() {
+		require.NoError(os.Remove(extendsfn2))
+	})
 
 	var cfg configuration
 	err := Load(extendsfn2, &cfg)
@@ -308,19 +318,23 @@ func TestExtendsConfigCircularRef(t *testing.T) {
 
 	_, err = f1.Write([]byte(goodConfig))
 	require.NoError(err)
-	defer os.Remove(f1.Name())
+	t.Cleanup(func() {
+		require.NoError(os.Remove(f1.Name()))
+	})
 
 	extends := fmt.Sprintf(goodExtendsConfig, filepath.Base(f3.Name()))
 	_, err = f2.Write([]byte(extends))
 	require.NoError(err)
-
-	defer os.Remove(f2.Name())
+	t.Cleanup(func() {
+		require.NoError(os.Remove(f2.Name()))
+	})
 
 	extends2 := fmt.Sprintf(goodYetAnotherExtendsConfig, filepath.Base(f2.Name()))
 	_, err = f3.Write([]byte(extends2))
 	require.NoError(err)
-
-	defer os.Remove(f3.Name())
+	t.Cleanup(func() {
+		require.NoError(os.Remove(f3.Name()))
+	})
 
 	var cfg configuration
 	err = Load(f3.Name(), &cfg)

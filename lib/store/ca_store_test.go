@@ -240,6 +240,7 @@ func TestCAStoreCreateCacheFile(t *testing.T) {
 	r2, err := s.GetCacheFileReader(computedDigest.Hex())
 	require.NoError(err)
 	b2, err := io.ReadAll(r2)
+	require.NoError(err)
 	require.Equal(s1, string(b2))
 }
 func TestCAStoreConfig_WithMemoryCache(t *testing.T) {
