@@ -15,17 +15,13 @@ package writeback
 
 import (
 	"context"
-<<<<<<< HEAD
 	"encoding/hex"
-=======
->>>>>>> bba1aae (Tracing executor tasks)
 	"fmt"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/uber/kraken/core"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // Task contains information to write back a blob to remote storage.
