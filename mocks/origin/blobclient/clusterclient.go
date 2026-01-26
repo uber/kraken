@@ -57,17 +57,17 @@ func (mr *MockClusterClientMockRecorder) CheckReadiness() *gomock.Call {
 }
 
 // DownloadBlob mocks base method.
-func (m *MockClusterClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
+func (m *MockClusterClient) DownloadBlob(arg0 context.Context, arg1 string, arg2 core.Digest, arg3 io.Writer) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DownloadBlob", namespace, d, dst)
+	ret := m.ctrl.Call(m, "DownloadBlob", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DownloadBlob indicates an expected call of DownloadBlob.
-func (mr *MockClusterClientMockRecorder) DownloadBlob(namespace, d, dst any) *gomock.Call {
+func (mr *MockClusterClientMockRecorder) DownloadBlob(arg0, arg1, arg2, arg3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBlob", reflect.TypeOf((*MockClusterClient)(nil).DownloadBlob), namespace, d, dst)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBlob", reflect.TypeOf((*MockClusterClient)(nil).DownloadBlob), arg0, arg1, arg2, arg3)
 }
 
 // GetMetaInfo mocks base method.
