@@ -29,7 +29,6 @@ import (
 	mockbackend "github.com/uber/kraken/mocks/lib/backend"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/testutil"
-	"go.opentelemetry.io/otel"
 )
 
 type executorMocks struct {
