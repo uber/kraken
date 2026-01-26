@@ -14,7 +14,6 @@
 package blobserver
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
