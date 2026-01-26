@@ -316,10 +316,10 @@ func (s *Server) replicateToRemoteHandler(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return err
 	}
-	return s.replicateToRemote(namespace, d, remote)
+	return s.replicateToRemote(r.Context(), namespace, d, remote)
 }
 
-func (s *Server) replicateToRemote(namespace string, d core.Digest, remoteDNS string) error {
+func (s *Server) replicateToRemote(ctx context.Context, namespace string, d core.Digest, remoteDNS string) error {
 	start := time.Now()
 
 	fi, err := s.cas.GetCacheFileStat(d.Hex())
@@ -347,7 +347,7 @@ func (s *Server) replicateToRemote(namespace string, d core.Digest, remoteDNS st
 		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to get remote cluster provider: %s", err)
 		return handler.Errorf("remote cluster provider: %s", err)
 	}
-	if err := remote.UploadBlob(namespace, d, f); err != nil {
+	if err := remote.UploadBlob(ctx, namespace, d, f); err != nil {
 		duration := time.Since(start)
 		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to upload blob to remote: %s", err)
 		return err

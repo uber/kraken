@@ -14,6 +14,7 @@
 package transfer
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -26,6 +27,11 @@ import (
 
 	"github.com/docker/distribution/uuid"
 	"github.com/uber-go/tally"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ReadWriteTransferer is a Transferer for proxy. Uploads/downloads blobs via the
@@ -37,6 +43,7 @@ type ReadWriteTransferer struct {
 	tags          tagclient.Client
 	originCluster blobclient.ClusterClient
 	cas           *store.CAStore
+	tracer        trace.Tracer
 }
 
 // NewReadWriteTransferer creates a new ReadWriteTransferer.
@@ -57,6 +64,7 @@ func NewReadWriteTransferer(
 		tags:          tags,
 		originCluster: originCluster,
 		cas:           cas,
+		tracer:        otel.Tracer("kraken-registry-transfer"),
 	}
 }
 
@@ -131,11 +139,26 @@ func (t *ReadWriteTransferer) downloadFromOrigin(namespace string, d core.Digest
 func (t *ReadWriteTransferer) Upload(
 	namespace string, d core.Digest, blob store.FileReader,
 ) error {
-	if err := t.originCluster.UploadBlob(namespace, d, blob); err != nil {
+	ctx, span := t.tracer.Start(context.Background(), "registry.upload_blob",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("component", "registry-transfer"),
+			attribute.String("operation", "upload_blob"),
+			attribute.String("namespace", namespace),
+			attribute.String("blob.digest", d.Hex()),
+		),
+	)
+	defer span.End()
+
+	if err := t.originCluster.UploadBlob(ctx, namespace, d, blob); err != nil {
 		t.failureStats.Counter("upload_blob").Inc(1)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "upload failed")
 		return err
 	}
+
 	t.successStats.Counter("upload_blob").Inc(1)
+	span.SetStatus(codes.Ok, "upload completed")
 	return nil
 }
 
