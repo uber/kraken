@@ -28,6 +28,8 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/handler"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 var retryableCodes = map[int]struct{}{
@@ -133,14 +135,15 @@ func IsNetworkError(err error) bool {
 }
 
 type sendOptions struct {
-	body          io.Reader
-	timeout       time.Duration
-	acceptedCodes map[int]bool
-	headers       map[string]string
-	redirect      func(req *http.Request, via []*http.Request) error
-	retry         retryOptions
-	transport     http.RoundTripper
-	ctx           context.Context
+	body           io.Reader
+	timeout        time.Duration
+	acceptedCodes  map[int]bool
+	headers        map[string]string
+	redirect       func(req *http.Request, via []*http.Request) error
+	retry          retryOptions
+	transport      http.RoundTripper
+	ctx            context.Context
+	tracingContext bool
 
 	// This is not a valid http option. It provides a way to override
 	// parts of the url. For example, url.Scheme can be changed from
@@ -278,6 +281,16 @@ func SendContext(ctx context.Context) SendOption {
 	return func(o *sendOptions) { o.ctx = ctx }
 }
 
+// SendTracingContext sets the context and enables OpenTelemetry trace context
+// propagation via HTTP headers. The transport will be wrapped with otelhttp
+// after all options are applied.
+func SendTracingContext(ctx context.Context) SendOption {
+	return func(o *sendOptions) {
+		o.ctx = ctx
+		o.tracingContext = true
+	}
+}
+
 // Send sends an HTTP request. May return NetworkError or StatusError (see above).
 func Send(method, rawurl string, options ...SendOption) (*http.Response, error) {
 	u, err := url.Parse(rawurl)
@@ -297,6 +310,16 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 	}
 	for _, o := range options {
 		o(opts)
+	}
+
+	// Apply tracing context wrapping AFTER all other options are processed
+	// This ensures SendTLS and other transport options are respected
+	if opts.tracingContext {
+		baseTransport := opts.transport
+		if baseTransport == nil {
+			baseTransport = http.DefaultTransport
+		}
+		opts.transport = otelhttp.NewTransport(baseTransport)
 	}
 
 	req, err := newRequest(method, opts)
@@ -381,8 +404,8 @@ func Delete(url string, options ...SendOption) (*http.Response, error) {
 
 // PollAccepted wraps GET requests for endpoints which require 202-polling.
 func PollAccepted(
-	url string, b backoff.BackOff, options ...SendOption) (*http.Response, error) {
-
+	url string, b backoff.BackOff, options ...SendOption,
+) (*http.Response, error) {
 	b.Reset()
 	for {
 		resp, err := Get(url, options...)
@@ -456,8 +479,8 @@ func newRequest(method string, opts *sendOptions) (*http.Request, error) {
 }
 
 func fallbackToHTTP(
-	client *http.Client, method string, opts *sendOptions) (*http.Response, error) {
-
+	client *http.Client, method string, opts *sendOptions,
+) (*http.Response, error) {
 	req, err := newRequest(method, opts)
 	if err != nil {
 		return nil, err
