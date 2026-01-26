@@ -15,6 +15,7 @@ package tagstore
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -48,7 +49,7 @@ type FileStore interface {
 
 // Store defines tag storage operations.
 type Store interface {
-	Put(tag string, d core.Digest, writeBackDelay time.Duration) error
+	Put(ctx context.Context, tag string, d core.Digest, writeBackDelay time.Duration) error
 	Get(tag string) (core.Digest, error)
 }
 
@@ -95,15 +96,20 @@ func New(
 	return s
 }
 
-func (s *tagStore) Put(tag string, d core.Digest, writeBackDelay time.Duration) error {
+func (s *tagStore) Put(ctx context.Context, tag string, d core.Digest, writeBackDelay time.Duration) error {
+	log.WithTraceContext(ctx).With("tag", tag, "digest", d.Hex(), "delay", writeBackDelay).Debug("Starting tag put operation")
+
 	if err := s.writeTagToDisk(tag, d); err != nil {
+		log.WithTraceContext(ctx).With("tag", tag, "error", err).Error("Failed to write tag to disk")
 		return fmt.Errorf("write tag to disk: %s", err)
 	}
 	if _, err := s.fs.SetCacheFileMetadata(tag, metadata.NewPersist(true)); err != nil {
+		log.WithTraceContext(ctx).With("tag", tag, "error", err).Error("Failed to set persist metadata")
 		return fmt.Errorf("set persist metadata: %s", err)
 	}
+	task := writeback.NewTaskWithContext(ctx, tag, tag, writeBackDelay)
+	log.WithTraceContext(ctx).With("tag", tag, "has_trace", task.HasTraceContext()).Debug("Created writeback task with trace context")
 
-	task := writeback.NewTask(tag, tag, writeBackDelay)
 	return s.writeBackStrategy(task)
 }
 
