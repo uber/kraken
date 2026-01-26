@@ -47,7 +47,7 @@ func TestMapResolveDocker(t *testing.T) {
 	layers := core.DigestListFixture(3)
 	manifest, b := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
 
-	originClient.EXPECT().DownloadBlob(tag, manifest, mockutil.MatchWriter(b)).Return(nil)
+	originClient.EXPECT().DownloadBlob(gomock.Any(), tag, manifest, mockutil.MatchWriter(b)).Return(nil)
 
 	deps, err := m.Resolve(tag, manifest)
 	require.NoError(err)
