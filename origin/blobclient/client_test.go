@@ -49,11 +49,12 @@ func statusHandler(status int) http.HandlerFunc {
 }
 
 // statusWithBodyHandler returns a handler that responds with status and body.
-func statusWithBodyHandler(status int, body []byte) http.HandlerFunc {
+func statusWithBodyHandler(t *testing.T, status int, body []byte) http.HandlerFunc {
+	t.Helper()
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 		if _, err := w.Write(body); err != nil {
-			panic(err)
+			t.Fatal(err)
 		}
 	}
 }
@@ -645,7 +646,7 @@ func TestGetMetaInfo(t *testing.T) {
 			d := core.DigestFixture()
 			namespace := "test-namespace"
 
-			client := testServer(t, statusWithBodyHandler(tt.status, tt.body))
+			client := testServer(t, statusWithBodyHandler(t, tt.status, tt.body))
 
 			_, err := client.GetMetaInfo(namespace, d)
 			require.Error(err)
@@ -746,7 +747,7 @@ func TestGetPeerContext(t *testing.T) {
 	for _, tt := range errorTests {
 		t.Run(tt.name, func(t *testing.T) {
 			require := require.New(t)
-			client := testServer(t, statusWithBodyHandler(tt.status, tt.body))
+			client := testServer(t, statusWithBodyHandler(t, tt.status, tt.body))
 
 			_, err := client.GetPeerContext()
 			require.Error(err)
