@@ -14,6 +14,7 @@
 package blobclient
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -31,6 +32,11 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/memsize"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var _ Client = &HTTPClient{}
@@ -50,7 +56,7 @@ type Client interface {
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
 
-	UploadBlob(namespace string, d core.Digest, blob io.Reader) error
+	UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.Reader) error
 	DuplicateUploadBlob(namespace string, d core.Digest, blob io.Reader, delay time.Duration) error
 
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
@@ -68,6 +74,7 @@ type HTTPClient struct {
 	addr      string
 	chunkSize uint64
 	tls       *tls.Config
+	tracer    trace.Tracer
 }
 
 // Option allows setting optional HTTPClient parameters.
@@ -88,6 +95,7 @@ func New(addr string, opts ...Option) *HTTPClient {
 	c := &HTTPClient{
 		addr:      addr,
 		chunkSize: 32 * memsize.MB,
+		tracer:    otel.Tracer("kraken-origin-client"),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -188,9 +196,27 @@ func (c *HTTPClient) TransferBlob(d core.Digest, blob io.Reader) error {
 
 // UploadBlob uploads and replicates blob to the origin cluster, asynchronously
 // backing the blob up to the remote storage configured for namespace.
-func (c *HTTPClient) UploadBlob(namespace string, d core.Digest, blob io.Reader) error {
-	uc := newUploadClient(c.addr, namespace, _publicUpload, 0, c.tls)
-	return runChunkedUpload(uc, d, blob, int64(c.chunkSize))
+func (c *HTTPClient) UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.Reader) error {
+	ctx, span := c.tracer.Start(ctx, "blobclient.upload_blob",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("component", "origin-client"),
+			attribute.String("operation", "upload_blob"),
+			attribute.String("namespace", namespace),
+			attribute.String("blob.digest", d.Hex()),
+		),
+	)
+	defer span.End()
+
+	uc := newUploadClientWithContext(ctx, c.addr, namespace, _publicUpload, 0, c.tls)
+	if err := runChunkedUpload(uc, d, blob, int64(c.chunkSize)); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "upload failed")
+		return err
+	}
+
+	span.SetStatus(codes.Ok, "upload completed")
+	return nil
 }
 
 // DuplicateUploadBlob duplicates an blob upload request, which will attempt to

@@ -15,6 +15,7 @@ package blobserver
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -597,7 +598,7 @@ func TestReplicateToRemote(t *testing.T) {
 
 	remoteCluster := s.expectRemoteCluster(remote)
 	remoteCluster.EXPECT().UploadBlob(
-		namespace, blob.Digest, mockutil.MatchReader(blob.Content)).Return(nil)
+		context.Background(), namespace, blob.Digest, mockutil.MatchReader(blob.Content)).Return(nil)
 
 	require.NoError(cp.Provide(master1).ReplicateToRemote(namespace, blob.Digest, remote))
 }
@@ -656,7 +657,7 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 
 	remoteCluster := s.expectRemoteCluster(remote)
 	remoteCluster.EXPECT().UploadBlob(
-		namespace, blob.Digest, mockutil.MatchReader(blob.Content)).Return(nil)
+		context.Background(), namespace, blob.Digest, mockutil.MatchReader(blob.Content)).Return(nil)
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		err := cp.Provide(master1).ReplicateToRemote(namespace, blob.Digest, remote)
@@ -685,7 +686,7 @@ func TestUploadBlobDuplicatesWriteBackTaskToReplicas(t *testing.T) {
 	s2.writeBackManager.EXPECT().Add(
 		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex(), 30*time.Minute)))
 
-	err := cp.Provide(s1.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
+	err := cp.Provide(s1.host).UploadBlob(context.Background(), namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
 
 	ensureHasBlob(t, cp.Provide(s1.host), namespace, blob)
@@ -718,12 +719,12 @@ func TestUploadBlobRetriesWriteBackFailure(t *testing.T) {
 
 	// Upload should "fail" because we failed to add a write-back task, but blob
 	// should still be present.
-	err := cp.Provide(s.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
+	err := cp.Provide(s.host).UploadBlob(context.Background(), namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.Error(err)
 	ensureHasBlob(t, cp.Provide(s.host), namespace, blob)
 
 	// Uploading again should succeed.
-	err = cp.Provide(s.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
+	err = cp.Provide(s.host).UploadBlob(context.Background(), namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
 
 	// Shouldn't be able to delete blob since it is still being written back.
@@ -748,7 +749,7 @@ func TestUploadBlobResilientToDuplicationFailure(t *testing.T) {
 	s.writeBackManager.EXPECT().Add(
 		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex(), 0))).Return(nil)
 
-	err := cp.Provide(s.host).UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content))
+	err := cp.Provide(s.host).UploadBlob(context.Background(), namespace, blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
 
 	ensureHasBlob(t, cp.Provide(s.host), namespace, blob)
@@ -772,7 +773,7 @@ func TestForceCleanupTTL(t *testing.T) {
 	s.writeBackManager.EXPECT().Add(
 		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex(), 0))).Return(nil)
 
-	require.NoError(client.UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content)))
+	require.NoError(client.UploadBlob(context.Background(), namespace, blob.Digest, bytes.NewReader(blob.Content)))
 
 	ensureHasBlob(t, client, namespace, blob)
 
@@ -817,7 +818,7 @@ func TestForceCleanupNonOwner(t *testing.T) {
 	s2.writeBackManager.EXPECT().Add(
 		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex(), 30*time.Minute)))
 
-	require.NoError(client.UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content)))
+	require.NoError(client.UploadBlob(context.Background(), namespace, blob.Digest, bytes.NewReader(blob.Content)))
 
 	ensureHasBlob(t, client, namespace, blob)
 
@@ -849,7 +850,7 @@ func TestForceCleanupWriteBackFailures(t *testing.T) {
 
 	s.writeBackManager.EXPECT().Add(writeback.MatchTask(task)).Return(nil)
 
-	require.NoError(client.UploadBlob(namespace, blob.Digest, bytes.NewReader(blob.Content)))
+	require.NoError(client.UploadBlob(context.Background(), namespace, blob.Digest, bytes.NewReader(blob.Content)))
 
 	ensureHasBlob(t, client, namespace, blob)
 
