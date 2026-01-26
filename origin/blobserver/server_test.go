@@ -598,7 +598,7 @@ func TestReplicateToRemote(t *testing.T) {
 
 	remoteCluster := s.expectRemoteCluster(remote)
 	remoteCluster.EXPECT().UploadBlob(
-		context.Background(), namespace, blob.Digest, mockutil.MatchReader(blob.Content)).Return(nil)
+		gomock.Any(), namespace, blob.Digest, mockutil.MatchReader(blob.Content)).Return(nil)
 
 	require.NoError(cp.Provide(master1).ReplicateToRemote(namespace, blob.Digest, remote))
 }
@@ -657,7 +657,7 @@ func TestReplicateToRemoteWhenBlobInStorageBackend(t *testing.T) {
 
 	remoteCluster := s.expectRemoteCluster(remote)
 	remoteCluster.EXPECT().UploadBlob(
-		context.Background(), namespace, blob.Digest, mockutil.MatchReader(blob.Content)).Return(nil)
+		gomock.Any(), namespace, blob.Digest, mockutil.MatchReader(blob.Content)).Return(nil)
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
 		err := cp.Provide(master1).ReplicateToRemote(namespace, blob.Digest, remote)

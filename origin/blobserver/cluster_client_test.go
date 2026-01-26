@@ -181,9 +181,9 @@ func TestPollSkipsOriginOnRetryableError(t *testing.T) {
 
 	reader := store.NewBufferFileReader(blob.Content)
 	mockClient1.EXPECT().Addr().Return("client1").AnyTimes()
-	mockClient1.EXPECT().UploadBlob(context.Background(), namespace, blob.Digest, reader).Return(httputil.StatusError{Status: 503})
+	mockClient1.EXPECT().UploadBlob(gomock.Any(), namespace, blob.Digest, reader).Return(httputil.StatusError{Status: 503})
 	mockClient2.EXPECT().Addr().Return("client2").AnyTimes()
-	mockClient2.EXPECT().UploadBlob(context.Background(), namespace, blob.Digest, reader).Return(nil)
+	mockClient2.EXPECT().UploadBlob(gomock.Any(), namespace, blob.Digest, reader).Return(nil)
 
 	require.NoError(cc.UploadBlob(context.Background(), namespace, blob.Digest, reader))
 }
