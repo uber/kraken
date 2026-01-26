@@ -48,6 +48,7 @@ import (
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/stringset"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -135,6 +136,9 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.StatusCounter(s.stats))
 	r.Use(middleware.LatencyTimer(s.stats))
 
+	tracingMiddleware := otelhttp.NewMiddleware("kraken-origin",
+		otelhttp.WithTracerProvider(otel.GetTracerProvider()))
+
 	// Public endpoints:
 
 	r.Get("/health", handler.Wrap(s.healthCheckHandler))
@@ -142,9 +146,9 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/blobs/{digest}/locations", handler.Wrap(s.getLocationsHandler))
 
-	r.Post("/namespace/{namespace}/blobs/{digest}/uploads", handler.Wrap(s.startClusterUploadHandler))
-	r.Patch("/namespace/{namespace}/blobs/{digest}/uploads/{uid}", handler.Wrap(s.patchClusterUploadHandler))
-	r.Put("/namespace/{namespace}/blobs/{digest}/uploads/{uid}", handler.Wrap(s.commitClusterUploadHandler))
+	r.With(tracingMiddleware).Post("/namespace/{namespace}/blobs/{digest}/uploads", handler.Wrap(s.startClusterUploadHandler))
+	r.With(tracingMiddleware).Patch("/namespace/{namespace}/blobs/{digest}/uploads/{uid}", handler.Wrap(s.patchClusterUploadHandler))
+	r.With(tracingMiddleware).Put("/namespace/{namespace}/blobs/{digest}/uploads/{uid}", handler.Wrap(s.commitClusterUploadHandler))
 
 	r.Get("/namespace/{namespace}/blobs/{digest}", handler.Wrap(s.downloadBlobHandler))
 	r.Post("/namespace/{namespace}/blobs/{digest}/prefetch", handler.Wrap(s.prefetchBlobHandler))
