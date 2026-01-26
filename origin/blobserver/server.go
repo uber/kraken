@@ -14,6 +14,7 @@
 package blobserver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,6 +48,11 @@ import (
 	"github.com/uber/kraken/utils/listener"
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/stringset"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const _operation = "operation"
@@ -67,6 +73,7 @@ type Server struct {
 	metaInfoGenerator *metainfogen.Generator
 	uploader          *uploader
 	writeBackManager  persistedretry.Manager
+	tracer            trace.Tracer
 
 	// This is an unfortunate coupling between the p2p client and the blob server.
 	// Tracker queries the origin cluster to discover which origins can seed
@@ -112,6 +119,7 @@ func New(
 		metaInfoGenerator: metaInfoGenerator,
 		uploader:          newUploader(cas),
 		writeBackManager:  writeBackManager,
+		tracer:            otel.Tracer("kraken-origin"),
 		pctx:              pctx,
 	}, nil
 }
@@ -707,50 +715,105 @@ func (s *Server) handleUploadConflict(err error, namespace string, d core.Digest
 
 // startClusterUploadHandler initializes an upload for external uploads.
 func (s *Server) startClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
+	ctx, span := s.tracer.Start(r.Context(), "origin.start_upload",
+		trace.WithSpanKind(trace.SpanKindServer),
+		trace.WithAttributes(
+			attribute.String("component", "origin"),
+			attribute.String("operation", "start_cluster_upload"),
+		),
+	)
+	defer span.End()
+
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse digest failed")
 		return err
 	}
 	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse namespace failed")
 		return err
 	}
-	log.With("namespace", namespace, "digest", d.Hex()).Info("Starting cluster upload")
+
+	span.SetAttributes(
+		attribute.String("namespace", namespace),
+		attribute.String("blob.digest", d.Hex()),
+	)
+
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Info("Starting cluster upload")
 	uid, err := s.uploader.start(d)
 	if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex()).Warnf("Failed to start cluster upload: %s", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "start upload failed")
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Warnf("Failed to start cluster upload: %s", err)
 		return s.handleUploadConflict(err, namespace, d)
 	}
+
+	span.SetAttributes(attribute.String("upload.uid", uid))
 	setUploadLocation(w, uid)
 	w.WriteHeader(http.StatusOK)
-	log.With("namespace", namespace, "digest", d.Hex(), "uid", uid).Info("Successfully started cluster upload")
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid).Info("Successfully started cluster upload")
+	span.SetStatus(codes.Ok, "upload started")
 	return nil
 }
 
 // patchClusterUploadHandler uploads a chunk of a blob for external uploads.
 func (s *Server) patchClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
+	ctx, span := s.tracer.Start(r.Context(), "origin.patch_upload",
+		trace.WithSpanKind(trace.SpanKindServer),
+		trace.WithAttributes(
+			attribute.String("component", "origin"),
+			attribute.String("operation", "patch_cluster_upload"),
+		),
+	)
+	defer span.End()
+
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse digest failed")
 		return err
 	}
 	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse namespace failed")
 		return err
 	}
 	uid, err := httputil.ParseParam(r, "uid")
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse uid failed")
 		return err
 	}
 	start, end, err := parseContentRange(r.Header)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse content range failed")
 		return err
 	}
-	log.With("namespace", namespace, "digest", d.Hex(), "uid", uid, "start", start, "end", end).Debug("Patching cluster upload chunk")
+
+	chunkSize := end - start
+	span.SetAttributes(
+		attribute.String("namespace", namespace),
+		attribute.String("blob.digest", d.Hex()),
+		attribute.String("upload.uid", uid),
+		attribute.Int64("upload.chunk_start", start),
+		attribute.Int64("upload.chunk_end", end),
+		attribute.Int64("upload.chunk_size", chunkSize),
+	)
+
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid, "start", start, "end", end).Debug("Patching cluster upload chunk")
 	if err := s.uploader.patch(d, uid, r.Body, start, end); err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "uid", uid).Errorf("Failed to patch cluster upload: %s", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "patch upload failed")
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid).Errorf("Failed to patch cluster upload: %s", err)
 		return s.handleUploadConflict(err, namespace, d)
 	}
-	log.With("namespace", namespace, "digest", d.Hex(), "uid", uid, "start", start, "end", end).Debug("Successfully patched upload chunk")
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid, "start", start, "end", end).Debug("Successfully patched upload chunk")
+	span.SetStatus(codes.Ok, "chunk uploaded")
 	return nil
 }
 
@@ -758,37 +821,66 @@ func (s *Server) patchClusterUploadHandler(w http.ResponseWriter, r *http.Reques
 // meaning the blob will be written back to remote storage in a non-blocking
 // fashion.
 func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Request) error {
+	ctx, span := s.tracer.Start(r.Context(), "origin.commit_upload",
+		trace.WithSpanKind(trace.SpanKindServer),
+		trace.WithAttributes(
+			attribute.String("component", "origin"),
+			attribute.String("operation", "commit_cluster_upload"),
+		),
+	)
+	defer span.End()
+
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse digest failed")
 		return err
 	}
 	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse namespace failed")
 		return err
 	}
 	uid, err := httputil.ParseParam(r, "uid")
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse uid failed")
 		return err
 	}
 
-	log.With("namespace", namespace, "digest", d.Hex(), "uid", uid).Info("Committing cluster upload")
+	span.SetAttributes(
+		attribute.String("namespace", namespace),
+		attribute.String("blob.digest", d.Hex()),
+		attribute.String("upload.uid", uid),
+	)
+
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid).Info("Committing cluster upload")
 	if err := s.uploader.commit(d, uid); err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "uid", uid).Errorf("Failed to commit cluster upload: %s", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "commit upload failed")
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid).Errorf("Failed to commit cluster upload: %s", err)
 		return s.handleUploadConflict(err, namespace, d)
 	}
+
+	// Note: Trace context propagation to writeback task will be added in a future commit
 	if err := s.writeBack(namespace, d, 0); err != nil {
-		log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to write back blob: %s", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "writeback initiation failed")
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to write back blob: %s", err)
 		return err
 	}
+
 	// Get blob size for replication logging
 	fi, err := s.cas.GetCacheFileStat(d.Hex())
 	var blobSize int64
 	if err == nil {
 		blobSize = fi.Size()
 	}
+	span.SetAttributes(attribute.Int64("blob.size_bytes", blobSize))
 
 	replicateStart := time.Now()
-	log.With("namespace", namespace, "digest", d.Hex(), "size_bytes", blobSize).Debug("Replicating upload to other origins")
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "size_bytes", blobSize).Debug("Replicating upload to other origins")
 	err = s.applyToReplicas(d, func(i int, client blobclient.Client) error {
 		replicaStart := time.Now()
 		delay := s.config.DuplicateWriteBackStagger * time.Duration(i+1)
@@ -805,12 +897,18 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 		log.With("namespace", namespace, "digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_s", duration.Seconds()).Debug("Successfully duplicated upload")
 		return nil
 	})
+	replicateDuration := time.Since(replicateStart)
+	span.SetAttributes(attribute.Int64("replication.duration_ms", replicateDuration.Milliseconds()))
+
 	if err != nil {
 		s.metrics.duplicateWritebackErrors.Inc(1)
-		replicateDuration := time.Since(replicateStart)
-		log.With("namespace", namespace, "digest", d.Hex(), "replication_duration_m", replicateDuration.Seconds()).Errorf("Error duplicating write-back task to replicas: %s", err)
+		span.RecordError(err)
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "replication_duration_ms", replicateDuration.Milliseconds()).Errorf("Error duplicating write-back task to replicas: %s", err)
+		// Don't fail the commit if replication fails - blob is still uploaded
 	}
-	log.With("namespace", namespace, "digest", d.Hex()).Info("Successfully committed cluster upload")
+
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Info("Successfully committed cluster upload")
+	span.SetStatus(codes.Ok, "upload committed and replicated")
 	return nil
 }
 
