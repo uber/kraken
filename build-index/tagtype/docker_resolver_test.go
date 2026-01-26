@@ -14,6 +14,7 @@
 package tagtype
 
 import (
+	"context"
 	"io"
 	"testing"
 	"time"
@@ -152,7 +153,7 @@ func TestDockerResolver_DownloadManifest_BufferResetBetweenRetries(t *testing.T)
 	gomock.InOrder(
 		mockOrigin.EXPECT().
 			DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
-			DoAndReturn(func(tag string, d core.Digest, dst io.Writer) error {
+			DoAndReturn(func(ctx context.Context, tag string, d core.Digest, dst io.Writer) error {
 				_, err := dst.Write(partialData)
 				require.NoError(err)
 				return blobclient.ErrBlobNotFound
@@ -177,7 +178,7 @@ func TestDockerResolver_DownloadManifest_InvalidManifestFormat(t *testing.T) {
 	// Download succeeds but returns invalid manifest data
 	mockOrigin.EXPECT().
 		DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
-		DoAndReturn(func(tag string, d core.Digest, dst io.Writer) error {
+		DoAndReturn(func(ctx context.Context, tag string, d core.Digest, dst io.Writer) error {
 			_, err := dst.Write([]byte("invalid manifest json"))
 			require.NoError(err)
 			return nil
