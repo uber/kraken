@@ -110,22 +110,11 @@ func (t *Task) SpanContext() trace.SpanContext {
 
 // parseHexByte parses a hex string (e.g., "01") to a byte.
 func parseHexByte(s string) byte {
-	if len(s) != 2 {
+	b, err := hex.DecodeString(s)
+	if err != nil || len(b) != 1 {
 		return 0
 	}
-	var b byte
-	for _, c := range s {
-		b <<= 4
-		switch {
-		case c >= '0' && c <= '9':
-			b |= byte(c - '0')
-		case c >= 'a' && c <= 'f':
-			b |= byte(c - 'a' + 10)
-		case c >= 'A' && c <= 'F':
-			b |= byte(c - 'A' + 10)
-		}
-	}
-	return b
+	return b[0]
 }
 
 // IsSampled returns true if the original request was sampled.
