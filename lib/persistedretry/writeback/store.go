@@ -122,7 +122,7 @@ func (s *Store) Find(query interface{}) ([]persistedretry.Task, error) {
 	switch q := query.(type) {
 	case *NameQuery:
 		err = s.db.Select(&tasks, `
-			SELECT namespace, name, created_at, last_attempt, failures, delay
+			SELECT namespace, name, created_at, last_attempt, failures, delay, trace_id, span_id, trace_flags
 			FROM writeback_task
 			WHERE name=?
 		`, q.name)
@@ -143,14 +143,20 @@ func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
 			last_attempt,
 			failures,
 			delay,
-			status
+			status,
+			trace_id,
+			span_id,
+			trace_flags
 		) VALUES (
 			:namespace,
 			:name,
 			:last_attempt,
 			:failures,
 			:delay,
-			%q
+			%q,
+			:trace_id,
+			:span_id,
+			:trace_flags
 		)
 	`, status)
 	t, ok := r.(*Task)
@@ -169,7 +175,7 @@ func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
 func (s *Store) selectStatus(status string) ([]persistedretry.Task, error) {
 	var tasks []*Task
 	err := s.db.Select(&tasks, `
-		SELECT namespace, name, created_at, last_attempt, failures, delay
+		SELECT namespace, name, created_at, last_attempt, failures, delay, trace_id, span_id, trace_flags
 		FROM writeback_task
 		WHERE status=?
 	`, status)
