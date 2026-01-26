@@ -30,7 +30,7 @@ type Store struct {
 }
 
 // NewStore creates a new Store.
-func NewStore(db *sqlx.DB) *Store {
+func sNewStore(db *sqlx.DB) *Store {
 	return &Store{db}
 }
 
