@@ -34,5 +34,7 @@ formatters:
     - gofmt # Format Go code
     - goimports # Format Go code and add missing imports
 issues:
+  # Report all issues, not just the first N per linter
   max-issues-per-linter: 0
+  # Report all occurrences of the same issue, not just unique ones
   max-same-issues: 0
