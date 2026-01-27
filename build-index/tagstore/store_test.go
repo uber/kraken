@@ -31,7 +31,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	"github.com/uber-go/tally"
 )
 
 const _testNamespace = ".*"
@@ -64,7 +63,7 @@ func newStoreMocks(t *testing.T) (*storeMocks, func()) {
 }
 
 func (m *storeMocks) new(config Config) Store {
-	return New(config, tally.NoopScope, m.ss, m.backends, m.writeBackManager)
+	return New(config, m.ss, m.backends, m.writeBackManager)
 }
 
 func TestPutAndGetFromDisk(t *testing.T) {

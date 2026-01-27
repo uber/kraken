@@ -151,6 +151,10 @@ func genManifestListPath(repo string) string {
 	return fmt.Sprintf("/docker/registry/v2/repositories/%s/_manifests/tags", repo)
 }
 
+type contextKey string
+
+const varsNameKey contextKey = "vars.name"
+
 func contextFixture() context.Context {
-	return context.WithValue(context.Background(), "vars.name", "dummy")
+	return context.WithValue(context.Background(), varsNameKey, "dummy")
 }

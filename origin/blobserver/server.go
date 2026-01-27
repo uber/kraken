@@ -49,8 +49,6 @@ import (
 	"github.com/uber/kraken/utils/stringset"
 )
 
-const _operation = "operation"
-
 // Server defines a server that serves blob data for agent.
 type Server struct {
 	config            Config
