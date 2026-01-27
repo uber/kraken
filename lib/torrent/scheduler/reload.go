@@ -61,7 +61,7 @@ func (rs *reloadableScheduler) reload(config Config) error {
 	}
 	rs.scheduler = n
 
-	if err := rs.start(rs.aq()); err != nil {
+	if err := rs.scheduler.start(rs.aq()); err != nil {
 		return fmt.Errorf("start new scheduler: %s", err)
 	}
 	return nil
