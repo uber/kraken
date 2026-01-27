@@ -49,10 +49,13 @@ func statusHandler(status int) http.HandlerFunc {
 }
 
 // statusWithBodyHandler returns a handler that responds with status and body.
-func statusWithBodyHandler(status int, body []byte) http.HandlerFunc {
+func statusWithBodyHandler(t *testing.T, status int, body []byte) http.HandlerFunc {
+	t.Helper()
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
-		w.Write(body)
+		if _, err := w.Write(body); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -316,13 +319,19 @@ func TestStat(t *testing.T) {
 			if !ok {
 				t.Fatal("cannot hijack connection")
 			}
-			conn, buf, _ := hijacker.Hijack()
-			t.Cleanup(func() { conn.Close() })
+			conn, buf, err := hijacker.Hijack()
+			require.NoError(err)
+			t.Cleanup(func() {
+				require.NoError(conn.Close())
+			})
 
-			buf.WriteString("HTTP/1.1 200 OK\r\n")
-			buf.WriteString("Content-Length: not-a-number\r\n")
-			buf.WriteString("\r\n")
-			buf.Flush()
+			_, err = buf.WriteString("HTTP/1.1 200 OK\r\n")
+			require.NoError(err)
+			_, err = buf.WriteString("Content-Length: not-a-number\r\n")
+			require.NoError(err)
+			_, err = buf.WriteString("\r\n")
+			require.NoError(err)
+			require.NoError(buf.Flush())
 		}))
 		t.Cleanup(server.Close)
 
@@ -472,7 +481,8 @@ func TestDownloadBlob(t *testing.T) {
 				require.Equal(http.MethodGet, r.Method)
 				w.WriteHeader(tt.status)
 				if tt.content != nil {
-					w.Write(tt.content)
+					_, err := w.Write(tt.content)
+					require.NoError(err)
 				}
 			})
 
@@ -597,7 +607,8 @@ func TestGetMetaInfo(t *testing.T) {
 			raw, err := blob.MetaInfo.Serialize()
 			require.NoError(err)
 			w.WriteHeader(http.StatusOK)
-			w.Write(raw)
+			_, err = w.Write(raw)
+			require.NoError(err)
 		})
 
 		mi, err := client.GetMetaInfo(namespace, blob.Digest)
@@ -635,7 +646,7 @@ func TestGetMetaInfo(t *testing.T) {
 			d := core.DigestFixture()
 			namespace := "test-namespace"
 
-			client := testServer(t, statusWithBodyHandler(tt.status, tt.body))
+			client := testServer(t, statusWithBodyHandler(t, tt.status, tt.body))
 
 			_, err := client.GetMetaInfo(namespace, d)
 			require.Error(err)
@@ -705,7 +716,7 @@ func TestGetPeerContext(t *testing.T) {
 			require.Equal("/internal/peercontext", r.URL.Path)
 			require.Equal(http.MethodGet, r.Method)
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(expectedPctx)
+			require.NoError(json.NewEncoder(w).Encode(expectedPctx))
 		})
 
 		pctx, err := client.GetPeerContext()
@@ -736,7 +747,7 @@ func TestGetPeerContext(t *testing.T) {
 	for _, tt := range errorTests {
 		t.Run(tt.name, func(t *testing.T) {
 			require := require.New(t)
-			client := testServer(t, statusWithBodyHandler(tt.status, tt.body))
+			client := testServer(t, statusWithBodyHandler(t, tt.status, tt.body))
 
 			_, err := client.GetPeerContext()
 			require.Error(err)
@@ -972,9 +983,10 @@ func TestDuplicateUploadBlob(t *testing.T) {
 			case r.Method == http.MethodPut:
 				require.Contains(r.URL.Path, "/internal/duplicate/namespace/")
 
-				body, _ := io.ReadAll(r.Body)
+				body, err := io.ReadAll(r.Body)
+				require.NoError(err)
 				var req DuplicateCommitUploadRequest
-				err := json.Unmarshal(body, &req)
+				err = json.Unmarshal(body, &req)
 				require.NoError(err)
 				require.Equal(delay, req.Delay)
 

@@ -352,7 +352,8 @@ func TestLRUCreateLastAccessTimeOnCreateFile(t *testing.T) {
 	defer cleanup()
 
 	store := bundle.store
-	clk := bundle.clk.(*clock.Mock)
+	clk, ok := bundle.clk.(*clock.Mock)
+	require.True(ok, "expected *clock.Mock")
 
 	t0 := time.Now()
 	clk.Set(t0)
@@ -377,7 +378,8 @@ func TestLRUUpdateLastAccessTimeOnMoveFrom(t *testing.T) {
 	defer cleanup()
 
 	store := bundle.store
-	clk := bundle.clk.(*clock.Mock)
+	clk, ok := bundle.clk.(*clock.Mock)
+	require.True(ok, "expected *clock.Mock")
 
 	t0 := time.Now()
 	clk.Set(t0)
@@ -403,7 +405,8 @@ func TestLRUUpdateLastAccessTimeOnMove(t *testing.T) {
 	defer cleanup()
 
 	store := bundle.store
-	clk := bundle.clk.(*clock.Mock)
+	clk, ok := bundle.clk.(*clock.Mock)
+	require.True(ok, "expected *clock.Mock")
 
 	t0 := time.Now()
 	clk.Set(t0)
@@ -427,7 +430,8 @@ func TestLRUUpdateLastAccessTimeOnOpen(t *testing.T) {
 	defer cleanup()
 
 	store := bundle.store
-	clk := bundle.clk.(*clock.Mock)
+	clk, ok := bundle.clk.(*clock.Mock)
+	require.True(ok, "expected *clock.Mock")
 
 	t0 := time.Now()
 	clk.Set(t0)
@@ -466,7 +470,8 @@ func TestLRUKeepLastAccessTimeOnPeek(t *testing.T) {
 	defer cleanup()
 
 	store := bundle.store
-	clk := bundle.clk.(*clock.Mock)
+	clk, ok := bundle.clk.(*clock.Mock)
+	require.True(ok, "expected *clock.Mock")
 
 	t0 := time.Now()
 	clk.Set(t0)
