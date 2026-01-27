@@ -47,10 +47,7 @@ func TestMapLoadHoldsLock(t *testing.T) {
 		wg.Add(1)
 		go require.True(m.Load("k", func(l sync.Locker) {
 			defer wg.Done()
-			v, ok := l.(*testValue)
-			if !ok {
-				panic(fmt.Sprintf("expected *testValue, got %T", l))
-			}
+			v := l.(*testValue)
 			if v.n == 0 {
 				v.n++
 			} else {

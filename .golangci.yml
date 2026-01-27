@@ -21,20 +21,15 @@ linters:
       check-blank: true
   exclusions:
     rules:
-      # Exclude staticcheck warnings in generated proto files
+      # Exclude staticcheck deprecation warnings in generated proto files
       - linters:
           - staticcheck
         path: "gen/go/proto/.*\\.pb\\.go$"
       # Exclude staticcheck deprecation warnings for proto imports
       - linters:
           - staticcheck
-        text: "github.com/golang/protobuf/proto.*is deprecated"
+        text: "SA1019.*github.com/golang/protobuf/proto.*is deprecated"
 formatters:
   enable:
     - gofmt # Format Go code
     - goimports # Format Go code and add missing imports
-issues:
-  # Report all issues, not just the first N per linter
-  max-issues-per-linter: 0
-  # Report all occurrences of the same issue, not just unique ones
-  max-same-issues: 0

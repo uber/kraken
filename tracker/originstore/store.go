@@ -61,11 +61,7 @@ func New(config Config, clk clock.Clock, origins hostlist.List, provider blobcli
 }
 
 func (s *store) GetOrigins(d core.Digest) ([]*core.PeerInfo, error) {
-	result := s.locations.Run(d)
-	lr, ok := result.(*locationsResult)
-	if !ok {
-		return nil, fmt.Errorf("originstore: expected *locationsResult, got %T", result)
-	}
+	lr := s.locations.Run(d).(*locationsResult)
 	if lr.err != nil {
 		return nil, lr.err
 	}
@@ -73,11 +69,7 @@ func (s *store) GetOrigins(d core.Digest) ([]*core.PeerInfo, error) {
 	var errs []error
 	var origins []*core.PeerInfo
 	for _, addr := range lr.addrs {
-		result := s.peerContexts.Run(addr)
-		pcr, ok := result.(*peerContextResult)
-		if !ok {
-			return nil, fmt.Errorf("originstore: expected *peerContextResult, got %T", result)
-		}
+		pcr := s.peerContexts.Run(addr).(*peerContextResult)
 		if pcr.err != nil {
 			errs = append(errs, pcr.err)
 		} else {
@@ -100,10 +92,7 @@ type locationsResult struct {
 }
 
 func (l *locations) Run(input interface{}) (interface{}, time.Duration) {
-	d, ok := input.(core.Digest)
-	if !ok {
-		panic(fmt.Sprintf("originstore: expected core.Digest, got %T", input))
-	}
+	d := input.(core.Digest)
 	addrs, err := blobclient.Locations(l.store.provider, l.store.origins, d)
 	ttl := l.store.config.LocationsTTL
 	if err != nil {
@@ -122,10 +111,7 @@ type peerContextResult struct {
 }
 
 func (p *peerContexts) Run(input interface{}) (interface{}, time.Duration) {
-	addr, ok := input.(string)
-	if !ok {
-		panic(fmt.Sprintf("originstore: expected string, got %T", input))
-	}
+	addr := input.(string)
 	pctx, err := p.store.provider.Provide(addr).GetPeerContext()
 	ttl := p.store.config.OriginContextTTL
 	if err != nil {

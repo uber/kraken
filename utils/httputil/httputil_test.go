@@ -161,9 +161,7 @@ func TestSendRetryWithCodes(t *testing.T) {
 			RetryCodes(400, 404)),
 		SendTransport(transport))
 	require.Error(err)
-	statusErr, ok := err.(StatusError)
-	require.True(ok, "expected StatusError")
-	require.Equal(404, statusErr.Status) // Last code returned.
+	require.Equal(404, err.(StatusError).Status) // Last code returned.
 	require.InDelta(400*time.Millisecond, time.Since(start), float64(50*time.Millisecond))
 }
 
@@ -206,9 +204,7 @@ func TestPollAcceptedStatusError(t *testing.T) {
 		backoff.NewConstantBackOff(200*time.Millisecond),
 		SendTransport(transport))
 	require.Error(err)
-	statusErr, ok := err.(StatusError)
-	require.True(ok, "expected StatusError")
-	require.Equal(404, statusErr.Status)
+	require.Equal(404, err.(StatusError).Status)
 	require.InDelta(400*time.Millisecond, time.Since(start), float64(50*time.Millisecond))
 }
 

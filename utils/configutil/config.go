@@ -171,12 +171,8 @@ func loadFiles(config interface{}, fnames []string) error {
 
 	// Validate on the merged config at the end.
 	if err := validator.Validate(config); err != nil {
-		errMap, ok := err.(validator.ErrorMap)
-		if !ok {
-			return fmt.Errorf("validation error: %s", err)
-		}
 		return ValidationError{
-			errorMap: errMap,
+			errorMap: err.(validator.ErrorMap),
 		}
 	}
 	return nil

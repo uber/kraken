@@ -95,7 +95,7 @@ func (ph *PreheatHandler) process(repo, digest string) error {
 func (ph *PreheatHandler) fetchManifest(repo, digest string) (distribution.Manifest, error) {
 	d, err := core.ParseSHA256Digest(digest)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing digest: %s", err)
+		return nil, fmt.Errorf("Error parse digest: %s ", err)
 	}
 
 	buf := &bytes.Buffer{}

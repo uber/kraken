@@ -54,7 +54,7 @@ func ParseManifestV2(bytes []byte) (distribution.Manifest, core.Digest, error) {
 	if !ok {
 		return nil, core.Digest{}, errors.New("expected schema2.DeserializedManifest")
 	}
-	version := deserializedManifest.SchemaVersion
+	version := deserializedManifest.Manifest.Versioned.SchemaVersion
 	if version != 2 {
 		return nil, core.Digest{}, fmt.Errorf("unsupported manifest version: %d", version)
 	}
@@ -75,7 +75,7 @@ func ParseManifestV2List(bytes []byte) (distribution.Manifest, core.Digest, erro
 	if !ok {
 		return nil, core.Digest{}, errors.New("expected manifestlist.DeserializedManifestList")
 	}
-	version := deserializedManifestList.SchemaVersion
+	version := deserializedManifestList.ManifestList.Versioned.SchemaVersion
 	if version != 2 {
 		return nil, core.Digest{}, fmt.Errorf("unsupported manifest list version: %d", version)
 	}

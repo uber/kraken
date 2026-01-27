@@ -41,6 +41,13 @@ func testServer(t *testing.T, handler http.HandlerFunc, opts ...Option) *HTTPCli
 	return New(stripHTTPPrefix(server.URL), opts...)
 }
 
+// statusHandler returns a handler that responds with the given status code.
+func statusHandler(status int) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+	}
+}
+
 // statusWithBodyHandler returns a handler that responds with status and body.
 func statusWithBodyHandler(t *testing.T, status int, body []byte) http.HandlerFunc {
 	t.Helper()
