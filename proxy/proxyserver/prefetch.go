@@ -476,8 +476,6 @@ func (ph *PrefetchHandler) triggerPrefetchBlobs(input *prefetchInput) error {
 	)
 	defer span.End()
 
-	_ = ctx // PrefetchBlob doesn't accept context yet
-
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var errList []error
@@ -490,7 +488,7 @@ func (ph *PrefetchHandler) triggerPrefetchBlobs(input *prefetchInput) error {
 		wg.Add(1)
 		go func(digest core.Digest) {
 			defer wg.Done()
-			err := ph.clusterClient.PrefetchBlob(input.namespace, digest)
+			err := ph.clusterClient.PrefetchBlob(ctx, input.namespace, digest)
 			if err != nil {
 				mu.Lock()
 				errList = append(errList, fmt.Errorf("digest %q, namespace %q, blob prefetch failure: %w", digest, input.namespace, err))

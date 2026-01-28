@@ -60,7 +60,7 @@ type Client interface {
 	DuplicateUploadBlob(namespace string, d core.Digest, blob io.Reader, delay time.Duration) error
 
 	DownloadBlob(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error
-	PrefetchBlob(namespace string, d core.Digest) error
+	PrefetchBlob(ctx context.Context, namespace string, d core.Digest) error
 
 	ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error
 
@@ -270,15 +270,30 @@ func (c *HTTPClient) DownloadBlob(ctx context.Context, namespace string, d core.
 
 // PrefetchBlob is an asynchronous, idempotent operation that preheats the origin's cache with the given blob.
 // If the blob is not present, it is downloaded asynchronously. If the blob is present, this is a no-op.
-func (c *HTTPClient) PrefetchBlob(namespace string, d core.Digest) error {
+func (c *HTTPClient) PrefetchBlob(ctx context.Context, namespace string, d core.Digest) error {
+	ctx, span := c.tracer.Start(ctx, "blobclient.prefetch_blob",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("component", "origin-client"),
+			attribute.String("operation", "prefetch_blob"),
+			attribute.String("namespace", namespace),
+			attribute.String("blob.digest", d.Hex()),
+		),
+	)
+	defer span.End()
+
 	r, err := httputil.Post(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/prefetch", c.addr, url.PathEscape(namespace), d),
 		httputil.SendAcceptedCodes(http.StatusOK, http.StatusAccepted),
-		httputil.SendTLS(c.tls))
+		httputil.SendTLS(c.tls),
+		httputil.SendTracingContext(ctx))
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "prefetch failed")
 		return err
 	}
 	defer closers.Close(r.Body)
+	span.SetStatus(codes.Ok, "prefetch triggered")
 	return nil
 }
 

@@ -209,7 +209,7 @@ func TestPrefetchHandler(t *testing.T) {
 
 	ensureHasBlob(t, cp.Provide(s.host), namespace, blob)
 
-	err := cp.Provide(master1).PrefetchBlob(namespace, blob.Digest)
+	err := cp.Provide(master1).PrefetchBlob(context.Background(), namespace, blob.Digest)
 	require.NoError(err)
 }
 
