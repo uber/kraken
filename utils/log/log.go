@@ -18,6 +18,9 @@ package log
 // and hides out some initialization details
 
 import (
+	"context"
+
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -169,4 +172,24 @@ func Fatalw(msg string, keysAndValues ...interface{}) {
 // It accepts a mix of strongly-typed zapcore.Field objects and loosely-typed key-value pairs.
 func With(args ...interface{}) *zap.SugaredLogger {
 	return Default().With(args...)
+}
+
+// WithTraceContext returns a logger with trace_id and span_id fields extracted from the context.
+// If the context doesn't contain a valid span, returns the default logger.
+//
+// Usage:
+//   ctx, span := tracer.Start(r.Context(), "operation")
+//   defer span.End()
+//   log.WithTraceContext(ctx).With("key", "value").Info("message")
+//
+// Output will include: {"trace_id": "abc123...", "span_id": "def456...", "key": "value", "message": "..."}
+func WithTraceContext(ctx context.Context) *zap.SugaredLogger {
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.IsValid() {
+		return Default().With(
+			"trace_id", spanCtx.TraceID().String(),
+			"span_id", spanCtx.SpanID().String(),
+		)
+	}
+	return Default()
 }

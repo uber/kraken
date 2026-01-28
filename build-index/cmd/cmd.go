@@ -37,6 +37,7 @@ import (
 	"github.com/uber/kraken/utils/log"
 
 	"github.com/uber-go/tally"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 )
 
@@ -215,6 +216,7 @@ func Run(flags *Flags, opts ...Option) {
 	if err != nil {
 		log.Fatalf("Error creating tag type manager: %s", err)
 	}
+	tracer := otel.Tracer("kraken-build-index")
 
 	server := tagserver.New(
 		config.TagServer,
@@ -227,7 +229,8 @@ func Run(flags *Flags, opts ...Option) {
 		remotes,
 		tagReplicationManager,
 		tagclient.NewProvider(tls),
-		depResolver)
+		depResolver,
+		tracer)
 	go func() {
 		log.Fatal(server.ListenAndServe())
 	}()
