@@ -79,7 +79,7 @@ func (ph *PreheatHandler) process(repo, digest string) error {
 		}
 		f := func() {
 			log.With("repo", repo).Debugf("trigger origin cache: %+v", d)
-			_, err = ph.clusterClient.GetMetaInfo(repo, d)
+			_, err = ph.clusterClient.GetMetaInfo(context.Background(), repo, d)
 			if err != nil && !httputil.IsAccepted(err) {
 				log.With("repo", repo, "digest", digest).Errorf("notify origin cache: %s", err)
 			}

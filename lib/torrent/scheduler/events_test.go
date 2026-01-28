@@ -120,7 +120,7 @@ func (m *stateMocks) newTorrent() storage.Torrent {
 	mi := core.MetaInfoFixture()
 
 	m.metainfoClient.EXPECT().
-		Download(_testNamespace, mi.Digest()).
+		Download(gomock.Any(), _testNamespace, mi.Digest()).
 		Return(mi, nil)
 
 	t, err := m.torrentArchive.CreateTorrent(_testNamespace, mi.Digest())

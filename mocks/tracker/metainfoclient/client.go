@@ -5,6 +5,7 @@
 package mockmetainfoclient
 
 import (
+	"context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -35,16 +36,16 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Download mocks base method
-func (m *MockClient) Download(arg0 string, arg1 core.Digest) (*core.MetaInfo, error) {
+func (m *MockClient) Download(ctx context.Context, arg0 string, arg1 core.Digest) (*core.MetaInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Download", arg0, arg1)
+	ret := m.ctrl.Call(m, "Download", ctx, arg0, arg1)
 	ret0, _ := ret[0].(*core.MetaInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Download indicates an expected call of Download
-func (mr *MockClientMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) Download(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockClient)(nil).Download), arg0, arg1, arg2)
 }

@@ -351,16 +351,16 @@ func TestGetMetaInfoDownloadsBlobAndReplicates(t *testing.T) {
 		blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil).AnyTimes()
 	backendClient.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
 
-	mi, err := cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
+	mi, err := cp.Provide(master1).GetMetaInfo(context.Background(), namespace, blob.Digest)
 	require.True(httputil.IsAccepted(err))
 	require.Nil(mi)
 
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		_, err := cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
+		_, err := cp.Provide(master1).GetMetaInfo(context.Background(), namespace, blob.Digest)
 		return !httputil.IsAccepted(err)
 	}))
 
-	mi, err = cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
+	mi, err = cp.Provide(master1).GetMetaInfo(context.Background(), namespace, blob.Digest)
 	require.NoError(err)
 	require.NotNil(mi)
 	require.Equal(len(blob.Content), int(mi.Length()))
@@ -386,7 +386,7 @@ func TestGetMetaInfoBlobNotFound(t *testing.T) {
 	backendClient := s.backendClient(namespace, false)
 	backendClient.EXPECT().Stat(namespace, d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 
-	mi, err := cp.Provide(master1).GetMetaInfo(namespace, d)
+	mi, err := cp.Provide(master1).GetMetaInfo(context.Background(), namespace, d)
 	require.True(httputil.IsNotFound(err))
 	require.Nil(mi)
 }
@@ -569,14 +569,14 @@ func TestOverwriteMetainfo(t *testing.T) {
 	err := cp.Provide(master1).TransferBlob(blob.Digest, bytes.NewReader(blob.Content))
 	require.NoError(err)
 
-	mi, err := cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
+	mi, err := cp.Provide(master1).GetMetaInfo(context.Background(), namespace, blob.Digest)
 	require.NoError(err)
 	require.Equal(int64(4), mi.PieceLength())
 
 	err = cp.Provide(master1).OverwriteMetaInfo(blob.Digest, 16)
 	require.NoError(err)
 
-	mi, err = cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
+	mi, err = cp.Provide(master1).GetMetaInfo(context.Background(), namespace, blob.Digest)
 	require.NoError(err)
 	require.Equal(int64(16), mi.PieceLength())
 }

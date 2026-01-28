@@ -71,18 +71,18 @@ func (mr *MockClusterClientMockRecorder) DownloadBlob(arg0, arg1, arg2, arg3 any
 }
 
 // GetMetaInfo mocks base method.
-func (m *MockClusterClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error) {
+func (m *MockClusterClient) GetMetaInfo(arg0 context.Context, arg1 string, arg2 core.Digest) (*core.MetaInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMetaInfo", namespace, d)
+	ret := m.ctrl.Call(m, "GetMetaInfo", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*core.MetaInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetMetaInfo indicates an expected call of GetMetaInfo.
-func (mr *MockClusterClientMockRecorder) GetMetaInfo(namespace, d any) *gomock.Call {
+func (mr *MockClusterClientMockRecorder) GetMetaInfo(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetaInfo", reflect.TypeOf((*MockClusterClient)(nil).GetMetaInfo), namespace, d)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetaInfo", reflect.TypeOf((*MockClusterClient)(nil).GetMetaInfo), arg0, arg1, arg2)
 }
 
 // OverwriteMetaInfo mocks base method.

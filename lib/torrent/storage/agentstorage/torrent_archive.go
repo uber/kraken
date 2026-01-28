@@ -14,6 +14,7 @@
 package agentstorage
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -25,6 +26,11 @@ import (
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/tracker/metainfoclient"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // TorrentArchive is capable of initializing torrents in the download directory
@@ -33,19 +39,25 @@ type TorrentArchive struct {
 	stats          tally.Scope
 	cads           *store.CADownloadStore
 	metaInfoClient metainfoclient.Client
+	tracer         trace.Tracer
 }
 
 // NewTorrentArchive creates a new TorrentArchive.
 func NewTorrentArchive(
 	stats tally.Scope,
 	cads *store.CADownloadStore,
-	mic metainfoclient.Client) *TorrentArchive {
-
+	mic metainfoclient.Client,
+) *TorrentArchive {
 	stats = stats.Tagged(map[string]string{
 		"module": "agenttorrentarchive",
 	})
 
-	return &TorrentArchive{stats, cads, mic}
+	return &TorrentArchive{
+		stats:          stats,
+		cads:           cads,
+		metaInfoClient: mic,
+		tracer:         otel.Tracer("kraken-agent-storage"),
+	}
 }
 
 // Stat returns TorrentInfo for the given digest. Returns os.ErrNotExist if the
@@ -74,15 +86,31 @@ func (a *TorrentArchive) Stat(namespace string, d core.Digest) (*storage.Torrent
 func (a *TorrentArchive) CreateTorrent(namespace string, d core.Digest) (storage.Torrent, error) {
 	var tm metadata.TorrentMeta
 	if err := a.cads.Any().GetMetadata(d.Hex(), &tm); os.IsNotExist(err) {
+		ctx, span := a.tracer.Start(context.Background(), "agent.download_metainfo",
+			trace.WithSpanKind(trace.SpanKindClient),
+			trace.WithAttributes(
+				attribute.String("component", "agent-storage"),
+				attribute.String("operation", "download_metainfo"),
+				attribute.String("namespace", namespace),
+				attribute.String("blob.digest", d.Hex()),
+			),
+		)
+		defer span.End()
+
 		downloadTimer := a.stats.Timer("metainfo_download").Start()
-		mi, err := a.metaInfoClient.Download(namespace, d)
+		mi, err := a.metaInfoClient.Download(ctx, namespace, d)
 		if err != nil {
 			if err == metainfoclient.ErrNotFound {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "metainfo not found")
 				return nil, storage.ErrNotFound
 			}
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "download metainfo failed")
 			return nil, fmt.Errorf("download metainfo: %s", err)
 		}
 		downloadTimer.Stop()
+		span.SetStatus(codes.Ok, "metainfo downloaded")
 
 		// There's a race condition here, but it's "okay"... Basically, we could
 		// initialize a download file with metainfo that is rejected by file store,

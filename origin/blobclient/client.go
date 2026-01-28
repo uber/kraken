@@ -53,7 +53,7 @@ type Client interface {
 	Stat(namespace string, d core.Digest) (*core.BlobInfo, error)
 	StatLocal(namespace string, d core.Digest) (*core.BlobInfo, error)
 
-	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
+	GetMetaInfo(ctx context.Context, namespace string, d core.Digest) (*core.MetaInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
 
 	UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.Reader) error
@@ -312,24 +312,43 @@ func (c *HTTPClient) ReplicateToRemote(namespace string, d core.Digest, remoteDN
 // (i.e. still downloading), returns a 202 httputil.StatusError, indicating that
 // the request should be retried later. If no blob exists for d, returns a 404
 // httputil.StatusError.
-func (c *HTTPClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error) {
+func (c *HTTPClient) GetMetaInfo(ctx context.Context, namespace string, d core.Digest) (*core.MetaInfo, error) {
+	ctx, span := c.tracer.Start(ctx, "blobclient.get_metainfo",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("component", "origin-client"),
+			attribute.String("operation", "get_metainfo"),
+			attribute.String("namespace", namespace),
+			attribute.String("blob.digest", d.Hex()),
+		),
+	)
+	defer span.End()
+
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/internal/namespace/%s/blobs/%s/metainfo",
 			c.addr, url.PathEscape(namespace), d),
 		httputil.SendTimeout(15*time.Second),
-		httputil.SendTLS(c.tls))
+		httputil.SendTLS(c.tls),
+		httputil.SendTracingContext(ctx))
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "get metainfo failed")
 		return nil, err
 	}
 	defer closers.Close(r.Body)
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "read body failed")
 		return nil, fmt.Errorf("read body: %s", err)
 	}
 	mi, err := core.DeserializeMetaInfo(raw)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "deserialize metainfo failed")
 		return nil, fmt.Errorf("deserialize metainfo: %s", err)
 	}
+	span.SetStatus(codes.Ok, "metainfo retrieved")
 	return mi, nil
 }
 
