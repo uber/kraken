@@ -30,6 +30,9 @@ import (
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/listener"
 	"github.com/uber/kraken/utils/log"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 )
 
 // Server serves Tracker endpoints.
@@ -51,8 +54,8 @@ func New(
 	policy *peerhandoutpolicy.PriorityPolicy,
 	peerStore peerstore.Store,
 	originStore originstore.Store,
-	originCluster blobclient.ClusterClient) *Server {
-
+	originCluster blobclient.ClusterClient,
+) *Server {
 	config = config.applyDefaults()
 
 	stats = stats.Tagged(map[string]string{
@@ -76,12 +79,15 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.StatusCounter(s.stats))
 	r.Use(middleware.LatencyTimer(s.stats))
 
+	tracingMiddleware := otelhttp.NewMiddleware("kraken-tracker",
+		otelhttp.WithTracerProvider(otel.GetTracerProvider()))
+
 	r.Get("/health", handler.Wrap(s.healthHandler))
 	r.Get("/readiness", handler.Wrap(s.readinessCheckHandler))
 
 	r.Get("/announce", handler.Wrap(s.announceHandlerV1))
 	r.Post("/announce/{infohash}", handler.Wrap(s.announceHandlerV2))
-	r.Get("/namespace/{namespace}/blobs/{digest}/metainfo", handler.Wrap(s.getMetaInfoHandler))
+	r.With(tracingMiddleware).Get("/namespace/{namespace}/blobs/{digest}/metainfo", handler.Wrap(s.getMetaInfoHandler))
 
 	r.Mount("/debug", chimiddleware.Profiler())
 

@@ -139,9 +139,9 @@ func TestPreheat(t *testing.T) {
 	b, _ := json.Marshal(notification)
 
 	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), repo, manifest, mockutil.MatchWriter(bs)).Return(nil)
-	mocks.originClient.EXPECT().GetMetaInfo(repo, layers[0]).Return(nil, nil)
-	mocks.originClient.EXPECT().GetMetaInfo(repo, layers[1]).Return(nil, nil)
-	mocks.originClient.EXPECT().GetMetaInfo(repo, layers[2]).Return(nil, nil)
+	mocks.originClient.EXPECT().GetMetaInfo(gomock.Any(), repo, layers[0]).Return(nil, nil)
+	mocks.originClient.EXPECT().GetMetaInfo(gomock.Any(), repo, layers[1]).Return(nil, nil)
+	mocks.originClient.EXPECT().GetMetaInfo(gomock.Any(), repo, layers[2]).Return(nil, nil)
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/registry/notifications", addr),
 		httputil.SendBody(bytes.NewReader(b)))

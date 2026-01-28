@@ -14,6 +14,7 @@
 package metainfoclient
 
 import (
+	"context"
 	"errors"
 	"sync"
 
@@ -44,7 +45,7 @@ func (c *TestClient) Upload(mi *core.MetaInfo) error {
 }
 
 // Download returns the metainfo for digest. Ignores namespace.
-func (c *TestClient) Download(namespace string, d core.Digest) (*core.MetaInfo, error) {
+func (c *TestClient) Download(ctx context.Context, namespace string, d core.Digest) (*core.MetaInfo, error) {
 	c.Lock()
 	defer c.Unlock()
 	mi, ok := c.m[d]

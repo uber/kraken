@@ -14,6 +14,7 @@
 package metainfoclient
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -36,7 +37,7 @@ var (
 
 // Client defines operations on torrent metainfo.
 type Client interface {
-	Download(namespace string, d core.Digest) (*core.MetaInfo, error)
+	Download(ctx context.Context, namespace string, d core.Digest) (*core.MetaInfo, error)
 }
 
 type client struct {
@@ -51,7 +52,7 @@ func New(ring hashring.PassiveRing, tls *tls.Config) Client {
 
 // Download returns the MetaInfo associated with name. Returns ErrNotFound if
 // no torrent exists under name.
-func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, error) {
+func (c *client) Download(ctx context.Context, namespace string, d core.Digest) (*core.MetaInfo, error) {
 	var resp *http.Response
 	var err error
 	for _, addr := range c.ring.Locations(d) {
@@ -68,7 +69,8 @@ func (c *client) Download(namespace string, d core.Digest) (*core.MetaInfo, erro
 				Clock:               backoff.SystemClock,
 			},
 			httputil.SendTimeout(10*time.Second),
-			httputil.SendTLS(c.tls))
+			httputil.SendTLS(c.tls),
+			httputil.SendTracingContext(ctx))
 		if err != nil {
 			if httputil.IsNetworkError(err) {
 				c.ring.Failed(addr)

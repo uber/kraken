@@ -64,7 +64,7 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 		require.NotNil(bi)
 		require.Equal(int64(256), bi.Size)
 
-		mi, err := cc.GetMetaInfo(backend.NoopNamespace, blob.Digest)
+		mi, err := cc.GetMetaInfo(context.Background(), backend.NoopNamespace, blob.Digest)
 		require.NoError(err)
 		require.NotNil(mi)
 
@@ -97,7 +97,7 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 	_, err := cc.Stat(backend.NoopNamespace, blob.Digest)
 	require.Error(err)
 
-	_, err = cc.GetMetaInfo(backend.NoopNamespace, blob.Digest)
+	_, err = cc.GetMetaInfo(context.Background(), backend.NoopNamespace, blob.Digest)
 	require.Error(err)
 
 	require.Error(cc.DownloadBlob(context.Background(), backend.NoopNamespace, blob.Digest, io.Discard))
@@ -205,10 +205,10 @@ func TestClusterClientReturnsErrorOnNoAvailableOrigins(t *testing.T) {
 	mockClient2 := mockblobclient.NewMockClient(ctrl)
 	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
 
-	mockClient1.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(nil, httputil.NetworkError{})
-	mockClient2.EXPECT().GetMetaInfo(namespace, blob.Digest).Return(nil, httputil.NetworkError{})
+	mockClient1.EXPECT().GetMetaInfo(gomock.Any(), namespace, blob.Digest).Return(nil, httputil.NetworkError{})
+	mockClient2.EXPECT().GetMetaInfo(gomock.Any(), namespace, blob.Digest).Return(nil, httputil.NetworkError{})
 
-	_, err := cc.GetMetaInfo(namespace, blob.Digest)
+	_, err := cc.GetMetaInfo(context.Background(), namespace, blob.Digest)
 	require.Error(err)
 }
 

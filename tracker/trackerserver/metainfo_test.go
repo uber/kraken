@@ -14,7 +14,10 @@
 package trackerserver
 
 import (
+	"context"
 	"testing"
+
+	"github.com/golang/mock/gomock"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/hashring"
@@ -42,11 +45,11 @@ func TestGetMetaInfoHandlerFetchesFromOrigin(t *testing.T) {
 	namespace := core.TagFixture()
 	mi := core.MetaInfoFixture()
 
-	mocks.originCluster.EXPECT().GetMetaInfo(namespace, mi.Digest()).Return(mi, nil)
+	mocks.originCluster.EXPECT().GetMetaInfo(gomock.Any(), namespace, mi.Digest()).Return(mi, nil)
 
 	client := newMetaInfoClient(addr)
 
-	result, err := client.Download(namespace, mi.Digest())
+	result, err := client.Download(context.Background(), namespace, mi.Digest())
 	require.NoError(err)
 	require.Equal(mi, result)
 }
@@ -64,11 +67,11 @@ func TestGetMetaInfoHandlerPropagatesOriginError(t *testing.T) {
 	mi := core.MetaInfoFixture()
 
 	mocks.originCluster.EXPECT().GetMetaInfo(
-		namespace, mi.Digest()).Return(nil, httputil.StatusError{Status: 599}).MinTimes(1)
+		gomock.Any(), namespace, mi.Digest()).Return(nil, httputil.StatusError{Status: 599}).MinTimes(1)
 
 	client := newMetaInfoClient(addr)
 
-	_, err := client.Download(namespace, mi.Digest())
+	_, err := client.Download(context.Background(), namespace, mi.Digest())
 	require.Error(err)
 	require.True(httputil.IsStatus(err, 599))
 }

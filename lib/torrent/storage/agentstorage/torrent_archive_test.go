@@ -68,7 +68,7 @@ func TestTorrentArchiveStatBitfield(t *testing.T) {
 	blob := core.SizedBlobFixture(4, 1)
 	mi := blob.MetaInfo
 
-	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Digest()).Return(mi, nil).Times(1)
+	mocks.metaInfoClient.EXPECT().Download(gomock.Any(), namespace, mi.Digest()).Return(mi, nil).Times(1)
 
 	tor, err := archive.CreateTorrent(namespace, mi.Digest())
 	require.NoError(err)
@@ -107,7 +107,7 @@ func TestTorrentArchiveCreateTorrent(t *testing.T) {
 	mi := core.MetaInfoFixture()
 	namespace := core.TagFixture()
 
-	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Digest()).Return(mi, nil)
+	mocks.metaInfoClient.EXPECT().Download(gomock.Any(), namespace, mi.Digest()).Return(mi, nil)
 
 	tor, err := archive.CreateTorrent(namespace, mi.Digest())
 	require.NoError(err)
@@ -135,7 +135,7 @@ func TestTorrentArchiveCreateTorrentNotFound(t *testing.T) {
 	mi := core.MetaInfoFixture()
 	namespace := core.TagFixture()
 
-	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Digest()).Return(nil, metainfoclient.ErrNotFound)
+	mocks.metaInfoClient.EXPECT().Download(gomock.Any(), namespace, mi.Digest()).Return(nil, metainfoclient.ErrNotFound)
 
 	_, err := archive.CreateTorrent(namespace, mi.Digest())
 	require.Equal(storage.ErrNotFound, err)
@@ -152,7 +152,7 @@ func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 	mi := core.MetaInfoFixture()
 	namespace := core.TagFixture()
 
-	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Digest()).Return(mi, nil)
+	mocks.metaInfoClient.EXPECT().Download(gomock.Any(), namespace, mi.Digest()).Return(mi, nil)
 
 	tor, err := archive.CreateTorrent(namespace, mi.Digest())
 	require.NoError(err)
@@ -176,7 +176,7 @@ func TestTorrentArchiveConcurrentGet(t *testing.T) {
 	namespace := core.TagFixture()
 
 	// Allow any times for concurrency below.
-	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Digest()).Return(mi, nil).AnyTimes()
+	mocks.metaInfoClient.EXPECT().Download(gomock.Any(), namespace, mi.Digest()).Return(mi, nil).AnyTimes()
 
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
@@ -206,7 +206,7 @@ func TestTorrentArchiveGetTorrent(t *testing.T) {
 	_, err := archive.GetTorrent(namespace, mi.Digest())
 	require.Error(err)
 
-	mocks.metaInfoClient.EXPECT().Download(namespace, mi.Digest()).Return(mi, nil)
+	mocks.metaInfoClient.EXPECT().Download(gomock.Any(), namespace, mi.Digest()).Return(mi, nil)
 
 	_, err = archive.CreateTorrent(namespace, mi.Digest())
 	require.NoError(err)
