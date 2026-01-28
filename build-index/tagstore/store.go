@@ -74,10 +74,6 @@ func New(
 	backends *backend.Manager,
 	writeBackManager persistedretry.Manager,
 ) Store {
-	stats = stats.Tagged(map[string]string{
-		"module": "tagstore",
-	})
-
 	s := &tagStore{
 		config:           config,
 		fs:               fs,
