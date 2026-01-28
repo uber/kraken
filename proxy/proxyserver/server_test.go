@@ -234,8 +234,8 @@ func TestPrefetchV2(t *testing.T) {
 	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
 	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
 
-	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[1]).Return(nil)
-	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[2]).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(gomock.Any(), namespace, layers[1]).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(gomock.Any(), namespace, layers[2]).Return(nil)
 	res, err := httputil.Post(
 		fmt.Sprintf("http://%s/proxy/v2/registry/prefetch", addr),
 		httputil.SendBody(bytes.NewReader(b)))
@@ -278,8 +278,8 @@ func TestPrefetchV2OriginError(t *testing.T) {
 	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
 	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
 
-	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[1]).Return(errors.New("foo err"))
-	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[2]).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(gomock.Any(), namespace, layers[1]).Return(errors.New("foo err"))
+	mocks.originClient.EXPECT().PrefetchBlob(gomock.Any(), namespace, layers[2]).Return(nil)
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/proxy/v2/registry/prefetch", addr),
 		httputil.SendBody(bytes.NewReader(b)))

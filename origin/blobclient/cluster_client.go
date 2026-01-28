@@ -90,7 +90,7 @@ type ClusterClient interface {
 	CheckReadiness() error
 	UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.ReadSeeker) error
 	DownloadBlob(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error
-	PrefetchBlob(namespace string, d core.Digest) error
+	PrefetchBlob(ctx context.Context, namespace string, d core.Digest) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	Stat(namespace string, d core.Digest) (*core.BlobInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
@@ -278,27 +278,49 @@ func (c *clusterClient) DownloadBlob(ctx context.Context, namespace string, d co
 
 // PrefetchBlob preheats a blob in the origin cluster for downloading.
 // Check [Client].PrefetchBlob's comment for more info.
-func (c *clusterClient) PrefetchBlob(namespace string, d core.Digest) error {
+func (c *clusterClient) PrefetchBlob(ctx context.Context, namespace string, d core.Digest) error {
+	ctx, span := otel.Tracer("kraken-origin-cluster").Start(ctx, "cluster.prefetch_blob",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("component", "origin-cluster-client"),
+			attribute.String("namespace", namespace),
+			attribute.String("blob.digest", d.Hex()),
+		),
+	)
+	defer span.End()
+
+	logger := log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex())
+	logger.Debug("Starting blob prefetch from origin cluster")
+
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "resolve clients failed")
 		return fmt.Errorf("resolve clients: %w", err)
 	}
 
 	var errs []error
 	for _, client := range clients {
-		err = client.PrefetchBlob(namespace, d)
+		err = client.PrefetchBlob(ctx, namespace, d)
 		if err == nil {
+			span.SetStatus(codes.Ok, "prefetch completed")
 			return nil
 		}
 
 		if httputil.IsNotFound(err) {
 			// no need to iterate over other origins
-			return ErrBlobNotFound
+			err = ErrBlobNotFound
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "blob not found")
+			return err
 		}
 		errs = append(errs, err)
 	}
 
-	return fmt.Errorf("all origins unavailable: %w", errors.Join(errs...))
+	err = fmt.Errorf("all origins unavailable: %w", errors.Join(errs...))
+	span.RecordError(err)
+	span.SetStatus(codes.Error, "prefetch failed")
+	return err
 }
 
 // Owners returns the origin peers which own d.

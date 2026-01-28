@@ -187,17 +187,17 @@ func (mr *MockClientMockRecorder) OverwriteMetaInfo(d, pieceLength any) *gomock.
 }
 
 // PrefetchBlob mocks base method.
-func (m *MockClient) PrefetchBlob(namespace string, d core.Digest) error {
+func (m *MockClient) PrefetchBlob(ctx context.Context, namespace string, d core.Digest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PrefetchBlob", namespace, d)
+	ret := m.ctrl.Call(m, "PrefetchBlob", ctx, namespace, d)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PrefetchBlob indicates an expected call of PrefetchBlob.
-func (mr *MockClientMockRecorder) PrefetchBlob(namespace, d any) *gomock.Call {
+func (mr *MockClientMockRecorder) PrefetchBlob(ctx, namespace, d any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrefetchBlob", reflect.TypeOf((*MockClient)(nil).PrefetchBlob), namespace, d)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrefetchBlob", reflect.TypeOf((*MockClient)(nil).PrefetchBlob), ctx, namespace, d)
 }
 
 // ReplicateToRemote mocks base method.
