@@ -151,8 +151,8 @@ func (s *Server) Handler() http.Handler {
 	r.With(tracingMiddleware).Patch("/namespace/{namespace}/blobs/{digest}/uploads/{uid}", handler.Wrap(s.patchClusterUploadHandler))
 	r.With(tracingMiddleware).Put("/namespace/{namespace}/blobs/{digest}/uploads/{uid}", handler.Wrap(s.commitClusterUploadHandler))
 
-	r.Get("/namespace/{namespace}/blobs/{digest}", handler.Wrap(s.downloadBlobHandler))
-	r.Post("/namespace/{namespace}/blobs/{digest}/prefetch", handler.Wrap(s.prefetchBlobHandler))
+	r.With(tracingMiddleware).Get("/namespace/{namespace}/blobs/{digest}", handler.Wrap(s.downloadBlobHandler))
+	r.With(tracingMiddleware).Post("/namespace/{namespace}/blobs/{digest}/prefetch", handler.Wrap(s.prefetchBlobHandler))
 
 	r.Post("/namespace/{namespace}/blobs/{digest}/remote/{remote}", handler.Wrap(s.replicateToRemoteHandler))
 
@@ -263,22 +263,44 @@ func (s *Server) stat(namespace string, d core.Digest, checkLocal bool) (*core.B
 }
 
 func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) error {
+	ctx, span := s.tracer.Start(r.Context(), "origin.download_blob",
+		trace.WithSpanKind(trace.SpanKindServer),
+		trace.WithAttributes(
+			attribute.String("component", "origin"),
+			attribute.String("operation", "download_blob"),
+		),
+	)
+	defer span.End()
+
 	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse namespace failed")
 		return err
 	}
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse digest failed")
 		return err
 	}
-	log.With("namespace", namespace, "digest", d.Hex()).Info("Starting blob download")
-	if err := s.downloadBlob(namespace, d, w); err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "error", err).
+
+	span.SetAttributes(
+		attribute.String("namespace", namespace),
+		attribute.String("blob.digest", d.Hex()),
+	)
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Info("Starting blob download")
+
+	if err := s.downloadBlob(ctx, namespace, d, w); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "download failed")
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "error", err).
 			Debug("downloadBlob returned non-nil error")
 		return err
 	}
 	setOctetStreamContentType(w)
-	log.With("namespace", namespace, "digest", d.Hex()).Info("Successfully downloaded blob")
+	span.SetStatus(codes.Ok, "download completed")
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Info("Successfully downloaded blob")
 	return nil
 }
 
@@ -287,19 +309,42 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 // If the blob is already present, "200 OK" is returned.
 // If the blob doesn't exist, "404 Not Found" is returned.
 func (s *Server) prefetchBlobHandler(w http.ResponseWriter, r *http.Request) error {
+	ctx, span := s.tracer.Start(r.Context(), "origin.prefetch_blob",
+		trace.WithSpanKind(trace.SpanKindServer),
+		trace.WithAttributes(
+			attribute.String("component", "origin"),
+			attribute.String("operation", "prefetch_blob"),
+		),
+	)
+	defer span.End()
+
 	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse namespace failed")
 		return err
 	}
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse digest failed")
 		return err
 	}
 
-	if err := s.prefetchBlob(namespace, d); err != nil {
+	span.SetAttributes(
+		attribute.String("namespace", namespace),
+		attribute.String("blob.digest", d.Hex()),
+	)
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Info("Starting blob prefetch")
+
+	if err := s.prefetchBlob(ctx, namespace, d); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "prefetch failed")
 		return err
 	}
 	w.WriteHeader(http.StatusOK)
+	span.SetStatus(codes.Ok, "prefetch completed")
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Info("Successfully prefetched blob")
 	return nil
 }
 
@@ -577,43 +622,43 @@ func (s *Server) applyToReplicas(d core.Digest, f func(i int, c blobclient.Clien
 // download of the blob from the storage backend configured for namespace will
 // be initiated. This download is asynchronous and downloadBlob will immediately
 // return a "202 Accepted" handler error.
-func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error {
+func (s *Server) downloadBlob(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error {
 	f, err := s.cas.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
-		log.With("namespace", namespace, "digest", d.Hex()).
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).
 			Info("Blob not in cache, initiating download from backend")
 		return s.startRemoteBlobDownload(namespace, d, true)
 	}
 	if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("Failed to get cache file reader: %s", err)).
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("Failed to get cache file reader: %s", err)).
 			Error("Download blob failure")
 		return handler.Errorf("get cache file: %s", err)
 	}
 	defer closers.Close(f)
 
 	if _, err := io.Copy(dst, f); err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("Failed to copy blob data: %s", err)).
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("Failed to copy blob data: %s", err)).
 			Error("Download blob failure")
 		return handler.Errorf("copy blob: %s", err)
 	}
 	return nil
 }
 
-func (s *Server) prefetchBlob(namespace string, d core.Digest) error {
+func (s *Server) prefetchBlob(ctx context.Context, namespace string, d core.Digest) error {
 	f, err := s.cas.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
-		log.With("namespace", namespace, "digest", d.Hex()).
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).
 			Info("Blob not in cache, initiating download from backend")
 		return s.startRemoteBlobDownload(namespace, d, true)
 	}
 	if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("Failed to get cache file reader: %s", err)).
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("Failed to get cache file reader: %s", err)).
 			Error("Prefetch blob failure")
 		return handler.Errorf("get cache file: %s", err)
 	}
 	defer closers.Close(f)
 
-	log.With("namespace", namespace, "digest", d.Hex()).
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).
 		Info("Prefetch successful, blob already in cache")
 	return nil
 }
