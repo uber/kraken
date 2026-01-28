@@ -877,7 +877,7 @@ func TestClusterClientDownloadBlob(t *testing.T) {
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
 				client.EXPECT().Addr().Return(testOrigin1).AnyTimes()
-					client.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				client.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 					func(namespace string, d core.Digest, dst io.Writer) error {
 						_, err := dst.Write([]byte("blob data"))
 						return err
