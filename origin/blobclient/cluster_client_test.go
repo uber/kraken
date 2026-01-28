@@ -537,7 +537,7 @@ func TestClusterClientGetMetaInfo(t *testing.T) {
 
 			resolver := tt.setup(ctrl)
 			client := blobclient.NewClusterClient(resolver)
-		mi, err := client.GetMetaInfo(testNamespace, core.DigestFixture())
+			mi, err := client.GetMetaInfo(testNamespace, core.DigestFixture())
 			if tt.wantErr {
 				require.Error(t, err)
 				if tt.errContains != "" {
@@ -613,7 +613,7 @@ func TestClusterClientStat(t *testing.T) {
 
 			resolver := tt.setup(ctrl)
 			client := blobclient.NewClusterClient(resolver)
-		bi, err := client.Stat(testNamespace, core.DigestFixture())
+			bi, err := client.Stat(testNamespace, core.DigestFixture())
 			if tt.wantErr {
 				require.Error(t, err)
 				if tt.errContains != "" {
@@ -877,10 +877,10 @@ func TestClusterClientDownloadBlob(t *testing.T) {
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
 				client.EXPECT().Addr().Return(testOrigin1).AnyTimes()
-				client.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+					client.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 					func(namespace string, d core.Digest, dst io.Writer) error {
-						dst.Write([]byte("blob data"))
-						return nil
+						_, err := dst.Write([]byte("blob data"))
+						return err
 					})
 				return resolver
 			},
