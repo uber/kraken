@@ -172,7 +172,6 @@ func TestFileMapLoadForWrite(t *testing.T) {
 	testInt := 1
 	loaded := fm.LoadForWrite(fe.GetName(), func(name string, entry FileEntry) {
 		testInt = 2
-		return
 	})
 	require.False(loaded)
 	require.Equal(testInt, 1)

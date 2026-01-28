@@ -171,7 +171,9 @@ func TestNew(t *testing.T) {
 				assert.Contains(t, err.Error(), tt.errContains)
 			} else {
 				require.NoError(t, err)
-				defer db.Close()
+				t.Cleanup(func() {
+					require.NoError(t, db.Close())
+				})
 				if tt.verifySuccess != nil {
 					tt.verifySuccess(t, db)
 				}
