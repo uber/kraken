@@ -91,7 +91,7 @@ type ClusterClient interface {
 	UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.ReadSeeker) error
 	DownloadBlob(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error
 	PrefetchBlob(ctx context.Context, namespace string, d core.Digest) error
-	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
+	GetMetaInfo(ctx context.Context, namespace string, d core.Digest) (*core.MetaInfo, error)
 	Stat(namespace string, d core.Digest) (*core.BlobInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
 	Owners(d core.Digest) ([]core.PeerContext, error)
@@ -192,18 +192,39 @@ func (c *clusterClient) UploadBlob(ctx context.Context, namespace string, d core
 }
 
 // GetMetaInfo returns the metainfo for d. Does not handle polling.
-func (c *clusterClient) GetMetaInfo(namespace string, d core.Digest) (mi *core.MetaInfo, err error) {
+func (c *clusterClient) GetMetaInfo(ctx context.Context, namespace string, d core.Digest) (mi *core.MetaInfo, err error) {
+	ctx, span := otel.Tracer("kraken-origin-cluster").Start(ctx, "cluster.get_metainfo",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("component", "origin-cluster-client"),
+			attribute.String("namespace", namespace),
+			attribute.String("blob.digest", d.Hex()),
+		),
+	)
+	defer span.End()
+
+	logger := log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex())
+	logger.Debug("Getting metainfo from origin cluster")
+
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "resolve clients failed")
 		return nil, fmt.Errorf("resolve clients: %s", err)
 	}
 	for _, client := range clients {
-		mi, err = client.GetMetaInfo(namespace, d)
+		mi, err = client.GetMetaInfo(ctx, namespace, d)
 		// Do not try the next replica on 202 errors.
 		if err != nil && !httputil.IsAccepted(err) {
 			continue
 		}
 		break
+	}
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "get metainfo failed")
+	} else {
+		span.SetStatus(codes.Ok, "metainfo retrieved")
 	}
 	return mi, err
 }

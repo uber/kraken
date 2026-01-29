@@ -51,8 +51,8 @@ func New(
 	policy *peerhandoutpolicy.PriorityPolicy,
 	peerStore peerstore.Store,
 	originStore originstore.Store,
-	originCluster blobclient.ClusterClient) *Server {
-
+	originCluster blobclient.ClusterClient,
+) *Server {
 	config = config.applyDefaults()
 
 	stats = stats.Tagged(map[string]string{

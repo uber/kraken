@@ -32,7 +32,7 @@ func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	timer := s.stats.Timer("get_metainfo").Start()
-	mi, err := s.originCluster.GetMetaInfo(namespace, d)
+	mi, err := s.originCluster.GetMetaInfo(r.Context(), namespace, d)
 	if err != nil {
 		if serr, ok := err.(httputil.StatusError); ok {
 			// Propagate errors received from origin.

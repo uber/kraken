@@ -128,18 +128,18 @@ func (mr *MockClientMockRecorder) ForceCleanup(ttl any) *gomock.Call {
 }
 
 // GetMetaInfo mocks base method.
-func (m *MockClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error) {
+func (m *MockClient) GetMetaInfo(arg0 context.Context, arg1 string, arg2 core.Digest) (*core.MetaInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMetaInfo", namespace, d)
+	ret := m.ctrl.Call(m, "GetMetaInfo", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*core.MetaInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetMetaInfo indicates an expected call of GetMetaInfo.
-func (mr *MockClientMockRecorder) GetMetaInfo(namespace, d any) *gomock.Call {
+func (mr *MockClientMockRecorder) GetMetaInfo(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetaInfo", reflect.TypeOf((*MockClient)(nil).GetMetaInfo), namespace, d)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetaInfo", reflect.TypeOf((*MockClient)(nil).GetMetaInfo), arg0, arg1, arg2)
 }
 
 // GetPeerContext mocks base method.
