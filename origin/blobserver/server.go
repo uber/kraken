@@ -172,7 +172,7 @@ func (s *Server) Handler() http.Handler {
 
 	r.Head("/internal/namespace/{namespace}/blobs/{digest}", handler.Wrap(s.statHandler))
 
-	r.With(tracingMiddleware).Get("/internal/namespace/{namespace}/blobs/{digest}/metainfo", handler.Wrap(s.getMetaInfoHandler))
+	r.Get("/internal/namespace/{namespace}/blobs/{digest}/metainfo", handler.Wrap(s.getMetaInfoHandler))
 
 	r.Put(
 		"/internal/duplicate/namespace/{namespace}/blobs/{digest}/uploads/{uid}",
@@ -439,49 +439,25 @@ func (s *Server) getPeerContextHandler(w http.ResponseWriter, r *http.Request) e
 }
 
 func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) error {
-	ctx, span := s.tracer.Start(r.Context(), "origin.get_metainfo",
-		trace.WithSpanKind(trace.SpanKindServer),
-		trace.WithAttributes(
-			attribute.String("component", "origin"),
-			attribute.String("operation", "get_metainfo"),
-		),
-	)
-	defer span.End()
-
 	namespace, err := httputil.ParseParam(r, "namespace")
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "parse namespace failed")
 		return err
 	}
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "parse digest failed")
 		return err
 	}
-
-	span.SetAttributes(
-		attribute.String("namespace", namespace),
-		attribute.String("blob.digest", d.Hex()),
-	)
-	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Debug("Getting metainfo")
-
+	log.With("namespace", namespace, "digest", d.Hex()).Debug("Getting metainfo")
 	raw, err := s.getMetaInfo(namespace, d)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "get metainfo failed")
-		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "error", err).
+		log.With("namespace", namespace, "digest", d.Hex(), "error", err).
 			Debug("getMetaInfo returned non-nil error")
 		return err
 	}
 	if _, err := w.Write(raw); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "write response failed")
 		return fmt.Errorf("write response: %s", err)
 	}
-	span.SetStatus(codes.Ok, "metainfo retrieved")
-	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Debug("Successfully retrieved metainfo")
+	log.With("namespace", namespace, "digest", d.Hex()).Debug("Successfully retrieved metainfo")
 	return nil
 }
 
