@@ -26,10 +26,10 @@ import (
 // =============================================================================
 
 const (
-	testNamespace = "test-namespace"
-	testOrigin1   = "origin1:8080"
-	testOrigin2   = "origin2:8080"
-	testRemoteDNS = "remote.dns.com"
+	_testNamespace = "test-namespace"
+	_testOrigin1   = "origin1:8080"
+	_testOrigin2   = "origin2:8080"
+	_testRemoteDNS = "remote.dns.com"
 )
 
 // =============================================================================
@@ -166,7 +166,7 @@ func TestClusterLocations(t *testing.T) {
 				})
 				return []string{addr1, addr2}
 			},
-			want: []string{testOrigin1},
+			want: []string{_testOrigin1},
 		},
 
 		// --- Failover Cases ---
@@ -182,7 +182,7 @@ func TestClusterLocations(t *testing.T) {
 				})
 				return []string{addr1, addr2}
 			},
-			want: []string{testOrigin2},
+			want: []string{_testOrigin2},
 		},
 		{
 			name: "all nodes fail",
@@ -222,7 +222,7 @@ func TestNewClientResolver(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	t.Cleanup(ctrl.Finish)
 
-	resolver := blobclient.NewClientResolver(mockblobclient.NewMockProvider(ctrl), getMockList(testOrigin1))
+	resolver := blobclient.NewClientResolver(mockblobclient.NewMockProvider(ctrl), getMockList(_testOrigin1))
 	require.NotNil(t, resolver)
 }
 
@@ -352,7 +352,7 @@ func TestClusterClientUploadBlob(t *testing.T) {
 				resolver := mockblobclient.NewMockClientResolver(ctrl)
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
-				client.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				client.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 				return resolver
 			},
@@ -376,10 +376,10 @@ func TestClusterClientUploadBlob(t *testing.T) {
 				client1 := mockblobclient.NewMockClient(ctrl)
 				client2 := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
-				client1.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				client1.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					httputil.StatusError{Status: http.StatusServiceUnavailable})
-				client2.EXPECT().Addr().Return(testOrigin2).AnyTimes()
+				client2.EXPECT().Addr().Return(_testOrigin2).AnyTimes()
 				client2.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 				return resolver
 			},
@@ -391,7 +391,7 @@ func TestClusterClientUploadBlob(t *testing.T) {
 				resolver := mockblobclient.NewMockClientResolver(ctrl)
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
-				client.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				client.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					httputil.StatusError{Status: http.StatusBadRequest})
 				return resolver
@@ -406,10 +406,10 @@ func TestClusterClientUploadBlob(t *testing.T) {
 				client1 := mockblobclient.NewMockClient(ctrl)
 				client2 := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
-				client1.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				client1.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					httputil.StatusError{Status: http.StatusServiceUnavailable})
-				client2.EXPECT().Addr().Return(testOrigin2).AnyTimes()
+				client2.EXPECT().Addr().Return(_testOrigin2).AnyTimes()
 				client2.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					httputil.StatusError{Status: http.StatusServiceUnavailable})
 				return resolver
@@ -424,9 +424,9 @@ func TestClusterClientUploadBlob(t *testing.T) {
 				client1 := mockblobclient.NewMockClient(ctrl)
 				client2 := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
-				client1.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				client1.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any()).Return(httputil.NetworkError{})
-				client2.EXPECT().Addr().Return(testOrigin2).AnyTimes()
+				client2.EXPECT().Addr().Return(_testOrigin2).AnyTimes()
 				client2.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 				return resolver
 			},
@@ -440,7 +440,7 @@ func TestClusterClientUploadBlob(t *testing.T) {
 				resolver := mockblobclient.NewMockClientResolver(ctrl)
 				client1 := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, mockblobclient.NewMockClient(ctrl)}, nil)
-				client1.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				client1.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					httputil.StatusError{Status: http.StatusServiceUnavailable})
 				return resolver
@@ -458,7 +458,7 @@ func TestClusterClientUploadBlob(t *testing.T) {
 
 			resolver := tt.setup(ctrl)
 			client := blobclient.NewClusterClient(resolver)
-			err := client.UploadBlob(testNamespace, core.DigestFixture(), tt.blob())
+			err := client.UploadBlob(_testNamespace, core.DigestFixture(), tt.blob())
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -537,7 +537,7 @@ func TestClusterClientGetMetaInfo(t *testing.T) {
 
 			resolver := tt.setup(ctrl)
 			client := blobclient.NewClusterClient(resolver)
-			mi, err := client.GetMetaInfo(testNamespace, core.DigestFixture())
+			mi, err := client.GetMetaInfo(_testNamespace, core.DigestFixture())
 			if tt.wantErr {
 				require.Error(t, err)
 				if tt.errContains != "" {
@@ -613,7 +613,7 @@ func TestClusterClientStat(t *testing.T) {
 
 			resolver := tt.setup(ctrl)
 			client := blobclient.NewClusterClient(resolver)
-			bi, err := client.Stat(testNamespace, core.DigestFixture())
+			bi, err := client.Stat(_testNamespace, core.DigestFixture())
 			if tt.wantErr {
 				require.Error(t, err)
 				if tt.errContains != "" {
@@ -644,9 +644,9 @@ func TestClusterClientOverwriteMetaInfo(t *testing.T) {
 				client1 := mockblobclient.NewMockClient(ctrl)
 				client2 := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
-				client1.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				client1.EXPECT().OverwriteMetaInfo(gomock.Any(), gomock.Any()).Return(nil)
-				client2.EXPECT().Addr().Return(testOrigin2).AnyTimes()
+				client2.EXPECT().Addr().Return(_testOrigin2).AnyTimes()
 				client2.EXPECT().OverwriteMetaInfo(gomock.Any(), gomock.Any()).Return(nil)
 				return resolver
 			},
@@ -666,14 +666,14 @@ func TestClusterClientOverwriteMetaInfo(t *testing.T) {
 				client1 := mockblobclient.NewMockClient(ctrl)
 				client2 := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
-				client1.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				client1.EXPECT().OverwriteMetaInfo(gomock.Any(), gomock.Any()).Return(nil)
-				client2.EXPECT().Addr().Return(testOrigin2).AnyTimes()
+				client2.EXPECT().Addr().Return(_testOrigin2).AnyTimes()
 				client2.EXPECT().OverwriteMetaInfo(gomock.Any(), gomock.Any()).Return(errors.New("failed"))
 				return resolver
 			},
 			wantErr:     true,
-			errContains: testOrigin2,
+			errContains: _testOrigin2,
 		},
 	}
 
@@ -760,7 +760,7 @@ func TestClusterClientPrefetchBlob(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runClusterClientTest(t, tt.setup, func(c blobclient.ClusterClient) error {
-				return c.PrefetchBlob(testNamespace, core.DigestFixture())
+				return c.PrefetchBlob(_testNamespace, core.DigestFixture())
 			}, tt.wantErr, tt.errContains)
 		})
 	}
@@ -876,7 +876,7 @@ func TestClusterClientDownloadBlob(t *testing.T) {
 				resolver := mockblobclient.NewMockClientResolver(ctrl)
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
-				client.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				client.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 					func(namespace string, d core.Digest, dst io.Writer) error {
 						_, err := dst.Write([]byte("blob data"))
@@ -899,7 +899,7 @@ func TestClusterClientDownloadBlob(t *testing.T) {
 				resolver := mockblobclient.NewMockClientResolver(ctrl)
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
-				client.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				client.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					httputil.StatusError{Status: http.StatusNotFound})
 				return resolver
@@ -917,7 +917,7 @@ func TestClusterClientDownloadBlob(t *testing.T) {
 			resolver := tt.setup(ctrl)
 			client := blobclient.NewClusterClient(resolver)
 			var buf bytes.Buffer
-			err := client.DownloadBlob(testNamespace, core.DigestFixture(), &buf)
+			err := client.DownloadBlob(_testNamespace, core.DigestFixture(), &buf)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -947,7 +947,7 @@ func TestClusterClientReplicateToRemote(t *testing.T) {
 				resolver := mockblobclient.NewMockClientResolver(ctrl)
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
-				client.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				client.EXPECT().ReplicateToRemote(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 				return resolver
 			},
@@ -965,7 +965,7 @@ func TestClusterClientReplicateToRemote(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runClusterClientTest(t, tt.setup, func(c blobclient.ClusterClient) error {
-				return c.ReplicateToRemote(testNamespace, core.DigestFixture(), testRemoteDNS)
+				return c.ReplicateToRemote(_testNamespace, core.DigestFixture(), _testRemoteDNS)
 			}, tt.wantErr, tt.errContains)
 		})
 	}
@@ -989,7 +989,7 @@ func TestPoll(t *testing.T) {
 				resolver := mockblobclient.NewMockClientResolver(ctrl)
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
-				client.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				return resolver
 			},
 			makeRequest: func(client blobclient.Client) error { return nil },
@@ -1011,7 +1011,7 @@ func TestPoll(t *testing.T) {
 				resolver := mockblobclient.NewMockClientResolver(ctrl)
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
-				client.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				return resolver
 			},
 			makeRequest: func(client blobclient.Client) error {
@@ -1029,8 +1029,8 @@ func TestPoll(t *testing.T) {
 				client1 := mockblobclient.NewMockClient(ctrl)
 				client2 := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
-				client1.EXPECT().Addr().Return(testOrigin1).AnyTimes()
-				client2.EXPECT().Addr().Return(testOrigin2).AnyTimes()
+				client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
+				client2.EXPECT().Addr().Return(_testOrigin2).AnyTimes()
 				return resolver
 			},
 			makeRequest: func() func(client blobclient.Client) error {
@@ -1053,7 +1053,7 @@ func TestPoll(t *testing.T) {
 				resolver := mockblobclient.NewMockClientResolver(ctrl)
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
-				client.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				return resolver
 			},
 			makeRequest: func() func(client blobclient.Client) error {
@@ -1074,7 +1074,7 @@ func TestPoll(t *testing.T) {
 				resolver := mockblobclient.NewMockClientResolver(ctrl)
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
-				client.EXPECT().Addr().Return(testOrigin1).AnyTimes()
+				client.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
 				return resolver
 			},
 			makeRequest: func(client blobclient.Client) error {
