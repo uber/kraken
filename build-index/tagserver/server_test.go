@@ -43,6 +43,7 @@ import (
 	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/testutil"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 const (
@@ -125,7 +126,8 @@ func (m *serverMocks) handler() http.Handler {
 		m.remotes,
 		m.tagReplicationManager,
 		m.provider,
-		m.depResolver).Handler()
+		m.depResolver,
+		noop.NewTracerProvider().Tracer("test")).Handler()
 }
 
 func newClusterClient(addr string) tagclient.Client {

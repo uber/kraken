@@ -31,6 +31,10 @@ server {
   access_log {{.access_log_path}};
   error_log {{.error_log_path}};
 
+  proxy_set_header traceparent $http_traceparent;
+  proxy_set_header tracestate $http_tracestate;
+  proxy_set_header jaeger-debug-id $http_jaeger_debug_id;
+
 {{healthEndpoint "build-index"}}
 
   location / {

@@ -30,9 +30,12 @@ require (
 	github.com/pressly/goose v2.6.0+incompatible
 	github.com/satori/go.uuid v1.2.0
 	github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72
-	github.com/stretchr/testify v1.7.4
+	github.com/stretchr/testify v1.8.4
 	github.com/uber-go/tally v3.3.11+incompatible
 	github.com/willf/bitset v0.0.0-20190228212526-18bd95f470f9
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.46.0
+	go.opentelemetry.io/otel v1.21.0
+	go.opentelemetry.io/otel/trace v1.21.0
 	go.uber.org/atomic v1.5.0
 	go.uber.org/zap v1.10.0
 	golang.org/x/net v0.41.0
@@ -67,7 +70,10 @@ require (
 	github.com/docker/go-metrics v0.0.0-20181218153428-b84716841b82 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/docker/libtrust v0.0.0-20160708172513-aabc10ec26b7 // indirect
+	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/garyburd/redigo v0.0.0-20150301180006-535138d7bcd7 // indirect
+	github.com/go-logr/logr v1.3.0 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.5.0 // indirect
 	github.com/gofrs/uuid v0.0.0-20190320161447-2593f3d8aa45 // indirect
 	github.com/gogo/googleapis v1.4.1 // indirect
@@ -100,6 +106,7 @@ require (
 	github.com/yvasiyarov/gorelic v0.0.0-20180809112600-635ca6035f23 // indirect
 	github.com/yvasiyarov/newrelic_platform_go v0.0.0-20160601141957-9c099fbc30e9 // indirect
 	go.opencensus.io v0.22.3 // indirect
+	go.opentelemetry.io/otel/metric v1.21.0 // indirect
 	go.uber.org/multierr v1.4.0 // indirect
 	go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee // indirect
 	golang.org/x/crypto v0.40.0 // indirect
