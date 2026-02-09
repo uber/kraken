@@ -122,8 +122,7 @@ func (s *Store) Find(query interface{}) ([]persistedretry.Task, error) {
 	switch q := query.(type) {
 	case *NameQuery:
 		err = s.db.Select(&tasks, `
-			SELECT namespace, name, created_at, last_attempt, failures, delay,
-			       trace_id, span_id, trace_flags
+			SELECT namespace, name, created_at, last_attempt, failures, delay
 			FROM writeback_task
 			WHERE name=?
 		`, q.name)
@@ -144,9 +143,6 @@ func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
 			last_attempt,
 			failures,
 			delay,
-			trace_id,
-			span_id,
-			trace_flags,
 			status
 		) VALUES (
 			:namespace,
@@ -154,9 +150,6 @@ func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
 			:last_attempt,
 			:failures,
 			:delay,
-			:trace_id,
-			:span_id,
-			:trace_flags,
 			%q
 		)
 	`, status)
@@ -164,7 +157,6 @@ func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
 	if !ok {
 		return fmt.Errorf("expected *Task, got %T", r)
 	}
-	t.syncSpanCtxToDB() // Sync before writing to DB
 	_, err := s.db.NamedExec(query, t)
 	if se, ok := err.(sqlite3.Error); ok {
 		if se.ExtendedCode == sqlite3.ErrConstraintPrimaryKey {
@@ -177,8 +169,7 @@ func (s *Store) addWithStatus(r persistedretry.Task, status string) error {
 func (s *Store) selectStatus(status string) ([]persistedretry.Task, error) {
 	var tasks []*Task
 	err := s.db.Select(&tasks, `
-		SELECT namespace, name, created_at, last_attempt, failures, delay,
-		       trace_id, span_id, trace_flags
+		SELECT namespace, name, created_at, last_attempt, failures, delay
 		FROM writeback_task
 		WHERE status=?
 	`, status)
@@ -190,7 +181,6 @@ func (s *Store) selectStatus(status string) ([]persistedretry.Task, error) {
 
 func convert(tasks []*Task) (result []persistedretry.Task) {
 	for _, t := range tasks {
-		t.syncDBToSpanCtx() // Reconstruct spanCtx from DB fields
 		result = append(result, t)
 	}
 	return result
