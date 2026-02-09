@@ -30,8 +30,6 @@ import (
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
-
-	"github.com/uber-go/tally"
 )
 
 // Store errors.
@@ -69,15 +67,10 @@ type tagStore struct {
 // New creates a new Store.
 func New(
 	config Config,
-	stats tally.Scope,
 	fs FileStore,
 	backends *backend.Manager,
 	writeBackManager persistedretry.Manager,
 ) Store {
-	stats = stats.Tagged(map[string]string{
-		"module": "tagstore",
-	})
-
 	s := &tagStore{
 		config:           config,
 		fs:               fs,

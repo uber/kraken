@@ -144,6 +144,9 @@ func getBackendClient(backendConfig map[string]interface{}, authConfRaw interfac
 				return nil, fmt.Errorf("unmarshal sql config: %s", err)
 			}
 			authConfBytes, err := yaml.Marshal(authConfRaw)
+			if err != nil {
+				return nil, fmt.Errorf("marshal sql auth config: %s", err)
+			}
 			var userAuth sqlbackend.UserAuthConfig
 			if err := yaml.Unmarshal(authConfBytes, &userAuth); err != nil {
 				return nil, fmt.Errorf("unmarshal sql auth config: %s", err)
@@ -172,6 +175,9 @@ func getBackendClient(backendConfig map[string]interface{}, authConfRaw interfac
 				return nil, fmt.Errorf("unmarshal s3 config: %s", err)
 			}
 			authConfBytes, err := yaml.Marshal(authConfRaw)
+			if err != nil {
+				return nil, fmt.Errorf("marshal s3 auth config: %s", err)
+			}
 			var userAuth s3backend.UserAuthConfig
 			if err := yaml.Unmarshal(authConfBytes, &userAuth); err != nil {
 				return nil, fmt.Errorf("unmarshal s3 auth config: %s", err)

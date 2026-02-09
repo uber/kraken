@@ -64,7 +64,6 @@ func NewTaskWithContext(ctx context.Context, namespace, name string, delay time.
 		Delay:     delay,
 	}
 
-	// Capture trace context if available
 	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.IsValid() {
 		t.TraceID = spanCtx.TraceID().String()
 		t.SpanID = spanCtx.SpanID().String()
@@ -117,14 +116,6 @@ func parseHexByte(s string) byte {
 		return 0
 	}
 	return b[0]
-}
-
-// IsSampled returns true if the original request was sampled.
-func (t *Task) IsSampled() bool {
-	if !t.HasTraceContext() {
-		return false
-	}
-	return t.SpanContext().IsSampled()
 }
 
 func (t *Task) String() string {
