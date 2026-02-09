@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 
@@ -258,9 +259,19 @@ func Run(flags *Flags, opts ...Option) {
 		}
 		addr = fmt.Sprintf("%s:%d", ip, flags.BlobServerPort)
 		if !hashRing.Contains(addr) {
-			log.Fatalf(
-				"Neither %s nor %s (port %d) found in hash ring",
-				hostname, ip, flags.BlobServerPort)
+			l := log.With(
+				"hostname", hostname,
+				"ip", ip,
+				"port", flags.BlobServerPort,
+				"ring_members", hashRing.Members().ToSlice(),
+				"resolver_members", cluster.Resolve().ToSlice(),
+			)
+			if host, _, err := net.SplitHostPort(config.Cluster.DNS); err == nil {
+				if ips, err := net.LookupHost(host); err == nil {
+					l = l.With("dns_ips", ips)
+				}
+			}
+			l.Fatal("Origin cannot find itself in hash ring upon init. Stopping application.")
 		}
 	}
 
