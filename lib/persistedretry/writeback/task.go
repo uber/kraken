@@ -14,8 +14,12 @@
 package writeback
 
 import (
+	"context"
+	"encoding/hex"
 	"fmt"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/uber/kraken/core"
 )
@@ -29,11 +33,17 @@ type Task struct {
 	Failures    int           `db:"failures"`
 	Delay       time.Duration `db:"delay"`
 
+	// Trace context for linking async execution back to original request.
+	TraceID    string `db:"trace_id"`
+	SpanID     string `db:"span_id"`
+	TraceFlags string `db:"trace_flags"` // Hex string of trace flags (e.g., "01" if sampled)
+
 	// Deprecated. Use name instead.
 	Digest core.Digest `db:"digest"`
 }
 
 // NewTask creates a new Task.
+// Deprecated: Use NewTaskWithContext to preserve trace context.
 func NewTask(namespace, name string, delay time.Duration) *Task {
 	return &Task{
 		Namespace: namespace,
@@ -41,6 +51,71 @@ func NewTask(namespace, name string, delay time.Duration) *Task {
 		CreatedAt: time.Now(),
 		Delay:     delay,
 	}
+}
+
+// NewTaskWithContext creates a new Task and captures the trace context from ctx.
+// This allows the async writeback execution to be linked to the original request trace.
+// It also captures TraceFlags to preserve the sampling decision.
+func NewTaskWithContext(ctx context.Context, namespace, name string, delay time.Duration) *Task {
+	t := &Task{
+		Namespace: namespace,
+		Name:      name,
+		CreatedAt: time.Now(),
+		Delay:     delay,
+	}
+
+	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.IsValid() {
+		t.TraceID = spanCtx.TraceID().String()
+		t.SpanID = spanCtx.SpanID().String()
+		t.TraceFlags = spanCtx.TraceFlags().String()
+	}
+
+	return t
+}
+
+// HasTraceContext returns true if the task has captured trace context.
+func (t *Task) HasTraceContext() bool {
+	return t.TraceID != "" && t.SpanID != ""
+}
+
+// SpanContext reconstructs a trace.SpanContext from the stored trace IDs.
+// Returns an invalid SpanContext if the task has no trace context or if parsing fails.
+func (t *Task) SpanContext() trace.SpanContext {
+	if !t.HasTraceContext() {
+		return trace.SpanContext{}
+	}
+
+	traceID, err := trace.TraceIDFromHex(t.TraceID)
+	if err != nil {
+		return trace.SpanContext{}
+	}
+
+	spanID, err := trace.SpanIDFromHex(t.SpanID)
+	if err != nil {
+		return trace.SpanContext{}
+	}
+
+	// Parse TraceFlags to preserve sampling decision
+	var traceFlags trace.TraceFlags
+	if t.TraceFlags != "" {
+		traceFlags = trace.TraceFlags(parseHexByte(t.TraceFlags))
+	}
+
+	return trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    traceID,
+		SpanID:     spanID,
+		TraceFlags: traceFlags,
+		Remote:     true,
+	})
+}
+
+// parseHexByte parses a hex string (e.g., "01") to a byte.
+func parseHexByte(s string) byte {
+	b, err := hex.DecodeString(s)
+	if err != nil || len(b) != 1 {
+		return 0
+	}
+	return b[0]
 }
 
 func (t *Task) String() string {
