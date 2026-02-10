@@ -1,3 +1,22 @@
+FROM golang:1.23.11 AS builder
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+ENV CGO_ENABLED=1 GO111MODULE=on
+
+WORKDIR /src
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential pkg-config sqlite3 libsqlite3-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN mkdir -p /out && \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -buildvcs=false -o /out/kraken-proxy ./proxy
+
 FROM debian:12
 
 # Fix repository configuration for Debian 12 (bookworm) with multiple mirrors and better retry logic
@@ -33,7 +52,7 @@ RUN if [ ${USERID} != "0" ]; then useradd --uid ${USERID} ${USERNAME}; fi
 COPY ./docker/setup_nginx.sh /tmp/setup_nginx.sh
 RUN /tmp/setup_nginx.sh ${USERNAME}
 
-COPY ./proxy/proxy /usr/bin/kraken-proxy
+COPY --from=builder /out/kraken-proxy /usr/bin/kraken-proxy
 COPY ./config /etc/kraken/config
 COPY ./nginx/config /etc/kraken/nginx/config
 COPY ./test/tls /etc/kraken/tls

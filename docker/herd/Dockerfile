@@ -1,5 +1,28 @@
 # This image combines all central components into one container, for easier
 # deployment and management.
+FROM golang:1.23.11 AS builder
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+ENV CGO_ENABLED=1 GO111MODULE=on
+
+WORKDIR /src
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential pkg-config sqlite3 libsqlite3-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN mkdir -p /out && \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -buildvcs=false -o /out/kraken-build-index ./build-index && \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -buildvcs=false -o /out/kraken-origin ./origin && \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -buildvcs=false -o /out/kraken-proxy ./proxy && \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -buildvcs=false -o /out/kraken-testfs ./tools/bin/testfs && \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -buildvcs=false -o /out/kraken-tracker ./tracker
+
 FROM debian:12
 
 # Fix repository configuration for Debian 12 (bookworm) with multiple mirrors and better retry logic
@@ -58,11 +81,11 @@ RUN if [ ${USERID} != "0" ]; then mkdir -p /etc/sudoers.d/ && \
 COPY ./docker/setup_nginx.sh /tmp/setup_nginx.sh
 RUN /tmp/setup_nginx.sh ${USERNAME}
 
-COPY ./build-index/build-index /usr/bin/kraken-build-index
-COPY ./origin/origin           /usr/bin/kraken-origin
-COPY ./proxy/proxy             /usr/bin/kraken-proxy
-COPY ./tools/bin/testfs/testfs /usr/bin/kraken-testfs
-COPY ./tracker/tracker         /usr/bin/kraken-tracker
+COPY --from=builder /out/kraken-build-index /usr/bin/kraken-build-index
+COPY --from=builder /out/kraken-origin /usr/bin/kraken-origin
+COPY --from=builder /out/kraken-proxy /usr/bin/kraken-proxy
+COPY --from=builder /out/kraken-testfs /usr/bin/kraken-testfs
+COPY --from=builder /out/kraken-tracker /usr/bin/kraken-tracker
 
 RUN chmod +x /usr/bin/kraken-build-index && \
     chmod +x /usr/bin/kraken-origin && \

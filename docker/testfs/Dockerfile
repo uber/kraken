@@ -1,3 +1,22 @@
+FROM golang:1.23.11 AS builder
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+ENV CGO_ENABLED=1 GO111MODULE=on
+
+WORKDIR /src
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential pkg-config sqlite3 libsqlite3-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN mkdir -p /out && \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -buildvcs=false -o /out/kraken-testfs ./tools/bin/testfs
+
 FROM debian:12
 
 # Fix repository configuration for Debian 12 (bookworm) with CDN mirror for better stability
@@ -28,7 +47,7 @@ ARG USERNAME="root"
 ARG USERID="0"
 RUN if [ ${USERID} != "0" ]; then useradd --uid ${USERID} ${USERNAME}; fi
 
-COPY tools/bin/testfs/testfs /usr/bin/kraken-testfs
+COPY --from=builder /out/kraken-testfs /usr/bin/kraken-testfs
 RUN chmod +x /usr/bin/kraken-testfs
 
 USER ${USERNAME}
