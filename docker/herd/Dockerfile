@@ -1,6 +1,12 @@
+# syntax=docker/dockerfile:1.6
+
 # This image combines all central components into one container, for easier
 # deployment and management.
-FROM golang:1.23.11 AS builder
+ARG TARGETPLATFORM
+FROM --platform=$TARGETPLATFORM golang:1.23.11 AS builder
+
+ARG TARGETOS=linux
+ARG TARGETARCH
 
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
@@ -16,12 +22,14 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN mkdir -p /out && \
-    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -buildvcs=false -o /out/kraken-build-index ./build-index && \
-    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -buildvcs=false -o /out/kraken-origin ./origin && \
-    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -buildvcs=false -o /out/kraken-proxy ./proxy && \
-    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -buildvcs=false -o /out/kraken-testfs ./tools/bin/testfs && \
-    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -buildvcs=false -o /out/kraken-tracker ./tracker
+RUN set -euo pipefail; \
+    ARCH=${TARGETARCH:-$(dpkg --print-architecture)}; \
+    mkdir -p /out && \
+    GOOS=${TARGETOS} GOARCH=${ARCH} go build -buildvcs=false -o /out/kraken-build-index ./build-index && \
+    GOOS=${TARGETOS} GOARCH=${ARCH} go build -buildvcs=false -o /out/kraken-origin ./origin && \
+    GOOS=${TARGETOS} GOARCH=${ARCH} go build -buildvcs=false -o /out/kraken-proxy ./proxy && \
+    GOOS=${TARGETOS} GOARCH=${ARCH} go build -buildvcs=false -o /out/kraken-testfs ./tools/bin/testfs && \
+    GOOS=${TARGETOS} GOARCH=${ARCH} go build -buildvcs=false -o /out/kraken-tracker ./tracker
 
 FROM debian:12
 
