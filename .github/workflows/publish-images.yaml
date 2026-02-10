@@ -1,0 +1,73 @@
+name: Publish Kraken Images
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: kraken-agent
+            dockerfile: docker/agent/Dockerfile
+          - component: kraken-build-index
+            dockerfile: docker/build-index/Dockerfile
+          - component: kraken-origin
+            dockerfile: docker/origin/Dockerfile
+          - component: kraken-proxy
+            dockerfile: docker/proxy/Dockerfile
+          - component: kraken-testfs
+            dockerfile: docker/testfs/Dockerfile
+          - component: kraken-tracker
+            dockerfile: docker/tracker/Dockerfile
+          - component: kraken-herd
+            dockerfile: docker/herd/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64,arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata (${{ matrix.component }})
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.component }}
+          tags: |
+            type=ref,event=tag
+            type=ref,event=branch
+            type=sha,format=short
+
+      - name: Build and push ${{ matrix.component }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
