@@ -1,13 +1,9 @@
 # syntax=docker/dockerfile:1.6
 
-ARG TARGETPLATFORM
-FROM --platform=$TARGETPLATFORM golang:1.23.11 AS builder
+FROM golang:1.23.11 AS builder
 
-ARG TARGETOS=linux
+ARG TARGETOS
 ARG TARGETARCH
-
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
 ENV CGO_ENABLED=1 GO111MODULE=on
 
 WORKDIR /src
@@ -20,10 +16,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN set -euo pipefail; \
-    ARCH=${TARGETARCH:-$(dpkg --print-architecture)}; \
-    mkdir -p /out && \
-    GOOS=${TARGETOS} GOARCH=${ARCH} go build -buildvcs=false -o /out/kraken-testfs ./tools/bin/testfs
+RUN mkdir -p /out && \
+    go build -buildvcs=false -o /out/kraken-testfs ./tools/bin/testfs
 
 FROM debian:12
 
