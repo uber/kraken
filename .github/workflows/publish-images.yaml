@@ -2,11 +2,8 @@ name: Publish Kraken Images
 
 on:
   push:
-    branches:
-      - master
     tags:
       - '*'
-  workflow_dispatch:
 
 permissions:
   contents: read
