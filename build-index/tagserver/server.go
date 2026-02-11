@@ -48,6 +48,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -183,22 +184,31 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 }
 
 func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
-	ctx, span := s.tracer.Start(r.Context(), "build_index.put_tag")
+	ctx, span := s.tracer.Start(r.Context(), "build_index.put_tag",
+		trace.WithSpanKind(trace.SpanKindServer),
+		trace.WithAttributes(
+			attribute.String("component", "build_index"),
+			attribute.String("operation", "put_tag"),
+		),
+	)
 	defer span.End()
 
 	tag, err := httputil.ParseParam(r, "tag")
 	if err != nil {
 		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse tag failed")
 		return err
 	}
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
 		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse digest failed")
 		return err
 	}
 	replicate, err := strconv.ParseBool(httputil.GetQueryArg(r, "replicate", "false"))
 	if err != nil {
 		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse query arg replicate failed")
 		return fmt.Errorf("parse query arg `replicate`: %w", err)
 	}
 
@@ -214,6 +224,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		log.WithTraceContext(ctx).With("tag", tag, "digest", d.String(), "error", err).Error("Failed to resolve dependencies")
 		span.RecordError(err)
+		span.SetStatus(codes.Error, "resolve dependencies failed")
 		return fmt.Errorf("resolve dependencies: %w", err)
 	}
 
@@ -223,6 +234,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	if err := s.putTag(ctx, tag, d, deps); err != nil {
 		log.WithTraceContext(ctx).With("tag", tag, "digest", d.String(), "error", err).Error("Failed to put tag")
 		span.RecordError(err)
+		span.SetStatus(codes.Error, "put tag failed")
 		return err
 	}
 
@@ -233,10 +245,13 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 		if err := s.replicateTag(ctx, tag, d, deps); err != nil {
 			log.WithTraceContext(ctx).With("tag", tag, "digest", d.String(), "error", err).Error("Failed to replicate tag")
 			span.RecordError(err)
+			span.SetStatus(codes.Error, "replicate tag failed")
 			return err
 		}
 		log.WithTraceContext(ctx).With("tag", tag, "digest", d.String()).Info("Successfully replicated tag")
 	}
+
+	span.SetStatus(codes.Ok, "tag put successfully")
 
 	span.SetAttributes(attribute.Bool("success", true))
 	w.WriteHeader(http.StatusOK)
