@@ -94,17 +94,3 @@ func (s *state) getHealthy() stringset.Set {
 
 	return s.healthy.Copy()
 }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
