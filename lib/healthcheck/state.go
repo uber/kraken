@@ -16,6 +16,7 @@ package healthcheck
 import (
 	"sync"
 
+	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/stringset"
 )
 
@@ -68,7 +69,9 @@ func (s *state) failed(addr string) {
 	defer s.Unlock()
 
 	s.trend[addr] = max(min(s.trend[addr]-1, -1), -s.config.Fails)
-	if s.trend[addr] == -s.config.Fails {
+	// Only emit log when host changes state from healthy to unhealthy.
+	if s.trend[addr] == -s.config.Fails && s.healthy.Has(addr) {
+		log.With("address", addr).Warn("Host marked as unhealthy")
 		s.healthy.Remove(addr)
 	}
 }
