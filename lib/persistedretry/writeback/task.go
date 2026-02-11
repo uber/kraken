@@ -64,10 +64,6 @@ func NewTaskWithContext(ctx context.Context, namespace, name string, delay time.
 		Delay:     delay,
 	}
 
-<<<<<<< HEAD
-=======
-	// Capture trace context if available
->>>>>>> bba1aae (Tracing executor tasks)
 	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.IsValid() {
 		t.TraceID = spanCtx.TraceID().String()
 		t.SpanID = spanCtx.SpanID().String()
