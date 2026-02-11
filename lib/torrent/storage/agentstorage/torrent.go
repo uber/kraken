@@ -294,10 +294,3 @@ func (t *Torrent) MissingPieces() []int {
 func (t *Torrent) getFileOffset(pi int) int64 {
 	return t.metaInfo.PieceLength() * int64(pi)
 }
-
-func min(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
-}
