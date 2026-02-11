@@ -23,6 +23,7 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
 
 	"github.com/willf/bitset"
@@ -177,7 +178,7 @@ func (t *Torrent) writePiece(src storage.PieceReader, pi int) error {
 	if err != nil {
 		return fmt.Errorf("get download writer: %s", err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 
 	h := core.PieceHash()
 	r := io.TeeReader(src, h) // Calculates piece sum as we write to file.

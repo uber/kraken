@@ -14,7 +14,6 @@
 package hashring
 
 import (
-	"log"
 	"sync"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/lib/hrw"
+	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/stringset"
 )
 
@@ -46,6 +46,7 @@ type Watcher interface {
 type Ring interface {
 	Locations(d core.Digest) []string
 	Contains(addr string) bool
+	Members() stringset.Set
 	Monitor(stop <-chan struct{})
 	Refresh()
 }
@@ -85,6 +86,7 @@ func New(
 		opt(r)
 	}
 	r.Refresh()
+	log.With("members", r.addrs.ToSlice(), "healthy", r.healthy.ToSlice()).Info("Hash ring initialised")
 	return r
 }
 
@@ -123,6 +125,13 @@ func (r *ring) Contains(addr string) bool {
 	defer r.mu.RUnlock()
 
 	return r.addrs.Has(addr)
+}
+
+// Members returns a copy of all ring members (healthy and unhealthy).
+func (r *ring) Members() stringset.Set {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.addrs.Copy()
 }
 
 // Monitor refreshes the ring at the configured interval. Blocks until the
