@@ -63,7 +63,6 @@ func NewTaskWithContext(ctx context.Context, namespace, name string, delay time.
 		CreatedAt: time.Now(),
 		Delay:     delay,
 	}
-
 	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.IsValid() {
 		t.TraceID = spanCtx.TraceID().String()
 		t.SpanID = spanCtx.SpanID().String()

@@ -10,6 +10,7 @@
 package mockblobclient
 
 import (
+	"context"
 	io "io"
 	reflect "reflect"
 	time "time"
@@ -258,15 +259,15 @@ func (mr *MockClientMockRecorder) TransferBlob(d, blob any) *gomock.Call {
 }
 
 // UploadBlob mocks base method.
-func (m *MockClient) UploadBlob(namespace string, d core.Digest, blob io.Reader) error {
+func (m *MockClient) UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.Reader) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UploadBlob", namespace, d, blob)
+	ret := m.ctrl.Call(m, "UploadBlob", ctx, namespace, d, blob)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UploadBlob indicates an expected call of UploadBlob.
-func (mr *MockClientMockRecorder) UploadBlob(namespace, d, blob any) *gomock.Call {
+func (mr *MockClientMockRecorder) UploadBlob(ctx, namespace, d, blob any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClient)(nil).UploadBlob), namespace, d, blob)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClient)(nil).UploadBlob), ctx, namespace, d, blob)
 }
