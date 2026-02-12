@@ -179,6 +179,18 @@ func TestRingContains(t *testing.T) {
 	require.False(r.Contains(z))
 }
 
+func TestRingMembers(t *testing.T) {
+	require := require.New(t)
+
+	x := "x:80"
+	y := "y:80"
+	z := "z:80"
+
+	r := New(Config{}, hostlist.Fixture(x, y, z), healthcheck.IdentityFilter{})
+
+	require.True(stringset.Equal(stringset.New(x, y, z), r.Members()))
+}
+
 func TestRingMonitor(t *testing.T) {
 	require := require.New(t)
 

@@ -185,7 +185,11 @@ func (d *Dispatcher) LastGoodPieceReceived(peerID core.PeerID) time.Time {
 	if !ok {
 		return time.Time{}
 	}
-	return v.(*peer).getLastGoodPieceReceived()
+	p, ok := v.(*peer)
+	if !ok {
+		panic(fmt.Sprintf("dispatcher: stored value is not *peer: %T", v))
+	}
+	return p.getLastGoodPieceReceived()
 }
 
 // LastPieceSent returns when d last sent a piece to peerID.
@@ -194,7 +198,11 @@ func (d *Dispatcher) LastPieceSent(peerID core.PeerID) time.Time {
 	if !ok {
 		return time.Time{}
 	}
-	return v.(*peer).getLastPieceSent()
+	p, ok := v.(*peer)
+	if !ok {
+		panic(fmt.Sprintf("dispatcher: stored value is not *peer: %T", v))
+	}
+	return p.getLastPieceSent()
 }
 
 // LastReadTime returns when d's torrent was last read from.
@@ -222,7 +230,15 @@ func (d *Dispatcher) RemoteBitfields() conn.RemoteBitfields {
 	remoteBitfields := make(conn.RemoteBitfields)
 
 	d.peers.Range(func(k, v interface{}) bool {
-		remoteBitfields[k.(core.PeerID)] = v.(*peer).bitfield.Copy()
+		peerID, ok := k.(core.PeerID)
+		if !ok {
+			panic(fmt.Sprintf("dispatcher: stored key is not core.PeerID: %T", k))
+		}
+		p, ok := v.(*peer)
+		if !ok {
+			panic(fmt.Sprintf("dispatcher: stored value is not *peer: %T", v))
+		}
+		remoteBitfields[peerID] = p.bitfield.Copy()
 		return true
 	})
 	return remoteBitfields
@@ -252,7 +268,11 @@ func (d *Dispatcher) addPeer(
 
 	pstats := &peerStats{}
 	if s, ok := d.peerStats.LoadOrStore(peerID, pstats); ok {
-		pstats = s.(*peerStats)
+		ps, ok := s.(*peerStats)
+		if !ok {
+			return nil, fmt.Errorf("dispatcher: stored value is not *peerStats: %T", s)
+		}
+		pstats = ps
 	}
 
 	p := newPeer(peerID, b, messages, d.clk, pstats)
@@ -283,7 +303,10 @@ func (d *Dispatcher) TearDown() {
 	})
 
 	d.peers.Range(func(k, v interface{}) bool {
-		p := v.(*peer)
+		p, ok := v.(*peer)
+		if !ok {
+			panic(fmt.Sprintf("dispatcher: stored value is not *peer: %T", v))
+		}
 		d.log("peer", p).Info("Dispatcher teardown closing connection")
 		p.messages.Close()
 		return true
@@ -291,8 +314,14 @@ func (d *Dispatcher) TearDown() {
 
 	summaries := make(torrentlog.LeecherSummaries, 0)
 	d.peerStats.Range(func(k, v interface{}) bool {
-		peerID := k.(core.PeerID)
-		pstats := v.(*peerStats)
+		peerID, ok := k.(core.PeerID)
+		if !ok {
+			panic(fmt.Sprintf("dispatcher: stored key is not core.PeerID: %T", k))
+		}
+		pstats, ok := v.(*peerStats)
+		if !ok {
+			panic(fmt.Sprintf("dispatcher: stored value is not *peerStats: %T", v))
+		}
 		summaries = append(summaries, torrentlog.LeecherSummary{
 			PeerID:           peerID,
 			RequestsReceived: pstats.getPieceRequestsReceived(),
@@ -316,7 +345,10 @@ func (d *Dispatcher) complete() {
 	d.pendingPiecesDoneOnce.Do(func() { close(d.pendingPiecesDone) })
 
 	d.peers.Range(func(k, v interface{}) bool {
-		p := v.(*peer)
+		p, ok := v.(*peer)
+		if !ok {
+			panic(fmt.Sprintf("dispatcher: stored value is not *peer: %T", v))
+		}
 		if p.bitfield.Complete() {
 			// Close connections to other completed peers since those connections
 			// are now useless.
@@ -335,8 +367,14 @@ func (d *Dispatcher) complete() {
 	var piecesRequestedTotal int
 	summaries := make(torrentlog.SeederSummaries, 0)
 	d.peerStats.Range(func(k, v interface{}) bool {
-		peerID := k.(core.PeerID)
-		pstats := v.(*peerStats)
+		peerID, ok := k.(core.PeerID)
+		if !ok {
+			panic(fmt.Sprintf("dispatcher: stored key is not core.PeerID: %T", k))
+		}
+		pstats, ok := v.(*peerStats)
+		if !ok {
+			panic(fmt.Sprintf("dispatcher: stored value is not *peerStats: %T", v))
+		}
 		requested := pstats.getPieceRequestsSent()
 		piecesRequestedTotal += requested
 		summary := torrentlog.SeederSummary{
@@ -403,7 +441,10 @@ func (d *Dispatcher) resendFailedPieceRequests() {
 	var sent int
 	for _, r := range failedRequests {
 		d.peers.Range(func(k, v interface{}) bool {
-			p := v.(*peer)
+			p, ok := v.(*peer)
+			if !ok {
+				panic(fmt.Sprintf("dispatcher: stored value is not *peer: %T", v))
+			}
 			if (r.Status == piecerequest.StatusExpired || r.Status == piecerequest.StatusInvalid) &&
 				r.PeerID == p.id {
 				// Do not resend to the same peer for expired or invalid requests.
@@ -571,10 +612,17 @@ func (d *Dispatcher) handlePiecePayload(
 	}
 
 	d.peers.Range(func(k, v interface{}) bool {
-		if k.(core.PeerID) == p.id {
+		peerID, ok := k.(core.PeerID)
+		if !ok {
+			panic(fmt.Sprintf("dispatcher: stored key is not core.PeerID: %T", k))
+		}
+		if peerID == p.id {
 			return true
 		}
-		pp := v.(*peer)
+		pp, ok := v.(*peer)
+		if !ok {
+			panic(fmt.Sprintf("dispatcher: stored value is not *peer: %T", v))
+		}
 
 		if err := pp.messages.Send(conn.NewAnnouncePieceMessage(i)); err != nil {
 			d.log("peer", pp).Errorf("Error sending announce piece message: %s", err)

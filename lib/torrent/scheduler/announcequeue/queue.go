@@ -15,6 +15,7 @@ package announcequeue
 
 import (
 	"container/list"
+	"fmt"
 
 	"github.com/uber/kraken/core"
 )
@@ -55,7 +56,10 @@ func (q *QueueImpl) Next() (core.InfoHash, bool) {
 		return core.InfoHash{}, false
 	}
 	q.readyQueue.Remove(next)
-	h := next.Value.(core.InfoHash)
+	h, ok := next.Value.(core.InfoHash)
+	if !ok {
+		panic(fmt.Sprintf("announcequeue: stored value is not core.InfoHash: %T", next.Value))
+	}
 	q.pending[h] = true
 	return h, true
 }
@@ -81,7 +85,11 @@ func (q *QueueImpl) Ready(h core.InfoHash) {
 func (q *QueueImpl) Eject(h core.InfoHash) {
 	delete(q.pending, h)
 	for e := q.readyQueue.Front(); e != nil; e = e.Next() {
-		if e.Value.(core.InfoHash) == h {
+		val, ok := e.Value.(core.InfoHash)
+		if !ok {
+			panic(fmt.Sprintf("announcequeue: stored value is not core.InfoHash: %T", e.Value))
+		}
+		if val == h {
 			q.readyQueue.Remove(e)
 		}
 	}
