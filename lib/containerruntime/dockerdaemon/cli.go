@@ -78,22 +78,26 @@ func parseHost(host string) (*http.Client, string, string, error) {
 	transport := new(http.Transport)
 
 	protocol, addr := strs[0], strs[1]
-	if protocol == "tcp" {
+	switch protocol {
+	case "tcp":
 		parsed, err := url.Parse("tcp://" + addr)
 		if err != nil {
 			return nil, "", "", err
 		}
 		addr = parsed.Host
 		basePath = parsed.Path
-	} else if protocol == "unix" {
+	case "unix":
 		if len(addr) > len(syscall.RawSockaddrUnix{}.Path) {
 			return nil, "", "", fmt.Errorf("unix socket path %q is too long", addr)
 		}
 		transport.DisableCompression = true
-		transport.Dial = func(_, _ string) (net.Conn, error) {
-			return net.DialTimeout(protocol, addr, _defaultTimeout)
+		transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+			d := &net.Dialer{
+				Timeout: _defaultTimeout,
+			}
+			return d.DialContext(ctx, protocol, addr)
 		}
-	} else {
+	default:
 		return nil, "", "", fmt.Errorf("protocol %s not supported", protocol)
 	}
 

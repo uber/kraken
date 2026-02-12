@@ -152,5 +152,5 @@ func genManifestListPath(repo string) string {
 }
 
 func contextFixture() context.Context {
-	return context.WithValue(context.Background(), "vars.name", "dummy")
+	return context.WithValue(context.Background(), "vars.name", "dummy") //nolint:staticcheck // Production code expects string key
 }

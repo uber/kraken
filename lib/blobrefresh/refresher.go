@@ -68,7 +68,10 @@ func New(
 		"module": "blobrefresh",
 	})
 
-	requests := dedup.NewRequestCache(dedup.RequestCacheConfig{}, clock.New())
+	requestsStats := stats.Tagged(map[string]string{
+		"request_type": "blobrefresh",
+	})
+	requests := dedup.NewRequestCache(dedup.RequestCacheConfig{}, clock.New(), requestsStats)
 	requests.SetNotFound(func(err error) bool { return err == backenderrors.ErrBlobNotFound })
 
 	return &Refresher{config, stats, requests, cas, backends, metaInfoGenerator}
@@ -109,12 +112,14 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 			return err
 		}
 		t := time.Since(start)
-		r.stats.Timer("download_remote_blob").Record(t)
+		r.stats.Tagged(map[string]string{"namespace": namespace}).
+			Timer("download_remote_blob").Record(t)
 		log.With(
 			"namespace", namespace,
 			"name", d.Hex(),
 			"download_time", t).Info("Downloaded remote blob")
-		r.stats.Counter("downloads").Inc(1)
+		r.stats.Tagged(map[string]string{"namespace": namespace}).
+			Counter("downloads").Inc(1)
 		for _, h := range hooks {
 			h.Run(d)
 		}

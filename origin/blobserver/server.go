@@ -48,15 +48,12 @@ import (
 	"github.com/uber/kraken/utils/listener"
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/stringset"
-
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
-
-const _operation = "operation"
 
 // Server defines a server that serves blob data for agent.
 type Server struct {
@@ -190,8 +187,8 @@ func (s *Server) ListenAndServe(h http.Handler) error {
 }
 
 func (s *Server) healthCheckHandler(w http.ResponseWriter, r *http.Request) error {
-	fmt.Fprintln(w, "OK")
-	return nil
+	_, err := fmt.Fprintln(w, "OK")
+	return err
 }
 
 func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) error {
@@ -199,8 +196,8 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return handler.Errorf("not ready to serve traffic: %s", err).Status(http.StatusServiceUnavailable)
 	}
-	fmt.Fprintln(w, "OK")
-	return nil
+	_, err = fmt.Fprintln(w, "OK")
+	return err
 }
 
 // statHandler returns blob info if it exists.
@@ -905,7 +902,7 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 
 	if err != nil {
 		s.metrics.duplicateWritebackErrors.Inc(1)
-		span.RecordError(err)
+		span.SetAttributes(attribute.String("replication.error", err.Error()))
 		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "replication_duration_ms", replicateDuration.Milliseconds()).Errorf("Error duplicating write-back task to replicas: %s", err)
 		// Don't fail the commit if replication fails - blob is still uploaded
 	}
