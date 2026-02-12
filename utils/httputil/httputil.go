@@ -138,15 +138,14 @@ func IsNetworkError(err error) bool {
 }
 
 type sendOptions struct {
-	body           io.Reader
-	timeout        time.Duration
-	acceptedCodes  map[int]bool
-	headers        map[string]string
-	redirect       func(req *http.Request, via []*http.Request) error
-	retry          retryOptions
-	transport      http.RoundTripper
-	ctx            context.Context
-	tracingContext bool
+	body          io.Reader
+	timeout       time.Duration
+	acceptedCodes map[int]bool
+	headers       map[string]string
+	redirect      func(req *http.Request, via []*http.Request) error
+	retry         retryOptions
+	transport     http.RoundTripper
+	ctx           context.Context
 
 	// This is not a valid http option. It provides a way to override
 	// parts of the url. For example, url.Scheme can be changed from
@@ -284,13 +283,12 @@ func SendContext(ctx context.Context) SendOption {
 	return func(o *sendOptions) { o.ctx = ctx }
 }
 
-// SendTracingContext sets the context and enables OpenTelemetry trace context
-// propagation via HTTP headers. The transport will be wrapped with otelhttp
-// after all options are applied.
+// SendTracingContext sets the context for the HTTP client.
+// OpenTelemetry trace context propagation is now enabled by default for all transports.
+// This function is kept for backward compatibility and is equivalent to SendContext.
 func SendTracingContext(ctx context.Context) SendOption {
 	return func(o *sendOptions) {
 		o.ctx = ctx
-		o.tracingContext = true
 	}
 }
 
@@ -315,15 +313,11 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		o(opts)
 	}
 
-	// Apply tracing context wrapping AFTER all other options are processed
-	// This ensures SendTLS and other transport options are respected
-	if opts.tracingContext {
-		baseTransport := opts.transport
-		if baseTransport == nil {
-			baseTransport = http.DefaultTransport
-		}
-		opts.transport = otelhttp.NewTransport(baseTransport)
+	baseTransport := opts.transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
 	}
+	opts.transport = otelhttp.NewTransport(baseTransport)
 
 	req, err := newRequest(method, opts)
 	if err != nil {
