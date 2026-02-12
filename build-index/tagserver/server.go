@@ -252,7 +252,6 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	span.SetStatus(codes.Ok, "tag put successfully")
-
 	span.SetAttributes(attribute.Bool("success", true))
 	w.WriteHeader(http.StatusOK)
 	return nil
