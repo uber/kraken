@@ -48,7 +48,6 @@ import (
 	"github.com/uber/kraken/utils/listener"
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/stringset"
-
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

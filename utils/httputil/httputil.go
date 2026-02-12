@@ -28,6 +28,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/log"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 var retryableCodes = map[int]struct{}{
@@ -303,6 +304,12 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		o(opts)
 	}
 
+	baseTransport := opts.transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	opts.transport = otelhttp.NewTransport(baseTransport)
+
 	req, err := newRequest(method, opts)
 	if err != nil {
 		return nil, err
@@ -385,8 +392,8 @@ func Delete(url string, options ...SendOption) (*http.Response, error) {
 
 // PollAccepted wraps GET requests for endpoints which require 202-polling.
 func PollAccepted(
-	url string, b backoff.BackOff, options ...SendOption) (*http.Response, error) {
-
+	url string, b backoff.BackOff, options ...SendOption,
+) (*http.Response, error) {
 	b.Reset()
 	for {
 		resp, err := Get(url, options...)
@@ -460,8 +467,8 @@ func newRequest(method string, opts *sendOptions) (*http.Request, error) {
 }
 
 func fallbackToHTTP(
-	client *http.Client, method string, opts *sendOptions) (*http.Response, error) {
-
+	client *http.Client, method string, opts *sendOptions,
+) (*http.Response, error) {
 	req, err := newRequest(method, opts)
 	if err != nil {
 		return nil, err
