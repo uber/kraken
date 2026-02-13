@@ -31,6 +31,10 @@ server {
   # Committing large blobs might take a while.
   proxy_read_timeout {{.proxy_read_timeout}};
 
+  proxy_set_header traceparent $http_traceparent;
+  proxy_set_header tracestate $http_tracestate;
+  proxy_set_header jaeger-debug-id $http_jaeger_debug_id;
+
 {{healthEndpoint .server}}
 
   location / {
