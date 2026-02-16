@@ -315,15 +315,11 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		o(opts)
 	}
 
-	// Apply tracing context wrapping AFTER all other options are processed
-	// This ensures SendTLS and other transport options are respected
-	if opts.tracingContext {
-		baseTransport := opts.transport
-		if baseTransport == nil {
-			baseTransport = http.DefaultTransport
-		}
-		opts.transport = otelhttp.NewTransport(baseTransport)
+	baseTransport := opts.transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
 	}
+	opts.transport = otelhttp.NewTransport(baseTransport)
 
 	req, err := newRequest(method, opts)
 	if err != nil {
