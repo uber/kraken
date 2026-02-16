@@ -154,15 +154,7 @@ func (t *ReadWriteTransferer) Upload(
 	if err := t.originCluster.UploadBlob(ctx, namespace, d, blob); err != nil {
 		t.failureStats.Counter("upload_blob").Inc(1)
 		span.RecordError(err)
-		statusMsg := "upload failed"
-		if httputil.IsNetworkError(err) {
-			statusMsg = "upload failed: network error"
-		} else if httputil.IsRetryable(err) {
-			statusMsg = "upload failed: retryable error"
-		} else if httputil.IsNotFound(err) {
-			statusMsg = "upload failed: not found"
-		}
-		span.SetStatus(codes.Error, statusMsg)
+		span.SetStatus(codes.Error, "upload failed")
 		return err
 	}
 
