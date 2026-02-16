@@ -15,6 +15,7 @@ package dispatch
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -67,7 +68,11 @@ func (m *mockMessages) Close() {
 
 func numRequestsPerPiece(messages Messages) map[int]int {
 	requests := make(map[int]int)
-	for _, msg := range messages.(*mockMessages).sent {
+	m, ok := messages.(*mockMessages)
+	if !ok {
+		panic(fmt.Sprintf("expected *mockMessages, got %T", messages))
+	}
+	for _, msg := range m.sent {
 		if msg.Message.Type == p2p.Message_PIECE_REQUEST {
 			requests[int(msg.Message.PieceRequest.Index)]++
 		}
@@ -77,7 +82,11 @@ func numRequestsPerPiece(messages Messages) map[int]int {
 
 func announcedPieces(messages Messages) []int {
 	var ps []int
-	for _, msg := range messages.(*mockMessages).sent {
+	m, ok := messages.(*mockMessages)
+	if !ok {
+		panic(fmt.Sprintf("expected *mockMessages, got %T", messages))
+	}
+	for _, msg := range m.sent {
 		if msg.Message.Type == p2p.Message_ANNOUCE_PIECE {
 			ps = append(ps, int(msg.Message.AnnouncePiece.Index))
 		}
@@ -86,8 +95,12 @@ func announcedPieces(messages Messages) []int {
 }
 
 func hasComplete(messages Messages) bool {
-	for _, m := range messages.(*mockMessages).sent {
-		if m.Message.Type == p2p.Message_COMPLETE {
+	m, ok := messages.(*mockMessages)
+	if !ok {
+		panic(fmt.Sprintf("expected *mockMessages, got %T", messages))
+	}
+	for _, msg := range m.sent {
+		if msg.Message.Type == p2p.Message_COMPLETE {
 			return true
 		}
 	}
@@ -95,7 +108,11 @@ func hasComplete(messages Messages) bool {
 }
 
 func closed(messages Messages) bool {
-	return messages.(*mockMessages).closed
+	m, ok := messages.(*mockMessages)
+	if !ok {
+		panic(fmt.Sprintf("expected *mockMessages, got %T", messages))
+	}
+	return m.closed
 }
 
 type noopEvents struct{}

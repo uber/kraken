@@ -14,6 +14,7 @@
 package localdb
 
 import (
+	"database/sql"
 	"fmt"
 
 	_ "github.com/uber/kraken/localdb/migrations" // Add migrations.
@@ -24,22 +25,30 @@ import (
 	"github.com/pressly/goose"
 )
 
+// Package-level function variables for dependency injection in tests.
+var (
+	ensureFilePresent = osutil.EnsureFilePresent
+	sqlxOpen          = sqlx.Open
+	gooseSetDialect   = goose.SetDialect
+	gooseUp           = func(db *sql.DB, dir string) error { return goose.Up(db, dir) }
+)
+
 // New creates a new locally embedded SQLite database.
 func New(config Config) (*sqlx.DB, error) {
-	if err := osutil.EnsureFilePresent(config.Source, 0775); err != nil {
+	if err := ensureFilePresent(config.Source, 0775); err != nil {
 		return nil, fmt.Errorf("ensure db source present: %s", err)
 	}
-	db, err := sqlx.Open("sqlite3", config.Source)
+	db, err := sqlxOpen("sqlite3", config.Source)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite3: %s", err)
 	}
 	// SQLite has concurrency issues where queries result in error if more than
 	// one connection is accessing a table.
 	db.SetMaxOpenConns(1)
-	if err := goose.SetDialect("sqlite3"); err != nil {
+	if err := gooseSetDialect("sqlite3"); err != nil {
 		return nil, fmt.Errorf("set dialect as sqlite3: %s", err)
 	}
-	if err := goose.Up(db.DB, "."); err != nil {
+	if err := gooseUp(db.DB, "."); err != nil {
 		return nil, fmt.Errorf("perform db migration: %s", err)
 	}
 	return db, nil

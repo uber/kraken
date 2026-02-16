@@ -49,8 +49,10 @@ func TestHealth(t *testing.T) {
 
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/health", s.addr))
-	defer resp.Body.Close()
 	require.NoError(err)
+	t.Cleanup(func() {
+		require.NoError(resp.Body.Close())
+	})
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(err)
 	require.Equal("OK\n", string(b))
@@ -263,7 +265,9 @@ func TestDownloadBlobNotFound(t *testing.T) {
 
 	err := cp.Provide(master1).DownloadBlob(namespace, d, io.Discard)
 	require.Error(err)
-	require.Equal(http.StatusNotFound, err.(httputil.StatusError).Status)
+	statusErr, ok := err.(httputil.StatusError)
+	require.True(ok, "expected httputil.StatusError")
+	require.Equal(http.StatusNotFound, statusErr.Status)
 }
 
 func TestDeleteBlob(t *testing.T) {

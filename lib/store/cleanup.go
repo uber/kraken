@@ -339,6 +339,7 @@ func (m *cleanupManager) shouldAggro(op base.FileOp, config CleanupConfig, diskU
 	}
 	if diskUsage.Util >= config.AggressiveThreshold {
 		log.Warnf("Aggressive cleanup of %s triggers with disk space util %d", op, diskUsage.Util)
+		m.stats.Counter("aggro_gc_runs").Inc(1)
 		return true
 	}
 	return false
