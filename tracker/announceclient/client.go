@@ -93,10 +93,11 @@ func getEndpoint(version int, addr string, h core.InfoHash) (method, url string)
 }
 
 func (c *client) CheckReadiness() error {
-	if len(c.ring.Locations(backend.ReadinessCheckDigest)) == 0 {
+	locations := c.ring.Locations(backend.ReadinessCheckDigest)
+	if len(locations) == 0 {
 		return fmt.Errorf("tracker not ready: no locations for readiness check digest")
 	}
-	addr := c.ring.Locations(backend.ReadinessCheckDigest)[0]
+	addr := locations[0]
 	_, err := httputil.Get(
 		fmt.Sprintf("http://%s/readiness", addr),
 		httputil.SendTimeout(5*time.Second),
