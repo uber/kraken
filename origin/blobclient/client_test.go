@@ -15,6 +15,7 @@ package blobclient
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -921,7 +922,7 @@ func TestUploadBlob(t *testing.T) {
 			}
 		}, WithChunkSize(uint64(len(content)+1)))
 
-		err := client.UploadBlob(namespace, d, bytes.NewReader(content))
+		err := client.UploadBlob(context.Background(), namespace, d, bytes.NewReader(content))
 		require.NoError(err)
 	})
 
@@ -949,7 +950,7 @@ func TestUploadBlob(t *testing.T) {
 			}
 		}, WithChunkSize(chunkSize))
 
-		err := client.UploadBlob(namespace, d, bytes.NewReader(content))
+		err := client.UploadBlob(context.Background(), namespace, d, bytes.NewReader(content))
 		require.NoError(err)
 		require.Equal(5, patchCount) // 49 bytes / 10 bytes per chunk = 5 chunks
 	})

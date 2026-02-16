@@ -10,6 +10,7 @@
 package mockblobclient
 
 import (
+	"context"
 	io "io"
 	reflect "reflect"
 
@@ -157,15 +158,15 @@ func (mr *MockClusterClientMockRecorder) Stat(namespace, d any) *gomock.Call {
 }
 
 // UploadBlob mocks base method.
-func (m *MockClusterClient) UploadBlob(namespace string, d core.Digest, blob io.ReadSeeker) error {
+func (m *MockClusterClient) UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.ReadSeeker) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UploadBlob", namespace, d, blob)
+	ret := m.ctrl.Call(m, "UploadBlob", ctx, namespace, d, blob)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UploadBlob indicates an expected call of UploadBlob.
-func (mr *MockClusterClientMockRecorder) UploadBlob(namespace, d, blob any) *gomock.Call {
+func (mr *MockClusterClientMockRecorder) UploadBlob(ctx, namespace, d, blob any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClusterClient)(nil).UploadBlob), namespace, d, blob)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClusterClient)(nil).UploadBlob), ctx, namespace, d, blob)
 }

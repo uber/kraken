@@ -15,6 +15,7 @@ package blobclient
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -91,8 +92,8 @@ func (c *transferClient) start(d core.Digest) (uid string, err error) {
 }
 
 func (c *transferClient) patch(
-	d core.Digest, uid string, start, stop int64, chunk io.Reader) error {
-
+	d core.Digest, uid string, start, stop int64, chunk io.Reader,
+) error {
 	_, err := httputil.Patch(
 		fmt.Sprintf("http://%s/internal/blobs/%s/uploads/%s", c.addr, d, uid),
 		httputil.SendBody(chunk),
@@ -120,6 +121,7 @@ const (
 
 // uploadClient executes chunked uploads for external cluster upload operations.
 type uploadClient struct {
+	ctx        context.Context
 	addr       string
 	namespace  string
 	uploadType uploadType
@@ -128,15 +130,29 @@ type uploadClient struct {
 }
 
 func newUploadClient(
-	addr string, namespace string, t uploadType, delay time.Duration, tls *tls.Config) *uploadClient {
+	addr string, namespace string, t uploadType, delay time.Duration, tls *tls.Config,
+) *uploadClient {
+	return newUploadClientWithContext(context.Background(), addr, namespace, t, delay, tls)
+}
 
-	return &uploadClient{addr, namespace, t, delay, tls}
+func newUploadClientWithContext(
+	ctx context.Context, addr string, namespace string, t uploadType, delay time.Duration, tls *tls.Config,
+) *uploadClient {
+	return &uploadClient{
+		ctx:        ctx,
+		addr:       addr,
+		namespace:  namespace,
+		uploadType: t,
+		delay:      delay,
+		tls:        tls,
+	}
 }
 
 func (c *uploadClient) start(d core.Digest) (uid string, err error) {
 	r, err := httputil.Post(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads",
 			c.addr, url.PathEscape(c.namespace), d),
+		httputil.SendContext(c.ctx),
 		httputil.SendTLS(c.tls))
 	if err != nil {
 		return "", err
@@ -149,11 +165,12 @@ func (c *uploadClient) start(d core.Digest) (uid string, err error) {
 }
 
 func (c *uploadClient) patch(
-	d core.Digest, uid string, start, stop int64, chunk io.Reader) error {
-
+	d core.Digest, uid string, start, stop int64, chunk io.Reader,
+) error {
 	_, err := httputil.Patch(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads/%s",
 			c.addr, url.PathEscape(c.namespace), d, uid),
+		httputil.SendContext(c.ctx),
 		httputil.SendBody(chunk),
 		httputil.SendHeaders(map[string]string{
 			"Content-Range": fmt.Sprintf("%d-%d", start, stop),
@@ -183,8 +200,10 @@ func (c *uploadClient) commit(d core.Digest, uid string) error {
 	default:
 		return fmt.Errorf("unknown upload type: %d", c.uploadType)
 	}
+
 	_, err := httputil.Put(
 		fmt.Sprintf(template, c.addr, url.PathEscape(c.namespace), d, uid),
+		httputil.SendContext(c.ctx),
 		httputil.SendTimeout(15*time.Minute),
 		httputil.SendBody(body),
 		httputil.SendTLS(c.tls))

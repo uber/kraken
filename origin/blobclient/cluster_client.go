@@ -14,6 +14,7 @@
 package blobclient
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -30,6 +31,11 @@ import (
 	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Locations queries cluster for the locations of d.
@@ -82,7 +88,7 @@ var _ ClusterClient = &clusterClient{}
 // location resolution and retries.
 type ClusterClient interface {
 	CheckReadiness() error
-	UploadBlob(namespace string, d core.Digest, blob io.ReadSeeker) error
+	UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.ReadSeeker) error
 	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
 	PrefetchBlob(namespace string, d core.Digest) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
@@ -123,42 +129,65 @@ func (c *clusterClient) CheckReadiness() error {
 }
 
 // UploadBlob uploads blob to origin cluster. See Client.UploadBlob for more details.
-func (c *clusterClient) UploadBlob(namespace string, d core.Digest, blob io.ReadSeeker) (err error) {
+func (c *clusterClient) UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.ReadSeeker) (err error) {
+	ctx, span := otel.Tracer("kraken-origin-cluster-client").Start(ctx, "cluster.upload_blob",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("component", "origin-cluster-client"),
+			attribute.String("operation", "upload_blob"),
+			attribute.String("namespace", namespace),
+			attribute.String("blob.digest", d.Hex()),
+		),
+	)
+	defer span.End()
+
 	clients, err := c.resolver.Resolve(d)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to resolve clients")
 		return fmt.Errorf("resolve clients: %s", err)
 	}
-	logger := log.With("namespace", namespace, "digest", d.Hex())
-	logger.Debug("Starting blob upload to origin cluster")
+
+	span.SetAttributes(attribute.Int("cluster.origin_count", len(clients)))
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Debug("Starting blob upload to origin cluster")
 
 	// We prefer the origin with highest hashing score so the first origin will handle
 	// replication to origins with lower score. This is because we want to reduce upload
 	// conflicts between local replicas.
 	for i, client := range clients {
 		originAddr := client.Addr()
-		attemptLogger := logger.With("origin", originAddr, "attempt", i)
+		span.SetAttributes(attribute.Int("cluster.attempt", i))
 
-		attemptLogger.Debug("Attempting blob upload to origin")
-		err = client.UploadBlob(namespace, d, blob)
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "origin", originAddr, "attempt", i).Debug("Attempting blob upload to origin")
+		err = client.UploadBlob(ctx, namespace, d, blob)
 		if err == nil {
-			attemptLogger.Debug("Blob upload succeeded")
+			log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "origin", originAddr).Debug("Blob upload succeeded")
+			span.SetAttributes(attribute.String("cluster.successful_origin", originAddr))
+			span.SetStatus(codes.Ok, "upload succeeded")
 			return nil
 		}
-		attemptLogger.With("error", err).Error("Blob upload failed")
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "origin", originAddr, "error", err).Error("Blob upload failed")
 
 		// Non-retryable error - don't try other origins
 		if !httputil.IsNetworkError(err) && !httputil.IsRetryable(err) {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "non-retryable error")
 			return err
 		}
 
 		// Allow retry on another origin if the current upstream is temporarily
 		// unavailable or under high load.
-		attemptLogger.Debug("Rewinding blob reader for retry")
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "origin", originAddr, "attempt", i).Debug("Rewinding blob reader for retry")
 		if _, seekErr := blob.Seek(0, io.SeekStart); seekErr != nil {
-			attemptLogger.With("error", seekErr).Error("Failed to rewind blob reader for retry")
+			log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "error", seekErr).Error("Failed to rewind blob reader for retry")
+			span.RecordError(seekErr)
+			span.SetStatus(codes.Error, "failed to rewind blob")
 			return fmt.Errorf("rewind blob for retry after %d attempts: %w", i, seekErr)
 		}
 	}
+
+	span.RecordError(err)
+	span.SetStatus(codes.Error, "all origins failed")
 	return err
 }
 
