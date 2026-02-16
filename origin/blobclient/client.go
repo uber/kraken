@@ -247,7 +247,7 @@ func (c *HTTPClient) DownloadBlob(ctx context.Context, namespace string, d core.
 
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s", c.addr, url.PathEscape(namespace), d),
-		httputil.SendTracingContext(ctx),
+		httputil.SendContext(ctx),
 		httputil.SendTLS(c.tls))
 	if err != nil {
 		span.RecordError(err)

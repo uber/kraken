@@ -285,16 +285,6 @@ func SendContext(ctx context.Context) SendOption {
 	return func(o *sendOptions) { o.ctx = ctx }
 }
 
-// SendTracingContext sets the context and enables OpenTelemetry trace context
-// propagation via HTTP headers. The transport will be wrapped with otelhttp
-// after all options are applied.
-func SendTracingContext(ctx context.Context) SendOption {
-	return func(o *sendOptions) {
-		o.ctx = ctx
-		o.tracingContext = true
-	}
-}
-
 // Send sends an HTTP request. May return NetworkError or StatusError (see above).
 func Send(method, rawurl string, options ...SendOption) (*http.Response, error) {
 	u, err := url.Parse(rawurl)
