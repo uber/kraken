@@ -314,6 +314,16 @@ func TestClusterClientCheckReadiness(t *testing.T) {
 			errContains: "resolve clients",
 		},
 		{
+			name: "empty clients returns error",
+			setup: func(ctrl *gomock.Controller) *mockblobclient.MockClientResolver {
+				resolver := mockblobclient.NewMockClientResolver(ctrl)
+				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{}, nil)
+				return resolver
+			},
+			wantErr:     true,
+			errContains: "no origins found",
+		},
+		{
 			name: "client readiness check fails",
 			setup: func(ctrl *gomock.Controller) *mockblobclient.MockClientResolver {
 				resolver := mockblobclient.NewMockClientResolver(ctrl)

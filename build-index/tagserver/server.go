@@ -473,7 +473,7 @@ func (s *Server) duplicateReplicateTagHandler(w http.ResponseWriter, r *http.Req
 	}
 	d, err := httputil.ParseDigest(r, "digest")
 	if err != nil {
-		return handler.Errorf("get dependency resolver: %s", err)
+		return handler.Errorf("parse digest: %s", err)
 	}
 	var req tagclient.DuplicateReplicateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

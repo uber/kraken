@@ -153,22 +153,20 @@ func (r *ring) Refresh() {
 
 	healthy := r.filter.Run(latest)
 
-	hash := r.hash
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	if !stringset.Equal(r.addrs, latest) {
 		// Membership has changed -- update hash nodes.
-		hash = hrw.NewRendezvousHash(hrw.Murmur3Hash, hrw.UInt64ToFloat64)
+		r.hash = hrw.NewRendezvousHash(hrw.Murmur3Hash, hrw.UInt64ToFloat64)
 		for addr := range latest {
-			hash.AddNode(addr, _defaultWeight)
+			r.hash.AddNode(addr, _defaultWeight)
 		}
 		// Notify watchers.
 		for _, w := range r.watchers {
 			w.Notify(latest.Copy())
 		}
 	}
-
-	r.mu.Lock()
 	r.addrs = latest
-	r.hash = hash
 	r.healthy = healthy
-	r.mu.Unlock()
 }
