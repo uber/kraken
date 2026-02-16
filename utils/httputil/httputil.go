@@ -29,6 +29,7 @@ import (
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/log"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var retryableCodes = map[int]struct{}{
@@ -308,7 +309,14 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 	if baseTransport == nil {
 		baseTransport = http.DefaultTransport
 	}
-	opts.transport = otelhttp.NewTransport(baseTransport)
+	// Only wrap with otelhttp.NewTransport if there's a valid span context.
+	// This prevents interference with the Docker registry API's manifest format selection
+	// when tracing is not being used.
+	if spanCtx := trace.SpanContextFromContext(opts.ctx); spanCtx.IsValid() {
+		opts.transport = otelhttp.NewTransport(baseTransport)
+	} else {
+		opts.transport = baseTransport
+	}
 
 	req, err := newRequest(method, opts)
 	if err != nil {
