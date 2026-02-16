@@ -100,7 +100,7 @@ func ParseManifestV2List(bytes []byte) (distribution.Manifest, core.Digest, erro
 // GetManifestReferences returns a list of references by a V2 manifest
 func GetManifestReferences(manifest distribution.Manifest) ([]core.Digest, error) {
 	refDescs := manifest.References()
-	log.Debugw("GetManifestReferences called",
+	log.Infow("GetManifestReferences called",
 		"num_references", len(refDescs))
 
 	var refs []core.Digest
@@ -114,7 +114,7 @@ func GetManifestReferences(manifest distribution.Manifest) ([]core.Digest, error
 		refDigestStrings = append(refDigestStrings, d.String())
 	}
 
-	log.Debugw("GetManifestReferences returning",
+	log.Infow("GetManifestReferences returning",
 		"num_digests", len(refs),
 		"digests", refDigestStrings)
 
@@ -145,7 +145,7 @@ func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) 
 		return nil, core.Digest{}, fmt.Errorf("expected oci manifest type %s, got %s", _ociManifestType, manifestJSON.MediaType)
 	}
 
-	log.Debugw("Parsing OCI manifest",
+	log.Infow("Parsing OCI manifest",
 		"config_digest", manifestJSON.Config.Digest,
 		"config_size", manifestJSON.Config.Size,
 		"num_layers", len(manifestJSON.Layers))
@@ -156,7 +156,7 @@ func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) 
 		return nil, core.Digest{}, fmt.Errorf("calculate manifest digest: %s", err)
 	}
 
-	log.Debugw("OCI manifest digest calculated", "digest", d.String())
+	log.Infow("OCI manifest digest calculated", "digest", d.String())
 
 	// Parse digests from OCI format (they're already in "sha256:hex" format)
 	configDigest, err := core.ParseSHA256Digest(manifestJSON.Config.Digest)
@@ -186,7 +186,7 @@ func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) 
 		})
 	}
 
-	log.Debugw("OCI manifest layers extracted",
+	log.Infow("OCI manifest layers extracted",
 		"layer_digests", layerDigests,
 		"config_digest", configDigest.String())
 
@@ -228,7 +228,7 @@ func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) 
 	for _, ref := range refs {
 		refDigests = append(refDigests, ref.Digest.String())
 	}
-	log.Debugw("OCI manifest converted to Docker v2, References() returned",
+	log.Infow("OCI manifest converted to Docker v2, References() returned",
 		"num_references", len(refs),
 		"reference_digests", refDigests,
 		"expected_config", configDigest.String(),
