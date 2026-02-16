@@ -118,11 +118,6 @@ func (c *clusterClient) CheckReadiness() error {
 	if err != nil {
 		return fmt.Errorf("resolve clients: %s", err)
 	}
-	// 0 will cause a panic in Intn, so we need to check this before.
-	// we add this check for safety.
-	if len(clients) == 0 {
-		return errors.New("no origins found for readiness check")
-	}
 	randIdx := rand.Intn(len(clients))
 	return clients[randIdx].CheckReadiness()
 }

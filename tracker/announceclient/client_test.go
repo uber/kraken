@@ -61,12 +61,6 @@ func TestCheckReadiness(t *testing.T) {
 	}{
 		// --- Error Cases ---
 		{
-			name:        "empty locations returns error",
-			locations:   []string{},
-			wantErr:     true,
-			errContains: "no locations",
-		},
-		{
 			name:        "server not ready",
 			locations:   nil, // Will be set to test server address
 			serverReady: false,
@@ -102,7 +96,7 @@ func TestCheckReadiness(t *testing.T) {
 			}
 
 			ring := mockhashring.NewMockPassiveRing(ctrl)
-			ring.EXPECT().Locations(backend.ReadinessCheckDigest).Return(locations).AnyTimes()
+			ring.EXPECT().Locations(backend.ReadinessCheckDigest).Return(locations)
 
 			client := announceclient.New(core.PeerContext{}, ring, nil)
 

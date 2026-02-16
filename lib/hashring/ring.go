@@ -150,23 +150,24 @@ func (r *ring) Monitor(stop <-chan struct{}) {
 // Refresh updates the membership and health information of r.
 func (r *ring) Refresh() {
 	latest := r.cluster.Resolve()
-
 	healthy := r.filter.Run(latest)
 
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if !stringset.Equal(r.addrs, latest) {
-		// Membership has changed -- update hash nodes.
+	changed := !stringset.Equal(r.addrs, latest)
+	if changed {
+		r.addrs = latest
 		r.hash = hrw.NewRendezvousHash(hrw.Murmur3Hash, hrw.UInt64ToFloat64)
 		for addr := range latest {
 			r.hash.AddNode(addr, _defaultWeight)
 		}
-		// Notify watchers.
-		for _, w := range r.watchers {
+	}
+	r.healthy = healthy
+	watchers := r.watchers
+	r.mu.Unlock()
+
+	if changed {
+		for _, w := range watchers {
 			w.Notify(latest.Copy())
 		}
 	}
-	r.addrs = latest
-	r.healthy = healthy
 }
