@@ -19,44 +19,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
+	mockhashring "github.com/uber/kraken/mocks/lib/hashring"
 	"github.com/uber/kraken/tracker/announceclient"
-	"github.com/uber/kraken/utils/stringset"
 )
 
 // =============================================================================
 // Test Helpers
 // =============================================================================
-
-// mockPassiveRing implements hashring.PassiveRing for testing.
-type mockPassiveRing struct {
-	locations []string
-}
-
-func (m *mockPassiveRing) Locations(d core.Digest) []string {
-	return m.locations
-}
-
-func (m *mockPassiveRing) Contains(addr string) bool {
-	for _, loc := range m.locations {
-		if loc == addr {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *mockPassiveRing) Members() stringset.Set {
-	return stringset.New(m.locations...)
-}
-
-func (m *mockPassiveRing) Monitor(stop <-chan struct{}) {}
-
-func (m *mockPassiveRing) Refresh() {}
-
-func (m *mockPassiveRing) Failed(addr string) {}
 
 // stripHTTPPrefix removes http:// prefix from URL.
 func stripHTTPPrefix(url string) string {
@@ -112,6 +86,7 @@ func TestCheckReadiness(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			require := require.New(t)
+			ctrl := gomock.NewController(t)
 
 			locations := tt.locations
 			if locations == nil {
@@ -126,7 +101,9 @@ func TestCheckReadiness(t *testing.T) {
 				locations = []string{addr}
 			}
 
-			ring := &mockPassiveRing{locations: locations}
+			ring := mockhashring.NewMockPassiveRing(ctrl)
+			ring.EXPECT().Locations(backend.ReadinessCheckDigest).Return(locations).AnyTimes()
+
 			client := announceclient.New(core.PeerContext{}, ring, nil)
 
 			err := client.CheckReadiness()

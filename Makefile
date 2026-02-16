@@ -235,6 +235,7 @@ mocks:
 	sed -i '' s,github.com/uber/kraken/vendor/,, mocks/lib/backend/gcsbackend/gcs.go
 
 	$(call add_mock,lib/hashring,Ring)
+	$(call add_mock,lib/hashring,PassiveRing)
 	$(call add_mock,lib/hashring,Watcher)
 
 	$(call add_mock,lib/backend/hdfsbackend/webhdfs,Client)
