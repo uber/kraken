@@ -211,7 +211,15 @@ func (c *HTTPClient) UploadBlob(ctx context.Context, namespace string, d core.Di
 	uc := newUploadClientWithContext(ctx, c.addr, namespace, _publicUpload, 0, c.tls)
 	if err := runChunkedUpload(uc, d, blob, int64(c.chunkSize)); err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "upload failed")
+		statusMsg := "upload failed"
+		if httputil.IsNetworkError(err) {
+			statusMsg = "upload failed: network error"
+		} else if httputil.IsRetryable(err) {
+			statusMsg = "upload failed: retryable error"
+		} else if httputil.IsNotFound(err) {
+			statusMsg = "upload failed: not found"
+		}
+		span.SetStatus(codes.Error, statusMsg)
 		return err
 	}
 

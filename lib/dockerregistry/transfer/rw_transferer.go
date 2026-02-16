@@ -23,6 +23,7 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/closers"
+	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 
 	"github.com/docker/distribution/uuid"
@@ -153,7 +154,15 @@ func (t *ReadWriteTransferer) Upload(
 	if err := t.originCluster.UploadBlob(ctx, namespace, d, blob); err != nil {
 		t.failureStats.Counter("upload_blob").Inc(1)
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "upload failed")
+		statusMsg := "upload failed"
+		if httputil.IsNetworkError(err) {
+			statusMsg = "upload failed: network error"
+		} else if httputil.IsRetryable(err) {
+			statusMsg = "upload failed: retryable error"
+		} else if httputil.IsNotFound(err) {
+			statusMsg = "upload failed: not found"
+		}
+		span.SetStatus(codes.Error, statusMsg)
 		return err
 	}
 
