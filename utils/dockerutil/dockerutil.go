@@ -189,5 +189,5 @@ func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) 
 }
 
 func GetSupportedManifestTypes() string {
-	return fmt.Sprintf("%s,%s", _v2ManifestType, _v2ManifestListType)
+	return fmt.Sprintf("%s,%s,%s", _v2ManifestType, _v2ManifestListType, _ociManifestType)
 }

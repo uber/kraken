@@ -100,10 +100,8 @@ func pullManifest(client http.Client, source string, name string, reference stri
 	if err != nil {
 		return nil, err
 	}
-	// Add `Accept` header to indicate schema2 is supported
-	req.Header.Add("Accept", schema2.MediaTypeManifest)
+	req.Header.Add("Accept", fmt.Sprintf("%s,%s", schema2.MediaTypeManifest, "application/vnd.oci.image.manifest.v1+json"))
 	resp, err := client.Do(req)
-
 	if err != nil {
 		return nil, err
 	}
