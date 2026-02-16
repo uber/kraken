@@ -24,13 +24,6 @@ import (
 // host ip is determined.
 var _supportedInterfaces = []string{"eth0", "ib0", "eth1", "eth2"}
 
-func min(a, b time.Duration) time.Duration {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // WithRetry executes f maxRetries times until it returns non-nil error, sleeping
 // for the given delay between retries with exponential backoff until maxDelay is
 // reached.

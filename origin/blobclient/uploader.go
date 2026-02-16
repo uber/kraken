@@ -152,7 +152,7 @@ func (c *uploadClient) start(d core.Digest) (uid string, err error) {
 	r, err := httputil.Post(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads",
 			c.addr, url.PathEscape(c.namespace), d),
-		httputil.SendTracingContext(c.ctx),
+		httputil.SendContext(c.ctx),
 		httputil.SendTLS(c.tls))
 	if err != nil {
 		return "", err
@@ -170,7 +170,7 @@ func (c *uploadClient) patch(
 	_, err := httputil.Patch(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads/%s",
 			c.addr, url.PathEscape(c.namespace), d, uid),
-		httputil.SendTracingContext(c.ctx),
+		httputil.SendContext(c.ctx),
 		httputil.SendBody(chunk),
 		httputil.SendHeaders(map[string]string{
 			"Content-Range": fmt.Sprintf("%d-%d", start, stop),
@@ -203,7 +203,7 @@ func (c *uploadClient) commit(d core.Digest, uid string) error {
 
 	_, err := httputil.Put(
 		fmt.Sprintf(template, c.addr, url.PathEscape(c.namespace), d, uid),
-		httputil.SendTracingContext(c.ctx),
+		httputil.SendContext(c.ctx),
 		httputil.SendTimeout(15*time.Minute),
 		httputil.SendBody(body),
 		httputil.SendTLS(c.tls))

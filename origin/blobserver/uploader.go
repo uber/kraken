@@ -21,6 +21,7 @@ import (
 	"github.com/docker/distribution/uuid"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/log"
 )
@@ -70,7 +71,7 @@ func (u *uploader) patch(
 		log.With("digest", d.Hex(), "uid", uid).Errorf("Failed to get upload file: %s", err)
 		return handler.Errorf("get upload file: %s", err)
 	}
-	defer f.Close()
+	defer closers.Close(f)
 	if _, err := f.Seek(start, 0); err != nil {
 		log.With("digest", d.Hex(), "uid", uid, "offset", start).Errorf("Failed to seek to offset: %s", err)
 		return handler.Errorf("seek offset %d: %s", start, err).Status(http.StatusBadRequest)

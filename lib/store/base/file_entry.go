@@ -533,7 +533,7 @@ func (entry *localFileEntry) SetMetadataAt(
 	if _, err := f.ReadAt(prev, offset); err != nil {
 		return false, err
 	}
-	if bytes.Compare(prev, b) == 0 {
+	if bytes.Equal(prev, b) {
 		return false, nil
 	}
 	if _, err := f.WriteAt(b, offset); err != nil {
