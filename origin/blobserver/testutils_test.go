@@ -58,7 +58,8 @@ func newHashRing(maxReplica int) hashring.Ring {
 	return hashring.New(
 		hashring.Config{MaxReplica: maxReplica},
 		hostlist.Fixture(master1, master2, master3),
-		healthcheck.IdentityFilter{})
+		healthcheck.IdentityFilter{},
+		tally.NoopScope)
 }
 
 func hashRingNoReplica() hashring.Ring   { return newHashRing(1) }
