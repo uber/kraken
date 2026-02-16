@@ -24,6 +24,7 @@ import (
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/opencontainers/go-digest"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/log"
 )
 
 const (
@@ -98,35 +99,32 @@ func ParseManifestV2List(bytes []byte) (distribution.Manifest, core.Digest, erro
 
 // GetManifestReferences returns a list of references by a V2 manifest
 func GetManifestReferences(manifest distribution.Manifest) ([]core.Digest, error) {
+	refDescs := manifest.References()
+	log.Debugw("GetManifestReferences called",
+		"num_references", len(refDescs))
+
 	var refs []core.Digest
-	for _, desc := range manifest.References() {
+	refDigestStrings := make([]string, 0, len(refDescs))
+	for _, desc := range refDescs {
 		d, err := core.ParseSHA256Digest(string(desc.Digest))
 		if err != nil {
 			return nil, fmt.Errorf("parse digest: %w", err)
 		}
 		refs = append(refs, d)
+		refDigestStrings = append(refDigestStrings, d.String())
 	}
+
+	log.Debugw("GetManifestReferences returning",
+		"num_digests", len(refs),
+		"digests", refDigestStrings)
+
 	return refs, nil
 }
 
 // ParseOCIManifest parses an OCI image manifest v1.
-// OCI manifests have the same structure as Docker v2 manifests, so we can parse them similarly.
+// OCI manifests have the same structure as Docker v2 manifests, so we convert them.
 func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) {
-	// First, try to parse as Docker v2 manifest (they have the same structure)
-	// The Docker Distribution library might accept it if we use schema2.MediaTypeManifest
-	manifest, desc, err := distribution.UnmarshalManifest(schema2.MediaTypeManifest, bytes)
-	if err == nil {
-		// Verify it's actually a schema2 manifest
-		if _, ok := manifest.(*schema2.DeserializedManifest); ok {
-			d, err := core.ParseSHA256Digest(string(desc.Digest))
-			if err != nil {
-				return nil, core.Digest{}, fmt.Errorf("parse digest: %s", err)
-			}
-			return manifest, d, nil
-		}
-	}
-
-	// If that fails, parse manually by checking the mediaType in the JSON
+	// Parse the OCI manifest JSON to extract structure
 	var manifestJSON struct {
 		MediaType string `json:"mediaType"`
 		Config    struct {
@@ -142,15 +140,23 @@ func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) 
 		return nil, core.Digest{}, fmt.Errorf("unmarshal oci manifest json: %s", err)
 	}
 
+	// Verify it's an OCI manifest
 	if manifestJSON.MediaType != _ociManifestType {
 		return nil, core.Digest{}, fmt.Errorf("expected oci manifest type %s, got %s", _ociManifestType, manifestJSON.MediaType)
 	}
+
+	log.Debugw("Parsing OCI manifest",
+		"config_digest", manifestJSON.Config.Digest,
+		"config_size", manifestJSON.Config.Size,
+		"num_layers", len(manifestJSON.Layers))
 
 	// Calculate digest of the original manifest
 	d, err := core.NewDigester().FromBytes(bytes)
 	if err != nil {
 		return nil, core.Digest{}, fmt.Errorf("calculate manifest digest: %s", err)
 	}
+
+	log.Debugw("OCI manifest digest calculated", "digest", d.String())
 
 	// Parse digests from OCI format (they're already in "sha256:hex" format)
 	configDigest, err := core.ParseSHA256Digest(manifestJSON.Config.Digest)
@@ -166,17 +172,23 @@ func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) 
 	}
 
 	layers := make([]distribution.Descriptor, 0, len(manifestJSON.Layers))
+	layerDigests := make([]string, 0, len(manifestJSON.Layers))
 	for _, layer := range manifestJSON.Layers {
 		layerDigest, err := core.ParseSHA256Digest(layer.Digest)
 		if err != nil {
 			return nil, core.Digest{}, fmt.Errorf("parse layer digest: %s", err)
 		}
+		layerDigests = append(layerDigests, layerDigest.String())
 		layers = append(layers, distribution.Descriptor{
 			Digest:    digest.Digest(layerDigest.String()),
 			MediaType: schema2.MediaTypeLayer,
 			Size:      layer.Size,
 		})
 	}
+
+	log.Debugw("OCI manifest layers extracted",
+		"layer_digests", layerDigests,
+		"config_digest", configDigest.String())
 
 	// Create a properly initialized schema2 manifest by converting OCI JSON to Docker v2 format
 	// and then parsing it with the standard parser to ensure proper initialization
@@ -200,7 +212,7 @@ func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) 
 	}
 
 	// Parse it using the standard Docker v2 parser to ensure proper initialization
-	manifest, _, err = distribution.UnmarshalManifest(schema2.MediaTypeManifest, dockerV2Bytes)
+	manifest, _, err := distribution.UnmarshalManifest(schema2.MediaTypeManifest, dockerV2Bytes)
 	if err != nil {
 		return nil, core.Digest{}, fmt.Errorf("unmarshal converted manifest: %s", err)
 	}
@@ -209,6 +221,18 @@ func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) 
 	if !ok {
 		return nil, core.Digest{}, errors.New("expected schema2.DeserializedManifest after conversion")
 	}
+
+	// Log what References() returns to verify it's working correctly
+	refs := deserializedManifest.References()
+	refDigests := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		refDigests = append(refDigests, ref.Digest.String())
+	}
+	log.Debugw("OCI manifest converted to Docker v2, References() returned",
+		"num_references", len(refs),
+		"reference_digests", refDigests,
+		"expected_config", configDigest.String(),
+		"expected_layers", layerDigests)
 
 	// Return the original OCI manifest's digest (calculated from original bytes)
 	// This ensures we return the correct digest that matches what the registry expects
