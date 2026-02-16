@@ -48,7 +48,7 @@ def _setup_test_image(name):
     return new_name
 
 
-TEST_IMAGE = _setup_test_image('alpine:3:19') # todo: switch to latest after supporting oci format manifests
+TEST_IMAGE = _setup_test_image('alpine:3.19') # todo: switch to latest after supporting oci format manifests
 TEST_IMAGE_2 = _setup_test_image('redis:latest')
 
 
