@@ -29,6 +29,7 @@ import (
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/opencontainers/go-digest"
 	"github.com/uber/kraken/utils/closers"
+	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/log"
 )
@@ -115,14 +116,16 @@ func pullManifest(client http.Client, source string, name string, reference stri
 		return nil, fmt.Errorf("server returned %v", resp.Status)
 	}
 
-	version := resp.Header.Get("Content-Type")
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
-	manifest, _, err := distribution.UnmarshalManifest(version, body)
+
+	// Use dockerutil.ParseManifest which handles Docker v2, v2 list, and OCI formats
+	// This avoids issues with Content-Type headers and schema1 signature verification
+	manifest, _, err := dockerutil.ParseManifest(bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse manifest: %w", err)
 	}
 
 	return manifest, nil
