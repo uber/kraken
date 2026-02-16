@@ -23,7 +23,6 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/closers"
-	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 
 	"github.com/docker/distribution/uuid"
