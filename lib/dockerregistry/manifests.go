@@ -147,7 +147,7 @@ func (t *manifests) verify(
 	}
 }
 
-func (t *manifests) putContent(path string, subtype PathSubType) error {
+func (t *manifests) putContent(path string, subtype PathSubType, content []byte) error {
 	switch subtype {
 	case _tags:
 		repo, err := GetRepo(path)
@@ -158,12 +158,25 @@ func (t *manifests) putContent(path string, subtype PathSubType) error {
 		if err != nil {
 			return fmt.Errorf("get manifest tag: %s", err)
 		}
+		var digest core.Digest
 		if isCurrent {
-			return nil
-		}
-		digest, err := GetManifestDigest(path)
-		if err != nil {
-			return fmt.Errorf("get manifest digest: %s", err)
+			// For current/link paths, the digest is in the content, not the path
+			if len(content) == 0 {
+				return fmt.Errorf("current link content is empty")
+			}
+			// Content is the digest string (e.g., "sha256:...")
+			digestStr := strings.TrimSpace(string(content))
+			var err error
+			digest, err = core.ParseSHA256Digest(digestStr)
+			if err != nil {
+				return fmt.Errorf("parse digest from content: %w", err)
+			}
+		} else {
+			// For index/sha256:digest/link paths, the digest is in the path
+			digest, err = GetManifestDigest(path)
+			if err != nil {
+				return fmt.Errorf("get manifest digest: %s", err)
+			}
 		}
 		if err := t.transferer.PutTag(fmt.Sprintf("%s:%s", repo, tag), digest); err != nil {
 			return fmt.Errorf("post tag: %w", err)

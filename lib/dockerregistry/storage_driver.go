@@ -240,7 +240,7 @@ func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, conte
 
 	switch pathType {
 	case _manifests:
-		err = d.manifests.putContent(path, pathSubType)
+		err = d.manifests.putContent(path, pathSubType, content)
 	case _uploads:
 		err = d.uploads.putContent(path, pathSubType, content)
 	case _layers:
