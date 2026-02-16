@@ -139,15 +139,14 @@ func IsNetworkError(err error) bool {
 }
 
 type sendOptions struct {
-	body           io.Reader
-	timeout        time.Duration
-	acceptedCodes  map[int]bool
-	headers        map[string]string
-	redirect       func(req *http.Request, via []*http.Request) error
-	retry          retryOptions
-	transport      http.RoundTripper
-	ctx            context.Context
-	tracingContext bool
+	body          io.Reader
+	timeout       time.Duration
+	acceptedCodes map[int]bool
+	headers       map[string]string
+	redirect      func(req *http.Request, via []*http.Request) error
+	retry         retryOptions
+	transport     http.RoundTripper
+	ctx           context.Context
 
 	// This is not a valid http option. It provides a way to override
 	// parts of the url. For example, url.Scheme can be changed from
