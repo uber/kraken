@@ -131,9 +131,11 @@ func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) 
 		MediaType string `json:"mediaType"`
 		Config    struct {
 			Digest string `json:"digest"`
+			Size   int64  `json:"size"`
 		} `json:"config"`
 		Layers []struct {
 			Digest string `json:"digest"`
+			Size   int64  `json:"size"`
 		} `json:"layers"`
 	}
 	if err := json.Unmarshal(bytes, &manifestJSON); err != nil {
@@ -144,7 +146,7 @@ func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) 
 		return nil, core.Digest{}, fmt.Errorf("expected oci manifest type %s, got %s", _ociManifestType, manifestJSON.MediaType)
 	}
 
-	// Calculate digest of the manifest
+	// Calculate digest of the original manifest
 	d, err := core.NewDigester().FromBytes(bytes)
 	if err != nil {
 		return nil, core.Digest{}, fmt.Errorf("calculate manifest digest: %s", err)
@@ -156,12 +158,11 @@ func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) 
 		return nil, core.Digest{}, fmt.Errorf("parse config digest: %s", err)
 	}
 
-	// Convert to Docker v2 format by creating a schema2 manifest
-	// We need to convert the OCI structure to schema2 format
+	// Convert to Docker v2 format by creating descriptors
 	configDesc := distribution.Descriptor{
 		Digest:    digest.Digest(configDigest.String()),
 		MediaType: schema2.MediaTypeImageConfig,
-		Size:      0, // Size not available in OCI manifest
+		Size:      manifestJSON.Config.Size,
 	}
 
 	layers := make([]distribution.Descriptor, 0, len(manifestJSON.Layers))
@@ -173,19 +174,45 @@ func ParseOCIManifest(bytes []byte) (distribution.Manifest, core.Digest, error) 
 		layers = append(layers, distribution.Descriptor{
 			Digest:    digest.Digest(layerDigest.String()),
 			MediaType: schema2.MediaTypeLayer,
-			Size:      0, // Size not available in OCI manifest
+			Size:      layer.Size,
 		})
 	}
 
-	ociManifest := &schema2.DeserializedManifest{
-		Manifest: schema2.Manifest{
-			Versioned: manifestlist.SchemaVersion,
-			Config:    configDesc,
-			Layers:    layers,
-		},
+	// Create a properly initialized schema2 manifest by converting OCI JSON to Docker v2 format
+	// and then parsing it with the standard parser to ensure proper initialization
+	// This is critical - manually constructing DeserializedManifest doesn't initialize
+	// the internal state needed for References() to work correctly
+	dockerV2JSON := struct {
+		SchemaVersion int                       `json:"schemaVersion"`
+		MediaType     string                    `json:"mediaType"`
+		Config        distribution.Descriptor   `json:"config"`
+		Layers        []distribution.Descriptor `json:"layers"`
+	}{
+		SchemaVersion: 2, // Docker v2 schema version
+		MediaType:     schema2.MediaTypeManifest,
+		Config:        configDesc,
+		Layers:        layers,
 	}
 
-	return ociManifest, d, nil
+	dockerV2Bytes, err := json.Marshal(dockerV2JSON)
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("marshal docker v2 manifest: %s", err)
+	}
+
+	// Parse it using the standard Docker v2 parser to ensure proper initialization
+	manifest, _, err = distribution.UnmarshalManifest(schema2.MediaTypeManifest, dockerV2Bytes)
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("unmarshal converted manifest: %s", err)
+	}
+
+	deserializedManifest, ok := manifest.(*schema2.DeserializedManifest)
+	if !ok {
+		return nil, core.Digest{}, errors.New("expected schema2.DeserializedManifest after conversion")
+	}
+
+	// Return the original OCI manifest's digest (calculated from original bytes)
+	// This ensures we return the correct digest that matches what the registry expects
+	return deserializedManifest, d, nil
 }
 
 func GetSupportedManifestTypes() string {
