@@ -15,6 +15,7 @@ package proxyserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -107,7 +108,7 @@ func (ph *PreheatHandler) fetchManifest(repo, digest string) (distribution.Manif
 			time.Sleep(interval)
 			interval = interval * 2
 		}
-		if err := ph.clusterClient.DownloadBlob(repo, d, buf); err == nil {
+		if err := ph.clusterClient.DownloadBlob(context.Background(), repo, d, buf); err == nil {
 			break
 		} else if err == blobclient.ErrBlobNotFound {
 			continue

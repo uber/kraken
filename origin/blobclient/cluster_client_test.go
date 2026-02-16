@@ -879,8 +879,8 @@ func TestClusterClientDownloadBlob(t *testing.T) {
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
 				client.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
-				client.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-					func(namespace string, d core.Digest, dst io.Writer) error {
+				client.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+					func(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error {
 						_, err := dst.Write([]byte("blob data"))
 						return err
 					})
@@ -902,7 +902,7 @@ func TestClusterClientDownloadBlob(t *testing.T) {
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
 				client.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
-				client.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+				client.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					httputil.StatusError{Status: http.StatusNotFound})
 				return resolver
 			},
@@ -919,7 +919,7 @@ func TestClusterClientDownloadBlob(t *testing.T) {
 			resolver := tt.setup(ctrl)
 			client := blobclient.NewClusterClient(resolver)
 			var buf bytes.Buffer
-			err := client.DownloadBlob(_testNamespace, core.DigestFixture(), &buf)
+			err := client.DownloadBlob(context.Background(), _testNamespace, core.DigestFixture(), &buf)
 
 			if tt.wantErr {
 				require.Error(t, err)
