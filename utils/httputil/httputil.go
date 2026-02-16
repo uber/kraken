@@ -29,6 +29,7 @@ import (
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/log"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var retryableCodes = map[int]struct{}{
@@ -308,7 +309,11 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 	if baseTransport == nil {
 		baseTransport = http.DefaultTransport
 	}
-	opts.transport = otelhttp.NewTransport(baseTransport)
+	if spanCtx := trace.SpanContextFromContext(opts.ctx); spanCtx.IsValid() {
+		opts.transport = otelhttp.NewTransport(baseTransport)
+	} else {
+		opts.transport = baseTransport
+	}
 
 	req, err := newRequest(method, opts)
 	if err != nil {
