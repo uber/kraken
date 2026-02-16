@@ -25,6 +25,12 @@ type Config struct {
 	// RefreshInterval is the interval at which membership / health information
 	// is refreshed during monitoring.
 	RefreshInterval time.Duration `yaml:"refresh_interval"`
+
+	// MembershipWaitTimeout is the timeout for waiting for the ring to contain the given address.
+	MembershipWaitTimeout time.Duration `yaml:"membership_wait_timeout"`
+
+	// MembershipWaitInterval is the interval for waiting for the ring to contain the given address.
+	MembershipWaitInterval time.Duration `yaml:"membership_wait_interval"`
 }
 
 func (c *Config) applyDefaults() {
@@ -33,5 +39,11 @@ func (c *Config) applyDefaults() {
 	}
 	if c.RefreshInterval == 0 {
 		c.RefreshInterval = 10 * time.Second
+	}
+	if c.MembershipWaitTimeout == 0 {
+		c.MembershipWaitTimeout = time.Minute
+	}
+	if c.MembershipWaitInterval == 0 {
+		c.MembershipWaitInterval = 500 * time.Millisecond
 	}
 }

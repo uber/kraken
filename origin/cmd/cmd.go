@@ -246,34 +246,11 @@ func Run(flags *Flags, opts ...Option) {
 		config.HashRing,
 		cluster,
 		healthCheckFilter,
+		stats,
 		hashring.WithWatcher(backend.NewBandwidthWatcher(backendManager)))
 	go hashRing.Monitor(nil)
 
-	addr := fmt.Sprintf("%s:%d", hostname, flags.BlobServerPort)
-	if !hashRing.Contains(addr) {
-		// When DNS is used for hash ring membership, the members will be IP
-		// addresses instead of hostnames.
-		ip, err := netutil.GetLocalIP()
-		if err != nil {
-			log.Fatalf("Error getting local ip: %s", err)
-		}
-		addr = fmt.Sprintf("%s:%d", ip, flags.BlobServerPort)
-		if !hashRing.Contains(addr) {
-			l := log.With(
-				"hostname", hostname,
-				"ip", ip,
-				"port", flags.BlobServerPort,
-				"ring_members", hashRing.Members().ToSlice(),
-				"resolver_members", cluster.Resolve().ToSlice(),
-			)
-			if host, _, err := net.SplitHostPort(config.Cluster.DNS); err == nil {
-				if ips, err := net.LookupHost(host); err == nil {
-					l = l.With("dns_ips", ips)
-				}
-			}
-			l.Fatal("Origin cannot find itself in hash ring upon init. Stopping application.")
-		}
-	}
+	addr := validateOriginMembership(hashRing, hostname, flags.BlobServerPort, config.Cluster.DNS)
 
 	server, err := blobserver.New(
 		config.BlobServer,
@@ -305,6 +282,35 @@ func Run(flags *Flags, opts ...Option) {
 			"server": nginx.GetServer(config.BlobServer.Listener.Net, config.BlobServer.Listener.Addr),
 		},
 		nginx.WithTLS(config.TLS)))
+}
+
+// validateOriginMembership ensures the origin is in the hash ring and returns its resolved address.
+func validateOriginMembership(ring hashring.Ring, hostname string, port int, clusterDNS string) string {
+	addr := fmt.Sprintf("%s:%d", hostname, port)
+	if ring.Contains(addr) {
+		return addr
+	}
+
+	// For DNS-based clusters, the members will be IP addresses.
+	ip, err := netutil.GetLocalIP()
+	if err != nil {
+		log.With("error", err).Fatal("Failed to retrieve local IP")
+	}
+
+	addr = fmt.Sprintf("%s:%d", ip, port)
+	if err := ring.WaitForContains(addr); err != nil {
+		l := log.With(
+			"hostname", hostname, "port", port, "ip", ip,
+			"error", err, "ring_members", ring.Members().ToSlice(),
+		)
+		if host, _, err := net.SplitHostPort(clusterDNS); err == nil {
+			if ips, err := net.LookupHost(host); err == nil {
+				l = l.With("dns_ips", ips)
+			}
+		}
+		l.Fatal("Origin could not find itself in hash ring upon init")
+	}
+	return addr
 }
 
 // addTorrentDebugEndpoints mounts experimental debugging endpoints which are
