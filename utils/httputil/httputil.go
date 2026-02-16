@@ -309,11 +309,7 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 	if baseTransport == nil {
 		baseTransport = http.DefaultTransport
 	}
-	if spanCtx := trace.SpanContextFromContext(opts.ctx); spanCtx.IsValid() {
-		opts.transport = otelhttp.NewTransport(baseTransport)
-	} else {
-		opts.transport = baseTransport
-	}
+	opts.transport = otelhttp.NewTransport(baseTransport)
 
 	req, err := newRequest(method, opts)
 	if err != nil {
