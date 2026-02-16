@@ -138,15 +138,14 @@ func IsNetworkError(err error) bool {
 }
 
 type sendOptions struct {
-	body           io.Reader
-	timeout        time.Duration
-	acceptedCodes  map[int]bool
-	headers        map[string]string
-	redirect       func(req *http.Request, via []*http.Request) error
-	retry          retryOptions
-	transport      http.RoundTripper
-	ctx            context.Context
-	tracingContext bool
+	body          io.Reader
+	timeout       time.Duration
+	acceptedCodes map[int]bool
+	headers       map[string]string
+	redirect      func(req *http.Request, via []*http.Request) error
+	retry         retryOptions
+	transport     http.RoundTripper
+	ctx           context.Context
 
 	// This is not a valid http option. It provides a way to override
 	// parts of the url. For example, url.Scheme can be changed from
@@ -282,16 +281,6 @@ func SendTransport(transport http.RoundTripper) SendOption {
 // SendContext sets the context for the HTTP client.
 func SendContext(ctx context.Context) SendOption {
 	return func(o *sendOptions) { o.ctx = ctx }
-}
-
-// SendTracingContext sets the context and enables OpenTelemetry trace context
-// propagation via HTTP headers. The transport will be wrapped with otelhttp
-// after all options are applied.
-func SendTracingContext(ctx context.Context) SendOption {
-	return func(o *sendOptions) {
-		o.ctx = ctx
-		o.tracingContext = true
-	}
 }
 
 // Send sends an HTTP request. May return NetworkError or StatusError (see above).
