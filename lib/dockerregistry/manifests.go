@@ -95,6 +95,13 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 		return nil, &InvalidRequestError{path}
 	}
 
+	// For tag links, we only need to return the digest. The blob will be downloaded
+	// when the Docker Distribution library calls Reader on the blob path.
+	// For revision links, we still download to verify the blob exists.
+	if subtype == _tags {
+		return []byte(digest.String()), nil
+	}
+
 	blob, err := t.transferer.Download(repo, digest)
 	if err != nil {
 		return nil, fmt.Errorf("transferer download: %w", err)
