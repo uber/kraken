@@ -202,6 +202,11 @@ func TestLocations(t *testing.T) {
 			status:  http.StatusInternalServerError,
 			wantErr: true,
 		},
+		{
+			name:    "empty locations header",
+			status:  http.StatusOK,
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
