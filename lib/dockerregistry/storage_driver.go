@@ -110,6 +110,13 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 	if !ok {
 		return nil, fmt.Errorf("expected config param to be Config, got %T", getParam(params, "config"))
 	}
+
+	// Apply defaults and validate verification cache config at startup.
+	config.VerificationCache = config.VerificationCache.applyDefaults()
+	if err := config.VerificationCache.validate(); err != nil {
+		return nil, fmt.Errorf("invalid registry config: %w", err)
+	}
+
 	transferer, ok := getParam(params, "transferer").(transfer.ImageTransferer)
 	if !ok {
 		return nil, fmt.Errorf("expected transferer param to be transfer.ImageTransferer, got %T", getParam(params, "transferer"))
@@ -153,7 +160,7 @@ func NewReadWriteStorageDriver(
 		transferer: transferer,
 		blobs:      newBlobs(cas, transferer),
 		uploads:    newCASUploads(cas, transferer),
-		manifests:  newManifests(transferer, verification),
+		manifests:  newManifests(transferer, verification, config.VerificationCache),
 	}
 }
 
@@ -168,7 +175,7 @@ func NewReadOnlyStorageDriver(
 		transferer: transferer,
 		blobs:      newBlobs(bs, transferer),
 		uploads:    disabledUploads{},
-		manifests:  newManifests(transferer, verification),
+		manifests:  newManifests(transferer, verification, config.VerificationCache),
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/uber/kraken/utils/cache"
 	"github.com/uber/kraken/utils/closers"
 
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
@@ -39,15 +40,19 @@ const (
 type manifests struct {
 	transferer   transfer.ImageTransferer
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)
+	verifyCache  *cache.LRUCache
 }
 
 func newManifests(
 	transferer transfer.ImageTransferer,
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
+	cacheConfig VerificationCacheConfig,
 ) *manifests {
+	cacheConfig = cacheConfig.applyDefaults()
 	return &manifests{
 		transferer:   transferer,
 		verification: verification,
+		verifyCache:  cache.NewLRUCache(cacheConfig.Size, cacheConfig.TTL),
 	}
 }
 
@@ -112,15 +117,14 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 // verify runs signature/image verification for a downloaded manifest blob and
 // logs around the decision.
 //
+// The verification function is always called. The verifyCache only controls
+// whether the associated log/metric messages are emitted again. When a digest
+// is already in the cache, duplicate log emission is suppressed.
+//
 // Returns
 //   - (true, nil)  when verification is allowed or intentionally skipped.
 //   - (false, nil) when verification explicitly denies.
 //   - (false, err) on verification errors or unknown decisions.
-//
-// Logging
-//   - Error on verification error (includes repo/digest).
-//   - Warn  on deny (includes original path).
-//   - Debug on skip.
 func (t *manifests) verify(
 	path string,
 	repo string,
@@ -133,14 +137,25 @@ func (t *manifests) verify(
 		return false, err
 	}
 
+	digestKey := digest.String()
+	alreadyCached := t.verifyCache.Has(digestKey)
+
 	switch decision {
 	case DecisionAllow:
+		// DecisionAllow emits no logs/metrics, so there is nothing to
+		// deduplicate. Deliberately NOT cached to avoid suppressing a
+		// later DecisionSkip log for the same digest.
 		return true, nil
 	case DecisionDeny:
+		// Always log denials; remove cached entry so future denials are reported.
+		t.verifyCache.Delete(digestKey)
 		log.With("repo", repo, "digest", digest).Warnf("Verification failed %s", path)
 		return false, nil
 	case DecisionSkip:
-		log.With("repo", repo, "digest", digest).Debugf("Verification skipped for %s", path)
+		if !alreadyCached {
+			log.With("repo", repo, "digest", digest).Debugf("Verification skipped for %s", path)
+			t.verifyCache.Add(digestKey)
+		}
 		return true, nil
 	default:
 		return false, fmt.Errorf("unknown verification decision: %d", decision)
