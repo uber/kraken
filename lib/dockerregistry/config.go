@@ -14,6 +14,9 @@
 package dockerregistry
 
 import (
+	"errors"
+	"time"
+
 	"github.com/docker/distribution/configuration"
 	"github.com/docker/distribution/context"
 	"github.com/docker/distribution/registry"
@@ -25,11 +28,57 @@ import (
 const (
 	_rw = "rw"
 	_ro = "ro"
+
+	// defaultVerificationCacheSize is the default maximum number of entries
+	// in the image verification LRU cache.
+	defaultVerificationCacheSize = 300
+
+	// defaultVerificationCacheTTL is the default duration a verified digest
+	// stays in the cache before it expires.
+	defaultVerificationCacheTTL = 5 * time.Minute
 )
+
+// VerificationCacheConfig defines configuration for the image verification
+// LRU cache. The cache tracks recently verified digests to suppress duplicate
+// metric and log emission on repeated verification of the same manifest.
+//
+// Image verification is always executed; the cache only controls whether
+// associated logs/metrics are emitted again.
+type VerificationCacheConfig struct {
+	// Size is the maximum number of entries in the LRU cache.
+	// If 0, defaults to 300.
+	Size int `yaml:"size"`
+	// TTL is how long a verified digest stays cached.
+	// If 0, defaults to 5m.
+	TTL time.Duration `yaml:"ttl"`
+}
+
+// applyDefaults fills zero-valued fields with default constants.
+func (c VerificationCacheConfig) applyDefaults() VerificationCacheConfig {
+	if c.Size == 0 {
+		c.Size = defaultVerificationCacheSize
+	}
+	if c.TTL == 0 {
+		c.TTL = defaultVerificationCacheTTL
+	}
+	return c
+}
+
+// validate checks that cache config values are valid after defaults are applied.
+func (c VerificationCacheConfig) validate() error {
+	if c.Size <= 0 {
+		return errors.New("verification_cache.size must be > 0")
+	}
+	if c.TTL <= 0 {
+		return errors.New("verification_cache.ttl must be a positive duration")
+	}
+	return nil
+}
 
 // Config defines registry configuration.
 type Config struct {
-	Docker configuration.Configuration `yaml:"docker"`
+	Docker            configuration.Configuration `yaml:"docker"`
+	VerificationCache VerificationCacheConfig     `yaml:"verification_cache"`
 }
 
 // ReadWriteParameters builds parameters for a read-write driver.
