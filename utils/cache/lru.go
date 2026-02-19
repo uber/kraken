@@ -24,19 +24,18 @@ import (
 // concurrent reads are allowed while writes get exclusive access.
 type LRUCache struct {
 	mu       sync.RWMutex
+	config   LRUCacheConfig
 	entries  map[string]time.Time // key -> expiration time
 	lruOrder []string             // keys in LRU order (oldest first)
-	maxSize  int
-	ttl      time.Duration
 }
 
-// NewLRUCache creates a new LRU cache with the specified maximum size and TTL.
-func NewLRUCache(maxSize int, ttl time.Duration) *LRUCache {
+// NewLRUCache creates a new LRU cache from the provided configuration.
+func NewLRUCache(cfg LRUCacheConfig) *LRUCache {
+	cfg = cfg.applyDefaults()
 	return &LRUCache{
+		config:   cfg,
 		entries:  make(map[string]time.Time),
-		lruOrder: make([]string, 0, maxSize),
-		maxSize:  maxSize,
-		ttl:      ttl,
+		lruOrder: make([]string, 0, cfg.Size),
 	}
 }
 
@@ -55,13 +54,13 @@ func (c *LRUCache) Has(key string) bool {
 
 // Add marks a key as cached. This operation uses a write lock for exclusive access.
 // If the key already exists, its expiration time is updated and it's moved to the
-// end of the LRU order. If the cache exceeds maxSize, oldest entries are evicted.
+// end of the LRU order. If the cache exceeds config.Size, oldest entries are evicted.
 func (c *LRUCache) Add(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	now := time.Now()
-	expireTime := now.Add(c.ttl)
+	expireTime := now.Add(c.config.TTL)
 
 	// If key already exists, update expiration and move to end
 	if _, exists := c.entries[key]; exists {
@@ -130,7 +129,7 @@ func (c *LRUCache) evict() {
 	}
 
 	// Enforce size limit by removing oldest entries
-	for len(c.entries) > c.maxSize {
+	for len(c.entries) > c.config.Size {
 		oldest := c.lruOrder[0]
 		delete(c.entries, oldest)
 		c.lruOrder = c.lruOrder[1:]
