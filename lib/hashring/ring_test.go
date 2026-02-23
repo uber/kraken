@@ -19,6 +19,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/lib/hostlist"
@@ -57,7 +58,8 @@ func TestRingLocationsDistribution(t *testing.T) {
 			r := New(
 				Config{MaxReplica: test.maxReplica},
 				hostlist.Fixture(addrs...),
-				healthcheck.IdentityFilter{})
+				healthcheck.IdentityFilter{},
+				tally.NoopScope)
 
 			sampleSize := 2000
 
@@ -84,7 +86,8 @@ func TestRingLocationsFiltersOutUnhealthyHosts(t *testing.T) {
 	r := New(
 		Config{MaxReplica: 3},
 		hostlist.Fixture(addrsFixture(10)...),
-		filter)
+		filter,
+		tally.NoopScope)
 
 	d := core.DigestFixture()
 
@@ -106,7 +109,8 @@ func TestRingLocationsReturnsNextHealthyHostWhenReplicaSetUnhealthy(t *testing.T
 	r := New(
 		Config{MaxReplica: 3},
 		hostlist.Fixture(addrsFixture(10)...),
-		filter)
+		filter,
+		tally.NoopScope)
 
 	d := core.DigestFixture()
 
@@ -147,7 +151,8 @@ func TestRingLocationsReturnsFirstHostWhenAllHostsUnhealthy(t *testing.T) {
 	r := New(
 		Config{MaxReplica: 3},
 		hostlist.Fixture(addrsFixture(10)...),
-		filter)
+		filter,
+		tally.NoopScope)
 
 	d := core.DigestFixture()
 
@@ -172,11 +177,70 @@ func TestRingContains(t *testing.T) {
 	y := "y:80"
 	z := "z:80"
 
-	r := New(Config{}, hostlist.Fixture(x, y), healthcheck.IdentityFilter{})
+	r := New(Config{}, hostlist.Fixture(x, y), healthcheck.IdentityFilter{}, tally.NoopScope)
 
 	require.True(r.Contains(x))
 	require.True(r.Contains(y))
 	require.False(r.Contains(z))
+}
+
+func TestRingWaitForContains(t *testing.T) {
+	tests := map[string]struct {
+		addrs    []string
+		giveAddr string
+		wantErr  string
+	}{
+		"instant success": {
+			addrs:    []string{"x:80", "y:80"},
+			giveAddr: "y:80",
+		},
+		"timeout": {
+			addrs:    []string{"x:80"},
+			giveAddr: "y:80",
+			wantErr:  "timed out waiting for membership: address y:80 not found in ring",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			require := require.New(t)
+
+			r := New(
+				Config{MembershipWaitTimeout: 100 * time.Millisecond},
+				hostlist.Fixture(tt.addrs...),
+				healthcheck.IdentityFilter{},
+				tally.NoopScope)
+
+			err := r.WaitForContains(tt.giveAddr)
+
+			if tt.wantErr != "" {
+				require.EqualError(err, tt.wantErr)
+			} else {
+				require.NoError(err)
+			}
+		})
+	}
+}
+
+func TestRingWaitForContainsDelayedSuccess(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	cluster := mockhostlist.NewMockList(ctrl)
+	cluster.EXPECT().Resolve().Return(stringset.New("x:80")).Times(1)
+	cluster.EXPECT().Resolve().Return(stringset.New("x:80", "y:80")).AnyTimes()
+
+	r := New(Config{}, cluster, healthcheck.IdentityFilter{}, tally.NoopScope)
+	require.False(r.Contains("y:80"))
+
+	// Simulate a DNS refresh that adds the new address.
+	time.AfterFunc(100*time.Millisecond, func() {
+		r.Refresh()
+	})
+
+	err := r.WaitForContains("y:80")
+
+	require.NoError(err)
 }
 
 func TestRingMembers(t *testing.T) {
@@ -186,7 +250,7 @@ func TestRingMembers(t *testing.T) {
 	y := "y:80"
 	z := "z:80"
 
-	r := New(Config{}, hostlist.Fixture(x, y, z), healthcheck.IdentityFilter{})
+	r := New(Config{}, hostlist.Fixture(x, y, z), healthcheck.IdentityFilter{}, tally.NoopScope)
 
 	require.True(stringset.Equal(stringset.New(x, y, z), r.Members()))
 }
@@ -210,7 +274,8 @@ func TestRingMonitor(t *testing.T) {
 	r := New(
 		Config{RefreshInterval: time.Second},
 		cluster,
-		healthcheck.IdentityFilter{})
+		healthcheck.IdentityFilter{},
+		tally.NoopScope)
 
 	stop := make(chan struct{})
 	defer close(stop)
@@ -244,7 +309,7 @@ func TestRingRefreshUpdatesMembership(t *testing.T) {
 		cluster.EXPECT().Resolve().Return(stringset.New(y, z)),
 	)
 
-	r := New(Config{}, cluster, healthcheck.IdentityFilter{})
+	r := New(Config{}, cluster, healthcheck.IdentityFilter{}, tally.NoopScope)
 
 	d := core.DigestFixture()
 
@@ -280,7 +345,7 @@ func TestRingNotifiesWatchersOnMembershipChanges(t *testing.T) {
 		cluster.EXPECT().Resolve().Return(stringset.New(x, y, z)),
 	)
 
-	r := New(Config{}, cluster, healthcheck.IdentityFilter{}, WithWatcher(watcher))
+	r := New(Config{}, cluster, healthcheck.IdentityFilter{}, tally.NoopScope, WithWatcher(watcher))
 	r.Refresh()
 	r.Refresh()
 }

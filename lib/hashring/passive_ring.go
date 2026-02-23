@@ -14,6 +14,7 @@
 package hashring
 
 import (
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/lib/hostlist"
 )
@@ -38,7 +39,7 @@ func NewPassive(
 	opts ...Option) PassiveRing {
 
 	return &passiveRing{
-		New(config, cluster, passiveFilter, opts...),
+		New(config, cluster, passiveFilter, tally.NoopScope, opts...),
 		passiveFilter,
 	}
 }

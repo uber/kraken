@@ -14,9 +14,13 @@
 package hashring
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/lib/hostlist"
@@ -25,7 +29,13 @@ import (
 	"github.com/uber/kraken/utils/stringset"
 )
 
-const _defaultWeight = 100
+const (
+	_defaultWeight = 100
+
+	_membershipWaitMetric      = "membership_wait_duration"
+	_membershipWaitBuckets     = 10
+	_membershipWaitBucketWidth = 10 * time.Second
+)
 
 // Watcher allows clients to watch the ring for changes. Whenever membership
 // changes, each registered Watcher is notified with the latest hosts.
@@ -46,6 +56,7 @@ type Watcher interface {
 type Ring interface {
 	Locations(d core.Digest) []string
 	Contains(addr string) bool
+	WaitForContains(addr string) error
 	Members() stringset.Set
 	Monitor(stop <-chan struct{})
 	Refresh()
@@ -62,6 +73,8 @@ type ring struct {
 	healthy stringset.Set
 
 	watchers []Watcher
+
+	membershipWaitDuration tally.Histogram
 }
 
 // Option allows setting custom parameters for ring.
@@ -74,17 +87,22 @@ func WithWatcher(w Watcher) Option {
 
 // New creates a new Ring whose members are defined by cluster.
 func New(
-	config Config, cluster hostlist.List, filter healthcheck.Filter, opts ...Option) Ring {
+	config Config, cluster hostlist.List, filter healthcheck.Filter, scope tally.Scope, opts ...Option) Ring {
 
 	config.applyDefaults()
+	scope = scope.Tagged(map[string]string{"module": "hashring"})
+	buckets := tally.MustMakeLinearDurationBuckets(0, _membershipWaitBucketWidth, _membershipWaitBuckets)
 	r := &ring{
-		config:  config,
-		cluster: cluster,
-		filter:  filter,
+		config:                 config,
+		cluster:                cluster,
+		filter:                 filter,
+		membershipWaitDuration: scope.Histogram(_membershipWaitMetric, buckets),
 	}
+
 	for _, opt := range opts {
 		opt(r)
 	}
+
 	r.Refresh()
 	log.With("members", r.addrs.ToSlice(), "healthy", r.healthy.ToSlice()).Info("Hash ring initialised")
 	return r
@@ -125,6 +143,29 @@ func (r *ring) Contains(addr string) bool {
 	defer r.mu.RUnlock()
 
 	return r.addrs.Has(addr)
+}
+
+// WaitForContains waits for the ring to contain the given address.
+// Returns an error if it times out waiting for the ring to contain the address.
+func (r *ring) WaitForContains(addr string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), r.config.MembershipWaitTimeout)
+	defer cancel()
+
+	b := backoff.NewConstantBackOff(r.config.MembershipWaitInterval)
+	operation := func() error {
+		if r.Contains(addr) {
+			return nil
+		}
+		return fmt.Errorf("address %s not found in ring", addr)
+	}
+
+	start := time.Now()
+	if err := backoff.Retry(operation, backoff.WithContext(b, ctx)); err != nil {
+		return fmt.Errorf("timed out waiting for membership: %w", err)
+	}
+
+	r.membershipWaitDuration.RecordDuration(time.Since(start))
+	return nil
 }
 
 // Members returns a copy of all ring members (healthy and unhealthy).
