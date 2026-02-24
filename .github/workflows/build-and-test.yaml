@@ -71,6 +71,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-docker-action@v4
+        with:
+          version: latest
+          # Disable containerd snapshotter which defaults to using OCI manifests,
+          # which are currently not supported by Kraken.
+          # TODO(thijmv): Remove this override once OCI manifests are supported.
+          daemon-config: |
+            {
+              "features": {
+                "containerd-snapshotter": false
+              }
+            }
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
