@@ -14,6 +14,7 @@
 package tagtype
 
 import (
+	"context"
 	"io"
 	"testing"
 	"time"
@@ -79,7 +80,7 @@ func TestDockerResolver_DownloadManifest_Success(t *testing.T) {
 
 	// Expect successful download on first attempt
 	mockOrigin.EXPECT().
-		DownloadBlob(tag, manifest, mockutil.MatchWriter(manifestBytes)).
+		DownloadBlob(gomock.Any(), tag, manifest, mockutil.MatchWriter(manifestBytes)).
 		Return(nil)
 
 	result, err := resolver.downloadManifest(tag, manifest)
@@ -93,10 +94,10 @@ func TestDockerResolver_DownloadManifest_RetryOnBlobNotFound(t *testing.T) {
 	// First attempt fails with blob not found, second succeeds
 	gomock.InOrder(
 		mockOrigin.EXPECT().
-			DownloadBlob(tag, manifest, gomock.Any()).
+			DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
 			Return(blobclient.ErrBlobNotFound),
 		mockOrigin.EXPECT().
-			DownloadBlob(tag, manifest, mockutil.MatchWriter(manifestBytes)).
+			DownloadBlob(gomock.Any(), tag, manifest, mockutil.MatchWriter(manifestBytes)).
 			Return(nil),
 	)
 
@@ -113,7 +114,7 @@ func TestDockerResolver_DownloadManifest_ExhaustedRetries(t *testing.T) {
 
 	// All attempts fail with blob not found (MaxRetries=3, so 4 total attempts)
 	mockOrigin.EXPECT().
-		DownloadBlob(tag, manifest, gomock.Any()).
+		DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
 		Return(blobclient.ErrBlobNotFound).
 		Times(4)
 
@@ -133,7 +134,7 @@ func TestDockerResolver_DownloadManifest_PermanentError(t *testing.T) {
 	permanentErr := httputil.StatusError{Status: 401}
 
 	mockOrigin.EXPECT().
-		DownloadBlob(tag, manifest, gomock.Any()).
+		DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
 		Return(permanentErr).
 		Times(1) // Should only be called once, no retries
 
@@ -151,14 +152,14 @@ func TestDockerResolver_DownloadManifest_BufferResetBetweenRetries(t *testing.T)
 	// Second attempt succeeds with full data
 	gomock.InOrder(
 		mockOrigin.EXPECT().
-			DownloadBlob(tag, manifest, gomock.Any()).
-			DoAndReturn(func(tag string, d core.Digest, dst io.Writer) error {
+			DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
+			DoAndReturn(func(ctx context.Context, tag string, d core.Digest, dst io.Writer) error {
 				_, err := dst.Write(partialData)
 				require.NoError(err)
 				return blobclient.ErrBlobNotFound
 			}),
 		mockOrigin.EXPECT().
-			DownloadBlob(tag, manifest, mockutil.MatchWriter(manifestBytes)).
+			DownloadBlob(gomock.Any(), tag, manifest, mockutil.MatchWriter(manifestBytes)).
 			Return(nil),
 	)
 
@@ -176,8 +177,8 @@ func TestDockerResolver_DownloadManifest_InvalidManifestFormat(t *testing.T) {
 
 	// Download succeeds but returns invalid manifest data
 	mockOrigin.EXPECT().
-		DownloadBlob(tag, manifest, gomock.Any()).
-		DoAndReturn(func(tag string, d core.Digest, dst io.Writer) error {
+		DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
+		DoAndReturn(func(ctx context.Context, tag string, d core.Digest, dst io.Writer) error {
 			_, err := dst.Write([]byte("invalid manifest json"))
 			require.NoError(err)
 			return nil
@@ -193,7 +194,7 @@ func TestDockerResolver_Resolve_Success(t *testing.T) {
 	require, _, resolver, mockOrigin, tag, layers, manifest, manifestBytes := setupDockerResolverTestWithManifest(t)
 
 	mockOrigin.EXPECT().
-		DownloadBlob(tag, manifest, mockutil.MatchWriter(manifestBytes)).
+		DownloadBlob(gomock.Any(), tag, manifest, mockutil.MatchWriter(manifestBytes)).
 		Return(nil)
 
 	deps, err := resolver.Resolve(tag, manifest)
@@ -209,7 +210,7 @@ func TestDockerResolver_Resolve_DownloadError(t *testing.T) {
 
 	// All retries exhausted
 	mockOrigin.EXPECT().
-		DownloadBlob(tag, manifest, gomock.Any()).
+		DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
 		Return(blobclient.ErrBlobNotFound).
 		Times(4)
 
@@ -225,13 +226,13 @@ func TestDockerResolver_Resolve_WithRetries(t *testing.T) {
 	// Fails twice, succeeds on third attempt
 	gomock.InOrder(
 		mockOrigin.EXPECT().
-			DownloadBlob(tag, manifest, gomock.Any()).
+			DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
 			Return(blobclient.ErrBlobNotFound),
 		mockOrigin.EXPECT().
-			DownloadBlob(tag, manifest, gomock.Any()).
+			DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
 			Return(blobclient.ErrBlobNotFound),
 		mockOrigin.EXPECT().
-			DownloadBlob(tag, manifest, mockutil.MatchWriter(manifestBytes)).
+			DownloadBlob(gomock.Any(), tag, manifest, mockutil.MatchWriter(manifestBytes)).
 			Return(nil),
 	)
 

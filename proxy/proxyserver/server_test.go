@@ -14,21 +14,23 @@
 package proxyserver
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
+
+	"github.com/golang/mock/gomock"
 
 	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/httputil"
 
-	"bytes"
-	"encoding/json"
-	"time"
-
 	"github.com/stretchr/testify/require"
+
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/mockutil"
 )
@@ -137,7 +139,7 @@ func TestPreheat(t *testing.T) {
 	b, err := json.Marshal(notification)
 	require.NoError(err)
 
-	mocks.originClient.EXPECT().DownloadBlob(repo, manifest, mockutil.MatchWriter(bs)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), repo, manifest, mockutil.MatchWriter(bs)).Return(nil)
 	mocks.originClient.EXPECT().GetMetaInfo(repo, layers[0]).Return(nil, nil)
 	mocks.originClient.EXPECT().GetMetaInfo(repo, layers[1]).Return(nil, nil)
 	mocks.originClient.EXPECT().GetMetaInfo(repo, layers[2]).Return(nil, nil)
@@ -205,9 +207,9 @@ func TestPrefetchV1(t *testing.T) {
 
 	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
 	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
-	mocks.originClient.EXPECT().DownloadBlob(namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
-	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[1], io.Discard).Return(nil)
-	mocks.originClient.EXPECT().DownloadBlob(namespace, layers[2], io.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, layers[1], io.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, layers[2], io.Discard).Return(nil)
 	_, err = httputil.Post(
 		fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr),
 		httputil.SendBody(bytes.NewReader(b)))
@@ -237,7 +239,7 @@ func TestPrefetchV2(t *testing.T) {
 
 	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
 	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
-	mocks.originClient.EXPECT().DownloadBlob(namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
 
 	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[1]).Return(nil)
 	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[2]).Return(nil)
@@ -284,7 +286,7 @@ func TestPrefetchV2OriginError(t *testing.T) {
 
 	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
 	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
-	mocks.originClient.EXPECT().DownloadBlob(namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
 
 	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[1]).Return(errors.New("foo err"))
 	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[2]).Return(nil)

@@ -15,6 +15,7 @@ package tagtype
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/cenkalti/backoff"
@@ -53,7 +54,7 @@ func (r *dockerResolver) downloadManifest(tag string, d core.Digest) (distributi
 		attempt++
 		buf.Reset()
 
-		err := r.originClient.DownloadBlob(tag, d, buf)
+		err := r.originClient.DownloadBlob(context.Background(), tag, d, buf)
 		if err == nil {
 			return nil
 		}

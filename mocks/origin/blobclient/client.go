@@ -86,17 +86,17 @@ func (mr *MockClientMockRecorder) DeleteBlob(d any) *gomock.Call {
 }
 
 // DownloadBlob mocks base method.
-func (m *MockClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
+func (m *MockClient) DownloadBlob(arg0 context.Context, arg1 string, arg2 core.Digest, arg3 io.Writer) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DownloadBlob", namespace, d, dst)
+	ret := m.ctrl.Call(m, "DownloadBlob", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DownloadBlob indicates an expected call of DownloadBlob.
-func (mr *MockClientMockRecorder) DownloadBlob(namespace, d, dst any) *gomock.Call {
+func (mr *MockClientMockRecorder) DownloadBlob(arg0, arg1, arg2, arg3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBlob", reflect.TypeOf((*MockClient)(nil).DownloadBlob), namespace, d, dst)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBlob", reflect.TypeOf((*MockClient)(nil).DownloadBlob), arg0, arg1, arg2, arg3)
 }
 
 // DuplicateUploadBlob mocks base method.

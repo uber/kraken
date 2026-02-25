@@ -59,7 +59,7 @@ type Client interface {
 	UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.Reader) error
 	DuplicateUploadBlob(namespace string, d core.Digest, blob io.Reader, delay time.Duration) error
 
-	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
+	DownloadBlob(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error
 	PrefetchBlob(namespace string, d core.Digest) error
 
 	ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error
@@ -235,17 +235,39 @@ func (c *HTTPClient) DuplicateUploadBlob(
 // (i.e. still downloading), returns 202 httputil.StatusError, indicating that
 // the request should be retried later. If not blob exists for d, returns a 404
 // httputil.StatusError.
-func (c *HTTPClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
+func (c *HTTPClient) DownloadBlob(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error {
+	ctx, span := c.tracer.Start(ctx, "blobclient.download_blob",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("component", "origin-client"),
+			attribute.String("operation", "download_blob"),
+			attribute.String("namespace", namespace),
+			attribute.String("blob.digest", d.Hex()),
+			attribute.String("origin.address", c.addr),
+		),
+	)
+	defer span.End()
+
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s", c.addr, url.PathEscape(namespace), d),
+		httputil.SendContext(ctx),
 		httputil.SendTLS(c.tls))
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "download request failed")
 		return err
 	}
 	defer closers.Close(r.Body)
-	if _, err := io.Copy(dst, r.Body); err != nil {
+
+	written, err := io.Copy(dst, r.Body)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to copy response body")
 		return fmt.Errorf("copy body: %s", err)
 	}
+
+	span.SetAttributes(attribute.Int64("blob.size_bytes", written))
+	span.SetStatus(codes.Ok, "download completed")
 	return nil
 }
 

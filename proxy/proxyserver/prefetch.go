@@ -2,6 +2,7 @@ package proxyserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -236,7 +237,7 @@ func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Reques
 
 	buf := &bytes.Buffer{}
 	startTime = time.Now()
-	if err := ph.clusterClient.DownloadBlob(namespace, digest, buf); err != nil {
+	if err := ph.clusterClient.DownloadBlob(context.Background(), namespace, digest, buf); err != nil {
 		ph.metrics.Counter("download_manifest_error").Inc(1)
 		logger.With("error", err).Error("Failed to download manifest blob")
 		writeInternalError(w, fmt.Sprintf("error downloading manifest blob: %s", err), reqBody.TraceId)
@@ -275,7 +276,7 @@ func (ph *PrefetchHandler) downloadBlobs(input *prefetchInput) {
 		go func(blob blobInfo) {
 			defer wg.Done()
 			blobStart := time.Now()
-			err := ph.clusterClient.DownloadBlob(input.namespace, blob.digest, io.Discard)
+			err := ph.clusterClient.DownloadBlob(context.Background(), input.namespace, blob.digest, io.Discard)
 			blobDuration := time.Since(blobStart)
 			ph.metrics.Timer("blob_download_time").Record(blobDuration)
 			ph.metrics.Counter("bytes_downloaded").Inc(blob.size)
@@ -363,7 +364,7 @@ func (ph *PrefetchHandler) processManifestList(logger *zap.SugaredLogger, namesp
 		}
 		buf := &bytes.Buffer{}
 		startTime := time.Now()
-		if err := ph.clusterClient.DownloadBlob(namespace, digest, buf); err != nil {
+		if err := ph.clusterClient.DownloadBlob(context.Background(), namespace, digest, buf); err != nil {
 			ph.metrics.Counter("download_manifest_error").Inc(1)
 			logger.With("error", err).Error("Failed to download manifest blob")
 			continue
