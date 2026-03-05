@@ -161,10 +161,13 @@ func (r *ring) WaitForContains(addr string) error {
 
 	start := time.Now()
 	if err := backoff.Retry(operation, backoff.WithContext(b, ctx)); err != nil {
+		log.With("addr", addr, "error", err, "timeout", r.config.MembershipWaitTimeout).Error("Timed out waiting to find address in hash ring")
 		return fmt.Errorf("timed out waiting for membership: %w", err)
 	}
 
-	r.membershipWaitDuration.RecordDuration(time.Since(start))
+	duration := time.Since(start)
+	log.With("addr", addr, "duration", duration, "timeout", r.config.MembershipWaitTimeout).Info("Address found in hash ring after waiting")
+	r.membershipWaitDuration.RecordDuration(duration)
 	return nil
 }
 
