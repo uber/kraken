@@ -89,7 +89,7 @@ var _ ClusterClient = &clusterClient{}
 type ClusterClient interface {
 	CheckReadiness() error
 	UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.ReadSeeker) error
-	DownloadBlob(namespace string, d core.Digest, dst io.Writer) error
+	DownloadBlob(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error
 	PrefetchBlob(namespace string, d core.Digest) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	Stat(namespace string, d core.Digest) (*core.BlobInfo, error)
@@ -245,12 +245,33 @@ func (c *clusterClient) OverwriteMetaInfo(d core.Digest, pieceLength int64) erro
 }
 
 // DownloadBlob pulls a blob from the origin cluster.
-func (c *clusterClient) DownloadBlob(namespace string, d core.Digest, dst io.Writer) error {
+func (c *clusterClient) DownloadBlob(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error {
+	ctx, span := otel.Tracer("kraken-origin-cluster").Start(ctx, "cluster.download_blob",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("component", "origin-cluster-client"),
+			attribute.String("operation", "download_blob"),
+			attribute.String("namespace", namespace),
+			attribute.String("blob.digest", d.Hex()),
+		),
+	)
+	defer span.End()
+
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Debug("Starting blob download from origin cluster")
+
 	err := Poll(c.resolver, c.defaultPollBackOff(), d, func(client Client) error {
-		return client.DownloadBlob(namespace, d, dst)
+		return client.DownloadBlob(ctx, namespace, d, dst)
 	})
 	if httputil.IsNotFound(err) {
+		span.SetStatus(codes.Error, "blob not found")
 		err = ErrBlobNotFound
+	} else if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "download failed")
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "error", err).Error("Blob download failed")
+	} else {
+		span.SetStatus(codes.Ok, "download completed")
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Debug("Blob download succeeded")
 	}
 	return err
 }

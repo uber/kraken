@@ -69,7 +69,7 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 		require.NotNil(mi)
 
 		var buf bytes.Buffer
-		require.NoError(cc.DownloadBlob(backend.NoopNamespace, blob.Digest, &buf))
+		require.NoError(cc.DownloadBlob(context.Background(), backend.NoopNamespace, blob.Digest, &buf))
 		require.Equal(string(blob.Content), buf.String())
 
 		peers, err := cc.Owners(blob.Digest)
@@ -100,7 +100,7 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 	_, err = cc.GetMetaInfo(backend.NoopNamespace, blob.Digest)
 	require.Error(err)
 
-	require.Error(cc.DownloadBlob(backend.NoopNamespace, blob.Digest, io.Discard))
+	require.Error(cc.DownloadBlob(context.Background(), backend.NoopNamespace, blob.Digest, io.Discard))
 
 	_, err = cc.Owners(blob.Digest)
 	require.Error(err)
@@ -124,14 +124,14 @@ func TestPollSkipsOriginOnTimeout(t *testing.T) {
 		[]blobclient.Client{mockClient1, mockClient2}, nil)
 
 	mockClient1.EXPECT().DownloadBlob(
-		namespace, blob.Digest, nil).Return(httputil.StatusError{Status: 202}).MinTimes(1)
+		gomock.Any(), namespace, blob.Digest, nil).Return(httputil.StatusError{Status: 202}).MinTimes(1)
 	mockClient1.EXPECT().Addr().Return("client1")
-	mockClient2.EXPECT().DownloadBlob(namespace, blob.Digest, nil).Return(nil)
+	mockClient2.EXPECT().DownloadBlob(gomock.Any(), namespace, blob.Digest, nil).Return(nil)
 
 	b := backoff.WithMaxRetries(backoff.NewConstantBackOff(100*time.Millisecond), 5)
 
 	require.NoError(blobclient.Poll(mockResolver, b, blob.Digest, func(c blobclient.Client) error {
-		return c.DownloadBlob(namespace, blob.Digest, nil)
+		return c.DownloadBlob(context.Background(), namespace, blob.Digest, nil)
 	}))
 }
 
@@ -151,14 +151,14 @@ func TestPollSkipsOriginOnNetworkErrors(t *testing.T) {
 
 	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
 
-	mockClient1.EXPECT().DownloadBlob(namespace, blob.Digest, nil).Return(httputil.NetworkError{})
+	mockClient1.EXPECT().DownloadBlob(gomock.Any(), namespace, blob.Digest, nil).Return(httputil.NetworkError{})
 	mockClient1.EXPECT().Addr().Return("client1")
-	mockClient2.EXPECT().DownloadBlob(namespace, blob.Digest, nil).Return(nil)
+	mockClient2.EXPECT().DownloadBlob(gomock.Any(), namespace, blob.Digest, nil).Return(nil)
 
 	b := backoff.WithMaxRetries(backoff.NewConstantBackOff(100*time.Millisecond), 5)
 
 	require.NoError(blobclient.Poll(mockResolver, b, blob.Digest, func(c blobclient.Client) error {
-		return c.DownloadBlob(namespace, blob.Digest, nil)
+		return c.DownloadBlob(context.Background(), namespace, blob.Digest, nil)
 	}))
 }
 

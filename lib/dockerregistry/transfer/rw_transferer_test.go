@@ -71,7 +71,7 @@ func TestReadWriteTransfererDownloadCachesBlob(t *testing.T) {
 	blob := core.NewBlobFixture()
 
 	mocks.originCluster.EXPECT().DownloadBlob(
-		namespace, blob.Digest, mockutil.MatchWriter(blob.Content)).Return(nil)
+		gomock.Any(), namespace, blob.Digest, mockutil.MatchWriter(blob.Content)).Return(nil)
 
 	// Downloading multiple times should only call blob download once.
 	for i := 0; i < 10; i++ {

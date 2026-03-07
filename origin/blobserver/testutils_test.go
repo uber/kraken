@@ -15,6 +15,7 @@ package blobserver
 
 import (
 	"bytes"
+	"context"
 	"testing"
 	"time"
 
@@ -106,8 +107,8 @@ type testServer struct {
 }
 
 func newTestServer(
-	t *testing.T, host string, ring hashring.Ring, cp *testClientProvider) *testServer {
-
+	t *testing.T, host string, ring hashring.Ring, cp *testClientProvider,
+) *testServer {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
@@ -187,6 +188,6 @@ func computeBlobForHosts(ring hashring.Ring, hosts ...string) *core.BlobFixture 
 
 func ensureHasBlob(t *testing.T, c blobclient.Client, namespace string, blob *core.BlobFixture) {
 	var buf bytes.Buffer
-	require.NoError(t, c.DownloadBlob(namespace, blob.Digest, &buf))
+	require.NoError(t, c.DownloadBlob(context.Background(), namespace, blob.Digest, &buf))
 	require.Equal(t, string(blob.Content), buf.String())
 }
