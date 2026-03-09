@@ -27,14 +27,9 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/handler"
-<<<<<<< HEAD
-
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-=======
 	"github.com/uber/kraken/utils/log"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
->>>>>>> master
 )
 
 var retryableCodes = map[int]struct{}{
@@ -321,16 +316,6 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		o(opts)
 	}
 
-<<<<<<< HEAD
-	// Apply tracing context wrapping AFTER all other options are processed
-	// This ensures SendTLS and other transport options are respected
-	if opts.tracingContext {
-		baseTransport := opts.transport
-		if baseTransport == nil {
-			baseTransport = http.DefaultTransport
-		}
-		opts.transport = otelhttp.NewTransport(baseTransport)
-=======
 	baseTransport := opts.transport
 	if baseTransport == nil {
 		baseTransport = http.DefaultTransport
@@ -342,7 +327,6 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		opts.transport = otelhttp.NewTransport(baseTransport)
 	} else {
 		opts.transport = baseTransport
->>>>>>> master
 	}
 
 	req, err := newRequest(method, opts)
