@@ -207,7 +207,6 @@ type prefetchInput struct {
 // If an error occurs, preparePrefetch returns the appropriate HTTP response.
 func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Request) (res *prefetchInput, errOccurred bool) {
 	ctx, span := ph.tracer.Start(r.Context(), "prefetch.prepare",
-		trace.WithSpanKind(trace.SpanKindServer),
 		trace.WithAttributes(
 			attribute.String("component", "proxy-prefetch"),
 			attribute.String("operation", "prepare_prefetch"),
@@ -305,7 +304,7 @@ func (ph *PrefetchHandler) downloadBlobs(input *prefetchInput) {
 	var errList []error
 
 	for _, b := range input.blobs {
-		if ph.shouldSkipPrefetch(input.ctx, b) {
+		if ph.shouldSkipPrefetch(ctx, b) {
 			continue
 		}
 
@@ -476,14 +475,12 @@ func (ph *PrefetchHandler) triggerPrefetchBlobs(input *prefetchInput) error {
 	)
 	defer span.End()
 
-	_ = ctx // PrefetchBlob doesn't accept context yet
-
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var errList []error
 
 	for _, b := range input.blobs {
-		if ph.shouldSkipPrefetch(input.ctx, b) {
+		if ph.shouldSkipPrefetch(ctx, b) {
 			continue
 		}
 
