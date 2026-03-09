@@ -188,15 +188,14 @@ func (ph *PrefetchHandler) HandleV1(w http.ResponseWriter, r *http.Request) {
 	writePrefetchResponse(w, input.tag, "prefetching initiated successfully")
 
 	if ph.v1Synchronous {
-		ph.downloadBlobs(input)
+		ph.downloadBlobs(r.Context(), input)
 	} else {
 		// Download blobs asynchronously.
-		go ph.downloadBlobs(input)
+		go ph.downloadBlobs(r.Context(), input)
 	}
 }
 
 type prefetchInput struct {
-	ctx       context.Context
 	blobs     []blobInfo
 	namespace string
 	tag       string
@@ -279,7 +278,6 @@ func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Reques
 	span.SetStatus(codes.Ok, "prepare completed")
 
 	return &prefetchInput{
-		ctx:       ctx,
 		blobs:     blobs,
 		namespace: namespace,
 		tag:       tag,
@@ -287,8 +285,8 @@ func (ph *PrefetchHandler) preparePrefetch(w http.ResponseWriter, r *http.Reques
 }
 
 // downloadBlobs downloads blobs in parallel.
-func (ph *PrefetchHandler) downloadBlobs(input *prefetchInput) {
-	ctx, span := ph.tracer.Start(input.ctx, "prefetch.download_blobs",
+func (ph *PrefetchHandler) downloadBlobs(ctx context.Context, input *prefetchInput) {
+	ctx, span := ph.tracer.Start(ctx, "prefetch.download_blobs",
 		trace.WithAttributes(
 			attribute.String("component", "proxy-prefetch"),
 			attribute.String("operation", "download_blobs"),
@@ -451,10 +449,10 @@ func (ph *PrefetchHandler) HandleV2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := ph.triggerPrefetchBlobs(input)
+	err := ph.triggerPrefetchBlobs(r.Context(), input)
 	if err != nil {
 		writeInternalError(w, fmt.Sprintf("failed to trigger image prefetch: %s", err))
-		log.WithTraceContext(input.ctx).Errorf("Failed to trigger image prefetch")
+		log.WithTraceContext(r.Context()).Errorf("Failed to trigger image prefetch")
 		return
 	}
 
@@ -463,8 +461,8 @@ func (ph *PrefetchHandler) HandleV2(w http.ResponseWriter, r *http.Request) {
 }
 
 // triggerPrefetchBlobs triggers a blob prefetch for all blobs in parallel.
-func (ph *PrefetchHandler) triggerPrefetchBlobs(input *prefetchInput) error {
-	ctx, span := ph.tracer.Start(input.ctx, "prefetch.trigger_prefetch",
+func (ph *PrefetchHandler) triggerPrefetchBlobs(ctx context.Context, input *prefetchInput) error {
+	ctx, span := ph.tracer.Start(ctx, "prefetch.trigger_prefetch",
 		trace.WithAttributes(
 			attribute.String("component", "proxy-prefetch"),
 			attribute.String("operation", "trigger_prefetch"),
