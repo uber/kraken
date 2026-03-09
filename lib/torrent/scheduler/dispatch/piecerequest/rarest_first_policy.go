@@ -14,6 +14,8 @@
 package piecerequest
 
 import (
+	"fmt"
+
 	"github.com/uber/kraken/utils/heap"
 	"github.com/uber/kraken/utils/syncutil"
 
@@ -50,7 +52,10 @@ func (p *rarestFirstPolicy) selectPieces(
 			return nil, err
 		}
 
-		candidate := item.Value.(int)
+		candidate, ok := item.Value.(int)
+		if !ok {
+			return nil, fmt.Errorf("expected int, got %T", item.Value)
+		}
 		if valid(candidate) {
 			pieces = append(pieces, candidate)
 		}

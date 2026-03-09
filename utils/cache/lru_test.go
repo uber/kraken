@@ -22,8 +22,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestLRUCacheConfig_ApplyDefaults(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    LRUCacheConfig
+		expected LRUCacheConfig
+	}{
+		{
+			name:     "zero values get defaults",
+			input:    LRUCacheConfig{},
+			expected: LRUCacheConfig{Size: 300, TTL: 5 * time.Minute},
+		},
+		{
+			name:     "positive values are preserved",
+			input:    LRUCacheConfig{Size: 500, TTL: 10 * time.Minute},
+			expected: LRUCacheConfig{Size: 500, TTL: 10 * time.Minute},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.input.applyDefaults()
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestLRUCache_Basic(t *testing.T) {
-	cache := NewLRUCache(3, time.Hour)
+	cache := NewLRUCache(LRUCacheConfig{Size: 3, TTL: time.Hour})
 
 	// Initially empty
 	require.Equal(t, 0, cache.Size())
@@ -45,7 +71,7 @@ func TestLRUCache_Basic(t *testing.T) {
 }
 
 func TestLRUCache_SizeLimit(t *testing.T) {
-	cache := NewLRUCache(2, time.Hour)
+	cache := NewLRUCache(LRUCacheConfig{Size: 2, TTL: time.Hour})
 
 	// Fill cache to capacity
 	cache.Add("key1")
@@ -61,7 +87,7 @@ func TestLRUCache_SizeLimit(t *testing.T) {
 }
 
 func TestLRUCache_LRUOrdering(t *testing.T) {
-	cache := NewLRUCache(2, time.Hour)
+	cache := NewLRUCache(LRUCacheConfig{Size: 2, TTL: time.Hour})
 
 	// Add two keys
 	cache.Add("key1")
@@ -78,7 +104,7 @@ func TestLRUCache_LRUOrdering(t *testing.T) {
 }
 
 func TestLRUCache_TTL(t *testing.T) {
-	cache := NewLRUCache(10, 50*time.Millisecond)
+	cache := NewLRUCache(LRUCacheConfig{Size: 10, TTL: 50 * time.Millisecond})
 
 	cache.Add("key1")
 	require.True(t, cache.Has("key1"))
@@ -89,7 +115,7 @@ func TestLRUCache_TTL(t *testing.T) {
 }
 
 func TestLRUCache_Delete(t *testing.T) {
-	cache := NewLRUCache(10, time.Hour)
+	cache := NewLRUCache(LRUCacheConfig{Size: 10, TTL: time.Hour})
 
 	cache.Add("key1")
 	cache.Add("key2")
@@ -108,7 +134,7 @@ func TestLRUCache_Delete(t *testing.T) {
 }
 
 func TestLRUCache_Clear(t *testing.T) {
-	cache := NewLRUCache(10, time.Hour)
+	cache := NewLRUCache(LRUCacheConfig{Size: 10, TTL: time.Hour})
 
 	cache.Add("key1")
 	cache.Add("key2")
@@ -123,7 +149,7 @@ func TestLRUCache_Clear(t *testing.T) {
 }
 
 func TestLRUCache_ConcurrentAccess(t *testing.T) {
-	cache := NewLRUCache(100, time.Hour)
+	cache := NewLRUCache(LRUCacheConfig{Size: 100, TTL: time.Hour})
 
 	// Test concurrent reads and writes
 	done := make(chan bool, 10)
@@ -162,7 +188,7 @@ func TestLRUCache_ConcurrentAccess(t *testing.T) {
 // Benchmark tests for measuring LRU cache performance
 
 func BenchmarkLRUCache_Add(b *testing.B) {
-	cache := NewLRUCache(1000, time.Hour)
+	cache := NewLRUCache(LRUCacheConfig{Size: 1000, TTL: time.Hour})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -171,7 +197,7 @@ func BenchmarkLRUCache_Add(b *testing.B) {
 }
 
 func BenchmarkLRUCache_Has_Hit(b *testing.B) {
-	cache := NewLRUCache(1000, time.Hour)
+	cache := NewLRUCache(LRUCacheConfig{Size: 1000, TTL: time.Hour})
 
 	// Pre-populate cache
 	for i := 0; i < 500; i++ {
@@ -185,7 +211,7 @@ func BenchmarkLRUCache_Has_Hit(b *testing.B) {
 }
 
 func BenchmarkLRUCache_Has_Miss(b *testing.B) {
-	cache := NewLRUCache(1000, time.Hour)
+	cache := NewLRUCache(LRUCacheConfig{Size: 1000, TTL: time.Hour})
 
 	// Pre-populate cache
 	for i := 0; i < 500; i++ {
@@ -199,7 +225,7 @@ func BenchmarkLRUCache_Has_Miss(b *testing.B) {
 }
 
 func BenchmarkLRUCache_Mixed_ReadHeavy(b *testing.B) {
-	cache := NewLRUCache(1000, time.Hour)
+	cache := NewLRUCache(LRUCacheConfig{Size: 1000, TTL: time.Hour})
 
 	// Pre-populate cache
 	for i := 0; i < 100; i++ {
@@ -217,7 +243,7 @@ func BenchmarkLRUCache_Mixed_ReadHeavy(b *testing.B) {
 }
 
 func BenchmarkLRUCache_ConcurrentAccess(b *testing.B) {
-	cache := NewLRUCache(1000, time.Hour)
+	cache := NewLRUCache(LRUCacheConfig{Size: 1000, TTL: time.Hour})
 
 	// Pre-populate cache
 	for i := 0; i < 100; i++ {
@@ -240,7 +266,7 @@ func BenchmarkLRUCache_ConcurrentAccess(b *testing.B) {
 }
 
 func BenchmarkLRUCache_EvictionPressure(b *testing.B) {
-	cache := NewLRUCache(50, time.Hour) // Small cache to force evictions
+	cache := NewLRUCache(LRUCacheConfig{Size: 50, TTL: time.Hour}) // Small cache to force evictions
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

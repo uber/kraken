@@ -9,6 +9,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
+	stringset "github.com/uber/kraken/utils/stringset"
 )
 
 // MockRing is a mock of Ring interface
@@ -62,6 +63,20 @@ func (mr *MockRingMockRecorder) Locations(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Locations", reflect.TypeOf((*MockRing)(nil).Locations), arg0)
 }
 
+// Members mocks base method
+func (m *MockRing) Members() stringset.Set {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Members")
+	ret0, _ := ret[0].(stringset.Set)
+	return ret0
+}
+
+// Members indicates an expected call of Members
+func (mr *MockRingMockRecorder) Members() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Members", reflect.TypeOf((*MockRing)(nil).Members))
+}
+
 // Monitor mocks base method
 func (m *MockRing) Monitor(arg0 <-chan struct{}) {
 	m.ctrl.T.Helper()
@@ -84,4 +99,18 @@ func (m *MockRing) Refresh() {
 func (mr *MockRingMockRecorder) Refresh() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Refresh", reflect.TypeOf((*MockRing)(nil).Refresh))
+}
+
+// WaitForContains mocks base method
+func (m *MockRing) WaitForContains(arg0 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitForContains", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WaitForContains indicates an expected call of WaitForContains
+func (mr *MockRingMockRecorder) WaitForContains(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForContains", reflect.TypeOf((*MockRing)(nil).WaitForContains), arg0)
 }

@@ -11,20 +11,24 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package timeutil
+package cache
 
 import "time"
 
-// MostRecent returns the most recent Time of ts.
-func MostRecent(ts ...time.Time) time.Time {
-	if len(ts) == 0 {
-		return time.Time{}
+// LRUCacheConfig defines LRU cache configuration.
+type LRUCacheConfig struct {
+	// Size is the maximum number of entries in the LRU cache.
+	Size int `yaml:"size"`
+	// TTL is how long an entry stays cached before it expires.
+	TTL time.Duration `yaml:"ttl"`
+}
+
+func (c LRUCacheConfig) applyDefaults() LRUCacheConfig {
+	if c.Size == 0 {
+		c.Size = 300
 	}
-	max := ts[0]
-	for i := 1; i < len(ts); i++ {
-		if max.Before(ts[i]) {
-			max = ts[i]
-		}
+	if c.TTL == 0 {
+		c.TTL = 5 * time.Minute
 	}
-	return max
+	return c
 }

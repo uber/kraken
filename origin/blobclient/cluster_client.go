@@ -130,7 +130,7 @@ func (c *clusterClient) CheckReadiness() error {
 
 // UploadBlob uploads blob to origin cluster. See Client.UploadBlob for more details.
 func (c *clusterClient) UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.ReadSeeker) (err error) {
-	ctx, span := otel.Tracer("kraken-origin-cluster").Start(ctx, "cluster.upload_blob",
+	ctx, span := otel.Tracer("kraken-origin-cluster-client").Start(ctx, "cluster.upload_blob",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
 			attribute.String("component", "origin-cluster-client"),

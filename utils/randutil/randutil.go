@@ -41,7 +41,12 @@ func Blob(n uint64) []byte {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	lr := io.LimitReader(r, int64(n))
-	b, _ := io.ReadAll(lr)
+	b, err := io.ReadAll(lr)
+	if err != nil {
+		// This should never happen with a rand.Rand source, but handle it
+		// gracefully by returning an empty slice.
+		return make([]byte, 0)
+	}
 
 	return b
 }

@@ -14,6 +14,8 @@
 package agentstorage
 
 import (
+	"fmt"
+
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
@@ -49,5 +51,9 @@ func TorrentFixture(mi *core.MetaInfo) (*Torrent, func()) {
 		panic(err)
 	}
 
-	return t.(*Torrent), cleanup.Run
+	torrent, ok := t.(*Torrent)
+	if !ok {
+		panic(fmt.Sprintf("expected *Torrent, got %T", t))
+	}
+	return torrent, cleanup.Run
 }

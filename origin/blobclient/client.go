@@ -128,8 +128,11 @@ func (c *HTTPClient) Locations(d core.Digest) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer closers.Close(r.Body)
 	locs := strings.Split(r.Header.Get("Origin-Locations"), ",")
-	if len(locs) == 0 {
+	// strings.Split("", ",") returns []string{""} (slice with one empty string)
+	// so len(locs) == 0 is never true. The check should be locs[0] == "".
+	if locs[0] == "" {
 		return nil, errors.New("no locations found")
 	}
 	return locs, nil
@@ -247,7 +250,7 @@ func (c *HTTPClient) DownloadBlob(ctx context.Context, namespace string, d core.
 
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s", c.addr, url.PathEscape(namespace), d),
-		httputil.SendTracingContext(ctx),
+		httputil.SendContext(ctx),
 		httputil.SendTLS(c.tls))
 	if err != nil {
 		span.RecordError(err)

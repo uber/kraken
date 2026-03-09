@@ -16,6 +16,7 @@ package heap
 import (
 	"container/heap"
 	"errors"
+	"fmt"
 )
 
 // An Item is something we manage in a priority queue.
@@ -50,7 +51,11 @@ func (pq *PriorityQueue) Pop() (*Item, error) {
 		return nil, errors.New("queue empty")
 	}
 
-	return heap.Pop(&pq.q).(*Item), nil
+	item, ok := heap.Pop(&pq.q).(*Item)
+	if !ok {
+		panic("priority_queue: popped value is not *Item")
+	}
+	return item, nil
 }
 
 // An internalQueue implements heap.Interface and holds Items.
@@ -67,7 +72,10 @@ func (q internalQueue) Swap(i, j int) {
 }
 
 func (q *internalQueue) Push(x interface{}) {
-	item := x.(*Item)
+	item, ok := x.(*Item)
+	if !ok {
+		panic(fmt.Sprintf("priority_queue: pushed value is not *Item: %T", x))
+	}
 	*q = append(*q, item)
 }
 

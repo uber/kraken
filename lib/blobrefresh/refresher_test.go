@@ -212,3 +212,41 @@ func TestRefreshWithMemoryCache(t *testing.T) {
 	require.NoError(err)
 	require.Equal(blob.Content, diskData)
 }
+
+func TestExtractPrefix(t *testing.T) {
+	tests := map[string]struct {
+		give string
+		want string
+	}{
+		"slash delimiter returns prefix": {
+			give: "foo/bar",
+			want: "foo",
+		},
+		"underscore delimiter returns prefix": {
+			give: "foo_bar",
+			want: "foo",
+		},
+		"no delimiter returns whole string": {
+			give: "foo",
+			want: "foo",
+		},
+		"empty prefix returns empty string": {
+			give: "/foo",
+			want: "",
+		},
+		"empty string returns empty string": {
+			give: "",
+			want: "",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			require := require.New(t)
+
+			prefix := extractPrefix(tt.give)
+
+			require.Equal(tt.want, prefix)
+		})
+	}
+}

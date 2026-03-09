@@ -136,21 +136,33 @@ func (b *fileStoreTestBundle) recreateStore() {
 func fileStoreDefaultFixture() (*fileStoreTestBundle, func()) {
 	return fileStoreFixture(func(clk clock.Clock) *localFileStore {
 		store := NewLocalFileStore(clk)
-		return store.(*localFileStore)
+		localStore, ok := store.(*localFileStore)
+		if !ok {
+			panic(fmt.Sprintf("expected *localFileStore, got %T", store))
+		}
+		return localStore
 	})
 }
 
 func fileStoreCASFixture() (*fileStoreTestBundle, func()) {
 	return fileStoreFixture(func(clk clock.Clock) *localFileStore {
 		store := NewCASFileStore(clk)
-		return store.(*localFileStore)
+		localStore, ok := store.(*localFileStore)
+		if !ok {
+			panic(fmt.Sprintf("expected *localFileStore, got %T", store))
+		}
+		return localStore
 	})
 }
 
 func fileStoreLRUFixture(size int) (*fileStoreTestBundle, func()) {
 	return fileStoreFixture(func(clk clock.Clock) *localFileStore {
 		store := NewLRUFileStore(size, clk)
-		return store.(*localFileStore)
+		localStore, ok := store.(*localFileStore)
+		if !ok {
+			panic(fmt.Sprintf("expected *localFileStore, got %T", store))
+		}
+		return localStore
 	})
 }
 

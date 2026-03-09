@@ -14,6 +14,7 @@
 package lockermap
 
 import (
+	"fmt"
 	"sync"
 
 	"golang.org/x/sync/syncmap"
@@ -37,7 +38,10 @@ func (m *Map) Load(k interface{}, f func(sync.Locker)) bool {
 		return false
 	}
 
-	l := v.(sync.Locker)
+	l, ok := v.(sync.Locker)
+	if !ok {
+		panic(fmt.Sprintf("lockermap: stored value is not sync.Locker: %T", v))
+	}
 	l.Lock()
 	defer l.Unlock()
 
@@ -65,7 +69,10 @@ func (m *Map) Delete(k interface{}) {
 		return
 	}
 
-	l := v.(sync.Locker)
+	l, ok := v.(sync.Locker)
+	if !ok {
+		panic(fmt.Sprintf("lockermap: stored value is not sync.Locker: %T", v))
+	}
 	l.Lock()
 	defer l.Unlock()
 
@@ -75,7 +82,10 @@ func (m *Map) Delete(k interface{}) {
 // Range interates over the Map and execs f until f returns false.
 func (m *Map) Range(f func(k interface{}, v sync.Locker) bool) {
 	m.m.Range(func(k, v interface{}) bool {
-		l := v.(sync.Locker)
+		l, ok := v.(sync.Locker)
+		if !ok {
+			panic(fmt.Sprintf("lockermap: stored value is not sync.Locker: %T", v))
+		}
 		l.Lock()
 		defer l.Unlock()
 

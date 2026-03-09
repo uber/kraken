@@ -16,6 +16,7 @@ package blobrefresh
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/uber/kraken/core"
@@ -68,7 +69,10 @@ func New(
 		"module": "blobrefresh",
 	})
 
-	requests := dedup.NewRequestCache(dedup.RequestCacheConfig{}, clock.New())
+	requestsStats := stats.Tagged(map[string]string{
+		"request_type": "blobrefresh",
+	})
+	requests := dedup.NewRequestCache(dedup.RequestCacheConfig{}, clock.New(), requestsStats)
 	requests.SetNotFound(func(err error) bool { return err == backenderrors.ErrBlobNotFound })
 
 	return &Refresher{config, stats, requests, cas, backends, metaInfoGenerator}
@@ -109,12 +113,13 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 			return err
 		}
 		t := time.Since(start)
-		r.stats.Timer("download_remote_blob").Record(t)
+		stats := r.stats.Tagged(map[string]string{"namespace": extractPrefix(namespace)})
+		stats.Timer("download_remote_blob").Record(t)
+		stats.Counter("downloads").Inc(1)
 		log.With(
 			"namespace", namespace,
 			"name", d.Hex(),
 			"download_time", t).Info("Downloaded remote blob")
-		r.stats.Counter("downloads").Inc(1)
 		for _, h := range hooks {
 			h.Run(d)
 		}
@@ -137,4 +142,15 @@ func (r *Refresher) download(client backend.Client, namespace string, d core.Dig
 	return r.cas.WriteBlobToCacheWithMetaInfo(name, size, func(w store.FileReadWriter) error {
 		return client.Download(namespace, name, w)
 	}, pieceLength)
+}
+
+// extractPrefix extracts the prefix from the namespace to decrease the cardinality of metrics.
+func extractPrefix(namespace string) string {
+	if prefix, _, ok := strings.Cut(namespace, "/"); ok {
+		return prefix
+	}
+	if prefix, _, ok := strings.Cut(namespace, "_"); ok {
+		return prefix
+	}
+	return namespace
 }

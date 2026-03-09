@@ -174,7 +174,11 @@ func findFreePort() int {
 	if err != nil {
 		panic(err)
 	}
-	defer l.Close()
+	defer func() {
+		if err := l.Close(); err != nil {
+			panic(err)
+		}
+	}()
 	_, portStr, err := net.SplitHostPort(l.Addr().String())
 	if err != nil {
 		panic(err)

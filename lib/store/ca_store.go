@@ -16,6 +16,7 @@ package store
 import (
 	"bytes"
 	"container/list"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -48,6 +49,7 @@ var drainDurationBuckets = append(
 type drainItem struct {
 	entry   *cache.MemoryEntry
 	retries int
+	errs    []error
 }
 
 type drain struct {
@@ -424,11 +426,14 @@ func (s *CAStore) drainNext() {
 			s.addItemForDiskSync(&drainItem{
 				entry:   item.entry,
 				retries: item.retries + 1,
+				errs:    append(item.errs, err),
 			})
 			return
 		}
 		s.memCache.Remove(item.entry.Name)
 		s.stats.Counter("drain_error").Inc(1)
+		log.With("name", item.entry.Name, "drain_errors", errors.Join(append(item.errs, err)...)).
+			Errorf("Failed to drain blob from mem cache to disk after %v retries", s.config.MemoryCache.DrainMaxRetries)
 		return
 	}
 

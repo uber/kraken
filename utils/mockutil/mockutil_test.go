@@ -38,7 +38,9 @@ func TestMatchReader(t *testing.T) {
 
 			f, err := os.CreateTemp("", "")
 			require.NoError(err)
-			defer os.Remove(f.Name())
+			t.Cleanup(func() {
+				require.NoError(os.Remove(f.Name()))
+			})
 
 			_, err = f.Write([]byte(test.actual))
 			require.NoError(err)
@@ -66,7 +68,9 @@ func TestMatchWriter(t *testing.T) {
 
 	f, err := os.CreateTemp("", "")
 	require.NoError(err)
-	defer os.Remove(f.Name())
+	t.Cleanup(func() {
+		require.NoError(os.Remove(f.Name()))
+	})
 
 	b := []byte("some text")
 
@@ -96,7 +100,9 @@ func TestMatchWriterAt(t *testing.T) {
 
 	f, err := os.CreateTemp("", "")
 	require.NoError(err)
-	defer os.Remove(f.Name())
+	t.Cleanup(func() {
+		require.NoError(os.Remove(f.Name()))
+	})
 
 	b := []byte("some text")
 

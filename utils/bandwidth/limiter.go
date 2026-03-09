@@ -154,10 +154,3 @@ func (l *Limiter) EgressLimit() int64 {
 func (l *Limiter) IngressLimit() int64 {
 	return int64(l.ingress.Limit())
 }
-
-func max(a, b uint64) uint64 {
-	if a > b {
-		return a
-	}
-	return b
-}

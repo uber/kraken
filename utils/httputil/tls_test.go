@@ -167,10 +167,13 @@ func startTLSServer(t *testing.T, clientCAs []Secret) (addr string, serverCA Sec
 	r := chi.NewRouter()
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "OK")
+		_, err := fmt.Fprintln(w, "OK")
+		require.NoError(err)
 	})
-	go http.Serve(l, r)
-	cleanup.Add(func() { l.Close() })
+	go http.Serve(l, r) //nolint:errcheck
+	cleanup.Add(func() {
+		require.NoError(l.Close())
+	})
 	return l.Addr().String(), Secret{certPath}, cleanup.Run
 }
 
@@ -237,7 +240,8 @@ func TestTLSClientFallback(t *testing.T) {
 	r := chi.NewRouter()
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "OK")
+		_, err := fmt.Fprintln(w, "OK")
+		require.NoError(err)
 	})
 	addr, stop := testutil.StartServer(r)
 	defer stop()

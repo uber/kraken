@@ -125,10 +125,3 @@ func TestLimiterTaskGC(t *testing.T) {
 	require.Equal(output, limiter.Run(input))
 	require.Equal(output, limiter.Run(input))
 }
-
-func max(a, b time.Duration) time.Duration {
-	if a < b {
-		return b
-	}
-	return a
-}

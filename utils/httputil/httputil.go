@@ -25,11 +25,16 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/go-chi/chi"
-
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/handler"
+<<<<<<< HEAD
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+=======
+	"github.com/uber/kraken/utils/log"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
+>>>>>>> master
 )
 
 var retryableCodes = map[int]struct{}{
@@ -53,7 +58,11 @@ type StatusError struct {
 
 // NewStatusError returns a new StatusError.
 func NewStatusError(resp *http.Response) StatusError {
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Errorf("Failed to close response body: %s", err)
+		}
+	}()
 	respBytes, err := io.ReadAll(resp.Body)
 	respDump := string(respBytes)
 	if err != nil {
@@ -312,6 +321,7 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		o(opts)
 	}
 
+<<<<<<< HEAD
 	// Apply tracing context wrapping AFTER all other options are processed
 	// This ensures SendTLS and other transport options are respected
 	if opts.tracingContext {
@@ -320,6 +330,19 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 			baseTransport = http.DefaultTransport
 		}
 		opts.transport = otelhttp.NewTransport(baseTransport)
+=======
+	baseTransport := opts.transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	// Only wrap with otelhttp.NewTransport if there's a valid span context.
+	// This prevents interference with the Docker registry API's manifest format selection
+	// when tracing is not being used.
+	if spanCtx := trace.SpanContextFromContext(opts.ctx); spanCtx.IsValid() {
+		opts.transport = otelhttp.NewTransport(baseTransport)
+	} else {
+		opts.transport = baseTransport
+>>>>>>> master
 	}
 
 	req, err := newRequest(method, opts)

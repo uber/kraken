@@ -28,7 +28,7 @@ import (
 
 // Torrent errors.
 var (
-	ErrReadOnly = errors.New("Read-only torrent is being written to")
+	ErrReadOnly = errors.New("read-only torrent is being written to")
 )
 
 // Torrent is a read-only storage.Torrent. It allows concurrent reads on all

@@ -159,6 +159,7 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 			return handler.Errorf("store: %s", err)
 		}
 	}
+	defer closers.Close(f)
 	if _, err := io.Copy(w, f); err != nil {
 		return fmt.Errorf("copy file: %s", err)
 	}

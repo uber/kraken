@@ -84,8 +84,12 @@ func StartServer(h http.Handler) (addr string, stop func()) {
 		panic(err)
 	}
 	s := &http.Server{Handler: h}
-	go s.Serve(l)
-	return l.Addr().String(), func() { s.Close() }
+	go s.Serve(l) //nolint:errcheck
+	return l.Addr().String(), func() {
+		if err := s.Close(); err != nil {
+			panic(err)
+		}
+	}
 }
 
 // TempFile creates a temporary file. Returns its name and cleanup function.
@@ -97,8 +101,16 @@ func TempFile(data []byte) (string, func()) {
 	if err != nil {
 		panic(err)
 	}
-	cleanup.Add(func() { os.Remove(f.Name()) })
-	defer f.Close()
+	cleanup.Add(func() {
+		if err := os.Remove(f.Name()); err != nil {
+			panic(err)
+		}
+	})
+	defer func() {
+		if err := f.Close(); err != nil {
+			panic(err)
+		}
+	}()
 	if _, err := f.Write(data); err != nil {
 		panic(err)
 	}

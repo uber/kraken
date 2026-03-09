@@ -25,9 +25,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var (
-	_default *zap.SugaredLogger
-)
+var _default *zap.SugaredLogger
 
 // configure a default logger
 func init() {
@@ -178,9 +176,10 @@ func With(args ...interface{}) *zap.SugaredLogger {
 // If the context doesn't contain a valid span, returns the default logger.
 //
 // Usage:
-//   ctx, span := tracer.Start(r.Context(), "operation")
-//   defer span.End()
-//   log.WithTraceContext(ctx).With("key", "value").Info("message")
+//
+//	ctx, span := tracer.Start(r.Context(), "operation")
+//	defer span.End()
+//	log.WithTraceContext(ctx).With("key", "value").Info("message")
 //
 // Output will include: {"trace_id": "abc123...", "span_id": "def456...", "key": "value", "message": "..."}
 func WithTraceContext(ctx context.Context) *zap.SugaredLogger {

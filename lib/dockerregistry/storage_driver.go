@@ -360,7 +360,7 @@ func (d *KrakenStorageDriver) Delete(ctx context.Context, path string) error {
 // URLFor returns url for path
 func (d *KrakenStorageDriver) URLFor(ctx context.Context, path string, options map[string]interface{}) (string, error) {
 	log.Debugf("(*KrakenStorageDriver).URLFor %s", path)
-	return "", fmt.Errorf("Not implemented")
+	return "", fmt.Errorf("not implemented")
 }
 
 // Walk is not implemented.

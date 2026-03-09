@@ -15,12 +15,12 @@ package core
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 )
 
 // PeerIDFactory defines the method used to generate a peer id.

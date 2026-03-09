@@ -26,11 +26,14 @@ func TestCappedBuffer_write_drain_success(t *testing.T) {
 
 	content := []byte("hello this is a stream of bytes")
 	buffer := NewCappedBuffer(len(content))
-	buffer.WriteAt(content[7:], 7)
-	buffer.WriteAt(content[:7], 0)
+	_, err := buffer.WriteAt(content[7:], 7)
+	require.NoError(err)
+	_, err = buffer.WriteAt(content[:7], 0)
+	require.NoError(err)
 
 	var dst bytes.Buffer
-	buffer.DrainInto(&dst)
+	err = buffer.DrainInto(&dst)
+	require.NoError(err)
 	require.Equal(content, dst.Bytes())
 }
 

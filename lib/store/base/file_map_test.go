@@ -172,7 +172,6 @@ func TestFileMapLoadForWrite(t *testing.T) {
 	testInt := 1
 	loaded := fm.LoadForWrite(fe.GetName(), func(name string, entry FileEntry) {
 		testInt = 2
-		return
 	})
 	require.False(loaded)
 	require.Equal(testInt, 1)
@@ -352,7 +351,8 @@ func TestLRUCreateLastAccessTimeOnCreateFile(t *testing.T) {
 	defer cleanup()
 
 	store := bundle.store
-	clk := bundle.clk.(*clock.Mock)
+	clk, ok := bundle.clk.(*clock.Mock)
+	require.True(ok, "expected *clock.Mock")
 
 	t0 := time.Now()
 	clk.Set(t0)
@@ -377,7 +377,8 @@ func TestLRUUpdateLastAccessTimeOnMoveFrom(t *testing.T) {
 	defer cleanup()
 
 	store := bundle.store
-	clk := bundle.clk.(*clock.Mock)
+	clk, ok := bundle.clk.(*clock.Mock)
+	require.True(ok, "expected *clock.Mock")
 
 	t0 := time.Now()
 	clk.Set(t0)
@@ -403,7 +404,8 @@ func TestLRUUpdateLastAccessTimeOnMove(t *testing.T) {
 	defer cleanup()
 
 	store := bundle.store
-	clk := bundle.clk.(*clock.Mock)
+	clk, ok := bundle.clk.(*clock.Mock)
+	require.True(ok, "expected *clock.Mock")
 
 	t0 := time.Now()
 	clk.Set(t0)
@@ -427,7 +429,8 @@ func TestLRUUpdateLastAccessTimeOnOpen(t *testing.T) {
 	defer cleanup()
 
 	store := bundle.store
-	clk := bundle.clk.(*clock.Mock)
+	clk, ok := bundle.clk.(*clock.Mock)
+	require.True(ok, "expected *clock.Mock")
 
 	t0 := time.Now()
 	clk.Set(t0)
@@ -466,7 +469,8 @@ func TestLRUKeepLastAccessTimeOnPeek(t *testing.T) {
 	defer cleanup()
 
 	store := bundle.store
-	clk := bundle.clk.(*clock.Mock)
+	clk, ok := bundle.clk.(*clock.Mock)
+	require.True(ok, "expected *clock.Mock")
 
 	t0 := time.Now()
 	clk.Set(t0)

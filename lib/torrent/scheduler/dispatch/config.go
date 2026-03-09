@@ -19,7 +19,6 @@ import (
 
 	"github.com/uber/kraken/lib/torrent/scheduler/dispatch/piecerequest"
 	"github.com/uber/kraken/utils/memsize"
-	"github.com/uber/kraken/utils/timeutil"
 )
 
 // Config defines the configuration for piece dispatch.
@@ -71,5 +70,5 @@ func (c Config) applyDefaults() Config {
 func (c Config) calcPieceRequestTimeout(maxPieceLength int64) time.Duration {
 	n := float64(c.PieceRequestTimeoutPerMb) * float64(maxPieceLength) / float64(memsize.MB)
 	d := time.Duration(math.Ceil(n))
-	return timeutil.MaxDuration(d, c.PieceRequestMinTimeout)
+	return max(d, c.PieceRequestMinTimeout)
 }
