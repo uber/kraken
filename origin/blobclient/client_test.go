@@ -493,7 +493,7 @@ func TestDownloadBlob(t *testing.T) {
 				dst = &buf
 			}
 
-			err := client.DownloadBlob(namespace, d, dst)
+			err := client.DownloadBlob(context.Background(), namespace, d, dst)
 			if tt.wantErr {
 				require.Error(err)
 				if tt.errContain != "" {

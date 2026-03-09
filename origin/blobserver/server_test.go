@@ -263,7 +263,7 @@ func TestDownloadBlobNotFound(t *testing.T) {
 	backendClient := s.backendClient(namespace, false)
 	backendClient.EXPECT().Stat(namespace, d.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
 
-	err := cp.Provide(master1).DownloadBlob(namespace, d, io.Discard)
+	err := cp.Provide(master1).DownloadBlob(context.Background(), namespace, d, io.Discard)
 	require.Error(err)
 	statusErr, ok := err.(httputil.StatusError)
 	require.True(ok, "expected httputil.StatusError")
