@@ -170,7 +170,7 @@ func TestPrefetchV1MalformedTag(t *testing.T) {
 
 	addr := mocks.startServer()
 
-	b, _ := json.Marshal(prefetchBody{
+	b, err := json.Marshal(prefetchBody{
 		Tag: "invalid",
 	})
 	require.NoError(err)
@@ -198,7 +198,7 @@ func TestPrefetchV1(t *testing.T) {
 	layers := core.DigestListFixture(3)
 	manifest, bs := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
 
-	b, _ := json.Marshal(prefetchBody{
+	b, err := json.Marshal(prefetchBody{
 		Tag: fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
 	})
 	require.NoError(err)
@@ -208,7 +208,7 @@ func TestPrefetchV1(t *testing.T) {
 	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
 	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, layers[1], io.Discard).Return(nil)
 	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, layers[2], io.Discard).Return(nil)
-	_, err := httputil.Post(
+	_, err = httputil.Post(
 		fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr),
 		httputil.SendBody(bytes.NewReader(b)))
 	require.NoError(err)
@@ -229,7 +229,7 @@ func TestPrefetchV2(t *testing.T) {
 	layers := core.DigestListFixture(3)
 	manifest, bs := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
 
-	b, _ := json.Marshal(prefetchBody{
+	b, err := json.Marshal(prefetchBody{
 		Tag: fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
 	})
 	require.NoError(err)
@@ -274,7 +274,7 @@ func TestPrefetchV2OriginError(t *testing.T) {
 	layers := core.DigestListFixture(3)
 	manifest, bs := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
 
-	b, _ := json.Marshal(prefetchBody{
+	b, err := json.Marshal(prefetchBody{
 		Tag: fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
 	})
 	require.NoError(err)
