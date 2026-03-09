@@ -128,8 +128,11 @@ func (c *HTTPClient) Locations(d core.Digest) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer closers.Close(r.Body)
 	locs := strings.Split(r.Header.Get("Origin-Locations"), ",")
-	if len(locs) == 0 {
+	// strings.Split("", ",") returns []string{""} (slice with one empty string)
+	// so len(locs) == 0 is never true. The check should be locs[0] == "".
+	if locs[0] == "" {
 		return nil, errors.New("no locations found")
 	}
 	return locs, nil
