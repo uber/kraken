@@ -337,7 +337,7 @@ func (ph *PrefetchHandler) downloadBlobs(input *prefetchInput) {
 		span.RecordError(errors.Join(errList...))
 		span.SetStatus(codes.Error, fmt.Sprintf("%d blob downloads failed", len(errList)))
 		for _, err := range errList {
-			log.WithTraceContext(input.ctx).With("error", err).Error("Error downloading blob")
+			log.WithTraceContext(ctx).With("error", err).Error("Error downloading blob")
 		}
 	} else {
 		span.SetStatus(codes.Ok, "all blobs downloaded")
