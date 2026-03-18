@@ -69,20 +69,15 @@ type cleanupManager struct {
 	stopc    chan struct{}
 }
 
-func newCleanupManager(clk clock.Clock, stats tally.Scope) (*cleanupManager, error) {
-	hostname, err := os.Hostname()
-	if err != nil {
-		return nil, fmt.Errorf("look up hostname: %s", err)
-	}
+func newCleanupManager(clk clock.Clock, stats tally.Scope) *cleanupManager {
 	stats = stats.Tagged(map[string]string{
-		"module":   "storecleanup",
-		"hostname": hostname,
+		"module": "storecleanup",
 	})
 	return &cleanupManager{
 		clk:   clk,
 		stats: stats,
 		stopc: make(chan struct{}),
-	}, nil
+	}
 }
 
 // addJob starts a background cleanup task which removes idle files from op based

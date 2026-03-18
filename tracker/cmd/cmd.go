@@ -124,8 +124,6 @@ func Run(flags *Flags, opts ...Option) {
 		defer closers.Close(closer)
 	}
 
-	go metrics.EmitVersion(stats)
-
 	peerStore, err := peerstore.New(config.PeerStore)
 	if err != nil {
 		log.Fatalf("Could not create PeerStore: %s", err)

@@ -105,10 +105,7 @@ func newCAStore(config CAStoreConfig, stats tally.Scope, clk clock.Clock) (*CASt
 		return nil, fmt.Errorf("init cas volumes: %s", err)
 	}
 
-	cleanup, err := newCleanupManager(clk, stats)
-	if err != nil {
-		return nil, fmt.Errorf("new cleanup manager: %s", err)
-	}
+	cleanup := newCleanupManager(clk, stats)
 	cleanup.addJob("upload", config.UploadCleanup, uploadStore.newFileOp())
 	cleanup.addJob("cache", config.CacheCleanup, cacheStore.newFileOp())
 

@@ -14,11 +14,8 @@
 package metrics
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"os"
-	"time"
 
 	"github.com/uber/kraken/utils/log"
 
@@ -53,32 +50,4 @@ func New(config Config, cluster string) (tally.Scope, io.Closer, error) {
 		return nil, nil, fmt.Errorf("metrics backend %q not registered", config.Backend)
 	}
 	return f(config, cluster)
-}
-
-// EmitVersion periodically emits the current GIT_DESCRIBE as a metric.
-func EmitVersion(stats tally.Scope) {
-	counter, err := getVersionCounter(stats)
-	if err != nil {
-		log.Warnf("Skipping version emitting: %s", err)
-		return
-	}
-	for {
-		time.Sleep(time.Minute)
-		counter.Inc(1)
-	}
-}
-
-func getVersionCounter(stats tally.Scope) (tally.Counter, error) {
-	version := os.Getenv("GIT_DESCRIBE")
-	if version == "" {
-		return nil, errors.New("no GIT_DESCRIBE env variable found")
-	}
-	hostname, err := os.Hostname()
-	if err != nil {
-		return nil, fmt.Errorf("hostname: %s", err)
-	}
-	return stats.Tagged(map[string]string{
-		"host":    hostname,
-		"version": version,
-	}).Counter("version"), nil
 }

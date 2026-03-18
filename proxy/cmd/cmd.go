@@ -135,8 +135,6 @@ func Run(flags *Flags, opts ...Option) {
 		defer closers.Close(closer)
 	}
 
-	go metrics.EmitVersion(stats)
-
 	if overrides.effect != nil {
 		overrides.effect()
 	}

@@ -50,10 +50,7 @@ func NewCADownloadStore(config CADownloadStoreConfig, stats tally.Scope) (*CADow
 	downloadState := base.NewFileState(config.DownloadDir)
 	cacheState := base.NewFileState(config.CacheDir)
 
-	cleanup, err := newCleanupManager(clock.New(), stats)
-	if err != nil {
-		return nil, fmt.Errorf("new cleanup manager: %s", err)
-	}
+	cleanup := newCleanupManager(clock.New(), stats)
 	cleanup.addJob(
 		"download",
 		config.DownloadCleanup,

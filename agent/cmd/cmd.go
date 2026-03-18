@@ -150,8 +150,6 @@ func Run(flags *Flags, opts ...Option) {
 		defer closers.Close(closer)
 	}
 
-	go metrics.EmitVersion(stats)
-
 	if flags.PeerIP == "" {
 		localIP, err := netutil.GetLocalIP()
 		if err != nil {

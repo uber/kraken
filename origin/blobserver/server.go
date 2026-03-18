@@ -901,7 +901,6 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 	span.SetAttributes(attribute.Int64("replication.duration_ms", replicateDuration.Milliseconds()))
 
 	if err != nil {
-		s.metrics.duplicateWritebackErrors.Inc(1)
 		span.SetAttributes(attribute.String("replication.error", err.Error()))
 		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "replication_duration_ms", replicateDuration.Milliseconds()).Errorf("Error duplicating write-back task to replicas: %s", err)
 		// Don't fail the commit if replication fails - blob is still uploaded
