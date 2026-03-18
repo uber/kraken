@@ -49,10 +49,7 @@ func NewSimpleStore(config SimpleStoreConfig, stats tally.Scope) (*SimpleStore, 
 		return nil, fmt.Errorf("new cache store: %s", err)
 	}
 
-	cleanup, err := newCleanupManager(clock.New(), stats)
-	if err != nil {
-		return nil, fmt.Errorf("new cleanup manager: %s", err)
-	}
+	cleanup := newCleanupManager(clock.New(), stats)
 	cleanup.addJob("upload", config.UploadCleanup, uploadStore.newFileOp())
 	cleanup.addJob("cache", config.CacheCleanup, cacheStore.newFileOp())
 

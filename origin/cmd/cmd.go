@@ -159,8 +159,6 @@ func Run(flags *Flags, opts ...Option) {
 		defer closers.Close(closer)
 	}
 
-	go metrics.EmitVersion(stats)
-
 	var hostname string
 	if flags.BlobServerHostName == "" {
 		var err error

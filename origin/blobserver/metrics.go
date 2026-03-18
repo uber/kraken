@@ -5,15 +5,13 @@ import (
 )
 
 type metrics struct {
-	replicateBlobTimer       tally.Timer
-	replicateBlobErrors      tally.Counter
-	duplicateWritebackErrors tally.Counter
+	replicateBlobTimer  tally.Timer
+	replicateBlobErrors tally.Counter
 }
 
 func newMetrics(s tally.Scope) *metrics {
 	return &metrics{
-		replicateBlobTimer:       s.Timer("replicate_blob"),
-		replicateBlobErrors:      s.Counter("replicate_blob_errors"),
-		duplicateWritebackErrors: s.Counter("duplicate_write_back_errors"),
+		replicateBlobTimer:  s.Timer("replicate_blob"),
+		replicateBlobErrors: s.Counter("replicate_blob_errors"),
 	}
 }
