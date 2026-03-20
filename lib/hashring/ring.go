@@ -35,6 +35,8 @@ const (
 	_membershipWaitMetric      = "membership_wait_duration"
 	_membershipWaitBuckets     = 10
 	_membershipWaitBucketWidth = 10 * time.Second
+
+	_membershipWaitLogInterval = time.Minute
 )
 
 // Watcher allows clients to watch the ring for changes. Whenever membership
@@ -151,15 +153,20 @@ func (r *ring) WaitForContains(addr string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), r.config.MembershipWaitTimeout)
 	defer cancel()
 
+	start := time.Now()
+	lastLog := start
 	b := backoff.NewConstantBackOff(r.config.MembershipWaitInterval)
 	operation := func() error {
 		if r.Contains(addr) {
 			return nil
 		}
+		if time.Since(lastLog) >= _membershipWaitLogInterval {
+			log.With("addr", addr, "elapsed", time.Since(start)).Warn("Address not yet found in hash ring")
+			lastLog = time.Now()
+		}
 		return fmt.Errorf("address %s not found in ring", addr)
 	}
 
-	start := time.Now()
 	if err := backoff.Retry(operation, backoff.WithContext(b, ctx)); err != nil {
 		log.With("addr", addr, "error", err, "timeout", r.config.MembershipWaitTimeout).Error("Timed out waiting to find address in hash ring")
 		return fmt.Errorf("timed out waiting for membership: %w", err)
