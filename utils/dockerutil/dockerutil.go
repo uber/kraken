@@ -20,7 +20,9 @@ import (
 
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/manifestlist"
+	"github.com/docker/distribution/manifest/ocischema"
 	"github.com/docker/distribution/manifest/schema2"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/uber/kraken/core"
 )
 
@@ -35,13 +37,26 @@ func ParseManifest(r io.Reader) (distribution.Manifest, core.Digest, error) {
 		return nil, core.Digest{}, fmt.Errorf("read: %s", err)
 	}
 
+	// Try Docker v2 manifest.
 	manifest, d, err := ParseManifestV2(b)
 	if err == nil {
-		return manifest, d, err
+		return manifest, d, nil
 	}
 
-	// Retry with v2 manifest list.
-	return ParseManifestV2List(b)
+	// Try Docker v2 manifest list.
+	manifest, d, err = ParseManifestV2List(b)
+	if err == nil {
+		return manifest, d, nil
+	}
+
+	// Try OCI image manifest.
+	manifest, d, err = ParseManifestOCI(b)
+	if err == nil {
+		return manifest, d, nil
+	}
+
+	// Try OCI image index.
+	return ParseManifestOCIIndex(b)
 }
 
 // ParseManifestV2 returns a parsed v2 manifest and its digest.
@@ -86,6 +101,40 @@ func ParseManifestV2List(bytes []byte) (distribution.Manifest, core.Digest, erro
 	return manifestList, d, nil
 }
 
+// ParseManifestOCI returns a parsed OCI image manifest and its digest.
+func ParseManifestOCI(bytes []byte) (distribution.Manifest, core.Digest, error) {
+	manifest, desc, err := distribution.UnmarshalManifest(specs.MediaTypeImageManifest, bytes)
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("unmarshal OCI manifest: %s", err)
+	}
+	_, ok := manifest.(*ocischema.DeserializedManifest)
+	if !ok {
+		return nil, core.Digest{}, errors.New("expected ocischema.DeserializedManifest")
+	}
+	d, err := core.ParseSHA256Digest(string(desc.Digest))
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("parse digest: %s", err)
+	}
+	return manifest, d, nil
+}
+
+// ParseManifestOCIIndex returns a parsed OCI image index and its digest.
+func ParseManifestOCIIndex(bytes []byte) (distribution.Manifest, core.Digest, error) {
+	manifestIndex, desc, err := distribution.UnmarshalManifest(specs.MediaTypeImageIndex, bytes)
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("unmarshal OCI image index: %s", err)
+	}
+	_, ok := manifestIndex.(*manifestlist.DeserializedManifestList)
+	if !ok {
+		return nil, core.Digest{}, errors.New("expected manifestlist.DeserializedManifestList for OCI index")
+	}
+	d, err := core.ParseSHA256Digest(string(desc.Digest))
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("parse digest: %s", err)
+	}
+	return manifestIndex, d, nil
+}
+
 // GetManifestReferences returns a list of references by a V2 manifest
 func GetManifestReferences(manifest distribution.Manifest) ([]core.Digest, error) {
 	var refs []core.Digest
@@ -100,5 +149,10 @@ func GetManifestReferences(manifest distribution.Manifest) ([]core.Digest, error
 }
 
 func GetSupportedManifestTypes() string {
-	return fmt.Sprintf("%s,%s", _v2ManifestType, _v2ManifestListType)
+	return fmt.Sprintf("%s,%s,%s,%s",
+		_v2ManifestType,
+		_v2ManifestListType,
+		specs.MediaTypeImageManifest,
+		specs.MediaTypeImageIndex,
+	)
 }
