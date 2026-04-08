@@ -37,26 +37,26 @@ func ParseManifest(r io.Reader) (distribution.Manifest, core.Digest, error) {
 		return nil, core.Digest{}, fmt.Errorf("read: %s", err)
 	}
 
-	// Try Docker v2 manifest.
-	manifest, d, err := ParseManifestV2(b)
-	if err == nil {
-		return manifest, d, nil
+	type attempt struct {
+		name string
+		fn   func([]byte) (distribution.Manifest, core.Digest, error)
+	}
+	attempts := []attempt{
+		{"docker v2 manifest", ParseManifestV2},
+		{"docker v2 manifest list", ParseManifestV2List},
+		{"OCI image manifest", ParseManifestOCI},
+		{"OCI image index", ParseManifestOCIIndex},
 	}
 
-	// Try Docker v2 manifest list.
-	manifest, d, err = ParseManifestV2List(b)
-	if err == nil {
-		return manifest, d, nil
+	var errs []string
+	for _, a := range attempts {
+		m, d, err := a.fn(b)
+		if err == nil {
+			return m, d, nil
+		}
+		errs = append(errs, fmt.Sprintf("%s: %s", a.name, err))
 	}
-
-	// Try OCI image manifest.
-	manifest, d, err = ParseManifestOCI(b)
-	if err == nil {
-		return manifest, d, nil
-	}
-
-	// Try OCI image index.
-	return ParseManifestOCIIndex(b)
+	return nil, core.Digest{}, fmt.Errorf("unrecognized manifest format: [%s]", strings.Join(errs, "; "))
 }
 
 // ParseManifestV2 returns a parsed v2 manifest and its digest.
@@ -86,13 +86,13 @@ func ParseManifestV2List(bytes []byte) (distribution.Manifest, core.Digest, erro
 	if err != nil {
 		return nil, core.Digest{}, fmt.Errorf("unmarshal manifestlist: %s", err)
 	}
-	deserializedManifestList, ok := manifestList.(*manifestlist.DeserializedManifestList)
+	deserializedManifestIndex, ok := manifestIndex.(*manifestlist.DeserializedManifestList)
 	if !ok {
-		return nil, core.Digest{}, errors.New("expected manifestlist.DeserializedManifestList")
+		return nil, core.Digest{}, fmt.Errorf("expected OCI image index, got %T", manifestIndex)
 	}
-	version := deserializedManifestList.SchemaVersion
+	version := deserializedManifestIndex.SchemaVersion
 	if version != 2 {
-		return nil, core.Digest{}, fmt.Errorf("unsupported manifest list version: %d", version)
+		return nil, core.Digest{}, fmt.Errorf("unsupported OCI image index version: %d", version)
 	}
 	d, err := core.ParseSHA256Digest(string(desc.Digest))
 	if err != nil {

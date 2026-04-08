@@ -125,22 +125,36 @@ var testOCIIndexBytes = []byte(`{
 
 func TestParseManifestOCI(t *testing.T) {
 	require := require.New(t)
+
+	// Success case
 	manifest, d, err := dockerutil.ParseManifestOCI(testOCIManifestBytes)
 	require.NoError(err)
 	mediaType, _, err := manifest.Payload()
 	require.NoError(err)
 	require.Equal("application/vnd.oci.image.manifest.v1+json", mediaType)
 	require.Equal("sha256", d.Algo())
+	require.NotEmpty(d.Hex())
+
+	// Failure case: passing a Docker manifest should fail
+	_, _, err = dockerutil.ParseManifestOCI(testManifestBytes)
+	require.Error(err)
 }
 
 func TestParseManifestOCIIndex(t *testing.T) {
 	require := require.New(t)
+
+	// Success case
 	manifest, d, err := dockerutil.ParseManifestOCIIndex(testOCIIndexBytes)
 	require.NoError(err)
 	mediaType, _, err := manifest.Payload()
 	require.NoError(err)
 	require.Equal("application/vnd.oci.image.index.v1+json", mediaType)
 	require.Equal("sha256", d.Algo())
+	require.NotEmpty(d.Hex())
+
+	// Failure case: passing a Docker manifest should fail
+	_, _, err = dockerutil.ParseManifestOCIIndex(testManifestBytes)
+	require.Error(err)
 }
 
 func TestParseManifestOCIViaParseManifest(t *testing.T) {
