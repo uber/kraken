@@ -2,6 +2,7 @@
 .idea
 .tmp
 .vscode
+.claude/settings.local.json
 *.test
 *.go~
 vendor/
