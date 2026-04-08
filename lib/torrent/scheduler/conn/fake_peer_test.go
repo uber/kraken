@@ -19,7 +19,7 @@ func TestFakePeer(t *testing.T) {
 
 	info := storage.TorrentInfoFixture(32, 4)
 
-	res, err := h.Initialize(p.PeerID(), p.Addr(), info, nil, "noexist")
+	res, err := h.Initialize(p.PeerID(), false, p.Addr(), info, nil, "noexist")
 	require.NoError(err)
 
 	require.Equal(p.PeerID(), res.Conn.PeerID())

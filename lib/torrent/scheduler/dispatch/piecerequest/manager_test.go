@@ -31,7 +31,7 @@ func newManager(
 	policy string,
 	pipelineLimit int) *Manager {
 
-	m, err := NewManager(clk, timeout, policy, pipelineLimit)
+	m, err := NewManager(clk, timeout, policy, pipelineLimit, pipelineLimit)
 	if err != nil {
 		panic(err)
 	}
@@ -54,7 +54,7 @@ func TestManagerPipelineLimit(t *testing.T) {
 
 	peerID := core.PeerIDFixture()
 
-	pieces, err := m.ReservePieces(peerID, bitsetutil.FromBools(true, true, true, true),
+	pieces, err := m.ReservePieces(peerID, false, bitsetutil.FromBools(true, true, true, true),
 		countsFromInts(0, 0, 0, 0), false)
 	require.NoError(err)
 	require.Len(pieces, 3)
@@ -72,25 +72,25 @@ func TestManagerReserveExpiredRequest(t *testing.T) {
 
 	peerID := core.PeerIDFixture()
 
-	pieces, err := m.ReservePieces(peerID, bitsetutil.FromBools(true),
+	pieces, err := m.ReservePieces(peerID, false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Equal([]int{0}, pieces)
 
 	// Further reservations fail.
-	pieces, err = m.ReservePieces(peerID, bitsetutil.FromBools(true),
+	pieces, err = m.ReservePieces(peerID, false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Empty(pieces)
 
-	pieces, err = m.ReservePieces(core.PeerIDFixture(), bitsetutil.FromBools(true),
+	pieces, err = m.ReservePieces(core.PeerIDFixture(), false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Empty(pieces)
 
 	clk.Add(timeout + 1)
 
-	pieces, err = m.ReservePieces(peerID, bitsetutil.FromBools(true),
+	pieces, err = m.ReservePieces(peerID, false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Equal([]int{0}, pieces)
@@ -103,25 +103,25 @@ func TestManagerReserveUnsentRequest(t *testing.T) {
 
 	peerID := core.PeerIDFixture()
 
-	pieces, err := m.ReservePieces(peerID, bitsetutil.FromBools(true),
+	pieces, err := m.ReservePieces(peerID, false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Equal([]int{0}, pieces)
 
 	// Further reservations fail.
-	pieces, err = m.ReservePieces(peerID, bitsetutil.FromBools(true),
+	pieces, err = m.ReservePieces(peerID, false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Empty(pieces)
 
-	pieces, err = m.ReservePieces(core.PeerIDFixture(), bitsetutil.FromBools(true),
+	pieces, err = m.ReservePieces(core.PeerIDFixture(), false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Empty(pieces)
 
 	m.MarkUnsent(peerID, 0)
 
-	pieces, err = m.ReservePieces(peerID, bitsetutil.FromBools(true),
+	pieces, err = m.ReservePieces(peerID, false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Equal([]int{0}, pieces)
@@ -134,25 +134,25 @@ func TestManagerReserveInvalidRequest(t *testing.T) {
 
 	peerID := core.PeerIDFixture()
 
-	pieces, err := m.ReservePieces(peerID, bitsetutil.FromBools(true),
+	pieces, err := m.ReservePieces(peerID, false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Equal([]int{0}, pieces)
 
 	// Further reservations fail.
-	pieces, err = m.ReservePieces(peerID, bitsetutil.FromBools(true),
+	pieces, err = m.ReservePieces(peerID, false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Empty(pieces)
 
-	pieces, err = m.ReservePieces(core.PeerIDFixture(), bitsetutil.FromBools(true),
+	pieces, err = m.ReservePieces(core.PeerIDFixture(), false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Empty(pieces)
 
 	m.MarkInvalid(peerID, 0)
 
-	pieces, err = m.ReservePieces(peerID, bitsetutil.FromBools(true),
+	pieces, err = m.ReservePieces(peerID, false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Equal([]int{0}, pieces)
@@ -170,17 +170,17 @@ func TestManagerGetFailedRequests(t *testing.T) {
 	p1 := core.PeerIDFixture()
 	p2 := core.PeerIDFixture()
 
-	pieces, err := m.ReservePieces(p0, bitsetutil.FromBools(true, true, true),
+	pieces, err := m.ReservePieces(p0, false, bitsetutil.FromBools(true, true, true),
 		countsFromInts(0, 1, 2), false)
 	require.NoError(err)
 	require.Equal([]int{0}, pieces)
 
-	pieces, err = m.ReservePieces(p1, bitsetutil.FromBools(false, true, false),
+	pieces, err = m.ReservePieces(p1, false, bitsetutil.FromBools(false, true, false),
 		countsFromInts(0, 1, 2), false)
 	require.NoError(err)
 	require.Equal([]int{1}, pieces)
 
-	pieces, err = m.ReservePieces(p2, bitsetutil.FromBools(false, false, true),
+	pieces, err = m.ReservePieces(p2, false, bitsetutil.FromBools(false, false, true),
 		countsFromInts(0, 1, 2), false)
 	require.NoError(err)
 	require.Equal([]int{2}, pieces)
@@ -190,7 +190,7 @@ func TestManagerGetFailedRequests(t *testing.T) {
 	clk.Add(timeout + 1) // Expires p2's request.
 
 	p3 := core.PeerIDFixture()
-	pieces, err = m.ReservePieces(p3, bitsetutil.FromBools(false, false, false, true),
+	pieces, err = m.ReservePieces(p3, false, bitsetutil.FromBools(false, false, false, true),
 		countsFromInts(0, 0, 0, 0), false)
 	require.NoError(err)
 	require.Equal([]int{3}, pieces)
@@ -210,7 +210,7 @@ func TestManagerClear(t *testing.T) {
 
 	peerID := core.PeerIDFixture()
 
-	pieces, err := m.ReservePieces(peerID, bitsetutil.FromBools(true),
+	pieces, err := m.ReservePieces(peerID, false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Equal([]int{0}, pieces)
@@ -230,17 +230,17 @@ func TestManagerClearPeer(t *testing.T) {
 	p1 := core.PeerIDFixture()
 	p2 := core.PeerIDFixture()
 
-	pieces, err := m.ReservePieces(p1, bitsetutil.FromBools(true),
+	pieces, err := m.ReservePieces(p1, false, bitsetutil.FromBools(true),
 		countsFromInts(0), false)
 	require.NoError(err)
 	require.Equal([]int{0}, pieces)
 
-	pieces, err = m.ReservePieces(p1, bitsetutil.FromBools(true, true),
+	pieces, err = m.ReservePieces(p1, false, bitsetutil.FromBools(true, true),
 		countsFromInts(0, 1), false)
 	require.NoError(err)
 	require.Empty(pieces)
 
-	pieces, err = m.ReservePieces(p2, bitsetutil.FromBools(true, true),
+	pieces, err = m.ReservePieces(p2, false, bitsetutil.FromBools(true, true),
 		countsFromInts(0, 1), false)
 	require.NoError(err)
 	require.Equal([]int{1}, pieces)
@@ -259,19 +259,19 @@ func TestManagerReservePiecesAllowDuplicate(t *testing.T) {
 	p1 := core.PeerIDFixture()
 	p2 := core.PeerIDFixture()
 
-	pieces, err := m.ReservePieces(p1, bitsetutil.FromBools(true),
+	pieces, err := m.ReservePieces(p1, false, bitsetutil.FromBools(true),
 		countsFromInts(0), true)
 	require.NoError(err)
 	require.Equal([]int{0}, pieces)
 
 	// Shouldn't allow duplicates on the same peer.
-	pieces, err = m.ReservePieces(p1, bitsetutil.FromBools(true),
+	pieces, err = m.ReservePieces(p1, false, bitsetutil.FromBools(true),
 		countsFromInts(0), true)
 	require.NoError(err)
 	require.Empty(pieces)
 
 	// Should allow duplicates for different peers.
-	pieces, err = m.ReservePieces(p2, bitsetutil.FromBools(true),
+	pieces, err = m.ReservePieces(p2, false, bitsetutil.FromBools(true),
 		countsFromInts(0), true)
 	require.NoError(err)
 	require.Equal([]int{0}, pieces)
@@ -285,12 +285,12 @@ func TestManagerClearWhenAllowedDuplicates(t *testing.T) {
 	p1 := core.PeerIDFixture()
 	p2 := core.PeerIDFixture()
 
-	pieces, err := m.ReservePieces(p1, bitsetutil.FromBools(true, true),
+	pieces, err := m.ReservePieces(p1, false, bitsetutil.FromBools(true, true),
 		countsFromInts(0, 0), true)
 	require.NoError(err)
 	require.Equal([]int{0, 1}, pieces)
 
-	pieces, err = m.ReservePieces(p2, bitsetutil.FromBools(true, true),
+	pieces, err = m.ReservePieces(p2, false, bitsetutil.FromBools(true, true),
 		countsFromInts(0, 0), true)
 	require.NoError(err)
 	require.Equal([]int{0, 1}, pieces)
@@ -309,12 +309,12 @@ func TestManagerClearPeerWhenAllowedDuplicates(t *testing.T) {
 	p1 := core.PeerIDFixture()
 	p2 := core.PeerIDFixture()
 
-	pieces, err := m.ReservePieces(p1, bitsetutil.FromBools(true, true),
+	pieces, err := m.ReservePieces(p1, false, bitsetutil.FromBools(true, true),
 		countsFromInts(0, 0), true)
 	require.NoError(err)
 	require.Equal([]int{0, 1}, pieces)
 
-	pieces, err = m.ReservePieces(p2, bitsetutil.FromBools(true, true),
+	pieces, err = m.ReservePieces(p2, false, bitsetutil.FromBools(true, true),
 		countsFromInts(0, 0), true)
 	require.NoError(err)
 	require.Equal([]int{0, 1}, pieces)
@@ -347,12 +347,12 @@ func TestManagerMarkStatusWhenAllowedDuplicates(t *testing.T) {
 			p1 := core.PeerIDFixture()
 			p2 := core.PeerIDFixture()
 
-			pieces, err := m.ReservePieces(p1, bitsetutil.FromBools(true, true),
+			pieces, err := m.ReservePieces(p1, false, bitsetutil.FromBools(true, true),
 				countsFromInts(0, 0), true)
 			require.NoError(err)
 			require.Equal([]int{0, 1}, pieces)
 
-			pieces, err = m.ReservePieces(p2, bitsetutil.FromBools(true, true),
+			pieces, err = m.ReservePieces(p2, false, bitsetutil.FromBools(true, true),
 				countsFromInts(0, 0), true)
 			require.NoError(err)
 			require.Equal([]int{0, 1}, pieces)
@@ -374,34 +374,34 @@ func TestRarestFirstPolicy(t *testing.T) {
 	p2 := core.PeerIDFixture()
 	p3 := core.PeerIDFixture()
 
-	pieces, err := m.ReservePieces(p1, bitsetutil.FromBools(true, true, false, true),
+	pieces, err := m.ReservePieces(p1, false, bitsetutil.FromBools(true, true, false, true),
 		countsFromInts(2, 3, 1, 0), false)
 	require.NoError(err)
 	require.Equal([]int{3, 0}, pieces)
 
-	pieces, err = m.ReservePieces(p2, bitsetutil.FromBools(true, true, false, true),
+	pieces, err = m.ReservePieces(p2, false, bitsetutil.FromBools(true, true, false, true),
 		countsFromInts(2, 3, 1, 0), false)
 	require.NoError(err)
 	require.Equal([]int{1}, pieces)
 
-	pieces, err = m.ReservePieces(p3, bitsetutil.FromBools(true, true, false, true),
+	pieces, err = m.ReservePieces(p3, false, bitsetutil.FromBools(true, true, false, true),
 		countsFromInts(2, 3, 1, 0), false)
 	require.NoError(err)
 	require.Empty(pieces)
 
-	pieces, err = m.ReservePieces(p1, bitsetutil.FromBools(true, true, false, true),
+	pieces, err = m.ReservePieces(p1, false, bitsetutil.FromBools(true, true, false, true),
 		countsFromInts(2, 3, 1, 0), false)
 	require.NoError(err)
 	require.Empty(pieces)
 
 	m.MarkUnsent(p1, 3)
-	pieces, err = m.ReservePieces(p2, bitsetutil.FromBools(true, true, false, true),
+	pieces, err = m.ReservePieces(p2, false, bitsetutil.FromBools(true, true, false, true),
 		countsFromInts(2, 3, 1, 0), false)
 	require.NoError(err)
 	require.Equal([]int{3}, pieces)
 
 	m.MarkUnsent(p1, 0)
-	pieces, err = m.ReservePieces(p2, bitsetutil.FromBools(true, true, false, true),
+	pieces, err = m.ReservePieces(p2, false, bitsetutil.FromBools(true, true, false, true),
 		countsFromInts(2, 3, 1, 0), false)
 	require.NoError(err)
 	require.Empty(pieces)

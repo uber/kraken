@@ -248,7 +248,10 @@ func (h *Handshaker) Establish(
 	if err := h.sendHandshake(pc.nc, info, remoteBitfields, ""); err != nil {
 		return nil, fmt.Errorf("send handshake: %s", err)
 	}
-	c, err := h.newConn(pc.nc, pc.handshake.peerID, info, true)
+	// This code is only executed when a peer initiates a handshake with us. Origins don't
+	// initiate handshakes, so we can conclude that the peer is not an origin.
+	isPeerOrigin := false
+	c, err := h.newConn(pc.nc, pc.handshake.peerID, isPeerOrigin, info, true)
 	if err != nil {
 		return nil, fmt.Errorf("new conn: %s", err)
 	}
@@ -260,6 +263,7 @@ func (h *Handshaker) Establish(
 // its connections for the torrent.
 func (h *Handshaker) Initialize(
 	peerID core.PeerID,
+	isPeerOrigin bool,
 	addr string,
 	info *storage.TorrentInfo,
 	remoteBitfields RemoteBitfields,
@@ -269,7 +273,7 @@ func (h *Handshaker) Initialize(
 	if err != nil {
 		return nil, fmt.Errorf("dial: %s", err)
 	}
-	r, err := h.fullHandshake(nc, peerID, info, remoteBitfields, namespace)
+	r, err := h.fullHandshake(nc, peerID, isPeerOrigin, info, remoteBitfields, namespace)
 	if err != nil {
 		closers.Close(nc)
 		return nil, err
@@ -313,6 +317,7 @@ func (h *Handshaker) readHandshake(nc net.Conn) (*handshake, error) {
 func (h *Handshaker) fullHandshake(
 	nc net.Conn,
 	peerID core.PeerID,
+	isPeerOrigin bool,
 	info *storage.TorrentInfo,
 	remoteBitfields RemoteBitfields,
 	namespace string) (*HandshakeResult, error) {
@@ -327,7 +332,7 @@ func (h *Handshaker) fullHandshake(
 	if hs.peerID != peerID {
 		return nil, errors.New("unexpected peer id")
 	}
-	c, err := h.newConn(nc, peerID, info, false)
+	c, err := h.newConn(nc, peerID, isPeerOrigin, info, false)
 	if err != nil {
 		return nil, fmt.Errorf("new conn: %s", err)
 	}
@@ -337,6 +342,7 @@ func (h *Handshaker) fullHandshake(
 func (h *Handshaker) newConn(
 	nc net.Conn,
 	peerID core.PeerID,
+	isPeerOrigin bool,
 	info *storage.TorrentInfo,
 	openedByRemote bool) (*Conn, error) {
 
@@ -350,6 +356,7 @@ func (h *Handshaker) newConn(
 		nc,
 		h.peerID,
 		peerID,
+		isPeerOrigin,
 		info,
 		openedByRemote,
 		zap.NewNop().Sugar())

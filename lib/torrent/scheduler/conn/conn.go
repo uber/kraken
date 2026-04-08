@@ -47,11 +47,12 @@ type Events interface {
 // Conn manages peer communication over a connection for multiple torrents. Inbound
 // messages are multiplexed based on the torrent they pertain to.
 type Conn struct {
-	peerID      core.PeerID
-	infoHash    core.InfoHash
-	createdAt   time.Time
-	localPeerID core.PeerID
-	bandwidth   *bandwidth.Limiter
+	peerID       core.PeerID
+	isPeerOrigin bool
+	infoHash     core.InfoHash
+	createdAt    time.Time
+	localPeerID  core.PeerID
+	bandwidth    *bandwidth.Limiter
 
 	events Events
 
@@ -87,6 +88,7 @@ func newConn(
 	nc net.Conn,
 	localPeerID core.PeerID,
 	remotePeerID core.PeerID,
+	isRemotePeerOrigin bool,
 	info *storage.TorrentInfo,
 	openedByRemote bool,
 	logger *zap.SugaredLogger) (*Conn, error) {
@@ -99,6 +101,7 @@ func newConn(
 
 	c := &Conn{
 		peerID:         remotePeerID,
+		isPeerOrigin:   isRemotePeerOrigin,
 		infoHash:       info.InfoHash(),
 		createdAt:      clk.Now(),
 		localPeerID:    localPeerID,
@@ -134,6 +137,11 @@ func (c *Conn) Start() {
 // PeerID returns the remote peer id.
 func (c *Conn) PeerID() core.PeerID {
 	return c.peerID
+}
+
+// IsPeerOrigin whether the remote peer is an agent or an origin.
+func (c *Conn) IsPeerOrigin() bool {
+	return c.isPeerOrigin
 }
 
 // InfoHash returns the info hash for the torrent being transmitted over this
