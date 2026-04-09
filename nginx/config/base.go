@@ -62,7 +62,6 @@ http {
   ##
 
   {{if .ssl_enabled}}
-    ssl on;
     ssl_certificate {{.ssl_certificate}};
     ssl_certificate_key {{.ssl_certificate_key}};
     {{if .ssl_password_file}}
