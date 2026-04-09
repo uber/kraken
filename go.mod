@@ -27,6 +27,7 @@ require (
 	github.com/jmoiron/sqlx v0.0.0-20190319043955-cdf62fdf55f6
 	github.com/mattn/go-sqlite3 v1.14.0
 	github.com/opencontainers/go-digest v1.0.0
+	github.com/opencontainers/image-spec v1.0.2
 	github.com/pressly/goose v2.6.0+incompatible
 	github.com/satori/go.uuid v1.2.0
 	github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72
@@ -88,7 +89,6 @@ require (
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/opencontainers/runc v1.0.2 // indirect
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417 // indirect
 	github.com/pkg/errors v0.9.1 // indirect

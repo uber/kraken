@@ -204,7 +204,7 @@ protoc:
 
 # mockgen must be installed on the system to make this work.
 # Install it by running:
-# `go get github.com/golang/mock/mockgen`.
+# `go install go.uber.org/mock/mockgen@latest`
 mockgen = $(shell go env GOPATH)/bin/mockgen
 
 define lowercase
@@ -290,6 +290,13 @@ mocks:
 	$(call add_mock,lib/persistedretry/tagreplication,RemoteValidator)
 
 	$(call add_mock,utils/httputil,RoundTripper)
+
+	# Stdlib mocks use reflect mode with the standard library package name.
+	mkdir -p mocks/io
+	$(mockgen) \
+		-destination=mocks/io/mock_closer.go \
+		-package mock_io \
+		io Closer
 
 # ==== MISC ====
 
