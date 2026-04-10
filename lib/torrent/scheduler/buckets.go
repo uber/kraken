@@ -20,92 +20,66 @@ import (
 	"github.com/uber/kraken/utils/memsize"
 )
 
-type bucket struct {
-	sizeTag   string
-	min       uint64
-	durations tally.DurationBuckets
-}
+const (
+	_xsmall, _small, _medium, _large, _xlarge, _xxlarge = "0B - 100MiB", "100MiB-1GB", "1GiB-2GiB", "2GiB-5GiB", "5GiB-10GiB", "10GiB+"
+)
 
-func newBucket(sizeTag string, min uint64) *bucket {
-	return &bucket{sizeTag, min, nil}
-}
+var _buckets tally.DurationBuckets
 
-func (b *bucket) addRange(start, stop, width time.Duration) {
-	cur := start
-	for cur < stop {
-		b.durations = append(b.durations, cur)
-		cur += width
+var (
+	_sizeBoundaries = []uint64{0, 100 * memsize.MB, memsize.GB, 2 * memsize.GB, 5 * memsize.GB, 10 * memsize.GB}
+	_sizeTags       = []string{_xsmall, _small, _medium, _large, _xlarge, _xxlarge}
+)
+
+func createBucketBounderies(start, stop, width time.Duration) []time.Duration {
+	var buckets []time.Duration
+	for cur := start; cur <= stop; cur += width {
+		buckets = append(buckets, cur)
 	}
+	return buckets
 }
-
-var _buckets []*bucket
 
 func init() {
-	xs := newBucket("xsmall", 0)
-	xs.addRange(250*time.Millisecond, time.Second, 250*time.Millisecond)
-	xs.addRange(time.Second, 20*time.Second, time.Second)
-	xs.addRange(20*time.Second, time.Minute, 5*time.Second)
-	xs.addRange(time.Minute, 5*time.Minute, time.Minute)
-	xs.addRange(5*time.Minute, 30*time.Minute, 5*time.Minute)
-	_buckets = append(_buckets, xs)
-
-	s := newBucket("small", 100*memsize.MB)
-	s.addRange(time.Second, 30*time.Second, time.Second)
-	s.addRange(30*time.Second, time.Minute, 5*time.Second)
-	s.addRange(time.Minute, 5*time.Minute, time.Minute)
-	s.addRange(5*time.Minute, 30*time.Minute, 5*time.Minute)
-	_buckets = append(_buckets, s)
-
-	m := newBucket("medium", memsize.GB)
-	m.addRange(2*time.Second, time.Minute, 2*time.Second)
-	m.addRange(time.Minute, 2*time.Minute, 5*time.Second)
-	m.addRange(2*time.Minute, 5*time.Minute, 30*time.Second)
-	m.addRange(5*time.Minute, 10*time.Minute, time.Minute)
-	m.addRange(10*time.Minute, 30*time.Minute, 5*time.Minute)
-	_buckets = append(_buckets, m)
-
-	l := newBucket("large", 2*memsize.GB)
-	l.addRange(5*time.Second, 3*time.Minute, 5*time.Second)
-	l.addRange(3*time.Minute, 5*time.Minute, 30*time.Second)
-	l.addRange(5*time.Minute, 10*time.Minute, time.Minute)
-	l.addRange(10*time.Minute, 30*time.Minute, 5*time.Minute)
-	_buckets = append(_buckets, l)
-
-	xl := newBucket("xlarge", 5*memsize.GB)
-	xl.addRange(10*time.Second, 5*time.Minute, 10*time.Second)
-	xl.addRange(5*time.Minute, 10*time.Minute, 30*time.Second)
-	xl.addRange(10*time.Minute, 30*time.Minute, time.Minute)
-	_buckets = append(_buckets, xl)
-
-	xxl := newBucket("xxlarge", 10*memsize.GB)
-	xxl.addRange(15*time.Second, 10*time.Minute, 15*time.Second)
-	xxl.addRange(10*time.Minute, 15*time.Minute, 30*time.Second)
-	xxl.addRange(15*time.Minute, 30*time.Minute, time.Minute)
-	_buckets = append(_buckets, xxl)
+	_buckets = []time.Duration{
+		500 * time.Millisecond,
+		1 * time.Second,
+		2 * time.Second,
+		4 * time.Second,
+		7 * time.Second,
+		12 * time.Second,
+		15 * time.Second,
+	}
+	_buckets = append(_buckets, createBucketBounderies(20*time.Second, time.Minute, 5*time.Second)...)
+	_buckets = append(_buckets, createBucketBounderies(time.Minute+10*time.Second, 2*time.Minute, 10*time.Second)...)
+	_buckets = append(_buckets, createBucketBounderies(2*time.Minute+20*time.Second, 4*time.Minute, 20*time.Second)...)
+	_buckets = append(_buckets, createBucketBounderies(4*time.Minute+30*time.Second, 8*time.Minute, 30*time.Second)...)
+	_buckets = append(_buckets, createBucketBounderies(9*time.Minute, 15*time.Minute, time.Minute)...)
+	_buckets = append(_buckets, createBucketBounderies(17*time.Minute, 25*time.Minute, 2*time.Minute)...)
+	_buckets = append(_buckets, createBucketBounderies(30*time.Minute, 40*time.Minute, 5*time.Minute)...)
+	_buckets = append(_buckets, createBucketBounderies(45*time.Minute, 60*time.Minute, 5*time.Minute)...)
 
 	// Sanity check to ensure buckets are sorted.
 	for i := 0; i < len(_buckets)-1; i++ {
-		if _buckets[i].min >= _buckets[i+1].min {
+		if _buckets[i] >= _buckets[i+1] {
 			panic("buckets are not sorted properly")
 		}
 	}
 }
 
-// getBucket selects the largest bucket size fits into.
-func getBucket(size uint64) (b *bucket) {
-	for i := len(_buckets) - 1; i >= 0; i-- {
-		b = _buckets[i]
-		if size >= b.min {
-			break
+func getSizeTag(sizeBytes uint64) string {
+	for i := len(_sizeBoundaries) - 1; i >= 0; i-- {
+		if sizeBytes >= _sizeBoundaries[i] {
+			return _sizeTags[i]
 		}
 	}
-	return b
+	return _sizeTags[0]
 }
 
-func recordDownloadTime(stats tally.Scope, size int64, t time.Duration) {
-	b := getBucket(uint64(size))
+func emitDownloadTime(stats tally.Scope, sizeBytes int64, t time.Duration) {
+	sizeTag := getSizeTag(uint64(sizeBytes))
+
 	stats.Tagged(map[string]string{
-		"size":    b.sizeTag,
-		"version": "3",
-	}).Histogram("download_time", b.durations).RecordDuration(t)
+		"size":    sizeTag,
+		"version": "4",
+	}).Histogram("download_time", _buckets).RecordDuration(t)
 }

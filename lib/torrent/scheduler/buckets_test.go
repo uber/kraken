@@ -18,43 +18,39 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/uber-go/tally"
 	"github.com/uber/kraken/utils/memsize"
 )
 
-func TestGetBucket(t *testing.T) {
-	tests := []struct {
-		desc     string
+func TestGetSizeTag(t *testing.T) {
+	tests := map[string]struct {
 		size     uint64
 		expected string
 	}{
-		{"below min", memsize.MB, "xsmall"},
-		{"above max", 30 * memsize.GB, "xxlarge"},
-		{"between buckets", 3 * memsize.GB, "large"},
-		{"exact bucket", 1 * memsize.GB, "medium"},
+		"below min":       {memsize.MB, _xsmall},
+		"above max":       {30 * memsize.GB, _xxlarge},
+		"between buckets": {3 * memsize.GB, _large},
+		"exact bucket":    {1 * memsize.GB, _medium},
 	}
-	for _, test := range tests {
-		t.Run(test.desc, func(t *testing.T) {
-			require.Equal(t, test.expected, getBucket(test.size).sizeTag)
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tt.expected, getSizeTag(tt.size))
 		})
 	}
 }
 
-func TestBucketAddRange(t *testing.T) {
-	tests := []struct {
-		desc               string
+func TestCreateBucketBounderies(t *testing.T) {
+	tests := map[string]struct {
 		start, stop, width time.Duration
 		expected           []time.Duration
 	}{
-		{"normal", 1, 4, 1, []time.Duration{1, 2, 3}},
-		{"single", 1, 4, 5, []time.Duration{1}},
-		{"none", 4, 1, 1, nil},
+		"normal": {1, 4, 1, []time.Duration{1, 2, 3, 4}},
+		"single": {1, 4, 5, []time.Duration{1}},
+		"none":   {4, 1, 1, nil},
 	}
-	for _, test := range tests {
-		t.Run(test.desc, func(t *testing.T) {
-			b := newBucket("test", 0)
-			b.addRange(test.start, test.stop, test.width)
-			require.Equal(t, tally.DurationBuckets(test.expected), b.durations)
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			res := createBucketBounderies(tt.start, tt.stop, tt.width)
+			require.Equal(t, tt.expected, res)
 		})
 	}
 }
