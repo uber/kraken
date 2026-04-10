@@ -16,7 +16,7 @@ package config
 // OriginTemplate is the default origin nginx tmpl.
 const OriginTemplate = `
 server {
-  listen {{.port}};
+  listen {{.port}}{{if .ssl_enabled}} ssl{{end}};
 
   {{.client_verification}}
 

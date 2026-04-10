@@ -24,7 +24,7 @@ upstream build-index {
 }
 
 server {
-  listen {{.port}};
+  listen {{.port}}{{if .ssl_enabled}} ssl{{end}};
 
   {{.client_verification}}
 

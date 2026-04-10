@@ -131,6 +131,9 @@ func (c *Config) Build(params map[string]interface{}) ([]byte, error) {
 	if _, ok := params["proxy_read_timeout"]; !ok {
 		params["proxy_read_timeout"] = c.ProxyTimeout
 	}
+	if _, ok := params["ssl_enabled"]; !ok {
+		params["ssl_enabled"] = !c.tls.Server.Disabled
+	}
 	site, err := populateTemplate(tmpl, params)
 	if err != nil {
 		return nil, fmt.Errorf("populate template: %s", err)

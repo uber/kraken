@@ -25,7 +25,7 @@ upstream agent-server {
 }
 
 server {
-  listen {{.port}};
+  listen {{.port}}{{if .ssl_enabled}} ssl{{end}};
 
   {{range .allowed_cidrs}}
     allow {{.}};
