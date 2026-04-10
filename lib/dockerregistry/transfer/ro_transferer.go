@@ -69,6 +69,7 @@ func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobIn
 
 // Download downloads blobs as torrent.
 func (t *ReadOnlyTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
+	t.stats.Counter("downloads").Inc(1)
 	f, err := t.cads.Cache().GetFileReader(d.Hex())
 	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
 		if err := t.sched.Download(namespace, d); err != nil {
