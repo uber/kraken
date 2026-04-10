@@ -64,8 +64,9 @@ type Manager struct {
 	clock   clock.Clock
 	timeout time.Duration
 
-	policy        pieceSelectionPolicy
-	pipelineLimit int
+	policy              pieceSelectionPolicy
+	agentPipelineLimit  int
+	originPipelineLimit int
 }
 
 // NewManager creates a new Manager.
@@ -73,14 +74,16 @@ func NewManager(
 	clk clock.Clock,
 	timeout time.Duration,
 	policy string,
-	pipelineLimit int) (*Manager, error) {
+	agentPipelineLimit int,
+	originPipelineLimit int) (*Manager, error) {
 
 	m := &Manager{
-		requests:       make(map[int][]*Request),
-		requestsByPeer: make(map[core.PeerID]map[int]*Request),
-		clock:          clk,
-		timeout:        timeout,
-		pipelineLimit:  pipelineLimit,
+		requests:            make(map[int][]*Request),
+		requestsByPeer:      make(map[core.PeerID]map[int]*Request),
+		clock:               clk,
+		timeout:             timeout,
+		agentPipelineLimit:  agentPipelineLimit,
+		originPipelineLimit: originPipelineLimit,
 	}
 
 	switch policy {
@@ -100,6 +103,7 @@ func NewManager(
 // reserved under other peers.
 func (m *Manager) ReservePieces(
 	peerID core.PeerID,
+	isPeerOrigin bool,
 	pieceCandidates *bitset.BitSet,
 	numPeersByPiece syncutil.Counters,
 	allowDuplicates bool) ([]int, error) {
@@ -107,7 +111,7 @@ func (m *Manager) ReservePieces(
 	m.Lock()
 	defer m.Unlock()
 
-	quota := m.requestQuota(peerID)
+	quota := m.requestQuota(peerID, isPeerOrigin)
 	if quota <= 0 {
 		return nil, nil
 	}
@@ -235,8 +239,12 @@ func (m *Manager) validRequest(peerID core.PeerID, pieceIdx int, allowDuplicates
 	return true
 }
 
-func (m *Manager) requestQuota(peerID core.PeerID) int {
-	quota := m.pipelineLimit
+func (m *Manager) requestQuota(peerID core.PeerID, isPeerOrigin bool) int {
+	quota := m.agentPipelineLimit
+	if isPeerOrigin {
+		quota = m.originPipelineLimit
+	}
+
 	pm, ok := m.requestsByPeer[peerID]
 	if !ok {
 		return quota

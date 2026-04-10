@@ -129,7 +129,7 @@ func (s *state) addOutgoingConn(c *conn.Conn, b *bitset.BitSet, info *storage.To
 	if !ok {
 		return errors.New("torrent controls must be created before sending handshake")
 	}
-	if err := ctrl.dispatcher.AddPeer(c.PeerID(), b, c); err != nil {
+	if err := ctrl.dispatcher.AddPeer(c.PeerID(), c.IsPeerOrigin(), b, c); err != nil {
 		return fmt.Errorf("add conn to dispatcher: %s", err)
 	}
 	return nil
@@ -156,7 +156,7 @@ func (s *state) addIncomingConn(
 			return err
 		}
 	}
-	if err := ctrl.dispatcher.AddPeer(c.PeerID(), b, c); err != nil {
+	if err := ctrl.dispatcher.AddPeer(c.PeerID(), c.IsPeerOrigin(), b, c); err != nil {
 		return fmt.Errorf("add conn to dispatcher: %s", err)
 	}
 	return nil

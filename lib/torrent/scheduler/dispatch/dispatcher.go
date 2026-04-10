@@ -125,7 +125,7 @@ func newDispatcher(
 
 	pieceRequestTimeout := config.calcPieceRequestTimeout(t.MaxPieceLength())
 	pieceRequestManager, err := piecerequest.NewManager(
-		clk, pieceRequestTimeout, config.PieceRequestPolicy, config.PipelineLimit)
+		clk, pieceRequestTimeout, config.PieceRequestPolicy, config.AgentPipelineLimit, config.OriginPipelineLimit)
 	if err != nil {
 		return nil, fmt.Errorf("piece request manager: %s", err)
 	}
@@ -246,9 +246,9 @@ func (d *Dispatcher) RemoteBitfields() conn.RemoteBitfields {
 
 // AddPeer registers a new peer with the Dispatcher.
 func (d *Dispatcher) AddPeer(
-	peerID core.PeerID, b *bitset.BitSet, messages Messages) error {
+	peerID core.PeerID, isPeerOrigin bool, b *bitset.BitSet, messages Messages) error {
 
-	p, err := d.addPeer(peerID, b, messages)
+	p, err := d.addPeer(peerID, isPeerOrigin, b, messages)
 	if err != nil {
 		return err
 	}
@@ -264,7 +264,7 @@ func (d *Dispatcher) AddPeer(
 // addPeer creates and inserts a new peer into the Dispatcher. Split from AddPeer
 // with no goroutine side-effects for testing purposes.
 func (d *Dispatcher) addPeer(
-	peerID core.PeerID, b *bitset.BitSet, messages Messages) (*peer, error) {
+	peerID core.PeerID, isPeerOrigin bool, b *bitset.BitSet, messages Messages) (*peer, error) {
 
 	pstats := &peerStats{}
 	if s, ok := d.peerStats.LoadOrStore(peerID, pstats); ok {
@@ -275,7 +275,7 @@ func (d *Dispatcher) addPeer(
 		pstats = ps
 	}
 
-	p := newPeer(peerID, b, messages, d.clk, pstats)
+	p := newPeer(peerID, isPeerOrigin, b, messages, d.clk, pstats)
 	if _, ok := d.peers.LoadOrStore(peerID, p); ok {
 		return nil, errors.New("peer already exists")
 	}
@@ -411,7 +411,7 @@ func (d *Dispatcher) maybeRequestMorePieces(p *peer) (bool, error) {
 }
 
 func (d *Dispatcher) maybeSendPieceRequests(p *peer, pieceCandidates *bitset.BitSet) (bool, error) {
-	pieces, err := d.pieceRequestManager.ReservePieces(p.id, pieceCandidates, d.numPeersByPiece, d.endgame())
+	pieces, err := d.pieceRequestManager.ReservePieces(p.id, p.isOrigin, pieceCandidates, d.numPeersByPiece, d.endgame())
 	if err != nil {
 		return false, err
 	}
