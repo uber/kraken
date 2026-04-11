@@ -1,6 +1,7 @@
 package dockerutil_test
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/docker/distribution/manifest/manifestlist"
@@ -87,4 +88,83 @@ func TestParseManifestV2List(t *testing.T) {
 			require.Equal("sha256", d.Algo())
 		})
 	}
+}
+
+var testOCIManifestBytes = []byte(`{
+	"schemaVersion": 2,
+	"mediaType": "application/vnd.oci.image.manifest.v1+json",
+	"config": {
+	   "mediaType": "application/vnd.oci.image.config.v1+json",
+	   "size": 985,
+	   "digest": "sha256:1a9ec845ee94c202b2d5da74a24f0ed2058318bfa9879fa541efaecba272e86b"
+	},
+	"layers": [
+	   {
+		  "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+		  "size": 153263,
+		  "digest": "sha256:62d8908bee94c202b2d35224a221aaa2058318bfa9879fa541efaecba272331b"
+	   }
+	]
+ }`)
+
+var testOCIIndexBytes = []byte(`{
+	"schemaVersion": 2,
+	"mediaType": "application/vnd.oci.image.index.v1+json",
+	"manifests": [
+	   {
+		  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+		  "size": 985,
+		  "digest": "sha256:1a9ec845ee94c202b2d5da74a24f0ed2058318bfa9879fa541efaecba272e86b",
+		  "platform": {
+			 "architecture": "amd64",
+			 "os": "linux"
+		  }
+	   }
+	]
+ }`)
+
+func TestParseManifestOCI(t *testing.T) {
+	require := require.New(t)
+
+	// Success case
+	manifest, d, err := dockerutil.ParseManifestOCI(testOCIManifestBytes)
+	require.NoError(err)
+	mediaType, _, err := manifest.Payload()
+	require.NoError(err)
+	require.Equal("application/vnd.oci.image.manifest.v1+json", mediaType)
+	require.Equal("sha256", d.Algo())
+	require.NotEmpty(d.Hex())
+
+	// Failure case: passing a Docker manifest should fail
+	_, _, err = dockerutil.ParseManifestOCI(testManifestBytes)
+	require.Error(err)
+}
+
+func TestParseManifestOCIIndex(t *testing.T) {
+	require := require.New(t)
+
+	// Success case
+	manifest, d, err := dockerutil.ParseManifestOCIIndex(testOCIIndexBytes)
+	require.NoError(err)
+	mediaType, _, err := manifest.Payload()
+	require.NoError(err)
+	require.Equal("application/vnd.oci.image.index.v1+json", mediaType)
+	require.Equal("sha256", d.Algo())
+	require.NotEmpty(d.Hex())
+
+	// Failure case: passing a Docker manifest should fail
+	_, _, err = dockerutil.ParseManifestOCIIndex(testManifestBytes)
+	require.Error(err)
+}
+
+func TestParseManifestOCIViaParseManifest(t *testing.T) {
+	require := require.New(t)
+
+	_, d, err := dockerutil.ParseManifest(bytes.NewReader(testOCIManifestBytes))
+	require.NoError(err)
+	require.Equal("sha256", d.Algo())
+
+	_, d, err = dockerutil.ParseManifest(bytes.NewReader(testOCIIndexBytes))
+	require.NoError(err)
+	require.Equal("sha256", d.Algo())
 }
