@@ -147,7 +147,8 @@ func NewReadWriteStorageDriver(
 	config Config,
 	cas *store.CAStore,
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)) *KrakenStorageDriver {
+	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
+) *KrakenStorageDriver {
 	return &KrakenStorageDriver{
 		config:     config,
 		transferer: transferer,
@@ -162,7 +163,8 @@ func NewReadOnlyStorageDriver(
 	config Config,
 	bs BlobStore,
 	transferer transfer.ImageTransferer,
-	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)) *KrakenStorageDriver {
+	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
+) *KrakenStorageDriver {
 	return &KrakenStorageDriver{
 		config:     config,
 		transferer: transferer,
@@ -238,7 +240,7 @@ func (d *KrakenStorageDriver) PutContent(ctx context.Context, path string, conte
 
 	switch pathType {
 	case _manifests:
-		err = d.manifests.putContent(path, pathSubType)
+		err = d.manifests.putContent(path, pathSubType, content)
 	case _uploads:
 		err = d.uploads.putContent(path, pathSubType, content)
 	case _layers:
