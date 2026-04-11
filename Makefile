@@ -204,7 +204,7 @@ protoc:
 
 # mockgen must be installed on the system to make this work.
 # Install it by running:
-# `go install go.uber.org/mock/mockgen@latest`
+# `go get github.com/golang/mock/mockgen`.
 mockgen = $(shell go env GOPATH)/bin/mockgen
 
 define lowercase
