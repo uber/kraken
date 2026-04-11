@@ -171,8 +171,7 @@ func TestPrefetchV1MalformedTag(t *testing.T) {
 	addr := mocks.startServer()
 
 	b, err := json.Marshal(prefetchBody{
-		TraceId: "abc",
-		Tag:     "invalid",
+		Tag: "invalid",
 	})
 	require.NoError(err)
 
@@ -200,8 +199,7 @@ func TestPrefetchV1(t *testing.T) {
 	manifest, bs := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
 
 	b, err := json.Marshal(prefetchBody{
-		Tag:     fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
-		TraceId: "abc",
+		Tag: fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
 	})
 	require.NoError(err)
 
@@ -232,8 +230,7 @@ func TestPrefetchV2(t *testing.T) {
 	manifest, bs := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
 
 	b, err := json.Marshal(prefetchBody{
-		Tag:     fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
-		TraceId: "abc",
+		Tag: fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
 	})
 	require.NoError(err)
 
@@ -256,7 +253,6 @@ func TestPrefetchV2(t *testing.T) {
 
 	require.Equal(prefetchResponse{
 		Message:    "prefetching initiated successfully",
-		TraceId:    "abc",
 		Status:     "success",
 		Tag:        "abcdef:v1.0.0",
 		Prefetched: true,
@@ -279,8 +275,7 @@ func TestPrefetchV2OriginError(t *testing.T) {
 	manifest, bs := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
 
 	b, err := json.Marshal(prefetchBody{
-		Tag:     fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
-		TraceId: "abc",
+		Tag: fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
 	})
 	require.NoError(err)
 
@@ -302,7 +297,6 @@ func TestPrefetchV2OriginError(t *testing.T) {
 	require.NoError(err)
 	require.Equal(prefetchResponse{
 		Message:    fmt.Sprintf("failed to trigger image prefetch: at least one layer could not be prefetched: digest %q, namespace %q, blob prefetch failure: foo err", layers[1], namespace),
-		TraceId:    "abc",
 		Status:     "failure",
 		Prefetched: false,
 	}, resBody)

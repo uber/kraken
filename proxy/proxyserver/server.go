@@ -27,6 +27,9 @@ import (
 	"github.com/uber/kraken/lib/middleware"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/handler"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 )
 
 // Server defines the proxy HTTP server.
@@ -62,9 +65,13 @@ func (s *Server) Handler() http.Handler {
 
 	r.Get("/health", handler.Wrap(s.healthHandler))
 
+	// Add tracing middleware for prefetch/preheat endpoints
+	tracingMiddleware := otelhttp.NewMiddleware("kraken-proxy",
+		otelhttp.WithTracerProvider(otel.GetTracerProvider()))
+
 	r.Post("/registry/notifications", handler.Wrap(s.preheatHandler.Handle))
-	r.Post("/proxy/v1/registry/prefetch", s.prefetchHandler.HandleV1)
-	r.Post("/proxy/v2/registry/prefetch", s.prefetchHandler.HandleV2)
+	r.With(tracingMiddleware).Post("/proxy/v1/registry/prefetch", s.prefetchHandler.HandleV1)
+	r.With(tracingMiddleware).Post("/proxy/v2/registry/prefetch", s.prefetchHandler.HandleV2)
 
 	// Serves /debug/pprof endpoints.
 	r.Mount("/", http.DefaultServeMux)
