@@ -21,14 +21,13 @@ import (
 )
 
 const (
-	_xsmall, _small, _medium, _large, _xlarge, _xxlarge = "0B - 100MiB", "100MiB-1GB", "1GiB-2GiB", "2GiB-5GiB", "5GiB-10GiB", "10GiB+"
+	_xsmall, _small, _medium, _large, _xlarge, _xxlarge = "0B-100MiB", "100MiB-1GB", "1GiB-2GiB", "2GiB-5GiB", "5GiB-10GiB", "10GiB+"
 )
-
-var _buckets tally.DurationBuckets
 
 var (
 	_sizeBoundaries = []uint64{0, 100 * memsize.MB, memsize.GB, 2 * memsize.GB, 5 * memsize.GB, 10 * memsize.GB}
 	_sizeTags       = []string{_xsmall, _small, _medium, _large, _xlarge, _xxlarge}
+	_buckets        = tally.DurationBuckets{}
 )
 
 func createBucketBounderies(start, stop, width time.Duration) []time.Duration {
