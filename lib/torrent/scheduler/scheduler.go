@@ -275,7 +275,7 @@ func (s *scheduler) Download(namespace string, d core.Digest) error {
 		s.torrentlog.DownloadFailure(namespace, d, size, err)
 	} else {
 		downloadTime := time.Since(start)
-		recordDownloadTime(s.stats, size, downloadTime)
+		emitDownloadTime(s.stats, size, downloadTime)
 		s.torrentlog.DownloadSuccess(namespace, d, size, downloadTime)
 	}
 	return err
