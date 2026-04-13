@@ -33,9 +33,11 @@ UNAME_S := $(shell uname -s)
 # ==== GIT HOOKS ====
 .PHONY: install-hooks
 install-hooks:
-	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."
-	@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
-		| sh -s -- -b $(shell go env GOPATH)/bin $(GOLANGCI_LINT_VERSION)
+	@echo "Installing git hooks and checking for golangci-lint..."
+	@if ! command -v golangci-lint >/dev/null 2>&1; then \
+		echo "ERROR: golangci-lint not found in PATH. Please install golangci-lint before proceeding."; \
+		exit 1; \
+	fi
 	@chmod +x .githooks/pre-commit
 	git config core.hooksPath .githooks
 	@echo "Git hooks installed successfully!"
@@ -69,8 +71,6 @@ LINUX_BINS = \
     proxy/proxy \
     tools/bin/testfs/testfs \
     tracker/tracker
-
-GOLANGCI_LINT_VERSION ?= v2.1.6
 
 REGISTRY ?= gcr.io/uber-container-tools
 

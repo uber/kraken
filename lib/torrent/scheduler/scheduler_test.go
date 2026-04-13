@@ -187,6 +187,14 @@ func TestSeederTTI(t *testing.T) {
 	seeder.writeTorrent(namespace, blob)
 	require.NoError(seeder.scheduler.Download(namespace, blob.Digest))
 
+	// Wait for the seeder to register with the tracker before starting the
+	// leecher. When the seeder's torrent is already complete, it announces via
+	// dispatcherCompleteEvent.apply. If the leecher's initial announce races
+	// ahead of the seeder's, the tracker returns no peers and the download
+	// hangs permanently (the mock clock is never advanced to trigger a retry).
+	w.waitFor(t, dispatcherCompleteEvent{})
+	w.waitFor(t, announceResultEvent{})
+
 	leecher := mocks.newPeer(config, withClock(clk))
 
 	errc := make(chan error)
