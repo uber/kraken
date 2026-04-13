@@ -176,6 +176,7 @@ func (t *ReadWriteTransferer) downloadFromOrigin(ctx context.Context, namespace 
 func (t *ReadWriteTransferer) Upload(
 	namespace string, d core.Digest, blob store.FileReader,
 ) error {
+	t.stats.Counter("upload_requests").Inc(1)
 	ctx, span := t.tracer.Start(context.Background(), "registry.upload_blob",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
