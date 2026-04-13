@@ -139,7 +139,7 @@ func (c *Conn) PeerID() core.PeerID {
 	return c.peerID
 }
 
-// IsPeerOrigin whether the remote peer is an agent or an origin.
+// IsPeerOrigin returns whether the remote peer is an origin instead of an agent.
 func (c *Conn) IsPeerOrigin() bool {
 	return c.isPeerOrigin
 }
