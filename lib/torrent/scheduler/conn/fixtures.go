@@ -56,14 +56,14 @@ func PipeFixture(
 	var err error
 
 	local, err = HandshakerFixture(config).newConn(
-		noopDeadline{nc1}, core.PeerIDFixture(), info, false)
+		noopDeadline{nc1}, core.PeerIDFixture(), false, info, false)
 	if err != nil {
 		panic(err)
 	}
 	local.Start()
 
 	remote, err = HandshakerFixture(config).newConn(
-		noopDeadline{nc2}, core.PeerIDFixture(), info, true)
+		noopDeadline{nc2}, core.PeerIDFixture(), false, info, true)
 	if err != nil {
 		panic(err)
 	}

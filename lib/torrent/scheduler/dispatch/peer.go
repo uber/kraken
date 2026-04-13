@@ -24,7 +24,8 @@ import (
 
 // peer consolidates bookeeping for a remote peer.
 type peer struct {
-	id core.PeerID
+	id       core.PeerID
+	isOrigin bool
 
 	// Tracks the pieces which the remote peer has.
 	bitfield *syncBitfield
@@ -43,6 +44,7 @@ type peer struct {
 
 func newPeer(
 	peerID core.PeerID,
+	isOrigin bool,
 	b *bitset.BitSet,
 	messages Messages,
 	clk clock.Clock,
@@ -50,6 +52,7 @@ func newPeer(
 
 	return &peer{
 		id:       peerID,
+		isOrigin: isOrigin,
 		bitfield: newSyncBitfield(b),
 		messages: messages,
 		clk:      clk,

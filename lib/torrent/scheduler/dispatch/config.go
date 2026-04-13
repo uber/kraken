@@ -36,9 +36,12 @@ type Config struct {
 	// from a peer.
 	PieceRequestPolicy string `yaml:"piece_request_policy"`
 
-	// PipelineLimit limits the total number of requests can be sent to a peer
+	// AgentPipelineLimit limits the total number of requests can be sent to an agent peer
 	// at the same time.
-	PipelineLimit int `yaml:"pipeline_limit"`
+	AgentPipelineLimit int `yaml:"pipeline_limit"`
+	// OriginPipelineLimit limits the total number of requests can be sent to an origin peer
+	// at the same time.
+	OriginPipelineLimit int `yaml:"origin_pipeline_limit"`
 
 	// EndgameThreshold is the number pieces required to complete the torrent
 	// before the torrent enters "endgame", where we start overloading piece
@@ -58,11 +61,14 @@ func (c Config) applyDefaults() Config {
 	if c.PieceRequestTimeoutPerMb == 0 {
 		c.PieceRequestTimeoutPerMb = 4 * time.Second
 	}
-	if c.PipelineLimit == 0 {
-		c.PipelineLimit = 3
+	if c.AgentPipelineLimit == 0 {
+		c.AgentPipelineLimit = 3
+	}
+	if c.OriginPipelineLimit == 0 {
+		c.OriginPipelineLimit = 5
 	}
 	if c.EndgameThreshold == 0 {
-		c.EndgameThreshold = c.PipelineLimit
+		c.EndgameThreshold = c.AgentPipelineLimit
 	}
 	return c
 }

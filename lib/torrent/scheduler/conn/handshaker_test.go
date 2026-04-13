@@ -78,7 +78,7 @@ func TestHandshakerSetsConnFieldsProperly(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		r, err := h2.Initialize(h1.peerID, l1.Addr().String(), info, emptyRemoteBitfields, namespace)
+		r, err := h2.Initialize(h1.peerID, false, l1.Addr().String(), info, emptyRemoteBitfields, namespace)
 		require.NoError(err)
 		require.Equal(h1.peerID, r.Conn.PeerID())
 		require.Equal(info.InfoHash(), r.Conn.InfoHash())

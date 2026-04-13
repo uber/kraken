@@ -401,7 +401,7 @@ func (s *scheduler) initializeOutgoingHandshake(
 	p *core.PeerInfo, info *storage.TorrentInfo, rb conn.RemoteBitfields, namespace string) {
 
 	addr := fmt.Sprintf("%s:%d", p.IP, p.Port)
-	result, err := s.handshaker.Initialize(p.PeerID, addr, info, rb, namespace)
+	result, err := s.handshaker.Initialize(p.PeerID, p.Origin, addr, info, rb, namespace)
 	if err != nil {
 		s.log(
 			"peer", p.PeerID,
