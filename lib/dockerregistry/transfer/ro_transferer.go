@@ -53,16 +53,20 @@ func NewReadOnlyTransferer(
 // Stat returns blob info from local cache, and triggers download if the blob is
 // not available locally.
 func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
+	t.stats.Counter("stat_requests").Inc(1)
 	fi, err := t.cads.Cache().GetFileStat(d.Hex())
 	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
 		if err := t.sched.Download(namespace, d); err != nil {
+			t.stats.Counter("stat_errors").Inc(1)
 			return nil, fmt.Errorf("scheduler: %s", err)
 		}
 		fi, err = t.cads.Cache().GetFileStat(d.Hex())
 		if err != nil {
+			t.stats.Counter("stat_errors").Inc(1)
 			return nil, fmt.Errorf("stat cache: %s", err)
 		}
 	} else if err != nil {
+		t.stats.Counter("stat_errors").Inc(1)
 		return nil, fmt.Errorf("stat cache: %s", err)
 	}
 	return core.NewBlobInfo(fi.Size()), nil
@@ -70,17 +74,20 @@ func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobIn
 
 // Download downloads blobs as torrent.
 func (t *ReadOnlyTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
-	t.stats.Counter("downloads").Inc(1)
+	t.stats.Counter("download_requests").Inc(1)
 	f, err := t.cads.Cache().GetFileReader(d.Hex())
 	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
 		if err := t.sched.Download(namespace, d); err != nil {
+			t.stats.Counter("download_errors").Inc(1)
 			return nil, fmt.Errorf("scheduler: %s", err)
 		}
 		f, err = t.cads.Cache().GetFileReader(d.Hex())
 		if err != nil {
+			t.stats.Counter("download_errors").Inc(1)
 			return nil, fmt.Errorf("cache: %s", err)
 		}
 	} else if err != nil {
+		t.stats.Counter("download_errors").Inc(1)
 		return nil, fmt.Errorf("cache: %s", err)
 	}
 	mbServed := int64(uint64(f.Size()) / memsize.MB)
@@ -95,13 +102,14 @@ func (t *ReadOnlyTransferer) Upload(namespace string, d core.Digest, blob store.
 
 // GetTag gets manifest digest for tag.
 func (t *ReadOnlyTransferer) GetTag(tag string) (core.Digest, error) {
+	t.stats.Counter("get_tag_requests").Inc(1)
 	d, err := t.tags.Get(tag)
 	if err != nil {
 		if err == tagclient.ErrTagNotFound {
 			t.stats.Counter("tag_not_found").Inc(1)
 			return core.Digest{}, ErrTagNotFound
 		}
-		t.stats.Counter("get_tag_error").Inc(1)
+		t.stats.Counter("get_tag_errors").Inc(1)
 		return core.Digest{}, fmt.Errorf("client get tag: %s", err)
 	}
 	return d, nil
