@@ -99,6 +99,7 @@ func (t *ReadWriteTransferer) originStat(namespace string, d core.Digest) (*core
 // Download downloads the blob of name into the file store and returns a reader
 // to the newly downloaded file.
 func (t *ReadWriteTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
+	t.stats.Counter("download_requests").Inc(1)
 	ctx, span := t.tracer.Start(context.Background(), "registry.download_blob",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
