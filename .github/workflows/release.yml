@@ -1,0 +1,99 @@
+name: Weekly Release
+
+on:
+  # TODO(sambhav-jain-16): enable the schedule after testing manually
+  # schedule:
+  #   - cron: '0 0 * * 1'  # Every Monday at 00:00 UTC
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Bump type for this run. auto = scan commit messages since last tag for release-type: minor/major markers (present in squash-merge commit bodies), falling back to patch.'
+        required: false
+        type: choice
+        options:
+          - auto
+          - patch
+          - minor
+          - major
+        default: auto
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for new commits since last tag
+        id: check
+        run: |
+          LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LATEST" ]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            COUNT=$(git rev-list "${LATEST}..HEAD" --count)
+            echo "has_changes=$([ "$COUNT" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Auto path: scan commit messages since last tag for release-type: markers ──
+      # Markers in PR bodies are included in squash-merge commit messages.
+      - name: Bump version and create tag
+        id: tag_auto
+        if: steps.check.outputs.has_changes == 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.release_type == 'auto')
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          major_string_token: 'release-type: major'
+          minor_string_token: 'release-type: minor'
+          patch_string_token: 'release-type: patch'
+          release_branches: master
+
+      # ── Explicit path: manual override, bypass keyword detection ──────────
+      - name: Get previous tag
+        id: prev_tag
+        if: steps.check.outputs.has_changes == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.release_type != 'auto'
+        uses: WyriHaximus/github-action-get-previous-tag@v1
+        with:
+          fallback: v0.0.0
+
+      - name: Compute next version
+        id: next_version
+        if: steps.check.outputs.has_changes == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.release_type != 'auto'
+        uses: actions-ecosystem/action-bump-semver@v1
+        with:
+          current_version: ${{ steps.prev_tag.outputs.tag }}
+          level: ${{ github.event.inputs.release_type }}
+
+      - name: Create tag for manual override
+        id: tag_explicit
+        if: steps.check.outputs.has_changes == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.release_type != 'auto'
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          custom_tag: ${{ steps.next_version.outputs.new_version }}
+          release_branches: master
+
+      # ── Release ────────────────────────────────────────────────────────────
+      - name: Create GitHub release
+        if: steps.check.outputs.has_changes == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.tag_auto.outputs.new_tag || steps.tag_explicit.outputs.new_tag }}
+          name: Release ${{ steps.tag_auto.outputs.new_tag || steps.tag_explicit.outputs.new_tag }}
+          generate_release_notes: true
+
+      - name: No new commits, skipping release
+        if: steps.check.outputs.has_changes == 'false'
+        run: echo "Skipping — no commits since last tag."
+
