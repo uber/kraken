@@ -4,7 +4,7 @@
 
 Kraken is a P2P-powered Docker registry designed for scalability and availability in hybrid cloud environments. It distributes Docker images using a BitTorrent-inspired protocol with a tracker-coordinated peer network. Built in Go, it has been in production at Uber since 2018, distributing over 1 million blobs per day.
 
-**Key technologies**: Go 1.23+, Docker, Containerd, P2P networking, pluggable storage backends (S3, GCS, ECR, HDFS)
+**Key technologies**: Go 1.24+, Docker, Containerd, P2P networking, pluggable storage backends (S3, GCS, ECR, HDFS)
 
 ## Quick Start
 
@@ -108,7 +108,7 @@ All new features and bug fixes must include tests.
 - **macOS**: Uses Docker for cross-compilation (cgo/sqlite3 limitation)
 - **Native tools**: puller, reload, visualization can build natively on macOS
 - **Linux bins**: agent, origin, tracker, proxy, build-index require Linux build
-- Binaries are built inside `golang:1.23.11` container
+- Binaries are built inside `golang:1.24.0` container
 
 ### Hash Rings
 - Multiple components (origin, tracker, build-index) use hash rings for sharding
