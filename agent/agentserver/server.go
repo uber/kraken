@@ -35,6 +35,7 @@ import (
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/memsize"
 
 	"github.com/go-chi/chi"
 	"github.com/uber-go/tally"
@@ -160,6 +161,9 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 		}
 	}
 	defer closers.Close(f)
+	mbServed := int64(uint64(f.Size()) / memsize.MB)
+	s.stats.Counter("mb_served").Inc(mbServed)
+
 	if _, err := io.Copy(w, f); err != nil {
 		return fmt.Errorf("copy file: %s", err)
 	}
