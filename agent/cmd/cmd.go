@@ -17,6 +17,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"runtime"
 	"sync"
 	"time"
 
@@ -42,14 +43,15 @@ import (
 
 // Flags defines agent CLI flags.
 type Flags struct {
-	PeerIP            string
-	PeerPort          int
-	AgentServerPort   int
-	AgentRegistryPort int
-	ConfigFile        string
-	Zone              string
-	KrakenCluster     string
-	SecretsFile       string
+	PeerIP               string
+	PeerPort             int
+	AgentServerPort      int
+	AgentRegistryPort    int
+	ConfigFile           string
+	Zone                 string
+	KrakenCluster        string
+	SecretsFile          string
+	MutexProfileFraction int
 }
 
 // ParseFlags parses agent CLI flags.
@@ -71,6 +73,9 @@ func ParseFlags() *Flags {
 		&flags.KrakenCluster, "cluster", "", "cluster name (e.g. prod01-zone1)")
 	flag.StringVar(
 		&flags.SecretsFile, "secrets", "", "path to a secrets YAML file to load into configuration")
+	flag.IntVar(
+		&flags.MutexProfileFraction, "mutex-profile-fraction", 0,
+		"rate for runtime.SetMutexProfileFraction; 0 disables, 1 records all events")
 	flag.Parse()
 	return &flags
 }
@@ -113,6 +118,10 @@ func Run(flags *Flags, opts ...Option) {
 	var overrides options
 	for _, o := range opts {
 		o(&overrides)
+	}
+
+	if flags.MutexProfileFraction > 0 {
+		runtime.SetMutexProfileFraction(flags.MutexProfileFraction)
 	}
 
 	var config Config

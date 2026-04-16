@@ -52,6 +52,7 @@ func TestParseFlags(t *testing.T) {
 	assert.Equal(t, "test-zone", flags.Zone)
 	assert.Equal(t, "test-cluster", flags.KrakenCluster)
 	assert.Equal(t, "secrets.yaml", flags.SecretsFile)
+	assert.Equal(t, 0, flags.MutexProfileFraction)
 }
 
 func TestWithConfigOption(t *testing.T) {

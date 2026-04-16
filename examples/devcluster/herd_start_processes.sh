@@ -16,21 +16,25 @@ sleep 3
     --blobserver-port=${ORIGIN_SERVER_PORT} \
     --peer-ip=${HOSTNAME} \
     --peer-port=${ORIGIN_PEER_PORT} \
+    --mutex-profile-fraction=1 \
     &>/var/log/kraken/kraken-origin/stdout.log &
 
 /usr/bin/kraken-tracker \
     --config=/etc/kraken/config/tracker/development.yaml \
     --port=${TRACKER_PORT} \
+    --mutex-profile-fraction=1 \
     &>/var/log/kraken/kraken-tracker/stdout.log &
 
 /usr/bin/kraken-build-index \
     --config=/etc/kraken/config/build-index/development.yaml \
     --port=${BUILD_INDEX_PORT} \
+    --mutex-profile-fraction=1 \
     &>/var/log/kraken/kraken-build-index/stdout.log &
 
 /usr/bin/kraken-proxy \
     --config=/etc/kraken/config/proxy/development.yaml \
     --port=${PROXY_PORT} \
+    --mutex-profile-fraction=1 \
     &>/var/log/kraken/kraken-proxy/stdout.log &
 
 sleep 3

@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
@@ -52,14 +53,15 @@ import (
 
 // Flags defines origin CLI flags.
 type Flags struct {
-	PeerIP             string
-	PeerPort           int
-	BlobServerHostName string
-	BlobServerPort     int
-	ConfigFile         string
-	Zone               string
-	KrakenCluster      string
-	SecretsFile        string
+	PeerIP               string
+	PeerPort             int
+	BlobServerHostName   string
+	BlobServerPort       int
+	ConfigFile           string
+	Zone                 string
+	KrakenCluster        string
+	SecretsFile          string
+	MutexProfileFraction int
 }
 
 // ParseFlags parses origin CLI flags.
@@ -81,6 +83,9 @@ func ParseFlags() *Flags {
 		&flags.KrakenCluster, "cluster", "", "cluster name (e.g. prod01-zone1)")
 	flag.StringVar(
 		&flags.SecretsFile, "secrets", "", "path to a secrets YAML file to load into configuration")
+	flag.IntVar(
+		&flags.MutexProfileFraction, "mutex-profile-fraction", 0,
+		"rate for runtime.SetMutexProfileFraction; 0 disables, 1 records all events")
 	flag.Parse()
 	return &flags
 }
@@ -122,6 +127,10 @@ func Run(flags *Flags, opts ...Option) {
 	var overrides options
 	for _, o := range opts {
 		o(&overrides)
+	}
+
+	if flags.MutexProfileFraction > 0 {
+		runtime.SetMutexProfileFraction(flags.MutexProfileFraction)
 	}
 
 	var config Config
