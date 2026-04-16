@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package scheduler
+package observability
 
 import (
 	"math"
@@ -50,13 +50,13 @@ func TestBucketsConfiguredCorrectly(t *testing.T) {
 	}
 }
 
-func TestEmitBlobDownloadPerformance(t *testing.T) {
+func TestEmitDownloadPerformance(t *testing.T) {
 	t.Run("latency", func(t *testing.T) {
 		require := require.New(t)
 		stats := tally.NewTestScope("", nil)
 
-		emitBlobDownloadPerformance(stats, 3*int64(memsize.MB), 220*time.Millisecond)
-		emitBlobDownloadPerformance(stats, 10*int64(memsize.GB), 20*time.Minute)
+		EmitDownloadPerformance(stats, TORRENT_DOWNLOAD, 3*int64(memsize.MB), 220*time.Millisecond)
+		EmitDownloadPerformance(stats, TORRENT_DOWNLOAD, 10*int64(memsize.GB), 20*time.Minute)
 
 		snapshot := stats.Snapshot()
 		histograms := snapshot.Histograms()
@@ -75,8 +75,8 @@ func TestEmitBlobDownloadPerformance(t *testing.T) {
 		require := require.New(t)
 		stats := tally.NewTestScope("", nil)
 
-		emitBlobDownloadPerformance(stats, 3*int64(memsize.MB), 2*time.Second)   // 1.5 MiB/s
-		emitBlobDownloadPerformance(stats, 10*int64(memsize.GB), 20*time.Minute) // 8.53 MiB/s
+		EmitDownloadPerformance(stats, TORRENT_DOWNLOAD, 3*int64(memsize.MB), 2*time.Second)   // 1.5 MiB/s
+		EmitDownloadPerformance(stats, TORRENT_DOWNLOAD, 10*int64(memsize.GB), 20*time.Minute) // 8.53 MiB/s
 
 		snapshot := stats.Snapshot()
 		histograms := snapshot.Histograms()
@@ -96,13 +96,13 @@ func TestEmitBlobDownloadPerformance(t *testing.T) {
 		require := require.New(t)
 		stats := tally.NewTestScope("", nil)
 
-		emitBlobDownloadPerformance(stats, 3*int64(memsize.MB), 2*time.Millisecond) // 1500 MiB/s
-		emitBlobDownloadPerformance(stats, 3*int64(memsize.MB), 1*time.Hour)        // 0.000833333333 MiB/s
+		EmitDownloadPerformance(stats, METAINFO_DOWNLOAD, 3*int64(memsize.MB), 2*time.Millisecond) // 1500 MiB/s
+		EmitDownloadPerformance(stats, METAINFO_DOWNLOAD, 3*int64(memsize.MB), 1*time.Hour)        // 0.000833333333 MiB/s
 
 		snapshot := stats.Snapshot()
 		histograms := snapshot.Histograms()
 
-		downloadThroughputXsmallKey := "download_throughput+size=0B-100MiB"
+		downloadThroughputXsmallKey := "metainfo_download_throughput+torrent_size=0B-100MiB"
 		downloadThroughputXsmall, ok := histograms[downloadThroughputXsmallKey]
 		require.True(ok)
 		require.Equal(int64(1), downloadThroughputXsmall.Values()[math.MaxFloat64])

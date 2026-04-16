@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package scheduler
+package observability
 
 import (
 	"time"
@@ -67,18 +67,49 @@ func getSizeTag(sizeBytes uint64) string {
 	return _sizeTags[0]
 }
 
-// emitBlobDownloadPerformance emits metrics on the speed of a blob's download from the moment
-// the blob was requested through Kraken's API to the moment it is fully downloaded.
-func emitBlobDownloadPerformance(stats tally.Scope, sizeBytes int64, t time.Duration) {
-	sizeTag := getSizeTag(uint64(sizeBytes))
+type DownloadType string
 
+const (
+	TORRENT_DOWNLOAD  DownloadType = "TORRENT_DOWNLOAD"
+	METAINFO_DOWNLOAD DownloadType = "METAINFO_DOWNLOAD"
+)
+
+// EmitDownloadPerformance emits metrics on the download performance for either a torrent (blob) download
+// or a metainfo download. Both latency and throughput are measured for the end-to-end download.
+// the blob was requested through Kraken's API to the moment it is fully downloaded.
+func EmitDownloadPerformance(stats tally.Scope, downloadType DownloadType, sizeBytes int64, t time.Duration) {
+	sizeTag := getSizeTag(uint64(sizeBytes))
+	mbPerSecond := (float64(sizeBytes) / (float64(memsize.MB))) / t.Seconds()
+
+	switch downloadType {
+	case TORRENT_DOWNLOAD:
+		emitBlobDownloadPerformance(stats, mbPerSecond, sizeTag, t)
+	case METAINFO_DOWNLOAD:
+		emitMetainfoDownloadPerformance(stats, mbPerSecond, sizeTag, t)
+	}
+}
+
+func emitBlobDownloadPerformance(stats tally.Scope, mbPerSecond float64, sizeTag string, t time.Duration) {
 	stats.Tagged(map[string]string{
 		"size":    sizeTag,
 		"version": "4",
 	}).Histogram("download_time", _downloadLatencyBuckets).RecordDuration(t)
 
-	mbPerSecond := (float64(sizeBytes) / (float64(memsize.MB))) / t.Seconds()
 	stats.Tagged(map[string]string{
 		"size": sizeTag,
 	}).Histogram("download_throughput", _downloadThroughputBuckets).RecordValue(mbPerSecond)
+}
+
+func emitMetainfoDownloadPerformance(stats tally.Scope, mbPerSecond float64, sizeTag string, t time.Duration) {
+	// Metrics are tagged by torrent_size, as origin needs to download the blob from storage (e.g. GCS) to
+	// calculate its metainfo, before returning it to tracker, which in turn, returns it to agent. Thus, even if
+	// metainfo itself is <1 KiB, its download may take 10s of minutes on huge blobs.
+
+	stats.Tagged(map[string]string{
+		"torrent_size": sizeTag,
+	}).Histogram("metainfo_download_time", _downloadLatencyBuckets).RecordDuration(t)
+
+	stats.Tagged(map[string]string{
+		"torrent_size": sizeTag,
+	}).Histogram("metainfo_download_throughput", _downloadThroughputBuckets).RecordValue(mbPerSecond)
 }

@@ -26,6 +26,7 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/torrent/networkevent"
+	"github.com/uber/kraken/lib/torrent/observability"
 	"github.com/uber/kraken/lib/torrent/scheduler/announcequeue"
 	"github.com/uber/kraken/lib/torrent/scheduler/announcer"
 	"github.com/uber/kraken/lib/torrent/scheduler/conn"
@@ -275,7 +276,7 @@ func (s *scheduler) Download(namespace string, d core.Digest) error {
 		s.torrentlog.DownloadFailure(namespace, d, size, err)
 	} else {
 		downloadTime := time.Since(start)
-		emitBlobDownloadPerformance(s.stats, size, downloadTime)
+		observability.EmitDownloadPerformance(s.stats, observability.TORRENT_DOWNLOAD, size, downloadTime)
 		s.torrentlog.DownloadSuccess(namespace, d, size, downloadTime)
 	}
 	return err
