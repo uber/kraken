@@ -27,42 +27,35 @@ const (
 var (
 	_sizeBoundaries = []uint64{0, 100 * memsize.MB, memsize.GB, 2 * memsize.GB, 5 * memsize.GB, 10 * memsize.GB}
 	_sizeTags       = []string{_xsmall, _small, _medium, _large, _xlarge, _xxlarge}
-	_buckets        = tally.DurationBuckets{}
+
+	_downloadLatencyBuckets tally.DurationBuckets
+	// In MiB/s.
+	_downloadThroughputBuckets tally.ValueBuckets
 )
 
-func createBucketBounderies(start, stop, width time.Duration) []time.Duration {
-	var buckets []time.Duration
-	for cur := start; cur <= stop; cur += width {
-		buckets = append(buckets, cur)
-	}
-	return buckets
-}
-
 func init() {
-	_buckets = []time.Duration{
-		500 * time.Millisecond,
-		1 * time.Second,
-		2 * time.Second,
-		4 * time.Second,
-		7 * time.Second,
-		12 * time.Second,
-		15 * time.Second,
-	}
-	_buckets = append(_buckets, createBucketBounderies(20*time.Second, time.Minute, 5*time.Second)...)
-	_buckets = append(_buckets, createBucketBounderies(time.Minute+10*time.Second, 2*time.Minute, 10*time.Second)...)
-	_buckets = append(_buckets, createBucketBounderies(2*time.Minute+20*time.Second, 4*time.Minute, 20*time.Second)...)
-	_buckets = append(_buckets, createBucketBounderies(4*time.Minute+30*time.Second, 8*time.Minute, 30*time.Second)...)
-	_buckets = append(_buckets, createBucketBounderies(9*time.Minute, 15*time.Minute, time.Minute)...)
-	_buckets = append(_buckets, createBucketBounderies(17*time.Minute, 25*time.Minute, 2*time.Minute)...)
-	_buckets = append(_buckets, createBucketBounderies(30*time.Minute, 40*time.Minute, 5*time.Minute)...)
-	_buckets = append(_buckets, createBucketBounderies(45*time.Minute, 60*time.Minute, 5*time.Minute)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, 0,
+		500*time.Millisecond,
+		1*time.Second,
+		2*time.Second,
+		4*time.Second,
+		7*time.Second,
+		12*time.Second,
+		15*time.Second)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(20*time.Second, 5*time.Second, 9)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(70*time.Second, 10*time.Second, 6)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(140*time.Second, 20*time.Second, 6)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(270*time.Second, 30*time.Second, 8)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(540*time.Second, 60*time.Second, 7)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(1020*time.Second, 120*time.Second, 5)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(1800*time.Second, 300*time.Second, 3)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(2700*time.Second, 300*time.Second, 4)...)
 
-	// Sanity check to ensure buckets are sorted.
-	for i := 0; i < len(_buckets)-1; i++ {
-		if _buckets[i] >= _buckets[i+1] {
-			panic("buckets are not sorted properly")
-		}
-	}
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(0, 1, 10)...)   // [0, 10)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(10, 2, 5)...)   // [10, 20)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(20, 5, 6)...)   // [20, 50)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(50, 10, 15)...) // [50, 200)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(200, 50, 4)...) // [200, 400)
 }
 
 func getSizeTag(sizeBytes uint64) string {
@@ -74,11 +67,18 @@ func getSizeTag(sizeBytes uint64) string {
 	return _sizeTags[0]
 }
 
-func emitDownloadTime(stats tally.Scope, sizeBytes int64, t time.Duration) {
+// emitBlobDownloadPerformance emits metrics on the speed of a blob's download from the moment
+// the blob was requested through Kraken's API to the moment it is fully downloaded.
+func emitBlobDownloadPerformance(stats tally.Scope, sizeBytes int64, t time.Duration) {
 	sizeTag := getSizeTag(uint64(sizeBytes))
 
 	stats.Tagged(map[string]string{
 		"size":    sizeTag,
 		"version": "4",
-	}).Histogram("download_time", _buckets).RecordDuration(t)
+	}).Histogram("download_time", _downloadLatencyBuckets).RecordDuration(t)
+
+	mbPerSecond := (float64(sizeBytes) / (float64(memsize.MB))) / t.Seconds()
+	stats.Tagged(map[string]string{
+		"size": sizeTag,
+	}).Histogram("download_throughput", _downloadThroughputBuckets).RecordValue(mbPerSecond)
 }
