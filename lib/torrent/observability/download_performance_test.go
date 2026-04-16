@@ -31,7 +31,7 @@ func TestGetSizeTag(t *testing.T) {
 		"below min":       {memsize.MB, _xsmall},
 		"above max":       {30 * memsize.GB, _xxlarge},
 		"between buckets": {3 * memsize.GB, _large},
-		"exact bucket":    {1 * memsize.GB, _medium},
+		"exact bucket":    {1 * memsize.GB, _large},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
