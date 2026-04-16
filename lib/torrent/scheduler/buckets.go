@@ -25,55 +25,38 @@ const (
 )
 
 var (
-	_sizeBoundaries         = []uint64{0, 100 * memsize.MB, memsize.GB, 2 * memsize.GB, 5 * memsize.GB, 10 * memsize.GB}
-	_sizeTags               = []string{_xsmall, _small, _medium, _large, _xlarge, _xxlarge}
-	_downloadLatencyBuckets = append(
-		[]time.Duration{
-			0,
-			500 * time.Millisecond,
-			1 * time.Second,
-			2 * time.Second,
-			4 * time.Second,
-			7 * time.Second,
-			12 * time.Second,
-			15 * time.Second,
-		},
-		append(
-			tally.MustMakeLinearDurationBuckets(20*time.Second, 5*time.Second, 9),
-			append(
-				tally.MustMakeLinearDurationBuckets(70*time.Second, 10*time.Second, 6),
-				append(
-					tally.MustMakeLinearDurationBuckets(140*time.Second, 20*time.Second, 6),
-					append(
-						tally.MustMakeLinearDurationBuckets(270*time.Second, 30*time.Second, 8),
-						append(
-							tally.MustMakeLinearDurationBuckets(540*time.Second, 60*time.Second, 7),
-							append(
-								tally.MustMakeLinearDurationBuckets(1020*time.Second, 120*time.Second, 5),
-								append(
-									tally.MustMakeLinearDurationBuckets(1800*time.Second, 300*time.Second, 3),
-									tally.MustMakeLinearDurationBuckets(2700*time.Second, 300*time.Second, 4)...,
-								)...,
-							)...,
-						)...,
-					)...,
-				)...,
-			)...,
-		)...,
-	)
+	_sizeBoundaries = []uint64{0, 100 * memsize.MB, memsize.GB, 2 * memsize.GB, 5 * memsize.GB, 10 * memsize.GB}
+	_sizeTags       = []string{_xsmall, _small, _medium, _large, _xlarge, _xxlarge}
 
+	_downloadLatencyBuckets tally.DurationBuckets
 	// In MiB/s.
-	_downloadThroughputBuckets = append(
-		tally.MustMakeLinearValueBuckets(0, 1, 10), // [0, 10)
-		append(
-			tally.MustMakeLinearValueBuckets(10, 2, 5), // [10, 20)
-			append(
-				tally.MustMakeLinearValueBuckets(20, 5, 6), // [20, 50)
-				append(
-					tally.MustMakeLinearValueBuckets(50, 10, 15),                // [50, 200)
-					tally.MustMakeLinearValueBuckets(200, 50, 4)...)...)...)..., // [200, 400)
-	)
+	_downloadThroughputBuckets tally.ValueBuckets
 )
+
+func init() {
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, 0,
+		500*time.Millisecond,
+		1*time.Second,
+		2*time.Second,
+		4*time.Second,
+		7*time.Second,
+		12*time.Second,
+		15*time.Second)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(20*time.Second, 5*time.Second, 9)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(70*time.Second, 10*time.Second, 6)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(140*time.Second, 20*time.Second, 6)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(270*time.Second, 30*time.Second, 8)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(540*time.Second, 60*time.Second, 7)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(1020*time.Second, 120*time.Second, 5)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(1800*time.Second, 300*time.Second, 3)...)
+	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(2700*time.Second, 300*time.Second, 4)...)
+
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(0, 1, 10)...)   // [0, 10)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(10, 2, 5)...)   // [10, 20)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(20, 5, 6)...)   // [20, 50)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(50, 10, 15)...) // [50, 200)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(200, 50, 4)...) // [200, 400)
+}
 
 func getSizeTag(sizeBytes uint64) string {
 	for i := len(_sizeBoundaries) - 1; i >= 0; i-- {
@@ -92,7 +75,7 @@ func emitBlobDownloadPerformance(stats tally.Scope, sizeBytes int64, t time.Dura
 	stats.Tagged(map[string]string{
 		"size":    sizeTag,
 		"version": "4",
-	}).Histogram("download_time", tally.DurationBuckets(_downloadLatencyBuckets)).RecordDuration(t)
+	}).Histogram("download_time", _downloadLatencyBuckets).RecordDuration(t)
 
 	mbPerSecond := (float64(sizeBytes) / (float64(memsize.MB))) / t.Seconds()
 	stats.Tagged(map[string]string{
