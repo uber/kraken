@@ -60,10 +60,10 @@ func TestEmitDownloadPerformance(t *testing.T) {
 
 		snapshot := stats.Snapshot()
 		histograms := snapshot.Histograms()
-		downloadTimeXsmallKey := "download_time+size=0B-100MiB,version=4"
-		downloadTimeXsmall, ok := histograms[downloadTimeXsmallKey]
+		downloadTimeXXsmallKey := "download_time+size=0B-5MiB,version=4"
+		downloadTimeXXsmall, ok := histograms[downloadTimeXXsmallKey]
 		require.True(ok)
-		require.Equal(int64(1), downloadTimeXsmall.Durations()[500*time.Millisecond])
+		require.Equal(int64(1), downloadTimeXXsmall.Durations()[500*time.Millisecond])
 
 		downloadTimeXXlargeKey := "download_time+size=10GiB+,version=4"
 		downloadTimeXXlarge, ok := histograms[downloadTimeXXlargeKey]
@@ -81,10 +81,10 @@ func TestEmitDownloadPerformance(t *testing.T) {
 		snapshot := stats.Snapshot()
 		histograms := snapshot.Histograms()
 
-		downloadThroughputXsmallKey := "download_throughput+size=0B-100MiB"
-		downloadThroughputXsmall, ok := histograms[downloadThroughputXsmallKey]
+		downloadThroughputXXsmallKey := "download_throughput+size=0B-5MiB"
+		downloadThroughputXXsmall, ok := histograms[downloadThroughputXXsmallKey]
 		require.True(ok)
-		require.Equal(int64(1), downloadThroughputXsmall.Values()[2])
+		require.Equal(int64(1), downloadThroughputXXsmall.Values()[2])
 
 		downloadThroughputXXlargeKey := "download_throughput+size=10GiB+"
 		downloadThroughputXXlarge, ok := histograms[downloadThroughputXXlargeKey]
@@ -102,7 +102,7 @@ func TestEmitDownloadPerformance(t *testing.T) {
 		snapshot := stats.Snapshot()
 		histograms := snapshot.Histograms()
 
-		downloadThroughputXsmallKey := "metainfo_download_throughput+torrent_size=0B-100MiB"
+		downloadThroughputXsmallKey := "metainfo_download_throughput+torrent_size=0B-5MiB"
 		downloadThroughputXsmall, ok := histograms[downloadThroughputXsmallKey]
 		require.True(ok)
 		require.Equal(int64(1), downloadThroughputXsmall.Values()[math.MaxFloat64])
