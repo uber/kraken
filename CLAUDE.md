@@ -147,6 +147,27 @@ All new features and bug fixes must include tests.
 - Logs are your friend - check component logs
 - Visualization tool available: `tools/bin/visualization`
 
+#### Mutex contention profiling
+
+All services support `--mutex-profile-fraction=N` (default 0, disabled). When
+enabled, ~1/N mutex contention events are recorded and exposed at
+`/debug/pprof/mutex`.
+
+```bash
+# Start any service with profiling enabled (1 = record every event)
+kraken-origin --mutex-profile-fraction=1 [other flags]
+
+# View the profile as text
+curl "http://localhost:<port>/debug/pprof/mutex?debug=1"
+
+# Analyze interactively
+go tool pprof http://localhost:<port>/debug/pprof/mutex
+```
+
+The devcluster already passes `--mutex-profile-fraction=1` to all services.
+Devcluster ports: proxy=15000, origin=15002, tracker=15003, build-index=15004,
+agent-1=16002, agent-2=17002.
+
 ### Modifying storage backends
 - Look at existing implementations in `lib/backend`
 - Maintain interface compatibility
