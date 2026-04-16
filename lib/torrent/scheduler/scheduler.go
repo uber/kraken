@@ -254,6 +254,7 @@ func (s *scheduler) doDownload(namespace string, d core.Digest) (size int64, err
 // Download downloads the torrent given metainfo. Once the torrent is downloaded,
 // it will begin seeding asynchronously.
 func (s *scheduler) Download(namespace string, d core.Digest) error {
+	s.stats.Counter("download_requests")
 	start := time.Now()
 	size, err := s.doDownload(namespace, d)
 	if err != nil {
