@@ -23,6 +23,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/scheduler"
+	"github.com/uber/kraken/utils/memsize"
 )
 
 var _ ImageTransferer = (*ReadOnlyTransferer)(nil)
@@ -82,6 +83,8 @@ func (t *ReadOnlyTransferer) Download(namespace string, d core.Digest) (store.Fi
 	} else if err != nil {
 		return nil, fmt.Errorf("cache: %s", err)
 	}
+	mbServed := int64(uint64(f.Size()) / memsize.MB)
+	t.stats.Counter("mb_served").Inc(mbServed)
 	return f, nil
 }
 
