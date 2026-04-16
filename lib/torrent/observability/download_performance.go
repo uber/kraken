@@ -76,7 +76,6 @@ const (
 
 // EmitDownloadPerformance emits metrics on the download performance for either a torrent (blob) download
 // or a metainfo download. Both latency and throughput are measured for the end-to-end download.
-// the blob was requested through Kraken's API to the moment it is fully downloaded.
 func EmitDownloadPerformance(stats tally.Scope, downloadType DownloadType, sizeBytes int64, t time.Duration) {
 	sizeTag := getSizeTag(uint64(sizeBytes))
 	mbPerSecond := (float64(sizeBytes) / (float64(memsize.MB))) / t.Seconds()
