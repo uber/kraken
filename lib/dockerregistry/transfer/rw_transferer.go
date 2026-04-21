@@ -24,6 +24,7 @@ import (
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
+	"github.com/uber/kraken/utils/memsize"
 
 	"github.com/docker/distribution/uuid"
 	"github.com/uber-go/tally"
@@ -115,12 +116,21 @@ func (t *ReadWriteTransferer) Download(namespace string, d core.Digest) (store.F
 	if err == nil {
 		span.SetAttributes(attribute.String("cache.status", "hit"))
 		span.SetStatus(codes.Ok, "cache hit")
+		mbServed := int64(uint64(blob.Size()) / memsize.MB)
+		t.stats.Counter("mb_served").Inc(mbServed)
 		return blob, nil
 	}
 	if os.IsNotExist(err) {
 		span.SetAttributes(attribute.String("cache.status", "miss"))
-		return t.downloadFromOrigin(ctx, namespace, d)
+		blob, err = t.downloadFromOrigin(ctx, namespace, d)
+		if err != nil {
+			t.stats.Counter("download_failures").Inc(1)
+		}
+		mbServed := int64(uint64(blob.Size()) / memsize.MB)
+		t.stats.Counter("mb_served").Inc(mbServed)
+		return blob, err
 	}
+	t.stats.Counter("download_failures").Inc(1)
 	span.RecordError(err)
 	span.SetStatus(codes.Error, "cache read error")
 	return nil, fmt.Errorf("get cache file: %s", err)
