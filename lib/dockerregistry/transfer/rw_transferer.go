@@ -125,9 +125,10 @@ func (t *ReadWriteTransferer) Download(namespace string, d core.Digest) (store.F
 		blob, err = t.downloadFromOrigin(ctx, namespace, d)
 		if err != nil {
 			t.stats.Counter("download_failures").Inc(1)
+		} else {
+			mbServed := int64(uint64(blob.Size()) / memsize.MB)
+			t.stats.Counter("mb_served").Inc(mbServed)
 		}
-		mbServed := int64(uint64(blob.Size()) / memsize.MB)
-		t.stats.Counter("mb_served").Inc(mbServed)
 		return blob, err
 	}
 	t.stats.Counter("download_failures").Inc(1)
