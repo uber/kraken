@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	_xsmall, _small, _medium, _large, _xlarge, _xxlarge = "0B-5MiB", "5MiB-100MiB", "100MiB-1GB", "1GiB-5GiB", "5GiB-10GiB", "10GiB+"
+	_xsmall, _small, _medium, _large, _xlarge, _xxlarge = "0B-5MiB", "5MiB-100MiB", "100MiB-1GiB", "1GiB-5GiB", "5GiB-10GiB", "10GiBplus"
 )
 
 var (
@@ -51,11 +51,13 @@ func init() {
 	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(1800*time.Second, 300*time.Second, 3)...)
 	_downloadLatencyBuckets = append(_downloadLatencyBuckets, tally.MustMakeLinearDurationBuckets(2700*time.Second, 300*time.Second, 4)...)
 
-	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(0, 1, 10)...)   // [0, 10)
-	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(10, 2, 5)...)   // [10, 20)
-	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(20, 5, 6)...)   // [20, 50)
-	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(50, 10, 15)...) // [50, 200)
-	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(200, 50, 4)...) // [200, 400)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(0, 0.1, 10)...) // [0, 1)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(1, 0.5, 4)...)  // [1, 3)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(3, 1, 7)...)    // [3, 10)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(10, 2, 10)...)  // [10, 30)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(30, 5, 4)...)   // [30, 50)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(50, 10, 5)...)  // [50, 100)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(100, 50, 6)...) // [100, 400)
 }
 
 func getSizeTag(sizeBytes uint64) string {
@@ -95,7 +97,8 @@ func emitBlobDownloadPerformance(stats tally.Scope, mbPerSecond float64, sizeTag
 	}).Histogram("download_time", _downloadLatencyBuckets).RecordDuration(t)
 
 	stats.Tagged(map[string]string{
-		"size": sizeTag,
+		"size":    sizeTag,
+		"version": "2",
 	}).Histogram("download_throughput", _downloadThroughputBuckets).RecordValue(mbPerSecond)
 }
 
@@ -110,5 +113,6 @@ func emitMetainfoDownloadPerformance(stats tally.Scope, mbPerSecond float64, siz
 
 	stats.Tagged(map[string]string{
 		"torrent_size": sizeTag,
+		"version":      "2",
 	}).Histogram("metainfo_download_throughput", _downloadThroughputBuckets).RecordValue(mbPerSecond)
 }
