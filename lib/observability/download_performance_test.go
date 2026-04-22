@@ -145,8 +145,8 @@ func TestEmitDownloadPerformance(t *testing.T) {
 		downloadTimeXsmallKey := "remote_blob_download_time+size=0B-5MiB"
 		downloadTimeXsmall, ok := histograms[downloadTimeXsmallKey]
 		require.True(ok)
-		require.Equal(int64(1), downloadTimeXsmall.Durations()[1260*time.Second])
-		require.Equal(int64(1), downloadTimeXsmall.Durations()[1260*time.Second])
+		require.Equal(int64(1), downloadTimeXsmall.Durations()[500*time.Millisecond])
+		require.Equal(int64(1), downloadTimeXsmall.Durations()[1*time.Hour])
 	})
 
 	t.Run("safeguard against 0 latency", func(t *testing.T) {
