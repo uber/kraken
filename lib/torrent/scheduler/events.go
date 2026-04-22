@@ -17,12 +17,12 @@ import (
 	"time"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/observability"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler/conn"
 	"github.com/uber/kraken/lib/torrent/scheduler/connstate"
 	"github.com/uber/kraken/lib/torrent/scheduler/dispatch"
 	"github.com/uber/kraken/lib/torrent/storage"
-	"github.com/uber/kraken/utils/memsize"
 	"github.com/uber/kraken/utils/timeutil"
 
 	"github.com/willf/bitset"
@@ -360,14 +360,8 @@ func (e dispatcherCompleteEvent) apply(s *state) {
 		errc <- nil
 	}
 	if ctrl.localRequest {
-		// Normalize the download time for all torrent sizes to a per MB value.
-		// Skip torrents that are less than a MB in size because we can't measure
-		// at that granularity.
 		downloadTime := s.sched.clock.Now().Sub(ctrl.dispatcher.CreatedAt())
-		lengthMB := ctrl.dispatcher.Length() / int64(memsize.MB)
-		if lengthMB > 0 {
-			s.sched.stats.Timer("download_time_per_mb").Record(downloadTime / time.Duration(lengthMB))
-		}
+		observability.EmitDownloadPerformance(s.sched.stats, observability.TORRENT_LEECH, ctrl.dispatcher.Length(), downloadTime)
 	}
 
 	s.log("hash", infoHash).Info("Torrent complete")

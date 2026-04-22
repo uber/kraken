@@ -108,4 +108,21 @@ func TestEmitDownloadPerformance(t *testing.T) {
 		require.Equal(int64(1), downloadThroughputXsmall.Values()[math.MaxFloat64])
 		require.Equal(int64(1), downloadThroughputXsmall.Values()[0.1])
 	})
+
+	t.Run("p2p torrent leeching throughput", func(t *testing.T) {
+		require := require.New(t)
+		stats := tally.NewTestScope("", nil)
+
+		EmitDownloadPerformance(stats, TORRENT_LEECH, 3*int64(memsize.MB), 2*time.Millisecond) // 1500 MiB/s
+		EmitDownloadPerformance(stats, TORRENT_LEECH, 3*int64(memsize.MB), 1*time.Hour)        // 0.000833333333 MiB/s
+
+		snapshot := stats.Snapshot()
+		histograms := snapshot.Histograms()
+
+		downloadThroughputXsmallKey := "p2p_leech_throughput+size=0B-5MiB"
+		downloadThroughputXsmall, ok := histograms[downloadThroughputXsmallKey]
+		require.True(ok)
+		require.Equal(int64(1), downloadThroughputXsmall.Values()[math.MaxFloat64])
+		require.Equal(int64(1), downloadThroughputXsmall.Values()[0.1])
+	})
 }

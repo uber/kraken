@@ -26,7 +26,7 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/torrent/networkevent"
-	"github.com/uber/kraken/lib/torrent/observability"
+	"github.com/uber/kraken/lib/observability"
 	"github.com/uber/kraken/lib/torrent/scheduler/announcequeue"
 	"github.com/uber/kraken/lib/torrent/scheduler/announcer"
 	"github.com/uber/kraken/lib/torrent/scheduler/conn"

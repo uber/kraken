@@ -58,7 +58,7 @@ func init() {
 	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(30, 5, 4)...)    // [30, 50)
 	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(50, 10, 5)...)   // [50, 100)
 	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(100, 50, 4)...)  // [100, 300)
-	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(300, 100, 7)...) // [100, 800)
+	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(300, 100, 7)...) // [300, 1000)
 }
 
 func getSizeTag(sizeBytes uint64) string {
@@ -93,6 +93,7 @@ func EmitDownloadPerformance(stats tally.Scope, downloadType DownloadType, sizeB
 	case METAINFO_DOWNLOAD:
 		emitMetainfoDownloadPerformance(stats, mbPerSecond, sizeTag, t)
 	case TORRENT_LEECH:
+		emitTorrentLeechPerformance(stats, mbPerSecond, sizeTag)
 	}
 }
 
@@ -108,10 +109,10 @@ func emitBlobDownloadPerformance(stats tally.Scope, mbPerSecond float64, sizeTag
 	}).Histogram("download_throughput", _downloadThroughputBuckets).RecordValue(mbPerSecond)
 }
 
-func emitTorrentLeechingPerformance(stats tally.Scope, mbPerSecond float64, sizeTag string) {
+func emitTorrentLeechPerformance(stats tally.Scope, mbPerSecond float64, sizeTag string) {
 	stats.Tagged(map[string]string{
 		"size": sizeTag,
-	}).Histogram("p2p_leeching_throughput", _downloadThroughputBuckets).RecordValue(mbPerSecond)
+	}).Histogram("p2p_leech_throughput", _downloadThroughputBuckets).RecordValue(mbPerSecond)
 }
 
 func emitMetainfoDownloadPerformance(stats tally.Scope, mbPerSecond float64, sizeTag string, t time.Duration) {
