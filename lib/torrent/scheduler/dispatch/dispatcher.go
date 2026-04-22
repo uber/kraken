@@ -254,7 +254,9 @@ func (d *Dispatcher) AddPeer(
 	}
 	go func() {
 		if _, err := d.maybeRequestMorePieces(p); err != nil {
-			d.log("peer", p).Errorf("Error requesting pieces: %s", err)
+			d.logger.Errorw(
+				fmt.Sprintf("Error requesting pieces: %s", err),
+				"peer", p)
 		}
 	}()
 	go d.feed(p)
@@ -307,7 +309,8 @@ func (d *Dispatcher) TearDown() {
 		if !ok {
 			panic(fmt.Sprintf("dispatcher: stored value is not *peer: %T", v))
 		}
-		d.log("peer", p).Info("Dispatcher teardown closing connection")
+		d.logger.Infow("Dispatcher teardown closing connection",
+			"peer", p, "torrent", d.torrent)
 		p.messages.Close()
 		return true
 	})
@@ -332,7 +335,9 @@ func (d *Dispatcher) TearDown() {
 
 	if err := d.torrentlog.LeecherSummaries(
 		d.torrent.Digest(), d.torrent.InfoHash(), summaries); err != nil {
-		d.log().Errorf("Error logging incoming piece request summary: %s", err)
+		d.logger.Errorw(
+			fmt.Sprintf("Error logging incoming piece request summary: %s", err),
+			"torrent", d.torrent)
 	}
 }
 
@@ -352,13 +357,16 @@ func (d *Dispatcher) complete() {
 		if p.bitfield.Complete() {
 			// Close connections to other completed peers since those connections
 			// are now useless.
-			d.log("peer", p).Info("Closing connection to completed peer")
+			d.logger.Infow("Closing connection to completed peer",
+				"peer", p, "torrent", d.torrent)
 			p.messages.Close()
 		} else {
 			// Notify in-progress peers that we have completed the torrent and
 			// all pieces are available.
 			if err := p.messages.Send(conn.NewCompleteMessage()); err != nil {
-				d.log("peer", p).Errorf("Error sending complete message: %s", err)
+				d.logger.Errorw(
+					fmt.Sprintf("Error sending complete message: %s", err),
+					"peer", p, "torrent", d.torrent)
 			}
 		}
 		return true
@@ -391,7 +399,9 @@ func (d *Dispatcher) complete() {
 	if piecesRequestedTotal > 0 {
 		if err := d.torrentlog.SeederSummaries(
 			d.torrent.Digest(), d.torrent.InfoHash(), summaries); err != nil {
-			d.log().Errorf("Error logging outgoing piece request summary: %s", err)
+			d.logger.Errorw(
+				fmt.Sprintf("Error logging outgoing piece request summary: %s", err),
+				"torrent", d.torrent)
 		}
 	}
 }
@@ -434,7 +444,9 @@ func (d *Dispatcher) maybeSendPieceRequests(p *peer, pieceCandidates *bitset.Bit
 func (d *Dispatcher) resendFailedPieceRequests() {
 	failedRequests := d.pieceRequestManager.GetFailedRequests()
 	if len(failedRequests) > 0 {
-		d.log().Infof("Resending %d failed piece requests", len(failedRequests))
+		d.logger.Infow(
+			fmt.Sprintf("Resending %d failed piece requests", len(failedRequests)),
+			"torrent", d.torrent)
 		d.stats.Counter("piece_request_failures").Inc(int64(len(failedRequests)))
 	}
 
@@ -465,7 +477,9 @@ func (d *Dispatcher) resendFailedPieceRequests() {
 
 	unsent := len(failedRequests) - sent
 	if unsent > 0 {
-		d.log().Infof("Nowhere to resend %d / %d failed piece requests", unsent, len(failedRequests))
+		d.logger.Infow(
+			fmt.Sprintf("Nowhere to resend %d / %d failed piece requests", unsent, len(failedRequests)),
+			"torrent", d.torrent)
 	}
 }
 
@@ -485,11 +499,15 @@ func (d *Dispatcher) watchPendingPieceRequests() {
 func (d *Dispatcher) feed(p *peer) {
 	for msg := range p.messages.Receiver() {
 		if err := d.dispatch(p, msg); err != nil {
-			d.log().Errorf("Error dispatching message: %s", err)
+			d.logger.Errorw(
+				fmt.Sprintf("Error dispatching message: %s", err),
+				"torrent", d.torrent)
 		}
 	}
 	if err := d.removePeer(p); err != nil {
-		d.log().Errorf("Error removing peer: %s", err)
+		d.logger.Errorw(
+			fmt.Sprintf("Error removing peer: %s", err),
+			"torrent", d.torrent)
 	}
 	d.events.PeerRemoved(p.id, d.torrent.InfoHash())
 }
@@ -519,14 +537,18 @@ func (d *Dispatcher) dispatch(p *peer, msg *conn.Message) error {
 func (d *Dispatcher) handleError(p *peer, msg *p2p.ErrorMessage) {
 	switch msg.Code {
 	case p2p.ErrorMessage_PIECE_REQUEST_FAILED:
-		d.log().Errorf("Piece request failed: %s", msg.Error)
+		d.logger.Errorw(
+			fmt.Sprintf("Piece request failed: %s", msg.Error),
+			"torrent", d.torrent)
 		d.pieceRequestManager.MarkInvalid(p.id, int(msg.Index))
 	}
 }
 
 func (d *Dispatcher) handleAnnouncePiece(p *peer, msg *p2p.AnnouncePieceMessage) {
 	if int(msg.Index) >= d.torrent.NumPieces() {
-		d.log().Errorf("Announce piece out of bounds: %d >= %d", msg.Index, d.torrent.NumPieces())
+		d.logger.Errorw(
+			fmt.Sprintf("Announce piece out of bounds: %d >= %d", msg.Index, d.torrent.NumPieces()),
+			"torrent", d.torrent)
 		return
 	}
 	i := int(msg.Index)
@@ -534,7 +556,9 @@ func (d *Dispatcher) handleAnnouncePiece(p *peer, msg *p2p.AnnouncePieceMessage)
 	d.numPeersByPiece.Increment(int(i))
 
 	if _, err := d.maybeRequestMorePieces(p); err != nil {
-		d.log("peer", p).Errorf("Error requesting more pieces: %s", err)
+		d.logger.Errorw(
+			fmt.Sprintf("Error requesting more pieces: %s", err),
+			"peer", p, "torrent", d.torrent)
 	}
 }
 
@@ -547,18 +571,25 @@ func (d *Dispatcher) handlePieceRequest(p *peer, msg *p2p.PieceRequestMessage) {
 
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
-		d.log("peer", p, "piece", i).Error("Rejecting piece request: chunk not supported")
+		d.logger.Errorw("Rejecting piece request: chunk not supported",
+			"peer", p, "piece", i, "torrent", d.torrent)
 		if err := p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, errChunkNotSupported)); err != nil {
-			d.log("peer", p, "piece", i).Errorf("Error sending error message: %s", err)
+			d.logger.Errorw(
+				fmt.Sprintf("Error sending error message: %s", err),
+				"peer", p, "piece", i, "torrent", d.torrent)
 		}
 		return
 	}
 
 	payload, err := d.torrent.GetPieceReader(i)
 	if err != nil {
-		d.log("peer", p, "piece", i).Errorf("Error getting reader for requested piece: %s", err)
+		d.logger.Errorw(
+			fmt.Sprintf("Error getting reader for requested piece: %s", err),
+			"peer", p, "piece", i, "torrent", d.torrent)
 		if err := p.messages.Send(conn.NewErrorMessage(i, p2p.ErrorMessage_PIECE_REQUEST_FAILED, err)); err != nil {
-			d.log("peer", p, "piece", i).Errorf("Error sending error message: %s", err)
+			d.logger.Errorw(
+				fmt.Sprintf("Error sending error message: %s", err),
+				"peer", p, "piece", i, "torrent", d.torrent)
 		}
 		return
 	}
@@ -581,14 +612,17 @@ func (d *Dispatcher) handlePiecePayload(
 
 	i := int(msg.Index)
 	if !d.isFullPiece(i, int(msg.Offset), int(msg.Length)) {
-		d.log("peer", p, "piece", i).Error("Rejecting piece payload: chunk not supported")
+		d.logger.Errorw("Rejecting piece payload: chunk not supported",
+			"peer", p, "piece", i, "torrent", d.torrent)
 		d.pieceRequestManager.MarkInvalid(p.id, i)
 		return
 	}
 
 	if err := d.torrent.WritePiece(payload, i); err != nil {
 		if err != storage.ErrPieceComplete {
-			d.log("peer", p, "piece", i).Errorf("Error writing piece payload: %s", err)
+			d.logger.Errorw(
+				fmt.Sprintf("Error writing piece payload: %s", err),
+				"peer", p, "piece", i, "torrent", d.torrent)
 			d.pieceRequestManager.MarkInvalid(p.id, i)
 		} else {
 			p.pstats.incrementDuplicatePiecesReceived()
@@ -608,7 +642,9 @@ func (d *Dispatcher) handlePiecePayload(
 	d.pieceRequestManager.Clear(i)
 
 	if _, err := d.maybeRequestMorePieces(p); err != nil {
-		d.log("peer", p).Errorf("Error requesting more pieces: %s", err)
+		d.logger.Errorw(
+			fmt.Sprintf("Error requesting more pieces: %s", err),
+			"peer", p, "torrent", d.torrent)
 	}
 
 	d.peers.Range(func(k, v interface{}) bool {
@@ -625,7 +661,9 @@ func (d *Dispatcher) handlePiecePayload(
 		}
 
 		if err := pp.messages.Send(conn.NewAnnouncePieceMessage(i)); err != nil {
-			d.log("peer", pp).Errorf("Error sending announce piece message: %s", err)
+			d.logger.Errorw(
+				fmt.Sprintf("Error sending announce piece message: %s", err),
+				"peer", pp, "torrent", d.torrent)
 		}
 
 		return true
@@ -639,22 +677,22 @@ func (d *Dispatcher) handleCancelPiece(p *peer, msg *p2p.CancelPieceMessage) {
 }
 
 func (d *Dispatcher) handleBitfield(p *peer, msg *p2p.BitfieldMessage) {
-	d.log("peer", p).Error("Unexpected bitfield message from established conn")
+	d.logger.Errorw("Unexpected bitfield message from established conn",
+		"peer", p, "torrent", d.torrent)
 }
 
 func (d *Dispatcher) handleComplete(p *peer) {
 	if d.Complete() {
-		d.log("peer", p).Info("Closing connection to completed peer")
+		d.logger.Infow("Closing connection to completed peer",
+			"peer", p, "torrent", d.torrent)
 		p.messages.Close()
 	} else {
 		p.bitfield.SetAll(true)
 		if _, err := d.maybeRequestMorePieces(p); err != nil {
-			d.log("peer", p).Errorf("Error requesting more pieces: %s", err)
+			d.logger.Errorw(
+				fmt.Sprintf("Error requesting more pieces: %s", err),
+				"peer", p, "torrent", d.torrent)
 		}
 	}
 }
 
-func (d *Dispatcher) log(args ...interface{}) *zap.SugaredLogger {
-	args = append(args, "torrent", d.torrent)
-	return d.logger.With(args...)
-}

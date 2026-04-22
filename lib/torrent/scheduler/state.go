@@ -24,7 +24,6 @@ import (
 	"github.com/uber/kraken/lib/torrent/scheduler/connstate"
 	"github.com/uber/kraken/lib/torrent/scheduler/dispatch"
 	"github.com/uber/kraken/lib/torrent/storage"
-	"go.uber.org/zap"
 
 	"github.com/willf/bitset"
 )
@@ -162,6 +161,3 @@ func (s *state) addIncomingConn(
 	return nil
 }
 
-func (s *state) log(args ...interface{}) *zap.SugaredLogger {
-	return s.sched.log(args...)
-}
