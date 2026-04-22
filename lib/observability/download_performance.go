@@ -84,8 +84,14 @@ const (
 // EmitDownloadPerformance emits metrics (usually latency and throughput) on the download performance of a blob.
 // Check the respective [DownloadType] for more context.
 func EmitDownloadPerformance(stats tally.Scope, downloadType DownloadType, sizeBytes int64, t time.Duration) {
+	seconds := t.Seconds()
+	if seconds == 0 {
+		// Safeguard against bad callers and/or unit tests using clock.NewMock and not incrementing time.
+		return
+	}
+
 	sizeTag := getSizeTag(uint64(sizeBytes))
-	mbPerSecond := (float64(sizeBytes) / (float64(memsize.MB))) / t.Seconds()
+	mbPerSecond := (float64(sizeBytes) / (float64(memsize.MB))) / seconds
 
 	switch downloadType {
 	case TORRENT_DOWNLOAD:
