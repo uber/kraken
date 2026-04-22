@@ -15,6 +15,7 @@ package connstate
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/andres-erbsen/clock"
@@ -154,7 +155,9 @@ func (s *State) Blacklist(peerID core.PeerID, h core.InfoHash) error {
 	}
 	s.blacklist[k] = &blacklistEntry{s.clk.Now().Add(s.config.BlacklistDuration)}
 
-	s.log("peer", peerID, "hash", h).Warnf("Connection blacklisted for %s", s.config.BlacklistDuration)
+	s.logger.Warnw(
+		fmt.Sprintf("Connection blacklisted for %s", s.config.BlacklistDuration),
+		"peer", peerID, "hash", h)
 	s.netevents.Produce(
 		networkevent.BlacklistConnEvent(h, s.localPeerID, peerID, s.config.BlacklistDuration))
 
@@ -188,7 +191,9 @@ func (s *State) AddPending(peerID core.PeerID, h core.InfoHash, neighbors []core
 			return ErrTooManyMutualConns
 		}
 		s.put(h, peerID, entry{status: _pending})
-		s.log("hash", h, "peer", peerID).Debugf("Added pending conn, capacity now at %d", s.capacity(h))
+		s.logger.Debugw(
+			fmt.Sprintf("Added pending conn, capacity now at %d", s.capacity(h)),
+			"hash", h, "peer", peerID)
 		return nil
 	case _pending:
 		return ErrConnAlreadyPending
@@ -205,8 +210,9 @@ func (s *State) DeletePending(peerID core.PeerID, h core.InfoHash) {
 		return
 	}
 	s.delete(h, peerID)
-	s.log("hash", h, "peer", peerID).Debugf(
-		"Deleted pending conn, capacity now at %d", s.capacity(h))
+	s.logger.Debugw(
+		fmt.Sprintf("Deleted pending conn, capacity now at %d", s.capacity(h)),
+		"hash", h, "peer", peerID)
 }
 
 // MovePendingToActive sets a previously pending connection as active.
@@ -219,7 +225,8 @@ func (s *State) MovePendingToActive(c *conn.Conn) error {
 	}
 	s.put(c.InfoHash(), c.PeerID(), entry{status: _active, conn: c})
 
-	s.log("hash", c.InfoHash(), "peer", c.PeerID()).Debug("Moved conn from pending to active")
+	s.logger.Debugw("Moved conn from pending to active",
+		"hash", c.InfoHash(), "peer", c.PeerID())
 	s.netevents.Produce(networkevent.AddActiveConnEvent(c.InfoHash(), s.localPeerID, c.PeerID()))
 
 	return nil
@@ -238,7 +245,9 @@ func (s *State) DeleteActive(c *conn.Conn) {
 	}
 	s.delete(c.InfoHash(), c.PeerID())
 
-	s.log("hash", c.InfoHash(), "peer", c.PeerID()).Debugf("Deleted active conn, capacity now at %d", s.capacity(c.InfoHash()))
+	s.logger.Debugw(
+		fmt.Sprintf("Deleted active conn, capacity now at %d", s.capacity(c.InfoHash())),
+		"hash", c.InfoHash(), "peer", c.PeerID())
 	s.netevents.Produce(networkevent.DropActiveConnEvent(
 		c.InfoHash(), s.localPeerID, c.PeerID()))
 }
@@ -307,6 +316,3 @@ func (s *State) capacity(h core.InfoHash) int {
 	return s.config.MaxOpenConnectionsPerTorrent - len(s.conns[h])
 }
 
-func (s *State) log(args ...interface{}) *zap.SugaredLogger {
-	return s.logger.With(args...)
-}
