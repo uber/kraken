@@ -22,9 +22,9 @@ import (
 	"github.com/willf/bitset"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/observability"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
-	"github.com/uber/kraken/lib/torrent/observability"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/tracker/metainfoclient"
 )
