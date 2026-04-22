@@ -45,10 +45,10 @@ func (c Config) applyDefaults() Config {
 		c.HandshakeTimeout = 5 * time.Second
 	}
 	if c.SenderBufferSize == 0 {
-		c.SenderBufferSize = 10000
+		c.SenderBufferSize = 256
 	}
 	if c.ReceiverBufferSize == 0 {
-		c.ReceiverBufferSize = 10000
+		c.ReceiverBufferSize = 256
 	}
 	if c.Bandwidth.EgressBitsPerSec == 0 {
 		c.Bandwidth.EgressBitsPerSec = 200 * 8 * memsize.Mbit
