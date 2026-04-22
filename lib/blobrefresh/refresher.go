@@ -16,13 +16,13 @@ package blobrefresh
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/metainfogen"
+	"github.com/uber/kraken/lib/observability"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/dedup"
 	"github.com/uber/kraken/utils/log"
@@ -112,14 +112,13 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 		if err != nil {
 			return err
 		}
-		t := time.Since(start)
-		stats := r.stats.Tagged(map[string]string{"namespace": extractPrefix(namespace)})
-		stats.Timer("download_remote_blob").Record(t)
-		stats.Counter("downloads").Inc(1)
+		downloadLatency := time.Since(start)
+		observability.EmitDownloadPerformance(r.stats, observability.REMOTE_DOWNLOAD, info.Size, downloadLatency)
 		log.With(
 			"namespace", namespace,
 			"name", d.Hex(),
-			"download_time", t).Info("Downloaded remote blob")
+			"blob_size", size.String(),
+			"download_time", downloadLatency).Info("Downloaded remote blob")
 		for _, h := range hooks {
 			h.Run(d)
 		}
@@ -142,15 +141,4 @@ func (r *Refresher) download(client backend.Client, namespace string, d core.Dig
 	return r.cas.WriteBlobToCacheWithMetaInfo(name, size, func(w store.FileReadWriter) error {
 		return client.Download(namespace, name, w)
 	}, pieceLength)
-}
-
-// extractPrefix extracts the prefix from the namespace to decrease the cardinality of metrics.
-func extractPrefix(namespace string) string {
-	if prefix, _, ok := strings.Cut(namespace, "/"); ok {
-		return prefix
-	}
-	if prefix, _, ok := strings.Cut(namespace, "_"); ok {
-		return prefix
-	}
-	return namespace
 }
