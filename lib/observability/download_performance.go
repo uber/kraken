@@ -81,6 +81,8 @@ const (
 	METAINFO_DOWNLOAD DownloadType = "METAINFO_DOWNLOAD"
 	// Measures the e2e blob download from remote storage (e.g. GCS) in origin/build-index.
 	REMOTE_DOWNLOAD DownloadType = "REMOTE_DOWNLOAD"
+	// Measures the e2e blob download performance of a blob from proxy.
+	PROXY_BLOB_DOWNLOAD = "PROXY_BLOB_DOWNLOAD"
 )
 
 // EmitDownloadPerformance emits metrics (usually latency and throughput) on the download performance of a blob.
@@ -104,6 +106,8 @@ func EmitDownloadPerformance(stats tally.Scope, downloadType DownloadType, sizeB
 		emitTorrentLeechPerformance(stats, mbPerSecond, sizeTag)
 	case REMOTE_DOWNLOAD:
 		emitRemoteBlobDownloadPerformance(stats, mbPerSecond, sizeTag, t)
+	case PROXY_BLOB_DOWNLOAD:
+		emitBlobDownloadPerformanceInProxy(stats, mbPerSecond, sizeTag, t)
 	}
 }
 
@@ -148,4 +152,14 @@ func emitRemoteBlobDownloadPerformance(stats tally.Scope, mbPerSecond float64, s
 	stats.Tagged(map[string]string{
 		"size": sizeTag,
 	}).Histogram("remote_blob_download_throughput", _downloadThroughputBuckets).RecordValue(mbPerSecond)
+}
+
+func emitBlobDownloadPerformanceInProxy(stats tally.Scope, mbPerSecond float64, sizeTag string, t time.Duration) {
+	stats.Tagged(map[string]string{
+		"size": sizeTag,
+	}).Histogram("blob_download_time", _downloadLatencyBuckets).RecordDuration(t)
+
+	stats.Tagged(map[string]string{
+		"size": sizeTag,
+	}).Histogram("blob_download_throughput", _downloadThroughputBuckets).RecordValue(mbPerSecond)
 }

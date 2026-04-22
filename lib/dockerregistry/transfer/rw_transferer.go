@@ -17,9 +17,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/observability"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/closers"
@@ -100,6 +102,7 @@ func (t *ReadWriteTransferer) originStat(namespace string, d core.Digest) (*core
 // Download downloads the blob of name into the file store and returns a reader
 // to the newly downloaded file.
 func (t *ReadWriteTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
+	start := time.Now()
 	t.stats.Counter("download_requests").Inc(1)
 	ctx, span := t.tracer.Start(context.Background(), "registry.download_blob",
 		trace.WithSpanKind(trace.SpanKindClient),
@@ -118,6 +121,7 @@ func (t *ReadWriteTransferer) Download(namespace string, d core.Digest) (store.F
 		span.SetStatus(codes.Ok, "cache hit")
 		mbServed := int64(uint64(blob.Size()) / memsize.MB)
 		t.stats.Counter("mb_served").Inc(mbServed)
+		observability.EmitDownloadPerformance(t.stats, observability.PROXY_BLOB_DOWNLOAD, blob.Size(), time.Since(start))
 		return blob, nil
 	}
 	if os.IsNotExist(err) {
@@ -128,6 +132,7 @@ func (t *ReadWriteTransferer) Download(namespace string, d core.Digest) (store.F
 		} else {
 			mbServed := int64(uint64(blob.Size()) / memsize.MB)
 			t.stats.Counter("mb_served").Inc(mbServed)
+			observability.EmitDownloadPerformance(t.stats, observability.PROXY_BLOB_DOWNLOAD, blob.Size(), time.Since(start))
 		}
 		return blob, err
 	}
