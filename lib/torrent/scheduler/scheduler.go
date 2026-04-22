@@ -182,10 +182,10 @@ func newScheduler(
 	}
 
 	if config.DisablePreemption {
-		s.log().Warn("Preemption disabled")
+		s.logger.Warn("Preemption disabled")
 	}
 	if config.ConnState.DisableBlacklist {
-		s.log().Warn("Blacklisting disabled")
+		s.logger.Warn("Blacklisting disabled")
 	}
 
 	return s, nil
@@ -196,7 +196,7 @@ func newScheduler(
 // Note: this has been split from the constructor so we can test against an
 // "unstarted" scheduler in certain cases.
 func (s *scheduler) start(aq announcequeue.Queue) error {
-	s.log().Infof(
+	s.logger.Infof(
 		"Scheduler starting as peer %s on addr %s:%d",
 		s.pctx.PeerID, s.pctx.IP, s.pctx.Port)
 
@@ -218,7 +218,7 @@ func (s *scheduler) start(aq announcequeue.Queue) error {
 // Stop shuts down the scheduler.
 func (s *scheduler) Stop() {
 	s.stopOnce.Do(func() {
-		s.log().Info("Stopping scheduler...")
+		s.logger.Info("Stopping scheduler...")
 
 		close(s.done)
 		closers.Close(s.listener)
@@ -229,7 +229,7 @@ func (s *scheduler) Stop() {
 
 		s.torrentlog.Sync()
 
-		s.log().Info("Scheduler stopped")
+		s.logger.Info("Scheduler stopped")
 	})
 }
 
@@ -318,18 +318,18 @@ func (s *scheduler) runEventLoop(aq announcequeue.Queue) {
 func (s *scheduler) listenLoop() {
 	defer s.wg.Done()
 
-	s.log().Infof("Listening on %s", s.listener.Addr().String())
+	s.logger.Infof("Listening on %s", s.listener.Addr().String())
 	for {
 		nc, err := s.listener.Accept()
 		if err != nil {
 			// TODO Need some way to make this gracefully exit.
-			s.log().Errorf("Error accepting new conn, exiting listen loop: %s", err)
+			s.logger.Errorf("Error accepting new conn, exiting listen loop: %s", err)
 			return
 		}
 		go func() {
 			pc, err := s.handshaker.Accept(nc)
 			if err != nil {
-				s.log().Infof("Error accepting handshake, closing net conn: %s", err)
+				s.logger.Infof("Error accepting handshake, closing net conn: %s", err)
 				closers.Close(nc)
 				return
 			}
@@ -373,9 +373,9 @@ func (s *scheduler) announce(d core.Digest, h core.InfoHash, complete bool) {
 }
 
 func (s *scheduler) failIncomingHandshake(pc *conn.PendingConn, err error) {
-	s.log(
-		"peer", pc.PeerID(),
-		"hash", pc.InfoHash()).Infof("Error accepting incoming handshake: %s", err)
+	s.logger.Infow(
+		fmt.Sprintf("Error accepting incoming handshake: %s", err),
+		"peer", pc.PeerID(), "hash", pc.InfoHash())
 	pc.Close()
 	s.eventLoop.send(failedIncomingHandshakeEvent{pc.PeerID(), pc.InfoHash()})
 }
@@ -405,10 +405,9 @@ func (s *scheduler) initializeOutgoingHandshake(
 	addr := fmt.Sprintf("%s:%d", p.IP, p.Port)
 	result, err := s.handshaker.Initialize(p.PeerID, p.Origin, addr, info, rb, namespace)
 	if err != nil {
-		s.log(
-			"peer", p.PeerID,
-			"hash", info.InfoHash(),
-			"addr", addr).Infof("Error initializing outgoing handshake: %s", err)
+		s.logger.Infow(
+			fmt.Sprintf("Error initializing outgoing handshake: %s", err),
+			"peer", p.PeerID, "hash", info.InfoHash(), "addr", addr)
 		s.eventLoop.send(failedOutgoingHandshakeEvent{p.PeerID, info.InfoHash()})
 		s.torrentlog.OutgoingConnectionReject(info.Digest(), info.InfoHash(), p.PeerID, err)
 		return
@@ -417,6 +416,3 @@ func (s *scheduler) initializeOutgoingHandshake(
 	s.eventLoop.send(outgoingConnEvent{result.Conn, result.Bitfield, info})
 }
 
-func (s *scheduler) log(args ...interface{}) *zap.SugaredLogger {
-	return s.logger.With(args...)
-}
