@@ -1,0 +1,92 @@
+name: Performance Benchmark
+
+# Runs the cold-pull-large-blob workload 5 times on every PR, uploads the
+# results as a workflow artifact, and posts a sticky comment with the KPI
+# table from the latest run's report.md. Baseline gating is currently
+# disabled (no committed baseline yet); switch --baseline to "compare"
+# once a hardware-specific baseline lives under test/perf/baselines/.
+
+on:
+  pull_request:
+    branches: ['**']
+
+env:
+  GO_VERSION: '1.24'
+  PYTHON_VERSION: '3.12'
+
+# A new push to the same PR cancels any in-flight perf run; perf data
+# from a stale commit is not useful.
+concurrency:
+  group: perf-bench-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  perf_bench:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write    # for the sticky PR comment
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-docker-action@v4
+        with:
+          version: latest
+          # Match integration_tests in build-and-test.yaml: Kraken does
+          # not yet support OCI manifests, so disable the containerd
+          # snapshotter that would default to them.
+          daemon-config: |
+            {
+              "features": {
+                "containerd-snapshotter": false
+              }
+            }
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Build kraken images
+        run: make images
+
+      - name: Install harness deps
+        run: pip install -r test/perf/requirements.txt
+
+      - name: Run cold-pull workload (5 reps, 64 MiB)
+        run: |
+          PYTHONPATH=. python3 -m test.perf.runner \
+            --env devcluster \
+            --workload cold-pull-large-blob \
+            --params blob_size=64MiB \
+            --runs 5 \
+            --bring-up --agents 2 \
+            --baseline skip \
+            --out bench-results/
+
+      - name: Tear down cluster
+        if: always()
+        run: |
+          PYTHONPATH=. python3 -m test.perf.runner --env devcluster --tear-down || true
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-bench-results
+          path: bench-results/
+          retention-days: 30
+          if-no-files-found: warn
+
+      # Sticky comment with the KPI table. Skipped for fork PRs which do
+      # not have write permission on the base repo.
+      - name: Comment on PR
+        if: always() && github.event.pull_request.head.repo.full_name == github.repository
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: perf-bench
+          path: bench-results/devcluster/cold-pull-large-blob/latest/report.md
