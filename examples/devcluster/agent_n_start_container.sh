@@ -11,6 +11,8 @@ set -ex
 
 AGENT_INDEX=${1:?usage: $0 <agent-index>}
 
+source examples/devcluster/_devcluster_lib.sh
+
 AGENT_REGISTRY_PORT=$((15000 + AGENT_INDEX * 1000))
 AGENT_PEER_PORT=$((AGENT_REGISTRY_PORT + 1))
 AGENT_SERVER_PORT=$((AGENT_REGISTRY_PORT + 2))
@@ -20,7 +22,7 @@ AGENT_CONTAINER_NAME=kraken-agent-${AGENT_INDEX}
 
 AGENT_CONFIG_DIR=${KRAKEN_AGENT_CONFIG_DIR:-$(pwd)/examples/devcluster/config/agent}
 
-docker run -d ${KRAKEN_DOCKER_EXTRA_ARGS} \
+docker run -d ${KRAKEN_DOCKER_EXTRA_ARGS} ${NETWORK_ARGS} \
     -p ${AGENT_PEER_PORT}:${AGENT_PEER_PORT} \
     -p ${AGENT_SERVER_PORT}:${AGENT_SERVER_PORT} \
     -p ${AGENT_REGISTRY_PORT}:${AGENT_REGISTRY_PORT} \

@@ -86,21 +86,33 @@ class DevclusterEnv:
         self.agent_count = 0
 
     def restart_agents(self) -> None:
-        """Restart all agents to flush their per-agent caches and torrent state.
-
-        This is the practical "cold cache" for pull workloads: the origin
-        retains its CAStore (the realistic case for repeat pulls), while
-        each agent re-fetches from origin/peers.
+        """Tear down and re-create all agent containers to fully flush per-agent
+        disk cache and torrent state. `docker restart` would NOT do this: the
+        agent's cache_dir lives on the container's ephemeral storage, which
+        persists across restart. Removing and recreating the container gives a
+        true cold cache for the leech side. Origin keeps its CAStore so it
+        serves from local disk after the first pull (the realistic case).
         """
         for i in range(1, self.agent_count + 1):
-            subprocess.check_call(
-                ["docker", "restart", agent_container_name(i)],
+            subprocess.call(
+                ["docker", "rm", "-f", agent_container_name(i)],
                 stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
-        # Same race as components.py.Component.restart: brief sleep before health
-        # checks to let the container actually come back up.
+        # docker rm has a brief window before the name is fully released; same
+        # one-second wait the integration tests' Component.restart uses.
         time.sleep(1)
+        for i in range(1, self.agent_count + 1):
+            self._start_agent(i)
         self._wait_for_agents_ready()
+
+    def _start_agent(self, idx: int) -> None:
+        if idx == 1:
+            self._run_script("agent_one_start_container.sh")
+        elif idx == 2:
+            self._run_script("agent_two_start_container.sh")
+        else:
+            self._run_script("agent_n_start_container.sh", str(idx))
 
     def _run_script(self, name: str, *args: str) -> None:
         env = os.environ.copy()

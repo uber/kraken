@@ -3,13 +3,14 @@
 set -ex
 
 source examples/devcluster/herd_param.sh
+source examples/devcluster/_devcluster_lib.sh
 
 # Start kraken herd. KRAKEN_DOCKER_EXTRA_ARGS allows callers (e.g. the perf
 # benchmark harness) to inject resource constraints like --cpus or --memory.
 # KRAKEN_HERD_CONFIG_DIR overrides the host path to the per-component config
 # parent dir, defaulting to the devcluster config.
 HERD_CONFIG_DIR=${KRAKEN_HERD_CONFIG_DIR:-$(pwd)/examples/devcluster/config}
-docker run -d ${KRAKEN_DOCKER_EXTRA_ARGS} \
+docker run -d ${KRAKEN_DOCKER_EXTRA_ARGS} ${HERD_NETWORK_ARGS} \
     -p ${TESTFS_PORT}:${TESTFS_PORT} \
     -p ${ORIGIN_SERVER_PORT}:${ORIGIN_SERVER_PORT} \
     -p ${ORIGIN_PEER_PORT}:${ORIGIN_PEER_PORT} \

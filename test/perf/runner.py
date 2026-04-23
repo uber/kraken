@@ -217,12 +217,15 @@ def main(
         else:
             all_pass, comparison = baseline_mod.compare(aggregated, existing)
             for r in comparison:
+                cur = r["current"] if r["current"] is not None else "-"
+                base = r["baseline"] if r["baseline"] is not None else "-"
                 click.echo(
-                    "  {name} ({tags}): {cur} vs {base} ({delta:+.2f}%) -> {v}".format(
+                    "  {name}.{stat} ({tags}): {cur} vs {base} ({delta:+.2f}%) -> {v}".format(
                         name=r["name"],
+                        stat=r.get("stat", ""),
                         tags=r["tags"],
-                        cur=r["current"],
-                        base=r["baseline"],
+                        cur=cur,
+                        base=base,
                         delta=r["delta_pct"],
                         v=r["verdict"],
                     )

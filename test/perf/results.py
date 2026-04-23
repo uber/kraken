@@ -212,15 +212,16 @@ class ResultsWriter:
         if comparison:
             lines += ["", "## Baseline comparison", ""]
             lines += [
-                "| Metric | Current | Baseline | Delta % | Verdict |",
-                "| --- | ---: | ---: | ---: | --- |",
+                "| Metric | Stat | Current | Baseline | Delta % | Verdict |",
+                "| --- | --- | ---: | ---: | ---: | --- |",
             ]
             for c in comparison:
                 lines.append(
-                    "| {name} | {cur} | {base} | {dlt} | {v} |".format(
+                    "| {name} | {stat} | {cur} | {base} | {dlt} | {v} |".format(
                         name=c["name"],
-                        cur=_fmt(c["current"]),
-                        base=_fmt(c["baseline"]),
+                        stat=c.get("stat", ""),
+                        cur=_fmt(c["current"]) if c["current"] is not None else "-",
+                        base=_fmt(c["baseline"]) if c["baseline"] is not None else "-",
                         dlt=f"{c['delta_pct']:+.2f}%",
                         v=c["verdict"],
                     )

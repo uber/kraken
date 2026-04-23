@@ -94,8 +94,8 @@ def compare(
     that exist in both, KPIs missing from baseline (treated as new, verdict
     "new"), and KPIs missing from current (verdict "missing").
     """
-    by_name_current = {(k.name, _tag_key(k.tags)): k for k in aggregated}
-    by_name_base = {(k.name, _tag_key(k.tags)): k for k in baseline.kpis}
+    by_name_current = {(k.name, k.stat, _tag_key(k.tags)): k for k in aggregated}
+    by_name_base = {(k.name, k.stat, _tag_key(k.tags)): k for k in baseline.kpis}
 
     results: list[dict[str, Any]] = []
     all_pass = True
@@ -106,6 +106,7 @@ def compare(
             results.append(
                 {
                     "name": cur.name,
+                    "stat": cur.stat,
                     "tags": cur.tags,
                     "current": cur.value,
                     "baseline": None,
@@ -124,6 +125,7 @@ def compare(
         results.append(
             {
                 "name": cur.name,
+                "stat": cur.stat,
                 "tags": cur.tags,
                 "current": cur.value,
                 "baseline": base.value,
@@ -139,6 +141,7 @@ def compare(
         results.append(
             {
                 "name": base.name,
+                "stat": base.stat,
                 "tags": base.tags,
                 "current": None,
                 "baseline": base.value,

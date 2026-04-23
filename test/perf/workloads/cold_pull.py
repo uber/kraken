@@ -74,7 +74,9 @@ class ColdPullLargeBlob(Workload):
     def setup(self, env, params: dict[str, Any]) -> None:
         self._size_bytes = parse_size(params["blob_size"])
         seed = int(params.get("seed", 42))
-        rng = random.Random((seed, self.name, self._size_bytes))
+        # random.Random only accepts None/int/float/str/bytes/bytearray as a
+        # seed, so derive a deterministic string from the inputs.
+        rng = random.Random(f"{seed}:{self.name}:{self._size_bytes}")
         # random.Random.randbytes is available in 3.9+; both CI runners are 3.10+.
         self._blob = rng.randbytes(self._size_bytes)
         self._name = hashlib.sha256(self._blob).hexdigest()
