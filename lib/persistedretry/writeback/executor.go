@@ -30,6 +30,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+var _writebackLatencyBuckets = tally.MustMakeExponentialDurationBuckets(1*time.Second, 1.4, 30)
+
 // FileStore defines store operations required for write-back.
 type FileStore interface {
 	DeleteCacheFileMetadata(name string, md metadata.Metadata) error
@@ -195,9 +197,11 @@ func (e *Executor) upload(ctx context.Context, t *Task) error {
 		"name", t.Name,
 	).Info("Uploaded cache file to remote backend")
 
-	// We don't want to time noops nor errors.
-	e.stats.Timer("upload").Record(time.Since(start))
-	e.stats.Timer("lifetime").Record(time.Since(t.CreatedAt))
+	s := e.stats.Tagged(map[string]string{
+		"version": "2",
+	})
+	s.Histogram("upload", _writebackLatencyBuckets).RecordDuration(time.Since(start))
+	s.Histogram("lifetime", _writebackLatencyBuckets).RecordDuration(time.Since(t.CreatedAt))
 
 	return nil
 }
