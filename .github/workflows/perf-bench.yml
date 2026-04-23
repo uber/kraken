@@ -73,14 +73,23 @@ jobs:
         run: |
           PYTHONPATH=. python3 -m test.perf.runner --env devcluster --tear-down || true
 
-      - name: Upload results
+      # Render the KPI table on the workflow run's Summary tab and dump
+      # the raw metrics.json to the step log for inline inspection.
+      - name: Write results to job summary
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: perf-bench-results
-          path: bench-results/
-          retention-days: 30
-          if-no-files-found: warn
+        run: |
+          REPORT=bench-results/devcluster/cold-pull-large-blob/latest/report.md
+          METRICS=bench-results/devcluster/cold-pull-large-blob/latest/metrics.json
+          if [ -f "$REPORT" ]; then
+            cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## perf-bench: no report produced" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f "$METRICS" ]; then
+            echo "::group::metrics.json"
+            cat "$METRICS"
+            echo "::endgroup::"
+          fi
 
       # Sticky comment with the KPI table. Skipped for fork PRs which do
       # not have write permission on the base repo.
