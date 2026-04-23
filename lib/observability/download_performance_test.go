@@ -126,6 +126,29 @@ func TestEmitDownloadPerformance(t *testing.T) {
 		require.Equal(int64(1), downloadThroughputXsmall.Values()[0.1])
 	})
 
+	t.Run("remote blob download", func(t *testing.T) {
+		require := require.New(t)
+		stats := tally.NewTestScope("", nil)
+
+		EmitDownloadPerformance(stats, REMOTE_DOWNLOAD, 3*int64(memsize.MB), 2*time.Millisecond) // 1500 MiB/s
+		EmitDownloadPerformance(stats, REMOTE_DOWNLOAD, 3*int64(memsize.MB), 1*time.Hour)        // 0.000833333333 MiB/s
+
+		snapshot := stats.Snapshot()
+		histograms := snapshot.Histograms()
+
+		downloadThroughputXsmallKey := "remote_blob_download_throughput+size=0B-5MiB"
+		downloadThroughputXsmall, ok := histograms[downloadThroughputXsmallKey]
+		require.True(ok)
+		require.Equal(int64(1), downloadThroughputXsmall.Values()[math.MaxFloat64])
+		require.Equal(int64(1), downloadThroughputXsmall.Values()[0.1])
+
+		downloadTimeXsmallKey := "remote_blob_download_time+size=0B-5MiB"
+		downloadTimeXsmall, ok := histograms[downloadTimeXsmallKey]
+		require.True(ok)
+		require.Equal(int64(1), downloadTimeXsmall.Durations()[500*time.Millisecond])
+		require.Equal(int64(1), downloadTimeXsmall.Durations()[1*time.Hour])
+	})
+
 	t.Run("safeguard against 0 latency", func(t *testing.T) {
 		require := require.New(t)
 		stats := tally.NewTestScope("", nil)

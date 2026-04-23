@@ -73,12 +73,14 @@ func getSizeTag(sizeBytes uint64) string {
 type DownloadType string
 
 const (
-	// Measures the end-to-end download of a torrent (blob), including the GetMetainfo call.
+	// Measures the end-to-end download of a torrent (blob) in agent, including the GetMetainfo call.
 	TORRENT_DOWNLOAD DownloadType = "TORRENT_DOWNLOAD"
 	// Measures the torrent leeching throughput from peers. EXCLUDES any other parts of the download, e.g. the GetMetainfo call.
 	TORRENT_LEECH DownloadType = "TORRENT_LEECH"
 	// Measures the client-side GetMetainfo call performance.
 	METAINFO_DOWNLOAD DownloadType = "METAINFO_DOWNLOAD"
+	// Measures the e2e blob download from remote storage (e.g. GCS) in origin/build-index.
+	REMOTE_DOWNLOAD DownloadType = "REMOTE_DOWNLOAD"
 )
 
 // EmitDownloadPerformance emits metrics (usually latency and throughput) on the download performance of a blob.
@@ -100,6 +102,8 @@ func EmitDownloadPerformance(stats tally.Scope, downloadType DownloadType, sizeB
 		emitMetainfoDownloadPerformance(stats, mbPerSecond, sizeTag, t)
 	case TORRENT_LEECH:
 		emitTorrentLeechPerformance(stats, mbPerSecond, sizeTag)
+	case REMOTE_DOWNLOAD:
+		emitRemoteBlobDownloadPerformance(stats, mbPerSecond, sizeTag, t)
 	}
 }
 
@@ -134,4 +138,14 @@ func emitMetainfoDownloadPerformance(stats tally.Scope, mbPerSecond float64, siz
 		"torrent_size": sizeTag,
 		"version":      "2",
 	}).Histogram("metainfo_download_throughput", _downloadThroughputBuckets).RecordValue(mbPerSecond)
+}
+
+func emitRemoteBlobDownloadPerformance(stats tally.Scope, mbPerSecond float64, sizeTag string, t time.Duration) {
+	stats.Tagged(map[string]string{
+		"size": sizeTag,
+	}).Histogram("remote_blob_download_time", _downloadLatencyBuckets).RecordDuration(t)
+
+	stats.Tagged(map[string]string{
+		"size": sizeTag,
+	}).Histogram("remote_blob_download_throughput", _downloadThroughputBuckets).RecordValue(mbPerSecond)
 }
