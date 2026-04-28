@@ -20,6 +20,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -38,12 +40,33 @@ import (
 	mockscheduler "github.com/uber/kraken/mocks/lib/torrent/scheduler"
 	mockannounceclient "github.com/uber/kraken/mocks/tracker/announceclient"
 	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/memsize"
 	"github.com/uber/kraken/utils/testutil"
 
+	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 )
+
+// failingResponseWriter always errors on Write, simulating a client that
+// disconnected after the response headers were sent.
+type failingResponseWriter struct {
+	header http.Header
+}
+
+func (f *failingResponseWriter) Header() http.Header {
+	if f.header == nil {
+		f.header = http.Header{}
+	}
+	return f.header
+}
+
+func (f *failingResponseWriter) Write([]byte) (int, error) {
+	return 0, errors.New("write failed: client disconnected")
+}
+
+func (f *failingResponseWriter) WriteHeader(int) {}
 
 type serverMocks struct {
 	cads             *store.CADownloadStore
@@ -53,6 +76,7 @@ type serverMocks struct {
 	containerdCli    *mockcontainerd.MockClient
 	ac               *mockannounceclient.MockClient
 	containerRuntime *mockcontainerruntime.MockFactory
+	stats            tally.TestScope
 	cleanup          *testutil.Cleanup
 }
 
@@ -73,17 +97,29 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	containerdCli := mockcontainerd.NewMockClient(ctrl)
 	ac := mockannounceclient.NewMockClient(ctrl)
 	containerruntime := mockcontainerruntime.NewMockFactory(ctrl)
+	stats := tally.NewTestScope("", nil)
 	return &serverMocks{
 		cads, sched, tags, dockerCli, containerdCli, ac,
-		containerruntime, &cleanup,
+		containerruntime, stats, &cleanup,
 	}, cleanup.Run
 }
 
 func (m *serverMocks) startServer(c Config) (*Server, string) {
-	s := New(c, tally.NoopScope, m.cads, m.sched, m.tags, m.ac, m.containerRuntime)
+	s := New(c, m.stats, m.cads, m.sched, m.tags, m.ac, m.containerRuntime)
 	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
 	return s, addr
+}
+
+// mbServedValue returns the sum of all "mb_served" counter values in the scope.
+func mbServedValue(scope tally.TestScope) int64 {
+	var total int64
+	for _, c := range scope.Snapshot().Counters() {
+		if c.Name() == "mb_served" {
+			total += c.Value()
+		}
+	}
+	return total
 }
 
 func TestGetTag(t *testing.T) {
@@ -144,6 +180,80 @@ func TestDownload(t *testing.T) {
 	result, err := io.ReadAll(r)
 	require.NoError(err)
 	require.Equal(string(blob.Content), string(result))
+}
+
+func TestDownloadEmitsMBServed(t *testing.T) {
+	for _, tc := range []struct {
+		desc     string
+		blobSize uint64
+		wantMB   int64
+	}{
+		{"large blob (2 MiB)", 2 * memsize.MB, 2},
+		{"exact 1 MiB blob", memsize.MB, 1},
+		{"sub-MiB blob truncates to 0", 256 * memsize.KB, 0},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			require := require.New(t)
+
+			mocks, cleanup := newServerMocks(t)
+			defer cleanup()
+
+			namespace := core.TagFixture()
+			blob := core.SizedBlobFixture(tc.blobSize, 64)
+
+			mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
+				func(namespace string, d core.Digest) error {
+					return store.RunDownload(mocks.cads, d, blob.Content)
+				})
+
+			_, addr := mocks.startServer(Config{})
+			c := agentclient.New(addr)
+
+			r, err := c.Download(namespace, blob.Digest)
+			require.NoError(err)
+			_, err = io.ReadAll(r)
+			require.NoError(err)
+
+			require.Equal(tc.wantMB, mbServedValue(mocks.stats))
+		})
+	}
+}
+
+// TestDownloadEmitsMBServedEvenWhenCopyFails documents that the mb_served
+// counter is incremented before io.Copy runs, so on a client disconnect (or
+// any other write failure) the counter still records a full serve even though
+// no bytes actually reached the client. This is the existing behavior after
+// PR #597; if a future change moves the increment to after a successful copy,
+// this test will need to be updated.
+func TestDownloadEmitsMBServedEvenWhenCopyFails(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	namespace := core.TagFixture()
+	blob := core.SizedBlobFixture(2*memsize.MB, 64)
+
+	mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
+		func(namespace string, d core.Digest) error {
+			return store.RunDownload(mocks.cads, d, blob.Content)
+		})
+
+	s := New(
+		Config{}, mocks.stats, mocks.cads, mocks.sched, mocks.tags,
+		mocks.ac, mocks.containerRuntime)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("namespace", namespace)
+	rctx.URLParams.Add("digest", blob.Digest.String())
+	req := httptest.NewRequest(http.MethodGet, "/", nil).
+		WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	err := s.downloadBlobHandler(&failingResponseWriter{}, req)
+	require.Error(err)
+	require.Contains(err.Error(), "copy file")
+
+	require.Equal(int64(2), mbServedValue(mocks.stats))
 }
 
 func TestDownloadNotFound(t *testing.T) {
