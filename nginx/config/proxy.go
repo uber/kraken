@@ -42,7 +42,7 @@ server {
   gzip_types text/plain test/csv application/json;
 
   # Committing large blobs might take a while.
-  proxy_read_timeout 3m;
+  proxy_read_timeout {{if $.proxy_read_timeout}}{{$.proxy_read_timeout}}{{else}}3m{{end}};
 
 {{healthEndpoint "proxy-server"}}
 

@@ -37,6 +37,8 @@ server {
   access_log {{.access_log_path}};
   error_log {{.error_log_path}};
 
+  proxy_read_timeout {{if .proxy_read_timeout}}{{.proxy_read_timeout}}{{else}}10m{{end}};
+
   gzip on;
   gzip_types text/plain test/csv application/json;
 
