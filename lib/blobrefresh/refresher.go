@@ -104,7 +104,7 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 		return fmt.Errorf("%s blob exceeds size limit of %s", size, r.config.SizeLimit)
 	}
 
-	id := namespace + ":" + d.Hex()
+	id := d.Hex()
 	err = r.requests.Start(id, func() error {
 		start := time.Now()
 		pieceLength := r.metaInfoGenerator.GetPieceLength(int64(size))

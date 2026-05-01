@@ -212,3 +212,47 @@ func TestRefreshWithMemoryCache(t *testing.T) {
 	require.NoError(err)
 	require.Equal(blob.Content, diskData)
 }
+
+func TestDedupSameBlobWithDifferentNamespaces(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newRefresherMocks(t)
+	defer cleanup()
+
+	refresher := mocks.new()
+
+	namespace1 := core.TagFixture()
+	namespace2 := core.TagFixture()
+	client1 := mocks.newClient(namespace1)
+	client2 := mocks.newClient(namespace2)
+
+	blob := core.SizedBlobFixture(100, uint64(_testPieceLength))
+
+	client1.EXPECT().Stat(namespace1, blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
+	client2.EXPECT().Stat(namespace2, blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
+
+	downloadStarted := make(chan struct{})
+	finishDownload := make(chan struct{})
+
+	client1.EXPECT().Download(namespace1, blob.Digest.Hex(), gomock.Any()).DoAndReturn(
+		func(_ string, _ string, w io.Writer) error {
+			close(downloadStarted)
+			<-finishDownload
+			_, err := w.Write(blob.Content)
+			return err
+		},
+	)
+
+	require.NoError(refresher.Refresh(namespace1, blob.Digest))
+	<-downloadStarted
+
+	err := refresher.Refresh(namespace2, blob.Digest)
+	require.Equal(ErrPending, err)
+
+	close(finishDownload)
+
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		_, err := mocks.cas.GetCacheFileStat(blob.Digest.Hex())
+		return !os.IsNotExist(err)
+	}))
+}
