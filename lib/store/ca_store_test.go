@@ -1276,8 +1276,10 @@ func BenchmarkGetCacheFileMetadata_MemoryCache(b *testing.B) {
 		{"1MB_4pc", 1 << 20, 256 << 10},
 		{"16MB_64pc", 16 << 20, 256 << 10},
 		{"64MB_256pc", 64 << 20, 256 << 10},
-		{"256MB_1024pc", 256 << 20, 256 << 10},
 		// Vary piece count at fixed 16 MB blob (isolates piece-count cost).
+		// Note: 256MB_1024pc is omitted — piece count drives allocation cost,
+		// not blob size, and 16MB_1024pc_16KBpc covers the 1024-piece case with
+		// ~40x faster setup per count.
 		{"16MB_4pc_4MBpc", 16 << 20, 4 << 20},
 		{"16MB_16pc_1MBpc", 16 << 20, 1 << 20},
 		{"16MB_1024pc_16KBpc", 16 << 20, 16 << 10},

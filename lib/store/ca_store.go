@@ -475,7 +475,14 @@ func (s *CAStore) GetCacheFileMetadata(name string, md metadata.Metadata) error 
 				// shouldn't happen, but good to check
 				return fmt.Errorf("entry %s doesn't have any metainfo", entry.Name)
 			}
-			// Serialize and deserialize for consistency with disk behavior
+			// Fast path: hand back the cached pointer. *core.MetaInfo has no
+			// public mutators, so sharing across readers is safe and avoids
+			// a JSON serialize/deserialize round-trip on every read.
+			if tm, ok := md.(*metadata.TorrentMeta); ok {
+				tm.MetaInfo = entry.MetaInfo
+				return nil
+			}
+			// Defensive fallback for any future TorrentMeta-suffix metadata type.
 			b, err := entry.MetaInfo.Serialize()
 			if err != nil {
 				return fmt.Errorf("serialize metainfo: %s", err)
