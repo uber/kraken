@@ -1208,3 +1208,127 @@ func TestCAStore_ListCacheFiles(t *testing.T) {
 		})
 	}
 }
+
+func TestGetCacheFileMetadata_MemoryCache_NoCopy(t *testing.T) {
+	require := require.New(t)
+
+	config, cleanup := CAStoreConfigFixture()
+	defer cleanup()
+	config.MemoryCache = MemoryCacheConfig{
+		Enabled:         true,
+		MaxSize:         100 * 1024 * 1024,
+		DrainWorkers:    1,
+		DrainMaxRetries: 3,
+		TTL:             time.Hour,
+		TTLInterval:     time.Hour,
+	}
+
+	mockClock := clock.NewMock()
+	s, err := newCAStore(config, tally.NoopScope, mockClock)
+	require.NoError(err)
+	defer s.Close()
+
+	blob := core.SizedBlobFixture(1024, 256)
+	name := blob.Digest.Hex()
+	err = s.WriteBlobToCacheWithMetaInfo(
+		name,
+		uint64(len(blob.Content)),
+		func(w FileReadWriter) error {
+			_, err := w.Write(blob.Content)
+			return err
+		},
+		256,
+	)
+	require.NoError(err)
+	require.True(s.CheckInMemCache(name))
+
+	cached := s.memCache.Get(name)
+	require.NotNil(cached)
+	require.NotNil(cached.MetaInfo)
+
+	// First read: pointer should match the cache entry's MetaInfo (no copy).
+	var tm1 metadata.TorrentMeta
+	require.NoError(s.GetCacheFileMetadata(name, &tm1))
+	require.Same(cached.MetaInfo, tm1.MetaInfo,
+		"GetCacheFileMetadata should return the cached *MetaInfo without copying")
+
+	// Second read: same again — confirms the path is deterministic, not a one-shot.
+	var tm2 metadata.TorrentMeta
+	require.NoError(s.GetCacheFileMetadata(name, &tm2))
+	require.Same(cached.MetaInfo, tm2.MetaInfo)
+
+	// Behavioral parity: returned MetaInfo matches the original blob's MetaInfo.
+	require.Equal(blob.MetaInfo.InfoHash(), tm1.MetaInfo.InfoHash())
+	require.Equal(blob.MetaInfo.Length(), tm1.MetaInfo.Length())
+	require.Equal(blob.MetaInfo.NumPieces(), tm1.MetaInfo.NumPieces())
+	for i := 0; i < blob.MetaInfo.NumPieces(); i++ {
+		require.Equal(blob.MetaInfo.GetPieceSum(i), tm1.MetaInfo.GetPieceSum(i))
+	}
+}
+
+func BenchmarkGetCacheFileMetadata_MemoryCache(b *testing.B) {
+	cases := []struct {
+		name        string
+		blobSize    uint64
+		pieceLength uint64
+	}{
+		// Vary blob size at fixed 256 KB pieces (realistic Docker layer scaling).
+		{"1MB_4pc", 1 << 20, 256 << 10},
+		{"16MB_64pc", 16 << 20, 256 << 10},
+		{"64MB_256pc", 64 << 20, 256 << 10},
+		// Vary piece count at fixed 16 MB blob (isolates piece-count cost).
+		{"16MB_4pc_4MBpc", 16 << 20, 4 << 20},
+		{"16MB_16pc_1MBpc", 16 << 20, 1 << 20},
+		{"16MB_1024pc_16KBpc", 16 << 20, 16 << 10},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			config, cleanup := CAStoreConfigFixture()
+			defer cleanup()
+			config.MemoryCache = MemoryCacheConfig{
+				Enabled:         true,
+				MaxSize:         512 << 20,
+				DrainWorkers:    1,
+				DrainMaxRetries: 3,
+				TTL:             time.Hour,
+				TTLInterval:     time.Hour,
+			}
+
+			// Mock clock keeps the drain worker's ticker from firing, so the entry
+			// stays in the memory cache for the duration of the benchmark.
+			mockClock := clock.NewMock()
+			s, err := newCAStore(config, tally.NoopScope, mockClock)
+			require.NoError(b, err)
+			defer func() {
+				b.StopTimer()
+				s.Close()
+			}()
+
+			blob := core.SizedBlobFixture(tc.blobSize, tc.pieceLength)
+			name := blob.Digest.Hex()
+			err = s.WriteBlobToCacheWithMetaInfo(
+				name,
+				uint64(len(blob.Content)),
+				func(w FileReadWriter) error {
+					_, err := w.Write(blob.Content)
+					return err
+				},
+				int64(tc.pieceLength),
+			)
+			require.NoError(b, err)
+			require.True(b, s.CheckInMemCache(name))
+
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				var tm metadata.TorrentMeta
+				if err := s.GetCacheFileMetadata(name, &tm); err != nil {
+					b.Fatal(err)
+				}
+				if tm.MetaInfo == nil {
+					b.Fatal("nil MetaInfo")
+				}
+			}
+		})
+	}
+}
