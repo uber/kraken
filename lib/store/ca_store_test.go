@@ -1320,7 +1320,7 @@ func BenchmarkGetCacheFileMetadata_MemoryCache(b *testing.B) {
 
 			b.ResetTimer()
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				var tm metadata.TorrentMeta
 				if err := s.GetCacheFileMetadata(name, &tm); err != nil {
 					b.Fatal(err)
