@@ -238,7 +238,7 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 	agentServer := agentserver.New(
 		config.AgentServer, stats, cads, sched, tagClient, announceClient, containerRuntimeFactory)
 	addr := fmt.Sprintf(":%d", flags.AgentServerPort)
-	log.InfoS("starting agent server", "addr", addr)
+	log.Infof("starting agent server: %s", addr)
 	errCh := make(chan error, 3)
 	heartbeatTicker := &timeTicker{inner: time.NewTicker(10 * time.Second)}
 	heartbeatDone := make(chan struct{})
@@ -255,7 +255,7 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 	go func() {
 		if err := http.ListenAndServe(addr, agentServer.Handler()); err != nil {
 			stopHeartbeat()
-			log.ErrorS(err, "agent server exited")
+			log.Errorf("agent server exited: %s", err)
 			cancel()
 			errCh <- err
 		}
@@ -265,7 +265,7 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 	go func() {
 		if err := registry.ListenAndServe(); err != nil {
 			stopHeartbeat()
-			log.ErrorS(err, "registry exited")
+			log.Errorf("registry exited: %s", err)
 			cancel()
 			errCh <- err
 		}
@@ -280,7 +280,7 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 		"registry_backup": config.RegistryBackup},
 		nginx.WithTLS(config.TLS)); err != nil {
 		stopHeartbeat()
-		log.ErrorS(err, "nginx exited")
+		log.Errorf("nginx exited: %s", err)
 		cancel()
 		errCh <- err
 	}
@@ -299,7 +299,7 @@ func waitForShutdown(ctx context.Context, errCh <-chan error) error {
 			return err
 		default:
 		}
-		log.InfoS("shutting down", "reason", ctx.Err())
+		log.Infof("shutting down: %s", ctx.Err())
 		return nil
 	case err := <-errCh:
 		return err
