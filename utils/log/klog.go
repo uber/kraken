@@ -23,7 +23,7 @@ import (
 // Level is a verbosity level used with V(). Higher values are more verbose.
 type Level int32
 
-var _verbosity int32 // atomic; default 0 = disabled
+var _verbosity int32 // atomic; default threshold 0 enables V(0) and disables V(1+)
 
 // SetVerbosity sets the global V() verbosity threshold at runtime.
 func SetVerbosity(l Level) {
