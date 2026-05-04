@@ -22,3 +22,10 @@ import (
 func PieceHash() hash.Hash32 {
 	return crc32.NewIEEE()
 }
+
+// PieceSum returns the checksum of b using the same algorithm as PieceHash.
+// It is equivalent to creating a PieceHash, writing b, and calling Sum32,
+// but avoids allocating a hash.Hash32 object.
+func PieceSum(b []byte) uint32 {
+	return crc32.ChecksumIEEE(b)
+}

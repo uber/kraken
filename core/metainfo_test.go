@@ -133,6 +133,9 @@ func TestNewMetaInfoFromBytes_MatchesReader(t *testing.T) {
 		{"two_pieces", 512, 256},
 		{"non_aligned", 700, 256},
 		{"many_pieces", 1 << 20, 256},
+		{"piece_length_one", 100, 1},
+		{"piece_larger_than_blob", 100, 1024},
+		{"invalid_piece_length", 100, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -170,7 +173,7 @@ func TestNewMetaInfoFromBytes_MatchesReader(t *testing.T) {
 	}
 }
 
-func BenchmarkNewMetaInfo(b *testing.B) {
+func BenchmarkNewMetaInfoFromBytes(b *testing.B) {
 	cases := []struct {
 		name        string
 		blobSize    uint64
