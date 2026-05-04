@@ -14,12 +14,14 @@
 package core
 
 import (
+	"bytes"
 	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/uber/kraken/utils/memsize"
+	"github.com/uber/kraken/utils/randutil"
 )
 
 func TestMetaInfoGetPieceLength(t *testing.T) {
@@ -115,6 +117,94 @@ func TestMetaInfoSerializationLimit(t *testing.T) {
 			size := uint64(len(b))
 			require.True(size < redisValueLimit,
 				"%d piece serialization %d bytes too large", numPieces, size-redisValueLimit)
+		})
+	}
+}
+
+func TestNewMetaInfoFromBytes_MatchesReader(t *testing.T) {
+	cases := []struct {
+		name        string
+		size        uint64
+		pieceLength uint64
+	}{
+		{"empty", 0, 256},
+		{"smaller_than_piece", 100, 256},
+		{"exact_one_piece", 256, 256},
+		{"two_pieces", 512, 256},
+		{"non_aligned", 700, 256},
+		{"many_pieces", 1 << 20, 256},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require := require.New(t)
+			data := randutil.Text(tc.size)
+			d, err := NewDigester().FromBytes(data)
+			require.NoError(err)
+
+			miReader, errReader := NewMetaInfo(d, bytes.NewReader(data), int64(tc.pieceLength))
+			miBytes, errBytes := NewMetaInfoFromBytes(d, data, int64(tc.pieceLength))
+
+			require.Equal(errReader != nil, errBytes != nil)
+			if errReader != nil {
+				return
+			}
+
+			require.Equal(miReader.InfoHash(), miBytes.InfoHash())
+			require.Equal(miReader.Length(), miBytes.Length())
+			require.Equal(miReader.NumPieces(), miBytes.NumPieces())
+			require.Equal(miReader.PieceLength(), miBytes.PieceLength())
+			for i := 0; i < miReader.NumPieces(); i++ {
+				require.Equal(miReader.GetPieceSum(i), miBytes.GetPieceSum(i),
+					"piece %d sum mismatch", i)
+			}
+			bReader, err := miReader.Serialize()
+			if err != nil {
+				t.Fatal(err)
+			}
+			bBytes, err := miBytes.Serialize()
+			if err != nil {
+				t.Fatal(err)
+			}
+			require.Equal(bReader, bBytes)
+		})
+	}
+}
+
+func BenchmarkNewMetaInfo(b *testing.B) {
+	cases := []struct {
+		name        string
+		blobSize    uint64
+		pieceLength uint64
+	}{
+		{"1MB_4pc", 1 << 20, 256 << 10},
+		{"16MB_64pc", 16 << 20, 256 << 10},
+		{"64MB_256pc", 64 << 20, 256 << 10},
+		{"256MB_1024pc", 256 << 20, 256 << 10},
+		{"16MB_4pc_4MBpc", 16 << 20, 4 << 20},
+		{"16MB_16pc_1MBpc", 16 << 20, 1 << 20},
+		{"16MB_1024pc_16KBpc", 16 << 20, 16 << 10},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			data := randutil.Text(tc.blobSize)
+			d, err := NewDigester().FromBytes(data)
+			require.NoError(b, err)
+			pl := int64(tc.pieceLength)
+
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(tc.blobSize))
+			for i := 0; i < b.N; i++ {
+				// BENCH_A1_TOGGLE_START
+				mi, err := NewMetaInfo(d, bytes.NewReader(data), pl)
+				// BENCH_A1_TOGGLE_END
+				if err != nil {
+					b.Fatal(err)
+				}
+				if mi == nil {
+					b.Fatal("nil MetaInfo")
+				}
+			}
 		})
 	}
 }
