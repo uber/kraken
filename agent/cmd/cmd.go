@@ -195,7 +195,7 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 	if err != nil {
 		return fmt.Errorf("create tracker client: %w", err)
 	}
-	go trackers.Monitor(nil)
+	go trackers.Monitor(ctx.Done())
 
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
