@@ -15,13 +15,13 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/uber/kraken/agent/cmd"
 	"github.com/uber/kraken/lib/dockerregistry"
+	"github.com/uber/kraken/utils/log"
 )
 
 func main() {
@@ -31,9 +31,9 @@ func main() {
 	if err := cmd.Run(ctx, cmd.ParseFlags(), cmd.WithEffect(func() {
 		dockerregistry.RegisterKrakenStorageDriver()
 	})); err != nil {
-		log.Fatal(err)
+		log.Fatalf("agent exited: %s", err)
 	}
-	if err := ctx.Err(); err != nil {
-		log.Fatal(err)
+	if err := ctx.Err(); err != nil && err != context.Canceled {
+		log.Fatalf("context error: %s", err)
 	}
 }

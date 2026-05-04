@@ -15,6 +15,7 @@ package nginx
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -168,6 +169,11 @@ func WithTLS(tls httputil.TLSConfig) Option {
 
 // Run injects params into an nginx configuration template and runs it.
 func Run(config Config, params map[string]interface{}, opts ...Option) error {
+	return RunContext(context.Background(), config, params, opts...)
+}
+
+// RunContext is like Run but kills the nginx subprocess when ctx is cancelled.
+func RunContext(ctx context.Context, config Config, params map[string]interface{}, opts ...Option) error {
 	if err := config.applyDefaults(); err != nil {
 		return fmt.Errorf("invalid config: %s", err)
 	}
@@ -237,7 +243,7 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	if config.Root {
 		args = append([]string{"sudo"}, args...)
 	}
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stdout
 	return cmd.Run()

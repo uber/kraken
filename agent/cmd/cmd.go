@@ -252,12 +252,20 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 
 	go heartbeat(stats, heartbeatTicker, heartbeatDone)
 	defer stopHeartbeat()
+
+	httpServer := &http.Server{Addr: addr, Handler: agentServer.Handler()}
 	go func() {
-		if err := http.ListenAndServe(addr, agentServer.Handler()); err != nil {
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			stopHeartbeat()
 			log.Errorf("agent server exited: %s", err)
-			cancel()
 			errCh <- err
+			cancel()
+		}
+	}()
+	go func() {
+		<-ctx.Done()
+		if err := httpServer.Shutdown(context.Background()); err != nil {
+			log.Errorf("agent server shutdown: %s", err)
 		}
 	}()
 
@@ -266,13 +274,13 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 		if err := registry.ListenAndServe(); err != nil {
 			stopHeartbeat()
 			log.Errorf("registry exited: %s", err)
-			cancel()
 			errCh <- err
+			cancel()
 		}
 	}()
 
 	go func() {
-		if err := nginx.Run(config.Nginx, map[string]interface{}{
+		if err := nginx.RunContext(ctx, config.Nginx, map[string]interface{}{
 			"allowed_cidrs": config.AllowedCidrs,
 			"port":          flags.AgentRegistryPort,
 			"registry_server": nginx.GetServer(
@@ -282,8 +290,8 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 			nginx.WithTLS(config.TLS)); err != nil {
 			stopHeartbeat()
 			log.Errorf("nginx exited: %s", err)
-			cancel()
 			errCh <- err
+			cancel()
 		}
 	}()
 
@@ -291,8 +299,9 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 }
 
 // waitForShutdown blocks until ctx is cancelled or an error arrives on errCh.
-// When both are ready simultaneously (i.e. a goroutine called cancel then sent
-// to errCh), the error is returned instead of nil so callers see the root cause.
+// Goroutines always send to errCh before calling cancel(), so by the time
+// ctx.Done() is observed the error is already buffered and the non-blocking
+// drain will always retrieve it.
 func waitForShutdown(ctx context.Context, errCh <-chan error) error {
 	select {
 	case <-ctx.Done():
