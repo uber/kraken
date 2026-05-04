@@ -194,10 +194,8 @@ func BenchmarkNewMetaInfo(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 			b.SetBytes(int64(tc.blobSize))
-			for i := 0; i < b.N; i++ {
-				// BENCH_A1_TOGGLE_START
-				mi, err := NewMetaInfo(d, bytes.NewReader(data), pl)
-				// BENCH_A1_TOGGLE_END
+			for b.Loop() {
+				mi, err := NewMetaInfoFromBytes(d, data, pl)
 				if err != nil {
 					b.Fatal(err)
 				}
