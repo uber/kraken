@@ -157,7 +157,7 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 	if stats == nil {
 		s, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
 		if err != nil {
-			return fmt.Errorf("init metrics: %w", err)
+			return fmt.Errorf("failed to init metrics: %s", err)
 		}
 		stats = s
 		defer closers.Close(closer)
@@ -166,7 +166,7 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 	if flags.PeerIP == "" {
 		localIP, err := netutil.GetLocalIP()
 		if err != nil {
-			return fmt.Errorf("get local IP: %w", err)
+			return fmt.Errorf("error getting local ip: %s", err)
 		}
 		flags.PeerIP = localIP
 	}
@@ -178,40 +178,40 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 	pctx, err := core.NewPeerContext(
 		config.PeerIDFactory, flags.Zone, flags.KrakenCluster, flags.PeerIP, flags.PeerPort, false)
 	if err != nil {
-		return fmt.Errorf("create peer context: %w", err)
+		return fmt.Errorf("failed to create peer context: %s", err)
 	}
 
 	cads, err := store.NewCADownloadStore(config.CADownloadStore, stats)
 	if err != nil {
-		return fmt.Errorf("create CA download store: %w", err)
+		return fmt.Errorf("failed to create local store: %s", err)
 	}
 
 	netevents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
-		return fmt.Errorf("create network event producer: %w", err)
+		return fmt.Errorf("failed to create network event producer: %s", err)
 	}
 
 	trackers, err := config.Tracker.Build()
 	if err != nil {
-		return fmt.Errorf("create tracker client: %w", err)
+		return fmt.Errorf("error building tracker upstream: %s", err)
 	}
 	go trackers.Monitor(ctx.Done())
 
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
-		return fmt.Errorf("build TLS config: %w", err)
+		return fmt.Errorf("error building client tls config: %s", err)
 	}
 
 	announceClient := announceclient.New(pctx, trackers, tls)
 	sched, err := scheduler.NewAgentScheduler(
 		config.Scheduler, stats, pctx, cads, netevents, trackers, announceClient, tls)
 	if err != nil {
-		return fmt.Errorf("create scheduler: %w", err)
+		return fmt.Errorf("error creating scheduler: %s", err)
 	}
 
 	buildIndexes, err := config.BuildIndex.Build()
 	if err != nil {
-		return fmt.Errorf("build build-index upstream: %w", err)
+		return fmt.Errorf("error building build-index upstream: %s", err)
 	}
 
 	tagClient := tagclient.NewClusterClient(buildIndexes, tls)
@@ -220,7 +220,7 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 
 	registry, err := config.Registry.Build(config.Registry.ReadOnlyParameters(transferer, cads, stats))
 	if err != nil {
-		return fmt.Errorf("init registry: %w", err)
+		return fmt.Errorf("failed to init registry: %s", err)
 	}
 
 	registryAddr := fmt.Sprintf("127.0.0.1:%d", flags.AgentRegistryPort)
@@ -232,13 +232,13 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 	}
 	containerRuntimeFactory, err := containerruntime.NewFactory(containerRuntimeCfg, registryAddr)
 	if err != nil {
-		return fmt.Errorf("create container runtime factory: %w", err)
+		return fmt.Errorf("failed to create container runtime factory: %s", err)
 	}
 
 	agentServer := agentserver.New(
 		config.AgentServer, stats, cads, sched, tagClient, announceClient, containerRuntimeFactory)
 	addr := fmt.Sprintf(":%d", flags.AgentServerPort)
-	log.Infof("starting agent server: %s", addr)
+	log.Infof("Starting agent server on %s", addr)
 	errCh := make(chan error, 3)
 	heartbeatTicker := &timeTicker{inner: time.NewTicker(10 * time.Second)}
 	heartbeatDone := make(chan struct{})
