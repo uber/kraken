@@ -239,7 +239,7 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 		config.AgentServer, stats, cads, sched, tagClient, announceClient, containerRuntimeFactory)
 	addr := fmt.Sprintf(":%d", flags.AgentServerPort)
 	log.InfoS("starting agent server", "addr", addr)
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
 	heartbeatTicker := &timeTicker{inner: time.NewTicker(10 * time.Second)}
 	heartbeatDone := make(chan struct{})
 	var heartbeatStop sync.Once
