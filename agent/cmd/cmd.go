@@ -133,11 +133,11 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 		config = *overrides.config
 	} else {
 		if err := configutil.Load(flags.ConfigFile, &config); err != nil {
-			panic(err)
+			return err
 		}
 		if flags.SecretsFile != "" {
 			if err := configutil.Load(flags.SecretsFile, &config); err != nil {
-				panic(err)
+				return err
 			}
 		}
 	}
@@ -157,7 +157,7 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 	if stats == nil {
 		s, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
 		if err != nil {
-			return fmt.Errorf("init metrics: %w", err)
+			return fmt.Errorf("failed to init metrics: %s", err)
 		}
 		stats = s
 		defer closers.Close(closer)
@@ -166,7 +166,7 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 	if flags.PeerIP == "" {
 		localIP, err := netutil.GetLocalIP()
 		if err != nil {
-			return fmt.Errorf("get local IP: %w", err)
+			return fmt.Errorf("error getting local ip: %s", err)
 		}
 		flags.PeerIP = localIP
 	}
@@ -178,40 +178,40 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 	pctx, err := core.NewPeerContext(
 		config.PeerIDFactory, flags.Zone, flags.KrakenCluster, flags.PeerIP, flags.PeerPort, false)
 	if err != nil {
-		return fmt.Errorf("create peer context: %w", err)
+		return fmt.Errorf("failed to create peer context: %s", err)
 	}
 
 	cads, err := store.NewCADownloadStore(config.CADownloadStore, stats)
 	if err != nil {
-		return fmt.Errorf("create CA download store: %w", err)
+		return fmt.Errorf("failed to create local store: %s", err)
 	}
 
 	netevents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
-		return fmt.Errorf("create network event producer: %w", err)
+		return fmt.Errorf("failed to create network event producer: %s", err)
 	}
 
 	trackers, err := config.Tracker.Build()
 	if err != nil {
-		return fmt.Errorf("create tracker client: %w", err)
+		return fmt.Errorf("error building tracker upstream: %s", err)
 	}
-	go trackers.Monitor(nil)
+	go trackers.Monitor(ctx.Done())
 
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
-		return fmt.Errorf("build TLS config: %w", err)
+		return fmt.Errorf("error building client tls config: %s", err)
 	}
 
 	announceClient := announceclient.New(pctx, trackers, tls)
 	sched, err := scheduler.NewAgentScheduler(
 		config.Scheduler, stats, pctx, cads, netevents, trackers, announceClient, tls)
 	if err != nil {
-		return fmt.Errorf("create scheduler: %w", err)
+		return fmt.Errorf("error creating scheduler: %s", err)
 	}
 
 	buildIndexes, err := config.BuildIndex.Build()
 	if err != nil {
-		return fmt.Errorf("build build-index upstream: %w", err)
+		return fmt.Errorf("error building build-index upstream: %s", err)
 	}
 
 	tagClient := tagclient.NewClusterClient(buildIndexes, tls)
@@ -220,7 +220,7 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 
 	registry, err := config.Registry.Build(config.Registry.ReadOnlyParameters(transferer, cads, stats))
 	if err != nil {
-		return fmt.Errorf("init registry: %w", err)
+		return fmt.Errorf("failed to init registry: %s", err)
 	}
 
 	registryAddr := fmt.Sprintf("127.0.0.1:%d", flags.AgentRegistryPort)
@@ -232,14 +232,14 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 	}
 	containerRuntimeFactory, err := containerruntime.NewFactory(containerRuntimeCfg, registryAddr)
 	if err != nil {
-		return fmt.Errorf("create container runtime factory: %w", err)
+		return fmt.Errorf("failed to create container runtime factory: %s", err)
 	}
 
 	agentServer := agentserver.New(
 		config.AgentServer, stats, cads, sched, tagClient, announceClient, containerRuntimeFactory)
 	addr := fmt.Sprintf(":%d", flags.AgentServerPort)
-	log.InfoS("starting agent server", "addr", addr)
-	errCh := make(chan error, 2)
+	log.Infof("Starting agent server on %s", addr)
+	errCh := make(chan error, 3)
 	heartbeatTicker := &timeTicker{inner: time.NewTicker(10 * time.Second)}
 	heartbeatDone := make(chan struct{})
 	var heartbeatStop sync.Once
@@ -252,45 +252,60 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 
 	go heartbeat(stats, heartbeatTicker, heartbeatDone)
 	defer stopHeartbeat()
+
+	httpServer := &http.Server{Addr: addr, Handler: agentServer.Handler()}
 	go func() {
-		if err := http.ListenAndServe(addr, agentServer.Handler()); err != nil {
+		defer cancel()
+		// ErrServerClosed is returned by ListenAndServe when Shutdown() is
+		// called during a clean shutdown — it is expected, not a real error.
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			stopHeartbeat()
-			log.ErrorS(err, "agent server exited")
-			cancel()
+			log.Errorf("agent server exited: %s", err)
 			errCh <- err
 		}
 	}()
 
 	log.Info("Starting registry...")
 	go func() {
+		defer cancel()
 		if err := registry.ListenAndServe(); err != nil {
 			stopHeartbeat()
-			log.ErrorS(err, "registry exited")
-			cancel()
+			log.Errorf("registry exited: %s", err)
 			errCh <- err
 		}
 	}()
 
-	if err := nginx.Run(config.Nginx, map[string]interface{}{
-		"allowed_cidrs": config.AllowedCidrs,
-		"port":          flags.AgentRegistryPort,
-		"registry_server": nginx.GetServer(
-			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
-		"agent_server":    fmt.Sprintf("127.0.0.1:%d", flags.AgentServerPort),
-		"registry_backup": config.RegistryBackup},
-		nginx.WithTLS(config.TLS)); err != nil {
-		stopHeartbeat()
-		log.ErrorS(err, "nginx exited")
-		cancel()
-		errCh <- err
-	}
+	go func() {
+		defer cancel()
+		if err := nginx.RunContext(ctx, config.Nginx, map[string]interface{}{
+			"allowed_cidrs": config.AllowedCidrs,
+			"port":          flags.AgentRegistryPort,
+			"registry_server": nginx.GetServer(
+				config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
+			"agent_server":    fmt.Sprintf("127.0.0.1:%d", flags.AgentServerPort),
+			"registry_backup": config.RegistryBackup},
+			nginx.WithTLS(config.TLS)); err != nil {
+			stopHeartbeat()
+			log.Errorf("nginx exited: %s", err)
+			errCh <- err
+		}
+	}()
 
-	return waitForShutdown(ctx, errCh)
+	runErr := waitForShutdown(ctx, errCh)
+	// Drain in-flight HTTP requests before returning. cancel() is called first
+	// so Shutdown does not block indefinitely if we are exiting due to an error
+	// rather than a signal.
+	cancel()
+	if err := httpServer.Shutdown(context.Background()); err != nil {
+		log.Errorf("agent server shutdown: %s", err)
+	}
+	return runErr
 }
 
 // waitForShutdown blocks until ctx is cancelled or an error arrives on errCh.
-// When both are ready simultaneously (i.e. a goroutine called cancel then sent
-// to errCh), the error is returned instead of nil so callers see the root cause.
+// Goroutines always send to errCh before calling cancel(), so by the time
+// ctx.Done() is observed the error is already buffered and the non-blocking
+// drain will always retrieve it.
 func waitForShutdown(ctx context.Context, errCh <-chan error) error {
 	select {
 	case <-ctx.Done():
@@ -299,7 +314,7 @@ func waitForShutdown(ctx context.Context, errCh <-chan error) error {
 			return err
 		default:
 		}
-		log.InfoS("shutting down", "reason", ctx.Err())
+		log.Infof("shutting down: %s", ctx.Err())
 		return nil
 	case err := <-errCh:
 		return err

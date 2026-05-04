@@ -15,12 +15,14 @@ package nginx
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"syscall"
 	"text/template"
 
 	"github.com/uber/kraken/nginx/config"
@@ -168,6 +170,13 @@ func WithTLS(tls httputil.TLSConfig) Option {
 
 // Run injects params into an nginx configuration template and runs it.
 func Run(config Config, params map[string]interface{}, opts ...Option) error {
+	return RunContext(context.Background(), config, params, opts...)
+}
+
+// RunContext is like Run but sends SIGQUIT to the nginx process when ctx is
+// cancelled, triggering nginx's graceful shutdown (drain in-flight connections)
+// rather than an immediate kill.
+func RunContext(ctx context.Context, config Config, params map[string]interface{}, opts ...Option) error {
 	if err := config.applyDefaults(); err != nil {
 		return fmt.Errorf("invalid config: %s", err)
 	}
@@ -240,7 +249,19 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stdout
-	return cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start nginx: %s", err)
+	}
+
+	go func() {
+		<-ctx.Done()
+		if cmd.Process != nil {
+			if err := cmd.Process.Signal(syscall.SIGQUIT); err != nil {
+				log.Errorf("nginx SIGQUIT: %s", err)
+			}
+		}
+	}()
+	return cmd.Wait()
 }
 
 func populateTemplate(tmpl string, args map[string]interface{}) ([]byte, error) {
