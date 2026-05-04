@@ -271,19 +271,21 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 		}
 	}()
 
-	if err := nginx.Run(config.Nginx, map[string]interface{}{
-		"allowed_cidrs": config.AllowedCidrs,
-		"port":          flags.AgentRegistryPort,
-		"registry_server": nginx.GetServer(
-			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
-		"agent_server":    fmt.Sprintf("127.0.0.1:%d", flags.AgentServerPort),
-		"registry_backup": config.RegistryBackup},
-		nginx.WithTLS(config.TLS)); err != nil {
-		stopHeartbeat()
-		log.Errorf("nginx exited: %s", err)
-		cancel()
-		errCh <- err
-	}
+	go func() {
+		if err := nginx.Run(config.Nginx, map[string]interface{}{
+			"allowed_cidrs": config.AllowedCidrs,
+			"port":          flags.AgentRegistryPort,
+			"registry_server": nginx.GetServer(
+				config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
+			"agent_server":    fmt.Sprintf("127.0.0.1:%d", flags.AgentServerPort),
+			"registry_backup": config.RegistryBackup},
+			nginx.WithTLS(config.TLS)); err != nil {
+			stopHeartbeat()
+			log.Errorf("nginx exited: %s", err)
+			cancel()
+			errCh <- err
+		}
+	}()
 
 	return waitForShutdown(ctx, errCh)
 }
