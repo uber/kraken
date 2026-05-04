@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -112,7 +114,7 @@ func TestRunValidation(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			assert.PanicsWithValue(t, test.panic, func() {
-				Run(&test.flags)
+				_ = Run(context.Background(), &test.flags) //nolint:errcheck
 			})
 		})
 	}
@@ -131,7 +133,8 @@ func TestRunUsesProvidedConfig(t *testing.T) {
 	called := false
 
 	assert.PanicsWithValue(t, sentinel, func() {
-		Run(
+		_ = Run( //nolint:errcheck
+			context.Background(),
 			flags,
 			WithConfig(Config{}),
 			WithMetrics(tally.NewTestScope("", nil)),
@@ -159,7 +162,8 @@ func TestRunPanicsWhenConfigLoadFails(t *testing.T) {
 	expected := fmt.Sprintf("open %s: no such file or directory", missing)
 
 	assert.PanicsWithError(t, expected, func() {
-		Run(
+		_ = Run( //nolint:errcheck
+			context.Background(),
 			flags,
 			WithMetrics(tally.NewTestScope("", nil)),
 			WithLogger(zap.NewNop()),
@@ -188,7 +192,8 @@ func TestRunPanicsWhenSecretsLoadFails(t *testing.T) {
 	expected := fmt.Sprintf("open %s: no such file or directory", missingSecrets)
 
 	assert.PanicsWithError(t, expected, func() {
-		Run(
+		_ = Run( //nolint:errcheck
+			context.Background(),
 			flags,
 			WithMetrics(tally.NewTestScope("", nil)),
 			WithLogger(zap.NewNop()),
@@ -287,4 +292,36 @@ func (t clockTicker) Chan() <-chan time.Time {
 
 func (t clockTicker) Stop() {
 	t.ticker.Stop()
+}
+
+func TestWaitForShutdown_ExternalCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 2)
+	cancel()
+	err := waitForShutdown(ctx, errCh)
+	assert.NoError(t, err)
+}
+
+func TestWaitForShutdown_ErrorReceived(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errCh := make(chan error, 2)
+	sentinel := errors.New("internal failure")
+	errCh <- sentinel
+	err := waitForShutdown(ctx, errCh)
+	assert.Equal(t, sentinel, err)
+}
+
+func TestWaitForShutdown_ErrorWinsWhenBothReady(t *testing.T) {
+	// When cancel() and errCh <- err happen together (the common internal-error
+	// path), the error must always be returned — never silently swallowed as nil.
+	sentinel := errors.New("goroutine failure")
+	for range 100 {
+		ctx, cancel := context.WithCancel(context.Background())
+		errCh := make(chan error, 2)
+		cancel()
+		errCh <- sentinel
+		err := waitForShutdown(ctx, errCh)
+		require.Equal(t, sentinel, err, "error must not be swallowed when both ctx and errCh are ready")
+	}
 }

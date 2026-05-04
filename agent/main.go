@@ -14,12 +14,23 @@
 package main
 
 import (
+	"context"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/uber/kraken/agent/cmd"
 	"github.com/uber/kraken/lib/dockerregistry"
 )
 
 func main() {
-	cmd.Run(cmd.ParseFlags(), cmd.WithEffect(func() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := cmd.Run(ctx, cmd.ParseFlags(), cmd.WithEffect(func() {
 		dockerregistry.RegisterKrakenStorageDriver()
-	}))
+	})); err != nil {
+		log.Fatal(err)
+	}
 }
