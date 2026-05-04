@@ -5,6 +5,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -323,5 +325,31 @@ func TestWaitForShutdown_ErrorWinsWhenBothReady(t *testing.T) {
 		errCh <- sentinel
 		err := waitForShutdown(ctx, errCh)
 		require.Equal(t, sentinel, err, "error must not be swallowed when both ctx and errCh are ready")
+	}
+}
+
+// TestHTTPServerGracefulShutdown verifies the pattern used in Run:
+// ListenAndServe stops cleanly when Shutdown is called, and http.ErrServerClosed
+// is not surfaced as a fatal error.
+func TestHTTPServerGracefulShutdown(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})}
+
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- srv.Serve(ln)
+	}()
+
+	// Shutdown should cause Serve to return http.ErrServerClosed — not a real error.
+	require.NoError(t, srv.Shutdown(context.Background()))
+
+	err = <-serveErr
+	assert.Equal(t, http.ErrServerClosed, err, "Serve should return ErrServerClosed after Shutdown")
+
+	// Verify the ErrServerClosed guard used in Run filters it correctly.
+	if err != nil && err != http.ErrServerClosed {
+		t.Fatal("guard would have incorrectly treated ErrServerClosed as a fatal error")
 	}
 }
