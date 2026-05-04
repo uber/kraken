@@ -33,4 +33,7 @@ func main() {
 	})); err != nil {
 		log.Fatal(err)
 	}
+	if err := ctx.Err(); err != nil {
+		log.Fatal(err)
+	}
 }
