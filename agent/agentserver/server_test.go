@@ -51,22 +51,17 @@ import (
 
 // failingResponseWriter always errors on Write, simulating a client that
 // disconnected after the response headers were sent.
-type failingResponseWriter struct {
-	header http.Header
-}
+type failingResponseWriter struct{}
 
-func (f *failingResponseWriter) Header() http.Header {
-	if f.header == nil {
-		f.header = http.Header{}
-	}
-	return f.header
-}
+func (failingResponseWriter) Header() http.Header { return http.Header{} }
 
-func (f *failingResponseWriter) Write([]byte) (int, error) {
+func (failingResponseWriter) Write([]byte) (int, error) {
 	return 0, errors.New("write failed: client disconnected")
 }
 
-func (f *failingResponseWriter) WriteHeader(int) {}
+func (failingResponseWriter) WriteHeader(int) {}
+
+var _ http.ResponseWriter = failingResponseWriter{}
 
 type serverMocks struct {
 	cads             *store.CADownloadStore
@@ -111,15 +106,14 @@ func (m *serverMocks) startServer(c Config) (*Server, string) {
 	return s, addr
 }
 
-// mbServedValue returns the sum of all "mb_served" counter values in the scope.
+// mbServedValue returns the "mb_served" counter value from the scope.
 func mbServedValue(scope tally.TestScope) int64 {
-	var total int64
 	for _, c := range scope.Snapshot().Counters() {
 		if c.Name() == "mb_served" {
-			total += c.Value()
+			return c.Value()
 		}
 	}
-	return total
+	return 0
 }
 
 func TestGetTag(t *testing.T) {
@@ -219,12 +213,6 @@ func TestDownloadEmitsMBServed(t *testing.T) {
 	}
 }
 
-// TestDownloadEmitsMBServedEvenWhenCopyFails documents that the mb_served
-// counter is incremented before io.Copy runs, so on a client disconnect (or
-// any other write failure) the counter still records a full serve even though
-// no bytes actually reached the client. This is the existing behavior after
-// PR #597; if a future change moves the increment to after a successful copy,
-// this test will need to be updated.
 func TestDownloadEmitsMBServedEvenWhenCopyFails(t *testing.T) {
 	require := require.New(t)
 
@@ -249,7 +237,7 @@ func TestDownloadEmitsMBServedEvenWhenCopyFails(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil).
 		WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
 
-	err := s.downloadBlobHandler(&failingResponseWriter{}, req)
+	err := s.downloadBlobHandler(failingResponseWriter{}, req)
 	require.Error(err)
 	require.Contains(err.Error(), "copy file")
 

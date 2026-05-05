@@ -63,15 +63,14 @@ func (m *agentTransfererMocks) new() *ReadOnlyTransferer {
 	return NewReadOnlyTransferer(m.stats, m.cads, m.tags, m.sched)
 }
 
-// mbServedValue returns the sum of all "mb_served" counter values in the scope.
+// mbServedValue returns the "mb_served" counter value from the scope.
 func mbServedValue(scope tally.TestScope) int64 {
-	var total int64
 	for _, c := range scope.Snapshot().Counters() {
 		if c.Name() == "mb_served" {
-			total += c.Value()
+			return c.Value()
 		}
 	}
-	return total
+	return 0
 }
 
 func TestReadOnlyTransfererDownloadCachesBlob(t *testing.T) {
