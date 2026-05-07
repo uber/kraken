@@ -29,7 +29,7 @@ server {
   gzip_types text/plain test/csv application/json;
 
   # Committing large blobs might take a while.
-  proxy_read_timeout {{.proxy_read_timeout}};
+  proxy_read_timeout {{if .proxy_read_timeout}}{{.proxy_read_timeout}}{{else}}3m{{end}};
 
   proxy_set_header traceparent $http_traceparent;
   proxy_set_header tracestate $http_tracestate;
