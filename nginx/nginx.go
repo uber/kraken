@@ -84,9 +84,6 @@ func (c *Config) applyDefaults() error {
 		}
 		c.ErrorLogPath = filepath.Join(c.LogDir, "nginx-error.log")
 	}
-	if c.ProxyTimeout == "" {
-		return errors.New("proxy_timeout must be set")
-	}
 	return nil
 }
 
