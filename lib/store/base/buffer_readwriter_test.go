@@ -15,7 +15,10 @@
 package base
 
 import (
+	"fmt"
 	"io"
+	"runtime"
+	"sync"
 	"testing"
 	"testing/iotest"
 
@@ -307,4 +310,118 @@ func TestBufferReadWriter_TestReader(t *testing.T) {
 
 	err = iotest.TestReader(buf, content)
 	require.NoError(t, err)
+}
+
+// TestBufferReadWriter_ConcurrentWriteAt validates that concurrent writes to
+// non-overlapping byte ranges on a pre-sized buffer produce correct results.
+// Run with -race to confirm no data races.
+func TestBufferReadWriter_ConcurrentWriteAt(t *testing.T) {
+	const numShards, shardSize = 10, 1024
+	data := make([]byte, numShards*shardSize)
+	for i := range data {
+		data[i] = byte(i % 256)
+	}
+
+	buf := NewBufferReadWriter(numShards * shardSize)
+	var wg sync.WaitGroup
+	for i := 0; i < numShards; i++ {
+		wg.Add(1)
+		go func(shard int) {
+			defer wg.Done()
+			off := int64(shard * shardSize)
+			_, err := buf.WriteAt(data[off:off+shardSize], off)
+			require.NoError(t, err)
+		}(i)
+	}
+	wg.Wait()
+	assert.Equal(t, data, buf.Bytes())
+}
+
+// totalMutexContentions returns the total number of mutex contention events
+// recorded in the runtime mutex profile since profiling was enabled.
+func totalMutexContentions() int64 {
+	records := make([]runtime.BlockProfileRecord, 10000)
+	n, _ := runtime.MutexProfile(records)
+	var total int64
+	for i := 0; i < n; i++ {
+		total += records[i].Count
+	}
+	return total
+}
+
+// benchmarkWriteAt is the shared helper for all WriteAt benchmarks.
+// numShards goroutines each write a non-overlapping 4 MiB shard concurrently,
+// matching the transfermanager production workload.
+// initSize controls the buffer's initial allocation:
+//   - initSize == totalSize: pre-sized fast path (production case)
+//   - initSize == 0:         dynamic growth (sequential / wrong-size case)
+//   - initSize == totalSize/2: partial pre-allocation, triggers growth mid-download
+func benchmarkWriteAt(b *testing.B, numShards int, initSize uint64) {
+	b.Helper()
+	const shardSize = 4 * 1024 * 1024
+	totalSize := uint64(numShards) * shardSize
+
+	shards := make([][]byte, numShards)
+	for i := range shards {
+		shards[i] = make([]byte, shardSize)
+		for j := range shards[i] {
+			shards[i][j] = byte(i)
+		}
+	}
+
+	runtime.SetMutexProfileFraction(1)
+	b.ResetTimer()
+	b.SetBytes(int64(totalSize))
+	b.ReportAllocs()
+
+	startContentions := totalMutexContentions()
+
+	for i := 0; i < b.N; i++ {
+		buf := NewBufferReadWriter(initSize)
+		var wg sync.WaitGroup
+		for shard := 0; shard < numShards; shard++ {
+			wg.Add(1)
+			go func(s int) {
+				defer wg.Done()
+				_, err := buf.WriteAt(shards[s], int64(s)*shardSize)
+				require.NoError(b, err)
+			}(shard)
+		}
+		wg.Wait()
+	}
+
+	b.StopTimer()
+	if b.N > 0 {
+		b.ReportMetric(float64(totalMutexContentions()-startContentions)/float64(b.N), "mutex-contentions/op")
+	}
+}
+
+// BenchmarkBufferReadWriter_WriteAt exercises three buffer initialisation
+// strategies × three shard counts, giving a full picture of throughput and
+// mutex contention under varying concurrency and pre-allocation.
+//
+// Run before and after the implementation change, then compare with:
+//
+//	benchstat bench-results/before.txt bench-results/after.txt
+func BenchmarkBufferReadWriter_WriteAt(b *testing.B) {
+	const shardSize = 4 * 1024 * 1024
+	cases := []struct {
+		label    string
+		initFunc func(total uint64) uint64
+	}{
+		{"presized", func(total uint64) uint64 { return total }},          // production fast path
+		{"half_presized", func(total uint64) uint64 { return total / 2 }}, // partial pre-alloc, growth needed
+		{"dynamic", func(total uint64) uint64 { return 0 }},               // no pre-alloc, always grows
+	}
+	shardCounts := []int{1, 4, 10}
+
+	for _, tc := range cases {
+		for _, numShards := range shardCounts {
+			totalSize := uint64(numShards) * shardSize
+			initSize := tc.initFunc(totalSize)
+			b.Run(fmt.Sprintf("%s_%d_shards", tc.label, numShards), func(b *testing.B) {
+				benchmarkWriteAt(b, numShards, initSize)
+			})
+		}
+	}
 }
