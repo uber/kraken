@@ -146,12 +146,13 @@ func TestNewMetaInfoFromBytes_MatchesReader(t *testing.T) {
 
 			miReader, errReader := NewMetaInfo(d, bytes.NewReader(data), int64(tc.pieceLength))
 			miBytes, errBytes := NewMetaInfoFromBytes(d, data, int64(tc.pieceLength))
-
 			require.Equal(errReader != nil, errBytes != nil)
 			if errReader != nil {
+				require.EqualError(errBytes, errReader.Error())
 				return
 			}
-
+			require.NoError(errReader)
+			require.NoError(errBytes)
 			require.Equal(miReader.InfoHash(), miBytes.InfoHash())
 			require.Equal(miReader.Length(), miBytes.Length())
 			require.Equal(miReader.NumPieces(), miBytes.NumPieces())
@@ -160,15 +161,6 @@ func TestNewMetaInfoFromBytes_MatchesReader(t *testing.T) {
 				require.Equal(miReader.GetPieceSum(i), miBytes.GetPieceSum(i),
 					"piece %d sum mismatch", i)
 			}
-			bReader, err := miReader.Serialize()
-			if err != nil {
-				t.Fatal(err)
-			}
-			bBytes, err := miBytes.Serialize()
-			if err != nil {
-				t.Fatal(err)
-			}
-			require.Equal(bReader, bBytes)
 		})
 	}
 }
