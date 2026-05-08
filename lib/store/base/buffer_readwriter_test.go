@@ -15,6 +15,7 @@
 package base
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"runtime"
@@ -314,7 +315,6 @@ func TestBufferReadWriter_TestReader(t *testing.T) {
 
 // TestBufferReadWriter_ConcurrentWriteAt validates that concurrent writes to
 // non-overlapping byte ranges on a pre-sized buffer produce correct results.
-// Run with -race to confirm no data races.
 func TestBufferReadWriter_ConcurrentWriteAt(t *testing.T) {
 	const numShards, shardSize = 10, 1024
 	data := make([]byte, numShards*shardSize)
@@ -323,35 +323,40 @@ func TestBufferReadWriter_ConcurrentWriteAt(t *testing.T) {
 	}
 
 	buf := NewBufferReadWriter(numShards * shardSize)
+	errs := make([]error, numShards)
 	var wg sync.WaitGroup
 	for i := 0; i < numShards; i++ {
 		wg.Add(1)
 		go func(shard int) {
 			defer wg.Done()
-			off := int64(shard * shardSize)
-			_, err := buf.WriteAt(data[off:off+shardSize], off)
-			require.NoError(t, err)
+			off := shard * shardSize
+			_, errs[shard] = buf.WriteAt(data[off:off+shardSize], int64(off))
 		}(i)
 	}
 	wg.Wait()
+
+	require.NoError(t, errors.Join(errs...))
 	assert.Equal(t, data, buf.Bytes())
 }
 
-// totalMutexContentions returns the total number of mutex contention events
-// recorded in the runtime mutex profile since profiling was enabled.
 func totalMutexContentions() int64 {
-	records := make([]runtime.BlockProfileRecord, 10000)
-	n, _ := runtime.MutexProfile(records)
-	var total int64
-	for i := 0; i < n; i++ {
-		total += records[i].Count
+	size := 1024
+	for {
+		records := make([]runtime.BlockProfileRecord, size)
+		n, ok := runtime.MutexProfile(records)
+		if ok {
+			var total int64
+			for i := 0; i < n; i++ {
+				total += records[i].Count
+			}
+			return total
+		}
+		size = n + 64
 	}
-	return total
 }
 
 // benchmarkWriteAt is the shared helper for all WriteAt benchmarks.
 // numShards goroutines each write a non-overlapping 4 MiB shard concurrently,
-// matching the transfermanager production workload.
 // initSize controls the buffer's initial allocation:
 //   - initSize == totalSize: pre-sized fast path (production case)
 //   - initSize == 0:         dynamic growth (sequential / wrong-size case)
@@ -369,13 +374,15 @@ func benchmarkWriteAt(b *testing.B, numShards int, initSize uint64) {
 		}
 	}
 
-	runtime.SetMutexProfileFraction(1)
+	prev := runtime.SetMutexProfileFraction(1)
+	defer runtime.SetMutexProfileFraction(prev)
 	b.ResetTimer()
 	b.SetBytes(int64(totalSize))
 	b.ReportAllocs()
 
 	startContentions := totalMutexContentions()
 
+	errs := make([]error, numShards)
 	for i := 0; i < b.N; i++ {
 		buf := NewBufferReadWriter(initSize)
 		var wg sync.WaitGroup
@@ -383,11 +390,13 @@ func benchmarkWriteAt(b *testing.B, numShards int, initSize uint64) {
 			wg.Add(1)
 			go func(s int) {
 				defer wg.Done()
-				_, err := buf.WriteAt(shards[s], int64(s)*shardSize)
-				require.NoError(b, err)
+				_, errs[s] = buf.WriteAt(shards[s], int64(s)*shardSize)
 			}(shard)
 		}
 		wg.Wait()
+		if err := errors.Join(errs...); err != nil {
+			b.Fatal(err)
+		}
 	}
 
 	b.StopTimer()
@@ -396,13 +405,8 @@ func benchmarkWriteAt(b *testing.B, numShards int, initSize uint64) {
 	}
 }
 
-// BenchmarkBufferReadWriter_WriteAt exercises three buffer initialisation
-// strategies × three shard counts, giving a full picture of throughput and
-// mutex contention under varying concurrency and pre-allocation.
-//
-// Run before and after the implementation change, then compare with:
-//
-//	benchstat bench-results/before.txt bench-results/after.txt
+// BenchmarkBufferReadWriter_WriteAt exercises three buffer initialization
+// strategies × three shard counts.
 func BenchmarkBufferReadWriter_WriteAt(b *testing.B) {
 	const shardSize = 4 * 1024 * 1024
 	cases := []struct {
