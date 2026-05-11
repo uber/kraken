@@ -53,6 +53,7 @@ func TestBufferReadWriter_Write(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.expectedSize, buf.Size())
+			assert.Equal(t, tt.expectedResult, buf.Bytes())
 		})
 	}
 }
@@ -115,6 +116,9 @@ func TestBufferReadWriter_WriteAt(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.expectedSize, buf.Size())
+			if tt.expectedResult != nil {
+				assert.Equal(t, tt.expectedResult, buf.Bytes())
+			}
 		})
 	}
 }
