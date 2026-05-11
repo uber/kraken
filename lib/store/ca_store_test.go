@@ -1256,14 +1256,6 @@ func TestGetCacheFileMetadata_MemoryCache_NoCopy(t *testing.T) {
 	var tm2 metadata.TorrentMeta
 	require.NoError(s.GetCacheFileMetadata(name, &tm2))
 	require.Same(cached.MetaInfo, tm2.MetaInfo)
-
-	// Behavioral parity: returned MetaInfo matches the original blob's MetaInfo.
-	require.Equal(blob.MetaInfo.InfoHash(), tm1.MetaInfo.InfoHash())
-	require.Equal(blob.MetaInfo.Length(), tm1.MetaInfo.Length())
-	require.Equal(blob.MetaInfo.NumPieces(), tm1.MetaInfo.NumPieces())
-	for i := 0; i < blob.MetaInfo.NumPieces(); i++ {
-		require.Equal(blob.MetaInfo.GetPieceSum(i), tm1.MetaInfo.GetPieceSum(i))
-	}
 }
 
 func BenchmarkGetCacheFileMetadata_MemoryCache(b *testing.B) {

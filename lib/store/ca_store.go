@@ -475,10 +475,9 @@ func (s *CAStore) GetCacheFileMetadata(name string, md metadata.Metadata) error 
 				// shouldn't happen, but good to check
 				return fmt.Errorf("entry %s doesn't have any metainfo", entry.Name)
 			}
-			// Verify if the asked metadata is TorrentMetdata or not
 			tm, ok := md.(*metadata.TorrentMeta)
 			if !ok {
-				return fmt.Errorf("unvariant violation: GetCacheFileMetadata should only be called for TorrentMetadata")
+				return fmt.Errorf("invariant violation: GetCacheFileMetadata should only be called for *metadata.TorrentMeta, got %T", md)
 			}
 			// hand back cached pointer
 			tm.MetaInfo = entry.MetaInfo
