@@ -50,3 +50,37 @@ func ManifestFixture(config core.Digest, layer1 core.Digest, layer2 core.Digest)
 
 	return d, raw
 }
+
+// ManifestListFixture creates a manifest list blob for testing purposes.
+func ManifestListFixture(manifest1 core.Digest, manifest2 core.Digest) (core.Digest, []byte) {
+	raw := []byte(fmt.Sprintf(`{
+		"schemaVersion": 2,
+		"mediaType": "application/vnd.docker.distribution.manifest.list.v2+json",
+		"manifests": [
+			{
+				"mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+				"size": 1024,
+				"digest": "%s",
+				"platform": {
+					"architecture": "amd64",
+					"os": "linux"
+				}
+			},
+			{
+				"mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+				"size": 1024,
+				"digest": "%s",
+				"platform": {
+					"architecture": "arm64",
+					"os": "linux"
+				}
+			}
+		]
+	}`, manifest1, manifest2))
+
+	d, err := core.NewDigester().FromBytes(raw)
+	if err != nil {
+		panic(err)
+	}
+	return d, raw
+}
