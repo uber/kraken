@@ -343,6 +343,15 @@ func TestBufferReadWriter_ConcurrentWriteAt(t *testing.T) {
 	assert.Equal(t, data, buf.Bytes())
 }
 
+func TestBufferReadWriter_WriteAtEmpty(t *testing.T) {
+	buf := NewBufferReadWriter(0)
+	n, err := buf.WriteAt(nil, 1<<30)
+	require.NoError(t, err)
+	assert.Equal(t, 0, n)
+	assert.Equal(t, int64(0), buf.Size())
+	assert.Empty(t, buf.Bytes())
+}
+
 func totalMutexContentions() int64 {
 	size := 1024
 	for {
@@ -380,14 +389,13 @@ func benchmarkWriteAt(b *testing.B, numShards int, initSize uint64) {
 
 	prev := runtime.SetMutexProfileFraction(1)
 	defer runtime.SetMutexProfileFraction(prev)
-	b.ResetTimer()
+	startContentions := totalMutexContentions()
 	b.SetBytes(int64(totalSize))
 	b.ReportAllocs()
-
-	startContentions := totalMutexContentions()
+	b.ResetTimer()
 
 	errs := make([]error, numShards)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		buf := NewBufferReadWriter(initSize)
 		var wg sync.WaitGroup
 		for shard := 0; shard < numShards; shard++ {

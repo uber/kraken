@@ -25,17 +25,12 @@ var _ FileReadWriter = &BufferReadWriter{}
 
 // BufferReadWriter implements FileReadWriter for in-memory buffering.
 //
-// When created with size > 0, WriteAt takes a fast path using RLock, allowing
-// concurrent goroutines writing to non-overlapping byte ranges to proceed in
-// parallel with no serialization. The maximum written extent is tracked via an
-// atomic so that Bytes(), Size(), Read, and ReadAt return only the data that
-// was actually written.
+// Pre-sizing (size > 0) allows concurrent WriteAt calls to non-overlapping
+// ranges to run in parallel. Without pre-sizing, each write that grows the
+// buffer is serialized.
 //
-// When created with size == 0, every WriteAt that extends the buffer acquires a
-// full write lock to grow the backing slice.
-//
-// Write, Read, ReadAt, and Seek must not be called concurrently with each other
-// or with WriteAt.
+// Bytes, Size, Write, Read, ReadAt, and Seek must not be called concurrently
+// with each other or with WriteAt.
 type BufferReadWriter struct {
 	mu      sync.RWMutex
 	buf     []byte
@@ -44,8 +39,8 @@ type BufferReadWriter struct {
 }
 
 // NewBufferReadWriter creates a new BufferReadWriter pre-allocated to size bytes.
-// Pass the exact blob size when known to enable lock-free
-// concurrent WriteAt calls for non-overlapping shard ranges.
+// Pass the exact blob size when known so concurrent WriteAt calls for
+// non-overlapping shard ranges can run in parallel without writer serialization.
 func NewBufferReadWriter(size uint64) *BufferReadWriter {
 	return &BufferReadWriter{buf: make([]byte, size)}
 }
@@ -67,25 +62,20 @@ func (b *BufferReadWriter) WriteAt(p []byte, off int64) (int, error) {
 	if off < 0 {
 		return 0, fmt.Errorf("negative offset")
 	}
+	if len(p) == 0 {
+		return 0, nil
+	}
 	end := off + int64(len(p))
 	if end < off {
 		return 0, fmt.Errorf("write at offset %d length %d overflows int64", off, len(p))
 	}
 
-	b.mu.RLock()
-	if end <= int64(len(b.buf)) {
-		n := copy(b.buf[off:], p)
-		for {
-			cur := b.written.Load()
-			if end <= cur || b.written.CompareAndSwap(cur, end) {
-				break
-			}
-		}
-		b.mu.RUnlock()
+	// fast path
+	if n, shouldGrowBuffer := b.updateBuffer(p, off, end); !shouldGrowBuffer {
 		return n, nil
 	}
-	b.mu.RUnlock()
 
+	// slow path
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if end > int64(len(b.buf)) {
@@ -98,6 +88,24 @@ func (b *BufferReadWriter) WriteAt(p []byte, off int64) (int, error) {
 		b.written.Store(end)
 	}
 	return n, nil
+}
+
+// updateBuffer copies p into [off, end).
+// Returns -1, false if end exceeds the buffer, which cause WriteAt to take the slow path
+func (b *BufferReadWriter) updateBuffer(p []byte, off, end int64) (int, bool) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	if end <= int64(len(b.buf)) {
+		n := copy(b.buf[off:], p)
+		for {
+			cur := b.written.Load()
+			if end <= cur || b.written.CompareAndSwap(cur, end) {
+				break
+			}
+		}
+		return n, false
+	}
+	return -1, true
 }
 
 // Read implements io.Reader for sequential reads.
@@ -171,7 +179,8 @@ func (b *BufferReadWriter) Commit() error {
 	return nil
 }
 
-// Bytes returns the bytes that have been written so far.
+// Bytes returns the buffer up to the highest offset written so far.
+// Any gaps between writes are zero-filled.
 func (b *BufferReadWriter) Bytes() []byte {
 	return b.buf[:b.written.Load()]
 }
