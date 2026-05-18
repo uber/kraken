@@ -74,6 +74,7 @@ type HTTPClient struct {
 	addr      string
 	chunkSize uint64
 	tls       *tls.Config
+	transport http.RoundTripper
 	tracer    trace.Tracer
 }
 
@@ -88,6 +89,33 @@ func WithChunkSize(s uint64) Option {
 // WithTLS configures an HTTPClient with tls configuration.
 func WithTLS(tls *tls.Config) Option {
 	return func(c *HTTPClient) { c.tls = tls }
+}
+
+// WithTransport configures an HTTPClient to use a shared HTTP RoundTripper
+// (typically built via httputil.NewClientTransport).
+func WithTransport(t http.RoundTripper) Option {
+	return func(c *HTTPClient) { c.transport = t }
+}
+
+// sendOpt returns the appropriate httputil.SendOption based on whether a
+// shared transport and TLS are configured.
+//
+// When transport is non-nil it is injected directly (connection pooling
+// active). tlsCfg is NOT used to configure TLS on the connection, the
+// transport already has a *tls.Config baked in from httputil.NewClientTransport.
+// Callers must therefore always pair WithTransport with WithTLS when connecting
+// to an HTTPS origin.
+//
+// When transport is nil httputil.SendTLS creates a
+// fresh *http.Transport per request (no pooling) and also sets the scheme.
+func sendOpt(tlsCfg *tls.Config, transport http.RoundTripper) httputil.SendOption {
+	if transport != nil {
+		if tlsCfg != nil {
+			return httputil.SendTLSTransport(transport)
+		}
+		return httputil.SendTransport(transport)
+	}
+	return httputil.SendTLS(tlsCfg)
 }
 
 // New returns a new HTTPClient scoped to addr.
@@ -112,7 +140,7 @@ func (c *HTTPClient) CheckReadiness() error {
 	_, err := httputil.Get(
 		fmt.Sprintf("http://%s/readiness", c.addr),
 		httputil.SendTimeout(5*time.Second),
-		httputil.SendTLS(c.tls))
+		sendOpt(c.tls, c.transport))
 	if err != nil {
 		return fmt.Errorf("origin not ready: %v", err)
 	}
@@ -124,7 +152,7 @@ func (c *HTTPClient) Locations(d core.Digest) ([]string, error) {
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/blobs/%s/locations", c.addr, d),
 		httputil.SendTimeout(5*time.Second),
-		httputil.SendTLS(c.tls))
+		sendOpt(c.tls, c.transport))
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +191,7 @@ func (c *HTTPClient) stat(namespace string, d core.Digest, local bool) (*core.Bl
 	r, err := httputil.Head(
 		u,
 		httputil.SendTimeout(15*time.Second),
-		httputil.SendTLS(c.tls))
+		sendOpt(c.tls, c.transport))
 	if err != nil {
 		if httputil.IsNotFound(err) {
 			return nil, ErrBlobNotFound
@@ -186,14 +214,14 @@ func (c *HTTPClient) DeleteBlob(d core.Digest) error {
 	_, err := httputil.Delete(
 		fmt.Sprintf("http://%s/internal/blobs/%s", c.addr, d),
 		httputil.SendAcceptedCodes(http.StatusAccepted),
-		httputil.SendTLS(c.tls))
+		sendOpt(c.tls, c.transport))
 	return err
 }
 
 // TransferBlob uploads a blob to a single origin server. Unlike its cousin UploadBlob,
 // TransferBlob is an internal API which does not replicate the blob.
 func (c *HTTPClient) TransferBlob(d core.Digest, blob io.Reader) error {
-	tc := newTransferClient(c.addr, c.tls)
+	tc := newTransferClient(c.addr, c.tls, c.transport)
 	return runChunkedUpload(tc, d, blob, int64(c.chunkSize))
 }
 
@@ -211,7 +239,7 @@ func (c *HTTPClient) UploadBlob(ctx context.Context, namespace string, d core.Di
 	)
 	defer span.End()
 
-	uc := newUploadClientWithContext(ctx, c.addr, namespace, _publicUpload, 0, c.tls)
+	uc := newUploadClientWithContext(ctx, c.addr, namespace, _publicUpload, 0, c.tls, c.transport)
 	if err := runChunkedUpload(uc, d, blob, int64(c.chunkSize)); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "upload failed")
@@ -227,7 +255,7 @@ func (c *HTTPClient) UploadBlob(ctx context.Context, namespace string, d core.Di
 func (c *HTTPClient) DuplicateUploadBlob(
 	namespace string, d core.Digest, blob io.Reader, delay time.Duration,
 ) error {
-	uc := newUploadClient(c.addr, namespace, _duplicateUpload, delay, c.tls)
+	uc := newUploadClient(c.addr, namespace, _duplicateUpload, delay, c.tls, c.transport)
 	return runChunkedUpload(uc, d, blob, int64(c.chunkSize))
 }
 
@@ -251,7 +279,7 @@ func (c *HTTPClient) DownloadBlob(ctx context.Context, namespace string, d core.
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s", c.addr, url.PathEscape(namespace), d),
 		httputil.SendContext(ctx),
-		httputil.SendTLS(c.tls))
+		sendOpt(c.tls, c.transport))
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "download request failed")
@@ -277,7 +305,7 @@ func (c *HTTPClient) PrefetchBlob(namespace string, d core.Digest) error {
 	r, err := httputil.Post(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/prefetch", c.addr, url.PathEscape(namespace), d),
 		httputil.SendAcceptedCodes(http.StatusOK, http.StatusAccepted),
-		httputil.SendTLS(c.tls))
+		sendOpt(c.tls, c.transport))
 	if err != nil {
 		return err
 	}
@@ -292,7 +320,7 @@ func (c *HTTPClient) ReplicateToRemote(namespace string, d core.Digest, remoteDN
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/remote/%s",
 			c.addr, url.PathEscape(namespace), d, remoteDNS),
-		httputil.SendTLS(c.tls))
+		sendOpt(c.tls, c.transport))
 	return err
 }
 
@@ -305,7 +333,7 @@ func (c *HTTPClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInf
 		fmt.Sprintf("http://%s/internal/namespace/%s/blobs/%s/metainfo",
 			c.addr, url.PathEscape(namespace), d),
 		httputil.SendTimeout(15*time.Second),
-		httputil.SendTLS(c.tls))
+		sendOpt(c.tls, c.transport))
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +354,7 @@ func (c *HTTPClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInf
 func (c *HTTPClient) OverwriteMetaInfo(d core.Digest, pieceLength int64) error {
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/internal/blobs/%s/metainfo?piece_length=%d", c.addr, d, pieceLength),
-		httputil.SendTLS(c.tls))
+		sendOpt(c.tls, c.transport))
 	return err
 }
 
@@ -336,7 +364,7 @@ func (c *HTTPClient) GetPeerContext() (core.PeerContext, error) {
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/internal/peercontext", c.addr),
 		httputil.SendTimeout(5*time.Second),
-		httputil.SendTLS(c.tls))
+		sendOpt(c.tls, c.transport))
 	if err != nil {
 		return pctx, err
 	}
@@ -354,6 +382,6 @@ func (c *HTTPClient) ForceCleanup(ttl time.Duration) error {
 	_, err := httputil.Post(
 		fmt.Sprintf("http://%s/forcecleanup?%s", c.addr, v.Encode()),
 		httputil.SendTimeout(2*time.Minute),
-		httputil.SendTLS(c.tls))
+		sendOpt(c.tls, c.transport))
 	return err
 }
