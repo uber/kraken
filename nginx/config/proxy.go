@@ -29,7 +29,7 @@ upstream proxy-server {
 
 {{range .ports}}
 server {
-  listen {{.}}{{if $.ssl_enabled}} ssl{{end}};
+  listen {{.}}{{if $.ssl_enabled}} ssl{{end}}{{if $.listen_backlog}} backlog={{$.listen_backlog}}{{end}};
 
   {{$.client_verification}}
 

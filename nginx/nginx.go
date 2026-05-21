@@ -59,6 +59,10 @@ type Config struct {
 	// ProxyTimeout defines the proxy_read_timeout for nginx (e.g. "15m", "3m", "60s")
 	ProxyTimeout string `yaml:"proxy_timeout"`
 
+	// ListenBacklog sets the backlog parameter on nginx listen directives.
+	// Zero means use nginx's default.
+	ListenBacklog int `yaml:"listen_backlog"`
+
 	tls httputil.TLSConfig
 }
 
@@ -83,6 +87,9 @@ func (c *Config) applyDefaults() error {
 			return errors.New("one of log_dir or error_log_path must be set")
 		}
 		c.ErrorLogPath = filepath.Join(c.LogDir, "nginx-error.log")
+	}
+	if c.ListenBacklog < 0 {
+		return errors.New("listen_backlog must be non-negative")
 	}
 	return nil
 }
@@ -121,12 +128,15 @@ func (c *Config) Build(params map[string]interface{}) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get template: %s", err)
 	}
+	// Add config-level defaults to params for site template.
 	if _, ok := params["client_verification"]; !ok {
 		params["client_verification"] = config.DefaultClientVerification
 	}
-	// Add proxy_read_timeout to params for site template
 	if _, ok := params["proxy_read_timeout"]; !ok {
 		params["proxy_read_timeout"] = c.ProxyTimeout
+	}
+	if _, ok := params["listen_backlog"]; !ok {
+		params["listen_backlog"] = c.ListenBacklog
 	}
 	if _, ok := params["ssl_enabled"]; !ok {
 		params["ssl_enabled"] = !c.tls.Server.Disabled
