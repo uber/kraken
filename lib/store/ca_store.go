@@ -475,12 +475,13 @@ func (s *CAStore) GetCacheFileMetadata(name string, md metadata.Metadata) error 
 				// shouldn't happen, but good to check
 				return fmt.Errorf("entry %s doesn't have any metainfo", entry.Name)
 			}
-			// Serialize and deserialize for consistency with disk behavior
-			b, err := entry.MetaInfo.Serialize()
-			if err != nil {
-				return fmt.Errorf("serialize metainfo: %s", err)
+			tm, ok := md.(*metadata.TorrentMeta)
+			if !ok {
+				return fmt.Errorf("invariant violation: GetCacheFileMetadata should only be called for *metadata.TorrentMeta, got %T", md)
 			}
-			return md.Deserialize(b)
+			// hand back cached pointer
+			tm.MetaInfo = entry.MetaInfo
+			return nil
 		}
 	}
 
