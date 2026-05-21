@@ -28,7 +28,8 @@ func TestPieceSumMatchesPieceHash(t *testing.T) {
 	}
 	for _, data := range cases {
 		h := PieceHash()
-		h.Write(data)
+		_, err := h.Write(data)
+		require.NoError(t, err)
 		require.Equal(t, h.Sum32(), PieceSum(data))
 	}
 }
