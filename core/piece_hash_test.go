@@ -14,18 +14,22 @@
 package core
 
 import (
-	"hash"
-	"hash/crc32"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-// PieceHash returns the hash used to sum pieces.
-func PieceHash() hash.Hash32 {
-	return crc32.NewIEEE()
-}
-
-// PieceSum returns the checksum of b using the same algorithm as PieceHash.
-// It is equivalent to creating a PieceHash, writing b, and calling Sum32,
-// but avoids allocating a hash.Hash32 object.
-func PieceSum(b []byte) uint32 {
-	return crc32.ChecksumIEEE(b)
+func TestPieceSumMatchesPieceHash(t *testing.T) {
+	cases := [][]byte{
+		nil,
+		{},
+		[]byte("hello"),
+		make([]byte, 32*1024),
+	}
+	for _, data := range cases {
+		h := PieceHash()
+		_, err := h.Write(data)
+		require.NoError(t, err)
+		require.Equal(t, h.Sum32(), PieceSum(data))
+	}
 }

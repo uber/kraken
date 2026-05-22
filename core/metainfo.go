@@ -57,21 +57,7 @@ func NewMetaInfo(d Digest, blob io.Reader, pieceLength int64) (*MetaInfo, error)
 	if err != nil {
 		return nil, err
 	}
-	info := info{
-		PieceLength: pieceLength,
-		PieceSums:   pieceSums,
-		Name:        d.Hex(),
-		Length:      length,
-	}
-	h, err := info.Hash()
-	if err != nil {
-		return nil, fmt.Errorf("compute info hash: %s", err)
-	}
-	return &MetaInfo{
-		info:     info,
-		infoHash: h,
-		digest:   d,
-	}, nil
+	return assembleMetaInfo(d, length, pieceSums, pieceLength)
 }
 
 // InfoHash returns the torrent InfoHash.
@@ -172,4 +158,58 @@ func calcPieceSums(blob io.Reader, pieceLength int64) (length int64, pieceSums [
 		}
 	}
 	return length, pieceSums, nil
+}
+
+// NewMetaInfoFromBytes is the byte-slice variant of NewMetaInfo. It avoids
+// the io.Reader indirection and the 32 KB scratch buffer per piece that
+// io.Copy allocates when reading from a bytes.Reader wrapped in
+// io.LimitReader, by hashing each piece directly off the underlying slice.
+//
+// Result is bit-identical to NewMetaInfo(d, bytes.NewReader(data),
+// pieceLength). Caller is expected to have already verified that d is the
+// correct digest for data.
+func NewMetaInfoFromBytes(d Digest, data []byte, pieceLength int64) (*MetaInfo, error) {
+	length, pieceSums, err := calcPieceSumsFromBytes(data, pieceLength)
+	if err != nil {
+		return nil, err
+	}
+	return assembleMetaInfo(d, length, pieceSums, pieceLength)
+}
+
+// assembleMetaInfo constructs a MetaInfo from pre-computed piece sums.
+func assembleMetaInfo(d Digest, length int64, pieceSums []uint32, pieceLength int64) (*MetaInfo, error) {
+	info := info{
+		PieceLength: pieceLength,
+		PieceSums:   pieceSums,
+		Name:        d.Hex(),
+		Length:      length,
+	}
+	h, err := info.Hash()
+	if err != nil {
+		return nil, fmt.Errorf("compute info hash: %s", err)
+	}
+	return &MetaInfo{info: info, infoHash: h, digest: d}, nil
+}
+
+// calcPieceSumsFromBytes hashes data in pieceLength chunks. Mirrors
+// calcPieceSums but avoids per-piece hash.Hash32 allocation by using
+// crc32.ChecksumIEEE, and pre-sizes pieceSums to its exact final length.
+func calcPieceSumsFromBytes(data []byte, pieceLength int64) (int64, []uint32, error) {
+	if pieceLength <= 0 {
+		return 0, nil, errors.New("piece length must be positive")
+	}
+	n := int64(len(data))
+	if n == 0 {
+		return 0, nil, nil
+	}
+	numPieces := (n-1)/pieceLength + 1
+	pieceSums := make([]uint32, 0, numPieces)
+	for offset := int64(0); offset < n; offset += pieceLength {
+		end := offset + pieceLength
+		if end > n {
+			end = n
+		}
+		pieceSums = append(pieceSums, PieceSum(data[offset:end]))
+	}
+	return n, pieceSums, nil
 }

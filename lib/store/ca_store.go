@@ -14,7 +14,6 @@
 package store
 
 import (
-	"bytes"
 	"container/list"
 	"errors"
 	"fmt"
@@ -299,7 +298,7 @@ func (s *CAStore) generateMetadataFromBytes(name string, data []byte, pieceLengt
 	if err != nil {
 		return nil, fmt.Errorf("new digest from hex: %s", err)
 	}
-	metaInfo, err := core.NewMetaInfo(digest, bytes.NewReader(data), pieceLength)
+	metaInfo, err := core.NewMetaInfoFromBytes(digest, data, pieceLength)
 	if err != nil {
 		return nil, fmt.Errorf("generate metainfo: %w", err)
 	}
