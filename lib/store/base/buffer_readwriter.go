@@ -91,7 +91,7 @@ func (b *BufferReadWriter) WriteAt(p []byte, off int64) (int, error) {
 }
 
 // updateBuffer copies p into [off, end).
-// Returns -1, false if end exceeds the buffer, which cause WriteAt to take the slow path
+// Returns (-1, true) if end exceeds the buffer, causing WriteAt to take the slow path.
 func (b *BufferReadWriter) updateBuffer(p []byte, off, end int64) (int, bool) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
