@@ -317,30 +317,43 @@ func TestBufferReadWriter_TestReader(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestBufferReadWriter_ConcurrentWriteAt validates that concurrent writes to
-// non-overlapping byte ranges on a pre-sized buffer produce correct results.
 func TestBufferReadWriter_ConcurrentWriteAt(t *testing.T) {
 	const numShards, shardSize = 10, 1024
-	data := make([]byte, numShards*shardSize)
-	for i := range data {
-		data[i] = byte(i % 256)
+	totalSize := uint64(numShards * shardSize)
+
+	tests := []struct {
+		name     string
+		initSize uint64
+	}{
+		{"presized", totalSize},
+		{"half_presized", totalSize / 2},
+		{"dynamic", 0},
 	}
 
-	buf := NewBufferReadWriter(numShards * shardSize)
-	errs := make([]error, numShards)
-	var wg sync.WaitGroup
-	for i := 0; i < numShards; i++ {
-		wg.Add(1)
-		go func(shard int) {
-			defer wg.Done()
-			off := shard * shardSize
-			_, errs[shard] = buf.WriteAt(data[off:off+shardSize], int64(off))
-		}(i)
-	}
-	wg.Wait()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := make([]byte, totalSize)
+			for i := range data {
+				data[i] = byte(i % 256)
+			}
 
-	require.NoError(t, errors.Join(errs...))
-	assert.Equal(t, data, buf.Bytes())
+			buf := NewBufferReadWriter(tt.initSize)
+			errs := make([]error, numShards)
+			var wg sync.WaitGroup
+			for i := 0; i < numShards; i++ {
+				wg.Add(1)
+				go func(shard int) {
+					defer wg.Done()
+					off := shard * shardSize
+					_, errs[shard] = buf.WriteAt(data[off:off+shardSize], int64(off))
+				}(i)
+			}
+			wg.Wait()
+
+			require.NoError(t, errors.Join(errs...))
+			assert.Equal(t, data, buf.Bytes())
+		})
+	}
 }
 
 func TestBufferReadWriter_WriteAtEmpty(t *testing.T) {

@@ -56,8 +56,10 @@ func (b *BufferReadWriter) Write(p []byte) (n int, err error) {
 //
 // Fast path (off+len(p) within pre-allocated buffer): multiple goroutines may
 // call WriteAt concurrently, provided their byte ranges do not overlap.
+//
 // Slow path (write extends beyond current buffer): acquires an exclusive lock
-// to grow the buffer, then writes.
+// only to grow the buffer, then copies under a shared read lock so other
+// writers can proceed in parallel.
 func (b *BufferReadWriter) WriteAt(p []byte, off int64) (int, error) {
 	if off < 0 {
 		return 0, fmt.Errorf("negative offset")
@@ -75,19 +77,23 @@ func (b *BufferReadWriter) WriteAt(p []byte, off int64) (int, error) {
 		return n, nil
 	}
 
-	// slow path
+	// slow path: grow, then call updateBuffer again
+	b.growBuffer(end)
+	n, _ := b.updateBuffer(p, off, end)
+	return n, nil
+}
+
+// growBuffer expands b.buf to at least size bytes. It is a no-op when the
+// buffer is already large enough.
+func (b *BufferReadWriter) growBuffer(size int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if end > int64(len(b.buf)) {
-		grown := make([]byte, end)
-		copy(grown, b.buf)
-		b.buf = grown
+	if size <= int64(len(b.buf)) {
+		return
 	}
-	n := copy(b.buf[off:], p)
-	if end > b.written.Load() {
-		b.written.Store(end)
-	}
-	return n, nil
+	grown := make([]byte, size)
+	copy(grown, b.buf)
+	b.buf = grown
 }
 
 // updateBuffer copies p into [off, end).
