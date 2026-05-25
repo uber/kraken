@@ -216,6 +216,39 @@ func TestPrefetchV1(t *testing.T) {
 	require.NoError(err)
 }
 
+func TestPrefetchV1NestedRepositoryPath(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr := mocks.startServer()
+
+	repo := "kraken-test"
+	namespace := "preheat"
+	tag := "team/service/abcdef:v1.0.0"
+
+	layers := core.DigestListFixture(3)
+	manifest, bs := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
+
+	b, err := json.Marshal(prefetchBody{
+		Tag:     fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
+		TraceId: "abc",
+	})
+	require.NoError(err)
+
+	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
+	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, layers[1], io.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, layers[2], io.Discard).Return(nil)
+
+	_, err = httputil.Post(
+		fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr),
+		httputil.SendBody(bytes.NewReader(b)))
+	require.NoError(err)
+}
+
 func TestPrefetchV2(t *testing.T) {
 	require := require.New(t)
 

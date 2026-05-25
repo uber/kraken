@@ -82,7 +82,7 @@ type DefaultTagParser struct{}
 // ParseTag implements the TagParser interface.
 // Expects tag strings in the format <hostname>/<namespace>/<imagename:tag>.
 func (p *DefaultTagParser) ParseTag(tag string) (namespace, name string, err error) {
-	parts := strings.Split(tag, "/")
+	parts := strings.SplitN(tag, "/", 3)
 	if len(parts) < 3 {
 		return "", "", fmt.Errorf("invalid tag format: %s", tag)
 	}
