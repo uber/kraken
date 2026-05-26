@@ -22,7 +22,7 @@ upstream tracker {
 }
 
 server {
-  listen {{.port}}{{if .ssl_enabled}} ssl{{end}};
+  listen {{.port}}{{if .ssl_enabled}} ssl{{end}}{{if .listen_backlog}} backlog={{.listen_backlog}}{{end}};
 
   {{.client_verification}}
 
