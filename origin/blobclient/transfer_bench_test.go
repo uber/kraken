@@ -50,7 +50,7 @@ func (l *connCountListener) count() int64 { return atomic.LoadInt64(&l.n) }
 // fakeUploadServer starts a fake origin server that handles the three endpoints
 // used by transferClient: POST (start), PATCH (chunk), PUT (commit). Request
 // bodies are discarded.
-func fakeUploadServer(b *testing.B, useTLS bool) (addr string, clientTLS *tls.Config, l *connCountListener, cleanup func()) {
+func fakeUploadServer(b *testing.B, useTLS bool) (addr string, clientTLS *tls.Config, l *connCountListener) {
 	b.Helper()
 
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -87,8 +87,9 @@ func fakeUploadServer(b *testing.B, useTLS bool) (addr string, clientTLS *tls.Co
 		s.Start()
 		addr = strings.TrimPrefix(s.URL, "http://")
 	}
+	b.Cleanup(s.Close)
 
-	return addr, clientTLS, l, s.Close
+	return addr, clientTLS, l
 }
 
 // BenchmarkTransferBlob measures TCP connection establishment per TransferBlob
@@ -101,14 +102,13 @@ func BenchmarkTransferBlob(b *testing.B) {
 		name   string
 		useTLS bool
 	}{
-		{"http_unpooled", false},
+		{"http", false},
 		{"https_unpooled", true},
 	}
 
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
-			addr, clientTLS, l, cleanup := fakeUploadServer(b, tc.useTLS)
-			defer cleanup()
+			addr, clientTLS, l := fakeUploadServer(b, tc.useTLS)
 
 			var opts []blobclient.Option
 			opts = append(opts, blobclient.WithChunkSize(1*memsize.MB))
@@ -120,17 +120,13 @@ func BenchmarkTransferBlob(b *testing.B) {
 			client := p.Provide(addr)
 			blob := make([]byte, 4*memsize.MB)
 			digest := core.DigestFixture()
-
-			b.ResetTimer()
 			b.SetBytes(int64(len(blob)))
-
 			for b.Loop() {
 				if err := client.TransferBlob(digest, bytes.NewReader(blob)); err != nil {
 					b.Fatal(err)
 				}
 			}
 
-			b.StopTimer()
 			b.ReportMetric(float64(l.count())/float64(b.N), "conns/op")
 		})
 	}
