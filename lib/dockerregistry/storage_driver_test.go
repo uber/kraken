@@ -128,7 +128,7 @@ func TestStorageDriverPutContent(t *testing.T) {
 		{genBlobDataPath(testImage.layer1.Digest.Hex()), testImage.layer1.Content, nil},
 		{genManifestRevisionLinkPath(repo, testImage.manifest), nil, nil},
 		{genManifestTagShaLinkPath(repo, tag, testImage.manifest), nil, nil},
-		{genManifestTagCurrentLinkPath(repo, tag, testImage.manifest), nil, nil},
+		{genManifestTagCurrentLinkPath(repo, tag, testImage.manifest), []byte("sha256:" + testImage.manifest), nil},
 	}
 
 	for _, tc := range testCases {
