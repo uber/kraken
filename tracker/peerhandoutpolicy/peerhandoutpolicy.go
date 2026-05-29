@@ -22,6 +22,11 @@ import (
 	"github.com/uber/kraken/core"
 )
 
+// On the client-side, agent leeches only from the top N seeders.
+const _maxSeedersUsedPerTorrent = 10
+
+var _numSeedersHistogramBuckets = tally.MustMakeLinearValueBuckets(0, 1, 20)
+
 type peerPriorityInfo struct {
 	peer     *core.PeerInfo
 	priority int
@@ -63,33 +68,49 @@ func NewPriorityPolicy(stats tally.Scope, priorityPolicy string) (*PriorityPolic
 // SortPeers returns the given list of peers sorted by the priority assigned to them
 // by the priorityPolicy. Excludes the source peer from the list.
 func (p *PriorityPolicy) SortPeers(source *core.PeerInfo, peers []*core.PeerInfo) []*core.PeerInfo {
-
 	peerPriorities := make([]*peerPriorityInfo, 0, len(peers))
-	for k := 0; k < len(peers); k++ {
-		if peers[k] != source {
-			priority, label := p.policy.assignPriority(peers[k])
-			peerPriorities = append(peerPriorities,
-				&peerPriorityInfo{peers[k], priority, label})
+	for _, peer := range peers {
+		if peer == source {
+			continue
 		}
+		priority, label := p.policy.assignPriority(peer)
+		peerPriorities = append(peerPriorities, &peerPriorityInfo{peer, priority, label})
 	}
 
 	sort.Slice(peerPriorities, func(i, j int) bool {
 		return peerPriorities[i].priority < peerPriorities[j].priority
 	})
 
-	priorityCounts := make(map[string]int)
-	for k := 0; k < len(peerPriorities); k++ {
-		p := peerPriorities[k]
-		peers[k] = p.peer
-		priorityCounts[p.label]++
-	}
-	peers = peers[:len(peerPriorities)]
+	p.emitNumSeeders(peerPriorities)
 
-	for label, count := range priorityCounts {
-		p.stats.Tagged(map[string]string{
-			"label": label,
-		}).Gauge("count").Update(float64(count))
+	sortedPeers := []*core.PeerInfo{}
+	for _, peerPrio := range peerPriorities {
+		sortedPeers = append(sortedPeers, peerPrio.peer)
 	}
 
-	return peers
+	return sortedPeers
+}
+
+func (p *PriorityPolicy) emitNumSeeders(peerPriorities []*peerPriorityInfo) {
+	if len(peerPriorities) > _maxSeedersUsedPerTorrent {
+		peerPriorities = peerPriorities[:_maxSeedersUsedPerTorrent]
+	}
+
+	numOrigins, numCompleteAgents, numIncompleteAgents := 0, 0, 0
+	for _, peerPrio := range peerPriorities {
+		switch peerPrio.label {
+		case "peer_seeder":
+			numCompleteAgents++
+		case "peer_incomplete":
+			numIncompleteAgents++
+		case "origin":
+			numOrigins++
+		}
+	}
+
+	total := numOrigins + numCompleteAgents + numIncompleteAgents
+	p.stats.Histogram("total_seeders", _numSeedersHistogramBuckets).RecordValue(float64(total))
+	p.stats.Histogram("origin_seeders", _numSeedersHistogramBuckets).RecordValue(float64(numOrigins))
+	p.stats.Histogram("complete_agent_seeders", _numSeedersHistogramBuckets).RecordValue(float64(numCompleteAgents))
+	p.stats.Histogram("incomplete_agent_seeders", _numSeedersHistogramBuckets).RecordValue(float64(numIncompleteAgents))
 }
