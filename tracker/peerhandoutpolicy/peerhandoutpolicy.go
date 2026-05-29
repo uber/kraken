@@ -91,6 +91,7 @@ func (p *PriorityPolicy) SortPeers(source *core.PeerInfo, peers []*core.PeerInfo
 	return sortedPeers
 }
 
+// Assumes that the completeness priority policy is used.
 func (p *PriorityPolicy) emitNumSeeders(peerPriorities []*peerPriorityInfo) {
 	if len(peerPriorities) > _maxSeedersUsedPerTorrent {
 		peerPriorities = peerPriorities[:_maxSeedersUsedPerTorrent]
