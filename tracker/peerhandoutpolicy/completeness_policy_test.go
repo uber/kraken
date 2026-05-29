@@ -26,7 +26,8 @@ import (
 func TestCompletenessPriorityPolicy(t *testing.T) {
 	require := require.New(t)
 
-	policy, err := NewPriorityPolicy(tally.NoopScope, _completenessPolicy)
+	testScope := tally.NewTestScope("", nil)
+	policy, err := NewPriorityPolicy(testScope, _completenessPolicy)
 	require.NoError(err)
 
 	seeders := 10
@@ -51,7 +52,7 @@ func TestCompletenessPriorityPolicy(t *testing.T) {
 		peers[i], peers[j] = peers[j], peers[i]
 	}
 
-	policy.SortPeers(core.PeerInfoFixture(), peers)
+	peers = policy.SortPeers(core.PeerInfoFixture(), peers)
 	require.Len(peers, seeders+origins+incomplete)
 	for k := 0; k < len(peers); k++ {
 		p := peers[k]
@@ -66,4 +67,23 @@ func TestCompletenessPriorityPolicy(t *testing.T) {
 			require.False(p.Origin)
 		}
 	}
+
+	histograms := testScope.Snapshot().Histograms()
+	tags := "module=peerhandoutpolicy,priority=completeness"
+
+	total, ok := histograms["total_seeders+"+tags]
+	require.True(ok)
+	require.Equal(int64(1), total.Values()[10])
+
+	complete, ok := histograms["complete_agent_seeders+"+tags]
+	require.True(ok)
+	require.Equal(int64(1), complete.Values()[10])
+
+	origin, ok := histograms["origin_seeders+"+tags]
+	require.True(ok)
+	require.Equal(int64(1), origin.Values()[0])
+
+	incompleteHist, ok := histograms["incomplete_agent_seeders+"+tags]
+	require.True(ok)
+	require.Equal(int64(1), incompleteHist.Values()[0])
 }
