@@ -20,7 +20,9 @@ import (
 
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/manifestlist"
+	"github.com/docker/distribution/manifest/ocischema"
 	"github.com/docker/distribution/manifest/schema2"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/uber/kraken/core"
 )
 
@@ -35,13 +37,26 @@ func ParseManifest(r io.Reader) (distribution.Manifest, core.Digest, error) {
 		return nil, core.Digest{}, fmt.Errorf("read: %s", err)
 	}
 
-	manifest, d, err := ParseManifestV2(b)
-	if err == nil {
-		return manifest, d, err
+	type attempt struct {
+		name string
+		fn   func([]byte) (distribution.Manifest, core.Digest, error)
+	}
+	attempts := []attempt{
+		{"docker v2 manifest", ParseManifestV2},
+		{"docker v2 manifest list", ParseManifestV2List},
+		{"OCI image manifest", ParseManifestOCI},
+		{"OCI image index", ParseManifestOCIIndex},
 	}
 
-	// Retry with v2 manifest list.
-	return ParseManifestV2List(b)
+	var errs []string
+	for _, a := range attempts {
+		m, d, err := a.fn(b)
+		if err == nil {
+			return m, d, nil
+		}
+		errs = append(errs, fmt.Sprintf("%s: %s", a.name, err))
+	}
+	return nil, core.Digest{}, fmt.Errorf("unrecognized manifest format: [%s]", strings.Join(errs, "; "))
 }
 
 // ParseManifestV2 returns a parsed v2 manifest and its digest.
@@ -71,19 +86,53 @@ func ParseManifestV2List(bytes []byte) (distribution.Manifest, core.Digest, erro
 	if err != nil {
 		return nil, core.Digest{}, fmt.Errorf("unmarshal manifestlist: %s", err)
 	}
-	deserializedManifestList, ok := manifestList.(*manifestlist.DeserializedManifestList)
+	deserializedManifestIndex, ok := manifestIndex.(*manifestlist.DeserializedManifestList)
 	if !ok {
-		return nil, core.Digest{}, errors.New("expected manifestlist.DeserializedManifestList")
+		return nil, core.Digest{}, fmt.Errorf("expected OCI image index, got %T", manifestIndex)
 	}
-	version := deserializedManifestList.SchemaVersion
+	version := deserializedManifestIndex.SchemaVersion
 	if version != 2 {
-		return nil, core.Digest{}, fmt.Errorf("unsupported manifest list version: %d", version)
+		return nil, core.Digest{}, fmt.Errorf("unsupported OCI image index version: %d", version)
 	}
 	d, err := core.ParseSHA256Digest(string(desc.Digest))
 	if err != nil {
 		return nil, core.Digest{}, fmt.Errorf("parse digest: %s", err)
 	}
 	return manifestList, d, nil
+}
+
+// ParseManifestOCI returns a parsed OCI image manifest and its digest.
+func ParseManifestOCI(bytes []byte) (distribution.Manifest, core.Digest, error) {
+	manifest, desc, err := distribution.UnmarshalManifest(specs.MediaTypeImageManifest, bytes)
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("unmarshal OCI manifest: %s", err)
+	}
+	_, ok := manifest.(*ocischema.DeserializedManifest)
+	if !ok {
+		return nil, core.Digest{}, errors.New("expected ocischema.DeserializedManifest")
+	}
+	d, err := core.ParseSHA256Digest(string(desc.Digest))
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("parse digest: %s", err)
+	}
+	return manifest, d, nil
+}
+
+// ParseManifestOCIIndex returns a parsed OCI image index and its digest.
+func ParseManifestOCIIndex(bytes []byte) (distribution.Manifest, core.Digest, error) {
+	manifestIndex, desc, err := distribution.UnmarshalManifest(specs.MediaTypeImageIndex, bytes)
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("unmarshal OCI image index: %s", err)
+	}
+	_, ok := manifestIndex.(*manifestlist.DeserializedManifestList)
+	if !ok {
+		return nil, core.Digest{}, errors.New("expected manifestlist.DeserializedManifestList for OCI index")
+	}
+	d, err := core.ParseSHA256Digest(string(desc.Digest))
+	if err != nil {
+		return nil, core.Digest{}, fmt.Errorf("parse digest: %s", err)
+	}
+	return manifestIndex, d, nil
 }
 
 // GetManifestReferences returns a list of references by a V2 manifest
@@ -100,5 +149,10 @@ func GetManifestReferences(manifest distribution.Manifest) ([]core.Digest, error
 }
 
 func GetSupportedManifestTypes() string {
-	return fmt.Sprintf("%s,%s", _v2ManifestType, _v2ManifestListType)
+	return fmt.Sprintf("%s,%s,%s,%s",
+		_v2ManifestType,
+		_v2ManifestListType,
+		specs.MediaTypeImageManifest,
+		specs.MediaTypeImageIndex,
+	)
 }
