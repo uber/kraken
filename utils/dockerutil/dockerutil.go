@@ -14,79 +14,68 @@
 package dockerutil
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
 	"io"
 
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/manifestlist"
+	_ "github.com/docker/distribution/manifest/ocischema"
 	"github.com/docker/distribution/manifest/schema2"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/uber/kraken/core"
 )
 
-const (
-	_v2ManifestType     = "application/vnd.docker.distribution.manifest.v2+json"
-	_v2ManifestListType = "application/vnd.docker.distribution.manifest.list.v2+json"
-)
+type manifestPeek struct {
+	SchemaVersion int               `json:"schemaVersion"`
+	MediaType     string            `json:"mediaType"`
+	Manifests     []json.RawMessage `json:"manifests"`
+}
 
 func ParseManifest(r io.Reader) (distribution.Manifest, core.Digest, error) {
 	b, err := io.ReadAll(r)
 	if err != nil {
-		return nil, core.Digest{}, fmt.Errorf("read: %s", err)
+		return nil, core.Digest{}, fmt.Errorf("read manifest: %w", err)
 	}
 
-	manifest, d, err := ParseManifestV2(b)
-	if err == nil {
-		return manifest, d, err
+	var p manifestPeek
+	if err := json.Unmarshal(b, &p); err != nil {
+		return nil, core.Digest{}, fmt.Errorf("peek manifest: %w", err)
+	}
+	if p.SchemaVersion != 2 {
+		return nil, core.Digest{}, fmt.Errorf("unsupported schema version: %d", p.SchemaVersion)
+	}
+	// OCI manifests may omit their mediatype. Use the "manifests" field
+	// to differentiate between an OCI manifest and an OCI index.
+	if p.MediaType == "" {
+		if len(p.Manifests) > 0 {
+			p.MediaType = v1.MediaTypeImageIndex
+		} else {
+			p.MediaType = v1.MediaTypeImageManifest
+		}
 	}
 
-	// Retry with v2 manifest list.
-	return ParseManifestV2List(b)
+	switch p.MediaType {
+	case schema2.MediaTypeManifest, manifestlist.MediaTypeManifestList, v1.MediaTypeImageManifest, v1.MediaTypeImageIndex:
+		return unmarshalManifest(p.MediaType, b)
+	default:
+		return nil, core.Digest{}, fmt.Errorf("unknown manifest mediatype: %s", p.MediaType)
+	}
 }
 
-// ParseManifestV2 returns a parsed v2 manifest and its digest.
-func ParseManifestV2(bytes []byte) (distribution.Manifest, core.Digest, error) {
-	manifest, desc, err := distribution.UnmarshalManifest(schema2.MediaTypeManifest, bytes)
+func unmarshalManifest(mediaType string, b []byte) (distribution.Manifest, core.Digest, error) {
+	manifest, desc, err := distribution.UnmarshalManifest(mediaType, b)
 	if err != nil {
-		return nil, core.Digest{}, fmt.Errorf("unmarshal manifest: %s", err)
+		return nil, core.Digest{}, fmt.Errorf("unmarshal manifest: %w", err)
 	}
-	deserializedManifest, ok := manifest.(*schema2.DeserializedManifest)
-	if !ok {
-		return nil, core.Digest{}, errors.New("expected schema2.DeserializedManifest")
-	}
-	version := deserializedManifest.SchemaVersion
-	if version != 2 {
-		return nil, core.Digest{}, fmt.Errorf("unsupported manifest version: %d", version)
-	}
-	d, err := core.ParseSHA256Digest(string(desc.Digest))
+	digest, err := core.ParseSHA256Digest(string(desc.Digest))
 	if err != nil {
-		return nil, core.Digest{}, fmt.Errorf("parse digest: %s", err)
+		return nil, core.Digest{}, fmt.Errorf("parse digest: %w", err)
 	}
-	return manifest, d, nil
+	return manifest, digest, nil
 }
 
-// ParseManifestV2List returns a parsed v2 manifest list and its digest.
-func ParseManifestV2List(bytes []byte) (distribution.Manifest, core.Digest, error) {
-	manifestList, desc, err := distribution.UnmarshalManifest(manifestlist.MediaTypeManifestList, bytes)
-	if err != nil {
-		return nil, core.Digest{}, fmt.Errorf("unmarshal manifestlist: %s", err)
-	}
-	deserializedManifestList, ok := manifestList.(*manifestlist.DeserializedManifestList)
-	if !ok {
-		return nil, core.Digest{}, errors.New("expected manifestlist.DeserializedManifestList")
-	}
-	version := deserializedManifestList.SchemaVersion
-	if version != 2 {
-		return nil, core.Digest{}, fmt.Errorf("unsupported manifest list version: %d", version)
-	}
-	d, err := core.ParseSHA256Digest(string(desc.Digest))
-	if err != nil {
-		return nil, core.Digest{}, fmt.Errorf("parse digest: %s", err)
-	}
-	return manifestList, d, nil
-}
-
-// GetManifestReferences returns a list of references by a V2 manifest
+// GetManifestReferences returns a list of references by a manifest.
 func GetManifestReferences(manifest distribution.Manifest) ([]core.Digest, error) {
 	var refs []core.Digest
 	for _, desc := range manifest.References() {
@@ -100,5 +89,9 @@ func GetManifestReferences(manifest distribution.Manifest) ([]core.Digest, error
 }
 
 func GetSupportedManifestTypes() string {
-	return fmt.Sprintf("%s,%s", _v2ManifestType, _v2ManifestListType)
+	return fmt.Sprintf("%s,%s,%s,%s",
+		schema2.MediaTypeManifest,
+		manifestlist.MediaTypeManifestList,
+		v1.MediaTypeImageManifest,
+		v1.MediaTypeImageIndex)
 }

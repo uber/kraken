@@ -208,8 +208,56 @@ func TestPrefetchV1(t *testing.T) {
 	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
 	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
 	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, manifest, io.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, layers[0], io.Discard).Return(nil)
 	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, layers[1], io.Discard).Return(nil)
 	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, layers[2], io.Discard).Return(nil)
+	_, err = httputil.Post(
+		fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr),
+		httputil.SendBody(bytes.NewReader(b)))
+	require.NoError(err)
+}
+
+func TestPrefetchV1WithManifestList(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr := mocks.startServer()
+
+	repo := "kraken-test"
+	namespace := "preheat"
+	tag := "abcdef:v1.0.0"
+
+	m1Refs := core.DigestListFixture(3)
+	m2Refs := core.DigestListFixture(3)
+	m1Digest, m1Bytes := dockerutil.ManifestFixture(m1Refs[0], m1Refs[1], m1Refs[2])
+	m2Digest, m2Bytes := dockerutil.ManifestFixture(m2Refs[0], m2Refs[1], m2Refs[2])
+	mlDigest, mlBytes := dockerutil.ManifestListFixture(m1Digest, m2Digest)
+
+	b, err := json.Marshal(prefetchBody{
+		Tag:     fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
+		TraceId: "abc",
+	})
+	require.NoError(err)
+
+	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
+	mocks.tagClient.EXPECT().Get(tagRequest).Return(mlDigest, nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, mlDigest, mockutil.MatchWriter(mlBytes)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, m1Digest, mockutil.MatchWriter(m1Bytes)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, m2Digest, mockutil.MatchWriter(m2Bytes)).Return(nil)
+
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, mlDigest, io.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, m1Digest, io.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, m2Digest, io.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, m1Refs[0], io.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, m1Refs[1], io.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, m1Refs[2], io.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, m2Refs[0], io.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, m2Refs[1], io.Discard).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, m2Refs[2], io.Discard).Return(nil)
+
 	_, err = httputil.Post(
 		fmt.Sprintf("http://%s/proxy/v1/registry/prefetch", addr),
 		httputil.SendBody(bytes.NewReader(b)))
@@ -241,8 +289,70 @@ func TestPrefetchV2(t *testing.T) {
 	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
 	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
 
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, manifest).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[0]).Return(nil)
 	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[1]).Return(nil)
 	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[2]).Return(nil)
+	res, err := httputil.Post(
+		fmt.Sprintf("http://%s/proxy/v2/registry/prefetch", addr),
+		httputil.SendBody(bytes.NewReader(b)))
+	require.NoError(err)
+
+	var resBody prefetchResponse
+	resBodyBytes, err := io.ReadAll(res.Body)
+	require.NoError(err)
+	err = json.Unmarshal(resBodyBytes, &resBody)
+	require.NoError(err)
+
+	require.Equal(prefetchResponse{
+		Message:    "prefetching initiated successfully",
+		TraceId:    "abc",
+		Status:     "success",
+		Tag:        "abcdef:v1.0.0",
+		Prefetched: true,
+	}, resBody)
+}
+
+func TestPrefetchV2WithOCIIndex(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr := mocks.startServer()
+
+	repo := "kraken-test"
+	namespace := "preheat"
+	tag := "abcdef:v1.0.0"
+
+	m1Refs := core.DigestListFixture(3)
+	m2Refs := core.DigestListFixture(3)
+	m1Digest, m1Bytes := dockerutil.OCIManifestFixture(m1Refs[0], m1Refs[1], m1Refs[2])
+	m2Digest, m2Bytes := dockerutil.OCIManifestFixture(m2Refs[0], m2Refs[1], m2Refs[2])
+	mlDigest, mlBytes := dockerutil.OCIIndexFixture(m1Digest, m2Digest)
+
+	b, err := json.Marshal(prefetchBody{
+		Tag:     fmt.Sprintf("%s/%s/%s", repo, namespace, tag),
+		TraceId: "abc",
+	})
+	require.NoError(err)
+
+	tagRequest := url.QueryEscape(fmt.Sprintf("%s/%s", namespace, tag))
+	mocks.tagClient.EXPECT().Get(tagRequest).Return(mlDigest, nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, mlDigest, mockutil.MatchWriter(mlBytes)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, m1Digest, mockutil.MatchWriter(m1Bytes)).Return(nil)
+	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, m2Digest, mockutil.MatchWriter(m2Bytes)).Return(nil)
+
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, mlDigest).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, m1Digest).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, m2Digest).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, m1Refs[0]).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, m1Refs[1]).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, m1Refs[2]).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, m2Refs[0]).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, m2Refs[1]).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, m2Refs[2]).Return(nil)
+
 	res, err := httputil.Post(
 		fmt.Sprintf("http://%s/proxy/v2/registry/prefetch", addr),
 		httputil.SendBody(bytes.NewReader(b)))
@@ -288,6 +398,8 @@ func TestPrefetchV2OriginError(t *testing.T) {
 	mocks.tagClient.EXPECT().Get(tagRequest).Return(manifest, nil)
 	mocks.originClient.EXPECT().DownloadBlob(gomock.Any(), namespace, manifest, mockutil.MatchWriter(bs)).Return(nil)
 
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, manifest).Return(nil)
+	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[0]).Return(nil)
 	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[1]).Return(errors.New("foo err"))
 	mocks.originClient.EXPECT().PrefetchBlob(namespace, layers[2]).Return(nil)
 	_, err = httputil.Post(

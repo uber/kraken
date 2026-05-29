@@ -32,7 +32,9 @@ import (
 	"github.com/uber/kraken/utils/log"
 )
 
-var _manifestRegexp = regexp.MustCompile(`^application/vnd.docker.distribution.manifest.v\d\+(json|prettyjws)`)
+var _manifestRegexp = regexp.MustCompile(
+	`^application/vnd\.(docker\.distribution\.manifest\.v\d\+(json|prettyjws)|oci\.image\.manifest\.v1\+json)`,
+)
 
 // PreheatHandler defines the handler of preheat.
 type PreheatHandler struct {

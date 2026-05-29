@@ -25,10 +25,11 @@ import (
 	"time"
 
 	"github.com/docker/distribution"
-	"github.com/docker/distribution/manifest/schema1"
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/opencontainers/go-digest"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/uber/kraken/utils/closers"
+	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/log"
 )
@@ -63,19 +64,14 @@ func PullImage(source, repo, tag string, useDocker bool) error {
 		return fmt.Errorf("failed to pull manifest %s:%s: %s", repo, tag, err)
 	}
 
-	layerDigests, err := getLayerDigestsFromManifest(&manifest)
-	if err != nil {
-		return fmt.Errorf("failed to get layer digests from manifest: %s", err)
-	}
-
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var errs errutil.MultiError
-	for _, d := range layerDigests {
+	for _, desc := range manifest.References() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := pullLayer(http.Client{Timeout: transferTimeout}, source, repo, d)
+			err := pullLayer(http.Client{Timeout: transferTimeout}, source, repo, desc.Digest.String())
 			if err != nil {
 				mu.Lock()
 				defer mu.Unlock()
@@ -100,8 +96,9 @@ func pullManifest(client http.Client, source string, name string, reference stri
 	if err != nil {
 		return nil, err
 	}
-	// Add `Accept` header to indicate schema2 is supported
+	// Accept single-arch manifests only; the puller does not support multi-arch images.
 	req.Header.Add("Accept", schema2.MediaTypeManifest)
+	req.Header.Add("Accept", v1.MediaTypeImageManifest)
 	resp, err := client.Do(req)
 
 	if err != nil {
@@ -117,53 +114,8 @@ func pullManifest(client http.Client, source string, name string, reference stri
 		return nil, fmt.Errorf("server returned %v", resp.Status)
 	}
 
-	version := resp.Header.Get("Content-Type")
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	manifest, _, err := distribution.UnmarshalManifest(version, body)
-	if err != nil {
-		return nil, err
-	}
-
-	return manifest, nil
-}
-
-func getLayerDigestsFromManifest(manifest *distribution.Manifest) ([]string, error) {
-	var digests []string
-	// Get layers from manifest
-	switch (*manifest).(type) {
-	case *schema1.SignedManifest:
-		signedManifest, ok := (*manifest).(*schema1.SignedManifest)
-		if !ok {
-			return nil, fmt.Errorf("failed to cast to SignedManifest")
-		}
-		fsLayers := signedManifest.FSLayers
-		for _, fsLayer := range fsLayers {
-			digests = append(digests, fsLayer.BlobSum.String())
-		}
-	case *schema2.DeserializedManifest:
-		deserializedManifest, ok := (*manifest).(*schema2.DeserializedManifest)
-		if !ok {
-			return nil, fmt.Errorf("failed to cast to DeserializedManifest")
-		}
-		layerDescriptors := deserializedManifest.Layers
-		for _, descriptor := range layerDescriptors {
-			digests = append(digests, descriptor.Digest.String())
-		}
-		// for schema2, we also need a config layer
-		config := deserializedManifest.Config
-		digests = append(digests, config.Digest.String())
-	default:
-		mt, _, err := (*manifest).Payload()
-		if err == nil {
-			err = fmt.Errorf("manifest type %s is not supported", mt)
-		}
-		return nil, err
-	}
-
-	return digests, nil
+	manifest, _, err := dockerutil.ParseManifest(resp.Body)
+	return manifest, err
 }
 
 func pullLayer(client http.Client, source, name string, layerDigest string) error {
