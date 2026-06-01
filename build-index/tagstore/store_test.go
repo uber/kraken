@@ -143,7 +143,7 @@ func TestGetFromBackendUnkownError(t *testing.T) {
 	mocks.backendClient.EXPECT().Download(tag, tag, w).Return(fmt.Errorf("test error"))
 
 	_, err := store.Get(tag)
-	require.Error(err)
+	require.Equal(ErrTagNotFound, err)
 }
 
 func TestGetFromBackendInvalidValue(t *testing.T) {

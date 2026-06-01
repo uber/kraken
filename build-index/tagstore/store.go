@@ -182,12 +182,17 @@ func (s *tagStore) resolveFromBackend(tag string) (core.Digest, error) {
 	}
 	var b bytes.Buffer
 	if err := backendClient.Download(tag, tag, &b); err != nil {
-		if err == backenderrors.ErrBlobNotFound {
+		if errors.Is(err, backenderrors.ErrBlobNotFound) {
 			log.With("tag", tag).Debug("Tag not found in backend")
-			return core.Digest{}, ErrTagNotFound
+		} else {
+			// Kraken is expected to accept image pushes even when remote storage is
+			// down by storing the blob on disk and flushing it to the remote storage
+			// once it becomes available again. When we experience a backend error,
+			// we return 404, instead of 500, as the latter would abort Docker pushes
+			// that HEAD before PUT (e.g. containerd snapshotter).
+			log.With("tag", tag, "error", err).Error("Failed to download tag from backend")
 		}
-		log.With("tag", tag).Errorf("Failed to download tag from backend: %s", err)
-		return core.Digest{}, fmt.Errorf("backend client: %s", err)
+		return core.Digest{}, ErrTagNotFound
 	}
 	d, err := core.ParseSHA256Digest(b.String())
 	if err != nil {
