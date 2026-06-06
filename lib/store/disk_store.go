@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/uber/kraken/lib/store/base"
 	"github.com/uber/kraken/lib/store/metadata"
 )
 
@@ -53,6 +54,7 @@ type el struct {
 
 // NewDiskStore creates a [DiskStore].
 func NewDiskStore(capacityBytes uint64, rootDir string) (*DiskStore, error) {
+	// TODO - pivot toward "complete" and "incomplete" blobs and pass config to support returning
 	// TODO - recover persisted state in case of crash.
 	return &DiskStore{
 		dir:              rootDir,
@@ -65,14 +67,11 @@ func NewDiskStore(capacityBytes uint64, rootDir string) (*DiskStore, error) {
 	}, nil
 }
 
-// Returns os.ErrNotExist if the blob is not present.
-// TODO - decide what happens if the blob is being writtem atm - should return a special error `InProgress` or keep returning `ErrNotExists`? - probably go for the simpler thing and return ErrNotExists until Commit is done. Atomicity should
-// be encapsulated as much as possible within this package. From the client's POV blobs are either in or outside the store. Consider whether we want to make an exception to that rule during writes for debugging purposes (makes sense there, as the client should know what state of the atomic write they are in).
-// and return ErrNotExists.
-// TODO - decide what is done when a blob is evicted while io.Reader is held by the client (check what's done right now and evaluate if we should mimic). - probably reuse linux semantics here (while the fd is kept, client can continue reading)
+// Get returns a committed blob. If the blob is not found, [os.ErrNotExists] is returned.
+// The blob cannot be evicted before the client calls Close() on it.
 func (s *DiskStore) Get(key string) (FileReader, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	node, okBlobs := s.blobs[key]
 	unevictableBlobSize, okUnevictable := s.unevictableBlobs[key]
@@ -99,8 +98,22 @@ func (s *DiskStore) getBlob(key string, size uint64) (FileReader, error) {
 	return newReadWriter(f, size), nil
 }
 
-// Stat returns [os.FileInfo] about the blob.
-func (s *DiskStore) Stat(key string) (os.FileInfo, error) { return nil, errors.New("not implemented") }
+// Stat returns [os.FileInfo] about the blob. Returns [os.ErrNotExists] if the blob is not found.
+func (s *DiskStore) Stat(key string) (os.FileInfo, error) {
+	s.mu.RLock()
+	// We **could** avoid locking the mutex by just statting the file directly. However, the current implementation
+	// prefers mutex contention over extra disk usage, as origin is bottlenecked by disk IO.
+	_, okBlobs := s.blobs[key]
+	_, okUnevictable := s.unevictableBlobs[key]
+	s.mu.RUnlock()
+	if !okBlobs && !okUnevictable {
+		return nil, os.ErrNotExist
+	}
+
+	committed := true
+	blobPath := s.blobPath(key, committed)
+	return os.Stat(blobPath)
+}
 
 // StartWrite initializes an uncommitted write to the store for a new blob.
 // The client MUST call CommitWrite once the blob is fully written to enable reading it.
@@ -207,15 +220,66 @@ func (s *DiskStore) CommitWrite(key string) error {
 	return nil
 }
 
-// CancelWrite should be called to free resources if an upload to the store has been started but will not be finished (e.g. due to an error).
-func (s *DiskStore) CancelWrite(key string) error { return errors.New("not implemented") } // TODO - evaulate whether we can remove this API in favor of using Delete for uncommitted blobs.
+// Delete removes a blob and its [metadata.Metadata] from the store.
+// If the blob is not committed, its write is canceled and any reserved resources are released.
+// Does NOT work on unevictable blobs and returns [base.ErrFilePersisted].
+func (s *DiskStore) Delete(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-// Delete removes a blob and its [metadata.Metadata] from the store. Does NOT work on unevictable blobs and returns [base.ErrFilePersisted].
-// CancelWrite should be used on uncommitted blobs. // TODO - reevaluate this decision.
-func (s *DiskStore) Delete(key string) error { return errors.New("not implemented") }
+	if _, ok := s.unevictableBlobs[key]; ok {
+		return base.ErrFilePersisted
+	}
 
-// List returns the keys of all committed blobs stored in the store.
-func (s *DiskStore) List() ([]string, error) { return nil, errors.New("not implemented") }
+	size, ok := s.uncommittedBlobs[key]
+	if ok {
+		return s.cancelWrite(key, size)
+	}
+
+	node, ok := s.blobs[key]
+	if !ok {
+		return os.ErrNotExist
+	}
+
+	committed := true
+	err := s.deleteFromDisk(key, committed)
+	if err != nil {
+		return fmt.Errorf("delete from disk: %w", err)
+	}
+	delete(s.blobs, key)
+	s.evictQueue.Remove(node)
+	s.releaseSpace(node.Value.(el).size)
+	return nil
+}
+
+func (s *DiskStore) cancelWrite(key string, size uint64) error {
+	committed := false
+	err := s.deleteFromDisk(key, committed)
+	if err != nil {
+		return fmt.Errorf("delete from disk: %w", err)
+	}
+	delete(s.uncommittedBlobs, key)
+	s.releaseSpace(size)
+	return nil
+}
+
+// List returns the keys of all committed blobs.
+func (s *DiskStore) List() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	res := make([]string, len(s.blobs)+len(s.unevictableBlobs))
+	i := 0
+	for key := range s.blobs {
+		res[i] = key
+		i++
+	}
+	for key := range s.unevictableBlobs {
+		res[i] = key
+		i++
+	}
+	return res
+}
 
 // ForbidEviction stops a blob from being evicted by the LRU until [AllowEviction] is called. Needed when blobs must be written back to GCS/S3/etc.
 func (s *DiskStore) ForbidEviction(key string) error { return errors.New("not implemented") }
