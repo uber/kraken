@@ -8,18 +8,19 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/uber/kraken/lib/store/base"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/closers"
 )
 
 const (
-	_defaultFilePerm = 0775
 	// _defaultShardIDLength is the number of bytes of file digest to be used for shard ID.
 	// For every byte (2 HEX char), one more level of directories will be created.
-	_defaultShardIDLength = 2
-	_incompleteSubDir     = "incomplete"
-	_completeSubDir       = "complete"
-	_blobFileName         = "data"
+	_defaultFilePerm        = 0775
+	_defaultShardIDLength   = 2
+	_incompleteSubDir       = "incomplete"
+	_completeSubDir         = "complete"
+	_blobFileName           = "data"
+	_evictionBannedFileName = "_eviction_banned"
 )
 
 // DiskStore is a key-value, persistent, thread-safe, LRU store for blobs and their [metadata.Metadata].
@@ -44,7 +45,8 @@ type DiskStore struct {
 	// complete, evictable blobs.
 	blobs map[string]*list.Element // value of [list.Element] is [el].
 	// Back is most recently used, front is the next to evict.
-	evictQueue      *list.List
+	evictQueue *list.List
+	// incomplete blobs that may or may not be evictable.
 	incompleteBlobs map[string]uint64
 	// complete blobs that cannot be evicted.
 	unevictableBlobs map[string]uint64
@@ -58,7 +60,7 @@ type el struct {
 // NewDiskStore creates a [DiskStore].
 func NewDiskStore(capacityBytes uint64, rootDir string) (*DiskStore, error) {
 	// TODO - create a Config struct.
-	// TODO - recover persisted state in case of crash.
+	// TODO - recover persisted state in case of crash. might need to evict. emit log if so.
 	return &DiskStore{
 		dir:              rootDir,
 		capacity:         capacityBytes,
@@ -127,8 +129,9 @@ func (s *DiskStore) Stat(key string, ignoreIncomplete bool) (os.FileInfo, error)
 	return os.Stat(blobPath)
 }
 
-// Create adds a new, incomplete blob to the store. Incomplete entries cannot be automatically
-// evicted. MarkComplete must be called once the blob is complete.
+// Create adds a new, incomplete blob to the store and reserves space for it.
+// Incomplete entries cannot be automatically evicted. MarkComplete must be called once the blob is complete.
+// DiskStore does not ever check/use the real size of the blob and only uses `sizeBytes` for its eviction logic.
 func (s *DiskStore) Create(key string, sizeBytes uint64) (FileReadWriter, error) {
 	// TODO - we might want some TTI on uploads to the store, after which we cancel the upload, e.g. 1min without the client uploading more data.
 	s.mu.Lock()
@@ -199,26 +202,38 @@ func (s *DiskStore) releaseSpace(space uint64) {
 	s.size -= space
 }
 
-// fully deletes the state of a blob, including metadata. Works both on persisted and non-persisted blobs.
+// fully deletes the disk state of a blob, including metadata. Works on any blob.
 func (s *DiskStore) deleteFromDisk(key string, complete bool) error {
 	dir := s.dirPath(key, complete)
 	return os.RemoveAll(dir)
 }
 
-// MarkComplete marks a blob as fully written. It enlists the blob for LRU eviction (unless ForbidEviction has been called).
+// MarkComplete marks a blob as fully written. It enlists the blob for LRU eviction (unless BanEviction has been called).
 // Additionally, read APIs may optionally filter out incomplete blobs.
 func (s *DiskStore) MarkComplete(key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	size, ok := s.incompleteBlobs[key]
-	if !ok {
-		return fmt.Errorf("blob is not in incomplete state")
+	size, okIncomplete := s.incompleteBlobs[key]
+	_, okBlob := s.blobs[key]
+	_, okUnevictable := s.unevictableBlobs[key]
+	if !okIncomplete && !okBlob && !okUnevictable {
+		return os.ErrNotExist
+	}
+
+	if !okIncomplete {
+		// no-op
+		return nil
 	}
 
 	oldPathDir := s.dirPath(key, false)
 	newPathDir := s.dirPath(key, true)
-	err := os.MkdirAll(filepath.Dir(newPathDir), _defaultFilePerm)
+	complete := false
+	isUnevictable, err := s.checkDiskIfUnevictable(key, complete)
+	if err != nil {
+		return fmt.Errorf("check if blob is evictable or not: %w", err)
+	}
+	err = os.MkdirAll(filepath.Dir(newPathDir), _defaultFilePerm)
 	if err != nil {
 		return fmt.Errorf("mkdirall: %w", err)
 	}
@@ -226,54 +241,68 @@ func (s *DiskStore) MarkComplete(key string) error {
 	if err != nil {
 		return fmt.Errorf("move dir: %w", err)
 	}
-
 	delete(s.incompleteBlobs, key)
-	// TODO - handle unevictable blobs correctly (they must transition to s.unevictableBlobs, not s.blobs and s.evictQueue)
+	if isUnevictable {
+		s.unevictableBlobs[key] = size
+		return nil
+	}
+
 	node := s.evictQueue.PushBack(el{key: key, size: size})
 	s.blobs[key] = node
 	return nil
 }
 
-// Delete removes a blob and its [metadata.Metadata] from the store. Works on incomplete blobs.
-// Does NOT work on unevictable blobs and returns [base.ErrFilePersisted].
+func (s *DiskStore) checkDiskIfUnevictable(key string, complete bool) (bool, error) {
+	dirPath := s.dirPath(key, complete)
+	flagBlobPath := filepath.Join(dirPath, _evictionBannedFileName)
+	_, err := os.Stat(flagBlobPath)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, fmt.Errorf("stat: %w", err)
+}
+
+// Delete removes a blob and its [metadata.Metadata] from the store. Works on any blob.
 func (s *DiskStore) Delete(key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.unevictableBlobs[key]; ok {
-		return base.ErrFilePersisted
+	if size, ok := s.unevictableBlobs[key]; ok {
+		complete := true
+		err := s.deleteFromDisk(key, complete)
+		if err != nil {
+			return fmt.Errorf("delete from disk: %w", err)
+		}
+		delete(s.unevictableBlobs, key)
+		s.releaseSpace(size)
+		return nil
+	}
+	if size, ok := s.incompleteBlobs[key]; ok {
+		complete := false
+		err := s.deleteFromDisk(key, complete)
+		if err != nil {
+			return fmt.Errorf("delete from disk: %w", err)
+		}
+		delete(s.incompleteBlobs, key)
+		s.releaseSpace(size)
+		return nil
+	}
+	if node, ok := s.blobs[key]; ok {
+		complete := true
+		err := s.deleteFromDisk(key, complete)
+		if err != nil {
+			return fmt.Errorf("delete from disk: %w", err)
+		}
+		delete(s.blobs, key)
+		s.evictQueue.Remove(node)
+		s.releaseSpace(node.Value.(el).size)
+		return nil
 	}
 
-	size, ok := s.incompleteBlobs[key]
-	if ok {
-		return s.cancelWrite(key, size)
-	}
-
-	node, ok := s.blobs[key]
-	if !ok {
-		return os.ErrNotExist
-	}
-
-	complete := true
-	err := s.deleteFromDisk(key, complete)
-	if err != nil {
-		return fmt.Errorf("delete from disk: %w", err)
-	}
-	delete(s.blobs, key)
-	s.evictQueue.Remove(node)
-	s.releaseSpace(node.Value.(el).size)
-	return nil
-}
-
-func (s *DiskStore) cancelWrite(key string, size uint64) error {
-	complete := false
-	err := s.deleteFromDisk(key, complete)
-	if err != nil {
-		return fmt.Errorf("delete from disk: %w", err)
-	}
-	delete(s.incompleteBlobs, key)
-	s.releaseSpace(size)
-	return nil
+	return os.ErrNotExist
 }
 
 // List returns the blobs' keys.
@@ -304,12 +333,92 @@ func (s *DiskStore) List(ignoreIncomplete bool) []string {
 	return res
 }
 
-// ForbidEviction unlists a blob from LRU eviction.
+// BanEviction marks a blob as unevictable by LRU eviction. It is idempotent.
 // Needed when e.g. blobs must be written back to GCS/S3 and eviction before that is unacceptable.
-func (s *DiskStore) ForbidEviction(key string) error { return errors.New("not implemented") }
+func (s *DiskStore) BanEviction(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-// AllowEviction removes the effect of ForbidEviction for a blob.
-func (s *DiskStore) AllowEviction(key string) error { return errors.New("not implemented") }
+	node, okBlob := s.blobs[key]
+	_, okUnevictable := s.unevictableBlobs[key]
+	_, okIncomplete := s.incompleteBlobs[key]
+
+	if !okBlob && !okUnevictable && !okIncomplete {
+		return os.ErrNotExist
+	}
+	if okUnevictable {
+		// no-op
+		return nil
+	}
+
+	complete := okBlob
+	dirPath := s.dirPath(key, complete)
+	flagBlobPath := filepath.Join(dirPath, _evictionBannedFileName)
+	// We persist the ban as a flag file on disk, such that after
+	// a system crash, we can recover the ban.
+	f, err := os.OpenFile(flagBlobPath, os.O_RDONLY|os.O_CREATE, _defaultFilePerm)
+	if err != nil {
+		return fmt.Errorf("create file that flags eviction as banned: %w", err)
+	}
+	closers.Close(f)
+
+	if okIncomplete {
+		return nil
+	}
+
+	nodeEl := node.Value.(el)
+	delete(s.blobs, key)
+	s.evictQueue.Remove(node)
+	s.unevictableBlobs[key] = nodeEl.size
+	return nil
+}
+
+// UnbanDeletion removes the effect of BanDeletion for a blob. It is idempotent.
+func (s *DiskStore) UnbanEviction(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, okBlob := s.blobs[key]
+	sizeUnevictable, okUnevictable := s.unevictableBlobs[key]
+	_, okIncomplete := s.incompleteBlobs[key]
+
+	if !okBlob && !okUnevictable && !okIncomplete {
+		return os.ErrNotExist
+	}
+
+	if okBlob {
+		// no-op
+		return nil
+	}
+
+	complete := okUnevictable
+	isUnevictable, err := s.checkDiskIfUnevictable(key, complete)
+	if err != nil {
+		return fmt.Errorf("check on disk if file is evictable: %w", err)
+	}
+	if !isUnevictable {
+		// no-op
+		if okUnevictable {
+			// TODO - log invariant violation
+		}
+		return nil
+	}
+	// TODO - create a helper function that finds a file with a specific suffix and returns its path
+	dirPath := s.dirPath(key, complete)
+	flagBlobPath := filepath.Join(dirPath, _evictionBannedFileName)
+	err = os.Remove(flagBlobPath)
+	if err != nil {
+		return fmt.Errorf("remove file that flags eviction as banned: %w", err)
+	}
+	if okIncomplete {
+		return nil
+	}
+
+	delete(s.unevictableBlobs, key)
+	node := s.evictQueue.PushBack(el{key: key, size: sizeUnevictable})
+	s.blobs[key] = node
+	return nil
+}
 
 // WriteMetadata atomically stores `md` on disk. Can be called on both complete and incomplete blobs.
 func (s *DiskStore) SetMetadata(key string, md metadata.Metadata) error {
