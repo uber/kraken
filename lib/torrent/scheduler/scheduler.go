@@ -48,11 +48,20 @@ var (
 	ErrSendEventTimedOut = errors.New("event loop send timed out")
 )
 
+// BlobReader serves a blob's bytes while it is still downloading. It satisfies
+// store.FileReader so it can back both the agent blob endpoint and the docker
+// registry read path (which seeks and ranges via http.ServeContent).
+type BlobReader interface {
+	io.ReadSeekCloser
+	io.ReaderAt
+	Size() int64
+}
+
 // Scheduler defines operations for scheduler.
 type Scheduler interface {
 	Stop()
 	Download(namespace string, d core.Digest) error
-	DownloadReader(namespace string, d core.Digest) (io.ReadCloser, error)
+	DownloadReader(namespace string, d core.Digest) (BlobReader, error)
 	BlacklistSnapshot() ([]connstate.BlacklistedConn, error)
 	RemoveTorrent(d core.Digest) error
 	Probe() error
@@ -289,7 +298,7 @@ func (s *scheduler) Download(namespace string, d core.Digest) error {
 // the blob's bytes in order as pieces arrive, without waiting for the whole blob
 // to complete. The returned reader shares the dispatcher's live torrent instance.
 func (s *scheduler) DownloadReader(
-	namespace string, d core.Digest) (io.ReadCloser, error) {
+	namespace string, d core.Digest) (BlobReader, error) {
 
 	s.stats.Counter("download_reader_requests").Inc(1)
 	t, err := s.torrentArchive.CreateTorrent(namespace, d)
@@ -308,7 +317,7 @@ func (s *scheduler) DownloadReader(
 	if res.torrent == nil {
 		return nil, <-res.errc
 	}
-	return newStreamReader(res.torrent, res.errc, s.clock, streamPollInterval), nil
+	return newStreamReader(res.torrent, res.errc, s.clock, streamPollInterval, res.priority), nil
 }
 
 // BlacklistSnapshot returns a snapshot of the current connection blacklist.

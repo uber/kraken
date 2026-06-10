@@ -16,14 +16,13 @@ package transfer
 import (
 	"bytes"
 	"io"
-	"os"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/torrent/scheduler"
 	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
 	mockscheduler "github.com/uber/kraken/mocks/lib/torrent/scheduler"
 	"github.com/uber/kraken/utils/memsize"
@@ -33,6 +32,19 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 )
+
+// fakeBlobReader adapts a bytes.Reader to scheduler.BlobReader for mocking the
+// streaming download path. bytes.Reader already provides Read, ReadAt, Seek and
+// Size; only Close is added.
+type fakeBlobReader struct {
+	*bytes.Reader
+}
+
+func (fakeBlobReader) Close() error { return nil }
+
+func newFakeBlobReader(b []byte) scheduler.BlobReader {
+	return fakeBlobReader{bytes.NewReader(b)}
+}
 
 type agentTransfererMocks struct {
 	cads  *store.CADownloadStore
@@ -73,7 +85,7 @@ func mbServedValue(scope tally.TestScope) int64 {
 	return 0
 }
 
-func TestReadOnlyTransfererDownloadCachesBlob(t *testing.T) {
+func TestReadOnlyTransfererDownloadStreamsOnCacheMiss(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newReadOnlyTransfererMocks(t)
@@ -84,13 +96,29 @@ func TestReadOnlyTransfererDownloadCachesBlob(t *testing.T) {
 	namespace := "docker/repo-bar:latest"
 	blob := core.NewBlobFixture()
 
-	mocks.sched.EXPECT().Download(
-		namespace, blob.Digest).DoAndReturn(func(namespace string, d core.Digest) error {
+	mocks.sched.EXPECT().DownloadReader(
+		namespace, blob.Digest).Return(newFakeBlobReader(blob.Content), nil)
 
-		return store.RunDownload(mocks.cads, d, blob.Content)
-	})
+	result, err := transferer.Download(namespace, blob.Digest)
+	require.NoError(err)
+	b, err := io.ReadAll(result)
+	require.NoError(err)
+	require.Equal(blob.Content, b)
+}
 
-	// Downloading multiple times should only call scheduler download once.
+func TestReadOnlyTransfererDownloadReadsFromCache(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newReadOnlyTransfererMocks(t)
+	defer cleanup()
+
+	transferer := mocks.new()
+
+	namespace := "docker/repo-bar:latest"
+	blob := core.NewBlobFixture()
+	require.NoError(store.RunDownload(mocks.cads, blob.Digest, blob.Content))
+
+	// A cached blob is served from cache without invoking the scheduler.
 	for i := 0; i < 10; i++ {
 		result, err := transferer.Download(namespace, blob.Digest)
 		require.NoError(err)
@@ -121,10 +149,8 @@ func TestReadOnlyTransfererDownloadEmitsMBServed(t *testing.T) {
 			namespace := "docker/repo-bar:latest"
 			blob := core.SizedBlobFixture(tc.blobSize, 64)
 
-			mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
-				func(namespace string, d core.Digest) error {
-					return store.RunDownload(mocks.cads, d, blob.Content)
-				})
+			mocks.sched.EXPECT().DownloadReader(
+				namespace, blob.Digest).Return(newFakeBlobReader(blob.Content), nil)
 
 			result, err := transferer.Download(namespace, blob.Digest)
 			require.NoError(err)
@@ -149,11 +175,7 @@ func TestReadOnlyTransfererDownloadEmitsMBServedOnCacheHit(t *testing.T) {
 
 	namespace := "docker/repo-bar:latest"
 	blob := core.SizedBlobFixture(2*memsize.MB, 64)
-
-	mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
-		func(namespace string, d core.Digest) error {
-			return store.RunDownload(mocks.cads, d, blob.Content)
-		})
+	require.NoError(store.RunDownload(mocks.cads, blob.Digest, blob.Content))
 
 	for i := 0; i < 3; i++ {
 		result, err := transferer.Download(namespace, blob.Digest)
@@ -165,7 +187,7 @@ func TestReadOnlyTransfererDownloadEmitsMBServedOnCacheHit(t *testing.T) {
 	require.Equal(int64(6), mbServedValue(mocks.stats))
 }
 
-func TestReadOnlyTransfererStat(t *testing.T) {
+func TestReadOnlyTransfererStatStreamsOnCacheMiss(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newReadOnlyTransfererMocks(t)
@@ -176,13 +198,27 @@ func TestReadOnlyTransfererStat(t *testing.T) {
 	namespace := "docker/repo-bar:latest"
 	blob := core.NewBlobFixture()
 
-	mocks.sched.EXPECT().Download(
-		namespace, blob.Digest).DoAndReturn(func(namespace string, d core.Digest) error {
+	mocks.sched.EXPECT().DownloadReader(
+		namespace, blob.Digest).Return(newFakeBlobReader(blob.Content), nil)
 
-		return store.RunDownload(mocks.cads, d, blob.Content)
-	})
+	bi, err := transferer.Stat(namespace, blob.Digest)
+	require.NoError(err)
+	require.Equal(blob.Info(), bi)
+}
 
-	// Stat-ing multiple times should only call scheduler download once.
+func TestReadOnlyTransfererStatReadsFromCache(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newReadOnlyTransfererMocks(t)
+	defer cleanup()
+
+	transferer := mocks.new()
+
+	namespace := "docker/repo-bar:latest"
+	blob := core.NewBlobFixture()
+	require.NoError(store.RunDownload(mocks.cads, blob.Digest, blob.Content))
+
+	// A cached blob is stat-ed from cache without invoking the scheduler.
 	for i := 0; i < 10; i++ {
 		bi, err := transferer.Stat(namespace, blob.Digest)
 		require.NoError(err)
@@ -225,8 +261,6 @@ func TestReadOnlyTransfererGetTagNotFound(t *testing.T) {
 	require.Equal(ErrTagNotFound, err)
 }
 
-// TODO(codyg): This is a particularly ugly test that is a symptom of the lack
-// of abstraction surrounding scheduler / file store operations.
 func TestReadOnlyTransfererMultipleDownloadsOfSameBlob(t *testing.T) {
 	require := require.New(t)
 
@@ -238,28 +272,13 @@ func TestReadOnlyTransfererMultipleDownloadsOfSameBlob(t *testing.T) {
 	namespace := "docker/repo-bar:latest"
 	blob := core.NewBlobFixture()
 
-	require.NoError(mocks.cads.CreateDownloadFile(blob.Digest.Hex(), blob.Length()))
-	w, err := mocks.cads.GetDownloadFileReadWriter(blob.Digest.Hex())
-	require.NoError(err)
-	_, err = io.Copy(w, bytes.NewReader(blob.Content))
-	require.NoError(err)
+	mocks.sched.EXPECT().DownloadReader(namespace, blob.Digest).DoAndReturn(
+		func(namespace string, d core.Digest) (scheduler.BlobReader, error) {
+			return newFakeBlobReader(blob.Content), nil
+		}).Times(10)
 
-	commit := make(chan struct{})
-
-	mocks.sched.EXPECT().Download(
-		namespace, blob.Digest).DoAndReturn(func(namespace string, d core.Digest) error {
-
-		<-commit
-
-		if err := mocks.cads.MoveDownloadFileToCache(d.Hex()); !os.IsExist(err) {
-			return err
-		}
-		return nil
-	}).Times(10)
-
-	// Multiple clients trying to download the same file which is already in
-	// the download state should queue up until the file has been committed to
-	// the cache.
+	// Multiple clients streaming the same uncached blob each get an independent
+	// reader.
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
@@ -272,10 +291,6 @@ func TestReadOnlyTransfererMultipleDownloadsOfSameBlob(t *testing.T) {
 			require.Equal(blob.Content, b)
 		}()
 	}
-
-	time.Sleep(250 * time.Millisecond)
-
-	close(commit)
 
 	wg.Wait()
 }

@@ -1,0 +1,11 @@
+# soci-snapshotter-grpc configuration for the e2e harness.
+#
+# min_layer_size = 0 forces every layer to be lazily mounted (the default 10MB
+# threshold otherwise fully downloads small layers, hiding the lazy-pull win on
+# small test images). For a realistic measurement, keep the default and use a
+# test image with at least one large, many-file layer.
+min_layer_size = 0
+
+[blob]
+  # Fetch piece-sized chunks; aligns with how Kraken serves ranged GETs.
+  valid_interval = 0

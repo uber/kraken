@@ -5,7 +5,6 @@
 package mockscheduler
 
 import (
-	io "io"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -67,10 +66,10 @@ func (mr *MockReloadableSchedulerMockRecorder) Download(arg0, arg1 interface{}) 
 }
 
 // DownloadReader mocks base method
-func (m *MockReloadableScheduler) DownloadReader(arg0 string, arg1 core.Digest) (io.ReadCloser, error) {
+func (m *MockReloadableScheduler) DownloadReader(arg0 string, arg1 core.Digest) (scheduler.BlobReader, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DownloadReader", arg0, arg1)
-	ret0, _ := ret[0].(io.ReadCloser)
+	ret0, _ := ret[0].(scheduler.BlobReader)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

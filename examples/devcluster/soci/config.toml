@@ -1,0 +1,14 @@
+# containerd configuration for the soci e2e harness.
+#
+# Registers soci-snapshotter as a proxy plugin so `nerdctl --snapshotter soci`
+# (and `ctr --snapshotter soci`) fetch layers lazily. The default overlayfs
+# snapshotter remains available for the baseline (full-pull) A/B leg.
+#
+# Note: containerd v2 accepts "snapshot" (or the full io.containerd.snapshotter.v1)
+# as the proxy plugin type; the older "snapshotter" value used in some SOCI docs
+# is containerd v1 only and panics on v2.
+version = 2
+
+[proxy_plugins.soci]
+  type = "snapshot"
+  address = "/run/soci-snapshotter-grpc/soci-snapshotter-grpc.sock"

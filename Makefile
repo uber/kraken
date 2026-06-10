@@ -166,6 +166,22 @@ devcluster: $(LINUX_BINS) docker_stop images
 	./examples/devcluster/agent_one_start_container.sh
 	./examples/devcluster/agent_two_start_container.sh
 
+# Streaming PoC Phase 1: blob TTFB A/B benchmark. Starts the devcluster and
+# compares baseline blocking downloads vs streaming (?stream=1). Override sizes
+# with SIZES, e.g. `make devcluster-bench SIZES="64 256"`.
+.PHONY: devcluster-bench
+devcluster-bench:
+	./examples/devcluster/stream_benchmark.sh $(SIZES)
+
+# Streaming PoC Phase 2: soci-snapshotter lazy-pull e2e benchmark. Requires a
+# running devcluster (Kraken proxy :15000, agent registries :16000 and :17000).
+# Builds + starts the DinD harness and runs the overlayfs-vs-soci comparison,
+# all from the host. Override the image with IMAGE=...:
+#   make devcluster-soci IMAGE=public.ecr.aws/docker/library/python:3.12
+.PHONY: devcluster-soci
+devcluster-soci:
+	./examples/devcluster/soci/soci_benchmark.sh $(IMAGE)
+
 # ==== TOOLS ====
 
 TOOLS = \

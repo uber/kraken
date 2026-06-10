@@ -67,7 +67,7 @@ func TestStreamReaderServesPiecesAsTheyArrive(t *testing.T) {
 	defer cleanup()
 
 	errc := make(chan error, 1)
-	r := newStreamReader(tor, errc, clock.New(), time.Millisecond)
+	r := newStreamReader(tor, errc, clock.New(), time.Millisecond, nil)
 	t.Cleanup(func() { require.NoError(r.Close()) })
 
 	// Write pieces in order from a separate goroutine, lagging the reader.
@@ -97,7 +97,7 @@ func TestStreamReaderHandlesAlreadyCompleteTorrent(t *testing.T) {
 
 	errc := make(chan error, 1)
 	errc <- nil
-	r := newStreamReader(tor, errc, clock.New(), time.Millisecond)
+	r := newStreamReader(tor, errc, clock.New(), time.Millisecond, nil)
 	t.Cleanup(func() { require.NoError(r.Close()) })
 
 	out, err := io.ReadAll(r)
@@ -116,7 +116,7 @@ func TestStreamReaderReturnsTerminalError(t *testing.T) {
 	writePiece(t, tor, blob, 0)
 
 	errc := make(chan error, 1)
-	r := newStreamReader(tor, errc, clock.New(), time.Millisecond)
+	r := newStreamReader(tor, errc, clock.New(), time.Millisecond, nil)
 	t.Cleanup(func() { require.NoError(r.Close()) })
 
 	// Signal a terminal download failure; the reader blocks on piece 1 and

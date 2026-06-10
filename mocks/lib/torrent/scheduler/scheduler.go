@@ -5,11 +5,11 @@
 package mockscheduler
 
 import (
-	io "io"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
+	scheduler "github.com/uber/kraken/lib/torrent/scheduler"
 	connstate "github.com/uber/kraken/lib/torrent/scheduler/connstate"
 )
 
@@ -66,10 +66,10 @@ func (mr *MockSchedulerMockRecorder) Download(arg0, arg1 interface{}) *gomock.Ca
 }
 
 // DownloadReader mocks base method
-func (m *MockScheduler) DownloadReader(arg0 string, arg1 core.Digest) (io.ReadCloser, error) {
+func (m *MockScheduler) DownloadReader(arg0 string, arg1 core.Digest) (scheduler.BlobReader, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DownloadReader", arg0, arg1)
-	ret0, _ := ret[0].(io.ReadCloser)
+	ret0, _ := ret[0].(scheduler.BlobReader)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

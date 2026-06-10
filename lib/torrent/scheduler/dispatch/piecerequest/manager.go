@@ -67,6 +67,10 @@ type Manager struct {
 	policy              pieceSelectionPolicy
 	agentPipelineLimit  int
 	originPipelineLimit int
+
+	// priority holds pieces that streaming readers are blocked on; they are
+	// reserved ahead of the selection policy.
+	priority map[int]struct{}
 }
 
 // NewManager creates a new Manager.
@@ -84,6 +88,7 @@ func NewManager(
 		timeout:             timeout,
 		agentPipelineLimit:  agentPipelineLimit,
 		originPipelineLimit: originPipelineLimit,
+		priority:            make(map[int]struct{}),
 	}
 
 	switch policy {
@@ -119,9 +124,41 @@ func (m *Manager) ReservePieces(
 	}
 
 	valid := func(pieceIdx int) bool { return m.validRequest(peerID, pieceIdx, allowDuplicates) }
-	pieces, err := m.policy.selectPieces(quota, valid, pieceCandidates, numPeersByPiece)
-	if err != nil {
-		return nil, err
+
+	// Reserve priority pieces (streaming readers blocked on them) first, then
+	// fill the remaining quota from the selection policy.
+	var pieces []int
+	if len(m.priority) > 0 {
+		chosen := make(map[int]struct{})
+		for _, i := range m.sortedPriority() {
+			if len(pieces) >= quota {
+				break
+			}
+			if pieceCandidates.Test(uint(i)) && valid(i) {
+				pieces = append(pieces, i)
+				chosen[i] = struct{}{}
+			}
+		}
+		if len(pieces) > 0 {
+			policyValid := func(pieceIdx int) bool {
+				if _, ok := chosen[pieceIdx]; ok {
+					return false
+				}
+				return valid(pieceIdx)
+			}
+			sel, err := m.policy.selectPieces(quota-len(pieces), policyValid, pieceCandidates, numPeersByPiece)
+			if err != nil {
+				return nil, err
+			}
+			pieces = append(pieces, sel...)
+		}
+	}
+	if len(pieces) == 0 {
+		var err error
+		pieces, err = m.policy.selectPieces(quota, valid, pieceCandidates, numPeersByPiece)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Set as pending in requests map.
@@ -142,6 +179,25 @@ func (m *Manager) ReservePieces(
 	return pieces, nil
 }
 
+// SetPriority marks piece i to be reserved ahead of the selection policy. The
+// hint is cleared when the piece is Clear'd (i.e. completed).
+func (m *Manager) SetPriority(i int) {
+	m.Lock()
+	defer m.Unlock()
+	m.priority[i] = struct{}{}
+}
+
+// sortedPriority returns the priority pieces in ascending order. Callers must
+// hold the lock.
+func (m *Manager) sortedPriority() []int {
+	pieces := make([]int, 0, len(m.priority))
+	for i := range m.priority {
+		pieces = append(pieces, i)
+	}
+	sort.Ints(pieces)
+	return pieces
+}
+
 // MarkUnsent marks the piece request for piece i as unsent.
 func (m *Manager) MarkUnsent(peerID core.PeerID, i int) {
 	m.markStatus(peerID, i, StatusUnsent)
@@ -159,6 +215,7 @@ func (m *Manager) Clear(i int) {
 	defer m.Unlock()
 
 	delete(m.requests, i)
+	delete(m.priority, i)
 
 	for peerID, pm := range m.requestsByPeer {
 		delete(pm, i)

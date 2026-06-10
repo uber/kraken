@@ -406,3 +406,76 @@ func TestRarestFirstPolicy(t *testing.T) {
 	require.NoError(err)
 	require.Empty(pieces)
 }
+
+func TestManagerSetPriority(t *testing.T) {
+	for _, tc := range []struct {
+		desc          string
+		pipelineLimit int
+		candidates    []bool
+		counts        []int
+		priority      []int
+		want          []int
+	}{
+		{
+			desc:          "priority piece reserved ahead of rarest-first",
+			pipelineLimit: 1,
+			candidates:    []bool{true, true, true},
+			counts:        []int{0, 1, 2},
+			priority:      []int{2},
+			want:          []int{2},
+		},
+		{
+			desc:          "priority piece then policy fills remaining quota",
+			pipelineLimit: 2,
+			candidates:    []bool{true, true, true},
+			counts:        []int{0, 1, 2},
+			priority:      []int{2},
+			want:          []int{2, 0},
+		},
+		{
+			desc:          "priority pieces reserved in ascending order",
+			pipelineLimit: 2,
+			candidates:    []bool{true, true, true},
+			counts:        []int{0, 1, 2},
+			priority:      []int{2, 1},
+			want:          []int{1, 2},
+		},
+		{
+			desc:          "priority piece not a candidate falls back to policy",
+			pipelineLimit: 1,
+			candidates:    []bool{true, true, false},
+			counts:        []int{1, 2, 0},
+			priority:      []int{2},
+			want:          []int{0},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			require := require.New(t)
+
+			m := newManager(clock.NewMock(), 5*time.Second, RarestFirstPolicy, tc.pipelineLimit)
+			for _, i := range tc.priority {
+				m.SetPriority(i)
+			}
+
+			pieces, err := m.ReservePieces(core.PeerIDFixture(), false,
+				bitsetutil.FromBools(tc.candidates...), countsFromInts(tc.counts...), false)
+			require.NoError(err)
+			require.Equal(tc.want, pieces)
+		})
+	}
+}
+
+func TestManagerClearRemovesPriority(t *testing.T) {
+	require := require.New(t)
+
+	m := newManager(clock.NewMock(), 5*time.Second, RarestFirstPolicy, 1)
+
+	m.SetPriority(2)
+	m.Clear(2)
+
+	// With the priority cleared, rarest-first selects piece 0.
+	pieces, err := m.ReservePieces(core.PeerIDFixture(), false,
+		bitsetutil.FromBools(true, true, true), countsFromInts(0, 1, 2), false)
+	require.NoError(err)
+	require.Equal([]int{0}, pieces)
+}

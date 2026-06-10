@@ -23,6 +23,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/scheduler"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/memsize"
 )
 
@@ -50,35 +51,37 @@ func NewReadOnlyTransferer(
 	return &ReadOnlyTransferer{stats, cads, tags, sched}
 }
 
-// Stat returns blob info from local cache, and triggers download if the blob is
-// not available locally.
+// Stat returns blob info from local cache. On a cache miss it returns the size
+// from torrent metainfo (fetched from origin) without downloading the whole
+// blob, so the registry can emit Content-Length and serve ranges while the blob
+// streams in.
 func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
 	fi, err := t.cads.Cache().GetFileStat(d.Hex())
 	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
-		if err := t.sched.Download(namespace, d); err != nil {
+		r, err := t.sched.DownloadReader(namespace, d)
+		if err != nil {
 			return nil, fmt.Errorf("scheduler: %s", err)
 		}
-		fi, err = t.cads.Cache().GetFileStat(d.Hex())
-		if err != nil {
-			return nil, fmt.Errorf("stat cache: %s", err)
-		}
+		defer closers.Close(r)
+		return core.NewBlobInfo(r.Size()), nil
 	} else if err != nil {
 		return nil, fmt.Errorf("stat cache: %s", err)
 	}
 	return core.NewBlobInfo(fi.Size()), nil
 }
 
-// Download downloads blobs as torrent.
+// Download returns a reader for a blob. On a cache miss it returns a streaming
+// reader that serves bytes as torrent pieces arrive, rather than blocking on the
+// whole blob.
 func (t *ReadOnlyTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
 	f, err := t.cads.Cache().GetFileReader(d.Hex())
 	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
-		if err := t.sched.Download(namespace, d); err != nil {
+		r, err := t.sched.DownloadReader(namespace, d)
+		if err != nil {
 			return nil, fmt.Errorf("scheduler: %s", err)
 		}
-		f, err = t.cads.Cache().GetFileReader(d.Hex())
-		if err != nil {
-			return nil, fmt.Errorf("cache: %s", err)
-		}
+		t.stats.Counter("mb_served").Inc(int64(uint64(r.Size()) / memsize.MB))
+		return r, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("cache: %s", err)
 	}

@@ -168,6 +168,13 @@ func (d *Dispatcher) Stat() *storage.TorrentInfo {
 	return d.torrent.Stat()
 }
 
+// SetPriorityPiece hints that the given piece should be requested next,
+// ahead of the configured selection policy. Used by streaming readers to bias
+// fetching toward a piece a reader is currently blocked on.
+func (d *Dispatcher) SetPriorityPiece(piece int) {
+	d.pieceRequestManager.SetPriority(piece)
+}
+
 // Complete returns true if d's torrent is complete.
 func (d *Dispatcher) Complete() bool {
 	return d.torrent.Complete()

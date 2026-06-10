@@ -341,12 +341,13 @@ func (e newTorrentEvent) apply(s *state) {
 }
 
 // streamResult is returned to a DownloadReader caller. It carries the live
-// torrent instance the dispatcher writes into, plus an errc that is signaled
-// with the terminal state of the download (nil on complete, non-nil on
-// error/timeout/removal).
+// torrent instance the dispatcher writes into, an errc that is signaled with
+// the terminal state of the download (nil on complete, non-nil on
+// error/timeout/removal), and a priority hint to fetch a given piece next.
 type streamResult struct {
-	torrent storage.Torrent
-	errc    chan error
+	torrent  storage.Torrent
+	errc     chan error
+	priority func(piece int)
 }
 
 // streamTorrentEvent occurs when a streaming reader was requested for download.
@@ -383,7 +384,11 @@ func (e streamTorrentEvent) apply(s *state) {
 			ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
 	}
 
-	e.result <- streamResult{torrent: ctrl.torrent, errc: errc}
+	e.result <- streamResult{
+		torrent:  ctrl.torrent,
+		errc:     errc,
+		priority: ctrl.dispatcher.SetPriorityPiece,
+	}
 }
 
 // errcWith returns a buffered error channel already holding err.
