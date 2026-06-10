@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -57,10 +58,11 @@ type el struct {
 	size uint64
 }
 
-// NewDiskStore creates a [DiskStore].
+// NewDiskStore creates a [*DiskStore].
 func NewDiskStore(capacityBytes uint64, rootDir string) (*DiskStore, error) {
 	// TODO - create a Config struct.
 	// TODO - recover persisted state in case of crash. might need to evict. emit log if so.
+	// TODO - consider how to support blob mutation, which might be needed by build-index for tag mutation.
 	return &DiskStore{
 		dir:              rootDir,
 		capacity:         capacityBytes,
@@ -73,7 +75,7 @@ func NewDiskStore(capacityBytes uint64, rootDir string) (*DiskStore, error) {
 }
 
 // Open returns an FD to a file in the store. [os.ErrNotExists] is returned on missing entry.
-// The blob cannot be evicted before the client calls Close() on it.
+// The blob cannot be evicted before the client calls Close on it.
 func (s *DiskStore) Open(key string, ignoreIncomplete bool) (FileReadWriter, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -211,6 +213,8 @@ func (s *DiskStore) deleteFromDisk(key string, complete bool) error {
 // MarkComplete marks a blob as fully written. It enlists the blob for LRU eviction (unless BanEviction has been called).
 // Additionally, read APIs may optionally filter out incomplete blobs.
 func (s *DiskStore) MarkComplete(key string) error {
+	// TODO - check if we can derive when a blob is considered complete (e.g. when client calls Close on file (although that depends on the
+	// assumption that Close means the file is complete which may not be true if the client that created the file expects another client to continue mutating it)).
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -253,8 +257,7 @@ func (s *DiskStore) MarkComplete(key string) error {
 }
 
 func (s *DiskStore) checkDiskIfUnevictable(key string, complete bool) (bool, error) {
-	dirPath := s.dirPath(key, complete)
-	flagBlobPath := filepath.Join(dirPath, _evictionBannedFileName)
+	flagBlobPath := s.sidecarFilePath(key, complete, _evictionBannedFileName)
 	_, err := os.Stat(flagBlobPath)
 	if err == nil {
 		return true, nil
@@ -352,8 +355,7 @@ func (s *DiskStore) BanEviction(key string) error {
 	}
 
 	complete := okBlob
-	dirPath := s.dirPath(key, complete)
-	flagBlobPath := filepath.Join(dirPath, _evictionBannedFileName)
+	flagBlobPath := s.sidecarFilePath(key, complete, _evictionBannedFileName)
 	// We persist the ban as a flag file on disk, such that after
 	// a system crash, we can recover the ban.
 	f, err := os.OpenFile(flagBlobPath, os.O_RDONLY|os.O_CREATE, _defaultFilePerm)
@@ -403,9 +405,7 @@ func (s *DiskStore) UnbanEviction(key string) error {
 		}
 		return nil
 	}
-	// TODO - create a helper function that finds a file with a specific suffix and returns its path
-	dirPath := s.dirPath(key, complete)
-	flagBlobPath := filepath.Join(dirPath, _evictionBannedFileName)
+	flagBlobPath := s.sidecarFilePath(key, complete, _evictionBannedFileName)
 	err = os.Remove(flagBlobPath)
 	if err != nil {
 		return fmt.Errorf("remove file that flags eviction as banned: %w", err)
@@ -420,19 +420,97 @@ func (s *DiskStore) UnbanEviction(key string) error {
 	return nil
 }
 
-// WriteMetadata atomically stores `md` on disk. Can be called on both complete and incomplete blobs.
+// SetMetadata atomically sets the respective metadata for a blob. Works on any blob.
 func (s *DiskStore) SetMetadata(key string, md metadata.Metadata) error {
-	return errors.New("not implemented")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, okBlob := s.blobs[key]
+	_, okUnevictable := s.unevictableBlobs[key]
+	_, okIncomplete := s.incompleteBlobs[key]
+	if !okBlob && !okUnevictable && !okIncomplete {
+		return os.ErrNotExist
+	}
+
+	mdData, err := md.Serialize()
+	if err != nil {
+		return fmt.Errorf("serialize metadata: %w", err)
+	}
+	complete := !okIncomplete
+	mdFilePath := s.sidecarFilePath(key, complete, md.GetSuffix())
+	// We use a tmp file to ensure atomicity.
+	tmpFilePath := mdFilePath + "-tmp"
+	tmpFile, err := os.OpenFile(tmpFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, _defaultFilePerm)
+	if err != nil {
+		return fmt.Errorf("create tmp file for md: %w", err)
+	}
+	_, err = tmpFile.Write(mdData)
+	if err != nil {
+		return fmt.Errorf("write to tmp file: %w", err)
+	}
+	err = tmpFile.Close()
+	if err != nil {
+		return fmt.Errorf("close tmp file: %w", err)
+	}
+	err = os.Rename(tmpFile.Name(), mdFilePath)
+	if err != nil {
+		return fmt.Errorf("rename tmp file: %w", err)
+	}
+	return nil
 }
 
 // GetMetadata populates `md` if the metadata is present. Returns [os.ErrNotExists] if key is not in store.
-func (s *DiskStore) GetMetadata(key string, md metadata.Metadata, ignoreIncomplete bool) error {
-	return errors.New("not implemented")
+func (s *DiskStore) GetMetadata(key string, md metadata.Metadata, ignoreIncomplete bool) (ok bool, err error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	_, okBlob := s.blobs[key]
+	_, okUnevictable := s.unevictableBlobs[key]
+	_, okIncomplete := s.incompleteBlobs[key]
+	if !okBlob && !okUnevictable && (ignoreIncomplete || !okIncomplete) {
+		return false, os.ErrNotExist
+	}
+
+	complete := !okIncomplete
+	mdFilePath := s.sidecarFilePath(key, complete, md.GetSuffix())
+	mdFile, err := os.OpenFile(mdFilePath, os.O_RDONLY, _defaultFilePerm)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	defer closers.Close(mdFile)
+	data, err := io.ReadAll(mdFile)
+	if err != nil {
+		return false, fmt.Errorf("read from metadata file: %w", err)
+	}
+	err = md.Deserialize(data)
+	if err != nil {
+		return false, fmt.Errorf("deserialize into metadata: %w", err)
+	}
+	return true, nil
 }
 
-// DeleteMetadata removes the respective metadata, if present.
+// DeleteMetadata removes any metadata of a blob with `md`'s suffix, if present.
 func (s *DiskStore) DeleteMetadata(key string, md metadata.Metadata) error {
-	return errors.New("not implemented")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, okBlob := s.blobs[key]
+	_, okUnevictable := s.unevictableBlobs[key]
+	_, okIncomplete := s.incompleteBlobs[key]
+	if !okBlob && !okUnevictable && !okIncomplete {
+		return os.ErrNotExist
+	}
+	complete := !okIncomplete
+	mdFilePath := s.sidecarFilePath(key, complete, md.GetSuffix())
+	err := os.Remove(mdFilePath)
+	if errors.Is(err, os.ErrNotExist) {
+		// no-op
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("remove metadata file: %w", err)
+	}
+	return nil
 }
 
 func (s *DiskStore) blobPath(key string, complete bool) string {
@@ -454,4 +532,9 @@ func (s *DiskStore) dirPath(key string, complete bool) string {
 	}
 
 	return filepath.Join(dirPath, key)
+}
+
+func (s *DiskStore) sidecarFilePath(key string, complete bool, sidecarFilePath string) string {
+	dirPath := s.dirPath(key, complete)
+	return filepath.Join(dirPath, sidecarFilePath)
 }

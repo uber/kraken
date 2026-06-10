@@ -2,6 +2,7 @@ package store
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -14,7 +15,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/memsize"
+)
+
+const (
+	_dontIgnoreIncompleteFiles = false
+	_ignoreIncompleteFiles     = true
 )
 
 func newTestStore(t *testing.T, capacity uint64) (res *DiskStore, rootDir string) {
@@ -100,8 +107,6 @@ func TestDiskStore(t *testing.T) {
 }
 
 func TestEviction(t *testing.T) {
-	const _dontIgnoreIncompleteFiles = false
-
 	require := require.New(t)
 	store, _ := newTestStore(t, 25*memsize.KB)
 	// create 5 blobs - a, b, c, d, e with different sizes.
@@ -596,14 +601,131 @@ func TestList(t *testing.T) {
 }
 
 func TestMetadata(t *testing.T) {
-	t.Skip("TODO - implement")
-	// in-place
-	// after move works as intended
+	t.Run("basic functionality", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB)
+		key := core.DigestFixture().Hex()
+		f, err := store.Create(key, 10*memsize.KB)
+		require.NoError(err)
+		require.NoError(f.Close())
+
+		mdStruct := core.MetaInfoFixture()
+		writtenMd := metadata.NewTorrentMeta(mdStruct)
+		err = store.SetMetadata(key, writtenMd)
+		// ensure metadata is not included in LRU eviction calculation.
+		require.NoError(err)
+
+		var readMd metadata.TorrentMeta
+		ok, err := store.GetMetadata(key, &readMd, _dontIgnoreIncompleteFiles)
+		require.NoError(err)
+		require.True(ok)
+		require.Equal(readMd.MetaInfo, writtenMd.MetaInfo)
+
+		require.NoError(store.DeleteMetadata(key, &readMd))
+		ok, err = store.GetMetadata(key, &readMd, _dontIgnoreIncompleteFiles)
+		require.NoError(err)
+		require.False(ok)
+		mdFilePath := store.sidecarFilePath(key, false, readMd.GetSuffix())
+		// ensure the metadata file is deleted from disk
+		_, err = os.Stat(mdFilePath)
+		require.True(errors.Is(err, os.ErrNotExist))
+		// deleting a second time should be a no-op.
+		require.NoError(store.DeleteMetadata(key, &readMd))
+	})
+
+	t.Run("non-existant blob", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB)
+		nonExistentKey := core.DigestFixture().Hex()
+		mdStruct := core.MetaInfoFixture()
+		md := metadata.NewTorrentMeta(mdStruct)
+
+		err := store.SetMetadata(nonExistentKey, md)
+		require.Equal(os.ErrNotExist, err)
+
+		ok, err := store.GetMetadata(nonExistentKey, md, _dontIgnoreIncompleteFiles)
+		require.Equal(os.ErrNotExist, err)
+		require.False(ok)
+
+		err = store.DeleteMetadata(nonExistentKey, md)
+		require.Equal(os.ErrNotExist, err)
+	})
+
+	t.Run("metadata does not change after marking a file as complete and/or evictable/unevictable", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB)
+		key := core.DigestFixture().Hex()
+		f, err := store.Create(key, 1*memsize.KB)
+		require.NoError(err)
+		require.NoError(f.Close())
+
+		mdStruct := core.MetaInfoFixture()
+		writtenMd := metadata.NewTorrentMeta(mdStruct)
+		require.NoError(store.SetMetadata(key, writtenMd))
+
+		var readMd metadata.TorrentMeta
+		ok, err := store.GetMetadata(key, &readMd, _ignoreIncompleteFiles)
+		require.Equal(os.ErrNotExist, err)
+		// incomplete files are ignored
+		require.False(ok)
+
+		ok, err = store.GetMetadata(key, &readMd, _dontIgnoreIncompleteFiles)
+		require.NoError(err)
+		require.True(ok)
+		require.Equal(readMd.MetaInfo, writtenMd.MetaInfo)
+
+		// Repeat the tests above for an evictable file
+		require.NoError(store.BanEviction(key))
+		ok, err = store.GetMetadata(key, &readMd, _ignoreIncompleteFiles)
+		require.Equal(os.ErrNotExist, err)
+		// incomplete files are ignored
+		require.False(ok)
+
+		ok, err = store.GetMetadata(key, &readMd, _dontIgnoreIncompleteFiles)
+		require.NoError(err)
+		require.True(ok)
+		require.Equal(readMd.MetaInfo, writtenMd.MetaInfo)
+
+		require.NoError(store.MarkComplete(key))
+		ok, err = store.GetMetadata(key, &readMd, _ignoreIncompleteFiles)
+		require.NoError(err)
+		require.True(ok)
+		require.Equal(readMd.MetaInfo, writtenMd.MetaInfo)
+	})
+	t.Run("metadata fully gone after blob is evicted", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB)
+		keyA := core.DigestFixture().Hex()
+		fA, err := store.Create(keyA, 10*memsize.KB)
+		require.NoError(err)
+		require.NoError(fA.Close())
+		require.NoError(store.MarkComplete(keyA))
+
+		md := metadata.NewTorrentMeta(core.MetaInfoFixture())
+		err = store.SetMetadata(keyA, md)
+		store.SetMetadata(keyA, md)
+		complete := true
+		mdFilePath := store.sidecarFilePath(keyA, complete, md.GetSuffix())
+		_, err = os.Stat(mdFilePath)
+		require.NoError(err)
+
+		keyB := core.DigestFixture().Hex()
+		fB, err := store.Create(keyB, 10*memsize.KB)
+		require.NoError(err)
+		defer func() { require.NoError(fB.Close()) }()
+
+		ok, err := store.GetMetadata(keyA, md, _dontIgnoreIncompleteFiles)
+		require.Equal(os.ErrNotExist, err)
+		require.False(ok)
+		_, err = os.Stat(mdFilePath)
+		require.True(errors.Is(err, os.ErrNotExist))
+	})
 }
 
 func TestPathing(t *testing.T) {
 	require := require.New(t)
 	store, rootDir := newTestStore(t, 10*memsize.KB)
+	md := metadata.NewTorrentMeta(core.MetaInfoFixture())
 
 	key := "8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78"
 	complete := false
@@ -613,6 +735,9 @@ func TestPathing(t *testing.T) {
 	blobPath := store.blobPath(key, complete)
 	wantBlobPath := rootDir + "/incomplete/8c/6a/8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78/data"
 	require.Equal(wantBlobPath, blobPath)
+	sidecarFilePath := store.sidecarFilePath(key, complete, md.GetSuffix())
+	wantSidecarFilePath := rootDir + "/incomplete/8c/6a/8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78/_torrentmeta"
+	require.Equal(wantSidecarFilePath, sidecarFilePath)
 
 	complete = true
 	dirPath = store.dirPath(key, complete)
@@ -621,4 +746,7 @@ func TestPathing(t *testing.T) {
 	blobPath = store.blobPath(key, complete)
 	wantBlobPath = rootDir + "/complete/8c/6a/8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78/data"
 	require.Equal(wantBlobPath, blobPath)
+	sidecarFilePath = store.sidecarFilePath(key, complete, md.GetSuffix())
+	wantSidecarFilePath = rootDir + "/complete/8c/6a/8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78/_torrentmeta"
+	require.Equal(wantSidecarFilePath, sidecarFilePath)
 }
