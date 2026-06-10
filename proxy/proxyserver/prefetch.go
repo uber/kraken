@@ -15,11 +15,11 @@ import (
 
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/manifestlist"
-	"github.com/docker/distribution/manifest/schema2"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 	"go.uber.org/zap"
@@ -326,59 +326,55 @@ func (ph *PrefetchHandler) shouldSkipPrefetch(b blobInfo, logger *zap.SugaredLog
 	return false
 }
 
-// processManifest handles both ManifestLists and single Manifests.
+// processManifest parses the manifest and returns all blob infos, including
+// the manifest blob itself.
 func (ph *PrefetchHandler) processManifest(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) ([]blobInfo, error) {
-	// Attempt to process as a manifest list.
-	blobs, err := ph.tryProcessManifestList(logger, namespace, manifestBytes)
-	if err == nil && len(blobs) > 0 {
-		return blobs, nil
+	manifest, digest, err := dockerutil.ParseManifest(bytes.NewReader(manifestBytes))
+	if err != nil {
+		return nil, fmt.Errorf("parse manifest: %w", err)
 	}
-
-	// Fallback to single manifest.
-	var manifest schema2.Manifest
-	if err := json.NewDecoder(bytes.NewReader(manifestBytes)).Decode(&manifest); err != nil {
-		logger.With("namespace", namespace).Errorf("Failed to parse single manifest: %v", err)
-		return nil, fmt.Errorf("invalid single manifest: %w", err)
+	self := blobInfo{digest: digest, size: int64(len(manifestBytes))}
+	blobs, err := ph.getBlobInfos(logger, namespace, manifest)
+	if err != nil {
+		return nil, err
 	}
-	return ph.processLayers(manifest.Layers)
+	return append([]blobInfo{self}, blobs...), nil
 }
 
-// tryProcessManifestList attempts to decode a manifest list.
-func (ph *PrefetchHandler) tryProcessManifestList(logger *zap.SugaredLogger, namespace string, manifestBytes []byte) ([]blobInfo, error) {
-	var manifestList manifestlist.ManifestList
-	if err := json.NewDecoder(bytes.NewReader(manifestBytes)).Decode(&manifestList); err != nil || len(manifestList.Manifests) == 0 {
-		return nil, fmt.Errorf("not a valid manifest list")
+// getBlobInfos returns all blob infos for a manifest. For manifest lists and
+// OCI indexes, it also descends one level to collect sub-manifest blob infos.
+func (ph *PrefetchHandler) getBlobInfos(logger *zap.SugaredLogger, namespace string, manifest distribution.Manifest) ([]blobInfo, error) {
+	ml, ok := manifest.(*manifestlist.DeserializedManifestList)
+	if !ok {
+		return ph.processLayers(manifest.References())
 	}
-	logger.With("namespace", namespace).Info("Processing manifest list")
-	return ph.processManifestList(logger, namespace, manifestList)
-}
 
-// processManifestList processes a manifest list.
-func (ph *PrefetchHandler) processManifestList(logger *zap.SugaredLogger, namespace string, manifestList manifestlist.ManifestList) ([]blobInfo, error) {
 	var allBlobs []blobInfo
-	for _, descriptor := range manifestList.Manifests {
-		manifestDigestHex := descriptor.Digest.Hex()
-		digest, err := core.NewSHA256DigestFromHex(manifestDigestHex)
+	for _, subDesc := range ml.Manifests {
+		subDigest, err := core.NewSHA256DigestFromHex(subDesc.Digest.Hex())
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse manifest digest %s: %w", manifestDigestHex, err)
+			return nil, fmt.Errorf("parse sub-manifest digest: %w", err)
 		}
+
 		buf := &bytes.Buffer{}
 		startTime := time.Now()
-		if err := ph.clusterClient.DownloadBlob(context.Background(), namespace, digest, buf); err != nil {
+		if err := ph.clusterClient.DownloadBlob(context.Background(), namespace, subDigest, buf); err != nil {
 			ph.metrics.Counter("download_manifest_error").Inc(1)
-			logger.With("error", err).Error("Failed to download manifest blob")
-			continue
+			logger.With("error", err).Error("Failed to download sub-manifest blob")
+			return nil, fmt.Errorf("download sub-manifest %s: %w", subDigest, err)
 		}
 		ph.getManifestLatency.RecordDuration(time.Since(startTime))
-		var manifest schema2.Manifest
-		if err := json.NewDecoder(buf).Decode(&manifest); err != nil {
-			return nil, fmt.Errorf("failed to parse manifest: %w", err)
-		}
-		blobs, err := ph.processLayers(manifest.Layers)
+
+		subManifest, _, err := dockerutil.ParseManifest(buf)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse sub-manifest %s: %w", subDigest, err)
 		}
-		allBlobs = append(allBlobs, blobs...)
+		subBlobs, err := ph.processLayers(subManifest.References())
+		if err != nil {
+			return nil, fmt.Errorf("get blob infos for sub-manifest %s: %w", subDigest, err)
+		}
+		allBlobs = append(allBlobs, blobInfo{digest: subDigest, size: subDesc.Size})
+		allBlobs = append(allBlobs, subBlobs...)
 	}
 	return allBlobs, nil
 }

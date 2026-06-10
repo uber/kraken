@@ -1,90 +1,132 @@
 package dockerutil_test
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
 	"testing"
+	"testing/iotest"
 
 	"github.com/docker/distribution/manifest/manifestlist"
+	"github.com/docker/distribution/manifest/schema2"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
+
+	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/dockerutil"
 )
 
-var testManifestListBytes = []byte(`{
-	"schemaVersion": 2,
-	"mediaType": "application/vnd.docker.distribution.manifest.list.v2+json",
-	"manifests": [
-	   {
-		  "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
-		  "size": 985,
-		  "digest": "sha256:1a9ec845ee94c202b2d5da74a24f0ed2058318bfa9879fa541efaecba272e86b",
-		  "platform": {
-			 "architecture": "amd64",
-			 "os": "linux",
-			 "features": [
-				"sse4"
-			 ]
-		  }
-	   },
-	   {
-		  "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
-		  "size": 2392,
-		  "digest": "sha256:6346340964309634683409684360934680934608934608934608934068934608",
-		  "platform": {
-			 "architecture": "sun4m",
-			 "os": "sunos"
-		  }
-	   }
-	]
- }`)
-
-var testManifestBytes = []byte(`{
-	"schemaVersion": 2,
-	"mediaType": "application/vnd.docker.distribution.manifest.v2+json",
-	"config": {
-	   "mediaType": "application/vnd.docker.container.image.v1+json",
-	   "size": 985,
-	   "digest": "sha256:1a9ec845ee94c202b2d5da74a24f0ed2058318bfa9879fa541efaecba272e86b"
-	},
-	"layers": [
-	   {
-		  "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
-		  "size": 153263,
-		  "digest": "sha256:62d8908bee94c202b2d35224a221aaa2058318bfa9879fa541efaecba272331b"
-	   }
-	]
- }`)
-
-func TestParseManifestV2List(t *testing.T) {
-	require := require.New(t)
-
-	tests := []struct {
-		name          string
-		hasError      bool
-		manifestBytes []byte
+func TestParseManifest(t *testing.T) {
+	tests := map[string]struct {
+		fixture       func() (core.Digest, []byte)
+		wantErr       string
+		wantMediaType string
 	}{
-		{
-			name:          "success",
-			hasError:      false,
-			manifestBytes: testManifestListBytes,
+		"success with v2 manifest": {
+			fixture: func() (core.Digest, []byte) {
+				return dockerutil.ManifestFixture(core.DigestFixture(), core.DigestFixture(), core.DigestFixture())
+			},
+			wantMediaType: schema2.MediaTypeManifest,
 		},
-		{
-			name:          "wrong manifest type",
-			hasError:      true,
-			manifestBytes: testManifestBytes,
+		"success with v2 manifest list": {
+			fixture: func() (core.Digest, []byte) {
+				return dockerutil.ManifestListFixture(core.DigestFixture(), core.DigestFixture())
+			},
+			wantMediaType: manifestlist.MediaTypeManifestList,
+		},
+		"success with OCI manifest": {
+			fixture: func() (core.Digest, []byte) {
+				return dockerutil.OCIManifestFixture(core.DigestFixture(), core.DigestFixture(), core.DigestFixture())
+			},
+			wantMediaType: v1.MediaTypeImageManifest,
+		},
+		"success with OCI index": {
+			fixture: func() (core.Digest, []byte) {
+				return dockerutil.OCIIndexFixture(core.DigestFixture(), core.DigestFixture())
+			},
+			wantMediaType: v1.MediaTypeImageIndex,
+		},
+		"success with OCI manifest without mediaType": {
+			fixture: func() (core.Digest, []byte) {
+				raw := []byte(fmt.Sprintf(`{
+					"schemaVersion": 2,
+					"config": {"mediaType": "application/vnd.oci.image.config.v1+json", "size": 1, "digest": "%s"},
+					"layers": [
+						{"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip", "size": 1, "digest": "%s"},
+						{"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip", "size": 1, "digest": "%s"}
+					]
+				}`, core.DigestFixture(), core.DigestFixture(), core.DigestFixture()))
+				d, err := core.NewDigester().FromBytes(raw)
+				if err != nil {
+					panic(err)
+				}
+				return d, raw
+			},
+			wantMediaType: v1.MediaTypeImageManifest,
+		},
+		"success with OCI index without mediaType": {
+			fixture: func() (core.Digest, []byte) {
+				raw := []byte(fmt.Sprintf(`{
+					"schemaVersion": 2,
+					"manifests": [
+						{"mediaType": "application/vnd.oci.image.manifest.v1+json", "size": 1, "digest": "%s", "platform": {"architecture": "amd64", "os": "linux"}},
+						{"mediaType": "application/vnd.oci.image.manifest.v1+json", "size": 1, "digest": "%s", "platform": {"architecture": "arm64", "os": "linux"}}
+					]
+				}`, core.DigestFixture(), core.DigestFixture()))
+				d, err := core.NewDigester().FromBytes(raw)
+				if err != nil {
+					panic(err)
+				}
+				return d, raw
+			},
+			wantMediaType: v1.MediaTypeImageIndex,
+		},
+		"failure with invalid JSON": {
+			fixture: func() (core.Digest, []byte) { return core.Digest{}, []byte("not json") },
+			wantErr: "peek manifest",
+		},
+		"failure when manifest schema version is not 2": {
+			fixture: func() (core.Digest, []byte) {
+				return core.Digest{}, []byte(`{"schemaVersion":1,"mediaType":"application/vnd.docker.distribution.manifest.v2+json"}`)
+			},
+			wantErr: "unsupported schema version: 1",
+		},
+		"failure when manifest is malformed": {
+			fixture: func() (core.Digest, []byte) {
+				return core.Digest{}, []byte(`{"schemaVersion":2,"mediaType":"application/vnd.docker.distribution.manifest.v2+json","layers":"not-an-array"}`)
+			},
+			wantErr: "unmarshal manifest",
+		},
+		"failure with unknown mediatype": {
+			fixture: func() (core.Digest, []byte) {
+				return core.Digest{}, []byte(`{"schemaVersion":2,"mediaType":"application/unknown"}`)
+			},
+			wantErr: "unknown manifest mediatype: application/unknown",
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			manifest, d, err := dockerutil.ParseManifestV2List(tt.manifestBytes)
-			if tt.hasError {
-				require.Error(err)
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			fixtureD, fixtureB := tt.fixture()
+			manifest, d, err := dockerutil.ParseManifest(bytes.NewReader(fixtureB))
+
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
 				return
 			}
 
-			require.NoError(err)
-			mediaType, _, err := manifest.Payload()
-			require.NoError(err)
-			require.EqualValues(manifestlist.MediaTypeManifestList, mediaType)
-			require.Equal("sha256", d.Algo())
+			require.NoError(t, err)
+			mediaType, payload, err := manifest.Payload()
+			require.NoError(t, err)
+			require.Equal(t, tt.wantMediaType, mediaType)
+			require.Equal(t, fixtureB, payload)
+			require.Equal(t, fixtureD, d)
 		})
 	}
+}
+
+func TestParseManifest_ReaderError(t *testing.T) {
+	giveReader := iotest.ErrReader(errors.New("test error"))
+	_, _, err := dockerutil.ParseManifest(giveReader)
+	require.ErrorContains(t, err, "read manifest")
 }
