@@ -6,6 +6,7 @@ source examples/devcluster/agent_two_param.sh
 
 # Start kraken agent.
 docker run -d \
+    --add-host host.docker.internal:host-gateway \
     -p ${AGENT_PEER_PORT}:${AGENT_PEER_PORT} \
     -p ${AGENT_SERVER_PORT}:${AGENT_SERVER_PORT} \
     -p ${AGENT_REGISTRY_PORT}:${AGENT_REGISTRY_PORT} \
