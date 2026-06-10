@@ -143,6 +143,14 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return err
 	}
+
+	// Streaming mode (PoC): serve bytes in piece order as they arrive over p2p,
+	// instead of blocking until the whole blob is downloaded. Enables a
+	// time-to-first-byte comparison against the default blocking path.
+	if httputil.GetQueryArg(r, "stream", "") == "1" {
+		return s.streamBlob(w, namespace, d)
+	}
+
 	f, err := s.cads.Cache().GetFileReader(d.Hex())
 	if err != nil {
 		if os.IsNotExist(err) || s.cads.InDownloadError(err) {
@@ -168,6 +176,40 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 		return fmt.Errorf("copy file: %s", err)
 	}
 	return nil
+}
+
+// streamBlob serves a blob's bytes in piece order as they are downloaded over
+// p2p, flushing as it goes so the first bytes reach the client without waiting
+// for the full blob.
+func (s *Server) streamBlob(w http.ResponseWriter, namespace string, d core.Digest) error {
+	rc, err := s.sched.DownloadReader(namespace, d)
+	if err != nil {
+		if err == scheduler.ErrTorrentNotFound {
+			return handler.ErrorStatus(http.StatusNotFound)
+		}
+		return handler.Errorf("download reader: %s", err)
+	}
+	defer closers.Close(rc)
+
+	flusher, canFlush := w.(http.Flusher)
+	buf := make([]byte, 32*1024)
+	for {
+		n, rerr := rc.Read(buf)
+		if n > 0 {
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				return fmt.Errorf("write: %s", werr)
+			}
+			if canFlush {
+				flusher.Flush()
+			}
+		}
+		if rerr == io.EOF {
+			return nil
+		}
+		if rerr != nil {
+			return fmt.Errorf("stream blob: %s", rerr)
+		}
+	}
 }
 
 func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error {

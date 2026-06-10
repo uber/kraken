@@ -91,6 +91,8 @@ func NewManager(
 		m.policy = newDefaultPolicy()
 	case RarestFirstPolicy:
 		m.policy = newRarestFirstPolicy()
+	case InOrderPolicy:
+		m.policy = newInOrderPolicy()
 	default:
 		return nil, fmt.Errorf("invalid piece selection policy: %s", policy)
 	}

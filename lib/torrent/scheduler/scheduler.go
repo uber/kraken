@@ -16,6 +16,7 @@ package scheduler
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -51,6 +52,7 @@ var (
 type Scheduler interface {
 	Stop()
 	Download(namespace string, d core.Digest) error
+	DownloadReader(namespace string, d core.Digest) (io.ReadCloser, error)
 	BlacklistSnapshot() ([]connstate.BlacklistedConn, error)
 	RemoveTorrent(d core.Digest) error
 	Probe() error
@@ -281,6 +283,32 @@ func (s *scheduler) Download(namespace string, d core.Digest) error {
 		s.torrentlog.DownloadSuccess(namespace, d, size, downloadTime)
 	}
 	return err
+}
+
+// DownloadReader schedules a blob for download and returns a reader that serves
+// the blob's bytes in order as pieces arrive, without waiting for the whole blob
+// to complete. The returned reader shares the dispatcher's live torrent instance.
+func (s *scheduler) DownloadReader(
+	namespace string, d core.Digest) (io.ReadCloser, error) {
+
+	s.stats.Counter("download_reader_requests").Inc(1)
+	t, err := s.torrentArchive.CreateTorrent(namespace, d)
+	if err != nil {
+		if err == storage.ErrNotFound {
+			return nil, ErrTorrentNotFound
+		}
+		return nil, fmt.Errorf("create torrent: %s", err)
+	}
+
+	result := make(chan streamResult, 1)
+	if !s.eventLoop.send(streamTorrentEvent{namespace, t, result}) {
+		return nil, ErrSchedulerStopped
+	}
+	res := <-result
+	if res.torrent == nil {
+		return nil, <-res.errc
+	}
+	return newStreamReader(res.torrent, res.errc, s.clock, streamPollInterval), nil
 }
 
 // BlacklistSnapshot returns a snapshot of the current connection blacklist.

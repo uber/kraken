@@ -340,7 +340,59 @@ func (e newTorrentEvent) apply(s *state) {
 	go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
 }
 
-// dispatcherCompleteEvent occurs when a dispatcher finishes downloading its torrent.
+// streamResult is returned to a DownloadReader caller. It carries the live
+// torrent instance the dispatcher writes into, plus an errc that is signaled
+// with the terminal state of the download (nil on complete, non-nil on
+// error/timeout/removal).
+type streamResult struct {
+	torrent storage.Torrent
+	errc    chan error
+}
+
+// streamTorrentEvent occurs when a streaming reader was requested for download.
+// Unlike newTorrentEvent, it does not block the caller until completion; it
+// hands back the live torrent so bytes can be served as pieces arrive.
+type streamTorrentEvent struct {
+	namespace string
+	torrent   storage.Torrent
+	result    chan streamResult
+}
+
+// apply begins leeching the torrent (if not already) and returns the live
+// torrent instance plus an errc registered for terminal-state signaling.
+func (e streamTorrentEvent) apply(s *state) {
+	ctrl, ok := s.torrentControls[e.torrent.InfoHash()]
+	if !ok {
+		var err error
+		ctrl, err = s.addTorrent(e.namespace, e.torrent, true)
+		if err != nil {
+			e.result <- streamResult{errc: errcWith(err)}
+			return
+		}
+		s.log("torrent", e.torrent).Info("Added new torrent for streaming")
+	}
+
+	// Buffer size of 1 so the event loop never blocks signaling terminal state.
+	errc := make(chan error, 1)
+	if ctrl.dispatcher.Complete() {
+		errc <- nil
+	} else {
+		ctrl.errors = append(ctrl.errors, errc)
+		// Immediately announce new torrents.
+		go s.sched.announce(
+			ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
+	}
+
+	e.result <- streamResult{torrent: ctrl.torrent, errc: errc}
+}
+
+// errcWith returns a buffered error channel already holding err.
+func errcWith(err error) chan error {
+	errc := make(chan error, 1)
+	errc <- err
+	return errc
+}
+
 type dispatcherCompleteEvent struct {
 	dispatcher *dispatch.Dispatcher
 }

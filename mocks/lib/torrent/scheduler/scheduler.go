@@ -5,6 +5,7 @@
 package mockscheduler
 
 import (
+	io "io"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -62,6 +63,21 @@ func (m *MockScheduler) Download(arg0 string, arg1 core.Digest) error {
 func (mr *MockSchedulerMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockScheduler)(nil).Download), arg0, arg1)
+}
+
+// DownloadReader mocks base method
+func (m *MockScheduler) DownloadReader(arg0 string, arg1 core.Digest) (io.ReadCloser, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DownloadReader", arg0, arg1)
+	ret0, _ := ret[0].(io.ReadCloser)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DownloadReader indicates an expected call of DownloadReader
+func (mr *MockSchedulerMockRecorder) DownloadReader(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadReader", reflect.TypeOf((*MockScheduler)(nil).DownloadReader), arg0, arg1)
 }
 
 // Probe mocks base method

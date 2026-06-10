@@ -35,6 +35,11 @@ type torrentControl struct {
 	dispatcher   *dispatch.Dispatcher
 	errors       []chan error
 	localRequest bool
+
+	// torrent is the live storage.Torrent instance the dispatcher writes pieces
+	// into. Streaming readers must use this instance (not a fresh CreateTorrent)
+	// so that HasPiece observes pieces as they land.
+	torrent storage.Torrent
 }
 
 // state is a superset of scheduler, which includes protected state which can
@@ -86,6 +91,7 @@ func (s *state) addTorrent(
 		namespace:    namespace,
 		dispatcher:   d,
 		localRequest: localRequest,
+		torrent:      t,
 	}
 	s.announceQueue.Add(t.InfoHash())
 	s.sched.netevents.Produce(networkevent.AddTorrentEvent(

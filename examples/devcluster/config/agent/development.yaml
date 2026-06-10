@@ -1,5 +1,12 @@
 extends: base.yaml
 
+# Use in-order piece selection so streaming reads (agent ?stream=1) get the
+# earliest pieces first, sharpening time-to-first-byte. Overrides base.yaml's
+# rarest_first via deep merge.
+scheduler:
+  dispatch:
+    piece_request_policy: in_order
+
 tracker:
   hosts:
     static:
