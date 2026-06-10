@@ -47,7 +47,6 @@ server {
     proxy_cache         tags;
     proxy_cache_methods GET;
     proxy_cache_valid   200 5m;
-    proxy_cache_valid   any 1s;
     proxy_cache_lock    on;
 
     proxy_read_timeout {{if .proxy_read_timeout}}{{.proxy_read_timeout}}{{else}}3m{{end}};
