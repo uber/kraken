@@ -11,17 +11,17 @@ import (
 
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/closers"
+	"github.com/uber/kraken/utils/log"
+	"go.uber.org/zap"
 )
 
 const (
 	// _defaultShardIDLength is the number of bytes of file digest to be used for shard ID.
 	// For every byte (2 HEX char), one more level of directories will be created.
 	_defaultFilePerm        = 0775
-	_defaultShardIDLength   = 2
-	_incompleteSubDir       = "incomplete"
-	_completeSubDir         = "complete"
-	_blobFileName           = "data"
 	_evictionBannedFileName = "_eviction_banned"
+	// TODO - change this not to be hardcoded when configurable sharding is implemented
+	_numShards = 2
 )
 
 // DiskStore is a key-value, persistent, thread-safe, LRU store for blobs and their [metadata.Metadata].
@@ -34,13 +34,13 @@ const (
 //
 //   - Supports (un-)marking blobs as non-evictable (may be needed when that data must be written back to remote storage).
 //
-//   - Crash-resistant - all state is restored upon restart (LRU order is approximated through file `ctime`).
+//   - Crash-resistant - all state is restored upon restart (LRU order is approximated through file `mtime`).
 //
 //   - Uses directory sharding to speed up disk performance.
 type DiskStore struct {
+	*pather
 	capacity uint64
 	size     uint64 // includes both used and reserved space
-	dir      string
 	// synchronizes mem state access and syscalls to the fs in the APIs (opening, moving files, etc.)
 	mu sync.RWMutex // TODO - evaluate whether the read-to-write ratio is more appropriate for a [sync.Mutex] instead.
 	// complete, evictable blobs.
@@ -51,6 +51,7 @@ type DiskStore struct {
 	incompleteBlobs map[string]uint64
 	// complete blobs that cannot be evicted.
 	unevictableBlobs map[string]uint64
+	log              *zap.SugaredLogger
 }
 
 type el struct {
@@ -59,23 +60,45 @@ type el struct {
 }
 
 // NewDiskStore creates a [*DiskStore].
+// incomplete blobs are deleted
+// approximates lru eviction order by file `mtime`
 func NewDiskStore(capacityBytes uint64, rootDir string) (*DiskStore, error) {
 	// TODO - create a Config struct.
-	// TODO - recover persisted state in case of crash. might need to evict. emit log if so.
 	// TODO - consider how to support blob mutation, which might be needed by build-index for tag mutation.
-	return &DiskStore{
-		dir:              rootDir,
-		capacity:         capacityBytes,
-		blobs:            make(map[string]*list.Element),
-		evictQueue:       list.New(),
-		incompleteBlobs:  make(map[string]uint64),
-		unevictableBlobs: make(map[string]uint64),
-		size:             0,
-	}, nil
+	// TODO - move disk store files into their own directory and package.
+
+	log := log.Default().With("module", "disk_store")
+	ok, err := existsPersistedState(rootDir)
+	if err != nil {
+		err = fmt.Errorf("could not check if previously-left persisted state exists on disk: %w", err)
+		log.With("error", err).Error("Failed to initialize disk store")
+		return nil, err
+	}
+	if !ok {
+		log.Info("Did not find any previously persisted state to reboot for DiskStore - initializing a new, empty DiskStore")
+		return &DiskStore{
+			capacity:         capacityBytes,
+			blobs:            make(map[string]*list.Element),
+			evictQueue:       list.New(),
+			incompleteBlobs:  make(map[string]uint64),
+			unevictableBlobs: make(map[string]uint64),
+			size:             0,
+			log:              log,
+			pather:           newPather(rootDir),
+		}, nil
+	}
+
+	store, err := rebootPersistedStateAfterCrash(capacityBytes, rootDir, log)
+	if err != nil {
+		err = fmt.Errorf("reboot persisted state into memory: %w", err)
+		log.With("error", err).Error("Failed to initialize disk store")
+		return nil, err
+	}
+	log.With("num_blobs", len(store.blobs)+len(store.unevictableBlobs)).Info("Successfully initialized disk store")
+	return store, nil
 }
 
 // Open returns an FD to a file in the store. [os.ErrNotExists] is returned on missing entry.
-// The blob cannot be evicted before the client calls Close on it.
 func (s *DiskStore) Open(key string, ignoreIncomplete bool) (FileReadWriter, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -258,14 +281,11 @@ func (s *DiskStore) MarkComplete(key string) error {
 
 func (s *DiskStore) checkDiskIfUnevictable(key string, complete bool) (bool, error) {
 	flagBlobPath := s.sidecarFilePath(key, complete, _evictionBannedFileName)
-	_, err := os.Stat(flagBlobPath)
-	if err == nil {
-		return true, nil
+	unevictable, err := exists(flagBlobPath)
+	if err != nil {
+		return false, err
 	}
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	return false, fmt.Errorf("stat: %w", err)
+	return unevictable, nil
 }
 
 // Delete removes a blob and its [metadata.Metadata] from the store. Works on any blob.
@@ -513,28 +533,26 @@ func (s *DiskStore) DeleteMetadata(key string, md metadata.Metadata) error {
 	return nil
 }
 
-func (s *DiskStore) blobPath(key string, complete bool) string {
-	dirName := s.dirPath(key, complete)
-	return filepath.Join(dirName, _blobFileName)
+// used during testing
+func (s *DiskStore) evictionOrder() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	evictionOrder := make([]string, 0)
+	for curr := s.evictQueue.Front(); curr != nil; curr = curr.Next() {
+		currEl := curr.Value.(el)
+		evictionOrder = append(evictionOrder, currEl.key)
+	}
+	return evictionOrder
 }
 
-func (s *DiskStore) dirPath(key string, complete bool) string {
-	// TODO - allow config to specify whether to shard or not. Allow no sharding, so we can replace [SimpleStore].
-	subDirName := _incompleteSubDir
-	if complete {
-		subDirName = _completeSubDir
+func exists(path string) (ok bool, err error) {
+	_, err = os.Stat(path)
+	if err == nil {
+		return true, nil
 	}
-	dirPath := filepath.Join(s.dir, subDirName)
-	for i := 0; i < int(_defaultShardIDLength) && i < len(key)/2; i++ {
-		// (1 byte = 2 char of file name assumming file name is in HEX)
-		dirName := key[i*2 : i*2+2]
-		dirPath = filepath.Join(dirPath, dirName)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
 	}
-
-	return filepath.Join(dirPath, key)
-}
-
-func (s *DiskStore) sidecarFilePath(key string, complete bool, sidecarFilePath string) string {
-	dirPath := s.dirPath(key, complete)
-	return filepath.Join(dirPath, sidecarFilePath)
+	return false, fmt.Errorf("stat: %w", err)
 }

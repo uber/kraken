@@ -20,6 +20,7 @@ import (
 )
 
 const (
+	// TODO - consider exporting these constants for clients to consume to avoid naked params
 	_dontIgnoreIncompleteFiles = false
 	_ignoreIncompleteFiles     = true
 )
@@ -46,7 +47,11 @@ func newTestFile(t *testing.T, store *DiskStore, size uint64) (f FileReadWriter,
 // does not count 1) the directories for sharding, 2) metadata files, and 3) the _eviction_banned flag file.
 func numBlobsOnDisk(t *testing.T, store *DiskStore) int {
 	numBlobs := 0
-	err := filepath.Walk(store.dir, func(path string, info fs.FileInfo, err error) error {
+	err := filepath.WalkDir(store.dir, func(path string, _ fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
 		if !strings.HasSuffix(path, _blobFileName) {
 			return nil
 		}
@@ -215,13 +220,6 @@ func TestEviction(t *testing.T) {
 	// evictionOrder: k(2KB); d(3KB)
 	require.Equal(5*memsize.KB, store.size)
 	require.Equal(2, numBlobsOnDisk(t, store))
-}
-
-func TestCrashRecovery(t *testing.T) {
-	t.Skip("TODO - implement")
-
-	// test each blob type is as expected in the store's internal state
-	// test LRU order is approximated correctly after recovery (ctime shd be different than access time)
 }
 
 func TestParallelAccessToSingleFile(t *testing.T) {
@@ -720,33 +718,4 @@ func TestMetadata(t *testing.T) {
 		_, err = os.Stat(mdFilePath)
 		require.True(errors.Is(err, os.ErrNotExist))
 	})
-}
-
-func TestPathing(t *testing.T) {
-	require := require.New(t)
-	store, rootDir := newTestStore(t, 10*memsize.KB)
-	md := metadata.NewTorrentMeta(core.MetaInfoFixture())
-
-	key := "8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78"
-	complete := false
-	dirPath := store.dirPath(key, complete)
-	wantDirPath := rootDir + "/incomplete/8c/6a/8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78"
-	require.Equal(wantDirPath, dirPath)
-	blobPath := store.blobPath(key, complete)
-	wantBlobPath := rootDir + "/incomplete/8c/6a/8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78/data"
-	require.Equal(wantBlobPath, blobPath)
-	sidecarFilePath := store.sidecarFilePath(key, complete, md.GetSuffix())
-	wantSidecarFilePath := rootDir + "/incomplete/8c/6a/8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78/_torrentmeta"
-	require.Equal(wantSidecarFilePath, sidecarFilePath)
-
-	complete = true
-	dirPath = store.dirPath(key, complete)
-	wantDirPath = rootDir + "/complete/8c/6a/8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78"
-	require.Equal(wantDirPath, dirPath)
-	blobPath = store.blobPath(key, complete)
-	wantBlobPath = rootDir + "/complete/8c/6a/8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78/data"
-	require.Equal(wantBlobPath, blobPath)
-	sidecarFilePath = store.sidecarFilePath(key, complete, md.GetSuffix())
-	wantSidecarFilePath = rootDir + "/complete/8c/6a/8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78/_torrentmeta"
-	require.Equal(wantSidecarFilePath, sidecarFilePath)
 }
