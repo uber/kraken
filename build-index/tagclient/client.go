@@ -98,7 +98,7 @@ func (c *singleClient) PutAndReplicate(tag string, d core.Digest) error {
 func (c *singleClient) Get(tag string) (core.Digest, error) {
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/tags/%s", c.addr, url.PathEscape(tag)),
-		httputil.SendTimeout(10*time.Second),
+		httputil.SendTimeout(30*time.Second),
 		httputil.SendTLS(c.tls))
 	if err != nil {
 		if httputil.IsNotFound(err) {

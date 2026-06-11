@@ -343,11 +343,13 @@ func (e newTorrentEvent) apply(s *state) {
 // streamResult is returned to a DownloadReader caller. It carries the live
 // torrent instance the dispatcher writes into, an errc that is signaled with
 // the terminal state of the download (nil on complete, non-nil on
-// error/timeout/removal), and a priority hint to fetch a given piece next.
+// error/timeout/removal), a priority hint to fetch a given piece next, and a
+// request callback to demand specific pieces in lazy mode.
 type streamResult struct {
 	torrent  storage.Torrent
 	errc     chan error
 	priority func(piece int)
+	request  func(pieces []int)
 }
 
 // streamTorrentEvent occurs when a streaming reader was requested for download.
@@ -378,6 +380,9 @@ func (e streamTorrentEvent) apply(s *state) {
 	if ctrl.dispatcher.Complete() {
 		errc <- nil
 	} else {
+		// Switch the dispatcher to demand-driven fetching so only pieces a
+		// reader touches (plus readahead) are downloaded, not the whole blob.
+		ctrl.dispatcher.SetLazy()
 		ctrl.errors = append(ctrl.errors, errc)
 		// Immediately announce new torrents.
 		go s.sched.announce(
@@ -388,6 +393,7 @@ func (e streamTorrentEvent) apply(s *state) {
 		torrent:  ctrl.torrent,
 		errc:     errc,
 		priority: ctrl.dispatcher.SetPriorityPiece,
+		request:  ctrl.dispatcher.RequestPieces,
 	}
 }
 

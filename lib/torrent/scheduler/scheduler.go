@@ -317,7 +317,8 @@ func (s *scheduler) DownloadReader(
 	if res.torrent == nil {
 		return nil, <-res.errc
 	}
-	return newStreamReader(res.torrent, res.errc, s.clock, streamPollInterval, res.priority), nil
+	return newStreamReader(
+		res.torrent, res.errc, s.clock, streamPollInterval, res.priority, res.request), nil
 }
 
 // BlacklistSnapshot returns a snapshot of the current connection blacklist.

@@ -497,3 +497,49 @@ func TestDispatcherPeerPieceCounts(t *testing.T) {
 	require.Equal(1, d.numPeersByPiece.Get(1))
 	require.Equal(2, d.numPeersByPiece.Get(2))
 }
+
+func TestDispatcherEagerRequestsAllMissingPieces(t *testing.T) {
+	require := require.New(t)
+
+	config := Config{AgentPipelineLimit: 10}
+	clk := clock.NewMock()
+
+	torrent, cleanup := agentstorage.TorrentFixture(core.SizedBlobFixture(5, 1).MetaInfo)
+	defer cleanup()
+
+	d := testDispatcher(config, clk, torrent)
+
+	peerBitfield := bitset.New(uint(torrent.NumPieces())).Complement()
+	p, err := d.addPeer(core.PeerIDFixture(), false, peerBitfield, newMockMessages())
+	require.NoError(err)
+
+	_, err = d.maybeRequestMorePieces(p)
+	require.NoError(err)
+	require.Len(numRequestsPerPiece(p.messages), torrent.NumPieces())
+}
+
+func TestDispatcherLazyRequestsOnlyDemandedPieces(t *testing.T) {
+	require := require.New(t)
+
+	config := Config{AgentPipelineLimit: 10}
+	clk := clock.NewMock()
+
+	torrent, cleanup := agentstorage.TorrentFixture(core.SizedBlobFixture(5, 1).MetaInfo)
+	defer cleanup()
+
+	d := testDispatcher(config, clk, torrent)
+	d.SetLazy()
+
+	peerBitfield := bitset.New(uint(torrent.NumPieces())).Complement()
+	p, err := d.addPeer(core.PeerIDFixture(), false, peerBitfield, newMockMessages())
+	require.NoError(err)
+
+	_, err = d.maybeRequestMorePieces(p)
+	require.NoError(err)
+	require.Empty(numRequestsPerPiece(p.messages))
+
+	d.demand.Set(2)
+	_, err = d.maybeRequestMorePieces(p)
+	require.NoError(err)
+	require.Equal(map[int]int{2: 1}, numRequestsPerPiece(p.messages))
+}

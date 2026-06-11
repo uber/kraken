@@ -67,7 +67,7 @@ func TestStreamReaderServesPiecesAsTheyArrive(t *testing.T) {
 	defer cleanup()
 
 	errc := make(chan error, 1)
-	r := newStreamReader(tor, errc, clock.New(), time.Millisecond, nil)
+	r := newStreamReader(tor, errc, clock.New(), time.Millisecond, nil, nil)
 	t.Cleanup(func() { require.NoError(r.Close()) })
 
 	// Write pieces in order from a separate goroutine, lagging the reader.
@@ -97,7 +97,7 @@ func TestStreamReaderHandlesAlreadyCompleteTorrent(t *testing.T) {
 
 	errc := make(chan error, 1)
 	errc <- nil
-	r := newStreamReader(tor, errc, clock.New(), time.Millisecond, nil)
+	r := newStreamReader(tor, errc, clock.New(), time.Millisecond, nil, nil)
 	t.Cleanup(func() { require.NoError(r.Close()) })
 
 	out, err := io.ReadAll(r)
@@ -116,7 +116,7 @@ func TestStreamReaderReturnsTerminalError(t *testing.T) {
 	writePiece(t, tor, blob, 0)
 
 	errc := make(chan error, 1)
-	r := newStreamReader(tor, errc, clock.New(), time.Millisecond, nil)
+	r := newStreamReader(tor, errc, clock.New(), time.Millisecond, nil, nil)
 	t.Cleanup(func() { require.NoError(r.Close()) })
 
 	// Signal a terminal download failure; the reader blocks on piece 1 and
@@ -127,4 +127,60 @@ func TestStreamReaderReturnsTerminalError(t *testing.T) {
 	out, err := io.ReadAll(r)
 	require.Equal(downloadErr, err)
 	require.Equal(blob.Content[:tor.PieceLength(0)], out)
+}
+
+func TestStreamReaderReadAtDemandsSpan(t *testing.T) {
+	require := require.New(t)
+
+	blob := core.SizedBlobFixture(100, 10)
+	tor, cleanup := streamTorrentFixture(t, blob)
+	defer cleanup()
+
+	for i := 0; i < tor.NumPieces(); i++ {
+		writePiece(t, tor, blob, i)
+	}
+
+	var demanded []int
+	request := func(pieces []int) { demanded = append(demanded, pieces...) }
+
+	errc := make(chan error, 1)
+	errc <- nil
+	r := newStreamReader(tor, errc, clock.New(), time.Millisecond, nil, request)
+	t.Cleanup(func() { require.NoError(r.Close()) })
+
+	p := make([]byte, 20)
+	n, err := r.ReadAt(p, 15)
+	require.NoError(err)
+	require.Equal(20, n)
+	require.Equal(blob.Content[15:35], p)
+	require.Equal([]int{1, 2, 3}, demanded)
+}
+
+func TestStreamReaderReadaheadBounded(t *testing.T) {
+	require := require.New(t)
+
+	blob := core.SizedBlobFixture(100, 10)
+	tor, cleanup := streamTorrentFixture(t, blob)
+	defer cleanup()
+
+	writePiece(t, tor, blob, 0)
+
+	windows := make(chan []int, 16)
+	request := func(pieces []int) { windows <- pieces }
+
+	errc := make(chan error, 1)
+	r := newStreamReader(tor, errc, clock.New(), time.Millisecond, nil, request)
+	t.Cleanup(func() { require.NoError(r.Close()) })
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := io.ReadAll(r)
+		done <- err
+	}()
+
+	require.Equal([]int{1, 2, 3, 4, 5, 6, 7, 8}, <-windows)
+
+	stopErr := errors.New("stop")
+	errc <- stopErr
+	require.Equal(stopErr, <-done)
 }

@@ -76,6 +76,14 @@ type Dispatcher struct {
 	events                Events
 	logger                *zap.SugaredLogger
 	torrentlog            *torrentlog.Logger
+
+	// demandMu guards lazy and demand. When lazy is true, the dispatcher only
+	// requests pieces present in demand (set by streaming readers via
+	// RequestPieces), instead of every missing piece. Default is eager (lazy
+	// false, demand nil), which requests all missing pieces.
+	demandMu sync.Mutex
+	lazy     bool
+	demand   *bitset.BitSet
 }
 
 // New creates a new Dispatcher.
@@ -173,6 +181,77 @@ func (d *Dispatcher) Stat() *storage.TorrentInfo {
 // fetching toward a piece a reader is currently blocked on.
 func (d *Dispatcher) SetPriorityPiece(piece int) {
 	d.pieceRequestManager.SetPriority(piece)
+}
+
+// SetLazy switches the dispatcher to demand-driven fetching: only pieces added
+// via RequestPieces are requested, rather than every missing piece. Idempotent.
+func (d *Dispatcher) SetLazy() {
+	d.demandMu.Lock()
+	defer d.demandMu.Unlock()
+	if d.lazy {
+		return
+	}
+	d.lazy = true
+	d.demand = bitset.New(uint(d.torrent.NumPieces()))
+}
+
+// RequestPieces marks the given pieces as demanded and kicks a request round so
+// they are fetched promptly. Only meaningful in lazy mode. The first piece is
+// also prioritized ahead of the selection policy.
+func (d *Dispatcher) RequestPieces(pieces []int) {
+	if len(pieces) == 0 {
+		return
+	}
+	d.demandMu.Lock()
+	if d.demand != nil {
+		for _, i := range pieces {
+			d.demand.Set(uint(i))
+		}
+	}
+	d.demandMu.Unlock()
+
+	d.SetPriorityPiece(pieces[0])
+
+	d.peers.Range(func(k, v interface{}) bool {
+		p, ok := v.(*peer)
+		if !ok {
+			panic(fmt.Sprintf("dispatcher: stored value is not *peer: %T", v))
+		}
+		go func() {
+			if _, err := d.maybeRequestMorePieces(p); err != nil {
+				d.log("peer", p).Errorf("Error requesting demanded pieces: %s", err)
+			}
+		}()
+		return true
+	})
+}
+
+// restrictToDemand intersects candidates with the demand set when lazy. In eager
+// mode candidates are returned unchanged.
+func (d *Dispatcher) restrictToDemand(candidates *bitset.BitSet) *bitset.BitSet {
+	d.demandMu.Lock()
+	defer d.demandMu.Unlock()
+	if !d.lazy || d.demand == nil {
+		return candidates
+	}
+	return candidates.Intersection(d.demand)
+}
+
+// isLazy reports whether the dispatcher is in demand-driven mode.
+func (d *Dispatcher) isLazy() bool {
+	d.demandMu.Lock()
+	defer d.demandMu.Unlock()
+	return d.lazy
+}
+
+// demandCount returns the number of demanded pieces, or -1 in eager mode.
+func (d *Dispatcher) demandCount() int {
+	d.demandMu.Lock()
+	defer d.demandMu.Unlock()
+	if !d.lazy || d.demand == nil {
+		return -1
+	}
+	return int(d.demand.Count())
 }
 
 // Complete returns true if d's torrent is complete.
@@ -309,6 +388,10 @@ func (d *Dispatcher) TearDown() {
 		close(d.pendingPiecesDone)
 	})
 
+	if n := d.demandCount(); n >= 0 {
+		d.log().Infof("Lazy torrent torn down: demanded %d/%d pieces", n, d.torrent.NumPieces())
+	}
+
 	d.peers.Range(func(k, v interface{}) bool {
 		p, ok := v.(*peer)
 		if !ok {
@@ -413,6 +496,7 @@ func (d *Dispatcher) endgame() bool {
 
 func (d *Dispatcher) maybeRequestMorePieces(p *peer) (bool, error) {
 	candidates := p.bitfield.Intersection(d.torrent.Bitfield().Complement())
+	candidates = d.restrictToDemand(candidates)
 
 	return d.maybeSendPieceRequests(p, candidates)
 }
@@ -425,6 +509,7 @@ func (d *Dispatcher) maybeSendPieceRequests(p *peer, pieceCandidates *bitset.Bit
 	if len(pieces) == 0 {
 		return false, nil
 	}
+	lazy := d.isLazy()
 	for _, i := range pieces {
 		if err := p.messages.Send(conn.NewPieceRequestMessage(i, d.torrent.PieceLength(i))); err != nil {
 			// Connection closed.
@@ -434,6 +519,9 @@ func (d *Dispatcher) maybeSendPieceRequests(p *peer, pieceCandidates *bitset.Bit
 		d.netevents.Produce(
 			networkevent.RequestPieceEvent(d.torrent.InfoHash(), d.localPeerID, p.id, i))
 		p.pstats.incrementPieceRequestsSent()
+		if lazy {
+			d.stats.Counter("lazy_pieces_requested").Inc(1)
+		}
 	}
 	return true, nil
 }
@@ -460,7 +548,7 @@ func (d *Dispatcher) resendFailedPieceRequests() {
 
 			b := d.torrent.Bitfield()
 			candidates := p.bitfield.Intersection(b.Complement())
-			if candidates.Test(uint(r.Piece)) {
+			if d.restrictToDemand(candidates).Test(uint(r.Piece)) {
 				nb := bitset.New(b.Len()).Set(uint(r.Piece))
 				if sent, err := d.maybeSendPieceRequests(p, nb); sent && err == nil {
 					return false

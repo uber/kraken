@@ -1,11 +1,14 @@
 # soci-snapshotter-grpc configuration for the e2e harness.
 #
-# min_layer_size = 0 forces every layer to be lazily mounted (the default 10MB
-# threshold otherwise fully downloads small layers, hiding the lazy-pull win on
-# small test images). For a realistic measurement, keep the default and use a
-# test image with at least one large, many-file layer.
-min_layer_size = 0
+# No resolver/mirror config is needed: the harness addresses Kraken as 127.0.0.1
+# (the container shares the host network), and soci-snapshotter uses plain HTTP
+# for localhost hosts automatically -- both for the SOCI-artifact fetch
+# (fs/artifact_fetcher.go: PlainHTTP = MatchLocalhost) and the layer Range reads
+# (resolver defaultScheme). An `insecure` mirror entry does NOT cover the
+# artifact-fetch path, which is why localhost addressing is used instead.
 
-[blob]
-  # Fetch piece-sized chunks; aligns with how Kraken serves ranged GETs.
-  valid_interval = 0
+# min_layer_size = 0 remote-mounts every layer that has a ztoc, instead of
+# fully downloading layers below the default threshold. Layers without a ztoc
+# (soci create skips layers under its own min-layer-size) are always pulled in
+# full, so a meaningful lazy-pull win needs a test image with a large layer.
+min_layer_size = 0

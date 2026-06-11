@@ -1,19 +1,22 @@
 #!/bin/bash
 # Entrypoint for the soci e2e DinD container: starts the soci-snapshotter grpc
-# plugin and containerd, waits until both are healthy, then idles so the host
-# can drive measurements via `docker exec`.
+# plugin and containerd, waits until both are healthy, then -- if given benchmark
+# args -- runs run_e2e.sh as the container workload (output to stdout/docker
+# logs); with no args it idles so the host can drive it manually via docker exec.
 
 set -ex
 
 mkdir -p /run/soci-snapshotter-grpc /var/log/kraken-soci \
     /var/lib/containerd /var/lib/soci-snapshotter-grpc
 
-# Registry mirror config so nerdctl/ctr reach Kraken over plain HTTP: the proxy
-# (push) and both agent registries (pull) used by the A/B legs.
+# Registry config so nerdctl/ctr reach Kraken over plain HTTP: the proxy (push)
+# and both agent registries (pull) used by the A/B legs. Addressed as 127.0.0.1
+# because soci-snapshotter only uses plain HTTP for localhost hosts (see
+# soci_start_container.sh); the container shares the host network namespace.
 for hostport in \
-    host.docker.internal:15000 \
-    host.docker.internal:16000 \
-    host.docker.internal:17000; do
+    127.0.0.1:15000 \
+    127.0.0.1:16000 \
+    127.0.0.1:17000; do
     dir="/etc/containerd/certs.d/${hostport}"
     mkdir -p "${dir}"
     cat >"${dir}/hosts.toml" <<EOF
@@ -57,5 +60,14 @@ fi
 ctr plugin ls | grep -i soci || true
 echo "kraken-soci ready: containerd + soci-snapshotter running"
 
-# Keep the container alive for docker exec-driven runs.
+# With benchmark args, run the e2e comparison as the container's workload so its
+# full report goes to stdout (== docker logs); the host reads it with
+# `docker logs -f` instead of `docker exec` (no connection upgrade needed). With
+# no args, idle so the container can be driven manually.
+if [ "$#" -gt 0 ]; then
+    set +x
+    exec /usr/local/bin/run_e2e.sh "$@"
+fi
+
+# Keep the container alive for manual docker exec-driven runs.
 tail -f /var/log/kraken-soci/containerd.log

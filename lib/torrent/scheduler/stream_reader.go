@@ -28,6 +28,11 @@ import (
 // next piece to become available.
 const streamPollInterval = 5 * time.Millisecond
 
+// streamReadahead is how many pieces past the one a sequential read blocks on
+// are demanded together, so the lazy dispatcher fetches ahead instead of one
+// piece per poll.
+const streamReadahead = 8
+
 // streamReader serves a torrent's bytes while it is still downloading, blocking
 // only on the piece needed for the current read rather than on the whole blob.
 // It shares the dispatcher's live torrent instance, so HasPiece reflects pieces
@@ -47,6 +52,9 @@ type streamReader struct {
 	// read blocks on it. Enables random-access (range) reads to skip ahead of
 	// the in-order fetch.
 	priority func(piece int)
+	// request, if non-nil, demands a set of pieces from the dispatcher in lazy
+	// mode, so only pieces a reader touches (plus readahead) are downloaded.
+	request func(pieces []int)
 
 	length   int64
 	pieceLen int64 // Standard piece stride (PieceLength(0)); 0 for empty blobs.
@@ -65,7 +73,8 @@ func newStreamReader(
 	errc chan error,
 	clk clock.Clock,
 	pollInterval time.Duration,
-	priority func(piece int)) *streamReader {
+	priority func(piece int),
+	request func(pieces []int)) *streamReader {
 
 	var pieceLen int64
 	if t.NumPieces() > 0 {
@@ -77,6 +86,7 @@ func newStreamReader(
 		clk:          clk,
 		pollInterval: pollInterval,
 		priority:     priority,
+		request:      request,
 		length:       t.Length(),
 		pieceLen:     pieceLen,
 		hinted:       -1,
@@ -149,6 +159,12 @@ func (r *streamReader) ReadAt(p []byte, off int64) (int, error) {
 	if off < 0 {
 		return 0, fmt.Errorf("stream reader: negative offset %d", off)
 	}
+	if end := off + int64(len(p)); end > 0 && r.pieceLen > 0 {
+		if end > r.length {
+			end = r.length
+		}
+		r.demand(int(off/r.pieceLen), int((end-1)/r.pieceLen)+1)
+	}
 	var read int
 	for read < len(p) {
 		pos := off + int64(read)
@@ -214,14 +230,40 @@ func (r *streamReader) acquirePiece(piece int) (storage.PieceReader, error) {
 			}
 			return pr, nil
 		}
-		if r.priority != nil && r.hinted != piece {
-			r.priority(piece)
+		if r.hinted != piece {
+			if r.priority != nil {
+				r.priority(piece)
+			}
+			r.demand(piece, piece+streamReadahead)
 			r.hinted = piece
 		}
 		if err := r.waitPiece(); err != nil {
 			return nil, err
 		}
 	}
+}
+
+// demand asks the dispatcher (lazy mode) to fetch pieces [lo, hi), clamped to
+// the torrent. No-op when request is nil (eager mode). Demand in the dispatcher
+// is monotonic, so repeated overlapping calls are harmless.
+func (r *streamReader) demand(lo, hi int) {
+	if r.request == nil {
+		return
+	}
+	if lo < 0 {
+		lo = 0
+	}
+	if hi > r.t.NumPieces() {
+		hi = r.t.NumPieces()
+	}
+	if lo >= hi {
+		return
+	}
+	pieces := make([]int, 0, hi-lo)
+	for i := lo; i < hi; i++ {
+		pieces = append(pieces, i)
+	}
+	r.request(pieces)
 }
 
 // waitPiece blocks until either the poll interval elapses (progress may have
