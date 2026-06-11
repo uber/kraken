@@ -106,6 +106,40 @@ as its workload; results are read back from `docker logs` (deliberately not
 `docker exec`, which needs a connection upgrade the busy daemon transiently
 refuses). The 206-vs-200 byte split is computed from the agent nginx access logs.
 
+### Agent-to-agent P2P holds while streaming (2026-06-11)
+
+Lazy pull does not bypass Kraken's P2P — a streaming agent still sources pieces
+peer-to-peer, not only origin→agent. This is what makes streaming a Kraken
+feature rather than a plain registry range read. **No Kraken core change was
+needed:** an incomplete agent already serves any piece it holds
+(`dispatcher.handlePieceRequest` has no `Complete()` gate), announces each piece
+to all peers as it lands (`handlePiecePayload` → `AnnouncePieceMessage`), and the
+tracker returns incomplete peers, so a mid-stream agent both serves and
+advertises its growing bitfield.
+
+Measured by enabling `network_event` on the agents and tallying agent-two's
+`receive_piece` events by source peer: a first agent streams the image cold
+(origin-only seeder), then a second agent streams the same content and we count
+how many of its pieces came from agent-one (P2P) vs the origin.
+
+| workload | snapshotter | P2P pieces | origin pieces | P2P share |
+|----------|-------------|------------|---------------|-----------|
+| pytorch 2.5.1-cuda12.4-cudnn9-devel | estargz | 109 | 197 | **35.6%** |
+| python:3.12 (converted) | estargz | 17 | 30 | **36.2%** |
+| synthetic 512 MiB blob | raw `?stream=1` | — | — | **39.8%** |
+| synthetic 256 MiB blob | raw `?stream=1` | — | — | **42.2%** |
+| synthetic 64 MiB blob | raw `?stream=1` | — | — | **43.8%** |
+
+Roughly a third to a half of every lazily-streamed image flowed agent→agent while
+the snapshotter was still reading it. The share is bounded below full because the
+second agent races the first: pieces it demands before agent-one has them (or
+advertised them) fall back to the origin — a cold-start effect that tracker
+partial-piece discovery (§7) would tighten, not a correctness gap.
+
+**Harness:** `examples/devcluster/p2p_agent_benchmark.sh` for the synthetic
+blobs; the estargz figures come from the same `estargz_benchmark.sh` run (its P2P
+tally reads each agent's `networkevent.log` via `docker cp`).
+
 ---
 
 ## Architecture

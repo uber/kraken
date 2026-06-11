@@ -7,6 +7,13 @@ scheduler:
   dispatch:
     piece_request_policy: in_order
 
+# Emit per-piece network events (receive_piece records the source peer) so the
+# agent-to-agent P2P benchmark can prove streamed pieces flow peer->peer, not
+# only origin->agent.
+network_event:
+  enabled: true
+  log_path: /var/log/kraken/kraken-agent/networkevent.log
+
 tracker:
   hosts:
     static:
