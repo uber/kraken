@@ -1,6 +1,11 @@
 # Lazy-Pull / Image Streaming for Kraken — Design One-Pager
 
-Status: Draft · Owner: TBD · Date: 2026-06-10
+Status: PoC complete (Phase 1 + 3) · Owner: TBD · Date: 2026-06-11
+
+A working end-to-end PoC has shipped on branch `image-streaming` and is
+validated in the devcluster against soci-snapshotter — see
+[PoC results](#poc-results-2026-06-11). The sections below mark what is
+**as-built** vs. still **design**.
 
 ## Goal
 
@@ -51,6 +56,36 @@ peer discovery on the tracker.
 
 ---
 
+## PoC results (2026-06-11)
+
+A Phase 1 + Phase 3 PoC is implemented on branch `image-streaming` and measured
+end-to-end in the devcluster, pulling real images through the Kraken agent
+registry with **soci-snapshotter** doing the lazy mount. The metric is
+**time-to-running**: a single `nerdctl run` (cold cache) that auto-pulls and
+starts the container, overlayfs (full pull) vs. soci (lazy range pull). Each leg
+targets a separate cold agent so caches never cross-warm.
+
+| image | overlayfs | soci (lazy) | speedup | bytes overlayfs | bytes soci | lazy layers |
+|-------|-----------|-------------|---------|-----------------|------------|-------------|
+| pytorch 2.5.1-cuda12.4-cudnn9-devel (~6.9 GiB) | 144.75 s | **13.48 s** | **~10.7×** | 7071.6 MiB (16× full `200`) | **325.1 MiB** (239× ranged `206`) | 5 |
+| anaconda3 (~3 GiB) | 58.04 s | **6.94 s** | **~8.4×** | — | — | — |
+
+For pytorch the container reaches running after fetching **~4.6%** of the image
+(21.7× fewer bytes from Kraken). The byte savings come from **demand-driven
+piece fetch** (Phase 3): the agent only downloads the pieces soci actually reads,
+not the whole blob. Lazy-ness was verified per run — 5 layers logged
+`remote-snapshot-prepared:true` and there were **0** HTTPS-fallback errors (a
+non-zero count would mean the artifact fetch silently fell back to a full pull).
+
+**Harness:** `examples/devcluster/soci/` over a running `make devcluster`. The
+host driver `soci_benchmark.sh` builds + starts a privileged DinD container
+(containerd + soci-snapshotter + `nerdctl`/`soci`/`ctr`) that runs `run_e2e.sh`
+as its workload; results are read back from `docker logs` (deliberately not
+`docker exec`, which needs a connection upgrade the busy daemon transiently
+refuses). The 206-vs-200 byte split is computed from the agent nginx access logs.
+
+---
+
 ## Architecture
 
 ```
@@ -90,10 +125,36 @@ type IndexFormat interface {
 ones compiled in are active. v1 ships `soci` (no image conversion needed) and a
 trivial `passthrough`. This is the single place that grows when adding a format.
 
-### Index discovery: derived tag, not OCI referrers
+> **Status:** design only. The PoC did **not** build `lib/streaming` (grep:
+> zero `IndexFormat`/`DependencyDigests` hits). The soci index was pushed as an
+> ordinary blob via `soci push --existing-index allow` and discovered through the
+> fallback tag below — single cluster, so no dependency resolver was needed yet.
+
+### Format support: soci vs estargz vs nydus
+
+The byte-level read path is **format-agnostic**: any snapshotter that issues
+ranged GETs on layer blobs is served by the same streaming reader. The formats
+differ only in *where the chunk index lives* and *whether the image must be
+converted* — which determines how much (if anything) Kraken must add.
+
+| format | chunk index | image conversion | discovery | what Kraken must add |
+|--------|-------------|------------------|-----------|----------------------|
+| **soci** | separate index artifact (ztoc blobs + index) | **none** (works on stock OCI images) | referrers → fallback `sha256-<digest>` tag | cross-cluster: a resolver to replicate the index's data blobs (§6). Nothing for single-cluster. |
+| **estargz** | embedded as a TOC footer **inside each layer blob** | **required** (`nerdctl image convert --estargz` / `ctr-remote`) | implicit — no separate artifact, no referrers | **nothing in core** — converted layers are opaque blobs; range reads suffice. |
+| **nydus** | separate bootstrap + blob artifacts | required (RAFS) | manifest references | soci-style index distribution (later). |
+
+Key consequence: **estargz is already supported by the PoC with no Kraken
+change** — Kraken stores/serves blobs opaquely by digest (`rw_transferer.Upload`
+ignores media type), so estargz-converted layers push through unchanged and the
+same range path serves them. The only cost is push-time conversion, a client/CI
+concern. soci's advantage is needing **no conversion**; that is why the PoC used
+it. (`--estargz-external-toc` moves the TOC into a separate "TOC image" pushed to
+the same registry — still just blobs + tags, still no referrers.)
+
+### Index discovery: derived tag, not OCI referrers — and do we need Referrers?
 
 Kraken has **no referrers/subject/artifactType** concept (grep confirms zero
-hits) but does have a generic `tag→digest` KV with HA + cross-cluster
+non-vendor hits) but does have a generic `tag→digest` KV with HA + cross-cluster
 replication. So the index is just a normal blob, discovered by a derived tag:
 
 ```
@@ -106,11 +167,35 @@ replication. So the index is just a normal blob, discovered by a derived tag:
 - Pull: agent computes the derived tag from the manifest digest and resolves it
   with the existing `GetTag` (`ro_transferer.go:96`). Deterministic, no new API.
 
+**Do we need to implement the OCI Referrers API? No — not a blocker.** soci and
+stargz both auto-fall back to the OCI `sha256-<manifest-digest>` tag scheme when
+a registry lacks the Referrers API, and Kraken's tag system already supports it
+(tag GET plus prefix listing: `build-index/tagserver/server.go:131`
+`/repositories/{repo}/tags`, `tagclient/client.go` `ListRepository`/`List`). The
+PoC ran entirely on this fallback (5 lazy layers, ranged reads, 0 errors). Kraken
+also *can't* get Referrers for free: the vendored `github.com/docker/distribution`
+is **v2.7.1** (2019 pin in `go.mod`), which predates the Referrers API
+(distribution v3 / registry 2.8+) — its route table has no `referrers` route.
+
+Implementing Referrers is an **optional future enhancement** (fewer round trips,
+no client-side filtering; some newer tooling such as SOCI Index Manifest v2 / ECS
+prefers it). If pursued: serve `GET /v2/<name>/referrers/<digest>` at the
+proxy/agent registry, backed by a new build-index **digest → referring-artifacts**
+index. That mapping is the missing state today; everything else (blob storage,
+tags) already exists.
+
 ---
 
-## Exact code changes, by layer
+## Exact code changes (as-built)
 
-### 1. Store — expose in-progress reads (small)
+> What actually shipped on branch `image-streaming` for the PoC, layer by layer.
+> Layers 1–3 are **built and validated**; layers 4–7 remain **design only** (the
+> PoC did not need cold-origin streaming — see Phasing). Two deviations from the
+> original design are called out inline: the reader **polls** instead of waiting
+> on a per-piece signal, and HTTP `Range` is served by the registry read path's
+> vendored `http.ServeContent`, not by a new agent endpoint.
+
+### 1. Store — expose in-progress reads (no change, as predicted)
 
 `lib/store/ca_download_store.go` already supports reading download-state files
 via `Any()`/`Download()` scopes (`:155`). No new store primitive strictly
@@ -119,59 +204,72 @@ required; the streaming reader uses `GetPieceReader` which already opens via
 for size before completion (it is). Keep this layer untouched to limit blast
 radius.
 
-### 2. Torrent / scheduler — streaming reader + per-piece signal + priority (core)
+### 2. Torrent / scheduler — streaming reader + demand-driven fetch (core, built)
 
-a. **Per-piece completion signal.** In
-`lib/torrent/scheduler/dispatch/dispatcher.go`, after `WritePiece` succeeds in
-`handlePiecePayload` (`:589`–`:604`), broadcast the completed piece index to a
-new per-dispatcher subscriber set (a `sync.Cond` or `chan struct{}` fan-out
-keyed by piece). Today the only signal is the all-pieces `DispatcherComplete`.
+This is the centerpiece of the PoC. The win comes from **demand-driven piece
+fetch**: a lazily-opened torrent only requests the pieces a reader actually
+touches (plus readahead), instead of the whole blob.
 
-b. **Non-blocking download + reader on the `Scheduler` interface.**
-`lib/torrent/scheduler/scheduler.go:51`. Add:
+a. **Streaming entry point on the `Scheduler` interface.**
+`lib/torrent/scheduler/scheduler.go` adds a `BlobReader` interface
+(`io.ReadSeekCloser + io.ReaderAt + Size()`) and
+`DownloadReader(namespace, d) (BlobReader, error)`. It sends a new
+`streamTorrentEvent` (`events.go`) that **reuses the live torrent control** if
+one exists, calls `ctrl.dispatcher.SetLazy()`, and returns a `*streamReader`
+over `ctrl.torrent` (`state.go` now holds the live `storage.Torrent` instance so
+the reader's `HasPiece` reflects pieces as they land). The blocking `Download`
+path is untouched for proxy preload + replication.
 
-```go
-// DownloadReader registers/starts leeching the torrent and returns a reader
-// that blocks only on the pieces covering each Read, not the whole blob.
-DownloadReader(namespace string, d core.Digest) (store.FileReader, error)
-```
+b. **`streamReader`** (`lib/torrent/scheduler/stream_reader.go`, new) implements
+`BlobReader`. **Deviation from original §2a:** rather than a per-piece
+`sync.Cond`/channel fan-out broadcast from `WritePiece`, the reader **polls** the
+live torrent (`streamPollInterval = 5ms`) for `HasPiece`, with a terminal `errc`
+for fatal torrent errors. Polling was simpler and adequate at PoC scale; the
+fan-out remains a future optimization if 5ms latency per uncached piece matters.
+On each `Read`/`ReadAt` it computes the covering piece span, calls `demand()` to
+register those pieces (+ `streamReadahead = 8` pieces ahead) with the dispatcher,
+waits for them via `acquirePiece`, then reads through `GetPieceReader`. `Size()`
+comes from the metainfo length up front.
 
-Internally it sends the existing `newTorrentEvent` (to start leeching) but does
-**not** wait on `errc`. Returns a `*streamReader`.
+c. **Demand set + lazy mode on the dispatcher.**
+`lib/torrent/scheduler/dispatch/dispatcher.go` adds `demandMu sync.Mutex`,
+`lazy bool`, and a `demand *bitset.BitSet`. `SetLazy()` flips the torrent into
+lazy mode; `RequestPieces()` ORs newly-demanded pieces into the set;
+`restrictToDemand()` intersects piece candidates with `demand` so that, in lazy
+mode, **only demanded pieces are ever requested**. The intersection is applied in
+both `maybeRequestMorePieces` and `resendFailedPieceRequests`. A
+`lazy_pieces_requested` counter and a teardown log line ("demanded N/total")
+make the savings observable — this is what produced the **325 MiB vs 7072 MiB**
+result.
 
-c. **`streamReader`** (new, `lib/torrent/scheduler/stream_reader.go`),
-implementing `store.FileReader` (`Read`/`ReadAt`/`Seek`/`Close`/`Size`):
-- maps offset→piece with `piece = off / mi.PieceLength()` (offset math already
-  exists as `getFileOffset`);
-- on `Read`/`ReadAt`, sets the dispatcher's **priority range** = pieces covering
-  `[off, off+len)`, then for each needed piece: if `HasPiece` read via
-  `GetPieceReader`; else wait on the per-piece signal (b/a) until it lands;
-- `Size()` from `Torrent.Length()` (known from metainfo up front).
+d. **In-order priority piece selection.**
+`lib/torrent/scheduler/dispatch/piecerequest/in_order_policy.go` (new) adds
+`InOrderPolicy = "in_order"`, selecting the lowest-index candidate pieces via
+`candidates.NextSet` so a streaming reader gets bytes roughly front-to-back.
+`manager.go` gains a `priority map[int]struct{}` with `SetPriority`/`Clear` and
+reserves priority pieces first in `ReservePieces`. The existing random/
+rarest-first policies are unchanged and still handle non-streaming torrents.
 
-d. **Piece prioritization by range.** Add a `priorityPieces *bitset.BitSet` to
-`Dispatcher`, settable from `streamReader`. In `maybeSendPieceRequests`
-(`dispatcher.go:413`) and `resendFailedPieceRequests` (`:434`), reserve pieces
-from `pieceCandidates ∩ priorityPieces` **first**, then fill remaining pipeline
-quota with the existing policy. This keeps the
-`piecerequest.pieceSelectionPolicy` interface
-(`lib/torrent/scheduler/dispatch/piecerequest/policy.go:25`) unchanged — random
-/ rarest-first still handle the non-priority tail.
+### 3. Agent registry — Range support, as-built (built)
 
-e. **Preserve the old path.** Existing `Download` (blocking) stays for proxy
-preload + replication. `dispatcherCompleteEvent`→`errc` (`events.go:359`)
-untouched.
+**Deviation from original §3.** The original plan was to add
+`http.ServeContent` to the agent's `downloadBlobHandler`. In practice the
+snapshotter pulls through the **Docker registry read path**, not the raw blob
+endpoint, and that path already serves HTTP `Range`:
 
-### 3. Agent registry — Range support + format wiring (small)
+a. `lib/dockerregistry/transfer/ro_transferer.go` — `Stat` returns
+`core.NewBlobInfo(r.Size())` from the metainfo via `DownloadReader` (no full
+download); `Download` returns the streaming reader on a cache miss and increments
+`mb_served`. This is the path soci actually used in the PoC.
 
-a. `lib/dockerregistry/transfer/ro_transferer.go`: switch `Download` (`:72`) to
-`sched.DownloadReader`, and `Stat` (`:55`) to use metainfo size without forcing
-full download (use `sched`'s torrent stat). The driver already calls
-`Reader(ctx, path, offset)` and `Seek` (`blobs.go:82`,`:113`).
+b. HTTP `Range` is served by **vendored `docker/distribution`**
+(`blobserver.go:76` `http.ServeContent`) over the `ReadSeeker` the read path
+returns — no Kraken change was required to honor `Range:` once `Download`
+returned a seekable streaming reader.
 
-b. `agent/agentserver/server.go` `downloadBlobHandler` (`:146`): replace
-`io.Copy` (`:167`) with `http.ServeContent(w, r, name, modtime, readSeeker)` so
-HTTP `Range:` requests are honored against the `streamReader`. This is the byte
-the snapshotter actually calls.
+c. A separate `agent/agentserver/server.go` `?stream=1` → `streamBlob` branch
+(manual 32 KiB Read+Flush loop) was added for a raw blob-endpoint
+time-to-first-byte A/B, independent of the registry path soci exercises.
 
 ### 4. Backend — range download (medium, needed for origin streaming)
 
@@ -211,6 +309,12 @@ Two options:
   **seed partial content**. Largest change; defer until Phase 1 proves value.
 
 ### 6. Proxy + build-index — distribute & discover the index (small)
+
+> Design only, except one as-built fix: the build-index tag client `Get` send
+> timeout was raised **10s → 30s** (`build-index/tagclient/client.go`) because a
+> large image's pre-push manifest HEAD triggers a tag lookup that, under
+> devcluster push load, transiently exceeded 10s and surfaced as a proxy 500.
+> Production must revisit this tag-lookup latency under real load (see Next).
 
 - Proxy push path is unchanged: the index blob rides the existing `Upload`
   (`rw_transferer.go:193`) and the derived tag rides `PutTag`/`PutAndReplicate`
@@ -269,13 +373,42 @@ to retrofit.
 
 ## Phasing
 
-1. **P1 — agent-side streaming (highest value/effort ratio):** §2 (reader +
-   per-piece signal + range priority), §3 (Range on agent), §6 (pluggable index
-   + resolver), integrate soci-snapshotter against the agent. Origin stays
-   whole-blob (§5 Phase 1). No tracker/backend change.
-2. **P2 — cold-origin streaming:** §4 (backend range) + §5 Phase 2 (partial
-   origin seed) + §7 (partial tracker discovery).
-3. **P3 — compression:** per-piece zstd, coordinated with the zstd workstream.
+1. **P1 — agent-side streaming — DONE.** §2 (streaming reader), §3 (Range via
+   the registry read path). soci-snapshotter integrated against the agent in the
+   devcluster. Origin stays whole-blob (§5 Phase 1). No tracker/backend change.
+2. **P3 — demand-driven fetch — DONE.** §2c lazy mode + demand set: the lazy
+   torrent requests only touched pieces (+readahead). This is what produced the
+   ~21× byte reduction; folded into P1 for the PoC.
+3. **P2 — cold-origin streaming — REMAINING.** §4 (backend range) + §5 Phase 2
+   (partial origin seed) + §7 (partial tracker discovery). Plus the `lib/streaming`
+   format seam (§ format abstraction) and the build-index dependency resolver
+   (§6) for cross-cluster index/data-blob replication.
+4. **P4 — compression — REMAINING.** Per-piece zstd, coordinated with the zstd
+   workstream.
+
+---
+
+## Next: production-like distributed-cluster PoC
+
+The devcluster PoC ran single-cluster, single-origin, with the index pushed as
+an ordinary blob (`soci push --existing-index allow`) discovered via the
+`sha256-<digest>` fallback tag. The production-like PoC must exercise what the
+devcluster could not:
+
+- **Multi-origin cold streaming.** Validate §4 backend range + §5 Phase 2
+  partial origin seed so a cold origin streams ranges from the backend instead of
+  materializing the whole blob on first range request.
+- **Cross-cluster index/ztoc replication.** Build the §6 build-index dependency
+  resolver so the index tag and its referenced data blobs replicate together;
+  today only the tag would replicate.
+- **Partial-peer discovery on the tracker.** §7 V3 announce carrying progress, so
+  cold agents can fetch already-streamed pieces from partial peers, not only
+  complete seeders.
+- **Tag-lookup latency under real load.** Re-evaluate the 10s→30s tag client
+  timeout (§6) against production build-index latencies and large-image pushes.
+- **estargz alongside soci.** Push estargz-converted images (client/CI
+  conversion) and confirm the format-agnostic range path serves them with no
+  Kraken core change (see Format support).
 
 ---
 
