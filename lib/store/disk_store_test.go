@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -594,8 +595,17 @@ func TestList(t *testing.T) {
 	defer func() { require.NoError(f.Close()) }()
 	require.NoError(store.MarkComplete(unevictableCompleteBlobKey))
 
-	require.Equal([]string{completeBlobKey, unevictableCompleteBlobKey}, store.List(true))
-	require.Equal([]string{completeBlobKey, unevictableCompleteBlobKey, incompleteBlobKey, unevictableIncompleteBlobKey}, store.List(false))
+	wantRes := []string{completeBlobKey, unevictableCompleteBlobKey}
+	res := store.List(true)
+	slices.Sort(res)
+	slices.Sort(wantRes)
+	require.Equal(wantRes, res)
+
+	wantRes = []string{incompleteBlobKey, completeBlobKey, unevictableCompleteBlobKey, unevictableIncompleteBlobKey}
+	res = store.List(false)
+	slices.Sort(res)
+	slices.Sort(wantRes)
+	require.Equal(wantRes, res)
 }
 
 func TestMetadata(t *testing.T) {

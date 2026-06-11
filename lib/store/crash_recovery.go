@@ -36,7 +36,7 @@ func rebootPersistedStateAfterCrash(capacityBytes uint64, rootDir string, log *z
 	}
 	pather := newPather(rootDir)
 
-	completeEntries := make([]*blobState, 0)
+	evictableEntries := make([]*blobState, 0)
 	unevictableEntries := make([]*blobState, 0)
 	for _, key := range keys {
 		bState, ok, err := rebootBlobState(key, pather)
@@ -47,40 +47,47 @@ func rebootPersistedStateAfterCrash(capacityBytes uint64, rootDir string, log *z
 			continue
 		}
 		if bState.evictable {
-			completeEntries = append(completeEntries, bState)
+			evictableEntries = append(evictableEntries, bState)
 		} else {
 			unevictableEntries = append(unevictableEntries, bState)
 		}
 	}
 
 	storeSize := uint64(0)
-	unevictableBlobs := make(map[string]uint64, len(unevictableEntries))
-	for _, e := range unevictableEntries {
-		unevictableBlobs[e.key] = e.size
-		storeSize += e.size
+	blobs := make(map[string]*blob, 0)
+	for _, bState := range unevictableEntries {
+		blobs[bState.key] = &blob{
+			size:           bState.size,
+			complete:       true,
+			node:           nil,
+			evictionBanned: true,
+		}
+		storeSize += bState.size
 	}
 
-	slices.SortFunc(completeEntries, func(left, right *blobState) int {
+	slices.SortFunc(evictableEntries, func(left, right *blobState) int {
 		// left-most is oldest, i.e. next-to-evict.
 		return left.mTime.Compare(right.mTime)
 	})
-	blobs := make(map[string]*list.Element, len(completeEntries))
 	evictQueue := list.New()
-	for _, e := range completeEntries {
-		node := evictQueue.PushBack(el{key: e.key, size: e.size})
-		blobs[e.key] = node
-		storeSize += e.size
+	for _, bState := range evictableEntries {
+		node := evictQueue.PushBack(bState.key)
+		blobs[bState.key] = &blob{
+			size:           bState.size,
+			complete:       true,
+			node:           node,
+			evictionBanned: false,
+		}
+		storeSize += bState.size
 	}
 
 	store := &DiskStore{
-		blobs:            blobs,
-		evictQueue:       evictQueue,
-		incompleteBlobs:  make(map[string]uint64),
-		unevictableBlobs: unevictableBlobs,
-		capacity:         capacityBytes,
-		pather:           pather,
-		size:             storeSize,
-		log:              log,
+		blobs:      blobs,
+		evictQueue: evictQueue,
+		capacity:   capacityBytes,
+		pather:     pather,
+		size:       storeSize,
+		log:        log,
 	}
 
 	if store.size > store.capacity {
