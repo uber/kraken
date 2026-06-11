@@ -1,0 +1,25 @@
+# containerd-nydus-grpc (nydus-snapshotter) configuration for the e2e harness.
+#
+# daemon_mode is TOP-LEVEL (not under [daemon]); fs_driver and the nydusd paths
+# live under [daemon]. "dedicated" mode launches one nydusd per image mount, so
+# this harness never starts nydusd itself -- the snapshotter spawns it using
+# nydusd_path + nydusd_config below.
+#
+# [experimental] enable_stargz = true is the knob that lets nydus lazily mount
+# eStargz images directly (download each layer TOC, build a bootstrap with
+# nydusimage_path, serve reads on demand) instead of requiring nydus-native RAFS
+# conversion. The actual backend/cache/prefetch behavior is in the referenced
+# nydusd JSON.
+version = 1
+root = "/var/lib/containerd/io.containerd.snapshotter.v1.nydus"
+address = "/run/containerd-nydus/containerd-nydus-grpc.sock"
+daemon_mode = "dedicated"
+
+[daemon]
+fs_driver = "fusedev"
+nydusd_path = "/usr/local/bin/nydusd"
+nydusimage_path = "/usr/local/bin/nydus-image"
+nydusd_config = "/etc/nydus/nydusd-config.fusedev.json"
+
+[experimental]
+enable_stargz = true

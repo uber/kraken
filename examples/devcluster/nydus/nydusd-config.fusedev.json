@@ -1,0 +1,23 @@
+{
+  "device": {
+    "backend": {
+      "type": "registry",
+      "config": {
+        "scheme": "http",
+        "skip_verify": true,
+        "timeout": 5,
+        "connect_timeout": 5,
+        "retry_limit": 2
+      }
+    },
+    "cache": {
+      "type": "blobcache",
+      "config": { "work_dir": "/var/lib/nydus/cache" }
+    }
+  },
+  "mode": "direct",
+  "digest_validate": false,
+  "enable_xattr": true,
+  "iostats_files": true,
+  "fs_prefetch": { "enable": false }
+}

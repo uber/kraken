@@ -1,0 +1,39 @@
+# containerd configuration for the nydus e2e harness.
+#
+# Registers containerd-nydus-grpc as a proxy plugin so `nerdctl --snapshotter
+# nydus` fetches eStargz layers lazily through nydusd. The default overlayfs
+# snapshotter remains available for the baseline (full-pull) A/B leg.
+#
+# Note: containerd v2 accepts "snapshot" (or the full io.containerd.snapshotter.v1)
+# as the proxy plugin type; the older "snapshotter" value is containerd v1 only
+# and panics on v2. The proxy-plugin name ("nydus") is the snapshotter name
+# nerdctl selects with --snapshotter nydus.
+#
+# LAZY-PULL GATE (the load-bearing part): nerdctl v2 pulls through containerd's
+# transfer service, which only attaches the remote-snapshot annotation labels
+# (containerd.io/snapshot.ref + containerd.io/snapshot/*) when BOTH of these are
+# present: (a) an unpack_config entry selecting the snapshotter, and (b)
+# enable_remote_snapshot_annotations="true" exported by the proxy plugin. nydus's
+# Prepare only enters its lazy (skip-download) path when those labels are set --
+# its registry backend learns the repo/host from them. Without this block,
+# containerd downloads every layer in full (200 GETs) and nydus mounts on top, so
+# there is no lazy win. stargz needs no exports because it carries its own
+# [[resolver.host...]] config and fetches by digest; nydus does not.
+# Sources: nydus-snapshotter v0.15.15 snapshot/process.go (isRoLayer ->
+# skipHandler), containerd core/transfer/local/pull.go (SnapshotterExports gate),
+# stargz-snapshotter script/cri-containerd/config.containerd.transfer.toml.
+version = 2
+
+[[plugins."io.containerd.transfer.v1.local".unpack_config]]
+  platform = "linux"
+  snapshotter = "nydus"
+
+[[plugins."io.containerd.transfer.v1.local".unpack_config]]
+  platform = "linux"
+  snapshotter = "overlayfs"
+
+[proxy_plugins.nydus]
+  type = "snapshot"
+  address = "/run/containerd-nydus/containerd-nydus-grpc.sock"
+  [proxy_plugins.nydus.exports]
+    enable_remote_snapshot_annotations = "true"
