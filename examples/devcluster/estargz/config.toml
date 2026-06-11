@@ -1,0 +1,14 @@
+# containerd configuration for the estargz e2e harness.
+#
+# Registers containerd-stargz-grpc as a proxy plugin so `nerdctl --snapshotter
+# stargz` (and `ctr --snapshotter stargz`) fetch layers lazily. The default
+# overlayfs snapshotter remains available for the baseline (full-pull) A/B leg.
+#
+# Note: containerd v2 accepts "snapshot" (or the full io.containerd.snapshotter.v1)
+# as the proxy plugin type; the older "snapshotter" value is containerd v1 only
+# and panics on v2.
+version = 2
+
+[proxy_plugins.stargz]
+  type = "snapshot"
+  address = "/run/containerd-stargz-grpc/containerd-stargz-grpc.sock"

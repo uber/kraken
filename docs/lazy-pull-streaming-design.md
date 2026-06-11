@@ -77,6 +77,28 @@ not the whole blob. Lazy-ness was verified per run — 5 layers logged
 `remote-snapshot-prepared:true` and there were **0** HTTPS-fallback errors (a
 non-zero count would mean the artifact fetch silently fell back to a full pull).
 
+### eStargz: same win, no Kraken change (2026-06-11)
+
+To confirm the read path is **format-agnostic**, the identical harness was re-run
+with **stargz-snapshotter** on eStargz-converted images
+(`examples/devcluster/estargz/`), same cold-agent A/B. No Kraken core change —
+only the snapshotter and a push-time `nerdctl image convert --estargz`.
+
+| image | snapshotter | overlayfs | lazy | speedup | bytes full | bytes lazy | % fetched | ranged GETs | lazy layers |
+|-------|-------------|-----------|------|---------|------------|------------|-----------|-------------|-------------|
+| pytorch 2.5.1-cuda12.4-cudnn9-devel | soci | 144.75 s | **13.48 s** | 10.7× | 7071.6 MiB | 325.1 MiB | 4.6% | 239 | 5 |
+| pytorch 2.5.1-cuda12.4-cudnn9-devel | estargz | 146.47 s | **16.64 s** | 8.8× | 7096.6 MiB | 295.6 MiB | 4.2% | 553 | 15 |
+| python:3.12 (converted) | estargz | 14.86 s | **1.22 s** | 12.2× | 404.6 MiB | 7.4 MiB | 1.8% | 32 | 7 |
+
+estargz matches soci within noise (~9–11× faster, ~4% of bytes, 0 failed
+prepares). It fetched slightly fewer bytes (295.6 vs 325.1 MiB) but was slightly
+slower (16.64 vs 13.48 s): the finer chunking from `--estargz-min-chunk-size=0`
+issues more, smaller ranged GETs (553 vs 239), trading round-trips for
+granularity. The 15-vs-5 lazy-layer count is conversion re-layering, not a Kraken
+difference. The **only** real asymmetry is push-side: estargz front-loads a heavy
+one-time layer recompress (the ~6.9 GiB convert pegged 4+ cores for minutes),
+which soci never pays — see "Per-format Kraken changes".
+
 **Harness:** `examples/devcluster/soci/` over a running `make devcluster`. The
 host driver `soci_benchmark.sh` builds + starts a privileged DinD container
 (containerd + soci-snapshotter + `nerdctl`/`soci`/`ctr`) that runs `run_e2e.sh`
@@ -338,6 +360,135 @@ exchange bitfields directly in the dispatch handshake,
 carrying progress/bitfield (extend `PeerInfo` + `announceclient.Request`,
 `announceclient/client.go:36`), store it in the peerstore, and add a handout
 policy that prefers peers covering the requested pieces. Defer.
+
+---
+
+## Per-format Kraken changes: soci vs estargz (exact)
+
+The streaming read path is format-agnostic, so the **shared core is the same for
+both** and is already built (§2 streaming reader, §2c demand-driven fetch, §2d
+in-order policy, §3 Range via the registry read path). What differs is only the
+edge work each format needs **on top of** that core.
+
+### estargz — Kraken core changes: none
+
+estargz embeds its TOC inside each layer blob, so there is nothing extra for
+Kraken to store, discover, or replicate:
+
+- **Storage / serve:** unchanged. `rw_transferer.Upload` (`rw_transferer.go:193`)
+  is media-type-agnostic — a converted layer is an opaque blob keyed by digest,
+  served by the same Range path.
+- **Discovery:** none. The snapshotter reads the TOC from the layer itself; no
+  derived tag, no resolver, no Referrers.
+- **Cross-cluster:** none. The TOC rides inside the layer blob, which already
+  replicates as part of the image.
+- **Push-time conversion** (`nerdctl image convert --estargz`) is a client/CI
+  step, not a Kraken change.
+- **Optional only:** an `estargz` `IndexFormat` in `lib/streaming` (§ format
+  abstraction) if build-index should *understand* the format — but estargz has no
+  separate artifact to resolve, so this is unnecessary for correctness.
+
+Net: estargz already works on the as-built PoC, verified end-to-end by
+`examples/devcluster/estargz/` (7 lazy layers, 7.4 MiB vs 404.6 MiB, 0 failures).
+
+### soci — Kraken changes
+
+- **Single-cluster:** none. The PoC ran on opaque blob storage + the existing
+  `sha256-<manifest>.soci` fallback tag.
+- **Cross-cluster:** exactly **one** real change — a dependency resolver so the
+  soci index tag replicates together with its ztoc/data blobs. Everything that
+  wires it already exists.
+
+**1.** New `build-index/tagtype/soci_resolver.go` implementing the existing
+`DependencyResolver` interface (`tagtype/map.go:42`):
+
+```go
+package tagtype
+
+// sociResolver returns the blobs a soci index references (ztocs + config) so
+// build-index verifies and replicates them alongside the index tag.
+type sociResolver struct {
+    originClient  blobclient.ClusterClient
+    backoffConfig httputil.ExponentialBackOffConfig
+}
+
+func (r *sociResolver) Resolve(
+    tag string, d core.Digest) (core.DigestList, error) {
+
+    buf := &bytes.Buffer{}
+    if err := r.originClient.DownloadBlob(
+        context.Background(), tag, d, buf); err != nil {
+        return nil, fmt.Errorf("download soci index: %w", err)
+    }
+    m, _, err := dockerutil.ParseManifest(buf)
+    if err != nil {
+        return nil, fmt.Errorf("parse soci index: %w", err)
+    }
+    refs, err := dockerutil.GetManifestReferences(m)
+    if err != nil {
+        return nil, fmt.Errorf("soci index references: %w", err)
+    }
+    return append(refs, d), nil
+}
+```
+
+A soci index is an OCI manifest whose layers are the ztoc blobs, so this reuses
+`dockerutil.ParseManifest` / `GetManifestReferences` and is nearly identical to
+`dockerResolver` — you could even register `dockerResolver` for the soci
+namespace; a dedicated type is clearer and leaves room for ztoc-specific checks.
+
+**2.** Register it in `build-index/tagtype/map.go` `NewMap`'s switch, next to
+`"docker"`/`"default"` (`map.go:70`):
+
+```go
+case "soci":
+    sr = &subResolver{re, &sociResolver{originClient, backoffConfig}}
+```
+
+**3.** Configure the namespace in the build-index `tag_types` config **before**
+the `.*` docker catch-all — `Map.Resolve` returns the first regex match
+(`map.go:92`):
+
+```yaml
+tag_types:
+  - namespace: .*\.soci$
+    type: soci
+    root: tags
+  - namespace: .*
+    type: docker
+    root: tags
+```
+
+That is the whole change — no new endpoints, no server edits. `putTagHandler`
+(`tagserver/server.go:223`) and `replicateTagHandler` (`:450`) already call
+`s.depResolver.Resolve(tag, d)` and pass the result into `replicateTag(...)`, so
+the ztoc blobs are verified on PutTag and shipped on replication automatically.
+`TagTypes` is already plumbed end to end (`cmd/config.go:43` →
+`cmd/cmd.go:222` `tagtype.NewMap`).
+
+**Not required for soci:**
+- *Discovery:* the snapshotter computes the `sha256-<manifest>.soci` fallback tag
+  itself; the agent resolves it through the existing `GetTag`
+  (`ro_transferer.go:99`). No agent change.
+- *Referrers API:* optional future enhancement (see Index discovery), not a
+  blocker.
+- *GC:* ensure the index blob + ztocs stay pinned while the image is referenced
+  (open question #2) — config/policy, not new code.
+
+### Side-by-side
+
+| concern | soci | estargz |
+|---|---|---|
+| store / serve blobs | none (opaque by digest) | none (opaque by digest) |
+| streaming read path | shared core (built) | shared core (built) |
+| discovery | none (existing fallback tag) | none (TOC in-layer) |
+| cross-cluster replication | `soci_resolver.go` (new) + `map.go` case + `tag_types` yaml | none |
+| push-time | none | client-side `image convert` (not Kraken) |
+| optional `lib/streaming` seam | `soci` `IndexFormat` (for §6 verify/replicate) | `estargz` `IndexFormat` (not needed for correctness) |
+
+The asymmetry: estargz trades **zero Kraken work** for a mandatory client-side
+conversion (and a distinct digest set); soci needs **no conversion** but costs
+the one resolver above to replicate cross-cluster.
 
 ---
 

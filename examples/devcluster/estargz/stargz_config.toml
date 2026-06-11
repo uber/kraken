@@ -1,0 +1,34 @@
+# containerd-stargz-grpc configuration for the e2e harness.
+#
+# NOTE: debug logging is REQUIRED -- the snapshotter logs a successful lazy
+# remote-mount as "remote-snapshot-prepared":"true" at DEBUG level
+# (snapshot/snapshot.go). This is enabled via the daemon's -log-level=debug flag
+# (see entrypoint.sh and reset_cold in run_e2e.sh), NOT a config key: the config
+# has no log-level setting. Without it the verification grep sees zero lazy layers
+# even on a correct lazy run. The failure line ("...":"false") is Warn-level.
+
+# noprefetch + no_background_fetch are load-bearing for the "bytes fetched" lazy
+# proof. By default stargz aggressively downloads the rest of each layer in the
+# background after mounting it; that would inflate the agent byte count to ~the
+# full image and defeat the comparison. Both must be off so only the pieces the
+# container actually reads are fetched.
+noprefetch = true
+no_background_fetch = true
+
+# Plain-HTTP access to the cold Kraken agents (and the proxy). In stargz,
+# insecure = true forces the http scheme (resolver sets Scheme = "http"), not
+# merely skip-TLS-verify. The agents are addressed as 127.0.0.1 because the
+# container shares the host network, so containerd's own manifest/config resolver
+# also resolves them as localhost (plain HTTP) -- same reasoning as the soci
+# harness, which uses 127.0.0.1 + --network host.
+[[resolver.host."127.0.0.1:15000".mirrors]]
+  host = "127.0.0.1:15000"
+  insecure = true
+
+[[resolver.host."127.0.0.1:16000".mirrors]]
+  host = "127.0.0.1:16000"
+  insecure = true
+
+[[resolver.host."127.0.0.1:17000".mirrors]]
+  host = "127.0.0.1:17000"
+  insecure = true
