@@ -14,6 +14,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const _numShards = 2 // TODO - change this not to be hardcoded when configurable sharding is implemented
+
 type blobState struct {
 	key       string
 	size      uint64

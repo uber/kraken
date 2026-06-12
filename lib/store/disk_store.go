@@ -15,13 +15,17 @@ import (
 	"go.uber.org/zap"
 )
 
+// Whether the store's read APIs ignore incomplete blobs.
 const (
-	// _defaultShardIDLength is the number of bytes of file digest to be used for shard ID.
-	// For every byte (2 HEX char), one more level of directories will be created.
+	IgnoreIncompleteBlobs = true
+	CheckIncompleteBlobs  = false
+)
+
+const (
+	_completeBlob           = true
+	_incompleteBlob         = false
 	_defaultFilePerm        = 0775
 	_evictionBannedFileName = "_eviction_banned"
-	// TODO - change this not to be hardcoded when configurable sharding is implemented
-	_numShards = 2
 )
 
 // DiskStore is a key-value, persistent, thread-safe, LRU store for blobs and their [metadata.Metadata].
@@ -68,6 +72,7 @@ func NewDiskStore(capacityBytes uint64, rootDir string) (*DiskStore, error) {
 	// TODO - create a Config struct.
 	// TODO - consider how to support blob mutation, which might be needed by build-index for tag mutation.
 	// TODO - move disk store files into their own directory and package.
+
 	log := log.Default().With("module", "disk_store")
 	ok, err := existsPersistedState(rootDir)
 	if err != nil {
@@ -154,14 +159,13 @@ func (s *DiskStore) Create(key string, sizeBytes uint64) (FileReadWriter, error)
 		return nil, fmt.Errorf("reserve space: %w", err)
 	}
 
-	complete := false
-	dirName := s.dirPath(key, complete)
+	dirName := s.dirPath(key, _incompleteBlob)
 	err := os.MkdirAll(dirName, _defaultFilePerm)
 	if err != nil {
 		s.releaseSpace(sizeBytes)
 		return nil, fmt.Errorf("ensure dir: %w", err)
 	}
-	blobPath := s.blobPath(key, complete)
+	blobPath := s.blobPath(key, _incompleteBlob)
 	flag := os.O_RDWR | os.O_CREATE | os.O_EXCL
 	f, err := os.OpenFile(blobPath, flag, _defaultFilePerm)
 	if err != nil {
@@ -189,8 +193,7 @@ func (s *DiskStore) reserveSpace(space uint64) error {
 		toEvictNode := s.evictQueue.Front()
 		toEvictKey := toEvictNode.Value.(string)
 
-		complete := true // TODO - use internal constants here, e.g. _completeBlob and _incompleteBlob
-		err := s.deleteFromDisk(toEvictKey, complete)
+		err := s.deleteFromDisk(toEvictKey, _completeBlob)
 		if err != nil {
 			// TODO - consider whether we want to fail-open by doing `continue` here.
 			return fmt.Errorf("delete from disk: %w", err)
@@ -233,14 +236,14 @@ func (s *DiskStore) MarkComplete(key string) error {
 		return nil
 	}
 
-	oldPathDir := s.dirPath(key, false)
-	newPathDir := s.dirPath(key, true)
+	oldPathDir := s.dirPath(key, _incompleteBlob)
+	newPathDir := s.dirPath(key, _completeBlob)
 	err := os.MkdirAll(filepath.Dir(newPathDir), _defaultFilePerm)
 	if err != nil {
 		return fmt.Errorf("mkdirall: %w", err)
 	}
 	// TODO - make sure that un-movable metadata is deleted after move
-	err = os.Rename(oldPathDir, newPathDir) // atomic
+	err = os.Rename(oldPathDir, newPathDir)
 	if err != nil {
 		return fmt.Errorf("move dir: %w", err)
 	}

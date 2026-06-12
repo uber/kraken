@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -18,12 +17,6 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/memsize"
-)
-
-const (
-	// TODO - consider exporting these constants for clients to consume to avoid naked params
-	_dontIgnoreIncompleteFiles = false
-	_ignoreIncompleteFiles     = true
 )
 
 func newTestStore(t *testing.T, capacity uint64) (res *DiskStore, rootDir string) {
@@ -39,8 +32,7 @@ func newTestStore(t *testing.T, capacity uint64) (res *DiskStore, rootDir string
 func newTestFile(t *testing.T, store *DiskStore, size uint64) (f FileReadWriter, key string) {
 	require := require.New(t)
 	key = core.DigestFixture().Hex()
-	var err error
-	f, err = store.Create(key, size)
+	f, err := store.Create(key, size)
 	require.NoError(err)
 	return f, key
 }
@@ -68,48 +60,49 @@ func TestDiskStore(t *testing.T) {
 	require := require.New(t)
 	store, _ := newTestStore(t, 10*memsize.KB)
 
-	digests := []core.Digest{}
+	keys := []string{}
 	for i := range 10 {
-		digest := core.DigestFixture()
-		digests = append(digests, digest)
-		f, err := store.Create(digest.Hex(), memsize.KB)
+		key := core.DigestFixture().Hex()
+		keys = append(keys, key)
+		f, err := store.Create(key, memsize.KB)
+		defer func(f io.Closer) { require.NoError(f.Close()) }(f)
 		require.NoError(err)
 
 		data := make([]byte, memsize.KB)
 		for k := range data {
 			data[k] = byte(i + 1)
 		}
-		n, err := io.Copy(f, bytes.NewReader(make([]byte, memsize.KB)))
-		require.Equal(n, int64(memsize.KB))
+		n, err := io.Copy(f, bytes.NewReader(data))
+		require.Equal(int64(memsize.KB), n)
 		require.NoError(err)
 	}
-	require.Equal(store.size, 10*memsize.KB)
+	require.Equal(10*memsize.KB, store.size)
 
-	digest := core.DigestFixture()
-	writer, err := store.Create(digest.Hex(), memsize.B)
+	f, err := store.Create(core.DigestFixture().Hex(), memsize.B)
 	require.EqualError(err, "reserve space: cannot evict enough, the unevictable/incomplete blobs are using up all the space")
-	require.Nil(writer)
+	require.Nil(f)
 
-	reader, err := store.Open(digests[0].Hex(), true)
-	require.Equal(err, os.ErrNotExist)
-	require.Nil(reader)
+	f, err = store.Open(keys[0], IgnoreIncompleteBlobs)
+	require.ErrorIs(err, os.ErrNotExist)
+	require.Nil(f)
 
-	require.NoError(store.MarkComplete(digests[0].Hex()))
-	reader, err = store.Open(digests[0].Hex(), true)
+	require.NoError(store.MarkComplete(keys[0]))
+	f, err = store.Open(keys[0], IgnoreIncompleteBlobs)
+	defer func(f io.Closer) { require.NoError(f.Close()) }(f)
 	require.NoError(err)
 	wantData := make([]byte, memsize.KB)
 	for k := range wantData {
 		wantData[k] = byte(1)
 	}
-	require.NoError(iotest.TestReader(reader, make([]byte, memsize.KB)))
+	require.NoError(iotest.TestReader(f, wantData))
 
 	// now test that LRU logic works - make sure that the 1 that is complete gets evicted.
-	digest = core.DigestFixture()
-	writer, err = store.Create(digest.Hex(), memsize.KB)
+	f, err = store.Create(core.DigestFixture().Hex(), memsize.KB)
 	require.NoError(err)
-	reader, err = store.Open(digests[0].Hex(), true)
-	require.Equal(err, os.ErrNotExist)
-	require.Nil(reader)
+	defer func(f io.Closer) { require.NoError(f.Close()) }(f)
+	f, err = store.Open(keys[0], IgnoreIncompleteBlobs)
+	require.ErrorIs(err, os.ErrNotExist)
+	require.Nil(f)
 }
 
 func TestEviction(t *testing.T) {
@@ -146,7 +139,7 @@ func TestEviction(t *testing.T) {
 	f, fKey := newTestFile(t, store, 4*memsize.KB)
 	require.NoError(f.Close())
 	require.NoError(store.MarkComplete(fKey))
-	keys := store.List(_dontIgnoreIncompleteFiles)
+	keys := store.List(CheckIncompleteBlobs)
 	require.NotContains(keys, cKey)
 	// new size == 23KB == 24KB - 5KB (c) + 4KB (f)
 	require.Equal(23*memsize.KB, store.size)
@@ -166,7 +159,7 @@ func TestEviction(t *testing.T) {
 	// size == 24KB == 24KB + 15KB (h) - 5KB (b) - 10KB (a)
 	require.Equal(24*memsize.KB, store.size)
 	require.Equal(5, numBlobsOnDisk(t, store))
-	keys = store.List(_dontIgnoreIncompleteFiles)
+	keys = store.List(CheckIncompleteBlobs)
 	require.NotContains(keys, bKey)
 	require.NotContains(keys, aKey)
 
@@ -175,14 +168,14 @@ func TestEviction(t *testing.T) {
 	require.NoError(store.UnbanEviction(eKey))
 	// eviction order (left-most is next to evict): f(4KB), g(1KB), h(15KB), e(1KB); d(3KB) is unevictable
 	// we open g to change the order to f, h, e, g
-	g, err = store.Open(gKey, _dontIgnoreIncompleteFiles)
+	g, err = store.Open(gKey, CheckIncompleteBlobs)
 	require.NoError(err)
 	require.NoError(g.Close())
 
 	i, iKey := newTestFile(t, store, 5*memsize.KB)
 	require.NoError(store.MarkComplete(iKey))
 	require.NoError(i.Close())
-	keys = store.List(_dontIgnoreIncompleteFiles)
+	keys = store.List(CheckIncompleteBlobs)
 	require.NotContains(keys, fKey)
 	require.Equal(25*memsize.KB, store.size)
 	require.Equal(5, numBlobsOnDisk(t, store))
@@ -191,7 +184,7 @@ func TestEviction(t *testing.T) {
 	j, jKey := newTestFile(t, store, 14*memsize.KB)
 	require.NoError(j.Close())
 	require.NoError(store.MarkComplete(jKey))
-	keys = store.List(_dontIgnoreIncompleteFiles)
+	keys = store.List(CheckIncompleteBlobs)
 	require.NotContains(keys, hKey)
 	require.Equal(24*memsize.KB, store.size)
 	require.Equal(5, numBlobsOnDisk(t, store))
@@ -200,7 +193,7 @@ func TestEviction(t *testing.T) {
 	k, kKey := newTestFile(t, store, 2*memsize.KB)
 	require.NoError(k.Close())
 	require.NoError(store.MarkComplete(kKey))
-	keys = store.List(_dontIgnoreIncompleteFiles)
+	keys = store.List(CheckIncompleteBlobs)
 	require.NotContains(keys, eKey)
 	require.Equal(25*memsize.KB, store.size)
 	require.Equal(5, numBlobsOnDisk(t, store))
@@ -209,7 +202,7 @@ func TestEviction(t *testing.T) {
 	l, lKey := newTestFile(t, store, 1*memsize.KB)
 	require.NoError(store.MarkComplete(lKey))
 	require.NoError(l.Close())
-	keys = store.List(_dontIgnoreIncompleteFiles)
+	keys = store.List(CheckIncompleteBlobs)
 	require.NotContains(keys, gKey)
 	require.Equal(25*memsize.KB, store.size)
 	require.Equal(5, numBlobsOnDisk(t, store))
@@ -235,36 +228,59 @@ func TestParallelAccessToSingleFile(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(5)
 
+	type res struct {
+		written, read []byte
+		err           error
+	}
+
+	results := make([]res, 5)
+
 	for idx := range 5 {
 		go func(idx int64) {
 			defer wg.Done()
 
-			ignoreIncomplete := false
-			f, err := store.Open(key, ignoreIncomplete)
-			require.NoError(err)
+			f, err := store.Open(key, CheckIncompleteBlobs)
+			if err != nil {
+				results[idx].err = err
+				return
+			}
 			pos := idx * 10
 			writtenData := make([]byte, 10)
 			for k := range writtenData {
 				writtenData[k] = byte(idx)
 			}
-			n, err := f.WriteAt(writtenData, pos)
-			require.NoError(err)
-			require.Equal(10, n)
+			_, err = f.WriteAt(writtenData, pos)
+			if err != nil {
+				results[idx].err = err
+				return
+			}
 
-			defer func() { require.NoError(f.Close()) }()
 			readData := make([]byte, 10)
-			n, err = f.ReadAt(readData, pos)
-			require.NoError(err)
-			require.Equal(10, n)
-			require.Equal(writtenData, readData)
+			_, err = f.ReadAt(readData, pos)
+			if err != nil {
+				results[idx].err = err
+				return
+			}
+			err = f.Close()
+			if err != nil {
+				results[idx].err = err
+				return
+			}
+
+			results[idx].read = readData
+			results[idx].written = writtenData
 		}(int64(idx))
 	}
 
 	wg.Wait()
+	for idx := range 5 {
+		require.NoError(results[idx].err)
+		require.Equal(results[idx].written, results[idx].written)
+	}
+
 	require.NoError(store.MarkComplete(key))
 
-	ignoreIncomplete := true
-	f, err = store.Open(key, ignoreIncomplete)
+	f, err = store.Open(key, IgnoreIncompleteBlobs)
 	require.NoError(err)
 	defer func() { require.NoError(f.Close()) }()
 
@@ -288,15 +304,13 @@ func TestOpenedFileAccessibleAfterMarkedComplete(t *testing.T) {
 	require.NoError(err)
 	require.NoError(f.Close())
 
-	ignoreIncomplete := false
-	incompleteFile, err := store.Open(key, ignoreIncomplete)
+	incompleteFile, err := store.Open(key, CheckIncompleteBlobs)
 	require.NoError(err)
 	defer func() { require.NoError(incompleteFile.Close()) }()
 
 	require.NoError(store.MarkComplete(key))
 
-	ignoreIncomplete = true
-	completeFile, err := store.Open(key, ignoreIncomplete)
+	completeFile, err := store.Open(key, IgnoreIncompleteBlobs)
 	require.NoError(err)
 	defer func() { require.NoError(completeFile.Close()) }()
 
@@ -328,8 +342,9 @@ func TestDelete(t *testing.T) {
 		require.NoError(f.Close())
 		require.NoError(store.Delete(key))
 
-		require.Empty(store.List(false))
+		require.Empty(store.List(CheckIncompleteBlobs))
 		require.Equal(uint64(0), store.size)
+		require.Equal(0, numBlobsOnDisk(t, store))
 	})
 	t.Run("incomplete, unevictable blob", func(t *testing.T) {
 		require := require.New(t)
@@ -344,8 +359,9 @@ func TestDelete(t *testing.T) {
 
 		require.NoError(store.Delete(key))
 
-		require.Empty(store.List(false))
+		require.Empty(store.List(CheckIncompleteBlobs))
 		require.Equal(uint64(0), store.size)
+		require.Equal(0, numBlobsOnDisk(t, store))
 	})
 	t.Run("complete blob", func(t *testing.T) {
 		require := require.New(t)
@@ -360,8 +376,9 @@ func TestDelete(t *testing.T) {
 
 		require.NoError(store.Delete(key))
 
-		require.Empty(store.List(false))
+		require.Empty(store.List(CheckIncompleteBlobs))
 		require.Equal(uint64(0), store.size)
+		require.Equal(0, numBlobsOnDisk(t, store))
 	})
 	t.Run("complete, unevictable blob", func(t *testing.T) {
 		require := require.New(t)
@@ -377,8 +394,9 @@ func TestDelete(t *testing.T) {
 
 		require.NoError(store.Delete(key))
 
-		require.Empty(store.List(false))
+		require.Empty(store.List(CheckIncompleteBlobs))
 		require.Equal(uint64(0), store.size)
+		require.Equal(0, numBlobsOnDisk(t, store))
 	})
 	t.Run("not found", func(t *testing.T) {
 		require := require.New(t)
@@ -403,9 +421,9 @@ func TestMarkComplete(t *testing.T) {
 
 		require.NoError(store.MarkComplete(key))
 
-		require.Equal([]string{key}, store.List(true))
+		require.Equal([]string{key}, store.List(IgnoreIncompleteBlobs))
 		require.Equal(uint64(100), store.size)
-		_, err = store.Open(key, true)
+		_, err = store.Open(key, IgnoreIncompleteBlobs)
 		require.NoError(err)
 	})
 	t.Run("incomplete blob with forbidden eviction", func(t *testing.T) {
@@ -421,9 +439,9 @@ func TestMarkComplete(t *testing.T) {
 
 		require.NoError(store.MarkComplete(key))
 
-		require.Equal([]string{key}, store.List(true))
+		require.Equal([]string{key}, store.List(IgnoreIncompleteBlobs))
 		require.Equal(uint64(100), store.size)
-		_, err = store.Open(key, true)
+		_, err = store.Open(key, IgnoreIncompleteBlobs)
 		require.NoError(err)
 	})
 	t.Run("already complete blob", func(t *testing.T) {
@@ -475,15 +493,16 @@ func TestStat(t *testing.T) {
 		require.NoError(err)
 		require.NoError(store.MarkComplete(key))
 
-		fInfo, err := store.Stat(key, true)
+		fInfo, err := store.Stat(key, IgnoreIncompleteBlobs)
 		require.NoError(err)
-		_, err = store.Stat(key, false)
+		_, err = store.Stat(key, CheckIncompleteBlobs)
 		require.NoError(err)
 
 		require.False(fInfo.IsDir())
 		require.WithinDuration(time.Now(), fInfo.ModTime(), 500*time.Millisecond)
 		require.Equal(_blobFileName, fInfo.Name())
 		require.Equal(int64(10), fInfo.Size())
+		require.Equal(fs.FileMode(0755), fInfo.Mode())
 	})
 	t.Run("complete, unevictable blob", func(t *testing.T) {
 		require := require.New(t)
@@ -497,15 +516,16 @@ func TestStat(t *testing.T) {
 		require.NoError(store.MarkComplete(key))
 		require.NoError(store.BanEviction(key))
 
-		fInfo, err := store.Stat(key, true)
+		fInfo, err := store.Stat(key, IgnoreIncompleteBlobs)
 		require.NoError(err)
-		_, err = store.Stat(key, false)
+		_, err = store.Stat(key, CheckIncompleteBlobs)
 		require.NoError(err)
 
 		require.False(fInfo.IsDir())
 		require.WithinDuration(time.Now(), fInfo.ModTime(), 500*time.Millisecond)
 		require.Equal(_blobFileName, fInfo.Name())
 		require.Equal(int64(10), fInfo.Size())
+		require.Equal(fs.FileMode(0755), fInfo.Mode())
 	})
 	t.Run("incomplete blob", func(t *testing.T) {
 		require := require.New(t)
@@ -517,15 +537,16 @@ func TestStat(t *testing.T) {
 		_, err = io.Copy(f, bytes.NewReader(make([]byte, 10)))
 		require.NoError(err)
 
-		_, err = store.Stat(key, true)
+		_, err = store.Stat(key, IgnoreIncompleteBlobs)
 		require.Equal(os.ErrNotExist, err)
-		fInfo, err := store.Stat(key, false)
+		fInfo, err := store.Stat(key, CheckIncompleteBlobs)
 		require.NoError(err)
 
 		require.False(fInfo.IsDir())
 		require.WithinDuration(time.Now(), fInfo.ModTime(), 500*time.Millisecond)
 		require.Equal(_blobFileName, fInfo.Name())
 		require.Equal(int64(10), fInfo.Size())
+		require.Equal(fs.FileMode(0755), fInfo.Mode())
 	})
 
 	t.Run("incomplete, unevictable blob", func(t *testing.T) {
@@ -539,24 +560,25 @@ func TestStat(t *testing.T) {
 		require.NoError(err)
 		require.NoError(store.BanEviction(key))
 
-		_, err = store.Stat(key, true)
+		_, err = store.Stat(key, IgnoreIncompleteBlobs)
 		require.Equal(os.ErrNotExist, err)
-		fInfo, err := store.Stat(key, false)
+		fInfo, err := store.Stat(key, CheckIncompleteBlobs)
 		require.NoError(err)
 
 		require.False(fInfo.IsDir())
 		require.WithinDuration(time.Now(), fInfo.ModTime(), 500*time.Millisecond)
 		require.Equal(_blobFileName, fInfo.Name())
 		require.Equal(int64(10), fInfo.Size())
+		require.Equal(fs.FileMode(0755), fInfo.Mode())
 	})
 	t.Run("non-existent blob", func(t *testing.T) {
 		require := require.New(t)
 		store, _ := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 
-		_, err := store.Stat(key, true)
+		_, err := store.Stat(key, IgnoreIncompleteBlobs)
 		require.Equal(os.ErrNotExist, err)
-		_, err = store.Stat(key, false)
+		_, err = store.Stat(key, CheckIncompleteBlobs)
 		require.Equal(os.ErrNotExist, err)
 	})
 }
@@ -565,8 +587,8 @@ func TestList(t *testing.T) {
 	require := require.New(t)
 	store, _ := newTestStore(t, 10*memsize.KB)
 
-	require.Empty(store.List(false))
-	require.Empty(store.List(true))
+	require.Empty(store.List(CheckIncompleteBlobs))
+	require.Empty(store.List(IgnoreIncompleteBlobs))
 
 	incompleteBlobKey := core.DigestFixture().Hex()
 	f, err := store.Create(incompleteBlobKey, 10*memsize.B)
@@ -596,16 +618,12 @@ func TestList(t *testing.T) {
 	require.NoError(store.MarkComplete(unevictableCompleteBlobKey))
 
 	wantRes := []string{completeBlobKey, unevictableCompleteBlobKey}
-	res := store.List(true)
-	slices.Sort(res)
-	slices.Sort(wantRes)
-	require.Equal(wantRes, res)
+	res := store.List(IgnoreIncompleteBlobs)
+	require.ElementsMatch(wantRes, res)
 
 	wantRes = []string{incompleteBlobKey, completeBlobKey, unevictableCompleteBlobKey, unevictableIncompleteBlobKey}
-	res = store.List(false)
-	slices.Sort(res)
-	slices.Sort(wantRes)
-	require.Equal(wantRes, res)
+	res = store.List(CheckIncompleteBlobs)
+	require.ElementsMatch(wantRes, res)
 }
 
 func TestMetadata(t *testing.T) {
@@ -620,20 +638,20 @@ func TestMetadata(t *testing.T) {
 		mdStruct := core.MetaInfoFixture()
 		writtenMd := metadata.NewTorrentMeta(mdStruct)
 		err = store.SetMetadata(key, writtenMd)
-		// ensure metadata is not included in LRU eviction calculation.
+		// asserts metadata is not included in LRU eviction calculation.
 		require.NoError(err)
 
 		var readMd metadata.TorrentMeta
-		ok, err := store.GetMetadata(key, &readMd, _dontIgnoreIncompleteFiles)
+		ok, err := store.GetMetadata(key, &readMd, CheckIncompleteBlobs)
 		require.NoError(err)
 		require.True(ok)
-		require.Equal(readMd.MetaInfo, writtenMd.MetaInfo)
+		require.Equal(writtenMd.MetaInfo, readMd.MetaInfo)
 
 		require.NoError(store.DeleteMetadata(key, &readMd))
-		ok, err = store.GetMetadata(key, &readMd, _dontIgnoreIncompleteFiles)
+		ok, err = store.GetMetadata(key, &readMd, CheckIncompleteBlobs)
 		require.NoError(err)
 		require.False(ok)
-		mdFilePath := store.sidecarFilePath(key, false, readMd.GetSuffix())
+		mdFilePath := store.sidecarFilePath(key, _incompleteBlob, readMd.GetSuffix())
 		// ensure the metadata file is deleted from disk
 		_, err = os.Stat(mdFilePath)
 		require.True(errors.Is(err, os.ErrNotExist))
@@ -641,7 +659,7 @@ func TestMetadata(t *testing.T) {
 		require.NoError(store.DeleteMetadata(key, &readMd))
 	})
 
-	t.Run("non-existant blob", func(t *testing.T) {
+	t.Run("non-existent blob", func(t *testing.T) {
 		require := require.New(t)
 		store, _ := newTestStore(t, 10*memsize.KB)
 		nonExistentKey := core.DigestFixture().Hex()
@@ -651,7 +669,7 @@ func TestMetadata(t *testing.T) {
 		err := store.SetMetadata(nonExistentKey, md)
 		require.Equal(os.ErrNotExist, err)
 
-		ok, err := store.GetMetadata(nonExistentKey, md, _dontIgnoreIncompleteFiles)
+		ok, err := store.GetMetadata(nonExistentKey, md, CheckIncompleteBlobs)
 		require.Equal(os.ErrNotExist, err)
 		require.False(ok)
 
@@ -672,33 +690,33 @@ func TestMetadata(t *testing.T) {
 		require.NoError(store.SetMetadata(key, writtenMd))
 
 		var readMd metadata.TorrentMeta
-		ok, err := store.GetMetadata(key, &readMd, _ignoreIncompleteFiles)
+		ok, err := store.GetMetadata(key, &readMd, IgnoreIncompleteBlobs)
 		require.Equal(os.ErrNotExist, err)
 		// incomplete files are ignored
 		require.False(ok)
 
-		ok, err = store.GetMetadata(key, &readMd, _dontIgnoreIncompleteFiles)
+		ok, err = store.GetMetadata(key, &readMd, CheckIncompleteBlobs)
 		require.NoError(err)
 		require.True(ok)
-		require.Equal(readMd.MetaInfo, writtenMd.MetaInfo)
+		require.Equal(writtenMd.MetaInfo, readMd.MetaInfo)
 
-		// Repeat the tests above for an evictable file
+		// Repeat the tests above for an unevictable file
 		require.NoError(store.BanEviction(key))
-		ok, err = store.GetMetadata(key, &readMd, _ignoreIncompleteFiles)
+		ok, err = store.GetMetadata(key, &readMd, IgnoreIncompleteBlobs)
 		require.Equal(os.ErrNotExist, err)
 		// incomplete files are ignored
 		require.False(ok)
 
-		ok, err = store.GetMetadata(key, &readMd, _dontIgnoreIncompleteFiles)
+		ok, err = store.GetMetadata(key, &readMd, CheckIncompleteBlobs)
 		require.NoError(err)
 		require.True(ok)
-		require.Equal(readMd.MetaInfo, writtenMd.MetaInfo)
+		require.Equal(writtenMd.MetaInfo, readMd.MetaInfo)
 
 		require.NoError(store.MarkComplete(key))
-		ok, err = store.GetMetadata(key, &readMd, _ignoreIncompleteFiles)
+		ok, err = store.GetMetadata(key, &readMd, IgnoreIncompleteBlobs)
 		require.NoError(err)
 		require.True(ok)
-		require.Equal(readMd.MetaInfo, writtenMd.MetaInfo)
+		require.Equal(writtenMd.MetaInfo, readMd.MetaInfo)
 	})
 	t.Run("metadata fully gone after blob is evicted", func(t *testing.T) {
 		require := require.New(t)
@@ -711,9 +729,8 @@ func TestMetadata(t *testing.T) {
 
 		md := metadata.NewTorrentMeta(core.MetaInfoFixture())
 		err = store.SetMetadata(keyA, md)
-		store.SetMetadata(keyA, md)
-		complete := true
-		mdFilePath := store.sidecarFilePath(keyA, complete, md.GetSuffix())
+		require.NoError(err)
+		mdFilePath := store.sidecarFilePath(keyA, _completeBlob, md.GetSuffix())
 		_, err = os.Stat(mdFilePath)
 		require.NoError(err)
 
@@ -722,7 +739,7 @@ func TestMetadata(t *testing.T) {
 		require.NoError(err)
 		defer func() { require.NoError(fB.Close()) }()
 
-		ok, err := store.GetMetadata(keyA, md, _dontIgnoreIncompleteFiles)
+		ok, err := store.GetMetadata(keyA, md, CheckIncompleteBlobs)
 		require.Equal(os.ErrNotExist, err)
 		require.False(ok)
 		_, err = os.Stat(mdFilePath)

@@ -3,6 +3,8 @@ package store
 import "path/filepath"
 
 const (
+	// _defaultShardIDLength is the number of bytes of file digest to be used for shard ID.
+	// For every byte (2 HEX char), one more level of directories will be created.
 	_defaultShardIDLength = 2
 	_incompleteSubDir     = "incomplete"
 	_completeSubDir       = "complete"

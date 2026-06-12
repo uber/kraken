@@ -44,13 +44,14 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(err)
 
 		// Incomplete files get dropped.
-		_, err = rebootedStore.Stat(incompleteEvictableKey, _dontIgnoreIncompleteFiles)
+		_, err = rebootedStore.Stat(incompleteEvictableKey, CheckIncompleteBlobs)
 		require.ErrorIs(err, os.ErrNotExist)
-		_, err = rebootedStore.Stat(incompleteUnevictableKey, _dontIgnoreIncompleteFiles)
+		_, err = rebootedStore.Stat(incompleteUnevictableKey, CheckIncompleteBlobs)
 		require.ErrorIs(err, os.ErrNotExist)
 
 		// Complete files are recovered.
-		f, err := rebootedStore.Open(completeEvictableKey, _ignoreIncompleteFiles)
+		f, err := rebootedStore.Open(completeEvictableKey, IgnoreIncompleteBlobs)
+		require.NoError(err)
 		defer func(f io.Closer) { require.NoError(f.Close()) }(f)
 		data, err := io.ReadAll(f)
 		require.NoError(err)
@@ -60,7 +61,8 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(err)
 		require.False(unevictable)
 
-		f, err = rebootedStore.Open(completeUnevictableKey, _ignoreIncompleteFiles)
+		f, err = rebootedStore.Open(completeUnevictableKey, IgnoreIncompleteBlobs)
+		require.NoError(err)
 		defer func(f io.Closer) { require.NoError(f.Close()) }(f)
 		data, err = io.ReadAll(f)
 		require.NoError(err)
@@ -85,7 +87,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(err)
 
 		var readMd metadata.TorrentMeta
-		ok, err := rebootedStore.GetMetadata(key, &readMd, _ignoreIncompleteFiles)
+		ok, err := rebootedStore.GetMetadata(key, &readMd, IgnoreIncompleteBlobs)
 		require.NoError(err)
 		require.True(ok)
 		require.Equal(writtenMd.MetaInfo, readMd.MetaInfo)
@@ -122,7 +124,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.Equal([]string{cKey, dKey, eKey}, store.evictionOrder()) // a is unevictable and b is incomplete
 
 		// reset the access time for d
-		dF, err := store.Open(dKey, _ignoreIncompleteFiles)
+		dF, err := store.Open(dKey, IgnoreIncompleteBlobs)
 		require.NoError(err)
 		require.NoError(dF.Close())
 		evictionOrderBeforeCrash := store.evictionOrder()
@@ -143,11 +145,11 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(err)
 
 		// since 10KB of blobs are in store, `c` gets evicted to put the store back within its capacity.
-		_, err = rebootedSmallerStore.Stat(cKey, _dontIgnoreIncompleteFiles)
+		_, err = rebootedSmallerStore.Stat(cKey, CheckIncompleteBlobs)
 		require.ErrorIs(err, os.ErrNotExist)
 
 		require.Equal([]string{dKey, eKey}, rebootedSmallerStore.evictionOrder())
-		_, err = rebootedSmallerStore.Stat(aKey, _dontIgnoreIncompleteFiles)
+		_, err = rebootedSmallerStore.Stat(aKey, CheckIncompleteBlobs)
 		require.NoError(err)
 	})
 }
