@@ -122,6 +122,9 @@ func newTestServer(
 	cas, c := store.CAStoreFixture()
 	cleanup.Add(c)
 
+	cads, cadsCleanup := store.CADownloadStoreFixture()
+	cleanup.Add(cadsCleanup)
+
 	bm := backend.ManagerFixture()
 
 	writeBackManager := mockpersistedretry.NewMockManager(ctrl)
@@ -134,7 +137,7 @@ func newTestServer(
 	clk.Set(time.Now())
 
 	s, err := New(
-		Config{}, tally.NoopScope, clk, host, ring, cas, cp, clusterProvider, pctx,
+		Config{}, tally.NoopScope, clk, host, ring, cas, cads, cp, clusterProvider, pctx,
 		bm, br, mg, writeBackManager)
 	if err != nil {
 		panic(err)

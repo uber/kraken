@@ -14,6 +14,7 @@
 package writeback
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/metainfosidecar"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
@@ -36,6 +38,7 @@ var _writebackLatencyBuckets = tally.MustMakeExponentialDurationBuckets(1*time.S
 type FileStore interface {
 	DeleteCacheFileMetadata(name string, md metadata.Metadata) error
 	GetCacheFileReader(name string) (store.FileReader, error)
+	GetCacheFileMetadata(name string, md metadata.Metadata) error
 }
 
 // Executor executes write back tasks.
@@ -149,53 +152,64 @@ func (e *Executor) upload(ctx context.Context, t *Task) error {
 		return fmt.Errorf("get client: %s", err)
 	}
 
+	blobExists := false
 	if _, err := client.Stat(t.Namespace, t.Name); err == nil {
-		// File already uploaded, no-op.
+		blobExists = true
 		log.WithTraceContext(ctx).With(
 			"namespace", t.Namespace,
 			"name", t.Name,
-		).Debug("File already exists in backend, skipping upload")
-		return nil
+		).Debug("File already exists in backend, skipping blob upload")
 	}
 
-	f, err := e.fs.GetCacheFileReader(t.Name)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Nothing we can do about this but make noise and drop the task.
-			e.stats.Counter("missing_files").Inc(1)
+	if !blobExists {
+		f, err := e.fs.GetCacheFileReader(t.Name)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// Nothing we can do about this but make noise and drop the task.
+				e.stats.Counter("missing_files").Inc(1)
+				log.WithTraceContext(ctx).With(
+					"namespace", t.Namespace,
+					"name", t.Name,
+				).Error("Invariant violation: writeback cache file missing")
+				return nil
+			}
 			log.WithTraceContext(ctx).With(
 				"namespace", t.Namespace,
 				"name", t.Name,
-			).Error("Invariant violation: writeback cache file missing")
-			return nil
+				"error", err,
+			).Error("Failed to get cache file reader")
+			return fmt.Errorf("get file: %s", err)
 		}
+		defer closers.Close(f)
+
+		log.WithTraceContext(ctx).With(
+			"namespace", t.Namespace,
+			"name", t.Name,
+		).Debug("Starting backend upload")
+
+		if err := client.Upload(t.Namespace, t.Name, f); err != nil {
+			log.WithTraceContext(ctx).With(
+				"namespace", t.Namespace,
+				"name", t.Name,
+				"error", err,
+			).Error("Backend upload failed")
+			return fmt.Errorf("upload: %s", err)
+		}
+
+		log.WithTraceContext(ctx).With(
+			"namespace", t.Namespace,
+			"name", t.Name,
+		).Info("Uploaded cache file to remote backend")
+	}
+
+	if err := e.uploadMetaInfoSidecar(ctx, client, t); err != nil {
 		log.WithTraceContext(ctx).With(
 			"namespace", t.Namespace,
 			"name", t.Name,
 			"error", err,
-		).Error("Failed to get cache file reader")
-		return fmt.Errorf("get file: %s", err)
+		).Error("Failed to upload metainfo sidecar")
+		return fmt.Errorf("upload metainfo sidecar: %s", err)
 	}
-	defer closers.Close(f)
-
-	log.WithTraceContext(ctx).With(
-		"namespace", t.Namespace,
-		"name", t.Name,
-	).Debug("Starting backend upload")
-
-	if err := client.Upload(t.Namespace, t.Name, f); err != nil {
-		log.WithTraceContext(ctx).With(
-			"namespace", t.Namespace,
-			"name", t.Name,
-			"error", err,
-		).Error("Backend upload failed")
-		return fmt.Errorf("upload: %s", err)
-	}
-
-	log.WithTraceContext(ctx).With(
-		"namespace", t.Namespace,
-		"name", t.Name,
-	).Info("Uploaded cache file to remote backend")
 
 	s := e.stats.Tagged(map[string]string{
 		"version": "2",
@@ -203,5 +217,41 @@ func (e *Executor) upload(ctx context.Context, t *Task) error {
 	s.Histogram("upload", _writebackLatencyBuckets).RecordDuration(time.Since(start))
 	s.Histogram("lifetime", _writebackLatencyBuckets).RecordDuration(time.Since(t.CreatedAt))
 
+	return nil
+}
+
+// uploadMetaInfoSidecar uploads the serialized metainfo for t as a sidecar
+// object so a cold origin can range-fetch pieces without the whole blob. It is
+// idempotent and a no-op when the sidecar already exists or no local metainfo
+// is available.
+func (e *Executor) uploadMetaInfoSidecar(
+	ctx context.Context, client backend.Client, t *Task) error {
+
+	if _, err := client.Stat(t.Namespace, metainfosidecar.Name(t.Name)); err == nil {
+		return nil
+	}
+	var tm metadata.TorrentMeta
+	if err := e.fs.GetCacheFileMetadata(t.Name, &tm); err != nil {
+		if os.IsNotExist(err) {
+			log.WithTraceContext(ctx).With(
+				"namespace", t.Namespace,
+				"name", t.Name,
+			).Debug("No local metainfo; skipping sidecar upload")
+			return nil
+		}
+		return fmt.Errorf("get cache metainfo: %s", err)
+	}
+	b, err := tm.Serialize()
+	if err != nil {
+		return fmt.Errorf("serialize metainfo: %s", err)
+	}
+	if err := client.Upload(
+		t.Namespace, metainfosidecar.Name(t.Name), bytes.NewReader(b)); err != nil {
+		return err
+	}
+	log.WithTraceContext(ctx).With(
+		"namespace", t.Namespace,
+		"name", t.Name,
+	).Debug("Uploaded metainfo sidecar")
 	return nil
 }

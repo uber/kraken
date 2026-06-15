@@ -35,6 +35,7 @@ import (
 	"github.com/uber/kraken/lib/blobrefresh"
 	"github.com/uber/kraken/lib/hashring"
 	"github.com/uber/kraken/lib/metainfogen"
+	"github.com/uber/kraken/lib/metainfosidecar"
 	"github.com/uber/kraken/lib/middleware"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/persistedretry/writeback"
@@ -64,6 +65,7 @@ type Server struct {
 	addr              string
 	hashRing          hashring.Ring
 	cas               *store.CAStore
+	cads              *store.CADownloadStore
 	clientProvider    blobclient.Provider
 	clusterProvider   blobclient.ClusterProvider
 	backends          *backend.Manager
@@ -88,6 +90,7 @@ func New(
 	addr string,
 	hashRing hashring.Ring,
 	cas *store.CAStore,
+	cads *store.CADownloadStore,
 	clientProvider blobclient.Provider,
 	clusterProvider blobclient.ClusterProvider,
 	pctx core.PeerContext,
@@ -110,6 +113,7 @@ func New(
 		addr:              addr,
 		hashRing:          hashRing,
 		cas:               cas,
+		cads:              cads,
 		clientProvider:    clientProvider,
 		clusterProvider:   clusterProvider,
 		backends:          backends,
@@ -460,6 +464,11 @@ func (s *Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
 	var tm metadata.TorrentMeta
 	err := s.cas.GetCacheFileMetadata(d.Hex(), &tm)
 	if os.IsNotExist(err) {
+		if mi, ok := s.coldMetaInfoFromSidecar(namespace, d); ok {
+			log.With("namespace", namespace, "digest", d.Hex()).
+				Debug("Serving cold metainfo from backend sidecar")
+			return mi.Serialize()
+		}
 		log.With("namespace", namespace, "digest", d.Hex()).Debug("Metainfo not found in cache, initiating blob download")
 		return nil, s.startRemoteBlobDownload(namespace, d, true)
 	}
@@ -469,6 +478,29 @@ func (s *Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
 		return nil, handler.Errorf("get cache metadata: %s", err)
 	}
 	return tm.Serialize()
+}
+
+// coldMetaInfoFromSidecar serves metainfo for a cold blob (not in local cache)
+// from the backend sidecar, avoiding a whole-blob download. ok is false when
+// the backend has no range support or no sidecar is present, in which case the
+// caller falls back to a full blob download.
+func (s *Server) coldMetaInfoFromSidecar(
+	namespace string, d core.Digest) (*core.MetaInfo, bool) {
+
+	client, err := s.backends.GetClient(namespace)
+	if err != nil {
+		return nil, false
+	}
+	if _, ok := backend.AsRangeDownloader(client); !ok {
+		return nil, false
+	}
+	mi, err := metainfosidecar.Fetch(client, namespace, d)
+	if err != nil {
+		log.With("namespace", namespace, "digest", d.Hex()).
+			Debugf("Cold metainfo sidecar unavailable: %s", err)
+		return nil, false
+	}
+	return mi, true
 }
 
 type localReplicationHook struct {
@@ -1002,6 +1034,23 @@ func (s *Server) forceCleanupHandler(w http.ResponseWriter, r *http.Request) err
 			deleted = append(deleted, name)
 		}
 	}
+	// partial=true also evicts the lazily range-fetched cold-blob download store
+	// (separate from the warm cas), so a cold-origin lazy-fetch PoC can fully
+	// re-cold the origin over HTTP without a docker exec into the container.
+	if r.URL.Query().Get("partial") == "true" && s.cads != nil {
+		partialNames, err := s.cads.Any().ListNames()
+		if err != nil {
+			log.Errorf("Failed to list partial files for cleanup: %s", err)
+			return err
+		}
+		for _, name := range partialNames {
+			if ok, err := s.maybeDeletePartial(name, ttl); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %s", name, err))
+			} else if ok {
+				deleted = append(deleted, name)
+			}
+		}
+	}
 	log.With("deleted_count", len(deleted), "error_count", len(errs), "ttl_hours", ttlHr).Info("Force cleanup completed")
 	return json.NewEncoder(w).Encode(map[string]interface{}{
 		"deleted": deleted,
@@ -1053,4 +1102,24 @@ func (s *Server) maybeDelete(name string, ttl time.Duration) (deleted bool, err 
 		return true, nil
 	}
 	return false, nil
+}
+
+// maybeDeletePartial removes an expired lazily range-fetched partial blob from
+// the download store. These are pure local scratch reconstructable from the
+// backend, so no writeback or ownership check is needed before deleting.
+func (s *Server) maybeDeletePartial(name string, ttl time.Duration) (bool, error) {
+	info, err := s.cads.Any().GetFileStat(name)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if s.clk.Now().Sub(info.ModTime()) <= ttl {
+		return false, nil
+	}
+	if err := s.cads.Any().DeleteFile(name); err != nil && !os.IsNotExist(err) {
+		return false, err
+	}
+	return true, nil
 }

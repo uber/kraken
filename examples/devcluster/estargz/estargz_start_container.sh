@@ -21,9 +21,16 @@ CONTAINER_NAME=kraken-estargz
 #
 # Any args ("$@") are passed through to the entrypoint as the benchmark image +
 # command; with args the container runs run_e2e.sh and exits, with none it idles.
+#
+# COLD_AGENT is forwarded so run_e2e.sh can optionally cold agent-one (the
+# overlay seeder) before the stargz leg, forcing pieces through the cold origin.
+# COLD_OVERLAY is forwarded so the overlay leg can itself be served by a cold
+# origin (cold both agents first) for the full-pull backend-egress baseline.
 docker run -d \
     --privileged \
     --network host \
+    -e COLD_AGENT="${COLD_AGENT:-0}" \
+    -e COLD_OVERLAY="${COLD_OVERLAY:-0}" \
     -v /var/lib/containerd \
     -v /var/lib/containerd-stargz-grpc \
     --name ${CONTAINER_NAME} \

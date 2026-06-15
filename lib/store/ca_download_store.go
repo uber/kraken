@@ -171,6 +171,11 @@ func (a *CADownloadStoreScope) DeleteFile(name string) error {
 	return a.op.DeleteFile(name)
 }
 
+// ListNames lists the names of all files within the scope's accepted states.
+func (a *CADownloadStoreScope) ListNames() ([]string, error) {
+	return a.op.ListNames()
+}
+
 // GetMetadata returns the metadata content of md for name.
 func (a *CADownloadStoreScope) GetMetadata(name string, md metadata.Metadata) error {
 	return a.op.GetFileMetadata(name, md)

@@ -46,6 +46,14 @@ castore:
     drain_workers: 2
     drain_max_retries: 3
 
+cadownloadstore:
+  download_dir: /var/cache/kraken/kraken-origin/download/
+  cache_dir:   /var/cache/kraken/kraken-origin/cache-partial/
+  download_cleanup:
+    ttl: 24h
+  cache_cleanup:
+    ttl: 24h
+
 blobserver:
   listener:
     net: unix

@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/blobrefresh"
 	"github.com/uber/kraken/lib/hashring"
 	"github.com/uber/kraken/lib/store"
@@ -68,12 +69,14 @@ func NewOriginScheduler(
 	stats tally.Scope,
 	pctx core.PeerContext,
 	cas *store.CAStore,
+	cads *store.CADownloadStore,
+	backends *backend.Manager,
 	netevents networkevent.Producer,
 	blobRefresher *blobrefresh.Refresher) (ReloadableScheduler, error) {
 
 	s, err := newScheduler(
 		config,
-		originstorage.NewTorrentArchive(cas, blobRefresher),
+		originstorage.NewTorrentArchive(cas, cads, backends, blobRefresher),
 		stats,
 		pctx,
 		announceclient.Disabled(),

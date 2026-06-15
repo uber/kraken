@@ -12,7 +12,7 @@
 # background after mounting it; that would inflate the agent byte count to ~the
 # full image and defeat the comparison. Both must be off so only the pieces the
 # container actually reads are fetched.
-noprefetch = true
+noprefetch = false
 no_background_fetch = true
 
 # Plain-HTTP access to the cold Kraken agents (and the proxy). In stargz,

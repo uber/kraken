@@ -101,42 +101,11 @@ DownloadReader(namespace string, d core.Digest) (BlobReader, error)
 Reuses `torrentArchive.CreateTorrent` and the event loop exactly as `Download`
 does; the only difference is it returns a reader instead of `<-errc`-blocking.
 
-### 4.3 Dispatcher lazy/demand API (internal to `dispatch`)
+### 4.3 Internal APIs
 
-```go
-// lib/torrent/scheduler/dispatch/dispatcher.go — drives demand-driven fetch.
-func (d *Dispatcher) SetLazy()                  // switch torrent to demand mode
-func (d *Dispatcher) RequestPieces(pieces []int) // OR pieces into the demand set
-func (d *Dispatcher) SetPriorityPiece(piece int)  // reserve a piece ahead of policy
-```
-
-In lazy mode, `restrictToDemand` intersects piece candidates with the demand set
-in `maybeRequestMorePieces` / `resendFailedPieceRequests`, so only demanded
-pieces are ever requested. Eager mode (no `SetLazy`) is byte-for-byte identical
-to master.
-
-### 4.4 In-order piece policy (internal to `piecerequest`)
-
-```go
-// lib/torrent/scheduler/dispatch/piecerequest/in_order_policy.go (new)
-const InOrderPolicy = "in_order"
-// inOrderPolicy.selectPieces picks the lowest-index valid candidates first,
-// sharpening time-to-first-byte for sequential reads. Implements the existing
-// pieceSelectionPolicy interface (policy.go:25); plugs into NewManager's switch.
-```
-
-Reuses the existing policy interface and the `piece_request_policy` config key —
-no new config struct. Default stays `rarest_first`; `in_order` is opt-in per
-agent (see §6, config rollout).
-
-### 4.5 Manager priority reservation (internal to `piecerequest`)
-
-```go
-// lib/torrent/scheduler/dispatch/piecerequest/manager.go
-func (m *Manager) SetPriority(i int) // streaming reader's blocking piece, reserved
-// ReservePieces reserves priority pieces (present in candidates) before filling
-// the remaining quota from the policy; Clear(i) drops a piece's hint on completion.
-```
+The internal dispatcher (`SetLazy`/`RequestPieces`/`SetPriorityPiece`) and
+`piecerequest` (`in_order` policy, `Manager.SetPriority`) APIs are detailed
+per-PR in §5.3 (A1–A4).
 
 ## 5. Stack A — agent-side streaming (v1)
 
@@ -298,10 +267,6 @@ func (d *Dispatcher) SetLazy()
 func (d *Dispatcher) restrictToDemand(candidates *bitset.BitSet) *bitset.BitSet
 // body: lock; if !lazy || demand==nil return candidates;
 // else return candidates.Intersection(d.demand).
-
-// isLazy reports demand-driven mode. (Optional — keep only if a non-instrument
-// consumer exists; see §6. restrictToDemand alone drives lazy behavior.)
-func (d *Dispatcher) isLazy() bool
 ```
 
 **Call-site edits (no-ops while `SetLazy` is never called):**
@@ -662,231 +627,373 @@ The PoC carried devcluster-only code that must **not** land in Stack A:
 
 ## 7. Stack B — cold-origin range streaming (design doc §4, §5 Phase 2)
 
-Lets a **cold** origin seed partial content instead of materializing the whole
-blob on first range request. Today the origin store hardcodes whole-blob
-semantics (`Complete()=true`, `HasPiece=true`), so the first ranged GET against a
-cold origin forces a full backend download before any byte is served — the exact
-stall Stack A removes on the agent side. Stack B removes it on the origin side.
+Lets a **cold** origin (blob not in its local cache) seed pieces by lazily
+range-fetching them from the backend, instead of materializing the whole blob on
+the first request. Today a cold origin forces a full backend download
+(`blobRefresher.Refresh`, whole blob) before any byte is served — the exact stall
+Stack A removes on the agent side. Stack B removes it on the origin side.
 
-**Grounding notes (verified against master + production GCS):**
-- The production GCS backend already routes downloads through
-  `transfermanager.Downloader`; ranged reads need **no new SDK feature** — the
-  vendored `transfermanager.DownloadObjectInput` has a `Range *DownloadRange`
-  field (`{Offset, Length int64}`, `Length<0` ⇒ to-EOF). The OSS `gcsbackend`
-  has no transfermanager and a `Download(name, io.Writer)` shape, so its impl
-  uses `obj.NewRangeReader(ctx, offset, length)` instead (flagged in B1).
-- Origin uses `*store.CAStore` (cache-only, no download dir / no per-piece
-  metadata); the agent partial store uses `*store.CADownloadStore`. B2 switches
-  origin to `CADownloadStore` — larger blast radius than "add a bitfield".
-- `lib/blobrefresh` dedups per **digest** (`d.Hex()`), not per `(digest,piece)`;
-  B3 adds a new per-`(digest,piece)` dedup key alongside the unchanged
-  whole-blob `Refresh`.
+**The load-bearing constraint — integrity.** Agents CRC32-verify every received
+piece against `metaInfo.GetPieceSum(pi)` (`agentstorage/torrent.go`), and the
+infohash is *derived* from the piece sums (20-byte SHA1 over the bencoded `info`,
+which contains `PieceSums` — `core/infohash.go:22`, `core/metainfo.go:32,37-43`).
+So a cold origin must serve the **real** metainfo (cold infohash == warm
+infohash) and therefore must obtain the real piece sums *without reading the
+whole blob*. The mechanism that makes the whole stack possible is a **metainfo
+sidecar**: at writeback the origin uploads the serialized `core.MetaInfo` as a
+tiny `<digest>.kmeta` object next to the blob (~4 B/piece); a cold origin fetches
+that sidecar cheaply, then range-fetches each requested piece and CRC-verifies it
+normally. Integrity is preserved end-to-end; §7.3 records why no other source of
+truth was used.
+
+**As-built model (simpler than a real-bitfield leecher).** The cold-origin
+partial torrent reports itself **complete** — `Complete()=true`, `HasPiece=true`,
+`Bitfield()` is the full complement — and lazily range-fetches each piece inside
+`GetPieceReader → ensurePiece → fetchPiece`. This is safe because origin
+announces are disabled (`constructors.go`): the origin never advertises into a
+swarm, it only answers piece reads on demand, so "I have everything" just means
+"ask me for any piece and I will fetch it." There is **no** partial bitfield and
+**no** `blobrefresh.RefreshRange` — the range fetch lives directly in
+`Torrent.fetchPiece`, driven by an injected `backend.RangeDownloader`.
+
+**The two cold seams (both served from the sidecar):**
+1. HTTP metainfo (agent → origin): `origin/blobserver/server.go getMetaInfo` —
+   cache miss now tries `coldMetaInfoFromSidecar` and returns `mi.Serialize()`
+   (200) instead of `startRemoteBlobDownload` (202, whole blob).
+2. P2P pieces + scheduler metainfo: `originstorage/torrent_archive.go
+   loadMetaInfo` — cache miss → `coldMetaInfo` (sidecar + `RangeDownloader`) →
+   `NewPartialTorrent`; piece reads then range-fetch on demand.
+
+The warm path (origin already has the blob) stays byte-for-byte unchanged: a
+cached blob still yields the whole-blob `NewTorrent(cas, mi)`.
+
+**Grounding notes (verified against this branch + production GCS):**
+- The PoC implements the `RangeDownloader` capability for **testfs only**
+  (the devcluster backend). Production backends are out of PoC scope but cheap to
+  add: the prod GCS backend already routes downloads through
+  `transfermanager.Downloader`, and the vendored
+  `transfermanager.DownloadObjectInput` has a `Range *DownloadRange` field
+  (`{Offset, Length int64}`, `Length<0` ⇒ to-EOF), so ranged reads need **no new
+  SDK feature**; s3manager already does ranged multipart via a `bytes=` header.
+  Backends lacking the capability fall back to the unchanged whole-blob path
+  (graceful degradation, never a regression).
+- Origin previously used only `*store.CAStore` (cache-only). Stack B adds a
+  `*store.CADownloadStore` (separate `cache-partial` + `download` dirs) so cold
+  pieces land in a sparse download file with per-piece `_status` metadata —
+  mirroring the agent partial store.
+- The `RangeDownloader` signature is `DownloadRange(namespace, name string, dst
+  io.Writer, offset, length int64) error` (dst **before** offset/length).
+  `AsRangeDownloader` unwraps `*ThrottledClient`, then type-asserts.
 
 ### 7.1 PR budget table
 
 | PR | Scope | Files | ~LOC (non-test) | Activates? |
 |----|-------|-------|------|-----------|
-| B1 | `RangeDownloader` capability + backend impls | `lib/backend/client.go` (iface) + s3/gcs/hdfs/testfs impls | ~40 | inert until B3 type-asserts it |
-| B2 | origin partial store (sparse file + per-piece bitfield) | `originstorage/torrent.go` + `torrent_archive.go` + `pieces.go` (new) | ~140 (2–3 PRs) | origin reflects real bitfield |
-| B3 | `blobrefresh` per-`(digest,piece)` range path | `lib/blobrefresh/refresher.go` | ~55 | **cold origin seeds partial content** |
+| B1 | `RangeDownloader` capability + testfs range | `lib/backend/rangedownloader.go` (new) + `testfs/{client,server}.go` | ~50 | inert until B3/B4 type-assert it |
+| B2 | metainfo sidecar (write at writeback) | `lib/metainfosidecar/sidecar.go` (new) + `persistedretry/writeback/executor.go` | ~55 | `.kmeta` sidecar lands on backend |
+| B3 | origin partial torrent (lazy range-fetch) | `originstorage/pieces.go` (new) + `originstorage/torrent.go` | ~150 (2 PRs) | partial `Torrent` fetches on demand |
+| B4 | cold-origin wiring (both seams) | `originstorage/torrent_archive.go`, `scheduler/constructors.go`, `origin/cmd/{cmd,config}.go`, `config/origin/base.yaml`, `origin/blobserver/server.go` | ~100 | **cold origin seeds partial content** |
 
 **Dependency order:** B1 and B2 are independent (different packages) and can land
-in parallel; **B3 depends on both** (it type-asserts B1's `RangeDownloader` and
-writes into B2's partial store). B2 is the long pole — split it 2–3 ways
-(`pieces.go` lift, then `WritePiece`/`HasPiece`/`Bitfield`, then the
-`CAStore`→`CADownloadStore` archive switch).
+in parallel. **B3 depends on B1** (the partial `Torrent` holds a
+`backend.RangeDownloader`). **B4 depends on B1+B2+B3** — it fetches the B2 sidecar
+through B1's `AsRangeDownloader` and constructs B3's `NewPartialTorrent`. B3 is
+the long pole; split it 2 ways: **B3a** lifts the `pieces.go` per-piece state
+model + the `NewPartialTorrent` constructor (reports complete); **B3b** adds the
+lazy fetch state machine (`GetPieceReader`/`ensurePiece`/`waitForPiece`/
+`fetchPiece`/`markPieceComplete`).
 
 ### 7.2 PR detail
 
-#### B1 — `RangeDownloader` backend capability + per-backend impls
+#### B1 — `RangeDownloader` backend capability + testfs range
 
-**Files:** `lib/backend/client.go` (add optional capability interface);
-`lib/backend/s3backend/client.go` (add `DownloadRange`); production
-`gcsbackend/client.go` + `gcsbackend/gcs.go` (add `DownloadRange` + widen `GCS`
-iface — uses transfermanager `Range`); `lib/backend/hdfsbackend/client.go`
-(`Range` header); `lib/backend/testfs/client.go` (impl for e2e). Callers
-type-assert, so `httpbackend`/`registrybackend`/`shadowbackend`/`sqlbackend` need
-no change (whole-blob fallback).
-**Imports added:** `client.go`: none (`io` present). gcs (prod):
-`cloud.google.com/go/storage/transfermanager` (already imported). s3: none.
+**Files:** `lib/backend/rangedownloader.go` (new — capability iface + unwrap
+helper); `lib/backend/testfs/client.go` (impl `DownloadRange`);
+`lib/backend/testfs/server.go` (`downloadHandler` honors the `Range` header).
+Callers type-assert, so every other backend keeps working via the whole-blob
+fallback.
+**Imports added:** `rangedownloader.go`: `io`. `testfs/client.go`: none (`fmt`,
+`net/http`, `httputil` present). `testfs/server.go`: `utils/closers` (errcheck
+forbids `_ = f.Close()`).
 **Declarations:**
 ```go
-// lib/backend/client.go — optional capability, sibling to Client. Callers MUST
-// type-assert; backends lacking it fall back to whole-blob Download.
+// lib/backend/rangedownloader.go — optional capability, sibling to Client.
+// Callers MUST type-assert; backends lacking it fall back to whole-blob Download.
 type RangeDownloader interface {
-    // DownloadRange downloads name[offset:offset+length) into dst. length<0 or
-    // past EOF reads to end. Returns backenderrors.ErrBlobNotFound if missing.
-    DownloadRange(namespace, name string, offset, length int64, dst io.Writer) error
+    DownloadRange(namespace, name string, dst io.Writer, offset, length int64) error
 }
 
-// lib/backend/s3backend/client.go — s3manager already does ranged multipart.
+// AsRangeDownloader unwraps *ThrottledClient (which embeds but does not forward
+// the method) and type-asserts. ok=false ⇒ caller falls back to whole-blob.
+func AsRangeDownloader(c Client) (RangeDownloader, bool)
+// body: if tc, ok := c.(*ThrottledClient); ok { c = tc.Client }; rd, ok :=
+//   c.(RangeDownloader); return rd, ok.
+
+// lib/backend/testfs/client.go — mirrors Download but with a Range header.
 func (c *Client) DownloadRange(
-    namespace, name string, offset, length int64, dst io.Writer) error
-// body: BlobPath(name); upcast dst→io.WriterAt else rwutil.NewCappedBuffer;
-// &s3.GetObjectInput{Bucket, Key, Range: aws.String(byteRange(offset,length))};
-// c.s3.Download(writerAt, input); isNotFound→ErrBlobNotFound; drain buffer.
-
-func byteRange(offset, length int64) string
-// body: length<0 ⇒ fmt.Sprintf("bytes=%d-", offset); else
-// fmt.Sprintf("bytes=%d-%d", offset, offset+length-1).
-
-// gcsbackend/gcs.go (PROD) — widen the GCS interface.
-type GCS interface {
-    // ... existing ObjectAttrs/Download/Upload/GetObjectIterator/NextPage/Close
-    DownloadRange(objectName string, w io.WriterAt, offset, length int64) (int64, error)
-}
-
-// gcsbackend/client.go (PROD) — Client + GCSImpl impls.
-func (c *Client) DownloadRange(
-    namespace, name string, offset, length int64, dst io.Writer) error
-// body: BlobPath(name); upcast dst→io.WriterAt else CappedBuffer(BufferGuard);
-// c.gcs.DownloadRange(path, writerAt, offset, length); per-StorageClass
-// latency; drain CappedBuffer.
-
-func (g *GCSImpl) DownloadRange(
-    objectName string, w io.WriterAt, offset, length int64) (int64, error)
-// body: in := transfermanager.DownloadObjectInput{Bucket, Object: objectName,
-//   Destination: w, Callback: ...,
-//   Range: &transfermanager.DownloadRange{Offset: offset, Length: length}};
-//   g.downloader.DownloadObject(g.ctx, &in); out := <-downloadOutput;
-//   return out.Attrs.Size, out.Err.
-// (OSS gcsbackend has no transfermanager + GCS.Download is io.Writer not
-//  io.WriterAt: use g.bucket.Object(name).NewRangeReader(ctx, offset, length)
-//  → io.Copy. Verify the OSS GCS signature before porting.)
+    namespace, name string, dst io.Writer, offset, length int64) error
+// body: url = .../<namespace>/blobs/<name>; hdr := fmt.Sprintf("bytes=%d-%d",
+//   offset, offset+length-1) (inclusive end); httputil.Get(url,
+//   SendHeaders{"Range": hdr},
+//   SendAcceptedCodes(http.StatusOK, http.StatusPartialContent));
+//   io.Copy(dst, resp.Body).
 ```
-**Call-site edits:** none here — B1 only adds the capability. The type assertion
-lives in **B3**: `rd, ok := client.(backend.RangeDownloader); if !ok { /* fall
-back to whole-blob Refresh */ }`.
-**Tests:** `func TestByteRange(t *testing.T)` — `0,100→bytes=0-99`;
-`100,50→bytes=100-149`; `len -1→bytes=100-`; `0,1→bytes=0-0`.
-`func TestClientDownloadRange(t *testing.T)` (gcs + s3 tables: full range,
-mid-range, range past EOF clamps, not-found→`ErrBlobNotFound`) against the
-backend mocks; regenerate `mocks/lib/backend/gcsbackend` `MockGCS` for the
-widened iface.
-**LOC (non-test):** ~40 (iface ~6, s3 ~18 incl. `byteRange`, gcs prod ~16).
+**Call-site edits:** `testfs/server.go downloadHandler` currently `io.Copy(w, f)`
+→ `http.ServeContent(w, r, name, modtime, f)` (honors the request `Range` header,
+emits `206` + `Content-Range` from the `*os.File` ReadSeeker). Wrap `w` in a
+small status/bytes recorder and log one `testfs download` line
+(name/range/status/bytes) so the e2e can tally origin→backend egress.
+**Tests:** `lib/backend/testfs/range_test.go` `TestClientDownloadRange` —
+table-driven over a real testfs fixture: first piece, interior piece, short last
+piece, length-past-EOF clamp, full-length; assert bytes == the expected slice.
+**LOC (non-test):** ~50 (`rangedownloader.go` ~12, client ~14, server ~24).
 
-#### B2 — origin partial store (sparse file + per-piece bitfield)
+#### B2 — metainfo sidecar (shared helper + writeback write)
 
-**Files:** `lib/torrent/storage/originstorage/torrent.go` (replace hardcoded
-`Complete()=true`/`HasPiece=true`/`WritePiece=ErrReadOnly` with per-piece state);
-`originstorage/torrent_archive.go` (switch `cas *store.CAStore` →
-`*store.CADownloadStore`, init download file + piece metadata, real bitfield in
-`Stat`); `originstorage/pieces.go` (new — lift the
-`piece`/`pieceStatus`/`restorePieces` model from `agentstorage`). Likely 2–3 PRs.
-**Caller blast radius (verify):** `origin/cmd` / `origin/blobserver` construct
-`originstorage.NewTorrentArchive(cas, blobRefresher)` — the `cas`→`cads` change
-ripples to those construction sites.
-**Imports added:** `torrent.go`: `io`, `os`, `utils/closers`, `utils/log`;
-`pieces.go`: `regexp`, `sync`, `lib/store/metadata` (mirrors agentstorage).
+**Files:** `lib/metainfosidecar/sidecar.go` (new — shared so writeback and
+originstorage don't depend on each other); `lib/persistedretry/writeback/executor.go`
+(write the sidecar after the blob upload).
+**Imports added:** `sidecar.go`: `bytes`, `core`, `lib/backend`. `executor.go`:
+`bytes`, `lib/metainfosidecar`.
 **Declarations:**
 ```go
-// torrent.go — Torrent backed by partial state (was: cas + numComplete fixed to
-// NumPieces). Mirrors agentstorage.Torrent.
+// lib/metainfosidecar/sidecar.go
+const Suffix = ".kmeta"
+func Name(name string) string { return name + Suffix }
+
+func Fetch(c backend.Client, namespace string, d core.Digest) (*core.MetaInfo, error)
+// body: var buf bytes.Buffer; c.Download(namespace, Name(d.Hex()), &buf);
+//   core.DeserializeMetaInfo(buf.Bytes()). Sidecar is tiny (~4 B/piece), so a
+//   plain whole-object Download is used — no range needed.
+
+// executor.go — FileStore gains read access to local metainfo.
+type FileStore interface {
+    DeleteCacheFileMetadata(name string, md metadata.Metadata) error
+    GetCacheFileReader(name string) (store.FileReader, error)
+    GetCacheFileMetadata(name string, md metadata.Metadata) error // NEW
+}
+
+func (e *Executor) uploadMetaInfoSidecar(
+    ctx context.Context, client backend.Client, t *Task) error
+// body: idempotent — client.Stat(ns, metainfosidecar.Name(t.Name)) == nil ⇒
+//   return nil; var tm metadata.TorrentMeta;
+//   e.fs.GetCacheFileMetadata(t.Name, &tm) (os.IsNotExist ⇒ skip, no local
+//   metainfo); b, _ := tm.Serialize();
+//   client.Upload(ns, metainfosidecar.Name(t.Name), bytes.NewReader(b)).
+```
+**Call-site edits:** `executor.upload` — replace the `client.Stat`-exists early
+return with a `blobExists bool`; wrap the blob `GetCacheFileReader` + `Upload` in
+`if !blobExists`; then **always** call `uploadMetaInfoSidecar` (so a re-push of an
+already-present blob still backfills the sidecar). `*store.CAStore` already
+implements `GetCacheFileMetadata`, so the existing `cmd.go` wiring still satisfies
+the widened `FileStore`.
+**Tests:** `executor_test.go` (extend) — after `Exec`, the backend holds both
+`name` and `name+".kmeta"`, and the sidecar deserializes to the local
+`TorrentMeta`; include the blob-already-exists case (sidecar still written).
+**LOC (non-test):** ~55 (`sidecar.go` ~14, executor `blobExists` refactor ~10,
+`uploadMetaInfoSidecar` ~30, iface +1).
+
+#### B3 — origin partial torrent (lazy range-fetch) — splits B3a/B3b
+
+**Files:** `lib/torrent/storage/originstorage/pieces.go` (new — per-piece status
+model, adapted from `agentstorage/pieces.go`);
+`lib/torrent/storage/originstorage/torrent.go` (partial mode alongside the
+unchanged warm `NewTorrent`).
+**Imports added:** `torrent.go`: `io`, `time`, `utils/closers`, `atomic`
+(`bitset` present); `pieces.go`: `sync`, `lib/store/metadata`.
+**Declarations (B3a — state model + constructor):**
+```go
+// pieces.go — per-piece status persisted as one byte each.
+const _pieceStatusSuffix = "_status"
+type pieceStatus int
+const ( _empty pieceStatus = iota; _complete; _dirty ) // _dirty in-memory only
+type pieceStatusMetadata struct{ statuses []pieceStatus } // Serialize/Deserialize
+type piece struct { sync.RWMutex; status pieceStatus }
+func (p *piece) snapshot() pieceStatus
+func (p *piece) complete() bool
+func (p *piece) tryMarkDirty() (dirty, complete bool) // claims the fetch
+func (p *piece) markEmpty()
+func (p *piece) markComplete()
+func restorePieces(
+    d core.Digest, cads *store.CADownloadStore, numPieces int) ([]*piece, int, error)
+// body: GetOrSetMetadata(_status) seeded empty; rebuild []*piece + completed
+//   count; tolerate cads.InCacheError (already moved to cache).
+
+// torrent.go — partial fields appended to the warm Torrent (nil/false in warm).
+const (
+    _partialFetchPollInterval = 50 * time.Millisecond
+    _partialFetchTimeout      = 2 * time.Minute
+)
 type Torrent struct {
     metaInfo    *core.MetaInfo
-    cads        caDownloadStore   // was: cas *store.CAStore
-    pieces      []*piece          // NEW: per-piece status (pieces.go)
-    numComplete *atomic.Int32     // now reflects real completed count
-    committed   *atomic.Bool      // NEW: moved to cache yet
+    cas         *store.CAStore
+    numComplete *atomic.Int32
+    partial     bool                    // NEW
+    cads        *store.CADownloadStore  // NEW
+    rd          backend.RangeDownloader // NEW
+    namespace   string                  // NEW
+    pieces      []*piece                // NEW
 }
-
-// caDownloadStore — subset iface, identical to agentstorage's (lift verbatim).
-type caDownloadStore interface {
-    MoveDownloadFileToCache(name string) error
-    GetDownloadFileReadWriter(name string) (store.FileReadWriter, error)
-    Any() *store.CADownloadStoreScope
-    Download() *store.CADownloadStoreScope
-    InCacheError(error) bool
-}
-
-func NewTorrent(cads caDownloadStore, mi *core.MetaInfo) (*Torrent, error)
-// body: restorePieces(mi.Digest(), cads, mi.NumPieces()); if all complete move
-// to cache + committed=true. Same shape as agentstorage.NewTorrent.
-
-func (t *Torrent) Complete() bool            // body: t.committed.Load()
-func (t *Torrent) HasPiece(pi int) bool      // body: getPiece(pi).complete()
-func (t *Torrent) Bitfield() *bitset.BitSet  // body: bit i iff pieces[i] complete
-func (t *Torrent) BytesDownloaded() int64    // body: min(numComplete*pl, length)
-func (t *Torrent) MissingPieces() []int      // body: collect !complete indices
-func (t *Torrent) WritePiece(src storage.PieceReader, pi int) error
-// body: agentstorage write path (tee→PieceHash, seek getFileOffset, verify
-// GetPieceSum, markPieceComplete, commit on last).
-func (t *Torrent) markPieceComplete(pi int) error
-// body: SetMetadataAt(_complete) + pieces[pi].markComplete() + numComplete.Inc().
-func (t *Torrent) GetPieceReader(pi int) (storage.PieceReader, error)
-// body: gate on completion; read via cads.Any() so the in-progress download file
-// is readable (was cas.GetCacheFileReader).
-
-// torrent_archive.go — TorrentArchive holds the partial store.
-type TorrentArchive struct {
-    cads          *store.CADownloadStore  // was: cas *store.CAStore
-    blobRefresher *blobrefresh.Refresher
-}
-func (a *TorrentArchive) Stat(
-    namespace string, d core.Digest) (*storage.TorrentInfo, error)
-// body: getMetaInfo; read piece status via cads.Any(); build real bitfield (was
-// bitset…Complement()); NewTorrentInfo(mi, bitfield).
+func NewPartialTorrent(
+    cads *store.CADownloadStore, rd backend.RangeDownloader,
+    namespace string, mi *core.MetaInfo) (*Torrent, error)
+// body: cads.CreateDownloadFile(mi.Digest().Hex(), mi.Length()) tolerating
+//   InDownloadError/InCacheError; restorePieces(...); numComplete =
+//   mi.NumPieces() (reports complete). Warm NewTorrent(cas, mi) unchanged.
 ```
-**Call-site edits:** `originstorage.NewTorrentArchive` param `cas *store.CAStore`
-→ `cads *store.CADownloadStore`; `getMetaInfo` reads metadata via
-`a.cads.Any().GetMetadata` + `CreateDownloadFile(d.Hex(), mi.Length())` on miss
-(mirror agentstorage `CreateTorrent`); `opener.Open` uses
-`cads.Any().GetFileReader`. **Verify** the `_status` metadata factory is not
-double-`Register`ed if both `originstorage` and `agentstorage` link.
-**Tests:** `func TestOriginTorrentPartial(t *testing.T)` — fresh
-`Complete()==false`/`HasPiece==false`; after all `WritePiece` → `Complete()` +
-full `Bitfield`; partial → `MissingPieces`/`BytesDownloaded` correct;
-`GetPieceReader` on incomplete → `errPieceNotComplete`; bad sum rejected.
-`func TestOriginTorrentArchivePartialBitfield(t *testing.T)` — `Stat` returns a
-partial bitfield. Drive against a real `*store.CADownloadStore` fixture (lift
-`agentstorage/fixtures.go`).
-**LOC (non-test):** ~140 across 2–3 PRs (`pieces.go` ~90 lifted, `torrent.go`
-net ~+30, `torrent_archive.go` ~+20).
+B3a keeps the reported-complete invariant: `Complete()=true`, `HasPiece=true`,
+`Bitfield()=Complement()`, `MissingPieces()=[]` — unchanged from today, so the
+torrent advertises every piece and the dispatcher asks for any of them on demand.
+**Declarations (B3b — lazy fetch state machine):**
+```go
+func (t *Torrent) GetPieceReader(pi int) (storage.PieceReader, error)
+// body: partial ⇒ ensurePiece(pi) then NewFileReader(getFileOffset, PieceLength,
+//   &downloadOpener{t}); warm ⇒ NewFileReader(..., &opener{t}) (unchanged).
+func (t *Torrent) ensurePiece(pi int) error
+// body: fast-path p.complete(); tryMarkDirty(): complete⇒nil, dirty⇒
+//   waitForPiece(p), else elected fetcher ⇒ fetchPiece (on err markEmpty) ⇒
+//   markPieceComplete.
+func (t *Torrent) waitForPiece(p *piece) error
+// body: spin-poll p.snapshot() every _partialFetchPollInterval; _complete⇒nil,
+//   _empty⇒err, deadline _partialFetchTimeout⇒err.
+func (t *Torrent) fetchPiece(pi int) error
+// body: f := cads.GetDownloadFileReadWriter(digest); f.Seek(getFileOffset(pi));
+//   h := core.PieceHash(); rd.DownloadRange(namespace, digest,
+//   io.MultiWriter(f, h), getFileOffset(pi), PieceLength(pi)); if h.Sum32() !=
+//   metaInfo.GetPieceSum(pi) ⇒ errors.New("invalid piece sum").
+func (t *Torrent) markPieceComplete(pi int) error
+// body: cads.Download().SetMetadataAt(digest, &pieceStatusMetadata{},
+//   []byte{byte(_complete)}, int64(pi)); pieces[pi].markComplete().
+type downloadOpener struct{ torrent *Torrent }
+func (o *downloadOpener) Open() (store.FileReader, error)
+// body: cads.Any().GetFileReader(digest).
+```
+**Call-site edits:** none outside `originstorage` until B4 — the warm
+`NewTorrent(cas, mi)` signature is unchanged, so existing construction still
+compiles.
+**Tests:** `torrent_test.go` (extend) against a real `*store.CADownloadStore`
+fixture + a fake in-memory `RangeDownloader`: (a) first `GetPieceReader(pi)` does
+exactly one `DownloadRange`, correct bytes; second call zero further fetches;
+(b) sum mismatch ⇒ error + re-fetchable; (c) N concurrent goroutines on one piece
+⇒ exactly one `DownloadRange`; (d) restart durability via a second Torrent over
+the same `cads`; (e) short last piece length.
+**LOC (non-test):** ~150 across 2 PRs (`pieces.go` ~80 [B3a]; `torrent.go`
+constructor + state machine ~70 [B3a ~25 / B3b ~45]).
 
-#### B3 — `blobrefresh` range path keyed per `(digest, piece)`
+#### B4 — cold-origin wiring (both seams)
 
-**Files:** `lib/blobrefresh/refresher.go` (add `RefreshRange` + `downloadRange`).
-The existing whole-blob `Refresh` (keyed by `d.Hex()`) is **unchanged**; this is
-a sibling path with a per-piece dedup key.
-**Imports added:** none (`backend`, `store`, `dedup`, `metainfogen` present).
+**Files:** `originstorage/torrent_archive.go` (cold metainfo + partial torrent
+selection); `lib/torrent/scheduler/constructors.go` (`NewOriginScheduler`
+params); `origin/cmd/config.go` + `origin/cmd/cmd.go` (construct the
+`CADownloadStore`, pass it + `backendManager`); `config/origin/base.yaml`
+(`cadownloadstore:` block); `origin/blobserver/server.go` (HTTP metainfo cold
+branch).
+**Imports added:** `torrent_archive.go`: `lib/metainfosidecar`; `server.go`:
+`lib/metainfosidecar` (`backend` present).
 **Declarations:**
 ```go
-// refresher.go — per-(digest,piece) range refresh. The dedup key is per-piece so
-// concurrent demands for distinct pieces of one blob neither collide nor dedup
-// against the whole-blob Refresh.
-func (r *Refresher) RefreshRange(
-    namespace string, d core.Digest, piece int, hooks ...PostHook) error
-// body: client := r.backends.GetClient(namespace); rd, ok :=
-//   client.(backend.RangeDownloader); if !ok return r.Refresh(...) (fallback);
-//   Stat for size + SizeLimit check; pl := metaInfoGenerator length;
-//   id := fmt.Sprintf("%s:%d", d.Hex(), piece);
-//   r.requests.Start(id, func() error { downloadRange(...); emit
-//   REMOTE_DOWNLOAD; run hooks }); map dedup.ErrRequestPending→ErrPending,
-//   ErrBlobNotFound→ErrNotFound, ErrWorkersBusy→ErrWorkersBusy.
+// torrent_archive.go — archive now holds cads + backends.
+type TorrentArchive struct {
+    cas           *store.CAStore
+    cads          *store.CADownloadStore
+    backends      *backend.Manager
+    blobRefresher *blobrefresh.Refresher
+}
+func (a *TorrentArchive) loadMetaInfo(
+    namespace string, d core.Digest) (*core.MetaInfo, backend.RangeDownloader, error)
+// body: warm cache GetCacheFileMetadata ⇒ (tm.MetaInfo, nil, nil); else if
+//   os.IsNotExist ⇒ coldMetaInfo ⇒ (mi, rd, nil); else blobRefresher.Refresh +
+//   return errors.New("refreshing blob") (today's behavior).
+func (a *TorrentArchive) coldMetaInfo(
+    namespace string, d core.Digest) (*core.MetaInfo, backend.RangeDownloader, bool)
+// body: backends.GetClient(namespace); backend.AsRangeDownloader (false⇒bail);
+//   metainfosidecar.Fetch (err⇒debug log, false).
+// GetTorrent: rd != nil ⇒ NewPartialTorrent(cads, rd, namespace, mi);
+//   else NewTorrent(cas, mi). Stat: loadMetaInfo (ignore rd) + complement bitfield.
 
-func (r *Refresher) downloadRange(
-    rd backend.RangeDownloader,
-    namespace string, d core.Digest, piece int, pieceLength, size int64) error
-// body: offset := pieceLength*piece; length := min(pieceLength, size-offset);
-//   route through B2's Torrent.WritePiece so CRC verify lives in one place
-//   (preferred), or seek the download file at offset and DownloadRange into it
-//   then markPieceComplete. (Verify the seam matches B2's store choice.)
+// origin/blobserver/server.go — getMetaInfo cold branch.
+func (s *Server) coldMetaInfoFromSidecar(
+    namespace string, d core.Digest) (*core.MetaInfo, bool)
+// body: same shape as coldMetaInfo: GetClient → AsRangeDownloader (capability
+//   gate) → metainfosidecar.Fetch. getMetaInfo, on os.IsNotExist, tries this and
+//   returns mi.Serialize() (200) before falling back to startRemoteBlobDownload.
 ```
-**Call-site edits:** new entry point — no existing blobrefresh caller changes.
-B2's origin path (or the blobserver range handler) calls
-`r.blobRefresher.RefreshRange(namespace, d, piece)` on a per-piece miss,
-analogous to today's `Refresh` call in `originstorage.getMetaInfo`
-(`torrent_archive.go`) and `blobserver/server.go`. Keep `downloadRange`'s write
-target consistent with B2's `CADownloadStore` choice.
-**Tests:** `func TestRefresherRefreshRange(t *testing.T)` — backend implements
-`RangeDownloader` ⇒ only the piece's span fetched (assert offset/length via a
-fake); lacks it ⇒ falls back to whole-blob `Refresh`; `ErrPending` on duplicate
-same-piece demand; distinct pieces of one digest do **not** dedup; size-limit
-exceeded → error; not-found→`ErrNotFound`.
-`func TestRefreshRangeWritesPieceAtOffset(t *testing.T)` — bytes land at
-`pieceLength*piece` and read back complete. Regenerate `mocks/lib/backend` to add
-`MockRangeDownloader`.
-**LOC (non-test):** ~55 (`RefreshRange` ~32, `downloadRange` ~23).
+**Call-site edits:**
+- `scheduler/constructors.go NewOriginScheduler` gains `cads *store.CADownloadStore`
+  + `backends *backend.Manager`, passing both to
+  `originstorage.NewTorrentArchive(cas, cads, backends, blobRefresher)`.
+- `origin/cmd/config.go`: `Config` gains
+  `CADownloadStore store.CADownloadStoreConfig \`yaml:"cadownloadstore"\``.
+- `origin/cmd/cmd.go`: `cads, err := store.NewCADownloadStore(config.CADownloadStore,
+  stats)`; pass `cads` + `backendManager` into `NewOriginScheduler`.
+- `config/origin/base.yaml`: add a `cadownloadstore:` block (separate
+  `cache-partial` + `download` dirs so it never collides with `castore.cache_dir`).
+**Tests:** `torrent_archive_test.go` (extend) — cold digest with a sidecar on a
+testfs-backed fixture ⇒ `GetTorrent` returns a partial torrent and `Stat` the
+complement bitfield; no sidecar / non-range backend ⇒ falls back to
+`blobRefresher.Refresh` (error), proving graceful degradation.
+**LOC (non-test):** ~100 (`torrent_archive.go` ~55, `blobserver` ~22,
+`constructors`/`cmd`/`config`/yaml ~23).
+
+### 7.3 Alternatives considered for cold-origin metainfo
+
+The sidecar is load-bearing, so we evaluated three other ways to give a cold
+origin the real piece sums (and thus the real infohash) without reading the whole
+blob. All three were rejected; the findings are recorded so the choice isn't
+relitigated.
+
+**(1) Centralized metainfo store (redis / tracker / build-index / SQL).** Keep
+generation where it is (`metainfogen` needs the full blob and already runs at
+writeback) but publish the metainfo to a shared service instead of a per-blob
+sidecar.
+- *Pros:* a queryable fleet-wide index; no backend `List`/GC pollution with
+  `.kmeta` objects.
+- *Cons (decisive):* every candidate host adds a **new failure domain on the hot
+  cold-pull path**. The sidecar co-locates with the very backend the origin must
+  already reach to fetch pieces, so it introduces **zero** new failure modes; a
+  redis/tracker/build-index dependency introduces one. redis is the lightest
+  (~250–350 LOC) but gives the origin a dependency it doesn't have today; the
+  tracker is circular (the origin is the tracker's source of truth, and it would
+  stop being stateless); build-index is the wrong granularity (tag→digest, not
+  digest→metainfo); a "SQL store" is really a sidecar-in-a-database with extra
+  ops. All need a **separate GC keyed to blob existence** and put metainfo state
+  origin-side. The sidecar is ~80 LOC and self-cleaning (lives and dies with the
+  blob, alongside it on the same backend).
+- *Verdict:* sidecar wins unless a future need for fleet-wide metainfo
+  querying/prefetch justifies the index — not in scope.
+
+**(2) Change the integrity model so the infohash no longer needs piece sums.**
+The infohash is a 20-byte SHA1 over the bencoded `info` that *contains*
+`PieceSums`, and it is the swarm key end-to-end (`peerstore` keys on
+`map[core.InfoHash]` at `tracker/peerstore/local.go:42`; conn dispatch
+`s.torrentControls[...InfoHash()]` at `lib/torrent/scheduler/state.go:102` and
+`events.go:160`).
+- *Variant A — infohash = content digest.* A flag-day break: it partitions every
+  in-flight swarm (old vs new key), ripples a 20-byte SHA1 vs the 32-byte digest
+  type through peerstore/announce/dispatch, and loses piece-length
+  disambiguation. ~400–800+ LOC. Not recommended.
+- *Variant B — defer integrity to a whole-blob SHA256 and drop per-piece sums.*
+  Security is acceptable in a non-adversarial datacenter, and `CAStore.verify`
+  already exists (`lib/store/ca_store.go:335`). But to actually help a cold origin
+  you must remove `PieceSums` from `info` — the same swarm-key split as Variant A
+  — so it doesn't solve the problem. (A whole-blob SHA256 *at completion* is a
+  worthwhile orthogonal defense-in-depth, not a sidecar substitute.)
+- *Verdict:* the sidecar is the only option that preserves the swarm key and
+  rolls out incrementally (cold and warm origins interoperate from day one).
+
+**(3) Storage-layer sources (object metadata / native checksums / lazy sidecar).**
+Metainfo is small (~11 B/piece + ~120 B JSON: 100 MB→~0.4 KB, 1 GB→~2.9 KB,
+20 GB→~55 KB).
+- *Object user-metadata:* S3 caps user-metadata at 2 KB (fails at ~700 MB blobs)
+  and GCS at ~8 KB; covering 20 GB would force a global piece-length change. Not
+  viable for Kraken's 20 GB target.
+- *Native backend checksums (S3 part ETags / GCS CRC32C):* don't supply the
+  infohash (still derived from Kraken's piece sums) and mismatch on both chunk
+  boundaries and algorithm (CRC32C vs Kraken's CRC32-IEEE). Partial at best.
+- *Lazy ranged sidecar:* the infohash needs **all** piece sums up front (`Stat`
+  builds the full bitfield), so a partially-fetched sidecar defeats itself; and
+  the sidecar is already KB-scale, so there is nothing to save.
+- *Verdict:* a separate, whole-object `.kmeta` sidecar is the right call.
 
 ## 8. Stack C — cross-cluster soci index replication (design doc §6, format seam)
 
@@ -926,7 +1033,7 @@ blank-imports C2 and looks up `streaming.Get("soci")`). C1+C2 are pure additions
 
 ### 8.2 PR detail
 
-#### C1 — `lib/streaming/format.go`: `IndexFormat` + `Registry` + `Register()` + passthrough
+#### C1 — `lib/streaming/format.go`: `IndexFormat` + `Registry` + `Register()`
 
 **Files:** `lib/streaming/format.go` (new); `format_test.go` (new).
 **Imports added:** `fmt`, `io`, `sync`, `github.com/uber/kraken/core`.
@@ -958,19 +1065,11 @@ func Register(f IndexFormat)              // body: defaultRegistry.Register(f)
 func (r *Registry) Register(f IndexFormat) // body: Lock; panic if dup; store
 func (r *Registry) Get(name string) (IndexFormat, bool) // body: RLock; lookup
 func Get(name string) (IndexFormat, bool)               // body: defaultRegistry.Get
-
-// passthrough is the no-op format for plain images; returns no extra blobs.
-type passthrough struct{}
-func (passthrough) Name() string { return "passthrough" }
-func (passthrough) DependencyDigests(io.Reader) (core.DigestList, error)
-// body: return nil, nil.
-func init() { Register(passthrough{}) }
 ```
 **Call-site edits:** none (new package; consumed by C2 `init()` and C3).
 **Tests:** `func TestRegistry(t *testing.T)` — register+get roundtrip; get
-unknown ⇒ ok=false; duplicate `Register` panics; default passthrough returns
-empty list. `func TestPassthroughName(t *testing.T)`.
-**LOC (non-test):** ~55.
+unknown ⇒ ok=false; duplicate `Register` panics.
+**LOC (non-test):** ~45.
 
 #### C2 — `soci` sub-package implementing `IndexFormat`
 
@@ -1070,8 +1169,8 @@ docker. No mock regen (`DependencyResolver` unchanged).
 **LOC (non-test):** ~70 (`soci_resolver.go` ~50 reusing the dockerResolver retry,
 `map.go` arm ~12, yaml ~4).
 
-v1 format set is **soci + passthrough** (design doc §6); estargz needs no
-`lib/streaming` entry (its TOC is in-layer, opaque to Kraken), nydus is later.
+v1 format set is **soci** only; estargz needs no `lib/streaming` entry (its TOC
+is in-layer, opaque to Kraken), nydus is later.
 
 ## 9. Stack D — tracker partial-aware discovery (design doc §7)
 
@@ -1264,13 +1363,16 @@ here.
 - **Scheduler integration:** extend existing scheduler tests so `DownloadReader`
   returns before completion and serves pieces as they land (eager after A7, lazy
   after A8).
-- **Stack B:** B1 tests `byteRange` + `DownloadRange` against the backend mocks
-  (regenerated `MockGCS`, new `MockRangeDownloader`); B2 tests the origin partial
-  `Torrent`/`TorrentArchive` against a real `*store.CADownloadStore` fixture
-  (lifted from `agentstorage`); B3 tests `RefreshRange` per-piece dedup, the
-  whole-blob fallback when a backend lacks `RangeDownloader`, and that bytes land
-  at `pieceLength*piece`.
-- **Stack C:** C1 tests the `Registry` (roundtrip, duplicate-panic, passthrough);
+- **Stack B:** B1 tests `DownloadRange` against a real testfs fixture
+  (first/interior/short-last/past-EOF-clamp/full); B2 tests that `Exec` writes
+  both the blob and the `.kmeta` sidecar (incl. the blob-already-exists backfill)
+  and that the sidecar round-trips to the local `TorrentMeta`; B3 tests the
+  partial `Torrent` against a real `*store.CADownloadStore` fixture + a fake
+  `RangeDownloader` (one `DownloadRange` per piece, sum-mismatch re-fetch,
+  single-fetch under concurrency, restart durability); B4 tests `loadMetaInfo`
+  cold (sidecar present ⇒ partial torrent) and the whole-blob fallback when a
+  backend lacks `RangeDownloader` or has no sidecar.
+- **Stack C:** C1 tests the `Registry` (roundtrip, duplicate-panic);
   C2 tests `DependencyDigests` over `dockerutil` manifest fixtures; C3 tests
   `sociResolver.Resolve` with `mockblobclient` and the `NewMap` first-match
   routing. A build-index integration test can replicate a `.soci` tag and assert
@@ -1282,9 +1384,13 @@ here.
 - **e2e (post-A10):** the existing `examples/devcluster/estargz` and `soci`
   harnesses over `make devcluster` — assert time-to-running ≪ overlayfs, bytes
   fetched ≪ full image, `remote-snapshot-prepared:true > 0`, 0 fallback errors,
-  and the agent↔agent P2P share > 0 (`p2p_agent_benchmark.sh`). A **cold-origin**
-  variant (Stack B) wipes the origin cache before the lazy leg and asserts the
-  origin too fetches ≪ full image from the backend.
+  and the agent↔agent P2P share > 0 (`p2p_agent_benchmark.sh`). The **cold-origin**
+  variant (Stack B) is already wired into the estargz harness: `run_e2e.sh`
+  `cold_origin` POSTs `forcecleanup?ttl_hr=0` (writeback first, so the blob +
+  `.kmeta` are on the backend, then the warm cache is wiped) before the lazy leg,
+  and `estargz_benchmark.sh` parses the testfs download log to assert the cold
+  origin range-fetched only touched pieces (`.kmeta` 200 + per-piece 206, zero
+  full 200 blob GETs) — far below the full image.
 
 ## 12. Open questions
 
@@ -1295,7 +1401,16 @@ here.
    `kraken-indexer` job. Design doc leans external for v1.
 3. **GC / pinning** of index + ztoc blobs while an image is referenced —
    config/policy, not new code, but unresolved.
-4. **Piece-length vs. snapshotter chunk alignment** — SOCI/eStargz chunks won't
-   align with Kraken `PieceLength`; range priority must round to piece
-   boundaries, and read amplification must be quantified.
+4. **Piece-length vs. snapshotter chunk alignment (resolved)** — see design doc
+   Open Question #3. Read amplification is bounded by whole-piece CRC32
+   verification (the load-bearing constraint). Fix: byte-budgeted readahead
+   (`streamReadaheadBytes`, default 32 MiB) applied only on sequential `Read`;
+   `ReadAt` passes readahead=0 (priority hint only, no overshoot). Pays twice
+   (P2P + cold-origin backend egress).
 5. **`tagclient` timeout** under real build-index latency (see §6).
+6. **`.kmeta` sidecar lifecycle (Stack B).** The sidecar is written at writeback
+   and read on cold pulls, but nothing deletes it when its blob is GC'd from the
+   backend, and it is currently `.kmeta`-suffixed before `BlobPath` (valid for
+   the identity pather; other pathers are out of PoC scope). Resolve: tie sidecar
+   deletion to blob deletion (or a TTL sweep), and confirm the suffix survives
+   each production pather. Config/policy, plus a small deletion hook.

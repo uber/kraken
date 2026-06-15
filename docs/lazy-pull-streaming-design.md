@@ -664,6 +664,35 @@ before/after methodology already in the repo:
 2. Index immutability vs. tag mutation: derived tag is content-addressed by
    manifest digest, so it's immutable — good. Confirm GC keeps the index blob
    pinned as long as the image is referenced.
-3. Piece length vs. snapshotter chunk size: SOCI/eStargz chunks won't align with
-   Kraken `PieceLength` (size-bucketed, `lib/metainfogen/config.go:70`). Range
-   priority must round to piece boundaries; quantify read amplification.
+3. **Piece length vs. snapshotter chunk size (resolved).**
+   SOCI/eStargz chunks won't align with Kraken `PieceLength` (size-bucketed,
+   `lib/metainfogen/config.go:70`). Every range read rounds to whole-piece
+   boundaries because the agent verifies each piece via CRC32 before serving
+   any byte (`agentstorage/torrent.go:192`). This is the load-bearing
+   constraint — it cannot change without breaking P2P integrity.
+
+   **Read amplification:** `bytes fetched = (distinct pieces touched) × pieceLen`.
+   For sequential workloads (e.g. `import torch`) deduplication keeps aggregate
+   amplification low (~4.2% measured). For sparse random access the worst case
+   per-read is `pieceLen / readSize` (up to 16–32× for small reads against
+   4 MiB pieces).
+
+   **Resolution — byte-budgeted, sequential-only readahead:**
+   The current `streamReader` applies a fixed 8-piece readahead
+   (`streamReadahead = 8`) in `acquirePiece` on *every* blocking piece,
+   including random `ReadAt` calls. `ReadAt` already pre-demands its exact
+   span (`:166`), so the readahead overshoot on random reads is pure waste.
+   The fix:
+   - Replace `const streamReadahead = 8` (pieces) with a byte-budget constant
+     `streamReadaheadBytes` (default 32 MiB, same effective budget as today for
+     4 MiB pieces, but adapts to other piece sizes).
+   - Add a struct field `readahead int` = `budget / pieceLen` (min 1, 0 for
+     empty blobs), computed once at construction.
+   - Change `acquirePiece(piece, readahead int)` so demand becomes
+     `[piece, piece+readahead+1)`.
+   - `openAt` (sequential `Read`) passes `r.readahead` — full prefetch window.
+   - `ReadAt` (random) passes `0` — keeps the `priority()` hint so the
+     dispatcher knows which piece to fetch next, but no overshoot beyond
+     the exact span already demanded.
+   This pays twice: P2P transfer *and* origin→backend egress (Stack B cold
+   origin range-fetch). No change to the verification model or piece grid.

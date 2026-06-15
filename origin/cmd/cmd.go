@@ -193,6 +193,11 @@ func Run(flags *Flags, opts ...Option) {
 		log.Fatalf("Failed to create castore: %s", err)
 	}
 
+	cads, err := store.NewCADownloadStore(config.CADownloadStore, stats)
+	if err != nil {
+		log.Fatalf("Failed to create cadownloadstore: %s", err)
+	}
+
 	pctx, err := core.NewPeerContext(
 		config.PeerIDFactory, flags.Zone, flags.KrakenCluster, flags.PeerIP, flags.PeerPort, true)
 	if err != nil {
@@ -232,7 +237,7 @@ func Run(flags *Flags, opts ...Option) {
 	}
 
 	sched, err := scheduler.NewOriginScheduler(
-		config.Scheduler, stats, pctx, cas, netevents, blobRefresher)
+		config.Scheduler, stats, pctx, cas, cads, backendManager, netevents, blobRefresher)
 	if err != nil {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
@@ -266,6 +271,7 @@ func Run(flags *Flags, opts ...Option) {
 		addr,
 		hashRing,
 		cas,
+		cads,
 		blobclient.NewProvider(blobclient.WithTLS(tls)),
 		blobclient.NewClusterProvider(blobclient.WithTLS(tls)),
 		pctx,
