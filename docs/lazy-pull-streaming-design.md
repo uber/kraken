@@ -528,31 +528,171 @@ the one resolver above to replicate cross-cluster.
 
 ## zstd interaction (do this right or it breaks streaming)
 
+### Current state: Kraken is compression-agnostic
+
 There is **no zstd code or design in the repo today** (grep: zero `zstd`,
-`klauspost`, `seekable`); the in-flight `docs/*cache*` work is off-heap caching,
-not compression. The hard rule for compatibility with streaming:
+`klauspost`, `seekable` in Go source; zero compression libraries in `go.mod`).
+The entire blob pipeline — push, store, piece-hash, P2P transfer, serve —
+operates on **opaque bytes** with zero decompression:
 
-- Digest and piece CRCs are over the **stored bytes**
-  (`core/digester.go`, `core/metainfo.go` `calcPieceSums`), and piece reads are
-  linear seeks `offset = piece * pieceLength`
-  (`storage/piecereader/file.go:96`). **Whole-blob single-stream zstd destroys
-  this 1:1 offset mapping and is incompatible with byte-range / lazy pull.**
-- The two compatible designs:
-  1. **Per-piece zstd** — each `PieceLength` chunk is an independent zstd frame.
-     Frame boundary == piece boundary, so offset math is preserved; compress for
-     transport/at-rest, decompress + verify on read. Cleanest fit; recommend
-     coordinating the zstd effort to land **per-piece**, not whole-blob.
-  2. **zstd seekable format** with an explicit uncompressed→compressed offset
-     index (skippable frames). More machinery; only if cross-tool seekable-zstd
-     compat is required.
-- OCI digests are over **uncompressed** layer bytes the client expects, so
-  at-rest compression also needs the digest kept over uncompressed bytes (a
-  CAStore change). Keep at-rest compression out of v1; if pursued, gate it
-  behind the per-piece model above.
+- **Digest**: SHA256 of raw bytes (`core/digester.go:36`)
+- **Piece sums**: CRC32-IEEE of raw bytes (`core/piece_hash.go:21`,
+  `core/metainfo.go:145` — `io.CopyN(h, blob, pieceLength)`)
+- **Storage**: CAStore writes bytes as-is (`lib/store/ca_store.go:183`)
+- **Serve**: `io.Copy(w, f)` — raw bytes to wire (`agent/agentserver/server.go:175`)
+- **Media types**: parsed for manifest routing only, never for content
+  transformation (`utils/dockerutil/dockerutil.go:35-76`)
 
-Net: streaming and zstd are compatible **iff zstd is per-piece**. Flag this to
-the zstd workstream now — it's a cheap constraint to honor early and expensive
-to retrofit.
+This means Kraken **already accepts `tar+zstd` layers** — if a client pushes
+them, they are stored, piece-hashed, P2P-distributed, and served back
+identically to `tar+gzip`. The client (containerd 1.5+) handles decompression.
+The only gate is whether the vendored `docker/distribution` v2.7.1 rejects
+zstd media types during manifest validation (the OCI `+zstd` media type was
+added in OCI Image Spec v1.1.0, February 2024).
+
+### The hard rule for streaming compatibility
+
+Piece CRCs are over the **stored bytes** (`core/metainfo.go` `calcPieceSums`),
+and piece reads are linear seeks `offset = piece * pieceLength`
+(`storage/piecereader/file.go:96`). **Whole-blob single-stream zstd destroys
+this 1:1 offset mapping and is incompatible with byte-range / lazy pull.**
+
+### Three levels of zstd support
+
+**Level 1 — Accept zstd layers (zero Kraken changes).** Already works. The
+blob is opaque. The only prerequisite: ensure the manifest validator accepts
+`application/vnd.oci.image.layer.v1.tar+zstd` (OCI v1.1.0). PR #584 (open,
+OCI manifest/index support) is adjacent.
+
+**Level 2 — At-rest / transport compression (per-piece zstd).** Compress each
+`PieceLength` chunk as an independent zstd frame for storage savings and P2P
+bandwidth reduction. This is the recommended production path.
+
+**Level 3 — Seekable zstd for lazy pull.** The zstd seekable format (RFC 8878
+skippable frames + seek table) enables random-access decompression — relevant
+only if Kraken needs to serve decompressed bytes from a compressed at-rest
+store, which it currently does not (the client decompresses).
+
+### Per-piece zstd design (Level 2 — recommended)
+
+Each `PieceLength` chunk is an independent zstd frame. Frame boundary == piece
+boundary, so offset math is preserved.
+
+**How it works:**
+
+1. At writeback (or upload commit), compress each piece independently:
+   ```
+   for each piece [i]:
+     compressed[i] = zstd.Encode(blob[i*pieceLen : (i+1)*pieceLen])
+   ```
+2. CRC32 piece sums are computed over the **compressed** bytes (same principle
+   as today — piece sums are over whatever bytes are on disk/wire).
+3. The piece reader decompresses on read:
+   ```
+   GetPieceReader(i) → zstd.Decode(compressed[i])
+   ```
+4. The metainfo gains a `Compressed bool` or codec field so peers know to
+   decompress. The infohash changes (piece sums are over different bytes), so
+   compressed and uncompressed torrents are distinct swarms — no mixed-mode
+   ambiguity.
+
+**Compression ratio tradeoff:**
+
+| Method | Ratio (typical container layer) | Random access? |
+|--------|--------------------------------|----------------|
+| Solid zstd (whole blob) | ~3.0–3.2× | No |
+| Per-piece zstd (4 MiB pieces) | ~2.5–3.0× | Yes |
+| Per-file zstd (eStargz-zstd) | ~2.0–2.8× | Yes (file-level) |
+| gzip (current OCI default) | ~2.0–2.5× | No |
+
+The ~10–15% ratio penalty vs solid compression comes from lost cross-piece
+dictionary context and per-frame overhead. It shrinks with larger pieces and
+is more than offset by the bandwidth savings from demand-driven fetch (only
+touched pieces transferred).
+
+**Go libraries:** `github.com/klauspost/compress/zstd` (pure Go, no cgo,
+used by containerd, CockroachDB) + `github.com/SaveTheRbtz/zstd-seekable-format-go`
+(implements full seekable format spec, wraps klauspost).
+
+**What changes in Kraken:**
+
+- `core/metainfo.go`: add `Codec` field to `info` struct (default empty =
+  uncompressed, `"zstd"` = per-piece zstd). Must be included in the bencoded
+  `info` so it affects the infohash (compressed != uncompressed swarm).
+- `lib/metainfogen/generator.go`: optionally compress each piece before
+  computing CRC32, store compressed length per piece (variable-length pieces).
+- `lib/torrent/storage/piecereader/`: decompress on read when codec is set.
+- `lib/torrent/storage/agentstorage/torrent.go`: `WritePiece` accepts
+  compressed bytes, `GetPieceReader` decompresses.
+- **Piece length becomes variable** after compression. The metainfo currently
+  assumes uniform piece length (`PieceLength(0)` for all but the last). With
+  per-piece compression, each piece has a different compressed size. Two options:
+  (a) store compressed sizes in metainfo (cleanest, ~4B/piece overhead), or
+  (b) pad each compressed frame to the original piece length (wastes space,
+  preserves uniform offset math). Recommend (a).
+- P2P protocol: no change needed — `PiecePayloadMessage` already carries
+  arbitrary bytes. Peers decompress locally after CRC32 verification.
+
+**OCI digest interaction:** OCI layer digests are over **compressed** bytes
+(manifest `layers[].digest` = SHA256 of the blob as stored). OCI DiffIDs
+(image config `rootfs.diff_ids`) are over **uncompressed** tar bytes. Kraken's
+blob digest (`core/digest.go`) is the OCI layer digest (compressed bytes), so
+per-piece zstd does NOT change the blob identity — it changes the internal
+piece representation. The blob digest stays the SHA256 of the original
+(pre-Kraken-compression) bytes. Kraken's at-rest compression is a transport
+optimization, invisible to OCI.
+
+### eStargz-zstd (zstdchunked) — already works with streaming
+
+stargz-snapshotter fully supports zstd as an alternative to gzip. The format
+(`zstdchunked`) uses independent zstd frames per file chunk and a TOC in a
+zstd skippable frame. Key details:
+
+- **Footer**: 40 bytes (vs 51 for gzip-eStargz). Magic: `GnUlInUx` (8 bytes).
+  Encodes TOC offset/compressed-size/uncompressed-size as uint64 LE.
+- **TOC**: JSON compressed with zstd, stored in a skippable frame
+  (`0x184D2A5E` magic). Same `TOCEntry` structure as gzip-eStargz (file
+  metadata + `Offset`/`ChunkOffset`/`ChunkDigest` per chunk).
+- **DiffID**: preserved (TOC is in skippable frames, not in the tar stream —
+  unlike gzip-eStargz which embeds `stargz.index.json` as a tar entry).
+- **Media type**: standard `application/vnd.oci.image.layer.v1.tar+zstd`.
+- **OCI annotations**: `io.containers.zstd-chunked.manifest-position` =
+  `tocOffset:compressedLen:rawLen:manifestType`.
+
+For Kraken, eStargz-zstd layers are opaque blobs served via the same
+format-agnostic range path. No Kraken change required — confirmed by the PoC
+(gzip-eStargz already validated; zstd variant is structurally identical from
+Kraken's perspective).
+
+### SOCI + zstd: hard gap
+
+**SOCI cannot index zstd layers.** The ztoc codepath returns
+`fmt.Errorf("not implemented: %s", Zstd)` (`ztoc/compression/zinfo.go`).
+SOCI's lazy loading depends on "zinfo" — a gzip-specific index mapping
+uncompressed offsets to compressed byte offsets via deflate block dictionaries
+(C code). There is an open issue (#519, March 2026) requesting zstd support.
+
+**Implication:** if the fleet moves to `tar+zstd` layers, SOCI cannot provide
+lazy pull for them. Only eStargz (with its mandatory conversion step) supports
+zstd lazy pull today.
+
+| | tar+gzip layers | tar+zstd layers |
+|---|---|---|
+| **SOCI** | Works (no conversion) | Not supported (issue #519) |
+| **eStargz** | Works (conversion to gzip-eStargz) | Works (conversion to zstdchunked) |
+| **Kraken streaming** | Works (format-agnostic) | Works (format-agnostic) |
+
+### Recommendation
+
+1. **v1 (now):** do nothing. Kraken already accepts zstd layers. The streaming
+   read path is format-agnostic. eStargz-zstd works out of the box.
+2. **v2 (coordinate with zstd workstream):** per-piece zstd for P2P transport
+   bandwidth reduction. Land it as an opt-in codec in metainfo, behind a
+   config flag. ~200–300 LOC (codec in metainfo, compress at write, decompress
+   at read, variable piece sizes). Flag this constraint to the zstd effort now:
+   **per-piece, not whole-blob**.
+3. **Watch:** SOCI zstd support (issue #519). If it lands, SOCI regains parity
+   with eStargz for zstd layers — no Kraken change needed.
 
 ---
 
