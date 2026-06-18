@@ -322,7 +322,7 @@ type newTorrentEvent struct {
 func (e newTorrentEvent) apply(s *state) {
 	ctrl, ok := s.torrentControls[e.torrent.InfoHash()]
 	if ok && ctrl.dispatcher.Complete() && !e.torrent.Complete() {
-		// The scheduler consider the torrent complete, while it is
+		// The scheduler considers the torrent complete, while it is
 		// actually not on disk. This happens when the disk cache
 		// asynchronously evicts the torrent, leaving the scheduler
 		// incorrectly thinking the torrent is still on disk.
