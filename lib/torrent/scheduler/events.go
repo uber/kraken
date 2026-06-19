@@ -321,6 +321,15 @@ type newTorrentEvent struct {
 // apply begins seeding / leeching a new torrent.
 func (e newTorrentEvent) apply(s *state) {
 	ctrl, ok := s.torrentControls[e.torrent.InfoHash()]
+	if ok && ctrl.dispatcher.Complete() && !e.torrent.Complete() {
+		// The scheduler considers the torrent complete, while it is
+		// actually not on disk. This happens when the disk cache
+		// asynchronously evicts the torrent, leaving the scheduler
+		// incorrectly thinking the torrent is still on disk.
+		// We fix this by removing the mem entry for the torrent.
+		s.removeTorrent(e.torrent.InfoHash(), nil)
+		ok = false
+	}
 	if !ok {
 		var err error
 		ctrl, err = s.addTorrent(e.namespace, e.torrent, true)

@@ -464,6 +464,47 @@ func TestSchedulerRemoveTorrent(t *testing.T) {
 	require.True(os.IsNotExist(err))
 }
 
+func TestDownloadAfterCacheEviction(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newTestMocks(t)
+	defer cleanup()
+
+	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
+
+	mocks.metaInfoClient.EXPECT().Download(
+		namespace, blob.Digest).Return(blob.MetaInfo, nil).AnyTimes()
+
+	config := configFixture()
+	config.ConnState.BlacklistDuration = time.Second
+
+	seeder := mocks.newPeer(config)
+	seeder.writeTorrent(namespace, blob)
+	require.NoError(seeder.scheduler.Download(namespace, blob.Digest))
+
+	leecher := mocks.newPeer(config)
+
+	// Download the blob successfully.
+	require.NoError(leecher.scheduler.Download(namespace, blob.Digest))
+	leecher.checkTorrent(t, namespace, blob)
+
+	// Wait for connections to close and blacklist to expire so the
+	// leecher can reconnect to the seeder for the re-download.
+	h := blob.MetaInfo.InfoHash()
+	waitForConnRemoved(t, leecher.scheduler, seeder.pctx.PeerID, h)
+	time.Sleep(config.ConnState.BlacklistDuration)
+
+	// Simulate cache cleanup evicting the file from disk while the
+	// scheduler still considers the torrent complete in memory.
+	require.NoError(leecher.cads.Cache().DeleteFile(blob.Digest.Hex()))
+
+	// A second download for the same blob must succeed by
+	// re-downloading from the seeder.
+	require.NoError(leecher.scheduler.Download(namespace, blob.Digest))
+	leecher.checkTorrent(t, namespace, blob)
+}
+
 func TestSchedulerProbe(t *testing.T) {
 	require := require.New(t)
 
