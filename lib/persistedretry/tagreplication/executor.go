@@ -14,12 +14,19 @@
 package tagreplication
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/docker/distribution"
+	"github.com/docker/distribution/manifest/manifestlist"
+
 	"github.com/uber/kraken/build-index/tagclient"
+	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/utils/dockerutil"
 
 	"github.com/uber-go/tally"
 )
@@ -69,8 +76,13 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 	if err != nil {
 		return fmt.Errorf("lookup remote origin cluster: %s", err)
 	}
-	for _, d := range t.Dependencies {
+	deps, err := e.resolveDeps(t.Tag, t.Digest)
+	if err != nil {
+		return fmt.Errorf("get deps: %w", err)
+	}
+	for _, d := range deps {
 		if err := e.originCluster.ReplicateToRemote(t.Tag, d, remoteOrigin); err != nil {
+			e.stats.Counter("replicate_blob_failures").Inc(1)
 			return fmt.Errorf("origin cluster replicate: %s", err)
 		}
 	}
@@ -87,4 +99,46 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 	e.stats.Timer("lifetime").Record(time.Since(t.CreatedAt))
 
 	return nil
+}
+
+func (e *Executor) resolveDeps(tag string, d core.Digest) (core.DigestList, error) {
+	deps := core.DigestList{d}
+	m, err := e.downloadManifest(tag, d)
+	if err != nil {
+		return nil, fmt.Errorf("download manifest: %w", err)
+	}
+	refs, err := dockerutil.GetManifestReferences(m)
+	if err != nil {
+		return nil, fmt.Errorf("get manifest references: %w", err)
+	}
+	if _, ok := m.(*manifestlist.DeserializedManifestList); !ok {
+		return append(deps, refs...), nil
+	}
+
+	for _, subDigest := range refs {
+		subManifest, err := e.downloadManifest(tag, subDigest)
+		if err != nil {
+			return nil, fmt.Errorf("download sub-manifest %s: %w", subDigest, err)
+		}
+		subRefs, err := dockerutil.GetManifestReferences(subManifest)
+		if err != nil {
+			return nil, fmt.Errorf("get sub-manifest references: %w", err)
+		}
+		deps = append(deps, subDigest)
+		deps = append(deps, subRefs...)
+	}
+
+	return deps, nil
+}
+
+func (e *Executor) downloadManifest(tag string, d core.Digest) (distribution.Manifest, error) {
+	var buf bytes.Buffer
+	if err := e.originCluster.DownloadBlob(context.Background(), tag, d, &buf); err != nil {
+		return nil, err
+	}
+	m, _, err := dockerutil.ParseManifest(&buf)
+	if err != nil {
+		return nil, fmt.Errorf("parse manifest: %w", err)
+	}
+	return m, nil
 }
