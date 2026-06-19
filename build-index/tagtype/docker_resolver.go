@@ -20,7 +20,6 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/docker/distribution"
-	"github.com/docker/distribution/manifest/manifestlist"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/origin/blobclient"
@@ -34,16 +33,15 @@ type dockerResolver struct {
 	backoffConfig httputil.ExponentialBackOffConfig
 }
 
-// Resolve returns all blob digests the manifest at d depends on, including d itself.
-// For manifest lists, each sub-manifest is resolved recursively.
+// Resolve returns all layers + manifest of given tag as its dependencies.
 func (r *dockerResolver) Resolve(tag string, d core.Digest) (core.DigestList, error) {
 	m, err := r.downloadManifest(tag, d)
 	if err != nil {
 		return nil, fmt.Errorf("download manifest: %w", err)
 	}
-	deps, err := r.resolveDeps(tag, m)
+	deps, err := dockerutil.GetManifestReferences(m)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get manifest references: %w", err)
 	}
 	return append(deps, d), nil
 }
@@ -82,35 +80,4 @@ func (r *dockerResolver) downloadManifest(tag string, d core.Digest) (distributi
 		return nil, fmt.Errorf("parse manifest: %w", err)
 	}
 	return manifest, nil
-}
-
-func (r *dockerResolver) resolveDeps(tag string, m distribution.Manifest) (core.DigestList, error) {
-	ml, ok := m.(*manifestlist.DeserializedManifestList)
-	if !ok {
-		refs, err := dockerutil.GetManifestReferences(m)
-		if err != nil {
-			return nil, fmt.Errorf("get manifest references: %w", err)
-		}
-		return refs, nil
-	}
-
-	subDigests, err := dockerutil.GetManifestReferences(ml)
-	if err != nil {
-		return nil, fmt.Errorf("get manifest list references: %w", err)
-	}
-
-	var deps core.DigestList
-	for _, subDigest := range subDigests {
-		subManifest, err := r.downloadManifest(tag, subDigest)
-		if err != nil {
-			return nil, fmt.Errorf("download sub-manifest: %w", err)
-		}
-		subRefs, err := dockerutil.GetManifestReferences(subManifest)
-		if err != nil {
-			return nil, fmt.Errorf("get sub-manifest references: %w", err)
-		}
-		deps = append(deps, subDigest)
-		deps = append(deps, subRefs...)
-	}
-	return deps, nil
 }
