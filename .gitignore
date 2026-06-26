@@ -30,6 +30,7 @@ tools/bin/trackerload/trackerload
 
 *.xml
 *.pyc
+__pycache__/
 venv
 
 # Golang coverage files
@@ -54,8 +55,12 @@ tags
 .DS_Store
 docs/_build/
 env*
+!test/perf/envs/
 *.pyc
 *.pickle
 
 # For integration tests.
 .tmptest/
+
+# Output of the perf benchmark harness (test/perf/runner.py).
+bench-results/
