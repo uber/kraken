@@ -43,6 +43,7 @@ type PrefetchHandler struct {
 	metrics            tally.Scope
 	getManifestLatency tally.Histogram
 	getTagLatency      tally.Histogram
+	blobDownloadTime   tally.Histogram
 }
 
 // blobInfo holds digest and size information for a blob.
@@ -121,6 +122,7 @@ func NewPrefetchHandler(
 		metrics:            m,
 		getManifestLatency: m.Histogram("download_manifest_latency", tally.MustMakeExponentialDurationBuckets(1*time.Second, 2, 12)),
 		getTagLatency:      m.Histogram("get_tag_latency", tally.MustMakeExponentialDurationBuckets(100*time.Millisecond, 2, 10)),
+		blobDownloadTime:   m.Histogram("blob_download_time", tally.MustMakeExponentialDurationBuckets(time.Millisecond, 2, 20)), // 1ms-8.7m
 	}
 }
 
@@ -278,7 +280,7 @@ func (ph *PrefetchHandler) downloadBlobs(input *prefetchInput) {
 			blobStart := time.Now()
 			err := ph.clusterClient.DownloadBlob(context.Background(), input.namespace, blob.digest, io.Discard)
 			blobDuration := time.Since(blobStart)
-			ph.metrics.Timer("blob_download_time").Record(blobDuration)
+			ph.blobDownloadTime.RecordDuration(blobDuration)
 			ph.metrics.Counter("bytes_downloaded").Inc(blob.size)
 			if err != nil {
 				if serr, ok := err.(httputil.StatusError); ok && serr.Status == http.StatusAccepted {

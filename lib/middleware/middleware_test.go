@@ -70,12 +70,12 @@ func TestScopeByEndpoint(t *testing.T) {
 	}
 }
 
-func TestLatencyTimer(t *testing.T) {
+func TestLatencyHistogram(t *testing.T) {
 	require := require.New(t)
 	stats := tally.NewTestScope("", nil)
 
 	r := chi.NewRouter()
-	r.Use(LatencyTimer(stats))
+	r.Use(LatencyHistogram(stats))
 	r.Get("/foo/{foo}", func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(200 * time.Millisecond)
 	})
@@ -86,17 +86,22 @@ func TestLatencyTimer(t *testing.T) {
 	_, err := httputil.Get(fmt.Sprintf("http://%s/foo/x", addr))
 	require.NoError(err)
 
-	now := time.Now()
+	histograms := stats.Snapshot().Histograms()
+	require.Equal(1, len(histograms))
 
-	require.Equal(1, len(stats.Snapshot().Timers()))
-	for _, v := range stats.Snapshot().Timers() {
-		require.Equal("latency", v.Name())
-		require.WithinDuration(now, now.Add(v.Values()[0]), 500*time.Millisecond)
-		require.Equal(map[string]string{
-			"endpoint": "foo",
-			"method":   "GET",
-		}, v.Tags())
+	h, ok := histograms["latency+endpoint=foo,method=GET"]
+	require.True(ok)
+	require.Equal("latency", h.Name())
+	require.Equal(map[string]string{
+		"endpoint": "foo",
+		"method":   "GET",
+	}, h.Tags())
+
+	var total int64
+	for _, count := range h.Durations() {
+		total += count
 	}
+	require.Equal(int64(1), total)
 }
 
 func TestStatusCounter(t *testing.T) {

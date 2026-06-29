@@ -132,7 +132,7 @@ func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.StatusCounter(s.stats))
-	r.Use(middleware.LatencyTimer(s.stats))
+	r.Use(middleware.LatencyHistogram(s.stats))
 
 	tracingMiddleware := otelhttp.NewMiddleware("kraken-origin",
 		otelhttp.WithTracerProvider(otel.GetTracerProvider()))
@@ -478,7 +478,6 @@ type localReplicationHook struct {
 func (h *localReplicationHook) Run(d core.Digest) {
 	start := time.Now()
 	log.With("digest", d.Hex()).Info("Starting local replication")
-	timer := h.server.metrics.replicateBlobTimer.Start()
 	if err := h.server.replicateBlobLocally(d); err != nil {
 		// Don't return error here as we only want to cache storage backend errors.
 		duration := time.Since(start)
@@ -486,8 +485,8 @@ func (h *localReplicationHook) Run(d core.Digest) {
 		h.server.metrics.replicateBlobErrors.Inc(1)
 		return
 	}
-	timer.Stop()
 	duration := time.Since(start)
+	h.server.metrics.replicateBlobLatency.RecordDuration(duration)
 	log.With("digest", d.Hex(), "duration_s", duration.Seconds()).Info("Successfully completed local replication")
 }
 

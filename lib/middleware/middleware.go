@@ -23,6 +23,8 @@ import (
 	"github.com/uber-go/tally"
 )
 
+var _latencyBuckets = tally.MustMakeExponentialDurationBuckets(time.Millisecond, 2, 20) // 1ms-8.7m
+
 // tagEndpoint tags stats by endpoint path and method, ignoring any path variables.
 // For example, "/foo/{foo}/bar/{bar}" is tagged with endpoint "foo.bar"
 //
@@ -58,13 +60,13 @@ func isPathVariable(s string) bool {
 	return len(s) >= 2 && s[0] == '{' && s[len(s)-1] == '}'
 }
 
-// LatencyTimer measures endpoint latencies.
-func LatencyTimer(stats tally.Scope) func(next http.Handler) http.Handler {
+// LatencyHistogram measures endpoint latencies.
+func LatencyHistogram(stats tally.Scope) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			next.ServeHTTP(w, r)
-			tagEndpoint(stats, r).Timer("latency").Record(time.Since(start))
+			tagEndpoint(stats, r).Histogram("latency", _latencyBuckets).RecordDuration(time.Since(start))
 		})
 	}
 }

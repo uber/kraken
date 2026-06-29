@@ -15,33 +15,24 @@ package tagreplication
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/origin/blobclient"
-
-	"github.com/uber-go/tally"
 )
 
 // Executor executes tag replication tasks.
 type Executor struct {
-	stats             tally.Scope
 	originCluster     blobclient.ClusterClient
 	tagClientProvider tagclient.Provider
 }
 
 // NewExecutor creates a new Executor.
 func NewExecutor(
-	stats tally.Scope,
 	originCluster blobclient.ClusterClient,
 	tagClientProvider tagclient.Provider) *Executor {
 
-	stats = stats.Tagged(map[string]string{
-		"module": "tagreplicationexecutor",
-	})
-
-	return &Executor{stats, originCluster, tagClientProvider}
+	return &Executor{originCluster, tagClientProvider}
 }
 
 // Name returns the executor name.
@@ -56,7 +47,6 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 	if !ok {
 		return fmt.Errorf("expected *Task, got %T", r)
 	}
-	start := time.Now()
 	remoteTagClient := e.tagClientProvider.Provide(t.Destination)
 
 	if ok, err := remoteTagClient.Has(t.Tag); err == nil && ok {
@@ -81,10 +71,6 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 	if err := remoteTagClient.PutAndReplicate(t.Tag, t.Digest); err != nil {
 		return fmt.Errorf("put and replicate tag: %s", err)
 	}
-
-	// We don't want to time noops nor errors.
-	e.stats.Timer("replicate").Record(time.Since(start))
-	e.stats.Timer("lifetime").Record(time.Since(t.CreatedAt))
 
 	return nil
 }

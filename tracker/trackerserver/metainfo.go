@@ -31,7 +31,6 @@ func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) erro
 		return handler.Errorf("parse digest: %s", err).Status(http.StatusBadRequest)
 	}
 
-	timer := s.stats.Timer("get_metainfo").Start()
 	mi, err := s.originCluster.GetMetaInfo(namespace, d)
 	if err != nil {
 		if serr, ok := err.(httputil.StatusError); ok {
@@ -40,7 +39,6 @@ func (s *Server) getMetaInfoHandler(w http.ResponseWriter, r *http.Request) erro
 		}
 		return err
 	}
-	timer.Stop()
 
 	b, err := mi.Serialize()
 	if err != nil {

@@ -18,7 +18,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	"github.com/uber-go/tally"
 	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
 	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
 )
@@ -43,7 +42,7 @@ func newExecutorMocks(t *testing.T) (*executorMocks, func()) {
 }
 
 func (m *executorMocks) new() *Executor {
-	return NewExecutor(tally.NoopScope, m.originCluster, m.tagClientProvider)
+	return NewExecutor(m.originCluster, m.tagClientProvider)
 }
 
 func (m *executorMocks) newTagClient() *mocktagclient.MockClient {

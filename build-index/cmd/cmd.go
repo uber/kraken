@@ -192,7 +192,6 @@ func Run(flags *Flags, opts ...Option) {
 	}
 
 	tagReplicationExecutor := tagreplication.NewExecutor(
-		stats,
 		originClient,
 		tagclient.NewProvider(tls))
 	tagReplicationStore, err := tagreplication.NewStore(localDB, remotes)
