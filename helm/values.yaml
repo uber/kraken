@@ -74,6 +74,17 @@ agent:
   initContainers:
   tolerations:
 #    - operator: "Exists"
+  # Override the list of IP address (ranges) allowed to access the agents
+  # Will be interpreted by NGINX allow statement.
+  #
+  # This can be useful e.g. when using AWS EKS with vpc-cni where the requests
+  # are made not from 127.0.0.1 but from the host IP
+  # default is:
+  # - 127.0.0.1
+  # - 172.17.0.1
+  allowedCidrs:
+    # - 192.168.178.1/24
+    # - 10.10.0.1
 testfs:
   enabled: true
   annotations:
