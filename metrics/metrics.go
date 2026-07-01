@@ -26,6 +26,7 @@ func init() {
 	register("statsd", newStatsdScope)
 	register("disabled", newDisabledScope)
 	register("m3", newM3Scope)
+	register("prometheus", newPrometheusScope)
 }
 
 var _scopeFactories = make(map[string]scopeFactory)
