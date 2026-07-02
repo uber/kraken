@@ -14,6 +14,7 @@
 package cmd
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/http"
@@ -112,7 +113,10 @@ func WithEffect(f func()) Option {
 }
 
 // Run runs the agent.
-func Run(flags *Flags, opts ...Option) {
+func Run(ctx context.Context, flags *Flags, opts ...Option) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	validateRequiredPorts(flags)
 
 	var overrides options
@@ -129,11 +133,11 @@ func Run(flags *Flags, opts ...Option) {
 		config = *overrides.config
 	} else {
 		if err := configutil.Load(flags.ConfigFile, &config); err != nil {
-			panic(err)
+			return err
 		}
 		if flags.SecretsFile != "" {
 			if err := configutil.Load(flags.SecretsFile, &config); err != nil {
-				panic(err)
+				return err
 			}
 		}
 	}
@@ -153,7 +157,7 @@ func Run(flags *Flags, opts ...Option) {
 	if stats == nil {
 		s, closer, err := metrics.New(config.Metrics, flags.KrakenCluster)
 		if err != nil {
-			log.Fatalf("Failed to init metrics: %s", err)
+			return fmt.Errorf("failed to init metrics: %s", err)
 		}
 		stats = s
 		defer closers.Close(closer)
@@ -162,7 +166,7 @@ func Run(flags *Flags, opts ...Option) {
 	if flags.PeerIP == "" {
 		localIP, err := netutil.GetLocalIP()
 		if err != nil {
-			log.Fatalf("Error getting local ip: %s", err)
+			return fmt.Errorf("error getting local ip: %s", err)
 		}
 		flags.PeerIP = localIP
 	}
@@ -174,40 +178,40 @@ func Run(flags *Flags, opts ...Option) {
 	pctx, err := core.NewPeerContext(
 		config.PeerIDFactory, flags.Zone, flags.KrakenCluster, flags.PeerIP, flags.PeerPort, false)
 	if err != nil {
-		log.Fatalf("Failed to create peer context: %s", err)
+		return fmt.Errorf("failed to create peer context: %s", err)
 	}
 
 	cads, err := store.NewCADownloadStore(config.CADownloadStore, stats)
 	if err != nil {
-		log.Fatalf("Failed to create local store: %s", err)
+		return fmt.Errorf("failed to create local store: %s", err)
 	}
 
 	netevents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
-		log.Fatalf("Failed to create network event producer: %s", err)
+		return fmt.Errorf("failed to create network event producer: %s", err)
 	}
 
 	trackers, err := config.Tracker.Build()
 	if err != nil {
-		log.Fatalf("Error building tracker upstream: %s", err)
+		return fmt.Errorf("error building tracker upstream: %s", err)
 	}
-	go trackers.Monitor(nil)
+	go trackers.Monitor(ctx.Done())
 
 	tls, err := config.TLS.BuildClient()
 	if err != nil {
-		log.Fatalf("Error building client tls config: %s", err)
+		return fmt.Errorf("error building client tls config: %s", err)
 	}
 
 	announceClient := announceclient.New(pctx, trackers, tls)
 	sched, err := scheduler.NewAgentScheduler(
 		config.Scheduler, stats, pctx, cads, netevents, trackers, announceClient, tls)
 	if err != nil {
-		log.Fatalf("Error creating scheduler: %s", err)
+		return fmt.Errorf("error creating scheduler: %s", err)
 	}
 
 	buildIndexes, err := config.BuildIndex.Build()
 	if err != nil {
-		log.Fatalf("Error building build-index upstream: %s", err)
+		return fmt.Errorf("error building build-index upstream: %s", err)
 	}
 
 	tagClient := tagclient.NewClusterClient(buildIndexes, tls)
@@ -216,7 +220,7 @@ func Run(flags *Flags, opts ...Option) {
 
 	registry, err := config.Registry.Build(config.Registry.ReadOnlyParameters(transferer, cads, stats))
 	if err != nil {
-		log.Fatalf("Failed to init registry: %s", err)
+		return fmt.Errorf("failed to init registry: %s", err)
 	}
 
 	registryAddr := fmt.Sprintf("127.0.0.1:%d", flags.AgentRegistryPort)
@@ -228,13 +232,14 @@ func Run(flags *Flags, opts ...Option) {
 	}
 	containerRuntimeFactory, err := containerruntime.NewFactory(containerRuntimeCfg, registryAddr)
 	if err != nil {
-		log.Fatalf("Failed to create container runtime factory: %s", err)
+		return fmt.Errorf("failed to create container runtime factory: %s", err)
 	}
 
 	agentServer := agentserver.New(
 		config.AgentServer, stats, cads, sched, tagClient, announceClient, containerRuntimeFactory)
 	addr := fmt.Sprintf(":%d", flags.AgentServerPort)
 	log.Infof("Starting agent server on %s", addr)
+	errCh := make(chan error, 3)
 	heartbeatTicker := &timeTicker{inner: time.NewTicker(10 * time.Second)}
 	heartbeatDone := make(chan struct{})
 	var heartbeatStop sync.Once
@@ -247,31 +252,72 @@ func Run(flags *Flags, opts ...Option) {
 
 	go heartbeat(stats, heartbeatTicker, heartbeatDone)
 	defer stopHeartbeat()
+
+	httpServer := &http.Server{Addr: addr, Handler: agentServer.Handler()}
 	go func() {
-		if err := http.ListenAndServe(addr, agentServer.Handler()); err != nil {
+		defer cancel()
+		// ErrServerClosed is returned by ListenAndServe when Shutdown() is
+		// called during a clean shutdown — it is expected, not a real error.
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			stopHeartbeat()
-			log.Fatal(err)
+			log.Errorf("agent server exited: %s", err)
+			errCh <- err
 		}
 	}()
 
 	log.Info("Starting registry...")
 	go func() {
+		defer cancel()
 		if err := registry.ListenAndServe(); err != nil {
 			stopHeartbeat()
-			log.Fatal(err)
+			log.Errorf("registry exited: %s", err)
+			errCh <- err
 		}
 	}()
 
-	if err := nginx.Run(config.Nginx, map[string]interface{}{
-		"allowed_cidrs": config.AllowedCidrs,
-		"port":          flags.AgentRegistryPort,
-		"registry_server": nginx.GetServer(
-			config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
-		"agent_server":    fmt.Sprintf("127.0.0.1:%d", flags.AgentServerPort),
-		"registry_backup": config.RegistryBackup},
-		nginx.WithTLS(config.TLS)); err != nil {
-		stopHeartbeat()
-		log.Fatal(err)
+	go func() {
+		defer cancel()
+		if err := nginx.RunContext(ctx, config.Nginx, map[string]interface{}{
+			"allowed_cidrs": config.AllowedCidrs,
+			"port":          flags.AgentRegistryPort,
+			"registry_server": nginx.GetServer(
+				config.Registry.Docker.HTTP.Net, config.Registry.Docker.HTTP.Addr),
+			"agent_server":    fmt.Sprintf("127.0.0.1:%d", flags.AgentServerPort),
+			"registry_backup": config.RegistryBackup},
+			nginx.WithTLS(config.TLS)); err != nil {
+			stopHeartbeat()
+			log.Errorf("nginx exited: %s", err)
+			errCh <- err
+		}
+	}()
+
+	runErr := waitForShutdown(ctx, errCh)
+	// Drain in-flight HTTP requests before returning. cancel() is called first
+	// so Shutdown does not block indefinitely if we are exiting due to an error
+	// rather than a signal.
+	cancel()
+	if err := httpServer.Shutdown(context.Background()); err != nil {
+		log.Errorf("agent server shutdown: %s", err)
+	}
+	return runErr
+}
+
+// waitForShutdown blocks until ctx is cancelled or an error arrives on errCh.
+// Goroutines always send to errCh before calling cancel(), so by the time
+// ctx.Done() is observed the error is already buffered and the non-blocking
+// drain will always retrieve it.
+func waitForShutdown(ctx context.Context, errCh <-chan error) error {
+	select {
+	case <-ctx.Done():
+		select {
+		case err := <-errCh:
+			return err
+		default:
+		}
+		log.Infof("shutting down: %s", ctx.Err())
+		return nil
+	case err := <-errCh:
+		return err
 	}
 }
 
