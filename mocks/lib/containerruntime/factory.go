@@ -12,30 +12,30 @@ import (
 	dockerdaemon "github.com/uber/kraken/lib/containerruntime/dockerdaemon"
 )
 
-// MockFactory is a mock of Factory interface
+// MockFactory is a mock of Factory interface.
 type MockFactory struct {
 	ctrl     *gomock.Controller
 	recorder *MockFactoryMockRecorder
 }
 
-// MockFactoryMockRecorder is the mock recorder for MockFactory
+// MockFactoryMockRecorder is the mock recorder for MockFactory.
 type MockFactoryMockRecorder struct {
 	mock *MockFactory
 }
 
-// NewMockFactory creates a new mock instance
+// NewMockFactory creates a new mock instance.
 func NewMockFactory(ctrl *gomock.Controller) *MockFactory {
 	mock := &MockFactory{ctrl: ctrl}
 	mock.recorder = &MockFactoryMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockFactory) EXPECT() *MockFactoryMockRecorder {
 	return m.recorder
 }
 
-// ContainerdClient mocks base method
+// ContainerdClient mocks base method.
 func (m *MockFactory) ContainerdClient() containerd.Client {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContainerdClient")
@@ -43,13 +43,13 @@ func (m *MockFactory) ContainerdClient() containerd.Client {
 	return ret0
 }
 
-// ContainerdClient indicates an expected call of ContainerdClient
+// ContainerdClient indicates an expected call of ContainerdClient.
 func (mr *MockFactoryMockRecorder) ContainerdClient() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContainerdClient", reflect.TypeOf((*MockFactory)(nil).ContainerdClient))
 }
 
-// DockerClient mocks base method
+// DockerClient mocks base method.
 func (m *MockFactory) DockerClient() dockerdaemon.DockerClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DockerClient")
@@ -57,7 +57,7 @@ func (m *MockFactory) DockerClient() dockerdaemon.DockerClient {
 	return ret0
 }
 
-// DockerClient indicates an expected call of DockerClient
+// DockerClient indicates an expected call of DockerClient.
 func (mr *MockFactoryMockRecorder) DockerClient() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DockerClient", reflect.TypeOf((*MockFactory)(nil).DockerClient))

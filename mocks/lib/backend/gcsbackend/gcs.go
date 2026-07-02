@@ -13,30 +13,30 @@ import (
 	iterator "google.golang.org/api/iterator"
 )
 
-// MockGCS is a mock of GCS interface
+// MockGCS is a mock of GCS interface.
 type MockGCS struct {
 	ctrl     *gomock.Controller
 	recorder *MockGCSMockRecorder
 }
 
-// MockGCSMockRecorder is the mock recorder for MockGCS
+// MockGCSMockRecorder is the mock recorder for MockGCS.
 type MockGCSMockRecorder struct {
 	mock *MockGCS
 }
 
-// NewMockGCS creates a new mock instance
+// NewMockGCS creates a new mock instance.
 func NewMockGCS(ctrl *gomock.Controller) *MockGCS {
 	mock := &MockGCS{ctrl: ctrl}
 	mock.recorder = &MockGCSMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockGCS) EXPECT() *MockGCSMockRecorder {
 	return m.recorder
 }
 
-// Download mocks base method
+// Download mocks base method.
 func (m *MockGCS) Download(arg0 string, arg1 io.Writer) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Download", arg0, arg1)
@@ -45,13 +45,13 @@ func (m *MockGCS) Download(arg0 string, arg1 io.Writer) (int64, error) {
 	return ret0, ret1
 }
 
-// Download indicates an expected call of Download
+// Download indicates an expected call of Download.
 func (mr *MockGCSMockRecorder) Download(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockGCS)(nil).Download), arg0, arg1)
 }
 
-// GetObjectIterator mocks base method
+// GetObjectIterator mocks base method.
 func (m *MockGCS) GetObjectIterator(arg0 string) iterator.Pageable {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetObjectIterator", arg0)
@@ -59,13 +59,13 @@ func (m *MockGCS) GetObjectIterator(arg0 string) iterator.Pageable {
 	return ret0
 }
 
-// GetObjectIterator indicates an expected call of GetObjectIterator
+// GetObjectIterator indicates an expected call of GetObjectIterator.
 func (mr *MockGCSMockRecorder) GetObjectIterator(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetObjectIterator", reflect.TypeOf((*MockGCS)(nil).GetObjectIterator), arg0)
 }
 
-// NextPage mocks base method
+// NextPage mocks base method.
 func (m *MockGCS) NextPage(arg0 *iterator.Pager) ([]string, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NextPage", arg0)
@@ -75,13 +75,13 @@ func (m *MockGCS) NextPage(arg0 *iterator.Pager) ([]string, string, error) {
 	return ret0, ret1, ret2
 }
 
-// NextPage indicates an expected call of NextPage
+// NextPage indicates an expected call of NextPage.
 func (mr *MockGCSMockRecorder) NextPage(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextPage", reflect.TypeOf((*MockGCS)(nil).NextPage), arg0)
 }
 
-// ObjectAttrs mocks base method
+// ObjectAttrs mocks base method.
 func (m *MockGCS) ObjectAttrs(arg0 string) (*storage.ObjectAttrs, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ObjectAttrs", arg0)
@@ -90,13 +90,13 @@ func (m *MockGCS) ObjectAttrs(arg0 string) (*storage.ObjectAttrs, error) {
 	return ret0, ret1
 }
 
-// ObjectAttrs indicates an expected call of ObjectAttrs
+// ObjectAttrs indicates an expected call of ObjectAttrs.
 func (mr *MockGCSMockRecorder) ObjectAttrs(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ObjectAttrs", reflect.TypeOf((*MockGCS)(nil).ObjectAttrs), arg0)
 }
 
-// Upload mocks base method
+// Upload mocks base method.
 func (m *MockGCS) Upload(arg0 string, arg1 io.Reader) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Upload", arg0, arg1)
@@ -105,7 +105,7 @@ func (m *MockGCS) Upload(arg0 string, arg1 io.Reader) (int64, error) {
 	return ret0, ret1
 }
 
-// Upload indicates an expected call of Upload
+// Upload indicates an expected call of Upload.
 func (mr *MockGCSMockRecorder) Upload(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockGCS)(nil).Upload), arg0, arg1)

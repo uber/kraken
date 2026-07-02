@@ -11,30 +11,30 @@ import (
 	core "github.com/uber/kraken/core"
 )
 
-// MockStore is a mock of Store interface
+// MockStore is a mock of Store interface.
 type MockStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockStoreMockRecorder
 }
 
-// MockStoreMockRecorder is the mock recorder for MockStore
+// MockStoreMockRecorder is the mock recorder for MockStore.
 type MockStoreMockRecorder struct {
 	mock *MockStore
 }
 
-// NewMockStore creates a new mock instance
+// NewMockStore creates a new mock instance.
 func NewMockStore(ctrl *gomock.Controller) *MockStore {
 	mock := &MockStore{ctrl: ctrl}
 	mock.recorder = &MockStoreMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockStore) EXPECT() *MockStoreMockRecorder {
 	return m.recorder
 }
 
-// GetOrigins mocks base method
+// GetOrigins mocks base method.
 func (m *MockStore) GetOrigins(arg0 core.Digest) ([]*core.PeerInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrigins", arg0)
@@ -43,7 +43,7 @@ func (m *MockStore) GetOrigins(arg0 core.Digest) ([]*core.PeerInfo, error) {
 	return ret0, ret1
 }
 
-// GetOrigins indicates an expected call of GetOrigins
+// GetOrigins indicates an expected call of GetOrigins.
 func (mr *MockStoreMockRecorder) GetOrigins(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrigins", reflect.TypeOf((*MockStore)(nil).GetOrigins), arg0)

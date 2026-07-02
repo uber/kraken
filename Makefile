@@ -291,6 +291,13 @@ mocks:
 
 	$(call add_mock,utils/httputil,RoundTripper)
 
+	# Stdlib mocks use reflect mode with the standard library package name.
+	mkdir -p mocks/io
+	$(mockgen) \
+		-destination=mocks/io/mock_closer.go \
+		-package mock_io \
+		io Closer
+
 # ==== MISC ====
 
 kubecluster:
