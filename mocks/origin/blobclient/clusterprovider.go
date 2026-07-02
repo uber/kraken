@@ -11,30 +11,30 @@ import (
 	blobclient "github.com/uber/kraken/origin/blobclient"
 )
 
-// MockClusterProvider is a mock of ClusterProvider interface
+// MockClusterProvider is a mock of ClusterProvider interface.
 type MockClusterProvider struct {
 	ctrl     *gomock.Controller
 	recorder *MockClusterProviderMockRecorder
 }
 
-// MockClusterProviderMockRecorder is the mock recorder for MockClusterProvider
+// MockClusterProviderMockRecorder is the mock recorder for MockClusterProvider.
 type MockClusterProviderMockRecorder struct {
 	mock *MockClusterProvider
 }
 
-// NewMockClusterProvider creates a new mock instance
+// NewMockClusterProvider creates a new mock instance.
 func NewMockClusterProvider(ctrl *gomock.Controller) *MockClusterProvider {
 	mock := &MockClusterProvider{ctrl: ctrl}
 	mock.recorder = &MockClusterProviderMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockClusterProvider) EXPECT() *MockClusterProviderMockRecorder {
 	return m.recorder
 }
 
-// Provide mocks base method
+// Provide mocks base method.
 func (m *MockClusterProvider) Provide(arg0 string) (blobclient.ClusterClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Provide", arg0)
@@ -43,7 +43,7 @@ func (m *MockClusterProvider) Provide(arg0 string) (blobclient.ClusterClient, er
 	return ret0, ret1
 }
 
-// Provide indicates an expected call of Provide
+// Provide indicates an expected call of Provide.
 func (mr *MockClusterProviderMockRecorder) Provide(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Provide", reflect.TypeOf((*MockClusterProvider)(nil).Provide), arg0)

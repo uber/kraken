@@ -12,30 +12,30 @@ import (
 	blobclient "github.com/uber/kraken/origin/blobclient"
 )
 
-// MockClientResolver is a mock of ClientResolver interface
+// MockClientResolver is a mock of ClientResolver interface.
 type MockClientResolver struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientResolverMockRecorder
 }
 
-// MockClientResolverMockRecorder is the mock recorder for MockClientResolver
+// MockClientResolverMockRecorder is the mock recorder for MockClientResolver.
 type MockClientResolverMockRecorder struct {
 	mock *MockClientResolver
 }
 
-// NewMockClientResolver creates a new mock instance
+// NewMockClientResolver creates a new mock instance.
 func NewMockClientResolver(ctrl *gomock.Controller) *MockClientResolver {
 	mock := &MockClientResolver{ctrl: ctrl}
 	mock.recorder = &MockClientResolverMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockClientResolver) EXPECT() *MockClientResolverMockRecorder {
 	return m.recorder
 }
 
-// Resolve mocks base method
+// Resolve mocks base method.
 func (m *MockClientResolver) Resolve(arg0 core.Digest) ([]blobclient.Client, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Resolve", arg0)
@@ -44,7 +44,7 @@ func (m *MockClientResolver) Resolve(arg0 core.Digest) ([]blobclient.Client, err
 	return ret0, ret1
 }
 
-// Resolve indicates an expected call of Resolve
+// Resolve indicates an expected call of Resolve.
 func (mr *MockClientResolverMockRecorder) Resolve(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resolve", reflect.TypeOf((*MockClientResolver)(nil).Resolve), arg0)
