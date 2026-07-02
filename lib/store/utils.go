@@ -15,7 +15,12 @@ package store
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"os"
+
+	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/utils/log"
 )
 
 func createOrUpdateSymlink(sourcePath, targetPath string) error {
@@ -39,6 +44,25 @@ func createOrUpdateSymlink(sourcePath, targetPath string) error {
 		return err
 	}
 
+	return nil
+}
+
+func verifyDigest(r io.Reader, name string, skipHashVerification bool) error {
+	expected, err := core.NewSHA256DigestFromHex(name)
+	if err != nil {
+		return fmt.Errorf("new digest from file name: %w", err)
+	}
+
+	if !skipHashVerification {
+		computed, err := core.NewDigester().FromReader(r)
+		if err != nil {
+			return fmt.Errorf("calculate digest: %w", err)
+		}
+		if computed != expected {
+			log.With("name", name, "expected", expected, "computed", computed).Error("Digest verification did not match")
+			return fmt.Errorf("computed digest %s doesn't match expected value %s", computed, expected)
+		}
+	}
 	return nil
 }
 
