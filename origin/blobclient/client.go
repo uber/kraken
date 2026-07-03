@@ -296,10 +296,11 @@ func (c *HTTPClient) ReplicateToRemote(namespace string, d core.Digest, remoteDN
 	return err
 }
 
-// GetMetaInfo returns metainfo for d. If the blob of d is not available yet
-// (i.e. still downloading), returns a 202 httputil.StatusError, indicating that
-// the request should be retried later. If no blob exists for d, returns a 404
-// httputil.StatusError.
+// GetMetaInfo returns metainfo for d. The origin may serve cold metainfo from
+// the backend sidecar without downloading the whole blob. If metainfo is not
+// available yet (i.e. the blob is still downloading), returns a 202
+// httputil.StatusError, indicating that the request should be retried later. If
+// no blob exists for d, returns a 404 httputil.StatusError.
 func (c *HTTPClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error) {
 	r, err := httputil.Get(
 		fmt.Sprintf("http://%s/internal/namespace/%s/blobs/%s/metainfo",

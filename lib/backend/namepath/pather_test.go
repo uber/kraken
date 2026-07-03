@@ -34,6 +34,10 @@ func TestBlobPathConversion(t *testing.T) {
 			"ff85ceb9734a3c2fbb886e0f7cfc66b046eeeae953d8cb430dc5a7ace544b0e9",
 			"/root/docker/registry/v2/blobs/sha256/ff/ff85ceb9734a3c2fbb886e0f7cfc66b046eeeae953d8cb430dc5a7ace544b0e9/data",
 		}, {
+			ShardedDockerBlob,
+			"ff85ceb9734a3c2fbb886e0f7cfc66b046eeeae953d8cb430dc5a7ace544b0e9/kmeta",
+			"/root/docker/registry/v2/blobs/sha256/ff/ff85ceb9734a3c2fbb886e0f7cfc66b046eeeae953d8cb430dc5a7ace544b0e9/kmeta/data",
+		}, {
 			Identity,
 			"foo/bar",
 			"/root/foo/bar",

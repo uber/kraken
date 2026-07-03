@@ -456,10 +456,10 @@ func (s *Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 	return nil
 }
 
-// getMetaInfo returns metainfo for d. If no blob exists under d, a download of
-// the blob from the storage backend configured for namespace will be initiated.
-// This download is asynchronous and getMetaInfo will immediately return a
-// "202 Accepted" server error.
+// getMetaInfo returns metainfo for d. It first checks local metadata, then the
+// backend metainfo sidecar for cold blobs. If neither is available, a blob
+// download from the storage backend configured for namespace will be initiated
+// asynchronously and getMetaInfo will return a "202 Accepted" server error.
 func (s *Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
 	var tm metadata.TorrentMeta
 	err := s.cas.GetCacheFileMetadata(d.Hex(), &tm)
@@ -988,17 +988,17 @@ func (s *Server) writeBack(ctx context.Context, namespace string, d core.Digest,
 		return handler.Errorf("set persist metadata: %s", err)
 	}
 
+	if err := s.metaInfoGenerator.Generate(d); err != nil {
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to generate metainfo during write-back: %s", err)
+		return handler.Errorf("generate metainfo: %s", err)
+	}
+
 	task := writeback.NewTaskWithContext(ctx, namespace, d.Hex(), delay)
 	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "has_trace", task.HasTraceContext()).Debug("Created writeback task with trace context")
 
 	if err := s.writeBackManager.Add(task); err != nil {
 		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to add write-back task: %s", err)
 		return handler.Errorf("add write-back task: %s", err)
-	}
-
-	if err := s.metaInfoGenerator.Generate(d); err != nil {
-		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to generate metainfo during write-back: %s", err)
-		return handler.Errorf("generate metainfo: %s", err)
 	}
 
 	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Debug("Successfully scheduled write-back")

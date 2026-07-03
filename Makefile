@@ -173,15 +173,6 @@ devcluster: $(LINUX_BINS) docker_stop images
 devcluster-bench:
 	./examples/devcluster/stream_benchmark.sh $(SIZES)
 
-# Streaming PoC Phase 2: soci-snapshotter lazy-pull e2e benchmark. Requires a
-# running devcluster (Kraken proxy :15000, agent registries :16000 and :17000).
-# Builds + starts the DinD harness and runs the overlayfs-vs-soci comparison,
-# all from the host. Override the image with IMAGE=...:
-#   make devcluster-soci IMAGE=public.ecr.aws/docker/library/python:3.12
-.PHONY: devcluster-soci
-devcluster-soci:
-	./examples/devcluster/soci/soci_benchmark.sh $(IMAGE)
-
 # ==== TOOLS ====
 
 TOOLS = \

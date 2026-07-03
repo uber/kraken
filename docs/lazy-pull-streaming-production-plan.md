@@ -3,7 +3,9 @@
 Status: proposal. Companion to [lazy-pull-streaming-design.md](lazy-pull-streaming-design.md)
 (the design + PoC results). This doc turns the proven PoC into a **stack of small,
 independently-mergeable PRs** — every PR changes **≤150 lines of non-test code**,
-compiles on its own, and is inert until a later PR activates it.
+compiles on its own, and is inert until a later PR activates it. Reviewed
+against [lazy-pull-streaming-critical-review.md](lazy-pull-streaming-critical-review.md);
+see §12 for the resulting corrections.
 
 ## 1. Strategy
 
@@ -17,17 +19,21 @@ rewrite**. It is:
 2. **Drop the devcluster-only instrumentation** the PoC carried (networkevent
    wiring, `?stream=1` A/B endpoint, mutex-profile flags, ad-hoc counters).
 3. **Build the genuinely-new production pieces** the PoC skipped, as their own
-   later stacks: cross-cluster index replication (`lib/streaming` + resolver),
-   cold-origin range streaming, tracker partial-aware discovery, per-piece zstd.
+   later stacks: cold-origin range streaming, tracker partial-aware discovery,
+   per-piece zstd. A generic, format-agnostic index-replication seam
+   (`lib/streaming` + resolver) is kept as a deferred extension point, not
+   built now — v1 supports stargz only, which needs no separate index blob.
 
 The whole of **Stack A** (the agent-side streaming path) is what makes a runtime
 snapshotter lazily pull a real image through a single Kraken cluster. **Stacks
-B–D are required for production** — the fleet has cold (multi-host) origins,
-cross-cluster replication, and cold-start swarms — and so get the same
-declaration-level detail below (§7–§9). Only **Stack E** (per-piece zstd) is
-deferred to a separate, coordinated workstream (§10). None of B–D is needed for
-single-cluster *correctness* (the design doc establishes this for §5/§7), but all
-are needed before the streaming path can ship to the production fleet.
+B and D are required for production** — the fleet has cold (multi-host) origins
+and cold-start swarms — and so get the same declaration-level detail below
+(§7, §9). **Stack C** (§8) is deferred: format-agnostic by design, but not
+needed until a lazy format that ships a separate index artifact is adopted.
+**Stack E** (per-piece zstd) is deferred to a separate, coordinated workstream
+(§10). None of B–D is needed for single-cluster *correctness* (the design doc
+establishes this for §5/§7), but B and D are needed before the streaming path
+can ship to the production fleet.
 
 ### Reuse posture
 
@@ -104,47 +110,44 @@ does; the only difference is it returns a reader instead of `<-errc`-blocking.
 ### 4.3 Internal APIs
 
 The internal dispatcher (`SetLazy`/`RequestPieces`/`SetPriorityPiece`) and
-`piecerequest` (`in_order` policy, `Manager.SetPriority`) APIs are detailed
-per-PR in §5.3 (A1–A4).
+`piecerequest` (`Manager.SetPriority`) APIs are detailed per-PR in §5.3 (A1–A3).
 
 ## 5. Stack A — agent-side streaming (v1)
 
-This is the deliverable that makes single-cluster lazy pull work. Eleven PRs,
+This is the deliverable that makes single-cluster lazy pull work. Ten PRs,
 each ≤150 non-test LOC. Lift each from the as-built PoC, dropping instrumentation.
 
 ### 5.1 Dependency order
 
 ```
-A1 in_order policy ─┐
-A2 manager priority ┴─▶ A4 dispatcher demand/priority API
-A3 dispatcher lazy state ──────▶ A4
-A4 ─▶ A5 scheduler events (eager) ─▶ A7 DownloadReader+mocks ─▶ A10 registry path
-A6 stream reader (eager) ─────────▶ A7
-A7 + A6 ─▶ A8 lazy activation (demand+readahead+SetLazy) ─▶ A9 ReadAt ─▶ A10
-A11 config + cleanup (last)
+A1 manager priority ──────────▶ A3 dispatcher demand/priority API
+A2 dispatcher lazy state ─────▶ A3
+A3 ─▶ A4 scheduler events (eager) ─▶ A6 DownloadReader+mocks ─▶ A9 registry path
+A5 stream reader (eager) ─────────▶ A6
+A6 + A5 ─▶ A7 lazy activation (demand+readahead+SetLazy) ─▶ A8 ReadAt ─▶ A9
+A10 config + cleanup (last)
 ```
 
 ### 5.2 PR budget table
 
 | PR | Scope | Files | ~LOC (non-test) | Activates? |
 |----|-------|-------|------|-----------|
-| A1 | `in_order` piece policy | `in_order_policy.go` (new) + `manager.go` switch arm | ~32 | selectable via config only |
-| A2 | manager priority reservation | `manager.go` | ~47 | inert until A4 calls `SetPriority` |
-| A3 | dispatcher lazy-demand state | `dispatcher.go` | ~36 | inert until A8 calls `SetLazy` |
-| A4 | dispatcher demand/priority API | `dispatcher.go` | ~26 | inert until A5/A8 wire it |
-| A5 | scheduler streaming events (eager) | `state.go` + `events.go` | ~52 | reached by A7 |
-| A6 | streaming reader — sequential, eager | `stream_reader.go` (new) | ~150 | unused until A7 |
-| A7 | `DownloadReader` + `BlobReader` + mocks | `scheduler.go` + `mocks/...` | ~33 (+~33 generated mocks) | **TTFB win live (eager)** |
-| A8 | lazy activation — demand + readahead | `stream_reader.go` + `events.go` (1 line) | ~33 | **byte-savings live (lazy)** |
-| A9 | streaming reader — `ReadAt` (range) | `stream_reader.go` | ~43 | range reads |
-| A10 | registry read path uses streaming | `ro_transferer.go` | ~16 | **snapshotter streams via registry** |
-| A11 | config rollout + PoC cleanup | config yaml + remove instrumentation | net ~−45 (deletions) | enables `in_order`, removes glue |
+| A1 | manager priority reservation | `manager.go` | ~47 | inert until A3 calls `SetPriority` |
+| A2 | dispatcher lazy-demand state | `dispatcher.go` | ~36 | inert until A7 calls `SetLazy` |
+| A3 | dispatcher demand/priority API | `dispatcher.go` | ~26 | inert until A4/A7 wire it |
+| A4 | scheduler streaming events (eager) | `state.go` + `events.go` | ~52 | reached by A6 |
+| A5 | streaming reader — sequential, eager | `stream_reader.go` (new) | ~150 | unused until A6 |
+| A6 | `DownloadReader` + `BlobReader` + mocks | `scheduler.go` + `mocks/...` | ~33 (+~33 generated mocks) | **TTFB win live (eager)** |
+| A7 | lazy activation — demand + readahead | `stream_reader.go` + `events.go` (1 line) | ~33 | **byte-savings live (lazy)** |
+| A8 | streaming reader — `ReadAt` (range) | `stream_reader.go` | ~43 | range reads |
+| A9 | registry read path uses streaming | `ro_transferer.go` | ~16 | **snapshotter streams via registry** |
+| A10 | PoC cleanup (deletions only) | remove instrumentation | net ~−45 (deletions) | drops PoC-only glue, no policy/config change |
 
 LOC are verified against the as-built code at HEAD on `image-streaming-p2p`. Each
 PR's own non-test delta is ≤150; the §5.3 detail lists exact declarations per PR.
 
 Two natural seams keep the big files under budget: `stream_reader.go` (293 in the
-PoC) splits across **A6 / A8 / A9**; `dispatcher.go` (95) splits across **A3 / A4**.
+PoC) splits across **A5 / A7 / A8**; `dispatcher.go` (95) splits across **A2 / A3**.
 
 ### 5.3 PR detail
 
@@ -155,50 +158,7 @@ verbatim from the as-built PoC at HEAD.
 
 ---
 
-#### A1 — in-order piece policy
-
-**Files:** `dispatch/piecerequest/in_order_policy.go` (new); `manager.go` (switch
-arm only); `in_order_policy_test.go` (new).
-**Imports added:** in `in_order_policy.go`: `utils/syncutil`, `github.com/willf/bitset`.
-
-```go
-// in_order_policy.go — Apache 2.0 header, then:
-package piecerequest
-
-// InOrderPolicy selects the lowest-index pieces first, sharpening
-// time-to-first-byte for sequential streamed reads.
-const InOrderPolicy = "in_order"
-
-type inOrderPolicy struct{} // stateless; selection is purely index-ordered
-
-func newInOrderPolicy() *inOrderPolicy
-// body: return &inOrderPolicy{}
-
-// selectPieces returns up to limit valid candidates in ascending index order.
-// Implements pieceSelectionPolicy (policy.go:25); numPeersByPiece is unused.
-func (p *inOrderPolicy) selectPieces(
-	limit int,
-	valid func(int) bool,
-	candidates *bitset.BitSet,
-	numPeersByPiece syncutil.Counters) ([]int, error)
-// body: iterate set bits via candidates.NextSet from 0 up; skip !valid(i);
-// append until len==limit; return (pieces, nil).
-```
-
-**Call-site edit:** `NewManager` switch (`manager.go`, after the
-`case RarestFirstPolicy:` arm, before `default:`):
-```go
-	case InOrderPolicy:
-		m.policy = newInOrderPolicy()
-```
-**Tests:** `func TestInOrderPolicy(t *testing.T)` — table-driven, cases: lowest
-index first (ignores rarity), fills quota ascending, skips non-candidate gaps,
-limit > candidates returns all, no candidates returns empty.
-**LOC (non-test):** ~32.
-
----
-
-#### A2 — manager priority reservation
+#### A1 — manager priority reservation
 
 **Files:** `manager.go`; `manager_test.go`. **Imports added:** none.
 
@@ -245,7 +205,7 @@ priority falls back); `TestManagerClearRemovesPriority`.
 
 ---
 
-#### A3 — dispatcher lazy-demand state (inert)
+#### A2 — dispatcher lazy-demand state (inert)
 
 **Files:** `dispatch/dispatcher.go`; `dispatcher_test.go`. **Imports added:** none
 (`sync`, `bitset`, `fmt` already imported on master).
@@ -282,15 +242,15 @@ missing requested == master); `TestDispatcherLazyRequestsOnlyDemandedPieces`
 
 ---
 
-#### A4 — dispatcher demand/priority API
+#### A3 — dispatcher demand/priority API
 
 **Files:** `dispatch/dispatcher.go`; `dispatcher_test.go`. **Imports added:** none.
-**Depends on:** A2 (`Manager.SetPriority`) and A3 (demand fields) — stack A2→A3→A4.
+**Depends on:** A1 (`Manager.SetPriority`) and A2 (demand fields) — stack A1→A2→A3.
 
 ```go
 // SetPriorityPiece hints a piece be requested ahead of the policy.
 func (d *Dispatcher) SetPriorityPiece(piece int)
-// body: d.pieceRequestManager.SetPriority(piece) — Manager.SetPriority from A2.
+// body: d.pieceRequestManager.SetPriority(piece) — Manager.SetPriority from A1.
 
 // RequestPieces marks pieces as demanded and kicks a request round. Only
 // meaningful in lazy mode; the first piece is also prioritized.
@@ -301,18 +261,18 @@ func (d *Dispatcher) RequestPieces(pieces []int)
 ```
 
 **Call-site edits:** none — these are new entry points called by the streaming
-reader (via the `streamResult` callbacks bound in A5), not wired into existing
+reader (via the `streamResult` callbacks bound in A4), not wired into existing
 dispatch control flow.
 **Instrumentation excluded** (kept out of the core PR; final disposition in §6):
 `lazy_pieces_requested` counter, `demandCount()`, the teardown demand log.
 **Tests:** `TestDispatcherSetPriorityPiece` (priority piece reserved ahead of
-policy end-to-end through A2); `TestDispatcherRequestPieces` (table: eager
+policy end-to-end through A1); `TestDispatcherRequestPieces` (table: eager
 request is demand-noop, lazy single, lazy multiple, lazy empty noop).
-**LOC (non-test):** ~26. (A3+A4 ≈ 62, vs ~95 in the PoC once instrumentation drops.)
+**LOC (non-test):** ~26. (A2+A3 ≈ 62, vs ~95 in the PoC once instrumentation drops.)
 
 ---
 
-#### A5 — scheduler streaming events (eager)
+#### A4 — scheduler streaming events (eager)
 
 **Files:** `scheduler/state.go`; `scheduler/events.go`. **Imports added:** none
 (both already import `storage`).
@@ -327,13 +287,13 @@ request is demand-noop, lazy single, lazy multiple, lazy empty noop).
 type streamResult struct {
 	torrent  storage.Torrent    // live torrent; nil signals add failure
 	errc     chan error         // buffered(1); terminal download state
-	priority func(piece int)    // bound to dispatcher.SetPriorityPiece (A4)
-	request  func(pieces []int) // bound to dispatcher.RequestPieces (A4)
+	priority func(piece int)    // bound to dispatcher.SetPriorityPiece (A3)
+	request  func(pieces []int) // bound to dispatcher.RequestPieces (A3)
 }
 
 type streamTorrentEvent struct {
 	namespace string
-	torrent   storage.Torrent   // created by DownloadReader (A7)
+	torrent   storage.Torrent   // created by DownloadReader (A6)
 	result    chan streamResult // buffered(1)
 }
 
@@ -351,22 +311,22 @@ func errcWith(err error) chan error
 ```
 
 **Call-site edit:** `addTorrent` sets `torrent: t,` in the `torrentControl` literal.
-**Deferred to A8:** the single line `ctrl.dispatcher.SetLazy()` in `apply`'s
-new-torrent branch is **withheld here** (eager mode in A5).
+**Deferred to A7:** the single line `ctrl.dispatcher.SetLazy()` in `apply`'s
+new-torrent branch is **withheld here** (eager mode in A4).
 **Tests:** `TestStreamTorrentEventAddsTorrentAndReturnsLiveTorrent`,
 `...ReturnsCompleteImmediately`, `...AddTorrentErrorReturnsErrc`, `TestErrcWith`.
 **LOC (non-test):** ~52. No mock regen (no interface change).
 
 ---
 
-#### A6 — streaming reader, sequential + eager
+#### A5 — streaming reader, sequential + eager
 
 **Files:** `scheduler/stream_reader.go` (new). **Imports added:** `fmt`, `io`,
 `time`, `clock`, `lib/torrent/storage`, `utils/closers`.
 
-> The struct field set and `newStreamReader` signature are **final in A6** so A8/A9
+> The struct field set and `newStreamReader` signature are **final in A5** so A7/A8
 > add behavior, not shape (no call-site churn). `priority`/`request`/`hinted` are
-> stored but **unused** in A6; `acquirePiece` is poll-only here, upgraded in A8.
+> stored but **unused** in A5; `acquirePiece` is poll-only here, upgraded in A7.
 
 ```go
 package scheduler
@@ -383,8 +343,8 @@ type streamReader struct {
 	errc         chan error          // terminal state (nil=complete, else err)
 	clk          clock.Clock         // injected for deterministic test backoff
 	pollInterval time.Duration       // backoff between availability polls
-	priority     func(piece int)     // FINAL; UNUSED in A6 (wired in A8)
-	request      func(pieces []int)  // FINAL; UNUSED in A6 (used by demand() A8)
+	priority     func(piece int)     // FINAL; UNUSED in A5 (wired in A7)
+	request      func(pieces []int)  // FINAL; UNUSED in A5 (used by demand() A7)
 
 	length   int64 // t.Length()
 	pieceLen int64 // PieceLength(0); 0 for empty blobs
@@ -392,7 +352,7 @@ type streamReader struct {
 	pos    int64               // next sequential Read position
 	pr     storage.PieceReader // currently open piece reader, if any
 	prOff  int64               // absolute position pr is at
-	hinted int                 // FINAL; UNUSED in A6 (priority guard A8); -1=none
+	hinted int                 // FINAL; UNUSED in A5 (priority guard A7); -1=none
 
 	done    bool  // terminal state received
 	termErr error // terminal download error
@@ -412,7 +372,7 @@ func (r *streamReader) Size() int64                         // return r.length
 func (r *streamReader) Read(p []byte) (int, error)          // open/advance piece, block on missing
 func (r *streamReader) Seek(offset int64, whence int) (int64, error) // resolve abs; err on bad whence/neg
 func (r *streamReader) openAt(pos int64) error              // acquirePiece + discard intra-piece offset
-func (r *streamReader) acquirePiece(piece int) (storage.PieceReader, error) // A6: poll-only (no priority/demand)
+func (r *streamReader) acquirePiece(piece int) (storage.PieceReader, error) // A5: poll-only (no priority/demand)
 func (r *streamReader) waitPiece() error                    // select errc vs clk.After(pollInterval)
 func (r *streamReader) Close() error                        // close r.pr if open
 ```
@@ -431,11 +391,11 @@ releases on a schedule"): `TestStreamReaderServesPiecesAsTheyArrive`,
 
 ---
 
-#### A7 — `DownloadReader` + `BlobReader` + mocks
+#### A6 — `DownloadReader` + `BlobReader` + mocks
 
-Wires the reader from **A6** into the events from **A5** — merges after both. This
+Wires the reader from **A5** into the events from **A4** — merges after both. This
 is the PR that makes an **eager** streaming reader reachable end-to-end (TTFB win,
-no byte-savings yet; lazy comes in A8).
+no byte-savings yet; lazy comes in A7).
 
 **Files:** `scheduler/scheduler.go`; `mocks/lib/torrent/scheduler/scheduler.go`
 and `reloadablescheduler.go` (generated). **Imports added:** `io` in
@@ -482,7 +442,7 @@ func (mr *MockReloadableSchedulerMockRecorder) DownloadReader(arg0, arg1 interfa
 
 ---
 
-#### A8 — lazy activation
+#### A7 — lazy activation
 
 **Files:** `scheduler/stream_reader.go` (modified). **Imports added:** none.
 
@@ -509,7 +469,7 @@ func (r *streamReader) demand(lo, hi int)
 	}
 ```
 **Pairs with:** the `ctrl.dispatcher.SetLazy()` line added to
-`streamTorrentEvent.apply` (deferred from A5). **Must ship together** — `SetLazy`
+`streamTorrentEvent.apply` (deferred from A4). **Must ship together** — `SetLazy`
 without the reader's `demand` deadlocks (nothing demands).
 **Tests:** `TestStreamReaderReadaheadBounded` — only piece 0 present; assert the
 first demanded window is exactly `[1..8]` and the readahead clamp holds; terminal
@@ -518,7 +478,7 @@ error propagates; demand is idempotent under the `hinted` guard.
 
 ---
 
-#### A9 — `ReadAt` (range)
+#### A8 — `ReadAt` (range)
 
 **Files:** `scheduler/stream_reader.go` (modified). **Imports added:** none.
 
@@ -533,7 +493,7 @@ func (r *streamReader) ReadAt(p []byte, off int64) (int, error)
 
 var _ io.ReaderAt = (*streamReader)(nil)
 ```
-**Reuse:** `r.demand` (A8), `r.acquirePiece` (A8), `t.PieceLength`; `closers.Close`
+**Reuse:** `r.demand` (A7), `r.acquirePiece` (A7), `t.PieceLength`; `closers.Close`
 per piece (ReadAt closes its own readers, independent of `r.pr`).
 **Tests:** `TestStreamReaderReadAtDemandsSpan` (table over off/len: mid-piece
 start spanning pieces asserts demanded span + bytes; aligned full read; tail
@@ -543,7 +503,7 @@ succeeds on a late piece. **LOC (non-test):** ~43.
 
 ---
 
-#### A10 — registry read path streams
+#### A9 — registry read path streams
 
 **Files:** `lib/dockerregistry/transfer/ro_transferer.go`; `ro_transferer_test.go`.
 **Imports added:** `utils/closers`. **Interface:** `ImageTransferer` UNCHANGED.
@@ -570,7 +530,7 @@ func (t *ReadOnlyTransferer) Download(
 `*streamReader` implements all five.
 **Behavior:** flips `Stat`/`Download` from blocking to streaming — Stat no longer
 guarantees the blob is on disk on return. **Requires e2e coverage** (unit mocks
-can't fake real piece-arrival ordering): the `estargz`/`soci` harnesses must
+can't fake real piece-arrival ordering): the `estargz` harness must
 assert correct `Content-Length` on a cold blob and correct bytes on mid-stream
 ranged GETs.
 **Tests:** `...DownloadStreamsOnCacheMiss`, `...ReadsFromCache`,
@@ -580,18 +540,13 @@ ranged GETs.
 
 ---
 
-#### A11 — config rollout + PoC cleanup
+#### A10 — PoC cleanup
 
-**Files:** a streaming-env agent overlay (config); `agentserver/server.go`;
-`dispatcher.go`; devcluster config; `tagclient/client.go`. Mostly deletions.
-
-**Config (do NOT change `base.yaml` default `rarest_first`):** in the streaming
-overlay that `extends: base.yaml`:
-```yaml
-scheduler:
-  dispatch:
-    piece_request_policy: in_order   # earliest pieces first → lower TTFB
-```
+**Files:** `agentserver/server.go`; `dispatcher.go`; devcluster config;
+`tagclient/client.go`. Deletions only — **no policy or config change ships
+here.** The blocked piece already gets priority via `SetPriorityPiece`
+(A1/A3) ahead of whatever the underlying selection policy is —
+`rarest_first` stays the production default throughout this stack.
 **Removal checklist** — see §6 for the full table. Drop: agentserver `?stream=1`
 branch + `streamBlob` (~42 LOC, the exact +42 this branch added) and its
 now-unused imports; devcluster `network_event` enablement (keep the package); the
@@ -600,7 +555,8 @@ devcluster `--mutex-profile-fraction` flags. Measure-then-decide:
 `tagclient` `SendTimeout` 10s→30s — revert unless p99 under streaming load
 justifies it.
 **Tests:** existing suites must still pass after deletions; the e2e harnesses
-(A10) gate the config flip. **LOC (non-test):** net ~−45 (deletions).
+(A9) gate rollout — no config policy flip to gate, since none ships here.
+**LOC (non-test):** net ~−45 (deletions).
 
 ### 5.4 What Stack A deliberately does NOT change
 
@@ -617,7 +573,7 @@ The PoC carried devcluster-only code that must **not** land in Stack A:
 
 | PoC item | Action |
 |---|---|
-| `agent/agentserver/server.go` `?stream=1` + `streamBlob` (42 LOC) | **Drop.** The production path is the registry read path (A10); the snapshotter never hits this raw endpoint. Keep only if a non-registry streaming endpoint is independently justified. |
+| `agent/agentserver/server.go` `?stream=1` + `streamBlob` (42 LOC) | **Drop.** The production path is the registry read path (A9); the snapshotter never hits this raw endpoint. Keep only if a non-registry streaming endpoint is independently justified. |
 | `networkevent` wiring in devcluster config | **Drop** from production config. Keep the package (used by the visualization tool). Production streaming metrics use `tally.Scope` + `observability.EmitDownloadPerformance`. |
 | `lazy_pieces_requested`, `mb_served`, `download_reader_requests` ad-hoc counters | Keep only those that map to real dashboards; drop the rest. ~3 LOC total. |
 | dispatcher teardown `demandCount` log line | **Drop** (devcluster debugging). |
@@ -641,7 +597,7 @@ So a cold origin must serve the **real** metainfo (cold infohash == warm
 infohash) and therefore must obtain the real piece sums *without reading the
 whole blob*. The mechanism that makes the whole stack possible is a **metainfo
 sidecar**: at writeback the origin uploads the serialized `core.MetaInfo` as a
-tiny `<digest>.kmeta` object next to the blob (~4 B/piece); a cold origin fetches
+tiny `<digest>/kmeta` object next to the blob (~4 B/piece); a cold origin fetches
 that sidecar cheaply, then range-fetches each requested piece and CRC-verifies it
 normally. Integrity is preserved end-to-end; §7.3 records why no other source of
 truth was used.
@@ -668,15 +624,26 @@ The warm path (origin already has the blob) stays byte-for-byte unchanged: a
 cached blob still yields the whole-blob `NewTorrent(cas, mi)`.
 
 **Grounding notes (verified against this branch + production GCS):**
-- The PoC implements the `RangeDownloader` capability for **testfs only**
-  (the devcluster backend). Production backends are out of PoC scope but cheap to
-  add: the prod GCS backend already routes downloads through
-  `transfermanager.Downloader`, and the vendored
-  `transfermanager.DownloadObjectInput` has a `Range *DownloadRange` field
-  (`{Offset, Length int64}`, `Length<0` ⇒ to-EOF), so ranged reads need **no new
-  SDK feature**; s3manager already does ranged multipart via a `bytes=` header.
-  Backends lacking the capability fall back to the unchanged whole-blob path
-  (graceful degradation, never a regression).
+- B1 implements the `RangeDownloader` capability for the two **real** backends
+  this repo ships: **GCS** and **S3**. Both are cheap: GCS's plain SDK already
+  exposes `Object.NewRangeReader(ctx, offset, length)`, and S3's
+  `s3manager.Downloader` already accepts a `Range` header on `GetObjectInput` —
+  neither needs new SDK surface, just a new `Client.DownloadRange` method
+  layered on the existing downloader. `testfs` (devcluster-only fixture) and
+  any backend lacking the capability (e.g. `hdfsbackend`) fall back to the
+  unchanged whole-blob path (graceful degradation, never a regression).
+- **GCS `RangeDownloader` — validated end-to-end.** Uber's internal GCS backend
+  (a separate, PSC-aware implementation building on the newer
+  `transfermanager.Downloader`) was implemented and unit-tested against
+  production GCS as a proof that range reads work cleanly on top of Uber's real
+  GCS setup: `transfermanager.DownloadObjectInput` has a `Range *DownloadRange`
+  field (`{Offset, Length int64}`, `Length<0` ⇒ to-EOF) that runs through the
+  same worker pool, CRC verification, and single/multi-shard logic as
+  whole-object `Download` (sharding only triggers past `DownloadPartSize`, so a
+  normal Kraken piece is always a single shard) — full bazel build + unit test
+  pass. This repo's own `gcsbackend` (§B1) is simpler still: the plain
+  `cloud.google.com/go/storage` SDK's `NewRangeReader` needs no worker pool at
+  all for a single-piece range.
 - Origin previously used only `*store.CAStore` (cache-only). Stack B adds a
   `*store.CADownloadStore` (separate `cache-partial` + `download` dirs) so cold
   pieces land in a sparse download file with per-piece `_status` metadata —
@@ -689,8 +656,8 @@ cached blob still yields the whole-blob `NewTorrent(cas, mi)`.
 
 | PR | Scope | Files | ~LOC (non-test) | Activates? |
 |----|-------|-------|------|-----------|
-| B1 | `RangeDownloader` capability + testfs range | `lib/backend/rangedownloader.go` (new) + `testfs/{client,server}.go` | ~50 | inert until B3/B4 type-assert it |
-| B2 | metainfo sidecar (write at writeback) | `lib/metainfosidecar/sidecar.go` (new) + `persistedretry/writeback/executor.go` | ~55 | `.kmeta` sidecar lands on backend |
+| B1 | `RangeDownloader` capability + GCS/S3 impls | `lib/backend/rangedownloader.go` (new) + `gcsbackend/{gcs,client}.go` + `s3backend/client.go` | ~55 | inert until B3/B4 type-assert it |
+| B2 | metainfo sidecar (write at writeback) | `lib/metainfosidecar/sidecar.go` (new) + `persistedretry/writeback/executor.go` | ~55 | `/kmeta` sidecar lands on backend |
 | B3 | origin partial torrent (lazy range-fetch) | `originstorage/pieces.go` (new) + `originstorage/torrent.go` | ~150 (2 PRs) | partial `Torrent` fetches on demand |
 | B4 | cold-origin wiring (both seams) | `originstorage/torrent_archive.go`, `scheduler/constructors.go`, `origin/cmd/{cmd,config}.go`, `config/origin/base.yaml`, `origin/blobserver/server.go` | ~100 | **cold origin seeds partial content** |
 
@@ -705,16 +672,16 @@ lazy fetch state machine (`GetPieceReader`/`ensurePiece`/`waitForPiece`/
 
 ### 7.2 PR detail
 
-#### B1 — `RangeDownloader` backend capability + testfs range
+#### B1 — `RangeDownloader` backend capability + GCS/S3 implementations
 
 **Files:** `lib/backend/rangedownloader.go` (new — capability iface + unwrap
-helper); `lib/backend/testfs/client.go` (impl `DownloadRange`);
-`lib/backend/testfs/server.go` (`downloadHandler` honors the `Range` header).
-Callers type-assert, so every other backend keeps working via the whole-blob
-fallback.
-**Imports added:** `rangedownloader.go`: `io`. `testfs/client.go`: none (`fmt`,
-`net/http`, `httputil` present). `testfs/server.go`: `utils/closers` (errcheck
-forbids `_ = f.Close()`).
+helper); `lib/backend/gcsbackend/{gcs,client}.go` (impl `DownloadRange`);
+`lib/backend/s3backend/client.go` (impl `DownloadRange`). Callers type-assert,
+so every backend lacking the capability (`hdfsbackend`, etc.) keeps working via
+the whole-blob fallback — no interface break.
+**Imports added:** `rangedownloader.go`: `io`. `gcsbackend`: none new (`storage`
+already imported). `s3backend`: none new (`aws`, `s3`, `s3manager` already
+imported).
 **Declarations:**
 ```go
 // lib/backend/rangedownloader.go — optional capability, sibling to Client.
@@ -729,24 +696,50 @@ func AsRangeDownloader(c Client) (RangeDownloader, bool)
 // body: if tc, ok := c.(*ThrottledClient); ok { c = tc.Client }; rd, ok :=
 //   c.(RangeDownloader); return rd, ok.
 
-// lib/backend/testfs/client.go — mirrors Download but with a Range header.
+// lib/backend/gcsbackend/gcs.go — extend the GCS interface.
+type GCS interface {
+    // ...existing methods unchanged...
+    DownloadRange(objectName string, w io.Writer, offset, length int64) (int64, error)
+}
+
+// lib/backend/gcsbackend/client.go — GCSImpl.DownloadRange reuses the plain
+// storage SDK's native range read; no new SDK surface needed.
+func (g *GCSImpl) DownloadRange(
+    objectName string, w io.Writer, offset, length int64) (int64, error)
+// body: rc, err := g.bucket.Object(objectName).NewRangeReader(g.ctx, offset,
+//   length); isObjectNotFound(err) ⇒ backenderrors.ErrBlobNotFound; defer
+//   closers.Close(rc); return io.Copy(w, rc).
+
+// Client.DownloadRange satisfies backend.RangeDownloader on top of GCSImpl.
 func (c *Client) DownloadRange(
     namespace, name string, dst io.Writer, offset, length int64) error
-// body: url = .../<namespace>/blobs/<name>; hdr := fmt.Sprintf("bytes=%d-%d",
-//   offset, offset+length-1) (inclusive end); httputil.Get(url,
-//   SendHeaders{"Range": hdr},
-//   SendAcceptedCodes(http.StatusOK, http.StatusPartialContent));
-//   io.Copy(dst, resp.Body).
+// body: path := c.pather.BlobPath(name); _, err := c.gcs.DownloadRange(path,
+//   dst, offset, length); return err.
+
+// lib/backend/s3backend/client.go — reuses the existing s3manager.Downloader;
+// GetObjectInput.Range is the only new field, no new SDK call shape.
+func (c *Client) DownloadRange(
+    namespace, name string, dst io.Writer, offset, length int64) error
+// body: path := c.pather.BlobPath(name); writerAt fallback identical to
+//   Download (io.WriterAt or rwutil.CappedBuffer); input := &s3.GetObjectInput{
+//   Bucket, Key: path, Range: aws.String(fmt.Sprintf("bytes=%d-%d", offset,
+//   offset+length-1))}; c.s3.Download(writerAt, input); isNotFound(err) ⇒
+//   backenderrors.ErrBlobNotFound; drain CappedBuffer into dst as Download does.
 ```
-**Call-site edits:** `testfs/server.go downloadHandler` currently `io.Copy(w, f)`
-→ `http.ServeContent(w, r, name, modtime, f)` (honors the request `Range` header,
-emits `206` + `Content-Range` from the `*os.File` ReadSeeker). Wrap `w` in a
-small status/bytes recorder and log one `testfs download` line
-(name/range/status/bytes) so the e2e can tally origin→backend egress.
-**Tests:** `lib/backend/testfs/range_test.go` `TestClientDownloadRange` —
-table-driven over a real testfs fixture: first piece, interior piece, short last
-piece, length-past-EOF clamp, full-length; assert bytes == the expected slice.
-**LOC (non-test):** ~50 (`rangedownloader.go` ~12, client ~14, server ~24).
+**Call-site edits:** none outside the two backend packages — `RangeDownloader`
+is a capability callers discover via `AsRangeDownloader`, not a method added to
+the `backend.Client` interface itself.
+**Tests:** `gcsbackend/client_test.go` `TestClientDownloadRange` and
+`s3backend/client_test.go` `TestClientDownloadRange` — both table-driven against
+their existing mock SDK fakes: first range, interior range, length-past-EOF
+clamp, not-found → `backenderrors.ErrBlobNotFound`.
+**LOC (non-test):** ~55 (`rangedownloader.go` ~12, gcsbackend ~20, s3backend ~23).
+**Backends without this PR** (`hdfsbackend`, `testfs`, etc.) simply don't
+implement `RangeDownloader`; `AsRangeDownloader` returns `(nil, false)` and
+callers fall back to the unchanged whole-blob `Download` path — never a
+regression. `testfs` (the devcluster-only fixture backend) is intentionally
+out of scope for this production PR; if a devcluster range-streaming demo is
+wanted later, that's a separate, non-production change.
 
 #### B2 — metainfo sidecar (shared helper + writeback write)
 
@@ -758,7 +751,7 @@ originstorage don't depend on each other); `lib/persistedretry/writeback/executo
 **Declarations:**
 ```go
 // lib/metainfosidecar/sidecar.go
-const Suffix = ".kmeta"
+const Suffix = "/kmeta"
 func Name(name string) string { return name + Suffix }
 
 func Fetch(c backend.Client, namespace string, d core.Digest) (*core.MetaInfo, error)
@@ -788,7 +781,7 @@ already-present blob still backfills the sidecar). `*store.CAStore` already
 implements `GetCacheFileMetadata`, so the existing `cmd.go` wiring still satisfies
 the widened `FileStore`.
 **Tests:** `executor_test.go` (extend) — after `Exec`, the backend holds both
-`name` and `name+".kmeta"`, and the sidecar deserializes to the local
+`name` and `name+"/kmeta"`, and the sidecar deserializes to the local
 `TorrentMeta`; include the blob-already-exists case (sidecar still written).
 **LOC (non-test):** ~55 (`sidecar.go` ~14, executor `blobExists` refactor ~10,
 `uploadMetaInfoSidecar` ~30, iface +1).
@@ -929,9 +922,11 @@ func (s *Server) coldMetaInfoFromSidecar(
 - `config/origin/base.yaml`: add a `cadownloadstore:` block (separate
   `cache-partial` + `download` dirs so it never collides with `castore.cache_dir`).
 **Tests:** `torrent_archive_test.go` (extend) — cold digest with a sidecar on a
-testfs-backed fixture ⇒ `GetTorrent` returns a partial torrent and `Stat` the
-complement bitfield; no sidecar / non-range backend ⇒ falls back to
-`blobRefresher.Refresh` (error), proving graceful degradation.
+fake in-memory `backend.Client`+`RangeDownloader` fixture ⇒ `GetTorrent`
+returns a partial torrent and `Stat` the complement bitfield; no sidecar /
+non-range backend (a fake `backend.Client` that does not implement
+`RangeDownloader`) ⇒ falls back to `blobRefresher.Refresh` (error), proving
+graceful degradation.
 **LOC (non-test):** ~100 (`torrent_archive.go` ~55, `blobserver` ~22,
 `constructors`/`cmd`/`config`/yaml ~23).
 
@@ -947,7 +942,7 @@ generation where it is (`metainfogen` needs the full blob and already runs at
 writeback) but publish the metainfo to a shared service instead of a per-blob
 sidecar.
 - *Pros:* a queryable fleet-wide index; no backend `List`/GC pollution with
-  `.kmeta` objects.
+  `/kmeta` objects.
 - *Cons (decisive):* every candidate host adds a **new failure domain on the hot
   cold-pull path**. The sidecar co-locates with the very backend the origin must
   already reach to fetch pieces, so it introduces **zero** new failure modes; a
@@ -993,184 +988,32 @@ Metainfo is small (~11 B/piece + ~120 B JSON: 100 MB→~0.4 KB, 1 GB→~2.9 KB,
 - *Lazy ranged sidecar:* the infohash needs **all** piece sums up front (`Stat`
   builds the full bitfield), so a partially-fetched sidecar defeats itself; and
   the sidecar is already KB-scale, so there is nothing to save.
-- *Verdict:* a separate, whole-object `.kmeta` sidecar is the right call.
+- *Verdict:* a separate, whole-object `/kmeta` sidecar is the right call.
 
-## 8. Stack C — cross-cluster soci index replication (design doc §6, format seam)
+## 8. Stack C — pluggable index-replication seam (deferred, format-agnostic)
 
-Needed for **cross-cluster** replication of the soci index + its ztoc/data blobs
-(single cluster already works via the derived-tag fallback). Builds the
-`lib/streaming` format seam the PoC skipped, so build-index, when it replicates a
-derived tag, also enumerates and ships the index's dependency blobs.
+**Scope change:** v1 supports **stargz only**. stargz's TOC is embedded in each
+converted layer (no separate index artifact), so it needs **no** `lib/streaming`
+entry at all — single-cluster and cross-cluster replication both already work
+via the normal manifest/layer replication path. Stack C is therefore **not
+needed for v1** and is not being built now.
 
-**Grounding notes (verified against master):**
-- `lib/streaming` does **not** exist yet (zero grep hits) — C1/C2 are all new.
-- The build-index resolver contract is
-  `DependencyResolver.Resolve(tag string, d core.Digest) (core.DigestList, error)`
-  (`build-index/tagtype/map.go`); the existing `dockerResolver` (struct
-  `{originClient blobclient.ClusterClient; backoffConfig
-  httputil.ExponentialBackOffConfig}`) downloads a manifest and returns
-  `dockerutil.GetManifestReferences`. C3's `sociResolver` mirrors it exactly,
-  bridging `(tag, digest)` → `streaming`'s `io.Reader` shape by downloading the
-  index blob first.
-- `tagtype.Config` has only `namespace` + `type` (the design doc's `root` field
-  does **not** exist — drop it). `Map.Resolve` returns the **first** regex match,
-  so the `.soci` pattern must precede the `.*` docker catch-all.
-- The C3 resolver delegates parsing to the C1/C2 `streaming.Registry` rather than
-  duplicating manifest parsing inline (the design doc's inline sketch parses with
-  `dockerutil` directly; routing through `lib/streaming` keeps parse logic in C2).
+It is kept here only as a **format-agnostic extension point**, in case a future
+lazy format is adopted that (unlike stargz) ships a separate index artifact
+needing its own cross-cluster dependency resolution. If that need arises, add:
 
-### 8.1 PR budget table
+- A minimal `lib/streaming` seam: an `IndexFormat` interface
+  (`Name() string`, `DependencyDigests(index io.Reader) (core.DigestList,
+  error)`) plus a small name→implementation `Registry`, mirroring the pattern
+  `build-index/tagtype.Map` already uses for `DependencyResolver`.
+- One `tagtype.DependencyResolver` implementation per format needing it, wired
+  into `tagtype.NewMap`'s existing switch (`tagtype/map.go`), matched by
+  namespace pattern ahead of the `docker` catch-all.
 
-| PR | Scope | Files | ~LOC (non-test) | Activates? |
-|----|-------|-------|------|-----------|
-| C1 | `lib/streaming` format seam | `lib/streaming/format.go` (new) | ~55 | inert until C2/C3 register/use |
-| C2 | `soci` `IndexFormat` impl | `lib/streaming/soci/soci.go` (new) | ~45 | active when imported (`init` registers) |
-| C3 | build-index soci resolver | `tagtype/soci_resolver.go` (new) + `map.go` case + `tag_types` yaml | ~70 | **cross-cluster ships ztoc/data blobs** |
+No format currently requires this. Do not implement `lib/streaming` or any
+concrete `IndexFormat` until a real format needs it — building it against a
+hypothetical future format risks locking in the wrong interface shape.
 
-**Dependency order:** C1 → C2 (C2 registers into C1's `Registry`) → C3 (C3
-blank-imports C2 and looks up `streaming.Get("soci")`). C1+C2 are pure additions
-(no existing file changes); C3 is the only PR that touches build-index.
-
-### 8.2 PR detail
-
-#### C1 — `lib/streaming/format.go`: `IndexFormat` + `Registry` + `Register()`
-
-**Files:** `lib/streaming/format.go` (new); `format_test.go` (new).
-**Imports added:** `fmt`, `io`, `sync`, `github.com/uber/kraken/core`.
-**Declarations:**
-```go
-package streaming
-
-// IndexFormat is a registered streaming-index handler (soci, estargz, nydus).
-type IndexFormat interface {
-    Name() string // format key, e.g. "soci"; used in the derived-tag suffix
-    // DependencyDigests parses an index blob and returns the data blobs it
-    // references so build-index can verify + replicate them.
-    DependencyDigests(index io.Reader) (core.DigestList, error)
-}
-
-// Registry maps format name -> IndexFormat. Populated via Register() at init.
-type Registry struct {
-    mu      sync.RWMutex
-    formats map[string]IndexFormat
-}
-
-var defaultRegistry = NewRegistry()
-
-func NewRegistry() *Registry  // body: &Registry{formats: map[string]IndexFormat{}}
-
-// Register adds f to the default registry, keyed by f.Name(); panics on a
-// duplicate name (init-time programmer error, mirrors database/sql.Register).
-func Register(f IndexFormat)              // body: defaultRegistry.Register(f)
-func (r *Registry) Register(f IndexFormat) // body: Lock; panic if dup; store
-func (r *Registry) Get(name string) (IndexFormat, bool) // body: RLock; lookup
-func Get(name string) (IndexFormat, bool)               // body: defaultRegistry.Get
-```
-**Call-site edits:** none (new package; consumed by C2 `init()` and C3).
-**Tests:** `func TestRegistry(t *testing.T)` — register+get roundtrip; get
-unknown ⇒ ok=false; duplicate `Register` panics.
-**LOC (non-test):** ~45.
-
-#### C2 — `soci` sub-package implementing `IndexFormat`
-
-**Files:** `lib/streaming/soci/soci.go` (new); `soci_test.go` (new).
-**Imports added:** `bytes`, `io`, `github.com/uber/kraken/core`,
-`github.com/uber/kraken/lib/streaming`, `github.com/uber/kraken/utils/dockerutil`.
-**Declarations:**
-```go
-package soci
-
-const Name = "soci" // format key: derived-tag suffix (.soci) + tag_types type
-
-// Format implements streaming.IndexFormat for AWS SOCI indexes. A soci v1 index
-// is an OCI artifact manifest whose layers are the ztoc blobs, so its dependency
-// set is the manifest's References().
-type Format struct{}
-
-func (Format) Name() string { return Name }
-
-// DependencyDigests returns the ztoc + config blob digests the soci index
-// references (NOT the index digest; the resolver appends that).
-func (Format) DependencyDigests(index io.Reader) (core.DigestList, error)
-// body: io.ReadAll(index); m,_ := dockerutil.ParseManifest(bytes.NewReader(buf));
-//   return dockerutil.GetManifestReferences(m).
-// (Verify: if a soci index is a bespoke zTOC JSON rather than an OCI artifact
-//  manifest, swap ParseManifest for json.Unmarshal of the descriptor list +
-//  core.ParseSHA256Digest per entry — pushes LOC toward ~100.)
-
-func init() { streaming.Register(Format{}) } // active when compiled in
-```
-**Call-site edits:** none directly; activated by a blank import (in C3's resolver
-file or build-index `cmd` main) so `init()` runs `streaming.Register`.
-**Tests:** `func TestSociDependencyDigests(t *testing.T)` — well-formed manifest
-returns ztoc digests in order; zero-layer ⇒ empty; malformed JSON ⇒ error;
-non-manifest bytes ⇒ error. `func TestSociName(t *testing.T)`. Uses
-`utils/dockerutil/fixtures.go` for manifest bytes.
-**LOC (non-test):** ~45 (delegates to `dockerutil`).
-
-#### C3 — build-index dependency resolver wiring
-
-**Files:** `build-index/tagtype/soci_resolver.go` (new); `tagtype/map.go` (add
-`case "soci"`); `soci_resolver_test.go` (new); build-index config yaml
-(`tag_types` entry).
-**Imports added:** `soci_resolver.go`: `bytes`, `github.com/cenkalti/backoff`,
-`core`, `lib/streaming`, `_ "github.com/uber/kraken/lib/streaming/soci"` (blank
-import for C2 `init()`), `origin/blobclient`, `utils/httputil`, `utils/log`.
-**Declarations:**
-```go
-// soci_resolver.go — same shape as dockerResolver (docker_resolver.go).
-type sociResolver struct {
-    originClient  blobclient.ClusterClient
-    backoffConfig httputil.ExponentialBackOffConfig
-}
-
-// Resolve downloads the soci index blob at d, asks the registered soci
-// IndexFormat for the blobs it references, and appends d so the index itself
-// replicates too. Implements tagtype.DependencyResolver.
-func (r *sociResolver) Resolve(tag string, d core.Digest) (core.DigestList, error)
-// body: buf := r.downloadIndex(tag, d) (backoff.Retry over
-//   originClient.DownloadBlob, ErrBlobNotFound/IsNetworkError→retry else
-//   Permanent); f,ok := streaming.Get("soci"); if !ok err "not registered";
-//   deps := f.DependencyDigests(bytes.NewReader(buf)); return append(deps, d).
-
-func (r *sociResolver) downloadIndex(tag string, d core.Digest) ([]byte, error)
-// body: dockerResolver.downloadManifest retry loop minus the ParseManifest tail.
-```
-**Call-site edits:** `tagtype/map.go` `NewMap` switch — new arm after
-`case "docker":`, before the default:
-```go
-case "soci":
-    backoffConfig := httputil.ExponentialBackOffConfig{
-        Enabled: true, InitialInterval: defaultInitialInterval,
-        RandomizationFactor: defaultRandomizationFactor, Multiplier: defaultMultiplier,
-        MaxInterval: defaultMaxInterval, MaxRetries: defaultMaxRetries,
-    }
-    sr = &subResolver{re, &sociResolver{originClient, backoffConfig}}
-```
-Config (`tag_types`, soci **before** the docker catch-all — first match wins):
-```yaml
-tag_types:
-  - namespace: '.*\.soci$'
-    type: soci
-  - namespace: '.*'
-    type: docker
-```
-End-to-end plumbing is unchanged: `config.TagTypes` → `tagtype.NewMap`
-(`cmd/cmd.go`); `s.depResolver.Resolve(tag, d)` already runs on PutTag
-(`tagserver/server.go`) and replicate, feeding
-`tagreplication.NewTask(tag, d, deps, dest, 0)` — so ztoc blobs verify on PutTag
-and ship on replication with **no server edits**.
-**Tests:** `func TestSociResolver(t *testing.T)` — index referencing N ztoc blobs
-returns N + d; not-found surfaces `ErrBlobNotFound` after retries; unparseable
-index ⇒ error; soci format unregistered ⇒ error (uses
-`mockblobclient.NewMockClusterClient`). `func TestNewMapSoci(t *testing.T)` —
-`type: soci` builds a `*sociResolver`; first-match routes `x.soci`→soci, `x`→
-docker. No mock regen (`DependencyResolver` unchanged).
-**LOC (non-test):** ~70 (`soci_resolver.go` ~50 reusing the dockerResolver retry,
-`map.go` arm ~12, yaml ~4).
-
-v1 format set is **soci** only; estargz needs no `lib/streaming` entry (its TOC
-is in-layer, opaque to Kraken), nydus is later.
 
 ## 9. Stack D — tracker partial-aware discovery (design doc §7)
 
@@ -1219,8 +1062,12 @@ route); `lib/torrent/scheduler/announcer/announcer.go` (pass bitfield + `V3`);
 `tracker/peerstore/{store,redis,local}.go` (persist bitfield);
 `mocks/tracker/announceclient/client.go` (regenerated).
 **Imports added:** `core/peer_info.go`: none if bitfield is `[]bool` (keeps `core`
-free of a `bitset` dep and matches the networkevent wire shape; **verify** vs.
-`[]byte` if size matters). `announce.go`/`announcer.go`: none.
+free of a `bitset` dep and matches the networkevent wire shape). **Required
+before shipping to any real cluster** (per `lazy-pull-streaming-critical-
+review.md`, which warns against serializing large `[]bool` arrays in
+production): use a packed bitfield (`[]byte`) or compact ranges instead of raw
+`[]bool`, and cap the announce payload size — this is a decision to make in
+this PR, not a follow-up. `announce.go`/`announcer.go`: none.
 **Declarations:**
 ```go
 // core/peer_info.go — extend PeerInfo (after Complete bool):
@@ -1356,61 +1203,75 @@ here.
 
 ## 11. Testing strategy
 
-- **Unit (each PR):** table-driven, `testify/require`. A1/A2 test policy + reserve
-  selection with fakes; A3/A4 test demand restriction + injection; A6/A8/A9 test
+- **Unit (each PR):** table-driven, `testify/require`. A1 tests priority
+  reservation with fakes; A2/A3 test demand restriction + injection; A5/A7/A8 test
   the reader against a fake `storage.Torrent` that releases pieces on a schedule
   (sequential read, seek, range, lazy-demand window, EOF, terminal error).
 - **Scheduler integration:** extend existing scheduler tests so `DownloadReader`
-  returns before completion and serves pieces as they land (eager after A7, lazy
-  after A8).
-- **Stack B:** B1 tests `DownloadRange` against a real testfs fixture
-  (first/interior/short-last/past-EOF-clamp/full); B2 tests that `Exec` writes
-  both the blob and the `.kmeta` sidecar (incl. the blob-already-exists backfill)
+  returns before completion and serves pieces as they land (eager after A6, lazy
+  after A7).
+- **Stack B:** B1 tests `DownloadRange` against each real backend's existing
+  mock SDK fake (`gcsbackend`, `s3backend`) — first/interior/past-EOF-clamp,
+  not-found → `backenderrors.ErrBlobNotFound`; B2 tests that `Exec` writes
+  both the blob and the `/kmeta` sidecar (incl. the blob-already-exists backfill)
   and that the sidecar round-trips to the local `TorrentMeta`; B3 tests the
   partial `Torrent` against a real `*store.CADownloadStore` fixture + a fake
   `RangeDownloader` (one `DownloadRange` per piece, sum-mismatch re-fetch,
   single-fetch under concurrency, restart durability); B4 tests `loadMetaInfo`
   cold (sidecar present ⇒ partial torrent) and the whole-blob fallback when a
   backend lacks `RangeDownloader` or has no sidecar.
-- **Stack C:** C1 tests the `Registry` (roundtrip, duplicate-panic);
-  C2 tests `DependencyDigests` over `dockerutil` manifest fixtures; C3 tests
-  `sociResolver.Resolve` with `mockblobclient` and the `NewMap` first-match
-  routing. A build-index integration test can replicate a `.soci` tag and assert
-  its ztoc blobs ship.
+- **Stack C:** deferred (§8) — no tests until a concrete format needs the
+  index-replication seam.
 - **Stack D:** D1 tests V3 announce round-trip + V2 back-compat + peerstore
   bitfield serialize parity (incl. legacy 4-field parse); D2 tests the
   coverage-aware `SortPeers`/`assignPriority` ranking and that nil/empty requested
   pieces degrade to the existing completeness ordering (no regression).
-- **e2e (post-A10):** the existing `examples/devcluster/estargz` and `soci`
-  harnesses over `make devcluster` — assert time-to-running ≪ overlayfs, bytes
+- **e2e (post-A9):** the existing `examples/devcluster/estargz`
+  harness over `make devcluster` — assert time-to-running ≪ overlayfs, bytes
   fetched ≪ full image, `remote-snapshot-prepared:true > 0`, 0 fallback errors,
   and the agent↔agent P2P share > 0 (`p2p_agent_benchmark.sh`). The **cold-origin**
   variant (Stack B) is already wired into the estargz harness: `run_e2e.sh`
   `cold_origin` POSTs `forcecleanup?ttl_hr=0` (writeback first, so the blob +
-  `.kmeta` are on the backend, then the warm cache is wiped) before the lazy leg,
+  `/kmeta` are on the backend, then the warm cache is wiped) before the lazy leg,
   and `estargz_benchmark.sh` parses the testfs download log to assert the cold
-  origin range-fetched only touched pieces (`.kmeta` 200 + per-piece 206, zero
-  full 200 blob GETs) — far below the full image.
+  origin range-fetched only touched pieces (`/kmeta` 200 + per-piece 206, zero
+  full 200 blob GETs) — far below the full image. **Note:** devcluster only
+  ships `testfs` as a backend, so this harness needs `testfs.DownloadRange` as
+  a local dev fixture to exercise the cold-origin path end-to-end; that's
+  devcluster tooling wired separately from B1 (§7.2), not part of the
+  reviewable production PR stack, and carries no production backend claim.
 
 ## 12. Open questions
 
-1. **`in_order` scope.** Global agent config vs. per-streaming-torrent. v1 ships
-   it as opt-in global config (matches PoC); per-torrent selection is a later
-   refinement if non-streaming swarm throughput regresses.
-2. **Index producer at push time** (Stack C): proxy-inline vs. external
-   `kraken-indexer` job. Design doc leans external for v1.
-3. **GC / pinning** of index + ztoc blobs while an image is referenced —
-   config/policy, not new code, but unresolved.
-4. **Piece-length vs. snapshotter chunk alignment (resolved)** — see design doc
+1. **Priority mechanism has no per-stream classification.**
+   `docs/lazy-pull-streaming-critical-review.md` verified today's priority
+   mechanism (A1's `priority map[int]struct{}`, ascending-sorted) has no
+   per-stream or "currently blocked piece" classification — a reader blocked
+   on a high-index piece can lose pipeline slots to another stream's
+   lower-index demand or stale readahead. Production needs a stream-aware
+   priority overlay — blocked piece > exact `ReadAt` span > sequential
+   readahead > background fill — before lazy streaming safely coexists with
+   multiple concurrent streams (or other swarm traffic) on the same agent.
+   This overlay is scoped as future work, not part of this stack.
+2. **Stack B concurrency and observability gap (new, per critical review).**
+   Confirmed absent in code: no per-origin or per-blob cap on concurrent
+   `RangeDownloader.DownloadRange` fetches, and no metrics for range-206 count,
+   bytes fetched, duplicate-waiter count, or fallback-to-full-refresh anywhere
+   in `originstorage/torrent.go`, `torrent_archive.go`, or
+   `lib/backend/rangedownloader.go`. A concurrent cold start today can fan out
+   unbounded parallel range fetches per blob with zero visibility into
+   fallback behavior. Required before Stack B is treated as fleet-ready; not
+   required for the single-cluster devcluster PoC.
+3. **Piece-length vs. snapshotter chunk alignment (resolved)** — see design doc
    Open Question #3. Read amplification is bounded by whole-piece CRC32
    verification (the load-bearing constraint). Fix: byte-budgeted readahead
    (`streamReadaheadBytes`, default 32 MiB) applied only on sequential `Read`;
    `ReadAt` passes readahead=0 (priority hint only, no overshoot). Pays twice
    (P2P + cold-origin backend egress).
-5. **`tagclient` timeout** under real build-index latency (see §6).
-6. **`.kmeta` sidecar lifecycle (Stack B).** The sidecar is written at writeback
+4. **`tagclient` timeout** under real build-index latency (see §6).
+5. **`/kmeta` sidecar lifecycle (Stack B).** The sidecar is written at writeback
    and read on cold pulls, but nothing deletes it when its blob is GC'd from the
-   backend, and it is currently `.kmeta`-suffixed before `BlobPath` (valid for
+   backend, and it is currently `/kmeta`-suffixed before `BlobPath` (valid for
    the identity pather; other pathers are out of PoC scope). Resolve: tie sidecar
    deletion to blob deletion (or a TTL sweep), and confirm the suffix survives
    each production pather. Config/policy, plus a small deletion hook.

@@ -135,18 +135,17 @@ func (c *Client) Download(namespace, name string, dst io.Writer) error {
 	return nil
 }
 
-// DownloadRange downloads length bytes of name starting at offset into dst.
-func (c *Client) DownloadRange(
-	namespace, name string, dst io.Writer, offset, length int64) error {
-
+// DownloadRange downloads a byte range of name to dst.
+func (c *Client) DownloadRange(namespace, name string, dst io.Writer, offset, length int64) error {
 	p, err := c.pather.BlobPath(name)
 	if err != nil {
 		return fmt.Errorf("pather: %s", err)
 	}
-	rangeHeader := fmt.Sprintf("bytes=%d-%d", offset, offset+length-1)
 	resp, err := httputil.Get(
 		fmt.Sprintf("http://%s/files/%s", c.config.Addr, p),
-		httputil.SendHeaders(map[string]string{"Range": rangeHeader}),
+		httputil.SendHeaders(map[string]string{
+			"Range": fmt.Sprintf("bytes=%d-%d", offset, offset+length-1),
+		}),
 		httputil.SendAcceptedCodes(http.StatusOK, http.StatusPartialContent))
 	if err != nil {
 		if httputil.IsNotFound(err) {

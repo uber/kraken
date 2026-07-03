@@ -26,7 +26,7 @@ import (
 )
 
 // Suffix is appended to a blob name to form its metainfo sidecar name.
-const Suffix = ".kmeta"
+const Suffix = "/kmeta"
 
 // Name returns the sidecar name for the given blob name.
 func Name(name string) string {

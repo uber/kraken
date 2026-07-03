@@ -105,42 +105,13 @@ func (s *Server) downloadHandler(w http.ResponseWriter, r *http.Request) error {
 		return handler.Errorf("open: %s", err)
 	}
 	defer closers.Close(f)
-	fi, err := f.Stat()
+
+	info, err := f.Stat()
 	if err != nil {
 		return handler.Errorf("stat: %s", err)
 	}
-	// ServeContent honors the Range request header, emitting 206 + Content-Range
-	// for ranged GETs and 200 for full downloads. The recorder captures the
-	// status and byte count so cold-origin egress (ranged 206 vs full 200) is
-	// observable in the access log.
-	rec := &respRecorder{ResponseWriter: w, status: http.StatusOK}
-	http.ServeContent(rec, r, name, fi.ModTime(), f)
-	log.With(
-		"name", name,
-		"range", r.Header.Get("Range"),
-		"status", rec.status,
-		"bytes", rec.bytes,
-	).Info("testfs download")
+	http.ServeContent(w, r, name, info.ModTime(), f)
 	return nil
-}
-
-// respRecorder wraps an http.ResponseWriter to record the response status code
-// and number of bytes written, for access logging.
-type respRecorder struct {
-	http.ResponseWriter
-	status int
-	bytes  int64
-}
-
-func (rr *respRecorder) WriteHeader(code int) {
-	rr.status = code
-	rr.ResponseWriter.WriteHeader(code)
-}
-
-func (rr *respRecorder) Write(b []byte) (int, error) {
-	n, err := rr.ResponseWriter.Write(b)
-	rr.bytes += int64(n)
-	return n, err
 }
 
 func (s *Server) uploadHandler(w http.ResponseWriter, r *http.Request) error {

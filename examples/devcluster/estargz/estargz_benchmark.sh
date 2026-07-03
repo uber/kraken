@@ -1,6 +1,5 @@
 #!/bin/bash
 # eStargz (stargz-snapshotter) lazy-pull e2e benchmark -- run this FROM THE HOST.
-# Format-agnostic counterpart to soci_benchmark.sh.
 #
 # This is the single host entrypoint. It builds and starts the kraken-estargz
 # DinD container (containerd + containerd-stargz-grpc + nerdctl/ctr-remote/ctr),

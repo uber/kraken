@@ -27,6 +27,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestName(t *testing.T) {
+	require.Equal(t,
+		"ff85ceb9734a3c2fbb886e0f7cfc66b046eeeae953d8cb430dc5a7ace544b0e9/kmeta",
+		Name("ff85ceb9734a3c2fbb886e0f7cfc66b046eeeae953d8cb430dc5a7ace544b0e9"))
+}
+
 func TestFetchRoundTrip(t *testing.T) {
 	require := require.New(t)
 

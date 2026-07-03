@@ -74,6 +74,15 @@ func setupBlob(t *testing.T, cas *store.CAStore, blob *core.BlobFixture) {
 	require.NoError(t, cas.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
 	_, err := cas.SetCacheFileMetadata(blob.Digest.Hex(), metadata.NewPersist(true))
 	require.NoError(t, err)
+	_, err = cas.SetCacheFileMetadata(blob.Digest.Hex(), metadata.NewTorrentMeta(blob.MetaInfo))
+	require.NoError(t, err)
+}
+
+func serializedMetaInfo(t *testing.T, blob *core.BlobFixture) []byte {
+	t.Helper()
+	b, err := blob.MetaInfo.Serialize()
+	require.NoError(t, err)
+	return b
 }
 
 func TestExec(t *testing.T) {
@@ -93,6 +102,8 @@ func TestExec(t *testing.T) {
 	client.EXPECT().Upload(task.Namespace, blob.Digest.Hex(), mockutil.MatchReader(blob.Content)).Return(nil)
 	client.EXPECT().Stat(task.Namespace,
 		metainfosidecar.Name(blob.Digest.Hex())).Return(nil, backenderrors.ErrBlobNotFound)
+	client.EXPECT().Upload(task.Namespace,
+		metainfosidecar.Name(blob.Digest.Hex()), mockutil.MatchReader(serializedMetaInfo(t, blob))).Return(nil)
 
 	executor := mocks.new()
 
@@ -120,6 +131,8 @@ func TestExecNoopWhenFileAlreadyUploaded(t *testing.T) {
 	client.EXPECT().Stat(task.Namespace, blob.Digest.Hex()).Return(core.NewBlobInfo(blob.Length()), nil)
 	client.EXPECT().Stat(task.Namespace,
 		metainfosidecar.Name(blob.Digest.Hex())).Return(nil, backenderrors.ErrBlobNotFound)
+	client.EXPECT().Upload(task.Namespace,
+		metainfosidecar.Name(blob.Digest.Hex()), mockutil.MatchReader(serializedMetaInfo(t, blob))).Return(nil)
 
 	executor := mocks.new()
 
@@ -195,6 +208,34 @@ func TestExecUploadFailure(t *testing.T) {
 	require.Error(mocks.cas.DeleteCacheFile(blob.Digest.Hex()))
 }
 
+func TestExecRetriesWhenMetaInfoMissing(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newExecutorMocks(t)
+	defer cleanup()
+
+	blob := core.NewBlobFixture()
+
+	require.NoError(mocks.cas.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+	_, err := mocks.cas.SetCacheFileMetadata(blob.Digest.Hex(), metadata.NewPersist(true))
+	require.NoError(err)
+
+	task := NewTask(core.TagFixture(), blob.Digest.Hex(), 0)
+
+	client := mocks.client(task.Namespace)
+	client.EXPECT().Stat(task.Namespace, blob.Digest.Hex()).Return(nil, backenderrors.ErrBlobNotFound)
+	client.EXPECT().Upload(task.Namespace, blob.Digest.Hex(), mockutil.MatchReader(blob.Content)).Return(nil)
+	client.EXPECT().Stat(task.Namespace,
+		metainfosidecar.Name(blob.Digest.Hex())).Return(nil, backenderrors.ErrBlobNotFound)
+
+	err = mocks.new().Exec(task)
+	require.Error(err)
+	require.Contains(err.Error(), "get cache metainfo")
+
+	// Missing metainfo must keep the task retryable, so persist metadata remains.
+	require.Error(mocks.cas.DeleteCacheFile(blob.Digest.Hex()))
+}
+
 func TestExecUploadsMetaInfoSidecar(t *testing.T) {
 	tests := []struct {
 		desc          string
@@ -220,7 +261,7 @@ func TestExecUploadsMetaInfoSidecar(t *testing.T) {
 			task := NewTask(core.TagFixture(), blob.Digest.Hex(), 0)
 
 			client, err := testfs.NewClient(
-				testfs.Config{Addr: addr, NamePath: namepath.Identity}, tally.NoopScope)
+				testfs.Config{Addr: addr, Root: "root", NamePath: namepath.ShardedDockerBlob}, tally.NoopScope)
 			require.NoError(err)
 			require.NoError(mocks.backends.Register(task.Namespace, client, false))
 

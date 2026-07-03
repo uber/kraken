@@ -3,24 +3,27 @@
 Status: PoC complete (Phase 1 + 3) · Owner: TBD · Date: 2026-06-11
 
 A working end-to-end PoC has shipped on branch `image-streaming` and is
-validated in the devcluster against soci-snapshotter — see
-[PoC results](#poc-results-2026-06-11). The sections below mark what is
-**as-built** vs. still **design**.
+validated in the devcluster against stargz-snapshotter (the original PoC
+targeted soci-snapshotter; see [PoC results](#poc-results-2026-06-11) for
+both) — see [PoC results](#poc-results-2026-06-11). The sections below mark
+what is **as-built** vs. still **design**. **v1 supports stargz only** — see
+[Format support](#format-support-estargz).
 
 ## Goal
 
 Let a container runtime start before a layer is fully present, by serving
 **arbitrary byte ranges of a blob on demand**, with the missing pieces fetched
 P2P and prioritized by what the runtime is actually reading. The image format
-that describes *which* ranges to fetch (SOCI ZToC, eStargz TOC, Nydus, custom)
-must be **pluggable** — Kraken should not hardwire AWS Labs' SOCI.
+that describes *which* ranges to fetch (eStargz TOC today, any future format's
+chunk index) must be **pluggable** — Kraken should not hardwire to any single
+vendor's format, even though v1 ships stargz only.
 
 ## Non-goals (v1)
 
 - Re-packing images into a new on-disk format. We keep standard OCI blobs.
-- A FUSE filesystem inside Kraken. The runtime-side snapshotter
-  (soci-snapshotter / stargz-snapshotter / nydus) stays the FUSE provider; the
-  Kraken **agent is its registry**, made range-capable.
+- A FUSE filesystem inside Kraken. The runtime-side snapshotter (e.g.
+  stargz-snapshotter) stays the FUSE provider; the Kraken **agent is its
+  registry**, made range-capable.
 - Changes to containerd core or to dockerd (see "Runtime integration").
 
 ## The one constraint everything traces back to
@@ -156,18 +159,21 @@ tally reads each agent's `networkevent.log` via `docker cp`).
                                           scheduler (P2P) ◀─▶ peers / origins
 ```
 
-### Pluggable format abstraction (new)
+### Pluggable format abstraction (deferred, format-agnostic seam)
 
-New package `lib/streaming` defines the seam so no Kraken core code knows what
-SOCI/eStargz/Nydus is:
+**v1 ships stargz only**, which needs no separate index artifact at all (the
+TOC is embedded in each converted layer — see Format support below), so this
+seam is not being built now. It is kept here only as the shape a future format
+would plug into, without committing to build it:
 
 ```go
 // lib/streaming/format.go
 package streaming
 
-// IndexFormat is a registered streaming-index handler (soci, estargz, nydus, ...).
+// IndexFormat is a registered streaming-index handler for a format whose
+// chunk index lives in a separate artifact from the layer blobs.
 type IndexFormat interface {
-    // Name is the format key, e.g. "soci". Used in the derived tag suffix.
+    // Name is the format key. Used in the derived tag suffix.
     Name() string
     // DependencyDigests parses an index blob and returns the data blobs it
     // references, so build-index can verify + replicate them.
@@ -177,68 +183,37 @@ type IndexFormat interface {
 // Registry maps format name -> IndexFormat. Populated via Register() at init.
 ```
 
-`soci`, `estargz`, `nydus` are separate sub-packages implementing this; only the
-ones compiled in are active. v1 ships `soci` (no image conversion needed) and a
-trivial `passthrough`. This is the single place that grows when adding a format.
+See production plan §8 for the deferred cross-cluster index-replication seam
+this abstraction exists to support, if a future format ever needs it.
 
-> **Status:** design only. The PoC did **not** build `lib/streaming` (grep:
-> zero `IndexFormat`/`DependencyDigests` hits). The soci index was pushed as an
-> ordinary blob via `soci push --existing-index allow` and discovered through the
-> fallback tag below — single cluster, so no dependency resolver was needed yet.
+> **Status:** design only, deferred. The PoC did **not** build `lib/streaming`
+> (grep: zero `IndexFormat`/`DependencyDigests` hits). The original PoC ran
+> against soci-snapshotter, whose index was pushed as an ordinary blob via
+> `soci push --existing-index allow` and discovered through a derived tag —
+> single cluster, so no dependency resolver was needed even then. v1 (stargz)
+> needs no index blob at all.
 
-### Format support: soci vs estargz vs nydus
+### Format support: estargz
 
 The byte-level read path is **format-agnostic**: any snapshotter that issues
-ranged GETs on layer blobs is served by the same streaming reader. The formats
-differ only in *where the chunk index lives* and *whether the image must be
-converted* — which determines how much (if anything) Kraken must add.
+ranged GETs on layer blobs is served by the same streaming reader. v1 supports
+one format:
 
 | format | chunk index | image conversion | discovery | what Kraken must add |
 |--------|-------------|------------------|-----------|----------------------|
-| **soci** | separate index artifact (ztoc blobs + index) | **none** (works on stock OCI images) | referrers → fallback `sha256-<digest>` tag | cross-cluster: a resolver to replicate the index's data blobs (§6). Nothing for single-cluster. |
 | **estargz** | embedded as a TOC footer **inside each layer blob** | **required** (`nerdctl image convert --estargz` / `ctr-remote`) | implicit — no separate artifact, no referrers | **nothing in core** — converted layers are opaque blobs; range reads suffice. |
-| **nydus** | separate bootstrap + blob artifacts | required (RAFS) | manifest references | soci-style index distribution (later). |
 
-Key consequence: **estargz is already supported by the PoC with no Kraken
-change** — Kraken stores/serves blobs opaquely by digest (`rw_transferer.Upload`
-ignores media type), so estargz-converted layers push through unchanged and the
-same range path serves them. The only cost is push-time conversion, a client/CI
-concern. soci's advantage is needing **no conversion**; that is why the PoC used
-it. (`--estargz-external-toc` moves the TOC into a separate "TOC image" pushed to
-the same registry — still just blobs + tags, still no referrers.)
+Key consequence: **estargz is supported by the PoC with no Kraken change** —
+Kraken stores/serves blobs opaquely by digest (`rw_transferer.Upload` ignores
+media type), so estargz-converted layers push through unchanged and the same
+range path serves them. The only cost is push-time conversion, a client/CI
+concern. (`--estargz-external-toc` moves the TOC into a separate "TOC image"
+pushed to the same registry — still just blobs + tags, still no referrers.)
 
-### Index discovery: derived tag, not OCI referrers — and do we need Referrers?
-
-Kraken has **no referrers/subject/artifactType** concept (grep confirms zero
-non-vendor hits) but does have a generic `tag→digest` KV with HA + cross-cluster
-replication. So the index is just a normal blob, discovered by a derived tag:
-
-```
-<repo>:sha256-<manifest-digest>.<format>      e.g.  myrepo:sha256-abc123.soci
-```
-
-- Push: push index blob via existing `Upload` (origins store it by digest — no
-  change), then `PutTag(derivedTag, indexDigest)` via existing
-  `tagclient.PutAndReplicate` (`build-index/tagclient/client.go:90`).
-- Pull: agent computes the derived tag from the manifest digest and resolves it
-  with the existing `GetTag` (`ro_transferer.go:96`). Deterministic, no new API.
-
-**Do we need to implement the OCI Referrers API? No — not a blocker.** soci and
-stargz both auto-fall back to the OCI `sha256-<manifest-digest>` tag scheme when
-a registry lacks the Referrers API, and Kraken's tag system already supports it
-(tag GET plus prefix listing: `build-index/tagserver/server.go:131`
-`/repositories/{repo}/tags`, `tagclient/client.go` `ListRepository`/`List`). The
-PoC ran entirely on this fallback (5 lazy layers, ranged reads, 0 errors). Kraken
-also *can't* get Referrers for free: the vendored `github.com/docker/distribution`
-is **v2.7.1** (2019 pin in `go.mod`), which predates the Referrers API
-(distribution v3 / registry 2.8+) — its route table has no `referrers` route.
-
-Implementing Referrers is an **optional future enhancement** (fewer round trips,
-no client-side filtering; some newer tooling such as SOCI Index Manifest v2 / ECS
-prefers it). If pursued: serve `GET /v2/<name>/referrers/<digest>` at the
-proxy/agent registry, backed by a new build-index **digest → referring-artifacts**
-index. That mapping is the missing state today; everything else (blob storage,
-tags) already exists.
+A format whose chunk index lives in a *separate* artifact (rather than
+embedded in the layer, as stargz does) would additionally need the derived-tag
+discovery and dependency-resolver mechanism the original PoC exercised with
+soci — see production plan §8 for why that is deferred rather than built now.
 
 ---
 
@@ -306,6 +281,13 @@ d. **In-order priority piece selection.**
 reserves priority pieces first in `ReservePieces`. The existing random/
 rarest-first policies are unchanged and still handle non-streaming torrents.
 
+`docs/lazy-pull-streaming-critical-review.md` independently confirmed this
+priority mechanism is a single ascending-sorted map with no per-stream or
+"currently blocked piece" classification, and flagged a real starvation risk:
+a reader blocked on a high-index piece can lose pipeline slots to another
+stream's lower-index demand, or to stale readahead. See production plan §12
+for the resulting recommendation.
+
 ### 3. Agent registry — Range support, as-built (built)
 
 **Deviation from original §3.** The original plan was to add
@@ -364,7 +346,7 @@ Two options:
   cache, and let `originstorage.Torrent` reflect a real bitfield so origin can
   **seed partial content**. Largest change; defer until Phase 1 proves value.
 
-### 6. Proxy + build-index — distribute & discover the index (small)
+### 6. Proxy + build-index — distribute & discover the index (deferred, format-agnostic)
 
 > Design only, except one as-built fix: the build-index tag client `Get` send
 > timeout was raised **10s → 30s** (`build-index/tagclient/client.go`) because a
@@ -372,17 +354,21 @@ Two options:
 > devcluster push load, transiently exceeded 10s and surfaced as a proxy 500.
 > Production must revisit this tag-lookup latency under real load (see Next).
 
-- Proxy push path is unchanged: the index blob rides the existing `Upload`
-  (`rw_transferer.go:193`) and the derived tag rides `PutTag`/`PutAndReplicate`
-  (`rw_transferer.go:234`).
+**Not needed for v1 (stargz has no separate index blob)** — kept here only as
+the shape a future format with a separate index artifact would need. See
+production plan §8.
+
+- Proxy push path is unchanged: an index blob (if a format has one) would ride
+  the existing `Upload` (`rw_transferer.go:193`) and its derived tag would ride
+  `PutTag`/`PutAndReplicate` (`rw_transferer.go:234`).
 - **New dependency resolver** in `build-index/tagtype/`: register a resolver
-  (alongside `"docker"`/`"default"` in `map.go:70`) for the
-  `*.soci`/`*.<format>` namespace that calls
-  `streaming.Registry[format].DependencyDigests(...)`. This makes build-index
-  (a) verify the index's data blobs exist on origin before accepting the tag
-  (`tagserver/server.go:513`) and (b) replicate them cross-cluster
-  (`:569`, `tagreplication.NewTask(tag, d, deps, ...)`). Without this the index
-  tag replicates but its referenced blobs might not.
+  (alongside `"docker"`/`"default"` in `map.go:70`) for that format's tag
+  namespace that calls `streaming.Registry[format].DependencyDigests(...)`.
+  This would make build-index (a) verify the index's data blobs exist on
+  origin before accepting the tag (`tagserver/server.go:513`) and (b)
+  replicate them cross-cluster (`:569`,
+  `tagreplication.NewTask(tag, d, deps, ...)`). Without this the index tag
+  replicates but its referenced blobs might not.
 
 ### 7. Tracker — partial-aware discovery (optional, phase 2)
 
@@ -397,12 +383,15 @@ policy that prefers peers covering the requested pieces. Defer.
 
 ---
 
-## Per-format Kraken changes: soci vs estargz (exact)
+## Per-format Kraken changes: estargz (exact)
 
-The streaming read path is format-agnostic, so the **shared core is the same for
-both** and is already built (§2 streaming reader, §2c demand-driven fetch, §2d
-in-order policy, §3 Range via the registry read path). What differs is only the
-edge work each format needs **on top of** that core.
+The streaming read path is format-agnostic — a format whose chunk index rides
+inside the layer blob (like estargz) needs nothing extra; a format with a
+separate index artifact would need cross-cluster replication support, which is
+why that seam is kept pluggable (see Format support above and production plan
+§8) even though nothing implements it today. The **shared core is the same
+regardless of format** and is already built (§2 streaming reader, §2c
+demand-driven fetch, §2d in-order policy, §3 Range via the registry read path).
 
 ### estargz — Kraken core changes: none
 
@@ -425,104 +414,10 @@ Kraken to store, discover, or replicate:
 Net: estargz already works on the as-built PoC, verified end-to-end by
 `examples/devcluster/estargz/` (7 lazy layers, 7.4 MiB vs 404.6 MiB, 0 failures).
 
-### soci — Kraken changes
-
-- **Single-cluster:** none. The PoC ran on opaque blob storage + the existing
-  `sha256-<manifest>.soci` fallback tag.
-- **Cross-cluster:** exactly **one** real change — a dependency resolver so the
-  soci index tag replicates together with its ztoc/data blobs. Everything that
-  wires it already exists.
-
-**1.** New `build-index/tagtype/soci_resolver.go` implementing the existing
-`DependencyResolver` interface (`tagtype/map.go:42`):
-
-```go
-package tagtype
-
-// sociResolver returns the blobs a soci index references (ztocs + config) so
-// build-index verifies and replicates them alongside the index tag.
-type sociResolver struct {
-    originClient  blobclient.ClusterClient
-    backoffConfig httputil.ExponentialBackOffConfig
-}
-
-func (r *sociResolver) Resolve(
-    tag string, d core.Digest) (core.DigestList, error) {
-
-    buf := &bytes.Buffer{}
-    if err := r.originClient.DownloadBlob(
-        context.Background(), tag, d, buf); err != nil {
-        return nil, fmt.Errorf("download soci index: %w", err)
-    }
-    m, _, err := dockerutil.ParseManifest(buf)
-    if err != nil {
-        return nil, fmt.Errorf("parse soci index: %w", err)
-    }
-    refs, err := dockerutil.GetManifestReferences(m)
-    if err != nil {
-        return nil, fmt.Errorf("soci index references: %w", err)
-    }
-    return append(refs, d), nil
-}
-```
-
-A soci index is an OCI manifest whose layers are the ztoc blobs, so this reuses
-`dockerutil.ParseManifest` / `GetManifestReferences` and is nearly identical to
-`dockerResolver` — you could even register `dockerResolver` for the soci
-namespace; a dedicated type is clearer and leaves room for ztoc-specific checks.
-
-**2.** Register it in `build-index/tagtype/map.go` `NewMap`'s switch, next to
-`"docker"`/`"default"` (`map.go:70`):
-
-```go
-case "soci":
-    sr = &subResolver{re, &sociResolver{originClient, backoffConfig}}
-```
-
-**3.** Configure the namespace in the build-index `tag_types` config **before**
-the `.*` docker catch-all — `Map.Resolve` returns the first regex match
-(`map.go:92`):
-
-```yaml
-tag_types:
-  - namespace: .*\.soci$
-    type: soci
-    root: tags
-  - namespace: .*
-    type: docker
-    root: tags
-```
-
-That is the whole change — no new endpoints, no server edits. `putTagHandler`
-(`tagserver/server.go:223`) and `replicateTagHandler` (`:450`) already call
-`s.depResolver.Resolve(tag, d)` and pass the result into `replicateTag(...)`, so
-the ztoc blobs are verified on PutTag and shipped on replication automatically.
-`TagTypes` is already plumbed end to end (`cmd/config.go:43` →
-`cmd/cmd.go:222` `tagtype.NewMap`).
-
-**Not required for soci:**
-- *Discovery:* the snapshotter computes the `sha256-<manifest>.soci` fallback tag
-  itself; the agent resolves it through the existing `GetTag`
-  (`ro_transferer.go:99`). No agent change.
-- *Referrers API:* optional future enhancement (see Index discovery), not a
-  blocker.
-- *GC:* ensure the index blob + ztocs stay pinned while the image is referenced
-  (open question #2) — config/policy, not new code.
-
-### Side-by-side
-
-| concern | soci | estargz |
-|---|---|---|
-| store / serve blobs | none (opaque by digest) | none (opaque by digest) |
-| streaming read path | shared core (built) | shared core (built) |
-| discovery | none (existing fallback tag) | none (TOC in-layer) |
-| cross-cluster replication | `soci_resolver.go` (new) + `map.go` case + `tag_types` yaml | none |
-| push-time | none | client-side `image convert` (not Kraken) |
-| optional `lib/streaming` seam | `soci` `IndexFormat` (for §6 verify/replicate) | `estargz` `IndexFormat` (not needed for correctness) |
-
-The asymmetry: estargz trades **zero Kraken work** for a mandatory client-side
-conversion (and a distinct digest set); soci needs **no conversion** but costs
-the one resolver above to replicate cross-cluster.
+A format whose index lives in a separate artifact instead (as the original PoC
+target, soci, did) would additionally need a cross-cluster dependency resolver
+so that index replicates together with its data blobs — see production plan §8
+for why that seam is deferred rather than built, since v1 only needs estargz.
 
 ---
 
@@ -664,24 +559,6 @@ format-agnostic range path. No Kraken change required — confirmed by the PoC
 (gzip-eStargz already validated; zstd variant is structurally identical from
 Kraken's perspective).
 
-### SOCI + zstd: hard gap
-
-**SOCI cannot index zstd layers.** The ztoc codepath returns
-`fmt.Errorf("not implemented: %s", Zstd)` (`ztoc/compression/zinfo.go`).
-SOCI's lazy loading depends on "zinfo" — a gzip-specific index mapping
-uncompressed offsets to compressed byte offsets via deflate block dictionaries
-(C code). There is an open issue (#519, March 2026) requesting zstd support.
-
-**Implication:** if the fleet moves to `tar+zstd` layers, SOCI cannot provide
-lazy pull for them. Only eStargz (with its mandatory conversion step) supports
-zstd lazy pull today.
-
-| | tar+gzip layers | tar+zstd layers |
-|---|---|---|
-| **SOCI** | Works (no conversion) | Not supported (issue #519) |
-| **eStargz** | Works (conversion to gzip-eStargz) | Works (conversion to zstdchunked) |
-| **Kraken streaming** | Works (format-agnostic) | Works (format-agnostic) |
-
 ### Recommendation
 
 1. **v1 (now):** do nothing. Kraken already accepts zstd layers. The streaming
@@ -691,8 +568,6 @@ zstd lazy pull today.
    config flag. ~200–300 LOC (codec in metainfo, compress at write, decompress
    at read, variable piece sizes). Flag this constraint to the zstd effort now:
    **per-piece, not whole-blob**.
-3. **Watch:** SOCI zstd support (issue #519). If it lands, SOCI regains parity
-   with eStargz for zstd layers — no Kraken change needed.
 
 ---
 
@@ -704,10 +579,13 @@ zstd lazy pull today.
 2. **P3 — demand-driven fetch — DONE.** §2c lazy mode + demand set: the lazy
    torrent requests only touched pieces (+readahead). This is what produced the
    ~21× byte reduction; folded into P1 for the PoC.
-3. **P2 — cold-origin streaming — REMAINING.** §4 (backend range) + §5 Phase 2
-   (partial origin seed) + §7 (partial tracker discovery). Plus the `lib/streaming`
-   format seam (§ format abstraction) and the build-index dependency resolver
-   (§6) for cross-cluster index/data-blob replication.
+3. **P2 — cold-origin streaming — DONE (Stack B).** §4 (backend range) + §5
+   Phase 2 (partial origin seed) shipped — see production plan for the as-built
+   detail. §7 (partial tracker discovery) remains. The `lib/streaming` format
+   seam (§ format abstraction) and the §6 build-index dependency resolver are
+   **deferred** — v1 (stargz) needs no separate index blob, so cross-cluster
+   index/data-blob replication has nothing to replicate today (production
+   plan §8).
 4. **P4 — compression — REMAINING.** Per-piece zstd, coordinated with the zstd
    workstream.
 
@@ -715,25 +593,22 @@ zstd lazy pull today.
 
 ## Next: production-like distributed-cluster PoC
 
-The devcluster PoC ran single-cluster, single-origin, with the index pushed as
-an ordinary blob (`soci push --existing-index allow`) discovered via the
-`sha256-<digest>` fallback tag. The production-like PoC must exercise what the
-devcluster could not:
+The devcluster PoC ran single-cluster, single-origin. The original PoC target
+(soci-snapshotter) discovered its index via an ordinary blob pushed with
+`soci push --existing-index allow` and the `sha256-<digest>` fallback tag; v1
+(stargz) needs no such index at all. The production-like PoC must exercise
+what the devcluster could not:
 
 - **Multi-origin cold streaming.** Validate §4 backend range + §5 Phase 2
   partial origin seed so a cold origin streams ranges from the backend instead of
   materializing the whole blob on first range request.
-- **Cross-cluster index/ztoc replication.** Build the §6 build-index dependency
-  resolver so the index tag and its referenced data blobs replicate together;
-  today only the tag would replicate.
 - **Partial-peer discovery on the tracker.** §7 V3 announce carrying progress, so
   cold agents can fetch already-streamed pieces from partial peers, not only
   complete seeders.
 - **Tag-lookup latency under real load.** Re-evaluate the 10s→30s tag client
   timeout (§6) against production build-index latencies and large-image pushes.
-- **estargz alongside soci.** Push estargz-converted images (client/CI
-  conversion) and confirm the format-agnostic range path serves them with no
-  Kraken core change (see Format support).
+- **Cross-cluster index replication** stays deferred (§6, production plan §8)
+  until a format that actually needs a separate index blob is adopted.
 
 ---
 
@@ -781,7 +656,8 @@ before/after methodology already in the repo:
 1. Pick representative images (one small ~50MB, one large ~2GB many-layer).
 2. Baseline: current `master`, `puller` cold pull ×N, record TTFB + total via
    `benchstat`.
-3. Streaming: feature branch + index pushed, soci-snapshotter cold pull ×N.
+3. Streaming: feature branch, stargz-snapshotter cold pull ×N (image
+   pre-converted; stargz needs no separate index push).
 4. Compare TTFB, total, bytes-fetched-before-start, and P2P leech throughput
    from the observability histograms. Expect large TTFB win, neutral-to-slightly
    higher total bytes (range overhead), no regression on the non-streaming path.
@@ -791,21 +667,15 @@ before/after methodology already in the repo:
 ## Runtime integration (no containerd/dockerd core changes)
 
 - **containerd:** reuse the existing remote-snapshotter API. Run
-  soci/stargz/nydus snapshotter pointed at the **agent** as its registry
+  stargz-snapshotter pointed at the **agent** as its registry
   (`localhost`). Pure config (register snapshotter, CRI `snapshotter` field).
 - **dockerd:** out of scope — lazy pull requires containerd's snapshotter API;
   classic dockerd graphdriver hooking is not worth it. Target containerd/k8s.
 
 ## Open questions
 
-1. Who produces the index at push time — the proxy (inline, on manifest put) or
-   an external `kraken-indexer` job? Inline couples push latency to indexing;
-   external needs an orchestration hook. Lean external for v1.
-2. Index immutability vs. tag mutation: derived tag is content-addressed by
-   manifest digest, so it's immutable — good. Confirm GC keeps the index blob
-   pinned as long as the image is referenced.
-3. **Piece length vs. snapshotter chunk size (resolved).**
-   SOCI/eStargz chunks won't align with Kraken `PieceLength` (size-bucketed,
+1. **Piece length vs. snapshotter chunk size (resolved).**
+   eStargz chunks won't align with Kraken `PieceLength` (size-bucketed,
    `lib/metainfogen/config.go:70`). Every range read rounds to whole-piece
    boundaries because the agent verifies each piece via CRC32 before serving
    any byte (`agentstorage/torrent.go:192`). This is the load-bearing

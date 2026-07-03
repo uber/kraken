@@ -15,22 +15,22 @@ package backend
 
 import "io"
 
-// RangeDownloader is an optional Client capability for fetching only a byte
-// range of a blob. Backends that support it let a cold origin lazily stream
-// individual pieces instead of downloading the whole blob.
+// RangeDownloader is optionally implemented by backend clients that support
+// efficient byte-range fetches without downloading the full blob.
 type RangeDownloader interface {
-	// DownloadRange downloads length bytes of name starting at offset into dst.
 	DownloadRange(namespace, name string, dst io.Writer, offset, length int64) error
 }
 
-// AsRangeDownloader returns c as a RangeDownloader if it supports ranged
-// downloads, unwrapping the throttle wrapper. ok is false when the backend
-// does not support ranged downloads, in which case callers should fall back to
-// a whole-blob download.
+// AsRangeDownloader returns a RangeDownloader from c, unwrapping ThrottledClient
+// if needed. Returns (nil, false) when the underlying client lacks range support.
 func AsRangeDownloader(c Client) (RangeDownloader, bool) {
-	if tc, ok := c.(*ThrottledClient); ok {
-		c = tc.Client
+	if rd, ok := c.(RangeDownloader); ok {
+		return rd, true
 	}
-	rd, ok := c.(RangeDownloader)
-	return rd, ok
+	if tc, ok := c.(*ThrottledClient); ok {
+		if rd, ok := tc.Client.(RangeDownloader); ok {
+			return rd, true
+		}
+	}
+	return nil, false
 }

@@ -222,8 +222,9 @@ func (e *Executor) upload(ctx context.Context, t *Task) error {
 
 // uploadMetaInfoSidecar uploads the serialized metainfo for t as a sidecar
 // object so a cold origin can range-fetch pieces without the whole blob. It is
-// idempotent and a no-op when the sidecar already exists or no local metainfo
-// is available.
+// idempotent and a no-op when the sidecar already exists. Missing local
+// metainfo is treated as retryable because cold-origin streaming depends on the
+// sidecar being present whenever the blob is written back.
 func (e *Executor) uploadMetaInfoSidecar(
 	ctx context.Context, client backend.Client, t *Task) error {
 
@@ -236,8 +237,8 @@ func (e *Executor) uploadMetaInfoSidecar(
 			log.WithTraceContext(ctx).With(
 				"namespace", t.Namespace,
 				"name", t.Name,
-			).Debug("No local metainfo; skipping sidecar upload")
-			return nil
+			).Warn("No local metainfo; retrying sidecar upload later")
+			return fmt.Errorf("get cache metainfo: %s", err)
 		}
 		return fmt.Errorf("get cache metainfo: %s", err)
 	}

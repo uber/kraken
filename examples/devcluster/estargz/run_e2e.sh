@@ -16,11 +16,11 @@
 # (estargz_benchmark.sh) then reports origin->backend egress -- it should be far
 # below the full image size, the cold-origin counterpart of the agent-side proof.
 #
-# Unlike soci, eStargz has no separate index artifact: the TOC is embedded in
-# each converted layer, so there is no `create`/`push --index` step and no
-# Referrers/derived-tag discovery -- conversion is the one extra step instead.
-# The converted image stays backward-compatible, so the overlayfs baseline pulls
-# the very same image in full (apples-to-apples lazy-vs-full of identical bytes).
+# eStargz has no separate index artifact: the TOC is embedded in each converted
+# layer, so there is no `create`/`push --index` step and no Referrers/derived-tag
+# discovery -- conversion is the one extra step instead. The converted image
+# stays backward-compatible, so the overlayfs baseline pulls the very same
+# image in full (apples-to-apples lazy-vs-full of identical bytes).
 #
 # Why two agents + two namespaces: blobs are content-addressed, so a single agent
 # would warm its cache on the first (overlayfs) leg and the stargz leg would no
