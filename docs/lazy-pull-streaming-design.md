@@ -193,17 +193,26 @@ this abstraction exists to support, if a future format ever needs it.
 > single cluster, so no dependency resolver was needed even then. v1 (stargz)
 > needs no index blob at all.
 
-### Format support: estargz
+### Format support: estargz, zstd:chunked
 
 The byte-level read path is **format-agnostic**: any snapshotter that issues
 ranged GETs on layer blobs is served by the same streaming reader. v1 supports
-one format:
+two stargz-family formats, both embedding their chunk index in the layer
+blob itself:
 
 | format | chunk index | image conversion | discovery | what Kraken must add |
 |--------|-------------|------------------|-----------|----------------------|
 | **estargz** | embedded as a TOC footer **inside each layer blob** | **required** (`nerdctl image convert --estargz` / `ctr-remote`) | implicit — no separate artifact, no referrers | **nothing in core** — converted layers are opaque blobs; range reads suffice. |
+| **zstd:chunked** | embedded as a TOC footer **inside each layer blob** (same stargz-snapshotter TOC/landmark mechanism, zstd chunk codec instead of gzip) | **required** (`nerdctl image convert --zstdchunked`) | implicit — no separate artifact, no referrers | **nothing in core** — identical treatment to estargz. |
 
-Key consequence: **estargz is supported by the PoC with no Kraken change** —
+zstd:chunked is the format used for local validation of this design where
+eStargz-specific build tooling (`ctr-remote image optimize`) isn't available
+— the two formats share stargz-snapshotter's prefetch/on-demand behavior, so
+findings from one carry over to the other unless a claim is specifically
+about the on-disk TOC/compression encoding.
+
+Key consequence: **both formats are supported by the PoC with no Kraken
+change** —
 Kraken stores/serves blobs opaquely by digest (`rw_transferer.Upload` ignores
 media type), so estargz-converted layers push through unchanged and the same
 range path serves them. The only cost is push-time conversion, a client/CI

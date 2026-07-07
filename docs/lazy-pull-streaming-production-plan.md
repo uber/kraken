@@ -22,7 +22,8 @@ rewrite**. It is:
    later stacks: cold-origin range streaming, tracker partial-aware discovery,
    per-piece zstd. A generic, format-agnostic index-replication seam
    (`lib/streaming` + resolver) is kept as a deferred extension point, not
-   built now — v1 supports stargz only, which needs no separate index blob.
+   built now — v1 supports stargz-family formats (eStargz, zstd:chunked)
+   only, neither of which needs a separate index blob.
 
 The whole of **Stack A** (the agent-side streaming path) is what makes a runtime
 snapshotter lazily pull a real image through a single Kraken cluster. **Stacks
@@ -111,6 +112,7 @@ A5 stream reader (eager) ─────────▶ A6
 A6 + A5 ─▶ A7 lazy activation (demand+readahead+SetLazy) ─▶ A8 ReadAt ─▶ A9
 A10 config + cleanup (last)
 A11 origin range-download client + retry (independent; activated by Stack B's B5)
+A1 + A7 + A8 ─▶ A12 stream-aware priority classes (independent; reservation-ordering only)
 ```
 
 ### 5.2 PR budget table
@@ -127,7 +129,8 @@ A11 origin range-download client + retry (independent; activated by Stack B's B5
 | A8 | streaming reader — `ReadAt` (range) | `stream_reader.go` | ~43 | range reads |
 | A9 | registry read path uses streaming | `ro_transferer.go` | ~16 | **snapshotter streams via registry** |
 | A10 | PoC cleanup (deletions only) | remove instrumentation | net ~−45 (deletions) | drops PoC-only glue, no policy/config change |
-| A11 | origin range-download client + retry | `origin/blobclient/client.go` + `cluster_client.go` (+ mocks) | ~40 | inert until B5 ships the origin range endpoint |
+| A11 | origin range-download client + retry | `origin/blobclient/client.go` + `cluster_client.go` (+ mocks) | ~44 | inert until B5 ships the origin range endpoint |
+| A12 | stream-aware priority classes | `manager.go` + `dispatcher.go` + `stream_reader.go` | ~34 | reservation ordering only; no wire/config change |
 
 LOC are verified against the as-built code at HEAD on `image-streaming-p2p`. Each
 PR's own non-test delta is ≤150; the §5.3 detail lists exact declarations per PR.
@@ -602,7 +605,8 @@ through the same `Poll`.
 
 **Files:** `origin/blobclient/client.go` (`Client` interface +
 `HTTPClient.DownloadBlobRange`), `origin/blobclient/cluster_client.go`
-(`clusterClient.DownloadBlobRange`), generated mocks for `Client`.
+(`clusterClient.DownloadBlobRange`), `core/blob.go` (`MaxBlobRangeLength`,
+shared with B5's server-side cap), generated mocks for `Client`.
 **Declarations:**
 ```go
 // origin/blobclient/client.go — Client interface gains:
@@ -621,10 +625,18 @@ func (c *HTTPClient) DownloadBlobRange(
 // defaultPollBackOff. Retries write into a scratch buffer, not dst directly
 // — Poll may call the closure multiple times across origin failover, and a
 // partial write from a failed attempt must not land in (or double-write to)
-// the caller's dst.
+// the caller's dst. Rejects length up front against core.MaxBlobRangeLength
+// — the same cap the server enforces (B5) — the server would 416 a larger
+// request anyway, so failing fast here avoids allocating a caller-controlled
+// scratch buffer before a single byte crosses the network. This is the
+// client-side half of B5's range cap: B5 only bounds the server's own
+// buffer, it does nothing to stop this client from allocating first.
 func (c *clusterClient) DownloadBlobRange(
     ctx context.Context, namespace string, d core.Digest, offset, length int64, dst io.Writer) error {
-    buf := bytes.NewBuffer(make([]byte, 0, length)) // exact size known up front, no growth churn
+    if length > core.MaxBlobRangeLength {
+        return fmt.Errorf("range length %d exceeds max %d", length, core.MaxBlobRangeLength)
+    }
+    buf := bytes.NewBuffer(make([]byte, 0, length)) // bounded above; exact size known up front, no growth churn
     if err := Poll(c.resolver, c.rangePollBackOff(), d, func(client Client) error {
         buf.Reset()
         return client.DownloadBlobRange(ctx, namespace, d, offset, length, buf)
@@ -634,6 +646,20 @@ func (c *clusterClient) DownloadBlobRange(
     _, err := io.Copy(dst, buf)
     return err
 }
+```
+`core.MaxBlobRangeLength` (`core/blob.go` or similarly small, existing file —
+not a new package): both `origin/blobclient` and `origin/blobserver` already
+import `core` for `core.Digest`, so this is a zero-new-coupling single
+source of truth instead of two independently-declared 64 MiB constants with
+only a comment promising they'd stay aligned — critical-review flagged that
+promise as a real drift risk (client rejects what the server would accept,
+or vice versa, the moment one changes without the other). B5's
+`_maxRangeLength` (§7.2) becomes a direct use of `core.MaxBlobRangeLength`
+too; see that section for the corresponding one-line change.
+```go
+// core/blob.go (new const, no new file)
+const MaxBlobRangeLength = 64 << 20 // 64 MiB; shared cap for client + server
+
 ```
 `Poll` already treats "202, keep retrying" as a first-class outcome for any
 request shape passed into it, so the range call reuses the same
@@ -669,8 +695,157 @@ N times then success, asserting `Poll` retries with backoff and eventually
 succeeds, and a variant that never succeeds asserts the same "backoff timed
 out on 202 responses" terminal error `DownloadBlob` already produces, within
 `rangePollBackOff`'s tighter ~20s budget (not 15 minutes).
-**LOC (non-test):** ~40 (`client.go` ~15, `cluster_client.go` ~15, interface
+`TestClusterClientDownloadBlobRangeRejectsOversizedLength` — length just
+under/at/over `core.MaxBlobRangeLength` (table): under and at succeed
+(zero-byte-allocation path unaffected), over returns the error immediately
+with no `Poll`/network call observed (call-counting fake `Client`
+`.Times(0)`), and no buffer sized to the oversized `length` is ever
+allocated.
+**LOC (non-test):** ~44 (`client.go` ~15, `cluster_client.go` ~19, interface
 + mock regen ~10).
+
+---
+
+#### A12 — stream-aware priority classes
+
+**Files:** `dispatch/piecerequest/manager.go`; `dispatcher.go`; `stream_reader.go`
+(+ their `_test.go`). **Imports added:** none. **Depends on:** A1
+(`Manager.priority`), A7 (`acquirePiece`'s hinted-miss branch), A8 (`ReadAt`).
+
+`docs/lazy-pull-streaming-critical-review.md` finding #2 and §12 item 1 (below)
+both flag that A1's `priority map[int]struct{}` is flat and ascending-sorted
+only — a piece a stream is genuinely blocked on right now can lose a
+reservation slot to another stream's speculative readahead (or a large
+prefetch-shaped `ReadAt`) purely because of piece index. There is no wire-level
+priority signal from containerd/stargz-snapshotter to Kraken to consume here
+(verified: containerd's `Prepare` labels are mount-granularity, not per-range;
+prefetch and on-demand are both plain Range GETs with no distinguishing
+header) — but the snapshotter's own client already treats the two request
+shapes very differently (`PrefetchTimeoutSec`=10s vs `FetchTimeoutSec`=300s):
+one large early Range request covering the prioritized-files region (low
+patience, disposable) vs. many small reactive Range requests for real FUSE
+reads (high patience, must succeed). Kraken can infer the same split from
+`ReadAt`'s own `len(p)` without any protocol change, and should rank the two
+tiers the same way the snapshotter's own timeouts imply.
+
+```go
+// dispatch/piecerequest/manager.go
+
+// PriorityClass ranks why a piece was prioritized. Foreground always wins a
+// reservation slot over Background, regardless of piece index — a real
+// blocked read must never lose its slot to another stream's speculative
+// readahead or a large prefetch-shaped span.
+type PriorityClass int
+
+const (
+	Background PriorityClass = iota // speculative: readahead tail, large ReadAt span
+	Foreground                      // the piece a read is actually blocked on; small ReadAt span
+)
+
+// priority: was map[int]struct{}, now carries a class per piece.
+priority map[int]PriorityClass
+
+// SetPriority upgrades piece i to class if class outranks any existing
+// entry; never downgrades — a piece already Foreground stays Foreground even
+// if a later Background-classed span also happens to cover it.
+func (m *Manager) SetPriority(i int, class PriorityClass)
+// body: Lock/defer Unlock; if cur, ok := m.priority[i]; !ok || class > cur {
+//   m.priority[i] = class }.
+
+// sortedPriority returns all Foreground pieces ascending, then all
+// Background pieces ascending — two groups, not one flat sort. Caller holds
+// the lock.
+func (m *Manager) sortedPriority() []int
+// body: split m.priority into two slices by class; sort.Ints each;
+// return append(foregroundSorted, backgroundSorted...).
+
+// ReservePieces, Clear: bodies UNCHANGED from A1 — both already walk
+// sortedPriority()/delete(m.priority, i) generically, independent of the
+// map's value type.
+```
+
+```go
+// dispatcher.go — signatures gain a class param, passed straight through.
+func (d *Dispatcher) SetPriorityPiece(piece int, class piecerequest.PriorityClass)
+// body: d.pieceRequestManager.SetPriority(piece, class).
+
+func (d *Dispatcher) RequestPieces(pieces []int, class piecerequest.PriorityClass)
+// body: unchanged except SetPriorityPiece(pieces[0], class).
+```
+
+```go
+// stream_reader.go
+
+// demand gains a class param, threaded through to the dispatcher.
+func (r *streamReader) demand(lo, hi int, class piecerequest.PriorityClass)
+// body: unchanged except r.request(pieces, class).
+```
+`acquirePiece`'s hinted-miss branch (A7) — the exact blocked piece is always
+Foreground; the readahead tail it kicks off is Background:
+```go
+	if r.hinted.Swap(int64(piece)) != int64(piece) {
+		if r.priority != nil {
+			r.priority(piece, piecerequest.Foreground)
+		}
+		r.demand(piece, piece+streamReadahead, piecerequest.Background)
+	}
+```
+`ReadAt` (A8) classifies its up-front span by size before demanding — a span
+no wider than `streamReadahead` is shaped like a real on-demand FUSE read
+(Foreground); a wider span is shaped like a snapshotter prefetch call
+(Background). Critical-review follow-up: classifying the **whole** span
+uniformly mis-tagged `lo` itself — the piece the read loop is about to
+consume on its very first iteration, always imminent regardless of how wide
+the rest of the span is — as Background whenever the span was wide, however
+briefly (`RequestPieces` only ever prioritizes `pieces[0]` of what it's
+given, so this is the one piece the class choice actually affects). The
+in-loop `acquirePiece` upgrade (below) corrects it back to Foreground almost
+immediately, but not before a concurrent `ReservePieces` round could
+transiently observe the wrong class and skip reserving it for one cycle.
+Fixed by demanding `lo` on its own, always Foreground, and only classifying
+the remainder of the span by size — `lo` is never briefly Background:
+```go
+	class := piecerequest.Foreground
+	if hi-lo > streamReadahead {
+		class = piecerequest.Background
+	}
+	r.demand(lo, lo+1, piecerequest.Foreground) // about to be read this call; never speculative
+	if hi > lo+1 {
+		r.demand(lo+1, hi, class) // genuine readahead/prefetch-shaped tail
+	}
+```
+The per-piece `acquirePiece` loop inside `ReadAt`'s read loop still
+independently upgrades whichever piece is currently blocking to Foreground
+via the same hinted-swap path above, so a real wait that happens to fall
+inside the Background-classed tail is never left there.
+
+**Known ceiling, not fixed here (ponytail: ceiling + upgrade path):**
+priority entries are only released on piece completion (`Clear`, unchanged
+from A1), not on stream abandonment — an aborted stream's claim lingers until
+the piece arrives via some other path (or never, if nothing else demands it).
+Fixing this needs per-stream lifecycle tracking, which would also have to
+address the separately pre-existing, equally leaky `demand` bitset (A2) —
+materially bigger scope than what the critical review/this fix targets.
+Upgrade path: give `streamReader` a stable identity object and release its
+claims on `Close()`, once real traffic shows the leak matters in practice.
+
+**Tests:** `TestManagerSetPriorityUpgradeOnly` (table: Background then
+Foreground on the same piece ⇒ Foreground; Foreground then Background ⇒
+stays Foreground); `TestManagerSortedPriorityGroupsByClass` (mixed classes,
+assert the full Foreground block precedes the full Background block, each
+ascending); `TestDispatcherSetPriorityPieceClass`/`TestDispatcherRequestPiecesClass`
+(class reaches `Manager.priority` unchanged); `TestStreamReaderAcquirePieceClassifiesBlockedPieceForeground`
+(readahead tail is Background, the blocked piece itself is Foreground even
+when it falls inside another span's Background-classed range);
+`TestStreamReaderReadAtClassifiesBySpanSize` (table: span ≤ `streamReadahead`
+⇒ Foreground, span > `streamReadahead` ⇒ Background; **and**, per the
+critical-review fix above, `lo` itself is asserted Foreground via a
+call-recording fake `request` even when the overall span is wide enough to
+classify its tail Background — a single-call assertion that `demand` was
+invoked once with `[lo, lo+1)`/Foreground and, only if `hi>lo+1`, again with
+`[lo+1, hi)`/the size-derived class).
+**LOC (non-test):** ~34 (`manager.go` ~15, `dispatcher.go` ~4,
+`stream_reader.go` ~15).
 
 ### 5.4 What Stack A deliberately does NOT change
 
@@ -795,7 +970,7 @@ cached blob still yields the whole-blob `NewTorrent(cas, mi)`.
 | B4 | cold-origin wiring (both seams) | `originstorage/torrent_archive.go`, `scheduler/constructors.go`, `origin/cmd/{cmd,config}.go`, `config/origin/base.yaml`, `origin/blobserver/server.go` | ~100 | **cold origin seeds partial content** |
 | B5 | `blobserver` ↔ scheduler wiring + range reads | `origin/cmd/cmd.go`, `lib/blobrefresh/refresher.go`, `origin/blobserver/server.go`, `lib/torrent/storage/torrent_info.go` | ~125 | plain HTTP whole-blob/range requests join the same fetch session as P2P, without blocking the request goroutine |
 | B6 | bounded concurrent piece prefetch | `originstorage/torrent.go`, `lib/torrent/scheduler/constructors.go`, `origin/cmd/config.go`, `config/origin/base.yaml` | ~40 | `GetPieceReader` fetches the next N pieces from backend concurrently instead of one at a time |
-| B3c | piece-level memcache for in-progress downloads | `lib/store/ca_store.go`, `originstorage/torrent.go` | ~50 | a piece already fetched (incl. by B6's prefetch) is served from memory to the next reader instead of a disk round-trip |
+| B3c | piece-level memcache for in-progress downloads | `lib/store/ca_store.go`, `originstorage/torrent.go` | ~55 | a piece already fetched (incl. by B6's prefetch) is served from memory to the next reader instead of a disk round-trip |
 
 **Dependency order:** B1 and B2 are independent (different packages) and can land
 in parallel. **B3 depends on B1** (the partial `Torrent` holds a
@@ -1253,13 +1428,23 @@ func (s *CAStore) PurgePieceCache(digest core.Digest, numPieces int)
 //   the fallback for pieces belonging to a torrent abandoned before
 //   completing — same pattern as today's memCache cleanup job, no new job.
 
+// CacheEnabled reports whether piece/blob memcache is configured at all.
+// Critical-review follow-up: fetchPiece (below) used to build its in-memory
+// verify buffer unconditionally, paying an allocation + copy per piece even
+// with memcache off entirely — this lets it skip that work outright rather
+// than build a buffer nothing will ever read.
+func (s *CAStore) CacheEnabled() bool
+// body: return s.memCache != nil.
+
 // originstorage/torrent.go
 func (t *Torrent) fetchPiece(pi int) error
-// body: unchanged network fetch + CRC verify, except the verify writer
-//   becomes io.MultiWriter(f, h, &buf) instead of io.MultiWriter(f, h), so the
-//   verified bytes are already in memory; on success,
-//   t.cas.PutPieceInCache(t.metaInfo.Digest(), pi, buf.Bytes()) (best-effort,
-//   return value ignored — a cache miss later just means one disk read).
+// body: unchanged network fetch + CRC verify, except: if t.cas.CacheEnabled(),
+//   the verify writer becomes io.MultiWriter(f, h, &buf) instead of
+//   io.MultiWriter(f, h) — the verified bytes are already in memory — and on
+//   success t.cas.PutPieceInCache(t.metaInfo.Digest(), pi, buf.Bytes())
+//   (best-effort, return value ignored — a cache miss later just means one
+//   disk read); when the cache is disabled, unchanged io.MultiWriter(f, h),
+//   no buffer allocated or copied into at all.
 
 func (t *Torrent) GetPieceReader(pi int) (storage.PieceReader, error)
 // body: partial ⇒ ensurePiece(pi); if b, ok := cas.GetPieceFromCache(digest, pi); ok
@@ -1278,16 +1463,34 @@ func (t *Torrent) maybePromoteToCache() error
 one shared budget for whole-blob and piece entries. Not adding a second
 capacity config until real traffic shows piece entries need independent
 sizing from whole-blob entries.
+
+**Known ceiling (critical-review follow-up), not fixed here:**
+`CacheEnabled()` only skips the buffer when the cache is off entirely; a
+cache that's on but momentarily at capacity still pays one wasted
+buffer-allocate-and-copy per piece, since `PutPieceInCache`'s own
+`TryReserve` check only happens after `fetchPiece` already built the buffer.
+Avoiding that too means reserving capacity for `PieceLength(pi)` (already
+known before the fetch starts) up front and only wiring in the third
+`MultiWriter` arm if the reservation succeeds — a real fix, but a bigger
+restructuring of `fetchPiece`/`PutPieceInCache`'s split responsibilities than
+this pass justifies; capacity-rejection is expected to be the occasional
+case, not the steady state, unlike cache-disabled-entirely which is a
+static, common configuration.
 **Tests:** `ca_store_test.go` (extend) — `TestPieceCacheRoundTrip` (put then
 get, two different piece indices for the same digest don't collide,
 capacity-full put is a silent no-op); `TestPieceCacheKeyNeverCollidesWithDigestKey`
 — for every `(digest, pi)`, `pieceCacheKey(digest, pi) != digest.Hex()`, and
 `GetCacheFileReader(digest.Hex())` never returns a piece entry even when one
-is cached for that digest. `torrent_test.go` (extend) — a piece fetched once
+is cached for that digest; `TestCacheEnabled` (nil `memCache` ⇒ false,
+configured ⇒ true). `torrent_test.go` (extend) — a piece fetched once
 and read twice triggers exactly one `DownloadRange` and one disk write, the
 second `GetPieceReader` call served via `piecereader.NewBuffer`; after
-promotion, every piece key for that digest is gone from `memCache`.
-**LOC (non-test):** ~50 (`ca_store.go` ~30, `torrent.go` ~20).
+promotion, every piece key for that digest is gone from `memCache`;
+`TestFetchPieceSkipsBufferWhenCacheDisabled` — a `CacheEnabled()==false`
+fake asserts `PutPieceInCache` is never called and (via a wrapped writer
+that fails the test if written beyond `f`/`h`) no third writer ever receives
+bytes.
+**LOC (non-test):** ~55 (`ca_store.go` ~33, `torrent.go` ~22).
 
 #### B4 — cold-origin wiring (both seams)
 
@@ -1422,10 +1625,15 @@ type Server struct {
     sched scheduler.Scheduler // NEW
 }
 
-const _maxRangeLength = 64 << 20 // 64 MiB — generous multiple of typical
-// piece size + readahead span. Hardcoded, not a config knob, until real
-// traffic shows a different cap is needed (same reasoning B3c used to skip
-// a new config field). Bounds the range copy/drain below.
+// _maxRangeLength: was a locally-declared 64 MiB constant; now a direct
+// alias of core.MaxBlobRangeLength (A11, §5.3) — single source of truth
+// shared with the client's own cap, closing the critical-review drift risk
+// of two independently-declared constants with only a comment keeping them
+// aligned. Same reasoning as before (generous multiple of typical piece
+// size + readahead span, hardcoded, not a config knob until real traffic
+// shows a different cap is needed — same posture B3c used to skip a new
+// config field). Bounds the range copy/drain below.
+const _maxRangeLength = core.MaxBlobRangeLength
 
 func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error
 // body: cache-hit fast path unchanged (cas.GetCacheFileReader). On miss (and
@@ -1965,6 +2173,11 @@ range/lazy pull. This stack must coordinate with the separate zstd effort to
 ensure per-piece framing, not whole-blob — so it is tracked there, not detailed
 here.
 
+**Not to be confused with zstd:chunked** (§1) — an OCI image format already
+supported today with no Kraken change, since Kraken's read path is
+format-agnostic byte-range serving. This section is about zstd-compressing
+Kraken's own on-disk pieces, an unrelated, separately-tracked workstream.
+
 ## 11. Testing strategy
 
 - **Unit (each PR):** table-driven, `testify/require`. A1 tests priority
@@ -2021,19 +2234,28 @@ here.
   a local dev fixture to exercise the cold-origin path end-to-end; that's
   devcluster tooling wired separately from B1 (§7.2), not part of the
   reviewable production PR stack, and carries no production backend claim.
+  **Format variant:** the harness is snapshotter-driven, not format-specific
+  — pointing it at a `zstd:chunked`-converted image (`nerdctl image convert
+  --zstdchunked`) exercises the identical read path, and is the variant to
+  use for local validation wherever eStargz-specific build tooling
+  (`ctr-remote image optimize`) isn't available.
 
 ## 12. Open questions
 
-1. **Priority mechanism has no per-stream classification.**
-   `docs/lazy-pull-streaming-critical-review.md` verified today's priority
-   mechanism (A1's `priority map[int]struct{}`, ascending-sorted) has no
-   per-stream or "currently blocked piece" classification — a reader blocked
-   on a high-index piece can lose pipeline slots to another stream's
-   lower-index demand or stale readahead. Production needs a stream-aware
-   priority overlay — blocked piece > exact `ReadAt` span > sequential
-   readahead > background fill — before lazy streaming safely coexists with
-   multiple concurrent streams (or other swarm traffic) on the same agent.
-   This overlay is scoped as future work, not part of this stack.
+1. **Priority mechanism now classifies by blocked-piece vs. span-shape
+   (A12).** `docs/lazy-pull-streaming-critical-review.md`'s finding that A1's
+   flat, ascending-sorted `priority map[int]struct{}` had no per-stream or
+   "currently blocked piece" classification is addressed: `Manager.priority`
+   now carries a `PriorityClass` (Foreground/Background) per piece,
+   upgrade-only, and `sortedPriority()` always serves the full Foreground
+   group before the full Background group regardless of piece index — see
+   §5.3 A12. The remaining, explicitly disclosed ceiling: priority claims are
+   released on piece completion only, not on stream abandonment, so an
+   aborted stream's claim can linger until the piece lands via some other
+   path. Fixing that needs per-stream lifecycle tracking (and would also have
+   to address the separately pre-existing, equally leaky `demand` bitset from
+   A2) — real future work if traffic ever shows this matters, not scoped into
+   A12.
 2. **Stack B observability gap (per critical review).** Confirmed absent in
    code: no metrics for range-206 count, bytes fetched, duplicate-waiter
    count, fallback-to-full-refresh, or piece-vs-whole-blob `memCache`
@@ -2053,7 +2275,12 @@ here.
    making it adaptive to backend/network conditions) is real future tuning
    work once real traffic exists, not a correction to make blind now. It is
    already a config knob (`scheduler.fetch_concurrency`), so operators are
-   not stuck with 8 in the meantime.
+   not stuck with 8 in the meantime. **Acceptance criterion for revisiting
+   the default** (per critical-review): once Stack B's observability (item 2
+   above) ships, raise/adapt 8 only off a measured cold-origin benchmark —
+   time-to-first-byte and backend saturation (error/throttle rate) at the
+   default vs. a candidate value on the same corpus used in §11's e2e
+   harness — not a guess; a config knob is not itself the acceptance bar.
 4. **Cold-range 202-retry vs. true synchronous streaming.** A11/B5 reuse the
    existing whole-blob 202-retry pattern (`Poll`, already real on master) for
    cold range reads rather than holding the HTTP connection open and

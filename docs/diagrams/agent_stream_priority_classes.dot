@@ -1,0 +1,39 @@
+digraph AgentStreamPriorityClasses {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style=filled];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="Agent: stream-aware priority classes";
+
+  subgraph cluster_before {
+    label="Before (production-plan A1)";
+    style=rounded; color="#545454";
+    b1 [label="blocked piece\n(acquirePiece miss)", fillcolor="#f5f5f5"];
+    b2 [label="readahead tail\n(Read cursor)", fillcolor="#f5f5f5"];
+    b3 [label="large ReadAt span\n(prefetch-shaped)", fillcolor="#f5f5f5"];
+    b4 [label="priority map[int]struct{}\nflat set", fillcolor="#f5f5f5"];
+    b5 [label="sortedPriority()\nascending by index ONLY", fillcolor="#f5f5f5"];
+    b1 -> b4; b2 -> b4; b3 -> b4; b4 -> b5;
+    bnote [shape=note, style=filled, fillcolor="#ffe8e8", label="A high-index blocked piece can lose\nits reservation slot to a lower-index\nreadahead/prefetch piece -- pure\nindex order, no notion of urgency."];
+  }
+
+  subgraph cluster_after {
+    label="After (A12, stream-aware)";
+    style=rounded; color="#276ef1"; penwidth=2;
+    a1 [label="blocked piece\n(acquirePiece miss)", fillcolor="#eef3ff"];
+    a2 [label="small ReadAt span\n(real on-demand read)", fillcolor="#eef3ff"];
+    a3 [label="readahead tail\n(Read cursor)", fillcolor="#fff2e8"];
+    a4 [label="large ReadAt span\n(prefetch-shaped,\nspan > streamReadahead)", fillcolor="#fff2e8"];
+    a5 [label="SetPriority(i, class)\nupgrade-only merge", fillcolor="#eef3ff"];
+    a6 [label="priority map[int]PriorityClass", fillcolor="#eef3ff"];
+    a7 [label="sortedPriority()\nForeground group (asc)\nthen Background group (asc)", fillcolor="#eef3ff"];
+    a1 -> a5 [label="Foreground"];
+    a2 -> a5 [label="Foreground"];
+    a3 -> a5 [label="Background"];
+    a4 -> a5 [label="Background"];
+    a5 -> a6 -> a7;
+  }
+
+  note1 [shape=note, style=filled, fillcolor="#fffbe0", label="Classification is inferred from request shape (span size vs.\nstreamReadahead), not a wire signal -- none exists from\ncontainerd/stargz-snapshotter to Kraken. Mirrors the snapshotter's\nown FetchTimeoutSec (300s, on-demand) vs PrefetchTimeoutSec\n(10s, prefetch) asymmetry: on-demand is precious, prefetch is\ndisposable. Upgrade-only merge means a piece that is both inside\na large background-classed span AND the exact piece a read is\ncurrently blocked on ends up Foreground -- never silently\nstarved by an unrelated large span covering the same piece."];
+}

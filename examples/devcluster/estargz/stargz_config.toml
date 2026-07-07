@@ -13,7 +13,7 @@
 # full image and defeat the comparison. Both must be off so only the pieces the
 # container actually reads are fetched.
 noprefetch = false
-no_background_fetch = true
+no_background_fetch = false
 
 # Plain-HTTP access to the cold Kraken agents (and the proxy). In stargz,
 # insecure = true forces the http scheme (resolver sets Scheme = "http"), not

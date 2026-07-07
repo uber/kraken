@@ -278,6 +278,57 @@ flowchart LR
 **Alternatives considered:** see §2.2 (this is the agent-side half of that
 cross-cutting merge; the alternatives are the same).
 
+### 3.3 Stream-aware priority
+
+```mermaid
+flowchart LR
+    subgraph before["Before (production-plan A1)"]
+        BP1["priority map[int]struct{}\nflat, ascending by index only"]
+    end
+    subgraph after["After (A12)"]
+        RA["Real ReadAt / blocked piece\n(small span)"] -->|"Foreground"| SP["Manager.SetPriority\nupgrade-only merge"]
+        PF["Large ReadAt span\n(prefetch-shaped)"] -->|"Background"| SP
+        AH["Read() readahead tail"] -->|"Background"| SP
+        SP --> SR["sortedPriority()\nForeground group, then\nBackground group\n(each ascending)"]
+    end
+```
+
+`docs/lazy-pull-streaming-critical-review.md`'s finding that the flat,
+ascending-sorted `priority` map has no per-stream or "currently blocked
+piece" classification is addressed in production-plan.md §5.3 A12: pieces are
+now tagged `Foreground` (the piece a read is actually blocked on, or a small
+`ReadAt` span) or `Background` (a stream's own speculative readahead tail, or
+a large `ReadAt` span shaped like a snapshotter prefetch call), upgrade-only,
+and `sortedPriority()` always serves the whole Foreground group ahead of the
+whole Background group regardless of piece index.
+
+The classification is inferred from request shape, not a wire signal —
+verified there is none: containerd's `Prepare` snapshot labels are
+mount-granularity, and stargz-snapshotter issues prefetch and on-demand
+reads as plain, indistinguishable Range GETs. The two-tier split instead
+mirrors an asymmetry the snapshotter's own client already encodes internally
+(`PrefetchTimeoutSec`=10s, low-patience/disposable vs. `FetchTimeoutSec`=300s,
+high-patience/must-succeed) — Kraken's tiers rank the same way rather than
+inventing an orthogonal scheme.
+
+**Alternatives considered:**
+- *Per-stream fairness (a stable identity object per `streamReader`, plumbed
+  through `SetPriorityPiece`/`RequestPieces`/`Manager`).* Rejected for now —
+  nothing in the actual snapshotter access pattern needs true per-stream
+  fairness, only a foreground/background split; `streamReader` has no stable
+  identity today, so this is materially bigger plumbing for no demonstrated
+  benefit. Left as future work if size-based classification proves
+  insufficient.
+- *Classify by wall-clock timing (early-after-mount = prefetch) instead of
+  span size.* Rejected — requires coordinating a mount-time reference clock
+  into the scheduler for no added precision; span size alone already
+  reliably distinguishes a real FUSE read (page/block-sized) from an
+  aggregate prefetch span (tens of MB) without any new state.
+- *Fix the stream-abandonment priority leak in the same change.* Rejected —
+  out of scope for the reservation-ordering bug actually reported; disclosed
+  as a residual, scoped-out ceiling in production-plan.md §5.3 A12 instead
+  of silently expanding this PR.
+
 ## 4. Origin
 
 ### 4.1 Disk/store
@@ -540,4 +591,5 @@ flowchart TB
 | Bounded concurrent piece prefetch (B6) | Origin | N/A (throughput fix, not duplication) | §4.4 |
 | Piece-level memcache (B3c) | Origin | Yes — reuses existing `memCache` instance, disjoint key format | §4.1 |
 | Coverage-aware handout (D2) | Tracker | No | §5.2 |
+| Stream-aware priority classes (A12) | Agent | No — new, this doc | §3.3 |
 | Proxy | Proxy | No — unchanged | §6.1 |

@@ -1,58 +1,36 @@
-• I reread the current docs. Several of my earlier findings are now fixed, so the review changes materially.
+• Latest review of docs/lazy-pull-streaming-production-plan.md.
 
-What is fixed now:
+Findings
 
-- Cold Stat is no longer implemented via DownloadReader; it uses a metainfo-only Scheduler.Stat, which is the right correction. docs/lazy-pull-streaming-
-  production-plan.md:513
+1. High: the cold-origin range path still chooses 202 + retry instead of a true streaming response, so first-touch latency is still structurally penalized. The
+   doc now frames this clearly as future work, but it remains the main performance gap in the plan for cold lazy pulls. Even after the other fixes, a cold miss
+   still requires a control-roundtrip before bytes can be served. See docs/lazy-pull-streaming-production-plan.md:1600 and docs/lazy-pull-streaming-production-
+   plan.md:2224.
 
-- The blobserver no longer reaches into partial-torrent internals directly; it uses explicit ReadableRange and CopyReadyRange APIs. docs/lazy-pull-streaming-
-  production-plan.md:1451
+2. Medium: A12’s new Foreground vs Background heuristic is an improvement, but it can still misclassify large latency-sensitive reads as background work purely
+   from span width. The rule says ReadAt spans wider than streamReadahead are “prefetch-shaped” and get Background, even though a real application read can
+   also be large and urgent. The later per-piece blocked upgrade helps once the reader is already waiting, but the initial reservation ordering for that span
+   can still be wrong. See docs/lazy-pull-streaming-production-plan.md:764.
 
-- The server-side range trigger path no longer allocates make([]byte, length); it drains via io.NewSectionReader and caps request size at 64 MiB. docs/lazy-
-  pull-streaming-production-plan.md:1425 docs/lazy-pull-streaming-production-plan.md:1474
+3. Medium: B3c introduces an unconditional in-memory copy of every fetched piece via io.MultiWriter(f, h, &buf), even though piece caching is only best-effort
+   and can be disabled or capacity-rejected. That means each fetched piece is buffered in memory during download regardless of whether it will actually be
+   admitted to memCache. With concurrent fetches, this creates avoidable transient memory pressure on the cold path. See docs/lazy-pull-streaming-production-
+   plan.md:1405 and docs/lazy-pull-streaming-production-plan.md:1794.
 
-- Trigger dedupe is no longer digest-only; disjoint ranges can proceed independently. That closes one real source of artificial serialization under snapshotter
-  traffic. docs/lazy-pull-streaming-production-plan.md:1385 docs/lazy-pull-streaming-production-plan.md:1542
+4. Medium: the shared memCache design in B3c still has no policy isolation between piece entries and whole-blob entries. The doc argues key-space safety
+   correctly, but eviction pressure is still shared, and the plan still lacks the observability needed to prove piece churn will not evict useful warm blobs.
+   That is now more important because B3c makes piece residency a first-class optimization. See docs/lazy-pull-streaming-production-plan.md:1364 and docs/lazy-
+   pull-streaming-production-plan.md:2199.
 
-- The tracker section is also in better shape now: the requested-piece producer path is defined, and the raw []bool issue appears to have been replaced by
-  packed bitfield bytes. docs/lazy-pull-streaming-production-plan.md:1851 docs/lazy-pull-streaming-production-plan.md:1872
+5. Low/Medium: the client and server range caps are duplicated constants with only a documentation promise to keep them numerically aligned. That is workable,
+   but it creates a drift risk where the client rejects a range the server would accept, or vice versa. See docs/lazy-pull-streaming-production-plan.md:628 and
+   docs/lazy-pull-streaming-production-plan.md:1575.
 
-Remaining findings
+What is fixed now
 
-1. The biggest remaining product gap is still the cold-range 202 retry model. The docs now explicitly acknowledge this as future work, but it is still the main
-   reason Kraken’s cold-origin lazy path will lag a more mature system like Dragonfly on first-touch latency. Every cold range miss still pays at least one
-   extra request cycle instead of turning into a true live stream. docs/lazy-pull-streaming-production-plan.md:2057
+- The client-side oversized-range allocation issue is addressed with _maxClientRangeLength. docs/lazy-pull-streaming-production-plan.md:624
+- A12 meaningfully improves the earlier flat-priority problem. docs/lazy-pull-streaming-production-plan.md:680
+- The concurrency default now has a real acceptance criterion for revisiting it. docs/lazy-pull-streaming-production-plan.md:2212
 
-2. The priority model is still not production-ready for multiple concurrent streams. The doc is explicit that per-stream classification is missing and still
-   future work. I still consider this a high-severity issue for fleet rollout, because once multiple lazy layers or mixed Read/ReadAt traffic coexist,
-   “priority as one ascending-sorted map” is too weak. docs/lazy-pull-streaming-production-plan.md:2027
-
-3. The client-side range retry path still has an unbounded request-sized allocation. clusterClient.DownloadBlobRange still builds bytes.NewBuffer(make([]byte,
-   0, length)) before polling. The server cap helps only after the request arrives; the client allocates first. That is still a memory-risk bug for large or
-   malformed requests. docs/lazy-pull-streaming-production-plan.md:625
-
-4. Stack B observability is still below production bar, and the doc correctly says so. The missing metrics are exactly the ones you will need to understand why
-   cold lazy pulls are slow or memory-heavy: range-206 counts, bytes fetched, duplicate waiters, fallback-to-full-refresh, and shared memcache occupancy/
-   evictions. docs/lazy-pull-streaming-production-plan.md:2037
-
-5. fetch_concurrency=8 is now properly called out as unbenchmarked and configurable, which is better than before, but it still means the current plan does not
-   yet explain how Kraken will avoid under-driving cold backends on first-touch reads. This is no longer a design bug; it is now a tuning risk. docs/lazy-pull-
-   streaming-production-plan.md:2050
-
-6. The one-store invariant is now much stronger and has the right negative tests: cache readers/stats/metadata must miss while only partial data exists in
-   download state. That concern is mostly closed. The remaining caution is operational rather than conceptual: once B3c’s piece-level memcache reuse is added,
-   you will need the missing observability from item 4 to prove partial-piece cache pressure is not evicting warm whole blobs too aggressively. docs/lazy-pull-
-   streaming-production-plan.md:1184 docs/lazy-pull-streaming-production-plan.md:2039
-
-Bottom line
-
-The plan is materially better now. The earlier contract/API problems are mostly fixed. What remains is less “the design is wrong” and more “the current phase
-still chooses a latency-taxed cold-path and postpones the scheduling/observability work needed for fleet-grade performance.”
-
-If you want the shortest updated judgment: the current plan is now structurally sound enough to build, but it will still likely trail Dragonfly on cold-cache
-lazy startup until you address:
-
-- true synchronous cold-range streaming,
-- stream-aware priority,
-- better Stack B observability,
-- and higher or adaptive cold-origin concurrency.
+Net: this revision is better. The remaining substantive issues are now mostly performance-shape issues, not contract holes: the retry-based cold path, the
+coarse A12 span heuristic, and the memory behavior introduced by B3c.
