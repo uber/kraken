@@ -1,0 +1,24 @@
+digraph TrackerAnnounceProtocol {
+  rankdir=LR;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style=filled];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="Tracker: announce protocol / peer info";
+
+  subgraph cluster_before {
+    label="Before (current master, V1/V2)";
+    style=rounded; color="#545454";
+    b1 [label="Agent announce", fillcolor="#f5f5f5"];
+    b2 [label="PeerInfo: Complete bool only", fillcolor="#f5f5f5"];
+    b1 -> b2;
+  }
+
+  subgraph cluster_after {
+    label="After (full feature, V3)";
+    style=rounded; color="#276ef1"; penwidth=2;
+    a1 [label="Agent announce", fillcolor="#eef3ff"];
+    a2 [label="PeerInfo: Complete bool +\nBitfield (bitset.MarshalBinary) +\nNumComplete", fillcolor="#eef3ff"];
+    a1 -> a2;
+  }
+}

@@ -1,0 +1,61 @@
+digraph PieceFetchConcurrencyCodePaths {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=10, shape=box, style=filled];
+  edge [fontname="Helvetica", fontsize=9];
+  labelloc="t";
+  fontsize=14;
+  label="Cold-origin piece fetch: exact code path, before vs. after B6";
+
+  subgraph cluster_before {
+    label="BEFORE (B3b/B5 as first specified) -- serial, one piece at a time";
+    style=rounded; color="#545454"; fontsize=12;
+
+    b_drain [label="io.Copy(io.Discard, br)\norigin/blobserver/server.go\ndownloadBlob() background closure (B5)", fillcolor="#f5f5f5"];
+    b_read  [label="streamReader.Read(p []byte)\nlib/torrent/scheduler/stream_reader.go\n(single cursor, not concurrent-safe)", fillcolor="#f5f5f5"];
+    b_acq   [label="streamReader.acquirePiece(piece)\nstream_reader.go\nfinds it complete via Torrent.HasPiece\n(always true for origin, B3a) -- demand()\nnever fires, this branch is dead for origin", fillcolor="#f5f5f5"];
+    b_get   [label="Torrent.GetPieceReader(pi)\noriginstorage/torrent.go", fillcolor="#f5f5f5"];
+    b_ensure[label="Torrent.ensurePiece(pi)\noriginstorage/torrent.go\ncalled directly, once, for THIS piece only", fillcolor="#f5f5f5"];
+    b_dirty [label="piece.tryMarkDirty()\noriginstorage/pieces.go\nelects exactly one fetcher for pi", fillcolor="#f5f5f5"];
+    b_fetch [label="Torrent.fetchPiece(pi)\noriginstorage/torrent.go\nBLOCKS the whole drain until this returns", fillcolor="#f5f5f5"];
+    b_range [label="backend.RangeDownloader.DownloadRange(\n  namespace, digest, dst, offset, length)\nlib/backend/rangedownloader.go", fillcolor="#f5f5f5"];
+    b_gcs   [label="GCSImpl.DownloadRange(...)\nlib/backend/gcsbackend/client.go:386\n-> downloader.DownloadObject(ctx, in)", fillcolor="#f5f5f5"];
+    b_pool  [label="transfermanager.Downloader\nWithWorkers(N) worker pool\n-- only 1 of N workers ever used", shape=cylinder, fillcolor="#fdeaea"];
+    b_next  [label="Read() returns bytes for pi\n-> next Read() call\n-> GetPieceReader(pi+1) starts ONLY NOW", fillcolor="#f5f5f5"];
+
+    b_drain -> b_read -> b_acq -> b_get -> b_ensure -> b_dirty -> b_fetch -> b_range -> b_gcs -> b_pool;
+    b_pool -> b_next [label="200ms later", style=dashed];
+    b_next -> b_read [label="repeat per piece,\nserially", style=dashed];
+
+    b_time [shape=note, style=filled, fillcolor="#fffbe0", label="8 pieces x 200ms each, serially\n= 1600ms total for 32 MiB\n~20 MiB/s -- pool mostly idle"];
+  }
+
+  subgraph cluster_after {
+    label="AFTER (with B6) -- bounded concurrent prefetch";
+    style=rounded; color="#276ef1"; penwidth=2; fontsize=12;
+
+    a_drain [label="io.Copy(io.Discard, br)\norigin/blobserver/server.go\ndownloadBlob() background closure (B5)\n[UNCHANGED -- still one reader cursor]", fillcolor="#eef3ff"];
+    a_read  [label="streamReader.Read(p []byte)\nstream_reader.go [UNCHANGED]", fillcolor="#eef3ff"];
+    a_acq   [label="streamReader.acquirePiece(piece)\n[UNCHANGED -- still dead for origin,\nHasPiece always true]", fillcolor="#eef3ff"];
+    a_get   [label="Torrent.GetPieceReader(pi)\noriginstorage/torrent.go [MODIFIED, B6]", fillcolor="#eef3ff"];
+    a_ensure[label="Torrent.ensurePiece(pi)\noriginstorage/torrent.go [UNCHANGED]\nblocks, returns THIS piece's reader", fillcolor="#eef3ff"];
+    a_pref  [label="Torrent.prefetchAhead(pi)\noriginstorage/torrent.go [NEW, B6]\nfire-and-forget, called right after\nensurePiece(pi) returns", fillcolor="#fff2e8"];
+    a_sem   [label="select { case t.fetchSem <- struct{}{}: ... }\nfetchSem chan struct{}, size fetchConcurrency\n[NEW, B6] -- bounds concurrent fetches", fillcolor="#fff2e8"];
+    a_goroutines [label="up to fetchConcurrency\ngo func(i) { ensurePiece(i) }\nfor i in pi+1..pi+fetchConcurrency", fillcolor="#eef3ff"];
+    a_dirty [label="piece.tryMarkDirty()\noriginstorage/pieces.go [UNCHANGED]\nstill exactly one fetcher per piece --\nsafe against a racing direct GetPieceReader call", fillcolor="#eef3ff"];
+    a_fetch [label="Torrent.fetchPiece(pi)\noriginstorage/torrent.go [UNCHANGED]\nruns concurrently, once per piece", fillcolor="#eef3ff"];
+    a_range [label="backend.RangeDownloader.DownloadRange(...)\nlib/backend/rangedownloader.go [UNCHANGED]\ncalled fetchConcurrency times AT ONCE", fillcolor="#eef3ff"];
+    a_gcs   [label="GCSImpl.DownloadRange(...)\ngcsbackend/client.go:386 [UNCHANGED]\n-> downloader.DownloadObject(ctx, in)", fillcolor="#eef3ff"];
+    a_pool  [label="transfermanager.Downloader\nWithWorkers(N) worker pool\n[SAME POOL, SAME CODE --\nnow actually given concurrent work]", shape=cylinder, fillcolor="#e9fbf1"];
+    a_serve [label="Read() reaches piece i:\nGetPieceReader(i) finds it already\ncomplete or in-flight -- no new fetch,\nwaitForPiece() at most", fillcolor="#eef3ff"];
+
+    a_drain -> a_read -> a_acq -> a_get -> a_ensure;
+    a_get -> a_pref -> a_sem -> a_goroutines -> a_dirty -> a_fetch -> a_range -> a_gcs -> a_pool;
+    a_pool -> a_serve [label="~200ms later,\nALL pieces land together", style=dashed];
+    a_serve -> a_read [label="Read() advances,\nfinds piece already warm", style=dashed];
+
+    a_time [shape=note, style=filled, fillcolor="#fffbe0", label="8 pieces fetched concurrently\n(fetchConcurrency=8, matches N workers)\n= ~200ms total for 32 MiB\n~160 MiB/s -- pool fully used"];
+  }
+
+  legend [shape=note, style=filled, fillcolor="#ffffff", color="#999999", label="Every caller of GetPieceReader shares the same Torrent,\nso the fix benefits all of them:\n- B5 whole-blob HTTP drain (this diagram)\n- B5 Range-read handler (downloadBlobRangeHandler)\n- P2P piece serving (dispatcher.handlePieceRequest)\nNo separate bulk-download path was added.\nPrefetch is driven by GetPieceReader itself, not by A7's\nstreamReader.demand/readahead -- that signal is dead code\nfor origin since Torrent.HasPiece is hardcoded true."];
+}

@@ -1,0 +1,28 @@
+digraph OriginClientRetry {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style=filled];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="Origin: client-side retry";
+
+  subgraph cluster_before {
+    label="Before (current master)";
+    style=rounded; color="#545454";
+    b1 [label="DownloadBlob", fillcolor="#f5f5f5"];
+    b2 [label="Poll: 202 backoff,\nmulti-host failover", fillcolor="#f5f5f5"];
+    b1 -> b2;
+  }
+
+  subgraph cluster_after {
+    label="After (full feature)";
+    style=rounded; color="#276ef1"; penwidth=2;
+    a1 [label="DownloadBlob", fillcolor="#eef3ff"];
+    a2 [label="DownloadBlobRange (NEW, A11)", fillcolor="#fff2e8"];
+    a3 [label="Poll", fillcolor="#eef3ff"];
+    a4 [label="shared retryOn202 helper\n(utils/httputil)", fillcolor="#eef3ff"];
+    a1 -> a3;
+    a2 -> a3;
+    a3 -> a4 [label="wraps", style=dashed];
+  }
+}

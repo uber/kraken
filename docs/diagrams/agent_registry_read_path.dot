@@ -1,0 +1,31 @@
+digraph AgentRegistryReadPath {
+  rankdir=LR;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style=filled];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="Agent: registry read path";
+
+  subgraph cluster_before {
+    label="Before (current master)";
+    style=rounded; color="#545454";
+    b1 [label="Docker client\nGET blob", fillcolor="#f5f5f5"];
+    b2 [label="ROTransferer.Download", fillcolor="#f5f5f5"];
+    b3 [label="scheduler.Download\n(blocks)", fillcolor="#f5f5f5"];
+    b4 [label="wait for every piece", fillcolor="#f5f5f5"];
+    b5 [label="return complete FileReader", fillcolor="#f5f5f5"];
+    b1 -> b2 -> b3 -> b4 -> b5;
+  }
+
+  subgraph cluster_after {
+    label="After (full feature)";
+    style=rounded; color="#276ef1"; penwidth=2;
+    a1 [label="Docker client\nGET blob", fillcolor="#eef3ff"];
+    a2 [label="ROTransferer.Download", fillcolor="#eef3ff"];
+    a3 [label="scheduler.DownloadReader\n(returns immediately)", fillcolor="#eef3ff"];
+    a4 [label="streamReader", fillcolor="#eef3ff"];
+    a5 [label="Read() pulls next piece\non demand as client reads", fillcolor="#eef3ff"];
+    a1 -> a2 -> a3 -> a4 -> a5;
+    a5 -> a4 [label="loop", style=dashed];
+  }
+}

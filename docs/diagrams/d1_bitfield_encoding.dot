@@ -1,0 +1,28 @@
+digraph D1BitfieldEncoding {
+  rankdir=LR;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style=filled];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="D1 design correction: reuse bitset.BitSet encoding instead of a second format";
+
+  subgraph cluster_existing {
+    label="Agent <-> Agent (existing, current master)";
+    style=rounded; color="#06c167";
+    agentagent [label="bitset.BitSet.MarshalBinary()", fillcolor="#e9fbf1"];
+  }
+
+  subgraph cluster_corrected {
+    label="Tracker <-> Agent (D1, corrected)";
+    style=rounded; color="#276ef1"; penwidth=2;
+    corrected [label="same bitset.BitSet.MarshalBinary()", fillcolor="#eef3ff"];
+  }
+
+  subgraph cluster_rejected {
+    label="Tracker <-> Agent (D1, as first drafted)";
+    style="rounded,dashed"; color="#e11d48";
+    rejected [label="raw []bool JSON,\nTODO: pack later", fillcolor="#fdeaea", style="filled,dashed"];
+  }
+
+  note1 [shape=note, style=filled, fillcolor="#fffbe0", label="Before: only the agent<->agent handshake has a\nbitfield wire format (bitset binary).\n\nD1 as first drafted would add a second, raw []bool\nformat for tracker<->agent, with a TODO to pack it\nlater -- risking a third encoding.\n\nAfter, corrected: D1 reuses bitset.MarshalBinary()\nfrom day one. No new encoding, no TODO."];
+}

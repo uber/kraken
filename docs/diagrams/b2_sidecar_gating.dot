@@ -1,0 +1,21 @@
+digraph B2SidecarGating {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style=filled];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="B2 regression fix: gate sidecar upload to blob tasks only (writeSidecar flag)";
+
+  origin_task [label="Origin blob task", fillcolor="#e9fbf1"];
+  bi_task [label="Build-index tag task", fillcolor="#fff2e8"];
+  exec_a [label="Executor(writeSidecar=true)", fillcolor="#eef3ff"];
+  exec_b [label="Executor(writeSidecar=false)", fillcolor="#eef3ff"];
+  sidecar [label="uploadMetaInfoSidecar", shape=ellipse, fillcolor="#ffffff"];
+
+  origin_task -> exec_a;
+  bi_task -> exec_b;
+  exec_a -> sidecar [label="runs"];
+  exec_b -> sidecar [label="skipped", style=dashed];
+
+  note1 [shape=note, style=filled, fillcolor="#fffbe0", label="Before (current master): writeback.Executor has no\nsidecar step at all.\n\nAfter, as B2 first drafted: sidecar upload runs\nunconditionally for every task through the shared\nExecutor type -- including build-index's tag tasks,\nwhich have no TorrentMeta and would retry forever.\n\nAfter, corrected: writeSidecar bool set once at\nconstruction, per call site."];
+}

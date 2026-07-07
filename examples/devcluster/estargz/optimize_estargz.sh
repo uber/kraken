@@ -86,6 +86,8 @@ while IFS= read -r line; do
 done <<< "$ENV_FLAGS"
 
 ctr-remote image optimize --oci \
+    --zstdchunked \
+    --zstdchunked-compression-level=15 \
     --period="$PERIOD" \
     --cwd="$CWD" \
     "${ENV_ARGS[@]}" \

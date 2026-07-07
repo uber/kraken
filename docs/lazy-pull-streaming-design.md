@@ -579,13 +579,14 @@ Kraken's perspective).
 2. **P3 — demand-driven fetch — DONE.** §2c lazy mode + demand set: the lazy
    torrent requests only touched pieces (+readahead). This is what produced the
    ~21× byte reduction; folded into P1 for the PoC.
-3. **P2 — cold-origin streaming — DONE (Stack B).** §4 (backend range) + §5
-   Phase 2 (partial origin seed) shipped — see production plan for the as-built
-   detail. §7 (partial tracker discovery) remains. The `lib/streaming` format
-   seam (§ format abstraction) and the §6 build-index dependency resolver are
-   **deferred** — v1 (stargz) needs no separate index blob, so cross-cluster
-   index/data-blob replication has nothing to replicate today (production
-   plan §8).
+3. **P2 — cold-origin streaming — IMPLEMENTED IN PLAN, NOT FLEET-READY (Stack
+   B).** §4 (backend range) + §5 Phase 2 (partial origin seed) designed — see
+   production plan for the as-built detail and its §12 observability gap
+   before calling this fleet-ready. §7 (partial tracker discovery) remains.
+   The `lib/streaming` format seam (§ format abstraction) and the §6
+   build-index dependency resolver are **deferred** — v1 (stargz) needs no
+   separate index blob, so cross-cluster index/data-blob replication has
+   nothing to replicate today (production plan §8).
 4. **P4 — compression — REMAINING.** Per-piece zstd, coordinated with the zstd
    workstream.
 

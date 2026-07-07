@@ -1,0 +1,26 @@
+digraph TrackerHandoutPolicy {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style=filled];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="Tracker: handout policy";
+
+  subgraph cluster_before {
+    label="Before (current master)";
+    style=rounded; color="#545454";
+    b1 [label="Leecher requests peers", fillcolor="#f5f5f5"];
+    b2 [label="completenessAssignmentPolicy", fillcolor="#f5f5f5"];
+    b3 [label="origin=1, complete=0, incomplete=2", fillcolor="#f5f5f5"];
+    b1 -> b2 -> b3;
+  }
+
+  subgraph cluster_after {
+    label="After (full feature, opt-in)";
+    style=rounded; color="#276ef1"; penwidth=2;
+    a1 [label="Leecher requests peers\n+ requested piece indices", fillcolor="#eef3ff"];
+    a2 [label="coverageAssignmentPolicy", fillcolor="#eef3ff"];
+    a3 [label="seeder=0, origin=1,\ncovers >=1 requested piece=2, else=3", fillcolor="#eef3ff"];
+    a1 -> a2 -> a3;
+  }
+}

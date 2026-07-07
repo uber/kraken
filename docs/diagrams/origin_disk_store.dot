@@ -1,0 +1,29 @@
+digraph OriginDiskStore {
+  rankdir=LR;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style=filled];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="Origin: disk/store";
+
+  subgraph cluster_before {
+    label="Before (current master)";
+    style=rounded; color="#545454";
+    b1 [label="CAStore: upload state", fillcolor="#f5f5f5"];
+    b2 [label="CAStore: cache state", fillcolor="#f5f5f5"];
+    b3 [label="no cold-fetch / partial-blob\nstate at all", shape=note, fillcolor="#fffbe0"];
+    b1 -> b2;
+  }
+
+  subgraph cluster_after {
+    label="After (full feature)";
+    style=rounded; color="#276ef1"; penwidth=2;
+    a1 [label="CAStore: upload state", fillcolor="#eef3ff"];
+    a2 [label="CAStore: cache state", fillcolor="#eef3ff"];
+    a3 [label="CAStore: download state (NEW)", fillcolor="#fff2e8"];
+    a1 -> a2;
+    a3 -> a2;
+  }
+
+  note1 [shape=note, style=filled, fillcolor="#fffbe0", label="An earlier design considered a separate\nCADownloadStore type/dir; rejected before any\ncode landed, in favor of a third state on the\nexisting CAStore (see castore_merge.dot)."];
+}

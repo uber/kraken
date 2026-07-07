@@ -1,0 +1,31 @@
+digraph RetryLoopMerge {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style=filled];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="Shared retry-on-202 backoff loop (new): origin + tracker clients";
+
+  subgraph cluster_shared {
+    label="utils/httputil  (NEW shared helper)";
+    style=rounded; color="#276ef1"; penwidth=2;
+    helper [label="retryOn202(request func() error,\nbackoff BackOff) error", fillcolor="#eef3ff"];
+  }
+
+  subgraph cluster_origin {
+    label="origin/blobclient.Poll";
+    style=rounded; color="#06c167";
+    poll [label="fan out across N resolved hosts,\nfailover on non-202 errors", fillcolor="#e9fbf1"];
+  }
+
+  subgraph cluster_tracker {
+    label="tracker/metainfoclient.Client.Download";
+    style=rounded; color="#ff6b35";
+    meta [label="single host,\nExponentialBackOffConfig-built backoff", fillcolor="#fff2e8"];
+  }
+
+  poll -> helper;
+  meta -> helper;
+
+  note1 [shape=note, style=filled, fillcolor="#fffbe0", label="Before: Poll and PollAccepted are two hand-written\ncopies of the same sleep-on-202 loop; PollAccepted\nalso hardcodes its own backoff.ExponentialBackOff\nliteral instead of the shared config builder.\n\nAfter: one inner loop, wrapped per-host by Poll,\ncalled directly by metainfoclient for its one host."];
+}

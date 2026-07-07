@@ -1,0 +1,43 @@
+digraph OriginDedupFetchSession {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style=filled];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="Origin: dedup / fetch-session";
+
+  subgraph cluster_before {
+    label="Before (current master)";
+    style=rounded; color="#545454";
+    b1 [label="P2P peer piece request", fillcolor="#f5f5f5"];
+    b2 [label="scheduler dispatcher\ntryMarkDirty", fillcolor="#f5f5f5"];
+    b3 [label="Plain HTTP GET blob", fillcolor="#f5f5f5"];
+    b4 [label="blobRefresher.Refresh\n(independent fetch)", fillcolor="#f5f5f5"];
+    b5 [label="backend", shape=cylinder, fillcolor="#f5f5f5"];
+    b1 -> b2 -> b5;
+    b3 -> b4 -> b5;
+  }
+
+  subgraph cluster_after {
+    label="After (full feature, scoped dedup)";
+    style=rounded; color="#276ef1"; penwidth=2;
+    a1 [label="P2P peer piece request", fillcolor="#eef3ff"];
+    a2 [label="shared *Torrent\ntryMarkDirty", fillcolor="#eef3ff"];
+    a3a [label="Plain HTTP GET (whole blob)", fillcolor="#eef3ff"];
+    a3b [label="Range request A\n[offset,length)", fillcolor="#eef3ff"];
+    a3c [label="Range request B\n(disjoint span)", fillcolor="#eef3ff"];
+    a4a [label="TriggerBackground\nscope=\"\" (digest only)", fillcolor="#fff2e8"];
+    a4b [label="TriggerBackground\nscope=\"3-5\" (pieces 3-5)", fillcolor="#fff2e8"];
+    a4c [label="TriggerBackground\nscope=\"40-41\" (pieces 40-41)", fillcolor="#fff2e8"];
+    a5a [label="sched.DownloadReader", fillcolor="#eef3ff"];
+    a5b [label="sched.DownloadReader", fillcolor="#eef3ff"];
+    a5c [label="sched.DownloadReader", fillcolor="#eef3ff"];
+    a6 [label="backend, one fetch per piece", shape=cylinder, fillcolor="#eef3ff"];
+    a1 -> a2 -> a6;
+    a3a -> a4a -> a5a -> a2;
+    a3b -> a4b -> a5b -> a2;
+    a3c -> a4c -> a5c -> a2;
+  }
+
+  note1 [shape=note, style=filled, fillcolor="#fffbe0", label="Scope = pieceRangeScope(offset,length), resolved via the\nalready-cheap Scheduler.Stat (metainfo-only, no torrent).\nThree independent TriggerBackground slots above never collide\nwith each other -- each is a distinct dedup.RequestCache key --\nso disjoint requests for the same digest no longer wait a\nretry round-trip for one shared slot to free. tryMarkDirty\n(inside the shared *Torrent) is unchanged and remains the\nactual per-piece fetch dedup: identical/overlapping scopes\nstill coalesce onto one TriggerBackground goroutine, and any\ntwo goroutines racing on the same underlying piece still only\nfetch it once."];
+}

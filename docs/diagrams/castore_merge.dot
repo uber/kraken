@@ -1,0 +1,32 @@
+digraph CAStore {
+  rankdir=LR;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="CAStore: one store, three states (was CAStore + separate CADownloadStore)";
+
+  subgraph cluster_castore {
+    label="*store.CAStore  (single Go object, single cleanupManager)";
+    style=rounded;
+    color="#276ef1";
+    penwidth=2;
+
+    upload   [label="upload state\n(uploadStore)\nproxy push / blobrefresh writes here first", shape=box, style=filled, fillcolor="#eef3ff"];
+    download [label="download state  [NEW]\n(downloadStore)\ncold P2P range-fetch pieces\nland here, sparse file + _status metadata", shape=box, style=filled, fillcolor="#fff2e8"];
+    cache    [label="cache state\n(cacheStore)\nTHE shared warm cache dir\n(memory-cache write-through on top)", shape=box, style=filled, fillcolor="#e9fbf1"];
+
+    upload -> cache [label="MoveUploadFileToCache\n(verify digest, os.Rename)\nEXISTING", color="#276ef1"];
+    download -> cache [label="MoveDownloadFileToCache\n(verify digest, os.Rename)\nNEW, same pattern", color="#ff6b35", penwidth=2];
+  }
+
+  note1 [shape=note, style=filled, fillcolor="#fffbe0",
+    label="Before: cold pieces landed in a SEPARATE\n*store.CADownloadStore object with its OWN\ncache dir. A fully-fetched cold blob never\nmoved into CAStore's cache -> permanent\nduplicate on disk.\n\nAfter: download state shares cache's backend/\ndirectory. Promotion is the same atomic\nsame-volume os.Rename CAStore already uses\nfor upload->cache. One physical cache dir."];
+
+  note1 -> download [style=invis];
+
+  reader [label="Any reader\n(HTTP GET, P2P piece serve,\nreplication)", shape=ellipse];
+  reader -> cache [label="GetCacheFileReader\n(only source of truth\nfor \"is this blob warm\")"];
+
+  agent [label="CADownloadStore\n(UNCHANGED — agent only,\nno separate CAStore there,\nso nothing to merge)", shape=box, style=dashed];
+}

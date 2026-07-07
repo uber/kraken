@@ -1,0 +1,50 @@
+digraph RequestFlow {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="Origin: whole-blob HTTP and P2P piece requests join ONE fetch session per digest";
+
+  p2p_peer  [label="P2P peer\n(agent requesting pieces)", shape=ellipse, style=filled, fillcolor="#eef3ff"];
+  http_get  [label="Plain HTTP GET\n(proxy / agent, whole blob)", shape=ellipse, style=filled, fillcolor="#eef3ff"];
+  http_range[label="HTTP Range GET\n(byte range only)", shape=ellipse, style=filled, fillcolor="#eef3ff"];
+
+  incoming_conn [label="scheduler/state.go\naddIncomingConn", shape=box];
+  sched_download [label="blobserver.downloadBlob\n\ncache miss ->\nNEW: sched.Download(ns, d)\n(was: blobRefresher.Refresh, independent)", shape=box, style=filled, fillcolor="#fff2e8"];
+  range_handler [label="blobserver\nNEW: Range-read handler\n\ngoes straight to TorrentArchive.GetTorrent,\nno full-completion wait", shape=box, style=filled, fillcolor="#fff2e8"];
+
+  p2p_peer -> incoming_conn;
+  http_get -> sched_download;
+  http_range -> range_handler;
+
+  dedup [label="scheduler event loop\ntorrentControls[InfoHash]\n\n\"is there already a live Torrent\nfor this digest? if so, reuse it\"", shape=diamond, style=filled, fillcolor="#e9fbf1"];
+
+  incoming_conn -> dedup;
+  sched_download -> dedup [label="Download() blocks\nuntil Complete()"];
+  range_handler -> dedup [label="joins same entry,\ndoesn't force full demand"];
+
+  torrent [label="ONE shared *Torrent\n(originstorage)\n\npieces[], numComplete,\nRangeDownloader", shape=box3d, style=filled, fillcolor="#f5eeff"];
+
+  dedup -> torrent [label="get-or-create\n(TorrentArchive.GetTorrent/\nCreateTorrent)"];
+
+  cache_hit [label="cas.GetCacheFileStat\nalready warm?", shape=diamond];
+  torrent -> cache_hit [style=dashed, label="checked first"];
+  cache_hit -> warm [label="yes -> NewTorrent(cas, mi)\n(skip download state entirely)"];
+  cache_hit -> fetch [label="no -> NewPartialTorrent(cas, rd, ...)"];
+
+  warm [label="serve straight from\nCAStore cache state", shape=box, style=filled, fillcolor="#e9fbf1"];
+  fetch [label="fetchPiece() per missing piece\n(RangeDownloader.DownloadRange)\nwrites into CAStore download state", shape=box, style=filled, fillcolor="#fff2e8"];
+
+  fetch -> complete_check [label="numComplete == NumPieces?"];
+  complete_check [shape=diamond, label="all pieces\ncomplete?"];
+  complete_check -> promote [label="yes"];
+  complete_check -> fetch [label="no -> keep fetching\n(eager demand escalates\nremaining pieces)", style=dashed];
+
+  promote [label="cas.MoveDownloadFileToCache\n(verify + atomic rename)", shape=box, style=filled, fillcolor="#ff6b35", fontcolor=white];
+  promote -> warm [label="now warm for\nfuture requests"];
+
+  note [shape=note, style=filled, fillcolor="#fffbe0",
+    label="Why request B (whole blob) can't hang forever:\nDownload() doesn't passively wait for whatever\npieces P2P happens to be asking for — it requests\nEAGER/full demand on the SAME shared torrent,\nso the dispatcher fetches every remaining piece\nand Download() blocks until Complete(). Never\nreturns a partial body for a non-range request."];
+  note -> promote [style=invis];
+}

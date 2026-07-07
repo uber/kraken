@@ -1,0 +1,34 @@
+digraph BuildIndexWritebackExecutor {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style=filled];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="Build-index: writeback executor";
+
+  subgraph cluster_before {
+    label="Before (current master)";
+    style=rounded; color="#545454";
+    b1 [label="Origin blob task", fillcolor="#f5f5f5"];
+    b2 [label="Build-index tag task", fillcolor="#f5f5f5"];
+    b3 [label="writeback.Executor.Exec", fillcolor="#f5f5f5"];
+    b4 [label="(no sidecar step yet)", fillcolor="#f5f5f5"];
+    b1 -> b3;
+    b2 -> b3;
+    b3 -> b4;
+  }
+
+  subgraph cluster_after {
+    label="After (full feature)";
+    style=rounded; color="#276ef1"; penwidth=2;
+    a1 [label="Origin blob task", fillcolor="#eef3ff"];
+    a2 [label="Build-index tag task", fillcolor="#eef3ff"];
+    a3 [label="Executor(writeSidecar=true)", fillcolor="#eef3ff"];
+    a4 [label="Executor(writeSidecar=false)", fillcolor="#eef3ff"];
+    a5 [label="uploadMetaInfoSidecar", fillcolor="#fff2e8"];
+    a1 -> a3;
+    a2 -> a4;
+    a3 -> a5 [label="runs"];
+    a4 -> a5 [label="skipped", style=dashed];
+  }
+}

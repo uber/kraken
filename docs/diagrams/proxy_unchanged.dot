@@ -1,0 +1,16 @@
+digraph ProxyUnchanged {
+  rankdir=LR;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style=filled];
+  edge [fontname="Helvetica", fontsize=10];
+  labelloc="t";
+  label="Proxy: blob client usage — unchanged (current master = full feature)";
+
+  px [label="Proxy preheat / prefetch", fillcolor="#f5f5f5"];
+  cc [label="origin/blobclient.ClusterClient\n(DownloadBlob, PrefetchBlob, UploadBlob)", fillcolor="#f5f5f5"];
+  or [label="Origin cluster", shape=cylinder, fillcolor="#f5f5f5"];
+
+  px -> cc -> or;
+
+  note1 [shape=note, style=filled, fillcolor="#fffbe0", label="No PR in Stacks A, B, or D touches proxy code.\nA11 adds DownloadBlobRange to the interface proxy\nalready depends on, but proxy never calls it."];
+}
