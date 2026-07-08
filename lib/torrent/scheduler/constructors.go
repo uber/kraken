@@ -64,19 +64,21 @@ func NewAgentScheduler(
 }
 
 // NewOriginScheduler creates and starts a ReloadableScheduler configured for an origin.
+// fetchConcurrency bounds concurrent backend range-fetches per partial (cold)
+// torrent; <=0 uses originstorage's default.
 func NewOriginScheduler(
 	config Config,
 	stats tally.Scope,
 	pctx core.PeerContext,
 	cas *store.CAStore,
-	cads *store.CADownloadStore,
 	backends *backend.Manager,
 	netevents networkevent.Producer,
-	blobRefresher *blobrefresh.Refresher) (ReloadableScheduler, error) {
+	blobRefresher *blobrefresh.Refresher,
+	fetchConcurrency int) (ReloadableScheduler, error) {
 
 	s, err := newScheduler(
 		config,
-		originstorage.NewTorrentArchive(cas, cads, backends, blobRefresher),
+		originstorage.NewTorrentArchive(cas, backends, blobRefresher, fetchConcurrency),
 		stats,
 		pctx,
 		announceclient.Disabled(),

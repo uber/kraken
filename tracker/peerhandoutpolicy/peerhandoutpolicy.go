@@ -35,7 +35,7 @@ type peerPriorityInfo struct {
 
 // assignmentPolicy defines the policy for assigning priority to peers.
 type assignmentPolicy interface {
-	assignPriority(peer *core.PeerInfo) (priority int, label string)
+	assignPriority(peer *core.PeerInfo, requested []int) (priority int, label string)
 }
 
 // PriorityPolicy wraps an assignmentPolicy and uses it to sort lists of peers.
@@ -58,6 +58,8 @@ func NewPriorityPolicy(stats tally.Scope, priorityPolicy string) (*PriorityPolic
 		p.policy = newDefaultAssignmentPolicy()
 	case _completenessPolicy:
 		p.policy = newCompletenessAssignmentPolicy()
+	case _coveragePolicy:
+		p.policy = newCoverageAssignmentPolicy()
 	default:
 		return nil, fmt.Errorf("priority policy %q not found", priorityPolicy)
 	}
@@ -66,14 +68,18 @@ func NewPriorityPolicy(stats tally.Scope, priorityPolicy string) (*PriorityPolic
 }
 
 // SortPeers returns the given list of peers sorted by the priority assigned to them
-// by the priorityPolicy. Excludes the source peer from the list.
-func (p *PriorityPolicy) SortPeers(source *core.PeerInfo, peers []*core.PeerInfo) []*core.PeerInfo {
+// by the priorityPolicy. Excludes the source peer from the list. requested is the
+// set of pieces the announcing peer currently wants (nil outside lazy/streaming
+// mode); only the coverage policy uses it.
+func (p *PriorityPolicy) SortPeers(
+	source *core.PeerInfo, peers []*core.PeerInfo, requested []int) []*core.PeerInfo {
+
 	peerPriorities := make([]*peerPriorityInfo, 0, len(peers))
 	for _, peer := range peers {
 		if peer == source {
 			continue
 		}
-		priority, label := p.policy.assignPriority(peer)
+		priority, label := p.policy.assignPriority(peer, requested)
 		peerPriorities = append(peerPriorities, &peerPriorityInfo{peer, priority, label})
 	}
 

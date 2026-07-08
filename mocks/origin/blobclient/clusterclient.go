@@ -70,6 +70,20 @@ func (mr *MockClusterClientMockRecorder) DownloadBlob(arg0, arg1, arg2, arg3 any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBlob", reflect.TypeOf((*MockClusterClient)(nil).DownloadBlob), arg0, arg1, arg2, arg3)
 }
 
+// DownloadBlobRange mocks base method.
+func (m *MockClusterClient) DownloadBlobRange(arg0 context.Context, arg1 string, arg2 core.Digest, arg3, arg4 int64, arg5 io.Writer) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DownloadBlobRange", arg0, arg1, arg2, arg3, arg4, arg5)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DownloadBlobRange indicates an expected call of DownloadBlobRange.
+func (mr *MockClusterClientMockRecorder) DownloadBlobRange(arg0, arg1, arg2, arg3, arg4, arg5 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBlobRange", reflect.TypeOf((*MockClusterClient)(nil).DownloadBlobRange), arg0, arg1, arg2, arg3, arg4, arg5)
+}
+
 // GetMetaInfo mocks base method.
 func (m *MockClusterClient) GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error) {
 	m.ctrl.T.Helper()

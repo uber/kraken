@@ -67,7 +67,8 @@ type CAStore struct {
 
 	*uploadStore
 	*cacheStore
-	cleanup *cleanupManager
+	*downloadStore // NEW, nil when config.DownloadDir == ""
+	cleanup        *cleanupManager
 
 	memCache *cache.BlobMemoryCache
 
@@ -108,13 +109,26 @@ func newCAStore(config CAStoreConfig, stats tally.Scope, clk clock.Clock) (*CASt
 	cleanup.addJob("upload", config.UploadCleanup, uploadStore.newFileOp())
 	cleanup.addJob("cache", config.CacheCleanup, cacheStore.newFileOp())
 
+	var downloadStore *downloadStore
+	if config.DownloadDir != "" {
+		// Shares cacheBackend so promotion (MoveDownloadFileToCache) is a
+		// same-volume rename, not a copy.
+		downloadStore, err = newDownloadStore(
+			config.DownloadDir, cacheBackend, config.ReadPartSize, config.WritePartSize)
+		if err != nil {
+			return nil, fmt.Errorf("new download store: %s", err)
+		}
+		cleanup.addJob("download", config.DownloadCleanup, downloadStore.newFileOp())
+	}
+
 	cas := &CAStore{
-		config:      config,
-		stats:       stats,
-		clk:         clk,
-		uploadStore: uploadStore,
-		cacheStore:  cacheStore,
-		cleanup:     cleanup,
+		config:        config,
+		stats:         stats,
+		clk:           clk,
+		uploadStore:   uploadStore,
+		cacheStore:    cacheStore,
+		downloadStore: downloadStore,
+		cleanup:       cleanup,
 	}
 
 	if config.MemoryCache.Enabled {
@@ -185,6 +199,47 @@ func (s *CAStore) MoveUploadFileToCache(uploadName, cacheName string) error {
 	}
 
 	return s.cacheStore.newFileOp().MoveFileFrom(cacheName, s.cacheStore.state, uploadPath)
+}
+
+// MoveDownloadFileToCache commits downloadName (fully-fetched) as cacheName,
+// verifying its digest first -- same shape as MoveUploadFileToCache.
+// Idempotent: if the download-state file is already gone (a prior call
+// already promoted it, or a concurrent one just did), returns nil rather
+// than a not-found error.
+func (s *CAStore) MoveDownloadFileToCache(downloadName, cacheName string) error {
+	f, err := s.downloadStore.newFileOp().GetFileReader(downloadName, s.downloadStore.readPartSize)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("get file reader %s: %s", downloadName, err)
+	}
+	defer closers.Close(f)
+	if err := s.verify(f, cacheName); err != nil {
+		return fmt.Errorf("verify digest: %s", err)
+	}
+	if err := s.downloadStore.newFileOp().MoveFile(downloadName, s.cacheStore.state); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("move file to cache: %s", err)
+	}
+	return nil
+}
+
+// InDownloadError returns true for errors originating from file store
+// operations which do not accept files in download state.
+func (s *CAStore) InDownloadError(err error) bool {
+	fse, ok := err.(*base.FileStateError)
+	return ok && s.downloadStore != nil && fse.State == s.downloadStore.state
+}
+
+// InCacheError returns true for errors originating from file store
+// operations which do not accept files in cache state -- e.g. a
+// download-scoped operation on a digest that has already been promoted.
+func (s *CAStore) InCacheError(err error) bool {
+	fse, ok := err.(*base.FileStateError)
+	return ok && fse.State == s.cacheStore.state
 }
 
 // CreateCacheFile initializes a cache file for name from r. name should be a raw

@@ -13,6 +13,10 @@
 // limitations under the License.
 package core
 
+// MaxBlobRangeLength is the shared cap on a single range read/download,
+// enforced by both the origin range-serving handler and its clients.
+const MaxBlobRangeLength = 64 << 20 // 64 MiB
+
 // BlobInfo contains metadata about a blob.
 type BlobInfo struct {
 	Size int64

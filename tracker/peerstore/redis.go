@@ -14,6 +14,7 @@
 package peerstore
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -32,12 +33,16 @@ func peerSetKey(h core.InfoHash, window int64) string {
 	return fmt.Sprintf("peerset:%s:%d", h.String(), window)
 }
 
+// serializePeer encodes p as "pid:ip:port:complete:bitfield", where bitfield
+// is hex-encoded (may be empty) so it can share the colon-delimited format
+// without colliding with the delimiter.
 func serializePeer(p *core.PeerInfo) string {
 	var completeBit int
 	if p.Complete {
 		completeBit = 1
 	}
-	return fmt.Sprintf("%s:%s:%d:%d", p.PeerID.String(), p.IP, p.Port, completeBit)
+	return fmt.Sprintf(
+		"%s:%s:%d:%d:%s", p.PeerID.String(), p.IP, p.Port, completeBit, hex.EncodeToString(p.Bitfield))
 }
 
 type peerIdentity struct {
@@ -46,23 +51,31 @@ type peerIdentity struct {
 	port   int
 }
 
-func deserializePeer(s string) (id peerIdentity, complete bool, err error) {
-	parts := strings.Split(s, ":")
-	if len(parts) != 4 {
-		return id, false, fmt.Errorf("invalid peer encoding: expected 'pid:ip:port:complete'")
+// deserializePeer parses serializePeer's format. The bitfield field is
+// optional on read (older entries from before it existed have 4 parts) so a
+// rolling deploy doesn't fail to parse peers written by the previous version.
+func deserializePeer(s string) (id peerIdentity, complete bool, bitfield []byte, err error) {
+	parts := strings.SplitN(s, ":", 5)
+	if len(parts) < 4 {
+		return id, false, nil, fmt.Errorf("invalid peer encoding: expected 'pid:ip:port:complete[:bitfield]'")
 	}
 	peerID, err := core.NewPeerID(parts[0])
 	if err != nil {
-		return id, false, fmt.Errorf("parse peer id: %s", err)
+		return id, false, nil, fmt.Errorf("parse peer id: %s", err)
 	}
 	ip := parts[1]
 	port, err := strconv.Atoi(parts[2])
 	if err != nil {
-		return id, false, fmt.Errorf("parse port: %s", err)
+		return id, false, nil, fmt.Errorf("parse port: %s", err)
 	}
 	id = peerIdentity{peerID, ip, port}
 	complete = parts[3] == "1"
-	return id, complete, nil
+	if len(parts) == 5 && parts[4] != "" {
+		if bitfield, err = hex.DecodeString(parts[4]); err != nil {
+			return id, false, nil, fmt.Errorf("parse bitfield: %s", err)
+		}
+	}
+	return id, complete, bitfield, nil
 }
 
 // RedisStore is a Store backed by Redis.
@@ -171,7 +184,11 @@ func (s *RedisStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 	randutil.ShuffleInt64s(windows)
 
 	// Eliminate duplicates from other windows and collapses complete bits.
-	selected := make(map[peerIdentity]bool)
+	type agg struct {
+		complete bool
+		bitfield []byte
+	}
+	selected := make(map[peerIdentity]agg)
 
 	for i := 0; len(selected) < n && i < len(windows); i++ {
 		k := peerSetKey(h, windows[i])
@@ -182,18 +199,27 @@ func (s *RedisStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 			return nil, err
 		}
 		for _, s := range result {
-			id, complete, err := deserializePeer(s)
+			id, complete, bitfield, err := deserializePeer(s)
 			if err != nil {
 				log.Errorf("Error deserializing peer %q: %s", s, err)
 				continue
 			}
-			selected[id] = selected[id] || complete
+			a := selected[id]
+			a.complete = a.complete || complete
+			if len(bitfield) > 0 {
+				// ponytail: last-seen-wins rather than OR-merging across
+				// windows -- a coverage heuristic doesn't need a perfectly
+				// up-to-date bitfield, just a recent one.
+				a.bitfield = bitfield
+			}
+			selected[id] = a
 		}
 	}
 
 	var peers []*core.PeerInfo
-	for id, complete := range selected {
-		p := core.NewPeerInfo(id.peerID, id.ip, id.port, false, complete)
+	for id, a := range selected {
+		p := core.NewPeerInfo(id.peerID, id.ip, id.port, false, a.complete)
+		p.Bitfield = a.bitfield
 		peers = append(peers, p)
 	}
 	return peers, nil

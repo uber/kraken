@@ -193,11 +193,6 @@ func Run(flags *Flags, opts ...Option) {
 		log.Fatalf("Failed to create castore: %s", err)
 	}
 
-	cads, err := store.NewCADownloadStore(config.CADownloadStore, stats)
-	if err != nil {
-		log.Fatalf("Failed to create cadownloadstore: %s", err)
-	}
-
 	pctx, err := core.NewPeerContext(
 		config.PeerIDFactory, flags.Zone, flags.KrakenCluster, flags.PeerIP, flags.PeerPort, true)
 	if err != nil {
@@ -219,7 +214,7 @@ func Run(flags *Flags, opts ...Option) {
 		config.WriteBack,
 		stats,
 		writeback.NewStore(localDB),
-		writeback.NewExecutor(stats, cas, backendManager))
+		writeback.NewExecutor(stats, cas, backendManager, true))
 	if err != nil {
 		log.Fatalf("Error creating write-back manager: %s", err)
 	}
@@ -237,7 +232,8 @@ func Run(flags *Flags, opts ...Option) {
 	}
 
 	sched, err := scheduler.NewOriginScheduler(
-		config.Scheduler, stats, pctx, cas, cads, backendManager, netevents, blobRefresher)
+		config.Scheduler, stats, pctx, cas, backendManager, netevents, blobRefresher,
+		config.FetchConcurrency)
 	if err != nil {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
@@ -271,14 +267,15 @@ func Run(flags *Flags, opts ...Option) {
 		addr,
 		hashRing,
 		cas,
-		cads,
 		blobclient.NewProvider(blobclient.WithTLS(tls)),
 		blobclient.NewClusterProvider(blobclient.WithTLS(tls)),
 		pctx,
 		backendManager,
 		blobRefresher,
 		metaInfoGenerator,
-		writeBackManager)
+		writeBackManager,
+		config.FetchConcurrency,
+		sched)
 	if err != nil {
 		log.Fatalf("Error initializing blob server: %s", err)
 	}

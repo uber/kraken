@@ -52,6 +52,18 @@ func (i *TorrentInfo) MaxPieceLength() int64 {
 	return i.metainfo.PieceLength()
 }
 
+// Length returns the total length of the torrent's target file.
+func (i *TorrentInfo) Length() int64 {
+	return i.metainfo.Length()
+}
+
+// PieceLength returns the torrent's uniform piece stride, used by callers
+// (e.g. pieceRangeScope) to resolve covering piece indices without creating
+// a torrent.
+func (i *TorrentInfo) PieceLength() int64 {
+	return i.metainfo.PieceLength()
+}
+
 // PercentDownloaded returns the percent of bytes downloaded as an integer
 // between 0 and 100. Useful for logging.
 func (i *TorrentInfo) PercentDownloaded() int {

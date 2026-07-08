@@ -16,10 +16,12 @@ package scheduler
 import (
 	"fmt"
 	"io"
+	"sync/atomic"
 	"time"
 
 	"github.com/andres-erbsen/clock"
 
+	"github.com/uber/kraken/lib/torrent/scheduler/dispatch/piecerequest"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/utils/closers"
 )
@@ -51,18 +53,24 @@ type streamReader struct {
 	// priority, if non-nil, hints the dispatcher to fetch a piece next when a
 	// read blocks on it. Enables random-access (range) reads to skip ahead of
 	// the in-order fetch.
-	priority func(piece int)
+	priority func(piece int, class piecerequest.PriorityClass)
 	// request, if non-nil, demands a set of pieces from the dispatcher in lazy
 	// mode, so only pieces a reader touches (plus readahead) are downloaded.
-	request func(pieces []int)
+	request func(pieces []int, class piecerequest.PriorityClass)
 
 	length   int64
 	pieceLen int64 // Standard piece stride (PieceLength(0)); 0 for empty blobs.
 
-	pos    int64               // Absolute position of the next sequential Read.
-	pr     storage.PieceReader // Reader for the currently open piece, if any.
-	prOff  int64               // Absolute position pr is positioned at.
-	hinted int                 // Last piece hinted via priority (-1 if none).
+	pos   int64               // Absolute position of the next sequential Read.
+	pr    storage.PieceReader // Reader for the currently open piece, if any.
+	prOff int64               // Absolute position pr is positioned at.
+	// hinted is the last piece hinted via priority (-1 if none). Read's cursor
+	// path and ReadAt's independent-offset path both call acquirePiece and can
+	// race on this field, so it's an atomic swapped rather than lock-guarded:
+	// demand()/priority() are idempotent, so a benign double-fire on a rare
+	// race is harmless -- only the "have I already fired for this piece" bit
+	// needs to be atomic.
+	hinted atomic.Int64
 
 	done    bool  // Terminal state received from errc.
 	termErr error // Non-nil terminal download error.
@@ -73,14 +81,14 @@ func newStreamReader(
 	errc chan error,
 	clk clock.Clock,
 	pollInterval time.Duration,
-	priority func(piece int),
-	request func(pieces []int)) *streamReader {
+	priority func(piece int, class piecerequest.PriorityClass),
+	request func(pieces []int, class piecerequest.PriorityClass)) *streamReader {
 
 	var pieceLen int64
 	if t.NumPieces() > 0 {
 		pieceLen = t.PieceLength(0)
 	}
-	return &streamReader{
+	r := &streamReader{
 		t:            t,
 		errc:         errc,
 		clk:          clk,
@@ -89,8 +97,9 @@ func newStreamReader(
 		request:      request,
 		length:       t.Length(),
 		pieceLen:     pieceLen,
-		hinted:       -1,
 	}
+	r.hinted.Store(-1)
+	return r
 }
 
 // Size returns the total blob length, known from metainfo before download.
@@ -163,7 +172,21 @@ func (r *streamReader) ReadAt(p []byte, off int64) (int, error) {
 		if end > r.length {
 			end = r.length
 		}
-		r.demand(int(off/r.pieceLen), int((end-1)/r.pieceLen)+1)
+		lo, hi := int(off/r.pieceLen), int((end-1)/r.pieceLen)+1
+		// The lead piece (lo) is about to be read on the very first loop
+		// iteration below, so it is always Foreground regardless of how wide
+		// the rest of the span is -- classifying the whole span uniformly
+		// would transiently mark it Background whenever the span looked
+		// prefetch-shaped, which a concurrent reservation round could
+		// observe before acquirePiece's own upgrade corrects it.
+		class := piecerequest.Foreground
+		if hi-lo > streamReadahead {
+			class = piecerequest.Background
+		}
+		r.demand(lo, lo+1, piecerequest.Foreground)
+		if hi > lo+1 {
+			r.demand(lo+1, hi, class)
+		}
 	}
 	var read int
 	for read < len(p) {
@@ -230,12 +253,11 @@ func (r *streamReader) acquirePiece(piece int) (storage.PieceReader, error) {
 			}
 			return pr, nil
 		}
-		if r.hinted != piece {
+		if r.hinted.Swap(int64(piece)) != int64(piece) {
 			if r.priority != nil {
-				r.priority(piece)
+				r.priority(piece, piecerequest.Foreground)
 			}
-			r.demand(piece, piece+streamReadahead)
-			r.hinted = piece
+			r.demand(piece, piece+streamReadahead, piecerequest.Background)
 		}
 		if err := r.waitPiece(); err != nil {
 			return nil, err
@@ -243,10 +265,11 @@ func (r *streamReader) acquirePiece(piece int) (storage.PieceReader, error) {
 	}
 }
 
-// demand asks the dispatcher (lazy mode) to fetch pieces [lo, hi), clamped to
-// the torrent. No-op when request is nil (eager mode). Demand in the dispatcher
-// is monotonic, so repeated overlapping calls are harmless.
-func (r *streamReader) demand(lo, hi int) {
+// demand asks the dispatcher (lazy mode) to fetch pieces [lo, hi) at the
+// given priority class, clamped to the torrent. No-op when request is nil
+// (eager mode). Demand in the dispatcher is monotonic, so repeated
+// overlapping calls are harmless.
+func (r *streamReader) demand(lo, hi int, class piecerequest.PriorityClass) {
 	if r.request == nil {
 		return
 	}
@@ -263,7 +286,7 @@ func (r *streamReader) demand(lo, hi int) {
 	for i := lo; i < hi; i++ {
 		pieces = append(pieces, i)
 	}
-	r.request(pieces)
+	r.request(pieces, class)
 }
 
 // waitPiece blocks until either the poll interval elapses (progress may have

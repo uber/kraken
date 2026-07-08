@@ -35,7 +35,7 @@ func (s *Server) announceHandlerV1(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return handler.Errorf("get request digest: %s", err)
 	}
-	resp, err := s.announce(d, req.InfoHash, req.Peer)
+	resp, err := s.announce(d, req.InfoHash, req.Peer, nil)
 	if err != nil {
 		return err
 	}
@@ -62,7 +62,37 @@ func (s *Server) announceHandlerV2(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return handler.Errorf("get request digest: %s", err)
 	}
-	resp, err := s.announce(d, h, req.Peer)
+	resp, err := s.announce(d, h, req.Peer, nil)
+	if err != nil {
+		return err
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		return handler.Errorf("json encode response: %s", err)
+	}
+	return nil
+}
+
+// announceHandlerV3 mirrors V2, but the request's Peer carries a populated
+// Bitfield/NumComplete and, for lazy (streaming) dispatchers,
+// RequestedPieces -- letting getPeerHandout prefer peers that cover them.
+func (s *Server) announceHandlerV3(w http.ResponseWriter, r *http.Request) error {
+	infohash, err := httputil.ParseParam(r, "infohash")
+	if err != nil {
+		return err
+	}
+	h, err := core.NewInfoHashFromHex(infohash)
+	if err != nil {
+		return fmt.Errorf("parse infohash: %s", err)
+	}
+	req := new(announceclient.Request)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		return handler.Errorf("json decode request: %s", err)
+	}
+	d, err := req.GetDigest()
+	if err != nil {
+		return handler.Errorf("get request digest: %s", err)
+	}
+	resp, err := s.announce(d, h, req.Peer, req.RequestedPieces)
 	if err != nil {
 		return err
 	}
@@ -73,14 +103,14 @@ func (s *Server) announceHandlerV2(w http.ResponseWriter, r *http.Request) error
 }
 
 func (s *Server) announce(
-	d core.Digest, h core.InfoHash, peer *core.PeerInfo) (*announceclient.Response, error) {
+	d core.Digest, h core.InfoHash, peer *core.PeerInfo, requested []int) (*announceclient.Response, error) {
 
 	if err := s.peerStore.UpdatePeer(h, peer); err != nil {
 		log.With(
 			"hash", h,
 			"peer_id", peer.PeerID).Errorf("Error updating peer: %s", err)
 	}
-	peers, err := s.getPeerHandout(d, h, peer)
+	peers, err := s.getPeerHandout(d, h, peer, requested)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +121,7 @@ func (s *Server) announce(
 }
 
 func (s *Server) getPeerHandout(
-	d core.Digest, h core.InfoHash, peer *core.PeerInfo) ([]*core.PeerInfo, error) {
+	d core.Digest, h core.InfoHash, peer *core.PeerInfo, requested []int) ([]*core.PeerInfo, error) {
 
 	if peer.Complete {
 		// If the peer is announcing as complete, don't return a peer handout since
@@ -111,5 +141,5 @@ func (s *Server) getPeerHandout(
 	if len(peers) == 0 {
 		return nil, handler.Errorf("no peers available: %s", errutil.Join(errs))
 	}
-	return s.policy.SortPeers(peer, peers), nil
+	return s.policy.SortPeers(peer, peers, requested), nil
 }

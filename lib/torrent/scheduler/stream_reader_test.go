@@ -25,6 +25,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/torrent/scheduler/dispatch/piecerequest"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/lib/torrent/storage/agentstorage"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
@@ -141,7 +142,7 @@ func TestStreamReaderReadAtDemandsSpan(t *testing.T) {
 	}
 
 	var demanded []int
-	request := func(pieces []int) { demanded = append(demanded, pieces...) }
+	request := func(pieces []int, class piecerequest.PriorityClass) { demanded = append(demanded, pieces...) }
 
 	errc := make(chan error, 1)
 	errc <- nil
@@ -166,7 +167,7 @@ func TestStreamReaderReadaheadBounded(t *testing.T) {
 	writePiece(t, tor, blob, 0)
 
 	windows := make(chan []int, 16)
-	request := func(pieces []int) { windows <- pieces }
+	request := func(pieces []int, class piecerequest.PriorityClass) { windows <- pieces }
 
 	errc := make(chan error, 1)
 	r := newStreamReader(tor, errc, clock.New(), time.Millisecond, nil, request)

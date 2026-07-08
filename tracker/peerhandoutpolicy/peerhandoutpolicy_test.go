@@ -33,7 +33,7 @@ func TestPriorityPolicyRemoveSource(t *testing.T) {
 	}
 	peers = append(peers, src)
 
-	sorted := policy.SortPeers(src, peers)
+	sorted := policy.SortPeers(src, peers, nil)
 	require.Len(sorted, len(peers)-1)
 	for k := 0; k < len(sorted); k++ {
 		require.NotEqual(src, sorted[k])

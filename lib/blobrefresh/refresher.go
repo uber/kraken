@@ -142,3 +142,26 @@ func (r *Refresher) download(client backend.Client, namespace string, d core.Dig
 		return client.Download(namespace, name, w)
 	}, pieceLength)
 }
+
+// TriggerBackground runs fn in a deduplicated background goroutine keyed on
+// d plus an optional scope. scope="" preserves exactly Refresh's whole-blob
+// dedup (same id Refresh uses); a non-empty scope (e.g. a covering piece
+// range) lets disjoint spans of the same digest, or a whole-blob request and
+// a range request, proceed independently instead of colliding on one dedup
+// slot. Returns ErrPending if an identical (digest, scope) request is
+// already running.
+func (r *Refresher) TriggerBackground(d core.Digest, scope string, fn func() error) error {
+	id := d.Hex()
+	if scope != "" {
+		id += ":" + scope
+	}
+	err := r.requests.Start(id, fn)
+	switch err {
+	case dedup.ErrRequestPending:
+		return ErrPending
+	case dedup.ErrWorkersBusy:
+		return ErrWorkersBusy
+	default:
+		return err
+	}
+}

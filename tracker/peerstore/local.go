@@ -58,6 +58,7 @@ type peerEntry struct {
 	ip        string
 	port      int
 	complete  bool
+	bitfield  []byte
 	expiresAt time.Time
 }
 
@@ -110,7 +111,9 @@ func (s *LocalStore) GetPeers(h core.InfoHash, n int) ([]*core.PeerInfo, error) 
 		// Note, we elect to return slightly expired entries rather than iterate
 		// until we find n valid entries.
 		e := g.peerList[i]
-		result = append(result, core.NewPeerInfo(e.id, e.ip, e.port, false /* origin */, e.complete))
+		p := core.NewPeerInfo(e.id, e.ip, e.port, false /* origin */, e.complete)
+		p.Bitfield = e.bitfield
+		result = append(result, p)
 	}
 	return result, nil
 }
@@ -130,6 +133,7 @@ func (s *LocalStore) UpdatePeer(h core.InfoHash, p *core.PeerInfo) error {
 	e.ip = p.IP
 	e.port = p.Port
 	e.complete = p.Complete
+	e.bitfield = p.Bitfield
 	e.expiresAt = s.clk.Now().Add(s.config.TTL)
 
 	// Allows cleanupExpiredPeerGroups to quickly determine when the last

@@ -35,7 +35,6 @@ const pieceLength = 4
 
 type archiveMocks struct {
 	cas           *store.CAStore
-	cads          *store.CADownloadStore
 	backends      *backend.Manager
 	backendClient *mockbackend.MockClient
 	blobRefresher *blobrefresh.Refresher
@@ -48,9 +47,6 @@ func newArchiveMocks(t *testing.T, namespace string) (*archiveMocks, func()) {
 	cas, c := store.CAStoreFixture()
 	cleanup.Add(c)
 
-	cads, c := store.CADownloadStoreFixture()
-	cleanup.Add(c)
-
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
 
@@ -61,11 +57,11 @@ func newArchiveMocks(t *testing.T, namespace string) (*archiveMocks, func()) {
 	blobRefresher := blobrefresh.New(
 		blobrefresh.Config{}, tally.NoopScope, cas, backends, metainfogen.Fixture(cas, pieceLength))
 
-	return &archiveMocks{cas, cads, backends, backendClient, blobRefresher}, cleanup.Run
+	return &archiveMocks{cas, backends, backendClient, blobRefresher}, cleanup.Run
 }
 
 func (m *archiveMocks) new() *TorrentArchive {
-	return NewTorrentArchive(m.cas, m.cads, m.backends, m.blobRefresher)
+	return NewTorrentArchive(m.cas, m.backends, m.blobRefresher, 0)
 }
 
 func TestTorrentArchiveStatNoExistTriggersRefresh(t *testing.T) {

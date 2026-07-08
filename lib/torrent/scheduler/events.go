@@ -22,6 +22,7 @@ import (
 	"github.com/uber/kraken/lib/torrent/scheduler/conn"
 	"github.com/uber/kraken/lib/torrent/scheduler/connstate"
 	"github.com/uber/kraken/lib/torrent/scheduler/dispatch"
+	"github.com/uber/kraken/lib/torrent/scheduler/dispatch/piecerequest"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/utils/timeutil"
 
@@ -247,7 +248,8 @@ func (e announceTickEvent) apply(s *state) {
 			continue
 		}
 		go s.sched.announce(
-			ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
+			ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete(),
+			ctrl.dispatcher.Bitfield(), ctrl.dispatcher.RequestedPieces())
 		break
 	}
 	// Re-enqueue any torrents we pulled off and ignored, else we would never
@@ -337,7 +339,8 @@ func (e newTorrentEvent) apply(s *state) {
 	ctrl.errors = append(ctrl.errors, e.errc)
 
 	// Immediately announce new torrents.
-	go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
+	go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete(),
+		ctrl.dispatcher.Bitfield(), ctrl.dispatcher.RequestedPieces())
 }
 
 // streamResult is returned to a DownloadReader caller. It carries the live
@@ -348,8 +351,8 @@ func (e newTorrentEvent) apply(s *state) {
 type streamResult struct {
 	torrent  storage.Torrent
 	errc     chan error
-	priority func(piece int)
-	request  func(pieces []int)
+	priority func(piece int, class piecerequest.PriorityClass)
+	request  func(pieces []int, class piecerequest.PriorityClass)
 }
 
 // streamTorrentEvent occurs when a streaming reader was requested for download.
@@ -386,7 +389,8 @@ func (e streamTorrentEvent) apply(s *state) {
 		ctrl.errors = append(ctrl.errors, errc)
 		// Immediately announce new torrents.
 		go s.sched.announce(
-			ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete())
+			ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), ctrl.dispatcher.Complete(),
+			ctrl.dispatcher.Bitfield(), ctrl.dispatcher.RequestedPieces())
 	}
 
 	e.result <- streamResult{
@@ -431,7 +435,8 @@ func (e dispatcherCompleteEvent) apply(s *state) {
 	s.sched.netevents.Produce(networkevent.TorrentCompleteEvent(infoHash, s.sched.pctx.PeerID))
 
 	// Immediately announce completed torrents.
-	go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), true)
+	go s.sched.announce(ctrl.dispatcher.Digest(), ctrl.dispatcher.InfoHash(), true,
+		ctrl.dispatcher.Bitfield(), nil)
 }
 
 // peerRemovedEvent occurs when a dispatcher removes a peer with a closed

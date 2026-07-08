@@ -99,6 +99,20 @@ func (mr *MockClientMockRecorder) DownloadBlob(arg0, arg1, arg2, arg3 any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBlob", reflect.TypeOf((*MockClient)(nil).DownloadBlob), arg0, arg1, arg2, arg3)
 }
 
+// DownloadBlobRange mocks base method.
+func (m *MockClient) DownloadBlobRange(arg0 context.Context, arg1 string, arg2 core.Digest, arg3, arg4 int64, arg5 io.Writer) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DownloadBlobRange", arg0, arg1, arg2, arg3, arg4, arg5)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DownloadBlobRange indicates an expected call of DownloadBlobRange.
+func (mr *MockClientMockRecorder) DownloadBlobRange(arg0, arg1, arg2, arg3, arg4, arg5 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadBlobRange", reflect.TypeOf((*MockClient)(nil).DownloadBlobRange), arg0, arg1, arg2, arg3, arg4, arg5)
+}
+
 // DuplicateUploadBlob mocks base method.
 func (m *MockClient) DuplicateUploadBlob(namespace string, d core.Digest, blob io.Reader, delay time.Duration) error {
 	m.ctrl.T.Helper()

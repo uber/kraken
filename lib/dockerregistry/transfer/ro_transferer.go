@@ -23,7 +23,6 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/torrent/scheduler"
-	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/memsize"
 )
 
@@ -58,12 +57,11 @@ func NewReadOnlyTransferer(
 func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
 	fi, err := t.cads.Cache().GetFileStat(d.Hex())
 	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
-		r, err := t.sched.DownloadReader(namespace, d)
+		info, err := t.sched.Stat(namespace, d)
 		if err != nil {
 			return nil, fmt.Errorf("scheduler: %s", err)
 		}
-		defer closers.Close(r)
-		return core.NewBlobInfo(r.Size()), nil
+		return core.NewBlobInfo(info.Length()), nil
 	} else if err != nil {
 		return nil, fmt.Errorf("stat cache: %s", err)
 	}

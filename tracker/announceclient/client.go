@@ -27,6 +27,8 @@ import (
 	"github.com/uber/kraken/lib/hashring"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/httputil"
+
+	"github.com/willf/bitset"
 )
 
 // ErrDisabled is returned when announce is disabled.
@@ -38,6 +40,9 @@ type Request struct {
 	Digest   *core.Digest   `json:"digest"` // Optional (for now).
 	InfoHash core.InfoHash  `json:"info_hash"`
 	Peer     *core.PeerInfo `json:"peer"`
+	// RequestedPieces is the set of pieces the announcing peer currently
+	// wants, populated by lazy (streaming) dispatchers. V3+ only.
+	RequestedPieces []int `json:"requested_pieces,omitempty"`
 }
 
 // GetDigest is a backwards compatible accessor of the request digest.
@@ -65,6 +70,8 @@ type Client interface {
 		d core.Digest,
 		h core.InfoHash,
 		complete bool,
+		bitfield *bitset.BitSet,
+		requested []int,
 		version int) ([]*core.PeerInfo, time.Duration, error)
 }
 
@@ -83,11 +90,19 @@ func New(pctx core.PeerContext, ring hashring.PassiveRing, tls *tls.Config) Clie
 const (
 	V1 = 1
 	V2 = 2
+	// V3 carries the announcing peer's bitfield/progress and, for lazy
+	// (streaming) dispatchers, its currently-requested pieces -- letting the
+	// tracker's handout policy prefer peers that actually cover what's
+	// wanted instead of ranking purely on overall completeness.
+	V3 = 3
 )
 
 func getEndpoint(version int, addr string, h core.InfoHash) (method, url string) {
 	if version == V1 {
 		return "GET", fmt.Sprintf("http://%s/announce", addr)
+	}
+	if version == V3 {
+		return "POST", fmt.Sprintf("http://%s/announce/v3/%s", addr, h.String())
 	}
 	return "POST", fmt.Sprintf("http://%s/announce/%s", addr, h.String())
 }
@@ -111,13 +126,24 @@ func (c *client) Announce(
 	d core.Digest,
 	h core.InfoHash,
 	complete bool,
+	bitfield *bitset.BitSet,
+	requested []int,
 	version int) (peers []*core.PeerInfo, interval time.Duration, err error) {
 
+	var opts []core.PeerInfoOption
+	var reqPieces []int
+	if version >= V3 {
+		if bitfield != nil {
+			opts = append(opts, core.WithBitfield(bitfield))
+		}
+		reqPieces = requested
+	}
 	body, err := json.Marshal(&Request{
-		Name:     d.Hex(), // For backwards compatability. TODO(codyg): Remove.
-		Digest:   &d,
-		InfoHash: h,
-		Peer:     core.PeerInfoFromContext(c.pctx, complete),
+		Name:            d.Hex(), // For backwards compatability. TODO(codyg): Remove.
+		Digest:          &d,
+		InfoHash:        h,
+		Peer:            core.PeerInfoFromContext(c.pctx, complete, opts...),
+		RequestedPieces: reqPieces,
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("marshal request: %s", err)
@@ -163,7 +189,8 @@ func (c DisabledClient) CheckReadiness() error {
 
 // Announce always returns error.
 func (c DisabledClient) Announce(
-	d core.Digest, h core.InfoHash, complete bool, version int) ([]*core.PeerInfo, time.Duration, error) {
+	d core.Digest, h core.InfoHash, complete bool, bitfield *bitset.BitSet, requested []int,
+	version int) ([]*core.PeerInfo, time.Duration, error) {
 
 	return nil, 0, ErrDisabled
 }

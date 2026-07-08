@@ -1315,8 +1315,15 @@ type RangeReadable interface {
     ReadableRange(offset, length int64) bool
 }
 func (t *Torrent) ReadableRange(offset, length int64) bool
-// body: !t.partial ⇒ true (warm is always readable); else every piece index
-//   covering [offset, offset+length) has t.pieces[pi].complete() == true.
+// body: !t.partial ⇒ true (warm is always readable); else compute the
+//   covering piece range [lo, hi) and bounds-check hi <= len(t.pieces) (and
+//   lo >= 0) BEFORE indexing — see open question #7: offset+length past the
+//   blob's actual length otherwise indexes t.pieces[pi] out of bounds and
+//   panics. Return false on an out-of-bounds range rather than panicking;
+//   the HTTP-layer length check (B5's range handler) is a second line of
+//   defense, not a substitute for this one. Once bounds-checked, every piece
+//   index covering [offset, offset+length) must have t.pieces[pi].complete()
+//   == true.
 
 // Fetch-lifetime cancellation. t.ctx/t.cancel (added to the Torrent struct
 // above) are threaded into every fetchPiece call, so an in-flight
@@ -1612,9 +1619,17 @@ work off the request goroutine, joining the same live `*Torrent` P2P uses via
 partial `Torrent` reports `Complete()=true` from construction per B3a's
 as-built model, so `sched.Download`'s blocking wait is not usable here).
 
+Note (open question #8): unlike `Refresh`, neither `TriggerBackground` closure
+above enforces `blobrefresh.Config.SizeLimit` — the scheduler path streams
+pieces through regardless of total blob size. Deliberate given partial
+torrents never materialize the whole blob in memory (the thing `SizeLimit`
+originally guarded against), but treat this as a decision to confirm, not an
+oversight to silently inherit.
+
 **Files:** `origin/cmd/cmd.go` (pass `sched` into `blobserver.New`);
 `lib/blobrefresh/refresher.go` (`TriggerBackground`); `origin/blobserver/server.go`
 (`downloadBlob` cache-miss path + new Range-read handler + `pieceRangeScope`);
+`originstorage/torrent_archive.go` (`CanStreamCold` — see open question #6);
 `lib/torrent/scheduler/scheduler.go` (`ReadableRange`, mocks);
 `lib/torrent/storage/torrent_info.go` (`PieceLength`).
 **Declarations:**
@@ -1636,10 +1651,14 @@ type Server struct {
 const _maxRangeLength = core.MaxBlobRangeLength
 
 func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error
-// body: cache-hit fast path unchanged (cas.GetCacheFileReader). On miss (and
-//   only when the namespace's backend has a RangeDownloader + sidecar, same
-//   gate as B4's coldMetaInfo — otherwise fall through to the unchanged
-//   blobRefresher.Refresh):
+// body: cache-hit fast path unchanged (cas.GetCacheFileReader). On miss, the
+//   cold-streamable gate MUST be a side-effect-free capability check —
+//   TorrentArchive.CanStreamCold(namespace, d) bool (wraps coldMetaInfo only),
+//   NOT Scheduler.Stat/GetTorrent (see open question #6: both trigger an
+//   unhooked background Refresh on failure, which can win the dedup race
+//   over this path's own hooked TriggerBackground call and silently drop the
+//   localReplicationHook). Same gate B4's coldMetaInfo uses — otherwise fall
+//   through to the unchanged blobRefresher.Refresh:
 //     err := s.blobRefresher.TriggerBackground(d, "", func() error {
 //         br, err := s.sched.DownloadReader(namespace, d)
 //         if err != nil { return err }
@@ -1653,9 +1672,22 @@ func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) er
 //   never duplicates backend work. Once every piece lands, B3b's
 //   maybePromoteToCache fires and the blob is warm for every future request.
 
+// TorrentArchive.CanStreamCold — new, side-effect-free capability check.
+// lib/torrent/storage/originstorage/torrent_archive.go
+func (a *TorrentArchive) CanStreamCold(namespace string, d core.Digest) bool
+// body: _, _, ok := a.coldMetaInfo(namespace, d); return ok. Deliberately
+//   does not call loadMetaInfo/Stat/GetTorrent, which fall back to
+//   blobRefresher.Refresh (no hooks) on failure — see open question #6.
+
 func (s *Server) downloadBlobRangeHandler(w http.ResponseWriter, r *http.Request) error
 // body: parse the Range header; length > _maxRangeLength ⇒ 416 Range Not
-//   Satisfiable, no fetch triggered. Otherwise, check whether the piece(s)
+//   Satisfiable, no fetch triggered. REQUIRED before anything else: also
+//   reject offset+length > the blob's actual length (via Scheduler.Stat's
+//   TorrentInfo.Length()) with 416 — see open question #7. Without this,
+//   ReadableRange's piece-index arithmetic can run past NumPieces() and
+//   index out of bounds; Torrent.ReadableRange must also bounds-check
+//   internally as defense in depth, not rely on the handler alone. Otherwise,
+//   check whether the piece(s)
 //   this range needs are already fetched via the sanctioned
 //   s.sched.ReadableRange(namespace, d, offset, length) (new Scheduler
 //   method, see below) — NOT by reaching into originstorage's piece status
@@ -1850,6 +1882,14 @@ never fires for origin, and A7's readahead window never reaches this code
 path. `tryMarkDirty` (B3b) still elects exactly one fetcher per piece, so a
 `prefetchAhead` background fetch racing a directly-blocking `GetPieceReader`
 call for the same piece never double-fetches.
+
+Note (open question #9): `fetchSem` is one pool shared by a blocking
+`GetPieceReader` fetch a caller is actively waiting on and `prefetchAhead`'s
+speculative background fetches. Fine at `_defaultFetchConcurrency = 8`; if
+egress ever needs tighter control specifically over speculative prefetch
+(vs. fetches actively blocking a request), that's a second, smaller-by-default
+knob, not scoped into B6 as designed.
+
 **Call-site edits:** `origin/cmd/cmd.go`/`config.go` — new
 `scheduler.fetch_concurrency` (default `_defaultFetchConcurrency`), passed
 through `NewOriginScheduler` → `TorrentArchive` → `NewPartialTorrent`.
@@ -2301,3 +2341,55 @@ Kraken's own on-disk pieces, an unrelated, separately-tracked workstream.
    Fixed in A11 (§5.2 above) with a dedicated `rangePollBackOff` (~20s
    `MaxElapsedTime`) sized under containerd's tighter default, with a note
    that deployments raising `request_timeout_sec` can raise this to match.
+6. **`Scheduler.Stat`/`TorrentArchive.GetTorrent` are not side-effect-free on
+   a miss — do not reuse them as a cheap capability probe.** Confirmed while
+   implementing B5: `TorrentArchive.loadMetaInfo` triggers a background,
+   unhooked `blobRefresher.Refresh` whenever both the local cache and the
+   cold-sidecar lookup (`coldMetaInfo`) fail. A caller that calls `Stat` (or
+   `GetTorrent`) purely to answer "does this exist / can it stream cold" and
+   then falls back to its own `Refresh(..., hooks...)` on failure races that
+   unhooked refresh against its own hooked one on the *same* dedup id
+   (`d.Hex()`) — whichever wins the dedup race determines whether any
+   post-download hooks (e.g. origin's `localReplicationHook`) actually run.
+   This is exactly the trap `downloadBlob`'s cold-streamable gate had to
+   avoid: it uses a new, dedicated, side-effect-free
+   `TorrentArchive.CanStreamCold(namespace, d) bool` (wraps `coldMetaInfo`
+   only, no `loadMetaInfo` fallback) instead of `Stat`. Any future B5-adjacent
+   code that needs a "can this stream cold" check should use
+   `CanStreamCold`, not `Stat`/`GetTorrent`. (`pieceRangeScope`'s use of
+   `Stat` in §7.2 B5 is fine as-is — it only runs after `ReadableRange` has
+   already confirmed the torrent resolves successfully, i.e. past the point
+   where the side effect could fire.)
+7. **`ReadableRange`'s piece-index math needs an explicit bounds check.**
+   `Torrent.pieceRange(offset, length)` computes `hi` from `(offset+length-1)
+   / pieceLength + 1` with no ceiling against `NumPieces()`. A range request
+   extending past the blob's actual length — client bug, or simply a request
+   that arrives before the length-vs-`info.Length()` check runs — makes
+   `ReadableRange`'s loop index `t.pieces[pi]` out of bounds and panic. Fixed
+   by bounds-checking `hi <= len(t.pieces)` inside `ReadableRange` itself
+   (defense in depth, not just at the HTTP boundary) and by keeping an
+   explicit `offset+length > info.Length()` ⇒ 416 check in the range handler
+   ahead of the `ReadableRange` call. §7.2 B5's declarations don't currently
+   name this as a requirement — they should, since it's a crash, not a
+   validation nicety.
+8. **Size-limit enforcement doesn't cover the scheduler-coordinated fetch
+   path.** `blobrefresh.Refresher.Refresh` enforces `config.SizeLimit` via a
+   `client.Stat` before starting a whole-blob download. `TriggerBackground` +
+   `sched.DownloadReader` (both `downloadBlob`'s cold-streamable branch and
+   the B5 range handler) has no equivalent check — pieces stream through
+   regardless of total blob size. This is arguably fine on its own terms
+   (partial torrents fetch and discard piece-by-piece, never materializing
+   the whole blob in memory, which is exactly what `SizeLimit` was guarding
+   against for the old whole-blob-into-memory path) but it is a real,
+   undocumented behavioral divergence between the two download paths for the
+   same digest. Needs an explicit decision — either declare `SizeLimit`
+   inapplicable to the streaming path (and say why, as above) or add an
+   equivalent check — rather than leaving it as an implicit gap.
+9. **B6's `fetch_concurrency` is one global knob shared by blocking reads and
+   opportunistic prefetch.** `Torrent.fetchSem` bounds both a direct
+   `GetPieceReader` fetch a caller is actually blocked on and `prefetchAhead`'s
+   speculative background fetches through the same semaphore. If origin
+   egress ever needs tighter control specifically over speculative prefetch
+   (vs. fetches a request is actively waiting on), that needs a second,
+   smaller-by-default knob — not a bug, but a natural follow-up B6 doesn't
+   distinguish today.

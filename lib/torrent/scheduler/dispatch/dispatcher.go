@@ -176,11 +176,33 @@ func (d *Dispatcher) Stat() *storage.TorrentInfo {
 	return d.torrent.Stat()
 }
 
+// Bitfield returns d's torrent's current per-piece have-set.
+func (d *Dispatcher) Bitfield() *bitset.BitSet {
+	return d.torrent.Bitfield()
+}
+
+// RequestedPieces returns the pieces a streaming reader currently wants, or
+// nil outside lazy mode -- the same demand set RequestPieces/
+// restrictToDemand already track, so the tracker's handout policy can prefer
+// peers covering them.
+func (d *Dispatcher) RequestedPieces() []int {
+	d.demandMu.Lock()
+	defer d.demandMu.Unlock()
+	if !d.lazy || d.demand == nil {
+		return nil
+	}
+	var pieces []int
+	for i, e := d.demand.NextSet(0); e; i, e = d.demand.NextSet(i + 1) {
+		pieces = append(pieces, int(i))
+	}
+	return pieces
+}
+
 // SetPriorityPiece hints that the given piece should be requested next,
 // ahead of the configured selection policy. Used by streaming readers to bias
 // fetching toward a piece a reader is currently blocked on.
-func (d *Dispatcher) SetPriorityPiece(piece int) {
-	d.pieceRequestManager.SetPriority(piece)
+func (d *Dispatcher) SetPriorityPiece(piece int, class piecerequest.PriorityClass) {
+	d.pieceRequestManager.SetPriority(piece, class)
 }
 
 // SetLazy switches the dispatcher to demand-driven fetching: only pieces added
@@ -197,8 +219,8 @@ func (d *Dispatcher) SetLazy() {
 
 // RequestPieces marks the given pieces as demanded and kicks a request round so
 // they are fetched promptly. Only meaningful in lazy mode. The first piece is
-// also prioritized ahead of the selection policy.
-func (d *Dispatcher) RequestPieces(pieces []int) {
+// also prioritized ahead of the selection policy, at the given class.
+func (d *Dispatcher) RequestPieces(pieces []int, class piecerequest.PriorityClass) {
 	if len(pieces) == 0 {
 		return
 	}
@@ -210,7 +232,7 @@ func (d *Dispatcher) RequestPieces(pieces []int) {
 	}
 	d.demandMu.Unlock()
 
-	d.SetPriorityPiece(pieces[0])
+	d.SetPriorityPiece(pieces[0], class)
 
 	d.peers.Range(func(k, v interface{}) bool {
 		p, ok := v.(*peer)

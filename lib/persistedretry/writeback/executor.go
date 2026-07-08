@@ -46,6 +46,11 @@ type Executor struct {
 	stats    tally.Scope
 	fs       FileStore
 	backends *backend.Manager
+	// writeSidecar is true for origin's blob writeback (content digests, which
+	// have local TorrentMeta to serialize) and false for build-index's tag
+	// writeback (tag names have no TorrentMeta -- attempting a sidecar upload
+	// for them would retry forever on a permanent os.IsNotExist).
+	writeSidecar bool
 }
 
 // NewExecutor creates a new Executor.
@@ -53,12 +58,13 @@ func NewExecutor(
 	stats tally.Scope,
 	fs FileStore,
 	backends *backend.Manager,
+	writeSidecar bool,
 ) *Executor {
 	stats = stats.Tagged(map[string]string{
 		"module": "writebackexecutor",
 	})
 
-	return &Executor{stats, fs, backends}
+	return &Executor{stats, fs, backends, writeSidecar}
 }
 
 // Name returns the executor name.
@@ -202,13 +208,15 @@ func (e *Executor) upload(ctx context.Context, t *Task) error {
 		).Info("Uploaded cache file to remote backend")
 	}
 
-	if err := e.uploadMetaInfoSidecar(ctx, client, t); err != nil {
-		log.WithTraceContext(ctx).With(
-			"namespace", t.Namespace,
-			"name", t.Name,
-			"error", err,
-		).Error("Failed to upload metainfo sidecar")
-		return fmt.Errorf("upload metainfo sidecar: %s", err)
+	if e.writeSidecar {
+		if err := e.uploadMetaInfoSidecar(ctx, client, t); err != nil {
+			log.WithTraceContext(ctx).With(
+				"namespace", t.Namespace,
+				"name", t.Name,
+				"error", err,
+			).Error("Failed to upload metainfo sidecar")
+			return fmt.Errorf("upload metainfo sidecar: %s", err)
+		}
 	}
 
 	s := e.stats.Tagged(map[string]string{

@@ -52,7 +52,7 @@ func TestCompletenessPriorityPolicy(t *testing.T) {
 		peers[i], peers[j] = peers[j], peers[i]
 	}
 
-	peers = policy.SortPeers(core.PeerInfoFixture(), peers)
+	peers = policy.SortPeers(core.PeerInfoFixture(), peers, nil)
 	require.Len(peers, seeders+origins+incomplete)
 	for k := 0; k < len(peers); k++ {
 		p := peers[k]

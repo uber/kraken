@@ -125,14 +125,14 @@ func (p *piece) markComplete() {
 // restarted origin does not re-fetch pieces it already streamed.
 func restorePieces(
 	d core.Digest,
-	cads *store.CADownloadStore,
+	cas *store.CAStore,
 	numPieces int) (pieces []*piece, numComplete int, err error) {
 
 	for i := 0; i < numPieces; i++ {
 		pieces = append(pieces, &piece{status: _empty})
 	}
 	md := newPieceStatusMetadata(pieces)
-	if err := cads.Download().GetOrSetMetadata(d.Hex(), md); cads.InCacheError(err) {
+	if err := cas.GetOrSetDownloadFileMetadata(d.Hex(), md); cas.InCacheError(err) {
 		for _, p := range pieces {
 			p.status = _complete
 		}

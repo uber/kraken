@@ -151,12 +151,12 @@ func (d *fakeRangeDownloader) numCalls() int {
 func newPartialTorrent(
 	t *testing.T,
 	rd backend.RangeDownloader,
-	blob *core.BlobFixture) (*Torrent, *store.CADownloadStore, func()) {
+	blob *core.BlobFixture) (*Torrent, *store.CAStore, func()) {
 
-	cads, cleanup := store.CADownloadStoreFixture()
-	tor, err := NewPartialTorrent(cads, rd, core.NamespaceFixture(), blob.MetaInfo)
+	cas, cleanup := store.CAStoreFixture()
+	tor, err := NewPartialTorrent(cas, rd, core.NamespaceFixture(), blob.MetaInfo, 0)
 	require.NoError(t, err)
-	return tor, cads, cleanup
+	return tor, cas, cleanup
 }
 
 func readPiece(t *testing.T, tor *Torrent, pi int) []byte {
@@ -251,13 +251,13 @@ func TestPartialTorrentRestartDurability(t *testing.T) {
 	blob := core.SizedBlobFixture(7, 2)
 	rd := &fakeRangeDownloader{content: blob.Content}
 
-	tor, cads, cleanup := newPartialTorrent(t, rd, blob)
+	tor, cas, cleanup := newPartialTorrent(t, rd, blob)
 	defer cleanup()
 
 	require.Equal(blob.Content[0:2], readPiece(t, tor, 0))
 	require.Equal(1, rd.numCalls())
 
-	tor2, err := NewPartialTorrent(cads, rd, core.NamespaceFixture(), blob.MetaInfo)
+	tor2, err := NewPartialTorrent(cas, rd, core.NamespaceFixture(), blob.MetaInfo, 0)
 	require.NoError(err)
 
 	require.Equal(blob.Content[0:2], readPiece(t, tor2, 0))

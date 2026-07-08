@@ -20,6 +20,8 @@ cluster:
   static:
     - host.docker.internal:15002
 
+fetch_concurrency: 8
+
 hashring:
   max_replica: 2
 

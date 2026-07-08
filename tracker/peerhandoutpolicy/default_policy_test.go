@@ -35,6 +35,6 @@ func TestDefaultPriorityPolicy(t *testing.T) {
 		peers[k] = core.PeerInfoFixture()
 	}
 
-	policy.SortPeers(core.PeerInfoFixture(), peers)
+	policy.SortPeers(core.PeerInfoFixture(), peers, nil)
 	require.Len(peers, nPeers)
 }

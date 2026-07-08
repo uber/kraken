@@ -35,20 +35,22 @@ import (
 // metainfo is fetched from a backend sidecar and their pieces are lazily
 // range-fetched from the backend on demand.
 type TorrentArchive struct {
-	cas           *store.CAStore
-	cads          *store.CADownloadStore
-	backends      *backend.Manager
-	blobRefresher *blobrefresh.Refresher
+	cas              *store.CAStore
+	backends         *backend.Manager
+	blobRefresher    *blobrefresh.Refresher
+	fetchConcurrency int
 }
 
-// NewTorrentArchive creates a new TorrentArchive.
+// NewTorrentArchive creates a new TorrentArchive. fetchConcurrency bounds how
+// many pieces of a partial (cold) torrent are range-fetched from the backend
+// at once; <=0 uses the default.
 func NewTorrentArchive(
 	cas *store.CAStore,
-	cads *store.CADownloadStore,
 	backends *backend.Manager,
-	blobRefresher *blobrefresh.Refresher) *TorrentArchive {
+	blobRefresher *blobrefresh.Refresher,
+	fetchConcurrency int) *TorrentArchive {
 
-	return &TorrentArchive{cas, cads, backends, blobRefresher}
+	return &TorrentArchive{cas, backends, blobRefresher, fetchConcurrency}
 }
 
 // loadMetaInfo returns the metainfo for d. When the blob is not in the local
@@ -99,6 +101,16 @@ func (a *TorrentArchive) coldMetaInfo(
 	return mi, rd, true
 }
 
+// CanStreamCold reports whether d can be served as a cold/partial torrent for
+// namespace, i.e. the backend supports ranged downloads and a metainfo
+// sidecar is present. Unlike Stat/GetTorrent on a miss, this never triggers a
+// background whole-blob refresh -- callers use it as a pure capability check
+// before deciding which download path to take.
+func (a *TorrentArchive) CanStreamCold(namespace string, d core.Digest) bool {
+	_, _, ok := a.coldMetaInfo(namespace, d)
+	return ok
+}
+
 // Stat returns TorrentInfo for given digest. If the file is neither cached nor
 // available as a cold sidecar, attempts to re-fetch the file from the storage
 // backend configured for namespace in a background goroutine.
@@ -126,7 +138,7 @@ func (a *TorrentArchive) GetTorrent(namespace string, d core.Digest) (storage.To
 		return nil, err
 	}
 	if rd != nil {
-		t, err := NewPartialTorrent(a.cads, rd, namespace, mi)
+		t, err := NewPartialTorrent(a.cas, rd, namespace, mi, a.fetchConcurrency)
 		if err != nil {
 			return nil, fmt.Errorf("initialize partial torrent: %s", err)
 		}
@@ -139,9 +151,14 @@ func (a *TorrentArchive) GetTorrent(namespace string, d core.Digest) (storage.To
 	return t, nil
 }
 
-// DeleteTorrent moves a torrent to the trash.
+// DeleteTorrent moves a torrent to the trash. Also cleans up any lingering
+// cold/partial download-state file, since a cold torrent never lands in cas
+// until it's fully promoted.
 func (a *TorrentArchive) DeleteTorrent(d core.Digest) error {
 	if err := a.cas.DeleteCacheFile(d.Hex()); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := a.cas.DeleteDownloadFile(d.Hex()); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil

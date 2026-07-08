@@ -102,7 +102,7 @@ func TestAnnounceSinglePeerResponse(t *testing.T) {
 				blob.MetaInfo.InfoHash(), core.PeerInfoFromContext(pctx, false)).Return(nil)
 
 			result, interval, err := client.Announce(
-				blob.Digest, blob.MetaInfo.InfoHash(), false, version)
+				blob.Digest, blob.MetaInfo.InfoHash(), false, nil, nil, version)
 			require.NoError(err)
 			require.Equal(peers, result)
 			require.Equal(config.AnnounceInterval, interval)
@@ -134,7 +134,7 @@ func TestAnnounceUnavailablePeerStoreCanStillProvideOrigins(t *testing.T) {
 	mocks.originStore.EXPECT().GetOrigins(blob.Digest).Return(origins, nil)
 
 	result, _, err := client.Announce(
-		blob.Digest, blob.MetaInfo.InfoHash(), false, announceclient.V2)
+		blob.Digest, blob.MetaInfo.InfoHash(), false, nil, nil, announceclient.V2)
 	require.NoError(err)
 	require.Equal(origins, result)
 }
@@ -162,7 +162,7 @@ func TestAnnouceUnavailableOriginClusterCanStillProvidePeers(t *testing.T) {
 	mocks.originStore.EXPECT().GetOrigins(blob.Digest).Return(nil, errors.New("some error"))
 
 	result, _, err := client.Announce(
-		blob.Digest, blob.MetaInfo.InfoHash(), false, announceclient.V2)
+		blob.Digest, blob.MetaInfo.InfoHash(), false, nil, nil, announceclient.V2)
 	require.NoError(err)
 	require.Equal(peers, result)
 }

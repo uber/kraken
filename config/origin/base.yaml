@@ -39,6 +39,9 @@ localdb:
 castore:
   upload_dir: /var/cache/kraken/kraken-origin/upload/
   cache_dir:  /var/cache/kraken/kraken-origin/cache/
+  download_dir: /var/cache/kraken/kraken-origin/download/
+  download_cleanup:
+    ttl: 24h
   memory_cache:
     enabled: true
     max_size: 1048576
@@ -46,18 +49,12 @@ castore:
     drain_workers: 2
     drain_max_retries: 3
 
-cadownloadstore:
-  download_dir: /var/cache/kraken/kraken-origin/download/
-  cache_dir:   /var/cache/kraken/kraken-origin/cache-partial/
-  download_cleanup:
-    ttl: 24h
-  cache_cleanup:
-    ttl: 24h
-
 blobserver:
   listener:
     net: unix
     addr: /tmp/kraken-origin.sock
+
+fetch_concurrency: 8
 
 nginx:
   name: kraken-origin

@@ -13,7 +13,11 @@
 // limitations under the License.
 package core
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/willf/bitset"
+)
 
 // PeerInfo defines peer metadata scoped to a torrent.
 type PeerInfo struct {
@@ -22,6 +26,28 @@ type PeerInfo struct {
 	Port     int    `json:"port"`
 	Origin   bool   `json:"origin"`
 	Complete bool   `json:"complete"`
+	// Bitfield is the peer's per-piece have-set, packed via bitset.BitSet's
+	// own MarshalBinary -- the same encoding agent-to-agent handshakes
+	// already use for bitfields. nil unless set via WithBitfield.
+	Bitfield []byte `json:"bitfield,omitempty"`
+	// NumComplete is a cheap progress summary (== set-bit count; 0 if nil).
+	NumComplete int `json:"num_complete,omitempty"`
+}
+
+// PeerInfoOption sets an optional PeerInfo field.
+type PeerInfoOption func(*PeerInfo)
+
+// WithBitfield attaches a packed snapshot of b, plus its set-bit count, to a
+// PeerInfo under construction.
+func WithBitfield(b *bitset.BitSet) PeerInfoOption {
+	return func(p *PeerInfo) {
+		encoded, err := b.MarshalBinary()
+		if err != nil {
+			return
+		}
+		p.Bitfield = encoded
+		p.NumComplete = int(b.Count())
+	}
 }
 
 // NewPeerInfo creates a new PeerInfo.
@@ -30,20 +56,25 @@ func NewPeerInfo(
 	ip string,
 	port int,
 	origin bool,
-	complete bool) *PeerInfo {
+	complete bool,
+	opts ...PeerInfoOption) *PeerInfo {
 
-	return &PeerInfo{
+	p := &PeerInfo{
 		PeerID:   peerID,
 		IP:       ip,
 		Port:     port,
 		Origin:   origin,
 		Complete: complete,
 	}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }
 
 // PeerInfoFromContext derives PeerInfo from a PeerContext.
-func PeerInfoFromContext(pctx PeerContext, complete bool) *PeerInfo {
-	return NewPeerInfo(pctx.PeerID, pctx.IP, pctx.Port, pctx.Origin, complete)
+func PeerInfoFromContext(pctx PeerContext, complete bool, opts ...PeerInfoOption) *PeerInfo {
+	return NewPeerInfo(pctx.PeerID, pctx.IP, pctx.Port, pctx.Origin, complete, opts...)
 }
 
 // PeerInfos groups PeerInfo structs for sorting.

@@ -23,6 +23,7 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
+	"github.com/willf/bitset"
 	"go.uber.org/zap"
 
 	"github.com/uber/kraken/core"
@@ -62,6 +63,9 @@ type Scheduler interface {
 	Stop()
 	Download(namespace string, d core.Digest) error
 	DownloadReader(namespace string, d core.Digest) (BlobReader, error)
+	Stat(namespace string, d core.Digest) (*storage.TorrentInfo, error)
+	ReadableRange(namespace string, d core.Digest, offset, length int64) (bool, error)
+	CopyReadyRange(namespace string, d core.Digest, w io.Writer, offset, length int64) error
 	BlacklistSnapshot() ([]connstate.BlacklistedConn, error)
 	RemoveTorrent(d core.Digest) error
 	Probe() error
@@ -294,6 +298,75 @@ func (s *scheduler) Download(namespace string, d core.Digest) error {
 	return err
 }
 
+// Stat returns metainfo-derived info for d without creating a torrent
+// control or leeching any pieces -- cheap enough to call on every
+// blob-exists / size check.
+func (s *scheduler) Stat(namespace string, d core.Digest) (*storage.TorrentInfo, error) {
+	return s.torrentArchive.Stat(namespace, d)
+}
+
+// ReadableRange reports whether [offset, offset+length) can be served
+// without a backend fetch. Torrents that don't implement
+// storage.RangeReadable (agent/warm torrents) don't need to: Complete() is
+// already truthful for them. Direct, synchronous call -- no event-loop
+// round trip, same shape as Stat.
+func (s *scheduler) ReadableRange(
+	namespace string, d core.Digest, offset, length int64) (bool, error) {
+
+	t, err := s.torrentArchive.GetTorrent(namespace, d)
+	if err != nil {
+		return false, err
+	}
+	if rr, ok := t.(storage.RangeReadable); ok {
+		return rr.ReadableRange(offset, length), nil
+	}
+	return t.Complete(), nil
+}
+
+// CopyReadyRange copies [offset, offset+length) into w from whichever
+// pieces already have it locally. Callers should confirm readiness via
+// ReadableRange first -- this does not fetch anything missing. Skips
+// DownloadReader's CreateTorrent+event-loop+streamReader machinery entirely.
+func (s *scheduler) CopyReadyRange(
+	namespace string, d core.Digest, w io.Writer, offset, length int64) error {
+
+	t, err := s.torrentArchive.GetTorrent(namespace, d)
+	if err != nil {
+		return err
+	}
+	pos, remaining := offset, length
+	for remaining > 0 {
+		pl := t.PieceLength(0)
+		pi := int(pos / pl)
+		if pi >= t.NumPieces() {
+			return fmt.Errorf("range extends past end of torrent")
+		}
+		pr, err := t.GetPieceReader(pi)
+		if err != nil {
+			return fmt.Errorf("get piece reader %d: %s", pi, err)
+		}
+		skip := pos - int64(pi)*pl
+		if skip > 0 {
+			if _, err := io.CopyN(io.Discard, pr, skip); err != nil {
+				closers.Close(pr)
+				return fmt.Errorf("skip to offset: %s", err)
+			}
+		}
+		want := t.PieceLength(pi) - skip
+		if want > remaining {
+			want = remaining
+		}
+		n, err := io.CopyN(w, pr, want)
+		closers.Close(pr)
+		pos += n
+		remaining -= n
+		if err != nil {
+			return fmt.Errorf("copy piece %d: %s", pi, err)
+		}
+	}
+	return nil
+}
+
 // DownloadReader schedules a blob for download and returns a reader that serves
 // the blob's bytes in order as pieces arrive, without waiting for the whole blob
 // to complete. The returned reader shares the dispatcher's live torrent instance.
@@ -399,8 +472,8 @@ func (s *scheduler) announceLoop() {
 	s.announcer.Ticker(s.done)
 }
 
-func (s *scheduler) announce(d core.Digest, h core.InfoHash, complete bool) {
-	peers, err := s.announcer.Announce(d, h, complete)
+func (s *scheduler) announce(d core.Digest, h core.InfoHash, complete bool, bitfield *bitset.BitSet, requested []int) {
+	peers, err := s.announcer.Announce(d, h, complete, bitfield, requested)
 	if err != nil {
 		if err != announceclient.ErrDisabled {
 			s.eventLoop.send(announceErrEvent{h, err})

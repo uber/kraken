@@ -151,7 +151,9 @@ func TestAnnounceTickEvent(t *testing.T) {
 			ctrls[0].dispatcher.Digest(),
 			ctrls[0].dispatcher.InfoHash(),
 			false,
-			announceclient.V2).
+			gomock.Any(),
+			gomock.Any(),
+			announceclient.V3).
 		Return(nil, time.Second, nil)
 
 	announceTickEvent{}.apply(state)
@@ -196,7 +198,9 @@ func TestAnnounceTickEventSkipsFullTorrents(t *testing.T) {
 			empty.dispatcher.Digest(),
 			empty.dispatcher.InfoHash(),
 			false,
-			announceclient.V2).
+			gomock.Any(),
+			gomock.Any(),
+			announceclient.V3).
 		Return(nil, time.Second, nil)
 
 	announceTickEvent{}.apply(state)
@@ -228,7 +232,9 @@ func TestAnnounceTickEventSkipsFullTorrents(t *testing.T) {
 			full.dispatcher.Digest(),
 			full.dispatcher.InfoHash(),
 			false,
-			announceclient.V2).
+			gomock.Any(),
+			gomock.Any(),
+			announceclient.V3).
 		Return(nil, time.Second, nil)
 
 	announceTickEvent{}.apply(state)

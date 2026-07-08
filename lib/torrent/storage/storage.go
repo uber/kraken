@@ -63,3 +63,16 @@ type TorrentArchive interface {
 	GetTorrent(namespace string, d core.Digest) (Torrent, error)
 	DeleteTorrent(d core.Digest) error
 }
+
+// RangeReadable is optionally implemented by a Torrent whose reported
+// completeness (HasPiece/Bitfield/Complete) does not reflect whether a given
+// byte span has actually landed locally -- e.g. originstorage's partial
+// (cold) Torrent, which always reports complete so agents can connect and
+// request pieces on demand. Callers that need to know whether [offset,
+// offset+length) can be served without a backend fetch should type-assert
+// for this instead of trusting Complete()/HasPiece.
+type RangeReadable interface {
+	// ReadableRange reports whether every piece covering [offset,
+	// offset+length) is already present locally.
+	ReadableRange(offset, length int64) bool
+}

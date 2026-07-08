@@ -25,6 +25,6 @@ func newDefaultAssignmentPolicy() assignmentPolicy {
 	return &defaultAssignmentPolicy{}
 }
 
-func (p *defaultAssignmentPolicy) assignPriority(peer *core.PeerInfo) (int, string) {
+func (p *defaultAssignmentPolicy) assignPriority(peer *core.PeerInfo, requested []int) (int, string) {
 	return 0, "default"
 }

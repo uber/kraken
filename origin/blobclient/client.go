@@ -60,6 +60,7 @@ type Client interface {
 	DuplicateUploadBlob(namespace string, d core.Digest, blob io.Reader, delay time.Duration) error
 
 	DownloadBlob(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error
+	DownloadBlobRange(ctx context.Context, namespace string, d core.Digest, offset, length int64, dst io.Writer) error
 	PrefetchBlob(namespace string, d core.Digest) error
 
 	ReplicateToRemote(namespace string, d core.Digest, remoteDNS string) error
@@ -268,6 +269,30 @@ func (c *HTTPClient) DownloadBlob(ctx context.Context, namespace string, d core.
 
 	span.SetAttributes(attribute.Int64("blob.size_bytes", written))
 	span.SetStatus(codes.Ok, "download completed")
+	return nil
+}
+
+// DownloadBlobRange downloads [offset, offset+length) of blob d via a Range
+// request. Same retry contract as DownloadBlob: 202 on a pending cold miss,
+// 404 if d doesn't exist.
+func (c *HTTPClient) DownloadBlobRange(
+	ctx context.Context, namespace string, d core.Digest, offset, length int64, dst io.Writer) error {
+
+	r, err := httputil.Get(
+		fmt.Sprintf("http://%s/namespace/%s/blobs/%s", c.addr, url.PathEscape(namespace), d),
+		httputil.SendContext(ctx),
+		httputil.SendTLS(c.tls),
+		httputil.SendHeaders(map[string]string{
+			"Range": fmt.Sprintf("bytes=%d-%d", offset, offset+length-1),
+		}))
+	if err != nil {
+		return err
+	}
+	defer closers.Close(r.Body)
+
+	if _, err := io.Copy(dst, r.Body); err != nil {
+		return fmt.Errorf("copy body: %s", err)
+	}
 	return nil
 }
 

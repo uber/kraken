@@ -52,6 +52,23 @@ type Request struct {
 	sentAt time.Time
 }
 
+// PriorityClass ranks why a piece was prioritized. Foreground always wins a
+// reservation slot over Background, regardless of piece index -- a piece a
+// stream is actually blocked on must never lose its slot to another
+// stream's speculative readahead or a large prefetch-shaped span.
+type PriorityClass int
+
+const (
+	// Background denotes a speculative priority hint: a stream's own
+	// sequential readahead tail, or a large ReadAt span shaped like a
+	// prefetch call.
+	Background PriorityClass = iota
+
+	// Foreground denotes a piece a reader is genuinely blocked on right
+	// now, or a small ReadAt span shaped like a real on-demand read.
+	Foreground
+)
+
 // Manager encapsulates thread-safe piece request bookkeeping. It is not responsible
 // for sending nor receiving pieces in any way.
 type Manager struct {
@@ -69,8 +86,9 @@ type Manager struct {
 	originPipelineLimit int
 
 	// priority holds pieces that streaming readers are blocked on; they are
-	// reserved ahead of the selection policy.
-	priority map[int]struct{}
+	// reserved ahead of the selection policy. Foreground pieces are always
+	// reserved before Background ones, regardless of piece index.
+	priority map[int]PriorityClass
 }
 
 // NewManager creates a new Manager.
@@ -88,7 +106,7 @@ func NewManager(
 		timeout:             timeout,
 		agentPipelineLimit:  agentPipelineLimit,
 		originPipelineLimit: originPipelineLimit,
-		priority:            make(map[int]struct{}),
+		priority:            make(map[int]PriorityClass),
 	}
 
 	switch policy {
@@ -179,23 +197,32 @@ func (m *Manager) ReservePieces(
 	return pieces, nil
 }
 
-// SetPriority marks piece i to be reserved ahead of the selection policy. The
+// SetPriority upgrades piece i to class, reserved ahead of the selection
+// policy. Never downgrades -- a piece already Foreground stays Foreground
+// even if a later Background-classed span also happens to cover it. The
 // hint is cleared when the piece is Clear'd (i.e. completed).
-func (m *Manager) SetPriority(i int) {
+func (m *Manager) SetPriority(i int, class PriorityClass) {
 	m.Lock()
 	defer m.Unlock()
-	m.priority[i] = struct{}{}
+	if cur, ok := m.priority[i]; !ok || class > cur {
+		m.priority[i] = class
+	}
 }
 
-// sortedPriority returns the priority pieces in ascending order. Callers must
-// hold the lock.
+// sortedPriority returns all Foreground pieces in ascending order, followed
+// by all Background pieces in ascending order. Callers must hold the lock.
 func (m *Manager) sortedPriority() []int {
-	pieces := make([]int, 0, len(m.priority))
-	for i := range m.priority {
-		pieces = append(pieces, i)
+	var fg, bg []int
+	for i, class := range m.priority {
+		if class == Foreground {
+			fg = append(fg, i)
+		} else {
+			bg = append(bg, i)
+		}
 	}
-	sort.Ints(pieces)
-	return pieces
+	sort.Ints(fg)
+	sort.Ints(bg)
+	return append(fg, bg...)
 }
 
 // MarkUnsent marks the piece request for piece i as unsent.

@@ -212,7 +212,7 @@ func Run(flags *Flags, opts ...Option) {
 		config.WriteBack,
 		stats,
 		writeback.NewStore(localDB),
-		writeback.NewExecutor(stats, ss, backends))
+		writeback.NewExecutor(stats, ss, backends, false))
 	if err != nil {
 		log.Fatalf("Error creating write-back manager: %s", err)
 	}

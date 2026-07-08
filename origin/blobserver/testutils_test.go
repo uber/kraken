@@ -36,6 +36,7 @@ import (
 	"github.com/uber/kraken/lib/store"
 	mockbackend "github.com/uber/kraken/mocks/lib/backend"
 	mockpersistedretry "github.com/uber/kraken/mocks/lib/persistedretry"
+	mockscheduler "github.com/uber/kraken/mocks/lib/torrent/scheduler"
 	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/log"
@@ -122,9 +123,6 @@ func newTestServer(
 	cas, c := store.CAStoreFixture()
 	cleanup.Add(c)
 
-	cads, cadsCleanup := store.CADownloadStoreFixture()
-	cleanup.Add(cadsCleanup)
-
 	bm := backend.ManagerFixture()
 
 	writeBackManager := mockpersistedretry.NewMockManager(ctrl)
@@ -137,8 +135,8 @@ func newTestServer(
 	clk.Set(time.Now())
 
 	s, err := New(
-		Config{}, tally.NoopScope, clk, host, ring, cas, cads, cp, clusterProvider, pctx,
-		bm, br, mg, writeBackManager)
+		Config{}, tally.NoopScope, clk, host, ring, cas, cp, clusterProvider, pctx,
+		bm, br, mg, writeBackManager, 0, mockscheduler.NewMockScheduler(ctrl))
 	if err != nil {
 		panic(err)
 	}

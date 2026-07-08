@@ -58,7 +58,7 @@ func newExecutorMocks(t *testing.T) (*executorMocks, func()) {
 }
 
 func (m *executorMocks) new() *Executor {
-	return NewExecutor(tally.NoopScope, m.cas, m.backends)
+	return NewExecutor(tally.NoopScope, m.cas, m.backends, true)
 }
 
 func (m *executorMocks) client(namespace string) *mockbackend.MockClient {

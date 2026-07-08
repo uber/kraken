@@ -20,6 +20,7 @@ import (
 	"github.com/uber/kraken/tracker/announceclient"
 
 	"github.com/andres-erbsen/clock"
+	"github.com/willf/bitset"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -87,9 +88,10 @@ func Default(
 // Announce announces through the underlying client and returns the resulting
 // peer handout. Updates the announce interval if it has changed.
 func (a *Announcer) Announce(
-	d core.Digest, h core.InfoHash, complete bool) ([]*core.PeerInfo, error) {
+	d core.Digest, h core.InfoHash, complete bool, bitfield *bitset.BitSet,
+	requested []int) ([]*core.PeerInfo, error) {
 
-	peers, interval, err := a.client.Announce(d, h, complete, announceclient.V2)
+	peers, interval, err := a.client.Announce(d, h, complete, bitfield, requested, announceclient.V3)
 	if err != nil {
 		return nil, err
 	}

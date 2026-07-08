@@ -61,6 +61,7 @@ fi
 # Build the harness image if missing or REBUILD=1.
 if [ "${REBUILD:-0}" = "1" ] || ! docker image inspect kraken-estargz:dev >/dev/null 2>&1; then
     log "building kraken-estargz:dev"
+    docker system prune -af
     docker build -t kraken-estargz:dev "${ESTARGZ_DIR}"
 fi
 

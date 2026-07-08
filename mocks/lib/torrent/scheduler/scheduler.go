@@ -5,12 +5,14 @@
 package mockscheduler
 
 import (
+	io "io"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/uber/kraken/core"
 	scheduler "github.com/uber/kraken/lib/torrent/scheduler"
 	connstate "github.com/uber/kraken/lib/torrent/scheduler/connstate"
+	storage "github.com/uber/kraken/lib/torrent/storage"
 )
 
 // MockScheduler is a mock of Scheduler interface
@@ -118,4 +120,48 @@ func (m *MockScheduler) Stop() {
 func (mr *MockSchedulerMockRecorder) Stop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockScheduler)(nil).Stop))
+}
+
+// Stat mocks base method
+func (m *MockScheduler) Stat(arg0 string, arg1 core.Digest) (*storage.TorrentInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Stat", arg0, arg1)
+	ret0, _ := ret[0].(*storage.TorrentInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Stat indicates an expected call of Stat
+func (mr *MockSchedulerMockRecorder) Stat(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockScheduler)(nil).Stat), arg0, arg1)
+}
+
+// ReadableRange mocks base method
+func (m *MockScheduler) ReadableRange(arg0 string, arg1 core.Digest, arg2, arg3 int64) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadableRange", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadableRange indicates an expected call of ReadableRange
+func (mr *MockSchedulerMockRecorder) ReadableRange(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadableRange", reflect.TypeOf((*MockScheduler)(nil).ReadableRange), arg0, arg1, arg2, arg3)
+}
+
+// CopyReadyRange mocks base method
+func (m *MockScheduler) CopyReadyRange(arg0 string, arg1 core.Digest, arg2 io.Writer, arg3, arg4 int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CopyReadyRange", arg0, arg1, arg2, arg3, arg4)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CopyReadyRange indicates an expected call of CopyReadyRange
+func (mr *MockSchedulerMockRecorder) CopyReadyRange(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyReadyRange", reflect.TypeOf((*MockScheduler)(nil).CopyReadyRange), arg0, arg1, arg2, arg3, arg4)
 }

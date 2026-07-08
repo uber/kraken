@@ -42,10 +42,12 @@ func CAStoreConfigFixture() (CAStoreConfig, func()) {
 
 	upload := tempdir(cleanup, "upload")
 	cache := tempdir(cleanup, "cache")
+	download := tempdir(cleanup, "download")
 
 	return CAStoreConfig{
 		UploadDir:            upload,
 		CacheDir:             cache,
+		DownloadDir:          download,
 		SkipHashVerification: false,
 	}, cleanup.Run
 }

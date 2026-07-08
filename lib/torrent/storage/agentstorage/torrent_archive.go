@@ -50,11 +50,22 @@ func NewTorrentArchive(
 	return &TorrentArchive{stats, cads, mic}
 }
 
-// Stat returns TorrentInfo for the given digest. Returns os.ErrNotExist if the
-// file does not exist. Ignores namespace.
+// Stat returns TorrentInfo for the given digest. On a local miss, it fetches
+// metainfo from the tracker (same fallback as CreateTorrent) so callers get a
+// real length without needing to create a download file or start a torrent.
+// Returns storage.ErrNotFound if no metainfo exists anywhere. Ignores namespace.
 func (a *TorrentArchive) Stat(namespace string, d core.Digest) (*storage.TorrentInfo, error) {
 	var tm metadata.TorrentMeta
-	if err := a.cads.Any().GetMetadata(d.Hex(), &tm); err != nil {
+	if err := a.cads.Any().GetMetadata(d.Hex(), &tm); os.IsNotExist(err) {
+		mi, err := a.metaInfoClient.Download(namespace, d)
+		if err != nil {
+			if err == metainfoclient.ErrNotFound {
+				return nil, storage.ErrNotFound
+			}
+			return nil, fmt.Errorf("download metainfo: %s", err)
+		}
+		return storage.NewTorrentInfo(mi, bitset.New(uint(mi.NumPieces()))), nil
+	} else if err != nil {
 		return nil, err
 	}
 	var psm pieceStatusMetadata

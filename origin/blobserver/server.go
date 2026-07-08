@@ -41,6 +41,8 @@ import (
 	"github.com/uber/kraken/lib/persistedretry/writeback"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/torrent/scheduler"
+	"github.com/uber/kraken/lib/torrent/storage/originstorage"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/errutil"
@@ -65,15 +67,16 @@ type Server struct {
 	addr              string
 	hashRing          hashring.Ring
 	cas               *store.CAStore
-	cads              *store.CADownloadStore
 	clientProvider    blobclient.Provider
 	clusterProvider   blobclient.ClusterProvider
 	backends          *backend.Manager
 	blobRefresher     *blobrefresh.Refresher
+	torrentArchive    *originstorage.TorrentArchive
 	metaInfoGenerator *metainfogen.Generator
 	uploader          *uploader
 	writeBackManager  persistedretry.Manager
 	tracer            trace.Tracer
+	sched             scheduler.Scheduler
 
 	// This is an unfortunate coupling between the p2p client and the blob server.
 	// Tracker queries the origin cluster to discover which origins can seed
@@ -90,7 +93,6 @@ func New(
 	addr string,
 	hashRing hashring.Ring,
 	cas *store.CAStore,
-	cads *store.CADownloadStore,
 	clientProvider blobclient.Provider,
 	clusterProvider blobclient.ClusterProvider,
 	pctx core.PeerContext,
@@ -98,6 +100,8 @@ func New(
 	blobRefresher *blobrefresh.Refresher,
 	metaInfoGenerator *metainfogen.Generator,
 	writeBackManager persistedretry.Manager,
+	fetchConcurrency int,
+	sched scheduler.Scheduler,
 ) (*Server, error) {
 	config = config.applyDefaults()
 
@@ -113,16 +117,17 @@ func New(
 		addr:              addr,
 		hashRing:          hashRing,
 		cas:               cas,
-		cads:              cads,
 		clientProvider:    clientProvider,
 		clusterProvider:   clusterProvider,
 		backends:          backends,
 		blobRefresher:     blobRefresher,
+		torrentArchive:    originstorage.NewTorrentArchive(cas, backends, blobRefresher, fetchConcurrency),
 		metaInfoGenerator: metaInfoGenerator,
 		uploader:          newUploader(cas),
 		writeBackManager:  writeBackManager,
 		tracer:            otel.Tracer("kraken-origin"),
 		pctx:              pctx,
+		sched:             sched,
 	}, nil
 }
 
@@ -272,6 +277,22 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return err
 	}
+	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
+		offset, length, err := parseRangeHeader(rangeHeader)
+		if err != nil {
+			return handler.ErrorStatus(http.StatusRequestedRangeNotSatisfiable)
+		}
+		if length > core.MaxBlobRangeLength {
+			return handler.ErrorStatus(http.StatusRequestedRangeNotSatisfiable)
+		}
+		log.With("namespace", namespace, "digest", d.Hex(), "offset", offset, "length", length).
+			Info("Starting blob range download")
+		if err := s.downloadBlobRange(namespace, d, offset, length, w); err != nil {
+			return err
+		}
+		setOctetStreamContentType(w)
+		return nil
+	}
 	log.With("namespace", namespace, "digest", d.Hex()).Info("Starting blob download")
 	if err := s.downloadBlob(namespace, d, w); err != nil {
 		log.With("namespace", namespace, "digest", d.Hex(), "error", err).
@@ -281,6 +302,77 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	setOctetStreamContentType(w)
 	log.With("namespace", namespace, "digest", d.Hex()).Info("Successfully downloaded blob")
 	return nil
+}
+
+// parseRangeHeader parses a single-range "bytes=start-end" header (inclusive
+// end, per RFC 7233) into an (offset, length) pair.
+func parseRangeHeader(v string) (offset, length int64, err error) {
+	var start, end int64
+	if _, err := fmt.Sscanf(v, "bytes=%d-%d", &start, &end); err != nil {
+		return 0, 0, fmt.Errorf("invalid range header %q: %s", v, err)
+	}
+	if start < 0 || end < start {
+		return 0, 0, fmt.Errorf("invalid range header %q", v)
+	}
+	return start, end - start + 1, nil
+}
+
+// downloadBlobRange serves [offset, offset+length) of digest d. If the
+// covering pieces are already local, it serves them directly with no backend
+// call via CopyReadyRange. Otherwise it triggers a scheduler-coordinated
+// background fetch of the whole blob (deduped per covering-piece-range scope
+// so disjoint ranges of the same digest don't collide on one dedup slot) and
+// returns "202 Accepted", the same retry contract as downloadBlob's miss path.
+func (s *Server) downloadBlobRange(namespace string, d core.Digest, offset, length int64, dst io.Writer) error {
+	info, err := s.sched.Stat(namespace, d)
+	if err != nil {
+		return err
+	}
+	if offset+length > info.Length() {
+		return handler.ErrorStatus(http.StatusRequestedRangeNotSatisfiable)
+	}
+
+	ready, err := s.sched.ReadableRange(namespace, d, offset, length)
+	if err != nil {
+		return err
+	}
+	if ready {
+		if err := s.sched.CopyReadyRange(namespace, d, dst, offset, length); err != nil {
+			log.With("namespace", namespace, "digest", d.Hex(), "offset", offset, "length", length).
+				Errorf("Failed to copy blob range: %s", err)
+			return handler.Errorf("copy blob range: %s", err)
+		}
+		return nil
+	}
+
+	pl := info.PieceLength()
+	scope := fmt.Sprintf("%d-%d", offset/pl, (offset+length-1)/pl)
+	err = s.blobRefresher.TriggerBackground(d, scope, func() error {
+		br, err := s.sched.DownloadReader(namespace, d)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			err := br.Close()
+			if err != nil {
+				log.Error(err)
+			}
+		}()
+		_, err = io.CopyN(io.Discard, io.NewSectionReader(br, offset, length), length)
+		return err
+	})
+	switch err {
+	case blobrefresh.ErrPending, nil:
+		log.With("namespace", namespace, "digest", d.Hex(), "offset", offset, "length", length).
+			Debug("Blob range download pending or started")
+		return handler.ErrorStatus(http.StatusAccepted)
+	case blobrefresh.ErrWorkersBusy:
+		return handler.ErrorStatus(http.StatusServiceUnavailable)
+	default:
+		log.With("namespace", namespace, "digest", d.Hex(), "offset", offset, "length", length).
+			Errorf("Failed to trigger blob range download: %s", err)
+		return err
+	}
 }
 
 // prefetchBlobHandler is an idempotent operation that preheats the origin's cache with the given blob.
@@ -609,6 +701,11 @@ func (s *Server) applyToReplicas(d core.Digest, f func(i int, c blobclient.Clien
 func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error {
 	f, err := s.cas.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
+		if s.torrentArchive.CanStreamCold(namespace, d) {
+			log.With("namespace", namespace, "digest", d.Hex()).
+				Info("Blob not in cache, triggering scheduler-coordinated download")
+			return s.triggerSchedulerDownload(namespace, d)
+		}
 		log.With("namespace", namespace, "digest", d.Hex()).
 			Info("Blob not in cache, initiating download from backend")
 		return s.startRemoteBlobDownload(namespace, d, true)
@@ -626,6 +723,43 @@ func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) er
 		return handler.Errorf("copy blob: %s", err)
 	}
 	return nil
+}
+
+// triggerSchedulerDownload joins the scheduler's live torrent for d instead
+// of a second, uncoordinated backend fetch: without this, a cold blob that a
+// P2P peer is already lazily range-fetching via the scheduler would also get
+// pulled a second time straight from the backend by startRemoteBlobDownload.
+// Mirrors startRemoteBlobDownload's pending/busy/error contract and runs the
+// same local-replication hook on success.
+func (s *Server) triggerSchedulerDownload(namespace string, d core.Digest) error {
+	err := s.blobRefresher.TriggerBackground(d, "", func() error {
+		br, err := s.sched.DownloadReader(namespace, d)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			err := br.Close()
+			if err != nil {
+				log.Error(err)
+			}
+		}()
+		if _, err := io.Copy(io.Discard, br); err != nil {
+			return err
+		}
+		(&localReplicationHook{s}).Run(d)
+		return nil
+	})
+	switch err {
+	case blobrefresh.ErrPending, nil:
+		log.With("namespace", namespace, "digest", d.Hex()).Debug("Blob download pending or started")
+		return handler.ErrorStatus(http.StatusAccepted)
+	case blobrefresh.ErrWorkersBusy:
+		log.With("namespace", namespace, "digest", d.Hex()).Warn("All blob refresh workers are busy")
+		return handler.ErrorStatus(http.StatusServiceUnavailable)
+	default:
+		log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to start scheduler download: %s", err)
+		return err
+	}
 }
 
 func (s *Server) prefetchBlob(namespace string, d core.Digest) error {
@@ -1037,8 +1171,8 @@ func (s *Server) forceCleanupHandler(w http.ResponseWriter, r *http.Request) err
 	// partial=true also evicts the lazily range-fetched cold-blob download store
 	// (separate from the warm cas), so a cold-origin lazy-fetch PoC can fully
 	// re-cold the origin over HTTP without a docker exec into the container.
-	if r.URL.Query().Get("partial") == "true" && s.cads != nil {
-		partialNames, err := s.cads.Any().ListNames()
+	if r.URL.Query().Get("partial") == "true" {
+		partialNames, err := s.cas.ListDownloadFiles()
 		if err != nil {
 			log.Errorf("Failed to list partial files for cleanup: %s", err)
 			return err
@@ -1108,7 +1242,7 @@ func (s *Server) maybeDelete(name string, ttl time.Duration) (deleted bool, err 
 // the download store. These are pure local scratch reconstructable from the
 // backend, so no writeback or ownership check is needed before deleting.
 func (s *Server) maybeDeletePartial(name string, ttl time.Duration) (bool, error) {
-	info, err := s.cads.Any().GetFileStat(name)
+	info, err := s.cas.GetDownloadFileStat(name)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
@@ -1118,7 +1252,7 @@ func (s *Server) maybeDeletePartial(name string, ttl time.Duration) (bool, error
 	if s.clk.Now().Sub(info.ModTime()) <= ttl {
 		return false, nil
 	}
-	if err := s.cads.Any().DeleteFile(name); err != nil && !os.IsNotExist(err) {
+	if err := s.cas.DeleteDownloadFile(name); err != nil && !os.IsNotExist(err) {
 		return false, err
 	}
 	return true, nil

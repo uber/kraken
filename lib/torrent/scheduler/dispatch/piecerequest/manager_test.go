@@ -454,7 +454,7 @@ func TestManagerSetPriority(t *testing.T) {
 
 			m := newManager(clock.NewMock(), 5*time.Second, RarestFirstPolicy, tc.pipelineLimit)
 			for _, i := range tc.priority {
-				m.SetPriority(i)
+				m.SetPriority(i, Foreground)
 			}
 
 			pieces, err := m.ReservePieces(core.PeerIDFixture(), false,
@@ -465,12 +465,40 @@ func TestManagerSetPriority(t *testing.T) {
 	}
 }
 
+func TestManagerSetPriorityUpgradeOnly(t *testing.T) {
+	require := require.New(t)
+
+	m := newManager(clock.NewMock(), 5*time.Second, RarestFirstPolicy, 3)
+
+	// Foreground always wins, regardless of call order.
+	m.SetPriority(0, Background)
+	m.SetPriority(0, Foreground)
+	require.Equal(Foreground, m.priority[0])
+
+	m.SetPriority(1, Foreground)
+	m.SetPriority(1, Background)
+	require.Equal(Foreground, m.priority[1])
+}
+
+func TestManagerSortedPriorityGroupsByClass(t *testing.T) {
+	require := require.New(t)
+
+	m := newManager(clock.NewMock(), 5*time.Second, RarestFirstPolicy, 3)
+
+	m.SetPriority(5, Background)
+	m.SetPriority(1, Foreground)
+	m.SetPriority(9, Background)
+	m.SetPriority(3, Foreground)
+
+	require.Equal([]int{1, 3, 5, 9}, m.sortedPriority())
+}
+
 func TestManagerClearRemovesPriority(t *testing.T) {
 	require := require.New(t)
 
 	m := newManager(clock.NewMock(), 5*time.Second, RarestFirstPolicy, 1)
 
-	m.SetPriority(2)
+	m.SetPriority(2, Foreground)
 	m.Clear(2)
 
 	// With the priority cleared, rarest-first selects piece 0.

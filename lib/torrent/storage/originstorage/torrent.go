@@ -25,6 +25,7 @@ import (
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
 	"github.com/uber/kraken/utils/closers"
+	"github.com/uber/kraken/utils/log"
 
 	"github.com/willf/bitset"
 	"go.uber.org/atomic"
@@ -39,6 +40,10 @@ var (
 const (
 	_partialFetchPollInterval = 50 * time.Millisecond
 	_partialFetchTimeout      = 2 * time.Minute
+
+	// _defaultFetchConcurrency bounds how many pieces of a partial torrent are
+	// range-fetched from the backend at once (direct reads plus prefetchAhead).
+	_defaultFetchConcurrency = 8
 )
 
 // Torrent is a read-only storage.Torrent. It allows concurrent reads on all
@@ -57,10 +62,10 @@ type Torrent struct {
 
 	// Partial (cold) mode fields. Unused (nil) in warm mode.
 	partial   bool
-	cads      *store.CADownloadStore
 	rd        backend.RangeDownloader
 	namespace string
 	pieces    []*piece
+	fetchSem  chan struct{} // Bounds concurrent backend range-fetches.
 }
 
 // NewTorrent creates a new warm Torrent backed by a complete cache file.
@@ -73,30 +78,46 @@ func NewTorrent(cas *store.CAStore, mi *core.MetaInfo) (*Torrent, error) {
 }
 
 // NewPartialTorrent creates a cold Torrent that lazily range-fetches pieces
-// from the backend into a sparse download file.
+// from the backend into a sparse download file. fetchConcurrency bounds how
+// many pieces are range-fetched from the backend at once; <=0 uses
+// _defaultFetchConcurrency.
 func NewPartialTorrent(
-	cads *store.CADownloadStore,
+	cas *store.CAStore,
 	rd backend.RangeDownloader,
 	namespace string,
-	mi *core.MetaInfo) (*Torrent, error) {
+	mi *core.MetaInfo,
+	fetchConcurrency int) (*Torrent, error) {
 
-	if err := cads.CreateDownloadFile(mi.Digest().Hex(), mi.Length()); err != nil &&
-		!cads.InDownloadError(err) && !cads.InCacheError(err) {
+	if fetchConcurrency <= 0 {
+		fetchConcurrency = _defaultFetchConcurrency
+	}
+	if err := cas.CreateDownloadFile(mi.Digest().Hex(), mi.Length()); err != nil &&
+		!cas.InDownloadError(err) && !cas.InCacheError(err) {
 		return nil, fmt.Errorf("create download file: %s", err)
 	}
-	pieces, _, err := restorePieces(mi.Digest(), cads, mi.NumPieces())
+	pieces, numComplete, err := restorePieces(mi.Digest(), cas, mi.NumPieces())
 	if err != nil {
 		return nil, fmt.Errorf("restore pieces: %s", err)
 	}
-	return &Torrent{
+	t := &Torrent{
 		metaInfo:    mi,
-		numComplete: atomic.NewInt32(int32(mi.NumPieces())),
+		cas:         cas,
+		numComplete: atomic.NewInt32(int32(numComplete)),
 		partial:     true,
-		cads:        cads,
 		rd:          rd,
 		namespace:   namespace,
 		pieces:      pieces,
-	}, nil
+		fetchSem:    make(chan struct{}, fetchConcurrency),
+	}
+	if numComplete == mi.NumPieces() {
+		// Every piece was already restored complete from a prior run --
+		// promote to the warm cache now instead of waiting for another
+		// fetch that will never come (ensurePiece short-circuits on
+		// p.complete() and never reaches markPieceComplete's promotion
+		// check below).
+		t.maybePromoteToCache()
+	}
+	return t, nil
 }
 
 // Digest returns the digest of the target blob.
@@ -172,7 +193,7 @@ type downloadOpener struct {
 }
 
 func (o *downloadOpener) Open() (store.FileReader, error) {
-	return o.torrent.cads.Any().GetFileReader(o.torrent.Digest().Hex())
+	return o.torrent.cas.GetDownloadFileReader(o.torrent.Digest().Hex())
 }
 
 // GetPieceReader returns a reader for piece pi. In partial mode the piece is
@@ -185,10 +206,38 @@ func (t *Torrent) GetPieceReader(pi int) (storage.PieceReader, error) {
 		if err := t.ensurePiece(pi); err != nil {
 			return nil, fmt.Errorf("ensure piece %d: %s", pi, err)
 		}
+		t.prefetchAhead(pi)
 		return piecereader.NewFileReader(
 			t.getFileOffset(pi), t.PieceLength(pi), &downloadOpener{t}), nil
 	}
 	return piecereader.NewFileReader(t.getFileOffset(pi), t.PieceLength(pi), &opener{t}), nil
+}
+
+// prefetchAhead opportunistically fetches up to cap(t.fetchSem) pieces after
+// pi in the background, bounded by the fetch-concurrency semaphore. Errors
+// are not surfaced here -- whichever caller actually reads a prefetched piece
+// calls ensurePiece itself via GetPieceReader and gets the real error; this
+// is best-effort, not the read path. Best-effort dedup with tryMarkDirty
+// (via ensurePiece) means a background prefetch racing a direct read for the
+// same piece never double-fetches.
+func (t *Torrent) prefetchAhead(pi int) {
+	for i := pi + 1; i < pi+1+cap(t.fetchSem) && i < len(t.pieces); i++ {
+		if t.pieces[i].complete() {
+			continue
+		}
+		select {
+		case t.fetchSem <- struct{}{}:
+			go func(i int) {
+				defer func() { <-t.fetchSem }()
+				if err := t.ensurePiece(i); err != nil {
+					log.With("hash", t.InfoHash(), "piece", i).
+						Debugf("Error prefetching piece: %s", err)
+				}
+			}(i)
+		default:
+			return
+		}
+	}
 }
 
 // ensurePiece guarantees piece pi is present and verified in the download file.
@@ -232,7 +281,7 @@ func (t *Torrent) waitForPiece(p *piece) error {
 // fetchPiece range-fetches piece pi from the backend into the download file and
 // verifies its CRC32 against the metainfo piece sum.
 func (t *Torrent) fetchPiece(pi int) error {
-	f, err := t.cads.GetDownloadFileReadWriter(t.metaInfo.Digest().Hex())
+	f, err := t.cas.GetDownloadFileReadWriter(t.metaInfo.Digest().Hex())
 	if err != nil {
 		return fmt.Errorf("get download writer: %s", err)
 	}
@@ -255,12 +304,25 @@ func (t *Torrent) fetchPiece(pi int) error {
 
 // markPieceComplete persists the completed status for piece pi.
 func (t *Torrent) markPieceComplete(pi int) error {
-	if _, err := t.cads.Download().SetMetadataAt(
+	if _, err := t.cas.SetDownloadFileMetadataAt(
 		t.Digest().Hex(), &pieceStatusMetadata{}, []byte{byte(_complete)}, int64(pi)); err != nil {
 		return fmt.Errorf("write piece metadata: %s", err)
 	}
 	t.pieces[pi].markComplete()
+	if t.numComplete.Inc() == int32(t.NumPieces()) {
+		t.maybePromoteToCache()
+	}
 	return nil
+}
+
+// maybePromoteToCache moves a fully-downloaded partial torrent's download
+// file into the warm cache so later reads are served directly from cas
+// instead of round-tripping through the download store forever. Best-effort:
+// a failure here doesn't fail the read that completed the torrent.
+func (t *Torrent) maybePromoteToCache() {
+	if err := t.cas.MoveDownloadFileToCache(t.Digest().Hex(), t.Digest().Hex()); err != nil {
+		log.With("hash", t.InfoHash()).Errorf("Error promoting completed partial torrent to cache: %s", err)
+	}
 }
 
 // HasPiece returns if piece pi is complete.
@@ -272,6 +334,68 @@ func (t *Torrent) HasPiece(pi int) bool {
 // MissingPieces always returns empty list.
 func (t *Torrent) MissingPieces() []int {
 	return []int{}
+}
+
+// pieceRange returns the [lo, hi) piece indices covering [offset, offset+length).
+func (t *Torrent) pieceRange(offset, length int64) (int, int) {
+	pl := t.metaInfo.PieceLength()
+	lo := int(offset / pl)
+	hi := int((offset+length-1)/pl) + 1
+	return lo, hi
+}
+
+// ReadableRange implements storage.RangeReadable: whether every piece
+// covering [offset, offset+length) has already landed locally, without
+// touching HasPiece/Bitfield's always-complete lie (needed so agents can
+// connect and request pieces on demand even before anything has landed).
+// Warm torrents are always readable everywhere.
+func (t *Torrent) ReadableRange(offset, length int64) bool {
+	if !t.partial {
+		return true
+	}
+	lo, hi := t.pieceRange(offset, length)
+	if lo < 0 || hi > len(t.pieces) {
+		return false
+	}
+	for pi := lo; pi < hi; pi++ {
+		if !t.pieces[pi].complete() {
+			return false
+		}
+	}
+	return true
+}
+
+// CopyRange copies [offset, offset+length) into w, range-fetching any
+// missing pieces on demand via GetPieceReader (blocking on ensurePiece's
+// per-piece dedup/fetch, same as a P2P piece request would).
+func (t *Torrent) CopyRange(w io.Writer, offset, length int64) error {
+	lo, hi := t.pieceRange(offset, length)
+	pos, remaining := offset, length
+	for pi := lo; pi < hi && remaining > 0; pi++ {
+		pr, err := t.GetPieceReader(pi)
+		if err != nil {
+			return fmt.Errorf("get piece reader %d: %s", pi, err)
+		}
+		skip := pos - int64(pi)*t.metaInfo.PieceLength()
+		if skip > 0 {
+			if _, err := io.CopyN(io.Discard, pr, skip); err != nil {
+				closers.Close(pr)
+				return fmt.Errorf("skip to offset: %s", err)
+			}
+		}
+		want := t.PieceLength(pi) - skip
+		if want > remaining {
+			want = remaining
+		}
+		n, err := io.CopyN(w, pr, want)
+		closers.Close(pr)
+		pos += n
+		remaining -= n
+		if err != nil {
+			return fmt.Errorf("copy piece %d: %s", pi, err)
+		}
+	}
+	return nil
 }
 
 // getFileOffset calculates the offset in the torrent file given piece index.

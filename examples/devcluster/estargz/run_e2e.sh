@@ -72,14 +72,26 @@ delta() { awk -v a="$1" -v b="$2" 'BEGIN { printf "%.2f", b - a }'; }
 json_array() {
     local out="" a sep=""
     for a in "$@"; do
-        a=${a//\\/\\\\}
-        a=${a//\"/\\\"}
+        # 1. Escape backslashes first to avoid double-escaping later
+        a="${a//\\/\\\\}"
+
+        # 2. Escape double quotes
+        a="${a//\"/\\\"}"
+
+        # 3. Escape literal newlines (this fixes your exact error)
+        a="${a//$'\n'/\\n}"
+
+        # 4. Escape literal carriage returns (useful for Windows file compatibility)
+        a="${a//$'\r'/\\r}"
+
+        # 5. Escape literal tabs
+        a="${a//$'\t'/\\t}"
+
         out="${out}${sep}\"${a}\""
         sep=,
     done
     printf '[%s]' "${out}"
 }
-
 # reset_cold wipes the shared containerd content store and the stargz blob cache,
 # then restarts both daemons. containerd's content store is GLOBAL across
 # namespaces, so the push leg's source pull would otherwise pre-warm every layer
@@ -182,7 +194,7 @@ cold_agent() {
 log "pulling source image ${SRC_IMAGE}"
 nerdctl --namespace "${PUSH_NS}" pull "${SRC_IMAGE}"
 
-# Convert to eStargz WITH a prefetch profile, so the snapshotter bulk-prefetches
+# Convert to zstd:chunked WITH a prefetch profile, so the snapshotter bulk-prefetches
 # the workload's working set on mount instead of paying per-file lazy-fetch
 # latency. ctr-remote optimize runs RUN_CMD against the source, records the files
 # it touches (--period bounds the monitor window), reorders them to the front of
@@ -193,14 +205,15 @@ nerdctl --namespace "${PUSH_NS}" pull "${SRC_IMAGE}"
 # legs actually run. ctr-remote shares containerd's content store with nerdctl in
 # the same namespace, so the push below uploads the optimized image. The result
 # stays a valid OCI image, so the overlayfs baseline still pulls it in full.
-log "converting+optimizing ${SRC_IMAGE} to eStargz -> ${PROXY_REF}"
-ctr-remote --namespace "${PUSH_NS}" image optimize --oci \
-    --period="${OPTIMIZE_PERIOD:-30}" \
+log "converting+optimizing ${SRC_IMAGE} to zstd:chunked -> ${PROXY_REF}"
+ctr-remote --namespace "${PUSH_NS}" image optimize --oci --zstdchunked \
+    --zstdchunked-compression-level=15 \
+    --period=60 \
     --entrypoint="$(json_array "${RUN_CMD[0]}")" \
     --args="$(json_array "${RUN_CMD[@]:1}")" \
     "${SRC_IMAGE}" "${PROXY_REF}"
 
-log "pushing eStargz image to Kraken proxy ${PROXY_REF}"
+log "pushing zstdchunked image to Kraken proxy ${PROXY_REF}"
 nerdctl --namespace "${PUSH_NS}" push "${PROXY_REF}"
 
 # Both legs run a single `nerdctl run`, which auto-pulls the image as part of

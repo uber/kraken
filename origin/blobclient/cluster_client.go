@@ -14,6 +14,7 @@
 package blobclient
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -90,6 +91,7 @@ type ClusterClient interface {
 	CheckReadiness() error
 	UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.ReadSeeker) error
 	DownloadBlob(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error
+	DownloadBlobRange(ctx context.Context, namespace string, d core.Digest, offset, length int64, dst io.Writer) error
 	PrefetchBlob(namespace string, d core.Digest) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	Stat(namespace string, d core.Digest) (*core.BlobInfo, error)
@@ -115,6 +117,21 @@ func (c *clusterClient) defaultPollBackOff() backoff.BackOff {
 		Multiplier:          1.3,
 		MaxInterval:         5 * time.Second,
 		MaxElapsedTime:      15 * time.Minute,
+		Clock:               backoff.SystemClock,
+	}
+}
+
+// rangePollBackOff is sized against a caller's own client-side timeout (e.g.
+// containerd's ~30s resolver request_timeout_sec), not Kraken's whole-blob
+// budget -- reusing defaultPollBackOff's 15 minutes would keep retrying long
+// after the caller already gave up and reissued its own request.
+func (c *clusterClient) rangePollBackOff() backoff.BackOff {
+	return &backoff.ExponentialBackOff{
+		InitialInterval:     200 * time.Millisecond,
+		RandomizationFactor: 0.05,
+		Multiplier:          1.3,
+		MaxInterval:         2 * time.Second,
+		MaxElapsedTime:      20 * time.Second,
 		Clock:               backoff.SystemClock,
 	}
 }
@@ -273,6 +290,27 @@ func (c *clusterClient) DownloadBlob(ctx context.Context, namespace string, d co
 		span.SetStatus(codes.Ok, "download completed")
 		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Debug("Blob download succeeded")
 	}
+	return err
+}
+
+// DownloadBlobRange pulls [offset, offset+length) of a blob from the origin
+// cluster. Rejects length up front against core.MaxBlobRangeLength -- the
+// same cap the server enforces -- so a caller-controlled scratch buffer is
+// never allocated for a request the server would reject anyway.
+func (c *clusterClient) DownloadBlobRange(
+	ctx context.Context, namespace string, d core.Digest, offset, length int64, dst io.Writer) error {
+
+	if length > core.MaxBlobRangeLength {
+		return fmt.Errorf("range length %d exceeds max %d", length, core.MaxBlobRangeLength)
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, length))
+	if err := Poll(c.resolver, c.rangePollBackOff(), d, func(client Client) error {
+		buf.Reset()
+		return client.DownloadBlobRange(ctx, namespace, d, offset, length, buf)
+	}); err != nil {
+		return err
+	}
+	_, err := io.Copy(dst, buf)
 	return err
 }
 

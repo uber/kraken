@@ -25,7 +25,7 @@ func newCompletenessAssignmentPolicy() assignmentPolicy {
 	return &completenessAssignmentPolicy{}
 }
 
-func (p *completenessAssignmentPolicy) assignPriority(peer *core.PeerInfo) (int, string) {
+func (p *completenessAssignmentPolicy) assignPriority(peer *core.PeerInfo, requested []int) (int, string) {
 	if peer.Origin {
 		return 1, "origin"
 	}

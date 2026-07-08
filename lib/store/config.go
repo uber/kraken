@@ -43,6 +43,11 @@ type CAStoreConfig struct {
 	Capacity      int           `yaml:"capacity"`
 	UploadCleanup CleanupConfig `yaml:"upload_cleanup"`
 	CacheCleanup  CleanupConfig `yaml:"cache_cleanup"`
+	// DownloadDir, if set, enables the third (download) state used by origin
+	// for lazily range-fetched partial blobs. Empty on the agent, which
+	// doesn't use CAStore at all.
+	DownloadDir     string        `yaml:"download_dir"`
+	DownloadCleanup CleanupConfig `yaml:"download_cleanup"`
 	// Part size limit for each file read. 0 means no limit.
 	ReadPartSize int `yaml:"read_part_size"`
 	// Part size limit for each file write. 0 means no limit.
