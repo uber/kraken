@@ -11,7 +11,7 @@ mkdir /tmp/apt-recovery && cd /tmp/apt-recovery
 APT_FILE=$(wget -qO- http://ftp.debian.org/debian/pool/main/a/apt/ | grep -o 'apt_2.6[^"]*_amd64\.deb' | tail -n 1)
 wget "http://ftp.debian.org/debian/pool/main/a/apt/$APT_FILE"
 
-dpkg -i "$APT_FILE"
+dpkg -i "$APT_FILE" || true
 
 KEYRING_FILE=$(wget -qO- http://ftp.debian.org/debian/pool/main/d/debian-archive-keyring/ | grep -o 'debian-archive-keyring_[^"]*_all\.deb' | tail -n 1)
 wget "http://ftp.debian.org/debian/pool/main/d/debian-archive-keyring/$KEYRING_FILE"
@@ -26,8 +26,9 @@ deb http://deb.debian.org/debian-security bookworm-security main
 deb http://deb.debian.org/debian bookworm-updates main
 EOF
 
-apt-get update && apt-get install fuse
+apt-get update && apt-get install -y fuse
 
+curl -Lo stargz-snapshotter-v0.18.2-linux-amd64.tar.gz https://github.com/containerd/stargz-snapshotter/releases/download/v0.18.2/stargz-snapshotter-v0.18.2-linux-amd64.tar.gz
 tar -C /usr/local/bin -xvf stargz-snapshotter-v0.18.2-linux-amd64.tar.gz containerd-stargz-grpc ctr-remote
 
 # Register the stargz snapshotter proxy plugin with containerd (idempotent).

@@ -90,6 +90,7 @@ ctr-remote image optimize --oci \
     --zstdchunked-compression-level=15 \
     --period="$PERIOD" \
     --cwd="$CWD" \
+    --record-out=/home/prodadmin/optimized-output.json \
     "${ENV_ARGS[@]}" \
     --entrypoint="$ENTRYPOINT" \
     --args="$ARGS_REST" \

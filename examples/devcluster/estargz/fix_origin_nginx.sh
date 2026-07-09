@@ -7,7 +7,18 @@
 set -eu
 
 ZONE="${1:-dev7}"
-HOSTS=(dev7-c6 dev7-he dev7-hi)
+host_group="kraken-master"
+
+list-kraken-master-hosts() {
+  lzc="lzc"
+  if echo "$ZONE" | grep -q "dev"; then
+    lzc="lzc-crane"
+  fi
+
+  "$lzc" host list -z "$ZONE" -g "$host_group" --format H
+}
+
+mapfile -t HOSTS < <(list-kraken-master-hosts)
 
 fix_nginx() {
     local container="$1" conf="$2"
