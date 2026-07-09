@@ -203,16 +203,27 @@ func (u *casUploads) move(uploadPath, blobPath string) error {
 	if err != nil {
 		return fmt.Errorf("get blob uuid: %s", err)
 	}
-	if err := u.cas.MoveUploadFileToCache(uuid, d.Hex()); err != nil {
-		return fmt.Errorf("move upload file to cache: %w", err)
-	}
-	f, err := u.cas.GetCacheFileReader(d.Hex())
+	// Upload to the origin cluster before promoting into the local cache --
+	// otherwise a failed origin upload still leaves the blob looking
+	// complete to future Stat calls against this proxy's local cache,
+	// permanently masking the failure (the blob never actually reaches any
+	// origin, but is never retried either).
+	f, err := u.cas.GetUploadFileReader(uuid)
 	if err != nil {
-		return fmt.Errorf("get cache file: %w", err)
+		return fmt.Errorf("get upload file: %w", err)
 	}
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.With("uuid", uuid, "digest", d).Error(err)
+		}
+	}()
 	if err := u.transferer.Upload("TODO", d, f); err != nil {
 		log.With("uuid", uuid, "digest", d).Errorf("Failed to upload blob: %s", err)
 		return fmt.Errorf("upload: %w", err)
+	}
+	if err := u.cas.MoveUploadFileToCache(uuid, d.Hex()); err != nil {
+		return fmt.Errorf("move upload file to cache: %w", err)
 	}
 	log.With("uuid", uuid, "digest", d).Debug("Blob uploaded")
 	return nil
