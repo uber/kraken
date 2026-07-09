@@ -30,7 +30,52 @@ apt-get update && apt-get install fuse
 
 tar -C /usr/local/bin -xvf stargz-snapshotter-v0.18.2-linux-amd64.tar.gz containerd-stargz-grpc ctr-remote
 
-# Edit containerd config also
+# Register the stargz snapshotter proxy plugin with containerd (idempotent).
+# Does NOT change plugins.cri.containerd.snapshotter -- that stays "overlayfs"
+# so the baseline leg is unaffected; nerdctl selects --snapshotter=stargz
+# per-pull for the lazy leg.
+if ! grep -q '\[proxy_plugins.stargz\]' /etc/containerd/config.toml; then
+  cp /etc/containerd/config.toml /etc/containerd/config.toml.bak
+  cat <<EOF >> /etc/containerd/config.toml
+
+[proxy_plugins]
+  [proxy_plugins.stargz]
+    type = "snapshot"
+    address = "/run/containerd-stargz-grpc/containerd-stargz-grpc.sock"
+  [proxy_plugins.stargz.exports]
+    root = "/var/lib/containerd-stargz-grpc/"
+EOF
+fi
+
+# containerd-stargz-grpc's own config -- points it at the same Kraken
+# registry mirror already configured in containerd's
+# plugins.cri.registry.mirrors."127.0.0.1:5055" above.
+#
+# [blob] controls retries for actual chunk/blob fetch requests (the lazy-read
+# data path) -- fs/config/config.go's BlobConfig: max_retries (default 5),
+# min_wait_msec/max_wait_msec (backoff bounds, default 30/30).
+#
+# [resolver] controls the manifest/blob-descriptor resolve requests against
+# the mirror host -- service/resolver/registry.go's Config. Its HTTP client
+# retries automatically via hashicorp/go-retryablehttp regardless of config;
+# request_timeout_sec is the only tunable there.
+mkdir -p /etc/containerd-stargz-grpc
+cat <<EOF > /etc/containerd-stargz-grpc/config.toml
+[blob]
+  max_retries = 5
+  min_wait_msec = 30
+  max_wait_msec = 500
+
+[resolver]
+  request_timeout_sec = 50
+
+  [resolver.host]
+    [resolver.host."127.0.0.1:5055"]
+      [[resolver.host."127.0.0.1:5055".mirrors]]
+        host = "127.0.0.1:5055"
+        insecure = true
+        request_timeout_sec = 50
+EOF
 
 wget -O /etc/systemd/system/stargz-snapshotter.service https://raw.githubusercontent.com/containerd/stargz-snapshotter/main/script/config/etc/systemd/system/stargz-snapshotter.service
 systemctl enable --now stargz-snapshotter
