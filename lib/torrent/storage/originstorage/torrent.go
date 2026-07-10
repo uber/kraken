@@ -193,7 +193,14 @@ type downloadOpener struct {
 }
 
 func (o *downloadOpener) Open() (store.FileReader, error) {
-	return o.torrent.cas.GetDownloadFileReader(o.torrent.Digest().Hex())
+	r, err := o.torrent.cas.GetDownloadFileReader(o.torrent.Digest().Hex())
+	if o.torrent.cas.InCacheError(err) {
+		// The last piece completed and promoted the download file to cache
+		// between GetPieceReader constructing this reader and it actually
+		// being opened here -- the blob is now fully in cache, read from there.
+		return o.torrent.cas.GetCacheFileReader(o.torrent.Digest().Hex())
+	}
+	return r, err
 }
 
 // GetPieceReader returns a reader for piece pi. In partial mode the piece is
