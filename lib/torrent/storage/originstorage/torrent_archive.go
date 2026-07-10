@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
@@ -39,6 +40,9 @@ type TorrentArchive struct {
 	backends         *backend.Manager
 	blobRefresher    *blobrefresh.Refresher
 	fetchConcurrency int
+
+	mu       sync.Mutex
+	partials map[core.Digest]*Torrent // In-flight cold torrents, shared across callers.
 }
 
 // NewTorrentArchive creates a new TorrentArchive. fetchConcurrency bounds how
@@ -50,7 +54,13 @@ func NewTorrentArchive(
 	blobRefresher *blobrefresh.Refresher,
 	fetchConcurrency int) *TorrentArchive {
 
-	return &TorrentArchive{cas, backends, blobRefresher, fetchConcurrency}
+	return &TorrentArchive{
+		cas:              cas,
+		backends:         backends,
+		blobRefresher:    blobRefresher,
+		fetchConcurrency: fetchConcurrency,
+		partials:         make(map[core.Digest]*Torrent),
+	}
 }
 
 // loadMetaInfo returns the metainfo for d. When the blob is not in the local
@@ -132,22 +142,68 @@ func (a *TorrentArchive) CreateTorrent(namespace string, d core.Digest) (storage
 // Torrent backed by lazy backend range-fetches when the blob is cold. If the
 // blob is neither cached nor available as a cold sidecar, attempts to re-fetch
 // it in a background goroutine and returns an error.
+//
+// Cold/partial torrents are shared across concurrent callers of the same
+// digest (background fetches, live P2P peer serving, range reads) so they
+// coordinate piece state and cache promotion through one instance instead of
+// racing independent ones -- see maybePromoteToCache/MoveDownloadFileToCache.
 func (a *TorrentArchive) GetTorrent(namespace string, d core.Digest) (storage.Torrent, error) {
 	mi, rd, err := a.loadMetaInfo(namespace, d)
 	if err != nil {
 		return nil, err
 	}
-	if rd != nil {
-		t, err := NewPartialTorrent(a.cas, rd, namespace, mi, a.fetchConcurrency)
+	if rd == nil {
+		// Warm: already fully cached. Stateless read, no coordination needed.
+		t, err := NewTorrent(a.cas, mi)
 		if err != nil {
-			return nil, fmt.Errorf("initialize partial torrent: %s", err)
+			return nil, fmt.Errorf("initialize torrent: %s", err)
 		}
 		return t, nil
 	}
-	t, err := NewTorrent(a.cas, mi)
-	if err != nil {
-		return nil, fmt.Errorf("initialize torrent: %s", err)
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if t, ok := a.partials[d]; ok {
+		if t.numComplete.Load() != int32(t.NumPieces()) {
+			return t, nil
+		}
+		// Already fully fetched by a previous caller (and promoted to cache
+		// via maybePromoteToCache) -- evict so this call falls through and
+		// re-runs loadMetaInfo's cache-hit path instead of reading a stale
+		// download file that's already been moved away.
+		delete(a.partials, d)
+		return a.getTorrentLocked(namespace, d)
 	}
+	return a.newPartialTorrentLocked(namespace, d, mi, rd)
+}
+
+// getTorrentLocked re-resolves d from scratch while a.mu is already held,
+// following a stale-partial eviction in GetTorrent.
+func (a *TorrentArchive) getTorrentLocked(namespace string, d core.Digest) (storage.Torrent, error) {
+	mi, rd, err := a.loadMetaInfo(namespace, d)
+	if err != nil {
+		return nil, err
+	}
+	if rd == nil {
+		t, err := NewTorrent(a.cas, mi)
+		if err != nil {
+			return nil, fmt.Errorf("initialize torrent: %s", err)
+		}
+		return t, nil
+	}
+	return a.newPartialTorrentLocked(namespace, d, mi, rd)
+}
+
+// newPartialTorrentLocked constructs and registers a new partial torrent for
+// d. a.mu must be held, and a.partials[d] must not already exist.
+func (a *TorrentArchive) newPartialTorrentLocked(
+	namespace string, d core.Digest, mi *core.MetaInfo, rd backend.RangeDownloader) (storage.Torrent, error) {
+
+	t, err := NewPartialTorrent(a.cas, rd, namespace, mi, a.fetchConcurrency)
+	if err != nil {
+		return nil, fmt.Errorf("initialize partial torrent: %s", err)
+	}
+	a.partials[d] = t
 	return t, nil
 }
 
