@@ -348,18 +348,22 @@ func (s *Server) downloadBlobRange(namespace string, d core.Digest, offset, leng
 	pl := info.PieceLength()
 	scope := fmt.Sprintf("%d-%d", offset/pl, (offset+length-1)/pl)
 	err = s.blobRefresher.TriggerBackground(d, scope, func() error {
-		br, err := s.sched.DownloadReader(namespace, d)
+		t, err := s.torrentArchive.GetTorrent(namespace, d)
 		if err != nil {
 			return err
 		}
-		defer func() {
-			err := br.Close()
+		for i := 0; i < t.NumPieces(); i++ {
+			pr, err := t.GetPieceReader(i)
 			if err != nil {
-				log.Error(err)
+				return err
 			}
-		}()
-		_, err = io.CopyN(io.Discard, io.NewSectionReader(br, offset, length), length)
-		return err
+			_, err = io.Copy(io.Discard, pr)
+			closers.Close(pr)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	switch err {
 	case blobrefresh.ErrPending, nil:
@@ -725,26 +729,32 @@ func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) er
 	return nil
 }
 
-// triggerSchedulerDownload joins the scheduler's live torrent for d instead
-// of a second, uncoordinated backend fetch: without this, a cold blob that a
-// P2P peer is already lazily range-fetching via the scheduler would also get
+// triggerSchedulerDownload forces a full fetch of d's cold/partial torrent
+// from the backend instead of a second, uncoordinated fetch: without this, a
+// cold blob that a P2P peer is already lazily range-fetching would also get
 // pulled a second time straight from the backend by startRemoteBlobDownload.
-// Mirrors startRemoteBlobDownload's pending/busy/error contract and runs the
-// same local-replication hook on success.
+// Uses GetTorrent (not the scheduler's DownloadReader/CreateTorrent, which
+// are agent-only -- origin's TorrentArchive.CreateTorrent is unsupported by
+// design) and drains every piece directly; per-piece backend-fetch dedup is
+// already handled inside GetPieceReader. Mirrors startRemoteBlobDownload's
+// pending/busy/error contract and runs the same local-replication hook on
+// success.
 func (s *Server) triggerSchedulerDownload(namespace string, d core.Digest) error {
 	err := s.blobRefresher.TriggerBackground(d, "", func() error {
-		br, err := s.sched.DownloadReader(namespace, d)
+		t, err := s.torrentArchive.GetTorrent(namespace, d)
 		if err != nil {
 			return err
 		}
-		defer func() {
-			err := br.Close()
+		for i := 0; i < t.NumPieces(); i++ {
+			pr, err := t.GetPieceReader(i)
 			if err != nil {
-				log.Error(err)
+				return err
 			}
-		}()
-		if _, err := io.Copy(io.Discard, br); err != nil {
-			return err
+			_, err = io.Copy(io.Discard, pr)
+			closers.Close(pr)
+			if err != nil {
+				return err
+			}
 		}
 		(&localReplicationHook{s}).Run(d)
 		return nil
