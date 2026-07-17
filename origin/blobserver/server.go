@@ -559,7 +559,13 @@ func (s *Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 func (s *Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
 	var tm metadata.TorrentMeta
 	err := s.cas.GetCacheFileMetadata(d.Hex(), &tm)
-	if os.IsNotExist(err) {
+	// GetCacheFileMetadata only accepts cache-state files. A digest with an
+	// in-flight (or leftover) partial download is found in download state
+	// instead, which fails as a FileStateError rather than os.ErrNotExist --
+	// treat it the same as a cache miss so we fall through to the cold sidecar
+	// path below instead of returning a fatal 500 (mirrors the same fix in
+	// TorrentArchive.loadMetaInfo).
+	if os.IsNotExist(err) || s.cas.InDownloadError(err) {
 		if mi, ok := s.coldMetaInfoFromSidecar(namespace, d); ok {
 			log.With("namespace", namespace, "digest", d.Hex()).
 				Debug("Serving cold metainfo from backend sidecar")
