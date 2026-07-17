@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/uber/kraken/core"
@@ -91,8 +92,16 @@ func NewPartialTorrent(
 	if fetchConcurrency <= 0 {
 		fetchConcurrency = _defaultFetchConcurrency
 	}
+	// A download-state file for this digest can already exist here -- not
+	// just from a wrong-state race (InDownloadError/InCacheError), but also
+	// from the legacy whole-blob refresh path (blobrefresh.Refresher, driven
+	// by Server.startRemoteBlobDownload) independently creating the same
+	// digest's download file concurrently, which CreateDownloadFile reports
+	// as a plain os.ErrExist rather than a *base.FileStateError. Tolerate it
+	// the same way: restorePieces below recovers whichever pieces either
+	// writer has already completed on the shared file.
 	if err := cas.CreateDownloadFile(mi.Digest().Hex(), mi.Length()); err != nil &&
-		!cas.InDownloadError(err) && !cas.InCacheError(err) {
+		!cas.InDownloadError(err) && !cas.InCacheError(err) && !os.IsExist(err) {
 		return nil, fmt.Errorf("create download file: %s", err)
 	}
 	pieces, numComplete, err := restorePieces(mi.Digest(), cas, mi.NumPieces())

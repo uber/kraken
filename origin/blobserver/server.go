@@ -781,6 +781,11 @@ func (s *Server) triggerSchedulerDownload(namespace string, d core.Digest) error
 func (s *Server) prefetchBlob(namespace string, d core.Digest) error {
 	f, err := s.cas.GetCacheFileReader(d.Hex())
 	if os.IsNotExist(err) {
+		if s.torrentArchive.CanStreamCold(namespace, d) {
+			log.With("namespace", namespace, "digest", d.Hex()).
+				Info("Blob not in cache, triggering scheduler-coordinated download")
+			return s.triggerSchedulerDownload(namespace, d)
+		}
 		log.With("namespace", namespace, "digest", d.Hex()).
 			Info("Blob not in cache, initiating download from backend")
 		return s.startRemoteBlobDownload(namespace, d, true)

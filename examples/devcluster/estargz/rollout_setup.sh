@@ -16,7 +16,7 @@ list-zone-hosts() {
     lzc="lzc-crane"
   fi
 
-  "$lzc" host list -z "$ZONE" --format H
+  "$lzc" host list -z "$ZONE" -g "kubernetes-stateless01-az-seed-kubelet" --format H
 }
 
 mapfile -t HOSTS < <(list-zone-hosts)
@@ -35,4 +35,4 @@ setup-host() {
 export -f setup-host
 export SETUP_SCRIPT
 
-printf '%s\n' "${HOSTS[@]}" | xargs -P 10 -I{} bash -c 'setup-host "$@"' _ {}
+printf '%s\n' "${HOSTS[@]}" | xargs -P 3 -I{} bash -c 'setup-host "$@"' _ {}
