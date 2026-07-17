@@ -76,7 +76,12 @@ func (a *TorrentArchive) loadMetaInfo(
 	if err == nil {
 		return tm.MetaInfo, nil, nil
 	}
-	if !os.IsNotExist(err) {
+	// GetCacheFileMetadata only accepts cache-state files. A digest with an
+	// in-flight (or leftover) partial download is found in download state
+	// instead, which fails as a FileStateError rather than os.ErrNotExist --
+	// treat it the same as a cache miss so we fall through to the cold path
+	// below and share the in-flight partial torrent (see GetTorrent).
+	if !os.IsNotExist(err) && !a.cas.InDownloadError(err) {
 		return nil, nil, err
 	}
 	if mi, rd, ok := a.coldMetaInfo(namespace, d); ok {
@@ -209,12 +214,16 @@ func (a *TorrentArchive) newPartialTorrentLocked(
 
 // DeleteTorrent moves a torrent to the trash. Also cleans up any lingering
 // cold/partial download-state file, since a cold torrent never lands in cas
-// until it's fully promoted.
+// until it's fully promoted. d may be in either state (or both, transiently,
+// mid-promotion), so a state mismatch on either call is not an error -- the
+// other call handles whichever state d actually turns out to be in.
 func (a *TorrentArchive) DeleteTorrent(d core.Digest) error {
-	if err := a.cas.DeleteCacheFile(d.Hex()); err != nil && !os.IsNotExist(err) {
+	if err := a.cas.DeleteCacheFile(d.Hex()); err != nil &&
+		!os.IsNotExist(err) && !a.cas.InDownloadError(err) {
 		return err
 	}
-	if err := a.cas.DeleteDownloadFile(d.Hex()); err != nil && !os.IsNotExist(err) {
+	if err := a.cas.DeleteDownloadFile(d.Hex()); err != nil &&
+		!os.IsNotExist(err) && !a.cas.InCacheError(err) {
 		return err
 	}
 	return nil

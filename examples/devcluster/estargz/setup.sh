@@ -62,20 +62,27 @@ fi
 # request_timeout_sec is the only tunable there.
 mkdir -p /etc/containerd-stargz-grpc
 cat <<EOF > /etc/containerd-stargz-grpc/config.toml
-[blob]
-  max_retries = 5
-  min_wait_msec = 30
-  max_wait_msec = 500
+debug = true
+noprefetch = false
+no_background_fetch = false
+max_concurrency = 1
+prefetch_timeout_sec = 300
 
 [resolver]
-  request_timeout_sec = 50
+  request_timeout_sec = 300
 
-  [resolver.host]
-    [resolver.host."127.0.0.1:5055"]
-      [[resolver.host."127.0.0.1:5055".mirrors]]
-        host = "127.0.0.1:5055"
-        insecure = true
-        request_timeout_sec = 50
+  [[resolver.host."127.0.0.1:5055".mirrors]]
+    host = "127.0.0.1:5055"
+    insecure = true
+    request_timeout_sec = 300
+
+[blob]
+max_retries = 10
+min_wait_msec = 1000
+max_wait_msec = 15000
+fetching_timeout_sec = 600
+check_always = true
+force_single_range_mode = true
 EOF
 
 wget -O /etc/systemd/system/stargz-snapshotter.service https://raw.githubusercontent.com/containerd/stargz-snapshotter/main/script/config/etc/systemd/system/stargz-snapshotter.service
