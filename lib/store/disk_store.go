@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 
 	"github.com/uber/kraken/lib/store/metadata"
@@ -26,6 +27,7 @@ const (
 	_incompleteBlob         = false
 	_defaultFilePerm        = 0775
 	_evictionBannedFileName = "_eviction_banned"
+	_blobSizeFileName       = "_size"
 )
 
 // DiskStore is a key-value, persistent, thread-safe, LRU store for blobs and their [metadata.Metadata].
@@ -47,8 +49,11 @@ type DiskStore struct {
 	blobs      map[string]*blob // TODO - consider whether it's better to use struct instead of pointer to reduce GC stress.
 	evictQueue *list.List       // Back is most recently used, front is the next to evict.
 	// synchronizes mem state access and syscalls to the fs in the APIs (opening, moving files, etc.)
-	mu  sync.RWMutex // TODO - evaluate whether the read-to-write ratio is more appropriate for a [sync.Mutex] instead.
-	log *zap.SugaredLogger
+	mu sync.RWMutex // TODO - evaluate whether the read-to-write ratio is more appropriate for a [sync.Mutex] instead.
+	// If enabled, incomplete blobs are rebooted in the store upon restart (or after a crash), allowing users to continue using the blob.
+	// If disabled, incomplete blobs are discarded (usually done to prevent leaks).
+	rebootIncompleteBlobs bool
+	log                   *zap.SugaredLogger
 	*pather
 }
 
@@ -62,43 +67,42 @@ type blob struct {
 // NewDiskStore initializes a new [*DiskStore]. If the store has been initialized in the same
 // directory before, its state is recovered from disk with the following caveats:
 //
-//   - incomplete blobs are deleted to prevent leaks, in case the clients have crashed.
+//   - `rebootIncompleteBlobs` configures whether incomplete blobs are evicted or rebooted on restart.
 //
-//   - the blobs' sizes are recovered from disk, which may differ from the client-provided sizes in Create. This is not a problem.
-//
-//   - if the store's size is bigger than its capacity (e.g. configured capacity has been reduced or files have been leaked),
+//   - If the store's size is bigger than its capacity (e.g. configured capacity has been reduced or files have been leaked),
 //     it evicts blobs until size is within capacity.
-func NewDiskStore(capacityBytes uint64, rootDir string) (*DiskStore, error) {
+func NewDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool) (*DiskStore, error) {
 	// TODO - create a Config struct.
 	// TODO - consider how to support blob mutation, which might be needed by build-index for tag mutation.
 	// TODO - move disk store files into their own directory and package.
 
 	log := log.Default().With("module", "disk_store")
-	ok, err := existsPersistedState(rootDir)
+	ok, err := existsPersistedStore(rootDir)
 	if err != nil {
 		err = fmt.Errorf("could not check if previously-left persisted state exists on disk: %w", err)
 		log.With("error", err).Error("Failed to initialize disk store")
 		return nil, err
 	}
 	if !ok {
-		log.Info("Did not find any previously persisted state to reboot for DiskStore - initializing a new, empty DiskStore")
+		log.Info("Initialized a new, empty DiskStore (did not find any previously persisted state to reboot for DiskStore)")
 		return &DiskStore{
-			capacity:   capacityBytes,
-			size:       0,
-			blobs:      make(map[string]*blob),
-			evictQueue: list.New(),
-			log:        log,
-			pather:     newPather(rootDir),
+			capacity:              capacityBytes,
+			size:                  0,
+			blobs:                 make(map[string]*blob),
+			evictQueue:            list.New(),
+			log:                   log,
+			pather:                newPather(rootDir),
+			rebootIncompleteBlobs: rebootIncompleteBlobs,
 		}, nil
 	}
 
-	store, err := rebootPersistedStateAfterCrash(capacityBytes, rootDir, log)
+	store, err := rebootPersistedStore(capacityBytes, rootDir, rebootIncompleteBlobs, log)
 	if err != nil {
 		err = fmt.Errorf("reboot persisted state into memory: %w", err)
 		log.With("error", err).Error("Failed to initialize disk store")
 		return nil, err
 	}
-	log.With("num_blobs", len(store.blobs)).Info("Successfully initialized disk store")
+	log.With("num_blobs", len(store.blobs)).Info("Successfully rebooted DiskStore's previously left state on disk")
 	return store, nil
 }
 
@@ -120,7 +124,7 @@ func (s *DiskStore) Open(key string, ignoreIncomplete bool) (FileReadWriter, err
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
-	return newReadWriter(f, b.size), nil
+	return newReadWriter(f), nil
 }
 
 // Stat returns [os.FileInfo] about the blob. Returns [os.ErrNotExists] if the blob is not found.
@@ -173,6 +177,14 @@ func (s *DiskStore) Create(key string, sizeBytes uint64) (FileReadWriter, error)
 		return nil, fmt.Errorf("open file: %w", err)
 	}
 
+	if s.rebootIncompleteBlobs {
+		err = s.persistBlobSize(key, sizeBytes)
+		if err != nil {
+			// Fail-open: the blob will be discarded upon reboot if incomplete.
+			s.log.With("error", err).Error("Could not persist client-provided blob size on disk")
+		}
+	}
+
 	s.blobs[key] = &blob{
 		size:           sizeBytes,
 		node:           nil,
@@ -180,10 +192,25 @@ func (s *DiskStore) Create(key string, sizeBytes uint64) (FileReadWriter, error)
 		evictionBanned: false,
 	}
 
-	return newReadWriter(f, sizeBytes), nil
+	return newReadWriter(f), nil
+}
+
+func (s *DiskStore) persistBlobSize(key string, sizeBytes uint64) error {
+	blobSizeFilePath := s.sidecarFilePath(key, _incompleteBlob, _blobSizeFileName)
+	blobSizeF, err := os.OpenFile(blobSizeFilePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, _defaultFilePerm)
+	if err != nil {
+		return fmt.Errorf("create file: %w", err)
+	}
+	_, err = blobSizeF.Write([]byte(strconv.Itoa(int(sizeBytes))))
+	if err != nil {
+		return fmt.Errorf("write to size file: %w", err)
+	}
+	closers.Close(blobSizeF)
+	return nil
 }
 
 func (s *DiskStore) reserveSpace(space uint64) error {
+	// TODO - benchmark and consider whether async eviction makes more sense.
 	// TODO - emit latency to reserve space for a blob.
 	for s.size+space > s.capacity {
 		if s.evictQueue.Len() == 0 {

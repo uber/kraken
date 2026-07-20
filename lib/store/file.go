@@ -25,10 +25,9 @@ type FileReadWriter = base.FileReadWriter
 // FileReader is a read-only file.
 type FileReader = base.FileReader
 
-func newReadWriter(f *os.File, size uint64) FileReadWriter {
+func newReadWriter(f *os.File) FileReadWriter {
 	return &rwImpl{
 		File: f,
-		size: int64(size),
 	}
 }
 
@@ -36,12 +35,15 @@ var _ FileReadWriter = &rwImpl{}
 
 type rwImpl struct {
 	*os.File
-	size int64
 }
 
-// Size returns the full size of the blob in bytes, even if the blob is not fully written yet.
+// Size returns the number of bytes the file contains.
 func (i *rwImpl) Size() int64 {
-	return i.size
+	info, err := i.Stat()
+	if err != nil {
+		return 0
+	}
+	return info.Size()
 }
 
 // Cancel is supposed to remove any written content.

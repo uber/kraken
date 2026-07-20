@@ -40,7 +40,7 @@ func (p *pather) dirPath(key string, complete bool) string {
 	return filepath.Join(dirPath, key)
 }
 
-func (p *pather) sidecarFilePath(key string, complete bool, sidecarFilePath string) string {
+func (p *pather) sidecarFilePath(key string, complete bool, sidecarFileName string) string {
 	dirPath := p.dirPath(key, complete)
-	return filepath.Join(dirPath, sidecarFilePath)
+	return filepath.Join(dirPath, sidecarFileName)
 }
