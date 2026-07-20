@@ -4,13 +4,16 @@ import (
 	"container/list"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/uber/kraken/utils/closers"
 	"go.uber.org/zap"
 )
 
@@ -21,58 +24,68 @@ type blobState struct {
 	size      uint64
 	mTime     time.Time
 	evictable bool
+	complete  bool
 }
 
-func rebootPersistedStateAfterCrash(capacityBytes uint64, rootDir string, log *zap.SugaredLogger) (*DiskStore, error) {
+func rebootPersistedStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool, log *zap.SugaredLogger) (*DiskStore, error) {
 	completeDirPath, incompleteDirPath := filepath.Join(rootDir, _completeSubDir), filepath.Join(rootDir, _incompleteSubDir)
-
-	// We remove incomplete entries, as we expect the processes/clients who were writing to
-	// these entries to also have crashed, which would leak the files on disk.
-	err := os.RemoveAll(incompleteDirPath)
-	if err != nil {
-		return nil, fmt.Errorf("remove incomplete blobs left from a previous service run: %w", err)
+	if !rebootIncompleteBlobs {
+		err := os.RemoveAll(incompleteDirPath)
+		if err != nil {
+			return nil, fmt.Errorf("remove incomplete blobs left from a previous service run: %w", err)
+		}
 	}
+
 	keys, err := rebootKeys(completeDirPath)
 	if err != nil {
 		return nil, err
 	}
-	pather := newPather(rootDir)
+	numCompleteBlobs := len(keys)
+	if rebootIncompleteBlobs {
+		incompleteKeys, err := rebootKeys(incompleteDirPath)
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, incompleteKeys...)
+	}
 
-	evictableEntries := make([]*blobState, 0)
-	unevictableEntries := make([]*blobState, 0)
-	for _, key := range keys {
-		bState, ok, err := rebootBlobState(key, pather)
+	pather := newPather(rootDir)
+	completeEvictableEntries := make([]*blobState, 0)
+	otherEntries := make([]*blobState, 0)
+	for i, key := range keys {
+		complete := i < numCompleteBlobs
+		bState, ok, err := rebootBlobState(key, complete, pather)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
 			continue
 		}
-		if bState.evictable {
-			evictableEntries = append(evictableEntries, bState)
+		if bState.complete && bState.evictable {
+			completeEvictableEntries = append(completeEvictableEntries, bState)
 		} else {
-			unevictableEntries = append(unevictableEntries, bState)
+			otherEntries = append(otherEntries, bState)
 		}
 	}
 
 	storeSize := uint64(0)
 	blobs := make(map[string]*blob, 0)
-	for _, bState := range unevictableEntries {
+	for _, bState := range otherEntries {
 		blobs[bState.key] = &blob{
 			size:           bState.size,
-			complete:       true,
+			complete:       bState.complete,
+			evictionBanned: !bState.evictable,
 			node:           nil,
-			evictionBanned: true,
 		}
 		storeSize += bState.size
 	}
 
-	slices.SortFunc(evictableEntries, func(left, right *blobState) int {
+	slices.SortFunc(completeEvictableEntries, func(left, right *blobState) int {
 		// left-most is oldest, i.e. next-to-evict.
 		return left.mTime.Compare(right.mTime)
 	})
 	evictQueue := list.New()
-	for _, bState := range evictableEntries {
+	for _, bState := range completeEvictableEntries {
 		node := evictQueue.PushBack(bState.key)
 		blobs[bState.key] = &blob{
 			size:           bState.size,
@@ -84,12 +97,13 @@ func rebootPersistedStateAfterCrash(capacityBytes uint64, rootDir string, log *z
 	}
 
 	store := &DiskStore{
-		blobs:      blobs,
-		evictQueue: evictQueue,
-		capacity:   capacityBytes,
-		pather:     pather,
-		size:       storeSize,
-		log:        log,
+		blobs:                 blobs,
+		evictQueue:            evictQueue,
+		capacity:              capacityBytes,
+		pather:                pather,
+		size:                  storeSize,
+		rebootIncompleteBlobs: rebootIncompleteBlobs,
+		log:                   log,
 	}
 
 	if store.size > store.capacity {
@@ -98,43 +112,84 @@ func rebootPersistedStateAfterCrash(capacityBytes uint64, rootDir string, log *z
 		err = store.reserveSpace(0)
 		if err != nil {
 			log.With("error", err).Error("DiskStore size exceeds its capacity after service reboot. Evicting blobs from disk did not work to reduce size within capacity.")
-			return nil, fmt.Errorf("remove blobs to reduce store size within configured capacity")
+			return nil, fmt.Errorf("remove blobs to reduce store size within configured capacity: %w", err)
 		}
 		evictedBytes := prevSize - store.size
-		log.With("evicted_bytes", evictedBytes).Warn("DiskStore size exceeds its capacity after service reboot. Successfully evicted blobs to reduce size within capacity.")
+		log.With("evicted_bytes", evictedBytes).Warn("DiskStore size exceeded its capacity after service reboot. Successfully evicted blobs to reduce size within capacity.")
 	}
 	return store, nil
 }
 
-func rebootBlobState(key string, pather *pather) (res *blobState, ok bool, err error) {
-	complete := true
+func rebootBlobState(key string, complete bool, pather *pather) (res *blobState, ok bool, err error) {
 	blobPath := pather.blobPath(key, complete)
 	fInfo, err := os.Stat(blobPath)
 	if errors.Is(err, os.ErrNotExist) {
-		// For some reason, the directory for the blob exists but not the blob itself.
-		return nil, true, nil
+		// The directory for the blob exists but not the blob itself.
+		return nil, false, nil
 	}
 	if err != nil {
 		return nil, false, fmt.Errorf("stat blob entry: %w", err)
 	}
+
 	flagBlobPath := pather.sidecarFilePath(key, complete, _evictionBannedFileName)
 	isUnevictable, err := exists(flagBlobPath)
 	if err != nil {
 		return nil, false, err
 	}
-	size := fInfo.Size()
+	var size uint64
+	if complete {
+		size = uint64(fInfo.Size())
+	} else {
+		size, ok, err = rebootIncompleteBlobSize(key, pather)
+		if err != nil {
+			return nil, false, fmt.Errorf("get incomplete blob size from sidecar file: %w", err)
+		}
+		if !ok {
+			return nil, false, nil
+		}
+	}
 	mTime := fInfo.ModTime()
 	return &blobState{
 		key:       key,
-		size:      uint64(size),
+		size:      size,
 		mTime:     mTime,
 		evictable: !isUnevictable,
+		complete:  complete,
 	}, true, nil
 }
 
-func rebootKeys(completeDirPath string) ([]string, error) {
+func rebootIncompleteBlobSize(key string, pather *pather) (size uint64, ok bool, err error) {
+	blobSizeFilePath := pather.sidecarFilePath(key, _incompleteBlob, _blobSizeFileName)
+	blobSizeF, err := os.OpenFile(blobSizeFilePath, os.O_RDONLY, _defaultFilePerm)
+	if errors.Is(err, os.ErrNotExist) {
+		// The size metadata file is not present, we fail-open by evicting the blob.
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("open blob size sidecar file: %w", err)
+	}
+	blobSizeData, err := io.ReadAll(blobSizeF)
+	if err != nil {
+		return 0, false, fmt.Errorf("read blob size sidecar file: %w", err)
+	}
+	blobSize, err := strconv.Atoi(string(blobSizeData))
+	if err != nil {
+		return 0, false, fmt.Errorf("blob size sidecar file is in unexpected format: %w", err)
+	}
+	closers.Close(blobSizeF)
+	return uint64(blobSize), true, nil
+}
+
+func rebootKeys(subDir string) ([]string, error) {
 	keys := make([]string, 0)
-	err := filepath.WalkDir(completeDirPath, func(path string, entry fs.DirEntry, err error) error {
+	ok, err := exists(subDir)
+	if err != nil {
+		return nil, fmt.Errorf("exists: %w", err)
+	}
+	if !ok {
+		return []string{}, nil
+	}
+	err = filepath.WalkDir(subDir, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -142,7 +197,7 @@ func rebootKeys(completeDirPath string) ([]string, error) {
 		if !entry.IsDir() {
 			return nil
 		}
-		relPath, err := filepath.Rel(completeDirPath, path)
+		relPath, err := filepath.Rel(subDir, path)
 		if err != nil {
 			return err
 		}
@@ -156,12 +211,12 @@ func rebootKeys(completeDirPath string) ([]string, error) {
 		return fs.SkipDir
 	})
 	if err != nil {
-		return nil, fmt.Errorf("walk through complete dir to collect keys of blobs: %w", err)
+		return nil, fmt.Errorf("walk through subdir '%v' to reboot blob keys: %w", subDir, err)
 	}
 	return keys, nil
 }
 
-func existsPersistedState(rootDir string) (ok bool, err error) {
+func existsPersistedStore(rootDir string) (ok bool, err error) {
 	completeDir, incompleteDir := filepath.Join(rootDir, _completeSubDir), filepath.Join(rootDir, _incompleteSubDir)
 	completeExists, err := exists(completeDir)
 	if err != nil {

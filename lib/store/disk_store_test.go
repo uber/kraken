@@ -19,12 +19,12 @@ import (
 	"github.com/uber/kraken/utils/memsize"
 )
 
-func newTestStore(t *testing.T, capacity uint64) (res *DiskStore, rootDir string) {
+func newTestStore(t *testing.T, capacity uint64, rebootIncompleteBlobs bool) (res *DiskStore, rootDir string) {
 	rootDir, err := os.MkdirTemp("/tmp", "kraken-disk-store")
 	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(rootDir) })
 
-	store, err := NewDiskStore(capacity, rootDir)
+	store, err := NewDiskStore(capacity, rootDir, rebootIncompleteBlobs)
 	require.NoError(t, err)
 	return store, rootDir
 }
@@ -58,7 +58,7 @@ func numBlobsOnDisk(t *testing.T, store *DiskStore) int {
 
 func TestDiskStore(t *testing.T) {
 	require := require.New(t)
-	store, _ := newTestStore(t, 10*memsize.KB)
+	store, _ := newTestStore(t, 10*memsize.KB, false)
 
 	keys := []string{}
 	for i := range 10 {
@@ -107,7 +107,7 @@ func TestDiskStore(t *testing.T) {
 
 func TestEviction(t *testing.T) {
 	require := require.New(t)
-	store, _ := newTestStore(t, 25*memsize.KB)
+	store, _ := newTestStore(t, 25*memsize.KB, false)
 	// create 5 blobs - a, b, c, d, e with different sizes.
 	a, aKey := newTestFile(t, store, 10*memsize.KB)
 	require.NoError(a.Close())
@@ -218,7 +218,7 @@ func TestEviction(t *testing.T) {
 
 func TestParallelAccessToSingleFile(t *testing.T) {
 	require := require.New(t)
-	store, _ := newTestStore(t, 10*memsize.KB)
+	store, _ := newTestStore(t, 10*memsize.KB, false)
 
 	key := core.DigestFixture().Hex()
 	f, err := store.Create(key, 1*memsize.KB)
@@ -295,7 +295,7 @@ func TestParallelAccessToSingleFile(t *testing.T) {
 
 func TestOpenedFileAccessibleAfterMarkedComplete(t *testing.T) {
 	require := require.New(t)
-	store, _ := newTestStore(t, 10*memsize.KB)
+	store, _ := newTestStore(t, 10*memsize.KB, false)
 
 	key := core.DigestFixture().Hex()
 	f, err := store.Create(key, 1*memsize.KB)
@@ -333,7 +333,7 @@ func TestOpenedFileAccessibleAfterEviction(t *testing.T) {
 func TestDelete(t *testing.T) {
 	t.Run("incomplete blob", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -348,7 +348,7 @@ func TestDelete(t *testing.T) {
 	})
 	t.Run("incomplete, unevictable blob", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -365,7 +365,7 @@ func TestDelete(t *testing.T) {
 	})
 	t.Run("complete blob", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -382,7 +382,7 @@ func TestDelete(t *testing.T) {
 	})
 	t.Run("complete, unevictable blob", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -400,7 +400,7 @@ func TestDelete(t *testing.T) {
 	})
 	t.Run("not found", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 
 		err := store.Delete(key)
@@ -411,7 +411,7 @@ func TestDelete(t *testing.T) {
 func TestMarkComplete(t *testing.T) {
 	t.Run("incomplete blob", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -428,7 +428,7 @@ func TestMarkComplete(t *testing.T) {
 	})
 	t.Run("incomplete blob with forbidden eviction", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -446,7 +446,7 @@ func TestMarkComplete(t *testing.T) {
 	})
 	t.Run("already complete blob", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -459,7 +459,7 @@ func TestMarkComplete(t *testing.T) {
 	})
 	t.Run("already complete blob with forbidden eviction", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -473,7 +473,7 @@ func TestMarkComplete(t *testing.T) {
 	})
 	t.Run("not found", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 
 		err := store.MarkComplete(key)
@@ -484,7 +484,7 @@ func TestMarkComplete(t *testing.T) {
 func TestStat(t *testing.T) {
 	t.Run("complete blob", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 10*memsize.B)
 		require.NoError(err)
@@ -506,7 +506,7 @@ func TestStat(t *testing.T) {
 	})
 	t.Run("complete, unevictable blob", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 10*memsize.B)
 		require.NoError(err)
@@ -529,7 +529,7 @@ func TestStat(t *testing.T) {
 	})
 	t.Run("incomplete blob", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 10*memsize.B)
 		require.NoError(err)
@@ -551,7 +551,7 @@ func TestStat(t *testing.T) {
 
 	t.Run("incomplete, unevictable blob", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 10*memsize.B)
 		require.NoError(err)
@@ -573,7 +573,7 @@ func TestStat(t *testing.T) {
 	})
 	t.Run("non-existent blob", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 
 		_, err := store.Stat(key, IgnoreIncompleteBlobs)
@@ -585,7 +585,7 @@ func TestStat(t *testing.T) {
 
 func TestList(t *testing.T) {
 	require := require.New(t)
-	store, _ := newTestStore(t, 10*memsize.KB)
+	store, _ := newTestStore(t, 10*memsize.KB, false)
 
 	require.Empty(store.List(CheckIncompleteBlobs))
 	require.Empty(store.List(IgnoreIncompleteBlobs))
@@ -629,7 +629,7 @@ func TestList(t *testing.T) {
 func TestMetadata(t *testing.T) {
 	t.Run("basic functionality", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 10*memsize.KB)
 		require.NoError(err)
@@ -661,7 +661,7 @@ func TestMetadata(t *testing.T) {
 
 	t.Run("non-existent blob", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		nonExistentKey := core.DigestFixture().Hex()
 		mdStruct := core.MetaInfoFixture()
 		md := metadata.NewTorrentMeta(mdStruct)
@@ -679,7 +679,7 @@ func TestMetadata(t *testing.T) {
 
 	t.Run("metadata does not change after marking a file as complete and/or evictable/unevictable", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 1*memsize.KB)
 		require.NoError(err)
@@ -720,7 +720,7 @@ func TestMetadata(t *testing.T) {
 	})
 	t.Run("metadata fully gone after blob is evicted", func(t *testing.T) {
 		require := require.New(t)
-		store, _ := newTestStore(t, 10*memsize.KB)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
 		keyA := core.DigestFixture().Hex()
 		fA, err := store.Create(keyA, 10*memsize.KB)
 		require.NoError(err)
