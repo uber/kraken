@@ -27,7 +27,7 @@ type blobState struct {
 	complete  bool
 }
 
-func rebootPersistedStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool, log *zap.SugaredLogger) (*DiskStore, error) {
+func rebootPersistedStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool, log *zap.SugaredLogger) (*diskStore, error) {
 	completeDirPath, incompleteDirPath := filepath.Join(rootDir, _completeSubDir), filepath.Join(rootDir, _incompleteSubDir)
 	if !rebootIncompleteBlobs {
 		err := os.RemoveAll(incompleteDirPath)
@@ -96,7 +96,7 @@ func rebootPersistedStore(capacityBytes uint64, rootDir string, rebootIncomplete
 		storeSize += bState.size
 	}
 
-	store := &DiskStore{
+	store := &diskStore{
 		blobs:                 blobs,
 		evictQueue:            evictQueue,
 		capacity:              capacityBytes,
