@@ -16,10 +16,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// Whether the store's read APIs ignore incomplete blobs.
+// the set of blobs that the store's APIs can operate on.
+type blobScope int
+
+// flags to scope [diskStore]'s APIs to a subset of blobs.
 const (
-	IgnoreIncompleteBlobs = true
-	CheckIncompleteBlobs  = false
+	blobScopeAny blobScope = iota
+	blobScopeComplete
+	blobScopeIncomplete
 )
 
 const (
@@ -30,20 +34,11 @@ const (
 	_blobSizeFileName       = "_size"
 )
 
-// DiskStore is a key-value, persistent, thread-safe, LRU store for blobs and their [metadata.Metadata].
+// diskStore implements the APIs of [DiskStore]. [diskStore]'s APIs expose the [blobScope] arg,
+// while [DiskStore]'s APIs omit that arg (cleaner interface) and instead expose other APIs to scope the whole store.
 //
-//   - Supports pagination of blobs during reading/writing, such that blobs don't need to be fully loaded into memory.
-//
-//   - New blobs are considered 'incomplete', which unlists them from LRU eviction. Read APIs may filter out incomplete blobs.
-//
-//   - All APIs are thread-safe. Parallel access to a single file is allowed but clients must ensure they don't intervene with one another.
-//
-//   - Supports (un-)marking blobs as non-evictable (may be needed when that data must be written back to remote storage).
-//
-//   - Crash-resistant - all state is restored upon restart (check [NewDiskStore] for details).
-//
-//   - Uses directory sharding to speed up disk performance.
-type DiskStore struct {
+// Check [DiskStore]'s comments for details on functionality.
+type diskStore struct {
 	capacity   uint64
 	size       uint64           // includes both used and reserved space.
 	blobs      map[string]*blob // TODO - consider whether it's better to use struct instead of pointer to reduce GC stress.
@@ -64,14 +59,7 @@ type blob struct {
 	evictionBanned bool
 }
 
-// NewDiskStore initializes a new [*DiskStore]. If the store has been initialized in the same
-// directory before, its state is recovered from disk with the following caveats:
-//
-//   - `rebootIncompleteBlobs` configures whether incomplete blobs are evicted or rebooted on restart.
-//
-//   - If the store's size is bigger than its capacity (e.g. configured capacity has been reduced or files have been leaked),
-//     it evicts blobs until size is within capacity.
-func NewDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool) (*DiskStore, error) {
+func newDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool) (*diskStore, error) {
 	// TODO - create a Config struct.
 	// TODO - consider how to support blob mutation, which might be needed by build-index for tag mutation.
 	// TODO - move disk store files into their own directory and package.
@@ -85,7 +73,7 @@ func NewDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bo
 	}
 	if !ok {
 		log.Info("Initialized a new, empty DiskStore (did not find any previously persisted state to reboot for DiskStore)")
-		return &DiskStore{
+		return &diskStore{
 			capacity:              capacityBytes,
 			size:                  0,
 			blobs:                 make(map[string]*blob),
@@ -106,14 +94,16 @@ func NewDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bo
 	return store, nil
 }
 
-// Open returns an FD to a file in the store. [os.ErrNotExists] is returned on missing entry.
-func (s *DiskStore) Open(key string, ignoreIncomplete bool) (FileReadWriter, error) {
+func (s *diskStore) open(key string, scope blobScope) (FileReadWriter, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	b, ok := s.blobs[key]
-	if !ok || (ignoreIncomplete && !b.complete) {
+	if !ok {
 		return nil, os.ErrNotExist
+	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return nil, err
 	}
 
 	if b.node != nil {
@@ -127,25 +117,22 @@ func (s *DiskStore) Open(key string, ignoreIncomplete bool) (FileReadWriter, err
 	return newReadWriter(f), nil
 }
 
-// Stat returns [os.FileInfo] about the blob. Returns [os.ErrNotExists] if the blob is not found.
-func (s *DiskStore) Stat(key string, ignoreIncomplete bool) (os.FileInfo, error) {
-	// We **could** avoid locking the mutex by just statting the file directly. However, the current implementation
-	// prefers mutex contention over extra disk usage, as origin is bottlenecked by disk IO.
+func (s *diskStore) stat(key string, scope blobScope) (os.FileInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	b, ok := s.blobs[key]
-	if !ok || (ignoreIncomplete && !b.complete) {
+	if !ok {
 		return nil, os.ErrNotExist
+	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return nil, err
 	}
 	blobPath := s.blobPath(key, b.complete)
 	return os.Stat(blobPath)
 }
 
-// Create adds a new, incomplete blob to the store and reserves space for it.
-// Incomplete entries cannot be automatically evicted. MarkComplete must be called once the blob is complete.
-// DiskStore does not ever check/use the real size of the blob and only uses `sizeBytes` for its eviction logic.
-func (s *DiskStore) Create(key string, sizeBytes uint64) (FileReadWriter, error) {
+func (s *diskStore) create(key string, sizeBytes uint64) (FileReadWriter, error) {
 	// TODO - we might want some TTI on uploads to the store, after which we cancel the upload, e.g. 1min without the client uploading more data.
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -195,7 +182,7 @@ func (s *DiskStore) Create(key string, sizeBytes uint64) (FileReadWriter, error)
 	return newReadWriter(f), nil
 }
 
-func (s *DiskStore) persistBlobSize(key string, sizeBytes uint64) error {
+func (s *diskStore) persistBlobSize(key string, sizeBytes uint64) error {
 	blobSizeFilePath := s.sidecarFilePath(key, _incompleteBlob, _blobSizeFileName)
 	blobSizeF, err := os.OpenFile(blobSizeFilePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, _defaultFilePerm)
 	if err != nil {
@@ -209,7 +196,7 @@ func (s *DiskStore) persistBlobSize(key string, sizeBytes uint64) error {
 	return nil
 }
 
-func (s *DiskStore) reserveSpace(space uint64) error {
+func (s *diskStore) reserveSpace(space uint64) error {
 	// TODO - benchmark and consider whether async eviction makes more sense.
 	// TODO - emit latency to reserve space for a blob.
 	for s.size+space > s.capacity {
@@ -235,22 +222,22 @@ func (s *DiskStore) reserveSpace(space uint64) error {
 	return nil
 }
 
-func (s *DiskStore) releaseSpace(space uint64) {
-	// TODO - if space > s.size, emit an error log for an invariant violation
+func (s *diskStore) releaseSpace(space uint64) {
+	if space > s.size {
+		s.log.Error("Invariant violation - DiskStore wants to release more disk space than actually reserved. Failing open by releasing all reserved space.")
+		s.size = 0
+		return
+	}
 	s.size -= space
 }
 
-// fully deletes the disk state of a blob, including metadata. Works on any blob.
-func (s *DiskStore) deleteFromDisk(key string, complete bool) error {
+// Fully deletes the disk state of a blob, including metadata. Works on any blob.
+func (s *diskStore) deleteFromDisk(key string, complete bool) error {
 	dir := s.dirPath(key, complete)
 	return os.RemoveAll(dir)
 }
 
-// MarkComplete marks a blob as fully written. It enlists the blob for LRU eviction (unless BanEviction has been called).
-// Additionally, read APIs may optionally filter out incomplete blobs.
-func (s *DiskStore) MarkComplete(key string) error {
-	// TODO - check if we can derive when a blob is considered complete (e.g. when client calls Close on file (although that depends on the
-	// assumption that Close means the file is complete which may not be true if the client that created the file expects another client to continue mutating it)).
+func (s *diskStore) markComplete(key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -282,7 +269,7 @@ func (s *DiskStore) MarkComplete(key string) error {
 	return nil
 }
 
-func (s *DiskStore) checkDiskIfUnevictable(key string, complete bool) (bool, error) {
+func (s *diskStore) checkDiskIfUnevictable(key string, complete bool) (bool, error) {
 	flagBlobPath := s.sidecarFilePath(key, complete, _evictionBannedFileName)
 	unevictable, err := exists(flagBlobPath)
 	if err != nil {
@@ -291,14 +278,16 @@ func (s *DiskStore) checkDiskIfUnevictable(key string, complete bool) (bool, err
 	return unevictable, nil
 }
 
-// Delete removes a blob and its [metadata.Metadata] from the store. Works on any blob.
-func (s *DiskStore) Delete(key string) error {
+func (s *diskStore) delete(key string, scope blobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	b, ok := s.blobs[key]
 	if !ok {
 		return os.ErrNotExist
+	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return err
 	}
 	err := s.deleteFromDisk(key, b.complete)
 	if err != nil {
@@ -314,14 +303,13 @@ func (s *DiskStore) Delete(key string) error {
 	return nil
 }
 
-// List returns the blobs' keys.
-func (s *DiskStore) List(ignoreIncomplete bool) []string {
+func (s *diskStore) list(scope blobScope) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	res := make([]string, 0, len(s.blobs))
 	for key, b := range s.blobs {
-		if ignoreIncomplete && !b.complete {
+		if err := isOutOfScope(b, scope); err != nil {
 			continue
 		}
 		res = append(res, key)
@@ -329,9 +317,7 @@ func (s *DiskStore) List(ignoreIncomplete bool) []string {
 	return res
 }
 
-// BanEviction marks a blob as unevictable by LRU eviction. It is idempotent.
-// Needed when e.g. blobs must be written back to GCS/S3 and eviction before that is unacceptable.
-func (s *DiskStore) BanEviction(key string) error {
+func (s *diskStore) banEviction(key string, scope blobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -339,14 +325,16 @@ func (s *DiskStore) BanEviction(key string) error {
 	if !ok {
 		return os.ErrNotExist
 	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return err
+	}
 	if b.evictionBanned {
 		// no-op
 		return nil
 	}
 
 	flagBlobPath := s.sidecarFilePath(key, b.complete, _evictionBannedFileName)
-	// We persist the ban as a flag file on disk, such that after
-	// a system crash, we can recover the ban.
+	// We persist the ban as a flag file on disk for crash-resilience.
 	f, err := os.OpenFile(flagBlobPath, os.O_RDONLY|os.O_CREATE, _defaultFilePerm)
 	if err != nil {
 		return fmt.Errorf("create file that flags eviction as banned: %w", err)
@@ -361,14 +349,16 @@ func (s *DiskStore) BanEviction(key string) error {
 	return nil
 }
 
-// UnbanDeletion removes the effect of BanDeletion for a blob. It is idempotent.
-func (s *DiskStore) UnbanEviction(key string) error {
+func (s *diskStore) unbanEviction(key string, scope blobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	b, ok := s.blobs[key]
 	if !ok {
 		return os.ErrNotExist
+	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return err
 	}
 	if !b.evictionBanned {
 		// no-op
@@ -389,14 +379,16 @@ func (s *DiskStore) UnbanEviction(key string) error {
 	return nil
 }
 
-// SetMetadata atomically sets the respective metadata for a blob. Works on any blob.
-func (s *DiskStore) SetMetadata(key string, md metadata.Metadata) error {
+func (s *diskStore) setMetadata(key string, md metadata.Metadata, scope blobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	b, ok := s.blobs[key]
 	if !ok {
 		return os.ErrNotExist
+	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return err
 	}
 
 	mdData, err := md.Serialize()
@@ -425,14 +417,16 @@ func (s *DiskStore) SetMetadata(key string, md metadata.Metadata) error {
 	return nil
 }
 
-// GetMetadata populates `md` if the metadata is present. Returns [os.ErrNotExists] if key is not in store.
-func (s *DiskStore) GetMetadata(key string, md metadata.Metadata, ignoreIncomplete bool) (ok bool, err error) {
+func (s *diskStore) getMetadata(key string, md metadata.Metadata, scope blobScope) (ok bool, err error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	b, ok := s.blobs[key]
-	if !ok || (ignoreIncomplete && !b.complete) {
+	if !ok {
 		return false, os.ErrNotExist
+	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return false, err
 	}
 
 	mdFilePath := s.sidecarFilePath(key, b.complete, md.GetSuffix())
@@ -452,14 +446,16 @@ func (s *DiskStore) GetMetadata(key string, md metadata.Metadata, ignoreIncomple
 	return true, nil
 }
 
-// DeleteMetadata removes any metadata of a blob with `md`'s suffix, if present.
-func (s *DiskStore) DeleteMetadata(key string, md metadata.Metadata) error {
+func (s *diskStore) deleteMetadata(key string, md metadata.Metadata, scope blobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	b, ok := s.blobs[key]
 	if !ok {
 		return os.ErrNotExist
+	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return err
 	}
 	mdFilePath := s.sidecarFilePath(key, b.complete, md.GetSuffix())
 	err := os.Remove(mdFilePath)
@@ -474,7 +470,7 @@ func (s *DiskStore) DeleteMetadata(key string, md metadata.Metadata) error {
 }
 
 // used during testing
-func (s *DiskStore) evictionOrder() []string {
+func (s *diskStore) evictionOrder() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -495,4 +491,11 @@ func exists(path string) (ok bool, err error) {
 		return false, nil
 	}
 	return false, fmt.Errorf("stat: %w", err)
+}
+
+func isOutOfScope(b *blob, scope blobScope) error {
+	if (b.complete && scope == blobScopeIncomplete) || (!b.complete && scope == blobScopeComplete) {
+		return ErrOutOfScope
+	}
+	return nil
 }

@@ -44,7 +44,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(err)
 
 		// Incomplete files are recovered (since `rebootIncompleteBlobs` is true).
-		f, err := store.Open(incompleteEvictableKey, CheckIncompleteBlobs)
+		f, err := store.Open(incompleteEvictableKey)
 		require.NoError(err)
 		defer func(f io.Closer) { require.NoError(f.Close()) }(f)
 		data, err := io.ReadAll(f)
@@ -54,7 +54,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(err)
 		require.False(unevictable)
 
-		f, err = store.Open(incompleteUnevictableKey, CheckIncompleteBlobs)
+		f, err = store.Open(incompleteUnevictableKey)
 		require.NoError(err)
 		defer func(f io.Closer) { require.NoError(f.Close()) }(f)
 		data, err = io.ReadAll(f)
@@ -65,7 +65,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.False(unevictable)
 
 		// Complete files are always recovered.
-		f, err = store.Open(completeEvictableKey, IgnoreIncompleteBlobs)
+		f, err = store.ScopeComplete().Open(completeEvictableKey)
 		require.NoError(err)
 		defer func(f io.Closer) { require.NoError(f.Close()) }(f)
 		data, err = io.ReadAll(f)
@@ -75,7 +75,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(err)
 		require.False(unevictable)
 
-		f, err = store.Open(completeUnevictableKey, IgnoreIncompleteBlobs)
+		f, err = store.ScopeComplete().Open(completeUnevictableKey)
 		require.NoError(err)
 		defer func(f io.Closer) { require.NoError(f.Close()) }(f)
 		data, err = io.ReadAll(f)
@@ -93,13 +93,13 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(err)
 
 		// Incomplete files are dropped.
-		_, err = store.Stat(incompleteEvictableKey, CheckIncompleteBlobs)
+		_, err = store.Stat(incompleteEvictableKey)
 		require.ErrorIs(err, os.ErrNotExist)
-		_, err = store.Stat(incompleteUnevictableKey, CheckIncompleteBlobs)
+		_, err = store.Stat(incompleteUnevictableKey)
 		require.ErrorIs(err, os.ErrNotExist)
 
 		// Complete files are always recovered.
-		f, err = store.Open(completeEvictableKey, IgnoreIncompleteBlobs)
+		f, err = store.ScopeComplete().Open(completeEvictableKey)
 		require.NoError(err)
 		defer func(f io.Closer) { require.NoError(f.Close()) }(f)
 		data, err = io.ReadAll(f)
@@ -109,7 +109,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(err)
 		require.False(unevictable)
 
-		f, err = store.Open(completeUnevictableKey, IgnoreIncompleteBlobs)
+		f, err = store.ScopeComplete().Open(completeUnevictableKey)
 		require.NoError(err)
 		defer func(f io.Closer) { require.NoError(f.Close()) }(f)
 		data, err = io.ReadAll(f)
@@ -137,7 +137,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(err)
 
 		var readMd metadata.TorrentMeta
-		ok, err := store.GetMetadata(key, &readMd, IgnoreIncompleteBlobs)
+		ok, err := store.ScopeComplete().GetMetadata(key, &readMd)
 		require.NoError(err)
 		require.True(ok)
 		require.Equal(writtenMd.MetaInfo, readMd.MetaInfo)
@@ -157,7 +157,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(err)
 
 		var readMd metadata.TorrentMeta
-		ok, err := store.GetMetadata(key, &readMd, CheckIncompleteBlobs)
+		ok, err := store.GetMetadata(key, &readMd)
 		require.NoError(err)
 		require.True(ok)
 		require.Equal(writtenMd.MetaInfo, readMd.MetaInfo)
@@ -194,7 +194,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.Equal([]string{cKey, dKey, eKey}, store.evictionOrder()) // a is unevictable and b is incomplete
 
 		// reset the access time for d
-		dF, err := store.Open(dKey, IgnoreIncompleteBlobs)
+		dF, err := store.ScopeComplete().Open(dKey)
 		require.NoError(err)
 		require.NoError(dF.Close())
 		evictionOrderBeforeCrash := store.evictionOrder()
@@ -215,11 +215,11 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(err)
 
 		// since 10KB of blobs are in store, `c` gets evicted to put the store back within its capacity.
-		_, err = rebootedSmallerStore.Stat(cKey, CheckIncompleteBlobs)
+		_, err = rebootedSmallerStore.Stat(cKey)
 		require.ErrorIs(err, os.ErrNotExist)
 
 		require.Equal([]string{dKey, eKey}, rebootedSmallerStore.evictionOrder())
-		_, err = rebootedSmallerStore.Stat(aKey, CheckIncompleteBlobs)
+		_, err = rebootedSmallerStore.Stat(aKey)
 		require.NoError(err)
 	})
 }
@@ -235,7 +235,7 @@ func TestIncompleteBlobDownloadResumedAfterMultipleCrashes(t *testing.T) {
 	store, err := NewDiskStore(10*memsize.KB, rootDir, true)
 	require.NoError(err)
 
-	f, err = store.Open(key, CheckIncompleteBlobs)
+	f, err = store.Open(key)
 	require.NoError(err)
 
 	// Write 5KB in total, while reporting only 4KB.
@@ -253,7 +253,7 @@ func TestIncompleteBlobDownloadResumedAfterMultipleCrashes(t *testing.T) {
 	copy(wantData, firstData)
 	copy(wantData[2*memsize.KB:], secondData)
 
-	f, err = store.Open(key, CheckIncompleteBlobs)
+	f, err = store.Open(key)
 	require.NoError(err)
 	data, err := io.ReadAll(f)
 	require.NoError(err)
@@ -266,7 +266,7 @@ func TestIncompleteBlobDownloadResumedAfterMultipleCrashes(t *testing.T) {
 	store, err = NewDiskStore(10*memsize.KB, rootDir, true)
 	// now that the blob is complete, its actual size should be rebooted through stat, instead of trusting the _size sidecar file.
 	require.Equal(5*memsize.KB, store.size)
-	f, err = store.Open(key, IgnoreIncompleteBlobs)
+	f, err = store.ScopeComplete().Open(key)
 	require.NoError(err)
 	defer func(f io.Closer) { require.NoError(f.Close()) }(f)
 	data, err = io.ReadAll(f)

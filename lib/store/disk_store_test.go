@@ -82,12 +82,12 @@ func TestDiskStore(t *testing.T) {
 	require.EqualError(err, "reserve space: cannot evict enough, the unevictable/incomplete blobs are using up all the space")
 	require.Nil(f)
 
-	f, err = store.Open(keys[0], IgnoreIncompleteBlobs)
-	require.ErrorIs(err, os.ErrNotExist)
+	f, err = store.ScopeComplete().Open(keys[0])
+	require.ErrorIs(err, ErrOutOfScope)
 	require.Nil(f)
 
 	require.NoError(store.MarkComplete(keys[0]))
-	f, err = store.Open(keys[0], IgnoreIncompleteBlobs)
+	f, err = store.Open(keys[0])
 	defer func(f io.Closer) { require.NoError(f.Close()) }(f)
 	require.NoError(err)
 	wantData := make([]byte, memsize.KB)
@@ -100,7 +100,7 @@ func TestDiskStore(t *testing.T) {
 	f, err = store.Create(core.DigestFixture().Hex(), memsize.KB)
 	require.NoError(err)
 	defer func(f io.Closer) { require.NoError(f.Close()) }(f)
-	f, err = store.Open(keys[0], IgnoreIncompleteBlobs)
+	f, err = store.Open(keys[0])
 	require.ErrorIs(err, os.ErrNotExist)
 	require.Nil(f)
 }
@@ -139,7 +139,7 @@ func TestEviction(t *testing.T) {
 	f, fKey := newTestFile(t, store, 4*memsize.KB)
 	require.NoError(f.Close())
 	require.NoError(store.MarkComplete(fKey))
-	keys := store.List(CheckIncompleteBlobs)
+	keys := store.List()
 	require.NotContains(keys, cKey)
 	// new size == 23KB == 24KB - 5KB (c) + 4KB (f)
 	require.Equal(23*memsize.KB, store.size)
@@ -159,7 +159,7 @@ func TestEviction(t *testing.T) {
 	// size == 24KB == 24KB + 15KB (h) - 5KB (b) - 10KB (a)
 	require.Equal(24*memsize.KB, store.size)
 	require.Equal(5, numBlobsOnDisk(t, store))
-	keys = store.List(CheckIncompleteBlobs)
+	keys = store.List()
 	require.NotContains(keys, bKey)
 	require.NotContains(keys, aKey)
 
@@ -168,14 +168,14 @@ func TestEviction(t *testing.T) {
 	require.NoError(store.UnbanEviction(eKey))
 	// eviction order (left-most is next to evict): f(4KB), g(1KB), h(15KB), e(1KB); d(3KB) is unevictable
 	// we open g to change the order to f, h, e, g
-	g, err = store.Open(gKey, CheckIncompleteBlobs)
+	g, err = store.Open(gKey)
 	require.NoError(err)
 	require.NoError(g.Close())
 
 	i, iKey := newTestFile(t, store, 5*memsize.KB)
 	require.NoError(store.MarkComplete(iKey))
 	require.NoError(i.Close())
-	keys = store.List(CheckIncompleteBlobs)
+	keys = store.List()
 	require.NotContains(keys, fKey)
 	require.Equal(25*memsize.KB, store.size)
 	require.Equal(5, numBlobsOnDisk(t, store))
@@ -184,7 +184,7 @@ func TestEviction(t *testing.T) {
 	j, jKey := newTestFile(t, store, 14*memsize.KB)
 	require.NoError(j.Close())
 	require.NoError(store.MarkComplete(jKey))
-	keys = store.List(CheckIncompleteBlobs)
+	keys = store.List()
 	require.NotContains(keys, hKey)
 	require.Equal(24*memsize.KB, store.size)
 	require.Equal(5, numBlobsOnDisk(t, store))
@@ -193,7 +193,7 @@ func TestEviction(t *testing.T) {
 	k, kKey := newTestFile(t, store, 2*memsize.KB)
 	require.NoError(k.Close())
 	require.NoError(store.MarkComplete(kKey))
-	keys = store.List(CheckIncompleteBlobs)
+	keys = store.List()
 	require.NotContains(keys, eKey)
 	require.Equal(25*memsize.KB, store.size)
 	require.Equal(5, numBlobsOnDisk(t, store))
@@ -202,7 +202,7 @@ func TestEviction(t *testing.T) {
 	l, lKey := newTestFile(t, store, 1*memsize.KB)
 	require.NoError(store.MarkComplete(lKey))
 	require.NoError(l.Close())
-	keys = store.List(CheckIncompleteBlobs)
+	keys = store.List()
 	require.NotContains(keys, gKey)
 	require.Equal(25*memsize.KB, store.size)
 	require.Equal(5, numBlobsOnDisk(t, store))
@@ -239,7 +239,7 @@ func TestParallelAccessToSingleFile(t *testing.T) {
 		go func(idx int64) {
 			defer wg.Done()
 
-			f, err := store.Open(key, CheckIncompleteBlobs)
+			f, err := store.Open(key)
 			if err != nil {
 				results[idx].err = err
 				return
@@ -280,7 +280,7 @@ func TestParallelAccessToSingleFile(t *testing.T) {
 
 	require.NoError(store.MarkComplete(key))
 
-	f, err = store.Open(key, IgnoreIncompleteBlobs)
+	f, err = store.ScopeComplete().Open(key)
 	require.NoError(err)
 	defer func() { require.NoError(f.Close()) }()
 
@@ -304,13 +304,13 @@ func TestOpenedFileAccessibleAfterMarkedComplete(t *testing.T) {
 	require.NoError(err)
 	require.NoError(f.Close())
 
-	incompleteFile, err := store.Open(key, CheckIncompleteBlobs)
+	incompleteFile, err := store.Open(key)
 	require.NoError(err)
 	defer func() { require.NoError(incompleteFile.Close()) }()
 
 	require.NoError(store.MarkComplete(key))
 
-	completeFile, err := store.Open(key, IgnoreIncompleteBlobs)
+	completeFile, err := store.ScopeComplete().Open(key)
 	require.NoError(err)
 	defer func() { require.NoError(completeFile.Close()) }()
 
@@ -342,7 +342,7 @@ func TestDelete(t *testing.T) {
 		require.NoError(f.Close())
 		require.NoError(store.Delete(key))
 
-		require.Empty(store.List(CheckIncompleteBlobs))
+		require.Empty(store.List())
 		require.Equal(uint64(0), store.size)
 		require.Equal(0, numBlobsOnDisk(t, store))
 	})
@@ -359,7 +359,7 @@ func TestDelete(t *testing.T) {
 
 		require.NoError(store.Delete(key))
 
-		require.Empty(store.List(CheckIncompleteBlobs))
+		require.Empty(store.List())
 		require.Equal(uint64(0), store.size)
 		require.Equal(0, numBlobsOnDisk(t, store))
 	})
@@ -376,7 +376,7 @@ func TestDelete(t *testing.T) {
 
 		require.NoError(store.Delete(key))
 
-		require.Empty(store.List(CheckIncompleteBlobs))
+		require.Empty(store.List())
 		require.Equal(uint64(0), store.size)
 		require.Equal(0, numBlobsOnDisk(t, store))
 	})
@@ -394,7 +394,7 @@ func TestDelete(t *testing.T) {
 
 		require.NoError(store.Delete(key))
 
-		require.Empty(store.List(CheckIncompleteBlobs))
+		require.Empty(store.List())
 		require.Equal(uint64(0), store.size)
 		require.Equal(0, numBlobsOnDisk(t, store))
 	})
@@ -421,9 +421,9 @@ func TestMarkComplete(t *testing.T) {
 
 		require.NoError(store.MarkComplete(key))
 
-		require.Equal([]string{key}, store.List(IgnoreIncompleteBlobs))
+		require.Equal([]string{key}, store.ScopeComplete().List())
 		require.Equal(uint64(100), store.size)
-		_, err = store.Open(key, IgnoreIncompleteBlobs)
+		_, err = store.ScopeComplete().Open(key)
 		require.NoError(err)
 	})
 	t.Run("incomplete blob with forbidden eviction", func(t *testing.T) {
@@ -439,9 +439,9 @@ func TestMarkComplete(t *testing.T) {
 
 		require.NoError(store.MarkComplete(key))
 
-		require.Equal([]string{key}, store.List(IgnoreIncompleteBlobs))
+		require.Equal([]string{key}, store.ScopeComplete().List())
 		require.Equal(uint64(100), store.size)
-		_, err = store.Open(key, IgnoreIncompleteBlobs)
+		_, err = store.ScopeComplete().Open(key)
 		require.NoError(err)
 	})
 	t.Run("already complete blob", func(t *testing.T) {
@@ -493,9 +493,9 @@ func TestStat(t *testing.T) {
 		require.NoError(err)
 		require.NoError(store.MarkComplete(key))
 
-		fInfo, err := store.Stat(key, IgnoreIncompleteBlobs)
+		fInfo, err := store.ScopeComplete().Stat(key)
 		require.NoError(err)
-		_, err = store.Stat(key, CheckIncompleteBlobs)
+		_, err = store.Stat(key)
 		require.NoError(err)
 
 		require.False(fInfo.IsDir())
@@ -516,9 +516,9 @@ func TestStat(t *testing.T) {
 		require.NoError(store.MarkComplete(key))
 		require.NoError(store.BanEviction(key))
 
-		fInfo, err := store.Stat(key, IgnoreIncompleteBlobs)
+		fInfo, err := store.ScopeComplete().Stat(key)
 		require.NoError(err)
-		_, err = store.Stat(key, CheckIncompleteBlobs)
+		_, err = store.Stat(key)
 		require.NoError(err)
 
 		require.False(fInfo.IsDir())
@@ -537,9 +537,9 @@ func TestStat(t *testing.T) {
 		_, err = io.Copy(f, bytes.NewReader(make([]byte, 10)))
 		require.NoError(err)
 
-		_, err = store.Stat(key, IgnoreIncompleteBlobs)
-		require.Equal(os.ErrNotExist, err)
-		fInfo, err := store.Stat(key, CheckIncompleteBlobs)
+		_, err = store.ScopeComplete().Stat(key)
+		require.Equal(ErrOutOfScope, err)
+		fInfo, err := store.Stat(key)
 		require.NoError(err)
 
 		require.False(fInfo.IsDir())
@@ -560,9 +560,9 @@ func TestStat(t *testing.T) {
 		require.NoError(err)
 		require.NoError(store.BanEviction(key))
 
-		_, err = store.Stat(key, IgnoreIncompleteBlobs)
-		require.Equal(os.ErrNotExist, err)
-		fInfo, err := store.Stat(key, CheckIncompleteBlobs)
+		_, err = store.ScopeComplete().Stat(key)
+		require.Equal(ErrOutOfScope, err)
+		fInfo, err := store.Stat(key)
 		require.NoError(err)
 
 		require.False(fInfo.IsDir())
@@ -576,9 +576,9 @@ func TestStat(t *testing.T) {
 		store, _ := newTestStore(t, 10*memsize.KB, false)
 		key := core.DigestFixture().Hex()
 
-		_, err := store.Stat(key, IgnoreIncompleteBlobs)
+		_, err := store.ScopeComplete().Stat(key)
 		require.Equal(os.ErrNotExist, err)
-		_, err = store.Stat(key, CheckIncompleteBlobs)
+		_, err = store.Stat(key)
 		require.Equal(os.ErrNotExist, err)
 	})
 }
@@ -587,8 +587,8 @@ func TestList(t *testing.T) {
 	require := require.New(t)
 	store, _ := newTestStore(t, 10*memsize.KB, false)
 
-	require.Empty(store.List(CheckIncompleteBlobs))
-	require.Empty(store.List(IgnoreIncompleteBlobs))
+	require.Empty(store.ScopeComplete().List())
+	require.Empty(store.ScopeComplete().List())
 
 	incompleteBlobKey := core.DigestFixture().Hex()
 	f, err := store.Create(incompleteBlobKey, 10*memsize.B)
@@ -618,11 +618,11 @@ func TestList(t *testing.T) {
 	require.NoError(store.MarkComplete(unevictableCompleteBlobKey))
 
 	wantRes := []string{completeBlobKey, unevictableCompleteBlobKey}
-	res := store.List(IgnoreIncompleteBlobs)
+	res := store.ScopeComplete().List()
 	require.ElementsMatch(wantRes, res)
 
 	wantRes = []string{incompleteBlobKey, completeBlobKey, unevictableCompleteBlobKey, unevictableIncompleteBlobKey}
-	res = store.List(CheckIncompleteBlobs)
+	res = store.List()
 	require.ElementsMatch(wantRes, res)
 }
 
@@ -642,13 +642,13 @@ func TestMetadata(t *testing.T) {
 		require.NoError(err)
 
 		var readMd metadata.TorrentMeta
-		ok, err := store.GetMetadata(key, &readMd, CheckIncompleteBlobs)
+		ok, err := store.GetMetadata(key, &readMd)
 		require.NoError(err)
 		require.True(ok)
 		require.Equal(writtenMd.MetaInfo, readMd.MetaInfo)
 
 		require.NoError(store.DeleteMetadata(key, &readMd))
-		ok, err = store.GetMetadata(key, &readMd, CheckIncompleteBlobs)
+		ok, err = store.GetMetadata(key, &readMd)
 		require.NoError(err)
 		require.False(ok)
 		mdFilePath := store.sidecarFilePath(key, _incompleteBlob, readMd.GetSuffix())
@@ -669,7 +669,7 @@ func TestMetadata(t *testing.T) {
 		err := store.SetMetadata(nonExistentKey, md)
 		require.Equal(os.ErrNotExist, err)
 
-		ok, err := store.GetMetadata(nonExistentKey, md, CheckIncompleteBlobs)
+		ok, err := store.GetMetadata(nonExistentKey, md)
 		require.Equal(os.ErrNotExist, err)
 		require.False(ok)
 
@@ -690,30 +690,30 @@ func TestMetadata(t *testing.T) {
 		require.NoError(store.SetMetadata(key, writtenMd))
 
 		var readMd metadata.TorrentMeta
-		ok, err := store.GetMetadata(key, &readMd, IgnoreIncompleteBlobs)
-		require.Equal(os.ErrNotExist, err)
+		ok, err := store.ScopeComplete().GetMetadata(key, &readMd)
+		require.Equal(ErrOutOfScope, err)
 		// incomplete files are ignored
 		require.False(ok)
 
-		ok, err = store.GetMetadata(key, &readMd, CheckIncompleteBlobs)
+		ok, err = store.GetMetadata(key, &readMd)
 		require.NoError(err)
 		require.True(ok)
 		require.Equal(writtenMd.MetaInfo, readMd.MetaInfo)
 
 		// Repeat the tests above for an unevictable file
 		require.NoError(store.BanEviction(key))
-		ok, err = store.GetMetadata(key, &readMd, IgnoreIncompleteBlobs)
-		require.Equal(os.ErrNotExist, err)
+		ok, err = store.ScopeComplete().GetMetadata(key, &readMd)
+		require.Equal(ErrOutOfScope, err)
 		// incomplete files are ignored
 		require.False(ok)
 
-		ok, err = store.GetMetadata(key, &readMd, CheckIncompleteBlobs)
+		ok, err = store.GetMetadata(key, &readMd)
 		require.NoError(err)
 		require.True(ok)
 		require.Equal(writtenMd.MetaInfo, readMd.MetaInfo)
 
 		require.NoError(store.MarkComplete(key))
-		ok, err = store.GetMetadata(key, &readMd, IgnoreIncompleteBlobs)
+		ok, err = store.ScopeComplete().GetMetadata(key, &readMd)
 		require.NoError(err)
 		require.True(ok)
 		require.Equal(writtenMd.MetaInfo, readMd.MetaInfo)
@@ -739,10 +739,156 @@ func TestMetadata(t *testing.T) {
 		require.NoError(err)
 		defer func() { require.NoError(fB.Close()) }()
 
-		ok, err := store.GetMetadata(keyA, md, CheckIncompleteBlobs)
+		ok, err := store.GetMetadata(keyA, md)
 		require.Equal(os.ErrNotExist, err)
 		require.False(ok)
 		_, err = os.Stat(mdFilePath)
 		require.True(errors.Is(err, os.ErrNotExist))
 	})
+}
+
+func TestScopes(t *testing.T) {
+	require := require.New(t)
+	store, _ := newTestStore(t, 10*memsize.KB, false)
+
+	f, key := newTestFile(t, store, 2*memsize.KB)
+	data := fillWithRandomData(t, f, 2*memsize.KB)
+	require.NoError(f.Close())
+	md := metadata.NewTorrentMeta(core.MetaInfoFixture())
+
+	// While incomplete, ScopeComplete's APIs reject the blob.
+	_, err := store.ScopeComplete().Open(key)
+	require.ErrorIs(err, ErrOutOfScope)
+	_, err = store.ScopeComplete().Stat(key)
+	require.ErrorIs(err, ErrOutOfScope)
+	require.ErrorIs(store.ScopeComplete().BanEviction(key), ErrOutOfScope)
+	require.ErrorIs(store.ScopeComplete().UnbanEviction(key), ErrOutOfScope)
+	require.ErrorIs(store.ScopeComplete().SetMetadata(key, md), ErrOutOfScope)
+	var readMd metadata.TorrentMeta
+	ok, err := store.ScopeComplete().GetMetadata(key, &readMd)
+	require.ErrorIs(err, ErrOutOfScope)
+	require.False(ok)
+	require.ErrorIs(store.ScopeComplete().DeleteMetadata(key, &readMd), ErrOutOfScope)
+	require.NotContains(store.ScopeComplete().List(), key)
+
+	// The unscoped store's APIs work regardless of completeness.
+	f, err = store.Open(key)
+	require.NoError(err)
+	readData, err := io.ReadAll(f)
+	require.NoError(err)
+	require.Equal(data, readData)
+	require.NoError(f.Close())
+	_, err = store.Stat(key)
+	require.NoError(err)
+	require.NoError(store.BanEviction(key))
+	require.NoError(store.UnbanEviction(key))
+	require.NoError(store.SetMetadata(key, md))
+	ok, err = store.GetMetadata(key, &readMd)
+	require.NoError(err)
+	require.True(ok)
+	require.Equal(md.MetaInfo, readMd.MetaInfo)
+	require.NoError(store.DeleteMetadata(key, &readMd))
+	require.Contains(store.List(), key)
+
+	// ScopeIncomplete's APIs also work, since the blob is (still) incomplete.
+	f, err = store.ScopeIncomplete().Open(key)
+	require.NoError(err)
+	readData, err = io.ReadAll(f)
+	require.NoError(err)
+	require.Equal(data, readData)
+	require.NoError(f.Close())
+	_, err = store.ScopeIncomplete().Stat(key)
+	require.NoError(err)
+	require.NoError(store.ScopeIncomplete().BanEviction(key))
+	require.NoError(store.ScopeIncomplete().UnbanEviction(key))
+	require.NoError(store.ScopeIncomplete().SetMetadata(key, md))
+	ok, err = store.ScopeIncomplete().GetMetadata(key, &readMd)
+	require.NoError(err)
+	require.True(ok)
+	require.Equal(md.MetaInfo, readMd.MetaInfo)
+	require.NoError(store.ScopeIncomplete().DeleteMetadata(key, &readMd))
+	require.Contains(store.ScopeIncomplete().List(), key)
+
+	require.NoError(store.MarkComplete(key))
+
+	// Now that the blob is complete, the roles reverse: ScopeIncomplete rejects it.
+	_, err = store.ScopeIncomplete().Open(key)
+	require.ErrorIs(err, ErrOutOfScope)
+	_, err = store.ScopeIncomplete().Stat(key)
+	require.ErrorIs(err, ErrOutOfScope)
+	require.ErrorIs(store.ScopeIncomplete().BanEviction(key), ErrOutOfScope)
+	require.ErrorIs(store.ScopeIncomplete().UnbanEviction(key), ErrOutOfScope)
+	require.ErrorIs(store.ScopeIncomplete().SetMetadata(key, md), ErrOutOfScope)
+	ok, err = store.ScopeIncomplete().GetMetadata(key, &readMd)
+	require.ErrorIs(err, ErrOutOfScope)
+	require.False(ok)
+	require.ErrorIs(store.ScopeIncomplete().DeleteMetadata(key, &readMd), ErrOutOfScope)
+	require.NotContains(store.ScopeIncomplete().List(), key)
+
+	// The unscoped store's APIs still work regardless of completeness.
+	f, err = store.Open(key)
+	require.NoError(err)
+	readData, err = io.ReadAll(f)
+	require.NoError(err)
+	require.Equal(data, readData)
+	require.NoError(f.Close())
+	_, err = store.Stat(key)
+	require.NoError(err)
+	require.NoError(store.BanEviction(key))
+	require.NoError(store.UnbanEviction(key))
+	require.NoError(store.SetMetadata(key, md))
+	ok, err = store.GetMetadata(key, &readMd)
+	require.NoError(err)
+	require.True(ok)
+	require.Equal(md.MetaInfo, readMd.MetaInfo)
+	require.NoError(store.DeleteMetadata(key, &readMd))
+	require.Contains(store.List(), key)
+
+	// ScopeComplete's APIs now work, since the blob is complete.
+	f, err = store.ScopeComplete().Open(key)
+	require.NoError(err)
+	readData, err = io.ReadAll(f)
+	require.NoError(err)
+	require.Equal(data, readData)
+	require.NoError(f.Close())
+	_, err = store.ScopeComplete().Stat(key)
+	require.NoError(err)
+	require.NoError(store.ScopeComplete().BanEviction(key))
+	require.NoError(store.ScopeComplete().UnbanEviction(key))
+	require.NoError(store.ScopeComplete().SetMetadata(key, md))
+	ok, err = store.ScopeComplete().GetMetadata(key, &readMd)
+	require.NoError(err)
+	require.True(ok)
+	require.Equal(md.MetaInfo, readMd.MetaInfo)
+	require.NoError(store.ScopeComplete().DeleteMetadata(key, &readMd))
+	require.Contains(store.ScopeComplete().List(), key)
+}
+
+func TestScopesDelete(t *testing.T) {
+	require := require.New(t)
+	store, _ := newTestStore(t, 10*memsize.KB, false)
+
+	f, key := newTestFile(t, store, 1*memsize.KB)
+	require.NoError(f.Close())
+	require.ErrorIs(store.ScopeComplete().Delete(key), ErrOutOfScope)
+	require.NoError(store.ScopeIncomplete().Delete(key))
+	_, err := store.Stat(key)
+	require.ErrorIs(err, os.ErrNotExist)
+
+	f, key = newTestFile(t, store, 1*memsize.KB)
+	require.NoError(f.Close())
+	require.NoError(store.MarkComplete(key))
+	require.ErrorIs(store.ScopeIncomplete().Delete(key), ErrOutOfScope)
+	require.NoError(store.ScopeComplete().Delete(key))
+	_, err = store.Stat(key)
+	require.ErrorIs(err, os.ErrNotExist)
+
+	f, key = newTestFile(t, store, 1*memsize.KB)
+	require.NoError(f.Close())
+	require.NoError(store.Delete(key))
+
+	f, key = newTestFile(t, store, 1*memsize.KB)
+	require.NoError(f.Close())
+	require.NoError(store.MarkComplete(key))
+	require.NoError(store.Delete(key))
 }
