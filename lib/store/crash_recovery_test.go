@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"crypto/rand"
 	"io"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/memsize"
@@ -40,7 +40,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(store.BanEviction(incompleteUnevictableKey))
 
 		// Assume that the application crashes here. The application would restart and call `NewDiskStore`.
-		store, err := NewDiskStore(10*memsize.KB, rootDir, true)
+		store, err := NewDiskStore(10*memsize.KB, rootDir, true, tally.NoopScope)
 		require.NoError(err)
 
 		// Incomplete files are recovered (since `rebootIncompleteBlobs` is true).
@@ -89,14 +89,13 @@ func TestCrashRecovery(t *testing.T) {
 		require.Equal(8*memsize.KB, store.size)
 
 		// Run the store with `rebootIncompleteBlobs` as false.
-		store, err = NewDiskStore(10*memsize.KB, rootDir, false)
+		store, err = NewDiskStore(10*memsize.KB, rootDir, false, tally.NoopScope)
 		require.NoError(err)
 
 		// Incomplete files are dropped.
-		_, err = store.Stat(incompleteEvictableKey)
-		require.ErrorIs(err, os.ErrNotExist)
-		_, err = store.Stat(incompleteUnevictableKey)
-		require.ErrorIs(err, os.ErrNotExist)
+		rebootedKeys := store.List()
+		require.NotContains(rebootedKeys, incompleteEvictableKey)
+		require.NotContains(rebootedKeys, incompleteUnevictableKey)
 
 		// Complete files are always recovered.
 		f, err = store.ScopeComplete().Open(completeEvictableKey)
@@ -133,7 +132,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(store.SetMetadata(key, writtenMd))
 
 		// Assume that the application crashes here. The application would restart and call `NewDiskStore`.
-		store, err := NewDiskStore(10*memsize.KB, rootDir, true)
+		store, err := NewDiskStore(10*memsize.KB, rootDir, true, tally.NoopScope)
 		require.NoError(err)
 
 		var readMd metadata.TorrentMeta
@@ -153,7 +152,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(store.SetMetadata(key, writtenMd))
 
 		// Assume that the application crashes here. The application would restart and call `NewDiskStore`.
-		store, err := NewDiskStore(10*memsize.KB, rootDir, true)
+		store, err := NewDiskStore(10*memsize.KB, rootDir, true, tally.NoopScope)
 		require.NoError(err)
 
 		var readMd metadata.TorrentMeta
@@ -201,7 +200,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.Equal([]string{cKey, eKey, dKey}, evictionOrderBeforeCrash) // a is unevictable and b is incomplete
 
 		// Assume that the application restarts here.
-		store, err = NewDiskStore(10*memsize.KB, rootDir, false)
+		store, err = NewDiskStore(10*memsize.KB, rootDir, false, tally.NoopScope)
 		require.NoError(err)
 
 		// LRU order is approximated, but not exact.
@@ -211,16 +210,37 @@ func TestCrashRecovery(t *testing.T) {
 		require.Equal(wantEvictionOrder, rebootedEvictionOrder)
 
 		// Assume we redeploy the service with a smaller capacity for the disk store:
-		rebootedSmallerStore, err := NewDiskStore(6*memsize.KB, rootDir, false)
+		store, err = NewDiskStore(6*memsize.KB, rootDir, false, tally.NoopScope)
 		require.NoError(err)
 
 		// since 10KB of blobs are in store, `c` gets evicted to put the store back within its capacity.
-		_, err = rebootedSmallerStore.Stat(cKey)
-		require.ErrorIs(err, os.ErrNotExist)
+		require.NotContains(store.List(), cKey)
 
-		require.Equal([]string{dKey, eKey}, rebootedSmallerStore.evictionOrder())
-		_, err = rebootedSmallerStore.Stat(aKey)
-		require.NoError(err)
+		require.Equal([]string{dKey, eKey}, store.evictionOrder())
+		require.Contains(store.List(), aKey)
+	})
+
+	t.Run("reboot fails if unevictable data is more than store capacity", func(t *testing.T) {
+		require := require.New(t)
+		store, rootDir := newTestStore(t, 10*memsize.KB, true)
+
+		aF, aKey := newTestFile(t, store, 2*memsize.KB)
+		_ = fillWithRandomData(t, aF, 2*memsize.KB)
+		require.NoError(aF.Close())
+		require.NoError(store.MarkComplete(aKey))
+		require.NoError(store.BanEviction(aKey))
+
+		bF, _ := newTestFile(t, store, 2*memsize.KB)
+		_ = fillWithRandomData(t, bF, 1*memsize.KB)
+		require.NoError(bF.Close())
+
+		cF, _ := newTestFile(t, store, 2*memsize.KB)
+		_ = fillWithRandomData(t, cF, 1*memsize.KB)
+		require.NoError(cF.Close())
+
+		// Assume that the application restarts here.
+		store, err := NewDiskStore(5*memsize.KB, rootDir, true, tally.NoopScope)
+		require.ErrorContains(err, "cannot evict enough, the unevictable/incomplete blobs are using up all the space")
 	})
 }
 
@@ -232,7 +252,7 @@ func TestIncompleteBlobDownloadResumedAfterMultipleCrashes(t *testing.T) {
 	firstData := fillWithRandomData(t, f, 2*memsize.KB)
 
 	// First crash.
-	store, err := NewDiskStore(10*memsize.KB, rootDir, true)
+	store, err := NewDiskStore(10*memsize.KB, rootDir, true, tally.NoopScope)
 	require.NoError(err)
 
 	f, err = store.Open(key)
@@ -246,7 +266,7 @@ func TestIncompleteBlobDownloadResumedAfterMultipleCrashes(t *testing.T) {
 	require.NoError(err)
 
 	// Second crash.
-	store, err = NewDiskStore(10*memsize.KB, rootDir, true)
+	store, err = NewDiskStore(10*memsize.KB, rootDir, true, tally.NoopScope)
 	require.NoError(err)
 
 	wantData := make([]byte, 5*memsize.KB)
@@ -263,7 +283,8 @@ func TestIncompleteBlobDownloadResumedAfterMultipleCrashes(t *testing.T) {
 	require.NoError(store.MarkComplete(key))
 
 	// Third crash.
-	store, err = NewDiskStore(10*memsize.KB, rootDir, true)
+	store, err = NewDiskStore(10*memsize.KB, rootDir, true, tally.NoopScope)
+	require.NoError(err)
 	// now that the blob is complete, its actual size should be rebooted through stat, instead of trusting the _size sidecar file.
 	require.Equal(5*memsize.KB, store.size)
 	f, err = store.ScopeComplete().Open(key)

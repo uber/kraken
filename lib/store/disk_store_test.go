@@ -2,11 +2,11 @@ package store
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/memsize"
@@ -22,9 +23,9 @@ import (
 func newTestStore(t *testing.T, capacity uint64, rebootIncompleteBlobs bool) (res *DiskStore, rootDir string) {
 	rootDir, err := os.MkdirTemp("/tmp", "kraken-disk-store")
 	require.NoError(t, err)
-	t.Cleanup(func() { os.RemoveAll(rootDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(rootDir) })
 
-	store, err := NewDiskStore(capacity, rootDir, rebootIncompleteBlobs)
+	store, err := NewDiskStore(capacity, rootDir, rebootIncompleteBlobs, tally.NoopScope)
 	require.NoError(t, err)
 	return store, rootDir
 }
@@ -275,7 +276,7 @@ func TestParallelAccessToSingleFile(t *testing.T) {
 	wg.Wait()
 	for idx := range 5 {
 		require.NoError(results[idx].err)
-		require.Equal(results[idx].written, results[idx].written)
+		require.Equal(results[idx].written, results[idx].read)
 	}
 
 	require.NoError(store.MarkComplete(key))
@@ -321,13 +322,6 @@ func TestOpenedFileAccessibleAfterMarkedComplete(t *testing.T) {
 
 	require.Equal([]byte("Hello World"), incompleteFileData)
 	require.Equal([]byte("Hello World"), completeFileData)
-}
-
-func TestOpenedFileAccessibleAfterEviction(t *testing.T) {
-	// when a file is created, then received with a Get, then deleted, check that the store doesn't count its size but it is still on disk and accessible. then check that when the client closes the file, it is not accessible anymore and not on disk anymore.
-	// test after both "Delete" and natural LRU eviction.
-	// what happens when we try to close the fd? i assume it works?
-	t.Skip("TODO")
 }
 
 func TestDelete(t *testing.T) {
@@ -404,7 +398,7 @@ func TestDelete(t *testing.T) {
 		key := core.DigestFixture().Hex()
 
 		err := store.Delete(key)
-		require.Equal(os.ErrNotExist, err)
+		require.ErrorIs(os.ErrNotExist, err)
 	})
 }
 
@@ -477,7 +471,7 @@ func TestMarkComplete(t *testing.T) {
 		key := core.DigestFixture().Hex()
 
 		err := store.MarkComplete(key)
-		require.Equal(os.ErrNotExist, err)
+		require.ErrorIs(os.ErrNotExist, err)
 	})
 }
 
@@ -577,9 +571,9 @@ func TestStat(t *testing.T) {
 		key := core.DigestFixture().Hex()
 
 		_, err := store.ScopeComplete().Stat(key)
-		require.Equal(os.ErrNotExist, err)
+		require.ErrorIs(os.ErrNotExist, err)
 		_, err = store.Stat(key)
-		require.Equal(os.ErrNotExist, err)
+		require.ErrorIs(os.ErrNotExist, err)
 	})
 }
 
@@ -626,6 +620,19 @@ func TestList(t *testing.T) {
 	require.ElementsMatch(wantRes, res)
 }
 
+func init() {
+	metadata.Register(regexp.MustCompile("immovableMd"), &immovableMdFactory{})
+}
+
+// used for testing
+type immovableMd struct{}
+type immovableMdFactory struct{}
+
+func (f *immovableMdFactory) Create(suffix string) metadata.Metadata { return &immovableMd{} }
+func (mda *immovableMd) GetSuffix() string                           { return "immovableMd" }
+func (mda *immovableMd) Movable() bool                               { return false }
+func (mda *immovableMd) Serialize() ([]byte, error)                  { return nil, nil }
+func (mda *immovableMd) Deserialize(b []byte) error                  { return nil }
 func TestMetadata(t *testing.T) {
 	t.Run("basic functionality", func(t *testing.T) {
 		require := require.New(t)
@@ -647,6 +654,27 @@ func TestMetadata(t *testing.T) {
 		require.True(ok)
 		require.Equal(writtenMd.MetaInfo, readMd.MetaInfo)
 
+		mdList, err := store.ListMetadata(key)
+		require.NoError(err)
+		require.Len(mdList, 1)
+		require.Equal(writtenMd.GetSuffix(), mdList[0].GetSuffix())
+
+		persistMd := metadata.NewPersist(true)
+		require.NoError(store.SetMetadata(key, persistMd))
+		require.NoError(store.WriteAtMetadata(key, persistMd, []byte("false"), 0))
+		var readPersistMd metadata.Persist
+		ok, err = store.GetMetadata(key, &readPersistMd)
+		require.NoError(err)
+		require.True(ok)
+		require.False(readPersistMd.Value)
+
+		mdList, err = store.ListMetadata(key)
+		require.NoError(err)
+		require.ElementsMatch(
+			[]string{writtenMd.GetSuffix(), persistMd.GetSuffix()},
+			[]string{mdList[0].GetSuffix(), mdList[1].GetSuffix()},
+		)
+
 		require.NoError(store.DeleteMetadata(key, &readMd))
 		ok, err = store.GetMetadata(key, &readMd)
 		require.NoError(err)
@@ -654,9 +682,19 @@ func TestMetadata(t *testing.T) {
 		mdFilePath := store.sidecarFilePath(key, _incompleteBlob, readMd.GetSuffix())
 		// ensure the metadata file is deleted from disk
 		_, err = os.Stat(mdFilePath)
-		require.True(errors.Is(err, os.ErrNotExist))
+		require.ErrorIs(err, os.ErrNotExist)
 		// deleting a second time should be a no-op.
 		require.NoError(store.DeleteMetadata(key, &readMd))
+
+		mdList, err = store.ListMetadata(key)
+		require.NoError(err)
+		require.Len(mdList, 1)
+		require.Equal(persistMd.GetSuffix(), mdList[0].GetSuffix())
+
+		require.NoError(store.DeleteMetadata(key, persistMd))
+		mdList, err = store.ListMetadata(key)
+		require.NoError(err)
+		require.Empty(mdList)
 	})
 
 	t.Run("non-existent blob", func(t *testing.T) {
@@ -667,14 +705,20 @@ func TestMetadata(t *testing.T) {
 		md := metadata.NewTorrentMeta(mdStruct)
 
 		err := store.SetMetadata(nonExistentKey, md)
-		require.Equal(os.ErrNotExist, err)
+		require.ErrorIs(os.ErrNotExist, err)
 
 		ok, err := store.GetMetadata(nonExistentKey, md)
-		require.Equal(os.ErrNotExist, err)
+		require.ErrorIs(os.ErrNotExist, err)
 		require.False(ok)
 
+		_, err = store.ListMetadata(nonExistentKey)
+		require.ErrorIs(os.ErrNotExist, err)
+
+		err = store.WriteAtMetadata(nonExistentKey, md, []byte("data"), 0)
+		require.ErrorIs(os.ErrNotExist, err)
+
 		err = store.DeleteMetadata(nonExistentKey, md)
-		require.Equal(os.ErrNotExist, err)
+		require.ErrorIs(os.ErrNotExist, err)
 	})
 
 	t.Run("metadata does not change after marking a file as complete and/or evictable/unevictable", func(t *testing.T) {
@@ -740,10 +784,80 @@ func TestMetadata(t *testing.T) {
 		defer func() { require.NoError(fB.Close()) }()
 
 		ok, err := store.GetMetadata(keyA, md)
-		require.Equal(os.ErrNotExist, err)
+		require.ErrorIs(os.ErrNotExist, err)
 		require.False(ok)
 		_, err = os.Stat(mdFilePath)
-		require.True(errors.Is(err, os.ErrNotExist))
+		require.ErrorIs(err, os.ErrNotExist)
+	})
+
+	t.Run("immovable metadata is deleted when calling MarkComplete", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		key := core.DigestFixture().Hex()
+		f, err := store.Create(key, 10*memsize.KB)
+		require.NoError(err)
+		require.NoError(f.Close())
+
+		md := &immovableMd{}
+		require.NoError(store.SetMetadata(key, md))
+		movableMd := metadata.NewTorrentMeta(core.MetaInfoFixture())
+		require.NoError(store.SetMetadata(key, movableMd))
+
+		require.NoError(store.MarkComplete(key))
+		readMd := immovableMd{}
+		ok, err := store.GetMetadata(key, &readMd)
+		require.NoError(err)
+		require.False(ok)
+
+		readMovableMd := metadata.TorrentMeta{}
+		ok, err = store.GetMetadata(key, &readMovableMd)
+		require.NoError(err)
+		require.True(ok)
+	})
+
+	t.Run("writeAt on metadata that does not exist", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		key := core.DigestFixture().Hex()
+		f, err := store.Create(key, 10*memsize.KB)
+		require.NoError(err)
+		require.NoError(f.Close())
+
+		md := metadata.NewPersist(true)
+		err = store.WriteAtMetadata(key, md, []byte("true"), 0)
+		require.EqualError(err, "metadata does not exist")
+	})
+
+	t.Run("list metadata excludes non-metadata sidecar files", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, true)
+		key := core.DigestFixture().Hex()
+		f, err := store.Create(key, 10*memsize.KB)
+		require.NoError(err)
+		require.NoError(f.Close())
+		require.NoError(store.BanEviction(key))
+
+		mdList, err := store.ListMetadata(key)
+		require.NoError(err)
+		require.Empty(mdList)
+
+		torrentMd := metadata.NewTorrentMeta(core.MetaInfoFixture())
+		persistMd := metadata.NewPersist(true)
+		lastAccessMd := metadata.NewLastAccessTime(time.Now())
+		require.NoError(store.SetMetadata(key, torrentMd))
+		require.NoError(store.SetMetadata(key, persistMd))
+		require.NoError(store.SetMetadata(key, lastAccessMd))
+
+		mdList, err = store.ListMetadata(key)
+		require.NoError(err)
+		gotSuffixes := make([]string, len(mdList))
+		for i, md := range mdList {
+			gotSuffixes[i] = md.GetSuffix()
+		}
+		require.ElementsMatch(
+			[]string{torrentMd.GetSuffix(), persistMd.GetSuffix(), lastAccessMd.GetSuffix()},
+			gotSuffixes,
+		)
 	})
 }
 
@@ -755,9 +869,11 @@ func TestScopes(t *testing.T) {
 	data := fillWithRandomData(t, f, 2*memsize.KB)
 	require.NoError(f.Close())
 	md := metadata.NewTorrentMeta(core.MetaInfoFixture())
+	mdData, err := md.Serialize()
+	require.NoError(err)
 
 	// While incomplete, ScopeComplete's APIs reject the blob.
-	_, err := store.ScopeComplete().Open(key)
+	_, err = store.ScopeComplete().Open(key)
 	require.ErrorIs(err, ErrOutOfScope)
 	_, err = store.ScopeComplete().Stat(key)
 	require.ErrorIs(err, ErrOutOfScope)
@@ -768,6 +884,9 @@ func TestScopes(t *testing.T) {
 	ok, err := store.ScopeComplete().GetMetadata(key, &readMd)
 	require.ErrorIs(err, ErrOutOfScope)
 	require.False(ok)
+	_, err = store.ScopeComplete().ListMetadata(key)
+	require.ErrorIs(err, ErrOutOfScope)
+	require.ErrorIs(store.ScopeComplete().WriteAtMetadata(key, md, mdData, 0), ErrOutOfScope)
 	require.ErrorIs(store.ScopeComplete().DeleteMetadata(key, &readMd), ErrOutOfScope)
 	require.NotContains(store.ScopeComplete().List(), key)
 
@@ -787,6 +906,11 @@ func TestScopes(t *testing.T) {
 	require.NoError(err)
 	require.True(ok)
 	require.Equal(md.MetaInfo, readMd.MetaInfo)
+	mdList, err := store.ListMetadata(key)
+	require.NoError(err)
+	require.Len(mdList, 1)
+	require.Equal(md.GetSuffix(), mdList[0].GetSuffix())
+	require.NoError(store.WriteAtMetadata(key, md, mdData, 0))
 	require.NoError(store.DeleteMetadata(key, &readMd))
 	require.Contains(store.List(), key)
 
@@ -806,6 +930,11 @@ func TestScopes(t *testing.T) {
 	require.NoError(err)
 	require.True(ok)
 	require.Equal(md.MetaInfo, readMd.MetaInfo)
+	mdList, err = store.ScopeIncomplete().ListMetadata(key)
+	require.NoError(err)
+	require.Len(mdList, 1)
+	require.Equal(md.GetSuffix(), mdList[0].GetSuffix())
+	require.NoError(store.ScopeIncomplete().WriteAtMetadata(key, md, mdData, 0))
 	require.NoError(store.ScopeIncomplete().DeleteMetadata(key, &readMd))
 	require.Contains(store.ScopeIncomplete().List(), key)
 
@@ -822,6 +951,9 @@ func TestScopes(t *testing.T) {
 	ok, err = store.ScopeIncomplete().GetMetadata(key, &readMd)
 	require.ErrorIs(err, ErrOutOfScope)
 	require.False(ok)
+	_, err = store.ScopeIncomplete().ListMetadata(key)
+	require.ErrorIs(err, ErrOutOfScope)
+	require.ErrorIs(store.ScopeIncomplete().WriteAtMetadata(key, md, mdData, 0), ErrOutOfScope)
 	require.ErrorIs(store.ScopeIncomplete().DeleteMetadata(key, &readMd), ErrOutOfScope)
 	require.NotContains(store.ScopeIncomplete().List(), key)
 
@@ -841,6 +973,11 @@ func TestScopes(t *testing.T) {
 	require.NoError(err)
 	require.True(ok)
 	require.Equal(md.MetaInfo, readMd.MetaInfo)
+	mdList, err = store.ListMetadata(key)
+	require.NoError(err)
+	require.Len(mdList, 1)
+	require.Equal(md.GetSuffix(), mdList[0].GetSuffix())
+	require.NoError(store.WriteAtMetadata(key, md, mdData, 0))
 	require.NoError(store.DeleteMetadata(key, &readMd))
 	require.Contains(store.List(), key)
 
@@ -860,6 +997,11 @@ func TestScopes(t *testing.T) {
 	require.NoError(err)
 	require.True(ok)
 	require.Equal(md.MetaInfo, readMd.MetaInfo)
+	mdList, err = store.ScopeComplete().ListMetadata(key)
+	require.NoError(err)
+	require.Len(mdList, 1)
+	require.Equal(md.GetSuffix(), mdList[0].GetSuffix())
+	require.NoError(store.ScopeComplete().WriteAtMetadata(key, md, mdData, 0))
 	require.NoError(store.ScopeComplete().DeleteMetadata(key, &readMd))
 	require.Contains(store.ScopeComplete().List(), key)
 }

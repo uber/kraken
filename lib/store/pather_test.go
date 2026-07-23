@@ -10,15 +10,15 @@ import (
 )
 
 func TestPather(t *testing.T) {
-	require := require.New(t)
 	rootDir, err := os.MkdirTemp("/tmp", "kraken-disk-store")
-	require.NoError(err)
-	t.Cleanup(func() { os.RemoveAll(rootDir) })
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(rootDir) })
 	pather := newPather(rootDir)
 	md := metadata.NewTorrentMeta(core.MetaInfoFixture())
 	key := "8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78"
 
 	t.Run("incomplete entry", func(t *testing.T) {
+		require := require.New(t)
 		complete := false
 		dirPath := pather.dirPath(key, complete)
 		wantDirPath := rootDir + "/incomplete/8c/6a/8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78"
@@ -32,6 +32,7 @@ func TestPather(t *testing.T) {
 	})
 
 	t.Run("complete entry", func(t *testing.T) {
+		require := require.New(t)
 		complete := true
 		dirPath := pather.dirPath(key, complete)
 		wantDirPath := rootDir + "/complete/8c/6a/8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78"

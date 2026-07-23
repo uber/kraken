@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
@@ -34,6 +36,8 @@ const (
 	_blobSizeFileName       = "_size"
 )
 
+var _syncEvictionLatencyBuckets = tally.MustMakeExponentialDurationBuckets(100*time.Millisecond, 1.4, 15)
+
 // diskStore implements the APIs of [DiskStore]. [diskStore]'s APIs expose the [blobScope] arg,
 // while [DiskStore]'s APIs omit that arg (cleaner interface) and instead expose other APIs to scope the whole store.
 //
@@ -49,6 +53,7 @@ type diskStore struct {
 	// If disabled, incomplete blobs are discarded (usually done to prevent leaks).
 	rebootIncompleteBlobs bool
 	log                   *zap.SugaredLogger
+	metrics               tally.Scope
 	*pather
 }
 
@@ -59,7 +64,7 @@ type blob struct {
 	evictionBanned bool
 }
 
-func newDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool) (*diskStore, error) {
+func newDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool, metrics tally.Scope) (*diskStore, error) {
 	// TODO - create a Config struct.
 	// TODO - consider how to support blob mutation, which might be needed by build-index for tag mutation.
 	// TODO - move disk store files into their own directory and package.
@@ -79,12 +84,13 @@ func newDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bo
 			blobs:                 make(map[string]*blob),
 			evictQueue:            list.New(),
 			log:                   log,
+			metrics:               metrics,
 			pather:                newPather(rootDir),
 			rebootIncompleteBlobs: rebootIncompleteBlobs,
 		}, nil
 	}
 
-	store, err := rebootPersistedStore(capacityBytes, rootDir, rebootIncompleteBlobs, log)
+	store, err := rebootPersistedStore(capacityBytes, rootDir, rebootIncompleteBlobs, log, metrics)
 	if err != nil {
 		err = fmt.Errorf("reboot persisted state into memory: %w", err)
 		log.With("error", err).Error("Failed to initialize disk store")
@@ -157,8 +163,7 @@ func (s *diskStore) create(key string, sizeBytes uint64) (FileReadWriter, error)
 		return nil, fmt.Errorf("ensure dir: %w", err)
 	}
 	blobPath := s.blobPath(key, _incompleteBlob)
-	flag := os.O_RDWR | os.O_CREATE | os.O_EXCL
-	f, err := os.OpenFile(blobPath, flag, _defaultFilePerm)
+	f, err := os.OpenFile(blobPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, _defaultFilePerm)
 	if err != nil {
 		s.releaseSpace(sizeBytes)
 		return nil, fmt.Errorf("open file: %w", err)
@@ -188,19 +193,24 @@ func (s *diskStore) persistBlobSize(key string, sizeBytes uint64) error {
 	if err != nil {
 		return fmt.Errorf("create file: %w", err)
 	}
+	defer closers.Close(blobSizeF)
 	_, err = blobSizeF.Write([]byte(strconv.Itoa(int(sizeBytes))))
 	if err != nil {
 		return fmt.Errorf("write to size file: %w", err)
 	}
-	closers.Close(blobSizeF)
 	return nil
 }
 
 func (s *diskStore) reserveSpace(space uint64) error {
 	// TODO - benchmark and consider whether async eviction makes more sense.
-	// TODO - emit latency to reserve space for a blob.
+	startTime := time.Now()
 	for s.size+space > s.capacity {
 		if s.evictQueue.Len() == 0 {
+			s.log.With(
+				"unevictable_bytes", s.size,
+				"required_space", space,
+				"capacity", s.capacity,
+			).Error("Cannot evict enough data to free space for new entry to DiskStore. The unevictable/incomplete blobs are using up all the space")
 			return errors.New("cannot evict enough, the unevictable/incomplete blobs are using up all the space")
 		}
 
@@ -209,7 +219,6 @@ func (s *diskStore) reserveSpace(space uint64) error {
 
 		err := s.deleteFromDisk(toEvictKey, _completeBlob)
 		if err != nil {
-			// TODO - consider whether we want to fail-open by doing `continue` here.
 			return fmt.Errorf("delete from disk: %w", err)
 		}
 		s.evictQueue.Remove(toEvictNode)
@@ -217,8 +226,10 @@ func (s *diskStore) reserveSpace(space uint64) error {
 		s.releaseSpace(size)
 		delete(s.blobs, toEvictKey)
 	}
-
 	s.size += space
+
+	latency := time.Since(startTime)
+	s.metrics.Histogram("sync_eviction_latency", _syncEvictionLatencyBuckets).RecordDuration(latency)
 	return nil
 }
 
@@ -256,7 +267,6 @@ func (s *diskStore) markComplete(key string) error {
 	if err != nil {
 		return fmt.Errorf("mkdirall: %w", err)
 	}
-	// TODO - make sure that un-movable metadata is deleted after move
 	err = os.Rename(oldPathDir, newPathDir)
 	if err != nil {
 		return fmt.Errorf("move dir: %w", err)
@@ -266,7 +276,33 @@ func (s *diskStore) markComplete(key string) error {
 		node := s.evictQueue.PushBack(key)
 		b.node = node
 	}
+
+	s.tryDeleteImmovableMetadata(key)
 	return nil
+}
+
+// Best-effort attempt to remove immovable metadata. Fail-open on failure
+// to avoid an inconsistent state, as failure only costs a negligible amount
+// of disk until the blob is evicted.
+func (s *diskStore) tryDeleteImmovableMetadata(key string) {
+	mdList, err := s.listMetadataNoLock(key, blobScopeAny)
+	if err != nil {
+		err = fmt.Errorf("list metadata: %w", err)
+		s.log.With("error", err).Error("Failed to delete un-movable metadata upon marking a blob as complete")
+		return
+	}
+	for _, md := range mdList {
+		if md.Movable() {
+			continue
+		}
+		mdFilePath := s.sidecarFilePath(key, _completeBlob, md.GetSuffix())
+		err = os.Remove(mdFilePath)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			err = fmt.Errorf("remove metadata file: %w", err)
+			s.log.With("error", err).Error("Failed to delete un-movable metadata upon marking a blob as complete")
+			continue
+		}
+	}
 }
 
 func (s *diskStore) checkDiskIfUnevictable(key string, complete bool) (bool, error) {
@@ -396,19 +432,16 @@ func (s *diskStore) setMetadata(key string, md metadata.Metadata, scope blobScop
 		return fmt.Errorf("serialize metadata: %w", err)
 	}
 	mdFilePath := s.sidecarFilePath(key, b.complete, md.GetSuffix())
-	// We use a tmp file to ensure atomicity.
+	// Use a tmp file to ensure atomicity.
 	tmpFilePath := mdFilePath + "-tmp"
 	tmpFile, err := os.OpenFile(tmpFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, _defaultFilePerm)
 	if err != nil {
 		return fmt.Errorf("create tmp file for md: %w", err)
 	}
+	defer closers.Close(tmpFile)
 	_, err = tmpFile.Write(mdData)
 	if err != nil {
 		return fmt.Errorf("write to tmp file: %w", err)
-	}
-	err = tmpFile.Close()
-	if err != nil {
-		return fmt.Errorf("close tmp file: %w", err)
 	}
 	err = os.Rename(tmpFile.Name(), mdFilePath)
 	if err != nil {
@@ -433,6 +466,9 @@ func (s *diskStore) getMetadata(key string, md metadata.Metadata, scope blobScop
 	mdFile, err := os.OpenFile(mdFilePath, os.O_RDONLY, _defaultFilePerm)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("open metadata file: %w", err)
 	}
 	defer closers.Close(mdFile)
 	data, err := io.ReadAll(mdFile)
@@ -466,6 +502,73 @@ func (s *diskStore) deleteMetadata(key string, md metadata.Metadata, scope blobS
 	if err != nil {
 		return fmt.Errorf("remove metadata file: %w", err)
 	}
+	return nil
+}
+
+func (s *diskStore) listMetadata(key string, scope blobScope) ([]metadata.Metadata, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.listMetadataNoLock(key, scope)
+}
+
+func (s *diskStore) listMetadataNoLock(key string, scope blobScope) ([]metadata.Metadata, error) {
+	b, ok := s.blobs[key]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return nil, err
+	}
+
+	res := make([]metadata.Metadata, 0)
+	entries, err := os.ReadDir(s.dirPath(key, b.complete))
+	if err != nil {
+		return nil, fmt.Errorf("read metadata files from dir: %w", err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == _blobFileName || name == _evictionBannedFileName || name == _blobSizeFileName {
+			continue
+		}
+
+		md := metadata.CreateFromSuffix(name)
+		if md == nil {
+			s.log.With("key", key, "file_name", name).Warn("Found file in blob dir that does not successfully parse as a metadata file")
+			continue
+		}
+		res = append(res, md)
+	}
+	return res, nil
+}
+
+func (s *diskStore) writeAtMetadata(key string, md metadata.Metadata, p []byte, off int64, scope blobScope) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return os.ErrNotExist
+	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return err
+	}
+
+	mdFilePath := s.sidecarFilePath(key, b.complete, md.GetSuffix())
+	mdFile, err := os.OpenFile(mdFilePath, os.O_WRONLY, _defaultFilePerm)
+	if errors.Is(err, os.ErrNotExist) {
+		return errors.New("metadata does not exist")
+	}
+	if err != nil {
+		return fmt.Errorf("open: %w", err)
+	}
+	defer closers.Close(mdFile)
+
+	_, err = mdFile.WriteAt(p, off)
+	if err != nil {
+		return fmt.Errorf("write at: %w", err)
+	}
+
 	return nil
 }
 
