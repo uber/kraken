@@ -37,7 +37,6 @@ func Register(suffix *regexp.Regexp, factory Factory) {
 }
 
 // CreateFromSuffix creates a Metadata obj based on suffix.
-// This is not a very efficient method; It's mostly used during reload.
 func CreateFromSuffix(suffix string) Metadata {
 	for re, factory := range _factories {
 		if re.MatchString(suffix) {

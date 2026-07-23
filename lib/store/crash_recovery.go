@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/kraken/utils/closers"
 	"go.uber.org/zap"
 )
@@ -27,7 +28,7 @@ type blobState struct {
 	complete  bool
 }
 
-func rebootPersistedStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool, log *zap.SugaredLogger) (*diskStore, error) {
+func rebootPersistedStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool, log *zap.SugaredLogger, metrics tally.Scope) (*diskStore, error) {
 	completeDirPath, incompleteDirPath := filepath.Join(rootDir, _completeSubDir), filepath.Join(rootDir, _incompleteSubDir)
 	if !rebootIncompleteBlobs {
 		err := os.RemoveAll(incompleteDirPath)
@@ -59,6 +60,7 @@ func rebootPersistedStore(capacityBytes uint64, rootDir string, rebootIncomplete
 			return nil, err
 		}
 		if !ok {
+			log.Warn("Could not reboot blob from disk - its parent directory is there but the blob is missing")
 			continue
 		}
 		if bState.complete && bState.evictable {
@@ -104,6 +106,7 @@ func rebootPersistedStore(capacityBytes uint64, rootDir string, rebootIncomplete
 		size:                  storeSize,
 		rebootIncompleteBlobs: rebootIncompleteBlobs,
 		log:                   log,
+		metrics:               metrics,
 	}
 
 	if store.size > store.capacity {
@@ -181,6 +184,7 @@ func rebootIncompleteBlobSize(key string, pather *pather) (size uint64, ok bool,
 }
 
 func rebootKeys(subDir string) ([]string, error) {
+	// TODO - consider using glob matching to reboot the keys
 	keys := make([]string, 0)
 	ok, err := exists(subDir)
 	if err != nil {

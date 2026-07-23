@@ -32,7 +32,7 @@ func (p *pather) dirPath(key string, complete bool) string {
 	}
 	dirPath := filepath.Join(p.dir, subDirName)
 	for i := 0; i < int(_defaultShardIDLength) && i < len(key)/2; i++ {
-		// (1 byte = 2 char of file name assumming file name is in HEX)
+		// (1 byte = 2 char of file name assuming file name is in HEX)
 		dirName := key[i*2 : i*2+2]
 		dirPath = filepath.Join(dirPath, dirName)
 	}
