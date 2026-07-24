@@ -1,22 +1,28 @@
 package store
 
-import "path/filepath"
+import (
+	"fmt"
+	"io/fs"
+	"path/filepath"
+	"strings"
+)
 
 const (
-	// _defaultShardIDLength is the number of bytes of file digest to be used for shard ID.
-	// For every byte (2 HEX char), one more level of directories will be created.
-	_defaultShardIDLength = 2
-	_incompleteSubDir     = "incomplete"
-	_completeSubDir       = "complete"
-	_blobFileName         = "data"
+	_incompleteSubDir = "incomplete"
+	_completeSubDir   = "complete"
+	_blobFileName     = "data"
 )
 
 type pather struct {
-	dir string
+	dir         string
+	shardLength int
 }
 
-func newPather(rootDir string) *pather {
-	return &pather{dir: rootDir}
+// shardLength is the number of bytes of blob key to be used for shard ID.
+// For every byte (2 HEX char), one more level of directories will be created.
+// A shardLength of 0 denotes no sharding.
+func newPather(rootDir string, shardLength int) *pather {
+	return &pather{dir: rootDir, shardLength: shardLength}
 }
 
 func (p *pather) blobPath(key string, complete bool) string {
@@ -25,13 +31,12 @@ func (p *pather) blobPath(key string, complete bool) string {
 }
 
 func (p *pather) dirPath(key string, complete bool) string {
-	// TODO - allow config to specify whether to shard or not. Allow no sharding, so we can replace [SimpleStore].
 	subDirName := _incompleteSubDir
 	if complete {
 		subDirName = _completeSubDir
 	}
 	dirPath := filepath.Join(p.dir, subDirName)
-	for i := 0; i < int(_defaultShardIDLength) && i < len(key)/2; i++ {
+	for i := 0; i < int(p.shardLength) && i < len(key)/2; i++ {
 		// (1 byte = 2 char of file name assuming file name is in HEX)
 		dirName := key[i*2 : i*2+2]
 		dirPath = filepath.Join(dirPath, dirName)
@@ -43,4 +48,41 @@ func (p *pather) dirPath(key string, complete bool) string {
 func (p *pather) sidecarFilePath(key string, complete bool, sidecarFileName string) string {
 	dirPath := p.dirPath(key, complete)
 	return filepath.Join(dirPath, sidecarFileName)
+}
+
+func (p *pather) rebootKeys(subDir string) ([]string, error) {
+	keys := make([]string, 0)
+	ok, err := exists(subDir)
+	if err != nil {
+		return nil, fmt.Errorf("exists: %w", err)
+	}
+	if !ok {
+		return []string{}, nil
+	}
+	err = filepath.WalkDir(subDir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !entry.IsDir() {
+			return nil
+		}
+		relPath, err := filepath.Rel(subDir, path)
+		if err != nil {
+			return err
+		}
+		nameParts := strings.Split(relPath, string(filepath.Separator))
+		numShards := p.shardLength
+		isBlobDir := len(nameParts) == numShards+1
+		if !isBlobDir {
+			return nil
+		}
+		key := nameParts[len(nameParts)-1]
+		keys = append(keys, key)
+		return fs.SkipDir
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walk through subdir '%v' to reboot blob keys: %w", subDir, err)
+	}
+	return keys, nil
 }

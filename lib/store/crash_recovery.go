@@ -5,20 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/utils/closers"
 	"go.uber.org/zap"
 )
-
-const _numShards = 2 // TODO - change this not to be hardcoded when configurable sharding is implemented
 
 type blobState struct {
 	key       string
@@ -28,7 +24,7 @@ type blobState struct {
 	complete  bool
 }
 
-func rebootPersistedStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool, log *zap.SugaredLogger, metrics tally.Scope) (*diskStore, error) {
+func rebootPersistedStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool, shardLength int, log *zap.SugaredLogger, metrics tally.Scope) (*diskStore, error) {
 	completeDirPath, incompleteDirPath := filepath.Join(rootDir, _completeSubDir), filepath.Join(rootDir, _incompleteSubDir)
 	if !rebootIncompleteBlobs {
 		err := os.RemoveAll(incompleteDirPath)
@@ -37,20 +33,20 @@ func rebootPersistedStore(capacityBytes uint64, rootDir string, rebootIncomplete
 		}
 	}
 
-	keys, err := rebootKeys(completeDirPath)
+	pather := newPather(rootDir, shardLength)
+	keys, err := pather.rebootKeys(completeDirPath)
 	if err != nil {
 		return nil, err
 	}
 	numCompleteBlobs := len(keys)
 	if rebootIncompleteBlobs {
-		incompleteKeys, err := rebootKeys(incompleteDirPath)
+		incompleteKeys, err := pather.rebootKeys(incompleteDirPath)
 		if err != nil {
 			return nil, err
 		}
 		keys = append(keys, incompleteKeys...)
 	}
 
-	pather := newPather(rootDir)
 	completeEvictableEntries := make([]*blobState, 0)
 	otherEntries := make([]*blobState, 0)
 	for i, key := range keys {
@@ -181,43 +177,6 @@ func rebootIncompleteBlobSize(key string, pather *pather) (size uint64, ok bool,
 	}
 	closers.Close(blobSizeF)
 	return uint64(blobSize), true, nil
-}
-
-func rebootKeys(subDir string) ([]string, error) {
-	// TODO - consider using glob matching to reboot the keys
-	keys := make([]string, 0)
-	ok, err := exists(subDir)
-	if err != nil {
-		return nil, fmt.Errorf("exists: %w", err)
-	}
-	if !ok {
-		return []string{}, nil
-	}
-	err = filepath.WalkDir(subDir, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if !entry.IsDir() {
-			return nil
-		}
-		relPath, err := filepath.Rel(subDir, path)
-		if err != nil {
-			return err
-		}
-		nameParts := strings.Split(relPath, string(filepath.Separator))
-		isBlobDir := len(nameParts) == _numShards+1
-		if !isBlobDir {
-			return nil
-		}
-		key := nameParts[len(nameParts)-1]
-		keys = append(keys, key)
-		return fs.SkipDir
-	})
-	if err != nil {
-		return nil, fmt.Errorf("walk through subdir '%v' to reboot blob keys: %w", subDir, err)
-	}
-	return keys, nil
 }
 
 func existsPersistedStore(rootDir string) (ok bool, err error) {

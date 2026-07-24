@@ -20,12 +20,16 @@ import (
 	"github.com/uber/kraken/utils/memsize"
 )
 
+const (
+	_defaultShardLength = 2
+)
+
 func newTestStore(t *testing.T, capacity uint64, rebootIncompleteBlobs bool) (res *DiskStore, rootDir string) {
 	rootDir, err := os.MkdirTemp("/tmp", "kraken-disk-store")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(rootDir) })
 
-	store, err := NewDiskStore(capacity, rootDir, rebootIncompleteBlobs, tally.NoopScope)
+	store, err := NewDiskStore(capacity, rootDir, rebootIncompleteBlobs, _defaultShardLength, tally.NoopScope)
 	require.NoError(t, err)
 	return store, rootDir
 }

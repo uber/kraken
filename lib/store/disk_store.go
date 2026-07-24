@@ -64,7 +64,7 @@ type blob struct {
 	evictionBanned bool
 }
 
-func newDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool, metrics tally.Scope) (*diskStore, error) {
+func newDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool, shardLength int, metrics tally.Scope) (*diskStore, error) {
 	// TODO - create a Config struct.
 	// TODO - consider how to support blob mutation, which might be needed by build-index for tag mutation.
 	// TODO - move disk store files into their own directory and package.
@@ -85,12 +85,12 @@ func newDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bo
 			evictQueue:            list.New(),
 			log:                   log,
 			metrics:               metrics,
-			pather:                newPather(rootDir),
+			pather:                newPather(rootDir, shardLength),
 			rebootIncompleteBlobs: rebootIncompleteBlobs,
 		}, nil
 	}
 
-	store, err := rebootPersistedStore(capacityBytes, rootDir, rebootIncompleteBlobs, log, metrics)
+	store, err := rebootPersistedStore(capacityBytes, rootDir, rebootIncompleteBlobs, shardLength, log, metrics)
 	if err != nil {
 		err = fmt.Errorf("reboot persisted state into memory: %w", err)
 		log.With("error", err).Error("Failed to initialize disk store")

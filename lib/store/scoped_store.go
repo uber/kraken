@@ -37,8 +37,8 @@ type DiskStore struct {
 //
 //   - If the store's size is bigger than its capacity (e.g. configured capacity has been reduced or files have been leaked),
 //     it evicts blobs until size is within capacity.
-func NewDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool, metrics tally.Scope) (*DiskStore, error) {
-	diskStore, err := newDiskStore(capacityBytes, rootDir, rebootIncompleteBlobs, metrics)
+func NewDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool, shardLength int, metrics tally.Scope) (*DiskStore, error) {
+	diskStore, err := newDiskStore(capacityBytes, rootDir, rebootIncompleteBlobs, shardLength, metrics)
 	if err != nil {
 		return nil, err
 	}

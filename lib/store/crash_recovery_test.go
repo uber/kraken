@@ -40,7 +40,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(store.BanEviction(incompleteUnevictableKey))
 
 		// Assume that the application crashes here. The application would restart and call `NewDiskStore`.
-		store, err := NewDiskStore(10*memsize.KB, rootDir, true, tally.NoopScope)
+		store, err := NewDiskStore(10*memsize.KB, rootDir, true, _defaultShardLength, tally.NoopScope)
 		require.NoError(err)
 
 		// Incomplete files are recovered (since `rebootIncompleteBlobs` is true).
@@ -89,7 +89,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.Equal(8*memsize.KB, store.size)
 
 		// Run the store with `rebootIncompleteBlobs` as false.
-		store, err = NewDiskStore(10*memsize.KB, rootDir, false, tally.NoopScope)
+		store, err = NewDiskStore(10*memsize.KB, rootDir, false, _defaultShardLength, tally.NoopScope)
 		require.NoError(err)
 
 		// Incomplete files are dropped.
@@ -132,7 +132,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(store.SetMetadata(key, writtenMd))
 
 		// Assume that the application crashes here. The application would restart and call `NewDiskStore`.
-		store, err := NewDiskStore(10*memsize.KB, rootDir, true, tally.NoopScope)
+		store, err := NewDiskStore(10*memsize.KB, rootDir, true, _defaultShardLength, tally.NoopScope)
 		require.NoError(err)
 
 		var readMd metadata.TorrentMeta
@@ -152,7 +152,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(store.SetMetadata(key, writtenMd))
 
 		// Assume that the application crashes here. The application would restart and call `NewDiskStore`.
-		store, err := NewDiskStore(10*memsize.KB, rootDir, true, tally.NoopScope)
+		store, err := NewDiskStore(10*memsize.KB, rootDir, true, _defaultShardLength, tally.NoopScope)
 		require.NoError(err)
 
 		var readMd metadata.TorrentMeta
@@ -200,7 +200,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.Equal([]string{cKey, eKey, dKey}, evictionOrderBeforeCrash) // a is unevictable and b is incomplete
 
 		// Assume that the application restarts here.
-		store, err = NewDiskStore(10*memsize.KB, rootDir, false, tally.NoopScope)
+		store, err = NewDiskStore(10*memsize.KB, rootDir, false, _defaultShardLength, tally.NoopScope)
 		require.NoError(err)
 
 		// LRU order is approximated, but not exact.
@@ -210,7 +210,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.Equal(wantEvictionOrder, rebootedEvictionOrder)
 
 		// Assume we redeploy the service with a smaller capacity for the disk store:
-		store, err = NewDiskStore(6*memsize.KB, rootDir, false, tally.NoopScope)
+		store, err = NewDiskStore(6*memsize.KB, rootDir, false, _defaultShardLength, tally.NoopScope)
 		require.NoError(err)
 
 		// since 10KB of blobs are in store, `c` gets evicted to put the store back within its capacity.
@@ -239,7 +239,7 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(cF.Close())
 
 		// Assume that the application restarts here.
-		store, err := NewDiskStore(5*memsize.KB, rootDir, true, tally.NoopScope)
+		_, err := NewDiskStore(5*memsize.KB, rootDir, true, _defaultShardLength, tally.NoopScope)
 		require.ErrorContains(err, "cannot evict enough, the unevictable/incomplete blobs are using up all the space")
 	})
 }
@@ -252,7 +252,7 @@ func TestIncompleteBlobDownloadResumedAfterMultipleCrashes(t *testing.T) {
 	firstData := fillWithRandomData(t, f, 2*memsize.KB)
 
 	// First crash.
-	store, err := NewDiskStore(10*memsize.KB, rootDir, true, tally.NoopScope)
+	store, err := NewDiskStore(10*memsize.KB, rootDir, true, _defaultShardLength, tally.NoopScope)
 	require.NoError(err)
 
 	f, err = store.Open(key)
@@ -266,7 +266,7 @@ func TestIncompleteBlobDownloadResumedAfterMultipleCrashes(t *testing.T) {
 	require.NoError(err)
 
 	// Second crash.
-	store, err = NewDiskStore(10*memsize.KB, rootDir, true, tally.NoopScope)
+	store, err = NewDiskStore(10*memsize.KB, rootDir, true, _defaultShardLength, tally.NoopScope)
 	require.NoError(err)
 
 	wantData := make([]byte, 5*memsize.KB)
@@ -283,7 +283,7 @@ func TestIncompleteBlobDownloadResumedAfterMultipleCrashes(t *testing.T) {
 	require.NoError(store.MarkComplete(key))
 
 	// Third crash.
-	store, err = NewDiskStore(10*memsize.KB, rootDir, true, tally.NoopScope)
+	store, err = NewDiskStore(10*memsize.KB, rootDir, true, _defaultShardLength, tally.NoopScope)
 	require.NoError(err)
 	// now that the blob is complete, its actual size should be rebooted through stat, instead of trusting the _size sidecar file.
 	require.Equal(5*memsize.KB, store.size)
