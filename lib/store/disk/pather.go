@@ -1,4 +1,4 @@
-package store
+package disk
 
 import (
 	"fmt"
@@ -50,16 +50,21 @@ func (p *pather) sidecarFilePath(key string, complete bool, sidecarFileName stri
 	return filepath.Join(dirPath, sidecarFileName)
 }
 
-func (p *pather) rebootKeys(subDir string) ([]string, error) {
+func (p *pather) rebootKeys(complete bool) ([]string, error) {
+	subDirName := _incompleteSubDir
+	if complete {
+		subDirName = _completeSubDir
+	}
+	dir := filepath.Join(p.dir, subDirName)
 	keys := make([]string, 0)
-	ok, err := exists(subDir)
+	ok, err := exists(dir)
 	if err != nil {
 		return nil, fmt.Errorf("exists: %w", err)
 	}
 	if !ok {
 		return []string{}, nil
 	}
-	err = filepath.WalkDir(subDir, func(path string, entry fs.DirEntry, err error) error {
+	err = filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -67,7 +72,10 @@ func (p *pather) rebootKeys(subDir string) ([]string, error) {
 		if !entry.IsDir() {
 			return nil
 		}
-		relPath, err := filepath.Rel(subDir, path)
+		if path == dir {
+			return nil
+		}
+		relPath, err := filepath.Rel(dir, path)
 		if err != nil {
 			return err
 		}
@@ -82,7 +90,7 @@ func (p *pather) rebootKeys(subDir string) ([]string, error) {
 		return fs.SkipDir
 	})
 	if err != nil {
-		return nil, fmt.Errorf("walk through subdir '%v' to reboot blob keys: %w", subDir, err)
+		return nil, fmt.Errorf("walk through dir '%v' to reboot blob keys: %w", dir, err)
 	}
 	return keys, nil
 }

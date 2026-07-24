@@ -25,7 +25,7 @@ type FileReadWriter = base.FileReadWriter
 // FileReader is a read-only file.
 type FileReader = base.FileReader
 
-func newReadWriter(f *os.File) FileReadWriter {
+func NewReadWriter(f *os.File) FileReadWriter {
 	return &rwImpl{
 		File: f,
 	}

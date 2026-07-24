@@ -1,4 +1,4 @@
-package store
+package disk
 
 import (
 	"os"
@@ -12,7 +12,7 @@ import (
 func TestPather(t *testing.T) {
 	rootDir, err := os.MkdirTemp("/tmp", "kraken-disk-store")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(rootDir) })
+	t.Cleanup(func() { require.NoError(t, os.RemoveAll(rootDir)) })
 	shardLength := 2
 	shardedPather := newPather(rootDir, shardLength)
 	unshardedPather := newPather(rootDir, 0)

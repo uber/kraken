@@ -1,4 +1,4 @@
-package store
+package disk
 
 import (
 	"container/list"
@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
+	storelib "github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
@@ -21,7 +22,7 @@ import (
 // the set of blobs that the store's APIs can operate on.
 type blobScope int
 
-// flags to scope [diskStore]'s APIs to a subset of blobs.
+// flags to scope [store]'s APIs to a subset of blobs.
 const (
 	blobScopeAny blobScope = iota
 	blobScopeComplete
@@ -38,69 +39,63 @@ const (
 
 var _syncEvictionLatencyBuckets = tally.MustMakeExponentialDurationBuckets(100*time.Millisecond, 1.4, 15)
 
-// diskStore implements the APIs of [DiskStore]. [diskStore]'s APIs expose the [blobScope] arg,
-// while [DiskStore]'s APIs omit that arg (cleaner interface) and instead expose other APIs to scope the whole store.
+// store implements the APIs of [Store]. [store]'s APIs expose the [blobScope] arg,
+// while [Store]'s APIs omit that arg (cleaner interface) and instead expose other APIs to scope the whole store.
 //
-// Check [DiskStore]'s comments for details on functionality.
-type diskStore struct {
+// Check [Store]'s comments for details on functionality.
+type store struct {
 	capacity   uint64
-	size       uint64           // includes both used and reserved space.
+	size       uint64           // Includes both actively-used and not yet used, but reserved space.
 	blobs      map[string]*blob // TODO - consider whether it's better to use struct instead of pointer to reduce GC stress.
-	evictQueue *list.List       // Back is most recently used, front is the next to evict.
-	// synchronizes mem state access and syscalls to the fs in the APIs (opening, moving files, etc.)
-	mu sync.RWMutex // TODO - evaluate whether the read-to-write ratio is more appropriate for a [sync.Mutex] instead.
-	// If enabled, incomplete blobs are rebooted in the store upon restart (or after a crash), allowing users to continue using the blob.
-	// If disabled, incomplete blobs are discarded (usually done to prevent leaks).
-	rebootIncompleteBlobs bool
-	log                   *zap.SugaredLogger
-	metrics               tally.Scope
+	evictQueue *list.List       // Front is the next to evict.
+	// Synchronizes 1) mem state and 2) disk state. Only acquired by public methods.
+	mu      sync.RWMutex // TODO - evaluate whether the read-to-write ratio is more appropriate for a [sync.Mutex] instead.
+	config  *Config
+	log     *zap.SugaredLogger
+	metrics tally.Scope
 	*pather
 }
 
 type blob struct {
-	node           *list.Element // value of [list.Element] is [string].
+	node           *list.Element // Value of [list.Element] is [string].
 	size           uint64
 	complete       bool
 	evictionBanned bool
 }
 
-func newDiskStore(capacityBytes uint64, rootDir string, rebootIncompleteBlobs bool, shardLength int, metrics tally.Scope) (*diskStore, error) {
-	// TODO - create a Config struct.
-	// TODO - consider how to support blob mutation, which might be needed by build-index for tag mutation.
-	// TODO - move disk store files into their own directory and package.
-
+func newStore(config *Config, metrics tally.Scope) (*store, error) {
 	log := log.Default().With("module", "disk_store")
-	ok, err := existsPersistedStore(rootDir)
+	ok, err := existsPersistedStore(config.RootDir)
 	if err != nil {
 		err = fmt.Errorf("could not check if previously-left persisted state exists on disk: %w", err)
 		log.With("error", err).Error("Failed to initialize disk store")
 		return nil, err
 	}
 	if !ok {
-		log.Info("Initialized a new, empty DiskStore (did not find any previously persisted state to reboot for DiskStore)")
-		return &diskStore{
-			capacity:              capacityBytes,
-			size:                  0,
-			blobs:                 make(map[string]*blob),
-			evictQueue:            list.New(),
-			log:                   log,
-			metrics:               metrics,
-			pather:                newPather(rootDir, shardLength),
-			rebootIncompleteBlobs: rebootIncompleteBlobs,
+		log.Info("Initialized a new, empty Store (did not find any previously persisted state to reboot for Store)")
+		return &store{
+			capacity:   config.CapacityBytes,
+			size:       0,
+			blobs:      make(map[string]*blob),
+			evictQueue: list.New(),
+			config:     config,
+			pather:     newPather(config.RootDir, config.ShardLength),
+			log:        log,
+			metrics:    metrics,
 		}, nil
 	}
 
-	store, err := rebootPersistedStore(capacityBytes, rootDir, rebootIncompleteBlobs, shardLength, log, metrics)
+	store, err := rebootPersistedStore(config, log, metrics)
 	if err != nil {
 		err = fmt.Errorf("reboot persisted state into memory: %w", err)
 		log.With("error", err).Error("Failed to initialize disk store")
 		return nil, err
 	}
-	log.With("num_blobs", len(store.blobs)).Info("Successfully rebooted DiskStore's previously left state on disk")
+	log.With("num_blobs", len(store.blobs)).Info("Successfully rebooted Store's previously left state on disk")
 	return store, nil
 }
 
-func (s *diskStore) open(key string, scope blobScope) (FileReadWriter, error) {
+func (s *store) Open(key string, scope blobScope) (storelib.FileReadWriter, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -120,12 +115,12 @@ func (s *diskStore) open(key string, scope blobScope) (FileReadWriter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
-	return newReadWriter(f), nil
+	return storelib.NewReadWriter(f), nil
 }
 
-func (s *diskStore) stat(key string, scope blobScope) (os.FileInfo, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *store) Stat(key string, scope blobScope) (os.FileInfo, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	b, ok := s.blobs[key]
 	if !ok {
@@ -134,11 +129,12 @@ func (s *diskStore) stat(key string, scope blobScope) (os.FileInfo, error) {
 	if err := isOutOfScope(b, scope); err != nil {
 		return nil, err
 	}
+	// TODO - consider whether this should update the access time of the blob.
 	blobPath := s.blobPath(key, b.complete)
 	return os.Stat(blobPath)
 }
 
-func (s *diskStore) create(key string, sizeBytes uint64) (FileReadWriter, error) {
+func (s *store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, error) {
 	// TODO - we might want some TTI on uploads to the store, after which we cancel the upload, e.g. 1min without the client uploading more data.
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -169,7 +165,7 @@ func (s *diskStore) create(key string, sizeBytes uint64) (FileReadWriter, error)
 		return nil, fmt.Errorf("open file: %w", err)
 	}
 
-	if s.rebootIncompleteBlobs {
+	if s.config.RebootIncompleteBlobs {
 		err = s.persistBlobSize(key, sizeBytes)
 		if err != nil {
 			// Fail-open: the blob will be discarded upon reboot if incomplete.
@@ -184,10 +180,10 @@ func (s *diskStore) create(key string, sizeBytes uint64) (FileReadWriter, error)
 		evictionBanned: false,
 	}
 
-	return newReadWriter(f), nil
+	return storelib.NewReadWriter(f), nil
 }
 
-func (s *diskStore) persistBlobSize(key string, sizeBytes uint64) error {
+func (s *store) persistBlobSize(key string, sizeBytes uint64) error {
 	blobSizeFilePath := s.sidecarFilePath(key, _incompleteBlob, _blobSizeFileName)
 	blobSizeF, err := os.OpenFile(blobSizeFilePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, _defaultFilePerm)
 	if err != nil {
@@ -201,7 +197,7 @@ func (s *diskStore) persistBlobSize(key string, sizeBytes uint64) error {
 	return nil
 }
 
-func (s *diskStore) reserveSpace(space uint64) error {
+func (s *store) reserveSpace(space uint64) error {
 	// TODO - benchmark and consider whether async eviction makes more sense.
 	startTime := time.Now()
 	for s.size+space > s.capacity {
@@ -210,12 +206,12 @@ func (s *diskStore) reserveSpace(space uint64) error {
 				"unevictable_bytes", s.size,
 				"required_space", space,
 				"capacity", s.capacity,
-			).Error("Cannot evict enough data to free space for new entry to DiskStore. The unevictable/incomplete blobs are using up all the space")
+			).Error("Cannot evict enough data to free space for new entry to Store. The unevictable/incomplete blobs are using up all the space")
 			return errors.New("cannot evict enough, the unevictable/incomplete blobs are using up all the space")
 		}
 
 		toEvictNode := s.evictQueue.Front()
-		toEvictKey := toEvictNode.Value.(string)
+		toEvictKey := toEvictNode.Value.(string) //nolint:errcheck // We only ever store string in this value.
 
 		err := s.deleteFromDisk(toEvictKey, _completeBlob)
 		if err != nil {
@@ -233,9 +229,9 @@ func (s *diskStore) reserveSpace(space uint64) error {
 	return nil
 }
 
-func (s *diskStore) releaseSpace(space uint64) {
+func (s *store) releaseSpace(space uint64) {
 	if space > s.size {
-		s.log.Error("Invariant violation - DiskStore wants to release more disk space than actually reserved. Failing open by releasing all reserved space.")
+		s.log.Error("Invariant violation - Store wants to release more disk space than actually reserved. Failing open by releasing all reserved space.")
 		s.size = 0
 		return
 	}
@@ -243,12 +239,12 @@ func (s *diskStore) releaseSpace(space uint64) {
 }
 
 // Fully deletes the disk state of a blob, including metadata. Works on any blob.
-func (s *diskStore) deleteFromDisk(key string, complete bool) error {
+func (s *store) deleteFromDisk(key string, complete bool) error {
 	dir := s.dirPath(key, complete)
 	return os.RemoveAll(dir)
 }
 
-func (s *diskStore) markComplete(key string) error {
+func (s *store) MarkComplete(key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -284,7 +280,7 @@ func (s *diskStore) markComplete(key string) error {
 // Best-effort attempt to remove immovable metadata. Fail-open on failure
 // to avoid an inconsistent state, as failure only costs a negligible amount
 // of disk until the blob is evicted.
-func (s *diskStore) tryDeleteImmovableMetadata(key string) {
+func (s *store) tryDeleteImmovableMetadata(key string) {
 	mdList, err := s.listMetadataNoLock(key, blobScopeAny)
 	if err != nil {
 		err = fmt.Errorf("list metadata: %w", err)
@@ -305,7 +301,7 @@ func (s *diskStore) tryDeleteImmovableMetadata(key string) {
 	}
 }
 
-func (s *diskStore) checkDiskIfUnevictable(key string, complete bool) (bool, error) {
+func (s *store) checkDiskIfUnevictable(key string, complete bool) (bool, error) {
 	flagBlobPath := s.sidecarFilePath(key, complete, _evictionBannedFileName)
 	unevictable, err := exists(flagBlobPath)
 	if err != nil {
@@ -314,7 +310,7 @@ func (s *diskStore) checkDiskIfUnevictable(key string, complete bool) (bool, err
 	return unevictable, nil
 }
 
-func (s *diskStore) delete(key string, scope blobScope) error {
+func (s *store) Delete(key string, scope blobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -339,7 +335,7 @@ func (s *diskStore) delete(key string, scope blobScope) error {
 	return nil
 }
 
-func (s *diskStore) list(scope blobScope) []string {
+func (s *store) list(scope blobScope) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -353,7 +349,7 @@ func (s *diskStore) list(scope blobScope) []string {
 	return res
 }
 
-func (s *diskStore) banEviction(key string, scope blobScope) error {
+func (s *store) BanEviction(key string, scope blobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -385,7 +381,7 @@ func (s *diskStore) banEviction(key string, scope blobScope) error {
 	return nil
 }
 
-func (s *diskStore) unbanEviction(key string, scope blobScope) error {
+func (s *store) UnbanEviction(key string, scope blobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -415,7 +411,7 @@ func (s *diskStore) unbanEviction(key string, scope blobScope) error {
 	return nil
 }
 
-func (s *diskStore) setMetadata(key string, md metadata.Metadata, scope blobScope) error {
+func (s *store) SetMetadata(key string, md metadata.Metadata, scope blobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -450,7 +446,7 @@ func (s *diskStore) setMetadata(key string, md metadata.Metadata, scope blobScop
 	return nil
 }
 
-func (s *diskStore) getMetadata(key string, md metadata.Metadata, scope blobScope) (ok bool, err error) {
+func (s *store) GetMetadata(key string, md metadata.Metadata, scope blobScope) (ok bool, err error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -482,7 +478,7 @@ func (s *diskStore) getMetadata(key string, md metadata.Metadata, scope blobScop
 	return true, nil
 }
 
-func (s *diskStore) deleteMetadata(key string, md metadata.Metadata, scope blobScope) error {
+func (s *store) DeleteMetadata(key string, md metadata.Metadata, scope blobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -505,14 +501,14 @@ func (s *diskStore) deleteMetadata(key string, md metadata.Metadata, scope blobS
 	return nil
 }
 
-func (s *diskStore) listMetadata(key string, scope blobScope) ([]metadata.Metadata, error) {
+func (s *store) ListMetadata(key string, scope blobScope) ([]metadata.Metadata, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	return s.listMetadataNoLock(key, scope)
 }
 
-func (s *diskStore) listMetadataNoLock(key string, scope blobScope) ([]metadata.Metadata, error) {
+func (s *store) listMetadataNoLock(key string, scope blobScope) ([]metadata.Metadata, error) {
 	b, ok := s.blobs[key]
 	if !ok {
 		return nil, os.ErrNotExist
@@ -542,7 +538,7 @@ func (s *diskStore) listMetadataNoLock(key string, scope blobScope) ([]metadata.
 	return res, nil
 }
 
-func (s *diskStore) writeAtMetadata(key string, md metadata.Metadata, p []byte, off int64, scope blobScope) error {
+func (s *store) WriteAtMetadata(key string, md metadata.Metadata, p []byte, off int64, scope blobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -573,13 +569,13 @@ func (s *diskStore) writeAtMetadata(key string, md metadata.Metadata, p []byte, 
 }
 
 // used during testing
-func (s *diskStore) evictionOrder() []string {
+func (s *store) evictionOrder() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	evictionOrder := make([]string, 0)
 	for curr := s.evictQueue.Front(); curr != nil; curr = curr.Next() {
-		currKey := curr.Value.(string)
+		currKey := curr.Value.(string) //nolint:errcheck // We only ever store string in this value.
 		evictionOrder = append(evictionOrder, currKey)
 	}
 	return evictionOrder
