@@ -1,11 +1,17 @@
 package memory
 
 import (
+	"container/list"
 	"errors"
 	"os"
+	"sync"
+	"sync/atomic"
 
+	"github.com/uber-go/tally"
 	storelib "github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/log"
+	"go.uber.org/zap"
 )
 
 // ErrNoSpace means the store could not free enough space for a new entry.
@@ -27,13 +33,90 @@ var ErrEvicted error = errors.New("the blob has been evicted from the store")
 //
 //   - Supports (un-)marking blobs as non-evictable (needed when we want to ensure an entry does not get evicted before the client flushes it to disk).
 type Store struct {
+	blobs      map[string]*blob
+	evictQueue *list.List // front is next to evict (least recently used entry)
+	size       uint64
+	capacity   uint64
+	mu         sync.RWMutex // TODO - benchmark if a [sync.Mutex] has better perf.
+	log        *zap.SugaredLogger
+	metrics    tally.Scope
+}
+
+// NewStore initializes an empty [*Store].
+func NewStore(capacityBytes uint64, metrics tally.Scope) (*Store, error) {
+	if capacityBytes <= 0 {
+		return nil, errors.New("store capacity must be positive")
+	}
+
+	log := log.Default().With("module", "memory_store")
+
+	log.Info("Initialized new, empty *memory.Store")
+	return &Store{
+		blobs:      make(map[string]*blob, 0),
+		evictQueue: list.New(),
+		capacity:   capacityBytes,
+		size:       0,
+		log:        log,
+		metrics:    metrics,
+	}, nil
+}
+
+type blob struct {
+	data           atomic.Pointer[[]byte] // set to nil upon eviction/deletion.
+	node           *list.Element
+	mdList         []metadata.Metadata
+	size           uint64
+	complete       bool
+	evictionBanned bool
+	sliceMu        sync.RWMutex // Writes to `data`'s array are parallelize-able with each other but NOT with writes that mutate 1) the atomic pointer OR 2) the slice (e.g. resizing the array).
 }
 
 // Create initializes a new, incomplete blob, reserves space for it, and returns a handle to it.
 // Incomplete entries cannot be automatically evicted. MarkComplete must be called once the blob is complete.
 // The store uses `sizeBytes` for its eviction logic even if the blob's real size differs (which is tolerated).
 func (s *Store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, error) {
-	return nil, nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, ok := s.blobs[key]
+	if ok {
+		return nil, os.ErrExist
+	}
+	if ok := s.reserveSpace(sizeBytes); !ok {
+		return nil, ErrNoSpace
+	}
+	b := &blob{
+		size:           sizeBytes,
+		complete:       false,
+		evictionBanned: false,
+		node:           nil,
+		mdList:         make([]metadata.Metadata, 0),
+	}
+	arr := make([]byte, sizeBytes)
+	b.data.Store(&arr)
+	s.blobs[key] = b
+	return newHandle(&b.data, &b.sliceMu, s.log), nil
+}
+
+func (s *Store) reserveSpace(space uint64) bool {
+	// TODO - consider whether it's a worth optimization to check if we can evict enough data BEFORE we start evicting, as to prevent evicting needlessly.
+	for s.size+space > s.capacity {
+		if s.evictQueue.Len() == 0 {
+			return false
+		}
+		toEvictNode := s.evictQueue.Front()
+		toEvictKey := toEvictNode.Value.(string)
+		b := s.blobs[toEvictKey]
+		b.sliceMu.Lock()
+		b.data.Store(nil) // Ensure the byte slice is not referenced by clients outside the store holding [*handle], so GC can evict the memory.
+		b.sliceMu.Unlock()
+		delete(s.blobs, toEvictKey)
+		s.size -= b.size
+		s.evictQueue.Remove(toEvictNode)
+	}
+
+	s.size += space
+	return true
 }
 
 // Open returns a handle to the blob. The handle returns [ErrEvicted] once the blob gets evicted.
@@ -68,7 +151,7 @@ func (s *Store) GetMetadata(key string, md metadata.Metadata) (ok bool, err erro
 // ListMetadata returns all [metadata.Metadata] of key.
 func (s *Store) ListMetadata(key string) ([]metadata.Metadata, error) { return nil, nil }
 
-// DeleteMetadata removes any metadata of a blob with `md`'s suffix, if present.
+// DeleteMetadata removes a blob's metadata, if present.
 func (s *Store) DeleteMetadata(key string, mdSuffix string) error { return nil }
 
 // ScopeComplete scopes [Store]'s APIs such that they can only operate on complete blobs.
