@@ -66,7 +66,7 @@ func (s *Store) Stat(key string) (os.FileInfo, error) { return s.impl.Stat(key, 
 // Additionally, other store APIs may filter blobs based on completeness.
 func (s *Store) MarkComplete(key string) error { return s.impl.MarkComplete(key) }
 
-// Delete removes a blob and its [metadata.Metadata] from the store.
+// Delete removes a blob and its [metadata.Metadata] from the store. Returns [os.ErrNotExist] on missing blob.
 func (s *Store) Delete(key string) error { return s.impl.Delete(key, s.scope) }
 
 // List returns the keys of all blobs (except those out of scope).
