@@ -53,8 +53,7 @@ func (s *Store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, e
 // Open returns a handle to the blob. The handle returns [ErrEvicted] once the blob gets evicted.
 func (s *Store) Open(key string) (storelib.FileReadWriter, error) { return s.impl.Open(key, s.scope) }
 
-// Stat returns the maximum of 1) the blob's size as reported when calling Create and
-// 2) the actual size of the blob, if it was not reported correctly.
+// Stat returns the the blob's actual size, even if it differs from the size reported during Create.
 func (s *Store) Stat(key string) (size int64, err error) { return s.impl.Stat(key, s.scope) }
 
 // MarkComplete marks the blob as fully written, which enlists it for LRU eviction (unless BanEviction has been called). It is idempotent.
