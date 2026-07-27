@@ -63,7 +63,7 @@ func newStore(config *Config, metrics tally.Scope) (*store, error) {
 	}
 	if !ok {
 		log.Info("Initialized a new, empty Store (did not find any previously persisted state to reboot for Store)")
-		return &store{
+		store := &store{
 			capacity:   config.CapacityBytes,
 			size:       0,
 			blobs:      make(map[string]*blob),
@@ -72,7 +72,10 @@ func newStore(config *Config, metrics tally.Scope) (*store, error) {
 			pather:     newPather(config.RootDir, config.ShardLength),
 			log:        log,
 			metrics:    metrics,
-		}, nil
+		}
+
+		store.emitUsageMetrics()
+		return store, nil
 	}
 
 	store, err := rebootPersistedStore(config, log, metrics)
@@ -82,6 +85,8 @@ func newStore(config *Config, metrics tally.Scope) (*store, error) {
 		return nil, err
 	}
 	log.With("num_blobs", len(store.blobs)).Info("Successfully rebooted Store's previously left state on disk")
+
+	store.emitUsageMetrics()
 	return store, nil
 }
 
@@ -170,6 +175,7 @@ func (s *store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, e
 		evictionBanned: false,
 	}
 
+	s.emitUsageMetrics()
 	return storelib.NewReadWriter(f), nil
 }
 
@@ -322,6 +328,7 @@ func (s *store) Delete(key string, scope storelib.BlobScope) error {
 	delete(s.blobs, key)
 	s.releaseSpace(b.size)
 
+	s.emitUsageMetrics()
 	return nil
 }
 
@@ -587,4 +594,9 @@ func isOutOfScope(b *blob, scope storelib.BlobScope) error {
 		return storelib.ErrOutOfScope
 	}
 	return nil
+}
+
+func (s *store) emitUsageMetrics() {
+	s.metrics.Gauge("num_entries").Update(float64(len(s.blobs)))
+	s.metrics.Gauge("size_bytes").Update(float64(s.size))
 }

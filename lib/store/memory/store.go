@@ -49,14 +49,17 @@ func newStore(capacityBytes uint64, metrics tally.Scope) (*store, error) {
 	log := log.Default().With("module", "memory_store")
 
 	log.Info("Initialized new, empty *memory.Store")
-	return &store{
+	s := &store{
 		blobs:      make(map[string]*blob, 0),
 		evictQueue: list.New(),
 		capacity:   capacityBytes,
 		size:       0,
 		log:        log,
 		metrics:    metrics,
-	}, nil
+	}
+
+	s.emitUsageMetrics()
+	return s, nil
 }
 
 func (s *store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, error) {
@@ -80,6 +83,8 @@ func (s *store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, e
 	arr := make([]byte, sizeBytes)
 	b.data.Store(&arr)
 	s.blobs[key] = b
+
+	s.emitUsageMetrics()
 	return newHandle(&b.data, &b.sliceMu, s.log), nil
 }
 
@@ -142,6 +147,8 @@ func (s *store) Delete(key string, scope storelib.BlobScope) error {
 		s.evictQueue.Remove(b.node)
 	}
 	s.size -= b.size
+
+	s.emitUsageMetrics()
 	return nil
 }
 
@@ -326,4 +333,9 @@ func isOutOfScope(b *blob, scope storelib.BlobScope) error {
 		return storelib.ErrOutOfScope
 	}
 	return nil
+}
+
+func (s *store) emitUsageMetrics() {
+	s.metrics.Gauge("num_entries").Update(float64(len(s.blobs)))
+	s.metrics.Gauge("size_bytes").Update(float64(s.size))
 }
