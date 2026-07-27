@@ -172,7 +172,7 @@ func (h *handle) WriteAt(p []byte, off int64) (n int, err error) {
 	}
 	buf, evicted := h.getData()
 	if evicted {
-		return 0, err
+		return 0, ErrEvicted
 	}
 
 	end := int(off) + len(p)

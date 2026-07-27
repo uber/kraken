@@ -95,7 +95,7 @@ func TestStore(t *testing.T) {
 	require.Nil(f)
 
 	f, err = store.ScopeComplete().Open(keys[0])
-	require.ErrorIs(err, ErrOutOfScope)
+	require.ErrorIs(err, storelib.ErrOutOfScope)
 	require.Nil(f)
 
 	require.NoError(store.MarkComplete(keys[0]))
@@ -543,7 +543,7 @@ func TestStat(t *testing.T) {
 		require.NoError(err)
 
 		_, err = store.ScopeComplete().Stat(key)
-		require.Equal(ErrOutOfScope, err)
+		require.Equal(storelib.ErrOutOfScope, err)
 		fInfo, err := store.Stat(key)
 		require.NoError(err)
 
@@ -566,7 +566,7 @@ func TestStat(t *testing.T) {
 		require.NoError(store.BanEviction(key))
 
 		_, err = store.ScopeComplete().Stat(key)
-		require.Equal(ErrOutOfScope, err)
+		require.Equal(storelib.ErrOutOfScope, err)
 		fInfo, err := store.Stat(key)
 		require.NoError(err)
 
@@ -745,7 +745,7 @@ func TestMetadata(t *testing.T) {
 
 		var readMd metadata.TorrentMeta
 		ok, err := store.ScopeComplete().GetMetadata(key, &readMd)
-		require.Equal(ErrOutOfScope, err)
+		require.Equal(storelib.ErrOutOfScope, err)
 		// incomplete files are ignored
 		require.False(ok)
 
@@ -757,7 +757,7 @@ func TestMetadata(t *testing.T) {
 		// Repeat the tests above for an unevictable file
 		require.NoError(store.BanEviction(key))
 		ok, err = store.ScopeComplete().GetMetadata(key, &readMd)
-		require.Equal(ErrOutOfScope, err)
+		require.Equal(storelib.ErrOutOfScope, err)
 		// incomplete files are ignored
 		require.False(ok)
 
@@ -888,20 +888,20 @@ func TestScopes(t *testing.T) {
 
 	// While incomplete, ScopeComplete's APIs reject the blob.
 	_, err = store.ScopeComplete().Open(key)
-	require.ErrorIs(err, ErrOutOfScope)
+	require.ErrorIs(err, storelib.ErrOutOfScope)
 	_, err = store.ScopeComplete().Stat(key)
-	require.ErrorIs(err, ErrOutOfScope)
-	require.ErrorIs(store.ScopeComplete().BanEviction(key), ErrOutOfScope)
-	require.ErrorIs(store.ScopeComplete().UnbanEviction(key), ErrOutOfScope)
-	require.ErrorIs(store.ScopeComplete().SetMetadata(key, md), ErrOutOfScope)
+	require.ErrorIs(err, storelib.ErrOutOfScope)
+	require.ErrorIs(store.ScopeComplete().BanEviction(key), storelib.ErrOutOfScope)
+	require.ErrorIs(store.ScopeComplete().UnbanEviction(key), storelib.ErrOutOfScope)
+	require.ErrorIs(store.ScopeComplete().SetMetadata(key, md), storelib.ErrOutOfScope)
 	var readMd metadata.TorrentMeta
 	ok, err := store.ScopeComplete().GetMetadata(key, &readMd)
-	require.ErrorIs(err, ErrOutOfScope)
+	require.ErrorIs(err, storelib.ErrOutOfScope)
 	require.False(ok)
 	_, err = store.ScopeComplete().ListMetadata(key)
-	require.ErrorIs(err, ErrOutOfScope)
-	require.ErrorIs(store.ScopeComplete().WriteAtMetadata(key, md, mdData, 0), ErrOutOfScope)
-	require.ErrorIs(store.ScopeComplete().DeleteMetadata(key, &readMd), ErrOutOfScope)
+	require.ErrorIs(err, storelib.ErrOutOfScope)
+	require.ErrorIs(store.ScopeComplete().WriteAtMetadata(key, md, mdData, 0), storelib.ErrOutOfScope)
+	require.ErrorIs(store.ScopeComplete().DeleteMetadata(key, &readMd), storelib.ErrOutOfScope)
 	require.NotContains(store.ScopeComplete().List(), key)
 
 	// The unscoped store's APIs work regardless of completeness.
@@ -956,19 +956,19 @@ func TestScopes(t *testing.T) {
 
 	// Now that the blob is complete, the roles reverse: ScopeIncomplete rejects it.
 	_, err = store.ScopeIncomplete().Open(key)
-	require.ErrorIs(err, ErrOutOfScope)
+	require.ErrorIs(err, storelib.ErrOutOfScope)
 	_, err = store.ScopeIncomplete().Stat(key)
-	require.ErrorIs(err, ErrOutOfScope)
-	require.ErrorIs(store.ScopeIncomplete().BanEviction(key), ErrOutOfScope)
-	require.ErrorIs(store.ScopeIncomplete().UnbanEviction(key), ErrOutOfScope)
-	require.ErrorIs(store.ScopeIncomplete().SetMetadata(key, md), ErrOutOfScope)
+	require.ErrorIs(err, storelib.ErrOutOfScope)
+	require.ErrorIs(store.ScopeIncomplete().BanEviction(key), storelib.ErrOutOfScope)
+	require.ErrorIs(store.ScopeIncomplete().UnbanEviction(key), storelib.ErrOutOfScope)
+	require.ErrorIs(store.ScopeIncomplete().SetMetadata(key, md), storelib.ErrOutOfScope)
 	ok, err = store.ScopeIncomplete().GetMetadata(key, &readMd)
-	require.ErrorIs(err, ErrOutOfScope)
+	require.ErrorIs(err, storelib.ErrOutOfScope)
 	require.False(ok)
 	_, err = store.ScopeIncomplete().ListMetadata(key)
-	require.ErrorIs(err, ErrOutOfScope)
-	require.ErrorIs(store.ScopeIncomplete().WriteAtMetadata(key, md, mdData, 0), ErrOutOfScope)
-	require.ErrorIs(store.ScopeIncomplete().DeleteMetadata(key, &readMd), ErrOutOfScope)
+	require.ErrorIs(err, storelib.ErrOutOfScope)
+	require.ErrorIs(store.ScopeIncomplete().WriteAtMetadata(key, md, mdData, 0), storelib.ErrOutOfScope)
+	require.ErrorIs(store.ScopeIncomplete().DeleteMetadata(key, &readMd), storelib.ErrOutOfScope)
 	require.NotContains(store.ScopeIncomplete().List(), key)
 
 	// The unscoped store's APIs still work regardless of completeness.
@@ -1026,7 +1026,7 @@ func TestScopesDelete(t *testing.T) {
 
 	f, key := newTestFile(t, store, 1*memsize.KB)
 	require.NoError(f.Close())
-	require.ErrorIs(store.ScopeComplete().Delete(key), ErrOutOfScope)
+	require.ErrorIs(store.ScopeComplete().Delete(key), storelib.ErrOutOfScope)
 	require.NoError(store.ScopeIncomplete().Delete(key))
 	_, err := store.Stat(key)
 	require.ErrorIs(err, os.ErrNotExist)
@@ -1034,7 +1034,7 @@ func TestScopesDelete(t *testing.T) {
 	f, key = newTestFile(t, store, 1*memsize.KB)
 	require.NoError(f.Close())
 	require.NoError(store.MarkComplete(key))
-	require.ErrorIs(store.ScopeIncomplete().Delete(key), ErrOutOfScope)
+	require.ErrorIs(store.ScopeIncomplete().Delete(key), storelib.ErrOutOfScope)
 	require.NoError(store.ScopeComplete().Delete(key))
 	_, err = store.Stat(key)
 	require.ErrorIs(err, os.ErrNotExist)

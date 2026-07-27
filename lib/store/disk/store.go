@@ -19,16 +19,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// the set of blobs that the store's APIs can operate on.
-type blobScope int
-
-// flags to scope [store]'s APIs to a subset of blobs.
-const (
-	blobScopeAny blobScope = iota
-	blobScopeComplete
-	blobScopeIncomplete
-)
-
 const (
 	_completeBlob           = true
 	_incompleteBlob         = false
@@ -39,7 +29,7 @@ const (
 
 var _syncEvictionLatencyBuckets = tally.MustMakeExponentialDurationBuckets(100*time.Millisecond, 1.4, 15)
 
-// store implements the APIs of [Store]. [store]'s APIs expose the [blobScope] arg,
+// store implements the APIs of [Store]. [store]'s APIs expose the [storelib.BlobScope] arg,
 // while [Store]'s APIs omit that arg (cleaner interface) and instead expose other APIs to scope the whole store.
 //
 // Check [Store]'s comments for details on functionality.
@@ -95,7 +85,7 @@ func newStore(config *Config, metrics tally.Scope) (*store, error) {
 	return store, nil
 }
 
-func (s *store) Open(key string, scope blobScope) (storelib.FileReadWriter, error) {
+func (s *store) Open(key string, scope storelib.BlobScope) (storelib.FileReadWriter, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -118,7 +108,7 @@ func (s *store) Open(key string, scope blobScope) (storelib.FileReadWriter, erro
 	return storelib.NewReadWriter(f), nil
 }
 
-func (s *store) Stat(key string, scope blobScope) (os.FileInfo, error) {
+func (s *store) Stat(key string, scope storelib.BlobScope) (os.FileInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -281,7 +271,7 @@ func (s *store) MarkComplete(key string) error {
 // to avoid an inconsistent state, as failure only costs a negligible amount
 // of disk until the blob is evicted.
 func (s *store) tryDeleteImmovableMetadata(key string) {
-	mdList, err := s.listMetadataNoLock(key, blobScopeAny)
+	mdList, err := s.listMetadataNoLock(key, storelib.BlobScopeAny)
 	if err != nil {
 		err = fmt.Errorf("list metadata: %w", err)
 		s.log.With("error", err).Error("Failed to delete un-movable metadata upon marking a blob as complete")
@@ -310,7 +300,7 @@ func (s *store) checkDiskIfUnevictable(key string, complete bool) (bool, error) 
 	return unevictable, nil
 }
 
-func (s *store) Delete(key string, scope blobScope) error {
+func (s *store) Delete(key string, scope storelib.BlobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -335,7 +325,7 @@ func (s *store) Delete(key string, scope blobScope) error {
 	return nil
 }
 
-func (s *store) list(scope blobScope) []string {
+func (s *store) list(scope storelib.BlobScope) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -349,7 +339,7 @@ func (s *store) list(scope blobScope) []string {
 	return res
 }
 
-func (s *store) BanEviction(key string, scope blobScope) error {
+func (s *store) BanEviction(key string, scope storelib.BlobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -381,7 +371,7 @@ func (s *store) BanEviction(key string, scope blobScope) error {
 	return nil
 }
 
-func (s *store) UnbanEviction(key string, scope blobScope) error {
+func (s *store) UnbanEviction(key string, scope storelib.BlobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -411,7 +401,7 @@ func (s *store) UnbanEviction(key string, scope blobScope) error {
 	return nil
 }
 
-func (s *store) SetMetadata(key string, md metadata.Metadata, scope blobScope) error {
+func (s *store) SetMetadata(key string, md metadata.Metadata, scope storelib.BlobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -446,7 +436,7 @@ func (s *store) SetMetadata(key string, md metadata.Metadata, scope blobScope) e
 	return nil
 }
 
-func (s *store) GetMetadata(key string, md metadata.Metadata, scope blobScope) (ok bool, err error) {
+func (s *store) GetMetadata(key string, md metadata.Metadata, scope storelib.BlobScope) (ok bool, err error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -478,7 +468,7 @@ func (s *store) GetMetadata(key string, md metadata.Metadata, scope blobScope) (
 	return true, nil
 }
 
-func (s *store) DeleteMetadata(key string, md metadata.Metadata, scope blobScope) error {
+func (s *store) DeleteMetadata(key string, md metadata.Metadata, scope storelib.BlobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -501,14 +491,14 @@ func (s *store) DeleteMetadata(key string, md metadata.Metadata, scope blobScope
 	return nil
 }
 
-func (s *store) ListMetadata(key string, scope blobScope) ([]metadata.Metadata, error) {
+func (s *store) ListMetadata(key string, scope storelib.BlobScope) ([]metadata.Metadata, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	return s.listMetadataNoLock(key, scope)
 }
 
-func (s *store) listMetadataNoLock(key string, scope blobScope) ([]metadata.Metadata, error) {
+func (s *store) listMetadataNoLock(key string, scope storelib.BlobScope) ([]metadata.Metadata, error) {
 	b, ok := s.blobs[key]
 	if !ok {
 		return nil, os.ErrNotExist
@@ -538,7 +528,7 @@ func (s *store) listMetadataNoLock(key string, scope blobScope) ([]metadata.Meta
 	return res, nil
 }
 
-func (s *store) WriteAtMetadata(key string, md metadata.Metadata, p []byte, off int64, scope blobScope) error {
+func (s *store) WriteAtMetadata(key string, md metadata.Metadata, p []byte, off int64, scope storelib.BlobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -592,9 +582,9 @@ func exists(path string) (ok bool, err error) {
 	return false, fmt.Errorf("stat: %w", err)
 }
 
-func isOutOfScope(b *blob, scope blobScope) error {
-	if (b.complete && scope == blobScopeIncomplete) || (!b.complete && scope == blobScopeComplete) {
-		return ErrOutOfScope
+func isOutOfScope(b *blob, scope storelib.BlobScope) error {
+	if (b.complete && scope == storelib.BlobScopeIncomplete) || (!b.complete && scope == storelib.BlobScopeComplete) {
+		return storelib.ErrOutOfScope
 	}
 	return nil
 }
