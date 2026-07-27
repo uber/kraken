@@ -227,7 +227,7 @@ func (s *store) reserveSpace(space uint64) error {
 
 func (s *store) releaseSpace(space uint64) {
 	if space > s.size {
-		s.log.Error("Invariant violation - Store wants to release more disk space than actually reserved. Failing open by releasing all reserved space.")
+		s.log.Error("Invariant violation - disk.Store wants to release more space than actually reserved. Failing open by setting store.size = 0")
 		s.size = 0
 		return
 	}

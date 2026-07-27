@@ -80,7 +80,7 @@ func (s *store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, e
 		node:           nil,
 		metadatas:      make(map[string]metadata.Metadata, 0),
 	}
-	arr := make([]byte, sizeBytes)
+	arr := make([]byte, 0, sizeBytes)
 	b.data.Store(&arr)
 	s.blobs[key] = b
 
@@ -101,12 +101,21 @@ func (s *store) reserveSpace(space uint64) bool {
 		b.data.Store(nil) // Ensure the byte slice is not referenced by clients outside the store holding [*handle], so GC can evict the memory.
 		b.sliceMu.Unlock()
 		delete(s.blobs, toEvictKey)
-		s.size -= b.size
 		s.evictQueue.Remove(toEvictNode)
+		s.releaseSpace(b.size)
 	}
 
 	s.size += space
 	return true
+}
+
+func (s *store) releaseSpace(space uint64) {
+	if space > s.size {
+		s.log.Error("Invariant violation - memory.Store wants to release more space than actually reserved. Failing open by setting store.size = 0")
+		s.size = 0
+		return
+	}
+	s.size -= space
 }
 
 func (s *store) Open(key string, scope storelib.BlobScope) (storelib.FileReadWriter, error) {
@@ -146,7 +155,7 @@ func (s *store) Delete(key string, scope storelib.BlobScope) error {
 	if b.node != nil {
 		s.evictQueue.Remove(b.node)
 	}
-	s.size -= b.size
+	s.releaseSpace(b.size)
 
 	s.emitUsageMetrics()
 	return nil
