@@ -3,7 +3,10 @@ package memory
 import (
 	"container/list"
 	"errors"
+	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -42,6 +45,16 @@ type Store struct {
 	metrics    tally.Scope
 }
 
+type blob struct {
+	data           atomic.Pointer[[]byte] // set to nil upon eviction/deletion.
+	node           *list.Element
+	metadatas      map[string]metadata.Metadata
+	size           uint64
+	complete       bool
+	evictionBanned bool
+	sliceMu        sync.RWMutex // Writes to `data`'s array are parallelize-able with each other but NOT with writes that mutate 1) the atomic pointer OR 2) the slice (e.g. resizing the array).
+}
+
 // NewStore initializes an empty [*Store].
 func NewStore(capacityBytes uint64, metrics tally.Scope) (*Store, error) {
 	if capacityBytes <= 0 {
@@ -59,16 +72,6 @@ func NewStore(capacityBytes uint64, metrics tally.Scope) (*Store, error) {
 		log:        log,
 		metrics:    metrics,
 	}, nil
-}
-
-type blob struct {
-	data           atomic.Pointer[[]byte] // set to nil upon eviction/deletion.
-	node           *list.Element
-	mdList         []metadata.Metadata
-	size           uint64
-	complete       bool
-	evictionBanned bool
-	sliceMu        sync.RWMutex // Writes to `data`'s array are parallelize-able with each other but NOT with writes that mutate 1) the atomic pointer OR 2) the slice (e.g. resizing the array).
 }
 
 // Create initializes a new, incomplete blob, reserves space for it, and returns a handle to it.
@@ -90,7 +93,7 @@ func (s *Store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, e
 		complete:       false,
 		evictionBanned: false,
 		node:           nil,
-		mdList:         make([]metadata.Metadata, 0),
+		metadatas:      make(map[string]metadata.Metadata, 0),
 	}
 	arr := make([]byte, sizeBytes)
 	b.data.Store(&arr)
@@ -155,33 +158,164 @@ func (s *Store) Delete(key string) error {
 }
 
 // List returns the keys of all blobs (except those out of scope).
-func (s *Store) List() []string { return nil }
+func (s *Store) List() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-// Stat returns the blob's [os.FileInfo].
-func (s *Store) Stat(key string) (os.FileInfo, error) { return nil, nil }
+	return slices.Collect(maps.Keys(s.blobs))
+}
 
-// MarkComplete marks the blob as fully written, which enlists it for LRU eviction (unless BanEviction has been called).
+// Stat returns the maximum of 1) the blob's size as reported when calling Create and
+// 2) the actual size of the blob, if it was not reported correctly.
+func (s *Store) Stat(key string) (size int64, err error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return 0, os.ErrNotExist
+	}
+	buf := *b.data.Load()
+	return int64(len(buf)), nil
+}
+
+// MarkComplete marks the blob as fully written, which enlists it for LRU eviction (unless BanEviction has been called). It is idempotent.
 // Additionally, other store APIs may filter blobs based on completeness.
-func (s *Store) MarkComplete(key string) error { return nil }
+func (s *Store) MarkComplete(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return os.ErrNotExist
+	}
+	if b.complete {
+		// no-op
+		return nil
+	}
+
+	b.complete = true
+	if !b.evictionBanned {
+		node := s.evictQueue.PushBack(key)
+		b.node = node
+	}
+	for mdSuffix, md := range b.metadatas {
+		if !md.Movable() {
+			delete(b.metadatas, mdSuffix)
+		}
+	}
+	return nil
+}
 
 // BanEviction marks a blob as unevictable by LRU eviction. It is idempotent.
 // Usually used by clients to ensure a blob is not evicted before being flushed to disk.
-func (s *Store) BanEviction(key string) error { return nil }
+func (s *Store) BanEviction(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return os.ErrNotExist
+	}
+	if b.evictionBanned {
+		// no-op
+		return nil
+	}
+
+	b.evictionBanned = true
+	if b.complete {
+		s.evictQueue.Remove(b.node)
+		b.node = nil
+	}
+	return nil
+}
 
 // UnbanEviction removes the effect of BanEviction for a blob. It is idempotent.
-func (s *Store) UnbanEviction(key string) error { return nil }
+func (s *Store) UnbanEviction(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return os.ErrNotExist
+	}
+	if !b.evictionBanned {
+		// no-op
+		return nil
+	}
+
+	b.evictionBanned = false
+	if b.complete {
+		node := s.evictQueue.PushBack(key)
+		b.node = node
+	}
+	return nil
+}
 
 // SetMetadata sets the respective metadata of the blob.
-func (s *Store) SetMetadata(key string, md metadata.Metadata) error { return nil }
+func (s *Store) SetMetadata(key string, md metadata.Metadata) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return os.ErrNotExist
+	}
+	b.metadatas[md.GetSuffix()] = md
+	return nil
+}
 
 // GetMetadata populates `md` if the metadata is present. Returns [os.ErrNotExist] if key is not in store.
-func (s *Store) GetMetadata(key string, md metadata.Metadata) (ok bool, err error) { return false, nil }
+func (s *Store) GetMetadata(key string, md metadata.Metadata) (ok bool, err error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return false, os.ErrNotExist
+	}
+
+	res, ok := b.metadatas[md.GetSuffix()]
+	if !ok {
+		return false, nil
+	}
+	mdData, err := res.Serialize()
+	if err != nil {
+		return false, fmt.Errorf("serialize metadata: %w", err)
+	}
+	err = md.Deserialize(mdData)
+	if err != nil {
+		return false, fmt.Errorf("deserialize metadata: %w", err)
+	}
+	return ok, nil
+}
 
 // ListMetadata returns all [metadata.Metadata] of key.
-func (s *Store) ListMetadata(key string) ([]metadata.Metadata, error) { return nil, nil }
+func (s *Store) ListMetadata(key string) ([]metadata.Metadata, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-// DeleteMetadata removes a blob's metadata, if present.
-func (s *Store) DeleteMetadata(key string, mdSuffix string) error { return nil }
+	b, ok := s.blobs[key]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+
+	return slices.Collect(maps.Values(b.metadatas)), nil
+}
+
+// DeleteMetadata removes a blob's metadata. No error returned if the metadata is not present.
+func (s *Store) DeleteMetadata(key string, mdSuffix string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return os.ErrNotExist
+	}
+
+	delete(b.metadatas, mdSuffix)
+	return nil
+}
 
 // ScopeComplete scopes [Store]'s APIs such that they can only operate on complete blobs.
 // [ErrOutOfScope] is returned if the user tries to operate on an incomplete blob.

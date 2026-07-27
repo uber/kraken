@@ -89,7 +89,7 @@ func (s *Store) GetMetadata(key string, md metadata.Metadata) (ok bool, err erro
 	return s.impl.GetMetadata(key, md, s.scope)
 }
 
-// DeleteMetadata removes any metadata of a blob with `md`'s suffix, if present.
+// DeleteMetadata removes a blob's metadata. No error returned if the metadata is not present.
 func (s *Store) DeleteMetadata(key string, md metadata.Metadata) error {
 	return s.impl.DeleteMetadata(key, md, s.scope)
 }
