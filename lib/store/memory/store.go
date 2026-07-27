@@ -120,10 +120,39 @@ func (s *Store) reserveSpace(space uint64) bool {
 }
 
 // Open returns a handle to the blob. The handle returns [ErrEvicted] once the blob gets evicted.
-func (s *Store) Open(key string) (storelib.FileReadWriter, error) { return nil, nil }
+func (s *Store) Open(key string) (storelib.FileReadWriter, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+
+	if b.node != nil {
+		s.evictQueue.MoveToBack(b.node)
+	}
+	return newHandle(&b.data, &b.sliceMu, s.log), nil
+}
 
 // Delete removes a blob and its metadata from the store. Returns [os.ErrNotExist] on missing entry.
-func (s *Store) Delete(key string) error { return nil }
+func (s *Store) Delete(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return os.ErrNotExist
+	}
+
+	b.sliceMu.Lock()
+	b.data.Store(nil) // Ensure the byte slice is not referenced by clients outside the store holding [*handle], so GC can evict the memory.
+	b.sliceMu.Unlock()
+	delete(s.blobs, key)
+	s.evictQueue.Remove(b.node)
+	s.size -= b.size
+	return nil
+}
 
 // List returns the keys of all blobs (except those out of scope).
 func (s *Store) List() []string { return nil }
