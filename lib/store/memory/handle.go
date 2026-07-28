@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 
 	storelib "github.com/uber/kraken/lib/store"
-	"go.uber.org/zap"
 )
 
 var _ storelib.FileReadWriter = &handle{}
@@ -17,17 +16,15 @@ var _ storelib.FileReadWriter = &handle{}
 // ensuring GC can clean it.
 type handle struct {
 	data    *atomic.Pointer[[]byte]
-	sliceMu *sync.RWMutex
+	sliceMu *sync.Mutex // A potential optimization if contention is too high: currently all writes are not parallelized. However, writes that only mutate the array but not the slice are parallelizable with each other. Thus, we could transition to a RWMutex to enable that.
 	off     int64
-	log     *zap.SugaredLogger
 }
 
-func newHandle(data *atomic.Pointer[[]byte], sliceMu *sync.RWMutex, log *zap.SugaredLogger) *handle {
+func newHandle(data *atomic.Pointer[[]byte], sliceMu *sync.Mutex) *handle {
 	return &handle{
 		data:    data,
 		sliceMu: sliceMu,
 		off:     0,
-		log:     log,
 	}
 }
 
@@ -82,9 +79,6 @@ func (h *handle) ReadAt(p []byte, off int64) (n int, err error) {
 
 // Seek implements [io.Seeker]. Not thread-safe.
 func (h *handle) Seek(off int64, whence int) (int64, error) {
-	if off < 0 {
-		return 0, errors.New("negative offset")
-	}
 	buf, evicted := h.getData()
 	if evicted {
 		return 0, ErrEvicted
@@ -109,7 +103,7 @@ func (h *handle) Seek(off int64, whence int) (int64, error) {
 	return newOff, nil
 }
 
-// Size returns the size of the blob reported by the store user in Create.
+// Stat returns the blob's actual size, even if it differs from the size reported during Create.
 func (h *handle) Size() int64 {
 	buf, evicted := h.getData()
 	if evicted {
@@ -119,77 +113,61 @@ func (h *handle) Size() int64 {
 	return int64(len(buf))
 }
 
-// Write implements io.Writer. Not thread-safe, unlike WriteAt.
-func (h *handle) Write(p []byte) (n int, err error) {
-	buf, evicted := h.getData()
-	if evicted {
-		return 0, ErrEvicted
-	}
-
-	end := int(h.off) + len(p)
-	if len(buf) < end {
-		h.resizeBuffer(end)
-	}
-
-	h.sliceMu.RLock()
-	defer h.sliceMu.RUnlock()
-	// Reload buf, as the slice might have been mutated.
-	buf, evicted = h.getData()
-	if evicted {
-		h.log.Warn("Client misuse of memory.Store - clients are writing to blobs as they are getting deleted/evicted")
-		return 0, ErrEvicted
-	}
-
-	n = copy(buf[h.off:], p)
-	h.off += int64(n)
-	return n, nil
-}
-
-// While the buffer is initialized with the client-provided size of the blob, rarely clients underreport blob sizes by a bit.
-// In such cases, we need to resize the buffer.
-func (h *handle) resizeBuffer(newSize int) {
-	h.sliceMu.Lock()
-	defer h.sliceMu.Unlock()
-
-	buf, evicted := h.getData()
-	if evicted {
-		h.log.Warn("Client misuse of memory.Store - clients are writing to blobs as they are getting deleted/evicted")
-	}
-	if len(buf) >= newSize {
-		// Another goroutine already resized and beat us to the race, we don't need to resize anymore.
-		return
-	}
-
-	newBuf := make([]byte, newSize)
-	copy(newBuf, buf)
-	h.data.Store(&newBuf)
-}
-
 // WriteAt implements [io.WriterAt]. It is fully thread-safe.
 func (h *handle) WriteAt(p []byte, off int64) (n int, err error) {
 	if off < 0 {
 		return 0, errors.New("negative offset")
 	}
+
+	h.sliceMu.Lock()
+	defer h.sliceMu.Unlock()
+
 	buf, evicted := h.getData()
 	if evicted {
 		return 0, ErrEvicted
 	}
 
 	end := int(off) + len(p)
-	if len(buf) < end {
-		h.resizeBuffer(end)
+	buf, resized := resizeSliceIfNecessary(buf, end)
+	n = copy(buf[off:], p)
+	if resized {
+		h.data.Store(&buf)
 	}
+	return n, nil
+}
 
-	h.sliceMu.RLock()
-	defer h.sliceMu.RUnlock()
-	// Reload buf, as the slice might have been mutated.
-	buf, evicted = h.getData()
+func resizeSliceIfNecessary(buf []byte, end int) ([]byte, bool) {
+	resized := false
+	if len(buf) < end {
+		if cap(buf) < end {
+			newBuf := make([]byte, end)
+			copy(newBuf, buf)
+			buf = newBuf
+		}
+		buf = buf[:end]
+		resized = true
+	}
+	return buf, resized
+}
+
+// Write implements io.Writer.
+func (h *handle) Write(p []byte) (n int, err error) {
+	h.sliceMu.Lock() // We need to lock in case we update the pointer to `data`.
+	defer h.sliceMu.Unlock()
+
+	buf, evicted := h.getData()
 	if evicted {
-		h.log.Warn("Client misuse of memory.Store - clients are writing to blobs as they are getting deleted/evicted")
 		return 0, ErrEvicted
 	}
 
-	n = copy(buf[off:], p)
+	end := int(h.off) + len(p)
+	buf, resized := resizeSliceIfNecessary(buf, end)
+
+	n = copy(buf[h.off:], p)
+	if resized {
+		h.data.Store(&buf)
+	}
+	h.off += int64(n)
 	return n, nil
 }
 

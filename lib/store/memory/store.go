@@ -38,7 +38,7 @@ type blob struct {
 	size           uint64
 	complete       bool
 	evictionBanned bool
-	sliceMu        sync.RWMutex // Writes to `data`'s array are parallelize-able with each other but NOT with writes that mutate 1) the atomic pointer OR 2) the slice (e.g. resizing the array).
+	sliceMu        sync.Mutex // Synchronizes writes to 1) the atomic pointer and 2) the slice (not the array!).
 }
 
 func newStore(capacityBytes uint64, metrics tally.Scope) (*store, error) {
@@ -85,7 +85,7 @@ func (s *store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, e
 	s.blobs[key] = b
 
 	s.emitUsageMetrics()
-	return newHandle(&b.data, &b.sliceMu, s.log), nil
+	return newHandle(&b.data, &b.sliceMu), nil
 }
 
 func (s *store) reserveSpace(space uint64) bool {
@@ -95,7 +95,7 @@ func (s *store) reserveSpace(space uint64) bool {
 			return false
 		}
 		toEvictNode := s.evictQueue.Front()
-		toEvictKey := toEvictNode.Value.(string)
+		toEvictKey := toEvictNode.Value.(string) //nolint:errcheck
 		b := s.blobs[toEvictKey]
 		b.sliceMu.Lock()
 		b.data.Store(nil) // Ensure the byte slice is not referenced by clients outside the store holding [*handle], so GC can evict the memory.
@@ -133,7 +133,7 @@ func (s *store) Open(key string, scope storelib.BlobScope) (storelib.FileReadWri
 	if b.node != nil {
 		s.evictQueue.MoveToBack(b.node)
 	}
-	return newHandle(&b.data, &b.sliceMu, s.log), nil
+	return newHandle(&b.data, &b.sliceMu), nil
 }
 
 func (s *store) Delete(key string, scope storelib.BlobScope) error {
