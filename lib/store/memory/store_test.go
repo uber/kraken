@@ -135,7 +135,7 @@ func TestEviction(t *testing.T) {
 	require.Equal(5*memsize.KB, store.impl.size)
 }
 
-func TestEvictedBlobImmediatellyNotAvailable(t *testing.T) {
+func TestEvictedBlobImmediatelyNotAvailable(t *testing.T) {
 	require := require.New(t)
 	store, err := NewStore(1*memsize.KB, tally.NoopScope)
 	require.NoError(err)
@@ -148,11 +148,11 @@ func TestEvictedBlobImmediatellyNotAvailable(t *testing.T) {
 	buf := make([]byte, 10)
 
 	n, err := b.Read(buf)
-	require.True(n == 0)
+	require.Zero(n)
 	require.Equal(ErrEvicted, err)
 
 	n, err = b.ReadAt(buf, 3)
-	require.True(n == 0)
+	require.Zero(n)
 	require.Equal(ErrEvicted, err)
 
 	seekN, err := b.Seek(10, io.SeekStart)
@@ -160,11 +160,11 @@ func TestEvictedBlobImmediatellyNotAvailable(t *testing.T) {
 	require.Equal(ErrEvicted, err)
 
 	n, err = b.Write(buf)
-	require.True(n == 0)
+	require.Zero(n)
 	require.Equal(ErrEvicted, err)
 
 	n, err = b.WriteAt(buf, 3)
-	require.True(n == 0)
+	require.Zero(n)
 	require.Equal(ErrEvicted, err)
 
 	require.NoError(b.Cancel())
@@ -444,7 +444,7 @@ func TestDelete(t *testing.T) {
 		key := core.DigestFixture().Hex()
 
 		err = store.Delete(key)
-		require.ErrorIs(os.ErrNotExist, err)
+		require.ErrorIs(err, os.ErrNotExist)
 	})
 }
 
@@ -522,7 +522,7 @@ func TestMarkComplete(t *testing.T) {
 		key := core.DigestFixture().Hex()
 
 		err = store.MarkComplete(key)
-		require.ErrorIs(os.ErrNotExist, err)
+		require.ErrorIs(err, os.ErrNotExist)
 	})
 }
 
@@ -602,7 +602,7 @@ func TestStat(t *testing.T) {
 		key := core.DigestFixture().Hex()
 
 		size, err := store.Stat(key)
-		require.ErrorIs(os.ErrNotExist, err)
+		require.ErrorIs(err, os.ErrNotExist)
 		require.Equal(int64(0), size)
 	})
 }
@@ -733,17 +733,17 @@ func TestMetadata(t *testing.T) {
 		md := metadata.NewTorrentMeta(mdStruct)
 
 		err = store.SetMetadata(nonExistentKey, md)
-		require.ErrorIs(os.ErrNotExist, err)
+		require.ErrorIs(err, os.ErrNotExist)
 
 		ok, err := store.GetMetadata(nonExistentKey, md)
-		require.ErrorIs(os.ErrNotExist, err)
+		require.ErrorIs(err, os.ErrNotExist)
 		require.False(ok)
 
 		_, err = store.ListMetadata(nonExistentKey)
-		require.ErrorIs(os.ErrNotExist, err)
+		require.ErrorIs(err, os.ErrNotExist)
 
 		err = store.DeleteMetadata(nonExistentKey, md.GetSuffix())
-		require.ErrorIs(os.ErrNotExist, err)
+		require.ErrorIs(err, os.ErrNotExist)
 	})
 
 	t.Run("metadata does not change after marking a file as complete and/or evictable/unevictable", func(t *testing.T) {
@@ -800,7 +800,7 @@ func TestMetadata(t *testing.T) {
 
 		md := metadata.NewTorrentMeta(core.MetaInfoFixture())
 		err = store.SetMetadata(keyA, md)
-		require.NoError(err) // TODO
+		require.NoError(err)
 
 		readMd := metadata.TorrentMeta{}
 		ok, err := store.GetMetadata(keyA, &readMd)
@@ -813,7 +813,7 @@ func TestMetadata(t *testing.T) {
 		defer func() { require.NoError(fB.Close()) }()
 
 		ok, err = store.GetMetadata(keyA, md)
-		require.ErrorIs(os.ErrNotExist, err)
+		require.ErrorIs(err, os.ErrNotExist)
 		require.False(ok)
 	})
 

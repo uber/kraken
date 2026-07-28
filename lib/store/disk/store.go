@@ -476,6 +476,7 @@ func (s *store) GetMetadata(key string, md metadata.Metadata, scope storelib.Blo
 }
 
 func (s *store) DeleteMetadata(key string, md metadata.Metadata, scope storelib.BlobScope) error {
+	// TODO - change interface to take `mdSuffix string` instead of `md metadata.Metadata`, just like memory.Store.`
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -12,5 +12,5 @@ type Config struct {
 	// If > 0, directory sharding is used to speed up performance, where ShardLength denotes
 	// 1) the length of each directory shard's name and 2) the number of shards.
 	// A value of 0 denotes no sharding.
-	ShardLength int
+	ShardLength int // TODO - add a mechanism to migrate in-place from 1 shardLength to another.
 }
