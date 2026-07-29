@@ -62,7 +62,7 @@ func newStore(capacityBytes uint64, metrics tally.Scope) (*store, error) {
 	return s, nil
 }
 
-func (s *store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, error) {
+func (s *store) Create(key string, sizeBytes uint64) (*File, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -85,7 +85,7 @@ func (s *store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, e
 	s.blobs[key] = b
 
 	s.emitUsageMetrics()
-	return newHandle(&b.data, &b.sliceMu), nil
+	return newFile(&b.data, &b.sliceMu), nil
 }
 
 func (s *store) reserveSpace(space uint64) bool {
@@ -98,7 +98,7 @@ func (s *store) reserveSpace(space uint64) bool {
 		toEvictKey := toEvictNode.Value.(string) //nolint:errcheck
 		b := s.blobs[toEvictKey]
 		b.sliceMu.Lock()
-		b.data.Store(nil) // Ensure the byte slice is not referenced by clients outside the store holding [*handle], so GC can evict the memory.
+		b.data.Store(nil) // Ensure the byte slice is not referenced by clients outside the store holding [*File], so GC can evict the memory.
 		b.sliceMu.Unlock()
 		delete(s.blobs, toEvictKey)
 		s.evictQueue.Remove(toEvictNode)
@@ -118,7 +118,7 @@ func (s *store) releaseSpace(space uint64) {
 	s.size -= space
 }
 
-func (s *store) Open(key string, scope storelib.BlobScope) (storelib.FileReadWriter, error) {
+func (s *store) Open(key string, scope storelib.BlobScope) (*File, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -133,7 +133,21 @@ func (s *store) Open(key string, scope storelib.BlobScope) (storelib.FileReadWri
 	if b.node != nil {
 		s.evictQueue.MoveToBack(b.node)
 	}
-	return newHandle(&b.data, &b.sliceMu), nil
+	return newFile(&b.data, &b.sliceMu), nil
+}
+
+func (s *store) Has(key string, scope storelib.BlobScope) (inStore bool, inScope bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return false, false
+	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return true, false
+	}
+	return true, true
 }
 
 func (s *store) Delete(key string, scope storelib.BlobScope) error {
@@ -149,7 +163,7 @@ func (s *store) Delete(key string, scope storelib.BlobScope) error {
 	}
 
 	b.sliceMu.Lock()
-	b.data.Store(nil) // Ensure the byte slice is not referenced by clients outside the store holding [*handle], so GC can evict the memory.
+	b.data.Store(nil) // Ensure the byte slice is not referenced by clients outside the store holding [*File], so GC can evict the memory.
 	b.sliceMu.Unlock()
 	delete(s.blobs, key)
 	if b.node != nil {

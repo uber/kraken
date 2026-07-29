@@ -47,12 +47,15 @@ func NewStore(config *Config, metrics tally.Scope) (*Store, error) {
 // Create adds a new, incomplete blob to the store and reserves space for it.
 // Incomplete entries cannot be automatically evicted. MarkComplete must be called once the blob is complete.
 // The store uses `sizeBytes` for its eviction logic even if the blob's real size differs.
-func (s *Store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, error) {
+func (s *Store) Create(key string, sizeBytes uint64) (*File, error) {
 	return s.impl.Create(key, sizeBytes)
 }
 
 // Open returns an FD to a file in the store. [os.ErrNotExist] is returned on missing entry.
-func (s *Store) Open(key string) (storelib.FileReadWriter, error) { return s.impl.Open(key, s.scope) }
+func (s *Store) Open(key string) (*File, error) { return s.impl.Open(key, s.scope) }
+
+// Has checks if the blob is in the store.
+func (s *Store) Has(key string) (inStore bool, inScope bool) { return s.impl.Has(key, s.scope) }
 
 // Stat returns [os.FileInfo] about the blob. Returns [os.ErrNotExist] if the blob is not found.
 func (s *Store) Stat(key string) (os.FileInfo, error) { return s.impl.Stat(key, s.scope) }
