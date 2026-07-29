@@ -11,7 +11,7 @@ import (
 // ErrNoSpace means the store could not free enough space for a new entry.
 var ErrNoSpace error = errors.New("cannot free enough memory for new entry")
 
-// ErrEvicted is returned when a user tries operating on a blob's handle after the blob has been evicted.
+// ErrEvicted is returned when a user tries operating on a blob's [*File] after the blob has been evicted.
 var ErrEvicted error = errors.New("the blob has been evicted from the store")
 
 // Store is an in-memory, thread-safe, LRU cache for blobs and their [metadata.Metadata].
@@ -20,7 +20,7 @@ var ErrEvicted error = errors.New("the blob has been evicted from the store")
 //
 //   - New blobs are considered 'incomplete', which unlists them from LRU eviction. The store can be scoped to work on only (in-)complete blobs.
 //
-//   - The store prioritizes writing new blobs over reading existing ones. Therefore, blobs may get evicted while clients hold a [storelib.FileReadWriter] to them.
+//   - The store prioritizes writing new blobs over reading existing ones. Therefore, blobs may get evicted while clients hold a [*File] to them.
 //     In such cases, [ErrEvicted] is returned.
 //
 //   - All APIs are thread-safe. Parallel access to a single blob is allowed but clients must ensure they don't intervene with one another.
@@ -43,17 +43,20 @@ func NewStore(capacityBytes uint64, metrics tally.Scope) (*Store, error) {
 	}, nil
 }
 
-// Create initializes a new, incomplete blob, reserves space for it, and returns a handle to it.
+// Create initializes a new, incomplete blob, reserves space for it, and returns a [*File] pointing to it.
 // Incomplete entries cannot be automatically evicted. MarkComplete must be called once the blob is complete.
 // The store uses `sizeBytes` for its eviction logic even if the blob's real size differs (which is tolerated).
-func (s *Store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, error) {
+func (s *Store) Create(key string, sizeBytes uint64) (*File, error) {
 	return s.impl.Create(key, sizeBytes)
 }
 
-// Open returns a handle to the blob. The handle returns [ErrEvicted] once the blob gets evicted.
-func (s *Store) Open(key string) (storelib.FileReadWriter, error) { return s.impl.Open(key, s.scope) }
+// Open returns a [*File] pointing to the blob. [*File] APIs returns [ErrEvicted] once the blob gets evicted.
+func (s *Store) Open(key string) (*File, error) { return s.impl.Open(key, s.scope) }
 
-// Stat returns the the blob's actual size, even if it differs from the size reported during Create.
+// Has checks if the blob is in the store.
+func (s *Store) Has(key string) (inStore bool, inScope bool) { return s.impl.Has(key, s.scope) }
+
+// Stat returns the blob's actual size, even if it differs from the size reported during Create.
 func (s *Store) Stat(key string) (size int64, err error) { return s.impl.Stat(key, s.scope) }
 
 // MarkComplete marks the blob as fully written, which enlists it for LRU eviction (unless BanEviction has been called). It is idempotent.

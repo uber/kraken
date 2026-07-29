@@ -90,7 +90,7 @@ func newStore(config *Config, metrics tally.Scope) (*store, error) {
 	return store, nil
 }
 
-func (s *store) Open(key string, scope storelib.BlobScope) (storelib.FileReadWriter, error) {
+func (s *store) Open(key string, scope storelib.BlobScope) (*File, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -110,7 +110,21 @@ func (s *store) Open(key string, scope storelib.BlobScope) (storelib.FileReadWri
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
-	return storelib.NewReadWriter(f), nil
+	return newFile(f), nil
+}
+
+func (s *store) Has(key string, scope storelib.BlobScope) (inStore bool, inScope bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return false, false
+	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return true, false
+	}
+	return true, true
 }
 
 func (s *store) Stat(key string, scope storelib.BlobScope) (os.FileInfo, error) {
@@ -129,7 +143,7 @@ func (s *store) Stat(key string, scope storelib.BlobScope) (os.FileInfo, error) 
 	return os.Stat(blobPath)
 }
 
-func (s *store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, error) {
+func (s *store) Create(key string, sizeBytes uint64) (*File, error) {
 	// TODO - we might want some TTI on uploads to the store, after which we cancel the upload, e.g. 1min without the client uploading more data.
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -176,7 +190,7 @@ func (s *store) Create(key string, sizeBytes uint64) (storelib.FileReadWriter, e
 	}
 
 	s.emitUsageMetrics()
-	return storelib.NewReadWriter(f), nil
+	return newFile(f), nil
 }
 
 func (s *store) persistBlobSize(key string, sizeBytes uint64) error {

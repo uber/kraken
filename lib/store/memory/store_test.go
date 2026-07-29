@@ -54,8 +54,8 @@ func TestEviction(t *testing.T) {
 	f, fKey := newTestFile(t, store, 4*memsize.KB)
 	require.NoError(f.Close())
 	require.NoError(store.MarkComplete(fKey))
-	keys := store.List()
-	require.NotContains(keys, cKey)
+	_, ok := store.Has(cKey)
+	require.False(ok)
 	_, err = c.Read(make([]byte, 5))
 	require.ErrorIs(err, ErrEvicted)
 	// new size == 23KB == 24KB - 5KB (c) + 4KB (f)
@@ -73,11 +73,12 @@ func TestEviction(t *testing.T) {
 	require.NoError(store.MarkComplete(hKey))
 	// size == 24KB == 24KB + 15KB (h) - 5KB (b) - 10KB (a)
 	require.Equal(24*memsize.KB, store.impl.size)
-	keys = store.List()
-	require.NotContains(keys, bKey)
+	_, ok = store.Has(bKey)
+	require.False(ok)
 	_, err = b.Read(make([]byte, 5))
 	require.ErrorIs(err, ErrEvicted)
-	require.NotContains(keys, aKey)
+	_, ok = store.Has(aKey)
+	require.False(ok)
 	_, err = a.Read(make([]byte, 5))
 	require.ErrorIs(err, ErrEvicted)
 
@@ -93,8 +94,8 @@ func TestEviction(t *testing.T) {
 	i, iKey := newTestFile(t, store, 5*memsize.KB)
 	require.NoError(store.MarkComplete(iKey))
 	require.NoError(i.Close())
-	keys = store.List()
-	require.NotContains(keys, fKey)
+	_, ok = store.Has(fKey)
+	require.False(ok)
 	_, err = f.Read(make([]byte, 5))
 	require.ErrorIs(err, ErrEvicted)
 	require.Equal(25*memsize.KB, store.impl.size)
@@ -103,8 +104,8 @@ func TestEviction(t *testing.T) {
 	j, jKey := newTestFile(t, store, 14*memsize.KB)
 	require.NoError(j.Close())
 	require.NoError(store.MarkComplete(jKey))
-	keys = store.List()
-	require.NotContains(keys, hKey)
+	_, ok = store.Has(hKey)
+	require.False(ok)
 	_, err = h.Read(make([]byte, 5))
 	require.ErrorIs(err, ErrEvicted)
 	require.Equal(24*memsize.KB, store.impl.size)
@@ -113,8 +114,8 @@ func TestEviction(t *testing.T) {
 	k, kKey := newTestFile(t, store, 2*memsize.KB)
 	require.NoError(k.Close())
 	require.NoError(store.MarkComplete(kKey))
-	keys = store.List()
-	require.NotContains(keys, eKey)
+	_, ok = store.Has(eKey)
+	require.False(ok)
 	_, err = e.Read(make([]byte, 5))
 	require.ErrorIs(err, ErrEvicted)
 	require.Equal(25*memsize.KB, store.impl.size)
@@ -123,8 +124,8 @@ func TestEviction(t *testing.T) {
 	l, lKey := newTestFile(t, store, 1*memsize.KB)
 	require.NoError(store.MarkComplete(lKey))
 	require.NoError(l.Close())
-	keys = store.List()
-	require.NotContains(keys, gKey)
+	_, ok = store.Has(gKey)
+	require.False(ok)
 	require.Equal(25*memsize.KB, store.impl.size)
 	// eviction order: i(5KB), j(14KB), k(2KB), l(1KB); d(3KB) is unevictable
 
@@ -875,6 +876,8 @@ func TestScopes(t *testing.T) {
 	require.ErrorIs(err, storelib.ErrOutOfScope)
 	require.ErrorIs(store.ScopeComplete().DeleteMetadata(key, readMd.GetSuffix()), storelib.ErrOutOfScope)
 	require.NotContains(store.ScopeComplete().List(), key)
+	_, ok = store.ScopeComplete().Has(key)
+	require.False(ok)
 
 	// The unscoped store's APIs work regardless of completeness.
 	f, err = store.Open(key)
@@ -898,6 +901,8 @@ func TestScopes(t *testing.T) {
 	require.Equal(md.GetSuffix(), mdList[0].GetSuffix())
 	require.NoError(store.DeleteMetadata(key, readMd.GetSuffix()))
 	require.Contains(store.List(), key)
+	_, ok = store.Has(key)
+	require.True(ok)
 
 	// ScopeIncomplete's APIs also work, since the blob is (still) incomplete.
 	f, err = store.ScopeIncomplete().Open(key)
@@ -921,6 +926,11 @@ func TestScopes(t *testing.T) {
 	require.Equal(md.GetSuffix(), mdList[0].GetSuffix())
 	require.NoError(store.ScopeIncomplete().DeleteMetadata(key, readMd.GetSuffix()))
 	require.Contains(store.ScopeIncomplete().List(), key)
+	_, ok = store.ScopeIncomplete().Has(key)
+	require.True(ok)
+	require.Contains(store.List(), key)
+	_, ok = store.Has(key)
+	require.True(ok)
 
 	require.NoError(store.MarkComplete(key))
 
@@ -939,6 +949,8 @@ func TestScopes(t *testing.T) {
 	require.ErrorIs(err, storelib.ErrOutOfScope)
 	require.ErrorIs(store.ScopeIncomplete().DeleteMetadata(key, readMd.GetSuffix()), storelib.ErrOutOfScope)
 	require.NotContains(store.ScopeIncomplete().List(), key)
+	_, ok = store.ScopeIncomplete().Has(key)
+	require.False(ok)
 
 	// The unscoped store's APIs still work regardless of completeness.
 	f, err = store.Open(key)
@@ -962,6 +974,8 @@ func TestScopes(t *testing.T) {
 	require.Equal(md.GetSuffix(), mdList[0].GetSuffix())
 	require.NoError(store.DeleteMetadata(key, readMd.GetSuffix()))
 	require.Contains(store.List(), key)
+	_, ok = store.Has(key)
+	require.True(ok)
 
 	// ScopeComplete's APIs now work, since the blob is complete.
 	f, err = store.ScopeComplete().Open(key)
@@ -985,6 +999,8 @@ func TestScopes(t *testing.T) {
 	require.Equal(md.GetSuffix(), mdList[0].GetSuffix())
 	require.NoError(store.ScopeComplete().DeleteMetadata(key, readMd.GetSuffix()))
 	require.Contains(store.ScopeComplete().List(), key)
+	_, ok = store.ScopeComplete().Has(key)
+	require.True(ok)
 }
 
 func TestScopesDelete(t *testing.T) {
