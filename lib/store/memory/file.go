@@ -103,11 +103,11 @@ func (f *File) Seek(off int64, whence int) (int64, error) {
 }
 
 // Stat returns the blob's actual size, even if it differs from the size reported during Create.
+// A return value of -1 represents [ErrEvicted].
 func (f *File) Size() int64 {
 	buf, evicted := f.getData()
 	if evicted {
-		// TODO - consider whether this is ok or whether we need to store the user-provided blob size in [*File].
-		return 0
+		return -1
 	}
 	return int64(len(buf))
 }
