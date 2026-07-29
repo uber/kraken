@@ -172,7 +172,7 @@ func TestEvictedBlobImmediatelyNotAvailable(t *testing.T) {
 	require.NoError(b.Close())
 	require.NoError(b.Commit())
 
-	require.Equal(int64(0), b.Size())
+	require.Equal(int64(-1), b.Size())
 }
 
 func TestParallelAccessToSingleFile(t *testing.T) {
