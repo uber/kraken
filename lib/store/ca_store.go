@@ -310,10 +310,17 @@ func (s *CAStore) generateMetadataFromFile(name string, pieceLength int64) error
 	if err != nil {
 		return fmt.Errorf("get digest from file: %w", err)
 	}
-	f, err := s.GetCacheFileReader(name)
+	return s.GenerateCacheFileMetaInfo(d, pieceLength)
+}
+
+// GenerateCacheFileMetaInfo generates torrent metainfo for a cached blob
+// and persists it alongside the cache file.
+func (s *CAStore) GenerateCacheFileMetaInfo(d core.Digest, pieceLength int64) error {
+	f, err := s.GetCacheFileReader(d.Hex())
 	if err != nil {
 		return fmt.Errorf("get cache file: %w", err)
 	}
+	defer closers.Close(f)
 	mi, err := core.NewMetaInfo(d, f, pieceLength)
 	if err != nil {
 		return fmt.Errorf("create metainfo: %w", err)

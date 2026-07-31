@@ -18,7 +18,6 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
-	"github.com/uber/kraken/lib/store/metadata"
 )
 
 // Generator wraps static piece length configuration in order to determinstically
@@ -43,19 +42,8 @@ func (g *Generator) Generate(d core.Digest) error {
 	if err != nil {
 		return fmt.Errorf("cache stat: %s", err)
 	}
-	f, err := g.cas.GetCacheFileReader(d.Hex())
-	if err != nil {
-		return fmt.Errorf("get cache file: %s", err)
-	}
 	pieceLength := g.pieceLengthConfig.get(info.Size())
-	mi, err := core.NewMetaInfo(d, f, pieceLength)
-	if err != nil {
-		return fmt.Errorf("create metainfo: %s", err)
-	}
-	if _, err := g.cas.SetCacheFileMetadata(d.Hex(), metadata.NewTorrentMeta(mi)); err != nil {
-		return fmt.Errorf("set metainfo: %s", err)
-	}
-	return nil
+	return g.cas.GenerateCacheFileMetaInfo(d, pieceLength)
 }
 
 // Get the piece length for the blob
