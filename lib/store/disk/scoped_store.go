@@ -88,8 +88,8 @@ func (s *Store) GetMetadata(key string, md metadata.Metadata) (ok bool, err erro
 }
 
 // DeleteMetadata removes a blob's metadata. No error returned if the metadata is not present.
-func (s *Store) DeleteMetadata(key string, md metadata.Metadata) error {
-	return s.impl.DeleteMetadata(key, md, s.scope)
+func (s *Store) DeleteMetadata(key string, mdSuffix string) error {
+	return s.impl.DeleteMetadata(key, mdSuffix, s.scope)
 }
 
 // ListMetadata returns all [metadata.Metadata] of key.

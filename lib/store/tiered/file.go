@@ -87,108 +87,126 @@ func errBadSwitch(subErr error) error {
 }
 
 func (f *File) Read(p []byte) (n int, err error) {
-	n, err = f.memF.Read(p)
-	if err != memory.ErrEvicted {
-		return n, err
-	}
+	if f.memF != nil {
+		n, err = f.memF.Read(p)
+		if err != memory.ErrEvicted {
+			return n, err
+		}
 
-	if err := f.openDiskFileIfNeeed(); err != nil {
-		return 0, err
+		if err := f.openDiskFileIfNeeed(); err != nil {
+			return 0, err
+		}
 	}
 	return f.diskF.Read(p)
 }
 
 func (f *File) ReadAt(p []byte, off int64) (n int, err error) {
-	n, err = f.memF.ReadAt(p, off)
-	if err != memory.ErrEvicted {
-		return n, err
-	}
-	if err := f.openDiskFileIfNeeed(); err != nil {
-		return 0, err
+	if f.memF != nil {
+		n, err = f.memF.ReadAt(p, off)
+		if err != memory.ErrEvicted {
+			return n, err
+		}
+		if err := f.openDiskFileIfNeeed(); err != nil {
+			return 0, err
+		}
 	}
 	return f.diskF.ReadAt(p, off)
 }
 
 func (f *File) Seek(off int64, whence int) (int64, error) {
-	newOff, err := f.memF.Seek(off, whence)
-	if err != memory.ErrEvicted {
-		return newOff, err
-	}
+	if f.memF != nil {
+		newOff, err := f.memF.Seek(off, whence)
+		if err != memory.ErrEvicted {
+			return newOff, err
+		}
 
-	if err := f.openDiskFileIfNeeed(); err != nil {
-		return 0, err
+		if err := f.openDiskFileIfNeeed(); err != nil {
+			return 0, err
+		}
 	}
 	return f.diskF.Seek(off, whence)
 }
 
 func (f *File) Size() int64 {
-	size := f.memF.Size()
-	if size != -1 {
-		// Same as [memory.ErrEvicted].
-		return size
-	}
+	if f.memF != nil {
+		size := f.memF.Size()
+		if size != -1 {
+			// Same as [memory.ErrEvicted].
+			return size
+		}
 
-	if err := f.openDiskFileIfNeeed(); err != nil {
-		return 0
+		if err := f.openDiskFileIfNeeed(); err != nil {
+			return 0
+		}
 	}
 	return f.diskF.Size()
 }
 
 func (f *File) WriteAt(p []byte, off int64) (n int, err error) {
-	n, err = f.memF.WriteAt(p, off)
-	if err != memory.ErrEvicted {
-		return n, err
-	}
+	if f.memF != nil {
+		n, err = f.memF.WriteAt(p, off)
+		if err != memory.ErrEvicted {
+			return n, err
+		}
 
-	if err := f.openDiskFileIfNeeed(); err != nil {
-		return 0, err
+		if err := f.openDiskFileIfNeeed(); err != nil {
+			return 0, err
+		}
 	}
 	return f.diskF.WriteAt(p, off)
 }
 
 func (f *File) Write(p []byte) (n int, err error) {
-	n, err = f.memF.Write(p)
-	if err != memory.ErrEvicted {
-		return n, err
-	}
+	if f.memF != nil {
+		n, err = f.memF.Write(p)
+		if err != memory.ErrEvicted {
+			return n, err
+		}
 
-	if err := f.openDiskFileIfNeeed(); err != nil {
-		return 0, err
+		if err := f.openDiskFileIfNeeed(); err != nil {
+			return 0, err
+		}
 	}
 	return f.diskF.Write(p)
 }
 
 func (f *File) Cancel() error {
-	err := f.memF.Cancel()
-	if err != memory.ErrEvicted {
-		return err
-	}
+	if f.memF != nil {
+		err := f.memF.Cancel()
+		if err != memory.ErrEvicted {
+			return err
+		}
 
-	if err := f.openDiskFileIfNeeed(); err != nil {
-		return err
+		if err := f.openDiskFileIfNeeed(); err != nil {
+			return err
+		}
 	}
 	return f.diskF.Cancel()
 }
 func (f *File) Close() error {
-	err := f.memF.Close()
-	if err != memory.ErrEvicted {
-		return err
-	}
+	if f.memF != nil {
+		err := f.memF.Close()
+		if err != memory.ErrEvicted {
+			return err
+		}
 
-	if err := f.openDiskFileIfNeeed(); err != nil {
-		return err
+		if err := f.openDiskFileIfNeeed(); err != nil {
+			return err
+		}
 	}
 	return f.diskF.Close()
 
 }
 func (f *File) Commit() error {
-	err := f.memF.Commit()
-	if err != memory.ErrEvicted {
-		return err
-	}
+	if f.memF != nil {
+		err := f.memF.Commit()
+		if err != memory.ErrEvicted {
+			return err
+		}
 
-	if err := f.openDiskFileIfNeeed(); err != nil {
-		return err
+		if err := f.openDiskFileIfNeeed(); err != nil {
+			return err
+		}
 	}
 	return f.diskF.Commit()
 }

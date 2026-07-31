@@ -489,8 +489,7 @@ func (s *store) GetMetadata(key string, md metadata.Metadata, scope storelib.Blo
 	return true, nil
 }
 
-func (s *store) DeleteMetadata(key string, md metadata.Metadata, scope storelib.BlobScope) error {
-	// TODO - change interface to take `mdSuffix string` instead of `md metadata.Metadata`, just like memory.Store.`
+func (s *store) DeleteMetadata(key, mdSuffix string, scope storelib.BlobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -501,7 +500,7 @@ func (s *store) DeleteMetadata(key string, md metadata.Metadata, scope storelib.
 	if err := isOutOfScope(b, scope); err != nil {
 		return err
 	}
-	mdFilePath := s.sidecarFilePath(key, b.complete, md.GetSuffix())
+	mdFilePath := s.sidecarFilePath(key, b.complete, mdSuffix)
 	err := os.Remove(mdFilePath)
 	if errors.Is(err, os.ErrNotExist) {
 		// no-op

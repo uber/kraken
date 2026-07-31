@@ -68,7 +68,7 @@ func (s *Store) MarkComplete(key string) error { return s.impl.MarkComplete(key)
 func (s *Store) Delete(key string) error { return s.impl.Delete(key, s.scope) }
 
 // List returns the keys of all blobs (except those out of scope).
-func (s *Store) List() []string { return s.impl.list(s.scope) }
+func (s *Store) List() []string { return s.impl.List(s.scope) }
 
 // BanEviction marks a blob as unevictable by LRU eviction. It is idempotent.
 // Usually used by clients to ensure a blob is not evicted before being flushed to disk.

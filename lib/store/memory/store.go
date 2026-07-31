@@ -175,7 +175,7 @@ func (s *store) Delete(key string, scope storelib.BlobScope) error {
 	return nil
 }
 
-func (s *store) list(scope storelib.BlobScope) []string {
+func (s *store) List(scope storelib.BlobScope) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
