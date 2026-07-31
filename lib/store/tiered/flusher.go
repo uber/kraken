@@ -249,7 +249,7 @@ func (f *flusher) flushMetadata(key, mdSuffix string) error {
 		return fmt.Errorf("mem store get md: %w", err)
 	}
 	if !ok {
-		err = f.disk.DeleteMetadata(key, md)
+		err = f.disk.DeleteMetadata(key, md.GetSuffix())
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
