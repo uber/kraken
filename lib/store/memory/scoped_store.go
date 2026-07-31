@@ -11,8 +11,9 @@ import (
 // ErrNoSpace means the store could not free enough space for a new entry.
 var ErrNoSpace error = errors.New("cannot free enough memory for new entry")
 
-// ErrEvicted is returned when a user tries operating on a blob's [*File] after the blob has been evicted.
-var ErrEvicted error = errors.New("the blob has been evicted from the store")
+// ErrEvicted is returned when a user tries operating on a blob's [*File] after the blob has been evicted or deleted.
+var ErrEvicted error = errors.New("the blob has been evicted or deleted from the store") // TODO - rename to ErrGone
+// or something else that shows the entry might be deleted too, not just evicted.
 
 // Store is an in-memory, thread-safe, LRU cache for blobs and their [metadata.Metadata].
 //
