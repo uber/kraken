@@ -62,7 +62,7 @@ func newStore(config *Config, metrics tally.Scope) (*store, error) {
 		return nil, err
 	}
 	if !ok {
-		log.Info("Initialized a new, empty Store (did not find any previously persisted state to reboot for Store)")
+		log.Info("Initialized a new, empty disk.Store (did not find any previously persisted state to reboot for disk.Store)")
 		store := &store{
 			capacity:   config.CapacityBytes,
 			size:       0,
@@ -128,6 +128,8 @@ func (s *store) Has(key string, scope storelib.BlobScope) (inStore bool, inScope
 }
 
 func (s *store) Stat(key string, scope storelib.BlobScope) (os.FileInfo, error) {
+	// TODO - make stat return `size` and not os.FileInfo to keep its interface consistent with memory.Store and tiered.Store.
+	// TODO - consider whether Stat (and maybe other APIs) should update the access time of the blob.
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -138,7 +140,6 @@ func (s *store) Stat(key string, scope storelib.BlobScope) (os.FileInfo, error) 
 	if err := isOutOfScope(b, scope); err != nil {
 		return nil, err
 	}
-	// TODO - consider whether this should update the access time of the blob.
 	blobPath := s.blobPath(key, b.complete)
 	return os.Stat(blobPath)
 }
@@ -148,13 +149,8 @@ func (s *store) Create(key string, sizeBytes uint64) (*File, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if b, ok := s.blobs[key]; ok {
-		// TODO - consider whether we need public errors for these cases.
-		if b.complete {
-			return nil, errors.New("blob is already in store")
-		} else {
-			return nil, errors.New("blob is already in store (it is incomplete)")
-		}
+	if _, ok := s.blobs[key]; ok {
+		return nil, os.ErrExist
 	}
 
 	if err := s.reserveSpace(sizeBytes); err != nil {
@@ -346,7 +342,7 @@ func (s *store) Delete(key string, scope storelib.BlobScope) error {
 	return nil
 }
 
-func (s *store) list(scope storelib.BlobScope) []string {
+func (s *store) List(scope storelib.BlobScope) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

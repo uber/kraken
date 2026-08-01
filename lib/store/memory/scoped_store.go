@@ -104,3 +104,6 @@ func (s *Store) ScopeComplete() *Store { return &Store{s.impl, storelib.BlobScop
 // ScopeIncomplete scopes [Store]'s APIs such that they can only operate on incomplete blobs.
 // [storelib.ErrOutOfScope] is returned if the user tries to operate on a complete blob.
 func (s *Store) ScopeIncomplete() *Store { return &Store{s.impl, storelib.BlobScopeIncomplete} }
+
+// Scoped scopes [Store]'s APIs, such that [storelib.ErrOutOfScope] is returned upon attempting to operate on blobs out of scope.
+func (s *Store) Scoped(scope storelib.BlobScope) *Store { return &Store{s.impl, scope} }

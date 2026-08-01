@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/uber-go/tally"
+	storelib "github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/store/memory"
 	"github.com/uber/kraken/lib/store/metadata"
@@ -16,7 +17,18 @@ import (
 	"go.uber.org/zap"
 )
 
-func NewStore(diskConfig *disk.Config, memCapacity uint64, numWorkers int, metrics tally.Scope) (*Store, error) {
+type store struct {
+	disk    *disk.Store
+	mem     *memory.Store
+	flusher *flusher
+	log     *zap.SugaredLogger
+	mu      sync.RWMutex
+}
+
+func newStore(diskConfig *disk.Config, memCapacity uint64, numWorkers int, metrics tally.Scope) (*store, error) {
+	if diskConfig.RebootIncompleteBlobs {
+		return nil, errors.New("tiered.Store does not support RebootIncompleteBlobs, as it can leak files. Use disk.Store if you need persistence for incomplete blobs")
+	}
 	mem, err := memory.NewStore(memCapacity, metrics)
 	if err != nil {
 		return nil, fmt.Errorf("new mem store: %w", err)
@@ -28,7 +40,8 @@ func NewStore(diskConfig *disk.Config, memCapacity uint64, numWorkers int, metri
 
 	log := log.Default().With("module", "tiered_store")
 
-	return &Store{
+	log.Info("Initialized a new tiered.Store")
+	return &store{
 		disk:    disk,
 		mem:     mem,
 		flusher: newFlusher(mem, disk, log, numWorkers),
@@ -36,15 +49,7 @@ func NewStore(diskConfig *disk.Config, memCapacity uint64, numWorkers int, metri
 	}, nil
 }
 
-type Store struct {
-	disk    *disk.Store
-	mem     *memory.Store
-	flusher *flusher
-	log     *zap.SugaredLogger
-	mu      sync.Mutex
-}
-
-func (s *Store) Create(key string, sizeBytes uint64) (*File, error) {
+func (s *store) Create(key string, sizeBytes uint64) (*File, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -69,8 +74,11 @@ func (s *Store) Create(key string, sizeBytes uint64) (*File, error) {
 	return newFile(key, nil, diskF, s.disk, s.log), nil
 }
 
-func (s *Store) Open(key string) (*File, error) {
-	memF, err := s.mem.Open(key)
+func (s *store) Open(key string, scope storelib.BlobScope) (*File, error) {
+	memF, err := s.mem.Scoped(scope).Open(key)
+	if errors.Is(err, storelib.ErrOutOfScope) {
+		return nil, storelib.ErrOutOfScope
+	}
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("mem store open: %w", err)
 	}
@@ -78,7 +86,10 @@ func (s *Store) Open(key string) (*File, error) {
 		return newFile(key, memF, nil, s.disk, s.log), nil
 	}
 
-	diskF, err := s.disk.Open(key)
+	diskF, err := s.disk.Scoped(scope).Open(key)
+	if errors.Is(err, storelib.ErrOutOfScope) {
+		return nil, storelib.ErrOutOfScope
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, os.ErrNotExist
 	}
@@ -88,24 +99,32 @@ func (s *Store) Open(key string) (*File, error) {
 	return newFile(key, nil, diskF, s.disk, s.log), nil
 }
 
-func (s *Store) Has(key string) (inStore bool, inScope bool) {
-	inMemStore, inScope := s.mem.Has(key)
-	if inMemStore {
-		return inMemStore, inScope
+func (s *store) Has(key string, scope storelib.BlobScope) (inStore bool, inScope bool) {
+	inMem, inMemScope := s.mem.Scoped(scope).Has(key)
+	if inMem {
+		return true, inMemScope
 	}
-	return s.disk.Has(key)
+
+	inDisk, inDiskScope := s.disk.Scoped(scope).Has(key)
+	if inDisk {
+		return true, inDiskScope
+	}
+	return false, false
 }
 
-func (s *Store) Delete(key string) error {
+func (s *store) Delete(key string, scope storelib.BlobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	err := s.mem.Delete(key)
+	err := s.mem.Scoped(scope).Delete(key)
+	if errors.Is(err, storelib.ErrOutOfScope) {
+		return storelib.ErrOutOfScope
+	}
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("mem store delete: %w", err)
 	}
 	if errors.Is(err, os.ErrNotExist) {
-		return s.disk.Delete(key)
+		return s.disk.Scoped(scope).Delete(key)
 	}
 
 	s.flusher.abort(key)
@@ -122,9 +141,9 @@ func (s *Store) Delete(key string) error {
 	return nil
 }
 
-func (s *Store) List() []string {
-	diskKeys := s.disk.List()
-	memKeys := s.mem.List()
+func (s *store) List(scope storelib.BlobScope) []string {
+	diskKeys := s.disk.Scoped(scope).List()
+	memKeys := s.mem.Scoped(scope).List()
 
 	dedup := make(map[string]struct{})
 	for _, key := range diskKeys {
@@ -133,11 +152,21 @@ func (s *Store) List() []string {
 	for _, key := range memKeys {
 		dedup[key] = struct{}{}
 	}
+	if scope == storelib.BlobScopeIncomplete {
+		// In the code above, we might have added accidentally entries that are complete from the store's POV,
+		// but still incomplete in disk, as the entry is currently being flushed from mem to disk. We remove these entries.
+		for _, key := range s.mem.ScopeComplete().List() {
+			delete(dedup, key)
+		}
+	}
 	return slices.Collect(maps.Keys(dedup))
 }
 
-func (s *Store) Stat(key string) (size int64, err error) {
-	size, err = s.mem.Stat(key)
+func (s *store) Stat(key string, scope storelib.BlobScope) (size int64, err error) {
+	size, err = s.mem.Scoped(scope).Stat(key)
+	if errors.Is(err, storelib.ErrOutOfScope) {
+		return 0, storelib.ErrOutOfScope
+	}
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return 0, fmt.Errorf("mem store stat: %w", err)
 	}
@@ -145,7 +174,10 @@ func (s *Store) Stat(key string) (size int64, err error) {
 		return size, nil
 	}
 
-	fi, err := s.disk.Stat(key)
+	fi, err := s.disk.Scoped(scope).Stat(key)
+	if errors.Is(err, storelib.ErrOutOfScope) {
+		return 0, storelib.ErrOutOfScope
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return 0, os.ErrNotExist
 	}
@@ -155,9 +187,16 @@ func (s *Store) Stat(key string) (size int64, err error) {
 	return fi.Size(), nil
 }
 
-func (s *Store) MarkComplete(key string) error {
+func (s *store) MarkComplete(key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if _, ok := s.mem.ScopeComplete().Has(key); ok {
+		return nil // no-op
+	}
+	if _, ok := s.disk.ScopeComplete().Has(key); ok {
+		return nil // no-op
+	}
 
 	err := s.mem.BanEviction(key)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -179,16 +218,19 @@ func (s *Store) MarkComplete(key string) error {
 	return nil
 }
 
-func (s *Store) SetMetadata(key string, md metadata.Metadata) error {
+func (s *store) SetMetadata(key string, md metadata.Metadata, scope storelib.BlobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	err := s.mem.BanEviction(key)
+	err := s.mem.Scoped(scope).BanEviction(key)
+	if errors.Is(err, storelib.ErrOutOfScope) {
+		return storelib.ErrOutOfScope
+	}
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("mem store ban eviction: %w", err)
 	}
 	if errors.Is(err, os.ErrNotExist) {
-		return s.disk.SetMetadata(key, md)
+		return s.disk.Scoped(scope).SetMetadata(key, md)
 	}
 
 	err = s.mem.SetMetadata(key, md)
@@ -199,27 +241,33 @@ func (s *Store) SetMetadata(key string, md metadata.Metadata) error {
 	return nil
 }
 
-func (s *Store) GetMetadata(key string, md metadata.Metadata) (ok bool, err error) {
-	ok, err = s.mem.GetMetadata(key, md)
+func (s *store) GetMetadata(key string, md metadata.Metadata, scope storelib.BlobScope) (ok bool, err error) {
+	ok, err = s.mem.Scoped(scope).GetMetadata(key, md)
+	if errors.Is(err, storelib.ErrOutOfScope) {
+		return false, storelib.ErrOutOfScope
+	}
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return false, fmt.Errorf("mem store get metadarta: %w", err)
 	}
 	if errors.Is(err, os.ErrNotExist) {
-		return s.disk.GetMetadata(key, md)
+		return s.disk.Scoped(scope).GetMetadata(key, md)
 	}
 	return ok, nil
 }
 
-func (s *Store) DeleteMetadata(key string, mdSuffix string) error {
+func (s *store) DeleteMetadata(key string, mdSuffix string, scope storelib.BlobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	err := s.mem.BanEviction(key)
+	err := s.mem.Scoped(scope).BanEviction(key)
+	if errors.Is(err, storelib.ErrOutOfScope) {
+		return storelib.ErrOutOfScope
+	}
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("mem store ban eviction: %w", err)
 	}
 	if errors.Is(err, os.ErrNotExist) {
-		return s.disk.DeleteMetadata(key, mdSuffix)
+		return s.disk.Scoped(scope).DeleteMetadata(key, mdSuffix)
 	}
 
 	err = s.mem.DeleteMetadata(key, mdSuffix)
