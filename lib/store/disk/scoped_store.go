@@ -68,7 +68,7 @@ func (s *Store) MarkComplete(key string) error { return s.impl.MarkComplete(key)
 func (s *Store) Delete(key string) error { return s.impl.Delete(key, s.scope) }
 
 // List returns the keys of all blobs (except those out of scope).
-func (s *Store) List() []string { return s.impl.list(s.scope) }
+func (s *Store) List() []string { return s.impl.List(s.scope) }
 
 // BanEviction marks a blob as unevictable by LRU eviction. It is idempotent.
 // Needed when e.g. blobs must be written back to GCS/S3 and eviction before that is unacceptable.
@@ -109,3 +109,6 @@ func (s *Store) ScopeComplete() *Store { return &Store{s.impl, storelib.BlobScop
 // ScopeIncomplete scopes [Store]'s APIs such that they can only operate on incomplete blobs.
 // [storelib.ErrOutOfScope] is returned if the user tries to operate on a complete blob.
 func (s *Store) ScopeIncomplete() *Store { return &Store{s.impl, storelib.BlobScopeIncomplete} }
+
+// Scoped scopes [Store]'s APIs, such that [storelib.ErrOutOfScope] is returned upon attempting to operate on blobs out of scope.
+func (s *Store) Scoped(scope storelib.BlobScope) *Store { return &Store{s.impl, scope} }

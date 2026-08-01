@@ -48,7 +48,7 @@ func newStore(capacityBytes uint64, metrics tally.Scope) (*store, error) {
 
 	log := log.Default().With("module", "memory_store")
 
-	log.Info("Initialized new, empty *memory.Store")
+	log.Info("Initialized new, empty memory.Store")
 	s := &store{
 		blobs:      make(map[string]*blob, 0),
 		evictQueue: list.New(),
