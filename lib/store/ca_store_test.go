@@ -1209,6 +1209,114 @@ func TestCAStore_ListCacheFiles(t *testing.T) {
 	}
 }
 
+func TestCAStore_DeleteCacheFile(t *testing.T) {
+	t.Run("removes memory-only entry and does not error", func(t *testing.T) {
+		config, cleanup := CAStoreConfigFixture()
+		defer cleanup()
+		config.MemoryCache = MemoryCacheConfig{
+			Enabled: true,
+			MaxSize: 1024 * 1024,
+			TTL:     time.Hour,
+		}
+
+		s, err := NewCAStore(config, tally.NoopScope)
+		require.NoError(t, err)
+		defer s.Close()
+
+		data := []byte("in memory only")
+		digest, err := core.NewDigester().FromBytes(data)
+		require.NoError(t, err)
+		name := digest.Hex()
+
+		added := s.memCache.Add(&cache.MemoryEntry{
+			Name:      name,
+			Data:      data,
+			CreatedAt: time.Now(),
+		})
+		require.True(t, added)
+		require.NotNil(t, s.memCache.Get(name), "entry should be in memory cache before delete")
+
+		err = s.DeleteCacheFile(name)
+		require.NoError(t, err)
+		require.Nil(t, s.memCache.Get(name), "entry should be removed from memory cache after delete")
+
+		// Confirm it's really gone from the combined listing too, not just
+		// from a direct memCache.Get check.
+		files, err := s.ListCacheFiles()
+		require.NoError(t, err)
+		for _, f := range files {
+			require.NotEqual(t, name, f, "deleted entry should not appear in ListCacheFiles")
+		}
+	})
+
+	t.Run("still deletes a disk-only entry as before", func(t *testing.T) {
+		config, cleanup := CAStoreConfigFixture()
+		defer cleanup()
+		config.MemoryCache = MemoryCacheConfig{
+			Enabled: true,
+			MaxSize: 1024 * 1024,
+			TTL:     time.Hour,
+		}
+
+		s, err := NewCAStore(config, tally.NoopScope)
+		require.NoError(t, err)
+		defer s.Close()
+
+		data := []byte("on disk only")
+		digest, err := core.NewDigester().FromBytes(data)
+		require.NoError(t, err)
+		name := digest.Hex()
+
+		err = s.CreateCacheFile(name, bytes.NewReader(data))
+		require.NoError(t, err)
+
+		err = s.DeleteCacheFile(name)
+		require.NoError(t, err)
+
+		_, err = s.GetCacheFileStat(name)
+		require.True(t, os.IsNotExist(err), "disk file should be gone after delete")
+	})
+
+	t.Run("falls back to disk-only behavior when memory cache is disabled", func(t *testing.T) {
+		config, cleanup := CAStoreConfigFixture()
+		defer cleanup()
+		config.MemoryCache = MemoryCacheConfig{Enabled: false}
+
+		s, err := NewCAStore(config, tally.NoopScope)
+		require.NoError(t, err)
+		defer s.Close()
+		require.Nil(t, s.memCache)
+
+		data := []byte("disk entry, no memory cache")
+		digest, err := core.NewDigester().FromBytes(data)
+		require.NoError(t, err)
+		name := digest.Hex()
+
+		err = s.CreateCacheFile(name, bytes.NewReader(data))
+		require.NoError(t, err)
+
+		err = s.DeleteCacheFile(name)
+		require.NoError(t, err)
+	})
+
+	t.Run("returns not-exist error for an entry that is nowhere", func(t *testing.T) {
+		config, cleanup := CAStoreConfigFixture()
+		defer cleanup()
+		config.MemoryCache = MemoryCacheConfig{
+			Enabled: true,
+			MaxSize: 1024 * 1024,
+			TTL:     time.Hour,
+		}
+
+		s, err := NewCAStore(config, tally.NoopScope)
+		require.NoError(t, err)
+		defer s.Close()
+
+		err = s.DeleteCacheFile("does-not-exist-anywhere")
+		require.True(t, os.IsNotExist(err), "expected a not-exist error, got: %v", err)
+	})
+}
+
 func TestGetCacheFileMetadata_MemoryCache_NoCopy(t *testing.T) {
 	require := require.New(t)
 
