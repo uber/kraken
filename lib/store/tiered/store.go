@@ -29,6 +29,9 @@ func newStore(diskConfig *disk.Config, memCapacity uint64, numWorkers int, metri
 	if diskConfig.RebootIncompleteBlobs {
 		return nil, errors.New("tiered.Store does not support RebootIncompleteBlobs, as it can leak files. Use disk.Store if you need persistence for incomplete blobs")
 	}
+	if numWorkers <= 0 {
+		return nil, errors.New("numWorkers must be at least 1, otherwise blobs would never get flushed from mem to disk")
+	}
 	mem, err := memory.NewStore(memCapacity, metrics)
 	if err != nil {
 		return nil, fmt.Errorf("new mem store: %w", err)

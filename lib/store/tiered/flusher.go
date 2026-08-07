@@ -14,6 +14,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// indirection needed for testing
+var (
+	memOpen = func(mem *memory.Store, key string) (*memory.File, error) {
+		return mem.Open(key)
+	}
+	ioCopy = io.Copy
+)
+
 type flusher struct {
 	blobs  map[string]*blob
 	queue  []string
@@ -271,7 +279,7 @@ func (f *flusher) flushMetadata(key, mdSuffix string) error {
 
 func (f *flusher) flushData(b *blob) error {
 	key := b.key
-	memF, err := f.mem.Open(key)
+	memF, err := memOpen(f.mem, key)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -299,7 +307,7 @@ func (f *flusher) flushData(b *blob) error {
 		return nil
 	}
 	f.mu.Unlock()
-	_, err = io.Copy(diskF, memF)
+	_, err = ioCopy(diskF, memF)
 	if errors.Is(err, memory.ErrEvicted) {
 		return nil
 	}
