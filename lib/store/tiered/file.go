@@ -48,7 +48,7 @@ func newFile(key string, memF *memory.File, diskF *disk.File, diskStore *disk.St
 // A blob might be evicted from the mem store (after being flushed to disk), while a tiered store user is holding a [File].
 // To allow the user to continue operating on the [File] seemlessly, we open the blob in the disk store and
 // operate on it instead. This is done once, on the first call to [File] after eviction from memory.
-func (f *File) openDiskFileIfNeeed() error {
+func (f *File) openDiskFileIfNeeded() error {
 	f.once.Do(func() {
 		diskF, err := f.diskStore.Open(f.key)
 		if errors.Is(err, os.ErrNotExist) {
@@ -99,7 +99,7 @@ func (f *File) Read(p []byte) (n int, err error) {
 			return n, err
 		}
 
-		if err := f.openDiskFileIfNeeed(); err != nil {
+		if err := f.openDiskFileIfNeeded(); err != nil {
 			return 0, err
 		}
 	}
@@ -112,7 +112,7 @@ func (f *File) ReadAt(p []byte, off int64) (n int, err error) {
 		if err != memory.ErrEvicted {
 			return n, err
 		}
-		if err := f.openDiskFileIfNeeed(); err != nil {
+		if err := f.openDiskFileIfNeeded(); err != nil {
 			return 0, err
 		}
 	}
@@ -126,7 +126,7 @@ func (f *File) Seek(off int64, whence int) (int64, error) {
 			return newOff, err
 		}
 
-		if err := f.openDiskFileIfNeeed(); err != nil {
+		if err := f.openDiskFileIfNeeded(); err != nil {
 			return 0, err
 		}
 	}
@@ -141,7 +141,7 @@ func (f *File) Size() int64 {
 			return size
 		}
 
-		if err := f.openDiskFileIfNeeed(); err != nil {
+		if err := f.openDiskFileIfNeeded(); err != nil {
 			return 0
 		}
 	}
@@ -155,7 +155,7 @@ func (f *File) WriteAt(p []byte, off int64) (n int, err error) {
 			return n, err
 		}
 
-		if err := f.openDiskFileIfNeeed(); err != nil {
+		if err := f.openDiskFileIfNeeded(); err != nil {
 			return 0, err
 		}
 	}
@@ -169,7 +169,7 @@ func (f *File) Write(p []byte) (n int, err error) {
 			return n, err
 		}
 
-		if err := f.openDiskFileIfNeeed(); err != nil {
+		if err := f.openDiskFileIfNeeded(); err != nil {
 			return 0, err
 		}
 	}
@@ -183,7 +183,7 @@ func (f *File) Cancel() error {
 			return err
 		}
 
-		if err := f.openDiskFileIfNeeed(); err != nil {
+		if err := f.openDiskFileIfNeeded(); err != nil {
 			return err
 		}
 	}
@@ -196,7 +196,7 @@ func (f *File) Close() error {
 			return err
 		}
 
-		if err := f.openDiskFileIfNeeed(); err != nil {
+		if err := f.openDiskFileIfNeeded(); err != nil {
 			return err
 		}
 	}
@@ -210,7 +210,7 @@ func (f *File) Commit() error {
 			return err
 		}
 
-		if err := f.openDiskFileIfNeeed(); err != nil {
+		if err := f.openDiskFileIfNeeded(); err != nil {
 			return err
 		}
 	}
