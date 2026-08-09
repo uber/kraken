@@ -1146,3 +1146,37 @@ func TestScopesDelete(t *testing.T) {
 	_, err = store.Stat(key)
 	require.ErrorIs(err, os.ErrNotExist)
 }
+
+func TestConfig__applyDefaults(t *testing.T) {
+	for name, tt := range map[string]struct {
+		config  *Config
+		wantErr string
+	}{
+		"capacity must be explicitly set": {
+			config: &Config{
+				RootDir:               t.TempDir(),
+				RebootIncompleteBlobs: false,
+				ShardLength:           _defaultShardLength,
+			},
+			wantErr: "capacity_bytes must be explicitly set",
+		},
+		"shard length cannot be negative": {
+			config: &Config{
+				CapacityBytes:         10 * memsize.KB,
+				RootDir:               t.TempDir(),
+				RebootIncompleteBlobs: false,
+				ShardLength:           -1,
+			},
+			wantErr: "shard_length must be non-negative",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := NewStore(tt.config, tally.NoopScope)
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

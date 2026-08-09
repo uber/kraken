@@ -2,7 +2,6 @@ package memory
 
 import (
 	"container/list"
-	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -41,18 +40,22 @@ type blob struct {
 	sliceMu        sync.Mutex // Synchronizes writes to 1) the atomic pointer and 2) the slice (not the array!).
 }
 
-func newStore(capacityBytes uint64, metrics tally.Scope) (*store, error) {
-	if capacityBytes <= 0 {
-		return nil, errors.New("store capacity must be positive")
+func newStore(config *Config, metrics tally.Scope) (*store, error) {
+	err := config.applyDefaults()
+	if err != nil {
+		return nil, err
+	}
+	err = config.configureGC()
+	if err != nil {
+		return nil, err
 	}
 
 	log := log.Default().With("module", "memory_store")
-
 	log.Info("Initialized new, empty memory.Store")
 	s := &store{
 		blobs:      make(map[string]*blob, 0),
 		evictQueue: list.New(),
-		capacity:   capacityBytes,
+		capacity:   config.CapacityBytes,
 		size:       0,
 		log:        log,
 		metrics:    metrics,

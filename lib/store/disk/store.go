@@ -54,6 +54,11 @@ type blob struct {
 }
 
 func newStore(config *Config, metrics tally.Scope) (*store, error) {
+	err := config.applyDefaults()
+	if err != nil {
+		return nil, err
+	}
+
 	log := log.Default().With("module", "disk_store")
 	ok, err := existsPersistedStore(config.RootDir)
 	if err != nil {

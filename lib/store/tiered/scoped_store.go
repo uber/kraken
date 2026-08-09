@@ -24,21 +24,22 @@ type Store struct {
 	scope storelib.BlobScope
 }
 
-// NewStore creates a new [Store].
-func NewStore(diskConfig *disk.Config, memCapacity uint64, numWorkers int, metrics tally.Scope) (*Store, error) {
-	s, err := newStore(diskConfig, memCapacity, numWorkers, metrics)
+// NewStore creates a new [Store] and returns its underlying [disk.Store] in case the
+// user wants to directly operate on disk (e.g. if persistence is mandatory).
+func NewStore(config *Config, metrics tally.Scope) (*Store, *disk.Store, error) {
+	impl, diskStore, err := newStore(config, metrics)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	return &Store{
-		impl:  s,
+		impl:  impl,
 		scope: storelib.BlobScopeAny,
-	}, nil
+	}, diskStore, nil
 }
 
 // Create initializes a new, incomplete blob, reserves space for it, and returns a [*File] pointing to it.
 // Incomplete entries cannot be automatically evicted. MarkComplete must be called once the blob is complete.
-// The store uses `sizeBytes` for its eviction logic even if the blob's real size differs (which is tolerated).
+// The store uses `sizeBytes` for its eviction logic even if the blob's real size differs (which is tolerated if the difference is negligible).
 func (s *Store) Create(key string, sizeBytes uint64) (*File, error) {
 	return s.impl.Create(key, sizeBytes)
 }
