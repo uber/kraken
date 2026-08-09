@@ -39,6 +39,7 @@ import (
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/persistedretry/writeback"
 	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/closers"
@@ -64,6 +65,7 @@ type Server struct {
 	addr              string
 	hashRing          hashring.Ring
 	cas               *store.CAStore
+	diskStore         *disk.Store
 	clientProvider    blobclient.Provider
 	clusterProvider   blobclient.ClusterProvider
 	backends          *backend.Manager
@@ -154,6 +156,7 @@ func (s *Server) Handler() http.Handler {
 	r.Post("/namespace/{namespace}/blobs/{digest}/remote/{remote}", handler.Wrap(s.replicateToRemoteHandler))
 
 	r.Post("/forcecleanup", handler.Wrap(s.forceCleanupHandler))
+	r.Post("/forcecleanup/v2", handler.Wrap(s.forceCleanupHandlerV2))
 
 	// Internal endpoints:
 
@@ -1053,4 +1056,35 @@ func (s *Server) maybeDelete(name string, ttl time.Duration) (deleted bool, err 
 		return true, nil
 	}
 	return false, nil
+}
+
+func (s *Server) forceCleanupHandlerV2(w http.ResponseWriter, r *http.Request) error {
+	if s.diskStore == nil {
+		return handler.Errorf("migration to disk.Store not yet done").Status(http.StatusNotImplemented)
+	}
+
+	rawTargetUtilPercent := r.URL.Query().Get("target_util_percent")
+	if rawTargetUtilPercent == "" {
+		return handler.Errorf("query arg target_util_percent required").Status(http.StatusBadRequest)
+	}
+	targetUtilPercent, err := strconv.Atoi(rawTargetUtilPercent)
+	if err != nil {
+		return handler.Errorf("invalid target_util_percent: %s", err).Status(http.StatusBadRequest)
+	}
+	rawRespectEvictionBan := r.URL.Query().Get("respect_eviction_ban")
+	if rawRespectEvictionBan == "" {
+		return handler.Errorf("query arg respect_eviction_ban required").Status(http.StatusBadRequest)
+	}
+	respectEvictionBan, err := strconv.ParseBool(rawRespectEvictionBan)
+	if err != nil {
+		return handler.Errorf("invalid respect_eviction_ban: %s", err).Status(http.StatusBadRequest)
+	}
+
+	newUtil, err := s.diskStore.Clean(targetUtilPercent, respectEvictionBan)
+	if err != nil {
+		return handler.Errorf("Encountered an error while cleaning. New utilization is '%v'. Error: %s", newUtil, err)
+	}
+	return json.NewEncoder(w).Encode(map[string]any{
+		"new_util": newUtil,
+	})
 }

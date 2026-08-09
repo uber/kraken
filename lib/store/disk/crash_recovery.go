@@ -108,7 +108,7 @@ func rebootPersistedStore(config *Config, log *zap.SugaredLogger, metrics tally.
 	if store.size > store.capacity {
 		prevSize := store.size
 		// evicts blobs until size <= capacity.
-		err = store.reserveSpace(0)
+		err = store.ensureFreeSpace(0)
 		if err != nil {
 			log.With("error", err).Error("Store size exceeds its capacity after service reboot. Evicting blobs from disk did not work to reduce size within capacity.")
 			return nil, fmt.Errorf("remove blobs to reduce store size within configured capacity: %w", err)
