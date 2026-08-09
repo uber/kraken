@@ -28,6 +28,7 @@ const (
 )
 
 var _syncEvictionLatencyBuckets = tally.MustMakeExponentialDurationBuckets(100*time.Millisecond, 1.4, 15)
+var errNoSpace = errors.New("cannot free enough space for new entry, the unevictable/incomplete blobs are using up all the space")
 
 // store implements the APIs of [Store]. [store]'s APIs expose the [storelib.BlobScope] arg,
 // while [Store]'s APIs omit that arg (cleaner interface) and instead expose other APIs to scope the whole store.
@@ -158,9 +159,10 @@ func (s *store) Create(key string, sizeBytes uint64) (*File, error) {
 		return nil, os.ErrExist
 	}
 
-	if err := s.reserveSpace(sizeBytes); err != nil {
-		return nil, fmt.Errorf("reserve space: %w", err)
+	if err := s.ensureFreeSpace(sizeBytes); err != nil {
+		return nil, fmt.Errorf("ensure free space: %w", err)
 	}
+	s.size += sizeBytes
 
 	dirName := s.dirPath(key, _incompleteBlob)
 	err := os.MkdirAll(dirName, _defaultFilePerm)
@@ -208,7 +210,11 @@ func (s *store) persistBlobSize(key string, sizeBytes uint64) error {
 	return nil
 }
 
-func (s *store) reserveSpace(space uint64) error {
+func (s *store) ensureFreeSpace(space uint64) error {
+	if s.size+space <= s.capacity {
+		return nil
+	}
+
 	// TODO - benchmark and consider whether async eviction makes more sense.
 	startTime := time.Now()
 	for s.size+space > s.capacity {
@@ -218,7 +224,7 @@ func (s *store) reserveSpace(space uint64) error {
 				"required_space", space,
 				"capacity", s.capacity,
 			).Error("Cannot evict enough data to free space for new entry to Store. The unevictable/incomplete blobs are using up all the space")
-			return errors.New("cannot evict enough, the unevictable/incomplete blobs are using up all the space")
+			return errNoSpace
 		}
 
 		toEvictNode := s.evictQueue.Front()
@@ -233,7 +239,6 @@ func (s *store) reserveSpace(space uint64) error {
 		s.releaseSpace(size)
 		delete(s.blobs, toEvictKey)
 	}
-	s.size += space
 
 	latency := time.Since(startTime)
 	s.metrics.Histogram("sync_eviction_latency", _syncEvictionLatencyBuckets).RecordDuration(latency)
@@ -325,6 +330,10 @@ func (s *store) Delete(key string, scope storelib.BlobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.deleteNoLock(key, scope)
+}
+
+func (s *store) deleteNoLock(key string, scope storelib.BlobScope) error {
 	b, ok := s.blobs[key]
 	if !ok {
 		return os.ErrNotExist
@@ -578,6 +587,66 @@ func (s *store) WriteAtMetadata(key string, md metadata.Metadata, p []byte, off 
 	}
 
 	return nil
+}
+
+func (s *store) Clean(targetUtilPercent int, respectEvictionBan bool) (newUtil int, err error) {
+	defer func() {
+		newUtil = int(s.size * 100 / s.capacity)
+	}()
+
+	if targetUtilPercent < 0 || targetUtilPercent >= 100 {
+		return 0, errors.New("target_util_percent must be >=0 and <100")
+	}
+	s.log.Warn("Starting manual cleanup of disk.Store")
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	targetSize := s.capacity * uint64(targetUtilPercent) / 100
+	requiredFreeSpace := s.capacity - targetSize
+
+	err = s.ensureFreeSpace(requiredFreeSpace)
+	if err != nil && !errors.Is(err, errNoSpace) {
+		return newUtil, fmt.Errorf("ensure free space: %w", err)
+	}
+	if err == nil {
+		return newUtil, err
+	}
+
+	notEvictionBannedKeys := []string{}
+	for key, b := range s.blobs {
+		if !b.evictionBanned {
+			notEvictionBannedKeys = append(notEvictionBannedKeys, key)
+		}
+	}
+
+	for _, key := range notEvictionBannedKeys {
+		if s.size <= targetSize {
+			return newUtil, nil
+		}
+
+		err = s.deleteNoLock(key, storelib.BlobScopeAny)
+		if err != nil {
+			return newUtil, fmt.Errorf("delete incomplete, non-eviction-banned blob: %w", err)
+		}
+	}
+
+	if respectEvictionBan {
+		return newUtil, nil
+	}
+
+	for key := range s.blobs {
+		if s.size <= targetSize {
+			return newUtil, nil
+		}
+
+		err = s.deleteNoLock(key, storelib.BlobScopeAny)
+		if err != nil {
+			return newUtil, fmt.Errorf("delete blob banned from eviction: %w", err)
+		}
+	}
+
+	return newUtil, nil
 }
 
 // used during testing

@@ -258,7 +258,7 @@ func TestCrashRecovery(t *testing.T) {
 
 		// Assume that the application restarts here.
 		_, err := NewStore(&Config{5 * memsize.KB, rootDir, true, _defaultShardLength}, tally.NoopScope)
-		require.ErrorContains(err, "cannot evict enough, the unevictable/incomplete blobs are using up all the space")
+		require.ErrorIs(err, errNoSpace)
 	})
 }
 
@@ -333,7 +333,7 @@ func TestStoreWorksWhenFileSizeNotCorrect(t *testing.T) {
 	// Even though only 1KB is actually used on disk, the store enforces capacity based on the
 	// declared 8KB, so a 3KB blob doesn't fit alongside it (there's nothing evictable to make room).
 	_, err := store.Create(core.DigestFixture().Hex(), 3*memsize.KB)
-	require.EqualError(err, "reserve space: cannot evict enough, the unevictable/incomplete blobs are using up all the space")
+	require.ErrorIs(err, errNoSpace)
 
 	// Declares 2KB (fits exactly within the remaining capacity) but writes 5KB.
 	overreportedF, overreportedKey := newTestFile(t, store, 2*memsize.KB)

@@ -34,6 +34,7 @@ import (
 	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/lib/metainfogen"
 	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	mockbackend "github.com/uber/kraken/mocks/lib/backend"
 	mockpersistedretry "github.com/uber/kraken/mocks/lib/persistedretry"
 	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
@@ -104,6 +105,11 @@ type testServer struct {
 	writeBackManager *mockpersistedretry.MockManager
 	clk              *clock.Mock
 	cleanup          func()
+
+	// setDiskStore configures the Server's disk.Store. There's no way to inject
+	// this via New yet (migration to disk.Store is in progress), so this closure
+	// captures the Server built below to allow tests to still wire it in.
+	setDiskStore func(*disk.Store)
 }
 
 func newTestServer(
@@ -157,6 +163,7 @@ func newTestServer(
 		writeBackManager: writeBackManager,
 		clk:              clk,
 		cleanup:          cleanup.Run,
+		setDiskStore:     func(d *disk.Store) { s.diskStore = d },
 	}
 }
 

@@ -112,3 +112,14 @@ func (s *Store) ScopeIncomplete() *Store { return &Store{s.impl, storelib.BlobSc
 
 // Scoped scopes [Store]'s APIs, such that [storelib.ErrOutOfScope] is returned upon attempting to operate on blobs out of scope.
 func (s *Store) Scoped(scope storelib.BlobScope) *Store { return &Store{s.impl, scope} }
+
+// Clean deletes blobs from the store until targetUtilPercent is hit.
+// Intended for manual use for incident mitigation/benchmarking.
+// Blobs are deleted in the following order:
+//  1. complete, non-eviction-banned blobs, in LRU order.
+//  2. incomplete, non-eviction-banned blobs, in a random order.
+//  3. If respectEvictionBan is true, Clean will not delete blobs banned from eviction.
+//     Else, it will delete them, in a random order.
+func (s *Store) Clean(targetUtilPercent int, respectEvictionBan bool) (newUtil int, err error) {
+	return s.impl.Clean(targetUtilPercent, respectEvictionBan)
+}

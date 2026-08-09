@@ -16,6 +16,7 @@ package blobserver
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -26,12 +27,14 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/persistedretry/writeback"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/httputil"
@@ -870,4 +873,78 @@ func TestForceCleanupWriteBackFailures(t *testing.T) {
 	require.NoError(client.ForceCleanup(12 * time.Hour))
 
 	ensureHasBlob(t, client, namespace, blob)
+}
+
+func newTestDiskStore(t *testing.T) *disk.Store {
+	d, err := disk.NewStore(&disk.Config{
+		CapacityBytes: 100,
+		RootDir:       t.TempDir(),
+		ShardLength:   2,
+	}, tally.NoopScope)
+	require.NoError(t, err)
+	return d
+}
+
+func TestForceCleanupV2MigrationNotDone(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+	defer s.cleanup()
+
+	_, err := httputil.Post(fmt.Sprintf(
+		"http://%s/forcecleanup/v2?target_util_percent=50&respect_eviction_ban=true", s.addr))
+	require.True(httputil.IsStatus(err, http.StatusNotImplemented))
+}
+
+func TestForceCleanupV2InvalidParams(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		query string
+	}{
+		{"missing target_util_percent", "respect_eviction_ban=true"},
+		{"invalid target_util_percent", "target_util_percent=abc&respect_eviction_ban=true"},
+		{"missing respect_eviction_ban", "target_util_percent=50"},
+		{"invalid respect_eviction_ban", "target_util_percent=50&respect_eviction_ban=abc"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require := require.New(t)
+
+			cp := newTestClientProvider()
+			s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+			defer s.cleanup()
+			s.setDiskStore(newTestDiskStore(t))
+
+			_, err := httputil.Post(fmt.Sprintf("http://%s/forcecleanup/v2?%s", s.addr, tc.query))
+			require.True(httputil.IsStatus(err, http.StatusBadRequest))
+		})
+	}
+}
+
+func TestForceCleanupV2(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+	defer s.cleanup()
+
+	diskStore := newTestDiskStore(t)
+	s.setDiskStore(diskStore)
+
+	key := core.DigestFixture().Hex()
+	f, err := diskStore.Create(key, 60)
+	require.NoError(err)
+	require.NoError(f.Close())
+	require.NoError(diskStore.MarkComplete(key))
+
+	// Target of 10% cannot be met while keeping the only blob (60% util), so it gets evicted.
+	resp, err := httputil.Post(fmt.Sprintf(
+		"http://%s/forcecleanup/v2?target_util_percent=10&respect_eviction_ban=true", s.addr))
+	require.NoError(err)
+	defer func() { require.NoError(resp.Body.Close()) }()
+
+	var body map[string]int
+	require.NoError(json.NewDecoder(resp.Body).Decode(&body))
+	require.Equal(0, body["new_util"])
+	require.Empty(diskStore.List())
 }

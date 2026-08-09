@@ -92,7 +92,7 @@ func TestStore(t *testing.T) {
 	require.Equal(10*memsize.KB, store.impl.size)
 
 	f, err := store.Create(core.DigestFixture().Hex(), memsize.B)
-	require.EqualError(err, "reserve space: cannot evict enough, the unevictable/incomplete blobs are using up all the space")
+	require.ErrorIs(err, errNoSpace)
 	require.Nil(f)
 
 	f, err = store.ScopeComplete().Open(keys[0])
@@ -137,7 +137,7 @@ func TestEviction(t *testing.T) {
 	require.Equal(5, numBlobsOnDisk(t, store))
 	// incomplete files cannot be evicted and adding 2KB would result in overreservation.
 	_, err := store.Create(core.DigestFixture().Hex(), 2*memsize.KB)
-	require.EqualError(err, "reserve space: cannot evict enough, the unevictable/incomplete blobs are using up all the space")
+	require.ErrorIs(err, errNoSpace)
 	// start marking as complete in this specific order - c, b, a (MarkComplete resets access time).
 	require.NoError(store.MarkComplete(cKey))
 	require.NoError(store.MarkComplete(bKey))
@@ -1145,6 +1145,107 @@ func TestScopesDelete(t *testing.T) {
 	require.NoError(store.Delete(key))
 	_, err = store.Stat(key)
 	require.ErrorIs(err, os.ErrNotExist)
+}
+
+func TestClean(t *testing.T) {
+	t.Run("invalid target_util_percent", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 100*memsize.KB, false)
+
+		_, err := store.Clean(-1, true)
+		require.EqualError(err, "target_util_percent must be >=0 and <100")
+
+		_, err = store.Clean(100, true)
+		require.EqualError(err, "target_util_percent must be >=0 and <100")
+	})
+
+	t.Run("no-op when already under target", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 100*memsize.KB, false)
+		f, key := newTestFile(t, store, 20*memsize.KB)
+		require.NoError(f.Close())
+		require.NoError(store.MarkComplete(key))
+
+		newUtil, err := store.Clean(50, true)
+		require.NoError(err)
+		require.Equal(20, newUtil)
+		require.Equal([]string{key}, store.List())
+	})
+
+	t.Run("LRU eviction alone reaches target", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 100*memsize.KB, false)
+		a, aKey := newTestFile(t, store, 60*memsize.KB)
+		require.NoError(a.Close())
+		require.NoError(store.MarkComplete(aKey))
+		b, bKey := newTestFile(t, store, 20*memsize.KB)
+		require.NoError(b.Close())
+		require.NoError(store.MarkComplete(bKey))
+
+		// LRU-evicting a (60KB) alone is enough to get to <=50% util, so b is spared.
+		newUtil, err := store.Clean(50, true)
+		require.NoError(err)
+		require.Equal(20, newUtil)
+		require.Equal([]string{bKey}, store.List())
+	})
+
+	t.Run("respectEvictionBan true - deletes incomplete blobs but spares banned ones", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 100*memsize.KB, false)
+		a, aKey := newTestFile(t, store, 30*memsize.KB)
+		require.NoError(a.Close())
+		require.NoError(store.MarkComplete(aKey))
+		require.NoError(store.BanEviction(aKey))
+		b, _ := newTestFile(t, store, 20*memsize.KB) // incomplete, non-banned.
+		require.NoError(b.Close())
+		c, cKey := newTestFile(t, store, 10*memsize.KB)
+		require.NoError(c.Close())
+		require.NoError(store.MarkComplete(cKey))
+
+		// Target of 10% cannot be reached without deleting the banned blob a,
+		// so with respectEvictionBan=true only b (LRU) and c (incomplete) are removed.
+		newUtil, err := store.Clean(10, true)
+		require.NoError(err)
+		require.Equal(30, newUtil)
+		require.Equal([]string{aKey}, store.List())
+	})
+
+	t.Run("respectEvictionBan true - target not reached, but no error returned", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 100*memsize.KB, false)
+		a, aKey := newTestFile(t, store, 100*memsize.KB)
+		require.NoError(a.Close())
+		require.NoError(store.MarkComplete(aKey))
+		require.NoError(store.BanEviction(aKey))
+
+		// The only blob is banned from eviction, so respectEvictionBan=true leaves
+		// it untouched even though the target of 0% is nowhere close to being met.
+		targetUtilPercent := 0
+		newUtil, err := store.Clean(targetUtilPercent, true)
+		require.NoError(err)
+		require.Greater(newUtil, targetUtilPercent)
+		require.Equal(100, newUtil)
+		require.Equal([]string{aKey}, store.List())
+	})
+
+	t.Run("respectEvictionBan false - also deletes banned blobs to reach target", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 100*memsize.KB, false)
+		a, aKey := newTestFile(t, store, 30*memsize.KB)
+		require.NoError(a.Close())
+		require.NoError(store.MarkComplete(aKey))
+		require.NoError(store.BanEviction(aKey))
+		b, _ := newTestFile(t, store, 20*memsize.KB) // incomplete, non-banned.
+		require.NoError(b.Close())
+		c, cKey := newTestFile(t, store, 10*memsize.KB)
+		require.NoError(c.Close())
+		require.NoError(store.MarkComplete(cKey))
+
+		newUtil, err := store.Clean(10, false)
+		require.NoError(err)
+		require.Equal(0, newUtil)
+		require.Empty(store.List())
+	})
 }
 
 func TestConfig__applyDefaults(t *testing.T) {
