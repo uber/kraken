@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"crypto/rand"
 	"io"
+	"math"
 	"os"
 	"regexp"
+	"runtime/debug"
 	"sync"
 	"testing"
 
@@ -17,6 +19,16 @@ import (
 	"github.com/uber/kraken/utils/memsize"
 )
 
+func newTestStore(t *testing.T, capacityBytes uint64) *Store {
+	config := &Config{
+		GOMEMLIMITBytes: math.MaxInt64,
+		CapacityBytes:   capacityBytes,
+	}
+	store, err := NewStore(config, tally.NoopScope)
+	require.NoError(t, err)
+	return store
+}
+
 func newTestFile(t *testing.T, store *Store, size uint64) (f storelib.FileReadWriter, key string) {
 	require := require.New(t)
 	key = core.DigestFixture().Hex()
@@ -27,8 +39,7 @@ func newTestFile(t *testing.T, store *Store, size uint64) (f storelib.FileReadWr
 
 func TestEviction(t *testing.T) {
 	require := require.New(t)
-	store, err := NewStore(25*memsize.KB, tally.NoopScope)
-	require.NoError(err)
+	store := newTestStore(t, 25*memsize.KB)
 	// create 5 blobs - a, b, c, d, e with different sizes.
 	a, aKey := newTestFile(t, store, 10*memsize.KB)
 	b, bKey := newTestFile(t, store, 5*memsize.KB)
@@ -38,7 +49,7 @@ func TestEviction(t *testing.T) {
 
 	require.Equal(24*memsize.KB, store.impl.size)
 	// incomplete files cannot be evicted and adding 2KB would result in overreservation.
-	_, err = store.Create(core.DigestFixture().Hex(), 2*memsize.KB)
+	_, err := store.Create(core.DigestFixture().Hex(), 2*memsize.KB)
 	require.ErrorIs(err, ErrNoSpace)
 	// start marking as complete in this specific order - c, b, a (MarkComplete resets access time).
 	require.NoError(store.MarkComplete(cKey))
@@ -138,8 +149,7 @@ func TestEviction(t *testing.T) {
 
 func TestEvictedBlobImmediatelyNotAvailable(t *testing.T) {
 	require := require.New(t)
-	store, err := NewStore(1*memsize.KB, tally.NoopScope)
-	require.NoError(err)
+	store := newTestStore(t, 1*memsize.KB)
 	b, key := newTestFile(t, store, 1*memsize.KB)
 	require.NoError(store.MarkComplete(key))
 
@@ -177,8 +187,7 @@ func TestEvictedBlobImmediatelyNotAvailable(t *testing.T) {
 
 func TestParallelAccessToSingleFile(t *testing.T) {
 	require := require.New(t)
-	store, err := NewStore(10*memsize.KB, tally.NoopScope)
-	require.NoError(err)
+	store := newTestStore(t, 10*memsize.KB)
 
 	key := core.DigestFixture().Hex()
 	// we purposefully underreport the size of the blob (real size is 50B) to test if the resizing logic is thread-safe.
@@ -256,8 +265,7 @@ func TestParallelAccessToSingleFile(t *testing.T) {
 
 func TestOpenedFileAccessibleAfterMarkedComplete(t *testing.T) {
 	require := require.New(t)
-	store, err := NewStore(10*memsize.KB, tally.NoopScope)
-	require.NoError(err)
+	store := newTestStore(t, 10*memsize.KB)
 
 	key := core.DigestFixture().Hex()
 	data := []byte("Hello World")
@@ -289,15 +297,14 @@ func TestOpenedFileAccessibleAfterMarkedComplete(t *testing.T) {
 func TestMisreportedBlobSize(t *testing.T) {
 	t.Run("user overreports size", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(25*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 25*memsize.KB)
 
 		// We pad the store's size to 1KB before all other operations to later show that size does not underflow when releasing memory.
 		_, _ = newTestFile(t, store, 1*memsize.KB)
 
 		f, key := newTestFile(t, store, 10*memsize.KB)
 		data := make([]byte, 5*memsize.KB)
-		_, err = rand.Read(data)
+		_, err := rand.Read(data)
 		require.NoError(err)
 		_, err = io.Copy(f, bytes.NewReader(data))
 		require.NoError(err)
@@ -327,8 +334,7 @@ func TestMisreportedBlobSize(t *testing.T) {
 
 	t.Run("user underreports size", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(25*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 25*memsize.KB)
 
 		// We pad the store's size to 1KB before all other operations to later show that size does not underflow when releasing memory.
 		_, _ = newTestFile(t, store, 1*memsize.KB)
@@ -336,7 +342,7 @@ func TestMisreportedBlobSize(t *testing.T) {
 		// We write 30KB to the file even though the store can only store 24KB. The store lets us do this and does not evict the blob.
 		f, key := newTestFile(t, store, 24*memsize.KB)
 		data := make([]byte, 30*memsize.KB)
-		_, err = rand.Read(data)
+		_, err := rand.Read(data)
 		require.NoError(err)
 		_, err = io.Copy(f, bytes.NewReader(data))
 		require.NoError(err)
@@ -369,8 +375,7 @@ func TestMisreportedBlobSize(t *testing.T) {
 func TestDelete(t *testing.T) {
 	t.Run("incomplete blob", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -385,8 +390,7 @@ func TestDelete(t *testing.T) {
 	})
 	t.Run("incomplete, unevictable blob", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -403,8 +407,7 @@ func TestDelete(t *testing.T) {
 	})
 	t.Run("complete blob", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -421,8 +424,7 @@ func TestDelete(t *testing.T) {
 	})
 	t.Run("complete, unevictable blob", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -440,11 +442,10 @@ func TestDelete(t *testing.T) {
 	})
 	t.Run("not found", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 
-		err = store.Delete(key)
+		err := store.Delete(key)
 		require.ErrorIs(err, os.ErrNotExist)
 	})
 }
@@ -452,8 +453,7 @@ func TestDelete(t *testing.T) {
 func TestMarkComplete(t *testing.T) {
 	t.Run("incomplete blob", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -470,8 +470,7 @@ func TestMarkComplete(t *testing.T) {
 	})
 	t.Run("incomplete blob with forbidden eviction", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -489,8 +488,7 @@ func TestMarkComplete(t *testing.T) {
 	})
 	t.Run("already complete blob", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -503,8 +501,7 @@ func TestMarkComplete(t *testing.T) {
 	})
 	t.Run("already complete blob with forbidden eviction", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 100*memsize.B)
 		require.NoError(err)
@@ -518,11 +515,10 @@ func TestMarkComplete(t *testing.T) {
 	})
 	t.Run("not found", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 
-		err = store.MarkComplete(key)
+		err := store.MarkComplete(key)
 		require.ErrorIs(err, os.ErrNotExist)
 	})
 }
@@ -530,8 +526,7 @@ func TestMarkComplete(t *testing.T) {
 func TestStat(t *testing.T) {
 	t.Run("complete blob", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 10*memsize.B)
 		require.NoError(err)
@@ -546,8 +541,7 @@ func TestStat(t *testing.T) {
 	})
 	t.Run("complete, unevictable blob", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 10*memsize.B)
 		require.NoError(err)
@@ -563,8 +557,7 @@ func TestStat(t *testing.T) {
 	})
 	t.Run("incomplete blob", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 10*memsize.B)
 		require.NoError(err)
@@ -582,8 +575,7 @@ func TestStat(t *testing.T) {
 
 	t.Run("incomplete, unevictable blob", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 10*memsize.B)
 		require.NoError(err)
@@ -598,8 +590,7 @@ func TestStat(t *testing.T) {
 	})
 	t.Run("non-existent blob", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 
 		size, err := store.Stat(key)
@@ -610,8 +601,7 @@ func TestStat(t *testing.T) {
 
 func TestList(t *testing.T) {
 	require := require.New(t)
-	store, err := NewStore(10*memsize.KB, tally.NoopScope)
-	require.NoError(err)
+	store := newTestStore(t, 10*memsize.KB)
 
 	require.Empty(store.ScopeComplete().List())
 	require.Empty(store.ScopeComplete().List())
@@ -668,8 +658,7 @@ func (mda *immovableMd) Deserialize(b []byte) error                  { return ni
 func TestMetadata(t *testing.T) {
 	t.Run("basic functionality", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 10*memsize.KB)
 		require.NoError(err)
@@ -727,13 +716,12 @@ func TestMetadata(t *testing.T) {
 
 	t.Run("non-existent blob", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		nonExistentKey := core.DigestFixture().Hex()
 		mdStruct := core.MetaInfoFixture()
 		md := metadata.NewTorrentMeta(mdStruct)
 
-		err = store.SetMetadata(nonExistentKey, md)
+		err := store.SetMetadata(nonExistentKey, md)
 		require.ErrorIs(err, os.ErrNotExist)
 
 		ok, err := store.GetMetadata(nonExistentKey, md)
@@ -749,8 +737,7 @@ func TestMetadata(t *testing.T) {
 
 	t.Run("metadata does not change after marking a file as complete and/or evictable/unevictable", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 1*memsize.KB)
 		require.NoError(err)
@@ -791,8 +778,7 @@ func TestMetadata(t *testing.T) {
 	})
 	t.Run("metadata fully gone after blob is evicted", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		keyA := core.DigestFixture().Hex()
 		fA, err := store.Create(keyA, 10*memsize.KB)
 		require.NoError(err)
@@ -820,8 +806,7 @@ func TestMetadata(t *testing.T) {
 
 	t.Run("immovable metadata is deleted when calling MarkComplete", func(t *testing.T) {
 		require := require.New(t)
-		store, err := NewStore(10*memsize.KB, tally.NoopScope)
-		require.NoError(err)
+		store := newTestStore(t, 10*memsize.KB)
 		key := core.DigestFixture().Hex()
 		f, err := store.Create(key, 10*memsize.KB)
 		require.NoError(err)
@@ -847,13 +832,12 @@ func TestMetadata(t *testing.T) {
 
 func TestScopes(t *testing.T) {
 	require := require.New(t)
-	store, err := NewStore(10*memsize.KB, tally.NoopScope)
-	require.NoError(err)
+	store := newTestStore(t, 10*memsize.KB)
 
 	// Add a file to the store, fill it with data.
 	f, key := newTestFile(t, store, 2*memsize.KB)
 	data := make([]byte, 2*memsize.KB)
-	_, err = rand.Read(data)
+	_, err := rand.Read(data)
 	require.NoError(err)
 	_, err = io.Copy(f, bytes.NewReader(data))
 	require.NoError(err)
@@ -1005,14 +989,13 @@ func TestScopes(t *testing.T) {
 
 func TestScopesDelete(t *testing.T) {
 	require := require.New(t)
-	store, err := NewStore(10*memsize.KB, tally.NoopScope)
-	require.NoError(err)
+	store := newTestStore(t, 10*memsize.KB)
 
 	f, key := newTestFile(t, store, 1*memsize.KB)
 	require.NoError(f.Close())
 	require.ErrorIs(store.ScopeComplete().Delete(key), storelib.ErrOutOfScope)
 	require.NoError(store.ScopeIncomplete().Delete(key))
-	_, err = store.Stat(key)
+	_, err := store.Stat(key)
 	require.ErrorIs(err, os.ErrNotExist)
 
 	f, key = newTestFile(t, store, 1*memsize.KB)
@@ -1031,4 +1014,84 @@ func TestScopesDelete(t *testing.T) {
 	require.NoError(f.Close())
 	require.NoError(store.MarkComplete(key))
 	require.NoError(store.Delete(key))
+}
+
+func TestConfig__applyDefaults(t *testing.T) {
+	for name, tt := range map[string]struct {
+		config  *Config
+		wantErr string
+	}{
+		"capacity must be explicitly set": {
+			config: &Config{
+				GOMEMLIMITBytes: math.MaxInt64,
+				GOGC:            100,
+			},
+			wantErr: "capacity_bytes must be explicitly set",
+		},
+		"minimal config": {
+			config: &Config{
+				CapacityBytes:   10 * memsize.KB,
+				GOMEMLIMITBytes: math.MaxInt64,
+			},
+			wantErr: "",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := NewStore(tt.config, tally.NoopScope)
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestConfig__configureGC(t *testing.T) {
+	t.Run("GOMEMLIMIT must be configured somehow", func(t *testing.T) {
+		require := require.New(t)
+		// disable GOMEMLIMIT by setting it to its default value of [math.MaxInt64]
+		tempChangeGCParams(t, 100, math.MaxInt64)
+		config := &Config{
+			GOGC:          200,
+			CapacityBytes: 70 * memsize.GB,
+		}
+
+		_, err := NewStore(config, tally.NoopScope)
+		require.EqualError(err, "GOMEMLIMIT must be configured either through memory.Config or an env var")
+	})
+
+	t.Run("config params are applied to GC even if previously configured", func(t *testing.T) {
+		require := require.New(t)
+
+		memLimitBeforeStoreCreation, goGCBeforeStoreCreation := int64(101*memsize.GB), 99
+		goGCBeforeTest, memLimitBeforeTest := tempChangeGCParams(t, goGCBeforeStoreCreation, memLimitBeforeStoreCreation)
+
+		configMemLimit := int64(100 * memsize.GB)
+		configGoGC := 200
+		config := &Config{
+			GOMEMLIMITBytes: configMemLimit,
+			GOGC:            configGoGC,
+			CapacityBytes:   70 * memsize.GB,
+		}
+
+		_, err := NewStore(config, tally.NoopScope)
+		require.NoError(err)
+
+		memLimitAfterStoreCreation := debug.SetMemoryLimit(memLimitBeforeTest)
+		goGcAfterStoreCreation := debug.SetGCPercent(goGCBeforeTest)
+
+		require.Equal(configMemLimit, memLimitAfterStoreCreation)
+		require.Equal(configGoGC, goGcAfterStoreCreation)
+	})
+}
+
+func tempChangeGCParams(t *testing.T, goGC int, goMemLimit int64) (goGCBeforeTest int, memLimitBeforeTest int64) {
+	memLimitBeforeTest = debug.SetMemoryLimit(int64(goMemLimit))
+	goGCBeforeTest = debug.SetGCPercent(goGC)
+	t.Cleanup(func() {
+		debug.SetMemoryLimit(memLimitBeforeTest)
+		debug.SetGCPercent(goGCBeforeTest)
+	})
+	return goGCBeforeTest, memLimitBeforeTest
 }

@@ -32,9 +32,9 @@ type Store struct {
 	scope storelib.BlobScope
 }
 
-// NewStore initializes a new, empty [*Store] with the given capacity.
-func NewStore(capacityBytes uint64, metrics tally.Scope) (*Store, error) {
-	s, err := newStore(capacityBytes, metrics)
+// NewStore initializes a new, empty [*Store].
+func NewStore(config *Config, metrics tally.Scope) (*Store, error) {
+	s, err := newStore(config, metrics)
 	if err != nil {
 		return nil, err
 	}

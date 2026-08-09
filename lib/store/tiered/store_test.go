@@ -3,6 +3,7 @@ package tiered
 import (
 	"crypto/rand"
 	"io"
+	"math"
 	"testing"
 	"time"
 
@@ -19,13 +20,25 @@ import (
 
 const _testBlobSize = 1 * memsize.KB
 
-func newDiskConfig(rootDir string, capacity uint64) *disk.Config {
-	return &disk.Config{CapacityBytes: capacity, RootDir: rootDir}
+func newTieredConfig(diskCapacity, memCapacity uint64, numWorkers int, rootDir string) *Config {
+	return &Config{
+		NumFlushWorkers: numWorkers,
+		DiskConfig: &disk.Config{
+			RootDir:               rootDir,
+			CapacityBytes:         diskCapacity,
+			RebootIncompleteBlobs: false,
+		},
+		MemConfig: &memory.Config{
+			CapacityBytes:   memCapacity,
+			GOMEMLIMITBytes: math.MaxInt64,
+		},
+	}
 }
 
 func newTestStore(t *testing.T, diskCapacity, memCapacity uint64, numWorkers int) (s *Store, rootDir string) {
 	rootDir = t.TempDir()
-	s, err := NewStore(newDiskConfig(rootDir, diskCapacity), memCapacity, numWorkers, tally.NoopScope)
+	config := newTieredConfig(diskCapacity, memCapacity, numWorkers, rootDir)
+	s, _, err := NewStore(config, tally.NoopScope)
 	require.NoError(t, err)
 	return s, rootDir
 }
@@ -204,24 +217,32 @@ func allStates() []stateBuilder {
 	}
 }
 
-func TestNewStore_RejectsRebootIncompleteBlobs(t *testing.T) {
-	require := require.New(t)
-	config := newDiskConfig(t.TempDir(), 10*memsize.KB)
-	config.RebootIncompleteBlobs = true
+func TestConfig__applyDefaults(t *testing.T) {
+	t.Run("RebootIncompleteBlobs cannot be true", func(t *testing.T) {
+		require := require.New(t)
+		config := newTieredConfig(10*memsize.KB, 10*memsize.KB, 10, t.TempDir())
+		config.DiskConfig.RebootIncompleteBlobs = true
 
-	_, err := NewStore(config, 10*memsize.KB, 1, tally.NoopScope)
-	require.EqualError(err, "tiered.Store does not support RebootIncompleteBlobs, as it can leak files. Use disk.Store if you need persistence for incomplete blobs")
-}
+		_, _, err := NewStore(config, tally.NoopScope)
+		require.EqualError(err, "tiered.Store does not support RebootIncompleteBlobs, as it can leak files. Use disk.Store if you need persistence for incomplete blobs")
+	})
+	t.Run("NumFlushWorkers cannot be negative", func(t *testing.T) {
+		require := require.New(t)
+		config := newTieredConfig(10*memsize.KB, 10*memsize.KB, 10, t.TempDir())
+		config.NumFlushWorkers = -1
 
-func TestNewStore_RejectsNonPositiveNumWorkers(t *testing.T) {
-	require := require.New(t)
-	config := newDiskConfig(t.TempDir(), 10*memsize.KB)
+		_, _, err := NewStore(config, tally.NoopScope)
+		require.EqualError(err, "num_flush_workers must be at least 1, otherwise blobs will never get flushed from mem to disk")
+	})
+	t.Run("NumFlushWorkers defaults to non-zero value", func(t *testing.T) {
+		require := require.New(t)
+		config := newTieredConfig(10*memsize.KB, 10*memsize.KB, 10, t.TempDir())
+		config.NumFlushWorkers = 0
 
-	_, err := NewStore(config, 10*memsize.KB, 0, tally.NoopScope)
-	require.EqualError(err, "numWorkers must be at least 1, otherwise blobs would never get flushed from mem to disk")
-
-	_, err = NewStore(config, 10*memsize.KB, -1, tally.NoopScope)
-	require.EqualError(err, "numWorkers must be at least 1, otherwise blobs would never get flushed from mem to disk")
+		_, _, err := NewStore(config, tally.NoopScope)
+		require.NoError(err)
+		require.Equal(_defaultNumFlushWorkers, config.NumFlushWorkers)
+	})
 }
 
 func TestStore_APICorrectnessAcrossStates(t *testing.T) {
@@ -368,7 +389,8 @@ func TestStore_List_DedupDuringFlush(t *testing.T) {
 func TestStore_CrashRecovery(t *testing.T) {
 	require := require.New(t)
 	// 2 workers: states 2 and 3 each block a flusher worker via the seams.
-	s, rootDir := newTestStore(t, 10*memsize.KB, 10*memsize.KB, 2)
+	diskCap, memCap, numWorkers := 10*memsize.KB, 10*memsize.KB, 2
+	s, rootDir := newTestStore(t, diskCap, memCap, numWorkers)
 
 	// Seed state 4 first while both workers are free.
 	bothCompleteKey, bothCompleteData := seedBothComplete(t, s)
@@ -395,7 +417,8 @@ func TestStore_CrashRecovery(t *testing.T) {
 	require.NoError(diskF.Close())
 	require.NoError(s.impl.disk.MarkComplete(diskOnlyCompleteKey))
 
-	restarted, err := NewStore(newDiskConfig(rootDir, 10*memsize.KB), 10*memsize.KB, 1, tally.NoopScope)
+	config := newTieredConfig(diskCap, memCap, 1, rootDir)
+	rebooted, _, err := NewStore(config, tally.NoopScope)
 	require.NoError(err)
 
 	for _, discardedKey := range []string{
@@ -404,18 +427,18 @@ func TestStore_CrashRecovery(t *testing.T) {
 		memCompleteDiskIncompleteKey,
 		diskOnlyIncompleteKey,
 	} {
-		_, ok := restarted.Has(discardedKey)
+		_, ok := rebooted.Has(discardedKey)
 		require.False(ok, "key %q should have been discarded on restart", discardedKey)
 	}
 
-	f, err := restarted.Open(bothCompleteKey)
+	f, err := rebooted.Open(bothCompleteKey)
 	require.NoError(err)
 	got, err := io.ReadAll(f)
 	require.NoError(err)
 	require.Equal(bothCompleteData, got)
 	require.NoError(f.Close())
 
-	f, err = restarted.Open(diskOnlyCompleteKey)
+	f, err = rebooted.Open(diskOnlyCompleteKey)
 	require.NoError(err)
 	got, err = io.ReadAll(f)
 	require.NoError(err)

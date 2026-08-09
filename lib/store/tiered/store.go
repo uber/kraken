@@ -25,31 +25,29 @@ type store struct {
 	mu      sync.RWMutex
 }
 
-func newStore(diskConfig *disk.Config, memCapacity uint64, numWorkers int, metrics tally.Scope) (*store, error) {
-	if diskConfig.RebootIncompleteBlobs {
-		return nil, errors.New("tiered.Store does not support RebootIncompleteBlobs, as it can leak files. Use disk.Store if you need persistence for incomplete blobs")
-	}
-	if numWorkers <= 0 {
-		return nil, errors.New("numWorkers must be at least 1, otherwise blobs would never get flushed from mem to disk")
-	}
-	mem, err := memory.NewStore(memCapacity, metrics)
+func newStore(config *Config, metrics tally.Scope) (*store, *disk.Store, error) {
+	err := config.applyDefaults()
 	if err != nil {
-		return nil, fmt.Errorf("new mem store: %w", err)
+		return nil, nil, err
 	}
-	disk, err := disk.NewStore(diskConfig, metrics)
+	memStore, err := memory.NewStore(config.MemConfig, metrics)
 	if err != nil {
-		return nil, fmt.Errorf("new disk store: %w", err)
+		return nil, nil, fmt.Errorf("new mem store: %w", err)
+	}
+	diskStore, err := disk.NewStore(config.DiskConfig, metrics)
+	if err != nil {
+		return nil, nil, fmt.Errorf("new disk store: %w", err)
 	}
 
 	log := log.Default().With("module", "tiered_store")
 
 	log.Info("Initialized a new tiered.Store")
 	return &store{
-		disk:    disk,
-		mem:     mem,
-		flusher: newFlusher(mem, disk, log, numWorkers),
+		disk:    diskStore,
+		mem:     memStore,
+		flusher: newFlusher(memStore, diskStore, log, config.NumFlushWorkers),
 		log:     log,
-	}, nil
+	}, diskStore, nil
 }
 
 func (s *store) Create(key string, sizeBytes uint64) (*File, error) {
