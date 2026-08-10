@@ -22,9 +22,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/uber/kraken/utils/log"
+
+	"github.com/uber-go/tally"
 )
+
+const _certExpiryCheckInterval = time.Hour
 
 // ErrEmptyCommonName is returned when common name is not provided for key generation.
 var ErrEmptyCommonName = errors.New("empty common name")
@@ -74,15 +79,7 @@ func (c *TLSConfig) BuildClient() (*tls.Config, error) {
 		}
 	}
 	if c.Client.Cert.Path != "" {
-		certPEM, err := parseCert(c.Client.Cert.Path)
-		if err != nil {
-			return nil, fmt.Errorf("parse client cert: %s", err)
-		}
-		keyPEM, err := parseKey(c.Client.Key.Path, c.Client.Passphrase.Path)
-		if err != nil {
-			return nil, fmt.Errorf("parse client key: %s", err)
-		}
-		cert, err := tls.X509KeyPair(certPEM, keyPEM)
+		cert, err := loadX509Pair(c.Client)
 		if err != nil {
 			return nil, fmt.Errorf("load client x509 key pair: %s", err)
 		}
@@ -96,6 +93,28 @@ func (c *TLSConfig) BuildClient() (*tls.Config, error) {
 		InsecureSkipVerify:       false, // This is important to enforce verification of server.
 	}
 	return c.tls, nil
+}
+
+// loadX509Pair reads and parses the cert/key files described by pair.
+func loadX509Pair(pair X509Pair) (tls.Certificate, error) {
+	certPEM, err := parseCert(pair.Cert.Path)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("parse cert: %s", err)
+	}
+	keyPEM, err := parseKey(pair.Key.Path, pair.Passphrase.Path)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("parse key: %s", err)
+	}
+	return tls.X509KeyPair(certPEM, keyPEM)
+}
+
+// certNotAfter returns the expiration time of cert's leaf certificate.
+func certNotAfter(cert tls.Certificate) (time.Time, error) {
+	leaf, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse leaf certificate: %s", err)
+	}
+	return leaf.NotAfter, nil
 }
 
 // WriteCABundle writes a list of CA to a writer.
@@ -198,4 +217,59 @@ func encodePEMKey(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("encode key: %s", err)
 	}
 	return buf.Bytes(), nil
+}
+
+type certExpiryMonitor struct {
+	stopCh chan struct{}
+}
+
+// MonitorCertExpiration starts a background goroutine to periodically emit
+// when TLS certs will expire.
+func MonitorCertExpiration(tlsConfig *TLSConfig, stats tally.Scope) io.Closer {
+	m := &certExpiryMonitor{stopCh: make(chan struct{})}
+
+	check := func() {
+		reportCertExpiry("server", tlsConfig.Server, stats)
+		reportCertExpiry("client", tlsConfig.Client, stats)
+	}
+
+	check()
+
+	go func() {
+		ticker := time.NewTicker(_certExpiryCheckInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				check()
+			case <-m.stopCh:
+				return
+			}
+		}
+	}()
+
+	return m
+}
+
+func (m *certExpiryMonitor) Close() error {
+	close(m.stopCh)
+	return nil
+}
+
+func reportCertExpiry(name string, pair X509Pair, stats tally.Scope) {
+	if pair.Disabled || pair.Cert.Path == "" {
+		return
+	}
+	cert, err := loadX509Pair(pair)
+	if err != nil {
+		log.Errorf("Error loading %s cert for expiry check: %s", name, err)
+		return
+	}
+	notAfter, err := certNotAfter(cert)
+	if err != nil {
+		log.Errorf("Error parsing %s cert for expiry check: %s", name, err)
+		return
+	}
+	gauge := stats.Tagged(map[string]string{"cert": name}).Gauge("tls_cert_expiry_days")
+	gauge.Update(time.Until(notAfter).Hours() / 24)
 }

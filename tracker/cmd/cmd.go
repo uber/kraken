@@ -31,6 +31,7 @@ import (
 	"github.com/uber/kraken/tracker/trackerserver"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/configutil"
+	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 	"go.uber.org/zap"
 )
@@ -143,6 +144,7 @@ func Run(flags *Flags, opts ...Option) {
 	if err != nil {
 		log.Fatalf("Error building client tls config: %s", err)
 	}
+	defer closers.Close(httputil.MonitorCertExpiration(&config.TLS, stats))
 
 	origins, err := config.Origin.Build(upstream.WithHealthCheck(healthcheck.Default(tls)))
 	if err != nil {
