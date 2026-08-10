@@ -91,13 +91,18 @@ func Wrap(h ErrHandler) http.HandlerFunc {
 			}
 			w.WriteHeader(status)
 			if _, err := w.Write([]byte(errMsg)); err != nil {
-				log.Errorf("Failed to write error response: %s", err)
+				log.With("error", err).Error("Failed to write error response")
 			}
 		} else {
 			status = http.StatusOK
 		}
 		if status >= 400 && status != 404 {
-			log.Infof("%d %s %s %s", status, r.Method, r.URL.Path, errMsg)
+			log.With(
+				"status", status,
+				"method", r.Method,
+				"path", r.URL.Path,
+				"error", errMsg,
+			).Info("Handler returned error response")
 		}
 	}
 }
