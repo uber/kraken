@@ -867,6 +867,7 @@ func TestTransferBlob(t *testing.T) {
 
 				switch {
 				case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/uploads"):
+					require.Equal(fmt.Sprintf("%d", len(tt.content)), r.URL.Query().Get("size"))
 					if tt.setLocation {
 						w.Header().Set("Location", tt.uploadID)
 					}
@@ -911,6 +912,7 @@ func TestUploadBlob(t *testing.T) {
 			switch {
 			case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/uploads"):
 				require.Contains(r.URL.Path, fmt.Sprintf("/namespace/%s/blobs/%s/uploads", namespace, d))
+				require.Equal(fmt.Sprintf("%d", len(content)), r.URL.Query().Get("size"))
 				w.Header().Set("Location", uploadID)
 				w.WriteHeader(http.StatusOK)
 
@@ -943,6 +945,7 @@ func TestUploadBlob(t *testing.T) {
 		client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/uploads"):
+				require.Equal(fmt.Sprintf("%d", len(content)), r.URL.Query().Get("size"))
 				w.Header().Set("Location", uploadID)
 				w.WriteHeader(http.StatusOK)
 
@@ -973,6 +976,7 @@ func TestDuplicateUploadBlob(t *testing.T) {
 		client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/uploads"):
+				require.Equal(fmt.Sprintf("%d", len(content)), r.URL.Query().Get("size"))
 				w.Header().Set("Location", uploadID)
 				w.WriteHeader(http.StatusOK)
 
