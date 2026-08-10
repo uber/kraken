@@ -122,7 +122,7 @@ func BenchmarkTransferBlob(b *testing.B) {
 			digest := core.DigestFixture()
 			b.SetBytes(int64(len(blob)))
 			for b.Loop() {
-				if err := client.TransferBlob(digest, bytes.NewReader(blob)); err != nil {
+				if err := client.TransferBlob(digest, bytes.NewReader(blob), uint64(len(blob))); err != nil {
 					b.Fatal(err)
 				}
 			}

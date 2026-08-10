@@ -88,7 +88,7 @@ var _ ClusterClient = &clusterClient{}
 // location resolution and retries.
 type ClusterClient interface {
 	CheckReadiness() error
-	UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.ReadSeeker) error
+	UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.ReadSeeker, size uint64) error
 	DownloadBlob(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error
 	PrefetchBlob(namespace string, d core.Digest) error
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
@@ -129,7 +129,7 @@ func (c *clusterClient) CheckReadiness() error {
 }
 
 // UploadBlob uploads blob to origin cluster. See Client.UploadBlob for more details.
-func (c *clusterClient) UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.ReadSeeker) (err error) {
+func (c *clusterClient) UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.ReadSeeker, size uint64) (err error) {
 	ctx, span := otel.Tracer("kraken-origin-cluster-client").Start(ctx, "cluster.upload_blob",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
@@ -159,7 +159,7 @@ func (c *clusterClient) UploadBlob(ctx context.Context, namespace string, d core
 		span.SetAttributes(attribute.Int("cluster.attempt", i))
 
 		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "origin", originAddr, "attempt", i).Debug("Attempting blob upload to origin")
-		err = client.UploadBlob(ctx, namespace, d, blob)
+		err = client.UploadBlob(ctx, namespace, d, blob, size)
 		if err == nil {
 			log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "origin", originAddr).Debug("Blob upload succeeded")
 			span.SetAttributes(attribute.String("cluster.successful_origin", originAddr))

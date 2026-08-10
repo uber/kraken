@@ -48,7 +48,7 @@ type Client interface {
 	CheckReadiness() error
 	Locations(d core.Digest) ([]string, error)
 	DeleteBlob(d core.Digest) error
-	TransferBlob(d core.Digest, blob io.Reader) error
+	TransferBlob(d core.Digest, blob io.Reader, size uint64) error
 
 	Stat(namespace string, d core.Digest) (*core.BlobInfo, error)
 	StatLocal(namespace string, d core.Digest) (*core.BlobInfo, error)
@@ -56,8 +56,8 @@ type Client interface {
 	GetMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error)
 	OverwriteMetaInfo(d core.Digest, pieceLength int64) error
 
-	UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.Reader) error
-	DuplicateUploadBlob(namespace string, d core.Digest, blob io.Reader, delay time.Duration) error
+	UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.Reader, size uint64) error
+	DuplicateUploadBlob(namespace string, d core.Digest, blob io.Reader, size uint64, delay time.Duration) error
 
 	DownloadBlob(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error
 	PrefetchBlob(namespace string, d core.Digest) error
@@ -192,14 +192,14 @@ func (c *HTTPClient) DeleteBlob(d core.Digest) error {
 
 // TransferBlob uploads a blob to a single origin server. Unlike its cousin UploadBlob,
 // TransferBlob is an internal API which does not replicate the blob.
-func (c *HTTPClient) TransferBlob(d core.Digest, blob io.Reader) error {
+func (c *HTTPClient) TransferBlob(d core.Digest, blob io.Reader, size uint64) error {
 	tc := newTransferClient(c.addr, c.tls)
-	return runChunkedUpload(tc, d, blob, int64(c.chunkSize))
+	return runChunkedUpload(tc, d, blob, size, int64(c.chunkSize))
 }
 
 // UploadBlob uploads and replicates blob to the origin cluster, asynchronously
 // backing the blob up to the remote storage configured for namespace.
-func (c *HTTPClient) UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.Reader) error {
+func (c *HTTPClient) UploadBlob(ctx context.Context, namespace string, d core.Digest, blob io.Reader, size uint64) error {
 	ctx, span := c.tracer.Start(ctx, "blobclient.upload_blob",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
@@ -212,7 +212,7 @@ func (c *HTTPClient) UploadBlob(ctx context.Context, namespace string, d core.Di
 	defer span.End()
 
 	uc := newUploadClientWithContext(ctx, c.addr, namespace, _publicUpload, 0, c.tls)
-	if err := runChunkedUpload(uc, d, blob, int64(c.chunkSize)); err != nil {
+	if err := runChunkedUpload(uc, d, blob, size, int64(c.chunkSize)); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "upload failed")
 		return err
@@ -225,10 +225,10 @@ func (c *HTTPClient) UploadBlob(ctx context.Context, namespace string, d core.Di
 // DuplicateUploadBlob duplicates an blob upload request, which will attempt to
 // write-back at the given delay.
 func (c *HTTPClient) DuplicateUploadBlob(
-	namespace string, d core.Digest, blob io.Reader, delay time.Duration,
+	namespace string, d core.Digest, blob io.Reader, size uint64, delay time.Duration,
 ) error {
 	uc := newUploadClient(c.addr, namespace, _duplicateUpload, delay, c.tls)
-	return runChunkedUpload(uc, d, blob, int64(c.chunkSize))
+	return runChunkedUpload(uc, d, blob, size, int64(c.chunkSize))
 }
 
 // DownloadBlob downloads blob for d. If the blob of d is not available yet

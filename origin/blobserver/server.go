@@ -344,7 +344,7 @@ func (s *Server) replicateToRemote(ctx context.Context, namespace string, d core
 		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to get remote cluster provider: %s", err)
 		return handler.Errorf("remote cluster provider: %s", err)
 	}
-	if err := remote.UploadBlob(ctx, namespace, d, f); err != nil {
+	if err := remote.UploadBlob(ctx, namespace, d, f, uint64(blobSize)); err != nil {
 		duration := time.Since(start)
 		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to upload blob to remote: %s", err)
 		return err
@@ -531,7 +531,7 @@ func (s *Server) replicateBlobLocally(d core.Digest) error {
 			log.With("digest", d.Hex(), "replica", client.Addr()).Errorf("Failed to get cache reader: %s", err)
 			return fmt.Errorf("get cache reader: %s", err)
 		}
-		if err := client.TransferBlob(d, f); err != nil {
+		if err := client.TransferBlob(d, f, uint64(blobSize)); err != nil {
 			duration := time.Since(start)
 			log.With("digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to transfer blob: %s", err)
 			return fmt.Errorf("transfer blob: %s", err)
@@ -888,7 +888,7 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 		if err != nil {
 			return fmt.Errorf("get cache file: %s", err)
 		}
-		if err := client.DuplicateUploadBlob(namespace, d, f, delay); err != nil {
+		if err := client.DuplicateUploadBlob(namespace, d, f, uint64(blobSize), delay); err != nil {
 			duration := time.Since(replicaStart)
 			log.With("namespace", namespace, "digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to duplicate upload: %s", err)
 			return fmt.Errorf("duplicate upload: %s", err)

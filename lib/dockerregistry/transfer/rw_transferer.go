@@ -205,7 +205,7 @@ func (t *ReadWriteTransferer) Upload(
 	)
 	defer span.End()
 
-	if err := t.originCluster.UploadBlob(ctx, namespace, d, blob); err != nil {
+	if err := t.originCluster.UploadBlob(ctx, namespace, d, blob, uint64(blob.Size())); err != nil {
 		t.failureStats.Counter("upload_blob").Inc(1)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "upload failed")

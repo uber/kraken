@@ -883,7 +883,7 @@ func TestTransferBlob(t *testing.T) {
 				}
 			}, WithChunkSize(uint64(len(tt.content)+1)))
 
-			err := client.TransferBlob(d, bytes.NewReader(tt.content))
+			err := client.TransferBlob(d, bytes.NewReader(tt.content), uint64(len(tt.content)))
 			if tt.wantErr {
 				require.Error(err)
 				if tt.errContain != "" {
@@ -927,7 +927,7 @@ func TestUploadBlob(t *testing.T) {
 			}
 		}, WithChunkSize(uint64(len(content)+1)))
 
-		err := client.UploadBlob(context.Background(), namespace, d, bytes.NewReader(content))
+		err := client.UploadBlob(context.Background(), namespace, d, bytes.NewReader(content), uint64(len(content)))
 		require.NoError(err)
 	})
 
@@ -955,7 +955,7 @@ func TestUploadBlob(t *testing.T) {
 			}
 		}, WithChunkSize(chunkSize))
 
-		err := client.UploadBlob(context.Background(), namespace, d, bytes.NewReader(content))
+		err := client.UploadBlob(context.Background(), namespace, d, bytes.NewReader(content), uint64(len(content)))
 		require.NoError(err)
 		require.Equal(5, patchCount) // 49 bytes / 10 bytes per chunk = 5 chunks
 	})
@@ -993,7 +993,7 @@ func TestDuplicateUploadBlob(t *testing.T) {
 			}
 		}, WithChunkSize(uint64(len(content)+1)))
 
-		err := client.DuplicateUploadBlob(namespace, d, bytes.NewReader(content), delay)
+		err := client.DuplicateUploadBlob(namespace, d, bytes.NewReader(content), uint64(len(content)), delay)
 		require.NoError(err)
 	})
 }

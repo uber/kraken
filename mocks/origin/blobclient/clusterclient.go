@@ -152,15 +152,15 @@ func (mr *MockClusterClientMockRecorder) Stat(arg0, arg1 interface{}) *gomock.Ca
 }
 
 // UploadBlob mocks base method.
-func (m *MockClusterClient) UploadBlob(arg0 context.Context, arg1 string, arg2 core.Digest, arg3 io.ReadSeeker) error {
+func (m *MockClusterClient) UploadBlob(arg0 context.Context, arg1 string, arg2 core.Digest, arg3 io.ReadSeeker, arg4 uint64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UploadBlob", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "UploadBlob", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UploadBlob indicates an expected call of UploadBlob.
-func (mr *MockClusterClientMockRecorder) UploadBlob(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockClusterClientMockRecorder) UploadBlob(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClusterClient)(nil).UploadBlob), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBlob", reflect.TypeOf((*MockClusterClient)(nil).UploadBlob), arg0, arg1, arg2, arg3, arg4)
 }
