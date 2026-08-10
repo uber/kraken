@@ -24,11 +24,14 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 
 	"github.com/uber/kraken/utils/randutil"
 	"github.com/uber/kraken/utils/testutil"
@@ -262,4 +265,56 @@ func TestTLSClientFallbackError(t *testing.T) {
 
 	_, err = Get("https://some-non-existent-addr/", SendTLS(tls))
 	require.Error(err)
+}
+
+func TestStartCertExpiryMonitor(t *testing.T) {
+	t.Run("expiration date emitted correctly", func(t *testing.T) {
+		require := require.New(t)
+
+		dir := t.TempDir()
+		writeFile := func(name string, data []byte) string {
+			path := filepath.Join(dir, name)
+			require.NoError(os.WriteFile(path, data, 0o600))
+			return path
+		}
+
+		serverCertPEM, serverKeyPEM, serverSecret := genKeyPair(t, nil, nil, nil)
+		config := &TLSConfig{}
+		config.Server.Cert.Path = writeFile("server.crt", serverCertPEM)
+		config.Server.Key.Path = writeFile("server.key", serverKeyPEM)
+		config.Server.Passphrase.Path = writeFile("server.passphrase", serverSecret)
+
+		clientCertPEM, clientKeyPEM, clientSecret := genKeyPair(t, nil, nil, nil)
+		config.Client.Cert.Path = writeFile("client.crt", clientCertPEM)
+		config.Client.Key.Path = writeFile("client.key", clientKeyPEM)
+		config.Client.Passphrase.Path = writeFile("client.passphrase", clientSecret)
+
+		// genKeyPair issues certs which expire in 180 days.
+		stats := tally.NewTestScope("", nil)
+		populatedCloser := MonitorCertExpiration(config, stats)
+		defer func() { require.NoError(populatedCloser.Close()) }()
+
+		gauges := stats.Snapshot().Gauges()
+
+		serverGauge, ok := gauges["tls_cert_expiry_days+cert=server"]
+		require.True(ok)
+		require.InDelta(180, serverGauge.Value(), 0.01)
+
+		clientGauge, ok := gauges["tls_cert_expiry_days+cert=client"]
+		require.True(ok)
+		require.InDelta(180, clientGauge.Value(), 0.01)
+	})
+
+	t.Run("metric is not emitted as 0 on empty cert, avoiding a false alarm", func(t *testing.T) {
+		require := require.New(t)
+		emptyStats := tally.NewTestScope("", nil)
+		emptyCloser := MonitorCertExpiration(&TLSConfig{}, emptyStats)
+		defer func() { require.NoError(emptyCloser.Close()) }()
+
+		emptyGauges := emptyStats.Snapshot().Gauges()
+		_, ok := emptyGauges["tls_cert_expiry_days+cert=server"]
+		require.False(ok)
+		_, ok = emptyGauges["tls_cert_expiry_days+cert=client"]
+		require.False(ok)
+	})
 }
