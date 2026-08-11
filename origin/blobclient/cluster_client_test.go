@@ -355,7 +355,7 @@ func TestClusterClientUploadBlob(t *testing.T) {
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
 				client.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
-				client.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				client.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 				return resolver
 			},
 			blob: func() io.ReadSeeker { return bytes.NewReader([]byte("test data")) },
@@ -379,10 +379,10 @@ func TestClusterClientUploadBlob(t *testing.T) {
 				client2 := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
 				client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
-				client1.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+				client1.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					httputil.StatusError{Status: http.StatusServiceUnavailable})
 				client2.EXPECT().Addr().Return(_testOrigin2).AnyTimes()
-				client2.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				client2.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 				return resolver
 			},
 			blob: func() io.ReadSeeker { return bytes.NewReader([]byte("test data")) },
@@ -394,7 +394,7 @@ func TestClusterClientUploadBlob(t *testing.T) {
 				client := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client}, nil)
 				client.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
-				client.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+				client.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					httputil.StatusError{Status: http.StatusBadRequest})
 				return resolver
 			},
@@ -409,10 +409,10 @@ func TestClusterClientUploadBlob(t *testing.T) {
 				client2 := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
 				client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
-				client1.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+				client1.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					httputil.StatusError{Status: http.StatusServiceUnavailable})
 				client2.EXPECT().Addr().Return(_testOrigin2).AnyTimes()
-				client2.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+				client2.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					httputil.StatusError{Status: http.StatusServiceUnavailable})
 				return resolver
 			},
@@ -427,9 +427,9 @@ func TestClusterClientUploadBlob(t *testing.T) {
 				client2 := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
 				client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
-				client1.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(httputil.NetworkError{})
+				client1.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(httputil.NetworkError{})
 				client2.EXPECT().Addr().Return(_testOrigin2).AnyTimes()
-				client2.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				client2.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 				return resolver
 			},
 			blob: func() io.ReadSeeker { return bytes.NewReader([]byte("test data")) },
@@ -443,7 +443,7 @@ func TestClusterClientUploadBlob(t *testing.T) {
 				client1 := mockblobclient.NewMockClient(ctrl)
 				resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, mockblobclient.NewMockClient(ctrl)}, nil)
 				client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
-				client1.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+				client1.EXPECT().UploadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					httputil.StatusError{Status: http.StatusServiceUnavailable})
 				return resolver
 			},
@@ -460,7 +460,7 @@ func TestClusterClientUploadBlob(t *testing.T) {
 
 			resolver := tt.setup(ctrl)
 			client := blobclient.NewClusterClient(resolver)
-			err := client.UploadBlob(context.Background(), _testNamespace, core.DigestFixture(), tt.blob())
+			err := client.UploadBlob(context.Background(), _testNamespace, core.DigestFixture(), tt.blob(), uint64(len("test data")))
 
 			if tt.wantErr {
 				require.Error(t, err)

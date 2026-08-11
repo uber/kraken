@@ -57,7 +57,7 @@ func TestClusterClientResilientToUnavailableMasters(t *testing.T) {
 		s.writeBackManager.EXPECT().Add(
 			writeback.MatchTask(writeback.NewTask(
 				backend.NoopNamespace, blob.Digest.Hex(), 0))).Return(nil)
-		require.NoError(cc.UploadBlob(context.Background(), backend.NoopNamespace, blob.Digest, store.NewBufferFileReader(blob.Content)))
+		require.NoError(cc.UploadBlob(context.Background(), backend.NoopNamespace, blob.Digest, store.NewBufferFileReader(blob.Content), uint64(len(blob.Content))))
 
 		bi, err := cc.Stat(backend.NoopNamespace, blob.Digest)
 		require.NoError(err)
@@ -92,7 +92,7 @@ func TestClusterClientReturnsErrorOnNoAvailability(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	require.Error(cc.UploadBlob(context.Background(), backend.NoopNamespace, blob.Digest, store.NewBufferFileReader(blob.Content)))
+	require.Error(cc.UploadBlob(context.Background(), backend.NoopNamespace, blob.Digest, store.NewBufferFileReader(blob.Content), uint64(len(blob.Content))))
 
 	_, err := cc.Stat(backend.NoopNamespace, blob.Digest)
 	require.Error(err)
@@ -180,12 +180,13 @@ func TestPollSkipsOriginOnRetryableError(t *testing.T) {
 	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
 
 	reader := store.NewBufferFileReader(blob.Content)
+	size := uint64(len(blob.Content))
 	mockClient1.EXPECT().Addr().Return("client1").AnyTimes()
-	mockClient1.EXPECT().UploadBlob(gomock.Any(), namespace, blob.Digest, reader).Return(httputil.StatusError{Status: 503})
+	mockClient1.EXPECT().UploadBlob(gomock.Any(), namespace, blob.Digest, reader, size).Return(httputil.StatusError{Status: 503})
 	mockClient2.EXPECT().Addr().Return("client2").AnyTimes()
-	mockClient2.EXPECT().UploadBlob(gomock.Any(), namespace, blob.Digest, reader).Return(nil)
+	mockClient2.EXPECT().UploadBlob(gomock.Any(), namespace, blob.Digest, reader, size).Return(nil)
 
-	require.NoError(cc.UploadBlob(context.Background(), namespace, blob.Digest, reader))
+	require.NoError(cc.UploadBlob(context.Background(), namespace, blob.Digest, reader, size))
 }
 
 func TestClusterClientReturnsErrorOnNoAvailableOrigins(t *testing.T) {

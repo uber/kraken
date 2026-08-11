@@ -30,20 +30,20 @@ import (
 
 // uploader provides methods for executing a chunked upload.
 type uploader interface {
-	start(d core.Digest) (uid string, err error)
+	start(d core.Digest, size uint64) (uid string, err error)
 	patch(d core.Digest, uid string, start, stop int64, chunk io.Reader) error
 	commit(d core.Digest, uid string) error
 }
 
-func runChunkedUpload(u uploader, d core.Digest, blob io.Reader, chunkSize int64) error {
-	if err := runChunkedUploadHelper(u, d, blob, chunkSize); err != nil && !httputil.IsConflict(err) {
+func runChunkedUpload(u uploader, d core.Digest, blob io.Reader, size uint64, chunkSize int64) error {
+	if err := runChunkedUploadHelper(u, d, blob, size, chunkSize); err != nil && !httputil.IsConflict(err) {
 		return err
 	}
 	return nil
 }
 
-func runChunkedUploadHelper(u uploader, d core.Digest, blob io.Reader, chunkSize int64) error {
-	uid, err := u.start(d)
+func runChunkedUploadHelper(u uploader, d core.Digest, blob io.Reader, size uint64, chunkSize int64) error {
+	uid, err := u.start(d, size)
 	if err != nil {
 		return err
 	}
@@ -77,9 +77,9 @@ func newTransferClient(addr string, tls *tls.Config) *transferClient {
 	return &transferClient{addr, tls}
 }
 
-func (c *transferClient) start(d core.Digest) (uid string, err error) {
+func (c *transferClient) start(d core.Digest, size uint64) (uid string, err error) {
 	r, err := httputil.Post(
-		fmt.Sprintf("http://%s/internal/blobs/%s/uploads", c.addr, d),
+		fmt.Sprintf("http://%s/internal/blobs/%s/uploads?size=%d", c.addr, d, size),
 		httputil.SendTLS(c.tls))
 	if err != nil {
 		return "", err
@@ -148,10 +148,10 @@ func newUploadClientWithContext(
 	}
 }
 
-func (c *uploadClient) start(d core.Digest) (uid string, err error) {
+func (c *uploadClient) start(d core.Digest, size uint64) (uid string, err error) {
 	r, err := httputil.Post(
-		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads",
-			c.addr, url.PathEscape(c.namespace), d),
+		fmt.Sprintf("http://%s/namespace/%s/blobs/%s/uploads?size=%d",
+			c.addr, url.PathEscape(c.namespace), d, size),
 		httputil.SendContext(c.ctx),
 		httputil.SendTLS(c.tls))
 	if err != nil {
