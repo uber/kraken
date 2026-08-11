@@ -46,7 +46,7 @@ IP.2 = ::1
 EOF
 
 # Create CA certificate (self-signed) with SHA256 and proper CA extensions
-openssl req -new -x509 -sha256 -days 365 \
+openssl req -new -x509 -sha256 -days 1825 \
     -key server.key \
     -passin 'pass:'"$(tr -d '\n' < passphrase)" \
     -subj "/C=US/ST=CA/L=San Francisco/O=Uber/OU=cluster-mgmt/CN=Kraken Test CA" \
@@ -99,7 +99,7 @@ openssl req -new -sha256 \
     -out client.csr
 
 # Generate client certificate signed by CA with SHA256 and SAN extensions
-openssl x509 -req -sha256 -days 365 \
+openssl x509 -req -sha256 -days 1825 \
     -in client.csr \
     -CA ../ca/server.crt \
     -CAkey ../ca/server.key \
