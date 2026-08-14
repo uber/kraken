@@ -1,8 +1,9 @@
 package disk
 
 import (
-	storelib "github.com/uber/kraken/lib/store"
 	"os"
+
+	storelib "github.com/uber/kraken/lib/store"
 )
 
 func newFile(f *os.File) *File {

@@ -40,10 +40,10 @@ type store struct {
 	blobs      map[string]*blob // TODO - consider whether it's better to use struct instead of pointer to reduce GC stress.
 	evictQueue *list.List       // Front is the next to evict.
 	// Synchronizes 1) mem state and 2) disk state. Only acquired by public methods.
-	mu      sync.RWMutex // TODO - evaluate whether the read-to-write ratio is more appropriate for a [sync.Mutex] instead.
-	config  *Config
-	log     *zap.SugaredLogger
-	metrics tally.Scope
+	mu     sync.RWMutex // TODO - evaluate whether the read-to-write ratio is more appropriate for a [sync.Mutex] instead.
+	config *Config
+	log    *zap.SugaredLogger
+	stats  tally.Scope
 	*pather
 }
 
@@ -54,7 +54,7 @@ type blob struct {
 	evictionBanned bool
 }
 
-func newStore(config *Config, metrics tally.Scope) (*store, error) {
+func newStore(config *Config, stats tally.Scope) (*store, error) {
 	err := config.applyDefaults()
 	if err != nil {
 		return nil, err
@@ -77,14 +77,14 @@ func newStore(config *Config, metrics tally.Scope) (*store, error) {
 			config:     config,
 			pather:     newPather(config.RootDir, config.ShardLength),
 			log:        log,
-			metrics:    metrics,
+			stats:      stats,
 		}
 
 		store.emitUsageMetrics()
 		return store, nil
 	}
 
-	store, err := rebootPersistedStore(config, log, metrics)
+	store, err := rebootPersistedStore(config, log, stats)
 	if err != nil {
 		err = fmt.Errorf("reboot persisted state into memory: %w", err)
 		log.With("error", err).Error("Failed to initialize disk store")
@@ -241,7 +241,7 @@ func (s *store) ensureFreeSpace(space uint64) error {
 	}
 
 	latency := time.Since(startTime)
-	s.metrics.Histogram("sync_eviction_latency", _syncEvictionLatencyBuckets).RecordDuration(latency)
+	s.stats.Histogram("sync_eviction_latency", _syncEvictionLatencyBuckets).RecordDuration(latency)
 	return nil
 }
 
@@ -595,7 +595,7 @@ func (s *store) Clean(targetUtilPercent int, respectEvictionBan bool) (newUtil i
 	}()
 
 	if targetUtilPercent < 0 || targetUtilPercent >= 100 {
-		return 0, errors.New("target_util_percent must be >=0 and <100")
+		return newUtil, errors.New("target_util_percent must be >=0 and <100")
 	}
 	s.log.Warn("Starting manual cleanup of disk.Store")
 
@@ -681,6 +681,6 @@ func isOutOfScope(b *blob, scope storelib.BlobScope) error {
 }
 
 func (s *store) emitUsageMetrics() {
-	s.metrics.Gauge("num_entries").Update(float64(len(s.blobs)))
-	s.metrics.Gauge("size_bytes").Update(float64(s.size))
+	s.stats.Gauge("num_entries").Update(float64(len(s.blobs)))
+	s.stats.Gauge("size_bytes").Update(float64(s.size))
 }

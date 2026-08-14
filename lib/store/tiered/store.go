@@ -22,19 +22,20 @@ type store struct {
 	mem     *memory.Store
 	flusher *flusher
 	log     *zap.SugaredLogger
+	stats   tally.Scope
 	mu      sync.RWMutex
 }
 
-func newStore(config *Config, metrics tally.Scope) (*store, *disk.Store, error) {
+func newStore(config *Config, stats tally.Scope) (*store, *disk.Store, error) {
 	err := config.applyDefaults()
 	if err != nil {
 		return nil, nil, err
 	}
-	memStore, err := memory.NewStore(config.MemConfig, metrics)
+	memStore, err := memory.NewStore(config.MemConfig, stats)
 	if err != nil {
 		return nil, nil, fmt.Errorf("new mem store: %w", err)
 	}
-	diskStore, err := disk.NewStore(config.DiskConfig, metrics)
+	diskStore, err := disk.NewStore(config.DiskConfig, stats)
 	if err != nil {
 		return nil, nil, fmt.Errorf("new disk store: %w", err)
 	}
@@ -47,6 +48,7 @@ func newStore(config *Config, metrics tally.Scope) (*store, *disk.Store, error) 
 		mem:     memStore,
 		flusher: newFlusher(memStore, diskStore, log, config.NumFlushWorkers),
 		log:     log,
+		stats:   stats,
 	}, diskStore, nil
 }
 
@@ -68,6 +70,7 @@ func (s *store) Create(key string, sizeBytes uint64) (*File, error) {
 		return newFile(key, memF, nil, s.disk, s.log), nil
 	}
 
+	s.stats.Counter("fallback_to_disk").Inc(1)
 	diskF, err := s.disk.Create(key, sizeBytes)
 	if err != nil {
 		return nil, fmt.Errorf("disk store create: %w", err)
@@ -248,7 +251,7 @@ func (s *store) GetMetadata(key string, md metadata.Metadata, scope storelib.Blo
 		return false, storelib.ErrOutOfScope
 	}
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return false, fmt.Errorf("mem store get metadarta: %w", err)
+		return false, fmt.Errorf("mem store get metadata: %w", err)
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		return s.disk.Scoped(scope).GetMetadata(key, md)

@@ -33,8 +33,8 @@ type Store struct {
 }
 
 // NewStore initializes a new, empty [*Store].
-func NewStore(config *Config, metrics tally.Scope) (*Store, error) {
-	s, err := newStore(config, metrics)
+func NewStore(config *Config, stats tally.Scope) (*Store, error) {
+	s, err := newStore(config, stats)
 	if err != nil {
 		return nil, err
 	}

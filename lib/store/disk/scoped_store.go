@@ -33,8 +33,8 @@ type Store struct {
 //
 //   - If the store's size is bigger than its capacity (e.g. configured capacity has been reduced or files have been leaked),
 //     it evicts blobs until size is within capacity.
-func NewStore(config *Config, metrics tally.Scope) (*Store, error) {
-	s, err := newStore(config, metrics)
+func NewStore(config *Config, stats tally.Scope) (*Store, error) {
+	s, err := newStore(config, stats)
 	if err != nil {
 		return nil, err
 	}
