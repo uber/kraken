@@ -27,7 +27,9 @@ type flusher struct {
 	queue  []string
 	mu     sync.Mutex
 	notify chan struct{}
-	stop   chan struct{}
+	// TODO - consider whether there's a race when 1) a blob's data is flushed on disk, but the entry is in mem too, 2) new md is enqueued for flushing,
+	// 3) `stop` is closed, and 4) the workers exit before flushing the metadata, thus the disk blob is corrupt (blob data is persisted, but not metadata).
+	stop chan struct{}
 
 	mem  *memory.Store
 	disk *disk.Store
@@ -70,8 +72,14 @@ func (f *flusher) markDirty(key string, sizeBytes uint64) {
 		f.log.With(
 			"key", key,
 			"error", fmt.Errorf("mem store list metadata: %w", err),
-		).Error("Could not mark blob as dirty, aborting flushing")
-		_ = f.mem.UnbanEviction(key) // prevent leak
+		).Error("Could not mark blob as dirty, trying to abort flushing")
+		err = f.mem.UnbanEviction(key) // prevent leak
+		if err != nil {
+			f.log.With(
+				"key", key,
+				"error", fmt.Errorf("mem store unban eviction: %w", err),
+			).Error("Leaked blob to mem store while trying to abort flushing")
+		}
 		return
 	}
 	dirtyMDMap := make(map[string]struct{})
@@ -133,13 +141,6 @@ func (f *flusher) abort(key string) {
 	delete(f.blobs, key)
 }
 
-// Stops all flushing gracefully.
-func (f *flusher) close() {
-	// TODO - consider whether there's a race when 1) a blob's data is flushed on disk, but the entry is in mem too, 2) new md is enqueued for flushing,
-	// 3) close is called, and 4) the workers exit before flushing the metadata, thus the disk blob is corrupt (blob data is persisted, but not metadata).
-	close(f.stop)
-}
-
 func (f *flusher) worker() {
 	for {
 		select {
@@ -175,7 +176,15 @@ func (f *flusher) nextToFlush() (b *blob, ok bool) {
 
 func (f *flusher) flush(b *blob) {
 	key := b.key
-	defer f.mem.UnbanEviction(key)
+	defer func() {
+		err := f.mem.UnbanEviction(key) // prevent leak
+		if err != nil {
+			f.log.With(
+				"key", key,
+				"error", fmt.Errorf("mem store unban eviction: %w", err),
+			).Error("Leaked blob to mem store while trying to abort flushing")
+		}
+	}()
 
 	if b.dataDirty {
 		if err := f.flushData(b); err != nil {

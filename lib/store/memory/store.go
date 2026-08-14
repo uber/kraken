@@ -7,7 +7,6 @@ import (
 	"os"
 	"slices"
 	"sync"
-	"sync/atomic"
 
 	"github.com/uber-go/tally"
 	storelib "github.com/uber/kraken/lib/store"
@@ -27,20 +26,20 @@ type store struct {
 	capacity   uint64
 	mu         sync.RWMutex // TODO - benchmark if a [sync.Mutex] has better perf.
 	log        *zap.SugaredLogger
-	metrics    tally.Scope
+	stats      tally.Scope
 }
 
 type blob struct {
-	data           atomic.Pointer[[]byte] // set to nil upon eviction/deletion.
+	data           *[]byte // slice (not pointer!) must be set to nil upon eviction/deletion.
 	node           *list.Element
 	metadatas      map[string]metadata.Metadata
 	size           uint64
 	complete       bool
 	evictionBanned bool
-	sliceMu        sync.Mutex // Synchronizes writes to 1) the atomic pointer and 2) the slice (not the array!).
+	sliceMu        sync.RWMutex // Synchronizes access to data's slice.
 }
 
-func newStore(config *Config, metrics tally.Scope) (*store, error) {
+func newStore(config *Config, stats tally.Scope) (*store, error) {
 	err := config.applyDefaults()
 	if err != nil {
 		return nil, err
@@ -58,7 +57,7 @@ func newStore(config *Config, metrics tally.Scope) (*store, error) {
 		capacity:   config.CapacityBytes,
 		size:       0,
 		log:        log,
-		metrics:    metrics,
+		stats:      stats,
 	}
 
 	s.emitUsageMetrics()
@@ -84,11 +83,11 @@ func (s *store) Create(key string, sizeBytes uint64) (*File, error) {
 		metadatas:      make(map[string]metadata.Metadata, 0),
 	}
 	arr := make([]byte, 0, sizeBytes)
-	b.data.Store(&arr)
+	b.data = &arr
 	s.blobs[key] = b
 
 	s.emitUsageMetrics()
-	return newFile(&b.data, &b.sliceMu), nil
+	return newFile(b.data, &b.sliceMu), nil
 }
 
 func (s *store) reserveSpace(space uint64) bool {
@@ -101,7 +100,7 @@ func (s *store) reserveSpace(space uint64) bool {
 		toEvictKey := toEvictNode.Value.(string) //nolint:errcheck
 		b := s.blobs[toEvictKey]
 		b.sliceMu.Lock()
-		b.data.Store(nil) // Ensure the byte slice is not referenced by clients outside the store holding [*File], so GC can evict the memory.
+		*b.data = nil // Ensure the byte slice is not referenced by clients outside the store holding [*File], so GC can evict the memory.
 		b.sliceMu.Unlock()
 		delete(s.blobs, toEvictKey)
 		s.evictQueue.Remove(toEvictNode)
@@ -136,7 +135,7 @@ func (s *store) Open(key string, scope storelib.BlobScope) (*File, error) {
 	if b.node != nil {
 		s.evictQueue.MoveToBack(b.node)
 	}
-	return newFile(&b.data, &b.sliceMu), nil
+	return newFile(b.data, &b.sliceMu), nil
 }
 
 func (s *store) Has(key string, scope storelib.BlobScope) (inStore bool, inScope bool) {
@@ -166,7 +165,7 @@ func (s *store) Delete(key string, scope storelib.BlobScope) error {
 	}
 
 	b.sliceMu.Lock()
-	b.data.Store(nil) // Ensure the byte slice is not referenced by clients outside the store holding [*File], so GC can evict the memory.
+	*b.data = nil // Ensure the byte slice is not referenced by clients outside the store holding [*File], so GC can evict the memory.
 	b.sliceMu.Unlock()
 	delete(s.blobs, key)
 	if b.node != nil {
@@ -203,8 +202,10 @@ func (s *store) Stat(key string, scope storelib.BlobScope) (size int64, err erro
 	if err := isOutOfScope(b, scope); err != nil {
 		return 0, err
 	}
-	buf := *b.data.Load()
-	return int64(len(buf)), nil
+
+	b.sliceMu.RLock()
+	defer b.sliceMu.RUnlock()
+	return int64(len(*b.data)), nil
 }
 
 func (s *store) MarkComplete(key string) error {
@@ -362,6 +363,6 @@ func isOutOfScope(b *blob, scope storelib.BlobScope) error {
 }
 
 func (s *store) emitUsageMetrics() {
-	s.metrics.Gauge("num_entries").Update(float64(len(s.blobs)))
-	s.metrics.Gauge("size_bytes").Update(float64(s.size))
+	s.stats.Gauge("num_entries").Update(float64(len(s.blobs)))
+	s.stats.Gauge("size_bytes").Update(float64(s.size))
 }

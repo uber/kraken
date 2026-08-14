@@ -10,9 +10,9 @@ import (
 // Store is a tiered (disk + memory), thread-safe, LRU cache for blobs and their [metadata.Metadata].
 //
 //   - New blobs are initially created in the memory cache to speed up writes/reads and asynchronously flushed to disk
-//     once MarkComplete is called on them. If the memory cache is full with inevctable blobs, the new blob is created on disk.
+//     once MarkComplete is called on them. If the memory cache is full with inevictable blobs, the new blob is created on disk.
 //
-//   - Partially crash-resistant - all complete blobs that were fully flushed to disk are persisted. Use [disk.Store] if you need full crash resistence.
+//   - Partially crash-resistant - all complete blobs that were fully flushed to disk are persisted. Use [disk.Store] if you need full crash resistance.
 //
 //   - Supports pagination of blobs during reading/writing, such that blobs don't need to be fully loaded into memory by the client.
 //
@@ -26,8 +26,8 @@ type Store struct {
 
 // NewStore creates a new [Store] and returns its underlying [disk.Store] in case the
 // user wants to directly operate on disk (e.g. if persistence is mandatory).
-func NewStore(config *Config, metrics tally.Scope) (*Store, *disk.Store, error) {
-	impl, diskStore, err := newStore(config, metrics)
+func NewStore(config *Config, stats tally.Scope) (*Store, *disk.Store, error) {
+	impl, diskStore, err := newStore(config, stats)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -48,7 +48,7 @@ func (s *Store) Create(key string, sizeBytes uint64) (*File, error) {
 func (s *Store) Open(key string) (*File, error) { return s.impl.Open(key, s.scope) }
 
 // Has reports if the blob is 1) in the store and 2) in scope.
-// If you don't care about the blob's scope and just want to check membership, do:
+// Hence, if the store is not scoped, the two return values are the same:
 //
 //	_, ok := store.Has(key)
 func (s *Store) Has(key string) (inStore bool, inScope bool) { return s.impl.Has(key, s.scope) }
@@ -56,9 +56,8 @@ func (s *Store) Has(key string) (inStore bool, inScope bool) { return s.impl.Has
 // Stat returns the blob's actual size, even if it differs from the size reported when Create was called.
 func (s *Store) Stat(key string) (size int64, err error) { return s.impl.Stat(key, s.scope) }
 
-// MarkComplete MUST be called once a blob is fully written, as it
-// 1) enqueues it to get flushed to disk (after which the blob is eligible for eviction from the memory store)
-// 2) enlists it for LRU eviction (unless BanEviction has been called).
+// MarkComplete MUST be called once a blob is fully written, as it enqueues it to get flushed to disk,
+// after which the blob is eligible for eviction.
 // Additionally, other store APIs may filter blobs based on completeness. No-op if the blob is already complete
 func (s *Store) MarkComplete(key string) error { return s.impl.MarkComplete(key) }
 

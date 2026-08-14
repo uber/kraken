@@ -24,7 +24,7 @@ type rebootedBlob struct {
 	complete  bool
 }
 
-func rebootPersistedStore(config *Config, log *zap.SugaredLogger, metrics tally.Scope) (*store, error) {
+func rebootPersistedStore(config *Config, log *zap.SugaredLogger, stats tally.Scope) (*store, error) {
 	incompleteDirPath := filepath.Join(config.RootDir, _incompleteSubDir)
 	if !config.RebootIncompleteBlobs {
 		err := os.RemoveAll(incompleteDirPath)
@@ -102,7 +102,7 @@ func rebootPersistedStore(config *Config, log *zap.SugaredLogger, metrics tally.
 		pather:     pather,
 		config:     config,
 		log:        log,
-		metrics:    metrics,
+		stats:      stats,
 	}
 
 	if store.size > store.capacity {

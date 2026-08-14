@@ -40,6 +40,7 @@ func newFile(key string, memF *memory.File, diskF *disk.File, diskStore *disk.St
 		openErr:   nil,
 	}
 	if diskF != nil {
+		// Fire the once just in case to prevent any bugs, even though it's not strictly necessary.
 		f.once.Do(func() { f.diskF = diskF })
 	}
 	return f
@@ -53,14 +54,14 @@ func (f *File) openDiskFileIfNeeded() error {
 		diskF, err := f.diskStore.Open(f.key)
 		if errors.Is(err, os.ErrNotExist) {
 			// TODO - Currently, we don't 100% ensure that a blob cannot be evicted from disk before it is evicted from memory.
-			// We *hope* that it doesn't happen, as there very specific requirements needed to trigger this event
-			// (a blob needs to 1) be complete, 2) be fully flushed on disk, and 3) not get evicted from memory
-			// 4) until all other blobs on disk are used more recently than this blob was fully flushed).
+			// We *hope* that it doesn't happen, as there very specific requirements needed to trigger this event:
+			// A blob needs to 1) be complete, 2) be fully flushed on disk, and 3) not get evicted from memory
+			// 4) until all other blobs on disk are used more recently than this blob was fully flushed.
 			// If that's not the case (detected through the error log below), consider adding a `Touch` API in disk.store
 			// that resets a blob's LAT and call that API each time a blob gets accessed from memory in the tiered store.
 			f.openErr = errBadSwitch(errors.New("blob not found in neither memory store nor disk store"))
 			f.log.With("key", f.key).
-				Error("invariant violation - a blob is neither memory.Store nor disk.Store while a tiered.Store user is trying to operate on the file")
+				Error("A blob is neither memory.Store nor disk.Store while a tiered.Store user is trying to operate on the file (either evicted by LRU policy or deleted by user)")
 			return
 		}
 		if err != nil {
