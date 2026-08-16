@@ -50,6 +50,8 @@ func newStore(config *Config, stats tally.Scope) (*store, error) {
 	}
 
 	log := log.Default().With("module", "memory_store")
+	stats = stats.Tagged(map[string]string{"module": "memory_store"})
+
 	log.Info("Initialized new, empty memory.Store")
 	s := &store{
 		blobs:      make(map[string]*blob, 0),
@@ -61,6 +63,7 @@ func newStore(config *Config, stats tally.Scope) (*store, error) {
 	}
 
 	s.emitUsageMetrics()
+	s.stats.Gauge("capacity_bytes").Update(float64(s.capacity))
 	return s, nil
 }
 

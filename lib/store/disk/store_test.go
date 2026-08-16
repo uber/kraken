@@ -27,19 +27,16 @@ const (
 )
 
 func newTestStore(t *testing.T, capacity uint64, rebootIncompleteBlobs bool) (res *Store, rootDir string) {
-	rootDir, err := os.MkdirTemp("/tmp", "kraken-disk-store")
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, os.RemoveAll(rootDir)) })
 	config := &Config{
-		CapacityBytes:         capacity,
-		RootDir:               rootDir,
+		Capacity:              capacity,
+		RootDir:               t.TempDir(),
 		RebootIncompleteBlobs: rebootIncompleteBlobs,
 		ShardLength:           _defaultShardLength,
 	}
 
 	store, err := NewStore(config, tally.NoopScope)
 	require.NoError(t, err)
-	return store, rootDir
+	return store, store.impl.config.RootDir
 }
 
 func newTestFile(t *testing.T, store *Store, size uint64) (f storelib.FileReadWriter, key string) {
@@ -1259,11 +1256,11 @@ func TestConfig__applyDefaults(t *testing.T) {
 				RebootIncompleteBlobs: false,
 				ShardLength:           _defaultShardLength,
 			},
-			wantErr: "capacity_bytes must be explicitly set",
+			wantErr: "capacity must be explicitly set",
 		},
 		"shard length cannot be negative": {
 			config: &Config{
-				CapacityBytes:         10 * memsize.KB,
+				Capacity:              10 * memsize.KB,
 				RootDir:               t.TempDir(),
 				RebootIncompleteBlobs: false,
 				ShardLength:           -1,

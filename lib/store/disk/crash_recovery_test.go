@@ -24,7 +24,7 @@ func TestCrashRecovery(t *testing.T) {
 			require.NoError(err)
 			t.Cleanup(func() { require.NoError(os.RemoveAll(rootDir)) })
 			config := &Config{
-				CapacityBytes:         10 * memsize.KB,
+				Capacity:              10 * memsize.KB,
 				RootDir:               rootDir,
 				RebootIncompleteBlobs: true,
 				ShardLength:           shardLength,
@@ -303,8 +303,8 @@ func TestIncompleteBlobDownloadResumedAfterMultipleCrashes(t *testing.T) {
 	// Third crash.
 	store, err = NewStore(&Config{10 * memsize.KB, rootDir, true, _defaultShardLength}, tally.NoopScope)
 	require.NoError(err)
-	// now that the blob is complete, its actual size should be rebooted through stat, instead of trusting the _size sidecar file.
-	require.Equal(5*memsize.KB, store.impl.size)
+	// The blob's client-provided size should be rebooted through from the _size sidecar file.
+	require.Equal(4*memsize.KB, store.impl.size)
 	f, err = store.ScopeComplete().Open(key)
 	require.NoError(err)
 	defer func(f io.Closer) { require.NoError(f.Close()) }(f)
@@ -315,7 +315,7 @@ func TestIncompleteBlobDownloadResumedAfterMultipleCrashes(t *testing.T) {
 
 func TestStoreWorksWhenFileSizeNotCorrect(t *testing.T) {
 	// Verify that the store works correctly when the reserved size for a file (the one passed by the client in Create) is different
-	// than its actual size. The store is expected to consistently use EITHER the client-given size OR the actual size of files, but not both.
+	// than its actual size. The store is expected to consistently use only the client-given size and never the blob'sreal size.
 	// If we mix them, this could break the eviction logic - imagine the user uploads a 2GB size but reports it as 1.9GB. Eviction works correctly
 	// as long as we reserve 2GB upon upload to store and release 2GB upon deletion/eviction from store. BUT if we reserve 2GB and free 1.9GB
 	// or vice-versa, it could lead to over/under-reservation.
@@ -330,9 +330,16 @@ func TestStoreWorksWhenFileSizeNotCorrect(t *testing.T) {
 	require.NoError(store.BanEviction(underreportedKey))
 	require.Equal(8*memsize.KB, store.impl.size)
 
+	// Simulate crash and restart.
+	store, err := NewStore(store.impl.config, tally.NoopScope)
+	require.NoError(err)
+
+	// Even after the crash, the client-provided blob size is used and not the blob's real size.
+	require.Equal(8*memsize.KB, store.impl.size)
+
 	// Even though only 1KB is actually used on disk, the store enforces capacity based on the
 	// declared 8KB, so a 3KB blob doesn't fit alongside it (there's nothing evictable to make room).
-	_, err := store.Create(core.DigestFixture().Hex(), 3*memsize.KB)
+	_, err = store.Create(core.DigestFixture().Hex(), 3*memsize.KB)
 	require.ErrorIs(err, errNoSpace)
 
 	// Declares 2KB (fits exactly within the remaining capacity) but writes 5KB.

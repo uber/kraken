@@ -41,6 +41,7 @@ func newStore(config *Config, stats tally.Scope) (*store, *disk.Store, error) {
 	}
 
 	log := log.Default().With("module", "tiered_store")
+	stats = stats.Tagged(map[string]string{"module": "tiered_store"})
 
 	log.Info("Initialized a new tiered.Store")
 	return &store{
