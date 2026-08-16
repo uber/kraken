@@ -82,6 +82,13 @@ func (s *Store) DeleteMetadata(key string, mdSuffix string) error {
 	return s.impl.DeleteMetadata(key, mdSuffix, s.scope)
 }
 
+// Close blocks until all dirty items are flushed.
+// Items marked as dirty after calling close may or may not be flushed,
+// thus Close is intended for testing, not application shutdown.
+func (s *Store) Close() {
+	s.impl.Close()
+}
+
 // ScopeComplete scopes [Store]'s APIs such that they can only operate on complete blobs.
 // [storelib.ErrOutOfScope] is returned if the user tries to operate on an incomplete blob.
 func (s *Store) ScopeComplete() *Store { return &Store{s.impl, storelib.BlobScopeComplete} }

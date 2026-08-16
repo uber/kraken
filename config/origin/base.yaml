@@ -36,15 +36,16 @@ scheduler:
 localdb:
   source: /var/cache/kraken/kraken-origin/origin.db
 
-castore:
-  upload_dir: /var/cache/kraken/kraken-origin/upload/
-  cache_dir:  /var/cache/kraken/kraken-origin/cache/
-  memory_cache:
-    enabled: true
-    max_size: 1048576
-    ttl: 2s
-    drain_workers: 2
-    drain_max_retries: 3
+blobstore:
+  disk_store:
+    capacity: 209715200 # 200MB, placeholder
+    root_dir: /var/cache/kraken/kraken-origin/cache/
+    reboot_incomplete_blobs: false
+    shard_length: 2
+  memory_store:
+    capacity_bytes: 1048576 # 1MB, placeholder
+    gomemlimit_bytes: 536870912 # 512MB, placeholder
+  num_flush_workers: 10
 
 blobserver:
   listener:

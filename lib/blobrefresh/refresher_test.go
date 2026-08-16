@@ -15,21 +15,18 @@ package blobrefresh
 
 import (
 	"io"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/metainfogen"
-	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/store/tiered"
 	mockbackend "github.com/uber/kraken/mocks/lib/backend"
-	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/testutil"
 )
@@ -38,7 +35,7 @@ const _testPieceLength = 10
 
 type refresherMocks struct {
 	ctrl     *gomock.Controller
-	cas      *store.CAStore
+	store    *tiered.Store
 	backends *backend.Manager
 	config   Config
 	t        *testing.T
@@ -48,19 +45,18 @@ func newRefresherMocks(t *testing.T) (*refresherMocks, func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
-	cas, c := store.CAStoreFixture()
-	cleanup.Add(c)
+	tieredStore, _ := tiered.StoreFixture(t)
 
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
 
 	backends := backend.ManagerFixture()
 
-	return &refresherMocks{ctrl, cas, backends, Config{}, t}, cleanup.Run
+	return &refresherMocks{ctrl, tieredStore, backends, Config{}, t}, cleanup.Run
 }
 
 func (m *refresherMocks) new() *Refresher {
-	return New(m.config, tally.NoopScope, m.cas, m.backends, metainfogen.Fixture(m.cas, _testPieceLength))
+	return New(m.config, tally.NoopScope, m.store, m.backends, metainfogen.Fixture(m.store, _testPieceLength))
 }
 
 func (m *refresherMocks) newClient(namespace string) *mockbackend.MockClient {
@@ -88,20 +84,22 @@ func TestRefresh(t *testing.T) {
 
 	require.NoError(refresher.Refresh(namespace, blob.Digest))
 
+	// Refresh() returns once the download is enqueued, before the background
+	// goroutine driving it (Create -> Download -> MarkComplete -> Generate)
+	// finishes. Metainfo generation is that goroutine's last step, so polling
+	// for it also guarantees the blob data itself is complete by then.
+	var tm metadata.TorrentMeta
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		_, err := mocks.cas.GetCacheFileStat(blob.Digest.Hex())
-		return !os.IsNotExist(err)
+		ok, err := mocks.store.GetMetadata(blob.Digest.Hex(), &tm)
+		return err == nil && ok
 	}))
+	require.Equal(blob.MetaInfo, tm.MetaInfo)
 
-	f, err := mocks.cas.GetCacheFileReader(blob.Digest.Hex())
+	f, err := mocks.store.Open(blob.Digest.Hex())
 	require.NoError(err)
 	result, err := io.ReadAll(f)
 	require.NoError(err)
 	require.Equal(string(blob.Content), string(result))
-
-	var tm metadata.TorrentMeta
-	require.NoError(mocks.cas.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
-	require.Equal(blob.MetaInfo, tm.MetaInfo)
 }
 
 func TestRefreshSizeLimitError(t *testing.T) {
@@ -144,73 +142,11 @@ func TestRefreshSizeLimitWithValidSize(t *testing.T) {
 
 	require.NoError(refresher.Refresh(namespace, blob.Digest))
 
+	var tm metadata.TorrentMeta
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		_, err := mocks.cas.GetCacheFileStat(blob.Digest.Hex())
-		return !os.IsNotExist(err)
+		ok, err := mocks.store.GetMetadata(blob.Digest.Hex(), &tm)
+		return err == nil && ok
 	}))
-}
-
-// TestRefreshWithMemoryCache tests that refresh works correctly when memory cache is enabled.
-// This verifies the metainfo generation optimization where metainfo is generated inline
-// when blob is buffered in memory, avoiding duplicate generation.
-func TestRefreshWithMemoryCache(t *testing.T) {
-	require := require.New(t)
-
-	// Create CAStore config with memory cache enabled
-	config, configCleanup := store.CAStoreConfigFixture()
-	defer configCleanup()
-
-	config.MemoryCache = store.MemoryCacheConfig{
-		Enabled: true,
-		MaxSize: 10 * 1024 * 1024, // 10MB
-		TTL:     time.Hour,
-	}
-
-	// Use mock clock to prevent automatic drain during test
-	mockClock := clock.NewMock()
-	cas, cleanup := store.CAStoreFixtureWithClock(config, mockClock)
-	defer cleanup()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	backends := backend.ManagerFixture()
-	namespace := core.TagFixture()
-	client := mockbackend.NewMockClient(ctrl)
-	err := backends.Register(namespace, client, false)
-	require.NoError(err)
-
-	refresher := New(Config{}, tally.NoopScope, cas, backends, metainfogen.Fixture(cas, _testPieceLength))
-
-	blob := core.SizedBlobFixture(100, uint64(_testPieceLength))
-
-	client.EXPECT().Stat(namespace, blob.Digest.Hex()).Return(core.NewBlobInfo(int64(len(blob.Content))), nil)
-	client.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).Return(nil)
-
-	// Refresh should complete successfully with memory cache enabled
-	require.NoError(refresher.Refresh(namespace, blob.Digest))
-
-	// Poll until blob is available in memory (async download completes)
-	// With memory cache enabled, blob will be in memory first, then drained to disk
-	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		return cas.CheckInMemCache(blob.Digest.Hex())
-	}))
-
-	// Poll until blob is drained to disk (no longer in memory cache)
-	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		mockClock.Add(100 * time.Millisecond)
-		return !cas.CheckInMemCache(blob.Digest.Hex())
-	}))
-
-	// Verify blob is accessible from disk
-	reader, err := cas.GetCacheFileReader(blob.Digest.Hex())
-	require.NoError(err)
-	defer closers.Close(reader)
-
-	diskData := make([]byte, len(blob.Content))
-	_, err = reader.Read(diskData)
-	require.NoError(err)
-	require.Equal(blob.Content, diskData)
 }
 
 func TestDedupSameBlobWithDifferentNamespaces(t *testing.T) {
@@ -251,8 +187,9 @@ func TestDedupSameBlobWithDifferentNamespaces(t *testing.T) {
 
 	close(finishDownload)
 
+	var tm metadata.TorrentMeta
 	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
-		_, err := mocks.cas.GetCacheFileStat(blob.Digest.Hex())
-		return !os.IsNotExist(err)
+		ok, err := mocks.store.GetMetadata(blob.Digest.Hex(), &tm)
+		return err == nil && ok
 	}))
 }

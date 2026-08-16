@@ -231,11 +231,11 @@ func (s *store) SetMetadata(key string, md metadata.Metadata, scope storelib.Blo
 	if errors.Is(err, storelib.ErrOutOfScope) {
 		return storelib.ErrOutOfScope
 	}
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("mem store ban eviction: %w", err)
-	}
 	if errors.Is(err, os.ErrNotExist) {
 		return s.disk.Scoped(scope).SetMetadata(key, md)
+	}
+	if err != nil {
+		return fmt.Errorf("mem store ban eviction: %w", err)
 	}
 
 	err = s.mem.SetMetadata(key, md)
@@ -281,4 +281,8 @@ func (s *store) DeleteMetadata(key string, mdSuffix string, scope storelib.BlobS
 	}
 	s.flusher.markMetadataDirty(key, mdSuffix)
 	return nil
+}
+
+func (s *store) Close() {
+	s.flusher.close()
 }

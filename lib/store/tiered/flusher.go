@@ -23,13 +23,13 @@ var (
 )
 
 type flusher struct {
-	blobs  map[string]*blob
-	queue  []string
-	mu     sync.Mutex
-	notify chan struct{}
-	// TODO - consider whether there's a race when 1) a blob's data is flushed on disk, but the entry is in mem too, 2) new md is enqueued for flushing,
-	// 3) `stop` is closed, and 4) the workers exit before flushing the metadata, thus the disk blob is corrupt (blob data is persisted, but not metadata).
-	stop chan struct{}
+	blobs     map[string]*blob
+	queue     []string
+	mu        sync.Mutex
+	notify    chan struct{}
+	stop      chan struct{}
+	wg        sync.WaitGroup
+	closeOnce sync.Once
 
 	mem  *memory.Store
 	disk *disk.Store
@@ -56,6 +56,7 @@ func newFlusher(mem *memory.Store, disk *disk.Store, log *zap.SugaredLogger, num
 	}
 
 	for range numWorkers {
+		f.wg.Add(1)
 		go f.worker()
 	}
 	return f
@@ -142,10 +143,19 @@ func (f *flusher) abort(key string) {
 }
 
 func (f *flusher) worker() {
+	defer f.wg.Done()
+
 	for {
 		select {
 		case <-f.stop:
-			return
+			// Flush anything left before stopping.
+			for {
+				b, ok := f.nextToFlush()
+				if !ok {
+					return
+				}
+				f.flush(b)
+			}
 		case <-f.notify:
 			for {
 				b, ok := f.nextToFlush()
@@ -156,6 +166,13 @@ func (f *flusher) worker() {
 			}
 		}
 	}
+}
+
+// close blocks until all dirty items are flushed. Items marked as dirty after calling close may or may not be flushed.
+func (f *flusher) close() {
+	f.closeOnce.Do(func() { close(f.stop) })
+
+	f.wg.Wait()
 }
 
 func (f *flusher) nextToFlush() (b *blob, ok bool) {

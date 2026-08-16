@@ -27,7 +27,7 @@ import (
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/persistedretry/tagreplication"
 	"github.com/uber/kraken/lib/persistedretry/writeback"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/upstream"
 	"github.com/uber/kraken/localdb"
 	"github.com/uber/kraken/metrics"
@@ -144,9 +144,9 @@ func Run(flags *Flags, opts ...Option) {
 		defer closers.Close(closer)
 	}
 
-	ss, err := store.NewSimpleStore(config.Store, stats)
+	store, err := disk.NewStore(&config.Store, stats)
 	if err != nil {
-		log.Fatalf("Error creating simple store: %s", err)
+		log.Fatalf("Error creating disk store: %s", err)
 	}
 
 	backends, err := backend.NewManager(config.BackendManager, config.Backends, config.Auth, stats)
@@ -214,12 +214,12 @@ func Run(flags *Flags, opts ...Option) {
 		config.WriteBack,
 		stats,
 		writeback.NewStore(localDB),
-		writeback.NewExecutor(stats, ss, backends))
+		writeback.NewExecutor(stats, store, backends))
 	if err != nil {
 		log.Fatalf("Error creating write-back manager: %s", err)
 	}
 
-	tagStore := tagstore.New(config.TagStore, ss, backends, writeBackManager)
+	tagStore := tagstore.New(config.TagStore, store, backends, writeBackManager)
 
 	depResolver, err := tagtype.NewMap(config.TagTypes, originClient)
 	if err != nil {

@@ -11,22 +11,29 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package metainfogen
+package disk
 
 import (
-	"github.com/uber/kraken/lib/store/tiered"
+	"testing"
 
-	"github.com/c2h5oh/datasize"
+	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
+
+	"github.com/uber/kraken/utils/memsize"
 )
 
-// Fixture returns a Generator which creates all metainfo with pieceLength for
-// testing purposes.
-func Fixture(store *tiered.Store, pieceLength int) *Generator {
-	g, err := New(Config{
-		PieceLengths: map[datasize.ByteSize]datasize.ByteSize{0: datasize.ByteSize(pieceLength)},
-	}, store)
-	if err != nil {
-		panic(err)
-	}
-	return g
+// Generously-sized capacity for Fixture, chosen so ordinary unit tests
+// never trigger eviction.
+const _fixtureCapacity = 100 * memsize.MB
+
+// Fixture returns a Store backed by a temp directory, sized generously
+// enough that unit tests won't trigger autoeviction.
+func Fixture(t *testing.T) *Store {
+	s, err := NewStore(&Config{
+		Capacity:    _fixtureCapacity,
+		RootDir:     t.TempDir(),
+		ShardLength: 2,
+	}, tally.NoopScope)
+	require.NoError(t, err)
+	return s
 }
